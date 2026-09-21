@@ -7,7 +7,12 @@
     "lint": "echo 'apps/api lint stub (real wiring in Phase 3)' && exit 0",
     "typecheck": "tsc --noEmit",
     "test": "echo 'apps/api test stub (real wiring in Phase 3)' && exit 0",
-    "build": "echo 'apps/api build stub (real wiring in Phase 3)' && exit 0"
+    "test:unit": "vitest run --coverage",
+    "test:integration": "echo 'integration tests na Fase 6' && exit 0",
+    "test:e2e": "echo 'e2e tests na Fase 9' && exit 0",
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/main.js"
   },
   "devDependencies": {
     "@nestjs/testing": "^11.0.0",
