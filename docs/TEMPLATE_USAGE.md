@@ -131,7 +131,8 @@ A regra `§1` do `AGENTS.md` é **mandatória por padrão**. Em casos excepciona
 
 | Versão | Mudanças | Compatibilidade |
 |--------|----------|-----------------|
-| `1.0.0` | Lançamento inicial com 8 agents genéricos + skill `agents:coordinate` | Estável |
+| `1.0.0` | Lançamento inicial com 10 agents genéricos + skill `agents:coordinate` | Estável |
+| `1.1.0` | Adicionados 3 specialists de stack (monorepo, nestjs, nextjs) + docs STACK.md e MONOREPO.md | Estável |
 
 **Regra de breaking change:**
 - Mudanças no formato de handoff (`task/context/expected_output/success_criteria`) exigem major bump
