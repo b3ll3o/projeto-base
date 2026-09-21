@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { AuditContext } from '../domain/audit-context.vo.js';
-import { AuditContextStore } from './audit-context-store.js';
+import { AuditContextStore, AuditContextMissingError } from './audit-context-store.js';
 
 const makeCtx = (id: string) =>
   new AuditContext({
@@ -21,8 +21,9 @@ describe('AuditContextStore', () => {
     });
   });
 
-  it('get() fora de run() throws', () => {
+  it('get() fora de run() lança AuditContextMissingError', () => {
     expect(() => AuditContextStore.get()).toThrow(/AuditContext/);
+    expect(() => AuditContextStore.get()).toThrow(AuditContextMissingError);
   });
 
   it('tryGet() fora de run() retorna undefined (sem throw)', () => {
@@ -37,17 +38,18 @@ describe('AuditContextStore', () => {
   });
 
   it('ctxs não vazam entre runs paralelos', async () => {
+    // ALS isola por stack frame async, não por timing — microtask (Promise.resolve)
+    // é suficiente para forçar continuação no event loop e validar isolamento.
     const a = makeCtx('A');
     const b = makeCtx('B');
 
     const taskA = AuditContextStore.run(a, async () => {
-      // Simula trabalho async antes de ler o ctx
-      await new Promise((r) => setTimeout(r, 5));
+      await Promise.resolve();
       return AuditContextStore.get().actorId;
     });
 
     const taskB = AuditContextStore.run(b, async () => {
-      await new Promise((r) => setTimeout(r, 1));
+      await Promise.resolve();
       return AuditContextStore.get().actorId;
     });
 
@@ -63,5 +65,35 @@ describe('AuditContextStore', () => {
       return got.actorId + ':async';
     });
     expect(result).toBe('actor-X:async');
+  });
+
+  it('run() propaga erro lançado em função sync', () => {
+    const ctx = makeCtx('sync-throw');
+    expect(() =>
+      AuditContextStore.run(ctx, () => {
+        throw new Error('boom');
+      }),
+    ).toThrow('boom');
+  });
+
+  it('run() propaga rejeição de Promise retornada por função async', async () => {
+    const ctx = makeCtx('async-reject');
+    await expect(
+      AuditContextStore.run(ctx, async () => {
+        throw new Error('boom-async');
+      }),
+    ).rejects.toThrow('boom-async');
+  });
+
+  it('nested run() shadowa o ctx externo', () => {
+    const outer = makeCtx('outer');
+    const inner = makeCtx('inner');
+    AuditContextStore.run(outer, () => {
+      expect(AuditContextStore.get()).toBe(outer);
+      AuditContextStore.run(inner, () => {
+        expect(AuditContextStore.get()).toBe(inner);
+      });
+      expect(AuditContextStore.get()).toBe(outer);
+    });
   });
 });

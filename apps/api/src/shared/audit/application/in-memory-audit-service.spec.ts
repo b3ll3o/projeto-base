@@ -20,6 +20,7 @@ const makeCtx = (actorId: string | null = 'actor-1') =>
 
 describe('InMemoryAuditService', () => {
   let svc: InMemoryAuditService;
+  const PAGE_SIZE = 2;
 
   beforeEach(() => {
     svc = new InMemoryAuditService();
@@ -77,7 +78,7 @@ describe('InMemoryAuditService', () => {
     const page1 = await svc.listHistory({
       entityName: 'User',
       entityId: 'u1',
-      limit: 2,
+      limit: PAGE_SIZE,
     } satisfies ListHistoryInput);
     expect(page1.entries).toHaveLength(2);
     expect(page1.entries.map((e) => e.version)).toEqual([1, 2]);
@@ -87,7 +88,7 @@ describe('InMemoryAuditService', () => {
       entityName: 'User',
       entityId: 'u1',
       cursor: page1.nextCursor,
-      limit: 2,
+      limit: PAGE_SIZE,
     } satisfies ListHistoryInput);
     expect(page2.entries.map((e) => e.version)).toEqual([3, 4]);
     expect(page2.nextCursor).not.toBeNull();
@@ -96,7 +97,7 @@ describe('InMemoryAuditService', () => {
       entityName: 'User',
       entityId: 'u1',
       cursor: page2.nextCursor,
-      limit: 2,
+      limit: PAGE_SIZE,
     } satisfies ListHistoryInput);
     expect(page3.entries.map((e) => e.version)).toEqual([5]);
     expect(page3.nextCursor).toBeNull();
@@ -186,7 +187,7 @@ describe('InMemoryAuditService', () => {
     }
     const page1 = await svc.listArchive({
       entityName: 'User',
-      limit: 2,
+      limit: PAGE_SIZE,
     } satisfies ListArchiveInput);
     expect(page1.entries).toHaveLength(2);
     expect(page1.entries.map((e) => e.entityId)).toEqual(['a', 'b']);
@@ -203,5 +204,58 @@ describe('InMemoryAuditService', () => {
       entityId: 'zzz',
     } satisfies GetArchiveEntryInput);
     expect(missing).toBeNull();
+  });
+
+  it('listHistory() retorna entries=[] e nextCursor=null quando entityId não existe', async () => {
+    const ctx = makeCtx();
+    await svc.record(
+      {
+        entityName: 'User',
+        entityId: 'u1',
+        operation: 'INSERT',
+        previousVersion: null,
+        newVersion: 1,
+        snapshot: { id: 'u1' },
+      },
+      ctx,
+    );
+    const page = await svc.listHistory({
+      entityName: 'User',
+      entityId: 'noSuchUser',
+      limit: PAGE_SIZE,
+    } satisfies ListHistoryInput);
+    expect(page.entries).toEqual([]);
+    expect(page.nextCursor).toBeNull();
+  });
+
+  it('archive() substitui APENAS o entityId correspondente (não afeta outros)', async () => {
+    const ctx = makeCtx();
+    await svc.archive({
+      entityName: 'User',
+      entityId: 'u1',
+      version: 1,
+      snapshot: { id: 'u1' },
+      ctx,
+    } satisfies ArchiveInput);
+    await svc.archive({
+      entityName: 'User',
+      entityId: 'u2',
+      version: 1,
+      snapshot: { id: 'u2' },
+      ctx,
+    } satisfies ArchiveInput);
+    expect(svc.archives.map((a) => a.entityId)).toEqual(['u1', 'u2']);
+
+    // Re-archive u1 with different ctx — should only replace u1
+    await svc.archive({
+      entityName: 'User',
+      entityId: 'u1',
+      version: 2,
+      snapshot: { id: 'u1', v: 2 },
+      ctx: makeCtx('actor-X'),
+    } satisfies ArchiveInput);
+    expect(svc.archives).toHaveLength(2);
+    expect(svc.archives.map((a) => a.entityId)).toEqual(['u1', 'u2']);
+    expect(svc.archives.find((a) => a.entityId === 'u1')?.deletedBy).toBe('actor-X');
   });
 });

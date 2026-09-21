@@ -12,6 +12,19 @@ import type { AuditContext } from '../domain/audit-context.vo.js';
 
 const storage = new AsyncLocalStorage<AuditContext>();
 
+/**
+ * Erro de domínio lançado quando `AuditContextStore.get()` é chamado fora
+ * de um scope `run()`. Indica bug de programação (chamada perdida, hook
+ * NestJS não configurado, etc.) — não condição de negócio esperada.
+ */
+export class AuditContextMissingError extends Error {
+  constructor() {
+    super('AuditContextStore: nenhum AuditContext no scope atual');
+    this.name = 'AuditContextMissingError';
+    Object.setPrototypeOf(this, AuditContextMissingError.prototype);
+  }
+}
+
 export const AuditContextStore = {
   /**
    * Executa `fn` dentro de um scope onde `get()` retorna `ctx`.
@@ -23,12 +36,12 @@ export const AuditContextStore = {
 
   /**
    * Retorna o AuditContext do scope atual.
-   * Lança Error se chamado fora de run().
+   * Lança `AuditContextMissingError` se chamado fora de run().
    */
   get(): AuditContext {
     const ctx = storage.getStore();
     if (!ctx) {
-      throw new Error('AuditContextStore: nenhum AuditContext no scope atual');
+      throw new AuditContextMissingError();
     }
     return ctx;
   },
