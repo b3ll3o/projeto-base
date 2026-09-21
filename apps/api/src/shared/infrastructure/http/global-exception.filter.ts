@@ -39,7 +39,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       title,
       status,
       detail,
-      instance: `${request.method} ${request.url}`,
+      instance: request.url,
       code,
       traceId,
     };

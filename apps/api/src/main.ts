@@ -15,7 +15,6 @@ async function bootstrap(): Promise<void> {
   app.useLogger(app.get(PinoLogger));
 
   app.setGlobalPrefix('api/v1');
-  app.useGlobalPipes(/* ValidationPipe configured in AppModule */);
   app.useGlobalFilters(new GlobalExceptionFilter());
   app.enableShutdownHooks();
 
