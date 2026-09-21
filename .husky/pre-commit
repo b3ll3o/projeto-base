@@ -2,13 +2,21 @@
 . "$(dirname -- "$0")/_/husky.sh"
 
 # Rodar lint-staged em arquivos staged
-pnpm exec lint-staged
+pnpm exec lint-staged || exit 1
 
-# Rodar stack-code-reviewer em arquivos .ts/.tsx/.prisma
+# Rodar stack-code-reviewer em arquivos .ts/.tsx/.prisma (Phase 8 scripts)
 changed_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx|prisma)$')
 if [ -n "$changed_files" ]; then
-  echo "stack-code-reviewer..."
-  pnpm tsx tooling/scripts/stack-code-reviewer.ts --files="$changed_files" --mode=pre-commit || exit 1
-  echo "doc-sync..."
-  pnpm tsx tooling/scripts/doc-sync.ts --files="$changed_files" --mode=incremental --auto-apply-minor=true || exit 1
+  if [ -f tooling/scripts/stack-code-reviewer.ts ]; then
+    echo "stack-code-reviewer..."
+    pnpm tsx tooling/scripts/stack-code-reviewer.ts --files="$changed_files" --mode=pre-commit || exit 1
+  else
+    echo "skip stack-code-reviewer (tooling/scripts/ not yet ready — Phase 8)"
+  fi
+  if [ -f tooling/scripts/doc-sync.ts ]; then
+    echo "doc-sync..."
+    pnpm tsx tooling/scripts/doc-sync.ts --files="$changed_files" --mode=incremental --auto-apply-minor=true || exit 1
+  else
+    echo "skip doc-sync (tooling/scripts/ not yet ready — Phase 8)"
+  fi
 fi
