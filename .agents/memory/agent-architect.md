@@ -13,7 +13,7 @@ description: Memória acumulada do agent-architect — decisões sobre criação
 
 **Contexto:** Primeiro lançamento do template projeto-base.
 
-**Decisão:** Criar 9 agents genéricos iniciais cobrindo os domínios mais comuns:
+**Decisão:** Criar 10 agents genéricos iniciais cobrindo os domínios mais comuns:
 
 - `orchestrator` — meta-agent para decomposição
 - `explorer` — read-only mapeamento de código
@@ -25,6 +25,16 @@ description: Memória acumulada do agent-architect — decisões sobre criação
 - `doc-writer` — documentação
 - `task-manager` — backlog
 
+### 2026-09-21 — Specialists de stack adicionados
+
+**Contexto:** projeto-base agora é monorepo base para múltiplos projetos. Stack inicial: NestJS (backend) + Next.js (frontend).
+
+**Decisão:** Criar 3 specialists de stack, alinhados com o monorepo:
+
+- `monorepo-specialist` — workspaces pnpm, Turborepo, Changesets
+- `nestjs-specialist` — arquitetura NestJS (Fastify, Prisma, Swagger)
+- `nextjs-specialist` — arquitetura Next.js (App Router, RSC, Server Actions)
+
 **Lacunas identificadas (pendentes):**
 
 - `performance-auditor` — N+1, memory leaks, Core Web Vitals
@@ -32,6 +42,8 @@ description: Memória acumulada do agent-architect — decisões sobre criação
 - `api-designer` — REST/GraphQL/tRPC API design
 - `i18n-specialist` — internacionalização, localização
 - `a11y-specialist` — acessibilidade WCAG
+- `devops-sre` — pipelines CI/CD, observabilidade
+- `data-engineer` — modelagem de dados, ETL
 
 **Referências consultadas:**
 
@@ -41,6 +53,9 @@ description: Memória acumulada do agent-architect — decisões sobre criação
 - Martin Fowler, *Refactoring* (2nd ed.)
 - Brendan Gregg, *Systems Performance*
 - Google, *Web Vitals*
+- pnpm workspaces & Turborepo docs
+- Next.js docs (App Router, RSC, Server Actions)
+- NestJS docs (DI, modules, OpenAPI)
 
 ## Padrões Descobertos
 
