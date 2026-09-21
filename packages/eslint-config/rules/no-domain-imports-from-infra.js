@@ -17,10 +17,10 @@ const FORBIDDEN = [
 
 export default {
   meta: {
-    type: "problem",
+    type: 'problem',
     docs: {
       description:
-        "Domain layer não pode importar de frameworks, ORM ou infrastructure.",
+        'Domain layer não pode importar de frameworks, ORM ou infrastructure.',
     },
     schema: [],
     messages: {
@@ -36,11 +36,11 @@ export default {
     return {
       ImportDeclaration(node) {
         const source = node.source && node.source.value;
-        if (typeof source !== "string") return;
+        if (typeof source !== 'string') return;
         if (FORBIDDEN.some((re) => re.test(source))) {
           context.report({
             node,
-            messageId: "forbidden",
+            messageId: 'forbidden',
             data: { module: source },
           });
         }
