@@ -6,26 +6,31 @@ export interface ApiClientConfig {
   getToken?: () => string | null;
 }
 
+// Estende RequestInit para permitir injetar `fetch` (testabilidade) sem
+// conflitar com o tipo nativo de lib.dom.d.ts.
+export interface ApiRequestInit extends Omit<RequestInit, 'body'> {
+  fetch?: typeof fetch;
+  body?: BodyInit | null;
+}
+
 export class ApiClient {
   constructor(private readonly config: ApiClientConfig) {}
 
-  async get<T>(path: string, init?: RequestInit): Promise<T> {
+  async get<T>(path: string, init?: ApiRequestInit): Promise<T> {
     return this.request<T>('GET', path, init);
   }
-  async post<T>(path: string, body?: unknown, init?: RequestInit): Promise<T> {
+  async post<T>(path: string, body?: unknown, init?: ApiRequestInit): Promise<T> {
     return this.request<T>('POST', path, { ...init, body: JSON.stringify(body) });
   }
-  async patch<T>(path: string, body?: unknown, init?: RequestInit): Promise<T> {
+  async patch<T>(path: string, body?: unknown, init?: ApiRequestInit): Promise<T> {
     return this.request<T>('PATCH', path, { ...init, body: JSON.stringify(body) });
   }
-  async delete<T>(path: string, init?: RequestInit): Promise<T> {
+  async delete<T>(path: string, init?: ApiRequestInit): Promise<T> {
     return this.request<T>('DELETE', path, init);
   }
 
-  private async request<T>(method: string, path: string, init?: RequestInit): Promise<T> {
-    const { fetch: injectedFetch, ...restInit } = (init ?? {}) as RequestInit & {
-      fetch?: typeof fetch;
-    };
+  private async request<T>(method: string, path: string, init?: ApiRequestInit): Promise<T> {
+    const { fetch: injectedFetch, ...restInit } = init ?? {};
     const fetchFn: typeof fetch = injectedFetch ?? fetch;
     const token = this.config.getToken?.();
     const headers = new Headers(restInit.headers);
