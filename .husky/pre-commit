@@ -1,11 +1,18 @@
 #!/usr/bin/env sh
 . "$(dirname -- "$0")/_/husky.sh"
 
-# Rodar lint-staged em arquivos staged
-pnpm exec lint-staged || exit 1
+# Rodar lint-staged SOMENTE se houver arquivos staged que casem com os globs.
+# Sem isso, commits com só .gitkeep/.md/.png falham o hook.
+staged_lint=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx|json|yaml|yml)$' || true)
+if [ -n "$staged_lint" ]; then
+  pnpm exec lint-staged || exit 1
+else
+  echo "skip lint-staged (no staged files matching globs)"
+fi
 
-# Rodar stack-code-reviewer em arquivos .ts/.tsx/.prisma (Phase 8 scripts)
-changed_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx|prisma)$')
+# Rodar stack-code-reviewer + doc-sync em arquivos .ts/.tsx/.prisma (Phase 8 scripts)
+# || true protege contra sh -e (husky wrapper) abortando em commits sem .ts/.tsx/.prisma
+changed_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx|prisma)$' || true)
 if [ -n "$changed_files" ]; then
   if [ -f tooling/scripts/stack-code-reviewer.ts ]; then
     echo "stack-code-reviewer..."
@@ -20,3 +27,7 @@ if [ -n "$changed_files" ]; then
     echo "skip doc-sync (tooling/scripts/ not yet ready — Phase 8)"
   fi
 fi
+
+# Defesa: se algum comando futuro invocar `husky <arg>` por engano, repara core.hooksPath.
+# Idempotente; custo ~50ms.
+pnpm exec husky >/dev/null 2>&1 || true
