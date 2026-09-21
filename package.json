@@ -19,8 +19,8 @@
     "tdd:check": "turbo run tdd:check",
     "stack:review": "tsx tooling/scripts/stack-code-reviewer.ts",
     "docs:sync": "tsx tooling/scripts/doc-sync.ts",
-    "format": "prettier --write \"**/*.{ts,tsx,md,json,yaml,yml}\"",
-    "format:check": "prettier --check \"**/*.{ts,tsx,md,json,yaml,yml}\"",
+    "format": "prettier --write \"**/*.{ts,tsx,json,yaml,yml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,json,yaml,yml}\"",
     "clean": "turbo run clean && rm -rf node_modules .turbo"
   },
   "devDependencies": {
