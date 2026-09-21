@@ -6,6 +6,8 @@
 
 ## Índice de Workflows
 
+### Genéricos
+
 | ID | Trigger | Tipo | Agents |
 |----|---------|------|--------|
 | `feature-mode` | "implementar X" | sequential | orchestrator → explorer → test-writer → code-reviewer → tdd-enforcer |
@@ -17,6 +19,14 @@
 | `explore-mode` | "como funciona X?" | single | explorer |
 | `review-mode` | "revisar PR / código" | single | code-reviewer + tdd-enforcer |
 
+### Por Stack (workflows detalhados em `.agents/workflows/`)
+
+| ID | Trigger | Tipo | Agents | Detalhe |
+|----|---------|------|--------|---------|
+| `backend-feature` | "implementar endpoint NestJS" | sequential | nestjs-specialist → test-writer → code-reviewer → tdd-enforcer | [`.agents/workflows/backend-feature.md`](./workflows/backend-feature.md) |
+| `frontend-feature` | "criar página/rota Next.js" | sequential | nextjs-specialist → test-writer → code-reviewer → tdd-enforcer | [`.agents/workflows/frontend-feature.md`](./workflows/frontend-feature.md) |
+| `monorepo-change` | "adicionar/mover pacote ou app" | sequential | monorepo-specialist → code-reviewer | [`.agents/workflows/monorepo-change.md`](./workflows/monorepo-change.md) |
+
 ---
 
 ## `feature-mode` — Implementar Nova Funcionalidade
@@ -25,7 +35,7 @@
 
 **Composição:** sequential (4 estágios)
 
-```
+```text
 ┌─────────────────┐
 │   ORCHESTRATOR  │  Decompõe feature em tasks
 └────────┬────────┘
@@ -73,7 +83,7 @@ test-writer → code-reviewer:
 
 **Composição:** sequential (4 estágios, com loop até reproduction)
 
-```
+```text
 ORCHESTRATOR → EXPLORER → TEST-WRITER (escreve repro test) → CODE-REVIEWER
                                                        ↑          │
                                                        └──────────┘ (loop se repro falhar)
@@ -106,7 +116,7 @@ test-writer → code-reviewer:
 
 **Composição:** sequential (3 estágios, TDD-driven)
 
-```
+```text
 REFACTORER → TEST-WRITER (garante testes existentes) → CODE-REVIEWER
 ```
 
@@ -136,7 +146,7 @@ test-writer → code-reviewer:
 
 **Composição:** sequential (2 estágios)
 
-```
+```text
 SECURITY-AUDITOR → CODE-REVIEWER
 ```
 
@@ -167,7 +177,7 @@ security-auditor → code-reviewer:
 
 **Composição:** sequential (2 estágios)
 
-```
+```text
 DOC-WRITER → CODE-REVIEWER
 ```
 
@@ -186,7 +196,7 @@ DOC-WRITER → CODE-REVIEWER
 
 **Composição:** single agent
 
-```
+```text
 TASK-MANAGER
 ```
 
@@ -210,7 +220,7 @@ TASK-MANAGER
 
 **Composição:** single agent (read-only)
 
-```
+```text
 EXPLORER
 ```
 
@@ -229,7 +239,7 @@ EXPLORER
 
 **Composição:** single agent
 
-```
+```text
 CODE-REVIEWER
 ```
 
@@ -241,6 +251,16 @@ CODE-REVIEWER
 - ⚡ **Performance** — complexidade algorítmica, queries N+1, memory leaks
 - 🧪 **Testabilidade** — cobertura baixa, testes frágeis, mocks excessivos
 - 📐 **Estilo** — convenções do projeto, formatação
+
+---
+
+## Workflows por Stack
+
+Os 3 workflows abaixo são detalhados em arquivos próprios:
+
+- [`backend-feature`](./workflows/backend-feature.md) — implementar endpoint NestJS
+- [`frontend-feature`](./workflows/frontend-feature.md) — criar página/rota Next.js
+- [`monorepo-change`](./workflows/monorepo-change.md) — adicionar/mover pacote ou app
 
 ---
 

@@ -99,7 +99,7 @@ success_criteria:
 
 ## Comportamento
 
-1. **Identificar** o que testar (escopo,边界, edge cases)
+1. **Identificar** o que testar (escopo, limites, edge cases)
 2. **Escolher** nível (unit / integração / E2E)
 3. **Escrever** testes ANTES da implementação (TDD)
 4. **Validar** que testes falham (red)

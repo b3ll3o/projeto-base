@@ -111,6 +111,9 @@ result:
 | `security-auditor` | Despachado quando o escopo toca auth/payments/secrets |
 | `task-manager` | Despachado se o plano gerar > 5 sub-tasks |
 | `doc-writer` | Despachado ao final, após implementação aprovada |
+| `monorepo-specialist` | Despachado quando a tarefa toca estrutura de workspaces, apps ou packages |
+| `nestjs-specialist` | Despachado quando o escopo é backend NestJS (`apps/api`) |
+| `nextjs-specialist` | Despachado quando o escopo é frontend Next.js (`apps/web`) |
 
 ## Princípios
 

@@ -73,6 +73,14 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 | **doc-writer**     | [`.agents/agents/doc-writer.md`](./.agents/agents/doc-writer.md)          | [memory](../.agents/memory/doc-writer.md)          | Geração de documentação              | README, ADRs, API docs, user guides                  |
 | **task-manager**   | [`.agents/agents/task-manager.md`](./.agents/agents/task-manager.md)      | [memory](../.agents/memory/task-manager.md)        | Gestão de tarefas e backlog          | "Todo", "tarefa", priorização                        |
 
+### §3.1 Specialists de Stack (incluso a partir de v1.1.0)
+
+| Agent                  | Arquivo                                                                          | Memória                                                  | Papel                                       | Quando invocar                                              |
+| ---------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------- | ----------------------------------------------------------- |
+| **monorepo-specialist**| [`.agents/agents/monorepo-specialist.md`](./.agents/agents/monorepo-specialist.md)| [memory](../.agents/memory/monorepo-specialist.md)        | Arquiteto de monorepo (workspaces, pipelines) | Adicionar/remover/mover apps ou packages, configurar turbo  |
+| **nestjs-specialist**  | [`.agents/agents/nestjs-specialist.md`](./.agents/agents/nestjs-specialist.md)    | [memory](../.agents/memory/nestjs-specialist.md)          | Arquiteto backend NestJS                    | Criar/refatorar módulo NestJS, DI, validação, Swagger       |
+| **nextjs-specialist**  | [`.agents/agents/nextjs-specialist.md`](./.agents/agents/nextjs-specialist.md)    | [memory](../.agents/memory/nextjs-specialist.md)          | Arquiteto frontend Next.js                  | Criar rota/página, decidir RSC vs. Client, Server Actions    |
+
 ---
 
 ## §4. Mecanismo de Coordenação
@@ -113,16 +121,19 @@ A consolida ou encadeia próximo agent
 
 ## §5. Workflows Padrão
 
-Workflows genéricos prontos para uso estão em [`.agents/WORKFLOWS.md`](./.agents/WORKFLOWS.md).
+Workflows genéricos prontos para uso estão em [`.agents/WORKFLOWS.md`](./.agents/WORKFLOWS.md). Workflows detalhados por stack estão em [`.agents/workflows/`](./.agents/workflows/).
 
-| Workflow        | Trigger                | Agents encadeados                                  |
-|-----------------|------------------------|----------------------------------------------------|
-| `feature-mode`  | "implementar X"        | orchestrator → explorer → test-writer → code-reviewer |
-| `bugfix-mode`   | "corrigir bug"         | orchestrator → explorer → test-writer → code-reviewer |
-| `refactor-mode` | "refatorar"            | refactorer → test-writer → code-reviewer            |
-| `security-mode` | "auditoria segurança"  | security-auditor → code-reviewer                    |
-| `docs-mode`     | "documentar"           | doc-writer → code-reviewer                          |
-| `task-mode`     | "todo / tarefa"        | task-manager                                       |
+| Workflow             | Trigger                | Agents encadeados                                       |
+|----------------------|------------------------|---------------------------------------------------------|
+| `feature-mode`       | "implementar X"        | orchestrator → explorer → test-writer → code-reviewer   |
+| `bugfix-mode`        | "corrigir bug"         | orchestrator → explorer → test-writer → code-reviewer   |
+| `refactor-mode`      | "refatorar"            | refactorer → test-writer → code-reviewer                 |
+| `security-mode`      | "auditoria segurança"  | security-auditor → code-reviewer                         |
+| `docs-mode`          | "documentar"           | doc-writer → code-reviewer                               |
+| `task-mode`          | "todo / tarefa"        | task-manager                                            |
+| `backend-feature`    | "endpoint NestJS"      | nestjs-specialist → test-writer → code-reviewer          |
+| `frontend-feature`   | "página/rota Next.js"  | nextjs-specialist → test-writer → code-reviewer          |
+| `monorepo-change`    | "adicionar app/package"| monorepo-specialist → code-reviewer                      |
 
 ---
 
