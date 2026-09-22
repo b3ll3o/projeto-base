@@ -46,8 +46,16 @@ const DDD_BLOCKED_IMPORTS = [
   /^rxjs$/,
 ];
 
+// pt-BR: regra do spec §1 ("Domain puro") só vale para arquivos cujo path
+// contém '/domain/' como componente de diretório. Sem esse gate, qualquer
+// arquivo (ex.: test/e2e/*) que importe @nestjs/testing vira blocker falso.
+function isDomainFile(file: string): boolean {
+  return /(^|[\\/])domain([\\/]|$)/.test(file);
+}
+
 function checkDomain(file: string, content: string): Finding[] {
   const findings: Finding[] = [];
+  if (!isDomainFile(file)) return findings;
   const lines = content.split('\n');
   lines.forEach((line, idx) => {
     const m = /^import .* from ['"]([^'"]+)['"]/.exec(line);
