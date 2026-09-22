@@ -1,0 +1,113 @@
+# .github/workflows/release-template.yml
+#
+# Auto-tagging do template após bump de versão em main.
+#
+# Triggers:
+#   1. push → main com mudança em docs/MONOREPO.md (único arquivo onde a
+#      versão canônica é detectada pelo regex do step "Determinar versão").
+#      Os outros 2 arquivos versionados (docs/STACK.md e
+#      .agents/specs/conventions/estrutura-e-versionamento.md) DEVEM ser
+#      atualizados juntos para consistência mas não disparam o workflow.
+#   2. workflow_dispatch → backfill manual (ex: tag de v1.3.0 antes deste
+#      workflow existir, ou re-tagging após correção manual)
+#
+# Lógica:
+#   - Lê versão do footer de docs/MONOREPO.md ("**Versão do documento:** X.Y.Z")
+#     — usa o ÚLTIMO match (`tail -1`) para resiliência contra footers duplicados
+#   - Se workflow_dispatch passar input `version`, usa ele; senão extrai
+#   - Se tag `vX.Y.Z` já existe → noop (idempotente)
+#   - Senão cria annotated tag `vX.Y.Z` apontando para o merge commit + push
+#
+# Concurrency: serializa pushes simultâneos para evitar corrida no git push.
+# Idempotência por `git rev-parse --verify --quiet refs/tags/<tag>`.
+# Tags pushed por este workflow ficam imutáveis por convenção (sem force-push).
+# Permissões mínimas: `contents: write` (criar tag).
+
+name: release-template
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/MONOREPO.md'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versão a taggear (ex: 1.3.0). Vazio = extrai de docs/MONOREPO.md.'
+        required: false
+        type: string
+
+concurrency:
+  group: release-template
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determinar versão alvo
+        id: version
+        run: |
+          set -euo pipefail
+          # Preferência: input do workflow_dispatch > footer de docs/MONOREPO.md
+          input_version="${{ inputs.version }}"
+          if [ -n "$input_version" ]; then
+            clean=$(echo "$input_version" | sed 's/^v//')
+          else
+            clean=$(grep -oE '\*\*Versão do documento:\*\* [0-9]+\.[0-9]+\.[0-9]+' docs/MONOREPO.md \
+              | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -1 || true)
+          fi
+          if [ -z "$clean" ]; then
+            echo "::error::Não foi possível determinar versão (input vazio e footer docs/MONOREPO.md não encontrado)."
+            exit 1
+          fi
+          if ! echo "$clean" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Versão '$clean' não está no formato X.Y.Z."
+            exit 1
+          fi
+          tag="v$clean"
+          echo "version=$clean" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Versão alvo: $tag"
+
+      - name: Verificar se tag já existe (idempotência)
+        id: check
+        run: |
+          if git rev-parse --verify --quiet "refs/tags/${{ steps.version.outputs.tag }}"; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Tag ${{ steps.version.outputs.tag }} já existe — noop."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Criar annotated tag + push
+        if: steps.check.outputs.exists == 'false'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          COMMIT_SHA: ${{ github.sha }}
+          TRIGGER: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Aponta tag para o commit atual (merge commit em push, ou HEAD em dispatch).
+          git tag -a "$TAG" "$COMMIT_SHA" -m "$TAG — template release
+
+          Versão: $VERSION
+          Trigger: $TRIGGER
+          Commit: $COMMIT_SHA
+
+          Tag criada automaticamente por .github/workflows/release-template.yml.
+          Para detalhes do que mudou, consulte o Histórico de Versões em
+          docs/MONOREPO.md, docs/STACK.md e
+          .agents/specs/conventions/estrutura-e-versionamento.md."
+          git push origin "$TAG"
+          echo "✓ Tag $TAG criada e pushed para origin."

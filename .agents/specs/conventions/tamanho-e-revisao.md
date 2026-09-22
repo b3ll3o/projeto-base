@@ -1,6 +1,6 @@
 # Convenção: Tamanho Máximo e Revisão Obrigatória
 
-> Sub-spec referenciada por [AGENTS.md §6](../../../../AGENTS.md).
+> Sub-spec referenciada por [AGENTS.md §6](../../../AGENTS.md).
 
 ## Tamanho Máximo de Arquivos
 

@@ -1,6 +1,6 @@
 # Convenção: Desenvolvimento Orientado a Testes (TDD)
 
-> Sub-spec referenciada por [AGENTS.md §6](../../../../AGENTS.md).
+> Sub-spec referenciada por [AGENTS.md §6](../../../AGENTS.md).
 
 **TODAS as aplicações do projeto DEVEM seguir o ciclo TDD canônico de Kent Beck.** Esta regra é absoluta e não admite exceção sem `AGENTS.override.md` documentado.
 
