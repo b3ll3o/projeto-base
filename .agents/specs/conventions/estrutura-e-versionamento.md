@@ -1,6 +1,6 @@
 # Convenção: Estrutura de Diretórios e Versionamento
 
-> Sub-spec referenciada por [AGENTS.md §6](../../../../AGENTS.md).
+> Sub-spec referenciada por [AGENTS.md §6](../../../AGENTS.md).
 
 ## Estrutura de Diretórios
 

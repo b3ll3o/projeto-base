@@ -1,6 +1,6 @@
 # Convenção: Evolução Contínua de Agents e Skills
 
-> Sub-spec referenciada por [AGENTS.md §6](../../../../AGENTS.md).
+> Sub-spec referenciada por [AGENTS.md §6](../../../AGENTS.md).
 
 **Agents e skills são entidades VIVAS que DEVEM evoluir junto com a aplicação.** Esta regra é absoluta.
 

@@ -1,6 +1,6 @@
 # Convenção: Idioma Padrão (pt-BR)
 
-> Sub-spec referenciada por [AGENTS.md §6](../../../../AGENTS.md).
+> Sub-spec referenciada por [AGENTS.md §6](../../../AGENTS.md).
 
 **pt-BR é o idioma padrão e obrigatório** do projeto. Aplicar a:
 

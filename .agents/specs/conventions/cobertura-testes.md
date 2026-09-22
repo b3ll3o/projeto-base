@@ -1,6 +1,6 @@
 # Convenção: Cobertura de Testes — Regra Mínima de 80%
 
-> Sub-spec referenciada por [AGENTS.md §6](../../../../AGENTS.md).
+> Sub-spec referenciada por [AGENTS.md §6](../../../AGENTS.md).
 > pt-BR prose, English technical identifiers.
 
 ## Objetivo

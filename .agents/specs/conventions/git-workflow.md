@@ -1,6 +1,6 @@
 # Convenção: Git Workflow — Proteção da Branch `main`
 
-> Sub-spec referenciada por [AGENTS.md §6](../../../../AGENTS.md).
+> Sub-spec referenciada por [AGENTS.md §6](../../../AGENTS.md).
 
 **A branch `main` é PROTEGIDA.** Nenhum commit ou push direto é permitido. Todas as alterações DEVEM chegar a `main` via Pull Request.
 
