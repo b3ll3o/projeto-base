@@ -161,8 +161,61 @@ always_on:
   - code-quality-reviewer
 ```
 
-## 5. Histórico de Versões
+## 5. Exemplos de Uso
+
+> Ilustram como o classificador headless + skip rules resolvem
+> o conjunto de reviewers despachados em cenários típicos.
+
+### Cenário A: chore em package de tooling (1 arquivo)
+
+```text
+paths:  [tooling/scripts/package.json]
+commits: ["chore(tooling): bump v0.1.0 → v0.1.1"]
+scope:  trivial
+files:  1
+```
+
+Resultado esperado:
+
+- `spec-compliance-reviewer` SKIPPED — `commit_type == 'chore' AND task.scope != 'large'` (skip rule 2)
+- `code-quality-reviewer` DISPATCHED (path `package.json` não termina em `.md`/`.txt`, scope não é `docs`)
+- Nenhum domain reviewer — nenhum path_glob match
+- Nenhum diff_pattern match — bump de versão não toca código
+
+### Cenário B: doc-only update (1 arquivo .md)
+
+```text
+paths:  [.agents/specs/conventions/review-routing.md]
+commits: ["docs(agents): adicionar exemplos de uso"]
+scope:  docs
+files:  1
+```
+
+Resultado esperado:
+
+- `spec-compliance-reviewer` DISPATCHED — `commit_type == 'docs'` (não casa nenhuma skip rule)
+- `code-quality-reviewer` SKIPPED — `all_changed_paths endsWith .md` (skip rule 1)
+- `doc-sync` DISPATCHED — `path_glob .agents/specs/**` + `commit_type docs`
+
+### Cenário C: feat em NestJS domain (3 arquivos)
+
+```text
+paths:  [apps/api/src/users/domain/user.ts,
+         apps/api/src/users/domain/user.spec.ts,
+         apps/api/src/users/application/create-user.usecase.ts]
+commits: ["feat(users): adicionar entidade User com use case de criação"]
+scope:  medium
+```
+
+Resultado esperado:
+
+- `nestjs-specialist` + `stack-code-reviewer` DISPATCHED — `path_glob apps/api/**/domain/**` e `apps/api/**/application/**`
+- `spec-compliance-reviewer` DISPATCHED — `commit_type feat` (não em skip list)
+- `code-quality-reviewer` DISPATCHED — há `.ts` files
+
+## 6. Histórico de Versões
 
 | Versão | Data | Mudança |
 |--------|------|---------|
 | 1 | 2026-09-22 | Versão inicial |
+| 1.1 | 2026-09-22 | Adicionar exemplos de uso (Seção 5) — usado como fixture no pilot run do review-router |
