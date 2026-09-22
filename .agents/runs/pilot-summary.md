@@ -145,16 +145,16 @@ pnpm review:lint   # 0 errors, 0 warnings
 pnpm ci:preflight  # 8/8 verde
 ```
 
-## Sprint Validation (Fase 5) — Router em todos os 6 workflows
+## Validação da Sprint (Fase 5) — Router em todos os 6 workflows
 
 > Complemento ao pilot run original (Tasks 1–5 acima). Documenta a
 > validação de rollout estrutural concluída na Fase 5 do plano
 > `2026-09-22-review-router-fase-05-migration-part-01.md`.
 >
 > **Validation date:** 2026-09-22
-> **Default-on state:** `REVIEW_ROUTER_ENABLED=true` é o default desde v1.1.
+> **Default-on state:** `REVIEW_ROUTER_ENABLED=true` é o default.
 > A matriz em [`.agents/specs/conventions/review-routing.md`](../specs/conventions/review-routing.md)
-> não declara nenhum flag `enabled: false`; o `version: 1.1` da matriz
+> não declara nenhum flag `enabled: false`; o `version: 1` da matriz
 > e a presença de `always_on:` (spec-compliance-reviewer +
 > code-quality-reviewer) confirmam que o router está habilitado por
 > default em todos os workflows que o invocam.
@@ -189,7 +189,7 @@ correct fabricated line numbers + inflated match count in pilot-summary`):
   diff_pattern_match 1/5 (20%).
 - **Falsos positivos:** 1 blocking FP (Task 1 — test fixtures casam
   regex `bcrypt|argon2|hash\(|jwt\.sign|jwt\.verify` da matriz).
-  Documentado como limitation known (Aprendizado #3 acima).
+  Documentado como limitation known (Aprendizado #2 acima).
 - **Findings agregados:** 0 — pilot planeja dispatch, não executa reviewer.
 
 ### Mudança estrutural vs métrica-produzida
@@ -206,15 +206,15 @@ classifica um diff real — até agora, os dados continuam sendo os do pilot
 run (5 tasks). A próxima coleta será orgânica, conforme os workflows
 adotados forem executados em PRs reais.
 
-### Production readiness — matriz v1.1
+### Production readiness — matriz v1
 
-**Status:** matriz v1.1 está production-ready.
+**Status:** matriz v1 está production-ready.
 
-A v1.1 cobre os 4 caminhos lógicos exercitados pelo pilot (sempre com
-fallback razoável) e expõe apenas 2 ressalvas conhecidas (FP em test
+A v1 cobre os 4 caminhos lógicos exercitados pelo pilot (sempre com
+fallback razoável) e expõe apenas as ressalvas conhecidas (FP em test
 fixtures + flag `blocking: true` em `path_globs` não honrado pelo
-classifier). Ambas já estão documentadas em **Aprendizados para Matriz
-v1.2** acima (2 P1 + 2 P2) e rastreadas para o próximo bump.
+classifier + outras 3). Todas já estão documentadas em **Aprendizados
+para Matriz v1.2** acima (2 P1 + 3 P2) e rastreadas para o próximo bump.
 
 ### Cross-refs para matriz v1.2 (Fase 6 — forthcoming)
 
@@ -223,7 +223,7 @@ v1.2** acima (2 P1 + 2 P2) e rastreadas para o próximo bump.
 | Flag `blocking: true` em `path_globs` (turbo.json, pnpm-workspace.yaml) não propagado pelo classifier | P1 | Aprendizado #1 |
 | Narrowing de diff_patterns regex (FP em test fixtures) | P1 | Aprendizado #2 |
 | Popular `domains[]` no classifier | P2 | Aprendizado #3 |
-| Warning em lint para `path_globs` com `blocking: true` não honrado | P2 | Aprendizado #4 |
+| Warning em lint para `path_globs` com `blocking: true` não honrado | P2 | Aprendizado #5 |
 
 Encaminhamento: matriz v1.2 (Fase 6 do rollout) deve atacar os 2 P1
 antes de qualquer expansão de path_globs ou diff_patterns. Os P2 podem
