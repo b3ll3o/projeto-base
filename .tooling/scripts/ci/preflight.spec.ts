@@ -52,4 +52,25 @@ describe('checkDocRefs', () => {
     });
     expect(result.ok).toBe(true);
   });
+
+  describe('checkDocRefs - code block handling', () => {
+    it('deve IGNORAR refs dentro de fenced code blocks ```', async () => {
+      const result = await checkDocRefs({ docsRoot: path.join(FIXTURES, 'docs-fenced-block') });
+      expect(result.ok).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('deve IGNORAR refs dentro de inline code `backticks`', async () => {
+      const result = await checkDocRefs({ docsRoot: path.join(FIXTURES, 'docs-inline-code') });
+      expect(result.ok).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('deve AINDA detectar refs quebradas fora de code blocks', async () => {
+      const result = await checkDocRefs({ docsRoot: path.join(FIXTURES, 'docs-mixed') });
+      expect(result.ok).toBe(false);
+      expect(result.errors.length).toBe(1);
+      expect(result.errors[0]).toMatch(/real-broken/);
+    });
+  });
 });
