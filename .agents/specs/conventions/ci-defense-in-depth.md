@@ -51,6 +51,8 @@ Lint, typecheck, test, coverage. Roda **apenas se preflight passou**.
 | `check-tsconfig-drift` | tsconfig | extensões/extends divergentes entre tsconfigs | ~3s | `.tooling/scripts/ci/check-tsconfig-drift.ts` |
 | `check-eslint-drift` | eslint config | regras duplicadas/legadas em configs ESLint | ~3s | `.tooling/scripts/ci/check-eslint-drift.ts` |
 | `check-types` | typecheck | tipos inconsistentes em scripts CI | ~1s | `.tooling/scripts/ci/check-types.ts` |
+| `check-turbo-drift` | turbo pipeline | drift em `turbo.json` (`$schema` ausente, nomes inválidos, `cache:false` com `outputs`) | ~2s | `.tooling/scripts/ci/check-turbo-drift.ts` |
+| `check-package-json-drift` | package.json raiz | scripts canônicos ausentes ou referenciando `tsx <path>` fantasma | ~2s | `.tooling/scripts/ci/check-package-json-drift.ts` |
 
 Todos os checks seguem o template `CheckResult` compartilhado
 extraído em commit `59eb083` (refactor que consolidou fixtures herméticas).
@@ -85,17 +87,18 @@ script.
 
 ## Pendências conhecidas
 
-- **Pre-push não automatizado via Husky.** Hoje depende de disciplina
-  do dev rodar `pnpm ci:local` antes de `git push`. Sugestão: Husky
-  hook em `.husky/pre-push` rodando `pnpm ci:preflight` (gap conhecido
-  do plano de robustez; tarefa para v1.4.0).
-- **Cobertura de drift para `turbo.json` e `package.json` raiz.** Hoje
-  apenas docs/tsconfig/eslint têm checks. Sugestão: novos checks para
-  detectar pipelines turbo divergentes e scripts pnpm fantasma.
 - **Skill `ci-defense-in-depth`:** publicada em
   [`.agents/skills/ci-defense-in-depth/SKILL.md`](../../skills/ci-defense-in-depth/SKILL.md)
   (adicionada em v1.4.0). Cobre o template `CheckResult`, fixtures herméticas
   via `fs.mkdtemp` e code-block-aware parsing para novos checks preflight.
+- **Drift detectado por `check-turbo-drift`** em commit da v1.4.0:
+  as tasks `stack:review` e `docs:sync` declaravam `outputs` apesar de
+  `cache:false` (semanticamente contraditório). Corrigido removendo os
+  `outputs` órfãos; registrado como caso de uso real que justifica o check.
+- **Mais 2 checks ativos a partir de v1.4.0:** `check-turbo-drift` e
+  `check-package-json-drift` estendem a tabela acima para 7 checks
+  estruturais totais (cross-refs, tsconfig, eslint, turbo, package.json,
+  types).
 
 ## Cross-references
 
