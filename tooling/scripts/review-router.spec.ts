@@ -14,6 +14,7 @@ import {
   parseCommitType,
   matchCommitTypes,
   matchDiffPatterns,
+  loadMatrix,
   type PathGlobRule,
   type CommitTypeRule,
   type DiffPatternRule,
@@ -171,6 +172,46 @@ describe('review-router classifier', () => {
       const result = matchDiffPatterns(bigDiff, rules);
       expect(result.truncated).toBe(true);
       expect(result.reviewers).toEqual([]); // bcrypt after truncation
+    });
+  });
+
+  describe('loadMatrix()', () => {
+    it('parses YAML blocks from review-routing.md', () => {
+      const md = `
+# Title
+\`\`\`yaml
+path_globs:
+  - pattern: "apps/api/**"
+    reviewers: [nestjs-specialist]
+\`\`\`
+`;
+      const result = loadMatrix(md);
+      expect(result.path_globs).toHaveLength(1);
+      expect(result.path_globs![0].pattern).toBe('apps/api/**');
+    });
+
+    it('returns empty matrix when no YAML blocks found', () => {
+      const md = '# Just markdown, no YAML';
+      const result = loadMatrix(md);
+      expect(result.path_globs).toBeUndefined();
+    });
+
+    it('extracts multiple YAML blocks (path_globs, commit_types, diff_patterns)', () => {
+      const md = `
+\`\`\`yaml
+path_globs:
+  - pattern: "apps/api/**"
+    reviewers: [nestjs-specialist]
+\`\`\`
+\`\`\`yaml
+commit_types:
+  feat:
+    reviewers_added: [stack-code-reviewer]
+\`\`\`
+`;
+      const result = loadMatrix(md);
+      expect(result.path_globs).toHaveLength(1);
+      expect(result.commit_types?.feat?.reviewers_added).toContain('stack-code-reviewer');
     });
   });
 });

@@ -4,6 +4,8 @@
 // commits + diff, retorna reviewers despachados baseado na matriz
 // de roteamento. Implementação completa virá em Tasks 1.3-1.7.
 
+import * as YAML from 'yaml';
+
 export interface ClassifyInput {
   paths: string[];
   commits: string[];
@@ -217,6 +219,31 @@ export function matchDiffPatterns(diff: string, rules: DiffPatternRule[]): DiffM
   }
 
   return { reviewers: Array.from(reviewers), blocking, truncated, evidence };
+}
+
+export interface Matrix {
+  path_globs?: PathGlobRule[];
+  commit_types?: Record<string, CommitTypeRule>;
+  diff_patterns?: DiffPatternRule[];
+  skip_rules?: Record<string, { skip_if: string[]; rationale?: string }>;
+  always_on?: string[];
+}
+
+export function loadMatrix(markdown: string): Matrix {
+  const yamlBlocks = markdown.matchAll(/```yaml\n([\s\S]*?)```/g);
+  const result: Matrix = {};
+
+  for (const match of yamlBlocks) {
+    const yamlContent = match[1];
+    try {
+      const parsed = YAML.parse(yamlContent) as Matrix;
+      Object.assign(result, parsed);
+    } catch {
+      continue; // Skip invalid YAML blocks (lint catches)
+    }
+  }
+
+  return result;
 }
 
 // CLI entrypoint (placeholder — implementação completa em Task 1.7)
