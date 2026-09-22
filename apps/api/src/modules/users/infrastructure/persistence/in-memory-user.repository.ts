@@ -6,7 +6,10 @@ import type {
 import { User } from '../../domain/user.aggregate.js';
 import type { UserId } from '../../domain/value-objects/user-id.vo.js';
 import type { Email } from '../../domain/value-objects/email.vo.js';
-import { ConcurrencyException } from '../../domain/exceptions/user.exceptions.js';
+import {
+  ConcurrencyException,
+  EmailAlreadyInUseException,
+} from '../../domain/exceptions/user.exceptions.js';
 
 /**
  * Implementação InMemory do UserRepositoryPort.
@@ -79,9 +82,7 @@ export class InMemoryUserRepository implements UserRepositoryPort {
       }
       // valida unicidade de email (exceto se for o próprio id, o que aqui é N/A)
       if (this.emailIndex.has(snapshot.email().value)) {
-        throw new Error(
-          `EmailAlreadyInUse: email '${snapshot.email().value}' já está em uso por outro User`,
-        );
+        throw new EmailAlreadyInUseException(snapshot.email().value);
       }
       this.byId.set(snapshot.id().value, snapshot);
       this.emailIndex.set(snapshot.email().value, snapshot.id().value);
@@ -102,9 +103,7 @@ export class InMemoryUserRepository implements UserRepositoryPort {
       if (occupier !== undefined && occupier !== snapshot.id().value) {
         // restaura índice antigo antes de propagar erro
         this.emailIndex.set(current.email().value, snapshot.id().value);
-        throw new Error(
-          `EmailAlreadyInUse: email '${snapshot.email().value}' já está em uso por outro User`,
-        );
+        throw new EmailAlreadyInUseException(snapshot.email().value);
       }
       this.emailIndex.set(snapshot.email().value, snapshot.id().value);
     }

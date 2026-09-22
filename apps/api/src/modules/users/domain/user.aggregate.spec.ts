@@ -75,6 +75,14 @@ describe('User aggregate', () => {
       u.pullEvents();
       expect(() => u.renomear('A', T1)).toThrow();
     });
+
+    it('lança UserDeletedException se User foi soft-deleted', () => {
+      const u = User.criar({ nome: 'João', email: 'joao@example.com', agora: T0 });
+      u.pullEvents();
+      u.marcarExcluido(null, T1);
+      u.pullEvents();
+      expect(() => u.renomear('João Silva', T2)).toThrow(UserDeletedException);
+    });
   });
 
   describe('alterarEmail()', () => {
@@ -91,6 +99,14 @@ describe('User aggregate', () => {
       u.pullEvents();
       u.alterarEmail('novo@example.com', T1);
       expect(u.pullEvents()[0]).toBeInstanceOf(UserUpdatedEvent);
+    });
+
+    it('lança UserDeletedException se User foi soft-deleted', () => {
+      const u = User.criar({ nome: 'João', email: 'joao@example.com', agora: T0 });
+      u.pullEvents();
+      u.marcarExcluido(null, T1);
+      u.pullEvents();
+      expect(() => u.alterarEmail('novo@example.com', T2)).toThrow(UserDeletedException);
     });
   });
 
@@ -149,6 +165,14 @@ describe('User aggregate', () => {
     it('lança InvalidRestoreException se não está excluído', () => {
       const u = User.criar({ nome: 'João', email: 'joao@example.com', agora: T0 });
       expect(() => u.restaurar(T1)).toThrow(InvalidRestoreException);
+    });
+
+    it('lança InvalidRestoreException se agora é anterior ao deletedAt', () => {
+      const u = User.criar({ nome: 'João', email: 'joao@example.com', agora: T0 });
+      u.pullEvents();
+      u.marcarExcluido(null, T2); // soft delete em T2
+      u.pullEvents();
+      expect(() => u.restaurar(T1)).toThrow(InvalidRestoreException); // T1 < T2
     });
   });
 

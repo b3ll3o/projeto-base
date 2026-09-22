@@ -14,10 +14,10 @@ import { UserDeletedException, InvalidRestoreException } from './exceptions/user
  * Encapsula estado + invariantes + regras de negócio + emissão de eventos.
  * Mutações externas só via factory (criar / restaurarDePersistencia) e mutators.
  *
- * Estado mutável é mantido em campos privados ECMAScript (#field), que vivem
- * em um slot interno separado das "own properties". Assim, `Object.freeze(this)`
- * continua protegendo contra escrita externa em propriedades públicas, sem
- * bloquear a reatribuição interna usada pelos mutators.
+ * Estado mutável é mantido em campos privados ECMAScript (`#field`), que
+ * vivem em um slot interno separado das "own properties" — isso já impede
+ * escrita externa. `Object.freeze(this)` é redundante para os campos privados
+ * mas protege qualquer own-property pública futura.
  */
 export class User {
   readonly #id: UserId;
@@ -166,6 +166,11 @@ export class User {
   restaurar(agora: Date): void {
     if (this.#deletedAt === null) {
       throw new InvalidRestoreException('User não está excluído; não há nada para restaurar');
+    }
+    if (agora.getTime() < this.#deletedAt.getTime()) {
+      throw new InvalidRestoreException(
+        `Não é possível restaurar em ${agora.toISOString()} antes do soft delete em ${this.#deletedAt.toISOString()}`,
+      );
     }
     const restoredFromVersion = this.#version;
     this.#deletedAt = null;

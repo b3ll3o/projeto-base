@@ -3,7 +3,10 @@ import { InMemoryUserRepository } from './in-memory-user.repository.js';
 import { User } from '../../domain/user.aggregate.js';
 import { UserId } from '../../domain/value-objects/user-id.vo.js';
 import { Email } from '../../domain/value-objects/email.vo.js';
-import { ConcurrencyException } from '../../domain/exceptions/user.exceptions.js';
+import {
+  ConcurrencyException,
+  EmailAlreadyInUseException,
+} from '../../domain/exceptions/user.exceptions.js';
 
 const T0 = new Date('2026-09-21T10:00:00Z');
 const T1 = new Date('2026-09-21T11:00:00Z');
@@ -38,6 +41,23 @@ describe('InMemoryUserRepository', () => {
       // segunda tentativa: expectedVersion ainda 0 mas já existe
       await expect(repo.save(u, 0)).rejects.toThrow(ConcurrencyException);
     });
+
+    it('rejeita INSERT com email já em uso por outro User', async () => {
+      const u1 = User.criar({
+        id: idA,
+        nome: 'Alice',
+        email: 'compartilhado@example.com',
+        agora: T0,
+      });
+      await repo.save(u1, 0);
+      const u2 = User.criar({
+        id: idB,
+        nome: 'Bob',
+        email: 'compartilhado@example.com',
+        agora: T0,
+      });
+      await expect(repo.save(u2, 0)).rejects.toThrow(EmailAlreadyInUseException);
+    });
   });
 
   describe('save() — UPDATE path', () => {
@@ -65,6 +85,29 @@ describe('InMemoryUserRepository', () => {
       expect(await repo.findByEmail(Email.create('novo@example.com'))).not.toBeNull();
       expect(await repo.findByEmail(Email.create('joao@example.com'))).toBeNull();
     });
+
+    it('rejeita UPDATE para email já usado por outro User (índice fica intacto)', async () => {
+      const u1 = User.criar({ id: idA, nome: 'Alice', email: 'alice@example.com', agora: T0 });
+      const u2 = User.criar({ id: idB, nome: 'Bob', email: 'bob@example.com', agora: T0 });
+      await repo.save(u1, 0);
+      await repo.save(u2, 0);
+
+      u1.alterarEmail('bob@example.com', T1); // tenta roubar email do Bob
+      await expect(repo.save(u1, 1)).rejects.toThrow(EmailAlreadyInUseException);
+
+      // índice deve estar intacto: Bob ainda dono do seu email, Alice ainda do antigo
+      expect((await repo.findByEmail(Email.create('bob@example.com')))!.id().value).toBe(idB);
+      expect((await repo.findByEmail(Email.create('alice@example.com')))!.id().value).toBe(idA);
+    });
+
+    it('clone defensivo: mutar o User APÓS save NÃO afeta o armazenado', async () => {
+      const u = User.criar({ id: idA, nome: 'João', email: 'joao@example.com', agora: T0 });
+      await repo.save(u, 0);
+      u.renomear('João Mutado', T1);
+      const refetched = await repo.findById(UserId.create(idA));
+      expect(refetched!.nome().value).toBe('João');
+      expect(refetched!.version()).toBe(1);
+    });
   });
 
   describe('findById()', () => {
@@ -78,6 +121,16 @@ describe('InMemoryUserRepository', () => {
       const found = await repo.findById(UserId.create(idA));
       expect(found).not.toBeNull();
       expect(found!.nome().value).toBe('João');
+    });
+
+    it('retorna clone defensivo: mutar o resultado NÃO afeta o armazenado', async () => {
+      const u = User.criar({ id: idA, nome: 'João', email: 'joao@example.com', agora: T0 });
+      await repo.save(u, 0);
+      const found = await repo.findById(UserId.create(idA));
+      found!.renomear('João Mutado', T1);
+      const refetched = await repo.findById(UserId.create(idA));
+      expect(refetched!.nome().value).toBe('João');
+      expect(refetched!.version()).toBe(1);
     });
   });
 

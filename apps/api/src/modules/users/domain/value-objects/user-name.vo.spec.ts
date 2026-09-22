@@ -7,6 +7,11 @@ describe('UserName', () => {
     expect(n.value).toBe('João Silva');
   });
 
+  it('colapsa múltiplos espaços internos em um único', () => {
+    const n = UserName.create(' João   Silva  Santos ');
+    expect(n.value).toBe('João Silva Santos');
+  });
+
   it('rejeita vazio', () => {
     expect(() => UserName.create('   ')).toThrow(/vazio/);
   });
