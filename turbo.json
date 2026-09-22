@@ -8,6 +8,7 @@
     "typecheck": { "dependsOn": ["^build"], "outputs": [] },
     "test": { "dependsOn": ["^build"], "outputs": ["coverage/**"] },
     "test:unit": { "outputs": ["coverage/**"] },
+    "test:coverage": { "outputs": ["coverage/**"] },
     "test:integration": { "cache": false, "outputs": [] },
     "test:e2e": { "cache": false, "outputs": [] },
     "tdd:check": { "dependsOn": ["test:unit"], "outputs": [] },

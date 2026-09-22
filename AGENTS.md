@@ -151,6 +151,7 @@ As convenções estão detalhadas em arquivos próprios sob [`.agents/specs/conv
 | Evolução de Agents    | [`evolucao-agents.md`](./.agents/specs/conventions/evolucao-agents.md)    | Agents/skills evoluem com a aplicação + memória       |
 | Git Workflow          | [`git-workflow.md`](./.agents/specs/conventions/git-workflow.md)          | `main` protegida; merge apenas via PR                 |
 | Estrutura & Versionamento | [`estrutura-e-versionamento.md`](./.agents/specs/conventions/estrutura-e-versionamento.md) | Layout de diretórios + versionamento semântico |
+| Cobertura de Testes   | [`cobertura-testes.md`](./.agents/specs/conventions/cobertura-testes.md)| Mínimo 80% agregado por projeto vitest; hard fail CI |
 
 ---
 

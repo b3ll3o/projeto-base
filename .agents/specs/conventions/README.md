@@ -12,6 +12,7 @@ Cada convenção está em arquivo próprio para manter este diretório e o AGENT
 | Evolução de Agents | [`evolucao-agents.md`](./evolucao-agents.md) | Agents e skills evoluem junto com a aplicação |
 | Git Workflow | [`git-workflow.md`](./git-workflow.md) | `main` protegida; merge apenas via PR |
 | Estrutura & Versionamento | [`estrutura-e-versionamento.md`](./estrutura-e-versionamento.md) | Layout de diretórios e versionamento semântico |
+| Cobertura de Testes | [`cobertura-testes.md`](./cobertura-testes.md) | Mínimo 80% agregado por projeto vitest; hard fail CI |
 
 ## Regra Geral
 
