@@ -17,9 +17,10 @@
 // - O documento JSON é gerado a partir dos `@Api*` decorators já
 //   presentes em `UsersController` (Fase 7). Conforme novos controllers
 //   forem adicionados, eles aparecem automaticamente.
-// - `setGlobalPrefix` NÃO é aplicado aqui (Test.createTestingModule não
-//   chama `app.setGlobalPrefix`). O JSON sai com paths absolutos
-//   (`/users`, `/users/:id`) — o consumer pode prefixar se precisar.
+// - `setGlobalPrefix('api/v1')` é aplicado aqui para que o JSON gerado
+//   espelhe o runtime (`main.ts:19`). Sem isso, o documento sai com
+//   paths relativos (`/users`, `/users/:id`) e qualquer consumer
+//   (docs, SDK generator, contract test) atinge paths errados.
 // - O `mkdir -p` cobre o caso de primeira execução (pasta `apps/api/`
 //   existe, mas o script não depende de path relativo estável — usa
 //   `process.cwd()` assumindo que `pnpm --filter` aponta para o package).
@@ -45,6 +46,10 @@ async function exportOpenApi(): Promise<void> {
     .compile();
 
   const app = moduleRef.createNestApplication(new FastifyAdapter());
+
+  // pt-BR: espelha o runtime (`main.ts:19`). Sem isso o documento sai
+  // com paths relativos e diverge do servidor real.
+  app.setGlobalPrefix('api/v1');
 
   const config = new DocumentBuilder()
     .setTitle('Projeto Base API')

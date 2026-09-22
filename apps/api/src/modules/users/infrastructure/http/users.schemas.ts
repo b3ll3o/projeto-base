@@ -18,10 +18,10 @@
 //                 de 254 octetos na "addr-spec"; usamos 255 para margem
 //                 inclusive do "@")
 //
-// - `novoNome` no PATCH é `.optional()` para forward-compat com PATCH
-//   parcial (issue de follow-up: PATCH/name + PATCH/email separados).
-//   Hoje o controller exige `novoNome`, mas o schema aceita omissão
-//   para não acoplar evoluções HTTP à evolução do schema.
+// - `novoNome` no PATCH é OBRIGATÓRIO: o endpoint atual é rename-only,
+//   e o pipe Zod centraliza a rejeição 400. PATCH parcial (alguns campos
+//   opcionais) será modelado em issue próprio, com schema dedicado e
+//   `setRequiredByRoute()`.
 
 import { z } from 'zod';
 
@@ -39,11 +39,12 @@ export const CreateUserSchema = z.object({
 export type CreateUserDto = z.infer<typeof CreateUserSchema>;
 
 /**
- * Schema do body de `PATCH /users/:id`. Hoje só suporta rename; `novoNome`
- * é opcional para forward-compat com PATCH parcial futuro.
+ * Schema do body de `PATCH /users/:id`. Endpoint rename-only:
+ * `novoNome` é obrigatório (1..120 chars). PATCH parcial será modelado
+ * em issue próprio com schema dedicado.
  */
 export const UpdateUserSchema = z.object({
-  novoNome: z.string().min(1).max(120).optional(),
+  novoNome: z.string().min(1).max(120),
 });
 
 /** Tipo inferido do `UpdateUserSchema` — consumido pelo controller. */

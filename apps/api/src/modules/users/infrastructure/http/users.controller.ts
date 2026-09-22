@@ -139,15 +139,6 @@ export class UsersController {
     @Headers('if-match') ifMatch: string,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<unknown> {
-    // pt-BR: `novoNome` é opcional no schema (forward-compat com PATCH
-    // parcial futuro), mas o use case `atualizarNome` exige-o hoje.
-    // Rejeitamos 400 cedo em vez de propagar erro genérico do use case.
-    if (body.novoNome === undefined) {
-      throw new BadRequestException({
-        code: 'NOVO_NOME_REQUIRED',
-        detail: 'Campo novoNome é obrigatório no PATCH atual (rename-only).',
-      });
-    }
     const expectedVersion = this.parseIfMatch(ifMatch);
     const input: UpdateUserNameInput = {
       id,

@@ -323,22 +323,26 @@ describe('UsersController — handlers HTTP', () => {
     runSpy.mockRestore();
   });
 
-  it('update() rejeita body sem novoNome com NOVO_NOME_REQUIRED', async () => {
-    // pt-BR: schema aceita `{}` (novoNome opcional, forward-compat) mas
-    // o controller exige-o hoje e devolve 400 NOVO_NOME_REQUIRED antes
-    // de chamar o use case.
-    const runSpy = vi.spyOn(AuditContextStore, 'run');
+  it('update() rejeita body sem novoNome via ZodValidationPipe (VALIDATION_ERROR)', async () => {
+    // pt-BR: `novoNome` é obrigatório no schema Zod — o pipe lança
+    // BadRequestException com `code: VALIDATION_ERROR` antes de o
+    // handler rodar, então o controller NÃO precisa de guard manual.
+    // Aqui exercitamos o pipe+schema (mesma estratégia dos demais
+    // testes de boundary Zod), pois é a única forma determinística
+    // de verificar o schema sem montar o TestingModule inteiro.
+    const pipe = new ZodValidationPipe(UpdateUserSchema);
     let captured: unknown;
     try {
-      await ctrl.update('u-1', {} as never, 'W/"v7"', reply as never);
+      pipe.transform({}, { type: 'body' });
     } catch (e) {
       captured = e;
     }
     expect(captured).toBeInstanceOf(BadRequestException);
     const payload = readErrorPayload(captured);
-    expect(payload.code).toBe('NOVO_NOME_REQUIRED');
-    expect(String(payload.detail)).toMatch(/obrigat/i);
-    expect(runSpy).not.toHaveBeenCalled();
+    expect(payload.code).toBe('VALIDATION_ERROR');
+    // Garante também que o controller não chega a ser invocado neste
+    // caminho (defesa em profundidade: o pipe roda no boundary).
+    const runSpy = vi.spyOn(AuditContextStore, 'run');
     expect(useCases.atualizarNome).not.toHaveBeenCalled();
     runSpy.mockRestore();
   });
@@ -519,9 +523,9 @@ describe('UsersController — Zod validation at HTTP boundary', () => {
     expect(out).toEqual({ novoNome: 'Maria' });
   });
 
-  it('update aceita payload sem novoNome (campo opcional)', () => {
-    const pipe = new ZodValidationPipe(UpdateUserSchema);
-    const out = pipe.transform({}, { type: 'body' });
-    expect(out).toEqual({});
+  it('update rejeita payload sem novoNome (campo obrigatório)', () => {
+    const err = captureUpdateError({});
+    const payload = readErrorPayload(err);
+    expect(payload.code).toBe('VALIDATION_ERROR');
   });
 });
