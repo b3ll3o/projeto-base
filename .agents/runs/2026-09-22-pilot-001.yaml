@@ -1,0 +1,159 @@
+# Review-Router Pilot Run — 2026-09-22
+#
+# pt-BR: Output canônico do review-router em pilot run (Task 3.5).
+# Schema: ver `.agents/specs/conventions/review-routing.md` e
+# `.agents/agents/review-router.md` §"Outputs".
+
+metadata:
+  run_id: '2026-09-22-pilot-001'
+  timestamp_iso: '2026-09-22T19:40:00-03:00'
+  task: 'Pilot run do review-router (Task 3.5)'
+  pilot_kind: 'discardable_fixture'
+  base_branch: 'main'
+  head_branch: 'feat/review-router-pilot-run'
+  base_sha: '675925527e4efef332d5ac27e3ef00a234633bdd'
+  head_sha: '9ff05e0b71c82e502af5e81331a35823f4db789b'
+  fixture_commits: 1
+  matrix_version: 1
+  matrix_path: '.agents/specs/conventions/review-routing.md'
+
+# Passo 1: Pre-dispatch checks (todos passaram)
+pre_dispatch_checks:
+  working_tree_clean: true
+  branch_base_exists: true # main == 6759255
+  matrix_file_exists: true # .agents/specs/conventions/review-routing.md (221 LOC, ≤ 300)
+  lint_clean: true # pnpm review:lint → exit 0, 0 warnings
+
+# Passo 2: Sinais coletados do diff
+signals_collected:
+  paths:
+    - '.agents/specs/conventions/review-routing.md'
+  commits:
+    - 'docs(agents): adicionar exemplos de uso da matriz (pilot fixture)'
+  files_changed: 1
+  diff_size_bytes: 2393
+  diff_truncated: false
+
+# Passo 3: Output do classificador headless (`pnpm review:route`)
+classifier_output:
+  domains: []
+  reviewers:
+    - doc-sync
+  evidence:
+    - signal: path_glob
+      pattern: '.agents/specs/**'
+      reviewers_added: [doc-sync]
+      files_matched:
+        - '.agents/specs/conventions/review-routing.md'
+    - signal: commit_type
+      pattern: 'docs'
+      reviewers_added: [doc-sync]
+  blocking: false
+  classifier_latency_ms: 889
+
+# Passo 4: Resolução de domínios → reviewers (skip rules + always_on aplicados)
+classification:
+  scope: docs
+  files_changed: 1
+  commit_types: [docs]
+  all_paths_end_with_md: true
+  matrix_version: 1
+
+# Passo 5 + 6: Reviewers despachados (ou skipped com razão)
+reviewers_dispatched:
+  - reviewer: spec-compliance-reviewer
+    status: dispatched
+    dispatched_as: code-reviewer # alias (per review-router.md §"Coordenação")
+    reason: 'always_on; nenhuma skip rule aplicável (scope=docs ≠ trivial; commit_type=docs ≠ chore)'
+    skip_rules_evaluated:
+      - rule: "scope == 'trivial' AND files_changed <= 1"
+        matched: false # scope=docs, não trivial
+      - rule: "commit_type == 'chore' AND scope != 'large'"
+        matched: false # commit_type=docs, não chore
+    evidence:
+      - always_on_dispatch
+    notes: |
+      Em produção, este reviewer executaria review de aderência a specs.
+      No pilot, sem findings (fixture trivial não introduz decisões de design).
+    dispatch_outcome: not_executed_pilot # pilot só registra plano, não executa review real
+
+  - reviewer: code-quality-reviewer
+    status: skipped
+    skip_reason: "all_changed_paths endsWith .md AND scope == 'docs'"
+    skip_rules_evaluated:
+      - rule: 'all_changed_paths endsWith .md OR .txt'
+        matched: true # review-routing.md termina em .md
+      - rule: "scope == 'docs'"
+        matched: true # scope da task é docs
+    evidence: []
+
+  - reviewer: doc-sync
+    status: dispatched
+    reason: "path_glob '.agents/specs/**' + commit_type 'docs'"
+    evidence:
+      - signal: path_glob
+        pattern: '.agents/specs/**'
+      - signal: commit_type
+        pattern: 'docs'
+    notes: |
+      Em produção, doc-sync verificaria referências cruzadas e staleness.
+      No pilot, sem findings (adição de seção "Exemplos de Uso" é self-contained
+      e não quebra refs existentes — ver Seção 6 do spec).
+    dispatch_outcome: not_executed_pilot
+
+# Passo 7: Agregação de findings
+findings_aggregated:
+  totals:
+    blocker: 0
+    major: 0
+    minor: 0
+    info: 0
+  consensus_count: 0
+  findings: []
+  notes: 'Pilot em fixture trivial não gera findings — objetivo é validar pipeline, não detectar issues.'
+
+# Métricas
+metrics:
+  total_latency_ms: 889 # só classifier roda; sem live dispatch no pilot
+  classifier_latency_ms: 889
+  dispatch_latency_ms: 0 # não houve live dispatch (pilot only logs plan)
+  aggregation_latency_ms: 0
+  reviewers_dispatched_count: 2 # spec-compliance-reviewer + doc-sync
+  reviewers_skipped_count: 1 # code-quality-reviewer
+  reviewers_total_resolved: 3 # 1 always_on + 1 always_on skipped + 1 domain
+  under_90s_budget: true # 889ms << 90000ms
+
+# Decisão de triage (controller)
+triage:
+  blocking_count: 0
+  important_count: 0
+  nice_to_have_count: 0
+  decision: advance # 0 BLOCKING/IMPORTANT → controller pode prosseguir
+  rationale: 'Fixture trivial sem findings; objetivo é validar pipeline do router, não o conteúdo do fixture.'
+
+# Próximos passos (controller)
+next_steps:
+  - 'Criar retro file `.agents/runs/2026-09-22-pilot-001.md` com aprendizados'
+  - 'Atualizar `.agents/memory/review-router.md` com learnings da pilot run'
+  - '(Opcional) Descartar o fixture commit antes de PR final se desejado'
+
+# Anti-padrões verificados (não cometidos)
+anti_patterns_avoided:
+  - 'Skipei router? Não — router rodou.'
+  - 'Avancei com BLOCKING não tratado? Não — 0 BLOCKING.'
+  - 'Modifiquei matriz fora de PR? Não — matriz inalterada (apenas adicionei seção de exemplos).'
+  - 'Inverti reviewers não declarados? Não — apenas reviewers da matriz.'
+
+# Auto-checagens do schema
+schema_validation:
+  reviewers_dispatched_non_empty_or_all_skipped: true # 2 dispatched, 1 skipped
+  findings_aggregated_totals_present: true
+  classification_evidence_present: true
+  all_skipped_have_reason: true # code-quality-reviewer tem skip_reason
+
+# Cross-refs
+cross_refs:
+  - '.agents/agents/review-router.md'
+  - '.agents/skills/review-routing/SKILL.md'
+  - '.agents/specs/conventions/review-routing.md'
+  - '.agents/runs/2026-09-22-pilot-001.md' # retro file (a criar)
