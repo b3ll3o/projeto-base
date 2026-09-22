@@ -1,18 +1,19 @@
 // apps/api/test/e2e/scenarios/01-crud-happy-path.e2e.spec.ts
 //
-// Cenário E2E 01: fluxo CRUD completo sem erros (Fase 9 Task 9.2).
+// Cenário E2E 01: fluxo CRU (CREATE + READ + UPDATE) sem erros (Fase 9 Task 9.2).
+// DELETE/RESTORE/history ficam nos cenários 02-08.
 //
 // Fluxo coberto:
 //  - CREATE → 201 + ETag W/"v1" + body com version=1
 //  - GET by id → 200 + mesmo id
-//  - LIST paginado → 200 + pelo menos 1 item
+//  - LIST paginado → 200 + exatamente 1 item (cenário isolado)
 //  - UPDATE com If-Match correto → 200 + version=2 + novo ETag
-//  - GET by id (atualizado) → confirma name novo
+//  - GET by id (atualizado) → confirma novo nome
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { bootstrapE2E, teardownE2E, type E2EContext } from '../test-app.helper.js';
 
-describe('E2E 01: CRUD happy path completo', () => {
+describe('E2E 01: CRU happy path completo', () => {
   let e2e: E2EContext;
 
   beforeAll(async () => {
@@ -44,11 +45,12 @@ describe('E2E 01: CRUD happy path completo', () => {
     const got = JSON.parse(g.body) as { id: string };
     expect(got.id).toBe(created.id);
 
-    // LIST
+    // LIST — cenário isolado em container dedicado, então exatamente 1 item
     const l = await app.inject({ method: 'GET', url: '/api/v1/users?limit=10' });
     expect(l.statusCode).toBe(200);
-    const list = JSON.parse(l.body) as { users: unknown[] };
-    expect(list.users.length).toBeGreaterThanOrEqual(1);
+    const list = JSON.parse(l.body) as { users: Array<{ id: string; version: number }> };
+    expect(list.users).toHaveLength(1);
+    expect(list.users[0]?.id).toBe(created.id);
 
     // UPDATE (com If-Match correto)
     const u = await app.inject({
