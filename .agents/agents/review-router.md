@@ -141,7 +141,7 @@ next_steps: [...]
 ## Referências Canônicas
 
 - [`.agents/specs/conventions/review-routing.md`](../specs/conventions/review-routing.md) — matriz
-- [`.agents/skills/review-routing/SKILL.md`](../skills/review-routing/SKILL.md) — workflow detalhado (a criar em Task 3.3)
+- [`.agents/skills/review-routing/SKILL.md`](../skills/review-routing/SKILL.md) — workflow detalhado (criado em Task 3.3)
 - [`.agents/memory/review-router.md`](../memory/review-router.md) — memória evolutiva
 - Spec de design: `docs/superpowers/specs/2026-09-22-review-router-design.md`
 

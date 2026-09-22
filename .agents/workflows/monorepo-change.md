@@ -29,7 +29,7 @@ monorepo-specialist → code-reviewer:
     - "Versionamento via Changesets (não manual)"
 ```
 
-### Passo X: Despachar review-router
+### Passo Pós-Implementer: Despachar review-router
 
 Após implementer reportar DONE:
 

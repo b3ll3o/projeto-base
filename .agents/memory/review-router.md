@@ -1,6 +1,7 @@
 ---
 name: review-router
 type: agent_memory
+description: Memória acumulada do agent review-router — aprendizados sobre classificação de diff, despacho de reviewers e agregação de findings
 ---
 
 # Memória: review-router
