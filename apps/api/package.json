@@ -7,7 +7,7 @@
     "lint": "echo 'apps/api lint stub (real wiring in Phase 3)' && exit 0",
     "typecheck": "tsc --noEmit",
     "test": "echo 'apps/api test stub (real wiring in Phase 3)' && exit 0",
-    "test:unit": "vitest run --project unit --coverage",
+    "test:unit": "vitest run --project unit",
     "test:coverage": "vitest run --project unit --coverage",
     "test:integration": "vitest run --project integration",
     "test:e2e": "vitest run --project e2e",
