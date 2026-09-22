@@ -18,6 +18,8 @@
     "test:coverage": "turbo run test:coverage",
     "test:e2e": "turbo run test:e2e",
     "tdd:check": "turbo run tdd:check",
+    "ci:preflight": "tsx .tooling/scripts/ci/preflight.ts",
+    "ci:local": "pnpm ci:preflight && pnpm turbo run lint typecheck test:unit test:coverage --filter=@projeto/api --filter=@projeto/web",
     "stack:review": "tsx tooling/scripts/stack-code-reviewer.ts",
     "docs:sync": "tsx tooling/scripts/doc-sync.ts",
     "tooling:test": "vitest run --root tooling/scripts",

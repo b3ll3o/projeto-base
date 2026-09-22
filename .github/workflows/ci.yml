@@ -6,7 +6,26 @@ on:
     branches: [main]
 
 jobs:
+  # pt-BR: preflight detecta drift estrutural (cross-refs quebradas em
+  # docs/specs, tsconfig drift, ESLint config legada) em ~10s antes do
+  # quality rodar lint/typecheck/test (~4min). Falha rápido.
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run preflight checks
+        run: pnpm ci:preflight
   quality:
+    needs: preflight
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # pt-BR: apps/api/test/testcontainers-helper.ts sobe Postgres próprio

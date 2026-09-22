@@ -61,6 +61,27 @@
 9. Merge (squash preferencialmente)
 ```
 
+## Pre-Push Quality Gate
+
+Antes de `git push`, **OBRIGATÓRIO** rodar:
+
+```bash
+pnpm ci:local
+```
+
+Este comando executa as **mesmas validações que o CI roda** em ~30-60s
+localmente. Se falhar, **NÃO fazer push** — corrigir primeiro.
+
+Falhas capturadas (vs custo de detecção em CI):
+
+- Docs com cross-refs quebradas → 5s local vs 3min CI
+- Drift em tsconfig → 5s local vs 4min CI (typecheck roda)
+- ESLint config duplicada → 5s local vs 3min CI (lint roda)
+- Cobertura abaixo do threshold → já roda no CI
+
+Exceção: hotfix trivial (typo, doc-only). Mesmo nesses casos,
+rodar `pnpm ci:preflight` para validar refs em docs.
+
 ## Proteções Recomendadas no GitHub
 
 Configurar em **Settings → Branches → Branch protection rules → `main`**:
