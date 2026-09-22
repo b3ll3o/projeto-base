@@ -3,7 +3,10 @@ import { UserUseCases } from './user-use-cases.js';
 import { InMemoryUserRepository } from '../infrastructure/persistence/in-memory-user.repository.js';
 import { InMemoryAuditService } from '../../../shared/audit/application/in-memory-audit-service.js';
 import { AuditContext } from '../../../shared/audit/domain/audit-context.vo.js';
-import { AuditContextStore } from '../../../shared/audit/shared/audit-context-store.js';
+import {
+  AuditContextStore,
+  AuditContextMissingError,
+} from '../../../shared/audit/shared/audit-context-store.js';
 import {
   ApplicationEmailAlreadyInUseException,
   ApplicationInvalidRestoreException,
@@ -69,6 +72,13 @@ describe('UserUseCases', () => {
       const ctx = makeCtx();
       await expect(
         AuditContextStore.run(ctx, () => useCases.criarUser({ nome: '', email: 'a@b.com' })),
+      ).rejects.toThrow(ApplicationValidationException);
+    });
+
+    it('rejeita email vazio com ApplicationValidationException', async () => {
+      const ctx = makeCtx();
+      await expect(
+        AuditContextStore.run(ctx, () => useCases.criarUser({ nome: 'João', email: '' })),
       ).rejects.toThrow(ApplicationValidationException);
     });
   });
@@ -227,7 +237,9 @@ describe('UserUseCases', () => {
     });
   });
 
-  it('lança erro se AuditContext não está no scope', async () => {
-    await expect(useCases.criarUser({ nome: 'João', email: 'joao@example.com' })).rejects.toThrow();
+  it('lança AuditContextMissingError se AuditContext não está no scope', async () => {
+    await expect(useCases.criarUser({ nome: 'João', email: 'joao@example.com' })).rejects.toThrow(
+      AuditContextMissingError,
+    );
   });
 });

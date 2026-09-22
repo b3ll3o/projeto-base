@@ -1,15 +1,19 @@
 import { User } from '../domain/user.aggregate.js';
 import { UserId } from '../domain/value-objects/user-id.vo.js';
 import { Email } from '../domain/value-objects/email.vo.js';
-import { UserNotFoundException } from '../domain/exceptions/user.exceptions.js';
+import {
+  UserNotFoundException,
+  UserDeletedException,
+  InvalidRestoreException,
+  EmailAlreadyInUseException,
+  ConcurrencyException,
+} from '../domain/exceptions/user.exceptions.js';
 import type { UserRepositoryPort } from '../domain/ports/user-repository.port.js';
 import type {
   AuditOperation,
   AuditServicePort,
 } from '../../../shared/audit/application/audit-service.port.js';
 import { AuditContextStore } from '../../../shared/audit/shared/audit-context-store.js';
-import { USER_REPOSITORY_PORT } from '../domain/ports/user-repository.port.js';
-import { AUDIT_SERVICE_PORT } from '../../../shared/audit/shared/audit.tokens.js';
 
 import type { CreateUserInput } from './dto/create-user.input.js';
 import type { UpdateUserNameInput } from './dto/update-user-name.input.js';
@@ -87,7 +91,7 @@ export class UserUseCases {
     await this.userRepo.save(user, 0);
 
     // 5. Auditar evento de criação
-    await this.emitAuditForEvents(user, ctx.timestamp);
+    await this.emitAuditForEvents(user);
 
     // 6. Retornar DTO
     return toUserOutput(user);
@@ -131,7 +135,7 @@ export class UserUseCases {
       this.translateDomainException(e, 'User', id.value);
     }
     await this.userRepo.save(user, user.version() - 1);
-    await this.emitAuditForEvents(user, ctx.timestamp);
+    await this.emitAuditForEvents(user);
     return toUserOutput(user);
   }
 
@@ -158,7 +162,7 @@ export class UserUseCases {
       this.translateDomainException(e, 'User', id.value);
     }
     await this.userRepo.save(user, user.version() - 1);
-    await this.emitAuditForEvents(user, ctx.timestamp);
+    await this.emitAuditForEvents(user);
     return toUserOutput(user);
   }
 
@@ -177,7 +181,7 @@ export class UserUseCases {
       this.translateDomainException(e, 'User', id.value);
     }
     await this.userRepo.save(user, user.version() - 1);
-    await this.emitAuditForEvents(user, ctx.timestamp);
+    await this.emitAuditForEvents(user);
 
     // Soft-delete também vai para o archive
     await this.auditService.archive({
@@ -207,7 +211,7 @@ export class UserUseCases {
       this.translateDomainException(e, 'User', id.value);
     }
     await this.userRepo.save(user, user.version() - 1);
-    await this.emitAuditForEvents(user, ctx.timestamp);
+    await this.emitAuditForEvents(user);
     return toUserOutput(user);
   }
 
@@ -217,7 +221,7 @@ export class UserUseCases {
    * Drena os domain events pendentes do agregado e chama audit.record()
    * para cada um. Converte o tipo de evento para AuditOperation.
    */
-  private async emitAuditForEvents(user: User, _agora: Date): Promise<void> {
+  private async emitAuditForEvents(user: User): Promise<void> {
     const ctx = AuditContextStore.get();
     const events = user.pullEvents();
     for (const ev of events) {
@@ -247,22 +251,17 @@ export class UserUseCases {
     if (e instanceof UserNotFoundException) {
       throw new ApplicationResourceNotFoundException(resource, id);
     }
-    if (e instanceof Error && e.name === 'UserDeletedException') {
+    if (e instanceof UserDeletedException) {
       throw new ApplicationResourceDeletedException(resource, id);
     }
-    if (e instanceof Error && e.name === 'InvalidRestoreException') {
+    if (e instanceof InvalidRestoreException) {
       throw new ApplicationInvalidRestoreException(e.message);
     }
-    if (e instanceof Error && e.name === 'EmailAlreadyInUseException') {
-      throw new ApplicationEmailAlreadyInUseException((e as { email?: string }).email ?? '');
+    if (e instanceof EmailAlreadyInUseException) {
+      throw new ApplicationEmailAlreadyInUseException(e.email);
     }
-    if (e instanceof Error && e.name === 'ConcurrencyException') {
-      const c = e as { expectedVersion?: number; actualVersion?: number | null };
-      throw new ApplicationConcurrencyException(
-        resource,
-        c.expectedVersion ?? -1,
-        c.actualVersion ?? null,
-      );
+    if (e instanceof ConcurrencyException) {
+      throw new ApplicationConcurrencyException(resource, e.expectedVersion, e.actualVersion);
     }
     throw e;
   }
