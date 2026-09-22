@@ -87,21 +87,27 @@ describe('E2E 06: Histórico preserva snapshots por versão', () => {
     expect(byV[3]).toBeDefined();
 
     // v1: INSERT com nome/email originais
-    expect(byV[1].operation).toBe('INSERT');
-    expect(byV[1].snapshot.nome).toBe('Snap v1');
-    expect(byV[1].snapshot.email).toBe('snap-v1@b.com');
-    expect(byV[1].previousVersion).toBeNull();
+    // `!` é seguro porque o `.toBeDefined()` acima garante a presença em runtime;
+    // TS não narrow o tipo sozinho em index access com `noUncheckedIndexedAccess`.
+    const v1 = byV[1]!;
+    const v2 = byV[2]!;
+    const v3 = byV[3]!;
+
+    expect(v1.operation).toBe('INSERT');
+    expect(v1.snapshot.nome).toBe('Snap v1');
+    expect(v1.snapshot.email).toBe('snap-v1@b.com');
+    expect(v1.previousVersion).toBeNull();
 
     // v2: UPDATE com nome atualizado
-    expect(byV[2].operation).toBe('UPDATE');
-    expect(byV[2].snapshot.nome).toBe('Snap v2');
-    expect(byV[2].snapshot.email).toBe('snap-v1@b.com');
-    expect(byV[2].previousVersion).toBe(1);
+    expect(v2.operation).toBe('UPDATE');
+    expect(v2.snapshot.nome).toBe('Snap v2');
+    expect(v2.snapshot.email).toBe('snap-v1@b.com');
+    expect(v2.previousVersion).toBe(1);
 
     // v3: UPDATE com nome atualizado novamente
-    expect(byV[3].operation).toBe('UPDATE');
-    expect(byV[3].snapshot.nome).toBe('Snap v3');
-    expect(byV[3].snapshot.email).toBe('snap-v1@b.com');
-    expect(byV[3].previousVersion).toBe(2);
+    expect(v3.operation).toBe('UPDATE');
+    expect(v3.snapshot.nome).toBe('Snap v3');
+    expect(v3.snapshot.email).toBe('snap-v1@b.com');
+    expect(v3.previousVersion).toBe(2);
   });
 });
