@@ -63,7 +63,7 @@ projeto-base/
 
 > **Regra canônica** (a partir de `v1.2.0`): apps backend (`apps/api` e futuros) adotam
 > **DDD + Hexagonal (Ports & Adapters)** como paradigma arquitetural obrigatório,
-> justificado pelo [ADR-0001 — DDD + Hexagonal + Auditoria](../../adr/0001-arquitetura-ddd-hexagonal-auditoria.md).
+> justificado pelo [ADR-0001 — DDD + Hexagonal + Auditoria](../../../docs/adr/0001-arquitetura-ddd-hexagonal-auditoria.md).
 
 ### Estrutura obrigatória por módulo
 
@@ -91,11 +91,10 @@ infrastructure ─→ application + domain + libs externas (NestJS, Prisma)
 
 ### Guardiões mecânicos
 
-- **ESLint rule**: `tooling/eslint-config/rules/no-domain-imports-from-infra.js`
 - **Agent `stack-code-reviewer`** (D11 — pre-commit + CI): aplica lens DDD/Hexagonal.
-- **Skill [`ddd-hexagonal-validation`](../../../skills/ddd-hexagonal-validation/SKILL.md)**: checklist automatizado para auditoria de módulo.
+- **Skill [`ddd-hexagonal-validation`](../../skills/ddd-hexagonal-validation/SKILL.md)**: checklist automatizado para auditoria de módulo.
 
-Referência cruzada: [`docs/MONOREPO.md` §11](../../MONOREPO.md) e [`docs/STACK.md` §8](../../STACK.md).
+Referência cruzada: [`docs/MONOREPO.md` §11](../../../docs/MONOREPO.md) e [`docs/STACK.md` §8](../../../docs/STACK.md).
 
 ## Histórico de Versões
 

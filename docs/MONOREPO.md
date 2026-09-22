@@ -241,11 +241,10 @@ infrastructure ─→ application + domain + libs externas (NestJS, Prisma)
 
 ### Guardiões
 
-- ESLint rule `tooling/eslint-config/rules/no-domain-imports-from-infra.js`
 - Agent `stack-code-reviewer` (D11 — pre-commit + CI) com lens DDD/Hexagonal
 - Skill [`.agents/skills/ddd-hexagonal-validation/SKILL.md`](../.agents/skills/ddd-hexagonal-validation/SKILL.md) — checklist automatizado
 
-Referência cruzada: [`.agents/specs/conventions/estrutura-e-versionamento.md`](./.agents/specs/conventions/estrutura-e-versionamento.md) e [`docs/STACK.md` §8](./STACK.md).
+Referência cruzada: [`.agents/specs/conventions/estrutura-e-versionamento.md`](../.agents/specs/conventions/estrutura-e-versionamento.md) e [`docs/STACK.md` §8](./STACK.md).
 
 ---
 
