@@ -45,6 +45,18 @@ code-reviewer → final:
   success_criteria: "0 duplicação; check roda em ≤ 5s; preflight.ts importa corretamente"
 ```
 
+### Passo Pós-Implementer: Despachar review-router
+
+Após implementer reportar DONE:
+
+1. Validar inputs (skill `review-routing` Passo 1)
+2. Despachar `review-router` via Agent tool
+3. Aguardar output em `.agents/runs/<timestamp>-review-<n>.yaml`
+4. Triage conforme skill (Passo 4)
+5. Se BLOCKING/IMPORTANT → dispatch fix-implementer (Passo 5)
+6. Re-rodar router após fix
+7. Avançar quando router retornar 0 BLOCKING/IMPORTANT
+
 ## Quando usar
 
 - Adicionar novo check preflight (cross-refs, tsconfig drift, eslint drift, etc.)
