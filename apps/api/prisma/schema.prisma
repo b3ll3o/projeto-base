@@ -1,0 +1,64 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AuditOperation {
+  INSERT
+  UPDATE
+  DELETE
+  RESTORE
+
+  @@map("audit_operation")
+}
+
+model User {
+  id        String    @id @db.Uuid
+  email     String    @unique
+  name      String
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt       @map("updated_at")
+  createdBy String?   @map("created_by") @db.Uuid
+  updatedBy String?   @map("updated_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by") @db.Uuid
+  version   Int       @default(1)
+
+  @@index([email])
+  @@index([deletedAt])
+  @@index([createdAt(sort: Desc)])
+  @@map("users")
+}
+
+model UserHistory {
+  id              String         @id @default(uuid()) @db.Uuid
+  entityId        String         @map("entity_id") @db.Uuid
+  version         Int            @map("version")
+  previousVersion Int?           @map("previous_version")
+  operation       AuditOperation @map("operation")
+  snapshot        Json           @map("snapshot")
+  changedAt       DateTime       @default(now()) @map("changed_at")
+  changedBy       String?        @map("changed_by") @db.Uuid
+  reason          String?        @map("reason")
+
+  @@unique([entityId, version])
+  @@index([entityId, changedAt(sort: Desc)])
+  @@map("users_history")
+}
+
+model UserArchive {
+  id        String   @id @default(uuid()) @db.Uuid
+  entityId  String   @unique @map("entity_id") @db.Uuid
+  version   Int      @map("version")
+  snapshot  Json     @map("snapshot")
+  deletedAt DateTime @default(now()) @map("deleted_at")
+  deletedBy String?  @map("deleted_by") @db.Uuid
+  reason    String?  @map("reason")
+
+  @@index([deletedAt(sort: Desc)])
+  @@map("users_archive")
+}
