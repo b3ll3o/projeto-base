@@ -5,6 +5,10 @@ dist/
 out/
 coverage/
 *.tsbuildinfo
+# pt-BR: openapi.json é gerado por `pnpm --filter @projeto/api openapi:export`
+# (Fase 7 Task 7.6). Não versionar — o CI/docs pipeline regera a partir
+# dos decorators @Api* do código.
+apps/api/openapi.json
 .env
 .env.local
 .env.*.local

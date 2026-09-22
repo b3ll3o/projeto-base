@@ -37,6 +37,10 @@ export default defineConfig({
         // pt-BR: diretório `test/` contém helpers de teste (não lógica
         // de produção) e por isso é excluído da medição de cobertura.
         '**/test/**',
+        // pt-BR: `scripts/` contém utilitários one-shot (export-openapi,
+        // futuras migrations, etc.) executados via tsx, não cobertos
+        // por specs unitários. Excluir evita inflar denominador com 0%.
+        '**/scripts/**',
       ],
     },
   },
