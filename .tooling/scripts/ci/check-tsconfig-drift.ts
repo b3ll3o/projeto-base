@@ -1,10 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-
-export interface CheckResult {
-  ok: boolean;
-  errors: string[];
-}
+import type { CheckResult } from './check-types';
 
 interface TsconfigShape {
   [key: string]: unknown;
