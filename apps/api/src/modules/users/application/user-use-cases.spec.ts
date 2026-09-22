@@ -8,6 +8,7 @@ import {
   AuditContextMissingError,
 } from '../../../shared/audit/shared/audit-context-store.js';
 import {
+  ApplicationConcurrencyException,
   ApplicationEmailAlreadyInUseException,
   ApplicationInvalidRestoreException,
   ApplicationResourceDeletedException,
@@ -116,7 +117,11 @@ describe('UserUseCases', () => {
         timestamp: T1,
       });
       const updated = await AuditContextStore.run(ctx1, () =>
-        useCases.atualizarNome({ id: created.id, novoNome: 'João Silva' }),
+        useCases.atualizarNome({
+          id: created.id,
+          novoNome: 'João Silva',
+          expectedVersion: 1,
+        }),
       );
       expect(updated.nome).toBe('João Silva');
       expect(updated.version).toBe(2);
@@ -130,16 +135,49 @@ describe('UserUseCases', () => {
       const created = await AuditContextStore.run(ctx, () =>
         useCases.criarUser({ nome: 'João', email: 'joao@example.com' }),
       );
-      await AuditContextStore.run(ctx, () => useCases.softDelete({ id: created.id, reason: null }));
+      await AuditContextStore.run(ctx, () =>
+        useCases.softDelete({ id: created.id, reason: null, expectedVersion: 1 }),
+      );
       // Após o fix do findById (que agora filtra soft-deleted por padrão em ambos
       // Prisma e InMemory — semântica de produção), tentar atualizar um agregado
       // soft-deleted via orquestrador retorna 404 (não encontrado), não 410.
       // Espelha o comportamento do integration spec.
       await expect(
         AuditContextStore.run(ctx, () =>
-          useCases.atualizarNome({ id: created.id, novoNome: 'Novo' }),
+          useCases.atualizarNome({
+            id: created.id,
+            novoNome: 'Novo',
+            expectedVersion: 2,
+          }),
         ),
       ).rejects.toThrow(ApplicationResourceNotFoundException);
+    });
+
+    it('lança ApplicationConcurrencyException quando expectedVersion diverge (sem mutar)', async () => {
+      const ctx = makeCtx();
+      const created = await AuditContextStore.run(ctx, () =>
+        useCases.criarUser({ nome: 'João', email: 'joao@example.com' }),
+      );
+      // created.version === 1; cliente envia expectedVersion=999
+      const historyBefore = audit.history.length;
+      await expect(
+        AuditContextStore.run(ctx, () =>
+          useCases.atualizarNome({
+            id: created.id,
+            novoNome: 'Não aplicado',
+            expectedVersion: 999,
+          }),
+        ),
+      ).rejects.toThrow(ApplicationConcurrencyException);
+
+      // Verifica que NENHUMA mutação persistiu: histórico inalterado,
+      // nome permanece o original, versão ainda é 1.
+      expect(audit.history.length).toBe(historyBefore);
+      const refetched = await AuditContextStore.run(ctx, () =>
+        useCases.obterPorId({ id: created.id }),
+      );
+      expect(refetched.nome).toBe('João');
+      expect(refetched.version).toBe(1);
     });
   });
 
@@ -150,7 +188,11 @@ describe('UserUseCases', () => {
         useCases.criarUser({ nome: 'João', email: 'joao@example.com' }),
       );
       const updated = await AuditContextStore.run(ctx, () =>
-        useCases.atualizarEmail({ id: created.id, novoEmail: 'novo@example.com' }),
+        useCases.atualizarEmail({
+          id: created.id,
+          novoEmail: 'novo@example.com',
+          expectedVersion: 1,
+        }),
       );
       expect(updated.email).toBe('novo@example.com');
       const updates = audit.history.filter((h) => h.operation === 'UPDATE');
@@ -167,9 +209,29 @@ describe('UserUseCases', () => {
       );
       await expect(
         AuditContextStore.run(ctx, () =>
-          useCases.atualizarEmail({ id: u1.id, novoEmail: 'b@example.com' }),
+          useCases.atualizarEmail({
+            id: u1.id,
+            novoEmail: 'b@example.com',
+            expectedVersion: 1,
+          }),
         ),
       ).rejects.toThrow(ApplicationEmailAlreadyInUseException);
+    });
+
+    it('lança ApplicationConcurrencyException quando expectedVersion diverge', async () => {
+      const ctx = makeCtx();
+      const created = await AuditContextStore.run(ctx, () =>
+        useCases.criarUser({ nome: 'João', email: 'joao@example.com' }),
+      );
+      await expect(
+        AuditContextStore.run(ctx, () =>
+          useCases.atualizarEmail({
+            id: created.id,
+            novoEmail: 'novo@example.com',
+            expectedVersion: 42,
+          }),
+        ),
+      ).rejects.toThrow(ApplicationConcurrencyException);
     });
   });
 
@@ -180,7 +242,7 @@ describe('UserUseCases', () => {
         useCases.criarUser({ nome: 'João', email: 'joao@example.com' }),
       );
       const deleted = await AuditContextStore.run(ctx, () =>
-        useCases.softDelete({ id: created.id, reason: 'LGPD' }),
+        useCases.softDelete({ id: created.id, reason: 'LGPD', expectedVersion: 1 }),
       );
       expect(deleted.isDeleted).toBe(true);
       const deletes = audit.history.filter((h) => h.operation === 'DELETE');
@@ -194,12 +256,28 @@ describe('UserUseCases', () => {
       const created = await AuditContextStore.run(ctx, () =>
         useCases.criarUser({ nome: 'João', email: 'joao@example.com' }),
       );
-      await AuditContextStore.run(ctx, () => useCases.softDelete({ id: created.id, reason: null }));
+      await AuditContextStore.run(ctx, () =>
+        useCases.softDelete({ id: created.id, reason: null, expectedVersion: 1 }),
+      );
       // Após o fix do findById, soft-delete de agregado já soft-deleted é 404
       // (findById filtra) — não 410. Espelha o integration spec.
       await expect(
-        AuditContextStore.run(ctx, () => useCases.softDelete({ id: created.id, reason: null })),
+        AuditContextStore.run(ctx, () =>
+          useCases.softDelete({ id: created.id, reason: null, expectedVersion: 2 }),
+        ),
       ).rejects.toThrow(ApplicationResourceNotFoundException);
+    });
+
+    it('lança ApplicationConcurrencyException quando expectedVersion diverge', async () => {
+      const ctx = makeCtx();
+      const created = await AuditContextStore.run(ctx, () =>
+        useCases.criarUser({ nome: 'João', email: 'joao@example.com' }),
+      );
+      await expect(
+        AuditContextStore.run(ctx, () =>
+          useCases.softDelete({ id: created.id, reason: 'x', expectedVersion: 7 }),
+        ),
+      ).rejects.toThrow(ApplicationConcurrencyException);
     });
   });
 
@@ -209,9 +287,11 @@ describe('UserUseCases', () => {
       const created = await AuditContextStore.run(ctx, () =>
         useCases.criarUser({ nome: 'João', email: 'joao@example.com' }),
       );
-      await AuditContextStore.run(ctx, () => useCases.softDelete({ id: created.id, reason: null }));
+      await AuditContextStore.run(ctx, () =>
+        useCases.softDelete({ id: created.id, reason: null, expectedVersion: 1 }),
+      );
       const restored = await AuditContextStore.run(ctx, () =>
-        useCases.restaurar({ id: created.id }),
+        useCases.restaurar({ id: created.id, expectedVersion: 2 }),
       );
       expect(restored.isDeleted).toBe(false);
       const restores = audit.history.filter((h) => h.operation === 'RESTORE');
@@ -224,8 +304,26 @@ describe('UserUseCases', () => {
         useCases.criarUser({ nome: 'João', email: 'joao@example.com' }),
       );
       await expect(
-        AuditContextStore.run(ctx, () => useCases.restaurar({ id: created.id })),
+        AuditContextStore.run(ctx, () =>
+          useCases.restaurar({ id: created.id, expectedVersion: 1 }),
+        ),
       ).rejects.toThrow(ApplicationInvalidRestoreException);
+    });
+
+    it('lança ApplicationConcurrencyException quando expectedVersion diverge', async () => {
+      const ctx = makeCtx();
+      const created = await AuditContextStore.run(ctx, () =>
+        useCases.criarUser({ nome: 'João', email: 'joao@example.com' }),
+      );
+      await AuditContextStore.run(ctx, () =>
+        useCases.softDelete({ id: created.id, reason: null, expectedVersion: 1 }),
+      );
+      // Após softDelete, versão persistida = 2; cliente envia expectedVersion=99
+      await expect(
+        AuditContextStore.run(ctx, () =>
+          useCases.restaurar({ id: created.id, expectedVersion: 99 }),
+        ),
+      ).rejects.toThrow(ApplicationConcurrencyException);
     });
   });
 

@@ -129,12 +129,16 @@ export class UserUseCases {
     if (user === null) {
       throw new ApplicationResourceNotFoundException('User', id.value);
     }
+    // Curto-circuito HTTP-observável: 412 antes de tentar mutar.
+    if (user.version() !== input.expectedVersion) {
+      throw new ApplicationConcurrencyException('User', input.expectedVersion, user.version());
+    }
     try {
       user.renomear(input.novoNome, ctx.timestamp);
     } catch (e) {
       this.translateDomainException(e, 'User', id.value);
     }
-    await this.userRepo.save(user, user.version() - 1);
+    await this.userRepo.save(user, input.expectedVersion);
     await this.emitAuditForEvents(user);
     return toUserOutput(user);
   }
@@ -145,6 +149,10 @@ export class UserUseCases {
     const user = await this.userRepo.findById(id);
     if (user === null) {
       throw new ApplicationResourceNotFoundException('User', id.value);
+    }
+    // Curto-circuito HTTP-observável: 412 antes de tentar mutar.
+    if (user.version() !== input.expectedVersion) {
+      throw new ApplicationConcurrencyException('User', input.expectedVersion, user.version());
     }
 
     // Email-uniqueness check ANTES de mutar
@@ -161,7 +169,7 @@ export class UserUseCases {
     } catch (e) {
       this.translateDomainException(e, 'User', id.value);
     }
-    await this.userRepo.save(user, user.version() - 1);
+    await this.userRepo.save(user, input.expectedVersion);
     await this.emitAuditForEvents(user);
     return toUserOutput(user);
   }
@@ -175,12 +183,16 @@ export class UserUseCases {
     if (user === null) {
       throw new ApplicationResourceNotFoundException('User', id.value);
     }
+    // Curto-circuito HTTP-observável: 412 antes de tentar mutar.
+    if (user.version() !== input.expectedVersion) {
+      throw new ApplicationConcurrencyException('User', input.expectedVersion, user.version());
+    }
     try {
       user.marcarExcluido(input.reason, ctx.timestamp);
     } catch (e) {
       this.translateDomainException(e, 'User', id.value);
     }
-    await this.userRepo.save(user, user.version() - 1);
+    await this.userRepo.save(user, input.expectedVersion);
     await this.emitAuditForEvents(user);
 
     // Soft-delete também vai para o archive
@@ -208,12 +220,16 @@ export class UserUseCases {
     if (user === null) {
       throw new ApplicationResourceNotFoundException('User', id.value);
     }
+    // Curto-circuito HTTP-observável: 412 antes de tentar mutar.
+    if (user.version() !== input.expectedVersion) {
+      throw new ApplicationConcurrencyException('User', input.expectedVersion, user.version());
+    }
     try {
       user.restaurar(ctx.timestamp);
     } catch (e) {
       this.translateDomainException(e, 'User', id.value);
     }
-    await this.userRepo.save(user, user.version() - 1);
+    await this.userRepo.save(user, input.expectedVersion);
     await this.emitAuditForEvents(user);
     return toUserOutput(user);
   }

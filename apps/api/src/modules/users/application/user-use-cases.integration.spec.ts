@@ -21,6 +21,7 @@ import { PrismaAuditService } from '../../../shared/audit/infrastructure/prisma-
 import { AuditContext } from '../../../shared/audit/domain/audit-context.vo.js';
 import { AuditContextStore } from '../../../shared/audit/shared/audit-context-store.js';
 import {
+  ApplicationConcurrencyException,
   ApplicationResourceNotFoundException,
   ApplicationEmailAlreadyInUseException,
 } from './exceptions/application.exceptions.js';
@@ -108,7 +109,7 @@ describe('UserUseCases (integration with Prisma)', () => {
     );
 
     const updated = await AuditContextStore.run(ctx, () =>
-      sut.atualizarNome({ id: created.id, novoNome: 'Carla Maria' }),
+      sut.atualizarNome({ id: created.id, novoNome: 'Carla Maria', expectedVersion: 1 }),
     );
     expect(updated.nome).toBe('Carla Maria');
     expect(updated.version).toBe(2);
@@ -129,7 +130,7 @@ describe('UserUseCases (integration with Prisma)', () => {
     );
 
     const deleted = await AuditContextStore.run(ctx, () =>
-      sut.softDelete({ id: created.id, reason: 'duplicate' }),
+      sut.softDelete({ id: created.id, reason: 'duplicate', expectedVersion: 1 }),
     );
     expect(deleted.deletedAt).not.toBeNull();
 
@@ -162,9 +163,13 @@ describe('UserUseCases (integration with Prisma)', () => {
     const created = await AuditContextStore.run(ctx, () =>
       sut.criarUser({ nome: 'Eva', email: 'eva@example.com' }),
     );
-    await AuditContextStore.run(ctx, () => sut.softDelete({ id: created.id, reason: null }));
+    await AuditContextStore.run(ctx, () =>
+      sut.softDelete({ id: created.id, reason: null, expectedVersion: 1 }),
+    );
 
-    const restored = await AuditContextStore.run(ctx, () => sut.restaurar({ id: created.id }));
+    const restored = await AuditContextStore.run(ctx, () =>
+      sut.restaurar({ id: created.id, expectedVersion: 2 }),
+    );
     expect(restored.deletedAt).toBeNull();
     expect(restored.version).toBe(3);
 
@@ -200,5 +205,44 @@ describe('UserUseCases (integration with Prisma)', () => {
     // A tenta salvar com expected=1 mas a versão real é 2
     userFromA!.renomear('Fabio A', new Date());
     await expect(repo.save(userFromA!, 1)).rejects.toThrow(ConcurrencyException);
+  });
+
+  it('application-layer short-circuita com ApplicationConcurrencyException antes de qualquer mutação', async () => {
+    // Comportamento alvo da Fase 7: o caller lê o user, depois algum tempo
+    // passa (ou outra aba atualizou), e a versão persistida diverge do
+    // expectedVersion enviado. O use case deve falhar RÁPIDO com
+    // ApplicationConcurrencyException (HTTP 412) sem chegar a chamar save()
+    // ou emitir audit — preservando o histórico.
+    const ctx = makeCtx();
+    const created = await AuditContextStore.run(ctx, () =>
+      sut.criarUser({ nome: 'Gabriela', email: 'gabriela@example.com' }),
+    );
+    expect(created.version).toBe(1);
+
+    const historyBefore = await prisma.userHistory.findMany({
+      where: { entityId: created.id },
+    });
+    expect(historyBefore).toHaveLength(1); // só o INSERT
+
+    await expect(
+      AuditContextStore.run(ctx, () =>
+        sut.atualizarNome({
+          id: created.id,
+          novoNome: 'Não aplicado',
+          expectedVersion: 999,
+        }),
+      ),
+    ).rejects.toThrow(ApplicationConcurrencyException);
+
+    // Nenhuma mutação foi persistida: row inalterada, histórico idem.
+    const row = await prisma.user.findUnique({ where: { id: created.id } });
+    expect(row!.name).toBe('Gabriela');
+    expect(row!.version).toBe(1);
+
+    const historyAfter = await prisma.userHistory.findMany({
+      where: { entityId: created.id },
+    });
+    expect(historyAfter).toHaveLength(1);
+    expect(historyAfter.map((h) => h.operation)).toEqual(['INSERT']);
   });
 });
