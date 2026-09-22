@@ -101,12 +101,18 @@ export class UsersController {
   @ApiOperation({ summary: 'Listar usuários (paginado por cursor)' })
   @ApiQuery({ name: 'cursor', required: false, type: String })
   @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'includeDeleted', required: false, type: Boolean })
   @ApiResponse({ status: 200, description: 'Página de usuários' })
-  async list(@Query('cursor') cursor?: string, @Query('limit') limit = '20'): Promise<unknown> {
+  async list(
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit = '20',
+    @Query('includeDeleted') includeDeleted?: string,
+  ): Promise<unknown> {
     const input: ListUsersInput = {
       cursor: cursor ?? null,
       limit: Number(limit),
-      includeDeleted: false,
+      // pt-BR: query string entrega 'true'/'false' como string; aceitamos ambos.
+      includeDeleted: includeDeleted === 'true' || includeDeleted === '1',
     };
     return this.userUseCases.listar(input);
   }
