@@ -74,6 +74,7 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 | **tdd-enforcer**   | [`.agents/agents/tdd-enforcer.md`](./.agents/agents/tdd-enforcer.md)      | [memory](../.agents/memory/tdd-enforcer.md)        | Valida ciclo Red→Green→Refactor      | Antes de merge, em PR, em git hooks                  |
 | **doc-writer**     | [`.agents/agents/doc-writer.md`](./.agents/agents/doc-writer.md)          | [memory](../.agents/memory/doc-writer.md)          | Geração de documentação              | README, ADRs, API docs, user guides                  |
 | **task-manager**   | [`.agents/agents/task-manager.md`](./.agents/agents/task-manager.md)      | [memory](../.agents/memory/task-manager.md)        | Gestão de tarefas e backlog          | "Todo", "tarefa", priorização                        |
+| **review-router**  | `.agents/agents/review-router.md` _(pendente Fase 3)_                      | [memory](../.agents/memory/review-router.md) _(pendente Fase 3)_ | Orquestrador de revisão pós-task | Após cada task (implementer DONE) — classifica diff e dispara reviewers em paralelo |
 
 ### §3.1 Specialists de Stack (incluso a partir de v1.1.0)
 
