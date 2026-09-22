@@ -15,6 +15,7 @@ Cada convenção está em arquivo próprio para manter este diretório e o AGENT
 | Cobertura de Testes | [`cobertura-testes.md`](./cobertura-testes.md) | Mínimo 80% agregado por projeto vitest; hard fail CI |
 | Release Automático (Post-Merge) | [`post-merge-release.md`](./post-merge-release.md) | Auto-tagging `vX.Y.Z` via `.github/workflows/release-template.yml` após bump em main |
 | CI Defense in Depth | [`ci-defense-in-depth.md`](./ci-defense-in-depth.md) | 3 camadas: pre-push local + preflight CI + quality CI gated |
+| Retrospective Capture | [`retrospective-capture.md`](./retrospective-capture.md) | Captura estruturada de aprendizados pós-atividade (T1/T2/T3 + threshold confidence ≥ 70) |
 
 ## Regra Geral
 
