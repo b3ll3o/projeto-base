@@ -13,6 +13,7 @@ Cada convenção está em arquivo próprio para manter este diretório e o AGENT
 | Git Workflow | [`git-workflow.md`](./git-workflow.md) | `main` protegida; merge apenas via PR |
 | Estrutura & Versionamento | [`estrutura-e-versionamento.md`](./estrutura-e-versionamento.md) | Layout de diretórios e versionamento semântico |
 | Cobertura de Testes | [`cobertura-testes.md`](./cobertura-testes.md) | Mínimo 80% agregado por projeto vitest; hard fail CI |
+| Release Automático (Post-Merge) | [`post-merge-release.md`](./post-merge-release.md) | Auto-tagging `vX.Y.Z` via `.github/workflows/release-template.yml` após bump em main |
 
 ## Regra Geral
 
