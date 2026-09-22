@@ -21,6 +21,7 @@
 | `release-mode` | "preparar release X.Y.Z" | sequential | doc-writer → code-reviewer → task-manager |
 | `ci-defense-mode` | "blindar CI / auditar pipeline" | sequential | monorepo-specialist → ci-defense-in-depth → code-reviewer |
 | `retrospective-mode` | "capturar aprendizados / post-mortem" | sequential | explorer → retrospective-capture → doc-writer (+ task-manager) |
+| `review-routing` | _(pendente Fase 3)_ | sequential | review-router → specialists (auto-dispatched via matriz) |
 
 ### Por Stack (workflows detalhados em `.agents/workflows/`)
 
@@ -273,9 +274,9 @@ doc-writer → code-reviewer:{success_criteria:"versão bumped+CHANGELOG+0 cross
 **Quando NÃO usar:** hotfix urgente (`bugfix-mode` + tag manual) · bump interno ad-hoc · dep upstream (Renovate/Dependabot).
 **Detalhes:** [`.agents/workflows/release-mode.md`](./workflows/release-mode.md) · spec: [`.agents/specs/conventions/post-merge-release.md`](./specs/conventions/post-merge-release.md)
 
-## Workflow: review-routing
+## `review-routing` — Orquestrador de Revisão Pós-Task
 
-> Orquestrador de revisão pós-task. Despacha specialists baseado em classificação de diff.
+> Despacha specialists baseado em classificação de diff.
 
 **Status:** Pendente (Fase 3) — agent `review-router` ainda não existe.
 
@@ -288,9 +289,10 @@ doc-writer → code-reviewer:{success_criteria:"versão bumped+CHANGELOG+0 cross
 **Outputs:** `.agents/runs/<timestamp>-review-<n>.yaml` com classification + reviewers_dispatched + findings_aggregated.
 
 **Cross-refs:**
-- [`.agents/agents/review-router.md`](./agents/review-router.md) (a criar em Fase 3)
-- [`.agents/specs/conventions/review-routing.md`](./specs/conventions/review-routing.md) (criado em Fase 1)
-- [`.agents/skills/review-routing/SKILL.md`](./skills/review-routing/SKILL.md) (a criar em Fase 3)
+
+- `.agents/agents/review-router.md` _(a criar em Fase 3)_
+- `.agents/specs/conventions/review-routing.md` _(criado em Fase 1)_
+- `.agents/skills/review-routing/SKILL.md` _(a criar em Fase 3)_
 
 ## `retrospective-mode` — Captura de Aprendizados Pós-Atividade
 
