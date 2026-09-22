@@ -102,4 +102,5 @@ Referência cruzada: [`docs/MONOREPO.md` §11](../../../docs/MONOREPO.md) e [`do
 |--------|----------|
 | `1.0.0` | Lançamento inicial — 10 agents genéricos + skill `agents:coordinate` |
 | `1.1.0` | Adicionados 3 specialists de stack (monorepo, nestjs, nextjs) + workflows detalhados + docs STACK.md e MONOREPO.md |
-| `1.2.0` | Regra canônica DDD/Hexagonal por módulo (referência ao ADR-0001) + skills `ddd-hexagonal-validation` e `audit-fields-convention` |
+| `1.2.0` | Regra canônica DDD/Hexagonal por módulo (referência ao ADR-0001) |
+| `1.3.0` | Skill `ddd-hexagonal-validation` (auditoria automatizada de boundaries) + ADR-0001 (DDD + Hexagonal + Auditoria via 3 tabelas) — BC `users` como template canônico validado end-to-end (HTTP + E2E + 250 testes) |
