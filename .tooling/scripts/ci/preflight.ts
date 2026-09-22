@@ -5,12 +5,14 @@
  *
  * Checks incluídos:
  * 1. checkDocRefs — cross-refs quebradas em .md (docs e .agents/specs)
+ * 2. checkTsconfigDrift — drift de chaves em tsconfigs do monorepo
+ * 3. checkEslintDrift — detecta configs ESLint legadas (apps + packages)
  *
  * Exit code 0 = OK, 1 = pelo menos 1 falha, 2 = erro inesperado.
  */
 import { checkDocRefs } from './check-doc-refs';
 import { checkTsconfigDrift } from './check-tsconfig-drift';
-// import { checkEslintDrift } from './check-eslint-drift';
+import { checkEslintDrift } from './check-eslint-drift';
 
 async function main(): Promise<void> {
   console.log('\u{1F50D} Pre-flight CI checks\n');
@@ -25,7 +27,16 @@ async function main(): Promise<void> {
           consistentKeys: ['strict', 'noUncheckedIndexedAccess'],
         }),
     },
-    // { name: 'eslint config drift', fn: () => checkEslintDrift() },
+    // `apps/api/.eslintrc.js` é convenção NestJS válida (escopo fora deste plano).
+    // Migrar NestJS para flat config é decisão separada; por ora allowlist.
+    {
+      name: 'ESLint config drift (apps)',
+      fn: () => checkEslintDrift({ appsRoot: 'apps', allowlist: ['api/.eslintrc.js'] }),
+    },
+    {
+      name: 'ESLint config drift (packages)',
+      fn: () => checkEslintDrift({ appsRoot: 'packages', allowlist: [] }),
+    },
   ];
 
   let totalErrors = 0;
