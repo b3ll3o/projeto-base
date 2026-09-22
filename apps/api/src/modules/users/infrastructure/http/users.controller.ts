@@ -101,7 +101,12 @@ export class UsersController {
   @ApiOperation({ summary: 'Listar usuários (paginado por cursor)' })
   @ApiQuery({ name: 'cursor', required: false, type: String })
   @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiQuery({ name: 'includeDeleted', required: false, type: Boolean })
+  @ApiQuery({
+    name: 'includeDeleted',
+    required: false,
+    type: String,
+    description: 'Aceita "true" ou "1" (case-insensitive). Default: false (esconde soft-deleted)',
+  })
   @ApiResponse({ status: 200, description: 'Página de usuários' })
   async list(
     @Query('cursor') cursor?: string,
@@ -111,8 +116,9 @@ export class UsersController {
     const input: ListUsersInput = {
       cursor: cursor ?? null,
       limit: Number(limit),
-      // pt-BR: query string entrega 'true'/'false' como string; aceitamos ambos.
-      includeDeleted: includeDeleted === 'true' || includeDeleted === '1',
+      // pt-BR: normaliza case (clients podem mandar 'True'/'TRUE'/'1') +
+      // aceita os dois valores truthy canônicos ('true' e '1').
+      includeDeleted: includeDeleted?.toLowerCase() === 'true' || includeDeleted === '1',
     };
     return this.userUseCases.listar(input);
   }
