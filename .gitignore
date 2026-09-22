@@ -9,6 +9,10 @@ coverage/
 # (Fase 7 Task 7.6). Não versionar — o CI/docs pipeline regera a partir
 # dos decorators @Api* do código.
 apps/api/openapi.json
+# pt-BR: reports JSON gerados pelos tooling scripts (stack-code-reviewer +
+# doc-sync) via --out-file. Padrão `*-report.json` casa `stack-review-report.json`
+# e `doc-sync-report.json`; CI faz upload-artifact em vez de commit.
+*-report.json
 .env
 .env.local
 .env.*.local

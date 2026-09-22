@@ -1,0 +1,46 @@
+name: ci
+on:
+  push:
+    branches: [feat/**]
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: projeto
+          POSTGRES_PASSWORD: projeto
+          POSTGRES_DB: projeto_base
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 5
+    env:
+      DATABASE_URL: postgresql://projeto:projeto@localhost:5432/projeto_base?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run lint typecheck
+      # Cobertura (gate-enforced) + testes unit para todos os apps. Turbo
+      # despacha por task graph; apps/api roda o project `unit` (regra 80%),
+      # apps/web roda o project único.
+      - run: pnpm turbo run test:coverage test:unit
+      # Integration + E2E rodam só em apps/api (apps/web não tem esses níveis).
+      - run: pnpm turbo run test:integration test:e2e --filter=@projeto/api
+      # Upload de cobertura como artifact para auditoria (cobertura-testes.md §CI Enforcement).
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: |
+            apps/api/coverage/
+            apps/web/coverage/
+          retention-days: 30
