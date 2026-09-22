@@ -22,6 +22,17 @@ description: Memória acumulada do agent monorepo-specialist — decisões sobre
 
 **Stack de apps inicial:** NestJS (backend) + Next.js (frontend)
 
+### 2026-09-22 — Validação de CI após mudanças estruturais
+
+**Contexto:** Mudanças em `turbo.json` / `pnpm-workspace.yaml` podem quebrar cache determinístico ou criar drift em tsconfig/eslint refs. Sem gate explícito, esses problemas só aparecem em CI (~4min) ou em runtime.
+
+**Decisão:** Após mudanças em artefatos estruturais do monorepo, monorepo-specialist recomenda rodar `pnpm ci:local` (defesa em 3 camadas — pre-push + preflight + quality CI gated) ou `pnpm ci:preflight` (~10s) para validação rápida de drift. Documentação canônica em `.agents/specs/conventions/ci-defense-in-depth.md` e skill `.agents/skills/ci-defense-in-depth/SKILL.md`.
+
+**Consequências:**
+
+- Falhas estruturais detectadas em ~5-30s localmente vs ~4min no CI
+- Reduz iteração devs → CI → fix → CI (loop caro)
+
 ## Padrões Descobertos
 
 - Apps isolados — comunicação entre apps via packages ou HTTP, nunca import direto

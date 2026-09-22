@@ -136,6 +136,7 @@ o monorepo usa:
    cross-refs, tsconfig drift, ESLint drift. Falha rápido em 10s.
 3. **Quality CI job** (atual) — lint, typecheck, test, coverage. Roda
    **apenas se preflight passou**.
+4. Para referência completa da estratégia defense-in-depth (3 camadas, checks ativos, pendências), ver [ci-defense-in-depth.md](./ci-defense-in-depth.md). O preflight detecta cross-ref depth bug (commit ffb5342) — exemplo real de falha capturada em camada 2 antes de chegar à camada 3.
 
 Threshold de cobertura pode ser ajustado por package em **report-only** mode
 (apps/web durante scaffolding) — ver nota em `apps/web/vitest.config.ts`.

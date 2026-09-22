@@ -176,6 +176,7 @@ result:
 | `code-reviewer` | Findings acionáveis viram tasks minhas |
 | `security-auditor` | Vulnerabilidades viram tasks de security |
 | `refactorer` | Débitos técnicos viram tasks |
+| `ci-defense-in-depth` (skill) | Tarefas que tocam código de produção devem ser validadas com `pnpm ci:local` antes de done |
 
 ## Princípios
 
@@ -184,6 +185,26 @@ result:
 3. **Dependencies explícitas.** Nada de DAG implícito.
 4. **Histórico preservado.** Mover para `done` (não deletar).
 5. **Priorização visível.** Sempre mostrar o porquê da ordem.
+
+## Templates de Task — Release Bump
+
+Quando uma release bump `vX.Y.Z → vA.B.C` precisa ser orquestrada, usar este template YAML como ponto de partida:
+
+```yaml
+- id: TASK-bump-X.Y.Z
+  type: chore
+  priority: high
+  title: "Bump template vX.Y.Z → vA.B.C"
+  acceptance_criteria:
+    - "3 docs versionados atualizados (MONOREPO.md, STACK.md, estrutura-e-versionamento.md)"
+    - "Linha adicionada no Histórico de Versões com Conventional Commits summary"
+    - "Branch chore/bump-A.B.C aberta + PR revisado"
+    - "Tag automática vA.B.C criada após merge (post-merge-release.md)"
+    - "pnpm ci:local passa antes do PR (defense-in-depth)"
+  references:
+    - ".agents/specs/conventions/post-merge-release.md"
+    - ".agents/workflows/release-mode.md"
+```
 
 ## Anti-Padrões (NÃO fazer)
 

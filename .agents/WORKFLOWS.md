@@ -18,6 +18,7 @@
 | `task-mode` | "todo / tarefa" | single | task-manager |
 | `explore-mode` | "como funciona X?" | single | explorer |
 | `review-mode` | "revisar PR / código" | single | code-reviewer + tdd-enforcer |
+| `release-mode` | "preparar release X.Y.Z" | sequential | doc-writer → code-reviewer → task-manager |
 
 ### Por Stack (workflows detalhados em `.agents/workflows/`)
 
@@ -251,6 +252,24 @@ CODE-REVIEWER
 - ⚡ **Performance** — complexidade algorítmica, queries N+1, memory leaks
 - 🧪 **Testabilidade** — cobertura baixa, testes frágeis, mocks excessivos
 - 📐 **Estilo** — convenções do projeto, formatação
+
+---
+
+## `release-mode` — Bump de Versão do Template
+
+**Trigger:** "preparar release", "bumpar versão X.Y.Z", "tag release" · **Composição:** sequential (3 estágios)
+
+```text
+DOC-WRITER → CODE-REVIEWER → TASK-MANAGER
+```
+
+```yaml
+doc-writer → code-reviewer:{success_criteria:"versão bumped+CHANGELOG+0 cross-ref quebrada"} | code-reviewer → task-manager:{success_criteria:"nenhum finding blocker;checklist pronto"} | task-manager → final:{success_criteria:"tag X.Y.Z publicada+checklist 100%"}
+```
+
+**Quando usar:** mudanças breaking/features desde última tag · milestone (MVP/GA/v2.0.0) · backlog maduro.
+**Quando NÃO usar:** hotfix urgente (`bugfix-mode` + tag manual) · bump interno ad-hoc · dep upstream (Renovate/Dependabot).
+**Detalhes:** [`.agents/workflows/release-mode.md`](./workflows/release-mode.md) · spec: [`.agents/specs/conventions/post-merge-release.md`](./specs/conventions/post-merge-release.md)
 
 ---
 

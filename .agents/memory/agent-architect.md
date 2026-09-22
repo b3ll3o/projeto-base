@@ -57,6 +57,18 @@ description: Memória acumulada do agent-architect — decisões sobre criação
 - Next.js docs (App Router, RSC, Server Actions)
 - NestJS docs (DI, modules, OpenAPI)
 
+### 2026-09-22 — Skill `ci-defense-in-depth` adicionada como habilitador manual
+
+**Contexto:** Plano de robustez do CI (PR #6, 11 commits) implementou defesa em 3 camadas (pre-push local + preflight CI + quality CI gated) com 3 checks estruturais (cross-refs, tsconfig drift, eslint drift). Padrões reutilizáveis identificados: `CheckResult` compartilhado, fixtures herméticas via `fs.mkdtemp`, code-block-aware parsing.
+
+**Decisão:** Criar skill `ci-defense-in-depth` (e convenção companion) em vez de agent dedicado, porque a auditoria de pipeline não exige loop nem memória persistente — é consulta sob demanda. Workflow `release-mode` adicionado como habilitador de bump de versão do template.
+
+**Consequências:**
+
+- Evidência de evolução orgânica via gap real: padrão emergiu de 11 commits de trabalho prático
+- Critério de promoção a agent: se > 3 chamadas autônomas/mês forem necessárias (não é o caso hoje)
+- Skill `ddd-hexagonal-validation` segue mesmo padrão (skill, não agent) — consistência
+
 ## Padrões Descobertos
 
 - Agents genéricos funcionam melhor que especialistas ultra-específicos

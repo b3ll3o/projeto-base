@@ -141,6 +141,8 @@ Workflows genéricos prontos para uso estão em [`.agents/WORKFLOWS.md`](./.agen
 | `backend-feature`    | "endpoint NestJS"      | nestjs-specialist → test-writer → code-reviewer          |
 | `frontend-feature`   | "página/rota Next.js"  | nextjs-specialist → test-writer → code-reviewer          |
 | `monorepo-change`    | "adicionar app/package"| monorepo-specialist → code-reviewer                      |
+| `release-mode`       | "preparar release / bumpar versão" | doc-writer → code-reviewer → task-manager    |
+| `ci-defense-mode`    | "blindar CI / auditar pipeline" | monorepo-specialist → ci-defense-in-depth → code-reviewer |
 
 ---
 
@@ -158,6 +160,7 @@ As convenções estão detalhadas em arquivos próprios sob [`.agents/specs/conv
 | Estrutura & Versionamento | [`estrutura-e-versionamento.md`](./.agents/specs/conventions/estrutura-e-versionamento.md) | Layout de diretórios + versionamento semântico |
 | Cobertura de Testes   | [`cobertura-testes.md`](./.agents/specs/conventions/cobertura-testes.md)| Mínimo 80% agregado por projeto vitest; hard fail CI |
 | Release Automático    | [`post-merge-release.md`](./.agents/specs/conventions/post-merge-release.md) | Auto-tagging `vX.Y.Z` em main via `.github/workflows/release-template.yml` |
+| CI Defense in Depth   | [`ci-defense-in-depth.md`](./.agents/specs/conventions/ci-defense-in-depth.md) | 3 camadas: pre-push local + preflight CI + quality CI gated |
 
 - **Pre-push obrigatório:** rodar `pnpm ci:local` antes de push (ver [git-workflow.md §Pre-Push Quality Gate](./.agents/specs/conventions/git-workflow.md))
 

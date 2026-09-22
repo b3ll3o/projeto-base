@@ -105,6 +105,14 @@ Para cada finding, classificar severidade:
 - `package.json` (root) — scripts orquestrados
 - `README.md` — seção monorepo
 
+### Passo 5: Validar CI Local
+
+Após mudanças em `turbo.json` / `pnpm-workspace.yaml` ou scripts compartilhados, validar com o pipeline local:
+
+- Após mudanças em `turbo.json` / `pnpm-workspace.yaml`, rodar `pnpm ci:local` (validar cache determinístico + 3 camadas de defesa)
+- Para validação rápida de drift estrutural (refs quebradas, tsconfig, eslint): `pnpm ci:preflight` (~10s)
+- Documentação completa em `.agents/specs/conventions/ci-defense-in-depth.md`
+
 ## Outputs
 
 ```yaml
@@ -162,6 +170,7 @@ result:
 | `refactorer` | Sou despachado antes dele para garantir que estrutura está limpa |
 | `code-reviewer` | Reviso PRs com lens de impacto cross-package |
 | `test-writer` | Coordeno pipelines de teste no monorepo |
+| `ci-defense-in-depth` (skill) | Documenta o padrão de 3 camadas do CI; eu referencio em auditorias de pipeline |
 
 ## Princípios
 

@@ -61,9 +61,9 @@ success_criteria:
 ### Passo 1: Auto-detectar Stack dos Arquivos Alterados
 
 ```text
-apps/api/src/modules/**/domain/**               → ddd-domain-purity
-apps/api/src/modules/**/application/**          → ddd-application-isolation
-apps/api/src/modules/**/infrastructure/**       → ddd-infrastructure-conventions
+apps/api/src/{modules,shared}/**/domain/**              → ddd-domain-purity
+apps/api/src/{modules,shared}/**/application/**         → ddd-application-isolation
+apps/api/src/{modules,shared}/**/infrastructure/**      → ddd-infrastructure-conventions
 apps/api/src/**/*.controller.ts                  → nestjs-controller-conventions
 apps/api/prisma/**                               → prisma-schema-conventions
 apps/web/app/**                                  → nextjs-app-router-conventions
@@ -201,6 +201,7 @@ result:
 | `nextjs-specialist` | Carrego lens de Next.js |
 | `monorepo-specialist` | Carrego lens de monorepo |
 | `security-auditor` | Não duplico OWASP; foco é estrutura de stack |
+| `ci-defense-in-depth` (skill) | Quando alguma regra nova é adicionada, sigo o padrão `CheckResult` documentado lá |
 
 ## Princípios
 
@@ -250,6 +251,18 @@ jobs:
 - ❌ Inventar regras não documentadas (toda regra tem ADR ou spec)
 - ❌ Bloquear commit por `minor` (bloquear só por `blocker`)
 - ❌ Modificar código automaticamente (sugerir, humano aplica)
+- ❌ Sugerir nova regra de stack sem antes verificar se o padrão já está coberto pelos checks preflight (cross-refs/tsconfig/eslint) — ver skill ci-defense-in-depth
+
+---
+
+## Referências Canônicas
+
+- **ADR-0001 (DDD/Hexagonal canônico):** [docs/adr/0001-arquitetura-ddd-hexagonal-auditoria.md](../../../docs/adr/0001-arquitetura-ddd-hexagonal-auditoria.md) — basis das regras DDD/Hexagonal aplicadas neste agent.
+- **Skill `ddd-hexagonal-validation`:** [`.agents/skills/ddd-hexagonal-validation/SKILL.md`](../skills/ddd-hexagonal-validation/SKILL.md) — auditoria manual de boundaries; complementar ao meu gate automatizado.
+- **Skill `ci-defense-in-depth`:** [`.agents/skills/ci-defense-in-depth/SKILL.md`](../skills/ci-defense-in-depth/SKILL.md) — quando adiciono nova regra, sigo o padrão `CheckResult` documentado lá.
+- **Documentação NestJS:** <https://docs.nestjs.com/>
+- **Documentação Next.js:** <https://nextjs.org/docs>
+- **Documentação Prisma:** <https://www.prisma.io/docs>
 
 ---
 
