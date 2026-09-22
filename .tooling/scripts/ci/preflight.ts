@@ -15,6 +15,42 @@ import { checkTsconfigDrift } from './check-tsconfig-drift';
 import { checkEslintDrift } from './check-eslint-drift';
 import { checkTurboDrift } from './check-turbo-drift';
 import { checkPackageJsonDrift } from './check-package-json-drift';
+import { existsSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+import type { CheckResult } from './check-types';
+
+/**
+ * Valida a matriz de roteamento do review-router (Task 1.10).
+ * Reexecuta `pnpm review:lint` (CLI) para fail-fast em YAML quebrado,
+ * LOC excessivo, duplicate patterns, regex inválida ou reviewer refs
+ * desconhecidos antes do push (defesa em profundidade simétrica ao
+ * `pnpm review:lint` manual).
+ *
+ * Usa execSync em vez de importar lintMatrix diretamente para evitar
+ * cross-package import (tooling/scripts é package isolado no monorepo).
+ */
+function checkReviewRoutingLint(): Promise<CheckResult> {
+  const matrixPath = 'tooling/scripts/lint-review-routing.ts';
+  const matrixFile = '.agents/specs/conventions/review-routing.md';
+
+  if (!existsSync(matrixPath) || !existsSync(matrixFile)) {
+    // Sem matriz ou sem lint ainda (repo pré-Task 1.8/1.9) — não falha.
+    return Promise.resolve({ ok: true, errors: [] });
+  }
+
+  try {
+    execSync('pnpm review:lint', { stdio: ['ignore', 'pipe', 'pipe'] });
+    return Promise.resolve({ ok: true, errors: [] });
+  } catch (err: any) {
+    const stderr = (err.stderr?.toString() ?? '').trim();
+    const stdout = (err.stdout?.toString() ?? '').trim();
+    const detail = stderr || stdout || err.message;
+    return Promise.resolve({
+      ok: false,
+      errors: [`review:lint falhou:\n${detail}`],
+    });
+  }
+}
 
 async function main(): Promise<void> {
   console.log('\u{1F50D} Pre-flight CI checks\n');
@@ -46,6 +82,10 @@ async function main(): Promise<void> {
     {
       name: 'package.json drift (scripts canônicos + fantasmas)',
       fn: () => checkPackageJsonDrift({ packageJsonPath: 'package.json', projectRoot: '.' }),
+    },
+    {
+      name: 'review-routing matrix lint (YAML + LOC + reviewer refs)',
+      fn: () => checkReviewRoutingLint(),
     },
   ];
 
