@@ -10,7 +10,7 @@ import {
 import type { FastifyAdapter } from '@nestjs/platform-fastify';
 import { randomUUID } from 'node:crypto';
 import type { ProblemDetailsDto, ProblemDetailsError } from '@projeto/shared-types';
-import { mapDomainExceptionToHttp } from './domain-exception-to-http.js';
+import { mapExceptionToHttp } from './domain-exception-to-http.js';
 
 // pt-BR: extraído de @nestjs/platform-fastify (TReply do FastifyAdapter)
 // porque o pacote 'fastify' não é dep direta de @projeto/api nesta fase.
@@ -106,8 +106,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       };
     }
 
-    // Exceções de domínio ou Error puro → mapper puro (Fase 7.2).
-    const mapped = mapDomainExceptionToHttp(exception);
+    // Exceções de domínio ou application, ou Error puro → mapper puro (Fase 7.2).
+    const mapped = mapExceptionToHttp(exception);
     return {
       status: mapped.status,
       code: mapped.code,
