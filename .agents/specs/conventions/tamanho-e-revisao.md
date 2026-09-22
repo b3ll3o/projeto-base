@@ -93,3 +93,64 @@ sem o claim ou reformule como range/estimativa derivada de fato verificável.
 - Code (constantes literais são, por definição, auto-verificáveis).
 - Outputs de comandos colados literalmente — o output É a evidência.
 - Ranges qualitativos sem número específico ("alguns", "vários", "poucos").
+
+## Polish Inline Trivial
+
+Quando um reviewer (spec ou code quality) retorna **apenas NICE findings**
+(sem IMPORTANT/BLOCKING), o controller **PODE** aplicá-los inline na mesma
+branch como um polish commit **SE todas** as condições abaixo forem
+satisfeitas:
+
+- Cada finding tem superfície pequena (≤ 5 linhas alteradas).
+- Trivialmente reversível (sem impacto arquitetural, sem mudança de API
+  pública, sem mudança de schema).
+- Verificável via `pnpm review:lint && pnpm ci:preflight` após aplicação.
+
+**BLOCKING e IMPORTANT** findings **SEMPRE** disparam loop de
+fix-implementer + re-review. Polish inline é exclusivo para NICE.
+
+### Precedentes (rollout review-router)
+
+- `cb60df6` (Fase 2): 6 NICE em AGENTS.md/WORKFLOWS.md — aplicados
+  inline como polish commits.
+- `c3e5b5e` (B14): DRY gap fix — 2-line import + reuse.
+- `a2c0e84` (B15): 2 IMPORTANT + 2 NICE em review-router agent/memory/
+  skill — aplicados inline.
+- `b40f207` (B17): 3 IMPORTANT em pilot-summary — aplicados inline como
+  fix commit separado (NÃO era polish — IMPORTANT sempre vai para commit
+  próprio com mensagem explícita).
+
+### Quando aplicar vs despachar fix-implementer
+
+```text
+Reviewer retorna: [NICE₁, NICE₂, NICE₃]
+  → Cada finding ≤ 5 linhas, sem impacto arquitetural
+  → Polish commit inline (1 commit agregando todos)
+
+Reviewer retorna: [NICE₁, IMPORTANT₁]
+  → IMPORTANT sempre vai para fix-implementer separado
+  → NICE₁ pode esperar próximo ciclo OU ser absorvido no mesmo fix
+    commit (mas com mensagem deixando claro o que é IMPORTANT vs NICE)
+
+Reviewer retorna: [BLOCKING₁]
+  → Fix-implementer + re-review loop, SEMPRE
+```
+
+### Mensagem de commit
+
+Polish inline commit DEVE explicitar que é polish (não fix):
+
+```text
+chore(agents): polir N NICE findings do review-router (Fase N backlog)
+
+Code quality review identificou N NICE (sem IMPORTANT/BLOCKING):
+- <lista dos findings com 1 linha cada>
+
+Aplicados inline conforme convenção polish-inline-trivial.
+
+Co-Authored-By: Claude Code <noreply@anthropic.com>
+```
+
+A separação semântica entre `chore` (polish) e `fix` (correção) ajuda na
+auditoria do rollout e no histórico de quando um reviewer aprovou vs
+quando um fix foi necessário.
