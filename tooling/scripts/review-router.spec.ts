@@ -13,8 +13,10 @@ import {
   matchPathGlobs,
   parseCommitType,
   matchCommitTypes,
+  matchDiffPatterns,
   type PathGlobRule,
   type CommitTypeRule,
+  type DiffPatternRule,
 } from './review-router.js';
 
 describe('review-router classifier', () => {
@@ -135,6 +137,40 @@ describe('review-router classifier', () => {
       };
       const result = matchCommitTypes(['random commit'], rules);
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('matchDiffPatterns()', () => {
+    it('adds security-auditor for bcrypt pattern', () => {
+      const rules: DiffPatternRule[] = [
+        { regex: 'bcrypt|argon2', reviewers_added: ['security-auditor'], blocking: true },
+      ];
+      const result = matchDiffPatterns('const hash = await bcrypt.hash(pwd);', rules);
+      expect(result.reviewers).toContain('security-auditor');
+      expect(result.blocking).toBe(true);
+    });
+
+    it('adds nestjs-specialist for @Injectable pattern', () => {
+      const rules: DiffPatternRule[] = [
+        { regex: '@(Injectable|Controller|Module)', reviewers_added: ['nestjs-specialist'] },
+      ];
+      const result = matchDiffPatterns('@Injectable()\nexport class UserService {}', rules);
+      expect(result.reviewers).toContain('nestjs-specialist');
+      expect(result.blocking).toBe(false);
+    });
+
+    it('returns empty for diff without matching patterns', () => {
+      const rules: DiffPatternRule[] = [{ regex: 'bcrypt', reviewers_added: ['security-auditor'] }];
+      const result = matchDiffPatterns('const x = 1;', rules);
+      expect(result.reviewers).toEqual([]);
+    });
+
+    it('respects 50KB cap and truncates with warning', () => {
+      const rules: DiffPatternRule[] = [{ regex: 'bcrypt', reviewers_added: ['security-auditor'] }];
+      const bigDiff = 'x'.repeat(60_000) + '\nbcrypt here';
+      const result = matchDiffPatterns(bigDiff, rules);
+      expect(result.truncated).toBe(true);
+      expect(result.reviewers).toEqual([]); // bcrypt after truncation
     });
   });
 });

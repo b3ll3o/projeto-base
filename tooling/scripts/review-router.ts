@@ -73,6 +73,7 @@ export function classify(
   rules?: {
     path_globs: PathGlobRule[];
     commit_types?: Record<string, CommitTypeRule>;
+    diff_patterns?: DiffPatternRule[];
   },
 ): ClassifyResult {
   const evidence: EvidenceItem[] = [];
@@ -101,6 +102,12 @@ export function classify(
         reviewers_added: ctReviewers,
       });
     }
+  }
+
+  if (rules?.diff_patterns) {
+    const dpResult = matchDiffPatterns(input.diff, rules.diff_patterns);
+    dpResult.reviewers.forEach((r) => reviewers.add(r));
+    evidence.push(...dpResult.evidence);
   }
 
   return {
@@ -160,6 +167,56 @@ export function matchCommitTypes(
     }
   }
   return Array.from(reviewers);
+}
+
+export interface DiffPatternRule {
+  regex: string;
+  reviewers_added: string[];
+  blocking?: boolean;
+  rationale?: string;
+}
+
+export interface DiffMatchResult {
+  reviewers: string[];
+  blocking: boolean;
+  truncated: boolean;
+  evidence: EvidenceItem[];
+}
+
+const DIFF_CAP_BYTES = 50_000;
+
+export function matchDiffPatterns(diff: string, rules: DiffPatternRule[]): DiffMatchResult {
+  const reviewers = new Set<string>();
+  let blocking = false;
+  let truncated = false;
+  let effectiveDiff = diff;
+
+  if (diff.length > DIFF_CAP_BYTES) {
+    effectiveDiff = diff.slice(0, DIFF_CAP_BYTES);
+    truncated = true;
+  }
+
+  const evidence: EvidenceItem[] = [];
+
+  for (const rule of rules) {
+    let regex: RegExp;
+    try {
+      regex = new RegExp(rule.regex, 'gm');
+    } catch {
+      continue; // skip invalid regex
+    }
+    if (regex.test(effectiveDiff)) {
+      rule.reviewers_added.forEach((r) => reviewers.add(r));
+      if (rule.blocking) blocking = true;
+      evidence.push({
+        signal: 'diff_pattern',
+        pattern: rule.regex,
+        reviewers_added: rule.reviewers_added,
+      });
+    }
+  }
+
+  return { reviewers: Array.from(reviewers), blocking, truncated, evidence };
 }
 
 // CLI entrypoint (placeholder — implementação completa em Task 1.7)
