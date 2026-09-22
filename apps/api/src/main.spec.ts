@@ -23,7 +23,7 @@ describe('GlobalExceptionFilter', () => {
       title: 'NOT_FOUND',
       status: HttpStatus.NOT_FOUND,
       detail: 'Não encontrado',
-      instance: '/api/v1/users/u-1',
+      instance: 'GET /api/v1/users/u-1',
       code: 'NOT_FOUND',
       traceId: 'req-1',
       type: 'https://errors.projeto.com/NOT_FOUND',
