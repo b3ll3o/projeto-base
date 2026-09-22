@@ -1,19 +1,22 @@
 import { Module } from '@nestjs/common';
 import { AUDIT_SERVICE_PORT } from './shared/audit.tokens.js';
-import { InMemoryAuditService } from './application/in-memory-audit-service.js';
+import { PrismaAuditService } from './infrastructure/prisma-audit.service.js';
 
 /**
- * Stub de infraestrutura do módulo de auditoria.
+ * Módulo de infraestrutura da auditoria (Fase 6).
  *
- * pt-BR: na Fase 6 este módulo será estendido (ou substituído) para
- * usar PrismaAuditService em produção. Como use cases dependem apenas
- * do port, a troca não exige mudanças fora deste arquivo.
+ * pt-BR: desde a Fase 6 este módulo usa PrismaAuditService (produção).
+ * O InMemoryAuditService permanece no código apenas para uso em testes
+ * unitários que importam o módulo de auditoria em isolamento; ele NÃO
+ * está registrado aqui.
+ *
+ * Requer `PrismaModule` no import graph (já é `@Global()`, auto-injetado).
  */
 @Module({
   providers: [
     {
       provide: AUDIT_SERVICE_PORT,
-      useClass: InMemoryAuditService,
+      useClass: PrismaAuditService,
     },
   ],
   exports: [AUDIT_SERVICE_PORT],
