@@ -22,10 +22,12 @@ import { toUserOutput, type UserOutput } from './dto/user.output.js';
 import type { ListUsersOutput } from './dto/list-users.output.js';
 
 import {
+  ApplicationConcurrencyException,
   ApplicationEmailAlreadyInUseException,
   ApplicationInvalidRestoreException,
   ApplicationResourceDeletedException,
   ApplicationResourceNotFoundException,
+  ApplicationValidationException,
 } from './exceptions/application.exceptions.js';
 
 /**
@@ -61,10 +63,10 @@ export class UserUseCases {
 
     // 1. Validar input no nível application (campos não-vazios antes de criar VO)
     if (typeof input.nome !== 'string' || input.nome.trim() === '') {
-      throw new ApplicationResourceNotFoundException('User', '(empty name input)');
+      throw new ApplicationValidationException('nome', 'campo obrigatório (string não-vazia)');
     }
     if (typeof input.email !== 'string' || input.email.trim() === '') {
-      throw new ApplicationResourceNotFoundException('User', '(empty email input)');
+      throw new ApplicationValidationException('email', 'campo obrigatório (string não-vazia)');
     }
 
     // 2. Email uniqueness check (application-level, antes de chamar VO)
@@ -255,13 +257,12 @@ export class UserUseCases {
       throw new ApplicationEmailAlreadyInUseException((e as { email?: string }).email ?? '');
     }
     if (e instanceof Error && e.name === 'ConcurrencyException') {
-      const concurrencyError = e as Error;
-      throw new (class extends Error {
-        constructor() {
-          super(concurrencyError.message);
-          this.name = 'ApplicationConcurrencyException';
-        }
-      })();
+      const c = e as { expectedVersion?: number; actualVersion?: number | null };
+      throw new ApplicationConcurrencyException(
+        resource,
+        c.expectedVersion ?? -1,
+        c.actualVersion ?? null,
+      );
     }
     throw e;
   }

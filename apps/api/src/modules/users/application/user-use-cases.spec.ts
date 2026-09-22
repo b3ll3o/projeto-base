@@ -9,6 +9,7 @@ import {
   ApplicationInvalidRestoreException,
   ApplicationResourceDeletedException,
   ApplicationResourceNotFoundException,
+  ApplicationValidationException,
 } from './exceptions/application.exceptions.js';
 
 const T0 = new Date('2026-09-21T10:00:00Z');
@@ -64,11 +65,11 @@ describe('UserUseCases', () => {
       ).rejects.toThrow(ApplicationEmailAlreadyInUseException);
     });
 
-    it('rejeita nome vazio', async () => {
+    it('rejeita nome vazio com ApplicationValidationException', async () => {
       const ctx = makeCtx();
       await expect(
         AuditContextStore.run(ctx, () => useCases.criarUser({ nome: '', email: 'a@b.com' })),
-      ).rejects.toThrow();
+      ).rejects.toThrow(ApplicationValidationException);
     });
   });
 
