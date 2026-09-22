@@ -83,6 +83,11 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 | **nestjs-specialist**  | [`.agents/agents/nestjs-specialist.md`](./.agents/agents/nestjs-specialist.md)    | [memory](../.agents/memory/nestjs-specialist.md)          | Arquiteto backend NestJS                    | Criar/refatorar módulo NestJS, DI, validação, Swagger       |
 | **nextjs-specialist**  | [`.agents/agents/nextjs-specialist.md`](./.agents/agents/nextjs-specialist.md)    | [memory](../.agents/memory/nextjs-specialist.md)          | Arquiteto frontend Next.js                  | Criar rota/página, decidir RSC vs. Client, Server Actions    |
 
+> **Lens DDD/Hexagonal (a partir de v1.2.0, com adoção do ADR-0001):** ao criar/refatorar módulo NestJS,
+> `nestjs-specialist` aplica a lens DDD/Hexagonal — validar boundary `domain/application/infrastructure`
+> e audit fields obrigatórios. A mesma lens é parte da atuação do `stack-code-reviewer` (D11) em pre-commit
+> (Husky) e em CI. Ver [`.agents/specs/conventions/estrutura-e-versionamento.md`](./.agents/specs/conventions/estrutura-e-versionamento.md).
+
 ---
 
 ## §4. Mecanismo de Coordenação

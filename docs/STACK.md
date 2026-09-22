@@ -105,7 +105,30 @@ Substituir uma tecnologia (ex.: trocar Prisma por Drizzle) é decisão arquitetu
 3. Ter plano de migração incremental (apps em paralelo, gradual)
 4. Ser aprovada por revisão (mínimo 1 aprovação)
 
+## §8. Paradigma Arquitetural — DDD + Hexagonal (obrigatório)
+
+> **Regra canônica** (a partir de `v1.2.0`): apps backend adotam **DDD + Hexagonal (Ports & Adapters)** como paradigma arquitetural. Decisão justificada no [ADR-0001 — DDD + Hexagonal + Auditoria](./adr/0001-arquitetura-ddd-hexagonal-auditoria.md).
+
+A escolha de paradigma é tão vinculante quanto a escolha de stack: define a organização de cada módulo de feature em `domain/application/infrastructure`, com a regra de dependência invertida (camadas externas podem importar das internas; o inverso é proibido). Detalhes completos em [`MONOREPO.md` §11](./MONOREPO.md) e [`.agents/specs/conventions/estrutura-e-versionamento.md`](./.agents/specs/conventions/estrutura-e-versionamento.md).
+
+### Guardião mecânico
+
+O único guardião automatizado no template raiz é o agent [`stack-code-reviewer`](../.agents/agents/stack-code-reviewer.md) (D11 — pre-commit + CI), que aplica a lens DDD/Hexagonal em toda alteração de código (`*.ts`, `*.tsx`, `*.prisma`). Cobertura: pureza de `domain/`, direção de dependência entre camadas, existência de ports + mappers Prisma → domínio.
+
+### Habilitadores
+
+- Skill [`.agents/skills/ddd-hexagonal-validation/SKILL.md`](../.agents/skills/ddd-hexagonal-validation/SKILL.md) — checklist manual/semi-auto para auditoria de módulo.
+- ESLint rule `tooling/eslint-config/rules/no-domain-imports-from-infra.js` — bloqueia imports proibidos em `**/domain/**`.
+
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão da stack:** 1.1.0
+**Versão da stack:** 1.2.0
+
+### Histórico de Versões
+
+| Versão | Mudanças |
+|--------|----------|
+| `1.0.0` | Lançamento inicial da stack |
+| `1.1.0` | Adicionados 3 specialists de stack |
+| `1.2.0` | §8 — DDD/Hexagonal como paradigma arquitetural obrigatório (ADR-0001) |

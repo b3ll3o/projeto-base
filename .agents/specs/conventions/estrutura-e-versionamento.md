@@ -59,9 +59,48 @@ projeto-base/
 - Mudanças em memory files são patch (não geram tag sozinhas)
 - Toda tag DEVE passar pelo checklist de revisão (ver [`tamanho-e-revisao.md`](./tamanho-e-revisao.md))
 
+## Arquitetura por Módulo (DDD/Hexagonal)
+
+> **Regra canônica** (a partir de `v1.2.0`): apps backend (`apps/api` e futuros) adotam
+> **DDD + Hexagonal (Ports & Adapters)** como paradigma arquitetural obrigatório,
+> justificado pelo [ADR-0001 — DDD + Hexagonal + Auditoria](../../adr/0001-arquitetura-ddd-hexagonal-auditoria.md).
+
+### Estrutura obrigatória por módulo
+
+```text
+apps/<backend-app>/src/modules/<feature>/
+├── domain/          # TypeScript puro — entidades, VOs, eventos de domínio
+├── application/     # Use cases + ports (interfaces) — depende só de domain
+└── infrastructure/  # http/, persistence/, adapters — implementa ports
+```
+
+### Constraint de dependência entre camadas
+
+```text
+domain         ─→ (nada além de typescript padrão)
+  ↑
+application    ─→ domain + ports próprias
+  ↑
+infrastructure ─→ application + domain + libs externas (NestJS, Prisma)
+```
+
+- ❌ `domain/` **nunca** importa `@nestjs/*`, `@prisma/*`, `class-validator`, `reflect-metadata`, `rxjs`.
+- ❌ `application/` **nunca** importa de `infrastructure/`.
+- ✅ O fluxo inverso (camadas externas → internas) é livre.
+- ✅ `infrastructure/http/` implementa os ports definidos em `application/ports/`.
+
+### Guardiões mecânicos
+
+- **ESLint rule**: `tooling/eslint-config/rules/no-domain-imports-from-infra.js`
+- **Agent `stack-code-reviewer`** (D11 — pre-commit + CI): aplica lens DDD/Hexagonal.
+- **Skill [`ddd-hexagonal-validation`](../../../skills/ddd-hexagonal-validation/SKILL.md)**: checklist automatizado para auditoria de módulo.
+
+Referência cruzada: [`docs/MONOREPO.md` §11](../../MONOREPO.md) e [`docs/STACK.md` §8](../../STACK.md).
+
 ## Histórico de Versões
 
 | Versão | Mudanças |
 |--------|----------|
 | `1.0.0` | Lançamento inicial — 10 agents genéricos + skill `agents:coordinate` |
 | `1.1.0` | Adicionados 3 specialists de stack (monorepo, nestjs, nextjs) + workflows detalhados + docs STACK.md e MONOREPO.md |
+| `1.2.0` | Regra canônica DDD/Hexagonal por módulo (referência ao ADR-0001) + skills `ddd-hexagonal-validation` e `audit-fields-convention` |

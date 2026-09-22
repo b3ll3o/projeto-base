@@ -8,6 +8,8 @@
 
 Este template é **vendor-neutral**. Ele define agents, skills e workflows em **Markdown puro**, sem acoplamento a nenhuma ferramenta específica. Cada ferramenta tem sua própria forma de carregar esses arquivos — este guia mostra como configurar cada uma.
 
+**Paradigma arquitetural default (apps backend):** ao derivar um backend a partir deste template, adote **DDD + Hexagonal (Ports & Adapters)** como estrutura canônica de cada módulo de feature — `apps/api/src/modules/<feature>/{domain,application,infrastructure}/`. Decisão registrada no [ADR-0001](../adr/0001-arquitetura-ddd-hexagonal-auditoria.md); guardiões automáticos em [`stack-code-reviewer`](../.agents/agents/stack-code-reviewer.md) (D11) e skill [`ddd-hexagonal-validation`](../.agents/skills/ddd-hexagonal-validation/SKILL.md). Detalhes em [`MONOREPO.md` §11](../MONOREPO.md).
+
 ## Índice de Integrações
 
 O guia de integração por ferramenta está dividido em arquivos irmãos:

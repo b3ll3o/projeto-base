@@ -209,7 +209,53 @@ Apps NÃO compartilham:
 6. Despachar monorepo-specialist → code-reviewer
 ```
 
+## §11. Estrutura Obrigatória por App (DDD/Hexagonal)
+
+> **Regra canônica** (a partir de `v1.2.0`): apps backend adotam **DDD + Hexagonal (Ports & Adapters)** como paradigma arquitetural obrigatório. Decisão justificada no [ADR-0001 — DDD + Hexagonal + Auditoria](./adr/0001-arquitetura-ddd-hexagonal-auditoria.md).
+
+### Layout canônico de módulo
+
+```text
+apps/api/src/modules/<feature>/
+├── domain/          # TypeScript puro — entidades, VOs, eventos de domínio
+├── application/     # Use cases + ports (interfaces) — depende só de domain
+└── infrastructure/  # http/, persistence/, adapters — implementa ports
+```
+
+Cada app backend **DEVE** organizar cada feature como módulo com as três camadas acima. Shared concerns (auditoria, validação, infra HTTP) ficam em `apps/<app>/src/shared/{audit,domain,infrastructure}/`.
+
+### Constraint de dependência entre camadas
+
+```text
+domain         ─→ (nada além de typescript padrão)
+  ↑
+application    ─→ domain + ports próprias
+  ↑
+infrastructure ─→ application + domain + libs externas (NestJS, Prisma)
+```
+
+- ❌ `domain/` **nunca** importa `@nestjs/*`, `@prisma/*`, `class-validator`, `reflect-metadata`, `rxjs`.
+- ❌ `application/` **nunca** importa de `infrastructure/`.
+- ✅ O fluxo inverso (camadas externas → internas) é livre.
+- ✅ `infrastructure/http/` implementa os ports definidos em `application/ports/`.
+
+### Guardiões
+
+- ESLint rule `tooling/eslint-config/rules/no-domain-imports-from-infra.js`
+- Agent `stack-code-reviewer` (D11 — pre-commit + CI) com lens DDD/Hexagonal
+- Skill [`.agents/skills/ddd-hexagonal-validation/SKILL.md`](../.agents/skills/ddd-hexagonal-validation/SKILL.md) — checklist automatizado
+
+Referência cruzada: [`.agents/specs/conventions/estrutura-e-versionamento.md`](./.agents/specs/conventions/estrutura-e-versionamento.md) e [`docs/STACK.md` §8](./STACK.md).
+
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão do documento:** 1.1.0
+**Versão do documento:** 1.2.0
+
+### Histórico de Versões
+
+| Versão | Mudanças |
+|--------|----------|
+| `1.0.0` | Lançamento inicial |
+| `1.1.0` | Adicionados 3 specialists de stack + workflows detalhados |
+| `1.2.0` | §11 — Estrutura obrigatória DDD/Hexagonal por app (ADR-0001) |
