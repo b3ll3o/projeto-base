@@ -123,6 +123,24 @@ e `--reporter=json-summary` (machine).
   (apenas adapters Prisma) fica abaixo do piso agregado; o mesmo
   comportamento já é coberto no `unit` via InMemory audit/repository.
 
+## CI Defense in Depth
+
+A regra de 80% é **apenas uma camada** da estratégia de CI. Para prevenir
+falhas estruturais (drift de tsconfig, ESLint config legada, refs quebradas),
+o monorepo usa:
+
+1. **Pre-push local** (`pnpm ci:local`) — devs rodam antes de push; detecta
+   em ~30s o que o CI detectaria em ~4min. Ver [git-workflow.md §Pre-Push
+   Quality Gate](./git-workflow.md).
+2. **Pre-flight CI job** (workflow `ci.yml`) — primeiro job, valida
+   cross-refs, tsconfig drift, ESLint drift. Falha rápido em 10s.
+3. **Quality CI job** (atual) — lint, typecheck, test, coverage. Roda
+   **apenas se preflight passou**.
+
+Threshold de cobertura pode ser ajustado por package em **report-only** mode
+(apps/web durante scaffolding) — ver nota em `apps/web/vitest.config.ts`.
+Reativar para 80% via PR que adiciona a primeira feature BC.
+
 ## Revisões
 
 A regra vale **desde o PR #1** — toda feature nova ou refactor deve
