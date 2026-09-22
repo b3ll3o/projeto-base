@@ -9,7 +9,7 @@
  * Exit code 0 = OK, 1 = pelo menos 1 falha, 2 = erro inesperado.
  */
 import { checkDocRefs } from './check-doc-refs';
-// import { checkTsconfigDrift } from './check-tsconfig-drift';
+import { checkTsconfigDrift } from './check-tsconfig-drift';
 // import { checkEslintDrift } from './check-eslint-drift';
 
 async function main(): Promise<void> {
@@ -17,7 +17,14 @@ async function main(): Promise<void> {
   const checks: Array<{ name: string; fn: () => Promise<{ ok: boolean; errors: string[] }> }> = [
     { name: 'Cross-refs em docs', fn: () => checkDocRefs({ docsRoot: 'docs' }) },
     { name: 'Cross-refs em .agents/specs', fn: () => checkDocRefs({ docsRoot: '.agents/specs' }) },
-    // { name: 'tsconfig drift', fn: () => checkTsconfigDrift() },
+    {
+      name: 'tsconfig drift (strict, noUncheckedIndexedAccess)',
+      fn: () =>
+        checkTsconfigDrift({
+          tsconfigsRoot: '.',
+          consistentKeys: ['strict', 'noUncheckedIndexedAccess'],
+        }),
+    },
     // { name: 'eslint config drift', fn: () => checkEslintDrift() },
   ];
 
