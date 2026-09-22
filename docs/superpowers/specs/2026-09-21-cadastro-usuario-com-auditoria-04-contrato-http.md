@@ -14,19 +14,26 @@
 
 ## §2. Endpoints
 
-| Método | Path | Descrição | Auth | Headers |
-|--------|------|-----------|------|---------|
-| `POST` | `/api/v1/users` | Criar | ✅ | `Authorization` |
-| `GET` | `/api/v1/users` | Listar ativos | ✅ | `Authorization` |
-| `GET` | `/api/v1/users/:id` | Buscar por ID | ✅ | `Authorization` |
-| `PATCH` | `/api/v1/users/:id` | Atualizar | ✅ | `Authorization`, `If-Match` (recomendado) |
-| `DELETE` | `/api/v1/users/:id` | Soft delete | ✅ | `Authorization`, `If-Match` (recomendado) |
-| `POST` | `/api/v1/users/:id/restore` | Restaurar versão | ✅ | `Authorization` |
-| `GET` | `/api/v1/users/:id/history` | Listar versões | ✅ | `Authorization` |
-| `GET` | `/api/v1/users/:id/history/:version` | Versão específica | ✅ | `Authorization` |
-| `GET` | `/api/v1/users/archive` | Listar deletados | ✅ | `Authorization` |
-| `GET` | `/api/v1/users/archive/:id` | Ver deletado | ✅ | `Authorization` |
-| `POST` | `/api/v1/users/archive/:id/restore` | Restaurar último deletado | ✅ | `Authorization` |
+> **Estado em 2026-09-22 (Fase 9 entregue):** os 7 endpoints abaixo estão **implementados e cobertos por testes E2E**. Endpoints marcados como *planejado* estão descritos no design original mas ainda não foram scaffolados — registrados aqui apenas para rastreabilidade de roadmap.
+
+| Método | Path | Descrição | Auth | Headers | Status |
+|--------|------|-----------|------|---------|--------|
+| `POST` | `/api/v1/users` | Criar | ✅ | `Authorization` | implementado |
+| `GET` | `/api/v1/users` | Listar (cursor + `includeDeleted` case-insensitive) | ✅ | `Authorization` | implementado |
+| `GET` | `/api/v1/users/:id` | Buscar por ID | ✅ | `Authorization` | implementado |
+| `PATCH` | `/api/v1/users/:id` | Atualizar | ✅ | `Authorization`, `If-Match` (obrigatório) | implementado |
+| `DELETE` | `/api/v1/users/:id` | Soft delete | ✅ | `Authorization`, `If-Match` (obrigatório) | implementado |
+| `POST` | `/api/v1/users/:id/restore` | Restaurar versão | ✅ | `Authorization`, `If-Match` (obrigatório) | implementado |
+| `GET` | `/api/v1/users/:id/history` | Listar versões | ✅ | `Authorization` | implementado |
+| `GET` | `/api/v1/users/:id/history/:version` | Versão específica | ✅ | `Authorization` | planejado |
+| `GET` | `/api/v1/users/archive` | Listar deletados | ✅ | `Authorization` | planejado |
+| `GET` | `/api/v1/users/archive/:id` | Ver deletado | ✅ | `Authorization` | planejado |
+| `POST` | `/api/v1/users/archive/:id/restore` | Restaurar último deletado | ✅ | `Authorization` | planejado |
+
+**Notas de implementação (Fase 9):**
+
+- `includeDeleted` em `GET /users` aceita `"true"` ou `"1"` (case-insensitive — `True`, `TRUE`, etc. também). Swagger tipa como `String` (não `Boolean`) para preservar a aceitação flexível em OpenAPI 3.0.
+- `If-Match` é **obrigatório** (não recomendado) em `PATCH`, `DELETE` e `POST /:id/restore`. Ausência → `400 IF_MATCH_REQUIRED`; formato inválido → `400 IF_MATCH_INVALID`; divergência de versão → `412 CONCURRENCY_CONFLICT`.
 
 ## §3. Schemas de Request/Response
 
