@@ -13,8 +13,9 @@
 // afetam o que está no banco (analogia com o clone() do InMemoryUserRepository).
 // O `User.criar` é chamado pelos use-cases; aqui só persistimos.
 
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service.js';
 import type {
   UserRepositoryPort,
   UserListInput,
@@ -29,7 +30,15 @@ import { UserPrismaMapper, type UserRow } from './user.prisma-mapper.js';
 
 @Injectable()
 export class PrismaUserRepository implements UserRepositoryPort {
-  constructor(private readonly prisma: PrismaClient) {}
+  /**
+   * pt-BR: `@Inject(PrismaService)` é necessário porque o param é
+   * tipado como `PrismaClient` (interface material — classe concreta
+   * mas não a que está registrada no container). Sem o token explícito,
+   * NestJS + emitDecoratorMetadata não conseguem resolver (apenas
+   * `PrismaService` está em `PrismaModule.providers`). Bug latente
+   * descoberto pelos testes e2e (Task 7.7).
+   */
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaClient) {}
 
   /**
    * Persiste o agregado respeitando optimistic locking.

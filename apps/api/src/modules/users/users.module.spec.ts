@@ -6,11 +6,12 @@ import { USER_REPOSITORY_PORT } from './domain/ports/user-repository.port.js';
 import { PrismaUserRepository } from './infrastructure/persistence/prisma-user.repository.js';
 import { AUDIT_SERVICE_PORT } from '../../shared/audit/shared/audit.tokens.js';
 import { PrismaAuditService } from '../../shared/audit/infrastructure/prisma-audit.service.js';
+import { PrismaModule } from '../../shared/infrastructure/prisma/prisma.module.js';
 
 describe('UsersModule (DI wiring)', () => {
   it('compila e resolve o grafo de DI', async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [UsersModule],
+      imports: [PrismaModule, UsersModule],
     }).compile();
 
     expect(moduleRef.get(USER_USE_CASES)).toBeInstanceOf(UserUseCases);
@@ -23,7 +24,7 @@ describe('UsersModule (DI wiring)', () => {
 
   it('USER_REPOSITORY_PORT resolve para PrismaUserRepository', async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [UsersModule],
+      imports: [PrismaModule, UsersModule],
     }).compile();
 
     const repo = moduleRef.get(USER_REPOSITORY_PORT);
@@ -34,7 +35,7 @@ describe('UsersModule (DI wiring)', () => {
 
   it('AUDIT_SERVICE_PORT resolve para PrismaAuditService', async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [UsersModule],
+      imports: [PrismaModule, UsersModule],
     }).compile();
 
     const audit = moduleRef.get(AUDIT_SERVICE_PORT);

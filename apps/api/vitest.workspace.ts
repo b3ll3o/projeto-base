@@ -62,4 +62,35 @@ export default defineWorkspace([
       },
     },
   },
+  {
+    // pt-BR: projeto `e2e` (Fase 7 Task 7.7) — sobe o AppModule inteiro
+    // (controller + use cases + PrismaModule + AuditInfraModule) e bate
+    // nas rotas HTTP via `app.inject(...)`. Diferente do `integration`
+    // porque exercita o boundary HTTP completo: ZodValidationPipe,
+    // GlobalExceptionFilter, optimistic locking, ETag/If-Match.
+    extends: './vitest.config.ts',
+    test: {
+      name: 'e2e',
+      include: ['test/**/*.e2e.spec.ts'],
+      exclude: [],
+      environment: 'node',
+      // Testcontainers + boot do NestApp + apply migrations — margem
+      // generosa para CI.
+      testTimeout: 120_000,
+      hookTimeout: 120_000,
+      // singleFork: o container Postgres + NestApp são compartilhados
+      // por todos os testes da run; múltiplos workers competiriam pela
+      // mesma porta efêmera e levantariam apps duplicados.
+      pool: 'forks',
+      poolOptions: { forks: { singleFork: true } },
+      // pt-BR: cobertura habilitada para relatório, mas SEM thresholds —
+      // e2e exercita o stack inteiro (controller + use cases + Prisma +
+      // audit + filter + pipe), então o agregado é próximo de 100%; o
+      // gate de 80% fica no projeto `unit`.
+      coverage: {
+        provider: 'v8',
+        reporter: ['text', 'json', 'html', 'lcov'],
+      },
+    },
+  },
 ]);

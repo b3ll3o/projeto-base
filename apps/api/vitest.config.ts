@@ -37,6 +37,11 @@ export default defineConfig({
         // pt-BR: diretório `test/` contém helpers de teste (não lógica
         // de produção) e por isso é excluído da medição de cobertura.
         '**/test/**',
+        // pt-BR: testes e2e (Task 7.7) sobem o AppModule inteiro via
+        // Testcontainers + app.inject; a porta de enforcement do gate
+        // de 80% é o projeto `unit`. Excluir explicitamente evita que
+        // a medição agregada do unit colete arquivos fora do `src/`.
+        '**/test/e2e/**',
         // pt-BR: `scripts/` contém utilitários one-shot (export-openapi,
         // futuras migrations, etc.) executados via tsx, não cobertos
         // por specs unitários. Excluir evita inflar denominador com 0%.

@@ -15,8 +15,9 @@
 // `Prisma.InputJsonValue` na escrita para satisfazer o tipo do client, e
 // `Record<string, unknown>` na leitura (assimetria intencional no IO boundary).
 
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { PrismaClient, type Prisma } from '@prisma/client';
+import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service.js';
 import type { AuditContext } from '../domain/audit-context.vo.js';
 import type {
   ArchiveEntry,
@@ -32,7 +33,13 @@ import type {
 
 @Injectable()
 export class PrismaAuditService implements AuditServicePort {
-  constructor(private readonly prisma: PrismaClient) {}
+  /**
+   * pt-BR: mesmo motivo do `PrismaUserRepository` — `@Inject(PrismaService)`
+   * explícito para resolver o param tipado como `PrismaClient` (a classe
+   * concreta registrada no container é `PrismaService`, subclasse de
+   * `PrismaClient`).
+   */
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaClient) {}
 
   async record(input: AuditRecordInput, ctx: AuditContext): Promise<void> {
     await this.prisma.userHistory.create({

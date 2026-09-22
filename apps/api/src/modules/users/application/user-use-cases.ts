@@ -8,7 +8,12 @@ import {
   EmailAlreadyInUseException,
   ConcurrencyException,
 } from '../domain/exceptions/user.exceptions.js';
-import type { UserRepositoryPort, FindByIdOptions } from '../domain/ports/user-repository.port.js';
+import {
+  USER_REPOSITORY_PORT,
+  type UserRepositoryPort,
+  type FindByIdOptions,
+} from '../domain/ports/user-repository.port.js';
+import { AUDIT_SERVICE_PORT } from '../../../shared/audit/shared/audit.tokens.js';
 import type {
   AuditOperation,
   AuditServicePort,
@@ -33,6 +38,7 @@ import {
   ApplicationResourceNotFoundException,
   ApplicationValidationException,
 } from './exceptions/application.exceptions.js';
+import { Inject, Injectable } from '@nestjs/common';
 
 /**
  * Casos de uso do bounded context de Users.
@@ -54,10 +60,18 @@ import {
  */
 export const USER_USE_CASES = Symbol.for('@projeto/api/users/UserUseCases');
 
+/**
+ * pt-BR: decorado com `@Injectable()` + `@Inject(USER_REPOSITORY_PORT)` /
+ * `@Inject(AUDIT_SERVICE_PORT)` no construtor porque os parâmetros são
+ * interfaces (apagadas em runtime pelo TS). Sem tokens explícitos o
+ * container DI passaria `undefined` para os params e `userRepo.findByEmail`
+ * quebraria em runtime — bug latente descoberto pelos testes e2e (Task 7.7).
+ */
+@Injectable()
 export class UserUseCases {
   constructor(
-    private readonly userRepo: UserRepositoryPort,
-    private readonly auditService: AuditServicePort,
+    @Inject(USER_REPOSITORY_PORT) private readonly userRepo: UserRepositoryPort,
+    @Inject(AUDIT_SERVICE_PORT) private readonly auditService: AuditServicePort,
   ) {}
 
   // ----- CREATE -----
