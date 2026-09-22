@@ -80,6 +80,12 @@ describe('E2E 06: Histórico preserva snapshots por versão', () => {
     const byV: Record<number, (typeof body.entries)[number]> = {};
     for (const e of body.entries) byV[e.version] = e;
 
+    // Garante todas as versões presentes antes de dereferenciar (senão TypeError
+    // mascara falha de contrato).
+    expect(byV[1]).toBeDefined();
+    expect(byV[2]).toBeDefined();
+    expect(byV[3]).toBeDefined();
+
     // v1: INSERT com nome/email originais
     expect(byV[1].operation).toBe('INSERT');
     expect(byV[1].snapshot.nome).toBe('Snap v1');

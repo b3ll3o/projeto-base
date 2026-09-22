@@ -23,7 +23,7 @@ describe('E2E 02: DELETE → RESTORE → audit trail completo', () => {
   });
 
   it('audit trail completo: INSERT, UPDATE, UPDATE, DELETE, RESTORE', async () => {
-    const { app, ctx } = e2e;
+    const { app } = e2e;
 
     // INSERT → v1
     const c = await app.inject({
@@ -57,10 +57,19 @@ describe('E2E 02: DELETE → RESTORE → audit trail completo', () => {
     });
     expect(d.statusCode).toBe(204);
 
-    // pt-BR: tabela UserArchive guarda snapshot da versão pós-delete (v4).
-    const archiveRow = await ctx.prisma.userArchive.findUnique({ where: { entityId: userId } });
-    expect(archiveRow).not.toBeNull();
-    expect(archiveRow?.version).toBe(4);
+    // pt-BR: HTTP contract — GET /history deve ter entry DELETE com
+    // version=4 (que é o archiveRow.version). Validamos via contrato HTTP
+    // em vez de acessar Prisma diretamente (acoplamento ao schema interno).
+    const histAfterDelete = await app.inject({
+      method: 'GET',
+      url: `/api/v1/users/${userId}/history`,
+    });
+    expect(histAfterDelete.statusCode).toBe(200);
+    const histBodyAfterDelete = JSON.parse(histAfterDelete.body) as {
+      entries: Array<{ operation: string; version: number }>;
+    };
+    const deleteEntry = histBodyAfterDelete.entries.find((e) => e.operation === 'DELETE');
+    expect(deleteEntry?.version).toBe(4);
 
     // RESTORE → v5
     const r = await app.inject({

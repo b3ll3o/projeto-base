@@ -31,7 +31,7 @@ describe('E2E 04: Validation errors (Zod) + RFC 7807 Problem Details', () => {
     await cleanE2EDatabase(e2e.ctx);
   });
 
-  it('POST sem email -> 400 VALIDATION_ERROR com errors[]', async () => {
+  it('POST sem email -> 400 VALIDATION_ERROR com errors[] + RFC 7807 props', async () => {
     const { app } = e2e;
     const res = await app.inject({
       method: 'POST',
@@ -48,6 +48,15 @@ describe('E2E 04: Validation errors (Zod) + RFC 7807 Problem Details', () => {
     expect(body.code).toBe('VALIDATION_ERROR');
     expect(Array.isArray(body.errors)).toBe(true);
     expect(body.errors!.length).toBeGreaterThanOrEqual(1);
+    // pt-BR: RFC 7807 Problem Details — problem type + instance + traceId.
+    expect(body).toHaveProperty('traceId');
+    expect(body).toHaveProperty('instance');
+  });
+
+  it('GET id inválido (não-UUID) -> 400 ou 500 (rejeitado pelo Zod do path)', async () => {
+    const { app } = e2e;
+    const res = await app.inject({ method: 'GET', url: '/api/v1/users/not-a-uuid' });
+    expect([400, 500]).toContain(res.statusCode);
   });
 
   it('POST com email em formato inválido -> 400 VALIDATION_ERROR', async () => {
