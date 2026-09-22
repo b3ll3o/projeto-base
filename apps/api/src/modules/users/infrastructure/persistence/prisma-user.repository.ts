@@ -19,6 +19,7 @@ import type {
   UserRepositoryPort,
   UserListInput,
   UserListResult,
+  FindByIdOptions,
 } from '../../domain/ports/user-repository.port.js';
 import type { User } from '../../domain/user.aggregate.js';
 import type { UserId } from '../../domain/value-objects/user-id.vo.js';
@@ -90,12 +91,16 @@ export class PrismaUserRepository implements UserRepositoryPort {
   }
 
   /**
-   * findById com filtro de soft-delete: retorna null se deletedAt != null.
+   * findById com filtro de soft-delete opcional.
+   *
+   * - Default: retorna null se `deletedAt !== null` (caminho de produção).
+   * - `options.includeDeleted === true`: retorna o agregado mesmo soft-deleted,
+   *   usado por fluxos que precisam operar sobre ele (ex: `UserUseCases.restaurar`).
    */
-  async findById(id: UserId): Promise<User | null> {
+  async findById(id: UserId, options?: FindByIdOptions): Promise<User | null> {
     const row = await this.prisma.user.findUnique({ where: { id: id.value } });
     if (row === null) return null;
-    if (row.deletedAt !== null) return null;
+    if (!options?.includeDeleted && row.deletedAt !== null) return null;
     return UserPrismaMapper.toDomain(row);
   }
 

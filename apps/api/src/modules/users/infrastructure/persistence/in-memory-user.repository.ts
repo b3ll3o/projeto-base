@@ -2,6 +2,7 @@ import type {
   UserRepositoryPort,
   UserListInput,
   UserListResult,
+  FindByIdOptions,
 } from '../../domain/ports/user-repository.port.js';
 import { User } from '../../domain/user.aggregate.js';
 import type { UserId } from '../../domain/value-objects/user-id.vo.js';
@@ -27,9 +28,10 @@ export class InMemoryUserRepository implements UserRepositoryPort {
   private readonly byId = new Map<string, User>();
   private readonly emailIndex = new Map<string, string>(); // email.value -> id.value
 
-  async findById(id: UserId): Promise<User | null> {
+  async findById(id: UserId, options?: FindByIdOptions): Promise<User | null> {
     const found = this.byId.get(id.value);
     if (found === undefined) return null;
+    if (!options?.includeDeleted && found.isDeleted()) return null;
     return this.clone(found);
   }
 

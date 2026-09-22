@@ -8,7 +8,7 @@ import {
   EmailAlreadyInUseException,
   ConcurrencyException,
 } from '../domain/exceptions/user.exceptions.js';
-import type { UserRepositoryPort } from '../domain/ports/user-repository.port.js';
+import type { UserRepositoryPort, FindByIdOptions } from '../domain/ports/user-repository.port.js';
 import type {
   AuditOperation,
   AuditServicePort,
@@ -201,7 +201,10 @@ export class UserUseCases {
   async restaurar(input: RestoreUserInput): Promise<UserOutput> {
     const ctx = AuditContextStore.get();
     const id = UserId.create(input.id);
-    const user = await this.userRepo.findById(id);
+    // includeDeleted: precisamos carregar o agregado mesmo soft-deleted
+    // para então restaurá-lo. Default (filter) seria null aqui.
+    const findOptions: FindByIdOptions = { includeDeleted: true };
+    const user = await this.userRepo.findById(id, findOptions);
     if (user === null) {
       throw new ApplicationResourceNotFoundException('User', id.value);
     }

@@ -157,34 +157,26 @@ describe('UserUseCases (integration with Prisma)', () => {
     ).rejects.toThrow(ApplicationResourceNotFoundException);
   });
 
-  it('restaurar expõe gap: findById filtra soft-deleted, então orquestrador não consegue recuperar via Prisma', async () => {
-    // KNOWN LIMITATION (integration spec only):
-    // UserUseCases.restaurar chama userRepo.findById() que em Prisma filtra
-    // soft-deleted (deletedAt != null) por padrão — comportamento intencional
-    // do contrato. Em InMemoryUserRepository o findById NÃO filtra, então o
-    // spec unitário passa. Como o orquestrador não tem variante
-    // "findById including deleted", o caminho restaurar() falha com
-    // ApplicationResourceNotFoundException quando rodado contra Prisma. Esse
-    // teste documenta a divergência até a Fase 7 introduzir uma variante
-    // findByIdIncludeDeleted / restoreFromArchive() no port.
+  it('restaurar limpa deletedAt e grava RESTORE no histórico', async () => {
     const ctx = makeCtx();
     const created = await AuditContextStore.run(ctx, () =>
       sut.criarUser({ nome: 'Eva', email: 'eva@example.com' }),
     );
     await AuditContextStore.run(ctx, () => sut.softDelete({ id: created.id, reason: null }));
 
-    await expect(
-      AuditContextStore.run(ctx, () => sut.restaurar({ id: created.id })),
-    ).rejects.toThrow(ApplicationResourceNotFoundException);
+    const restored = await AuditContextStore.run(ctx, () => sut.restaurar({ id: created.id }));
+    expect(restored.deletedAt).toBeNull();
+    expect(restored.version).toBe(3);
 
-    // Row continua soft-deleted e o histórico tem INSERT + DELETE (sem RESTORE)
-    const row = await prisma.user.findUnique({ where: { id: created.id } });
-    expect(row!.deletedAt).not.toBeNull();
-    const hist = await prisma.userHistory.findMany({
-      where: { entityId: created.id },
-      orderBy: { version: 'asc' },
+    const restoreEntry = await prisma.userHistory.findFirst({
+      where: { entityId: created.id, operation: 'RESTORE' },
     });
-    expect(hist.map((h) => h.operation)).toEqual(['INSERT', 'DELETE']);
+    expect(restoreEntry).not.toBeNull();
+    expect(restoreEntry!.version).toBe(3);
+
+    // Após restaurar, obterPorId volta a funcionar (não retorna 404)
+    const fetched = await AuditContextStore.run(ctx, () => sut.obterPorId({ id: created.id }));
+    expect(fetched.deletedAt).toBeNull();
   });
 
   it('atualizarEmail lança ApplicationConcurrencyException em cenário concorrente', async () => {

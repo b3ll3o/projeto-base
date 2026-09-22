@@ -131,11 +131,15 @@ describe('UserUseCases', () => {
         useCases.criarUser({ nome: 'João', email: 'joao@example.com' }),
       );
       await AuditContextStore.run(ctx, () => useCases.softDelete({ id: created.id, reason: null }));
+      // Após o fix do findById (que agora filtra soft-deleted por padrão em ambos
+      // Prisma e InMemory — semântica de produção), tentar atualizar um agregado
+      // soft-deleted via orquestrador retorna 404 (não encontrado), não 410.
+      // Espelha o comportamento do integration spec.
       await expect(
         AuditContextStore.run(ctx, () =>
           useCases.atualizarNome({ id: created.id, novoNome: 'Novo' }),
         ),
-      ).rejects.toThrow(ApplicationResourceDeletedException);
+      ).rejects.toThrow(ApplicationResourceNotFoundException);
     });
   });
 
@@ -191,9 +195,11 @@ describe('UserUseCases', () => {
         useCases.criarUser({ nome: 'João', email: 'joao@example.com' }),
       );
       await AuditContextStore.run(ctx, () => useCases.softDelete({ id: created.id, reason: null }));
+      // Após o fix do findById, soft-delete de agregado já soft-deleted é 404
+      // (findById filtra) — não 410. Espelha o integration spec.
       await expect(
         AuditContextStore.run(ctx, () => useCases.softDelete({ id: created.id, reason: null })),
-      ).rejects.toThrow(ApplicationResourceDeletedException);
+      ).rejects.toThrow(ApplicationResourceNotFoundException);
     });
   });
 

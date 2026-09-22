@@ -21,6 +21,19 @@ export interface UserListResult {
 }
 
 /**
+ * Opções para `findById`.
+ *
+ * - `includeDeleted: true` permite carregar o User mesmo se ele estiver
+ *   soft-deleted (deletedAt !== null). Usado por fluxos que precisam
+ *   operar sobre soft-deleted (ex: `UserUseCases.restaurar()`).
+ * - Default `false`: retorna null se soft-deleted — semântica de
+ *   consulta de produção (read APIs).
+ */
+export interface FindByIdOptions {
+  includeDeleted?: boolean;
+}
+
+/**
  * Port do repositório de User (DDD/Hexagonal).
  *
  * Contrato de domínio — não conhece a infraestrutura. A implementação concreta
@@ -34,8 +47,12 @@ export interface UserListResult {
 export interface UserRepositoryPort {
   /**
    * Busca User pelo id. Retorna null se não existir.
+   *
+   * Por padrão, retorna null se o User estiver soft-deleted (deletedAt !== null) —
+   * este é o caminho "consulta de produção". Use `{ includeDeleted: true }`
+   * para fluxos que precisam operar sobre soft-deleted (ex: restaurar).
    */
-  findById(id: UserId): Promise<User | null>;
+  findById(id: UserId, options?: FindByIdOptions): Promise<User | null>;
 
   /**
    * Busca User pelo email (já normalizado). Retorna null se não existir.
