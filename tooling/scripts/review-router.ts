@@ -73,7 +73,7 @@ export function matchPathGlobs(paths: string[], rules: PathGlobRule[]): PathMatc
 export function classify(
   input: ClassifyInput,
   rules?: {
-    path_globs: PathGlobRule[];
+    path_globs?: PathGlobRule[];
     commit_types?: Record<string, CommitTypeRule>;
     diff_patterns?: DiffPatternRule[];
   },
