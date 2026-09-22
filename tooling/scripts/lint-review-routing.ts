@@ -74,6 +74,20 @@ export function lintMatrix(markdown: string, knownReviewers?: string[]): LintRes
     }
   }
 
+  // Check diff_patterns reviewers (assimetria com commit_types — antes só validava
+  // regex, não refs de reviewer)
+  for (const rule of matrix.diff_patterns ?? []) {
+    if (knownReviewers) {
+      for (const reviewer of rule.reviewers_added) {
+        if (!knownReviewers.includes(reviewer)) {
+          warnings.push(
+            `reviewer not found in .agents/agents/: ${reviewer} (diff_pattern: ${rule.regex})`,
+          );
+        }
+      }
+    }
+  }
+
   // Check diff_patterns regex validity
   for (const rule of matrix.diff_patterns ?? []) {
     try {

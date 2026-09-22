@@ -238,6 +238,17 @@ export interface Matrix {
  */
 export const YAML_BLOCK_RE = /```yaml\n([\s\S]*?)```/g;
 
+/**
+ * Extrai blocos YAML de markdown e merge em objeto Matrix.
+ *
+ * Comportamento: blocos são processados em ordem; chaves duplicadas têm o valor
+ * do ÚLTIMO bloco YAML (Object.assign). Arrays (path_globs, diff_patterns) são
+ * sobrescritos inteiros — não concatena. Para evitar perda de regras, mantenha
+ * no máximo 1 bloco por chave (path_globs, commit_types, diff_patterns).
+ *
+ * @param markdown Conteúdo markdown com 0+ blocos ```yaml ... ```
+ * @returns Matrix parcial (apenas chaves presentes nos blocos válidos)
+ */
 export function loadMatrix(markdown: string): Matrix {
   const yamlBlocks = markdown.matchAll(YAML_BLOCK_RE);
   const result: Matrix = {};
