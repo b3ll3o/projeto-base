@@ -70,7 +70,10 @@ export function matchPathGlobs(paths: string[], rules: PathGlobRule[]): PathMatc
 
 export function classify(
   input: ClassifyInput,
-  rules?: { path_globs: PathGlobRule[] },
+  rules?: {
+    path_globs: PathGlobRule[];
+    commit_types?: Record<string, CommitTypeRule>;
+  },
 ): ClassifyResult {
   const evidence: EvidenceItem[] = [];
   const reviewers = new Set<string>();
@@ -87,11 +90,76 @@ export function classify(
     }
   }
 
+  if (rules?.commit_types) {
+    const ctReviewers = matchCommitTypes(input.commits, rules.commit_types);
+    ctReviewers.forEach((r) => reviewers.add(r));
+    if (ctReviewers.length > 0) {
+      const types = input.commits.map((c) => parseCommitType(c).type);
+      evidence.push({
+        signal: 'commit_type',
+        pattern: types.join(','),
+        reviewers_added: ctReviewers,
+      });
+    }
+  }
+
   return {
     domains: [],
     reviewers: Array.from(reviewers),
     evidence,
   };
+}
+
+export interface ParsedCommit {
+  type: string;
+  scope?: string;
+  breaking: boolean;
+  subject: string;
+}
+
+const COMMIT_TYPES = [
+  'feat',
+  'fix',
+  'refactor',
+  'perf',
+  'docs',
+  'chore',
+  'ci',
+  'test',
+  'build',
+  'style',
+];
+
+export function parseCommitType(message: string): ParsedCommit {
+  const match = message.match(/^(\w+)(?:\(([^)]+)\))?(!)?:\s*(.+)$/);
+  if (match) {
+    const [, type, scope, bang, subject] = match;
+    const validType = COMMIT_TYPES.includes(type) ? type : 'chore';
+    return { type: validType, scope, breaking: !!bang, subject };
+  }
+  return { type: 'chore', scope: undefined, breaking: false, subject: message };
+}
+
+export interface CommitTypeRule {
+  reviewers_added?: string[];
+  may_skip?: string[];
+  conditional?: Array<{ if_path_matches: string; reviewers_added: string[] }>;
+  rationale?: string;
+}
+
+export function matchCommitTypes(
+  commits: string[],
+  rules: Record<string, CommitTypeRule>,
+): string[] {
+  const reviewers = new Set<string>();
+  for (const msg of commits) {
+    const parsed = parseCommitType(msg);
+    const rule = rules[parsed.type];
+    if (rule?.reviewers_added) {
+      rule.reviewers_added.forEach((r) => reviewers.add(r));
+    }
+  }
+  return Array.from(reviewers);
 }
 
 // CLI entrypoint (placeholder — implementação completa em Task 1.7)

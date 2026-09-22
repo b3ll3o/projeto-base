@@ -8,7 +8,14 @@
 // Tasks 1.3 (path glob), 1.4 (commit type), 1.5 (diff pattern).
 
 import { describe, it, expect } from 'vitest';
-import { classify, matchPathGlobs, type PathGlobRule } from './review-router.js';
+import {
+  classify,
+  matchPathGlobs,
+  parseCommitType,
+  matchCommitTypes,
+  type PathGlobRule,
+  type CommitTypeRule,
+} from './review-router.js';
 
 describe('review-router classifier', () => {
   describe('classify()', () => {
@@ -72,6 +79,62 @@ describe('review-router classifier', () => {
       const result = matchPathGlobs(['apps/api/src/users.controller.ts'], rules);
       const allReviewers = result.flatMap((m) => m.reviewers);
       expect(new Set(allReviewers)).toEqual(new Set(['nestjs-specialist', 'stack-code-reviewer']));
+    });
+  });
+
+  describe('parseCommitType()', () => {
+    it('parses feat(api): ... as type=feat scope=api', () => {
+      expect(parseCommitType('feat(api): add user endpoint')).toEqual({
+        type: 'feat',
+        scope: 'api',
+        breaking: false,
+        subject: 'add user endpoint',
+      });
+    });
+
+    it('parses feat(api)!: ... as breaking=true', () => {
+      expect(parseCommitType('feat(api)!: breaking change')).toEqual({
+        type: 'feat',
+        scope: 'api',
+        breaking: true,
+        subject: 'breaking change',
+      });
+    });
+
+    it('falls back to chore when no prefix', () => {
+      expect(parseCommitType('random commit message')).toEqual({
+        type: 'chore',
+        scope: undefined,
+        breaking: false,
+        subject: 'random commit message',
+      });
+    });
+
+    it('parses fix: ... without scope', () => {
+      expect(parseCommitType('fix: bug in login')).toEqual({
+        type: 'fix',
+        scope: undefined,
+        breaking: false,
+        subject: 'bug in login',
+      });
+    });
+  });
+
+  describe('matchCommitTypes()', () => {
+    it('adds stack-code-reviewer for feat type', () => {
+      const rules: Record<string, CommitTypeRule> = {
+        feat: { reviewers_added: ['stack-code-reviewer'] },
+      };
+      const result = matchCommitTypes(['feat(api): new feature'], rules);
+      expect(result).toContain('stack-code-reviewer');
+    });
+
+    it('returns empty for unknown type without matching rule', () => {
+      const rules: Record<string, CommitTypeRule> = {
+        feat: { reviewers_added: ['stack-code-reviewer'] },
+      };
+      const result = matchCommitTypes(['random commit'], rules);
+      expect(result).toEqual([]);
     });
   });
 });
