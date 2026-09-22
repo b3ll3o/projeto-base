@@ -22,6 +22,8 @@
     "ci:local": "pnpm ci:preflight && pnpm turbo run lint typecheck test:unit test:coverage --filter=@projeto/api --filter=@projeto/web",
     "stack:review": "tsx tooling/scripts/stack-code-reviewer.ts",
     "docs:sync": "tsx tooling/scripts/doc-sync.ts",
+    "review:route": "cd tooling/scripts && pnpm review:route",
+    "review:lint": "cd tooling/scripts && pnpm review:lint --matrix=../../.agents/specs/conventions/review-routing.md --agents=../../.agents/agents/",
     "tooling:test": "vitest run --root tooling/scripts",
     "format": "prettier --write \"**/*.{ts,tsx,json,yaml,yml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,json,yaml,yml}\"",
