@@ -246,7 +246,48 @@ export function loadMatrix(markdown: string): Matrix {
   return result;
 }
 
-// CLI entrypoint (placeholder — implementação completa em Task 1.7)
+// CLI entrypoint
 if (import.meta.url === `file://${process.argv[1]}`) {
-  console.log('CLI not yet implemented');
+  main().catch((err) => {
+    console.error('FATAL:', err.message);
+    process.exit(1);
+  });
+}
+
+async function main(): Promise<void> {
+  const args = process.argv.slice(2);
+  const pathsFile = args.find((a) => a.startsWith('--paths='))?.split('=')[1];
+  const matrixFile = args.find((a) => a.startsWith('--matrix='))?.split('=')[1];
+  const outputFile = args.find((a) => a.startsWith('--output='))?.split('=')[1];
+
+  if (!pathsFile || !matrixFile) {
+    console.error('Usage: review-router.ts --paths=<file> --matrix=<file> [--output=<file>]');
+    process.exit(2);
+  }
+
+  const fs = await import('node:fs');
+  const pathsContent = fs.readFileSync(pathsFile, 'utf-8');
+  const paths = pathsContent.split('\n').filter((p) => p.trim());
+  const diff = await readStdin();
+  const matrixContent = fs.readFileSync(matrixFile, 'utf-8');
+
+  const matrix = loadMatrix(matrixContent);
+  const commits: string[] = [];
+  const result = classify({ paths, commits, diff }, matrix);
+
+  const yamlOutput = YAML.stringify(result);
+  if (outputFile) {
+    fs.writeFileSync(outputFile, yamlOutput);
+  } else {
+    console.log(yamlOutput);
+  }
+}
+
+async function readStdin(): Promise<string> {
+  return new Promise((resolve) => {
+    let data = '';
+    process.stdin.setEncoding('utf-8');
+    process.stdin.on('data', (chunk) => (data += chunk));
+    process.stdin.on('end', () => resolve(data));
+  });
 }

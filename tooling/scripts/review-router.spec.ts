@@ -8,6 +8,9 @@
 // Tasks 1.3 (path glob), 1.4 (commit type), 1.5 (diff pattern).
 
 import { describe, it, expect } from 'vitest';
+import { execSync } from 'node:child_process';
+import { writeFileSync, unlinkSync } from 'node:fs';
+import * as path from 'node:path';
 import {
   classify,
   matchPathGlobs,
@@ -212,6 +215,41 @@ commit_types:
       const result = loadMatrix(md);
       expect(result.path_globs).toHaveLength(1);
       expect(result.commit_types?.feat?.reviewers_added).toContain('stack-code-reviewer');
+    });
+  });
+
+  describe('CLI entrypoint', () => {
+    it('reads paths from --paths file, diff from stdin, emits YAML', () => {
+      const tmpPaths = '/tmp/test-paths.txt';
+      writeFileSync(tmpPaths, 'apps/api/src/users.controller.ts\napps/api/prisma/schema.prisma');
+      const tmpMatrix = '/tmp/test-matrix.md';
+      writeFileSync(
+        tmpMatrix,
+        `
+\`\`\`yaml
+path_globs:
+  - pattern: "apps/api/**/*.ts"
+    reviewers: [nestjs-specialist]
+\`\`\`
+`,
+      );
+
+      try {
+        const scriptDir = path.resolve(__dirname);
+        const result = execSync(
+          `node --import tsx review-router.ts --paths=${tmpPaths} --matrix=${tmpMatrix}`,
+          {
+            cwd: scriptDir,
+            input: '@Injectable()\nclass FooService {}',
+            encoding: 'utf-8',
+          },
+        );
+
+        expect(result).toContain('nestjs-specialist');
+      } finally {
+        unlinkSync(tmpPaths);
+        unlinkSync(tmpMatrix);
+      }
     });
   });
 });
