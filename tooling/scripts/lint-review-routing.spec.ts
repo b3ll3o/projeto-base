@@ -52,4 +52,37 @@ path_globs:
     const result = lintMatrix(md);
     expect(result.errors.some((e) => e.includes('LOC'))).toBe(true);
   });
+
+  it('reports error for invalid regex in diff_patterns', () => {
+    const md = `\`\`\`yaml
+diff_patterns:
+  - regex: "[invalid-regex("
+    reviewers_added: [nestjs-specialist]
+\`\`\``;
+    const result = lintMatrix(md);
+    expect(result.errors.some((e) => e.includes('invalid regex'))).toBe(true);
+  });
+
+  it('reports error when YAML blocks present but all invalid', () => {
+    const md = `\`\`\`yaml
+this is: [not valid yaml at all
+\`\`\``;
+    const result = lintMatrix(md);
+    expect(result.errors.some((e) => e.includes('YAML blocks present'))).toBe(true);
+  });
+
+  it('passes LOC at exactly 300 lines', () => {
+    // 300 linhas sem \n trailing (split('\n') deve dar exatamente 300 elementos).
+    // 'x\n'.repeat(300) terminaria em \n → split daria 301 (off-by-one); usamos
+    // 299 'x\n' + 'x' final para fechar exatamente 300 linhas.
+    const md = 'x\n'.repeat(299) + 'x';
+    const result = lintMatrix(md);
+    expect(result.errors.some((e) => e.includes('LOC'))).toBe(false);
+  });
+
+  it('fails LOC at 301 lines', () => {
+    const md = 'x\n'.repeat(301);
+    const result = lintMatrix(md);
+    expect(result.errors.some((e) => e.includes('LOC'))).toBe(true);
+  });
 });

@@ -29,32 +29,32 @@ import type { CheckResult } from './check-types';
  * Usa execSync em vez de importar lintMatrix diretamente para evitar
  * cross-package import (tooling/scripts é package isolado no monorepo).
  */
-function checkReviewRoutingLint(): Promise<CheckResult> {
+function checkReviewRoutingLint(): CheckResult {
   const matrixPath = 'tooling/scripts/lint-review-routing.ts';
   const matrixFile = '.agents/specs/conventions/review-routing.md';
 
   if (!existsSync(matrixPath) || !existsSync(matrixFile)) {
     // Sem matriz ou sem lint ainda (repo pré-Task 1.8/1.9) — não falha.
-    return Promise.resolve({ ok: true, errors: [] });
+    return { ok: true, errors: [] };
   }
 
   try {
     execSync('pnpm review:lint', { stdio: ['ignore', 'pipe', 'pipe'] });
-    return Promise.resolve({ ok: true, errors: [] });
+    return { ok: true, errors: [] };
   } catch (err: any) {
     const stderr = (err.stderr?.toString() ?? '').trim();
     const stdout = (err.stdout?.toString() ?? '').trim();
     const detail = stderr || stdout || err.message;
-    return Promise.resolve({
+    return {
       ok: false,
       errors: [`review:lint falhou:\n${detail}`],
-    });
+    };
   }
 }
 
 async function main(): Promise<void> {
   console.log('\u{1F50D} Pre-flight CI checks\n');
-  const checks: Array<{ name: string; fn: () => Promise<{ ok: boolean; errors: string[] }> }> = [
+  const checks: Array<{ name: string; fn: () => CheckResult | Promise<CheckResult> }> = [
     { name: 'Cross-refs em docs', fn: () => checkDocRefs({ docsRoot: 'docs' }) },
     { name: 'Cross-refs em .agents/specs', fn: () => checkDocRefs({ docsRoot: '.agents/specs' }) },
     {

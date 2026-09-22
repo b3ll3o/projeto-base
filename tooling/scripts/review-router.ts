@@ -16,6 +16,11 @@ export interface ClassifyResult {
   domains: string[];
   reviewers: string[];
   evidence: EvidenceItem[];
+  /**
+   * True se alguma regra de diff_patterns com `blocking: true` matchou.
+   * O CLI usa esse flag para propagar exit code 3 (bloqueio de merge).
+   */
+  blocking: boolean;
 }
 
 export interface EvidenceItem {
@@ -106,16 +111,19 @@ export function classify(
     }
   }
 
+  let blocking = false;
   if (rules?.diff_patterns) {
     const dpResult = matchDiffPatterns(input.diff, rules.diff_patterns);
     dpResult.reviewers.forEach((r) => reviewers.add(r));
-    evidence.push(...dpResult.evidence);
+    dpResult.evidence.forEach((e) => evidence.push(e));
+    blocking = dpResult.blocking;
   }
 
   return {
     domains: [],
     reviewers: Array.from(reviewers),
     evidence,
+    blocking,
   };
 }
 
@@ -185,7 +193,10 @@ export interface DiffMatchResult {
   evidence: EvidenceItem[];
 }
 
-const DIFF_CAP_BYTES = 50_000;
+// Limite de caracteres (UTF-16 code units) para o diff processado pelo matcher.
+// Diff maior é truncado e marcado como truncated=true; reviewers podem re-rodar
+// localmente com diff completo se necessário.
+const DIFF_MAX_LENGTH = 50_000;
 
 export function matchDiffPatterns(diff: string, rules: DiffPatternRule[]): DiffMatchResult {
   const reviewers = new Set<string>();
@@ -193,8 +204,8 @@ export function matchDiffPatterns(diff: string, rules: DiffPatternRule[]): DiffM
   let truncated = false;
   let effectiveDiff = diff;
 
-  if (diff.length > DIFF_CAP_BYTES) {
-    effectiveDiff = diff.slice(0, DIFF_CAP_BYTES);
+  if (diff.length > DIFF_MAX_LENGTH) {
+    effectiveDiff = diff.slice(0, DIFF_MAX_LENGTH);
     truncated = true;
   }
 
@@ -229,8 +240,25 @@ export interface Matrix {
   always_on?: string[];
 }
 
+/**
+ * Regex global para extrair blocos YAML de markdown. Captura o conteúdo
+ * entre ```yaml e ``` em grupo 1. Exportado para reuso no lint-review-routing.
+ */
+export const YAML_BLOCK_RE = /```yaml\n([\s\S]*?)```/g;
+
+/**
+ * Extrai blocos YAML de markdown e merge em objeto Matrix.
+ *
+ * Comportamento: blocos são processados em ordem; chaves duplicadas têm o valor
+ * do ÚLTIMO bloco YAML (Object.assign). Arrays (path_globs, diff_patterns) são
+ * sobrescritos inteiros — não concatena. Para evitar perda de regras, mantenha
+ * no máximo 1 bloco por chave (path_globs, commit_types, diff_patterns).
+ *
+ * @param markdown Conteúdo markdown com 0+ blocos ```yaml ... ```
+ * @returns Matrix parcial (apenas chaves presentes nos blocos válidos)
+ */
 export function loadMatrix(markdown: string): Matrix {
-  const yamlBlocks = markdown.matchAll(/```yaml\n([\s\S]*?)```/g);
+  const yamlBlocks = markdown.matchAll(YAML_BLOCK_RE);
   const result: Matrix = {};
 
   for (const match of yamlBlocks) {
@@ -259,9 +287,12 @@ async function main(): Promise<void> {
   const pathsFile = args.find((a) => a.startsWith('--paths='))?.split('=')[1];
   const matrixFile = args.find((a) => a.startsWith('--matrix='))?.split('=')[1];
   const outputFile = args.find((a) => a.startsWith('--output='))?.split('=')[1];
+  const commitsFile = args.find((a) => a.startsWith('--commits='))?.split('=')[1];
 
   if (!pathsFile || !matrixFile) {
-    console.error('Usage: review-router.ts --paths=<file> --matrix=<file> [--output=<file>]');
+    console.error(
+      'Usage: review-router.ts --paths=<file> --matrix=<file> [--commits=<file>] [--output=<file>]',
+    );
     process.exit(2);
   }
 
@@ -272,7 +303,12 @@ async function main(): Promise<void> {
   const matrixContent = fs.readFileSync(matrixFile, 'utf-8');
 
   const matrix = loadMatrix(matrixContent);
-  const commits: string[] = [];
+  const commits = commitsFile
+    ? fs
+        .readFileSync(commitsFile, 'utf-8')
+        .split('\n')
+        .filter((c) => c.trim())
+    : [];
   const result = classify({ paths, commits, diff }, matrix);
 
   const yamlOutput = YAML.stringify(result);
@@ -281,6 +317,10 @@ async function main(): Promise<void> {
   } else {
     console.log(yamlOutput);
   }
+
+  // Exit code 3 = blocking review needed (diff_patterns match com blocking=true).
+  // Consumidores (CI, pre-commit) podem failar o push e exigir re-review humana.
+  process.exit(result.blocking ? 3 : 0);
 }
 
 async function readStdin(): Promise<string> {

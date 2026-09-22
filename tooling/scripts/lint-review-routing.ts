@@ -11,7 +11,7 @@
 //
 // Falha com exit 1 se qualquer erro. Warnings não bloqueiam.
 
-import { loadMatrix } from './review-router.js';
+import { loadMatrix, YAML_BLOCK_RE } from './review-router.js';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 
 export interface LintResult {
@@ -37,8 +37,9 @@ export function lintMatrix(markdown: string, knownReviewers?: string[]): LintRes
   let matrix;
   try {
     matrix = loadMatrix(markdown);
-  } catch (e: any) {
-    errors.push(`YAML parse error: ${e.message}`);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    errors.push(`YAML parse error: ${msg}`);
     return { errors, warnings, info };
   }
 
@@ -73,17 +74,32 @@ export function lintMatrix(markdown: string, knownReviewers?: string[]): LintRes
     }
   }
 
+  // Check diff_patterns reviewers (assimetria com commit_types — antes só validava
+  // regex, não refs de reviewer)
+  for (const rule of matrix.diff_patterns ?? []) {
+    if (knownReviewers) {
+      for (const reviewer of rule.reviewers_added) {
+        if (!knownReviewers.includes(reviewer)) {
+          warnings.push(
+            `reviewer not found in .agents/agents/: ${reviewer} (diff_pattern: ${rule.regex})`,
+          );
+        }
+      }
+    }
+  }
+
   // Check diff_patterns regex validity
   for (const rule of matrix.diff_patterns ?? []) {
     try {
       new RegExp(rule.regex);
-    } catch (e: any) {
-      errors.push(`invalid regex in diff_patterns: ${rule.regex} (${e.message})`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      errors.push(`invalid regex in diff_patterns: ${rule.regex} (${msg})`);
     }
   }
 
   // Se há blocos YAML mas nenhum deles parseou, reporta erro
-  const yamlBlocks = markdown.match(/```yaml\n[\s\S]*?```/g);
+  const yamlBlocks = markdown.match(YAML_BLOCK_RE);
   if (yamlBlocks && yamlBlocks.length > 0 && Object.keys(matrix).length === 0) {
     errors.push('YAML blocks present but matrix is empty (all blocks invalid)');
   }

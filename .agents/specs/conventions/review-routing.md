@@ -3,6 +3,7 @@ name: review-routing
 version: 1
 updated: 2026-09-22
 maintainer: review-router
+description: "Matriz de roteamento de revisores consultada pelo review-router"
 ---
 
 # Convenção: review-routing (matriz de roteamento de revisores)
