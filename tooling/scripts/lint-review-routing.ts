@@ -11,7 +11,7 @@
 //
 // Falha com exit 1 se qualquer erro. Warnings não bloqueiam.
 
-import { loadMatrix } from './review-router.js';
+import { loadMatrix, YAML_BLOCK_RE } from './review-router.js';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 
 export interface LintResult {
@@ -99,7 +99,7 @@ export function lintMatrix(markdown: string, knownReviewers?: string[]): LintRes
   }
 
   // Se há blocos YAML mas nenhum deles parseou, reporta erro
-  const yamlBlocks = markdown.match(/```yaml\n[\s\S]*?```/g);
+  const yamlBlocks = markdown.match(YAML_BLOCK_RE);
   if (yamlBlocks && yamlBlocks.length > 0 && Object.keys(matrix).length === 0) {
     errors.push('YAML blocks present but matrix is empty (all blocks invalid)');
   }
