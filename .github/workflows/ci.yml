@@ -20,6 +20,7 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run db:generate
       - run: pnpm turbo run lint typecheck
       # Cobertura (gate-enforced) + unit para todos os apps via turbo task graph.
       - run: pnpm turbo run test:coverage test:unit
