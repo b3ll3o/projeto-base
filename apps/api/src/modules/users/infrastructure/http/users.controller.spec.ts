@@ -32,9 +32,10 @@
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { BadRequestException } from '@nestjs/common';
 import { UsersController } from './users.controller.js';
+import { CreateUserDto, CreateUserSchema, UpdateUserSchema } from './users.schemas.js';
+import { ZodValidationPipe } from '../../../../shared/infrastructure/http/zod-validation.pipe.js';
 import { AuditContextStore } from '../../../../shared/audit/shared/audit-context-store.js';
 import type { UserUseCases } from '../../application/user-use-cases.js';
-import type { CreateUserInput } from '../../application/dto/create-user.input.js';
 import type { AuditServicePort } from '../../../../shared/audit/application/audit-service.port.js';
 
 interface ErrorPayload {
@@ -247,7 +248,7 @@ describe('UsersController — handlers HTTP', () => {
     const runSpy = vi.spyOn(AuditContextStore, 'run');
     useCases.criarUser.mockResolvedValue(fakeUserOutput);
 
-    const input: CreateUserInput = { nome: 'João', email: 'joao@example.com' };
+    const input: CreateUserDto = { nome: 'João', email: 'joao@example.com' };
     const result = await ctrl.create(input, reply as never);
 
     expect(runSpy).toHaveBeenCalledTimes(1);
@@ -322,6 +323,26 @@ describe('UsersController — handlers HTTP', () => {
     runSpy.mockRestore();
   });
 
+  it('update() rejeita body sem novoNome com NOVO_NOME_REQUIRED', async () => {
+    // pt-BR: schema aceita `{}` (novoNome opcional, forward-compat) mas
+    // o controller exige-o hoje e devolve 400 NOVO_NOME_REQUIRED antes
+    // de chamar o use case.
+    const runSpy = vi.spyOn(AuditContextStore, 'run');
+    let captured: unknown;
+    try {
+      await ctrl.update('u-1', {} as never, 'W/"v7"', reply as never);
+    } catch (e) {
+      captured = e;
+    }
+    expect(captured).toBeInstanceOf(BadRequestException);
+    const payload = readErrorPayload(captured);
+    expect(payload.code).toBe('NOVO_NOME_REQUIRED');
+    expect(String(payload.detail)).toMatch(/obrigat/i);
+    expect(runSpy).not.toHaveBeenCalled();
+    expect(useCases.atualizarNome).not.toHaveBeenCalled();
+    runSpy.mockRestore();
+  });
+
   it('remove() parseia If-Match e wrapa em run, NÃO seta ETag', async () => {
     const runSpy = vi.spyOn(AuditContextStore, 'run');
     useCases.softDelete.mockResolvedValue(undefined);
@@ -386,5 +407,121 @@ describe('UsersController — handlers HTTP', () => {
       cursor: 'cur-1',
       limit: 5,
     });
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Validação Zod no boundary HTTP (Task 7.4 — defense-in-depth).
+//
+// pt-BR: o controller declara `@Body(new ZodValidationPipe(CreateUserSchema))`.
+// NestJS instancia o pipe no momento do request e propaga
+// BadRequestException com code='VALIDATION_ERROR'. Aqui exercitamos
+// diretamente pipe+schema (não o método do controller), porque é a
+// única forma unitariamente determinística de verificar o schema sem
+// montar o TestingModule inteiro — o pipe é puro (stateless) e o
+// schema é a fonte de verdade da validação HTTP. Confiamos que o
+// framework NestJS invoca o pipe declarado no decorator.
+// ───────────────────────────────────────────────────────────────────────────
+
+describe('UsersController — Zod validation at HTTP boundary', () => {
+  function captureValidationError(payload: unknown): unknown {
+    let captured: unknown;
+    try {
+      new ZodValidationPipe(CreateUserSchema).transform(payload, { type: 'body' });
+    } catch (e) {
+      captured = e;
+    }
+    expect(captured).toBeInstanceOf(BadRequestException);
+    return captured;
+  }
+
+  function captureUpdateError(payload: unknown): unknown {
+    let captured: unknown;
+    try {
+      new ZodValidationPipe(UpdateUserSchema).transform(payload, { type: 'body' });
+    } catch (e) {
+      captured = e;
+    }
+    expect(captured).toBeInstanceOf(BadRequestException);
+    return captured;
+  }
+
+  it('create rejeita payload com email vazio (VALIDATION_ERROR)', () => {
+    const err = captureValidationError({ nome: 'João', email: '' });
+    const payload = readErrorPayload(err);
+    expect(payload.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('create rejeita payload com email em formato inválido', () => {
+    const err = captureValidationError({ nome: 'João', email: 'invalid-email' });
+    const payload = readErrorPayload(err);
+    expect(payload.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('create rejeita payload sem o campo email', () => {
+    const err = captureValidationError({ nome: 'João' });
+    const payload = readErrorPayload(err);
+    expect(payload.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('create rejeita payload com nome vazio', () => {
+    const err = captureValidationError({ nome: '', email: 'joao@example.com' });
+    const payload = readErrorPayload(err);
+    expect(payload.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('create rejeita payload com nome > 120 chars', () => {
+    const err = captureValidationError({
+      nome: 'x'.repeat(121),
+      email: 'joao@example.com',
+    });
+    const payload = readErrorPayload(err);
+    expect(payload.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('create rejeita payload com email > 255 chars', () => {
+    const longLocal = 'a'.repeat(250);
+    const err = captureValidationError({
+      nome: 'João',
+      email: `${longLocal}@example.com`,
+    });
+    const payload = readErrorPayload(err);
+    expect(payload.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('create aceita payload válido (nome + email RFC 5322)', () => {
+    const pipe = new ZodValidationPipe(CreateUserSchema);
+    const out = pipe.transform({ nome: 'João', email: 'joao@example.com' }, { type: 'body' });
+    expect(out).toEqual({ nome: 'João', email: 'joao@example.com' });
+  });
+
+  it('update rejeita novoNome vazio', () => {
+    const err = captureUpdateError({ novoNome: '' });
+    const payload = readErrorPayload(err);
+    expect(payload.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('update rejeita novoNome com tipo errado (number)', () => {
+    const err = captureUpdateError({ novoNome: 42 });
+    const payload = readErrorPayload(err);
+    expect(payload.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('update rejeita novoNome > 120 chars', () => {
+    const err = captureUpdateError({ novoNome: 'x'.repeat(121) });
+    const payload = readErrorPayload(err);
+    expect(payload.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('update aceita novoNome válido', () => {
+    const pipe = new ZodValidationPipe(UpdateUserSchema);
+    const out = pipe.transform({ novoNome: 'Maria' }, { type: 'body' });
+    expect(out).toEqual({ novoNome: 'Maria' });
+  });
+
+  it('update aceita payload sem novoNome (campo opcional)', () => {
+    const pipe = new ZodValidationPipe(UpdateUserSchema);
+    const out = pipe.transform({}, { type: 'body' });
+    expect(out).toEqual({});
   });
 });

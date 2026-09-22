@@ -9,9 +9,10 @@
 //   `If-Match`; divergência vira ApplicationConcurrencyException → 412.
 // - ETag (RFC 7232): toda resposta mutante inclui `ETag: W/"v<n>"` para
 //   que clientes possam re-enviá-lo no próximo `If-Match` (evita lost-update).
-// - Validation: Zod schemas NÃO estão neste commit (Task 7.5 os adiciona).
-//   Por enquanto rely na validação do use case; próxima task adiciona
-//   `@Body(new ZodValidationPipe(SchemaDoDto))` por rota.
+// - Validation (Task 7.4): Zod schemas por rota via
+//   `@Body(new ZodValidationPipe(SchemaDoDto))`. Defense-in-depth — os use
+//   cases também validam via VOs, mas o boundary HTTP rejeita 400 cedo
+//   com mensagem útil para o cliente.
 
 import {
   BadRequestException,
@@ -45,29 +46,24 @@ import type {
   AuditServicePort,
   ListHistoryInput,
 } from '../../../../shared/audit/application/audit-service.port.js';
+import { ZodValidationPipe } from '../../../../shared/infrastructure/http/zod-validation.pipe.js';
 
 import { UserUseCases, USER_USE_CASES } from '../../application/user-use-cases.js';
-import type { CreateUserInput } from '../../application/dto/create-user.input.js';
 import type { GetUserByIdInput } from '../../application/dto/get-user-by-id.input.js';
 import type { ListUsersInput } from '../../application/dto/list-users.input.js';
 import type { RestoreUserInput } from '../../application/dto/restore-user.input.js';
 import type { SoftDeleteUserInput } from '../../application/dto/soft-delete-user.input.js';
 import type { UpdateUserNameInput } from '../../application/dto/update-user-name.input.js';
+import {
+  CreateUserSchema,
+  UpdateUserSchema,
+  type CreateUserDto,
+  type UpdateUserDto,
+} from './users.schemas.js';
 
 // pt-BR: extraído de @nestjs/platform-fastify (TReply do FastifyAdapter)
 // porque o pacote 'fastify' não é dep direta de @projeto/api nesta fase.
 type FastifyReply = Parameters<FastifyAdapter['setHeader']>[0];
-
-/**
- * Body do PATCH /users/:id — apenas `novoNome`. Atualização de email
- * não é exposta via HTTP neste commit: Fase 4/6 quebrou `atualizar`
- * em `atualizarNome` + `atualizarEmail` (ports não suportam partial),
- * e PATCH uniforme `{ email?, name? }` ficaria para uma issue de
- * follow-up que adiciona PATCH/name + PATCH/email (ou vice-versa).
- */
-interface UpdateUserBody {
-  novoNome: string;
-}
 
 @ApiTags('users')
 @ApiBearerAuth()
@@ -89,7 +85,7 @@ export class UsersController {
   @ApiResponse({ status: 409, description: 'Email já em uso' })
   @ApiResponse({ status: 400, description: 'Payload inválido' })
   async create(
-    @Body() body: CreateUserInput,
+    @Body(new ZodValidationPipe(CreateUserSchema)) body: CreateUserDto,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<unknown> {
     const user = await AuditContextStore.run(this.buildContext(), () =>
@@ -139,10 +135,19 @@ export class UsersController {
   @ApiResponse({ status: 412, description: 'Conflito de versão (optimistic lock)' })
   async update(
     @Param('id') id: string,
-    @Body() body: UpdateUserBody,
+    @Body(new ZodValidationPipe(UpdateUserSchema)) body: UpdateUserDto,
     @Headers('if-match') ifMatch: string,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<unknown> {
+    // pt-BR: `novoNome` é opcional no schema (forward-compat com PATCH
+    // parcial futuro), mas o use case `atualizarNome` exige-o hoje.
+    // Rejeitamos 400 cedo em vez de propagar erro genérico do use case.
+    if (body.novoNome === undefined) {
+      throw new BadRequestException({
+        code: 'NOVO_NOME_REQUIRED',
+        detail: 'Campo novoNome é obrigatório no PATCH atual (rename-only).',
+      });
+    }
     const expectedVersion = this.parseIfMatch(ifMatch);
     const input: UpdateUserNameInput = {
       id,
