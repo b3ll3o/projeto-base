@@ -1,0 +1,15 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Defense-in-Depth Layer 1 — pre-push local
+# Bloqueia push se drift estrutural for detectado localmente,
+# poupando ~4min de round-trip no CI remoto.
+# Idempotente: roda em qualquer branch; cancela push se algum check falhar.
+echo "pre-push: rodando pnpm ci:preflight (Defense-in-Depth Layer 1)..."
+pnpm ci:preflight || {
+  echo "❌ pre-push abortado: pnpm ci:preflight falhou (drift estrutural detectado)."
+  echo "   Corrija localmente antes de tentar push novamente."
+  echo "   Para entender a estratégia defense-in-depth: cat .agents/specs/conventions/ci-defense-in-depth.md"
+  exit 1
+}
+echo "✓ pre-push: preflight verde, push liberado."

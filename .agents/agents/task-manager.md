@@ -176,6 +176,8 @@ result:
 | `code-reviewer` | Findings acionáveis viram tasks minhas |
 | `security-auditor` | Vulnerabilidades viram tasks de security |
 | `refactorer` | Débitos técnicos viram tasks |
+| `ci-defense-in-depth` (skill) | Tarefas que tocam código de produção devem ser validadas com `pnpm ci:local` antes de done |
+| `retrospective-capture` (skill) | Disparada após conclusão de task que casa T1/T2/T3; gera proposals que viram itens de backlog priorizados por RICE |
 
 ## Princípios
 
@@ -184,6 +186,55 @@ result:
 3. **Dependencies explícitas.** Nada de DAG implícito.
 4. **Histórico preservado.** Mover para `done` (não deletar).
 5. **Priorização visível.** Sempre mostrar o porquê da ordem.
+
+## Templates de Task — Release Bump
+
+Quando uma release bump `vX.Y.Z → vA.B.C` precisa ser orquestrada, usar este template YAML como ponto de partida:
+
+```yaml
+- id: TASK-bump-X.Y.Z
+  type: chore
+  priority: high
+  title: "Bump template vX.Y.Z → vA.B.C"
+  acceptance_criteria:
+    - "3 docs versionados atualizados (MONOREPO.md, STACK.md, estrutura-e-versionamento.md)"
+    - "Linha adicionada no Histórico de Versões com Conventional Commits summary"
+    - "Branch chore/bump-A.B.C aberta + PR revisado"
+    - "Tag automática vA.B.C criada após merge (post-merge-release.md)"
+    - "pnpm ci:local passa antes do PR (defense-in-depth)"
+  references:
+    - ".agents/specs/conventions/post-merge-release.md"
+    - ".agents/workflows/release-mode.md"
+```
+
+## Templates de Task — Retrospective Capture
+
+Quando uma grande atividade termina (T1/T2/T3) e a skill
+`retrospective-capture` produz proposals filtradas, cada proposal
+vira um item de backlog priorizado por RICE. Template base:
+
+```yaml
+- id: TASK-retro-R-NNN
+  type: refactor  # ou chore/feature/docs dependendo do proposal
+  priority: medium
+  title: "<resumir proposal em 1 linha>"
+  description: |
+    <conteúdo da proposal: skill/convention/memory/ADR a criar>
+    confidence: <70-100>
+    justification: <evento que motivou>
+  acceptance_criteria:
+    - "Artefato criado/atualizado em <path>"
+    - "Cross-refs validados (pnpm ci:preflight verde)"
+    - "MEMORY.md index atualizado (se aplicável)"
+    - "Cobertura de testes mantida (se envolve código)"
+  references:
+    - ".agents/specs/conventions/retrospective-capture.md"
+    - ".agents/skills/retrospective-capture/SKILL.md"
+```
+
+Apenas items com `confidence ≥ 70` viram tasks. Proposals com
+confidence 50–69 viram comentário no result file (re-avaliar em
+próxima sessão); `< 50` é descartado.
 
 ## Anti-Padrões (NÃO fazer)
 

@@ -34,6 +34,8 @@ dispara em **duas** situações:
 3. Validação: precisa casar `^[0-9]+\.[0-9]+\.[0-9]+$`.
 4. Tag final: `vX.Y.Z` (prefixo `v` adicionado se ausente).
 
+> **Nota:** O trigger `push em main` que detecta mudança em `docs/MONOREPO.md` é uma das 3 camadas da estratégia de defense-in-depth do CI (ver [ci-defense-in-depth.md](./ci-defense-in-depth.md)). O release workflow roda em camada 3 (quality CI gated).
+
 ## Idempotência
 
 Antes de criar a tag, o workflow verifica `git rev-parse --verify --quiet

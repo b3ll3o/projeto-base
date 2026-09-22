@@ -59,6 +59,8 @@ projeto-base/
 - Mudanças em memory files são patch (não geram tag sozinhas)
 - Toda tag DEVE passar pelo checklist de revisão (ver [`tamanho-e-revisao.md`](./tamanho-e-revisao.md))
 
+**Fluxo automatizado:** o bump de versão no template (major/minor/patch) é orquestrado pelo workflow [`release-mode`](../../workflows/release-mode.md) e finalizado pelo workflow `.github/workflows/release-template.yml`. Após merge do PR `chore/bump-A.B.C`, a tag `vA.B.C` é criada automaticamente (idempotente via `git rev-parse --verify`). **Não rodar `git tag` manual** — isso gera divergência entre tag e Histórico de Versões.
+
 ## Arquitetura por Módulo (DDD/Hexagonal)
 
 > **Regra canônica** (a partir de `v1.2.0`): apps backend (`apps/api` e futuros) adotam
@@ -104,3 +106,4 @@ Referência cruzada: [`docs/MONOREPO.md` §11](../../../docs/MONOREPO.md) e [`do
 | `1.1.0` | Adicionados 3 specialists de stack (monorepo, nestjs, nextjs) + workflows detalhados + docs STACK.md e MONOREPO.md |
 | `1.2.0` | Regra canônica DDD/Hexagonal por módulo (referência ao ADR-0001) |
 | `1.3.0` | Skill `ddd-hexagonal-validation` (auditoria automatizada de boundaries) + ADR-0001 (DDD + Hexagonal + Auditoria via 3 tabelas) — BC `users` como template canônico validado end-to-end (HTTP + E2E + 250 testes) |
+| `1.4.0` | Skill `ci-defense-in-depth` + convenção `ci-defense-in-depth.md` + workflow `release-mode` + memory files (`stack-code-reviewer`, `doc-sync`); updates cirúrgicos em 6 agents e 3 conventions (cross-refs defense-in-depth + release automation). Pendente: bump dos footers de `docs/MONOREPO.md` e `docs/STACK.md` via `release-mode` workflow. |

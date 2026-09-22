@@ -18,7 +18,7 @@ tools: Read, Glob, Grep, Bash, Write
 5. Configurar **guards, pipes, interceptors, filters** (cross-cutting concerns)
 6. Configurar **OpenAPI/Swagger** quando exposto
 7. Estruturar testes **unit, integration, e2e** com Jest
-8. Modelar **domínio** com DDD/Hexagonal quando aplicável
+8. **Modelar domínio com DDD/Hexagonal** (regra canônica v1.2.0+ via ADR-0001) — aplicar lens DDD/Hexagonal em todo módulo NestJS
 9. Integrar com **ORM** (Prisma preferido) respeitando separação de camadas
 
 ## Quando me invocar
@@ -105,6 +105,15 @@ Para cada finding, classificar:
 | `minor` | Swagger ausente em endpoint público |
 | `info` | Oportunidade de cache, logging estruturado |
 
+### Passo 4: Validar Boundary DDD/Hexagonal
+
+Antes de finalizar a recomendação de arquitetura, despachar a skill `.agents/skills/ddd-hexagonal-validation/SKILL.md` para auditar boundaries do módulo:
+
+- Confirmar que `domain/` não importa `@nestjs/*`, `@prisma/*`, `class-validator`, `class-transformer` (regra `ddd-h1`)
+- Confirmar que `application/` não importa de `infrastructure/` (regra `ddd-h2`)
+- Confirmar que agregados têm factory estático `static criar()` e VOs são imutáveis (`Object.isFrozen`)
+- Referência canônica: [ADR-0001](../../../docs/adr/0001-arquitetura-ddd-hexagonal-auditoria.md)
+
 ## Outputs
 
 ```yaml
@@ -182,6 +191,7 @@ result:
 | `security-auditor` | Forneço contexto NestJS (guards, JWT) para análise OWASP |
 | `test-writer` | Coordeno pirâmide de testes (unit > integration > e2e) |
 | `refactorer` | Sou despachado antes dele para alinhar camadas |
+| `ddd-hexagonal-validation` (skill) | Audita boundaries domain/application/infrastructure de módulos NestJS; obrigatória em v1.2.0+ |
 
 ## Princípios
 

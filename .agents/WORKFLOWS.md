@@ -18,6 +18,9 @@
 | `task-mode` | "todo / tarefa" | single | task-manager |
 | `explore-mode` | "como funciona X?" | single | explorer |
 | `review-mode` | "revisar PR / código" | single | code-reviewer + tdd-enforcer |
+| `release-mode` | "preparar release X.Y.Z" | sequential | doc-writer → code-reviewer → task-manager |
+| `ci-defense-mode` | "blindar CI / auditar pipeline" | sequential | monorepo-specialist → ci-defense-in-depth → code-reviewer |
+| `retrospective-mode` | "capturar aprendizados / post-mortem" | sequential | explorer → retrospective-capture → doc-writer (+ task-manager) |
 
 ### Por Stack (workflows detalhados em `.agents/workflows/`)
 
@@ -254,28 +257,41 @@ CODE-REVIEWER
 
 ---
 
-## Workflows por Stack
+## `release-mode` — Bump de Versão do Template
 
-Os 3 workflows abaixo são detalhados em arquivos próprios:
+**Trigger:** "preparar release", "bumpar versão X.Y.Z", "tag release" · **Composição:** sequential (3 estágios)
+
+```text
+DOC-WRITER → CODE-REVIEWER → TASK-MANAGER
+```
+
+```yaml
+doc-writer → code-reviewer:{success_criteria:"versão bumped+CHANGELOG+0 cross-ref quebrada"} | code-reviewer → task-manager:{success_criteria:"nenhum finding blocker;checklist pronto"} | task-manager → final:{success_criteria:"tag X.Y.Z publicada+checklist 100%"}
+```
+
+**Quando usar:** mudanças breaking/features desde última tag · milestone (MVP/GA/v2.0.0) · backlog maduro.
+**Quando NÃO usar:** hotfix urgente (`bugfix-mode` + tag manual) · bump interno ad-hoc · dep upstream (Renovate/Dependabot).
+**Detalhes:** [`.agents/workflows/release-mode.md`](./workflows/release-mode.md) · spec: [`.agents/specs/conventions/post-merge-release.md`](./specs/conventions/post-merge-release.md)
+
+## `retrospective-mode` — Captura de Aprendizados Pós-Atividade
+
+**Trigger:** "capturar aprendizados" / "retrospectiva" / "post-mortem" · plano ≥3 tasks · bugfix > 30min · 1ª adoção de skill · **Composição:** sequential + task-manager paralelo no final
+
+```yaml
+explorer → retrospective-capture:{success_criteria:"diff+memories+≥3 events"} | retrospective-capture → doc-writer:{success_criteria:"0 proposals conf<70;result file ≤300 linhas"} | doc-writer + task-manager (paralelo):{success_criteria:"proposals → memory/PR/backlog"}
+```
+
+**Quando usar:** T1 implementação grande · T2 bugfix não-trivial · T3 adoção de novo padrão. **Quando NÃO usar:** typo fix · dep bump · merge conflict · doc-only trivial.
+**Detalhes:** [`retrospective-mode.md`](./workflows/retrospective-mode.md) · skill: [`retrospective-capture/SKILL.md`](./skills/retrospective-capture/SKILL.md) · spec: [`retrospective-capture.md`](./specs/conventions/retrospective-capture.md)
+
+## Workflows por Stack
 
 - [`backend-feature`](./workflows/backend-feature.md) — implementar endpoint NestJS
 - [`frontend-feature`](./workflows/frontend-feature.md) — criar página/rota Next.js
 - [`monorepo-change`](./workflows/monorepo-change.md) — adicionar/mover pacote ou app
 
----
-
 ## Customização
 
-Para criar um workflow customizado:
+Para criar um workflow customizado: defina `trigger`, escolha a `composição` (sequential/parallel/hierarchical), liste os `agents` em ordem, defina os `handoffs` (task, context, expected_output, success_criteria), adicione entrada na tabela acima, e documente em `.agents/workflows/<id>.md` se for complexo.
 
-1. Defina o **trigger** (palavras-chave ou evento)
-2. Escolha a **composição** (sequential / parallel / hierarchical)
-3. Liste os **agents** na ordem de despacho
-4. Defina os **handoffs** (task, context, expected_output, success_criteria)
-5. Adicione uma entrada na tabela acima
-6. Documente em `.agents/workflows/<id>.md` se for complexo
-
----
-
-**Mantido por:** projeto-base contributors
-**Versão do padrão:** 1.0
+**Mantido por:** projeto-base contributors  **Versão do padrão:** 1.0

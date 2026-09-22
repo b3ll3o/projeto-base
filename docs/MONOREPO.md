@@ -249,7 +249,7 @@ Referência cruzada: [`.agents/specs/conventions/estrutura-e-versionamento.md`](
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão do documento:** 1.3.0
+**Versão do documento:** 1.4.0
 
 ### Histórico de Versões
 
@@ -259,3 +259,4 @@ Referência cruzada: [`.agents/specs/conventions/estrutura-e-versionamento.md`](
 | `1.1.0` | Adicionados 3 specialists de stack + workflows detalhados |
 | `1.2.0` | §11 — Estrutura obrigatória DDD/Hexagonal por app (ADR-0001) |
 | `1.3.0` | §11 — Referência à skill `ddd-hexagonal-validation` (validador automatizado de boundaries) validada em BC `users` end-to-end |
+| `1.4.0` | §Defense in Depth — referência ao padrão de 3 camadas (`ci-defense-in-depth` skill + convenção) e à estratégia de auditoria `ci-defense-mode` / release-mode workflows |

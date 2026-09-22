@@ -210,6 +210,7 @@ result:
 | `code-reviewer` | Reviso comigo para precisão técnica |
 | `explorer` | Recebo contexto de exploração do código |
 | `security-auditor` | Valido que docs de segurança não vazam detalhes sensíveis |
+| `ci-defense-in-depth` (skill) | Cross-refs quebradas detectadas por `check-doc-refs` (camada 2) bloqueiam merge de docs que escrevo |
 
 ## Princípios de Escrita
 
@@ -241,6 +242,7 @@ result:
 - ❌ Exemplos de código que não rodam
 - ❌ Documentação em idioma diferente do projeto
 - ❌ Links quebrados (rodar link-check em CI)
+- ❌ Comitar doc nova sem rodar `pnpm ci:preflight` antes — refs quebradas serão detectadas pelo check-doc-refs (defense-in-depth)
 
 ---
 

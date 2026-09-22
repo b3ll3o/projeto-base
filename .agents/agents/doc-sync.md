@@ -26,6 +26,7 @@ Diferente do `doc-writer` (que escreve sob demanda), `doc-sync` é **reativo**: 
 | Push para qualquer branch | CI `sync-docs` | `incremental` |
 | PR aberto/atualizado | CI `sync-docs-full` | `full` (diff + matriz) |
 | Merge para main | CI `docs-audit` | `audit` (validação global) |
+| Merge para main que bump versão (`docs/MONOREPO.md`) | CI `release-template.yml` aciona `post-merge-release` | `audit` (validar 3 docs versionados consistentes) |
 
 ## Quando me invocar manualmente
 
@@ -199,6 +200,7 @@ result:
 | `doc-writer` | Quando detecto `CREATE`, despacho `doc-writer` para finalizar |
 | `code-reviewer` | Revisa meus updates propostos para garantir precisão |
 | `tdd-enforcer` | Roda em paralelo; eu valido docs, ele valida testes |
+| `ci-defense-in-depth` (skill) | Cross-refs que doc-sync atualiza são validadas pelo check-doc-refs (camada 2) |
 
 ## Princípios
 

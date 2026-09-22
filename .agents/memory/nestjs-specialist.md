@@ -23,7 +23,19 @@ description: Memória acumulada do agent nestjs-specialist — decisões sobre a
 - **Testes:** Jest (default NestJS) + Supertest (e2e) + Testcontainers (Postgres real)
 - **Logging:** Pino (estruturado JSON) + OpenTelemetry
 - **Filas:** BullMQ + Redis (quando necessário)
-- **Arquitetura preferida:** Feature modules + camadas Controller/Service/Repository + Domain opcional (Hexagonal)
+- **Arquitetura preferida (SUPERADA em 2026-09-22):** ~~Feature modules + camadas Controller/Service/Repository + Domain opcional (Hexagonal)~~ — ver decisão seguinte (DDD/Hexagonal virou paradigma obrigatório via ADR-0001).
+
+### 2026-09-22 — DDD/Hexagonal adotado como paradigma canônico
+
+**Contexto:** ADR-0001 (docs/adr/0001-arquitetura-ddd-hexagonal-auditoria.md, status Aceito 2026-09-21) promulgou DDD + Hexagonal (Ports & Adapters) como paradigma arquitetural OBRIGATÓRIO em apps backend, com auditoria via 3 tabelas por entidade e optimistic locking via If-Match/ETag (RFC 7232).
+
+**Decisão:** nestjs-specialist aplica a lens DDD/Hexagonal em todo módulo NestJS — validar boundaries `domain/application/infrastructure`, despachar skill `.agents/skills/ddd-hexagonal-validation/SKILL.md` antes de finalizar módulo, e remover linguagem "Domain opcional (Hexagonal)" (pré-ADR-0001).
+
+**Consequências:**
+
+- Migrations agora exigem 3 tabelas por entidade (`X`, `XHistory`, `XArchive`) + audit fields obrigatórios
+- Skill `ddd-hexagonal-validation` é o gatekeeper manual; `stack-code-reviewer` (D11) é o gate automatizado
+- BC `users` validado end-to-end (HTTP + E2E + 250 testes) como template canônico
 
 ## Padrões Descobertos
 

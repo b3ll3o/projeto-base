@@ -13,6 +13,8 @@
 import { checkDocRefs } from './check-doc-refs';
 import { checkTsconfigDrift } from './check-tsconfig-drift';
 import { checkEslintDrift } from './check-eslint-drift';
+import { checkTurboDrift } from './check-turbo-drift';
+import { checkPackageJsonDrift } from './check-package-json-drift';
 
 async function main(): Promise<void> {
   console.log('\u{1F50D} Pre-flight CI checks\n');
@@ -36,6 +38,14 @@ async function main(): Promise<void> {
     {
       name: 'ESLint config drift (packages)',
       fn: () => checkEslintDrift({ appsRoot: 'packages', allowlist: [] }),
+    },
+    {
+      name: 'turbo.json drift (pipeline canônico)',
+      fn: () => checkTurboDrift({ turboPath: 'turbo.json' }),
+    },
+    {
+      name: 'package.json drift (scripts canônicos + fantasmas)',
+      fn: () => checkPackageJsonDrift({ packageJsonPath: 'package.json', projectRoot: '.' }),
     },
   ];
 
