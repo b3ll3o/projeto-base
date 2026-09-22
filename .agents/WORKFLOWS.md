@@ -273,6 +273,25 @@ doc-writer → code-reviewer:{success_criteria:"versão bumped+CHANGELOG+0 cross
 **Quando NÃO usar:** hotfix urgente (`bugfix-mode` + tag manual) · bump interno ad-hoc · dep upstream (Renovate/Dependabot).
 **Detalhes:** [`.agents/workflows/release-mode.md`](./workflows/release-mode.md) · spec: [`.agents/specs/conventions/post-merge-release.md`](./specs/conventions/post-merge-release.md)
 
+## Workflow: review-routing
+
+> Orquestrador de revisão pós-task. Despacha specialists baseado em classificação de diff.
+
+**Status:** Pendente (Fase 3) — agent `review-router` ainda não existe.
+
+**Triggers:** Manual (controller invoca após implementer DONE).
+
+**Responsável:** review-router agent.
+
+**Inputs:** `task{scope}`, `branch{base,head}`, `implementer_output_path`.
+
+**Outputs:** `.agents/runs/<timestamp>-review-<n>.yaml` com classification + reviewers_dispatched + findings_aggregated.
+
+**Cross-refs:**
+- [`.agents/agents/review-router.md`](./agents/review-router.md) (a criar em Fase 3)
+- [`.agents/specs/conventions/review-routing.md`](./specs/conventions/review-routing.md) (criado em Fase 1)
+- [`.agents/skills/review-routing/SKILL.md`](./skills/review-routing/SKILL.md) (a criar em Fase 3)
+
 ## `retrospective-mode` — Captura de Aprendizados Pós-Atividade
 
 **Trigger:** "capturar aprendizados" / "retrospectiva" / "post-mortem" · plano ≥3 tasks · bugfix > 30min · 1ª adoção de skill · **Composição:** sequential + task-manager paralelo no final
