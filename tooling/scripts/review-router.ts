@@ -16,6 +16,11 @@ export interface ClassifyResult {
   domains: string[];
   reviewers: string[];
   evidence: EvidenceItem[];
+  /**
+   * True se alguma regra de diff_patterns com `blocking: true` matchou.
+   * O CLI usa esse flag para propagar exit code 3 (bloqueio de merge).
+   */
+  blocking: boolean;
 }
 
 export interface EvidenceItem {
@@ -106,16 +111,19 @@ export function classify(
     }
   }
 
+  let blocking = false;
   if (rules?.diff_patterns) {
     const dpResult = matchDiffPatterns(input.diff, rules.diff_patterns);
     dpResult.reviewers.forEach((r) => reviewers.add(r));
-    evidence.push(...dpResult.evidence);
+    dpResult.evidence.forEach((e) => evidence.push(e));
+    blocking = dpResult.blocking;
   }
 
   return {
     domains: [],
     reviewers: Array.from(reviewers),
     evidence,
+    blocking,
   };
 }
 
@@ -279,9 +287,12 @@ async function main(): Promise<void> {
   const pathsFile = args.find((a) => a.startsWith('--paths='))?.split('=')[1];
   const matrixFile = args.find((a) => a.startsWith('--matrix='))?.split('=')[1];
   const outputFile = args.find((a) => a.startsWith('--output='))?.split('=')[1];
+  const commitsFile = args.find((a) => a.startsWith('--commits='))?.split('=')[1];
 
   if (!pathsFile || !matrixFile) {
-    console.error('Usage: review-router.ts --paths=<file> --matrix=<file> [--output=<file>]');
+    console.error(
+      'Usage: review-router.ts --paths=<file> --matrix=<file> [--commits=<file>] [--output=<file>]',
+    );
     process.exit(2);
   }
 
@@ -292,7 +303,12 @@ async function main(): Promise<void> {
   const matrixContent = fs.readFileSync(matrixFile, 'utf-8');
 
   const matrix = loadMatrix(matrixContent);
-  const commits: string[] = [];
+  const commits = commitsFile
+    ? fs
+        .readFileSync(commitsFile, 'utf-8')
+        .split('\n')
+        .filter((c) => c.trim())
+    : [];
   const result = classify({ paths, commits, diff }, matrix);
 
   const yamlOutput = YAML.stringify(result);
@@ -301,6 +317,10 @@ async function main(): Promise<void> {
   } else {
     console.log(yamlOutput);
   }
+
+  // Exit code 3 = blocking review needed (diff_patterns match com blocking=true).
+  // Consumidores (CI, pre-commit) podem failar o push e exigir re-review humana.
+  process.exit(result.blocking ? 3 : 0);
 }
 
 async function readStdin(): Promise<string> {

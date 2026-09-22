@@ -251,5 +251,69 @@ path_globs:
         unlinkSync(tmpMatrix);
       }
     });
+
+    it('exits 2 when --paths is missing', () => {
+      const scriptDir = path.resolve(__dirname);
+      let exitCode = -1;
+      try {
+        execSync(`node --import tsx review-router.ts --matrix=/tmp/nonexistent`, {
+          cwd: scriptDir,
+          stdio: 'pipe',
+        });
+      } catch (err: any) {
+        exitCode = err.status;
+      }
+      expect(exitCode).toBe(2);
+    });
+
+    it('exits 1 when paths file does not exist', () => {
+      const scriptDir = path.resolve(__dirname);
+      const fakePaths = `/tmp/nonexistent-${Date.now()}-paths.txt`;
+      let exitCode = -1;
+      try {
+        execSync(
+          `node --import tsx review-router.ts --paths=${fakePaths} --matrix=/tmp/nonexistent-matrix`,
+          {
+            cwd: scriptDir,
+            stdio: 'pipe',
+          },
+        );
+      } catch (err: any) {
+        exitCode = err.status;
+      }
+      expect(exitCode).toBe(1);
+    });
+
+    it('handles empty stdin gracefully and exits 0 without blocking', () => {
+      const tmpPaths = '/tmp/test-paths-empty.txt';
+      const tmpMatrix = '/tmp/test-matrix-empty.md';
+      writeFileSync(tmpPaths, '');
+      writeFileSync(
+        tmpMatrix,
+        `
+\`\`\`yaml
+path_globs:
+  - pattern: "apps/api/**/*.ts"
+    reviewers: [nestjs-specialist]
+\`\`\`
+`,
+      );
+      try {
+        const scriptDir = path.resolve(__dirname);
+        const result = execSync(
+          `node --import tsx review-router.ts --paths=${tmpPaths} --matrix=${tmpMatrix}`,
+          {
+            cwd: scriptDir,
+            input: '',
+            encoding: 'utf-8',
+          },
+        );
+        expect(result).toBeDefined();
+        // Sem diff → sem match em diff_patterns blocking → exit 0
+      } finally {
+        unlinkSync(tmpPaths);
+        unlinkSync(tmpMatrix);
+      }
+    });
   });
 });
