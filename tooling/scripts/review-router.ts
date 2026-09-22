@@ -185,7 +185,10 @@ export interface DiffMatchResult {
   evidence: EvidenceItem[];
 }
 
-const DIFF_CAP_BYTES = 50_000;
+// Limite de caracteres (UTF-16 code units) para o diff processado pelo matcher.
+// Diff maior é truncado e marcado como truncated=true; reviewers podem re-rodar
+// localmente com diff completo se necessário.
+const DIFF_MAX_LENGTH = 50_000;
 
 export function matchDiffPatterns(diff: string, rules: DiffPatternRule[]): DiffMatchResult {
   const reviewers = new Set<string>();
@@ -193,8 +196,8 @@ export function matchDiffPatterns(diff: string, rules: DiffPatternRule[]): DiffM
   let truncated = false;
   let effectiveDiff = diff;
 
-  if (diff.length > DIFF_CAP_BYTES) {
-    effectiveDiff = diff.slice(0, DIFF_CAP_BYTES);
+  if (diff.length > DIFF_MAX_LENGTH) {
+    effectiveDiff = diff.slice(0, DIFF_MAX_LENGTH);
     truncated = true;
   }
 
@@ -229,8 +232,14 @@ export interface Matrix {
   always_on?: string[];
 }
 
+/**
+ * Regex global para extrair blocos YAML de markdown. Captura o conteúdo
+ * entre ```yaml e ``` em grupo 1. Exportado para reuso no lint-review-routing.
+ */
+export const YAML_BLOCK_RE = /```yaml\n([\s\S]*?)```/g;
+
 export function loadMatrix(markdown: string): Matrix {
-  const yamlBlocks = markdown.matchAll(/```yaml\n([\s\S]*?)```/g);
+  const yamlBlocks = markdown.matchAll(YAML_BLOCK_RE);
   const result: Matrix = {};
 
   for (const match of yamlBlocks) {

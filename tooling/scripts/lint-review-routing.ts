@@ -37,8 +37,9 @@ export function lintMatrix(markdown: string, knownReviewers?: string[]): LintRes
   let matrix;
   try {
     matrix = loadMatrix(markdown);
-  } catch (e: any) {
-    errors.push(`YAML parse error: ${e.message}`);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    errors.push(`YAML parse error: ${msg}`);
     return { errors, warnings, info };
   }
 
@@ -77,8 +78,9 @@ export function lintMatrix(markdown: string, knownReviewers?: string[]): LintRes
   for (const rule of matrix.diff_patterns ?? []) {
     try {
       new RegExp(rule.regex);
-    } catch (e: any) {
-      errors.push(`invalid regex in diff_patterns: ${rule.regex} (${e.message})`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      errors.push(`invalid regex in diff_patterns: ${rule.regex} (${msg})`);
     }
   }
 
