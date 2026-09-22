@@ -66,7 +66,9 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 | **orchestrator**   | [`.agents/agents/orchestrator.md`](./.agents/agents/orchestrator.md)      | [memory](../.agents/memory/orchestrator.md)        | Despacha tarefas para specialists    | Tarefas multi-step que exigem múltiplas especialidades |
 | **explorer**       | [`.agents/agents/explorer.md`](./.agents/agents/explorer.md)              | [memory](../.agents/memory/explorer.md)            | Mapeia código, busca padrões         | "Onde fica X?", "Como funciona Y?"                   |
 | **code-reviewer**  | [`.agents/agents/code-reviewer.md`](./.agents/agents/code-reviewer.md)    | [memory](../.agents/memory/code-reviewer.md)       | Revisa código (bugs, smells, qualidade)| Antes de merge, em PR, após feature completa         |
+| **stack-code-reviewer**| [`.agents/agents/stack-code-reviewer.md`](./.agents/agents/stack-code-reviewer.md)| [memory](../.agents/memory/stack-code-reviewer.md)| Revisa código com lens de stack (NestJS, NextJS, Prisma, DDD/Hexagonal) | **Toda alteração de código** (pre-commit + CI automático) |
 | **security-auditor**| [`.agents/agents/security-auditor.md`](./.agents/agents/security-auditor.md)| [memory](../.agents/memory/security-auditor.md)| Auditoria OWASP Top 10 + supply chain | Alterações em auth, secrets, payments, deps          |
+| **doc-sync**        | [`.agents/agents/doc-sync.md`](./.agents/agents/doc-sync.md)              | [memory](../.agents/memory/doc-sync.md)            | Sincroniza docs após alteração de código (reativo) | **Toda alteração de código** (pre-commit + CI automático) |
 | **refactorer**     | [`.agents/agents/refactorer.md`](./.agents/agents/refactorer.md)          | [memory](../.agents/memory/refactorer.md)          | Refatoração incremental TDD-driven   | "Refatorar X", code smells, débito técnico           |
 | **test-writer**    | [`.agents/agents/test-writer.md`](./.agents/agents/test-writer.md)        | [memory](../.agents/memory/test-writer.md)         | Criação de testes (TDD/BDD/ATDD)     | Cobertura < 80%, nova feature, bug fix               |
 | **tdd-enforcer**   | [`.agents/agents/tdd-enforcer.md`](./.agents/agents/tdd-enforcer.md)      | [memory](../.agents/memory/tdd-enforcer.md)        | Valida ciclo Red→Green→Refactor      | Antes de merge, em PR, em git hooks                  |
@@ -80,6 +82,11 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 | **monorepo-specialist**| [`.agents/agents/monorepo-specialist.md`](./.agents/agents/monorepo-specialist.md)| [memory](../.agents/memory/monorepo-specialist.md)        | Arquiteto de monorepo (workspaces, pipelines) | Adicionar/remover/mover apps ou packages, configurar turbo  |
 | **nestjs-specialist**  | [`.agents/agents/nestjs-specialist.md`](./.agents/agents/nestjs-specialist.md)    | [memory](../.agents/memory/nestjs-specialist.md)          | Arquiteto backend NestJS                    | Criar/refatorar módulo NestJS, DI, validação, Swagger       |
 | **nextjs-specialist**  | [`.agents/agents/nextjs-specialist.md`](./.agents/agents/nextjs-specialist.md)    | [memory](../.agents/memory/nextjs-specialist.md)          | Arquiteto frontend Next.js                  | Criar rota/página, decidir RSC vs. Client, Server Actions    |
+
+> **Lens DDD/Hexagonal (a partir de v1.2.0, com adoção do ADR-0001):** ao criar/refatorar módulo NestJS,
+> `nestjs-specialist` aplica a lens DDD/Hexagonal — validar boundary `domain/application/infrastructure`
+> e audit fields obrigatórios. A mesma lens é parte da atuação do `stack-code-reviewer` (D11) em pre-commit
+> (Husky) e em CI. Ver [`.agents/specs/conventions/estrutura-e-versionamento.md`](./.agents/specs/conventions/estrutura-e-versionamento.md).
 
 ---
 
@@ -149,6 +156,7 @@ As convenções estão detalhadas em arquivos próprios sob [`.agents/specs/conv
 | Evolução de Agents    | [`evolucao-agents.md`](./.agents/specs/conventions/evolucao-agents.md)    | Agents/skills evoluem com a aplicação + memória       |
 | Git Workflow          | [`git-workflow.md`](./.agents/specs/conventions/git-workflow.md)          | `main` protegida; merge apenas via PR                 |
 | Estrutura & Versionamento | [`estrutura-e-versionamento.md`](./.agents/specs/conventions/estrutura-e-versionamento.md) | Layout de diretórios + versionamento semântico |
+| Cobertura de Testes   | [`cobertura-testes.md`](./.agents/specs/conventions/cobertura-testes.md)| Mínimo 80% agregado por projeto vitest; hard fail CI |
 
 ---
 

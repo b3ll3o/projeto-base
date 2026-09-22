@@ -1,0 +1,16 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-background: 0 0% 100%;
+  --color-foreground: 222.2 84%;
+  /* shadcn/ui tokens podem ser adicionados depois */
+}
+
+body {
+  background-color: hsl(var(--color-background));
+  color: hsl(var(--color-foreground));
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+}

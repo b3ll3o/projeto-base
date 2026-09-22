@@ -1,0 +1,21 @@
+# docker-compose.yml
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: projeto-base-postgres
+    environment:
+      POSTGRES_USER: projeto
+      POSTGRES_PASSWORD: projeto
+      POSTGRES_DB: projeto_base
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U projeto']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

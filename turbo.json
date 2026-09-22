@@ -1,0 +1,26 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": ["**/.env.*local", "tsconfig.base.json"],
+  "tasks": {
+    "build": { "dependsOn": ["^build"], "outputs": ["dist/**", ".next/**"] },
+    "dev": { "cache": false, "persistent": true },
+    "lint": { "outputs": [] },
+    "db:generate": {
+      "outputs": ["node_modules/.prisma/**", "node_modules/@prisma/client/**"]
+    },
+    "typecheck": { "dependsOn": ["^build", "db:generate"], "outputs": [] },
+    "test": { "dependsOn": ["^build"], "outputs": ["coverage/**"] },
+    "test:unit": { "outputs": ["coverage/**"] },
+    "test:coverage": { "outputs": ["coverage/**"] },
+    "test:integration": { "cache": false, "outputs": [] },
+    "test:e2e": { "cache": false, "outputs": [] },
+    "tdd:check": { "dependsOn": ["test:unit"], "outputs": [] },
+    "stack:review": { "cache": false, "outputs": ["stack-review-report.json"] },
+    "docs:sync": { "cache": false, "outputs": ["doc-sync-report.json"] },
+    "ci:quality": {
+      "dependsOn": ["tdd:check", "stack:review", "docs:sync"],
+      "outputs": []
+    },
+    "clean": { "cache": false }
+  }
+}
