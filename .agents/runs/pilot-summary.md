@@ -19,7 +19,7 @@
 
 | # | Task (SHA) | Branch (label) | Files | Diff (cap 50KB) | Reviewers Dispatched | Latência | Blocking | Findings | Consensus |
 |---|---|---|---|---|---|---|---|---|---|
-| 1 | `7ddb93e` | feat/phase-1-foundation (review-router foundation) | 22 | 51200 (trunc.) | doc-sync, doc-writer, test-writer, stack-code-reviewer, nestjs-specialist, nextjs-specialist, security-auditor (**7**) | 911 ms | **YES** (FP) | 0 | N/A |
+| 1 | `7ddb93e` | feat/phase-1-foundation (review-router foundation) | 22 | 130219 (raw) → 51200 (cap 50KB; truncado) | doc-sync, doc-writer, test-writer, stack-code-reviewer, nestjs-specialist, nextjs-specialist, security-auditor (**7**) | 911 ms | **YES** (FP) | 0 | N/A |
 | 2 | `224007c` | feat/phase-2-catalog (catalogar review-router) | 2 | 3458 | doc-sync (**1**) | 892 ms | no | 0 | N/A |
 | 3 | `6759255` | feat/phase-3-pilot-infra (agent + skill + workflow + memory) | 4 | 10676 | agent-architect, doc-sync, stack-code-reviewer (**3**) | 889 ms | no | 0 | N/A |
 | 4 | `ea3592c` | feat/retrospective-mode (workflow + skill) | 8 | 26829 | agent-architect, doc-sync, stack-code-reviewer (**3**) | 888 ms | no | 0 | N/A |
@@ -40,8 +40,8 @@
   - `diff_pattern` `next/image|next/font` (2 matches em fixtures) → nextjs-specialist
   - `diff_pattern` `'use client'|useEffect|useState` (2 matches em fixtures) → nextjs-specialist
   - `diff_pattern` `$queryRaw|$executeRaw` (2 matches em fixtures) → security-auditor
-  - `diff_pattern` **`bcrypt|argon2|hash\(|jwt\.sign|jwt\.verify`** (10 matches em fixtures) → security-auditor + **blocking=true**
-- **Blocking=true (FP):** Matches vêm de test fixtures em `review-router.spec.ts` (linhas 777, 797, 804-805, 1454, 1510) que usam `bcrypt`, `jwt`, `argon2` como inputs de teste. Nenhum código de produção toca esses tokens.
+  - `diff_pattern` **`bcrypt|argon2|hash\(|jwt\.sign|jwt\.verify`** (7 matches em fixtures, verificado via `git show 7ddb93e:tooling/scripts/review-router.spec.ts | grep -cE "bcrypt|argon2|jwt\.sign|jwt\.verify"`) → security-auditor + **blocking=true**
+- **Blocking=true (FP):** Matches vêm de test fixtures em `review-router.spec.ts` que usam `bcrypt`, `jwt`, `argon2` como inputs de teste. Linhas verificadas onde os tokens aparecem: **148, 150, 152, 167, 173, 174, 177** (verificado via `git show 7ddb93e:tooling/scripts/review-router.spec.ts`). Nenhum código de produção toca esses tokens. **Caveat de truncamento:** diff bruto era **130.219 bytes**, mas o classificador aplica cap de 50 KB — apenas os primeiros ~50 KB foram efetivamente varridos pelo regex. A demonstração de FP é aproximada (não cobre a totalidade do diff).
 - **Skip rules avaliadas:** Não exercitadas — classifier headless não aplica skip rules (são responsabilidade do agent `review-router`).
 
 #### Task 2 — `224007c` docs(agents): catalogar review-router (Phase 2)
@@ -113,7 +113,7 @@
 
 ## Observações
 
-1. **Diff cap de 50 KB ativado em 1/5 tasks** (Task 1). Classifier marca `truncated: true` no output, mas isso só é visível quando há `diff_patterns` matches. Diff de Task 1 = 51200 bytes (exatamente no cap), portanto sem truncamento efetivo — mas reforça a recomendação de nunca passar diffs inteiros de PRs grandes.
+1. **Diff cap de 50 KB ativado em 1/5 tasks** (Task 1). Diff bruto = **130.219 bytes**; classificador aplicou cap de 50 KB e capturou **51.200 bytes** (= 39,3% do total) → **truncamento efetivo**. Isso significa que o regex de `security-auditor` só varreu os primeiros ~50 KB do diff — a demonstração de FP (7 matches de `bcrypt|argon2|hash\(|jwt\.sign|jwt\.verify`) só cobre essa janela. Marcador `truncated: true` no output só é visível quando há `diff_patterns` que casam (caso desta task). Reforça a recomendação de nunca passar diffs inteiros de PRs grandes para o classificador — preferir chunks ou amostras.
 
 2. **Classifier NÃO aplica skip rules.** Documentado em pilot-001 (Aprendizado #3) e confirmado aqui: `spec-compliance-reviewer` e `code-quality-reviewer` (always_on) NUNCA aparecem no output de `pnpm review:route`. Consumidores que rodam só o classifier headless vão SEMPRE omitir esses reviewers. Workflows que dependem deles DEVEM delegar ao agent `review-router`.
 
