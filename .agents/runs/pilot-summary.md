@@ -145,6 +145,92 @@ pnpm review:lint   # 0 errors, 0 warnings
 pnpm ci:preflight  # 8/8 verde
 ```
 
+## Sprint Validation (Fase 5) — Router em todos os 6 workflows
+
+> Complemento ao pilot run original (Tasks 1–5 acima). Documenta a
+> validação de rollout estrutural concluída na Fase 5 do plano
+> `2026-09-22-review-router-fase-05-migration-part-01.md`.
+>
+> **Validation date:** 2026-09-22
+> **Default-on state:** `REVIEW_ROUTER_ENABLED=true` é o default desde v1.1.
+> A matriz em [`.agents/specs/conventions/review-routing.md`](../specs/conventions/review-routing.md)
+> não declara nenhum flag `enabled: false`; o `version: 1.1` da matriz
+> e a presença de `always_on:` (spec-compliance-reviewer +
+> code-quality-reviewer) confirmam que o router está habilitado por
+> default em todos os workflows que o invocam.
+
+### Coverage matrix — router step presente nos 6 workflows
+
+| # | Workflow | Router step | Evidência |
+|---|---|---|---|
+| 1 | `monorepo-change.md` | sim | adicionado em `6759255 feat(agents): review-router agent + memory + skill + monorepo-change pilot` |
+| 2 | `backend-feature.md` | sim | adicionado em `1cf78c3 feat(workflows): ... (Task 5.1)` |
+| 3 | `frontend-feature.md` | sim | adicionado em `1cf78c3 feat(workflows): ... (Task 5.2)` |
+| 4 | `ci-defense-mode.md` | sim | adicionado em `1cf78c3 feat(workflows): ... (Task 5.3)` |
+| 5 | `release-mode.md` | sim | adicionado em `1cf78c3 feat(workflows): ... (Task 5.4)` |
+| 6 | `retrospective-mode.md` | sim | adicionado em `1cf78c3 feat(workflows): ... (Task 5.5)` |
+
+**Status:** 6/6 (100%). Verificado via `grep -c "review-router\|review:route"
+.agents/workflows/*.md` → todos retornam `2` matches (header da step +
+referência no fluxo de revisão).
+
+### Métricas herdadas do pilot run (Tasks 1–5)
+
+O sprint de produção monitorado pela Fase 5 reutiliza a validação das
+5 tasks reais já executadas via `pnpm review:route` neste pilot. Métricas
+canônicas (originadas em `10f9266 feat(agents): pilot run summary —
+Task 4.4 validation 5 tasks`, retificadas em `b40f207 fix(agents):
+correct fabricated line numbers + inflated match count in pilot-summary`):
+
+- **Latência:** P50 = 889 ms / P95 = 911 ms / range 884–911 ms
+  (variação 27 ms; budget 90 s; ~100× abaixo do teto).
+- **Reviewers dispatched:** 18 total (avg 3.6/task; range 1–7).
+- **Cobertura de caminhos lógicos:** domain_dispatch 5/5 (100%),
+  diff_pattern_match 1/5 (20%).
+- **Falsos positivos:** 1 blocking FP (Task 1 — test fixtures casam
+  regex `bcrypt|argon2|hash\(|jwt\.sign|jwt\.verify` da matriz).
+  Documentado como limitation known (Aprendizado #3 acima).
+- **Findings agregados:** 0 — pilot planeja dispatch, não executa reviewer.
+
+### Mudança estrutural vs métrica-produzida
+
+A migração da Fase 5 (`1cf78c3`) é uma **mudança estrutural**, não uma
+review que produz métrica nova: ela adiciona um passo `pnpm review:route`
+em 5 workflows pré-existentes e consolida o router como peça transversal
+do fluxo. O critério de validação da sprint (router presente em todos os
+6 workflows) é portanto satisfeito por inspeção, não por produção de
+métricas adicionais.
+
+Métricas novas só emergem quando um usuário roda um workflow e o router
+classifica um diff real — até agora, os dados continuam sendo os do pilot
+run (5 tasks). A próxima coleta será orgânica, conforme os workflows
+adotados forem executados em PRs reais.
+
+### Production readiness — matriz v1.1
+
+**Status:** matriz v1.1 está production-ready.
+
+A v1.1 cobre os 4 caminhos lógicos exercitados pelo pilot (sempre com
+fallback razoável) e expõe apenas 2 ressalvas conhecidas (FP em test
+fixtures + flag `blocking: true` em `path_globs` não honrado pelo
+classifier). Ambas já estão documentadas em **Aprendizados para Matriz
+v1.2** acima (2 P1 + 2 P2) e rastreadas para o próximo bump.
+
+### Cross-refs para matriz v1.2 (Fase 6 — forthcoming)
+
+| Gap | Severidade | Origem |
+|---|---|---|
+| Flag `blocking: true` em `path_globs` (turbo.json, pnpm-workspace.yaml) não propagado pelo classifier | P1 | Aprendizado #1 |
+| Narrowing de diff_patterns regex (FP em test fixtures) | P1 | Aprendizado #2 |
+| Popular `domains[]` no classifier | P2 | Aprendizado #3 |
+| Warning em lint para `path_globs` com `blocking: true` não honrado | P2 | Aprendizado #4 |
+
+Encaminhamento: matriz v1.2 (Fase 6 do rollout) deve atacar os 2 P1
+antes de qualquer expansão de path_globs ou diff_patterns. Os P2 podem
+ficar para v1.3 ou v1.4 conforme prioridade do time.
+
+---
+
 ## Cross-refs
 
 - Output canônico YAML: `/tmp/result-task-{1..5}.yaml` (não commitado — artefatos descartáveis)
