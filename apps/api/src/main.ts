@@ -4,8 +4,10 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Logger as PinoLogger } from 'nestjs-pino';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { z } from 'zod';
 import { AppModule } from './app.module.js';
 import { GlobalExceptionFilter } from './shared/infrastructure/http/global-exception.filter.js';
+import { ZodValidationPipe } from './shared/infrastructure/http/zod-validation.pipe.js';
 
 async function bootstrap(): Promise<void> {
   const adapter = new FastifyAdapter({ logger: false });
@@ -16,6 +18,9 @@ async function bootstrap(): Promise<void> {
 
   app.setGlobalPrefix('api/v1');
   app.useGlobalFilters(new GlobalExceptionFilter());
+  // Pipe global Zod: default `z.any()` (noop) — cada rota
+  // sobrescreve via @Body(new ZodValidationPipe(SchemaDoDto)).
+  app.useGlobalPipes(new ZodValidationPipe(z.any()));
   app.enableShutdownHooks();
 
   const swaggerConfig = new DocumentBuilder()
