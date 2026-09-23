@@ -61,7 +61,7 @@ Lista canônica a considerar (não instalar tudo; instalar conforme demanda):
 | `@opentelemetry/instrumentation-fastify` | Backend Fastify (cuidado: `logger: false` em `main.ts:13`) |
 | `@opentelemetry/instrumentation-http` | HTTP client (Pino + Outbound) |
 | `@opentelemetry/instrumentation-pino` | Injeta `trace_id`/`span_id` em logs Pino |
-| `@opentelemetry/instrumentation-prisma` | `$extends({ query })` em `PrismaClient` |
+| `@opentelemetry/instrumentation-prisma` | ⚠️ **NÃO EXISTE no npm** — usar `@prisma/instrumentation` (pacote oficial Prisma, alinhado com `@prisma/client@^6.0.0`) |
 | `@opentelemetry/instrumentation-ioredis` | Quando Redis entrar |
 | `@opentelemetry/instrumentation-bullmq` | Quando BullMQ entrar |
 | `@opentelemetry/exporter-trace-otlp-http` | Exportar para OTel Collector HTTP |
