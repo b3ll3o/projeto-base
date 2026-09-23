@@ -71,6 +71,108 @@ projeto-base/
         └── cody.md
 ```
 
+## Como executar localmente
+
+> Três modos suportados. Use Docker para reproduzir ambiente de produção, pnpm nativo para iterar rápido, ou só Postgres+apps nativos para debugar uma camada.
+
+### Pré-requisitos
+
+- **Node.js** ≥ 20 (LTS)
+- **pnpm** ≥ 9.12.0 (`corepack enable && corepack prepare pnpm@9.12.0 --activate`)
+- **Docker** + **Docker Compose** v2 (apenas para modos A e B)
+- **PostgreSQL 16** rodando em `localhost:5432` (ou usar `docker compose up -d postgres`)
+
+### Opção A — Docker Compose (recomendado)
+
+Reproduz fielmente o ambiente de produção com healthchecks, network interna e migrations automáticas.
+
+```bash
+# Stack completa (postgres + api + web prod targets)
+docker compose up -d postgres api web
+
+# Aguardar healthcheck (~30s na primeira vez — migrations + db:generate)
+docker compose ps   # todos Up + (healthy)
+
+# Validar endpoints
+curl -f http://localhost:3000/api/v1/health     # 200 { status: "ok" }
+curl -f http://localhost:3001/api/health        # 200 { status: "ok" }
+curl -f http://localhost:3000/api/docs          # Swagger UI
+
+# Logs em tempo real
+docker compose logs -f api web
+```
+
+**Dev (hot reload via bind mounts):**
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# Editar apps/api/src/ → tsx watch recarrega em <2s
+# Editar apps/web/app/ → Next.js Fast Refresh imediato
+```
+
+### Opção B — pnpm nativo (sem Docker nos apps)
+
+Mais rápido para iterar. Postgres ainda roda em Docker (B22 alternativa: Postgres local via brew/apt).
+
+```bash
+# 1. Instalar deps
+pnpm install --frozen-lockfile
+
+# 2. Subir Postgres
+docker compose up -d postgres
+# ou apontar DATABASE_URL para Postgres existente:
+export DATABASE_URL="postgresql://projeto:projeto@localhost:5432/projeto_base?schema=public"
+
+# 3. Gerar Prisma Client (uma vez, e após mudanças em schema.prisma)
+pnpm turbo run db:generate
+
+# 4. Subir apps em watch mode
+pnpm dev    # turbo run dev em paralelo — api em :3000, web em :3001
+
+# 5. Rodar migrations
+pnpm --filter @projeto/api prisma:migrate:deploy
+```
+
+Endpoints:
+
+- **API:** <http://localhost:3000>
+- **API Docs (Swagger):** <http://localhost:3000/api/docs>
+- **Web:** <http://localhost:3001>
+
+### Verificação rápida (CI-equivalente local)
+
+Reproduz o que o CI roda, sem precisar push:
+
+```bash
+pnpm ci:preflight                         # ~10s — drift (cross-refs, tsconfig, docker, lint)
+pnpm turbo run lint typecheck             # ~1min — qualidade estática
+pnpm turbo run test:unit --filter=@projeto/api   # ~1min
+pnpm turbo run test:unit --filter=@projeto/web   # ~30s
+
+# Docker build sanity (sem daemon local: falha cedo se Dockerfile quebrado)
+docker build -f apps/api/Dockerfile --target dev -t projeto-api:dev .
+docker build -f apps/web/Dockerfile --target dev -t projeto-web:dev .
+```
+
+Para o smoke completo da stack Docker (requer daemon):
+
+```bash
+docker compose up -d postgres api web
+sleep 30
+pnpm --filter @projeto/api test:integration
+pnpm --filter @projeto/api test:e2e
+docker compose down
+```
+
+### Troubleshooting
+
+| Sintoma | Causa provável | Solução |
+|---|---|---|
+| `prisma migrate deploy` falha em container | Migrations já aplicadas parcialmente | `docker compose down -v` para resetar volume + re-up |
+| `pnpm dev` falha com `Cannot find module '@projeto/...'` | Workspace não linkado | `pnpm install --frozen-lockfile` |
+| `docker compose` diz "port already in use" | Postgres local na 5432 | `lsof -i :5432` → parar processo OU mudar porta no compose |
+| `curl /api/v1/health` retorna 503 (degraded) | Postgres não subiu ou credenciais erradas | `docker compose logs postgres` |
+
 ## Como usar
 
 ### Opção 1: Copiar para novo monorepo
@@ -175,7 +277,7 @@ Detalhes completos em [`docs/TEMPLATE_USAGE.md`](./docs/TEMPLATE_USAGE.md).
 
 ## Versão
 
-**1.1.0** — Specialists de stack + docs MONOREPO/STACK adicionados.
+**1.6.0** — Seção "Como executar localmente" (Docker + pnpm nativo + verificação rápida) + healthchecks no compose.
 
 ## Licença
 
