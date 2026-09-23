@@ -87,6 +87,7 @@ B22-4 implementou `matchDerivedTags()` + 5 testes novos em commit único (`0b9a0
 **Decisão consciente do implementer:** para feature add pequena (5 testes + 16 linhas impl), o overhead de 3 commits separados (RED → GREEN → REFACTOR) não traz benefício observável. Implementer rodou RED→GREEN localmente antes do commit único; não é "pular TDD" — é "TDD sem overhead de granularidade de commit".
 
 **Guideline atualizado (v1.1 → v1.2):**
+
 - ✅ Bugfix SEMPRE 3 commits separados (RED com teste falhando, GREEN com fix mínimo, REFACTOR se necessário)
 - ✅ Feature add pequena (< 10 testes, < 50 linhas impl) pode ser commit único desde que implementer demonstre RED→GREEN em execução local no report
 - ❌ Feature add grande (> 10 testes OU > 50 linhas impl) DEVE ser 2-3 commits separados (mínimo RED + GREEN)
