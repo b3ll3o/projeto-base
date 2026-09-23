@@ -15,6 +15,7 @@ import {
   matchPathGlobs,
   matchDemandKeywords,
   matchDemandScopes,
+  matchDerivedTags,
   loadMatrix,
   getRepoRoot,
   resolveMatrixPath,
@@ -152,6 +153,23 @@ describe('matchDemandScopes', () => {
   it('returns empty for unknown scope', () => {
     const r = matchDemandScopes('unknown-scope', matrix);
     expect(r).toEqual([]);
+  });
+});
+
+describe('matchDerivedTags', () => {
+  it('returns empty Set when no paths match', () => {
+    const tags = matchDerivedTags(['apps/web/app/page.tsx'], matrix);
+    expect(tags.size).toBe(0);
+  });
+
+  it('detects prisma_binary when path matches **/prisma/schema.prisma', () => {
+    const tags = matchDerivedTags(['apps/api/prisma/schema.prisma'], matrix);
+    expect(tags.has('prisma_binary')).toBe(true);
+  });
+
+  it('returns Set (not Array) for consistency with other matchers', () => {
+    const tags = matchDerivedTags(['apps/api/prisma/schema.prisma'], matrix);
+    expect(tags).toBeInstanceOf(Set);
   });
 });
 
@@ -307,6 +325,22 @@ describe('classify', () => {
       matrix,
     );
     expect(r.specialists).toContain('docker-specialist');
+  });
+
+  it('exposes derived_tags in result for prisma_binary path', () => {
+    const r = classify(
+      { demand: 'add user endpoint', paths: ['apps/api/prisma/schema.prisma'], scope: '' },
+      matrix,
+    );
+    expect(r.derived_tags).toContain('prisma_binary');
+  });
+
+  it('exposes compose_with_healthcheck when docker-compose path present', () => {
+    const r = classify(
+      { demand: 'dockerize apps', paths: ['docker-compose.yml'], scope: 'infra' },
+      matrix,
+    );
+    expect(r.derived_tags).toContain('compose_with_healthcheck');
   });
 });
 

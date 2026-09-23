@@ -1,5 +1,7 @@
 ---
 name: docker
+version: 1.1
+updated: 2026-09-23
 description: Convenções e processos docker específicos do monorepo projeto-base. Cobre ordem de build (db:generate → tsc), next.config.mjs output: 'standalone', entrypoint com prisma migrate deploy, .dockerignore mínimo, Compose profiles dev/prod, networks bridge, volumes nomeados, healthchecks via curl, non-root user, BuildKit cache mounts para pnpm. Use sempre que criar/editar Dockerfile, compose, ou .dockerignore no projeto.
 ---
 
@@ -191,6 +193,14 @@ outputs:
 - ❌ `build context = apps/api` em monorepo (infla contexto com `node_modules`, `coverage`, etc.; usar repo root)
 - ❌ Secrets hardcoded em `environment:` do Compose (usar `env_file`, Docker secrets ou build args; jamais commitar `.env`)
 - ❌ Esquecer `db:generate` antes de `tsc` no api (`Cannot find module '@prisma/client'` em build — Prisma 6 não dá fallback silencioso)
+
+## Checklist: compose healthcheck
+
+Ao criar/editar `docker-compose*.yml`:
+
+- [ ] Para cada service que expõe `/health` (ou `/api/v1/health`): adicionar `healthcheck:` block no compose (curl ou node http.get), mesmo se o Dockerfile já tem `HEALTHCHECK` (o compose level é independente e usado por `docker compose ps`).
+- [ ] `interval: 10s`, `timeout: 3s`, `start_period: 20s`, `retries: 3` (defaults sensatos para apps Node).
+- [ ] `depends_on` em services downstream deve usar `condition: service_healthy` (não `- service_name` plain) — sem isso o dependent sobe antes do upstream estar ready.
 
 ## Cross-refs
 

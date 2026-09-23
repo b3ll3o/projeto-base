@@ -1,6 +1,6 @@
 ---
 name: specialist-routing
-version: 1.0
+version: 1.1
 updated: 2026-09-23
 maintainer: specialist-router
 description: "Matriz canônica de roteamento de demanda — mapeia paths/keywords/scopes para 8 specialists. Source of truth para o classificador headless (tooling/scripts/specialist-router.ts) e para o lint da matriz. Atualizada por PR."
@@ -223,6 +223,10 @@ always_on:
 
 ## 6. GAPS CONHECIDOS (v1.0)
 
+> pt-BR: gaps remanescentes do lançamento v1.0; avaliados em B22 e
+> considerados fora do escopo do polish (P3 todos). Mantidos para
+> rastreabilidade até v1.2/v2.0.
+
 | # | Severidade | Gap | Mitigação |
 |---|------------|-----|-----------|
 | G1 | P3 | `docker-specialist` referenciado na matriz mas agent definition só será criado na Task 9. Mitigação: lint da matriz (Task 5) deve permitir a referência enquanto agent não existe, OU criar agent placeholder antes da Task 4 | Aceito em v1.0; lint permite ref pendente |
@@ -231,8 +235,28 @@ always_on:
 | G4 | P3 | Skip rules são textuais (não programáticas) — futuro v2 pode parsear YAML para skip_if estruturado | Aceito em v1.0; alinhado com review-router (também usa strings textuais) |
 | G5 | P3 | `blocking` em path_globs v1.0 só aplicado a `pnpm-workspace.yaml` e `turbo.json`; paths em `apps/api/**` e `apps/web/**` são `blocking: false` mesmo quando mudança é cross-cutting | v1.1 deve anotar blocking por path_glob baseado em criticidade (security/auth, infra monorepo, etc.) |
 
-## 7. Histórico de Versões
+## 7. DERIVED TAGS (v1.1)
+
+> Tags derivadas da análise de paths que sinalizam requisitos
+> técnicos implícitos (não especialistas). O classificador
+> `tooling/scripts/specialist-router.ts` expoe `derived_tags` em
+> `ClassifyResult` para que o controller saiba aplicar convenções
+> específicas (ex: ENTRYPOINT usa `pnpm exec prisma`, compose precisa
+> de healthcheck block).
+
+```yaml
+derived_tags:
+  prisma_binary:
+    path_match: "**/prisma/schema.prisma"
+    rationale: "Prisma CLI precisa do binary engine debian-openssl-3.0.x (não alpine). ENTRYPOINT em Dockerfile prod deve usar `pnpm exec prisma` (pnpm strict layout não cria .bin/prisma)."
+  compose_with_healthcheck:
+    path_match: "**/docker-compose*.yml"
+    rationale: "Compose services com /health endpoint devem declarar block `healthcheck:` (compose level) — Dockerfile HEALTHCHECK sozinho não é suficiente para `docker compose ps` mostrar healthy."
+```
+
+## 8. Histórico de Versões
 
 | Versão | Data | Mudança |
 |--------|------|---------|
+| 1.1 | 2026-09-23 | Adiciona `derived_tags` (prisma_binary + compose_with_healthcheck). Atualiza `classify()` para retornar `derived_tags` no resultado. Atualiza skill docker com checklist healthcheck. B22 polish. |
 | 1.0 | 2026-09-23 | Lançamento inicial: 8 specialists (monorepo, nestjs, nextjs, docker, security-auditor, test-writer, doc-writer, refactorer); 21 path_globs; 8 demand_keywords; 8 demand_scopes; 5 skip_rules; `monorepo-specialist` always-on. Source of truth para classificador headless e lint. |

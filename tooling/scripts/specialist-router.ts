@@ -2,7 +2,7 @@
 //
 // pt-BR: Classificador headless do specialist-router (review-router
 // mirror). Recebe demand+paths+scope, retorna specialists conforme
-// matriz `.agents/specs/conventions/specialist-routing.md` (v1.0).
+// matriz `.agents/specs/conventions/specialist-routing.md` (v1.1).
 // CLI: `pnpm specialist:route --demand=<file> --paths=<file>
 // --matrix=<file> [--scope=<v>] [--output=<file>]`. Exit: 0/2/3/4.
 
@@ -20,12 +20,14 @@ export type PathGlobRule = {
 };
 export type DemandKeywordRule = { regex: string; specialists: string[]; rationale?: string };
 export type DemandScopeRule = { specialists_added: string[]; rationale?: string };
+export type DerivedTagRule = { path_match: string; rationale?: string };
 export type Matrix = {
   path_globs: PathGlobRule[];
   demand_keywords: DemandKeywordRule[];
   demand_scopes: Record<string, DemandScopeRule>;
   skip_rules?: Record<string, { skip_if: string; rationale?: string }>;
   always_on?: string[];
+  derived_tags?: Record<string, DerivedTagRule>;
 };
 export type ClassifyInput = { demand: string; paths: string[]; scope: string };
 export type ClassifyResult = {
@@ -34,6 +36,7 @@ export type ClassifyResult = {
   blocking: boolean;
   gap_detected: boolean;
   suggested_specialist?: string;
+  derived_tags?: string[];
 };
 
 // pt-BR: single-pass glob→regex. `**/` opcional (casa raiz OU subpath),
@@ -127,6 +130,17 @@ export function matchDemandScopes(scope: string, matrix: Matrix): string[] {
   return Array.from(specialists);
 }
 
+// pt-BR: matchDerivedTags (v1.1) — espelha matchPathGlobs mas retorna
+// tags (não specialists). Tags sinalizam requisitos técnicos implícitos
+// (ex: prisma_binary → ENTRYPOINT deve usar `pnpm exec prisma`). Retorna
+// Set para consistência com matchPathGlobs e matchDemandKeywords.
+export function matchDerivedTags(paths: string[], matrix: Matrix): Set<string> {
+  const tags = new Set<string>();
+  for (const [tagName, rule] of Object.entries(matrix.derived_tags || {}))
+    if (paths.some((p) => globToRegex(rule.path_match).test(p))) tags.add(tagName);
+  return tags;
+}
+
 // pt-BR: gap → primeiro keyword matched → sugere specialist para o
 // controller dispatchar agent-architect e criar o ausente.
 const inferSuggested = (input: ClassifyInput, matrix: Matrix): string | undefined => {
@@ -174,12 +188,14 @@ export function classify(input: ClassifyInput, matrix: Matrix): ClassifyResult {
   }
 
   const gap = specialists.size === 0;
+  const derived_tags = Array.from(matchDerivedTags(input.paths, matrix)).sort();
   return {
     specialists: Array.from(specialists).sort(),
     evidence,
     blocking,
     gap_detected: gap,
     suggested_specialist: gap ? inferSuggested(input, matrix) : undefined,
+    derived_tags: derived_tags.length > 0 ? derived_tags : undefined,
   };
 }
 
@@ -197,6 +213,7 @@ export async function loadMatrix(matrixPath: string): Promise<Matrix> {
     demand_scopes: result.demand_scopes || {},
     skip_rules: result.skip_rules,
     always_on: result.always_on,
+    derived_tags: result.derived_tags,
   };
 }
 
