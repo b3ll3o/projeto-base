@@ -222,11 +222,12 @@ Resultado esperado:
 
 ### P1 — Flag `blocking: true` em `path_globs` (turbo.json, pnpm-workspace.yaml) não propagado pelo classifier
 
-**Origem:** pilot-summary.md, Aprendizado #1 (linha 134).
+**Origem:** pilot-summary.md, Aprendizado #1 (linha 130 do pilot-summary
+em commit `28f5ef4`).
 
 A matriz declara `blocking: true` em `turbo.json` (linha 56) e
 `pnpm-workspace.yaml` (linha 52), mas o classificador (`matchPathGlobs()`
-em `tooling/scripts/review-router.ts:54`) só retorna
+em `tooling/scripts/review-router.ts`) só retorna
 `{pattern, reviewers, files_matched}` — o flag `blocking` declarado na
 YAML não é lido nem propagado para `classify()`.
 
@@ -259,6 +260,21 @@ Trade-off: regex mais restrita = menos cobertura em código real.
 O classificador popula `reviewers[]` mas o campo `domains[]` permanece
 vazio em 5/5 tasks do pilot (consumidores devem usar `reviewers[]`,
 não `domains[]`). Não bloqueador, mas documentar.
+
+### P2 — Adicionar cenários multi-commit/multi-path em Seção 5 (Exemplos)
+
+**Origem:** pilot-summary.md, Aprendizado #4 (linha 136 do
+pilot-summary em commit `28f5ef4`).
+
+Os 3 cenários atuais (A, B, C) cobrem patches 1-commit com 1-3 arquivos.
+Faltam cenários multi-commit (chained commits no mesmo PR) e multi-path
+(>5 arquivos em paths heterogêneos) observados no pilot run #001.
+
+**Decisão pendente v1.2:** expandir Seção 5 com 2 cenários adicionais:
+
+- **Cenário D:** feat multi-commit (3 commits encadeados no mesmo PR)
+- **Cenário E:** chore/refactor multi-path (>5 arquivos em
+  packages/apps distintos)
 
 ### P2 — Warning em lint para `path_globs` com `blocking: true` não honrado
 
