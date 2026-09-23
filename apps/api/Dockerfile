@@ -37,7 +37,7 @@ COPY --from=builder /repo/apps/api/prisma apps/api/prisma
 COPY --from=builder /repo/package.json ./
 COPY --from=builder /repo/apps/api/package.json apps/api/
 COPY --from=builder /repo/packages packages
-COPY --from=builder /repo/pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY --from=builder /repo/pnpm-lock.yaml /repo/pnpm-workspace.yaml ./
 COPY --from=builder /repo/node_modules node_modules
 RUN pnpm prune --prod
 USER node
