@@ -2,16 +2,20 @@
 //
 // TDD (Task 3.5): garante que `apps/web/next.config.mjs` empacota
 // `@opentelemetry/*` + `web-vitals` no output standalone via
-// `experimental.outputFileTracingIncludes`.
+// `outputFileTracingIncludes` no TOP-LEVEL (NÃO nested em `experimental`).
 //
 // Por que arquivo-fonte (não runtime import)? O `next.config.mjs` é validado
 // pelo Next.js no build; aqui queremos um guard portável e rápido contra
-// regressões acidentais de remoção dos globs.
+// regressões acidentais de remoção dos globs ou migração errada para
+// `experimental.outputFileTracingIncludes` (que seria silenciosamente
+// ignorada em Next.js 15.5.x — ver collect-build-traces.js).
 //
 // Cobertura:
 //   1. `output: 'standalone'` preservado (alinhado ao Dockerfile de prod).
-//   2. `experimental.outputFileTracingIncludes` existe e mapeia `/**` para
-//      ambos os globs `@opentelemetry/**/*` e `web-vitals/**/*`.
+//   2. `outputFileTracingIncludes` no top-level (NÃO nested em experimental)
+//      com chave raiz '/**'.
+//   3. globs cobrem `./node_modules/@opentelemetry/**/*` e
+//      `./node_modules/web-vitals/**/*` dentro do `/**`.
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -25,14 +29,22 @@ describe('next.config.mjs — outputFileTracingIncludes (Task 3.5)', () => {
     expect(source).toMatch(/output:\s*['"]standalone['"]/);
   });
 
-  it('declara experimental.outputFileTracingIncludes para /**', () => {
-    // bloco `experimental` precisa existir e referenciar outputFileTracingIncludes
-    expect(source).toMatch(/experimental:\s*\{[\s\S]*?outputFileTracingIncludes[\s\S]*?\}/);
-    // chave raiz '/**' presente
+  it('declara outputFileTracingIncludes no TOP-LEVEL (NÃO dentro de experimental)', () => {
+    // Positivo: outputFileTracingIncludes aparece no top-level do objeto
+    // (sem indentação significativa que indique aninhamento).
+    expect(source).toMatch(/^\s*outputFileTracingIncludes\s*:/m);
+
+    // Negativo (guard de regressão): NÃO pode estar nested dentro de
+    // `experimental: { ... }`. Em Next.js 15.5.x isso seria silenciosamente
+    // ignorado em runtime (collect-build-traces.js destrutura apenas de
+    // config.outputFileTracingIncludes, nunca de config.experimental).
+    expect(source).not.toMatch(/experimental:\s*\{[\s\S]*?outputFileTracingIncludes/);
+
+    // Chave raiz '/**' presente
     expect(source).toMatch(/['"]\/\*\*['"]:\s*\[/);
   });
 
-  it('inclui @opentelemetry/**/* e web-vitals/**/* nos globs de /**', () => {
+  it('outputFileTracingIncludes cobre @opentelemetry/**/* e web-vitals/**/*', () => {
     expect(source).toMatch(/['"]\.\/node_modules\/@opentelemetry\/\*\*\/\*['"]/);
     expect(source).toMatch(/['"]\.\/node_modules\/web-vitals\/\*\*\/\*['"]/);
   });
