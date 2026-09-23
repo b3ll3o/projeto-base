@@ -41,6 +41,13 @@ export interface PathGlobRule {
    * Default false. v1.2: gap P1 #1 da matrix Seção 6 resolvido.
    */
   blocking?: boolean;
+  /**
+   * Domínio semântico da regra (ex: 'agents-specs', 'agents-meta', 'nestjs-domain').
+   * Quando presente, propaga para `ClassifyResult.domains[]` (dedupe via Set).
+   * Default undefined — regras sem `domain:` continuam funcionando e não
+   * contribuem para o array. v1.3: gap P2 #3 da matrix Seção 6 resolvido.
+   */
+  domain?: string;
 }
 
 export interface PathMatch {
@@ -49,6 +56,8 @@ export interface PathMatch {
   files_matched: string[];
   /** Espelha `PathGlobRule.blocking` da regra que produziu o match. v1.2. */
   blocking: boolean;
+  /** Espelha `PathGlobRule.domain` da regra que produziu o match. v1.3. */
+  domain?: string;
 }
 
 // Converte glob pattern para regex
@@ -78,6 +87,7 @@ export function matchPathGlobs(paths: string[], rules: PathGlobRule[]): PathMatc
         reviewers: rule.reviewers,
         files_matched: filesMatched,
         blocking: rule.blocking === true,
+        domain: rule.domain,
       });
     }
   }
@@ -94,6 +104,9 @@ export function classify(
 ): ClassifyResult {
   const evidence: EvidenceItem[] = [];
   const reviewers = new Set<string>();
+  // pt-BR: v1.3 — domains[] coletado de path_globs rules com campo `domain`
+  // opcional (gap P2 #3 da matrix Seção 6). Set garante dedupe.
+  const domains = new Set<string>();
   // pt-BR: v1.2 — blocking agora é OR entre path_glob matches e diff_patterns
   // matches (gap P1 #1 da matrix Seção 6). Movido para o topo do escopo para
   // ambas as fontes poderem escrever nele.
@@ -104,6 +117,7 @@ export function classify(
     for (const m of pathMatches) {
       m.reviewers.forEach((r) => reviewers.add(r));
       if (m.blocking) blocking = true;
+      if (m.domain) domains.add(m.domain);
       evidence.push({
         signal: 'path_glob',
         pattern: m.pattern,
@@ -133,7 +147,7 @@ export function classify(
   }
 
   return {
-    domains: [],
+    domains: Array.from(domains),
     reviewers: Array.from(reviewers),
     evidence,
     blocking,

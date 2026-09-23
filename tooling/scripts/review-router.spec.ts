@@ -125,6 +125,64 @@ describe('review-router classifier', () => {
     });
   });
 
+  describe('classify() — domain enrichment (gap P2 #3)', () => {
+    it('matchPathGlobs propagates domain from rule', () => {
+      const rules: PathGlobRule[] = [
+        { pattern: '.agents/specs/**', reviewers: ['doc-sync'], domain: 'agents-specs' },
+      ];
+      const result = matchPathGlobs(['.agents/specs/conventions/x.md'], rules);
+      expect(result[0].domain).toBe('agents-specs');
+    });
+
+    it('matchPathGlobs leaves domain undefined when rule has no domain field', () => {
+      const rules: PathGlobRule[] = [{ pattern: 'apps/api/**', reviewers: ['nestjs-specialist'] }];
+      const result = matchPathGlobs(['apps/api/x.ts'], rules);
+      expect(result[0].domain).toBeUndefined();
+    });
+
+    it('classify populates domains[] with unique domains from path_globs', () => {
+      const result = classify(
+        {
+          paths: ['.agents/specs/conventions/x.md', '.agents/agents/review-router.md'],
+          commits: [],
+          diff: '',
+        },
+        {
+          path_globs: [
+            { pattern: '.agents/specs/**', reviewers: ['doc-sync'], domain: 'agents-specs' },
+            { pattern: '.agents/agents/**', reviewers: ['agent-architect'], domain: 'agents-meta' },
+          ],
+        },
+      );
+      expect(result.domains).toEqual(['agents-specs', 'agents-meta']);
+    });
+
+    it('classify dedupes repeated domains from multiple path_globs matching', () => {
+      const result = classify(
+        {
+          paths: ['.agents/specs/x.md', '.agents/specs/y.md'],
+          commits: [],
+          diff: '',
+        },
+        {
+          path_globs: [
+            { pattern: '.agents/specs/x.md', reviewers: ['doc-sync'], domain: 'agents-specs' },
+            { pattern: '.agents/specs/**', reviewers: ['doc-sync'], domain: 'agents-specs' },
+          ],
+        },
+      );
+      expect(result.domains).toEqual(['agents-specs']);
+    });
+
+    it('classify domains remains [] when no path_glob has domain field', () => {
+      const result = classify(
+        { paths: ['apps/api/x.ts'], commits: [], diff: '' },
+        { path_globs: [{ pattern: 'apps/api/**', reviewers: ['nestjs-specialist'] }] },
+      );
+      expect(result.domains).toEqual([]);
+    });
+  });
+
   describe('parseCommitType()', () => {
     it('parses feat(api): ... as type=feat scope=api', () => {
       expect(parseCommitType('feat(api): add user endpoint')).toEqual({

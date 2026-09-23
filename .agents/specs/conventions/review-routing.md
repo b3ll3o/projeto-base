@@ -1,6 +1,6 @@
 ---
 name: review-routing
-version: 1.2
+version: 1.3
 updated: 2026-09-22
 maintainer: review-router
 description: "Matriz de roteamento de revisores consultada pelo review-router"
@@ -60,6 +60,7 @@ path_globs:
 
   - pattern: ".agents/agents/**"
     reviewers: [agent-architect, doc-sync]
+    domain: "agents-meta"
 
   - pattern: ".agents/skills/**"
     reviewers: [agent-architect, doc-sync]
@@ -69,6 +70,7 @@ path_globs:
 
   - pattern: ".agents/specs/**"
     reviewers: [doc-sync]
+    domain: "agents-specs"
 
   - pattern: ".agents/memory/**"
     reviewers: [agent-architect]
@@ -215,7 +217,7 @@ Resultado esperado:
 
 ## 6. Gaps Conhecidos (forthcoming v1.3)
 
-(v1.2 resolveu os 2 gaps P1 abaixo; ver Seção 7 para o changelog completo)
+(v1.2 resolveu os 2 gaps P1; v1.3 resolveu 1 gap P2; ver Seção 7)
 
 ### Resolvidos em v1.2
 
@@ -270,7 +272,18 @@ legítima `matchDiffPatterns('const hash = await bcrypt.hash(pwd);', rules)`
 em `tooling/scripts/review-router.spec.ts` (preservado por design —
 production signal sem FP).
 
-### Conhecidos (forthcoming v1.3)
+### Resolvidos em v1.3
+
+#### Antigo P2 #3 — `domains[]` em `ClassifyResult` sempre `[]`
+
+**Resolvido em v1.3** (PR #20): `PathGlobRule` + `PathMatch` ganham
+`domain?: string` opcional; `matchPathGlobs()` propaga `rule.domain`;
+`classify()` coleta em `Set<string>` (dedupe) e popula
+`ClassifyResult.domains[]`. Zero breaking change — `domain` opcional.
+Seção 1 anota `.agents/specs/**` → `agents-specs`,
+`.agents/agents/**` → `agents-meta`. 5 testes TDD + `pnpm test` 30/30.
+
+### Conhecidos (forthcoming v1.4)
 
 (lista vazia — sem gaps conhecidos atualmente)
 
@@ -283,3 +296,4 @@ production signal sem FP).
 | 1 | 2026-09-22 | Versão inicial |
 | 1.1 | 2026-09-22 | Adicionar exemplos de uso (Seção 5) + Seção 6 "Gaps Conhecidos" priorizando 2 P1 + 2 P2 para v1.2; bump version frontmatter `1` → `1.1` (resolvia divergência entre `version: 1` declarado e docs que já referenciavam v1.1) |
 | 1.2 | 2026-09-22 | 2 P1 gaps resolvidos: propagação de `blocking` em path_globs (`e4c0971`) + narrowing do regex de segurança (`f496b05`). Classifier agora propaga corretamente a flag `blocking: true` para a exit code; regex narrow elimina FPs em test fixtures e docs. (Seção 6) |
+| 1.3 | 2026-09-22 | 1 P2 gap resolvido (PR #20): enrich `domains[]` em `ClassifyResult`. `PathGlobRule` + `PathMatch` ganham `domain?: string` opcional; `matchPathGlobs()` propaga; `classify()` coleta via `Set<string>`. 5 testes TDD. 2 regras anotadas em Seção 1: `.agents/specs/**` → `agents-specs`, `.agents/agents/**` → `agents-meta`. Zero breaking change. (Seção 6) |
