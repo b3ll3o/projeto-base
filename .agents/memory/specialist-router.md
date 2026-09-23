@@ -59,8 +59,8 @@ description: Memória acumulada do specialist-router — aprendizados sobre clas
 #### Cross-refs desta retro
 
 - Plan: `docs/superpowers/plans/2026-09-23-specialist-router-docker-plan.md`
-- PR: `https://github.com/b3ll3o/projeto-base/pull/<TBD>` (preencher após gh pr create)
-- Branch: `feat/dockerize-apps` (28 commits ao final)
+- PR: `https://github.com/b3ll3o/projeto-base/pull/24`
+- Branch: `feat/dockerize-apps` (30 commits ao final)
 
 ## Gaps Conhecidos
 
