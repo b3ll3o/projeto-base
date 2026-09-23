@@ -1,6 +1,6 @@
 ---
 name: docker
-description: Convenções e processos docker específicos do monorepo projeto-base. Cobre ordem de build (db:generate → tsc antes de tsc), next.config.mjs output: 'standalone', entrypoint com prisma migrate deploy, .dockerignore mínimo, Compose profiles dev/prod, networks bridge, volumes nomeados, healthchecks via curl, non-root user, BuildKit cache mounts para pnpm. Use sempre que criar/editar Dockerfile, compose, ou .dockerignore no projeto.
+description: Convenções e processos docker específicos do monorepo projeto-base. Cobre ordem de build (db:generate → tsc), next.config.mjs output: 'standalone', entrypoint com prisma migrate deploy, .dockerignore mínimo, Compose profiles dev/prod, networks bridge, volumes nomeados, healthchecks via curl, non-root user, BuildKit cache mounts para pnpm. Use sempre que criar/editar Dockerfile, compose, ou .dockerignore no projeto.
 ---
 
 # Skill: docker
@@ -81,7 +81,7 @@ export default {
 };
 ```
 
-Sem `output: 'standalone'` → imagem final tem几百 MB (`node_modules` inteiro copiado). Com `standalone` → copia `server.js` + arquivos mínimos (~50 MB).
+Sem `output: 'standalone'` → imagem final tem centenas de MB (`node_modules` inteiro copiado). Com `standalone` → copia `server.js` + arquivos mínimos (~50 MB).
 
 ## Passo 6: Entrypoint
 
