@@ -114,7 +114,7 @@ Consensus = mesmo file:line + severidades compatíveis (mesma ou ±1 nível).
 
 ### Passo 7: Retornar ao controller
 
-Output em `.agents/runs/<timestamp>-review-<n>.yaml` (ver Seção 6 do spec).
+Output em `.agents/runs/<timestamp>-review-<n>.yaml` (ver Seção 7 do spec).
 
 ## Outputs
 
