@@ -10,20 +10,20 @@
 import { describe, it, expect } from 'vitest';
 import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { reviewFiles } from './stack-code-reviewer.js';
 
 function tmpFile(name: string, content: string): string {
   const dir = join(tmpdir(), 'stack-review-test');
-  mkdirSync(dir, { recursive: true });
   const file = join(dir, name);
+  mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, content);
   return file;
 }
 
 describe('stack-code-reviewer', () => {
   it('detecta blocker em domain com import proibido', () => {
-    const file = tmpFile('user.spec.ts', `import { Injectable } from '@nestjs/common';\n`);
+    const file = tmpFile('domain/user.spec.ts', `import { Injectable } from '@nestjs/common';\n`);
     const report = reviewFiles([file]);
     expect(
       report.findings.some(
@@ -61,7 +61,10 @@ describe('stack-code-reviewer', () => {
   });
 
   it('report não aprova quando há blocker', () => {
-    const file = tmpFile('domain-import.ts', `import { Injectable } from '@nestjs/common';\n`);
+    const file = tmpFile(
+      'domain/domain-import.ts',
+      `import { Injectable } from '@nestjs/common';\n`,
+    );
     const report = reviewFiles([file]);
     expect(report.approved).toBe(false);
   });
@@ -78,8 +81,8 @@ describe('stack-code-reviewer', () => {
   });
 
   it('detecta múltiplos blockers de uma vez', () => {
-    const file1 = tmpFile('d1.ts', `import { Injectable } from '@nestjs/common';\n`);
-    const file2 = tmpFile('d2.ts', `import { Entity } from '@prisma/client';\n`);
+    const file1 = tmpFile('domain/d1.ts', `import { Injectable } from '@nestjs/common';\n`);
+    const file2 = tmpFile('domain/d2.ts', `import { Entity } from '@prisma/client';\n`);
     const report = reviewFiles([file1, file2]);
     const blockers = report.findings.filter((f) => f.severity === 'blocker');
     expect(blockers.length).toBeGreaterThanOrEqual(2);
