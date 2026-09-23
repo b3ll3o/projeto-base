@@ -12,7 +12,7 @@ description: "Apêndice de cenários E2E para a matriz specialist-routing v1.0"
 > Contém 3 cenários end-to-end (D, E, F) cobrindo os principais padrões
 > de despacho: infra multi-stack, security scoped, refactor simples.
 
-## Cenário D — dockerizar monorepo (multi-stack, scope=infra)
+## Cenário D — dockerizar monorepo (multi-stack, scope=feat+infra)
 
 ```text
 demand: "dockerizar apps/api e apps/web com compose"
@@ -20,7 +20,7 @@ paths:  [apps/api/Dockerfile,
          apps/web/Dockerfile,
          docker-compose.yml,
          docker-compose.dev.yml]
-scope:  infra
+scope:  feat,infra
 ```
 
 Resultado esperado:
@@ -48,13 +48,13 @@ Justificativa:
 - **Skip rules aplicadas:** nenhuma (docker-specialist justificado por scope infra + keyword; security-auditor sem keyword de segurança)
 - **`blocking: false`** — match com a matriz atual (paths `apps/api/**` e `apps/web/**` são `blocking: false` em v1.0); blocking inferido por criticidade da demanda é G5 (P3, v1.1)
 
-## Cenário E — correção de segurança (scoped security)
+## Cenário E — correção de segurança (scoped security+fix)
 
 ```text
 demand: "auditar vulnerabilidade de SQL injection no módulo users"
 paths:  [apps/api/src/modules/users/infra/persistence/user.repository.ts,
          apps/api/src/modules/users/application/queries/get-user.usecase.ts]
-scope:  security
+scope:  security,fix
 ```
 
 Resultado esperado:

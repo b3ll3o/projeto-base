@@ -8,12 +8,16 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import * as path from 'node:path';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
 import {
   classify,
   matchPathGlobs,
   matchDemandKeywords,
   matchDemandScopes,
   loadMatrix,
+  getRepoRoot,
+  resolveMatrixPath,
   type Matrix,
 } from './specialist-router.js';
 
@@ -285,5 +289,50 @@ describe('loadMatrix', () => {
     expect(matrix.skip_rules).toBeDefined();
     expect(matrix.always_on).toBeDefined();
     expect(matrix.always_on).toContain('monorepo-specialist');
+  });
+});
+
+describe('getRepoRoot', () => {
+  it('retorna path absoluto da raiz do repo quando invocado do repo (cwd padrão)', () => {
+    const root = getRepoRoot();
+    expect(root).toBeTruthy();
+    expect(path.isAbsolute(root!)).toBe(true);
+    // A raiz do repo deve conter o arquivo da matriz v1.0 (sanity check
+    // de que o git rev-parse resolveu para o repo correto, não um pai
+    // acima ou algum trabalho de diretório aleatório).
+    expect(fs.existsSync(path.join(root!, '.agents/specs/conventions/specialist-routing.md'))).toBe(
+      true,
+    );
+  });
+
+  it('retorna null quando cwd não está em um repositório git', () => {
+    // Cria temp dir vazio (não-git-repo) e tenta resolver dali. Evita
+    // fragilidade de assumir que /tmp não é repo em algum CI exótico.
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sr-no-repo-'));
+    try {
+      expect(getRepoRoot(tmpDir)).toBeNull();
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('resolveMatrixPath', () => {
+  it('resolve default matrix path a partir do repo root quando --matrix é omitido', () => {
+    const resolved = resolveMatrixPath(undefined);
+    const root = getRepoRoot();
+    expect(resolved).toBe(path.join(root!, '.agents/specs/conventions/specialist-routing.md'));
+  });
+
+  it('preserva paths absolutos sem modificação', () => {
+    const abs = path.resolve('/absolute/path/to/matrix.md');
+    expect(resolveMatrixPath(abs)).toBe(abs);
+  });
+
+  it('resolve paths relativos a partir do repo root (não do cwd)', () => {
+    const resolved = resolveMatrixPath('custom/relative/matrix.md');
+    const root = getRepoRoot();
+    expect(resolved).toBe(path.join(root!, 'custom/relative/matrix.md'));
+    expect(path.isAbsolute(resolved)).toBe(true);
   });
 });

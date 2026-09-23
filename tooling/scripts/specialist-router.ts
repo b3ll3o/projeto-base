@@ -7,6 +7,8 @@
 // --matrix=<file> [--scope=<v>] [--output=<file>]`. Exit: 0/2/3/4.
 
 import * as YAML from 'yaml';
+import { execSync } from 'node:child_process';
+import * as path from 'node:path';
 
 export type PathGlobRule = {
   pattern: string;
@@ -192,18 +194,47 @@ export async function loadMatrix(matrixPath: string): Promise<Matrix> {
   };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  main().catch((e) => {
-    console.error('FATAL:', e.message);
-    process.exit(1);
-  });
+// pt-BR: detecta a raiz do repo via `git rev-parse --show-toplevel`.
+// Necessário porque o wrapper root faz `cd tooling/scripts && pnpm specialist:route`,
+// mudando o cwd; default --matrix é resolvido a partir do repo root, não do cwd
+// (espelha `tooling/scripts/lint-review-routing.ts:53-69`).
+// Memoizado em `cachedRepoRoot` para evitar N execSyncs em chamadas repetidas.
+let cachedRepoRoot: string | null | undefined = undefined;
+export function getRepoRoot(cwd: string = '.'): string | null {
+  if (cwd === '.' && cachedRepoRoot !== undefined) {
+    return cachedRepoRoot;
+  }
+  try {
+    const stdout = execSync('git rev-parse --show-toplevel', {
+      cwd,
+      encoding: 'utf-8',
+    });
+    const result = stdout.trim();
+    if (cwd === '.') cachedRepoRoot = result;
+    return result;
+  } catch {
+    if (cwd === '.') cachedRepoRoot = null;
+    return null;
+  }
+}
+
+// pt-BR: resolve o caminho da matriz a partir do repo root quando o path
+// é relativo. Cobre (a) --matrix omitido (usa default) e (b) --matrix=path
+// relativo (ex: `.agents/specs/conventions/...`); paths absolutos passam
+// inalterados. Self-correcting: rodar `pnpm specialist:route` de qualquer
+// cwd resolve o matrix file no repo root.
+export function resolveMatrixPath(matrixArg: string | undefined): string {
+  const p = matrixArg ?? '.agents/specs/conventions/specialist-routing.md';
+  if (path.isAbsolute(p)) return p;
+  const root = getRepoRoot();
+  return root ? path.join(root, p) : p;
 }
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const get = (k: string) => args.find((a) => a.startsWith(k + '='))?.split('=')[1];
   const demandFile = get('--demand');
   const pathsFile = get('--paths');
-  const matrixFile = get('--matrix');
+  const matrixFile = resolveMatrixPath(get('--matrix'));
   const outputFile = get('--output');
   const scopeArg = get('--scope');
   if (!demandFile || !pathsFile || !matrixFile) {
@@ -225,4 +256,11 @@ async function main(): Promise<void> {
   // 3 = gap_detected (BLOQUEIA planning, design §5.1 p5);
   // 4 = blocking (path_glob blocking=true, ex: pnpm-workspace).
   process.exit(result.gap_detected ? 3 : result.blocking ? 4 : 0);
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((e) => {
+    console.error('FATAL:', e.message);
+    process.exit(1);
+  });
 }
