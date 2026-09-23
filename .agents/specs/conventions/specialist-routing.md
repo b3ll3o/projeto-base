@@ -40,6 +40,18 @@ path_globs:
     specialists: [nestjs-specialist]
     rationale: "Schema, migrations, seed"
 
+  - pattern: "**/auth/**"
+    specialists: [security-auditor]
+    rationale: "Auth code (guards, strategies, JWT handlers)"
+
+  - pattern: "**/secrets/**"
+    specialists: [security-auditor]
+    rationale: "Secrets/credentials storage"
+
+  - pattern: "**/.env*"
+    specialists: [security-auditor]
+    rationale: "Environment files (may contain secrets)"
+
   - pattern: "apps/web/**"
     specialists: [nextjs-specialist]
     rationale: "Frontend Next.js (app/, components/, lib/, styles/)"
@@ -89,6 +101,10 @@ path_globs:
   - pattern: "docs/adr/**"
     specialists: [doc-writer]
 
+  - pattern: "**/*.md"
+    specialists: [doc-writer]
+    rationale: "Markdown files anywhere in repo (docs, agents, specs)"
+
   - pattern: "**/*.spec.ts"
     specialists: [test-writer]
 
@@ -100,35 +116,35 @@ path_globs:
 
 ```yaml
 demand_keywords:
-  - pattern: "(?i)docker(izar|ize)?|container(iza[çc][ãa]o)?|compose"
+  - regex: "(?i)docker(izar|ize)?|container(iza[çc][ãa]o)?|compose"
     specialists: [docker-specialist]
     rationale: "Demanda sobre containerização"
 
-  - pattern: "(?i)monorepo|workspace|^turbo$|pnpm.?workspace"
+  - regex: "(?i)monorepo|workspace|\bturbo\b|pnpm.?workspace"
     specialists: [monorepo-specialist]
     rationale: "Mudança estrutural no monorepo"
 
-  - pattern: "(?i)nestjs|fastify|prisma|controller|module"
+  - regex: "(?i)nestjs|fastify|prisma|controller|module"
     specialists: [nestjs-specialist]
     rationale: "Demanda backend NestJS"
 
-  - pattern: "(?i)next\\.?js|nextjs|react|tailwind|rsc|server.?component"
+  - regex: "(?i)next\\.?js|nextjs|react|tailwind|rsc|server.?component"
     specialists: [nextjs-specialist]
     rationale: "Demanda frontend Next.js"
 
-  - pattern: "(?i)seguran[çc]a|vulnerab|owasp|secrets?|cve|exploit"
+  - regex: "(?i)seguran[çc]a|vulnerab|owasp|secrets?|cve|exploit|\bauth\b|\bjwt\b"
     specialists: [security-auditor]
     rationale: "Demanda de auditoria/segurança"
 
-  - pattern: "(?i)refactor|simplificar|simplify|dry|limpar|cleanup"
+  - regex: "(?i)refactor|simplificar|simplify|dry|limpar|cleanup"
     specialists: [refactorer]
     rationale: "Demanda de refactor"
 
-  - pattern: "(?i)\\btest(es)?\\b|tdd|cobertura|coverage|\\bspec\\b"
+  - regex: "(?i)\\btest(es)?\\b|tdd|cobertura|coverage|\\bspec\\b"
     specialists: [test-writer]
     rationale: "Demanda sobre testes"
 
-  - pattern: "(?i)\\bdoc(umenta[çc][ãa]o)?\\b|readme|adr|spec(ification)?"
+  - regex: "(?i)\\bdoc(umenta[çc][ãa]o)?\\b|readme|adr|spec(ification)?"
     specialists: [doc-writer]
     rationale: "Demanda sobre documentação"
 ```
@@ -187,7 +203,7 @@ skip_rules:
     rationale: "Demanda sem menção a containerização não precisa de docker-specialist"
 
   security-auditor:
-    skip_if: "scope != security E nenhum keyword segurança|vulnerab|owasp|secrets|cve|exploit match"
+    skip_if: "scope != security E nenhum keyword segurança|vulnerab|owasp|secrets|cve|exploit|auth|jwt match"
     rationale: "Auditoria só dispara quando demanda explicitamente toca segurança"
 
   refactorer:

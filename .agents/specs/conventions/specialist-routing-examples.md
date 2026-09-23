@@ -32,7 +32,8 @@ specialists:
   - nestjs-specialist     # path apps/api/**
   - nextjs-specialist     # path apps/web/**
   - test-writer           # scope=feat (dockerizar = nova capacidade)
-blocking: true
+  - doc-writer            # scope=feat (dockerizar = nova capacidade, Seção 3)
+blocking: false
 gap_detected: false
 ```
 
@@ -42,9 +43,10 @@ Justificativa:
 - **`docker-specialist`** — keyword `docker|dockerizar|container|compose` na demand + scope `infra` (adiciona docker + monorepo) + paths `**/Dockerfile*` e `**/docker-compose*.yml` (múltiplos matches)
 - **`nestjs-specialist`** — path `apps/api/Dockerfile` casa path_glob `apps/api/**`
 - **`nextjs-specialist`** — path `apps/web/Dockerfile` casa path_glob `apps/web/**`
-- **`test-writer`** — scope `feat` (interpretado de "dockerizar" = nova capacidade) adiciona `test-writer` (Seção 3); `doc-writer` é omitido aqui porque a atualização de docs (STACK.md, MONOREPO.md) é coberta pelo plan do `monorepo-specialist`, evitando dispatch redundante — heurística v1.0 do router agent
+- **`test-writer`** — scope `feat` (interpretado de "dockerizar" = nova capacidade) adiciona `test-writer` (Seção 3)
+- **`doc-writer`** — scope `feat` adiciona `doc-writer` (Seção 3 — matriz é source of truth, sem heurística implícita)
 - **Skip rules aplicadas:** nenhuma (docker-specialist justificado por scope infra + keyword; security-auditor sem keyword de segurança)
-- **`blocking: true`** — paths `apps/api/**` e `apps/web/**` em v1.0 são `blocking: false` por default; **`blocking: true`** reflete que demanda cruza múltiplos stacks (interpretado pelo router agent como critical)
+- **`blocking: false`** — match com a matriz atual (paths `apps/api/**` e `apps/web/**` são `blocking: false` em v1.0); blocking inferido por criticidade da demanda é G5 (P3, v1.1)
 
 ## Cenário E — correção de segurança (scoped security)
 
@@ -63,7 +65,7 @@ specialists:
   - nestjs-specialist     # path apps/api/**
   - security-auditor      # scope=security + keyword "vulnerab"
   - test-writer           # scope=fix (auditar vulnerab = corrigir)
-blocking: true
+blocking: false
 gap_detected: false
 ```
 
@@ -78,7 +80,7 @@ Justificativa:
   - `nextjs-specialist` SKIPPED — paths todos em apps/api/** (backend puro) + nenhum keyword nextjs/react/tailwind
   - `refactorer` SKIPPED — paths não estão em tooling/scripts/** nem .agents/** + nenhum keyword refactor + scope != refactor
   - `doc-writer` SKIPPED — scope != feat (não adiciona doc-writer via scope); paths não são docs/**
-- **`blocking: true`** — paths em `apps/api/**` (v1.0: `blocking: false`); `blocking: true` aqui é inferido pela criticidade da demanda (security audit) — heurística v1.0 ainda em refinement (G5)
+- **`blocking: false`** — match com a matriz atual (paths em `apps/api/**` são `blocking: false` em v1.0); blocking inferido por criticidade é G5 (P3, v1.1)
 
 ## Cenário F — refactor simples (tooling)
 
