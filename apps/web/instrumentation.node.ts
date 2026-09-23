@@ -14,7 +14,7 @@
 //   - Não usa PinoInstrumentation (apps/web não usa Pino; usa console + Next).
 //   - Não tem `initTracing()` explícito: a inicialização acontece como
 //     side-effect na importação do módulo, pois é o contrato esperado pelo
-//     `await import('./instrumentation.node.js')` em instrumentation.ts.
+//     `await import('./instrumentation.node')` em instrumentation.ts.
 
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
