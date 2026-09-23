@@ -54,3 +54,24 @@ jobs:
             apps/api/coverage/
             apps/web/coverage/
           retention-days: 30
+  # pt-BR: smoke job que builda os Dockerfiles prod completos. Defesa em profundidade
+  # contra bugs latentes tipo `COPY --from=builder <path>` relativo (que só aparece
+  # quando o cache do build local difere do cache CI). Roda só em PR para não
+  # inflar push em feat/** (custo ~5min em cold cache).
+  docker-build-prod:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: docker/setup-buildx-action@v3
+      - name: Build api prod (smoke)
+        run: docker buildx build -f apps/api/Dockerfile --target prod -t projeto-api:smoke --load .
+      - name: Build web prod (smoke)
+        run: docker buildx build -f apps/web/Dockerfile --target prod -t projeto-web:smoke --load .
