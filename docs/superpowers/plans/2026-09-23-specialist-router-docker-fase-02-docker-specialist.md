@@ -33,7 +33,7 @@ git commit -m "feat(agents): add docker-specialist agent + memory v1.0"
 - [ ] **Step 4: Validar via specialist-router**
 ```bash
 echo "dockerizar apps/api e apps/web" > /tmp/d.txt
-echo "apps/api/** apps/web/**" > /tmp/p.txt
+printf 'apps/api/**\napps/web/**\n' > /tmp/p.txt
 pnpm specialist:route --demand=/tmp/d.txt --paths=/tmp/p.txt --matrix=.agents/specs/conventions/specialist-routing.md
 ```
 Esperado: YAML com `specialists: [docker-specialist, monorepo-specialist]` (validação end-to-end da Fase 1).

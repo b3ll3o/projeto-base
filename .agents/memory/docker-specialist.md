@@ -15,7 +15,7 @@ Agent criado durante rollout do specialist-router (Fase 2 Task 9). Demanda atual
 **Paths relevantes:**
 
 - Spec: `docs/superpowers/specs/2026-09-23-specialist-router-docker-design.md`
-- Plan: `docs/superpowers/plans/2026-09-23-specialist-router-docker-plan.md` + 3 fases
+- Plan: `docs/superpowers/plans/2026-09-23-specialist-router-docker-plan.md` (master) + Fase 2 (`2026-09-23-specialist-router-docker-fase-02-docker-specialist.md`)
 - Skill: `.agents/skills/docker/SKILL.md` (a ser criada na Task 10)
 - Demanda ativa: dockerização `apps/api` + `apps/web`
 

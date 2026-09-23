@@ -62,32 +62,38 @@ const parseScopes = (s: string) =>
     .filter(Boolean);
 
 // pt-BR: matriz §4 descreve skip_if em texto; codificamos cada condição
-// programaticamente para comportamento determinístico.
+// programaticamente para comportamento determinístico. Termos são
+// substring-match (sem `\b`) para casar compostos PT ("dockerizar",
+// "containerização", "simplificação", "limpeza") e EN ("dockerized",
+// "containers", "authentication", "modular"). Bug fix: word-boundary
+// `\b(docker|container|compose)\b` falhava em "dockerizar" (o `i`
+// pós-"docker" é word char) e a classifier avaliava `!true` → `false`
+// → skip aplicado, descartando docker-specialist indevidamente.
 const SKIP_RULES: Record<string, (i: ClassifyInput) => boolean> = {
   'nestjs-specialist': ({ paths, demand }) =>
     paths.length > 0 &&
     paths.every((p) => p.startsWith('apps/web/')) &&
     !paths.some((p) => p.startsWith('apps/api/')) &&
-    !/\b(nestjs|fastify|prisma|controller|module)\b/i.test(demand),
+    !/(nestjs|fastify|prisma|controller|module)/i.test(demand),
   'nextjs-specialist': ({ paths, demand }) =>
     paths.length > 0 &&
     paths.every((p) => p.startsWith('apps/api/')) &&
     !paths.some((p) => p.startsWith('apps/web/')) &&
-    !/\b(nextjs|react|tailwind|rsc)\b/i.test(demand),
+    !/(nextjs|react|tailwind|rsc)/i.test(demand),
   'docker-specialist': ({ paths, demand, scope }) =>
     !parseScopes(scope).includes('infra') &&
-    !/\b(docker|container|compose)\b/i.test(demand) &&
+    !/(docker|container|compose)/i.test(demand) &&
     !paths.some((p) => /Dockerfile|docker-compose|\.dockerignore/.test(p)),
   'security-auditor': ({ demand, scope }) =>
     !parseScopes(scope).includes('security') &&
-    !/seguran[çc]a|vulnerab|owasp|secrets?|cve|exploit|\b(auth|jwt)\b/i.test(demand),
+    !/seguran[çc]a|vulnerab|owasp|secrets?|cve|exploit|auth|jwt/i.test(demand),
   refactorer: ({ paths, demand, scope }) =>
     !parseScopes(scope).includes('refactor') &&
     !paths.some(
       (p) =>
         p.startsWith('tooling/scripts/') || p.startsWith('.agents/') || p.includes('/.agents/'),
     ) &&
-    !/\b(refactor|simplificar|simplify|dry|limpar|cleanup)\b/i.test(demand),
+    !/(refactor|simplificar|simplify|dry|limpar|cleanup)/i.test(demand),
 };
 const shouldSkip = (sp: string, i: ClassifyInput) => SKIP_RULES[sp]?.(i) ?? false;
 

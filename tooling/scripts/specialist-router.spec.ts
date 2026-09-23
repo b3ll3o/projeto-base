@@ -276,6 +276,38 @@ describe('classify', () => {
     expect(r.specialists).not.toContain('nestjs-specialist');
     expect(r.specialists).toContain('nextjs-specialist');
   });
+
+  it('dispatcha docker-specialist para "dockerizar apps/api" (compound PT)', () => {
+    // pt-BR: regressão do bug I1 — o skip_rule usava `\b(docker|...)\b`
+    // que falhava em "dockerizar" (o `i` pós-"docker" é word char).
+    // Sem scope=infra e sem Dockerfile nos paths, o skip_rule agora
+    // usa substring `(docker|container|compose)` → regex matches →
+    // skip NÃO dispara → docker-specialist dispatchado.
+    const r = classify(
+      {
+        demand: 'dockerizar apps/api',
+        paths: ['apps/api/**'],
+        scope: 'feat',
+      },
+      matrix,
+    );
+    expect(r.specialists).toContain('docker-specialist');
+  });
+
+  it('dispatcha docker-specialist para "containerização" (compound PT)', () => {
+    // pt-BR: segunda regressão do mesmo bug — "containerização" começa
+    // com "container" + "i" (word char); sem o substring-match o
+    // skip_rule descartaria docker-specialist indevidamente.
+    const r = classify(
+      {
+        demand: 'containerização do postgres',
+        paths: [],
+        scope: 'infra',
+      },
+      matrix,
+    );
+    expect(r.specialists).toContain('docker-specialist');
+  });
 });
 
 describe('loadMatrix', () => {
