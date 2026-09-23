@@ -4,7 +4,7 @@
 
 **Goal:** Ship a `archify flow` CLI subcommand + git `pre-push` hook that auto-generates a Workflow diagram artifact (HTML + JSON) from a git range and version it in `docs/flows/` of the feature branch.
 
-**Architecture:** Thin orchestrator CLI delegates to existing `validate` and `deliver` subcommands. Hook is plain Node, no deps. Schema emitted at v2 by default, v1 via `--schema=1`. Idempotent, full-regen, never blocks push.
+**Architecture:** Thin orchestrator CLI delegates to existing `validate` and `deliver` subcommands. Hook is plain Node, no deps. Schema emitted at v1 (matches existing `examples/*.workflow.json`); the schema enum accepts both v1 and v2 so no dual-mode logic is needed. Idempotent, full-regen, never blocks push.
 
 **Tech Stack:** Node.js `^22.19.0 || >=24.0.0`, vanilla JavaScript (ESM), AJV for schema validation (already in archify), `node:child_process` for git invocation, `node:fs/promises` for I/O. No new runtime dependencies.
 
@@ -484,17 +484,29 @@ const baseInputs = () => ({
   commits: [{sha: 'abcdef', subject: 'feat: x', body: ''}],
   decisions: [],
   validations: [],
-  schemaVersion: 2,
 });
 
-test('builds spec with start, modify, decide, end', () => {
+test('builds spec with modify and decide nodes; no synthetic start/end', () => {
   const spec = buildSpec(baseInputs());
-  const lanes = spec.nodes.map(n => n.lane).filter(Boolean);
-  assert.ok(lanes.includes('Modify'));
-  assert.ok(lanes.includes('Decide'));
-  const ids = spec.nodes.map(n => n.id);
-  assert.ok(ids.includes('start'));
-  assert.ok(ids.includes('end'));
+  const lanes = new Set(spec.nodes.map(n => n.lane).filter(Boolean));
+  assert.ok(lanes.has('modify'));
+  assert.ok(lanes.has('decide'));
+  const ids = new Set(spec.nodes.map(n => n.id));
+  assert.ok(!ids.has('start'));
+  assert.ok(!ids.has('end'));
+});
+
+test('every node has lane id, col [0,5], type from enum, label, no description', () => {
+  const spec = buildSpec(baseInputs());
+  const LANE_IDS = new Set(['modify', 'decide', 'validate']);
+  const TYPE_ENUM = new Set(['frontend', 'backend', 'database', 'cloud', 'security', 'messagebus', 'external']);
+  for (const n of spec.nodes) {
+    assert.ok(LANE_IDS.has(n.lane), `node ${n.id} has invalid lane ${n.lane}`);
+    assert.ok(Number.isInteger(n.col) && n.col >= 0 && n.col <= 5, `node ${n.id} col out of range`);
+    assert.ok(TYPE_ENUM.has(n.type), `node ${n.id} has invalid type ${n.type}`);
+    assert.ok(typeof n.label === 'string' && n.label.length > 0, `node ${n.id} empty label`);
+    assert.equal(n.description, undefined, `node ${n.id} has forbidden description field`);
+  }
 });
 
 test('collapses commits to summary node when > 10', () => {
@@ -502,41 +514,37 @@ test('collapses commits to summary node when > 10', () => {
     sha: `sha${i}`, subject: `commit ${i}`, body: '',
   }));
   const spec = buildSpec({...baseInputs(), commits});
-  const decideNodes = spec.nodes.filter(n => n.lane === 'Decide');
+  const decideNodes = spec.nodes.filter(n => n.lane === 'decide');
   assert.equal(decideNodes.length, 1);
   assert.match(decideNodes[0].label, /^11 commits/);
-  assert.ok(decideNodes[0].description.includes('sha0'));
-  assert.ok(decideNodes[0].description.includes('sha10'));
+  assert.ok(decideNodes[0].sublabel.includes('sha0'));
+  assert.ok(decideNodes[0].sublabel.includes('sha10'));
 });
 
 test('appends explicit decisions after commit nodes', () => {
   const decisions = [{title: 'Rationale: chose lazy', body: 'because...'}];
   const spec = buildSpec({...baseInputs(), decisions});
-  const decideNodes = spec.nodes.filter(n => n.lane === 'Decide');
+  const decideNodes = spec.nodes.filter(n => n.lane === 'decide');
   assert.ok(decideNodes.some(n => n.label.includes('chose lazy')));
 });
 
 test('skips empty Modify lane when no files', () => {
   const spec = buildSpec({...baseInputs(), files: []});
-  const ids = spec.nodes.filter(n => n.lane === 'Modify').map(n => n.id);
+  const ids = spec.nodes.filter(n => n.lane === 'modify').map(n => n.id);
   assert.equal(ids.length, 0);
-  // still has start and end
-  assert.ok(spec.nodes.some(n => n.id === 'start'));
-  assert.ok(spec.nodes.some(n => n.id === 'end'));
 });
 
-test('emits schema_version 2 by default', () => {
+test('emits schema_version 1 with object lanes', () => {
   const spec = buildSpec(baseInputs());
-  assert.equal(spec.schema_version, 2);
-  assert.equal(spec.diagram_type, 'workflow');
-  assert.ok(Array.isArray(spec.semanticChecks.allowedRoots));
-  assert.ok(spec.semanticChecks.allowedRoots.includes('start'));
-});
-
-test('emits schema_version 1 when --schema=1', () => {
-  const spec = buildSpec({...baseInputs(), schemaVersion: 1});
   assert.equal(spec.schema_version, 1);
-  // semanticChecks is v2-only
+  assert.equal(spec.diagram_type, 'workflow');
+  assert.ok(Array.isArray(spec.lanes));
+  for (const lane of spec.lanes) {
+    assert.equal(typeof lane.id, 'string');
+    assert.equal(typeof lane.label, 'string');
+  }
+  // forbidden root keys
+  assert.equal(spec._flow_source, undefined);
   assert.equal(spec.semanticChecks, undefined);
 });
 
@@ -548,13 +556,13 @@ test('binary file gets a single Binary label', () => {
   assert.match(node.label, /Binary changes/);
 });
 
-test('validates axes are wired start → modify → decide → validate → end', () => {
+test('mainPath is the linear sequence of all nodes (no start/end padding)', () => {
   const validations = [{name: 'lint', status: 'passed', summary: 'ok'}];
   const spec = buildSpec({...baseInputs(), validations});
-  assert.ok(spec.edges.some(e => e.from === 'start'));
-  assert.ok(spec.edges.some(e => e.to === 'end'));
-  assert.deepEqual(spec.mainPath[0], 'start');
-  assert.equal(spec.mainPath[spec.mainPath.length - 1], 'end');
+  const expected = spec.nodes.map(n => n.id);
+  assert.deepEqual(spec.mainPath, expected);
+  // mainPath MUST have length >= 2 per schema
+  assert.ok(spec.mainPath.length >= 2);
 });
 
 test('honors since-message filter (only matching commits appear)', () => {
@@ -565,9 +573,15 @@ test('honors since-message filter (only matching commits appear)', () => {
   const spec = buildSpec({
     ...baseInputs(), commits, sinceMessage: 'feat:*',
   });
-  const decideNodes = spec.nodes.filter(n => n.lane === 'Decide');
+  const decideNodes = spec.nodes.filter(n => n.lane === 'decide');
   assert.equal(decideNodes.length, 1);
   assert.match(decideNodes[0].label, /feat: include/);
+});
+
+test('since-message with literal ? does not throw', () => {
+  // regression: globToRegex('?') previously threw SyntaxError: Nothing to repeat
+  const commits = [{sha: 'a', subject: 'feat: ok', body: ''}];
+  assert.doesNotThrow(() => buildSpec({...baseInputs(), commits, sinceMessage: '?'}));
 });
 ```
 
@@ -608,8 +622,9 @@ Replace `bin/flow/builder-spec.mjs`:
 import {idFor} from './ids.mjs';
 
 function globToRegex(glob) {
-  // minimal glob: '*' → '.*'
-  const escaped = glob.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+  // minimal glob: '*' → '.*'; escape other regex metachars INCLUDING '?'
+  // (otherwise globToRegex('?') throws SyntaxError: Nothing to repeat)
+  const escaped = glob.replace(/[.+^${}()|[\]\\?]/g, '\\$&').replace(/\*/g, '.*');
   return new RegExp(`^${escaped}$`);
 }
 
@@ -618,110 +633,140 @@ function commitMatches(commit, sinceMessage) {
   return globToRegex(sinceMessage).test(commit.subject);
 }
 
-function buildModifyNode(file) {
+// Lane IDs and their visual type (per spec §4.3)
+const LANES = [
+  {id: 'modify',   label: 'Modify',   type: 'frontend'},
+  {id: 'decide',   label: 'Decide',   type: 'security'},
+  {id: 'validate', label: 'Validate', type: 'backend'},
+];
+const LANE_TYPE = Object.fromEntries(LANES.map(l => [l.id, l.type]));
+const COL_MAX = 5;
+
+function colFor(indexInLane) {
+  return Math.min(indexInLane, COL_MAX);
+}
+
+function buildModifyNode(file, indexInLane) {
   const id = idFor({kind: 'modify', key: file.path, suffix: file.hunks.map(h => h.lines.join('-')).join(',')});
   if (file.binary) {
-    return {id, lane: 'Modify', type: 'default', label: `${file.path} (Binary changes)`};
+    return {
+      id,
+      lane: 'modify',
+      col: colFor(indexInLane),
+      type: LANE_TYPE.modify,
+      label: `${file.path} (Binary changes)`,
+    };
   }
   const adds = file.hunks.reduce((s, h) => s + h.add, 0);
   const dels = file.hunks.reduce((s, h) => s + h.del, 0);
   const ranges = file.hunks.map(h => `lines ${h.lines[0]}-${h.lines[1]}`).join(', ');
   return {
     id,
-    lane: 'Modify',
-    type: 'default',
+    lane: 'modify',
+    col: colFor(indexInLane),
+    type: LANE_TYPE.modify,
     label: `${file.path} (+${adds} -${dels})`,
-    description: ranges ? `hunks at ${ranges}` : '',
+    sublabel: ranges ? `hunks at ${ranges}` : '',
   };
 }
 
-function buildDecideNodeFromCommit(c) {
+function buildDecideNodeFromCommit(c, indexInLane) {
   return {
     id: idFor({kind: 'decide', key: c.subject, suffix: c.sha}),
-    lane: 'Decide',
-    type: 'default',
+    lane: 'decide',
+    col: colFor(indexInLane),
+    type: LANE_TYPE.decide,
     label: `${c.sha.slice(0, 7)} ${c.subject}`,
-    description: c.body || '',
+    sublabel: c.body || '',
   };
 }
 
-function buildCollapsedDecideNode(commits) {
+function buildCollapsedDecideNode(commits, indexInLane) {
   const shas = commits.map(c => c.sha).join(' ');
   return {
     id: idFor({kind: 'decide', key: 'collapsed', suffix: shas}),
-    lane: 'Decide',
-    type: 'default',
+    lane: 'decide',
+    col: colFor(indexInLane),
+    type: LANE_TYPE.decide,
     label: `${commits.length} commits`,
-    description: `${commits[0].subject} … ${commits[commits.length - 1].subject} (${commits.map(c => c.sha.slice(0, 7)).join(' ')})`,
+    sublabel: `${commits[0].subject} … ${commits[commits.length - 1].subject} (${commits.map(c => c.sha.slice(0, 7)).join(' ')})`,
   };
 }
 
-function buildDecideNodeFromDecision(d) {
+function buildDecideNodeFromDecision(d, indexInLane) {
   return {
     id: idFor({kind: 'decide', key: d.title, suffix: 'explicit'}),
-    lane: 'Decide',
-    type: 'default',
+    lane: 'decide',
+    col: colFor(indexInLane),
+    type: LANE_TYPE.decide,
     label: d.title,
-    description: d.body,
+    sublabel: d.body,
   };
 }
 
-function buildValidateNode(v) {
+function buildValidateNode(v, indexInLane) {
   return {
     id: idFor({kind: 'validate', key: v.name, suffix: v.status}),
-    lane: 'Validate',
-    type: 'default',
+    lane: 'validate',
+    col: colFor(indexInLane),
+    type: LANE_TYPE.validate,
     label: `${v.name}: ${v.status}`,
-    description: v.summary || '',
+    sublabel: v.summary || '',
   };
 }
 
-function buildInternalValidateNode(result) {
+function buildInternalValidateNode(result, indexInLane) {
   return {
     id: idFor({kind: 'validate', key: 'archify-validate', suffix: result.status}),
-    lane: 'Validate',
-    type: 'default',
+    lane: 'validate',
+    col: colFor(indexInLane),
+    type: LANE_TYPE.validate,
     label: `archify validate ${result.status}`,
-    description: result.summary,
+    sublabel: result.summary,
   };
 }
 
 function chainEdges(nodes) {
+  // Linear: connect each node to the next; with 1 node, self-loop.
   const edges = [];
-  let prev = 'start';
-  for (const n of nodes) {
-    if (n.id === 'start' || n.id === 'end') continue;
-    edges.push({from: prev, to: n.id});
-    prev = n.id;
+  if (nodes.length === 0) return edges;
+  if (nodes.length === 1) {
+    edges.push({from: nodes[0].id, to: nodes[0].id});
+    return edges;
   }
-  edges.push({from: prev, to: 'end'});
+  for (let i = 0; i < nodes.length - 1; i++) {
+    edges.push({from: nodes[i].id, to: nodes[i + 1].id});
+  }
   return edges;
 }
 
 export function buildSpec(inputs) {
   const {
     range, baseSha, files, commits, decisions = [],
-    validations = [], schemaVersion = 2, sinceMessage,
+    validations = [], sinceMessage,
   } = inputs;
 
   const filteredCommits = commits.filter(c => commitMatches(c, sinceMessage));
 
+  // Build per-lane node arrays with index-in-lane for col assignment
   const modifyNodes = files
     .filter(f => !f.binary || files.length === 1)
-    .map(buildModifyNode)
-    .concat(files.filter(f => f.binary && files.length !== 1).map(f => buildModifyNode(f)));
-  // the above ensures binary files always emit a node but won't double-count when 1 file only
+    .map((f, i) => buildModifyNode(f, i))
+    .concat(
+      files.filter(f => f.binary && files.length !== 1).map((f) => buildModifyNode(f, modifyNodes.length))
+    );
 
   let decideNodes;
   if (filteredCommits.length > 10) {
-    decideNodes = [buildCollapsedDecideNode(filteredCommits)];
+    decideNodes = [buildCollapsedDecideNode(filteredCommits, 0)];
   } else {
-    decideNodes = filteredCommits.map(buildDecideNodeFromCommit);
+    decideNodes = filteredCommits.map((c, i) => buildDecideNodeFromCommit(c, i));
   }
-  const explicitDecideNodes = decisions.map(buildDecideNodeFromDecision);
+  const explicitStart = decideNodes.length;
+  const explicitDecideNodes = decisions.map((d, i) => buildDecideNodeFromDecision(d, explicitStart + i));
   decideNodes = decideNodes.concat(explicitDecideNodes);
 
-  const validateNodes = validations.map(buildValidateNode);
+  const validateNodes = validations.map((v, i) => buildValidateNode(v, i));
 
   const ordered = [
     ...modifyNodes,
@@ -729,33 +774,26 @@ export function buildSpec(inputs) {
     ...validateNodes,
   ];
 
-  const nodes = [{id: 'start', type: 'start'}, ...ordered, {id: 'end', type: 'terminal'}];
+  if (ordered.length === 0) {
+    throw new Error('buildSpec: no nodes to emit (no files, commits, decisions, or validations)');
+  }
 
-  const edges = chainEdges(ordered);
-  const mainPath = ['start', ...ordered.map(n => n.id), 'end'];
-
-  const meta = {
-    title: `Flow for ${range}`,
-    animation: 'trace',
-  };
+  const nodes = ordered;
+  const edges = chainEdges(nodes);
+  const mainPath = nodes.map(n => n.id);
 
   const spec = {
-    schema_version: schemaVersion,
+    schema_version: 1,
     diagram_type: 'workflow',
-    meta,
-    lanes: ['Modify', 'Decide', 'Validate'],
+    meta: {
+      title: `Flow for ${range}`,
+      animation: 'trace',
+    },
+    lanes: LANES,
     nodes,
     edges,
     mainPath,
   };
-
-  if (schemaVersion >= 2) {
-    spec.semanticChecks = {
-      allowedRoots: ['start'],
-      allowedTerminals: ['end'],
-    };
-    spec._flow_source = {range, baseSha, generated_at: 'will-be-stamped-by-runner'};
-  }
 
   return spec;
 }
@@ -801,13 +839,14 @@ test('runFlow writes workflow.json + workflow.html and returns receipt', async (
   // simpler: rely on actual mini-repo inside test/flow/fixtures/mini-repo (Task 8 creates it)
   const range = `${process.cwd()}/test/flow/fixtures/mini-repo/main...feat`;
   const receipt = await runFlow({range, out: outDir, quality: 'standard',
-    schemaVersion: 2, decisionMode: 'auto', archifyBin: `node ${process.cwd()}/bin/archify.mjs`});
+    archifyBin: `node ${process.cwd()}/bin/archify.mjs`});
 
   assert.ok(receipt.jsonPath.endsWith('workflow.json'));
   assert.ok(receipt.htmlPath.endsWith('workflow.html'));
   const json = JSON.parse(await fs.readFile(receipt.jsonPath, 'utf8'));
   assert.equal(json.diagram_type, 'workflow');
-  assert.ok(json.nodes.length >= 3); // start + at least one modify + end
+  assert.ok(json.nodes.length >= 2); // at least one modify + decide
+  assert.ok(receipt.sourcePath.endsWith('_flow_source.json'));
 
   await fs.rm(tmpRoot, {recursive: true, force: true});
 });
@@ -876,7 +915,7 @@ async function loadValidations(file) {
 
 export async function runFlow(opts) {
   const {
-    range, out, quality = 'standard', schemaVersion = 2,
+    range, out, quality = 'standard',
     decisions: decisionsFile, validations: validationsFile,
     archifyBin, sinceMessage,
   } = opts;
@@ -889,15 +928,19 @@ export async function runFlow(opts) {
   const validations = validationsFile ? await loadValidations(validationsFile) : [];
 
   const spec = buildSpec({
-    range, baseSha, files, commits, decisions, validations,
-    schemaVersion, sinceMessage,
+    range, baseSha, files, commits, decisions, validations, sinceMessage,
   });
-  // stamp generated_at deterministically AFTER build so the JSON is stable for hash:
-  if (spec._flow_source) spec._flow_source.generated_at = stamp;
 
   await fs.mkdir(out, {recursive: true});
   const jsonPath = path.join(out, 'workflow.json');
   await fs.writeFile(jsonPath, JSON.stringify(spec, null, 2), 'utf8');
+
+  // Provenance sidecar (not part of the schema-validated workflow JSON).
+  // Full-regen contract: regenerated every run, never validated by `archify validate`.
+  const sourcePath = path.join(out, '_flow_source.json');
+  await fs.writeFile(sourcePath, JSON.stringify({
+    range, baseSha, generated_at: stamp,
+  }, null, 2), 'utf8');
 
   // Reuse existing archify CLI for validate + deliver
   const cwd = process.cwd();
@@ -920,7 +963,7 @@ export async function runFlow(opts) {
     `--quality=${quality}`, '--json',
   ], {encoding: 'utf8', cwd});
 
-  return {jsonPath, htmlPath, validateReceipt, range, stamp, schemaVersion};
+  return {jsonPath, htmlPath, validateReceipt, range, stamp, sourcePath};
 }
 ```
 
@@ -1127,7 +1170,6 @@ export async function runCLI(args) {
       range: opts['git-range'],
       out,
       quality: opts.quality || 'standard',
-      schemaVersion: opts.schema === '1' ? 1 : 2,
       decisions: opts.decisions,
       validations: opts.validations,
       sinceMessage: opts['since-message'],
@@ -1187,7 +1229,6 @@ Options:
   --decisions <md-file>     Markdown file with ## decisions appended to Decide lane.
   --validations <json-file> JSON array of {name,status,summary} nodes appended to Validate lane.
   --quality <level>         standard | showcase (default: standard).
-  --schema <1|2>            Schema version (default: 2).
   --strict                  Exit 5 if archify validate fails or any warning.
   --json                    Emit machine-readable receipt.
   --help                    Print this help.
@@ -1289,14 +1330,15 @@ git commit -m "test(flow): end-to-end CLI coverage"
 
 ---
 
-## Task 11: Cross-version tests (v1 + v2)
+## Task 11: Schema conformance integration test (real `archify validate`)
 
 **Files:**
-- Create: `test/flow/schema-versions.test.mjs`
+
+- Create: `test/flow/schema-conformance.test.mjs`
 
 - [ ] **Step 1: Write the test**
 
-`test/flow/schema-versions.test.mjs`:
+`test/flow/schema-conformance.test.mjs`:
 
 ```js
 import {test} from 'node:test';
@@ -1305,46 +1347,62 @@ import {execFileSync} from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import {ensureFixture} from './fixtures/mini-repo/bootstrap.mjs';
+import {buildSpec} from '../../bin/flow/builder-spec.mjs';
+import wfSchema from '../../schemas/workflow.schema.json' with {type: 'json'};
+import Ajv from 'ajv';
 
-async function runSchema(flag) {
-  await ensureFixture();
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), `archify-${flag}-`));
-  const fixture = `${process.cwd()}/test/flow/fixtures/mini-repo`;
-  execFileSync('node', [
-    `${process.cwd()}/bin/archify.mjs`, 'flow',
-    `--git-range=${fixture}/main...feat`,
-    `--out=${tmp}`,
-    `--schema=${flag}`,
-  ], {encoding: 'utf8'});
-  const json = JSON.parse(await fs.readFile(path.join(tmp, 'workflow.json'), 'utf8'));
-  await fs.rm(tmp, {recursive: true, force: true});
-  return json;
-}
+const ajv = new Ajv({strict: false, allErrors: true});
+const validate = ajv.compile(wfSchema);
 
-test('default emits schema_version 2 with semanticChecks', async () => {
-  const json = await runSchema('2');
-  assert.equal(json.schema_version, 2);
-  assert.ok(json.semanticChecks);
+const inputs = () => ({
+  range: 'origin/main...HEAD',
+  baseSha: 'base',
+  files: [{path: 'src/x.ts', binary: false, renameFrom: null,
+           hunks: [{start: 1, add: 1, del: 0, lines: [1, 2]}]}],
+  commits: [{sha: 'abc1234', subject: 'feat: x', body: 'msg'}],
+  decisions: [],
+  validations: [],
 });
 
-test('--schema=1 emits schema_version 1 without semanticChecks', async () => {
-  const json = await runSchema('1');
-  assert.equal(json.schema_version, 1);
-  assert.equal(json.semanticChecks, undefined);
+test('buildSpec output passes schemas/workflow.schema.json (Ajv)', () => {
+  const ok = validate(buildSpec(inputs()));
+  assert.ok(ok, JSON.stringify(validate.errors, null, 2));
+});
+
+test('empty commits + decisions + validations throws (degenerate input)', () => {
+  assert.throws(() => buildSpec({...inputs(), files: [], commits: [], decisions: [], validations: []}));
+});
+
+test('1-commit-only range produces self-loop + mainPath length 2', () => {
+  const spec = buildSpec({...inputs(), files: [], commits: [{sha: 'a', subject: 's', body: ''}]});
+  assert.equal(spec.mainPath.length, 2);
+  assert.equal(spec.edges.length, 1);
+  assert.equal(spec.edges[0].from, spec.edges[0].to);
+  assert.ok(validate(spec));
+});
+
+test('output validates against real `archify validate workflow`', async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'archify-conf-'));
+  const jsonPath = path.join(tmp, 'workflow.json');
+  await fs.writeFile(jsonPath, JSON.stringify(buildSpec(inputs()), null, 2));
+  const out = execFileSync('node', [
+    `${process.cwd()}/bin/archify.mjs`, 'validate', 'workflow', jsonPath, '--json',
+  ], {encoding: 'utf8'});
+  const receipt = JSON.parse(out);
+  assert.equal(receipt.status, 'passed', JSON.stringify(receipt));
 });
 ```
 
 - [ ] **Step 2: Run test**
 
-Run: `node --test test/flow/schema-versions.test.mjs`
-Expected: 2 tests, both PASS.
+Run: `node --test test/flow/schema-conformance.test.mjs`
+Expected: 4 tests, all PASS.
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add test/flow/schema-versions.test.mjs
-git commit -m "test(flow): schema v1 + v2 cross-version compatibility"
+git add test/flow/schema-conformance.test.mjs
+git commit -m "test(flow): real-schema conformance via Ajv + archify validate"
 ```
 
 ---
@@ -1365,7 +1423,7 @@ node bin/archify.mjs flow \
   --out=/tmp/snap-out --json > test/flow/snapshots/flow-cli-receipt.json
 ```
 
-Inspect: `cat test/flow/snapshots/flow-cli-receipt.json`. Should be valid JSON with `jsonPath`, `htmlPath`, `validateReceipt`, `range`, `stamp`, `schemaVersion`. The `stamp` will differ between runs — re-capture after stabilizing it.
+Inspect: `cat test/flow/snapshots/flow-cli-receipt.json`. Should be valid JSON with `jsonPath`, `htmlPath`, `sourcePath`, `validateReceipt`, `range`, `stamp`. The `stamp` will differ between runs — re-capture after stabilizing it.
 
 - [ ] **Step 2: Make snapshot stable — strip non-deterministic fields**
 
