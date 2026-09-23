@@ -132,7 +132,7 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão da stack:** 1.2.0
+**Versão da stack:** 1.5.0
 
 ### Histórico de Versões
 
@@ -143,3 +143,4 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 | `1.2.0` | §8 — DDD/Hexagonal como paradigma arquitetural obrigatório (ADR-0001) |
 | `1.3.0` | Habilitador `ddd-hexagonal-validation` (skill de auditoria) + guardiões `stack-code-reviewer` + `doc-sync` em pre-commit/CI (proven em BC `users`) |
 | `1.4.0` | Habilitador `ci-defense-in-depth` (skill + convenção de defesa em 3 camadas) + workflows `ci-defense-mode` e `release-mode` automatizando auditoria de pipeline e bumps de versão |
+| `1.5.0` | Seção "Containerização" — Dockerfiles multi-stage (api+web), docker-compose (prod) + override dev (hot reload), healthchecks (`/api/v1/health` + `node http.get`), entrypoint com `prisma migrate deploy`, BuildKit cache, runtime non-root (`USER node`) |
