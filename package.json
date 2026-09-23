@@ -25,6 +25,7 @@
     "review:route": "cd tooling/scripts && pnpm review:route",
     "review:lint": "cd tooling/scripts && pnpm review:lint --matrix=../../.agents/specs/conventions/review-routing.md --agents=../../.agents/agents/",
     "specialist:route": "cd tooling/scripts && pnpm specialist:route",
+    "specialist:lint": "cd tooling/scripts && pnpm specialist:lint --matrix=../../.agents/specs/conventions/specialist-routing.md --agents=../../.agents/agents/",
     "tooling:test": "vitest run --root tooling/scripts",
     "format": "prettier --write \"**/*.{ts,tsx,json,yaml,yml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,json,yaml,yml}\"",
