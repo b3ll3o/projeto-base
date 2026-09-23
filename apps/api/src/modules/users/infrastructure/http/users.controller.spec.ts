@@ -31,10 +31,13 @@
 
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { BadRequestException } from '@nestjs/common';
+import type { Span } from '@opentelemetry/api';
+import { trace } from '@opentelemetry/api';
 import { UsersController } from './users.controller.js';
 import { CreateUserDto, CreateUserSchema, UpdateUserSchema } from './users.schemas.js';
 import { ZodValidationPipe } from '../../../../shared/infrastructure/http/zod-validation.pipe.js';
 import { AuditContextStore } from '../../../../shared/audit/shared/audit-context-store.js';
+import type { AuditContext } from '../../../../shared/audit/domain/audit-context.vo.js';
 import type { UserUseCases } from '../../application/user-use-cases.js';
 import type { AuditServicePort } from '../../../../shared/audit/application/audit-service.port.js';
 
@@ -411,6 +414,39 @@ describe('UsersController — handlers HTTP', () => {
       cursor: 'cur-1',
       limit: 5,
     });
+  });
+
+  it('AuditContext.correlationId vem do span ativo quando há traceId W3C (32 hex chars)', async () => {
+    // pt-BR: W3C traceId são exatamente 32 chars hex minúsculos. Spy em
+    // `trace.getSpan` (do módulo singleton OTel) faz o controller usar
+    // o traceId do span ativo em vez do Math.random legado (gap G-011).
+    // Verifica-se o correlationId que chega no AuditContextStore.run() —
+    // é o caminho end-to-end do correlationId dentro do AuditContext VO.
+    const fakeSpan = {
+      spanContext: () => ({
+        traceId: 'a'.repeat(32),
+        spanId: 'b'.repeat(16),
+        traceFlags: 0x01,
+      }),
+    } as unknown as Span;
+    const getSpanSpy = vi.spyOn(trace, 'getSpan').mockReturnValue(fakeSpan);
+    const runSpy = vi.spyOn(AuditContextStore, 'run');
+    useCases.criarUser.mockResolvedValue(fakeUserOutput);
+
+    try {
+      const input: CreateUserDto = { nome: 'João', email: 'joao@example.com' };
+      await ctrl.create(input, reply as never);
+
+      expect(runSpy).toHaveBeenCalledTimes(1);
+      const ctx = runSpy.mock.calls[0]?.[0] as AuditContext;
+      expect(ctx).toBeDefined();
+      expect(ctx.correlationId).toBe('a'.repeat(32));
+      expect(ctx.correlationId).toHaveLength(32);
+      expect(ctx.correlationId).toMatch(/^[0-9a-f]{32}$/);
+    } finally {
+      getSpanSpy.mockRestore();
+      runSpy.mockRestore();
+    }
   });
 });
 

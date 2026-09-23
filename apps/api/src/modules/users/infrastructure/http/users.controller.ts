@@ -38,6 +38,8 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import type { FastifyAdapter } from '@nestjs/platform-fastify';
+import { trace, context } from '@opentelemetry/api';
+import { randomUUID } from 'node:crypto';
 
 import { AUDIT_SERVICE_PORT } from '../../../../shared/audit/shared/audit.tokens.js';
 import { AuditContextStore } from '../../../../shared/audit/shared/audit-context-store.js';
@@ -254,13 +256,18 @@ export class UsersController {
   /**
    * pt-BR: monta o AuditContext a partir da request. `actorId` é null
    * por enquanto — Fase 8 decodificará o header Authorization (JWT)
-   * para popular o campo. `correlationId` é gerado localmente; Fase 8
-   * substituirá por X-Request-Id / OpenTelemetry trace-id.
+   * para popular o campo. `correlationId` é W3C-compliant quando há
+   * um span OTel ativo no contexto (32 chars hex minúsculos),
+   * correlacionando audit com traces no backend OTel. Fallback para
+   * `randomUUID()` mantém compat com testes e callers fora de uma
+   * span ativa — o VO AuditContext rejeita correlationId vazio.
    */
   private buildContext(): AuditContext {
+    const span = trace.getSpan(context.active());
+    const w3cTraceId = span?.spanContext().traceId;
     return new AuditContext({
       actorId: null,
-      correlationId: Math.random().toString(36).slice(2),
+      correlationId: w3cTraceId ?? randomUUID(),
       source: 'http',
       timestamp: new Date(),
     });

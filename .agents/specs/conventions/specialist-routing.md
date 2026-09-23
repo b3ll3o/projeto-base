@@ -1,9 +1,9 @@
 ---
 name: specialist-routing
-version: 1.1
+version: 1.2
 updated: 2026-09-23
 maintainer: specialist-router
-description: "Matriz canônica de roteamento de demanda — mapeia paths/keywords/scopes para 8 specialists. Source of truth para o classificador headless (tooling/scripts/specialist-router.ts) e para o lint da matriz. Atualizada por PR."
+description: "Matriz canônica de roteamento de demanda — mapeia paths/keywords/scopes para 9 specialists. Source of truth para o classificador headless (tooling/scripts/specialist-router.ts) e para o lint da matriz. Atualizada por PR."
 ---
 
 # Convenção: specialist-routing (matriz de roteamento de specialists)
@@ -84,6 +84,22 @@ path_globs:
   - pattern: "**/.dockerignore"
     specialists: [docker-specialist]
 
+  - pattern: "apps/api/**/telemetry/**"
+    specialists: [telemetry-specialist]
+    rationale: "Backend telemetry (OpenTelemetry SDK Node: tracing.ts, instrumentations NestJS/Fastify/Prisma/Pino, OTel Logs bridge)"
+
+  - pattern: "apps/web/**/instrumentation*"
+    specialists: [telemetry-specialist]
+    rationale: "Next.js OpenTelemetry instrumentation hook (instrumentation.ts / instrumentation-client.ts / instrumentation-node.ts / instrumentation.edge.ts)"
+
+  - pattern: "apps/web/**/web-vitals*"
+    specialists: [telemetry-specialist]
+    rationale: "Browser Real User Monitoring (LCP, CLS, INP, FID, TTFB) via web-vitals reporter"
+
+  - pattern: "infra/otelcol/**"
+    specialists: [telemetry-specialist]
+    rationale: "OpenTelemetry Collector config (receivers, processors, exporters, pipelines)"
+
   - pattern: ".github/workflows/**"
     specialists: [monorepo-specialist, security-auditor]
 
@@ -147,6 +163,10 @@ demand_keywords:
   - regex: "(?i)\\bdoc(umenta[çc][ãa]o)?\\b|readme|adr|spec(ification)?"
     specialists: [doc-writer]
     rationale: "Demanda sobre documentação"
+
+  - regex: "(?i)telemetry|tracing|opentelemetry|\\botel\\b|spans?"
+    specialists: [telemetry-specialist]
+    rationale: "Demanda sobre telemetria/observabilidade (OpenTelemetry SDK, exporters, sampling, propagação W3C, web-vitals, OTel Collector)"
 ```
 
 ## 3. DEMAND SCOPES
@@ -260,5 +280,6 @@ derived_tags:
 
 | Versão | Data | Mudança |
 |--------|------|---------|
+| 1.2 | 2026-09-23 | Bump menor — adiciona `telemetry-specialist` transversal (cross-stack: backend + frontend + docker). 4 path_globs novos (`apps/api/**/telemetry/**`, `apps/web/**/instrumentation*`, `apps/web/**/web-vitals*`, `infra/otelcol/**`) + 1 demand_keyword novo (`telemetry\|tracing\|opentelemetry\|\botel\b\|spans?`). Total: 9 specialists; 29 path_globs; 9 demand_keywords. |
 | 1.1 | 2026-09-23 | Adiciona `derived_tags` (prisma_binary + compose_with_healthcheck). Atualiza `classify()` para retornar `derived_tags` no resultado. Atualiza skill docker com checklist healthcheck. B22 polish. |
 | 1.0 | 2026-09-23 | Lançamento inicial: 8 specialists (monorepo, nestjs, nextjs, docker, security-auditor, test-writer, doc-writer, refactorer); 21 path_globs; 8 demand_keywords; 8 demand_scopes; 5 skip_rules; `monorepo-specialist` always-on. Source of truth para classificador headless e lint. |

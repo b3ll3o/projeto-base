@@ -85,11 +85,16 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 | **monorepo-specialist**| [`.agents/agents/monorepo-specialist.md`](./.agents/agents/monorepo-specialist.md)| [memory](../.agents/memory/monorepo-specialist.md)        | Arquiteto de monorepo (workspaces, pipelines) | Adicionar/remover/mover apps ou packages, configurar turbo  |
 | **nestjs-specialist**  | [`.agents/agents/nestjs-specialist.md`](./.agents/agents/nestjs-specialist.md)    | [memory](../.agents/memory/nestjs-specialist.md)          | Arquiteto backend NestJS                    | Criar/refatorar módulo NestJS, DI, validação, Swagger       |
 | **nextjs-specialist**  | [`.agents/agents/nextjs-specialist.md`](./.agents/agents/nextjs-specialist.md)    | [memory](../.agents/memory/nextjs-specialist.md)          | Arquiteto frontend Next.js                  | Criar rota/página, decidir RSC vs. Client, Server Actions    |
+| **telemetry-specialist**| [`.agents/agents/telemetry-specialist.md`](./.agents/agents/telemetry-specialist.md)| [memory](../.agents/memory/telemetry-specialist.md)        | Arquiteto de telemetria/observabilidade cross-stack (OpenTelemetry SDK init, exporters OTLP, propagação W3C, sampling, web-vitals, collector) | Decisões de instrumentação em backend/frontend/infra; correlação Pino↔OTel; bridge `request.id` → W3C `traceparent`; config OTel Collector Compose |
 
 > **Lens DDD/Hexagonal (a partir de v1.2.0, com adoção do ADR-0001):** ao criar/refatorar módulo NestJS,
 > `nestjs-specialist` aplica a lens DDD/Hexagonal — validar boundary `domain/application/infrastructure`
 > e audit fields obrigatórios. A mesma lens é parte da atuação do `stack-code-reviewer` (D11) em pre-commit
 > (Husky) e em CI. Ver [`.agents/specs/conventions/estrutura-e-versionamento.md`](./.agents/specs/conventions/estrutura-e-versionamento.md).
+>
+> **State-Aware Planning (camada 0 do pre-planner, a partir de v1.8.0):** convenção
+> [`.agents/specs/conventions/state-aware-planning.md`](./.agents/specs/conventions/state-aware-planning.md)
+> obriga gerar `state-snapshot-<ts>.md` ANTES de planejar. Alimenta o `specialist-router` (camada 1).
 
 ---
 
@@ -146,6 +151,7 @@ Workflows genéricos prontos para uso estão em [`.agents/WORKFLOWS.md`](./.agen
 | `monorepo-change`    | "adicionar app/package"| monorepo-specialist → code-reviewer                      |
 | `release-mode`       | "preparar release / bumpar versão" | doc-writer → code-reviewer → task-manager    |
 | `ci-defense-mode`    | "blindar CI / auditar pipeline" | monorepo-specialist → ci-defense-in-depth → code-reviewer |
+| `state-aware-planning` | "planejar / state-aware / snapshot antes de planejar" (v1.8.0+) | state-aware-planning (skill) → specialist-router (camada 1; opcional) |
 | `retrospective-mode` | "capturar aprendizados / post-mortem" | explorer → retrospective-capture → doc-writer (+ task-manager em paralelo) |
 
 ---
@@ -166,6 +172,7 @@ As convenções estão detalhadas em arquivos próprios sob [`.agents/specs/conv
 | Release Automático    | [`post-merge-release.md`](./.agents/specs/conventions/post-merge-release.md) | Auto-tagging `vX.Y.Z` em main via `.github/workflows/release-template.yml` |
 | CI Defense in Depth   | [`ci-defense-in-depth.md`](./.agents/specs/conventions/ci-defense-in-depth.md) | 3 camadas: pre-push local + preflight CI + quality CI gated |
 | Retrospective Capture | [`retrospective-capture.md`](./.agents/specs/conventions/retrospective-capture.md) | Captura estruturada de aprendizados pós-atividade (T1/T2/T3 + threshold confidence ≥ 70) |
+| State-Aware Planning (v1.8.0+) | [`state-aware-planning.md`](./.agents/specs/conventions/state-aware-planning.md) | Camada 0 do pre-planner — obriga gerar `state-snapshot-<ts>.md` antes de planejar (gap analysis AS-IS→TO-BE); alimenta `specialist-router` camada 1 |
 
 - **Pre-push obrigatório:** rodar `pnpm ci:local` antes de push (ver [git-workflow.md §Pre-Push Quality Gate](./.agents/specs/conventions/git-workflow.md))
 

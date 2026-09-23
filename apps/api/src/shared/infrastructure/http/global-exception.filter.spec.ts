@@ -9,10 +9,12 @@
 // e corpo. Sem NestJS TestBed aqui — o filter é um ExceptionFilter
 // simples (não NestJS managed), então pode ser instanciado direto.
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { FastifyAdapter } from '@nestjs/platform-fastify';
 import { HttpException, Logger } from '@nestjs/common';
 import type { ArgumentsHost } from '@nestjs/common';
+import type { Span } from '@opentelemetry/api';
+import { trace, context } from '@opentelemetry/api';
 import { GlobalExceptionFilter } from './global-exception.filter.js';
 import {
   ApplicationResourceNotFoundException,
@@ -55,7 +57,7 @@ function makeReply(): ReplyStub {
 interface RequestStub {
   method: string;
   url: string;
-  id: string;
+  id?: string;
 }
 
 function makeRequest(): RequestStub {
@@ -219,6 +221,78 @@ describe('GlobalExceptionFilter — HttpException branches', () => {
     const body = sent.body as BodyShape & { instance: string; traceId: string };
     expect(body.instance).toBe('POST /api/v1/users');
     expect(body.traceId).toBe('t-42');
+  });
+
+  describe('W3C traceId via OTel active span', () => {
+    // pt-BR: tipado como `MockInstance` (forma genérica) para que Type-
+    // Script não tente inferir o overload específico de `vi.spyOn`
+    // (que exige `PropertyKey extends never` quando o objeto é a
+    // singleton `TraceAPI`). Variável guarda o spy entre `it`s.
+    let getSpanSpy: import('vitest').MockInstance<(...args: never[]) => unknown> | undefined;
+
+    beforeEach(() => {
+      // pt-BR: default sem span ativo — restaura spy se algum teste ante-
+      // rior deixou pendurado. Cada teste que quiser um span ativo deve
+      // instalar seu próprio spy dentro do `it` para clareza.
+      if (getSpanSpy) {
+        getSpanSpy.mockRestore();
+        getSpanSpy = undefined;
+      }
+    });
+
+    afterEach(() => {
+      if (getSpanSpy) {
+        getSpanSpy.mockRestore();
+        getSpanSpy = undefined;
+      }
+    });
+
+    it('extrai traceId W3C (32 hex chars) do span ativo quando há span', () => {
+      // pt-BR: W3C traceId são exatamente 32 chars hex minúsculos.
+      // Spy em `trace.getSpan` (do módulo singleton) faz o filter usar
+      // o traceId do span ativo em vez de request.id.
+      const fakeSpan = {
+        spanContext: () => ({
+          traceId: 'a'.repeat(32),
+          spanId: 'b'.repeat(16),
+          traceFlags: 0x01,
+        }),
+      } as unknown as Span;
+      getSpanSpy = vi.spyOn(trace, 'getSpan').mockReturnValue(fakeSpan);
+
+      const { reply, sent } = makeReply();
+      const filter = new GlobalExceptionFilter();
+      filter.catch(new Error('boom-otel'), makeHost(reply, makeRequest()));
+      const body = sent.body as BodyShape & { traceId: string };
+      expect(body.traceId).toBe('a'.repeat(32));
+      expect(body.traceId).toHaveLength(32);
+      expect(body.traceId).toMatch(/^[0-9a-f]{32}$/);
+    });
+
+    it('cai no request.id quando NÃO há span ativo (preserva t-42)', () => {
+      // pt-BR: sem spy, trace.getSpan() retorna undefined (noop default).
+      // Filter deve cair no fallback `request.id ?? randomUUID()`.
+      const { reply, sent } = makeReply();
+      const filter = new GlobalExceptionFilter();
+      filter.catch(
+        new Error('x'),
+        makeHost(reply, { method: 'POST', url: '/api/v1/users', id: 't-42' }),
+      );
+      const body = sent.body as BodyShape & { traceId: string };
+      expect(body.traceId).toBe('t-42');
+    });
+
+    it('cai no randomUUID quando NÃO há span e request.id ausente', () => {
+      // pt-BR: request sem `id` → randomUUID (último fallback).
+      const { reply, sent } = makeReply();
+      const filter = new GlobalExceptionFilter();
+      filter.catch(new Error('x'), makeHost(reply, { method: 'GET', url: '/api/v1/x' }));
+      const body = sent.body as BodyShape & { traceId: string };
+      // UUID v4: 36 chars com hífens
+      expect(body.traceId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+    });
   });
 
   it('5xx loga via Logger.error com stack trace', () => {

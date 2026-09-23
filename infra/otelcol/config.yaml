@@ -1,0 +1,29 @@
+# infra/otelcol/config.yaml
+# OTel Collector config — receivers (OTLP gRPC+HTTP) + batch processor + debug exporter.
+# This is the MVP configuration: trace + metric signals piped to debug (stdout).
+# Add real exporters (jaeger/tempo/honeycomb/...) later as needed.
+
+receivers:
+  otlp:
+    protocols:
+      grpc: {}
+      http: {}
+
+processors:
+  batch: {}
+
+exporters:
+  debug:
+    verbosity: detailed
+  # + exporters para backend escolhido (jaeger/tempo/honeycomb/...)
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]

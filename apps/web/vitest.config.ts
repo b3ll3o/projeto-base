@@ -28,7 +28,17 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['lib/**/*.spec.ts', 'components/**/*.spec.ts'],
+    include: [
+      'lib/**/*.spec.ts',
+      'components/**/*.spec.ts',
+      // pt-BR: Task 4.1 (plano telemetria) introduziu o reporter de
+      // Web Vitals sob `src/telemetry/`. Client Components ficam fora
+      // de `lib/` (utilities puras) e `components/` (UI), então
+      // estendemos o glob para cobrir o diretório novo sem precisar
+      // renomear caminhos.
+      'src/**/*.spec.ts',
+      'src/**/*.spec.tsx',
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary'],

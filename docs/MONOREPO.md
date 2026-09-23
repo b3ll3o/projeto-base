@@ -271,3 +271,6 @@ Referência cruzada: [`.agents/specs/conventions/estrutura-e-versionamento.md`](
 | `1.3.0` | §11 — Referência à skill `ddd-hexagonal-validation` (validador automatizado de boundaries) validada em BC `users` end-to-end |
 | `1.4.0` | §Defense in Depth — referência ao padrão de 3 camadas (`ci-defense-in-depth` skill + convenção) e à estratégia de auditoria `ci-defense-mode` / release-mode workflows |
 | `1.5.0` | Seção "Docker" — `Dockerfile` por app (`apps/api`, `apps/web`) + `docker-compose.yml` (postgres + api + web prod) + `docker-compose.dev.yml` (override dev com bind mounts / hot reload) + `.dockerignore` na raiz |
+| `1.5.1` | Backfill: matrix `review-router` bumped para v1.2 (2 P1 gaps resolvidos — propagação `blocking:true` em path_globs + regex security narrow call-site anchored). Sem mudança de monorepo. |
+| `1.6.0` | Backfill: matrix `review-router` bumped para v1.3 (3 P2 gaps resolvidos — `domains[]` enrich, lint WARNING para blocking, coverage scenarios em apêndice). Sem mudança de monorepo. |
+| `1.7.0` | Adição do agent `telemetry-specialist` (transversal: backend+frontend+docker) + convenção `state-aware-planning` (camada 0 do pre-planner) + skill/workflow/memory companions; nova categoria transversal "Observabilidade" (referência cross-stack) |
