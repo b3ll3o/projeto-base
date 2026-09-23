@@ -17,6 +17,14 @@ async function bootstrap(): Promise<void> {
   app.useLogger(app.get(PinoLogger));
 
   app.setGlobalPrefix('api/v1');
+  // pt-BR: CORS habilitado para dev/staging (consumido pelo front-end
+  // em http://localhost:3001). Em produção o front-end é servido atrás
+  // do mesmo domínio via reverse proxy, então CORS fica desligado.
+  // `origin: true` reflete o Origin do request (whitelist dinâmica);
+  // `credentials: true` permite cookies de auth em chamadas cross-origin.
+  if (process.env.NODE_ENV !== 'production') {
+    app.enableCors({ origin: true, credentials: true });
+  }
   app.useGlobalFilters(new GlobalExceptionFilter());
   // Pipe global Zod: default `z.any()` (noop) — cada rota
   // sobrescreve via @Body(new ZodValidationPipe(SchemaDoDto)).
