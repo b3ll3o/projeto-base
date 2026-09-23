@@ -180,6 +180,8 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
 ENTRYPOINT ["sh","-c","node_modules/.bin/prisma migrate deploy --schema=apps/api/prisma/schema.prisma && node apps/api/dist/main.js"]
 ```
 
+> **Note (2026-09-23):** `pnpm prune --prod` removes the prisma CLI unless it is in `dependencies`. The api package requires `"prisma": "^6.0.0"` in `dependencies` (not `devDependencies`) so that the ENTRYPOINT can invoke `node_modules/.bin/prisma migrate deploy` at runtime.
+
 - [ ] **Step 2: Test build target prod**
 ```bash
 docker build -f apps/api/Dockerfile --target prod -t projeto-base-api:test .
