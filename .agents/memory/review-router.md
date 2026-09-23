@@ -143,12 +143,14 @@ retornam `2` matches (header da step + referência no fluxo).
 
 1. **P1:** Flag `blocking: true` em `path_globs` (turbo.json,
    pnpm-workspace.yaml) não propagado pelo classifier
-   (Aprendizado #1, linha 134 do pilot-summary).
+   (Aprendizado #1, linha 130 do pilot-summary em commit `28f5ef4`).
 2. **P1:** Narrowing de diff_patterns regex (FP em test fixtures)
-   (Aprendizado #2, linha 135).
-3. **P2:** Popular `domains[]` no classifier (Aprendizado #3, linha 136).
+   (Aprendizado #2, linha 134 do pilot-summary em commit `28f5ef4`).
+3. **P2:** Popular `domains[]` no classifier (Aprendizado #3, linha 135
+   do pilot-summary em commit `28f5ef4`).
 4. **P2:** Warning em lint para `path_globs` com `blocking: true` não
-   honrado (Aprendizado #5, linha 137).
+   honrado (Aprendizado #5, linha 137 do pilot-summary em commit
+   `28f5ef4`).
 
 Recomendações explícitas do pilot-summary:
 
