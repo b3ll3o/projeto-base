@@ -86,3 +86,54 @@ this is: [not valid yaml at all
     expect(result.errors.some((e) => e.includes('LOC'))).toBe(true);
   });
 });
+
+describe('lintMatrix() — path_globs blocking on illegible files (gap P2 #5)', () => {
+  it('warns when blocking: true glob matches no files in repo', () => {
+    const md = `
+\`\`\`yaml
+path_globs:
+  - pattern: ".agents/nonexistent-dir-xyz123/**"
+    reviewers: [doc-sync]
+    blocking: true
+\`\`\``;
+    const result = lintMatrix(md, ['doc-sync']);
+    expect(result.warnings.some((w) => w.match(/no files matched|ilegível|illegible/i))).toBe(true);
+  });
+
+  it('warns when blocking: true glob matches only .gitignored paths', () => {
+    // .gitignore tem: dist/, .turbo/, node_modules/, coverage/.
+    const md = `
+\`\`\`yaml
+path_globs:
+  - pattern: "dist/**"
+    reviewers: [monorepo-specialist]
+    blocking: true
+\`\`\``;
+    const result = lintMatrix(md, ['monorepo-specialist']);
+    expect(result.warnings.some((w) => w.match(/gitignore|ilegível|illegible/i))).toBe(true);
+  });
+
+  it('does NOT warn when blocking: true glob matches existing, non-ignored files', () => {
+    const md = `
+\`\`\`yaml
+path_globs:
+  - pattern: "package.json"
+    reviewers: [monorepo-specialist]
+    blocking: true
+\`\`\``;
+    const result = lintMatrix(md, ['monorepo-specialist']);
+    expect(result.warnings.some((w) => w.match(/ilegível|illegible|gitignore/i))).toBe(false);
+  });
+
+  it('does NOT warn when blocking: false (no severity escalation)', () => {
+    const md = `
+\`\`\`yaml
+path_globs:
+  - pattern: ".agents/nonexistent-dir-xyz123/**"
+    reviewers: [doc-sync]
+    blocking: false
+\`\`\``;
+    const result = lintMatrix(md, ['doc-sync']);
+    expect(result.warnings.some((w) => w.match(/ilegível|illegible|gitignore/i))).toBe(false);
+  });
+});

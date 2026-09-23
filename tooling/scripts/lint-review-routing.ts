@@ -10,9 +10,15 @@
 // - Bloco YAML presente mas matriz vazia (todos os blocos falharam parse)
 //
 // Falha com exit 1 se qualquer erro. Warnings não bloqueiam.
+//
+// v1.3 (PR #21): lint WARNING quando path_globs tem `blocking: true`
+// mas o pattern casa apenas paths ilegíveis (inexistentes no repo OU
+// todos em .gitignore). Pattern morto é dead rule que nunca dispararia
+// — visibility sem breaking change (warnings não bloqueiam exit).
 
 import { loadMatrix, YAML_BLOCK_RE } from './review-router.js';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 
 export interface LintResult {
   errors: string[];
@@ -21,6 +27,67 @@ export interface LintResult {
 }
 
 const MAX_LOC = 300;
+
+// pt-BR: replica local de `review-router.ts:68-77` (isolation entre packages;
+// import cross-package não permitido — `review-router.ts` é classificador,
+// não lib pública).
+function globToRegexLocal(glob: string): RegExp {
+  const P_DBL = '\x00GLOBSTAR_DBL\x00';
+  const P_SGL = '\x00GLOBSTAR_SGL\x00';
+  const transformed = glob.replace(/\*\*/g, P_DBL).replace(/\*/g, P_SGL);
+  const escaped = transformed.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  const final = escaped
+    .replace(new RegExp(P_DBL, 'g'), '.*')
+    .replace(new RegExp(P_SGL, 'g'), '[^/]*');
+  return new RegExp(`^${final}$`);
+}
+
+// pt-BR: detecta a raiz do repo via `git rev-parse --show-toplevel`.
+// Necessário porque o lint pode rodar de qualquer cwd (ex: tooling/scripts)
+// e `git ls-files` retorna paths relativos ao cwd, não ao repo root.
+function getRepoRoot(cwd: string = '.'): string | null {
+  try {
+    const stdout = execSync('git rev-parse --show-toplevel', {
+      cwd,
+      encoding: 'utf-8',
+    });
+    return stdout.trim();
+  } catch {
+    return null;
+  }
+}
+
+// pt-BR: lista os tracked files do repo e filtra pelos que casam o glob.
+// Usa `git ls-files` (não `glob()`) para ser determinístico e respeitar
+// .gitignore nativo — patterns gitignored nem aparecem na saída.
+// SEMPRE roda do repo root para retornar paths repo-relative (assivos o
+// regex contra `rule.pattern` — também repo-relative — bate corretamente).
+function getTrackedFiles(): string[] {
+  const root = getRepoRoot();
+  if (!root) return [];
+  try {
+    const stdout = execSync('git ls-files', { cwd: root, encoding: 'utf-8' });
+    return stdout.split('\n').filter((f) => f.trim());
+  } catch {
+    return [];
+  }
+}
+
+// pt-BR: `git check-ignore` retorna exit 0 se path é gitignored, exit 1 se não.
+// Roda do repo root porque `filePath` é repo-relative.
+function isPathGitignored(filePath: string): boolean {
+  const root = getRepoRoot();
+  if (!root) return false;
+  try {
+    execSync(`git check-ignore ${JSON.stringify(filePath)}`, {
+      cwd: root,
+      stdio: 'pipe',
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export function lintMatrix(markdown: string, knownReviewers?: string[]): LintResult {
   const errors: string[] = [];
@@ -57,6 +124,24 @@ export function lintMatrix(markdown: string, knownReviewers?: string[]): LintRes
         if (!knownReviewers.includes(reviewer)) {
           warnings.push(`reviewer not found in .agents/agents/: ${reviewer}`);
         }
+      }
+    }
+
+    // v1.3 (PR #21): warn quando `blocking: true` casa apenas files
+    // ilegíveis — pattern morto (dead rule) que nunca dispararia.
+    // Cache de tracked files para evitar N execuções de `git ls-files`.
+    if (rule.blocking === true) {
+      const trackedFiles = getTrackedFiles();
+      const regex = globToRegexLocal(rule.pattern);
+      const matchedFiles = trackedFiles.filter((f) => regex.test(f));
+      if (matchedFiles.length === 0) {
+        warnings.push(
+          `path_glob with blocking: true matches no files in repo: ${rule.pattern} (ilegível — dead pattern)`,
+        );
+      } else if (matchedFiles.every((f) => isPathGitignored(f))) {
+        warnings.push(
+          `path_glob with blocking: true matches only .gitignored files: ${rule.pattern} (ilegível — blocking nunca dispararia)`,
+        );
       }
     }
   }

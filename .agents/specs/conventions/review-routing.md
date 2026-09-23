@@ -217,7 +217,7 @@ Resultado esperado:
 
 ## 6. Gaps Conhecidos (forthcoming v1.3)
 
-(v1.2 resolveu os 2 gaps P1; v1.3 resolveu 1 gap P2; ver Seção 7)
+(v1.2 resolveu 2 P1; v1.3 resolveu 2 P2; ver Seção 7)
 
 ### Resolvidos em v1.2
 
@@ -276,12 +276,11 @@ production signal sem FP).
 
 #### Antigo P2 #3 — `domains[]` em `ClassifyResult` sempre `[]`
 
-**Resolvido em v1.3** (PR #20): `PathGlobRule` + `PathMatch` ganham
-`domain?: string` opcional; `matchPathGlobs()` propaga `rule.domain`;
-`classify()` coleta em `Set<string>` (dedupe) e popula
-`ClassifyResult.domains[]`. Zero breaking change — `domain` opcional.
-Seção 1 anota `.agents/specs/**` → `agents-specs`,
-`.agents/agents/**` → `agents-meta`. 5 testes TDD + `pnpm test` 30/30.
+**Resolvido em v1.3** (PR #20): `PathGlobRule.domain?` propaga via `matchPathGlobs()` → `classify()` dedupe em `Set<string>`. 5 testes TDD; 2 regras anotadas em Seção 1 (`agents-specs`, `agents-meta`). Zero breaking change.
+
+#### Antigo P2 #5 — `blocking: true` em paths ilegíveis (lint silenciava)
+
+**Resolvido em v1.3** (PR #21): lint emite WARNING (não error — não bloqueia exit) quando `path_globs.blocking: true` casa files ilegíveis (no-match OU todos em `.gitignore`). +3 helpers (`globToRegexLocal`, `getTrackedFiles`, `isPathGitignored`) + bloco `if (rule.blocking === true)` em `lintMatrix`; +4 testes TDD. Matrix atual (tracked) → 0 warnings.
 
 ### Conhecidos (forthcoming v1.4)
 
@@ -296,4 +295,4 @@ Seção 1 anota `.agents/specs/**` → `agents-specs`,
 | 1 | 2026-09-22 | Versão inicial |
 | 1.1 | 2026-09-22 | Adicionar exemplos de uso (Seção 5) + Seção 6 "Gaps Conhecidos" priorizando 2 P1 + 2 P2 para v1.2; bump version frontmatter `1` → `1.1` (resolvia divergência entre `version: 1` declarado e docs que já referenciavam v1.1) |
 | 1.2 | 2026-09-22 | 2 P1 gaps resolvidos: propagação de `blocking` em path_globs (`e4c0971`) + narrowing do regex de segurança (`f496b05`). Classifier agora propaga corretamente a flag `blocking: true` para a exit code; regex narrow elimina FPs em test fixtures e docs. (Seção 6) |
-| 1.3 | 2026-09-22 | 1 P2 gap resolvido (PR #20): enrich `domains[]` em `ClassifyResult`. `PathGlobRule` + `PathMatch` ganham `domain?: string` opcional; `matchPathGlobs()` propaga; `classify()` coleta via `Set<string>`. 5 testes TDD. 2 regras anotadas em Seção 1: `.agents/specs/**` → `agents-specs`, `.agents/agents/**` → `agents-meta`. Zero breaking change. (Seção 6) |
+| 1.3 | 2026-09-22 | 2 P2 gaps resolvidos: PR #20 (enrich `domains[]` em `ClassifyResult` via `domain?: string` + `Set<string>` dedupe em `classify()`; 5 testes TDD; 2 regras em Seção 1 anotadas) e PR #21 (lint WARNING quando `blocking: true` casa paths ilegíveis — +3 helpers + 4 testes TDD em `lint-review-routing`). Zero breaking change em ambos. (Seção 6) |
