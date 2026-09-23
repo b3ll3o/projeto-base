@@ -31,6 +31,7 @@
 | `backend-feature` | "implementar endpoint NestJS" | sequential | nestjs-specialist → test-writer → code-reviewer → tdd-enforcer | [`.agents/workflows/backend-feature.md`](./workflows/backend-feature.md) |
 | `frontend-feature` | "criar página/rota Next.js" | sequential | nextjs-specialist → test-writer → code-reviewer → tdd-enforcer | [`.agents/workflows/frontend-feature.md`](./workflows/frontend-feature.md) |
 | `monorepo-change` | "adicionar/mover pacote ou app" | sequential | monorepo-specialist → code-reviewer | [`.agents/workflows/monorepo-change.md`](./workflows/monorepo-change.md) |
+| `archive-demand` | "arquivar demanda implementada" | single | archive-demand skill (controller) | [`.agents/workflows/archive-demand.md`](./workflows/archive-demand.md) |
 
 ---
 
@@ -341,6 +342,7 @@ explorer → retrospective-capture:{success_criteria:"diff+memories+≥3 events"
 - [`backend-feature`](./workflows/backend-feature.md) — implementar endpoint NestJS
 - [`frontend-feature`](./workflows/frontend-feature.md) — criar página/rota Next.js
 - [`monorepo-change`](./workflows/monorepo-change.md) — adicionar/mover pacote ou app
+- [`archive-demand`](./workflows/archive-demand.md) — arquivar demanda implementada em `.agents/runs/archive/`
 
 ## Customização
 
