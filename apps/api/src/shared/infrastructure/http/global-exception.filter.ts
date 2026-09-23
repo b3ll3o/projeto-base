@@ -8,6 +8,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import type { FastifyAdapter } from '@nestjs/platform-fastify';
+import { trace, context } from '@opentelemetry/api';
 import { randomUUID } from 'node:crypto';
 import type { ProblemDetailsDto, ProblemDetailsError } from '@projeto/shared-types';
 import { mapExceptionToHttp } from './domain-exception-to-http.js';
@@ -34,7 +35,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const ctx = host.switchToHttp();
     const reply = ctx.getResponse<FastifyReply>();
     const request = ctx.getRequest<{ url: string; method: string; id?: string }>();
-    const traceId = request.id ?? randomUUID();
+    // pt-BR: prioridade para traceId W3C do span OTel ativo (32 hex chars),
+    // correlacionando respostas HTTP com traces no backend OTel. Fallback
+    // para request.id (Fastify) preserva compat com teste t-42 e logs já
+    // existentes; randomUUID é último recurso.
+    const span = trace.getSpan(context.active());
+    const w3cTraceId = span?.spanContext().traceId;
+    const traceId = w3cTraceId ?? request.id ?? randomUUID();
 
     const { status, code, title, detail, errors } = this.mapException(exception);
 
