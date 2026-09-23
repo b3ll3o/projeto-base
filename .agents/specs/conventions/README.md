@@ -16,6 +16,7 @@ Cada convenção está em arquivo próprio para manter este diretório e o AGENT
 | Release Automático (Post-Merge) | [`post-merge-release.md`](./post-merge-release.md) | Auto-tagging `vX.Y.Z` via `.github/workflows/release-template.yml` após bump em main |
 | CI Defense in Depth | [`ci-defense-in-depth.md`](./ci-defense-in-depth.md) | 3 camadas: pre-push local + preflight CI + quality CI gated |
 | Retrospective Capture | [`retrospective-capture.md`](./retrospective-capture.md) | Captura estruturada de aprendizados pós-atividade (T1/T2/T3 + threshold confidence ≥ 70) |
+| State-Aware Planning (v1.8.0+) | [`state-aware-planning.md`](./state-aware-planning.md) | Camada 0 do pre-planner — `state-snapshot-<ts>.md` antes de planejar; alimenta `specialist-router` camada 1 |
 
 ## Regra Geral
 

@@ -20,6 +20,7 @@
 | `review-mode` | "revisar PR / código" | single | code-reviewer + tdd-enforcer |
 | `release-mode` | "preparar release X.Y.Z" | sequential | doc-writer → code-reviewer → task-manager |
 | `ci-defense-mode` | "blindar CI / auditar pipeline" | sequential | monorepo-specialist → ci-defense-in-depth → code-reviewer |
+| `state-aware-planning` (v1.8.0+) | "planejar / state-aware / snapshot antes de planejar" | sequential | state-aware-planning (skill) → specialist-router (camada 1; opcional) |
 | `retrospective-mode` | "capturar aprendizados / post-mortem" | sequential | explorer → retrospective-capture → doc-writer (+ task-manager) |
 | `review-routing` | _(pendente Fase 3)_ | sequential | review-router → specialists (auto-dispatched via matriz) |
 | `specialist-routing` | specialist-router | sequential | router → controller (decide planejar ou bloquear) |
@@ -343,6 +344,7 @@ explorer → retrospective-capture:{success_criteria:"diff+memories+≥3 events"
 - [`frontend-feature`](./workflows/frontend-feature.md) — criar página/rota Next.js
 - [`monorepo-change`](./workflows/monorepo-change.md) — adicionar/mover pacote ou app
 - [`archive-demand`](./workflows/archive-demand.md) — arquivar demanda implementada em `.agents/runs/archive/`
+- [`state-aware-planning`](./workflows/state-aware-planning.md) (v1.8.0+) — gerar `state-snapshot-<ts>.md` antes de planejar (camada 0 do pre-planner)
 
 ## Customização
 
