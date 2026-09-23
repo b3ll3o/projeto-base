@@ -172,7 +172,7 @@ No new code path duplicates the existing `validate` / `deliver` semantics; the f
 | `decide` | `security` | commit = gated decision |
 | `validate` | `backend` | automated quality checks |
 
-**Column strategy:** `col` is integer `[0, 5]`. The builder assigns `col = Math.min(position_in_lane, 5)` so multiple nodes can share a column when a lane has more than 6 items (overflow is visually stacked, not cropped). The first node of each non-empty lane goes to `col = 0`.
+**Column strategy:** `col` is integer `[0, 5]`. The builder assigns `col = Math.min(position_in_ordered_list, 5)` sequentially across the entire ordered node list — first node overall at `col = 0`, subsequent nodes monotonically increasing. This is a renderer constraint: archify's workflow compiler enforces `to.col >= from.col` on every `mainPath` step, so per-lane restart would produce backward mainPath steps whenever a lane has more than one node. The schema permits any `col` in `[0, 5]`; the monotonic assignment keeps the renderer happy. When the list exceeds 6 items, late nodes share `col = 5` (visually stacked, not cropped).
 
 **Provenance sidecar (replaces the old `_flow_source`):** because the schema is strict, builder provenance (`range`, `baseSha`, `generated_at`) is written to a separate file `<out>/_flow_source.json` next to `workflow.json`. This file is never validated by `archify validate` and exists purely for traceability. It is regenerated on every flow run (full-regen contract).
 
@@ -257,7 +257,7 @@ The installer writes a thin shim (Husky or `.git/hooks/pre-push`) that `require`
 | `archify validate workflow <spec>` result | `validate` | `backend` | Single node `passed` / `failed: <reason>`. |
 | `--validations <json>` (optional) | `validate` | `backend` | Each entry (lint / test / build) becomes a separate node. Format: `{name, status, summary, exitCode?}`. |
 
-**Column assignment:** within each lane, nodes get `col = Math.min(position_in_lane, 5)` so a lane with N>6 nodes still fits (overflow stacked). The first node of each non-empty lane starts at `col = 0`.
+**Column assignment:** `col` is assigned sequentially across the entire ordered node list (not per-lane). First node overall at `col = 0`, subsequent nodes monotonically increasing. Schema permits any `col` in `[0, 5]`; the renderer requires monotonic mainPath so per-lane restart is infeasible. When the list exceeds 6 items, late nodes share `col = 5`.
 
 **Edge wiring:** the builder emits nodes in lane order: `modify` → `decide` → `validate`. Within a lane, nodes are sequenced by their parse order. **Empty lanes are skipped** — when a lane has zero nodes, the chain jumps to the next non-empty lane (so a feature with no explicit decisions still produces `Modify[…] → Validate[…] →` directly). `mainPath` is the linear sequence of all node ids in that order; `edges` connect consecutive ids. `mainPath` length MUST be `≥ 2` per schema. If only one node exists across all lanes (degenerate), the builder emits a self-loop edge `{from, to}` pointing to the same node so `mainPath` still has 2 entries (`[node, node]`).
 
