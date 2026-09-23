@@ -81,11 +81,28 @@ export function validateArchive(input: ArchiveInput): LintResult {
     errors.push('retro_refs vazio (sem b<N>-result.md referenciado)');
   }
 
-  if (fm.improvements && typeof fm.improvements === 'object') {
-    const entries = Object.entries(fm.improvements as Record<string, number>);
-    const hasNonZero = entries.some(([, v]) => typeof v === 'number' && v > 0);
-    if (entries.length === 0 || !hasNonZero) {
-      errors.push('improvements vazio ou zero (sem melhorias aplicadas = não arquivar)');
+  if (fm.improvements !== undefined && fm.improvements !== null) {
+    if (typeof fm.improvements !== 'object' || Array.isArray(fm.improvements)) {
+      errors.push(
+        `improvements deve ser objeto (string/número/array rejeitados): ${typeof fm.improvements}`,
+      );
+    } else {
+      let hasNonZero = false;
+      let invalidItem: string | null = null;
+      for (const [k, v] of Object.entries(fm.improvements)) {
+        if (typeof v !== 'number') {
+          invalidItem = k;
+          break;
+        }
+        if (v > 0) hasNonZero = true;
+      }
+      if (invalidItem !== null) {
+        errors.push(
+          `improvements["${invalidItem}"] não é número: ${typeof fm.improvements[invalidItem]}`,
+        );
+      } else if (!hasNonZero) {
+        errors.push('improvements vazio ou zero (sem melhorias aplicadas = não arquivar)');
+      }
     }
   }
 
@@ -110,7 +127,7 @@ export function parseArchiveFile(content: string): ArchiveInput | null {
   const fm = YAML.parse(m[1]) as Record<string, unknown> | null;
   if (!fm || typeof fm !== 'object') return null;
 
-  return { frontmatter: fm as ArchiveFrontmatter, body: m[2] };
+  return { frontmatter: fm as ArchiveFrontmatter, body: m[2] ?? '' };
 }
 
 /**

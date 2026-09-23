@@ -65,14 +65,3 @@ async function checkArchiveIntegrity(repoRoot: string): Promise<CheckResult> {
 
 // Export nomeado para testabilidade (preflight.spec.ts espelha).
 export { checkArchiveIntegrity };
-
-if (import.meta.url === `file://${process.argv[1]}`) {
-  checkArchiveIntegrity(process.cwd()).then((r) => {
-    if (r.ok) {
-      console.log('✓ archive integrity OK');
-    } else {
-      for (const err of r.errors) console.error(`ERROR: ${err}`);
-      process.exit(1);
-    }
-  });
-}
