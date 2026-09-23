@@ -73,6 +73,8 @@ Agent criado durante rollout do specialist-router (Fase 2 Task 9). Demanda atual
 
 6. **`apps/web/.next/static` precisa ser copiado SEPARADAMENTE do `.next/standalone`.** Standalone só copia o necessário para o server, não os static assets. COPY separado de `.next/static` é mandatório.
 
+7. **`node_modules/.bin/<binary>` não funciona com pnpm strict layout** — pnpm usa `.pnpm/` com symlinks virtuais; o `.bin/` em `node_modules/` não tem todas as CLIs (verificado: só eslint/husky/lint-staged/prettier/tsc/turbo/vitest). Para invocar CLI de deps em ENTRYPOINT, use `pnpm exec <binary>` em vez de `node_modules/.bin/<binary>`. Custo: prod start crasha se usar `.bin/` direto.
+
 #### Dev override (compose dev)
 
 - **`docker-compose.dev.yml`** estende `docker-compose.yml` (não substitui).
