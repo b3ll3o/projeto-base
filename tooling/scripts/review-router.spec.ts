@@ -54,6 +54,29 @@ describe('review-router classifier', () => {
       );
       expect(result.reviewers).toContain('nestjs-specialist');
     });
+
+    it('classify sets blocking when path_glob rule has blocking=true', () => {
+      // Gap P1 #1 da matrix v1.1 Seção 6 — `blocking: true` em path_globs
+      // deve propagar para a final exit code decision do classifier.
+      const result = classify(
+        {
+          paths: ['pnpm-workspace.yaml'],
+          diff: '',
+          commits: [],
+        },
+        {
+          path_globs: [
+            {
+              pattern: 'pnpm-workspace.yaml',
+              reviewers: ['monorepo-specialist'],
+              blocking: true,
+            },
+          ],
+        },
+      );
+      expect(result.blocking).toBe(true);
+      expect(result.reviewers).toContain('monorepo-specialist');
+    });
   });
 
   describe('matchPathGlobs()', () => {
@@ -85,6 +108,20 @@ describe('review-router classifier', () => {
       const result = matchPathGlobs(['apps/api/src/users.controller.ts'], rules);
       const allReviewers = result.flatMap((m) => m.reviewers);
       expect(new Set(allReviewers)).toEqual(new Set(['nestjs-specialist', 'stack-code-reviewer']));
+    });
+
+    it('matchPathGlobs propagates blocking flag from rule', () => {
+      // Gap P1 #1 da matrix v1.1 Seção 6 — matchPathGlobs() deve ler
+      // `rule.blocking` e popular PathMatch.blocking com o valor declarado.
+      const rules: PathGlobRule[] = [
+        {
+          pattern: 'pnpm-workspace.yaml',
+          reviewers: ['monorepo-specialist'],
+          blocking: true,
+        },
+      ];
+      const result = matchPathGlobs(['pnpm-workspace.yaml'], rules);
+      expect(result[0].blocking).toBe(true);
     });
   });
 
@@ -175,6 +212,46 @@ describe('review-router classifier', () => {
       const result = matchDiffPatterns(bigDiff, rules);
       expect(result.truncated).toBe(true);
       expect(result.reviewers).toEqual([]); // bcrypt after truncation
+    });
+
+    it('narrowed regex does not match fixture/spec/doc content (regression for FP pilot Task 1)', () => {
+      // Gap P1 #2 da matrix v1.1 Seção 6 — regex broad `bcrypt|argon2|hash\(|jwt\.sign|jwt\.verify`
+      // produzia 10 FPs no pilot Task 1 (commit 7ddb93e), todos em test fixtures /
+      // plan docs / spec docs / matrix YAML. Narrowing para call-site anchored deve
+      // zerar matches em conteúdo representativo (sem call sites reais).
+      //
+      // pt-BR: a fixture abaixo replica as fontes de FP do pilot Task 1:
+      // - nomes de teste com `bcrypt` (linha 148 original)
+      // - regex literal `'bcrypt|argon2'` em test code (linha 150 original)
+      // - regex literal `'bcrypt'` em test code (linhas 167, 173 originais)
+      // - string de teste `'\nbcrypt here'` (linha 174 original)
+      // NENHUMA contém call site real (`bcrypt.hash(` etc), por isso o regex
+      // narrow (call-site anchored) deve ter 0 matches.
+      const fixtureContent = `
+    it('adds security-auditor for bcrypt pattern', () => {
+      const rules: DiffPatternRule[] = [
+        { regex: 'bcrypt|argon2', reviewers_added: ['security-auditor'], blocking: true },
+      ];
+      expect(result.reviewers).toContain('security-auditor');
+      expect(result.blocking).toBe(true);
+    });
+    // ... outros casos omitidos ...
+    it('respects 50KB cap and truncates with warning', () => {
+      const rules: DiffPatternRule[] = [{ regex: 'bcrypt', reviewers_added: ['security-auditor'] }];
+      const bigDiff = 'x'.repeat(60_000) + '\\nbcrypt here';
+      const result = matchDiffPatterns(bigDiff, rules);
+      expect(result.truncated).toBe(true);
+      expect(result.reviewers).toEqual([]);
+    });
+  `;
+      const narrowRegex =
+        'bcrypt\\.hash(?:Sync)?\\(|bcrypt\\.compare(?:Sync)?\\(|argon2\\.hash(?:Sync)?\\(|argon2\\.verify\\(|jwt\\.(?:sign|verify|decode)\\(';
+      const rules: DiffPatternRule[] = [
+        { regex: narrowRegex, reviewers_added: ['security-auditor'], blocking: true },
+      ];
+      const result = matchDiffPatterns(fixtureContent, rules);
+      expect(result.reviewers).not.toContain('security-auditor');
+      expect(result.blocking).toBe(false);
     });
   });
 
