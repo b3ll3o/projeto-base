@@ -102,6 +102,20 @@ revisar.
 - ❌ **`@opentelemetry/instrumentation-ioredis` antes do ioredis
   existir**: instalador falha. Aguardar Redis entrar (atualmente sem
   Redis no `package.json`).
+- ❌ **`@opentelemetry/instrumentation-prisma` referenciado em planos
+  antigos**: **NÃO EXISTE no npm registry**. O pacote oficial é
+  `@prisma/instrumentation` (publicado pela equipe Prisma, alinhado
+  com `@prisma/client@^6.x`). Ao especificar dependência, validar
+  previamente no registry (Task 1.1 — 2026-09-23).
+- ❌ **`require.main === module` em código ESM**: o projeto é
+  `type: module` + `module: NodeNext` → top-level `require` é
+  `undefined`. Em produção isso lança `ReferenceError`. Padrão
+  correto: exportar `initTracing()` e fazer side-effect import
+  (`import './tracing.js'`) + chamada explícita (`initTracing()`)
+  no entry-point (`main.ts`). Para init via flag de boot, usar
+  `node --import` (ESM-aware) e NÃO `node --require` (CJS-only).
+  Vitest polyfila `require` global, mascarando o bug em testes
+  (Task 1.3 — 2026-09-23).
 
 ## Sugestões de Evolução
 
@@ -122,3 +136,7 @@ revisar.
   paths (validar que lint aceita ou bloqueia corretamente)
 - [ ] Considerar `devops-sre` agent (escopo amplo: CI/CD + SLOs +
   runbooks) como evolução futura pós-telemetria-MVP
+- [ ] Migrar `SemanticResourceAttributes` (deprecated) para `ATTR_SERVICE_NAME` /
+  `ATTR_SERVICE_VERSION` / `ATTR_DEPLOYMENT_ENVIRONMENT` quando semconv for
+  estabilizado (Task 1.2 — 2026-09-23: semconv deprecated export ainda funcional,
+  mas aponta para SEMRESATTRS\_\* / ATTR\_\* constants para bundle minification)
