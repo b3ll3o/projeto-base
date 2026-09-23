@@ -13,6 +13,19 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         { emit: 'event', level: 'warn' },
       ],
     });
+
+    // Registra handlers de evento (sincronizado com o array log: acima).
+    // Sem esses $on, queries ficam silenciosamente não-logadas (gap G-007
+    // do state-snapshot telemetria).
+    this.$on('query' as never, (e: { query: string; duration: number }) => {
+      this.logger.debug({ sql: e.query, durationMs: e.duration }, 'prisma query');
+    });
+    this.$on('error' as never, (e: { message: string }) => {
+      this.logger.error({ err: e.message }, 'prisma error');
+    });
+    this.$on('warn' as never, (e: { message: string }) => {
+      this.logger.warn({ msg: e.message }, 'prisma warn');
+    });
   }
 
   async onModuleInit(): Promise<void> {
