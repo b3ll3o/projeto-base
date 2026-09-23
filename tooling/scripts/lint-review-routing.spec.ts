@@ -86,3 +86,64 @@ this is: [not valid yaml at all
     expect(result.errors.some((e) => e.includes('LOC'))).toBe(true);
   });
 });
+
+// pt-BR: WARNING — o teste abaixo ("warns when blocking: true glob matches
+// only .gitignored paths") depende de `dist/` estar listado em `.gitignore`
+// do repo. Se o `.gitignore` for modificado para un-ignore `dist/`, o teste
+// vai PASSAR mas exercitará um path diferente (não-gitignored em vez de
+// gitignored) — o assertion é permissivo o suficiente para ambos os casos,
+// então o teste deixa de ser meaningful sem sinalizar falha.
+//
+// Para tornar este teste hermético, seria necessário mockar `execSync` (ou
+// injetar `getTrackedFiles`/`isPathGitignored` como dependências). Fora de
+// escopo deste PR; documentado para futuro hardening.
+describe('lintMatrix() — path_globs blocking on illegible files (gap P2 #5)', () => {
+  it('warns when blocking: true glob matches no files in repo', () => {
+    const md = `
+\`\`\`yaml
+path_globs:
+  - pattern: ".agents/nonexistent-dir-xyz123/**"
+    reviewers: [doc-sync]
+    blocking: true
+\`\`\``;
+    const result = lintMatrix(md, ['doc-sync']);
+    expect(result.warnings.some((w) => w.match(/no files matched|ilegível|illegible/i))).toBe(true);
+  });
+
+  it('warns when blocking: true glob matches only .gitignored paths', () => {
+    // .gitignore tem: dist/, .turbo/, node_modules/, coverage/.
+    const md = `
+\`\`\`yaml
+path_globs:
+  - pattern: "dist/**"
+    reviewers: [monorepo-specialist]
+    blocking: true
+\`\`\``;
+    const result = lintMatrix(md, ['monorepo-specialist']);
+    expect(result.warnings.some((w) => w.match(/gitignore|ilegível|illegible/i))).toBe(true);
+  });
+
+  it('does NOT warn when blocking: true glob matches existing, non-ignored files', () => {
+    const md = `
+\`\`\`yaml
+path_globs:
+  - pattern: "package.json"
+    reviewers: [monorepo-specialist]
+    blocking: true
+\`\`\``;
+    const result = lintMatrix(md, ['monorepo-specialist']);
+    expect(result.warnings.some((w) => w.match(/ilegível|illegible|gitignore/i))).toBe(false);
+  });
+
+  it('does NOT warn when blocking: false (no severity escalation)', () => {
+    const md = `
+\`\`\`yaml
+path_globs:
+  - pattern: ".agents/nonexistent-dir-xyz123/**"
+    reviewers: [doc-sync]
+    blocking: false
+\`\`\``;
+    const result = lintMatrix(md, ['doc-sync']);
+    expect(result.warnings.some((w) => w.match(/ilegível|illegible|gitignore/i))).toBe(false);
+  });
+});
