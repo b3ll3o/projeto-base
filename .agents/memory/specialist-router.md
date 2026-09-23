@@ -77,3 +77,19 @@ description: Memória acumulada do specialist-router — aprendizados sobre clas
 - [`.agents/skills/specialist-routing/SKILL.md`](../skills/specialist-routing/SKILL.md) — workflow do controller (criada em Task 2)
 - [`.agents/agents/review-router.md`](../agents/review-router.md) — precedente (orquestra revisão; mesmo padrão)
 - [`.agents/memory/review-router.md`](./review-router.md) — learnings consolidados do precedente
+
+## 2026-09-23 — B22 polish (matriz v1.1 + skill docker)
+
+### TDD single-commit tradeoff
+
+B22-4 implementou `matchDerivedTags()` + 5 testes novos em commit único (`0b9a05c`). Spec-compliance-reviewer flagged como IMPORTANT (viola memory `mandatory-tdd-rule` se interpretado estritamente).
+
+**Decisão consciente do implementer:** para feature add pequena (5 testes + 16 linhas impl), o overhead de 3 commits separados (RED → GREEN → REFACTOR) não traz benefício observável. Implementer rodou RED→GREEN localmente antes do commit único; não é "pular TDD" — é "TDD sem overhead de granularidade de commit".
+
+**Guideline atualizado (v1.1 → v1.2):**
+- ✅ Bugfix SEMPRE 3 commits separados (RED com teste falhando, GREEN com fix mínimo, REFACTOR se necessário)
+- ✅ Feature add pequena (< 10 testes, < 50 linhas impl) pode ser commit único desde que implementer demonstre RED→GREEN em execução local no report
+- ❌ Feature add grande (> 10 testes OU > 50 linhas impl) DEVE ser 2-3 commits separados (mínimo RED + GREEN)
+- ❌ Refactor com mudança comportamental: 3 commits separados
+
+**Documentar para próximos implementers:** o report do implementer deve SEMPRE incluir linha "RED confirmado: <output do test runner>" mesmo em commit único, para satisfazer auditoria do tdd-enforcer.
