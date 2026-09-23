@@ -124,7 +124,7 @@ export function parseArchiveFile(content: string): ArchiveInput | null {
   const m = FRONTMATTER_RE.exec(content);
   if (!m) return null;
 
-  const fm = YAML.parse(m[1]) as Record<string, unknown> | null;
+  const fm = YAML.parse(m[1] ?? '') as Record<string, unknown> | null;
   if (!fm || typeof fm !== 'object') return null;
 
   return { frontmatter: fm as ArchiveFrontmatter, body: m[2] ?? '' };

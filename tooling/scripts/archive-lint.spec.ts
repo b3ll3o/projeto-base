@@ -69,7 +69,7 @@ describe('validateArchive', () => {
 
   it('falha quando status é inválido (não archived nem cancelled)', () => {
     const r = validateArchive({
-      frontmatter: { ...VALID_FRONT, status: 'unknown' as Partial<typeof VALID_FRONT>['status'] },
+      frontmatter: { ...VALID_FRONT, status: 'unknown' } as unknown as Partial<typeof VALID_FRONT>,
       body: '# Title',
     });
     expect(r.valid).toBe(false);
