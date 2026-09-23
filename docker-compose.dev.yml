@@ -1,0 +1,31 @@
+services:
+  api:
+    build: { target: dev }
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://projeto:projeto@postgres:5432/projeto_base?schema=public
+    volumes:
+      - ./apps/api/src:/repo/apps/api/src:ro
+      - ./apps/api/prisma:/repo/apps/api/prisma:ro
+      - api_node_modules:/repo/node_modules
+      - api_apps_modules:/repo/apps/api/node_modules
+    command: ['pnpm', '--filter', '@projeto/api', 'dev']
+  web:
+    build: { target: dev }
+    environment:
+      NODE_ENV: development
+      API_BASE_URL: http://api:3000/api/v1
+    volumes:
+      - ./apps/web/app:/repo/apps/web/app:ro
+      - ./apps/web/lib:/repo/apps/web/lib:ro
+      - ./apps/web/public:/repo/apps/web/public:ro
+      - web_node_modules:/repo/node_modules
+      - web_apps_modules:/repo/apps/web/node_modules
+      - web_next:/repo/apps/web/.next
+    command: ['pnpm', '--filter', '@projeto/web', 'dev']
+volumes:
+  api_node_modules:
+  api_apps_modules:
+  web_node_modules:
+  web_apps_modules:
+  web_next:

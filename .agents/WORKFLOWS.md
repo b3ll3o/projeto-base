@@ -22,6 +22,7 @@
 | `ci-defense-mode` | "blindar CI / auditar pipeline" | sequential | monorepo-specialist → ci-defense-in-depth → code-reviewer |
 | `retrospective-mode` | "capturar aprendizados / post-mortem" | sequential | explorer → retrospective-capture → doc-writer (+ task-manager) |
 | `review-routing` | _(pendente Fase 3)_ | sequential | review-router → specialists (auto-dispatched via matriz) |
+| `specialist-routing` | specialist-router | sequential | router → controller (decide planejar ou bloquear) |
 
 ### Por Stack (workflows detalhados em `.agents/workflows/`)
 
@@ -30,6 +31,7 @@
 | `backend-feature` | "implementar endpoint NestJS" | sequential | nestjs-specialist → test-writer → code-reviewer → tdd-enforcer | [`.agents/workflows/backend-feature.md`](./workflows/backend-feature.md) |
 | `frontend-feature` | "criar página/rota Next.js" | sequential | nextjs-specialist → test-writer → code-reviewer → tdd-enforcer | [`.agents/workflows/frontend-feature.md`](./workflows/frontend-feature.md) |
 | `monorepo-change` | "adicionar/mover pacote ou app" | sequential | monorepo-specialist → code-reviewer | [`.agents/workflows/monorepo-change.md`](./workflows/monorepo-change.md) |
+| `archive-demand` | "arquivar demanda implementada" | single | archive-demand skill (controller) | [`.agents/workflows/archive-demand.md`](./workflows/archive-demand.md) |
 
 ---
 
@@ -294,6 +296,36 @@ doc-writer → code-reviewer:{success_criteria:"versão bumped+CHANGELOG+0 cross
 - `.agents/specs/conventions/review-routing.md` _(criado em Fase 1)_
 - `.agents/skills/review-routing/SKILL.md` _(a criar em Fase 3)_
 
+## `specialist-routing` — Orquestrador de Demanda Pré-Planning
+
+> Classifica demanda (keywords + paths + scope) via matriz canônica e despacha specialists em paralelo.
+
+**Trigger:** Demanda com escopo técnico definido (qualquer task exceto housekeeping trivial ou documentação isolada).
+
+**Responsável:** Controller (operador) invoca `specialist-router` via Agent tool.
+
+**Inputs:** `task{description, scope}`, `context{paths, branch}`.
+
+**Outputs:** `.agents/runs/<timestamp>-specialist-<n>.yaml` com `classification` + `specialists_dispatched` + `plans_aggregated` + `gap_detected` + `suggested_specialist`.
+
+**Comportamento resumido:**
+
+1. Pre-dispatch checks (matriz canônica + agent + convenção `evolucao-agents`)
+2. Escrever temp files (`.agents/runs/<ts>-demand.txt` + `<ts>-paths.txt`)
+3. Despachar `specialist-router` via Agent tool
+4. Interpretar YAML de output
+5. Triage: se `gap_detected: true` → dispatch `agent-architect`; senão prosseguir
+6. Integrar `plans_aggregated` com workflow `writing-plans`
+
+**Detalhes:** [`.agents/workflows/specialist-routing.md`](./workflows/specialist-routing.md) · skill: [`.agents/skills/specialist-routing/SKILL.md`](./skills/specialist-routing/SKILL.md)
+
+**Cross-refs:**
+
+- [`.agents/agents/specialist-router.md`](./agents/specialist-router.md)
+- [`.agents/specs/conventions/specialist-routing.md`](./specs/conventions/specialist-routing.md) — matriz canônica
+- [`.agents/memory/specialist-router.md`](../memory/specialist-router.md)
+- [`.agents/specs/conventions/evolucao-agents.md`](./specs/conventions/evolucao-agents.md) — regra gap_detected
+
 ## `retrospective-mode` — Captura de Aprendizados Pós-Atividade
 
 **Trigger:** "capturar aprendizados" / "retrospectiva" / "post-mortem" · plano ≥3 tasks · bugfix > 30min · 1ª adoção de skill · **Composição:** sequential + task-manager paralelo no final
@@ -310,6 +342,7 @@ explorer → retrospective-capture:{success_criteria:"diff+memories+≥3 events"
 - [`backend-feature`](./workflows/backend-feature.md) — implementar endpoint NestJS
 - [`frontend-feature`](./workflows/frontend-feature.md) — criar página/rota Next.js
 - [`monorepo-change`](./workflows/monorepo-change.md) — adicionar/mover pacote ou app
+- [`archive-demand`](./workflows/archive-demand.md) — arquivar demanda implementada em `.agents/runs/archive/`
 
 ## Customização
 

@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { LoggerModule } from 'nestjs-pino';
 import { AuditInfraModule } from './shared/audit/audit-infra.module.js';
 import { PrismaModule } from './shared/infrastructure/prisma/prisma.module.js';
+import { HealthModule } from './modules/health/health.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 
 const REDACT_PATHS = ['req.headers.authorization', 'req.headers.cookie'] as const;
@@ -23,6 +24,7 @@ const REDACT_PATHS = ['req.headers.authorization', 'req.headers.cookie'] as cons
     ),
     PrismaModule,
     AuditInfraModule,
+    HealthModule,
     UsersModule,
   ],
 })

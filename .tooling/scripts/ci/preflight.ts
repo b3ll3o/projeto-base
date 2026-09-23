@@ -15,6 +15,8 @@ import { checkTsconfigDrift } from './check-tsconfig-drift';
 import { checkEslintDrift } from './check-eslint-drift';
 import { checkTurboDrift } from './check-turbo-drift';
 import { checkPackageJsonDrift } from './check-package-json-drift';
+import { checkDockerDrift } from './check-docker-drift';
+import { checkArchiveIntegrity } from './check-archive-integrity';
 import { existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
@@ -84,8 +86,16 @@ async function main(): Promise<void> {
       fn: () => checkPackageJsonDrift({ packageJsonPath: 'package.json', projectRoot: '.' }),
     },
     {
+      name: 'docker drift (.dockerignore + Dockerfile size/base)',
+      fn: () => checkDockerDrift('.'),
+    },
+    {
       name: 'review-routing matrix lint (YAML + LOC + reviewer refs)',
       fn: () => checkReviewRoutingLint(),
+    },
+    {
+      name: 'archive integrity (.agents/runs/archive/*.md frontmatter canônico)',
+      fn: () => checkArchiveIntegrity('.'),
     },
   ];
 

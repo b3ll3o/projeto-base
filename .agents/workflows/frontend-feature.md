@@ -42,6 +42,16 @@ code-reviewer → tdd-enforcer:
     - "TDD estritamente seguido"
 ```
 
+### Passo Pré-Planner: Despachar specialist-router
+
+Antes do passo 1:
+
+1. Validar demanda tem escopo técnico (skill `specialist-routing` Passo 1)
+2. Despachar `specialist-router` via Agent tool
+3. Aguardar `.agents/runs/<ts>-specialist-<n>.yaml`
+4. Se `gap_detected: true` → dispatch `agent-architect` + re-rodar router
+5. Prosseguir com planning
+
 ### Passo Pós-Implementer: Despachar review-router
 
 Após implementer reportar DONE:

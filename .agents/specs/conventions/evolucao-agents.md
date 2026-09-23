@@ -29,6 +29,29 @@
               6. Despachar via agents:coordinate
 ```
 
+## Regra de Bloqueio por `gap_detected`
+
+Quando `specialist-router` retorna `gap_detected: true`, controller **DEVE** bloquear planning e despachar `agent-architect` para criar o specialist ausente. **Inegociável** — alinhado com "Never implement manually when an appropriate agent exists".
+
+**Fluxo:**
+
+1. Router retorna gap + suggested_specialist
+2. Controller loga + despacha `agent-architect` com tarefa `criar specialist <suggested_specialist>`
+3. `agent-architect` cria agent + memory + atualiza AGENTS.md §3 + WORKFLOWS.md
+4. Controller re-despacha router
+5. Prosseguir com planning
+
+**Exceções:**
+
+- Se `suggested_specialist` for claramente trivial (e.g., mudança isolada em 1 arquivo) e o usuário aprovar bypass explícito, controller pode prosseguir diretamente. **Default é bloquear.**
+
+**Cross-refs:**
+
+- [`.agents/agents/specialist-router.md`](../../../agents/specialist-router.md) — orquestrador que detecta gap
+- [`.agents/skills/specialist-routing/SKILL.md`](../../skills/specialist-routing/SKILL.md) — Passo 5 do controller (tratar gap)
+- [`.agents/specs/conventions/specialist-routing.md`](./specialist-routing.md) §4 — `gap_detected` field no schema
+- [`tooling/scripts/specialist-router.ts`](../../../tooling/scripts/specialist-router.ts) — classificador que emite gap_detected
+
 ## Regras Inegociáveis
 
 1. **NUNCA implementar manualmente** tarefa que tem agent apropriado — SEMPRE despachar via `agents:coordinate`
