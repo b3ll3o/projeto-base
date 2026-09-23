@@ -98,7 +98,7 @@ reviewers_dispatched:
     notes: |
       Em produção, doc-sync verificaria referências cruzadas e staleness.
       No pilot, sem findings (adição de seção "Exemplos de Uso" é self-contained
-      e não quebra refs existentes — ver Seção 6 do spec).
+      e não quebra refs existentes — ver Seção 7 do spec).
     dispatch_outcome: not_executed_pilot
 
 # Passo 7: Agregação de findings
