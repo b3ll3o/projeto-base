@@ -40,6 +40,10 @@ COPY --from=builder /repo/packages packages
 COPY --from=builder /repo/pnpm-lock.yaml /repo/pnpm-workspace.yaml ./
 COPY --from=builder /repo/node_modules node_modules
 RUN pnpm prune --prod
+# pt-BR: defesa em profundidade — `node --check` valida syntax do entrypoint
+# sem precisar runtime deps. Pega erros de parsing, missing modules em require/import
+# e typos em filenames antes do container subir. Custo: ~100ms por build.
+RUN node --check apps/api/dist/main.js
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
