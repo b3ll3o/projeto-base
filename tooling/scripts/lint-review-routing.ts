@@ -28,9 +28,11 @@ export interface LintResult {
 
 const MAX_LOC = 300;
 
-// pt-BR: replica local de `review-router.ts:68-77` (isolation entre packages;
-// import cross-package não permitido — `review-router.ts` é classificador,
-// não lib pública).
+// pt-BR: replica local de `review-router.ts:68-77` (`globToRegex` é PRIVADA
+// no módulo, não exportada — cópia intencional para evitar expandir API
+// pública do classificador com uma helper de regex). Ambos arquivos vivem no
+// mesmo package `@repo/review-router-tooling`, então não há isolation por
+// package a manter; a razão da duplicação é puramente o escopo de export.
 function globToRegexLocal(glob: string): RegExp {
   const P_DBL = '\x00GLOBSTAR_DBL\x00';
   const P_SGL = '\x00GLOBSTAR_SGL\x00';
@@ -45,14 +47,23 @@ function globToRegexLocal(glob: string): RegExp {
 // pt-BR: detecta a raiz do repo via `git rev-parse --show-toplevel`.
 // Necessário porque o lint pode rodar de qualquer cwd (ex: tooling/scripts)
 // e `git ls-files` retorna paths relativos ao cwd, não ao repo root.
+// Memoizado em `cachedRepoRoot` para evitar N execSyncs de `git rev-parse`
+// quando `isPathGitignored()` é invocado em loop sobre matched files.
+let cachedRepoRoot: string | null | undefined = undefined;
 function getRepoRoot(cwd: string = '.'): string | null {
+  if (cwd === '.' && cachedRepoRoot !== undefined) {
+    return cachedRepoRoot;
+  }
   try {
     const stdout = execSync('git rev-parse --show-toplevel', {
       cwd,
       encoding: 'utf-8',
     });
-    return stdout.trim();
+    const result = stdout.trim();
+    if (cwd === '.') cachedRepoRoot = result;
+    return result;
   } catch {
+    if (cwd === '.') cachedRepoRoot = null;
     return null;
   }
 }
@@ -74,7 +85,7 @@ function getTrackedFiles(): string[] {
 }
 
 // pt-BR: `git check-ignore` retorna exit 0 se path é gitignored, exit 1 se não.
-// Roda do repo root porque `filePath` é repo-relative.
+// Roda do repo root (cached) porque `filePath` é repo-relative.
 function isPathGitignored(filePath: string): boolean {
   const root = getRepoRoot();
   if (!root) return false;
@@ -112,6 +123,11 @@ export function lintMatrix(markdown: string, knownReviewers?: string[]): LintRes
 
   const seenPatterns = new Set<string>();
 
+  // pt-BR: cache de tracked files (lazy) para evitar N execuções de
+  // `git ls-files` quando múltiplos path_globs têm `blocking: true`.
+  // Matrix atual tem 2 rules blocking → 2 execSyncs → após hoist: 1.
+  let trackedFiles: string[] | null = null;
+
   // Check path_globs
   for (const rule of matrix.path_globs ?? []) {
     if (seenPatterns.has(rule.pattern)) {
@@ -129,9 +145,12 @@ export function lintMatrix(markdown: string, knownReviewers?: string[]): LintRes
 
     // v1.3 (PR #21): warn quando `blocking: true` casa apenas files
     // ilegíveis — pattern morto (dead rule) que nunca dispararia.
-    // Cache de tracked files para evitar N execuções de `git ls-files`.
+    // Cache de tracked files compartilhado entre todas as rules blocking
+    // do loop (lazy init na primeira vez que precisamos).
     if (rule.blocking === true) {
-      const trackedFiles = getTrackedFiles();
+      if (trackedFiles === null) {
+        trackedFiles = getTrackedFiles();
+      }
       const regex = globToRegexLocal(rule.pattern);
       const matchedFiles = trackedFiles.filter((f) => regex.test(f));
       if (matchedFiles.length === 0) {

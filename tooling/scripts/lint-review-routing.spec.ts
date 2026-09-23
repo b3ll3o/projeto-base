@@ -87,6 +87,16 @@ this is: [not valid yaml at all
   });
 });
 
+// pt-BR: WARNING — o teste abaixo ("warns when blocking: true glob matches
+// only .gitignored paths") depende de `dist/` estar listado em `.gitignore`
+// do repo. Se o `.gitignore` for modificado para un-ignore `dist/`, o teste
+// vai PASSAR mas exercitará um path diferente (não-gitignored em vez de
+// gitignored) — o assertion é permissivo o suficiente para ambos os casos,
+// então o teste deixa de ser meaningful sem sinalizar falha.
+//
+// Para tornar este teste hermético, seria necessário mockar `execSync` (ou
+// injetar `getTrackedFiles`/`isPathGitignored` como dependências). Fora de
+// escopo deste PR; documentado para futuro hardening.
 describe('lintMatrix() — path_globs blocking on illegible files (gap P2 #5)', () => {
   it('warns when blocking: true glob matches no files in repo', () => {
     const md = `
