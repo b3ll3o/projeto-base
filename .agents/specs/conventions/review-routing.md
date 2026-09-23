@@ -1,6 +1,6 @@
 ---
 name: review-routing
-version: 1.1
+version: 1.2
 updated: 2026-09-22
 maintainer: review-router
 description: "Matriz de roteamento de revisores consultada pelo review-router"
@@ -129,7 +129,7 @@ diff_patterns:
     reviewers_added: [nextjs-specialist]
   - regex: "next/image|next/font"
     reviewers_added: [nextjs-specialist]
-  - regex: "bcrypt|argon2|hash\\(|jwt\\.sign|jwt\\.verify"
+  - regex: "bcrypt\\.hash(?:Sync)?\\(|bcrypt\\.compare(?:Sync)?\\(|argon2\\.hash(?:Sync)?\\(|argon2\\.verify\\(|jwt\\.(?:sign|verify|decode)\\("
     reviewers_added: [security-auditor]
     blocking: true
   - regex: "process\\.env\\.|secrets?\\.|credentials?\\."
@@ -213,80 +213,66 @@ Resultado esperado:
 - `spec-compliance-reviewer` DISPATCHED — `commit_type feat` (não em skip list)
 - `code-quality-reviewer` DISPATCHED — há `.ts` files
 
-## 6. Gaps Conhecidos (forthcoming v1.2)
+## 6. Gaps Conhecidos (forthcoming v1.3)
 
-> Lista priorizada de gaps identificados durante o rollout do review-router
-> (Fases 1–5, encerradas em 2026-09-22). A próxima bump da matriz (v1.2)
-> DEVE atacar os 2 P1 antes de qualquer expansão de path_globs ou
-> diff_patterns. Os P2 podem ficar para v1.3 ou v1.4 conforme prioridade.
+(v1.2 resolveu os 2 gaps P1 abaixo; ver Seção 7 para o changelog completo)
 
-### P1 — Flag `blocking: true` em `path_globs` (turbo.json, pnpm-workspace.yaml) não propagado pelo classifier
+### Resolvidos em v1.2
 
-**Origem:** pilot-summary.md, Aprendizado #1 (linha 130 do pilot-summary
-em commit `28f5ef4`).
+#### Antigo P1 #1 — `blocking: true` em path_globs não propagado
 
-A matriz declara `blocking: true` em `turbo.json` (linha 56) e
-`pnpm-workspace.yaml` (linha 52), mas o classificador (`matchPathGlobs()`
-em `tooling/scripts/review-router.ts`) só retorna
-`{pattern, reviewers, files_matched}` — o flag `blocking` declarado na
-YAML não é lido nem propagado para `classify()`.
+**Resolvido em v1.2** (commit `e4c0971`): propagação do flag `blocking: true`
+de `path_globs` entries para a final exit code decision do classifier.
+Mudanças:
 
-**Decisão pendente v1.2:** escolher entre
+- `PathGlobRule` interface: adicionado `blocking?: boolean`
+- `PathMatch` interface: adicionado `blocking: boolean`
+- `matchPathGlobs()`: lê `rule.blocking` e popula `PathMatch.blocking`
+- `classify()`: `blocking` movido para o topo do escopo; OR entre
+  path_match blocking e dp_result blocking na decisão final
 
-- (A) Implementar `blocking` em `path_globs` no classifier (propagar flag
-  → `classify` seta `blocking=true`).
-- (B) Mover intenção para `diff_pattern` (regex que case mudanças
-  estruturais nesses arquivos).
+Verificação:
 
-Default recomendado: (A), pois é onde a intenção está documentada.
+- 2 entries com `blocking: true` em path_globs (`pnpm-workspace.yaml`,
+  `turbo.json`) agora corretamente disparam exit code 3 quando seus
+  paths aparecem no diff
+- 3 testes TDD cobrindo o comportamento (`review-router.spec.ts`,
+  commit `eb0b6fd`)
 
-### P1 — Narrowing de diff_patterns regex (FP em test fixtures)
+#### Antigo P1 #2 — FP de regex `bcrypt|argon2|hash\(|jwt\.sign|jwt\.verify`
 
-**Origem:** pilot-summary.md, Aprendizado #2.
+**Resolvido em v1.2** (este commit): narrowing do regex para call-site
+anchored. Novo regex:
 
-Regex atual `bcrypt|argon2|hash\(|jwt\.sign|jwt\.verify` (linha 132)
-casa 7 matches em test fixtures (`review-router.spec.ts` linhas
-148-177, verificável via `git show 7ddb93e:tooling/scripts/
-review-router.spec.ts | grep -nE "bcrypt|argon2|jwt\\.sign|jwt\\.verify"`).
-Mitigação possível: regex mais restrita (ex:
-`bcrypt\\.hash\\(.*password|jwt\\.sign\\(.*secret`).
+```regex
+bcrypt\.hash(?:Sync)?\(|bcrypt\.compare(?:Sync)?\(|argon2\.hash(?:Sync)?\(|argon2\.verify\(|jwt\.(?:sign|verify|decode)\(
+```
 
-Trade-off: regex mais restrita = menos cobertura em código real.
+Cobre: hash/hashSync/compare/compareSync (bcrypt); hash/hashSync/verify
+(argon2); sign/verify/decode (jwt). Não cobre: bare `bcrypt`/`argon2`
+tokens (low signal).
 
-### P2 — Popular `domains[]` no classifier
+Verificação no Pilot Task 1 (commit `7ddb93e`): o broad regex
+`bcrypt|argon2|hash\(|jwt\.sign|jwt\.verify` produzia **10 matches no
+classifier scan window de 50KB** e **20 matches no diff completo**
+(136977 bytes, ~134KB). Distribuição (verificada via `git show 7ddb93e
+| grep -nE ...`):
 
-**Origem:** pilot-summary.md, Aprendizado #3.
+- ~14 matches em test fixtures (`tooling/scripts/review-router.spec.ts`
+  e pilot-summary replication)
+- ~5 matches em plan/spec docs quotando o regex
+- ~1 match na própria matrix YAML
 
-O classificador popula `reviewers[]` mas o campo `domains[]` permanece
-vazio em 5/5 tasks do pilot (consumidores devem usar `reviewers[]`,
-não `domains[]`). Não bloqueador, mas documentar.
+**Total: 0 matches em production code.**
 
-### P2 — Adicionar cenários multi-commit/multi-path em Seção 5 (Exemplos)
+O narrow regex (call-site anchored) tem **1 match nesse diff**: a fixture
+legítima `matchDiffPatterns('const hash = await bcrypt.hash(pwd);', rules)`
+em `tooling/scripts/review-router.spec.ts` (preservado por design —
+production signal sem FP).
 
-**Origem:** pilot-summary.md, Aprendizado #4 (linha 136 do
-pilot-summary em commit `28f5ef4`).
+### Conhecidos (forthcoming v1.3)
 
-Os 3 cenários atuais (A, B, C) cobrem patches 1-commit com 1-3 arquivos.
-Faltam cenários multi-commit (chained commits no mesmo PR) e multi-path
-(>5 arquivos em paths heterogêneos) observados no pilot run #001.
-
-**Decisão pendente v1.2:** expandir Seção 5 com 2 cenários adicionais:
-
-- **Cenário D:** feat multi-commit (3 commits encadeados no mesmo PR)
-- **Cenário E:** chore/refactor multi-path (>5 arquivos em
-  packages/apps distintos)
-
-### P2 — Warning em lint para `path_globs` com `blocking: true` não honrado
-
-**Origem:** pilot-summary.md, Aprendizado #5.
-
-Lint atual não detecta o descompasso entre `blocking: true` declarado em
-`path_globs` e a ausência de propagação no classificador. Sinaliza
-intenção não implementada.
-
-**Decisão pendente v1.2:** adicionar warning (não error) ao
-`tooling/scripts/lint-review-routing.ts` quando encontrar `blocking: true`
-em path_glob sem suporte no classifier.
+(lista vazia — sem gaps conhecidos atualmente)
 
 ---
 
@@ -296,3 +282,4 @@ em path_glob sem suporte no classifier.
 |--------|------|---------|
 | 1 | 2026-09-22 | Versão inicial |
 | 1.1 | 2026-09-22 | Adicionar exemplos de uso (Seção 5) + Seção 6 "Gaps Conhecidos" priorizando 2 P1 + 2 P2 para v1.2; bump version frontmatter `1` → `1.1` (resolvia divergência entre `version: 1` declarado e docs que já referenciavam v1.1) |
+| 1.2 | 2026-09-22 | 2 P1 gaps resolvidos: propagação de `blocking` em path_globs (`e4c0971`) + narrowing do regex de segurança (`f496b05`). Classifier agora propaga corretamente a flag `blocking: true` para a exit code; regex narrow elimina FPs em test fixtures e docs. (Seção 6) |

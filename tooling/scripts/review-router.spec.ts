@@ -54,6 +54,29 @@ describe('review-router classifier', () => {
       );
       expect(result.reviewers).toContain('nestjs-specialist');
     });
+
+    it('classify sets blocking when path_glob rule has blocking=true', () => {
+      // Gap P1 #1 da matrix v1.1 Seção 6 — `blocking: true` em path_globs
+      // deve propagar para a final exit code decision do classifier.
+      const result = classify(
+        {
+          paths: ['pnpm-workspace.yaml'],
+          diff: '',
+          commits: [],
+        },
+        {
+          path_globs: [
+            {
+              pattern: 'pnpm-workspace.yaml',
+              reviewers: ['monorepo-specialist'],
+              blocking: true,
+            },
+          ],
+        },
+      );
+      expect(result.blocking).toBe(true);
+      expect(result.reviewers).toContain('monorepo-specialist');
+    });
   });
 
   describe('matchPathGlobs()', () => {
@@ -85,6 +108,20 @@ describe('review-router classifier', () => {
       const result = matchPathGlobs(['apps/api/src/users.controller.ts'], rules);
       const allReviewers = result.flatMap((m) => m.reviewers);
       expect(new Set(allReviewers)).toEqual(new Set(['nestjs-specialist', 'stack-code-reviewer']));
+    });
+
+    it('matchPathGlobs propagates blocking flag from rule', () => {
+      // Gap P1 #1 da matrix v1.1 Seção 6 — matchPathGlobs() deve ler
+      // `rule.blocking` e popular PathMatch.blocking com o valor declarado.
+      const rules: PathGlobRule[] = [
+        {
+          pattern: 'pnpm-workspace.yaml',
+          reviewers: ['monorepo-specialist'],
+          blocking: true,
+        },
+      ];
+      const result = matchPathGlobs(['pnpm-workspace.yaml'], rules);
+      expect(result[0].blocking).toBe(true);
     });
   });
 
@@ -175,6 +212,66 @@ describe('review-router classifier', () => {
       const result = matchDiffPatterns(bigDiff, rules);
       expect(result.truncated).toBe(true);
       expect(result.reviewers).toEqual([]); // bcrypt after truncation
+    });
+
+    it('broad regex matches fixtures (FP); narrow regex preserves production signal (regression pilot Task 1)', () => {
+      // Gap P1 #2 da matrix v1.1 Seção 6 — regex broad `bcrypt|argon2|hash\(|jwt\.sign|jwt\.verify`
+      // produzia 10 FPs no classifier scan window de 50KB + 20 no diff completo do pilot Task 1
+      // (commit 7ddb93e), todos em test fixtures / plan docs / spec docs / matrix YAML.
+      // Narrowing para call-site anchored reduz para 1 match nesse diff (fixture
+      // legítima preservada por design — ver nota abaixo).
+      //
+      // pt-BR: a fixture abaixo replica as fontes de FP do pilot Task 1:
+      // - nomes de teste com `bcrypt` (linha 148 original)
+      // - regex literal `'bcrypt|argon2'` em test code (linha 150 original)
+      // - regex literal `'bcrypt'` em test code (linhas 167, 173 originais)
+      // - string de teste `'\nbcrypt here'` (linha 174 original)
+      //
+      // NOTA IMPORTANTE: a linha 152 original (`'const hash = await bcrypt.hash(pwd);'`)
+      // foi INTENCIONALMENTE EXCLUÍDA desta fixture porque ela É um call-site real
+      // (`bcrypt.hash(`) — o narrow regex CORRETAMENTE deve casá-la. Mantê-la aqui
+      // faria o teste passar "by construction" sem provar nada sobre a narrowing
+      // (seria um false-green). O teste abaixo asserta ambas as direções:
+      // broad MUST match (prova que a fixture tem conteúdo FP-prone) + narrow
+      // MUST NOT match (prova que o v1.2 fix elimina esses FPs).
+      const fixtureContent = `
+    it('adds security-auditor for bcrypt pattern', () => {
+      const rules: DiffPatternRule[] = [
+        { regex: 'bcrypt|argon2', reviewers_added: ['security-auditor'], blocking: true },
+      ];
+      expect(result.reviewers).toContain('security-auditor');
+      expect(result.blocking).toBe(true);
+    });
+    // ... outros casos omitidos ...
+    it('respects 50KB cap and truncates with warning', () => {
+      const rules: DiffPatternRule[] = [{ regex: 'bcrypt', reviewers_added: ['security-auditor'] }];
+      const bigDiff = 'x'.repeat(60_000) + '\\nbcrypt here';
+      const result = matchDiffPatterns(bigDiff, rules);
+      expect(result.truncated).toBe(true);
+      expect(result.reviewers).toEqual([]);
+    });
+  `;
+
+      // Broad regex (pre-fix): MUST match fixture content (demonstra que a fixture
+      // contém conteúdo FP-prone das categorias do pilot Task 1).
+      const broadResult = matchDiffPatterns(fixtureContent, [
+        {
+          regex: 'bcrypt|argon2|hash\\(|jwt\\.sign|jwt\\.verify',
+          reviewers_added: ['security-auditor'],
+          blocking: true,
+        },
+      ]);
+      expect(broadResult.reviewers).toContain('security-auditor');
+      expect(broadResult.blocking).toBe(true);
+
+      // Narrow regex (v1.2 fix): MUST NOT match fixture content (zero FPs).
+      const narrowRegex =
+        'bcrypt\\.hash(?:Sync)?\\(|bcrypt\\.compare(?:Sync)?\\(|argon2\\.hash(?:Sync)?\\(|argon2\\.verify\\(|jwt\\.(?:sign|verify|decode)\\(';
+      const narrowResult = matchDiffPatterns(fixtureContent, [
+        { regex: narrowRegex, reviewers_added: ['security-auditor'], blocking: true },
+      ]);
+      expect(narrowResult.reviewers).not.toContain('security-auditor');
+      expect(narrowResult.blocking).toBe(false);
     });
   });
 

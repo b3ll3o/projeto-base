@@ -35,12 +35,20 @@ export interface PathGlobRule {
   stacks?: string[];
   rationale?: string;
   blocking_if_diff_matches?: string[];
+  /**
+   * Se true, qualquer match desta regra propaga `blocking=true` para o
+   * ClassifyResult final (afinal é o CLI que mapeia isso para exit code 3).
+   * Default false. v1.2: gap P1 #1 da matrix Seção 6 resolvido.
+   */
+  blocking?: boolean;
 }
 
 export interface PathMatch {
   pattern: string;
   reviewers: string[];
   files_matched: string[];
+  /** Espelha `PathGlobRule.blocking` da regra que produziu o match. v1.2. */
+  blocking: boolean;
 }
 
 // Converte glob pattern para regex
@@ -69,6 +77,7 @@ export function matchPathGlobs(paths: string[], rules: PathGlobRule[]): PathMatc
         pattern: rule.pattern,
         reviewers: rule.reviewers,
         files_matched: filesMatched,
+        blocking: rule.blocking === true,
       });
     }
   }
@@ -85,11 +94,16 @@ export function classify(
 ): ClassifyResult {
   const evidence: EvidenceItem[] = [];
   const reviewers = new Set<string>();
+  // pt-BR: v1.2 — blocking agora é OR entre path_glob matches e diff_patterns
+  // matches (gap P1 #1 da matrix Seção 6). Movido para o topo do escopo para
+  // ambas as fontes poderem escrever nele.
+  let blocking = false;
 
   if (rules?.path_globs) {
     const pathMatches = matchPathGlobs(input.paths, rules.path_globs);
     for (const m of pathMatches) {
       m.reviewers.forEach((r) => reviewers.add(r));
+      if (m.blocking) blocking = true;
       evidence.push({
         signal: 'path_glob',
         pattern: m.pattern,
@@ -111,12 +125,11 @@ export function classify(
     }
   }
 
-  let blocking = false;
   if (rules?.diff_patterns) {
     const dpResult = matchDiffPatterns(input.diff, rules.diff_patterns);
     dpResult.reviewers.forEach((r) => reviewers.add(r));
     dpResult.evidence.forEach((e) => evidence.push(e));
-    blocking = dpResult.blocking;
+    if (dpResult.blocking) blocking = true;
   }
 
   return {
