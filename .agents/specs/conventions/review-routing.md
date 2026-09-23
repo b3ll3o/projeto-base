@@ -252,11 +252,23 @@ Cobre: hash/hashSync/compare/compareSync (bcrypt); hash/hashSync/verify
 (argon2); sign/verify/decode (jwt). Não cobre: bare `bcrypt`/`argon2`
 tokens (low signal).
 
-Verificação no Pilot Task 1 (commit `7ddb93e`): broad regex tinha **10
-matches** (todos FP — test fixtures, plan docs, spec docs, matrix YAML,
-commit message); narrow regex tem **0 matches** nesse commit.
-Production signal preservado (todas as variantes security-relevant
-permanecem cobertas).
+Verificação no Pilot Task 1 (commit `7ddb93e`): o broad regex
+`bcrypt|argon2|hash\(|jwt\.sign|jwt\.verify` produzia **10 matches no
+classifier scan window de 50KB** e **20 matches no diff completo**
+(136977 bytes, ~134KB). Distribuição (verificada via `git show 7ddb93e
+| grep -nE ...`):
+
+- ~14 matches em test fixtures (`tooling/scripts/review-router.spec.ts`
+  e pilot-summary replication)
+- ~5 matches em plan/spec docs quotando o regex
+- ~1 match na própria matrix YAML
+
+**Total: 0 matches em production code.**
+
+O narrow regex (call-site anchored) tem **1 match nesse diff**: a fixture
+legítima `matchDiffPatterns('const hash = await bcrypt.hash(pwd);', rules)`
+em `tooling/scripts/review-router.spec.ts` (preservado por design —
+production signal sem FP).
 
 ### Conhecidos (forthcoming v1.3)
 
@@ -270,4 +282,4 @@ permanecem cobertas).
 |--------|------|---------|
 | 1 | 2026-09-22 | Versão inicial |
 | 1.1 | 2026-09-22 | Adicionar exemplos de uso (Seção 5) + Seção 6 "Gaps Conhecidos" priorizando 2 P1 + 2 P2 para v1.2; bump version frontmatter `1` → `1.1` (resolvia divergência entre `version: 1` declarado e docs que já referenciavam v1.1) |
-| 1.2 | 2026-09-22 | 2 P1 gaps resolvidos: propagação de `blocking` em path_globs + narrowing do regex de segurança. Classifier agora propaga corretamente a flag `blocking: true` para a exit code; regex narrow elimina FPs em test fixtures e docs. (Seção 6) |
+| 1.2 | 2026-09-22 | 2 P1 gaps resolvidos: propagação de `blocking` em path_globs (`e4c0971`) + narrowing do regex de segurança (`f496b05`). Classifier agora propaga corretamente a flag `blocking: true` para a exit code; regex narrow elimina FPs em test fixtures e docs. (Seção 6) |

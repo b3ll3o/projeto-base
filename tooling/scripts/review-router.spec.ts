@@ -214,19 +214,26 @@ describe('review-router classifier', () => {
       expect(result.reviewers).toEqual([]); // bcrypt after truncation
     });
 
-    it('narrowed regex does not match fixture/spec/doc content (regression for FP pilot Task 1)', () => {
+    it('broad regex matches fixtures (FP); narrow regex preserves production signal (regression pilot Task 1)', () => {
       // Gap P1 #2 da matrix v1.1 Seção 6 — regex broad `bcrypt|argon2|hash\(|jwt\.sign|jwt\.verify`
-      // produzia 10 FPs no pilot Task 1 (commit 7ddb93e), todos em test fixtures /
-      // plan docs / spec docs / matrix YAML. Narrowing para call-site anchored deve
-      // zerar matches em conteúdo representativo (sem call sites reais).
+      // produzia 10 FPs no classifier scan window de 50KB + 20 no diff completo do pilot Task 1
+      // (commit 7ddb93e), todos em test fixtures / plan docs / spec docs / matrix YAML.
+      // Narrowing para call-site anchored reduz para 1 match nesse diff (fixture
+      // legítima preservada por design — ver nota abaixo).
       //
       // pt-BR: a fixture abaixo replica as fontes de FP do pilot Task 1:
       // - nomes de teste com `bcrypt` (linha 148 original)
       // - regex literal `'bcrypt|argon2'` em test code (linha 150 original)
       // - regex literal `'bcrypt'` em test code (linhas 167, 173 originais)
       // - string de teste `'\nbcrypt here'` (linha 174 original)
-      // NENHUMA contém call site real (`bcrypt.hash(` etc), por isso o regex
-      // narrow (call-site anchored) deve ter 0 matches.
+      //
+      // NOTA IMPORTANTE: a linha 152 original (`'const hash = await bcrypt.hash(pwd);'`)
+      // foi INTENCIONALMENTE EXCLUÍDA desta fixture porque ela É um call-site real
+      // (`bcrypt.hash(`) — o narrow regex CORRETAMENTE deve casá-la. Mantê-la aqui
+      // faria o teste passar "by construction" sem provar nada sobre a narrowing
+      // (seria um false-green). O teste abaixo asserta ambas as direções:
+      // broad MUST match (prova que a fixture tem conteúdo FP-prone) + narrow
+      // MUST NOT match (prova que o v1.2 fix elimina esses FPs).
       const fixtureContent = `
     it('adds security-auditor for bcrypt pattern', () => {
       const rules: DiffPatternRule[] = [
@@ -244,14 +251,27 @@ describe('review-router classifier', () => {
       expect(result.reviewers).toEqual([]);
     });
   `;
+
+      // Broad regex (pre-fix): MUST match fixture content (demonstra que a fixture
+      // contém conteúdo FP-prone das categorias do pilot Task 1).
+      const broadResult = matchDiffPatterns(fixtureContent, [
+        {
+          regex: 'bcrypt|argon2|hash\\(|jwt\\.sign|jwt\\.verify',
+          reviewers_added: ['security-auditor'],
+          blocking: true,
+        },
+      ]);
+      expect(broadResult.reviewers).toContain('security-auditor');
+      expect(broadResult.blocking).toBe(true);
+
+      // Narrow regex (v1.2 fix): MUST NOT match fixture content (zero FPs).
       const narrowRegex =
         'bcrypt\\.hash(?:Sync)?\\(|bcrypt\\.compare(?:Sync)?\\(|argon2\\.hash(?:Sync)?\\(|argon2\\.verify\\(|jwt\\.(?:sign|verify|decode)\\(';
-      const rules: DiffPatternRule[] = [
+      const narrowResult = matchDiffPatterns(fixtureContent, [
         { regex: narrowRegex, reviewers_added: ['security-auditor'], blocking: true },
-      ];
-      const result = matchDiffPatterns(fixtureContent, rules);
-      expect(result.reviewers).not.toContain('security-auditor');
-      expect(result.blocking).toBe(false);
+      ]);
+      expect(narrowResult.reviewers).not.toContain('security-auditor');
+      expect(narrowResult.blocking).toBe(false);
     });
   });
 
