@@ -1,4 +1,6 @@
 // apps/api/src/main.ts
+import './shared/infrastructure/telemetry/tracing.js';
+import { initTracing } from './shared/infrastructure/telemetry/tracing.js';
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
@@ -8,6 +10,10 @@ import { z } from 'zod';
 import { AppModule } from './app.module.js';
 import { GlobalExceptionFilter } from './shared/infrastructure/http/global-exception.filter.js';
 import { ZodValidationPipe } from './shared/infrastructure/http/zod-validation.pipe.js';
+
+// pt-BR: Inicializa OTel ANTES de qualquer outro código rodar (deve ser o
+// primeiro passo do bootstrap — ver tracing.ts:30-36 para o rationale ESM).
+initTracing();
 
 async function bootstrap(): Promise<void> {
   const adapter = new FastifyAdapter({ logger: false });
