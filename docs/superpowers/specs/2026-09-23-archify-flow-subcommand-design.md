@@ -84,7 +84,7 @@ git log  <range> --pretty="%h %s%n%b"
 [--validations <json>]      → validation nodes
         │
         ▼
-build-spec.mjs     ──►   spec.json   (Workflow schema v2)
+build-spec.mjs     ──►   spec.json   (Workflow schema v1, conforms to schemas/workflow.schema.json)
         │
         ▼
 archify validate workflow spec.json --quality standard --json
@@ -99,60 +99,84 @@ archify deliver  workflow spec.json <out>/workflow.html --quality standard --jso
 
 No new code path duplicates the existing `validate` / `deliver` semantics; the flow subcommand is a thin orchestrator that reuses the same renderer, validator, and schema machinery.
 
-### 4.3 Workflow JSON shape (schema_version 2)
+### 4.3 Workflow JSON shape (conforms to `schemas/workflow.schema.json`)
+
+> **Note (corrected from earlier draft):** the schema has `additionalProperties: false` at every level. There is no `description` field on nodes, no `type: "default"|"start"|"terminal"`, no `semanticChecks.allowedRoots/allowedTerminals`, and no top-level `_flow_source`. This shape was validated against `examples/release-delivery.workflow.json`.
 
 ```jsonc
 {
-  "schema_version": 2,
+  "schema_version": 1,
   "diagram_type": "workflow",
   "meta": {
     "title": "Flow for feat/users-api",
     "animation": "trace"
-    // no extras — meta fields are strictly controlled by common.schema.json
+    // additionalProperties: false — only title/subtitle/locale/output/animation/
+    // visual_preset/quality_profile/views/legend/viewBox are allowed
   },
-  "lanes": ["Modify", "Decide", "Validate"],
+  "lanes": [
+    { "id": "modify",   "label": "Modify"   },
+    { "id": "decide",   "label": "Decide"   },
+    { "id": "validate", "label": "Validate" }
+  ],
   "nodes": [
     {
-      "id": "m1",
-      "type": "default",
-      "lane": "Modify",
+      "id": "m_abc123",
+      "lane": "modify",
+      "col": 0,
+      "type": "frontend",
       "label": "src/users/create.ts (+12 -3)",
-      "description": "hunks at lines 10-22, 44-58"
+      "sublabel": "hunks at lines 10-22, 44-58"
     },
     {
-      "id": "d1",
-      "type": "default",
-      "lane": "Decide",
+      "id": "d_def456",
+      "lane": "decide",
+      "col": 1,
+      "type": "security",
       "label": "a1b2c3d feat(api): add users endpoint",
-      "description": "commit message body"
+      "sublabel": "commit message body"
     },
     {
-      "id": "v1",
-      "type": "default",
-      "lane": "Validate",
+      "id": "v_ghi789",
+      "lane": "validate",
+      "col": 2,
+      "type": "backend",
       "label": "archify validate passed",
-      "description": "exit 0, 12 checks"
-    },
-    { "id": "start", "type": "start"   },
-    { "id": "end",   "type": "terminal" }
+      "sublabel": "exit 0, 12 checks"
+    }
   ],
   "edges": [
-    { "from": "start", "to": "m1" },
-    { "from": "m1",    "to": "d1" },
-    { "from": "d1",    "to": "v1" },
-    { "from": "v1",    "to": "end"  }
+    { "from": "m_abc123", "to": "d_def456" },
+    { "from": "d_def456", "to": "v_ghi789" }
   ],
-  "mainPath": ["start", "m1", "d1", "v1", "end"],
-  "semanticChecks": {
-    "allowedRoots":     ["start"],
-    "allowedTerminals": ["end"]
-  }
+  "mainPath": ["m_abc123", "d_def456", "v_ghi789"]
 }
 ```
 
-**Schema strategy:** default emission is `schema_version: 2`. v2's `semanticChecks` + node `description` + `lane` strings give enough expressiveness for the diff/commit/validate narrative without forcing new schema fields (which `additionalProperties: false` would forbid). Specs are validated by the existing `archify validate workflow` command.
+**Schema constraints the builder MUST respect:**
 
-**Legacy mode:** if the host repo pins `archify` to a version older than the v2 compiler, the user passes `--schema=1` and the spec is emitted at v1 (linear phases, no `semanticChecks`). The default v2 path is unaffected.
+| Field | Constraint | Source |
+|---|---|---|
+| `lanes[*].id` | unique, non-empty id | `additionalProperties: false` |
+| `nodes[*].lane` | MUST equal one of `lanes[*].id` | required `lane` |
+| `nodes[*].col` | integer in `[0, 5]` (max 6 columns) | `maximum: 5` |
+| `nodes[*].type` | enum: `frontend` \| `backend` \| `database` \| `cloud` \| `security` \| `messagebus` \| `external` | `$ref: componentType` |
+| `nodes[*].label` | non-empty string | `minLength: 1` |
+| `meta` | `additionalProperties: false` — no extra keys | strict |
+| root | `additionalProperties: false` — no `_flow_source`, no `semanticChecks` | strict |
+
+**Type-by-lane visual map (decision, locked here):**
+
+| Lane | `type` value | Rationale |
+|---|---|---|
+| `modify` | `frontend` | developer source changes |
+| `decide` | `security` | commit = gated decision |
+| `validate` | `backend` | automated quality checks |
+
+**Column strategy:** `col` is integer `[0, 5]`. The builder assigns `col = Math.min(position_in_lane, 5)` so multiple nodes can share a column when a lane has more than 6 items (overflow is visually stacked, not cropped). The first node of each non-empty lane goes to `col = 0`.
+
+**Provenance sidecar (replaces the old `_flow_source`):** because the schema is strict, builder provenance (`range`, `baseSha`, `generated_at`) is written to a separate file `<out>/_flow_source.json` next to `workflow.json`. This file is never validated by `archify validate` and exists purely for traceability. It is regenerated on every flow run (full-regen contract).
+
+**Legacy `--schema=1` / `--schema=2` flag:** REMOVED. The schema enum already accepts both 1 and 2; we always emit `schema_version: 1` matching the existing examples. No dual-mode logic in the builder.
 
 **Node-id collisions** are prevented by hashing `path:lineRange` (Modify) and `commit-sha` (Decide) — deterministic, idempotent, no merge math.
 
@@ -225,16 +249,19 @@ The installer writes a thin shim (Husky or `.git/hooks/pre-push`) that `require`
 
 ## 6. Diff → node mapping
 
-| Source | Lane | Field source |
-|---|---|---|
-| `git diff --unified=0 <range>` | `Modify` | One node per file. `label = "<path> (+a -b)"`. `description` enumerates hunk line ranges. Binary files → single node `Binary changes: <path>`. |
-| `git log <range> --pretty=%h %s%n%b` | `Decide` | One node per commit (subject as label). When more than 10 commits are in the range, they collapse to a single summary node: `label = "<N> commits"`, `description = "<first subject> … <last subject> (<list of shas>)"`. `--since-message <glob>` (if passed) **includes only** commits whose subject matches the glob (positive filter, applied during parse). |
-| `--decisions <md>` (optional) | `Decide` | Each `## Heading` becomes a node; body becomes description. Appends after commit nodes (so commit-derived decisions appear first). |
-| `archify validate workflow <spec>` result | `Validate` | Single node `passed` / `failed: <reason>`. |
-| `--validations <json>` (optional) | `Validate` | Each entry (lint / test / build) becomes a separate node. Format: `{name, status, summary, exitCode?}`. |
-| (synthetic) | — | `start` and `end` (terminal) anchor `mainPath`. |
+| Source | Lane id | `type` | Field source |
+|---|---|---|---|
+| `git diff --unified=0 <range>` | `modify` | `frontend` | One node per file. `label = "<path> (+a -b)"`. `sublabel` enumerates hunk line ranges. Binary files → single node `Binary changes: <path>`. |
+| `git log <range> --pretty=%h %s%n%b` | `decide` | `security` | One node per commit (subject as label). When more than 10 commits are in the range, they collapse to a single summary node: `label = "<N> commits"`, `sublabel = "<first subject> … <last subject> (<list of shas>)"`. `--since-message <glob>` (if passed) **includes only** commits whose subject matches the glob (positive filter, applied during parse). |
+| `--decisions <md>` (optional) | `decide` | `security` | Each `## Heading` becomes a node; body becomes `sublabel`. Appends after commit nodes (so commit-derived decisions appear first). |
+| `archify validate workflow <spec>` result | `validate` | `backend` | Single node `passed` / `failed: <reason>`. |
+| `--validations <json>` (optional) | `validate` | `backend` | Each entry (lint / test / build) becomes a separate node. Format: `{name, status, summary, exitCode?}`. |
 
-**Edge wiring:** the nodes are emitted in lane order: `Modify` nodes first, then `Decide`, then `Validate`, with `start` anchoring the chain and `end` (terminal) closing it. Within a lane, nodes are sequenced by their parse order (modify: file order from `git diff`; decide: chronological commit order, then explicit decisions from `--decisions`; validate: order in `--validations`, then internal validate result last). **Empty lanes are skipped** — when a lane has zero nodes, the chain jumps to the next non-empty lane (so a feature with no explicit decisions still produces `start → Modify[…] → Validate[…] → end` directly). This keeps the runtime path unambiguous and matches archify's `semanticChecks.allowedRoots` / `allowedTerminals` contract out of the box.
+**Column assignment:** within each lane, nodes get `col = Math.min(position_in_lane, 5)` so a lane with N>6 nodes still fits (overflow stacked). The first node of each non-empty lane starts at `col = 0`.
+
+**Edge wiring:** the builder emits nodes in lane order: `modify` → `decide` → `validate`. Within a lane, nodes are sequenced by their parse order. **Empty lanes are skipped** — when a lane has zero nodes, the chain jumps to the next non-empty lane (so a feature with no explicit decisions still produces `Modify[…] → Validate[…] →` directly). `mainPath` is the linear sequence of all node ids in that order; `edges` connect consecutive ids. `mainPath` length MUST be `≥ 2` per schema. If only one node exists across all lanes (degenerate), the builder emits a self-loop edge `{from, to}` pointing to the same node so `mainPath` still has 2 entries (`[node, node]`).
+
+**`start`/`end` anchors are NOT nodes** — the previous draft added synthetic `start`/`end` nodes with non-conformant `type` values. Removed. The semantic entry/exit is implied by `mainPath` order.
 
 ## 7. Error handling
 
@@ -257,7 +284,7 @@ New test directory: `archify/test/flow/`.
 | Type | File | Covers |
 |---|---|---|
 | Unit | `parser-diff.test.mjs` | `git diff --unified=0` → typed array: binário, rename, multi-hunk, delete-only, add-only, submodules. Target 100% branch coverage. |
-| Unit | `builder-spec.test.mjs` | diff + log + validations → spec JSON conformante com `workflow.schema.json` v2. Cases: range vazio, > 10 commits (colapsa), com/sem inputs extras. |
+| Unit | `builder-spec.test.mjs` | diff + log + validations → spec JSON conforms to `workflow.schema.json` v1. Cases: empty range (1 self-loop), > 10 commits (collapse), with/without extra inputs, lane-id validation, col bound `[0,5]`, type enum. **Asserts against real schema via AJV (not hand-written shape check).** |
 | Unit | `id-collision.test.mjs` | Dois commits com mesmo subject → ids diferentes; dois arquivos com mesmo path após rename → ids diferentes. |
 | Integration | `validate-deliver.test.mjs` | Roda `archify validate workflow` e `archify deliver` reais no spec gerado; asserta `checks` esperados. |
 | E2E | `flow-cli.test.mjs` | Mini fixture repo (mini `.git` criado no boot do teste); roda `archify flow --git-range=base...feat`; asserta `workflow.json` + `workflow.html` existem, validação passa, HTML renderiza. |
