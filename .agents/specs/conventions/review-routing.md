@@ -1,7 +1,7 @@
 ---
 name: review-routing
-version: 1.3
-updated: 2026-09-22
+version: 1.4
+updated: 2026-09-23
 maintainer: review-router
 description: "Matriz de roteamento de revisores consultada pelo review-router"
 ---
@@ -95,6 +95,14 @@ path_globs:
 
   - pattern: "**/*.spec.ts"
     reviewers: [test-writer]
+
+  # pt-BR: OpenTelemetry (T6.2 — v1.4). Paths canônicos do rollout telemetria.
+  - pattern: "apps/api/**/telemetry/**"
+    reviewers: [telemetry-specialist]
+  - pattern: "apps/web/**/instrumentation*"
+    reviewers: [telemetry-specialist]
+  - pattern: "infra/otelcol/**"
+    reviewers: [telemetry-specialist]
 ```
 
 ## 2. COMMIT TYPES (Conventional Commits)
@@ -141,6 +149,8 @@ diff_patterns:
     reviewers_added: [security-auditor]
   - regex: "workspace:\\*"
     reviewers_added: [monorepo-specialist]
+  - regex: "@Trace\\(|@Span\\(|SpanKind\\.|context\\.with\\(|\\.setAttribute\\("
+    reviewers_added: [telemetry-specialist]
 ```
 
 ## 4. SKIP HEURISTICS
@@ -221,23 +231,7 @@ Resultado esperado:
 
 #### Antigo P1 #1 — `blocking: true` em path_globs não propagado
 
-**Resolvido em v1.2** (commit `e4c0971`): propagação do flag `blocking: true`
-de `path_globs` entries para a final exit code decision do classifier.
-Mudanças:
-
-- `PathGlobRule` interface: adicionado `blocking?: boolean`
-- `PathMatch` interface: adicionado `blocking: boolean`
-- `matchPathGlobs()`: lê `rule.blocking` e popula `PathMatch.blocking`
-- `classify()`: `blocking` movido para o topo do escopo; OR entre
-  path_match blocking e dp_result blocking na decisão final
-
-Verificação:
-
-- 2 entries com `blocking: true` em path_globs (`pnpm-workspace.yaml`,
-  `turbo.json`) agora corretamente disparam exit code 3 quando seus
-  paths aparecem no diff
-- 3 testes TDD cobrindo o comportamento (`review-router.spec.ts`,
-  commit `eb0b6fd`)
+**Resolvido em v1.2** (`e4c0971`): flag `blocking: true` propaga de `path_globs` para exit code (4 alvos: `PathGlobRule`, `PathMatch`, `matchPathGlobs()`, `classify()`). 2 entries blocking (`pnpm-workspace.yaml`, `turbo.json`) disparam exit 3; 3 testes TDD em `review-router.spec.ts` (`eb0b6fd`).
 
 #### Antigo P1 #2 — FP de regex `bcrypt|argon2|hash\(|jwt\.sign|jwt\.verify`
 
@@ -284,7 +278,11 @@ production signal sem FP).
 
 **Resolvido em v1.3** (PR #22): Cenários D + E migrados para [review-routing-examples.md](./review-routing-examples.md) (apêndice, ~102 linhas) preservando limite de 300 linhas. Zero breaking change — aditivo.
 
-### Conhecidos (forthcoming v1.4) — _(nenhum)_
+### Conhecidos (forthcoming v1.5) — _(nenhum)_
+
+### Adicionado em v1.4 — diff_patterns OpenTelemetry
+
+**Adicionado em v1.4** (T6.2): roteamento de PRs com código OTel (`@Trace\(` / `@Span\(` decorators NestJS, `SpanKind\.`, `context\.with\(`, `\.setAttribute\(`) e paths OTel (`apps/api/**/telemetry/**`, `apps/web/**/instrumentation*`, `infra/otelcol/**`) para `telemetry-specialist`. Aditivo — sem breaking change. Verifica com lint script (`pnpm tooling:test -- lint-review-routing`).
 
 ---
 
@@ -296,3 +294,4 @@ production signal sem FP).
 | 1.1 | 2026-09-22 | Adicionar exemplos de uso (Seção 5) + Seção 6 "Gaps Conhecidos" priorizando 2 P1 + 2 P2 para v1.2; bump version frontmatter `1` → `1.1` (resolvia divergência entre `version: 1` declarado e docs que já referenciavam v1.1) |
 | 1.2 | 2026-09-22 | 2 P1 gaps resolvidos: propagação de `blocking` em path_globs (`e4c0971`) + narrowing do regex de segurança (`f496b05`). Classifier agora propaga corretamente a flag `blocking: true` para a exit code; regex narrow elimina FPs em test fixtures e docs. (Seção 6) |
 | 1.3 | 2026-09-22 | 3 P2 gaps resolvidos: PR #20 (enrich `domains[]` em `ClassifyResult`), PR #21 (lint WARNING em `blocking: true` c/ paths ilegíveis), PR #22 (cenários multi-commit/multi-path migrados para apêndice `review-routing-examples.md` para preservar limite de 300 linhas). Zero breaking change em todos. (Seção 6) |
+| 1.4 | 2026-09-23 | Adicionar diff_pattern OpenTelemetry + 3 path_globs (`apps/api/**/telemetry/**`, `apps/web/**/instrumentation*`, `infra/otelcol/**`) roteando para `telemetry-specialist`. Cobre NestJS decorators (`@Trace\(`, `@Span\(`), OTel enums (`SpanKind\.`), context API (`context\.with\(`) e span API (`\.setAttribute\(`). Acionado por T6.2 do plano de telemetria. Aditivo — sem breaking change. (Seção 6) |
