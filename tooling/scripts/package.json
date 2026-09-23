@@ -6,7 +6,8 @@
   "scripts": {
     "test": "vitest run",
     "review:route": "tsx review-router.ts",
-    "review:lint": "tsx lint-review-routing.ts"
+    "review:lint": "tsx lint-review-routing.ts",
+    "specialist:route": "tsx specialist-router.ts"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

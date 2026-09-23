@@ -120,7 +120,7 @@ demand_keywords:
     specialists: [docker-specialist]
     rationale: "Demanda sobre containerização"
 
-  - regex: "(?i)monorepo|workspace|\bturbo\b|pnpm.?workspace"
+  - regex: "(?i)monorepo|workspace|\\bturbo\\b|pnpm.?workspace"
     specialists: [monorepo-specialist]
     rationale: "Mudança estrutural no monorepo"
 
@@ -132,7 +132,7 @@ demand_keywords:
     specialists: [nextjs-specialist]
     rationale: "Demanda frontend Next.js"
 
-  - regex: "(?i)seguran[çc]a|vulnerab|owasp|secrets?|cve|exploit|\bauth\b|\bjwt\b"
+  - regex: "(?i)seguran[çc]a|vulnerab|owasp|secrets?|cve|exploit|\\bauth\\b|\\bjwt\\b"
     specialists: [security-auditor]
     rationale: "Demanda de auditoria/segurança"
 
