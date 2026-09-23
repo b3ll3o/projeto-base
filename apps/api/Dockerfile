@@ -49,9 +49,12 @@ EXPOSE 3000
 # pt-BR: Task 1.5 — auto-carrega tracing OTel antes de qualquer código de usuário.
 # `--import` é ESM-aware (Node 20.6+); `--require` é CJS-only e quebraria em
 # runtime `type: module`. O caminho é relativo ao WORKDIR (/repo), espelhando
-# a convenção do entrypoint (`apps/api/dist/main.js`). Side-effect: o módulo
-# é registrado como import antes do bootstrap do NestFactory.
-ENV NODE_OPTIONS="--import ./apps/api/dist/shared/infrastructure/telemetry/tracing.js"
+# a convenção do entrypoint (`apps/api/dist/main.js`). Aponta para `init.js`
+# (wrapper side-effect que chama initTracing() no top-level); `tracing.js` é
+# puro e NÃO tem side-effect (protegido por tracing.spec.ts:28-35), portanto
+# importá-lo diretamente NÃO dispararia o SDK no container. Side-effect: o
+# módulo init.js é registrado como import antes do bootstrap do NestFactory.
+ENV NODE_OPTIONS="--import ./apps/api/dist/shared/infrastructure/telemetry/init.js"
 HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
   CMD curl -fsS http://localhost:3000/api/v1/health || exit 1
 ENTRYPOINT ["sh","-c","pnpm exec prisma migrate deploy --schema=apps/api/prisma/schema.prisma && node apps/api/dist/main.js"]

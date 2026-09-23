@@ -13,12 +13,12 @@ import { readFile } from 'node:fs/promises';
 const DOCKERFILE_PATH = new URL('../Dockerfile', import.meta.url);
 
 describe('Dockerfile prod target — OTel tracing bootstrap (Task 1.5)', () => {
-  it('declara NODE_OPTIONS com --import (ESM-aware) apontando para telemetry/tracing.js', async () => {
+  it('declara NODE_OPTIONS com --import (ESM-aware) apontando para telemetry/init.js', async () => {
     const dockerfile = await readFile(DOCKERFILE_PATH, 'utf8');
     // --require é CJS-only e quebraria ESM (ERR_REQUIRE_ESM) — não aceitar
     expect(dockerfile).not.toMatch(/NODE_OPTIONS=.*--require/);
-    // --import é a forma ESM-aware (Node 20.6+ / 22+); path deve terminar em telemetry/tracing.js
-    expect(dockerfile).toMatch(/NODE_OPTIONS=.*--import\s+\S*telemetry\/tracing\.js/);
+    // --import é a forma ESM-aware (Node 20.6+ / 22+); path deve terminar em telemetry/init.js
+    expect(dockerfile).toMatch(/NODE_OPTIONS=.*--import\s+\S*telemetry\/init\.js/);
   });
 
   it('mantém ENTRYPOINT/CMD executando node dist/main.js no target prod', async () => {
@@ -33,5 +33,14 @@ describe('Dockerfile prod target — OTel tracing bootstrap (Task 1.5)', () => {
     const dockerfile = await readFile(DOCKERFILE_PATH, 'utf8');
     // Em prod rodamos a partir de apps/api/dist/ (output do `tsc -p tsconfig.build.json`)
     expect(dockerfile).not.toMatch(/NODE_OPTIONS=.*src\/shared\/infrastructure\/telemetry/);
+  });
+
+  it('NODE_OPTIONS aponta para init.js (não tracing.js) para garantir side-effect', async () => {
+    const dockerfile = await readFile(DOCKERFILE_PATH, 'utf8');
+    // init.js é o bootstrap side-effect que chama initTracing() no top-level
+    expect(dockerfile).toMatch(/NODE_OPTIONS=.*telemetry\/init\.js/);
+    // tracing.js puro não tem side-effect (protegido por tracing.spec.ts:28-35),
+    // então NÃO deve ser o target direto do --import
+    expect(dockerfile).not.toMatch(/NODE_OPTIONS=.*telemetry\/tracing\.js/);
   });
 });
