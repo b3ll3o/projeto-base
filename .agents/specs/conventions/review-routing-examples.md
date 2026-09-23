@@ -40,10 +40,11 @@ Resultado esperado:
 - **`blocking = false`** — nenhum `path_glob` blocking (`pnpm-workspace.yaml`
   ou `turbo.json`) casa os paths deste cenário; diff_patterns também
   não têm `blocking: true` aqui (sem bcrypt/jwt/raw SQL)
-- `domains = ["nestjs-domain"]` — Seção 1 da matrix não tem `domain:` em
-  `apps/api/**` (regra adicionada apenas em `.agents/specs/**` e
-  `.agents/agents/**`); v1.3 enrich permite popular quando futuramente
-  a regra for anotada
+- `domains = []` — a matrix Seção 1 atualmente só anota `domain:` em
+  `.agents/specs/**` (→ `agents-specs`) e `.agents/agents/**` (→
+  `agents-meta`); a regra `apps/api/**` poderia ser anotada com
+  `domain: "nestjs-domain"` em versão futura para popular este campo
+  via enrich v1.3 (PR #20)
 
 **Nota:** `!` no `feat(users)!:` marca breaking change (campo
 `breaking: true` em `ParsedCommit`) mas não afeta dispatch — só sinaliza
@@ -67,11 +68,12 @@ Resultado esperado:
   e `turbo.json` e `tooling/scripts/ci/**` (2 matches com
   `blocking: true`); também via commit_type `ci` se algum commit tiver
   `ci:` type
-- `doc-sync` DISPATCHED — path_glob `.agents/specs/**` + commit_type
-  `chore(agents)` borderline; classificador pode interpretar
-  `chore(agents):` como docs-style quando scope toca `.agents/specs/**`
-- `agent-architect` DISPATCHED — path_glob `.agents/specs/**` (segundo
-  reviewer desta regra)
+- `doc-sync` DISPATCHED — path_glob `.agents/specs/**` (regra
+  `.agents/specs/**` na matrix Seção 1 só lista `[doc-sync]` como
+  reviewer — diferentemente de `.agents/agents/**`/`.agents/skills/**`
+  que também incluem `agent-architect`) + commit_type `chore(agents)`
+  borderline; classificador pode interpretar `chore(agents):` como
+  docs-style quando scope toca `.agents/specs/**`
 - **`blocking = true`** — path_globs `pnpm-workspace.yaml` E `turbo.json`
   ambos com `blocking: true`; v1.2 fix propagou corretamente via
   `PathMatch.blocking` → `classify()` final OR
