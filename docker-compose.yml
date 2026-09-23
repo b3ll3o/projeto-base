@@ -63,6 +63,15 @@ services:
     depends_on:
       api:
         condition: service_healthy
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.103.0
+    profiles: [observability]
+    command: ['--config=/etc/otelcol/config.yaml']
+    volumes:
+      - ./infra/otelcol/config.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - '4317:4317' # OTLP gRPC
+      - '4318:4318' # OTLP HTTP
 
 volumes:
   postgres_data:
