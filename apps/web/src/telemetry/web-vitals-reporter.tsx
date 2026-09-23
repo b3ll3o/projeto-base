@@ -22,12 +22,17 @@
 //
 // SSR-safety:
 //
-//   A diretiva `'use client'` é respeitada pelo bundler do Next.js: o
-//   módulo entra apenas no bundle do browser. Mesmo se uma avaliação
-//   server-side ocorrer durante SSR, `web-vitals` v4 encapsula o
-//   `new PerformanceObserver(...)` em try/catch e no-op silenciosamente
-//   quando o observer não está disponível, e o `@opentelemetry/api`
-//   retorna NoopMeter/NoopHistogram sem SDK registrado — sem erros.
+//   IMPORTANTE: mesmo com `'use client'`, o Next.js avalia este módulo
+//   durante o build pipeline (prerender de páginas estáticas como
+//   `/_not-found` e `/`). O callback de `web-vitals` é registrado via
+//   `whenActivated(...)`, que referencia `document.prerendering` no setup
+//   do `PerformanceObserver` — isso lança `ReferenceError: document is
+//   not defined` no Node.js e quebra o build do Docker (PR #25,
+//   `docker-build-prod` CI check). Mesmo padrão já adotado em
+//   `apps/web/instrumentation-client.ts`: guard top-level
+//   `if (typeof window !== 'undefined')` para que o módulo só execute
+//   no browser em runtime, mas o build pipeline faça tree-shaking
+//   seguro sem `document` reference no Node.
 
 'use client';
 
@@ -36,21 +41,23 @@ import { metrics } from '@opentelemetry/api';
 
 const meter = metrics.getMeter('projeto-base-web');
 
-onLCP((metric) => {
-  meter.createHistogram('web.vitals.lcp').record(metric.value);
-});
-onCLS((metric) => {
-  meter.createHistogram('web.vitals.cls').record(metric.value);
-});
-onINP((metric) => {
-  meter.createHistogram('web.vitals.inp').record(metric.value);
-});
-onFID((metric) => {
-  meter.createHistogram('web.vitals.fid').record(metric.value);
-});
-onTTFB((metric) => {
-  meter.createHistogram('web.vitals.ttfb').record(metric.value);
-});
+if (typeof window !== 'undefined') {
+  onLCP((metric) => {
+    meter.createHistogram('web.vitals.lcp').record(metric.value);
+  });
+  onCLS((metric) => {
+    meter.createHistogram('web.vitals.cls').record(metric.value);
+  });
+  onINP((metric) => {
+    meter.createHistogram('web.vitals.inp').record(metric.value);
+  });
+  onFID((metric) => {
+    meter.createHistogram('web.vitals.fid').record(metric.value);
+  });
+  onTTFB((metric) => {
+    meter.createHistogram('web.vitals.ttfb').record(metric.value);
+  });
+}
 
 export function WebVitalsReporter(): null {
   return null;

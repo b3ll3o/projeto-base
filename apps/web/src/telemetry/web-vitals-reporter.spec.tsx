@@ -31,8 +31,16 @@
 // - `vi.resetModules()` em `beforeEach` garante que cada teste reavalie o
 //   módulo sob mocks frescos (especialmente o `web-vitals`, que tem o call
 //   count zerado entre importações).
+//
+// - Desde o fix do build do Docker (PR #25), o module-load do reporter é
+//   guardado por `if (typeof window !== 'undefined')` — equivalente ao
+//   guard em `apps/web/instrumentation-client.ts`. Vitest roda em
+//   `environment: 'node'` (ver `vitest.config.ts`), então stubamos
+//   `window` via `vi.stubGlobal` para destravar o guard e exercitar o
+//   mesmo caminho que o runtime browser executa. `vi.unstubAllGlobals()`
+//   em `afterEach` garante cleanup entre testes.
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { onLCP, onCLS, onINP } from 'web-vitals';
 
 const hoisted = vi.hoisted(() => ({ record: vi.fn() }));
@@ -56,6 +64,11 @@ vi.mock('@opentelemetry/api', () => ({
 beforeEach(() => {
   vi.resetModules();
   hoisted.record.mockClear();
+  vi.stubGlobal('window', {});
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe('WebVitalsReporter', () => {
