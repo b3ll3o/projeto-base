@@ -186,6 +186,16 @@ Apps NÃO compartilham:
 - ❌ `node_modules/` — pnpm gerencia isso (hoisting no root)
 - ❌ Configurações runtime (.env, logs)
 
+## Docker
+
+- `Dockerfile` em cada app (`apps/api/Dockerfile`, `apps/web/Dockerfile`)
+- `docker-compose.yml` na raiz (postgres + api + web prod)
+- `docker-compose.dev.yml` na raiz (override dev com hot reload)
+- `.dockerignore` na raiz
+- Comandos:
+  - `docker compose up -d postgres api web` (prod)
+  - `docker compose -f docker-compose.yml -f docker-compose.dev.yml up` (dev)
+
 ## §9. Quando Adicionar um App
 
 ```text
@@ -249,7 +259,7 @@ Referência cruzada: [`.agents/specs/conventions/estrutura-e-versionamento.md`](
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão do documento:** 1.4.0
+**Versão do documento:** 1.2.0
 
 ### Histórico de Versões
 

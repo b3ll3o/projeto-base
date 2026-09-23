@@ -80,6 +80,16 @@ projeto-base (monorepo)
 | CI | (a definir por projeto) | GitHub Actions / GitLab CI |
 | Secrets | (a definir por projeto) | Doppler / Vault / 1Password |
 
+## Containerização
+
+- **Base image:** `node:20-bookworm-slim` (Prisma 6 compat)
+- **Multi-stage:** `base` → `dev` → `prod` em ambos apps
+- **Compose:** `docker-compose.yml` (prod) + `docker-compose.dev.yml` (override dev)
+- **Healthchecks:** `curl /api/v1/health` (api) + node http.get (web)
+- **Migrations:** entrypoint com `prisma migrate deploy`
+- **Build cache:** BuildKit `--mount=type=cache,target=/root/.local/share/pnpm/store`
+- **Runtime:** non-root user (`USER node`)
+
 ## §6. Quando Adicionar Nova Tecnologia
 
 Adicionar nova lib/framework ao monorepo DEVE:
@@ -122,7 +132,7 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão da stack:** 1.4.0
+**Versão da stack:** 1.2.0
 
 ### Histórico de Versões
 
