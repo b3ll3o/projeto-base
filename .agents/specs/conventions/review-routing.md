@@ -215,9 +215,7 @@ Resultado esperado:
 - `spec-compliance-reviewer` DISPATCHED — `commit_type feat` (não em skip list)
 - `code-quality-reviewer` DISPATCHED — há `.ts` files
 
-## 6. Gaps Conhecidos (forthcoming v1.3)
-
-(v1.2 resolveu 2 P1; v1.3 resolveu 2 P2; ver Seção 7)
+## 6. Gaps Conhecidos (forthcoming v1.3) — (v1.2: 2 P1; v1.3: 3 P2; ver Seção 7)
 
 ### Resolvidos em v1.2
 
@@ -282,9 +280,11 @@ production signal sem FP).
 
 **Resolvido em v1.3** (PR #21): lint emite WARNING (não error — não bloqueia exit) quando `path_globs.blocking: true` casa files ilegíveis (no-match OU todos em `.gitignore`). +3 helpers (`globToRegexLocal`, `getTrackedFiles`, `isPathGitignored`) + bloco `if (rule.blocking === true)` em `lintMatrix`; +4 testes TDD. Matrix atual (tracked) → 0 warnings.
 
-### Conhecidos (forthcoming v1.4)
+#### Antigo P2 #4 — coverage scenarios multi-commit / multi-path
 
-(lista vazia — sem gaps conhecidos atualmente)
+**Resolvido em v1.3** (PR #22): Cenários D + E migrados para [review-routing-examples.md](./review-routing-examples.md) (apêndice, ~102 linhas) preservando limite de 300 linhas. Zero breaking change — aditivo.
+
+### Conhecidos (forthcoming v1.4) — _(nenhum)_
 
 ---
 
@@ -295,4 +295,4 @@ production signal sem FP).
 | 1 | 2026-09-22 | Versão inicial |
 | 1.1 | 2026-09-22 | Adicionar exemplos de uso (Seção 5) + Seção 6 "Gaps Conhecidos" priorizando 2 P1 + 2 P2 para v1.2; bump version frontmatter `1` → `1.1` (resolvia divergência entre `version: 1` declarado e docs que já referenciavam v1.1) |
 | 1.2 | 2026-09-22 | 2 P1 gaps resolvidos: propagação de `blocking` em path_globs (`e4c0971`) + narrowing do regex de segurança (`f496b05`). Classifier agora propaga corretamente a flag `blocking: true` para a exit code; regex narrow elimina FPs em test fixtures e docs. (Seção 6) |
-| 1.3 | 2026-09-22 | 2 P2 gaps resolvidos: PR #20 (enrich `domains[]` em `ClassifyResult` via `domain?: string` + `Set<string>` dedupe em `classify()`; 5 testes TDD; 2 regras em Seção 1 anotadas) e PR #21 (lint WARNING quando `blocking: true` casa paths ilegíveis — +3 helpers + 4 testes TDD em `lint-review-routing`). Zero breaking change em ambos. (Seção 6) |
+| 1.3 | 2026-09-22 | 3 P2 gaps resolvidos: PR #20 (enrich `domains[]` em `ClassifyResult`), PR #21 (lint WARNING em `blocking: true` c/ paths ilegíveis), PR #22 (cenários multi-commit/multi-path migrados para apêndice `review-routing-examples.md` para preservar limite de 300 linhas). Zero breaking change em todos. (Seção 6) |
