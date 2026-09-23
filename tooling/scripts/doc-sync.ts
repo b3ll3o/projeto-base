@@ -12,7 +12,22 @@
 //   tsx tooling/scripts/doc-sync.ts --files="a.ts\nb.ts" --mode=incremental --auto-apply-minor=false
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { dirname, isAbsolute, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { detectStacksBatch } from './lib/stack-detector.js';
+
+// pt-BR: REPO_ROOT é resolvido a partir do próprio módulo (import.meta.url),
+// tornando a função `syncDocs` robusta a QUALQUER CWD (CLI do repo root,
+// testes rodando em tooling/scripts/, uso programático de outros scripts).
+// `tooling/scripts/doc-sync.ts` está 2 níveis abaixo da raiz do repo.
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const REPO_ROOT = join(__dirname, '..', '..');
+
+/** Resolve path relativo ao REPO_ROOT, preservando paths absolutos. */
+function resolvePath(p: string): string {
+  return isAbsolute(p) ? p : join(REPO_ROOT, p);
+}
 
 type ActionType = 'review' | 'update' | 'create' | 'alert';
 
@@ -85,7 +100,7 @@ function mapCodeToDocFiles(file: string): string[] {
 function checkMissingDoc(file: string): DocAction | null {
   const docs = mapCodeToDocFiles(file);
   for (const d of docs) {
-    if (!existsSync(d)) {
+    if (!existsSync(resolvePath(d))) {
       return {
         type: 'create',
         doc_file: d,
@@ -166,7 +181,7 @@ export function syncDocs(files: string[], _autoApplyMinor = false): DocSyncRepor
 
     let content = '';
     try {
-      content = readFileSync(f, 'utf-8');
+      content = readFileSync(resolvePath(f), 'utf-8');
     } catch {
       continue;
     }
