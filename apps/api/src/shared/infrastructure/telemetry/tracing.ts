@@ -27,7 +27,10 @@ export function initTracing(): void {
   globalThis.__otel_sdk__ = sdk;
 }
 
-// Auto-init se carregado via `node --require`
-if (require.main === module || process.env.OTEL_AUTO_INIT === 'true') {
-  initTracing();
-}
+// NOTA: initTracing() NÃO é auto-invocado neste módulo.
+// Em runtime ESM (projeto é `type: module`), `require` é undefined — qualquer
+// side-effect de auto-init precisa ser feito pelo chamador. O contrato é:
+//   1. main.ts faz `import './shared/infrastructure/telemetry/tracing.js'` (side-effect import)
+//   2. logo após, chama `initTracing()` explicitamente
+// Isso mantém o módulo livre de side-effects na importação (facilita testes)
+// e mantém o controle de inicialização no composition root (main.ts).

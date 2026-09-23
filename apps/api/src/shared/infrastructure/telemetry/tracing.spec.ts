@@ -24,4 +24,13 @@ describe('initTracing (idempotência)', () => {
     initTracing();
     expect((globalThis as { __otel_sdk__?: unknown }).__otel_sdk__).toBeUndefined();
   });
+
+  it('NÃO auto-inicializa ao importar (sem side-effect)', async () => {
+    // Reset state
+    delete (globalThis as { __otel_sdk__?: unknown }).__otel_sdk__;
+    vi.resetModules();
+    // Apenas importa — NÃO chama initTracing
+    await import('./tracing.js');
+    expect((globalThis as { __otel_sdk__?: unknown }).__otel_sdk__).toBeUndefined();
+  });
 });
