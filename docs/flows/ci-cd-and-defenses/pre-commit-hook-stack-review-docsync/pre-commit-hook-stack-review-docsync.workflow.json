@@ -1,0 +1,228 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Pre-commit hook — lint-staged + stack + doc-sync",
+    "subtitle": "Husky pre-commit → staged files → 3 gates paralelos → commit OK",
+    "output": "pre-commit-hook-stack-review-docsync.workflow.html",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "hook-pipeline",
+        "label": "Commit gate",
+        "focus": [
+          "hook",
+          "staged_diff",
+          "lint_staged",
+          "stack_reviewer",
+          "doc_sync",
+          "husky_repair",
+          "commit_ok"
+        ],
+        "note": "3 gates paralelos (lint-staged, stack-code-reviewer, doc-sync) — todos devem passar para commit."
+      }
+    ]
+  },
+  "lanes": [{ "id": "dev", "label": "Dev (staging area)" }],
+  "phases": [
+    { "id": "trigger", "label": "Trigger", "fromCol": 0, "toCol": 0, "variant": "default" },
+    { "id": "gates", "label": "3 gates", "fromCol": 1, "toCol": 1, "variant": "emphasis" },
+    { "id": "merge", "label": "Aggregate", "fromCol": 2, "toCol": 2, "variant": "default" },
+    { "id": "commit", "label": "Commit", "fromCol": 3, "toCol": 3, "variant": "security" }
+  ],
+  "mainPath": ["hook", "staged_diff", "lint_staged", "husky_repair", "commit_ok"],
+  "nodes": [
+    {
+      "id": "hook",
+      "lane": "dev",
+      "col": 0,
+      "type": "frontend",
+      "label": ".husky/pre-commit",
+      "sublabel": "git commit trigger",
+      "tag": "Husky v9",
+      "width": 180
+    },
+    {
+      "id": "staged_diff",
+      "lane": "dev",
+      "col": 0,
+      "type": "external",
+      "label": "staged files",
+      "sublabel": "git diff --cached",
+      "tag": "*.{ts,tsx,json,yaml,yml,prisma}",
+      "width": 170,
+      "yOffset": 130
+    },
+    {
+      "id": "lint_staged",
+      "lane": "dev",
+      "col": 1,
+      "type": "backend",
+      "label": "lint-staged",
+      "sublabel": "prettier + eslint",
+      "tag": "global config",
+      "width": 170
+    },
+    {
+      "id": "stack_reviewer",
+      "lane": "dev",
+      "col": 1,
+      "type": "security",
+      "label": "stack-code-reviewer",
+      "sublabel": "DDD/Nest/Prisma/Next",
+      "tag": "stack-code-reviewer.ts",
+      "width": 180,
+      "yOffset": 130
+    },
+    {
+      "id": "doc_sync",
+      "lane": "dev",
+      "col": 1,
+      "type": "backend",
+      "label": "doc-sync",
+      "sublabel": "incremental + auto-apply-minor",
+      "tag": "doc-sync.ts",
+      "width": 170,
+      "yOffset": 260
+    },
+    {
+      "id": "husky_repair",
+      "lane": "dev",
+      "col": 2,
+      "type": "backend",
+      "label": "husky repair",
+      "sublabel": "core.hooksPath",
+      "tag": "idempotente ~50ms",
+      "width": 150
+    },
+    {
+      "id": "commit_ok",
+      "lane": "dev",
+      "col": 3,
+      "type": "frontend",
+      "label": "commit OK",
+      "sublabel": "tree created",
+      "tag": "git commit",
+      "width": 140
+    },
+    {
+      "id": "commit_block",
+      "lane": "dev",
+      "col": 3,
+      "type": "security",
+      "label": "commit abortado",
+      "sublabel": "exit 1",
+      "tag": "gates falharam",
+      "width": 170,
+      "yOffset": 130
+    }
+  ],
+  "edges": [
+    {
+      "id": "hook-to-staged",
+      "from": "hook",
+      "to": "staged_diff",
+      "label": "filtra globs",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "staged-to-lint",
+      "from": "staged_diff",
+      "to": "lint_staged",
+      "label": "*.ts/tsx/json/yaml",
+      "variant": "emphasis",
+      "role": "branch"
+    },
+    {
+      "id": "staged-to-stack",
+      "from": "staged_diff",
+      "to": "stack_reviewer",
+      "label": "*.ts/tsx/prisma",
+      "variant": "emphasis",
+      "role": "branch"
+    },
+    {
+      "id": "staged-to-doc",
+      "from": "staged_diff",
+      "to": "doc_sync",
+      "label": "*.ts/tsx/prisma",
+      "variant": "emphasis",
+      "role": "branch"
+    },
+    {
+      "id": "lint-to-repair",
+      "from": "lint_staged",
+      "to": "husky_repair",
+      "label": "exit 0",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "stack-to-repair",
+      "from": "stack_reviewer",
+      "to": "husky_repair",
+      "label": "exit 0",
+      "variant": "default",
+      "role": "return"
+    },
+    {
+      "id": "doc-to-repair",
+      "from": "doc_sync",
+      "to": "husky_repair",
+      "label": "exit 0",
+      "variant": "default",
+      "role": "return"
+    },
+    {
+      "id": "repair-to-ok",
+      "from": "husky_repair",
+      "to": "commit_ok",
+      "label": "OK",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "repair-to-block",
+      "from": "husky_repair",
+      "to": "commit_block",
+      "label": "qualquer exit >0",
+      "variant": "security",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Trigger Husky",
+      "items": [
+        ".husky/pre-commit é carregado por core.hooksPath",
+        "Idempotente: sh wrapper husky.sh sourced uma vez",
+        "Skip automático se staged files não casarem globs",
+        "Se algum comando futuro invocar husky <arg>, core.hooksPath é reparado (~50ms)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "3 gates paralelos",
+      "items": [
+        "lint-staged: prettier + eslint em *.ts/tsx/json/yaml/yml",
+        "stack-code-reviewer: DDD/Hexagonal/NestJS/Prisma/Next.js em *.ts/tsx/prisma",
+        "doc-sync: mapeamento code→doc em *.ts/tsx/prisma (incremental + auto-apply minor ≤ 5 linhas)",
+        "Cada gate roda apenas se houver staged files matching globs"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Comportamento defensivo",
+      "items": [
+        "Phase 8 scripts: skip silencioso se tooling/scripts/ não existir",
+        "Comando ausente não bloqueia o commit",
+        "Commit só acontece se TODOS os 3 gates exitarem 0",
+        "drift detectado → exit 1 → commit abortado + mensagem"
+      ]
+    }
+  ]
+}
