@@ -29,7 +29,7 @@
         "id": "consumers",
         "label": "Consumidores",
         "focus": ["api_consume", "web_consume"],
-        "note": "apps/api/src/shared/infrastructure/http/global-exception.filter.ts consome ProblemDetailsDto+Error. apps/web ainda não consome (planejado)."
+        "note": "apps/api consome ProblemDetailsDto+Error via global-exception.filter. apps/web ainda não consome (planejado)."
       }
     ]
   },
