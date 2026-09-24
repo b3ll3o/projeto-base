@@ -1,0 +1,132 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "CI Defense Mode — Blindagem/Auditoria do CI",
+    "subtitle": "3 estágios sequenciais: monorepo-specialist → ci-defense-in-depth skill → code-reviewer",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "output": "flow-ci-defense-mode.workflow.html",
+    "views": [
+      {
+        "id": "audit",
+        "label": "Auditar pipeline",
+        "focus": ["monorepo_specialist", "ci_defense_skill", "code_reviewer"],
+        "note": "3 estágios: diagnosticar gaps, implementar check via TDD, revisar duplicação/performance."
+      },
+      {
+        "id": "handoffs",
+        "label": "Handoffs + gates",
+        "focus": ["ci_defense_skill", "code_reviewer"],
+        "note": "Cada handoff tem expected_output + success_criteria binário."
+      }
+    ]
+  },
+  "lanes": [{ "id": "agent", "label": "Agent Runtime" }],
+  "phases": [
+    { "id": "diagnose", "label": "Diagnosticar", "fromCol": 0, "toCol": 1, "variant": "emphasis" },
+    { "id": "review", "label": "Revisar", "fromCol": 2, "toCol": 2, "variant": "dashed" }
+  ],
+  "groups": [
+    {
+      "id": "diagnose_phase",
+      "label": "Diagnosticar pipeline",
+      "lane": "agent",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "review_phase",
+      "label": "Code review",
+      "lane": "agent",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": ["monorepo_specialist", "ci_defense_skill", "code_reviewer"],
+  "nodes": [
+    {
+      "id": "monorepo_specialist",
+      "lane": "agent",
+      "col": 0,
+      "type": "backend",
+      "label": "monorepo-specialist",
+      "sublabel": "diagnosticar gaps",
+      "tag": "checks ativos vs 3-camadas",
+      "width": 170
+    },
+    {
+      "id": "ci_defense_skill",
+      "lane": "agent",
+      "col": 1,
+      "type": "security",
+      "label": "ci-defense-in-depth",
+      "sublabel": "skill TDD red→green",
+      "tag": "CheckResult template",
+      "width": 170
+    },
+    {
+      "id": "code_reviewer",
+      "lane": "agent",
+      "col": 2,
+      "type": "security",
+      "label": "code-reviewer",
+      "sublabel": "duplicação + budget",
+      "tag": "≤ 5s check",
+      "width": 170
+    }
+  ],
+  "edges": [
+    {
+      "id": "specialist-to-skill",
+      "from": "monorepo_specialist",
+      "to": "ci_defense_skill",
+      "label": "gaps + recommended_checks",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "skill-to-reviewer",
+      "from": "ci_defense_skill",
+      "to": "code_reviewer",
+      "label": "diff do novo check",
+      "variant": "default",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Pipeline Sequencial",
+      "items": [
+        "3 estágios: monorepo-specialist → ci-defense-in-depth skill → code-reviewer",
+        "Cada handoff tem expected_output + success_criteria binário (pass/fail)",
+        "Pré-step: specialist-router valida escopo técnico antes do passo 1"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Gates de Saída",
+      "items": [
+        "Check segue template CheckResult { ok: boolean; errors: string[] }",
+        "Fixture hermética via fs.mkdtemp(os.tmpdir(), '<check>-')",
+        "Code-block-aware parsing para markdown (state machine fenced/inline/indented)",
+        "Spec ao lado do script (<check>.spec.ts)",
+        "Registrado em .tooling/scripts/ci/preflight.ts",
+        "CI verde 4/4 checks após pnpm ci:preflight"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Quando NÃO usar",
+      "items": [
+        "Bug de aplicação (use bugfix-mode)",
+        "Validar arquitetura (use ddd-hexagonal-validation)",
+        "Mudança que não envolve CI (use workflow regular da stack)"
+      ]
+    }
+  ]
+}
