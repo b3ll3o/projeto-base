@@ -16,12 +16,32 @@
         "focus": ["doc_writer", "code_reviewer"],
         "note": "doc-writer produz; code-reviewer valida."
       }
-    ]
+    ],
+    "tier": "nice",
+    "mechanism": "auto",
+    "subject": "docs-mode — Documentação (genérico)"
   },
-  "lanes": [{ "id": "agent", "label": "Agent Runtime" }],
+  "lanes": [
+    {
+      "id": "agent",
+      "label": "Agent Runtime"
+    }
+  ],
   "phases": [
-    { "id": "produce", "label": "Produzir", "fromCol": 0, "toCol": 0, "variant": "emphasis" },
-    { "id": "review", "label": "Revisar", "fromCol": 1, "toCol": 1, "variant": "default" }
+    {
+      "id": "produce",
+      "label": "Produzir",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
+      "id": "review",
+      "label": "Revisar",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "default"
+    }
   ],
   "groups": [
     {

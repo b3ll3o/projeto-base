@@ -21,12 +21,32 @@
         "focus": ["retrospective_skill", "task_manager"],
         "note": "Threshold confidence ≥ 70; result file ≤ 300 linhas; memories atualizadas."
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "auto",
+    "subject": "retrospective-mode — Captura de Aprendizados Pós-Atividade"
   },
-  "lanes": [{ "id": "agent", "label": "Agent Runtime" }],
+  "lanes": [
+    {
+      "id": "agent",
+      "label": "Agent Runtime"
+    }
+  ],
   "phases": [
-    { "id": "collect", "label": "Coletar", "fromCol": 0, "toCol": 1, "variant": "emphasis" },
-    { "id": "write", "label": "Codificar", "fromCol": 2, "toCol": 3, "variant": "dashed" }
+    {
+      "id": "collect",
+      "label": "Coletar",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "write",
+      "label": "Codificar",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "dashed"
+    }
   ],
   "groups": [
     {

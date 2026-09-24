@@ -16,12 +16,32 @@
         "focus": ["security_auditor", "code_reviewer"],
         "note": "security-auditor identifica; code-reviewer prioriza."
       }
-    ]
+    ],
+    "tier": "nice",
+    "mechanism": "auto",
+    "subject": "security-mode — Auditoria de Segurança (genérico)"
   },
-  "lanes": [{ "id": "agent", "label": "Agent Runtime" }],
+  "lanes": [
+    {
+      "id": "agent",
+      "label": "Agent Runtime"
+    }
+  ],
   "phases": [
-    { "id": "audit", "label": "Auditar", "fromCol": 0, "toCol": 0, "variant": "emphasis" },
-    { "id": "prioritize", "label": "Priorizar", "fromCol": 1, "toCol": 1, "variant": "default" }
+    {
+      "id": "audit",
+      "label": "Auditar",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
+      "id": "prioritize",
+      "label": "Priorizar",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "default"
+    }
   ],
   "groups": [
     {
