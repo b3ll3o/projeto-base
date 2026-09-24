@@ -1,0 +1,103 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Task Mode — Gestão de Tarefas",
+    "subtitle": "Single agent (task-manager): CRUD de tasks com priority + dependencies + acceptance criteria",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "output": "flow-task-mode.workflow.html",
+    "viewBox": [950, 320],
+    "views": [
+      {
+        "id": "task",
+        "label": "Gestão de tarefas",
+        "focus": ["task_manager", "task_output"],
+        "note": "task-manager mantém backlog atualizado com deps e acceptance criteria."
+      }
+    ]
+  },
+  "lanes": [{ "id": "agent", "label": "Agent Runtime" }],
+  "phases": [
+    { "id": "manage", "label": "Gerenciar", "fromCol": 0, "toCol": 0, "variant": "emphasis" }
+  ],
+  "groups": [
+    {
+      "id": "manage_phase",
+      "label": "Gestão de backlog",
+      "lane": "agent",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    }
+  ],
+  "mainPath": ["task_manager", "task_output"],
+  "nodes": [
+    {
+      "id": "task_manager",
+      "lane": "agent",
+      "col": 0,
+      "type": "external",
+      "label": "task-manager",
+      "sublabel": "CRUD tasks",
+      "tag": "todo/in_progress/done",
+      "width": 150
+    },
+    {
+      "id": "task_output",
+      "lane": "agent",
+      "col": 1,
+      "type": "backend",
+      "label": "task output",
+      "sublabel": "id + status + prio",
+      "tag": "deps + AC",
+      "width": 150
+    }
+  ],
+  "edges": [
+    {
+      "id": "manager-to-output",
+      "from": "task_manager",
+      "to": "task_output",
+      "label": "task spec",
+      "variant": "emphasis",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Pipeline Single Agent",
+      "items": [
+        "1 agente: task-manager",
+        "Saída: lista de tasks com id/title/status/priority/assignee/deps/AC",
+        "Status enum: todo | in_progress | done",
+        "Priority enum: low | medium | high | critical"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Output Canônico",
+      "items": [
+        "id: TASK-001 (sequence number)",
+        "title: descrição curta",
+        "status: todo | in_progress | done",
+        "priority: low | medium | high | critical",
+        "assignee: agent ou humano",
+        "dependencies: [TASK-XXX, ...]",
+        "acceptance_criteria: [critérios verificáveis]"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Quando usar",
+      "items": [
+        "Trigger: 'todo', 'tarefa', 'criar task', 'atualizar backlog'",
+        "Para planejamento de sprint",
+        "Para tracking de subtasks dentro de uma feature",
+        "Para follow-up de bugs encontrados em revisão"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,160 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Domain Events → Audit — Pipeline users.user.*.v1",
+    "subtitle": "User aggregate drena eventos → UserUseCases converte → PrismaAuditService persiste como AuditRecord",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "standard",
+    "output": "http-api-domain-events-to-audit.workflow.html",
+    "views": [
+      {
+        "id": "pipeline",
+        "label": "Drain → map → record",
+        "focus": ["user_aggregate", "domain_events", "emit_audit", "audit_record"],
+        "note": "4 etapas: aggregate emite → use case drena → mapper converte → audit service persiste."
+      },
+      {
+        "id": "events",
+        "label": "4 event types",
+        "focus": ["domain_events"],
+        "note": "users.user.created.v1 → INSERT | updated.v1 → UPDATE | deleted.v1 → DELETE | restored.v1 → RESTORE"
+      }
+    ]
+  },
+  "lanes": [{ "id": "users", "label": "users-module" }],
+  "phases": [
+    { "id": "emit", "label": "Domain emit", "fromCol": 0, "toCol": 0, "variant": "emphasis" },
+    { "id": "drain", "label": "Drain + map", "fromCol": 1, "toCol": 1, "variant": "default" },
+    { "id": "persist", "label": "Persist", "fromCol": 2, "toCol": 3, "variant": "dashed" }
+  ],
+  "groups": [
+    {
+      "id": "emit_phase",
+      "label": "Aggregate emite",
+      "lane": "users",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
+      "id": "drain_phase",
+      "label": "Drain + map",
+      "lane": "users",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "default"
+    },
+    {
+      "id": "persist_phase",
+      "label": "Audit persistence",
+      "lane": "users",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": ["user_aggregate", "domain_events", "emit_audit", "audit_record"],
+  "nodes": [
+    {
+      "id": "user_aggregate",
+      "lane": "users",
+      "col": 0,
+      "type": "backend",
+      "label": "User aggregate",
+      "sublabel": "domain/DomainEvents",
+      "tag": "4 event types",
+      "width": 150
+    },
+    {
+      "id": "domain_events",
+      "lane": "users",
+      "col": 0,
+      "type": "external",
+      "label": "DomainEvent[]",
+      "sublabel": "pullEvents()",
+      "tag": "created/updated/deleted/restored",
+      "width": 160,
+      "yOffset": 130
+    },
+    {
+      "id": "emit_audit",
+      "lane": "users",
+      "col": 1,
+      "type": "backend",
+      "label": "emitAuditForEvents",
+      "sublabel": "mapEventNameToOp",
+      "tag": "INSERT/UPDATE/DELETE/RESTORE",
+      "width": 170
+    },
+    {
+      "id": "audit_record",
+      "lane": "users",
+      "col": 2,
+      "type": "database",
+      "label": "AuditRecord row",
+      "sublabel": "AuditContext + AuditOp",
+      "tag": "INSERT INTO AuditRecord",
+      "width": 160
+    }
+  ],
+  "edges": [
+    {
+      "id": "agg-to-events",
+      "from": "user_aggregate",
+      "to": "domain_events",
+      "label": "created/updated/deleted/restored",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "events-to-emit",
+      "from": "domain_events",
+      "to": "emit_audit",
+      "label": "events[] (drained)",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "emit-to-record",
+      "from": "emit_audit",
+      "to": "audit_record",
+      "label": "AuditServicePort.record()",
+      "variant": "default",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Event → Operation",
+      "items": [
+        "users.user.created.v1 → INSERT (previousVersion=null)",
+        "users.user.updated.v1 → UPDATE (previousVersion=extractPreviousVersion)",
+        "users.user.deleted.v1 → DELETE (reason=extractReason)",
+        "users.user.restored.v1 → RESTORE (restoredFromVersion=extractPreviousVersion)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Drain discipline",
+      "items": [
+        "user.pullEvents() esvazia fila do aggregate após cada operação",
+        "ctx = AuditContextStore.get() puxa do scope async (sempre disponível)",
+        "Loop for-await sequencial (não paralelo) preserva ordem causal",
+        "Snapshot = toUserOutput(user) é serializado no record"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Garantias",
+      "items": [
+        "EventName tipado em DomainEvent (compile-time safety)",
+        "mapEventNameToOperation lança Error se eventName desconhecido (fail-fast)",
+        "AuditContext (W3C traceId) correlaciona com HTTP request origin",
+        "previousVersion permite replay/versioning de histórico de mudanças"
+      ]
+    }
+  ]
+}

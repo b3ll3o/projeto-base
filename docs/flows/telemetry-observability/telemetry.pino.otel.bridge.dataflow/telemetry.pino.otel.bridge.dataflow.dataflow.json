@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Telemetry Pino-OTel Bridge",
+    "subtitle": "logger.info({traceId,spanId}) → instrumentation-pino → spans enrichidos → OTLP",
+    "output": "telemetry.pino.otel.bridge.dataflow.html",
+    "quality_profile": "standard",
+    "viewBox": [1130, 540],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "views": [
+      {
+        "id": "bridge",
+        "label": "Pino-OTel bridge",
+        "focus": ["app", "pino", "hook", "spans", "otlp"],
+        "note": "Pino logger instrumented, captura trace context automatico."
+      }
+    ]
+  },
+  "stages": [
+    { "label": "App code" },
+    { "label": "Logger" },
+    { "label": "Hook" },
+    { "label": "Spans" },
+    { "label": "Export" }
+  ],
+  "nodes": [
+    {
+      "id": "app",
+      "type": "backend",
+      "label": "UserUseCases",
+      "sublabel": "log info()",
+      "stage": 0,
+      "row": 1,
+      "tag": "domain"
+    },
+    {
+      "id": "pino",
+      "type": "backend",
+      "label": "Pino logger",
+      "sublabel": "v10.x",
+      "stage": 1,
+      "row": 1,
+      "tag": "JSON"
+    },
+    {
+      "id": "hook",
+      "type": "backend",
+      "label": "pino-otel hook",
+      "sublabel": "0.68",
+      "stage": 2,
+      "row": 1,
+      "tag": "auto"
+    },
+    {
+      "id": "spans",
+      "type": "backend",
+      "label": "Span enriched",
+      "sublabel": "traceId+spanId",
+      "stage": 3,
+      "row": 1,
+      "tag": "active context"
+    },
+    {
+      "id": "otlp",
+      "type": "backend",
+      "label": "OTLP exporter",
+      "sublabel": "LogRecord",
+      "stage": 4,
+      "row": 1,
+      "tag": "v1 logs"
+    }
+  ],
+  "flows": [
+    {
+      "id": "f1",
+      "from": "app",
+      "to": "pino",
+      "label": "logger.info()",
+      "variant": "default",
+      "labelDy": -32
+    },
+    {
+      "id": "f2",
+      "from": "pino",
+      "to": "hook",
+      "label": "log record",
+      "variant": "emphasis",
+      "labelDy": -32
+    },
+    {
+      "id": "f3",
+      "from": "hook",
+      "to": "spans",
+      "label": "correlate OTel ctx",
+      "variant": "emphasis",
+      "labelDy": -32
+    },
+    {
+      "id": "f4",
+      "from": "spans",
+      "to": "otlp",
+      "label": "LogRecord w/ traceId",
+      "variant": "emphasis",
+      "labelDy": -32
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "instrumentation-pino 0.68",
+      "items": [
+        "Auto-inject traceId/spanId em cada log line",
+        "Captures active span via OTel context API",
+        "Correlation log↔trace sem mudanca de app code"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Pino performance",
+      "items": [
+        "JSON serialization 5x faster que Winston",
+        "Logger com wrapAsyncLocalStorage context",
+        "10k logs/s sem GC pressure"
+      ]
+    },
+    {
+      "dot": "orange",
+      "title": "Active context",
+      "items": [
+        "AsyncLocalStorage OTel context propagator",
+        "Cada request HTTP seta context ativo",
+        "Pino fetch active span no momento do log"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Export",
+      "items": [
+        "LogRecord v1 schema (OTLP logs signal)",
+        "Enviado junto com traces+metrics no mesmo batch",
+        "Backend Loki/Tempo correlaciona logs↔traces"
+      ]
+    }
+  ]
+}

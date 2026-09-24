@@ -1,0 +1,129 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Telemetry Backend Bootstrap",
+    "subtitle": "Init wrapper (.cjs) → NodeSDK startWithAll() → OTLP → tracing active → runtime",
+    "output": "telemetry.backend.bootstrap.lifecycle.html",
+    "quality_profile": "standard",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "views": [
+      {
+        "id": "boot",
+        "label": "Boot lifecycle",
+        "focus": ["init", "start", "otlp", "tracing", "runtime"],
+        "note": "ESM wrapper via .cjs, otel sdk-node v1.x."
+      }
+    ]
+  },
+  "lanes": [{ "id": "boot", "label": "Boot phases" }],
+  "phases": [
+    { "id": "p1", "label": "Init", "fromCol": 0, "toCol": 1, "variant": "default" },
+    { "id": "p2", "label": "SDK + OTLP", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
+    { "id": "p3", "label": "Runtime", "fromCol": 4, "toCol": 5, "variant": "security" }
+  ],
+  "mainPath": ["init", "start", "otlp", "tracing", "runtime"],
+  "nodes": [
+    {
+      "id": "init",
+      "lane": "boot",
+      "col": 0,
+      "type": "frontend",
+      "label": "init.cjs",
+      "sublabel": "wrapper",
+      "width": 150,
+      "tag": "ESM"
+    },
+    {
+      "id": "start",
+      "lane": "boot",
+      "col": 2,
+      "type": "backend",
+      "label": "NodeSDK",
+      "sublabel": "startWithAll",
+      "width": 150,
+      "tag": "providers"
+    },
+    {
+      "id": "otlp",
+      "lane": "boot",
+      "col": 3,
+      "type": "backend",
+      "label": "OTLP exporter",
+      "sublabel": "BSP",
+      "width": 150,
+      "tag": "queue"
+    },
+    {
+      "id": "tracing",
+      "lane": "boot",
+      "col": 4,
+      "type": "security",
+      "label": "tracing",
+      "sublabel": "active",
+      "width": 150,
+      "tag": "W3C"
+    },
+    {
+      "id": "runtime",
+      "lane": "boot",
+      "col": 5,
+      "type": "security",
+      "label": "NestJS",
+      "sublabel": "PORT 3000",
+      "width": 150,
+      "tag": "PR #25"
+    }
+  ],
+  "edges": [
+    { "from": "init", "to": "start", "label": "constructor", "variant": "default", "role": "main" },
+    { "from": "start", "to": "otlp", "label": "exporters", "variant": "emphasis", "role": "main" },
+    {
+      "from": "otlp",
+      "to": "tracing",
+      "label": "providers",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    { "from": "tracing", "to": "runtime", "label": "listen", "variant": "emphasis", "role": "main" }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "ESM wrapper (PR #25)",
+      "items": [
+        "--import ./apps/api/dist/telemetry/init.cjs",
+        "Wrapper CJS roda ANTES de qualquer codigo ESM",
+        "Sem wrapper: requires() em load OTel falha em ESM"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Pino + OTel bridge",
+      "items": [
+        "instrumentation-pino 0.68 emite spans de log",
+        "Log records correlacionados com active span",
+        "traceId/spanId field em cada log line"
+      ]
+    },
+    {
+      "dot": "orange",
+      "title": "Prisma emit events",
+      "items": [
+        "prisma.$on('query') + emit:'event' REQUERIDO",
+        "Prisma instrumentation 0.6+",
+        "Correlaciona SQL queries com span"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Cleanup no SIGTERM",
+      "items": [
+        "app.enableShutdownHooks() (NestJS lifecycle)",
+        "OTel SDK shutdown 10s grace",
+        "Flush OTLP batches antes de exit"
+      ]
+    }
+  ]
+}

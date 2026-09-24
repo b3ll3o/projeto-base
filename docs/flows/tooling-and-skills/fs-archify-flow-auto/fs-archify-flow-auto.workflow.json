@@ -1,0 +1,293 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "archify flow — Geração automática de workflow diagram",
+    "subtitle": "Pipeline CLI in → diff parse → validate → deliver → commit",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "output": "fs-archify-flow-auto.workflow.html",
+    "views": [
+      {
+        "id": "happy-path",
+        "label": "Run bem-sucedido",
+        "focus": [
+          "cli_args",
+          "preflight",
+          "parse_diff",
+          "parse_commits",
+          "build_spec",
+          "validate",
+          "deliver",
+          "receipt"
+        ],
+        "note": "diff não-vazio + --out dentro do repo + validate passa → deliver gera HTML."
+      },
+      {
+        "id": "gates",
+        "label": "Gates de proteção",
+        "focus": ["preflight", "validate", "deliver"],
+        "note": "Pre-flight (exit 2/6) + validate (gate para deliver) + strict (exit 5)."
+      }
+    ]
+  },
+  "lanes": [
+    { "id": "cli", "label": "CLI / Pre-flight" },
+    { "id": "pipeline", "label": "Pipeline" },
+    { "id": "validate", "label": "Validate + Deliver" },
+    { "id": "policy", "label": "Errors / Gates", "variant": "exception" }
+  ],
+  "phases": [
+    {
+      "id": "input",
+      "label": "Input + pre-flight",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    { "id": "build", "label": "Build spec", "fromCol": 1, "toCol": 2, "variant": "emphasis" },
+    { "id": "ship", "label": "Validate + deliver", "fromCol": 3, "toCol": 4, "variant": "dashed" }
+  ],
+  "groups": [
+    {
+      "id": "input_group",
+      "label": "Input",
+      "lane": "cli",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
+      "id": "pipeline_group",
+      "label": "Pipeline",
+      "lane": "pipeline",
+      "fromCol": 1,
+      "toCol": 2,
+      "variant": "emphasis"
+    },
+    {
+      "id": "ship_group",
+      "label": "Ship",
+      "lane": "validate",
+      "fromCol": 3,
+      "toCol": 4,
+      "variant": "dashed"
+    },
+    {
+      "id": "error_group",
+      "label": "Errors",
+      "lane": "policy",
+      "fromCol": 0,
+      "toCol": 4,
+      "variant": "security"
+    }
+  ],
+  "mainPath": [
+    "cli_args",
+    "preflight",
+    "parse_diff",
+    "build_spec",
+    "validate",
+    "deliver",
+    "receipt"
+  ],
+  "nodes": [
+    {
+      "id": "cli_args",
+      "lane": "cli",
+      "col": 0,
+      "type": "external",
+      "label": "CLI args",
+      "sublabel": "--git-range + --out + --quality",
+      "tag": "argv parseArgs",
+      "width": 160
+    },
+    {
+      "id": "preflight",
+      "lane": "cli",
+      "col": 0,
+      "type": "security",
+      "label": "pre-flight",
+      "sublabel": "diff não-vazio + out dentro repo",
+      "tag": "realpath + git diff",
+      "width": 160,
+      "yOffset": 120
+    },
+    {
+      "id": "parse_diff",
+      "lane": "pipeline",
+      "col": 1,
+      "type": "backend",
+      "label": "parseDiffRange",
+      "sublabel": "files + hunks",
+      "tag": "parser-diff.mjs",
+      "width": 160
+    },
+    {
+      "id": "parse_commits",
+      "lane": "pipeline",
+      "col": 1,
+      "type": "backend",
+      "label": "parseCommits",
+      "sublabel": "sha + subject + body",
+      "tag": "--ARCHIFY-FLOW-SEP--",
+      "width": 160,
+      "yOffset": 120
+    },
+    {
+      "id": "build_spec",
+      "lane": "pipeline",
+      "col": 2,
+      "type": "backend",
+      "label": "buildSpec",
+      "sublabel": "spec workflow v2",
+      "tag": "builder-spec.mjs",
+      "width": 160
+    },
+    {
+      "id": "validate",
+      "lane": "validate",
+      "col": 3,
+      "type": "security",
+      "label": "archify validate",
+      "sublabel": "schema + readability",
+      "tag": "sub-shell JSON receipt",
+      "width": 160
+    },
+    {
+      "id": "deliver",
+      "lane": "validate",
+      "col": 4,
+      "type": "cloud",
+      "label": "archify deliver",
+      "sublabel": "HTML navegável",
+      "tag": "gated by validate.ok",
+      "width": 160
+    },
+    {
+      "id": "receipt",
+      "lane": "validate",
+      "col": 4,
+      "type": "external",
+      "label": "receipt JSON",
+      "sublabel": "validate + deliver status",
+      "tag": "--json or text",
+      "width": 160,
+      "yOffset": 120
+    },
+    {
+      "id": "strict_fail",
+      "lane": "policy",
+      "col": 3,
+      "type": "security",
+      "label": "--strict exit 5",
+      "sublabel": "validate !passed",
+      "tag": "fail-closed",
+      "width": 160
+    }
+  ],
+  "edges": [
+    {
+      "id": "args-to-preflight",
+      "from": "cli_args",
+      "to": "preflight",
+      "label": "parsed",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "preflight-to-parse-diff",
+      "from": "preflight",
+      "to": "parse_diff",
+      "label": "diff text",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "preflight-to-parse-commits",
+      "from": "preflight",
+      "to": "parse_commits",
+      "label": "git log",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "parse-diff-to-build",
+      "from": "parse_diff",
+      "to": "build_spec",
+      "label": "files",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "parse-commits-to-build",
+      "from": "parse_commits",
+      "to": "build_spec",
+      "label": "commits",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "build-to-validate",
+      "from": "build_spec",
+      "to": "validate",
+      "label": "workflow.json",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "validate-to-deliver",
+      "from": "validate",
+      "to": "deliver",
+      "label": "ok = true",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "validate-strict",
+      "from": "validate",
+      "to": "strict_fail",
+      "label": "!passed + --strict",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "deliver-to-receipt",
+      "from": "deliver",
+      "to": "receipt",
+      "label": "status",
+      "variant": "dashed",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Exit Codes",
+      "items": [
+        "0 success | 2 no diff | 5 --strict trip",
+        "6 --out fora do repo",
+        "1 pipeline failed"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Atomicidade",
+      "items": [
+        "JSON escrito via writeAtomic (staging + rename POSIX)",
+        "Sidecar _flow_source.json com range + baseSha + timestamp",
+        "HTML só é escrito se validate.ok === true"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Fail-Closed",
+      "items": [
+        "diff vazio → exit 2 antes de qualquer escrita",
+        "out fora do repo (realpath) → exit 6",
+        "validate failed → deliver skipped (htmlPath=null)"
+      ]
+    }
+  ]
+}

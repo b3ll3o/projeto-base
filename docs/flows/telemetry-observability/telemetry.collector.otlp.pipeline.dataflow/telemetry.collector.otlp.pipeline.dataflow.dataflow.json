@@ -1,0 +1,141 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Telemetry Collector OTLP Pipeline",
+    "subtitle": "browser+api apps → OTLP exporters → OTel Collector (otlp recv → batch proc → debug exp)",
+    "output": "telemetry.collector.otlp.pipeline.dataflow.html",
+    "quality_profile": "standard",
+    "viewBox": [1130, 540],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "views": [
+      {
+        "id": "pipeline",
+        "label": "OTLP pipeline",
+        "focus": ["web", "api", "otelcol_recv", "otelcol_proc", "otelcol_exp"],
+        "note": "Apps instrumentadas enviam OTLP para o Collector; MVP atual roteia para debug (stdout)."
+      }
+    ]
+  },
+  "stages": [
+    { "label": "Apps" },
+    { "label": "Receivers" },
+    { "label": "Processors" },
+    { "label": "Exporters" }
+  ],
+  "nodes": [
+    {
+      "id": "web",
+      "type": "frontend",
+      "label": "apps/web",
+      "sublabel": "browser SDK",
+      "stage": 0,
+      "row": 1,
+      "tag": "web-vitals"
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "apps/api",
+      "sublabel": "NodeSDK",
+      "stage": 0,
+      "row": 2,
+      "tag": "auto-instr"
+    },
+    {
+      "id": "otelcol_recv",
+      "type": "cloud",
+      "label": "Receivers",
+      "sublabel": "otlp receiver",
+      "stage": 1,
+      "row": 1,
+      "tag": "gRPC:4317 + HTTP:4318"
+    },
+    {
+      "id": "otelcol_proc",
+      "type": "cloud",
+      "label": "Processors",
+      "sublabel": "batch",
+      "stage": 2,
+      "row": 1,
+      "tag": "agregacao 1-10s"
+    },
+    {
+      "id": "otelcol_exp",
+      "type": "cloud",
+      "label": "Exporters",
+      "sublabel": "debug (stdout)",
+      "stage": 3,
+      "row": 1,
+      "tag": "verbosity: detailed"
+    }
+  ],
+  "flows": [
+    {
+      "id": "f1",
+      "from": "web",
+      "to": "otelcol_recv",
+      "label": "OTLP/HTTP :4318",
+      "variant": "emphasis",
+      "labelDy": -32
+    },
+    {
+      "id": "f2",
+      "from": "api",
+      "to": "otelcol_recv",
+      "label": "OTLP/gRPC :4317",
+      "variant": "emphasis",
+      "labelDy": 28
+    },
+    {
+      "id": "f3",
+      "from": "otelcol_recv",
+      "to": "otelcol_proc",
+      "label": "raw OTLP",
+      "variant": "default",
+      "labelDy": -32
+    },
+    {
+      "id": "f4",
+      "from": "otelcol_proc",
+      "to": "otelcol_exp",
+      "label": "batch (traces+metrics)",
+      "variant": "emphasis",
+      "labelDy": 55
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "OpenTelemetry Collector (MVP)",
+      "items": [
+        "Componente agnostico entre apps e backends",
+        "Configuravel via YAML em infra/otelcol/config.yaml",
+        "MVP roteia para debug (stdout) — backends reais adicionados depois"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Receivers OTLP",
+      "items": [
+        "gRPC :4317 (server-side, alta performance)",
+        "HTTP :4318 (browser-friendly)",
+        "Aceita traces + metrics"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Processors",
+      "items": ["batch: agregacao 1-10s antes de exportar"]
+    },
+    {
+      "dot": "rose",
+      "title": "Exporters",
+      "items": [
+        "debug: stdout verbosity detailed",
+        "Substituir por jaeger/tempo/honeycomb quando backend escolhido"
+      ]
+    }
+  ]
+}

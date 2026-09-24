@@ -1,0 +1,192 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "apps/web — Server-side OTel SDK Init (Node Runtime)",
+    "subtitle": "process start → instrumentation.ts shim → NodeSDK + OTLP exporter + auto-instr → SDK running → shutdown",
+    "output": "web-app-flow-05.workflow.html",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "standard",
+    "views": [
+      {
+        "id": "otel-bootstrap",
+        "label": "OTel bootstrap",
+        "focus": [
+          "process_start",
+          "shim",
+          "node_sdk",
+          "exporter",
+          "auto_instr",
+          "running",
+          "shutdown"
+        ],
+        "note": "Idempotente via globalThis.__otel_sdk__. Side-effect na importação."
+      }
+    ]
+  },
+  "lanes": [{ "id": "next", "label": "Next.js lifecycle" }],
+  "phases": [
+    { "id": "boot", "label": "Boot", "fromCol": 0, "toCol": 1, "variant": "default" },
+    { "id": "config", "label": "Config", "fromCol": 2, "toCol": 2, "variant": "emphasis" },
+    { "id": "running", "label": "Running", "fromCol": 3, "toCol": 3, "variant": "security" }
+  ],
+  "mainPath": ["process_start", "shim", "node_sdk", "auto_instr", "running", "shutdown"],
+  "nodes": [
+    {
+      "id": "process_start",
+      "lane": "next",
+      "col": 0,
+      "type": "frontend",
+      "label": "process start",
+      "sublabel": "NODE_ENV",
+      "tag": "node bin/apps/web/server.js",
+      "width": 150
+    },
+    {
+      "id": "shim",
+      "lane": "next",
+      "col": 1,
+      "type": "backend",
+      "label": "instrumentation.ts",
+      "sublabel": "register() shim",
+      "tag": "Next.js convention",
+      "width": 200
+    },
+    {
+      "id": "node_sdk",
+      "lane": "next",
+      "col": 2,
+      "type": "backend",
+      "label": "NodeSDK",
+      "sublabel": "instrumentation.node.ts",
+      "tag": "globalThis.__otel_sdk__",
+      "width": 200
+    },
+    {
+      "id": "exporter",
+      "lane": "next",
+      "col": 2,
+      "type": "backend",
+      "label": "OTLPTraceExporter",
+      "sublabel": "traceExporter option",
+      "tag": "otel-collector:4318/v1/traces",
+      "width": 200,
+      "yOffset": 130
+    },
+    {
+      "id": "auto_instr",
+      "lane": "next",
+      "col": 2,
+      "type": "backend",
+      "label": "auto-instr",
+      "sublabel": "getNodeAutoInstr",
+      "tag": "fs OFF",
+      "width": 180,
+      "yOffset": 260
+    },
+    {
+      "id": "running",
+      "lane": "next",
+      "col": 3,
+      "type": "frontend",
+      "label": "SDK running",
+      "sublabel": "tracerProvider global",
+      "tag": "spans export active",
+      "width": 180
+    },
+    {
+      "id": "shutdown",
+      "lane": "next",
+      "col": 4,
+      "type": "security",
+      "label": "SIGTERM shutdown",
+      "sublabel": "sdk.shutdown()",
+      "tag": "flush pending",
+      "width": 180
+    }
+  ],
+  "edges": [
+    {
+      "id": "start-to-shim",
+      "from": "process_start",
+      "to": "shim",
+      "label": "bootstrap",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "shim-to-node",
+      "from": "shim",
+      "to": "node_sdk",
+      "label": "NEXT_RUNTIME=nodejs",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "node-to-exporter",
+      "from": "node_sdk",
+      "to": "exporter",
+      "label": "traceExporter:",
+      "variant": "default",
+      "role": "branch"
+    },
+    {
+      "id": "node-to-auto",
+      "from": "node_sdk",
+      "to": "auto_instr",
+      "label": "instrumentations:",
+      "variant": "emphasis",
+      "role": "branch"
+    },
+    {
+      "id": "auto-to-running",
+      "from": "auto_instr",
+      "to": "running",
+      "label": "sdk.start()",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "running-to-shutdown",
+      "from": "running",
+      "to": "shutdown",
+      "label": "SIGTERM",
+      "variant": "security",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Next.js convention file",
+      "items": [
+        "apps/web/instrumentation.ts carregado pelo Next.js automaticamente",
+        "register() checa NEXT_RUNTIME e importa shim node ou edge",
+        "browser side NÃO passa por aqui (instrumentation-client.ts auto-bundled)",
+        "Idempotente via globalThis.__otel_sdk__ (HMR-safe em dev)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "NodeSDK config",
+      "items": [
+        "resource: SERVICE_NAME=projeto-base-web (default)",
+        "DEPLOYMENT_ENVIRONMENT=$NODE_ENV",
+        "traceExporter: OTLPTraceExporter → /v1/traces",
+        "instrumentations: getNodeAutoInstrumentations (fs instrumentation OFF)",
+        "serviceName via OTEL_SERVICE_NAME env var"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Edge + Browser tracks",
+      "items": [
+        "edge: stub `export {}` (decision futuro se Edge runtime entrar)",
+        "browser: WebTracerProvider em instrumentation-client.ts (separate flow)",
+        "Node runtime: bootstrap acontece como side-effect (sem init() helper)",
+        "Auto-instrumentations cobrem fetch/http/pg/dns no server"
+      ]
+    }
+  ]
+}

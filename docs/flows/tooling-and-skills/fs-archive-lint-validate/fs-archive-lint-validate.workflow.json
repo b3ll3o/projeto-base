@@ -1,0 +1,178 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Archive Lint Validate — Frontmatter Canônico",
+    "subtitle": "Pipeline: scan archive/ → parse frontmatter → validate 8 campos → report errors",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "standard",
+    "output": "fs-archive-lint-validate.workflow.html",
+    "viewBox": [1200, 580],
+    "views": [
+      {
+        "id": "lint",
+        "label": "Pipeline lint",
+        "focus": ["scan", "parse_fm", "validate_required", "validate_formats", "report"],
+        "note": "Valida 8 campos canônicos: archived_at, original_run, demand_slug, prs, retro_refs, improvements, status, tags."
+      },
+      {
+        "id": "errors",
+        "label": "Exit codes",
+        "focus": ["report"],
+        "note": "Exit 0 = ok; 1 = errors de validação; 2 = erro inesperado."
+      }
+    ]
+  },
+  "lanes": [
+    { "id": "io", "label": "I/O" },
+    { "id": "validate", "label": "Validation" },
+    { "id": "report", "label": "Report" }
+  ],
+  "phases": [
+    { "id": "scan", "label": "Scan + Parse", "fromCol": 0, "toCol": 1, "variant": "emphasis" },
+    { "id": "validate", "label": "Validate", "fromCol": 2, "toCol": 3, "variant": "default" },
+    { "id": "report", "label": "Report", "fromCol": 4, "toCol": 4, "variant": "dashed" }
+  ],
+  "groups": [
+    {
+      "id": "io_group",
+      "label": "I/O operations",
+      "lane": "io",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "validate_group",
+      "label": "Validation rules",
+      "lane": "validate",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "default"
+    }
+  ],
+  "mainPath": ["scan", "parse_fm", "validate_required", "validate_formats", "report"],
+  "nodes": [
+    {
+      "id": "scan",
+      "lane": "io",
+      "col": 0,
+      "type": "external",
+      "label": "scan archive/",
+      "sublabel": "readdirSync",
+      "tag": ".agents/runs/archive/*.md",
+      "width": 150
+    },
+    {
+      "id": "parse_fm",
+      "lane": "io",
+      "col": 1,
+      "type": "backend",
+      "label": "parse frontmatter",
+      "sublabel": "regex + YAML",
+      "tag": "FRONTMATTER_RE",
+      "width": 150
+    },
+    {
+      "id": "validate_required",
+      "lane": "validate",
+      "col": 2,
+      "type": "security",
+      "label": "check required",
+      "sublabel": "8 fields",
+      "tag": "REQUIRED_FIELDS",
+      "width": 150
+    },
+    {
+      "id": "validate_formats",
+      "lane": "validate",
+      "col": 3,
+      "type": "security",
+      "label": "check formats",
+      "sublabel": "ISO 8601 + kebab",
+      "tag": "regex tests",
+      "width": 150
+    },
+    {
+      "id": "report",
+      "lane": "report",
+      "col": 4,
+      "type": "external",
+      "label": "LintResult",
+      "sublabel": "errors[]",
+      "tag": "exit 0/1/2",
+      "width": 150
+    }
+  ],
+  "edges": [
+    {
+      "id": "scan-to-parse",
+      "from": "scan",
+      "to": "parse_fm",
+      "label": "file content",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "parse-to-required",
+      "from": "parse_fm",
+      "to": "validate_required",
+      "label": "frontmatter obj",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "required-to-formats",
+      "from": "validate_required",
+      "to": "validate_formats",
+      "label": "8 fields OK",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "formats-to-report",
+      "from": "validate_formats",
+      "to": "report",
+      "label": "errors[]",
+      "variant": "dashed",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Pipeline de Validação",
+      "items": [
+        "scan: readdirSync em .agents/runs/archive/*.md",
+        "parse: regex FRONTMATTER_RE + yaml parse",
+        "validate_required: 8 campos canônicos obrigatórios",
+        "validate_formats: ISO 8601 + kebab-case regex"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "8 Campos Canônicos",
+      "items": [
+        "archived_at: ISO 8601 datetime (UTC)",
+        "original_run: path relativo ao run original",
+        "demand_slug: kebab-case único",
+        "prs: array de números (≥1 = demanda implementada)",
+        "retro_refs: array de paths para b<N>-result.md",
+        "improvements: objeto com contagens por categoria",
+        "status: 'archived' | 'cancelled'",
+        "tags: array livre para busca"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Exit Codes",
+      "items": [
+        "Exit 0: todos archives válidos",
+        "Exit 1: ≥1 archive com errors de validação",
+        "Exit 2: erro inesperado (I/O, parse YAML falho)",
+        "CLI override: --archive=<path> para validar arquivo único"
+      ]
+    }
+  ]
+}

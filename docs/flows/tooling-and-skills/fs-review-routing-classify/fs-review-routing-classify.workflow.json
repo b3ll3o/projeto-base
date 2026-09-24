@@ -1,0 +1,244 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "review-routing — Classificador Pós-Implementer (Consensus + Exit 3)",
+    "subtitle": "Pre-checks → dispatch → interpret → triage → fix loop → advance (exit 3 se ainda BLOCKING)",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "output": "fs-review-routing-classify.workflow.html",
+    "views": [
+      {
+        "id": "happy-path",
+        "label": "0 BLOCKING / IMPORTANT",
+        "focus": ["pre_checks", "dispatch_router", "interpret", "triage", "advance"],
+        "note": "Controller pode prosseguir — sem findings bloqueantes."
+      },
+      {
+        "id": "fix-loop",
+        "label": "Fix loop",
+        "focus": ["triage", "fix_implementer", "dispatch_router"],
+        "note": "BLOCKING/IMPORTANT → fix-implementer → re-despachar router."
+      },
+      {
+        "id": "blocked",
+        "label": "Exit 3 (escalation)",
+        "focus": ["triage", "blocked_exit_3"],
+        "note": "Após 2 rounds de fix, ainda há BLOCKING → escalar."
+      }
+    ]
+  },
+  "lanes": [
+    { "id": "controller", "label": "Controller" },
+    { "id": "router", "label": "Review Router" },
+    { "id": "implementer", "label": "Fix Implementer" },
+    { "id": "policy", "label": "Policy / Escalation", "variant": "exception" }
+  ],
+  "phases": [
+    { "id": "checks", "label": "Pre-checks", "fromCol": 0, "toCol": 0, "variant": "emphasis" },
+    {
+      "id": "review",
+      "label": "Dispatch + interpret",
+      "fromCol": 1,
+      "toCol": 2,
+      "variant": "emphasis"
+    },
+    { "id": "decide", "label": "Triage + fix", "fromCol": 3, "toCol": 4, "variant": "dashed" }
+  ],
+  "groups": [
+    {
+      "id": "controller_group",
+      "label": "Controller",
+      "lane": "controller",
+      "fromCol": 0,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "router_group",
+      "label": "Router",
+      "lane": "router",
+      "fromCol": 1,
+      "toCol": 2,
+      "variant": "emphasis"
+    },
+    {
+      "id": "fix_group",
+      "label": "Fix loop",
+      "lane": "implementer",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "policy_group",
+      "label": "Escalation",
+      "lane": "policy",
+      "fromCol": 4,
+      "toCol": 4,
+      "variant": "security"
+    }
+  ],
+  "mainPath": ["pre_checks", "dispatch_router", "interpret", "triage", "advance"],
+  "nodes": [
+    {
+      "id": "pre_checks",
+      "lane": "controller",
+      "col": 0,
+      "type": "security",
+      "label": "Pre-checks",
+      "sublabel": "tree + base + matriz",
+      "tag": "git rev-parse + test -f",
+      "width": 180
+    },
+    {
+      "id": "dispatch_router",
+      "lane": "router",
+      "col": 1,
+      "type": "backend",
+      "label": "dispatch router",
+      "sublabel": "Agent(review-router)",
+      "tag": "matriz review-routing",
+      "width": 180
+    },
+    {
+      "id": "interpret",
+      "lane": "controller",
+      "col": 2,
+      "type": "backend",
+      "label": "interpret",
+      "sublabel": "<ts>-review-<n>.yaml",
+      "tag": "reviewers_dispatched + totals",
+      "width": 180
+    },
+    {
+      "id": "triage",
+      "lane": "controller",
+      "col": 3,
+      "type": "security",
+      "label": "triage",
+      "sublabel": "consensus + severity",
+      "tag": "BLOCKING | IMPORTANT | NICE",
+      "width": 180
+    },
+    {
+      "id": "fix_implementer",
+      "lane": "implementer",
+      "col": 3,
+      "type": "backend",
+      "label": "fix-implementer",
+      "sublabel": "corrigir findings alvo",
+      "tag": "scope: medium",
+      "width": 180
+    },
+    {
+      "id": "advance",
+      "lane": "controller",
+      "col": 4,
+      "type": "cloud",
+      "label": "advance",
+      "sublabel": "0 BLOCKING/IMPORTANT",
+      "tag": "exit 0",
+      "width": 180
+    },
+    {
+      "id": "blocked_exit_3",
+      "lane": "policy",
+      "col": 4,
+      "type": "security",
+      "label": "exit 3",
+      "sublabel": "após 2 rounds fix ainda BLOCKING",
+      "tag": "escalar humano",
+      "width": 180
+    }
+  ],
+  "edges": [
+    {
+      "id": "checks-to-dispatch",
+      "from": "pre_checks",
+      "to": "dispatch_router",
+      "label": "ok",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "dispatch-to-interpret",
+      "from": "dispatch_router",
+      "to": "interpret",
+      "label": "YAML output",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "interpret-to-triage",
+      "from": "interpret",
+      "to": "triage",
+      "label": "findings",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "triage-to-fix",
+      "from": "triage",
+      "to": "fix_implementer",
+      "label": "BLOCKING | IMPORTANT",
+      "variant": "security",
+      "role": "branch"
+    },
+    {
+      "id": "triage-to-advance",
+      "from": "triage",
+      "to": "advance",
+      "label": "0 BLOCKING/IMPORTANT",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "fix-to-router",
+      "from": "fix_implementer",
+      "to": "dispatch_router",
+      "label": "re-dispatch",
+      "variant": "dashed",
+      "role": "return"
+    },
+    {
+      "id": "triage-to-escalate",
+      "from": "triage",
+      "to": "blocked_exit_3",
+      "label": "após 2 rounds",
+      "variant": "security",
+      "role": "error"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Schema Validation",
+      "items": [
+        "reviewers_dispatched[] não-vazio OU todos skipped (com reasons)",
+        "findings_aggregated.totals presente",
+        "classification_evidence[] presente (rastreabilidade)"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Bloqueios",
+      "items": [
+        "Pular router e dispatchar reviewers manualmente",
+        "Avançar com BLOCKING não tratado",
+        "Re-despachar router sem fix (mesmo output esperado)"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Severidade",
+      "items": [
+        "consensus=true → geralmente IMPORTANT (confiança alta)",
+        "severity=blocker → sempre BLOCKING",
+        "severity=major → triagem manual",
+        "minor | info → NICE-TO-HAVE"
+      ]
+    }
+  ]
+}

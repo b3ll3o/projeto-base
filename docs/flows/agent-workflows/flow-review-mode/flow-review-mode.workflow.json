@@ -1,0 +1,101 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Review Mode — Revisão de Código (genérico)",
+    "subtitle": "Single agent paralelo: code-reviewer + tdd-enforcer com 6 categorias de findings",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "output": "flow-review-mode.workflow.html",
+    "viewBox": [1100, 320],
+    "views": [
+      {
+        "id": "review",
+        "label": "Pipeline de revisão",
+        "focus": ["code_reviewer", "tdd_enforcer"],
+        "note": "code-reviewer valida qualidade; tdd-enforcer valida cobertura/RED→GREEN."
+      }
+    ]
+  },
+  "lanes": [{ "id": "agent", "label": "Agent Runtime" }],
+  "phases": [
+    { "id": "review", "label": "Revisar", "fromCol": 0, "toCol": 1, "variant": "emphasis" }
+  ],
+  "groups": [
+    {
+      "id": "review_phase",
+      "label": "Revisão técnica",
+      "lane": "agent",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    }
+  ],
+  "mainPath": ["code_reviewer", "tdd_enforcer"],
+  "nodes": [
+    {
+      "id": "code_reviewer",
+      "lane": "agent",
+      "col": 0,
+      "type": "security",
+      "label": "code-reviewer",
+      "sublabel": "6 categorias",
+      "tag": "bugs/smells/sec/perf/test/style",
+      "width": 160
+    },
+    {
+      "id": "tdd_enforcer",
+      "lane": "agent",
+      "col": 1,
+      "type": "security",
+      "label": "tdd-enforcer",
+      "sublabel": "cov ≥ 80%",
+      "tag": "RED→GREEN",
+      "width": 150
+    }
+  ],
+  "edges": [
+    {
+      "id": "review-to-tdd",
+      "from": "code_reviewer",
+      "to": "tdd_enforcer",
+      "label": "qualidade OK",
+      "variant": "emphasis",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Pipeline Single-Agent Paralelo",
+      "items": [
+        "2 agentes em paralelo: code-reviewer + tdd-enforcer",
+        "code-reviewer valida 6 categorias de findings",
+        "tdd-enforcer valida coverage + RED→GREEN + ciclo TDD"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "6 Categorias de Findings",
+      "items": [
+        "Bugs — comportamento incorreto, edge cases, race conditions",
+        "Smells — design ruim, complexidade ciclomática alta, naming",
+        "Segurança — vulnerabilidades, validação faltando, secrets",
+        "Performance — complexidade algorítmica, queries N+1, leaks",
+        "Testabilidade — cobertura baixa, testes frágeis, mocks excessivos",
+        "Estilo — convenções do projeto, formatação"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Quando usar",
+      "items": [
+        "Trigger: 'revisar PR', 'revisar diff', 'code review'",
+        "Para revisão final antes de merge",
+        "Para gate de qualidade em CI (complementar stack-code-reviewer)",
+        "Para revisão human-in-the-loop de mudanças grandes"
+      ]
+    }
+  ]
+}

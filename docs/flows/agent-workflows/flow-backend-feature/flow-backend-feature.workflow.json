@@ -1,0 +1,138 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Backend Feature — Implementação no NestJS",
+    "subtitle": "4 estágios sequenciais: specialist → test-writer → code-reviewer → tdd-enforcer",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "output": "flow-backend-feature.workflow.html",
+    "views": [
+      {
+        "id": "implement",
+        "label": "Implementar módulo",
+        "focus": ["nestjs_specialist", "test_writer", "code_reviewer", "tdd_enforcer"],
+        "note": "Ciclo TDD do módulo backend NestJS — red → green → review → enforce."
+      },
+      {
+        "id": "gates",
+        "label": "Gates de qualidade",
+        "focus": ["test_writer", "code_reviewer", "tdd_enforcer"],
+        "note": "3 gates obrigatórios: testes, arquitetura, TDD histórico."
+      }
+    ]
+  },
+  "lanes": [{ "id": "agent", "label": "Agent Runtime" }],
+  "phases": [
+    { "id": "build", "label": "Spec + build", "fromCol": 0, "toCol": 1, "variant": "emphasis" },
+    { "id": "review", "label": "Review + enforce", "fromCol": 2, "toCol": 3, "variant": "dashed" }
+  ],
+  "groups": [
+    {
+      "id": "tdd_loop",
+      "label": "TDD loop",
+      "lane": "agent",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "gates",
+      "label": "Quality gates",
+      "lane": "agent",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": ["nestjs_specialist", "test_writer", "code_reviewer", "tdd_enforcer"],
+  "nodes": [
+    {
+      "id": "nestjs_specialist",
+      "lane": "agent",
+      "col": 0,
+      "type": "backend",
+      "label": "nestjs-specialist",
+      "sublabel": "spec + implement",
+      "tag": "controller / service / repository",
+      "width": 160
+    },
+    {
+      "id": "test_writer",
+      "lane": "agent",
+      "col": 1,
+      "type": "security",
+      "label": "test-writer",
+      "sublabel": "unit + e2e specs",
+      "tag": "red → green",
+      "width": 160
+    },
+    {
+      "id": "code_reviewer",
+      "lane": "agent",
+      "col": 2,
+      "type": "security",
+      "label": "code-reviewer",
+      "sublabel": "DI + layers + DTOs",
+      "tag": "controller magro",
+      "width": 160
+    },
+    {
+      "id": "tdd_enforcer",
+      "lane": "agent",
+      "col": 3,
+      "type": "security",
+      "label": "tdd-enforcer",
+      "sublabel": "historico + coverage",
+      "tag": "≥ 80% coverage",
+      "width": 160
+    }
+  ],
+  "edges": [
+    {
+      "id": "spec-to-tests",
+      "from": "nestjs_specialist",
+      "to": "test_writer",
+      "label": "red tests first",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "tests-to-review",
+      "from": "test_writer",
+      "to": "code_reviewer",
+      "label": "impl + tests",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "review-to-tdd",
+      "from": "code_reviewer",
+      "to": "tdd_enforcer",
+      "label": "diff do módulo",
+      "variant": "default",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Pipeline Sequencial",
+      "items": [
+        "4 estágios com handoff explícito (YAML no source)",
+        "Cada gate tem success_criteria binário (pass/fail)",
+        "Histórico git é insumo do tdd-enforcer"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Gates de Saída",
+      "items": [
+        "Coverage ≥ 80% em todas as métricas",
+        "Controller sem lógica de negócio",
+        "Repository abstrai Prisma cru do service"
+      ]
+    }
+  ]
+}
