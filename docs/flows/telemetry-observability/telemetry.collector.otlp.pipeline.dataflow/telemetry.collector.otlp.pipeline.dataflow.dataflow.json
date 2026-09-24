@@ -3,7 +3,7 @@
   "diagram_type": "dataflow",
   "meta": {
     "title": "Telemetry Collector OTLP Pipeline",
-    "subtitle": "browser+api apps → OTLP exporters → OTel Collector receivers → processors → exporters → backend",
+    "subtitle": "browser+api apps → OTLP exporters → OTel Collector (otlp recv → batch proc → debug exp)",
     "output": "telemetry.collector.otlp.pipeline.dataflow.html",
     "quality_profile": "standard",
     "viewBox": [1130, 540],
@@ -13,8 +13,8 @@
       {
         "id": "pipeline",
         "label": "OTLP pipeline",
-        "focus": ["web", "api", "otelcol_recv", "otelcol_proc", "otelcol_exp", "tempo"],
-        "note": "Apps instrumentadas enviam OTLP para o Collector, que roteia para backends."
+        "focus": ["web", "api", "otelcol_recv", "otelcol_proc", "otelcol_exp"],
+        "note": "Apps instrumentadas enviam OTLP para o Collector; MVP atual roteia para debug (stdout)."
       }
     ]
   },
@@ -22,8 +22,7 @@
     { "label": "Apps" },
     { "label": "Receivers" },
     { "label": "Processors" },
-    { "label": "Exporters" },
-    { "label": "Backends" }
+    { "label": "Exporters" }
   ],
   "nodes": [
     {
@@ -51,43 +50,25 @@
       "sublabel": "otlp receiver",
       "stage": 1,
       "row": 1,
-      "tag": "gRPC:4317"
+      "tag": "gRPC:4317 + HTTP:4318"
     },
     {
       "id": "otelcol_proc",
       "type": "cloud",
       "label": "Processors",
-      "sublabel": "batch + memory_limiter",
+      "sublabel": "batch",
       "stage": 2,
       "row": 1,
-      "tag": "tail_sampling"
+      "tag": "agregacao 1-10s"
     },
     {
       "id": "otelcol_exp",
       "type": "cloud",
       "label": "Exporters",
-      "sublabel": "prometheus+loki+tempo",
+      "sublabel": "debug (stdout)",
       "stage": 3,
       "row": 1,
-      "tag": "fanout"
-    },
-    {
-      "id": "tempo",
-      "type": "cloud",
-      "label": "Tempo",
-      "sublabel": "traces",
-      "stage": 4,
-      "row": 1,
-      "tag": "long-term"
-    },
-    {
-      "id": "prometheus",
-      "type": "cloud",
-      "label": "Prometheus",
-      "sublabel": "metrics",
-      "stage": 4,
-      "row": 2,
-      "tag": "scrape"
+      "tag": "verbosity: detailed"
     }
   ],
   "flows": [
@@ -95,7 +76,7 @@
       "id": "f1",
       "from": "web",
       "to": "otelcol_recv",
-      "label": "OTLP/HTTP /v1/metrics",
+      "label": "OTLP/HTTP :4318",
       "variant": "emphasis",
       "labelDy": -32
     },
@@ -119,35 +100,19 @@
       "id": "f4",
       "from": "otelcol_proc",
       "to": "otelcol_exp",
-      "label": "enriched",
+      "label": "batch (traces+metrics)",
       "variant": "emphasis",
-      "labelDy": -32
-    },
-    {
-      "id": "f5",
-      "from": "otelcol_exp",
-      "to": "tempo",
-      "label": "traces",
-      "variant": "emphasis",
-      "labelDy": -32
-    },
-    {
-      "id": "f6",
-      "from": "otelcol_exp",
-      "to": "prometheus",
-      "label": "metrics",
-      "variant": "default",
-      "labelDy": 28
+      "labelDy": 55
     }
   ],
   "cards": [
     {
       "dot": "emerald",
-      "title": "OpenTelemetry Collector",
+      "title": "OpenTelemetry Collector (MVP)",
       "items": [
         "Componente agnostico entre apps e backends",
-        "Configuravel via YAML: receivers/processors/exporters",
-        "Corre em infra/otelcol (Docker compose local)"
+        "Configuravel via YAML em infra/otelcol/config.yaml",
+        "MVP roteia para debug (stdout) — backends reais adicionados depois"
       ]
     },
     {
@@ -156,25 +121,20 @@
       "items": [
         "gRPC :4317 (server-side, alta performance)",
         "HTTP :4318 (browser-friendly)",
-        "Ambos aceitam traces+metrics+logs"
+        "Aceita traces + metrics"
       ]
     },
     {
-      "dot": "orange",
+      "dot": "amber",
       "title": "Processors",
-      "items": [
-        "batch: agregacao 1-10s antes de export",
-        "memory_limiter: protege contra OOM",
-        "tail_sampling: 100% erros, 10% outros"
-      ]
+      "items": ["batch: agregacao 1-10s antes de exportar"]
     },
     {
       "dot": "rose",
-      "title": "Backends (long-term)",
+      "title": "Exporters",
       "items": [
-        "Tempo: traces com traceId W3C",
-        "Prometheus: metrics scraping",
-        "Loki: logs estruturados (futuro)"
+        "debug: stdout verbosity detailed",
+        "Substituir por jaeger/tempo/honeycomb quando backend escolhido"
       ]
     }
   ]
