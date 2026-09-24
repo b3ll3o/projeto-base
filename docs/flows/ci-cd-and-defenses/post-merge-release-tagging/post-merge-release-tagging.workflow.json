@@ -15,18 +15,54 @@
         "focus": ["merge_main", "bump_footer", "wf_run", "tagged"],
         "note": "Conventional commits + bump + automatic tag vX.Y.Z."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "Post-merge release tagging: docs/MONOREPO.md footer → annotated tag vX.Y.Z"
   },
   "lanes": [
-    { "id": "main", "label": "main branch" },
-    { "id": "wf", "label": "GitHub Actions" },
-    { "id": "git", "label": "Git tags" }
+    {
+      "id": "main",
+      "label": "main branch"
+    },
+    {
+      "id": "wf",
+      "label": "GitHub Actions"
+    },
+    {
+      "id": "git",
+      "label": "Git tags"
+    }
   ],
   "phases": [
-    { "id": "merge", "label": "Merge", "fromCol": 0, "toCol": 0, "variant": "default" },
-    { "id": "bump", "label": "Bump footer", "fromCol": 1, "toCol": 1, "variant": "emphasis" },
-    { "id": "wf", "label": "Workflow run", "fromCol": 2, "toCol": 3, "variant": "security" },
-    { "id": "tag", "label": "Tag push", "fromCol": 4, "toCol": 5, "variant": "default" }
+    {
+      "id": "merge",
+      "label": "Merge",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "default"
+    },
+    {
+      "id": "bump",
+      "label": "Bump footer",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "wf",
+      "label": "Workflow run",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "security"
+    },
+    {
+      "id": "tag",
+      "label": "Tag push",
+      "fromCol": 4,
+      "toCol": 5,
+      "variant": "default"
+    }
   ],
   "mainPath": ["merge_main", "bump_footer", "wf_run", "extract_ver", "tagged"],
   "nodes": [

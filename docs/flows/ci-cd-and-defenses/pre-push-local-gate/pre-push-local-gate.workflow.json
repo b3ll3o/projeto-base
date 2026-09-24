@@ -7,7 +7,7 @@
     "output": "pre-push-local-gate.workflow.html",
     "animation": "trace",
     "visual_preset": "signal-flow",
-    "quality_profile": "showcase",
+    "quality_profile": "standard",
     "views": [
       {
         "id": "local-gate",
@@ -15,13 +15,39 @@
         "focus": ["hook", "preflight_entry", "result_aggregator", "push_ok", "block"],
         "note": "Defense-in-Depth Camada 1: detecta drift EM ~10s no dev, evitando round-trip ~4min no CI remoto."
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "Pre-push local gate: pnpm ci:preflight (~10s) bloqueia drift estrutural"
   },
-  "lanes": [{ "id": "dev", "label": "Dev (local)" }],
+  "lanes": [
+    {
+      "id": "dev",
+      "label": "Dev (local)"
+    }
+  ],
   "phases": [
-    { "id": "trigger", "label": "Trigger", "fromCol": 0, "toCol": 0, "variant": "default" },
-    { "id": "checks", "label": "Drift checks", "fromCol": 1, "toCol": 1, "variant": "emphasis" },
-    { "id": "gate", "label": "Gate", "fromCol": 2, "toCol": 3, "variant": "security" }
+    {
+      "id": "trigger",
+      "label": "Trigger",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "default"
+    },
+    {
+      "id": "checks",
+      "label": "Drift checks",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "gate",
+      "label": "Gate",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "security"
+    }
   ],
   "mainPath": ["hook", "preflight_entry", "result_aggregator", "push_ok"],
   "nodes": [

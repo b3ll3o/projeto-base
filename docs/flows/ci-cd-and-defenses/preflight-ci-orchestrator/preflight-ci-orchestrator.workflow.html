@@ -5131,7 +5131,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     <!-- Main Diagram -->
     <div class="diagram-container" data-detail-level="read"
          data-preset-badge-editorial-plate="ARCHIFY / PLATE 04">
-      <svg viewBox="0 0 1236 446" role="img" lang="en" aria-labelledby="archify-diagram-title archify-diagram-description" data-animation="trace" data-preset="signal-flow" data-quality-profile="showcase">
+      <svg viewBox="0 0 1236 462" role="img" lang="en" aria-labelledby="archify-diagram-title archify-diagram-description" data-animation="trace" data-preset="signal-flow" data-quality-profile="standard">
         <title id="archify-diagram-title">Preflight CI Orchestrator</title>
         <desc id="archify-diagram-description">pnpm ci:preflight → 6 drift checks → CheckResult</desc>
         <!-- Definitions -->
@@ -5157,7 +5157,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <rect width="100%" height="100%" fill="url(#grid)" />
 
         <!-- Swimlanes -->
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-0" x="40" y="52" width="1180" height="270" rx="10" class="c-lane" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-0" x="40" y="52" width="1180" height="286" rx="10" class="c-lane" stroke-width="1"/>
         <text x="54" y="74" class="t-dim" font-size="10" font-weight="600">01 / .tooling/scripts/ci</text>
 
         <!-- Phase headers -->
@@ -5175,152 +5175,159 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
 
         <!-- Edge paths -->
-        <path data-edge-from="doc" data-edge-to="tsc" data-edge-label="next" data-edge-key="0" data-composition-points="436,202;474,202" d="M 436 202 L 474 202" class="a-emphasis" data-animate="edge" style="--step:1" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="entry" data-edge-to="doc" data-edge-label="run" data-edge-key="1" data-composition-points="228,202;266,202" d="M 228 202 L 266 202" class="a-default" data-animate="edge" style="--step:0" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="doc" data-edge-to="tsc" data-edge-label="next" data-edge-key="0" data-composition-points="436,210;474,210" d="M 436 210 L 474 210" class="a-emphasis" data-animate="edge" style="--step:1" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="entry" data-edge-to="doc" data-edge-label="run" data-edge-key="1" data-composition-points="228,210;266,210" d="M 228 210 L 266 210" class="a-default" data-animate="edge" style="--step:0" stroke-width="1.4" marker-end="url(#arrowhead)"/>
         <path data-edge-from="esl" data-edge-to="result" data-edge-label="merge" data-edge-key="2" data-composition-points="737,176;737,160;1134,160;1134,176" d="M 737 176 L 737 160 L 1134 160 L 1134 176" class="a-default" data-animate="edge" style="--step:6" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="pkg" data-edge-to="result" data-edge-label="merge" data-edge-key="3" data-composition-points="351,318;351,338;1127,338;1127,228" d="M 351 318 L 351 338 L 1127 338 L 1127 228" class="a-default" data-animate="edge" style="--step:7" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="pkg" data-edge-to="result" data-edge-label="merge" data-edge-key="3" data-composition-points="351,334;351,354;1127,354;1127,244" d="M 351 334 L 351 354 L 1127 354 L 1127 244" class="a-default" data-animate="edge" style="--step:7" stroke-width="1.4" marker-end="url(#arrowhead)"/>
         <path data-edge-from="tsc" data-edge-to="result" data-edge-label="first 3" data-edge-key="4" data-composition-points="559,176;559,160;1120,160;1120,176" d="M 559 176 L 559 160 L 1120 160 L 1120 176" class="a-emphasis" data-animate="edge" style="--step:2" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="turb" data-edge-to="result" data-edge-label="merge" data-edge-key="5" data-composition-points="915,228;915,244;1127,244;1127,228" d="M 915 228 L 915 244 L 1127 244 L 1127 228" class="a-default" data-animate="edge" style="--step:9" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="typ" data-edge-to="result" data-edge-label="merge" data-edge-key="6" data-composition-points="644,292;1127,292;1127,228" d="M 644 292 L 1127 292 L 1127 228" class="a-default" data-animate="edge" style="--step:10" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="turb" data-edge-to="result" data-edge-label="merge" data-edge-key="5" data-composition-points="915,244;915,260;1127,260;1127,244" d="M 915 244 L 915 260 L 1127 260 L 1127 244" class="a-default" data-animate="edge" style="--step:9" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="typ" data-edge-to="result" data-edge-label="merge" data-edge-key="6" data-composition-points="644,300;1127,300;1127,244" d="M 644 300 L 1127 300 L 1127 244" class="a-default" data-animate="edge" style="--step:10" stroke-width="1.4" marker-end="url(#arrowhead)"/>
 
         <!-- Nodes -->
         <g id="node-entry" data-node-id="entry" data-node-label="ci:preflight" tabindex="0" role="button" aria-label="Focus ci:preflight, shell, .tooling/scripts/ci › Entry" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="shell" data-node-tag="entry" data-node-context=".tooling/scripts/ci › Entry">
           <title>ci:preflight · shell · .tooling/scripts/ci › Entry · entry</title>
-          <rect x="48" y="168" width="180" height="68" rx="6" class="c-mask"/>
-          <rect x="48" y="168" width="180" height="68" rx="6" class="c-frontend" data-animate="node" style="--step:0" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(54 174) scale(0.6875)">
+          <rect x="48" y="176" width="180" height="68" rx="6" class="c-mask"/>
+          <rect x="48" y="176" width="180" height="68" rx="6" class="c-frontend" data-animate="node" style="--step:0" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(54 182) scale(0.6875)">
             <rect x="2" y="3" width="12" height="10" rx="2"/>
             <path d="M2 6.5h12"/>
             <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
             <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="138" y="189" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">ci:preflight</text>
-          <text data-detail="context" x="138" y="206" class="t-muted" font-size="8" text-anchor="middle">shell</text>
-        <text data-detail="fine" x="138" y="224" class="t-frontend" font-size="7" text-anchor="middle">entry</text>
+          <text data-node-label="" data-detail-anchor="" x="138" y="197" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">ci:preflight</text>
+          <text data-detail="context" x="138" y="214" class="t-muted" font-size="8" text-anchor="middle">shell</text>
+        <text data-detail="fine" x="138" y="232" class="t-frontend" font-size="7" text-anchor="middle">entry</text>
         </g>
 
-        <g id="node-doc" data-node-id="doc" data-node-label="doc-refs" tabindex="0" role="button" aria-label="Focus doc-refs, ~5s, .tooling/scripts/ci › Checks (sequencial)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="~5s" data-node-context=".tooling/scripts/ci › Checks (sequencial)">
-          <title>doc-refs · ~5s · .tooling/scripts/ci › Checks (sequencial)</title>
-          <rect x="266" y="176" width="170" height="52" rx="6" class="c-mask"/>
-          <rect x="266" y="176" width="170" height="52" rx="6" class="c-backend" data-animate="node" style="--step:1" stroke-width="1.5"/>
+        <g id="node-doc" data-node-id="doc" data-node-label="doc-refs" tabindex="0" role="button" aria-label="Focus doc-refs, ~5s, .tooling/scripts/ci › Checks (sequencial)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="~5s" data-node-tag="scope:docs" data-node-context=".tooling/scripts/ci › Checks (sequencial)">
+          <title>doc-refs · ~5s · .tooling/scripts/ci › Checks (sequencial) · scope:docs</title>
+          <rect x="266" y="176" width="170" height="68" rx="6" class="c-mask"/>
+          <rect x="266" y="176" width="170" height="68" rx="6" class="c-backend" data-animate="node" style="--step:1" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(272 182) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
           <text data-node-label="" data-detail-anchor="" x="351" y="197" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">doc-refs</text>
           <text data-detail="context" x="351" y="214" class="t-muted" font-size="8" text-anchor="middle">~5s</text>
+        <text data-detail="fine" x="351" y="232" class="t-backend" font-size="7" text-anchor="middle">scope:docs</text>
         </g>
 
-        <g id="node-pkg" data-node-id="pkg" data-node-label="pkg-drift" tabindex="0" role="button" aria-label="Focus pkg-drift, ~2s, .tooling/scripts/ci › Checks (sequencial)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="~2s" data-node-context=".tooling/scripts/ci › Checks (sequencial)">
-          <title>pkg-drift · ~2s · .tooling/scripts/ci › Checks (sequencial)</title>
-          <rect x="266" y="266" width="170" height="52" rx="6" class="c-mask"/>
-          <rect x="266" y="266" width="170" height="52" rx="6" class="c-backend" data-animate="node" style="--step:6" stroke-width="1.5"/>
+        <g id="node-pkg" data-node-id="pkg" data-node-label="pkg-drift" tabindex="0" role="button" aria-label="Focus pkg-drift, ~2s, .tooling/scripts/ci › Checks (sequencial)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="~2s" data-node-tag="scope:generic" data-node-context=".tooling/scripts/ci › Checks (sequencial)">
+          <title>pkg-drift · ~2s · .tooling/scripts/ci › Checks (sequencial) · scope:generic</title>
+          <rect x="266" y="266" width="170" height="68" rx="6" class="c-mask"/>
+          <rect x="266" y="266" width="170" height="68" rx="6" class="c-backend" data-animate="node" style="--step:6" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(272 272) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
           <text data-node-label="" data-detail-anchor="" x="351" y="287" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">pkg-drift</text>
           <text data-detail="context" x="351" y="304" class="t-muted" font-size="8" text-anchor="middle">~2s</text>
+        <text data-detail="fine" x="351" y="322" class="t-backend" font-size="7" text-anchor="middle">scope:generic</text>
         </g>
 
-        <g id="node-tsc" data-node-id="tsc" data-node-label="tsconfig-drift" tabindex="0" role="button" aria-label="Focus tsconfig-drift, ~3s, .tooling/scripts/ci › Checks (sequencial)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="~3s" data-node-context=".tooling/scripts/ci › Checks (sequencial)">
-          <title>tsconfig-drift · ~3s · .tooling/scripts/ci › Checks (sequencial)</title>
-          <rect x="474" y="176" width="170" height="52" rx="6" class="c-mask"/>
-          <rect x="474" y="176" width="170" height="52" rx="6" class="c-backend" data-animate="node" style="--step:2" stroke-width="1.5"/>
+        <g id="node-tsc" data-node-id="tsc" data-node-label="tsconfig-drift" tabindex="0" role="button" aria-label="Focus tsconfig-drift, ~3s, .tooling/scripts/ci › Checks (sequencial)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="~3s" data-node-tag="scope:generic" data-node-context=".tooling/scripts/ci › Checks (sequencial)">
+          <title>tsconfig-drift · ~3s · .tooling/scripts/ci › Checks (sequencial) · scope:generic</title>
+          <rect x="474" y="176" width="170" height="68" rx="6" class="c-mask"/>
+          <rect x="474" y="176" width="170" height="68" rx="6" class="c-backend" data-animate="node" style="--step:2" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(480 182) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
           <text data-node-label="" data-detail-anchor="" x="559" y="197" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">tsconfig-drift</text>
           <text data-detail="context" x="559" y="214" class="t-muted" font-size="8" text-anchor="middle">~3s</text>
+        <text data-detail="fine" x="559" y="232" class="t-backend" font-size="7" text-anchor="middle">scope:generic</text>
         </g>
 
-        <g id="node-typ" data-node-id="typ" data-node-label="types" tabindex="0" role="button" aria-label="Focus types, ~1s, .tooling/scripts/ci › Checks (sequencial)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="~1s" data-node-context=".tooling/scripts/ci › Checks (sequencial)">
-          <title>types · ~1s · .tooling/scripts/ci › Checks (sequencial)</title>
-          <rect x="474" y="266" width="170" height="52" rx="6" class="c-mask"/>
-          <rect x="474" y="266" width="170" height="52" rx="6" class="c-backend" data-animate="node" style="--step:8" stroke-width="1.5"/>
+        <g id="node-typ" data-node-id="typ" data-node-label="types" tabindex="0" role="button" aria-label="Focus types, ~1s, .tooling/scripts/ci › Checks (sequencial)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="~1s" data-node-tag="scope:generic" data-node-context=".tooling/scripts/ci › Checks (sequencial)">
+          <title>types · ~1s · .tooling/scripts/ci › Checks (sequencial) · scope:generic</title>
+          <rect x="474" y="266" width="170" height="68" rx="6" class="c-mask"/>
+          <rect x="474" y="266" width="170" height="68" rx="6" class="c-backend" data-animate="node" style="--step:8" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(480 272) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
           <text data-node-label="" data-detail-anchor="" x="559" y="287" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">types</text>
           <text data-detail="context" x="559" y="304" class="t-muted" font-size="8" text-anchor="middle">~1s</text>
+        <text data-detail="fine" x="559" y="322" class="t-backend" font-size="7" text-anchor="middle">scope:generic</text>
         </g>
 
-        <g id="node-esl" data-node-id="esl" data-node-label="eslint-drift" tabindex="0" role="button" aria-label="Focus eslint-drift, ~3s, .tooling/scripts/ci › Checks (sequencial)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="~3s" data-node-context=".tooling/scripts/ci › Checks (sequencial)">
-          <title>eslint-drift · ~3s · .tooling/scripts/ci › Checks (sequencial)</title>
-          <rect x="652" y="176" width="170" height="52" rx="6" class="c-mask"/>
-          <rect x="652" y="176" width="170" height="52" rx="6" class="c-backend" data-animate="node" style="--step:9" stroke-width="1.5"/>
+        <g id="node-esl" data-node-id="esl" data-node-label="eslint-drift" tabindex="0" role="button" aria-label="Focus eslint-drift, ~3s, .tooling/scripts/ci › Checks (sequencial)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="~3s" data-node-tag="scope:generic" data-node-context=".tooling/scripts/ci › Checks (sequencial)">
+          <title>eslint-drift · ~3s · .tooling/scripts/ci › Checks (sequencial) · scope:generic</title>
+          <rect x="652" y="176" width="170" height="68" rx="6" class="c-mask"/>
+          <rect x="652" y="176" width="170" height="68" rx="6" class="c-backend" data-animate="node" style="--step:9" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(658 182) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
           <text data-node-label="" data-detail-anchor="" x="737" y="197" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">eslint-drift</text>
           <text data-detail="context" x="737" y="214" class="t-muted" font-size="8" text-anchor="middle">~3s</text>
+        <text data-detail="fine" x="737" y="232" class="t-backend" font-size="7" text-anchor="middle">scope:generic</text>
         </g>
 
-        <g id="node-turb" data-node-id="turb" data-node-label="turbo-drift" tabindex="0" role="button" aria-label="Focus turbo-drift, ~2s, .tooling/scripts/ci › Checks (sequencial)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="~2s" data-node-context=".tooling/scripts/ci › Checks (sequencial)">
-          <title>turbo-drift · ~2s · .tooling/scripts/ci › Checks (sequencial)</title>
-          <rect x="830" y="176" width="170" height="52" rx="6" class="c-mask"/>
-          <rect x="830" y="176" width="170" height="52" rx="6" class="c-backend" data-animate="node" style="--step:10" stroke-width="1.5"/>
+        <g id="node-turb" data-node-id="turb" data-node-label="turbo-drift" tabindex="0" role="button" aria-label="Focus turbo-drift, ~2s, .tooling/scripts/ci › Checks (sequencial)" aria-pressed="false" data-node-kind="backend" data-node-sublabel="~2s" data-node-tag="scope:generic" data-node-context=".tooling/scripts/ci › Checks (sequencial)">
+          <title>turbo-drift · ~2s · .tooling/scripts/ci › Checks (sequencial) · scope:generic</title>
+          <rect x="830" y="176" width="170" height="68" rx="6" class="c-mask"/>
+          <rect x="830" y="176" width="170" height="68" rx="6" class="c-backend" data-animate="node" style="--step:10" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(836 182) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
           <text data-node-label="" data-detail-anchor="" x="915" y="197" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">turbo-drift</text>
           <text data-detail="context" x="915" y="214" class="t-muted" font-size="8" text-anchor="middle">~2s</text>
+        <text data-detail="fine" x="915" y="232" class="t-backend" font-size="7" text-anchor="middle">scope:generic</text>
         </g>
 
-        <g id="node-result" data-node-id="result" data-node-label="CheckResult" tabindex="0" role="button" aria-label="Focus CheckResult, exit, .tooling/scripts/ci › Aggregate" aria-pressed="false" data-node-kind="security" data-node-sublabel="exit" data-node-context=".tooling/scripts/ci › Aggregate">
-          <title>CheckResult · exit · .tooling/scripts/ci › Aggregate</title>
-          <rect x="1042" y="176" width="170" height="52" rx="6" class="c-mask"/>
-          <rect x="1042" y="176" width="170" height="52" rx="6" class="c-security" data-animate="node" style="--step:3" stroke-width="1.5"/>
+        <g id="node-result" data-node-id="result" data-node-label="CheckResult" tabindex="0" role="button" aria-label="Focus CheckResult, exit, .tooling/scripts/ci › Aggregate" aria-pressed="false" data-node-kind="security" data-node-sublabel="exit" data-node-tag="scope:generic" data-node-context=".tooling/scripts/ci › Aggregate">
+          <title>CheckResult · exit · .tooling/scripts/ci › Aggregate · scope:generic</title>
+          <rect x="1042" y="176" width="170" height="68" rx="6" class="c-mask"/>
+          <rect x="1042" y="176" width="170" height="68" rx="6" class="c-security" data-animate="node" style="--step:3" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(1048 182) scale(0.6875)">
             <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
             <path d="m5.8 8 1.5 1.5 3-3"/>
           </g>
           <text data-node-label="" data-detail-anchor="" x="1127" y="197" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">CheckResult</text>
           <text data-detail="context" x="1127" y="214" class="t-muted" font-size="8" text-anchor="middle">exit</text>
+        <text data-detail="fine" x="1127" y="232" class="t-security" font-size="7" text-anchor="middle">scope:generic</text>
         </g>
 
         <!-- Edge labels -->
         <g data-detail="context" data-edge-from="doc" data-edge-to="tsc" data-edge-label="next" data-edge-key="0">
-          <rect x="440" y="182" width="30" height="14" rx="3" class="c-mask"/>
-          <text x="455" y="192" class="t-backend" font-size="8" text-anchor="middle">next</text>
+          <rect x="440" y="190" width="30" height="14" rx="3" class="c-mask"/>
+          <text x="455" y="200" class="t-backend" font-size="8" text-anchor="middle">next</text>
         </g>
         <g data-detail="context" data-edge-from="entry" data-edge-to="doc" data-edge-label="run" data-edge-key="1">
-          <rect x="232" y="182" width="30" height="14" rx="3" class="c-mask"/>
-          <text x="247" y="192" class="t-muted" font-size="8" text-anchor="middle">run</text>
+          <rect x="232" y="190" width="30" height="14" rx="3" class="c-mask"/>
+          <text x="247" y="200" class="t-muted" font-size="8" text-anchor="middle">run</text>
         </g>
         <g data-detail="context" data-edge-from="esl" data-edge-to="result" data-edge-label="merge" data-edge-key="2">
           <rect x="918.5" y="140" width="34" height="14" rx="3" class="c-mask"/>
           <text x="935.5" y="150" class="t-muted" font-size="8" text-anchor="middle">merge</text>
         </g>
         <g data-detail="context" data-edge-from="pkg" data-edge-to="result" data-edge-label="merge" data-edge-key="3">
-          <rect x="722" y="318" width="34" height="14" rx="3" class="c-mask"/>
-          <text x="739" y="328" class="t-muted" font-size="8" text-anchor="middle">merge</text>
+          <rect x="722" y="334" width="34" height="14" rx="3" class="c-mask"/>
+          <text x="739" y="344" class="t-muted" font-size="8" text-anchor="middle">merge</text>
         </g>
         <g data-detail="context" data-edge-from="tsc" data-edge-to="result" data-edge-label="first 3" data-edge-key="4">
           <rect x="817.7" y="140" width="43.6" height="14" rx="3" class="c-mask"/>
           <text x="839.5" y="150" class="t-backend" font-size="8" text-anchor="middle">first 3</text>
         </g>
         <g data-detail="context" data-edge-from="turb" data-edge-to="result" data-edge-label="merge" data-edge-key="5">
-          <rect x="1004" y="224" width="34" height="14" rx="3" class="c-mask"/>
-          <text x="1021" y="234" class="t-muted" font-size="8" text-anchor="middle">merge</text>
+          <rect x="1004" y="240" width="34" height="14" rx="3" class="c-mask"/>
+          <text x="1021" y="250" class="t-muted" font-size="8" text-anchor="middle">merge</text>
         </g>
         <g data-detail="context" data-edge-from="typ" data-edge-to="result" data-edge-label="merge" data-edge-key="6">
-          <rect x="868.5" y="272" width="34" height="14" rx="3" class="c-mask"/>
-          <text x="885.5" y="282" class="t-muted" font-size="8" text-anchor="middle">merge</text>
+          <rect x="868.5" y="280" width="34" height="14" rx="3" class="c-mask"/>
+          <text x="885.5" y="290" class="t-muted" font-size="8" text-anchor="middle">merge</text>
         </g>
 
         <!-- Legend -->
         <g data-legend="" data-legend-bridge="">
-          <text x="20" y="346" class="t-primary" font-size="12" font-weight="650">Legend</text>
-          <g data-legend-semantic-kind="frontend" data-legend-kind="frontend" data-legend-label="User UI" data-legend-x="20" data-legend-baseline="366" data-legend-width="74">
-            <rect x="20" y="358" width="14" height="9" rx="2" class="c-frontend" stroke-width="1"/>
-            <text x="42" y="366" class="t-muted" font-size="7.5" font-weight="500">User UI</text>
+          <text x="20" y="362" class="t-primary" font-size="12" font-weight="650">Legend</text>
+          <g data-legend-semantic-kind="frontend" data-legend-kind="frontend" data-legend-label="User UI" data-legend-x="20" data-legend-baseline="382" data-legend-width="74">
+            <rect x="20" y="374" width="14" height="9" rx="2" class="c-frontend" stroke-width="1"/>
+            <text x="42" y="382" class="t-muted" font-size="7.5" font-weight="500">User UI</text>
           </g>
-          <g data-legend-semantic-kind="backend" data-legend-kind="backend" data-legend-label="Agent logic" data-legend-x="101" data-legend-baseline="366" data-legend-width="91">
-            <rect x="101" y="358" width="14" height="9" rx="2" class="c-backend" stroke-width="1"/>
-            <text x="123" y="366" class="t-muted" font-size="7.5" font-weight="500">Agent logic</text>
+          <g data-legend-semantic-kind="backend" data-legend-kind="backend" data-legend-label="Agent logic" data-legend-x="101" data-legend-baseline="382" data-legend-width="91">
+            <rect x="101" y="374" width="14" height="9" rx="2" class="c-backend" stroke-width="1"/>
+            <text x="123" y="382" class="t-muted" font-size="7.5" font-weight="500">Agent logic</text>
           </g>
-          <g data-legend-semantic-kind="security" data-legend-kind="security" data-legend-label="Policy" data-legend-x="199" data-legend-baseline="366" data-legend-width="70">
-            <rect x="199" y="358" width="14" height="9" rx="2" class="c-security" stroke-width="1"/>
-            <text x="221" y="366" class="t-muted" font-size="7.5" font-weight="500">Policy</text>
+          <g data-legend-semantic-kind="security" data-legend-kind="security" data-legend-label="Policy" data-legend-x="199" data-legend-baseline="382" data-legend-width="70">
+            <rect x="199" y="374" width="14" height="9" rx="2" class="c-security" stroke-width="1"/>
+            <text x="221" y="382" class="t-muted" font-size="7.5" font-weight="500">Policy</text>
           </g>
         </g>
       </svg>

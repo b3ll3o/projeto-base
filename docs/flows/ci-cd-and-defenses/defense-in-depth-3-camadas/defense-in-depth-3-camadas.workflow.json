@@ -8,7 +8,7 @@
     "viewBox": [1192, 900],
     "animation": "trace",
     "visual_preset": "signal-flow",
-    "quality_profile": "showcase",
+    "quality_profile": "standard",
     "views": [
       {
         "id": "all-layers",
@@ -16,16 +16,43 @@
         "focus": ["local", "preflight", "quality"],
         "note": "Drift estrutural não é pego por testes/cobertura — defesa em camadas."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "Estratégia defense-in-depth: pre-push local + preflight CI + quality CI gated"
   },
   "lanes": [
-    { "id": "dev", "label": "Dev (local)" },
-    { "id": "ci", "label": "CI remoto" }
+    {
+      "id": "dev",
+      "label": "Dev (local)"
+    },
+    {
+      "id": "ci",
+      "label": "CI remoto"
+    }
   ],
   "phases": [
-    { "id": "c1", "label": "Camada 1", "fromCol": 0, "toCol": 1, "variant": "default" },
-    { "id": "c2", "label": "Camada 2", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
-    { "id": "c3", "label": "Camada 3", "fromCol": 4, "toCol": 5, "variant": "security" }
+    {
+      "id": "c1",
+      "label": "Camada 1",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "default"
+    },
+    {
+      "id": "c2",
+      "label": "Camada 2",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "c3",
+      "label": "Camada 3",
+      "fromCol": 4,
+      "toCol": 5,
+      "variant": "security"
+    }
   ],
   "mainPath": ["local", "preflight", "checks", "quality", "merged"],
   "nodes": [
@@ -56,7 +83,8 @@
       "type": "security",
       "label": "6 checks",
       "sublabel": "drift",
-      "width": 180
+      "width": 180,
+      "tag": "scope:generic"
     },
     {
       "id": "quality",
@@ -75,7 +103,8 @@
       "type": "frontend",
       "label": "merge main",
       "sublabel": "PR OK",
-      "width": 170
+      "width": 170,
+      "tag": "scope:generic"
     },
     {
       "id": "blocked",
