@@ -49,11 +49,11 @@
 | `http-api-users-restore` | 🔴 critical | hand | sequence | POST /users/:id/restore — restaurar soft-deletado (optimistic lock) |
 | `http-api-users-soft-delete` | 🔴 critical | hand | sequence | DELETE /users/:id — soft delete + audit (DELETE op + archive) |
 | `http-api-users-update-name` | 🔴 critical | hand | sequence | PATCH /users/:id — rename com optimistic locking (If-Match) |
-| `http-api-audit-context-propagation` | 🟡 important | hand | lifecycle | Cross-cutting — AuditContext via AsyncLocalStorage (correlationId W3C) |
+| `http-api-audit-context-propagation` | 🟡 important | hand | workflow | Cross-cutting — AuditContext via AsyncLocalStorage (correlationId W3C) |
 | `http-api-domain-events-to-audit` | 🟡 important | hand | workflow | Cross-cutting — domain events → audit operations (mapping) |
 | `http-api-nestjs-module-composition` | 🟡 important | hand | architecture | Arquitetura — composição de módulos NestJS e bindings DI |
 | `http-api-zod-validation-pipeline` | 🟡 important | hand | workflow | Cross-cutting — Zod validation na borda HTTP (defense-in-depth) |
-| `http-api-etag-versioning-lifecycle` | 🟢 nice | hand | lifecycle | Lifecycle — User aggregate version/ETag transitions |
+| `http-api-etag-versioning-lifecycle` | 🟢 nice | hand | workflow | Lifecycle — User aggregate version/ETag transitions |
 | `http-api-planned-endpoints-roadmap` | 🟢 nice | hand | workflow | Roadmap — endpoints planejados (Fase 8+) ainda não implementados |
 | `http-api-update-email-flow` | 🟢 nice | hand | sequence | UPDATE email — use case existente (sem rota HTTP dedicada ainda) |
 
@@ -88,7 +88,7 @@
 | `fs-stack-code-reviewer-rules` | 🟡 important | auto | workflow | stack-code-reviewer — pipeline de regras DDD/NestJS/Prisma/Next.js com gating blocker→exit |
 | `fs-archive-lint-validate` | 🟢 nice | auto | workflow | archive-lint — validador de frontmatter canônico para archive de demands |
 | `fs-demand-archiving-flow` | 🟢 nice | hand | workflow | archive-demand — pipeline de elegibilidade + commit atômico |
-| `fs-state-aware-planning-snapshot` | 🟢 nice | hand | workflow | state-aware-planning — snapshot pré-planner com gates proceed | block | gap_blocker |
+| `fs-state-aware-planning-snapshot` | 🟢 nice | hand | workflow | state-aware-planning — snapshot pré-planner com gates proceed / block / gap_blocker |
 
 ### telemetry-observability (8 flows)
 
@@ -111,7 +111,7 @@
 | `web-app-flow-04` | 🔴 critical | hand | dataflow | Web App: Web Vitals Telemetry Pipeline |
 | `web-app-flow-01` | 🟡 important | hand | sequence | Web App: Home Page SSR Render (RSC) |
 | `web-app-flow-03` | 🟡 important | hand | sequence | Web App: Health Check API Route |
-| `web-app-flow-05` | 🟡 important | hand | lifecycle | Web App: Server-side OTel SDK Init (Node Runtime) |
+| `web-app-flow-05` | 🟡 important | hand | workflow | Web App: Server-side OTel SDK Init (Node Runtime) |
 | `web-app-flow-06` | 🟡 important | hand | sequence | Web App: API Client Error Path (ProblemDetails -> ApiError) |
 | `web-app-flow-08` | 🟡 important | hand | architecture | Web App: API Client Component Topology |
 | `web-app-flow-07` | 🟢 nice | hand | workflow | Web App: Next.js Standalone Build Pipeline (Docker) |
