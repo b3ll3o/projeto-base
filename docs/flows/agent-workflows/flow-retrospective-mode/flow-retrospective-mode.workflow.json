@@ -1,0 +1,151 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Retrospective Mode — Captura de Aprendizados Pós-Atividade",
+    "subtitle": "3 estágios sequenciais (explorer → retrospective-capture → doc-writer) + task-manager paralelo no estágio final",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "output": "flow-retrospective-mode.workflow.html",
+    "views": [
+      {
+        "id": "retrospective",
+        "label": "Pipeline de retrospectiva",
+        "focus": ["explorer", "retrospective_skill", "doc_writer", "task_manager"],
+        "note": "Coleta evidência → analisa/filtra proposals → codifica em artefatos duráveis."
+      },
+      {
+        "id": "handoffs",
+        "label": "Handoffs + gates",
+        "focus": ["retrospective_skill", "task_manager"],
+        "note": "Threshold confidence ≥ 70; result file ≤ 300 linhas; memories atualizadas."
+      }
+    ]
+  },
+  "lanes": [{ "id": "agent", "label": "Agent Runtime" }],
+  "phases": [
+    { "id": "collect", "label": "Coletar", "fromCol": 0, "toCol": 1, "variant": "emphasis" },
+    { "id": "write", "label": "Codificar", "fromCol": 2, "toCol": 3, "variant": "dashed" }
+  ],
+  "groups": [
+    {
+      "id": "collect_phase",
+      "label": "Coletar + analisar",
+      "lane": "agent",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "write_phase",
+      "label": "Codificar artefatos",
+      "lane": "agent",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": ["explorer", "retrospective_skill", "doc_writer"],
+  "nodes": [
+    {
+      "id": "explorer",
+      "lane": "agent",
+      "col": 0,
+      "type": "external",
+      "label": "explorer",
+      "sublabel": "diff + conversation",
+      "tag": "≥ 3 decisões/patterns",
+      "width": 160
+    },
+    {
+      "id": "retrospective_skill",
+      "lane": "agent",
+      "col": 1,
+      "type": "security",
+      "label": "retrospective-capture",
+      "sublabel": "filtrar por confidence",
+      "tag": "threshold = 70",
+      "width": 170
+    },
+    {
+      "id": "doc_writer",
+      "lane": "agent",
+      "col": 2,
+      "type": "external",
+      "label": "doc-writer",
+      "sublabel": "result file ≤300 linhas",
+      "tag": "b<N>+1-result.md",
+      "width": 160
+    },
+    {
+      "id": "task_manager",
+      "lane": "agent",
+      "col": 3,
+      "type": "backend",
+      "label": "task-manager",
+      "sublabel": "backlog das proposals",
+      "tag": "paralelo ao doc-writer",
+      "width": 160,
+      "yOffset": 120
+    }
+  ],
+  "edges": [
+    {
+      "id": "explorer-to-skill",
+      "from": "explorer",
+      "to": "retrospective_skill",
+      "label": "raw_evidence",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "skill-to-writer",
+      "from": "retrospective_skill",
+      "to": "doc_writer",
+      "label": "proposals filtradas",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "skill-to-task",
+      "from": "retrospective_skill",
+      "to": "task_manager",
+      "label": "proposals paralelas",
+      "variant": "dashed",
+      "role": "async"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Pipeline Híbrido",
+      "items": [
+        "3 estágios sequenciais (explorer → retrospective-capture → doc-writer)",
+        "task-manager paralelo no estágio final (prepara backlog das proposals)",
+        "Cada handoff tem expected_output + success_criteria binário (pass/fail)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Gates de Saída",
+      "items": [
+        "Result file escrito em memory/b<N>+1-result.md com frontmatter + linked memories",
+        "0 proposals com confidence < 70 (abaixo disso vira comentário no result)",
+        "Memory files dos agents envolvidos atualizados (git diff verificável)",
+        "PR opcional aberto se proposals de harness (skills/conventions)",
+        "MEMORY.md index atualizado com apontador para o result",
+        "pnpm ci:preflight passa (cross-refs em memory/, agents, skills)"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Quando NÃO usar",
+      "items": [
+        "Atividades triviais (typo, dep bump) — overhead puro",
+        "Quando o plano ainda está em curso (executar retrospectiva quando ciclo review+fix já aprovado)",
+        "Como substituto para task-mode (gestão de backlog sem retrospectiva)"
+      ]
+    }
+  ]
+}
