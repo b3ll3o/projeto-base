@@ -94,7 +94,7 @@
 
 | Flow ID | Tier | Mecanismo | Tipo | Subject |
 |---------|------|-----------|------|---------|
-| `telemetry.backend.bootstrap.lifecycle` | 🔴 critical | hand | lifecycle | Backend NodeSDK bootstrap (apps/api: process startup → SDK ready) |
+| `telemetry.backend.bootstrap.lifecycle` | 🔴 critical | hand | workflow | Backend NodeSDK bootstrap (apps/api: process startup → SDK ready) |
 | `telemetry.collector.otlp.pipeline.dataflow` | 🔴 critical | hand | dataflow | OTel Collector pipeline (receiver → processor → exporter) |
 | `telemetry.frontend.nodejs.bootstrap.sequence` | 🔴 critical | hand | sequence | Frontend Next.js server-side OTel init (RSC/API routes via NodeSDK) |
 | `telemetry.http.w3c.traceid.propagation.sequence` | 🔴 critical | hand | sequence | HTTP request → W3C traceId propagation (controller → AuditContext/ProblemDetails) |
