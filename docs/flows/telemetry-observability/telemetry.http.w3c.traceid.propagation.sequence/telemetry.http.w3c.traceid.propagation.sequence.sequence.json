@@ -16,21 +16,71 @@
         "focus": ["rsc", "fetch", "traceparent", "controller", "otel", "audit", "pg"],
         "note": "W3C trace context flui browser→API→DB com correlação."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "HTTP request → W3C traceId propagation (controller → AuditContext/ProblemDetails)"
   },
   "participants": [
-    { "id": "rsc", "type": "external", "label": "apps/web", "sublabel": "RSC fetch" },
-    { "id": "fetch", "type": "backend", "label": "fetch()", "sublabel": "traceparent" },
-    { "id": "traceparent", "type": "backend", "label": "traceparent", "sublabel": "HTTP header" },
-    { "id": "controller", "type": "backend", "label": "Controller", "sublabel": "@Span()" },
-    { "id": "otel", "type": "backend", "label": "OTel SDK", "sublabel": "extract ctx" },
-    { "id": "audit", "type": "backend", "label": "AuditContext", "sublabel": "store" },
-    { "id": "pg", "type": "database", "label": "PostgreSQL", "sublabel": "audit_event" }
+    {
+      "id": "rsc",
+      "type": "external",
+      "label": "apps/web",
+      "sublabel": "RSC fetch"
+    },
+    {
+      "id": "fetch",
+      "type": "backend",
+      "label": "fetch()",
+      "sublabel": "traceparent"
+    },
+    {
+      "id": "traceparent",
+      "type": "backend",
+      "label": "traceparent",
+      "sublabel": "HTTP header"
+    },
+    {
+      "id": "controller",
+      "type": "backend",
+      "label": "Controller",
+      "sublabel": "@Span()"
+    },
+    {
+      "id": "otel",
+      "type": "backend",
+      "label": "OTel SDK",
+      "sublabel": "extract ctx"
+    },
+    {
+      "id": "audit",
+      "type": "backend",
+      "label": "AuditContext",
+      "sublabel": "store"
+    },
+    {
+      "id": "pg",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "audit_event"
+    }
   ],
   "segments": [
-    { "from": 150, "to": 340, "label": "HTTP request com traceparent" },
-    { "from": 356, "to": 500, "label": "Audit context store" },
-    { "from": 516, "to": 640, "label": "Persist com traceId" }
+    {
+      "from": 150,
+      "to": 340,
+      "label": "HTTP request com traceparent"
+    },
+    {
+      "from": 356,
+      "to": 500,
+      "label": "Audit context store"
+    },
+    {
+      "from": 516,
+      "to": 640,
+      "label": "Persist com traceId"
+    }
   ],
   "messages": [
     {
@@ -75,7 +125,13 @@
       "label": "INSERT audit_event w/ traceId",
       "variant": "emphasis"
     },
-    { "from": "pg", "to": "audit", "y": 580, "label": "row OK", "variant": "return" },
+    {
+      "from": "pg",
+      "to": "audit",
+      "y": 580,
+      "label": "row OK",
+      "variant": "return"
+    },
     {
       "from": "audit",
       "to": "controller",
@@ -85,11 +141,36 @@
     }
   ],
   "activations": [
-    { "participant": "fetch", "from": 174, "to": 254, "type": "backend" },
-    { "participant": "controller", "from": 254, "to": 600, "type": "backend" },
-    { "participant": "otel", "from": 294, "to": 400, "type": "backend" },
-    { "participant": "audit", "from": 374, "to": 580, "type": "backend" },
-    { "participant": "pg", "from": 530, "to": 570, "type": "database" }
+    {
+      "participant": "fetch",
+      "from": 174,
+      "to": 254,
+      "type": "backend"
+    },
+    {
+      "participant": "controller",
+      "from": 254,
+      "to": 600,
+      "type": "backend"
+    },
+    {
+      "participant": "otel",
+      "from": 294,
+      "to": 400,
+      "type": "backend"
+    },
+    {
+      "participant": "audit",
+      "from": 374,
+      "to": 580,
+      "type": "backend"
+    },
+    {
+      "participant": "pg",
+      "from": 530,
+      "to": 570,
+      "type": "database"
+    }
   ],
   "cards": [
     {

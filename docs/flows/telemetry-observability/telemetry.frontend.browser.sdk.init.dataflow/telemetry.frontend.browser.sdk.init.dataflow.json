@@ -25,13 +25,24 @@
         ],
         "note": "Side-effect module bundlado por Next.js (browser only). guard typeof window !== 'undefined' protege prerender."
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "Browser-side OTel SDK init (WebTracerProvider + auto-instrumentations)"
   },
   "stages": [
-    { "label": "Load" },
-    { "label": "Guard" },
-    { "label": "Provider" },
-    { "label": "Wired" }
+    {
+      "label": "Load"
+    },
+    {
+      "label": "Guard"
+    },
+    {
+      "label": "Provider"
+    },
+    {
+      "label": "Wired"
+    }
   ],
   "nodes": [
     {

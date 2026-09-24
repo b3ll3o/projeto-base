@@ -24,7 +24,10 @@
         ],
         "note": "Perfil 'observability' opt-in: docker compose --profile observability up. MVP debug exporter; trocar por jaeger/tempo/honeycomb."
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "Docker Compose observability stack (otel-collector service + observability profile)"
   },
   "layout": {
     "mode": "grid",
