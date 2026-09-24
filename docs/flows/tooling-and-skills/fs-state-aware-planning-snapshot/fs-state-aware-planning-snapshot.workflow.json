@@ -1,0 +1,316 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "State-Aware Planning Snapshot — Camada 0",
+    "subtitle": "Pipeline: pré-validar inputs → coletar 10 categorias (≤90s) → compor snapshot.md → decidir proceed/block via gap_blocker gate",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "standard",
+    "output": "fs-state-aware-planning-snapshot.workflow.html",
+    "views": [
+      {
+        "id": "pipeline",
+        "label": "Pipeline 3 passos",
+        "focus": ["pre_validate", "git_status", "compose_snapshot", "decide_gate"],
+        "note": "3 passos canônicos: 1)≤90s coletar 10 cats, 2)compor state-snapshot-<ts>.md, 3)decidir proceed/block."
+      },
+      {
+        "id": "gates",
+        "label": "4 gates",
+        "focus": ["decide_gate"],
+        "note": "proceed exige gap_blocker=false + working_tree=clean + preflight=all_passed + coverage≥80%."
+      }
+    ]
+  },
+  "lanes": [
+    { "id": "preflight", "label": "Pre-validate" },
+    { "id": "collect", "label": "Collect" },
+    { "id": "compose", "label": "Compose" },
+    { "id": "decide", "label": "Decide" }
+  ],
+  "phases": [
+    { "id": "pre", "label": "Pre-validate", "fromCol": 0, "toCol": 0, "variant": "emphasis" },
+    { "id": "collect", "label": "Collect", "fromCol": 1, "toCol": 2, "variant": "default" },
+    { "id": "compose", "label": "Compose", "fromCol": 3, "toCol": 3, "variant": "default" },
+    { "id": "decide", "label": "Decide", "fromCol": 4, "toCol": 5, "variant": "dashed" }
+  ],
+  "groups": [
+    {
+      "id": "collect_group",
+      "label": "10 categorias (≤90s)",
+      "lane": "collect",
+      "fromCol": 1,
+      "toCol": 2,
+      "variant": "default"
+    }
+  ],
+  "mainPath": [
+    "pre_validate",
+    "git_status",
+    "prisma_drift",
+    "preflight",
+    "coverage",
+    "compose_snapshot",
+    "validate_frontmatter",
+    "decide_gate"
+  ],
+  "nodes": [
+    {
+      "id": "pre_validate",
+      "lane": "preflight",
+      "col": 0,
+      "type": "security",
+      "label": "pré-validar",
+      "sublabel": "extra_paths+slug",
+      "tag": "test -f + regex",
+      "width": 150
+    },
+    {
+      "id": "git_status",
+      "lane": "collect",
+      "col": 1,
+      "type": "external",
+      "label": "working tree",
+      "sublabel": "git status --short",
+      "tag": ".agents/runs/TS-git.txt",
+      "width": 150
+    },
+    {
+      "id": "prisma_drift",
+      "lane": "collect",
+      "col": 1,
+      "type": "backend",
+      "label": "prisma migrate",
+      "sublabel": "cd apps/api",
+      "tag": "migrate status",
+      "width": 150,
+      "yOffset": 120
+    },
+    {
+      "id": "preflight",
+      "lane": "collect",
+      "col": 2,
+      "type": "security",
+      "label": "preflight check",
+      "sublabel": "pnpm ci:preflight",
+      "tag": ".agents/runs/TS-pre.txt",
+      "width": 150
+    },
+    {
+      "id": "coverage",
+      "lane": "collect",
+      "col": 2,
+      "type": "backend",
+      "label": "coverage agregada",
+      "sublabel": "pnpm -r test --cov",
+      "tag": "≥80% threshold",
+      "width": 150,
+      "yOffset": 120
+    },
+    {
+      "id": "health_endpoint",
+      "lane": "collect",
+      "col": 2,
+      "type": "external",
+      "label": "health endpoint",
+      "sublabel": "curl /api/v1/health",
+      "tag": "DOWN=blocker",
+      "width": 150,
+      "yOffset": 240
+    },
+    {
+      "id": "compose_snapshot",
+      "lane": "compose",
+      "col": 3,
+      "type": "backend",
+      "label": "compor snapshot",
+      "sublabel": "fm + 5-10 linhas body",
+      "tag": "state-snapshot-<ts>.md",
+      "width": 160
+    },
+    {
+      "id": "validate_frontmatter",
+      "lane": "compose",
+      "col": 3,
+      "type": "security",
+      "label": "validar fm + secrets",
+      "sublabel": "8c + 0 SECRET hits",
+      "tag": "regex grep",
+      "width": 150,
+      "yOffset": 120
+    },
+    {
+      "id": "decide_gate",
+      "lane": "decide",
+      "col": 4,
+      "type": "external",
+      "label": "decidir gate",
+      "sublabel": "4 sinais",
+      "tag": "proceed | block",
+      "width": 150
+    },
+    {
+      "id": "specialist_router",
+      "lane": "decide",
+      "col": 5,
+      "type": "external",
+      "label": "specialist-router",
+      "sublabel": "camada 1",
+      "tag": "consome snapshot",
+      "width": 150
+    },
+    {
+      "id": "agent_architect",
+      "lane": "decide",
+      "col": 5,
+      "type": "backend",
+      "label": "agent-architect",
+      "sublabel": "se gap_blocker",
+      "tag": "cria novo agent",
+      "width": 150,
+      "yOffset": 120
+    }
+  ],
+  "edges": [
+    {
+      "id": "pre-to-git",
+      "from": "pre_validate",
+      "to": "git_status",
+      "label": "inputs OK",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "git-to-prisma",
+      "from": "git_status",
+      "to": "prisma_drift",
+      "label": "tree clean",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "prisma-to-preflight",
+      "from": "prisma_drift",
+      "to": "preflight",
+      "label": "no drift",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "preflight-to-coverage",
+      "from": "preflight",
+      "to": "coverage",
+      "label": "preflight OK",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "coverage-to-compose",
+      "from": "coverage",
+      "to": "compose_snapshot",
+      "label": "10 cats OK",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "coverage-to-health",
+      "from": "coverage",
+      "to": "health_endpoint",
+      "label": "tests run",
+      "variant": "default",
+      "role": "branch"
+    },
+    {
+      "id": "health-to-compose",
+      "from": "health_endpoint",
+      "to": "compose_snapshot",
+      "label": "10 cats OK",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "compose-to-validate",
+      "from": "compose_snapshot",
+      "to": "validate_frontmatter",
+      "label": "fm + body",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "validate-to-decide",
+      "from": "validate_frontmatter",
+      "to": "decide_gate",
+      "label": "8c OK + no leak",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "decide-to-router",
+      "from": "decide_gate",
+      "to": "specialist_router",
+      "label": "proceed: true",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "decide-to-architect",
+      "from": "decide_gate",
+      "to": "agent_architect",
+      "label": "gap_blocker",
+      "variant": "dashed",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "10 categorias obrigatórias",
+      "items": [
+        "1. Working tree (git status --short)",
+        "2. Branch + main SHA (rev-parse origin/main)",
+        "3. Último commit (git log -1 --pretty=fuller)",
+        "4. Versão template (git tag --list 'v*')",
+        "5. Deps (jq package.json)",
+        "6. Prisma schema drift (migrate status)",
+        "7. Coverage agregada (pnpm -r test --cov)",
+        "8. Preflight (pnpm ci:preflight)",
+        "9. Health endpoints (curl /api/v1/health)",
+        "10. OTEL_* env vars + matrix lint"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "4 gates de decisão",
+      "items": [
+        "gap_blocker: false + working_tree: clean",
+        "preflight_checks: all_passed",
+        "coverage_threshold_met: true (≥80%)",
+        "→ proceed: true (consumido por specialist-router)",
+        "gap_blocker: true → despachar agent-architect"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Invariantes do frontmatter",
+      "items": [
+        "gap_blocker: true ⟺ ≥1 gap severity:blocker",
+        "preflight_checks: all_passed só se todos passaram",
+        "coverage_threshold_met: true só se ≥80%",
+        "cada gap_detectado.id único e referenciável",
+        "OTel: só chaves (não valores, evita secret leak)"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Anti-padroes",
+      "items": [
+        "❌ 'Lembro que preflight passou ontem' — sempre re-executar",
+        "❌ Rodar comandos sem salvar <TS>-*.txt (perde evidência)",
+        "❌ Hardcodar .env values (secret leak)",
+        "❌ Pular Passo 1 quando 'parece óbvio'",
+        "❌ Despachar implementer sem snapshot"
+      ]
+    }
+  ]
+}
