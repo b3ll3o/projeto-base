@@ -16,14 +16,29 @@
         "focus": ["local_hook", "ci_preflight", "ci_quality", "ci_docker", "merged"],
         "note": "Local hook + preflight + quality (gated) + docker smoke."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "Pipeline CI principal: preflight → quality (gated) + docker-build-prod smoke"
   },
   "lanes": [
-    { "id": "githooks", "label": ".husky" },
-    { "id": "ci", "label": "GitHub Actions" }
+    {
+      "id": "githooks",
+      "label": ".husky"
+    },
+    {
+      "id": "ci",
+      "label": "GitHub Actions"
+    }
   ],
   "phases": [
-    { "id": "layer1", "label": "Layer 1 — Local", "fromCol": 0, "toCol": 1, "variant": "default" },
+    {
+      "id": "layer1",
+      "label": "Layer 1 — Local",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "default"
+    },
     {
       "id": "layer2",
       "label": "Layer 2 — Preflight CI",
@@ -96,7 +111,8 @@
       "type": "backend",
       "label": "test:coverage",
       "sublabel": "gate-enforced",
-      "width": 170
+      "width": 170,
+      "tag": "scope:generic"
     },
     {
       "id": "lint_tc",
@@ -106,7 +122,8 @@
       "label": "lint+typecheck",
       "sublabel": "turbo run",
       "width": 170,
-      "yOffset": 100
+      "yOffset": 100,
+      "tag": "scope:generic"
     },
     {
       "id": "ci_docker",

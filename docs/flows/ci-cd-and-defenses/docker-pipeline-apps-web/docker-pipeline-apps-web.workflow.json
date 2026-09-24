@@ -15,16 +15,43 @@
         "focus": ["base_img", "fetch", "compile"],
         "note": "Next.js standalone server, 96.7MB final."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "Pipeline Docker multi-stage apps/web: base → dev → builder → prod + healthcheck"
   },
   "lanes": [
-    { "id": "build", "label": "Build phases" },
-    { "id": "art", "label": "Artifacts" }
+    {
+      "id": "build",
+      "label": "Build phases"
+    },
+    {
+      "id": "art",
+      "label": "Artifacts"
+    }
   ],
   "phases": [
-    { "id": "i", "label": "Install deps", "fromCol": 0, "toCol": 1, "variant": "default" },
-    { "id": "b", "label": "Compile", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
-    { "id": "f", "label": "Prod finalize", "fromCol": 4, "toCol": 5, "variant": "security" }
+    {
+      "id": "i",
+      "label": "Install deps",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "default"
+    },
+    {
+      "id": "b",
+      "label": "Compile",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "f",
+      "label": "Prod finalize",
+      "fromCol": 4,
+      "toCol": 5,
+      "variant": "security"
+    }
   ],
   "mainPath": ["base_img", "fetch", "install", "compile", "prod_img", "healthcheck"],
   "nodes": [
@@ -55,7 +82,8 @@
       "type": "backend",
       "label": "pnpm install",
       "sublabel": "--filter",
-      "width": 150
+      "width": 150,
+      "tag": "scope:generic"
     },
     {
       "id": "compile",
@@ -84,7 +112,8 @@
       "type": "cloud",
       "label": "standalone",
       "sublabel": "server.js",
-      "width": 150
+      "width": 150,
+      "tag": "scope:generic"
     },
     {
       "id": "static",
@@ -93,7 +122,8 @@
       "type": "cloud",
       "label": ".next/static",
       "sublabel": "assets",
-      "width": 150
+      "width": 150,
+      "tag": "scope:generic"
     },
     {
       "id": "healthcheck",
@@ -128,7 +158,13 @@
       "variant": "emphasis",
       "role": "main"
     },
-    { "from": "compile", "to": "prod_img", "label": "COPY", "variant": "emphasis", "role": "main" },
+    {
+      "from": "compile",
+      "to": "prod_img",
+      "label": "COPY",
+      "variant": "emphasis",
+      "role": "main"
+    },
     {
       "from": "prod_img",
       "to": "healthcheck",
@@ -143,7 +179,13 @@
       "variant": "default",
       "role": "branch"
     },
-    { "from": "compile", "to": "static", "label": "assets", "variant": "default", "role": "branch" }
+    {
+      "from": "compile",
+      "to": "static",
+      "label": "assets",
+      "variant": "default",
+      "role": "branch"
+    }
   ],
   "cards": [
     {

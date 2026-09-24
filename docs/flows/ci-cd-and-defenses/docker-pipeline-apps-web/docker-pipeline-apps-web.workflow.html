@@ -5180,10 +5180,10 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <!-- Edge paths -->
         <path data-edge-from="base_img" data-edge-to="fetch" data-edge-label="corepack" data-edge-key="0" data-composition-points="198,120;254.39999999999998,120" d="M 198 120 L 254.39999999999998 120" class="a-default" data-animate="edge" style="--step:0" stroke-width="1.4" marker-end="url(#arrowhead)"/>
         <path data-edge-from="compile" data-edge-to="prod_img" data-edge-label="COPY" data-edge-key="1" data-composition-points="785.4,154;785.4,170;973.4,170;973.4,154" d="M 785.4 154 L 785.4 170 L 973.4 170 L 973.4 154" class="a-emphasis" data-animate="edge" style="--step:3" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="compile" data-edge-to="standalone" data-edge-label="artifacts" data-edge-key="2" data-composition-points="710.4,120;694.4,120;694.4,300;785.4,300;785.4,272" d="M 710.4 120 L 694.4 120 L 694.4 300 L 785.4 300 L 785.4 272" class="a-default" data-animate="edge" style="--step:8" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="compile" data-edge-to="static" data-edge-label="assets" data-edge-key="3" data-composition-points="710.4,120;694.4,120;694.4,300;973.4,300;973.4,272" d="M 710.4 120 L 694.4 120 L 694.4 300 L 973.4 300 L 973.4 272" class="a-default" data-animate="edge" style="--step:9" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="compile" data-edge-to="standalone" data-edge-label="artifacts" data-edge-key="2" data-composition-points="710.4,120;694.4,120;694.4,300;785.4,300;785.4,280" d="M 710.4 120 L 694.4 120 L 694.4 300 L 785.4 300 L 785.4 280" class="a-default" data-animate="edge" style="--step:8" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="compile" data-edge-to="static" data-edge-label="assets" data-edge-key="3" data-composition-points="710.4,120;694.4,120;694.4,300;973.4,300;973.4,280" d="M 710.4 120 L 694.4 120 L 694.4 300 L 973.4 300 L 973.4 280" class="a-default" data-animate="edge" style="--step:9" stroke-width="1.4" marker-end="url(#arrowhead)"/>
         <path data-edge-from="fetch" data-edge-to="install" data-edge-label="frozen lockfile" data-edge-key="4" data-composition-points="404.4,120;494.4,120" d="M 404.4 120 L 494.4 120" class="a-emphasis" data-animate="edge" style="--step:1" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="install" data-edge-to="compile" data-edge-label="next build" data-edge-key="5" data-composition-points="569.4,146;569.4,174;694.4,174;694.4,120;710.4,120" d="M 569.4 146 L 569.4 174 L 694.4 174 L 694.4 120 L 710.4 120" class="a-emphasis" data-animate="edge" style="--step:2" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="install" data-edge-to="compile" data-edge-label="next build" data-edge-key="5" data-composition-points="569.4,86;569.4,70;785.4,70;785.4,86" d="M 569.4 86 L 569.4 70 L 785.4 70 L 785.4 86" class="a-emphasis" data-animate="edge" style="--step:2" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         <path data-edge-from="prod_img" data-edge-to="healthcheck" data-edge-label="verify" data-edge-key="6" data-composition-points="1048.4,120;1095.2,120" d="M 1048.4 120 L 1095.2 120" class="a-security" data-animate="edge" style="--step:4" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
 
         <!-- Nodes -->
@@ -5212,15 +5212,16 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <text data-detail="fine" x="329.4" y="142" class="t-backend" font-size="7" text-anchor="middle">frozen</text>
         </g>
 
-        <g id="node-install" data-node-id="install" data-node-label="pnpm install" tabindex="0" role="button" aria-label="Focus pnpm install, --filter, Build phases › Compile" aria-pressed="false" data-node-kind="backend" data-node-sublabel="--filter" data-node-context="Build phases › Compile">
-          <title>pnpm install · --filter · Build phases › Compile</title>
-          <rect x="494.4" y="94" width="150" height="52" rx="6" class="c-mask"/>
-          <rect x="494.4" y="94" width="150" height="52" rx="6" class="c-backend" data-animate="node" style="--step:2" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(500.4 100) scale(0.6875)">
+        <g id="node-install" data-node-id="install" data-node-label="pnpm install" tabindex="0" role="button" aria-label="Focus pnpm install, --filter, Build phases › Compile" aria-pressed="false" data-node-kind="backend" data-node-sublabel="--filter" data-node-tag="scope:generic" data-node-context="Build phases › Compile">
+          <title>pnpm install · --filter · Build phases › Compile · scope:generic</title>
+          <rect x="494.4" y="86" width="150" height="68" rx="6" class="c-mask"/>
+          <rect x="494.4" y="86" width="150" height="68" rx="6" class="c-backend" data-animate="node" style="--step:2" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(500.4 92) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="569.4" y="115" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">pnpm install</text>
-          <text data-detail="context" x="569.4" y="132" class="t-muted" font-size="8" text-anchor="middle">--filter</text>
+          <text data-node-label="" data-detail-anchor="" x="569.4" y="107" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">pnpm install</text>
+          <text data-detail="context" x="569.4" y="124" class="t-muted" font-size="8" text-anchor="middle">--filter</text>
+        <text data-detail="fine" x="569.4" y="142" class="t-backend" font-size="7" text-anchor="middle">scope:generic</text>
         </g>
 
         <g id="node-compile" data-node-id="compile" data-node-label="next build" tabindex="0" role="button" aria-label="Focus next build, standalone, Build phases › Compile" aria-pressed="false" data-node-kind="backend" data-node-sublabel="standalone" data-node-tag="builder" data-node-context="Build phases › Compile">
@@ -5261,26 +5262,28 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <text data-detail="fine" x="1170.2" y="142" class="t-security" font-size="7" text-anchor="middle">smoke</text>
         </g>
 
-        <g id="node-standalone" data-node-id="standalone" data-node-label="standalone" tabindex="0" role="button" aria-label="Focus standalone, server.js, Artifacts › Compile" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="server.js" data-node-context="Artifacts › Compile">
-          <title>standalone · server.js · Artifacts › Compile</title>
-          <rect x="710.4" y="220" width="150" height="52" rx="6" class="c-mask"/>
-          <rect x="710.4" y="220" width="150" height="52" rx="6" class="c-cloud" data-animate="node" style="--step:12" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(716.4 226) scale(0.6875)">
+        <g id="node-standalone" data-node-id="standalone" data-node-label="standalone" tabindex="0" role="button" aria-label="Focus standalone, server.js, Artifacts › Compile" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="server.js" data-node-tag="scope:generic" data-node-context="Artifacts › Compile">
+          <title>standalone · server.js · Artifacts › Compile · scope:generic</title>
+          <rect x="710.4" y="212" width="150" height="68" rx="6" class="c-mask"/>
+          <rect x="710.4" y="212" width="150" height="68" rx="6" class="c-cloud" data-animate="node" style="--step:12" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(716.4 218) scale(0.6875)">
             <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="785.4" y="241" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">standalone</text>
-          <text data-detail="context" x="785.4" y="258" class="t-muted" font-size="8" text-anchor="middle">server.js</text>
+          <text data-node-label="" data-detail-anchor="" x="785.4" y="233" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">standalone</text>
+          <text data-detail="context" x="785.4" y="250" class="t-muted" font-size="8" text-anchor="middle">server.js</text>
+        <text data-detail="fine" x="785.4" y="268" class="t-cloud" font-size="7" text-anchor="middle">scope:generic</text>
         </g>
 
-        <g id="node-static" data-node-id="static" data-node-label=".next/static" tabindex="0" role="button" aria-label="Focus .next/static, assets, Artifacts › Prod finalize" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="assets" data-node-context="Artifacts › Prod finalize">
-          <title>.next/static · assets · Artifacts › Prod finalize</title>
-          <rect x="898.4" y="220" width="150" height="52" rx="6" class="c-mask"/>
-          <rect x="898.4" y="220" width="150" height="52" rx="6" class="c-cloud" data-animate="node" style="--step:12" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(904.4 226) scale(0.6875)">
+        <g id="node-static" data-node-id="static" data-node-label=".next/static" tabindex="0" role="button" aria-label="Focus .next/static, assets, Artifacts › Prod finalize" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="assets" data-node-tag="scope:generic" data-node-context="Artifacts › Prod finalize">
+          <title>.next/static · assets · Artifacts › Prod finalize · scope:generic</title>
+          <rect x="898.4" y="212" width="150" height="68" rx="6" class="c-mask"/>
+          <rect x="898.4" y="212" width="150" height="68" rx="6" class="c-cloud" data-animate="node" style="--step:12" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(904.4 218) scale(0.6875)">
             <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="973.4" y="241" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">.next/static</text>
-          <text data-detail="context" x="973.4" y="258" class="t-muted" font-size="8" text-anchor="middle">assets</text>
+          <text data-node-label="" data-detail-anchor="" x="973.4" y="233" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">.next/static</text>
+          <text data-detail="context" x="973.4" y="250" class="t-muted" font-size="8" text-anchor="middle">assets</text>
+        <text data-detail="fine" x="973.4" y="268" class="t-cloud" font-size="7" text-anchor="middle">scope:generic</text>
         </g>
 
         <!-- Edge labels -->
@@ -5305,8 +5308,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           <text x="449.4" y="110" class="t-backend" font-size="8" text-anchor="middle">frozen lockfile</text>
         </g>
         <g data-detail="context" data-edge-from="install" data-edge-to="compile" data-edge-label="next build" data-edge-key="5">
-          <rect x="602.9" y="154" width="58" height="14" rx="3" class="c-mask"/>
-          <text x="631.9" y="164" class="t-backend" font-size="8" text-anchor="middle">next build</text>
+          <rect x="648.4" y="50" width="58" height="14" rx="3" class="c-mask"/>
+          <text x="677.4" y="60" class="t-backend" font-size="8" text-anchor="middle">next build</text>
         </g>
         <g data-detail="context" data-edge-from="prod_img" data-edge-to="healthcheck" data-edge-label="verify" data-edge-key="6">
           <rect x="1052.4" y="100" width="38.8" height="14" rx="3" class="c-mask"/>

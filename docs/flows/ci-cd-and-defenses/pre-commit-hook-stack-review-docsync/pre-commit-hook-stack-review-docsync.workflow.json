@@ -23,14 +23,46 @@
         ],
         "note": "3 gates paralelos (lint-staged, stack-code-reviewer, doc-sync) — todos devem passar para commit."
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "Pre-commit hook: lint-staged + stack-code-reviewer + doc-sync"
   },
-  "lanes": [{ "id": "dev", "label": "Dev (staging area)" }],
+  "lanes": [
+    {
+      "id": "dev",
+      "label": "Dev (staging area)"
+    }
+  ],
   "phases": [
-    { "id": "trigger", "label": "Trigger", "fromCol": 0, "toCol": 0, "variant": "default" },
-    { "id": "gates", "label": "3 gates", "fromCol": 1, "toCol": 1, "variant": "emphasis" },
-    { "id": "merge", "label": "Aggregate", "fromCol": 2, "toCol": 2, "variant": "default" },
-    { "id": "commit", "label": "Commit", "fromCol": 3, "toCol": 3, "variant": "security" }
+    {
+      "id": "trigger",
+      "label": "Trigger",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "default"
+    },
+    {
+      "id": "gates",
+      "label": "3 gates",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "merge",
+      "label": "Aggregate",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "default"
+    },
+    {
+      "id": "commit",
+      "label": "Commit",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "security"
+    }
   ],
   "mainPath": ["hook", "staged_diff", "lint_staged", "husky_repair", "commit_ok"],
   "nodes": [
