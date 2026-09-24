@@ -21,13 +21,39 @@
         "focus": ["domain_events"],
         "note": "users.user.created.v1 → INSERT | updated.v1 → UPDATE | deleted.v1 → DELETE | restored.v1 → RESTORE"
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "Cross-cutting — domain events → audit operations (mapping)"
   },
-  "lanes": [{ "id": "users", "label": "users-module" }],
+  "lanes": [
+    {
+      "id": "users",
+      "label": "users-module"
+    }
+  ],
   "phases": [
-    { "id": "emit", "label": "Domain emit", "fromCol": 0, "toCol": 0, "variant": "emphasis" },
-    { "id": "drain", "label": "Drain + map", "fromCol": 1, "toCol": 1, "variant": "default" },
-    { "id": "persist", "label": "Persist", "fromCol": 2, "toCol": 3, "variant": "dashed" }
+    {
+      "id": "emit",
+      "label": "Domain emit",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
+      "id": "drain",
+      "label": "Drain + map",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "default"
+    },
+    {
+      "id": "persist",
+      "label": "Persist",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "dashed"
+    }
   ],
   "groups": [
     {

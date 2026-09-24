@@ -8,7 +8,7 @@
     "viewBox": [1020, 900],
     "animation": "trace",
     "visual_preset": "signal-flow",
-    "quality_profile": "showcase",
+    "quality_profile": "standard",
     "views": [
       {
         "id": "happy-path",
@@ -28,21 +28,71 @@
         "focus": ["client", "controller", "filter"],
         "note": "parseIfMatch rejeita sem W/v<n> → BadRequestException → 400."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "PATCH /users/:id — rename com optimistic locking (If-Match)"
   },
   "participants": [
-    { "id": "client", "type": "external", "label": "Cliente", "sublabel": "PATCH + If-Match" },
-    { "id": "controller", "type": "backend", "label": "UsersCtrl", "sublabel": "@If-Match" },
-    { "id": "usecases", "type": "backend", "label": "UserUseCases", "sublabel": "atualizarNome()" },
-    { "id": "repo", "type": "backend", "label": "PrismaRepo", "sublabel": "save(user,n-1)" },
-    { "id": "audit", "type": "backend", "label": "AuditService", "sublabel": "record UPDATE" },
-    { "id": "pg", "type": "database", "label": "PostgreSQL", "sublabel": "users + history" },
-    { "id": "filter", "type": "security", "label": "ExcFilter", "sublabel": "RFC 7807" }
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Cliente",
+      "sublabel": "PATCH + If-Match"
+    },
+    {
+      "id": "controller",
+      "type": "backend",
+      "label": "UsersCtrl",
+      "sublabel": "@If-Match"
+    },
+    {
+      "id": "usecases",
+      "type": "backend",
+      "label": "UserUseCases",
+      "sublabel": "atualizarNome()"
+    },
+    {
+      "id": "repo",
+      "type": "backend",
+      "label": "PrismaRepo",
+      "sublabel": "save(user,n-1)"
+    },
+    {
+      "id": "audit",
+      "type": "backend",
+      "label": "AuditService",
+      "sublabel": "record UPDATE"
+    },
+    {
+      "id": "pg",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "users + history"
+    },
+    {
+      "id": "filter",
+      "type": "security",
+      "label": "ExcFilter",
+      "sublabel": "RFC 7807"
+    }
   ],
   "segments": [
-    { "from": 150, "to": 360, "label": "Parse + load" },
-    { "from": 376, "to": 640, "label": "Renomear + persist + audit" },
-    { "from": 656, "to": 854, "label": "Error paths (412/400)" }
+    {
+      "from": 150,
+      "to": 360,
+      "label": "Parse + load"
+    },
+    {
+      "from": 376,
+      "to": 640,
+      "label": "Renomear + persist + audit"
+    },
+    {
+      "from": 656,
+      "to": 854,
+      "label": "Error paths (412/400)"
+    }
   ],
   "messages": [
     {
@@ -73,7 +123,13 @@
       "label": "SELECT WHERE id AND deletedAt IS NULL",
       "variant": "default"
     },
-    { "from": "pg", "to": "repo", "y": 378, "label": "User (version=n)", "variant": "return" },
+    {
+      "from": "pg",
+      "to": "repo",
+      "y": 378,
+      "label": "User (version=n)",
+      "variant": "return"
+    },
     {
       "from": "usecases",
       "to": "repo",
@@ -88,7 +144,13 @@
       "label": "UPDATE WHERE id AND version=n-1",
       "variant": "default"
     },
-    { "from": "pg", "to": "repo", "y": 530, "label": "row updated", "variant": "return" },
+    {
+      "from": "pg",
+      "to": "repo",
+      "y": 530,
+      "label": "row updated",
+      "variant": "return"
+    },
     {
       "from": "usecases",
       "to": "audit",
@@ -133,14 +195,54 @@
     }
   ],
   "activations": [
-    { "participant": "controller", "from": 174, "to": 678, "type": "backend" },
-    { "participant": "usecases", "from": 254, "to": 640, "type": "backend" },
-    { "participant": "repo", "from": 294, "to": 524, "type": "backend" },
-    { "participant": "pg", "from": 334, "to": 524, "type": "database" },
-    { "participant": "audit", "from": 562, "to": 600, "type": "backend" },
-    { "participant": "usecases", "from": 754, "to": 784, "type": "backend" },
-    { "participant": "controller", "from": 794, "to": 824, "type": "backend" },
-    { "participant": "filter", "from": 754, "to": 824, "type": "security" }
+    {
+      "participant": "controller",
+      "from": 174,
+      "to": 678,
+      "type": "backend"
+    },
+    {
+      "participant": "usecases",
+      "from": 254,
+      "to": 640,
+      "type": "backend"
+    },
+    {
+      "participant": "repo",
+      "from": 294,
+      "to": 524,
+      "type": "backend"
+    },
+    {
+      "participant": "pg",
+      "from": 334,
+      "to": 524,
+      "type": "database"
+    },
+    {
+      "participant": "audit",
+      "from": 562,
+      "to": 600,
+      "type": "backend"
+    },
+    {
+      "participant": "usecases",
+      "from": 754,
+      "to": 784,
+      "type": "backend"
+    },
+    {
+      "participant": "controller",
+      "from": 794,
+      "to": 824,
+      "type": "backend"
+    },
+    {
+      "participant": "filter",
+      "from": 754,
+      "to": 824,
+      "type": "security"
+    }
   ],
   "cards": [
     {

@@ -5131,7 +5131,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     <!-- Main Diagram -->
     <div class="diagram-container" data-detail-level="read"
          data-preset-badge-editorial-plate="ARCHIFY / PLATE 04">
-      <svg viewBox="0 0 1130 1000" role="img" lang="en" aria-labelledby="archify-diagram-title archify-diagram-description" data-animation="trace" data-preset="signal-flow" data-quality-profile="showcase">
+      <svg viewBox="0 0 1130 1024" role="img" lang="en" aria-labelledby="archify-diagram-title archify-diagram-description" data-animation="trace" data-preset="signal-flow" data-quality-profile="showcase">
         <title id="archify-diagram-title">Optimistic Locking — RFC 7232 If-Match/ETag handshake</title>
         <desc id="archify-diagram-description">PATCH/POST /:id/restore/DELETE — cliente envia W/v&lt;n&gt;, servidor compara e responde 200 ou 412</desc>
         <!-- Definitions -->
@@ -5157,14 +5157,14 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <rect width="100%" height="100%" fill="url(#grid)" />
 
         <!-- Swimlanes -->
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-0" x="40" y="52" width="980" height="250" rx="10" class="c-lane" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-0" x="40" y="52" width="980" height="266" rx="10" class="c-lane" stroke-width="1"/>
         <text x="54" y="74" class="t-dim" font-size="10" font-weight="600">01 / Client</text>
 
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-1" x="40" y="322" width="980" height="250" rx="10" class="c-lane" stroke-width="1"/>
-        <text x="54" y="344" class="t-dim" font-size="10" font-weight="600">02 / Server (NestJS)</text>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-1" x="40" y="338" width="980" height="266" rx="10" class="c-lane" stroke-width="1"/>
+        <text x="54" y="360" class="t-dim" font-size="10" font-weight="600">02 / Server (NestJS)</text>
 
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-2" x="40" y="592" width="980" height="250" rx="10" class="c-lane" stroke-width="1"/>
-        <text x="54" y="614" class="t-dim" font-size="10" font-weight="600">03 / Storage</text>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-2" x="40" y="624" width="980" height="266" rx="10" class="c-lane" stroke-width="1"/>
+        <text x="54" y="646" class="t-dim" font-size="10" font-weight="600">03 / Storage</text>
 
         <!-- Phase headers -->
         <line x1="82" y1="35" x2="294" y2="35" class="a-default" stroke-width="1.1"/>
@@ -5181,20 +5181,20 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
 
         <!-- Edge paths -->
-        <path data-edge-from="another_writer" data-edge-to="etag_stale" data-edge-label="UPDATE version=2" data-edge-key="0" data-composition-points="128,838;128,858;248,858;248,568" d="M 128 838 L 128 858 L 248 858 L 248 568" class="a-security" data-animate="edge" style="--step:5" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
-        <path data-edge-from="client_get" data-edge-to="etag_v1" data-edge-label="200 + ETag" data-edge-key="1" data-composition-points="128,218;128,312;248,312;248,436" d="M 128 218 L 128 312 L 248 312 L 248 436" class="a-default" data-animate="edge" style="--step:0" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="client_patch" data-edge-to="server_match" data-edge-label="If-Match: W/v1" data-edge-key="2" data-composition-points="375,218;375,312;488,312;488,428" d="M 375 218 L 375 312 L 488 312 L 488 428" class="a-emphasis" data-animate="edge" style="--step:2" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="etag_stale" data-edge-to="server_match" data-edge-label="stored v=2 (≠1)" data-edge-key="3" data-composition-points="328,542;488,542;488,496" d="M 328 542 L 488 542 L 488 496" class="a-security" data-animate="edge" style="--step:8" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
-        <path data-edge-from="etag_v1" data-edge-to="client_patch" data-edge-label="cached" data-edge-key="4" data-composition-points="248,436;248,312;368,312;368,218" d="M 248 436 L 248 312 L 368 312 L 368 218" class="a-default" data-animate="edge" style="--step:1" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="etag_v2" data-edge-to="client_get" data-edge-label="200 + ETag v2" data-edge-key="5" data-composition-points="871.6,462;1032,462;1032,150;128,150;128,166" d="M 871.6 462 L 1032 462 L 1032 150 L 128 150 L 128 166" class="a-default" data-animate="edge" style="--step:10" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="server_match" data-edge-to="etag_v2" data-edge-label="UPDATE WHERE version=1" data-edge-key="6" data-composition-points="488,496;488,588;791.6,588;791.6,488" d="M 488 496 L 488 588 L 791.6 588 L 791.6 488" class="a-emphasis" data-animate="edge" style="--step:3" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="server_match" data-edge-to="server_412" data-edge-label="throw ConcurrencyException" data-edge-key="7" data-composition-points="488,496;488,542;811.6,542" d="M 488 496 L 488 542 L 811.6 542" class="a-security" data-animate="edge" style="--step:12" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
+        <path data-edge-from="another_writer" data-edge-to="etag_stale" data-edge-label="UPDATE version=2" data-edge-key="0" data-composition-points="128,886;128,906;248,906;248,600" d="M 128 886 L 128 906 L 248 906 L 248 600" class="a-security" data-animate="edge" style="--step:5" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
+        <path data-edge-from="client_get" data-edge-to="etag_v1" data-edge-label="200 + ETag" data-edge-key="1" data-composition-points="128,234;128,328;248,328;248,452" d="M 128 234 L 128 328 L 248 328 L 248 452" class="a-default" data-animate="edge" style="--step:0" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="client_patch" data-edge-to="server_match" data-edge-label="If-Match: W/v1" data-edge-key="2" data-composition-points="375,234;375,328;488,328;488,452" d="M 375 234 L 375 328 L 488 328 L 488 452" class="a-emphasis" data-animate="edge" style="--step:2" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="etag_stale" data-edge-to="server_match" data-edge-label="stored v=2 (≠1)" data-edge-key="3" data-composition-points="328,566;488,566;488,520" d="M 328 566 L 488 566 L 488 520" class="a-security" data-animate="edge" style="--step:8" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
+        <path data-edge-from="etag_v1" data-edge-to="client_patch" data-edge-label="cached" data-edge-key="4" data-composition-points="248,452;248,328;368,328;368,234" d="M 248 452 L 248 328 L 368 328 L 368 234" class="a-default" data-animate="edge" style="--step:1" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="etag_v2" data-edge-to="client_get" data-edge-label="200 + ETag v2" data-edge-key="5" data-composition-points="871.6,486;1032,486;1032,150;128,150;128,166" d="M 871.6 486 L 1032 486 L 1032 150 L 128 150 L 128 166" class="a-default" data-animate="edge" style="--step:10" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="server_match" data-edge-to="etag_v2" data-edge-label="UPDATE WHERE version=1" data-edge-key="6" data-composition-points="488,452;488,436;791.6,436;791.6,452" d="M 488 452 L 488 436 L 791.6 436 L 791.6 452" class="a-emphasis" data-animate="edge" style="--step:3" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="server_match" data-edge-to="server_412" data-edge-label="throw ConcurrencyException" data-edge-key="7" data-composition-points="488,520;488,566;811.6,566" d="M 488 520 L 488 566 L 811.6 566" class="a-security" data-animate="edge" style="--step:12" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
 
         <!-- Nodes -->
-        <g id="node-client_get" data-node-id="client_get" data-node-label="GET /users/:id" tabindex="0" role="button" aria-label="Focus GET /users/:id, load state, Client › Carregar state" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="load state" data-node-context="Client › Carregar state">
-          <title>GET /users/:id · load state · Client › Carregar state</title>
-          <rect x="48" y="166" width="160" height="52" rx="6" class="c-mask"/>
-          <rect x="48" y="166" width="160" height="52" rx="6" class="c-frontend" data-animate="node" style="--step:0" stroke-width="1.5"/>
+        <g id="node-client_get" data-node-id="client_get" data-node-label="GET /users/:id" tabindex="0" role="button" aria-label="Focus GET /users/:id, load state, Client › Carregar state" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="load state" data-node-tag="scope:generic" data-node-context="Client › Carregar state">
+          <title>GET /users/:id · load state · Client › Carregar state · scope:generic</title>
+          <rect x="48" y="166" width="160" height="68" rx="6" class="c-mask"/>
+          <rect x="48" y="166" width="160" height="68" rx="6" class="c-frontend" data-animate="node" style="--step:0" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(54 172) scale(0.6875)">
             <rect x="2" y="3" width="12" height="10" rx="2"/>
             <path d="M2 6.5h12"/>
@@ -5203,12 +5203,13 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           </g>
           <text data-node-label="" data-detail-anchor="" x="128" y="187" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">GET /users/:id</text>
           <text data-detail="context" x="128" y="204" class="t-muted" font-size="8" text-anchor="middle">load state</text>
+        <text data-detail="fine" x="128" y="222" class="t-frontend" font-size="7" text-anchor="middle">scope:generic</text>
         </g>
 
-        <g id="node-client_patch" data-node-id="client_patch" data-node-label="PATCH + If-Match: W/v1" tabindex="0" role="button" aria-label="Focus PATCH + If-Match: W/v1, expect v1, Client › Mutate" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="expect v1" data-node-context="Client › Mutate">
-          <title>PATCH + If-Match: W/v1 · expect v1 · Client › Mutate</title>
-          <rect x="268" y="166" width="200" height="52" rx="6" class="c-mask"/>
-          <rect x="268" y="166" width="200" height="52" rx="6" class="c-frontend" data-animate="node" style="--step:2" stroke-width="1.5"/>
+        <g id="node-client_patch" data-node-id="client_patch" data-node-label="PATCH + If-Match: W/v1" tabindex="0" role="button" aria-label="Focus PATCH + If-Match: W/v1, expect v1, Client › Mutate" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="expect v1" data-node-tag="scope:generic" data-node-context="Client › Mutate">
+          <title>PATCH + If-Match: W/v1 · expect v1 · Client › Mutate · scope:generic</title>
+          <rect x="268" y="166" width="200" height="68" rx="6" class="c-mask"/>
+          <rect x="268" y="166" width="200" height="68" rx="6" class="c-frontend" data-animate="node" style="--step:2" stroke-width="1.5"/>
           <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(274 172) scale(0.6875)">
             <rect x="2" y="3" width="12" height="10" rx="2"/>
             <path d="M2 6.5h12"/>
@@ -5217,129 +5218,135 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           </g>
           <text data-node-label="" data-detail-anchor="" x="368" y="187" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">PATCH + If-Match: W/v1</text>
           <text data-detail="context" x="368" y="204" class="t-muted" font-size="8" text-anchor="middle">expect v1</text>
+        <text data-detail="fine" x="368" y="222" class="t-frontend" font-size="7" text-anchor="middle">scope:generic</text>
         </g>
 
-        <g id="node-etag_stale" data-node-id="etag_stale" data-node-label="stored W/v2" tabindex="0" role="button" aria-label="Focus stored W/v2, stale client&#39;s view, Server (NestJS) › Carregar state" aria-pressed="false" data-node-kind="backend" data-node-sublabel="stale client&#39;s view" data-node-context="Server (NestJS) › Carregar state">
-          <title>stored W/v2 · stale client&#39;s view · Server (NestJS) › Carregar state</title>
-          <rect x="168" y="516" width="160" height="52" rx="6" class="c-mask"/>
-          <rect x="168" y="516" width="160" height="52" rx="6" class="c-backend" data-animate="node" style="--step:7" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(174 522) scale(0.6875)">
+        <g id="node-etag_stale" data-node-id="etag_stale" data-node-label="stored W/v2" tabindex="0" role="button" aria-label="Focus stored W/v2, stale client&#39;s view, Server (NestJS) › Carregar state" aria-pressed="false" data-node-kind="backend" data-node-sublabel="stale client&#39;s view" data-node-tag="scope:generic" data-node-context="Server (NestJS) › Carregar state">
+          <title>stored W/v2 · stale client&#39;s view · Server (NestJS) › Carregar state · scope:generic</title>
+          <rect x="168" y="532" width="160" height="68" rx="6" class="c-mask"/>
+          <rect x="168" y="532" width="160" height="68" rx="6" class="c-backend" data-animate="node" style="--step:7" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(174 538) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="248" y="537" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">stored W/v2</text>
-          <text data-detail="context" x="248" y="554" class="t-muted" font-size="8" text-anchor="middle">stale client&#39;s view</text>
+          <text data-node-label="" data-detail-anchor="" x="248" y="553" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">stored W/v2</text>
+          <text data-detail="context" x="248" y="570" class="t-muted" font-size="8" text-anchor="middle">stale client&#39;s view</text>
+        <text data-detail="fine" x="248" y="588" class="t-backend" font-size="7" text-anchor="middle">scope:generic</text>
         </g>
 
-        <g id="node-etag_v1" data-node-id="etag_v1" data-node-label="ETag W/v1" tabindex="0" role="button" aria-label="Focus ETag W/v1, version=1, Server (NestJS) › Carregar state" aria-pressed="false" data-node-kind="backend" data-node-sublabel="version=1" data-node-context="Server (NestJS) › Carregar state">
-          <title>ETag W/v1 · version=1 · Server (NestJS) › Carregar state</title>
-          <rect x="168" y="436" width="160" height="52" rx="6" class="c-mask"/>
-          <rect x="168" y="436" width="160" height="52" rx="6" class="c-backend" data-animate="node" style="--step:1" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(174 442) scale(0.6875)">
+        <g id="node-etag_v1" data-node-id="etag_v1" data-node-label="ETag W/v1" tabindex="0" role="button" aria-label="Focus ETag W/v1, version=1, Server (NestJS) › Carregar state" aria-pressed="false" data-node-kind="backend" data-node-sublabel="version=1" data-node-tag="scope:generic" data-node-context="Server (NestJS) › Carregar state">
+          <title>ETag W/v1 · version=1 · Server (NestJS) › Carregar state · scope:generic</title>
+          <rect x="168" y="452" width="160" height="68" rx="6" class="c-mask"/>
+          <rect x="168" y="452" width="160" height="68" rx="6" class="c-backend" data-animate="node" style="--step:1" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(174 458) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="248" y="457" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">ETag W/v1</text>
-          <text data-detail="context" x="248" y="474" class="t-muted" font-size="8" text-anchor="middle">version=1</text>
+          <text data-node-label="" data-detail-anchor="" x="248" y="473" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">ETag W/v1</text>
+          <text data-detail="context" x="248" y="490" class="t-muted" font-size="8" text-anchor="middle">version=1</text>
+        <text data-detail="fine" x="248" y="508" class="t-backend" font-size="7" text-anchor="middle">scope:generic</text>
         </g>
 
         <g id="node-server_match" data-node-id="server_match" data-node-label="version()==1? → save" tabindex="0" role="button" aria-label="Focus version()==1? → save, OK, Server (NestJS) › Mutate" aria-pressed="false" data-node-kind="backend" data-node-sublabel="OK" data-node-tag="linha 147" data-node-context="Server (NestJS) › Mutate">
           <title>version()==1? → save · OK · Server (NestJS) › Mutate · linha 147</title>
-          <rect x="388" y="428" width="200" height="68" rx="6" class="c-mask"/>
-          <rect x="388" y="428" width="200" height="68" rx="6" class="c-backend" data-animate="node" style="--step:3" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(394 434) scale(0.6875)">
+          <rect x="388" y="452" width="200" height="68" rx="6" class="c-mask"/>
+          <rect x="388" y="452" width="200" height="68" rx="6" class="c-backend" data-animate="node" style="--step:3" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(394 458) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="488" y="449" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">version()==1? → save</text>
-          <text data-detail="context" x="488" y="466" class="t-muted" font-size="8" text-anchor="middle">OK</text>
-        <text data-detail="fine" x="488" y="484" class="t-backend" font-size="7" text-anchor="middle">linha 147</text>
+          <text data-node-label="" data-detail-anchor="" x="488" y="473" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">version()==1? → save</text>
+          <text data-detail="context" x="488" y="490" class="t-muted" font-size="8" text-anchor="middle">OK</text>
+        <text data-detail="fine" x="488" y="508" class="t-backend" font-size="7" text-anchor="middle">linha 147</text>
         </g>
 
-        <g id="node-etag_v2" data-node-id="etag_v2" data-node-label="ETag W/v2" tabindex="0" role="button" aria-label="Focus ETag W/v2, version=2, Server (NestJS) › Verify + 412" aria-pressed="false" data-node-kind="backend" data-node-sublabel="version=2" data-node-context="Server (NestJS) › Verify + 412">
-          <title>ETag W/v2 · version=2 · Server (NestJS) › Verify + 412</title>
-          <rect x="711.6" y="436" width="160" height="52" rx="6" class="c-mask"/>
-          <rect x="711.6" y="436" width="160" height="52" rx="6" class="c-backend" data-animate="node" style="--step:4" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(717.6 442) scale(0.6875)">
+        <g id="node-etag_v2" data-node-id="etag_v2" data-node-label="ETag W/v2" tabindex="0" role="button" aria-label="Focus ETag W/v2, version=2, Server (NestJS) › Verify + 412" aria-pressed="false" data-node-kind="backend" data-node-sublabel="version=2" data-node-tag="scope:generic" data-node-context="Server (NestJS) › Verify + 412">
+          <title>ETag W/v2 · version=2 · Server (NestJS) › Verify + 412 · scope:generic</title>
+          <rect x="711.6" y="452" width="160" height="68" rx="6" class="c-mask"/>
+          <rect x="711.6" y="452" width="160" height="68" rx="6" class="c-backend" data-animate="node" style="--step:4" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(717.6 458) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="791.6" y="457" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">ETag W/v2</text>
-          <text data-detail="context" x="791.6" y="474" class="t-muted" font-size="8" text-anchor="middle">version=2</text>
+          <text data-node-label="" data-detail-anchor="" x="791.6" y="473" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">ETag W/v2</text>
+          <text data-detail="context" x="791.6" y="490" class="t-muted" font-size="8" text-anchor="middle">version=2</text>
+        <text data-detail="fine" x="791.6" y="508" class="t-backend" font-size="7" text-anchor="middle">scope:generic</text>
         </g>
 
-        <g id="node-server_412" data-node-id="server_412" data-node-label="412 Precondition Failed" tabindex="0" role="button" aria-label="Focus 412 Precondition Failed, CONCURRENCY_CONFLICT, Server (NestJS) › Verify + 412" aria-pressed="false" data-node-kind="security" data-node-sublabel="CONCURRENCY_CONFLICT" data-node-context="Server (NestJS) › Verify + 412">
-          <title>412 Precondition Failed · CONCURRENCY_CONFLICT · Server (NestJS) › Verify + 412</title>
-          <rect x="811.6" y="516" width="200" height="52" rx="6" class="c-mask"/>
-          <rect x="811.6" y="516" width="200" height="52" rx="6" class="c-security" data-animate="node" style="--step:11" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(817.6 522) scale(0.6875)">
+        <g id="node-server_412" data-node-id="server_412" data-node-label="412 Precondition Failed" tabindex="0" role="button" aria-label="Focus 412 Precondition Failed, CONCURRENCY_CONFLICT, Server (NestJS) › Verify + 412" aria-pressed="false" data-node-kind="security" data-node-sublabel="CONCURRENCY_CONFLICT" data-node-tag="scope:generic" data-node-context="Server (NestJS) › Verify + 412">
+          <title>412 Precondition Failed · CONCURRENCY_CONFLICT · Server (NestJS) › Verify + 412 · scope:generic</title>
+          <rect x="811.6" y="532" width="200" height="68" rx="6" class="c-mask"/>
+          <rect x="811.6" y="532" width="200" height="68" rx="6" class="c-security" data-animate="node" style="--step:11" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(817.6 538) scale(0.6875)">
             <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
             <path d="m5.8 8 1.5 1.5 3-3"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="911.6" y="537" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">412 Precondition Failed</text>
-          <text data-detail="context" x="911.6" y="554" class="t-muted" font-size="8" text-anchor="middle">CONCURRENCY_CONFLICT</text>
+          <text data-node-label="" data-detail-anchor="" x="911.6" y="553" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">412 Precondition Failed</text>
+          <text data-detail="context" x="911.6" y="570" class="t-muted" font-size="8" text-anchor="middle">CONCURRENCY_CONFLICT</text>
+        <text data-detail="fine" x="911.6" y="588" class="t-security" font-size="7" text-anchor="middle">scope:generic</text>
         </g>
 
-        <g id="node-another_writer" data-node-id="another_writer" data-node-label="Concurrent writer" tabindex="0" role="button" aria-label="Focus Concurrent writer, PATCH v→2, Storage › Carregar state" aria-pressed="false" data-node-kind="database" data-node-sublabel="PATCH v→2" data-node-context="Storage › Carregar state">
-          <title>Concurrent writer · PATCH v→2 · Storage › Carregar state</title>
-          <rect x="48" y="786" width="160" height="52" rx="6" class="c-mask"/>
-          <rect x="48" y="786" width="160" height="52" rx="6" class="c-database" data-animate="node" style="--step:12" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(54 792) scale(0.6875)">
+        <g id="node-another_writer" data-node-id="another_writer" data-node-label="Concurrent writer" tabindex="0" role="button" aria-label="Focus Concurrent writer, PATCH v→2, Storage › Carregar state" aria-pressed="false" data-node-kind="database" data-node-sublabel="PATCH v→2" data-node-tag="scope:generic" data-node-context="Storage › Carregar state">
+          <title>Concurrent writer · PATCH v→2 · Storage › Carregar state · scope:generic</title>
+          <rect x="48" y="818" width="160" height="68" rx="6" class="c-mask"/>
+          <rect x="48" y="818" width="160" height="68" rx="6" class="c-database" data-animate="node" style="--step:12" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(54 824) scale(0.6875)">
             <ellipse cx="8" cy="4" rx="5" ry="2"/>
             <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="128" y="807" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Concurrent writer</text>
-          <text data-detail="context" x="128" y="824" class="t-muted" font-size="8" text-anchor="middle">PATCH v→2</text>
+          <text data-node-label="" data-detail-anchor="" x="128" y="839" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Concurrent writer</text>
+          <text data-detail="context" x="128" y="856" class="t-muted" font-size="8" text-anchor="middle">PATCH v→2</text>
+        <text data-detail="fine" x="128" y="874" class="t-database" font-size="7" text-anchor="middle">scope:generic</text>
         </g>
 
         <!-- Edge labels -->
         <g data-detail="context" data-edge-from="another_writer" data-edge-to="etag_stale" data-edge-label="UPDATE version=2" data-edge-key="0">
-          <rect x="144.6" y="838" width="86.8" height="14" rx="3" class="c-mask"/>
-          <text x="188" y="848" class="t-security" font-size="8" text-anchor="middle">UPDATE version=2</text>
+          <rect x="144.6" y="886" width="86.8" height="14" rx="3" class="c-mask"/>
+          <text x="188" y="896" class="t-security" font-size="8" text-anchor="middle">UPDATE version=2</text>
         </g>
         <g data-detail="context" data-edge-from="client_get" data-edge-to="etag_v1" data-edge-label="200 + ETag" data-edge-key="1">
-          <rect x="159" y="292" width="58" height="14" rx="3" class="c-mask"/>
-          <text x="188" y="302" class="t-muted" font-size="8" text-anchor="middle">200 + ETag</text>
+          <rect x="159" y="308" width="58" height="14" rx="3" class="c-mask"/>
+          <text x="188" y="318" class="t-muted" font-size="8" text-anchor="middle">200 + ETag</text>
         </g>
         <g data-detail="context" data-edge-from="client_patch" data-edge-to="server_match" data-edge-label="If-Match: W/v1" data-edge-key="2">
-          <rect x="392.9" y="292" width="77.2" height="14" rx="3" class="c-mask"/>
-          <text x="431.5" y="302" class="t-backend" font-size="8" text-anchor="middle">If-Match: W/v1</text>
+          <rect x="392.9" y="308" width="77.2" height="14" rx="3" class="c-mask"/>
+          <text x="431.5" y="318" class="t-backend" font-size="8" text-anchor="middle">If-Match: W/v1</text>
         </g>
         <g data-detail="context" data-edge-from="etag_stale" data-edge-to="server_match" data-edge-label="stored v=2 (≠1)" data-edge-key="3">
-          <rect x="367" y="522" width="82" height="14" rx="3" class="c-mask"/>
-          <text x="408" y="532" class="t-security" font-size="8" text-anchor="middle">stored v=2 (≠1)</text>
+          <rect x="367" y="546" width="82" height="14" rx="3" class="c-mask"/>
+          <text x="408" y="556" class="t-security" font-size="8" text-anchor="middle">stored v=2 (≠1)</text>
         </g>
         <g data-detail="context" data-edge-from="etag_v1" data-edge-to="client_patch" data-edge-label="cached" data-edge-key="4">
-          <rect x="288.6" y="292" width="38.8" height="14" rx="3" class="c-mask"/>
-          <text x="308" y="302" class="t-muted" font-size="8" text-anchor="middle">cached</text>
+          <rect x="288.6" y="308" width="38.8" height="14" rx="3" class="c-mask"/>
+          <text x="308" y="318" class="t-muted" font-size="8" text-anchor="middle">cached</text>
         </g>
         <g data-detail="context" data-edge-from="etag_v2" data-edge-to="client_get" data-edge-label="200 + ETag v2" data-edge-key="5">
           <rect x="543.8" y="130" width="72.4" height="14" rx="3" class="c-mask"/>
           <text x="580" y="140" class="t-muted" font-size="8" text-anchor="middle">200 + ETag v2</text>
         </g>
         <g data-detail="context" data-edge-from="server_match" data-edge-to="etag_v2" data-edge-label="UPDATE WHERE version=1" data-edge-key="6">
-          <rect x="582" y="568" width="115.6" height="14" rx="3" class="c-mask"/>
-          <text x="639.8" y="578" class="t-backend" font-size="8" text-anchor="middle">UPDATE WHERE version=1</text>
+          <rect x="582" y="416" width="115.6" height="14" rx="3" class="c-mask"/>
+          <text x="639.8" y="426" class="t-backend" font-size="8" text-anchor="middle">UPDATE WHERE version=1</text>
         </g>
         <g data-detail="context" data-edge-from="server_match" data-edge-to="server_412" data-edge-label="throw ConcurrencyException" data-edge-key="7">
-          <rect x="582.4" y="522" width="134.8" height="14" rx="3" class="c-mask"/>
-          <text x="649.8" y="532" class="t-security" font-size="8" text-anchor="middle">throw ConcurrencyException</text>
+          <rect x="582.4" y="546" width="134.8" height="14" rx="3" class="c-mask"/>
+          <text x="649.8" y="556" class="t-security" font-size="8" text-anchor="middle">throw ConcurrencyException</text>
         </g>
 
         <!-- Legend -->
         <g data-legend="" data-legend-bridge="">
-          <text x="20" y="866" class="t-primary" font-size="12" font-weight="650">Legend</text>
-          <g data-legend-semantic-kind="frontend" data-legend-kind="frontend" data-legend-label="User UI" data-legend-x="20" data-legend-baseline="886" data-legend-width="74">
-            <rect x="20" y="878" width="14" height="9" rx="2" class="c-frontend" stroke-width="1"/>
-            <text x="42" y="886" class="t-muted" font-size="7.5" font-weight="500">User UI</text>
+          <text x="20" y="914" class="t-primary" font-size="12" font-weight="650">Legend</text>
+          <g data-legend-semantic-kind="frontend" data-legend-kind="frontend" data-legend-label="User UI" data-legend-x="20" data-legend-baseline="934" data-legend-width="74">
+            <rect x="20" y="926" width="14" height="9" rx="2" class="c-frontend" stroke-width="1"/>
+            <text x="42" y="934" class="t-muted" font-size="7.5" font-weight="500">User UI</text>
           </g>
-          <g data-legend-semantic-kind="backend" data-legend-kind="backend" data-legend-label="Agent logic" data-legend-x="101" data-legend-baseline="886" data-legend-width="91">
-            <rect x="101" y="878" width="14" height="9" rx="2" class="c-backend" stroke-width="1"/>
-            <text x="123" y="886" class="t-muted" font-size="7.5" font-weight="500">Agent logic</text>
+          <g data-legend-semantic-kind="backend" data-legend-kind="backend" data-legend-label="Agent logic" data-legend-x="101" data-legend-baseline="934" data-legend-width="91">
+            <rect x="101" y="926" width="14" height="9" rx="2" class="c-backend" stroke-width="1"/>
+            <text x="123" y="934" class="t-muted" font-size="7.5" font-weight="500">Agent logic</text>
           </g>
-          <g data-legend-semantic-kind="security" data-legend-kind="security" data-legend-label="Policy" data-legend-x="199" data-legend-baseline="886" data-legend-width="70">
-            <rect x="199" y="878" width="14" height="9" rx="2" class="c-security" stroke-width="1"/>
-            <text x="221" y="886" class="t-muted" font-size="7.5" font-weight="500">Policy</text>
+          <g data-legend-semantic-kind="security" data-legend-kind="security" data-legend-label="Policy" data-legend-x="199" data-legend-baseline="934" data-legend-width="70">
+            <rect x="199" y="926" width="14" height="9" rx="2" class="c-security" stroke-width="1"/>
+            <text x="221" y="934" class="t-muted" font-size="7.5" font-weight="500">Policy</text>
           </g>
-          <g data-legend-semantic-kind="database" data-legend-kind="database" data-legend-label="Context / trace" data-legend-x="276" data-legend-baseline="886" data-legend-width="109">
-            <rect x="276" y="878" width="14" height="9" rx="2" class="c-database" stroke-width="1"/>
-            <text x="298" y="886" class="t-muted" font-size="7.5" font-weight="500">Context / trace</text>
+          <g data-legend-semantic-kind="database" data-legend-kind="database" data-legend-label="Context / trace" data-legend-x="276" data-legend-baseline="934" data-legend-width="109">
+            <rect x="276" y="926" width="14" height="9" rx="2" class="c-database" stroke-width="1"/>
+            <text x="298" y="934" class="t-muted" font-size="7.5" font-weight="500">Context / trace</text>
           </g>
         </g>
       </svg>

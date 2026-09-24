@@ -8,7 +8,7 @@
     "viewBox": [1020, 760],
     "animation": "trace",
     "visual_preset": "signal-flow",
-    "quality_profile": "showcase",
+    "quality_profile": "standard",
     "views": [
       {
         "id": "happy-path",
@@ -22,19 +22,60 @@
         "focus": ["client", "controller", "usecases", "repo", "pg", "filter"],
         "note": "deletedAt IS NOT NULL → repo retorna null → ApplicationResourceNotFoundException → 404."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "GET /users/:id — buscar por ID (soft-deleted omitido por default)"
   },
   "participants": [
-    { "id": "client", "type": "external", "label": "Cliente", "sublabel": "GET /users/:id" },
-    { "id": "controller", "type": "backend", "label": "UsersCtrl", "sublabel": "@Param('id')" },
-    { "id": "usecases", "type": "backend", "label": "UserUseCases", "sublabel": "obterPorId()" },
-    { "id": "repo", "type": "backend", "label": "PrismaRepo", "sublabel": "findById(id)" },
-    { "id": "pg", "type": "database", "label": "PostgreSQL", "sublabel": "users table" },
-    { "id": "filter", "type": "security", "label": "ExcFilter", "sublabel": "RFC 7807" }
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Cliente",
+      "sublabel": "GET /users/:id"
+    },
+    {
+      "id": "controller",
+      "type": "backend",
+      "label": "UsersCtrl",
+      "sublabel": "@Param('id')"
+    },
+    {
+      "id": "usecases",
+      "type": "backend",
+      "label": "UserUseCases",
+      "sublabel": "obterPorId()"
+    },
+    {
+      "id": "repo",
+      "type": "backend",
+      "label": "PrismaRepo",
+      "sublabel": "findById(id)"
+    },
+    {
+      "id": "pg",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "users table"
+    },
+    {
+      "id": "filter",
+      "type": "security",
+      "label": "ExcFilter",
+      "sublabel": "RFC 7807"
+    }
   ],
   "segments": [
-    { "from": 150, "to": 480, "label": "Find by id" },
-    { "from": 496, "to": 700, "label": "404 soft-deleted" }
+    {
+      "from": 150,
+      "to": 480,
+      "label": "Find by id"
+    },
+    {
+      "from": 496,
+      "to": 700,
+      "label": "404 soft-deleted"
+    }
   ],
   "messages": [
     {
@@ -65,8 +106,20 @@
       "label": "SELECT * WHERE id=$1 AND deletedAt IS NULL",
       "variant": "default"
     },
-    { "from": "pg", "to": "repo", "y": 380, "label": "row | null", "variant": "return" },
-    { "from": "repo", "to": "usecases", "y": 418, "label": "User agg | null", "variant": "return" },
+    {
+      "from": "pg",
+      "to": "repo",
+      "y": 380,
+      "label": "row | null",
+      "variant": "return"
+    },
+    {
+      "from": "repo",
+      "to": "usecases",
+      "y": 418,
+      "label": "User agg | null",
+      "variant": "return"
+    },
     {
       "from": "usecases",
       "to": "controller",
@@ -104,12 +157,42 @@
     }
   ],
   "activations": [
-    { "participant": "controller", "from": 174, "to": 490, "type": "backend" },
-    { "participant": "usecases", "from": 214, "to": 488, "type": "backend" },
-    { "participant": "repo", "from": 294, "to": 450, "type": "backend" },
-    { "participant": "pg", "from": 334, "to": 412, "type": "database" },
-    { "participant": "usecases", "from": 574, "to": 608, "type": "backend" },
-    { "participant": "filter", "from": 614, "to": 656, "type": "security" }
+    {
+      "participant": "controller",
+      "from": 174,
+      "to": 490,
+      "type": "backend"
+    },
+    {
+      "participant": "usecases",
+      "from": 214,
+      "to": 488,
+      "type": "backend"
+    },
+    {
+      "participant": "repo",
+      "from": 294,
+      "to": 450,
+      "type": "backend"
+    },
+    {
+      "participant": "pg",
+      "from": 334,
+      "to": 412,
+      "type": "database"
+    },
+    {
+      "participant": "usecases",
+      "from": 574,
+      "to": 608,
+      "type": "backend"
+    },
+    {
+      "participant": "filter",
+      "from": 614,
+      "to": 656,
+      "type": "security"
+    }
   ],
   "cards": [
     {

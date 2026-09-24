@@ -8,7 +8,7 @@
     "viewBox": [1020, 760],
     "animation": "trace",
     "visual_preset": "signal-flow",
-    "quality_profile": "showcase",
+    "quality_profile": "standard",
     "views": [
       {
         "id": "happy-path",
@@ -22,20 +22,66 @@
         "focus": ["client", "controller", "usecases", "filter"],
         "note": "User não existe → 404; versão mismatch → 412; já ativo → 422."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "POST /users/:id/restore — restaurar soft-deletado (optimistic lock)"
   },
   "participants": [
-    { "id": "client", "type": "external", "label": "Cliente", "sublabel": "POST + If-Match" },
-    { "id": "controller", "type": "backend", "label": "UsersCtrl", "sublabel": "@Status 201" },
-    { "id": "usecases", "type": "backend", "label": "UserUseCases", "sublabel": "restaurar()" },
-    { "id": "repo", "type": "backend", "label": "PrismaRepo", "sublabel": "findById inc" },
-    { "id": "audit", "type": "backend", "label": "AuditService", "sublabel": "record RESTORE" },
-    { "id": "pg", "type": "database", "label": "PostgreSQL", "sublabel": "users table" },
-    { "id": "filter", "type": "security", "label": "ExcFilter", "sublabel": "RFC 7807" }
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Cliente",
+      "sublabel": "POST + If-Match"
+    },
+    {
+      "id": "controller",
+      "type": "backend",
+      "label": "UsersCtrl",
+      "sublabel": "@Status 201"
+    },
+    {
+      "id": "usecases",
+      "type": "backend",
+      "label": "UserUseCases",
+      "sublabel": "restaurar()"
+    },
+    {
+      "id": "repo",
+      "type": "backend",
+      "label": "PrismaRepo",
+      "sublabel": "findById inc"
+    },
+    {
+      "id": "audit",
+      "type": "backend",
+      "label": "AuditService",
+      "sublabel": "record RESTORE"
+    },
+    {
+      "id": "pg",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "users table"
+    },
+    {
+      "id": "filter",
+      "type": "security",
+      "label": "ExcFilter",
+      "sublabel": "RFC 7807"
+    }
   ],
   "segments": [
-    { "from": 150, "to": 480, "label": "Restore + persist" },
-    { "from": 456, "to": 710, "label": "Audit RESTORE" }
+    {
+      "from": 150,
+      "to": 480,
+      "label": "Restore + persist"
+    },
+    {
+      "from": 456,
+      "to": 710,
+      "label": "Audit RESTORE"
+    }
   ],
   "messages": [
     {
@@ -66,7 +112,13 @@
       "label": "SELECT WHERE id (sem filtro deletedAt)",
       "variant": "default"
     },
-    { "from": "pg", "to": "repo", "y": 338, "label": "User soft-deletado", "variant": "return" },
+    {
+      "from": "pg",
+      "to": "repo",
+      "y": 338,
+      "label": "User soft-deletado",
+      "variant": "return"
+    },
     {
       "from": "usecases",
       "to": "repo",
@@ -118,13 +170,48 @@
     }
   ],
   "activations": [
-    { "participant": "controller", "from": 174, "to": 600, "type": "backend" },
-    { "participant": "usecases", "from": 214, "to": 596, "type": "backend" },
-    { "participant": "repo", "from": 254, "to": 446, "type": "backend" },
-    { "participant": "pg", "from": 294, "to": 446, "type": "database" },
-    { "participant": "audit", "from": 484, "to": 522, "type": "backend" },
-    { "participant": "usecases", "from": 666, "to": 698, "type": "backend" },
-    { "participant": "filter", "from": 666, "to": 698, "type": "security" }
+    {
+      "participant": "controller",
+      "from": 174,
+      "to": 600,
+      "type": "backend"
+    },
+    {
+      "participant": "usecases",
+      "from": 214,
+      "to": 596,
+      "type": "backend"
+    },
+    {
+      "participant": "repo",
+      "from": 254,
+      "to": 446,
+      "type": "backend"
+    },
+    {
+      "participant": "pg",
+      "from": 294,
+      "to": 446,
+      "type": "database"
+    },
+    {
+      "participant": "audit",
+      "from": 484,
+      "to": 522,
+      "type": "backend"
+    },
+    {
+      "participant": "usecases",
+      "from": 666,
+      "to": 698,
+      "type": "backend"
+    },
+    {
+      "participant": "filter",
+      "from": 666,
+      "to": 698,
+      "type": "security"
+    }
   ],
   "cards": [
     {

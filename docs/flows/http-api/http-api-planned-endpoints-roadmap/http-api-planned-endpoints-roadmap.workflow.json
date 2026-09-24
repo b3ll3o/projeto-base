@@ -28,12 +28,24 @@
         "focus": ["users_update_email"],
         "note": "Use case existente sem rota HTTP dedicada (Phase 5 gap)."
       }
-    ]
+    ],
+    "tier": "nice",
+    "mechanism": "hand",
+    "subject": "Roadmap — endpoints planejados (Fase 8+) ainda não implementados"
   },
   "lanes": [
-    { "id": "auth", "label": "Auth (Fase 8)" },
-    { "id": "users", "label": "Users (Fase 8+)" },
-    { "id": "audit", "label": "Audit (Fase 9)" }
+    {
+      "id": "auth",
+      "label": "Auth (Fase 8)"
+    },
+    {
+      "id": "users",
+      "label": "Users (Fase 8+)"
+    },
+    {
+      "id": "audit",
+      "label": "Audit (Fase 9)"
+    }
   ],
   "phases": [
     {
@@ -50,7 +62,13 @@
       "toCol": 3,
       "variant": "default"
     },
-    { "id": "backlog", "label": "Backlog", "fromCol": 4, "toCol": 4, "variant": "dashed" }
+    {
+      "id": "backlog",
+      "label": "Backlog",
+      "fromCol": 4,
+      "toCol": 4,
+      "variant": "dashed"
+    }
   ],
   "groups": [
     {

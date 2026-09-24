@@ -6,7 +6,7 @@
     "subtitle": "Use case UpdateEmail existe em apps/api mas SEM controller dedicado (gap documentado)",
     "animation": "trace",
     "visual_preset": "signal-flow",
-    "quality_profile": "showcase",
+    "quality_profile": "standard",
     "output": "http-api-update-email-flow.sequence.html",
     "viewBox": [920, 800],
     "views": [
@@ -22,24 +22,59 @@
         "focus": ["controller"],
         "note": "Sem PATCH /users/:id/email — clients usam PATCH /users/:id com campo email."
       }
-    ]
+    ],
+    "tier": "nice",
+    "mechanism": "hand",
+    "subject": "UPDATE email — use case existente (sem rota HTTP dedicada ainda)"
   },
   "participants": [
-    { "id": "client", "type": "external", "label": "Client", "sublabel": "external" },
-    { "id": "controller", "type": "backend", "label": "UsersCtrl", "sublabel": "REST" },
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Client",
+      "sublabel": "external"
+    },
+    {
+      "id": "controller",
+      "type": "backend",
+      "label": "UsersCtrl",
+      "sublabel": "REST"
+    },
     {
       "id": "update_email_uc",
       "type": "backend",
       "label": "UpdateEmailUC",
       "sublabel": "use case"
     },
-    { "id": "user_aggregate", "type": "database", "label": "User Agg", "sublabel": "domain" },
-    { "id": "audit_record", "type": "database", "label": "users_history", "sublabel": "audit" }
+    {
+      "id": "user_aggregate",
+      "type": "database",
+      "label": "User Agg",
+      "sublabel": "domain"
+    },
+    {
+      "id": "audit_record",
+      "type": "database",
+      "label": "users_history",
+      "sublabel": "audit"
+    }
   ],
   "segments": [
-    { "from": 130, "to": 280, "label": "Request" },
-    { "from": 290, "to": 440, "label": "Domain" },
-    { "from": 460, "to": 640, "label": "Audit + Response" }
+    {
+      "from": 130,
+      "to": 280,
+      "label": "Request"
+    },
+    {
+      "from": 290,
+      "to": 440,
+      "label": "Domain"
+    },
+    {
+      "from": 460,
+      "to": 640,
+      "label": "Audit + Response"
+    }
   ],
   "messages": [
     {
@@ -114,10 +149,30 @@
     }
   ],
   "activations": [
-    { "participant": "controller", "from": 174, "to": 616, "type": "backend" },
-    { "participant": "update_email_uc", "from": 214, "to": 576, "type": "backend" },
-    { "participant": "user_aggregate", "from": 254, "to": 536, "type": "database" },
-    { "participant": "audit_record", "from": 444, "to": 496, "type": "database" }
+    {
+      "participant": "controller",
+      "from": 174,
+      "to": 616,
+      "type": "backend"
+    },
+    {
+      "participant": "update_email_uc",
+      "from": 214,
+      "to": 576,
+      "type": "backend"
+    },
+    {
+      "participant": "user_aggregate",
+      "from": 254,
+      "to": 536,
+      "type": "database"
+    },
+    {
+      "participant": "audit_record",
+      "from": 444,
+      "to": 496,
+      "type": "database"
+    }
   ],
   "cards": [
     {

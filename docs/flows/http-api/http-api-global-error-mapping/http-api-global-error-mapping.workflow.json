@@ -8,7 +8,7 @@
     "viewBox": [1130, 1400],
     "animation": "trace",
     "visual_preset": "signal-flow",
-    "quality_profile": "showcase",
+    "quality_profile": "standard",
     "views": [
       {
         "id": "by-status",
@@ -16,15 +16,33 @@
         "focus": ["map", "s400", "s404", "s409", "s410", "s412", "s422", "s500"],
         "note": "Cada classe de exceção resolve para um HTTP status code canônico."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "Cross-cutting — Exception → GlobalExceptionFilter → RFC 7807"
   },
   "lanes": [
-    { "id": "exception", "label": "Exception classes" },
-    { "id": "mapper", "label": "Mapper (pure)" },
-    { "id": "status", "label": "HTTP status" }
+    {
+      "id": "exception",
+      "label": "Exception classes"
+    },
+    {
+      "id": "mapper",
+      "label": "Mapper (pure)"
+    },
+    {
+      "id": "status",
+      "label": "HTTP status"
+    }
   ],
   "phases": [
-    { "id": "domain", "label": "Domain", "fromCol": 0, "toCol": 1, "variant": "default" },
+    {
+      "id": "domain",
+      "label": "Domain",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "default"
+    },
     {
       "id": "application",
       "label": "Application",
@@ -32,7 +50,13 @@
       "toCol": 3,
       "variant": "emphasis"
     },
-    { "id": "default", "label": "Default", "fromCol": 4, "toCol": 4, "variant": "security" }
+    {
+      "id": "default",
+      "label": "Default",
+      "fromCol": 4,
+      "toCol": 4,
+      "variant": "security"
+    }
   ],
   "mainPath": ["domain_not_found", "map", "s404"],
   "nodes": [
@@ -43,7 +67,8 @@
       "type": "backend",
       "label": "UserNotFoundException",
       "sublabel": "domain layer",
-      "width": 180
+      "width": 180,
+      "tag": "scope:generic"
     },
     {
       "id": "domain_email",
@@ -52,7 +77,8 @@
       "type": "backend",
       "label": "EmailAlreadyInUseException",
       "sublabel": "domain",
-      "width": 200
+      "width": 200,
+      "tag": "scope:generic"
     },
     {
       "id": "domain_concurrency",
@@ -61,7 +87,8 @@
       "type": "backend",
       "label": "ConcurrencyException",
       "sublabel": "domain",
-      "width": 180
+      "width": 180,
+      "tag": "scope:generic"
     },
     {
       "id": "domain_deleted",
@@ -70,7 +97,8 @@
       "type": "backend",
       "label": "UserDeletedException",
       "sublabel": "domain",
-      "width": 180
+      "width": 180,
+      "tag": "scope:generic"
     },
     {
       "id": "domain_restore",
@@ -79,7 +107,8 @@
       "type": "backend",
       "label": "InvalidRestoreException",
       "sublabel": "domain",
-      "width": 180
+      "width": 180,
+      "tag": "scope:generic"
     },
     {
       "id": "app_notfound",
@@ -89,7 +118,8 @@
       "type": "security",
       "label": "AppResourceNotFound",
       "sublabel": "app layer",
-      "width": 180
+      "width": 180,
+      "tag": "scope:generic"
     },
     {
       "id": "app_validation",
@@ -99,7 +129,8 @@
       "type": "security",
       "label": "AppValidationException",
       "sublabel": "app layer",
-      "width": 180
+      "width": 180,
+      "tag": "scope:generic"
     },
     {
       "id": "app_concurrency",
@@ -109,7 +140,8 @@
       "type": "security",
       "label": "AppConcurrencyException",
       "sublabel": "app layer",
-      "width": 180
+      "width": 180,
+      "tag": "scope:generic"
     },
     {
       "id": "app_email",
@@ -119,7 +151,8 @@
       "type": "security",
       "label": "AppEmailInUse",
       "sublabel": "app layer",
-      "width": 180
+      "width": 180,
+      "tag": "scope:generic"
     },
     {
       "id": "unknown",
@@ -129,7 +162,8 @@
       "type": "external",
       "label": "Unknown Error",
       "sublabel": "fallback",
-      "width": 160
+      "width": 160,
+      "tag": "scope:generic"
     },
     {
       "id": "map",
@@ -148,7 +182,8 @@
       "type": "backend",
       "label": "GlobalExceptionFilter",
       "sublabel": "RFC 7807",
-      "width": 200
+      "width": 200,
+      "tag": "scope:generic"
     },
     {
       "id": "s400",
@@ -287,11 +322,41 @@
       "variant": "emphasis",
       "role": "main"
     },
-    { "from": "unknown", "to": "map", "label": "fallback", "variant": "security", "role": "main" },
-    { "from": "map", "to": "s400", "label": "VALIDATION", "variant": "default", "role": "branch" },
-    { "from": "map", "to": "s404", "label": "NOT_FOUND", "variant": "default", "role": "branch" },
-    { "from": "map", "to": "s409", "label": "CONFLICT", "variant": "default", "role": "branch" },
-    { "from": "map", "to": "s410", "label": "GONE", "variant": "default", "role": "branch" },
+    {
+      "from": "unknown",
+      "to": "map",
+      "label": "fallback",
+      "variant": "security",
+      "role": "main"
+    },
+    {
+      "from": "map",
+      "to": "s400",
+      "label": "VALIDATION",
+      "variant": "default",
+      "role": "branch"
+    },
+    {
+      "from": "map",
+      "to": "s404",
+      "label": "NOT_FOUND",
+      "variant": "default",
+      "role": "branch"
+    },
+    {
+      "from": "map",
+      "to": "s409",
+      "label": "CONFLICT",
+      "variant": "default",
+      "role": "branch"
+    },
+    {
+      "from": "map",
+      "to": "s410",
+      "label": "GONE",
+      "variant": "default",
+      "role": "branch"
+    },
     {
       "from": "map",
       "to": "s412",
