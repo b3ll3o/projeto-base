@@ -24,7 +24,7 @@
           "link_run",
           "atomic_commit"
         ],
-        "note": "10 passos: gh pr state → test retro → metadata → kebab slug → YYYY-MM-DD-slug → 8 fields → 5 sections → write → link → commit."
+        "note": "10 etapas: gh pr state → retro ok → metadata → slug kebab → path YYYY-MM-DD → fm 8c → body 5s → write → link → commit."
       },
       {
         "id": "frontmatter",
