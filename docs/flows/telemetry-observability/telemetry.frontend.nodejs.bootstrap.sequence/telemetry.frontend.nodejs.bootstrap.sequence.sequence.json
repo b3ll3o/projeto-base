@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Telemetry Frontend (Next.js) Bootstrap",
+    "subtitle": "Browser → app/layout.tsx instrumentation → web-vitals → OTel metrics SDK OTLP",
+    "output": "telemetry.frontend.nodejs.bootstrap.sequence.html",
+    "quality_profile": "standard",
+    "viewBox": [1020, 700],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "views": [
+      {
+        "id": "boot",
+        "label": "Frontend boot",
+        "focus": ["browser", "next", "instrument", "reporter", "vitals", "otlp"],
+        "note": "Next.js 15 OTel instrumentation em node runtime."
+      }
+    ]
+  },
+  "participants": [
+    { "id": "browser", "type": "external", "label": "Browser", "sublabel": "perf observer" },
+    { "id": "next", "type": "backend", "label": "Next.js", "sublabel": "App Router" },
+    {
+      "id": "instrument",
+      "type": "backend",
+      "label": "Instr.ts",
+      "sublabel": "register()"
+    },
+    {
+      "id": "reporter",
+      "type": "backend",
+      "label": "Reporter",
+      "sublabel": "client comp"
+    },
+    { "id": "vitals", "type": "backend", "label": "web-vitals", "sublabel": "LCP/CLS/INP" },
+    {
+      "id": "otel_api",
+      "type": "backend",
+      "label": "OTel API",
+      "sublabel": "createHistogram"
+    },
+    { "id": "otlp", "type": "external", "label": "OTLP", "sublabel": "/v1/metrics" }
+  ],
+  "segments": [
+    { "from": 150, "to": 320, "label": "Boot" },
+    { "from": 336, "to": 480, "label": "Web Vitals capture" },
+    { "from": 496, "to": 600, "label": "OTLP export" }
+  ],
+  "messages": [
+    {
+      "from": "browser",
+      "to": "next",
+      "y": 180,
+      "label": "GET / (page load)",
+      "variant": "emphasis"
+    },
+    { "from": "next", "to": "instrument", "y": 220, "label": "register()", "variant": "default" },
+    {
+      "from": "instrument",
+      "to": "reporter",
+      "y": 260,
+      "label": "render <WebVitalsReporter/>",
+      "variant": "default"
+    },
+    {
+      "from": "reporter",
+      "to": "vitals",
+      "y": 340,
+      "label": "onLCP/onCLS/onINP",
+      "variant": "emphasis"
+    },
+    {
+      "from": "vitals",
+      "to": "otel_api",
+      "y": 378,
+      "label": "histogram value",
+      "variant": "default"
+    },
+    {
+      "from": "otel_api",
+      "to": "reporter",
+      "y": 416,
+      "label": "histogram.record()",
+      "variant": "return"
+    },
+    {
+      "from": "reporter",
+      "to": "otlp",
+      "y": 540,
+      "label": "POST /v1/metrics",
+      "variant": "emphasis"
+    }
+  ],
+  "activations": [
+    { "participant": "next", "from": 174, "to": 250, "type": "backend" },
+    { "participant": "reporter", "from": 254, "to": 470, "type": "backend" },
+    { "participant": "vitals", "from": 334, "to": 390, "type": "backend" },
+    { "participant": "otel_api", "from": 372, "to": 412, "type": "backend" }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Next.js 15 instrumentation.ts",
+      "items": [
+        "App Router detecta instrumentation.ts automaticamente",
+        "Roda antes de qualquer render",
+        "Exports register() para OTel SDK"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Web Vitals automatic",
+      "items": [
+        "web-vitals lib captura LCP/CLS/INP/FID/TTFB",
+        "Browser PerformanceObserver nativo",
+        "Reporta ao OTel como histogram (não counter)"
+      ]
+    },
+    {
+      "dot": "orange",
+      "title": "SSR-safe module-load",
+      "items": [
+        "typeof window guard no top-level (PR #25)",
+        "Reporter marcado como 'use client'",
+        "Docker build nao quebra em SSR-only context"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "OTLP/HTTP",
+      "items": [
+        "POST http://collector:4318/v1/metrics",
+        "JSON encoding (protobuf optional)",
+        "Correlacionado via trace context W3C"
+      ]
+    }
+  ]
+}
