@@ -5,7 +5,7 @@
     "title": "Optimistic Locking — RFC 7232 If-Match/ETag handshake",
     "subtitle": "PATCH/POST /:id/restore/DELETE — cliente envia W/v<n>, servidor compara e responde 200 ou 412",
     "output": "http-api-optimistic-locking-protocol.workflow.html",
-    "viewBox": [1130, 1000],
+    "viewBox": [1130, 1024],
     "animation": "trace",
     "visual_preset": "signal-flow",
     "quality_profile": "showcase",
@@ -29,17 +29,47 @@
         ],
         "note": "Outro writer incrementou version; If-Match do cliente é stale → 412."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "Cross-cutting — RFC 7232 If-Match/ETag optimistic locking"
   },
   "lanes": [
-    { "id": "client", "label": "Client" },
-    { "id": "server", "label": "Server (NestJS)" },
-    { "id": "db", "label": "Storage" }
+    {
+      "id": "client",
+      "label": "Client"
+    },
+    {
+      "id": "server",
+      "label": "Server (NestJS)"
+    },
+    {
+      "id": "db",
+      "label": "Storage"
+    }
   ],
   "phases": [
-    { "id": "read", "label": "Carregar state", "fromCol": 0, "toCol": 1, "variant": "default" },
-    { "id": "mutate", "label": "Mutate", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
-    { "id": "verify", "label": "Verify + 412", "fromCol": 4, "toCol": 5, "variant": "security" }
+    {
+      "id": "read",
+      "label": "Carregar state",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "default"
+    },
+    {
+      "id": "mutate",
+      "label": "Mutate",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "verify",
+      "label": "Verify + 412",
+      "fromCol": 4,
+      "toCol": 5,
+      "variant": "security"
+    }
   ],
   "mainPath": ["client_get", "etag_v1", "client_patch", "server_match", "etag_v2"],
   "nodes": [
@@ -50,7 +80,8 @@
       "type": "frontend",
       "label": "GET /users/:id",
       "sublabel": "load state",
-      "width": 160
+      "width": 160,
+      "tag": "scope:generic"
     },
     {
       "id": "etag_v1",
@@ -59,7 +90,8 @@
       "type": "backend",
       "label": "ETag W/v1",
       "sublabel": "version=1",
-      "width": 160
+      "width": 160,
+      "tag": "scope:generic"
     },
     {
       "id": "client_patch",
@@ -68,7 +100,8 @@
       "type": "frontend",
       "label": "PATCH + If-Match: W/v1",
       "sublabel": "expect v1",
-      "width": 200
+      "width": 200,
+      "tag": "scope:generic"
     },
     {
       "id": "server_match",
@@ -87,7 +120,8 @@
       "type": "backend",
       "label": "ETag W/v2",
       "sublabel": "version=2",
-      "width": 160
+      "width": 160,
+      "tag": "scope:generic"
     },
     {
       "id": "another_writer",
@@ -97,7 +131,8 @@
       "type": "database",
       "label": "Concurrent writer",
       "sublabel": "PATCH v→2",
-      "width": 160
+      "width": 160,
+      "tag": "scope:generic"
     },
     {
       "id": "etag_stale",
@@ -107,7 +142,8 @@
       "type": "backend",
       "label": "stored W/v2",
       "sublabel": "stale client's view",
-      "width": 160
+      "width": 160,
+      "tag": "scope:generic"
     },
     {
       "id": "server_412",
@@ -117,7 +153,8 @@
       "type": "security",
       "label": "412 Precondition Failed",
       "sublabel": "CONCURRENCY_CONFLICT",
-      "width": 200
+      "width": 200,
+      "tag": "scope:generic"
     }
   ],
   "edges": [

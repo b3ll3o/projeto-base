@@ -21,14 +21,46 @@
         "focus": ["context_store"],
         "note": "AuditContextMissingError se get() fora de run()."
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "Cross-cutting — AuditContext via AsyncLocalStorage (correlationId W3C)"
   },
-  "lanes": [{ "id": "api", "label": "HTTP API request" }],
+  "lanes": [
+    {
+      "id": "api",
+      "label": "HTTP API request"
+    }
+  ],
   "phases": [
-    { "id": "build", "label": "Build ctx", "fromCol": 0, "toCol": 0, "variant": "emphasis" },
-    { "id": "store", "label": "Store.run()", "fromCol": 1, "toCol": 1, "variant": "default" },
-    { "id": "use", "label": "Use cases", "fromCol": 2, "toCol": 2, "variant": "default" },
-    { "id": "persist", "label": "Audit record", "fromCol": 3, "toCol": 3, "variant": "dashed" }
+    {
+      "id": "build",
+      "label": "Build ctx",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
+      "id": "store",
+      "label": "Store.run()",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "default"
+    },
+    {
+      "id": "use",
+      "label": "Use cases",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "default"
+    },
+    {
+      "id": "persist",
+      "label": "Audit record",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "dashed"
+    }
   ],
   "groups": [
     {
