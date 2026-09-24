@@ -1,0 +1,143 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "GET /users/:id — Buscar por ID (soft-deleted omitido por default)",
+    "subtitle": "GET /users/:id → UsersController → UserUseCases.obterPorId → UserRepository.findById (deletedAt=null filter) → Prisma → PostgreSQL",
+    "output": "http-api-users-get-by-id.sequence.html",
+    "viewBox": [1020, 760],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "happy-path",
+        "label": "User ativo → 200",
+        "focus": ["client", "controller", "usecases", "repo", "pg"],
+        "note": "User existe, deletedAt=null → retorna UserOutput."
+      },
+      {
+        "id": "soft-deleted-404",
+        "label": "Soft-deleted omitido → 404",
+        "focus": ["client", "controller", "usecases", "repo", "pg", "filter"],
+        "note": "deletedAt IS NOT NULL → repo retorna null → ApplicationResourceNotFoundException → 404."
+      }
+    ]
+  },
+  "participants": [
+    { "id": "client", "type": "external", "label": "Cliente", "sublabel": "GET /users/:id" },
+    { "id": "controller", "type": "backend", "label": "UsersCtrl", "sublabel": "@Param('id')" },
+    { "id": "usecases", "type": "backend", "label": "UserUseCases", "sublabel": "obterPorId()" },
+    { "id": "repo", "type": "backend", "label": "PrismaRepo", "sublabel": "findById(id)" },
+    { "id": "pg", "type": "database", "label": "PostgreSQL", "sublabel": "users table" },
+    { "id": "filter", "type": "security", "label": "ExcFilter", "sublabel": "RFC 7807" }
+  ],
+  "segments": [
+    { "from": 150, "to": 480, "label": "Find by id" },
+    { "from": 496, "to": 700, "label": "404 soft-deleted" }
+  ],
+  "messages": [
+    {
+      "from": "client",
+      "to": "controller",
+      "y": 180,
+      "label": "GET /users/0190a8b6-...",
+      "variant": "emphasis"
+    },
+    {
+      "from": "controller",
+      "to": "usecases",
+      "y": 220,
+      "label": "obterPorId({id})",
+      "variant": "emphasis"
+    },
+    {
+      "from": "usecases",
+      "to": "repo",
+      "y": 300,
+      "label": "findById(UserIdVO)",
+      "variant": "default"
+    },
+    {
+      "from": "repo",
+      "to": "pg",
+      "y": 340,
+      "label": "SELECT * WHERE id=$1 AND deletedAt IS NULL",
+      "variant": "default"
+    },
+    { "from": "pg", "to": "repo", "y": 380, "label": "row | null", "variant": "return" },
+    { "from": "repo", "to": "usecases", "y": 418, "label": "User agg | null", "variant": "return" },
+    {
+      "from": "usecases",
+      "to": "controller",
+      "y": 456,
+      "label": "toUserOutput(user)",
+      "variant": "return"
+    },
+    {
+      "from": "controller",
+      "to": "client",
+      "y": 494,
+      "label": "200 UserOutput",
+      "variant": "return"
+    },
+    {
+      "from": "repo",
+      "to": "usecases",
+      "y": 540,
+      "label": "null (deletedAt != null)",
+      "variant": "security"
+    },
+    {
+      "from": "usecases",
+      "to": "filter",
+      "y": 580,
+      "label": "throw ApplicationResourceNotFound 404",
+      "variant": "security"
+    },
+    {
+      "from": "filter",
+      "to": "client",
+      "y": 620,
+      "label": "404 ProblemDetails",
+      "variant": "security"
+    }
+  ],
+  "activations": [
+    { "participant": "controller", "from": 174, "to": 490, "type": "backend" },
+    { "participant": "usecases", "from": 214, "to": 488, "type": "backend" },
+    { "participant": "repo", "from": 294, "to": 450, "type": "backend" },
+    { "participant": "pg", "from": 334, "to": 412, "type": "database" },
+    { "participant": "usecases", "from": 574, "to": 608, "type": "backend" },
+    { "participant": "filter", "from": 614, "to": 656, "type": "security" }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Soft-delete semantics",
+      "items": [
+        "findById filtra deletedAt IS NULL por default — sem flag → 404 illusion",
+        "findById com includeDeleted=true retorna o user (usado por restore flow)",
+        "Comportamento documentado em prisma-user.repository.ts:103-112"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "404 vs soft-deleted",
+      "items": [
+        "Soft-deleted vira 404 (não 410 Gone) — Uniformidade com 'não existe'",
+        "Traders 401/403 não se aplicam (auth será Fase 8 com JWT)",
+        "RFC 7807 problem+json indica resourceName=User, resourceId=id"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Layered architecture",
+      "items": [
+        "Controller fino — só parse + delegação (sem regra de negócio)",
+        "Use case valida VO via UserId.create() (defesa secundária)",
+        "PrismaUserRepo encapsula SQL (camada infrastructure)"
+      ]
+    }
+  ]
+}

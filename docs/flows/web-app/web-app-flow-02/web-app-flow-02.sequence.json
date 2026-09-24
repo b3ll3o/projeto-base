@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "apps/web — Users List Page (RSC fetch)",
+    "subtitle": "Browser → Next.js (RSC) → ApiClient → apps/api → Prisma → Users List Page render",
+    "output": "web-app-flow-02.sequence.html",
+    "viewBox": [1020, 760],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "rsc-fetch",
+        "label": "RSC direct fetch",
+        "focus": ["browser", "next", "rsc", "apiclient", "api", "pg"],
+        "note": "Server Component fetcha direto, sem useEffect — Next.js 15 RSC."
+      }
+    ]
+  },
+  "participants": [
+    { "id": "browser", "type": "external", "label": "Browser", "sublabel": "GET /users" },
+    { "id": "next", "type": "backend", "label": "Next.js", "sublabel": "App Router" },
+    { "id": "rsc", "type": "backend", "label": "RSC", "sublabel": "users/page.tsx" },
+    { "id": "apiclient", "type": "backend", "label": "ApiClient", "sublabel": "fetch wrapper" },
+    { "id": "api", "type": "backend", "label": "apps/api", "sublabel": "NestJS" },
+    { "id": "pg", "type": "database", "label": "PostgreSQL", "sublabel": "users table" }
+  ],
+  "segments": [
+    { "from": 150, "to": 320, "label": "RSC fetch" },
+    { "from": 336, "to": 540, "label": "API query" },
+    { "from": 556, "to": 640, "label": "Render" }
+  ],
+  "messages": [
+    {
+      "from": "browser",
+      "to": "next",
+      "y": 180,
+      "label": "GET /users (page request)",
+      "variant": "emphasis"
+    },
+    { "from": "next", "to": "rsc", "y": 220, "label": "render UsersPage()", "variant": "default" },
+    {
+      "from": "rsc",
+      "to": "apiclient",
+      "y": 260,
+      "label": "api.get('/users?limit=20')",
+      "variant": "emphasis"
+    },
+    {
+      "from": "apiclient",
+      "to": "api",
+      "y": 300,
+      "label": "GET /api/v1/users?limit=20",
+      "variant": "emphasis"
+    },
+    { "from": "api", "to": "pg", "y": 340, "label": "SELECT FROM users", "variant": "default" },
+    { "from": "pg", "to": "api", "y": 378, "label": "N rows", "variant": "return" },
+    {
+      "from": "api",
+      "to": "apiclient",
+      "y": 416,
+      "label": "200 {data,nextCursor}",
+      "variant": "return"
+    },
+    {
+      "from": "apiclient",
+      "to": "rsc",
+      "y": 454,
+      "label": "PaginatedResponse",
+      "variant": "return"
+    },
+    {
+      "from": "rsc",
+      "to": "next",
+      "y": 492,
+      "label": "RSC payload (server-rendered)",
+      "variant": "default"
+    },
+    { "from": "next", "to": "browser", "y": 530, "label": "HTML stream", "variant": "return" },
+    {
+      "from": "rsc",
+      "to": "browser",
+      "y": 580,
+      "label": "RSC chunk (streaming)",
+      "variant": "dashed"
+    }
+  ],
+  "activations": [
+    { "participant": "next", "from": 174, "to": 526, "type": "backend" },
+    { "participant": "rsc", "from": 214, "to": 586, "type": "backend" },
+    { "participant": "apiclient", "from": 254, "to": 450, "type": "backend" },
+    { "participant": "api", "from": 294, "to": 412, "type": "backend" },
+    { "participant": "pg", "from": 334, "to": 374, "type": "database" }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "RSC direct fetch pattern",
+      "items": [
+        "Server Component faz fetch DIRETO no server (sem useEffect)",
+        "API_BASE_URL env var aponta para apps/api",
+        "Dados serializados via @projeto/shared-types (DTO compartilhado)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Next.js 15 App Router",
+      "items": [
+        "app/users/page.tsx é async function component",
+        "try/catch captura erro (renderiza fallback client-side)",
+        "Streaming RSC: chunks chegam progressivamente"
+      ]
+    },
+    {
+      "dot": "orange",
+      "title": "Shared types contract",
+      "items": [
+        "@projeto/shared-types exporta UserOutputDto + PaginatedResponse<T>",
+        "apps/web e apps/api compartilham tipos sem duplicar",
+        "Build monorepo garante consistência de contrato"
+      ]
+    }
+  ]
+}

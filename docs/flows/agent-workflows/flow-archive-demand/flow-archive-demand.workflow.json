@@ -1,0 +1,171 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Archive Demand — Pipeline de Arquivamento",
+    "subtitle": "5 estágios: validar elegibilidade → coletar metadados → criar archive → atualizar run → validar formato",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "output": "flow-archive-demand.workflow.html",
+    "viewBox": [1200, 320],
+    "views": [
+      {
+        "id": "archive",
+        "label": "Pipeline de arquivamento",
+        "focus": ["eligibility", "collect_meta", "create_archive", "update_run", "lint_format"],
+        "note": "Gate binário: PR MERGED + retro completa + ≥1 melhoria."
+      },
+      {
+        "id": "atomic_commit",
+        "label": "Commit atômico",
+        "focus": ["create_archive", "update_run", "lint_format"],
+        "note": "archive novo + link no run original em 1 commit."
+      }
+    ]
+  },
+  "lanes": [{ "id": "agent", "label": "Archive Operator" }],
+  "phases": [
+    { "id": "validate", "label": "Validar", "fromCol": 0, "toCol": 1, "variant": "emphasis" },
+    { "id": "produce", "label": "Produzir", "fromCol": 2, "toCol": 3, "variant": "default" },
+    { "id": "ship", "label": "Commitar", "fromCol": 4, "toCol": 4, "variant": "dashed" }
+  ],
+  "groups": [
+    {
+      "id": "validate_phase",
+      "label": "Validação de elegibilidade",
+      "lane": "agent",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "produce_phase",
+      "label": "Produção de archive",
+      "lane": "agent",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "default"
+    }
+  ],
+  "mainPath": ["eligibility", "collect_meta", "create_archive", "update_run", "lint_format"],
+  "nodes": [
+    {
+      "id": "eligibility",
+      "lane": "agent",
+      "col": 0,
+      "type": "external",
+      "label": "eligibility",
+      "sublabel": "check 3 gates",
+      "tag": "3 gates",
+      "width": 130
+    },
+    {
+      "id": "collect_meta",
+      "lane": "agent",
+      "col": 1,
+      "type": "backend",
+      "label": "collect meta",
+      "sublabel": "PRs + retro_refs",
+      "tag": "gh pr view",
+      "width": 130
+    },
+    {
+      "id": "create_archive",
+      "lane": "agent",
+      "col": 2,
+      "type": "backend",
+      "label": "create archive",
+      "sublabel": "frontmatter + body",
+      "tag": "archive/<date>-<slug>",
+      "width": 130
+    },
+    {
+      "id": "update_run",
+      "lane": "agent",
+      "col": 3,
+      "type": "backend",
+      "label": "update run",
+      "sublabel": "link no topo",
+      "tag": "> **Archive:** ...",
+      "width": 130
+    },
+    {
+      "id": "lint_format",
+      "lane": "agent",
+      "col": 4,
+      "type": "security",
+      "label": "lint + commit",
+      "sublabel": "archive:lint + atomic",
+      "tag": "1 commit",
+      "width": 130
+    }
+  ],
+  "edges": [
+    {
+      "id": "elig-to-collect",
+      "from": "eligibility",
+      "to": "collect_meta",
+      "label": "elegível (3/3)",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "collect-to-create",
+      "from": "collect_meta",
+      "to": "create_archive",
+      "label": "metadata bundle",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "create-to-update",
+      "from": "create_archive",
+      "to": "update_run",
+      "label": "archive path",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "update-to-lint",
+      "from": "update_run",
+      "to": "lint_format",
+      "label": "link injetado",
+      "variant": "default",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Pipeline Sequencial",
+      "items": [
+        "5 estágios: eligibility → collect → create → update → lint",
+        "Gate binário: 3 condições (PR MERGED + retro + melhoria)",
+        "Commit atômico inclui archive novo + link no run original",
+        "Lint final garante frontmatter canônico"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Gates de Saída",
+      "items": [
+        "gh pr view <N> --json state retorna MERGED",
+        "b<N>-result.md existe em .claude/projects/.../memory/",
+        "improvements tem ≥1 categoria não-zero",
+        "archive:lint valida 8 campos canônicos do frontmatter",
+        "Commit message segue convenção docs(agents): archive demand <slug>"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Quando NÃO usar",
+      "items": [
+        "Demanda ainda em progresso (mesmo pausada)",
+        "Demanda sem b<N>-result.md (sem elegibilidade)",
+        "Bug trivial sem melhorias estruturais (não há demanda)",
+        "Demanda abandonada — usar cancelled/<slug>.md em vez de archive/"
+      ]
+    }
+  ]
+}

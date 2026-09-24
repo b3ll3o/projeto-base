@@ -1,0 +1,133 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Refactor Mode — Refatoração Incremental",
+    "subtitle": "3 estágios TDD-driven: refactorer → test-writer (gate coverage) → code-reviewer",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "output": "flow-refactor-mode.workflow.html",
+    "viewBox": [1100, 320],
+    "views": [
+      {
+        "id": "refactor",
+        "label": "Pipeline de refatoração",
+        "focus": ["refactorer", "test_writer", "code_reviewer"],
+        "note": "NUNCA refatorar sem testes — test-writer é o gate."
+      },
+      {
+        "id": "coverage_gate",
+        "label": "Gate de coverage",
+        "focus": ["refactorer", "test_writer"],
+        "note": "Coverage ≥ 80% ANTES de iniciar refatoração."
+      }
+    ]
+  },
+  "lanes": [{ "id": "agent", "label": "Agent Runtime" }],
+  "phases": [
+    { "id": "refactor", "label": "Refatorar", "fromCol": 0, "toCol": 0, "variant": "emphasis" },
+    { "id": "test_gate", "label": "Test gate", "fromCol": 1, "toCol": 1, "variant": "dashed" },
+    { "id": "review", "label": "Revisar", "fromCol": 2, "toCol": 2, "variant": "default" }
+  ],
+  "groups": [
+    {
+      "id": "refactor_phase",
+      "label": "Refatoração",
+      "lane": "agent",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
+      "id": "test_phase",
+      "label": "Validação de cobertura",
+      "lane": "agent",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": ["refactorer", "test_writer", "code_reviewer"],
+  "nodes": [
+    {
+      "id": "refactorer",
+      "lane": "agent",
+      "col": 0,
+      "type": "external",
+      "label": "refactorer",
+      "sublabel": "preserva behavior",
+      "tag": "apply pattern X",
+      "width": 150
+    },
+    {
+      "id": "test_writer",
+      "lane": "agent",
+      "col": 1,
+      "type": "security",
+      "label": "test-writer",
+      "sublabel": "cov ≥ 80%",
+      "tag": "existing tests",
+      "width": 150
+    },
+    {
+      "id": "code_reviewer",
+      "lane": "agent",
+      "col": 2,
+      "type": "security",
+      "label": "code-reviewer",
+      "sublabel": "behavior preserved",
+      "tag": "0 blockers",
+      "width": 150
+    }
+  ],
+  "edges": [
+    {
+      "id": "refactor-to-test",
+      "from": "refactorer",
+      "to": "test_writer",
+      "label": "refactored code",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "test-to-review",
+      "from": "test_writer",
+      "to": "code_reviewer",
+      "label": "tests passing",
+      "variant": "default",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Pipeline TDD-Driven",
+      "items": [
+        "3 estágios: refactorer → test-writer → code-reviewer",
+        "NUNCA refatorar sem testes — test-writer cria primeiro se faltar",
+        "Coverage ≥ 80% ANTES de iniciar refatoração"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Princípio Central",
+      "items": [
+        "Refatoração preserva comportamento (verificado por testes)",
+        "Todos os testes existentes continuam verdes",
+        "Se faltar testes, test-writer cria ANTES do refactor",
+        "code-reviewer valida que behavior foi preservado"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Quando usar",
+      "items": [
+        "Trigger: 'refatorar', 'simplificar código', 'aplicar pattern X'",
+        "Code smells (complexidade, duplicação)",
+        "Para preparar terreno para nova feature",
+        "NÃO usar para corrigir bug (use bugfix-mode)"
+      ]
+    }
+  ]
+}

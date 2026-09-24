@@ -1,0 +1,181 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "CI stack-code-review — Review em PR",
+    "subtitle": "pull_request → changed .ts/.tsx/.prisma → pnpm stack:review (mode=ci) → stack-review-report.json",
+    "output": "ci-stack-code-review-pr.workflow.html",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "standard",
+    "views": [
+      {
+        "id": "ci-stack",
+        "label": "PR stack-review",
+        "focus": [
+          "pr_event",
+          "checkout",
+          "pnpm_setup",
+          "diff_filter",
+          "stack_review",
+          "report_upload"
+        ],
+        "note": "Review-stack.yml: paths = apps/**/packages/**/tooling/**/.agents/**. Filtra .ts/.tsx/.prisma."
+      }
+    ]
+  },
+  "lanes": [{ "id": "ci", "label": "GitHub Actions (ubuntu-latest)" }],
+  "phases": [
+    { "id": "trigger", "label": "Trigger", "fromCol": 0, "toCol": 0, "variant": "default" },
+    { "id": "setup", "label": "Setup", "fromCol": 1, "toCol": 2, "variant": "default" },
+    { "id": "run", "label": "Run", "fromCol": 3, "toCol": 3, "variant": "emphasis" },
+    { "id": "report", "label": "Report", "fromCol": 4, "toCol": 4, "variant": "security" }
+  ],
+  "mainPath": [
+    "pr_event",
+    "checkout",
+    "pnpm_setup",
+    "diff_filter",
+    "stack_review",
+    "report_upload"
+  ],
+  "nodes": [
+    {
+      "id": "pr_event",
+      "lane": "ci",
+      "col": 0,
+      "type": "external",
+      "label": "pull_request",
+      "sublabel": "PR aberto/atualizado",
+      "tag": "paths: apps/** etc",
+      "width": 170
+    },
+    {
+      "id": "checkout",
+      "lane": "ci",
+      "col": 1,
+      "type": "frontend",
+      "label": "actions/checkout@v4",
+      "sublabel": "fetch-depth: 0 (full history)",
+      "tag": "diff base..HEAD",
+      "width": 200
+    },
+    {
+      "id": "pnpm_setup",
+      "lane": "ci",
+      "col": 2,
+      "type": "frontend",
+      "label": "pnpm install",
+      "sublabel": "frozen-lockfile",
+      "tag": "Node 20 + pnpm cache",
+      "width": 170
+    },
+    {
+      "id": "diff_filter",
+      "lane": "ci",
+      "col": 3,
+      "type": "backend",
+      "label": "grep .ts/.tsx/.prisma",
+      "sublabel": "from git diff",
+      "tag": "/tmp/files.txt NUL",
+      "width": 170,
+      "yOffset": 130
+    },
+    {
+      "id": "stack_review",
+      "lane": "ci",
+      "col": 3,
+      "type": "security",
+      "label": "pnpm stack:review",
+      "sublabel": "mode=ci + out-file",
+      "tag": "stack-review-report.json",
+      "width": 200
+    },
+    {
+      "id": "report_upload",
+      "lane": "ci",
+      "col": 4,
+      "type": "frontend",
+      "label": "upload-artifact@v4",
+      "sublabel": "if: always()",
+      "tag": "stack-review-report",
+      "width": 170
+    }
+  ],
+  "edges": [
+    {
+      "id": "pr-to-checkout",
+      "from": "pr_event",
+      "to": "checkout",
+      "label": "trigger",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "checkout-to-pnpm",
+      "from": "checkout",
+      "to": "pnpm_setup",
+      "label": "node+pnpm",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "pnpm-to-diff",
+      "from": "pnpm_setup",
+      "to": "diff_filter",
+      "label": "deps OK",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "diff-to-stack",
+      "from": "diff_filter",
+      "to": "stack_review",
+      "label": "filtered files",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "stack-to-upload",
+      "from": "stack_review",
+      "to": "report_upload",
+      "label": "report.json",
+      "variant": "default",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Paths filter + grep",
+      "items": [
+        "paths: apps/**, packages/**, tooling/**, .agents/** (excluído docs/**)",
+        "grep -E '\\.(ts|tsx|prisma)$' no git diff",
+        "Output: arquivos críticos APENAS (model + repos + controllers + schema)",
+        "tr '\\n' '\\0' → NUL-separated para sobreviver filenames com espaço"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Pipeline steps",
+      "items": [
+        "actions/checkout@v4 com fetch-depth: 0",
+        "pnpm/action-setup@v3 + setup-node@v4 (Node 20 + pnpm cache)",
+        "pnpm install --frozen-lockfile",
+        "CHANGED_FILES env var = ${{ github.event.pull_request.base.ref }}",
+        "pnpm stack:review --files=... --mode=ci --out-file=stack-review-report.json",
+        "upload-artifact@v4 (if: always()) preserva report"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "mode=ci vs mode=local",
+      "items": [
+        "mode=ci: output JSON estruturado (não TTY)",
+        "modo local: --mode=local imprime findings coloridos no TTY",
+        "Exit code diferente: CI vs local (CI pode falhar se critical findings)",
+        "Report JSON consumido por review router ou ferramenta externa"
+      ]
+    }
+  ]
+}

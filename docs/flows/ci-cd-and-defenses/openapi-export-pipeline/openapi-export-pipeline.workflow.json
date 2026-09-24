@@ -1,0 +1,202 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "OpenAPI Export Pipeline — apps/api",
+    "subtitle": "NestFactory + SwaggerModule → openapi.json (4 paths atuais, Fase 7 controllers)",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "standard",
+    "output": "openapi-export-pipeline.workflow.html",
+    "viewBox": [950, 1140],
+    "views": [
+      {
+        "id": "pipeline",
+        "label": "Export pipeline",
+        "focus": ["test_module", "app_create", "swagger_module", "openapi_json", "prisma_stub"],
+        "note": "Pipeline offline (sem Postgres); SwaggerModule só lê metadados dos decorators."
+      },
+      {
+        "id": "runtime_mirror",
+        "label": "Runtime mirror",
+        "focus": ["set_global_prefix", "openapi_json", "swagger_module"],
+        "note": "setGlobalPrefix('api/v1') espelha main.ts:19 para evitar paths relativos."
+      }
+    ]
+  },
+  "lanes": [
+    { "id": "script", "label": "Script entry" },
+    { "id": "nest", "label": "NestJS DI" },
+    { "id": "output", "label": "Output" }
+  ],
+  "phases": [
+    { "id": "setup", "label": "Setup DI", "fromCol": 0, "toCol": 1, "variant": "emphasis" },
+    { "id": "build", "label": "Build doc", "fromCol": 2, "toCol": 2, "variant": "default" },
+    { "id": "write", "label": "Write JSON", "fromCol": 3, "toCol": 3, "variant": "dashed" }
+  ],
+  "groups": [
+    {
+      "id": "setup_group",
+      "label": "DI + adapter",
+      "lane": "script",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    }
+  ],
+  "mainPath": ["test_module", "app_create", "swagger_module", "openapi_json"],
+  "nodes": [
+    {
+      "id": "test_module",
+      "lane": "script",
+      "col": 0,
+      "type": "external",
+      "label": "pnpm openapi:export",
+      "sublabel": "CLI entry",
+      "tag": "export-openapi.ts",
+      "width": 150
+    },
+    {
+      "id": "prisma_stub",
+      "lane": "script",
+      "col": 0,
+      "type": "security",
+      "label": "PrismaService stub",
+      "sublabel": "Test.overrideProvider",
+      "tag": "useValue({})",
+      "width": 150,
+      "yOffset": 100
+    },
+    {
+      "id": "app_create",
+      "lane": "nest",
+      "col": 1,
+      "type": "backend",
+      "label": "NestApp create",
+      "sublabel": "FastifyAdapter",
+      "tag": "Test.compile()",
+      "width": 150
+    },
+    {
+      "id": "set_global_prefix",
+      "lane": "nest",
+      "col": 2,
+      "type": "backend",
+      "label": "setGlobalPrefix",
+      "sublabel": "'api/v1'",
+      "tag": "mirror main.ts:19",
+      "width": 150
+    },
+    {
+      "id": "swagger_module",
+      "lane": "nest",
+      "col": 2,
+      "type": "backend",
+      "label": "SwaggerModule",
+      "sublabel": "createDocument",
+      "tag": "metadata readers",
+      "width": 150,
+      "yOffset": 100
+    },
+    {
+      "id": "openapi_json",
+      "lane": "output",
+      "col": 3,
+      "type": "external",
+      "label": "openapi.json",
+      "sublabel": "apps/api/",
+      "tag": "4 paths",
+      "width": 150
+    }
+  ],
+  "edges": [
+    {
+      "id": "test-to-stub",
+      "from": "test_module",
+      "to": "prisma_stub",
+      "label": "override",
+      "variant": "dashed",
+      "role": "main"
+    },
+    {
+      "id": "test-to-app",
+      "from": "test_module",
+      "to": "app_create",
+      "label": "Test.createTestingModule",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "stub-to-app",
+      "from": "prisma_stub",
+      "to": "app_create",
+      "label": "no $connect",
+      "variant": "dashed",
+      "role": "main"
+    },
+    {
+      "id": "app-to-prefix",
+      "from": "app_create",
+      "to": "set_global_prefix",
+      "label": "app instance",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "app-to-swagger",
+      "from": "app_create",
+      "to": "swagger_module",
+      "label": "app instance",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "prefix-to-swagger",
+      "from": "set_global_prefix",
+      "to": "swagger_module",
+      "label": "api/v1 prefix",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "swagger-to-json",
+      "from": "swagger_module",
+      "to": "openapi_json",
+      "label": "writeFile",
+      "variant": "emphasis",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Pipeline de Export",
+      "items": [
+        "Usa @nestjs/testing (não NestFactory.create) para evitar $connect do Prisma",
+        "FastifyAdapter (não Express default) — espelha runtime",
+        "setGlobalPrefix('api/v1') espelha main.ts:19",
+        "SwaggerModule.createDocument lê @Api* decorators dos controllers"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Por que stub Prisma",
+      "items": [
+        "AppModule importa PrismaService globalmente",
+        "PrismaService.onModuleInit chama $connect() — em CI sem Postgres falharia",
+        "overrideProvider(PrismaService).useValue({}) bloqueia init",
+        "SwaggerModule só lê metadados — não toca DB"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Output Canônico",
+      "items": [
+        "apps/api/openapi.json (OpenAPI 3)",
+        "4 paths atuais (users CRUD + health + audit history)",
+        "Conforme novos controllers aparecem, paths somem automaticamente",
+        "Consumers: docs site, SDK generator, contract test"
+      ]
+    }
+  ]
+}

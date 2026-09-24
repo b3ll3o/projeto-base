@@ -1,0 +1,150 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "State-Aware Planning — Snapshot Pré-Planner (Camada 0)",
+    "subtitle": "Coleta state → analyze → decide (proceed/block/gap_blocker)",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "output": "flow-state-aware-planning.workflow.html",
+    "views": [
+      {
+        "id": "happy-path",
+        "label": "Caminho proceed",
+        "focus": ["state_aware_planning", "analyze", "decide"],
+        "note": "Snapshot válido → specialist-router (camada 1) é consumido."
+      },
+      {
+        "id": "gap-blocker",
+        "label": "gap_blocker paralelo",
+        "focus": ["decide", "agent_architect"],
+        "note": "Quando gap_detected, agent-architect valida em paralelo."
+      }
+    ]
+  },
+  "lanes": [
+    { "id": "agent", "label": "Skill Layer 0" },
+    { "id": "policy", "label": "Policy / Recovery", "variant": "exception" }
+  ],
+  "phases": [
+    { "id": "collect", "label": "Coleta", "fromCol": 0, "toCol": 0, "variant": "emphasis" },
+    { "id": "consolidate", "label": "Consolida", "fromCol": 1, "toCol": 1, "variant": "emphasis" },
+    { "id": "decide", "label": "Decide", "fromCol": 2, "toCol": 3, "variant": "dashed" }
+  ],
+  "groups": [
+    {
+      "id": "main_pipeline",
+      "label": "Main pipeline",
+      "lane": "agent",
+      "fromCol": 0,
+      "toCol": 2,
+      "variant": "emphasis"
+    },
+    {
+      "id": "exception_path",
+      "label": "Exception path",
+      "lane": "policy",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "security"
+    }
+  ],
+  "mainPath": ["state_aware_planning", "analyze", "decide"],
+  "nodes": [
+    {
+      "id": "state_aware_planning",
+      "lane": "agent",
+      "col": 0,
+      "type": "backend",
+      "label": "state-aware-planning",
+      "sublabel": "coleta .agents/runs/*",
+      "tag": "working tree + deps + preflight",
+      "width": 180
+    },
+    {
+      "id": "analyze",
+      "lane": "agent",
+      "col": 1,
+      "type": "backend",
+      "label": "analyze",
+      "sublabel": "frontmatter canônico",
+      "tag": "state-snapshot-<TS>.md",
+      "width": 180
+    },
+    {
+      "id": "decide",
+      "lane": "agent",
+      "col": 2,
+      "type": "security",
+      "label": "decide",
+      "sublabel": "proceed | block",
+      "tag": "tabela §3 Passo 3",
+      "width": 180
+    },
+    {
+      "id": "agent_architect",
+      "lane": "policy",
+      "col": 3,
+      "type": "security",
+      "label": "agent-architect",
+      "sublabel": "validar lacuna (se gap_blocker)",
+      "tag": "proposta em ≤ 90s",
+      "width": 180
+    }
+  ],
+  "edges": [
+    {
+      "id": "collect-to-analyze",
+      "from": "state_aware_planning",
+      "to": "analyze",
+      "label": "txt inputs",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "analyze-to-decide",
+      "from": "analyze",
+      "to": "decide",
+      "label": "frontmatter ok",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "decide-parallel-architect",
+      "from": "decide",
+      "to": "agent_architect",
+      "label": "gap_blocker?",
+      "variant": "security",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Inspecionados",
+      "items": [
+        ".agents/runs/<TS>-*.txt (working tree, branch, deps)",
+        "Schema frontmatter canônico definido na convenção §3 Passo 2"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Critérios de Done",
+      "items": [
+        "state-snapshot-<TS>.md com body ≤ 30 linhas",
+        "gap_blocker consistente com severity dos gaps",
+        "pnpm ci:preflight passa (cross-refs em .agents/)"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Quando NÃO usar",
+      "items": [
+        "Atividades triviais (typo, dep bump, merge conflict)",
+        "Plano já em curso (snapshot desatualiza rápido)",
+        "Hotfix urgente (bugfix-mode dispensa)"
+      ]
+    }
+  ]
+}

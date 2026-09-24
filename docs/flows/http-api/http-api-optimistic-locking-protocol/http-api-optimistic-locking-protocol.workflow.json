@@ -1,0 +1,210 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Optimistic Locking — RFC 7232 If-Match/ETag handshake",
+    "subtitle": "PATCH/POST /:id/restore/DELETE — cliente envia W/v<n>, servidor compara e responde 200 ou 412",
+    "output": "http-api-optimistic-locking-protocol.workflow.html",
+    "viewBox": [1130, 1000],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "happy-path",
+        "label": "If-Match match → 200",
+        "focus": ["client_get", "etag_v1", "client_patch", "server_match", "etag_v2"],
+        "note": "Cliente carrega resource (recebe ETag v1), edita com If-Match, servidor compara e aceita."
+      },
+      {
+        "id": "stale-path",
+        "label": "If-Match mismatch → 412",
+        "focus": [
+          "client_get",
+          "etag_v1",
+          "another_writer",
+          "etag_v2",
+          "client_patch",
+          "server_412"
+        ],
+        "note": "Outro writer incrementou version; If-Match do cliente é stale → 412."
+      }
+    ]
+  },
+  "lanes": [
+    { "id": "client", "label": "Client" },
+    { "id": "server", "label": "Server (NestJS)" },
+    { "id": "db", "label": "Storage" }
+  ],
+  "phases": [
+    { "id": "read", "label": "Carregar state", "fromCol": 0, "toCol": 1, "variant": "default" },
+    { "id": "mutate", "label": "Mutate", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
+    { "id": "verify", "label": "Verify + 412", "fromCol": 4, "toCol": 5, "variant": "security" }
+  ],
+  "mainPath": ["client_get", "etag_v1", "client_patch", "server_match", "etag_v2"],
+  "nodes": [
+    {
+      "id": "client_get",
+      "lane": "client",
+      "col": 0,
+      "type": "frontend",
+      "label": "GET /users/:id",
+      "sublabel": "load state",
+      "width": 160
+    },
+    {
+      "id": "etag_v1",
+      "lane": "server",
+      "col": 1,
+      "type": "backend",
+      "label": "ETag W/v1",
+      "sublabel": "version=1",
+      "width": 160
+    },
+    {
+      "id": "client_patch",
+      "lane": "client",
+      "col": 2,
+      "type": "frontend",
+      "label": "PATCH + If-Match: W/v1",
+      "sublabel": "expect v1",
+      "width": 200
+    },
+    {
+      "id": "server_match",
+      "lane": "server",
+      "col": 3,
+      "type": "backend",
+      "label": "version()==1? → save",
+      "sublabel": "OK",
+      "width": 200,
+      "tag": "linha 147"
+    },
+    {
+      "id": "etag_v2",
+      "lane": "server",
+      "col": 4,
+      "type": "backend",
+      "label": "ETag W/v2",
+      "sublabel": "version=2",
+      "width": 160
+    },
+    {
+      "id": "another_writer",
+      "lane": "db",
+      "col": 0,
+      "yOffset": 80,
+      "type": "database",
+      "label": "Concurrent writer",
+      "sublabel": "PATCH v→2",
+      "width": 160
+    },
+    {
+      "id": "etag_stale",
+      "lane": "server",
+      "col": 1,
+      "yOffset": 80,
+      "type": "backend",
+      "label": "stored W/v2",
+      "sublabel": "stale client's view",
+      "width": 160
+    },
+    {
+      "id": "server_412",
+      "lane": "server",
+      "col": 5,
+      "yOffset": 80,
+      "type": "security",
+      "label": "412 Precondition Failed",
+      "sublabel": "CONCURRENCY_CONFLICT",
+      "width": 200
+    }
+  ],
+  "edges": [
+    {
+      "from": "client_get",
+      "to": "etag_v1",
+      "label": "200 + ETag",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "from": "etag_v1",
+      "to": "client_patch",
+      "label": "cached",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "from": "client_patch",
+      "to": "server_match",
+      "label": "If-Match: W/v1",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "server_match",
+      "to": "etag_v2",
+      "label": "UPDATE WHERE version=1",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "etag_v2",
+      "to": "client_get",
+      "label": "200 + ETag v2",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "from": "another_writer",
+      "to": "etag_stale",
+      "label": "UPDATE version=2",
+      "variant": "security",
+      "role": "branch"
+    },
+    {
+      "from": "etag_stale",
+      "to": "server_match",
+      "label": "stored v=2 (≠1)",
+      "variant": "security",
+      "role": "branch"
+    },
+    {
+      "from": "server_match",
+      "to": "server_412",
+      "label": "throw ConcurrencyException",
+      "variant": "security",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Why optimistic locking?",
+      "items": [
+        "Lost-update problem: 2 clients carregam v1, ambos patcham, segundo overwrite silenciosamente",
+        "W/v<n> ETag = version fingerprint — RFC 7232 padrão canônico",
+        "UPDATE WHERE version=expected é atômico no Postgres (row lock)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "RFC 7232 If-Match/ETag semantics",
+      "items": [
+        "If-Match ausente → 400 IF_MATCH_REQUIRED (parseIfMatch linha 240)",
+        "If-Match inválido → 400 IF_MATCH_INVALID (regex /^W/\"v(\\d+)\"$/i)",
+        "If-Match correto mas version divergente → 412 PRECONDITION_FAILED"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Client UX on 412",
+      "items": [
+        "Cliente deve refazer GET, mostrar diff, resubmeter",
+        "Sem auto-retry (race condition reincidente)",
+        "apps/web ApiClient trata 412 via ProblemDetails code"
+      ]
+    }
+  ]
+}

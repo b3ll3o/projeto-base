@@ -1,0 +1,152 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Preflight CI Orchestrator",
+    "subtitle": "pnpm ci:preflight → 6 drift checks → CheckResult",
+    "output": "preflight-ci-orchestrator.workflow.html",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "all-checks",
+        "label": "6 checks",
+        "focus": ["entry", "doc", "tsc", "esl", "turb", "pkg", "typ"],
+        "note": "Sequencial: cada check emite CheckResult, agregado no fim."
+      }
+    ]
+  },
+  "lanes": [{ "id": "s", "label": ".tooling/scripts/ci" }],
+  "phases": [
+    { "id": "e", "label": "Entry", "fromCol": 0, "toCol": 0, "variant": "default" },
+    { "id": "r", "label": "Checks (sequencial)", "fromCol": 1, "toCol": 4, "variant": "emphasis" },
+    { "id": "o", "label": "Aggregate", "fromCol": 5, "toCol": 5, "variant": "security" }
+  ],
+  "mainPath": ["entry", "doc", "tsc", "result"],
+  "nodes": [
+    {
+      "id": "entry",
+      "lane": "s",
+      "col": 0,
+      "type": "frontend",
+      "label": "ci:preflight",
+      "sublabel": "shell",
+      "width": 180,
+      "tag": "entry"
+    },
+    {
+      "id": "doc",
+      "lane": "s",
+      "col": 1,
+      "type": "backend",
+      "label": "doc-refs",
+      "sublabel": "~5s",
+      "width": 170
+    },
+    {
+      "id": "tsc",
+      "lane": "s",
+      "col": 2,
+      "type": "backend",
+      "label": "tsconfig-drift",
+      "sublabel": "~3s",
+      "width": 170
+    },
+    {
+      "id": "esl",
+      "lane": "s",
+      "col": 3,
+      "type": "backend",
+      "label": "eslint-drift",
+      "sublabel": "~3s",
+      "width": 170
+    },
+    {
+      "id": "turb",
+      "lane": "s",
+      "col": 4,
+      "type": "backend",
+      "label": "turbo-drift",
+      "sublabel": "~2s",
+      "width": 170
+    },
+    {
+      "id": "pkg",
+      "lane": "s",
+      "col": 1,
+      "type": "backend",
+      "label": "pkg-drift",
+      "sublabel": "~2s",
+      "width": 170,
+      "yOffset": 90
+    },
+    {
+      "id": "typ",
+      "lane": "s",
+      "col": 2,
+      "type": "backend",
+      "label": "types",
+      "sublabel": "~1s",
+      "width": 170,
+      "yOffset": 90
+    },
+    {
+      "id": "result",
+      "lane": "s",
+      "col": 5,
+      "type": "security",
+      "label": "CheckResult",
+      "sublabel": "exit",
+      "width": 170
+    }
+  ],
+  "edges": [
+    { "from": "entry", "to": "doc", "label": "run", "variant": "default", "role": "main" },
+    { "from": "doc", "to": "tsc", "label": "next", "variant": "emphasis", "role": "main" },
+    { "from": "tsc", "to": "result", "label": "first 3", "variant": "emphasis", "role": "main" },
+    { "from": "esl", "to": "result", "label": "merge", "variant": "default", "role": "branch" },
+    { "from": "turb", "to": "result", "label": "merge", "variant": "default", "role": "branch" },
+    { "from": "pkg", "to": "result", "label": "merge", "variant": "default", "role": "branch" },
+    { "from": "typ", "to": "result", "label": "merge", "variant": "default", "role": "branch" }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Por que orchestrator",
+      "items": [
+        "6 checks compartilham fixture + CheckResult (refactor 59eb083)",
+        "Todos detectam drift ESTRUTURAL (não negocio)",
+        "Falha em ~10s antes do quality job consumir runner-time"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Check taxonomy",
+      "items": [
+        "doc-refs: paths relativos quebrados em docs/*.md",
+        "tsconfig-drift: extends divergentes entre tsconfigs",
+        "eslint-drift: regras duplicadas/legadas",
+        "turbo-drift: $schema ausente, nomes invalidos"
+      ]
+    },
+    {
+      "dot": "orange",
+      "title": "Sequencial com fallback",
+      "items": [
+        "Cada check emite CheckResult {ok, drift, duration}",
+        "Falha aborta script com exit 1",
+        "Output guardado em .tooling/.preflight-state.json"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Gatilhos",
+      "items": [
+        ".husky/pre-push (camada 1) — local <10s",
+        ".github/workflows/ci.yml job preflight (camada 2) — ~10s",
+        "Ambos rodam o MESMO script (idempotente)"
+      ]
+    }
+  ]
+}

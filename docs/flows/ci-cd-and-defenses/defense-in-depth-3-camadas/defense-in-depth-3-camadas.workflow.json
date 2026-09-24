@@ -1,0 +1,175 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Defense in Depth — 3 camadas",
+    "subtitle": "Camada 1 (local) → Camada 2 (preflight) → Camada 3 (quality)",
+    "output": "defense-in-depth-3-camadas.workflow.html",
+    "viewBox": [1192, 900],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "all-layers",
+        "label": "3 camadas",
+        "focus": ["local", "preflight", "quality"],
+        "note": "Drift estrutural não é pego por testes/cobertura — defesa em camadas."
+      }
+    ]
+  },
+  "lanes": [
+    { "id": "dev", "label": "Dev (local)" },
+    { "id": "ci", "label": "CI remoto" }
+  ],
+  "phases": [
+    { "id": "c1", "label": "Camada 1", "fromCol": 0, "toCol": 1, "variant": "default" },
+    { "id": "c2", "label": "Camada 2", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
+    { "id": "c3", "label": "Camada 3", "fromCol": 4, "toCol": 5, "variant": "security" }
+  ],
+  "mainPath": ["local", "preflight", "checks", "quality", "merged"],
+  "nodes": [
+    {
+      "id": "local",
+      "lane": "dev",
+      "col": 0,
+      "type": "frontend",
+      "label": "pnpm ci:local",
+      "sublabel": "Camada 1",
+      "width": 180,
+      "tag": "local"
+    },
+    {
+      "id": "preflight",
+      "lane": "ci",
+      "col": 2,
+      "type": "backend",
+      "label": "preflight job",
+      "sublabel": "Camada 2",
+      "width": 180,
+      "tag": "~10s"
+    },
+    {
+      "id": "checks",
+      "lane": "ci",
+      "col": 3,
+      "type": "security",
+      "label": "6 checks",
+      "sublabel": "drift",
+      "width": 180
+    },
+    {
+      "id": "quality",
+      "lane": "ci",
+      "col": 4,
+      "type": "security",
+      "label": "quality",
+      "sublabel": "Camada 3",
+      "width": 180,
+      "tag": "gated"
+    },
+    {
+      "id": "merged",
+      "lane": "ci",
+      "col": 5,
+      "type": "frontend",
+      "label": "merge main",
+      "sublabel": "PR OK",
+      "width": 170
+    },
+    {
+      "id": "blocked",
+      "lane": "ci",
+      "col": 1,
+      "type": "security",
+      "label": "blocked",
+      "sublabel": "exit 1",
+      "width": 170,
+      "yOffset": 120,
+      "tag": "fail-fast"
+    }
+  ],
+  "edges": [
+    {
+      "from": "local",
+      "to": "preflight",
+      "label": "push trigger",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "from": "preflight",
+      "to": "checks",
+      "label": "verify drift",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "checks",
+      "to": "quality",
+      "label": "OK",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "quality",
+      "to": "merged",
+      "label": "PR green",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "local",
+      "to": "blocked",
+      "label": "drift",
+      "variant": "security",
+      "role": "branch"
+    },
+    {
+      "from": "checks",
+      "to": "blocked",
+      "label": "drift",
+      "variant": "security",
+      "role": "branch",
+      "bias": 0.9
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Drift não é capturado por testes",
+      "items": [
+        "Cross-refs quebradas em docs/*.md não quebram build",
+        "tsconfigs divergentes silenciosamente degradam typecheck",
+        "ESLint config legada mascara erros como warnings"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Camada 1 — Local (5-60s)",
+      "items": [
+        "pnpm ci:local roda tudo que CI rodaria em 30-60s",
+        "Devs executam ANTES de git push",
+        "Detecta drift em ~5s vs ~4min no CI remoto"
+      ]
+    },
+    {
+      "dot": "orange",
+      "title": "Camada 2 — Preflight (~10s)",
+      "items": [
+        "Primeiro job do pipeline — demais declaram needs: preflight",
+        "6 checks: doc-refs, tsconfig/eslint/turbo/pkg drift",
+        "Falha rápido antes de consumir runner-time em quality"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Camada 3 — Quality (~4min)",
+      "items": [
+        "Roda APENAS se preflight passou — gate-enforced",
+        "lint+typecheck+test:coverage+test:unit+integration+e2e",
+        "apps/api usa testcontainers (Postgres:16-alpine)"
+      ]
+    }
+  ]
+}

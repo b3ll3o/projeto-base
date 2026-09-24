@@ -1,0 +1,174 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "PATCH /users/:id — Renomear com If-Match optimistic locking",
+    "subtitle": "PATCH /users/:id (If-Match: W/v<n>) → UsersController.parseIfMatch → UserUseCases.atualizarNome → version mismatch → 412 Precondition",
+    "output": "http-api-users-update-name.sequence.html",
+    "viewBox": [1020, 900],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "happy-path",
+        "label": "Optimistic lock OK → 200",
+        "focus": ["client", "controller", "usecases", "repo", "audit", "pg"],
+        "note": "version() === expectedVersion → renomear + UPDATE + audit cascade."
+      },
+      {
+        "id": "version-mismatch-412",
+        "label": "Stale If-Match → 412",
+        "focus": ["client", "controller", "usecases", "repo", "filter"],
+        "note": "version() !== expectedVersion → ApplicationConcurrencyException → 412 Precondition Failed."
+      },
+      {
+        "id": "if-match-invalid-400",
+        "label": "Header ausente/inválido → 400",
+        "focus": ["client", "controller", "filter"],
+        "note": "parseIfMatch rejeita sem W/v<n> → BadRequestException → 400."
+      }
+    ]
+  },
+  "participants": [
+    { "id": "client", "type": "external", "label": "Cliente", "sublabel": "PATCH + If-Match" },
+    { "id": "controller", "type": "backend", "label": "UsersCtrl", "sublabel": "@If-Match" },
+    { "id": "usecases", "type": "backend", "label": "UserUseCases", "sublabel": "atualizarNome()" },
+    { "id": "repo", "type": "backend", "label": "PrismaRepo", "sublabel": "save(user,n-1)" },
+    { "id": "audit", "type": "backend", "label": "AuditService", "sublabel": "record UPDATE" },
+    { "id": "pg", "type": "database", "label": "PostgreSQL", "sublabel": "users + history" },
+    { "id": "filter", "type": "security", "label": "ExcFilter", "sublabel": "RFC 7807" }
+  ],
+  "segments": [
+    { "from": 150, "to": 360, "label": "Parse + load" },
+    { "from": 376, "to": 640, "label": "Renomear + persist + audit" },
+    { "from": 656, "to": 854, "label": "Error paths (412/400)" }
+  ],
+  "messages": [
+    {
+      "from": "client",
+      "to": "controller",
+      "y": 180,
+      "label": "PATCH /users/:id {novoNome}",
+      "variant": "emphasis"
+    },
+    {
+      "from": "controller",
+      "to": "usecases",
+      "y": 220,
+      "label": "parseIfMatch → expectedVersion",
+      "variant": "emphasis"
+    },
+    {
+      "from": "usecases",
+      "to": "repo",
+      "y": 300,
+      "label": "findById(UserId)",
+      "variant": "default"
+    },
+    {
+      "from": "repo",
+      "to": "pg",
+      "y": 340,
+      "label": "SELECT WHERE id AND deletedAt IS NULL",
+      "variant": "default"
+    },
+    { "from": "pg", "to": "repo", "y": 378, "label": "User (version=n)", "variant": "return" },
+    {
+      "from": "usecases",
+      "to": "repo",
+      "y": 416,
+      "label": "renomear + save(user,n-1)",
+      "variant": "emphasis"
+    },
+    {
+      "from": "repo",
+      "to": "pg",
+      "y": 492,
+      "label": "UPDATE WHERE id AND version=n-1",
+      "variant": "default"
+    },
+    { "from": "pg", "to": "repo", "y": 530, "label": "row updated", "variant": "return" },
+    {
+      "from": "usecases",
+      "to": "audit",
+      "y": 568,
+      "label": "pullEvents() → record UPDATE",
+      "variant": "emphasis"
+    },
+    {
+      "from": "audit",
+      "to": "pg",
+      "y": 606,
+      "label": "INSERT INTO users_history",
+      "variant": "default"
+    },
+    {
+      "from": "usecases",
+      "to": "controller",
+      "y": 644,
+      "label": "toUserOutput(user)",
+      "variant": "return"
+    },
+    {
+      "from": "controller",
+      "to": "client",
+      "y": 682,
+      "label": "200 + ETag: W/v(n+1)",
+      "variant": "return"
+    },
+    {
+      "from": "usecases",
+      "to": "filter",
+      "y": 720,
+      "label": "version!=n → 412",
+      "variant": "security"
+    },
+    {
+      "from": "controller",
+      "to": "filter",
+      "y": 760,
+      "label": "IfMatchInvalid → 400",
+      "variant": "security"
+    }
+  ],
+  "activations": [
+    { "participant": "controller", "from": 174, "to": 678, "type": "backend" },
+    { "participant": "usecases", "from": 254, "to": 640, "type": "backend" },
+    { "participant": "repo", "from": 294, "to": 524, "type": "backend" },
+    { "participant": "pg", "from": 334, "to": 524, "type": "database" },
+    { "participant": "audit", "from": 562, "to": 600, "type": "backend" },
+    { "participant": "usecases", "from": 754, "to": 784, "type": "backend" },
+    { "participant": "controller", "from": 794, "to": 824, "type": "backend" },
+    { "participant": "filter", "from": 754, "to": 824, "type": "security" }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Optimistic locking flow (200)",
+      "items": [
+        "parseIfMatch regex /^W/\"v(\\d+)\"$/i aceita 'W/v3' (case-insensitive)",
+        "Curto-circuito em use case: 412 ANTES de tentar mutar (idempotente)",
+        "save(user, expectedVersion=n-1) garante atomicidade (UPDATE ... WHERE version=n-1)"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "RFC 7232 — If-Match semantics",
+      "items": [
+        "412 Precondition Failed = 'estado mudou desde que você viu'",
+        "Header ausente/inválido → 400 (BadRequestException IF_MATCH_REQUIRED/INVALID)",
+        "Sem ETag na resposta → cliente não pode fazer PATCH subsequo (Task 7.6)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Audit cascade em UPDATE",
+      "items": [
+        "UserUpdatedEvent → mapEventNameToOperation('*.updated.v1') → UPDATE",
+        "previousVersion = n-1 (extraído do evento)",
+        "AuditContextStore.run() propaga W3C traceId OTel → correlationId"
+      ]
+    }
+  ]
+}

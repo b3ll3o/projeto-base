@@ -1,0 +1,104 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Monorepo Change — Adicionar/Mover/Remover Pacote ou App",
+    "subtitle": "2 estágios sequenciais: monorepo-specialist → code-reviewer",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "output": "flow-monorepo-change.workflow.html",
+    "views": [
+      {
+        "id": "structural",
+        "label": "Mudança estrutural",
+        "focus": ["monorepo_specialist", "code_reviewer"],
+        "note": "Adicionar/mover/remover app, package ou tooling."
+      },
+      {
+        "id": "isolation",
+        "label": "Isolamento e contratos",
+        "focus": ["code_reviewer"],
+        "note": "Apps isolados + workspace protocol + Changesets."
+      }
+    ]
+  },
+  "lanes": [{ "id": "agent", "label": "Agent Runtime" }],
+  "phases": [
+    { "id": "build", "label": "Spec + build", "fromCol": 0, "toCol": 0, "variant": "emphasis" },
+    { "id": "review", "label": "Review", "fromCol": 1, "toCol": 1, "variant": "dashed" }
+  ],
+  "groups": [
+    {
+      "id": "spec_step",
+      "label": "Spec",
+      "lane": "agent",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
+      "id": "review_step",
+      "label": "Review",
+      "lane": "agent",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": ["monorepo_specialist", "code_reviewer"],
+  "nodes": [
+    {
+      "id": "monorepo_specialist",
+      "lane": "agent",
+      "col": 0,
+      "type": "backend",
+      "label": "monorepo-specialist",
+      "sublabel": "pnpm + turbo + workspaces",
+      "tag": "pnpm-workspace.yaml + turbo.json",
+      "width": 180
+    },
+    {
+      "id": "code_reviewer",
+      "lane": "agent",
+      "col": 1,
+      "type": "security",
+      "label": "code-reviewer",
+      "sublabel": "isolamento + contracts",
+      "tag": "Changesets versiona",
+      "width": 180
+    }
+  ],
+  "edges": [
+    {
+      "id": "specialist-to-review",
+      "from": "monorepo_specialist",
+      "to": "code_reviewer",
+      "label": "diff estrutural",
+      "variant": "emphasis",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Inspecionados",
+      "items": [
+        "pnpm-workspace.yaml (globs alterados)",
+        "turbo.json (pipeline alterado)",
+        "package.json root + workspaces alterados",
+        "Estrutura de apps/, packages/, tooling/"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Bloqueios",
+      "items": [
+        "Apps permanecem isolados (zero imports cruzados)",
+        "Deps compartilhadas via workspace protocol",
+        "Pipelines turbo cacheáveis com outputs declarados",
+        "Versionamento via Changesets (não manual)"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,140 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Release Mode — Bump de Versão do Template",
+    "subtitle": "3 estágios sequenciais: doc-writer → code-reviewer → task-manager",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "output": "flow-release-mode.workflow.html",
+    "views": [
+      {
+        "id": "release",
+        "label": "Pipeline de release",
+        "focus": ["doc_writer", "code_reviewer", "task_manager"],
+        "note": "3 docs versionados + Histórico + branch chore/bump + tag automática."
+      },
+      {
+        "id": "handoffs",
+        "label": "Handoffs + gates",
+        "focus": ["code_reviewer", "task_manager"],
+        "note": "Cada handoff tem expected_output + success_criteria binário."
+      }
+    ]
+  },
+  "lanes": [{ "id": "agent", "label": "Agent Runtime" }],
+  "phases": [
+    { "id": "docs", "label": "Atualizar docs", "fromCol": 0, "toCol": 0, "variant": "emphasis" },
+    { "id": "validate", "label": "Validar", "fromCol": 1, "toCol": 1, "variant": "dashed" },
+    { "id": "task", "label": "Criar task", "fromCol": 2, "toCol": 2, "variant": "default" }
+  ],
+  "groups": [
+    {
+      "id": "docs_phase",
+      "label": "Atualizar docs versionados",
+      "lane": "agent",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
+      "id": "validate_phase",
+      "label": "Validar cross-refs",
+      "lane": "agent",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "dashed"
+    },
+    {
+      "id": "task_phase",
+      "label": "Criar task no backlog",
+      "lane": "agent",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "default"
+    }
+  ],
+  "mainPath": ["doc_writer", "code_reviewer", "task_manager"],
+  "nodes": [
+    {
+      "id": "doc_writer",
+      "lane": "agent",
+      "col": 0,
+      "type": "external",
+      "label": "doc-writer",
+      "sublabel": "3 docs + Histórico",
+      "tag": "MONOREPO/STACK/Versionamento",
+      "width": 170
+    },
+    {
+      "id": "code_reviewer",
+      "lane": "agent",
+      "col": 1,
+      "type": "security",
+      "label": "code-reviewer",
+      "sublabel": "cross-refs consistentes",
+      "tag": "0 broken refs",
+      "width": 170
+    },
+    {
+      "id": "task_manager",
+      "lane": "agent",
+      "col": 2,
+      "type": "backend",
+      "label": "task-manager",
+      "sublabel": "chore/bump-A.B.C",
+      "tag": "priority=high",
+      "width": 170
+    }
+  ],
+  "edges": [
+    {
+      "id": "docs-to-review",
+      "from": "doc_writer",
+      "to": "code_reviewer",
+      "label": "diff dos 3 docs",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "review-to-task",
+      "from": "code_reviewer",
+      "to": "task_manager",
+      "label": "approved + findings",
+      "variant": "default",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Pipeline Sequencial",
+      "items": [
+        "3 estágios: doc-writer → code-reviewer → task-manager",
+        "Cada handoff tem expected_output + success_criteria binário (pass/fail)",
+        "Pré-step: specialist-router valida escopo técnico antes do passo 1"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Gates de Saída",
+      "items": [
+        "3 docs versionados atualizados (MONOREPO/STACK/Versionamento)",
+        "Linha adicionada no Histórico de Versões (Conventional Commits summary)",
+        "Cross-refs validados (pnpm ci:preflight passa)",
+        "Branch chore/bump-A.B.C aberta + PR revisado",
+        "Tag automática criada via .github/workflows/release-template.yml após merge"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Quando NÃO usar",
+      "items": [
+        "Hotfix urgente (use workflow regular + label hotfix)",
+        "Bump de package npm interno (use Changesets, não este workflow)",
+        "Mudança que não envolve bump (use docs-mode)"
+      ]
+    }
+  ]
+}
