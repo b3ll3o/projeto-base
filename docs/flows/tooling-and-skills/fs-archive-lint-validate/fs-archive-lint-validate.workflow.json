@@ -22,17 +22,47 @@
         "focus": ["report"],
         "note": "Exit 0 = ok; 1 = errors de validação; 2 = erro inesperado."
       }
-    ]
+    ],
+    "tier": "nice",
+    "mechanism": "auto",
+    "subject": "archive-lint — validador de frontmatter canônico para archive de demands"
   },
   "lanes": [
-    { "id": "io", "label": "I/O" },
-    { "id": "validate", "label": "Validation" },
-    { "id": "report", "label": "Report" }
+    {
+      "id": "io",
+      "label": "I/O"
+    },
+    {
+      "id": "validate",
+      "label": "Validation"
+    },
+    {
+      "id": "report",
+      "label": "Report"
+    }
   ],
   "phases": [
-    { "id": "scan", "label": "Scan + Parse", "fromCol": 0, "toCol": 1, "variant": "emphasis" },
-    { "id": "validate", "label": "Validate", "fromCol": 2, "toCol": 3, "variant": "default" },
-    { "id": "report", "label": "Report", "fromCol": 4, "toCol": 4, "variant": "dashed" }
+    {
+      "id": "scan",
+      "label": "Scan + Parse",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "validate",
+      "label": "Validate",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "default"
+    },
+    {
+      "id": "report",
+      "label": "Report",
+      "fromCol": 4,
+      "toCol": 4,
+      "variant": "dashed"
+    }
   ],
   "groups": [
     {

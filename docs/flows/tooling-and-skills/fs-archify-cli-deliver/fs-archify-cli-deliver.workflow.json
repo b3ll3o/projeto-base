@@ -23,14 +23,46 @@
         ],
         "note": "5 estágios: args → JSON parse → schema check → render → composition → output."
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "archify CLI render/validate/deliver/compare — pipeline de validação + entrega"
   },
-  "lanes": [{ "id": "cli", "label": "archify CLI" }],
+  "lanes": [
+    {
+      "id": "cli",
+      "label": "archify CLI"
+    }
+  ],
   "phases": [
-    { "id": "parse", "label": "Parse", "fromCol": 0, "toCol": 1, "variant": "default" },
-    { "id": "validate", "label": "Validate", "fromCol": 2, "toCol": 2, "variant": "emphasis" },
-    { "id": "render", "label": "Render", "fromCol": 3, "toCol": 3, "variant": "security" },
-    { "id": "write", "label": "Write", "fromCol": 4, "toCol": 4, "variant": "default" }
+    {
+      "id": "parse",
+      "label": "Parse",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "default"
+    },
+    {
+      "id": "validate",
+      "label": "Validate",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "emphasis"
+    },
+    {
+      "id": "render",
+      "label": "Render",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "security"
+    },
+    {
+      "id": "write",
+      "label": "Write",
+      "fromCol": 4,
+      "toCol": 4,
+      "variant": "default"
+    }
   ],
   "mainPath": [
     "cli_args",

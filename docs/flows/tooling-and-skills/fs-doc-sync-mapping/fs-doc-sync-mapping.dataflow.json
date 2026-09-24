@@ -24,13 +24,24 @@
         ],
         "note": "5 estágios: changed files → heurística code→doc → classificador de ação → 4 ações."
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "auto",
+    "subject": "doc-sync — mapeamento code→doc que dispara ações review/update/create/alert"
   },
   "stages": [
-    { "label": "Trigger" },
-    { "label": "Heurística" },
-    { "label": "Classificador" },
-    { "label": "Ações" }
+    {
+      "label": "Trigger"
+    },
+    {
+      "label": "Heurística"
+    },
+    {
+      "label": "Classificador"
+    },
+    {
+      "label": "Ações"
+    }
   ],
   "nodes": [
     {

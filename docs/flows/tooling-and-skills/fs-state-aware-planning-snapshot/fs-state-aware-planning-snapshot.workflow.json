@@ -21,19 +21,58 @@
         "focus": ["decide_gate"],
         "note": "proceed exige gap_blocker=false + working_tree=clean + preflight=all_passed + coverage≥80%."
       }
-    ]
+    ],
+    "tier": "nice",
+    "mechanism": "hand",
+    "subject": "state-aware-planning — snapshot pré-planner com gates proceed / block / gap_blocker"
   },
   "lanes": [
-    { "id": "preflight", "label": "Pre-validate" },
-    { "id": "collect", "label": "Collect" },
-    { "id": "compose", "label": "Compose" },
-    { "id": "decide", "label": "Decide" }
+    {
+      "id": "preflight",
+      "label": "Pre-validate"
+    },
+    {
+      "id": "collect",
+      "label": "Collect"
+    },
+    {
+      "id": "compose",
+      "label": "Compose"
+    },
+    {
+      "id": "decide",
+      "label": "Decide"
+    }
   ],
   "phases": [
-    { "id": "pre", "label": "Pre-validate", "fromCol": 0, "toCol": 0, "variant": "emphasis" },
-    { "id": "collect", "label": "Collect", "fromCol": 1, "toCol": 2, "variant": "default" },
-    { "id": "compose", "label": "Compose", "fromCol": 3, "toCol": 3, "variant": "default" },
-    { "id": "decide", "label": "Decide", "fromCol": 4, "toCol": 5, "variant": "dashed" }
+    {
+      "id": "pre",
+      "label": "Pre-validate",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
+      "id": "collect",
+      "label": "Collect",
+      "fromCol": 1,
+      "toCol": 2,
+      "variant": "default"
+    },
+    {
+      "id": "compose",
+      "label": "Compose",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "default"
+    },
+    {
+      "id": "decide",
+      "label": "Decide",
+      "fromCol": 4,
+      "toCol": 5,
+      "variant": "dashed"
+    }
   ],
   "groups": [
     {
