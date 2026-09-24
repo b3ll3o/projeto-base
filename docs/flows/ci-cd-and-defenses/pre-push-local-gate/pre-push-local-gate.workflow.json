@@ -101,7 +101,7 @@
       "id": "preflight-to-agg",
       "from": "preflight_entry",
       "to": "result_aggregator",
-      "label": "11 checks",
+      "label": "10 checks",
       "variant": "default",
       "role": "main"
     },
@@ -144,14 +144,14 @@
       "title": "Defense-in-Depth Camada 1",
       "items": [
         "Dispara automaticamente em git push (qualquer branch)",
-        "pnpm ci:preflight roda 11 checks de drift estrutural",
+        "pnpm ci:preflight roda 10 checks de drift estrutural",
         "Idempotente: re-executável sem side effects",
         "Detecta drift EM ~10s vs ~4min no CI remoto"
       ]
     },
     {
       "dot": "cyan",
-      "title": "11 checks cobertos",
+      "title": "10 checks cobertos",
       "items": [
         "doc-refs (docs/, .agents/specs/) cross-references quebradas",
         "tsconfig-drift (strict + noUncheckedIndexedAccess)",

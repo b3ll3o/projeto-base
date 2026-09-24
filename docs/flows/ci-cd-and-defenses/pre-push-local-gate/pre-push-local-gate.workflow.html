@@ -5131,7 +5131,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     <!-- Main Diagram -->
     <div class="diagram-container" data-detail-level="read"
          data-preset-badge-editorial-plate="ARCHIFY / PLATE 04">
-      <svg viewBox="0 0 1146 542" role="img" lang="en" aria-labelledby="archify-diagram-title archify-diagram-description" data-animation="trace" data-preset="signal-flow" data-quality-profile="showcase">
+      <svg viewBox="0 0 1146 542" role="img" lang="en" aria-labelledby="archify-diagram-title archify-diagram-description" data-animation="trace" data-preset="signal-flow" data-quality-profile="standard">
         <title id="archify-diagram-title">Pre-push local gate — Defense Layer 1</title>
         <desc id="archify-diagram-description">Husky pre-push → pnpm ci:preflight → exit gate bloqueia drift estrutural</desc>
         <!-- Definitions -->
@@ -5180,7 +5180,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <path data-edge-from="block" data-edge-to="remote_ci" data-edge-label="abort" data-edge-key="2" data-edge-id="block-halt" data-composition-points="681,380;831.4,380;831.4,284" d="M 681 380 L 831.4 380 L 831.4 284" class="a-security" data-animate="edge" style="--step:6" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
         <path data-edge-from="hook" data-edge-to="preflight_entry" data-edge-label="dispara" data-edge-key="3" data-edge-id="hook-to-preflight" data-composition-points="218,250;269.6,250" d="M 218 250 L 269.6 250" class="a-emphasis" data-animate="edge" style="--step:0" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         <path data-edge-from="push_ok" data-edge-to="remote_ci" data-edge-label="refs visíveis" data-edge-key="4" data-edge-id="ok-to-ci" data-composition-points="596,284;596,300;831.4,300;831.4,284" d="M 596 284 L 596 300 L 831.4 300 L 831.4 284" class="a-default" data-animate="edge" style="--step:8" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="preflight_entry" data-edge-to="result_aggregator" data-edge-label="11 checks" data-edge-key="5" data-edge-id="preflight-to-agg" data-composition-points="369.6,216;369.6,200;20,200;20,380;284.6,380" d="M 369.6 216 L 369.6 200 L 20 200 L 20 380 L 284.6 380" class="a-default" data-animate="edge" style="--step:1" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="preflight_entry" data-edge-to="result_aggregator" data-edge-label="10 checks" data-edge-key="5" data-edge-id="preflight-to-agg" data-composition-points="369.6,216;369.6,200;20,200;20,380;284.6,380" d="M 369.6 216 L 369.6 200 L 20 200 L 20 380 L 284.6 380" class="a-default" data-animate="edge" style="--step:1" stroke-width="1.4" marker-end="url(#arrowhead)"/>
 
         <!-- Nodes -->
         <g id="node-hook" data-node-id="hook" data-node-label=".husky/pre-push" tabindex="0" role="button" aria-label="Focus .husky/pre-push, git push trigger, Dev (local) › Trigger" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="git push trigger" data-node-tag="Husky v9" data-node-context="Dev (local) › Trigger">
@@ -5285,9 +5285,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           <rect x="677.5" y="280" width="72.4" height="14" rx="3" class="c-mask"/>
           <text x="713.7" y="290" class="t-muted" font-size="8" text-anchor="middle">refs visíveis</text>
         </g>
-        <g data-detail="context" data-edge-from="preflight_entry" data-edge-to="result_aggregator" data-edge-label="11 checks" data-edge-key="5" data-edge-id="preflight-to-agg">
+        <g data-detail="context" data-edge-from="preflight_entry" data-edge-to="result_aggregator" data-edge-label="10 checks" data-edge-key="5" data-edge-id="preflight-to-agg">
           <rect x="168.20000000000002" y="180" width="53.199999999999996" height="14" rx="3" class="c-mask"/>
-          <text x="194.8" y="190" class="t-muted" font-size="8" text-anchor="middle">11 checks</text>
+          <text x="194.8" y="190" class="t-muted" font-size="8" text-anchor="middle">10 checks</text>
         </g>
 
         <!-- Legend -->
@@ -5503,7 +5503,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         </div>
         <ul>
           <li>&bull; Dispara automaticamente em git push (qualquer branch)</li>
-          <li>&bull; pnpm ci:preflight roda 11 checks de drift estrutural</li>
+          <li>&bull; pnpm ci:preflight roda 10 checks de drift estrutural</li>
           <li>&bull; Idempotente: re-executável sem side effects</li>
           <li>&bull; Detecta drift EM ~10s vs ~4min no CI remoto</li>
         </ul>
@@ -5512,7 +5512,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       <div class="card">
         <div class="card-header">
           <div class="card-dot cyan"></div>
-          <h3>11 checks cobertos</h3>
+          <h3>10 checks cobertos</h3>
         </div>
         <ul>
           <li>&bull; doc-refs (docs/, .agents/specs/) cross-references quebradas</li>
