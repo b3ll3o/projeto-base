@@ -22,14 +22,46 @@
         ],
         "note": "Review-stack.yml: paths = apps/**/packages/**/tooling/**/.agents/**. Filtra .ts/.tsx/.prisma."
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "CI stack-code-review em PR: review-stack.yml → pnpm stack:review --mode=ci"
   },
-  "lanes": [{ "id": "ci", "label": "GitHub Actions (ubuntu-latest)" }],
+  "lanes": [
+    {
+      "id": "ci",
+      "label": "GitHub Actions (ubuntu-latest)"
+    }
+  ],
   "phases": [
-    { "id": "trigger", "label": "Trigger", "fromCol": 0, "toCol": 0, "variant": "default" },
-    { "id": "setup", "label": "Setup", "fromCol": 1, "toCol": 2, "variant": "default" },
-    { "id": "run", "label": "Run", "fromCol": 3, "toCol": 3, "variant": "emphasis" },
-    { "id": "report", "label": "Report", "fromCol": 4, "toCol": 4, "variant": "security" }
+    {
+      "id": "trigger",
+      "label": "Trigger",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "default"
+    },
+    {
+      "id": "setup",
+      "label": "Setup",
+      "fromCol": 1,
+      "toCol": 2,
+      "variant": "default"
+    },
+    {
+      "id": "run",
+      "label": "Run",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "report",
+      "label": "Report",
+      "fromCol": 4,
+      "toCol": 4,
+      "variant": "security"
+    }
   ],
   "mainPath": [
     "pr_event",

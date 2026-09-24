@@ -35,17 +35,47 @@
         "focus": ["consensus"],
         "note": "Exit 3 se BLOCKING; 1 se IMPORTANT; 0 se OK/INFO-only."
       }
-    ]
+    ],
+    "tier": "nice",
+    "mechanism": "hand",
+    "subject": "review-routing — Orquestrador de Revisão Pós-Task (pendente Fase 3)"
   },
   "lanes": [
-    { "id": "router", "label": "Router" },
-    { "id": "specialists", "label": "Specialists (parallel)" },
-    { "id": "aggregator", "label": "Aggregator" }
+    {
+      "id": "router",
+      "label": "Router"
+    },
+    {
+      "id": "specialists",
+      "label": "Specialists (parallel)"
+    },
+    {
+      "id": "aggregator",
+      "label": "Aggregator"
+    }
   ],
   "phases": [
-    { "id": "classify", "label": "Classificar", "fromCol": 0, "toCol": 0, "variant": "emphasis" },
-    { "id": "review", "label": "Revisar", "fromCol": 1, "toCol": 1, "variant": "default" },
-    { "id": "aggregate", "label": "Agregar", "fromCol": 2, "toCol": 2, "variant": "dashed" }
+    {
+      "id": "classify",
+      "label": "Classificar",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
+      "id": "review",
+      "label": "Revisar",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "default"
+    },
+    {
+      "id": "aggregate",
+      "label": "Agregar",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "dashed"
+    }
   ],
   "groups": [
     {

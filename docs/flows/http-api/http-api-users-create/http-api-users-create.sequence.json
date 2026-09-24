@@ -28,21 +28,71 @@
         "focus": ["client", "controller", "filter"],
         "note": "ZodValidationPipe rejeita DTO antes do handler (defense-in-depth)."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "POST /users — criar user + audit record (INSERT)"
   },
   "participants": [
-    { "id": "client", "type": "external", "label": "Cliente", "sublabel": "POST /users" },
-    { "id": "controller", "type": "backend", "label": "UsersCtrl", "sublabel": "+ ZodPipe" },
-    { "id": "usecases", "type": "backend", "label": "UserUseCases", "sublabel": "+ User agg" },
-    { "id": "repo", "type": "backend", "label": "PrismaRepo", "sublabel": "save(user,0)" },
-    { "id": "audit", "type": "backend", "label": "AuditService", "sublabel": "record INSERT" },
-    { "id": "pg", "type": "database", "label": "PostgreSQL", "sublabel": "users+history" },
-    { "id": "filter", "type": "security", "label": "ExcFilter", "sublabel": "RFC 7807" }
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Cliente",
+      "sublabel": "POST /users"
+    },
+    {
+      "id": "controller",
+      "type": "backend",
+      "label": "UsersCtrl",
+      "sublabel": "+ ZodPipe"
+    },
+    {
+      "id": "usecases",
+      "type": "backend",
+      "label": "UserUseCases",
+      "sublabel": "+ User agg"
+    },
+    {
+      "id": "repo",
+      "type": "backend",
+      "label": "PrismaRepo",
+      "sublabel": "save(user,0)"
+    },
+    {
+      "id": "audit",
+      "type": "backend",
+      "label": "AuditService",
+      "sublabel": "record INSERT"
+    },
+    {
+      "id": "pg",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "users+history"
+    },
+    {
+      "id": "filter",
+      "type": "security",
+      "label": "ExcFilter",
+      "sublabel": "RFC 7807"
+    }
   ],
   "segments": [
-    { "from": 150, "to": 320, "label": "Validation" },
-    { "from": 336, "to": 604, "label": "Persist + audit" },
-    { "from": 620, "to": 880, "label": "Caminhos de erro" }
+    {
+      "from": 150,
+      "to": 320,
+      "label": "Validation"
+    },
+    {
+      "from": 336,
+      "to": 604,
+      "label": "Persist + audit"
+    },
+    {
+      "from": 620,
+      "to": 880,
+      "label": "Caminhos de erro"
+    }
   ],
   "messages": [
     {
@@ -66,8 +116,20 @@
       "label": "save(user, expectedVersion=0)",
       "variant": "emphasis"
     },
-    { "from": "repo", "to": "pg", "y": 340, "label": "INSERT INTO users", "variant": "default" },
-    { "from": "pg", "to": "repo", "y": 378, "label": "row inserted", "variant": "return" },
+    {
+      "from": "repo",
+      "to": "pg",
+      "y": 340,
+      "label": "INSERT INTO users",
+      "variant": "default"
+    },
+    {
+      "from": "pg",
+      "to": "repo",
+      "y": 378,
+      "label": "row inserted",
+      "variant": "return"
+    },
     {
       "from": "usecases",
       "to": "audit",
@@ -82,7 +144,13 @@
       "label": "INSERT INTO users_history",
       "variant": "default"
     },
-    { "from": "audit", "to": "usecases", "y": 492, "label": "ack", "variant": "return" },
+    {
+      "from": "audit",
+      "to": "usecases",
+      "y": 492,
+      "label": "ack",
+      "variant": "return"
+    },
     {
       "from": "usecases",
       "to": "controller",
@@ -127,15 +195,60 @@
     }
   ],
   "activations": [
-    { "participant": "controller", "from": 174, "to": 564, "type": "backend" },
-    { "participant": "usecases", "from": 214, "to": 526, "type": "backend" },
-    { "participant": "repo", "from": 294, "to": 374, "type": "backend" },
-    { "participant": "pg", "from": 334, "to": 374, "type": "database" },
-    { "participant": "audit", "from": 410, "to": 488, "type": "backend" },
-    { "participant": "pg", "from": 448, "to": 488, "type": "database" },
-    { "participant": "usecases", "from": 670, "to": 702, "type": "backend" },
-    { "participant": "controller", "from": 710, "to": 742, "type": "backend" },
-    { "participant": "filter", "from": 670, "to": 826, "type": "security" }
+    {
+      "participant": "controller",
+      "from": 174,
+      "to": 564,
+      "type": "backend"
+    },
+    {
+      "participant": "usecases",
+      "from": 214,
+      "to": 526,
+      "type": "backend"
+    },
+    {
+      "participant": "repo",
+      "from": 294,
+      "to": 374,
+      "type": "backend"
+    },
+    {
+      "participant": "pg",
+      "from": 334,
+      "to": 374,
+      "type": "database"
+    },
+    {
+      "participant": "audit",
+      "from": 410,
+      "to": 488,
+      "type": "backend"
+    },
+    {
+      "participant": "pg",
+      "from": 448,
+      "to": 488,
+      "type": "database"
+    },
+    {
+      "participant": "usecases",
+      "from": 670,
+      "to": 702,
+      "type": "backend"
+    },
+    {
+      "participant": "controller",
+      "from": 710,
+      "to": 742,
+      "type": "backend"
+    },
+    {
+      "participant": "filter",
+      "from": 670,
+      "to": 826,
+      "type": "security"
+    }
   ],
   "cards": [
     {

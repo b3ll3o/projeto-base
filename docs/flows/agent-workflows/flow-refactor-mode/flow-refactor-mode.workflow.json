@@ -22,13 +22,39 @@
         "focus": ["refactorer", "test_writer"],
         "note": "Coverage ≥ 80% ANTES de iniciar refatoração."
       }
-    ]
+    ],
+    "tier": "nice",
+    "mechanism": "auto",
+    "subject": "refactor-mode — Refatoração Incremental (genérico)"
   },
-  "lanes": [{ "id": "agent", "label": "Agent Runtime" }],
+  "lanes": [
+    {
+      "id": "agent",
+      "label": "Agent Runtime"
+    }
+  ],
   "phases": [
-    { "id": "refactor", "label": "Refatorar", "fromCol": 0, "toCol": 0, "variant": "emphasis" },
-    { "id": "test_gate", "label": "Test gate", "fromCol": 1, "toCol": 1, "variant": "dashed" },
-    { "id": "review", "label": "Revisar", "fromCol": 2, "toCol": 2, "variant": "default" }
+    {
+      "id": "refactor",
+      "label": "Refatorar",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
+      "id": "test_gate",
+      "label": "Test gate",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "dashed"
+    },
+    {
+      "id": "review",
+      "label": "Revisar",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "default"
+    }
   ],
   "groups": [
     {

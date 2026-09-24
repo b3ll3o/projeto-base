@@ -23,17 +23,50 @@
         ],
         "note": "3 estágios: EXPLORER → retrospective-capture skill → DOC-WRITER + gate confidence ≥ 70."
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "retrospective-capture — captura de aprendizados em 3 estágios com gate de confidence ≥ 70"
   },
   "lanes": [
-    { "id": "orchestrator", "label": "Orchestrator (retrospective-mode)" },
-    { "id": "skill", "label": "Skill + writer" }
+    {
+      "id": "orchestrator",
+      "label": "Orchestrator (retrospective-mode)"
+    },
+    {
+      "id": "skill",
+      "label": "Skill + writer"
+    }
   ],
   "phases": [
-    { "id": "trigger", "label": "Trigger", "fromCol": 0, "toCol": 0, "variant": "default" },
-    { "id": "explore", "label": "Explore", "fromCol": 1, "toCol": 1, "variant": "default" },
-    { "id": "skill", "label": "Skill apply", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
-    { "id": "gate", "label": "Gate", "fromCol": 4, "toCol": 4, "variant": "security" }
+    {
+      "id": "trigger",
+      "label": "Trigger",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "default"
+    },
+    {
+      "id": "explore",
+      "label": "Explore",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "default"
+    },
+    {
+      "id": "skill",
+      "label": "Skill apply",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "gate",
+      "label": "Gate",
+      "fromCol": 4,
+      "toCol": 4,
+      "variant": "security"
+    }
   ],
   "mainPath": [
     "trigger",

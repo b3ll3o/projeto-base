@@ -21,13 +21,39 @@
         "focus": ["code_reviewer", "task_manager"],
         "note": "Cada handoff tem expected_output + success_criteria binário."
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "auto",
+    "subject": "release-mode — Bump de Versão do Template"
   },
-  "lanes": [{ "id": "agent", "label": "Agent Runtime" }],
+  "lanes": [
+    {
+      "id": "agent",
+      "label": "Agent Runtime"
+    }
+  ],
   "phases": [
-    { "id": "docs", "label": "Atualizar docs", "fromCol": 0, "toCol": 0, "variant": "emphasis" },
-    { "id": "validate", "label": "Validar", "fromCol": 1, "toCol": 1, "variant": "dashed" },
-    { "id": "task", "label": "Criar task", "fromCol": 2, "toCol": 2, "variant": "default" }
+    {
+      "id": "docs",
+      "label": "Atualizar docs",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
+      "id": "validate",
+      "label": "Validar",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "dashed"
+    },
+    {
+      "id": "task",
+      "label": "Criar task",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "default"
+    }
   ],
   "groups": [
     {

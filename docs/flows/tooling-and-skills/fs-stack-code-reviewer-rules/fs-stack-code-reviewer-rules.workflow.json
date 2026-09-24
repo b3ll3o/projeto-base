@@ -21,11 +21,25 @@
         "focus": ["apply_rules"],
         "note": "DDD-Hexagonal / NestJS / Next.js / Prisma / Monorepo — cada um com regras blocker/major/minor."
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "auto",
+    "subject": "stack-code-reviewer — pipeline de regras DDD/NestJS/Prisma/Next.js com gating blocker→exit"
   },
-  "lanes": [{ "id": "agent", "label": "Agent Runtime" }],
+  "lanes": [
+    {
+      "id": "agent",
+      "label": "Agent Runtime"
+    }
+  ],
   "phases": [
-    { "id": "detect", "label": "Detect", "fromCol": 0, "toCol": 0, "variant": "emphasis" },
+    {
+      "id": "detect",
+      "label": "Detect",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
     {
       "id": "review",
       "label": "Review + classify",
@@ -33,7 +47,13 @@
       "toCol": 1,
       "variant": "default"
     },
-    { "id": "gate", "label": "Gate", "fromCol": 2, "toCol": 3, "variant": "dashed" }
+    {
+      "id": "gate",
+      "label": "Gate",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "dashed"
+    }
   ],
   "groups": [
     {

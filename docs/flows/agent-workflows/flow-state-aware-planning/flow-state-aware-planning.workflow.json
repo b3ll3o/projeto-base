@@ -21,16 +21,44 @@
         "focus": ["decide", "agent_architect"],
         "note": "Quando gap_detected, agent-architect valida em paralelo."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "auto",
+    "subject": "state-aware-planning — Snapshot Pré-Planner (Camada 0)"
   },
   "lanes": [
-    { "id": "agent", "label": "Skill Layer 0" },
-    { "id": "policy", "label": "Policy / Recovery", "variant": "exception" }
+    {
+      "id": "agent",
+      "label": "Skill Layer 0"
+    },
+    {
+      "id": "policy",
+      "label": "Policy / Recovery",
+      "variant": "exception"
+    }
   ],
   "phases": [
-    { "id": "collect", "label": "Coleta", "fromCol": 0, "toCol": 0, "variant": "emphasis" },
-    { "id": "consolidate", "label": "Consolida", "fromCol": 1, "toCol": 1, "variant": "emphasis" },
-    { "id": "decide", "label": "Decide", "fromCol": 2, "toCol": 3, "variant": "dashed" }
+    {
+      "id": "collect",
+      "label": "Coleta",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
+      "id": "consolidate",
+      "label": "Consolida",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "decide",
+      "label": "Decide",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "dashed"
+    }
   ],
   "groups": [
     {

@@ -5183,8 +5183,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <!-- Edge paths -->
         <path data-edge-from="ci_docker" data-edge-to="merged" data-edge-label="smoke OK" data-edge-key="0" data-composition-points="1166.4,606;1205.801,606;1205.801,706;1161.4,706" d="M 1166.4 606 L 1205.801 606 L 1205.801 706 L 1161.4 706" class="a-emphasis" data-animate="edge" style="--step:3" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         <path data-edge-from="ci_preflight" data-edge-to="ci_quality" data-edge-label="preflight verde" data-edge-key="1" data-composition-points="458,606;548,606" d="M 458 606 L 548 606" class="a-emphasis" data-animate="edge" style="--step:1" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="ci_quality" data-edge-to="ci_docker" data-edge-label="PR open" data-edge-key="2" data-composition-points="638,640;638,656;1076.4,656;1076.4,640" d="M 638 640 L 638 656 L 1076.4 656 L 1076.4 640" class="a-default" data-animate="edge" style="--step:2" stroke-width="1.4" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="ci_quality" data-edge-to="cobertura" data-edge-label="test:coverage" data-edge-key="3" data-composition-points="638,572;638,402;893.4,402;893.4,580" d="M 638 572 L 638 402 L 893.4 402 L 893.4 580" class="a-emphasis" data-animate="edge" style="--step:8" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="ci_quality" data-edge-to="ci_docker" data-edge-label="PR open" data-edge-key="2" data-composition-points="638,572;638,556;1069.4,556;1069.4,572" d="M 638 572 L 638 556 L 1069.4 556 L 1069.4 572" class="a-default" data-animate="edge" style="--step:2" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="ci_quality" data-edge-to="cobertura" data-edge-label="test:coverage" data-edge-key="3" data-composition-points="638,640;638,656;893.4,656;893.4,640" d="M 638 640 L 638 656 L 893.4 656 L 893.4 640" class="a-emphasis" data-animate="edge" style="--step:8" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         <path data-edge-from="ci_quality" data-edge-to="lint_tc" data-edge-label="lint+typecheck" data-edge-key="4" data-composition-points="638,640;638,706;808.4,706" d="M 638 640 L 638 706 L 808.4 706" class="a-default" data-animate="edge" style="--step:9" stroke-width="1.4" marker-end="url(#arrowhead)"/>
         <path data-edge-from="local_hook" data-edge-to="ci_preflight" data-edge-label="remote trigger" data-edge-key="5" data-composition-points="218,240;373,240;373,572" d="M 218 240 L 373 240 L 373 572" class="a-default" data-animate="edge" style="--step:0" stroke-width="1.4" marker-end="url(#arrowhead)"/>
         <path data-edge-from="local_hook" data-edge-to="drift" data-edge-label="preflight failed" data-edge-key="6" data-composition-points="218,240;234,240;234,414;133,414;133,394" d="M 218 240 L 234 240 L 234 414 L 133 414 L 133 394" class="a-security" data-animate="edge" style="--step:11" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
@@ -5243,26 +5243,28 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <text data-detail="fine" x="638" y="628" class="t-security" font-size="7" text-anchor="middle">needs: preflight</text>
         </g>
 
-        <g id="node-cobertura" data-node-id="cobertura" data-node-label="test:coverage" tabindex="0" role="button" aria-label="Focus test:coverage, gate-enforced, GitHub Actions › Layer 3 — Quality gated" aria-pressed="false" data-node-kind="backend" data-node-sublabel="gate-enforced" data-node-context="GitHub Actions › Layer 3 — Quality gated">
-          <title>test:coverage · gate-enforced · GitHub Actions › Layer 3 — Quality gated</title>
-          <rect x="808.4" y="580" width="170" height="52" rx="6" class="c-mask"/>
-          <rect x="808.4" y="580" width="170" height="52" rx="6" class="c-backend" data-animate="node" style="--step:9" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(814.4 586) scale(0.6875)">
+        <g id="node-cobertura" data-node-id="cobertura" data-node-label="test:coverage" tabindex="0" role="button" aria-label="Focus test:coverage, gate-enforced, GitHub Actions › Layer 3 — Quality gated" aria-pressed="false" data-node-kind="backend" data-node-sublabel="gate-enforced" data-node-tag="scope:generic" data-node-context="GitHub Actions › Layer 3 — Quality gated">
+          <title>test:coverage · gate-enforced · GitHub Actions › Layer 3 — Quality gated · scope:generic</title>
+          <rect x="808.4" y="572" width="170" height="68" rx="6" class="c-mask"/>
+          <rect x="808.4" y="572" width="170" height="68" rx="6" class="c-backend" data-animate="node" style="--step:9" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(814.4 578) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="893.4" y="601" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">test:coverage</text>
-          <text data-detail="context" x="893.4" y="618" class="t-muted" font-size="8" text-anchor="middle">gate-enforced</text>
+          <text data-node-label="" data-detail-anchor="" x="893.4" y="593" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">test:coverage</text>
+          <text data-detail="context" x="893.4" y="610" class="t-muted" font-size="8" text-anchor="middle">gate-enforced</text>
+        <text data-detail="fine" x="893.4" y="628" class="t-backend" font-size="7" text-anchor="middle">scope:generic</text>
         </g>
 
-        <g id="node-lint_tc" data-node-id="lint_tc" data-node-label="lint+typecheck" tabindex="0" role="button" aria-label="Focus lint+typecheck, turbo run, GitHub Actions › Layer 3 — Quality gated" aria-pressed="false" data-node-kind="backend" data-node-sublabel="turbo run" data-node-context="GitHub Actions › Layer 3 — Quality gated">
-          <title>lint+typecheck · turbo run · GitHub Actions › Layer 3 — Quality gated</title>
-          <rect x="808.4" y="680" width="170" height="52" rx="6" class="c-mask"/>
-          <rect x="808.4" y="680" width="170" height="52" rx="6" class="c-backend" data-animate="node" style="--step:10" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(814.4 686) scale(0.6875)">
+        <g id="node-lint_tc" data-node-id="lint_tc" data-node-label="lint+typecheck" tabindex="0" role="button" aria-label="Focus lint+typecheck, turbo run, GitHub Actions › Layer 3 — Quality gated" aria-pressed="false" data-node-kind="backend" data-node-sublabel="turbo run" data-node-tag="scope:generic" data-node-context="GitHub Actions › Layer 3 — Quality gated">
+          <title>lint+typecheck · turbo run · GitHub Actions › Layer 3 — Quality gated · scope:generic</title>
+          <rect x="808.4" y="672" width="170" height="68" rx="6" class="c-mask"/>
+          <rect x="808.4" y="672" width="170" height="68" rx="6" class="c-backend" data-animate="node" style="--step:10" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(814.4 678) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="893.4" y="701" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">lint+typecheck</text>
-          <text data-detail="context" x="893.4" y="718" class="t-muted" font-size="8" text-anchor="middle">turbo run</text>
+          <text data-node-label="" data-detail-anchor="" x="893.4" y="693" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">lint+typecheck</text>
+          <text data-detail="context" x="893.4" y="710" class="t-muted" font-size="8" text-anchor="middle">turbo run</text>
+        <text data-detail="fine" x="893.4" y="728" class="t-backend" font-size="7" text-anchor="middle">scope:generic</text>
         </g>
 
         <g id="node-ci_docker" data-node-id="ci_docker" data-node-label="docker-build-prod" tabindex="0" role="button" aria-label="Focus docker-build-prod, Layer 3B, GitHub Actions › Layer 3B — Docker smoke" aria-pressed="false" data-node-kind="backend" data-node-sublabel="Layer 3B" data-node-tag="PR only" data-node-context="GitHub Actions › Layer 3B — Docker smoke">
@@ -5302,12 +5304,12 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           <text x="503" y="596" class="t-backend" font-size="8" text-anchor="middle">preflight verde</text>
         </g>
         <g data-detail="context" data-edge-from="ci_quality" data-edge-to="ci_docker" data-edge-label="PR open" data-edge-key="2">
-          <rect x="835.4000000000001" y="636" width="43.6" height="14" rx="3" class="c-mask"/>
-          <text x="857.2" y="646" class="t-muted" font-size="8" text-anchor="middle">PR open</text>
+          <rect x="831.9000000000001" y="536" width="43.6" height="14" rx="3" class="c-mask"/>
+          <text x="853.7" y="546" class="t-muted" font-size="8" text-anchor="middle">PR open</text>
         </g>
         <g data-detail="context" data-edge-from="ci_quality" data-edge-to="cobertura" data-edge-label="test:coverage" data-edge-key="3">
-          <rect x="729.5" y="382" width="72.4" height="14" rx="3" class="c-mask"/>
-          <text x="765.7" y="392" class="t-backend" font-size="8" text-anchor="middle">test:coverage</text>
+          <rect x="729.5" y="636" width="72.4" height="14" rx="3" class="c-mask"/>
+          <text x="765.7" y="646" class="t-backend" font-size="8" text-anchor="middle">test:coverage</text>
         </g>
         <g data-detail="context" data-edge-from="ci_quality" data-edge-to="lint_tc" data-edge-label="lint+typecheck" data-edge-key="4">
           <rect x="684.6" y="686" width="77.2" height="14" rx="3" class="c-mask"/>

@@ -22,17 +22,47 @@
         "focus": ["set_global_prefix", "openapi_json", "swagger_module"],
         "note": "setGlobalPrefix('api/v1') espelha main.ts:19 para evitar paths relativos."
       }
-    ]
+    ],
+    "tier": "nice",
+    "mechanism": "hand",
+    "subject": "Pipeline export-openapi: NestFactory + SwaggerModule → apps/api/openapi.json"
   },
   "lanes": [
-    { "id": "script", "label": "Script entry" },
-    { "id": "nest", "label": "NestJS DI" },
-    { "id": "output", "label": "Output" }
+    {
+      "id": "script",
+      "label": "Script entry"
+    },
+    {
+      "id": "nest",
+      "label": "NestJS DI"
+    },
+    {
+      "id": "output",
+      "label": "Output"
+    }
   ],
   "phases": [
-    { "id": "setup", "label": "Setup DI", "fromCol": 0, "toCol": 1, "variant": "emphasis" },
-    { "id": "build", "label": "Build doc", "fromCol": 2, "toCol": 2, "variant": "default" },
-    { "id": "write", "label": "Write JSON", "fromCol": 3, "toCol": 3, "variant": "dashed" }
+    {
+      "id": "setup",
+      "label": "Setup DI",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "build",
+      "label": "Build doc",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "default"
+    },
+    {
+      "id": "write",
+      "label": "Write JSON",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "dashed"
+    }
   ],
   "groups": [
     {

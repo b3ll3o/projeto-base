@@ -29,7 +29,10 @@
         ],
         "note": "Pipeline .tooling/scripts/ci/preflight.ts com 11 checks sequenciais + agregador + gate."
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "auto",
+    "subject": "ci-defense-mode — preflight (defense-in-depth) com 11 checks + gates"
   },
   "layout": {
     "mode": "grid",

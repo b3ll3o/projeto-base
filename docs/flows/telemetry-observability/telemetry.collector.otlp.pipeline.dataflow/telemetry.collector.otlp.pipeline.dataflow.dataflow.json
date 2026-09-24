@@ -16,13 +16,24 @@
         "focus": ["web", "api", "otelcol_recv", "otelcol_proc", "otelcol_exp"],
         "note": "Apps instrumentadas enviam OTLP para o Collector; MVP atual roteia para debug (stdout)."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "OTel Collector pipeline (receiver → processor → exporter)"
   },
   "stages": [
-    { "label": "Apps" },
-    { "label": "Receivers" },
-    { "label": "Processors" },
-    { "label": "Exporters" }
+    {
+      "label": "Apps"
+    },
+    {
+      "label": "Receivers"
+    },
+    {
+      "label": "Processors"
+    },
+    {
+      "label": "Exporters"
+    }
   ],
   "nodes": [
     {

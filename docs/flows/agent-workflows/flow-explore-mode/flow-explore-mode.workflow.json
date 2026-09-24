@@ -16,10 +16,26 @@
         "focus": ["explorer", "map"],
         "note": "Exploração não muta estado — read-only por contrato."
       }
-    ]
+    ],
+    "tier": "nice",
+    "mechanism": "auto",
+    "subject": "explore-mode — Exploração Read-Only (single agent)"
   },
-  "lanes": [{ "id": "agent", "label": "Agent Runtime" }],
-  "phases": [{ "id": "scan", "label": "Mapear", "fromCol": 0, "toCol": 0, "variant": "emphasis" }],
+  "lanes": [
+    {
+      "id": "agent",
+      "label": "Agent Runtime"
+    }
+  ],
+  "phases": [
+    {
+      "id": "scan",
+      "label": "Mapear",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    }
+  ],
   "groups": [
     {
       "id": "scan_phase",

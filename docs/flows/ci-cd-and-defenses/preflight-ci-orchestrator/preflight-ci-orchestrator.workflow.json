@@ -15,13 +15,39 @@
         "focus": ["entry", "doc", "tsc", "esl", "turb", "pkg", "typ"],
         "note": "Sequencial: cada check emite CheckResult, agregado no fim."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "Orquestrador preflight.ts: 10 checks estruturais agregados"
   },
-  "lanes": [{ "id": "s", "label": ".tooling/scripts/ci" }],
+  "lanes": [
+    {
+      "id": "s",
+      "label": ".tooling/scripts/ci"
+    }
+  ],
   "phases": [
-    { "id": "e", "label": "Entry", "fromCol": 0, "toCol": 0, "variant": "default" },
-    { "id": "r", "label": "Checks (sequencial)", "fromCol": 1, "toCol": 4, "variant": "emphasis" },
-    { "id": "o", "label": "Aggregate", "fromCol": 5, "toCol": 5, "variant": "security" }
+    {
+      "id": "e",
+      "label": "Entry",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "default"
+    },
+    {
+      "id": "r",
+      "label": "Checks (sequencial)",
+      "fromCol": 1,
+      "toCol": 4,
+      "variant": "emphasis"
+    },
+    {
+      "id": "o",
+      "label": "Aggregate",
+      "fromCol": 5,
+      "toCol": 5,
+      "variant": "security"
+    }
   ],
   "mainPath": ["entry", "doc", "tsc", "result"],
   "nodes": [
@@ -42,7 +68,8 @@
       "type": "backend",
       "label": "doc-refs",
       "sublabel": "~5s",
-      "width": 170
+      "width": 170,
+      "tag": "scope:docs"
     },
     {
       "id": "tsc",
@@ -51,7 +78,8 @@
       "type": "backend",
       "label": "tsconfig-drift",
       "sublabel": "~3s",
-      "width": 170
+      "width": 170,
+      "tag": "scope:generic"
     },
     {
       "id": "esl",
@@ -60,7 +88,8 @@
       "type": "backend",
       "label": "eslint-drift",
       "sublabel": "~3s",
-      "width": 170
+      "width": 170,
+      "tag": "scope:generic"
     },
     {
       "id": "turb",
@@ -69,7 +98,8 @@
       "type": "backend",
       "label": "turbo-drift",
       "sublabel": "~2s",
-      "width": 170
+      "width": 170,
+      "tag": "scope:generic"
     },
     {
       "id": "pkg",
@@ -79,7 +109,8 @@
       "label": "pkg-drift",
       "sublabel": "~2s",
       "width": 170,
-      "yOffset": 90
+      "yOffset": 90,
+      "tag": "scope:generic"
     },
     {
       "id": "typ",
@@ -89,7 +120,8 @@
       "label": "types",
       "sublabel": "~1s",
       "width": 170,
-      "yOffset": 90
+      "yOffset": 90,
+      "tag": "scope:generic"
     },
     {
       "id": "result",
@@ -98,17 +130,60 @@
       "type": "security",
       "label": "CheckResult",
       "sublabel": "exit",
-      "width": 170
+      "width": 170,
+      "tag": "scope:generic"
     }
   ],
   "edges": [
-    { "from": "entry", "to": "doc", "label": "run", "variant": "default", "role": "main" },
-    { "from": "doc", "to": "tsc", "label": "next", "variant": "emphasis", "role": "main" },
-    { "from": "tsc", "to": "result", "label": "first 3", "variant": "emphasis", "role": "main" },
-    { "from": "esl", "to": "result", "label": "merge", "variant": "default", "role": "branch" },
-    { "from": "turb", "to": "result", "label": "merge", "variant": "default", "role": "branch" },
-    { "from": "pkg", "to": "result", "label": "merge", "variant": "default", "role": "branch" },
-    { "from": "typ", "to": "result", "label": "merge", "variant": "default", "role": "branch" }
+    {
+      "from": "entry",
+      "to": "doc",
+      "label": "run",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "from": "doc",
+      "to": "tsc",
+      "label": "next",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "tsc",
+      "to": "result",
+      "label": "first 3",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "esl",
+      "to": "result",
+      "label": "merge",
+      "variant": "default",
+      "role": "branch"
+    },
+    {
+      "from": "turb",
+      "to": "result",
+      "label": "merge",
+      "variant": "default",
+      "role": "branch"
+    },
+    {
+      "from": "pkg",
+      "to": "result",
+      "label": "merge",
+      "variant": "default",
+      "role": "branch"
+    },
+    {
+      "from": "typ",
+      "to": "result",
+      "label": "merge",
+      "variant": "default",
+      "role": "branch"
+    }
   ],
   "cards": [
     {

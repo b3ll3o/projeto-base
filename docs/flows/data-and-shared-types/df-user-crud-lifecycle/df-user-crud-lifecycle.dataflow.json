@@ -16,14 +16,27 @@
         "focus": ["rsc", "ctrl", "uc", "repo", "pg"],
         "note": "Full-stack CRUD — frontend → RSC → API → Prisma → PostgreSQL."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "User CRUD request/response data flow (HTTP DTO → service → repository → Prisma → PostgreSQL → UserOutput)"
   },
   "stages": [
-    { "label": "Browser" },
-    { "label": "Frontend" },
-    { "label": "API boundary" },
-    { "label": "Domain" },
-    { "label": "Data" }
+    {
+      "label": "Browser"
+    },
+    {
+      "label": "Frontend"
+    },
+    {
+      "label": "API boundary"
+    },
+    {
+      "label": "Domain"
+    },
+    {
+      "label": "Data"
+    }
   ],
   "nodes": [
     {

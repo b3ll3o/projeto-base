@@ -23,13 +23,24 @@
         ],
         "note": "Cada mutação do agregado gera 1 domain event → 1 audit record. Soft-delete gera ADICIONAL 1 archive."
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "Audit lineage — domain events drained from aggregate written to users_history and users_archive"
   },
   "stages": [
-    { "label": "Domain" },
-    { "label": "Drain" },
-    { "label": "Audit svc" },
-    { "label": "Persist" }
+    {
+      "label": "Domain"
+    },
+    {
+      "label": "Drain"
+    },
+    {
+      "label": "Audit svc"
+    },
+    {
+      "label": "Persist"
+    }
   ],
   "nodes": [
     {

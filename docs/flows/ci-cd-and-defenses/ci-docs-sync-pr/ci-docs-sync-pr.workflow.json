@@ -15,14 +15,46 @@
         "focus": ["pr_event", "checkout", "diff_filter", "docs_sync", "report_upload"],
         "note": "Sync-docs.yml: paths = apps/**, packages/**, tooling/**, docs/**, .agents/**. Mode=full gera report."
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "CI docs-sync em PR: sync-docs.yml → pnpm docs:sync --mode=full"
   },
-  "lanes": [{ "id": "ci", "label": "GitHub Actions (ubuntu-latest)" }],
+  "lanes": [
+    {
+      "id": "ci",
+      "label": "GitHub Actions (ubuntu-latest)"
+    }
+  ],
   "phases": [
-    { "id": "trigger", "label": "Trigger", "fromCol": 0, "toCol": 0, "variant": "default" },
-    { "id": "setup", "label": "Setup", "fromCol": 1, "toCol": 2, "variant": "default" },
-    { "id": "run", "label": "Run", "fromCol": 3, "toCol": 3, "variant": "emphasis" },
-    { "id": "report", "label": "Report", "fromCol": 4, "toCol": 4, "variant": "security" }
+    {
+      "id": "trigger",
+      "label": "Trigger",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "default"
+    },
+    {
+      "id": "setup",
+      "label": "Setup",
+      "fromCol": 1,
+      "toCol": 2,
+      "variant": "default"
+    },
+    {
+      "id": "run",
+      "label": "Run",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "report",
+      "label": "Report",
+      "fromCol": 4,
+      "toCol": 4,
+      "variant": "security"
+    }
   ],
   "mainPath": ["pr_event", "checkout", "pnpm_setup", "diff_filter", "docs_sync", "report_upload"],
   "nodes": [

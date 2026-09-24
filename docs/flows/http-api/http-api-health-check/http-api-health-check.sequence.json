@@ -22,7 +22,10 @@
         "focus": ["client", "fastify", "controller", "prisma", "postgres", "filter"],
         "note": "PrismaService.$queryRawUnsafe rejeita → ServiceUnavailableException → GlobalExceptionFilter → RFC 7807."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "Health check — DB liveness via Fastify/NestJS boundary"
   },
   "participants": [
     {
@@ -31,15 +34,30 @@
       "label": "Cliente",
       "sublabel": "curl / HEALTH"
     },
-    { "id": "fastify", "type": "backend", "label": "Fastify", "sublabel": "HTTP server" },
+    {
+      "id": "fastify",
+      "type": "backend",
+      "label": "Fastify",
+      "sublabel": "HTTP server"
+    },
     {
       "id": "controller",
       "type": "backend",
       "label": "HealthCtrl",
       "sublabel": "GET /health v1"
     },
-    { "id": "prisma", "type": "backend", "label": "PrismaSvc", "sublabel": "client wrapper" },
-    { "id": "postgres", "type": "database", "label": "PostgreSQL", "sublabel": "db engine" },
+    {
+      "id": "prisma",
+      "type": "backend",
+      "label": "PrismaSvc",
+      "sublabel": "client wrapper"
+    },
+    {
+      "id": "postgres",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "db engine"
+    },
     {
       "id": "filter",
       "type": "security",
@@ -48,8 +66,16 @@
     }
   ],
   "segments": [
-    { "from": 150, "to": 354, "label": "200 OK (DB up)" },
-    { "from": 372, "to": 696, "label": "503 Service Unavailable (DB down)" }
+    {
+      "from": 150,
+      "to": 354,
+      "label": "200 OK (DB up)"
+    },
+    {
+      "from": 372,
+      "to": 696,
+      "label": "503 Service Unavailable (DB down)"
+    }
   ],
   "messages": [
     {
@@ -73,9 +99,27 @@
       "label": "$queryRawUnsafe('SELECT 1')",
       "variant": "emphasis"
     },
-    { "from": "prisma", "to": "postgres", "y": 306, "label": "SELECT 1", "variant": "default" },
-    { "from": "postgres", "to": "prisma", "y": 338, "label": "1 row", "variant": "return" },
-    { "from": "prisma", "to": "controller", "y": 360, "label": "resolve()", "variant": "return" },
+    {
+      "from": "prisma",
+      "to": "postgres",
+      "y": 306,
+      "label": "SELECT 1",
+      "variant": "default"
+    },
+    {
+      "from": "postgres",
+      "to": "prisma",
+      "y": 338,
+      "label": "1 row",
+      "variant": "return"
+    },
+    {
+      "from": "prisma",
+      "to": "controller",
+      "y": 360,
+      "label": "resolve()",
+      "variant": "return"
+    },
     {
       "from": "controller",
       "to": "client",
@@ -134,15 +178,60 @@
     }
   ],
   "activations": [
-    { "participant": "fastify", "from": 174, "to": 222, "type": "backend" },
-    { "participant": "controller", "from": 216, "to": 396, "type": "backend" },
-    { "participant": "prisma", "from": 258, "to": 364, "type": "backend" },
-    { "participant": "postgres", "from": 300, "to": 344, "type": "database" },
-    { "participant": "fastify", "from": 438, "to": 486, "type": "backend" },
-    { "participant": "controller", "from": 480, "to": 664, "type": "backend" },
-    { "participant": "prisma", "from": 522, "to": 618, "type": "backend" },
-    { "participant": "postgres", "from": 564, "to": 618, "type": "database" },
-    { "participant": "filter", "from": 624, "to": 676, "type": "security" }
+    {
+      "participant": "fastify",
+      "from": 174,
+      "to": 222,
+      "type": "backend"
+    },
+    {
+      "participant": "controller",
+      "from": 216,
+      "to": 396,
+      "type": "backend"
+    },
+    {
+      "participant": "prisma",
+      "from": 258,
+      "to": 364,
+      "type": "backend"
+    },
+    {
+      "participant": "postgres",
+      "from": 300,
+      "to": 344,
+      "type": "database"
+    },
+    {
+      "participant": "fastify",
+      "from": 438,
+      "to": 486,
+      "type": "backend"
+    },
+    {
+      "participant": "controller",
+      "from": 480,
+      "to": 664,
+      "type": "backend"
+    },
+    {
+      "participant": "prisma",
+      "from": 522,
+      "to": 618,
+      "type": "backend"
+    },
+    {
+      "participant": "postgres",
+      "from": 564,
+      "to": 618,
+      "type": "database"
+    },
+    {
+      "participant": "filter",
+      "from": 624,
+      "to": 676,
+      "type": "security"
+    }
   ],
   "cards": [
     {

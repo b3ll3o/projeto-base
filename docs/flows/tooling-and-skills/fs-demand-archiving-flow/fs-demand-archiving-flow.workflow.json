@@ -32,19 +32,58 @@
         "focus": ["frontmatter"],
         "note": "archived_at, original_run, demand_slug, prs[], retro_refs[], improvements{9 keys}, status='archived', tags[]."
       }
-    ]
+    ],
+    "tier": "nice",
+    "mechanism": "hand",
+    "subject": "archive-demand — pipeline de elegibilidade + commit atômico"
   },
   "lanes": [
-    { "id": "elig", "label": "Eligibility" },
-    { "id": "collect", "label": "Collect" },
-    { "id": "generate", "label": "Generate" },
-    { "id": "persist", "label": "Persist" }
+    {
+      "id": "elig",
+      "label": "Eligibility"
+    },
+    {
+      "id": "collect",
+      "label": "Collect"
+    },
+    {
+      "id": "generate",
+      "label": "Generate"
+    },
+    {
+      "id": "persist",
+      "label": "Persist"
+    }
   ],
   "phases": [
-    { "id": "verify", "label": "Eligibility", "fromCol": 0, "toCol": 1, "variant": "emphasis" },
-    { "id": "collect", "label": "Collect", "fromCol": 2, "toCol": 2, "variant": "default" },
-    { "id": "generate", "label": "Generate", "fromCol": 3, "toCol": 4, "variant": "default" },
-    { "id": "persist", "label": "Persist", "fromCol": 5, "toCol": 5, "variant": "dashed" }
+    {
+      "id": "verify",
+      "label": "Eligibility",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "collect",
+      "label": "Collect",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "default"
+    },
+    {
+      "id": "generate",
+      "label": "Generate",
+      "fromCol": 3,
+      "toCol": 4,
+      "variant": "default"
+    },
+    {
+      "id": "persist",
+      "label": "Persist",
+      "fromCol": 5,
+      "toCol": 5,
+      "variant": "dashed"
+    }
   ],
   "groups": [
     {

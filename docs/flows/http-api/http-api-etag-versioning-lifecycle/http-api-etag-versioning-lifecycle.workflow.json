@@ -22,16 +22,43 @@
         "focus": ["v2", "v4"],
         "note": "If-Match: W/\"u-2\" → 200 OK (novo ETag) ou 412 Precondition Failed."
       }
-    ]
+    ],
+    "tier": "nice",
+    "mechanism": "hand",
+    "subject": "Lifecycle — User aggregate version/ETag transitions"
   },
   "lanes": [
-    { "id": "active", "label": "Active" },
-    { "id": "deleted", "label": "Soft-Deleted" }
+    {
+      "id": "active",
+      "label": "Active"
+    },
+    {
+      "id": "deleted",
+      "label": "Soft-Deleted"
+    }
   ],
   "phases": [
-    { "id": "create", "label": "Create + Mutate", "fromCol": 0, "toCol": 1, "variant": "emphasis" },
-    { "id": "delete", "label": "Delete + Restore", "fromCol": 2, "toCol": 3, "variant": "dashed" },
-    { "id": "archive", "label": "Archive", "fromCol": 4, "toCol": 4, "variant": "default" }
+    {
+      "id": "create",
+      "label": "Create + Mutate",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "delete",
+      "label": "Delete + Restore",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "dashed"
+    },
+    {
+      "id": "archive",
+      "label": "Archive",
+      "fromCol": 4,
+      "toCol": 4,
+      "variant": "default"
+    }
   ],
   "groups": [
     {

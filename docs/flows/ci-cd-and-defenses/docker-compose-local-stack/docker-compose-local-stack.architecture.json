@@ -21,7 +21,10 @@
         "focus": ["otel_collector", "api"],
         "note": "Profile opcional: OTLP gRPC 4317 + OTLP HTTP 4318 (apenas quando --profile observability)."
       }
-    ]
+    ],
+    "tier": "nice",
+    "mechanism": "hand",
+    "subject": "Stack local Docker Compose: postgres + api + web + otel-collector (observability profile)"
   },
   "layout": {
     "mode": "grid",

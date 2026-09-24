@@ -21,12 +21,32 @@
         "focus": ["controller", "zod_pipe", "schema"],
         "note": "Se safeParse.success → data tipado segue para use case."
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "Cross-cutting — Zod validation na borda HTTP (defense-in-depth)"
   },
-  "lanes": [{ "id": "http", "label": "HTTP layer" }],
+  "lanes": [
+    {
+      "id": "http",
+      "label": "HTTP layer"
+    }
+  ],
   "phases": [
-    { "id": "validate", "label": "Validate", "fromCol": 0, "toCol": 1, "variant": "emphasis" },
-    { "id": "respond", "label": "Respond", "fromCol": 2, "toCol": 4, "variant": "dashed" }
+    {
+      "id": "validate",
+      "label": "Validate",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "respond",
+      "label": "Respond",
+      "fromCol": 2,
+      "toCol": 4,
+      "variant": "dashed"
+    }
   ],
   "groups": [
     {

@@ -30,19 +30,58 @@
         "focus": ["next_build", "copy_standalone", "start_node"],
         "note": "next.config: output:'standalone' + outputFileTracingIncludes para OTel. Output: apps/web/.next/standalone + server.js."
       }
-    ]
+    ],
+    "tier": "nice",
+    "mechanism": "hand",
+    "subject": "Web App: Next.js Standalone Build Pipeline (Docker)"
   },
   "lanes": [
-    { "id": "base", "label": "Base" },
-    { "id": "deps", "label": "Deps" },
-    { "id": "build", "label": "Build" },
-    { "id": "runtime", "label": "Runtime" }
+    {
+      "id": "base",
+      "label": "Base"
+    },
+    {
+      "id": "deps",
+      "label": "Deps"
+    },
+    {
+      "id": "build",
+      "label": "Build"
+    },
+    {
+      "id": "runtime",
+      "label": "Runtime"
+    }
   ],
   "phases": [
-    { "id": "base", "label": "Base image", "fromCol": 0, "toCol": 0, "variant": "emphasis" },
-    { "id": "deps", "label": "Dependencies", "fromCol": 1, "toCol": 2, "variant": "default" },
-    { "id": "build", "label": "Build artifacts", "fromCol": 3, "toCol": 4, "variant": "emphasis" },
-    { "id": "runtime", "label": "Runtime", "fromCol": 5, "toCol": 5, "variant": "dashed" }
+    {
+      "id": "base",
+      "label": "Base image",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
+      "id": "deps",
+      "label": "Dependencies",
+      "fromCol": 1,
+      "toCol": 2,
+      "variant": "default"
+    },
+    {
+      "id": "build",
+      "label": "Build artifacts",
+      "fromCol": 3,
+      "toCol": 4,
+      "variant": "emphasis"
+    },
+    {
+      "id": "runtime",
+      "label": "Runtime",
+      "fromCol": 5,
+      "toCol": 5,
+      "variant": "dashed"
+    }
   ],
   "groups": [
     {

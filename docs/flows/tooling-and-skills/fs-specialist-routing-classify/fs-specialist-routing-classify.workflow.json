@@ -28,16 +28,38 @@
         "focus": ["triage", "agent_architect", "dispatch_router"],
         "note": "BLOQUEAR planning; agent-architect cria specialist; re-despachar router."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "auto",
+    "subject": "specialist-routing — classificador headless + gate de gap_detected"
   },
   "lanes": [
-    { "id": "controller", "label": "Controller (humano)" },
-    { "id": "router", "label": "Specialist Router" },
-    { "id": "downstream", "label": "Downstream (writing-plans)" },
-    { "id": "policy", "label": "Gap / Recovery", "variant": "exception" }
+    {
+      "id": "controller",
+      "label": "Controller (humano)"
+    },
+    {
+      "id": "router",
+      "label": "Specialist Router"
+    },
+    {
+      "id": "downstream",
+      "label": "Downstream (writing-plans)"
+    },
+    {
+      "id": "policy",
+      "label": "Gap / Recovery",
+      "variant": "exception"
+    }
   ],
   "phases": [
-    { "id": "checks", "label": "Pre-checks", "fromCol": 0, "toCol": 0, "variant": "emphasis" },
+    {
+      "id": "checks",
+      "label": "Pre-checks",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
     {
       "id": "dispatch",
       "label": "Dispatch + interpret",
@@ -45,7 +67,13 @@
       "toCol": 2,
       "variant": "emphasis"
     },
-    { "id": "decide", "label": "Triage + integrate", "fromCol": 3, "toCol": 4, "variant": "dashed" }
+    {
+      "id": "decide",
+      "label": "Triage + integrate",
+      "fromCol": 3,
+      "toCol": 4,
+      "variant": "dashed"
+    }
   ],
   "groups": [
     {

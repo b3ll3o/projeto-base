@@ -22,20 +22,66 @@
         "focus": ["client", "controller", "usecases", "filter"],
         "note": "User não existe ou já deletado → 404; versão mismatch → 412."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "DELETE /users/:id — soft delete + audit (DELETE op + archive)"
   },
   "participants": [
-    { "id": "client", "type": "external", "label": "Cliente", "sublabel": "DELETE + If-Match" },
-    { "id": "controller", "type": "backend", "label": "UsersCtrl", "sublabel": "@HttpCode 204" },
-    { "id": "usecases", "type": "backend", "label": "UserUseCases", "sublabel": "softDelete()" },
-    { "id": "repo", "type": "backend", "label": "PrismaRepo", "sublabel": "save(user,n-1)" },
-    { "id": "audit", "type": "backend", "label": "AuditService", "sublabel": "record + archive" },
-    { "id": "pg", "type": "database", "label": "PostgreSQL", "sublabel": "tables x3" },
-    { "id": "filter", "type": "security", "label": "ExcFilter", "sublabel": "RFC 7807" }
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Cliente",
+      "sublabel": "DELETE + If-Match"
+    },
+    {
+      "id": "controller",
+      "type": "backend",
+      "label": "UsersCtrl",
+      "sublabel": "@HttpCode 204"
+    },
+    {
+      "id": "usecases",
+      "type": "backend",
+      "label": "UserUseCases",
+      "sublabel": "softDelete()"
+    },
+    {
+      "id": "repo",
+      "type": "backend",
+      "label": "PrismaRepo",
+      "sublabel": "save(user,n-1)"
+    },
+    {
+      "id": "audit",
+      "type": "backend",
+      "label": "AuditService",
+      "sublabel": "record + archive"
+    },
+    {
+      "id": "pg",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "tables x3"
+    },
+    {
+      "id": "filter",
+      "type": "security",
+      "label": "ExcFilter",
+      "sublabel": "RFC 7807"
+    }
   ],
   "segments": [
-    { "from": 150, "to": 480, "label": "Mark deleted + persist" },
-    { "from": 456, "to": 770, "label": "Audit record + archive" }
+    {
+      "from": 150,
+      "to": 480,
+      "label": "Mark deleted + persist"
+    },
+    {
+      "from": 456,
+      "to": 770,
+      "label": "Audit record + archive"
+    }
   ],
   "messages": [
     {
@@ -66,7 +112,13 @@
       "label": "SELECT WHERE id AND deletedAt IS NULL",
       "variant": "default"
     },
-    { "from": "pg", "to": "repo", "y": 338, "label": "User (version=n)", "variant": "return" },
+    {
+      "from": "pg",
+      "to": "repo",
+      "y": 338,
+      "label": "User (version=n)",
+      "variant": "return"
+    },
     {
       "from": "usecases",
       "to": "repo",
@@ -125,12 +177,42 @@
     }
   ],
   "activations": [
-    { "participant": "controller", "from": 174, "to": 638, "type": "backend" },
-    { "participant": "usecases", "from": 214, "to": 670, "type": "backend" },
-    { "participant": "repo", "from": 254, "to": 446, "type": "backend" },
-    { "participant": "pg", "from": 294, "to": 446, "type": "database" },
-    { "participant": "audit", "from": 484, "to": 598, "type": "backend" },
-    { "participant": "filter", "from": 714, "to": 746, "type": "security" }
+    {
+      "participant": "controller",
+      "from": 174,
+      "to": 638,
+      "type": "backend"
+    },
+    {
+      "participant": "usecases",
+      "from": 214,
+      "to": 670,
+      "type": "backend"
+    },
+    {
+      "participant": "repo",
+      "from": 254,
+      "to": 446,
+      "type": "backend"
+    },
+    {
+      "participant": "pg",
+      "from": 294,
+      "to": 446,
+      "type": "database"
+    },
+    {
+      "participant": "audit",
+      "from": 484,
+      "to": 598,
+      "type": "backend"
+    },
+    {
+      "participant": "filter",
+      "from": 714,
+      "to": 746,
+      "type": "security"
+    }
   ],
   "cards": [
     {

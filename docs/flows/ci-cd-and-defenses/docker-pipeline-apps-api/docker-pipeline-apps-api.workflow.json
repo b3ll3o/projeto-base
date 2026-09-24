@@ -15,16 +15,43 @@
         "focus": ["base_img", "fetch", "compile"],
         "note": "4 stages em /home/leo/Documentos/projetos/base/apps/api/Dockerfile: base, dev, builder, prod."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "Pipeline Docker multi-stage apps/api: base → dev → builder → prod + healthcheck"
   },
   "lanes": [
-    { "id": "build", "label": "Build phases" },
-    { "id": "artifacts", "label": "Artifacts" }
+    {
+      "id": "build",
+      "label": "Build phases"
+    },
+    {
+      "id": "artifacts",
+      "label": "Artifacts"
+    }
   ],
   "phases": [
-    { "id": "install", "label": "Install deps", "fromCol": 0, "toCol": 1, "variant": "default" },
-    { "id": "build_run", "label": "Compile", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
-    { "id": "finalize", "label": "Prod finalize", "fromCol": 4, "toCol": 5, "variant": "security" }
+    {
+      "id": "install",
+      "label": "Install deps",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "default"
+    },
+    {
+      "id": "build_run",
+      "label": "Compile",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "finalize",
+      "label": "Prod finalize",
+      "fromCol": 4,
+      "toCol": 5,
+      "variant": "security"
+    }
   ],
   "mainPath": ["base_img", "fetch", "install", "compile", "prod_img", "node_check"],
   "nodes": [
@@ -55,7 +82,8 @@
       "type": "backend",
       "label": "pnpm install",
       "sublabel": "--filter",
-      "width": 150
+      "width": 150,
+      "tag": "scope:generic"
     },
     {
       "id": "compile",
@@ -84,7 +112,8 @@
       "type": "cloud",
       "label": "dist/",
       "sublabel": "main.js",
-      "width": 150
+      "width": 150,
+      "tag": "scope:generic"
     },
     {
       "id": "copy_prisma",
@@ -93,7 +122,8 @@
       "type": "cloud",
       "label": "prisma/",
       "sublabel": "schema",
-      "width": 150
+      "width": 150,
+      "tag": "scope:generic"
     },
     {
       "id": "node_check",

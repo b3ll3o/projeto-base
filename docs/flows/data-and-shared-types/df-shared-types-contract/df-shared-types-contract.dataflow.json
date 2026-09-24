@@ -31,13 +31,24 @@
         "focus": ["api_consume", "web_consume"],
         "note": "apps/api consome ProblemDetailsDto+Error via global-exception.filter. apps/web ainda não consome (planejado)."
       }
-    ]
+    ],
+    "tier": "nice",
+    "mechanism": "hand",
+    "subject": "Shared-types package contract flow — @projeto/shared-types exports consumed by apps/api (and planned apps/web)"
   },
   "stages": [
-    { "label": "Source TS" },
-    { "label": "Re-export" },
-    { "label": "API consumer" },
-    { "label": "Web consumer" }
+    {
+      "label": "Source TS"
+    },
+    {
+      "label": "Re-export"
+    },
+    {
+      "label": "API consumer"
+    },
+    {
+      "label": "Web consumer"
+    }
   ],
   "nodes": [
     {

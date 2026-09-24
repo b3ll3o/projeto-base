@@ -23,7 +23,10 @@
         ],
         "note": "ApiClient é instanciado per-request em RSC e via DI nos Client Components (não-acoplado a React context)."
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "Web App: API Client Component Topology"
   },
   "layout": {
     "mode": "grid",

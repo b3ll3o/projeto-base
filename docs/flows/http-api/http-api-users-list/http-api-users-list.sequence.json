@@ -22,19 +22,60 @@
         "focus": ["client", "controller", "usecases", "repo"],
         "note": "includeDeleted=TrUe|TRUE|1 case-insensitive normalized to boolean true."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "GET /users — listar paginado por cursor (includeDeleted case-insensitive)"
   },
   "participants": [
-    { "id": "client", "type": "external", "label": "Cliente", "sublabel": "GET /users" },
-    { "id": "controller", "type": "backend", "label": "UsersCtrl", "sublabel": "@Query()" },
-    { "id": "usecases", "type": "backend", "label": "UserUseCases", "sublabel": "listar()" },
-    { "id": "repo", "type": "backend", "label": "PrismaRepo", "sublabel": "list(opts)" },
-    { "id": "cursor", "type": "backend", "label": "CursorEnc", "sublabel": "encode/decode" },
-    { "id": "pg", "type": "database", "label": "PostgreSQL", "sublabel": "users table" }
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Cliente",
+      "sublabel": "GET /users"
+    },
+    {
+      "id": "controller",
+      "type": "backend",
+      "label": "UsersCtrl",
+      "sublabel": "@Query()"
+    },
+    {
+      "id": "usecases",
+      "type": "backend",
+      "label": "UserUseCases",
+      "sublabel": "listar()"
+    },
+    {
+      "id": "repo",
+      "type": "backend",
+      "label": "PrismaRepo",
+      "sublabel": "list(opts)"
+    },
+    {
+      "id": "cursor",
+      "type": "backend",
+      "label": "CursorEnc",
+      "sublabel": "encode/decode"
+    },
+    {
+      "id": "pg",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "users table"
+    }
   ],
   "segments": [
-    { "from": 150, "to": 360, "label": "Parse + validate input" },
-    { "from": 376, "to": 620, "label": "Query + cursor encode" }
+    {
+      "from": 150,
+      "to": 360,
+      "label": "Parse + validate input"
+    },
+    {
+      "from": 376,
+      "to": 620,
+      "label": "Query + cursor encode"
+    }
   ],
   "messages": [
     {
@@ -51,7 +92,13 @@
       "label": "listar({cursor,limit,includeDeleted})",
       "variant": "emphasis"
     },
-    { "from": "usecases", "to": "repo", "y": 300, "label": "list(opts)", "variant": "default" },
+    {
+      "from": "usecases",
+      "to": "repo",
+      "y": 300,
+      "label": "list(opts)",
+      "variant": "default"
+    },
     {
       "from": "repo",
       "to": "cursor",
@@ -73,7 +120,13 @@
       "label": "SELECT * FROM users WHERE...",
       "variant": "default"
     },
-    { "from": "pg", "to": "repo", "y": 494, "label": "N rows + total", "variant": "return" },
+    {
+      "from": "pg",
+      "to": "repo",
+      "y": 494,
+      "label": "N rows + total",
+      "variant": "return"
+    },
     {
       "from": "repo",
       "to": "cursor",
@@ -104,11 +157,36 @@
     }
   ],
   "activations": [
-    { "participant": "controller", "from": 174, "to": 642, "type": "backend" },
-    { "participant": "usecases", "from": 294, "to": 604, "type": "backend" },
-    { "participant": "repo", "from": 334, "to": 566, "type": "backend" },
-    { "participant": "cursor", "from": 374, "to": 528, "type": "backend" },
-    { "participant": "pg", "from": 450, "to": 490, "type": "database" }
+    {
+      "participant": "controller",
+      "from": 174,
+      "to": 642,
+      "type": "backend"
+    },
+    {
+      "participant": "usecases",
+      "from": 294,
+      "to": 604,
+      "type": "backend"
+    },
+    {
+      "participant": "repo",
+      "from": 334,
+      "to": 566,
+      "type": "backend"
+    },
+    {
+      "participant": "cursor",
+      "from": 374,
+      "to": 528,
+      "type": "backend"
+    },
+    {
+      "participant": "pg",
+      "from": 450,
+      "to": 490,
+      "type": "database"
+    }
   ],
   "cards": [
     {

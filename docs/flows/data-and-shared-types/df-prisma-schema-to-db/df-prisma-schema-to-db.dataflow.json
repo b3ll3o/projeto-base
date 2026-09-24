@@ -25,13 +25,24 @@
         ],
         "note": "3 estágios: schema.prisma → generate + migrate dev → migration.sql + PG apply → tables/indexes/enum."
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "Schema-to-DB lineage — apps/api/prisma/schema.prisma → generated migration.sql → PostgreSQL tables/indexes/enum"
   },
   "stages": [
-    { "label": "Source" },
-    { "label": "Codegen" },
-    { "label": "Migration" },
-    { "label": "DB artifacts" }
+    {
+      "label": "Source"
+    },
+    {
+      "label": "Codegen"
+    },
+    {
+      "label": "Migration"
+    },
+    {
+      "label": "DB artifacts"
+    }
   ],
   "nodes": [
     {

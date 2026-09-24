@@ -27,7 +27,10 @@
         ],
         "note": "Composição canônica: AppModule orquestra 5 sub-módulos com bindings DI de ports (USER_REPOSITORY_PORT, AUDIT_SERVICE_PORT)."
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "Arquitetura — composição de módulos NestJS e bindings DI"
   },
   "layout": {
     "mode": "grid",
