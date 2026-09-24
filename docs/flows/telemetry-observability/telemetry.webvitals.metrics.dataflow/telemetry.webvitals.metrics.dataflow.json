@@ -16,13 +16,24 @@
         "focus": ["module_load", "window_guard", "web_vitals_lib", "meter_get", "histogram_record"],
         "note": "Side-effect Client Component. Guard typeof window protege build pipeline (PerformanceObserver lança ReferenceError em Node SSR)."
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "Web Vitals → OTel Metrics (LCP/CLS/INP/FID/TTFB como Histograms)"
   },
   "stages": [
-    { "label": "Module" },
-    { "label": "Guard" },
-    { "label": "Setup" },
-    { "label": "Records" }
+    {
+      "label": "Module"
+    },
+    {
+      "label": "Guard"
+    },
+    {
+      "label": "Setup"
+    },
+    {
+      "label": "Records"
+    }
   ],
   "nodes": [
     {

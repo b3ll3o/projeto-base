@@ -16,14 +16,27 @@
         "focus": ["app", "pino", "hook", "spans", "otlp"],
         "note": "Pino logger instrumented, captura trace context automatico."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "Pino ↔ OTel correlation bridge (log JSON enrichment com W3C trace_id/span_id)"
   },
   "stages": [
-    { "label": "App code" },
-    { "label": "Logger" },
-    { "label": "Hook" },
-    { "label": "Spans" },
-    { "label": "Export" }
+    {
+      "label": "App code"
+    },
+    {
+      "label": "Logger"
+    },
+    {
+      "label": "Hook"
+    },
+    {
+      "label": "Spans"
+    },
+    {
+      "label": "Export"
+    }
   ],
   "nodes": [
     {

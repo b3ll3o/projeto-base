@@ -15,13 +15,39 @@
         "focus": ["init", "start", "otlp", "tracing", "runtime"],
         "note": "ESM wrapper via .cjs, otel sdk-node v1.x."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "Backend NodeSDK bootstrap (apps/api: process startup → SDK ready)"
   },
-  "lanes": [{ "id": "boot", "label": "Boot phases" }],
+  "lanes": [
+    {
+      "id": "boot",
+      "label": "Boot phases"
+    }
+  ],
   "phases": [
-    { "id": "p1", "label": "Init", "fromCol": 0, "toCol": 1, "variant": "default" },
-    { "id": "p2", "label": "SDK + OTLP", "fromCol": 2, "toCol": 3, "variant": "emphasis" },
-    { "id": "p3", "label": "Runtime", "fromCol": 4, "toCol": 5, "variant": "security" }
+    {
+      "id": "p1",
+      "label": "Init",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "default"
+    },
+    {
+      "id": "p2",
+      "label": "SDK + OTLP",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "p3",
+      "label": "Runtime",
+      "fromCol": 4,
+      "toCol": 5,
+      "variant": "security"
+    }
   ],
   "mainPath": ["init", "start", "otlp", "tracing", "runtime"],
   "nodes": [
@@ -77,8 +103,20 @@
     }
   ],
   "edges": [
-    { "from": "init", "to": "start", "label": "constructor", "variant": "default", "role": "main" },
-    { "from": "start", "to": "otlp", "label": "exporters", "variant": "emphasis", "role": "main" },
+    {
+      "from": "init",
+      "to": "start",
+      "label": "constructor",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "from": "start",
+      "to": "otlp",
+      "label": "exporters",
+      "variant": "emphasis",
+      "role": "main"
+    },
     {
       "from": "otlp",
       "to": "tracing",
@@ -86,7 +124,13 @@
       "variant": "emphasis",
       "role": "main"
     },
-    { "from": "tracing", "to": "runtime", "label": "listen", "variant": "emphasis", "role": "main" }
+    {
+      "from": "tracing",
+      "to": "runtime",
+      "label": "listen",
+      "variant": "emphasis",
+      "role": "main"
+    }
   ],
   "cards": [
     {

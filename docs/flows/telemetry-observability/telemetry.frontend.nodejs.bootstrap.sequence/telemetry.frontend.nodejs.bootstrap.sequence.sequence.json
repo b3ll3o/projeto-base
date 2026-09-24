@@ -16,11 +16,24 @@
         "focus": ["browser", "next", "instrument", "reporter", "vitals", "otlp"],
         "note": "Next.js 15 OTel instrumentation em node runtime."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "Frontend Next.js server-side OTel init (RSC/API routes via NodeSDK)"
   },
   "participants": [
-    { "id": "browser", "type": "external", "label": "Browser", "sublabel": "perf observer" },
-    { "id": "next", "type": "backend", "label": "Next.js", "sublabel": "App Router" },
+    {
+      "id": "browser",
+      "type": "external",
+      "label": "Browser",
+      "sublabel": "perf observer"
+    },
+    {
+      "id": "next",
+      "type": "backend",
+      "label": "Next.js",
+      "sublabel": "App Router"
+    },
     {
       "id": "instrument",
       "type": "backend",
@@ -33,19 +46,41 @@
       "label": "Reporter",
       "sublabel": "client comp"
     },
-    { "id": "vitals", "type": "backend", "label": "web-vitals", "sublabel": "LCP/CLS/INP" },
+    {
+      "id": "vitals",
+      "type": "backend",
+      "label": "web-vitals",
+      "sublabel": "LCP/CLS/INP"
+    },
     {
       "id": "otel_api",
       "type": "backend",
       "label": "OTel API",
       "sublabel": "createHistogram"
     },
-    { "id": "otlp", "type": "external", "label": "OTLP", "sublabel": "/v1/metrics" }
+    {
+      "id": "otlp",
+      "type": "external",
+      "label": "OTLP",
+      "sublabel": "/v1/metrics"
+    }
   ],
   "segments": [
-    { "from": 150, "to": 320, "label": "Boot" },
-    { "from": 336, "to": 480, "label": "Web Vitals capture" },
-    { "from": 496, "to": 600, "label": "OTLP export" }
+    {
+      "from": 150,
+      "to": 320,
+      "label": "Boot"
+    },
+    {
+      "from": 336,
+      "to": 480,
+      "label": "Web Vitals capture"
+    },
+    {
+      "from": 496,
+      "to": 600,
+      "label": "OTLP export"
+    }
   ],
   "messages": [
     {
@@ -55,7 +90,13 @@
       "label": "GET / (page load)",
       "variant": "emphasis"
     },
-    { "from": "next", "to": "instrument", "y": 220, "label": "register()", "variant": "default" },
+    {
+      "from": "next",
+      "to": "instrument",
+      "y": 220,
+      "label": "register()",
+      "variant": "default"
+    },
     {
       "from": "instrument",
       "to": "reporter",
@@ -93,10 +134,30 @@
     }
   ],
   "activations": [
-    { "participant": "next", "from": 174, "to": 250, "type": "backend" },
-    { "participant": "reporter", "from": 254, "to": 470, "type": "backend" },
-    { "participant": "vitals", "from": 334, "to": 390, "type": "backend" },
-    { "participant": "otel_api", "from": 372, "to": 412, "type": "backend" }
+    {
+      "participant": "next",
+      "from": 174,
+      "to": 250,
+      "type": "backend"
+    },
+    {
+      "participant": "reporter",
+      "from": 254,
+      "to": 470,
+      "type": "backend"
+    },
+    {
+      "participant": "vitals",
+      "from": 334,
+      "to": 390,
+      "type": "backend"
+    },
+    {
+      "participant": "otel_api",
+      "from": 372,
+      "to": 412,
+      "type": "backend"
+    }
   ],
   "cards": [
     {
