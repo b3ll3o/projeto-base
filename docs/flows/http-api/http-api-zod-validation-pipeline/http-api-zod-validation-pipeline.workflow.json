@@ -1,0 +1,183 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Zod Validation Pipeline — RFC 7807",
+    "subtitle": "Request → ZodSchema.safeParse → 400 Problem Details via GlobalExceptionFilter",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "standard",
+    "output": "http-api-zod-validation-pipeline.workflow.html",
+    "views": [
+      {
+        "id": "pipeline",
+        "label": "Validation pipeline",
+        "focus": ["controller", "zod_pipe", "schema", "exception_filter", "problem_response"],
+        "note": "5 etapas: body chega → schema valida → BadRequestException → GlobalExceptionFilter → 400 RFC 7807."
+      },
+      {
+        "id": "success",
+        "label": "Happy path",
+        "focus": ["controller", "zod_pipe", "schema"],
+        "note": "Se safeParse.success → data tipado segue para use case."
+      }
+    ]
+  },
+  "lanes": [{ "id": "http", "label": "HTTP layer" }],
+  "phases": [
+    { "id": "validate", "label": "Validate", "fromCol": 0, "toCol": 1, "variant": "emphasis" },
+    { "id": "respond", "label": "Respond", "fromCol": 2, "toCol": 4, "variant": "dashed" }
+  ],
+  "groups": [
+    {
+      "id": "validate_phase",
+      "label": "Zod validation",
+      "lane": "http",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "respond_phase",
+      "label": "Error mapping",
+      "lane": "http",
+      "fromCol": 2,
+      "toCol": 4,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": ["controller", "zod_pipe", "exception_filter", "problem_response"],
+  "nodes": [
+    {
+      "id": "controller",
+      "lane": "http",
+      "col": 0,
+      "type": "backend",
+      "label": "Controller",
+      "sublabel": "@Body(new ZodPipe())",
+      "tag": "UsersController",
+      "width": 140
+    },
+    {
+      "id": "zod_pipe",
+      "lane": "http",
+      "col": 1,
+      "type": "security",
+      "label": "ZodValidationPipe",
+      "sublabel": "safeParse()",
+      "tag": "ZodSchema<T>",
+      "width": 160
+    },
+    {
+      "id": "schema",
+      "lane": "http",
+      "col": 1,
+      "type": "external",
+      "label": "ZodSchema",
+      "sublabel": "users.schemas.ts",
+      "tag": "CreateUserSchema etc",
+      "width": 150,
+      "yOffset": 130
+    },
+    {
+      "id": "exception_filter",
+      "lane": "http",
+      "col": 2,
+      "type": "backend",
+      "label": "GlobalExceptionFilter",
+      "sublabel": "@Catch()",
+      "tag": "mapException()",
+      "width": 170
+    },
+    {
+      "id": "problem_response",
+      "lane": "http",
+      "col": 3,
+      "type": "security",
+      "label": "Problem Details",
+      "sublabel": "RFC 7807",
+      "tag": "400 + traceId W3C",
+      "width": 160
+    }
+  ],
+  "edges": [
+    {
+      "id": "ctrl-to-pipe",
+      "from": "controller",
+      "to": "zod_pipe",
+      "label": "raw body",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "pipe-to-schema",
+      "from": "zod_pipe",
+      "to": "schema",
+      "label": "safeParse(value)",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "schema-to-pipe",
+      "from": "schema",
+      "to": "zod_pipe",
+      "label": "result.success | ZodError",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "pipe-to-filter",
+      "from": "zod_pipe",
+      "to": "exception_filter",
+      "label": "BadRequestException + errors[]",
+      "variant": "dashed",
+      "role": "main"
+    },
+    {
+      "id": "filter-to-response",
+      "from": "exception_filter",
+      "to": "problem_response",
+      "label": "400 ProblemDetailsDto",
+      "variant": "default",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Validation flow",
+      "items": [
+        "@Body(new ZodValidationPipe(CreateUserSchema)) por rota",
+        "Pipe registrado globalmente com schema default z.any() (noop)",
+        "safeParse() → result.success (boolean) ou ZodError",
+        "Se sucesso → result.data tipado segue para use case",
+        "Se erro → BadRequestException com code/detail/errors[]"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "RFC 7807 mapping",
+      "items": [
+        "GlobalExceptionFilter converte HttpException → ProblemDetailsDto",
+        "Preserva code/detail/errors[] do response-objeto",
+        "traceId W3C do span OTel ativo (32 hex chars)",
+        "Fallback: request.id Fastify → randomUUID",
+        "Status 5xx logado com stack trace completo"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Estrutura ProblemDetailsDto",
+      "items": [
+        "type: https://errors.projeto.com/{code}",
+        "title: human-readable summary",
+        "status: HTTP status code",
+        "detail: mensagem específica",
+        "instance: METHOD URL",
+        "code: VAL id do erro",
+        "traceId: W3C 32 hex chars",
+        "errors[]: campo + message + code (Zod)"
+      ]
+    }
+  ]
+}
