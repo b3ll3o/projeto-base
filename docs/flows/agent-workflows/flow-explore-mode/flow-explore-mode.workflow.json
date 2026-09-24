@@ -1,0 +1,97 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Explore Mode — Exploração Read-Only",
+    "subtitle": "Single agent (explorer): mapeia arquivos relevantes + dependências + padrões arquiteturais",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "output": "flow-explore-mode.workflow.html",
+    "viewBox": [950, 320],
+    "views": [
+      {
+        "id": "explore",
+        "label": "Exploração read-only",
+        "focus": ["explorer", "map"],
+        "note": "Exploração não muta estado — read-only por contrato."
+      }
+    ]
+  },
+  "lanes": [{ "id": "agent", "label": "Agent Runtime" }],
+  "phases": [{ "id": "scan", "label": "Mapear", "fromCol": 0, "toCol": 0, "variant": "emphasis" }],
+  "groups": [
+    {
+      "id": "scan_phase",
+      "label": "Mapear código",
+      "lane": "agent",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    }
+  ],
+  "mainPath": ["explorer", "map"],
+  "nodes": [
+    {
+      "id": "explorer",
+      "lane": "agent",
+      "col": 0,
+      "type": "external",
+      "label": "explorer",
+      "sublabel": "read-only",
+      "tag": "exploração",
+      "width": 150
+    },
+    {
+      "id": "map",
+      "lane": "agent",
+      "col": 1,
+      "type": "backend",
+      "label": "map output",
+      "sublabel": "arquivos + padrões",
+      "tag": "≥3 patterns",
+      "width": 150
+    }
+  ],
+  "edges": [
+    {
+      "id": "explorer-to-map",
+      "from": "explorer",
+      "to": "map",
+      "label": "scan result",
+      "variant": "emphasis",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Pipeline Single Agent",
+      "items": [
+        "1 agente: explorer (read-only por contrato)",
+        "Saída: mapa de arquivos + dependências + padrões + extensões",
+        "Não muta estado — apenas lê"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Saída Típica",
+      "items": [
+        "Mapa de arquivos relevantes (paths absolutos/relativos)",
+        "Diagrama de dependências entre módulos",
+        "Padrões arquiteturais identificados (≥3)",
+        "Pontos de extensão (onde adicionar feature)"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Quando usar",
+      "items": [
+        "Trigger: 'como funciona X?', 'onde fica Y?', 'explorar módulo Z'",
+        "Antes de implementar feature (entender o código)",
+        "Para debugging: mapear antes de mudar",
+        "Para onboarding de novo dev ao codebase"
+      ]
+    }
+  ]
+}
