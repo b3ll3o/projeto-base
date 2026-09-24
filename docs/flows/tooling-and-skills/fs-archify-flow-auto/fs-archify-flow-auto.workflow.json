@@ -30,13 +30,29 @@
         "focus": ["preflight", "validate", "deliver"],
         "note": "Pre-flight (exit 2/6) + validate (gate para deliver) + strict (exit 5)."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "auto",
+    "subject": "archify flow — geração automática de workflow diagram a partir do git diff (pre-push)"
   },
   "lanes": [
-    { "id": "cli", "label": "CLI / Pre-flight" },
-    { "id": "pipeline", "label": "Pipeline" },
-    { "id": "validate", "label": "Validate + Deliver" },
-    { "id": "policy", "label": "Errors / Gates", "variant": "exception" }
+    {
+      "id": "cli",
+      "label": "CLI / Pre-flight"
+    },
+    {
+      "id": "pipeline",
+      "label": "Pipeline"
+    },
+    {
+      "id": "validate",
+      "label": "Validate + Deliver"
+    },
+    {
+      "id": "policy",
+      "label": "Errors / Gates",
+      "variant": "exception"
+    }
   ],
   "phases": [
     {
@@ -46,8 +62,20 @@
       "toCol": 0,
       "variant": "emphasis"
     },
-    { "id": "build", "label": "Build spec", "fromCol": 1, "toCol": 2, "variant": "emphasis" },
-    { "id": "ship", "label": "Validate + deliver", "fromCol": 3, "toCol": 4, "variant": "dashed" }
+    {
+      "id": "build",
+      "label": "Build spec",
+      "fromCol": 1,
+      "toCol": 2,
+      "variant": "emphasis"
+    },
+    {
+      "id": "ship",
+      "label": "Validate + deliver",
+      "fromCol": 3,
+      "toCol": 4,
+      "variant": "dashed"
+    }
   ],
   "groups": [
     {

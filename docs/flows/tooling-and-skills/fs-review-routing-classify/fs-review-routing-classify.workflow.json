@@ -27,16 +27,38 @@
         "focus": ["triage", "blocked_exit_3"],
         "note": "Após 2 rounds de fix, ainda há BLOCKING → escalar."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "auto",
+    "subject": "review-routing — classificador pós-implementer com consensus e exit code 3 (bloqueio)"
   },
   "lanes": [
-    { "id": "controller", "label": "Controller" },
-    { "id": "router", "label": "Review Router" },
-    { "id": "implementer", "label": "Fix Implementer" },
-    { "id": "policy", "label": "Policy / Escalation", "variant": "exception" }
+    {
+      "id": "controller",
+      "label": "Controller"
+    },
+    {
+      "id": "router",
+      "label": "Review Router"
+    },
+    {
+      "id": "implementer",
+      "label": "Fix Implementer"
+    },
+    {
+      "id": "policy",
+      "label": "Policy / Escalation",
+      "variant": "exception"
+    }
   ],
   "phases": [
-    { "id": "checks", "label": "Pre-checks", "fromCol": 0, "toCol": 0, "variant": "emphasis" },
+    {
+      "id": "checks",
+      "label": "Pre-checks",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
     {
       "id": "review",
       "label": "Dispatch + interpret",
@@ -44,7 +66,13 @@
       "toCol": 2,
       "variant": "emphasis"
     },
-    { "id": "decide", "label": "Triage + fix", "fromCol": 3, "toCol": 4, "variant": "dashed" }
+    {
+      "id": "decide",
+      "label": "Triage + fix",
+      "fromCol": 3,
+      "toCol": 4,
+      "variant": "dashed"
+    }
   ],
   "groups": [
     {
