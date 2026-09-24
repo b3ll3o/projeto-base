@@ -8,7 +8,7 @@
     "viewBox": [1080, 760],
     "animation": "trace",
     "visual_preset": "signal-flow",
-    "quality_profile": "showcase",
+    "quality_profile": "standard",
     "views": [
       {
         "id": "api-error",
@@ -16,21 +16,71 @@
         "focus": ["rsc", "api_client", "fetch", "api", "problem", "api_error", "fallback_ui"],
         "note": "non-2xx → body JSON parse → ApiError com ProblemDetailsDto → client component catch → fallback UI."
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "Web App: API Client Error Path (ProblemDetails -> ApiError)"
   },
   "participants": [
-    { "id": "rsc", "type": "backend", "label": "RSC", "sublabel": "app/users/page.tsx" },
-    { "id": "api_client", "type": "backend", "label": "ApiClient", "sublabel": "fetch wrapper" },
-    { "id": "fetch", "type": "external", "label": "fetch", "sublabel": "node/browser" },
-    { "id": "api", "type": "backend", "label": "apps/api", "sublabel": "NestJS" },
-    { "id": "problem", "type": "security", "label": "Problems", "sublabel": "RFC 7807" },
-    { "id": "api_error", "type": "security", "label": "ApiError", "sublabel": "throw new" },
-    { "id": "fallback_ui", "type": "frontend", "label": "fallback UI", "sublabel": "error message" }
+    {
+      "id": "rsc",
+      "type": "backend",
+      "label": "RSC",
+      "sublabel": "app/users/page.tsx"
+    },
+    {
+      "id": "api_client",
+      "type": "backend",
+      "label": "ApiClient",
+      "sublabel": "fetch wrapper"
+    },
+    {
+      "id": "fetch",
+      "type": "external",
+      "label": "fetch",
+      "sublabel": "node/browser"
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "apps/api",
+      "sublabel": "NestJS"
+    },
+    {
+      "id": "problem",
+      "type": "security",
+      "label": "Problems",
+      "sublabel": "RFC 7807"
+    },
+    {
+      "id": "api_error",
+      "type": "security",
+      "label": "ApiError",
+      "sublabel": "throw new"
+    },
+    {
+      "id": "fallback_ui",
+      "type": "frontend",
+      "label": "fallback UI",
+      "sublabel": "error message"
+    }
   ],
   "segments": [
-    { "from": 130, "to": 308, "label": "Request" },
-    { "from": 324, "to": 488, "label": "Error path" },
-    { "from": 504, "to": 644, "label": "Recover" }
+    {
+      "from": 130,
+      "to": 308,
+      "label": "Request"
+    },
+    {
+      "from": 324,
+      "to": 488,
+      "label": "Error path"
+    },
+    {
+      "from": 504,
+      "to": 644,
+      "label": "Recover"
+    }
   ],
   "messages": [
     {
@@ -105,12 +155,42 @@
     }
   ],
   "activations": [
-    { "participant": "api_client", "from": 174, "to": 596, "type": "backend" },
-    { "participant": "fetch", "from": 214, "to": 426, "type": "external" },
-    { "participant": "api", "from": 254, "to": 314, "type": "backend" },
-    { "participant": "problem", "from": 314, "to": 374, "type": "security" },
-    { "participant": "api_error", "from": 494, "to": 536, "type": "security" },
-    { "participant": "fallback_ui", "from": 654, "to": 656, "type": "frontend" }
+    {
+      "participant": "api_client",
+      "from": 174,
+      "to": 596,
+      "type": "backend"
+    },
+    {
+      "participant": "fetch",
+      "from": 214,
+      "to": 426,
+      "type": "external"
+    },
+    {
+      "participant": "api",
+      "from": 254,
+      "to": 314,
+      "type": "backend"
+    },
+    {
+      "participant": "problem",
+      "from": 314,
+      "to": 374,
+      "type": "security"
+    },
+    {
+      "participant": "api_error",
+      "from": 494,
+      "to": 536,
+      "type": "security"
+    },
+    {
+      "participant": "fallback_ui",
+      "from": 654,
+      "to": 656,
+      "type": "frontend"
+    }
   ],
   "cards": [
     {

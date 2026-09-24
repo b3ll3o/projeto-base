@@ -8,7 +8,7 @@
     "viewBox": [1020, 760],
     "animation": "trace",
     "visual_preset": "signal-flow",
-    "quality_profile": "showcase",
+    "quality_profile": "standard",
     "views": [
       {
         "id": "rsc-fetch",
@@ -16,20 +16,65 @@
         "focus": ["browser", "next", "rsc", "apiclient", "api", "pg"],
         "note": "Server Component fetcha direto, sem useEffect — Next.js 15 RSC."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "Web App: Users List Page (RSC data fetch via ApiClient)"
   },
   "participants": [
-    { "id": "browser", "type": "external", "label": "Browser", "sublabel": "GET /users" },
-    { "id": "next", "type": "backend", "label": "Next.js", "sublabel": "App Router" },
-    { "id": "rsc", "type": "backend", "label": "RSC", "sublabel": "users/page.tsx" },
-    { "id": "apiclient", "type": "backend", "label": "ApiClient", "sublabel": "fetch wrapper" },
-    { "id": "api", "type": "backend", "label": "apps/api", "sublabel": "NestJS" },
-    { "id": "pg", "type": "database", "label": "PostgreSQL", "sublabel": "users table" }
+    {
+      "id": "browser",
+      "type": "external",
+      "label": "Browser",
+      "sublabel": "GET /users"
+    },
+    {
+      "id": "next",
+      "type": "backend",
+      "label": "Next.js",
+      "sublabel": "App Router"
+    },
+    {
+      "id": "rsc",
+      "type": "backend",
+      "label": "RSC",
+      "sublabel": "users/page.tsx"
+    },
+    {
+      "id": "apiclient",
+      "type": "backend",
+      "label": "ApiClient",
+      "sublabel": "fetch wrapper"
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "apps/api",
+      "sublabel": "NestJS"
+    },
+    {
+      "id": "pg",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "users table"
+    }
   ],
   "segments": [
-    { "from": 150, "to": 320, "label": "RSC fetch" },
-    { "from": 336, "to": 540, "label": "API query" },
-    { "from": 556, "to": 640, "label": "Render" }
+    {
+      "from": 150,
+      "to": 320,
+      "label": "RSC fetch"
+    },
+    {
+      "from": 336,
+      "to": 540,
+      "label": "API query"
+    },
+    {
+      "from": 556,
+      "to": 640,
+      "label": "Render"
+    }
   ],
   "messages": [
     {
@@ -39,7 +84,13 @@
       "label": "GET /users (page request)",
       "variant": "emphasis"
     },
-    { "from": "next", "to": "rsc", "y": 220, "label": "render UsersPage()", "variant": "default" },
+    {
+      "from": "next",
+      "to": "rsc",
+      "y": 220,
+      "label": "render UsersPage()",
+      "variant": "default"
+    },
     {
       "from": "rsc",
       "to": "apiclient",
@@ -54,8 +105,20 @@
       "label": "GET /api/v1/users?limit=20",
       "variant": "emphasis"
     },
-    { "from": "api", "to": "pg", "y": 340, "label": "SELECT FROM users", "variant": "default" },
-    { "from": "pg", "to": "api", "y": 378, "label": "N rows", "variant": "return" },
+    {
+      "from": "api",
+      "to": "pg",
+      "y": 340,
+      "label": "SELECT FROM users",
+      "variant": "default"
+    },
+    {
+      "from": "pg",
+      "to": "api",
+      "y": 378,
+      "label": "N rows",
+      "variant": "return"
+    },
     {
       "from": "api",
       "to": "apiclient",
@@ -77,7 +140,13 @@
       "label": "RSC payload (server-rendered)",
       "variant": "default"
     },
-    { "from": "next", "to": "browser", "y": 530, "label": "HTML stream", "variant": "return" },
+    {
+      "from": "next",
+      "to": "browser",
+      "y": 530,
+      "label": "HTML stream",
+      "variant": "return"
+    },
     {
       "from": "rsc",
       "to": "browser",
@@ -87,11 +156,36 @@
     }
   ],
   "activations": [
-    { "participant": "next", "from": 174, "to": 526, "type": "backend" },
-    { "participant": "rsc", "from": 214, "to": 586, "type": "backend" },
-    { "participant": "apiclient", "from": 254, "to": 450, "type": "backend" },
-    { "participant": "api", "from": 294, "to": 412, "type": "backend" },
-    { "participant": "pg", "from": 334, "to": 374, "type": "database" }
+    {
+      "participant": "next",
+      "from": 174,
+      "to": 526,
+      "type": "backend"
+    },
+    {
+      "participant": "rsc",
+      "from": 214,
+      "to": 586,
+      "type": "backend"
+    },
+    {
+      "participant": "apiclient",
+      "from": 254,
+      "to": 450,
+      "type": "backend"
+    },
+    {
+      "participant": "api",
+      "from": 294,
+      "to": 412,
+      "type": "backend"
+    },
+    {
+      "participant": "pg",
+      "from": 334,
+      "to": 374,
+      "type": "database"
+    }
   ],
   "cards": [
     {

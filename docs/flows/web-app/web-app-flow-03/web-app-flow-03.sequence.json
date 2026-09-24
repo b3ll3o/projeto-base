@@ -8,7 +8,7 @@
     "viewBox": [920, 580],
     "animation": "trace",
     "visual_preset": "signal-flow",
-    "quality_profile": "showcase",
+    "quality_profile": "standard",
     "views": [
       {
         "id": "health-route",
@@ -16,11 +16,24 @@
         "focus": ["client", "next", "api_route", "json_response"],
         "note": "API route estática (force-dynamic), usada por Docker healthcheck do container web."
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "Web App: Health Check API Route"
   },
   "participants": [
-    { "id": "client", "type": "external", "label": "Docker / curl", "sublabel": "HEALTHCHECK" },
-    { "id": "next", "type": "backend", "label": "Next.js", "sublabel": "App Router" },
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Docker / curl",
+      "sublabel": "HEALTHCHECK"
+    },
+    {
+      "id": "next",
+      "type": "backend",
+      "label": "Next.js",
+      "sublabel": "App Router"
+    },
     {
       "id": "api_route",
       "type": "backend",
@@ -35,8 +48,16 @@
     }
   ],
   "segments": [
-    { "from": 130, "to": 300, "label": "Request" },
-    { "from": 316, "to": 460, "label": "Respond" }
+    {
+      "from": 130,
+      "to": 300,
+      "label": "Request"
+    },
+    {
+      "from": 316,
+      "to": 460,
+      "label": "Respond"
+    }
   ],
   "messages": [
     {
@@ -83,9 +104,24 @@
     }
   ],
   "activations": [
-    { "participant": "next", "from": 174, "to": 476, "type": "backend" },
-    { "participant": "api_route", "from": 214, "to": 276, "type": "backend" },
-    { "participant": "json_response", "from": 354, "to": 396, "type": "frontend" }
+    {
+      "participant": "next",
+      "from": 174,
+      "to": 476,
+      "type": "backend"
+    },
+    {
+      "participant": "api_route",
+      "from": 214,
+      "to": 276,
+      "type": "backend"
+    },
+    {
+      "participant": "json_response",
+      "from": 354,
+      "to": 396,
+      "type": "frontend"
+    }
   ],
   "cards": [
     {
