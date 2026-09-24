@@ -1,0 +1,212 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Shared-Types Contract — pacote → apps/api + apps/web",
+    "subtitle": "packages/shared-types/src/user.ts → index.ts (re-export) → apps/api (consumido) + apps/web (planejado)",
+    "output": "df-shared-types-contract.dataflow.html",
+    "quality_profile": "standard",
+    "viewBox": [1500, 760],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "views": [
+      {
+        "id": "types-lineage",
+        "label": "Contract lineage",
+        "focus": [
+          "primitives_src",
+          "user_dtos_src",
+          "audit_dtos_src",
+          "http_src",
+          "rfc7807_src",
+          "index_export",
+          "api_consume",
+          "web_consume"
+        ],
+        "note": "11 types definidos em user.ts, re-exportados via index.ts, consumidos por apps/api (current) + apps/web (planned)."
+      },
+      {
+        "id": "consumers",
+        "label": "Consumidores",
+        "focus": ["api_consume", "web_consume"],
+        "note": "apps/api/src/shared/infrastructure/http/global-exception.filter.ts consome ProblemDetailsDto+Error. apps/web ainda não consome (planejado)."
+      }
+    ]
+  },
+  "stages": [
+    { "label": "Source TS" },
+    { "label": "Re-export" },
+    { "label": "API consumer" },
+    { "label": "Web consumer" }
+  ],
+  "nodes": [
+    {
+      "id": "primitives_src",
+      "type": "backend",
+      "label": "primitives",
+      "sublabel": "UUID+ISODate",
+      "stage": 0,
+      "row": 0,
+      "tag": "user.ts"
+    },
+    {
+      "id": "user_dtos_src",
+      "type": "backend",
+      "label": "user DTOs",
+      "sublabel": "User+CRUD inputs",
+      "stage": 0,
+      "row": 1,
+      "tag": "user.ts"
+    },
+    {
+      "id": "audit_dtos_src",
+      "type": "security",
+      "label": "audit DTOs",
+      "sublabel": "history+archive",
+      "stage": 0,
+      "row": 2,
+      "tag": "user.ts"
+    },
+    {
+      "id": "http_src",
+      "type": "backend",
+      "label": "PaginatedResponse",
+      "sublabel": "cursor-based",
+      "stage": 0,
+      "row": 3,
+      "tag": "user.ts"
+    },
+    {
+      "id": "rfc7807_src",
+      "type": "security",
+      "label": "ProblemDetails",
+      "sublabel": "RFC 7807+ext",
+      "stage": 0,
+      "row": 4,
+      "tag": "user.ts"
+    },
+    {
+      "id": "index_export",
+      "type": "backend",
+      "label": "index.ts re-export",
+      "sublabel": "11 types",
+      "stage": 1,
+      "row": 0,
+      "tag": "src/index.ts"
+    },
+    {
+      "id": "api_consume",
+      "type": "external",
+      "label": "apps/api imports",
+      "sublabel": "ProblemDetails*",
+      "stage": 2,
+      "row": 0,
+      "tag": "global-exception.filter"
+    },
+    {
+      "id": "web_consume",
+      "type": "external",
+      "label": "apps/web (planned)",
+      "sublabel": "frontend types",
+      "stage": 3,
+      "row": 0,
+      "tag": "future migration"
+    }
+  ],
+  "flows": [
+    {
+      "id": "f-prim-to-index",
+      "from": "primitives_src",
+      "to": "index_export",
+      "label": "UUID+ISO",
+      "variant": "emphasis"
+    },
+    {
+      "id": "f-user-to-index",
+      "from": "user_dtos_src",
+      "to": "index_export",
+      "label": "4 DTOs",
+      "variant": "emphasis"
+    },
+    {
+      "id": "f-audit-to-index",
+      "from": "audit_dtos_src",
+      "to": "index_export",
+      "label": "2 DTOs+enum",
+      "variant": "emphasis"
+    },
+    {
+      "id": "f-http-to-index",
+      "from": "http_src",
+      "to": "index_export",
+      "label": "Paginated",
+      "variant": "default"
+    },
+    {
+      "id": "f-rfc-to-index",
+      "from": "rfc7807_src",
+      "to": "index_export",
+      "label": "RFC7807",
+      "variant": "emphasis"
+    },
+    {
+      "id": "f-index-to-api",
+      "from": "index_export",
+      "to": "api_consume",
+      "label": "@projeto/shared-types",
+      "variant": "emphasis",
+      "labelDy": -28
+    },
+    {
+      "id": "f-api-to-web",
+      "from": "api_consume",
+      "to": "web_consume",
+      "label": "planned",
+      "variant": "default",
+      "labelDy": -28
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "11 types exportados",
+      "items": [
+        "UUID, ISODateString (primitives)",
+        "UserOutputDto, CreateUserInputDto, UpdateUserInputDto, RestoreUserInputDto (4 user DTOs)",
+        "AuditOperationType, UserHistoryEntryDto, UserArchiveEntryDto (audit)",
+        "PaginatedResponse<T> (HTTP genérico)",
+        "ProblemDetailsDto, ProblemDetailsError (RFC 7807)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Pacote types-only",
+      "items": [
+        "main+types: ./src/index.ts (sem build step)",
+        "type: module + ESM re-exports",
+        "scripts: typecheck (tsc --noEmit), test (noop — types-only)",
+        "devDependencies: @projeto/tsconfig + typescript ^5.6.0"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Consumo atual",
+      "items": [
+        "apps/api/src/shared/infrastructure/http/global-exception.filter.ts",
+        "Importa: ProblemDetailsDto + ProblemDetailsError",
+        "apps/web ainda NÃO consome (planejado para forms/admin)",
+        "Cross-ref: import type { ... } from '@projeto/shared-types'"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Armadilhas conhecidas",
+      "items": [
+        "❌ Adicionar runtime dep em packages/shared-types (deve ser types-only)",
+        "❌ Esquecer .js suffix em imports (ESM resolution)",
+        "❌ Duplicar tipos em apps/web ao invés de consumir do pacote",
+        "❌ Adicionar tipos sem atualizar index.ts (sem export = inacessível)"
+      ]
+    }
+  ]
+}
