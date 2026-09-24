@@ -1,0 +1,175 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Pre-push local gate — Defense Layer 1",
+    "subtitle": "Husky pre-push → pnpm ci:preflight → exit gate bloqueia drift estrutural",
+    "output": "pre-push-local-gate.workflow.html",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "local-gate",
+        "label": "Local push gate",
+        "focus": ["hook", "preflight_entry", "result_aggregator", "push_ok", "block"],
+        "note": "Defense-in-Depth Camada 1: detecta drift EM ~10s no dev, evitando round-trip ~4min no CI remoto."
+      }
+    ]
+  },
+  "lanes": [{ "id": "dev", "label": "Dev (local)" }],
+  "phases": [
+    { "id": "trigger", "label": "Trigger", "fromCol": 0, "toCol": 0, "variant": "default" },
+    { "id": "checks", "label": "Drift checks", "fromCol": 1, "toCol": 1, "variant": "emphasis" },
+    { "id": "gate", "label": "Gate", "fromCol": 2, "toCol": 3, "variant": "security" }
+  ],
+  "mainPath": ["hook", "preflight_entry", "result_aggregator", "push_ok"],
+  "nodes": [
+    {
+      "id": "hook",
+      "lane": "dev",
+      "col": 0,
+      "type": "frontend",
+      "label": ".husky/pre-push",
+      "sublabel": "git push trigger",
+      "tag": "Husky v9",
+      "width": 170
+    },
+    {
+      "id": "preflight_entry",
+      "lane": "dev",
+      "col": 1,
+      "type": "backend",
+      "label": "pnpm ci:preflight",
+      "sublabel": "shell entry",
+      "tag": ".tooling/scripts/ci/preflight.ts",
+      "width": 200
+    },
+    {
+      "id": "result_aggregator",
+      "lane": "dev",
+      "col": 1,
+      "type": "security",
+      "label": "CheckResult",
+      "sublabel": "agregador",
+      "tag": "{ ok, errors[] }",
+      "width": 170,
+      "yOffset": 130
+    },
+    {
+      "id": "push_ok",
+      "lane": "dev",
+      "col": 2,
+      "type": "frontend",
+      "label": "push permitido",
+      "sublabel": "exit 0",
+      "tag": "git push OK",
+      "width": 160
+    },
+    {
+      "id": "block",
+      "lane": "dev",
+      "col": 2,
+      "type": "security",
+      "label": "push bloqueado",
+      "sublabel": "exit 1",
+      "tag": "drift detectado",
+      "width": 170,
+      "yOffset": 130
+    },
+    {
+      "id": "remote_ci",
+      "lane": "dev",
+      "col": 3,
+      "type": "external",
+      "label": "CI remoto",
+      "sublabel": "origin",
+      "tag": "github.com",
+      "width": 150
+    }
+  ],
+  "edges": [
+    {
+      "id": "hook-to-preflight",
+      "from": "hook",
+      "to": "preflight_entry",
+      "label": "dispara",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "preflight-to-agg",
+      "from": "preflight_entry",
+      "to": "result_aggregator",
+      "label": "11 checks",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "agg-to-ok",
+      "from": "result_aggregator",
+      "to": "push_ok",
+      "label": "ok=true",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "agg-to-block",
+      "from": "result_aggregator",
+      "to": "block",
+      "label": "ok=false",
+      "variant": "security",
+      "role": "branch"
+    },
+    {
+      "id": "ok-to-ci",
+      "from": "push_ok",
+      "to": "remote_ci",
+      "label": "refs visíveis",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "block-halt",
+      "from": "block",
+      "to": "remote_ci",
+      "label": "abort",
+      "variant": "security",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Defense-in-Depth Camada 1",
+      "items": [
+        "Dispara automaticamente em git push (qualquer branch)",
+        "pnpm ci:preflight roda 11 checks de drift estrutural",
+        "Idempotente: re-executável sem side effects",
+        "Detecta drift EM ~10s vs ~4min no CI remoto"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "11 checks cobertos",
+      "items": [
+        "doc-refs (docs/, .agents/specs/) cross-references quebradas",
+        "tsconfig-drift (strict + noUncheckedIndexedAccess)",
+        "eslint-drift (apps + packages) legacy rules",
+        "turbo-drift (pipeline canônico) / package-drift (scripts fantasmas)",
+        "docker-drift (.dockerignore + size) / review-routing lint",
+        "archive integrity (frontmatter canônico)"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Gating local",
+      "items": [
+        "exit 0 → preflight verde, push liberado",
+        "exit 1 → preflight falhou, push bloqueado",
+        "Mensagem aponta arquivo + linha + drift específico",
+        "Doc de referência: .agents/specs/conventions/ci-defense-in-depth.md"
+      ]
+    }
+  ]
+}
