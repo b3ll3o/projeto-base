@@ -1,0 +1,181 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Telemetry Collector OTLP Pipeline",
+    "subtitle": "browser+api apps → OTLP exporters → OTel Collector receivers → processors → exporters → backend",
+    "output": "telemetry.collector.otlp.pipeline.dataflow.html",
+    "quality_profile": "standard",
+    "viewBox": [1130, 540],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "views": [
+      {
+        "id": "pipeline",
+        "label": "OTLP pipeline",
+        "focus": ["web", "api", "otelcol_recv", "otelcol_proc", "otelcol_exp", "tempo"],
+        "note": "Apps instrumentadas enviam OTLP para o Collector, que roteia para backends."
+      }
+    ]
+  },
+  "stages": [
+    { "label": "Apps" },
+    { "label": "Receivers" },
+    { "label": "Processors" },
+    { "label": "Exporters" },
+    { "label": "Backends" }
+  ],
+  "nodes": [
+    {
+      "id": "web",
+      "type": "frontend",
+      "label": "apps/web",
+      "sublabel": "browser SDK",
+      "stage": 0,
+      "row": 1,
+      "tag": "web-vitals"
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "apps/api",
+      "sublabel": "NodeSDK",
+      "stage": 0,
+      "row": 2,
+      "tag": "auto-instr"
+    },
+    {
+      "id": "otelcol_recv",
+      "type": "cloud",
+      "label": "Receivers",
+      "sublabel": "otlp receiver",
+      "stage": 1,
+      "row": 1,
+      "tag": "gRPC:4317"
+    },
+    {
+      "id": "otelcol_proc",
+      "type": "cloud",
+      "label": "Processors",
+      "sublabel": "batch + memory_limiter",
+      "stage": 2,
+      "row": 1,
+      "tag": "tail_sampling"
+    },
+    {
+      "id": "otelcol_exp",
+      "type": "cloud",
+      "label": "Exporters",
+      "sublabel": "prometheus+loki+tempo",
+      "stage": 3,
+      "row": 1,
+      "tag": "fanout"
+    },
+    {
+      "id": "tempo",
+      "type": "cloud",
+      "label": "Tempo",
+      "sublabel": "traces",
+      "stage": 4,
+      "row": 1,
+      "tag": "long-term"
+    },
+    {
+      "id": "prometheus",
+      "type": "cloud",
+      "label": "Prometheus",
+      "sublabel": "metrics",
+      "stage": 4,
+      "row": 2,
+      "tag": "scrape"
+    }
+  ],
+  "flows": [
+    {
+      "id": "f1",
+      "from": "web",
+      "to": "otelcol_recv",
+      "label": "OTLP/HTTP /v1/metrics",
+      "variant": "emphasis",
+      "labelDy": -32
+    },
+    {
+      "id": "f2",
+      "from": "api",
+      "to": "otelcol_recv",
+      "label": "OTLP/gRPC :4317",
+      "variant": "emphasis",
+      "labelDy": 28
+    },
+    {
+      "id": "f3",
+      "from": "otelcol_recv",
+      "to": "otelcol_proc",
+      "label": "raw OTLP",
+      "variant": "default",
+      "labelDy": -32
+    },
+    {
+      "id": "f4",
+      "from": "otelcol_proc",
+      "to": "otelcol_exp",
+      "label": "enriched",
+      "variant": "emphasis",
+      "labelDy": -32
+    },
+    {
+      "id": "f5",
+      "from": "otelcol_exp",
+      "to": "tempo",
+      "label": "traces",
+      "variant": "emphasis",
+      "labelDy": -32
+    },
+    {
+      "id": "f6",
+      "from": "otelcol_exp",
+      "to": "prometheus",
+      "label": "metrics",
+      "variant": "default",
+      "labelDy": 28
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "OpenTelemetry Collector",
+      "items": [
+        "Componente agnostico entre apps e backends",
+        "Configuravel via YAML: receivers/processors/exporters",
+        "Corre em infra/otelcol (Docker compose local)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Receivers OTLP",
+      "items": [
+        "gRPC :4317 (server-side, alta performance)",
+        "HTTP :4318 (browser-friendly)",
+        "Ambos aceitam traces+metrics+logs"
+      ]
+    },
+    {
+      "dot": "orange",
+      "title": "Processors",
+      "items": [
+        "batch: agregacao 1-10s antes de export",
+        "memory_limiter: protege contra OOM",
+        "tail_sampling: 100% erros, 10% outros"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Backends (long-term)",
+      "items": [
+        "Tempo: traces com traceId W3C",
+        "Prometheus: metrics scraping",
+        "Loki: logs estruturados (futuro)"
+      ]
+    }
+  ]
+}
