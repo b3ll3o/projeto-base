@@ -6,7 +6,7 @@
     "subtitle": "5 estágios: validar elegibilidade → coletar metadados → criar archive → atualizar run → validar formato",
     "animation": "trace",
     "visual_preset": "signal-flow",
-    "quality_profile": "showcase",
+    "quality_profile": "standard",
     "output": "flow-archive-demand.workflow.html",
     "viewBox": [1200, 320],
     "views": [
@@ -22,13 +22,39 @@
         "focus": ["create_archive", "update_run", "lint_format"],
         "note": "archive novo + link no run original em 1 commit."
       }
-    ]
+    ],
+    "tier": "nice",
+    "mechanism": "auto",
+    "subject": "archive-demand — Arquivar Demanda Implementada"
   },
-  "lanes": [{ "id": "agent", "label": "Archive Operator" }],
+  "lanes": [
+    {
+      "id": "agent",
+      "label": "Archive Operator"
+    }
+  ],
   "phases": [
-    { "id": "validate", "label": "Validar", "fromCol": 0, "toCol": 1, "variant": "emphasis" },
-    { "id": "produce", "label": "Produzir", "fromCol": 2, "toCol": 3, "variant": "default" },
-    { "id": "ship", "label": "Commitar", "fromCol": 4, "toCol": 4, "variant": "dashed" }
+    {
+      "id": "validate",
+      "label": "Validar",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "produce",
+      "label": "Produzir",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "default"
+    },
+    {
+      "id": "ship",
+      "label": "Commitar",
+      "fromCol": 4,
+      "toCol": 4,
+      "variant": "dashed"
+    }
   ],
   "groups": [
     {

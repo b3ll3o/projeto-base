@@ -6,7 +6,7 @@
     "subtitle": "2 estágios sequenciais: monorepo-specialist → code-reviewer",
     "animation": "trace",
     "visual_preset": "signal-flow",
-    "quality_profile": "showcase",
+    "quality_profile": "standard",
     "output": "flow-monorepo-change.workflow.html",
     "views": [
       {
@@ -21,12 +21,32 @@
         "focus": ["code_reviewer"],
         "note": "Apps isolados + workspace protocol + Changesets."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "auto",
+    "subject": "monorepo-change — Adicionar/Mover/Remover Pacote ou App"
   },
-  "lanes": [{ "id": "agent", "label": "Agent Runtime" }],
+  "lanes": [
+    {
+      "id": "agent",
+      "label": "Agent Runtime"
+    }
+  ],
   "phases": [
-    { "id": "build", "label": "Spec + build", "fromCol": 0, "toCol": 0, "variant": "emphasis" },
-    { "id": "review", "label": "Review", "fromCol": 1, "toCol": 1, "variant": "dashed" }
+    {
+      "id": "build",
+      "label": "Spec + build",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
+      "id": "review",
+      "label": "Review",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "dashed"
+    }
   ],
   "groups": [
     {

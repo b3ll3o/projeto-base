@@ -6,7 +6,7 @@
     "subtitle": "4 estágios sequenciais (orchestrator → explorer → test-writer → code-reviewer) com loop se repro falhar",
     "animation": "trace",
     "visual_preset": "signal-flow",
-    "quality_profile": "showcase",
+    "quality_profile": "standard",
     "output": "flow-bugfix-mode.workflow.html",
     "views": [
       {
@@ -21,12 +21,32 @@
         "focus": ["explorer", "test_writer"],
         "note": "Repro test deve falhar antes do fix; passar depois. Loop se ainda falhar."
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "auto",
+    "subject": "bugfix-mode — Corrigir Bug (genérico, com loop)"
   },
-  "lanes": [{ "id": "agent", "label": "Agent Runtime" }],
+  "lanes": [
+    {
+      "id": "agent",
+      "label": "Agent Runtime"
+    }
+  ],
   "phases": [
-    { "id": "discover", "label": "Reproduzir", "fromCol": 0, "toCol": 1, "variant": "emphasis" },
-    { "id": "fix", "label": "Fix + review", "fromCol": 2, "toCol": 3, "variant": "dashed" }
+    {
+      "id": "discover",
+      "label": "Reproduzir",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "fix",
+      "label": "Fix + review",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "dashed"
+    }
   ],
   "groups": [
     {

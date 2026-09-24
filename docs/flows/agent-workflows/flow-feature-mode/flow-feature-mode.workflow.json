@@ -6,7 +6,7 @@
     "subtitle": "5 estágios sequenciais: orchestrator → explorer → test-writer → code-reviewer → tdd-enforcer",
     "animation": "trace",
     "visual_preset": "signal-flow",
-    "quality_profile": "showcase",
+    "quality_profile": "standard",
     "output": "flow-feature-mode.workflow.html",
     "views": [
       {
@@ -21,13 +21,39 @@
         "focus": ["test_writer", "code_reviewer", "tdd_enforcer"],
         "note": "Coverage ≥ 80%, nenhum finding blocker, TDD histórico verificável."
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "auto",
+    "subject": "feature-mode — Implementar Nova Funcionalidade (genérico)"
   },
-  "lanes": [{ "id": "agent", "label": "Agent Runtime" }],
+  "lanes": [
+    {
+      "id": "agent",
+      "label": "Agent Runtime"
+    }
+  ],
   "phases": [
-    { "id": "discover", "label": "Discover", "fromCol": 0, "toCol": 1, "variant": "emphasis" },
-    { "id": "build", "label": "Build", "fromCol": 2, "toCol": 2, "variant": "default" },
-    { "id": "review", "label": "Review", "fromCol": 3, "toCol": 4, "variant": "dashed" }
+    {
+      "id": "discover",
+      "label": "Discover",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "build",
+      "label": "Build",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "default"
+    },
+    {
+      "id": "review",
+      "label": "Review",
+      "fromCol": 3,
+      "toCol": 4,
+      "variant": "dashed"
+    }
   ],
   "groups": [
     {

@@ -6,7 +6,7 @@
     "subtitle": "3 estágios sequenciais: monorepo-specialist → ci-defense-in-depth skill → code-reviewer",
     "animation": "trace",
     "visual_preset": "signal-flow",
-    "quality_profile": "showcase",
+    "quality_profile": "standard",
     "output": "flow-ci-defense-mode.workflow.html",
     "views": [
       {
@@ -21,12 +21,32 @@
         "focus": ["ci_defense_skill", "code_reviewer"],
         "note": "Cada handoff tem expected_output + success_criteria binário."
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "auto",
+    "subject": "ci-defense-mode — Blindagem/Auditoria do CI"
   },
-  "lanes": [{ "id": "agent", "label": "Agent Runtime" }],
+  "lanes": [
+    {
+      "id": "agent",
+      "label": "Agent Runtime"
+    }
+  ],
   "phases": [
-    { "id": "diagnose", "label": "Diagnosticar", "fromCol": 0, "toCol": 1, "variant": "emphasis" },
-    { "id": "review", "label": "Revisar", "fromCol": 2, "toCol": 2, "variant": "dashed" }
+    {
+      "id": "diagnose",
+      "label": "Diagnosticar",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "review",
+      "label": "Revisar",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "dashed"
+    }
   ],
   "groups": [
     {

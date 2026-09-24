@@ -6,7 +6,7 @@
     "subtitle": "Single agent (task-manager): CRUD de tasks com priority + dependencies + acceptance criteria",
     "animation": "trace",
     "visual_preset": "signal-flow",
-    "quality_profile": "showcase",
+    "quality_profile": "standard",
     "output": "flow-task-mode.workflow.html",
     "viewBox": [950, 320],
     "views": [
@@ -16,11 +16,25 @@
         "focus": ["task_manager", "task_output"],
         "note": "task-manager mantém backlog atualizado com deps e acceptance criteria."
       }
-    ]
+    ],
+    "tier": "nice",
+    "mechanism": "auto",
+    "subject": "task-mode — Gestão de Tarefas (single agent)"
   },
-  "lanes": [{ "id": "agent", "label": "Agent Runtime" }],
+  "lanes": [
+    {
+      "id": "agent",
+      "label": "Agent Runtime"
+    }
+  ],
   "phases": [
-    { "id": "manage", "label": "Gerenciar", "fromCol": 0, "toCol": 0, "variant": "emphasis" }
+    {
+      "id": "manage",
+      "label": "Gerenciar",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    }
   ],
   "groups": [
     {

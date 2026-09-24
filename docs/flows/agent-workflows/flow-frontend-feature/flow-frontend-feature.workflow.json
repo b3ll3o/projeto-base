@@ -6,7 +6,7 @@
     "subtitle": "4 estágios sequenciais: nextjs-specialist → test-writer → code-reviewer → tdd-enforcer",
     "animation": "trace",
     "visual_preset": "signal-flow",
-    "quality_profile": "showcase",
+    "quality_profile": "standard",
     "output": "flow-frontend-feature.workflow.html",
     "views": [
       {
@@ -21,12 +21,32 @@
         "focus": ["test_writer", "code_reviewer", "tdd_enforcer"],
         "note": "Lighthouse + a11y + RSC vs. Client + coverage ≥ 80%."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "auto",
+    "subject": "frontend-feature — Implementar Feature no Frontend Next.js"
   },
-  "lanes": [{ "id": "agent", "label": "Agent Runtime" }],
+  "lanes": [
+    {
+      "id": "agent",
+      "label": "Agent Runtime"
+    }
+  ],
   "phases": [
-    { "id": "build", "label": "Spec + build", "fromCol": 0, "toCol": 1, "variant": "emphasis" },
-    { "id": "review", "label": "Review + enforce", "fromCol": 2, "toCol": 3, "variant": "dashed" }
+    {
+      "id": "build",
+      "label": "Spec + build",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "review",
+      "label": "Review + enforce",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "dashed"
+    }
   ],
   "groups": [
     {

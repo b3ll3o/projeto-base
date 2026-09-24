@@ -6,7 +6,7 @@
     "subtitle": "Router classifica demanda → specialists paralelos → controller decide",
     "animation": "trace",
     "visual_preset": "signal-flow",
-    "quality_profile": "showcase",
+    "quality_profile": "standard",
     "output": "flow-specialist-routing.workflow.html",
     "views": [
       {
@@ -21,16 +21,38 @@
         "focus": ["specialist_router", "controller", "agent_architect"],
         "note": "gap_detected → controller BLOQUEIA planning; agent-architect cria specialist."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "auto",
+    "subject": "specialist-routing — Orquestrador de Demanda Pré-Planning"
   },
   "lanes": [
-    { "id": "controller", "label": "Controller (humano)" },
-    { "id": "router", "label": "Specialist Router" },
-    { "id": "specialists", "label": "Specialists Paralelos" },
-    { "id": "policy", "label": "Policy / Recovery", "variant": "exception" }
+    {
+      "id": "controller",
+      "label": "Controller (humano)"
+    },
+    {
+      "id": "router",
+      "label": "Specialist Router"
+    },
+    {
+      "id": "specialists",
+      "label": "Specialists Paralelos"
+    },
+    {
+      "id": "policy",
+      "label": "Policy / Recovery",
+      "variant": "exception"
+    }
   ],
   "phases": [
-    { "id": "classify", "label": "Classifica", "fromCol": 0, "toCol": 1, "variant": "emphasis" },
+    {
+      "id": "classify",
+      "label": "Classifica",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
     {
       "id": "dispatch",
       "label": "Despacha paralelo",
@@ -38,7 +60,13 @@
       "toCol": 2,
       "variant": "emphasis"
     },
-    { "id": "decide", "label": "Decide", "fromCol": 3, "toCol": 3, "variant": "dashed" }
+    {
+      "id": "decide",
+      "label": "Decide",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "dashed"
+    }
   ],
   "groups": [
     {
