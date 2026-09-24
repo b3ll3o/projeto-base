@@ -1,0 +1,109 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Security Mode — Auditoria de Segurança",
+    "subtitle": "2 estágios: security-auditor (OWASP Top 10 + supply chain) → code-reviewer (impacto real)",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "output": "flow-security-mode.workflow.html",
+    "viewBox": [1000, 320],
+    "views": [
+      {
+        "id": "security",
+        "label": "Pipeline de auditoria",
+        "focus": ["security_auditor", "code_reviewer"],
+        "note": "security-auditor identifica; code-reviewer prioriza."
+      }
+    ]
+  },
+  "lanes": [{ "id": "agent", "label": "Agent Runtime" }],
+  "phases": [
+    { "id": "audit", "label": "Auditar", "fromCol": 0, "toCol": 0, "variant": "emphasis" },
+    { "id": "prioritize", "label": "Priorizar", "fromCol": 1, "toCol": 1, "variant": "default" }
+  ],
+  "groups": [
+    {
+      "id": "audit_phase",
+      "label": "Auditoria de segurança",
+      "lane": "agent",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
+      "id": "prio_phase",
+      "label": "Priorização por impacto",
+      "lane": "agent",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "default"
+    }
+  ],
+  "mainPath": ["security_auditor", "code_reviewer"],
+  "nodes": [
+    {
+      "id": "security_auditor",
+      "lane": "agent",
+      "col": 0,
+      "type": "security",
+      "label": "security-auditor",
+      "sublabel": "OWASP A01-A10",
+      "tag": "supply chain + secrets",
+      "width": 160
+    },
+    {
+      "id": "code_reviewer",
+      "lane": "agent",
+      "col": 1,
+      "type": "security",
+      "label": "code-reviewer",
+      "sublabel": "CVSS/OWASP risk",
+      "tag": "0 blockers",
+      "width": 150
+    }
+  ],
+  "edges": [
+    {
+      "id": "audit-to-review",
+      "from": "security_auditor",
+      "to": "code_reviewer",
+      "label": "findings brutos",
+      "variant": "emphasis",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Pipeline Sequencial",
+      "items": [
+        "2 estágios: security-auditor → code-reviewer",
+        "security-auditor identifica achados (read-only)",
+        "code-reviewer prioriza por impacto real (CVSS/OWASP risk)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Foco do security-auditor",
+      "items": [
+        "OWASP Top 10 (A01:2021 a A10:2021)",
+        "Supply chain (deps desatualizadas, vulneráveis)",
+        "Secrets em código (.env, hardcoded credentials)",
+        "Validação de input / output encoding",
+        "Auth/authz/sessão + criptografia em trânsito e repouso"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Quando usar",
+      "items": [
+        "Trigger: 'auditoria segurança', 'verificar OWASP', 'revisar auth/payments'",
+        "Para PR com mudança em auth, payments, dados sensíveis",
+        "Auditoria periódica (mensal/trimestral)",
+        "Pré-deploy em produção"
+      ]
+    }
+  ]
+}
