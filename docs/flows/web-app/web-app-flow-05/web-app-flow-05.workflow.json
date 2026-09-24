@@ -23,13 +23,39 @@
         ],
         "note": "Idempotente via globalThis.__otel_sdk__. Side-effect na importação."
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "Web App: Server-side OTel SDK Init (Node Runtime)"
   },
-  "lanes": [{ "id": "next", "label": "Next.js lifecycle" }],
+  "lanes": [
+    {
+      "id": "next",
+      "label": "Next.js lifecycle"
+    }
+  ],
   "phases": [
-    { "id": "boot", "label": "Boot", "fromCol": 0, "toCol": 1, "variant": "default" },
-    { "id": "config", "label": "Config", "fromCol": 2, "toCol": 2, "variant": "emphasis" },
-    { "id": "running", "label": "Running", "fromCol": 3, "toCol": 3, "variant": "security" }
+    {
+      "id": "boot",
+      "label": "Boot",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "default"
+    },
+    {
+      "id": "config",
+      "label": "Config",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "emphasis"
+    },
+    {
+      "id": "running",
+      "label": "Running",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "security"
+    }
   ],
   "mainPath": ["process_start", "shim", "node_sdk", "auto_instr", "running", "shutdown"],
   "nodes": [

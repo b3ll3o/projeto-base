@@ -16,18 +16,53 @@
         "focus": ["browser", "next", "rsc_home", "html_stream"],
         "note": "HomePage é RSC puro (sem data fetch) — Server Component renderiza JSX para HTML stream."
       }
-    ]
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "Web App: Home Page SSR Render (RSC)"
   },
   "participants": [
-    { "id": "browser", "type": "external", "label": "Browser", "sublabel": "client" },
-    { "id": "next", "type": "backend", "label": "Next.js", "sublabel": "App Router" },
-    { "id": "rsc_home", "type": "backend", "label": "HomePage", "sublabel": "app/page.tsx" },
-    { "id": "html_stream", "type": "frontend", "label": "HTML stream", "sublabel": "RSC payload" }
+    {
+      "id": "browser",
+      "type": "external",
+      "label": "Browser",
+      "sublabel": "client"
+    },
+    {
+      "id": "next",
+      "type": "backend",
+      "label": "Next.js",
+      "sublabel": "App Router"
+    },
+    {
+      "id": "rsc_home",
+      "type": "backend",
+      "label": "HomePage",
+      "sublabel": "app/page.tsx"
+    },
+    {
+      "id": "html_stream",
+      "type": "frontend",
+      "label": "HTML stream",
+      "sublabel": "RSC payload"
+    }
   ],
   "segments": [
-    { "from": 130, "to": 360, "label": "Request" },
-    { "from": 376, "to": 500, "label": "Render" },
-    { "from": 526, "to": 620, "label": "Response" }
+    {
+      "from": 130,
+      "to": 360,
+      "label": "Request"
+    },
+    {
+      "from": 376,
+      "to": 500,
+      "label": "Render"
+    },
+    {
+      "from": 526,
+      "to": 620,
+      "label": "Response"
+    }
   ],
   "messages": [
     {
@@ -88,9 +123,24 @@
     }
   ],
   "activations": [
-    { "participant": "next", "from": 174, "to": 576, "type": "backend" },
-    { "participant": "rsc_home", "from": 214, "to": 396, "type": "backend" },
-    { "participant": "html_stream", "from": 464, "to": 500, "type": "frontend" }
+    {
+      "participant": "next",
+      "from": 174,
+      "to": 576,
+      "type": "backend"
+    },
+    {
+      "participant": "rsc_home",
+      "from": 214,
+      "to": 396,
+      "type": "backend"
+    },
+    {
+      "participant": "html_stream",
+      "from": 464,
+      "to": 500,
+      "type": "frontend"
+    }
   ],
   "cards": [
     {

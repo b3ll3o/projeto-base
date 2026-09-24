@@ -22,14 +22,27 @@
         "focus": ["otel_api", "otlp", "collector", "tempo"],
         "note": "Histograms exportados via OTLP HTTP para o OTel Collector → Tempo."
       }
-    ]
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "Web App: Web Vitals Telemetry Pipeline"
   },
   "stages": [
-    { "label": "Browser" },
-    { "label": "Reporter" },
-    { "label": "OTel SDK" },
-    { "label": "Transport" },
-    { "label": "Backend" }
+    {
+      "label": "Browser"
+    },
+    {
+      "label": "Reporter"
+    },
+    {
+      "label": "OTel SDK"
+    },
+    {
+      "label": "Transport"
+    },
+    {
+      "label": "Backend"
+    }
   ],
   "nodes": [
     {
