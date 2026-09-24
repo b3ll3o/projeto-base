@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Telemetry W3C traceId Propagation",
+    "subtitle": "Browser RSC → traceparent header → NestJS Controller span → AuditContext store → PostgreSQL",
+    "output": "telemetry.http.w3c.traceid.propagation.sequence.html",
+    "quality_profile": "standard",
+    "viewBox": [1020, 700],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "views": [
+      {
+        "id": "propagation",
+        "label": "traceId propagation",
+        "focus": ["rsc", "fetch", "traceparent", "controller", "otel", "audit", "pg"],
+        "note": "W3C trace context flui browser→API→DB com correlação."
+      }
+    ]
+  },
+  "participants": [
+    { "id": "rsc", "type": "external", "label": "apps/web", "sublabel": "RSC fetch" },
+    { "id": "fetch", "type": "backend", "label": "fetch()", "sublabel": "traceparent" },
+    { "id": "traceparent", "type": "backend", "label": "traceparent", "sublabel": "HTTP header" },
+    { "id": "controller", "type": "backend", "label": "Controller", "sublabel": "@Span()" },
+    { "id": "otel", "type": "backend", "label": "OTel SDK", "sublabel": "extract ctx" },
+    { "id": "audit", "type": "backend", "label": "AuditContext", "sublabel": "store" },
+    { "id": "pg", "type": "database", "label": "PostgreSQL", "sublabel": "audit_event" }
+  ],
+  "segments": [
+    { "from": 150, "to": 340, "label": "HTTP request com traceparent" },
+    { "from": 356, "to": 500, "label": "Audit context store" },
+    { "from": 516, "to": 640, "label": "Persist com traceId" }
+  ],
+  "messages": [
+    {
+      "from": "rsc",
+      "to": "fetch",
+      "y": 180,
+      "label": "apiClient.get('/users')",
+      "variant": "emphasis"
+    },
+    {
+      "from": "fetch",
+      "to": "traceparent",
+      "y": 220,
+      "label": "inject header",
+      "variant": "default"
+    },
+    {
+      "from": "traceparent",
+      "to": "controller",
+      "y": 260,
+      "label": "00-{traceId}-{spanId}-01",
+      "variant": "emphasis"
+    },
+    {
+      "from": "controller",
+      "to": "otel",
+      "y": 300,
+      "label": "extract context",
+      "variant": "default"
+    },
+    {
+      "from": "otel",
+      "to": "audit",
+      "y": 380,
+      "label": "AsyncLocalStorage.run()",
+      "variant": "emphasis"
+    },
+    {
+      "from": "audit",
+      "to": "pg",
+      "y": 540,
+      "label": "INSERT audit_event w/ traceId",
+      "variant": "emphasis"
+    },
+    { "from": "pg", "to": "audit", "y": 580, "label": "row OK", "variant": "return" },
+    {
+      "from": "audit",
+      "to": "controller",
+      "y": 610,
+      "label": "traceId correlate",
+      "variant": "return"
+    }
+  ],
+  "activations": [
+    { "participant": "fetch", "from": 174, "to": 254, "type": "backend" },
+    { "participant": "controller", "from": 254, "to": 600, "type": "backend" },
+    { "participant": "otel", "from": 294, "to": 400, "type": "backend" },
+    { "participant": "audit", "from": 374, "to": 580, "type": "backend" },
+    { "participant": "pg", "from": 530, "to": 570, "type": "database" }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "W3C trace context",
+      "items": [
+        "traceparent: 00-<32 hex traceId>-<16 hex spanId>-01",
+        "W3C TraceContext spec (não Zipkin B3)",
+        "Propagator configurado em OTel SDK"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Browser ↔ API correlation",
+      "items": [
+        "fetch() injection automatic via OTLP context",
+        "ApiClient send traceparent header em toda request",
+        "Backend extract ctx antes do controller"
+      ]
+    },
+    {
+      "dot": "orange",
+      "title": "AsyncLocalStorage context",
+      "items": [
+        "AuditContext.store.run() seta ctx na thread",
+        "Each request has own store (per-request isolation)",
+        "Correlation available em todos use-cases"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Persistência no PostgreSQL",
+      "items": [
+        "audit_event.traceId column (VARCHAR 32)",
+        "Correlacionável com Tempo back-end",
+        "apps/web ApiClient trata 412 via ProblemDetails"
+      ]
+    }
+  ]
+}
