@@ -1,0 +1,168 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Audit lineage — events drain → users_history + users_archive",
+    "subtitle": "Domain events → audit.record()/audit.archive() → users_history (INSERT/UPDATE/RESTORE) | users_archive (DELETE)",
+    "output": "df-audit-history-archive.dataflow.html",
+    "quality_profile": "standard",
+    "viewBox": [1500, 760],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "views": [
+      {
+        "id": "audit-lineage",
+        "label": "Audit lineage",
+        "focus": [
+          "domain_event",
+          "drain",
+          "audit_record",
+          "audit_archive",
+          "history_insert",
+          "archive_upsert"
+        ],
+        "note": "Cada mutação do agregado gera 1 domain event → 1 audit record. Soft-delete gera ADICIONAL 1 archive."
+      }
+    ]
+  },
+  "stages": [
+    { "label": "Domain" },
+    { "label": "Drain" },
+    { "label": "Audit svc" },
+    { "label": "Persist" }
+  ],
+  "nodes": [
+    {
+      "id": "domain_event",
+      "type": "security",
+      "label": "domain event",
+      "sublabel": "users.* v1",
+      "stage": 0,
+      "row": 1,
+      "tag": "Created/Updated/.../Restored"
+    },
+    {
+      "id": "drain",
+      "type": "backend",
+      "label": "drainEvents()",
+      "sublabel": "pullEvents()",
+      "stage": 1,
+      "row": 1,
+      "tag": "UserUseCases"
+    },
+    {
+      "id": "audit_record",
+      "type": "backend",
+      "label": "audit.record()",
+      "sublabel": "INSERT/UPDATE/RESTORE",
+      "stage": 2,
+      "row": 0,
+      "tag": "PrismaAuditService"
+    },
+    {
+      "id": "audit_archive",
+      "type": "security",
+      "label": "audit.archive()",
+      "sublabel": "DELETE only",
+      "stage": 2,
+      "row": 3,
+      "tag": "PrismaAuditService"
+    },
+    {
+      "id": "history_insert",
+      "type": "database",
+      "label": "users_history",
+      "sublabel": "JSONB snapshot",
+      "stage": 3,
+      "row": 0,
+      "tag": "Postgres users_history"
+    },
+    {
+      "id": "archive_upsert",
+      "type": "database",
+      "label": "users_archive",
+      "sublabel": "soft-deleted",
+      "stage": 3,
+      "row": 3,
+      "tag": "Postgres users_archive"
+    }
+  ],
+  "flows": [
+    {
+      "id": "f1",
+      "from": "domain_event",
+      "to": "drain",
+      "label": "Event vN",
+      "variant": "emphasis"
+    },
+    {
+      "id": "f2",
+      "from": "drain",
+      "to": "audit_record",
+      "label": "drained",
+      "variant": "emphasis",
+      "route": "vertical-channel",
+      "channelX": 280,
+      "labelDy": -28
+    },
+    {
+      "id": "f3",
+      "from": "drain",
+      "to": "audit_archive",
+      "label": "DeletedEvent",
+      "variant": "security",
+      "route": "vertical-channel",
+      "channelX": 280,
+      "labelDy": -28
+    },
+    {
+      "id": "f4",
+      "from": "audit_record",
+      "to": "history_insert",
+      "label": "INSERT",
+      "variant": "emphasis"
+    },
+    {
+      "id": "f5",
+      "from": "audit_archive",
+      "to": "archive_upsert",
+      "label": "UPSERT",
+      "variant": "security"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Domain events draining",
+      "items": [
+        "User aggregate emite evento via this.events.push(...) em cada mutator",
+        "UserUseCases drena após persist: aggregate.pullEvents() retorna array",
+        "Cada evento mapeado 1:1 para AuditRecordInput",
+        "RESTORE gera evento separado (não é reverse de DELETE)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "users_history schema",
+      "items": [
+        "entityId (UUID) + version (Int) unique",
+        "previousVersion nullable (null apenas em INSERT)",
+        "operation enum { INSERT, UPDATE, DELETE, RESTORE }",
+        "snapshot: JSONB do estado completo",
+        "changedAt + changedBy (AuditContext.actorId)",
+        "reason nullable (soft-delete pode trazer reason)"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "users_archive (DELETE-only)",
+      "items": [
+        "PK lógica: entityId UNIQUE (1 snapshot final por user deletado)",
+        "version Int do snapshot",
+        "snapshot: JSONB do estado FINAL pré-delete",
+        "deletedAt + deletedBy + reason opcional",
+        "Re-arquivar (restore+delete) faz UPSERT substituindo version/snapshot"
+      ]
+    }
+  ]
+}
