@@ -1,0 +1,245 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "POST /users/:id/restore — Restaurar soft-deleted",
+    "subtitle": "POST /users/:id/restore (If-Match) → findById(includeDeleted) → restaurar() → UPDATE users + audit RESTORE",
+    "output": "http-api-users-restore.sequence.html",
+    "viewBox": [1020, 760],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "happy-path",
+        "label": "Restore → 201",
+        "focus": ["client", "controller", "usecases", "repo", "audit", "pg"],
+        "note": "User soft-deletado restaurado, deletedAt=NULL, ETag atualizado."
+      },
+      {
+        "id": "errors",
+        "label": "404/412/422",
+        "focus": ["client", "controller", "usecases", "filter"],
+        "note": "User não existe → 404; versão mismatch → 412; já ativo → 422."
+      }
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "POST /users/:id/restore — restaurar soft-deletado (optimistic lock)"
+  },
+  "participants": [
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Cliente",
+      "sublabel": "POST + If-Match"
+    },
+    {
+      "id": "controller",
+      "type": "backend",
+      "label": "UsersCtrl",
+      "sublabel": "@Status 201"
+    },
+    {
+      "id": "usecases",
+      "type": "backend",
+      "label": "UserUseCases",
+      "sublabel": "restaurar()"
+    },
+    {
+      "id": "repo",
+      "type": "backend",
+      "label": "PrismaRepo",
+      "sublabel": "findById inc"
+    },
+    {
+      "id": "audit",
+      "type": "backend",
+      "label": "AuditService",
+      "sublabel": "record RESTORE"
+    },
+    {
+      "id": "pg",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "users table"
+    },
+    {
+      "id": "filter",
+      "type": "security",
+      "label": "ExcFilter",
+      "sublabel": "RFC 7807"
+    }
+  ],
+  "segments": [
+    {
+      "from": 150,
+      "to": 480,
+      "label": "Restore + persist"
+    },
+    {
+      "from": 456,
+      "to": 710,
+      "label": "Audit RESTORE"
+    }
+  ],
+  "messages": [
+    {
+      "from": "client",
+      "to": "controller",
+      "y": 180,
+      "label": "POST /users/:id/restore",
+      "variant": "emphasis"
+    },
+    {
+      "from": "controller",
+      "to": "usecases",
+      "y": 220,
+      "label": "restaurar({id,expectedVer})",
+      "variant": "emphasis"
+    },
+    {
+      "from": "usecases",
+      "to": "repo",
+      "y": 260,
+      "label": "findById(id, includeDeleted:true)",
+      "variant": "default"
+    },
+    {
+      "from": "repo",
+      "to": "pg",
+      "y": 300,
+      "label": "SELECT WHERE id (sem filtro deletedAt)",
+      "variant": "default"
+    },
+    {
+      "from": "pg",
+      "to": "repo",
+      "y": 338,
+      "label": "User soft-deletado",
+      "variant": "return"
+    },
+    {
+      "from": "usecases",
+      "to": "repo",
+      "y": 376,
+      "label": "restaurar + save(user,n-1)",
+      "variant": "emphasis"
+    },
+    {
+      "from": "repo",
+      "to": "pg",
+      "y": 452,
+      "label": "UPDATE SET deletedAt=NULL WHERE version=n-1",
+      "variant": "default"
+    },
+    {
+      "from": "usecases",
+      "to": "audit",
+      "y": 490,
+      "label": "pullEvents() → record RESTORE",
+      "variant": "emphasis"
+    },
+    {
+      "from": "audit",
+      "to": "pg",
+      "y": 528,
+      "label": "INSERT INTO users_history",
+      "variant": "default"
+    },
+    {
+      "from": "usecases",
+      "to": "controller",
+      "y": 566,
+      "label": "toUserOutput(user)",
+      "variant": "return"
+    },
+    {
+      "from": "controller",
+      "to": "client",
+      "y": 604,
+      "label": "201 + ETag: W/v(n+1)",
+      "variant": "return"
+    },
+    {
+      "from": "usecases",
+      "to": "filter",
+      "y": 672,
+      "label": "404/412/422",
+      "variant": "security"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "controller",
+      "from": 174,
+      "to": 600,
+      "type": "backend"
+    },
+    {
+      "participant": "usecases",
+      "from": 214,
+      "to": 596,
+      "type": "backend"
+    },
+    {
+      "participant": "repo",
+      "from": 254,
+      "to": 446,
+      "type": "backend"
+    },
+    {
+      "participant": "pg",
+      "from": 294,
+      "to": 446,
+      "type": "database"
+    },
+    {
+      "participant": "audit",
+      "from": 484,
+      "to": 522,
+      "type": "backend"
+    },
+    {
+      "participant": "usecases",
+      "from": 666,
+      "to": 698,
+      "type": "backend"
+    },
+    {
+      "participant": "filter",
+      "from": 666,
+      "to": 698,
+      "type": "security"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Restore cascade",
+      "items": [
+        "includeDeleted:true no findById (linha 232 do use-cases.ts) — necessário para carregar",
+        "restaurar() seta deletedAt=null + emite UserRestoredEvent",
+        "audit.record(RESTORE) com previousVersion=restoredFromVersion"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Optimistic locking obrigatório",
+      "items": [
+        "412 se If-Match divergente (mesma proteção do PATCH/DELETE)",
+        "Sem If-Match → 400 IF_MATCH_REQUIRED",
+        "Restore + soft-delete formam par simétrico de version increment"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Error mapping",
+      "items": [
+        "User não existe → ApplicationResourceNotFoundException → 404",
+        "User existe mas deletedAt=null → ApplicationInvalidRestoreException → 422",
+        "Version mismatch → ApplicationConcurrencyException → 412"
+      ]
+    }
+  ]
+}

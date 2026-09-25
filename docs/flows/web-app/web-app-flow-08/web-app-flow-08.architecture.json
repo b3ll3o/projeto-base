@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "apps/web — API Client Component Topology",
+    "subtitle": "ApiClient único + ApiError class + Pages/Components consumidores + shared types contract",
+    "output": "web-app-flow-08.architecture.html",
+    "quality_profile": "standard",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "views": [
+      {
+        "id": "api-client-graph",
+        "label": "Component topology",
+        "focus": [
+          "api_client",
+          "api_error",
+          "users_page",
+          "home_page",
+          "rsc_pages",
+          "shared_types",
+          "config"
+        ],
+        "note": "ApiClient é instanciado per-request em RSC e via DI nos Client Components (não-acoplado a React context)."
+      }
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "Web App: API Client Component Topology"
+  },
+  "layout": {
+    "mode": "grid",
+    "origin": [40, 40],
+    "cols": 4,
+    "gapX": 24,
+    "gapY": 24,
+    "cellW": 220,
+    "cellH": 96
+  },
+  "components": [
+    {
+      "id": "api_client",
+      "type": "security",
+      "label": "ApiClient",
+      "sublabel": "get/post/patch/delete",
+      "tag": "lib/api-client.ts",
+      "row": 0,
+      "col": 1
+    },
+    {
+      "id": "api_error",
+      "type": "security",
+      "label": "ApiError",
+      "sublabel": "extends Error",
+      "tag": "{title,code,status,problem}",
+      "row": 1,
+      "col": 2
+    },
+    {
+      "id": "config",
+      "type": "backend",
+      "label": "ApiClientConfig",
+      "sublabel": "{ baseUrl, getToken }",
+      "tag": "per-request instantiation",
+      "row": 1,
+      "col": 0
+    },
+    {
+      "id": "users_page",
+      "type": "frontend",
+      "label": "users/page.tsx",
+      "sublabel": "RSC try/catch",
+      "tag": "fetch on server",
+      "row": 2,
+      "col": 0
+    },
+    {
+      "id": "home_page",
+      "type": "frontend",
+      "label": "HomePage",
+      "sublabel": "static RSC",
+      "tag": "app/page.tsx",
+      "row": 2,
+      "col": 1
+    },
+    {
+      "id": "rsc_pages",
+      "type": "frontend",
+      "label": "RSC pages",
+      "sublabel": "fetch direto server",
+      "tag": "no useEffect pattern",
+      "row": 2,
+      "col": 2
+    },
+    {
+      "id": "shared_types",
+      "type": "backend",
+      "label": "shared-types",
+      "sublabel": "UserOutputDto + Paginated",
+      "tag": "packages/shared-types",
+      "row": 0,
+      "col": 2
+    },
+    {
+      "id": "problem_consumer",
+      "type": "backend",
+      "label": "ProblemDetailsDto",
+      "sublabel": "RFC 7807 type",
+      "tag": "type-safe error DTO",
+      "row": 1,
+      "col": 3
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "ApiClient API",
+      "items": [
+        "constructor(config: ApiClientConfig)",
+        "api.get<T>(path, init?): Promise<T>",
+        "api.post<T>(path, body?): T",
+        "api.patch<T>(path, body?): T",
+        "api.delete<T>(path, init?): T",
+        "private request<T>(): Promise<T> (logger + headers)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Error type contract",
+      "items": [
+        "ApiError extends Error { code, status, problem }",
+        "problem: ProblemDetailsDto (full DTO preserved)",
+        "name: 'ApiError' (Error.name override)",
+        "Catch upstream: instance of Error vs ApiError",
+        "Component can read .code for branching"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Shared types contract",
+      "items": [
+        "@projeto/shared-types package consumed by apps/api + apps/web",
+        "UserOutputDto exporta versão tipada de User aggregate",
+        "PaginatedResponse<T> generic para listas",
+        "Build monorepo garante consistência cross-package",
+        "Sem drift type-safety entre API e Web"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,200 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Audit Context Propagation — W3C via AsyncLocalStorage",
+    "subtitle": "HTTP → controller → use case → repository: correlationId (W3C traceId) propagado sem parâmetro explícito",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "standard",
+    "output": "http-api-audit-context-propagation.workflow.html",
+    "views": [
+      {
+        "id": "propagation",
+        "label": "Propagação",
+        "focus": ["controller", "context_store", "use_case", "audit_record"],
+        "note": "4 camadas + AuditContextStore singleton (AsyncLocalStorage)."
+      },
+      {
+        "id": "missing-error",
+        "label": "Error handling",
+        "focus": ["context_store"],
+        "note": "AuditContextMissingError se get() fora de run()."
+      }
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "Cross-cutting — AuditContext via AsyncLocalStorage (correlationId W3C)"
+  },
+  "lanes": [
+    {
+      "id": "api",
+      "label": "HTTP API request"
+    }
+  ],
+  "phases": [
+    {
+      "id": "build",
+      "label": "Build ctx",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
+      "id": "store",
+      "label": "Store.run()",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "default"
+    },
+    {
+      "id": "use",
+      "label": "Use cases",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "default"
+    },
+    {
+      "id": "persist",
+      "label": "Audit record",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "dashed"
+    }
+  ],
+  "groups": [
+    {
+      "id": "build_phase",
+      "label": "Build context",
+      "lane": "api",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
+      "id": "store_phase",
+      "label": "AsyncLocalStorage",
+      "lane": "api",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "default"
+    },
+    {
+      "id": "use_phase",
+      "label": "Use case execution",
+      "lane": "api",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "default"
+    },
+    {
+      "id": "persist_phase",
+      "label": "Persiste audit",
+      "lane": "api",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": ["controller", "context_store", "use_case", "audit_record"],
+  "nodes": [
+    {
+      "id": "controller",
+      "lane": "api",
+      "col": 0,
+      "type": "backend",
+      "label": "UsersController",
+      "sublabel": "buildContext()",
+      "tag": "W3C traceId",
+      "width": 150
+    },
+    {
+      "id": "context_store",
+      "lane": "api",
+      "col": 1,
+      "type": "external",
+      "label": "AuditContextStore",
+      "sublabel": "singleton module",
+      "tag": "AsyncLocalStorage",
+      "width": 170
+    },
+    {
+      "id": "use_case",
+      "lane": "api",
+      "col": 2,
+      "type": "backend",
+      "label": "UserUseCases",
+      "sublabel": "AuditContextStore.get()",
+      "tag": "ctx via scope",
+      "width": 150
+    },
+    {
+      "id": "audit_record",
+      "lane": "api",
+      "col": 3,
+      "type": "database",
+      "label": "PrismaAuditService",
+      "sublabel": "audit.record()",
+      "tag": "AuditRecord table",
+      "width": 170
+    }
+  ],
+  "edges": [
+    {
+      "id": "ctrl-to-store",
+      "from": "controller",
+      "to": "context_store",
+      "label": "AuditContext (correlationId=W3C)",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "store-to-usecase",
+      "from": "context_store",
+      "to": "use_case",
+      "label": "run(ctx, fn) → fn()",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "usecase-to-audit",
+      "from": "use_case",
+      "to": "audit_record",
+      "label": "AuditServicePort.record()",
+      "variant": "default",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Propagação sem parâmetro",
+      "items": [
+        "AsyncLocalStorage<AuditContext> em singleton module-level",
+        "buildContext() extrai span ativa via trace.getSpan(context.active())",
+        "correlationId = w3cTraceId ?? randomUUID() (fallback)",
+        "AuditContextStore.run(ctx, fn) cria scope; get() puxa do scope",
+        "PrismaAuditService.record() recebe ctx via get() no momento do log"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Garantias",
+      "items": [
+        "correlationId nunca vazio (validado no VO AuditContext)",
+        "AsyncLocalStorage preserva ctx em toda cadeia async",
+        "AuditContextMissingError se get() fora de run()",
+        "Logs Pino recebem traceId W3C automaticamente"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Origem do correlationId",
+      "items": [
+        "controller extrai W3C traceId da span ativa",
+        "randomUUID() se span ausente (request sem tracing)",
+        "Mesma identidade propaga em: HTTP response, audit row, Pino logs, OTel spans"
+      ]
+    }
+  ]
+}

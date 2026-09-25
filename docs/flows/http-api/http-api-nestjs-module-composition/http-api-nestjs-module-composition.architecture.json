@@ -1,0 +1,186 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "NestJS Module Composition — apps/api",
+    "subtitle": "AppModule raiz + imports globais + DI bindings hexagonal (Users ↔ Audit ↔ Prisma)",
+    "output": "http-api-nestjs-module-composition.architecture.html",
+    "quality_profile": "standard",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "views": [
+      {
+        "id": "module-graph",
+        "label": "Module graph",
+        "focus": [
+          "app_module",
+          "config_module",
+          "logger_module",
+          "prisma_module",
+          "audit_module",
+          "health_module",
+          "users_module",
+          "prisma_persistence",
+          "audit_persistence",
+          "users_controller",
+          "users_use_cases"
+        ],
+        "note": "Composição canônica: AppModule orquestra 5 sub-módulos com bindings DI de ports (USER_REPOSITORY_PORT, AUDIT_SERVICE_PORT)."
+      }
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "Arquitetura — composição de módulos NestJS e bindings DI"
+  },
+  "layout": {
+    "mode": "grid",
+    "origin": [40, 40],
+    "cols": 4,
+    "gapX": 24,
+    "gapY": 24,
+    "cellW": 220,
+    "cellH": 96
+  },
+  "components": [
+    {
+      "id": "app_module",
+      "type": "external",
+      "label": "AppModule",
+      "sublabel": "@Module raiz",
+      "tag": "apps/api/src/app.module.ts",
+      "row": 0,
+      "col": 1
+    },
+    {
+      "id": "config_module",
+      "type": "backend",
+      "label": "ConfigModule",
+      "sublabel": "isGlobal + cache",
+      "tag": "@nestjs/config",
+      "row": 1,
+      "col": 0
+    },
+    {
+      "id": "logger_module",
+      "type": "backend",
+      "label": "LoggerModule",
+      "sublabel": "pino + pino-pretty",
+      "tag": "nestjs-pino",
+      "row": 1,
+      "col": 1
+    },
+    {
+      "id": "prisma_module",
+      "type": "backend",
+      "label": "PrismaModule",
+      "sublabel": "@Global()",
+      "tag": "@prisma/client + PrismaService",
+      "row": 1,
+      "col": 2
+    },
+    {
+      "id": "audit_module",
+      "type": "backend",
+      "label": "AuditInfraModule",
+      "sublabel": "AUDIT_SERVICE_PORT → Prisma",
+      "tag": "apps/api/src/shared/audit",
+      "row": 1,
+      "col": 3
+    },
+    {
+      "id": "health_module",
+      "type": "backend",
+      "label": "HealthModule",
+      "sublabel": "GET /api/v1/health",
+      "tag": "apps/api/src/modules/health",
+      "row": 2,
+      "col": 0
+    },
+    {
+      "id": "users_module",
+      "type": "backend",
+      "label": "UsersModule",
+      "sublabel": "bounded context Users",
+      "tag": "apps/api/src/modules/users",
+      "row": 2,
+      "col": 1
+    },
+    {
+      "id": "prisma_persistence",
+      "type": "backend",
+      "label": "PrismaPersistModule",
+      "sublabel": "USER_REPOSITORY_PORT → Prisma",
+      "tag": "infrastructure/persistence",
+      "row": 2,
+      "col": 2
+    },
+    {
+      "id": "audit_persistence",
+      "type": "backend",
+      "label": "PrismaAuditService",
+      "sublabel": "implements AuditServicePort",
+      "tag": "prisma-audit.service.ts",
+      "row": 2,
+      "col": 3
+    },
+    {
+      "id": "users_controller",
+      "type": "frontend",
+      "label": "UsersController",
+      "sublabel": "@Controller + Zod pipes",
+      "tag": "infra/http/users.controller.ts",
+      "row": 3,
+      "col": 1
+    },
+    {
+      "id": "users_use_cases",
+      "type": "security",
+      "label": "UserUseCases",
+      "sublabel": "USER_USE_CASES (Symbol.for)",
+      "tag": "application/user-use-cases.ts",
+      "row": 3,
+      "col": 2
+    },
+    {
+      "id": "user_aggregate",
+      "type": "security",
+      "label": "User aggregate",
+      "sublabel": "domain/User aggregate",
+      "tag": "domain/user.aggregate.ts",
+      "row": 3,
+      "col": 3
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Composição canônica",
+      "items": [
+        "AppModule importa: Config, Logger, PrismaModule, AuditInfra, Health, Users",
+        "PrismaModule é @Global() (auto-injetável em qualquer module)",
+        "UsersModule importa PrismaPersistence (port binding) + AuditInfra",
+        "DI por Symbol.for tokens (USER_REPOSITORY_PORT, AUDIT_SERVICE_PORT)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Hexagonal DI bindings",
+      "items": [
+        "Domain layer: define Port interfaces (UserRepositoryPort, AuditServicePort)",
+        "Application layer: use cases recebem ports via @Inject(token)",
+        "Infrastructure layer: implementações Prisma registradas em PrismaPersistenceModule/AuditInfraModule",
+        "Sem @Inject explícito o container passaria undefined (latent bug, Task 7.7)"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Logger + Config",
+      "items": [
+        "ConfigModule.forRoot({ isGlobal: true, cache: true })",
+        "LoggerModule: pino-pretty em dev / redact paths em prod",
+        "REDACT_PATHS = ['req.headers.authorization', 'req.headers.cookie']",
+        "Pino logger propaga correlationId W3C do OpenTelemetry"
+      ]
+    }
+  ]
+}

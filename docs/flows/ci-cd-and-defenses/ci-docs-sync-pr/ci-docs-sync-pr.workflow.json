@@ -1,0 +1,200 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "CI docs-sync — Sync em PR",
+    "subtitle": "pull_request → changed files → pnpm docs:sync (mode=full) → doc-sync-report.json artifact",
+    "output": "ci-docs-sync-pr.workflow.html",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "standard",
+    "views": [
+      {
+        "id": "ci-docs-sync",
+        "label": "PR docs-sync",
+        "focus": ["pr_event", "checkout", "diff_filter", "docs_sync", "report_upload"],
+        "note": "Sync-docs.yml: paths = apps/**, packages/**, tooling/**, docs/**, .agents/**. Mode=full gera report."
+      }
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "CI docs-sync em PR: sync-docs.yml → pnpm docs:sync --mode=full"
+  },
+  "lanes": [
+    {
+      "id": "ci",
+      "label": "GitHub Actions (ubuntu-latest)"
+    }
+  ],
+  "phases": [
+    {
+      "id": "trigger",
+      "label": "Trigger",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "default"
+    },
+    {
+      "id": "setup",
+      "label": "Setup",
+      "fromCol": 1,
+      "toCol": 2,
+      "variant": "default"
+    },
+    {
+      "id": "run",
+      "label": "Run",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "report",
+      "label": "Report",
+      "fromCol": 4,
+      "toCol": 4,
+      "variant": "security"
+    }
+  ],
+  "mainPath": ["pr_event", "checkout", "pnpm_setup", "diff_filter", "docs_sync", "report_upload"],
+  "nodes": [
+    {
+      "id": "pr_event",
+      "lane": "ci",
+      "col": 0,
+      "type": "external",
+      "label": "pull_request",
+      "sublabel": "PR aberto/atualizado",
+      "tag": "paths: apps/** etc",
+      "width": 170
+    },
+    {
+      "id": "checkout",
+      "lane": "ci",
+      "col": 1,
+      "type": "frontend",
+      "label": "actions/checkout@v4",
+      "sublabel": "fetch-depth: 0 (full history)",
+      "tag": "diff base..HEAD",
+      "width": 200
+    },
+    {
+      "id": "pnpm_setup",
+      "lane": "ci",
+      "col": 2,
+      "type": "frontend",
+      "label": "pnpm install",
+      "sublabel": "frozen-lockfile",
+      "tag": "Node 20 + pnpm cache",
+      "width": 170
+    },
+    {
+      "id": "diff_filter",
+      "lane": "ci",
+      "col": 3,
+      "type": "backend",
+      "label": "git diff name-only",
+      "sublabel": "origin/base...HEAD",
+      "tag": "files.txt",
+      "width": 170,
+      "yOffset": 130
+    },
+    {
+      "id": "docs_sync",
+      "lane": "ci",
+      "col": 3,
+      "type": "security",
+      "label": "pnpm docs:sync",
+      "sublabel": "mode=full + out-file",
+      "tag": "doc-sync-report.json",
+      "width": 200
+    },
+    {
+      "id": "report_upload",
+      "lane": "ci",
+      "col": 4,
+      "type": "frontend",
+      "label": "upload-artifact@v4",
+      "sublabel": "if: always()",
+      "tag": "doc-sync-report",
+      "width": 170
+    }
+  ],
+  "edges": [
+    {
+      "id": "pr-to-checkout",
+      "from": "pr_event",
+      "to": "checkout",
+      "label": "trigger",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "checkout-to-pnpm",
+      "from": "checkout",
+      "to": "pnpm_setup",
+      "label": "node+pnpm",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "pnpm-to-diff",
+      "from": "pnpm_setup",
+      "to": "diff_filter",
+      "label": "deps OK",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "diff-to-sync",
+      "from": "diff_filter",
+      "to": "docs_sync",
+      "label": "changed files",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "sync-to-upload",
+      "from": "docs_sync",
+      "to": "report_upload",
+      "label": "report.json",
+      "variant": "default",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Paths filter (paths)",
+      "items": [
+        "apps/** — apps/api + apps/web",
+        "packages/** — packages/*",
+        "tooling/** — .tooling/scripts",
+        "docs/** — docs/*.md",
+        ".agents/** — agents, specs, skills, conventions"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Pipeline steps",
+      "items": [
+        "actions/checkout@v4 com fetch-depth: 0 (histórico completo para git diff)",
+        "pnpm/action-setup@v3 + setup-node@v4 (Node 20 + pnpm cache)",
+        "pnpm install --frozen-lockfile (reproduzível)",
+        "git diff --name-only origin/$BASE...HEAD → files changed",
+        "pnpm docs:sync --files=... --mode=full --out-file=doc-sync-report.json",
+        "upload-artifact@v4 (if: always()) preserva report em falhas"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Idempotência e mode=full",
+      "items": [
+        "mode=full: varredura completa, não incremental — emite actions em ordem",
+        "out-file: doc-sync-report.json (sempre presente)",
+        "if: always(): artifact carrega MESMO se sync detectou drift",
+        "consumidores: status checks do PR review + debug pós-merge"
+      ]
+    }
+  ]
+}

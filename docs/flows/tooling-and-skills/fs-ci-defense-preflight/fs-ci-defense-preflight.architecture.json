@@ -1,0 +1,191 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "ci-defense-preflight — 11 Checks + Gates",
+    "subtitle": "pnpm ci:preflight → 11 checks paralelos → CheckResult agregado → gate",
+    "output": "fs-ci-defense-preflight.architecture.html",
+    "quality_profile": "standard",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "views": [
+      {
+        "id": "all-checks",
+        "label": "11 checks paralelos",
+        "focus": [
+          "preflight_entry",
+          "doc_refs_docs",
+          "doc_refs_specs",
+          "tsconfig_drift",
+          "eslint_apps",
+          "eslint_packages",
+          "turbo_drift",
+          "package_drift",
+          "docker_drift",
+          "review_routing",
+          "archive_integrity",
+          "result_aggregator",
+          "gate_exit"
+        ],
+        "note": "Pipeline .tooling/scripts/ci/preflight.ts com 11 checks sequenciais + agregador + gate."
+      }
+    ],
+    "tier": "important",
+    "mechanism": "auto",
+    "subject": "ci-defense-mode — preflight (defense-in-depth) com 11 checks + gates"
+  },
+  "layout": {
+    "mode": "grid",
+    "origin": [40, 40],
+    "cols": 4,
+    "gapX": 24,
+    "gapY": 24,
+    "cellW": 220,
+    "cellH": 96
+  },
+  "components": [
+    {
+      "id": "preflight_entry",
+      "type": "external",
+      "label": "pnpm ci:preflight",
+      "sublabel": "shell entry",
+      "tag": "preflight.ts",
+      "row": 0,
+      "col": 0
+    },
+    {
+      "id": "doc_refs_docs",
+      "type": "backend",
+      "label": "doc-refs (docs)",
+      "sublabel": "checkDocRefs",
+      "tag": "docs/",
+      "row": 1,
+      "col": 0
+    },
+    {
+      "id": "doc_refs_specs",
+      "type": "backend",
+      "label": "doc-refs (specs)",
+      "sublabel": "checkDocRefs",
+      "tag": ".agents/specs/",
+      "row": 2,
+      "col": 0
+    },
+    {
+      "id": "tsconfig_drift",
+      "type": "backend",
+      "label": "tsconfig-drift",
+      "sublabel": "strict + indexedAccess",
+      "tag": "tsconfig.base.json",
+      "row": 1,
+      "col": 1
+    },
+    {
+      "id": "eslint_apps",
+      "type": "backend",
+      "label": "eslint-drift (apps)",
+      "sublabel": "apps/{api,web}",
+      "tag": "eslint.config.mjs",
+      "row": 2,
+      "col": 1
+    },
+    {
+      "id": "eslint_packages",
+      "type": "backend",
+      "label": "eslint pkg-drift",
+      "sublabel": "packages/*",
+      "tag": "eslint.config.mjs",
+      "row": 3,
+      "col": 1
+    },
+    {
+      "id": "turbo_drift",
+      "type": "backend",
+      "label": "turbo-drift",
+      "sublabel": "pipeline canônico",
+      "tag": "turbo.json",
+      "row": 1,
+      "col": 2
+    },
+    {
+      "id": "package_drift",
+      "type": "backend",
+      "label": "package-drift",
+      "sublabel": "scripts canônicos",
+      "tag": "package.json",
+      "row": 2,
+      "col": 2
+    },
+    {
+      "id": "docker_drift",
+      "type": "backend",
+      "label": "docker-drift",
+      "sublabel": ".dockerignore + size",
+      "tag": "Dockerfile*",
+      "row": 3,
+      "col": 2
+    },
+    {
+      "id": "review_routing",
+      "type": "backend",
+      "label": "review-routing lint",
+      "sublabel": "YAML + LOC + refs",
+      "tag": "matrix v1.6.0",
+      "row": 1,
+      "col": 3
+    },
+    {
+      "id": "archive_integrity",
+      "type": "backend",
+      "label": "archive integrity",
+      "sublabel": "frontmatter canônico",
+      "tag": ".agents/runs/archive/",
+      "row": 2,
+      "col": 3
+    },
+    {
+      "id": "result_aggregator",
+      "type": "security",
+      "label": "CheckResult",
+      "sublabel": "agregador",
+      "tag": "ok/errors[]",
+      "row": 3,
+      "col": 0
+    },
+    {
+      "id": "gate_exit",
+      "type": "security",
+      "label": "exit gate",
+      "sublabel": "0 → ok | >0 → fail",
+      "tag": "exit code",
+      "row": 3,
+      "col": 3
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "11 checks paralelos",
+      "items": [
+        "doc-refs × 2 (docs/, .agents/specs/)",
+        "tsconfig-drift (strict + noUncheckedIndexedAccess)",
+        "eslint-drift × 2 (apps + packages)",
+        "turbo-drift (pipeline canônico)",
+        "package-drift (scripts + fantasmas)",
+        "docker-drift (.dockerignore + size)",
+        "review-routing matrix lint (YAML + LOC)",
+        "archive integrity (frontmatter canônico)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Gating",
+      "items": [
+        "CheckResult { ok: boolean; errors: string[] }",
+        "preflight.ts importa TODOS os checks",
+        "specs herméticos via fs.mkdtemp(os.tmpdir())",
+        "exit code 0 → CI continua | >0 → CI bloqueia"
+      ]
+    }
+  ]
+}

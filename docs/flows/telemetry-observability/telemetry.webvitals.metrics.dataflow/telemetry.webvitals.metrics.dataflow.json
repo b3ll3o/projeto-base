@@ -1,0 +1,160 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Web Vitals → OpenTelemetry Metrics Histograms",
+    "subtitle": "web-vitals-reporter.tsx → web-vitals callbacks → meter.createHistogram().record(value)",
+    "output": "telemetry.webvitals.metrics.dataflow.html",
+    "quality_profile": "standard",
+    "viewBox": [1400, 720],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "views": [
+      {
+        "id": "webvitals-flow",
+        "label": "Web Vitals to OTel",
+        "focus": ["module_load", "window_guard", "web_vitals_lib", "meter_get", "histogram_record"],
+        "note": "Side-effect Client Component. Guard typeof window protege build pipeline (PerformanceObserver lança ReferenceError em Node SSR)."
+      }
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "Web Vitals → OTel Metrics (LCP/CLS/INP/FID/TTFB como Histograms)"
+  },
+  "stages": [
+    {
+      "label": "Module"
+    },
+    {
+      "label": "Guard"
+    },
+    {
+      "label": "Setup"
+    },
+    {
+      "label": "Records"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "module_load",
+      "type": "external",
+      "label": "marker component",
+      "sublabel": "web-vitals-reporter.tsx",
+      "stage": 0,
+      "row": 1,
+      "tag": "use client"
+    },
+    {
+      "id": "window_guard",
+      "type": "security",
+      "label": "typeof window guard",
+      "sublabel": "browser only",
+      "stage": 1,
+      "row": 1,
+      "tag": "tree-shaking safe"
+    },
+    {
+      "id": "web_vitals_lib",
+      "type": "external",
+      "label": "web-vitals",
+      "sublabel": "onLCP/CLS/INP/FID/TTFB",
+      "stage": 2,
+      "row": 0,
+      "tag": "Google library"
+    },
+    {
+      "id": "meter_get",
+      "type": "backend",
+      "label": "metrics.getMeter",
+      "sublabel": "projeto-base-web",
+      "stage": 2,
+      "row": 1,
+      "tag": "@opentelemetry/api"
+    },
+    {
+      "id": "histogram_record",
+      "type": "security",
+      "label": "createHistogram()",
+      "sublabel": "5 histograms",
+      "stage": 3,
+      "row": 1,
+      "tag": "web.vitals.*",
+      "width": 180
+    }
+  ],
+  "flows": [
+    {
+      "id": "f1",
+      "from": "module_load",
+      "to": "window_guard",
+      "label": "imported",
+      "variant": "emphasis"
+    },
+    {
+      "id": "f2",
+      "from": "window_guard",
+      "to": "web_vitals_lib",
+      "label": "register callbacks",
+      "variant": "emphasis",
+      "route": "top-channel",
+      "channelY": 215
+    },
+    {
+      "id": "f3",
+      "from": "window_guard",
+      "to": "meter_get",
+      "label": "getMeter",
+      "variant": "emphasis"
+    },
+    {
+      "id": "f4",
+      "from": "web_vitals_lib",
+      "to": "histogram_record",
+      "label": "value",
+      "variant": "emphasis",
+      "route": "top-channel",
+      "channelY": 215
+    },
+    {
+      "id": "f5",
+      "from": "meter_get",
+      "to": "histogram_record",
+      "label": "histogram",
+      "variant": "emphasis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Marker component pattern",
+      "items": [
+        "apps/web/src/telemetry/web-vitals-reporter.tsx",
+        "Client Component 'use client' + função WebVitalsReporter(): null",
+        "Importado em app/layout.tsx (Task 4.2) para forçar side-effect mount",
+        "Stateless: re-registrar a cada render duplicaria observers"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Web Vitals coverage",
+      "items": [
+        "onLCP: largest-contentful-paint (loading)",
+        "onCLS: cumulative-layout-shift (visual stability)",
+        "onINP: interaction-to-next-paint (responsiveness)",
+        "onFID: first-input-delay (legacy compat)",
+        "onTTFB: time-to-first-byte (server roundtrip)"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "SSR-safety guard",
+      "items": [
+        "if (typeof window !== 'undefined') no top-level",
+        "Protege build pipeline: PerformanceObserver não existe em Node",
+        "Document reference via web-vitals onActivated lança ReferenceError em SSR",
+        "Tree-shaking remove bloco no Node bundle (sem document reference)"
+      ]
+    }
+  ]
+}

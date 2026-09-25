@@ -1,0 +1,228 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "apps/web — ApiClient Error Path (RFC 7807 → ApiError)",
+    "subtitle": "RSC → ApiClient.get() → fetch apps/api → non-2xx → ProblemDetails → ApiError throw → client catch",
+    "output": "web-app-flow-06.sequence.html",
+    "viewBox": [1080, 760],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "api-error",
+        "label": "Error path",
+        "focus": ["rsc", "api_client", "fetch", "api", "problem", "api_error", "fallback_ui"],
+        "note": "non-2xx → body JSON parse → ApiError com ProblemDetailsDto → client component catch → fallback UI."
+      }
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "Web App: API Client Error Path (ProblemDetails -> ApiError)"
+  },
+  "participants": [
+    {
+      "id": "rsc",
+      "type": "backend",
+      "label": "RSC",
+      "sublabel": "app/users/page.tsx"
+    },
+    {
+      "id": "api_client",
+      "type": "backend",
+      "label": "ApiClient",
+      "sublabel": "fetch wrapper"
+    },
+    {
+      "id": "fetch",
+      "type": "external",
+      "label": "fetch",
+      "sublabel": "node/browser"
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "apps/api",
+      "sublabel": "NestJS"
+    },
+    {
+      "id": "problem",
+      "type": "security",
+      "label": "Problems",
+      "sublabel": "RFC 7807"
+    },
+    {
+      "id": "api_error",
+      "type": "security",
+      "label": "ApiError",
+      "sublabel": "throw new"
+    },
+    {
+      "id": "fallback_ui",
+      "type": "frontend",
+      "label": "fallback UI",
+      "sublabel": "error message"
+    }
+  ],
+  "segments": [
+    {
+      "from": 130,
+      "to": 308,
+      "label": "Request"
+    },
+    {
+      "from": 324,
+      "to": 488,
+      "label": "Error path"
+    },
+    {
+      "from": 504,
+      "to": 644,
+      "label": "Recover"
+    }
+  ],
+  "messages": [
+    {
+      "from": "rsc",
+      "to": "api_client",
+      "y": 180,
+      "label": "api.get('/users?limit=20')",
+      "variant": "emphasis"
+    },
+    {
+      "from": "api_client",
+      "to": "fetch",
+      "y": 220,
+      "label": "build URL + headers",
+      "variant": "default"
+    },
+    {
+      "from": "fetch",
+      "to": "api",
+      "y": 260,
+      "label": "GET /api/v1/users",
+      "variant": "emphasis"
+    },
+    {
+      "from": "api",
+      "to": "problem",
+      "y": 320,
+      "label": "Throw HttpException",
+      "variant": "security"
+    },
+    {
+      "from": "problem",
+      "to": "fetch",
+      "y": 380,
+      "label": "400/404/500 ProblemDetailsDto",
+      "variant": "security"
+    },
+    {
+      "from": "fetch",
+      "to": "api_client",
+      "y": 430,
+      "label": "res.ok=false",
+      "variant": "security"
+    },
+    {
+      "from": "api_client",
+      "to": "api_error",
+      "y": 500,
+      "label": "await res.json() → ProblemDetails",
+      "variant": "default"
+    },
+    {
+      "from": "api_error",
+      "to": "api_client",
+      "y": 540,
+      "label": "throw new ApiError(title, code, status)",
+      "variant": "security"
+    },
+    {
+      "from": "api_client",
+      "to": "rsc",
+      "y": 600,
+      "label": "throw ApiError (rejected promise)",
+      "variant": "security"
+    },
+    {
+      "from": "rsc",
+      "to": "fallback_ui",
+      "y": 660,
+      "label": "try/catch render fallback UI",
+      "variant": "emphasis"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "api_client",
+      "from": 174,
+      "to": 596,
+      "type": "backend"
+    },
+    {
+      "participant": "fetch",
+      "from": 214,
+      "to": 426,
+      "type": "external"
+    },
+    {
+      "participant": "api",
+      "from": 254,
+      "to": 314,
+      "type": "backend"
+    },
+    {
+      "participant": "problem",
+      "from": 314,
+      "to": 374,
+      "type": "security"
+    },
+    {
+      "participant": "api_error",
+      "from": 494,
+      "to": 536,
+      "type": "security"
+    },
+    {
+      "participant": "fallback_ui",
+      "from": 654,
+      "to": 656,
+      "type": "frontend"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "ApiClient.ts estratégia de erro",
+      "items": [
+        "if (!res.ok) parse body as ProblemDetailsDto",
+        "throw new ApiError(title, code, status, problem)",
+        "ApiError extends Error com .problem (full DTO)",
+        "catch upstream via try/catch no RSC (app/users/page.tsx)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "ProblemDetailsDto contrato",
+      "items": [
+        "type: https://errors.projeto.com/{code}",
+        "title: human-readable summary",
+        "code: VAL id do erro (definido em @projeto/shared-types)",
+        "traceId: W3C 32 hex chars (correlaciona com backend spans)",
+        "errors[]: campo + message + code (Zod) — detalhe granular"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "RSC fallback UX",
+      "items": [
+        "app/users/page.tsx: try/catch → set error string",
+        "Renderiza <p className='mt-4 text-red-600'>Erro ao carregar: ...</p>",
+        "Não exibe stack (apenas message.title)",
+        "Recovery: client pode retry via router.refresh()"
+      ]
+    }
+  ]
+}

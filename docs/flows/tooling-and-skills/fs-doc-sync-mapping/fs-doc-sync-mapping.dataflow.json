@@ -1,0 +1,193 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "doc-sync — Code→Doc Mapping",
+    "subtitle": "Pipeline reativo: changed files → heurística code→doc → ações review/update/create/alert",
+    "output": "fs-doc-sync-mapping.dataflow.html",
+    "quality_profile": "standard",
+    "viewBox": [1200, 720],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "views": [
+      {
+        "id": "pipeline",
+        "label": "doc-sync pipeline",
+        "focus": [
+          "changed_files",
+          "heuristic",
+          "actions_router",
+          "review",
+          "update",
+          "create",
+          "alert"
+        ],
+        "note": "5 estágios: changed files → heurística code→doc → classificador de ação → 4 ações."
+      }
+    ],
+    "tier": "important",
+    "mechanism": "auto",
+    "subject": "doc-sync — mapeamento code→doc que dispara ações review/update/create/alert"
+  },
+  "stages": [
+    {
+      "label": "Trigger"
+    },
+    {
+      "label": "Heurística"
+    },
+    {
+      "label": "Classificador"
+    },
+    {
+      "label": "Ações"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "changed_files",
+      "type": "external",
+      "label": "changed files",
+      "sublabel": "git diff --cached",
+      "stage": 0,
+      "row": 1,
+      "tag": "*.ts/*.tsx/*.prisma"
+    },
+    {
+      "id": "heuristic",
+      "type": "backend",
+      "label": "heurística code→doc",
+      "sublabel": "path → doc files",
+      "stage": 1,
+      "row": 1,
+      "tag": "apps/api/users/** → 5 docs"
+    },
+    {
+      "id": "actions_router",
+      "type": "backend",
+      "label": "classificador",
+      "sublabel": "severity + tipo",
+      "stage": 2,
+      "row": 1,
+      "tag": "info/minor/major"
+    },
+    {
+      "id": "review",
+      "type": "external",
+      "label": "REVIEW",
+      "sublabel": "sem mudanças",
+      "stage": 3,
+      "row": 0,
+      "tag": "doc ainda OK"
+    },
+    {
+      "id": "update",
+      "type": "backend",
+      "label": "UPDATE",
+      "sublabel": "auto-apply minor",
+      "stage": 3,
+      "row": 1,
+      "tag": "≤ 5 linhas"
+    },
+    {
+      "id": "create",
+      "type": "external",
+      "label": "CREATE",
+      "sublabel": "dispatch doc-writer",
+      "stage": 3,
+      "row": 2,
+      "tag": "doc nova"
+    },
+    {
+      "id": "alert",
+      "type": "security",
+      "label": "ALERT",
+      "sublabel": "breaking change",
+      "stage": 3,
+      "row": 3,
+      "tag": "bloqueia merge"
+    }
+  ],
+  "flows": [
+    {
+      "id": "f1",
+      "from": "changed_files",
+      "to": "heuristic",
+      "label": "diff completo",
+      "variant": "emphasis",
+      "labelDy": -32
+    },
+    {
+      "id": "f2",
+      "from": "heuristic",
+      "to": "actions_router",
+      "label": "doc files afetadas",
+      "variant": "emphasis",
+      "labelDy": -32
+    },
+    {
+      "id": "f3",
+      "from": "actions_router",
+      "to": "review",
+      "label": "stack unchanged",
+      "variant": "default",
+      "labelDy": -32
+    },
+    {
+      "id": "f4",
+      "from": "actions_router",
+      "to": "update",
+      "label": "minor factual",
+      "variant": "emphasis",
+      "labelDy": -32
+    },
+    {
+      "id": "f5",
+      "from": "actions_router",
+      "to": "create",
+      "label": "feature nova",
+      "variant": "default",
+      "labelDy": -32
+    },
+    {
+      "id": "f6",
+      "from": "actions_router",
+      "to": "alert",
+      "label": "breaking change",
+      "variant": "emphasis",
+      "labelDy": -32
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Heurística code→doc",
+      "items": [
+        "apps/api/src/modules/X/** → apps/api/README.md + docs/api/X.md + OpenAPI",
+        "apps/api/prisma/schema.prisma → docs/STACK.md §2 + prisma/README.md + ADR",
+        ".agents/agents/** → AGENTS.md §3",
+        "Mudança em controller → atualizar OpenAPI + exemplos request/response"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Auto-apply conservador",
+      "items": [
+        "Severity info ou minor → aplicado se ≤ 5 linhas",
+        "Mudança puramente factual (typo/link quebrado)",
+        "Major ou breaking change → sempre ALERT (não auto-aplica)",
+        "Cada update cita evidence: file + line + code"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Triggers",
+      "items": [
+        "git commit com *.ts/*.tsx/*.prisma → Husky pre-commit (incremental)",
+        "Push em qualquer branch → CI sync-docs (incremental)",
+        "PR aberto/atualizado → CI sync-docs-full (full)",
+        "Merge para main → CI docs-audit (global)"
+      ]
+    }
+  ]
+}

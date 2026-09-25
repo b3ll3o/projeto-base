@@ -1,0 +1,229 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Docker Pipeline — apps/api",
+    "subtitle": "multi-stage: base → builder → prod (241MB, dist+prisma+runtime)",
+    "output": "docker-pipeline-apps-api.workflow.html",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "standard",
+    "views": [
+      {
+        "id": "stages",
+        "label": "Multi-stage build",
+        "focus": ["base_img", "fetch", "compile"],
+        "note": "4 stages em /home/leo/Documentos/projetos/base/apps/api/Dockerfile: base, dev, builder, prod."
+      }
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "Pipeline Docker multi-stage apps/api: base → dev → builder → prod + healthcheck"
+  },
+  "lanes": [
+    {
+      "id": "build",
+      "label": "Build phases"
+    },
+    {
+      "id": "artifacts",
+      "label": "Artifacts"
+    }
+  ],
+  "phases": [
+    {
+      "id": "install",
+      "label": "Install deps",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "default"
+    },
+    {
+      "id": "build_run",
+      "label": "Compile",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "finalize",
+      "label": "Prod finalize",
+      "fromCol": 4,
+      "toCol": 5,
+      "variant": "security"
+    }
+  ],
+  "mainPath": ["base_img", "fetch", "install", "compile", "prod_img", "node_check"],
+  "nodes": [
+    {
+      "id": "base_img",
+      "lane": "build",
+      "col": 0,
+      "type": "external",
+      "label": "node:20-slim",
+      "sublabel": "base",
+      "width": 150,
+      "tag": "corepack"
+    },
+    {
+      "id": "fetch",
+      "lane": "build",
+      "col": 1,
+      "type": "backend",
+      "label": "pnpm fetch",
+      "sublabel": "cache",
+      "width": 150,
+      "tag": "frozen"
+    },
+    {
+      "id": "install",
+      "lane": "build",
+      "col": 2,
+      "type": "backend",
+      "label": "pnpm install",
+      "sublabel": "--filter",
+      "width": 150,
+      "tag": "scope:generic"
+    },
+    {
+      "id": "compile",
+      "lane": "build",
+      "col": 3,
+      "type": "backend",
+      "label": "tsc + nest",
+      "sublabel": "build",
+      "width": 150,
+      "tag": "builder"
+    },
+    {
+      "id": "prod_img",
+      "lane": "build",
+      "col": 4,
+      "type": "security",
+      "label": "prod stage",
+      "sublabel": "FROM node:20",
+      "width": 150,
+      "tag": "prod"
+    },
+    {
+      "id": "copy_dist",
+      "lane": "artifacts",
+      "col": 3,
+      "type": "cloud",
+      "label": "dist/",
+      "sublabel": "main.js",
+      "width": 150,
+      "tag": "scope:generic"
+    },
+    {
+      "id": "copy_prisma",
+      "lane": "artifacts",
+      "col": 4,
+      "type": "cloud",
+      "label": "prisma/",
+      "sublabel": "schema",
+      "width": 150,
+      "tag": "scope:generic"
+    },
+    {
+      "id": "node_check",
+      "lane": "build",
+      "col": 5,
+      "type": "security",
+      "label": "node --check",
+      "sublabel": "syntax",
+      "width": 150,
+      "tag": "smoke"
+    }
+  ],
+  "edges": [
+    {
+      "from": "base_img",
+      "to": "fetch",
+      "label": "corepack",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "from": "fetch",
+      "to": "install",
+      "label": "frozen lockfile",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "install",
+      "to": "compile",
+      "label": "tsc build",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "compile",
+      "to": "prod_img",
+      "label": "COPY dist",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "prod_img",
+      "to": "node_check",
+      "label": "verify",
+      "variant": "security",
+      "role": "main"
+    },
+    {
+      "from": "compile",
+      "to": "copy_dist",
+      "label": "artifacts",
+      "variant": "default",
+      "role": "branch"
+    },
+    {
+      "from": "compile",
+      "to": "copy_prisma",
+      "label": "schema",
+      "variant": "default",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Multi-stage Docker pattern",
+      "items": [
+        "base stage: node:20-bookworm-slim + corepack",
+        "builder stage: pnpm install + tsc + nest build",
+        "prod stage: 241MB final, node:20-slim + dist + prisma",
+        "node --check smoke valida syntax do entrypoint (~100ms)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Cache mounts (BuildKit)",
+      "items": [
+        "--mount=type=cache,target=/root/.local/share/pnpm/store",
+        "pnpm fetch (downloads) separado de pnpm install (link)",
+        "Cache compartilhado entre stages builder e dev"
+      ]
+    },
+    {
+      "dot": "orange",
+      "title": "Layers & COPY",
+      "items": [
+        "COPY --from=builder /repo/apps/api/dist apps/api/dist",
+        "COPY --from=builder /repo/apps/api/prisma apps/api/prisma",
+        "pnpm prune --prod para remover devDependencies no prod"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "OpenTelemetry precarregue",
+      "items": [
+        "Prod image usa --import ./apps/api/dist/telemetry/init.cjs",
+        "Carrega OTel ANTES de qualquer codigo de usuario",
+        "CJS-aware: --require quebraria em ESM"
+      ]
+    }
+  ]
+}

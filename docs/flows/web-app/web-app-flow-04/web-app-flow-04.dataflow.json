@@ -1,0 +1,199 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Web Vitals Telemetry — LCP/CLS/INP/FID/TTFB → OTel",
+    "subtitle": "Browser web-vitals observer → Histogram OTel (web.vitals.*) → OTLP exporter → OTel Collector",
+    "output": "web-app-flow-04.dataflow.html",
+    "viewBox": [1080, 560],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "collection",
+        "label": "Web Vitals collection",
+        "focus": ["browser", "vitals", "otel_api", "otlp"],
+        "note": "5 Core Web Vitals + TTFB medidos pelo browser SDK."
+      },
+      {
+        "id": "export",
+        "label": "OTLP export",
+        "focus": ["otel_api", "otlp", "collector", "tempo"],
+        "note": "Histograms exportados via OTLP HTTP para o OTel Collector → Tempo."
+      }
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "Web App: Web Vitals Telemetry Pipeline"
+  },
+  "stages": [
+    {
+      "label": "Browser"
+    },
+    {
+      "label": "Reporter"
+    },
+    {
+      "label": "OTel SDK"
+    },
+    {
+      "label": "Transport"
+    },
+    {
+      "label": "Backend"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "browser",
+      "type": "frontend",
+      "label": "PerformanceObs",
+      "sublabel": "browser API",
+      "stage": 0,
+      "row": 1,
+      "tag": "paint/input/layout"
+    },
+    {
+      "id": "vitals",
+      "type": "frontend",
+      "label": "web-vitals SDK",
+      "sublabel": "5 metrics lib",
+      "stage": 1,
+      "row": 1,
+      "tag": "LCP/CLS/INP/FID/TTFB"
+    },
+    {
+      "id": "otel_api",
+      "type": "backend",
+      "label": "OTel metrics",
+      "sublabel": "createHistogram",
+      "stage": 2,
+      "row": 1,
+      "tag": "@opentelemetry/api"
+    },
+    {
+      "id": "otlp",
+      "type": "backend",
+      "label": "OTLP exporter",
+      "sublabel": "HTTP/protobuf",
+      "stage": 2,
+      "row": 2,
+      "tag": "batch"
+    },
+    {
+      "id": "collector",
+      "type": "cloud",
+      "label": "OTel Collector",
+      "sublabel": "infra/otelcol",
+      "stage": 3,
+      "row": 1,
+      "tag": "receivers"
+    },
+    {
+      "id": "backend",
+      "type": "backend",
+      "label": "apps/api SDK",
+      "sublabel": "correlate",
+      "stage": 4,
+      "row": 2,
+      "tag": "W3C traceId"
+    },
+    {
+      "id": "tempo",
+      "type": "cloud",
+      "label": "Tempo",
+      "sublabel": "traces store",
+      "stage": 4,
+      "row": 1,
+      "tag": "long-term"
+    }
+  ],
+  "flows": [
+    {
+      "id": "observer",
+      "from": "browser",
+      "to": "vitals",
+      "label": "perf entries",
+      "classification": "browser event",
+      "variant": "emphasis",
+      "labelDy": -32
+    },
+    {
+      "id": "vital-callback",
+      "from": "vitals",
+      "to": "otel_api",
+      "label": "histogram values",
+      "classification": "metric value",
+      "variant": "emphasis",
+      "labelDy": -32
+    },
+    {
+      "id": "otlp-export",
+      "from": "otel_api",
+      "to": "otlp",
+      "label": "records",
+      "classification": "OTLP metrics",
+      "variant": "default",
+      "labelDy": 36
+    },
+    {
+      "id": "to-collector",
+      "from": "otlp",
+      "to": "collector",
+      "label": "POST /v1/metrics",
+      "classification": "OTLP/HTTP",
+      "variant": "emphasis",
+      "labelDy": 36
+    },
+    {
+      "id": "collector-to-tempo",
+      "from": "collector",
+      "to": "tempo",
+      "label": "exporter pipeline",
+      "classification": "long-term store",
+      "variant": "dashed",
+      "labelDy": 24
+    },
+    {
+      "id": "correlate",
+      "from": "tempo",
+      "to": "backend",
+      "label": "trace context",
+      "classification": "W3C traceId",
+      "variant": "security",
+      "labelDy": 36
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "5 Core Web Vitals",
+      "items": [
+        "LCP (Largest Contentful Paint) — perceived load speed",
+        "CLS (Cumulative Layout Shift) — visual stability",
+        "INP (Interaction to Next Paint) — responsiveness",
+        "FID (First Input Delay) — legacy input delay",
+        "TTFB (Time To First Byte) — server response time"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "SSR-safe module-load",
+      "items": [
+        "Top-level `if (typeof window !== 'undefined')` guard",
+        "Evita ReferenceError durante build do Docker (PR #25)",
+        "Reporter é 'use client' mas roda em build pipeline"
+      ]
+    },
+    {
+      "dot": "orange",
+      "title": "OTel correlation",
+      "items": [
+        "web-vitals metrics usam trace context W3C do browser",
+        "apps/api NodeSDK compartilha context via propagator",
+        "Correlaciona user-perceived perf com backend traces"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,237 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "archify CLI — render/validate/deliver pipeline",
+    "subtitle": "input.json → schema check → render → post-render composition → write .html",
+    "output": "fs-archify-cli-deliver.workflow.html",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "standard",
+    "views": [
+      {
+        "id": "deliver-pipeline",
+        "label": "Deliver pipeline",
+        "focus": [
+          "cli_args",
+          "input_parse",
+          "schema_check",
+          "renderer",
+          "post_render",
+          "output_path",
+          "html"
+        ],
+        "note": "5 estágios: args → JSON parse → schema check → render → composition → output."
+      }
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "archify CLI render/validate/deliver/compare — pipeline de validação + entrega"
+  },
+  "lanes": [
+    {
+      "id": "cli",
+      "label": "archify CLI"
+    }
+  ],
+  "phases": [
+    {
+      "id": "parse",
+      "label": "Parse",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "default"
+    },
+    {
+      "id": "validate",
+      "label": "Validate",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "emphasis"
+    },
+    {
+      "id": "render",
+      "label": "Render",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "security"
+    },
+    {
+      "id": "write",
+      "label": "Write",
+      "fromCol": 4,
+      "toCol": 4,
+      "variant": "default"
+    }
+  ],
+  "mainPath": [
+    "cli_args",
+    "input_parse",
+    "schema_check",
+    "renderer",
+    "post_render",
+    "output_path",
+    "html"
+  ],
+  "nodes": [
+    {
+      "id": "cli_args",
+      "lane": "cli",
+      "col": 0,
+      "type": "external",
+      "label": "CLI args",
+      "sublabel": "deliver <type> input.json output.html",
+      "tag": "--json --quality",
+      "width": 200
+    },
+    {
+      "id": "input_parse",
+      "lane": "cli",
+      "col": 1,
+      "type": "backend",
+      "label": "JSON parse",
+      "sublabel": "fs.readFileSync + JSON.parse",
+      "tag": "diagram = JSON.parse(spec)",
+      "width": 170
+    },
+    {
+      "id": "schema_check",
+      "lane": "cli",
+      "col": 2,
+      "type": "security",
+      "label": "schema validation",
+      "sublabel": "draft 2020-12 ajv",
+      "tag": "{workflow,sequence,...}.schema.json",
+      "width": 180
+    },
+    {
+      "id": "renderer",
+      "lane": "cli",
+      "col": 3,
+      "type": "backend",
+      "label": "renderer-<type>.mjs",
+      "sublabel": "Node child process",
+      "tag": "renderers/<type>/",
+      "width": 200
+    },
+    {
+      "id": "post_render",
+      "lane": "cli",
+      "col": 3,
+      "type": "security",
+      "label": "compositor",
+      "sublabel": "9 checks + readable y-range",
+      "tag": "checksPassed/checkCount",
+      "width": 170,
+      "yOffset": 130
+    },
+    {
+      "id": "output_path",
+      "lane": "cli",
+      "col": 4,
+      "type": "backend",
+      "label": "resolveOutputPath",
+      "sublabel": "authored > requested > default",
+      "tag": "renderers/shared/output-path.mjs",
+      "width": 200
+    },
+    {
+      "id": "html",
+      "lane": "cli",
+      "col": 5,
+      "type": "frontend",
+      "label": "output.html",
+      "sublabel": "page artifact",
+      "tag": "evidence SVG + script",
+      "width": 160
+    }
+  ],
+  "edges": [
+    {
+      "id": "args-to-parse",
+      "from": "cli_args",
+      "to": "input_parse",
+      "label": "type + input + out",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "parse-to-schema",
+      "from": "input_parse",
+      "to": "schema_check",
+      "label": "diagram object",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "schema-to-render",
+      "from": "schema_check",
+      "to": "renderer",
+      "label": "valid JSON",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "render-to-compositor",
+      "from": "renderer",
+      "to": "post_render",
+      "label": "SVG fragment",
+      "variant": "default",
+      "role": "branch"
+    },
+    {
+      "id": "compositor-to-path",
+      "from": "post_render",
+      "to": "output_path",
+      "label": "checksPassed === checksCount",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "path-to-html",
+      "from": "output_path",
+      "to": "html",
+      "label": "fs.writeFileSync",
+      "variant": "default",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Subcommands disponíveis",
+      "items": [
+        "render: gera SVG sem quality/composition check rigoroso",
+        "validate: schema + render-check, NÃO escreve arquivo",
+        "deliver: validate + compositor + write (pipeline canônico)",
+        "preview: deliver + open browser",
+        "compare architecture <base> <head>: gera diff HTML side-by-side"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "9 checks composition",
+      "items": [
+        "finite_svg: coordenadas não-finitas removidas",
+        "single_svg: 1 <svg> block",
+        "orthogonal_arrows: routing ortogonal suportado",
+        "label_route_clearance: 8px endpoint + 16px interior + 28px direct",
+        "node_overlap: ≥8px entre nodes na mesma lane/col",
+        "mainPath consecutive: edges casam com sequência",
+        "edge/proper-crossing: <N crossings para showcase",
+        "desktop-readability: viewBox ≤ 930px width para showcase",
+        "schema/enum: variants e roles válidos"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Recibo e failure handling",
+      "items": [
+        "--json: stdout com receipt { ok, checks, compositionStatus }",
+        "Failure: process.exitCode setado + diagnostics listados",
+        "schema/enum errors NÃO rendem → exitCode 1",
+        "compositionFailure mostra warning count (warnings não bloqueiam deliver)"
+      ]
+    }
+  ]
+}

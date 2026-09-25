@@ -1,0 +1,209 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Browser OTel SDK init — WebTracerProvider + auto-instr",
+    "subtitle": "instrumentation-client.ts → WebTracerProvider + BatchSpanProcessor + OTLP exporter + auto-instr → /api/otel/collect",
+    "output": "telemetry.frontend.browser.sdk.init.dataflow.html",
+    "quality_profile": "standard",
+    "viewBox": [1500, 760],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "views": [
+      {
+        "id": "browser-otel",
+        "label": "Browser OTel init",
+        "focus": [
+          "module_load",
+          "window_guard",
+          "web_provider",
+          "resource_in_processor",
+          "exporter",
+          "register",
+          "auto_instr",
+          "api_route"
+        ],
+        "note": "Side-effect module bundlado por Next.js (browser only). guard typeof window !== 'undefined' protege prerender."
+      }
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "Browser-side OTel SDK init (WebTracerProvider + auto-instrumentations)"
+  },
+  "stages": [
+    {
+      "label": "Load"
+    },
+    {
+      "label": "Guard"
+    },
+    {
+      "label": "Provider"
+    },
+    {
+      "label": "Wired"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "module_load",
+      "type": "external",
+      "label": "module load",
+      "sublabel": "instrumentation-client.ts",
+      "stage": 0,
+      "row": 1,
+      "tag": "browser bundle"
+    },
+    {
+      "id": "window_guard",
+      "type": "security",
+      "label": "typeof window guard",
+      "sublabel": "skip if server",
+      "stage": 1,
+      "row": 1,
+      "tag": "tree-shaking safe"
+    },
+    {
+      "id": "web_provider",
+      "type": "backend",
+      "label": "WebTracerProvider",
+      "sublabel": "sdk-trace-web",
+      "stage": 2,
+      "row": 1,
+      "tag": "resource + batch processor"
+    },
+    {
+      "id": "resource_in_processor",
+      "type": "backend",
+      "label": "Resource + Batch",
+      "sublabel": "Resource { SERVICE_NAME }",
+      "stage": 2,
+      "row": 0,
+      "tag": "SERVICE_NAME browser",
+      "width": 180
+    },
+    {
+      "id": "exporter",
+      "type": "security",
+      "label": "OTLPTraceExporter",
+      "sublabel": "HTTP transport",
+      "stage": 2,
+      "row": 2,
+      "tag": "OTLP/HTTP endpoint"
+    },
+    {
+      "id": "register",
+      "type": "frontend",
+      "label": "provider.register()",
+      "sublabel": "tracerProvider global",
+      "stage": 3,
+      "row": 1,
+      "tag": "trace.getTracer() resolves"
+    },
+    {
+      "id": "auto_instr",
+      "type": "frontend",
+      "label": "auto-instr",
+      "sublabel": "fetch + document + user",
+      "stage": 3,
+      "row": 0,
+      "tag": "auto-instr-web"
+    },
+    {
+      "id": "api_route",
+      "type": "backend",
+      "label": "/api/otel/collect",
+      "sublabel": "server proxy",
+      "stage": 3,
+      "row": 2,
+      "tag": "avoids CORS"
+    }
+  ],
+  "flows": [
+    {
+      "id": "f1",
+      "from": "module_load",
+      "to": "window_guard",
+      "label": "imported",
+      "variant": "emphasis"
+    },
+    {
+      "id": "f2",
+      "from": "window_guard",
+      "to": "web_provider",
+      "label": "browser only",
+      "variant": "emphasis"
+    },
+    {
+      "id": "f3",
+      "from": "resource_in_processor",
+      "to": "web_provider",
+      "label": "build provider",
+      "variant": "emphasis",
+      "route": "vertical-channel"
+    },
+    {
+      "id": "f4",
+      "from": "web_provider",
+      "to": "exporter",
+      "label": "traceExporter:",
+      "variant": "default",
+      "route": "bottom-channel",
+      "channelY": 280,
+      "labelDy": 16
+    },
+    {
+      "id": "f5",
+      "from": "web_provider",
+      "to": "register",
+      "label": "provider.register()",
+      "variant": "emphasis"
+    },
+    {
+      "id": "f6",
+      "from": "register",
+      "to": "auto_instr",
+      "label": "global tracer",
+      "variant": "emphasis"
+    },
+    {
+      "id": "f7",
+      "from": "exporter",
+      "to": "api_route",
+      "label": "POST OTLP/HTTP",
+      "variant": "emphasis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Browser bundle lifecycle",
+      "items": [
+        "apps/web/instrumentation-client.ts no project root",
+        "Next.js auto-bundle este arquivo no client",
+        "typeof window !== 'undefined' guard no top-level",
+        "Tree-shaking no build preserva sem document reference"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Configuração browser",
+      "items": [
+        "SERVICE_NAME: NEXT_PUBLIC_OTEL_SERVICE_NAME",
+        "OTEL endpoint: NEXT_PUBLIC_OTEL_EXPORTER_OTLP_ENDPOINT (default /api/otel/collect)",
+        "BatchSpanProcessor: async batched export",
+        "WebTracerProvider auto-instrumentations: fetch + document-load + user-interaction"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Anti-CORS + SSR safety",
+      "items": [
+        "Browser MUST use NEXT_PUBLIC_* env vars (inlined at build)",
+        "/api/otel/collect proxy server-side: evita CORS contra otel-collector",
+        "Registro global ANTES de auto-instr (NoopTracers se invertido)",
+        "Docker build funciona: guard top-level protege prerender"
+      ]
+    }
+  ]
+}

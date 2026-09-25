@@ -1,0 +1,126 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "docker-compose Local Stack — Postgres + API + Web + OTel Collector",
+    "subtitle": "Stack local dev/prod com 4 services + healthchecks + observability profile opcional",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "standard",
+    "output": "docker-compose-local-stack.architecture.html",
+    "views": [
+      {
+        "id": "stack",
+        "label": "Stack local",
+        "focus": ["postgres", "api", "web", "otel_collector", "host"],
+        "note": "docker-compose.yml + docker-compose.dev.yml (override para dev com volumes)."
+      },
+      {
+        "id": "observability",
+        "label": "Profile observability",
+        "focus": ["otel_collector", "api"],
+        "note": "Profile opcional: OTLP gRPC 4317 + OTLP HTTP 4318 (apenas quando --profile observability)."
+      }
+    ],
+    "tier": "nice",
+    "mechanism": "hand",
+    "subject": "Stack local Docker Compose: postgres + api + web + otel-collector (observability profile)"
+  },
+  "layout": {
+    "mode": "grid",
+    "origin": [40, 40],
+    "cols": 4,
+    "gapX": 32,
+    "gapY": 32,
+    "cellW": 220,
+    "cellH": 96
+  },
+  "components": [
+    {
+      "id": "host",
+      "type": "external",
+      "label": "Host (developer)",
+      "sublabel": "localhost",
+      "tag": "docker compose up",
+      "row": 0,
+      "col": 1
+    },
+    {
+      "id": "postgres",
+      "type": "database",
+      "label": "postgres:16-alpine",
+      "sublabel": "DB",
+      "tag": ":5432 healthcheck",
+      "row": 1,
+      "col": 0
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "apps/api (prod)",
+      "sublabel": "NestJS + Fastify",
+      "tag": ":3000 healthcheck",
+      "row": 1,
+      "col": 1
+    },
+    {
+      "id": "web",
+      "type": "frontend",
+      "label": "apps/web (prod)",
+      "sublabel": "Next.js standalone",
+      "tag": ":3001 healthcheck",
+      "row": 1,
+      "col": 2
+    },
+    {
+      "id": "otel_collector",
+      "type": "cloud",
+      "label": "otel-collector",
+      "sublabel": "OTel contrib",
+      "tag": "profile:observability",
+      "row": 2,
+      "col": 1
+    },
+    {
+      "id": "volumes",
+      "type": "database",
+      "label": "postgres_data",
+      "sublabel": "named volume",
+      "tag": "persistência",
+      "row": 2,
+      "col": 0
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Stack Local (docker-compose.yml)",
+      "items": [
+        "4 services: postgres + api + web + otel-collector",
+        "depends_on healthcheck-based (start_order garantido)",
+        "otel-collector usa profile 'observability' (não inicia por default)",
+        "Override dev em docker-compose.dev.yml (volumes + hot reload)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Healthchecks (defense-in-depth)",
+      "items": [
+        "postgres: pg_isready -U projeto (5s interval)",
+        "api: curl /api/v1/health (10s interval, 20s start_period)",
+        "web: node check /api/health (10s interval, 20s start_period)",
+        "depends_on com condition: service_healthy bloqueia start até OK"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Observability Profile",
+      "items": [
+        "Inicia com: docker compose --profile observability up",
+        "otel-collector recebe OTLP gRPC (4317) e HTTP (4318)",
+        "Config em infra/otelcol/config.yaml (read-only mount)",
+        "Telemetria: backend NodeSDK + browser SDK enviam para collector"
+      ]
+    }
+  ]
+}

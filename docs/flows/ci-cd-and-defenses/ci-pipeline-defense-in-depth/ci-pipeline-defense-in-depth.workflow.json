@@ -1,0 +1,239 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "CI Pipeline — Defense in Depth",
+    "subtitle": "pre-push local + preflight CI + quality gated + docker smoke",
+    "output": "ci-pipeline-defense-in-depth.workflow.html",
+    "viewBox": [1224, 900],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "all-layers",
+        "label": "3 camadas",
+        "focus": ["local_hook", "ci_preflight", "ci_quality", "ci_docker", "merged"],
+        "note": "Local hook + preflight + quality (gated) + docker smoke."
+      }
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "Pipeline CI principal: preflight → quality (gated) + docker-build-prod smoke"
+  },
+  "lanes": [
+    {
+      "id": "githooks",
+      "label": ".husky"
+    },
+    {
+      "id": "ci",
+      "label": "GitHub Actions"
+    }
+  ],
+  "phases": [
+    {
+      "id": "layer1",
+      "label": "Layer 1 — Local",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "default"
+    },
+    {
+      "id": "layer2",
+      "label": "Layer 2 — Preflight CI",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "emphasis"
+    },
+    {
+      "id": "layer3",
+      "label": "Layer 3 — Quality gated",
+      "fromCol": 3,
+      "toCol": 4,
+      "variant": "security"
+    },
+    {
+      "id": "layer3b",
+      "label": "Layer 3B — Docker smoke",
+      "fromCol": 5,
+      "toCol": 5,
+      "variant": "default"
+    }
+  ],
+  "mainPath": ["local_hook", "ci_preflight", "ci_quality", "ci_docker", "merged"],
+  "nodes": [
+    {
+      "id": "local_hook",
+      "lane": "githooks",
+      "col": 0,
+      "type": "frontend",
+      "label": ".husky/pre-push",
+      "sublabel": "Layer 1",
+      "width": 170,
+      "tag": "local fast-fail"
+    },
+    {
+      "id": "drift",
+      "lane": "githooks",
+      "col": 0,
+      "type": "security",
+      "label": "drift detected",
+      "sublabel": "abort",
+      "width": 170,
+      "yOffset": 120,
+      "tag": "fail-fast"
+    },
+    {
+      "id": "ci_preflight",
+      "lane": "ci",
+      "col": 2,
+      "type": "backend",
+      "label": "preflight job",
+      "sublabel": "Layer 2",
+      "width": 170,
+      "tag": "drift detection"
+    },
+    {
+      "id": "ci_quality",
+      "lane": "ci",
+      "col": 3,
+      "type": "security",
+      "label": "quality job",
+      "sublabel": "Layer 3",
+      "width": 180,
+      "tag": "needs: preflight"
+    },
+    {
+      "id": "cobertura",
+      "lane": "ci",
+      "col": 4,
+      "type": "backend",
+      "label": "test:coverage",
+      "sublabel": "gate-enforced",
+      "width": 170,
+      "tag": "scope:generic"
+    },
+    {
+      "id": "lint_tc",
+      "lane": "ci",
+      "col": 4,
+      "type": "backend",
+      "label": "lint+typecheck",
+      "sublabel": "turbo run",
+      "width": 170,
+      "yOffset": 100,
+      "tag": "scope:generic"
+    },
+    {
+      "id": "ci_docker",
+      "lane": "ci",
+      "col": 5,
+      "type": "backend",
+      "label": "docker-build-prod",
+      "sublabel": "Layer 3B",
+      "width": 180,
+      "tag": "PR only"
+    },
+    {
+      "id": "merged",
+      "lane": "ci",
+      "col": 5,
+      "type": "frontend",
+      "label": "merge to main",
+      "sublabel": "success path",
+      "width": 170,
+      "yOffset": 100,
+      "tag": "via PR"
+    }
+  ],
+  "edges": [
+    {
+      "from": "local_hook",
+      "to": "ci_preflight",
+      "label": "remote trigger",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "from": "ci_preflight",
+      "to": "ci_quality",
+      "label": "preflight verde",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "ci_quality",
+      "to": "cobertura",
+      "label": "test:coverage",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "ci_quality",
+      "to": "lint_tc",
+      "label": "lint+typecheck",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "from": "ci_quality",
+      "to": "ci_docker",
+      "label": "PR open",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "from": "ci_docker",
+      "to": "merged",
+      "label": "smoke OK",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "local_hook",
+      "to": "drift",
+      "label": "preflight failed",
+      "variant": "security",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Layer 1 — Local fast-fail",
+      "items": [
+        ".husky/pre-push roda pnpm ci:preflight antes do git push",
+        "BLOQUEIA push se drift detectado — poupa ~4min round-trip CI",
+        "Idempotente: roda em qualquer branch, exit 1 se algum check falhar"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Layer 2 — Preflight CI (~10s)",
+      "items": [
+        "preflight job (independent): mesmas checks mas no GitHub Actions",
+        "Detecta cross-refs quebradas, tsconfig drift, ESLint config legada",
+        "Falha rápido antes do quality job consumir runner-time"
+      ]
+    },
+    {
+      "dot": "orange",
+      "title": "Layer 3 — Quality gated",
+      "items": [
+        "needs: preflight — só roda se Camada 2 passou",
+        "lint+typecheck+test:coverage (gate-enforced)+test:unit",
+        "apps/api integration+e2e via testcontainers (Postgres:16-alpine)"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Layer 3B — Docker smoke",
+      "items": [
+        "docker-build-prod job roda SÓ em pull_request (não em push)",
+        "Builda apps/api + apps/web Dockerfile com --target prod",
+        "Defesa contra bugs latentes tipo COPY path relativo"
+      ]
+    }
+  ]
+}

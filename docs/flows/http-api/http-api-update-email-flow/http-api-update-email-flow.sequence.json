@@ -1,0 +1,209 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Update Email — Use Case (sem rota HTTP dedicada)",
+    "subtitle": "Use case UpdateEmail existe em apps/api mas SEM controller dedicado (gap documentado)",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "output": "http-api-update-email-flow.sequence.html",
+    "viewBox": [920, 800],
+    "views": [
+      {
+        "id": "use-case",
+        "label": "UpdateEmail use case",
+        "focus": ["controller", "update_email_uc", "user_aggregate", "audit_record"],
+        "note": "Use case existe (Application layer); controller NÃO está mapeado (gap)."
+      },
+      {
+        "id": "gap",
+        "label": "Gap documentado",
+        "focus": ["controller"],
+        "note": "Sem PATCH /users/:id/email — clients usam PATCH /users/:id com campo email."
+      }
+    ],
+    "tier": "nice",
+    "mechanism": "hand",
+    "subject": "UPDATE email — use case existente (sem rota HTTP dedicada ainda)"
+  },
+  "participants": [
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Client",
+      "sublabel": "external"
+    },
+    {
+      "id": "controller",
+      "type": "backend",
+      "label": "UsersCtrl",
+      "sublabel": "REST"
+    },
+    {
+      "id": "update_email_uc",
+      "type": "backend",
+      "label": "UpdateEmailUC",
+      "sublabel": "use case"
+    },
+    {
+      "id": "user_aggregate",
+      "type": "database",
+      "label": "User Agg",
+      "sublabel": "domain"
+    },
+    {
+      "id": "audit_record",
+      "type": "database",
+      "label": "users_history",
+      "sublabel": "audit"
+    }
+  ],
+  "segments": [
+    {
+      "from": 130,
+      "to": 280,
+      "label": "Request"
+    },
+    {
+      "from": 290,
+      "to": 440,
+      "label": "Domain"
+    },
+    {
+      "from": 460,
+      "to": 640,
+      "label": "Audit + Response"
+    }
+  ],
+  "messages": [
+    {
+      "from": "client",
+      "to": "controller",
+      "y": 180,
+      "label": "PATCH /users/:id {email:...}",
+      "variant": "emphasis"
+    },
+    {
+      "from": "controller",
+      "to": "update_email_uc",
+      "y": 220,
+      "label": "execute({userId, newEmail, If-Match})",
+      "variant": "default"
+    },
+    {
+      "from": "update_email_uc",
+      "to": "user_aggregate",
+      "y": 260,
+      "label": "load + version check",
+      "variant": "default"
+    },
+    {
+      "from": "user_aggregate",
+      "to": "update_email_uc",
+      "y": 320,
+      "label": "current state v<N>",
+      "variant": "return"
+    },
+    {
+      "from": "update_email_uc",
+      "to": "user_aggregate",
+      "y": 380,
+      "label": "apply email + bump version",
+      "variant": "default"
+    },
+    {
+      "from": "user_aggregate",
+      "to": "audit_record",
+      "y": 470,
+      "label": "INSERT audit UPDATE_EMAIL",
+      "variant": "emphasis"
+    },
+    {
+      "from": "audit_record",
+      "to": "user_aggregate",
+      "y": 510,
+      "label": "audit_id (FK)",
+      "variant": "return"
+    },
+    {
+      "from": "user_aggregate",
+      "to": "update_email_uc",
+      "y": 555,
+      "label": "UserOutput (new ETag)",
+      "variant": "default"
+    },
+    {
+      "from": "update_email_uc",
+      "to": "controller",
+      "y": 590,
+      "label": "Result",
+      "variant": "return"
+    },
+    {
+      "from": "controller",
+      "to": "client",
+      "y": 615,
+      "label": "200 OK (ETag W/\"u-N+1\")",
+      "variant": "emphasis"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "controller",
+      "from": 174,
+      "to": 616,
+      "type": "backend"
+    },
+    {
+      "participant": "update_email_uc",
+      "from": 214,
+      "to": 576,
+      "type": "backend"
+    },
+    {
+      "participant": "user_aggregate",
+      "from": 254,
+      "to": 536,
+      "type": "database"
+    },
+    {
+      "participant": "audit_record",
+      "from": 444,
+      "to": 496,
+      "type": "database"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Use Case sem Rota Dedicada (gap)",
+      "items": [
+        "UpdateEmail existe em Application layer (use case canônico)",
+        "Mas SEM PATCH /users/:id/email dedicado no controller",
+        "Clients atualmente usam PATCH /users/:id genérico com campo email",
+        "Phase 8 roadmap: rota dedicada + DTO separado + validação específica"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Implementação Atual",
+      "items": [
+        "PATCH /users/:id aceita body com campos parciais (name OR email)",
+        "Mesmo use case path via ZodValidationPipe (validation compartilhada)",
+        "Optimistic locking funciona (If-Match obrigatório)",
+        "Audit gera evento UPDATE com diff de campos alterados"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Por que gap documentado",
+      "items": [
+        "Email tem regras específicas (RFC 5321 + uniqueness)",
+        "Email update pode disparar email de verificação (futuro)",
+        "Phase 8 deve adicionar rota dedicada com DTO UpdateEmailDto",
+        "Por enquanto, comportamento funcional via rota genérica é OK"
+      ]
+    }
+  ]
+}

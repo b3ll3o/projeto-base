@@ -1,0 +1,281 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "retrospective-capture — 3 estágios + confidence gate",
+    "subtitle": "Trigger T1/T2/T3 → 3 perguntas obrigatórias → confidence ≥ 70 → proposal",
+    "output": "fs-retrospective-capture-pipeline.workflow.html",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "standard",
+    "views": [
+      {
+        "id": "retrospective-pipeline",
+        "label": "Capture pipeline",
+        "focus": [
+          "trigger",
+          "explorer",
+          "skill_apply",
+          "decision_list",
+          "confidence_gate",
+          "memory_write",
+          "doc_writer"
+        ],
+        "note": "3 estágios: EXPLORER → retrospective-capture skill → DOC-WRITER + gate confidence ≥ 70."
+      }
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "retrospective-capture — captura de aprendizados em 3 estágios com gate de confidence ≥ 70"
+  },
+  "lanes": [
+    {
+      "id": "orchestrator",
+      "label": "Orchestrator (retrospective-mode)"
+    },
+    {
+      "id": "skill",
+      "label": "Skill + writer"
+    }
+  ],
+  "phases": [
+    {
+      "id": "trigger",
+      "label": "Trigger",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "default"
+    },
+    {
+      "id": "explore",
+      "label": "Explore",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "default"
+    },
+    {
+      "id": "skill",
+      "label": "Skill apply",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "gate",
+      "label": "Gate",
+      "fromCol": 4,
+      "toCol": 4,
+      "variant": "security"
+    }
+  ],
+  "mainPath": [
+    "trigger",
+    "explorer",
+    "skill_apply",
+    "decision_list",
+    "confidence_gate",
+    "memory_write"
+  ],
+  "nodes": [
+    {
+      "id": "trigger",
+      "lane": "orchestrator",
+      "col": 0,
+      "type": "external",
+      "label": "Trigger (T1/T2/T3)",
+      "sublabel": "≥ 3 tasks OR bugfix > 30min OR novo padrão",
+      "tag": ".agents/workflows/retrospective-mode.md",
+      "width": 190
+    },
+    {
+      "id": "explorer",
+      "lane": "orchestrator",
+      "col": 1,
+      "type": "frontend",
+      "label": "EXPLORER agent",
+      "sublabel": "coleta transcript + tool calls + diff",
+      "tag": "fan-out search",
+      "width": 200
+    },
+    {
+      "id": "task_mgr",
+      "lane": "orchestrator",
+      "col": 1,
+      "type": "backend",
+      "label": "task-manager",
+      "sublabel": "task paralelo",
+      "tag": "TASK-retro-R-NNN",
+      "width": 170,
+      "yOffset": 130
+    },
+    {
+      "id": "skill_apply",
+      "lane": "skill",
+      "col": 2,
+      "type": "backend",
+      "label": "retrospective-capture",
+      "sublabel": "3 perguntas obrigatórias",
+      "tag": ".agents/skills/retrospective-capture/SKILL.md",
+      "width": 220
+    },
+    {
+      "id": "decision_list",
+      "lane": "skill",
+      "col": 3,
+      "type": "security",
+      "label": "decision-list",
+      "sublabel": "{ decision, rationale, impact, confidence }",
+      "tag": "schema canônico",
+      "width": 200
+    },
+    {
+      "id": "confidence_gate",
+      "lane": "skill",
+      "col": 4,
+      "type": "security",
+      "label": "confidence gate",
+      "sublabel": "≥ 70 proposal | 50-69 comment | <50 discard",
+      "tag": "threshold check",
+      "width": 220
+    },
+    {
+      "id": "memory_write",
+      "lane": "skill",
+      "col": 5,
+      "type": "frontend",
+      "label": "memory update",
+      "sublabel": "MEMORY.md b<N>-result.md",
+      "tag": "registro estruturado",
+      "width": 170
+    },
+    {
+      "id": "doc_writer",
+      "lane": "skill",
+      "col": 5,
+      "type": "frontend",
+      "label": "DOC-WRITER",
+      "sublabel": "skill/convention/ADR",
+      "tag": ".agents/specs/",
+      "width": 170,
+      "yOffset": 130
+    },
+    {
+      "id": "backlog",
+      "lane": "skill",
+      "col": 5,
+      "type": "backend",
+      "label": "backlog item",
+      "sublabel": "confidence 50-69 → re-avaliar",
+      "tag": "revisitar próximo ciclo",
+      "width": 170,
+      "yOffset": 260
+    }
+  ],
+  "edges": [
+    {
+      "id": "trigger-to-explorer",
+      "from": "trigger",
+      "to": "explorer",
+      "label": "dispara",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "explorer-to-tm",
+      "from": "explorer",
+      "to": "task_mgr",
+      "label": "task paralelo",
+      "variant": "default",
+      "role": "branch"
+    },
+    {
+      "id": "explorer-to-skill",
+      "from": "explorer",
+      "to": "skill_apply",
+      "label": "transcript",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "tm-to-skill",
+      "from": "task_mgr",
+      "to": "skill_apply",
+      "label": "tracking",
+      "variant": "default",
+      "role": "branch"
+    },
+    {
+      "id": "skill-to-decisions",
+      "from": "skill_apply",
+      "to": "decision_list",
+      "label": "3 perguntas",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "decisions-to-gate",
+      "from": "decision_list",
+      "to": "confidence_gate",
+      "label": "score 0-100",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "gate-to-memory",
+      "from": "confidence_gate",
+      "to": "memory_write",
+      "label": "≥ 70",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "gate-to-docwriter",
+      "from": "confidence_gate",
+      "to": "doc_writer",
+      "label": "≥ 70 proposal",
+      "variant": "emphasis",
+      "role": "branch"
+    },
+    {
+      "id": "gate-to-backlog",
+      "from": "confidence_gate",
+      "to": "backlog",
+      "label": "50-69",
+      "variant": "default",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "3 perguntas obrigatórias",
+      "items": [
+        "O que foi decidido/criado? (deliverable concreto)",
+        "Por que essa abordagem vs alternativas? (rationale)",
+        "Qual o impacto downstream? (quem é afetado, como)",
+        "Cada item recebe score de confidence 0-100"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Confidence threshold",
+      "items": [
+        "≥ 70 → proposal aplicado (memory + skill/convention/ADR)",
+        "50–69 → comentário em b<N>-result.md, re-avaliar próximo ciclo",
+        "< 50 → descartar (não vira proposal)",
+        "Score é self-assessed pelo agente aplicador da skill"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Outputs estruturados",
+      "items": [
+        "MEMORY.md: nome b<N>-result.md (mem persist cross-session)",
+        ".agents/skills/<name>/SKILL.md: skill codified",
+        ".agents/specs/conventions/<name>.md: convention codified",
+        "backlog: items 50-69 ficam em tasks/wf_*/backlog.json",
+        "Triggers T1/T2/T3 documentados em retrospective-capture.md"
+      ]
+    }
+  ]
+}

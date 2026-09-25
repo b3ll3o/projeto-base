@@ -1,0 +1,246 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "DELETE /users/:id — Soft-delete com audit + archive",
+    "subtitle": "DELETE /users/:id (If-Match) → marcarExcluido + audit.record(DELETE) + audit.archive → users_archive",
+    "output": "http-api-users-soft-delete.sequence.html",
+    "viewBox": [1020, 820],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "happy-path",
+        "label": "Soft-delete cascade → 204",
+        "focus": ["client", "controller", "usecases", "repo", "audit", "pg"],
+        "note": "marcarExcluido + UPDATE users + INSERT history + INSERT archive."
+      },
+      {
+        "id": "errors",
+        "label": "404/412 error paths",
+        "focus": ["client", "controller", "usecases", "filter"],
+        "note": "User não existe ou já deletado → 404; versão mismatch → 412."
+      }
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "DELETE /users/:id — soft delete + audit (DELETE op + archive)"
+  },
+  "participants": [
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Cliente",
+      "sublabel": "DELETE + If-Match"
+    },
+    {
+      "id": "controller",
+      "type": "backend",
+      "label": "UsersCtrl",
+      "sublabel": "@HttpCode 204"
+    },
+    {
+      "id": "usecases",
+      "type": "backend",
+      "label": "UserUseCases",
+      "sublabel": "softDelete()"
+    },
+    {
+      "id": "repo",
+      "type": "backend",
+      "label": "PrismaRepo",
+      "sublabel": "save(user,n-1)"
+    },
+    {
+      "id": "audit",
+      "type": "backend",
+      "label": "AuditService",
+      "sublabel": "record + archive"
+    },
+    {
+      "id": "pg",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "tables x3"
+    },
+    {
+      "id": "filter",
+      "type": "security",
+      "label": "ExcFilter",
+      "sublabel": "RFC 7807"
+    }
+  ],
+  "segments": [
+    {
+      "from": 150,
+      "to": 480,
+      "label": "Mark deleted + persist"
+    },
+    {
+      "from": 456,
+      "to": 770,
+      "label": "Audit record + archive"
+    }
+  ],
+  "messages": [
+    {
+      "from": "client",
+      "to": "controller",
+      "y": 180,
+      "label": "DELETE /users/:id + If-Match",
+      "variant": "emphasis"
+    },
+    {
+      "from": "controller",
+      "to": "usecases",
+      "y": 220,
+      "label": "parseIfMatch + softDelete(input)",
+      "variant": "emphasis"
+    },
+    {
+      "from": "usecases",
+      "to": "repo",
+      "y": 260,
+      "label": "findById(UserId)",
+      "variant": "default"
+    },
+    {
+      "from": "repo",
+      "to": "pg",
+      "y": 300,
+      "label": "SELECT WHERE id AND deletedAt IS NULL",
+      "variant": "default"
+    },
+    {
+      "from": "pg",
+      "to": "repo",
+      "y": 338,
+      "label": "User (version=n)",
+      "variant": "return"
+    },
+    {
+      "from": "usecases",
+      "to": "repo",
+      "y": 376,
+      "label": "marcarExcluido(reason,ctx.ts)",
+      "variant": "emphasis"
+    },
+    {
+      "from": "repo",
+      "to": "pg",
+      "y": 452,
+      "label": "UPDATE users SET deletedAt=NOW()",
+      "variant": "default"
+    },
+    {
+      "from": "usecases",
+      "to": "audit",
+      "y": 490,
+      "label": "pullEvents() → record DELETE",
+      "variant": "emphasis"
+    },
+    {
+      "from": "audit",
+      "to": "pg",
+      "y": 528,
+      "label": "INSERT INTO users_history",
+      "variant": "default"
+    },
+    {
+      "from": "usecases",
+      "to": "audit",
+      "y": 566,
+      "label": "archive(entity=snapshot,reason)",
+      "variant": "emphasis"
+    },
+    {
+      "from": "audit",
+      "to": "pg",
+      "y": 604,
+      "label": "INSERT INTO users_archive",
+      "variant": "default"
+    },
+    {
+      "from": "controller",
+      "to": "client",
+      "y": 642,
+      "label": "204 No Content",
+      "variant": "return"
+    },
+    {
+      "from": "usecases",
+      "to": "filter",
+      "y": 720,
+      "label": "404 deleted / 412 mismatch",
+      "variant": "security"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "controller",
+      "from": 174,
+      "to": 638,
+      "type": "backend"
+    },
+    {
+      "participant": "usecases",
+      "from": 214,
+      "to": 670,
+      "type": "backend"
+    },
+    {
+      "participant": "repo",
+      "from": 254,
+      "to": 446,
+      "type": "backend"
+    },
+    {
+      "participant": "pg",
+      "from": 294,
+      "to": 446,
+      "type": "database"
+    },
+    {
+      "participant": "audit",
+      "from": 484,
+      "to": 598,
+      "type": "backend"
+    },
+    {
+      "participant": "filter",
+      "from": 714,
+      "to": 746,
+      "type": "security"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Soft-delete semantics",
+      "items": [
+        "DELETE não remove o row — apenas seta deletedAt = NOW() (preserva histórico)",
+        "204 No Content (controller @HttpCode(204)) — sem ETag/ETag='W/v(final)'",
+        "findById subsequente retorna null (filtra deletedAt IS NULL)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Audit cascade (DELETE + archive)",
+      "items": [
+        "audit.record(DELETE) insere em users_history (audit trail)",
+        "audit.archive() insere snapshot completo em users_archive (restore path)",
+        "extrai previousVersion + reason do UserDeletedEvent"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Optimistic locking obrigatório",
+      "items": [
+        "412 se If-Match divergente (sem If-Match = 400 IF_MATCH_REQUIRED)",
+        "404 se User já soft-deletado (findById filtra deletedAt)",
+        "PATCH/DELETE subsequentes exigem ETag atualizado — força cliente a recarregar"
+      ]
+    }
+  ]
+}

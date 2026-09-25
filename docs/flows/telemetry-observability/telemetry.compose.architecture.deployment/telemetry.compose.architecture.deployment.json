@@ -1,0 +1,148 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "OpenTelemetry Collector Deployment (docker-compose)",
+    "subtitle": "apps/api + apps/web (Node + Browser) → otel-collector (OTLP gRPC/HTTP) → debug exporter",
+    "output": "telemetry.compose.architecture.deployment.html",
+    "quality_profile": "standard",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "views": [
+      {
+        "id": "otel-deploy",
+        "label": "OTel Collector deployment",
+        "focus": [
+          "api_node_sdk",
+          "web_node_sdk",
+          "otel_collector",
+          "otel_pipeline",
+          "browser_sdk",
+          "api_route_proxy",
+          "debug_exporter",
+          "config_volume"
+        ],
+        "note": "Perfil 'observability' opt-in: docker compose --profile observability up. MVP debug exporter; trocar por jaeger/tempo/honeycomb."
+      }
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "Docker Compose observability stack (otel-collector service + observability profile)"
+  },
+  "layout": {
+    "mode": "grid",
+    "origin": [40, 40],
+    "cols": 4,
+    "gapX": 24,
+    "gapY": 28,
+    "cellW": 220,
+    "cellH": 96
+  },
+  "components": [
+    {
+      "id": "api_node_sdk",
+      "type": "backend",
+      "label": "apps/api NodeSDK",
+      "sublabel": "OTLPTraceExporter",
+      "tag": "gRPC → :4317",
+      "row": 0,
+      "col": 0
+    },
+    {
+      "id": "web_node_sdk",
+      "type": "backend",
+      "label": "apps/web NodeSDK",
+      "sublabel": "instrumentation.ts",
+      "tag": "gRPC → :4317",
+      "row": 0,
+      "col": 1
+    },
+    {
+      "id": "browser_sdk",
+      "type": "frontend",
+      "label": "apps/web browser",
+      "sublabel": "WebTracerProvider",
+      "tag": "OTLP HTTP via proxy",
+      "row": 1,
+      "col": 0
+    },
+    {
+      "id": "api_route_proxy",
+      "type": "security",
+      "label": "/api/otel/collect",
+      "sublabel": "Next.js route proxy",
+      "tag": "evita CORS",
+      "row": 1,
+      "col": 1
+    },
+    {
+      "id": "otel_collector",
+      "type": "security",
+      "label": "otel-collector",
+      "sublabel": "otel-collector-contrib 0.103",
+      "tag": "profile: observability",
+      "row": 0,
+      "col": 2
+    },
+    {
+      "id": "otel_pipeline",
+      "type": "backend",
+      "label": "OTel pipelines",
+      "sublabel": "traces + metrics",
+      "tag": "receivers → batch → debug",
+      "row": 1,
+      "col": 2
+    },
+    {
+      "id": "debug_exporter",
+      "type": "frontend",
+      "label": "debug exporter",
+      "sublabel": "stdout verbose",
+      "tag": "MVP: trocar depois",
+      "row": 2,
+      "col": 2
+    },
+    {
+      "id": "config_volume",
+      "type": "backend",
+      "label": "otelcol/config.yaml",
+      "sublabel": "volume:ro",
+      "tag": "receivers + batch + debug",
+      "row": 0,
+      "col": 3
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "OTel Collector service",
+      "items": [
+        "image: otel/opentelemetry-collector-contrib:0.103.0",
+        "command: --config=/etc/otelcol/config.yaml",
+        "ports: 4317 (gRPC) + 4318 (HTTP)",
+        "profile: observability (opt-in)",
+        "volume: ./infra/otelcol/config.yaml:/etc/otelcol/config.yaml:ro"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Pipelines MVP",
+      "items": [
+        "traces: receivers otlp → processors batch → exporters debug",
+        "metrics: receivers otlp → processors batch → exporters debug",
+        "Debug exporter verbosity: detailed (stdout)",
+        "Pronto para adicionar jaeger/tempo/honeycomb trocando exporters"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Apps cliente",
+      "items": [
+        "apps/api: NodeSDK → OTLP gRPC direto :4317 (server-side)",
+        "apps/web Node runtime: OTLP gRPC direto :4317",
+        "apps/web browser: WebTracerProvider → OTLP HTTP → /api/otel/collect (anti-CORS)",
+        "Next.js proxy server-side repassa para otel-collector"
+      ]
+    }
+  ]
+}

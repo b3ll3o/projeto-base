@@ -1,0 +1,183 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "GET /users/:id/history — Audit history paginado",
+    "subtitle": "GET /users/:id/history?cursor=... → UsersController → AuditServicePort.listHistory → users_history table",
+    "output": "http-api-users-history.sequence.html",
+    "viewBox": [1020, 640],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "happy-path",
+        "label": "History cursor pagination",
+        "focus": ["client", "controller", "audit", "pg"],
+        "note": "AuditServicePort.listHistory(entityName=User, entityId) → cursor-based page."
+      }
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "GET /users/:id/history — histórico de auditoria paginado"
+  },
+  "participants": [
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Cliente",
+      "sublabel": "GET history"
+    },
+    {
+      "id": "controller",
+      "type": "backend",
+      "label": "UsersCtrl",
+      "sublabel": "@Param('id')"
+    },
+    {
+      "id": "audit",
+      "type": "backend",
+      "label": "AuditService",
+      "sublabel": "listHistory()"
+    },
+    {
+      "id": "cursor",
+      "type": "backend",
+      "label": "CursorEnc",
+      "sublabel": "decode/encode"
+    },
+    {
+      "id": "pg",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "users_history"
+    }
+  ],
+  "segments": [
+    {
+      "from": 150,
+      "to": 580,
+      "label": "List history (read-only)"
+    }
+  ],
+  "messages": [
+    {
+      "from": "client",
+      "to": "controller",
+      "y": 180,
+      "label": "GET /users/:id/history?cursor=",
+      "variant": "emphasis"
+    },
+    {
+      "from": "controller",
+      "to": "audit",
+      "y": 220,
+      "label": "listHistory(input)",
+      "variant": "emphasis"
+    },
+    {
+      "from": "audit",
+      "to": "cursor",
+      "y": 300,
+      "label": "decode(cursor)",
+      "variant": "default"
+    },
+    {
+      "from": "cursor",
+      "to": "audit",
+      "y": 338,
+      "label": "offset/limit",
+      "variant": "return"
+    },
+    {
+      "from": "audit",
+      "to": "pg",
+      "y": 376,
+      "label": "SELECT FROM users_history WHERE entityId=$1 ORDER BY version DESC",
+      "variant": "default"
+    },
+    {
+      "from": "pg",
+      "to": "audit",
+      "y": 414,
+      "label": "N audit events",
+      "variant": "return"
+    },
+    {
+      "from": "audit",
+      "to": "cursor",
+      "y": 452,
+      "label": "encode(next offset)",
+      "variant": "default"
+    },
+    {
+      "from": "audit",
+      "to": "controller",
+      "y": 490,
+      "label": "{events[], nextCursor}",
+      "variant": "return"
+    },
+    {
+      "from": "controller",
+      "to": "client",
+      "y": 528,
+      "label": "200 history",
+      "variant": "return"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "controller",
+      "from": 174,
+      "to": 524,
+      "type": "backend"
+    },
+    {
+      "participant": "audit",
+      "from": 254,
+      "to": 518,
+      "type": "backend"
+    },
+    {
+      "participant": "cursor",
+      "from": 294,
+      "to": 450,
+      "type": "backend"
+    },
+    {
+      "participant": "pg",
+      "from": 370,
+      "to": 410,
+      "type": "database"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Audit history semantics",
+      "items": [
+        "history é read-only — sem If-Match, sem idempotência",
+        "AuditContext não é necessário (listagem é passiva)",
+        "Cursor pagination igual ao GET /users (mesma port de encoder)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Cross-BC reuse",
+      "items": [
+        "AuditServicePort é compartilhado com outros BCs (audit é infra shared)",
+        "users_history é uma tabela genérica (entityName+entityId columns)",
+        "Sem soft-delete filter — histórico inclui eventos de users deletados"
+      ]
+    },
+    {
+      "dot": "orange",
+      "title": "Performance",
+      "items": [
+        "Index composto (entityName, entityId, version DESC) — query eficiente",
+        "Sem N+1 — único SELECT retorna page inteira",
+        "OpenAPI documenta cursor + limit query params"
+      ]
+    }
+  ]
+}

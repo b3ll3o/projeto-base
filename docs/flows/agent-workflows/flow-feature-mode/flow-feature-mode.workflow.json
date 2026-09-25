@@ -1,0 +1,202 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Feature Mode — Implementar Nova Funcionalidade",
+    "subtitle": "5 estágios sequenciais: orchestrator → explorer → test-writer → code-reviewer → tdd-enforcer",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "output": "flow-feature-mode.workflow.html",
+    "views": [
+      {
+        "id": "implement",
+        "label": "Implementar feature",
+        "focus": ["orchestrator", "explorer", "test_writer", "code_reviewer", "tdd_enforcer"],
+        "note": "5 estágios com handoff explícito (YAML no source)."
+      },
+      {
+        "id": "gates",
+        "label": "Quality gates",
+        "focus": ["test_writer", "code_reviewer", "tdd_enforcer"],
+        "note": "Coverage ≥ 80%, nenhum finding blocker, TDD histórico verificável."
+      }
+    ],
+    "tier": "important",
+    "mechanism": "auto",
+    "subject": "feature-mode — Implementar Nova Funcionalidade (genérico)"
+  },
+  "lanes": [
+    {
+      "id": "agent",
+      "label": "Agent Runtime"
+    }
+  ],
+  "phases": [
+    {
+      "id": "discover",
+      "label": "Discover",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "build",
+      "label": "Build",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "default"
+    },
+    {
+      "id": "review",
+      "label": "Review",
+      "fromCol": 3,
+      "toCol": 4,
+      "variant": "dashed"
+    }
+  ],
+  "groups": [
+    {
+      "id": "discover_phase",
+      "label": "Decompor + mapear",
+      "lane": "agent",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "build_phase",
+      "label": "TDD red → green",
+      "lane": "agent",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "default"
+    },
+    {
+      "id": "review_phase",
+      "label": "Review + enforce",
+      "lane": "agent",
+      "fromCol": 3,
+      "toCol": 4,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": ["orchestrator", "explorer", "test_writer", "code_reviewer", "tdd_enforcer"],
+  "nodes": [
+    {
+      "id": "orchestrator",
+      "lane": "agent",
+      "col": 0,
+      "type": "external",
+      "label": "orchestrator",
+      "sublabel": "decompor",
+      "tag": "tasks",
+      "width": 130
+    },
+    {
+      "id": "explorer",
+      "lane": "agent",
+      "col": 1,
+      "type": "external",
+      "label": "explorer",
+      "sublabel": "mapear",
+      "tag": "patterns",
+      "width": 130
+    },
+    {
+      "id": "test_writer",
+      "lane": "agent",
+      "col": 2,
+      "type": "security",
+      "label": "test-writer",
+      "sublabel": "TDD red",
+      "tag": "cov ≥ 80%",
+      "width": 130
+    },
+    {
+      "id": "code_reviewer",
+      "lane": "agent",
+      "col": 3,
+      "type": "security",
+      "label": "code-reviewer",
+      "sublabel": "0 blockers",
+      "tag": "diff ok",
+      "width": 130
+    },
+    {
+      "id": "tdd_enforcer",
+      "lane": "agent",
+      "col": 4,
+      "type": "security",
+      "label": "tdd-enforcer",
+      "sublabel": "histórico",
+      "tag": "≥ 80% cov",
+      "width": 130
+    }
+  ],
+  "edges": [
+    {
+      "id": "orch-to-explorer",
+      "from": "orchestrator",
+      "to": "explorer",
+      "label": "feature Y + escopo",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "explorer-to-test",
+      "from": "explorer",
+      "to": "test_writer",
+      "label": "files + patterns",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "test-to-review",
+      "from": "test_writer",
+      "to": "code_reviewer",
+      "label": "testes + impl",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "review-to-tdd",
+      "from": "code_reviewer",
+      "to": "tdd_enforcer",
+      "label": "approved + diff",
+      "variant": "default",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Pipeline Sequencial",
+      "items": [
+        "5 estágios: orchestrator → explorer → test-writer → code-reviewer → tdd-enforcer",
+        "Cada handoff tem expected_output + success_criteria binário (pass/fail)",
+        "TDD discipline enforced by tdd-enforcer no estágio final"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Gates de Saída",
+      "items": [
+        "Testes falham antes da implementação (TDD red)",
+        "Nenhum finding blocker no code-reviewer",
+        "Coverage ≥ 80% em todas as métricas",
+        "Histórico git comprova ciclo red → green",
+        "PR revisado + CI verde antes do merge"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Quando NÃO usar",
+      "items": [
+        "Bugfix urgente (use bugfix-mode)",
+        "Mudança puramente documental (use docs-mode)",
+        "Refatoração sem feature nova (use refactor-mode)"
+      ]
+    }
+  ]
+}

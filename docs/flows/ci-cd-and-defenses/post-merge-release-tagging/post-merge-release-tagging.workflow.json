@@ -1,0 +1,225 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Post-merge Release Tagging",
+    "subtitle": "merge to main → bump MONOREPO footer → release-template workflow → tag annotated",
+    "output": "post-merge-release-tagging.workflow.html",
+    "quality_profile": "standard",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "views": [
+      {
+        "id": "happy-path",
+        "label": "Tag creation",
+        "focus": ["merge_main", "bump_footer", "wf_run", "tagged"],
+        "note": "Conventional commits + bump + automatic tag vX.Y.Z."
+      }
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "Post-merge release tagging: docs/MONOREPO.md footer → annotated tag vX.Y.Z"
+  },
+  "lanes": [
+    {
+      "id": "main",
+      "label": "main branch"
+    },
+    {
+      "id": "wf",
+      "label": "GitHub Actions"
+    },
+    {
+      "id": "git",
+      "label": "Git tags"
+    }
+  ],
+  "phases": [
+    {
+      "id": "merge",
+      "label": "Merge",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "default"
+    },
+    {
+      "id": "bump",
+      "label": "Bump footer",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "wf",
+      "label": "Workflow run",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "security"
+    },
+    {
+      "id": "tag",
+      "label": "Tag push",
+      "fromCol": 4,
+      "toCol": 5,
+      "variant": "default"
+    }
+  ],
+  "mainPath": ["merge_main", "bump_footer", "wf_run", "extract_ver", "tagged"],
+  "nodes": [
+    {
+      "id": "merge_main",
+      "lane": "main",
+      "col": 0,
+      "type": "frontend",
+      "label": "merge to main",
+      "sublabel": "via PR",
+      "width": 170,
+      "tag": "PR green"
+    },
+    {
+      "id": "bump_footer",
+      "lane": "main",
+      "col": 1,
+      "type": "external",
+      "label": "bump footer",
+      "sublabel": "MONOREPO.md",
+      "width": 170,
+      "tag": "X.Y.Z"
+    },
+    {
+      "id": "wf_run",
+      "lane": "wf",
+      "col": 2,
+      "type": "backend",
+      "label": "release-template",
+      "sublabel": "trigger",
+      "width": 180,
+      "tag": "on push"
+    },
+    {
+      "id": "extract_ver",
+      "lane": "wf",
+      "col": 3,
+      "type": "security",
+      "label": "Determinar versao",
+      "sublabel": "regex",
+      "width": 180,
+      "tag": "tail -1"
+    },
+    {
+      "id": "exists_check",
+      "lane": "git",
+      "col": 3,
+      "type": "external",
+      "label": "git rev-parse",
+      "sublabel": "tag exists?",
+      "width": 170,
+      "yOffset": 100,
+      "tag": "idempotent"
+    },
+    {
+      "id": "noop",
+      "lane": "git",
+      "col": 4,
+      "type": "external",
+      "label": "noop",
+      "sublabel": "already",
+      "width": 150,
+      "yOffset": 100,
+      "tag": "skip"
+    },
+    {
+      "id": "tagged",
+      "lane": "git",
+      "col": 5,
+      "type": "security",
+      "label": "git tag annotated",
+      "sublabel": "vX.Y.Z",
+      "width": 170,
+      "tag": "pushed"
+    }
+  ],
+  "edges": [
+    {
+      "from": "merge_main",
+      "to": "bump_footer",
+      "label": "footer bump",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "from": "bump_footer",
+      "to": "wf_run",
+      "label": "push main",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "wf_run",
+      "to": "extract_ver",
+      "label": "checkout",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "extract_ver",
+      "to": "tagged",
+      "label": "create+push",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "extract_ver",
+      "to": "exists_check",
+      "label": "verify",
+      "variant": "default",
+      "role": "branch"
+    },
+    {
+      "from": "exists_check",
+      "to": "noop",
+      "label": "tag exists",
+      "variant": "default",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Triggers",
+      "items": [
+        "push → main com mudança em docs/MONOREPO.md",
+        "STACK.md + estrutura-e-versionamento.md NAO disparam",
+        "workflow_dispatch input version (backfill manual)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Versao canônica",
+      "items": [
+        "regex do footer: **Versao do documento:** X.Y.Z",
+        "tail -1 (ultimo match) — resiliência a footers duplicados",
+        "3 arquivos DEVEM ser atualizados juntos para consistencia"
+      ]
+    },
+    {
+      "dot": "orange",
+      "title": "Idempotencia",
+      "items": [
+        "git rev-parse --verify refs/tags/<tag>",
+        "Se tag existe → noop (sem forca-push)",
+        "concurrency group + cancel-in-progress: false",
+        "Tags annotated ficam imutaveis por convencao"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Apos tag",
+      "items": [
+        "MEMORY.md bumped com tag+commit (backfilled em v1.3.0)",
+        "PRs subsequentes referenciam a tag no changelog",
+        "Convention: tag MERGED aponta para merge commit"
+      ]
+    }
+  ]
+}

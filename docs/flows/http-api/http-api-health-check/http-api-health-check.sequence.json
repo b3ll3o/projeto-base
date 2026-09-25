@@ -1,0 +1,265 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Health Check — GET /api/v1/health",
+    "subtitle": "Liveness/readiness do apps/api (NestJS + Fastify + PrismaService + PostgreSQL)",
+    "output": "http-api-health-check.sequence.html",
+    "viewBox": [920, 820],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "happy-path",
+        "label": "DB up → 200",
+        "focus": ["client", "fastify", "controller", "prisma", "postgres"],
+        "note": "SELECT 1 retorna → 200 com payload { ok, database, timestamp }."
+      },
+      {
+        "id": "degraded-path",
+        "label": "DB down → 503",
+        "focus": ["client", "fastify", "controller", "prisma", "postgres", "filter"],
+        "note": "PrismaService.$queryRawUnsafe rejeita → ServiceUnavailableException → GlobalExceptionFilter → RFC 7807."
+      }
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "Health check — DB liveness via Fastify/NestJS boundary"
+  },
+  "participants": [
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Cliente",
+      "sublabel": "curl / HEALTH"
+    },
+    {
+      "id": "fastify",
+      "type": "backend",
+      "label": "Fastify",
+      "sublabel": "HTTP server"
+    },
+    {
+      "id": "controller",
+      "type": "backend",
+      "label": "HealthCtrl",
+      "sublabel": "GET /health v1"
+    },
+    {
+      "id": "prisma",
+      "type": "backend",
+      "label": "PrismaSvc",
+      "sublabel": "client wrapper"
+    },
+    {
+      "id": "postgres",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "db engine"
+    },
+    {
+      "id": "filter",
+      "type": "security",
+      "label": "ExcFilter",
+      "sublabel": "RFC 7807 mapper"
+    }
+  ],
+  "segments": [
+    {
+      "from": 150,
+      "to": 354,
+      "label": "200 OK (DB up)"
+    },
+    {
+      "from": 372,
+      "to": 696,
+      "label": "503 Service Unavailable (DB down)"
+    }
+  ],
+  "messages": [
+    {
+      "from": "client",
+      "to": "fastify",
+      "y": 180,
+      "label": "GET /api/v1/health",
+      "variant": "emphasis"
+    },
+    {
+      "from": "fastify",
+      "to": "controller",
+      "y": 222,
+      "label": "route → NestJS handler",
+      "variant": "default"
+    },
+    {
+      "from": "controller",
+      "to": "prisma",
+      "y": 264,
+      "label": "$queryRawUnsafe('SELECT 1')",
+      "variant": "emphasis"
+    },
+    {
+      "from": "prisma",
+      "to": "postgres",
+      "y": 306,
+      "label": "SELECT 1",
+      "variant": "default"
+    },
+    {
+      "from": "postgres",
+      "to": "prisma",
+      "y": 338,
+      "label": "1 row",
+      "variant": "return"
+    },
+    {
+      "from": "prisma",
+      "to": "controller",
+      "y": 360,
+      "label": "resolve()",
+      "variant": "return"
+    },
+    {
+      "from": "controller",
+      "to": "client",
+      "y": 402,
+      "label": "200 { status: ok, database: ok, ts }",
+      "variant": "return"
+    },
+    {
+      "from": "client",
+      "to": "fastify",
+      "y": 444,
+      "label": "GET /api/v1/health (DB indisponível)",
+      "variant": "emphasis"
+    },
+    {
+      "from": "fastify",
+      "to": "controller",
+      "y": 486,
+      "label": "route → handler",
+      "variant": "default"
+    },
+    {
+      "from": "controller",
+      "to": "prisma",
+      "y": 528,
+      "label": "$queryRawUnsafe('SELECT 1')",
+      "variant": "emphasis"
+    },
+    {
+      "from": "prisma",
+      "to": "postgres",
+      "y": 570,
+      "label": "SELECT 1 (timeout/refused)",
+      "variant": "security"
+    },
+    {
+      "from": "postgres",
+      "to": "prisma",
+      "y": 608,
+      "label": "ECONNREFUSED",
+      "variant": "security"
+    },
+    {
+      "from": "controller",
+      "to": "filter",
+      "y": 644,
+      "label": "throw ServiceUnavailableException",
+      "variant": "security"
+    },
+    {
+      "from": "filter",
+      "to": "client",
+      "y": 676,
+      "label": "503 ProblemDetails RFC 7807",
+      "variant": "security"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "fastify",
+      "from": 174,
+      "to": 222,
+      "type": "backend"
+    },
+    {
+      "participant": "controller",
+      "from": 216,
+      "to": 396,
+      "type": "backend"
+    },
+    {
+      "participant": "prisma",
+      "from": 258,
+      "to": 364,
+      "type": "backend"
+    },
+    {
+      "participant": "postgres",
+      "from": 300,
+      "to": 344,
+      "type": "database"
+    },
+    {
+      "participant": "fastify",
+      "from": 438,
+      "to": 486,
+      "type": "backend"
+    },
+    {
+      "participant": "controller",
+      "from": 480,
+      "to": 664,
+      "type": "backend"
+    },
+    {
+      "participant": "prisma",
+      "from": 522,
+      "to": 618,
+      "type": "backend"
+    },
+    {
+      "participant": "postgres",
+      "from": 564,
+      "to": 618,
+      "type": "database"
+    },
+    {
+      "participant": "filter",
+      "from": 624,
+      "to": 676,
+      "type": "security"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Caminho 200 OK",
+      "items": [
+        "PrismaService.$queryRawUnsafe('SELECT 1') valida o pool de conexões",
+        "Payload mínimo { status, checks.database } é contrato do HEALTHCHECK",
+        "Latência típica < 50ms — adequado para docker HEALTHCHECK interval=10s"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Caminho 503 Degradado",
+      "items": [
+        "ServiceUnavailableException lançada pelo controller é mapeada via GlobalExceptionFilter",
+        "Resposta segue RFC 7807 (application/problem+json)",
+        "Docker HEALTHCHECK trata 503 como unhealthy → restart policy age"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Atores + Boundary",
+      "items": [
+        "FastifyAdapter recebe o request antes do NestJS pipeline",
+        "PrismaService é o único port para PostgreSQL — não há SQL fora deste boundary",
+        "Versão /v1 é obrigatória pelo FastifyAdapter (sem version: '1' → 500)"
+      ]
+    }
+  ]
+}

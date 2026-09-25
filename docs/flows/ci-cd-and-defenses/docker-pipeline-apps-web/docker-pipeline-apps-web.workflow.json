@@ -1,0 +1,228 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Docker Pipeline — apps/web",
+    "subtitle": "multi-stage: base → builder → prod Next.js standalone (96.7MB)",
+    "output": "docker-pipeline-apps-web.workflow.html",
+    "quality_profile": "standard",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "views": [
+      {
+        "id": "stages",
+        "label": "Multi-stage build",
+        "focus": ["base_img", "fetch", "compile"],
+        "note": "Next.js standalone server, 96.7MB final."
+      }
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "Pipeline Docker multi-stage apps/web: base → dev → builder → prod + healthcheck"
+  },
+  "lanes": [
+    {
+      "id": "build",
+      "label": "Build phases"
+    },
+    {
+      "id": "art",
+      "label": "Artifacts"
+    }
+  ],
+  "phases": [
+    {
+      "id": "i",
+      "label": "Install deps",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "default"
+    },
+    {
+      "id": "b",
+      "label": "Compile",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "f",
+      "label": "Prod finalize",
+      "fromCol": 4,
+      "toCol": 5,
+      "variant": "security"
+    }
+  ],
+  "mainPath": ["base_img", "fetch", "install", "compile", "prod_img", "healthcheck"],
+  "nodes": [
+    {
+      "id": "base_img",
+      "lane": "build",
+      "col": 0,
+      "type": "external",
+      "label": "node:20-slim",
+      "sublabel": "base",
+      "width": 150,
+      "tag": "corepack"
+    },
+    {
+      "id": "fetch",
+      "lane": "build",
+      "col": 1,
+      "type": "backend",
+      "label": "pnpm fetch",
+      "sublabel": "cache",
+      "width": 150,
+      "tag": "frozen"
+    },
+    {
+      "id": "install",
+      "lane": "build",
+      "col": 2,
+      "type": "backend",
+      "label": "pnpm install",
+      "sublabel": "--filter",
+      "width": 150,
+      "tag": "scope:generic"
+    },
+    {
+      "id": "compile",
+      "lane": "build",
+      "col": 3,
+      "type": "backend",
+      "label": "next build",
+      "sublabel": "standalone",
+      "width": 150,
+      "tag": "builder"
+    },
+    {
+      "id": "prod_img",
+      "lane": "build",
+      "col": 4,
+      "type": "security",
+      "label": "prod stage",
+      "sublabel": "FROM node:20",
+      "width": 150,
+      "tag": "prod"
+    },
+    {
+      "id": "standalone",
+      "lane": "art",
+      "col": 3,
+      "type": "cloud",
+      "label": "standalone",
+      "sublabel": "server.js",
+      "width": 150,
+      "tag": "scope:generic"
+    },
+    {
+      "id": "static",
+      "lane": "art",
+      "col": 4,
+      "type": "cloud",
+      "label": ".next/static",
+      "sublabel": "assets",
+      "width": 150,
+      "tag": "scope:generic"
+    },
+    {
+      "id": "healthcheck",
+      "lane": "build",
+      "col": 5,
+      "type": "security",
+      "label": "HEALTHCHECK",
+      "sublabel": "/api/health",
+      "width": 150,
+      "tag": "smoke"
+    }
+  ],
+  "edges": [
+    {
+      "from": "base_img",
+      "to": "fetch",
+      "label": "corepack",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "from": "fetch",
+      "to": "install",
+      "label": "frozen lockfile",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "install",
+      "to": "compile",
+      "label": "next build",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "compile",
+      "to": "prod_img",
+      "label": "COPY",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "prod_img",
+      "to": "healthcheck",
+      "label": "verify",
+      "variant": "security",
+      "role": "main"
+    },
+    {
+      "from": "compile",
+      "to": "standalone",
+      "label": "artifacts",
+      "variant": "default",
+      "role": "branch"
+    },
+    {
+      "from": "compile",
+      "to": "static",
+      "label": "assets",
+      "variant": "default",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Next.js standalone pattern",
+      "items": [
+        "next.config.ts tem output: standalone",
+        "Gera server.js minimo so com deps necessarias",
+        "96.7MB final image vs ~1GB sem standalone"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Layers & COPY",
+      "items": [
+        "COPY --from=builder /repo/apps/web/.next/standalone /repo",
+        "COPY --from=builder /repo/apps/web/.next/static assets",
+        "COPY public/ para files estaticos publicos"
+      ]
+    },
+    {
+      "dot": "orange",
+      "title": "Prod runtime",
+      "items": [
+        "ENV NODE_ENV=production PORT=3001",
+        "CMD node apps/web/server.js (server HTTP)",
+        "USER node (nao-root security)"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "HEALTHCHECK instrinseco",
+      "items": [
+        "interval=10s timeout=3s start-period=20s retries=3",
+        "GET /api/health 200 (Next.js route handler)",
+        "Smoke job valida Docker startup (PR #24)"
+      ]
+    }
+  ]
+}

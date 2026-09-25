@@ -1,0 +1,221 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Specialist Routing — Orquestrador Pré-Planning",
+    "subtitle": "Router classifica demanda → specialists paralelos → controller decide",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "output": "flow-specialist-routing.workflow.html",
+    "views": [
+      {
+        "id": "happy-path",
+        "label": "Demanda coberta",
+        "focus": ["specialist_router", "specialist_1", "specialist_2", "controller"],
+        "note": "specialists_dispatched ≥ 1 → controller prossegue com writing-plans."
+      },
+      {
+        "id": "gap-blocker",
+        "label": "Gap detectado",
+        "focus": ["specialist_router", "controller", "agent_architect"],
+        "note": "gap_detected → controller BLOQUEIA planning; agent-architect cria specialist."
+      }
+    ],
+    "tier": "critical",
+    "mechanism": "auto",
+    "subject": "specialist-routing — Orquestrador de Demanda Pré-Planning"
+  },
+  "lanes": [
+    {
+      "id": "controller",
+      "label": "Controller (humano)"
+    },
+    {
+      "id": "router",
+      "label": "Specialist Router"
+    },
+    {
+      "id": "specialists",
+      "label": "Specialists Paralelos"
+    },
+    {
+      "id": "policy",
+      "label": "Policy / Recovery",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "classify",
+      "label": "Classifica",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "dispatch",
+      "label": "Despacha paralelo",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "emphasis"
+    },
+    {
+      "id": "decide",
+      "label": "Decide",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "dashed"
+    }
+  ],
+  "groups": [
+    {
+      "id": "router_lane",
+      "label": "Router",
+      "lane": "router",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "fanout",
+      "label": "Fan-out paralelo",
+      "lane": "specialists",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "emphasis"
+    },
+    {
+      "id": "exception_path",
+      "label": "Exception path",
+      "lane": "policy",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "security"
+    }
+  ],
+  "mainPath": ["specialist_router", "specialist_1", "controller"],
+  "nodes": [
+    {
+      "id": "specialist_router",
+      "lane": "router",
+      "col": 0,
+      "type": "backend",
+      "label": "specialist-router",
+      "sublabel": "matriz canônica",
+      "tag": "PATH_GLOBS + KEYWORDS + SCOPES",
+      "width": 180
+    },
+    {
+      "id": "specialist_1",
+      "lane": "specialists",
+      "col": 1,
+      "type": "backend",
+      "label": "specialist [1]",
+      "sublabel": "ex: nestjs-specialist",
+      "tag": "domain match",
+      "width": 160
+    },
+    {
+      "id": "specialist_2",
+      "lane": "specialists",
+      "col": 2,
+      "type": "frontend",
+      "label": "specialist [2]",
+      "sublabel": "ex: nextjs-specialist",
+      "tag": "domain match",
+      "width": 160
+    },
+    {
+      "id": "controller",
+      "lane": "controller",
+      "col": 3,
+      "type": "security",
+      "label": "controller",
+      "sublabel": "planejar | bloquear",
+      "tag": "writing-plans input",
+      "width": 160
+    },
+    {
+      "id": "agent_architect",
+      "lane": "policy",
+      "col": 3,
+      "type": "security",
+      "label": "agent-architect",
+      "sublabel": "criar specialist novo",
+      "tag": "se gap_detected",
+      "width": 160
+    }
+  ],
+  "edges": [
+    {
+      "id": "router-to-spec-1",
+      "from": "specialist_router",
+      "to": "specialist_1",
+      "label": "dispatch",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "router-to-spec-2",
+      "from": "specialist_router",
+      "to": "specialist_2",
+      "label": "dispatch",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "spec-1-to-controller",
+      "from": "specialist_1",
+      "to": "controller",
+      "label": "plans_aggregated",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "spec-2-to-controller",
+      "from": "specialist_2",
+      "to": "controller",
+      "label": "plans_aggregated",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "controller-gap-architect",
+      "from": "controller",
+      "to": "agent_architect",
+      "label": "gap_detected?",
+      "variant": "security",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Outputs Esperados",
+      "items": [
+        "classification { paths, keywords, scope }",
+        "specialists_dispatched[] ≥ 1",
+        "gap_detected boolean + suggested_specialist"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Bloqueios",
+      "items": [
+        "Planejar com gap_detected=true (viola evolucao-agents)",
+        "Dispatchar implementer antes do router",
+        "Modificar matriz fora de PR"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Critérios de Done",
+      "items": [
+        "Output YAML em .agents/runs/<ts>-specialist-<n>.yaml",
+        "classification tem ≥1 signal (path/keyword/scope)",
+        "plans_aggregated integrado com writing-plans"
+      ]
+    }
+  ]
+}

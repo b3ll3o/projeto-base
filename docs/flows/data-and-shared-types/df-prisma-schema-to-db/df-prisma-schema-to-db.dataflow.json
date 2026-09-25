@@ -1,0 +1,207 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Prisma schema → PostgreSQL tables/indexes/enum",
+    "subtitle": "schema.prisma → prisma generate → prisma migrate dev → migration.sql → apply → tables + indexes + enums",
+    "output": "df-prisma-schema-to-db.dataflow.html",
+    "quality_profile": "standard",
+    "viewBox": [1500, 760],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "views": [
+      {
+        "id": "schema-to-db",
+        "label": "Prisma lineage",
+        "focus": [
+          "schema_prisma",
+          "prisma_generate",
+          "prisma_client",
+          "migration_sql",
+          "apply_migration",
+          "pg_tables",
+          "pg_indexes",
+          "pg_enum"
+        ],
+        "note": "3 estágios: schema.prisma → generate + migrate dev → migration.sql + PG apply → tables/indexes/enum."
+      }
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "Schema-to-DB lineage — apps/api/prisma/schema.prisma → generated migration.sql → PostgreSQL tables/indexes/enum"
+  },
+  "stages": [
+    {
+      "label": "Source"
+    },
+    {
+      "label": "Codegen"
+    },
+    {
+      "label": "Migration"
+    },
+    {
+      "label": "DB artifacts"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "schema_prisma",
+      "type": "external",
+      "label": "schema.prisma",
+      "sublabel": "models + enums",
+      "stage": 0,
+      "row": 1,
+      "tag": "schema.prisma"
+    },
+    {
+      "id": "prisma_generate",
+      "type": "backend",
+      "label": "prisma generate",
+      "sublabel": "TypeScript client",
+      "stage": 1,
+      "row": 0,
+      "tag": "pnpm prisma:gen"
+    },
+    {
+      "id": "prisma_client",
+      "type": "security",
+      "label": "@prisma/client",
+      "sublabel": "typed DAO",
+      "stage": 2,
+      "row": 0,
+      "tag": "node_modules/.prisma"
+    },
+    {
+      "id": "migration_sql",
+      "type": "backend",
+      "label": "migration.sql",
+      "sublabel": "CREATE TABLE/INDEX",
+      "stage": 2,
+      "row": 3,
+      "tag": "migrations/2026*/"
+    },
+    {
+      "id": "apply_migration",
+      "type": "security",
+      "label": "prisma migrate dev",
+      "sublabel": "apply + reset + seed",
+      "stage": 2,
+      "row": 2,
+      "yOffset": -120,
+      "tag": "prisma:migrate:dev"
+    },
+    {
+      "id": "pg_tables",
+      "type": "database",
+      "label": "users + history",
+      "sublabel": "Postgres tables",
+      "stage": 3,
+      "row": 0,
+      "tag": "users + history + archive"
+    },
+    {
+      "id": "pg_indexes",
+      "type": "database",
+      "label": "PG indexes",
+      "sublabel": "BTREE + UNIQUE",
+      "stage": 3,
+      "row": 1,
+      "tag": "email_idx, deleted_at_idx"
+    },
+    {
+      "id": "pg_enum",
+      "type": "database",
+      "label": "audit_operation",
+      "sublabel": "Postgres enum type",
+      "stage": 3,
+      "row": 2,
+      "tag": "INSERT/UPDATE/DELETE/RESTORE"
+    }
+  ],
+  "flows": [
+    {
+      "id": "f1",
+      "from": "schema_prisma",
+      "to": "prisma_generate",
+      "label": "model User",
+      "variant": "emphasis"
+    },
+    {
+      "id": "f2",
+      "from": "schema_prisma",
+      "to": "migration_sql",
+      "label": "audit enum",
+      "variant": "default",
+      "route": "bottom-channel"
+    },
+    {
+      "id": "f3",
+      "from": "prisma_generate",
+      "to": "prisma_client",
+      "label": "TS types + DAO",
+      "variant": "emphasis"
+    },
+    {
+      "id": "f4",
+      "from": "migration_sql",
+      "to": "apply_migration",
+      "label": "DDL statements",
+      "variant": "default"
+    },
+    {
+      "id": "f5",
+      "from": "apply_migration",
+      "to": "pg_tables",
+      "label": "CREATE TABLE",
+      "variant": "emphasis"
+    },
+    {
+      "id": "f6",
+      "from": "apply_migration",
+      "to": "pg_indexes",
+      "label": "CREATE INDEX",
+      "variant": "default"
+    },
+    {
+      "id": "f7",
+      "from": "apply_migration",
+      "to": "pg_enum",
+      "label": "CREATE TYPE",
+      "variant": "default"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Pipeline monorepo",
+      "items": [
+        "turbo.json: prisma.generate → db:apply como deps",
+        "generate roda no turbo build de apps/api (gera node_modules/.prisma/client)",
+        "migrate dev roda via Docker local (postgres:16-alpine)",
+        "CI: prisma generate em build, migrate deploy em release"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Migration content exemplo",
+      "items": [
+        "CREATE TYPE audit_operation AS ENUM (INSERT, UPDATE, DELETE, RESTORE)",
+        "CREATE TABLE users (id UUID PK, email UNIQUE, version Int)",
+        "CREATE INDEX users_email_idx, users_deleted_at_idx, users_created_at_idx",
+        "users_history: unique (entity_id, version) + index (entity_id, changed_at DESC)",
+        "users_archive: UNIQUE entity_id + index deleted_at DESC"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Idempotência + drift detection",
+      "items": [
+        "migration_lock.toml com provider=postgresql",
+        "_prisma_migrations table registra applied migrations",
+        "prisma migrate dev detecta drift e oferece reset (dev only)",
+        "prisma migrate deploy idempotente em CI/CD (production)"
+      ]
+    }
+  ]
+}

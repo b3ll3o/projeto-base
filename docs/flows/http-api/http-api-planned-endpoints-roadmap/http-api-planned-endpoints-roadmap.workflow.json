@@ -1,0 +1,210 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Planned Endpoints Roadmap — Fase 8+",
+    "subtitle": "Endpoints planejados (não implementados): auth/JWT + email update + pagination cursor + audit export",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "standard",
+    "output": "http-api-planned-endpoints-roadmap.workflow.html",
+    "viewBox": [1400, 580],
+    "views": [
+      {
+        "id": "roadmap",
+        "label": "Planned endpoints (Fase 8+)",
+        "focus": [
+          "auth_login",
+          "auth_refresh",
+          "users_update_email",
+          "users_audit_export",
+          "users_bulk"
+        ],
+        "note": "Endpoints planejados em Fase 8+; atualmente status PLANNED (não implementados)."
+      },
+      {
+        "id": "gaps",
+        "label": "Gaps documentados",
+        "focus": ["users_update_email"],
+        "note": "Use case existente sem rota HTTP dedicada (Phase 5 gap)."
+      }
+    ],
+    "tier": "nice",
+    "mechanism": "hand",
+    "subject": "Roadmap — endpoints planejados (Fase 8+) ainda não implementados"
+  },
+  "lanes": [
+    {
+      "id": "auth",
+      "label": "Auth (Fase 8)"
+    },
+    {
+      "id": "users",
+      "label": "Users (Fase 8+)"
+    },
+    {
+      "id": "audit",
+      "label": "Audit (Fase 9)"
+    }
+  ],
+  "phases": [
+    {
+      "id": "fase8",
+      "label": "Fase 8 — Auth + Identity",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "fase9",
+      "label": "Fase 9 — Audit + Bulk",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "default"
+    },
+    {
+      "id": "backlog",
+      "label": "Backlog",
+      "fromCol": 4,
+      "toCol": 4,
+      "variant": "dashed"
+    }
+  ],
+  "groups": [
+    {
+      "id": "auth_group",
+      "label": "Auth (Fase 8 — JWT + refresh tokens)",
+      "lane": "auth",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "users_group",
+      "label": "Users extensions",
+      "lane": "users",
+      "fromCol": 0,
+      "toCol": 3,
+      "variant": "default"
+    },
+    {
+      "id": "audit_group",
+      "label": "Audit extensions",
+      "lane": "audit",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "default"
+    }
+  ],
+  "mainPath": ["auth_login", "auth_refresh", "users_update_email", "users_audit_export"],
+  "nodes": [
+    {
+      "id": "auth_login",
+      "lane": "auth",
+      "col": 0,
+      "type": "external",
+      "label": "POST /auth/login",
+      "sublabel": "Fase 8 PLANNED",
+      "tag": "JWT + refresh",
+      "width": 160
+    },
+    {
+      "id": "auth_refresh",
+      "lane": "auth",
+      "col": 1,
+      "type": "external",
+      "label": "POST /auth/refresh",
+      "sublabel": "Fase 8 PLANNED",
+      "tag": "rotate refresh",
+      "width": 160
+    },
+    {
+      "id": "users_update_email",
+      "lane": "users",
+      "col": 2,
+      "type": "backend",
+      "label": "PATCH /users/:id/email",
+      "sublabel": "Fase 8 PLANNED (gap)",
+      "tag": "use case existe",
+      "width": 180
+    },
+    {
+      "id": "users_audit_export",
+      "lane": "audit",
+      "col": 3,
+      "type": "security",
+      "label": "GET /users/:id/audit/export",
+      "sublabel": "Fase 9 PLANNED",
+      "tag": "NDJSON stream",
+      "width": 180
+    },
+    {
+      "id": "users_bulk",
+      "lane": "users",
+      "col": 4,
+      "type": "backend",
+      "label": "POST /users/bulk",
+      "sublabel": "backlog",
+      "tag": "batch create",
+      "width": 150
+    }
+  ],
+  "edges": [
+    {
+      "id": "login-to-refresh",
+      "from": "auth_login",
+      "to": "auth_refresh",
+      "label": "tokens",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "refresh-to-update-email",
+      "from": "auth_refresh",
+      "to": "users_update_email",
+      "label": "authorized PATCH",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "update-email-to-audit",
+      "from": "users_update_email",
+      "to": "users_audit_export",
+      "label": "audit trail",
+      "variant": "default",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Roadmap Fase 8+",
+      "items": [
+        "Fase 8: Auth endpoints (login + refresh) usando JWT + bcrypt",
+        "Fase 8: PATCH /users/:id/email (use case existe, rota dedicada não)",
+        "Fase 9: GET /users/:id/audit/export (NDJSON streaming)",
+        "Backlog: POST /users/bulk (batch create com audit por linha)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Status atual (2026-09-24)",
+      "items": [
+        "Implementado: 9 endpoints users CRUD + health + audit history",
+        "PLANNED: 5 endpoints (login, refresh, email, audit export, bulk)",
+        "Gap documentado: use case UpdateEmail existe sem rota HTTP",
+        "Auth atual: header Authorization parseado mas não validado (Fase 8)"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Pre-requisitos técnicos",
+      "items": [
+        "Auth: PassportStrategy + bcrypt + JWT signing key (env JWT_SECRET)",
+        "Email update: optimistic locking (mesmo pattern de PATCH /users/:id name)",
+        "Audit export: streaming response (Fastify reply.raw) + NDJSON",
+        "Bulk create: rate limit + transaction por batch + audit por item"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,411 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Global Error Mapping — DomainException → RFC 7807",
+    "subtitle": "Domain/Application exceptions → mapExceptionToHttp (pura) → ProblemDetails",
+    "output": "http-api-global-error-mapping.workflow.html",
+    "viewBox": [1130, 1400],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "by-status",
+        "label": "Status code mapping",
+        "focus": ["map", "s400", "s404", "s409", "s410", "s412", "s422", "s500"],
+        "note": "Cada classe de exceção resolve para um HTTP status code canônico."
+      }
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "Cross-cutting — Exception → GlobalExceptionFilter → RFC 7807"
+  },
+  "lanes": [
+    {
+      "id": "exception",
+      "label": "Exception classes"
+    },
+    {
+      "id": "mapper",
+      "label": "Mapper (pure)"
+    },
+    {
+      "id": "status",
+      "label": "HTTP status"
+    }
+  ],
+  "phases": [
+    {
+      "id": "domain",
+      "label": "Domain",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "default"
+    },
+    {
+      "id": "application",
+      "label": "Application",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "default",
+      "label": "Default",
+      "fromCol": 4,
+      "toCol": 4,
+      "variant": "security"
+    }
+  ],
+  "mainPath": ["domain_not_found", "map", "s404"],
+  "nodes": [
+    {
+      "id": "domain_not_found",
+      "lane": "exception",
+      "col": 0,
+      "type": "backend",
+      "label": "UserNotFoundException",
+      "sublabel": "domain layer",
+      "width": 180,
+      "tag": "scope:generic"
+    },
+    {
+      "id": "domain_email",
+      "lane": "exception",
+      "col": 1,
+      "type": "backend",
+      "label": "EmailAlreadyInUseException",
+      "sublabel": "domain",
+      "width": 200,
+      "tag": "scope:generic"
+    },
+    {
+      "id": "domain_concurrency",
+      "lane": "exception",
+      "col": 2,
+      "type": "backend",
+      "label": "ConcurrencyException",
+      "sublabel": "domain",
+      "width": 180,
+      "tag": "scope:generic"
+    },
+    {
+      "id": "domain_deleted",
+      "lane": "exception",
+      "col": 3,
+      "type": "backend",
+      "label": "UserDeletedException",
+      "sublabel": "domain",
+      "width": 180,
+      "tag": "scope:generic"
+    },
+    {
+      "id": "domain_restore",
+      "lane": "exception",
+      "col": 4,
+      "type": "backend",
+      "label": "InvalidRestoreException",
+      "sublabel": "domain",
+      "width": 180,
+      "tag": "scope:generic"
+    },
+    {
+      "id": "app_notfound",
+      "lane": "exception",
+      "col": 0,
+      "yOffset": 120,
+      "type": "security",
+      "label": "AppResourceNotFound",
+      "sublabel": "app layer",
+      "width": 180,
+      "tag": "scope:generic"
+    },
+    {
+      "id": "app_validation",
+      "lane": "exception",
+      "col": 1,
+      "yOffset": 120,
+      "type": "security",
+      "label": "AppValidationException",
+      "sublabel": "app layer",
+      "width": 180,
+      "tag": "scope:generic"
+    },
+    {
+      "id": "app_concurrency",
+      "lane": "exception",
+      "col": 2,
+      "yOffset": 120,
+      "type": "security",
+      "label": "AppConcurrencyException",
+      "sublabel": "app layer",
+      "width": 180,
+      "tag": "scope:generic"
+    },
+    {
+      "id": "app_email",
+      "lane": "exception",
+      "col": 3,
+      "yOffset": 120,
+      "type": "security",
+      "label": "AppEmailInUse",
+      "sublabel": "app layer",
+      "width": 180,
+      "tag": "scope:generic"
+    },
+    {
+      "id": "unknown",
+      "lane": "exception",
+      "col": 4,
+      "yOffset": 120,
+      "type": "external",
+      "label": "Unknown Error",
+      "sublabel": "fallback",
+      "width": 160,
+      "tag": "scope:generic"
+    },
+    {
+      "id": "map",
+      "lane": "mapper",
+      "col": 0,
+      "type": "backend",
+      "label": "mapExceptionToHttp()",
+      "sublabel": "pure fn",
+      "width": 200,
+      "tag": "linha 61"
+    },
+    {
+      "id": "filter",
+      "lane": "mapper",
+      "col": 4,
+      "type": "backend",
+      "label": "GlobalExceptionFilter",
+      "sublabel": "RFC 7807",
+      "width": 200,
+      "tag": "scope:generic"
+    },
+    {
+      "id": "s400",
+      "lane": "status",
+      "col": 0,
+      "type": "security",
+      "label": "400",
+      "sublabel": "VALIDATION_ERROR",
+      "width": 100,
+      "tag": "BadRequest"
+    },
+    {
+      "id": "s404",
+      "lane": "status",
+      "col": 1,
+      "type": "security",
+      "label": "404",
+      "sublabel": "USER_NOT_FOUND",
+      "width": 100,
+      "tag": "NotFound"
+    },
+    {
+      "id": "s409",
+      "lane": "status",
+      "col": 2,
+      "type": "security",
+      "label": "409",
+      "sublabel": "EMAIL_IN_USE",
+      "width": 100,
+      "tag": "Conflict"
+    },
+    {
+      "id": "s410",
+      "lane": "status",
+      "col": 3,
+      "type": "security",
+      "label": "410",
+      "sublabel": "USER_DELETED",
+      "width": 100,
+      "tag": "Gone"
+    },
+    {
+      "id": "s412",
+      "lane": "status",
+      "col": 4,
+      "type": "security",
+      "label": "412",
+      "sublabel": "CONCURRENCY",
+      "width": 100,
+      "tag": "PreconditionFailed"
+    },
+    {
+      "id": "s422",
+      "lane": "status",
+      "col": 0,
+      "yOffset": 140,
+      "type": "security",
+      "label": "422",
+      "sublabel": "INVALID_RESTORE",
+      "width": 100,
+      "tag": "Unprocessable"
+    },
+    {
+      "id": "s500",
+      "lane": "status",
+      "col": 4,
+      "yOffset": 140,
+      "type": "security",
+      "label": "500",
+      "sublabel": "INTERNAL",
+      "width": 100,
+      "tag": "ServerError"
+    }
+  ],
+  "edges": [
+    {
+      "from": "domain_not_found",
+      "to": "map",
+      "label": "instanceof",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "from": "domain_email",
+      "to": "map",
+      "label": "instanceof",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "from": "domain_concurrency",
+      "to": "map",
+      "label": "instanceof",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "from": "domain_deleted",
+      "to": "map",
+      "label": "instanceof",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "from": "domain_restore",
+      "to": "map",
+      "label": "instanceof",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "from": "app_notfound",
+      "to": "map",
+      "label": "instanceof",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "app_validation",
+      "to": "map",
+      "label": "instanceof",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "app_concurrency",
+      "to": "map",
+      "label": "instanceof",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "app_email",
+      "to": "map",
+      "label": "instanceof",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "from": "unknown",
+      "to": "map",
+      "label": "fallback",
+      "variant": "security",
+      "role": "main"
+    },
+    {
+      "from": "map",
+      "to": "s400",
+      "label": "VALIDATION",
+      "variant": "default",
+      "role": "branch"
+    },
+    {
+      "from": "map",
+      "to": "s404",
+      "label": "NOT_FOUND",
+      "variant": "default",
+      "role": "branch"
+    },
+    {
+      "from": "map",
+      "to": "s409",
+      "label": "CONFLICT",
+      "variant": "default",
+      "role": "branch"
+    },
+    {
+      "from": "map",
+      "to": "s410",
+      "label": "GONE",
+      "variant": "default",
+      "role": "branch"
+    },
+    {
+      "from": "map",
+      "to": "s412",
+      "label": "PRECONDITION",
+      "variant": "default",
+      "role": "branch"
+    },
+    {
+      "from": "map",
+      "to": "s422",
+      "label": "UNPROCESSABLE",
+      "variant": "default",
+      "role": "branch"
+    },
+    {
+      "from": "map",
+      "to": "s500",
+      "label": "INTERNAL default",
+      "variant": "security",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Mapper é função PURA",
+      "items": [
+        "Não lança, não loga, não instancia — recebe Error, devolve {status,code,title}",
+        "instanceof checks ordem: DOMAIN primeiro, depois APPLICATION (defensivo)",
+        "Default 500 INTERNAL_SERVER_ERROR cobre qualquer Error não-mapeado"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "RFC 7807 ProblemDetails",
+      "items": [
+        "type / title / status / detail / instance / code / traceId",
+        "traceId = W3C OTel span id ativo (correlaciona erro com trace)",
+        "Cliente (apps/web) trata ProblemDetails uniformemente via codigo"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Por que domain vs application?",
+      "items": [
+        "Domain exceptions vivem em domain/ (puro, sem NestJS)",
+        "Application exceptions vivem em application/ (boundary inbound)",
+        "Use cases SEMPRE traduzem domain → application (translateDomainException)"
+      ]
+    }
+  ]
+}

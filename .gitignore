@@ -24,3 +24,13 @@ apps/api/openapi.json
 !.vscode/settings.json
 !.vscode/extensions.json
 .pnpm-store/
+
+# pt-BR: dev-archify/ e' uma FERRAMENTA standalone (repo git proprio aninhado),
+# nao uma dependencia do monorepo nem parte de apps/packages. Foi clonado aqui
+# para iteracao local com claude sessions; ver ~/.claude/projects/-home-leo-
+# Documentos-projetos-base/memory/ para historico (B26+B27). Funciona via
+# `node dev-archify/bin/archify.mjs <sub>` — paths em scripts assumem esta
+# localizacao, entao NAO mover sem ajustar as memories e skills referenciadas.
+# Ignore explicito remove o "?? dev-archify/" do git status do base sem
+# afetar o repo git interno de dev-archify/.
+/dev-archify/

@@ -1,0 +1,317 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Next.js Standalone Build Pipeline — apps/web",
+    "subtitle": "Pipeline: Dockerfile multi-stage (base→builder→prod) com pnpm fetch/install/filter + next build → output: apps/web/.next/standalone",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "standard",
+    "output": "web-app-flow-07.workflow.html",
+    "views": [
+      {
+        "id": "pipeline",
+        "label": "3-stage Docker build",
+        "focus": [
+          "base_setup",
+          "pnpm_fetch",
+          "pnpm_install",
+          "copy_sources",
+          "next_build",
+          "copy_standalone",
+          "copy_static",
+          "start_node"
+        ],
+        "note": "Multi-stage: base (node+corepack) → builder (pnpm install + next build) → prod (copy .next/standalone + static + public)."
+      },
+      {
+        "id": "standalone",
+        "label": "Standalone output",
+        "focus": ["next_build", "copy_standalone", "start_node"],
+        "note": "next.config: output:'standalone' + outputFileTracingIncludes para OTel. Output: apps/web/.next/standalone + server.js."
+      }
+    ],
+    "tier": "nice",
+    "mechanism": "hand",
+    "subject": "Web App: Next.js Standalone Build Pipeline (Docker)"
+  },
+  "lanes": [
+    {
+      "id": "base",
+      "label": "Base"
+    },
+    {
+      "id": "deps",
+      "label": "Deps"
+    },
+    {
+      "id": "build",
+      "label": "Build"
+    },
+    {
+      "id": "runtime",
+      "label": "Runtime"
+    }
+  ],
+  "phases": [
+    {
+      "id": "base",
+      "label": "Base image",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
+      "id": "deps",
+      "label": "Dependencies",
+      "fromCol": 1,
+      "toCol": 2,
+      "variant": "default"
+    },
+    {
+      "id": "build",
+      "label": "Build artifacts",
+      "fromCol": 3,
+      "toCol": 4,
+      "variant": "emphasis"
+    },
+    {
+      "id": "runtime",
+      "label": "Runtime",
+      "fromCol": 5,
+      "toCol": 5,
+      "variant": "dashed"
+    }
+  ],
+  "groups": [
+    {
+      "id": "deps_group",
+      "label": "pnpm fetch + install",
+      "lane": "deps",
+      "fromCol": 1,
+      "toCol": 2,
+      "variant": "default"
+    },
+    {
+      "id": "build_group",
+      "label": "next build + standalone output",
+      "lane": "build",
+      "fromCol": 3,
+      "toCol": 4,
+      "variant": "emphasis"
+    }
+  ],
+  "mainPath": [
+    "base_setup",
+    "pnpm_fetch",
+    "pnpm_install",
+    "copy_sources",
+    "next_build",
+    "copy_standalone",
+    "copy_static",
+    "start_node"
+  ],
+  "nodes": [
+    {
+      "id": "base_setup",
+      "lane": "base",
+      "col": 0,
+      "type": "external",
+      "label": "node 20-slim",
+      "sublabel": "corepack+pnpm@9.12",
+      "tag": "FROM base",
+      "width": 150
+    },
+    {
+      "id": "pnpm_fetch",
+      "lane": "deps",
+      "col": 1,
+      "type": "backend",
+      "label": "pnpm fetch",
+      "sublabel": "offline mirror",
+      "tag": "pnpm fetch",
+      "width": 150
+    },
+    {
+      "id": "pnpm_install",
+      "lane": "deps",
+      "col": 2,
+      "type": "backend",
+      "label": "pnpm install",
+      "sublabel": "--frozen-lockfile",
+      "tag": "--filter @projeto/web",
+      "width": 160
+    },
+    {
+      "id": "copy_sources",
+      "lane": "build",
+      "col": 3,
+      "type": "external",
+      "label": "COPY sources",
+      "sublabel": "apps/web + packages",
+      "tag": "COPY apps/web",
+      "width": 150
+    },
+    {
+      "id": "next_build",
+      "lane": "build",
+      "col": 4,
+      "type": "security",
+      "label": "next build",
+      "sublabel": "output:'standalone'",
+      "tag": "pnpm --filter build",
+      "width": 150
+    },
+    {
+      "id": "outputFileTracing",
+      "lane": "build",
+      "col": 4,
+      "type": "backend",
+      "label": "trace OTel+web-vitals",
+      "sublabel": "outputFileTracingIncludes",
+      "tag": "@opentelemetry/**",
+      "width": 160,
+      "yOffset": 120
+    },
+    {
+      "id": "copy_standalone",
+      "lane": "runtime",
+      "col": 5,
+      "type": "external",
+      "label": "copy standalone",
+      "sublabel": "FROM prod",
+      "tag": ".next/standalone",
+      "width": 150
+    },
+    {
+      "id": "copy_static",
+      "lane": "runtime",
+      "col": 5,
+      "type": "external",
+      "label": "copy static+public",
+      "sublabel": ".next/static + public/",
+      "tag": "static assets",
+      "width": 150,
+      "yOffset": 120
+    },
+    {
+      "id": "start_node",
+      "lane": "runtime",
+      "col": 5,
+      "type": "backend",
+      "label": "node server.js",
+      "sublabel": "HEALTHCHECK /api/health",
+      "tag": "CMD node server.js",
+      "width": 150,
+      "yOffset": 240
+    }
+  ],
+  "edges": [
+    {
+      "id": "base-to-fetch",
+      "from": "base_setup",
+      "to": "pnpm_fetch",
+      "label": "corepack ready",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "fetch-to-install",
+      "from": "pnpm_fetch",
+      "to": "pnpm_install",
+      "label": "lockfile ok",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "install-to-copy",
+      "from": "pnpm_install",
+      "to": "copy_sources",
+      "label": "deps locked",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "copy-to-build",
+      "from": "copy_sources",
+      "to": "next_build",
+      "label": "sources in",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "build-to-trace",
+      "from": "next_build",
+      "to": "outputFileTracing",
+      "label": "config top-level",
+      "variant": "default",
+      "role": "branch"
+    },
+    {
+      "id": "build-to-standalone",
+      "from": "next_build",
+      "to": "copy_standalone",
+      "label": ".next/standalone",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "standalone-to-static",
+      "from": "copy_standalone",
+      "to": "copy_static",
+      "label": "prod stage",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "static-to-start",
+      "from": "copy_static",
+      "to": "start_node",
+      "label": "all in /repo",
+      "variant": "dashed",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "3 stages do Dockerfile",
+      "items": [
+        "AS base: node:20-bookworm-slim + corepack + pnpm@9.12.0",
+        "AS builder: pnpm fetch → install --frozen-lockfile → COPY → next build",
+        "AS prod: COPY .next/standalone + .next/static + public → node server.js",
+        "AS dev: variante para desenvolvimento local"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Next.js Standalone output",
+      "items": [
+        "next.config.mjs: output: 'standalone'",
+        "outputFileTracingIncludes: ['./node_modules/@opentelemetry/**/*', './node_modules/web-vitals/**/*']",
+        "Output: apps/web/.next/standalone + apps/web/server.js",
+        "Tamanho tipico: <100MB (sem node_modules completo)"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Healthcheck + start",
+      "items": [
+        "HEALTHCHECK curl http://localhost:3001/api/health (10s/3s/20s/3x)",
+        "CMD ['node', 'apps/web/server.js']",
+        "EXPOSE 3001 (porta Next.js)",
+        "ENV NODE_ENV=production PORT=3001"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Armadilhas conhecidas",
+      "items": [
+        "❌ Esquecer outputFileTracingIncludes → OTel deps faltam no runtime",
+        "❌ outputFileTracingIncludes em experimental (Next.js 15.5+ é top-level)",
+        "❌ Copiar node_modules inteiro (imagem 600MB+) em vez de standalone",
+        "❌ Healthcheck apontando para /api/health inexistente"
+      ]
+    }
+  ]
+}

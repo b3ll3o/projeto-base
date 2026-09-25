@@ -1,0 +1,182 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "stack-code-reviewer — Pipeline de Regras por Stack",
+    "subtitle": "4 etapas: detect-stack → apply-rules → classify → gate (blocker→exit)",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "standard",
+    "output": "fs-stack-code-reviewer-rules.workflow.html",
+    "views": [
+      {
+        "id": "pipeline",
+        "label": "Pipeline de review",
+        "focus": ["detect_stack", "apply_rules", "classify", "gate"],
+        "note": "Auto-detect stack → aplica 5 lenses → classifica severity → gate blocker→exit."
+      },
+      {
+        "id": "lenses",
+        "label": "5 lenses de stack",
+        "focus": ["apply_rules"],
+        "note": "DDD-Hexagonal / NestJS / Next.js / Prisma / Monorepo — cada um com regras blocker/major/minor."
+      }
+    ],
+    "tier": "important",
+    "mechanism": "auto",
+    "subject": "stack-code-reviewer — pipeline de regras DDD/NestJS/Prisma/Next.js com gating blocker→exit"
+  },
+  "lanes": [
+    {
+      "id": "agent",
+      "label": "Agent Runtime"
+    }
+  ],
+  "phases": [
+    {
+      "id": "detect",
+      "label": "Detect",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
+      "id": "review",
+      "label": "Review + classify",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "default"
+    },
+    {
+      "id": "gate",
+      "label": "Gate",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "dashed"
+    }
+  ],
+  "groups": [
+    {
+      "id": "detect_phase",
+      "label": "Auto-detect stack",
+      "lane": "agent",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
+      "id": "review_phase",
+      "label": "Aplicar regras",
+      "lane": "agent",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "default"
+    },
+    {
+      "id": "gate_phase",
+      "label": "Aprovação",
+      "lane": "agent",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": ["detect_stack", "apply_rules", "classify", "gate"],
+  "nodes": [
+    {
+      "id": "detect_stack",
+      "lane": "agent",
+      "col": 0,
+      "type": "external",
+      "label": "detect-stack",
+      "sublabel": "auto path",
+      "tag": "7 patterns",
+      "width": 130
+    },
+    {
+      "id": "apply_rules",
+      "lane": "agent",
+      "col": 1,
+      "type": "security",
+      "label": "apply-rules",
+      "sublabel": "5 lenses de stack",
+      "tag": "DDD/Nest/Next/Prisma/Mono",
+      "width": 150
+    },
+    {
+      "id": "classify",
+      "lane": "agent",
+      "col": 2,
+      "type": "backend",
+      "label": "classify",
+      "sublabel": "severity + evidence",
+      "tag": "blkr/maj/min/info",
+      "width": 130
+    },
+    {
+      "id": "gate",
+      "lane": "agent",
+      "col": 3,
+      "type": "security",
+      "label": "gate",
+      "sublabel": "approved bool",
+      "tag": "blocker → exit",
+      "width": 130
+    }
+  ],
+  "edges": [
+    {
+      "id": "detect-to-apply",
+      "from": "detect_stack",
+      "to": "apply_rules",
+      "label": "stacks_detected",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "apply-to-classify",
+      "from": "apply_rules",
+      "to": "classify",
+      "label": "findings + line+code",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "classify-to-gate",
+      "from": "classify",
+      "to": "gate",
+      "label": "findings_by_severity",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "gate-blocker",
+      "from": "gate",
+      "to": "apply_rules",
+      "label": "blocker → re-apply",
+      "variant": "dashed",
+      "role": "return"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Pipeline + Lenses",
+      "items": [
+        "4 etapas: detect-stack → apply-rules → classify → gate",
+        "5 lenses: DDD/Nest/Next/Prisma/Monorepo",
+        "Cada finding cita evidência (file+line+code)"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Gating proporcional",
+      "items": [
+        "blocker → approved=false (bloqueia commit)",
+        "major >3 → approved=false (bloqueia PR)",
+        "minor qualquer qty → approved=true (warning)",
+        "info → sempre passa"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,363 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Demand Archiving — Pipeline de Arquivamento",
+    "subtitle": "Pipeline: validar elegibilidade (PR MERGED + retro) → coletar metadata → gerar frontmatter canônico (8 campos) → commit atômico",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "standard",
+    "output": "fs-demand-archiving-flow.workflow.html",
+    "views": [
+      {
+        "id": "pipeline",
+        "label": "Pipeline 10 passos",
+        "focus": [
+          "pr_state",
+          "retro_exists",
+          "pr_meta",
+          "derive_slug",
+          "define_path",
+          "frontmatter",
+          "body",
+          "write_file",
+          "link_run",
+          "atomic_commit"
+        ],
+        "note": "10 etapas: gh pr state → retro ok → metadata → slug kebab → path YYYY-MM-DD → fm 8c → body 5s → write → link → commit."
+      },
+      {
+        "id": "frontmatter",
+        "label": "8 campos canônicos",
+        "focus": ["frontmatter"],
+        "note": "archived_at, original_run, demand_slug, prs[], retro_refs[], improvements{9 keys}, status='archived', tags[]."
+      }
+    ],
+    "tier": "nice",
+    "mechanism": "hand",
+    "subject": "archive-demand — pipeline de elegibilidade + commit atômico"
+  },
+  "lanes": [
+    {
+      "id": "elig",
+      "label": "Eligibility"
+    },
+    {
+      "id": "collect",
+      "label": "Collect"
+    },
+    {
+      "id": "generate",
+      "label": "Generate"
+    },
+    {
+      "id": "persist",
+      "label": "Persist"
+    }
+  ],
+  "phases": [
+    {
+      "id": "verify",
+      "label": "Eligibility",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "collect",
+      "label": "Collect",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "default"
+    },
+    {
+      "id": "generate",
+      "label": "Generate",
+      "fromCol": 3,
+      "toCol": 4,
+      "variant": "default"
+    },
+    {
+      "id": "persist",
+      "label": "Persist",
+      "fromCol": 5,
+      "toCol": 5,
+      "variant": "dashed"
+    }
+  ],
+  "groups": [
+    {
+      "id": "verify_group",
+      "label": "Eligibility checks",
+      "lane": "elig",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "collect_group",
+      "label": "Metadata collection",
+      "lane": "collect",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "default"
+    },
+    {
+      "id": "generate_group",
+      "label": "Content generation",
+      "lane": "generate",
+      "fromCol": 3,
+      "toCol": 4,
+      "variant": "default"
+    }
+  ],
+  "mainPath": [
+    "pr_state",
+    "retro_exists",
+    "pr_meta",
+    "derive_slug",
+    "define_path",
+    "frontmatter",
+    "body",
+    "write_file",
+    "link_run",
+    "atomic_commit"
+  ],
+  "nodes": [
+    {
+      "id": "pr_state",
+      "lane": "elig",
+      "col": 0,
+      "type": "external",
+      "label": "verificar PR",
+      "sublabel": "state=MERGED",
+      "tag": "gh pr view",
+      "width": 150
+    },
+    {
+      "id": "retro_exists",
+      "lane": "elig",
+      "col": 1,
+      "type": "external",
+      "label": "verificar retro",
+      "sublabel": "test -f b<N>.md",
+      "tag": "memory/",
+      "width": 150
+    },
+    {
+      "id": "pr_meta",
+      "lane": "collect",
+      "col": 2,
+      "type": "backend",
+      "label": "coletar metadata",
+      "sublabel": "title+sha+author",
+      "tag": "gh pr view --json",
+      "width": 160
+    },
+    {
+      "id": "derive_slug",
+      "lane": "collect",
+      "col": 3,
+      "type": "backend",
+      "label": "derivar slug",
+      "sublabel": "kebab-case",
+      "tag": "lowercase+regex",
+      "width": 150
+    },
+    {
+      "id": "define_path",
+      "lane": "generate",
+      "col": 3,
+      "type": "external",
+      "label": "definir path",
+      "sublabel": "YYYY-MM-DD-slug",
+      "tag": "archive/<file>.md",
+      "width": 160,
+      "yOffset": 120
+    },
+    {
+      "id": "frontmatter",
+      "lane": "generate",
+      "col": 4,
+      "type": "security",
+      "label": "frontmatter 8c",
+      "sublabel": "ISO+kebab+arrays",
+      "tag": "8 required",
+      "width": 150
+    },
+    {
+      "id": "body",
+      "lane": "persist",
+      "col": 5,
+      "type": "backend",
+      "label": "gerar body",
+      "sublabel": "5 secoes",
+      "tag": "Demand+PRs+Retro",
+      "width": 150
+    },
+    {
+      "id": "write_file",
+      "lane": "persist",
+      "col": 5,
+      "type": "external",
+      "label": "escrever arquivo",
+      "sublabel": "mkdir+cat EOF",
+      "tag": "fs.writeFileSync",
+      "width": 150,
+      "yOffset": 120
+    },
+    {
+      "id": "link_run",
+      "lane": "persist",
+      "col": 5,
+      "type": "external",
+      "label": "linkar run",
+      "sublabel": "topo blockquote",
+      "tag": "> Archive: ...",
+      "width": 150,
+      "yOffset": 240
+    },
+    {
+      "id": "atomic_commit",
+      "lane": "persist",
+      "col": 5,
+      "type": "external",
+      "label": "commit atomico",
+      "sublabel": "git add 2 + commit",
+      "tag": "git add+commit",
+      "width": 150,
+      "yOffset": 360
+    }
+  ],
+  "edges": [
+    {
+      "id": "pr-state-to-retro",
+      "from": "pr_state",
+      "to": "retro_exists",
+      "label": "state=MERGED",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "retro-to-meta",
+      "from": "retro_exists",
+      "to": "pr_meta",
+      "label": "retro exists",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "meta-to-slug",
+      "from": "pr_meta",
+      "to": "derive_slug",
+      "label": "title+author",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "slug-to-path",
+      "from": "derive_slug",
+      "to": "define_path",
+      "label": "slug pronto",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "path-to-fm",
+      "from": "define_path",
+      "to": "frontmatter",
+      "label": "path definido",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "fm-to-body",
+      "from": "frontmatter",
+      "to": "body",
+      "label": "fm OK",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "body-to-write",
+      "from": "body",
+      "to": "write_file",
+      "label": "body+fm",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "write-to-link",
+      "from": "write_file",
+      "to": "link_run",
+      "label": "archive criado",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "link-to-commit",
+      "from": "link_run",
+      "to": "atomic_commit",
+      "label": "link inserido",
+      "variant": "dashed",
+      "role": "main"
+    },
+    {
+      "id": "fm-to-write",
+      "from": "frontmatter",
+      "to": "write_file",
+      "label": "fm data",
+      "variant": "default",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Critérios de elegibilidade",
+      "items": [
+        "PR final com state=MERGED (abortar se OPEN/CLOSED)",
+        "retro b<N>-result.md presente em memory/",
+        "Demanda implementada com melhorias aplicadas (≥1 categoria não-zero)",
+        "Não usar para bug trivial, demanda em progresso, ou cancelled"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "8 campos frontmatter",
+      "items": [
+        "archived_at: ISO 8601 datetime (UTC)",
+        "original_run: path relativo ao run ativo",
+        "demand_slug: kebab-case único",
+        "prs: array de números (≥1 = implementada)",
+        "retro_refs: array de b<N>-result.md",
+        "improvements: {agents_added, agents_updated, skills_added, skills_updated, workflows_added, workflows_updated, conventions_added, conventions_updated, memory_updated}",
+        "status: sempre 'archived'",
+        "tags: array livre para busca"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "5 seções do body",
+      "items": [
+        "# <Demand Title> — titulo h1",
+        "## Demanda original — resumo ≤5 linhas",
+        "## PRs — tabela PR#|Título|SHA|Autor",
+        "## Retro — lista b<N>-result.md",
+        "## Improvements aplicadas — descritivo por categoria",
+        "## Cross-refs — specs, plans, branches"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Anti-padroes",
+      "items": [
+        "❌ Arquivar antes do PR MERGED (risco de rollback)",
+        "❌ Deletar run original (perde histórico)",
+        "❌ Esquecer cross-refs (quebra rastreabilidade)",
+        "❌ Mudar formato sem atualizar convenção",
+        "❌ Arquivar sem melhorias próprias (sem evidência)"
+      ]
+    }
+  ]
+}

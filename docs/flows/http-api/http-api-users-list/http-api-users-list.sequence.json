@@ -1,0 +1,220 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "GET /users — Listar (cursor paginado + includeDeleted)",
+    "subtitle": "GET /users?cursor=...&includeDeleted=... → UsersController → UserUseCases.listar → UserRepositoryPort.list → Prisma + cursor encoder",
+    "output": "http-api-users-list.sequence.html",
+    "viewBox": [1020, 760],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "happy-path",
+        "label": "Cursor paginated list",
+        "focus": ["client", "controller", "usecases", "repo", "cursor", "pg"],
+        "note": "Lista página de users; nextCursor opaco para próxima página."
+      },
+      {
+        "id": "include-deleted",
+        "label": "includeDeleted parsing",
+        "focus": ["client", "controller", "usecases", "repo"],
+        "note": "includeDeleted=TrUe|TRUE|1 case-insensitive normalized to boolean true."
+      }
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "GET /users — listar paginado por cursor (includeDeleted case-insensitive)"
+  },
+  "participants": [
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Cliente",
+      "sublabel": "GET /users"
+    },
+    {
+      "id": "controller",
+      "type": "backend",
+      "label": "UsersCtrl",
+      "sublabel": "@Query()"
+    },
+    {
+      "id": "usecases",
+      "type": "backend",
+      "label": "UserUseCases",
+      "sublabel": "listar()"
+    },
+    {
+      "id": "repo",
+      "type": "backend",
+      "label": "PrismaRepo",
+      "sublabel": "list(opts)"
+    },
+    {
+      "id": "cursor",
+      "type": "backend",
+      "label": "CursorEnc",
+      "sublabel": "encode/decode"
+    },
+    {
+      "id": "pg",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "users table"
+    }
+  ],
+  "segments": [
+    {
+      "from": 150,
+      "to": 360,
+      "label": "Parse + validate input"
+    },
+    {
+      "from": 376,
+      "to": 620,
+      "label": "Query + cursor encode"
+    }
+  ],
+  "messages": [
+    {
+      "from": "client",
+      "to": "controller",
+      "y": 180,
+      "label": "GET /users?cursor=&includeDeleted=",
+      "variant": "emphasis"
+    },
+    {
+      "from": "controller",
+      "to": "usecases",
+      "y": 260,
+      "label": "listar({cursor,limit,includeDeleted})",
+      "variant": "emphasis"
+    },
+    {
+      "from": "usecases",
+      "to": "repo",
+      "y": 300,
+      "label": "list(opts)",
+      "variant": "default"
+    },
+    {
+      "from": "repo",
+      "to": "cursor",
+      "y": 380,
+      "label": "decode(cursor) → offset",
+      "variant": "default"
+    },
+    {
+      "from": "cursor",
+      "to": "repo",
+      "y": 418,
+      "label": "PageRequest (offset/limit)",
+      "variant": "return"
+    },
+    {
+      "from": "repo",
+      "to": "pg",
+      "y": 456,
+      "label": "SELECT * FROM users WHERE...",
+      "variant": "default"
+    },
+    {
+      "from": "pg",
+      "to": "repo",
+      "y": 494,
+      "label": "N rows + total",
+      "variant": "return"
+    },
+    {
+      "from": "repo",
+      "to": "cursor",
+      "y": 532,
+      "label": "encode(next offset)",
+      "variant": "default"
+    },
+    {
+      "from": "repo",
+      "to": "usecases",
+      "y": 570,
+      "label": "{users, nextCursor}",
+      "variant": "return"
+    },
+    {
+      "from": "usecases",
+      "to": "controller",
+      "y": 608,
+      "label": "ListUsersOutput",
+      "variant": "return"
+    },
+    {
+      "from": "controller",
+      "to": "client",
+      "y": 646,
+      "label": "200 { users:[], nextCursor }",
+      "variant": "return"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "controller",
+      "from": 174,
+      "to": 642,
+      "type": "backend"
+    },
+    {
+      "participant": "usecases",
+      "from": 294,
+      "to": 604,
+      "type": "backend"
+    },
+    {
+      "participant": "repo",
+      "from": 334,
+      "to": 566,
+      "type": "backend"
+    },
+    {
+      "participant": "cursor",
+      "from": 374,
+      "to": 528,
+      "type": "backend"
+    },
+    {
+      "participant": "pg",
+      "from": 450,
+      "to": 490,
+      "type": "database"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Cursor pagination",
+      "items": [
+        "Cursor é opaco (encode/decode) — clients não inspecionam offset",
+        "nextCursor=null é o sinal canônico de fim de página",
+        "Page size default 20 (limite máximo configurável no PrismaRepo)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "includeDeleted case-insensitive",
+      "items": [
+        "includeDeleted?.toLowerCase() === 'true' || === '1' (linha 123 do controller)",
+        "Default false esconde soft-deleted — sem flag → 404 illusion via list",
+        "Truthy values: 'true', 'TRUE', 'True', '1' (apenas esses 2 tokens)"
+      ]
+    },
+    {
+      "dot": "orange",
+      "title": "Camada application vs infra",
+      "items": [
+        "Use case só recebe tipos primitivos (input DTO) — não conhece HTTP",
+        "PrismaRepo encapsula SQL — use case depende apenas da port",
+        "Output DTO tem {users, nextCursor} (não expõe entities)"
+      ]
+    }
+  ]
+}

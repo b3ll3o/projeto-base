@@ -1,0 +1,200 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "df-user-crud-lifecycle",
+    "subtitle": "apps/web RSC + ApiClient → apps/api controllers → use cases → Prisma → PostgreSQL",
+    "output": "df-user-crud-lifecycle.dataflow.html",
+    "quality_profile": "standard",
+    "viewBox": [1130, 540],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "views": [
+      {
+        "id": "crud",
+        "label": "CRUD pipeline",
+        "focus": ["rsc", "ctrl", "uc", "repo", "pg"],
+        "note": "Full-stack CRUD — frontend → RSC → API → Prisma → PostgreSQL."
+      }
+    ],
+    "tier": "critical",
+    "mechanism": "hand",
+    "subject": "User CRUD request/response data flow (HTTP DTO → service → repository → Prisma → PostgreSQL → UserOutput)"
+  },
+  "stages": [
+    {
+      "label": "Browser"
+    },
+    {
+      "label": "Frontend"
+    },
+    {
+      "label": "API boundary"
+    },
+    {
+      "label": "Domain"
+    },
+    {
+      "label": "Data"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "browser",
+      "type": "frontend",
+      "label": "Browser",
+      "sublabel": "USER UI",
+      "stage": 0,
+      "row": 1,
+      "tag": "form submit"
+    },
+    {
+      "id": "rsc",
+      "type": "frontend",
+      "label": "Next.js RSC",
+      "sublabel": "users/page",
+      "stage": 1,
+      "row": 1,
+      "tag": "async fetch"
+    },
+    {
+      "id": "apiclient",
+      "type": "frontend",
+      "label": "ApiClient",
+      "sublabel": "fetch wrap",
+      "stage": 1,
+      "row": 2,
+      "tag": "@projeto/shared-types"
+    },
+    {
+      "id": "ctrl",
+      "type": "backend",
+      "label": "UsersController",
+      "sublabel": "NestJS",
+      "stage": 2,
+      "row": 1,
+      "tag": "REST"
+    },
+    {
+      "id": "uc",
+      "type": "backend",
+      "label": "UserUseCases",
+      "sublabel": "TS puro",
+      "stage": 3,
+      "row": 1,
+      "tag": "criarUser/restaurar"
+    },
+    {
+      "id": "repo",
+      "type": "backend",
+      "label": "PrismaUserRepo",
+      "sublabel": "Port",
+      "stage": 3,
+      "row": 2,
+      "tag": "Prisma 6.x"
+    },
+    {
+      "id": "pg",
+      "type": "database",
+      "label": "Postgres",
+      "sublabel": "users table",
+      "stage": 4,
+      "row": 1,
+      "tag": "ROW LOCK"
+    }
+  ],
+  "flows": [
+    {
+      "id": "f1",
+      "from": "browser",
+      "to": "rsc",
+      "label": "GET /users",
+      "classification": "HTTP request",
+      "variant": "emphasis",
+      "labelDy": -32
+    },
+    {
+      "id": "f2",
+      "from": "rsc",
+      "to": "apiclient",
+      "label": "api.getUsers()",
+      "classification": "TS call",
+      "variant": "default",
+      "labelDy": 28
+    },
+    {
+      "id": "f3",
+      "from": "apiclient",
+      "to": "ctrl",
+      "label": "GET /api/v1/users",
+      "classification": "REST",
+      "variant": "emphasis",
+      "labelDy": 28
+    },
+    {
+      "id": "f4",
+      "from": "ctrl",
+      "to": "uc",
+      "label": "executarUC(input)",
+      "classification": "TS call",
+      "variant": "emphasis",
+      "labelDy": -32
+    },
+    {
+      "id": "f5",
+      "from": "uc",
+      "to": "repo",
+      "label": "save/findById",
+      "classification": "Port call",
+      "variant": "default",
+      "labelDy": 28
+    },
+    {
+      "id": "f6",
+      "from": "repo",
+      "to": "pg",
+      "label": "INSERT/SELECT",
+      "classification": "SQL",
+      "variant": "emphasis",
+      "labelDy": 28
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Hexagonal layers",
+      "items": [
+        "domain puro (UserUseCases) — sem NestJS",
+        "application boundary (controllers) — REST DTOs",
+        "infrastructure (Prisma) — Port+Adapter swap"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Shared types via @projeto/shared-types",
+      "items": [
+        "DTOs exportados para apps/web e apps/api",
+        "PaginatedResponse<T> generic",
+        "Build monorepo garante consistencia"
+      ]
+    },
+    {
+      "dot": "orange",
+      "title": "Optimistic locking",
+      "items": [
+        "IF-Match W/v<n> ETag (RFC 7232)",
+        "UPDATE WHERE version = expected",
+        "412 CONCURRENCY_CONFLICT on mismatch"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Audit trail",
+      "items": [
+        "users_history tabela genérica (entityName+entityId)",
+        "AsyncLocalStorage propagates AuditContext",
+        "W3C traceId correlaciona frontend+backend"
+      ]
+    }
+  ]
+}

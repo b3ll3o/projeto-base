@@ -1,0 +1,208 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "ETag Versioning — User Aggregate Lifecycle (workflow v2 pivot)",
+    "subtitle": "5 estados de versioning: v1 (created) → v2 (renamed) → v4 (deleted) → v3 (restored) → tombstone (archive)",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "standard",
+    "output": "http-api-etag-versioning-lifecycle.workflow.html",
+    "viewBox": [1400, 540],
+    "views": [
+      {
+        "id": "lifecycle",
+        "label": "Version transitions",
+        "focus": ["v1", "v2", "v3", "v4", "tombstone"],
+        "note": "Cada mutation incrementa version monotonicamente; ETag = W/\"<id>-v<n>\"."
+      },
+      {
+        "id": "rfc7232",
+        "label": "RFC 7232 handshake",
+        "focus": ["v2", "v4"],
+        "note": "If-Match: W/\"u-2\" → 200 OK (novo ETag) ou 412 Precondition Failed."
+      }
+    ],
+    "tier": "nice",
+    "mechanism": "hand",
+    "subject": "Lifecycle — User aggregate version/ETag transitions"
+  },
+  "lanes": [
+    {
+      "id": "active",
+      "label": "Active"
+    },
+    {
+      "id": "deleted",
+      "label": "Soft-Deleted"
+    }
+  ],
+  "phases": [
+    {
+      "id": "create",
+      "label": "Create + Mutate",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "delete",
+      "label": "Delete + Restore",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "dashed"
+    },
+    {
+      "id": "archive",
+      "label": "Archive",
+      "fromCol": 4,
+      "toCol": 4,
+      "variant": "default"
+    }
+  ],
+  "groups": [
+    {
+      "id": "active_group",
+      "label": "Estados ativos (read+write)",
+      "lane": "active",
+      "fromCol": 0,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "deleted_group",
+      "label": "Soft-deleted (read-only por default)",
+      "lane": "deleted",
+      "fromCol": 2,
+      "toCol": 4,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": ["v1", "v2", "v4", "tombstone"],
+  "nodes": [
+    {
+      "id": "v1",
+      "lane": "active",
+      "col": 0,
+      "type": "external",
+      "label": "v1",
+      "sublabel": "POST /users",
+      "tag": "ETag W/\"u-1\"",
+      "width": 140
+    },
+    {
+      "id": "v2",
+      "lane": "active",
+      "col": 1,
+      "type": "backend",
+      "label": "v2",
+      "sublabel": "PATCH /users/:id",
+      "tag": "ETag W/\"u-2\"",
+      "width": 140
+    },
+    {
+      "id": "v4",
+      "lane": "deleted",
+      "col": 2,
+      "type": "security",
+      "label": "v4",
+      "sublabel": "DELETE /users/:id",
+      "tag": "ETag W/\"u-4\"",
+      "width": 140
+    },
+    {
+      "id": "v3",
+      "lane": "active",
+      "col": 3,
+      "type": "backend",
+      "label": "v3",
+      "sublabel": "POST /:id/restore",
+      "tag": "ETag W/\"u-3\"",
+      "width": 140
+    },
+    {
+      "id": "tombstone",
+      "lane": "deleted",
+      "col": 4,
+      "type": "external",
+      "label": "tombstone",
+      "sublabel": "archive flush",
+      "tag": "users_archive",
+      "width": 140
+    }
+  ],
+  "edges": [
+    {
+      "id": "v1-to-v2",
+      "from": "v1",
+      "to": "v2",
+      "label": "rename (If-Match)",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "v2-to-v4",
+      "from": "v2",
+      "to": "v4",
+      "label": "delete",
+      "variant": "dashed",
+      "role": "main"
+    },
+    {
+      "id": "v4-to-v3",
+      "from": "v4",
+      "to": "v3",
+      "label": "restore",
+      "variant": "emphasis",
+      "role": "return"
+    },
+    {
+      "id": "v3-to-v4",
+      "from": "v3",
+      "to": "v4",
+      "label": "delete (2nd)",
+      "variant": "default",
+      "role": "return"
+    },
+    {
+      "id": "v4-to-tombstone",
+      "from": "v4",
+      "to": "tombstone",
+      "label": "archive on flush",
+      "variant": "dashed",
+      "role": "main"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Workflow v2 (lifecycle pivot)",
+      "items": [
+        "Pivot de lifecycle → workflow v2: 2 lanes (active + deleted) + 5 cols",
+        "Cada mutation incrementa version monotonicamente (v1 → v2 → v3 → ...)",
+        "ETag = W/\"<user-id>-v<n>\" (RFC 7232 weak validator)",
+        "Restore reativa soft-deleted + bump version (v3)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "RFC 7232 Compliance",
+      "items": [
+        "If-Match: W/\"u-2\" no request → server compara com current version",
+        "Match → aceita mutation + retorna novo ETag (200 OK)",
+        "Mismatch → 412 Precondition Failed (sem mutation)",
+        "Client deve recarregar resource + retry com novo ETag"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Edge Cases",
+      "items": [
+        "Soft-deleted é omitido por default em GET (includeDeleted=true bypass)",
+        "Restore incrementa version (não decrementa) — append-only",
+        "Archive (users_archive) é imutável após flush — read-only histórico",
+        "Concurrent edits em v2: segundo PATCH recebe 412 (otimistic lock)"
+      ]
+    }
+  ]
+}

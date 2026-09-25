@@ -1,0 +1,280 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "specialist-routing — Classificador Headless + Gap Gate",
+    "subtitle": "Pre-checks → dispatch router → interpret → triage → (gap) agent-architect → writing-plans",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "output": "fs-specialist-routing-classify.workflow.html",
+    "views": [
+      {
+        "id": "happy-path",
+        "label": "Demanda coberta",
+        "focus": [
+          "pre_checks",
+          "temp_files",
+          "dispatch_router",
+          "interpret",
+          "triage",
+          "writing_plans"
+        ],
+        "note": "specialists_dispatched ≥ 1 → writing-plans integrado."
+      },
+      {
+        "id": "gap-path",
+        "label": "Gap detectado",
+        "focus": ["triage", "agent_architect", "dispatch_router"],
+        "note": "BLOQUEAR planning; agent-architect cria specialist; re-despachar router."
+      }
+    ],
+    "tier": "critical",
+    "mechanism": "auto",
+    "subject": "specialist-routing — classificador headless + gate de gap_detected"
+  },
+  "lanes": [
+    {
+      "id": "controller",
+      "label": "Controller (humano)"
+    },
+    {
+      "id": "router",
+      "label": "Specialist Router"
+    },
+    {
+      "id": "downstream",
+      "label": "Downstream (writing-plans)"
+    },
+    {
+      "id": "policy",
+      "label": "Gap / Recovery",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "checks",
+      "label": "Pre-checks",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "emphasis"
+    },
+    {
+      "id": "dispatch",
+      "label": "Dispatch + interpret",
+      "fromCol": 1,
+      "toCol": 2,
+      "variant": "emphasis"
+    },
+    {
+      "id": "decide",
+      "label": "Triage + integrate",
+      "fromCol": 3,
+      "toCol": 4,
+      "variant": "dashed"
+    }
+  ],
+  "groups": [
+    {
+      "id": "controller_group",
+      "label": "Controller",
+      "lane": "controller",
+      "fromCol": 0,
+      "toCol": 2,
+      "variant": "emphasis"
+    },
+    {
+      "id": "router_group",
+      "label": "Router",
+      "lane": "router",
+      "fromCol": 1,
+      "toCol": 2,
+      "variant": "emphasis"
+    },
+    {
+      "id": "downstream_group",
+      "label": "Downstream",
+      "lane": "downstream",
+      "fromCol": 3,
+      "toCol": 4,
+      "variant": "dashed"
+    },
+    {
+      "id": "policy_group",
+      "label": "Gap recovery",
+      "lane": "policy",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "security"
+    }
+  ],
+  "mainPath": [
+    "pre_checks",
+    "temp_files",
+    "dispatch_router",
+    "interpret",
+    "triage",
+    "writing_plans"
+  ],
+  "nodes": [
+    {
+      "id": "pre_checks",
+      "lane": "controller",
+      "col": 0,
+      "type": "security",
+      "label": "Pre-checks",
+      "sublabel": "working tree + matriz + agent + conv",
+      "tag": "abort se qualquer check falhar",
+      "width": 180
+    },
+    {
+      "id": "temp_files",
+      "lane": "controller",
+      "col": 1,
+      "type": "database",
+      "label": "temp files",
+      "sublabel": "<ts>-demand.txt + paths.txt",
+      "tag": ".agents/runs/",
+      "width": 180
+    },
+    {
+      "id": "dispatch_router",
+      "lane": "router",
+      "col": 2,
+      "type": "backend",
+      "label": "dispatch router",
+      "sublabel": "Agent(specialist-router)",
+      "tag": "matriz canônica",
+      "width": 180
+    },
+    {
+      "id": "interpret",
+      "lane": "controller",
+      "col": 3,
+      "type": "backend",
+      "label": "interpret",
+      "sublabel": "<ts>-specialist-<n>.yaml",
+      "tag": "schema validation",
+      "width": 180
+    },
+    {
+      "id": "triage",
+      "lane": "controller",
+      "col": 4,
+      "type": "security",
+      "label": "triage",
+      "sublabel": "proceed | gap",
+      "tag": "matriz_version + signals",
+      "width": 180
+    },
+    {
+      "id": "agent_architect",
+      "lane": "policy",
+      "col": 3,
+      "type": "security",
+      "label": "agent-architect",
+      "sublabel": "criar specialist novo",
+      "tag": "se gap_detected",
+      "width": 180
+    },
+    {
+      "id": "writing_plans",
+      "lane": "downstream",
+      "col": 4,
+      "type": "backend",
+      "label": "writing-plans",
+      "sublabel": "plans_aggregated integrado",
+      "tag": "subagent-driven-development",
+      "width": 180
+    }
+  ],
+  "edges": [
+    {
+      "id": "checks-to-temp",
+      "from": "pre_checks",
+      "to": "temp_files",
+      "label": "ok",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "temp-to-router",
+      "from": "temp_files",
+      "to": "dispatch_router",
+      "label": "context",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "router-to-interpret",
+      "from": "dispatch_router",
+      "to": "interpret",
+      "label": "YAML output",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "interpret-to-triage",
+      "from": "interpret",
+      "to": "triage",
+      "label": "schema válido",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "triage-to-writing",
+      "from": "triage",
+      "to": "writing_plans",
+      "label": "gap_detected=false",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "triage-to-architect",
+      "from": "triage",
+      "to": "agent_architect",
+      "label": "gap_detected=true",
+      "variant": "security",
+      "role": "branch"
+    },
+    {
+      "id": "architect-to-router",
+      "from": "agent_architect",
+      "to": "dispatch_router",
+      "label": "re-dispatch com nova matriz",
+      "variant": "dashed",
+      "role": "return"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Pre-checks (controller)",
+      "items": [
+        "git status --porcelain (working tree limpo)",
+        "test -f .agents/specs/conventions/specialist-routing.md",
+        "test -f .agents/agents/specialist-router.md",
+        "test -f .agents/specs/conventions/evolucao-agents.md"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Bloqueios",
+      "items": [
+        "Pular router e planificar direto (perde orquestração)",
+        "Prosseguir com gap_detected=true sem agent-architect",
+        "Dispatchar implementer antes do router"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Critérios de Done",
+      "items": [
+        "classification tem ≥1 signal (path/keyword/scope)",
+        "specialists_dispatched[] ≥ 1 OU gap_detected=true",
+        "plans_aggregated integrado com writing-plans"
+      ]
+    }
+  ]
+}

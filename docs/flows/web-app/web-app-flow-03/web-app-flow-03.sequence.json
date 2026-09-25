@@ -1,0 +1,148 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "apps/web — Health Check API Route",
+    "subtitle": "Browser/Docker → Next.js API route /api/health → JSON response",
+    "output": "web-app-flow-03.sequence.html",
+    "viewBox": [920, 580],
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "health-route",
+        "label": "Health endpoint",
+        "focus": ["client", "next", "api_route", "json_response"],
+        "note": "API route estática (force-dynamic), usada por Docker healthcheck do container web."
+      }
+    ],
+    "tier": "important",
+    "mechanism": "hand",
+    "subject": "Web App: Health Check API Route"
+  },
+  "participants": [
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Docker / curl",
+      "sublabel": "HEALTHCHECK"
+    },
+    {
+      "id": "next",
+      "type": "backend",
+      "label": "Next.js",
+      "sublabel": "App Router"
+    },
+    {
+      "id": "api_route",
+      "type": "backend",
+      "label": "GET handler",
+      "sublabel": "api/health/route.ts"
+    },
+    {
+      "id": "json_response",
+      "type": "frontend",
+      "label": "JSON 200",
+      "sublabel": "{status,timestamp}"
+    }
+  ],
+  "segments": [
+    {
+      "from": 130,
+      "to": 300,
+      "label": "Request"
+    },
+    {
+      "from": 316,
+      "to": 460,
+      "label": "Respond"
+    }
+  ],
+  "messages": [
+    {
+      "from": "client",
+      "to": "next",
+      "y": 180,
+      "label": "GET /api/health",
+      "variant": "emphasis"
+    },
+    {
+      "from": "next",
+      "to": "api_route",
+      "y": 220,
+      "label": "GET() handler",
+      "variant": "default"
+    },
+    {
+      "from": "api_route",
+      "to": "next",
+      "y": 280,
+      "label": "NextResponse.json({status, timestamp})",
+      "variant": "emphasis"
+    },
+    {
+      "from": "next",
+      "to": "json_response",
+      "y": 360,
+      "label": "serialize 200 OK",
+      "variant": "default"
+    },
+    {
+      "from": "json_response",
+      "to": "next",
+      "y": 400,
+      "label": "headers + body",
+      "variant": "return"
+    },
+    {
+      "from": "next",
+      "to": "client",
+      "y": 480,
+      "label": "200 { status: 'ok', timestamp }",
+      "variant": "emphasis"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "next",
+      "from": 174,
+      "to": 476,
+      "type": "backend"
+    },
+    {
+      "participant": "api_route",
+      "from": 214,
+      "to": 276,
+      "type": "backend"
+    },
+    {
+      "participant": "json_response",
+      "from": 354,
+      "to": 396,
+      "type": "frontend"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "API route force-dynamic",
+      "items": [
+        "export const dynamic = 'force-dynamic' impede cache de response",
+        "Cada chamada re-executa o handler (timestamp atual)",
+        "GET handler retorna NextResponse.json()",
+        "Sem DB coupling (apps/web version standalone) — só healthcheck leve"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Docker HEALTHCHECK integration",
+      "items": [
+        "docker-compose.yml web service: node healthcheck a cada 10s",
+        "curl /api/health → 200 → container marked healthy",
+        "start_period 20s (tempo para Next.js bootar)",
+        "retries 3 antes de marcar unhealthy"
+      ]
+    }
+  ]
+}
