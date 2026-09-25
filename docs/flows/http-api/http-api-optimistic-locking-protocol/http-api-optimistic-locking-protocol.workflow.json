@@ -5,7 +5,6 @@
     "title": "Optimistic Locking — RFC 7232 If-Match/ETag handshake",
     "subtitle": "PATCH/POST /:id/restore/DELETE — cliente envia W/v<n>, servidor compara e responde 200 ou 412",
     "output": "http-api-optimistic-locking-protocol.workflow.html",
-    "viewBox": [1130, 1024],
     "animation": "trace",
     "visual_preset": "signal-flow",
     "quality_profile": "showcase",

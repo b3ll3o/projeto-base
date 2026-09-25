@@ -34,3 +34,11 @@ apps/api/openapi.json
 # Ignore explicito remove o "?? dev-archify/" do git status do base sem
 # afetar o repo git interno de dev-archify/.
 /dev-archify/
+
+# pt-BR: visual-check gera screenshots PNG + receipt JSON + contact-sheet HTML
+# ao lado do HTML canonico. Outputs locais de validacao, NAO artefatos canonicos.
+# Use `archify visual-check <html>` para regenerar durante revisao; evidencia
+# vai em comentario de PR, nao via commit. Pattern cobre
+# `*.workflow.visual-check.{json,html}` e `*.{type}.visual-check.{w}x{h}.{theme}.png`.
+*.visual-check.*
+
