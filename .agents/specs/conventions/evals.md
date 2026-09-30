@@ -162,6 +162,7 @@ Default sugerido:
 | [`cobertura-testes.md`](./cobertura-testes.md) | Coverage ≥ 80% é o **gate universal**; Evals adicionam gates semânticos por tipo |
 | [`retrospective-capture.md`](./retrospective-capture.md) | T2 (bugfix > 30min) **sempre** abre Eval de Regression na spec corrigida |
 | [`evolucao-agents.md`](./evolucao-agents.md) | Novo tipo de Eval → gap_detected → cria novo specialist ou expande existente |
+| [`engineering-loop.md`](./engineering-loop.md) | Fases 02-03 do loop produzem/consomem Evals (TDD Red→Green); fase 04 fecha o gate com BLOCKING Evals; templates de fase referenciam `evals/<tipo>.evals.yaml` |
 
 ## §8. Template de Spec (referência)
 

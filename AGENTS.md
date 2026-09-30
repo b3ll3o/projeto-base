@@ -153,6 +153,7 @@ Workflows genéricos prontos para uso estão em [`.agents/WORKFLOWS.md`](./.agen
 | `ci-defense-mode`    | "blindar CI / auditar pipeline" | monorepo-specialist → ci-defense-in-depth → code-reviewer |
 | `state-aware-planning` | "planejar / state-aware / snapshot antes de planejar" (v1.8.0+) | state-aware-planning (skill) → specialist-router (camada 1; opcional) |
 | `retrospective-mode` | "capturar aprendizados / post-mortem" | explorer → retrospective-capture → doc-writer (+ task-manager em paralelo) |
+| `feedback-to-spec` (v1.9.0+) | "feedback to spec / próxima spec de finding / T1/T2/T3 → spec" | task-manager → orchestrator (state-aware) → specialist-router → specialist (template spec) → task-manager (loop close) |
 
 ---
 
@@ -174,6 +175,7 @@ As convenções estão detalhadas em arquivos próprios sob [`.agents/specs/conv
 | Retrospective Capture | [`retrospective-capture.md`](./.agents/specs/conventions/retrospective-capture.md) | Captura estruturada de aprendizados pós-atividade (T1/T2/T3 + threshold confidence ≥ 70) |
 | State-Aware Planning (v1.8.0+) | [`state-aware-planning.md`](./.agents/specs/conventions/state-aware-planning.md) | Camada 0 do pre-planner — obriga gerar `state-snapshot-<ts>.md` antes de planejar (gap analysis AS-IS→TO-BE); alimenta `specialist-router` camada 1 |
 | Evals (v1.9.0+)               | [`evals.md`](./.agents/specs/conventions/evals.md)                         | Framework canônico dos 7 tipos (Domain, Architecture, Contract, Integration, Regression, Security, Observability); path `specs/<feature>/evals/*.evals.yaml`; gate rules por severidade |
+| Engineering Loop (v1.9.0+)    | [`engineering-loop.md`](./.agents/specs/conventions/engineering-loop.md)  | Convenção unificadora do ciclo UNDERSTAND → IMPLEMENT → TEST → REVIEW → OBSERVE → LEARN; 6 templates de fase em `.agents/specs/templates/engineering-loop/`; integra retro + archive + state-aware; fecha o loop via workflow `feedback-to-spec` |
 
 > **Templates:** [`.agents/specs/templates/`](./.agents/specs/templates/) contém templates canônicos versionados (ex.: [`spec.md`](./.agents/specs/templates/spec.md) — template de Spec de feature). Toda spec deve derivar de um template; criar templates novos via PR com bump major da convenção relacionada.
 

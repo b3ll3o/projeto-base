@@ -350,4 +350,33 @@ explorer → retrospective-capture:{success_criteria:"diff+memories+≥3 events"
 
 Para criar um workflow customizado: defina `trigger`, escolha a `composição` (sequential/parallel/hierarchical), liste os `agents` em ordem, defina os `handoffs` (task, context, expected_output, success_criteria), adicione entrada na tabela acima, e documente em `.agents/workflows/<id>.md` se for complexo.
 
-**Mantido por:** projeto-base contributors  **Versão do padrão:** 1.0
+## `feedback-to-spec` (v1.9.0+) — Fecha o Engineering Loop
+
+> Pega proposals T1/T2/T3 com confidence ≥ 70 do `retrospective-mode` e estrutura a criação de **specs filhas** via state-aware-planning → specialist-router → template `spec.md`.
+
+**Trigger:** "feedback to spec", "próxima spec de finding", "loop fechado", "T1/T2/T3 → spec"
+
+**Composição:** sequential (5 estágios)
+
+```text
+RETRO RESULT ──► TRIAGE ──► STATE-AWARE ──► SPECIALIST-ROUTER ──► SPEC CREATION ──► LOOP CLOSE
+   (input)       (filter)    (camada 0)      (camada 1)            (template)         (archive)
+```
+
+**Quando usar:** retro completa com ≥ 1 proposal `artifact: spec` E `confidence ≥ 70`. **Quando NÃO usar:** proposals apenas de memory/ADR (não viram spec) · confidence < 70 (volta para backlog) · working tree dirty · gap_detected pelo specialist-router (criar specialist antes).
+
+**Detalhes:** [`.agents/workflows/feedback-to-spec.md`](./workflows/feedback-to-spec.md) · spec: [`engineering-loop.md`](./specs/conventions/engineering-loop.md) §4 · skill retro: [`retrospective-capture/SKILL.md`](./skills/retrospective-capture/SKILL.md).
+
+---
+
+## Adicionando workflows à tabela geral
+
+Para registrar um novo workflow em `.agents/WORKFLOWS.md`, adicione uma linha na tabela **Genéricos** ou **Por Stack** com:
+
+| ID | Trigger | Tipo | Agents (resumo) |
+|----|---------|------|------------------|
+| `<id>` | "<trigger phrase>" | sequential / parallel / single | `<agent1> → <agent2> → ...` |
+
+E adicione a seção `## <id> — <título>` abaixo com a composição em texto + handoff YAML entre agents.
+
+**Mantido por:** projeto-base contributors  **Versão do padrão:** 1.9.0
