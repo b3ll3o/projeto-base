@@ -93,7 +93,7 @@ agent: nestjs-specialist | nextjs-specialist | monorepo-specialist (conforme rou
 success_criteria: |
   spec.md preenchido via template, com BR-XXX, AC-XXX, Eval-XXX já mapeados.
   parent_spec referenciada em §11 Cross-refs.
-  business-rules.yaml extraído se atende critério (engineering-loop.md §3).
+  business-rules.md extraído se atende critério (engineering-loop.md §3).
 ```
 
 ### Estágio 5 — LOOP CLOSE
@@ -134,6 +134,6 @@ success_criteria: |
 - Convenção unificadora: [`../specs/conventions/engineering-loop.md`](../specs/conventions/engineering-loop.md) §4
 - Retro: [`../specs/conventions/retrospective-capture.md`](../specs/conventions/retrospective-capture.md)
 - State-aware: [`../specs/conventions/state-aware-planning.md`](../specs/conventions/state-aware-planning.md)
-- Specialist-router: [`../.agents/agents/specialist-router.md`](../agents/specialist-router.md)
+- Specialist-router: [`../agents/specialist-router.md`](../agents/specialist-router.md)
 - Spec template: [`../specs/templates/spec.md`](../specs/templates/spec.md)
 - Workflows relacionados: [`./retrospective-mode.md`](./retrospective-mode.md), [`./archive-demand.md`](./archive-demand.md)

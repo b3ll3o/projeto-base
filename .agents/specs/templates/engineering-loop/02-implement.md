@@ -55,7 +55,7 @@ usage: |
 - [ ] **Application layer** depende apenas de `domain/` (ports)
 - [ ] **Infrastructure layer** implementa ports de `application/`
 - [ ] **Bounded Context boundary** respeitada (sem imports cross-context)
-- [ ] **Audit fields** (`createdAt`, `updatedAt`, `createdBy`, `updatedAt`) presentes em entities
+- [ ] **Audit fields** (`createdAt`, `updatedAt`, `createdBy`, `updatedBy`) presentes em entities
 
 ## 5. Pontos de extensão deixados
 

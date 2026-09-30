@@ -41,8 +41,8 @@ usage: |
 
 <!-- Friction sources — viram anti-patterns em convenções existentes ou novas. -->
 
-- `<ex: reuso de `business-rules.yaml` falhou — BRs estavam duplicadas em 2 specs>`
-- `<ex: pipeline CI quebrou em commit com `.ts` mas sem coverage — pre-push não cobriu>`
+- `<ex: reuso de business-rules.md falhou — BRs estavam duplicadas em 2 specs>`
+- `<ex: pipeline CI quebrou em commit com .ts mas sem coverage — pre-push não cobriu>`
 
 ### 2.3 O que ficou ambíguo e DEVE virar ADR/memory?
 
@@ -57,7 +57,7 @@ usage: |
 - id: P-001
   artifact: "convention"
   target: ".agents/specs/conventions/engineering-loop.md"
-  content: "Adicionar nota: business-rules.yaml só quando ≥ 10 BRs"
+  content: "Adicionar nota: business-rules.md só quando ≥ 10 BRs"
   confidence: 85
   justification: "Reuso cross-spec falhou em spec-099 (3 BRs); template só agrega valor a partir de 10"
   action: "update"

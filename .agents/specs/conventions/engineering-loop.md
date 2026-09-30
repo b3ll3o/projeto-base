@@ -33,7 +33,7 @@ O mapping file ([`docs/articles/vibe-coding-sdd-engineering-loop-mapping.md`](..
 |---|---|---|
 | **G4** | Apenas a fase **Learn** tinha template (`retrospective-capture.md`); as outras 5 fases ficavam como boa prática implícita | ❌ sem artefatos versionados para Understand/Implement/Test/Review/Observe |
 | **G5** | O loop terminava em "archive" — não havia workflow que pegasse um finding da retro e **abrisse spec nova** | ❌ loop não fechava de volta para `specs/<feature>/` |
-| **G3** | Business Rules eram inline em `spec.md`; sem artefato separado para reuso cross-spec | ❌ sem `business-rules.yaml` por feature |
+| **G3** | Business Rules eram inline em `spec.md`; sem artefato separado para reuso cross-spec | ❌ sem `business-rules.md` por feature |
 
 Esta convenção **unifica G3+G4+G5** em um framework único que REUSA tudo o que já existe (retrospective-capture, archive-demand, state-aware-planning, evals, tdd) e adiciona apenas o que falta.
 
@@ -62,6 +62,7 @@ UNDERSTAND → IMPLEMENT → TEST → REVIEW → OBSERVE → LEARN
 ```text
 specs/<NNN>-<feature>/
 ├── spec.md                                # Spec + business rules + acceptance criteria
+├── business-rules.md                      # (opcional — ver §3 critérios de extração)
 ├── engineering-loop/
 │   ├── 01-understand.md                   # Fase 1
 │   ├── 02-implement.md                    # Fase 2
@@ -80,7 +81,7 @@ Templates versionados em [`../templates/engineering-loop/`](../templates/enginee
 
 ## §3. G3 — Business Rules como artefato opcional
 
-**Quando extrair `specs/<feature>/business-rules.yaml`** (separado do `spec.md`):
+**Quando extrair `specs/<feature>/business-rules.md`** (separado do `spec.md`):
 
 | Critério | Obrigatório extrair? |
 |----------|----------------------|
@@ -91,7 +92,7 @@ Templates versionados em [`../templates/engineering-loop/`](../templates/enginee
 
 Template: [`../templates/business-rules.md`](../templates/business-rules.md).
 
-**Integração com Evals:** cada BR em `business-rules.yaml` referencia 1+ AC em `spec.md` que referencia 1+ Eval em `evals/`. A cadeia de rastreabilidade é **BR → AC → Eval** (mesma regra do `evals.md` §5).
+**Integração com Evals:** cada BR em `business-rules.md` referencia 1+ AC em `spec.md` que referencia 1+ Eval em `evals/`. A cadeia de rastreabilidade é **BR → AC → Eval** (mesma regra do `evals.md` §5).
 
 ## §4. G5 — Loop fechado: feedback → próxima spec
 
@@ -153,7 +154,7 @@ A convenção `engineering-loop` está **ativa e obrigatória** quando:
 
 - [x] `engineering-loop.md` publicada em `.agents/specs/conventions/`
 - [x] 6 templates de fase publicadas em `.agents/specs/templates/engineering-loop/`
-- [x] Template `business-rules.yaml` publicado
+- [x] Template `business-rules.md` publicado
 - [x] Workflow `feedback-to-spec.md` publicado
 - [x] Cross-refs em `evals.md`, `AGENTS.md §6`, `WORKFLOWS.md` atualizadas
 - [ ] Pelo menos 1 spec real do projeto preenche as 6 fases (gap atual — primeiro uso = template)
@@ -170,4 +171,4 @@ A convenção `engineering-loop` está **ativa e obrigatória** quando:
 
 | Versão | Data       | Mudança                                                                                                              |
 |--------|------------|----------------------------------------------------------------------------------------------------------------------|
-| 1.0    | 2026-09-30 | Lançamento inicial — unificação G3+G4+G5; 6 templates de fase + business-rules.yaml + feedback-to-spec workflow    |
+| 1.0    | 2026-09-30 | Lançamento inicial — unificação G3+G4+G5; 6 templates de fase + business-rules.md + feedback-to-spec workflow    |
