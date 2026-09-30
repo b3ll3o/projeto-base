@@ -173,6 +173,9 @@ As convenções estão detalhadas em arquivos próprios sob [`.agents/specs/conv
 | CI Defense in Depth   | [`ci-defense-in-depth.md`](./.agents/specs/conventions/ci-defense-in-depth.md) | 3 camadas: pre-push local + preflight CI + quality CI gated |
 | Retrospective Capture | [`retrospective-capture.md`](./.agents/specs/conventions/retrospective-capture.md) | Captura estruturada de aprendizados pós-atividade (T1/T2/T3 + threshold confidence ≥ 70) |
 | State-Aware Planning (v1.8.0+) | [`state-aware-planning.md`](./.agents/specs/conventions/state-aware-planning.md) | Camada 0 do pre-planner — obriga gerar `state-snapshot-<ts>.md` antes de planejar (gap analysis AS-IS→TO-BE); alimenta `specialist-router` camada 1 |
+| Evals (v1.9.0+)               | [`evals.md`](./.agents/specs/conventions/evals.md)                         | Framework canônico dos 7 tipos (Domain, Architecture, Contract, Integration, Regression, Security, Observability); path `specs/<feature>/evals/*.evals.yaml`; gate rules por severidade |
+
+> **Templates:** [`.agents/specs/templates/`](./.agents/specs/templates/) contém templates canônicos versionados (ex.: [`spec.md`](./.agents/specs/templates/spec.md) — template de Spec de feature). Toda spec deve derivar de um template; criar templates novos via PR com bump major da convenção relacionada.
 
 - **Pre-push obrigatório:** rodar `pnpm ci:local` antes de push (ver [git-workflow.md §Pre-Push Quality Gate](./.agents/specs/conventions/git-workflow.md))
 
