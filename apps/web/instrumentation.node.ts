@@ -23,7 +23,6 @@ import { Resource } from '@opentelemetry/resources';
 import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
 
 declare global {
-  // eslint-disable-next-line no-var
   var __otel_sdk__: NodeSDK | undefined;
 }
 
