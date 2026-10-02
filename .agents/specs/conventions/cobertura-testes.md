@@ -58,6 +58,35 @@ Lista canônica (usar nas configs vitest E neste doc). Cada item
 representa código sem lógica executável, type-only, ou já testado em
 outro nível (E2E/integração):
 
+> **O `exclude` de cada config DEVE começar com
+> `...coverageConfigDefaults.exclude`.** O Vitest faz shallow spread
+> (`{...coverageConfigDefaults, ...config}`): o array do usuário
+> **substitui** a lista default em vez de mesclar. Perder esse spread
+> remove `**/[.]**` (que segura `.next/`, `dist/`, `coverage/`) e o
+> glob default de test/spec.
+>
+> **Declare mesmo assim as exclusões que o default já cobre.** A
+> redundância é o que se quer: os globs se cobrem dois a dois e o
+> relatório só regride quando o par responsável cai junto. Medido em
+> `apps/web` (`pnpm run test:coverage`, lista final como base):
+>
+> | variação | arquivos | lines |
+> | -------- | -------- | ----- |
+> | este config | 6     | 47.24% |
+> | sem `**/.next/**` | 6  | 47.24% |
+> | sem o spread | 6        | 47.24% |
+> | sem os dois | 73         | 12.07% |
+>
+> O estado de `main` antes do fix (nem spread nem `**/.next/**`, com o
+> glob antigo `**/*.spec.ts`) lia **74 arquivos / 16.28%**, dos quais 67
+> eram build output do Next.js.
+>
+> E atenção ao sentido da falha: sem o spread mas com o glob antigo
+> `**/*.spec.ts`, um `.spec.tsx` entra no relatório como 100% coberto e
+> a cobertura **sobe** para **55.92%**. Cobertura que melhora sem
+> ninguém escrever teste é config quebrada, não progresso — conferir o
+> número de **arquivos** do relatório, não só o percentual.
+
 - `**/main.ts` — bootstrap, chamado uma vez no startup.
 - `**/*.module.ts` — DI wiring puro, sem lógica de negócio.
 - `**/ports/**` — contratos de interface (type-only, sem implementação).
@@ -82,6 +111,16 @@ outro nível (E2E/integração):
 - Em `apps/web`: `app/**` — Next.js RSC pages, exigem testes E2E
   (Playwright) **fora do escopo unitário** desta convenção.
 - Em `apps/web`: `next-env.d.ts` — gerado pelo Next.js, não editado.
+- Em `apps/web`: `**/.next/**` — build output do framework Next.js.
+  Redundante dado o spread dos defaults (medido: sem a linha o
+  relatório é byte-a-byte idêntico), mas declarado de propósito: aqui
+  a proteção vem de `**/[.]**`, um catch-all de dotfiles que ninguém
+  associaria a `.next`.
+- Em `apps/web`: `**/*.spec.{ts,tsx}` — arquivos de teste. As duas
+  extensões importam: o app tem Client Component testado em
+  `src/telemetry/web-vitals-reporter.spec.tsx`, e `**/*.spec.ts` não
+  casa `.tsx`. Com o spread presente a troca é inócua; ela existe
+  para que a lista explícita não dependa do default.
 
 Configurações vitest devem referenciar esta lista via `coverage.exclude`.
 
