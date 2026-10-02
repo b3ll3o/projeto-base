@@ -8,7 +8,10 @@
     ".": "./index.js",
     "./rules/*": "./rules/*"
   },
-  "files": ["index.js", "rules"],
+  "files": [
+    "index.js",
+    "rules"
+  ],
   "scripts": {
     "lint:self": "eslint index.js rules/",
     "test": "echo \"no tests yet (will be added in Task 4.x)\" && exit 0"
