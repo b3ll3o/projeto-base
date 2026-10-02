@@ -22,6 +22,12 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # pt-BR: o format:check é o check mais barato do preflight (~2.4s) e
+      # roda antes de ci:preflight para falhar ainda mais rápido. Até v1.8.0
+      # nenhum gate de formatação existia fora do lint-staged local — drift
+      # entrava por squash-merge da UI ou por --no-verify.
+      - name: Run format check
+        run: pnpm format:check
       - name: Run preflight checks
         run: pnpm ci:preflight
   quality:
