@@ -261,25 +261,20 @@ o erro que esperam tratar. Não são falha.
 > Os comandos de plans de 2026-09-21 tinham esse bug; a forma correta é
 > `pnpm run <script> --coverage` de dentro de `apps/api`.
 
-## Fora de escopo
+## `apps/web` (mesmo bug, corrigido aqui)
 
-`apps/web/vitest.config.ts` tem o mesmo bug latente de
-`exclude`-substitui-defaults (Falha 3), e o impacto foi medido: **67 dos
-74 arquivos** do relatório são artefatos de `.next/`, e o número lido é
-**16.28%** quando o real é **47.24%**. O gate do frontend não está
-inerte — os `thresholds: 0` são honrados — mas o número que ele reporta
-é falso.
+`apps/web/vitest.config.ts` tinha o mesmo bug latente de
+`exclude`-substitui-defaults (Falha 3): **67 dos 74 arquivos** do relatório
+eram artefatos de `.next/` e o número lido era **16.28%** quando o real
+é **47.24%**. O gate do frontend não está inerte — os `thresholds: 0` são
+honrados — mas o número que ele reportava era falso.
 
-Não corrigido aqui porque o `web` está em `report-only` por decisão
-documentada, e mexer no `exclude` altera a base de medição: se o gate
-subisse de uma vez, o app reprovaria por build artifact, não por falta
-de teste. A ordem correta é **consertar o `exclude` primeiro, reativar
-o piso depois**.
-
-**Feito no mesmo PR**, na ordem certa: o `exclude` do `web` ganhou o
-spread dos defaults e `**/.next/**`, e o relatório saiu de 74 arquivos /
-16.28% para 6 / 47.24%. O piso continua em `report-only` — a reativação
-para 80% depende do primeiro BC do frontend, não desta correção.
+A ordem correta era **consertar o `exclude` primeiro, reativar o piso
+depois** — senão o app reprovaria por build artifact, não por falta de
+teste. O `exclude` foi corrigido neste mesmo PR (spread + `**/.next/**`
++ `**/*.spec.{ts,tsx}`): 74 arquivos / 16.28% → 6 / 47.24%. O piso segue
+em `report-only`; a reativação para 80% depende do primeiro BC do
+frontend, não desta correção.
 
 ## Aprendizados
 
