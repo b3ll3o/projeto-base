@@ -1,16 +1,36 @@
 // apps/api/vitest.workspace.ts
 //
-// Workspaces para o Vitest 2.x — separa `unit` (smoke + specs em memória)
-// de `integration` (Testcontainers + Prisma real).
+// Workspaces para o Vitest 2.x — separa `unit` (specs em memória) de
+// `integration` (Testcontainers + Prisma real) e `e2e` (AppModule via
+// app.inject).
 //
 // pt-BR: vitest 2.x não suporta o array `projects` no config raiz; em vez
 // disso, define-se aqui via `defineWorkspace`. Cada projeto estende
-// vitest.config.ts para herdar resolve/aliases + coverage.exclude canônico
-// e sobrescreve só `test.*` (thresholds + include/exclude patterns).
+// vitest.config.ts e sobrescreve só o que lhe é próprio (include/exclude
+// de specs, timeouts, pool).
 //
-// Regra de cobertura mínima: 80% agregado POR projeto vitest (lines,
-// functions, branches, statements). Ver `.agents/specs/conventions/
-// cobertura-testes.md` para a regra completa e lista de exclusões.
+// ── Cobertura: duas armadilhas do Vitest 2.1.9 ────────────────────────────
+//
+// 1. `coverage.thresholds` declarado AQUI é INERTE. O Vitest constrói o
+//    reporter de coverage com o `ctx` do projeto RAIZ
+//    (`initCoverageProvider` → `ctx.config.coverage`,
+//    dist/chunks/cli-api*.js:10582-10588), logo o único threshold que vale
+//    é o do `vitest.config.ts`. Não existe opt-out por projeto via config:
+//    nem `thresholds: { lines: 0 }` sobrepõe o piso herdado.
+//
+// 2. Blocos `coverage: { provider, reporter }` por projeto também não têm
+//    efeito — o projeto herda os mesmos valores do config raiz, que ele
+//    estende. Medido (issue #40): removê-los deixa o `coverage-final.json`
+//    do projeto `integration` byte-a-byte idêntico. Eles foram removidos
+//    porque além de mortos eram **inválidos**: `coverage` não existe em
+//    `ProjectConfig`, e o erro só aparecia porque este arquivo nunca entrou
+//    no programa do `tsc` (não está no `include` do tsconfig.json).
+//
+// O gate de 80% vive no config raiz, derivado do projeto ativo por
+// `isCoverageEnforced` (test/config/coverage-floor.ts). Os nomes dos
+// projetos são lidos daqui pelo próprio config raiz, então um projeto novo
+// é registrado ao ser declarado e, por ser diferente de `unit`,
+// automaticamente deixa de ser enforced — nada a fazer aqui.
 
 import { defineWorkspace } from 'vitest/config';
 
@@ -19,19 +39,12 @@ export default defineWorkspace([
     extends: './vitest.config.ts',
     test: {
       name: 'unit',
-      include: ['src/**/*.spec.ts'],
+      // `test/config/**` entra porque é onde mora a lógica que decide se o
+      // gate é aplicado (issue #40). O caminho já está no `coverage.exclude`
+      // do config raiz, então rodar estas specs não altera o denominador.
+      include: ['src/**/*.spec.ts', 'test/config/**/*.spec.ts'],
       exclude: ['src/**/*.integration.spec.ts', 'src/**/*.testcontainers.spec.ts'],
       environment: 'node',
-      coverage: {
-        provider: 'v8',
-        reporter: ['text', 'json', 'html', 'lcov'],
-        thresholds: {
-          lines: 80,
-          functions: 80,
-          branches: 80,
-          statements: 80,
-        },
-      },
     },
   },
   {
@@ -51,15 +64,11 @@ export default defineWorkspace([
       // competir pela mesma porta efêmera.
       pool: 'forks',
       poolOptions: { forks: { singleFork: true } },
-      // pt-BR: coverage habilitado para visibilidade/relatório mas SEM
-      // `thresholds` — o projeto `integration` só exercita os adapters
-      // Prisma (~38% agregado, esperado); a porta de enforcement da
-      // regra de 80% é o projeto `unit`. Ver cobertura-testes.md §CI
-      // Enforcement.
-      coverage: {
-        provider: 'v8',
-        reporter: ['text', 'json', 'html', 'lcov'],
-      },
+      // pt-BR: o coverage RODE neste projeto (visibilidade/relatório), mas
+      // o gate de 80% NÃO se aplica a ele — exercita só os adapters
+      // Prisma (~38% agregado, esperado). O opt-out é derivado no config
+      // raiz pelo `isCoverageEnforced`; ver issue #40 e cobertura-testes.md
+      // §CI Enforcement.
     },
   },
   {
@@ -78,19 +87,13 @@ export default defineWorkspace([
       // generosa para CI.
       testTimeout: 120_000,
       hookTimeout: 120_000,
-      // singleFork: o container Postgres + NestApp são compartilhados
-      // por todos os testes da run; múltiplos workers competiriam pela
-      // mesma porta efêmera e levantariam apps duplicados.
+      // singleFork: o container Postgres + NestApp são compartilhados por
+      // todos os testes da run; múltiplos workers competiriam pela mesma
+      // porta efêmera e levantariam apps duplicados.
       pool: 'forks',
       poolOptions: { forks: { singleFork: true } },
-      // pt-BR: cobertura habilitada para relatório, mas SEM thresholds —
-      // e2e exercita o stack inteiro (controller + use cases + Prisma +
-      // audit + filter + pipe), então o agregado é próximo de 100%; o
-      // gate de 80% fica no projeto `unit`.
-      coverage: {
-        provider: 'v8',
-        reporter: ['text', 'json', 'html', 'lcov'],
-      },
+      // pt-BR: coverage roda para relatório, gate de 80% fica no `unit`.
+      // Mesmo motivo do `integration` (ver nota lá).
     },
   },
 ]);

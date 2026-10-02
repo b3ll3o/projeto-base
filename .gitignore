@@ -20,9 +20,16 @@ apps/api/openapi.json
 .DS_Store
 *.log
 .idea/
+# pt-BR: `.vscode/*` tem separador no meio, logo e' ancorado na RAIZ — casa
+# apenas com o `.vscode/` da raiz, nunca com `apps/*/.vscode/`. As negacoes
+# levam `/` explicito para deixar a intencao (versionar settings/extensions
+# da raiz) nao depender de nada implicito.
+# ATENCAO: isto NAO ignora `.vscode/` de apps aninhados — nenhuma regra os
+# alcanca, entao `git add -A` ainda os varre. Fechar isso exigiria
+# `**/.vscode/`, que nao foi adicionado aqui de proposito.
 .vscode/*
-!.vscode/settings.json
-!.vscode/extensions.json
+!/.vscode/settings.json
+!/.vscode/extensions.json
 .pnpm-store/
 
 # pt-BR: dev-archify/ e' uma FERRAMENTA standalone (repo git proprio aninhado),
