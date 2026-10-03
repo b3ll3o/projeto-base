@@ -310,6 +310,27 @@ describe('checkPackageJsonDrift', () => {
 });
 
 describe('extractTurboRunTasks', () => {
+  it('para no redirect de shell, sem tomar o nome do arquivo como task', () => {
+    // Mesmo defeito do separador colado, outra classe: `>` e `log.txt` viravam
+    // tasks fantasma e bloqueavam o push com erro falso. O reviewer mediu que
+    // nenhum `package.json` do repo usa isso hoje — risco latente, nao ativo.
+    expect(extractTurboRunTasks('turbo run build > build.log')).toEqual(['build']);
+    expect(extractTurboRunTasks('turbo run build >> out/build.log')).toEqual(['build']);
+    expect(extractTurboRunTasks('turbo run lint 2>&1')).toEqual(['lint']);
+    expect(extractTurboRunTasks('turbo run a b > x.log && turbo run c')).toEqual(['a', 'b', 'c']);
+  });
+
+  it('cobre os três @example do JSDoc de extractTurboRunTasks', () => {
+    // O JSDoc afirma estes três; sem spec, uma refatoração pode quebrá-los em
+    // silêncio e o próximo leitor acredita no exemplo.
+    expect(extractTurboRunTasks('turbo run build')).toEqual(['build']);
+    expect(extractTurboRunTasks('pnpm turbo run lint typecheck --filter=@x')).toEqual([
+      'lint',
+      'typecheck',
+    ]);
+    expect(extractTurboRunTasks('turbo run clean && rm -rf dist')).toEqual(['clean']);
+  });
+
   it('acha o `turbo run` de um segmento posterior, não só o primeiro', () => {
     // `exec` com regex sem /g para na 1ª ocorrência: a task fantasma do 2º
     // segmento nunca era vista, e o check ficava verde.

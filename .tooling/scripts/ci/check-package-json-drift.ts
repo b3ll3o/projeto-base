@@ -308,7 +308,7 @@ function extractTsxPath(command: string): string | null {
 /**
  * Extrai as tasks de **todos** os `turbo run` de um comando.
  *
- * Três armadilhas que o parser anterior caiu, todas cobertas por spec:
+ * Quatro armadilhas que o parser anterior caiu, todas cobertas por spec:
  *
  * 1. `exec` sem `/g` só acha a **primeira** ocorrência — em
  *    `turbo run lint && turbo run nao-existe` a task fantasma do segundo
@@ -318,9 +318,13 @@ function extractTsxPath(command: string): string | null {
  *    com um erro falso.
  * 3. `turbo run` **dentro de aspas** (`echo 'turbo run lint'`) não é
  *    invocação; sem remover aspas antes, vira task.
+ * 4. **Redirect de shell** (`turbo run build > build.log`): `>` e `build.log`
+ *    viravam tasks fantasma. Mesmo modo de falha do item 2 — erro falso
+ *    bloqueando push — e preexistente nas duas versões do parser.
  *
  * A estratégia é segmentar por separador de shell, achar `turbo run` dentro
- * de cada segmento e tomar os tokens não-flag até o fim do segmento.
+ * de cada segmento e tomar os tokens não-flag até o fim do segmento ou até o
+ * primeiro redirect, o que vier antes.
  *
  * @example extractTurboRunTasks('turbo run build') → ['build']
  * @example extractTurboRunTasks('pnpm turbo run lint typecheck --filter=@x') → ['lint', 'typecheck']
@@ -336,8 +340,18 @@ export function extractTurboRunTasks(command: string): string[] {
     for (const token of (match[1] ?? '').trim().split(/\s+/)) {
       if (token === '') continue;
       if (token.startsWith('-')) continue;
+      // `turbo run build > build.log`: a partir do redirect só há alvo de
+      // redirecionamento, nunca task. Sem esta parada, `>` e `build.log`
+      // viravam tasks fantasma e bloqueavam o push com erro falso — mesma
+      // classe do separador colado, outra armadilha.
+      if (isShellRedirect(token)) break;
       tasks.push(token);
     }
   }
   return tasks;
+}
+
+/** `>`, `>>`, `2>`, `2>&1`, `&>`, `<`… — só redirecionamento, nunca nome de task. */
+function isShellRedirect(token: string): boolean {
+  return /[<>]/.test(token) && /^[\d<>&]+$/.test(token);
 }

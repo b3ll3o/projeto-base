@@ -164,7 +164,7 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 | `pnpm review:lint` | Valida a matriz `review-routing.md` (YAML, LOC, reviewer refs) | A + B |
 | `pnpm specialist:lint` | Idem para a matriz `specialist-routing.md` — **fora do preflight** | nenhuma |
 | `pnpm archive:lint` | Valida frontmatter de `.agents/runs/archive/*.md` — **alvo ausente** | nenhuma |
-| `pnpm tooling:test` | Suíte de testes do próprio tooling (16 arquivos / 196 testes) | nenhuma |
+| `pnpm tooling:test` | Suíte de testes do próprio tooling (16 arquivos / 198 testes) | nenhuma |
 | `pnpm review:route` / `pnpm specialist:route` | Roteamento headless: emite YAML de despacho | nenhuma |
 | `pnpm test:unit` / `test:coverage` / `test:integration` / `test:e2e` | Suítes via turbo | B |
 | `pnpm lint` | `turbo run lint` — no `apps/api` é stub `echo 'apps/api lint stub…' && exit 0` | B (parcial) |
