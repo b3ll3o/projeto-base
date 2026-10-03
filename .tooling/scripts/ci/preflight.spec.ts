@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { checkDocRefs } from './check-doc-refs';
+import { formatMark } from './preflight';
+import type { CheckResult } from './check-types';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -160,6 +162,29 @@ describe('checkDocRefs', () => {
       expect(result.ok).toBe(false);
       expect(result.errors.length).toBe(1);
       expect(result.errors[0]).toMatch(/real-broken/);
+    });
+  });
+
+  // F4-T1: `CheckResult` era binario — `ok: true, errors: []` nao distingue
+  // "verifiquei e passou" de "nao havia o que verificar". Um check que
+  // early-return por pre-requisito ausente imprimia o MESMO token de sucesso
+  // de um check que realmente rodou. Regra: o token de sucesso nao pode ser
+  // o mesmo para os dois casos.
+  describe('formatMark - o token de sucesso nao mente', () => {
+    it('NAO pode renderizar ✓ quando o check nao chegou a rodar', () => {
+      const skipped: CheckResult = { ok: true, errors: [], skipped: true, reason: 'sem diretório' };
+      const mark = formatMark(skipped);
+      expect(mark).not.toBe('✓');
+      expect(mark).toContain('skipped:');
+      expect(mark).toContain('sem diretório');
+    });
+
+    it('deve manter ✓ para o check que realmente rodou e passou', () => {
+      expect(formatMark({ ok: true, errors: [] })).toBe('✓');
+    });
+
+    it('deve manter ✗ para o check que rodou e falhou', () => {
+      expect(formatMark({ ok: false, errors: ['algo quebrado'] })).toBe('✗');
     });
   });
 });
