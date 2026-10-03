@@ -367,6 +367,12 @@ describe('extractTurboRunTasks', () => {
     expect(extractTurboRunTasks('turbo run build >/dev/null 2>&1')).toEqual(['build']);
     expect(extractTurboRunTasks('turbo run build >log.txt')).toEqual(['build']);
     expect(extractTurboRunTasks('turbo run build 2>errors.log')).toEqual(['build']);
+    // Esta asserção sozinha NÃO prova o guard de `&>`: sem ele, o segmentador
+    // corta no `&` e o resultado ainda é `['build']` — verde pelo motivo
+    // errado. O guard é provado pelo caso `&>a.log ALVO`, em que sem ele a
+    // task `ALVO` se perde. Medido por mutação: remover o guard deixa
+    // vermelho só a spec 'palavra depois de redirect ESPACADO continua
+    // sendo task', e esta linha continua verde.
     expect(extractTurboRunTasks('turbo run build &>all.log')).toEqual(['build']);
     // Composto: o `&&` seguinte segue como comando, e a lista não foi truncada.
     expect(extractTurboRunTasks('turbo run build 2>/dev/null && echo done')).toEqual(['build']);
