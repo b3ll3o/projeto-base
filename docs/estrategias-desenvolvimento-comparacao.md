@@ -118,14 +118,22 @@ por hook ou CI. Agrava: 18 links em `AGENTS.md:65-88` apontam para
 - Camada 1 tem barreira **provada ao vivo**: violação DDD real em
   `domain/probe.ts` → `1 finding(s) — 1 blocker` + EXIT=1 pelo mesmo caminho que
   `.husky/pre-commit:19` e `review-stack.yml:31` executam.
-- Camada 2 é código testado: `pnpm tooling:test` → **15 arquivos / 195 testes
+- Camada 2 é código testado: `pnpm tooling:test` → **16 arquivos / 195 testes
   verdes** em 1,71s.
 - Camada 3 é artefato versionado: 1307 linhas em 21 arquivos.
 
-**Mas a carga de prova está concentrada na Camada 1.** Camada 2 nunca é
-acionada. Camada 3 é inalcançável pelo índice. E a barreira de topo não existe:
-o ruleset ativo não tem `required_status_checks`, então todo o aparato de
-`ci-defense-in-depth.md` é telemetria.
+**A carga de prova não está mais concentrada na Camada 1.** A Camada 2 era
+inert — os 6 specs de `.tooling/scripts/ci` (os próprios checks do preflight)
+não rodavam em lugar nenhum, porque `tooling:test` usava `--root
+tooling/scripts`, que exclui `.tooling/`. Ligados ao `tooling:test` e ao job
+`preflight` do CI. E a barreira de topo **passou a existir**: o ruleset
+`master` (23853096) exige `required_status_checks: [{context: "quality"}]`
+(D2, [git-workflow.md](../.agents/specs/conventions/git-workflow.md)).
+
+**O que ainda não fecha:** a garantia é da **cadeia**, não de cada check —
+`quality` tem `needs: preflight`, mas se essa aresta cair, `preflight` vira
+opcional sem aviso. `required_approving_review_count` segue 0. E a Camada 3
+continua inalcançável pelo índice.
 
 **Veredito:** o híbrido ganha como narrativa e perde como sistema. Onde ele é
 real — um gate de DDD barrando um commit — funciona. Onde ele é declarado — três
