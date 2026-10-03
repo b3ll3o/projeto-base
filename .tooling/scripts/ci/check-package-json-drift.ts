@@ -344,28 +344,53 @@ export function extractTurboRunTasks(command: string): string[] {
       // redirecionamento, nunca task. Sem esta parada, `>` e `build.log`
       // viravam tasks fantasma e bloqueavam o push com erro falso — mesma
       // classe do separador colado, outra armadilha.
-      if (isShellRedirect(token)) break;
-      tasks.push(token);
+      //
+      // O redirect também pode vir COLADO na task (`turbo run build>log.txt`),
+      // e aí o token não é redirect: é task + redirect. Ver `splitRedirect`.
+      const parsed = splitRedirect(token);
+      if (parsed === null) break;
+      tasks.push(parsed);
     }
   }
   return tasks;
 }
 
 /**
- * `>`, `>>`, `2>`, `2>&1`, `&>`, `<`… — só redirecionamento, nunca nome de task.
+ * Separa o token em task, ou devolve `null` quando ele é redirect puro.
  *
- * O teste é só "o token contém `<` ou `>`". Uma versão anterior exigia ainda
- * que o token fosse composto exclusivamente de dígito/`<`/`>`/`&`, e isso
- * pegava justamente as formas **raras** (`>`, `2>&1`, `&>`) e deixava passar
- * as **comuns** — no instante em que o redirect nomeia o alvo, o token ganha
- * `/` e letras, o anchor falha, e `2>/dev/null` vira task fantasma. Medido:
- * 6 formatos vazavam, incluindo `turbo run build 2>/dev/null`, que é shell
- * perfeitamente válido e trava o push com erro falso.
+ * `turbo run build>log.txt` é shell válido: a task é `build` e o redirect é
+ * `>log.txt`, no **mesmo** token. Tratar o token inteiro como redirect
+ * descartava `build` e devolvia `[]` — e lista vazia faz o caller pular o
+ * script inteiro em silêncio (`referenced.length === 0`), sem marcador de
+ * `skipped`. Task fantasma escrita assim escapava da validação: gate que para
+ * de gatear, e parece verde. Foi esse o achado da rodada 4.
  *
- * O risco oposto — cortar task legítima — é nulo por construção: nome de task
- * é nome de script npm e carrega `:`, `.`, `/`, `@`, `+`, nunca `<` ou `>`.
+ * O que separa os dois casos é o **prefixo** antes do primeiro `<`/`>`:
+ *
+ * | token         | prefixo | leitura                              |
+ * |---------------|---------|--------------------------------------|
+ * | `build>log`   | `build` | task `build`, redirect à direita     |
+ * | `2>/dev/null` | `2`     | file descriptor 2, não task          |
+ * | `&>all.log`   | `&`     | o `&` de `&>`, não task              |
+ * | `>log.txt`    | —       | redirect puro, nada antes            |
+ *
+ * A primeira versão deste guard era `/[<>]/.test(token)`. Ela corrige a
+ * vazamento anterior (uma versão mais antiga ainda exigia
+ * `/^[\d<>&]+$/`, que pegava `2>&1` e deixava `2>/dev/null` vazar — 6
+ * formatos) mas introduzia esta: cortar a task junto com o redirect. As duas
+ * falhas são o mesmo erro visto de lados opostos — tratar o token como
+ * indivisível quando o shell o trata como partível.
+ *
+ * Nome de task é nome de script npm e carrega `:`, `.`, `/`, `@`, `+`, nunca
+ * `<` ou `>` — por isso cortar no primeiro `<`/`>` é seguro para o sufixo.
  * Varredura dos 27 nomes de task do repo: 0 cortados.
  */
-function isShellRedirect(token: string): boolean {
-  return /[<>]/.test(token);
+function splitRedirect(token: string): string | null {
+  const idx = [...token].findIndex((c) => c === '<' || c === '>');
+  if (idx === -1) return token;
+  const prefix = token.slice(0, idx);
+  // Prefixo vazio, só dígitos (file descriptor) ou o `&` de `&>`: não há task
+  // antes do redirect, então o token inteiro é redirect.
+  if (prefix === '' || /^\d+$/.test(prefix) || prefix === '&') return null;
+  return prefix;
 }

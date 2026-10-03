@@ -190,6 +190,41 @@ describe('checkPackageJsonDrift', () => {
     expect(result.errors.some((e) => e.includes("'tdd:check'") && e.includes('turbo'))).toBe(true);
   });
 
+  it('deve falhar se a task fantasma vier com redirect COLADO no script', async () => {
+    // End-to-end do achado da rodada 4. Mesmo estado quebrado do spec acima
+    // (`tdd:check` declarada no turbo.json, sem pacote que a implemente), mas
+    // escrito como `turbo run tdd:check>out.log`. Com o guard antigo, o token
+    // inteiro era lido como redirect: `extractTurboRunTasks` devolvia `[]`, o
+    // caller caía em `referenced.length === 0` e **pulia o script inteiro**,
+    // sem erro e sem marcador de `skipped`. O gate ficava verde sobre uma task
+    // fantasma — silenciosamente, que é o pior jeito.
+    const dir = path.join(tmpRoot, 'turbo-fantasma-com-redirect');
+    await fs.mkdir(dir, { recursive: true });
+    await makeWorkspace(dir, {
+      turboTasks: ['build', 'lint', 'tdd:check'],
+      packageScripts: ['build', 'lint'],
+    });
+    await fs.writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        scripts: {
+          build: 'turbo run build',
+          dev: 'echo dev',
+          lint: 'turbo run lint',
+          typecheck: 'echo tc',
+          test: 'echo test',
+          'ci:preflight': 'echo ok',
+          'ci:local': 'turbo run tdd:check>out.log',
+        },
+      }),
+    );
+
+    const result = await checkPackageJsonDrift({ packageJsonPath: path.join(dir, 'package.json') });
+    expect(result.skipped).toBeFalsy();
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.includes("'tdd:check'") && e.includes('turbo'))).toBe(true);
+  });
+
   it('deve falhar se a task for script de pacote mas não estiver no turbo.json', async () => {
     // O erro simétrico — e o que a versão anterior deste check cometia: ela
     // aceitava QUALQUER script de pacote como resolvível. Medido no repo real:
@@ -350,6 +385,36 @@ describe('extractTurboRunTasks', () => {
       'test:e2e',
     ]) {
       expect(extractTurboRunTasks(`turbo run ${task}`)).toEqual([task]);
+    }
+  });
+
+  it('não perde a task quando o redirect vem COLADO nela, sem espaço', () => {
+    // `turbo run build>log.txt` é shell válido: a task é `build`, o redirect
+    // é `>log.txt`. O guard via o token inteiro e quebra antes de registrar
+    // `build`, devolvendo `[]` — e lista vazia faz o caller pular o script
+    // inteiro em silêncio (`referenced.length === 0`), sem marcador de
+    // `skipped`. Task fantasma escrita assim escaparia do check: gate que para
+    // de gatear, e parece verde.
+    expect(extractTurboRunTasks('turbo run build>log.txt')).toEqual(['build']);
+    expect(extractTurboRunTasks('turbo run test>out')).toEqual(['test']);
+    expect(extractTurboRunTasks('turbo run lint 2>err.log')).toEqual(['lint']);
+    expect(extractTurboRunTasks('turbo run build>build.log 2>&1')).toEqual(['build']);
+  });
+
+  it('separa task colada de redirect puro pelo prefixo, não pelo token inteiro', () => {
+    // O que distingue `build>log.txt` (task + redirect) de `2>/dev/null`
+    // (redirect puro) é o PREFIXO antes do primeiro `<`/`>`: task real é
+    // `build`; descriptor de file descriptor é `2`; o token `&` de `&>file`
+    // é `&`. Os três precisam sair pelo caminho certo.
+    for (const puro of [
+      '>log.txt',
+      '>>log.txt',
+      '2>/dev/null',
+      '1>/dev/null',
+      '2>&1',
+      '&>all.log',
+    ]) {
+      expect(extractTurboRunTasks(`turbo run build ${puro}`)).toEqual(['build']);
     }
   });
 
