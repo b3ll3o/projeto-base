@@ -344,7 +344,7 @@ Após fix DONE, **re-despachar router** (re-rodar Task 1-5 com branch atualizada
 
 - [`.agents/agents/review-router.md`](../../../.agents/agents/review-router.md)
 - [`.agents/specs/conventions/review-routing.md`](../../../.agents/specs/conventions/review-routing.md)
-- Memory: [`two-stage-review-after-each-task`](../../../../home/leo/.claude/projects/-home-leo-Documentos-projetos-base/memory/two-stage-review-after-each-task.md), [`review-and-fix-after-each-task`](../../../../home/leo/.claude/projects/-home-leo-Documentos-projetos-base/memory/review-and-fix-after-each-task.md)
+- Memory do agent (fora do repo, sem path relativo que resolva): `two-stage-review-after-each-task`, `review-and-fix-after-each-task`
 ```
 
 - [ ] **Step 2: Validar LOC**

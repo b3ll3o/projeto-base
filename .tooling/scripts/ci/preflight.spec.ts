@@ -36,6 +36,15 @@ describe('checkDocRefs', () => {
       '# Guia\n\nVeja [site](https://example.com).\n',
     );
 
+    // Link para memoria do agent: o alvo esta fora do repo e NAO existe em
+    // path relativo a partir daqui. Existiu uma allowlist
+    // `/(\.\.\/)+home\//` que engoleva qualquer link assim.
+    await fs.mkdir(path.join(FIXTURES, 'docs-agent-memory-ref'), { recursive: true });
+    await fs.writeFile(
+      path.join(FIXTURES, 'docs-agent-memory-ref/guia.md'),
+      '# Guia\n\nMemory: [two-stage](../../../../home/leo/.claude/projects/x/memory/two-stage.md)\n',
+    );
+
     // Os 3 fixtures abaixo eram referenciados por testes que NUNCA rodaram
     // (§F2-T8): a suite nao entrava em tooling:test nem no CI, entao os 3
     // vermelhos ficavam invisiveis. Criados aqui, e nao reaproveitados
@@ -103,6 +112,21 @@ describe('checkDocRefs', () => {
     expect(result.errors[0]).toMatch(
       /docs-broken-ref\/guia\.md: link para 'arquivo-inexistente\.md' quebrado/,
     );
+  });
+
+  it('NAO deve allowlistar link para memoria do agent (fora do repo)', async () => {
+    // A allowlist `/(\.\.\/)+home\//` engoleva QUALQUER link com `../home/`,
+    // nao so o caso legitimo — e mascarava 2 links que estavam genuinamente
+    // quebrados, para um path que nao resolve em maquina nenhuma. Medido:
+    // o path relativo resolve para `<pai-do-repo>/home/leo/...`, que nao
+    // existe; o arquivo vive em `~/.claude/projects/...`.
+    // A correcao foi consertar os 2 links (viraram codigo inline) e remover a
+    // entrada. Este spec impede que a mascara volte.
+    const result = await checkDocRefs({
+      docsRoot: path.join(FIXTURES, 'docs-agent-memory-ref'),
+    });
+    expect(result.ok).toBe(false);
+    expect(result.errors[0]).toMatch(/docs-agent-memory-ref\/guia\.md: link para .*quebrado/);
   });
 
   it('deve ignorar refs externas (http://, https://)', async () => {

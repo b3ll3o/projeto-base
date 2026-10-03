@@ -6,7 +6,7 @@
 // path absoluto, relativo-repo, vazio, e `./` prefix.
 
 import { describe, it, expect } from 'vitest';
-import { dirname, isAbsolute, join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Importação indireta via re-export local para validar comportamento
@@ -52,8 +52,16 @@ describe('resolvePath (regression)', () => {
     // string começando com `/` é absoluta em qualquer plataforma. O teste então
     // rodava de verdade contra um path que só existe na máquina do autor: verde
     // local, vermelho no CI, onde esse path não existe. Teste que só passa em
-    // uma máquina não é cobertura, é sorte — e o `isAbsolute` agora é usado
-    // para o que serve: provar que o path montado é mesmo absoluto.
+    // uma máquina não é cobertura, é sorte.
+    //
+    // Havia aqui um `expect(isAbsolute(absPath)).toBe(true)`. Era tautologia:
+    // `absPath` é `path.join` de uma constante já absoluta, então a linha
+    // provava que `join` funciona, não que `resolvePath` preserva path
+    // absoluto — que é o que o nome do teste promete. Para exercitar o
+    // `isAbsolute` de verdade seria preciso exportar `resolvePath`; o que a
+    // asserção removida não podia provar, a de baixo prova: um path com dupla
+    // resolução (`REPO_ROOT` prefixado duas vezes) não existe, a leitura falha,
+    // e `report.actions` vem vazio. É essa que verifica a semântica.
     //
     // O diretório home literal NÃO volta aqui, nem neste comentário — nem
     // escrito de outro jeito para escapar do grep. A varredura por path de
@@ -63,7 +71,6 @@ describe('resolvePath (regression)', () => {
     // guard que se dispara sozinho é a mesma classe do guard que nunca dispara.
     // O comando mora no backlog da demanda, que é `.md` e está fora do sweep.
     const absPath = join(REPO_ROOT, 'apps/api/prisma/schema.prisma');
-    expect(isAbsolute(absPath)).toBe(true);
     const report = syncDocs([absPath]);
     // Mesma expectation do teste relativo — absolute path deve funcionar
     // idêntico porque o conteúdo do schema é o mesmo.

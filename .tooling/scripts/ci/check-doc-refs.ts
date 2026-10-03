@@ -38,7 +38,6 @@ const TARGET_ALLOWLIST: RegExp[] = [
   /^\.\/contracts\//, // placeholder de template
   /^\.\/(plan|tasks)\.md$/, // placeholders de template
   /^\.\.\/\.\.\/\.\.\/docs\/(domain|architecture)\//, // docs gerados
-  /(\.\.\/)+home\//, // memória do agent, fora do repo
 ];
 
 function isAllowlisted(target: string): boolean {
