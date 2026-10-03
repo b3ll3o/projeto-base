@@ -1,8 +1,8 @@
 ---
 name: fluxo-desenvolvimento
 description: Documento canonico do fluxo de desenvolvimento do repositorio, do primeiro comando ao merge — das 3 camadas (hooks locais, CI remoto, processo de agents) aos gates que cada uma dispara, com o estado real (wired / unwired) de cada mecanismo.
-version: 1.0.0
-updated: 2026-10-02
+version: 1.1.0
+updated: 2026-10-03
 maintainer: stack-code-reviewer
 ---
 
@@ -18,7 +18,7 @@ maintainer: stack-code-reviewer
 
 1. **Antes de qualquer coisa**: `pnpm install` e, se for planejar, gerar um *state-snapshot* (camada de agents).
 2. **Commit** dispara `pre-commit`: `lint-staged` (só Prettier) + `stack-code-reviewer` (único que aborta) + `doc-sync` (roda mas nunca aborta).
-3. **Push** dispara `pre-push`: `pnpm ci:preflight` — 10 checks estruturais, aborta com exit 1.
+3. **Push** dispara `pre-push`: `pnpm ci:preflight` — 9 checks estruturais, aborta com exit 1.
 4. **PR para `main`** dispara 3 jobs de CI (`preflight`, `quality`, `docker-build-prod`) + `stack-code-review` + `docs-sync`.
 5. **Merge em `main`** só dispara `release-template` (auto-tag) **se** o commit tocar `docs/MONOREPO.md`.
 
@@ -122,18 +122,17 @@ Os 10 checks registrados (verificado ao vivo com `pnpm ci:preflight`):
 | `lint-staged` | `pnpm exec lint-staged` | A (pre-commit) | Nada semântico: as 2 entradas são `prettier --write` | Sim — `format:check` roda no `ci.yml` |
 | `stack-code-reviewer` | `pnpm tsx tooling/scripts/stack-code-reviewer.ts` | A (pre-commit) | `blocker` > 0 ou `major` > 3 (`exit 1`) | Sim — `review-stack.yml` chama o mesmo script |
 | `doc-sync` | `pnpm tsx tooling/scripts/doc-sync.ts` | A (pre-commit) | **Nada** — `grep -c 'process.exit' tooling/scripts/doc-sync.ts` = 0 | Não — e o job de CI também nunca falha |
-| `ci:preflight` | `pnpm ci:preflight` | A (pre-push) + B | 10 checks estruturais | Sim — `ci.yml` roda o mesmo script |
+| `ci:preflight` | `pnpm ci:preflight` | A (pre-push) + B | 9 checks estruturais | Sim — `ci.yml` roda o mesmo script |
 | `format:check` | `pnpm format:check` | B (preflight job) | Arquivo não formatado | — |
 | `test:coverage` | `pnpm turbo run test:coverage` | B (quality job) | Cobertura de `apps/api` < 80% (`COVERAGE_FLOOR`, só quando `isCoverageEnforced`) | — |
 | `test:integration` / `test:e2e` | `pnpm turbo run test:integration test:e2e --filter=@projeto/api` | B (quality job) | Teste falhando (exige Docker) | — |
 | `stack-code-review` (job) | `pnpm stack:review --files=… --mode=ci` | B (PR job) | Mesmo `blocker`/`major` do local | — |
 | `docker-build-prod` | `docker buildx build … --target prod` | B (só PR) | Dockerfile quebrado | Não — não roda em push |
-| `release-template` | automático | B (merge em main) | Nada; hoje é **noop** (ver §7) | — |
+| `release-template` | automático | B (merge em main) | Nada — e o noop foi desfeito: o footer pede `1.9.0`, tag `v1.9.0` não existe, então a criação sairia. O que falta é o check que amarra footer↔tag (**BL1**) | — |
 | `specialist:lint` | `pnpm specialist:lint` | **NENHUMA** | Nada — script existe, 12 testes verdes, fora do preflight | Não |
-| `review:lint` | `pnpm review:lint` | A+B (via preflight #9) | YAML inválido, LOC, regex, reviewer inexistente | Sim |
-| `archive:lint` | `pnpm archive:lint` | **NENHUMA** (via check #10, que é no-op) | Nada — `.agents/runs/archive` não existe | Não |
-| `tooling:test` | `pnpm tooling:test` | **NENHUMA** | Nada — 10 arquivos / 150 testes que não rodam em hook nem CI | Não |
-| `tdd:check` | `pnpm tdd:check` | **NENHUMA** | Nada — nenhum pacote declara `tdd:check`; o turbo só materializa a task via `dependsOn: ["test:unit"]` | Não |
+| `review:lint` | `pnpm review:lint` | A+B (via preflight #8) | YAML inválido, LOC, regex, reviewer inexistente | Sim |
+| `archive:lint` | `pnpm archive:lint` | A+B (via preflight #9) | Frontmatter canônico; com o diretório vazio o check se declara `skipped` em vez de verde | Sim |
+| `tooling:test` | `pnpm tooling:test` | B (job `preflight` do `ci.yml`) | Spec vermelho da própria camada de tooling | Sim |
 
 ---
 
@@ -180,28 +179,25 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 
 - `pre-commit` / `pre-push` instalados e executando.
 - `stack-code-reviewer` — **único mecanismo com dentes reais**: `process.exit(1)` em blocker.
-- `ci:preflight` — 10 checks registrados e executando. Estado ao vivo neste working tree: **9/10 ✓** — o check 1 (`Cross-refs em docs`) falha com 3 links quebrados em documentos ainda não versionados (`docs/articles/`, `docs/superpowers/plans/`).
+- `ci:preflight` — 9 checks registrados e executando. Estado ao vivo neste working tree: **9/9 ✓**.
 - Job `quality` do CI — encadeado por `needs: preflight`, roda cobertura 80% de `apps/api#unit`.
 - `docker-build-prod` — build real dos 2 Dockerfiles `prod` em toda PR.
-- `release-template` — syntaticamente correto (idempotência via `git rev-parse --verify`, `concurrency`, `contents: write`), ver §7.2.
+- `release-template` — syntaticamente correto (idempotência via `git rev-parse --verify`, `concurrency`, `contents: write`) e **já não é noop**: quando a tag existe ele emite `::warning::` em vez de encerrar em silêncio. Ver §7.2 para o que ainda falta.
 - Boundary DDD/Hexagonal **existe de fato** em `apps/api/src/modules/users/{domain,application,infrastructure}`.
 
 ### 7.2 Unwired / aspiracional
 
+> Os 13 achados da auditoria original caíram para **5**. Os fechados estão em
+> [`backlog-2026-10-02.md`](../.agents/runs/backlog-2026-10-02.md) §Remissões, e a
+> lista do que segue adiado em `BL1`–`BL10`. Toda linha abaixo foi **re-medida** no
+> merge — não copiada da auditoria.
+
 | Item | Evidência de que não funciona |
 |------|------------------------------|
-| **Nenhum check bloqueia merge** | Ruleset ativo (`gh api repos/:owner/:repo/rulesets`, id 23853096, name `master`) tem rules `['deletion','non_fast_forward','pull_request']` — **sem `required_status_checks`**, `required_approving_review_count = 0`. As 3 camadas são telemetria, não barreira. |
-| `lint-staged` não é linter | `node -e "console.log(require('./package.json')['lint-staged'])"` → as 2 entradas são `prettier --write`. Nenhum eslint, tsc ou vitest. |
-| `doc-sync` nunca aborta | `grep -c 'process.exit' tooling/scripts/doc-sync.ts` → **0**. O `\|\| exit 1` do hook e o job de CI são guarda de crash, não gate. |
-| `checkDocRefs` cego p/ 75% dos `.md` | Cobre só `docs` + `.agents/specs` = 114 de `git ls-files '*.md' \| wc -l` = 189. E `check-doc-refs.ts:67` remove inline-code **antes** do regex de link (`:70`) — link com label 100% inline-code colapsa para `[]()` e nunca casa. 18 links quebrados estão em `AGENTS.md` (`grep -c '(\.\./\.agents/memory/' AGENTS.md` → 18). |
-| `checkArchiveIntegrity` verde incondicional | `.agents/runs/archive` não existe; o check faz short-circuit `ok:true`. |
-| `apps/api` nunca é lintada | `apps/api/package.json` → `"lint": "echo 'apps/api lint stub…' && exit 0"`. Além disso o config se chama `.eslintrc.js` mas contém flat config — ESLint 9 não o carrega (`ls apps/api/eslint.config*` → inexistente). A rule `ddd-hexagonal/no-domain-imports-from-infra` nunca roda. |
-| `tdd:check` é fantasma | Declarada em `turbo.json:17` + `package.json`, mas nenhum pacote a implementa — o turbo materializa via `dependsOn: ['test:unit']`. |
-| `ci:quality` é órfã | `turbo.json:20` — nenhum script, pacote ou job a invoca. |
-| `specialist:lint` fora do preflight | `grep -c specialist .tooling/scripts/ci/preflight.ts` → **0**, enquanto `review:lint` está em `preflight.ts:93`. |
-| 6 specs mortos em `.tooling/scripts/ci/` | `ls .tooling/scripts/ci/*.spec.ts \| wc -l` → 6; `tooling:test` usa `--root tooling/scripts`, que exclui `.tooling/`. |
-| `release-template` é noop | Footer de `docs/MONOREPO.md:262` = **1.5.0**; última tag é **v1.8.0**; `v1.5.0` já existe → o step de idempotência sempre retorna `exists=true` e a criação é sempre `SKIPPED`. `docs/STACK.md:135` tem o mesmo drift. |
-| Onboarding desatualizado | `README.md:259` e `docs/STACK.md:4` afirmam que `apps/api` e `apps/web` "ainda não foram criados" — os dois existem, com 41 arquivos de spec. |
+| **Nenhum check bloqueia merge** *(parcialmente corrigido)* | O ruleset `master` (id 23853096) agora tem `required_status_checks: [{context: "quality"}]` e `main` só é atualizável por PR. O que sobra: `required_approving_review_count = 0` e `required_reviewers = []` (contribuidor único), e só **1 dos 3** contexts é exigido — a garantia real é a cadeia do workflow (`preflight` bloqueia `quality` via `needs:`), não o check isolado. |
+| `lint-staged` não é linter | `node -e "console.log(Object.values(require('./package.json')['lint-staged']).join(' \| '))"` → `prettier --write \| prettier --write`. Nenhum eslint, tsc ou vitest. O ESLint entra pelo turbo. |
+| `doc-sync` nunca aborta | `grep -c 'process.exit' tooling/scripts/doc-sync.ts` → **0**. O `\|\| exit 1` do hook e o job de CI são guarda de crash, não gate. Ao menos agora o contrato **documentado** diz report-only, em vez de prometer bloqueio que não existe. |
+| `specialist:lint` fora do preflight | `grep -c specialist .tooling/scripts/ci/preflight.ts` → **0**, enquanto `review:lint` roda no preflight. Duas matrizes de routing, dois scripts, um só no gate. |
 | Limite de 300 linhas não é imposto | `wc -l .agents/WORKFLOWS.md` → **382**. Nenhum check mede LOC de `.md`. |
 
 ### 7.3 Regra que resume a camada

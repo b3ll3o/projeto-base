@@ -1,8 +1,8 @@
 ---
 name: estrategias-desenvolvimento-comparacao
 description: Comparação entre regra determinística, camada agentic e memória acumulada, e onde este repo errou a classificação
-version: 1.0.0
-updated: 2026-10-02
+version: 1.1.0
+updated: 2026-10-03
 maintainer: orquestração
 ---
 
@@ -14,7 +14,7 @@ O framework de referência ("vetorial encontra similaridade, grafos encontram
 relacionamentos, fine-tuning especializa comportamento, e às vezes a resposta é
 software convencional") aplicado a este repo produz um veredito desconfortável:
 **quase nenhum problema aqui precisa de IA**, e mesmo assim o repo construiu
-três camadas — 1778 linhas de tooling determinístico, 19 agents, 1307 linhas de
+três camadas — 1849 linhas de tooling determinístico (`find tooling/scripts -name '*.ts' -not -name '*.spec.ts' | xargs wc -l`), 19 agents, 1307 linhas de
 memória — para resolver o que, em 100% dos casos verificados, é regra
 determinística.
 
@@ -56,11 +56,11 @@ verificado nos dois sentidos: fora de `/domain/` importando `@nestjs/common` →
 0 findings; dentro → 1 blocker + exit 1.
 
 **Custo por task:** ~1,6s (preflight) + ~0,5s (stack-code-reviewer).
-Manutenção: 1778 linhas:
+Manutenção: 2373 linhas:
 
 ```bash
 wc -l .tooling/scripts/ci/*.ts tooling/scripts/stack-code-reviewer.ts tooling/scripts/doc-sync.ts | tail -1
-# → 1778 total
+# → 2373 total
 ```
 
 **Modo de falha:** não é o gate errar — é o gate virar teatro. Verde sem ter
@@ -202,12 +202,12 @@ IA acima. Não há superfície vetorial, não há grafo, não há LLM em runtime
 | O que o repo tentou | O que era de fato | Custo do erro de rótulo |
 | --- | --- | --- |
 | Camada "agentic" de roteamento | 26 `pattern:` regex em YAML rodados por TypeScript (`review-routing.md:21-104`) | Foi o que deixou `specialist:lint` **fora** do preflight (`grep -c specialist .tooling/scripts/ci/preflight.ts` = **0**) enquanto `review:lint` está dentro (`preflight.ts:93`, que executa `pnpm review:lint`). A camada tratada como "semântica" foi tratada como opcional. |
-| Memória acumulada como "fine-tuning" | Fine-tuning de conhecimento que **muda** — proibido pelo framework | `README.md:259` afirma que os apps "ainda **não foram criados**"; existem, com 40 specs (`find apps packages -name '*.spec.ts' -not -path '*/node_modules/*' \| wc -l`). `docs/MONOREPO.md:262` está em `1.5.0` enquanto a última tag é `v1.8.0`. Fatos volatile envelheceram como se fossem estáveis. |
-| Arquitetura de 3 camadas escolhida antes do problema | Nenhum problema verificado pede IA | Superfície de manutenção (1778 + 1307 linhas) e 12 furos de costura (§7 + §8), para resolver o que cabia num script de 1,6s. |
+| Memória acumulada como "fine-tuning" | Fine-tuning de conhecimento que **muda** — proibido pelo framework | `README.md:259` afirmava que os apps "ainda **não foram criados**"; existem, com 40 specs. Corrigido. `docs/MONOREPO.md:262` está em `1.9.0` enquanto a última tag é `v1.8.0` — o drift encolheu de 3 versões para 1, mas a classe é a mesma: fato volatile envelhecendo como se fosse estável, agora sem check que amarre os dois. |
+| Arquitetura de 3 camadas escolhida antes do problema | Nenhum problema verificado pede IA | Superfície de manutenção (1849 + 1307 linhas) e 12 furos de costura (§7 + §8), para resolver o que cabia num script de 1,6s. |
 | Camada 2 como "barreira de roteamento" | Telemetria | `review-router.ts:350` tem exit 3 sem consumidor algum. Um exit code sem consumidor é uma constante, não um portão. |
-| `tdd:check` como verificação de TDD | Cache-hit de `test:unit` (`turbo.json:17` declara `dependsOn`, nenhum pacote implementa) | Pior classe de erro: exit 0 com "FULL TURBO" em 37ms (`pnpm turbo run tdd:check`). Confiança falsa a custo zero e latência zero. |
-| `release-template.yml` como "automática e idempotente" | Inerte — o footer regrediu para `1.5.0`, `v1.5.0` já existe, todo push é noop | Idempotência confundida com *correctly*-idempotência. O mecanismo criado para evitar erro está mascarando drift. |
-| 3 camadas de `ci-defense-in-depth.md` como barreira | Detecção — o ruleset ativo não tem `required_status_checks` | `git-workflow.md:34` afirma que "branch protection + status checks" **impõem** a regra. Um agent que leia isso conclui o oposto do que o repo permite. |
+| `tdd:check` como verificação de TDD | Task sem dono: declarada no `package.json` como `turbo run tdd:check`, ausente do `turbo.json` e de todo pacote do workspace | **A análise original errou a classe do erro** e a tabela é a prova: afirmava "exit 0 com FULL TURBO em 37ms" (falso verde). Medido: `pnpm tdd:check` → **EXIT=1**, `Could not find task in project`. A task já tinha morrido; o script que a invocava ficou. Quem reportava verde era este documento, não o comando. |
+| `release-template.yml` como "automática e idempotente" | Era inerte — o footer tinha regredido para `1.5.0` e `v1.5.0` já existia, então todo push era noop. Footer alinhado em `1.9.0`; a idempotência agora emite `::warning::` em vez de encerrar em silêncio | Idempotência confundida com *correctly*-idempotência: o mecanismo criado para evitar erro mascarava drift. Falta o check que amarra footer↔tag (**BL1**). |
+| 3 camadas de `ci-defense-in-depth.md` como barreira | Eram detecção — o ruleset ativo não tinha `required_status_checks`. Agora exige `{context: "quality"}` e `main` só é atualizável por PR | `git-workflow.md:34` afirmava que "branch protection + status checks" **impõem** a regra; a afirmação era verdadeira em prosa e falsa no repo. Restam `required_approving_review_count = 0` e 1 dos 3 contexts exigido. |
 | `lint-staged` como lint pelo nome | Formatter — as duas entradas são `prettier --write` | O nome induz a crer em checagem semântica; o conteúdo é formatação. |
 
 ## 8. Bypass silencioso — a classe que nenhuma estratégia captura sozinha
