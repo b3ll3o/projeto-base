@@ -118,7 +118,7 @@ por hook ou CI. Agrava: 18 links em `AGENTS.md:65-88` apontam para
 - Camada 1 tem barreira **provada ao vivo**: violação DDD real em
   `domain/probe.ts` → `1 finding(s) — 1 blocker` + EXIT=1 pelo mesmo caminho que
   `.husky/pre-commit:19` e `review-stack.yml:31` executam.
-- Camada 2 é código testado: `pnpm tooling:test` → **16 arquivos / 203 testes
+- Camada 2 é código testado: `pnpm tooling:test` → **16 arquivos / 206 testes
   verdes**.
 - Camada 3 é artefato versionado: 1307 linhas em 21 arquivos.
 
@@ -178,7 +178,7 @@ footer, se um link existe. Conhecimento que muda é fonte viva, nunca cópia.
 
 | Tipo do problema | Instâncias verificadas no repo | Estratégia correta | O que foi feito |
 | --- | --- | --- | --- |
-| Regra determinística | 9 checks de drift/preflight, 203 testes de tooling | Determinística — e funciona | ✅ Camada 1 |
+| Regra determinística | 9 checks de drift/preflight, 206 testes de tooling | Determinística — e funciona | ✅ Camada 1 |
 | Similaridade semântica | 0 | Vetorial | — (nada a fazer) |
 | Relacionamento multi-hop | 0 | Grafo | — (nada a fazer) |
 | Especialização de comportamento | 1 caso real (roteamento de reviewer) | Regra, não agentic | ⚠️ chamada de "agentic", é TypeScript com regex |
