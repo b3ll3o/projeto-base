@@ -47,13 +47,21 @@ describe('resolvePath (regression)', () => {
     // prefixar REPO_ROOT (causaria path inválido).
     //
     // O path é derivado do REPO_ROOT real, e não hardcoded. A versão anterior
-    // fixava `/home/leo/Documentos/projetos/base` e tentava se proteger com
+    // fixava um diretório home absoluto e tentava se proteger com
     // `if (!isAbsolute(absPath)) return` — guard que NUNCA dispara, porque uma
     // string começando com `/` é absoluta em qualquer plataforma. O teste então
     // rodava de verdade contra um path que só existe na máquina do autor: verde
     // local, vermelho no CI, onde esse path não existe. Teste que só passa em
     // uma máquina não é cobertura, é sorte — e o `isAbsolute` agora é usado
     // para o que serve: provar que o path montado é mesmo absoluto.
+    //
+    // O diretório home literal NÃO volta aqui, nem neste comentário — nem
+    // escrito de outro jeito para escapar do grep. A varredura por path de
+    // máquina em `*.ts` é o que pega o próximo, e um sweep que nunca fecha em
+    // zero é um sweep que ninguém lê. Escrever o padrão literal aqui para
+    // explicar a regra suja exatamente o que a regra existe para limpar: um
+    // guard que se dispara sozinho é a mesma classe do guard que nunca dispara.
+    // O comando mora no backlog da demanda, que é `.md` e está fora do sweep.
     const absPath = join(REPO_ROOT, 'apps/api/prisma/schema.prisma');
     expect(isAbsolute(absPath)).toBe(true);
     const report = syncDocs([absPath]);
