@@ -52,7 +52,7 @@ Lint, typecheck, test, coverage. Roda **apenas se preflight passou**.
 | `check-eslint-drift` | eslint config | regras duplicadas/legadas em configs ESLint | ~3s | `.tooling/scripts/ci/check-eslint-drift.ts` |
 | `check-types` | typecheck | tipos inconsistentes em scripts CI | ~1s | `.tooling/scripts/ci/check-types.ts` |
 | `check-turbo-drift` | turbo pipeline | drift em `turbo.json` (`$schema` ausente, nomes inválidos, `cache:false` com `outputs`) | ~2s | `.tooling/scripts/ci/check-turbo-drift.ts` |
-| `check-package-json-drift` | package.json raiz | scripts canônicos ausentes ou referenciando `tsx <path>` fantasma | ~2s | `.tooling/scripts/ci/check-package-json-drift.ts` |
+| `check-package-json-drift` | package.json raiz | scripts canônicos ausentes, `tsx <path>` fantasma, ou `turbo run <task>` que o turbo não resolve | ~2s | `.tooling/scripts/ci/check-package-json-drift.ts` |
 
 Todos os checks seguem o template `CheckResult` compartilhado
 extraído em commit `59eb083` (refactor que consolidou fixtures herméticas).
@@ -99,6 +99,15 @@ script.
   `check-package-json-drift` estendem a tabela acima para 7 checks
   estruturais totais (cross-refs, tsconfig, eslint, turbo, package.json,
   types).
+- **A contagem acima é do subset documentado aqui, não do total rodado.**
+  O `preflight` executa **9** checks; a diferença é `check-eslint-drift`
+  rodar uma vez por app (`apps`, `packages`) e `checkReviewRoutingLint` +
+  `checkArchiveIntegrity` não estarem na tabela. Ao auditar, rode
+  `pnpm ci:preflight` e conte as linhas `•` — não some com esta tabela.
+- **`check-package-json-drift` só varre o `package.json` raiz.** Task
+  turbo fantasma declarada em `apps/*/package.json` escapa do gate, e os
+  4 call-sites `pnpm turbo run` do `ci.yml` também não são varridos.
+  Fechar isso é change próprio, com spec.
 
 ## Cross-references
 

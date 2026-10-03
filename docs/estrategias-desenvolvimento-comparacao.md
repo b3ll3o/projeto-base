@@ -44,14 +44,14 @@ sistema.
 proibido, script fantasma no `package.json`, link quebrado, tamanho de `.md`.
 **O que não resolve:** nada que exija julgamento semântico.
 
-**Evidência de que funciona:** o `preflight` roda 10 checks declarados em
-`.tooling/scripts/ci/preflight.ts:59-100` e mede ~1,6s localmente
+**Evidência de que funciona:** o `preflight` roda 9 checks declarados no array `checks` de
+`.tooling/scripts/ci/preflight.ts:80-125` e mede ~1,6s localmente
 (`time pnpm ci:preflight` → `real 0m1,562s`, 3 execuções em 2026-10-02), contra
 `timeout-minutes: 20` no job `quality` (`.github/workflows/ci.yml:36`).
 
-O bloqueio é real: `tooling/scripts/stack-code-reviewer.ts:232` faz
+O bloqueio é real: `tooling/scripts/stack-code-reviewer.ts:236` faz
 `process.exit(1)`, e o guard anti-falso-positivo `isDomainFile()`
-(`stack-code-reviewer.ts:52`) limita a regra a paths com componente `/domain/` —
+(`stack-code-reviewer.ts:56`) limita a regra a paths com componente `/domain/` —
 verificado nos dois sentidos: fora de `/domain/` importando `@nestjs/common` →
 0 findings; dentro → 1 blocker + exit 1.
 
@@ -118,7 +118,7 @@ por hook ou CI. Agrava: 18 links em `AGENTS.md:65-88` apontam para
 - Camada 1 tem barreira **provada ao vivo**: violação DDD real em
   `domain/probe.ts` → `1 finding(s) — 1 blocker` + EXIT=1 pelo mesmo caminho que
   `.husky/pre-commit:19` e `review-stack.yml:31` executam.
-- Camada 2 é código testado: `pnpm tooling:test` → **10 arquivos / 150 testes
+- Camada 2 é código testado: `pnpm tooling:test` → **15 arquivos / 195 testes
   verdes** em 1,71s.
 - Camada 3 é artefato versionado: 1307 linhas em 21 arquivos.
 
@@ -170,7 +170,7 @@ footer, se um link existe. Conhecimento que muda é fonte viva, nunca cópia.
 
 | Tipo do problema | Instâncias verificadas no repo | Estratégia correta | O que foi feito |
 | --- | --- | --- | --- |
-| Regra determinística | 10 checks de drift/preflight, 150 testes de tooling | Determinística — e funciona | ✅ Camada 1 |
+| Regra determinística | 9 checks de drift/preflight, 195 testes de tooling | Determinística — e funciona | ✅ Camada 1 |
 | Similaridade semântica | 0 | Vetorial | — (nada a fazer) |
 | Relacionamento multi-hop | 0 | Grafo | — (nada a fazer) |
 | Especialização de comportamento | 1 caso real (roteamento de reviewer) | Regra, não agentic | ⚠️ chamada de "agentic", é TypeScript com regex |
@@ -201,7 +201,7 @@ IA acima. Não há superfície vetorial, não há grafo, não há LLM em runtime
 
 | O que o repo tentou | O que era de fato | Custo do erro de rótulo |
 | --- | --- | --- |
-| Camada "agentic" de roteamento | 26 `pattern:` regex em YAML rodados por TypeScript (`review-routing.md:21-104`) | Foi o que deixou `specialist:lint` **fora** do preflight (`grep -c specialist .tooling/scripts/ci/preflight.ts` = **0**) enquanto `review:lint` está dentro (`preflight.ts:93`, que executa `pnpm review:lint`). A camada tratada como "semântica" foi tratada como opcional. |
+| Camada "agentic" de roteamento | 26 `pattern:` regex em YAML rodados por TypeScript (`review-routing.md:21-104`) | Foi o que deixou `specialist:lint` **fora** do preflight (`grep -c specialist .tooling/scripts/ci/preflight.ts` = **0**) enquanto `review:lint` está dentro (`preflight.ts:50`, que executa `pnpm review:lint`). A camada tratada como "semântica" foi tratada como opcional. |
 | Memória acumulada como "fine-tuning" | Fine-tuning de conhecimento que **muda** — proibido pelo framework | `README.md:259` afirmava que os apps "ainda **não foram criados**"; existem, com 40 specs. Corrigido. `docs/MONOREPO.md:262` está em `1.9.0` enquanto a última tag é `v1.8.0` — o drift encolheu de 3 versões para 1, mas a classe é a mesma: fato volatile envelhecendo como se fosse estável, agora sem check que amarre os dois. |
 | Arquitetura de 3 camadas escolhida antes do problema | Nenhum problema verificado pede IA | Superfície de manutenção (1849 + 1307 linhas) e 12 furos de costura (§7 + §8), para resolver o que cabia num script de 1,6s. |
 | Camada 2 como "barreira de roteamento" | Telemetria | `review-router.ts:350` tem exit 3 sem consumidor algum. Um exit code sem consumidor é uma constante, não um portão. |

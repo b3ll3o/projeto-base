@@ -50,7 +50,7 @@ maintainer: stack-code-reviewer
 │     pre-commit ─ lint-staged      → prettier --write         │
 │                  stack-code-reviewer → exit 1 se blocker     │
 │                  doc-sync          → NUNCA aborta (§7)       │
-│     pre-push   ─ ci:preflight     → 10 checks, exit 1        │
+│     pre-push   ─ ci:preflight     → 9 checks, exit 1         │
 │   ✅ IMPOSTO localmente, burlável com --no-verify            │
 └──────────────────────────────────────────────────────────────┘
                │
@@ -84,7 +84,7 @@ maintainer: stack-code-reviewer
 | 5 | Codar com o specialist | ver `.agents/agents/<specialist>.md` | nenhum — prosa |
 | 6 | Commit | `git add -A && git commit -m "…"` | **pre-commit**: lint-staged, stack-code-reviewer, doc-sync |
 | 7 | Verificação completa local | `pnpm ci:local` | **nenhum** — `ci:local` não está em nenhum hook (§7) |
-| 8 | Push | `git push -u origin <branch>` | **pre-push**: `pnpm ci:preflight` (10 checks) |
+| 8 | Push | `git push -u origin <branch>` | **pre-push**: `pnpm ci:preflight` (9 checks) |
 | 9 | Abrir PR | `gh pr create` | — |
 | 10 | CI do PR | automático em `pull_request` | `preflight` → `quality`; `docker-build-prod` em paralelo; `stack-code-review` e `docs-sync` em workflows separados |
 | 11 | Revisão / fix loop | `gh pr merge` só após CI verde | **NENHUM** — sem `required_status_checks`, o botão decide (§7) |
@@ -109,9 +109,9 @@ pnpm tsx tooling/scripts/doc-sync.ts --files="$changed" --mode=incremental || ex
 
 `.husky/pre-push` roda **exclusivamente** `pnpm ci:preflight`. Ele **não** roda lint, typecheck nem teste — apesar de [`git-workflow.md`](../.agents/specs/conventions/git-workflow.md) recomendar `pnpm ci:local` como "Pre-Push Quality Gate".
 
-Os 10 checks registrados (verificado ao vivo com `pnpm ci:preflight`):
+Os 9 checks registrados (verificado ao vivo com `pnpm ci:preflight`):
 
-1. Cross-refs em `docs` · 2. Cross-refs em `.agents/specs` · 3. tsconfig drift · 4. ESLint drift (apps) · 5. ESLint drift (packages) · 6. turbo.json drift · 7. package.json drift · 8. docker drift · 9. review-routing matrix lint · 10. archive integrity.
+1. Cross-refs em `.md` versionados · 2. tsconfig drift · 3. ESLint config drift (apps) · 4. ESLint config drift (packages) · 5. turbo.json drift · 6. package.json drift · 7. docker drift · 8. review-routing matrix lint · 9. archive integrity.
 
 ---
 
@@ -156,7 +156,7 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 
 | Comando | O que faz | Camada |
 |---------|-----------|--------|
-| `pnpm ci:preflight` | 10 checks estruturais de drift; aborta com exit 1 | A + B |
+| `pnpm ci:preflight` | 9 checks estruturais de drift; aborta com exit 1 | A + B |
 | `pnpm ci:local` | `ci:preflight` + `turbo run lint typecheck test:unit test:coverage --filter=@projeto/api --filter=@projeto/web` | manual (não está em hook) |
 | `pnpm format:check` | Prettier em modo check sobre ts/tsx/json/yaml/yml | B |
 | `pnpm stack:review` | `stack-code-reviewer` standalone (mesmo gate do pre-commit e do CI) | A + B |
@@ -164,10 +164,9 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 | `pnpm review:lint` | Valida a matriz `review-routing.md` (YAML, LOC, reviewer refs) | A + B |
 | `pnpm specialist:lint` | Idem para a matriz `specialist-routing.md` — **fora do preflight** | nenhuma |
 | `pnpm archive:lint` | Valida frontmatter de `.agents/runs/archive/*.md` — **alvo ausente** | nenhuma |
-| `pnpm tooling:test` | Suíte de testes do próprio tooling (10 arquivos / 150 testes) | nenhuma |
+| `pnpm tooling:test` | Suíte de testes do próprio tooling (15 arquivos / 195 testes) | nenhuma |
 | `pnpm review:route` / `pnpm specialist:route` | Roteamento headless: emite YAML de despacho | nenhuma |
 | `pnpm test:unit` / `test:coverage` / `test:integration` / `test:e2e` | Suítes via turbo | B |
-| `pnpm tdd:check` | Task órfã do turbo — nenhum pacote a implementa; materializa só `test:unit` | nenhuma |
 | `pnpm lint` | `turbo run lint` — no `apps/api` é stub `echo 'apps/api lint stub…' && exit 0` | B (parcial) |
 | `pnpm typecheck` | `turbo run typecheck` — real em `apps/api` (`tsc --noEmit`) | B |
 

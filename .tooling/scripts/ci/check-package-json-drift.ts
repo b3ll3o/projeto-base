@@ -43,6 +43,11 @@ const REQUIRED_SCRIPTS = [
  *   o arquivo — assume shell válido.
  * - A checagem de tasks turbo (5) exige `pnpm-workspace.yaml` legível. Sem
  *   ele, o sub-check é marcado `skipped` em vez de passar em silêncio.
+ * - **Só varre o `package.json` raiz.** Task turbo fantasma declarada no
+ *   `package.json` de um app (ex.: `apps/web`) escapa:
+ *   `pnpm --filter @projeto/web e2e:typo` quebra com o preflight verde.
+ *   Os 4 call-sites `pnpm turbo run` do `ci.yml` também não são varridos.
+ *   Fechar isso é change próprio.
  */
 export async function checkPackageJsonDrift(opts: {
   packageJsonPath: string;
