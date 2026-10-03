@@ -157,7 +157,7 @@ Updates de severidade `info` ou `minor` são aplicados automaticamente quando:
 
 Updates de severidade `major` ou com risco de `breaking change` **sempre** geram `ALERT` (não auto-aplicam).
 
-### Passo 4: Reportar e Bloquear
+### Passo 4: Reportar
 
 ```yaml
 result:
@@ -219,8 +219,7 @@ result:
 # Roda APÓS stack-code-reviewer
 pnpm tsx tooling/scripts/doc-sync.ts \
   --files="$(git diff --cached --name-only --diff-filter=ACM)" \
-  --mode=incremental \
-  --auto-apply-minor=true
+  --mode=incremental
 ```
 
 ### CI (`.github/workflows/sync-docs.yml`)
@@ -255,7 +254,12 @@ jobs:
 - ❌ Reescrever docs sem mudança de código (escopo do `doc-writer`)
 - ❌ Auto-aplicar updates de breaking change sem humano
 - ❌ Inventar mapeamento code→docs sem evidência
-- ❌ Bloquear merge por `info` ou `minor`
+- ⚠️ **Não bloquear merge por severidade documental.** `doc-sync` é
+  **report-only** por contrato: o script nunca chama `process.exit`
+  (`grep -c 'process.exit' tooling/scripts/doc-sync.ts` → `0`). Ele gera
+  `doc-sync-report.json` e imprime as ações — artefato para revisão humana.
+  Bloquear antes de calibrar `docs_health_score` travaria commits legítimos.
+  A barreira de merge é o check `quality` exigido pelo ruleset de `main`.
 - ❌ Modificar código (só modifico docs)
 - ❌ Criar doc redundante (checar se já existe similar)
 

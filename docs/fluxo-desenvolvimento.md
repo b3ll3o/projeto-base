@@ -100,10 +100,10 @@ pnpm exec lint-staged || exit 1
 
 # Bloco 2 — se houver staged casando com \.(ts|tsx|prisma)$
 pnpm tsx tooling/scripts/stack-code-reviewer.ts --files="$changed" --mode=pre-commit || exit 1
-pnpm tsx tooling/scripts/doc-sync.ts --files="$changed" --mode=incremental --auto-apply-minor=true || exit 1
+pnpm tsx tooling/scripts/doc-sync.ts --files="$changed" --mode=incremental || exit 1
 ```
 
-**Consequência prática:** um commit que mexa só em `.md` ou `Dockerfile` **não passa por nenhum dos dois** (`.yml`/`.yaml` passam pelo Bloco 1, mas só como `prettier --write`). O único gate que poderia ver esses arquivos (`checkDocRefs`) só cobre `docs/` e `.agents/specs/` (§7).
+**Consequência prática:** um commit que mexa só em `.md` ou `Dockerfile` **não passa por nenhum dos dois** (`.yml`/`.yaml` passam pelo Bloco 1, mas só como `prettier --write`). O gate que poderia ver esses arquivos (`checkDocRefs`) não roda no `pre-commit`: roda no `pre-push` e no job `preflight` do CI, e desde a correção do escopo (§F2-T2) ele cobre **todo `.md` versionado** (`git ls-files '*.md'`), não só `docs/` e `.agents/specs/`.
 
 ### 3.2 Detalhe do pre-push
 

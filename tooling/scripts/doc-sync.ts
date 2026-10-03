@@ -9,7 +9,7 @@
 // pattern bate.
 //
 // Uso:
-//   tsx tooling/scripts/doc-sync.ts --files="a.ts\nb.ts" --mode=incremental --auto-apply-minor=false
+//   tsx tooling/scripts/doc-sync.ts --files="a.ts\nb.ts" --mode=incremental
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, isAbsolute, join } from 'node:path';
@@ -147,7 +147,7 @@ function checkControllerDoc(file: string, content: string): DocAction[] {
   return actions;
 }
 
-export function syncDocs(files: string[], _autoApplyMinor = false): DocSyncReport {
+export function syncDocs(files: string[]): DocSyncReport {
   const actions: DocAction[] = [];
   const filesChanged: string[] = [];
   let alerts = 0;
@@ -208,7 +208,6 @@ export function syncDocs(files: string[], _autoApplyMinor = false): DocSyncRepor
 function parseArgs(): {
   files: string[];
   mode: string;
-  autoApplyMinor: boolean;
   outFile: string;
 } {
   const args = process.argv.slice(2);
@@ -223,7 +222,6 @@ function parseArgs(): {
   return {
     files,
     mode: String(opts['mode'] ?? 'incremental'),
-    autoApplyMinor: opts['auto-apply-minor'] === 'true',
     outFile: String(opts['out-file'] ?? 'doc-sync-report.json'),
   };
 }
@@ -234,7 +232,7 @@ function main(): void {
     console.log('✓ Nenhum arquivo para sincronizar docs');
     return;
   }
-  const report = syncDocs(files, false);
+  const report = syncDocs(files);
   writeFileSync(outFile, JSON.stringify(report, null, 2));
   console.log(`[doc-sync] mode=${mode} files=${files.length}`);
   console.log(
