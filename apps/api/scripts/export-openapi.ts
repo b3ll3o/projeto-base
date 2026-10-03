@@ -68,12 +68,10 @@ async function exportOpenApi(): Promise<void> {
   // abertos do NestJS/Fastify.
   await app.close();
 
-  // eslint-disable-next-line no-console
   console.log(`OpenAPI exportado para ${outputPath}`);
 }
 
 exportOpenApi().catch((err) => {
-  // eslint-disable-next-line no-console
   console.error('OpenAPI export falhou:', err);
   process.exit(1);
 });

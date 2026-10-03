@@ -66,7 +66,7 @@ export class PrismaUserRepository implements UserRepositoryPort {
       }
       try {
         await this.prisma.user.create({ data: row });
-      } catch (e) {
+      } catch {
         // Possível race: outro processo inseriu entre o findUnique e o create.
         // Recarrega para distinguir 0 vs duplicado.
         const actual = await this.prisma.user.findUnique({ where: { id } });

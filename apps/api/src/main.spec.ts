@@ -1,7 +1,7 @@
 // apps/api/src/main.spec.ts
 import { describe, it, expect, vi } from 'vitest';
 import { GlobalExceptionFilter } from './shared/infrastructure/http/global-exception.filter.js';
-import { HttpException, HttpStatus } from '@nestjs/common';
+import { HttpException, HttpStatus, type ArgumentsHost } from '@nestjs/common';
 
 describe('GlobalExceptionFilter', () => {
   it('converte HttpException em Problem Details (RFC 7807)', () => {
@@ -14,7 +14,7 @@ describe('GlobalExceptionFilter', () => {
         getResponse: () => fakeReply,
         getRequest: () => ({ url: '/api/v1/users/u-1', method: 'GET', id: 'req-1' }),
       }),
-    } as any;
+    } as unknown as ArgumentsHost;
     filter.catch(new HttpException('Não encontrado', HttpStatus.NOT_FOUND), host);
     expect(statusSpy).toHaveBeenCalledWith(HttpStatus.NOT_FOUND);
     expect(sendSpy).toHaveBeenCalledTimes(1);

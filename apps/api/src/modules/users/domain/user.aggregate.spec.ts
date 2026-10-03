@@ -9,8 +9,6 @@ import { UserDeletedException, InvalidRestoreException } from './exceptions/user
 const T0 = new Date('2026-09-21T10:00:00Z');
 const T1 = new Date('2026-09-21T11:00:00Z');
 const T2 = new Date('2026-09-21T12:00:00Z');
-const T3 = new Date('2026-09-21T13:00:00Z');
-const T4 = new Date('2026-09-21T14:00:00Z');
 
 describe('User aggregate', () => {
   describe('criar()', () => {

@@ -5,7 +5,6 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { buildResource } from './resource.js';
 
 declare global {
-  // eslint-disable-next-line no-var
   var __otel_sdk__: NodeSDK | undefined;
 }
 

@@ -11,7 +11,6 @@ import {
   ApplicationConcurrencyException,
   ApplicationEmailAlreadyInUseException,
   ApplicationInvalidRestoreException,
-  ApplicationResourceDeletedException,
   ApplicationResourceNotFoundException,
   ApplicationValidationException,
 } from './exceptions/application.exceptions.js';
