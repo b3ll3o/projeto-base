@@ -65,7 +65,14 @@ export async function checkTsconfigDrift(opts: {
   }
 
   if (files.length === 0) {
-    return { ok: true, errors: [] };
+    // Latente hoje (há 6 tsconfigs), mas o early-return silencioso é um `✓`
+    // que pode voltar a mentir se o glob deixar de casar.
+    return {
+      ok: true,
+      errors: [],
+      skipped: true,
+      reason: `nenhum tsconfig encontrado sob '${opts.tsconfigsRoot}'`,
+    };
   }
 
   // Carrega todos os tsconfigs

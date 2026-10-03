@@ -25,37 +25,35 @@ projeto-base/
 ├── README.md                           # Este arquivo
 ├── .markdownlint.json                  # Configuração do lint de Markdown
 ├── .agents/
-│   ├── agents/                         # 13 agents (10 genéricos + 3 specialists de stack)
+│   ├── agents/                         # 19 agents (12 genéricos + 2 routers + 5 specialists de stack)
 │   │   ├── agent-architect.md
-│   │   ├── orchestrator.md
-│   │   ├── explorer.md
 │   │   ├── code-reviewer.md
-│   │   ├── security-auditor.md
-│   │   ├── refactorer.md
-│   │   ├── test-writer.md
-│   │   ├── tdd-enforcer.md
+│   │   ├── docker-specialist.md
+│   │   ├── doc-sync.md
 │   │   ├── doc-writer.md
+│   │   ├── explorer.md
+│   │   ├── monorepo-specialist.md
+│   │   ├── nestjs-specialist.md
+│   │   ├── nextjs-specialist.md
+│   │   ├── orchestrator.md
+│   │   ├── refactorer.md
+│   │   ├── review-router.md            # roteia diffs pós-task para reviewers
+│   │   ├── security-auditor.md
+│   │   ├── specialist-router.md        # roteia demanda para o(s) specialist(s)
+│   │   ├── stack-code-reviewer.md
 │   │   ├── task-manager.md
-│   │   ├── monorepo-specialist.md      # NOVO (v1.1.0)
-│   │   ├── nestjs-specialist.md        # NOVO (v1.1.0)
-│   │   └── nextjs-specialist.md        # NOVO (v1.1.0)
-│   ├── memory/                         # Memória acumulada por agent (13 arquivos)
-│   ├── skills/
-│   │   └── agents-coordinate/          # Skill de coordenação multi-agent
-│   │       ├── SKILL.md                # Ponto de entrada (≤ 300 linhas)
-│   │       ├── MEMORY.md               # Memória da skill
-│   │       ├── protocolos/             # dispatch, composição, outputs
-│   │       └── exemplos/               # feature-mode completo
-│   ├── specs/
-│   │   └── conventions/                # Sub-specs referenciadas por AGENTS.md §6
-│   │       ├── README.md
-│   │       ├── idioma.md
-│   │       ├── tamanho-e-revisao.md
-│   │       ├── tdd.md
-│   │       ├── evolucao-agents.md
-│   │       ├── git-workflow.md
-│   │       └── estrutura-e-versionamento.md
-│   └── WORKFLOWS.md                    # Fluxos pré-configurados (11 workflows)
+│   │   ├── tdd-enforcer.md
+│   │   ├── telemetry-specialist.md
+│   │   └── test-writer.md
+│   ├── memory/                         # Memória acumulada por agent (21 arquivos)
+│   ├── skills/                         # coordenação, routing, validação (ver AGENTS.md §3)
+│   ├── specs/conventions/              # tdd, git-workflow, cobertura, tamanho… (ver AGENTS.md §6)
+│   └── WORKFLOWS.md                    # Fluxos pré-configurados (10 workflows)
+├── apps/                              # api (NestJS 11) + web (Next.js 15)
+├── packages/                          # eslint-config, shared-types, tsconfig
+├── tooling/scripts/                   # stack-code-reviewer, doc-sync, routers
+├── turbo.json                         # pipeline cacheado (turbo)
+├── pnpm-workspace.yaml
 └── docs/
     ├── TEMPLATE_USAGE.md               # Guia principal (≤ 300 linhas)
     ├── MONOREPO.md                     # NOVO (v1.1.0) — convenções de monorepo
@@ -248,15 +246,19 @@ Cada agent possui arquivo de **memória** em `.agents/memory/<nome>.md` que arma
 
 Detalhes em [`.agents/WORKFLOWS.md`](./.agents/WORKFLOWS.md).
 
-## Stack Configurada (configurar, não criar ainda)
+## Stack e Apps Implementados
 
 Conforme convenção [`docs/STACK.md`](./docs/STACK.md):
 
 - **Monorepo:** pnpm workspaces + Turborepo + Changesets
-- **Backend (apps/api):** NestJS 11 + Fastify + Prisma 6 + PostgreSQL + Redis
+- **Backend (apps/api):** NestJS 11 + Fastify + Prisma 6 + PostgreSQL
 - **Frontend (apps/web):** Next.js 15 (App Router) + React 19 + Tailwind CSS 4 + shadcn/ui
 
-> **⚠️ IMPORTANTE:** A stack está **configurada** (agents specialists prontos, convenções documentadas) mas os apps `apps/api` e `apps/web` ainda **não foram criados**. Crie-os somente quando for implementar a primeira feature.
+Os apps `apps/api` e `apps/web` **já estão implementados** — bounded context
+`users` com auditoria, em camadas `domain/`, `application/` e
+`infrastructure/`, conforme o
+[ADR-0001](./docs/adr/0001-arquitetura-ddd-hexagonal-auditoria.md). Para subir
+localmente, ver a seção "Como executar localmente" acima.
 
 Veja [`docs/MONOREPO.md`](./docs/MONOREPO.md) para convenções detalhadas.
 

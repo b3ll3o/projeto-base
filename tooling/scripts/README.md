@@ -8,7 +8,7 @@ revisões de qualidade e sincronização de documentação.
 | Script | Comando | Quando |
 | --- | --- | --- |
 | `stack-code-reviewer.ts` | `pnpm stack:review --files=<lista>` | pre-commit + CI `review-stack.yml` (D11) |
-| `doc-sync.ts` | `pnpm docs:sync --files=<lista> --auto-apply-minor=<bool>` | pre-commit + CI `sync-docs.yml` (D12) |
+| `doc-sync.ts` | `pnpm docs:sync --files=<lista>` | pre-commit + CI `sync-docs.yml` (D12) — **report-only**: nunca bloqueia |
 
 ## Como adicionar um novo script
 

@@ -136,8 +136,8 @@ tags:                                     # tags livres para busca
 
 ## §7. Cross-refs
 
-- [`.agents/workflows/archive-demand.md`](../workflows/archive-demand.md) — workflow que executa
-- [`.agents/skills/demand-archiving/SKILL.md`](../skills/demand-archiving/SKILL.md) — skill com passos
+- [`.agents/workflows/archive-demand.md`](../../workflows/archive-demand.md) — workflow que executa
+- [`.agents/skills/demand-archiving/SKILL.md`](../../skills/demand-archiving/SKILL.md) — skill com passos
 - [`.agents/specs/conventions/evolucao-agents.md`](./evolucao-agents.md) — integra com ciclo de evolução
 - [`.tooling/scripts/archive-lint.ts`](../../../tooling/scripts/archive-lint.ts) — validador TDD do frontmatter
 - [`docs/TEMPLATE_USAGE.md`](../../../docs/TEMPLATE_USAGE.md) — guia principal (referência)

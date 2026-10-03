@@ -49,11 +49,11 @@ Antes de declarar Fase 6 completa, validar:
 ## Cross-refs Canônicos
 
 - **Spec de design:** [`docs/superpowers/specs/2026-09-22-review-router-design.md`](../specs/2026-09-22-review-router-design.md)
-- **Matriz (fonte da verdade):** [`.agents/specs/conventions/review-routing.md`](../../.agents/specs/conventions/review-routing.md)
-- **Agent:** [`.agents/agents/review-router.md`](../../.agents/agents/review-router.md)
-- **Memory:** [`.agents/memory/review-router.md`](../../.agents/memory/review-router.md)
-- **Skill:** [`.agents/skills/review-routing/SKILL.md`](../../.agents/skills/review-routing/SKILL.md)
-- **Tooling:** [`tooling/scripts/review-router.ts`](../../tooling/scripts/review-router.ts), [`tooling/scripts/lint-review-routing.ts`](../../tooling/scripts/lint-review-routing.ts)
+- **Matriz (fonte da verdade):** [`.agents/specs/conventions/review-routing.md`](../../../.agents/specs/conventions/review-routing.md)
+- **Agent:** [`.agents/agents/review-router.md`](../../../.agents/agents/review-router.md)
+- **Memory:** [`.agents/memory/review-router.md`](../../../.agents/memory/review-router.md)
+- **Skill:** [`.agents/skills/review-routing/SKILL.md`](../../../.agents/skills/review-routing/SKILL.md)
+- **Tooling:** [`tooling/scripts/review-router.ts`](../../../tooling/scripts/review-router.ts), [`tooling/scripts/lint-review-routing.ts`](../../../tooling/scripts/lint-review-routing.ts)
 - **Memórias globais:** `two-stage-review-after-each-task.md`, `review-and-fix-after-each-task.md`, `subagent-driven-development-always.md` (todas em `~/.claude/projects/-home-leo-Documentos-projetos-base/memory/`)
 - **Conventions relacionadas:** `ci-defense-in-depth.md`, `retrospective-capture.md`, `estrutura-e-versionamento.md`
 

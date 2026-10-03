@@ -1,7 +1,7 @@
 # Fase 2 — Shared Audit (Parte 2/3)
 
 > **Continuação** da Fase 2. Veja o índice completo em:
-> [](./2026-09-21-cadastro-usuario-com-auditoria-fase-02-shared-audit.md)
+> []./2026-09-21-cadastro-usuario-com-auditoria-fase-02-shared-audit-part-01.md
 >
 > Esta é a parte 2 de 3 da Fase 2. Pule para a próxima parte ao final.
 

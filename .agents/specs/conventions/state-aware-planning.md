@@ -269,9 +269,9 @@ Demanda: "fix typo in apps/api/src/main.ts comment"
 
 ## §8. Cross-references
 
-- Skill: [`.agents/skills/state-aware-planning/SKILL.md`](../skills/state-aware-planning/SKILL.md)
-- Workflow: [`.agents/workflows/state-aware-planning.md`](../workflows/state-aware-planning.md)
-- Memória: [`.agents/memory/state-aware-planning.md`](../memory/state-aware-planning.md)
+- Skill: [`.agents/skills/state-aware-planning/SKILL.md`](../../skills/state-aware-planning/SKILL.md)
+- Workflow: [`.agents/workflows/state-aware-planning.md`](../../workflows/state-aware-planning.md)
+- Memória: [`.agents/memory/state-aware-planning.md`](../../memory/state-aware-planning.md)
 - AGENTS.md §6 (índice de convenções)
 - [`evolucao-agents.md`](./evolucao-agents.md) (regra `gap_detected`)
 - [`retrospective-capture.md`](./retrospective-capture.md) (pós-atividade)

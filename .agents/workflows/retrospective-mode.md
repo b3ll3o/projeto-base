@@ -113,6 +113,6 @@ Após implementer reportar DONE:
 
 - [`.agents/specs/conventions/retrospective-capture.md`](../specs/conventions/retrospective-capture.md)
 - [`.agents/skills/retrospective-capture/SKILL.md`](../skills/retrospective-capture/SKILL.md)
-- [`.agents/specs/conventions/agent-evolution-and-memory.md`](../specs/conventions/agent-evolution-and-memory.md) (convenção relacionada — como memories são mantidas)
+- [`.agents/specs/conventions/evolucao-agents.md`](../specs/conventions/evolucao-agents.md) (convenção relacionada — como memories são mantidas)
 - [`.agents/specs/conventions/tamanho-e-revisao.md`](../specs/conventions/tamanho-e-revisao.md) (limite 300 linhas para memory files)
 - [`.agents/WORKFLOWS.md`](../WORKFLOWS.md) (este workflow aparece na tabela de Genéricos)

@@ -1,7 +1,7 @@
 # Fase 4 — User Domain (Parte 5/5)
 
 > **Continuação** da Fase 4. Veja o índice completo em:
-> [](./2026-09-21-cadastro-usuario-com-auditoria-fase-04-user-domain.md)
+> []./2026-09-21-cadastro-usuario-com-auditoria-fase-04-user-domain-part-01.md
 >
 > Esta é a parte 5 de 5 da Fase 4. Pule para a próxima parte ao final.
 
@@ -248,4 +248,4 @@ Expected: `✓ domain limpo`.
 
 ---
 
-**Próxima fase:** [`fase-05-user-application.md`](./2026-09-21-cadastro-usuario-com-auditoria-fase-05-user-application.md)
+**Próxima fase:** [`fase-05-user-application.md`]./2026-09-21-cadastro-usuario-com-auditoria-fase-05-user-application-part-01.md

@@ -6,11 +6,16 @@
 // path absoluto, relativo-repo, vazio, e `./` prefix.
 
 import { describe, it, expect } from 'vitest';
-import { isAbsolute } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // Importação indireta via re-export local para validar comportamento
 // sem expor resolvePath como API pública.
 import { syncDocs } from './doc-sync.js';
+
+// Mesmo cálculo do `doc-sync.ts:23-25` — este spec mora no mesmo diretório do
+// módulo, 2 níveis abaixo da raiz do repo.
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 describe('resolvePath (regression)', () => {
   it('CWD não interfere na leitura de schema.prisma relativo', () => {
@@ -40,11 +45,32 @@ describe('resolvePath (regression)', () => {
   it('paths absolutos são preservados (sem dupla resolução)', () => {
     // pt-BR: Se o caller já tem path absoluto, resolvePath não deve
     // prefixar REPO_ROOT (causaria path inválido).
-    const absPath = '/home/leo/Documentos/projetos/base/apps/api/prisma/schema.prisma';
-    if (!isAbsolute(absPath)) {
-      // Skip se REPO_ROOT mudou em outro ambiente (CI/dev/containers).
-      return;
-    }
+    //
+    // O path é derivado do REPO_ROOT real, e não hardcoded. A versão anterior
+    // fixava um diretório home absoluto e tentava se proteger com
+    // `if (!isAbsolute(absPath)) return` — guard que NUNCA dispara, porque uma
+    // string começando com `/` é absoluta em qualquer plataforma. O teste então
+    // rodava de verdade contra um path que só existe na máquina do autor: verde
+    // local, vermelho no CI, onde esse path não existe. Teste que só passa em
+    // uma máquina não é cobertura, é sorte.
+    //
+    // Havia aqui um `expect(isAbsolute(absPath)).toBe(true)`. Era tautologia:
+    // `absPath` é `path.join` de uma constante já absoluta, então a linha
+    // provava que `join` funciona, não que `resolvePath` preserva path
+    // absoluto — que é o que o nome do teste promete. Para exercitar o
+    // `isAbsolute` de verdade seria preciso exportar `resolvePath`; o que a
+    // asserção removida não podia provar, a de baixo prova: um path com dupla
+    // resolução (`REPO_ROOT` prefixado duas vezes) não existe, a leitura falha,
+    // e `report.actions` vem vazio. É essa que verifica a semântica.
+    //
+    // O diretório home literal NÃO volta aqui, nem neste comentário — nem
+    // escrito de outro jeito para escapar do grep. A varredura por path de
+    // máquina em `*.ts` é o que pega o próximo, e um sweep que nunca fecha em
+    // zero é um sweep que ninguém lê. Escrever o padrão literal aqui para
+    // explicar a regra suja exatamente o que a regra existe para limpar: um
+    // guard que se dispara sozinho é a mesma classe do guard que nunca dispara.
+    // O comando mora no backlog da demanda, que é `.md` e está fora do sweep.
+    const absPath = join(REPO_ROOT, 'apps/api/prisma/schema.prisma');
     const report = syncDocs([absPath]);
     // Mesma expectation do teste relativo — absolute path deve funcionar
     // idêntico porque o conteúdo do schema é o mesmo.

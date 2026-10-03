@@ -1,7 +1,7 @@
 # Fase 2 — Shared Audit (Parte 3/3)
 
 > **Continuação** da Fase 2. Veja o índice completo em:
-> [](./2026-09-21-cadastro-usuario-com-auditoria-fase-02-shared-audit.md)
+> []./2026-09-21-cadastro-usuario-com-auditoria-fase-02-shared-audit-part-01.md
 >
 > Esta é a parte 3 de 3 da Fase 2. Pule para a próxima parte ao final.
 
@@ -249,4 +249,4 @@ git status
 
 ---
 
-**Próxima fase:** [`fase-03-apps-scaffold.md`](./2026-09-21-cadastro-usuario-com-auditoria-fase-03-apps-scaffold.md)
+**Próxima fase:** [`fase-03-apps-scaffold.md`]./2026-09-21-cadastro-usuario-com-auditoria-fase-03-apps-scaffold-part-01.md

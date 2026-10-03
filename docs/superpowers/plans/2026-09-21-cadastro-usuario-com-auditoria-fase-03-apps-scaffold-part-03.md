@@ -1,7 +1,7 @@
 # Fase 3 — Apps Scaffold (Parte 3/4)
 
 > **Continuação** da Fase 3. Veja o índice completo em:
-> [](./2026-09-21-cadastro-usuario-com-auditoria-fase-03-apps-scaffold.md)
+> []./2026-09-21-cadastro-usuario-com-auditoria-fase-03-apps-scaffold-part-01.md
 >
 > Esta é a parte 3 de 4 da Fase 3. Pule para a próxima parte ao final.
 

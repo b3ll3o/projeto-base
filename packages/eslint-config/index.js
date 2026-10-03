@@ -14,11 +14,14 @@ export default [
     rules: { 'ddd-hexagonal/no-domain-imports-from-infra': 'error' },
   },
   {
-    ignores: [
-      '**/dist/**',
-      '**/.next/**',
-      '**/coverage/**',
-      '**/node_modules/**',
-    ],
+    // Parâmetro prefixado com `_` é assinatura de override (ex.: o
+    // `_metadata` de `PipeTransform.transform`), não código morto — o
+    // argumento precisa existir, só não é lido pelo corpo.
+    rules: {
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    },
+  },
+  {
+    ignores: ['**/dist/**', '**/.next/**', '**/coverage/**', '**/node_modules/**'],
   },
 ];

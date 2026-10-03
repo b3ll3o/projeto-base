@@ -1,7 +1,7 @@
 # Fase 6 — User Infra Persistence (Parte 3/4)
 
 > **Continuação** da Fase 6. Veja o índice completo em:
-> [](./2026-09-21-cadastro-usuario-com-auditoria-fase-06-user-infra-persistence.md)
+> []./2026-09-21-cadastro-usuario-com-auditoria-fase-06-user-infra-persistence-part-01.md
 >
 > Esta é a parte 3 de 4 da Fase 6. Pule para a próxima parte ao final.
 

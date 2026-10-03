@@ -1,8 +1,8 @@
 # Plano de Implementação — Telemetria (OpenTelemetry)
 
-> **Snapshot:** [`.agents/runs/state-snapshot-20260923T183938Z.md`](../../.agents/runs/state-snapshot-20260923T183938Z.md)
-> **Spec (decisões):** [`.agents/agents/telemetry-specialist.md`](../../.agents/agents/telemetry-specialist.md) (com 3 siblings em `.agents/agents/telemetry-specialist/`)
-> **Convenção:** [`.agents/specs/conventions/state-aware-planning.md`](../../.agents/specs/conventions/state-aware-planning.md)
+> **Snapshot:** [`.agents/runs/state-snapshot-20260923T183938Z.md`](../../../.agents/runs/state-snapshot-20260923T183938Z.md)
+> **Spec (decisões):** [`.agents/agents/telemetry-specialist.md`](../../../.agents/agents/telemetry-specialist.md) (com 3 siblings em `.agents/agents/telemetry-specialist/`)
+> **Convenção:** [`.agents/specs/conventions/state-aware-planning.md`](../../../.agents/specs/conventions/state-aware-planning.md)
 > **Branch:** `feat/telemetria` (a partir de `main @ 24b1b8f`)
 > **Pré-requisitos:** v1.7.0 merged (commit `cb48450`)
 

@@ -1,7 +1,7 @@
 # Fase 7 — User Infra HTTP (Parte 2/3)
 
 > **Continuação** da Fase 7. Veja o índice completo em:
-> [](./2026-09-21-cadastro-usuario-com-auditoria-fase-07-user-infra-http.md)
+> []./2026-09-21-cadastro-usuario-com-auditoria-fase-07-user-infra-http-part-01.md
 >
 > Esta é a parte 2 de 3 da Fase 7. Pule para a próxima parte ao final.
 

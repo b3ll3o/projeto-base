@@ -1,7 +1,7 @@
 # Fase 1 — Foundation (Parte 4/4)
 
 > **Continuação** da Fase 1. Veja o índice completo em:
-> [](./2026-09-21-cadastro-usuario-com-auditoria-fase-01-foundation.md)
+> []./2026-09-21-cadastro-usuario-com-auditoria-fase-01-foundation-part-01.md
 >
 > Esta é a parte 3 de 3 da Fase 1. Pule para a próxima parte ao final.
 
@@ -168,4 +168,4 @@ git status
 
 ---
 
-**Próxima fase:** [`fase-02-shared-audit.md`](./2026-09-21-cadastro-usuario-com-auditoria-fase-02-shared-audit.md)
+**Próxima fase:** [`fase-02-shared-audit.md`]./2026-09-21-cadastro-usuario-com-auditoria-fase-02-shared-audit-part-01.md

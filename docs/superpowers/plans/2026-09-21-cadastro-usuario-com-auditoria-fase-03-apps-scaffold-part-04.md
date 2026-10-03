@@ -1,7 +1,7 @@
 # Fase 3 — Apps Scaffold (Parte 4/4)
 
 > **Continuação** da Fase 3. Veja o índice completo em:
-> [](./2026-09-21-cadastro-usuario-com-auditoria-fase-03-apps-scaffold.md)
+> []./2026-09-21-cadastro-usuario-com-auditoria-fase-03-apps-scaffold-part-01.md
 >
 > Esta é a parte 4 de 4 da Fase 3. Pule para a próxima parte ao final.
 
@@ -165,4 +165,4 @@ Expected: resposta `No relations found.` (ok — DB vazio).
 
 ---
 
-**Próxima fase:** [`fase-04-user-domain.md`](./2026-09-21-cadastro-usuario-com-auditoria-fase-04-user-domain.md)
+**Próxima fase:** [`fase-04-user-domain.md`]./2026-09-21-cadastro-usuario-com-auditoria-fase-04-user-domain-part-01.md

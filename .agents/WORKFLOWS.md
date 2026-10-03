@@ -22,7 +22,7 @@
 | `ci-defense-mode` | "blindar CI / auditar pipeline" | sequential | monorepo-specialist → ci-defense-in-depth → code-reviewer |
 | `state-aware-planning` (v1.8.0+) | "planejar / state-aware / snapshot antes de planejar" | sequential | state-aware-planning (skill) → specialist-router (camada 1; opcional) |
 | `retrospective-mode` | "capturar aprendizados / post-mortem" | sequential | explorer → retrospective-capture → doc-writer (+ task-manager) |
-| `review-routing` | _(pendente Fase 3)_ | sequential | review-router → specialists (auto-dispatched via matriz) |
+| `review-routing` | — | sequential | review-router → specialists (auto-dispatched via matriz) |
 | `specialist-routing` | specialist-router | sequential | router → controller (decide planejar ou bloquear) |
 
 ### Por Stack (workflows detalhados em `.agents/workflows/`)
@@ -324,7 +324,7 @@ doc-writer → code-reviewer:{success_criteria:"versão bumped+CHANGELOG+0 cross
 
 - [`.agents/agents/specialist-router.md`](./agents/specialist-router.md)
 - [`.agents/specs/conventions/specialist-routing.md`](./specs/conventions/specialist-routing.md) — matriz canônica
-- [`.agents/memory/specialist-router.md`](../memory/specialist-router.md)
+- [`.agents/memory/specialist-router.md`](./memory/specialist-router.md)
 - [`.agents/specs/conventions/evolucao-agents.md`](./specs/conventions/evolucao-agents.md) — regra gap_detected
 
 ## `retrospective-mode` — Captura de Aprendizados Pós-Atividade

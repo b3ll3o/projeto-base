@@ -36,8 +36,14 @@ function checkReviewRoutingLint(): CheckResult {
   const matrixFile = '.agents/specs/conventions/review-routing.md';
 
   if (!existsSync(matrixPath) || !existsSync(matrixFile)) {
-    // Sem matriz ou sem lint ainda (repo pré-Task 1.8/1.9) — não falha.
-    return { ok: true, errors: [] };
+    // Sem matriz ou sem lint ainda (repo pré-Task 1.8/1.9) — não falha,
+    // mas também não pode reportar que verificou.
+    return {
+      ok: true,
+      errors: [],
+      skipped: true,
+      reason: `matriz de routing ausente (${matrixPath} ou ${matrixFile})`,
+    };
   }
 
   try {
@@ -54,11 +60,32 @@ function checkReviewRoutingLint(): CheckResult {
   }
 }
 
+/**
+ * Marca de um check que rodou até o fim.
+ *
+ * `skipped` NAO pode renderizar `✓`: o painel precisa distinguir "verifiquei e
+ * passou" de "não havia o que verificar". Sem essa separação, um check que
+ * faz early-return por pré-requisito ausente reporta sucesso sem ter
+ * verificado nada — o token de sucesso mente, e é o pior tipo de bug de gate
+ * porque parece que o gate funcionou.
+ */
+export function formatMark(r: CheckResult): string {
+  if (!r.ok) return '✗';
+  if (r.skipped) return `– (skipped: ${r.reason ?? 'sem motivo declarado'})`;
+  return '✓';
+}
+
 async function main(): Promise<void> {
   console.log('\u{1F50D} Pre-flight CI checks\n');
   const checks: Array<{ name: string; fn: () => CheckResult | Promise<CheckResult> }> = [
-    { name: 'Cross-refs em docs', fn: () => checkDocRefs({ docsRoot: 'docs' }) },
-    { name: 'Cross-refs em .agents/specs', fn: () => checkDocRefs({ docsRoot: '.agents/specs' }) },
+    // F2-T2: escopo = todo `.md` versionado (git ls-files), nao só `docs` +
+    // `.agents/specs`. Antes, `AGENTS.md` — o indice que todo agent le
+    // primeiro para decidir a quem despachar — ficava fora do gate.
+    // `docsRoots` é o fallback (walk) caso o git não esteja disponível.
+    {
+      name: 'Cross-refs em .md versionados',
+      fn: () => checkDocRefs({ docsRoot: '.', docsRoots: ['docs', '.agents/specs'] }),
+    },
     {
       name: 'tsconfig drift (strict, noUncheckedIndexedAccess)',
       fn: () =>
@@ -67,11 +94,9 @@ async function main(): Promise<void> {
           consistentKeys: ['strict', 'noUncheckedIndexedAccess'],
         }),
     },
-    // `apps/api/.eslintrc.js` é convenção NestJS válida (escopo fora deste plano).
-    // Migrar NestJS para flat config é decisão separada; por ora allowlist.
     {
       name: 'ESLint config drift (apps)',
-      fn: () => checkEslintDrift({ appsRoot: 'apps', allowlist: ['api/.eslintrc.js'] }),
+      fn: () => checkEslintDrift({ appsRoot: 'apps', allowlist: [] }),
     },
     {
       name: 'ESLint config drift (packages)',
@@ -100,17 +125,19 @@ async function main(): Promise<void> {
   ];
 
   let totalErrors = 0;
+  let totalSkipped = 0;
   for (const check of checks) {
     process.stdout.write(`  • ${check.name}... `);
     const result = await check.fn();
-    if (result.ok) {
-      console.log('✓');
-    } else {
+    if (!result.ok) {
       console.log('✗');
       for (const err of result.errors) {
         console.log(`      ${err}`);
       }
       totalErrors += result.errors.length;
+    } else {
+      if (result.skipped) totalSkipped++;
+      console.log(formatMark(result));
     }
   }
 
@@ -119,10 +146,24 @@ async function main(): Promise<void> {
     console.error(`❌ ${totalErrors} erro(s) encontrado(s). Corrigir antes de push.`);
     process.exit(1);
   }
+  // O resumo repete a mesma regra do painel: um check que não rodou não pode
+  // ser somado como se tivesse passado.
+  if (totalSkipped > 0) {
+    console.log(
+      `⚠ ${totalErrors} erro(s); ${totalSkipped} check(s) não rodaram (skipped) — ` +
+        `ver as marcas acima. "Todos passaram" seria mentira enquanto houver skip.`,
+    );
+    return;
+  }
   console.log('✓ Todos os checks passaram.');
 }
 
-main().catch((err) => {
-  console.error('Erro inesperado:', err);
-  process.exit(2);
-});
+// Gate IIFE: sem isso, importar `formatMark` num teste executa a preflight
+// inteira em background — o teste passa, mas o processo paga por uma checagem
+// que ele nao pediu. Mesmo padrao de `stack-code-reviewer.ts`.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((err) => {
+    console.error('Erro inesperado:', err);
+    process.exit(2);
+  });
+}

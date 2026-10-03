@@ -82,6 +82,7 @@ jobs:
         run: |
           if git rev-parse --verify --quiet "refs/tags/${{ steps.version.outputs.tag }}"; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::Tag ${{ steps.version.outputs.tag }} já existe. Nada foi criado — se o footer regrediu, o bump não saiu."
             echo "Tag ${{ steps.version.outputs.tag }} já existe — noop."
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"

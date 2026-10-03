@@ -30,6 +30,11 @@ jobs:
         run: pnpm format:check
       - name: Run preflight checks
         run: pnpm ci:preflight
+      # pt-BR: a suite de .tooling/scripts/ci (os checks do preflight) nao
+      # rodava em lugar nenhum ate v1.9.1 — e por isso que 3 specs ficaram
+      # vermelhos sem ninguem perceber. Rodar no job que ja falha rapido.
+      - name: Run tooling tests
+        run: pnpm tooling:test
   quality:
     needs: preflight
     runs-on: ubuntu-latest

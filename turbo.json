@@ -14,13 +14,6 @@
     "test:coverage": { "outputs": ["coverage/**"] },
     "test:integration": { "cache": false, "outputs": [] },
     "test:e2e": { "cache": false, "outputs": [] },
-    "tdd:check": { "dependsOn": ["test:unit"], "outputs": [] },
-    "stack:review": { "cache": false },
-    "docs:sync": { "cache": false },
-    "ci:quality": {
-      "dependsOn": ["tdd:check", "stack:review", "docs:sync"],
-      "outputs": []
-    },
     "clean": { "cache": false }
   }
 }

@@ -162,9 +162,9 @@ next_steps: [...]
 
 ## Referências Canônicas
 
-- [`.agents/specs/conventions/review-routing.md`](../specs/conventions/review-routing.md) — matriz
-- [`.agents/skills/review-routing/SKILL.md`](../skills/review-routing/SKILL.md) — workflow detalhado (a criar em Task 3.3)
-- [`.agents/memory/review-router.md`](../memory/review-router.md) — memória evolutiva
+- [`.agents/specs/conventions/review-routing.md`](../../../.agents/specs/conventions/review-routing.md) — matriz
+- [`.agents/skills/review-routing/SKILL.md`](../../../.agents/skills/review-routing/SKILL.md) — workflow detalhado (a criar em Task 3.3)
+- [`.agents/memory/review-router.md`](../../../.agents/memory/review-router.md) — memória evolutiva
 - Spec de design: `docs/superpowers/specs/2026-09-22-review-router-design.md`
 
 ---
@@ -235,8 +235,8 @@ _(vazio — primeira versão)_
 ## Cross-refs
 
 - [`.agents/agents/review-router.md`](../agents/review-router.md) — definition
-- [`.agents/skills/review-routing/SKILL.md`](../skills/review-routing/SKILL.md) — workflow
-- [`.agents/specs/conventions/review-routing.md`](../specs/conventions/review-routing.md) — matriz
+- [`.agents/skills/review-routing/SKILL.md`](../../../.agents/skills/review-routing/SKILL.md) — workflow
+- [`.agents/specs/conventions/review-routing.md`](../../../.agents/specs/conventions/review-routing.md) — matriz
 ```
 
 - [ ] **Step 2: Commit**
@@ -342,9 +342,9 @@ Após fix DONE, **re-despachar router** (re-rodar Task 1-5 com branch atualizada
 
 ## Cross-refs
 
-- [`.agents/agents/review-router.md`](../../agents/review-router.md)
-- [`.agents/specs/conventions/review-routing.md`](../../specs/conventions/review-routing.md)
-- Memory: [`two-stage-review-after-each-task`](../../../../home/leo/.claude/projects/-home-leo-Documentos-projetos-base/memory/two-stage-review-after-each-task.md), [`review-and-fix-after-each-task`](../../../../home/leo/.claude/projects/-home-leo-Documentos-projetos-base/memory/review-and-fix-after-each-task.md)
+- [`.agents/agents/review-router.md`](../../../.agents/agents/review-router.md)
+- [`.agents/specs/conventions/review-routing.md`](../../../.agents/specs/conventions/review-routing.md)
+- Memory do agent (fora do repo, sem path relativo que resolva): `two-stage-review-after-each-task`, `review-and-fix-after-each-task`
 ```
 
 - [ ] **Step 2: Validar LOC**

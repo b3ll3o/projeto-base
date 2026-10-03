@@ -14,7 +14,7 @@ import type { FastifyAdapter } from '@nestjs/platform-fastify';
 import { HttpException, Logger } from '@nestjs/common';
 import type { ArgumentsHost } from '@nestjs/common';
 import type { Span } from '@opentelemetry/api';
-import { trace, context } from '@opentelemetry/api';
+import { trace } from '@opentelemetry/api';
 import { GlobalExceptionFilter } from './global-exception.filter.js';
 import {
   ApplicationResourceNotFoundException,

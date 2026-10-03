@@ -31,15 +31,23 @@ async function checkArchiveIntegrity(repoRoot: string): Promise<CheckResult> {
   const lintScript = join(repoRoot, 'tooling/scripts/archive-lint.ts');
 
   if (!existsSync(archiveDir)) {
-    // Sem archive dir ainda (B23 acabou de criar a convenção) — não falha.
-    return { ok: true, errors: [] };
-  }
-
-  if (!existsSync(lintScript)) {
-    // Script não existe (pré-B23) — não bloqueia preflight, mas avisa.
+    // Sem archive dir (B23 acabou de criar a convenção) — não falha, mas
+    // também não verifica nada: o `✓` aqui era puro teatro.
     return {
       ok: true,
       errors: [],
+      skipped: true,
+      reason: 'diretório .agents/runs/archive não existe',
+    };
+  }
+
+  if (!existsSync(lintScript)) {
+    // Script não existe (pré-B23) — não bloqueia preflight, mas declara.
+    return {
+      ok: true,
+      errors: [],
+      skipped: true,
+      reason: 'tooling/scripts/archive-lint.ts não existe',
     };
   }
 

@@ -20,7 +20,7 @@ alteração começa de `main` atualizado.**
   antes de criar a branch de trabalho
 - ✅ **OBRIGATÓRIO** criar branch `feature/`, `fix/`, `refactor/`, `docs/`, `chore/` ou `hotfix/`
 - ✅ **OBRIGATÓRIO** abrir PR com revisão aprovada
-- ✅ **OBRIGATÓRIO** checks verdes (`tdd-enforcer`, `code-reviewer`, size-check)
+- ✅ **OBRIGATÓRIO** checks verdes do [`ci.yml`](../../../.github/workflows/ci.yml): `preflight` e `quality`
 - ✅ **OBRIGATÓRIO** Conventional Commits em pt-BR e TDD em toda alteração
 
 ## Trunk-Based: o que significa aqui
@@ -31,11 +31,29 @@ de revisão humana, e por isso deve ser cobrada no PR.
 
 | Princípio                        | Aplicação neste repo                                        | Como é garantido |
 |----------------------------------|-------------------------------------------------------------|------------------|
-| Tronco único e sempre integrável | `main` nunca recebe commit vermelho — o gate de cobertura (§ [cobertura-testes.md](./cobertura-testes.md)) e o CI travam o merge | **Impõe**: branch protection + status checks |
+| Tronco único e sempre integrável | `main` nunca recebe commit vermelho — o gate de cobertura (§ [cobertura-testes.md](./cobertura-testes.md)) e o CI travam o merge | **Impõe**: `required_status_checks` = `quality` (veja nota) |
 | Base sempre atualizada           | `main` é atualizada **antes** de cada branch de trabalho     | **Convenção**: revisão no PR (o hook não valida a base) |
 | Branches curtas                  | Ciclo de horas, não semanas | **Convenção**: nada no GitHub detecta duração de branch |
 | Commit pequeno e focado           | Um commit = uma mudança coerente; facilita `bisect` e `revert` | **Convenção**: revisão no PR |
 | Sem branch permanente            | Nenhuma branch vive além do seu PR (só `main` e tags) | **Convenção**: limpeza pós-merge é manual |
+
+> **Nota — o que o GitHub de fato impõe.** O ruleset `master`
+> (`23853096`) tem `deletion`, `non_fast_forward`, `pull_request` **e**
+> `required_status_checks` com context `quality` (`strict: false`).
+>
+> `quality` tem `needs: preflight` no [`ci.yml`](../../../.github/workflows/ci.yml),
+> então os dois jobs gateiam o merge — mas a garantia é da **cadeia de
+> workflows**, não de cada check: se `quality` deixar de ter `needs: preflight`,
+> `preflight` continua opcional sem nenhum aviso. Ainda **não** há
+> `required_approving_review_count` (segue `0` — o repositório é de contributor
+> único, e exigir aprovação travaria o autor em PR solo).
+>
+> Como o [`ci.yml`](../../../.github/workflows/ci.yml) só dispara em
+> `push: feat/**` e `pull_request: main`, **`main` só é atualizável por PR**:
+> um push direto não tem check `quality` reportado naquele commit e é
+> rejeitado. `bypass_actors` é vazio — ninguém contorna, nem administrador.
+> A barreira local (`pre-push`) continua sendo a camada mais rápida, mas
+> deixou de ser a única.
 
 ## Ponto de Partida Obrigatório
 
@@ -109,9 +127,8 @@ O nome deve descrever **o problema**, não a ferramenta. `fix/coverage-gate-40`
        │
        ▼
 9. Aguardar checks + revisão
-   - tdd-enforcer (pass)
-   - code-reviewer (approve)
-   - markdown-size-check (≤ 300 linhas)
+   - `preflight` (pass)
+   - `quality` (pass)
        │
        ▼
 10. Merge (squash preferencialmente) e apagar a branch
@@ -154,9 +171,8 @@ Configurar em **Settings → Branches → Branch protection rules → `main`**:
 - ✅ Require approvals: 1+
 - ✅ Dismiss stale pull request approvals when new commits are pushed
 - ✅ Require status checks to pass before merging
-  - `tdd-enforcer`
-  - `code-reviewer`
-  - `markdown-size-check`
+  - `preflight`
+  - `quality`
 - ✅ Require linear history (squash merge)
 - ✅ Include administrators (ninguém bypassa)
 
@@ -166,5 +182,11 @@ Nenhuma. Hotfixes urgentes também usam PR (com label `hotfix` para SLA diferenc
 
 ## Bloqueio Automático
 
-`tdd-enforcer` é despachado em todo PR. Em breve, `git-workflow-enforcer` validará
-se o PR está abrindo para `main` a partir de branch válida.
+Os gates que realmente rodam em todo PR são o job `preflight` (que executa
+`pnpm ci:preflight`) e o job `quality`. **Nenhum agente é despachado
+automaticamente**: quem invoca o agente de enforcement de TDD e o de revisão
+de código é o operador, ou a matriz de routing
+([`review-routing.md`](./review-routing.md)), que despacha o reviewer de
+stack + specialists — ver
+[`review-stack.yml`](../../../.github/workflows/review-stack.yml). Nenhum
+agente valida hoje se o PR abre para `main` a partir de branch válida.

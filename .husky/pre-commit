@@ -22,7 +22,7 @@ if [ -n "$changed_files" ]; then
   fi
   if [ -f tooling/scripts/doc-sync.ts ]; then
     echo "doc-sync..."
-    pnpm tsx tooling/scripts/doc-sync.ts --files="$changed_files" --mode=incremental --auto-apply-minor=true || exit 1
+    pnpm tsx tooling/scripts/doc-sync.ts --files="$changed_files" --mode=incremental || exit 1
   else
     echo "skip doc-sync (tooling/scripts/ not yet ready — Phase 8)"
   fi
