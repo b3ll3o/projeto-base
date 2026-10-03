@@ -44,6 +44,10 @@ const DDD_BLOCKED_IMPORTS = [
   /class-transformer/,
   /^reflect-metadata$/,
   /^rxjs$/,
+  // SKILL.md:58 — `domain/` nao pode importar arquivos da camada de
+  // adaptacao. Mesmo padrao do gate ESLint (no-domain-imports-from-infra.js),
+  // para que os 2 gates nao discordem sobre o mesmo arquivo.
+  /\/infrastructure\//,
 ];
 
 // pt-BR: regra do spec §1 ("Domain puro") só vale para arquivos cujo path

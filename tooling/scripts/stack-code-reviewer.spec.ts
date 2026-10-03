@@ -22,6 +22,39 @@ function tmpFile(name: string, content: string): string {
 }
 
 describe('stack-code-reviewer', () => {
+  // Gate DDD para import RELATIVO de infrastructure/ a partir de domain/.
+  // Antes these 3 cases, DDD_BLOCKED_IMPORTS so listava framework: o padrao
+  // nao casava e '../infrastructure/persistence/repo' gerava 0 findings.
+  it('bloqueia import relativo de infrastructure/ a partir de domain/', () => {
+    const file = tmpFile(
+      'domain/probe.vo.ts',
+      "import { Repo } from '../infrastructure/persistence/repo';\nexport class P {}\n",
+    );
+    const report = reviewFiles([file]);
+    expect(
+      report.findings.some(
+        (f) => f.severity === 'blocker' && f.rule === 'ddd-h1-no-framework-imports-in-domain',
+      ),
+    ).toBe(true);
+  });
+
+  it('nao bloqueia import de infrastructure/ fora de domain/', () => {
+    const file = tmpFile(
+      'application/use-cases/user.uc.ts',
+      "import { F } from '../infrastructure/http/f.js';\nexport class U {}\n",
+    );
+    expect(reviewFiles([file]).findings.filter((f) => f.severity === 'blocker')).toHaveLength(0);
+  });
+
+  it('nao bloqueia infrastructure/ citado em comentario', () => {
+    // Caso real: apps/api/src/modules/users/domain/ports/user-repository.port.ts:40
+    const file = tmpFile(
+      'domain/ports/repo.port.ts',
+      'export interface R {}\n// a implementacao fica em infrastructure/persistence/\n',
+    );
+    expect(reviewFiles([file]).findings.filter((f) => f.severity === 'blocker')).toHaveLength(0);
+  });
+
   it('detecta blocker em domain com import proibido', () => {
     const file = tmpFile('domain/user.spec.ts', `import { Injectable } from '@nestjs/common';\n`);
     const report = reviewFiles([file]);
