@@ -102,6 +102,6 @@ Heurística de scoring:
 - Skill: [`.agents/skills/retrospective-capture/SKILL.md`](../../skills/retrospective-capture/SKILL.md)
 - Workflow: [`.agents/workflows/retrospective-mode.md`](../../workflows/retrospective-mode.md)
 - Memória da skill: [`.agents/skills/retrospective-capture/MEMORY.md`](../../skills/retrospective-capture/MEMORY.md)
-- Convenção relacionada: [`.agents/specs/conventions/agent-evolution-and-memory.md`](./agent-evolution-and-memory.md) (como memories são mantidas)
+- Convenção relacionada: [`.agents/specs/conventions/evolucao-agents.md`](./evolucao-agents.md) (como memories são mantidas)
 - Regra de tamanho: [`.agents/specs/conventions/tamanho-e-revisao.md`](./tamanho-e-revisao.md)
 - AGENTS.md §6 (índice de convenções)

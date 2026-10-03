@@ -1,7 +1,7 @@
 # Fase 1 — Foundation (Parte 2/4)
 
 > **Continuação** da Fase 1. Veja o índice completo em:
-> [](./2026-09-21-cadastro-usuario-com-auditoria-fase-01-foundation.md)
+> []./2026-09-21-cadastro-usuario-com-auditoria-fase-01-foundation-part-01.md
 >
 > Esta é a parte 2 de 3 da Fase 1. Pule para a próxima parte ao final.
 

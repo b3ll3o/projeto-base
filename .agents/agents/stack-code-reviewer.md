@@ -257,7 +257,7 @@ jobs:
 
 ## Referências Canônicas
 
-- **ADR-0001 (DDD/Hexagonal canônico):** [docs/adr/0001-arquitetura-ddd-hexagonal-auditoria.md](../../../docs/adr/0001-arquitetura-ddd-hexagonal-auditoria.md) — basis das regras DDD/Hexagonal aplicadas neste agent.
+- **ADR-0001 (DDD/Hexagonal canônico):** [docs/adr/0001-arquitetura-ddd-hexagonal-auditoria.md](../../docs/adr/0001-arquitetura-ddd-hexagonal-auditoria.md) — basis das regras DDD/Hexagonal aplicadas neste agent.
 - **Skill `ddd-hexagonal-validation`:** [`.agents/skills/ddd-hexagonal-validation/SKILL.md`](../skills/ddd-hexagonal-validation/SKILL.md) — auditoria manual de boundaries; complementar ao meu gate automatizado.
 - **Skill `ci-defense-in-depth`:** [`.agents/skills/ci-defense-in-depth/SKILL.md`](../skills/ci-defense-in-depth/SKILL.md) — quando adiciono nova regra, sigo o padrão `CheckResult` documentado lá.
 - **Documentação NestJS:** <https://docs.nestjs.com/>

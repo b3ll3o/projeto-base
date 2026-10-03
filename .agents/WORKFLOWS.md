@@ -324,7 +324,7 @@ doc-writer → code-reviewer:{success_criteria:"versão bumped+CHANGELOG+0 cross
 
 - [`.agents/agents/specialist-router.md`](./agents/specialist-router.md)
 - [`.agents/specs/conventions/specialist-routing.md`](./specs/conventions/specialist-routing.md) — matriz canônica
-- [`.agents/memory/specialist-router.md`](../memory/specialist-router.md)
+- [`.agents/memory/specialist-router.md`](./memory/specialist-router.md)
 - [`.agents/specs/conventions/evolucao-agents.md`](./specs/conventions/evolucao-agents.md) — regra gap_detected
 
 ## `retrospective-mode` — Captura de Aprendizados Pós-Atividade

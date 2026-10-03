@@ -96,4 +96,4 @@ pipeline:
 
 ---
 
-**Ver também:** [Índice da skill `agents:coordinate`](../SKILL.md) · [Workflows genéricos](../../../../WORKFLOWS.md)
+**Ver também:** [Índice da skill `agents:coordinate`](../SKILL.md) · [Workflows genéricos](../../../WORKFLOWS.md)

@@ -31,7 +31,7 @@
 
 ## Verificação Automática
 
-O agent [`tdd-enforcer`](../../../agents/tdd-enforcer.md) é despachado automaticamente em:
+O agent [`tdd-enforcer`](../../agents/tdd-enforcer.md) é despachado automaticamente em:
 
 - Todo `git commit` que toca código de produção
 - Todo `git push` / abertura de PR

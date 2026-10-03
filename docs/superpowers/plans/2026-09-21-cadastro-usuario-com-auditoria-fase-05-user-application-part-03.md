@@ -1,7 +1,7 @@
 # Fase 5 — User Application (Parte 3/5)
 
 > **Continuação** da Fase 5. Veja o índice completo em:
-> [](./2026-09-21-cadastro-usuario-com-auditoria-fase-05-user-application.md)
+> []./2026-09-21-cadastro-usuario-com-auditoria-fase-05-user-application-part-01.md
 >
 > Esta é a parte 3 de 5 da Fase 5. Pule para a próxima parte ao final.
 

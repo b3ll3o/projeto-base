@@ -124,4 +124,4 @@ git status
 
 ---
 
-**Próxima fase:** [`fase-10-docs-adr-finishing.md`](./2026-09-21-cadastro-usuario-com-auditoria-fase-10-docs-adr-finishing.md)
+**Próxima fase:** [`fase-10-docs-adr-finishing.md`]./2026-09-21-cadastro-usuario-com-auditoria-fase-10-docs-adr-finishing-part-01.md

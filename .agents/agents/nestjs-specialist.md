@@ -112,7 +112,7 @@ Antes de finalizar a recomendação de arquitetura, despachar a skill `.agents/s
 - Confirmar que `domain/` não importa `@nestjs/*`, `@prisma/*`, `class-validator`, `class-transformer` (regra `ddd-h1`)
 - Confirmar que `application/` não importa de `infrastructure/` (regra `ddd-h2`)
 - Confirmar que agregados têm factory estático `static criar()` e VOs são imutáveis (`Object.isFrozen`)
-- Referência canônica: [ADR-0001](../../../docs/adr/0001-arquitetura-ddd-hexagonal-auditoria.md)
+- Referência canônica: [ADR-0001](../../docs/adr/0001-arquitetura-ddd-hexagonal-auditoria.md)
 
 ## Outputs
 

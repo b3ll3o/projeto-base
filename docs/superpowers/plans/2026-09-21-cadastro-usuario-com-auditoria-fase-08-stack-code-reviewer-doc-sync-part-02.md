@@ -1,7 +1,7 @@
 # Fase 8 — Agents Automation (Parte 2/3)
 
 > **Continuação** da Fase 8. Veja o índice completo em:
-> [](./2026-09-21-cadastro-usuario-com-auditoria-fase-08-stack-code-reviewer-doc-sync.md)
+> []./2026-09-21-cadastro-usuario-com-auditoria-fase-08-stack-code-reviewer-doc-sync-part-01.md
 >
 > Esta é a parte 2 de 3 da Fase 8. Pule para a próxima parte ao final.
 

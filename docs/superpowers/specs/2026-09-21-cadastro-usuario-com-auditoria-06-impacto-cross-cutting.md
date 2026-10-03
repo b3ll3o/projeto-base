@@ -182,6 +182,6 @@ Checklist automatizado:
 
 ---
 
-**Próximo:** [`07-referencias.md`](./2026-09-21-cadastro-usuario-com-auditoria-07-referencias.md) (não necessário; referências estão no índice)
+**Próximo:** `07-referencias.md` (não necessário; referências estão no índice)
 
 **Voltar ao índice:** [`2026-09-21-cadastro-usuario-com-auditoria-design.md`](./2026-09-21-cadastro-usuario-com-auditoria-design.md)

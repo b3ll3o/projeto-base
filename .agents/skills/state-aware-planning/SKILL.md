@@ -9,7 +9,7 @@ type: specialist
 > Especificação canônica em
 > [`.agents/specs/conventions/state-aware-planning.md`](../../specs/conventions/state-aware-planning.md).
 > Esta skill é a **metodologia**; o workflow detalhado é o
-> [`.agents/workflows/state-aware-planning.md`](../workflows/state-aware-planning.md).
+> [`.agents/workflows/state-aware-planning.md`](../../workflows/state-aware-planning.md).
 
 ---
 
@@ -260,8 +260,8 @@ result:
 ## Cross-references
 
 - [`.agents/specs/conventions/state-aware-planning.md`](../../specs/conventions/state-aware-planning.md) — spec canônica
-- [`.agents/workflows/state-aware-planning.md`](../workflows/state-aware-planning.md) — workflow detalhado
-- [`.agents/memory/state-aware-planning.md`](../memory/state-aware-planning.md) — memória
+- [`.agents/workflows/state-aware-planning.md`](../../workflows/state-aware-planning.md) — workflow detalhado
+- [`.agents/memory/state-aware-planning.md`](../../memory/state-aware-planning.md) — memória
 - [`.agents/specs/conventions/evolucao-agents.md`](../../specs/conventions/evolucao-agents.md) — `gap_detected` é instância de state-aware
 - [`.agents/specs/conventions/ci-defense-in-depth.md`](../../specs/conventions/ci-defense-in-depth.md) — preflight = 1 categoria
 - [`.agents/specs/conventions/tamanho-e-revisao.md`](../../specs/conventions/tamanho-e-revisao.md) — limite 300 linhas + verificabilidade

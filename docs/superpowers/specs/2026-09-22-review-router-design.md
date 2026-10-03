@@ -267,7 +267,7 @@ Cada output referencia `implementer_run`, `matrix_version`, `matrix_file_sha` (r
   - `mandatory-tdd-rule.md` (Red→Green→Refactor)
   - `prefer-parallel-subagents-when-possible.md`
 - **Agents existentes:** [`.agents/agents/AGENTS.md`](../../../AGENTS.md) §3 (catálogo)
-- **Workflows:** [`.agents/WORKFLOWS.md`](../../../WORKFLOWS.md)
+- **Workflows:** [`.agents/WORKFLOWS.md`](../../../.agents/WORKFLOWS.md)
 - **Skills:** `agents-coordinate`, `ddd-hexagonal-validation`, `ci-defense-in-depth`, `retrospective-capture`
 - **Conventions:** `.agents/specs/conventions/ci-defense-in-depth.md`, `retrospective-capture.md`, `estrutura-e-versionamento.md`
 - **Documentação externa:**

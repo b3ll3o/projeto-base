@@ -153,7 +153,7 @@ Para cada item, calcular `confidence` baseado em:
 
 - [`.agents/specs/conventions/retrospective-capture.md`](../../specs/conventions/retrospective-capture.md)
 - [`.agents/workflows/retrospective-mode.md`](../../workflows/retrospective-mode.md)
-- [`.agents/specs/conventions/agent-evolution-and-memory.md`](../../specs/conventions/agent-evolution-and-memory.md)
+- [`.agents/specs/conventions/evolucao-agents.md`](../../specs/conventions/evolucao-agents.md)
 - [`.agents/specs/conventions/tamanho-e-revisao.md`](../../specs/conventions/tamanho-e-revisao.md)
 
 ---

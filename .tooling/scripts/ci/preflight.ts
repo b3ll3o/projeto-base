@@ -57,8 +57,14 @@ function checkReviewRoutingLint(): CheckResult {
 async function main(): Promise<void> {
   console.log('\u{1F50D} Pre-flight CI checks\n');
   const checks: Array<{ name: string; fn: () => CheckResult | Promise<CheckResult> }> = [
-    { name: 'Cross-refs em docs', fn: () => checkDocRefs({ docsRoot: 'docs' }) },
-    { name: 'Cross-refs em .agents/specs', fn: () => checkDocRefs({ docsRoot: '.agents/specs' }) },
+    // F2-T2: escopo = todo `.md` versionado (git ls-files), nao só `docs` +
+    // `.agents/specs`. Antes, `AGENTS.md` — o indice que todo agent le
+    // primeiro para decidir a quem despachar — ficava fora do gate.
+    // `docsRoots` é o fallback (walk) caso o git não esteja disponível.
+    {
+      name: 'Cross-refs em .md versionados',
+      fn: () => checkDocRefs({ docsRoot: '.', docsRoots: ['docs', '.agents/specs'] }),
+    },
     {
       name: 'tsconfig drift (strict, noUncheckedIndexedAccess)',
       fn: () =>

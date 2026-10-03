@@ -1,7 +1,7 @@
 # Fase 10 — Docs, ADR, PR (Parte 2/4)
 
 > **Continuação** da Fase 10. Veja o índice completo em:
-> [](./2026-09-21-cadastro-usuario-com-auditoria-fase-10-docs-adr-finishing.md)
+> []./2026-09-21-cadastro-usuario-com-auditoria-fase-10-docs-adr-finishing-part-01.md
 >
 > Esta é a parte 2 de 3 da Fase 10. Pule para a próxima parte ao final.
 

@@ -67,9 +67,9 @@ A regra de auditoria será propagada para **toda entidade de domínio** que vier
 - RFC 7807 (Problem Details): <https://datatracker.ietf.org/doc/html/rfc7807>
 - Optimistic locking via `If-Match`: <https://datatracker.ietf.org/doc/html/rfc7232#section-3.1>
 - Documentação interna:
-  - [`docs/MONOREPO.md`](../../../MONOREPO.md)
-  - [`docs/STACK.md`](../../../STACK.md)
-  - [`AGENTS.md`](../../../../AGENTS.md)
+  - [`docs/MONOREPO.md`](../../MONOREPO.md)
+  - [`docs/STACK.md`](../../STACK.md)
+  - [`AGENTS.md`](../../../AGENTS.md)
 
 ---
 

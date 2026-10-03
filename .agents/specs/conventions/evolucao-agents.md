@@ -47,7 +47,7 @@ Quando `specialist-router` retorna `gap_detected: true`, controller **DEVE** blo
 
 **Cross-refs:**
 
-- [`.agents/agents/specialist-router.md`](../../../agents/specialist-router.md) — orquestrador que detecta gap
+- [`.agents/agents/specialist-router.md`](../../agents/specialist-router.md) — orquestrador que detecta gap
 - [`.agents/skills/specialist-routing/SKILL.md`](../../skills/specialist-routing/SKILL.md) — Passo 5 do controller (tratar gap)
 - [`.agents/specs/conventions/specialist-routing.md`](./specialist-routing.md) §4 — `gap_detected` field no schema
 - [`tooling/scripts/specialist-router.ts`](../../../tooling/scripts/specialist-router.ts) — classificador que emite gap_detected
@@ -67,7 +67,7 @@ Quando `specialist-router` retorna `gap_detected: true`, controller **DEVE** blo
 
 ## Meta-Agent Responsável
 
-[`agent-architect`](../../../agents/agent-architect.md) é despachado quando:
+[`agent-architect`](../../agents/agent-architect.md) é despachado quando:
 
 - Novo domínio surge que nenhum agent cobre
 - Lacuna funcional identificada em agent existente

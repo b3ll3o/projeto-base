@@ -20,7 +20,7 @@ source_article: Dennis Rojas (Tech na Prática, 2026-09-15) §"Evals: a spec pre
 
 ## §0. Origem da regra
 
-O mapping file ([`docs/articles/vibe-coding-sdd-engineering-loop-mapping.md`](../../../docs/articles/vibe-coding-sdd-engineering-loop-mapping.md)) lista **Evals** como conceito central do artigo de Dennis Rojas. Hoje o projeto-base cobre Eval indiretamente via:
+O mapping file (`docs/articles/vibe-coding-sdd-engineering-loop-mapping.md`) lista **Evals** como conceito central do artigo de Dennis Rojas. Hoje o projeto-base cobre Eval indiretamente via:
 
 - `tdd.md` (Red→Green→Refactor) — cobre Domain + parte de Integration
 - `stack-code-reviewer` (lens D11 DDD/Hexagonal) — cobre Architecture
@@ -180,8 +180,8 @@ A convenção `evals` está **ativa e obrigatória** quando:
 
 ## §10. Cross-references
 
-- Mapping com artigo: [`docs/articles/vibe-coding-sdd-engineering-loop-mapping.md`](../../../docs/articles/vibe-coding-sdd-engineering-loop-mapping.md) §1
-- Source article: [`docs/articles/vibe-coding-sdd-engineering-loop.md`](../../../docs/articles/vibe-coding-sdd-engineering-loop.md) §"Evals: a spec precisa ser verificável"
+- Mapping com artigo: `docs/articles/vibe-coding-sdd-engineering-loop-mapping.md` §1
+- Source article: `docs/articles/vibe-coding-sdd-engineering-loop.md` §"Evals: a spec precisa ser verificável"
 - WORKFLOWS: [`.agents/WORKFLOWS.md`](../../WORKFLOWS.md) → `feature-mode`, `backend-feature`, `frontend-feature`
 - Agents: [`test-writer`](../../agents/test-writer.md), [`stack-code-reviewer`](../../agents/stack-code-reviewer.md), [`security-auditor`](../../agents/security-auditor.md), [`telemetry-specialist`](../../agents/telemetry-specialist.md), [`review-router`](../../agents/review-router.md)
 

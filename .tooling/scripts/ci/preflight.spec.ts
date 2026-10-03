@@ -30,6 +30,35 @@ describe('checkDocRefs', () => {
       path.join(FIXTURES, 'docs-external-links/guia.md'),
       '# Guia\n\nVeja [site](https://example.com).\n',
     );
+
+    // F2-T1: os 2 links apontam para o MESMO alvo quebrado; um tem label
+    // 100% inline-code, o outro nao. Com remocao do trecho inline-code o
+    // primeiro colapsa para `[]()` e nunca casa com /\[([^\]]+)\]/ — o gate
+    // reportava 1 erro em vez de 2, em silencio.
+    await fs.mkdir(path.join(FIXTURES, 'docs-inline-code-label'), { recursive: true });
+    await fs.writeFile(
+      path.join(FIXTURES, 'docs-inline-code-label/guia.md'),
+      '# Guia\n\nVeja [`nao-existe.md`](./nao-existe.md) e tambem [aqui](./nao-existe.md).\n',
+    );
+
+    // F2-T2 (a): .md fora das raizes declaradas em `docsRoot` ainda entra no
+    // escopo quando `docsRoots` lista outro diretorio. Sem `docsRoots`, o
+    // arquivo nao e lido e o gate reporta verde sobre um escopo menor.
+    await fs.mkdir(path.join(FIXTURES, 'docs-fora-de-docsRoot'), { recursive: true });
+    await fs.writeFile(
+      path.join(FIXTURES, 'docs-fora-de-docsRoot/guia.md'),
+      '# Guia\n\nVeja [intro](alvo-inexistente.md).\n',
+    );
+
+    // F2-T2 (b): o `walk` nao pode descer em node_modules — com `docsRoot: '.'`
+    // isso media 500+ erros so de dependencias.
+    await fs.mkdir(path.join(FIXTURES, 'docs-skip-dirs/node_modules/pacote-falso'), {
+      recursive: true,
+    });
+    await fs.writeFile(
+      path.join(FIXTURES, 'docs-skip-dirs/node_modules/pacote-falso/guia.md'),
+      '# Guia\n\nVeja [intro](alvo-inexistente.md).\n',
+    );
   });
 
   it('deve passar quando todas as refs apontam para arquivos existentes', async () => {
@@ -51,6 +80,38 @@ describe('checkDocRefs', () => {
       docsRoot: path.join(FIXTURES, 'docs-external-links'),
     });
     expect(result.ok).toBe(true);
+  });
+
+  describe('checkDocRefs - inline code com label', () => {
+    it('deve detectar link com label 100% inline-code (nao pode colapsar)', async () => {
+      const result = await checkDocRefs({
+        docsRoot: path.join(FIXTURES, 'docs-inline-code-label'),
+      });
+      expect(result.ok).toBe(false);
+      // Os 2 links do arquivo apontam para o mesmo alvo quebrado: um com
+      // label inline-code, um sem. Remover o inline-code faria o 1o virar
+      // `[]()`, que o regex (label 1+ char) nunca casa — 1 erro em vez de 2.
+      expect(result.errors).toHaveLength(2);
+      expect(result.errors.every((e) => e.includes('./nao-existe.md'))).toBe(true);
+    });
+  });
+
+  describe('checkDocRefs - escopo', () => {
+    it('deve cobrir .md declarado em docsRoots, mesmo fora de docsRoot', async () => {
+      const result = await checkDocRefs({
+        docsRoot: path.join(FIXTURES, 'docs-ok'),
+        docsRoots: [path.join(FIXTURES, 'docs-fora-de-docsRoot')],
+      });
+      expect(result.ok).toBe(false);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0]).toMatch(/alvo-inexistente\.md/);
+    });
+
+    it('deve IGNORAR node_modules/ (e demais diretorios de build)', async () => {
+      const result = await checkDocRefs({ docsRoot: path.join(FIXTURES, 'docs-skip-dirs') });
+      expect(result.ok).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
   });
 
   describe('checkDocRefs - code block handling', () => {
