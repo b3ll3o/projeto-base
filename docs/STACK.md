@@ -1,7 +1,9 @@
 # STACK.md — Stack do Monorepo Base
 
 > Documento canônico da stack escolhida para este monorepo base. Descreve **tecnologias, versões e justificativas**.
-> Configuração ≠ implementação: a stack está documentada aqui, mas os apps `apps/api` e `apps/web` ainda não foram criados.
+> Os apps `apps/api` e `apps/web` **já estão implementados** sobre esta stack
+> (ver [`./MONOREPO.md`](./MONOREPO.md) para a convenção do monorepo e a seção
+> [Containerização](#containerização) para os Dockerfiles).
 
 ---
 

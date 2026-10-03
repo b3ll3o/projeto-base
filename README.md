@@ -248,15 +248,19 @@ Cada agent possui arquivo de **memória** em `.agents/memory/<nome>.md` que arma
 
 Detalhes em [`.agents/WORKFLOWS.md`](./.agents/WORKFLOWS.md).
 
-## Stack Configurada (configurar, não criar ainda)
+## Stack e Apps Implementados
 
 Conforme convenção [`docs/STACK.md`](./docs/STACK.md):
 
 - **Monorepo:** pnpm workspaces + Turborepo + Changesets
-- **Backend (apps/api):** NestJS 11 + Fastify + Prisma 6 + PostgreSQL + Redis
+- **Backend (apps/api):** NestJS 11 + Fastify + Prisma 6 + PostgreSQL
 - **Frontend (apps/web):** Next.js 15 (App Router) + React 19 + Tailwind CSS 4 + shadcn/ui
 
-> **⚠️ IMPORTANTE:** A stack está **configurada** (agents specialists prontos, convenções documentadas) mas os apps `apps/api` e `apps/web` ainda **não foram criados**. Crie-os somente quando for implementar a primeira feature.
+Os apps `apps/api` e `apps/web` **já estão implementados** — bounded context
+`users` com auditoria, em camadas `domain/`, `application/` e
+`infrastructure/`, conforme o
+[ADR-0001](./docs/adr/0001-arquitetura-ddd-hexagonal-auditoria.md). Para subir
+localmente, ver a seção "Como executar localmente" acima.
 
 Veja [`docs/MONOREPO.md`](./docs/MONOREPO.md) para convenções detalhadas.
 
