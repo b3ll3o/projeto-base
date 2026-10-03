@@ -1,7 +1,9 @@
 # API Reference — BC `users`
 
 > Documento de referência da API HTTP do **Bounded Context `users`**.
-> Contrato canônico exportado em [`apps/api/openapi.json`](../../apps/api/openapi.json).
+> Contrato canônico exportado para `apps/api/openapi.json` — artefato **gerado**,
+> gitignored (`.gitignore:11`). A fonte versionada é a spec logo abaixo; para
+> regenerar: `pnpm --filter @projeto/api openapi:export`.
 > Spec de design: [`docs/superpowers/specs/2026-09-21-cadastro-usuario-com-auditoria-04-contrato-http.md`](../superpowers/specs/2026-09-21-cadastro-usuario-com-auditoria-04-contrato-http.md).
 > ADR-0001 (DDD + Hexagonal): [`docs/adr/0001-arquitetura-ddd-hexagonal-auditoria.md`](../adr/0001-arquitetura-ddd-hexagonal-auditoria.md).
 
@@ -104,7 +106,7 @@ Use cases persistem histórico via `AuditServicePort.record(...)` (camada `infra
 
 ## §7. Referências Cruzadas
 
-- OpenAPI JSON: [`apps/api/openapi.json`](../../apps/api/openapi.json) (regenerado via `pnpm --filter @projeto/api openapi:export`)
+- OpenAPI JSON: `apps/api/openapi.json` — **gerado, não versionado** (`.gitignore:11`); regenerar via `pnpm --filter @projeto/api openapi:export`
 - Spec de design do contrato: [`04-contrato-http.md`](../superpowers/specs/2026-09-21-cadastro-usuario-com-auditoria-04-contrato-http.md)
 - ADR-0001 (DDD + Hexagonal + Auditoria): [`docs/adr/0001-arquitetura-ddd-hexagonal-auditoria.md`](../adr/0001-arquitetura-ddd-hexagonal-auditoria.md)
 - Controller fonte: [`apps/api/src/modules/users/infrastructure/http/users.controller.ts`](../../apps/api/src/modules/users/infrastructure/http/users.controller.ts)
