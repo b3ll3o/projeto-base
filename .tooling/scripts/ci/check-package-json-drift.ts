@@ -107,20 +107,24 @@ export async function checkPackageJsonDrift(opts: {
     }
   }
 
-  // Drift #5: `turbo run <task>` apontando para task inexistente.
+  // Drift #5: `turbo run <task>` apontando para task que o turbo não resolve.
   //
   // A §F2-T7 removeu `tdd:check` do `turbo.json` mas deixou o script
   // `"tdd:check": "turbo run tdd:check"` no package.json — e o comando
   // passou a falhar com EXIT=1 enquanto todo o resto reportava verde. O
   // check acima não via nada disso: ele só valida `tsx <path>`.
   //
-  // Invariante: uma task é resolvível pelo turbo se estiver declarada em
-  // `turbo.json` (que customiza cache/dependsOn) **ou** se algum pacote do
-  // workspace declarar um script com esse nome. A segunda metade não é
-  // opcional: `test:e2e` não está no `turbo.json` e mesmo assim roda
-  // (EXIT=0, 14 testes). Um check que exigisse entrada no `turbo.json`
-  // acusaria `test:e2e` de fantasma — gate que falha errado é tão
-  // fictício quanto gate que não falha.
+  // Invariante: `turbo run <task>` só resolve se a task **estiver declarada em
+  // `turbo.json` E algum pacote do workspace tiver um script com esse nome**.
+  // As duas metades são medidas em turbo 2.11.2, e as duas já falharam aqui:
+  //
+  // - `openapi:export` é script de `apps/api` e não está no `turbo.json` →
+  //   "Could not find task `openapi:export` in project". Declarar não basta.
+  // - `tdd:check` no `main` **estava** no `turbo.json` e nenhum dos 6 pacotes a
+  //   implementava → a mesma resposta. Estar declarada não basta.
+  //
+  // Erro nas duas direções custa caro: aceitar a task órfã é o gate que
+  // reporta verde; acusar uma task legítima é o gate que trava o push errado.
   const turboSkip = await collectUnresolvableTurboTasks(projectRoot, parsed.scripts);
   if (turboSkip.reason) {
     return {
@@ -164,14 +168,26 @@ async function collectUnresolvableTurboTasks(
   }
 
   const declared = await readTurboTaskNames(projectRoot);
-  const resolvable = new Set([...declared, ...packageScripts]);
+  const declaredSet = new Set(declared);
 
   const unresolvable: { task: string; error: string }[] = [];
   for (const { script, task } of referenced) {
-    if (resolvable.has(task)) continue;
+    // Conjunção, e não disjunção. Medido em turbo 2.11.2:
+    //   - `openapi:export` é script de `apps/api` e NÃO está no turbo.json →
+    //     `turbo run openapi:export` responde "Could not find task in project".
+    //     Estar em `turbo.json` é condição necessária.
+    //   - `tdd:check` no `main` ESTAVA no turbo.json e nenhum pacote a tinha →
+    //     mesma resposta. Estar em `turbo.json` não é condição suficiente.
+    // A chave `tasks` é a porta de entrada do `turbo run`; o turbo então
+    // procura nos pacotes do workspace um script com aquele nome. Faltando um
+    // dos dois lados, o comando quebra.
+    if (declaredSet.has(task) && packageScripts.has(task)) continue;
+    const falta = !declaredSet.has(task)
+      ? 'não está declarada em turbo.json'
+      : 'está declarada em turbo.json mas nenhum pacote do workspace a implementa';
     unresolvable.push({
       task,
-      error: `drift detectado: script '${script}' roda 'turbo run ${task}' mas a task '${task}' não existe em turbo.json nem como script de pacote do workspace (task fantasma)`,
+      error: `drift detectado: script '${script}' roda 'turbo run ${task}' mas a task '${task}' ${falta} (task fantasma)`,
     });
   }
   return { unresolvable };
