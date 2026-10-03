@@ -31,19 +31,29 @@ de revisão humana, e por isso deve ser cobrada no PR.
 
 | Princípio                        | Aplicação neste repo                                        | Como é garantido |
 |----------------------------------|-------------------------------------------------------------|------------------|
-| Tronco único e sempre integrável | `main` nunca recebe commit vermelho — o gate de cobertura (§ [cobertura-testes.md](./cobertura-testes.md)) e o CI travam o merge | **Parcial**: só o PR obrigatório (veja nota) |
+| Tronco único e sempre integrável | `main` nunca recebe commit vermelho — o gate de cobertura (§ [cobertura-testes.md](./cobertura-testes.md)) e o CI travam o merge | **Impõe**: `required_status_checks` = `quality` (veja nota) |
 | Base sempre atualizada           | `main` é atualizada **antes** de cada branch de trabalho     | **Convenção**: revisão no PR (o hook não valida a base) |
 | Branches curtas                  | Ciclo de horas, não semanas | **Convenção**: nada no GitHub detecta duração de branch |
 | Commit pequeno e focado           | Um commit = uma mudança coerente; facilita `bisect` e `revert` | **Convenção**: revisão no PR |
 | Sem branch permanente            | Nenhuma branch vive além do seu PR (só `main` e tags) | **Convenção**: limpeza pós-merge é manual |
 
-> **Nota — o que o GitHub de fato impõe.** O ruleset ativo do repositório tem
-> apenas `deletion`, `non_fast_forward` e `pull_request`: **sem
-> `required_status_checks`** e com `required_approving_review_count: 0`. O que
-> impede commit vermelho em `main` hoje é o `pre-push` local (burlável com
-> `--no-verify`) mais a revisão do PR — não o GitHub. Fechar a barreira de
-> verdade é decisão do **owner**, registrada como **D2** em
-> [`docs/MONOREPO.md`](../../../docs/MONOREPO.md) § Histórico.
+> **Nota — o que o GitHub de fato impõe.** O ruleset `master`
+> (`23853096`) tem `deletion`, `non_fast_forward`, `pull_request` **e**
+> `required_status_checks` com context `quality` (`strict: false`).
+>
+> `quality` tem `needs: preflight` no [`ci.yml`](../../../.github/workflows/ci.yml),
+> então os dois jobs gateiam o merge — mas a garantia é da **cadeia de
+> workflows**, não de cada check: se `quality` deixar de ter `needs: preflight`,
+> `preflight` continua opcional sem nenhum aviso. Ainda **não** há
+> `required_approving_review_count` (segue `0` — o repositório é de contributor
+> único, e exigir aprovação travaria o autor em PR solo).
+>
+> Como o [`ci.yml`](../../../.github/workflows/ci.yml) só dispara em
+> `push: feat/**` e `pull_request: main`, **`main` só é atualizável por PR**:
+> um push direto não tem check `quality` reportado naquele commit e é
+> rejeitado. `bypass_actors` é vazio — ninguém contorna, nem administrador.
+> A barreira local (`pre-push`) continua sendo a camada mais rápida, mas
+> deixou de ser a única.
 
 ## Ponto de Partida Obrigatório
 
