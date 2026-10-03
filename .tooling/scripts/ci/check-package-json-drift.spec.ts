@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { checkPackageJsonDrift } from './check-package-json-drift';
+import { checkPackageJsonDrift, extractTurboRunTasks } from './check-package-json-drift';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -15,9 +15,40 @@ describe('checkPackageJsonDrift', () => {
     await fs.rm(tmpRoot, { recursive: true, force: true });
   });
 
+  /**
+   * Cria um workspace mínimo: `pnpm-workspace.yaml` + `turbo.json` + 1 pacote.
+   *
+   * Sem isso o check se declara `skipped` e volta `ok: true` **sem verificar
+   * nada** — foi exatamente assim que o fixture `valid` passou carregando duas
+   * tasks fantasma. Todo teste positivo precisa de workspace, e precisa
+   * afirmar `skipped` falsy, senão "verde" volta a significar "não olhei".
+   */
+  async function makeWorkspace(
+    dir: string,
+    opts: { turboTasks: string[]; packageScripts: string[] },
+  ): Promise<void> {
+    await fs.mkdir(path.join(dir, 'apps', 'api'), { recursive: true });
+    await fs.writeFile(path.join(dir, 'pnpm-workspace.yaml'), "packages:\n  - 'apps/*'\n");
+    await fs.writeFile(
+      path.join(dir, 'turbo.json'),
+      JSON.stringify({ tasks: Object.fromEntries(opts.turboTasks.map((t) => [t, {}])) }),
+    );
+    await fs.writeFile(
+      path.join(dir, 'apps', 'api', 'package.json'),
+      JSON.stringify({
+        name: '@projeto/api',
+        scripts: Object.fromEntries(opts.packageScripts.map((s) => [s, 'echo ok'])),
+      }),
+    );
+  }
+
   it('deve passar quando package.json tem todos os scripts canônicos', async () => {
     const dir = path.join(tmpRoot, 'valid');
     await fs.mkdir(dir, { recursive: true });
+    await makeWorkspace(dir, {
+      turboTasks: ['build', 'dev', 'lint', 'typecheck', 'test'],
+      packageScripts: ['ci:quality'],
+    });
     await fs.writeFile(
       path.join(dir, 'package.json'),
       JSON.stringify({
@@ -30,12 +61,14 @@ describe('checkPackageJsonDrift', () => {
           'ci:preflight': 'echo ok',
           'ci:local':
             'pnpm ci:preflight && pnpm stack:review && pnpm docs:sync && turbo run ci:quality',
-          'tdd:check': 'turbo run tdd:check',
         },
       }),
     );
 
     const result = await checkPackageJsonDrift({ packageJsonPath: path.join(dir, 'package.json') });
+    // O ponto do assert: `ok: true` aqui significa "verifiquei e passou",
+    // não "não tinha o que verificar".
+    expect(result.skipped).toBeFalsy();
     expect(result.ok).toBe(true);
     expect(result.errors).toEqual([]);
   });
@@ -233,6 +266,10 @@ describe('checkPackageJsonDrift', () => {
   it('deve aceitar scripts não-arquivo (comandos compostos via pnpm/&&)', async () => {
     const dir = path.join(tmpRoot, 'composite');
     await fs.mkdir(dir, { recursive: true });
+    await makeWorkspace(dir, {
+      turboTasks: ['build', 'dev', 'lint', 'typecheck', 'test'],
+      packageScripts: ['ci:quality'],
+    });
     await fs.writeFile(
       path.join(dir, 'package.json'),
       JSON.stringify({
@@ -244,12 +281,34 @@ describe('checkPackageJsonDrift', () => {
           test: 'turbo run test',
           'ci:local': 'pnpm ci:preflight && pnpm stack:review && turbo run ci:quality',
           'ci:preflight': 'echo ok',
-          'tdd:check': 'echo ok',
         },
       }),
     );
 
     const result = await checkPackageJsonDrift({ packageJsonPath: path.join(dir, 'package.json') });
+    expect(result.skipped).toBeFalsy();
     expect(result.ok).toBe(true);
+  });
+});
+
+describe('extractTurboRunTasks', () => {
+  it('acha o `turbo run` de um segmento posterior, não só o primeiro', () => {
+    // `exec` com regex sem /g para na 1ª ocorrência: a task fantasma do 2º
+    // segmento nunca era vista, e o check ficava verde.
+    expect(extractTurboRunTasks('turbo run lint && turbo run nao-existe')).toEqual([
+      'lint',
+      'nao-existe',
+    ]);
+  });
+
+  it('para no separador colado, sem espaços', () => {
+    // `clean&&rm` não é token exato de separador nem começa com `-`:
+    // viraria "task fantasma" e bloquearia o push.
+    expect(extractTurboRunTasks('turbo run clean&&rm -rf dist')).toEqual(['clean']);
+  });
+
+  it('ignora `turbo run` que está dentro de aspas', () => {
+    expect(extractTurboRunTasks("echo 'turbo run nao-existe'")).toEqual([]);
+    expect(extractTurboRunTasks('echo "turbo run nao-existe"')).toEqual([]);
   });
 });

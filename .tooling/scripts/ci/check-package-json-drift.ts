@@ -285,27 +285,38 @@ function extractTsxPath(command: string): string | null {
 }
 
 /**
- * Extrai as tasks de um comando `turbo run`.
+ * Extrai as tasks de **todos** os `turbo run` de um comando.
  *
- * Para no primeiro separador de shell (`&&`, `||`, `;`, `|`) e ignora flags
- * (`--filter=…`, `--concurrency=…`), porque `"clean": "turbo run clean && rm
- * -rf node_modules .turbo"` tem `rm`, `-rf`, `node_modules` e `.turbo`
- * depois da task — e nenhum deles é nome de task.
+ * Três armadilhas que o parser anterior caiu, todas cobertas por spec:
+ *
+ * 1. `exec` sem `/g` só acha a **primeira** ocorrência — em
+ *    `turbo run lint && turbo run nao-existe` a task fantasma do segundo
+ *    segmento nunca era vista.
+ * 2. Separadores **colados** (`clean&&rm`) não casam com o token exato
+ *    `&&` e não começam com `-`, então viravam task — e bloqueavam o push
+ *    com um erro falso.
+ * 3. `turbo run` **dentro de aspas** (`echo 'turbo run lint'`) não é
+ *    invocação; sem remover aspas antes, vira task.
+ *
+ * A estratégia é segmentar por separador de shell, achar `turbo run` dentro
+ * de cada segmento e tomar os tokens não-flag até o fim do segmento.
  *
  * @example extractTurboRunTasks('turbo run build') → ['build']
  * @example extractTurboRunTasks('pnpm turbo run lint typecheck --filter=@x') → ['lint', 'typecheck']
  * @example extractTurboRunTasks('turbo run clean && rm -rf dist') → ['clean']
  */
 export function extractTurboRunTasks(command: string): string[] {
-  const match = /turbo\s+run\s+([^\n]*)/.exec(command);
-  if (!match) return [];
+  // Remove o conteúdo entre aspas antes de procurar `turbo run`.
+  const unquoted = command.replace(/'[^']*'|"[^"]*"/g, ' ');
 
   const tasks: string[] = [];
-  for (const token of match[1].split(/\s+/)) {
-    if (token === '') continue;
-    if (/^(&&|\|\||;|\|)$/.test(token)) break;
-    if (token.startsWith('-')) continue;
-    tasks.push(token);
+  const segment = /(?:^|[|&;])[^|&;]*?\bturbo\s+run\s+([^|&;]*)/g;
+  for (const match of unquoted.matchAll(segment)) {
+    for (const token of (match[1] ?? '').trim().split(/\s+/)) {
+      if (token === '') continue;
+      if (token.startsWith('-')) continue;
+      tasks.push(token);
+    }
   }
   return tasks;
 }
