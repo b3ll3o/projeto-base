@@ -2,8 +2,11 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { checkDocRefs } from './check-doc-refs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import * as os from 'node:os';
 
-const FIXTURES = '/tmp/ci-fixtures';
+// Diretorio isolado por suite: '/tmp/ci-fixtures' compartilhado era
+// vulneravel a leftover de outra execucao.
+const FIXTURES = path.join(os.tmpdir(), 'ci-fixtures-check-doc-refs');
 
 describe('checkDocRefs', () => {
   beforeAll(async () => {
@@ -29,6 +32,31 @@ describe('checkDocRefs', () => {
     await fs.writeFile(
       path.join(FIXTURES, 'docs-external-links/guia.md'),
       '# Guia\n\nVeja [site](https://example.com).\n',
+    );
+
+    // Os 3 fixtures abaixo eram referenciados por testes que NUNCA rodaram
+    // (§F2-T8): a suite nao entrava em tooling:test nem no CI, entao os 3
+    // vermelhos ficavam invisiveis. Criados aqui, e nao reaproveitados
+    // pelos testes de §F2-T1, para nao criar dependencia de ordem entre
+    // tasks.
+    await fs.mkdir(path.join(FIXTURES, 'docs-fenced-block'), { recursive: true });
+    await fs.writeFile(
+      path.join(FIXTURES, 'docs-fenced-block/guia.md'),
+      '# Guia\n\n```ts\nconst x = [a](b);\n```\n\nVeja [intro](intro.md).\n',
+    );
+    await fs.writeFile(path.join(FIXTURES, 'docs-fenced-block/intro.md'), '# Intro\n');
+
+    await fs.mkdir(path.join(FIXTURES, 'docs-inline-code'), { recursive: true });
+    await fs.writeFile(
+      path.join(FIXTURES, 'docs-inline-code/guia.md'),
+      '# Guia\n\nVeja [`intro.md`](intro.md) para começar.\n',
+    );
+    await fs.writeFile(path.join(FIXTURES, 'docs-inline-code/intro.md'), '# Intro\n');
+
+    await fs.mkdir(path.join(FIXTURES, 'docs-mixed'), { recursive: true });
+    await fs.writeFile(
+      path.join(FIXTURES, 'docs-mixed/guia.md'),
+      '# Guia\n\n```\n[a](b)\n```\n\nVeja [real-broken](nao-existe.md).\n',
     );
 
     // F2-T1: os 2 links apontam para o MESMO alvo quebrado; um tem label

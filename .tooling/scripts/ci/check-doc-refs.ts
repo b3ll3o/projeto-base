@@ -120,7 +120,11 @@ export async function checkDocRefs(opts: {
       try {
         await fs.access(resolved);
       } catch {
-        errors.push(`${rel}: link para '${target}' quebrado`);
+        // O texto do link entra no relatorio: num gate que acusa 58 links em
+        // 34 arquivos, o trecho que o autor escreveu localiza melhor que o
+        // path repetido. `match[1]` pode vir mascarado (inline code) e vazio.
+        const label = match[1].trim();
+        errors.push(`${rel}: link para '${target}' quebrado${label ? ` (texto: "${label}")` : ''}`);
       }
     }
   }
