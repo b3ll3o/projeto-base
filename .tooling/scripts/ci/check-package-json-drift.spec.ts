@@ -418,6 +418,41 @@ describe('extractTurboRunTasks', () => {
     }
   });
 
+  it('palavra depois de redirect ESPACADO continua sendo task', () => {
+    // Toda a primeira geração de specs cobriu a forma COLADA e parou nela. A
+    // forma espacada — `turbo run build >out.log ALVO` — é a mais comum, e o
+    // parser fazia `break` no redirect, descartando `ALVO` em silêncio.
+    //
+    // Estas expectativas NÃO saíram da imaginação: cada linha foi medida
+    // contra o turbo 2.11.2 real, num workspace onde `turbo.json.tasks` é
+    // `{}` — assim toda palavra que o turbo trata como task aparece em
+    // "Could not find task". O script que produz a tabela está em
+    // `.tooling/scripts/ci/turbo-redirect-differential.sh`.
+    expect(extractTurboRunTasks('turbo run build >out.log ALVO')).toEqual(['build', 'ALVO']);
+    expect(extractTurboRunTasks('turbo run build 2>err ALVO')).toEqual(['build', 'ALVO']);
+    expect(extractTurboRunTasks('turbo run build 2>&1 ALVO')).toEqual(['build', 'ALVO']);
+    expect(extractTurboRunTasks('turbo run build &>a.log ALVO')).toEqual(['build', 'ALVO']);
+    expect(extractTurboRunTasks('turbo run build >>log ALVO')).toEqual(['build', 'ALVO']);
+    expect(extractTurboRunTasks('turbo run build <in.txt ALVO')).toEqual(['build', 'ALVO']);
+    expect(extractTurboRunTasks('turbo run build >out.log build2 ALVO')).toEqual([
+      'build',
+      'build2',
+      'ALVO',
+    ]);
+  });
+
+  it('operador NU consome a próxima palavra como alvo, e só ele', () => {
+    // O complemento do spec anterior. Um operador sem alvo colado
+    // (`>`, `2>`, `&>`) tem o operando na palavra seguinte — então essa
+    // palavra é arquivo, não task. Medido nos dois sentidos:
+    //   `build > ALVO`     -> turbo só viu `build`; ALVO virou o arquivo
+    //   `build 2> ALVO`    -> idem
+    //   `build 2>err ALVO` -> turbo viu `build` E `ALVO`
+    expect(extractTurboRunTasks('turbo run build > ALVO')).toEqual(['build']);
+    expect(extractTurboRunTasks('turbo run build 2> ALVO')).toEqual(['build']);
+    expect(extractTurboRunTasks('turbo run build > build.log')).toEqual(['build']);
+  });
+
   it('cobre os três @example do JSDoc de extractTurboRunTasks', () => {
     // O JSDoc afirma estes três; sem spec, uma refatoração pode quebrá-los em
     // silêncio e o próximo leitor acredita no exemplo.

@@ -330,67 +330,87 @@ function extractTsxPath(command: string): string | null {
  * @example extractTurboRunTasks('pnpm turbo run lint typecheck --filter=@x') → ['lint', 'typecheck']
  * @example extractTurboRunTasks('turbo run clean && rm -rf dist') → ['clean']
  */
+/**
+ * `&>` é operador de redirect (bash/ksh), não separador de comandos.
+ *
+ * O segmentador abaixo quebra em `&`, o que faz `turbo run build &>a.log ALVO`
+ * virar dois segmentos e perder `ALVO` — que o turbo real trata como task.
+ * Substituído por um sentinela antes de segmentar, e o sentinela volta a ser
+ * lido como operador em `classifyToken`. Medido: com `&` solto, turbo vê
+ * `build` e `ALVO`; com `&>` solto, idem.
+ */
+const BOTH_STREAMS = '\u0000';
+
 export function extractTurboRunTasks(command: string): string[] {
   // Remove o conteúdo entre aspas antes de procurar `turbo run`.
   const unquoted = command.replace(/'[^']*'|"[^"]*"/g, ' ');
+  // `&` que é parte de um operador de redirect deixa de parecer separador.
+  // São duas formas: `&>file` / `&>>file` (o `&` antecede `>`) e `2>&1` /
+  // `2>&-` (o `&` segue `>`). Precisa vir ANTES da segmentação, senão o
+  // segmentador corta no `&` e perde as tasks seguintes — medido: o turbo
+  // real trata `ALVO` como task em `turbo run build 2>&1 ALVO`.
+  const protectedCmd = unquoted.replace(/&>/g, BOTH_STREAMS).replace(/>&/g, `>${BOTH_STREAMS}`);
 
   const tasks: string[] = [];
   const segment = /(?:^|[|&;])[^|&;]*?\bturbo\s+run\s+([^|&;]*)/g;
-  for (const match of unquoted.matchAll(segment)) {
+  for (const match of protectedCmd.matchAll(segment)) {
+    // Operador sem alvo colado consome a PRÓXIMA palavra como arquivo.
+    let nextIsRedirectTarget = false;
     for (const token of (match[1] ?? '').trim().split(/\s+/)) {
       if (token === '') continue;
+      if (nextIsRedirectTarget) {
+        nextIsRedirectTarget = false;
+        continue;
+      }
       if (token.startsWith('-')) continue;
-      // `turbo run build > build.log`: a partir do redirect só há alvo de
-      // redirecionamento, nunca task. Sem esta parada, `>` e `build.log`
-      // viravam tasks fantasma e bloqueavam o push com erro falso — mesma
-      // classe do separador colado, outra armadilha.
-      //
-      // O redirect também pode vir COLADO na task (`turbo run build>log.txt`),
-      // e aí o token não é redirect: é task + redirect. Ver `splitRedirect`.
-      const parsed = splitRedirect(token);
-      if (parsed === null) break;
-      tasks.push(parsed);
+      const { task, bare } = classifyToken(token);
+      if (task !== null) tasks.push(task);
+      if (bare) nextIsRedirectTarget = true;
     }
   }
   return tasks;
 }
 
 /**
- * Separa o token em task, ou devolve `null` quando ele é redirect puro.
+ * Classifica um token: ele é task, redirect completo, ou operador nu?
  *
- * `turbo run build>log.txt` é shell válido: a task é `build` e o redirect é
- * `>log.txt`, no **mesmo** token. Tratar o token inteiro como redirect
- * descartava `build` e devolvia `[]` — e lista vazia faz o caller pular o
- * script inteiro em silêncio (`referenced.length === 0`), sem marcador de
- * `skipped`. Task fantasma escrita assim escapava da validação: gate que para
- * de gatear, e parece verde. Foi esse o achado da rodada 4.
+ * A regra real, medida contra o turbo 2.11.2: **redirect nunca encerra a lista
+ * de tasks.** O que encerra a lista é o operador, e só porque ele é a coisa
+ * inteira — em `turbo run build >out.log ALVO`, o shell remove da lista de
+ * palavras o operador e o seu operando, e as palavras em volta continuam
+ * argumentos. `ALVO` é task, e o turbo de fato a rejeita.
  *
- * O que separa os dois casos é o **prefixo** antes do primeiro `<`/`>`:
+ * Três formas, e a distinção está no que vem **depois** do operador:
  *
- * | token         | prefixo | leitura                              |
- * |---------------|---------|--------------------------------------|
- * | `build>log`   | `build` | task `build`, redirect à direita     |
- * | `2>/dev/null` | `2`     | file descriptor 2, não task          |
- * | `&>all.log`   | `&`     | o `&` de `&>`, não task              |
- * | `>log.txt`    | —       | redirect puro, nada antes            |
+ * | token          | prefixo  | depois do op | leitura                          |
+ * |----------------|----------|--------------|----------------------------------|
+ * | `build>log`    | `build`  | `log`        | task `build` + redirect completo |
+ * | `2>/dev/null`  | `2` (fd) | `/dev/null`  | redirect completo, sem task      |
+ * | `build > ALVO` | `build`  | (vazio)      | task `build`, `ALVO` é o alvo   |
  *
- * A primeira versão deste guard era `/[<>]/.test(token)`. Ela corrige a
- * vazamento anterior (uma versão mais antiga ainda exigia
- * `/^[\d<>&]+$/`, que pegava `2>&1` e deixava `2>/dev/null` vazar — 6
- * formatos) mas introduzia esta: cortar a task junto com o redirect. As duas
- * falhas são o mesmo erro visto de lados opostos — tratar o token como
- * indivisível quando o shell o trata como partível.
+ * O sentinela de `&>` entra aqui como mais um operador.
  *
- * Nome de task é nome de script npm e carrega `:`, `.`, `/`, `@`, `+`, nunca
- * `<` ou `>` — por isso cortar no primeiro `<`/`>` é seguro para o sufixo.
- * Varredura dos 27 nomes de task do repo: 0 cortados.
+ * Histórico, porque as duas primeiras versões erraram e a forma do erro
+ * importa: a original vazava `2>/dev/null` como task (exigia
+ * `/^[\d<>&]+$/`, que pegava as formas raras e perdia as comuns). A segunda
+ * corrigiu isso com `/[<>]/.test(token)` e passou a cortar a task colada ao
+ * redirect. A terceira é esta. **Todas as três tinham spec verde** — o que
+ * faltava era evidência vinda do sistema real, não mais spec escrito a partir
+ * das formas que eu já tinha em mente. Ver `turbo-redirect-differential.sh`.
  */
-function splitRedirect(token: string): string | null {
-  const idx = [...token].findIndex((c) => c === '<' || c === '>');
-  if (idx === -1) return token;
+function classifyToken(token: string): { task: string | null; bare: boolean } {
+  const chars = [...token];
+  const idx = chars.findIndex((c) => c === '<' || c === '>' || c === BOTH_STREAMS);
+  if (idx === -1) return { task: token, bare: false };
+
+  // O prefixo é task quando não é descriptor de arquivo, o `&` do `&>`, ou vazio.
   const prefix = token.slice(0, idx);
-  // Prefixo vazio, só dígitos (file descriptor) ou o `&` de `&>`: não há task
-  // antes do redirect, então o token inteiro é redirect.
-  if (prefix === '' || /^\d+$/.test(prefix) || prefix === '&') return null;
-  return prefix;
+  const isTask = prefix !== '' && !/^\d+$/.test(prefix) && prefix !== '&';
+
+  // O que sobra depois do operador é o alvo. `>>` tem o `>` duplo colado.
+  let rest = token.slice(idx + 1);
+  if (rest.startsWith('>')) rest = rest.slice(1);
+
+  // Alvo vazio = operador nu: o operando é a PRÓXIMA palavra, não a atual.
+  return { task: isTask ? prefix : null, bare: rest === '' };
 }
