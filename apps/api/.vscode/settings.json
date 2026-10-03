@@ -1,0 +1,19 @@
+{
+  // pt-BR: workaround para bug do vitest.explorer v1.52.0 + vitest 2.x.
+  //
+  // Sem este setting, a extensão auto-descobre `vitest.workspace.ts` e envia
+  // TANTO `configFile` QUANTO `workspaceFile` apontando para o arquivo de
+  // workspace. O worker chama `createVitest('test', {config: workspaceFile,
+  // workspace: workspaceFile})`, e o vite `loadConfigFromFile` falha em
+  // `isObject$1` (que retorna false para arrays) com
+  // `config must export or return an object`.
+  //
+  // Ao apontar `vitest.rootConfig` para o config base (que exporta um
+  // objeto via `defineConfig`), a extensão seta:
+  //   configFile = apps/api/vitest.config.ts   (objeto — passa em isObject$1)
+  //   workspaceFile = apps/api/vitest.workspace.ts (array — tratado como workspace)
+  //
+  // Referência do código da extensão:
+  //   `{...t, configFile: n, workspaceFile: t.id}` onde `n = rootConfig`.
+  "vitest.rootConfig": "vitest.config.ts"
+}
