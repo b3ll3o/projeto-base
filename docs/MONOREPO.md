@@ -259,7 +259,7 @@ Referência cruzada: [`.agents/specs/conventions/estrutura-e-versionamento.md`](
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão do documento:** 1.5.0
+**Versão do documento:** 1.9.0
 
 ### Histórico de Versões
 
@@ -274,3 +274,4 @@ Referência cruzada: [`.agents/specs/conventions/estrutura-e-versionamento.md`](
 | `1.5.1` | Backfill: matrix `review-router` bumped para v1.2 (2 P1 gaps resolvidos — propagação `blocking:true` em path_globs + regex security narrow call-site anchored). Sem mudança de monorepo. |
 | `1.6.0` | Backfill: matrix `review-router` bumped para v1.3 (3 P2 gaps resolvidos — `domains[]` enrich, lint WARNING para blocking, coverage scenarios em apêndice). Sem mudança de monorepo. |
 | `1.7.0` | Adição do agent `telemetry-specialist` (transversal: backend+frontend+docker) + convenção `state-aware-planning` (camada 0 do pre-planner) + skill/workflow/memory companions; nova categoria transversal "Observabilidade" (referência cross-stack) |
+| `1.9.0` | §1 — árvore de estrutura e contagens de agents/memórias/workflows realinhadas com o disco (19/21/10). §CI — `tooling:test` passou a cobrir `.tooling/scripts/ci` (6 specs / 32 testes que nunca rodavam) e roda no job `preflight`; lint real em `apps/api` (antes era stub `exit 0`); gate DDD barra import de `infrastructure/` em `domain/`; `turbo.json` sem tasks órfãs; `checkDocRefs` com escopo via `git ls-files` e máscara de inline-code. |
