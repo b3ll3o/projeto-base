@@ -96,6 +96,140 @@ describe('checkPackageJsonDrift', () => {
     ).toBe(true);
   });
 
+  it('deve falhar se um script `turbo run <task>` apontar para task inexistente', async () => {
+    const dir = path.join(tmpRoot, 'turbo-phantom');
+    await fs.mkdir(path.join(dir, 'apps', 'api'), { recursive: true });
+    await fs.writeFile(path.join(dir, 'pnpm-workspace.yaml'), "packages:\n  - 'apps/*'\n");
+    await fs.writeFile(
+      path.join(dir, 'turbo.json'),
+      JSON.stringify({ tasks: { build: {}, lint: {} } }),
+    );
+    await fs.writeFile(
+      path.join(dir, 'apps', 'api', 'package.json'),
+      JSON.stringify({ name: '@projeto/api', scripts: { build: 'nest build' } }),
+    );
+    await fs.writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        scripts: {
+          build: 'turbo run build',
+          dev: 'echo dev',
+          lint: 'turbo run lint',
+          typecheck: 'echo tc',
+          test: 'echo test',
+          'ci:preflight': 'echo ok',
+          'ci:local': 'echo local',
+          'tdd:check': 'turbo run tdd:check',
+        },
+      }),
+    );
+
+    const result = await checkPackageJsonDrift({ packageJsonPath: path.join(dir, 'package.json') });
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.includes("'tdd:check'") && e.includes('turbo'))).toBe(true);
+  });
+
+  it('deve aceitar task não declarada no turbo.json mas resolvível por script de pacote', async () => {
+    // Task implícita: o turbo resolve qualquer script declarado em um pacote do
+    // workspace, mesmo sem entrada em turbo.json (que só customiza cache). Se
+    // este check acusasse, `test:e2e` seria falso positivo.
+    const dir = path.join(tmpRoot, 'turbo-implicit');
+    await fs.mkdir(path.join(dir, 'apps', 'api'), { recursive: true });
+    await fs.writeFile(path.join(dir, 'pnpm-workspace.yaml'), "packages:\n  - 'apps/*'\n");
+    await fs.writeFile(
+      path.join(dir, 'turbo.json'),
+      JSON.stringify({ tasks: { build: {}, lint: {} } }),
+    );
+    await fs.writeFile(
+      path.join(dir, 'apps', 'api', 'package.json'),
+      JSON.stringify({
+        name: '@projeto/api',
+        scripts: { build: 'nest build', 'test:e2e': 'vitest run' },
+      }),
+    );
+    await fs.writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        scripts: {
+          build: 'turbo run build',
+          dev: 'echo dev',
+          lint: 'turbo run lint',
+          typecheck: 'echo tc',
+          test: 'echo test',
+          'ci:preflight': 'echo ok',
+          'ci:local': 'echo local',
+          'test:e2e': 'turbo run test:e2e',
+        },
+      }),
+    );
+
+    const result = await checkPackageJsonDrift({ packageJsonPath: path.join(dir, 'package.json') });
+    expect(result.errors).toEqual([]);
+    expect(result.ok).toBe(true);
+  });
+
+  it('deve extrair todas as tasks de `turbo run a b c --filter=x` e parar em &&', async () => {
+    const dir = path.join(tmpRoot, 'turbo-multi');
+    await fs.mkdir(path.join(dir, 'apps', 'api'), { recursive: true });
+    await fs.writeFile(path.join(dir, 'pnpm-workspace.yaml'), "packages:\n  - 'apps/*'\n");
+    await fs.writeFile(
+      path.join(dir, 'turbo.json'),
+      JSON.stringify({ tasks: { build: {}, lint: {}, typecheck: {} } }),
+    );
+    await fs.writeFile(
+      path.join(dir, 'apps', 'api', 'package.json'),
+      JSON.stringify({ name: '@projeto/api', scripts: { build: 'nest build' } }),
+    );
+    await fs.writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        scripts: {
+          build: 'turbo run build',
+          dev: 'echo dev',
+          lint: 'turbo run lint',
+          typecheck: 'echo tc',
+          test: 'echo test',
+          'ci:preflight': 'echo ok',
+          // `typecheck` existe, `nao-existe` nao -> erro. O `&& rm -rf` depois
+          // nao deve ser lido como task.
+          'ci:local': 'pnpm turbo run build typecheck nao-existe --filter=@x && rm -rf dist',
+        },
+      }),
+    );
+
+    const result = await checkPackageJsonDrift({ packageJsonPath: path.join(dir, 'package.json') });
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.includes("'nao-existe'"))).toBe(true);
+    expect(result.errors.some((e) => e.includes('rm -rf'))).toBe(false);
+  });
+
+  it('deve declarar skipped quando o workspace não tem pnpm-workspace.yaml', async () => {
+    // Sem lista de pacotes não dá para resolver task implícita. Falhar aqui
+    // seria erro falso; passar em silêncio seria gate que não pode falhar.
+    const dir = path.join(tmpRoot, 'turbo-no-workspace');
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        scripts: {
+          build: 'turbo run build',
+          dev: 'echo dev',
+          lint: 'echo lint',
+          typecheck: 'echo tc',
+          test: 'echo test',
+          'ci:preflight': 'echo ok',
+          'ci:local': 'echo local',
+          'tdd:check': 'turbo run tdd:check',
+        },
+      }),
+    );
+
+    const result = await checkPackageJsonDrift({ packageJsonPath: path.join(dir, 'package.json') });
+    expect(result.errors).toEqual([]);
+    expect(result.skipped).toBe(true);
+    expect(result.reason).toMatch(/pnpm-workspace\.yaml/);
+  });
+
   it('deve aceitar scripts não-arquivo (comandos compostos via pnpm/&&)', async () => {
     const dir = path.join(tmpRoot, 'composite');
     await fs.mkdir(dir, { recursive: true });
