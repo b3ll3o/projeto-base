@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "lint": "echo 'apps/api lint stub (real wiring in Phase 3)' && exit 0",
+    "lint": "eslint .",
     "db:generate": "prisma generate",
     "typecheck": "tsc --noEmit",
     "test": "echo 'apps/api test stub (real wiring in Phase 3)' && exit 0",
