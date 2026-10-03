@@ -4,7 +4,7 @@ description: Fase 1 (P0) parte 1 — 2 tasks: gerar o state-snapshot canonico da
 version: 1.1.0
 updated: 2026-10-02
 maintainer: stack-code-reviewer
-state_snapshot: .agents/runs/state-snapshot-<ts>.md
+state_snapshot: .agents/runs/state-snapshot-20261003T154334Z.md
 related:
   - ./2026-10-02-melhorias-fluxo-desenvolvimento.md
   - ./2026-10-02-melhorias-fluxo-desenvolvimento-fase-1-p0-part-02.md

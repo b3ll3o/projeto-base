@@ -4,7 +4,7 @@ description: Plano de implementação dos pontos de melhoria do fluxo de desenvo
 version: 1.1.0
 updated: 2026-10-02
 maintainer: stack-code-reviewer
-state_snapshot: .agents/runs/state-snapshot-<ts>.md
+state_snapshot: .agents/runs/state-snapshot-20261003T154334Z.md
 related:
   - ../../fluxo-desenvolvimento.md
   - ../../estrategias-desenvolvimento-comparacao.md

@@ -4,7 +4,7 @@ description: Fase 2 (P1 enforcement) parte 3 — 2 tasks: trocar o stub de lint 
 version: 1.1.0
 updated: 2026-10-02
 maintainer: stack-code-reviewer
-state_snapshot: .agents/runs/state-snapshot-<ts>.md
+state_snapshot: .agents/runs/state-snapshot-20261003T154334Z.md
 related:
   - ./2026-10-02-melhorias-fluxo-desenvolvimento.md
   - ./2026-10-02-melhorias-fluxo-desenvolvimento-fase-2-p1-enforcement-part-02.md
