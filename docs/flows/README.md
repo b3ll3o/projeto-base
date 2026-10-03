@@ -66,7 +66,7 @@
 | `docker-pipeline-apps-api` | 🔴 critical | hand | workflow | Pipeline Docker multi-stage apps/api: base → dev → builder → prod + healthcheck |
 | `docker-pipeline-apps-web` | 🔴 critical | hand | workflow | Pipeline Docker multi-stage apps/web: base → dev → builder → prod + healthcheck |
 | `post-merge-release-tagging` | 🔴 critical | hand | workflow | Post-merge release tagging: docs/MONOREPO.md footer → annotated tag vX.Y.Z |
-| `preflight-ci-orchestrator` | 🔴 critical | hand | workflow | Orquestrador preflight.ts: 10 checks estruturais agregados |
+| `preflight-ci-orchestrator` | 🔴 critical | hand | workflow | Orquestrador preflight.ts: 9 checks estruturais agregados |
 | `ci-docs-sync-pr` | 🟡 important | hand | workflow | CI docs-sync em PR: sync-docs.yml → pnpm docs:sync --mode=full |
 | `ci-stack-code-review-pr` | 🟡 important | hand | workflow | CI stack-code-review em PR: review-stack.yml → pnpm stack:review --mode=ci |
 | `pre-commit-hook-stack-review-docsync` | 🟡 important | hand | workflow | Pre-commit hook: lint-staged + stack-code-reviewer + doc-sync |

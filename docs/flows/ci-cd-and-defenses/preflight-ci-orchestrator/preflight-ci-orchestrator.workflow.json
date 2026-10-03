@@ -18,7 +18,7 @@
     ],
     "tier": "critical",
     "mechanism": "hand",
-    "subject": "Orquestrador preflight.ts: 10 checks estruturais agregados"
+    "subject": "Orquestrador preflight.ts: 9 checks estruturais agregados"
   },
   "lanes": [
     {
