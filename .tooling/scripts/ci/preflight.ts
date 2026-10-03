@@ -73,11 +73,9 @@ async function main(): Promise<void> {
           consistentKeys: ['strict', 'noUncheckedIndexedAccess'],
         }),
     },
-    // `apps/api/.eslintrc.js` é convenção NestJS válida (escopo fora deste plano).
-    // Migrar NestJS para flat config é decisão separada; por ora allowlist.
     {
       name: 'ESLint config drift (apps)',
-      fn: () => checkEslintDrift({ appsRoot: 'apps', allowlist: ['api/.eslintrc.js'] }),
+      fn: () => checkEslintDrift({ appsRoot: 'apps', allowlist: [] }),
     },
     {
       name: 'ESLint config drift (packages)',
