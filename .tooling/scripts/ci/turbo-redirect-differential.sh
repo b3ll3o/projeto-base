@@ -112,6 +112,9 @@ build 2> ALVO
 build > ALVO
 build >out.log build2 ALVO
 build --filter=./apps/* ALVO
+build "a<b"
+"a<b" build
+build "lint typecheck"
 CASES
 
 echo

@@ -345,7 +345,7 @@ describe('checkPackageJsonDrift', () => {
 });
 
 describe('extractTurboRunTasks', () => {
-  it('para no redirect de shell, sem tomar o nome do arquivo como task', () => {
+  it('redirect nomeia arquivo sem encerrar a lista de tasks', () => {
     // Mesmo defeito do separador colado, outra classe: `>` e `log.txt` viravam
     // tasks fantasma e bloqueavam o push com erro falso. O reviewer mediu que
     // nenhum `package.json` do repo usa isso hoje — risco latente, nao ativo.
@@ -355,7 +355,7 @@ describe('extractTurboRunTasks', () => {
     expect(extractTurboRunTasks('turbo run a b > x.log && turbo run c')).toEqual(['a', 'b', 'c']);
   });
 
-  it('para no redirect que nomeia arquivo — a forma comum, não só a forma nua', () => {
+  it('cobre a forma comum do redirect, não só a forma nua', () => {
     // O guard anterior exigia token composto SÓ de dígito/`<`/`>`/`&`. No
     // instante em que o redirect nomeia o alvo — que é a forma mais comum em
     // script real — o token ganha `/` e letras, o anchor falha, e o nome do
@@ -368,7 +368,7 @@ describe('extractTurboRunTasks', () => {
     expect(extractTurboRunTasks('turbo run build >log.txt')).toEqual(['build']);
     expect(extractTurboRunTasks('turbo run build 2>errors.log')).toEqual(['build']);
     expect(extractTurboRunTasks('turbo run build &>all.log')).toEqual(['build']);
-    // Composto: o redirect encerra a lista, o `&&` seguinte segue como comando.
+    // Composto: o `&&` seguinte segue como comando, e a lista não foi truncada.
     expect(extractTurboRunTasks('turbo run build 2>/dev/null && echo done')).toEqual(['build']);
   });
 
@@ -482,5 +482,23 @@ describe('extractTurboRunTasks', () => {
   it('ignora `turbo run` que está dentro de aspas', () => {
     expect(extractTurboRunTasks("echo 'turbo run nao-existe'")).toEqual([]);
     expect(extractTurboRunTasks('echo "turbo run nao-existe"')).toEqual([]);
+  });
+
+  it('trata argumento ENTRE aspas como task literal, não como redirect', () => {
+    // Medido contra o turbo 2.11.2, com a task `a<b` declarada no turbo.json E
+    // implementada por apps/p:
+    //
+    //   turbo run a<b      -> shell faz `<b` ser input redirect; turbo só vê `a`
+    //   turbo run "a<b"    -> aspas protegem o operador; turbo EXECUTA `a<b`
+    //
+    // A remoção de aspas do comando inteiro apagava essa distinção e devolvia
+    // `[]`: task real sumindo do gate. Falso negativo, que é o modo de falha
+    // mais caro — o gate reporta que não há o que verificar.
+    expect(extractTurboRunTasks('turbo run "a<b"')).toEqual(['a<b']);
+    expect(extractTurboRunTasks("turbo run 'a<b'")).toEqual(['a<b']);
+    // Sem aspas continua sendo redirect — a forma é a mesma, muda o quoting.
+    expect(extractTurboRunTasks('turbo run a<b')).toEqual(['a']);
+    // E o conteúdo entre aspas é UM argumento só, mesmo com espaço dentro.
+    expect(extractTurboRunTasks('turbo run "lint typecheck"')).toEqual(['lint typecheck']);
   });
 });

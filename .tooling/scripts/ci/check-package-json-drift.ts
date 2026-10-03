@@ -308,7 +308,8 @@ function extractTsxPath(command: string): string | null {
 /**
  * Extrai as tasks de **todos** os `turbo run` de um comando.
  *
- * Quatro armadilhas que o parser anterior caiu, todas cobertas por spec:
+ * Cinco armadilhas que o parser caiu, todas cobertas por spec — e as três
+ * últimas medidas contra o turbo 2.11.2, não só contra spec:
  *
  * 1. `exec` sem `/g` só acha a **primeira** ocorrência — em
  *    `turbo run lint && turbo run nao-existe` a task fantasma do segundo
@@ -317,18 +318,25 @@ function extractTsxPath(command: string): string | null {
  *    `&&` e não começam com `-`, então viravam task — e bloqueavam o push
  *    com um erro falso.
  * 3. `turbo run` **dentro de aspas** (`echo 'turbo run lint'`) não é
- *    invocação; sem remover aspas antes, vira task.
+ *    invocação; sem tratar aspas antes, vira task.
  * 4. **Redirect de shell** (`turbo run build > build.log`): `>` e `build.log`
  *    viravam tasks fantasma. Mesmo modo de falha do item 2 — erro falso
  *    bloqueando push — e preexistente nas duas versões do parser.
+ * 5. **Argumento entre aspas** (`turbo run "a<b"`): o oposto do item 3. Remover
+ *    aspas apagava a task em vez de criar uma — falso negativo, task real
+ *    sumindo do gate. Medido: task `a<b` declarada e implementada é executada
+ *    pelo turbo entre aspas, e é input redirect sem elas.
  *
  * A estratégia é segmentar por separador de shell, achar `turbo run` dentro
- * de cada segmento e tomar os tokens não-flag até o fim do segmento ou até o
- * primeiro redirect, o que vier antes.
+ * de cada segmento e tomar os tokens não-flag. Redirect **não** encerra a
+ * lista: o shell remove o operador e o seu operando in loco, e as palavras em
+ * volta continuam argumentos. Só o operador **nu** consome a próxima palavra.
  *
  * @example extractTurboRunTasks('turbo run build') → ['build']
  * @example extractTurboRunTasks('pnpm turbo run lint typecheck --filter=@x') → ['lint', 'typecheck']
  * @example extractTurboRunTasks('turbo run clean && rm -rf dist') → ['clean']
+ * @example extractTurboRunTasks('turbo run build >out.log ALVO') → ['build', 'ALVO']
+ * @example extractTurboRunTasks('turbo run "a<b"') → ['a<b']
  */
 /**
  * `&>` é operador de redirect (bash/ksh), não separador de comandos.
@@ -341,15 +349,37 @@ function extractTsxPath(command: string): string | null {
  */
 const BOTH_STREAMS = '\u0000';
 
+/**
+ * Sentinelas para argumento entre aspas.
+ *
+ * `QUOTED_OPEN` cerca o conteúdo, e `QUOTED_SPACE` substitui o espaço interno.
+ * O espaço interno virar sentinela é o que preserva a armadilha 3: o segmentador
+ * casa `turbo run` com `\s` no meio, e `\u0002` não é `\s`, então
+ * `echo 'turbo run x'` continua não sendo uma invocação.
+ */
+const QUOTED_OPEN = '\u0001';
+const QUOTED_SPACE = '\u0002';
+
 export function extractTurboRunTasks(command: string): string[] {
-  // Remove o conteúdo entre aspas antes de procurar `turbo run`.
-  const unquoted = command.replace(/'[^']*'|"[^"]*"/g, ' ');
-  // `&` que é parte de um operador de redirect deixa de parecer separador.
-  // São duas formas: `&>file` / `&>>file` (o `&` antecede `>`) e `2>&1` /
-  // `2>&-` (o `&` segue `>`). Precisa vir ANTES da segmentação, senão o
-  // segmentador corta no `&` e perde as tasks seguintes — medido: o turbo
-  // real trata `ALVO` como task em `turbo run build 2>&1 ALVO`.
-  const protectedCmd = unquoted.replace(/&>/g, BOTH_STREAMS).replace(/>&/g, `>${BOTH_STREAMS}`);
+  // Argumento entre aspas é UM argumento só, e o shell não o reinterpreta.
+  // Medido em turbo 2.11.2, com a task `a<b` declarada E implementada:
+  //   turbo run a<b    -> o shell faz `<b` ser input redirect; turbo só vê `a`
+  //   turbo run "a<b"  -> aspas protegem o operador; turbo EXECUTA `a<b`
+  // Remover aspas (o que esta função fazia) apagava essa distinção, e a task
+  // real sumia do gate — falso negativo, o modo de falha mais caro.
+  const protectedCmd = command
+    .replace(
+      /'([^']*)'|"([^"]*)"/g,
+      (_m, single, double) =>
+        `${QUOTED_OPEN}${(single ?? double).replace(/\s+/g, QUOTED_SPACE)}${QUOTED_OPEN}`,
+    )
+    // `&` que é parte de um operador de redirect deixa de parecer separador.
+    // São duas formas: `&>file` / `&>>file` (o `&` antecede `>`) e `2>&1` /
+    // `2>&-` (o `&` segue `>`). Precisa vir ANTES da segmentação, senão o
+    // segmentador corta no `&` e perde as tasks seguintes — medido: o turbo
+    // real trata `ALVO` como task em `turbo run build 2>&1 ALVO`.
+    .replace(/&>/g, BOTH_STREAMS)
+    .replace(/>&/g, `>${BOTH_STREAMS}`);
 
   const tasks: string[] = [];
   const segment = /(?:^|[|&;])[^|&;]*?\bturbo\s+run\s+([^|&;]*)/g;
@@ -363,6 +393,15 @@ export function extractTurboRunTasks(command: string): string[] {
         continue;
       }
       if (token.startsWith('-')) continue;
+      // Token entre aspas é literal: `<` e `>` NÃO viram operador de shell.
+      if (token.startsWith(QUOTED_OPEN)) {
+        const inner = token
+          .slice(QUOTED_OPEN.length, -QUOTED_OPEN.length)
+          .split(QUOTED_SPACE)
+          .join(' ');
+        if (inner !== '') tasks.push(inner);
+        continue;
+      }
       const { task, bare } = classifyToken(token);
       if (task !== null) tasks.push(task);
       if (bare) nextIsRedirectTarget = true;
