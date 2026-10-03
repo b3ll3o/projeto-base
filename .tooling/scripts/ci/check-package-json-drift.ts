@@ -351,7 +351,21 @@ export function extractTurboRunTasks(command: string): string[] {
   return tasks;
 }
 
-/** `>`, `>>`, `2>`, `2>&1`, `&>`, `<`… — só redirecionamento, nunca nome de task. */
+/**
+ * `>`, `>>`, `2>`, `2>&1`, `&>`, `<`… — só redirecionamento, nunca nome de task.
+ *
+ * O teste é só "o token contém `<` ou `>`". Uma versão anterior exigia ainda
+ * que o token fosse composto exclusivamente de dígito/`<`/`>`/`&`, e isso
+ * pegava justamente as formas **raras** (`>`, `2>&1`, `&>`) e deixava passar
+ * as **comuns** — no instante em que o redirect nomeia o alvo, o token ganha
+ * `/` e letras, o anchor falha, e `2>/dev/null` vira task fantasma. Medido:
+ * 6 formatos vazavam, incluindo `turbo run build 2>/dev/null`, que é shell
+ * perfeitamente válido e trava o push com erro falso.
+ *
+ * O risco oposto — cortar task legítima — é nulo por construção: nome de task
+ * é nome de script npm e carrega `:`, `.`, `/`, `@`, `+`, nunca `<` ou `>`.
+ * Varredura dos 27 nomes de task do repo: 0 cortados.
+ */
 function isShellRedirect(token: string): boolean {
-  return /[<>]/.test(token) && /^[\d<>&]+$/.test(token);
+  return /[<>]/.test(token);
 }

@@ -320,6 +320,39 @@ describe('extractTurboRunTasks', () => {
     expect(extractTurboRunTasks('turbo run a b > x.log && turbo run c')).toEqual(['a', 'b', 'c']);
   });
 
+  it('para no redirect que nomeia arquivo — a forma comum, não só a forma nua', () => {
+    // O guard anterior exigia token composto SÓ de dígito/`<`/`>`/`&`. No
+    // instante em que o redirect nomeia o alvo — que é a forma mais comum em
+    // script real — o token ganha `/` e letras, o anchor falha, e o nome do
+    // arquivo vira task fantasma. `2>/dev/null` é shell válido: o turbo
+    // resolve os pacotes normalmente e o shell consome o redirect.
+    expect(extractTurboRunTasks('turbo run build 2>/dev/null')).toEqual(['build']);
+    expect(extractTurboRunTasks('turbo run build 1>/dev/null')).toEqual(['build']);
+    expect(extractTurboRunTasks('turbo run build >/dev/null')).toEqual(['build']);
+    expect(extractTurboRunTasks('turbo run build >/dev/null 2>&1')).toEqual(['build']);
+    expect(extractTurboRunTasks('turbo run build >log.txt')).toEqual(['build']);
+    expect(extractTurboRunTasks('turbo run build 2>errors.log')).toEqual(['build']);
+    expect(extractTurboRunTasks('turbo run build &>all.log')).toEqual(['build']);
+    // Composto: o redirect encerra a lista, o `&&` seguinte segue como comando.
+    expect(extractTurboRunTasks('turbo run build 2>/dev/null && echo done')).toEqual(['build']);
+  });
+
+  it('não corta task legítima que por acaso carrega pontuação de nome', () => {
+    // O guard broadened precisa rejeitar o redirect sem criar o erro oposto:
+    // nome de task real contém `:`, `.`, `/`, `@` e `+`, nunca `<` ou `>`.
+    for (const task of [
+      'build',
+      'test:coverage',
+      'db:generate',
+      'build:prod',
+      'a.b',
+      'ci:quality',
+      'test:e2e',
+    ]) {
+      expect(extractTurboRunTasks(`turbo run ${task}`)).toEqual([task]);
+    }
+  });
+
   it('cobre os três @example do JSDoc de extractTurboRunTasks', () => {
     // O JSDoc afirma estes três; sem spec, uma refatoração pode quebrá-los em
     // silêncio e o próximo leitor acredita no exemplo.
