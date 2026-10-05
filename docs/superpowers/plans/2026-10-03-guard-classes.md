@@ -191,8 +191,8 @@ fix v1.3). `review-routing-examples.md` está em 104/300 e é o destino.
 
 | id | Task | Verificação |
 |----|------|-------------|
-| 4.1 | Ligar `turbo-redirect-differential.sh` ao `preflight` **ou** a um script de `ci:local` | rodar o dono **executa** o differential; mutação introduzindo o bug antigo deixa **vermelho**. Custo remedido 3×: **8,16/8,16/8,19 s**. **Pré-condição que a v2.1 omitiu:** a linha 83 usa `node --experimental-strip-types`, que nasceu no **Node 22.6**, e os 3 jobs do CI pinam **20** — decidir subir o CI ou reescrever a linha 83 sem a flag, senão o gate quebra no CI |
-| 4.2 | Auditar o plano contra as próprias classes antes do merge, **gravado em `.agents/runs/`** — não em commit message | arquivo versionado, uma linha por classe: onde este plano poderia cair nela, e por que não cai |
+| 4.1 | Ligar `turbo-redirect-differential.sh` ao `preflight` **ou** a um script de `ci:local` | rodar o dono **executa** o differential; mutação introduzindo o bug antigo deixa **vermelho**. Custo remedido 3×: **8,17/8,15/8,20 s** (remedido na 4.1). **Pré-condição que a v2.1 omitiu:** a linha 83 usa `node --experimental-strip-types`, que nasceu no **Node 22.6**, e os 5 pins do CI (3 arquivos) pinam **20** — **resolvido na 4.1**: o owner escolheu subir o CI + `engines.node >=22.6.0` |
+| 4.2 | Auditar o plano contra as próprias classes antes do merge, **gravado em `.agents/runs/`** — não em commit message | arquivo versionado, uma linha por classe: onde este plano poderia cair nela, e por que não cai — **feito**: [autoauditoria](../../../.agents/runs/2026-10-05-guard-classes-autoauditoria.md), veredito 4 das 7 |
 
 **4.2 não é burocracia.** Um plano que publica uma regra sobre controles
 desligados, enquanto entrega um controle desligado, começa falso no primeiro dia.
@@ -216,7 +216,7 @@ F2.2 (índice + claim X8) em paralelo a F2.1 e F3                   ▼
 | Virar só prosa — o defeito que B38 nomeou | 1.3/3.2/3.4 não existem no merge | F3 é pré-requisito de F4, não follow-up |
 | O registro de dentes envelhece igual o resto | `desconhecida` aparecendo nas linhas | 3.1 exige justificativa escrita **e ≥ 1 mutação medida** |
 | Backfill de 34 arquivos polui o template | PR grande e difícil de revisar | 1.4 é decisão do owner, com 3 opções |
-| Custo do differential no CI | preflight passa de **2,5 s** para **~11 s** (n=5 e n=3) | 4.1 deixa a escolha (preflight vs `ci:local`) com o owner — a v2.1 dizia "~10 s → ~18 s" e errava nos dois extremos |
+| Custo do differential no CI | preflight passa de **2,62 s** para **10,78 s** (n=3, ambos medidos) | 4.1 deixa a escolha (preflight vs `ci:local`) com o owner — a v2.1 dizia "~10 s → ~18 s" e errava nos dois extremos |
 | Differential quebra no CI | `node --experimental-strip-types` não existe no Node 20, que é o que o CI pinam | decidir **antes** de 4.1: subir os 3 jobs para ≥22.6, ou reescrever a linha 83 sem a flag |
 | A demanda cresce | alguém adiciona R-009/R-010/R-011 | ver §Fora de escopo |
 
