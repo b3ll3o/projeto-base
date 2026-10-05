@@ -131,7 +131,11 @@ O nome deve descrever **o problema**, não a ferramenta. `fix/coverage-gate-40`
    - `quality` (pass)
        │
        ▼
-10. Merge (squash preferencialmente) e apagar a branch
+10. Push novo na branch? → rodar [`pr-refresh`](../../workflows/pr-refresh.md)
+   (o corpo do PR envelhece a cada push, e nenhum gate o cobre)
+       │
+       ▼
+11. Merge (squash preferencialmente) e apagar a branch
 ```
 
 ## Pre-Push Quality Gate

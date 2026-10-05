@@ -24,6 +24,7 @@
 | `retrospective-mode` | "capturar aprendizados / post-mortem" | sequential | explorer → retrospective-capture → doc-writer (+ task-manager) |
 | `review-routing` | — | sequential | review-router → specialists (auto-dispatched via matriz) |
 | `specialist-routing` | specialist-router | sequential | router → controller (decide planejar ou bloquear) |
+| `pr-refresh` | "atualizar título/descrição do PR" | single | pr-refresh-scan → agente (reclassifica + reescreve) |
 
 ### Por Stack (workflows detalhados em `.agents/workflows/`)
 
@@ -366,6 +367,24 @@ RETRO RESULT ──► TRIAGE ──► STATE-AWARE ──► SPECIALIST-ROUTER 
 **Quando usar:** retro completa com ≥ 1 proposal `artifact: spec` E `confidence ≥ 70`. **Quando NÃO usar:** proposals apenas de memory/ADR (não viram spec) · confidence < 70 (volta para backlog) · working tree dirty · gap_detected pelo specialist-router (criar specialist antes).
 
 **Detalhes:** [`.agents/workflows/feedback-to-spec.md`](./workflows/feedback-to-spec.md) · spec: [`engineering-loop.md`](./specs/conventions/engineering-loop.md) §4 · skill retro: [`retrospective-capture/SKILL.md`](./skills/retrospective-capture/SKILL.md).
+
+---
+
+## `pr-refresh` (v1.10.0+) — Título e Descrição de um PR Aberto
+
+```text
+PUSH NOVO ──► T1 PR aberto? ──► T2 branch avançou? ──► T3 ≥1 claim DIVERGENTE? ──► T4 ainda OPEN? ──► reescreve SÓ as linhas divergentes
+               (gh pr list,     (rev-list --count)    (pr-refresh-scan.ts)        (re-checar no     (gh api -X PATCH …/pulls/N
+                mede stdout)                                               momento da escrita) -F body=@arquivo)
+```
+
+**Quando usar:** PR aberto + push novo. **Quando NÃO usar:** PR MERGED/CLOSED (histórico imutável) · PR sem description (isso é criação) · branch sem PR aberto.
+
+**T3 carrega o peso:** T1 + T2 são verdadeiros em 100% dos pushes de uma branch com PR aberto — disparar só com eles é a **classe 1**. E **T1 mede o stdout do `gh`, não o `$?`**: auth expirado devolve lista vazia _e_ exit ≠ 0, e testar o exit acusa "não há PR" quando o truth é "não consegui perguntar".
+
+**Fronteira dura:** o corpo do PR é entrada não confiável e mutável; o scanner **não executa nada que venha dele** (é regex; o único subprocesso é o `git`) — executar o comando de re-medição escrito no corpo seria RCE em CI. Offline por padrão, porque o `preflight` roda sem rede e `.husky/pre-push:9` faz `|| exit 1` em qualquer branch.
+
+**Detalhes:** [`.agents/workflows/pr-refresh.md`](./workflows/pr-refresh.md) · script: [`tooling/scripts/pr-refresh-scan.ts`](../tooling/scripts/pr-refresh-scan.ts) · spec: [`guard-classes.md`](./specs/conventions/guard-classes.md).
 
 ---
 
