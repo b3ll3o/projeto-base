@@ -17,7 +17,7 @@
 // - check ausente → skipped, nunca ✓ (o bug que o formatoMark já documenta)
 
 import { describe, expect, it } from 'vitest';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
@@ -331,11 +331,35 @@ describe('checkMemoryDirConcordance', () => {
   });
 
   it('a derivação canônica resolve para um diretório que existe de verdade', () => {
-    // Se a derivação canônica quebrar, o único lugar que manda no destino
-    // para de mandar — e o check tem de dizer isso, não passar calado.
-    const r = checkMemoryDirConcordance({ repoRoot: process.cwd() });
-    expect(r.ok).toBe(true);
-    expect(r.errors).toEqual([]);
+    // Este teste existia com o nome acima e a assertion `ok:true, errors:[]` —
+    // idêntica à do teste anterior. O nome prometia um dente que a assertion
+    // não tinha: `checkMemoryDirConcordance` compara as DECLARAÇÕES entre si e
+    // nunca pergunta se o destino derivado existe, então uma derivação que
+    // apontasse para o vazio passaria calada — exatamente o que o comentário
+    // dizia querer evitar. (Achado da task 3.1, ao montar o registro de dentes:
+    // um teste cujo nome promete mais do que a assertion entrega é classe 7 em
+    // forma de spec.)
+    //
+    // A correção é fazer o teste olhar o que o nome afirma: executar a
+    // derivação e verificar que o caminho derivado EXISTE e tem o result file
+    // real dentro. Se `MEMORY_DIR` deixar de derivar, ou derivar um path que
+    // ninguém cria, isto fica vermelho.
+    const canon = readFileSync(
+      join(process.cwd(), '.agents/specs/conventions/retrospective-capture.md'),
+      'utf8',
+    );
+    const line = canon.split('\n').find((l) => l.startsWith('MEMORY_DIR='));
+    expect(line, 'a fonte única precisa declarar MEMORY_DIR=').toBeTruthy();
+
+    const out = spawnSync('bash', ['-c', `${line}; printf %s "$MEMORY_DIR"`], {
+      cwd: join(process.cwd(), '.tooling'), // de um SUBDIRECTÓRIO: é lá que o bug aparecia
+      encoding: 'utf8',
+    });
+    const memoryDir = out.stdout.trim();
+
+    expect(memoryDir).toMatch(/\/memory$/);
+    // O que o nome promete: um diretório que existe de verdade.
+    expect(existsSync(memoryDir), `derivou "${memoryDir}", que não existe`).toBe(true);
   });
 
   it('convenção ausente → skipped com motivo, nunca ok silencioso', () => {
