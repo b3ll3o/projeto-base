@@ -113,6 +113,20 @@ forma que passa e não deveria) → **evidência medida** de que a receita pega.
   `guard-classes` corrigeu, com o comando e as exclusões **escritos no
   backlog** — porque um `0` que só fecha com exclusão escondida é um gate
   que não dispara.
+- **A variante que um guard de reconciliação não pega (2026-10-05).** O registro
+  de dentes em `ci-defense-in-depth.md` **tinha** o comando de cada RED ao lado
+  do número esperado, e `check-teeth-registry` reconcilia toda linha. Três
+  números envelheceram assim mesmo: a classe 3 dizia **9** (são **8**) e o
+  comando 4 dizia "8 dos **9** gates" (são **12 dos 13** — a tabela cresceu de
+  9 para 13). As mutações eram as mesmas; mudou o corpus. **O guard validava o
+  endereço da claim — o `path` da linha — e não a claim.** Reconciliar onde a
+  evidência mora não a impede de envelhecer; só reexecutar o comando, no dia da
+  leitura, impede.
+- **Por que o registro não se autoprotege:** `check-teeth-registry` **não pode**
+  reexecutar os REDs de todos os gates em cada preflight — o registro documenta
+  o vermelho de gates que ele próprio não é. A defesa é o que o §2 já exige (o
+  comando ao lado do número) mais a auditoria que rodou todos uma vez e corrigiu
+  o que divergiu.
 
 ## §3 O que cada classe NÃO é detectável estaticamente
 

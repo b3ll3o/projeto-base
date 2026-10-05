@@ -108,7 +108,7 @@ extraído em commit `59eb083` (refactor que consolidou fixtures herméticas).
 | `check-tsconfig-drift` | `check-tsconfig-drift.spec.ts` — 1 de 2 | controle negativo | `npx vitest run --root .tooling/scripts/ci check-tsconfig-drift` | `.tooling/scripts/ci/check-tsconfig-drift.ts` |
 | `check-teeth-registry` | `check-teeth-registry.spec.ts` — 12 testes | **mutação** | comando 3 → **vermelho nomeando o gate** (medido 2026-10-05) | `.tooling/scripts/ci/check-teeth-registry.ts` |
 | `check-self-firing-guard` | `check-self-firing-guard.spec.ts` — 10 testes | **mutação** | comando 5 → **diferencial vira 0 → 0** (medido 2026-10-05) | `.tooling/scripts/ci/check-self-firing-guard.ts` |
-| `turbo-redirect-differential` | o próprio script — 18 formas de redirect contra o turbo REAL; e o comando 7 | **mutação** | comando 7 → **1 e 3 de 18 divergentes** (medido 2026-10-05) | `.tooling/scripts/ci/turbo-redirect-differential.sh` |
+| `turbo-redirect-differential` | o próprio script — 18 formas de redirect contra o turbo REAL; e o comando 7. **O veredito** (`[ "$div" -eq 0 ]`) é coberto por `turbo-redirect-differential.spec.ts` — 2 de 3 | **mutação** | comando 7 → **1 e 3 de 18 divergentes**; e o veredito `-eq 0` → `-ge 0` → **2 de 3 vermelho** (medido 2026-10-05) | `.tooling/scripts/ci/turbo-redirect-differential.sh` |
 | `check-harness-owner` | `check-harness-owner.spec.ts` — 18 testes, incluindo o segundo órfão | **mutação** | comando 6 → **exit 0** (medido 2026-10-05) | `.tooling/scripts/ci/check-harness-owner.ts` |
 
 > A coluna **Arquivo** é a chave de reconciliação, e não um enfeite: o
@@ -147,11 +147,11 @@ cp /tmp/ci-defense.bak .agents/specs/conventions/ci-defense-in-depth.md   # rest
 
 # 4) check-teeth-registry (roteamento) — o prefixo de "." some da path_glob.
 #    A rota continua existindo e o lint da matrix continua verde (a regra não é
-#    blocking): só que ela casa 0 arquivos. 8 dos 9 gates ficam sem rota —
+#    blocking): só que ela casa 0 arquivos. 12 dos 13 gates ficam sem rota —
 #    classe 1, "condição inalcançável". Este é o RED que a task 3.2 achou.
 sed -i 's|- pattern: "\.tooling/scripts/ci/\*\*"|- pattern: "tooling/scripts/ci/**"|' \
   .agents/specs/conventions/review-routing.md
-npx tsx .tooling/scripts/ci/check-teeth-registry.ts   # -> 8 erros "não alcançado por nenhuma path_glob"
+npx tsx .tooling/scripts/ci/check-teeth-registry.ts   # -> 12 erros "não alcançado por nenhuma path_glob"
 sed -i 's|- pattern: "tooling/scripts/ci/\*\*"|- pattern: ".tooling/scripts/ci/**"|' \
   .agents/specs/conventions/review-routing.md       # restaurado byte-exato
 
@@ -162,7 +162,7 @@ sed -i 's|- pattern: "tooling/scripts/ci/\*\*"|- pattern: ".tooling/scripts/ci/*
 #    sem o `N`, "verde" e "isenção inerte" são o mesmo resultado.
 perl -0pi -e "s|return line\.replaceAll\(SELF_NAME, ''\);|return line;|" \
   .tooling/scripts/ci/check-memory-dir-concordance.ts
-npx tsx .tooling/scripts/ci/check-self-firing-guard.ts   # -> 9 erros "dispara em si mesmo"
+npx tsx .tooling/scripts/ci/check-self-firing-guard.ts   # -> 8 erros "dispara em si mesmo"
 perl -0pi -e "s|^function stripSelfName\(line: string\): string \{\n  return line;\n\}|function stripSelfName(line: string): string {\n  return line.replaceAll(SELF_NAME, '');\n}|m" \
   .tooling/scripts/ci/check-memory-dir-concordance.ts   # restaurado byte-exato (conferido com diff)
 
@@ -197,9 +197,9 @@ cp /tmp/cpjd.bak .tooling/scripts/ci/check-package-json-drift.ts   # restaurado 
 Os números deste registro são medidos e trazem o `n` ao lado. O comando 7
 divergente em **1 e 3 de 18** formas (n=2 mutações: perder o `>&`, perder a
 proteção de aspas) — citar uma só seria o mesmo erro do `3+` com outro
-número. A classe 3 diverge em **9** erros (n=1 mutação). A primeira redação
-dizia "`3+`" por ter lido três linhas da saída: o mesmo erro do `X8` do
-backlog, e que a coluna Nível existe para tornar visível.
+número. A classe 3 diverge em **8** erros (n=1 mutação). A primeira redação
+dizia "`3+`" por ter lido três linhas: o mesmo erro do `X8` do backlog, e a
+coluna Nível existe para torná-lo visível. Já envelheceram — classe 7.
 
 Um segundo acerto veio da redação anterior: ela citava o símbolo que o guard
 procura, e o guard — com razão — a acusou enquanto eu a escrevia. Um guard que
