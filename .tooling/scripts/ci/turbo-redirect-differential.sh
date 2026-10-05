@@ -91,8 +91,21 @@ while IFS= read -r form; do
   #    turbo no repo converte a autoverificação em abort permanente, e o sintoma
   #    — "turbo não executou" — aponta para o turbo, não para o grep. Casa pela
   #    forma do banner, que é o que prova que o binário rodou, sem fixar número.
-  grep -qE 'turbo [0-9]+\.[0-9]+\.[0-9]+' "$OUT" \
-    || { echo "ABORTA: turbo nao executou em '$form'"; exit 1; }
+  grep -qE 'turbo [0-9]+\.[0-9]+\.[0-9]+' "$OUT" || {
+    # 5. Abortar sem dump é abortar sem evidência. Este gate já abortou duas
+    #    vezes no CI com "turbo nao executou" e nenhuma saida — e a causa não
+    #    era o turbo. Falha barulhenta inclui o que saiu; sem isso a próxima
+    #    hipótese também é um palpite.
+    echo "ABORTA: turbo nao executou em '$form'"
+    echo "--- exit de 'pnpm turbo run $form' e saida capturada ---"
+    echo "WS=$WS"
+    echo "node_modules -> $(readlink "$WS/node_modules" 2>&1)"
+    echo "turbo visivel em \$WS/node_modules/.bin: $(ls "$WS/node_modules/.bin/turbo" 2>&1)"
+    echo "--- conteudo de \$OUT ---"
+    cat "$OUT" 2>&1 | head -30
+    echo "--- fim ---"
+    exit 1
+  }
 
   real=$(grep -oE 'Could not find task `[^`]+`' "$OUT" \
     | sed 's/.*`\(.*\)`/\1/' | sort -u | tr '\n' ',' | sed 's/,$//')
