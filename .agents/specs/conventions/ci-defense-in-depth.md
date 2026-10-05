@@ -92,19 +92,28 @@ extraído em commit `59eb083` (refactor que consolidou fixtures herméticas).
 | **controle negativo** | alimenta entrada errada (tmpdir) e afirma vermelho | parcial — prova a lógica, não a integração |
 | **desconhecida** | só afirma verde | **não** |
 
-| Gate | Onde o dente está | Nível | Comando da prova |
-|---|---|---|---|
-| `check-archive-integrity` | `check-archive-integrity.spec.ts` — `arquivo INVÁLIDO no archive REAL` + `arquivo inválido no diretório ERRADO` (o par) | **mutação** | comando 1 → **3 de 7 vermelho** (medido 2026-10-05) |
-| `check-memory-dir-concordance` | `check-memory-dir-concordance.spec.ts` — `a derivação canônica resolve para um diretório que existe de verdade` | **mutação** | comando 2 → **3 de 27 vermelho** (medido 2026-10-05) |
-| `check-turbo-drift` | `check-turbo-drift.spec.ts` — 5 de 6 testes | controle negativo | `npx vitest run --root .tooling/scripts/ci check-turbo-drift` |
-| `check-package-json-drift` | `check-package-json-drift.spec.ts` — 9 de 23 | controle negativo | `npx vitest run --root .tooling/scripts/ci check-package-json-drift` |
-| `check-docker-drift` | `check-docker-drift.spec.ts` — 3 de 5 | controle negativo | `npx vitest run --root .tooling/scripts/ci check-docker-drift` |
-| `check-eslint-drift` | `check-eslint-drift.spec.ts` — 2 de 5 | controle negativo | `npx vitest run --root .tooling/scripts/ci check-eslint-drift` |
-| `check-doc-refs` | `preflight.spec.ts` → `describe('checkDocRefs')` — **o spec não é `check-doc-refs.spec.ts`**, é o do runner | controle negativo | `npx vitest run --root .tooling/scripts/ci -t checkDocRefs` |
-| `review-routing` matrix lint | `tooling/scripts/lint-review-routing.spec.ts` — **diretório diferente** (veja a armadilha abaixo) | controle negativo | `npx vitest run --root tooling/scripts lint-review-routing` |
-| `check-tsconfig-drift` | `check-tsconfig-drift.spec.ts` — 1 de 2 | controle negativo | `npx vitest run --root .tooling/scripts/ci check-tsconfig-drift` |
+| Gate | Onde o dente está | Nível | Comando da prova | Arquivo |
+|---|---|---|---|---|
+| `check-archive-integrity` | `check-archive-integrity.spec.ts` — `arquivo INVÁLIDO no archive REAL` + `arquivo inválido no diretório ERRADO` (o par) | **mutação** | comando 1 → **3 de 7 vermelho** (medido 2026-10-05) | `.tooling/scripts/ci/check-archive-integrity.ts` |
+| `check-memory-dir-concordance` | `check-memory-dir-concordance.spec.ts` — `a derivação canônica resolve para um diretório que existe de verdade` | **mutação** | comando 2 → **3 de 27 vermelho** (medido 2026-10-05) | `.tooling/scripts/ci/check-memory-dir-concordance.ts` |
+| `check-turbo-drift` | `check-turbo-drift.spec.ts` — 5 de 6 testes | controle negativo | `npx vitest run --root .tooling/scripts/ci check-turbo-drift` | `.tooling/scripts/ci/check-turbo-drift.ts` |
+| `check-package-json-drift` | `check-package-json-drift.spec.ts` — 9 de 23 | controle negativo | `npx vitest run --root .tooling/scripts/ci check-package-json-drift` | `.tooling/scripts/ci/check-package-json-drift.ts` |
+| `check-docker-drift` | `check-docker-drift.spec.ts` — 3 de 5 | controle negativo | `npx vitest run --root .tooling/scripts/ci check-docker-drift` | `.tooling/scripts/ci/check-docker-drift.ts` |
+| `check-eslint-drift` | `check-eslint-drift.spec.ts` — 2 de 5 | controle negativo | `npx vitest run --root .tooling/scripts/ci check-eslint-drift` | `.tooling/scripts/ci/check-eslint-drift.ts` |
+| `check-doc-refs` | `preflight.spec.ts` → `describe('checkDocRefs')` — **o spec não é `check-doc-refs.spec.ts`**, é o do runner | controle negativo | `npx vitest run --root .tooling/scripts/ci -t checkDocRefs` | `.tooling/scripts/ci/check-doc-refs.ts` |
+| `review-routing` matrix lint | `tooling/scripts/lint-review-routing.spec.ts` — **diretório diferente** (veja a armadilha abaixo) | controle negativo | `npx vitest run --root tooling/scripts lint-review-routing` | `tooling/scripts/lint-review-routing.ts` |
+| `check-tsconfig-drift` | `check-tsconfig-drift.spec.ts` — 1 de 2 | controle negativo | `npx vitest run --root .tooling/scripts/ci check-tsconfig-drift` | `.tooling/scripts/ci/check-tsconfig-drift.ts` |
+| `check-teeth-registry` | `check-teeth-registry.spec.ts` — 12 testes | **mutação** | comando 3 → **vermelho nomeando o gate** (medido 2026-10-05) | `.tooling/scripts/ci/check-teeth-registry.ts` |
 
-Os **dois comandos de mutação**, medidos 2026-10-05. Cada um reverte o
+> A coluna **Arquivo** é a chave de reconciliação, e não um enfeite: o
+> `check-teeth-registry` casa o registro com o `preflight.ts` por ela. Sem a
+> coluna, o gate é identificado pelo **nome de exibição** — e aí
+> `'Cross-refs em .md versionados'` casa com `` check-doc-refs `` por
+> coincidência, `check-eslint-drift` (2 entradas) contaria como dois gates, e
+> qualquer gate novo entraria no preflight sem aviso. Foi a ausência desta
+> coluna que o check acusou na primeira execução (9 de 9 sem correspondência).
+
+Os **quatro comandos de mutação**, medidos 2026-10-05. Cada um reverte o
 arquivo ao final — a mutação é efêmera por desenho, e o `git diff` depois
 deles tem de estar vazio:
 
@@ -122,7 +131,28 @@ sed -i 's|^MEMORY_DIR=.*|MEMORY_DIR="$HOME/caminho-que-nao-existe/memory"|' \
   .agents/specs/conventions/retrospective-capture.md
 npx vitest run --root .tooling/scripts/ci check-memory-dir-concordance  # -> 3 de 27 vermelho
 git checkout -- .agents/specs/conventions/retrospective-capture.md
+
+# 3) check-teeth-registry (reconciliação) — some uma linha da tabela de dentes.
+#    O gate continua RODANDO; é a documentação que ficou órfã. Vermelho
+#    nomeando o arquivo, não um "registro divergente" genérico.
+sed -i '/^| `check-docker-drift` |/d' .agents/specs/conventions/ci-defense-in-depth.md
+npx tsx .tooling/scripts/ci/check-teeth-registry.ts   # -> 1 erro, nomeando check-docker-drift.ts
+cp /tmp/ci-defense.bak .agents/specs/conventions/ci-defense-in-depth.md   # restaurado byte-exato
+
+# 4) check-teeth-registry (roteamento) — o prefixo de "." some da path_glob.
+#    A rota continua existindo e o lint da matrix continua verde (a regra não é
+#    blocking): só que ela casa 0 arquivos. 8 dos 9 gates ficam sem rota —
+#    classe 1, "condição inalcançável". Este é o RED que a task 3.2 achou.
+sed -i 's|- pattern: "\.tooling/scripts/ci/\*\*"|- pattern: "tooling/scripts/ci/**"|' \
+  .agents/specs/conventions/review-routing.md
+npx tsx .tooling/scripts/ci/check-teeth-registry.ts   # -> 8 erros "não alcançado por nenhuma path_glob"
+sed -i 's|- pattern: "tooling/scripts/ci/\*\*"|- pattern: ".tooling/scripts/ci/**"|' \
+  .agents/specs/conventions/review-routing.md       # restaurado byte-exato
 ```
+
+> Comandos 3 e 4 **não** usam `git checkout --` como 1 e 2: eles reverteriam
+> trabalho ainda não commitado de quem está no meio da task. O `sed` inverso é
+> o restauração, e foi conferido com `diff` contra um backup antes de seguir.
 
 **A armadilha de ler este registro por nome de arquivo.** `tooling/` e
 `.tooling/` são **dois diretórios distintos**, ambos versionados, ambos rodados

@@ -18,6 +18,7 @@ import { checkPackageJsonDrift } from './check-package-json-drift';
 import { checkDockerDrift } from './check-docker-drift';
 import { checkArchiveIntegrity } from './check-archive-integrity';
 import { checkMemoryDirConcordance } from './check-memory-dir-concordance';
+import { checkTeethRegistry } from './check-teeth-registry';
 import { existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
@@ -78,17 +79,32 @@ export function formatMark(r: CheckResult): string {
 
 async function main(): Promise<void> {
   console.log('\u{1F50D} Pre-flight CI checks\n');
-  const checks: Array<{ name: string; fn: () => CheckResult | Promise<CheckResult> }> = [
+  const checks: Array<{
+    name: string;
+    /**
+     * O ARQUIVO que implementa o gate. Não é decoração: a task 3.2 do plano
+     * `guard-classes` reconcilia este array contra o registro de dentes, e
+     * contra a matriz de roteamento — e não há como casar um nome de
+     * exibição ('Cross-refs em .md versionados') com uma entrada de registro
+     * ('`check-doc-refs`') sem o path. Sem este campo, a reconciliação seria
+     * por semelhança de nome: exatamente a classe 2 — cobre a forma que você
+     * conhece e só ela.
+     */
+    file: string;
+    fn: () => CheckResult | Promise<CheckResult>;
+  }> = [
     // F2-T2: escopo = todo `.md` versionado (git ls-files), nao só `docs` +
     // `.agents/specs`. Antes, `AGENTS.md` — o indice que todo agent le
     // primeiro para decidir a quem despachar — ficava fora do gate.
     // `docsRoots` é o fallback (walk) caso o git não esteja disponível.
     {
       name: 'Cross-refs em .md versionados',
+      file: '.tooling/scripts/ci/check-doc-refs.ts',
       fn: () => checkDocRefs({ docsRoot: '.', docsRoots: ['docs', '.agents/specs'] }),
     },
     {
       name: 'tsconfig drift (strict, noUncheckedIndexedAccess)',
+      file: '.tooling/scripts/ci/check-tsconfig-drift.ts',
       fn: () =>
         checkTsconfigDrift({
           tsconfigsRoot: '.',
@@ -97,30 +113,37 @@ async function main(): Promise<void> {
     },
     {
       name: 'ESLint config drift (apps)',
+      file: '.tooling/scripts/ci/check-eslint-drift.ts',
       fn: () => checkEslintDrift({ appsRoot: 'apps', allowlist: [] }),
     },
     {
       name: 'ESLint config drift (packages)',
+      file: '.tooling/scripts/ci/check-eslint-drift.ts',
       fn: () => checkEslintDrift({ appsRoot: 'packages', allowlist: [] }),
     },
     {
       name: 'turbo.json drift (pipeline canônico)',
+      file: '.tooling/scripts/ci/check-turbo-drift.ts',
       fn: () => checkTurboDrift({ turboPath: 'turbo.json' }),
     },
     {
       name: 'package.json drift (scripts canônicos + fantasmas)',
+      file: '.tooling/scripts/ci/check-package-json-drift.ts',
       fn: () => checkPackageJsonDrift({ packageJsonPath: 'package.json', projectRoot: '.' }),
     },
     {
       name: 'docker drift (.dockerignore + Dockerfile size/base)',
+      file: '.tooling/scripts/ci/check-docker-drift.ts',
       fn: () => checkDockerDrift('.'),
     },
     {
       name: 'review-routing matrix lint (YAML + LOC + reviewer refs)',
+      file: 'tooling/scripts/lint-review-routing.ts',
       fn: () => checkReviewRoutingLint(),
     },
     {
       name: 'archive integrity (.agents/runs/archive/*.md frontmatter canônico)',
+      file: '.tooling/scripts/ci/check-archive-integrity.ts',
       fn: () => checkArchiveIntegrity('.'),
     },
     {
@@ -129,7 +152,18 @@ async function main(): Promise<void> {
       // arquivos, em 6 notações — uma delas um `test -f` executável com path
       // de máquina, falso em toda máquina.
       name: 'destino da retrospectiva (fonte única, sem 2ª declaração)',
+      file: '.tooling/scripts/ci/check-memory-dir-concordance.ts',
       fn: () => checkMemoryDirConcordance({ repoRoot: '.' }),
+    },
+    {
+      // Task 3.2 do plano guard-classes. Reconcilia o registro de dentes com
+      // o preflight E com a matriz de roteamento. Sem ele, o registro
+      // envelhece em silêncio e um gate pode morar num diretório que nenhuma
+      // `path_glob` alcança — classe 1, condição inalcançável: todo mundo
+      // vê verde e nenhuma revisão é despachada.
+      name: 'registro de dentes (registro ↔ preflight ↔ roteamento)',
+      file: '.tooling/scripts/ci/check-teeth-registry.ts',
+      fn: () => checkTeethRegistry(),
     },
   ];
 
