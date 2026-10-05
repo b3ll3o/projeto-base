@@ -257,7 +257,7 @@ describe('checkTeethRegistry — contra o repo de verdade', () => {
       'utf8',
     );
     const found = registryGateFiles(registryMd);
-    expect(found).toHaveLength(10);
+    expect(found).toHaveLength(11);
     // E nenhum deles pode ser um spec — a coluna Arquivo documenta o GATE.
     expect(found.filter((f) => f.endsWith('.spec.ts'))).toEqual([]);
 

@@ -49,7 +49,7 @@ const SKIP_DIRS = new Set(['runs']);
  * que foi exatamente o erro do guard de redirect do PR #43 (classe 2: só a
  * forma comum). Por isso a lista é explícita e o spec cobre uma por uma.
  */
-const DECLARATION_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
+export const DECLARATION_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   {
     pattern: /memory-dir/,
     reason: 'usa o símbolo `memory-dir` em vez de referenciar a seção canônica',
@@ -91,6 +91,11 @@ const EXECUTABLE_FENCE_LANGS = new Set(['bash', 'sh', 'shell', 'zsh', 'console',
 
 /** O nome deste arquivo — que contém o token `memory-dir` que ele procura. */
 const SELF_NAME = 'check-memory-dir-concordance';
+
+/** Exportado para o `check-self-firing-guard` (task 3.3), que mede o
+ *  diferencial desta isenção. Ver aquele arquivo para por que o diferential
+ *  — e não o código daqui — é a propriedade que tem dentes. */
+export const SELF_EXEMPTION = { name: SELF_NAME, strip: stripSelfName };
 
 /**
  * Remove as menções ao PRÓPRIO NOME do check antes de casar os padrões.
@@ -155,6 +160,44 @@ function walk(dir: string, acc: string[] = []): string[] {
     }
   }
   return acc;
+}
+
+/**
+ * As LINHAS que este guard varre, com o arquivo e o número de cada uma.
+ *
+ * Exportado para o `check-self-firing-guard` (task 3.3) medir o diferencial
+ * da isenção do próprio nome. Existe como função, e não como reimplementação
+ * lá dentro, para que a política de exclusão (`SKIP_DIRS`, escopo `.agents`)
+ * tenha UMA definição: um detector que varre um conjunto diferente do guard
+ * mede um Corpus que não é o Corpus, e o verde dele não descreve nada.
+ */
+export function sweptCorpus(repoRoot: string): Array<{ file: string; line: number; text: string }> {
+  const root = resolve(repoRoot);
+  const agentsRoot = join(root, '.agents');
+  if (!existsSync(agentsRoot)) return [];
+
+  const canonPath = join(root, CANONICAL_FILE);
+  const canonRange = existsSync(canonPath)
+    ? canonicalLineRange(readFileSync(canonPath, 'utf8'))
+    : null;
+
+  const out: Array<{ file: string; line: number; text: string }> = [];
+  for (const file of walk(agentsRoot)) {
+    const isCanon = file === canonPath;
+    const lines = readFileSync(file, 'utf8').split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const n = i + 1;
+      // A seção canônica é a única lugar onde declarar é permitido — logo
+      // ela NÃO faz parte do que o guard varre. Sem esta linha, o corpus
+      // daqui é MAIOR que o do guard, e o `check-self-firing-guard` acusa
+      // linhas que o guard jamais acusaria. Foi o que aconteceu na primeira
+      // execução: `retrospective-capture.md:90` casou `claude/projects`
+      // sendo que está dentro da seção canônica.
+      if (isCanon && canonRange && n >= canonRange.start && n <= canonRange.end) continue;
+      out.push({ file: relative(root, file), line: n, text: lines[i]! });
+    }
+  }
+  return out;
 }
 
 /**

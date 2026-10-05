@@ -222,6 +222,7 @@ const PREFLIGHT_GATES: GateRef[] = [
   { name: 'archive integrity', file: '.tooling/scripts/ci/check-archive-integrity.ts' },
   { name: 'memory dir concordance', file: '.tooling/scripts/ci/check-memory-dir-concordance.ts' },
   { name: 'registro de dentes', file: '.tooling/scripts/ci/check-teeth-registry.ts' },
+  { name: 'classe 3', file: '.tooling/scripts/ci/check-self-firing-guard.ts' },
 ];
 
 export function checkTeethRegistry(): CheckResult {

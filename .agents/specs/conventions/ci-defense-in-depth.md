@@ -104,6 +104,7 @@ extraído em commit `59eb083` (refactor que consolidou fixtures herméticas).
 | `review-routing` matrix lint | `tooling/scripts/lint-review-routing.spec.ts` — **diretório diferente** (veja a armadilha abaixo) | controle negativo | `npx vitest run --root tooling/scripts lint-review-routing` | `tooling/scripts/lint-review-routing.ts` |
 | `check-tsconfig-drift` | `check-tsconfig-drift.spec.ts` — 1 de 2 | controle negativo | `npx vitest run --root .tooling/scripts/ci check-tsconfig-drift` | `.tooling/scripts/ci/check-tsconfig-drift.ts` |
 | `check-teeth-registry` | `check-teeth-registry.spec.ts` — 12 testes | **mutação** | comando 3 → **vermelho nomeando o gate** (medido 2026-10-05) | `.tooling/scripts/ci/check-teeth-registry.ts` |
+| `check-self-firing-guard` | `check-self-firing-guard.spec.ts` — 10 testes | **mutação** | comando 5 → **diferencial vira 0 → 0** (medido 2026-10-05) | `.tooling/scripts/ci/check-self-firing-guard.ts` |
 
 > A coluna **Arquivo** é a chave de reconciliação, e não um enfeite: o
 > `check-teeth-registry` casa o registro com o `preflight.ts` por ela. Sem a
@@ -113,7 +114,7 @@ extraído em commit `59eb083` (refactor que consolidou fixtures herméticas).
 > qualquer gate novo entraria no preflight sem aviso. Foi a ausência desta
 > coluna que o check acusou na primeira execução (9 de 9 sem correspondência).
 
-Os **quatro comandos de mutação**, medidos 2026-10-05. Cada um reverte o
+Os **cinco comandos de mutação**, medidos 2026-10-05. Cada um reverte o
 arquivo ao final — a mutação é efêmera por desenho, e o `git diff` depois
 deles tem de estar vazio:
 
@@ -148,11 +149,33 @@ sed -i 's|- pattern: "\.tooling/scripts/ci/\*\*"|- pattern: "tooling/scripts/ci/
 npx tsx .tooling/scripts/ci/check-teeth-registry.ts   # -> 8 erros "não alcançado por nenhuma path_glob"
 sed -i 's|- pattern: "tooling/scripts/ci/\*\*"|- pattern: ".tooling/scripts/ci/**"|' \
   .agents/specs/conventions/review-routing.md       # restaurado byte-exato
+
+# 5) check-self-firing-guard (classe 3) — a isenção mecânica é neutralizada.
+#    O guard NÃO fica vermelho: a linha que cita o nome dele casa o símbolo
+#    que é parte do próprio nome, e a seção canônica o absorve. É por isso
+#    que este check é um DIFERENCIAL (N → 0) e não uma asserção de verde —
+#    sem o `N`, "verde" e "isenção inerte" são o mesmo resultado.
+perl -0pi -e "s|return line\.replaceAll\(SELF_NAME, ''\);|return line;|" \
+  .tooling/scripts/ci/check-memory-dir-concordance.ts
+npx tsx .tooling/scripts/ci/check-self-firing-guard.ts   # -> 9 erros "dispara em si mesmo"
+perl -0pi -e "s|^function stripSelfName\(line: string\): string \{\n  return line;\n\}|function stripSelfName(line: string): string {\n  return line.replaceAll(SELF_NAME, '');\n}|m" \
+  .tooling/scripts/ci/check-memory-dir-concordance.ts   # restaurado byte-exato (conferido com diff)
 ```
 
-> Comandos 3 e 4 **não** usam `git checkout --` como 1 e 2: eles reverteriam
-> trabalho ainda não commitado de quem está no meio da task. O `sed` inverso é
-> o restauração, e foi conferido com `diff` contra um backup antes de seguir.
+> O `9` é medido, não estimado. E a primeira redação deste bloco dizia
+> "`3+`" porque eu tinha lido só as três primeiras linhas da saída — o mesmo
+> erro que o `X8` do backlog comete, e que a coluna **Nível** deste registro
+> existe para tornar visível.
+
+Um segundo acerto veio da redação anterior: ela citava, em prosa deste
+arquivo, o símbolo que o guard procura, e o guard — com razão — a acusou
+enquanto eu a escrevia. Um guard que pega o autor da própria documentação é
+um guard funcionando; o conserto é no texto, nunca no guard.
+
+> Comandos 3 a 5 **não** usam `git checkout --` como 1 e 2: eles reverteriam
+> trabalho ainda não commitado de quem está no meio da task. O `sed`/perl
+> inverso é a restauração, e cada um foi conferido com `diff` contra um
+> backup antes de seguir.
 
 **A armadilha de ler este registro por nome de arquivo.** `tooling/` e
 `.tooling/` são **dois diretórios distintos**, ambos versionados, ambos rodados

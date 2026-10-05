@@ -19,6 +19,7 @@ import { checkDockerDrift } from './check-docker-drift';
 import { checkArchiveIntegrity } from './check-archive-integrity';
 import { checkMemoryDirConcordance } from './check-memory-dir-concordance';
 import { checkTeethRegistry } from './check-teeth-registry';
+import { checkSelfFiringGuards } from './check-self-firing-guard';
 import { existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
@@ -164,6 +165,16 @@ async function main(): Promise<void> {
       name: 'registro de dentes (registro ↔ preflight ↔ roteamento)',
       file: '.tooling/scripts/ci/check-teeth-registry.ts',
       fn: () => checkTeethRegistry(),
+    },
+    {
+      // Task 3.3 do plano guard-classes. Classe 3 — o guard que dispara em
+      // si mesmo. Não pergunta se o guard está verde: pergunta se a isenção
+      // que o impede de se acusar está pagando pelo trabalho que declara.
+      // Um 0 → 0 aqui significa isenção inerte, e a próxima mudança de padrão
+      // a transforma num catch que engole o que vier.
+      name: 'classe 3 (guard que dispara em si mesmo)',
+      file: '.tooling/scripts/ci/check-self-firing-guard.ts',
+      fn: () => checkSelfFiringGuards(),
     },
   ];
 
