@@ -121,7 +121,11 @@ export function registryGateFiles(markdown: string): string[] {
     if (!line.trimStart().startsWith('|')) continue;
 
     for (const m of line.matchAll(/`([^`]+)`/g)) {
-      if (isGatePath(m[1])) files.push(m[1]);
+      // `m[1]` é `string | undefined` sob `noUncheckedIndexedAccess`. O grupo
+      // é obrigatório no padrão; o filtro deixa isso explícito em vez de um
+      // `as string` que o compilador aceitaria e o leitor teria que conferir.
+      const token = m[1];
+      if (token !== undefined && isGatePath(token)) files.push(token);
     }
   }
   return files;

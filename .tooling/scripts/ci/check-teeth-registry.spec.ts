@@ -237,6 +237,32 @@ Fora da tabela, um path citado em prosa: \`.tooling/scripts/ci/check-fantasma.ts
 `;
     expect(registryGateFiles(md)).toEqual(['.tooling/scripts/ci/check-x.ts']);
   });
+
+  it('a seção de DÍVIDIDA não vaza para o registro, mesmo com tabela', () => {
+    // `ci-defense-in-depth.md` ganhou a seção "Dívida de controles", que
+    // documenta um harness que NÃO roda. Se ela usar tabela `|`, um parse que
+    // não pare na primeira linha não-`|` a leria como entrada do registro — e
+    // o `check-teeth-registry` passaria a acusar "entrada que não corresponde
+    // a nenhum gate" por causa de uma frase honestamente escrita.
+    //
+    // Este teste existe porque o parse HOJE para na prosa. Se alguém um dia
+    // trocar a prosa por tabela, este teste é o que avisa — e é a diferença
+    // entre um documento que documenta e um documento que trava o pipeline.
+    const md = `
+## Registro de dentes
+
+| Gate | Nível | Arquivo |
+|---|---|---|
+| \`check-x\` | mutação | \`.tooling/scripts/ci/check-x.ts\` |
+
+## Dívida de controles
+
+| Controle | Dono |
+|---|---|
+| \`.tooling/scripts/ci/turbo-redirect-differential.sh\` | nenhum |
+`;
+    expect(registryGateFiles(md)).toEqual(['.tooling/scripts/ci/check-x.ts']);
+  });
 });
 
 // ── 5. o estado real do repo ────────────────────────────────────────────────

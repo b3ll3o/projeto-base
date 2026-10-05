@@ -71,11 +71,13 @@ Escopo de todos: **todo `.md` versionado** sob a raiz que o preflight passa
 > já dizia certo ("— não roda"); a convenção é que estava errada.
 >
 > **A coluna "Custo" foi removida, não corrigida.** Ela somava **16 s**
-> (5+3+3+1+2+2) para um preflight medido em **2,55 s** — e o preflight não
+> (5+3+3+1+2+2) para um preflight medido em **~2,6 s** — e o preflight não
 > imprime tempo por check, então nenhum dos números tinha derivação. Somar
 > números inventados numa coluna que ninguém consegue reproduzir é a classe 7
 > desta demanda; o que dá para medir hoje é o todo:
-> `time pnpm ci:preflight` → **2,55 s** (medido 2026-10-05, n=1).
+> `time pnpm ci:preflight` → **2,62 / 2,64 / 2,62 s** (medido 2026-10-05,
+> n=3, com os 12 checks do array). Um único `time` é `n=1` e não generaliza —
+> por isso o `n` está escrito ao lado do número, e não é enfeite.
 
 Todos os checks seguem o template `CheckResult` compartilhado
 extraído em commit `59eb083` (refactor que consolidou fixtures herméticas).
@@ -114,7 +116,7 @@ extraído em commit `59eb083` (refactor que consolidou fixtures herméticas).
 > qualquer gate novo entraria no preflight sem aviso. Foi a ausência desta
 > coluna que o check acusou na primeira execução (9 de 9 sem correspondência).
 
-Os **cinco comandos de mutação**, medidos 2026-10-05. Cada um reverte o
+Os **seis comandos de mutação**, medidos 2026-10-05. Cada um reverte o
 arquivo ao final — a mutação é efêmera por desenho, e o `git diff` depois
 deles tem de estar vazio:
 
@@ -160,6 +162,19 @@ perl -0pi -e "s|return line\.replaceAll\(SELF_NAME, ''\);|return line;|" \
 npx tsx .tooling/scripts/ci/check-self-firing-guard.ts   # -> 9 erros "dispara em si mesmo"
 perl -0pi -e "s|^function stripSelfName\(line: string\): string \{\n  return line;\n\}|function stripSelfName(line: string): string {\n  return line.replaceAll(SELF_NAME, '');\n}|m" \
   .tooling/scripts/ci/check-memory-dir-concordance.ts   # restaurado byte-exato (conferido com diff)
+
+# 6) check-harness-owner (controle desligado) — o vermelho do dia a dia é
+#    VERMELHO de propósito, então a prova de dente é invertida: neutraliza-se
+#    a resolução de dono, e o check tem de FICAR VERDE. Se ele continuar
+#    vermelho, o vermelho não vinha da dívida — vinha de outra coisa, e o
+#    check estava medindo outra coisa. Este check não está na tabela acima
+#    porque NÃO RODA no preflight enquanto for vermelho: ver "Dívida de
+#    controles".
+perl -i -pe "s/^  const owners: string\[\] = \[\];\$/  const owners: string[] = ['preflight.ts#checks']; return owners;/" \
+  .tooling/scripts/ci/check-harness-owner.ts
+npx tsx .tooling/scripts/ci/check-harness-owner.ts   # -> exit 0 (o vermelho era só a dívida)
+perl -i -pe "s/^  const owners: string\[\] = \['preflight.ts#checks'\]; return owners;\$/  const owners: string[] = [];/" \
+  .tooling/scripts/ci/check-harness-owner.ts   # restaurado byte-exato (conferido com diff)
 ```
 
 > O `9` é medido, não estimado. E a primeira redação deste bloco dizia
@@ -185,12 +200,14 @@ pelo mesmo `pnpm tooling:test` (`package.json#tooling:test`). Todos os
 dentro do `preflight.spec.ts`. Quem indexar por `ls check-*.spec.ts` conclui,
 errado, que `check-doc-refs` e `review-routing` não têm spec nenhum.
 
-**Duas das 9 linhas não são só "sem mutação" — são claims que hadiam
-envelhecido.** Elas foram corrigidas ao montar este registro:
+**Duas linhas da tabela não eram só "sem mutação" — eram claims que tinham
+envelhecido.** Foram corrigidas ao montar este registro:
 
 - **`check-types` não é check** (ver a nota acima): a tabela atribuía a ele
   uma capacidade e um custo inexistentes.
-- **A coluna "Custo" inteira** somava 16 s para um preflight de 2,55 s.
+- **A coluna "Custo" foi removida** (motivo na
+  [Tabela de Checks](#tabela-de-checks)): somava 16 s para um preflight de
+  ~2,6 s, e nenhum dos dois números tinha derivação.
 
 E uma terceira, que é o achado do método: o teste
 `a derivação canônica resolve para um diretório que existe de verdade` tinha
@@ -241,18 +258,39 @@ script.
 - **A tabela de Checks acima é completa** (a task 3.1 do plano
   [`guard-classes`](../../../docs/superpowers/plans/2026-10-03-guard-classes.md)
   fechou as 3 lacunas que esta seção declarava). O `preflight` executa
-  **10 entradas** — as **9** linhas da tabela, mais uma segunda entrada de
-  `check-eslint-drift` (uma por app: `apps`, `packages`). Antes, a tabela
-  listava 6, das quais uma (`check-types`) nem era check. Para auditar:
+  **12 entradas** — as **11** linhas da tabela de dentes, mais uma segunda
+  entrada de `check-eslint-drift` (uma por app: `apps`, `packages`). Antes, a
+  tabela listava 6, das quais uma (`check-types`) nem era check. Para auditar:
   `pnpm ci:preflight` e conte as linhas `•`.
-- **Só 2 dos 9 gates têm mutação medida** (ver [Registro de dentes](#registro-de-dentes)).
-  Os outros 7 provam a lógica com `controle negativo` em tmpdir, o que não
-  prova a integração com o sistema real. Fechar os 7 restantes é change
-  próprio, um por gate.
+- **Só 4 dos 11 gates têm mutação medida** (ver
+  [Registro de dentes](#registro-de-dentes)). Os outros 7 provam a lógica com
+  `controle negativo` em tmpdir, o que não prova a integração com o sistema
+  real. Fechar os 7 restantes é change próprio, um por gate.
 - **`check-package-json-drift` só varre o `package.json` raiz.** Task
   turbo fantasma declarada em `apps/*/package.json` escapa do gate, e os
   4 call-sites `pnpm turbo run` do `ci.yml` também não são varridos.
   Fechar isso é change próprio, com spec.
+
+## Dívida de controles
+
+Controles que **existem e não rodam** — o oposto da tabela de dentes, que só
+lista o que o `preflight` invoca e é reconciliada nas duas direções pelo
+`check-teeth-registry`. Escrever a dívida aqui é o que impede a convenção de
+publicar uma regra sobre controle desligado enquanto entrega um controle
+desligado.
+
+- **`.tooling/scripts/ci/turbo-redirect-differential.sh`** — mede se o
+  `turbo.json` ainda redireciona o que deveria, rodando o turbo de verdade.
+  É o instrumento mais forte do diretório: aborta sozinho quando a medida não
+  faz sentido, porque um instrumento quebrado produzindo `[]` nos dois lados
+  casaria e reportaria `ok`.
+  **Nenhum dono** (medido 2026-10-05): 2 menções, ambas em comentário,
+  **0 invocações** — nem o `preflight`, nem script algum de
+  `package.json#scripts`. Custo remedido 3×: **8,16 / 8,16 / 8,19 s**.
+  **Fecha na task 4.1** do plano `guard-classes`, que lhe dá dono.
+  Vigia: `check-harness-owner`, que por isso **falha de propósito** e não está
+  no `preflight` enquanto for vermelho — gate vermelho no runner que o runner
+  roda é push impossível, e gate impossível é gate que ninguém lê.
 
 ## Cross-references
 

@@ -22,6 +22,28 @@ const CANONICAL_FILE = '.agents/specs/conventions/retrospective-capture.md';
 const CANONICAL_SECTION = '## Destino canônico do result file';
 
 /**
+ * O destino que ESTE guard protege, declarado por ele mesmo.
+ *
+ * Task 3.4 do plano `guard-classes` generaliza a instância (b) da regra de
+ * controle desligado — *"toda referência ao destino aponta para o mesmo
+ * lugar"* — e precisa saber **quais destinos existem**. Declarar a lista
+ * dentro do check que a verifica seria uma segunda fonte de verdade que
+ * envelhece exatamente no cenário em que o check é necessário: alguém cria o
+ * segundo destino, o cria no guard (único lugar onde a semântica dele mora) e
+ * esquece de acrescentá-lo à lista do check. O check ficaria calado sobre a
+ * omissão, que é a função dele.
+ *
+ * Por isso a direção é invertida: quem protege um destino o DECLARA aqui, e o
+ * check lê a união das declarações. Acrescentar um destino é acrescentar um
+ * guard — e o guard novo nasce sabendo que tem de se declarar.
+ */
+export const PROTECTED_DESTINATION = {
+  destino: 'result file da retrospectiva',
+  fonteCanonica: `${CANONICAL_FILE} §"${CANONICAL_SECTION}"`,
+  guard: 'check-memory-dir-concordance',
+} as const;
+
+/**
  * A única exclusão da varredura, e o motivo está escrito aqui porque exclusão
  * sem motivo é a armadilha que a task 2.3 proíbe.
  *
