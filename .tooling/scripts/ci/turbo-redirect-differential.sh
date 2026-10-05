@@ -48,7 +48,17 @@ trap 'rm -rf "$WS"' EXIT
 
 mkdir -p "$WS/apps/p"
 printf 'packages:\n  - "apps/*"\n' > "$WS/pnpm-workspace.yaml"
-printf '{ "name": "@x/root", "version": "0.0.0", "private": true, "packageManager": "pnpm@9.0.0" }\n' > "$WS/package.json"
+# 3. `packageManager` chumbado aqui quebrava o gate NO CI. O corepack honra o
+#    campo: com `pnpm@9.0.0` e essa versao fora do cache do runner, ele tentava
+#    baixar antes de rodar qualquer coisa, o banner do turbo nao saia, e a
+#    checagem de autoverificacao abaixo abortava — 271 ms depois de comecar,
+#    contra 8,2 s que as 18 formas levam. Localmente passava porque o 9.0.0
+#    estava no cache desta maquina desde o dia em que o harness foi escrito.
+#    O verde era uma propriedade do cache, nao do repo. Agora o campo e lido do
+#    package.json do repo, que e a unica fonte, e nao pode divergir dele.
+PM_VERSION=$(sed -n 's/.*"packageManager"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$ROOT/package.json")
+[ -n "$PM_VERSION" ] || { echo "ERRO: packageManager ausente em $ROOT/package.json"; exit 1; }
+printf '{ "name": "@x/root", "version": "0.0.0", "private": true, "packageManager": "%s" }\n' "$PM_VERSION" > "$WS/package.json"
 # tasks vazio: toda palavra task vira "Could not find task"
 printf '{ "$schema": "https://turbo.build/schema.json", "tasks": {} }\n' > "$WS/turbo.json"
 printf '{ "name": "@x/p", "version": "0.0.0", "scripts": { "build": "echo build" } }\n' > "$WS/apps/p/package.json"
@@ -76,7 +86,13 @@ while IFS= read -r form; do
   # executou produz `real=[]`, e uma forma sem tasks casaria `[]` com `[]` e
   # reportaria `ok` — o falso-verde mais caro possível, vindo do próprio
   # verificador.
-  grep -q 'turbo 2\.11\.2' "$OUT" || { echo "ABORTA: turbo nao executou em '$form'"; exit 1; }
+  # 4. A versão do turbo NÃO pode ser chumbada aqui. `grep 'turbo 2\.11\.2'`
+  #    é uma claim que envelhece no lugar mais caro do gate: o primeiro bump de
+  #    turbo no repo converte a autoverificação em abort permanente, e o sintoma
+  #    — "turbo não executou" — aponta para o turbo, não para o grep. Casa pela
+  #    forma do banner, que é o que prova que o binário rodou, sem fixar número.
+  grep -qE 'turbo [0-9]+\.[0-9]+\.[0-9]+' "$OUT" \
+    || { echo "ABORTA: turbo nao executou em '$form'"; exit 1; }
 
   real=$(grep -oE 'Could not find task `[^`]+`' "$OUT" \
     | sed 's/.*`\(.*\)`/\1/' | sort -u | tr '\n' ',' | sed 's/,$//')
