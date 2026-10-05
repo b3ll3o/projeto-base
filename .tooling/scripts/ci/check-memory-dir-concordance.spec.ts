@@ -209,6 +209,44 @@ describe('findDivergentDeclarations', () => {
     });
   });
 
+  it('NÃO acusa o NOME DO PRÓPRIO CHECK escrito em prosa', () => {
+    // Falso positivo real, encontrado pela task 2.1: a convenção `guard-classes`
+    // precisa CITAR o check que produziu, e o nome do arquivo contém o token
+    // que o detector procura. Sem esta isenção, documentar o guard exigiria
+    // deformed o nome dele — e um guard que não pode ser nomeado empurra todo
+    // mundo a contorná-lo, que é como um guard começa a ser ignorado.
+    //
+    // A isenção é do NOME, não do arquivo: ela não abre exceção para
+    // qualquer ocorrência do token, só para a menção `check-memory-dir-concordance`.
+    withRepo((dir) => {
+      writeConvention(dir);
+      writeFileSync(
+        mkAgentFile(dir, 'specs/conventions/guard-classes.md'),
+        [
+          '# Convenção',
+          '',
+          'O `check-memory-dir-concordance` não pega a classe 4 nem a 5,',
+          'porque elas são do domínio do parser de redirect.',
+          '',
+        ].join('\n'),
+      );
+      expect(findDivergentDeclarations(dir)).toEqual([]);
+    });
+  });
+
+  it('AINDA acusa o token quando NÃO é o nome do check', () => {
+    // A isenção do nome não pode virar atalho: `memory-dir` sozinho, fora do
+    // nome do check, continua sendo divergência.
+    withRepo((dir) => {
+      writeConvention(dir);
+      writeFileSync(
+        mkAgentFile(dir, 'specs/conventions/guard-classes.md'),
+        'ver `<memory-dir>/b<N>-result.md`\n',
+      );
+      expect(findDivergentDeclarations(dir)).toHaveLength(1);
+    });
+  });
+
   it('acusa uma segunda declaração DENTRO do arquivo canônico, fora da seção', () => {
     withRepo((dir) => {
       const canon = writeConvention(

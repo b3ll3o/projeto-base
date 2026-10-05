@@ -89,6 +89,30 @@ const MEMORY_DIR_IN_PROSE = /\bMEMORY_DIR\b/;
 const FENCE_OPEN_RE = /^\s*(?:```|~~~)\s*([A-Za-z0-9_+-]*)/;
 const EXECUTABLE_FENCE_LANGS = new Set(['bash', 'sh', 'shell', 'zsh', 'console', 'shellsession']);
 
+/** O nome deste arquivo — que contém o token `memory-dir` que ele procura. */
+const SELF_NAME = 'check-memory-dir-concordance';
+
+/**
+ * Remove as menções ao PRÓPRIO NOME do check antes de casar os padrões.
+ *
+ * O nome do arquivo contém `memory-dir`, e documentar o guard é trabalho
+ * obrigatório de quem escreve convenção — a `guard-classes` cita este check
+ * pelo nome. Sem isto, citar o guard dispara nele.
+ *
+ * A alternativa era reescrever a convenção para não citar o check pelo nome, e
+ * isso é pior: **um guard que não pode ser nomeado sem disparar empurra quem
+ * escreve a contornar o nome**, e um guard contornado é um guard desligado com
+ * outra forma. O custo da isenção é baixo porque ela é exata — o nome inteiro
+ * sai, o resto da linha continua sendo testado normalmente.
+ *
+ * Isto **não** é a cegueira de "hit legítimo" que a §3 de `guard-classes`
+ * declara: ali a separação entre hit legítimo e hit indevido exige julgamento
+ * humano; aqui é mecânica — ou a ocorrência é o nome do check, ou não é.
+ */
+function stripSelfName(line: string): string {
+  return line.replaceAll(SELF_NAME, '');
+}
+
 export interface Divergence {
   file: string;
   line: number;
@@ -171,7 +195,7 @@ export function findDivergentDeclarations(repoRoot: string): Divergence[] {
         continue;
       }
       for (const { pattern, reason } of DECLARATION_PATTERNS) {
-        if (pattern.test(line)) {
+        if (pattern.test(stripSelfName(line))) {
           out.push({
             file: relative(repoRoot, file),
             line: n,
@@ -181,7 +205,7 @@ export function findDivergentDeclarations(repoRoot: string): Divergence[] {
           break;
         }
       }
-      if (!inExecFence && MEMORY_DIR_IN_PROSE.test(line)) {
+      if (!inExecFence && MEMORY_DIR_IN_PROSE.test(stripSelfName(line))) {
         out.push({
           file: relative(repoRoot, file),
           line: n,
