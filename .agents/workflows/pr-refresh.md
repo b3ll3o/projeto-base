@@ -107,33 +107,46 @@ reusar o resultado de T1.
 2. **Trazer o corpo para arquivo.**
    ```bash
    TMP=$(mktemp -d)
-   gh pr view <N> --json body -q .body > "$TMP/pr-body.md"
+   gh pr view <N> --json body -q .body > "$TMP/pr-body.md" \
+     || { echo "gh falhou — corpo NÃO foi baixado; abortando" >&2; exit 1; }
+   [ -s "$TMP/pr-body.md" ] \
+     || { echo "corpo veio VAZIO — abortando" >&2; exit 1; }
    ```
    O corpo chega como **arquivo**, nunca por comando. É o que mantém o passo
    seguinte offline e testável por fixture.
+
+   > **As duas guardas são o passo, não a decoração.** Medido 2026-10-05 contra
+   > o PR #44: `gh pr view 44 > f` → **exit 1 e 0 bytes**. O passo 3 lê um
+   > arquivo vazio, não acha claim nenhuma e responde **"nenhuma claim
+   > mensurável"** — que é a mesma frase de um PR legitimamente sem número. A
+   > falha de rede, a de autenticação e o token revogado chegam todos como
+   > "PR em dia". A guarda pelo `exit` pega a falha; a guarda pelo `-s` pega o
+   > caso em que o `gh` sai 0 e não escreve nada, que a primeira não vê.
+   >
+   > Sem uma das duas, este workflow tem um **falso verde silencioso** — e o
+   > pior deles, porque é indistinguível do sucesso.
+
+   > **`--json body -q .body` é obrigatório, não preferência.** O `gh pr view`
+   > **sem** `--json` chama `projectCards` e quebra com
+   > `GraphQL: Projects (classic) is being deprecated`. A mesma depreciação que
+   > quebra `gh pr edit --body`.
 
    > **Por que `mktemp -d` e não `.pr-body.md` na raiz.** A primeira versão
    > deste passo escrevia na raiz do repo. O arquivo ficava **untracked**, e
    > todo gate deste repo enumera com `git ls-files` — que só enxerga o
    > rastreado. O resultado é um `.md` na árvore que **nenhum gate vê**, e que
    > um `git add -A` disto empurra para dentro do PR. Medido: `git
-   > check-ignore .pr-body.md` → **não ignorado**. Escrever fora do repo
-   > remove a necessidade de uma entrada no `.gitignore` que só existiria para
-   > isso, e o arquivo some junto com a `TMP` ao fim do workflow.
-
-   > **`--json body -q .body` é obrigatório, não preferência.** O `gh pr view`
-   > **sem** `--json` chama `projectCards` e quebra com
-   > `GraphQL: Projects (classic) is being deprecated` — **exit 1, corpo vazio**.
-   > A mesma depreciação que quebra `gh pr edit --body`. Medido 2026-10-05
-   > contra o PR #44. E um corpo vazio aqui não dá erro: o passo 3 lê zero claims
-   > e responde "nenhuma claim mensurável" — que parece um PR em dia.
+   > check-ignore .pr-body.md` → **não ignorado**.
 
 3. **Rodar o scanner (T3).**
    ```bash
    npx tsx tooling/scripts/pr-refresh-scan.ts --body-file="$TMP/pr-body.md" --base=origin/main
    ```
-   Sai **1** se há divergência, **0** se não há. Sai **2** se faltou
-   `--body-file`.
+   Sai **0** se não há divergência, **1** se há, **2** se faltou `--body-file`, e
+   **3** se não deu para medir (base inválida). O **3** é distinto do 1 de propósito:
+   um exit 1 aqui quer dizer "o corpo envelheceu, corrija", e um exit 3 quer dizer
+   "a base está errada, nada foi comparado". Colapsar os dois faz um `if !
+   scanner` reescrever o corpo por causa de uma referência inexistente.
 
 4. **Tratar o `NÃO MENSURÁVEL`.** O scanner mede o que o git mede — commits,
    arquivos, inserções, remoções. **`N testes` sai declarada e não

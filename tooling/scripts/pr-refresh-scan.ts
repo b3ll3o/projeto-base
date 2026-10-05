@@ -210,7 +210,20 @@ function main(argv: string[]): number {
     return 2;
   }
   const base = args.get('base') ?? 'origin/main';
-  const relatorio = varrer({ bodyFile, repo: resolve(process.cwd()), base });
+
+  // `varrer` lança quando a base não resolve — a biblioteca propaga o erro, e
+  // quem decide o código de saída é o CLI. Sem este try, um throw vira exit 1,
+  // que é o código de "há divergência": o caller não distingue "a base está
+  // errada" de "o corpo envelheceu", e um `if ! scanner` reescreve o corpo por
+  // causa de uma referência inexistente. Exit 3 é o "não deu para medir".
+  let relatorio: Relatorio;
+  try {
+    relatorio = varrer({ bodyFile, repo: resolve(process.cwd()), base });
+  } catch (e) {
+    process.stderr.write(`erro: ${e instanceof Error ? e.message : String(e)}\n`);
+    process.stderr.write('  não deu para medir — nada foi comparado.\n');
+    return 3;
+  }
 
   for (const c of relatorio.claims) {
     const medido = c.medido === null ? 'NÃO MENSURÁVEL' : String(c.medido);

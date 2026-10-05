@@ -309,6 +309,37 @@ describe('pr-refresh-scan: o script roda como CLI', () => {
     expect(stderr).toContain('--body-file');
   });
 
+  it('CLI com base INVÁLIDA → exit 3, distinto do 1 de "há divergência"', () => {
+    // O contrato do doc: 0 = em dia, 1 = há divergência, 2 = falta --body-file.
+    // Antes, uma base inválida era um throw não tratado → **exit 1**, o mesmo
+    // do achado legítimo. Um caller que faz `if ! scanner; then corrigir-corpo`
+    // reescreve o corpo porque a BASE estava errada — a falha vira trabalho
+    // errado em vez de erro. É [[ambiguous-sentinel-silently-skips]]: dois
+    // estados distintos, um sinal só, e o consumidor não pode distinguir.
+    //
+    // 3 é o código do "não deu para medir". Precisa ser distinto **e** vir com
+    // mensagem no stderr, porque um código novo que ninguém lê é um segundo
+    // sentinel silencioso.
+    const { repo } = repoFixture();
+    const arquivo = corpoFixture('**1 commit, 1 arquivo, +1/−0**');
+    let exit = 0;
+    let stderr = '';
+    try {
+      execFileSync(TSX, [SCRIPT, `--body-file=${arquivo}`, '--base=ref/que-nao-existe'], {
+        cwd: repo,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      });
+    } catch (e) {
+      exit = (e as { status?: number }).status ?? -1;
+      stderr = (e as { stderr?: string }).stderr ?? '';
+    }
+    expect(exit).toBe(3);
+    expect(stderr).toMatch(/base inválida/i);
+    // Um trace de stack não é uma mensagem de erro para quem usa o CLI.
+    expect(stderr).not.toMatch(/at Object\.|at Module\._/);
+  });
+
   it('a saída renderizada não contém NENHUM "???" — nem de artefato, nem de encode', () => {
     // A primeira versão deste CLI tinha `marca = '???????'` hardcoded na fonte.
     // Os 16 testes passavam: todos afirmavam sobre `relatorio.resumo`, e o
