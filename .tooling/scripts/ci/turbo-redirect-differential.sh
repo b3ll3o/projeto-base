@@ -18,7 +18,7 @@
 # parser é o que `extractTurboRunTasks` devolve. Divergência = o gate pode
 # deixar passar uma task fantasma.
 #
-# DOIS ERROS QUE ESTE SCRIPT JÁ COMETEU (não repita)
+# ERROS QUE ESTE SCRIPT JÁ COMETEU (não repita) — o corpo numera de 1 a 6
 #
 #  1. `pnpm turbo run $form` NÃO cria o redirect: operador de shell é
 #     reconhecido no parsing, não depois da expansão de variável. O turbo
@@ -38,9 +38,10 @@ WS=$(mktemp -d /tmp/turbo-diff-XXXXXX)
 # `..` é a contagem de segmentos: este arquivo vive em `.tooling/scripts/ci`,
 # então são TRÊS para chegar na raiz. Errei as duas vezes — a primeira
 # apontava para `.tooling/node_modules` e `.tooling/.tooling`, a segunda ainda
-# para `.tooling`. As duas apareceram como "15/15 divergentes", que é ruído, e
-# não sinal. Daí o guard logo abaixo: ele falha em 1 linha, em vez de produzir
-# 15 medições sem sentido.
+# para `.tooling`. As duas apareceram como "todas as formas divergentes", que é
+# ruído, e não sinal — e o número exato é uma claim que envelhece a cada forma
+# acrescentada ao corpus, sem que nada do script mude. Daí o guard logo abaixo:
+# ele falha em 1 linha, em vez de produzir uma pilha de medições sem sentido.
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." && pwd)"
 PARSER="$ROOT/.tooling/scripts/ci/check-package-json-drift.ts"
@@ -63,7 +64,7 @@ printf '{ "name": "@x/root", "version": "0.0.0", "private": true, "packageManage
 printf '{ "$schema": "https://turbo.build/schema.json", "tasks": {} }\n' > "$WS/turbo.json"
 printf '{ "name": "@x/p", "version": "0.0.0", "scripts": { "build": "echo build" } }\n' > "$WS/apps/p/package.json"
 # Sem `2>/dev/null`: symlink pendente significa que o turbo não roda, e aí TODAS
-# as 15 medições viram `[]` — o instrumento quebrado produzindo um resultado
+# as medições viram `[]` — o instrumento quebrado produzindo um resultado
 # que parece um veredito. Falha barulhenta, não silêncio.
 [ -d "$ROOT/node_modules" ] || { echo "ERRO: $ROOT/node_modules nao existe"; exit 1; }
 ln -s "$ROOT/node_modules" "$WS/node_modules"
@@ -82,21 +83,38 @@ while IFS= read -r form; do
   find "$WS" -maxdepth 1 -type f ! -name '*.json' ! -name '*.yaml' ! -name 'in.txt' ! -name '.turbo-out' \
     -exec cat {} + >> "$OUT" 2>/dev/null
 
-  # O instrumento precisa provar que rodou. Sem esta checagem, um turbo que nem
-  # executou produz `real=[]`, e uma forma sem tasks casaria `[]` com `[]` e
-  # reportaria `ok` — o falso-verde mais caro possível, vindo do próprio
-  # verificador.
-  # 4. A versão do turbo NÃO pode ser chumbada aqui. `grep 'turbo 2\.11\.2'`
-  #    é uma claim que envelhece no lugar mais caro do gate: o primeiro bump de
-  #    turbo no repo converte a autoverificação em abort permanente, e o sintoma
-  #    — "turbo não executou" — aponta para o turbo, não para o grep. Casa pela
-  #    forma do banner, que é o que prova que o binário rodou, sem fixar número.
-  grep -qE 'turbo [0-9]+\.[0-9]+\.[0-9]+' "$OUT" || {
-    # 5. Abortar sem dump é abortar sem evidência. Este gate já abortou duas
-    #    vezes no CI com "turbo nao executou" e nenhuma saida — e a causa não
-    #    era o turbo. Falha barulhenta inclui o que saiu; sem isso a próxima
-    #    hipótese também é um palpite.
-    echo "ABORTA: turbo nao executou em '$form'"
+  # O instrumento precisa provar que rodou — e provar **isto**: que o turbo leu o
+  # comando, resolveu as tasks contra o `tasks = {}` e por isso nomeou cada
+  # palavra. Sem esta checagem, um turbo que nem executou produz `real=[]`, e uma
+  # forma sem tasks casaria `[]` com `[]` e reportaria `ok` — o falso-verde mais
+  # caro possível, vindo do próprio verificador.
+  #
+  # 4. A prova é `real` não-vazio, não o banner. Duas tentativas anteriores usaram
+  #    o banner — `turbo 2.11.2` chumbado, depois `turbo [0-9]+\.[0-9]+\.[0-9]+` —
+  #    e as duas quebraram no CI. A saída do CI diz por quê: `• turbo 2.11.2` não
+  #    sai num runner sem TTY, que é exatamente onde este gate roda (a assinatura
+  #    é o renderizador plain, com `x` no lugar de `→`). A versão no grep
+  #    envelhecia no lugar mais caro do arquivo; já sem versão, o banner ainda
+  #    media o terminal em vez do turbo.
+  #
+  # 5. Um único regex define o que é uma task, para o guard e para a comparação.
+  #    Duas definições divergentes dão um guard que passa enquanto a comparação
+  #    (ou vice-versa) — o guard medindo uma coisa e o veredito medindo outra.
+  real=$(grep -oE 'Could not find task `[^`]+`' "$OUT" \
+    | sed 's/.*`\(.*\)`/\1/' | sort -u | tr '\n' ',' | sed 's/,$//')
+  # 6. E o abort diz o que ele sabe, não o que ele deduz. Este gate já abortou três
+  #    vezes no CI com "turbo não executou" — e nenhuma das três vezes o turbo
+  #    era a causa. Abortar sem dump é abortar sem evidência: sem o que saiu, a
+  #    próxima hipótese também é um palpite.
+  [ -n "$real" ] || {
+    echo "ABORTA: o turbo nao nomeou nenhuma task em '$form'."
+    echo "O que sei: nenhuma linha 'Could not find task \`X\`' apareceu em \$OUT."
+    echo "O que NAO sei: se o turbo rodou. Quatro causas dão esta mesma linha —"
+    echo "  (a) o turbo nao executou;"
+    echo "  (b) executou contra um turbo.json com tasks reais, e a premissa do"
+    echo "      differential (tasks = {}) quebrou;"
+    echo "  (c) o texto da mensagem mudou;"
+    echo "  (d) a saida foi para o arquivo-alvo do comando e nao voltou para \$OUT."
     echo "--- exit de 'pnpm turbo run $form' e saida capturada ---"
     echo "WS=$WS"
     echo "node_modules -> $(readlink "$WS/node_modules" 2>&1)"
@@ -106,9 +124,6 @@ while IFS= read -r form; do
     echo "--- fim ---"
     exit 1
   }
-
-  real=$(grep -oE 'Could not find task `[^`]+`' "$OUT" \
-    | sed 's/.*`\(.*\)`/\1/' | sort -u | tr '\n' ',' | sed 's/,$//')
   got=$(node --experimental-strip-types -e "
     import('$PARSER')
       .then((m) => console.log(m.extractTurboRunTasks('turbo run $form').sort().join(',')))
