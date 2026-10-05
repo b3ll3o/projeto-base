@@ -106,10 +106,20 @@ reusar o resultado de T1.
 
 2. **Trazer o corpo para arquivo.**
    ```bash
-   gh pr view <N> --json body -q .body > .pr-body.md
+   TMP=$(mktemp -d)
+   gh pr view <N> --json body -q .body > "$TMP/pr-body.md"
    ```
    O corpo chega como **arquivo**, nunca por comando. É o que mantém o passo
    seguinte offline e testável por fixture.
+
+   > **Por que `mktemp -d` e não `.pr-body.md` na raiz.** A primeira versão
+   > deste passo escrevia na raiz do repo. O arquivo ficava **untracked**, e
+   > todo gate deste repo enumera com `git ls-files` — que só enxerga o
+   > rastreado. O resultado é um `.md` na árvore que **nenhum gate vê**, e que
+   > um `git add -A` disto empurra para dentro do PR. Medido: `git
+   > check-ignore .pr-body.md` → **não ignorado**. Escrever fora do repo
+   > remove a necessidade de uma entrada no `.gitignore` que só existiria para
+   > isso, e o arquivo some junto com a `TMP` ao fim do workflow.
 
    > **`--json body -q .body` é obrigatório, não preferência.** O `gh pr view`
    > **sem** `--json` chama `projectCards` e quebra com
@@ -120,7 +130,7 @@ reusar o resultado de T1.
 
 3. **Rodar o scanner (T3).**
    ```bash
-   npx tsx tooling/scripts/pr-refresh-scan.ts --body-file=.pr-body.md --base=origin/main
+   npx tsx tooling/scripts/pr-refresh-scan.ts --body-file="$TMP/pr-body.md" --base=origin/main
    ```
    Sai **1** se há divergência, **0** se não há. Sai **2** se faltou
    `--body-file`.
