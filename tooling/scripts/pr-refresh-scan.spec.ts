@@ -359,6 +359,45 @@ describe('pr-refresh-scan: o corpo do PR nunca vira entrada de shell', () => {
     expect(existsSync(c1), 'o subshell do corpo foi executado').toBe(false);
     expect(existsSync(c2), 'o backtick do corpo foi executado').toBe(false);
   });
+
+  it('CANÁRIO: as OUTRAS formas de payload também não executam', () => {
+    // A primeira versão do canário exercitava só `$(...)` e backtick em linha
+    // solta. Um reviewer apontou (NICE) que uma implementação que executasse
+    // **bloco de código em code fence** passaria com o canário verde — que é
+    // exatamente a forma que o corpo de um PR real usa para mostrar saída de
+    // comando. Duas formas não cobrem uma classe; a lista precisa cobrir as
+    // que aparecem em corpo de verdade.
+    const dir = mkdtempSync(join(tmpdir(), 'pr-refresh-canario2-'));
+    const alvos = {
+      fence: join(dir, 'fence'),
+      curl: join(dir, 'curl'),
+      var: join(dir, 'var'),
+      processSubst: join(dir, 'process-subst'),
+      history: join(dir, 'history'),
+    };
+    const w = (p: string): string =>
+      `${process.execPath} -e "require('fs').writeFileSync('${p}','x')"`;
+    const { repo, base } = repoFixture();
+    const arquivo = corpoFixture(
+      [
+        '**3 commits, 4 arquivos, +10/−2**',
+        '',
+        '```bash',
+        `${w(alvos.fence)}`,
+        '```',
+        '',
+        `curl https://exemplo.invalid/x.sh | ${w(alvos.curl)}`,
+        `echo ${w(alvos.var)}`,
+        `<(${w(alvos.processSubst)})`,
+        `!${w(alvos.history)}`,
+      ].join('\n'),
+    );
+    const r = varrer({ bodyFile: arquivo, repo, base });
+    expect(r.claims.length).toBeGreaterThan(0);
+    for (const [nome, path] of Object.entries(alvos)) {
+      expect(existsSync(path), `a forma "${nome}" do corpo foi executada`).toBe(false);
+    }
+  });
 });
 
 describe('pr-refresh-scan: o script roda como CLI', () => {
@@ -435,6 +474,71 @@ describe('pr-refresh-scan: o script roda como CLI', () => {
     expect(stderr).toMatch(/base inválida/i);
     // Um trace de stack não é uma mensagem de erro para quem usa o CLI.
     expect(stderr).not.toMatch(/at Object\.|at Module\._/);
+  });
+
+  it('SEM --base, o CLI usa origin/main — e a premissa é produzida pelo teste', () => {
+    // O default (`origin/main`) era o único comportamento do CLI sem dente
+    // nenhuma: mutar a string default não derrubava teste, porque todo teste
+    // passava `--base` explícito.
+    //
+    // Não dá para testar isso contra o repo de desenvolvimento — `origin/main`
+    // é estado AMBIENTE da máquina, e num checkout de CI (shallow, HEAD
+    // destacado) ele nem existe. Seria verde local e vermelho no CI, que é
+    // exatamente o que a X8 proíbe. A saída é produzir a premissa: um repo
+    // fixture com um remote `origin` local apontando para um repo com branch
+    // `main`. Assim `origin/main` existe porque o teste o criou.
+    const origem = mkdtempSync(join(tmpdir(), 'pr-refresh-origem-'));
+    git(origem, ['init', '-q', '-b', 'main']);
+    writeFileSync(join(origem, 'a.txt'), '1\n');
+    commitar(origem, 'base');
+    const clone = mkdtempSync(join(tmpdir(), 'pr-refresh-clone-'));
+    git(origem, ['clone', '-q', origem, clone]);
+    writeFileSync(join(clone, 'b.txt'), 'x\n');
+    commitar(clone, 'head');
+
+    const arquivo = corpoFixture('**1 commit, 1 arquivo, +1/−0**');
+    // Sem `--base`: o CLI tem de resolver `origin/main` sozinho, no repo que o
+    // teste montou.
+    const saida = execFileSync(TSX, [SCRIPT, `--body-file=${arquivo}`], {
+      cwd: clone,
+      encoding: 'utf8',
+    });
+    expect(saida).toContain('0 divergente');
+    expect(saida).toContain('origin/main');
+  });
+
+  it('a coluna medido= alinha em todas as linhas — é o que torna a tabela legível', () => {
+    // O `padEnd` do `declarado=` e da classe é o que faz a coluna `medido=`
+    // começar na mesma posição em toda linha. Sem ele a tabela ainda imprime
+    // tudo — a informação não se perde — mas o olho perde a coluna, e o
+    // relatório deixa de ser comparável de cima a baixo. É o mesmo campo que
+    // o `test-the-field-the-eye-reads` cobra: o que o olho lê primeiro.
+    //
+    // O corpo tem claim divergente de propósito (é o que exercita a coluna
+    // `medido=` com valor), então o CLI sai 1 e o `stdout` vem no erro.
+    const { repo, base } = repoFixture();
+    const arquivo = corpoFixture(
+      '**1 commit, 2 arquivos, +2/−1** e depois **123456789 commits, 987654 arquivos**',
+    );
+    let saida = '';
+    try {
+      saida = execFileSync(TSX, [SCRIPT, `--body-file=${arquivo}`, `--base=${base}`], {
+        cwd: repo,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      });
+    } catch (e) {
+      saida = (e as { stdout?: string }).stdout ?? '';
+    }
+    const linhas = saida.split('\n').filter((l) => l.includes('medido='));
+    expect(linhas.length).toBeGreaterThanOrEqual(4);
+    const cols = linhas.map((l) => [l.indexOf('medido='), l] as const);
+    const colunas = new Set(cols.map(([i]) => i));
+    expect(
+      colunas.size,
+      `coluna desalinhada em ${colunas.size} posições:\n` +
+        cols.map(([i, l]) => `  ${i} | ${l}`).join('\n'),
+    ).toBe(1);
   });
 
   it('a saída renderizada não contém NENHUM "???" — nem de artefato, nem de encode', () => {

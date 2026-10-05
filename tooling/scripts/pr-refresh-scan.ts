@@ -303,11 +303,21 @@ function main(argv: string[]): number {
     return 3;
   }
 
+  // A largura do `declarado=` é medida a partir dos DADOS, não fixada em 8.
+  // MEDIDO: com `123456789 commits` no corpo, um `padEnd(8)` fixo transborda e a
+  // coluna `medido=` deixa de alinhar — a tabela ainda imprime tudo, mas o olho
+  // perde a coluna. O teste de alinhamento ficou vermelho por causa disso, e
+  // era o único comportamento de renderização que nenhum teste pegava.
+  const larguraDeclarado = Math.max(8, ...relatorio.claims.map((c) => String(c.valor).length));
   for (const c of relatorio.claims) {
     const medido = c.medido === null ? 'NÃO MENSURÁVEL' : String(c.medido);
-    const marca = c.medido === null ? 'NÃO MEDE' : c.divergente ? 'DIVERGE' : 'ok      ';
+    // As três marcas precisam do MESMO comprimento, senão a coluna da direita
+    // anda. MEDIDO: `'ok      '` e `'NÃO MEDE'` têm 8, `'DIVERGE'` tem 7 — e
+    // nenhuma das 24 linhas de spec olhava a tabela renderizada o bastante
+    // para notar. Toda linha divergente saía um caractere à esquerda.
+    const marca = (c.medido === null ? 'NÃO MEDE' : c.divergente ? 'DIVERGE' : 'ok').padEnd(8);
     process.stdout.write(
-      `${marca} L${String(c.linha).padEnd(4)} ${c.classe.padEnd(11)} declarado=${String(c.valor).padEnd(8)} medido=${medido}\n`,
+      `${marca} L${String(c.linha).padEnd(4)} ${c.classe.padEnd(11)} declarado=${String(c.valor).padEnd(larguraDeclarado)} medido=${medido}\n`,
     );
   }
   process.stdout.write(`\n  ${relatorio.resumo}\n`);
