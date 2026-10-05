@@ -165,6 +165,45 @@ describe('pr-refresh-scan: extração de claims', () => {
     const c = extrairClaims('999999999999999999999999 commits');
     expect(c).toHaveLength(0);
   });
+
+  it('separador de milhar NÃO fabrica claim — "2.000 commits" é 2000, nunca 0', () => {
+    // MEDIDO antes do fix (2026-10-05): a regex casava `000 commits` e o
+    // relatório imprimia `DIVERGE commits declarado=0 medido=34`. O `0` é um
+    // número que o corpo NÃO contém — o scanner fabricou a claim, declarando-a
+    // como se o autor tivesse escrito zero commits. Pior que ignorar: um corpo
+    // com separador de milhar accuse divergência onde não há.
+    const c = extrairClaims('**2.000 commits**, 1.234 arquivos');
+    expect(c.find((x) => x.classe === 'commits')?.valor).toBe(2000);
+    expect(c.find((x) => x.classe === 'arquivos')?.valor).toBe(1234);
+  });
+
+  it('aceita espaço fino e non-breaking como separador de milhar', () => {
+    // `2 000` com U+202F/U+00A0 é o que o git e o GitHub produzem ao formatar
+    // números grandes. Sem reconhecer, o mesmo número dá dois resultados
+    // dependendo de quem colou o texto.
+    const fino = extrairClaims('2 000 commits');
+    const nbsp = extrairClaims('2 000 commits');
+    expect(fino.find((x) => x.classe === 'commits')?.valor).toBe(2000);
+    expect(nbsp.find((x) => x.classe === 'commits')?.valor).toBe(2000);
+  });
+
+  it('NÃO trata ponto como milhar quando o grupo não tem 3 dígitos', () => {
+    // `2.5` e `1.23` não são agrupamento de milhar. Aceitá-los como tal seria
+    // inventar um número do mesmo jeito que o bug anterior — só menor.
+    expect(extrairClaims('2.5 commits')).toHaveLength(0);
+    expect(extrairClaims('1.23 arquivos')).toHaveLength(0);
+  });
+
+  it('lê TODAS as ocorrências de uma classe, não só a primeira', () => {
+    // MEDIDO no corpo real do PR #44 (2026-10-05): o corpo declara `20 commits`
+    // no cabeçalho e `31 commits` no meio. Só a primeira era lida, e o resumo
+    // dizia "0 divergente(s)" — a claim obsoleta estava no corpo e o scanner
+    // nunca a olhou. Este é o problema que o workflow existe para resolver,
+    // e o scanner resolvia metade dele.
+    const c = extrairClaims('**20 commits**, 41 arquivos\n\nO PR original dizia 31 commits');
+    const commits = c.filter((x) => x.classe === 'commits');
+    expect(commits.map((x) => x.valor)).toEqual([20, 31]);
+  });
 });
 
 describe('pr-refresh-scan: medição', () => {
@@ -234,6 +273,64 @@ describe('pr-refresh-scan: a divergência é o produto, e ela tem que aparecer',
     expect(r.claims).toHaveLength(0);
     expect(r.resumo).toMatch(/nenhuma claim/i);
     expect(r.resumo).not.toMatch(/0 divergente/);
+  });
+
+  it('claim obsoleta NA SEGUNDA ocorrência → o relatório acusa, não só a primeira', () => {
+    // O caso medido no PR #44: cabeçalho certo (`1 commit`, o valor da fixture),
+    // e um `99 commits` obsoleto mais abaixo. Antes do fix o resumo dizia
+    // "0 divergente(s)" — o scanner resolvia a metade fácil do problema e
+    // declarava a parte difícil resolvida.
+    const { repo, base, esperado } = repoFixture();
+    const r = varrer({
+      bodyFile: corpoFixture(
+        `**${esperado.commits} commits, ${esperado.arquivos} arquivos**\n\n` +
+          'O PR original dizia 99 commits e 12 arquivos.',
+      ),
+      repo,
+      base,
+    });
+    const divergentes = r.claims.filter((c) => c.divergente);
+    expect(divergentes.map((c) => c.classe).sort()).toEqual(['arquivos', 'commits']);
+    expect(r.resumo).toContain('2 divergente');
+  });
+
+  it('cada claim diz a LINHA em que está — sem ela, "todas as ocorrências" é inútil', () => {
+    // Lendo todas as ocorrências, o mesmo corpo pode declarar `31 commits` no
+    // cabeçalho (claim de verdade) e `20 commits` numa frase que CITA o
+    // histórico. MEDIDO no PR #44: os dois aparecem, ambos divergem do
+    // medido, e sem a linha não há como saber qual corrigir. A linha é o que
+    // separa "claim a atualizar" de "frase a deixar quieta" — e essa
+    // separação é do humano, não da regex.
+    const { repo, base, esperado } = repoFixture();
+    const r = varrer({
+      bodyFile: corpoFixture(
+        [
+          `**${esperado.commits} commits, ${esperado.arquivos} arquivos**`,
+          '',
+          'Ela foi aberta com "99 commits, 88 arquivos" e evoluiu.',
+        ].join('\n'),
+      ),
+      repo,
+      base,
+    });
+    const commits = r.claims.filter((c) => c.classe === 'commits');
+    expect(commits).toHaveLength(2);
+    expect(commits[0]?.linha).toBe(1);
+    expect(commits[1]?.linha).toBe(3);
+  });
+
+  it('o resumo NÃO repete a classe quando há várias claims dela', () => {
+    // O relatório real dizia "3 não mensurável(is) offline — testes, testes,
+    // testes". A repetição não informa nada e faz a linha parecer defeito.
+    const { repo, base } = repoFixture();
+    const r = varrer({
+      bodyFile: corpoFixture('**300 testes** e depois **280 testes** e **9 testes**'),
+      repo,
+      base,
+    });
+    expect(r.resumo).toContain('3 não mensurável(is)');
+    expect(r.resumo).toContain('testes: verificar');
+    expect(r.resumo).not.toContain('testes, testes');
   });
 });
 

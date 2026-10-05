@@ -49,6 +49,17 @@ export interface Claim {
   classe: Classe;
   valor: number;
   declarado: string;
+  /**
+   * Linha do CORPO (1-based) onde a claim aparece.
+   *
+   * Sem isto, ler todas as ocorrências produz um relatório que não se pode
+   * usar: no PR #44, `31 commits` (linha 7, cabeçalho — claim de verdade) e
+   * `20 commits` (linha 33, dentro de "ela foi aberta com 20 commits" — uma
+   * frase que CITA o passado) são ambos divergentes do medido, e nada no
+   * relatório diz qual corrigir. A linha é o que entrega essa decisão ao
+   * humano, que é quem pode dizer se a frase é citação ou contagem viva.
+   */
+  linha: number;
 }
 
 export interface Medicao {
@@ -84,37 +95,99 @@ export interface Relatorio {
  * - **Pendências ("Task 1.4 pós-merge")** — exigem julgamento sobre se a task
  *   foi feita. Não é medição, é decisão; fica com o agente.
  */
+/**
+ * Um número como o corpo escreve número grande: `2000`, `2.000`, `2 000`.
+ *
+ * O ponto e o espaço fino/não-separável são separadores de milhar em pt-BR — e
+ * em pt-BR a vírgula é o decimal, então `2.000` não tem leitura ambígua. Sem
+ * isto, a regex casava `000` de `2.000 commits` e o relatório imprimia
+ * `declarado=0` (MEDIDO): um número que o corpo não contém, fabricado pela
+ * regex e apresentado como se o autor o tivesse escrito.
+ *
+ * O guard `(?![.\d])` fecha o lado do fim: sem ele, `2.5 commits` casaria `2` e
+ * viraria claim — invenção menor, do mesmo tipo. E o `(?<![\d.])` fecha o lado
+ * do início, que o primeiro não pega: com só o `(?![.\d])`, o engine recua e
+ * casa `5 commits` a partir do MEIO de `2.5` (MEDIDO — o teste ficou vermelho
+ * com a frente do guard já posta). Com os dois, `2.5`, `1.23` e `2.11.2` não
+ * casam, e nenhum número é lido a partir do meio.
+ */
+const SEPARADORES_MILHAR = '.\\u202F\\u00A0\\u2009';
+const MILHAR = String.raw`\d{1,3}(?:[${SEPARADORES_MILHAR}]\d{3})+`;
+const NUMERO = String.raw`(?<![\d.])(?:${MILHAR}|\d+)(?![.\d])`;
+
 const PADROES: Array<{
   classe: Classe;
   re: RegExp;
   grupo: number;
   medir: (m: Medicao) => number | null;
 }> = [
-  { classe: 'commits', re: /(\d+)\s+commits?\b/gi, grupo: 1, medir: (m) => m.commits },
-  { classe: 'arquivos', re: /(\d+)\s+arquivos?\b/gi, grupo: 1, medir: (m) => m.arquivos },
-  { classe: 'testes', re: /(\d+)\s+testes?\b/gi, grupo: 1, medir: () => null },
+  {
+    classe: 'commits',
+    re: new RegExp(String.raw`(${NUMERO})\s+commits?\b`, 'gi'),
+    grupo: 1,
+    medir: (m) => m.commits,
+  },
+  {
+    classe: 'arquivos',
+    re: new RegExp(String.raw`(${NUMERO})\s+arquivos?\b`, 'gi'),
+    grupo: 1,
+    medir: (m) => m.arquivos,
+  },
+  {
+    classe: 'testes',
+    re: new RegExp(String.raw`(${NUMERO})\s+testes?\b`, 'gi'),
+    grupo: 1,
+    medir: () => null,
+  },
   // `+N/−M` carrega DOIS grupos. Ler sempre o grupo 1 faria `remocoes` reportar
   // as inserções — e as duas claims divergentes só apareceriam em paralelo,
   // quando o `+` e o `−` por acaso fossem iguais.
-  { classe: 'insercoes', re: /\+(\d+)\s*\/\s*(?:−|-)(\d+)/g, grupo: 1, medir: (m) => m.insercoes },
-  { classe: 'remocoes', re: /\+(\d+)\s*\/\s*(?:−|-)(\d+)/g, grupo: 2, medir: (m) => m.remocoes },
+  {
+    classe: 'insercoes',
+    re: new RegExp(String.raw`\+(${NUMERO})\s*\/\s*(?:−|-)(\d+)`, 'g'),
+    grupo: 1,
+    medir: (m) => m.insercoes,
+  },
+  {
+    classe: 'remocoes',
+    re: new RegExp(String.raw`\+(${NUMERO})\s*\/\s*(?:−|-)(\d+)`, 'g'),
+    grupo: 2,
+    medir: (m) => m.remocoes,
+  },
 ];
 
-/** Extrai as claims declaradas. Retorna a primeira ocorrência de cada classe. */
+/**
+ * Extrai as claims declaradas — **todas** as ocorrências, não só a primeira de
+ * cada classe.
+ *
+ * "Primeira ocorrência" era um limite silencioso, e um limite silencioso neste
+ * ponto anula o produto: MEDIDO no corpo real do PR #44, ele declara `20 commits`
+ * no cabeçalho e `31 commits` no meio. Lendo só a primeira, o resumo dizia
+ * "0 divergente(s)" com a claim obsoleta **dentro do corpo** — metade do
+ * problema declarada resolvida.
+ */
 export function extrairClaims(texto: string): Claim[] {
   const encontradas: Claim[] = [];
   for (const { classe, re, grupo } of PADROES) {
-    // Cópia do RegExp: `exec` num `/g` é stateful (`lastIndex`), e uma regex
-    // compartilhada entre chamadas alternaria entre a 1ª e a 2ª ocorrência.
-    const m = new RegExp(re.source, re.flags).exec(texto);
-    const bruto = m?.[grupo];
-    if (bruto === undefined) continue;
-    const n = Number(bruto);
-    // `Number('999999999999999999999999')` é 1e24: inteiro, mas fora do
-    // inteiro seguro. Um corpo malicioso não ganha nada com isso, mas o
-    // relatório também não deve apresentar um número que não representa.
-    if (!Number.isSafeInteger(n)) continue;
-    encontradas.push({ classe, valor: n, declarado: m?.[0] ?? bruto });
+    // `matchAll` exige `g` e não muta a regex compartilhada (`lastIndex`), ao
+    // contrário de `exec`. Por isso o `new RegExp` de cada `PADROES` é seguro.
+    for (const m of texto.matchAll(re)) {
+      const bruto = m[grupo];
+      if (bruto === undefined) continue;
+      // O texto capturado é o que o corpo escreveu, com separador. `Number` não
+      // entende `2.000` (dá NaN) e o `isSafeInteger` a seguir descartaria a
+      // claim em silêncio. Remover o separador é o que o número realmente é.
+      const n = Number(bruto.replace(/[.\u202F\u00A0\u2009]/g, ''));
+      // `Number('999999999999999999999999')` é 1e24: inteiro, mas fora do
+      // inteiro seguro. Um corpo malicioso não ganha nada com isso, mas o
+      // relatório também não deve apresentar um número que não representa.
+      if (!Number.isSafeInteger(n)) continue;
+      // `m.index` é o offset no texto; a linha é quantos `\n` até lá. Cortar em
+      // `m.index` (e não em `+1`) evita um `slice` do corpo inteiro por claim —
+      // o corpo é entrada não confiável e o custo é meu, não do autor.
+      const linha = texto.slice(0, m.index).split('\n').length;
+      encontradas.push({ classe, valor: n, declarado: m[0], linha });
+    }
   }
   return encontradas;
 }
@@ -186,7 +259,12 @@ export function varrer({ bodyFile, repo, base }: Opcoes): Relatorio {
       : [
           `${divergentes.length} divergente(s) em ${claims.length} claim(s) (base ${base})`,
           naoMensuraveis.length > 0
-            ? `${naoMensuraveis.length} não mensurável(is) offline — ${naoMensuraveis.map((c) => c.classe).join(', ')}: verificar rodando a suíte, não pelo git`
+            ? // `Set` porque 3 claims de `testes` não são 3 vezes a mesma
+              // informação: MEDIDO, o relatório dizia "testes, testes, testes",
+              // que parece defeito em vez de contagem. A contagem continua
+              // sendo o número de CLAIMS (`naoMensuraveis.length`); só a lista
+              // de classes é única.
+              `${naoMensuraveis.length} não mensurável(is) offline — ${[...new Set(naoMensuraveis.map((c) => c.classe))].join(', ')}: verificar rodando a suíte, não pelo git`
             : null,
         ]
           .filter((s): s is string => s !== null)
@@ -229,7 +307,7 @@ function main(argv: string[]): number {
     const medido = c.medido === null ? 'NÃO MENSURÁVEL' : String(c.medido);
     const marca = c.medido === null ? 'NÃO MEDE' : c.divergente ? 'DIVERGE' : 'ok      ';
     process.stdout.write(
-      `${marca} ${c.classe.padEnd(11)} declarado=${String(c.valor).padEnd(8)} medido=${medido}\n`,
+      `${marca} L${String(c.linha).padEnd(4)} ${c.classe.padEnd(11)} declarado=${String(c.valor).padEnd(8)} medido=${medido}\n`,
     );
   }
   process.stdout.write(`\n  ${relatorio.resumo}\n`);
