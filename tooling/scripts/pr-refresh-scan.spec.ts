@@ -308,4 +308,46 @@ describe('pr-refresh-scan: o script roda como CLI', () => {
     expect(exit).toBe(2);
     expect(stderr).toContain('--body-file');
   });
+
+  it('a saída renderizada não contém NENHUM "???" — nem de artefato, nem de encode', () => {
+    // A primeira versão deste CLI tinha `marca = '???????'` hardcoded na fonte.
+    // Os 16 testes passavam: todos afirmavam sobre `relatorio.resumo`, e o
+    // `???????` vivia na LINHA DA TABELA, que nada lia. Um relatório cuja saída
+    // tem caracteres de substituição é um relatório ilegível que ainda sai
+    // com exit 1 correto — o código está certo e a leitura é impossível.
+    //
+    // A guarda é genérica de propósito: `???` pega artefato de geração,
+    // truncamento de encoding e Replacement Character, sem precisar saber
+    // qual dos dois é. E é ela que impede o próximo `???????` de passar.
+    const { repo, base, esperado } = repoFixture();
+    const arquivo = corpoFixture(
+      `**${esperado.commits} commits, ${esperado.arquivos} arquivos, +${esperado.insercoes}/−${esperado.remocoes}** e **302 testes**`,
+    );
+    const saida = execFileSync(TSX, [SCRIPT, `--body-file=${arquivo}`, `--base=${base}`], {
+      cwd: repo,
+      encoding: 'utf8',
+    });
+    expect(saida, 'a tabela saiu ilegível').not.toMatch(/\?{2,}/);
+    expect(saida, 'a tabela saiu ilegível').not.toMatch(/�/);
+  });
+
+  it('a claim não mensurável é marcada na TABELA, não só no resumo', () => {
+    // `relatorio.resumo` é o que os testes cobriam; a marca por linha é o que
+    // o olho lê primeiro. Se as duas divergirem — ou se a marca sumir e o
+    // resumo continuar — o leitor é induzido a uma conclusão errada.
+    const { repo, base, esperado } = repoFixture();
+    const arquivo = corpoFixture(
+      `**${esperado.commits} commits, ${esperado.arquivos} arquivos, +${esperado.insercoes}/−${esperado.remocoes}** e **302 testes**`,
+    );
+    const saida = execFileSync(TSX, [SCRIPT, `--body-file=${arquivo}`, `--base=${base}`], {
+      cwd: repo,
+      encoding: 'utf8',
+    });
+    const linha = saida.split('\n').find((l) => l.includes('testes'));
+    expect(linha, `nenhuma linha da tabela para "testes" em:\n${saida}`).toBeDefined();
+    // `NÃO MEDE` = o git não mede contagem de testes. O texto completo
+    // ("NÃO MENSURÁVEL") vive na coluna `medido=` e no resumo.
+    expect(linha).toContain('NÃO MEDE');
+    expect(linha).toContain('NÃO MENSURÁVEL');
+  });
 });

@@ -214,7 +214,7 @@ function main(argv: string[]): number {
 
   for (const c of relatorio.claims) {
     const medido = c.medido === null ? 'NÃO MENSURÁVEL' : String(c.medido);
-    const marca = c.medido === null ? '???????' : c.divergente ? 'DIVERGE' : 'ok      ';
+    const marca = c.medido === null ? 'NÃO MEDE' : c.divergente ? 'DIVERGE' : 'ok      ';
     process.stdout.write(
       `${marca} ${c.classe.padEnd(11)} declarado=${String(c.valor).padEnd(8)} medido=${medido}\n`,
     );
