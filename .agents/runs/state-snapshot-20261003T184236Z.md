@@ -1,6 +1,6 @@
 ---
 name: state-snapshot-guard-classes
-description: Snapshot de estado da demanda guard-classes (levar as 5 classes de guard dos aprendizados de maquina para dentro do repo) no momento em que o planejamento comeca. Registra proceed:true e os 4 gaps que a demanda fecha - incluindo 1 check quebrado por path de maquina mais a notacao em prosa que o repete, e 1 check que valida zero arquivos e reporta verde.
+description: Snapshot de estado da demanda guard-classes (levar as 5 classes de guard dos aprendizados de maquina para dentro do repo) no momento em que o planejamento comeca. Registra proceed:true e os 4 gaps que a demanda fecha - incluindo 1 check quebrado por path de maquina mais a notacao em prosa que o repete, e 1 check que nunca le o diretorio que ele proprio verificou existir e ainda reporta verde.
 demand: guard-classes
 base_commit: ad0ff70
 branch_base: feat/guard-classes
@@ -105,12 +105,16 @@ fence — **não é executável nem é path de máquina**. O `0` de
 existe em disco, então o `test -f` é falso em toda máquina, não "verde aqui,
 vermelho fora". **1 check quebrado, 1 notação a normalizar.**
 
-**Leitura de M20 [corr].** `tooling/scripts/archive-lint.ts:141` retorna
-`{ valid: true }` quando o diretório está **ausente**. Ele existe e contém só
-`.gitkeep`, então `readdirSync().filter(f => f.endsWith('.md'))` devolve lista
-vazia, o laço não roda, `errors` fica vazio, e `formatMark` renderiza `✓`.
-Enquanto `preflight.ts:63-71` carrega um docstring que diz que `skipped`
-não pode renderizar `✓` — o invariante está escrito e violado por outro caminho.
+**Leitura de M20 [corr-3].** A primeira leitura dizia que o `✓` vinha de o linter ler
+zero arquivos num diretório com só `.gitkeep`. **O mecanismo é outro, e pior.**
+`check-archive-integrity.ts` calcula o `archiveDir` **certo**, `existsSync` → `true`, e
+mesmo assim chama `execSync('pnpm archive:lint')` **sem `--archive-dir`**; esse script é
+`"cd tooling/scripts && …"` e seu default é relativo ao cwd, então o early-return de
+`archive-lint.ts:138` dispara em `tooling/scripts/.agents/runs/`, que não existe. **O
+archive real nunca é lido** — não é "validou zero", é "validou um diretório inexistente".
+Prova de direcionalidade: arquivo inválido plantado no dir errado → `exit 1`; no archive
+real → invisível. Enquanto `preflight.ts:63-71` diz que `skipped` não pode renderizar `✓`,
+o caminho de **dado ausente** devolve `ok: true` puro. Medido em 2026-10-05 (B19).
 
 ## Gaps que a demanda fecha
 
@@ -119,7 +123,7 @@ não pode renderizar `✓` — o invariante está escrito e violado por outro ca
 | G-001 | As classes de guard não têm regra no repo: quem copia o template (`cp -r`) herda os 9 checks e não o diagnóstico das falhas que eles já deram | conhecimento | `major` | (a ausência é o gap) | 0 hits pelos nomes (M5–M9); instâncias X8/X10–X12 versionadas mas sem regra que as cite |
 | G-002 | 7 convenções existem e **não** estão linkadas no índice do diretório | descoberta | `nice` | `.agents/specs/conventions/README.md` | M17 |
 | G-003 | **1 check executável usa path de máquina hardcoded**, e uma 2ª declaração repete a string em prosa | correção | `major` | `demand-archiving/SKILL.md:64` (executável), `archive-demand.md:30` (prosa) | M19 [corr-2]: `test -f .claude/projects/-home-leo-…/memory/<retro>.md`; `.claude` não existe em disco, então o teste é falso **em toda máquina** |
-| G-004 | O check de archive valida **zero arquivos** e renderiza `✓` | correção | `major` | `tooling/scripts/archive-lint.ts:141` | M20; invariante oposto declarado em `preflight.ts:63-71` |
+| G-004 | O check de archive **nunca lê o diretório que ele mesmo verificou existir**, e renderiza `✓` **[corr-3]** | correção | `major` | `.tooling/scripts/ci/check-archive-integrity.ts` | M20 + B19: ele calcula `join(repoRoot,'.agents/runs/archive')`, confirma que existe, e executa `execSync('pnpm archive:lint')` — que faz `cd tooling/scripts` e resolve o default para `tooling/scripts/.agents/runs/`, **que não existe**; o early-return de `archive-lint.ts:138` dispara no caminho errado. Invariante oposto declarado em `preflight.ts:63-71` |
 
 **Por que `major` e não `blocker`:** o repo builda, os gates passam, nada
 quebra. O custo é diferido — um template novo nasce com 9 checks e sem o
