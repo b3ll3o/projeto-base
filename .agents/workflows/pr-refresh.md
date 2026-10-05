@@ -82,7 +82,7 @@ lado.
 **T3 é o que carrega o peso.** T1 + T2 são verdadeiros em **100% dos pushes**
 para qualquer branch com PR aberto — um gate que dispara só com T1 + T2 é a
 **classe 1** da [convenção `guard-classes`](../specs/conventions/guard-classes.md):
-acontece sempre, não informa nada, e treina quem lê aIgnore. Sem T3, este
+acontece sempre, não informa nada, e treina quem lê a ignorar o relatório. Sem T3, este
 workflow é um hook que toca a campainha em todo push.
 
 T4 existe porque T1 foi medido no começo e a escrita acontece no fim: entre os

@@ -62,10 +62,19 @@ import { describe, expect, it } from 'vitest';
 import type { Medicao } from './pr-refresh-scan.js';
 import { extrairClaims, medirBranch, varrer } from './pr-refresh-scan.js';
 
-// O spec vive em tooling/scripts/, a raiz do repo está 2 níveis acima. Resolver
-// por `import.meta.url` e não por `process.cwd()`: o cwd do vitest é o root
-// configurado (`tooling/scripts`), e um path derivado do cwd vira verde na
-// máquina de quem roda e vermelho no CI — a lição do X8, de novo.
+// O spec vive em tooling/scripts/, a raiz do repo está 2 níveis acima.
+//
+// `import.meta.url` e não `process.cwd()` — e o motivo é mais estreito do que
+// "cwd é a máquina". MEDIDO (n=1, vitest 2.1.9): sob `vitest run --root
+// tooling/scripts`, `process.cwd()` é a **raiz do repo**, não o root do vitest.
+// `--root` muda a resolução de módulo; não faz `chdir`. Então `process.cwd()`
+// daria o path certo hoje, por conta de um segundo fato não escrito — o pnpm
+// executa scripts da raiz do pacote que os declara. Dois fatos independentes, e
+// nenhum deles é contrato.
+//
+// `import.meta.url` depende de um só: onde este arquivo está no disco, que é
+// propriedade do repositório. É por isso que ele, e não o cwd. Um path derivado
+// do cwd vira verde na máquina de quem roda e vermelho no CI — a lição do X8.
 const REPO = new URL('../..', import.meta.url).pathname;
 const TSX = join(REPO, 'node_modules', '.bin', 'tsx');
 const SCRIPT = join(REPO, 'tooling', 'scripts', 'pr-refresh-scan.ts');
