@@ -120,14 +120,24 @@ destino único para onde apontar.
 | 1.1 | Corrigir o `test -f` **executável** (`demand-archiving/SKILL.md:64`, num fence `bash`, slug de máquina) e normalizar a notação da **prosa** que o repete (`archive-demand.md:30`, item de checklist com reticências) — as duas derivam da fonte única | RED: **o `test -f` da SKILL, rodado da raiz do repo, dá falso hoje** (B15); GREEN: com a fonte definida, dá verdadeiro. Sem o RED, o path volta. A linha de `archive-demand.md` **não tem RED possível** — não é executável; a prova dela é o check de 1.3 |
 | 1.2 | Declarar a **fonte única** do destino num lugar canônico; as outras 9 declarações passam a **referenciar**, não repetir | `git grep -oE 'memory-dir\|claude/projects\|memory/b<N' -- '.agents/**/*.md' ':!.agents/runs/state-snapshot-*' \| wc -l` → hoje **11 ocorrências**; GREEN = **1** (só a definição). A forma anterior (`-cE` com `\|` escapado) casava pipe literal, dava `exit 1` sem saída e era satisfeita **vacuamente pelo conjunto vazio** — um critério que passa com zero trabalho. O `-o` conta **ocorrências**, não linhas: o `10` do TL;DR é de `-n`, e `SKILL.md:64` casa 2× — sob `-n` uma duplicata na mesma linha passaria como 1 |
 | 1.3 | Check de **concordância**: extrai o destino de todas as declarações e falha se qualquer uma divergir | RED: mutar 1 das 10 deixa vermelho nomeando o arquivo; GREEN: volta |
-| 1.4 | **Arquivar as fontes de evidência** pelo mecanismo que já existe (`demand-archiving.md` + `archive-lint.ts` + frontmatter) | ver §Decisões 1 — ternário, não binário |
+| 1.4 | **Arquivar a demanda** `guard-classes` pelo mecanismo que já existe (`demand-archiving.md` + `archive-lint.ts` + frontmatter) — **pós-merge**, não durante a implementação | ver §Decisões 1. O "6" da v2.0–v2.2 era claim sem derivação: a evidência fecha em **1** (`b39`) |
 
 **1.3 fecha a pendência.** Não é "definir um símbolo": é a primeira instância do
 `3.4` generalizado, e sem ela as próximas 9 declarações voltam a divergir em
 silêncio. **E 1.4 tem o mecanismo pronto e não o usa** — o repo já tem
 `demand-archiving.md`, o workflow, a skill e o linter de frontmatter; a v1.0
 ofereceu só o binário "backfill / não mover" e **perdeu a terceira opção**,
-arquivar as 6 fontes e deixar as 28 de fora.
+arquivar a demanda e deixar as demais de fora.
+
+> **Correção v2.3 (medida, 2026-10-05): o "6" da task 1.4 era infundado.**
+> A evidência das 7 classes fecha em **1** result file — `b39-…-result.md` é o
+> único dos 34 que cita `X8`/`X10`–`X12` e o único que carrega os tokens
+> discriminantes das classes. É a **classe 7 deste plano**, aplicada ao próprio
+> plano. Pior: o objeto estava errado — a convenção arquiva **demandas**, e os
+> `b*-result.md` são *retros*; e §4 diz "❌ Nunca durante implementação".
+> **1.4 passa a ser:** arquivar a demanda `guard-classes` **após o merge**, com
+> `retro_refs` apontando para a retro desta demanda. Tabela completa das 5
+> medições em [§Decisões 1](./2026-10-03-guard-classes-decisoes.md).
 
 ## Fase 2 — P1: o payload
 

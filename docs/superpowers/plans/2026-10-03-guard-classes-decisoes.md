@@ -26,8 +26,26 @@ eu medi, com o comando na baseline ou aqui.
 
 ## 1. O destino dos 34 results (task 1.4)
 
-**Três saídas:** **(a)** mover tudo; **(b)** não mover; **(c)** arquivar só as **6
-fontes de evidência**.
+> **v2.3 (2026-10-05): a decisão (c) não é executável como estava escrita, e o
+> número 6 nunca foi derivado.** Ver a correção completa em
+> [o plano](./2026-10-03-guard-classes.md) §Fase 1. Resumo do que a medição
+> mudou:
+>
+> | Afirmação | Medição | Verdade |
+> |-----------|---------|---------|
+> | "6 fontes de evidência" | `grep -lE '\bX(8\|10\|11\|12)\b'` sobre os 34 `b*-result.md` | **1** — só `b39-fluxo-dev-melhorias-result.md` |
+> | — | `grep -liE '0x27\|2>&1\|isAbsolute\|erra o eixo\|classe ausente'` | **1** — o mesmo `b39` |
+> | "as 6" | contagem de `b*-result.md` = **34**; 6 + 28 = 34 fecha, mas o **numerador foi afirmado** | claim de classe 7, sem derivação |
+> | "usar o mecanismo de archive que o repo já tem" | §3 do frontmatter pede `prs`, `improvements` por categoria, `original_run` — campos que uma **retro** não tem | objeto errado: a convenção arquiva **demandas**, não retros |
+> | "migração em 6 arquivos" | §4: "❌ Nunca durante implementação (mesmo se pausada)" | a demanda ainda está em implementação; o PR nem existe |
+>
+> **O que 1.4 passa a ser:** arquivar a demanda `guard-classes` **após o merge**,
+> com `retro_refs` apontando para a retro desta demanda. A B19 (corrigida em
+> `d3fde13`) era pré-requisito — sem ela o `✓` seria teatro; com ela, o
+> arquivamento pós-merge é o caminho que toda demanda do repo já segue.
+
+**Três saídas (como escritas na v2.2):** **(a)** mover tudo; **(b)** não mover;
+**(c)** arquivar só as **6 fontes de evidência**.
 
 **A opção (c) — que a v2.1 recomendava — está errada.** Eu escrevi que ela "usa o
 mecanismo de archive que o repo já tem". O mecanismo existe; **o formato não**.
