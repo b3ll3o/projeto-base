@@ -81,7 +81,11 @@ path_globs:
   - pattern: "docs/adr/**"
     reviewers: [doc-writer]
 
-  - pattern: "tooling/scripts/ci/**"
+  - pattern: ".tooling/scripts/ci/**"
+    reviewers: [monorepo-specialist]
+    blocking: true
+
+  - pattern: "tooling/scripts/**"
     reviewers: [monorepo-specialist]
 
   - pattern: ".github/workflows/**"
@@ -209,21 +213,13 @@ Resultado esperado:
 - `code-quality-reviewer` SKIPPED — `all_changed_paths endsWith .md` (skip rule 1)
 - `doc-sync` DISPATCHED — `path_glob .agents/specs/**` + `commit_type docs`
 
-### Cenário C: feat em NestJS domain (3 arquivos)
-
-```text
-paths:  [apps/api/src/users/domain/user.ts,
-         apps/api/src/users/domain/user.spec.ts,
-         apps/api/src/users/application/create-user.usecase.ts]
-commits: ["feat(users): adicionar entidade User com use case de criação"]
-scope:  medium
-```
-
-Resultado esperado:
-
-- `nestjs-specialist` + `stack-code-reviewer` DISPATCHED — `path_glob apps/api/**/domain/**` e `apps/api/**/application/**`
-- `spec-compliance-reviewer` DISPATCHED — `commit_type feat` (não em skip list)
-- `code-quality-reviewer` DISPATCHED — há `.ts` files
+> Os cenários que envolvem **vários** commits ou **vários** paths vivem no
+> apêndice [`review-routing-examples.md`](./review-routing-examples.md)
+> (cenários D e E). Aqui ficam só os de 1 commit / 1 path, que são os que
+> cabem no exemplo curto. A extração do cenário C (v1.6) foi o que abriu
+> espaço para as rotas de `tooling/` que a task 3.2 do plano
+> [`guard-classes`](../../../docs/superpowers/plans/2026-10-03-guard-classes.md)
+> precisou corrigir.
 
 ## 6. Gaps Conhecidos (forthcoming v1.3) — (v1.2: 2 P1; v1.3: 3 P2; ver Seção 7)
 

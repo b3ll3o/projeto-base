@@ -96,9 +96,28 @@ multi-path cross-cutting com `scope=large` → dispatch. Isso reflete a
 intenção de que mudanças cross-cutting merecem atenção de spec mesmo
 quando housekeeping.
 
+## Cenário C — feat em NestJS domain (3 arquivos)
+
+> Migrado do arquivo principal na v1.6 para abrir espaço às rotas de
+> `tooling/` (task 3.2 do plano `guard-classes`).
+
+```text
+paths:  [apps/api/src/users/domain/user.ts,
+         apps/api/src/users/domain/user.spec.ts,
+         apps/api/src/users/application/create-user.usecase.ts]
+commits: ["feat(users): adicionar entidade User com use case de criação"]
+scope:  medium
+```
+
+Resultado esperado:
+
+- `nestjs-specialist` + `stack-code-reviewer` DISPATCHED — `path_glob apps/api/**/domain/**` e `apps/api/**/application/**`
+- `spec-compliance-reviewer` DISPATCHED — `commit_type feat` (não em skip list)
+- `code-quality-reviewer` DISPATCHED — há `.ts` files
+
 ## Cross-refs
 
-- [review-routing.md](./review-routing.md) — matrix canônica (3 cenários A/B/C)
+- [review-routing.md](./review-routing.md) — matrix canônica (cenários A/B; C/D/E aqui)
 - [tooling/scripts/review-router.ts](../../../tooling/scripts/review-router.ts) — classifier headless
 - [tooling/scripts/review-router.spec.ts](../../../tooling/scripts/review-router.spec.ts) — 30 testes TDD
 - [tooling/scripts/lint-review-routing.ts](../../../tooling/scripts/lint-review-routing.ts) — linter da matrix
