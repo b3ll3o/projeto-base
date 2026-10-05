@@ -30,6 +30,7 @@ lê — a task 2.2 do plano `guard-classes` fecha isso. **Regra: criar uma conve
 | Demand Archiving | [`demand-archiving.md`](./demand-archiving.md) | Quando e como arquivar uma demanda; frontmatter canônico validado por `archive:lint` |
 | Review Routing | [`review-routing.md`](./review-routing.md) | Matriz que decide quem revisa o quê; apêndice de exemplos em [`review-routing-examples.md`](./review-routing-examples.md) |
 | Specialist Routing | [`specialist-routing.md`](./specialist-routing.md) | Roteamento por especialidade; apêndice de exemplos em [`specialist-routing-examples.md`](./specialist-routing-examples.md) |
+| Guard Classes | [`guard-classes.md`](./guard-classes.md) | As 7 classes pelas quais um controle falha reportando verde; receita de detecção por classe **e a coluna "não pega"** |
 
 ## Regra Geral
 

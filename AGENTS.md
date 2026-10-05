@@ -179,6 +179,7 @@ As convenções estão detalhadas em arquivos próprios sob [`.agents/specs/conv
 | Demand Archiving   | [`demand-archiving.md`](./.agents/specs/conventions/demand-archiving.md) | Quando e como arquivar uma demanda; frontmatter canônico de 8 campos validado por `archive:lint` |
 | Review Routing     | [`review-routing.md`](./.agents/specs/conventions/review-routing.md) | Matriz que decide **quem revisa o quê**; apêndice de exemplos em [`review-routing-examples.md`](./.agents/specs/conventions/review-routing-examples.md) |
 | Specialist Routing | [`specialist-routing.md`](./.agents/specs/conventions/specialist-routing.md) | Roteamento por especialidade; apêndice de exemplos em [`specialist-routing-examples.md`](./.agents/specs/conventions/specialist-routing-examples.md) |
+| Guard Classes | [`guard-classes.md`](./.agents/specs/conventions/guard-classes.md) | As 7 classes pelas quais um controle falha reportando verde; receita de detecção por classe **e a coluna "não pega"** |
 
 > **Os dois índices são o mesmo índice.** Este §6 e o
 > [`README.md`](./.agents/specs/conventions/README.md) das convenções listam os
