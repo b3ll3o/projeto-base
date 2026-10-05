@@ -18,7 +18,7 @@ description: "Convenção canônica de arquivamento de demandas implementadas �
 Uma demanda é elegível para arquivamento quando **TODAS** as condições são verdadeiras:
 
 - [ ] **Implementada:** PR final mergeado em `main` (`state == MERGED`, não draft, não closed)
-- [ ] **Retro completa:** existe arquivo `b<N>-result.md` correspondente em `.claude/projects/.../memory/`
+- [ ] **Retro completa:** existe o result file correspondente no [destino canônico](./retrospective-capture.md#destino-canônico-do-result-file)
 - [ ] **Melhorias aplicadas:** ≥ 1 melhoria em `agents/`, `skills/`, `workflows/`, `specs/conventions/` ou `memory/`
 - [ ] **Não paused/abandoned:** status final é `SUCCESS` ou `DONE_WITH_CONCERNS` (não `BLOCKED` nem `NEEDS_CONTEXT`)
 
@@ -55,7 +55,7 @@ original_run: 2026-09-22-pilot-001.md    # arquivo em .agents/runs/ ativo
 demand_slug: review-router-pilot-001      # slug kebab-case
 prs:                                       # PRs mergeados (lista de números)
   - 12
-retro_refs:                                # refs retro (relativos a .claude/projects/.../memory/)
+retro_refs:                                # refs retro (ver retrospective-capture.md §"Destino canônico")
   - b16-result.md
 improvements:                              # contagem por categoria
   agents_added: 0

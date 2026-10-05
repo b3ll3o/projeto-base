@@ -70,11 +70,44 @@ Heurística de scoring:
 
 | Output | Localização | Tipo |
 |--------|-------------|------|
-| Result file | `<memory-dir>/b<N>+1-result.md` | narrativa + linked memories |
+| Result file | [§Destino canônico](#destino-canônico-do-result-file) abaixo | narrativa + linked memories |
 | Memory updates | `.agents/memory/<agent>.md` | diff em "Decisões Tomadas" |
 | Skill/convention new | `.agents/skills/`, `.agents/specs/conventions/` | PR `feat(retrospective)` |
 | ADR | `.docs/adr/NNNN-*.md` | PR com reviewer de arquitetura |
 | Backlog item | `TASK-NNN` em quadro do `task-manager` | item priorizado RICE |
+
+## Destino canônico do result file
+
+> **Fonte única do repo.** O result file da retro vive **fora** do repo, no diretório
+> de memória da máquina. Esta seção é a **única** declaração desse caminho em
+> `.agents/**`; toda outra referência aponta para cá em vez de repetir. Se você
+> encontrou o caminho escrito em outro arquivo, isso é um defeito
+> (backlog `X8`) — corrija para um link, não para uma segunda cópia.
+
+O diretório é **derivado do repositório**; não é fixo e não deve ser escrito à mão:
+
+```bash
+MEMORY_DIR="${HOME}/.claude/projects/-$(git rev-parse --show-toplevel | sed 's|^/||;s|/|-|g')/memory"
+test -f "${MEMORY_DIR}/<N>-result.md"
+```
+
+| Segmento | Origem |
+|----------|--------|
+| `${HOME}` | home do usuário |
+| `projects` | literal do layout do Claude Code |
+| `-<slug>` | `git rev-parse --show-toplevel` com `/` → `-` e `/` inicial preservado |
+| `memory` | literal |
+
+**Por que `git rev-parse --show-toplevel` e não `pwd`:** o slug descreve o
+*repositório*. Um `pwd` rodando de um subdiretório produz um slug diferente — o
+`test -f` passaria a ler um diretório que não existe, **sem erro**, que é a
+assinatura de um gate que nunca dispara.
+
+**Antes de confiar no gate, prove a derivação:**
+
+```bash
+ls -1 "${MEMORY_DIR}" | head      # tem de listar os result files, não falhar
+```
 
 ## Comandos / Triggers
 

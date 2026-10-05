@@ -29,7 +29,7 @@ demand_slug: "dockerize-apps"             # kebab-case slug único
 original_run_path: ".agents/runs/2026-09-22-pilot-001.md"  # path do run ativo
 prs:                                        # PRs mergeados (lista de inteiros)
   - 24
-retro_refs:                                 # refs retro (paths relativos a .claude/projects/.../memory/)
+retro_refs:                                 # refs retro (ver retrospective-capture.md §"Destino canônico")
   - b21-result.md
   - b22-result.md
 improvements:                               # contagem por categoria (≥ 1 item não-zero obrigatório)
@@ -61,8 +61,17 @@ Resultado esperado: `state == "MERGED"`. Se `OPEN`/`CLOSED`, **abortar** (demand
 ### 2. Verificar `retro_ref` existe
 
 ```bash
-test -f .claude/projects/-home-leo-Documentos-projetos-base/memory/<retro>.md
+# O destino NÃO é repetido aqui. Rodar o bloco de
+# retrospective-capture.md §"Destino canônico do result file", que é a
+# fonte única, e então testar o retro:
+#   eval "$(sed -n '/^MEMORY_DIR=/p' \
+#     .agents/specs/conventions/retrospective-capture.md)"
+#   test -f "${MEMORY_DIR}/<retro>.md"
+test -f "${MEMORY_DIR}/<retro>.md"
 ```
+
+Repetir o path aqui foi o que tornou esta linha falsa em **toda** máquina: ela
+apontava para `.claude/` relativo ao CWD, que o repo não tem.
 
 Se ausente, **abortar** (convenção §1 — retro completa é obrigatória).
 

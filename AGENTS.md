@@ -176,7 +176,18 @@ As convenções estão detalhadas em arquivos próprios sob [`.agents/specs/conv
 | State-Aware Planning (v1.8.0+) | [`state-aware-planning.md`](./.agents/specs/conventions/state-aware-planning.md) | Camada 0 do pre-planner — obriga gerar `state-snapshot-<ts>.md` antes de planejar (gap analysis AS-IS→TO-BE); alimenta `specialist-router` camada 1 |
 | Evals (v1.9.0+)               | [`evals.md`](./.agents/specs/conventions/evals.md)                         | Framework canônico dos 7 tipos (Domain, Architecture, Contract, Integration, Regression, Security, Observability); path `specs/<feature>/evals/*.evals.yaml`; gate rules por severidade |
 | Engineering Loop (v1.9.0+)    | [`engineering-loop.md`](./.agents/specs/conventions/engineering-loop.md)  | Convenção unificadora do ciclo UNDERSTAND → IMPLEMENT → TEST → REVIEW → OBSERVE → LEARN; 6 templates de fase em `.agents/specs/templates/engineering-loop/`; integra retro + archive + state-aware; fecha o loop via workflow `feedback-to-spec` |
+| Demand Archiving   | [`demand-archiving.md`](./.agents/specs/conventions/demand-archiving.md) | Quando e como arquivar uma demanda; frontmatter canônico de 8 campos validado por `archive:lint` |
+| Review Routing     | [`review-routing.md`](./.agents/specs/conventions/review-routing.md) | Matriz que decide **quem revisa o quê**; apêndice de exemplos em [`review-routing-examples.md`](./.agents/specs/conventions/review-routing-examples.md) |
+| Specialist Routing | [`specialist-routing.md`](./.agents/specs/conventions/specialist-routing.md) | Roteamento por especialidade; apêndice de exemplos em [`specialist-routing-examples.md`](./.agents/specs/conventions/specialist-routing-examples.md) |
 
+> **Os dois índices são o mesmo índice.** Este §6 e o
+> [`README.md`](./.agents/specs/conventions/README.md) das convenções listam os
+> mesmos arquivos, e uma convenção nova entra **nos dois, no mesmo PR**. Eles
+> divergiram uma vez: `evals.md` e `engineering-loop.md` entraram só aqui, e
+> `demand-archiving`/`review-routing`/`specialist-routing` não entraram em
+> nenhum — 7 convenções órfãs de índice, corrigidas pela task 2.2 do plano
+> [`guard-classes`](./docs/superpowers/plans/2026-10-03-guard-classes.md).
+>
 > **Templates:** [`.agents/specs/templates/`](./.agents/specs/templates/) contém templates canônicos versionados (ex.: [`spec.md`](./.agents/specs/templates/spec.md) — template de Spec de feature). Toda spec deve derivar de um template; criar templates novos via PR com bump major da convenção relacionada.
 
 - **Pre-push obrigatório:** rodar `pnpm ci:local` antes de push (ver [git-workflow.md §Pre-Push Quality Gate](./.agents/specs/conventions/git-workflow.md))

@@ -52,7 +52,7 @@ retrospective-capture (skill) → doc-writer:
   task: "Escrever result file + filtrar proposals por confidence"
   context: ["raw_evidence do explorer", "threshold = 70"]
   expected_output:
-    result_file: "memory/b<N>+1-result.md"
+    result_file: "<MEMORY_DIR>/<N>+1-result.md"   # derivação em retrospective-capture.md §"Destino canônico"
     proposals:
       - artifact: "skill|convention|memory|adr|backlog"
         target: "<path>"
@@ -100,8 +100,8 @@ Após implementer reportar DONE:
 
 ## Critérios de Done
 
-- [ ] Result file escrito em `memory/b<N>+1-result.md` com frontmatter
-      + linked memories
+- [ ] Result file escrito no [destino canônico](../specs/conventions/retrospective-capture.md#destino-canônico-do-result-file)
+      com frontmatter + linked memories
 - [ ] 0 proposals com confidence < 70 (abaixo disso vira comentário no result)
 - [ ] Memory files dos agents envolvidos atualizados (git diff verificável)
 - [ ] PR opcional aberto se proposals de harness (skills/conventions)

@@ -17,6 +17,7 @@ import { checkTurboDrift } from './check-turbo-drift';
 import { checkPackageJsonDrift } from './check-package-json-drift';
 import { checkDockerDrift } from './check-docker-drift';
 import { checkArchiveIntegrity } from './check-archive-integrity';
+import { checkMemoryDirConcordance } from './check-memory-dir-concordance';
 import { existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
@@ -121,6 +122,14 @@ async function main(): Promise<void> {
     {
       name: 'archive integrity (.agents/runs/archive/*.md frontmatter canônico)',
       fn: () => checkArchiveIntegrity('.'),
+    },
+    {
+      // Task 1.3 do plano guard-classes. Fecha a divergência que reinava em
+      // silêncio: o destino da retrospectiva já foi declarado 10 vezes, em 7
+      // arquivos, em 6 notações — uma delas um `test -f` executável com path
+      // de máquina, falso em toda máquina.
+      name: 'destino da retrospectiva (fonte única, sem 2ª declaração)',
+      fn: () => checkMemoryDirConcordance({ repoRoot: '.' }),
     },
   ];
 
