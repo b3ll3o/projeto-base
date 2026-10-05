@@ -60,8 +60,7 @@ conferisse. A 4.1 comprimiu para **300 exatos**, o que satisfez a regra à mão
 sem satisfazer nada que a verificasse.
 
 Ambas são pré-existentes e fora do escopo das 13 tasks — a task que deveria ter
-as pego é esta, e ela as nomeia em vez de declarar o plano completo. O que
-faltava era o gate.
+as pego é esta, e ela as nomeia em vez de declarar o plano completo.
 
 ---
 
