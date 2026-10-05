@@ -140,7 +140,10 @@ reusar o resultado de T1.
 
 3. **Rodar o scanner (T3).**
    ```bash
-   npx tsx tooling/scripts/pr-refresh-scan.ts --body-file="$TMP/pr-body.md" --base=origin/main
+   [ -n "${TMP:-}" ] && [ -f "$TMP/pr-body.md" ] \
+     || { echo "TMP não sobreviveu do passo 2 — reexecute o passo 2" >&2; exit 1; }
+   git fetch origin "$BASE" --quiet   # ver "base velha", abaixo
+   npx tsx tooling/scripts/pr-refresh-scan.ts --body-file="$TMP/pr-body.md" --base="$BASE"
    ```
    Sai **0** se não há divergência, **1** se há, **2** se faltou `--body-file`, e
    **3** se não deu para medir (base inválida). O **3** é distinto do 1 de propósito:
@@ -148,17 +151,46 @@ reusar o resultado de T1.
    "a base está errada, nada foi comparado". Colapsar os dois faz um `if !
    scanner` reescrever o corpo por causa de uma referência inexistente.
 
+   > **`TMP` não sobrevive entre blocos de código.** Este passo, o 7 e o 8 estão
+   > em blocos separados do passo 2, e colar o passo 3 numa shell nova faz
+   > `"$TMP/pr-body.md"` virar `"/pr-body.md"`. Não é hipótese: é a forma como o
+   > passo é lido, um bloco por vez. A guarda acima transforma isso de "exit 3
+   > com mensagem de base inválida" em "TMP não sobreviveu, refaça o passo 2" —
+   > que é a mensagem que o operador precisa.
+   >
+   > **A base precisa estar atualizada, e `origin/main` é o default.** MEDIDO
+   > 2026-10-05 com `origin/main` local 2 dias atrás: o scanner acusou **4
+   > divergências** contra um corpo **perfeitamente correto** — `595 arquivos`
+   > vs `41`, `+1271833` vs `+5475` — sem nenhuma pista de que a causa era a base,
+   > não o corpo. É a forma mais cara desta classe: o número é plausível, o
+   > relatório é honesto, e a conclusão está errada. O `git fetch` acima não é
+   > opcional; `BASE` precisa ser uma referência resolvida **agora**.
+
 4. **Tratar o `NÃO MENSURÁVEL`.** O scanner mede o que o git mede — commits,
    arquivos, inserções, remoções. **`N testes` sai declarada e não
    verificada**, de propósito: medi-la exige rodar a suíte, que não é o escopo
    de um scanner de branch. Um gate que não mede e não diz que não mediu é
    verde por omissão.
+
+   **Não existe "o número verdadeiro de testes".** Uma versão anterior deste
+   passo escrevia `pnpm tooling:test # o número verdadeiro de testes`, e a
+   frase era falsa em duas frentes (MEDIDO 2026-10-05):
+
+   - `pnpm tooling:test` roda `tooling/scripts` + `.tooling/scripts/ci` —
+     **23 dos 63** `.spec.ts` do repo. Os **38** de `apps/api` saem por
+     `pnpm test:unit` / `test:integration` / `test:e2e`;
+   - um corpo pode declarar mais de uma contagem para suítes diferentes, e o
+     scanner **lê todas** agora — as duas podem ser ambas verdadeiras.
+
+   Meça a suíte que a claim nomeia, e deixe a claim dizer qual:
    ```bash
-   pnpm tooling:test   # o número verdadeiro de testes
+   pnpm tooling:test                                    # tooling/scripts + ci
+   pnpm turbo run test:unit --filter=@projeto/api       # os 38 de apps/api
    ```
-   O corpo está `"286 testes"` e a suíte devolveu `279`: isso é uma divergência
-   e precisa ser corrigida no corpo. **Não** desligue o campo para ficar
-   verde — desligar é apagar a claim, não verificá-la.
+   O corpo do PR #44 diz `**304 testes** (171 + 133)`, que era o
+   `tooling:test` da época. A suíte devolve hoje `177 + 133 = 310`: isso é uma
+   divergência e precisa ser corrigida no corpo. **Não** desligue o campo para
+   ficar verde — desligar é apagar a claim, não verificá-la.
 
 5. **Classificar o que mudar.** Três categorias, e elas **não** se tratam igual:
 
@@ -175,6 +207,24 @@ reusar o resultado de T1.
 6. **Reescrever, preservando o que não mudou.** Edite **só** as linhas
    divergentes do corpo já existente. Reescrever o PR inteiro perde histórico
    de revisão e apaga decisões que o corpo registra.
+
+   A coluna `L` do relatório é por onde você começa: ela diz a **linha do
+   corpo**, não um índice de array. Isso importa porque o scanner lê **todas** as
+   ocorrências, e nem toda ocorrência é uma claim viva — MEDIDO no PR #44:
+
+   ```text
+   DIVERGE L7    commits     declarado=31   medido=34   <- cabeçalho: corrigir
+   DIVERGE L33   commits     declarado=20   medido=34   <- "ela foi aberta com 20 commits"
+   DIVERGE L7    arquivos    declarado=41   medido=41   <- ok
+   DIVERGE L33   arquivos    declarado=34   medido=41   <- mesma citação: deixar
+   ```
+
+   L7 e L33 são ambos `commits` divergentes. **Só L7 é claim da branch**; L33
+   está dentro de uma frase que conta o passado e continua verdadeira depois de
+   um push. Sem a linha, os dois são indistinguíveis e o relatório obriga a
+   escolher entre "corrigir os dois" (apaga o histórico do PR) e "corrigir
+   nenhum". A linha entrega essa decisão ao humano — que é quem sabe o que a
+   frase significava — e a regex nunca tem que adivinhar.
 
 7. **Re-checar T4 e aplicar.**
    ```bash
@@ -211,7 +261,9 @@ reusar o resultado de T1.
 
 ## Saídas
 
-- Relatório de claims: `declarado` vs `medido`, por classe
+- Relatório de claims: `L<linha>` + `declarado` vs `medido`, **uma linha por
+  ocorrência** — não por classe. Ver o passo 6 para por que a coluna `L` é o
+  que separa claim viva de citação histórica.
 - Corpo do PR atualizado **apenas** nas linhas divergentes (se havia)
 - Nenhum arquivo do repo alterado
 
