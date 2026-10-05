@@ -106,10 +106,17 @@ reusar o resultado de T1.
 
 2. **Trazer o corpo para arquivo.**
    ```bash
-   gh pr view <N> > .pr-body.md    # corpo + título, como texto
+   gh pr view <N> --json body -q .body > .pr-body.md
    ```
    O corpo chega como **arquivo**, nunca por comando. É o que mantém o passo
    seguinte offline e testável por fixture.
+
+   > **`--json body -q .body` é obrigatório, não preferência.** O `gh pr view`
+   > **sem** `--json` chama `projectCards` e quebra com
+   > `GraphQL: Projects (classic) is being deprecated` — **exit 1, corpo vazio**.
+   > A mesma depreciação que quebra `gh pr edit --body`. Medido 2026-10-05
+   > contra o PR #44. E um corpo vazio aqui não dá erro: o passo 3 lê zero claims
+   > e responde "nenhuma claim mensurável" — que parece um PR em dia.
 
 3. **Rodar o scanner (T3).**
    ```bash
