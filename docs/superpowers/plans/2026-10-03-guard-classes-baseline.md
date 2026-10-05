@@ -1,7 +1,7 @@
 ---
 name: guard-classes-baseline
-description: Baseline medido da demanda guard-classes, 18 metricas (B1-B18) com o comando de reproducao ao lado de cada numero, mais as leituras que os dados sustentam. Sub-arquivo de docs/superpowers/plans/2026-10-03-guard-classes.md.
-version: 2.1.0
+description: Baseline medido da demanda guard-classes, 19 metricas (B1-B19) com o comando de reproducao ao lado de cada numero, mais as leituras que os dados sustentam. Sub-arquivo de docs/superpowers/plans/2026-10-03-guard-classes.md.
+version: 2.2.0
 updated: 2026-10-05
 maintainer: stack-code-reviewer
 related:
@@ -39,10 +39,11 @@ do plano — em especial a 4, sobre a tabela que casa o próprio registro.
 | B11 | differential ligado? | `git grep -n 'turbo-redirect-differential' -- package.json '.github' '.tooling' 'tooling' \| grep -v spec.ts` | **2 hits, ambos comentários** (`check-package-json-drift.ts:438` e o próprio script). **0 invocações** |
 | B12 | review-routing executa o regex? | `sed -n '196,200p' tooling/scripts/lint-review-routing.ts`; `sed -n '150,158p'` | linha **198** compila e nunca roda contra diff; linhas **150–165** rodam `path_globs` e avisam dead pattern |
 | B13 | convenções órfãs do índice | `ls -1 .agents/specs/conventions/*.md \| wc -l`; `grep -oE '\]\(\./[a-z-]+\.md\)' .agents/specs/conventions/README.md \| sort -u \| wc -l`; `comm -23 <(ls -1 .agents/specs/conventions/*.md \| xargs -n1 basename) <(grep -oE '\]\(\./[a-z-]+\.md\)' .agents/specs/conventions/README.md \| tr -d '](' \| sort -u)` | **19 arquivos, 11 linkados, 8 não-linkados** — um deles é o `README.md`, logo **7 órfãs**. A subtração só fecha excluindo o README; `19 − 11 = 8` e dizer "7" sem explicar o README é aritmética que não bate |
-| B14 | archive vazio | `find .agents/runs/archive -name '*.md' \| wc -l` | **0** — e o check 9 renderiza `✓` |
+| B14 | archive vazio | `find .agents/runs/archive -name '*.md' \| wc -l` | **0** — e o check 9 renderiza `✓`, mas **pelo mecanismo de B19**, não por ler 0 arquivos |
 | B15 | `.claude` existe no repo? | `ls -d .claude` | **não** — o `test -f` executável de B2 é falso em **toda** máquina, não só fora; `git check-ignore -v .claude` → 1, ou seja nem está ignorado: o path não existe em disco |
 | B16 | check no registro que não roda | `grep -c 'check-types' .tooling/scripts/ci/preflight.ts`; `wc -l .tooling/scripts/ci/check-types.ts` | **1 hit, e é `import type`** — não está no array `checks`, mas consta da Tabela de Checks (`ci-defense-in-depth.md:53`) com custo e propósito. `check-types.ts` tem 23 linhas: só JSDoc + `export interface CheckResult`, **zero código executável** — e `ci-defense-in-depth/SKILL.md:195` já diz que ele "não roda". O repo se contradiz em 3 lugares |
 | B17 | roteamento alcança os checks? | `git ls-files \| grep -c '^tooling/scripts/ci/'` / `'^\.tooling/scripts/ci/'` | **0 / 16** — `review-routing.md:84` casa 0 arquivos; e sem `blocking: true`, o detector de dead pattern (que exige `blocking: true`) não roda |
+| B19 | o `archive:lint` que o preflight chama resolve para o diretório **errado** | `python3 -c "import json;print(json.load(open('package.json'))['scripts']['archive:lint'])"` → `cd tooling/scripts && pnpm archive:lint`; `sed -n '189p' tooling/scripts/archive-lint.ts` → default `.agents/runs/archive`; `ls -d tooling/scripts/.agents/runs/archive` → **inexistente**; `ls -d .agents/runs/archive` → existe | O default é relativo ao **cwd**, e o script `cd` para `tooling/scripts/`. `checkArchiveIntegrity` valida `join(repoRoot,'.agents/runs/archive')` mas **executa** `execSync('pnpm archive:lint')` sem `--archive-dir` → o `existsSync` do early-return roda no caminho errado. **O archive real nunca é lido.** Prova de direcionalidade: arquivo inválido plantado em `tooling/scripts/.agents/runs/archive/` → `exit 1`; no archive real → invisível |
 | B18 | claim numérico falso no backlog | `git grep -n '/home/' -- '*.ts'`; `git grep -n '/home/' -- '*.ts' ':!*.spec.ts'` | `X8` afirma o primeiro → **0**; mede **3**. Verdade na branch de escrita, envelheceu. Os 3 são **todos** de `.tooling/scripts/ci/preflight.spec.ts` (45, 118, 121) — o fixture e o comentário que **documentam a remoção da allowlist**. O recorte de produção (`:!*.spec.ts`) dá **0** |
 
 ## Leituras que os dados sustentam
@@ -53,12 +54,19 @@ condição alcançável (B10); a pasta onde os guards vivem não está no worksp
 (B7) nem tem tsconfig (B8) nem config de eslint (B8); e a regra que pegaria
 condição morta não existe em config nenhum (B9). Não é um buraco único.
 
-**B14 — a classe deste plano, viva.** [`archive-lint.ts:141`](../../../tooling/scripts/archive-lint.ts#L141)
-só retorna cedo quando o diretório está **ausente**; ele existe e tem só
-`.gitkeep`, então o linter lê 0 arquivos e `formatMark` renderiza `✓` — enquanto
+**B14 + B19 — a classe deste plano, viva, e por um mecanismo pior que o que eu
+escrevi.** A v2.0 deste arquivo explicou o `✓` por "o linter lê 0 arquivos".
+**Errado**: `checkArchiveIntegrity` calcula o `archiveDir` certo, confirma que
+existe, e então chama `execSync('pnpm archive:lint')` — que faz `cd
+tooling/scripts` e resolve o default para um diretório que **não existe** (B19).
+O early-return de [`archive-lint.ts:138`](../../../tooling/scripts/archive-lint.ts#L138)
+dispara no caminho errado: **o archive real nunca é lido**. Não é "validou zero
+arquivos", é "validou um diretório que não existe" — e o próprio
+[`check-archive-integrity.ts`](../../../.tooling/scripts/ci/check-archive-integrity.ts)
+diz no comentário que *"o `✓` aqui era puro teatro"*. Enquanto
 [`preflight.ts:63-71`](../../../.tooling/scripts/ci/preflight.ts#L63-L71) declara
-que `skipped` não pode renderizar `✓`. **É a classe que o plano nomeia, dentro
-dos 9 que ele certifica como verdes.**
+que `skipped` não pode renderizar `✓`, o caminho de dado **ausente** (não de
+`skipped`) devolve `ok: true` puro. **Classe 1 dentro dos 9 que ele certifica.**
 
 **B15 + B17 — a regra que não alcança o próprio objeto.** `review-routing.md:84`
 declara `tooling/scripts/ci/**`, que casa **0** arquivos tracked; o diretório
@@ -82,5 +90,6 @@ lado**, não a supressão silenciosa que o 3.3 proíbe.
 
 - [x] `wc -l` ≤ 300
 - [x] Links cruzados nos dois sentidos (plano ↔ este arquivo)
-- [x] Todo claim numérico tem comando ao lado (B1–B18)
-- [x] Sem duplicação: as leituras B14/B17/B18 aparecem aqui, e o plano aponta
+- [x] Todo claim numérico tem comando ao lado (B1–B19)
+- [x] Sem duplicação: as leituras de B14/B19, B17 e B18 ficam só aqui, e o
+      plano aponta para cá em vez de repeti-las

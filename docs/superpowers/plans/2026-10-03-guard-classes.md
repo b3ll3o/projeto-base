@@ -1,12 +1,13 @@
 ---
 name: guard-classes
 description: Leva para dentro do repo o diagnostico das 5 classes de guard descobertas ao construir os gates do fluxo de desenvolvimento, conserta a fonte unica do destino da retrospectiva que hoje tem 10 declaracoes divergentes, corrige o unico check de path de maquina e a notacao em prosa que o repete, e liga o unico harness que o repo ja provou e deixou desligado. 4 fases, P0-P2.
-version: 2.1.0
+version: 2.2.0
 updated: 2026-10-05
 maintainer: stack-code-reviewer
 state_snapshot: ../../../.agents/runs/state-snapshot-20261003T184236Z.md
 related:
   - ./2026-10-03-guard-classes-baseline.md
+  - ./2026-10-03-guard-classes-decisoes.md
   - ../../fluxo-desenvolvimento.md
   - ../../../.agents/specs/conventions/retrospective-capture.md
   - ../../../.agents/specs/conventions/ci-defense-in-depth.md
@@ -23,7 +24,7 @@ related:
 > não há link relativo que a alcance daqui (ver F2.1).
 > **Branch:** `feat/guard-classes` (base `main` @ `ad0ff70`) · **Agentes:**
 > `stack-code-reviewer` (review por task) · `agent-architect` (F1) · `doc-sync`
-> (pós-alteração) · **v2.1.0** corrigido após auditoria adversarial — ver §Changelog.
+> (pós-alteração) · **v2.2.0** corrigido após 2 auditorias adversariais — ver §Changelog.
 
 ## TL;DR
 
@@ -86,16 +87,14 @@ não o diagnóstico das falhas que eles já deram.
 > foi declarado em prosa e nunca construído, é fictício — e o pior caso é o que
 > reporta verde."* (tese do plano B38, e o critério de sucesso deste)
 
-**Escrever uma convenção em prosa repetiria o defeito.** Por isso há uma fase de
-construção por classe, e cada task declara o que **não** é detectável, em vez de
-prometer um lint que não pega.
+**Escrever a convenção em prosa repetiria o defeito** — por isso cada task declara o
+que **não** é detectável, em vez de prometer um lint que não pega.
 
 ## Baseline verificável
 
-As 18 medições (B1–B18) vivem em
-**[`2026-10-03-guard-classes-baseline.md`](./2026-10-03-guard-classes-baseline.md)**,
-com o comando ao lado de cada número; as tasks citam as linhas pelo id (B7, B14,
-B15, B17) sem repetir a tabela. **Regra:** sem comando, o número não vale.
+As 19 medições (B1–B19) vivem em
+[o baseline](./2026-10-03-guard-classes-baseline.md), com o comando ao lado de cada
+número; as tasks citam pelo id. **Regra:** sem comando, o número não vale.
 
 ## Índice das fases
 
@@ -135,7 +134,7 @@ arquivar as 6 fontes e deixar as 28 de fora.
 | id | Task | Verificação |
 |----|------|-------------|
 | 2.1 | Convenção das classes com **receita de detecção por classe** — não só definição. **Citar `X8`/`X10`–`X12` como fonte**, não reescrevê-las | tabela com, por classe: definição, instância com `arquivo:linha`, receita, contra-exemplo, evidência de que a receita funciona |
-| 2.2 | Registrar: `AGENTS.md` §6 + índice de `.agents/specs/conventions/README.md` — fechar as 7 órfãs (B13) **e corrigir o claim `X8`, que afirma `git grep '/home/' -- '*.ts'` → 0 e mede 3 (B18)**: claim numérico falso em doc versionado viola a regra de verificabilidade de `tamanho-e-revisao.md` | **zero órfãs**: todo `.md`, exceto o README, linkado no índice — 19 arquivos, 11 linkados, 8 não-linkados, 1 deles é o README (B13). E `git grep -c '/home/' -- '*.ts' ':!*.spec.ts'` → **0**, com a exclusão **e o motivo escritos no backlog** — sem ela o `0` exigiria apagar o fixture e o comentário que provam que a allowlist da doc-refs não volta |
+| 2.2 | Registrar: `AGENTS.md` §6 + índice de `.agents/specs/conventions/README.md` — fechar as 7 órfãs (B13) **e corrigir o claim `X8`, que afirma `git grep '/home/' -- '*.ts'` → 0 e mede 3 (B18)** — a premissa da v2.1 ("o índice morreu") é **falsa**: `evals.md` e `engineering-loop.md`, as 2 mais novas, **estão no `AGENTS.md` §6**; 2.2 espelha nos **dois** índices, não fecha um só: claim numérico falso em doc versionado viola a regra de verificabilidade de `tamanho-e-revisao.md` | **zero órfãs**: todo `.md`, exceto o README, linkado no índice — 19 arquivos, 11 linkados, 8 não-linkados, 1 deles é o README (B13). E `git grep -c '/home/' -- '*.ts' ':!*.spec.ts'` → **0**, com a exclusão **e o motivo escritos no backlog** — sem ela o `0` exigiria apagar o fixture e o comentário que provam que a allowlist da doc-refs não volta |
 | 2.3 | Declarar **o que cada classe NÃO é detectável estaticamente** — incluindo os cegos do próprio 3.3 | coluna "detecção" (`estática` \| `harness`) + coluna "não pega", uma linha por classe |
 
 **2.3 é o que impede a convenção de mentir.** Um lint que promete pegar a
@@ -161,11 +160,11 @@ que tem dentes**, e um check que confere o registro contra a realidade.
 | 3.4 | Check de **controle desligado** — regra geral, duas instâncias: (a) todo harness referenciado é invocado por algo; (b) **toda referência ao destino aponta para o mesmo lugar**. A instância (b) é o 1.3, generalizado | **O aceite é o check disparar, não ele virar verde.** Um detector de dívida nasce vermelho: (a) só esverdeia em 4.1, quando o differential ganha dono. Prova: introduzir um **segundo** harness sem dono → o check nomeia os dois; a instância (b) esverdeia já em 1.3 |
 
 **3.1 tem que achar duas coisas na mão.** Os 9 checks estão mapeados como
-funcionais; **um validou zero arquivos e ainda assim está marcado `✓`** (B14), e
-**um nem roda** — `check-types` está na Tabela de Checks com custo e propósito,
-mas não no array `checks` (B16). Se 3.1 não achar as duas sozinho, o registro
-está errado: a segunda é a própria F3 FAIL — um registro de dentes com um check
-sem dentes.
+funcionais; **um nem olha o diretório que ele mesmo verificou existir** — o
+`checkArchiveIntegrity` calcula o `archiveDir` certo, confirma que existe, e chama
+`execSync('pnpm archive:lint')`, que resolve para `tooling/scripts/…` (B19) —, e
+**um nem roda** (`check-types`: na Tabela de Checks, fora do array, B16). Se 3.1 não
+achar as duas sozinho, o registro está errado: a segunda é a própria F3 FAIL.
 
 **Invariante de 3.4 com 4.1 (importante).** Se 4.1 puser o differential no
 `ci:local`, **3.4 tem de tratar qualquer script de `package.json#scripts` como
@@ -182,7 +181,7 @@ fix v1.3). `review-routing-examples.md` está em 104/300 e é o destino.
 
 | id | Task | Verificação |
 |----|------|-------------|
-| 4.1 | Ligar `turbo-redirect-differential.sh` ao `preflight` **ou** a um script de `ci:local` | rodar o dono **executa** o differential; mutação reintroduzindo o bug antigo deixa **vermelho**. Custo medido: 8,2 s sozinho |
+| 4.1 | Ligar `turbo-redirect-differential.sh` ao `preflight` **ou** a um script de `ci:local` | rodar o dono **executa** o differential; mutação introduzindo o bug antigo deixa **vermelho**. Custo remedido 3×: **8,16/8,16/8,19 s**. **Pré-condição que a v2.1 omitiu:** a linha 83 usa `node --experimental-strip-types`, que nasceu no **Node 22.6**, e os 3 jobs do CI pinam **20** — decidir subir o CI ou reescrever a linha 83 sem a flag, senão o gate quebra no CI |
 | 4.2 | Auditar o plano contra as próprias classes antes do merge, **gravado em `.agents/runs/`** — não em commit message | arquivo versionado, uma linha por classe: onde este plano poderia cair nela, e por que não cai |
 
 **4.2 não é burocracia.** Um plano que publica uma regra sobre controles
@@ -207,31 +206,25 @@ F2.2 (índice + claim X8) em paralelo a F2.1 e F3                   ▼
 | Virar só prosa — o defeito que B38 nomeou | 1.3/3.2/3.4 não existem no merge | F3 é pré-requisito de F4, não follow-up |
 | O registro de dentes envelhece igual o resto | `desconhecida` aparecendo nas linhas | 3.1 exige justificativa escrita **e ≥ 1 mutação medida** |
 | Backfill de 34 arquivos polui o template | PR grande e difícil de revisar | 1.4 é decisão do owner, com 3 opções |
-| Custo do differential no CI | preflight passa de ~10 s para ~18 s | 4.1 deixa a escolha (preflight vs `ci:local`) com o owner |
+| Custo do differential no CI | preflight passa de **2,5 s** para **~11 s** (n=5 e n=3) | 4.1 deixa a escolha (preflight vs `ci:local`) com o owner — a v2.1 dizia "~10 s → ~18 s" e errava nos dois extremos |
+| Differential quebra no CI | `node --experimental-strip-types` não existe no Node 20, que é o que o CI pinam | decidir **antes** de 4.1: subir os 3 jobs para ≥22.6, ou reescrever a linha 83 sem a flag |
 | A demanda cresce | alguém adiciona R-009/R-010/R-011 | ver §Fora de escopo |
 
 ## Decisões do owner
 
-1. **O destino dos 34 results (1.4)?** Três saídas, não duas: **(a)** mover tudo
-   — deixa o template com 34 arquivos de histórico; **(b)** não mover — repo
-   leve, mas quem copia o template herda as regras e nenhuma das falhas;
-   **(c)** arquivar só as **6 fontes de evidência** e deixar as 28 de fora.
-   **Recomendo (c)**: usa o mecanismo de archive que o repo já tem, custa pouco,
-   e entrega o que o TL;DR 3 diz que falta.
-2. **O differential no `preflight` ou no `ci:local` (4.1)?** Exige `pnpm turbo` e
-   um workspace temporário. Custo medido: **8,2 s** contra um preflight de ~10 s.
-   **Recomendo `ci:local`** — quase dobra o primeiro gate de todo push de PR.
-3. **A convenção nova entra no índice (2.2)?** Das 19 convenções, 11 são
-   linkadas e 8 não (B13): 7 órfãs de verdade, mais o `README.md`, que
-   corretamente não se linka a si mesmo. Há duas leituras — o índice morreu, ou
-   foi esquecido. O plano assume que **morreu** e fecha; se o owner preferir o
-   contrário, 2.2 inverte.
+As 3 decisões, com a medição de 2026-10-05 que **derrubou duas recomendações**,
+estão em [o arquivo de decisões](./2026-10-03-guard-classes-decisoes.md):
+**(1)** a opção (c) da 1.4 **caiu** — **0 dos 34** results têm o frontmatter de
+archive, e pela B19 o `✓` não os validaria mesmo; **(2)** o custo é 8,2 s contra um
+preflight de **2,5 s** (não "~10 s", que era o `ci:local`) — **quadruplica** —, e o
+script exige Node **≥22.6** enquanto o CI roda **20**; **(3)** "o índice morreu" é
+**falso** — 2 das 7 órfãs (`evals.md`, `engineering-loop.md`) estão no `AGENTS.md` §6.
 
 ## Como validar o plano inteiro
 
 ```bash
 pnpm ci:local                                            # o que o CI roda
-bash .tooling/scripts/ci/turbo-redirect-differential.sh  # 18 formas, 0 divergentes, 8,2 s
+bash .tooling/scripts/ci/turbo-redirect-differential.sh  # 18 formas, 0 divergentes, 8,2 s (n=3)
 pnpm ci:preflight                                        # deve incluir os checks novos
 git grep -n -e memory-dir -e claude/projects -e 'memory/b<N' -- '.agents/**/*.md' \
   ':!.agents/runs/state-snapshot-*'                      # == nº de declarações, nenhuma divergente
@@ -259,42 +252,38 @@ nada — e é a classe que este plano nomeia.
 
 ## Fora de escopo
 
-Explicitamente **não** entram: **R-009** (nenhum gate lê `.github/workflows/`)
-e **R-010** (`.md` fora do `format:check`) — pedidos separados; **R-011 / X5**
-(`.tooling` sem tsconfig) — mudar a topologia do monorepo é maior que esta
-demanda, mas B7–B9 registram por que a detecção de classes é limitada; **X9**
-(path de máquina em `note`) — cosmético; **Husky deprecated**; e lint para as
-classes 1, 2, 4 e 5 — exige corpus ou diferencial, registrado em 2.3 como
-limitação explícita, não como esquecimento.
+**Não** entram: **R-009** (nenhum gate lê `.github/workflows/`) e **R-010** (`.md`
+fora do `format:check`); **R-011 / X5** (`.tooling` sem tsconfig) — mudar a topologia
+do monorepo é maior que esta demanda, mas B7–B9 registram por que a detecção é
+limitada; **X9** (path de máquina em `note`); **Husky deprecated**; e lint para as
+classes 1, 2, 4 e 5 — exige corpus ou diferencial, registrado em 2.3 como limitação
+explícita, não como esquecimento.
 
 ## Checklist de revisão (aplicado a este arquivo)
 
 - [x] `wc -l` ≤ 300 — medido
 - [x] Referências cruzadas resolvem — cada path do frontmatter testado com `test -e`
-- [x] Todo claim numérico tem comando ao lado (B1–B18 no baseline, M1–M20 do snapshot)
+- [x] Todo claim numérico tem comando ao lado (B1–B19 no baseline, M1–M20 do snapshot)
 - [x] pt-BR, sem placeholders, tabelas consistentes
 - [x] Limitações declaradas (2.3, §Fora de escopo), não escondidas
 
 ## Changelog
 
-- **v2.1.0** (2026-10-05): 2 workflows adversariais (13 e 12 agentes) tentaram
-  refutar o plano, e **as claims que caíram eram todas minhas** — a mais grave, o
-  critério da **1.2 era inerte**: casava pipe literal, saía `exit 1` e passava
-  **vacuamente pelo conjunto vazio**, exatamente a forma que o v2.0 declarava ter
-  corrigido. Também: "2 `test -f`" é **1** (contei em vez de classificar — classe
-  4); a 2.2 exigia `0` hits de `/home/`, o que apagaria o fixture que prova a
-  allowlist fechada (classe 3); e os critérios de 3.2 e 3.4 estavam invertidos — a
-  mutação nomeada era o GREEN, e o GREEN declarado dependia de 4.1. **A ressalva 5
-  mordeu:** `8,1 s` → **8,2 s**. Cada correção está no ponto, com o comando;
-  medições e leituras em [`-baseline.md`](./2026-10-03-guard-classes-baseline.md).
+- **v2.2.0** (2026-10-05): os 2 ataques dados por perdidos **voltaram** (o `consistencia`,
+  truncado, e o `decisoes`) e 6 achados seguiam vivos. **Duas correções eram claims minhas
+  erradas**: o **B14** explicava o `✓` por "o linter lê 0 arquivos", mas o
+  `archive:lint` que o preflight chama faz `cd tooling/scripts` e valida um diretório
+  **que não existe** — o archive real nunca é lido (nova **B19**); e o preflight custa
+  **2,51–2,53 s** (n=5), não "~10 s" (que era o `ci:local`), então 8,2 s **quadruplica**
+  o gate. Caíram ainda a opção (c) da 1.4 (**0 dos 34** com o frontmatter de archive), a
+  premissa "o índice morreu" (2 das 7 órfãs no `AGENTS.md` §6) e a pré-condição de Node
+  do differential (**≥22.6** contra o **20** do CI). Evidência: [`-baseline.md`](./2026-10-03-guard-classes-baseline.md) e [`-decisoes.md`](./2026-10-03-guard-classes-decisoes.md).
 
-- **v2.0.0** (2026-10-03): reescrito após auditoria adversarial que **refutou a
-  causa raiz** da v1.0 — que era "`<memory-dir>` indefinido", quando o medido
-  são 10 declarações sem fonte única. A auditoria também pegou: o `-E` com `\|`
-  do B5 medindo a coisa errada, 4 de 5 caminhos do frontmatter quebrados, o
-  snapshot afirmando `working_tree: clean` com um teste vermelho na árvore, e
-  "F1→F2 é load-bearing" sendo falso (F2 escreve artefato versionado). 4 fases,
-  13 tasks, baseline B1–B14. O diff completo está em `8b57731`.
+- **v2.0.0** (2026-10-03): reescrito após auditoria que **refutou a causa raiz** da
+  v1.0 ("`<memory-dir>` indefinido" → 10 declarações sem fonte única) e pegou o `-E` com
+  `\|` do B5, 4 de 5 caminhos do frontmatter quebrados, o snapshot afirmando
+  `working_tree: clean` com um teste vermelho, e "F1→F2 é load-bearing" falso.
+  Diff completo: `8b57731`.
 
 - v1.0.0 (2026-10-03): plano inicial, do PR #43. **Superado:** causa raiz errada e
   comando de baseline que media a coisa errada.
