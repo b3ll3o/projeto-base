@@ -227,6 +227,8 @@ const PREFLIGHT_GATES: GateRef[] = [
   { name: 'memory dir concordance', file: '.tooling/scripts/ci/check-memory-dir-concordance.ts' },
   { name: 'registro de dentes', file: '.tooling/scripts/ci/check-teeth-registry.ts' },
   { name: 'classe 3', file: '.tooling/scripts/ci/check-self-firing-guard.ts' },
+  { name: 'turbo differential', file: '.tooling/scripts/ci/turbo-redirect-differential.sh' },
+  { name: 'controle desligado', file: '.tooling/scripts/ci/check-harness-owner.ts' },
 ];
 
 export function checkTeethRegistry(): CheckResult {

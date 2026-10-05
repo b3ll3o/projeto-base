@@ -8,34 +8,31 @@
 Drift estrutural (cross-refs quebradas em docs, tsconfigs divergentes,
 regras ESLint legadas, extensões faltando em `tsconfig`) **não é capturado
 por testes unitários nem por cobertura**: código compila e passa, mas o
-monorepo fica progressivamente inconsistente até quebrar um build
-aleatório. A estratégia defense-in-depth ataca o problema em **camadas
-progressivas** — quanto mais cedo o drift é detectado, menor o custo do
-feedback loop (5s local vs 4min no CI) e menor a chance de merge de uma
-regressão estrutural.
+monorepo fica progressivamente inconsistente até quebrar um build aleatório.
+A estratégia defense-in-depth ataca o problema em **camadas progressivas** —
+quanto mais cedo o drift é detectado, menor o custo do feedback loop e menor a
+chance de merge de uma regressão estrutural.
 
-A estratégia tem **3 camadas**: pre-push local (dev), preflight CI job
-(primeiro gate), quality CI jobs (lint/typecheck/test/coverage, gated).
+São **3 camadas**: pre-push local (dev), preflight CI job (primeiro gate),
+quality CI jobs (lint/typecheck/test/coverage, gated).
 
 ## As 3 Camadas
 
 ### Camada 1 — Pre-push local
 
-`pnpm ci:local` roda **todas as validações que o CI roda** em ~30–60s.
-Devs executam **antes** de `git push`. Detecta drift estrutural em ~5s
-(o que o CI detectaria em ~4min). Falha localmente antes de gastar um
-round-trip com o CI remoto. Script definido em
-`package.json` raiz; detalhes em [git-workflow.md §Pre-Push Quality
-Gate](./git-workflow.md).
+`pnpm ci:local` roda **tudo que o CI roda** antes de `git push`, detectando
+drift estrutural em ~11 s em vez de ~4 min de round-trip. Falha localmente
+antes de gastar CI remoto. Script no `package.json` raiz; detalhes em
+[git-workflow.md §Pre-Push Quality Gate](./git-workflow.md).
 
 ### Camada 2 — Preflight CI job
 
 Workflow `.github/workflows/ci.yml`, job `preflight`. **Primeiro job do
-pipeline** — demais jobs (lint, typecheck, test, coverage) declaram
-`needs: preflight` e não rodam se preflight falhar. Falha rápido em
-~10s com 3 checks estruturais: `check-doc-refs`,
-`check-tsconfig-drift`, `check-eslint-drift` (todos sob
-`.tooling/scripts/ci/`). Veja a [Tabela de Checks](#tabela-de-checks).
+pipeline** — os demais (lint, typecheck, test, coverage) declaram
+`needs: preflight` e não rodam se ele falhar. São **14 checks** estruturais
+(medido em 10,8 s), todos em `.tooling/scripts/ci/` exceto o lint da matriz;
+veja a [Tabela de Checks](#tabela-de-checks) e o
+[Registro de dentes](#registro-de-dentes).
 
 ### Camada 3 — Quality CI
 
@@ -61,12 +58,11 @@ Escopo de todos: **todo `.md` versionado** sob a raiz que o preflight passa
 | `check-memory-dir-concordance` | retro | segunda declaração do destino do result file, em 6 notações históricas |
 | `review-routing` matrix lint | roteamento | YAML inválido, reviewer inexistente, pattern duplicado, LOC > 300, `blocking: true` casando 0 arquivos |
 
-> **`check-types.ts` NÃO é um check** e saiu desta tabela. Ele contém um único
-> `export interface CheckResult` (medido: `wc -l` = 23, um `export`). Não há
-> lógica para rodar — ele é importado **só** como `import type` pelos outros
-> 9 arquivos. A versão anterior desta tabela lhe atribuía uma capacidade
-> ("tipos inconsistentes em scripts CI") e um custo ("~1s") que **não existem**:
-> foi a task 3.1 do plano [`guard-classes`](../../../docs/superpowers/plans/2026-10-03-guard-classes.md)
+> **`check-types.ts` NÃO é um check** e saiu desta tabela: tem um único
+> `export interface CheckResult` (medido, `wc -l` = 23) e é importado **só**
+> como `import type`. A versão anterior lhe atribuía uma capacidade e um custo
+> que **não existem** — foi a task 3.1 do plano
+> [`guard-classes`](../../../docs/superpowers/plans/2026-10-03-guard-classes.md)
 > que mediu e corrigiu. A [SKILL](../../skills/ci-defense-in-depth/SKILL.md)
 > já dizia certo ("— não roda"); a convenção é que estava errada.
 >
@@ -74,10 +70,15 @@ Escopo de todos: **todo `.md` versionado** sob a raiz que o preflight passa
 > (5+3+3+1+2+2) para um preflight medido em **~2,6 s** — e o preflight não
 > imprime tempo por check, então nenhum dos números tinha derivação. Somar
 > números inventados numa coluna que ninguém consegue reproduzir é a classe 7
-> desta demanda; o que dá para medir hoje é o todo:
-> `time pnpm ci:preflight` → **2,62 / 2,64 / 2,62 s** (medido 2026-10-05,
-> n=3, com os 12 checks do array). Um único `time` é `n=1` e não generaliza —
-> por isso o `n` está escrito ao lado do número, e não é enfeite.
+> desta demanda; o que dá para medir hoje é o todo, e o todo mudou quando a
+> task 4.1 ligou o differential:
+> `time pnpm ci:preflight` → **10,84 / 10,77 / 10,78 s** (medido 2026-10-05,
+> n=3, com os **14** checks do array). O mesmo comando com os 12 checks de
+> antes da 4.1 dava **2,62 / 2,64 / 2,62 s** (n=3), e o
+> `turbo-redirect-differential.sh` sozinho mede **8,17 / 8,15 / 8,20 s**
+> (n=3) — `2,62 + 8,17 = 10,79`, que bate com os 10,78. É essa aritmética que
+> a coluna inventada não tinha: um custo que não fecha com o todo não é um
+> custo, é uma história.
 
 Todos os checks seguem o template `CheckResult` compartilhado
 extraído em commit `59eb083` (refactor que consolidou fixtures herméticas).
@@ -107,6 +108,8 @@ extraído em commit `59eb083` (refactor que consolidou fixtures herméticas).
 | `check-tsconfig-drift` | `check-tsconfig-drift.spec.ts` — 1 de 2 | controle negativo | `npx vitest run --root .tooling/scripts/ci check-tsconfig-drift` | `.tooling/scripts/ci/check-tsconfig-drift.ts` |
 | `check-teeth-registry` | `check-teeth-registry.spec.ts` — 12 testes | **mutação** | comando 3 → **vermelho nomeando o gate** (medido 2026-10-05) | `.tooling/scripts/ci/check-teeth-registry.ts` |
 | `check-self-firing-guard` | `check-self-firing-guard.spec.ts` — 10 testes | **mutação** | comando 5 → **diferencial vira 0 → 0** (medido 2026-10-05) | `.tooling/scripts/ci/check-self-firing-guard.ts` |
+| `turbo-redirect-differential` | o próprio script — 18 formas de redirect contra o turbo REAL; e o comando 7 | **mutação** | comando 7 → **1 e 3 de 18 divergentes** (medido 2026-10-05) | `.tooling/scripts/ci/turbo-redirect-differential.sh` |
+| `check-harness-owner` | `check-harness-owner.spec.ts` — 18 testes, incluindo o segundo órfão | **mutação** | comando 6 → **exit 0** (medido 2026-10-05) | `.tooling/scripts/ci/check-harness-owner.ts` |
 
 > A coluna **Arquivo** é a chave de reconciliação, e não um enfeite: o
 > `check-teeth-registry` casa o registro com o `preflight.ts` por ela. Sem a
@@ -116,7 +119,7 @@ extraído em commit `59eb083` (refactor que consolidou fixtures herméticas).
 > qualquer gate novo entraria no preflight sem aviso. Foi a ausência desta
 > coluna que o check acusou na primeira execução (9 de 9 sem correspondência).
 
-Os **seis comandos de mutação**, medidos 2026-10-05. Cada um reverte o
+Os **sete comandos de mutação**, medidos 2026-10-05. Cada um reverte o
 arquivo ao final — a mutação é efêmera por desenho, e o `git diff` depois
 deles tem de estar vazio:
 
@@ -163,56 +166,63 @@ npx tsx .tooling/scripts/ci/check-self-firing-guard.ts   # -> 9 erros "dispara e
 perl -0pi -e "s|^function stripSelfName\(line: string\): string \{\n  return line;\n\}|function stripSelfName(line: string): string {\n  return line.replaceAll(SELF_NAME, '');\n}|m" \
   .tooling/scripts/ci/check-memory-dir-concordance.ts   # restaurado byte-exato (conferido com diff)
 
-# 6) check-harness-owner (controle desligado) — o vermelho do dia a dia é
-#    VERMELHO de propósito, então a prova de dente é invertida: neutraliza-se
-#    a resolução de dono, e o check tem de FICAR VERDE. Se ele continuar
-#    vermelho, o vermelho não vinha da dívida — vinha de outra coisa, e o
-#    check estava medindo outra coisa. Este check não está na tabela acima
-#    porque NÃO RODA no preflight enquanto for vermelho: ver "Dívida de
-#    controles".
+# 6) check-harness-owner (controle desligado) — a prova de dente é INVERTIDA:
+#    neutraliza-se a resolução de dono, e o check tem de FICAR VERDE. Se ele
+#    continuar vermelho, o vermelho não vinha da dívida — vinha de outra coisa.
 perl -i -pe "s/^  const owners: string\[\] = \[\];\$/  const owners: string[] = ['preflight.ts#checks']; return owners;/" \
   .tooling/scripts/ci/check-harness-owner.ts
-npx tsx .tooling/scripts/ci/check-harness-owner.ts   # -> exit 0 (o vermelho era só a dívida)
+npx tsx .tooling/scripts/ci/check-harness-owner.ts   # -> exit 0
 perl -i -pe "s/^  const owners: string\[\] = \['preflight.ts#checks'\]; return owners;\$/  const owners: string[] = [];/" \
   .tooling/scripts/ci/check-harness-owner.ts   # restaurado byte-exato (conferido com diff)
+
+# 7) turbo-redirect-differential — o parser volta a errar a forma que o
+#    turbo real trata como task. Duas mutações medidas: perder o `>&` deixa
+#    1 de 18 divergente, perder a proteção de aspas deixa 3 de 18.
+perl -0pi -e 's|\.replace\(/>&/g, `>\$\{BOTH_STREAMS\}`\);|.replace(/x-NEVER/g, `x`);|' \
+  .tooling/scripts/ci/check-package-json-drift.ts
+bash .tooling/scripts/ci/turbo-redirect-differential.sh   # -> exit 1, "1 divergentes"
+cp /tmp/cpjd.bak .tooling/scripts/ci/check-package-json-drift.ts   # restaurado byte-exato
 ```
 
-> O `9` é medido, não estimado. E a primeira redação deste bloco dizia
-> "`3+`" porque eu tinha lido só as três primeiras linhas da saída — o mesmo
-> erro que o `X8` do backlog comete, e que a coluna **Nível** deste registro
-> existe para tornar visível.
+> **A cobertura do comando 7 tem um limite, nomeado porque um leitor que
+> tropeça nele vai concluir que o gate é inerte.** Remover o
+> `nextIsRedirectTarget = false` de dentro do `if` — o bug da 3ª versão do
+> parser — **deixa o differential VERDE**: nas 18 formas do corpus esse
+> `reset` só muda o resultado quando um operador *nu* é seguido de *duas*
+> tasks, e o corpus tem `build > ALVO` (uma task depois) e
+> `build >out.log ALVO` (alvo colado), nunca `build > ALVO build2`. Não é
+> dente fraco: é **cobertura** — a mesma distinção da coluna Nível, e um gate
+> diferencial mede o corpus dele, nunca o infinito.
 
-Um segundo acerto veio da redação anterior: ela citava, em prosa deste
-arquivo, o símbolo que o guard procura, e o guard — com razão — a acusou
-enquanto eu a escrevia. Um guard que pega o autor da própria documentação é
-um guard funcionando; o conserto é no texto, nunca no guard.
+Os números deste registro são medidos e trazem o `n` ao lado. O comando 7
+divergente em **1 e 3 de 18** formas (n=2 mutações: perder o `>&`, perder a
+proteção de aspas) — citar uma só seria o mesmo erro do `3+` com outro
+número. A classe 3 diverge em **9** erros (n=1 mutação). A primeira redação
+dizia "`3+`" por ter lido três linhas da saída: o mesmo erro do `X8` do
+backlog, e que a coluna Nível existe para tornar visível.
 
-> Comandos 3 a 5 **não** usam `git checkout --` como 1 e 2: eles reverteriam
+Um segundo acerto veio da redação anterior: ela citava o símbolo que o guard
+procura, e o guard — com razão — a acusou enquanto eu a escrevia. Um guard que
+pega o autor da própria documentação está funcionando; o conserto é no texto,
+nunca no guard.
+
+> Comandos 3 a 5 **não** usam `git checkout --` como 1 e 2: reverteriam
 > trabalho ainda não commitado de quem está no meio da task. O `sed`/perl
-> inverso é a restauração, e cada um foi conferido com `diff` contra um
-> backup antes de seguir.
+> inverso é a restauração, conferido com `diff` contra um backup.
 
 **A armadilha de ler este registro por nome de arquivo.** `tooling/` e
 `.tooling/` são **dois diretórios distintos**, ambos versionados, ambos rodados
-pelo mesmo `pnpm tooling:test` (`package.json#tooling:test`). Todos os
-`check-*` vivem em `.tooling/scripts/ci/`; o `lint-review-routing` e o
-`archive-lint` vivem em `tooling/scripts/`. E o spec do `check-doc-refs` mora
-dentro do `preflight.spec.ts`. Quem indexar por `ls check-*.spec.ts` conclui,
-errado, que `check-doc-refs` e `review-routing` não têm spec nenhum.
+pelo mesmo `pnpm tooling:test`. Todos os `check-*` vivem em `.tooling/scripts/ci/`;
+o `lint-review-routing` e o `archive-lint` em `tooling/scripts/`; e o spec do
+`check-doc-refs` mora dentro do `preflight.spec.ts`. Indexar por
+`ls check-*.spec.ts` conclui, errado, que dois deles não têm spec.
 
-**Duas linhas da tabela não eram só "sem mutação" — eram claims que tinham
-envelhecido.** Foram corrigidas ao montar este registro:
-
-- **`check-types` não é check** (ver a nota acima): a tabela atribuía a ele
-  uma capacidade e um custo inexistentes.
-- **A coluna "Custo" foi removida** (motivo na
-  [Tabela de Checks](#tabela-de-checks)): somava 16 s para um preflight de
-  ~2,6 s, e nenhum dos dois números tinha derivação.
-
-E uma terceira, que é o achado do método: o teste
-`a derivação canônica resolve para um diretório que existe de verdade` tinha
-**o nome de um dente e a assertion de um verde** (`ok:true, errors:[]`,
-idêntica à do teste vizinho). Um teste cujo nome promete mais do que a assertion
+**Três claims da tabela já tinham envelhecido**, corrigidas ao montá-la:
+(a) `check-types` nunca foi check — ver a nota acima; (b) a coluna "Custo" foi
+removida, e o motivo está na [Tabela de Checks](#tabela-de-checks); (c) o
+teste `a derivação canônica resolve para um diretório que existe de verdade`
+tinha **o nome de um dente e a assertion de um verde** (`ok:true, errors:[]`,
+idêntica à do vizinho). Um teste cujo nome promete mais do que a assertion
 entrega é a classe 7 em forma de spec — e só apareceu porque o registro exige
 classificar por **nível**, e não por **contagem de testes**. Corrigido: o teste
 agora executa a derivação e verifica que o path derivado existe.
@@ -227,70 +237,60 @@ pnpm ci:local
 pnpm ci:preflight
 ```
 
-`pnpm ci:local` é referenciado em `AGENTS.md` §6 como pré-requisito de
-push. `pnpm ci:preflight` é o atalho para devs iterando em docs/tsconfig.
+`pnpm ci:local` é o pré-requisito de push em `AGENTS.md` §6;
+`pnpm ci:preflight` é o atalho para devs iterando em docs/tsconfig.
 
 ## Histórico de drift detectado
 
+Só entram aqui os rows em que um check **achou** algo. A introdução de um
+check é TDD (Red→Green→Refactor — ver [tdd.md](./tdd.md)) e vive no git.
+
 | PR / commit | Check | Drift | Correção |
 |---|---|---|---|
-| `3f614dd` | `check-doc-refs` | primeiro check de cross-refs introduzido (TDD) | feature inicial |
 | `df70f5d` | `check-doc-refs` | falsos positivos em code blocks | preflight pula code blocks |
-| `2b158f8` | `check-tsconfig-drift` | primeiro check de drift de tsconfig (TDD) | feature inicial |
-| `59eb083` | `check-tsconfig-drift` | fixtures compartilhadas + `CheckResult` unificado | refactor (fixtures herméticas) |
-| `f4a5434` | `check-eslint-drift` | primeiro check de drift de ESLint (TDD) | feature inicial |
-| `0008319` | preflight job | gate `needs: preflight` adicionado | feature inicial |
-
-Cada novo check é introduzido por TDD (Red→Green→Refactor — ver
-[tdd.md](./tdd.md)); o spec do check fica em `*.spec.ts` ao lado do
-script.
+| `4b3d297` | registro de dentes | 3 claims envelhecidos (gate de `check-types`, coluna "Custo", teste com nome de dente e assertion de verde) | corrigidos; ver [Tabela de Checks](#tabela-de-checks) |
 
 ## Pendências conhecidas
 
-- **Skill `ci-defense-in-depth`:** publicada em
-  [`.agents/skills/ci-defense-in-depth/SKILL.md`](../../skills/ci-defense-in-depth/SKILL.md)
-  (adicionada em v1.4.0). Cobre o template `CheckResult`, fixtures herméticas
-  via `fs.mkdtemp` e code-block-aware parsing para novos checks preflight.
-- **Drift detectado por `check-turbo-drift`** em commit da v1.4.0:
-  as tasks `stack:review` e `docs:sync` declaravam `outputs` apesar de
-  `cache:false` (semanticamente contraditório). Corrigido removendo os
-  `outputs` órfãos; registrado como caso de uso real que justifica o check.
 - **A tabela de Checks acima é completa** (a task 3.1 do plano
   [`guard-classes`](../../../docs/superpowers/plans/2026-10-03-guard-classes.md)
   fechou as 3 lacunas que esta seção declarava). O `preflight` executa
-  **12 entradas** — as **11** linhas da tabela de dentes, mais uma segunda
+  **14 entradas** — as **13** linhas da tabela de dentes, mais uma segunda
   entrada de `check-eslint-drift` (uma por app: `apps`, `packages`). Antes, a
   tabela listava 6, das quais uma (`check-types`) nem era check. Para auditar:
   `pnpm ci:preflight` e conte as linhas `•`.
-- **Só 4 dos 11 gates têm mutação medida** (ver
+- **Só 6 dos 13 gates têm mutação medida** (ver
   [Registro de dentes](#registro-de-dentes)). Os outros 7 provam a lógica com
   `controle negativo` em tmpdir, o que não prova a integração com o sistema
   real. Fechar os 7 restantes é change próprio, um por gate.
 - **`check-package-json-drift` só varre o `package.json` raiz.** Task
   turbo fantasma declarada em `apps/*/package.json` escapa do gate, e os
   4 call-sites `pnpm turbo run` do `ci.yml` também não são varridos.
-  Fechar isso é change próprio, com spec.
+- **Os Dockerfiles rodam `node:20`; o `engines.node` declara `>=22.6.0`.**
+  O `engines.node` subiu na 4.1 junto com os 5 pins do CI; as imagens não.
+  Não quebra hoje — não há `engine-strict`, o pnpm só avisa — mas o
+  `engines.node` declara um piso que o container não honra, e o build é
+  testado num runtime diferente do de produção. Fechar exige mexer em
+  `REQUIRED_BASE_IMAGE` (fixado em `node:20`) e remedir as imagens.
+- **Skill `ci-defense-in-depth`:** publicada em
+  [`.agents/skills/ci-defense-in-depth/SKILL.md`](../../skills/ci-defense-in-depth/SKILL.md)
+  (v1.4.0). Cobre o template `CheckResult`, fixtures herméticas via
+  `fs.mkdtemp` e code-block-aware parsing para novos checks preflight.
+- **Drift real que justificou o `check-turbo-drift`** (v1.4.0): `stack:review`
+  e `docs:sync` declaravam `outputs` apesar de `cache:false`. Corrigido.
 
 ## Dívida de controles
 
 Controles que **existem e não rodam** — o oposto da tabela de dentes, que só
-lista o que o `preflight` invoca e é reconciliada nas duas direções pelo
-`check-teeth-registry`. Escrever a dívida aqui é o que impede a convenção de
-publicar uma regra sobre controle desligado enquanto entrega um controle
-desligado.
+lista o que o `preflight` invoca. Escrever a dívida aqui é o que impede a
+convenção de publicar uma regra sobre controle desligado enquanto entrega um
+controle desligado.
 
-- **`.tooling/scripts/ci/turbo-redirect-differential.sh`** — mede se o
-  `turbo.json` ainda redireciona o que deveria, rodando o turbo de verdade.
-  É o instrumento mais forte do diretório: aborta sozinho quando a medida não
-  faz sentido, porque um instrumento quebrado produzindo `[]` nos dois lados
-  casaria e reportaria `ok`.
-  **Nenhum dono** (medido 2026-10-05): 2 menções, ambas em comentário,
-  **0 invocações** — nem o `preflight`, nem script algum de
-  `package.json#scripts`. Custo remedido 3×: **8,16 / 8,16 / 8,19 s**.
-  **Fecha na task 4.1** do plano `guard-classes`, que lhe dá dono.
-  Vigia: `check-harness-owner`, que por isso **falha de propósito** e não está
-  no `preflight` enquanto for vermelho — gate vermelho no runner que o runner
-  roda é push impossível, e gate impossível é gate que ninguém lê.
+**Nenhuma em aberto (2026-10-05).** A única era o
+`turbo-redirect-differential.sh` — 2 menções, 0 invocações (B11) — e fechou na
+task 4.1, que lhe deu dono no `preflight`. A seção fica, e vazia de propósito:
+`check-harness-owner` garante que ela continue vazia, e um detector de dívida
+que some junto com a dívida deixa de existir no dia em que a dívida volta.
 
 ## Cross-references
 

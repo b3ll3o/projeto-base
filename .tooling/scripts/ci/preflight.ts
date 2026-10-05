@@ -20,6 +20,7 @@ import { checkArchiveIntegrity } from './check-archive-integrity';
 import { checkMemoryDirConcordance } from './check-memory-dir-concordance';
 import { checkTeethRegistry } from './check-teeth-registry';
 import { checkSelfFiringGuards } from './check-self-firing-guard';
+import { checkHarnessOwner } from './check-harness-owner';
 import { existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
@@ -59,6 +60,60 @@ function checkReviewRoutingLint(): CheckResult {
     return {
       ok: false,
       errors: [`review:lint falhou:\n${detail}`],
+    };
+  }
+}
+
+/**
+ * Task 4.1 do plano `guard-classes`. O instrumento que a B11 mediu em 2
+ * menções e 0 invocações ganha dono, e o dono é o PREFLIGHT — não o
+ * `ci:local`.
+ *
+ * A escolha não é estética. `ci:local` é `pnpm ci:preflight && …`, então
+ * entrar pelo preflight também roda no `ci:local`; o inverso não é verdade.
+ * O CI executa `pnpm ci:preflight` (`.github/workflows/ci.yml`) e nunca
+ * executa `ci:local` — um gate ligado só ao `ci:local` roda na máquina de
+ * quem dá push e em nenhum outro lugar, que é a classe 1 com o nome de
+ * "funciona na minha máquina".
+ *
+ * `file` aponta para o `.sh`, não para um wrapper em TypeScript, e isso é o
+ * que faz o `check-harness-owner` enxergar o dono. Um wrapper seria ele
+ * mesmo um segundo harness, sem dono — e o check que existe para achar
+ * exatamente esse caso passaria calado sobre o wrapper que ele próprio
+ * acabou de criar.
+ *
+ * Custo: ~8,2 s contra um preflight de ~2,6 s. É o preço de um gate que
+ * mede contra o turbo real em vez de contra o parser.
+ */
+function checkTurboRedirectDifferential(): CheckResult {
+  const script = '.tooling/scripts/ci/turbo-redirect-differential.sh';
+  if (!existsSync(script)) {
+    return {
+      ok: true,
+      errors: [],
+      skipped: true,
+      reason: `harness ausente (${script})`,
+    };
+  }
+
+  try {
+    execSync(`bash ${script}`, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      encoding: 'utf8',
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    return { ok: true, errors: [] };
+  } catch (err: any) {
+    const stderr = (err.stderr?.toString() ?? '').trim();
+    const stdout = (err.stdout?.toString() ?? '').trim();
+    const detail = stderr || stdout || err.message;
+    return {
+      ok: false,
+      errors: [
+        `turbo-redirect-differential: o parser e o turbo REAL divergem.\n${detail}\n` +
+          `Um "Could not find task" que o parser não extrai é uma task fantasma ` +
+          `que o gate deixa passar.`,
+      ],
     };
   }
 }
@@ -175,6 +230,28 @@ async function main(): Promise<void> {
       name: 'classe 3 (guard que dispara em si mesmo)',
       file: '.tooling/scripts/ci/check-self-firing-guard.ts',
       fn: () => checkSelfFiringGuards(),
+    },
+    {
+      // Task 4.1 do plano guard-classes. O `turbo-redirect-differential.sh`
+      // era o único instrumento do diretório sem dono. Entrou pelo preflight
+      // — e não pelo `ci:local` — porque o CI roda `ci:preflight` e nunca
+      // roda `ci:local`.
+      //
+      // O `file` é o `.sh` de propósito: é o próprio harness que ganha dono,
+      // e não um wrapper. Ver a nota em `checkTurboRedirectDifferential`.
+      name: 'turbo: differential parser × turbo real',
+      file: '.tooling/scripts/ci/turbo-redirect-differential.sh',
+      fn: () => checkTurboRedirectDifferential(),
+    },
+    {
+      // Task 3.4 do plano guard-classes. Controle desligado: (a) todo
+      // harness é invocado por algo, (b) todo destino declarado tem guard
+      // ligado. Nasceu VERMELHO em 3.4 — nomeando o differential sem dono —
+      // e só entra aqui em 4.1, quando esse dono existe. Registrá-lo antes
+      // teria tornado todo push impossível por causa de uma dívida conhecida.
+      name: 'controle desligado (harness órfão + destino sem guard)',
+      file: '.tooling/scripts/ci/check-harness-owner.ts',
+      fn: () => checkHarnessOwner(),
     },
   ];
 

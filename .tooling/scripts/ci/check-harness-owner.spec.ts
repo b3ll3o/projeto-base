@@ -15,7 +15,7 @@
 // ganha dono.
 
 import { execFileSync } from 'node:child_process';
-import { rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
@@ -211,26 +211,49 @@ describe('orphanDestinationRules', () => {
 // ── o repo de verdade ───────────────────────────────────────────────────────
 
 describe('checkHarnessOwner contra o repo real', () => {
-  it('NASCE VERMELHO, nomeando o differential órfão', () => {
+  it('a dívida fechou na 4.1: o differential tem dono e o check está verde', () => {
     const r = checkHarnessOwner();
-    expect(r.ok).toBe(false);
-    const saida = r.errors.join('\n');
-    expect(saida).toContain('turbo-redirect-differential.sh');
-    // A instância (b) não pode estar vermelha junto: ela é a 1.3, e a 1.3
-    // está verde. Um detector de dívida que acusa a dívida errada treina quem
-    // lê a ignorar o vermelho.
-    expect(saida).not.toContain('check-memory-dir-concordance.ts — guard desligado');
+    expect(r.orphans).toEqual([]);
+    expect(r.errors).toEqual([]);
+    expect(r.ok).toBe(true);
+    // O vermelho é o que FAZ este check valer, e é o que ele perde se a
+    // alguém religar sem dono: o próximo teste prova que voltar a ser órfão
+    // o deixa vermelho de novo. Assertar `ok: true` sozinho — sem a lista de
+    // órfãos — é o "só afirma verde" que a coluna Nível proíbe.
+    expect(r.errors.join('\n')).not.toContain('turbo-redirect-differential.sh');
+  });
+
+  it('perder o dono do differential o torna órfão DE NOVO, nomeado', () => {
+    // Este é o dente do teste acima, e ele é a CONTRADIÇÃO do estado atual:
+    // se o `file:` do differential sair do array `checks` do preflight, o
+    // check volta a accusing-lo. Sem esta assimetria, "verde" e "não faz
+    // nada" são indistinguíveis — a classe 1 com o nome de detecção de dívida.
+    //
+    // A pergunta vai ao PARSER DE PRODUÇÃO (`findOwners`), e não a uma
+    // releitura do `preflight.ts` escrita aqui: um spec que reimplementa a
+    // regra cobre só a forma que ele mesmo escreveu — a classe 2 — e o verde
+    // do check e o verde deste teste deixam de ser a mesma coisa sem ninguém
+    // perceber.
+    const src = readFileSync(join(process.cwd(), '.tooling/scripts/ci/preflight.ts'), 'utf8');
+    expect(findOwners(HARNESS, { preflightSource: src, packageJsonScripts: {} })).toEqual([
+      'preflight.ts#checks',
+    ]);
+    // E o veredito derivado: com dono, nada órfão.
+    expect(checkHarnessOwner().orphans).toEqual([]);
   });
 
   it('introduzir um SEGUNDO harness sem dono faz o check nomear os dois', () => {
     // MUTAÇÃO no disco, restaurada byte-exata. Sem isto, o teste acima prova
     // que o check conhece um nome — não que ele reage a um arquivo novo.
+    //
+    // `toEqual`, e não `toContain`: a lista tem que ser EXATAMENTE o probe.
+    // Um `toContain` passaria com o differential de volta na lista — que é
+    // justamente o estado que a 4.1 acabou de remover.
     const probe = join(process.cwd(), '.tooling/scripts/ci/segundo-differential-probe.sh');
     writeFileSync(probe, '#!/usr/bin/env bash\necho sonda\n');
     try {
       const r = checkHarnessOwner();
-      expect(r.orphans).toContain(HARNESS);
-      expect(r.orphans).toContain('.tooling/scripts/ci/segundo-differential-probe.sh');
+      expect(r.orphans).toEqual(['.tooling/scripts/ci/segundo-differential-probe.sh']);
       expect(r.ok).toBe(false);
     } finally {
       rmSync(probe, { force: true });
@@ -242,22 +265,38 @@ describe('checkHarnessOwner contra o repo real', () => {
     // gate: o preflight chama por import, o humano chama por shell, e as duas
     // metades divergem sem ninguém ver — porque nada as compara. Aqui as duas
     // saídas são comparadas, texto a texto.
-    const viaFuncao = checkHarnessOwner();
-    let stderr = '';
-    let status = 0;
+    //
+    // A comparação roda num estado VERMELHO de propósito: com o check verde
+    // os dois lados são vazios, e vazio contra vazio passa sem provar nada —
+    // é a mesma armadilha do `3+`. O vermelho vem de um probe descartável,
+    // não de uma dívida real.
+    //
+    // O binário é `node_modules/.bin/tsx`, e não `npx`: o `npx` escreve
+    // `npm warn Unknown env config "reporter"` no **stderr**, e aí o teste
+    // passava a comparar o aviso do launcher com o erro do gate — passando
+    // por motivo errado na suíte isolada e falhando na completa. Um teste de
+    // paridade que mede o launcher não mede o gate.
+    const probe = join(process.cwd(), '.tooling/scripts/ci/cli-parity-probe.sh');
+    writeFileSync(probe, '#!/usr/bin/env bash\necho sonda\n');
     try {
-      execFileSync('npx', ['tsx', '.tooling/scripts/ci/check-harness-owner.ts'], {
-        cwd: process.cwd(),
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-    } catch (err) {
-      // O CLI sai com 1 porque ESTE check nasce vermelho. O throw do
-      // execFileSync é o comportamento esperado, não a falha do teste.
-      stderr = (err as { stderr?: string }).stderr ?? '';
-      status = (err as { status?: number }).status ?? 0;
+      const viaFuncao = checkHarnessOwner();
+      expect(viaFuncao.ok).toBe(false);
+      let stderr = '';
+      let status = 0;
+      try {
+        execFileSync('node_modules/.bin/tsx', ['.tooling/scripts/ci/check-harness-owner.ts'], {
+          cwd: process.cwd(),
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+      } catch (err) {
+        stderr = (err as { stderr?: string }).stderr ?? '';
+        status = (err as { status?: number }).status ?? 0;
+      }
+      expect(status).toBe(1);
+      expect(stderr).toBe(viaFuncao.errors.join('\n') + '\n');
+    } finally {
+      rmSync(probe, { force: true });
     }
-    expect(status).toBe(1);
-    expect(stderr).toBe(viaFuncao.errors.join('\n') + '\n');
   });
 });

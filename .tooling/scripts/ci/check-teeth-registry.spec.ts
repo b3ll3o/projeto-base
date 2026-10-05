@@ -272,18 +272,18 @@ Fora da tabela, um path citado em prosa: \`.tooling/scripts/ci/check-fantasma.ts
 // valida fixture é verde enquanto a convenção que ele reconcilia envelhece.
 
 describe('checkTeethRegistry — contra o repo de verdade', () => {
-  it('o registro real DECLARA 9 paths — e o check reconcilia em cima deles', () => {
+  it('o registro real DECLARA 13 paths — e o check reconcilia em cima deles', () => {
     // A contagem vem ANTES do veredito, e por um motivo: `unroutedGateFiles`
     // com lista vazia devolve `[]` — que é o MESMO retorno de "todos
     // roteados". Um check que só afirmasse `ok: true` passaria igual num
     // repo onde o registro sumiu por completo. Aqui o verde vem depois de um
-    // 9 que não pode ser zero.
+    // 13 que não pode ser zero.
     const registryMd = readFileSync(
       join(process.cwd(), '.agents/specs/conventions/ci-defense-in-depth.md'),
       'utf8',
     );
     const found = registryGateFiles(registryMd);
-    expect(found).toHaveLength(11);
+    expect(found).toHaveLength(13);
     // E nenhum deles pode ser um spec — a coluna Arquivo documenta o GATE.
     expect(found.filter((f) => f.endsWith('.spec.ts'))).toEqual([]);
 
