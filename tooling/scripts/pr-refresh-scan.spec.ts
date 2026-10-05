@@ -14,22 +14,40 @@
  * branch, e reporta a divergência. Ele **não** reescreve nada — a decisão é do
  * agente que roda o workflow.
  *
- * O que este script NUNCA FAZ, e por quê
+ * ## O repo de teste é construído pelo spec, não emprestado do CI
  *
- * Ele **não executa nada que venha do corpo do PR.** O corpo é entrada não
+ * A primeira versão deste spec media o **repo real**, com `origin/main` e
+ * `HEAD~1`. Passava aqui e **quebrou no CI**:
+ *
+ *     Error: base inválida: "origin/main" não resolve neste repo
+ *            (/home/runner/work/projeto-base/projeto-base/)
+ *
+ * O `actions/checkout` de um evento `pull_request` faz checkout shallow com
+ * HEAD destacado num commit de merge: não existe `origin/main`, nem `HEAD~1`
+ * (profundidade 1), nem remoto nenhum. Um spec que passa na máquina do autor e
+ * falha no runner tem a **mesma forma** do `doc-sync.resolvePath.spec.ts` que
+ * o X8 registrou — a premissa do teste é uma propriedade do ambiente, não do
+ * código.
+ *
+ * A correção é a mesma que o resto do repo já usa: **o fixture é produzido
+ * pelo teste**. O spec cria um repo git temporário com histórico conhecido e
+ * mede contra ele — nenhum número vem da máquina, do remoto ou da profundidade
+ * do clone. Um teste que depende de `HEAD~1` existir não testa o scanner;
+ * testa o servidor de CI.
+ *
+ * ## O corpo do PR nunca vira entrada de shell
+ *
+ * Ele **não executa nada que venha do corpo.** O corpo é entrada não
  * confiável e mutável (quem abre o PR controla o texto inteiro). Um check que
- * executa um comando extraído desse texto é uma superfície de RCE em CI — o
- * corpo pode conter `$(...)`, `curl … | sh`, ou um redirect que vaze o
- * `GITHUB_TOKEN`. Aqui o corpo é apenas **texto analisado por regex**, e a
- * única saída é um relatório. Nenhum `exec`, nenhum `spawn`, nenhum shell: o
- * único subprocesso é o `git` com argumentos construídos aqui, nunca vindos
- * da entrada.
+ * executa um comando extraído desse texto é uma superfície de RCE em CI. Aqui
+ * o corpo é apenas **texto analisado por regex**, e a única saída é um
+ * relatório. Nenhum `exec`, nenhum `spawn`, nenhum shell: o único subprocesso
+ * é o `git` com argumentos construídos aqui.
  *
  * Isso é testado por **canário**, não por leitura: o corpo pede para criar dois
- * arquivos e o teste afirma que eles não existem depois da varredura. Uma
- * revisão de código que o autorammeria não veria o canário virar vermelho.
+ * arquivos e o teste afirma que eles não existem depois da varredura.
  *
- * OFFLINE POR PADRÃO
+ * ## Offline por padrão
  *
  * O corpo chega por `--body-file`, não por `gh`. Isso mantém o script testável
  * offline por fixture e mantém rede **fora** do caminho padrão — o preflight e
@@ -41,13 +59,55 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import type { Medicao } from './pr-refresh-scan.js';
 import { extrairClaims, medirBranch, varrer } from './pr-refresh-scan.js';
 
 // O spec vive em tooling/scripts/, a raiz do repo está 2 níveis acima. Resolver
 // por `import.meta.url` e não por `process.cwd()`: o cwd do vitest é o root
 // configurado (`tooling/scripts`), e um path derivado do cwd vira verde na
-// máquina de quem roda e vermelho no CI.
+// máquina de quem roda e vermelho no CI — a lição do X8, de novo.
 const REPO = new URL('../..', import.meta.url).pathname;
+const TSX = join(REPO, 'node_modules', '.bin', 'tsx');
+const SCRIPT = join(REPO, 'tooling', 'scripts', 'pr-refresh-scan.ts');
+
+function git(repo: string, args: string[]): string {
+  return execFileSync('git', args, {
+    cwd: repo,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+}
+
+function commitar(repo: string, msg: string): string {
+  git(repo, ['add', '-A']);
+  git(repo, ['-c', 'user.name=T', '-c', 'user.email=t@t', 'commit', '-q', '-m', msg]);
+  return git(repo, ['rev-parse', 'HEAD']).trim();
+}
+
+/**
+ * Repo de 2 commits com números conhecidos de antemão:
+ *
+ *   base (A)  a.txt = "1\n2\n"
+ *   HEAD (B)  a.txt = "1\n3\n"   -> +1 -1
+ *             b.txt = "x\n"      -> +1
+ *
+ * Logo `A..B` = **1 commit, 2 arquivos, +2 inserções, −1 remoção**. Nenhum
+ * número vem da máquina, do remoto ou do histórico do repo de desenvolvimento.
+ */
+function repoFixture(): { repo: string; base: string; esperado: Medicao } {
+  const repo = mkdtempSync(join(tmpdir(), 'pr-refresh-repo-'));
+  git(repo, ['init', '-q', '-b', 'main']);
+  writeFileSync(join(repo, 'a.txt'), '1\n2\n');
+  const base = commitar(repo, 'base');
+  writeFileSync(join(repo, 'a.txt'), '1\n3\n');
+  writeFileSync(join(repo, 'b.txt'), 'x\n');
+  commitar(repo, 'head');
+  return {
+    repo,
+    base,
+    esperado: { commits: 1, arquivos: 2, insercoes: 2, remocoes: 1 },
+  };
+}
 
 function corpoFixture(texto: string): string {
   const dir = mkdtempSync(join(tmpdir(), 'pr-refresh-'));
@@ -100,27 +160,22 @@ describe('pr-refresh-scan: extração de claims', () => {
 
 describe('pr-refresh-scan: medição', () => {
   it('mede a branch contra uma base explícita e devolve os quatro números', () => {
-    const m = medirBranch(REPO, 'origin/main');
-    expect(m.commits).toBeGreaterThan(0);
-    expect(m.arquivos).toBeGreaterThan(0);
-    expect(m.insercoes).toBeGreaterThan(0);
-    expect(m.remocoes).toBeGreaterThan(0);
+    const { repo, base, esperado } = repoFixture();
+    expect(medirBranch(repo, base)).toEqual(esperado);
   });
 
   it('a base não existe → erro nomeado, nunca um número inventado', () => {
-    expect(() => medirBranch(REPO, 'ref/que-nao-existe')).toThrow(/base/);
+    const { repo } = repoFixture();
+    expect(() => medirBranch(repo, 'ref/que-nao-existe')).toThrow(/base/);
   });
 });
 
 describe('pr-refresh-scan: a divergência é o produto, e ela tem que aparecer', () => {
-  const base = 'origin/main';
-
   it('cabeçalho divergente → reporta a classe, o declarado e o medido', () => {
-    const arquivo = corpoFixture(
-      '**20 commits, 34 arquivos, +4402/−102**, base [`ad0ff70`]\n\n' +
-        '`pnpm tooling:test` — **283 testes** (153 + 130)',
-    );
-    const r = varrer({ bodyFile: arquivo, repo: REPO, base });
+    const { repo, base, esperado } = repoFixture();
+    const falso = `**${esperado.commits + 19} commits, ${esperado.arquivos + 32} arquivos, +${esperado.insercoes + 4400}/−${esperado.remocoes + 101}**`;
+    const arquivo = corpoFixture(`${falso}\n\n\`pnpm tooling:test\` — **283 testes** (153 + 130)`);
+    const r = varrer({ bodyFile: arquivo, repo, base });
     const divergentes = r.claims.filter((c) => c.divergente);
     expect(divergentes.map((c) => c.classe).sort()).toEqual([
       'arquivos',
@@ -139,23 +194,24 @@ describe('pr-refresh-scan: a divergência é o produto, e ela tem que aparecer',
     // verificável seria silencioso; reportá-la como `ok` seria pior que falso —
     // seria a classe 1 com roupa de verde. Ela sai como **não mensurável**,
     // e o workflow manda verificar rodando a suíte.
-    const arquivo = corpoFixture('**20 commits, 34 arquivos, +4402/−102** e **283 testes**');
-    const r = varrer({ bodyFile: arquivo, repo: REPO, base });
+    const { repo, base, esperado } = repoFixture();
+    const falso = `**${esperado.commits + 19} commits, ${esperado.arquivos + 32} arquivos, +${esperado.insercoes + 4400}/−${esperado.remocoes + 101}**`;
+    const r = varrer({ bodyFile: corpoFixture(`${falso} e **283 testes**`), repo, base });
     const testes = r.claims.find((c) => c.classe === 'testes');
     expect(testes).toBeDefined();
     expect(testes?.medido).toBeNull();
     expect(testes?.divergente).toBe(false);
     // E o relatório tem de nomear o buraco, não fechar em silêncio: um gate que
     // não mede e não diz que não mediu é verde por omissão.
-    expect(r.resumo).toMatch(/1 claim.*não mensurável|não mensurável/i);
+    expect(r.resumo).toContain('não mensurável');
   });
 
   it('cabeçalho verdadeiro → zero divergências, e o relatório diz por quê', () => {
-    const m = medirBranch(REPO, base);
+    const { repo, base, esperado } = repoFixture();
     const arquivo = corpoFixture(
-      `**${m.commits} commits, ${m.arquivos} arquivos, +${m.insercoes}/−${m.remocoes}**`,
+      `**${esperado.commits} commits, ${esperado.arquivos} arquivos, +${esperado.insercoes}/−${esperado.remocoes}**`,
     );
-    const r = varrer({ bodyFile: arquivo, repo: REPO, base });
+    const r = varrer({ bodyFile: arquivo, repo, base });
     expect(r.claims.filter((c) => c.divergente)).toHaveLength(0);
     expect(r.resumo).toContain('0 divergente');
   });
@@ -164,7 +220,8 @@ describe('pr-refresh-scan: a divergência é o produto, e ela tem que aparecer',
     // Um relatório que diz "0 divergente" sobre um corpo que não foi lido é
     // verde por ausência de dado — indistinguível de verde por ausência de
     // problema. Os dois estados precisam ter palavras diferentes.
-    const r = varrer({ bodyFile: corpoFixture('só texto, nenhum número'), repo: REPO, base });
+    const { repo, base } = repoFixture();
+    const r = varrer({ bodyFile: corpoFixture('só texto, nenhum número'), repo, base });
     expect(r.claims).toHaveLength(0);
     expect(r.resumo).toMatch(/nenhuma claim/i);
     expect(r.resumo).not.toMatch(/0 divergente/);
@@ -174,18 +231,19 @@ describe('pr-refresh-scan: a divergência é o produto, e ela tem que aparecer',
 describe('pr-refresh-scan: o corpo do PR nunca vira entrada de shell', () => {
   it('CANÁRIO: um corpo que manda criar dois arquivos não os cria', () => {
     // Se alguém "melhorar" o scanner para rodar o comando de re-medição escrito
-    // no corpo — a variante que o design de gate+radius propunha — este teste
-    // fica vermelho. É a prova de que a fronteira de segurança é do código, e
-    // não uma promessa no cabeçalho.
+    // no corpo — a variante que o design de gate+CI propunha — este teste fica
+    // vermelho. É a prova de que a fronteira de segurança é do código, e não
+    // uma promessa no cabeçalho.
     const dir = mkdtempSync(join(tmpdir(), 'pr-refresh-canario-'));
     const c1 = join(dir, 'canario-subshell');
     const c2 = join(dir, 'canario-backtick');
+    const { repo, base } = repoFixture();
     const arquivo = corpoFixture(
       '**3 commits, 4 arquivos, +10/−2**\n\n' +
         `prova: $(${process.execPath} -e "require('fs').writeFileSync('${c1}','x')")\n` +
         `prova: \`${process.execPath} -e "require('fs').writeFileSync('${c2}','x')"\``,
     );
-    const r = varrer({ bodyFile: arquivo, repo: REPO, base: 'origin/main' });
+    const r = varrer({ bodyFile: arquivo, repo, base });
     expect(
       r.claims
         .filter((c) => c.divergente)
@@ -197,44 +255,48 @@ describe('pr-refresh-scan: o corpo do PR nunca vira entrada de shell', () => {
   });
 });
 
-describe('pr-refresh-scan: a base do repo é derivada do spec, não do cwd', () => {
-  it('a mesma repo, duas bases relativas → 1 e 2 commits', () => {
-    expect(medirBranch(REPO, 'HEAD~1').commits).toBe(1);
-    expect(medirBranch(REPO, 'HEAD~2').commits).toBe(2);
-  });
-});
-
-describe('pr-refresh-scan: o script roda como CLI e sai != 0 quando há divergência', () => {
-  it('CLI lê o corpo de --body-file e imprime o resumo', () => {
-    const m = medirBranch(REPO, 'origin/main');
+describe('pr-refresh-scan: o script roda como CLI', () => {
+  it('CLI com corpo verdadeiro → exit 0 e "0 divergente" no stdout', () => {
+    const { repo, base, esperado } = repoFixture();
     const arquivo = corpoFixture(
-      `**${m.commits} commits, ${m.arquivos} arquivos, +${m.insercoes}/−${m.remocoes}**`,
+      `**${esperado.commits} commits, ${esperado.arquivos} arquivos, +${esperado.insercoes}/−${esperado.remocoes}**`,
     );
-    const saida = execFileSync(
-      'npx',
-      ['tsx', 'tooling/scripts/pr-refresh-scan.ts', `--body-file=${arquivo}`, '--base=origin/main'],
-      { cwd: REPO, encoding: 'utf8' },
-    );
+    const saida = execFileSync(TSX, [SCRIPT, `--body-file=${arquivo}`, `--base=${base}`], {
+      // O cwd é o repo FIXTURE, não o repo de desenvolvimento: é assim que o
+      // scanner resolve a raiz, e é o caminho que o CLI precisa percorrer.
+      cwd: repo,
+      encoding: 'utf8',
+    });
     expect(saida).toContain('0 divergente');
   });
 
   it('CLI com corpo divergente → exit != 0 (o gate precisa poder travar)', () => {
+    const { repo, base } = repoFixture();
     const arquivo = corpoFixture('**1 commit, 1 arquivo, +1/−0**');
     let exit = 0;
     try {
-      execFileSync(
-        'npx',
-        [
-          'tsx',
-          'tooling/scripts/pr-refresh-scan.ts',
-          `--body-file=${arquivo}`,
-          '--base=origin/main',
-        ],
-        { cwd: REPO, encoding: 'utf8', stdio: 'pipe' },
-      );
+      execFileSync(TSX, [SCRIPT, `--body-file=${arquivo}`, `--base=${base}`], {
+        cwd: repo,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      });
     } catch (e) {
       exit = (e as { status?: number }).status ?? -1;
     }
     expect(exit).not.toBe(0);
+  });
+
+  it('CLI sem --body-file → exit 2 e a mensagem de uso (não um relatório vazio)', () => {
+    const { repo } = repoFixture();
+    let exit = 0;
+    let stderr = '';
+    try {
+      execFileSync(TSX, [SCRIPT], { cwd: repo, encoding: 'utf8', stdio: 'pipe' });
+    } catch (e) {
+      exit = (e as { status?: number }).status ?? -1;
+      stderr = (e as { stderr?: string }).stderr ?? '';
+    }
+    expect(exit).toBe(2);
+    expect(stderr).toContain('--body-file');
   });
 });
