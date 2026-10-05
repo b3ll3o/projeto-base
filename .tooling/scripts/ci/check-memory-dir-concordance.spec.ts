@@ -17,10 +17,10 @@
 // - check ausente → skipped, nunca ✓ (o bug que o formatoMark já documenta)
 
 import { describe, expect, it } from 'vitest';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { join, relative } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import {
   checkMemoryDirConcordance,
   findDivergentDeclarations,
@@ -330,20 +330,28 @@ describe('checkMemoryDirConcordance', () => {
     expect(r.ok).toBe(true);
   });
 
-  it('a derivação canônica resolve para um diretório que existe de verdade', () => {
-    // Este teste existia com o nome acima e a assertion `ok:true, errors:[]` —
-    // idêntica à do teste anterior. O nome prometia um dente que a assertion
-    // não tinha: `checkMemoryDirConcordance` compara as DECLARAÇÕES entre si e
-    // nunca pergunta se o destino derivado existe, então uma derivação que
-    // apontasse para o vazio passaria calada — exatamente o que o comentário
-    // dizia querer evitar. (Achado da task 3.1, ao montar o registro de dentes:
-    // um teste cujo nome promete mais do que a assertion entrega é classe 7 em
-    // forma de spec.)
+  it('a derivação canônica descreve o REPO, não o cwd', () => {
+    // Este teste já teve dois nomes e duas asserções, e as duas mediam a
+    // máquina em vez do repo.
     //
-    // A correção é fazer o teste olhar o que o nome afirma: executar a
-    // derivação e verificar que o caminho derivado EXISTE e tem o result file
-    // real dentro. Se `MEMORY_DIR` deixar de derivar, ou derivar um path que
-    // ninguém cria, isto fica vermelho.
+    // 1ª versão: `ok:true, errors:[]` — idêntica à do teste anterior. O nome
+    // prometia um dente que a assertion não tinha: uma derivação que apontasse
+    // para o vazio passaria calada.
+    //
+    // 2ª versão: derivava e checava `existsSync(derivado)`. Ganhou dente e
+    // perdeu o port: o destino vive em `~/.claude/projects/<slug>/memory`,
+    // FORA do repo, e existe na máquina de quem roda o spec porque o Claude
+    // Code criou. Num runner do CI o diretório não existe — o teste ficou
+    // vermelho no PR #44 com `derivou "/home/runner/.claude/projects/
+    // -home-runner-work-projeto-base-projeto-base/memory", que não existe`.
+    // Um teste que só é verde na máquina do autor mede o autor.
+    //
+    // A propriedade que o destino realmente tem — e que vale em qualquer
+    // máquina — éESTRUTURAL: o slug descreve o repositório, não o diretório de
+    // onde a derivação rodou. É isso que `verifyDerivation` já exige do check,
+    // então o dente não foi perdido: mudou de lugar e deixou de depender do
+    // disco. Rodar de `.tooling` é o que torna isso observável: de lá, `pwd`
+    // e o toplevel divergem.
     const canon = readFileSync(
       join(process.cwd(), '.agents/specs/conventions/retrospective-capture.md'),
       'utf8',
@@ -357,9 +365,13 @@ describe('checkMemoryDirConcordance', () => {
     });
     const memoryDir = out.stdout.trim();
 
-    expect(memoryDir).toMatch(/\/memory$/);
-    // O que o nome promete: um diretório que existe de verdade.
-    expect(existsSync(memoryDir), `derivou "${memoryDir}", que não existe`).toBe(true);
+    // Mesmo slug de `verifyDerivation`, derivado do toplevel: `-` + caminho
+    // sem a barra inicial, com `/` virando `-`.
+    const expectedSlug = `-${resolve(process.cwd()).replace(/^\//, '').replace(/\//g, '-')}`;
+    expect(
+      memoryDir.endsWith(`/${expectedSlug}/memory`),
+      `derivou "${memoryDir}" de um subdiretório; esperava o slug do repo (${expectedSlug})`,
+    ).toBe(true);
   });
 
   it('convenção ausente → skipped com motivo, nunca ok silencioso', () => {
@@ -426,7 +438,11 @@ describe('fence da SKILL demand-archiving (CWD-independente e auto-contido)', ()
    * VERDE num retro inexistente. Um teste que mede o campo errado passa por
    * cima do gate que ele deveria estar fechando.
    */
-  function runFence(cwd: string, retro = 'b21-result'): { code: number; memoryDir: string } {
+  function runFence(
+    cwd: string,
+    retro = 'b21-result',
+    home = process.env.HOME,
+  ): { code: number; memoryDir: string } {
     const src = fenceSource().replace(/<retro>/g, retro);
     const run = spawnSync(
       'bash',
@@ -436,10 +452,33 @@ describe('fence da SKILL demand-archiving (CWD-independente e auto-contido)', ()
         encoding: 'utf8',
         // MEMORY_DIR zerado: se o fence não deriva, tem de ficar vazio e o
         // teste tem de ver isso — nunca herdar o ambiente como verde de sorte.
-        env: { ...process.env, MEMORY_DIR: '' },
+        // `HOME` é parâmetro porque a derivação é `${HOME}/.claude/projects/
+        // <slug>/memory`: sem controlá-lo, a premissa "o retro existe" vira uma
+        // propriedade do disco de quem roda o spec. Ver `memoryHomeWith`.
+        env: { ...process.env, MEMORY_DIR: '', HOME: home },
       },
     );
     return { code: run.status ?? -1, memoryDir: run.stdout };
+  }
+
+  /**
+   * Um `HOME` temporário com o destino derivado JÁ populado pelo fixture.
+   *
+   * `b21-result.md` existe no meu `~/.claude/projects/…/memory` porque eu
+   * escrevi lá; no runner do CI esse diretório não existe, o `test -f` dá
+   * vermelho, e o spec acusa um gate que está certo — foi o que aconteceu no
+   * PR #44. Aqui o arquivo é criado dentro do `HOME` que o fence vai derivar,
+   * então "o retro existe" é consequência do fixture e não do estado da
+   * máquina. O teste fica verde em qualquer máquina e continua vermelho se o
+   * fence parar de derivar.
+   */
+  function memoryHomeWith(retro: string): string {
+    const home = mkdtempSync(join(tmpdir(), 'memhome-'));
+    const slug = `-${resolve(REPO).replace(/^\//, '').replace(/\//g, '-')}`;
+    const dir = join(home, '.claude', 'projects', slug, 'memory');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, `${retro}.md`), '# fixture: retro que existe\n');
+    return home;
   }
 
   it('deriva o MESMO destino da raiz e de um subdiretório', () => {
@@ -463,14 +502,20 @@ describe('fence da SKILL demand-archiving (CWD-independente e auto-contido)', ()
   });
 
   it('dá verde para um retro que EXISTE, de qualquer CWD', () => {
-    expect(runFence(REPO).code).toBe(0);
-    expect(runFence(join(REPO, '.agents', 'skills')).code).toBe(0);
+    const home = memoryHomeWith('b21-result');
+    expect(runFence(REPO, 'b21-result', home).code).toBe(0);
+    expect(runFence(join(REPO, '.agents', 'skills'), 'b21-result', home).code).toBe(0);
   });
 
   it('dá vermelho para um retro que NÃO existe, de qualquer CWD', () => {
-    // Controle negativo com o MESMO fence: se isto passasse, o gate seria
-    // verde em vazio — a classe 1, o `test -f` que nunca pode falhar.
-    expect(runFence(REPO, 'b999-nao-existe').code).toBe(1);
-    expect(runFence(join(REPO, '.agents', 'skills'), 'b999-nao-existe').code).toBe(1);
+    // Controle negativo com o MESMO fence e — o que importa — o MESMO `HOME`,
+    // onde `b21-result.md` EXISTE. Só o nome pedido muda. A versão anterior
+    // usava um diretório vazio, que também daria vermelho se o fence
+    // devolvesse 1 sem nunca procurar nada: ela provava que o gate erra, não
+    // que ele discriminate. Aqui o gate tem um alvo ao lado e ainda erra —
+    // é a diferença entre "testa que falha" e "testa que mede".
+    const home = memoryHomeWith('b21-result');
+    expect(runFence(REPO, 'b999-nao-existe', home).code).toBe(1);
+    expect(runFence(join(REPO, '.agents', 'skills'), 'b999-nao-existe', home).code).toBe(1);
   });
 });
