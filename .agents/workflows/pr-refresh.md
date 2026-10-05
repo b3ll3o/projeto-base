@@ -166,17 +166,26 @@ reusar o resultado de T1.
 7. **Re-checar T4 e aplicar.**
    ```bash
    gh pr view <N> --json state | grep -q '"state":"OPEN"' \
-     && gh api -X PATCH repos/b3ll3o/projeto-base/pulls/<N> -F body=@.pr-body.md
+     && gh api -X PATCH repos/b3ll3o/projeto-base/pulls/<N> -F body=@"$TMP/pr-body.md"
    ```
    Use `gh api -X PATCH`, **não** `gh pr edit --body`: o `gh pr edit` quebra com
    `Projects (classic) is being deprecated`, e o PATCH REST não toca em Projects.
 
+   > O `@` + aspas é o que faz o `gh` ler **arquivo** em vez de tratar o
+   > conteúdo como valor literal. E o caminho tem de ser o **do passo 2**:
+   > uma versão anterior deste documento escrevia em `.pr-body.md` na raiz e o
+   > passo 7 ainda apontava para lá depois que o passo 2 mudou — o produtor e os
+   > consumidores precisam sair no mesmo commit, senão o fix do produtor deixa
+   > um consumidor apontando para um arquivo que ninguém cria.
+
 8. **Limpar e registrar.**
    ```bash
-   rm .pr-body.md
+   rm -rf "$TMP"
    ```
-   Se algo mudou: commit não é necessário — o corpo não é arquivo do repo. O que
-   se versiona é a **decisão**, no log da sessão.
+   Sai o diretório inteiro, não só o arquivo: `TMP` é um `mktemp -d`, e o
+   passo 3 não cria mais nada lá dentro. Se algo mudou: commit não é
+   necessário — o corpo não é arquivo do repo. O que se versiona é a
+   **decisão**, no log da sessão.
 
 ## O que este workflow NÃO faz
 
