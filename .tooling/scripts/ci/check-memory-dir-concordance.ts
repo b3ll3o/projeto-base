@@ -22,17 +22,24 @@ const CANONICAL_FILE = '.agents/specs/conventions/retrospective-capture.md';
 const CANONICAL_SECTION = '## Destino canônico do result file';
 
 /**
- * Camada NORMATIVA: onde uma declaração de fato manda um agente agir.
+ * A única exclusão da varredura, e o motivo está escrito aqui porque exclusão
+ * sem motivo é a armadilha que a task 2.3 proíbe.
  *
- * `.agents/runs/` fica de fora, e o motivo está escrito aqui porque a
- * exclusão sem motivo é a armadilha que a 2.3 proíbe: um run record e um
- * backlog item **descrevem** o achado — citam o path de máquina como
- * evidência de que ele existia. Não são uma segunda declaração do destino;
- * são o registro da auditoria que o compte. Incluí-los faz o check acusar o
- * próprio relatório dele (classe 3: guard que dispara em si mesmo), e o
- * remédio — editar ou apagar o registro — seria pior que a disease.
+ * `.agents/runs/` é o **registro** da auditoria, não a camada normativa: um run
+ * record e um backlog item citam o path de máquina como evidência de que ele
+ * existia. Não são uma segunda declaração do destino; são o relato que o
+ * compte. Incluí-los faz o check acusar o próprio relatório dele (classe 3:
+ * guard que dispara em si mesmo), e o remédio — editar ou apagar o registro —
+ * seria pior que a disease.
+ *
+ * A varredura é sobre `.agents` INTEIRO, menos este diretório. A versão
+ * anterior enumerava `['specs','skills','workflows','agents','memory']`, o que
+ * deixava `.agents/WORKFLOWS.md` — o índice de workflows, o tipo de arquivo
+ * que alguém edita achando que é só uma lista de links — fora do alcance, e
+ * fazia qualquer diretório novo nascer cego. Lista fechada de caminhos é a
+ * classe 2 com outro nome: cobre a forma que você conhece e só ela.
  */
-const SCAN_DIRS = ['specs', 'skills', 'workflows', 'agents', 'memory'];
+const SKIP_DIRS = new Set(['runs']);
 
 /**
  * As notações que o repo já usou para declarar o destino. Cada uma é uma
@@ -57,6 +64,30 @@ const DECLARATION_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   },
   { pattern: /\/home\/[a-z]/, reason: 'contém path absoluto de máquina (`/home/...`)' },
 ];
+
+/**
+ * `MEMORY_DIR` é caso aparte, e a distinção é executável-vs-especificação.
+ *
+ * Num fence `bash` o símbolo é uma variável de shell que DERIVA da fonte
+ * única — uso legítimo, e é o consumidor que a task 1.1 criou. Em qualquer
+ * outro lugar (prosa, ou fence `yaml`/`text`/`json`) ele é uma
+ * re-declaração: ninguém sabe mais o valor, e o símbolo envelhece sem nunca
+ * ter sido tied a um diretório real.
+ *
+ * A notação escapou do guard por essa razão: `retrospective-mode.md` trocou
+ * `memory/b<N>-result.md` (pego pelo padrão de path) por `<MEMORY_DIR>/...`
+ * dentro de um handoff **yaml** (não pego por nenhum), trocando uma divergência
+ * detectada por uma invisível. Por isso "dentro de fence" não basta: um fence
+ * `yaml` é especificação, e especificação envelhece tanto quanto prosa.
+ *
+ * Um padrão bruto para `MEMORY_DIR` acusaria o fence bash legítimo — seria a
+ * classe 2 pelo outro lado, um guard que corta a forma comum. Daí a distinção
+ * ser estrutural (linguagem do fence) e não por allowlist de arquivo, que
+ * envelheceria junto com o bug.
+ */
+const MEMORY_DIR_IN_PROSE = /\bMEMORY_DIR\b/;
+const FENCE_OPEN_RE = /^\s*(?:```|~~~)\s*([A-Za-z0-9_+-]*)/;
+const EXECUTABLE_FENCE_LANGS = new Set(['bash', 'sh', 'shell', 'zsh', 'console', 'shellsession']);
 
 export interface Divergence {
   file: string;
@@ -84,18 +115,27 @@ export function canonicalLineRange(content: string): { start: number; end: numbe
   return { start: start + 1, end };
 }
 
+/**
+ * Todos os `.md` sob um diretório, pulando `SKIP_DIRS`.
+ *
+ * O nome do diretório pulado é testado contra o NOME, não contra o caminho
+ * inteiro: `SKIP_DIRS` guarda nomes, e assim qualquer `.agents` aninhado —
+ * até um que nem existe ainda — herda a mesma política sem mais código.
+ */
 function walk(dir: string, acc: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const p = join(dir, entry.name);
-    if (entry.isDirectory()) walk(p, acc);
-    else if (entry.name.endsWith('.md')) acc.push(p);
+    if (entry.isDirectory()) {
+      if (!SKIP_DIRS.has(entry.name)) walk(join(dir, entry.name), acc);
+    } else if (entry.name.endsWith('.md')) {
+      acc.push(join(dir, entry.name));
+    }
   }
   return acc;
 }
 
 /**
- * Varre todo `.md` sob `.agents` e devolve as declarações do destino que NÃO
- * estão na seção canônica. Lista vazia = concordância.
+ * Varre todo `.md` sob `.agents` (menos `runs/`) e devolve as declarações do
+ * destino que NÃO estão na seção canônica. Lista vazia = concordância.
  */
 export function findDivergentDeclarations(repoRoot: string): Divergence[] {
   // `repoRoot` pode chegar como '.' (o preflight passa assim). Sem resolver,
@@ -109,19 +149,27 @@ export function findDivergentDeclarations(repoRoot: string): Divergence[] {
     ? canonicalLineRange(readFileSync(canonPath, 'utf8'))
     : null;
 
-  const files = SCAN_DIRS.flatMap((d) => {
-    const p = join(agentsRoot, d);
-    return existsSync(p) ? walk(p) : [];
-  });
-
   const out: Divergence[] = [];
-  for (const file of files) {
+  for (const file of walk(agentsRoot)) {
     const lines = readFileSync(file, 'utf8').split('\n');
     const isCanon = file === canonPath;
+    // `false` = fora de fence (prosa); `true` = dentro de fence EXECUTÁVEL
+    // (bash/sh/...), onde o símbolo é uma variável que deriva. Um fence yaml/
+    // text/json é especificação e conta como prosa.
+    let inExecFence = false;
     for (let i = 0; i < lines.length; i++) {
       const n = i + 1;
       if (isCanon && canonRange && n >= canonRange.start && n <= canonRange.end) continue;
       const line = lines[i]!;
+      // O trecho canônico inteiro é ignorado, fences inclusive, então o
+      // balanceamento de fences não é afetado por pulá-lo.
+      const open = FENCE_OPEN_RE.exec(line);
+      if (open) {
+        // Abertura tem linguagem; fechamento é um fence vazio.
+        const lang = (open[1] ?? '').toLowerCase();
+        inExecFence = lang !== '' ? EXECUTABLE_FENCE_LANGS.has(lang) : false;
+        continue;
+      }
       for (const { pattern, reason } of DECLARATION_PATTERNS) {
         if (pattern.test(line)) {
           out.push({
@@ -132,6 +180,15 @@ export function findDivergentDeclarations(repoRoot: string): Divergence[] {
           });
           break;
         }
+      }
+      if (!inExecFence && MEMORY_DIR_IN_PROSE.test(line)) {
+        out.push({
+          file: relative(repoRoot, file),
+          line: n,
+          reason:
+            'usa o símbolo `MEMORY_DIR` em prosa/especificação em vez de referenciar a seção canônica',
+          text: line.trim().slice(0, 120),
+        });
       }
     }
   }

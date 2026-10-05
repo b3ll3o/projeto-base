@@ -52,7 +52,7 @@ retrospective-capture (skill) → doc-writer:
   task: "Escrever result file + filtrar proposals por confidence"
   context: ["raw_evidence do explorer", "threshold = 70"]
   expected_output:
-    result_file: "<MEMORY_DIR>/<N>+1-result.md"   # derivação em retrospective-capture.md §"Destino canônico"
+    result_file: "<path canônico>/<N>+1-result.md"  # ver retrospective-capture.md §"Destino canônico do result file"
     proposals:
       - artifact: "skill|convention|memory|adr|backlog"
         target: "<path>"
