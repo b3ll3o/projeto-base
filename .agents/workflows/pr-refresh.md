@@ -26,14 +26,13 @@ verdadeiro no push em que é escrito, e a description não é reescrita por nada
 
 Os PRs #24, #33 e #43 (mergeados) mostram a outra metade: não têm cabeçalho
 `N commits`, e sim claims inline por artefato (`spec (34 testes)`) que
-envelheceram em silêncio e nunca foram revisitadas. **A claim inline tem o
-mesmo problema e não é vista por nenhum instrumento.**
+envelheceram em silêncio. **A claim inline tem o mesmo problema e não é vista
+por nenhum instrumento.**
 
 ## A fronteira de segurança — leia antes de estender este workflow
 
 O corpo do PR é **entrada não confiável e mutável**: quem abre o PR controla o
 texto inteiro, e o texto não passa por revisão antes de qualquer gate rodar.
-
 Uma variante deste check que executasse o "comando de re-medição" escrito no
 corpo seria uma **superfície de RCE em CI** — o corpo pode conter `$(…)`,
 `curl … | sh`, ou um redirect que vaze o `GITHUB_TOKEN`. Um check de conteúdo
@@ -45,29 +44,23 @@ por regex, e nada mais.** O único subprocesso é o `git`, com argumentos
 construídos no script. Nenhum valor do corpo chega a uma posição de comando.
 
 > **Ao estender este workflow: nunca transforme texto do corpo em comando.**
-> Se um dia for preciso medir algo que o git não mede (contagem de testes,
-> resultado de suíte), meça **rodando o comando você mesmo**, no seu shell, e
-> compare o resultado — não rodando o que o corpo pediu.
+> Se um dia for preciso medir algo que o git não mede, meça **rodando o comando
+> você mesmo**, no seu shell, e compare — não rodando o que o corpo pediu.
 
 ## Por que isto NÃO mora no `preflight`
 
 Os 14 checks do [`preflight`](../../.tooling/scripts/ci/preflight.ts) rodam
-**offline**, e [`.husky/pre-push:9`](../../.husky/pre-push) faz
+**offline** e [`.husky/pre-push`](../../.husky/pre-push) faz
 `pnpm ci:preflight || exit 1` em **qualquer** branch. Um check de PR exigiria
-rede e falharia num repo sem PR — transformando o preflight num gate que
-trava por ausência de dado, que é [[criterion-inert-on-empty-set]] pelo outro
-lado.
+rede e falharia num repo sem PR — um gate que trava por ausência de dado.
 
-## Inputs
+## Inputs e quando usar
 
 - `pr_number` (number) — ex: `44`
-- `branch` (string) — a branch do PR. **Vem de `git branch --show-current`**, nunca digitado à mão
+- `branch` (string) — a branch do PR. **Vem de `git branch --show-current`**, nunca à mão
 - `base` (string, opcional) — default `origin/main`
-
-## Quando usar
-
 - ✅ PR **aberto** e a branch avançou depois da última escrita da description
-- ❌ PR já MERGED ou CLOSED — o histórico é imutável, e reescrever é reescrever o registro
+- ❌ PR MERGED ou CLOSED — o histórico é imutável, e reescrever é reescrever o registro
 - ❌ PR nunca teve description — isso é criação, não refresh
 
 ## Os quatro predicados — todos precisam ser verdadeiros
@@ -75,9 +68,14 @@ lado.
 | # | Predicado | Como verificar |
 |---|---|---|
 | **T1** | O PR está **aberto** | `gh pr list --head <branch> --state open --json number` |
-| **T2** | A branch **avançou** desde a última escrita | `git rev-list --count <base>..HEAD` |
+| **T2** | A branch **avançou** desde a última escrita | `git merge-base <base> HEAD` e `--count <mb>..HEAD` |
 | **T3** | Há **≥ 1 claim divergente** | `pr-refresh-scan` |
 | **T4** | O estado ainda é **OPEN** | re-checar T1 no momento da escrita |
+
+> **T2 mede com `merge-base`, não com `<base>...HEAD`.** O ponto triplo do
+> `rev-list` é a **diferença simétrica**: ele conta também o commit do lado do
+> main. MEDIDO no fixture do scanner: `rev-list --count <base>...HEAD` devolveu
+> **2** onde o branch tinha **1** commit.
 
 **T3 é o que carrega o peso.** T1 + T2 são verdadeiros em **100% dos pushes**
 para qualquer branch com PR aberto — um gate que dispara só com T1 + T2 é a
@@ -118,26 +116,24 @@ reusar o resultado de T1.
    > **As duas guardas são o passo, não a decoração.** MEDIDO 2026-10-05 no PR
    > #44: `gh pr view 44 > f` → **exit 1 e 0 bytes**; o passo 3 lê um arquivo
    > vazio e responde "nenhuma claim mensurável" — a mesma frase de um PR
-   > legitimamente sem número. Rede, auth e token revogado chegam todos como
-   > "PR em dia". A guarda pelo `exit` pega a falha; a do `-s` pega o caso em que
-   > o `gh` sai 0 sem escrever, que a primeira não vê. Sem uma das duas, há um
-   > **falso verde silencioso** — o pior deles, porque é indistinguível do
-   > sucesso.
+   > legitimamente sem número. A guarda pelo `exit` pega a falha; a do `-s` pega
+   > o caso em que o `gh` sai 0 sem escrever, que a primeira não vê. Sem uma das
+   > duas, há um **falso verde silencioso** — indistinguível do sucesso.
    >
-   > **`--json body -q .body` é obrigatório**, não preferência: `gh pr view` sem
-   > `--json` chama `projectCards` e quebra com `GraphQL: Projects (classic) is
-   > being deprecated` — a mesma depreciação que quebra `gh pr edit --body`.
+   > **`--json body -q .body` é obrigatório**: sem `--json`, `gh pr view` chama
+   > `projectCards` e quebra com `Projects (classic) is being deprecated` — a
+   > mesma depreciação que quebra `gh pr edit --body`.
    >
-   > **Por que `mktemp -d` e não `.pr-body.md` na raiz:** o arquivo ficava
-   > untracked, e todo gate deste repo enumera com `git ls-files` — o resultado é
-   > um `.md` na árvore que **nenhum gate vê** e que um `git add -A` empurra para
-   > dentro do PR. MEDIDO: `git check-ignore .pr-body.md` → **não ignorado**.
+   > **Por que `mktemp -d` e não `.pr-body.md` na raiz:** todo gate deste repo
+   > enumera com `git ls-files`, e um `.md` untracked na árvore **não existe**
+   > para nenhum gate — um `git add -A` o empurra para dentro do PR. MEDIDO:
+   > `git check-ignore .pr-body.md` → **não ignorado**.
 
 3. **Rodar o scanner (T3).**
    ```bash
    [ -n "${TMP:-}" ] && [ -f "$TMP/pr-body.md" ] \
      || { echo "TMP não sobreviveu do passo 2 — reexecute o passo 2" >&2; exit 1; }
-   git fetch origin "$BASE" --quiet   # ver "base velha", abaixo
+   git fetch --quiet -- origin "+refs/heads/${BASE#origin/}:refs/remotes/$BASE"
    npx tsx tooling/scripts/pr-refresh-scan.ts --body-file="$TMP/pr-body.md" --base="$BASE"
    ```
    Sai **0** se não há divergência, **1** se há, **2** se faltou `--body-file`, e
@@ -160,6 +156,13 @@ reusar o resultado de T1.
    > não o corpo. É a forma mais cara desta classe: o número é plausível, o
    > relatório é honesto, e a conclusão está errada. O `git fetch` acima não é
    > opcional; `BASE` precisa ser uma referência resolvida **agora**.
+   >
+   > **O refspec do `fetch` trava, e a forma óbvia trava.** MEDIDO 2026-10-06:
+   > `git fetch origin origin/main` → `couldn't find remote ref origin/main` — o
+   > `origin/` é nome **local** da ref de tracking, e como refspec pede ao remoto
+   > uma branch `origin/main`. O hook tinha o mesmo bug (`base-indisponivel` em
+   > todo push, medindo nada). Detalhe em
+   > [`pr-refresh-hook.ts`](../../tooling/scripts/pr-refresh-hook.ts).
 
 4. **Tratar o `NÃO MENSURÁVEL`.** O scanner mede o que o git mede — commits,
    arquivos, inserções, remoções. **`N testes` sai declarada e não
@@ -182,10 +185,12 @@ reusar o resultado de T1.
    pnpm tooling:test                                    # tooling/scripts + ci
    pnpm turbo run test:unit --filter=@projeto/api       # os 38 de apps/api
    ```
-   O corpo do PR #44 diz `**304 testes** (171 + 133)`, que era o
-   `tooling:test` da época. A suíte devolve hoje `177 + 133 = 310`: isso é uma
-   divergência e precisa ser corrigida no corpo. **Não** desligue o campo para
-   ficar verde — desligar é apagar a claim, não verificá-la.
+   Um total escrito no corpo envelhece sem que nada acuse. MEDIDO 2026-10-06 no
+   PR #44: escrevi `353 testes`, e no mesmo dia os 2 testes que documentam a
+   armadilha do marcador o deixaram em **355** — antes de o corpo chegar ao
+   GitHub. Por isso o corpo **não traz total**: aponta para o comando que o
+   imprime. **Não** desligue um campo verificável para ficar verde; o caso aqui
+   é o inverso — um campo sem instrumento, que só envelhece.
 
 5. **Classificar o que mudar.** Três categorias, e elas **não** se tratam igual:
 
@@ -239,20 +244,14 @@ reusar o resultado de T1.
    `Projects (classic) is being deprecated`, e o PATCH REST não toca em Projects.
 
    > O `@` + aspas é o que faz o `gh` ler **arquivo** em vez de tratar o
-   > conteúdo como valor literal. E o caminho tem de ser o **do passo 2**:
-   > uma versão anterior deste documento escrevia em `.pr-body.md` na raiz e o
-   > passo 7 ainda apontava para lá depois que o passo 2 mudou — o produtor e os
-   > consumidores precisam sair no mesmo commit, senão o fix do produtor deixa
-   > um consumidor apontando para um arquivo que ninguém cria.
+   > conteúdo como valor literal. No `pr-refresh-hook.ts` o corpo nem chega
+   > aqui: ele entra por `stdin` como JSON, o que fecha a mesma porta sem a
+   > parede de aspas.
 
-8. **Limpar e registrar.**
-   ```bash
-   rm -rf "$TMP"
-   ```
-   Sai o diretório inteiro, não só o arquivo: `TMP` é um `mktemp -d`, e o
-   passo 3 não cria mais nada lá dentro. Se algo mudou: commit não é
-   necessário — o corpo não é arquivo do repo. O que se versiona é a
-   **decisão**, no log da sessão.
+8. **Limpar.** Não há nada a limpar: o corpo é varrido **em memória**
+   (`varrerTexto`) e o PATCH recebe o novo corpo por `stdin`. Uma versão
+   anterior desta lista baixava o corpo para um `mktemp -d` porque o scanner
+   era offline-por-arquivo; o hook mantém essa propriedade sem o arquivo.
 
 ## O que este workflow NÃO faz
 
@@ -266,8 +265,7 @@ reusar o resultado de T1.
 ## Saídas
 
 - Relatório de claims: `L<linha>` + `declarado` vs `medido`, **uma linha por
-  ocorrência** — não por classe. Ver o passo 6 para por que a coluna `L` é o
-  que separa claim viva de citação histórica.
+  ocorrência** — não por classe. Ver o passo 6.
 - Corpo do PR atualizado **apenas** nas linhas divergentes (se havia)
 - Nenhum arquivo do repo alterado
 
@@ -276,13 +274,14 @@ reusar o resultado de T1.
 Roda no `.husky/pre-push`, **depois** do `pnpm ci:preflight`, e **nunca bloqueia
 o push**. Autorizado pelo owner em 2026-10-06 (*"a partir do momento que o PR
 está aberto, ao fazer qualquer push quero que seja executado o pr-refresh"*),
-com **hook local** e **nunca bloqueia** escolhidos explicitamente.
+com **hook local** e **nunca bloqueia** escolhidos explicitamente. MEDIDO no
+husky 9.1.7: `post-push` **não existe**.
 
-Os **seis estados** que ele pode imprimir (e por que cinco "não escrevi" não
-podem virar um só), a **janela residual** do `pre-push` e o motivo de cada
-guarda estão na docstring de
-[`pr-refresh-hook.ts`](../../tooling/scripts/pr-refresh-hook.ts) — no código
-que os implementa, e não numa cópia deste arquivo que envelhece sem que alguém
+Os **seis estados** que ele imprime (e por que cinco "não escrevi" não podem
+virar um só), a **janela residual** do `pre-push` e o motivo de cada guarda
+estão na docstring de
+[`pr-refresh-hook.ts`](../../tooling/scripts/pr-refresh-hook.ts) — no código que
+os implementa, e não numa cópia deste arquivo que envelhece sem que alguém
 remeça.
 
 ## Decisões pendentes (o owner decide, não este workflow)

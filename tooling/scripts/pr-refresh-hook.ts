@@ -135,8 +135,12 @@ export interface Deps {
   branch: string;
   repo: string;
   base: string;
-  /** `true` se a base foi atualizada; `false` se a rede falhou. */
-  atualizarBase(): boolean;
+  /**
+   * Atualiza a base. `ok: false` DEVE vir com `erro` preenchido — rede caída,
+   * token expirado e branch apagada são três consertos diferentes, e um estado
+   * que não distingue os três obriga o operador a adivinhar.
+   */
+  atualizarBase(): { ok: boolean; erro: string };
   /**
    * Como a branch está em relação ao remoto.
    *
@@ -186,10 +190,15 @@ export function executar(deps: Deps): Resultado {
 }
 
 function rodar(deps: Deps): Resultado {
-  if (!deps.atualizarBase()) {
+  // Uma chamada só. Ler `.ok` e `.erro` em dois `deps.atualizarBase()` faria
+  // DOIS fetches — o segundo sobre uma base já atualizada, e o `erro` viria de
+  // uma tentativa diferente da que falhou.
+  const baseAtual = deps.atualizarBase();
+  if (!baseAtual.ok) {
     return semRelatorio(
       'base-indisponivel',
-      `não consegui atualizar "${deps.base}"; sem base atual não há número confiável, e nada foi escrito`,
+      `não consegui atualizar "${deps.base}": ${baseAtual.erro || 'motivo não informado'}; ` +
+        `sem base atual não há número confiável, e nada foi escrito`,
     );
   }
 
@@ -280,6 +289,63 @@ function gh(repo: string, args: string[], entrada?: string): string {
   });
 }
 
+/** A primeira linha do stderr do subprocesso — a que diz o que deu errado. */
+function stderrDe(e: unknown): string {
+  if (typeof e === 'object' && e !== null && 'stderr' in e) {
+    const s = (e as { stderr?: Buffer | string }).stderr;
+    if (s !== undefined) {
+      const linhas = s
+        .toString()
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean);
+      if (linhas.length > 0) return linhas[0] as string;
+    }
+  }
+  return e instanceof Error ? e.message : String(e);
+}
+
+/**
+ * Atualiza a base, e DIZ por que não conseguiu quando não consegue.
+ *
+ * ## O refspec que parece certo e não é
+ *
+ * `git fetch origin origin/main` falha com `couldn't find remote ref
+ * origin/main`. O `origin/` de `origin/main` é o **nome local da ref de
+ * tracking**; passado como refspec ele diz ao remoto "me traga a branch
+ * `origin/main`", e essa branch não existe. MEDIDO 2026-10-06 no push que ligou
+ * este hook:_exit 128, `base-indisponivel` em todo push, e nada medido nunca.
+ *
+ * A forma que funciona traduz o nome de tracking para o par branch-remoto /
+ * ref-local:
+ * `+refs/heads/<branch>:refs/remotes/<base>`.
+ *
+ * ## Por que o retorno carrega `erro`
+ *
+ * Auth expirada, branch remota apagada e rede caída dão o mesmo `false`. Um
+ * estado que só diz "não consegui" obriga o operador a adivinhar entre três
+ * causas — e adivinhação é como um hook verde nasce. O `erro` é a primeira
+ * linha do stderr, que o git já escreve com o nome da coisa que não encontrou.
+ */
+export function buscarBase(repo: string, base: string): { ok: boolean; erro: string } {
+  // Só o primeiro `/` separa remoto de branch: `origin/release/2` tem `/` no
+  // nome da branch, e cortar no primeiro daria branch `release` + lixo `2`.
+  const tracking = /^[^/]+\/(.+)$/.exec(base);
+  const args =
+    tracking === null
+      ? ['fetch', '--quiet', '--', 'origin']
+      : ['fetch', '--quiet', '--', 'origin', `+refs/heads/${tracking[1]}:refs/remotes/${base}`];
+  try {
+    // `--` antes do remoto: um nome que comece com `-` seria lido como opção.
+    // A ref vem de `git rev-parse` ou de `--base=`, nunca do corpo do PR — mas
+    // o `--` custa um caractere e fecha a porta.
+    execFileSync('git', args, { cwd: repo, stdio: ['ignore', 'ignore', 'pipe'] });
+    return { ok: true, erro: '' };
+  } catch (e) {
+    return { ok: false, erro: stderrDe(e) };
+  }
+}
+
 /** O corpo do PR em vez de stdout de um comando — evita a parede de aspas. */
 function prAbertoReal(repo: string, branch: string): number | null {
   const json = gh(repo, [
@@ -330,17 +396,7 @@ function main(argv: string[]): number {
     branch,
     repo,
     base,
-    atualizarBase: () => {
-      try {
-        // `--` antes da ref: um nome de branch que comece com `-` seria lido
-        // como opção. A ref vem de `git rev-parse`, não do corpo, mas o `--`
-        // custa um caractere e fecha a porta.
-        git(repo, ['fetch', '--quiet', '--', 'origin', base]);
-        return true;
-      } catch {
-        return false;
-      }
-    },
+    atualizarBase: () => buscarBase(repo, base),
     relacaoComRemoto: () => relacaoReal(repo, branch),
     prAberto: () => prAbertoReal(repo, branch),
     corpo: (pr) => gh(repo, ['pr', 'view', String(pr), '--json', 'body', '-q', '.body']),
