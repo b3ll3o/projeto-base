@@ -352,6 +352,15 @@ export interface Opcoes {
  * A implementação é a MESMA: `varrer` delega para cá. A duplicação seria o
  * modo pelo qual os dois divergem em silêncio daqui a seis meses.
  */
+/**
+ * Quantos formatos de contagem o scanner reconhece.
+ *
+ * Exportado para que nenhuma prosa precise repetir o número: hardcodar "5"
+ * aqui dentro envelheceria no dia que uma classe entrar, e quem lê não tem
+ * como conferir. MEDIDO 2026-10-06: `PADROES` tinha 5 entradas.
+ */
+export const TOTAL_PADROES = PADROES.length;
+
 export function varrerTexto(texto: string, repo: string, base: string): Relatorio {
   const medicao = medirBranch(repo, base);
   const claims = extrairClaims(texto).map((c): ClaimVerificada => {

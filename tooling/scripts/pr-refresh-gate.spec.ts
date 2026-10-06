@@ -282,4 +282,39 @@ describe('CLI (o caminho que o CI usa)', () => {
     expect(r.stderr).toMatch(/NÃO VERIFICADO/);
     expect(r.status).toBe(1);
   });
+
+  it('NÃO afirma que mediu o que não existe quando o corpo não tem claim', () => {
+    // Achado da revisão de spec de 2026-10-06. Corpo vazio é permitido pelo
+    // GitHub, e a saída antiga dizia "0 claim(s) divergente(s), todas em
+    // parágrafo marcado — OK": com corpo vazio não há claim E não há
+    // marcador. Uma frase que afirma um marcador inexistente é pior que
+    // silence — ela parece uma aprovação.
+    const arquivo = join(mkdtempSync(join(tmpdir(), 'pr-body-')), 'body.md');
+    writeFileSync(arquivo, '');
+    const r = rodar({ PR_BODY_FILE: arquivo, PR_BASE: 'origin/main', GITHUB_WORKSPACE: REPO });
+
+    // Sai 0: o corpo FOI lido e varrido, e a varredura terminou com zero.
+    // Isso é medição completa com resultado zero, não "não consegui medir".
+    expect(r.status).toBe(0);
+    expect(r.stderr).not.toMatch(/NÃO VERIFICADO/);
+    // A afirmação que não pode estar lá:
+    expect(r.stderr).not.toMatch(/em parágrafo marcado/);
+    // E a ressalva que tem de estar — a limitação é o conteúdo, não ruído:
+    expect(r.stderr).toMatch(/0 claim\(s\) reconhecida\(s\)/);
+    expect(r.stderr).toMatch(/NÃO é o mesmo que "verificado e verde"/);
+  });
+
+  it('nomeia a limitação quando o corpo tem número que o scanner não reconhece', () => {
+    // `37 erros` e `300 linhas` são contagens reais que o gate NÃO enxerga:
+    // ele não pode dizer que "tudo que tem contagem está marcado".
+    const arquivo = join(mkdtempSync(join(tmpdir(), 'pr-body-')), 'body.md');
+    writeFileSync(
+      arquivo,
+      'Corrigi 37 erros e tirei 300 linhas.\n\n<!--pr-refresh:live--> mexi nisso\n',
+    );
+    const r = rodar({ PR_BODY_FILE: arquivo, PR_BASE: 'origin/main', GITHUB_WORKSPACE: REPO });
+    expect(r.status).toBe(0);
+    expect(r.stderr).toMatch(/37 erros/);
+    expect(r.stderr).not.toMatch(/em parágrafo marcado/);
+  });
 });

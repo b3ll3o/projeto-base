@@ -45,6 +45,7 @@ import { execSync } from 'node:child_process';
 import { MARCADOR, linhasVivas } from './pr-refresh-apply.js';
 import { buscarBase } from './pr-refresh-hook.js';
 import { varrerTexto } from './pr-refresh-scan.js';
+import { TOTAL_PADROES } from './pr-refresh-scan.js';
 import type { Relatorio } from './pr-refresh-scan.js';
 
 export interface ResultadoGate {
@@ -173,10 +174,35 @@ function main(): number {
   }
 
   const r = verificarMarcador(corpo, relatorio);
+  const divergentes = relatorio.claims.filter((c) => c.divergente).length;
+
+  if (relatorio.claims.length === 0) {
+    // Sai 0, mas sem afirmar que mediu o que não existia.
+    //
+    // Isto NÃO é "pular": o corpo foi lido e varrido, e a varredura terminou
+    // com zero claims. É uma medição completa cujo resultado é zero — diferente
+    // de `naoVerificado`, onde nada foi lido. A saída antiga dizia "0 claim(s)
+    // divergente(s), todas em parágrafo marcado — OK", o que afirma uma
+    // marcação que não existia: com corpo vazio não há claim E não há
+    // marcador. MEDIDO: corpo vazio e corpo sem claim ambos davam essa frase.
+    //
+    // A ressalva que a mensagem carrega é a parte que importa: o scanner
+    // reconhece N formatos, e um número fora deles é invisível para ele. O
+    // gate não pode afirmar que "tudo que tem contagem está marcado" quando o
+    // que ele viu foi zero.
+    process.stderr.write(
+      `pr-refresh-gate: 0 claim(s) reconhecida(s) no corpo — o gate leu e varreu, ` +
+        `e não achou contagem viva para conferir. NÃO é o mesmo que "verificado e ` +
+        `verde": um número fora dos ${TOTAL_PADROES} formatos que o scanner ` +
+        `reconhece é invisível para ele (ex.: "37 erros", "300 linhas").\n`,
+    );
+    return 0;
+  }
+
   if (r.ok) {
     process.stderr.write(
-      `pr-refresh-gate: ${relatorio.claims.filter((c) => c.divergente).length} claim(s) ` +
-        `divergente(s), todas em parágrafo marcado — OK\n`,
+      `pr-refresh-gate: ${divergentes} claim(s) divergente(s) de ${relatorio.claims.length} ` +
+        `reconhecida(s), todas em parágrafo marcado — OK\n`,
     );
     return 0;
   }

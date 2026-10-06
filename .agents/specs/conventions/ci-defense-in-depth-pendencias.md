@@ -79,11 +79,12 @@
   acusaria "entrada do registro que não corresponde a nenhum gate". Ele roda
   como passo do job `preflight` em `.github/workflows/ci.yml`, no `pull_request`
   — sem `permissions` novo, porque o corpo vem do payload do evento, não de
-  `gh`. Dentes: `pr-refresh-gate.spec.ts` — **2 de 16** sem o filtro
-  `divergente` e **2 de 16** com o marcador valendo no corpo inteiro em vez do
+  `gh`. Dentes: `pr-refresh-gate.spec.ts` — **2 de 18** sem o filtro
+  `divergente` e **2 de 18** com o marcador valendo no corpo inteiro em vez do
   parágrafo (as duas remedidas em 2026-10-06; o commit do #45 dizia "3 de 13"
   para a segunda e estava errado — e o denominador era 13 porque o spec não
-  tinha os 3 testes de CLI que entraram com a correção do `fetch-depth`).
+  tinha os 5 testes de CLI que entraram depois: 3 de "não verificado" e 2 do
+  caminho verde).
   O critério é **por parágrafo** (`linhasVivas`), não "o corpo tem um
   marcador": colar o token num parágrafo qualquer enquanto as claims seguem sem
   ele é exatamente o estado silencioso.
@@ -94,7 +95,7 @@
   versão do gate subia a exceção crua (vermelho, mas com stack trace e sem
   pista de como corrigir) enquanto o ramo "não verificado" ficava **inalcançável**
   pelo único canal que de fato dispara. Corrigido com `fetch-depth: 0` no
-  `ci.yml` + `try/catch` em volta do `varrerTexto`. Dentes: os 3 testes de CLI
+  `ci.yml` + `try/catch` em volta do `varrerTexto`. Dentes: os 3 testes de CLI de "não verificado"
   ficam vermelhos se `naoVerificado` voltar a devolver `0` — que é o
   "pular com verde" que a issue #45 denuncia, só que pelo outro lado.
 - **Só 6 dos 13 gates têm mutação medida** (ver
