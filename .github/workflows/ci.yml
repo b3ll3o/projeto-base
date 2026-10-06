@@ -15,7 +15,14 @@ jobs:
     permissions:
       contents: read
     steps:
+      # `fetch-depth: 0` é exigência do gate do marcador, não preferência: com o
+      # default (depth 1) o checkout de `pull_request` traz só o ref de merge e
+      # `origin/main` não tem ancestral comum com HEAD — o `varrerTexto` levanta
+      # "base sem ancestral comum" e o gate morre com stack trace.
+      # MEDIDO no PR #53: preflight vermelho por exatamente isso.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v3
       - uses: actions/setup-node@v4
         with:

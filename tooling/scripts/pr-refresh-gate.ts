@@ -31,6 +31,14 @@
  * Claim **não** divergente sem marcador NÃO é erro. Marcar o corpo inteiro
  * faria o token deixar de significar "aqui a contagem é viva" e viraria
  * decoração — que é o estado que faz o instrumento perder o sentido.
+ *
+ * ## "Não verificado" é vermelho
+ *
+ * Sem corpo legível, ou sem base que convirja com HEAD, o gate diz
+ * `NÃO VERIFICADO` e sai **1**. Deliberado: este gate não tem painel de
+ * `skipped`, só exit code, e **pular com `0` É verde** — seria o mesmo
+ * estado silencioso que a issue denuncia, agora pelo outro lado. Acompanhe
+ * `naoVerificado()` abaixo, onde o motivo fica escrito.
  */
 import { readFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
@@ -95,6 +103,41 @@ export function lerCorpo(repo: string, pr: string | undefined): string | null {
   }
 }
 
+/**
+ * Sai com uma mensagem que deixa claro que nada foi medido.
+ *
+ * ## Por que isto é FALHA e não skip
+ *
+ * A primeira versão deste gate pulava (exit 0) quando não conseguia medir, com
+ * o argumento "não verificado não é verde". O argumento está certo e a
+ * conclusão estava errada: **pular com exit 0 É verde.** O preflight tem um
+ * `skipped` explícito justamente para que "não havia o que verificar" não se
+ * pareça com "verifiquei e passou" — e este gate não tem painel, só exit code.
+ *
+ * Pular aqui tornaria o gate decorativo pelo caminho exato que a issue #45
+ * denuncia: um PR que nasce inativo e ninguém é avisado. Um gate que só
+ * funciona na máquina de quem o escreveu não é um gate.
+ *
+ * ## Por que não engole a exceção
+ *
+ * `varrerTexto` LANÇA quando a base não tem ancestral comum com HEAD (que é o
+ * que acontece com o checkout raso do `pull_request`). A primeira versão não
+ * tinha `try` aqui: a exceção subia e matava o processo com stack trace —
+ * vermelho, mas pelo motivo errado, e sem a pista de como corrigir.
+ * MEDIDO no PR #53: preflight vermelho com
+ * `Error: base sem ancestral comum: "origin/main" e HEAD não convergem`.
+ * O ramo "não verificado" existia no código e era inalcançável pelo único canal
+ * que de fato dispara.
+ */
+function naoVerificado(motivo: string, comoCorrigir: string): number {
+  process.stderr.write(
+    `pr-refresh-gate: NÃO VERIFICADO — ${motivo}\n` +
+      `Nada foi medido, e isto não conta como aprovação: o gate só pode dizer\n` +
+      `"verde" tendo lido as claims. Como corrigir: ${comoCorrigir}\n`,
+  );
+  return 1;
+}
+
 function main(): number {
   const repo = process.env.GITHUB_REPOSITORY ?? '';
   const pr = process.env.PR_NUMBER;
@@ -102,25 +145,33 @@ function main(): number {
 
   const corpo = lerCorpo(repo, pr);
   if (corpo === null) {
-    // Não verificado NÃO é verde. Sem `gh` (ou sem permissão) o gate sai
-    // pulado, nunca aprovado: um gate que aprova o que não mediu é a classe 1
-    // com aparência de sucesso.
-    process.stderr.write(
-      `pr-refresh-gate: não consegui ler o corpo do PR ${pr ?? '(?)'} em ${repo} — ` +
-        `VERIFICAÇÃO NÃO FEITA, pulando (não é aprovação)\n`,
+    return naoVerificado(
+      `não consegui ler o corpo do PR ${pr ?? '(?)'} em ${repo || '(repo não informado)'}`,
+      'no CI o corpo vem do payload do evento — veja o passo "Gate do marcador pr-refresh" em .github/workflows/ci.yml. Localmente, rode com PR_BODY_FILE=<arquivo> ou dentro de um repo com `gh` autenticado.',
     );
-    return 0;
   }
 
   const base = process.env.PR_BASE ?? 'origin/main';
   const achada = buscarBase(repoDir, base);
   if (!achada.ok) {
-    process.stderr.write(`pr-refresh-gate: ${achada.erro}\nVERIFICAÇÃO NÃO FEITA, pulando\n`);
-    return 0;
+    return naoVerificado(
+      achada.erro,
+      `o fetch de ${base} falhou — verifique acesso de rede e a ref.`,
+    );
   }
 
-  // `achada.erro` é a mensagem de falha do git, não a base — quando ok, é ''.
-  const relatorio = varrerTexto(corpo, repoDir, base);
+  let relatorio: Relatorio;
+  try {
+    relatorio = varrerTexto(corpo, repoDir, base);
+  } catch (e) {
+    // O `throw` é o canal real deste gate: base sem ancestral comum é o que
+    // acontece com `fetch-depth` default num checkout de `pull_request`.
+    return naoVerificado(
+      e instanceof Error ? e.message : String(e),
+      `a base ${base} não converge com HEAD — o checkout precisa de histórico completo (\`fetch-depth: 0\` no actions/checkout).`,
+    );
+  }
+
   const r = verificarMarcador(corpo, relatorio);
   if (r.ok) {
     process.stderr.write(

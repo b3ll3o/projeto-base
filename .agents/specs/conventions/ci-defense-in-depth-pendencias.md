@@ -62,12 +62,24 @@
   acusaria "entrada do registro que não corresponde a nenhum gate". Ele roda
   como passo do job `preflight` em `.github/workflows/ci.yml`, no `pull_request`
   — sem `permissions` novo, porque o corpo vem do payload do evento, não de
-  `gh`. Dentes: `pr-refresh-gate.spec.ts` — **2 de 13** sem o filtro
-  `divergente` e **2 de 13** com o marcador valendo no corpo inteiro em vez do
+  `gh`. Dentes: `pr-refresh-gate.spec.ts` — **2 de 16** sem o filtro
+  `divergente` e **2 de 16** com o marcador valendo no corpo inteiro em vez do
   parágrafo (as duas remedidas em 2026-10-06; o commit do #45 dizia "3 de 13"
-  para a segunda e estava errado). O critério é **por parágrafo**
-  (`linhasVivas`), não "o corpo tem um marcador": colar o token num parágrafo
-  qualquer enquanto as claims seguem sem ele é exatamente o estado silencioso.
+  para a segunda e estava errado — e o denominador era 13 porque o spec não
+  tinha os 3 testes de CLI que entraram com a correção do `fetch-depth`).
+  O critério é **por parágrafo** (`linhasVivas`), não "o corpo tem um
+  marcador": colar o token num parágrafo qualquer enquanto as claims seguem sem
+  ele é exatamente o estado silencioso.
+- **"Não verificado" é vermelho, e o gate mede os dois ramos disso**: quando não
+  consegue ler o corpo, ou quando a base não converge com HEAD, ele escreve
+  `NÃO VERIFICADO` e sai **1** — não `0`. MEDIDO no PR #53: `fetch-depth`
+  default num `pull_request` dá ref de merge sem ancestral comum, e a primeira
+  versão do gate subia a exceção crua (vermelho, mas com stack trace e sem
+  pista de como corrigir) enquanto o ramo "não verificado" ficava **inalcançável**
+  pelo único canal que de fato dispara. Corrigido com `fetch-depth: 0` no
+  `ci.yml` + `try/catch` em volta do `varrerTexto`. Dentes: os 3 testes de CLI
+  ficam vermelhos se `naoVerificado` voltar a devolver `0` — que é o
+  "pular com verde" que a issue #45 denuncia, só que pelo outro lado.
 - **Só 6 dos 13 gates têm mutação medida** (ver
   [Registro de dentes](ci-defense-in-depth.md#registro-de-dentes)). Os outros 7 provam a lógica com
   `controle negativo` em tmpdir, o que não prova a integração com o sistema

@@ -1,6 +1,8 @@
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { MARCADOR } from './pr-refresh-apply';
 import { lerCorpo, verificarMarcador } from './pr-refresh-gate';
@@ -149,5 +151,130 @@ describe('lerCorpo', () => {
   it('sem arquivo e sem repo, devolve null em vez de chamar `gh` de vazio', () => {
     delete process.env.PR_BODY_FILE;
     expect(lerCorpo('', undefined)).toBeNull();
+  });
+});
+
+/**
+ * O gate pela CLI, que é como o CI o invoca.
+ *
+ * A primeira versão não tinha `try` em volta de `varrerTexto`, e o `throw` de
+ * "base sem ancestral comum" subia e matava o processo com stack trace. Nenhum
+ * teste pegou: os de `verificarMarcador` são puros e os de `lerCorpo` nunca
+ * chegam perto de medir. MEDIDO no PR #53 — preflight vermelho por isso.
+ */
+describe('CLI (o caminho que o CI usa)', () => {
+  // Ancorado neste arquivo, não em `process.cwd()`: `vitest --root tooling/scripts`
+  // NÃO muda o cwd, que continua o repo — e um caminho relativo ao cwd
+  // resolveria o tsx três níveis acima do projeto.
+  const AQUI = dirname(fileURLToPath(import.meta.url));
+  const REPO = join(AQUI, '../..');
+  const GATE = join(AQUI, 'pr-refresh-gate.ts');
+  const TSX = join(REPO, 'node_modules/tsx/dist/cli.mjs');
+
+  function rodar(env: Record<string, string>) {
+    const r = spawnSync(process.execPath, [TSX, GATE], {
+      env: { ...process.env, ...env },
+      encoding: 'utf-8',
+    });
+    return { status: r.status, stderr: r.stderr ?? '' };
+  }
+
+  /**
+   * Repo com `origin/main` EXISTENTE mas sem ancestral comum com HEAD.
+   *
+   * É a condição real do CI: `actions/checkout` com `fetch-depth` default num
+   * evento `pull_request` entrega o ref de merge e o histórico truncado, então
+   * `git merge-base origin/main HEAD` não tem o que devolver. O `fetch` da base
+   * **tem sucesso** — daí a importance de montar a base em vez de inventar um
+   * nome de ref: com `origin/ref-que-nao-existe` o `buscarBase` falha antes e o
+   * `catch` do `varrerTexto` nunca é alcançado. Foi assim que a primeira
+   * versão deste teste passou verde com o `try/catch` removido.
+   */
+  function repoSemAncestralComum(): string {
+    const raiz = mkdtempSync(join(tmpdir(), 'pr-sem-ancestral-'));
+    const remoto = join(raiz, 'origin.git');
+    const trabalho = join(raiz, 'work');
+    const git = (...args: string[]) =>
+      execFileSync('git', args, {
+        cwd: trabalho,
+        stdio: ['ignore', 'ignore', 'pipe'],
+        env: {
+          ...process.env,
+          GIT_AUTHOR_NAME: 't',
+          GIT_AUTHOR_EMAIL: 't@t',
+          GIT_COMMITTER_NAME: 't',
+          GIT_COMMITTER_EMAIL: 't@t',
+        },
+      });
+
+    execFileSync('git', ['init', '--quiet', '--bare', remoto]);
+    execFileSync('git', ['clone', '--quiet', remoto, trabalho]);
+    git('commit', '--quiet', '--allow-empty', '-m', 'raiz');
+    git('branch', '-M', 'main');
+    git('push', '--quiet', 'origin', 'main');
+    // `--orphan` zera a história: HEAD passa a não descend de `main`.
+    git('checkout', '--quiet', '--orphan', 'branch-do-pr');
+    git('commit', '--quiet', '--allow-empty', '-m', 'trabalho');
+    return trabalho;
+  }
+
+  it('NÃO sai verde quando a base não tem ancestral comum com HEAD', () => {
+    // O esperado é 1 com "NÃO VERIFICADO" e o NOME do problema — não stack
+    // trace, e não 0.
+    const trabalho = repoSemAncestralComum();
+    const arquivo = join(mkdtempSync(join(tmpdir(), 'pr-body-')), 'body.md');
+    writeFileSync(arquivo, 'A branch tem 5 commits à frente de `origin/main`.\n');
+
+    // Sanidade: o cenário tem de ser o que o teste afirma. Sem isto, um
+    // `buscarBase` quebrado faria o gate sair 1 pelo motivo errado e o teste
+    // passaria — verde sobre o defeito que deveria pegar.
+    expect(() =>
+      execFileSync('git', ['merge-base', 'origin/main', 'HEAD'], {
+        cwd: trabalho,
+        stdio: ['ignore', 'ignore', 'pipe'],
+      }),
+    ).toThrow();
+
+    const r = rodar({
+      PR_BODY_FILE: arquivo,
+      PR_BASE: 'origin/main',
+      GITHUB_WORKSPACE: trabalho,
+    });
+    expect(r.stderr).toMatch(/NÃO VERIFICADO/);
+    // Distingue os DOIS ramos: `!achada.ok` também diz "NÃO VERIFICADO", mas
+    // a causa é outra e o `catch` não entrou.
+    expect(r.stderr).toMatch(/sem ancestral comum/);
+    expect(r.stderr).not.toMatch(/^\s+at /m); // nenhum stack trace
+    expect(r.status).toBe(1);
+  });
+
+  it('NÃO sai verde quando o fetch da base falha', () => {
+    // Ramo irmão, e o que a primeira versão deste teste media sem saber:
+    // `buscarBase` não tem a ref, o gate nem chega a varrer.
+    const dir = mkdtempSync(join(tmpdir(), 'pr-body-'));
+    const arquivo = join(dir, 'body.md');
+    writeFileSync(arquivo, 'A branch tem 5 commits à frente de `origin/main`.\n');
+    const r = rodar({
+      PR_BODY_FILE: arquivo,
+      PR_BASE: 'origin/ref-que-nao-existe',
+      GITHUB_WORKSPACE: REPO,
+    });
+    expect(r.stderr).toMatch(/NÃO VERIFICADO/);
+    expect(r.stderr).not.toMatch(/sem ancestral comum/);
+    expect(r.stderr).not.toMatch(/^\s+at /m);
+    expect(r.status).toBe(1);
+  });
+
+  it('NÃO sai verde quando não consegue ler o corpo', () => {
+    // `GH_TOKEN`/repo vazios: `lerCorpo` devolve null e não mediu nada.
+    const r = rodar({
+      PR_BODY_FILE: join(tmpdir(), 'nao-existe-pr-body.md'),
+      GITHUB_REPOSITORY: '',
+      GH_TOKEN: '',
+      GITHUB_ACTOR: '',
+      GH_CONFIG_DIR: mkdtempSync(join(tmpdir(), 'gh-empty-')),
+    });
+    expect(r.stderr).toMatch(/NÃO VERIFICADO/);
+    expect(r.status).toBe(1);
   });
 });
