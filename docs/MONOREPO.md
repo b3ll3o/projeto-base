@@ -169,6 +169,10 @@ Cada mudança em `packages/` DEVE vir acompanhada de `.changeset/`.
 | `pnpm typecheck` | `turbo run typecheck` | tsc --noEmit em tudo |
 | `pnpm format` | `prettier --write .` | Formata código |
 | `pnpm clean` | `turbo run clean && rm -rf node_modules` | Limpa cache e deps |
+| `pnpm ci:preflight` | roda os 14 checks estruturais de drift | aborta com exit 1 |
+| `pnpm ci:local` | `preflight + lint + typecheck + test:unit + test:coverage` | atalho manual (não está em hook) |
+
+**Fluxo canônico (do primeiro comando ao merge):** cada script acima é uma peça do quebra-cabeça — quem dispara, em qual ordem, e o que bloqueia está em [`docs/fluxo-desenvolvimento.md`](./fluxo-desenvolvimento.md) (documento factual, re-medido a cada merge).
 
 ## §8. Isolamento por App
 
@@ -259,7 +263,7 @@ Referência cruzada: [`.agents/specs/conventions/estrutura-e-versionamento.md`](
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão do documento:** 1.9.0
+**Versão do documento:** 1.9.1
 
 ### Histórico de Versões
 
@@ -275,3 +279,4 @@ Referência cruzada: [`.agents/specs/conventions/estrutura-e-versionamento.md`](
 | `1.6.0` | Backfill: matrix `review-router` bumped para v1.3 (3 P2 gaps resolvidos — `domains[]` enrich, lint WARNING para blocking, coverage scenarios em apêndice). Sem mudança de monorepo. |
 | `1.7.0` | Adição do agent `telemetry-specialist` (transversal: backend+frontend+docker) + convenção `state-aware-planning` (camada 0 do pre-planner) + skill/workflow/memory companions; nova categoria transversal "Observabilidade" (referência cross-stack) |
 | `1.9.0` | §1 — árvore de estrutura e contagens de agents/memórias/workflows realinhadas com o disco (19/21/10). §CI — `tooling:test` passou a cobrir `.tooling/scripts/ci` (6 specs / 32 testes que nunca rodavam) e roda no job `preflight`; lint real em `apps/api` (antes era stub `exit 0`); gate DDD barra import de `infrastructure/` em `domain/`; `turbo.json` sem tasks órfãs; `checkDocRefs` com escopo via `git ls-files` e máscara de inline-code. |
+| `1.9.1` | §1 — contagem de agents corrigida de 19 para 20 (inclui o sub-dir `telemetry-specialist/` além do `.md` correspondente). §7 — `pnpm ci:preflight` e `pnpm ci:local` adicionados à tabela canônica de scripts; cross-ref para [`docs/fluxo-desenvolvimento.md`](./fluxo-desenvolvimento.md) (fluxo end-to-end re-medido a cada merge). |

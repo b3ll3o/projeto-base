@@ -27,7 +27,7 @@ projeto-base/
 ├── README.md                           # Este arquivo
 ├── .markdownlint.json                  # Configuração do lint de Markdown
 ├── .agents/
-│   ├── agents/                         # 19 agents (12 genéricos + 2 routers + 5 specialists de stack)
+│   ├── agents/                         # 20 agents (12 genéricos + 2 routers + 5 specialists de stack + 1 sub-dir `agent-architect`)
 │   │   ├── agent-architect.md
 │   │   ├── code-reviewer.md
 │   │   ├── docker-specialist.md
@@ -152,6 +152,8 @@ pnpm turbo run test:coverage --filter=@projeto/api --filter=@projeto/web  # gate
 pnpm stack:review --files="$(git diff --name-only main | tr '\n' ',' | sed 's/,$//')"
 pnpm docs:sync --files="$(git diff --name-only main | tr '\n' ',' | sed 's/,$//')" --mode=check
 ```
+
+**Fluxo canônico (do primeiro comando ao merge):** [`docs/fluxo-desenvolvimento.md`](./docs/fluxo-desenvolvimento.md) — documento factual com cada gate, em qual camada, e o que **de fato** bloqueia.
 
 Smoke completo da stack Docker (requer daemon):
 
@@ -290,10 +292,6 @@ Veja [`docs/MONOREPO.md`](./docs/MONOREPO.md) para convenções detalhadas.
 
 Detalhes em [`docs/TEMPLATE_USAGE.md`](./docs/TEMPLATE_USAGE.md).
 
-## Versão
+## Versão & Licença
 
-**1.9.0** — Major doc sync: README alinhado ao estado real (20 agents / 9 skills / 17 conventions / 10 workflows; apps implementados; OpenTelemetry). Bump 1.6.0 → 1.9.0.
-
-## Licença
-
-MIT
+**Versão:** 1.9.1 — Cross-refs pós-#50: link para `docs/fluxo-desenvolvimento.md`; agents 19 → 20. Bump 1.9.0 → 1.9.1. **Licença:** MIT.

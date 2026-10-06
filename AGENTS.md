@@ -192,6 +192,7 @@ As convenções estão detalhadas em arquivos próprios sob [`.agents/specs/conv
 > **Templates:** [`.agents/specs/templates/`](./.agents/specs/templates/) contém templates canônicos versionados (ex.: [`spec.md`](./.agents/specs/templates/spec.md) — template de Spec de feature). Toda spec deve derivar de um template; criar templates novos via PR com bump major da convenção relacionada.
 
 - **Pre-push obrigatório:** rodar `pnpm ci:local` antes de push (ver [git-workflow.md §Pre-Push Quality Gate](./.agents/specs/conventions/git-workflow.md))
+- **Fluxo canônico end-to-end:** [`docs/fluxo-desenvolvimento.md`](./docs/fluxo-desenvolvimento.md) — documento factual que lista cada gate (3 camadas: hooks locais, CI remoto, processo de agents), em qual comando/hook dispara, e o que **de fato** bloqueia. Re-medido a cada merge.
 
 ---
 
@@ -219,5 +220,5 @@ Quando seguido corretamente, este padrão garante:
 
 **Mantido por:** projeto-base contributors
 **Licença:** MIT
-**Versão do documento:** 1.9.0
+**Versão do documento:** 1.9.1
 **Status:** Estável

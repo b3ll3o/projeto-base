@@ -17,12 +17,12 @@ maintainer: stack-code-reviewer
 ## §1. TL;DR
 
 1. **Antes de qualquer coisa**: `pnpm install` e, se for planejar, gerar um *state-snapshot* (camada de agents).
-2. **Commit** dispara `pre-commit`: `lint-staged` (só Prettier) + `stack-code-reviewer` (único que aborta) + `doc-sync` (roda mas nunca aborta).
-3. **Push** dispara `pre-push`: `pnpm ci:preflight` — os checks estruturais, aborta com exit 1.
-4. **PR para `main`** dispara 3 jobs de CI (`preflight`, `quality`, `docker-build-prod`) + `stack-code-review` + `docs-sync`.
+2. **Commit** dispara `pre-commit`: `lint-staged` (só Prettier) + `stack-code-reviewer` (único que aborta em pre-commit) + `doc-sync` (roda mas nunca aborta — ver §7.2).
+3. **Push** dispara `pre-push`: `pnpm ci:preflight` — 14 checks estruturais; aborta com exit 1 se algum falhar.
+4. **PR para `main`** dispara 3 jobs de CI (`preflight`, `quality`, `docker-build-prod`) + `stack-code-review` + `docs-sync`. **Pós-#44** os jobs `preflight` e `quality` rodam a suíte `.tooling/scripts/ci/*.spec.ts` (16 arquivos / 207 testes), que valida os próprios dentes do tooling.
 5. **Merge em `main`** só dispara `release-template` (auto-tag) **se** o commit tocar `docs/MONOREPO.md`.
 
-> **Ressalva crítica:** nenhum check de CI é *required*. Ver [§7](#7-estado-atual-as-is).
+> **Ressalva crítica:** nenhum check de CI é *required_status_check* (apenas `quality` em `main` é *required* via ruleset — ver §7.2). A garantia real é a cadeia do workflow (`preflight` bloqueia `quality` via `needs:`), não o check isolado.
 
 ---
 
@@ -109,12 +109,9 @@ pnpm tsx tooling/scripts/doc-sync.ts --files="$changed" --mode=incremental || ex
 
 `.husky/pre-push` roda **exclusivamente** `pnpm ci:preflight`. Ele **não** roda lint, typecheck nem teste — apesar de [`git-workflow.md`](../.agents/specs/conventions/git-workflow.md) recomendar `pnpm ci:local` como "Pre-Push Quality Gate".
 
-Os 14 checks registrados (medido em 2026-10-05 com `pnpm ci:preflight`:
-14/14 ✓). A **lista** é a fonte da verdade, não este número — ele envelhece a
-cada check novo, e as outras menções deste doc citam o gate sem repetir a
-contagem justamente por isso:
+Os 14 checks registrados (medido em 2026-10-06 pós-#50: **13 ✓ / 1 ✗** — o ✗ é `turbo: differential parser × turbo real`, que exige Node ≥ 22.6 (turbo 2.11.2) e a NodeBox local roda Node 20.20; no CI, Node 22, passa). A **lista** é a fonte de verdade, não este número — ele envelhece a cada check novo, e as outras menções deste doc citam o gate sem repetir a contagem justamente por isso:
 
-1. Cross-refs em `.md` versionados · 2. tsconfig drift · 3. ESLint config drift (apps) · 4. ESLint config drift (packages) · 5. turbo.json drift · 6. package.json drift · 7. docker drift · 8. review-routing matrix lint · 9. archive integrity.
+1. Cross-refs em `.md` versionados · 2. tsconfig drift · 3. ESLint config drift (apps) · 4. ESLint config drift (packages) · 5. turbo.json drift · 6. package.json drift · 7. docker drift · 8. review-routing matrix lint · 9. archive integrity · 10. destino da retrospectiva · 11. registro de dentes · 12. classe 3 (guard que dispara em si mesmo) · 13. turbo: differential parser × turbo real · 14. controle desligado.
 
 ---
 
@@ -136,6 +133,7 @@ contagem justamente por isso:
 | `review:lint` | `pnpm review:lint` | A+B (via preflight #8) | YAML inválido, LOC, regex, reviewer inexistente | Sim |
 | `archive:lint` | `pnpm archive:lint` | A+B (via preflight #9) | Frontmatter canônico; com o diretório vazio o check se declara `skipped` em vez de verde | Sim |
 | `tooling:test` | `pnpm tooling:test` | B (job `preflight` do `ci.yml`) | Spec vermelho da própria camada de tooling | Sim |
+| `turbo-redirect-differential` | `.tooling/scripts/ci/turbo-redirect-differential.sh` | A+B (via preflight #13) | Forma de `pnpm turbo run …` que o parser extrai diferente do turbo real — **classe 6** (especificação local diverge do sistema real) | Sim (se Node ≥ 22.6) |
 
 ---
 
@@ -180,29 +178,30 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 ### 7.1 Wired e funcionando
 
 - `pre-commit` / `pre-push` instalados e executando.
-- `stack-code-reviewer` — **único mecanismo com dentes reais**: `process.exit(1)` em blocker.
-- `ci:preflight` — registrado e executando. Estado medido em 2026-10-05 neste
-  working tree: **14/14 ✓**. Reexecute `pnpm ci:preflight` para confirmar; este
-  número envelhece a cada check novo (foi 9 até 2026-10-05).
-- Job `quality` do CI — encadeado por `needs: preflight`, roda cobertura 80% de `apps/api#unit`.
+- `stack-code-reviewer` — gate com dentes reais em pre-commit: `process.exit(1)` em blocker.
+- `ci:preflight` — registrado e executando. Estado medido em 2026-10-06 neste
+  working tree pós-#50: **13/14 ✓** (o 14º, `turbo-redirect-differential`, ✗
+  localmente por Node 20.20 vs turbo 2.11.2 querer ≥ 22.6; **✓ no CI** que roda
+  Node 22). Reexecute `pnpm ci:preflight` para confirmar; este número envelhece
+  a cada check novo (foi 9 até 2026-10-05; 14 pós-#44).
+- Job `quality` do CI — encadeado por `needs: preflight`, roda cobertura 80% de `apps/api#unit` (gate era inerte até #40/#41).
+- Job `preflight` do CI — **pós-#44** roda a suíte `pnpm tooling:test` (16 arquivos / 207 testes em `.tooling/scripts/ci/*.spec.ts`), que valida os próprios dentes do tooling.
 - `docker-build-prod` — build real dos 2 Dockerfiles `prod` em toda PR.
-- `release-template` — syntaticamente correto (idempotência via `git rev-parse --verify`, `concurrency`, `contents: write`) e **já não é noop**: quando a tag existe ele emite `::warning::` em vez de encerrar em silêncio. Ver §7.2 para o que ainda falta.
+- `release-template` — syntaticamente correto (idempotência via `git rev-parse --verify`, `concurrency`, `contents: write`) e **já não é noop**: quando a tag existe ele emite `::warning::` em vez de encerrar em silêncio. O que falta: check que amarra footer↔tag (**BL1**).
 - Boundary DDD/Hexagonal **existe de fato** em `apps/api/src/modules/users/{domain,application,infrastructure}`.
+- **Pós-#44**: 5 gates novos sobre as 7 classes de guard, incluindo o `turbo-redirect-differential` (classe 6 — spec local diverge do sistema real) e o `check-self-firing-guard` (classe 3 — guard que dispara em si mesmo). Detalhes em [`docs/superpowers/plans/2026-10-03-guard-classes.md`](./superpowers/plans/2026-10-03-guard-classes.md) e [`docs/superpowers/plans/2026-10-03-guard-classes-decisoes.md`](./superpowers/plans/2026-10-03-guard-classes-decisoes.md).
 
 ### 7.2 Unwired / aspiracional
 
-> Os 13 achados da auditoria original caíram para **5**. Os fechados estão em
-> [`backlog-2026-10-02.md`](../.agents/runs/backlog-2026-10-02.md) §Remissões, e a
-> lista do que segue adiado em `BL1`–`BL10`. Toda linha abaixo foi **re-medida** no
-> merge — não copiada da auditoria.
+> **Re-medido em 2026-10-06 pós-#44 (`249ad9a`) e pós-#50 (`af6af0a`).** Os 5 itens residuais da auditoria original caíram para **2** que permanecem unwired (sem mudança de fato). Os fechados estão em [`backlog-2026-10-02.md`](../.agents/runs/backlog-2026-10-02.md) §Remissões + §Achados durante a execução, e o que segue adiado está em `BL1`–`BL10` + `X1`–`X15`. Toda linha abaixo foi **re-medida** no merge — não copiada da auditoria.
 
 | Item | Evidência de que não funciona |
 |------|------------------------------|
-| **Nenhum check bloqueia merge** *(parcialmente corrigido)* | O ruleset `master` (id 23853096) agora tem `required_status_checks: [{context: "quality"}]` e `main` só é atualizável por PR. O que sobra: `required_approving_review_count = 0` e `required_reviewers = []` (contribuidor único), e só **1 dos 3** contexts é exigido — a garantia real é a cadeia do workflow (`preflight` bloqueia `quality` via `needs:`), não o check isolado. |
+| **Nenhum check bloqueia merge** *(parcialmente corrigido)* | O ruleset `master` (id 23853096) tem `required_status_checks: [{context: "quality"}]` e `main` só é atualizável por PR. O que sobra: `required_approving_review_count = 0` e `required_reviewers = []` (contribuidor único). Só **1 dos 3** contexts é exigido — a garantia real é a cadeia do workflow (`preflight` bloqueia `quality` via `needs:`), não o check isolado. |
 | `lint-staged` não é linter | `node -e "console.log(Object.values(require('./package.json')['lint-staged']).join(' \| '))"` → `prettier --write \| prettier --write`. Nenhum eslint, tsc ou vitest. O ESLint entra pelo turbo. |
-| `doc-sync` nunca aborta | `grep -c 'process.exit' tooling/scripts/doc-sync.ts` → **0**. O `\|\| exit 1` do hook e o job de CI são guarda de crash, não gate. Ao menos agora o contrato **documentado** diz report-only, em vez de prometer bloqueio que não existe. |
-| `specialist:lint` fora do preflight | `grep -c specialist .tooling/scripts/ci/preflight.ts` → **0**, enquanto `review:lint` roda no preflight. Duas matrizes de routing, dois scripts, um só no gate. |
-| Limite de 300 linhas não é imposto | `wc -l .agents/WORKFLOWS.md` → **382**. Nenhum check mede LOC de `.md`. |
+| `doc-sync` nunca aborta | `grep -c 'process.exit' tooling/scripts/doc-sync.ts` → **0** (re-medido 2026-10-06). O `\|\| exit 1` do hook e o job de CI são guarda de crash, não gate. O contrato **documentado** diz report-only, em vez de prometer bloqueio que não existe. |
+| `specialist:lint` fora do preflight | `grep -c specialist .tooling/scripts/ci/preflight.ts` → **0** (re-medido 2026-10-06), enquanto `review:lint` roda no preflight. Duas matrizes de routing, dois scripts, um só no gate. |
+| Limite de 300 linhas não é imposto | `wc -l .agents/WORKFLOWS.md` → **163** (pós-#50, o que **reduziu** o problema; **mas**: a regra `tamanho-e-revisao.md` segue não tendo gate mecânico — `grep -rn '300' .tooling/scripts/ci/*.ts \| grep -v spec` retorna só o `MAX_LOC` do `lint-review-routing.ts:29`, que mede `review-routing.md` apenas). |
 
 ### 7.3 Regra que resume a camada
 
@@ -217,11 +216,19 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 - [`git-workflow.md`](../.agents/specs/conventions/git-workflow.md) — regras de branch/PR/merge
 - [`cobertura-testes.md`](../.agents/specs/conventions/cobertura-testes.md) — o piso de 80% e suas exceções
 - [`tamanho-e-revisao.md`](../.agents/specs/conventions/tamanho-e-revisao.md) — limite de 300 linhas
+- [`guard-classes.md`](../.agents/specs/conventions/guard-classes.md) — as 7 classes pelas quais um controle falha reportando verde
 - [`MONOREPO.md`](./MONOREPO.md) · [`STACK.md`](./STACK.md) · [`TEMPLATE_USAGE.md`](./TEMPLATE_USAGE.md)
+
+### Planos e backlog ativos
+
+- [`docs/superpowers/plans/2026-09-21-cadastro-usuario-com-auditoria-plan.md`](./superpowers/plans/2026-09-21-cadastro-usuario-com-auditoria-plan.md) — plano de fundação do BC `users`
+- [`docs/superpowers/plans/2026-10-02-melhorias-fluxo-desenvolvimento.md`](./superpowers/plans/2026-10-02-melhorias-fluxo-desenvolvimento.md) — plano de melhorias que produziu o #43 e #44
+- [`docs/superpowers/plans/2026-10-03-guard-classes.md`](./superpowers/plans/2026-10-03-guard-classes.md) — plano das 7 classes de guard (gates do #44)
+- [`.agents/runs/backlog-2026-10-02.md`](../.agents/runs/backlog-2026-10-02.md) — backlog vivo de itens adiados + achados durante a execução (BL1–BL10 + X1–X15)
 
 ---
 
 **Mantido por:** projeto-base contributors
 **Licença:** MIT
-**Versão do documento:** 1.0.0
-**Última atualização:** 2026-10-02
+**Versão do documento:** 1.1.0
+**Última atualização:** 2026-10-06

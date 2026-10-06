@@ -160,4 +160,4 @@ Detalhes: [`.agents/workflows/pr-refresh.md`](./workflows/pr-refresh.md) · scri
 Para criar um workflow customizado: defina `trigger`, escolha a `composição` (sequential/parallel/hierarchical), liste os `agents` em ordem, defina os `handoffs`, adicione entrada na tabela acima, e documente em `.agents/workflows/<id>.md` se for complexo (>30 linhas).
 
 **Mantido por:** projeto-base contributors
-**Versão do padrão:** 1.9.0
+**Versão do padrão:** 1.9.1
