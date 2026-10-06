@@ -29,8 +29,11 @@ antes de gastar CI remoto. Script no `package.json` raiz; detalhes em
 
 Workflow `.github/workflows/ci.yml`, job `preflight`. **Primeiro job do
 pipeline** — os demais (lint, typecheck, test, coverage) declaram
-`needs: preflight` e não rodam se ele falhar. São **14 checks** estruturais
-(medido em 10,8 s), todos em `.tooling/scripts/ci/` exceto o lint da matriz;
+`needs: preflight` e não rodam se ele falhar. São os checks estruturais
+registrados em [`preflight.ts`](../../../.tooling/scripts/ci/preflight.ts) —
+a contagem envelhece, então quem precisar dela roda
+`grep -cE "^\s+name: '" .tooling/scripts/ci/preflight.ts`. Todos vivem em
+`.tooling/scripts/ci/` exceto o lint da matriz;
 veja a [Tabela de Checks](#tabela-de-checks) e o
 [Registro de dentes](#registro-de-dentes).
 
@@ -76,7 +79,7 @@ Escopo de todos: **todo `.md` versionado** sob a raiz que o preflight passa
 > desta demanda; o que dá para medir hoje é o todo, e o todo mudou quando a
 > task 4.1 ligou o differential:
 > `time pnpm ci:preflight` → **10,84 / 10,77 / 10,78 s** (medido 2026-10-05,
-> n=3, com os **14** checks do array). O mesmo comando com os 12 checks de
+> n=3, com o array completo de checks). O mesmo comando com os 12 checks de
 > antes da 4.1 dava **2,62 / 2,64 / 2,62 s** (n=3), e o
 > `turbo-redirect-differential.sh` sozinho mede **8,17 / 8,15 / 8,20 s**
 > (n=3) — `2,62 + 8,17 = 10,79`, que bate com os 10,78. É essa aritmética que

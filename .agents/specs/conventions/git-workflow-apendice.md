@@ -121,18 +121,23 @@ mais nova — nenhuma é perda:
 
 | Arquivo | Órfãs | Composição |
 |---|--:|---|
-| Arquivo | Órfãs | Composição |
-|---|--:|---|
 | `AGENTS.md` | 18 | links `../.agents/memory/*.md` que **saem do repo** — o `main` usa `./.agents/` |
-| `evals.md` | 1 | o link para a transcrição da PR #35 — `main` já tem o destino, a branch não |
+| `evals.md` | 1 | o link para a transcrição da PR #35, que **não existe em lado nenhum** — nem em `main` (que tem só o *mapping*, pelo PR #57) nem na #36 |
 | `spec.md` | 0 | — |
 
-> **A coluna conta só link markdown**: extração por `grep -oE '\]\([^)]+\)'` sobre
-> `git show <branch>:<arquivo>` contra `git show origin/main:<arquivo>` (bloco do
-> passo 4). Ela **não** pega marcador de prosa como `_(pendente …)_` nem linha de
-> tabela reescrita por `main` — quem quiser esses conta no diff. A divergência
-> total não está fixada aqui porque `main` reescreve esses arquivos a cada merge:
-> **re-meça pelo bloco, não pelo número.**
+> **A coluna conta só link markdown** — e o passo 4 acima conta outra coisa: ele
+> compara **linhas**, e devolve números diferentes. O extrator desta tabela é
+> este:
+>
+> ```bash
+> comm -23 <(git show <branch>:<arquivo>     | grep -oE '\]\([^)]+\)' | sort -u) \
+>          <(git show origin/main:<arquivo> | grep -oE '\]\([^)]+\)' | sort -u) | wc -l
+> ```
+>
+> Ele **não** pega marcador de prosa como `_(pendente …)_` nem linha de tabela
+> reescrita por `main` — quem quiser esses conta no diff. A divergência total não
+> está fixada aqui porque `main` reescreve esses arquivos a cada merge: **re-meça
+> pelo comando acima, não pelo número.**
 
 > **A #36 deve ser descartada, não integrada:** restaurar os links órfãos de
 > `evals.md` da branch os tornaria links markdown para arquivos que não existem

@@ -79,9 +79,11 @@ O artigo descreve — de forma independente e aplicada a uma fintech — exatame
 - [x] §1 e §2 são análise original do autor do projeto-base (não estavam no artigo)
 
 > **O `related:` do frontmatter não é validado.** O `check-doc-refs` extrai
-> links só pela forma `[texto](path)`, e YAML não tem essa forma — medido: 17
-> links no corpo, **0** no frontmatter. Os caminhos de `related:` resolvem hoje,
-> mas um quebrado amanhã passaria verde. Ampliar o gate é trabalho à parte, com
-> risco de falso positivo: **30** arquivos versionados declaram `related:`.
+> links só pela forma `[texto](path)`, e YAML não tem essa forma — medido com
+> `grep -oE '\]\([^)]+\)' <arquivo> | wc -l`: o corpo devolve contagem, o
+> frontmatter devolve **0**. Os caminhos de `related:` resolvem hoje, mas um
+> quebrado amanhã passaria verde. Ampliar o gate é trabalho à parte, com risco
+> de falso positivo: quase trinta arquivos versionados declaram `related:`
+> (`git grep -l '^related:' -- '*.md' | wc -l`).
 
 **Mantido por:** projeto-base contributors · **Licença:** MIT.
