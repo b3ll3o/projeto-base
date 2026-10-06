@@ -240,7 +240,7 @@ para em vez de escolher uma ferramenta qualquer.
 
   | Arquivo ausente | Citado em |
   |---|---|
-  | `docs/articles/vibe-coding-sdd-engineering-loop-mapping.md` | `evals.md:23`, `engineering-loop.md:30` |
+  | [`docs/articles/vibe-coding-sdd-engineering-loop-mapping.md`](./vibe-coding-sdd-engineering-loop-mapping.md) | `evals.md:23`, `engineering-loop.md:30` |
   | `docs/articles/vibe-coding-ssd-engineering-loop.md` | `evals.md:184`, `engineering-loop.md:164` |
 
   Verificação:

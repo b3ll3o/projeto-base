@@ -37,7 +37,7 @@ usage: |
 - [ ] `docs/domain/bounded-contexts.md`
 - [ ] `docs/domain/context-map.md`
 - [ ] `docs/architecture/adr/` (ADRs relevantes)
-- [ ] `docs/articles/vibe-coding-sdd-engineering-loop-mapping.md` (se aplicável)
+- [ ] [`docs/articles/vibe-coding-sdd-engineering-loop-mapping.md`](../../../../docs/articles/vibe-coding-sdd-engineering-loop-mapping.md) (se aplicável)
 - [ ] Módulos adjacentes no monorepo (`apps/api/src/<bc>/`)
 
 ## 3. Módulos e arquivos impactados
