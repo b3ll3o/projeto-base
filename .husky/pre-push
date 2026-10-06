@@ -13,3 +13,26 @@ pnpm ci:preflight || {
   exit 1
 }
 echo "✓ pre-push: preflight verde, push liberado."
+
+# ---------------------------------------------------------------------------
+# pr-refresh — atualiza as claims numéricas do corpo do PR a cada push.
+#
+# A ordem (DEPOIS do preflight) é carga, não estética: o preflight é a única
+# coisa aqui que bloqueia. Se o refresh viesse primeiro, um push barrado pelo
+# preflight já teria publicado um corpo descrevendo um push que não aconteceu.
+#
+# O refresh é ADVISORY. Rede, auth e `gh` podem falhar; nada disso pode virar
+# "não consegui commitar". O código de saída é capturado e NÃO propagado — sem
+# isso, o último comando do hook decide o `git push`, e um `pr-refresh` que
+# saiu 4 (não conseguiu medir) derrubaria o push de quem só queria subir uma
+# correção de digitação.
+#
+# Autorizado pelo owner em 2026-10-06: "a partir do momento que o PR está
+# aberto, ao fazer qualquer push quero que seja executado o pr-refresh", com
+# "hook local" e "nunca bloqueia" escolhidos explicitamente.
+rc_pr=0
+pnpm pr:refresh || rc_pr=$?
+if [ "$rc_pr" -ne 0 ]; then
+  echo "ℹ️  pre-push: pr-refresh saiu $rc_pr — advisory, push liberado. Estado acima."
+fi
+exit 0

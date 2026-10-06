@@ -27,7 +27,10 @@ type: workflow
 
 1. **Validar elegibilidade** (convenção §1):
    - PR final está MERGED? (`gh pr view <N> --json state`)
-   - `b<N>-result.md` existe? (`test -f .claude/projects/.../memory/<retro>.md`)
+   - `b<N>-result.md` existe? (destino em
+     [retrospective-capture.md §"Destino canônico do result file"](../specs/conventions/retrospective-capture.md#destino-canônico-do-result-file);
+     o `test -f` executável está em
+     [`demand-archiving/SKILL.md` §2](../skills/demand-archiving/SKILL.md#2-verificar-retro_ref-existe))
    - `improvements` tem ≥ 1 item não-zero?
 
 2. **Coletar metadados**:

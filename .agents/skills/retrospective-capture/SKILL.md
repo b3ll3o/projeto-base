@@ -127,7 +127,7 @@ Para cada item, calcular `confidence` baseado em:
 | Agent | Relação |
 |-------|---------|
 | `orchestrator` | Despacha esta skill quando trigger conditions são atingidas |
-| `doc-writer` | Escreve o resultado em `memory/b<N>-result.md` |
+| `doc-writer` | Escreve o [result file](../../specs/conventions/retrospective-capture.md#destino-canônico-do-result-file) |
 | `task-manager` | Transforma proposals em items de backlog RICE-priorizados |
 | `code-reviewer` | Revisa cada proposal antes de virar PR de harness |
 

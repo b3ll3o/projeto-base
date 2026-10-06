@@ -18,7 +18,7 @@ maintainer: stack-code-reviewer
 
 1. **Antes de qualquer coisa**: `pnpm install` e, se for planejar, gerar um *state-snapshot* (camada de agents).
 2. **Commit** dispara `pre-commit`: `lint-staged` (só Prettier) + `stack-code-reviewer` (único que aborta) + `doc-sync` (roda mas nunca aborta).
-3. **Push** dispara `pre-push`: `pnpm ci:preflight` — 9 checks estruturais, aborta com exit 1.
+3. **Push** dispara `pre-push`: `pnpm ci:preflight` — os checks estruturais, aborta com exit 1.
 4. **PR para `main`** dispara 3 jobs de CI (`preflight`, `quality`, `docker-build-prod`) + `stack-code-review` + `docs-sync`.
 5. **Merge em `main`** só dispara `release-template` (auto-tag) **se** o commit tocar `docs/MONOREPO.md`.
 
@@ -50,7 +50,7 @@ maintainer: stack-code-reviewer
 │     pre-commit ─ lint-staged      → prettier --write         │
 │                  stack-code-reviewer → exit 1 se blocker     │
 │                  doc-sync          → NUNCA aborta (§7)       │
-│     pre-push   ─ ci:preflight     → 9 checks, exit 1         │
+│     pre-push   ─ ci:preflight     → exit 1 se falhar       │
 │   ✅ IMPOSTO localmente, burlável com --no-verify            │
 └──────────────────────────────────────────────────────────────┘
                │
@@ -84,7 +84,7 @@ maintainer: stack-code-reviewer
 | 5 | Codar com o specialist | ver `.agents/agents/<specialist>.md` | nenhum — prosa |
 | 6 | Commit | `git add -A && git commit -m "…"` | **pre-commit**: lint-staged, stack-code-reviewer, doc-sync |
 | 7 | Verificação completa local | `pnpm ci:local` | **nenhum** — `ci:local` não está em nenhum hook (§7) |
-| 8 | Push | `git push -u origin <branch>` | **pre-push**: `pnpm ci:preflight` (9 checks) |
+| 8 | Push | `git push -u origin <branch>` | **pre-push**: `pnpm ci:preflight` |
 | 9 | Abrir PR | `gh pr create` | — |
 | 10 | CI do PR | automático em `pull_request` | `preflight` → `quality`; `docker-build-prod` em paralelo; `stack-code-review` e `docs-sync` em workflows separados |
 | 11 | Revisão / fix loop | `gh pr merge` só após CI verde | **NENHUM** — sem `required_status_checks`, o botão decide (§7) |
@@ -109,7 +109,10 @@ pnpm tsx tooling/scripts/doc-sync.ts --files="$changed" --mode=incremental || ex
 
 `.husky/pre-push` roda **exclusivamente** `pnpm ci:preflight`. Ele **não** roda lint, typecheck nem teste — apesar de [`git-workflow.md`](../.agents/specs/conventions/git-workflow.md) recomendar `pnpm ci:local` como "Pre-Push Quality Gate".
 
-Os 9 checks registrados (verificado ao vivo com `pnpm ci:preflight`):
+Os 14 checks registrados (medido em 2026-10-05 com `pnpm ci:preflight`:
+14/14 ✓). A **lista** é a fonte da verdade, não este número — ele envelhece a
+cada check novo, e as outras menções deste doc citam o gate sem repetir a
+contagem justamente por isso:
 
 1. Cross-refs em `.md` versionados · 2. tsconfig drift · 3. ESLint config drift (apps) · 4. ESLint config drift (packages) · 5. turbo.json drift · 6. package.json drift · 7. docker drift · 8. review-routing matrix lint · 9. archive integrity.
 
@@ -122,7 +125,7 @@ Os 9 checks registrados (verificado ao vivo com `pnpm ci:preflight`):
 | `lint-staged` | `pnpm exec lint-staged` | A (pre-commit) | Nada semântico: as 2 entradas são `prettier --write` | Sim — `format:check` roda no `ci.yml` |
 | `stack-code-reviewer` | `pnpm tsx tooling/scripts/stack-code-reviewer.ts` | A (pre-commit) | `blocker` > 0 ou `major` > 3 (`exit 1`) | Sim — `review-stack.yml` chama o mesmo script |
 | `doc-sync` | `pnpm tsx tooling/scripts/doc-sync.ts` | A (pre-commit) | **Nada** — `grep -c 'process.exit' tooling/scripts/doc-sync.ts` = 0 | Não — e o job de CI também nunca falha |
-| `ci:preflight` | `pnpm ci:preflight` | A (pre-push) + B | 9 checks estruturais | Sim — `ci.yml` roda o mesmo script |
+| `ci:preflight` | `pnpm ci:preflight` | A (pre-push) + B | os checks estruturais | Sim — `ci.yml` roda o mesmo script |
 | `format:check` | `pnpm format:check` | B (preflight job) | Arquivo não formatado | — |
 | `test:coverage` | `pnpm turbo run test:coverage` | B (quality job) | Cobertura de `apps/api` < 80% (`COVERAGE_FLOOR`, só quando `isCoverageEnforced`) | — |
 | `test:integration` / `test:e2e` | `pnpm turbo run test:integration test:e2e --filter=@projeto/api` | B (quality job) | Teste falhando (exige Docker) | — |
@@ -156,7 +159,7 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 
 | Comando | O que faz | Camada |
 |---------|-----------|--------|
-| `pnpm ci:preflight` | 9 checks estruturais de drift; aborta com exit 1 | A + B |
+| `pnpm ci:preflight` | checks estruturais de drift; aborta com exit 1 | A + B |
 | `pnpm ci:local` | `ci:preflight` + `turbo run lint typecheck test:unit test:coverage --filter=@projeto/api --filter=@projeto/web` | manual (não está em hook) |
 | `pnpm format:check` | Prettier em modo check sobre ts/tsx/json/yaml/yml | B |
 | `pnpm stack:review` | `stack-code-reviewer` standalone (mesmo gate do pre-commit e do CI) | A + B |
@@ -178,7 +181,9 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 
 - `pre-commit` / `pre-push` instalados e executando.
 - `stack-code-reviewer` — **único mecanismo com dentes reais**: `process.exit(1)` em blocker.
-- `ci:preflight` — 9 checks registrados e executando. Estado ao vivo neste working tree: **9/9 ✓**.
+- `ci:preflight` — registrado e executando. Estado medido em 2026-10-05 neste
+  working tree: **14/14 ✓**. Reexecute `pnpm ci:preflight` para confirmar; este
+  número envelhece a cada check novo (foi 9 até 2026-10-05).
 - Job `quality` do CI — encadeado por `needs: preflight`, roda cobertura 80% de `apps/api#unit`.
 - `docker-build-prod` — build real dos 2 Dockerfiles `prod` em toda PR.
 - `release-template` — syntaticamente correto (idempotência via `git rev-parse --verify`, `concurrency`, `contents: write`) e **já não é noop**: quando a tag existe ele emite `::warning::` em vez de encerrar em silêncio. Ver §7.2 para o que ainda falta.

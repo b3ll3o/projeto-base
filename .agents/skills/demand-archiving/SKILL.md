@@ -29,7 +29,7 @@ demand_slug: "dockerize-apps"             # kebab-case slug único
 original_run_path: ".agents/runs/2026-09-22-pilot-001.md"  # path do run ativo
 prs:                                        # PRs mergeados (lista de inteiros)
   - 24
-retro_refs:                                 # refs retro (paths relativos a .claude/projects/.../memory/)
+retro_refs:                                 # refs retro (ver retrospective-capture.md §"Destino canônico")
   - b21-result.md
   - b22-result.md
 improvements:                               # contagem por categoria (≥ 1 item não-zero obrigatório)
@@ -61,8 +61,22 @@ Resultado esperado: `state == "MERGED"`. Se `OPEN`/`CLOSED`, **abortar** (demand
 ### 2. Verificar `retro_ref` existe
 
 ```bash
-test -f .claude/projects/-home-leo-Documentos-projetos-base/memory/<retro>.md
+# O destino NÃO é repetido aqui — é derivado da fonte única
+# (retrospective-capture.md §"Destino canônico do result file").
+# Dois detalhes não são estilo, são o que fecha o gate:
+#  - `git rev-parse --show-toplevel`: o bloco funciona de qualquer diretório.
+#    Um path relativo ao CWD dá vermelho num retro que EXISTE.
+#  - `eval`, e não captura do valor: a linha canônica é `MEMORY_DIR="..."` com
+#    aspas e `${HOME}` dentro. Copiar só o valor (sem as aspas, via `sed s///`)
+#    devolve os metacaracteres como TEXTO, e o `test -f "${HOME}/..."` literal
+#    nunca acha o arquivo. É preciso EVALUAR a linha, não capturá-la.
+eval "$(sed -n '/^MEMORY_DIR=/p' \
+  "$(git rev-parse --show-toplevel)/.agents/specs/conventions/retrospective-capture.md")"
+test -f "${MEMORY_DIR}/<retro>.md"
 ```
+
+Repetir o path aqui foi o que tornou a versão anterior falsa em **toda**
+máquina: ela apontava para `.claude/` relativo ao CWD, que o repo não tem.
 
 Se ausente, **abortar** (convenção §1 — retro completa é obrigatória).
 

@@ -23,7 +23,7 @@ trigger: "feedback to spec", "próxima spec de um finding", "loop fechado", "T1/
 
 ```yaml
 parent_spec: <NNN>-<feature-name>           # spec que gerou os learnings
-retro_result_path: <path>                   # ex: .claude/projects/.../memory/b<N+1>-result.md
+retro_result_path: <path>                   # ver retrospective-capture.md §"Destino canônico do result file"
 proposals:                                  # filtradas (confidence ≥ 70) — vêm do retro
   - id: P-001
     artifact: convention | skill | memory | adr | backlog | spec
