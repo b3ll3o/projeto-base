@@ -219,27 +219,26 @@ Depois que o PR fecha, a branch vira duplicata que só diverge.
 
 ```bash
 gh pr list --state all --json number,headRefName,mergedAt   # PR saiu de open?
-git branch -d <branch>                  # local
-git push origin --delete <branch>       # remota
+git tag backup/<branch> <branch>      # ANTES de apagar — irreversível sem isso
+git branch -d <branch> && git push origin --delete <branch>
 ```
 
 ### Como decidir
 
 | PR | Pode apagar? |
 |---|---|
-| `merged` (tem `mergedAt`) | **Sim**, direto — se `git log <branch> --not --remotes` vier vazio |
+| `merged` (tem `mergedAt`) | **Sim**, direto — se nenhum arquivo da branch estiver ausente em `main` |
 | `closed` sem merge, ou nunca teve PR | **Só após exame de conteúdo** — apêndice §Caso 2 e §Caso 3 |
 
 `-d` recusa apagar branch não mergeada — **respeite a recusa, não troque por
 `-D`.** Com squash merge, `git branch --merged main` ainda erra (§apêndice
-§Caso 1), então confirme pelo `mergedAt`, não pelo git.
+§Caso 1), então confirme pelo `mergedAt`, não pelo git. **`closed` sem merge
+exige cuidado**: das 2 branches fechadas preservadas, **1** tinha conteúdo que
+nada em `main` tinha. Qualquer `-D` **exige** `git tag backup/<b> <b>` antes.
 
-`closed` sem merge exige cuidado: o código **não** entrou em `main`, e apagar
-sem conferir destrói trabalho que ninguém mais tem. Das 2 branches com PR
-fechado preservadas na limpeza, **1** tinha conteúdo que nada em `main` tinha.
-Qualquer `-D` **exige** `git tag backup/<b> <b>` antes — o apagamento é
-irreversível para quem não sabe o SHA — e o exame do
-[apêndice](./git-workflow-apendice.md).
+> **Predicado de "está tudo em main" é o arquivo, não o commit** —
+> `--not --remotes` é inerte, `--not origin/main` acusa falso positivo com
+> squash; exame no [apêndice](./git-workflow-apendice.md).
 
 ## Pre-Push Quality Gate
 
