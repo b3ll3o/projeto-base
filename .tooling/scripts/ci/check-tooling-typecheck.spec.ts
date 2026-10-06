@@ -72,6 +72,14 @@ describe('checkToolingTypecheck', () => {
     });
     expect(r.ok).toBe(false);
     expect(r.errors[0]).toMatch(/TS2322/);
+    // Estas duas separam os DOIS ramos. O fallback de `status !== 0`
+    // interpola a saída bruta do processo — que também contém `TS2322` —,
+    // então `toMatch(/TS2322/)` sozinho é satisfeito tanto pelo gate que
+    // listou o diagnóstico quanto pelo que nunca viu nenhum. Com o parser
+    // neutralizado, este teste ficava VERDE: era o teste que deveria
+    // prender o parser que não prendia.
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0]).not.toMatch(/NÃO foi verificada/);
   });
 
   // O tsc falha por motivos que não são diagnóstico de tipo: config inválida,

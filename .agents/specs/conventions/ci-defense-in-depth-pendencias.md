@@ -1,8 +1,9 @@
 # Pendências conhecidas — CI Defense in Depth
 
 > Companion de [`ci-defense-in-depth.md`](./ci-defense-in-depth.md). Sub-spec
-> referenciada por [AGENTS.md §6](../../../AGENTS.md). pt-BR prose, English
-> technical identifiers.
+> indexada no [§6 do AGENTS.md](../../../AGENTS.md) e no
+> [README das convenções](./README.md). pt-BR prose, English technical
+> identifiers.
 >
 > **Por que este arquivo existe:** a convenção está no teto de
 > [`tamanho-e-revisao.md`](./tamanho-e-revisao.md) (300 linhas) e pendência
@@ -16,6 +17,22 @@
 
 ## Pendências conhecidas
 
+- **`PREFLIGHT_GATES` é uma transcrição à mão, e o reconciliador é cego nos
+  dois sentidos** (medido 2026-10-06, achado da revisão paralela do PR deste
+  branch). `check-teeth-registry.ts` reconcilia o registro contra um **literal**
+  seu, não contra o array `checks` que `preflight.ts` de fato executa — o array
+  vive dentro de `main()` e não é exportado. Medido: inserido um gate fantasma
+  em `preflight.ts`, o preflight imprimiu `✓`, `check-teeth-registry` devolveu
+  `EXIT=0` e os 13 testes do spec seguiram verdes. Gate novo no preflight sem
+  linha no registro **não é acusado por nada**. É a classe 1 dentro do guard que
+  existe para pegar a classe 1, e o comentário que ficava sobre o literal
+  afirmava "derivados do array `checks` por importação real" — o oposto do que
+  o código fazia. O comentário foi corrigido; a derivação não foi feita.
+  **Correção:** extrair `PREFLIGHT_CHECKS` para um módulo próprio
+  (`preflight-gates.ts`) importado por `preflight.ts` e por
+  `check-teeth-registry.ts`. Importar direto de `preflight.ts` criaria ciclo, e
+  na ordem inversa de importação `PREFLIGHT_GATES` cairia em TDZ. Change
+  próprio: mexe no runner do preflight, não num dos 5 gates.
 - **A tabela de Checks acima é completa** (a task 3.1 do plano
   [`guard-classes`](../../../docs/superpowers/plans/2026-10-03-guard-classes.md)
   fechou as 3 lacunas que esta seção declarava). O `preflight` executa
@@ -41,13 +58,14 @@
   base. Fechar a lacuna inteira é change próprio.
 - **O gate do marcador `pr-refresh` é CI, não preflight** (issue #45 item 4),
   então ele **não** entra no [Registro de dentes](ci-defense-in-depth.md#registro-de-dentes): o
-  registro é biunívoco com o `PREFLIGHT_GATES`, e uma linha para um gate de CI
+  registro reconcilia contra o `PREFLIGHT_GATES`, e uma linha para um gate de CI
   acusaria "entrada do registro que não corresponde a nenhum gate". Ele roda
   como passo do job `preflight` em `.github/workflows/ci.yml`, no `pull_request`
   — sem `permissions` novo, porque o corpo vem do payload do evento, não de
-  `gh`. Dentes: `pr-refresh-gate.spec.ts`, `parseTscDiagnostics`-par do
-  marcador — **2 de 13** sem o filtro `divergente`, **3 de 13** com o marcador
-  valendo no corpo inteiro (medido 2026-10-06). O critério é **por parágrafo**
+  `gh`. Dentes: `pr-refresh-gate.spec.ts` — **2 de 13** sem o filtro
+  `divergente` e **2 de 13** com o marcador valendo no corpo inteiro em vez do
+  parágrafo (as duas remedidas em 2026-10-06; o commit do #45 dizia "3 de 13"
+  para a segunda e estava errado). O critério é **por parágrafo**
   (`linhasVivas`), não "o corpo tem um marcador": colar o token num parágrafo
   qualquer enquanto as claims seguem sem ele é exatamente o estado silencioso.
 - **Só 6 dos 13 gates têm mutação medida** (ver

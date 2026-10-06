@@ -206,21 +206,32 @@ const REGISTRY_DOC = join(process.cwd(), '.agents/specs/conventions/ci-defense-i
 const MATRIX_DOC = join(process.cwd(), '.agents/specs/conventions/review-routing.md');
 
 /**
- * Os gates do preflight. Derivados do array `checks` por importação real, não
- * re-declarados: uma cópia aqui seria uma segunda fonte de verdade que
- * envelhece exatamente no cenário que este check existe para pegar.
+ * Os gates do preflight — **transcrição à mão**, não derivação.
  *
- * A lista de `files` abaixo é o que o preflight carrega hoje (task 3.1 deste
- * plano introduziu o campo). Se um gate novo entrar no preflight e não entrar
- * aqui, o RED 1 do spec acusa.
- */
-/**
- * Os gates do preflight, como o spec os consome.
+ * Este comentário já disse o contrário ("Derivados do array `checks` por
+ * importação real, não re-declarados") e a frase descrevia exatamente a
+ * invariante que o código não tem. `PREFLIGHT_GATES` é um literal; o array
+ * `checks` vive dentro de `main()` em `preflight.ts` e não é exportado. O
+ * reconciliador compara o registro contra ESTE literal, então é cego nos
+ * dois sentidos:
  *
- * Exportado porque o spec deriva a contagem daqui. A versão anterior fixava o
- * número no teste (13), e ele envelheceu no gate seguinte — a classe 7 que
- * este próprio repo nomeia, e a versão testada da classe 2: a lista replica
- * da que deveria ser a fonte única.
+ *   - gate novo entra em `checks` e não entra aqui → roda no preflight e
+ *     **nada obriga a registrá-lo**;
+ *   - gate sai de `checks` e continua aqui → o reconciliador segue verde
+ *     sobre um gate que não roda mais.
+ *
+ * MEDIDO em 2026-10-06: inserido um gate fantasma em `preflight.ts`, o
+ * preflight imprimiu `✓` e `check-teeth-registry` devolveu `EXIT=0`, com os
+ * 13 testes do spec verdes. É a classe 1 dentro do guard que existe para
+ * pegar a classe 1.
+ *
+ * A correção é derivar: extrair o array para um módulo próprio
+ * (`preflight-gates.ts`) importado pelos dois lados — direto de
+ * `preflight.ts` criaria ciclo, e na ordem inversa de importação
+ * `PREFLIGHT_GATES` cairia em TDZ. Registrado em §Pendências conhecidas do
+ * companion; enquanto não for feito, **este gate não garante que todo gate do
+ * preflight tem linha no registro** — garante que o registro bate com a lista
+ * abaixo.
  */
 export const PREFLIGHT_GATES: GateRef[] = [
   { name: 'Cross-refs em .md versionados', file: '.tooling/scripts/ci/check-doc-refs.ts' },
