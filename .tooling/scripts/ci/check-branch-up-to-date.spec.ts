@@ -7,6 +7,31 @@ import { checkBranchUpToDate } from './check-branch-up-to-date';
 import type { GitRun } from './check-branch-up-to-date';
 
 /**
+ * Executa `git` com a identidade **explícita**.
+ *
+ * MEDIDO no PR #53: o `git rebase` do par de integração passava na minha
+ * máquina e falhava com `status 128` no CI. A causa não era o gate — era o
+ * `git config --global user.name` da minha máquina, que existe aqui e não
+ * existe no runner. Toda chamada `git` deste arquivo passa por aqui, para
+ * que nenhuma herde a identidade de quem está rodando. Confirmado com
+ * `GIT_CONFIG_GLOBAL=/dev/null`, que reproduz o CI localmente.
+ */
+function git(cwd: string, ...args: string[]): string {
+  return execFileSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: 't',
+      GIT_AUTHOR_EMAIL: 't@t',
+      GIT_COMMITTER_NAME: 't',
+      GIT_COMMITTER_EMAIL: 't@t',
+    },
+  });
+}
+
+/**
  * Git de mentira, com as respostas que o gate recebe.
  *
  * O gate tem TRÊS saídas possíveis do `merge-base --is-ancestor` e elas não
@@ -44,45 +69,34 @@ function repoReal(quantosMainDepois: number): string {
   const raiz = mkdtempSync(join(tmpdir(), 'branch-atrasada-'));
   const remoto = join(raiz, 'origin.git');
   const trabalho = join(raiz, 'work');
-  const git = (...args: string[]) =>
-    execFileSync('git', args, {
-      cwd: trabalho,
-      stdio: ['ignore', 'ignore', 'pipe'],
-      env: {
-        ...process.env,
-        GIT_AUTHOR_NAME: 't',
-        GIT_AUTHOR_EMAIL: 't@t',
-        GIT_COMMITTER_NAME: 't',
-        GIT_COMMITTER_EMAIL: 't@t',
-      },
-    });
+  const g = (...args: string[]) => git(trabalho, ...args);
   // A mensagem é parte do conteúdo do commit, e o conteúdo define o SHA.
   //
   // MEDIDO: com `-m c` em tudo, o primeiro commit de `main` saiu com o MESMO
   // SHA do commit da demanda (`9a816e2`) — mesma árvore vazia, mesmo autor,
   // mesma mensagem, mesmo segundo. `main` passou a conter o objeto da demanda
-  // e a branch ficou "2 atrás" de um `main` com 3 commits novos. O gate
+  // e a branch ficou "2 atrás" de um `main` que tinha recebido três commits novos. O gate
   // contava certo e o cenário é que estava errado: um teste que faz o
   // repositório mentir culpa o instrumento.
-  const commitar = (msg: string) => git('commit', '--quiet', '--allow-empty', '-m', msg);
+  const commitar = (msg: string) => g('commit', '--quiet', '--allow-empty', '-m', msg);
 
-  execFileSync('git', ['init', '--quiet', '--bare', remoto]);
-  execFileSync('git', ['clone', '--quiet', remoto, trabalho]);
+  git(raiz, 'init', '--quiet', '--bare', remoto);
+  git(raiz, 'clone', '--quiet', remoto, trabalho);
   commitar('raiz');
-  git('branch', '-M', 'main');
-  git('push', '--quiet', 'origin', 'main');
+  g('branch', '-M', 'main');
+  g('push', '--quiet', 'origin', 'main');
 
   // A branch nasce de `main` e entrega trabalho.
-  git('checkout', '--quiet', '-b', 'demanda');
+  g('checkout', '--quiet', '-b', 'demanda');
   commitar('trabalho da demanda');
-  git('push', '--quiet', 'origin', 'demanda');
+  g('push', '--quiet', 'origin', 'demanda');
 
   // `main` avança depois que a demanda foi implementada: é a situação que a
   // regra descreve ("demanda implementada com a main desatualizada").
-  git('checkout', '--quiet', 'main');
+  g('checkout', '--quiet', 'main');
   for (let i = 1; i <= quantosMainDepois; i++) commitar(`main ${i}`);
-  git('push', '--quiet', 'origin', 'main');
-  git('checkout', '--quiet', 'demanda');
+  g('push', '--quiet', 'origin', 'main');
+  g('checkout', '--quiet', 'demanda');
 
   return trabalho;
 }
@@ -99,27 +113,11 @@ function repoReal(quantosMainDepois: number): string {
  */
 function repoComRebaseParado(): string {
   const repo = repoReal(1);
-  const git = (...args: string[]) =>
-    execFileSync('git', args, {
-      cwd: repo,
-      stdio: ['ignore', 'ignore', 'pipe'],
-      env: {
-        ...process.env,
-        GIT_AUTHOR_NAME: 't',
-        GIT_AUTHOR_EMAIL: 't@t',
-        GIT_COMMITTER_NAME: 't',
-        GIT_COMMITTER_EMAIL: 't@t',
-      },
-    });
   // `git rev-parse --git-path` respeita worktrees e `GIT_DIR`; um
   // `.git/rebase-merge` chutado seria verde numa máquina e vermelho no CI.
   // `encoding` + stdout em pipe: o helper acima joga o stdout fora, e aqui
   // é justamente a saída que importa.
-  const caminho = execFileSync('git', ['rev-parse', '--git-path', 'rebase-merge'], {
-    cwd: repo,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  }).trim();
+  const caminho = git(repo, 'rev-parse', '--git-path', 'rebase-merge').trim();
   mkdirSync(join(repo, caminho), { recursive: true });
   return repo;
 }
@@ -206,8 +204,8 @@ describe('checkBranchUpToDate', () => {
       // não do argumento.
       const repo = repoReal(3);
       const antes = checkBranchUpToDate({ repoRoot: repo });
-      execFileSync('git', ['fetch', '--quiet', 'origin'], { cwd: repo, stdio: 'ignore' });
-      execFileSync('git', ['rebase', '--quiet', 'origin/main'], { cwd: repo, stdio: 'ignore' });
+      git(repo, 'fetch', '--quiet', 'origin');
+      git(repo, 'rebase', '--quiet', 'origin/main');
       const depois = checkBranchUpToDate({ repoRoot: repo });
 
       expect(antes.ok).toBe(false);
