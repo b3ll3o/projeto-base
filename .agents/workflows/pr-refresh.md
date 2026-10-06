@@ -213,11 +213,20 @@ reusar o resultado de T1.
    ocorrências, e nem toda ocorrência é uma claim viva — MEDIDO no PR #44:
 
    ```text
-   DIVERGE L7    commits     declarado=31   medido=34   <- cabeçalho: corrigir
-   DIVERGE L33   commits     declarado=20   medido=34   <- "ela foi aberta com 20 commits"
-   DIVERGE L7    arquivos    declarado=41   medido=41   <- ok
-   DIVERGE L33   arquivos    declarado=34   medido=41   <- mesma citação: deixar
+   DIVERGE L7    commits     declarado=31   medido=37   <- cabeçalho: corrigir
+   DIVERGE L33   commits     declarado=20   medido=37   <- "ela foi aberta com 20 commits"
+   DIVERGE L7    arquivos    declarado=41   medido=42   <- cabeçalho: corrigir
+   DIVERGE L33   arquivos    declarado=34   medido=42   <- mesma citação: deixar
    ```
+
+   MEDIDO no PR #44 em 2026-10-05, com
+   `npx tsx tooling/scripts/pr-refresh-scan.ts --body-file=<corpo> --base=origin/main`.
+   **Os números envelhecem a cada push; o que o exemplo ensina é a coluna `L`.**
+   Uma versão anterior deste bloco trazia `DIVERGE … declarado=41 medido=41` — uma
+   linha que o scanner **não consegue imprimir**, porque `divergente` exige
+   `declarado !== medido`. Ela estava rotulada como medida, e é a mesma classe 7
+   que este workflow existe para nomear: um exemplo envelhecido que ninguém
+   reexecutou.
 
    L7 e L33 são ambos `commits` divergentes. **Só L7 é claim da branch**; L33
    está dentro de uma frase que conta o passado e continua verdadeira depois de
