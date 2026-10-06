@@ -86,7 +86,7 @@ projeto-base (monorepo)
 
 ## Containerização
 
-- **Base image:** `node:20-bookworm-slim` (Prisma 6 compat)
+- **Base image:** `node:22-bookworm-slim` (Prisma 6 exige glibc; major casa com `engines.node`)
 - **Multi-stage:** `base` → `dev` → `prod` em ambos apps
 - **Compose:** `docker-compose.yml` (prod) + `docker-compose.dev.yml` (override dev)
 - **Healthchecks:** `curl /api/v1/health` (api) + node http.get (web)

@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-FROM node:20-bookworm-slim AS base
+FROM node:22-bookworm-slim AS base
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
 WORKDIR /repo
@@ -27,7 +27,7 @@ COPY apps/api apps/api
 RUN pnpm --filter @projeto/api db:generate
 RUN pnpm --filter @projeto/api build
 
-FROM node:20-bookworm-slim AS prod
+FROM node:22-bookworm-slim AS prod
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 RUN apt-get update && apt-get install -y --no-install-recommends openssl curl && rm -rf /var/lib/apt/lists/*
 WORKDIR /repo

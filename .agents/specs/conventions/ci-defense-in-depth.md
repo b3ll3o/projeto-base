@@ -53,7 +53,7 @@ Escopo de todos: **todo `.md` versionado** sob a raiz que o preflight passa
 | `check-eslint-drift` | eslint config | regras duplicadas/legadas em configs ESLint |
 | `check-turbo-drift` | turbo pipeline | drift em `turbo.json` (`$schema` ausente, nomes inválidos, `cache:false` com `outputs`) |
 | `check-package-json-drift` | package.json raiz | scripts canônicos ausentes, `tsx <path>` fantasma, ou `turbo run <task>` que o turbo não resolve |
-| `check-docker-drift` | docker | `.dockerignore` ausente, `Dockerfile` > 100 linhas, base image ≠ `node:20-bookworm-slim` |
+| `check-docker-drift` | docker | `.dockerignore` ausente, `Dockerfile` > 100 linhas, base image sem glibc (distro) ou com major ≠ a de `engines.node` (major) — as duas são guardas separados |
 | `check-archive-integrity` | archive | frontmatter canônico de `.agents/runs/archive/*.md` |
 | `check-memory-dir-concordance` | retro | segunda declaração do destino do result file, em 6 notações históricas |
 | `check-agent-memory-drift` | agents | agent com **mudança de comportamento** e memória (`.agents/memory/<agent>.md`) intocada no mesmo range |
@@ -103,7 +103,7 @@ extraído em commit `59eb083` (refactor que consolidou fixtures herméticas).
 | `check-agent-memory-drift` | `check-agent-memory-drift.spec.ts` — o par `APENAS path corrigido NÃO é delta` / `prosa NOVA É delta` + `findDriftedAgents` com memória tocada | **mutação** | `npx vitest run --root .tooling/scripts/ci check-agent-memory-drift` → **4 de 12** com `hasBehaviorDelta` sempre true, **3 de 12** com `findDriftedAgents` sempre vazio (medido 2026-10-06) | `.tooling/scripts/ci/check-agent-memory-drift.ts` |
 | `check-turbo-drift` | `check-turbo-drift.spec.ts` — 5 de 6 testes | controle negativo | `npx vitest run --root .tooling/scripts/ci check-turbo-drift` | `.tooling/scripts/ci/check-turbo-drift.ts` |
 | `check-package-json-drift` | `check-package-json-drift.spec.ts` — 9 de 23 | controle negativo | `npx vitest run --root .tooling/scripts/ci check-package-json-drift` | `.tooling/scripts/ci/check-package-json-drift.ts` |
-| `check-docker-drift` | `check-docker-drift.spec.ts` — 3 de 5 | controle negativo | `npx vitest run --root .tooling/scripts/ci check-docker-drift` | `.tooling/scripts/ci/check-docker-drift.ts` |
+| `check-docker-drift` | `check-docker-drift.spec.ts` — o par `alpine é VERMELHA por glibc` / `base image na major ATUALIZADA é VERDE`, mais `as duas são motivos DIFERENTES` | **mutação** | `npx vitest run --root .tooling/scripts/ci check-docker-drift` → **2 de 8** com o guarda de distro neutralizado, **2 de 8** com o de major (medido 2026-10-06, issue #48) | `.tooling/scripts/ci/check-docker-drift.ts` |
 | `check-eslint-drift` | `check-eslint-drift.spec.ts` — 2 de 5 | controle negativo | `npx vitest run --root .tooling/scripts/ci check-eslint-drift` | `.tooling/scripts/ci/check-eslint-drift.ts` |
 | `check-doc-refs` | `preflight.spec.ts` → `describe('checkDocRefs')` — **o spec não é `check-doc-refs.spec.ts`**, é o do runner | controle negativo | `npx vitest run --root .tooling/scripts/ci -t checkDocRefs` | `.tooling/scripts/ci/check-doc-refs.ts` |
 | `review-routing` matrix lint | `tooling/scripts/lint-review-routing.spec.ts` — **diretório diferente** (veja a armadilha abaixo) | controle negativo | `npx vitest run --root tooling/scripts lint-review-routing` | `tooling/scripts/lint-review-routing.ts` |
@@ -257,10 +257,13 @@ check é TDD (Red→Green→Refactor — ver [tdd.md](./tdd.md)) e vive no git.
 - **A tabela de Checks acima é completa** (a task 3.1 do plano
   [`guard-classes`](../../../docs/superpowers/plans/2026-10-03-guard-classes.md)
   fechou as 3 lacunas que esta seção declarava). O `preflight` executa
-  **14 entradas** — as **13** linhas da tabela de dentes, mais uma segunda
-  entrada de `check-eslint-drift` (uma por app: `apps`, `packages`). Antes, a
-  tabela listava 6, das quais uma (`check-types`) nem era check. Para auditar:
-  `pnpm ci:preflight` e conte as linhas `•`.
+  **15 entradas** no preflight para **14 arquivos de gate distintos** — a
+  diferença 1 é `check-eslint-drift`, que entra duas vezes (uma por app:
+  `apps` e `packages`), não um gate sem registro. Esses 14 são exatamente as
+  linhas do [Registro de dentes](#registro-de-dentes), e o
+  `check-teeth-registry` é o que reconcilia as duas listas.
+  (Re-medido 2026-10-06: `pnpm ci:preflight | grep -c '^  •'` → 15;
+  `check-agent-memory-drift` entrou pela #47.)
 - **Só 6 dos 13 gates têm mutação medida** (ver
   [Registro de dentes](#registro-de-dentes)). Os outros 7 provam a lógica com
   `controle negativo` em tmpdir, o que não prova a integração com o sistema
@@ -268,12 +271,21 @@ check é TDD (Red→Green→Refactor — ver [tdd.md](./tdd.md)) e vive no git.
 - **`check-package-json-drift` só varre o `package.json` raiz.** Task
   turbo fantasma declarada em `apps/*/package.json` escapa do gate, e os
   4 call-sites `pnpm turbo run` do `ci.yml` também não são varridos.
-- **Os Dockerfiles rodam `node:20`; o `engines.node` declara `>=22.6.0`.**
-  O `engines.node` subiu na 4.1 junto com os 5 pins do CI; as imagens não.
-  Não quebra hoje — não há `engine-strict`, o pnpm só avisa — mas o
-  `engines.node` declara um piso que o container não honra, e o build é
-  testado num runtime diferente do de produção. Fechar exige mexer em
-  `REQUIRED_BASE_IMAGE` (fixado em `node:20`) e remedir as imagens.
+- **Os Dockerfiles agora `node:22`, e o `engines.node` declara `>=22.6.0`** —
+  resolvido pela issue #48. As duas propriedades do guard de base image foram
+  separadas (`check-docker-drift.ts`): **distro** (glibc, por causa do engine
+  binary do Prisma 6) e **major** (a que casa com `engines.node` e com
+  `node-version: 22` do CI). Antes elas viviam numa constante só
+  (`REQUIRED_BASE_IMAGE = 'node:20-bookworm-slim'`), o que fazia `node:20-alpine`
+  (problema real de glibc) e `node:22-bookworm-slim` (válido) produzirem a
+  MESMA mensagem, atribuindo bump de major a problema de distro.
+  O selo é o `.npmrc` raiz com `engine-strict=true`, ligado **depois** de subir
+  as imagens — na ordem inversa, o `pnpm install --frozen-lockfile` dentro do
+  build quebraria com exit 1 em vez de avisar.
+  **O que continua aberto:** o CI prova que a imagem **monta**, não que ela
+  **roda** — `grep -rnE 'docker run|docker compose up' -- .github` → 0
+  ocorrências. Nada executa a imagem de produção, então a regressão "roda em
+  major diferente da de build" continua sem verificação de execução.
 - **Skill `ci-defense-in-depth`:** publicada em
   [`.agents/skills/ci-defense-in-depth/SKILL.md`](../../skills/ci-defense-in-depth/SKILL.md)
   (v1.4.0). Cobre o template `CheckResult`, fixtures herméticas via

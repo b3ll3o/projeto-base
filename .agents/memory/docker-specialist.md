@@ -29,11 +29,11 @@ Agent criado durante rollout do specialist-router (Fase 2 Task 9). Demanda atual
 #### Imagens finais (validadas com `docker build --target prod`)
 
 - **`projeto-base-api:prod`** — 241 MB content size (1.1 GB disk usage c/ BuildKit cache)
-  - Base: `node:20-bookworm-slim` (não alpine — incompatível com Prisma engines)
+  - Base: `node:22-bookworm-slim` (não alpine — incompatível com Prisma engines)
   - Healthcheck embutido: `curl -fsS http://localhost:3000/api/v1/health`
   - ENTRYPOINT: `prisma migrate deploy && node apps/api/dist/main.js`
 - **`projeto-base-web:prod`** — 96.7 MB content size (402 MB disk usage c/ BuildKit cache)
-  - Base: `node:20-bookworm-slim` (standalone output do Next.js reduz ~70%)
+  - Base: `node:22-bookworm-slim` (standalone output do Next.js reduz ~70%)
   - Healthcheck embutido: `node -e` chamando `/api/health`
   - Standalone copy de `.next/standalone` + `.next/static` + `public`
 
@@ -67,7 +67,7 @@ Agent criado durante rollout do specialist-router (Fase 2 Task 9). Demanda atual
 
 3. **`pnpm fetch` com `--mount=type=cache` exige lockfile presente no contexto no momento do fetch.** Ordem correta: fetch → COPY lockfile → install. Inverter ordem quebra o cache mount.
 
-4. **`node:20-bookworm-slim` vs `node:20-alpine`.** Alpine NÃO suporta Prisma engines (musl libc + glibc binary mismatch). bookworm-slim é ~30 MB maior mas evita `ENOTSUP` no runtime. **Nunca usar alpine para NestJS+Prisma.**
+4. **`node:22-bookworm-slim` vs `node:22-alpine`.** Alpine NÃO suporta Prisma engines (musl libc + glibc binary mismatch). bookworm-slim é ~30 MB maior mas evita `ENOTSUP` no runtime. **Nunca usar alpine para NestJS+Prisma.**
 
 5. **Next.js `output: 'standalone'` exige `public/` existir mesmo que vazio.** Sem o placeholder commit (`5611a7d`), COPY de `/repo/apps/web/public` falha no build prod. (Já documentado na skill mas custa lembrar.)
 
