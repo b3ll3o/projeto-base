@@ -17,6 +17,7 @@ import { checkTurboDrift } from './check-turbo-drift';
 import { checkPackageJsonDrift } from './check-package-json-drift';
 import { checkDockerDrift } from './check-docker-drift';
 import { checkArchiveIntegrity } from './check-archive-integrity';
+import { checkAgentMemoryDrift } from './check-agent-memory-drift';
 import { checkMemoryDirConcordance } from './check-memory-dir-concordance';
 import { checkTeethRegistry } from './check-teeth-registry';
 import { checkSelfFiringGuards } from './check-self-firing-guard';
@@ -210,6 +211,21 @@ async function main(): Promise<void> {
       name: 'destino da retrospectiva (fonte única, sem 2ª declaração)',
       file: '.tooling/scripts/ci/check-memory-dir-concordance.ts',
       fn: () => checkMemoryDirConcordance({ repoRoot: '.' }),
+    },
+    {
+      // Issue #47. Fecha a classe 1 que a própria tabela de guard nomeia:
+      // `evolucao-agents.md` obriga a atualizar "o agent E sua memória" após
+      // mudança de comportamento, e nenhum gate media o par. O caso medido foi
+      // o próprio `doc-sync`, que virou report-only com a memória intocada
+      // desde 2026-09-22.
+      //
+      // O gate distingue comportamento de correção de path de propósito: no
+      // mesmo commit, `nestjs-specialist` e `stack-code-reviewer` só
+      // corrigiram `../../../docs/adr/` → `../../docs/adr/`, delta zero.
+      // Acusar os três ensinaria o autor a atualizar memória por ruído.
+      name: 'drift agent↔memória (comportamento novo com memória intocada)',
+      file: '.tooling/scripts/ci/check-agent-memory-drift.ts',
+      fn: () => checkAgentMemoryDrift('.'),
     },
     {
       // Task 3.2 do plano guard-classes. Reconcilia o registro de dentes com

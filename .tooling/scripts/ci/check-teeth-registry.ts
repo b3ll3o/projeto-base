@@ -214,7 +214,15 @@ const MATRIX_DOC = join(process.cwd(), '.agents/specs/conventions/review-routing
  * plano introduziu o campo). Se um gate novo entrar no preflight e não entrar
  * aqui, o RED 1 do spec acusa.
  */
-const PREFLIGHT_GATES: GateRef[] = [
+/**
+ * Os gates do preflight, como o spec os consome.
+ *
+ * Exportado porque o spec deriva a contagem daqui. A versão anterior fixava o
+ * número no teste (13), e ele envelheceu no gate seguinte — a classe 7 que
+ * este próprio repo nomeia, e a versão testada da classe 2: a lista replica
+ * da que deveria ser a fonte única.
+ */
+export const PREFLIGHT_GATES: GateRef[] = [
   { name: 'Cross-refs em .md versionados', file: '.tooling/scripts/ci/check-doc-refs.ts' },
   { name: 'tsconfig drift', file: '.tooling/scripts/ci/check-tsconfig-drift.ts' },
   { name: 'eslint drift (api)', file: '.tooling/scripts/ci/check-eslint-drift.ts' },
@@ -225,6 +233,7 @@ const PREFLIGHT_GATES: GateRef[] = [
   { name: 'matrix review-routing', file: 'tooling/scripts/lint-review-routing.ts' },
   { name: 'archive integrity', file: '.tooling/scripts/ci/check-archive-integrity.ts' },
   { name: 'memory dir concordance', file: '.tooling/scripts/ci/check-memory-dir-concordance.ts' },
+  { name: 'drift agent↔memória', file: '.tooling/scripts/ci/check-agent-memory-drift.ts' },
   { name: 'registro de dentes', file: '.tooling/scripts/ci/check-teeth-registry.ts' },
   { name: 'classe 3', file: '.tooling/scripts/ci/check-self-firing-guard.ts' },
   { name: 'turbo differential', file: '.tooling/scripts/ci/turbo-redirect-differential.sh' },

@@ -56,6 +56,7 @@ Escopo de todos: **todo `.md` versionado** sob a raiz que o preflight passa
 | `check-docker-drift` | docker | `.dockerignore` ausente, `Dockerfile` > 100 linhas, base image ≠ `node:20-bookworm-slim` |
 | `check-archive-integrity` | archive | frontmatter canônico de `.agents/runs/archive/*.md` |
 | `check-memory-dir-concordance` | retro | segunda declaração do destino do result file, em 6 notações históricas |
+| `check-agent-memory-drift` | agents | agent com **mudança de comportamento** e memória (`.agents/memory/<agent>.md`) intocada no mesmo range |
 | `review-routing` matrix lint | roteamento | YAML inválido, reviewer inexistente, pattern duplicado, LOC > 300, `blocking: true` casando 0 arquivos |
 
 > **`check-types.ts` NÃO é um check** e saiu desta tabela: tem um único
@@ -99,6 +100,7 @@ extraído em commit `59eb083` (refactor que consolidou fixtures herméticas).
 |---|---|---|---|---|
 | `check-archive-integrity` | `check-archive-integrity.spec.ts` — `arquivo INVÁLIDO no archive REAL` + `arquivo inválido no diretório ERRADO` (o par) | **mutação** | comando 1 → **3 de 7 vermelho** (medido 2026-10-05) | `.tooling/scripts/ci/check-archive-integrity.ts` |
 | `check-memory-dir-concordance` | `check-memory-dir-concordance.spec.ts` — `a derivação canônica resolve para um diretório que existe de verdade` | **mutação** | comando 2 → **3 de 27 vermelho** (medido 2026-10-05) | `.tooling/scripts/ci/check-memory-dir-concordance.ts` |
+| `check-agent-memory-drift` | `check-agent-memory-drift.spec.ts` — o par `APENAS path corrigido NÃO é delta` / `prosa NOVA É delta` + `findDriftedAgents` com memória tocada | **mutação** | `npx vitest run --root .tooling/scripts/ci check-agent-memory-drift` → **4 de 12** com `hasBehaviorDelta` sempre true, **3 de 12** com `findDriftedAgents` sempre vazio (medido 2026-10-06) | `.tooling/scripts/ci/check-agent-memory-drift.ts` |
 | `check-turbo-drift` | `check-turbo-drift.spec.ts` — 5 de 6 testes | controle negativo | `npx vitest run --root .tooling/scripts/ci check-turbo-drift` | `.tooling/scripts/ci/check-turbo-drift.ts` |
 | `check-package-json-drift` | `check-package-json-drift.spec.ts` — 9 de 23 | controle negativo | `npx vitest run --root .tooling/scripts/ci check-package-json-drift` | `.tooling/scripts/ci/check-package-json-drift.ts` |
 | `check-docker-drift` | `check-docker-drift.spec.ts` — 3 de 5 | controle negativo | `npx vitest run --root .tooling/scripts/ci check-docker-drift` | `.tooling/scripts/ci/check-docker-drift.ts` |
