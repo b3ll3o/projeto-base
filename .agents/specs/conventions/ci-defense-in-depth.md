@@ -53,10 +53,13 @@ Escopo de todos: **todo `.md` versionado** sob a raiz que o preflight passa
 | `check-eslint-drift` | eslint config | regras duplicadas/legadas em configs ESLint |
 | `check-turbo-drift` | turbo pipeline | drift em `turbo.json` (`$schema` ausente, nomes inválidos, `cache:false` com `outputs`) |
 | `check-package-json-drift` | package.json raiz | scripts canônicos ausentes, `tsx <path>` fantasma, ou `turbo run <task>` que o turbo não resolve |
-| `check-docker-drift` | docker | `.dockerignore` ausente, `Dockerfile` > 100 linhas, base image ≠ `node:20-bookworm-slim` |
+| `check-docker-drift` | docker | `.dockerignore` ausente, `Dockerfile` > 100 linhas, base image sem glibc (distro) ou com major ≠ a de `engines.node` (major) — as duas são guardas separados |
 | `check-archive-integrity` | archive | frontmatter canônico de `.agents/runs/archive/*.md` |
 | `check-memory-dir-concordance` | retro | segunda declaração do destino do result file, em 6 notações históricas |
+| `check-agent-memory-drift` | agents | agent com **mudança de comportamento** e memória (`.agents/memory/<agent>.md`) intocada no mesmo range |
+| `check-tooling-typecheck` | typecheck | erro de tipo em `.tooling/scripts/**` sob a barra de `tsconfig.base.json`; `tsc` != 0 **sem** diagnóstico também é vermelho (issue #46) |
 | `review-routing` matrix lint | roteamento | YAML inválido, reviewer inexistente, pattern duplicado, LOC > 300, `blocking: true` casando 0 arquivos |
+| `check-branch-up-to-date` | git workflow | demanda que não contém `origin/main` (regra de rebase de [`git-workflow.md`](./git-workflow.md)); "sem ancestral comum" é motivo **diferente** de "atrasada"; rebase **parado em conflito** é vermelho antes de qualquer contagem; base ausente é `skipped`, nunca verde |
 
 > **`check-types.ts` NÃO é um check** e saiu desta tabela: tem um único
 > `export interface CheckResult` (medido, `wc -l` = 23) e é importado **só**
@@ -99,17 +102,20 @@ extraído em commit `59eb083` (refactor que consolidou fixtures herméticas).
 |---|---|---|---|---|
 | `check-archive-integrity` | `check-archive-integrity.spec.ts` — `arquivo INVÁLIDO no archive REAL` + `arquivo inválido no diretório ERRADO` (o par) | **mutação** | comando 1 → **3 de 7 vermelho** (medido 2026-10-05) | `.tooling/scripts/ci/check-archive-integrity.ts` |
 | `check-memory-dir-concordance` | `check-memory-dir-concordance.spec.ts` — `a derivação canônica resolve para um diretório que existe de verdade` | **mutação** | comando 2 → **3 de 27 vermelho** (medido 2026-10-05) | `.tooling/scripts/ci/check-memory-dir-concordance.ts` |
+| `check-agent-memory-drift` | `check-agent-memory-drift.spec.ts` — o par `APENAS path corrigido NÃO é delta` / `prosa NOVA É delta` + `findDriftedAgents` com memória tocada | **mutação** | `npx vitest run --root .tooling/scripts/ci check-agent-memory-drift` → **5 de 12** com `hasBehaviorDelta` sempre true, **3 de 12** com `findDriftedAgents` sempre vazio (medido 2026-10-06) | `.tooling/scripts/ci/check-agent-memory-drift.ts` |
+| `check-tooling-typecheck` | `check-tooling-typecheck.spec.ts` — `NÃO reporta verde quando o tsc falha sem imprimir diagnóstico` / `…sem saída nenhuma` (o par) | **mutação** | `npx vitest run --root .tooling/scripts/ci check-tooling-typecheck` → **3 de 11** com `parseTscDiagnostics` sempre `[]`, **2 de 11** com o `status !== 0` neutralizado (medido 2026-10-06, issue #46) | `.tooling/scripts/ci/check-tooling-typecheck.ts` |
 | `check-turbo-drift` | `check-turbo-drift.spec.ts` — 5 de 6 testes | controle negativo | `npx vitest run --root .tooling/scripts/ci check-turbo-drift` | `.tooling/scripts/ci/check-turbo-drift.ts` |
 | `check-package-json-drift` | `check-package-json-drift.spec.ts` — 9 de 23 | controle negativo | `npx vitest run --root .tooling/scripts/ci check-package-json-drift` | `.tooling/scripts/ci/check-package-json-drift.ts` |
-| `check-docker-drift` | `check-docker-drift.spec.ts` — 3 de 5 | controle negativo | `npx vitest run --root .tooling/scripts/ci check-docker-drift` | `.tooling/scripts/ci/check-docker-drift.ts` |
+| `check-docker-drift` | `check-docker-drift.spec.ts` — o par `alpine é VERMELHA por glibc` / `base image na major ATUALIZADA é VERDE`, mais `as duas são motivos DIFERENTES` | **mutação** | `npx vitest run --root .tooling/scripts/ci check-docker-drift` → **2 de 8** com o guarda de distro neutralizado, **2 de 8** com o de major (medido 2026-10-06, issue #48) | `.tooling/scripts/ci/check-docker-drift.ts` |
 | `check-eslint-drift` | `check-eslint-drift.spec.ts` — 2 de 5 | controle negativo | `npx vitest run --root .tooling/scripts/ci check-eslint-drift` | `.tooling/scripts/ci/check-eslint-drift.ts` |
 | `check-doc-refs` | `preflight.spec.ts` → `describe('checkDocRefs')` — **o spec não é `check-doc-refs.spec.ts`**, é o do runner | controle negativo | `npx vitest run --root .tooling/scripts/ci -t checkDocRefs` | `.tooling/scripts/ci/check-doc-refs.ts` |
 | `review-routing` matrix lint | `tooling/scripts/lint-review-routing.spec.ts` — **diretório diferente** (veja a armadilha abaixo) | controle negativo | `npx vitest run --root tooling/scripts lint-review-routing` | `tooling/scripts/lint-review-routing.ts` |
 | `check-tsconfig-drift` | `check-tsconfig-drift.spec.ts` — 1 de 2 | controle negativo | `npx vitest run --root .tooling/scripts/ci check-tsconfig-drift` | `.tooling/scripts/ci/check-tsconfig-drift.ts` |
-| `check-teeth-registry` | `check-teeth-registry.spec.ts` — 12 testes | **mutação** | comando 3 → **vermelho nomeando o gate** (medido 2026-10-05) | `.tooling/scripts/ci/check-teeth-registry.ts` |
+| `check-teeth-registry` | `check-teeth-registry.spec.ts` — 13 testes | **mutação** | comando 3 → **vermelho nomeando o gate** (medido 2026-10-05) | `.tooling/scripts/ci/check-teeth-registry.ts` |
 | `check-self-firing-guard` | `check-self-firing-guard.spec.ts` — 10 testes | **mutação** | comando 5 → **diferencial vira 0 → 0** (medido 2026-10-05) | `.tooling/scripts/ci/check-self-firing-guard.ts` |
 | `turbo-redirect-differential` | o próprio script — 18 formas de redirect contra o turbo REAL; e o comando 7. **O veredito** (`[ "$div" -eq 0 ]`) é coberto por `turbo-redirect-differential.spec.ts` — 2 de 3 | **mutação** | comando 7 → **1 e 3 de 18 divergentes**; e o veredito `-eq 0` → `-ge 0` → **2 de 3 vermelho** (medido 2026-10-05) | `.tooling/scripts/ci/turbo-redirect-differential.sh` |
-| `check-harness-owner` | `check-harness-owner.spec.ts` — 18 testes, incluindo o segundo órfão | **mutação** | comando 6 → **exit 0** (medido 2026-10-05) | `.tooling/scripts/ci/check-harness-owner.ts` |
+| `check-harness-owner` | `check-harness-owner.spec.ts` — 19 testes, incluindo o segundo órfão | **mutação** | comando 6 → **exit 0** (medido 2026-10-05) | `.tooling/scripts/ci/check-harness-owner.ts` |
+| `check-branch-up-to-date` | `check-branch-up-to-date.spec.ts` — `VERMELHO numa demanda implementada com a main desatualizada` / `após o rebase, a mesma demanda fica verde` (o par, contra **git de verdade**), mais `NÃO confunde "sem ancestral comum" com "atrasada"` e `VERMELHO, e nomeando o estado, com um rebase PARADO em conflito` | **mutação** | `npx vitest run --root .tooling/scripts/ci check-branch-up-to-date` → **2 de 9** com a detecção de "atrasada" neutralizada, **1 de 9** com `128` fundido em "atrasada", **2 de 9** com o `skipped` removido, **1 de 9** com o rebase-em-andamento neutralizado, **1 de 9** com a junção do caminho ao `repoRoot` removida (medido 2026-10-06) | `.tooling/scripts/ci/check-branch-up-to-date.ts` |
 
 > A coluna **Arquivo** é a chave de reconciliação, e não um enfeite: o
 > `check-teeth-registry` casa o registro com o `preflight.ts` por ela. Sem a
@@ -252,33 +258,11 @@ check é TDD (Red→Green→Refactor — ver [tdd.md](./tdd.md)) e vive no git.
 
 ## Pendências conhecidas
 
-- **A tabela de Checks acima é completa** (a task 3.1 do plano
-  [`guard-classes`](../../../docs/superpowers/plans/2026-10-03-guard-classes.md)
-  fechou as 3 lacunas que esta seção declarava). O `preflight` executa
-  **14 entradas** — as **13** linhas da tabela de dentes, mais uma segunda
-  entrada de `check-eslint-drift` (uma por app: `apps`, `packages`). Antes, a
-  tabela listava 6, das quais uma (`check-types`) nem era check. Para auditar:
-  `pnpm ci:preflight` e conte as linhas `•`.
-- **Só 6 dos 13 gates têm mutação medida** (ver
-  [Registro de dentes](#registro-de-dentes)). Os outros 7 provam a lógica com
-  `controle negativo` em tmpdir, o que não prova a integração com o sistema
-  real. Fechar os 7 restantes é change próprio, um por gate.
-- **`check-package-json-drift` só varre o `package.json` raiz.** Task
-  turbo fantasma declarada em `apps/*/package.json` escapa do gate, e os
-  4 call-sites `pnpm turbo run` do `ci.yml` também não são varridos.
-- **Os Dockerfiles rodam `node:20`; o `engines.node` declara `>=22.6.0`.**
-  O `engines.node` subiu na 4.1 junto com os 5 pins do CI; as imagens não.
-  Não quebra hoje — não há `engine-strict`, o pnpm só avisa — mas o
-  `engines.node` declara um piso que o container não honra, e o build é
-  testado num runtime diferente do de produção. Fechar exige mexer em
-  `REQUIRED_BASE_IMAGE` (fixado em `node:20`) e remedir as imagens.
-- **Skill `ci-defense-in-depth`:** publicada em
-  [`.agents/skills/ci-defense-in-depth/SKILL.md`](../../skills/ci-defense-in-depth/SKILL.md)
-  (v1.4.0). Cobre o template `CheckResult`, fixtures herméticas via
-  `fs.mkdtemp` e code-block-aware parsing para novos checks preflight.
-- **Drift real que justificou o `check-turbo-drift`** (v1.4.0): `stack:review`
-  e `docs:sync` declaravam `outputs` apesar de `cache:false`. Corrigido.
-
+As pendências abertas vivem no companion
+[`ci-defense-in-depth-pendencias.md`](./ci-defense-in-depth-pendencias.md).
+Elas crescem a cada gate novo e este documento está no teto de 300 linhas da
+convenção [`tamanho-e-revisao.md`](./tamanho-e-revisao.md) — um item novo aqui
+significa um corte em outro.
 ## Dívida de controles
 
 Controles que **existem e não rodam** — o oposto da tabela de dentes, que só

@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-FROM node:20-bookworm-slim AS base
+FROM node:22-bookworm-slim AS base
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 WORKDIR /repo
 
@@ -26,7 +26,7 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
 COPY apps/web apps/web
 RUN pnpm --filter @projeto/web build
 
-FROM node:20-bookworm-slim AS prod
+FROM node:22-bookworm-slim AS prod
 WORKDIR /repo
 ENV NODE_ENV=production PORT=3001
 COPY --from=builder /repo/apps/web/.next/standalone /repo

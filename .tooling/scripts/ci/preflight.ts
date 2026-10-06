@@ -17,10 +17,13 @@ import { checkTurboDrift } from './check-turbo-drift';
 import { checkPackageJsonDrift } from './check-package-json-drift';
 import { checkDockerDrift } from './check-docker-drift';
 import { checkArchiveIntegrity } from './check-archive-integrity';
+import { checkAgentMemoryDrift } from './check-agent-memory-drift';
+import { checkToolingTypecheck } from './check-tooling-typecheck';
 import { checkMemoryDirConcordance } from './check-memory-dir-concordance';
 import { checkTeethRegistry } from './check-teeth-registry';
 import { checkSelfFiringGuards } from './check-self-firing-guard';
 import { checkHarnessOwner } from './check-harness-owner';
+import { checkBranchUpToDate } from './check-branch-up-to-date';
 import { existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
@@ -212,6 +215,30 @@ async function main(): Promise<void> {
       fn: () => checkMemoryDirConcordance({ repoRoot: '.' }),
     },
     {
+      // Issue #47. Fecha a classe 1 que a própria tabela de guard nomeia:
+      // `evolucao-agents.md` obriga a atualizar "o agent E sua memória" após
+      // mudança de comportamento, e nenhum gate media o par. O caso medido foi
+      // o próprio `doc-sync`, que virou report-only com a memória intocada
+      // desde 2026-09-22.
+      //
+      // O gate distingue comportamento de correção de path de propósito: no
+      // mesmo commit, `nestjs-specialist` e `stack-code-reviewer` só
+      // corrigiram `../../../docs/adr/` → `../../docs/adr/`, delta zero.
+      // Acusar os três ensinaria o autor a atualizar memória por ruído.
+      name: 'drift agent↔memória (comportamento novo com memória intocada)',
+      file: '.tooling/scripts/ci/check-agent-memory-drift.ts',
+      fn: () => checkAgentMemoryDrift('.'),
+    },
+    {
+      // Issue #46. `.tooling/` decide se o CI passa, e era a única superfície do
+      // repo sem typecheck: `pnpm typecheck` é `turbo run typecheck`, que só
+      // alcança workspaces declarados. O gate executa o `tsc` sobre o tsconfig
+      // desta própria árvore — que inclui este arquivo.
+      name: 'typecheck tooling (.tooling/)',
+      file: '.tooling/scripts/ci/check-tooling-typecheck.ts',
+      fn: () => checkToolingTypecheck({ repoRoot: '.' }),
+    },
+    {
       // Task 3.2 do plano guard-classes. Reconcilia o registro de dentes com
       // o preflight E com a matriz de roteamento. Sem ele, o registro
       // envelhece em silêncio e um gate pode morar num diretório que nenhuma
@@ -252,6 +279,20 @@ async function main(): Promise<void> {
       name: 'controle desligado (harness órfão + destino sem guard)',
       file: '.tooling/scripts/ci/check-harness-owner.ts',
       fn: () => checkHarnessOwner(),
+    },
+    {
+      // Regra de `git-workflow.md`: demanda implementada com a main
+      // desatualizada é rebaseada na main atualizada. Entrei pelo preflight e
+      // não pelo `ci:local` pelo mesmo motivo do differential acima — o CI
+      // roda `ci:preflight`, e uma regra que só roda na máquina de quem a
+      // escreveu não é uma regra do repo.
+      //
+      // `skipped` quando `origin/main` não existe: aí não há o que medir, e
+      // um verde aqui afirmaria que a demanda contém a main atual sem ter
+      // perguntado a ninguém.
+      name: 'demanda rebaseda na main atual (regra de rebase)',
+      file: '.tooling/scripts/ci/check-branch-up-to-date.ts',
+      fn: () => checkBranchUpToDate(),
     },
   ];
 

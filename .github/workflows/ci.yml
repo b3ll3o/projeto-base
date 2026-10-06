@@ -15,7 +15,26 @@ jobs:
     permissions:
       contents: read
     steps:
+      # `fetch-depth: 0` é exigência do gate do marcador, não preferência: com o
+      # default (depth 1) o checkout de `pull_request` traz só o ref de merge e
+      # `origin/main` não tem ancestral comum com HEAD — o `varrerTexto` levanta
+      # "base sem ancestral comum" e o gate morre com stack trace.
+      # MEDIDO no PR #53: preflight vermelho por exatamente isso.
+      #
+      # `ref` no head da branch, e não no ref de merge: o merge ref que o
+      # GitHub fabrica tem DOIS pais (base + head) e `rev-list --count
+      # base..HEAD` conta o próprio commit sintético junto. O erro é sempre
+      # **exatamente 1**, qualquer que seja a branch — e todo corpo de PR
+      # escrito localmente diverge em 1 no CI.
+      # MEDIDO no PR #53 (os números de cada par crescem a cada push; o que
+      # não muda é a diferença): merge ref `dec7a89` (pais `8de508a` +
+      # `095c043`) → 8, head `095c043` → 7; depois, merge ref `d206727`
+      # (pais `8de508a` + `d56ce17`) → 9, head `d56ce17` → 8.
+      # É o mesmo gate, medindo duas branchs diferentes.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: pnpm/action-setup@v3
       - uses: actions/setup-node@v4
         with:
@@ -35,6 +54,39 @@ jobs:
       # vermelhos sem ninguem perceber. Rodar no job que ja falha rapido.
       - name: Run tooling tests
         run: pnpm tooling:test
+      # pt-BR: issue #45 item 4. O `pr-refresh` so reescreve claims no
+      # paragrafo marcado; sem marcador ele roda, mede, NAO escreve e sai com
+      # "sem-marcador" — que o `.husky/pre-push` engole por decisao de owner
+      # ("nunca bloqueia"). Sem um gate, todo PR nasce inativo e ninguem e
+      # avisado: foi assim que o corpo do #44 mentiu por 2 commits, 5 arquivos
+      # e 1613 linhas. Aqui o gate BLOQUEIA, que e o que job de CI faz.
+      # Fora de `pull_request` nao ha PR: o gate e do PR, nao do push.
+      #
+      # O corpo vem do PAYLOAD do evento (`pull_request.body`), nao de `gh`:
+      # ler o PR que disparou a run nao exige token nenhum, entao o job segue
+      # com `permissions: contents: read` como estava. Conceder
+      # `pull-requests: read` seria trocar um arquivo por uma permissao nova.
+      #
+      # O payload e um SNAPSHOT do momento do push. Editar o corpo depois nao
+      # dispara run (o tipo default de `pull_request` e opened/synchronize/
+      # reopened; `edited` nao esta nele), e um re-run entrega o payload
+      # antigo — a unica forma de o CI validar um corpo corrigido e o proximo
+      # push. MEDIDO no PR #53: corrigi a contagem depois de pushar, e a run
+      # seguinte reprovou com o corpo que eu ja tinha consertado.
+      # REGRA OPERACIONAL: ajuste o corpo ANTES de pushar.
+      #
+      # A semantica e a desejada — o gate valida o que foi submetido junto com
+      # o codigo, nao o que o corpo virou depois. O custo e ter que pushar de
+      # novo para revalidar, e ele e visivel (a run reprova) em vez de
+      # silencioso.
+      - name: Gate do marcador pr-refresh
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_BASE: origin/${{ github.event.pull_request.base.ref }}
+        run: |
+          printf '%s' "$PR_BODY" > "$RUNNER_TEMP/pr-body.md"
+          PR_BODY_FILE="$RUNNER_TEMP/pr-body.md" pnpm pr:marker
   quality:
     needs: preflight
     runs-on: ubuntu-latest

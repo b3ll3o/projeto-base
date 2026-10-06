@@ -31,6 +31,7 @@ import {
   registryGateFiles,
   unroutedGateFiles,
   type GateRef,
+  PREFLIGHT_GATES,
 } from './check-teeth-registry.js';
 
 // ── fixtures ────────────────────────────────────────────────────────────────
@@ -272,18 +273,26 @@ Fora da tabela, um path citado em prosa: \`.tooling/scripts/ci/check-fantasma.ts
 // valida fixture é verde enquanto a convenção que ele reconcilia envelhece.
 
 describe('checkTeethRegistry — contra o repo de verdade', () => {
-  it('o registro real DECLARA 13 paths — e o check reconcilia em cima deles', () => {
+  it('o registro real DECLARA um path por gate do preflight — e reconcilia em cima deles', () => {
     // A contagem vem ANTES do veredito, e por um motivo: `unroutedGateFiles`
     // com lista vazia devolve `[]` — que é o MESMO retorno de "todos
     // roteados". Um check que só afirmasse `ok: true` passaria igual num
-    // repo onde o registro sumiu por completo. Aqui o verde vem depois de um
-    // 13 que não pode ser zero.
+    // repo onde o registro sumiu por completo. Aqui o verde vem depois de uma
+    // contagem que não pode ser zero.
+    //
+    // O número é DERIVADO dos gates que o preflight invoca, não literal: um
+    // literal envelhece a cada gate novo (foi 13, virou 14 com o
+    // check-agent-memory-drift) e o teste passa a falhar por um motivo que
+    // não é defeito — que é a classe 7 que este repo nomeia. O que o teste
+    // quer é "um registro por gate", e é isso que ele afirma.
     const registryMd = readFileSync(
       join(process.cwd(), '.agents/specs/conventions/ci-defense-in-depth.md'),
       'utf8',
     );
     const found = registryGateFiles(registryMd);
-    expect(found).toHaveLength(13);
+    const expected = new Set(PREFLIGHT_GATES.map((g) => g.file));
+    expect(expected.size).toBeGreaterThan(0); // senão `found` vs `[]` seria vacuamente verde
+    expect(new Set(found)).toEqual(expected);
     // E nenhum deles pode ser um spec — a coluna Arquivo documenta o GATE.
     expect(found.filter((f) => f.endsWith('.spec.ts'))).toEqual([]);
 

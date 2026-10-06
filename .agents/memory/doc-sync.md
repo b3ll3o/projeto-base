@@ -9,6 +9,14 @@ description: Memória acumulada do agent doc-sync — sincronização reativa co
 
 ## Decisões Tomadas
 
+### 2026-10-06 — doc-sync virou report-only
+
+**Contexto:** o Passo 4 deixou de bloquear merge.
+
+**Decisão:** report-only por contrato; o script nunca chama `process.exit`.
+
+**Consequências:** a barreira de merge é o check `quality` do ruleset de `main`.
+
 ### 2026-09-22 — Estratégia reativa (não proativa)
 
 **Contexto:** sincronização proativa gera churn e conflitos.

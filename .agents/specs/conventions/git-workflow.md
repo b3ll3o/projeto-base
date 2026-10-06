@@ -79,6 +79,68 @@ git branch --show-current
 Esse passo não é opcional — é a defesa contra commit acidental em
 `main`, que só é detectado depois que já aconteceu.
 
+## Rebase Obrigatório: Demanda Implementada com `main` Desatualizada
+
+O ponto de partida acima cobre o **começo** da demanda. Ele não cobre o
+**intervalo**: uma demanda entregue ao longo de duas semanas acumula commits
+em `main` que ela não contém. Ela continua sendo trabalho válido e abre PR
+que parece correto — só que o merge reintroduz no histórico tudo o que a
+`main` já resolveu, e o revisor passa a ler um diff que já era verde quando a
+demanda foi escrita.
+
+**Regra.** Toda demanda é rebaseada na `main` atualizada antes de push e de
+abrir PR. Sem exceção por tamanho: uma demanda de uma linha que ficou três
+dias aberta tem o mesmo defeito que uma de três semanas.
+
+```bash
+git fetch origin main
+git rebase origin/main
+```
+
+`rebase`, não `merge`: um merge de `main` na demanda cria o commit que a
+convenção proíbe em `main` (§Regra Inegociável), e deixa o histórico da
+demanda com um nó de junção que nenhum outro branch tem.
+
+### Depois do rebase: revisão obrigatória
+
+Rebase não é um comando atômico, e o resultado dele não é o mesmo código.
+
+1. **Parou em conflito?** Resolva e rode `git rebase --continue`, ou volte
+   ao ponto de partida com `git rebase --abort`. Um rebase no meio é
+   vermelho no `preflight` por si — não há histórico pronto para medir.
+2. **Revise o resultado.** Conflito resolvido não é código correto: as duas
+   metades podem ter sido escritas contra premissas que a `main` nova
+   invalidou, e o `git` não tem como saber disso. Depois do rebase, o diff
+   da demanda é **novo código do ponto de vista de quem revisa** — despache
+   a revisão de novo, por
+   [`review-routing.md`](./review-routing.md), com revisor que **não**
+   participou da resolução do conflito.
+3. **Rode `pnpm ci:local` de novo.** Verde antes do rebase não vale depois:
+   os testes rodaram contra a base antiga.
+4. **Só então** `git push --force-with-lease`.
+
+O passo 2 é o que a regra sozinha não diz, e é o mais caro de pular: uma
+demanda rebaseada sem revisão reintroduz em silêncio a razão pela qual o
+rebase foi feito.
+
+### Quem cobra
+
+O gate [`check-branch-up-to-date`](./ci-defense-in-depth.md) roda no
+`preflight` (local e CI): vermelho quando a demanda não contém `origin/main`,
+nomeando **quantos** commits e **qual** base foi medida. "Sem ancestral comum"
+é motivo **diferente** de "atrasada" — a história não converge, e rebasedar
+em cima dela não resolve. Rebase parado em conflito é vermelho antes de
+qualquer contagem, porque não há histórico para medir. Base inexistente é
+`skipped`, nunca verde: um clone sem remoto não atesta que a demanda está
+atualizada.
+
+**A régua é nomeada porque ela pode estar velha.** O gate mede contra a ref
+`origin/main` **local**. Em CI (`fetch-depth: 0`) ela vem do servidor e é a
+verdade; localmente pode estar desatualizada, e então o gate **subdeclara** —
+uma demanda 5 atrás do remoto passa se o `origin/main` local for antigo. Por
+isso o `git fetch` acima não é etapa decorativa: sem ele, a checagem local é
+mais fraca do que parece.
+
 ## Padrão de Nomeação de Branches
 
 | Tipo            | Prefixo       | Exemplo                          | Uso                                          |
@@ -117,25 +179,32 @@ O nome deve descrever **o problema**, não a ferramenta. `fix/coverage-gate-40`
        ▼
 6. Rodar o pre-push gate local
    pnpm ci:local
+   (inclui o gate da regra de rebase — se a main avançou,
+   ele acusa aqui; ver §Rebase Obrigatório)
        │
        ▼
-7. Push da branch
+7. Rebasear na main atual, se o gate acusou
+   git fetch origin main && git rebase origin/main
+   → conflito? revisar e corrigir (§Depois do rebase)
+       │
+       ▼
+8. Push da branch
    git push -u origin feature/<nome>
        │
        ▼
-8. Abrir Pull Request para main
+9. Abrir Pull Request para main
        │
        ▼
-9. Aguardar checks + revisão
+10. Aguardar checks + revisão
    - `preflight` (pass)
    - `quality` (pass)
        │
        ▼
-10. Push novo na branch? → rodar [`pr-refresh`](../../workflows/pr-refresh.md)
+11. Push novo na branch? → rodar [`pr-refresh`](../../workflows/pr-refresh.md)
    (o corpo do PR envelhece a cada push, e nenhum gate o cobre)
        │
        ▼
-11. Merge (squash preferencialmente) e apagar a branch
+12. Merge (squash preferencialmente) e apagar a branch
 ```
 
 ## Pre-Push Quality Gate

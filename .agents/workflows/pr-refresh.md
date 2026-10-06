@@ -293,7 +293,7 @@ remeça.
 
 ## Cross-refs
 
-- Scripts: [`pr-refresh-scan.ts`](../../tooling/scripts/pr-refresh-scan.ts) (mede) · [`pr-refresh-apply.ts`](../../tooling/scripts/pr-refresh-apply.ts) (reescreve string) · [`pr-refresh-hook.ts`](../../tooling/scripts/pr-refresh-hook.ts) (gatilho + rede) — cada um com o spec homônimo ao lado
+- Scripts: [`pr-refresh-scan.ts`](../../tooling/scripts/pr-refresh-scan.ts) (mede) · [`pr-refresh-apply.ts`](../../tooling/scripts/pr-refresh-apply.ts) (reescreve string) · [`pr-refresh-hook.ts`](../../tooling/scripts/pr-refresh-hook.ts) (gatilho + rede) · [`pr-refresh-gate.ts`](../../tooling/scripts/pr-refresh-gate.ts) (gate de CI: claim divergente em parágrafo sem marcador) — cada um com o spec homônimo ao lado
 - Convenção: [`.agents/specs/conventions/guard-classes.md`](../specs/conventions/guard-classes.md) (as 7 classes — em especial a 1 e a 7)
 - Git: [`.agents/specs/conventions/git-workflow.md`](../specs/conventions/git-workflow.md)
 - Retrospectiva: [`.agents/workflows/retrospective-mode.md`](./retrospective-mode.md)

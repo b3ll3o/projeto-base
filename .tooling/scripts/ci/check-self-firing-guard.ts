@@ -261,6 +261,15 @@ const DECLARED: Array<{ id: string; why: string }> = [
 
 export const DECLARED_IDS: string[] = DECLARED.map((d) => d.id);
 
+/**
+ * Path repo-relative de um guard pelo id. Fonte unica: `buildGuard` e a
+ * checagem de nao-declarado precisam casar com o MESMO path, e duas copias
+ * do template sao duas coisas para divergirem.
+ */
+export function guardSourcePath(id: string): string {
+  return `.tooling/scripts/ci/${id}.ts`;
+}
+
 function buildGuard(id: string): SelfExemptingGuard {
   return {
     id,
@@ -268,7 +277,7 @@ function buildGuard(id: string): SelfExemptingGuard {
     // A função real, importada. Ver o campo `strip` da interface: o check
     // que reimplementa a isenção mede a isenção que ele inventou.
     strip: SELF_EXEMPTION.strip,
-    sourceFile: `.tooling/scripts/ci/${id}.ts`,
+    sourceFile: guardSourcePath(id),
     patterns: DECLARATION_PATTERNS,
     corpus: sweptCorpus(process.cwd()),
   };
@@ -318,9 +327,13 @@ export function checkSelfFiringGuards(): CheckResult {
   }
 
   const { sourceFiles, sourceTexts } = readGuardSources();
-  const declaredFiles = new Set(
-    DECLARED.map((d) => d.sourceFile ?? `.tooling/scripts/ci/${d.id}.ts`),
-  );
+  // `DECLARED` nao tem (nem pode ter) campo `sourceFile`: a entrada e
+  // `{ id, why }`. O codigo lia `d.sourceFile ?? <template>` — o lado esquerdo
+  // nunca existia e o fallback era sempre o valor real, mascarando isso. Um
+  // `??` cujo lado esquerdo e sempre `undefined` e um caminho que nunca dispara.
+  // O tipo aqui e `string[]` porque e o que `undeclaredSelfExemptingGuards`
+  // consome (ela propria constroi o `Set`).
+  const declaredFiles: string[] = DECLARED.map((d) => guardSourcePath(d.id));
   for (const f of undeclaredSelfExemptingGuards({ sourceFiles, sourceTexts, declaredFiles })) {
     errors.push(
       `guard com auto-isenção não declarado: ${f} — declare-o na ` +

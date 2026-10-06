@@ -50,7 +50,7 @@ task:
 context:
   paths: ["Dockerfile*", "docker-compose*.yml", ".dockerignore", "apps/api/**", "apps/web/**"]
   stack: <node|python|go|...>   # obrigatório
-  base_image_preference: <node:20-bookworm-slim|node:20-alpine|distroless>   # opcional
+  base_image_preference: <node:22-bookworm-slim|node:22-alpine|distroless>   # opcional
 
 expected_output:
   format: yaml
@@ -87,8 +87,8 @@ Identificar: runtime (Node 20+), framework (NestJS/Next.js), ORM (Prisma 6+), bu
 
 Critérios:
 
-- **`node:20-bookworm-slim`** — default para apps com Prisma (compat com `debian-openssl-3.0.x` binary targets)
-- **`node:20-alpine`** — se tamanho crítico (<150MB) e sem deps nativas complexas
+- **`node:22-bookworm-slim`** — default para apps com Prisma (compat com `debian-openssl-3.0.x` binary targets)
+- **`node:22-alpine`** — se tamanho crítico (<150MB) e sem deps nativas complexas
 - **`gcr.io/distroless/nodejs20-debian12`** — produção hardenada (sem shell, attack surface mínima)
 - **Version pinning obrigatório** — nunca `:latest`, sempre tag exata + SHA256 digest em prod
 
@@ -99,13 +99,13 @@ Estrutura canônica para apps Node no monorepo:
 - **`base`** — deps do workspace (`pnpm fetch` + BuildKit cache mount do pnpm store)
 - **`dev`** — base + `pnpm install --frozen-lockfile` + bind mounts para hot reload
 - **`builder`** — base + `pnpm install` + `pnpm db:generate` (se Prisma) + `pnpm build` (`tsc` para api, `next build` para web)
-- **`prod`** — apenas artefatos + `node:20-bookworm-slim` runtime + USER node + entrypoint
+- **`prod`** — apenas artefatos + `node:22-bookworm-slim` runtime + USER node + entrypoint
 
 ### Passo 4: Aplicar Hardening
 
 - **`USER node`** (uid 1000) no stage runtime — NUNCA `USER root` em produção
 - **`HEALTHCHECK`** com `curl --fail` ou `wget --spider` apontando para `/api/v1/health`
-- **Version pinning** — `FROM node:20.18.0-bookworm-slim@sha256:...`
+- **Version pinning** — `FROM node:22.14.0-bookworm-slim@sha256:...`
 - **Read-only root filesystem** quando possível (`security-opt: no-new-privileges`)
 - **`.dockerignore`** agressivo: `node_modules`, `.git`, `.turbo`, `coverage`, `*.log`, `.env*`, `docs/`, `tools/`
 - **Capabilities mínimas**: dropar `ALL`, adicionar apenas as necessárias (NET_BIND_SERVICE se porta <1024)
@@ -150,14 +150,14 @@ result:
     dockerfiles:
       - path: apps/api/Dockerfile
         targets: [base, dev, builder, prod]
-        base_image: node:20-bookworm-slim
+        base_image: node:22-bookworm-slim
         size_mb: 245
         user: node
         healthcheck: "curl --fail http://localhost:3000/api/v1/health"
 
       - path: apps/web/Dockerfile
         targets: [base, dev, builder, prod]
-        base_image: node:20-bookworm-slim
+        base_image: node:22-bookworm-slim
         size_mb: 215
         user: node
         healthcheck: "wget --spider http://localhost:3000/api/health"
