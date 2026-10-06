@@ -219,4 +219,5 @@ Quando seguido corretamente, este padrão garante:
 
 **Mantido por:** projeto-base contributors
 **Licença:** MIT
+**Versão do documento:** 1.9.0
 **Status:** Estável
