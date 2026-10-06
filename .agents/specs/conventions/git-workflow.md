@@ -3,19 +3,17 @@
 > Sub-spec referenciada por [AGENTS.md §6](../../../AGENTS.md).
 
 **Modelo: trunk-based development.** `main` é o tronco único e sempre
-integrável. Branches são curtas e descartadas no merge. **Toda
-alteração começa de `main` atualizado.**
-
-**A branch `main` é PROTEGIDA.** Nenhum commit ou push direto é permitido. Todas as alterações DEVEM chegar a `main` via Pull Request.
+integrável. Branches são curtas e descartadas no merge. **Toda alteração começa
+de `main` atualizado** e chega ao tronco **via Pull Request** — nunca por commit
+ou push direto.
 
 ## Regra Inegociável
 
 - ❌ **PROIBIDO** `git commit` em `main` (exceto via PR de hotify)
 - ❌ **PROIBIDO** `git push origin main`
 - ❌ **PROIBIDO** `--force-push` em qualquer branch compartilhada
-- ❌ **PROIBIDO** iniciar trabalho sem antes atualizar `main` — branch
-  criada a partir de `main` desatualizado carrega rework de merge e
-  diverge do padrão do projeto
+- ❌ **PROIBIDO** iniciar trabalho sem atualizar `main` — branch criada a partir
+  de `main` desatualizado carrega rework de merge e diverge do padrão do projeto
 - ✅ **OBRIGATÓRIO** `git checkout main && git pull --ff-only origin main`
   antes de criar a branch de trabalho
 - ✅ **OBRIGATÓRIO** criar branch `feature/`, `fix/`, `refactor/`, `docs/`, `chore/` ou `hotfix/`
@@ -119,9 +117,8 @@ Rebase não é um comando atômico, e o resultado dele não é o mesmo código.
    os testes rodaram contra a base antiga.
 4. **Só então** `git push --force-with-lease`.
 
-O passo 2 é o que a regra sozinha não diz, e é o mais caro de pular: uma
-demanda rebaseada sem revisão reintroduz em silêncio a razão pela qual o
-rebase foi feito.
+O passo 2 é o mais caro de pular: uma demanda rebaseada sem revisão
+reintroduz em silêncio a razão pela qual o rebase foi feito.
 
 ### Quem cobra
 
@@ -134,12 +131,11 @@ qualquer contagem, porque não há histórico para medir. Base inexistente é
 `skipped`, nunca verde: um clone sem remoto não atesta que a demanda está
 atualizada.
 
-**A régua é nomeada porque ela pode estar velha.** O gate mede contra a ref
+**A régua é nomeada porque ela pode estar velha.** O gate mede contra
 `origin/main` **local**. Em CI (`fetch-depth: 0`) ela vem do servidor e é a
-verdade; localmente pode estar desatualizada, e então o gate **subdeclara** —
-uma demanda 5 atrás do remoto passa se o `origin/main` local for antigo. Por
-isso o `git fetch` acima não é etapa decorativa: sem ele, a checagem local é
-mais fraca do que parece.
+verdade; localmente pode estar desatualizada, e então o gate **subdeclara** — uma
+demanda 5 atrás do remoto passa se o `origin/main` local for antigo. Por isso o
+`git fetch` acima não é etapa decorativa.
 
 ## Padrão de Nomeação de Branches
 
@@ -211,16 +207,17 @@ O nome deve descrever **o problema**, não a ferramenta. `fix/coverage-gate-40`
 ## Branch Morta: Apagar Quando o PR Sai de OPEN
 
 > **REGRA:** branch cujo PR saiu de `open` — **merged** ou **closed** — está
-> **morta**. Apague-a local e remotamente assim que o PR fechar: não no fim da
-> sprint, não "quando der". Tabela de decisão abaixo.
-
-Branch viva é a que tem PR aberto: alguém pode mergear, revisar ou rebasar.
-Depois que o PR fecha, a branch vira duplicata que só diverge.
+> **morta**. Apague-a local e remotamente assim que o PR fechar, não "quando
+> der". Branch viva é a que tem PR aberto: alguém ainda pode mergear, revisar ou
+> rebasar.
 
 ```bash
 gh pr list --state all --json number,headRefName,mergedAt   # PR saiu de open?
-git tag backup/<branch> <branch>      # ANTES de apagar — irreversível sem isso
-git branch -d <branch> && git push origin --delete <branch>
+# tag SÓ com conteúdo fora de main (exame no apêndice, passo 3): com exame
+# vazio a main já tem tudo, e a tag vira ruído que se acumula a cada limpeza
+git tag backup/<branch> <branch>      # só se o exame acusou conteúdo
+git branch -d <branch> || git branch -D <branch>   # -d recusa se o squash escondeu a ancestralidade
+git push origin --delete <branch>
 ```
 
 ### Como decidir
@@ -230,11 +227,19 @@ git branch -d <branch> && git push origin --delete <branch>
 | `merged` (tem `mergedAt`) | **Sim**, direto — se nenhum arquivo da branch estiver ausente em `main` |
 | `closed` sem merge, ou nunca teve PR | **Só após exame de conteúdo** — apêndice §Caso 2 e §Caso 3 |
 
-`-d` recusa apagar branch não mergeada — **respeite a recusa, não troque por
-`-D`.** Com squash merge, `git branch --merged main` ainda erra (§apêndice
-§Caso 1), então confirme pelo `mergedAt`, não pelo git. **`closed` sem merge
-exige cuidado**: das 2 branches fechadas preservadas, **1** tinha conteúdo que
-nada em `main` tinha. Qualquer `-D` **exige** `git tag backup/<b> <b>` antes.
+**O que decide é `mergedAt`, não a recusa do `-d`.** `-d` recusa apagar branch não
+mergeada e essa recusa protege — mas o caso comum deste repo é o oposto: com
+squash merge o tip deixa de ser ancestral de `main`, então **`-d` recusa branch
+mergeada**. MEDIDO 2026-10-06: as **4** branches mergeadas de `backup/docs/*` e
+`backup/chore/*` falham em `git merge-base --is-ancestor <tag> origin/main` — e as
+4 estavam inteiras em `main`. Obedecer a recusa literalmente tornaria a limpeza
+**impossível** aqui.
+
+**`closed` sem merge** exige o exame de conteúdo — foi ele que separou as duas
+branches fechadas: #35 entregou 2 arquivos, #36 entregou 0. O predicado de "está
+tudo em `main`" é o **arquivo**, não o commit: `--not --remotes` é inerte e
+`--not origin/main` acusa falso positivo com squash. Detalhes no
+[apêndice](./git-workflow-apendice.md) §Caso 1.
 
 > **Predicado de "está tudo em main" é o arquivo, não o commit** —
 > `--not --remotes` é inerte, `--not origin/main` acusa falso positivo com
@@ -284,15 +289,12 @@ Configurar em **Settings → Branches → Branch protection rules → `main`**:
 
 ## Exceções
 
-Nenhuma. Hotfixes urgentes também usam PR (com label `hotfix` para SLA diferenciado).
+Nenhuma — hotfixes urgentes também usam PR (label `hotfix` para SLA diferenciado).
 
 ## Bloqueio Automático
 
-Os gates que realmente rodam em todo PR são o job `preflight` (que executa
-`pnpm ci:preflight`) e o job `quality`. **Nenhum agente é despachado
-automaticamente**: quem invoca o agente de enforcement de TDD e o de revisão
-de código é o operador, ou a matriz de routing
-([`review-routing.md`](./review-routing.md)), que despacha o reviewer de
-stack + specialists — ver
-[`review-stack.yml`](../../../.github/workflows/review-stack.yml). Nenhum
-agente valida hoje se o PR abre para `main` a partir de branch válida.
+Os gates que rodam em todo PR são o job `preflight` (executa `pnpm ci:preflight`)
+e o job `quality`. **Nenhum agente é despachado automaticamente**: quem invoca o
+de TDD e o de revisão de código é o operador ou a matriz
+[`review-routing.md`](./review-routing.md). O fluxo completo, com o que de fato
+bloqueia, está em [`docs/fluxo-desenvolvimento.md`](../../../docs/fluxo-desenvolvimento.md).

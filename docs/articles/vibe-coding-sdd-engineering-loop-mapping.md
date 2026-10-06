@@ -27,8 +27,10 @@ status: analysis
 > Este arquivo contém **somente a análise** de como cada conceito do artigo já
 > vive no padrão genérico de agents deste projeto.
 >
-> A transcrição do artigo **não** está neste repositório — ver
-> [`evals.md` §0](../../.agents/specs/conventions/evals.md) para o contexto.
+> A transcrição do artigo **não** está neste repositório. Ela sobrevive apenas na
+> tag `backup/docs/articles-transcription-vibe-coding-sdd`; recupere com
+> `git show <tag>:docs/articles/vibe-coding-sdd-engineering-loop.md`. Para o
+> contexto, ver [`evals.md` §0](../../.agents/specs/conventions/evals.md).
 
 ## §1. Correspondência conceito-a-conceito
 
@@ -46,7 +48,7 @@ O artigo descreve — de forma independente e aplicada a uma fintech — exatame
 | **State-snapshot antes de planejar**                | [`.agents/specs/conventions/state-aware-planning.md`](../../.agents/specs/conventions/state-aware-planning.md) (camada 0 do pre-planner, v1.8.0+) |
 | **Pre-dispatch checks (matriz existe, etc.)**       | [`specialist-router`](../../.agents/agents/specialist-router.md) (camada 1 do pre-planner)                                |
 | **Spec/ADR/Eval como contrato do agent**            | [`.agents/specs/conventions/evolucao-agents.md`](../../.agents/specs/conventions/evolucao-agents.md) (regra `gap_detected`) |
-| **Feedback → próxima spec** (loop fecha)            | [`archive-demand`](../../.agents/workflows/archive-demand.md) → `.agents/runs/archive/<ts>-<slug>/`                        |
+| **Feedback → próxima spec** (loop fecha)            | [`archive-demand`](../../.agents/workflows/archive-demand.md) → arquivo `YYYY-MM-DD-<slug>.md` em `.agents/runs/archive/` ([`demand-archiving.md`](../../.agents/specs/conventions/demand-archiving.md)) |
 
 ## §2. Como implementar a fintech do artigo neste projeto
 
@@ -55,19 +57,31 @@ O artigo descreve — de forma independente e aplicada a uma fintech — exatame
 1. **`specialist-routing`** (state-snapshot + classificador) identifica `nestjs-specialist` + `monorepo-specialist` + `docker-specialist` + `telemetry-specialist`.
 2. **`orchestrator`** decompõe em sub-tasks (`spec → research → data-model → contracts → plan → tasks → code`).
 3. **`nestjs-specialist`** aplica a lens DDD/Hexagonal em cada Bounded Context (Accounts, Pix, Ledger, Fraud, ...).
-4. **`test-writer`** (TDD Red→Green→Refactor) + **`stack-code-reviewer`** (lens D11 — Architecture Evals via ArchUnit) executam a esteira de Evals.
+4. **`test-writer`** (TDD Red→Green→Refactor) + **`stack-code-reviewer`** (lens D11 — Architecture Evals via ArchUnit, ainda **previsto** e não implementado: `find . -iname '*archunit*'` → vazio) executam a esteira de Evals.
 5. **`review-router`** auto-classifica o diff e despacha reviewers em paralelo.
-6. **`retrospective-mode`** fecha o loop com `engineering/feedback/<spec>.md` e alimenta a próxima spec.
+6. **`retrospective-mode`** fecha o loop e alimenta a próxima spec. O destino canônico do result file é declarado **uma única vez** — em [`retrospective-capture.md` §Destino canônico](../../.agents/specs/conventions/retrospective-capture.md); repeti-lo aqui seria exatamente o defeito que aquela seção nomeia.
 
 ## §3. Checklist de Revisão (`tamanho-e-revisao.md`)
 
-- [x] Arquivo ≤ 300 linhas (73)
+- [x] Dentro do teto de 300 linhas — `wc -l <este arquivo>`
 - [x] pt-BR no corpo
 - [x] Identificadores técnicos em inglês (kebab-case, paths, comandos)
-- [x] Frontmatter canônico com `name`, `description`, `source_url`, `author`, `published`, `updated`, `maintainer` — igual ao de [`vetor-grafos-fine-tuning-resumo.md`](./vetor-grafos-fine-tuning-resumo.md)
-- [x] Cross-refs verificadas (16/16 resolvem a partir de `docs/articles/`)
-- [x] Tabela de mapeamento com 11 entradas (1:1 com os conceitos centrais do artigo)
-- [x] Nota explícita de que a transcrição **não** está neste repositório, com ponteiro para a tag de backup
-- [x] Análise original do autor do projeto-base (não estava no artigo)
+- [x] Frontmatter no **formato do artigo irmão**
+      [`vetor-grafos-fine-tuning-resumo.md`](./vetor-grafos-fine-tuning-resumo.md) —
+      este é um **superconjunto** dele (acrescenta `language`, `tags`, `related`,
+      `status`). **Não existe schema canônico de artigo no repo** contra o qual
+      validar; quem precisar de um, que o crie antes de chamá-lo de canônico.
+- [x] Todo `[texto](path)` do corpo resolve — validado por `pnpm ci:preflight`
+      (`check-doc-refs`), não por contagem
+- [x] §1 mapeia 1:1 os conceitos centrais do artigo
+- [x] A transcrição está declarada fora do repositório, com o comando de
+      recuperação a partir da tag
+- [x] §1 e §2 são análise original do autor do projeto-base (não estavam no artigo)
+
+> **O `related:` do frontmatter não é validado.** O `check-doc-refs` extrai
+> links só pela forma `[texto](path)`, e YAML não tem essa forma — medido: 17
+> links no corpo, **0** no frontmatter. Os caminhos de `related:` resolvem hoje,
+> mas um quebrado amanhã passaria verde. Ampliar o gate é trabalho à parte, com
+> risco de falso positivo: **30** arquivos versionados declaram `related:`.
 
 **Mantido por:** projeto-base contributors · **Licença:** MIT.

@@ -106,7 +106,7 @@ merge-base ele desaparece. Por isso a tabela abaixo é a que vale:
 
 | Branch (PR) | Entregues pela branch | Veredito |
 |---|--:|---|
-| `docs/articles-transcription-vibe-coding-sdd` (#35) | **2** arquivos (mapping 61 linhas + transcrição 513) | o **mapping** foi extraído (PR #57); a **transcrição** segue fora do tronco — decisão de copyright do dono do repo |
+| `docs/articles-transcription-vibe-coding-sdd` (#35) | **2** arquivos: o mapping + a transcrição de 513 linhas | o **mapping** foi extraído (PR #57) e é o arquivo do tronco — `wc -l docs/articles/vibe-coding-sdd-engineering-loop-mapping.md`; a **transcrição** segue fora, sobrevivendo só na tag — decisão de copyright do dono do repo |
 | `feat/evals-convention-and-spec-template` (#36) | **0** | `main` é mais nova em tudo — branch apagada |
 
 As divergências da #36 nos arquivos que existem nos dois lados, todas com `main`
@@ -149,7 +149,9 @@ isso que ele ainda está na branch.
 
 ## A tag de recuperação
 
-Apagar é irreversível para quem não conhece o SHA. Antes de cada `-D`:
+Apagar é irreversível para quem não conhece o SHA. Antes de cada `-D` **em
+branch cujo exame acusou conteúdo fora de `main`** (passo 3 acima) — com o exame
+vazio a main já tem tudo, e criar tag ali é ruído que se acumula a cada limpeza:
 
 ```bash
 git tag backup/<branch> <branch>
