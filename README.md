@@ -2,20 +2,22 @@
 
 > **Monorepo base** para projetos que usam agents de IA interoperáveis.
 > Vendor-neutral — funciona com Claude Code, Cursor, Windsurf, Aider, Continue, Cline e outras ferramentas.
-> Stack inicial: **NestJS (backend) + Next.js (frontend)** + **pnpm workspaces + Turborepo**.
+> Stack implementada: **NestJS (backend) + Next.js (frontend) + OpenTelemetry** + **pnpm workspaces + Turborepo**.
 
 ---
 
 ## O que é
 
-Um **monorepo base reutilizável** que implementa o **padrão genérico de agents de IA** onde todos os agents podem interoperar entre si via coordenação explícita. Use como ponto de partida para qualquer projeto full-stack que queira organizar trabalho multi-agent de forma consistente, com convenções de monorepo bem definidas.
+Um **monorepo base reutilizável** que implementa o **padrão genérico de agents de IA** onde todos os agents podem interoperar entre si via coordenação explícita. Use como ponto de partida para qualquer projeto full-stack que queira organizar trabalho multi-agent de forma consistente, com convenções de monorepo, DDD/Hexagonal e CI defense-in-depth bem definidas.
 
 **Diferencial:** enquanto o template anterior era genérico para qualquer projeto, este é um **monorepo base opinativo** com:
 
-- Estrutura de workspaces (apps/, packages/, tooling/)
-- Stack inicial configurada (NestJS + Next.js)
-- 3 specialists de stack inclusos (`monorepo-specialist`, `nestjs-specialist`, `nextjs-specialist`)
-- Convenções claras de isolamento entre apps e reuso via packages
+- Apps `apps/api` (NestJS) + `apps/web` (Next.js) **já implementados** — bounded context `users` em camadas `domain/`, `application/`, `infrastructure/`
+- 20 agents (12 genéricos + 2 routers + 5 specialists + 1 sub-dir) interoperáveis via skill `agents:coordinate`
+- 9 skills + 10 workflows + 17 convenções canônicas
+- **Paradigma DDD + Hexagonal** canônico (ADR-0001) com guardiões automáticos
+- **OpenTelemetry cross-stack** (backend + frontend + Collector)
+- **CI Defense-in-Depth** em 3 camadas
 
 ## Estrutura
 
@@ -139,58 +141,53 @@ Endpoints:
 
 ### Verificação rápida (CI-equivalente local)
 
-Reproduz o que o CI roda, sem precisar push:
-
 ```bash
-pnpm ci:preflight                         # ~10s — drift (cross-refs, tsconfig, docker, lint)
-pnpm turbo run lint typecheck             # ~1min — qualidade estática
-pnpm turbo run test:unit --filter=@projeto/api   # ~1min
-pnpm turbo run test:unit --filter=@projeto/web   # ~30s
+# Atalho consolidado antes de push — ~1min
+pnpm ci:local    # preflight + lint + typecheck + test:unit + test:coverage
 
-# Docker build sanity (sem daemon local: falha cedo se Dockerfile quebrado)
-docker build -f apps/api/Dockerfile --target dev -t projeto-api:dev .
-docker build -f apps/web/Dockerfile --target dev -t projeto-web:dev .
+# Granular (debug de gate específico)
+pnpm ci:preflight                          # ~10s — drift
+pnpm turbo run lint typecheck              # ~1min
+pnpm turbo run test:coverage --filter=@projeto/api --filter=@projeto/web  # gate 80%
+pnpm stack:review --files="$(git diff --name-only main | tr '\n' ',' | sed 's/,$//')"
+pnpm docs:sync --files="$(git diff --name-only main | tr '\n' ',' | sed 's/,$//')" --mode=check
 ```
 
-Para o smoke completo da stack Docker (requer daemon):
+Smoke completo da stack Docker (requer daemon):
 
 ```bash
-docker compose up -d postgres api web
-sleep 30
-pnpm --filter @projeto/api test:integration
-pnpm --filter @projeto/api test:e2e
-docker compose down
+docker compose up -d postgres api web && sleep 30 \
+  && pnpm --filter @projeto/api test:integration \
+  && pnpm --filter @projeto/api test:e2e && docker compose down
 ```
 
 ### Troubleshooting
 
-| Sintoma | Causa provável | Solução |
-|---|---|---|
-| `prisma migrate deploy` falha em container | Migrations já aplicadas parcialmente | `docker compose down -v` para resetar volume + re-up |
-| `pnpm dev` falha com `Cannot find module '@projeto/...'` | Workspace não linkado | `pnpm install --frozen-lockfile` |
-| `docker compose` diz "port already in use" | Postgres local na 5432 | `lsof -i :5432` → parar processo OU mudar porta no compose |
-| `curl /api/v1/health` retorna 503 (degraded) | Postgres não subiu ou credenciais erradas | `docker compose logs postgres` |
+| Sintoma | Solução |
+|---|---|
+| `prisma migrate deploy` falha em container | `docker compose down -v` para resetar volume + re-up |
+| `pnpm dev` falha com `Cannot find module '@projeto/...'` | `pnpm install --frozen-lockfile` |
+| `docker compose` diz "port already in use" | `lsof -i :5432` → parar processo OU mudar porta no compose |
+| `curl /api/v1/health` retorna 503 | `docker compose logs postgres` |
+| Traces não chegam no OTel Collector | Subir com `docker compose --profile observability up -d` |
+| `pnpm ci:preflight` falha com cross-ref quebrada | `pnpm docs:sync --mode=fix` ou ajustar manualmente |
 
 ## Como usar
 
-### Opção 1: Copiar para novo monorepo
+Três opções para derivar um novo projeto:
 
 ```bash
-cp -r projeto-base/ meu-novo-monorepo/
-cd meu-novo-monorepo/
-# Customize à vontade — o padrão de interoperabilidade permanece
-```
+# Opção 1 — Copiar
+cp -r projeto-base/ meu-novo-monorepo/ && cd meu-novo-monorepo/
 
-### Opção 2: Usar como submodule
-
-```bash
+# Opção 2 — Submodule (sincroniza updates sem perder customizações)
 git submodule add https://github.com/seu-org/projeto-base.git .agents-base
-# Sincronize updates do padrão sem perder customizações locais
+
+# Opção 3 — Fork + personalizar (mantenha §1 do AGENTS.md intacta)
+gh repo fork b3ll3o/projeto-base
 ```
 
-### Opção 3: Fork + personalizar
-
-Faça fork deste repositório e customize para sua organização. Mantenha a `§1` do `AGENTS.md` intacta para preservar a interoperabilidade.
+Independente da opção, o padrão de interoperabilidade permanece intacto.
 
 ## Regra Mandatória
 
@@ -200,34 +197,47 @@ Detalhes completos em [`AGENTS.md`](./AGENTS.md) (seção §1).
 
 ## Agents Inclusos
 
-### Genéricos (10)
+### Genéricos (12)
 
-| Agent              | Uso                                                |
-| ------------------ | -------------------------------------------------- |
-| `agent-architect`  | Cria/evolui agents (meta-agent)                    |
-| `orchestrator`     | Despacha tarefas multi-step                        |
-| `explorer`         | Mapeia código (read-only)                          |
-| `code-reviewer`    | Revisão de código                                  |
-| `security-auditor` | Auditoria OWASP                                    |
-| `refactorer`       | Refatoração incremental                            |
-| `test-writer`      | Criação de testes (TDD)                            |
-| `tdd-enforcer`     | Valida ciclo Red→Green→Refactor (bloqueia merge)   |
-| `doc-writer`       | Documentação                                       |
-| `task-manager`     | Gestão de tarefas                                  |
+| Agent | Uso |
+|---|---|
+| `agent-architect` | Cria/evolui agents (meta-agent) |
+| `orchestrator` | Despacha tarefas multi-step |
+| `explorer` | Mapeia código (read-only) |
+| `code-reviewer` | Revisão geral (bugs, smells, qualidade) |
+| `stack-code-reviewer` | Revisão com lens de stack (DDD/Hexagonal, NestJS, NextJS, Prisma) — gate em pre-commit + CI |
+| `security-auditor` | Auditoria OWASP Top 10 + supply chain |
+| `doc-sync` | Sincroniza docs após alteração de código — gate em pre-commit + CI |
+| `refactorer` | Refatoração incremental TDD-driven |
+| `test-writer` | Criação de testes (TDD/BDD/ATDD) |
+| `tdd-enforcer` | Valida ciclo Red→Green→Refactor (bloqueia merge) |
+| `doc-writer` | Geração de documentação |
+| `task-manager` | Gestão de tarefas e backlog |
 
-### Specialists de Stack (3) — novos em v1.1.0
+### Routers / Orquestradores (2)
 
-| Agent                  | Uso                                                          |
-| ---------------------- | ------------------------------------------------------------ |
-| `monorepo-specialist`  | Estrutura de workspaces, pipelines turbo, versionamento     |
-| `nestjs-specialist`    | Arquitetura backend NestJS (módulos, DI, validação, Swagger) |
-| `nextjs-specialist`    | Arquitetura frontend Next.js (RSC, App Router, Server Actions)|
+| Agent | Uso |
+|---|---|
+| `review-router` | Despacha reviewers em paralelo após task DONE (matriz `path_globs` × `commit_types` × `diff_patterns`) |
+| `specialist-router` | Pré-planejamento — classifica demanda e identifica specialist(s); bloqueia se `gap_detected` |
+
+### Specialists de Stack (5)
+
+| Agent | Uso |
+|---|---|
+| `monorepo-specialist` | Arquiteto de monorepo (workspaces, pipelines turbo, versionamento) |
+| `nestjs-specialist` | Arquitetura backend NestJS (módulos, DI, validação, Swagger, DDD/Hexagonal) |
+| `nextjs-specialist` | Arquitetura frontend Next.js (RSC, App Router, Server Actions) |
+| `docker-specialist` | Containerização (Dockerfile multi-stage, Compose, hardening) |
+| `telemetry-specialist` | Observabilidade cross-stack (OTel SDK init, exporters OTLP, propagação W3C, web-vitals) |
 
 Cada agent possui arquivo de **memória** em `.agents/memory/<nome>.md` que armazena decisões, padrões e sugestões de evolução — garantindo que os agents evoluam junto com a aplicação.
 
 ## Workflows Pré-Configurados
 
-### Genéricos (8)
+Workflows detalhados em [`.agents/WORKFLOWS.md`](./.agents/WORKFLOWS.md) (índice) e [`.agents/workflows/`](./.agents/workflows/) (detalhes por workflow).
+
+### Genéricos (10)
 
 - `feature-mode` — implementar nova feature
 - `bugfix-mode` — corrigir bug
@@ -237,22 +247,25 @@ Cada agent possui arquivo de **memória** em `.agents/memory/<nome>.md` que arma
 - `task-mode` — gerenciar tarefas
 - `explore-mode` — explorar código
 - `review-mode` — revisar PR/diff
+- `release-mode` — preparar release / bumpar versão
+- `retrospective-mode` — capturar aprendizados / post-mortem
 
-### Por Stack (3) — novos em v1.1.0
+### Compostos (6)
 
-- `backend-feature` — implementar endpoint NestJS
-- `frontend-feature` — criar página/rota Next.js
-- `monorepo-change` — adicionar/mover pacote ou app
+`ci-defense-mode` · `state-aware-planning` · `specialist-routing` · `feedback-to-spec` (v1.9.0+ — fecha o Engineering Loop) · `review-routing` · `archive-demand`
 
-Detalhes em [`.agents/WORKFLOWS.md`](./.agents/WORKFLOWS.md).
+### Por Stack (3)
+
+`backend-feature` · `frontend-feature` · `monorepo-change`
 
 ## Stack e Apps Implementados
 
 Conforme convenção [`docs/STACK.md`](./docs/STACK.md):
 
 - **Monorepo:** pnpm workspaces + Turborepo + Changesets
-- **Backend (apps/api):** NestJS 11 + Fastify + Prisma 6 + PostgreSQL
-- **Frontend (apps/web):** Next.js 15 (App Router) + React 19 + Tailwind CSS 4 + shadcn/ui
+- **Backend (`apps/api`):** NestJS 11 + Fastify + Prisma 6 + PostgreSQL 16
+- **Frontend (`apps/web`):** Next.js 15 (App Router) + React 19 + Tailwind CSS 4
+- **Observabilidade:** OpenTelemetry SDK + OTel Collector (perfil Compose `observability`)
 
 Os apps `apps/api` e `apps/web` **já estão implementados** — bounded context
 `users` com auditoria, em camadas `domain/`, `application/` e
@@ -264,22 +277,22 @@ Veja [`docs/MONOREPO.md`](./docs/MONOREPO.md) para convenções detalhadas.
 
 ## Compatibilidade por Ferramenta
 
-| Ferramenta         | Suporte     | Como integrar                                    |
-| ------------------ | ----------- | ------------------------------------------------ |
-| Claude Code        | ✅ Nativo   | `AGENTS.md` carregado automaticamente            |
-| Cursor             | ✅          | `AGENTS.md` + `.cursorrules` opcional            |
-| Windsurf           | ✅          | `AGENTS.md` + `.windsurf/memories/`              |
-| Aider              | ✅          | `--read AGENTS.md`                               |
-| Continue           | ✅          | Custom slash commands                            |
-| GitHub Copilot     | ✅          | `AGENTS.md` + `.github/copilot-instructions.md`  |
-| Cline / Roo Code   | ✅          | `.clinerules`                                    |
-| Cody               | ✅          | `.vscode/cody.json` recipes                      |
+| Ferramenta | Suporte | Como integrar |
+|---|---|---|
+| Claude Code | ✅ Nativo | `AGENTS.md` carregado automaticamente |
+| Cursor | ✅ | `AGENTS.md` + `.cursorrules` opcional |
+| Windsurf | ✅ | `AGENTS.md` + `.windsurf/memories/` |
+| Aider | ✅ | `--read AGENTS.md` |
+| Continue | ✅ | Custom slash commands |
+| GitHub Copilot | ✅ | `AGENTS.md` + `.github/copilot-instructions.md` |
+| Cline / Roo Code | ✅ | `.clinerules` |
+| Cody | ✅ | `.vscode/cody.json` recipes |
 
-Detalhes completos em [`docs/TEMPLATE_USAGE.md`](./docs/TEMPLATE_USAGE.md).
+Detalhes em [`docs/TEMPLATE_USAGE.md`](./docs/TEMPLATE_USAGE.md).
 
 ## Versão
 
-**1.6.0** — Seção "Como executar localmente" (Docker + pnpm nativo + verificação rápida) + healthchecks no compose.
+**1.9.0** — Major doc sync: README alinhado ao estado real (20 agents / 9 skills / 17 conventions / 10 workflows; apps implementados; OpenTelemetry). Bump 1.6.0 → 1.9.0.
 
 ## Licença
 
