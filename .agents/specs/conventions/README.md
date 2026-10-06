@@ -23,6 +23,7 @@ lê — a task 2.2 do plano `guard-classes` fecha isso. **Regra: criar uma conve
 | Cobertura de Testes | [`cobertura-testes.md`](./cobertura-testes.md) | Mínimo 80% agregado por projeto vitest; hard fail CI |
 | Release Automático (Post-Merge) | [`post-merge-release.md`](./post-merge-release.md) | Auto-tagging `vX.Y.Z` via `.github/workflows/release-template.yml` após bump em main |
 | CI Defense in Depth | [`ci-defense-in-depth.md`](./ci-defense-in-depth.md) | 3 camadas: pre-push local + preflight CI + quality CI gated |
+| CI Defense in Depth — pendências | [`ci-defense-in-depth-pendencias.md`](./ci-defense-in-depth-pendencias.md) | Pendências abertas dos gates (companion; cresce sem caber no documento da convenção) |
 | Retrospective Capture | [`retrospective-capture.md`](./retrospective-capture.md) | Captura estruturada de aprendizados pós-atividade (T1/T2/T3 + threshold confidence ≥ 70) |
 | State-Aware Planning (v1.8.0+) | [`state-aware-planning.md`](./state-aware-planning.md) | Camada 0 do pre-planner — `state-snapshot-<ts>.md` antes de planejar; alimenta `specialist-router` camada 1 |
 | Evals (v1.9.0+) | [`evals.md`](./evals.md) | 7 tipos de eval; `specs/<feature>/evals/*.evals.yaml`; gate rules por severidade |

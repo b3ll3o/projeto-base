@@ -35,6 +35,26 @@ jobs:
       # vermelhos sem ninguem perceber. Rodar no job que ja falha rapido.
       - name: Run tooling tests
         run: pnpm tooling:test
+      # pt-BR: issue #45 item 4. O `pr-refresh` so reescreve claims no
+      # paragrafo marcado; sem marcador ele roda, mede, NAO escreve e sai com
+      # "sem-marcador" — que o `.husky/pre-push` engole por decisao de owner
+      # ("nunca bloqueia"). Sem um gate, todo PR nasce inativo e ninguem e
+      # avisado: foi assim que o corpo do #44 mentiu por 2 commits, 5 arquivos
+      # e 1613 linhas. Aqui o gate BLOQUEIA, que e o que job de CI faz.
+      # Fora de `pull_request` nao ha PR: o gate e do PR, nao do push.
+      #
+      # O corpo vem do PAYLOAD do evento (`pull_request.body`), nao de `gh`:
+      # ler o PR que disparou a run nao exige token nenhum, entao o job segue
+      # com `permissions: contents: read` como estava. Conceder
+      # `pull-requests: read` seria trocar um arquivo por uma permissao nova.
+      - name: Gate do marcador pr-refresh
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_BASE: origin/${{ github.event.pull_request.base.ref }}
+        run: |
+          printf '%s' "$PR_BODY" > "$RUNNER_TEMP/pr-body.md"
+          PR_BODY_FILE="$RUNNER_TEMP/pr-body.md" pnpm pr:marker
   quality:
     needs: preflight
     runs-on: ubuntu-latest

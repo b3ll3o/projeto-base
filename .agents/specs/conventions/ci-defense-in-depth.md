@@ -256,66 +256,11 @@ check é TDD (Red→Green→Refactor — ver [tdd.md](./tdd.md)) e vive no git.
 
 ## Pendências conhecidas
 
-- **A tabela de Checks acima é completa** (a task 3.1 do plano
-  [`guard-classes`](../../../docs/superpowers/plans/2026-10-03-guard-classes.md)
-  fechou as 3 lacunas que esta seção declarava). O `preflight` executa
-  **16 entradas** no preflight para **15 arquivos de gate distintos** — a
-  diferença 1 é `check-eslint-drift`, que entra duas vezes (uma por app:
-  `apps` e `packages`), não um gate sem registro. Esses 15 são exatamente as
-  linhas do [Registro de dentes](#registro-de-dentes), e o
-  `check-teeth-registry` é o que reconcilia as duas listas.
-  (Re-medido 2026-10-06: `pnpm ci:preflight | grep -c '^  •'` → 16;
-  `check-agent-memory-drift` entrou pela #47 e `check-tooling-typecheck` pela
-  #46.)
-- **`tooling/scripts/` tem typecheck que NADA executa — e barra mais frouxa
-  que a do resto do repo** (medido 2026-10-06, issue #46). A issue #46 dizia
-  que `.tooling/` era "a única superfície do repo sem typecheck"; isso é
-  falso para `tooling/`, que tem `tooling/scripts/tsconfig.json` mas cujo
-  `tsc` nenhum script e nenhum job de CI roda (`pnpm typecheck` é
-  `turbo run typecheck`, que só alcança workspaces declarados). Três
-  divergências concretas, todas medidas:
-  1. o config **não estende** `tsconfig.base.json` — tem `strict: true` mas
-     **não tem** `noUncheckedIndexedAccess`, que é justamente uma das duas
-     chaves que o `check-tsconfig-drift` reconcilia (e que ele não consegue
-     acusar: sem `extends`, "ausente" e "herda" são indistinguíveis);
-  2. ele **exclui** `**/*.spec.ts` e limita `include` a `./*.ts`, então nem
-     `lib/` nem os specs entram;
-  3. paridade plena custaria **37 erros** (11 deles em specs), contra os
-     **18** que a #46 zerou em `.tooling/`.
-  Uma fração disso já é coberta por acidente: `check-teeth-registry.ts`
-  importa `tooling/scripts/review-router.ts`, e como `.tooling/tsconfig.json`
-  estende a barra do base, aquele arquivo passa a ser verificado por lá — o
-  que obrigou a corrigir os 6 erros dele. **Fechar a lacuna inteira é change
-  próprio**, não cabia na #46 e não foi feito aqui.
-- **Só 6 dos 13 gates têm mutação medida** (ver
-  [Registro de dentes](#registro-de-dentes)). Os outros 7 provam a lógica com
-  `controle negativo` em tmpdir, o que não prova a integração com o sistema
-  real. Fechar os 7 restantes é change próprio, um por gate.
-- **`check-package-json-drift` só varre o `package.json` raiz.** Task
-  turbo fantasma declarada em `apps/*/package.json` escapa do gate, e os
-  4 call-sites `pnpm turbo run` do `ci.yml` também não são varridos.
-- **Os Dockerfiles agora `node:22`, e o `engines.node` declara `>=22.6.0`** —
-  resolvido pela issue #48. As duas propriedades do guard de base image foram
-  separadas (`check-docker-drift.ts`): **distro** (glibc, por causa do engine
-  binary do Prisma 6) e **major** (a que casa com `engines.node` e com
-  `node-version: 22` do CI). Antes elas viviam numa constante só
-  (`REQUIRED_BASE_IMAGE = 'node:20-bookworm-slim'`), o que fazia `node:20-alpine`
-  (problema real de glibc) e `node:22-bookworm-slim` (válido) produzirem a
-  MESMA mensagem, atribuindo bump de major a problema de distro.
-  O selo é o `.npmrc` raiz com `engine-strict=true`, ligado **depois** de subir
-  as imagens — na ordem inversa, o `pnpm install --frozen-lockfile` dentro do
-  build quebraria com exit 1 em vez de avisar.
-  **O que continua aberto:** o CI prova que a imagem **monta**, não que ela
-  **roda** — `grep -rnE 'docker run|docker compose up' -- .github` → 0
-  ocorrências. Nada executa a imagem de produção, então a regressão "roda em
-  major diferente da de build" continua sem verificação de execução.
-- **Skill `ci-defense-in-depth`:** publicada em
-  [`.agents/skills/ci-defense-in-depth/SKILL.md`](../../skills/ci-defense-in-depth/SKILL.md)
-  (v1.4.0). Cobre o template `CheckResult`, fixtures herméticas via
-  `fs.mkdtemp` e code-block-aware parsing para novos checks preflight.
-- **Drift real que justificou o `check-turbo-drift`** (v1.4.0): `stack:review`
-  e `docs:sync` declaravam `outputs` apesar de `cache:false`. Corrigido.
-
+As pendências abertas vivem no companion
+[`ci-defense-in-depth-pendencias.md`](./ci-defense-in-depth-pendencias.md).
+Elas crescem a cada gate novo e este documento está no teto de 300 linhas da
+convenção [`tamanho-e-revisao.md`](./tamanho-e-revisao.md) — um item novo aqui
+significa um corte em outro.
 ## Dívida de controles
 
 Controles que **existem e não rodam** — o oposto da tabela de dentes, que só
