@@ -63,6 +63,33 @@ descartável — uma tinha 2 artigos inteiros ausentes em `main`.
 
 Para essas, o caminho é PR ou backup, nunca `-D` no escuro.
 
+## Caso 3 — PR closed sem merge
+
+O PR fechou mas o código **não** entrou em `main`. É o caso que mais exige
+exame, porque a branch tem conteúdo real que **ninguém mais tem**.
+
+```bash
+gh pr list --state all --head <branch> --json number,state,mergedAt
+```
+
+`state: CLOSED` com `mergedAt: null` = conteúdo não está no tronco. Não apague
+no escuro — rode o exame de conteúdo dos dois casos acima.
+
+Medido neste repo: as 2 branches com PR fechado foram preservadas na limpeza, e
+a verificação pagou — `docs/articles-transcription-vibe-coding-sdd` (PR #35) tem
+2 artigos que **não existem em `main`**, e `feat/evals-convention-and-spec-template`
+(PR #36) tem `evals.md` e `AGENTS.md` que nada em main reproduzia.
+
+Duas saídas legítimas:
+
+- **conteúdo está em `main`** (o PR fechou porque outra via entregou) → apague
+- **conteúdo não está** → **não apague**: reabra o PR, ou salve com
+  `git tag backup/<branch> <branch>` e só então apague
+
+"PR fechado" não é sinônimo de "trabalho preservado". O PR fecha quando alguém
+decide; o conteúdo pode ter sido descartado nessa decisão, e é justamente por
+isso que ele ainda está na branch.
+
 ## A tag de recuperação
 
 Apagar é irreversível para quem não conhece o SHA. Antes de cada `-D`:

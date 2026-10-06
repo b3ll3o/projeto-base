@@ -205,42 +205,41 @@ O nome deve descrever **o problema**, não a ferramenta. `fix/coverage-gate-40`
        │
        ▼
 12. Merge (squash preferencialmente) e apagar a branch
-   (ver §Branch Morta: Apagar Depois do Merge)
+   (ver §Branch Morta: Apagar Quando o PR Sai de OPEN)
 ```
 
-## Branch Morta: Apagar Depois do Merge
+## Branch Morta: Apagar Quando o PR Sai de OPEN
 
-> **REGRA:** branch já mergeada em `main` está **morta**. Apague-a local e
-> remotamente **imediatamente após o merge** — não no fim da sprint, não
-> "quando der", não nunca.
+> **REGRA:** branch cujo PR saiu de `open` — **merged** ou **closed** — está
+> **morta**. Apague-a local e remotamente assim que o PR fechar: não no fim da
+> sprint, não "quando der". Tabela de decisão abaixo.
 
-Branch viva é a que tem trabalho que ainda não chegou a `main`. Depois do merge
-o código já está no tronco; a branch vira duplicata que só diverge e induz
-trabalho a partir de base velha.
+Branch viva é a que tem PR aberto: alguém pode mergear, revisar ou rebasar.
+Depois que o PR fecha, a branch vira duplicata que só diverge.
 
 ```bash
-git branch -d <branch>                  # local (o PR já fez o merge)
+gh pr list --state all --json number,headRefName,mergedAt   # PR saiu de open?
+git branch -d <branch>                  # local
 git push origin --delete <branch>       # remota
 ```
 
-### Como decidir se pode apagar
+### Como decidir
+
+| PR | Pode apagar? |
+|---|---|
+| `merged` (tem `mergedAt`) | **Sim**, direto — se `git log <branch> --not --remotes` vier vazio |
+| `closed` sem merge, ou nunca teve PR | **Só após exame de conteúdo** — apêndice §Caso 2 e §Caso 3 |
 
 `-d` recusa apagar branch não mergeada — **respeite a recusa, não troque por
-`-D`.** `-D` é a exceção que transforma limpeza em perda de trabalho.
+`-D`.** Com squash merge, `git branch --merged main` ainda erra (§apêndice
+§Caso 1), então confirme pelo `mergedAt`, não pelo git.
 
-Com **squash merge**, `git branch --merged main` **não** lista a branch: o
-squash reescreve o patch-id e quebra a detecção por ancestria. Medido neste
-repo — 9 branches ancestrais diretas de `main` **mais** 16 mergeadas por squash,
-com o sinal errado em um dos dois lados. O critério para as de squash é o PR:
-
-```bash
-gh pr list --state merged --json number,headRefName   # PR merged => pode apagar
-git log <branch> --not --remotes                       # commits só locais?
-```
-
-Lista vazia ⇒ apagar é seguro. Lista **não** vazia ⇒ o trabalho pode existir só
-na máquina; ver [git-workflow-apendice.md](./git-workflow-apendice.md) antes de
-`-D`, que também **exige** `git tag backup/<b> <b>` (o `-D` é irreversível).
+`closed` sem merge exige cuidado: o código **não** entrou em `main`, e apagar
+sem conferir destrói trabalho que ninguém mais tem. Das 2 branches com PR
+fechado preservadas na limpeza, **1** tinha conteúdo que nada em `main` tinha.
+Qualquer `-D` **exige** `git tag backup/<b> <b>` antes — o apagamento é
+irreversível para quem não sabe o SHA — e o exame do
+[apêndice](./git-workflow-apendice.md).
 
 ## Pre-Push Quality Gate
 
