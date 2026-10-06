@@ -28,14 +28,30 @@ os SHAs `e4c0971` e `f496b05` de commits que o git ainda classificava como
 # 1. O PR foi merged?
 gh pr list --state merged --json number,headRefName
 
-# 2. A branch tem commits que nunca foram publicados?
-git log <branch> --not --remotes
-#    vazio  => seguro, o conteúdo está todo em main
-#    cheio => o trabalho pode existir só na máquina -> siga para o passo 3
+# 2. A branch tem commits fora de main?
+git log <branch> --not origin/main --oneline
+#    NÃO é discriminante: com squash merge todo commit muda de SHA, então
+#    branch merged também volta "cheio". Use para localizar, não para decidir.
 
-# 3. O que a branch tem que main não tem?
-git diff --name-only main <branch>
+# 3. Quais arquivos existem na branch e NÃO existem em main?
+comm -23 \
+  <(git ls-tree -r --name-only <branch> | sort) \
+  <(git ls-tree -r --name-only origin/main  | sort)
+#    vazio  => nenhum arquivo exclusivo -> vá ao passo 4
+#    cheio => arquivo exclusivo é forte indício de conteúdo perdido -> passo 4 nele
+
+# 4. Dos arquivos que existem nos dois, sobrou linha que só a branch tem?
 ```
+
+> ⚠️ **Não use `git log <branch> --not --remotes` como predicado.** Ele é
+> **inerte**: `--remotes` inclui `origin/<branch>`, logo toda branch publicada
+> devolve vazio — inclusive as que têm conteúdo real ausente de `main`.
+> Medido: as 3 branches remotas deste repo devolveram `0`, e `origin/main`
+> também. Quatro zeros que significam a mesma coisa, um deles com 3 arquivos
+> exclusivos. A inércia vale para branch **publicada** — só work inedito e
+> local (nunca publicado) escapa dela, porque não tem `origin/<branch>`.
+>
+> O discriminante é o **passo 3** (arquivos exclusivos), não o passo 2.
 
 Para cada arquivo divergente, veja se sobrou linha que só a branch tem:
 
@@ -75,10 +91,29 @@ gh pr list --state all --head <branch> --json number,state,mergedAt
 `state: CLOSED` com `mergedAt: null` = conteúdo não está no tronco. Não apague
 no escuro — rode o exame de conteúdo dos dois casos acima.
 
-Medido neste repo: as 2 branches com PR fechado foram preservadas na limpeza, e
-a verificação pagou — `docs/articles-transcription-vibe-coding-sdd` (PR #35) tem
-2 artigos que **não existem em `main`**, e `feat/evals-convention-and-spec-template`
-(PR #36) tem `evals.md` e `AGENTS.md` que nada em main reproduzia.
+Medido neste repo (2026-10-06, 3 branches remotas): as 2 branches com PR fechado
+foram preservadas, e a verificação pagou — `docs/articles-transcription-vibe-coding-sdd`
+(PR #35) tem **3 arquivos exclusivos** que `main` não reproduz: os 2 artigos
+(49 + 285 linhas órfãs) e `apps/api/.eslintrc.js`.
+`feat/evals-convention-and-spec-template` (PR #36) tem 1 arquivo exclusivo — o
+mesmo `.eslintrc.js`, substituído em `main` por `eslint.config.mjs`. Suas
+divergências nos arquivos que existem nos dois lados, todas resolvidas por
+`main` ser mais novo:
+
+| Arquivo | Órfãs | Composição |
+|---|--:|---|
+| `AGENTS.md` | 21 | 18 com `../.agents/` (main usa `./.agents/`), 2 marcadores `_(pendente …)_`, 2 linhas de tabela reescritas por `main` (`Cobertura de Testes`, `Git Workflow`) |
+| `evals.md` | 3 | as 3 refs aos artigos da PR #35 — main já as tem, só o destino não |
+| `spec.md` | 0 | — |
+
+> **Sinal correlato que o exame não acharia:** `evals.md` **em `main`** cita os
+> 2 artigos da PR #35 em 4 lugares — frontmatter `related` (path solto, sem
+> backtick), §0 e `§10. Cross-references` (3 em backtick) — e nenhum dos dois
+> existe em `main`. O gate `check-doc-refs` passa verde porque o gate só
+> reconhece link markdown `[texto](path)`; nenhuma das 4 tem essa forma.
+> Confirmado por counterfactual: convertendo-as em link markdown, o gate acusa
+> as 3 quebradas. Referência quebrada é, portanto, um indício de branch
+> preservada — e um ponto cego do gate.
 
 Duas saídas legítimas:
 
