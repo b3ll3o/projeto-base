@@ -205,7 +205,42 @@ O nome deve descrever **o problema**, não a ferramenta. `fix/coverage-gate-40`
        │
        ▼
 12. Merge (squash preferencialmente) e apagar a branch
+   (ver §Branch Morta: Apagar Depois do Merge)
 ```
+
+## Branch Morta: Apagar Depois do Merge
+
+> **REGRA:** branch já mergeada em `main` está **morta**. Apague-a local e
+> remotamente **imediatamente após o merge** — não no fim da sprint, não
+> "quando der", não nunca.
+
+Branch viva é a que tem trabalho que ainda não chegou a `main`. Depois do merge
+o código já está no tronco; a branch vira duplicata que só diverge e induz
+trabalho a partir de base velha.
+
+```bash
+git branch -d <branch>                  # local (o PR já fez o merge)
+git push origin --delete <branch>       # remota
+```
+
+### Como decidir se pode apagar
+
+`-d` recusa apagar branch não mergeada — **respeite a recusa, não troque por
+`-D`.** `-D` é a exceção que transforma limpeza em perda de trabalho.
+
+Com **squash merge**, `git branch --merged main` **não** lista a branch: o
+squash reescreve o patch-id e quebra a detecção por ancestria. Medido neste
+repo — 9 branches ancestrais diretas de `main` **mais** 16 mergeadas por squash,
+com o sinal errado em um dos dois lados. O critério para as de squash é o PR:
+
+```bash
+gh pr list --state merged --json number,headRefName   # PR merged => pode apagar
+git log <branch> --not --remotes                       # commits só locais?
+```
+
+Lista vazia ⇒ apagar é seguro. Lista **não** vazia ⇒ o trabalho pode existir só
+na máquina; ver [git-workflow-apendice.md](./git-workflow-apendice.md) antes de
+`-D`, que também **exige** `git tag backup/<b> <b>` (o `-D` é irreversível).
 
 ## Pre-Push Quality Gate
 
