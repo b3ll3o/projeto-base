@@ -232,10 +232,15 @@ git push origin --delete <branch>
 **O que decide é `mergedAt`, não a recusa do `-d`.** `-d` recusa apagar branch não
 mergeada e essa recusa protege — mas o caso comum deste repo é o oposto: com
 squash merge o tip deixa de ser ancestral de `main`, então **`-d` recusa branch
-mergeada**. Nenhuma tag `backup/*` deste repo é ancestral de `origin/main`, e o
-conteúdo delas está inteiro em `main` (`git tag --list 'backup/*' | while read t;
-do git merge-base --is-ancestor "$t" origin/main || echo "$t"; done`). Obedecer
-a recusa literalmente tornaria a limpeza **impossível** aqui.
+mergeada**. Nenhuma tag `backup/*` deste repo é ancestral de `origin/main` —
+inclusive as cujas branches mergeadas já estão inteiras em `main`, que é
+justamente o caso que torna a limpeza impossível aqui:
+
+```bash
+git tag --list 'backup/*' | while read t; do
+  git merge-base --is-ancestor "$t" origin/main || echo "não-ancestral: $t"
+done
+```
 
 **`closed` sem merge** exige o exame de conteúdo — foi ele que separou as duas
 branches fechadas: #35 entregou 1 arquivo, #36 entregou 0 (passo 3 do
@@ -263,13 +268,6 @@ localmente. Se falhar, **NÃO fazer push** — corrigir primeiro.
 > pelo hook; é por isso que `ci:local` continua sendo passo manual
 > obrigatório no fluxo. Para o hook passar a cobrir mais, o ajuste é em
 > `.husky/pre-push`, não neste doc.
-
-Falhas capturadas (vs custo de detecção em CI):
-
-- Docs com cross-refs quebradas → 5s local vs 3min CI
-- Drift em tsconfig → 5s local vs 4min CI (typecheck roda)
-- ESLint config duplicada → 5s local vs 3min CI (lint roda)
-- Cobertura abaixo do threshold → já roda no CI
 
 Exceção: hotfix trivial (typo, doc-only). Mesmo nesses casos,
 rodar `pnpm ci:preflight` para validar refs em docs.
