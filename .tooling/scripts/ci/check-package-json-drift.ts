@@ -231,8 +231,14 @@ async function readWorkspaceScriptNames(projectRoot: string): Promise<Set<string
     // Só a forma `dir/*` é suportada. Qualquer outra (nested, negação,
     // variável) devolve null em vez de ser interpretada pela metade.
     const match = /^(.+)\/\*$/.exec(glob);
-    if (!match) return null;
-    const parentDir = path.join(projectRoot, match[1]);
+    // O grupo 1 e garantido pela regex (`.+` = 1+ char), mas o tipo e
+    // `string | undefined`. O default `''` NAO e um valor de fallback inocuo
+    // aqui: `path.join(root, '')` resolve para a raiz e o readdir seguinte
+    // escanearia todo diretorio de topo como se fosse pacote. Entao o valor
+    // ausente sai pelo mesmo caminho de uma forma nao suportada, num branch so.
+    const dirPattern = match?.[1] ?? '';
+    if (dirPattern === '') return null;
+    const parentDir = path.join(projectRoot, dirPattern);
     let entries;
     try {
       entries = await fs.readdir(parentDir, { withFileTypes: true });
@@ -284,8 +290,9 @@ function parseWorkspaceGlobs(yaml: string): string[] | null {
 
     if (!insidePackages) continue;
     const item = /^\s+-\s*['"]?([^'"]+?)['"]?\s*$/.exec(line);
-    if (!item) return null;
-    globs.push(item[1]);
+    const globItem = item?.[1] ?? '';
+    if (globItem === '') return null;
+    globs.push(globItem);
   }
 
   return globs.length > 0 ? globs : null;
@@ -302,7 +309,7 @@ function parseWorkspaceGlobs(yaml: string): string[] | null {
 function extractTsxPath(command: string): string | null {
   const tsxRegex = /tsx\s+([^\s|&;]+)/;
   const match = tsxRegex.exec(command);
-  return match ? match[1] : null;
+  return match?.[1] ?? null;
 }
 
 /**

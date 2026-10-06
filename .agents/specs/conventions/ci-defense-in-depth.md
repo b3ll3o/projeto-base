@@ -57,6 +57,7 @@ Escopo de todos: **todo `.md` versionado** sob a raiz que o preflight passa
 | `check-archive-integrity` | archive | frontmatter canônico de `.agents/runs/archive/*.md` |
 | `check-memory-dir-concordance` | retro | segunda declaração do destino do result file, em 6 notações históricas |
 | `check-agent-memory-drift` | agents | agent com **mudança de comportamento** e memória (`.agents/memory/<agent>.md`) intocada no mesmo range |
+| `check-tooling-typecheck` | typecheck | erro de tipo em `.tooling/scripts/**` sob a barra de `tsconfig.base.json`; `tsc` != 0 **sem** diagnóstico também é vermelho (issue #46) |
 | `review-routing` matrix lint | roteamento | YAML inválido, reviewer inexistente, pattern duplicado, LOC > 300, `blocking: true` casando 0 arquivos |
 
 > **`check-types.ts` NÃO é um check** e saiu desta tabela: tem um único
@@ -101,6 +102,7 @@ extraído em commit `59eb083` (refactor que consolidou fixtures herméticas).
 | `check-archive-integrity` | `check-archive-integrity.spec.ts` — `arquivo INVÁLIDO no archive REAL` + `arquivo inválido no diretório ERRADO` (o par) | **mutação** | comando 1 → **3 de 7 vermelho** (medido 2026-10-05) | `.tooling/scripts/ci/check-archive-integrity.ts` |
 | `check-memory-dir-concordance` | `check-memory-dir-concordance.spec.ts` — `a derivação canônica resolve para um diretório que existe de verdade` | **mutação** | comando 2 → **3 de 27 vermelho** (medido 2026-10-05) | `.tooling/scripts/ci/check-memory-dir-concordance.ts` |
 | `check-agent-memory-drift` | `check-agent-memory-drift.spec.ts` — o par `APENAS path corrigido NÃO é delta` / `prosa NOVA É delta` + `findDriftedAgents` com memória tocada | **mutação** | `npx vitest run --root .tooling/scripts/ci check-agent-memory-drift` → **4 de 12** com `hasBehaviorDelta` sempre true, **3 de 12** com `findDriftedAgents` sempre vazio (medido 2026-10-06) | `.tooling/scripts/ci/check-agent-memory-drift.ts` |
+| `check-tooling-typecheck` | `check-tooling-typecheck.spec.ts` — `NÃO reporta verde quando o tsc falha sem imprimir diagnóstico` / `…sem saída nenhuma` (o par) | **mutação** | `npx vitest run --root .tooling/scripts/ci check-tooling-typecheck` → **3 de 11** com `parseTscDiagnostics` sempre `[]`, **2 de 11** com o `status !== 0` neutralizado (medido 2026-10-06, issue #46) | `.tooling/scripts/ci/check-tooling-typecheck.ts` |
 | `check-turbo-drift` | `check-turbo-drift.spec.ts` — 5 de 6 testes | controle negativo | `npx vitest run --root .tooling/scripts/ci check-turbo-drift` | `.tooling/scripts/ci/check-turbo-drift.ts` |
 | `check-package-json-drift` | `check-package-json-drift.spec.ts` — 9 de 23 | controle negativo | `npx vitest run --root .tooling/scripts/ci check-package-json-drift` | `.tooling/scripts/ci/check-package-json-drift.ts` |
 | `check-docker-drift` | `check-docker-drift.spec.ts` — o par `alpine é VERMELHA por glibc` / `base image na major ATUALIZADA é VERDE`, mais `as duas são motivos DIFERENTES` | **mutação** | `npx vitest run --root .tooling/scripts/ci check-docker-drift` → **2 de 8** com o guarda de distro neutralizado, **2 de 8** com o de major (medido 2026-10-06, issue #48) | `.tooling/scripts/ci/check-docker-drift.ts` |
@@ -257,13 +259,34 @@ check é TDD (Red→Green→Refactor — ver [tdd.md](./tdd.md)) e vive no git.
 - **A tabela de Checks acima é completa** (a task 3.1 do plano
   [`guard-classes`](../../../docs/superpowers/plans/2026-10-03-guard-classes.md)
   fechou as 3 lacunas que esta seção declarava). O `preflight` executa
-  **15 entradas** no preflight para **14 arquivos de gate distintos** — a
+  **16 entradas** no preflight para **15 arquivos de gate distintos** — a
   diferença 1 é `check-eslint-drift`, que entra duas vezes (uma por app:
-  `apps` e `packages`), não um gate sem registro. Esses 14 são exatamente as
+  `apps` e `packages`), não um gate sem registro. Esses 15 são exatamente as
   linhas do [Registro de dentes](#registro-de-dentes), e o
   `check-teeth-registry` é o que reconcilia as duas listas.
-  (Re-medido 2026-10-06: `pnpm ci:preflight | grep -c '^  •'` → 15;
-  `check-agent-memory-drift` entrou pela #47.)
+  (Re-medido 2026-10-06: `pnpm ci:preflight | grep -c '^  •'` → 16;
+  `check-agent-memory-drift` entrou pela #47 e `check-tooling-typecheck` pela
+  #46.)
+- **`tooling/scripts/` tem typecheck que NADA executa — e barra mais frouxa
+  que a do resto do repo** (medido 2026-10-06, issue #46). A issue #46 dizia
+  que `.tooling/` era "a única superfície do repo sem typecheck"; isso é
+  falso para `tooling/`, que tem `tooling/scripts/tsconfig.json` mas cujo
+  `tsc` nenhum script e nenhum job de CI roda (`pnpm typecheck` é
+  `turbo run typecheck`, que só alcança workspaces declarados). Três
+  divergências concretas, todas medidas:
+  1. o config **não estende** `tsconfig.base.json` — tem `strict: true` mas
+     **não tem** `noUncheckedIndexedAccess`, que é justamente uma das duas
+     chaves que o `check-tsconfig-drift` reconcilia (e que ele não consegue
+     acusar: sem `extends`, "ausente" e "herda" são indistinguíveis);
+  2. ele **exclui** `**/*.spec.ts` e limita `include` a `./*.ts`, então nem
+     `lib/` nem os specs entram;
+  3. paridade plena custaria **37 erros** (11 deles em specs), contra os
+     **18** que a #46 zerou em `.tooling/`.
+  Uma fração disso já é coberta por acidente: `check-teeth-registry.ts`
+  importa `tooling/scripts/review-router.ts`, e como `.tooling/tsconfig.json`
+  estende a barra do base, aquele arquivo passa a ser verificado por lá — o
+  que obrigou a corrigir os 6 erros dele. **Fechar a lacuna inteira é change
+  próprio**, não cabia na #46 e não foi feito aqui.
 - **Só 6 dos 13 gates têm mutação medida** (ver
   [Registro de dentes](#registro-de-dentes)). Os outros 7 provam a lógica com
   `controle negativo` em tmpdir, o que não prova a integração com o sistema

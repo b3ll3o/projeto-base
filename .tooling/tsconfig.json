@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "//": "Issue #46: `.tooling/` era a única superfície do repo sem typecheck, e nenhum gate executava tsc sobre ela. Este arquivo fecha a lacuna. Estende `tsconfig.base.json` — a MESMA barra de `apps/` e `packages/`, sem exclusão. A alternativa (barra mais frouxa aqui) criaria dois padrões de tipo no repo, que é exatamente o que `check-tsconfig-drift` existe para impedir. // module: o `NodeNext` do base resolve `.ts` como CommonJS sem `package.json` sob `.tooling/`, e aí TS1470/TS1343/TS2550 disparam — artefato de config, não defeito. `bundler` + `esnext` é o runtime real (executado por `tsx`).",
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "types": ["node"],
+    "lib": ["ES2022"],
+    "baseUrl": "..",
+    "paths": {}
+  },
+  "include": ["scripts/**/*.ts"]
+}

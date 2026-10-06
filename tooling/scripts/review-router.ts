@@ -82,13 +82,19 @@ export function matchPathGlobs(paths: string[], rules: PathGlobRule[]): PathMatc
     const regex = globToRegex(rule.pattern);
     const filesMatched = paths.filter((p) => regex.test(p));
     if (filesMatched.length > 0) {
-      matches.push({
+      // `domain` e opcional em `PathMatch` e `exactOptionalPropertyTypes` esta
+      // ligado: escrever `domain: rule.domain` com `rule.domain` possivelmente
+      // `undefined` nao compila. A chave so entra quando ha dominio — que e o
+      // que "opcional" quer dizer, e tambem o que o `toEqual` dos specs ja
+      // tratava como igual (ele ignora props `undefined`).
+      const m: PathMatch = {
         pattern: rule.pattern,
         reviewers: rule.reviewers,
         files_matched: filesMatched,
         blocking: rule.blocking === true,
-        domain: rule.domain,
-      });
+      };
+      if (rule.domain !== undefined) m.domain = rule.domain;
+      matches.push(m);
     }
   }
   return matches;
@@ -177,11 +183,18 @@ const COMMIT_TYPES = [
 export function parseCommitType(message: string): ParsedCommit {
   const match = message.match(/^(\w+)(?:\(([^)]+)\))?(!)?:\s*(.+)$/);
   if (match) {
-    const [, type, scope, bang, subject] = match;
+    // Os grupos 1 e 4 sao `\w+` e `.+` (ambos 1+ char), e o grupo 2 e
+    // opcional por construcao (`?`) — so ele pode faltar de verdade. O default
+    // `''` nos outros mantem o tipo estrito sem mudar o resultado: `includes('')`
+    // e falso (-> `'chore'`) e `''` nunca chega a `subject` porque `(.+)` casa.
+    const [, type = '', scope, bang, subject = ''] = match;
     const validType = COMMIT_TYPES.includes(type) ? type : 'chore';
-    return { type: validType, scope, breaking: !!bang, subject };
+    const parsed: ParsedCommit = { type: validType, breaking: !!bang, subject };
+    if (scope !== undefined) parsed.scope = scope;
+    return parsed;
   }
-  return { type: 'chore', scope: undefined, breaking: false, subject: message };
+  const fallback: ParsedCommit = { type: 'chore', breaking: false, subject: message };
+  return fallback;
 }
 
 export interface CommitTypeRule {
@@ -289,7 +302,7 @@ export function loadMatrix(markdown: string): Matrix {
   const result: Matrix = {};
 
   for (const match of yamlBlocks) {
-    const yamlContent = match[1];
+    const yamlContent = match[1] ?? '';
     try {
       const parsed = YAML.parse(yamlContent) as Matrix;
       Object.assign(result, parsed);

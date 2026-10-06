@@ -18,6 +18,7 @@ import { checkPackageJsonDrift } from './check-package-json-drift';
 import { checkDockerDrift } from './check-docker-drift';
 import { checkArchiveIntegrity } from './check-archive-integrity';
 import { checkAgentMemoryDrift } from './check-agent-memory-drift';
+import { checkToolingTypecheck } from './check-tooling-typecheck';
 import { checkMemoryDirConcordance } from './check-memory-dir-concordance';
 import { checkTeethRegistry } from './check-teeth-registry';
 import { checkSelfFiringGuards } from './check-self-firing-guard';
@@ -226,6 +227,15 @@ async function main(): Promise<void> {
       name: 'drift agent↔memória (comportamento novo com memória intocada)',
       file: '.tooling/scripts/ci/check-agent-memory-drift.ts',
       fn: () => checkAgentMemoryDrift('.'),
+    },
+    {
+      // Issue #46. `.tooling/` decide se o CI passa, e era a única superfície do
+      // repo sem typecheck: `pnpm typecheck` é `turbo run typecheck`, que só
+      // alcança workspaces declarados. O gate executa o `tsc` sobre o tsconfig
+      // desta própria árvore — que inclui este arquivo.
+      name: 'typecheck tooling (.tooling/)',
+      file: '.tooling/scripts/ci/check-tooling-typecheck.ts',
+      fn: () => checkToolingTypecheck({ repoRoot: '.' }),
     },
     {
       // Task 3.2 do plano guard-classes. Reconcilia o registro de dentes com

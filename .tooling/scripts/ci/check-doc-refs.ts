@@ -107,13 +107,17 @@ export async function checkDocRefs(opts: {
     const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
     let match: RegExpExecArray | null;
     while ((match = linkRegex.exec(content)) !== null) {
-      const target = match[2];
+      // Os 2 grupos sao estruturalmente garantidos pela regex (`[^\]]+` e
+      // `[^)]+`, ambos 1+ char), mas `noUncheckedIndexedAccess` ve um index
+      // possivelmente ausente. O fallback e `''`, nao `!`: um alvo vazio cai
+      // no fim do laco sem reportar, que e o lado seguro para quem varre prosa.
+      const target = match[2] ?? '';
       // Skip external links and pure anchors
       if (target.startsWith('http://') || target.startsWith('https://') || target.startsWith('#')) {
         continue;
       }
       // Strip anchor if present
-      const [filePath] = target.split('#');
+      const [filePath = ''] = target.split('#');
       if (isAllowlisted(filePath)) continue;
       const resolved = path.resolve(path.dirname(file), filePath);
       try {
@@ -122,7 +126,7 @@ export async function checkDocRefs(opts: {
         // O texto do link entra no relatorio: num gate que acusa 58 links em
         // 34 arquivos, o trecho que o autor escreveu localiza melhor que o
         // path repetido. `match[1]` pode vir mascarado (inline code) e vazio.
-        const label = match[1].trim();
+        const label = (match[1] ?? '').trim();
         errors.push(`${rel}: link para '${target}' quebrado${label ? ` (texto: "${label}")` : ''}`);
       }
     }

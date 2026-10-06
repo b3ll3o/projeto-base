@@ -225,6 +225,7 @@ const MATRIX_DOC = join(process.cwd(), '.agents/specs/conventions/review-routing
 export const PREFLIGHT_GATES: GateRef[] = [
   { name: 'Cross-refs em .md versionados', file: '.tooling/scripts/ci/check-doc-refs.ts' },
   { name: 'tsconfig drift', file: '.tooling/scripts/ci/check-tsconfig-drift.ts' },
+  { name: 'typecheck tooling', file: '.tooling/scripts/ci/check-tooling-typecheck.ts' },
   { name: 'eslint drift (api)', file: '.tooling/scripts/ci/check-eslint-drift.ts' },
   { name: 'eslint drift (web)', file: '.tooling/scripts/ci/check-eslint-drift.ts' },
   { name: 'turbo drift', file: '.tooling/scripts/ci/check-turbo-drift.ts' },
