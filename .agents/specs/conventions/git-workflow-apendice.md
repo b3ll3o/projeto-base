@@ -106,8 +106,8 @@ merge-base ele desaparece. Por isso a tabela abaixo é a que vale:
 
 | Branch (PR) | Entregues pela branch | Veredito |
 |---|--:|---|
-| `docs/articles-transcription-vibe-coding-sdd` (#35) | **2** artigos (49 + 285 linhas órfãs) | conteúdo **ausente** de `main` — reabrir ou extrair |
-| `feat/evals-convention-and-spec-template` (#36) | **0** | `main` é mais nova em tudo — apagar |
+| `docs/articles-transcription-vibe-coding-sdd` (#35) | **2** arquivos (mapping 61 linhas + transcrição 513) | o **mapping** foi extraído (PR #57); a **transcrição** segue fora do tronco — decisão de copyright do dono do repo |
+| `feat/evals-convention-and-spec-template` (#36) | **0** | `main` é mais nova em tudo — branch apagada |
 
 As divergências da #36 nos arquivos que existem nos dois lados, todas com `main`
 mais nova — nenhuma é perda:
@@ -125,15 +125,17 @@ mais nova — nenhuma é perda:
 > afirma a regra de cobertura errada ("80% por projeto vitest") que a `main`
 > documenta como inerte.
 
-> **Sinal correlato que o exame não acharia:** `main` cita os 2 artigos da PR
-> #35 em **12 linhas de 5 arquivos** — `engineering-loop.md` (5), `evals.md` (4),
-> `01-understand.md` (1), `vetor-grafos-fine-tuning-resumo.md` (1) e um plano
-> (1) — e não em 4: o artigo chegou a ser citado por PRs que **rodaram depois**
-> do close do #35, alargando o rastro. Nenhuma das 12 tem forma de link
-> markdown, então `check-doc-refs` é cego para todas. Confirmado por
-> counterfactual: convertendo-as em link markdown, o gate acusa as quebradas.
-> Referência quebrada é, portanto, indício de branch preservada — e ponto cego
-> do gate.
+> **Sinal correlato que o exame não acharia:** no momento do exame, `main`
+> citava os 2 artigos da PR #35 em **12 linhas de 5 arquivos** —
+> `engineering-loop.md` (5), `evals.md` (4), `01-understand.md` (1),
+> `vetor-grafos-fine-tuning-resumo.md` (1) e um plano (1) — e não em 4: o
+> artigo chegou a ser citado por PRs que **rodaram depois** do close do #35,
+> alargando o rastro. Nenhuma das 12 tinha forma de link markdown, então
+> `check-doc-refs` era cego para todas. Confirmado por counterfactual:
+> convertendo-as em link markdown, o gate passou a acusar as quebradas — e,
+> depois que o mapping entrou (PR #57), a maioria resolve e fica **sob
+> verificação**. Referência quebrada é, portanto, indício de branch
+> preservada — e ponto cego do gate.
 
 Duas saídas legítimas:
 

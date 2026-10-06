@@ -4,7 +4,7 @@ description: >-
   Análise de como os conceitos do artigo "Vibe Coding, SDD e Engineering Loop"
   (Dennis Rojas, Tech na Prática, 2026-09-15) já vivem no padrão genérico de
   agents deste projeto. Tabela conceito-a-conceito + checklist de revisão.
-source_url: https://www.linkedin.com/
+source_url: https://www.linkedin.com/pulse/vibe-coding-sdd-engineering-loop-evals-e-context-criando-dennis-rojas-wh4jf
 author: Dennis Rojas
 newsletter: Tech na Prática
 published: 2026-09-15
@@ -61,13 +61,13 @@ O artigo descreve — de forma independente e aplicada a uma fintech — exatame
 
 ## §3. Checklist de Revisão (`tamanho-e-revisao.md`)
 
-- [x] Arquivo ≤ 300 linhas (~50 linhas)
+- [x] Arquivo ≤ 300 linhas (73)
 - [x] pt-BR no corpo
 - [x] Identificadores técnicos em inglês (kebab-case, paths, comandos)
-- [x] Frontmatter canônico com `source_article`, `source_author`, `related`
-- [x] Cross-refs verificadas (paths relativos a partir de `docs/articles/`)
+- [x] Frontmatter canônico com `name`, `description`, `source_url`, `author`, `published`, `updated`, `maintainer` — igual ao de [`vetor-grafos-fine-tuning-resumo.md`](./vetor-grafos-fine-tuning-resumo.md)
+- [x] Cross-refs verificadas (16/16 resolvem a partir de `docs/articles/`)
 - [x] Tabela de mapeamento com 11 entradas (1:1 com os conceitos centrais do artigo)
-- [x] Companion explícito do arquivo de transcrição
+- [x] Nota explícita de que a transcrição **não** está neste repositório, com ponteiro para a tag de backup
 - [x] Análise original do autor do projeto-base (não estava no artigo)
 
 **Mantido por:** projeto-base contributors · **Licença:** MIT.
