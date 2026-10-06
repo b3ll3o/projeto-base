@@ -60,6 +60,37 @@ export interface Claim {
    * humano, que é quem pode dizer se a frase é citação ou contagem viva.
    */
   linha: number;
+  /**
+   * Offsets, no corpo, do NÚMERO — do grupo capturado, não do match inteiro.
+   *
+   * `declarado` é `m[0]`, e `m[0]` **não identifica a claim**: `insercoes` e
+   * `remocoes` saem do mesmo regex, nos grupos 1 e 2, e por isso compartilham
+   * a mesma string `declarado` (MEDIDO no PR #44: as duas são
+   * `"+5905/−124"`). Quem reescreve por substring faz as duas disputarem o
+   * mesmo alvo e produz `**45, 50, 6000**` — sem "commits", sem "arquivos",
+   * sem o `−`. O scanner deixa de reportar a linha, então a corrupção não
+   * produz sinal nenhum.
+   *
+   * `ini`/`fim` delimitam só os dígitos, e é por eles que a escrita desce da
+   * direita para a esquerda.
+   */
+  ini: number;
+  fim: number;
+  /**
+   * A palavra da classe — `commits`, `arquivo`, `testes` — com seus offsets.
+   *
+   * Existe por um defeito que só aparece quando o escritor é automático:
+   * `**30 commits**` reescrito para `1` vira `**1 commits**`. O número é
+   * medido e correto, a frase é nova, e ninguém escreveu "1 commits". Um hook
+   * que roda em todo push para sempre produz essa gramática quebrada uma vez
+   * por PR que chegue a um arquivo.
+   *
+   * `insercoes` e `remocoes` NÃO têm palavra: elas moram dentro de `+N/−M`, e
+   * o que está ao redor é o sinal, não um substantivo. Por isso o campo é
+   * opcional em vez de vazio — ausente significa "não há o que ajustar", e
+   * inventar uma palavra para elas seria escrever onde não há texto.
+   */
+  palavra?: { ini: number; fim: number; texto: string };
 }
 
 export interface Medicao {
@@ -119,38 +150,59 @@ const PADROES: Array<{
   classe: Classe;
   re: RegExp;
   grupo: number;
+  /** Índice do grupo que captura a PALAVRA, quando a frase a tem. */
+  palavra?: number;
   medir: (m: Medicao) => number | null;
 }> = [
+  // A flag `d` é o que dá `m.indices` — o offset do GRUPO capturado. Sem ela
+  // não há como reescrever: `m[0]` é o match inteiro, e `insercoes`/`remocoes`
+  // têm o mesmo `m[0]`. Custa nada em velocidade e é a diferença entre
+  // corrigir o cabeçalho e apagá-lo.
+  //
+  // O grupo 2 (`palavra`) existe pelo plural: `**30 commits**` → `1` deixa
+  // `1 commits`, e um escritor que roda em todo push não pode fabricar gramática
+  // quebrada em nome de um número certo.
   {
     classe: 'commits',
-    re: new RegExp(String.raw`(${NUMERO})\s+commits?\b`, 'gi'),
+    re: new RegExp(String.raw`(${NUMERO})\s+(commits?)\b`, 'gdi'),
     grupo: 1,
+    palavra: 2,
     medir: (m) => m.commits,
   },
   {
     classe: 'arquivos',
-    re: new RegExp(String.raw`(${NUMERO})\s+arquivos?\b`, 'gi'),
+    re: new RegExp(String.raw`(${NUMERO})\s+(arquivos?)\b`, 'gdi'),
     grupo: 1,
+    palavra: 2,
     medir: (m) => m.arquivos,
   },
   {
     classe: 'testes',
-    re: new RegExp(String.raw`(${NUMERO})\s+testes?\b`, 'gi'),
+    re: new RegExp(String.raw`(${NUMERO})\s+(testes?)\b`, 'gdi'),
     grupo: 1,
+    palavra: 2,
     medir: () => null,
   },
   // `+N/−M` carrega DOIS grupos. Ler sempre o grupo 1 faria `remocoes` reportar
   // as inserções — e as duas claims divergentes só apareceriam em paralelo,
-  // quando o `+` e o `−` por acaso fossem iguais.
+  // quando o `+` e o `−` por acaso fossem iguais. E como as duas classes
+  // compartilham o MESMO match, os offsets por grupo são a única coisa que
+  // distingue "corrigir as inserções" de "corrigir as remoções".
   {
     classe: 'insercoes',
-    re: new RegExp(String.raw`\+(${NUMERO})\s*\/\s*(?:−|-)(\d+)`, 'g'),
+    re: new RegExp(String.raw`\+(${NUMERO})\s*\/\s*(?:−|-)(\d+)`, 'gdi'),
     grupo: 1,
     medir: (m) => m.insercoes,
   },
   {
     classe: 'remocoes',
-    re: new RegExp(String.raw`\+(${NUMERO})\s*\/\s*(?:−|-)(\d+)`, 'g'),
+    // `NUMERO` e não `(\d+)`: com `(\d+)`, `−1.024` casava só o `1` do milhar
+    // e o resto da palavra virava lixo que o regex deixava passar. MEDIDO
+    // 2026-10-06: o corpo do PR #44 com `−1.024` produzia `declarado=1` — um
+    // número que o autor não escreveu, apresentado no relatório como se fosse
+    // dele. As DUAS metades usam a mesma expressão; se divergirem de novo, as
+    // duas classes medem coisas diferentes sem ninguém perceber.
+    re: new RegExp(String.raw`\+(${NUMERO})\s*\/\s*(?:−|-)(${NUMERO})`, 'gdi'),
     grupo: 2,
     medir: (m) => m.remocoes,
   },
@@ -168,7 +220,7 @@ const PADROES: Array<{
  */
 export function extrairClaims(texto: string): Claim[] {
   const encontradas: Claim[] = [];
-  for (const { classe, re, grupo } of PADROES) {
+  for (const { classe, re, grupo, palavra } of PADROES) {
     // `matchAll` exige `g` e não muta a regex compartilhada (`lastIndex`), ao
     // contrário de `exec`. Por isso o `new RegExp` de cada `PADROES` é seguro.
     for (const m of texto.matchAll(re)) {
@@ -186,7 +238,24 @@ export function extrairClaims(texto: string): Claim[] {
       // `m.index` (e não em `+1`) evita um `slice` do corpo inteiro por claim —
       // o corpo é entrada não confiável e o custo é meu, não do autor.
       const linha = texto.slice(0, m.index).split('\n').length;
-      encontradas.push({ classe, valor: n, declarado: m[0], linha });
+      // Os offsets do GRUPO, não do match. `m.indices` só existe por causa da
+      // flag `d`; sem ele a claim é descartada em vez de ganhar offsets que
+      // não existem — escrever no lugar errado é pior que não escrever.
+      const digitos = m.indices?.[grupo];
+      if (digitos === undefined) continue;
+      const daPalavra = palavra === undefined ? undefined : m.indices?.[palavra];
+      const textoPalavra = palavra === undefined ? undefined : m[palavra];
+      encontradas.push({
+        classe,
+        valor: n,
+        declarado: m[0],
+        linha,
+        ini: digitos[0],
+        fim: digitos[1],
+        ...(daPalavra !== undefined && textoPalavra !== undefined
+          ? { palavra: { ini: daPalavra[0], fim: daPalavra[1], texto: textoPalavra } }
+          : {}),
+      });
     }
   }
   return encontradas;
@@ -205,12 +274,26 @@ function git(repo: string, args: string[]): string {
 }
 
 export function medirBranch(repo: string, base: string): Medicao {
-  const range = `${base}..HEAD`;
-  let commits: number;
-  let arquivos: number;
-  let insercoes = 0;
-  let remocoes = 0;
-
+  // A base de um PR é o MERGE-BASE, não a ponta da `main`. Resolver isso
+  // explicitamente é o que faz os quatro números casarem com a aba "Files
+  // changed" do GitHub — e o motivo é medido, não presumido.
+  //
+  // As duas formas "óbvias" erram em direções diferentes, e nenhuma delas é
+  // óbvia depois de measure. No fixture `repoDesvioFixture` (`main` ganhou
+  // c.txt e d.txt depois do desvio):
+  //
+  //     base..HEAD     2 pontos, ponta da base  -> 3 arquivos, 0 inserções,
+  //                     3 remoções. A main "desfaz" c.txt e d.txt, e eles
+  //                     contam como REMOVIDOS.
+  //     base...HEAD    3 pontos                 -> diff certo (2 arquivos,
+  //                     +2 −1), mas `rev-list --count` de três pontos é a
+  //                     DIFERENÇA SIMÉTRICA: devolve 2, contando o commit da
+  //                     main que a branch não tem.
+  //     merge-base..   o que este arquivo faz   -> 1 commit, 2 arquivos, +2 −1.
+  //
+  // Consequência prática do errado: os números do corpo mudam sozinhos quando
+  // alguém faz merge na `main`, sem nenhum push desta branch. A aba ao lado
+  // não muda.
   try {
     git(repo, ['rev-parse', '--verify', base]);
   } catch {
@@ -219,16 +302,35 @@ export function medirBranch(repo: string, base: string): Medicao {
     throw new Error(`base inválida: "${base}" não resolve neste repo (${repo})`);
   }
 
-  commits = Number(git(repo, ['rev-list', '--count', range]).trim());
-  arquivos = git(repo, ['diff', '--name-only', range])
+  let baseEfetiva: string;
+  try {
+    baseEfetiva = git(repo, ['merge-base', base, 'HEAD']).trim();
+  } catch {
+    // Histórico sem ancestral comum (rebase sem `fetch`, ou `base` em outro
+    // universo de objetos). Diff entre eles não é "o que a branch fez" — é
+    // ruído. Sem ancestral não há PR para medir, e dizer isso é melhor que
+    // devolver quatro números que descrevem nada.
+    throw new Error(
+      `base sem ancestral comum: "${base}" e HEAD não convergem (${repo}); rebase ou fetch antes de medir`,
+    );
+  }
+
+  const range = `${baseEfetiva}..HEAD`;
+  const commits = Number(git(repo, ['rev-list', '--count', range]).trim());
+  const arquivos = git(repo, ['diff', '--name-only', range])
     .split('\n')
     .filter((l) => l.length > 0).length;
 
   const shortstat = git(repo, ['diff', '--shortstat', range]).trim();
+  // Zero inserções não produz `insertions` no shortstat — o git escreve
+  // "3 files changed, 3 deletions(-)" e a classe `insercoes` fica no 0 inicial,
+  // que é o número certo. Um `|| 0` aqui esconderia a diferença entre "zero" e
+  // "o shortstat não parseou"; os dois já produzem 0, então a diferença não
+  // existe para o chamador, e poluir o regex para exprimir 0 seria só risco.
   const ins = /(\d+) insertions?\(\+\)/.exec(shortstat);
   const del = /(\d+) deletions?\(-\)/.exec(shortstat);
-  if (ins?.[1] !== undefined) insercoes = Number(ins[1]);
-  if (del?.[1] !== undefined) remocoes = Number(del[1]);
+  const insercoes = ins?.[1] === undefined ? 0 : Number(ins[1]);
+  const remocoes = del?.[1] === undefined ? 0 : Number(del[1]);
 
   return { commits, arquivos, insercoes, remocoes };
 }
@@ -239,8 +341,18 @@ export interface Opcoes {
   base: string;
 }
 
-export function varrer({ bodyFile, repo, base }: Opcoes): Relatorio {
-  const texto = readFileSync(bodyFile, 'utf8');
+/**
+ * O scanner, com o corpo já em memória.
+ *
+ * `varrer` é a porta de arquivo porque o `preflight` e o scanner rodam offline
+ * por padrão. O hook recebe o corpo pela rede, e mandar a rede para um arquivo
+ * temporário para a rede ler de volta seria um dance sem ganho — pior, criaria
+ * um arquivo cujo conteúdo é entrada não confiável em `/tmp`.
+ *
+ * A implementação é a MESMA: `varrer` delega para cá. A duplicação seria o
+ * modo pelo qual os dois divergem em silêncio daqui a seis meses.
+ */
+export function varrerTexto(texto: string, repo: string, base: string): Relatorio {
   const medicao = medirBranch(repo, base);
   const claims = extrairClaims(texto).map((c): ClaimVerificada => {
     const medido = PADROES.find((p) => p.classe === c.classe)?.medir(medicao) ?? null;
@@ -271,6 +383,10 @@ export function varrer({ bodyFile, repo, base }: Opcoes): Relatorio {
           .join('; ');
 
   return { base, claims, resumo };
+}
+
+export function varrer({ bodyFile, repo, base }: Opcoes): Relatorio {
+  return varrerTexto(readFileSync(bodyFile, 'utf8'), repo, base);
 }
 
 function main(argv: string[]): number {

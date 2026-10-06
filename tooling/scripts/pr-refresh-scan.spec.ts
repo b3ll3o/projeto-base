@@ -60,7 +60,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import type { Medicao } from './pr-refresh-scan.js';
-import { extrairClaims, medirBranch, varrer } from './pr-refresh-scan.js';
+import { extrairClaims, medirBranch, varrer, varrerTexto } from './pr-refresh-scan.js';
 
 // O spec vive em tooling/scripts/, a raiz do repo está 2 níveis acima.
 //
@@ -204,7 +204,88 @@ describe('pr-refresh-scan: extração de claims', () => {
     const commits = c.filter((x) => x.classe === 'commits');
     expect(commits.map((x) => x.valor)).toEqual([20, 31]);
   });
+
+  it('lê o separador de milhar NAS DUAS metades de `+N/−M`', () => {
+    // MEDIDO (bug real, 2026-10-06): o grupo 1 usava `NUMERO` e o grupo 2
+    // usava `(\d+)`. Com `−1.024`, as inserções saíam 5905 (certo) e as
+    // remoções saíam **1** — o `1` do milhar, com o resto lido como texto.
+    //
+    // O relatório apresentava `declarado=1` como se o autor tivesse escrito 1.
+    // Pior sozinho isso seria um relatório errado; com o `pr-refresh-apply`
+    // escrevendo por conta própria, viraria uma reescrita que sobrescreve
+    // `1.024` por `124` — e a conta do corpo deixa de fechar. Fabricar o dado
+    // é pior que não medir: o número errado aparece como se fosse do autor.
+    const c = extrairClaims('**+5905/−1.024**');
+    expect(c.find((x) => x.classe === 'insercoes')?.valor).toBe(5905);
+    expect(c.find((x) => x.classe === 'remocoes')?.valor).toBe(1024);
+  });
+
+  it('as DUAS metades de `+N/−M` continuam sendo claims separadas', () => {
+    // A correção do milhar não pode vir por fusão dos dois grupos: são duas
+    // classes medidas de formas diferentes, e uma delas Some se virar a outra.
+    const c = extrairClaims('**+5.000/−2.000**');
+    expect(c.filter((x) => x.classe === 'insercoes').map((x) => x.valor)).toEqual([5000]);
+    expect(c.filter((x) => x.classe === 'remocoes').map((x) => x.valor)).toEqual([2000]);
+  });
+
+  it('cada claim carrega os offsets do NÚMERO, e eles delimitam os dígitos', () => {
+    // Sem isto a escrita por offset não tem alvo, e voltar para substring é o
+    // caminho que transforma o cabeçalho em `**45, 50, 6000**`.
+    const texto = '**38 commits, 42 arquivos**';
+    const c = extrairClaims(texto);
+    for (const claim of c) {
+      expect(texto.slice(claim.ini, claim.fim)).toBe(String(claim.valor));
+    }
+  });
 });
+
+/**
+ * Repo onde a `main` avançou DEPOIS do ponto de divergência.
+ *
+ *   A ──────► B   (branch `topic`: a.txt 1/3, b.txt novo)      <- estamos aqui
+ *    \
+ *     └──────► C   (main: a.txt 1/2/9, c.txt, d.txt)
+ *
+ * Os dois diffs discordam, e discordam no que interessa:
+ *
+ *   `main..B`   (dois pontos)  mede C → B: a main "desfaz" o que C fez, então
+ *                               c.txt e d.txt aparecem como REMOVIDOS.
+ *                               MEDIDO: 3 arquivos, 0 inserções, 3 remoções.
+ *   `main...B`  (três pontos)  mede merge-base → B: 2 arquivos, +2 −1.
+ *
+ * O GitHub resolve a "Files changed" com o de TRÊS pontos. Um corpo reescrito
+ * com o número de dois pontos volta errado assim que `main` recebe um commit
+ * que a branch não tem — e o número errado é plausível o bastante para passar
+ * por review.
+ */
+function repoDesvioFixture(): {
+  repo: string;
+  tresPontos: Medicao;
+  doisPontos: Medicao;
+} {
+  const repo = mkdtempSync(join(tmpdir(), 'pr-refresh-desvio-'));
+  git(repo, ['init', '-q', '-b', 'main']);
+  writeFileSync(join(repo, 'a.txt'), '1\n2\n');
+  commitar(repo, 'A');
+
+  git(repo, ['checkout', '-q', '-b', 'topic']);
+  writeFileSync(join(repo, 'a.txt'), '1\n3\n');
+  writeFileSync(join(repo, 'b.txt'), 'x\n');
+  commitar(repo, 'B');
+
+  git(repo, ['checkout', '-q', 'main']);
+  writeFileSync(join(repo, 'a.txt'), '1\n2\n9\n');
+  writeFileSync(join(repo, 'c.txt'), 'z\n');
+  writeFileSync(join(repo, 'd.txt'), 'w\n');
+  commitar(repo, 'C');
+
+  git(repo, ['checkout', '-q', 'topic']);
+  return {
+    repo,
+    tresPontos: { commits: 1, arquivos: 2, insercoes: 2, remocoes: 1 },
+    doisPontos: { commits: 1, arquivos: 3, insercoes: 0, remocoes: 3 },
+  };
+}
 
 describe('pr-refresh-scan: medição', () => {
   it('mede a branch contra uma base explícita e devolve os quatro números', () => {
@@ -215,6 +296,36 @@ describe('pr-refresh-scan: medição', () => {
   it('a base não existe → erro nomeado, nunca um número inventado', () => {
     const { repo } = repoFixture();
     expect(() => medirBranch(repo, 'ref/que-nao-existe')).toThrow(/base/);
+  });
+
+  it('mede em DOIS pontos quando a base avançou depois do desvio', () => {
+    // O teste que fixa o comportamento. Sem ele, este arquivo aceita as duas
+    // respostas e um dia volta para a errada por engano, sem ninguém ver.
+    const { repo, doisPontos, tresPontos } = repoDesvioFixture();
+    const medido = medirBranch(repo, 'main');
+    expect(medido).not.toEqual(doisPontos);
+    expect(medido).toEqual(tresPontos);
+  });
+});
+
+describe('pr-refresh-scan: varrerTexto — o mesmo scanner, sem arquivo no meio', () => {
+  it('mede o MESMO texto que `varrer` mede a partir do arquivo', () => {
+    // O hook recebe o corpo pela rede e não pode (e não quer) escrever um
+    // arquivo temporário para a rede poder ler de volta. `varrerTexto` é o
+    // mesmo caminho de código com a origem trocada — e este teste é o que
+    // impede os dois de divergirem em silêncio depois.
+    const { repo, base, esperado } = repoFixture();
+    const falso = `**${esperado.commits + 19} commits, ${esperado.arquivos + 32} arquivos, +${esperado.insercoes + 4400}/−${esperado.remocoes + 101}**`;
+    const texto = `${falso}\n\nprosa`;
+    const deArquivo = varrer({ bodyFile: corpoFixture(texto), repo, base });
+    const deTexto = varrerTexto(texto, repo, base);
+    expect(deTexto.claims).toEqual(deArquivo.claims);
+    expect(deTexto.resumo).toBe(deArquivo.resumo);
+  });
+
+  it('lança com o mesmo erro nomeado quando a base não existe', () => {
+    const { repo } = repoFixture();
+    expect(() => varrerTexto('texto', repo, 'ref/que-nao-existe')).toThrow(/base/);
   });
 });
 

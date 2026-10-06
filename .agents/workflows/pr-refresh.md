@@ -115,28 +115,23 @@ reusar o resultado de T1.
    O corpo chega como **arquivo**, nunca por comando. É o que mantém o passo
    seguinte offline e testável por fixture.
 
-   > **As duas guardas são o passo, não a decoração.** Medido 2026-10-05 contra
-   > o PR #44: `gh pr view 44 > f` → **exit 1 e 0 bytes**. O passo 3 lê um
-   > arquivo vazio, não acha claim nenhuma e responde **"nenhuma claim
-   > mensurável"** — que é a mesma frase de um PR legitimamente sem número. A
-   > falha de rede, a de autenticação e o token revogado chegam todos como
-   > "PR em dia". A guarda pelo `exit` pega a falha; a guarda pelo `-s` pega o
-   > caso em que o `gh` sai 0 e não escreve nada, que a primeira não vê.
+   > **As duas guardas são o passo, não a decoração.** MEDIDO 2026-10-05 no PR
+   > #44: `gh pr view 44 > f` → **exit 1 e 0 bytes**; o passo 3 lê um arquivo
+   > vazio e responde "nenhuma claim mensurável" — a mesma frase de um PR
+   > legitimamente sem número. Rede, auth e token revogado chegam todos como
+   > "PR em dia". A guarda pelo `exit` pega a falha; a do `-s` pega o caso em que
+   > o `gh` sai 0 sem escrever, que a primeira não vê. Sem uma das duas, há um
+   > **falso verde silencioso** — o pior deles, porque é indistinguível do
+   > sucesso.
    >
-   > Sem uma das duas, este workflow tem um **falso verde silencioso** — e o
-   > pior deles, porque é indistinguível do sucesso.
-
-   > **`--json body -q .body` é obrigatório, não preferência.** O `gh pr view`
-   > **sem** `--json` chama `projectCards` e quebra com
-   > `GraphQL: Projects (classic) is being deprecated`. A mesma depreciação que
-   > quebra `gh pr edit --body`.
-
-   > **Por que `mktemp -d` e não `.pr-body.md` na raiz.** A primeira versão
-   > deste passo escrevia na raiz do repo. O arquivo ficava **untracked**, e
-   > todo gate deste repo enumera com `git ls-files` — que só enxerga o
-   > rastreado. O resultado é um `.md` na árvore que **nenhum gate vê**, e que
-   > um `git add -A` disto empurra para dentro do PR. Medido: `git
-   > check-ignore .pr-body.md` → **não ignorado**.
+   > **`--json body -q .body` é obrigatório**, não preferência: `gh pr view` sem
+   > `--json` chama `projectCards` e quebra com `GraphQL: Projects (classic) is
+   > being deprecated` — a mesma depreciação que quebra `gh pr edit --body`.
+   >
+   > **Por que `mktemp -d` e não `.pr-body.md` na raiz:** o arquivo ficava
+   > untracked, e todo gate deste repo enumera com `git ls-files` — o resultado é
+   > um `.md` na árvore que **nenhum gate vê** e que um `git add -A` empurra para
+   > dentro do PR. MEDIDO: `git check-ignore .pr-body.md` → **não ignorado**.
 
 3. **Rodar o scanner (T3).**
    ```bash
@@ -262,11 +257,11 @@ reusar o resultado de T1.
 ## O que este workflow NÃO faz
 
 - **Não roda nada do corpo do PR** (ver "fronteira de segurança").
-- **Não reescreve o PR inteiro** — só as linhas divergentes.
+- **Não reescreve o PR inteiro** — só as linhas divergentes **do parágrafo que
+  o corpo marcou** com `<!--pr-refresh:live-->`.
 - **Não muda escopo nem título por conta própria.**
-- **Não roda em push.** É um workflow sob demanda: quem decide a hora é quem
-  está empurrando. Automatizá-lo exige um gatilho, e gatilho em `.husky/` ou em
-  CI é decisão do owner — ver "Decisões pendentes" abaixo.
+- **Não bloqueia um push.** Ele roda no `.husky/pre-push`, depois do preflight,
+  e o código de saída dele nunca chega ao `git push`.
 
 ## Saídas
 
@@ -276,21 +271,30 @@ reusar o resultado de T1.
 - Corpo do PR atualizado **apenas** nas linhas divergentes (se havia)
 - Nenhum arquivo do repo alterado
 
+## Como ele roda (o gatilho)
+
+Roda no `.husky/pre-push`, **depois** do `pnpm ci:preflight`, e **nunca bloqueia
+o push**. Autorizado pelo owner em 2026-10-06 (*"a partir do momento que o PR
+está aberto, ao fazer qualquer push quero que seja executado o pr-refresh"*),
+com **hook local** e **nunca bloqueia** escolhidos explicitamente.
+
+Os **seis estados** que ele pode imprimir (e por que cinco "não escrevi" não
+podem virar um só), a **janela residual** do `pre-push` e o motivo de cada
+guarda estão na docstring de
+[`pr-refresh-hook.ts`](../../tooling/scripts/pr-refresh-hook.ts) — no código
+que os implementa, e não numa cópia deste arquivo que envelhece sem que alguém
+remeça.
+
 ## Decisões pendentes (o owner decide, não este workflow)
 
-1. **Gatilho automático.** Um `post-push` que rode `pr-refresh-scan` e
-   **imprima** o relatório (sem escrever no PR) seria útil e barato. Mas
-   `.husky/pre-push` é **persistência**: roda em todo push futuro, e precisa de
-   autorização explícita. **Não foi adicionado** — o owner não pediu, e o
-   padrão deste repo é perguntar antes de criar hook.
-2. **Claim inline (`spec (34 testes)`).** É o caso mais comum de
+1. **Claim inline (`spec (34 testes)`).** É o caso mais comum de
    envelhecimento silencioso e o scanner **não** o cobre: só reconhece as cinco
    classes da tabela. Cobrir exige parsear artefato-por-artefato, e um parser
    que só reconhece o formato que ele mesmo escreveu cobre só esse formato.
 
 ## Cross-refs
 
-- Script: [`tooling/scripts/pr-refresh-scan.ts`](../../tooling/scripts/pr-refresh-scan.ts) · spec: [`pr-refresh-scan.spec.ts`](../../tooling/scripts/pr-refresh-scan.spec.ts)
+- Scripts: [`pr-refresh-scan.ts`](../../tooling/scripts/pr-refresh-scan.ts) (mede) · [`pr-refresh-apply.ts`](../../tooling/scripts/pr-refresh-apply.ts) (reescreve string) · [`pr-refresh-hook.ts`](../../tooling/scripts/pr-refresh-hook.ts) (gatilho + rede) — cada um com o spec homônimo ao lado
 - Convenção: [`.agents/specs/conventions/guard-classes.md`](../specs/conventions/guard-classes.md) (as 7 classes — em especial a 1 e a 7)
 - Git: [`.agents/specs/conventions/git-workflow.md`](../specs/conventions/git-workflow.md)
 - Retrospectiva: [`.agents/workflows/retrospective-mode.md`](./retrospective-mode.md)

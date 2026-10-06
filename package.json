@@ -19,6 +19,7 @@
     "test:e2e": "turbo run test:e2e",
     "ci:preflight": "tsx .tooling/scripts/ci/preflight.ts",
     "ci:local": "pnpm ci:preflight && pnpm turbo run lint typecheck test:unit test:coverage --filter=@projeto/api --filter=@projeto/web",
+    "pr:refresh": "tsx tooling/scripts/pr-refresh-hook.ts",
     "stack:review": "tsx tooling/scripts/stack-code-reviewer.ts",
     "docs:sync": "tsx tooling/scripts/doc-sync.ts",
     "review:route": "cd tooling/scripts && pnpm review:route",
