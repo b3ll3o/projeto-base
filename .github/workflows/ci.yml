@@ -20,9 +20,18 @@ jobs:
       # `origin/main` não tem ancestral comum com HEAD — o `varrerTexto` levanta
       # "base sem ancestral comum" e o gate morre com stack trace.
       # MEDIDO no PR #53: preflight vermelho por exatamente isso.
+      #
+      # `ref` no head da branch, e não no ref de merge: o merge ref que o
+      # GitHub fabrica tem DOIS pais (base + head) e `rev-list --count
+      # base..HEAD` conta o próprio commit sintético junto. O CI media 8
+      # commits onde a branch tem 7 — e todo corpo de PR escrito localmente
+      # diverge em exatamente 1, na CI e para sempre.
+      # MEDIDO no PR #53: `dec7a89` (pais `8de508a` + `095c043`) → 8; o head
+      # `095c043` → 7. É o mesmo gate, medindo duas branchs diferentes.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: pnpm/action-setup@v3
       - uses: actions/setup-node@v4
         with:
