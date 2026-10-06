@@ -49,3 +49,46 @@ apps/api/openapi.json
 # `*.workflow.visual-check.{json,html}` e `*.{type}.visual-check.{w}x{h}.{theme}.png`.
 *.visual-check.*
 
+# pt-BR: playwright-mcp MCP despeja accessibility-snapshots (`page-<ts>.yml`) e
+# console logs (`console-<ts>.log`) no cwd de onde a sessao foi aberta. Sao
+# artefatos de navegacao de UMA sessao, nunca insumo de build ou teste.
+# MEDIDO 2026-10-06: `git grep -l "playwright-mcp" -- . ':!.gitignore'` -> exit=1,
+# 0 hits nos 600 arquivos versionados; `@playwright/test` so aparece em
+# `pnpm-lock.yaml`, nao ha consumidor. Padrao SEM `/` inicial de proposito:
+# comecado em `apps/web/`, a saida cai em `apps/web/.playwright-mcp/` e o padrao
+# ancorado na raiz deixaria passar. MEDIDO: `/.playwright-mcp/` -> exit=1 em
+# `apps/api/.playwright-mcp/x.yml`; `.playwright-mcp/` -> exit=0 nas tres
+# profundidades; 0 versionados escondidos nas duas variantes
+# (`git ls-files | git check-ignore --stdin | wc -l` -> 0). Nao usar `*.yml` —
+# engoliria fixtures. NOTA: o `console-*.log` ja era coberto por `*.log` (linha
+# 21); sao os 5 `.yml` que apareciam no `git status`.
+# NAO precisa de entrada em `.prettierignore`: MEDIDO que o prettier 3.9.8 deste
+# repo ja respeita `.gitignore` (arquivo `*.yml` desformatado dentro de um padrao
+# ignorado passa no `prettier --check`).
+.playwright-mcp/
+
+# pt-BR: `--help/` e `--version/` na raiz sao artefato do `husky 9` — `bin.js`
+# faz `i(a == 'install' ? undefined : a)` com `a = process.argv[2]`, e o default
+# export de `index.js` usa esse valor como diretorio-alvo. `husky --help` NAO
+# entra em nenhum dos ramos de guarda (`init`, `add`/`set`/`uninstall`,
+# `install`), entao `--help` vira literalmente o nome do diretorio: materializa
+# `--help/_/` com os hooks dentro e ainda escreve
+# `git config core.hooksPath --help/_`. Eles ja estavam fora do status antes
+# destas regras, mas por acidente de terceiro: cada `_/` tem um `.gitignore`
+# com `*` que o proprio husky escreve. MEDIDO: existe `--help/_/.gitignore`
+# contendo `*`, e o `husky.sh` dessas pastas avisa "They WILL FAIL in v10.0.0".
+# Depender disso e deixar o estado de ignore do repo refem de um arquivo que o
+# husky reescreve — e o `husky --help` que o criou reescreve `core.hooksPath`.
+# Com estas regras a dependencia acaba: MEDIDO `git check-ignore -v --
+# '--help/_/husky.sh'` -> `.gitignore:<linha>:/--help/` (o `.gitignore` da raiz
+# precede o aninhado, entao este e quem resolve). Ancorados na raiz porque sao
+# nomes com sinal de menos, que so formam path na raiz. MEDIDO em repo
+# descartavel (`printf -- 'apps/api/--help/x.txt\napps/api/a/x.txt\n' | git
+# check-ignore --stdin`): sem ancora casam os 4 caminhos, com ancora so os 2 da
+# raiz — ancorar aqui NAO e defensivo, e o que impede `apps/api/--help/` de
+# sumir. NOTA: o caminho com sinal de menos exige `--` antes do argumento, senao
+# o proprio git o le como opcao.
+# MEDIDO: `git ls-files | grep -cE '(^|/)(--help|--version)(/|$)'` -> 0.
+/--help/
+/--version/
+
