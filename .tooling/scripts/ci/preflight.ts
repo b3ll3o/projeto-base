@@ -23,6 +23,7 @@ import { checkMemoryDirConcordance } from './check-memory-dir-concordance';
 import { checkTeethRegistry } from './check-teeth-registry';
 import { checkSelfFiringGuards } from './check-self-firing-guard';
 import { checkHarnessOwner } from './check-harness-owner';
+import { checkBranchUpToDate } from './check-branch-up-to-date';
 import { existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
@@ -278,6 +279,20 @@ async function main(): Promise<void> {
       name: 'controle desligado (harness órfão + destino sem guard)',
       file: '.tooling/scripts/ci/check-harness-owner.ts',
       fn: () => checkHarnessOwner(),
+    },
+    {
+      // Regra de `git-workflow.md`: demanda implementada com a main
+      // desatualizada é rebaseada na main atualizada. Entrei pelo preflight e
+      // não pelo `ci:local` pelo mesmo motivo do differential acima — o CI
+      // roda `ci:preflight`, e uma regra que só roda na máquina de quem a
+      // escreveu não é uma regra do repo.
+      //
+      // `skipped` quando `origin/main` não existe: aí não há o que medir, e
+      // um verde aqui afirmaria que a demanda contém a main atual sem ter
+      // perguntado a ninguém.
+      name: 'demanda rebaseda na main atual (regra de rebase)',
+      file: '.tooling/scripts/ci/check-branch-up-to-date.ts',
+      fn: () => checkBranchUpToDate(),
     },
   ];
 
