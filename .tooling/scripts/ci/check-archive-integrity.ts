@@ -34,7 +34,7 @@
  *
  * Retorna `CheckResult` no formato padrão do preflight.
  */
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
@@ -49,6 +49,21 @@ import type { CheckResult } from './check-types';
 export function buildLintArgs(repoRoot: string): { archiveDir: string; args: string[] } {
   const archiveDir = resolve(repoRoot, '.agents/runs/archive');
   return { archiveDir, args: ['archive:lint', `--archive-dir=${archiveDir}`] };
+}
+
+/**
+ * Conta os `.md` que o linter realmente varreria.
+ *
+ * Este é o denominador do "verifiquei". Sem ele, um diretório que existe mas
+ * está vazio (só o `.gitkeep`) produz o mesmo `✓` de um archive cheio: o
+ * linter roda sobre o conjunto vazio, o laço nunca itera, e `valid: true`
+ * volta **por desenho** (`validateArchivesDir` — "diretório inexistente →
+ * valid=true"). O painel imprimia "verificado" para um check que não tinha
+ * verificado nada. Issue #49.
+ */
+export function countArchiveFiles(archiveDir: string): number {
+  if (!existsSync(archiveDir)) return 0;
+  return readdirSync(archiveDir).filter((f) => f.endsWith('.md')).length;
 }
 
 /**
@@ -77,6 +92,22 @@ export async function checkArchiveIntegrity(repoRoot: string): Promise<CheckResu
       errors: [],
       skipped: true,
       reason: 'tooling/scripts/archive-lint.ts não existe',
+    };
+  }
+
+  // O diretório existe mas não tem nenhum `.md` — o linter vai rodar sobre o
+  // conjunto vazio e devolver `valid: true` SEM ter lido um único arquivo.
+  // Isso não é "verde": é ausência de material para verificar. O `skipped`
+  // acima cobria só o diretório inexistente, e como `.agents/runs/archive/`
+  // nasce com um `.gitkeep` versionado, aquele ramo era INALCANÇÁVEL — o
+  // estado mais silencioso que existe. Issue #49.
+  const total = countArchiveFiles(archiveDir);
+  if (total === 0) {
+    return {
+      ok: true,
+      errors: [],
+      skipped: true,
+      reason: 'archive vazio — 0 arquivo .md para verificar em .agents/runs/archive',
     };
   }
 

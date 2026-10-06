@@ -131,7 +131,7 @@ Os 14 checks registrados (medido em 2026-10-06 pós-#50: **13 ✓ / 1 ✗** — 
 | `release-template` | automático | B (merge em main) | Nada — e o noop foi desfeito: o footer pede `1.9.0`, tag `v1.9.0` não existe, então a criação sairia. O que falta é o check que amarra footer↔tag (**BL1**) | — |
 | `specialist:lint` | `pnpm specialist:lint` | **NENHUMA** | Nada — script existe, 12 testes verdes, fora do preflight | Não |
 | `review:lint` | `pnpm review:lint` | A+B (via preflight #8) | YAML inválido, LOC, regex, reviewer inexistente | Sim |
-| `archive:lint` | `pnpm archive:lint` | A+B (via preflight #9) | Frontmatter canônico; com o diretório vazio o check se declara `skipped` em vez de verde | Sim |
+| `archive:lint` | `pnpm archive:lint` | A+B (via preflight #9) | Frontmatter canônico; com o diretório vazio (só `.gitkeep`) o check se declara `skipped` em vez de verde | Sim |
 | `tooling:test` | `pnpm tooling:test` | B (job `preflight` do `ci.yml`) | Spec vermelho da própria camada de tooling | Sim |
 | `turbo-redirect-differential` | `.tooling/scripts/ci/turbo-redirect-differential.sh` | A+B (via preflight #13) | Forma de `pnpm turbo run …` que o parser extrai diferente do turbo real — **classe 6** (especificação local diverge do sistema real) | Sim (se Node ≥ 22.6) |
 
@@ -164,7 +164,7 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 | `pnpm docs:sync` | `doc-sync` standalone — **só relatório** | A + B |
 | `pnpm review:lint` | Valida a matriz `review-routing.md` (YAML, LOC, reviewer refs) | A + B |
 | `pnpm specialist:lint` | Idem para a matriz `specialist-routing.md` — **fora do preflight** | nenhuma |
-| `pnpm archive:lint` | Valida frontmatter de `.agents/runs/archive/*.md` — **alvo ausente** | nenhuma |
+| `pnpm archive:lint` | Valida frontmatter de `.agents/runs/archive/*.md` — ainda **sem arquivo** no repo | nenhuma |
 | `pnpm tooling:test` | Suíte de testes do próprio tooling (16 arquivos / 207 testes) | nenhuma |
 | `pnpm review:route` / `pnpm specialist:route` | Roteamento headless: emite YAML de despacho | nenhuma |
 | `pnpm test:unit` / `test:coverage` / `test:integration` / `test:e2e` | Suítes via turbo | B |

@@ -20,11 +20,20 @@
 // - arquivo inválido no archive REAL deixa o check vermelho (o que não acontecia)
 // - arquivo inválido no diretório ERRADO não altera o resultado
 // - precondição ausente continua `skipped`, nunca `✓` calado
+// - archive EXISTENTE mas sem nenhum `.md` é `skipped`, não `✓` (issue #49)
+// - archive preenchido com `.md` válido é verde DE VERDADE (contra-regra do skip)
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { checkArchiveIntegrity, buildLintArgs } from './check-archive-integrity.js';
+
+/** Quantos `.md` o linter realmente veria — o denominador do "verifiquei". */
+function countArchiveFiles(repoRoot: string): number {
+  const dir = join(resolve(repoRoot), '.agents/runs/archive');
+  if (!existsSync(dir)) return 0;
+  return readdirSync(dir).filter((f) => f.endsWith('.md')).length;
+}
 
 const REPO = resolve(process.cwd());
 const ARCHIVE = join(REPO, '.agents/runs/archive');
@@ -32,6 +41,38 @@ const WRONG_DIR = join(REPO, 'tooling/scripts/.agents/runs/archive');
 const PLANTED = join(ARCHIVE, '2026-10-05-prova-plantada.md');
 
 const INVALID = ['---', 'name: nao-e-um-archive', '---', '', 'body', ''].join('\n');
+
+/**
+ * Archive canônico VÁLIDO — todos os campos obrigatórios presentes.
+ *
+ * Cada valor foi verificado contra o linter real
+ * (`tsx archive-lint.ts --archive-dir=<tmp>` → exit 0), não copiado da doc:
+ * `archived_at` exige ISO 8601 **com hora** (`2026-10-06` sozinho é
+ * rejeitado), `prs` são numéricos (`"#1"` é rejeitado) e `improvements`
+ * mapeia para **números**, não strings.
+ *
+ * Existe para provar a DIREÇÃO do skip: sem este par verde/vermelho, um gate
+ * que declare `skipped` para tudo também passaria.
+ */
+const VALID = [
+  '---',
+  'archived_at: 2026-10-06T00:00:00Z',
+  'original_run: .agents/runs/2026-10-06-exemplo.md',
+  'demand_slug: exemplo-de-demand',
+  'prs:',
+  '  - 1',
+  'retro_refs:',
+  '  - .agents/runs/b1-result.md',
+  'improvements:',
+  '  B1: 1',
+  'status: archived',
+  'tags:',
+  '  - exemplo',
+  '---',
+  '',
+  'body',
+  '',
+].join('\n');
 
 afterEach(() => {
   if (existsSync(PLANTED)) rmSync(PLANTED, { force: true });
@@ -63,10 +104,44 @@ describe('buildLintArgs', () => {
 });
 
 describe('checkArchiveIntegrity', () => {
-  it('estado real do repo: verde', async () => {
+  it('estado real do repo: o resultado declara o que ele sabe', async () => {
+    // Antes este teste era `expect(r.ok).toBe(true)` e passava — mas o `ok:
+    // true` vinha de um `✓` emitido sobre ZERO arquivos verificados. Um teste
+    // que só afirma `ok:true` não distingue "verifiquei e passou" de "não havia
+    // nada para verificar"; este afirma o ESTADO, seja ele qual for. É o que a
+    // issue #49 pede: archive vazio e archive rightly preenchido produzem
+    // saídas diferentes.
+    const r = await checkArchiveIntegrity(REPO);
+    expect(r.ok).toBe(true);
+    if (countArchiveFiles(REPO) === 0) {
+      expect(r.skipped).toBe(true);
+      expect(r.reason).toContain('0 arquivo');
+    } else {
+      expect(r.skipped).toBeUndefined();
+    }
+  });
+
+  it('archive EXISTENTE sem nenhum .md → skipped, não ✓ calado (issue #49)', async () => {
+    // RED: antes deste fix o diretório existe (só o .gitkeep), então o ramo
+    // `skipped` — que só dispara quando o diretório NÃO existe — nunca era
+    // alcançado, e o linter rodava sobre o conjunto vazio devolvendo
+    // `valid: true` por desenho. O `✓` era emitido sem ter verificado nada.
+    const r = await checkArchiveIntegrity(REPO);
+    expect(countArchiveFiles(REPO)).toBe(0); // precondição do cenário
+    expect(r.ok).toBe(true);
+    expect(r.skipped).toBe(true);
+    expect(r.reason).toBeTruthy();
+  });
+
+  it('archive com .md VÁLIDO → verde de verdade, sem skip (contra-regra)', async () => {
+    // A direção oposta. Sem este par, "declare skipped para tudo" também
+    // passaria nos dois primeiros testes — e um gate que nunca verifica é
+    // exatamente a classe 1 que a issue #49 denuncia, invertida.
+    writeFileSync(PLANTED, VALID);
     const r = await checkArchiveIntegrity(REPO);
     expect(r.ok).toBe(true);
     expect(r.errors).toEqual([]);
+    expect(r.skipped).toBeUndefined();
   });
 
   it('arquivo INVÁLIDO no archive REAL deixa o check vermelho', async () => {
