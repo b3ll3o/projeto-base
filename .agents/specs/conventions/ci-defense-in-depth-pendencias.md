@@ -98,6 +98,27 @@
   `ci.yml` + `try/catch` em volta do `varrerTexto`. Dentes: os 3 testes de CLI de "não verificado"
   ficam vermelhos se `naoVerificado` voltar a devolver `0` — que é o
   "pular com verde" que a issue #45 denuncia, só que pelo outro lado.
+- **O gate não pode afirmar que mediu o que não existe** (achado da revisão de
+  especificação do PR deste branch, MEDIDO 2026-10-06). Com corpo vazio — que
+  o GitHub aceita — ou sem nenhuma contagem, a saída era `0 claim(s)
+  divergente(s), todas em parágrafo marcado — OK`: zero claims e **zero
+  marcadores**, com uma frase afirmando uma marcação inexistente. Sai `0`
+  por escolha (o corpo foi lido e varrido; é medição completa com resultado
+  zero, não "não consegui medir"), mas a mensagem agora nomeia a limitação:
+  o scanner reconhece `TOTAL_PADROES` formatos e um número fora deles é
+  **invisível** para o gate. Dentes: remover o ramo dá **2 de 18** vermelhos.
+- **Risco não medido — `pull_request.head.sha` em PR de fork**
+  (achado da revisão de especificação do PR deste branch, 2026-10-06). O
+  `ref:` do checkout do `preflight` aponta para o commit do **fork**, não do
+  repo base; com `fetch-depth: 0` o checkout tenta trazer o histórico inteiro
+  daquele ref, e algum objeto não servível pelo repo base devolveria histórico
+  incompleto — a condição "base sem ancestral comum" que o `fetch-depth: 0`
+  existe para eliminar. **Não medido**: exige um PR real de fork, impossível
+  localmente, e este repositório é privado. O padrão
+  `ref: ${{ github.event.pull_request.head.sha }}` é o documentado e
+  amplamente usado, então a hipótese padrão é que funcione — fica escrito
+  como hipótese, não como fato. Se algum dia o repo abrir para fork, o teste
+  é abrir um PR de fora e ver se o `preflight` acusa `NÃO VERIFICADO`.
 - **Só 6 dos 13 gates têm mutação medida** (ver
   [Registro de dentes](ci-defense-in-depth.md#registro-de-dentes)). Os outros 7 provam a lógica com
   `controle negativo` em tmpdir, o que não prova a integração com o sistema
