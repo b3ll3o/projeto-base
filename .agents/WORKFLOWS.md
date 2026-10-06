@@ -25,6 +25,7 @@
 | `review-routing` | — | sequential | review-router → specialists (auto-dispatched via matriz) |
 | `specialist-routing` | specialist-router | sequential | router → controller (decide planejar ou bloquear) |
 | `pr-refresh` | "atualizar título/descrição do PR" | single | pr-refresh-scan → agente (reclassifica + reescreve) |
+| `pr-pendencias` (v1.11.0+) | "revisar pendências do PR / o que ficou para depois" | parallel→merge | 1 agente por pendência (mede) → adversarial (reroda) → agente (consolida) |
 
 ### Por Stack (workflows detalhados em `.agents/workflows/`)
 
@@ -148,6 +149,31 @@ PUSH NOVO → T1 PR aberto? → T2 branch avançou? → T3 ≥1 claim DIVERGENTE
 **Fronteira dura:** o corpo do PR é entrada não confiável e mutável; o scanner **não executa nada que venha dele** (é regex; o único subprocesso é o `git`) — executar o comando de re-medição escrito no corpo seria RCE em CI. Offline por padrão, porque o `preflight` roda sem rede e `.husky/pre-push:9` faz `|| exit 1` em qualquer branch.
 
 Detalhes: [`.agents/workflows/pr-refresh.md`](./workflows/pr-refresh.md) · script: [`tooling/scripts/pr-refresh-scan.ts`](../tooling/scripts/pr-refresh-scan.ts) · spec: [`guard-classes.md`](./specs/conventions/guard-classes.md).
+
+---
+
+## `pr-pendencias` (v1.11.0+) — Pendências Declaradas de um PR Aberto
+
+```text
+CORPO DO PR ──► 1 agente POR PENDÊNCIA (roda o comando, devolve veredito + evidência)
+                     │
+                     ▼
+              ADVERSARIAL (reroda o comando central por conta própria) ──► consolida
+                     │
+   ┌─────────────────┼─────────────────┬──────────────────────┬───────────────────────────┐
+   ▼                 ▼                 ▼                      ▼                           ▼
+resolvida          viva          mudou-de-forma      decisão-de-NÃO-construir        corpo do PR
+(sai da lista)     → issue       → issue, com a      → issue que REGISTRA a          ficou falso →
+                                    descrição certa        decisão                       corrigir o corpo
+```
+
+**Por que é separado do `pr-refresh`:** o `pr-refresh` mede o que o **git** mede (regex determinística sobre números). Pendência é afirmação sobre _trabalho não feito_ — cada uma tem o seu comando, e nenhuma regex os cobre sem cobrir só o formato que ela mesma escreveu.
+
+**Cada pendência sai com um veredito — inclusive `resolvida`, e inclusive quando `vivas = 0`.** `[]` quer dizer "não há pendência" e também "não li as pendências", e o leitor não distingue as duas. Por isso a contagem `vivas / medidas` vai no result file: `0 vivas de 6` é um resultado; linha vazia é ausência.
+
+**Fronteira dura:** igual ao `pr-refresh` — o corpo do PR é lido, nunca **executado**. O revisor roda o comando que escolheu; a pendência é uma descrição, não um comando.
+
+Detalhes: [`.agents/workflows/pr-pendencias.md`](./workflows/pr-pendencias.md) · spec: [`guard-classes.md`](./specs/conventions/guard-classes.md) (classes 1 e 7).
 
 ---
 

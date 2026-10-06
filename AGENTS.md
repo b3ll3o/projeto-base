@@ -154,6 +154,8 @@ Workflows genéricos prontos para uso estão em [`.agents/WORKFLOWS.md`](./.agen
 | `state-aware-planning` | "planejar / state-aware / snapshot antes de planejar" (v1.8.0+) | state-aware-planning (skill) → specialist-router (camada 1; opcional) |
 | `retrospective-mode` | "capturar aprendizados / post-mortem" | explorer → retrospective-capture → doc-writer (+ task-manager em paralelo) |
 | `feedback-to-spec` (v1.9.0+) | "feedback to spec / próxima spec de finding / T1/T2/T3 → spec" | task-manager → orchestrator (state-aware) → specialist-router → specialist (template spec) → task-manager (loop close) |
+| `pr-refresh` (v1.10.0+) | "atualizar título/descrição do PR" | pr-refresh-scan (mede) → agente (reclassifica + reescreve) — hook local, nunca bloqueia |
+| `pr-pendencias` (v1.11.0+) | "revisar pendências do PR / o que ficou para depois" | 1 agente por pendência (mede) → adversarial (reroda o comando) → consolida; cada uma sai como `resolvida`, `viva`, `mudou-de-forma` ou `decisão-de-não-construir` |
 
 ---
 
