@@ -23,11 +23,14 @@ jobs:
       #
       # `ref` no head da branch, e não no ref de merge: o merge ref que o
       # GitHub fabrica tem DOIS pais (base + head) e `rev-list --count
-      # base..HEAD` conta o próprio commit sintético junto. O CI media 8
-      # commits onde a branch tem 7 — e todo corpo de PR escrito localmente
-      # diverge em exatamente 1, na CI e para sempre.
-      # MEDIDO no PR #53: `dec7a89` (pais `8de508a` + `095c043`) → 8; o head
-      # `095c043` → 7. É o mesmo gate, medindo duas branchs diferentes.
+      # base..HEAD` conta o próprio commit sintético junto. O erro é sempre
+      # **exatamente 1**, qualquer que seja a branch — e todo corpo de PR
+      # escrito localmente diverge em 1 no CI.
+      # MEDIDO no PR #53 (os números de cada par crescem a cada push; o que
+      # não muda é a diferença): merge ref `dec7a89` (pais `8de508a` +
+      # `095c043`) → 8, head `095c043` → 7; depois, merge ref `d206727`
+      # (pais `8de508a` + `d56ce17`) → 9, head `d56ce17` → 8.
+      # É o mesmo gate, medindo duas branchs diferentes.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0

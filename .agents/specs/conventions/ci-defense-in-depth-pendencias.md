@@ -17,6 +17,23 @@
 
 ## Pendências conhecidas
 
+- **Nenhum tooling lê `.github/workflows/ci.yml` — o arquivo que decide o que
+  roda é prosa** (medido 2026-10-06, achado da revisão adversarial do PR deste
+  branch). Comando: `grep -rn "workflows" tooling/scripts/*.ts
+  .tooling/scripts/ci/*.ts | grep -v spec` devolve **3** linhas, e nenhuma
+  delas parseia YAML: uma é string dentro de mensagem de erro do
+  `pr-refresh-gate`, duas são comentário — uma sobre `.agents/WORKFLOWS.md` e
+  outra citando o `ci.yml` como quem roda o preflight.
+  Consequência medida: remover a linha `ref:` do checkout do `preflight`
+  (commit `d56ce17`, que faz o gate medir a branch e não o merge ref do GitHub)
+  deixa a suíte **inteiramente verde**. É a mesma classe da pendência do
+  `PREFLIGHT_GATES` acima — reconciliador cego — mas um passo acima na cadeia:
+  lá o array é re-declarado à mão em TypeScript, aqui o arquivo inteiro não tem
+  leitor nenhum. Como isso é uma defendável decisão de escopo e não um bug
+  (um gate de workflow exigiria um parser de YAML e uma política do que é
+  "essencial"), fica registrado em vez de corrigido. **Se algum dia alguém
+  escrever um gate de workflow, este é o primeiro item que ele deveria pegar.**
+
 - **`PREFLIGHT_GATES` é uma transcrição à mão, e o reconciliador é cego nos
   dois sentidos** (medido 2026-10-06, achado da revisão paralela do PR deste
   branch). `check-teeth-registry.ts` reconcilia o registro contra um **literal**

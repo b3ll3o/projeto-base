@@ -244,6 +244,11 @@ describe('CLI (o caminho que o CI usa)', () => {
     // Distingue os DOIS ramos: `!achada.ok` também diz "NÃO VERIFICADO", mas
     // a causa é outra e o `catch` não entrou.
     expect(r.stderr).toMatch(/sem ancestral comum/);
+    // A metrADE do contrato que o cabeçalho do arquivo promete ("NÃO
+    // VERIFICADO + como corrigir") é o texto de orientação — e ela tinha
+    // cobertura ZERO: trocada por uma string inútil, os 16 seguiam verdes.
+    // MEDIDO na revisão adversarial de 2026-10-06.
+    expect(r.stderr).toMatch(/Como corrigir:.*fetch-depth/s);
     expect(r.stderr).not.toMatch(/^\s+at /m); // nenhum stack trace
     expect(r.status).toBe(1);
   });
