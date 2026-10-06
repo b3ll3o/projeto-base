@@ -27,7 +27,7 @@ source_article: Dennis Rojas (Tech na Prática, 2026-09-15) §"Engineering Loop"
 
 ## §0. Origem da regra
 
-O mapping file (`docs/articles/vibe-coding-sdd-engineering-loop-mapping.md`) lista "Engineering Loop" como conceito coberto por `orchestrator` + `retrospective-mode` + `retrospective-capture`. Análise de gaps (v1.9.0) identificou que a cobertura é **parcial**:
+O mapping file ([`docs/articles/vibe-coding-sdd-engineering-loop-mapping.md`](../../../docs/articles/vibe-coding-sdd-engineering-loop-mapping.md)) lista "Engineering Loop" como conceito coberto por `orchestrator` + `retrospective-mode` + `retrospective-capture`. Análise de gaps (v1.9.0) identificou que a cobertura é **parcial**:
 
 | Gap | Descrição | Estado antes desta convenção |
 |---|---|---|
@@ -161,8 +161,8 @@ A convenção `engineering-loop` está **ativa e obrigatória** quando:
 
 ## §8. Cross-references
 
-- Source article: `docs/articles/vibe-coding-sdd-engineering-loop.md` §"Engineering Loop"
-- Mapping analysis: `docs/articles/vibe-coding-sdd-engineering-loop-mapping.md`
+- Source article: Dennis Rojas §"Engineering Loop" — transcrição não versionada (ver `git tag backup/docs/articles-transcription-vibe-coding-sdd`)
+- Mapping analysis: [`docs/articles/vibe-coding-sdd-engineering-loop-mapping.md`](../../../docs/articles/vibe-coding-sdd-engineering-loop-mapping.md)
 - WORKFLOWS: [`.agents/WORKFLOWS.md`](../../WORKFLOWS.md) → `feature-mode`, `retrospective-mode`, `archive-demand`, `feedback-to-spec`
 - Spec template: [`../templates/spec.md`](../templates/spec.md)
 - Evals convention: [`./evals.md`](./evals.md)
