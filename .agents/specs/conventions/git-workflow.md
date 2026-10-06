@@ -179,25 +179,32 @@ O nome deve descrever **o problema**, não a ferramenta. `fix/coverage-gate-40`
        ▼
 6. Rodar o pre-push gate local
    pnpm ci:local
+   (inclui o gate da regra de rebase — se a main avançou,
+   ele acusa aqui; ver §Rebase Obrigatório)
        │
        ▼
-7. Push da branch
+7. Rebasear na main atual, se o gate acusou
+   git fetch origin main && git rebase origin/main
+   → conflito? revisar e corrigir (§Depois do rebase)
+       │
+       ▼
+8. Push da branch
    git push -u origin feature/<nome>
        │
        ▼
-8. Abrir Pull Request para main
+9. Abrir Pull Request para main
        │
        ▼
-9. Aguardar checks + revisão
+10. Aguardar checks + revisão
    - `preflight` (pass)
    - `quality` (pass)
        │
        ▼
-10. Push novo na branch? → rodar [`pr-refresh`](../../workflows/pr-refresh.md)
+11. Push novo na branch? → rodar [`pr-refresh`](../../workflows/pr-refresh.md)
    (o corpo do PR envelhece a cada push, e nenhum gate o cobre)
        │
        ▼
-11. Merge (squash preferencialmente) e apagar a branch
+12. Merge (squash preferencialmente) e apagar a branch
 ```
 
 ## Pre-Push Quality Gate
