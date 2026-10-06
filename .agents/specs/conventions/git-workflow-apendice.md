@@ -1,7 +1,7 @@
 # Apêndice: Apagar Branch Mergeada com `-D`
 
-> Apêndice de [git-workflow.md](./git-workflow.md) §Branch Morta: Apagar Depois
-> do Merge. Leia **antes** do primeiro `git branch -D`.
+> Apêndice de [git-workflow.md](./git-workflow.md) §Branch Morta: Apagar Quando
+> o PR Sai de OPEN. Leia **antes** do primeiro `git branch -D`.
 
 `-d` recusa apagar branch não mergeada. Isso protege. Mas existem dois casos em
 que só `-D` funciona — e é aí que a limpeza vira perda de trabalho.
@@ -50,13 +50,14 @@ comm -23 \
 # 4. Dos arquivos que existem nos dois, sobrou linha que só a branch tem?
 ```
 
-> ⚠️ **Não use `git log <branch> --not --remotes` como predicado.** Ele é
-> **inerte**: `--remotes` inclui `origin/<branch>`, logo toda branch publicada
-> devolve vazio — inclusive as que têm conteúdo real ausente de `main`.
-> Medido: as 3 branches remotas deste repo devolveram `0`, e `origin/main`
-> também. Quatro zeros que significam a mesma coisa, um deles com conteúdo
-> real. A inércia vale para branch **publicada** — só work inedito e local
-> (nunca publicado) escapa dela, porque não tem `origin/<branch>`.
+> ⚠️ **Não use `git log <branch> --not --remotes` como predicado.** Ele mede
+> *"não está em nenhuma ref remota"*, não *"não está em `main`"*. Enquanto
+> `origin/<branch>` existir, ele devolve vazio para toda branch publicada —
+> inclusive as que têm conteúdo real ausente de `main`. E **depois** do
+> `git push origin --delete <branch>` — que é o passo seguinte do bloco
+> principal — a ref some, o comando volta a devolver a branch **inteira**, e o
+> diagnóstico se inverte sem nenhum aviso. Note que o procedimento que prescreve
+> a consulta é o mesmo que destrói a pré-condição que a torna inerte.
 >
 > O discriminante é o **passo 3** (diff contra merge-base), não o passo 2.
 
@@ -71,20 +72,20 @@ comm -23 \
 Saída vazia ⇒ main é igual ou mais novo ⇒ `-D` é seguro.
 Saída com linha real ⇒ **não apague.** Reabra o PR ou extraia o commit.
 
-> Não confie só no contador. Este contador acusou 230 "linhas perdidas" em
-> `feat/guard-classes` e 326 em `chore/melhorias-fluxo-desenvolvimento` — todas
-> eram versões antigas de arquivos que main já havia reescrito. A contagem mede
-> *divergência de texto*, não *perda*. Por isso a inspeção linha a linha.
+> Não confie só no contador. Ele mede *divergência de texto*, não *perda*: nas
+> branches deste repo acusou centenas de "linhas perdidas" que eram versões
+> antigas de arquivos que `main` já havia reescrito. O total exato não está fixado
+> aqui — ele envelhece a cada `main` que reescreve os mesmos arquivos. Por isso a
+> inspeção linha a linha.
 
 ## Caso 2 — branch sem PR
 
 Branch nunca aberta como PR e nunca mergeada. Ela não está "morta" — está
 **abandonada** ou **em trabalho**. Apagar é decisão de conteúdo, não de higiene.
 
-Medido: de 30 branches deste repo, 3 estavam nesse caso e **nenhuma** era
-descartável — uma tinha 2 artigos inteiros ausentes em `main`.
-
-Para essas, o caminho é PR ou backup, nunca `-D` no escuro.
+Medido: as branches sem PR deste repo foram todas inspecionadas e **nenhuma** era
+descartável — uma tinha um artigo inteiro ausente de `main`. Para essas, o caminho
+é PR ou backup, nunca `-D` no escuro.
 
 ## Caso 3 — PR closed sem merge
 
@@ -98,43 +99,60 @@ gh pr list --state all --head <branch> --json number,state,mergedAt
 `state: CLOSED` com `mergedAt: null` = conteúdo não está no tronco. Não apague
 no escuro — rode o exame de conteúdo dos dois casos acima.
 
-Medido neste repo (2026-10-06, 3 branches remotas). Comparando por `ls-tree`,
-ambas acusam `apps/api/.eslintrc.js` como exclusivo — mas o blob é **idêntico ao
-merge-base** (`e4a50a8`) nas duas: nenhuma das duas branches o tocou, e `main`
-o removeu em `ad0ff70` ao trocar por `eslint.config.mjs`. No diff contra o
-merge-base ele desaparece. Por isso a tabela abaixo é a que vale:
+Medido neste repo (2026-10-06, branches fechadas sem merge — as duas têm o mesmo
+merge-base, `4ffc732`). Comparando por `ls-tree`, ambas acusam
+`apps/api/.eslintrc.js` como exclusivo — mas o **conteúdo** do arquivo nas duas é
+byte a byte igual ao do merge-base (blob `e4a50a8`): nenhuma das duas branches o
+tocou, e `main` o removeu em `ad0ff70` ao trocar por `eslint.config.mjs`. No diff
+contra o merge-base ele desaparece. Por isso a tabela abaixo é a que vale:
 
-| Branch (PR) | Entregues pela branch | Veredito |
+| Branch (PR) | Ainda fora de `main` | Veredito |
 |---|--:|---|
-| `docs/articles-transcription-vibe-coding-sdd` (#35) | **2** arquivos: o mapping + a transcrição de 513 linhas | o **mapping** foi extraído (PR #57) e é o arquivo do tronco — `wc -l docs/articles/vibe-coding-sdd-engineering-loop-mapping.md`; a **transcrição** segue fora, sobrevivendo só na tag — decisão de copyright do dono do repo |
+| `docs/articles-transcription-vibe-coding-sdd` (#35) | **1** arquivo: a transcrição de 513 linhas | a branch entregou 2, mas o **mapping** foi extraído no PR #57 e é o arquivo do tronco (`wc -l docs/articles/vibe-coding-sdd-engineering-loop-mapping.md`); a **transcrição** segue fora, sobrevivindo só na tag — decisão de copyright do dono do repo |
 | `feat/evals-convention-and-spec-template` (#36) | **0** | `main` é mais nova em tudo — branch apagada |
+
+> A coluna é o que o exame (passo 3) devolve: `comm -23` entre
+> `git diff --name-only $(git merge-base origin/main <branch>) <branch>` e
+> `git ls-tree -r --name-only origin/main`. Ela **envelhece** — o #35 tinha 2 fora
+> de `main` antes do PR #57.
 
 As divergências da #36 nos arquivos que existem nos dois lados, todas com `main`
 mais nova — nenhuma é perda:
 
 | Arquivo | Órfãs | Composição |
 |---|--:|---|
-| `AGENTS.md` | 21 | 18 com `../.agents/` (path que sai do repo; main usa `./.agents/`), 2 marcadores `_(pendente …)_` de Fases concluídas, 2 linhas de tabela reescritas por `main` (`Cobertura de Testes`, `Git Workflow`) |
-| `evals.md` | 3 | as 3 refs aos artigos da PR #35 — main já as tem, só o destino não |
+| Arquivo | Órfãs | Composição |
+|---|--:|---|
+| `AGENTS.md` | 18 | links `../.agents/memory/*.md` que **saem do repo** — o `main` usa `./.agents/` |
+| `evals.md` | 1 | o link para a transcrição da PR #35 — `main` já tem o destino, a branch não |
 | `spec.md` | 0 | — |
 
-> **A #36 deve ser descartada, não integrada:** restaurar os 3 "links" de
-> `evals.md` da branch os tornaria links markdown para arquivos que não
-> existem em lado nenhum, e o gate `check-eslint-drift` (`allowlist: []`) falha
-> com qualquer `.eslintrc.*` em `apps/`. Uma das 21 linhas da branch ainda
-> afirma a regra de cobertura errada ("80% por projeto vitest") que a `main`
-> documenta como inerte.
+> **A coluna conta só link markdown**: extração por `grep -oE '\]\([^)]+\)'` sobre
+> `git show <branch>:<arquivo>` contra `git show origin/main:<arquivo>` (bloco do
+> passo 4). Ela **não** pega marcador de prosa como `_(pendente …)_` nem linha de
+> tabela reescrita por `main` — quem quiser esses conta no diff. A divergência
+> total não está fixada aqui porque `main` reescreve esses arquivos a cada merge:
+> **re-meça pelo bloco, não pelo número.**
+
+> **A #36 deve ser descartada, não integrada:** restaurar os links órfãos de
+> `evals.md` da branch os tornaria links markdown para arquivos que não existem
+> em lado nenhum, e o gate `check-eslint-drift` (`allowlist: []`) falha com
+> qualquer `.eslintrc.*` em `apps/`. Uma das linhas da branch ainda afirma a
+> regra de cobertura errada ("80% por projeto vitest") que a `main` documenta
+> como inerte.
 
 > **Sinal correlato que o exame não acharia:** no momento do exame, `main`
-> citava os 2 artigos da PR #35 em **12 linhas de 5 arquivos** —
-> `engineering-loop.md` (5), `evals.md` (4), `01-understand.md` (1),
-> `vetor-grafos-fine-tuning-resumo.md` (1) e um plano (1) — e não em 4: o
-> artigo chegou a ser citado por PRs que **rodaram depois** do close do #35,
-> alargando o rastro. Nenhuma das 12 tinha forma de link markdown, então
-> `check-doc-refs` era cego para todas. Confirmado por counterfactual:
-> convertendo-as em link markdown, o gate passou a acusar as quebradas — e,
-> depois que o mapping entrou (PR #57), a maioria resolve e fica **sob
-> verificação**. Referência quebrada é, portanto, indício de branch
+> citava os 2 artigos da PR #35 em 12 linhas de 5 arquivos
+> (`engineering-loop.md`, `evals.md`, `01-understand.md`,
+> `vetor-grafos-fine-tuning-resumo.md` e um plano) — e não em 4: o artigo chegou
+> a ser citado por PRs que **rodaram depois** do close do #35, alargando o rastro.
+> Nenhuma das 12 tinha forma de link markdown, então `check-doc-refs` era cego
+> para todas. A contagem está ancorada no commit **antes** do PR #57 e envelhece
+> a cada merge que reescreve as citações — re-meça com
+> `git grep -c 'vibe-coding-sdd-engineering-loop' <ref>` em vez de citá-la.
+> Confirmado por counterfactual: convertendo-as em link markdown, o gate passou a
+> acusar as quebradas — e, depois que o mapping entrou (PR #57), a maioria resolve
+> e fica **sob verificação**. Referência quebrada é, portanto, indício de branch
 > preservada — e ponto cego do gate.
 
 Duas saídas legítimas:

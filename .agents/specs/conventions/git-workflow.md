@@ -212,7 +212,9 @@ O nome deve descrever **o problema**, não a ferramenta. `fix/coverage-gate-40`
 > rebasar.
 
 ```bash
-gh pr list --state all --json number,headRefName,mergedAt   # PR saiu de open?
+gh pr list --state all --limit 200 --json number,headRefName,mergedAt  # PR saiu de open?
+# --limit é obrigatório: o gh pagina em 30 e o corte é silencioso, sem aviso e
+# sem exit code diferente — sem ele, PRs antigos somem da lista sem você ver
 # tag SÓ com conteúdo fora de main (exame no apêndice, passo 3): com exame
 # vazio a main já tem tudo, e a tag vira ruído que se acumula a cada limpeza
 git tag backup/<branch> <branch>      # só se o exame acusou conteúdo
@@ -230,20 +232,18 @@ git push origin --delete <branch>
 **O que decide é `mergedAt`, não a recusa do `-d`.** `-d` recusa apagar branch não
 mergeada e essa recusa protege — mas o caso comum deste repo é o oposto: com
 squash merge o tip deixa de ser ancestral de `main`, então **`-d` recusa branch
-mergeada**. MEDIDO 2026-10-06: as **4** branches mergeadas de `backup/docs/*` e
-`backup/chore/*` falham em `git merge-base --is-ancestor <tag> origin/main` — e as
-4 estavam inteiras em `main`. Obedecer a recusa literalmente tornaria a limpeza
-**impossível** aqui.
+mergeada**. Nenhuma tag `backup/*` deste repo é ancestral de `origin/main`, e o
+conteúdo delas está inteiro em `main` (`git tag --list 'backup/*' | while read t;
+do git merge-base --is-ancestor "$t" origin/main || echo "$t"; done`). Obedecer
+a recusa literalmente tornaria a limpeza **impossível** aqui.
 
 **`closed` sem merge** exige o exame de conteúdo — foi ele que separou as duas
-branches fechadas: #35 entregou 2 arquivos, #36 entregou 0. O predicado de "está
-tudo em `main`" é o **arquivo**, não o commit: `--not --remotes` é inerte e
-`--not origin/main` acusa falso positivo com squash. Detalhes no
-[apêndice](./git-workflow-apendice.md) §Caso 1.
-
-> **Predicado de "está tudo em main" é o arquivo, não o commit** —
-> `--not --remotes` é inerte, `--not origin/main` acusa falso positivo com
-> squash; exame no [apêndice](./git-workflow-apendice.md).
+branches fechadas: #35 entregou 1 arquivo, #36 entregou 0 (passo 3 do
+[apêndice](./git-workflow-apendice.md) §Caso 1). O predicado de "está tudo em
+`main`" é o **arquivo**, não o commit: `--not --remotes` mede *"não está em
+nenhuma ref remota"* — inerte enquanto `origin/<branch>` existir, e **não-zero
+depois** do `push --delete`, que é o passo seguinte do mesmo bloco; já
+`--not origin/main` acusa falso positivo com squash.
 
 ## Pre-Push Quality Gate
 

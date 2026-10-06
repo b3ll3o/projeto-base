@@ -53,14 +53,17 @@
 - **A tabela de Checks acima é completa** (a task 3.1 do plano
   [`guard-classes`](../../../docs/superpowers/plans/2026-10-03-guard-classes.md)
   fechou as 3 lacunas que esta seção declarava). O `preflight` executa
-  **16 entradas** no preflight para **15 arquivos de gate distintos** — a
+  **17 entradas** no preflight para **16 arquivos de gate distintos** — a
   diferença 1 é `check-eslint-drift`, que entra duas vezes (uma por app:
-  `apps` e `packages`), não um gate sem registro. Esses 15 são exatamente as
+  `apps` e `packages`), não um gate sem registro. Esses 16 são exatamente as
   linhas do [Registro de dentes](ci-defense-in-depth.md#registro-de-dentes), e o
   `check-teeth-registry` é o que reconcilia as duas listas.
-  (Re-medido 2026-10-06: `pnpm ci:preflight | grep -c '^  •'` → 16;
-  `check-agent-memory-drift` entrou pela #47 e `check-tooling-typecheck` pela
-  #46.)
+  (Reconciliado por `name:`×`file:` em [`preflight.ts`](../../../.tooling/scripts/ci/preflight.ts)
+  — não por contagem de glob. O "15" anterior era um **undercount**: o glob
+  `'.tooling/scripts/ci/check-*.ts'` não enxerga
+  `tooling/scripts/lint-review-routing.ts`, que mora fora de `.tooling/scripts/ci/`
+  e não tem prefixo `check-`. Contar gates por glob é a classe 1 desta própria
+  lista.)
 - **`tooling/scripts/` tem typecheck que NADA executa, e barra mais frouxa**
   (medido 2026-10-06, issue #46). A #46 dizia que `.tooling/` era "a única
   superfície do repo sem typecheck" — falso para `tooling/`, que tem
