@@ -18,7 +18,7 @@ lê — a task 2.2 do plano `guard-classes` fecha isso. **Regra: criar uma conve
 | Tamanho & Revisão | [`tamanho-e-revisao.md`](./tamanho-e-revisao.md) | Limite de 300 linhas + checklist de revisão |
 | TDD | [`tdd.md`](./tdd.md) | Desenvolvimento orientado a testes (Kent Beck) |
 | Evolução de Agents | [`evolucao-agents.md`](./evolucao-agents.md) | Agents e skills evoluem junto com a aplicação |
-| Git Workflow | [`git-workflow.md`](./git-workflow.md) | `main` protegida; merge apenas via PR; branch mergeada é apagada ([apêndice](./git-workflow-apendice.md)) |
+| Git Workflow | [`git-workflow.md`](./git-workflow.md) | `main` protegida; merge apenas via PR; branch cujo PR saiu de `open` (merged **ou** closed) é apagada ([apêndice](./git-workflow-apendice.md)) |
 | Estrutura & Versionamento | [`estrutura-e-versionamento.md`](./estrutura-e-versionamento.md) | Layout de diretórios e versionamento semântico |
 | Cobertura de Testes | [`cobertura-testes.md`](./cobertura-testes.md) | Mínimo 80% agregado por projeto vitest; hard fail CI |
 | Release Automático (Post-Merge) | [`post-merge-release.md`](./post-merge-release.md) | Auto-tagging `vX.Y.Z` via `.github/workflows/release-template.yml` após bump em main |

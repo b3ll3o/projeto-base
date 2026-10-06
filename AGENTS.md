@@ -169,7 +169,7 @@ As convenções estão detalhadas em arquivos próprios sob [`.agents/specs/conv
 | Tamanho & Revisão     | [`tamanho-e-revisao.md`](./.agents/specs/conventions/tamanho-e-revisao.md)| `.md` ≤ 300 linhas + checklist de revisão obrigatório |
 | TDD                   | [`tdd.md`](./.agents/specs/conventions/tdd.md)                            | Red→Green→Refactor de Kent Beck, bloqueia merge       |
 | Evolução de Agents    | [`evolucao-agents.md`](./.agents/specs/conventions/evolucao-agents.md)    | Agents/skills evoluem com a aplicação + memória       |
-| Git Workflow          | [`git-workflow.md`](./.agents/specs/conventions/git-workflow.md)          | `main` protegida; merge apenas via PR; branch mergeada é apagada ([apêndice](./.agents/specs/conventions/git-workflow-apendice.md)) |
+| Git Workflow          | [`git-workflow.md`](./.agents/specs/conventions/git-workflow.md)          | `main` protegida; merge apenas via PR; branch cujo PR saiu de `open` (merged **ou** closed) é apagada ([apêndice](./.agents/specs/conventions/git-workflow-apendice.md)) |
 | Estrutura & Versionamento | [`estrutura-e-versionamento.md`](./.agents/specs/conventions/estrutura-e-versionamento.md) | Layout de diretórios + versionamento semântico |
 | Cobertura de Testes   | [`cobertura-testes.md`](./.agents/specs/conventions/cobertura-testes.md)| Mínimo 80% agregado, declarado **no config raiz** (no Vitest 2.1.9 o threshold de um projeto `defineWorkspace` é inerte — issue #40); hard fail CI |
 | Release Automático    | [`post-merge-release.md`](./.agents/specs/conventions/post-merge-release.md) | Auto-tagging `vX.Y.Z` em main via `.github/workflows/release-template.yml` |
