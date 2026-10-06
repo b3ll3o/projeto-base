@@ -79,8 +79,10 @@ projeto-base (monorepo)
 | Editor | VS Code | Suporte nativo a TS, ESLint, Prisma |
 | Container | Docker + Compose | Banco, Redis, serviços locais |
 | Git hooks | Husky + lint-staged | TDD enforcer, lint, format |
-| CI | (a definir por projeto) | GitHub Actions / GitLab CI |
+| CI | GitHub Actions (`.github/workflows/`) | `ci.yml` + `review-stack.yml` + `sync-docs.yml` + `release-template.yml` |
 | Secrets | (a definir por projeto) | Doppler / Vault / 1Password |
+
+**Fluxo canônico (do primeiro comando ao merge):** como cada ferramenta acima dispara gates (pre-commit, pre-push, CI, release) e o que cada um bloqueia de fato está em [`docs/fluxo-desenvolvimento.md`](./fluxo-desenvolvimento.md).
 
 ## Containerização
 
@@ -134,7 +136,7 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão da stack:** 1.9.0
+**Versão da stack:** 1.9.1
 
 ### Histórico de Versões
 
@@ -150,3 +152,4 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 | `1.6.0` | Backfill: matrix `review-router` v1.3 (3 P2 gaps — `domains[]` enrich, lint WARNING blocking, coverage em apêndice). Sem mudança de stack. |
 | `1.7.0` | Adição de **OpenTelemetry** ao stack backend (SDK Node + auto-instrumentations: NestJS/Fastify/Pino/Prisma/HTTP; exporter OTLP HTTP via OTel Collector perfil Compose `[observability]`); §Observabilidade agora instrumentável de fato (não apenas declarada). Frontend: `instrumentation.ts` + `@opentelemetry/sdk-web` + `web-vitals` (LCP/CLS/INP reporters → OTel Metrics). Estado correlacionado: `request.id` → `traceparent` W3C + `AuditContext.correlationId`. |
 | `1.9.0` | `apps/api` e `apps/web` documentados como **implementados** — o cabeçalho afirmava o contrário e o próprio arquivo se contradizia (a §Containerização e o Histórico já descreviam os Dockerfiles de api+web). `+ Redis` removido da lista do README: `grep -l 'redis\|bullmq' apps/*/package.json` não acha nenhum dos dois. |
+| `1.9.1` | §5 — CI reespecificado de "a definir por projeto" para GitHub Actions (com 4 workflows nomeados). Cross-ref para [`docs/fluxo-desenvolvimento.md`](./fluxo-desenvolvimento.md) (fluxo end-to-end re-medido a cada merge). |
