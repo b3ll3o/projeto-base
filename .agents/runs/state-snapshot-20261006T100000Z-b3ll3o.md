@@ -93,7 +93,7 @@ Diz: "nenhum problema medido neste repo pede IA". Isso é verdade — mas o **PR
 - Atualizar §7.1: lista de wired/funcionando pós-#44 (release-template já não é noop, gates de tooling:test, archive:lint, turbo-redirect-differential, etc.)
 
 ### P1 — Cross-refs entre docs (commit 2)
-- `README.md`: adicionar bullet "Fluxo de desenvolvimento canônico: [docs/fluxo-desenvolvimento.md](./docs/fluxo-desenvolvimento.md)" na seção "Como executar localmente"
+- `README.md`: adicionar bullet "Fluxo de desenvolvimento canônico: [docs/fluxo-desenvolvimento.md](../../docs/fluxo-desenvolvimento.md)" na seção "Como executar localmente"
 - `docs/MONOREPO.md`: linkar `docs/fluxo-desenvolvimento.md` em §7 (Scripts Canônicos) ou §1
 - `docs/STACK.md`: linkar `docs/fluxo-desenvolvimento.md` em §4 (Monorepo) ou §Containerização
 - `AGENTS.md`: cross-ref `fluxo-desenvolvimento.md` em §6 (Convenções) ou novo bullet
