@@ -13,7 +13,7 @@ Um **monorepo base reutilizável** que implementa o **padrão genérico de agent
 **Diferencial:** enquanto o template anterior era genérico para qualquer projeto, este é um **monorepo base opinativo** com:
 
 - Apps `apps/api` (NestJS) + `apps/web` (Next.js) **já implementados** — bounded context `users` em camadas `domain/`, `application/`, `infrastructure/`
-- 20 agents (12 genéricos + 2 routers + 5 specialists + 1 sub-dir) interoperáveis via skill `agents:coordinate`
+- 21 agents (12 genéricos + 2 routers + 6 specialists + 1 sub-dir) interoperáveis via skill `agents:coordinate`
 - 9 skills + 10 workflows + 17 convenções canônicas
 - **Paradigma DDD + Hexagonal** canônico (ADR-0001) com guardiões automáticos
 - **OpenTelemetry cross-stack** (backend + frontend + Collector)
@@ -27,7 +27,7 @@ projeto-base/
 ├── README.md                           # Este arquivo
 ├── .markdownlint.json                  # Configuração do lint de Markdown
 ├── .agents/
-│   ├── agents/                         # 20 agents (12 genéricos + 2 routers + 5 specialists de stack + 1 sub-dir `agent-architect`)
+│   ├── agents/                         # 21 agents (12 genéricos + 2 routers + 6 specialists de stack + 1 sub-dir `agent-architect`)
 │   │   ├── agent-architect.md
 │   │   ├── code-reviewer.md
 │   │   ├── docker-specialist.md
@@ -46,8 +46,9 @@ projeto-base/
 │   │   ├── task-manager.md
 │   │   ├── tdd-enforcer.md
 │   │   ├── telemetry-specialist.md
-│   │   └── test-writer.md
-│   ├── memory/                         # Memória acumulada por agent (21 arquivos)
+│   │   ├── test-writer.md
+│   │   └── ux-design-specialist.md
+│   ├── memory/                         # Memória acumulada (22 arquivos: 20 agents + `state-aware-planning` + `_template`)
 │   ├── skills/                         # coordenação, routing, validação (ver AGENTS.md §3)
 │   ├── specs/conventions/              # tdd, git-workflow, cobertura, tamanho… (ver AGENTS.md §6)
 │   └── WORKFLOWS.md                    # Fluxos pré-configurados (10 workflows)
@@ -223,7 +224,7 @@ Detalhes completos em [`AGENTS.md`](./AGENTS.md) (seção §1).
 | `review-router` | Despacha reviewers em paralelo após task DONE (matriz `path_globs` × `commit_types` × `diff_patterns`) |
 | `specialist-router` | Pré-planejamento — classifica demanda e identifica specialist(s); bloqueia se `gap_detected` |
 
-### Specialists de Stack (5)
+### Specialists de Stack (6)
 
 | Agent | Uso |
 |---|---|
@@ -232,6 +233,7 @@ Detalhes completos em [`AGENTS.md`](./AGENTS.md) (seção §1).
 | `nextjs-specialist` | Arquitetura frontend Next.js (RSC, App Router, Server Actions) |
 | `docker-specialist` | Containerização (Dockerfile multi-stage, Compose, hardening) |
 | `telemetry-specialist` | Observabilidade cross-stack (OTel SDK init, exporters OTLP, propagação W3C, web-vitals) |
+| `ux-design-specialist` | UX e design de interface (tokens, estados, formulários, a11y, microcopy) |
 
 Cada agent possui arquivo de **memória** em `.agents/memory/<nome>.md` que armazena decisões, padrões e sugestões de evolução — garantindo que os agents evoluam junto com a aplicação.
 

@@ -86,6 +86,7 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 | **nestjs-specialist**  | [`.agents/agents/nestjs-specialist.md`](./.agents/agents/nestjs-specialist.md)    | [memory](./.agents/memory/nestjs-specialist.md)          | Arquiteto backend NestJS                    | Criar/refatorar módulo NestJS, DI, validação, Swagger       |
 | **nextjs-specialist**  | [`.agents/agents/nextjs-specialist.md`](./.agents/agents/nextjs-specialist.md)    | [memory](./.agents/memory/nextjs-specialist.md)          | Arquiteto frontend Next.js                  | Criar rota/página, decidir RSC vs. Client, Server Actions    |
 | **telemetry-specialist**| [`.agents/agents/telemetry-specialist.md`](./.agents/agents/telemetry-specialist.md)| [memory](./.agents/memory/telemetry-specialist.md)        | Arquiteto de telemetria/observabilidade cross-stack (OpenTelemetry SDK init, exporters OTLP, propagação W3C, sampling, web-vitals, collector) | Decisões de instrumentação em backend/frontend/infra; correlação Pino↔OTel; bridge `request.id` → W3C `traceparent`; config OTel Collector Compose |
+| **ux-design-specialist**| [`.agents/agents/ux-design-specialist.md`](./.agents/agents/ux-design-specialist.md)| [memory](./.agents/memory/ux-design-specialist.md)        | Specialist em UX/design de interface (tokens, estados, formulários, a11y, microcopy) | Criar/revisar a aparência e o comportamento de telas e componentes, definir tokens, auditar a11y de UI |
 
 > **Lens DDD/Hexagonal (a partir de v1.2.0, com adoção do ADR-0001):** ao criar/refatorar módulo NestJS,
 > `nestjs-specialist` aplica a lens DDD/Hexagonal — validar boundary `domain/application/infrastructure`
@@ -223,5 +224,5 @@ Quando seguido corretamente, este padrão garante:
 
 **Mantido por:** projeto-base contributors
 **Licença:** MIT
-**Versão do documento:** 1.9.1
+**Versão do documento:** 1.10.0
 **Status:** Estável
