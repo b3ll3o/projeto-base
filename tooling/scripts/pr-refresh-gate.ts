@@ -53,11 +53,79 @@ export interface ResultadoGate {
   errors: string[];
 }
 
+/** Largura da citação da linha: legível num log de CI, sem despejar o corpo. */
+const LARGURA_CITACAO = 160;
+
+/**
+ * Remove do texto tudo que controla o terminal de quem vai ler.
+ *
+ * O corpo do PR é **escrito pelo autor do PR**, e o gate ecoa pedaços dele no
+ * log do CI. Ecoado cru, o corpo controla o log: uma sequência ANSI reescreve
+ * a linha seguinte do console, e um autor que não tem acesso ao runner ainda
+ * assim mede o tamanho do terminal de quem lê. Por isso duas passadas — a
+ * sequência ANSI inteira (que inclui os `[31m` que sobram órfãos se a gente só
+ * apagar o `ESC`), e depois qualquer caractere de controle remanescente.
+ *
+ * pt-BR: isto NÃO é um detalhe da citação. O `declarado` — o trecho do corpo
+ * que o scanner casou — entra na MESMA mensagem, e ele chega aqui já com o
+ * `\r` dentro: o `\s` do regex do scanner casa CR, LF, VT e U+2028/9. MEDIDO
+ * 2026-10-06 com o binário real e um corpo `31\rcommits`:
+ *
+ *     L1 (commits): declara "31\rcommits", o medido na base origin/main é 7…
+ *         linha um 31 commits e 15 arquivos aqui        ← higienizada
+ *
+ * A citação limpa e o `declarado` cru, duas linhas acima, na mesma string. Por
+ * isso a higienização mora aqui e é usada nos DOIS pontos — consertar só a
+ * citação deixa o serviço pela metade, que é pior do que não consertar porque
+ * o comentário do conserto passa a prometer uma proteção que não existe.
+ */
+function higienizar(bruto: string): string {
+  return bruto
+    .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')
+    .replace(/[\x00-\x1f\x7f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * O texto da linha citada, higienizado e truncado.
+ *
+ * Devolve string vazia quando a linha não existe no corpo: `L<n>` fora do
+ * corpo é dado corrompido upstream, e inventar texto para preencher seria pior
+ * que citar menos. O gate degrada para o `L<n>` e continua dizendo a mesma
+ * coisa — a ausência da citação nunca muda o veredito.
+ */
+function citarLinha(body: string, linha: number): string {
+  const bruto = body.split('\n')[linha - 1];
+  if (bruto === undefined) return '';
+  const limpo = higienizar(bruto);
+  if (limpo === '') return '';
+  return limpo.length > LARGURA_CITACAO ? `${limpo.slice(0, LARGURA_CITACAO - 1)}…` : limpo;
+}
+
 /**
  * O gate propriamente dito: pura, sem rede e sem git.
  *
  * Recebe o corpo e o relatório que o scanner já produziu — quem chama não
  * precisa saber de onde saíram, e o spec exercita a decisão sem `gh`.
+ *
+ * ## Por que a mensagem oferece DOIS consertos
+ *
+ * A primeira versão mandava "Marque o parágrafo e rode `pnpm pr:refresh`", sem
+ * alternativa. MEDIDO no PR #58: a prosa acusada falava dos **scripts de
+ * preflight** ("15 arquivos"), e o hook obedeceria — trocaria a frase pela
+ * contagem de arquivos **do PR**. O número sairia verdadeiro, a frase deixaria
+ * de falar do que ela falava, e o gate ficaria **verde**.
+ *
+ * Esse é o pior desfecho possível para este instrumento: um número certo sobre
+ * outro assunto não produz sinal nenhum, nem no gate nem na leitura. Um falso
+ * positivo honesto só custa uma frase reescrita.
+ *
+ * O gate **não pode decidir** qual dos dois é o caso: "esta frase é uma claim
+ * deste PR?" é semântica, e um classificador por palavra-chave seria uma
+ * superfície nova de falso positivo — a classe 2 de `guard-classes`, um guard
+ * que cobre só a forma que você conhece. A saída honesta é o bifurc + a frase,
+ * para o humano julgar em segundos em vez de caçar a linha e decidir sozinho.
  */
 export function verificarMarcador(body: string, relatorio: Relatorio): ResultadoGate {
   const vivas = linhasVivas(body, MARCADOR);
@@ -66,14 +134,28 @@ export function verificarMarcador(body: string, relatorio: Relatorio): Resultado
 
   return {
     ok: false,
-    errors: naoMarcadas.map(
-      (c) =>
-        `L${c.linha} (${c.classe}): declara "${c.declarado}", o medido na base ` +
+    errors: naoMarcadas.map((c) => {
+      const citacao = citarLinha(body, c.linha);
+      // pt-BR: `declarado` é `m[0]` do scanner — texto do CORPO DO PR, não
+      // dado do git. Passa por `higienizar` pelo mesmo motivo da citação, e
+      // o teste "um \r no declarado não sobrevive à mensagem" é o que segura.
+      const declarado = higienizar(c.declarado);
+      return (
+        `L${c.linha} (${c.classe}): declara "${declarado}", o medido na base ` +
         `${relatorio.base} é ${c.medido ?? '—'}, e o parágrafo NÃO carrega ` +
-        `${MARCADOR}. Sem o marcador o pr-refresh roda, mede e não escreve — ` +
-        `a claim envelhece em silêncio e o hook sai com "sem-marcador", que o ` +
-        `pre-push engole. Marque o parágrafo e rode \`pnpm pr:refresh\`.`,
-    ),
+        `${MARCADOR}.\n` +
+        (citacao === '' ? '' : `    ${citacao}\n`) +
+        `\n` +
+        `  Escolha o conserto pelo ASSUNTO da frase, não pela forma dela:\n` +
+        `  • a frase é sobre ESTE PR → marque o parágrafo e rode \`pnpm pr:refresh\`;\n` +
+        `  • a frase só tem a FORMA de uma claim (ex.: "15 arquivos" falando de\n` +
+        `    scripts, não do diff) → NÃO marque: reescreva a frase.\n` +
+        `\n` +
+        `  Marcar no segundo caso não conserta nada: o hook troca o número pela\n` +
+        `  contagem de commits/arquivos DO PR, e a frase sai verdadeira sobre\n` +
+        `  outro assunto — sem nenhum sinal depois disso.`
+      );
+    }),
   };
 }
 

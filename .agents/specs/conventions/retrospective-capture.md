@@ -88,7 +88,17 @@ O diretório é **derivado do repositório**; não é fixo e não deve ser escri
 
 ```bash
 MEMORY_DIR="${HOME}/.claude/projects/-$(git rev-parse --show-toplevel | sed 's|^/||;s|/|-|g')/memory"
-test -f "${MEMORY_DIR}/<N>-result.md"
+
+# 1. A derivação aponta para um diretório que existe?
+test -d "${MEMORY_DIR}" || { echo "derivação quebrada: ${MEMORY_DIR}" >&2; exit 1; }
+
+# 2. O result file DESTA campanha apareceu nele?
+#    `N` não é opcional: sem ele o grep casa qualquer result file que já esteja
+#    no diretório e o gate fica verde com ninguém tendo escrito nada.
+N=40  # o número desta campanha — quem roda a retro sabe qual é
+n_arquivos=$(ls -1 "${MEMORY_DIR}" | grep -cE "^b${N}(-.*)?-result\.md$")
+test "${n_arquivos}" -eq 1 \
+  || { echo "esperado 1 result file de b${N}, achei ${n_arquivos}" >&2; exit 1; }
 ```
 
 | Segmento | Origem |
@@ -99,15 +109,46 @@ test -f "${MEMORY_DIR}/<N>-result.md"
 | `memory` | literal |
 
 **Por que `git rev-parse --show-toplevel` e não `pwd`:** o slug descreve o
-*repositório*. Um `pwd` rodando de um subdiretório produz um slug diferente — o
-`test -f` passaria a ler um diretório que não existe, **sem erro**, que é a
-assinatura de um gate que nunca dispara.
+*repositório*. Um `pwd` rodando de um subdiretório produz um slug diferente, e
+`MEMORY_DIR` passa a apontar para um diretório que não existe. O `test -d` acima
+existe para separar os dois casos que um `test -f` confundiria: *a derivação
+quebrou* e *eu ainda não escrevi o arquivo*. São defeitos opostos — um se
+corrige recriando o diretório, o outro escrevendo o arquivo — e um check que
+não os distingue leva o autor a reescrever o arquivo no lugar errado até o
+`ls` acusar que nada mudou.
 
-**Antes de confiar no gate, prove a derivação:**
+**Por que não `test -f "${MEMORY_DIR}/<N>-result.md"`:** esta versão anterior
+não verificava nada, por dois defeitos independentes. O `<N>` é um placeholder —
+rodada literalmente, ela testa um arquivo chamado `<N>-result.md`, que não existe,
+e **sai 1 sempre** (MEDIDO 2026-10-06: `exit=1`, mesmo com a derivação
+correta). E mesmo com `<N>` preenchido, ela é tautológica: confirma a existência
+de um arquivo que você acabou de escrever, e é cega para os dois defeitos que
+importam — o arquivo no diretório errado, e o nome que nenhum consumidor
+reconhece.
 
-```bash
-ls -1 "${MEMORY_DIR}" | head      # tem de listar os result files, não falhar
-```
+**Por que `-eq 1` e não `≥ 1`:** duas respostas para a mesma campanha não são
+redundância, são ambiguidade — um consumidor que indexa por `b40` não sabe qual
+das duas ler. E `grep -cE` conta **linhas**: um `grep` que não casa nada devolve
+saída vazia e `0` no exit, então um critério escrito como "sem saída" passa
+vacuamente (a forma `criterion-inert-on-empty-set` de `guard-classes.md`).
+
+**O nome do arquivo é a parte que o gate não decide.** O padrão acima aceita
+qualquer `b<N>…-result.md`, incluindo sufixo descritivo
+(`b40-claims-envelhecem-na-memoria-result.md`) e campanha combinada
+(`b5-b6-result.md` casa em `b5` e em `b6`). Isso é deliberado: uma regra que
+exigisse o nome exato não teria o que reprovar em quem já tem um nome melhor, e
+o custo de impor um formato é maior que o de conviver com a variação. O que
+**não** é negociável é conter `b<N>` e terminar em `-result.md` — sem isso o
+arquivo não é localizável por nenhum consumidor.
+
+**O `N` sem o qual o gate não mede nada.** A versão intermediária —
+`ls -1 "${MEMORY_DIR}" | grep -E '^b[0-9]+.*-result\.md$'` — era verde por
+acúmulo: MEDIDO 2026-10-06, o diretório já tinha **41** result files de
+campanhas anteriores, então o gate saía 0 sem esta retrospectiva ter escrito
+nada. É a mesma classe do `skipped` que se confunde com aprovação, uma geração
+adiante: um critério que mede *"o diretório tem result file"* quando o que ele
+promete é *"esta campanha tem result file"*. O mesmo comando também não enxerga
+um `b24` faltando — a numeração tem buraco e nenhum check acima o vê.
 
 ## Comandos / Triggers
 

@@ -116,6 +116,101 @@ describe('verificarMarcador', () => {
     expect(r.errors.join('\n')).toContain('origin/main');
   });
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // A mensagem NÃO pode prescrever UM conserto só.
+  //
+  // MEDIDO no PR #58: o parágrafo dizia "15 arquivos" falando dos scripts de
+  // preflight, e o console mandava "marque o parágrafo e rode pr:refresh". O
+  // hook obedeceria: trocaria a frase pela contagem de arquivos DO PR. O número
+  // sairia verdadeiro e a frase deixaria de falar do que ela falava — e o gate
+  // ficaria verde, que é o pior desfecho possível: um número certo sobre outro
+  // assunto não tem sinal nenhum.
+  //
+  // O gate NÃO consegue decidir isso: "é uma claim deste PR?" é semântica, e um
+  // classificador por palavra-chave seria uma superfície nova de falso positivo
+  // (guard-classe 2: cobre só a forma que você conhece). A saída honesta é o
+  // bifurco + o texto da linha, para o humano julgar.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it('apresenta os DOIS consertos, porque a forma da frase não diz de que assunto ela é', () => {
+    const r = verificarMarcador(CORPO_SEM_MARCADOR, relatorio([claim(1, true)]));
+    const msg = r.errors.join('\n');
+    expect(msg).toMatch(/pnpm pr:refresh/); // conserto A: a frase é sobre este PR
+    expect(msg).toMatch(/reescrev/i); // conserto B: a frase só tem a forma de uma claim
+  });
+
+  it('diz que marcar uma frase que NÃO é deste PR a troca pelo número de outro assunto', () => {
+    // Sem esta linha o bifurco é decorativo: o autor lê "outros dois consertos",
+    // escolhe o primeiro por reflexo e produz a frase verdadeira-sobre-outro-assunto.
+    const r = verificarMarcador(CORPO_SEM_MARCADOR, relatorio([claim(1, true)]));
+    expect(r.errors.join('\n')).toMatch(/outro assunto/);
+  });
+
+  it('traz o texto da linha citada, para o humano julgar sem abrir o corpo', () => {
+    const r = verificarMarcador(CORPO_SEM_MARCADOR, relatorio([claim(1, true)]));
+    expect(r.errors[0]).toContain('linha 1');
+  });
+
+  it('a citação da linha não deixa o corpo do PR reescrever o log do CI', () => {
+    // O corpo vem do autor do PR. Ecoá-lo cru em stderr deixa o conteúdo do PR
+    // controlar o log — e é o único dado desta função que o PR escolhe.
+    const corpo = ['linha 1 \x1b[31mVERMELHO\x1b[0m fim', 'linha 2'].join('\n');
+    const r = verificarMarcador(corpo, relatorio([claim(1, true)]));
+    // eslint-disable-next-line no-control-regex
+    expect(r.errors[0]).not.toMatch(/[\x00-\x09\x0b\x0c\x0e-\x1f\x7f]/);
+    // ...e o texto continua legível depois de higienizado.
+    expect(r.errors[0]).toContain('VERMELHO');
+  });
+
+  it('o `declarado` do scanner não deixa o corpo do PR reescrever o log do CI', () => {
+    // pt-BR: `declarado` é `m[0]` do scanner — texto do CORPO DO PR — e entra
+    // na MESMA mensagem que a citação, duas linhas acima. Ele chega aqui já
+    // com o `\r` dentro: o `\s` do regex do scanner casa CR, LF, VT e U+2028/9.
+    //
+    // MEDIDO 2026-10-06 com o binário real e corpo `31\rcommits`:
+    //
+    //     L1 (commits): declara "31\rcommits", o medido na base origin/main é 7…
+    //         linha um 31 commits e 15 arquivos aqui        ← higienizada
+    //
+    // A citação limpa e o `declarado` cru, na mesma string.
+    //
+    // Por que este teste é separado do da citação: a classe de caracteres
+    // daquele é `[\x00-\x09\x0b\x0c\x0e-\x1f\x7f]`, que EXCLUI `\x0d` porque a
+    // mensagem é multi-linha e o `\n` é legítimo. Um mutante que higienize SÓ a
+    // citação deixa o CR passar e o teste anterior continua VERDE. MEDIDO: é
+    // exatamente o furo que a revisão de 2026-10-06 apontou.
+    const corpo = 'linha um 31 commits e 15 arquivos aqui';
+    const c = { ...claim(1, true), declarado: '31\rcommits' };
+    const r = verificarMarcador(corpo, relatorio([c]));
+
+    expect(r.errors[0]).not.toContain('\r');
+    // E o texto continua legível depois de higienizado — não virou vazio.
+    expect(r.errors[0]).toContain('declara "31 commits"');
+  });
+
+  it('trunca a citação longa para caber num log de CI', () => {
+    // pt-BR: `LARGURA_CITACAO` é o limite entre "cite o texto que o autor
+    // reconheça" e "despeje o parágrafo inteiro no log". Sem este teste, dois
+    // mutantes passavam — MEDIDO 2026-10-06, 1 vermelho cada a partir do
+    // arquivo íntegro: `return limpo` (sem truncar) e `slice(LARGURA_CITACAO)`
+    // (invertido, devolvendo 240 em vez de 160). O `toContain('linha 1')` do
+    // teste acima não pega nenhum dos dois.
+    const corpo = 'x'.repeat(400);
+    const r = verificarMarcador(corpo, relatorio([claim(1, true)]));
+    const citacao = r.errors[0]!.split('\n')[1]!.trim();
+
+    expect(citacao).toHaveLength(160);
+    expect(citacao.endsWith('…')).toBe(true);
+  });
+
+  it('NÃO imprime citação quando a linha citada não existe no corpo', () => {
+    // Linha fora do corpo é dado corrompido upstream, não motivo para inventar
+    // texto: o gate degrada para o `L<n>` e segue dizendo a mesma coisa.
+    const r = verificarMarcador(CORPO_SEM_MARCADOR, relatorio([claim(99, true)]));
+    expect(r.ok).toBe(false);
+    expect(r.errors[0]).toContain('L99');
+  });
+
   it('o marcador que o gate exige é o mesmo que o apply escreve', () => {
     // Duas strings distintas no mesmo código = o gate exigindo um token
     // que o apply nunca procura.
