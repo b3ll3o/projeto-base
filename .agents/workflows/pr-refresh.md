@@ -49,7 +49,7 @@ construídos no script. Nenhum valor do corpo chega a uma posição de comando.
 
 ## Por que isto NÃO mora no `preflight`
 
-Os 14 checks do [`preflight`](../../.tooling/scripts/ci/preflight.ts) rodam
+Os checks do [`preflight`](../../.tooling/scripts/ci/preflight.ts) rodam
 **offline** e [`.husky/pre-push`](../../.husky/pre-push) faz
 `pnpm ci:preflight || exit 1` em **qualquer** branch. Um check de PR exigiria
 rede e falharia num repo sem PR — um gate que trava por ausência de dado.

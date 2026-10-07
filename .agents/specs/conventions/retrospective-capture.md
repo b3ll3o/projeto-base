@@ -81,8 +81,8 @@ Heurística de scoring:
 > **Fonte única do repo.** O result file da retro vive **fora** do repo, no diretório
 > de memória da máquina. Esta seção é a **única** declaração desse caminho em
 > `.agents/**`; toda outra referência aponta para cá em vez de repetir. Se você
-> encontrou o caminho escrito em outro arquivo, isso é um defeito
-> (backlog `X8`) — corrija para um link, não para uma segunda cópia.
+> encontrou o caminho escrito em outro arquivo, isso é um defeito — corrija para
+> um link, não para uma segunda cópia.
 
 O diretório é **derivado do repositório**; não é fixo e não deve ser escrito à mão:
 

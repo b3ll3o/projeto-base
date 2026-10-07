@@ -18,8 +18,9 @@ maintainer: stack-code-reviewer
 
 1. **Antes de qualquer coisa**: `pnpm install` e, se for planejar, gerar um *state-snapshot* (camada de agents).
 2. **Commit** dispara `pre-commit`: `lint-staged` (só Prettier) + `stack-code-reviewer` (único que aborta em pre-commit) + `doc-sync` (roda mas nunca aborta — ver §7.2).
-3. **Push** dispara `pre-push`: `pnpm ci:preflight` — 14 checks estruturais; aborta com exit 1 se algum falhar.
-4. **PR para `main`** dispara 3 jobs de CI (`preflight`, `quality`, `docker-build-prod`) + `stack-code-review` + `docs-sync`. **Pós-#44** os jobs `preflight` e `quality` rodam a suíte `.tooling/scripts/ci/*.spec.ts` (16 arquivos / 207 testes), que valida os próprios dentes do tooling.
+3. **Push** dispara `pre-push`: `pnpm ci:preflight` — os gates estruturais declarados em
+   [`preflight.ts`](../.tooling/scripts/ci/preflight.ts); aborta com exit 1 se algum falhar.
+4. **PR para `main`** dispara 3 jobs de CI (`preflight`, `quality`, `docker-build-prod`) + `stack-code-review` + `docs-sync`. **Pós-#44** os jobs `preflight` e `quality` rodam a suíte do tooling, que valida os próprios dentes dele — contagem por `pnpm tooling:test` (dois roots).
 5. **Merge em `main`** só dispara `release-template` (auto-tag) **se** o commit tocar `docs/MONOREPO.md`.
 
 > **Ressalva crítica:** nenhum check de CI é *required_status_check* (apenas `quality` em `main` é *required* via ruleset — ver §7.2). A garantia real é a cadeia do workflow (`preflight` bloqueia `quality` via `needs:`), não o check isolado.
@@ -109,9 +110,15 @@ pnpm tsx tooling/scripts/doc-sync.ts --files="$changed" --mode=incremental || ex
 
 `.husky/pre-push` roda **exclusivamente** `pnpm ci:preflight`. Ele **não** roda lint, typecheck nem teste — apesar de [`git-workflow.md`](../.agents/specs/conventions/git-workflow.md) recomendar `pnpm ci:local` como "Pre-Push Quality Gate".
 
-Os 14 checks registrados (medido em 2026-10-06 pós-#50: **13 ✓ / 1 ✗** — o ✗ é `turbo: differential parser × turbo real`, que exige Node ≥ 22.6 (turbo 2.11.2) e a NodeBox local roda Node 20.20; no CI, Node 22, passa). A **lista** é a fonte de verdade, não este número — ele envelhece a cada check novo, e as outras menções deste doc citam o gate sem repetir a contagem justamente por isso:
+Os gates registrados são os `name:` de
+[`preflight.ts`](../.tooling/scripts/ci/preflight.ts) — **essa lista é a fonte de
+verdade, não este doc**. Uma cópia enumerada aqui envelhece a cada gate novo sem
+aviso nenhum; o veredito sai de `pnpm ci:preflight`, que separa `✓` / `✗` /
+`skipped`. Para quantos são agora:
 
-1. Cross-refs em `.md` versionados · 2. tsconfig drift · 3. ESLint config drift (apps) · 4. ESLint config drift (packages) · 5. turbo.json drift · 6. package.json drift · 7. docker drift · 8. review-routing matrix lint · 9. archive integrity · 10. destino da retrospectiva · 11. registro de dentes · 12. classe 3 (guard que dispara em si mesmo) · 13. turbo: differential parser × turbo real · 14. controle desligado.
+```bash
+grep -cE "^\s+name: '" .tooling/scripts/ci/preflight.ts
+```
 
 ---
 
@@ -165,7 +172,7 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 | `pnpm review:lint` | Valida a matriz `review-routing.md` (YAML, LOC, reviewer refs) | A + B |
 | `pnpm specialist:lint` | Idem para a matriz `specialist-routing.md` — **fora do preflight** | nenhuma |
 | `pnpm archive:lint` | Valida frontmatter de `.agents/runs/archive/*.md` — ainda **sem arquivo** no repo | nenhuma |
-| `pnpm tooling:test` | Suíte de testes do próprio tooling (16 arquivos / 207 testes) | nenhuma |
+| `pnpm tooling:test` | Suíte de testes do próprio tooling, em **dois roots** — a contagem total é `pnpm tooling:test \| grep -E 'Test Files\|Tests '`, e ela **envelhece**: re-meça, não cite | nenhuma |
 | `pnpm review:route` / `pnpm specialist:route` | Roteamento headless: emite YAML de despacho | nenhuma |
 | `pnpm test:unit` / `test:coverage` / `test:integration` / `test:e2e` | Suítes via turbo | B |
 | `pnpm lint` | `turbo run lint` — no `apps/api` é stub `echo 'apps/api lint stub…' && exit 0` | B (parcial) |
@@ -179,13 +186,13 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 
 - `pre-commit` / `pre-push` instalados e executando.
 - `stack-code-reviewer` — gate com dentes reais em pre-commit: `process.exit(1)` em blocker.
-- `ci:preflight` — registrado e executando. Estado medido em 2026-10-06 neste
-  working tree pós-#50: **13/14 ✓** (o 14º, `turbo-redirect-differential`, ✗
-  localmente por Node 20.20 vs turbo 2.11.2 querer ≥ 22.6; **✓ no CI** que roda
-  Node 22). Reexecute `pnpm ci:preflight` para confirmar; este número envelhece
-  a cada check novo (foi 9 até 2026-10-05; 14 pós-#44).
+- `ci:preflight` — registrado e executando. **O veredito não é um número fixo:**
+  rode `pnpm ci:preflight` e leia a linha final — ela separa `✓` / `✗` /
+  `skipped`, e "todos passaram" é mentira enquanto houver skip. (2026-10-06 neste
+  working tree: 15 ✓, 0 ✗, 2 skipped — os dois skips são por **ausência de
+  alvo**, um deles porque `.agents/runs/archive/` está vazio.)
 - Job `quality` do CI — encadeado por `needs: preflight`, roda cobertura 80% de `apps/api#unit` (gate era inerte até #40/#41).
-- Job `preflight` do CI — **pós-#44** roda a suíte `pnpm tooling:test` (16 arquivos / 207 testes em `.tooling/scripts/ci/*.spec.ts`), que valida os próprios dentes do tooling.
+- Job `preflight` do CI — **pós-#44** roda a suíte `pnpm tooling:test`, que valida os próprios dentes do tooling (dois roots; a contagem por `grep -E 'Test Files|Tests '` envelhece a cada spec nova).
 - `docker-build-prod` — build real dos 2 Dockerfiles `prod` em toda PR.
 - `release-template` — syntaticamente correto (idempotência via `git rev-parse --verify`, `concurrency`, `contents: write`) e **já não é noop**: quando a tag existe ele emite `::warning::` em vez de encerrar em silêncio. O que falta: check que amarra footer↔tag (**BL1**).
 - Boundary DDD/Hexagonal **existe de fato** em `apps/api/src/modules/users/{domain,application,infrastructure}`.
@@ -200,8 +207,8 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 | **Nenhum check bloqueia merge** *(parcialmente corrigido)* | O ruleset `master` (id 23853096) tem `required_status_checks: [{context: "quality"}]` e `main` só é atualizável por PR. O que sobra: `required_approving_review_count = 0` e `required_reviewers = []` (contribuidor único). Só **1 dos 3** contexts é exigido — a garantia real é a cadeia do workflow (`preflight` bloqueia `quality` via `needs:`), não o check isolado. |
 | `lint-staged` não é linter | `node -e "console.log(Object.values(require('./package.json')['lint-staged']).join(' \| '))"` → `prettier --write \| prettier --write`. Nenhum eslint, tsc ou vitest. O ESLint entra pelo turbo. |
 | `doc-sync` nunca aborta | `grep -c 'process.exit' tooling/scripts/doc-sync.ts` → **0** (re-medido 2026-10-06). O `\|\| exit 1` do hook e o job de CI são guarda de crash, não gate. O contrato **documentado** diz report-only, em vez de prometer bloqueio que não existe. |
-| `specialist:lint` fora do preflight | `grep -c specialist .tooling/scripts/ci/preflight.ts` → **0** (re-medido 2026-10-06), enquanto `review:lint` roda no preflight. Duas matrizes de routing, dois scripts, um só no gate. |
-| Limite de 300 linhas não é imposto | `wc -l .agents/WORKFLOWS.md` → **163** (pós-#50, o que **reduziu** o problema; **mas**: a regra `tamanho-e-revisao.md` segue não tendo gate mecânico — `grep -rn '300' .tooling/scripts/ci/*.ts \| grep -v spec` retorna só o `MAX_LOC` do `lint-review-routing.ts:29`, que mede `review-routing.md` apenas). |
+| `specialist:lint` fora do preflight | `grep -c specialist .tooling/scripts/ci/preflight.ts` → **1**, e o hit é um **comentário** que cita `nestjs-specialist` — não uma invocação. É classe 3: o sweep dispara em si mesmo. `review:lint` roda no preflight, `specialist:lint` não: duas matrizes de routing, dois scripts, um só no gate. |
+| Limite de 300 linhas não é imposto | `wc -l .agents/WORKFLOWS.md` → **189** (re-meça; a régua é do repo, não deste arquivo). **Mas** a regra `tamanho-e-revisao.md` segue sem gate mecânico: `grep -rln 'MAX_LOC' tooling/scripts/ .tooling/scripts/ \| grep -v spec` devolve **um** arquivo, `tooling/scripts/lint-review-routing.ts`, e ele mede `review-routing.md` apenas. **Cuidado com o path**: procurar por `.tooling/scripts/ci/*.ts` devolve **0** e leva à conclusão errada de que não existe limite nenhum. |
 
 ### 7.3 Regra que resume a camada
 

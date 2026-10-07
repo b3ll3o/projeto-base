@@ -23,13 +23,13 @@ description: "Convenção canônica das 7 classes de guard — como cada uma se 
 
 | # | Classe | Instância real no repo | Fonte | Detecção |
 |---|--------|--------------------------|-------|----------|
-| 1 | **Nunca dispara** — condição inalcançável | `review-routing.md:84` declara `tooling/scripts/ci/**` → **0** arquivos tracked; o real é `.tooling/scripts/ci/**` → **19** | [`X8`](../../runs/backlog-2026-10-02.md) (mesma *forma*, `isAbsolute`) | estática |
+| 1 | **Nunca dispara** — condição inalcançável | o par `tooling/scripts/ci/**` (resolve 0 tracked) vs `.tooling/scripts/ci/**` (o diretório real) — **corrigido** em `review-routing.md`, que já declara a forma com o ponto; sobrevive como histórico da classe, não como instância viva | [`X8`](../../runs/backlog-2026-10-02.md) (mesma *forma*, `isAbsolute`) | estática |
 | 2 | **Só a forma rara** — cobre `2>&1`, perde `2>/dev/null` | guard de redirect do PR #43: 6 formatos vazavam | — (memória `b39`) | estática + corpus |
 | 3 | **Dispara em si mesmo** — o único hit é o comentário que o documenta | sweep de path-de-máquina do PR #43 (o hit virou fixture) | [`X8`](../../runs/backlog-2026-10-02.md) (o hit virou fixture) | estática + julgamento |
 | 4 | **Erra o eixo** — corta task em vez de cortar redirect | `splitRedirect` devolvia `[]` → caller pulava o script sem `skipped` | [`X10`+`X11`](../../runs/backlog-2026-10-02.md) | harness |
 | 5 | **Classe ausente do dado** — a forma defeituosa não existe no repo | `turbo run build >out.log ALVO` (não existe em nenhum `package.json`) | [`X12`](../../runs/backlog-2026-10-02.md) | harness |
 | 6 | **Ferramenta reporta sucesso corrompendo** | `Edit` trocou `0x27`→`0x22` fora do alvo; sintoma (`Unterminated string literal`) apareceu numa linha não editada | — (memória `b39`) | **nenhuma** (ver §3) |
-| 7 | **Claim numérico que envelhece** | `X8` afirmava `git grep '/home/' -- '*.ts'` → 0; hoje são **3** | [`X8`](../../runs/backlog-2026-10-02.md) (corrigido na task 2.2) | estática (re-medição) |
+| 7 | **Claim numérico que envelhece** | `X8` afirmava `git grep '/home/' -- '*.ts'` → 0, e **todas** as contagens de corpus deste arquivo envelheceram desde — re-meça pelo comando de §2, nunca pelo número | [`X8`](../../runs/backlog-2026-10-02.md) (corrigido na task 2.2) | estática (re-medição) |
 
 > **As classes 1, 4 e 5 têm entrada própria no backlog** (`X8`, `X10`+`X11`,
 > `X12`) com comando de reprodução. Esta convenção **não reescreve** esses
@@ -46,18 +46,23 @@ forma que passa e não deveria) → **evidência medida** de que a receita pega.
   resolvido é **vazio**, e cuja intenção era não-vazia.
 - **Comando:** `git ls-files '<glob-do-guard>' | wc -l` → 0, com o diretório
   irmão real contando > 0.
-- **Contra-exemplo:** `tooling/scripts/ci/**` (0) quando o guard vive em
-  `.tooling/scripts/ci/**` (19). O prefixo de `.` some e nada acusa.
+- **Contra-exemplo (histórico — já corrigido):** `tooling/scripts/ci/**`, que
+  resolve **0** arquivos, quando o guard vivia em `.tooling/scripts/ci/**`. O
+  prefixo de `.` some e nada acusa. O `review-routing.md` **já** declara a forma
+  correta, então este item deixou de instanciar a classe: fica como registro do
+  defeito e da receita, não como prova viva.
 - **Evidência:** `git ls-files 'tooling/scripts/ci/**' | wc -l` → **0**;
-  `git ls-files '.tooling/scripts/ci/**' | wc -l` → **19**. Medido 2026-10-05.
+  `git ls-files '.tooling/scripts/ci/**' | wc -l` → o total real do diretório.
 
 ### 2 — Só a forma rara
 
 - **O que procurar:** um parser/guard que enumera **variantes**; contar se
   alguma variante **comum** ficou de fora.
-- **Comando:** contar quantos nomes de script alcançáveis o guard NÃO cobre:
-  `git ls-files '*package.json'` → 7 arquivos → **27 nomes / 53 ocorrências**
-  de scripts; o guard cobria 21, 6 vazavam.
+- **Comando:** contar quantos nomes de script alcançáveis o guard NÃO cobre.
+  O corpus é `git ls-files '*package.json'`; some as chaves de `scripts` de cada
+  arquivo, compare com o padrão que o guard casa, e liste as que vazam. **Não
+  congele o resultado** — ele envelhece a cada script novo, que é a classe 7
+  desta própria linha.
 - **Contra-exemplo:** cobrir `2>&1`, `&>` e `>` mas deixar `2>/dev/null` — a
   forma que o mundo realmente usa.
 - **Evidência:** 6 formatos vazando, medido sobre os nomes reais do repo.
@@ -93,8 +98,10 @@ forma que passa e não deveria) → **evidência medida** de que a receita pega.
   → 0 arquivos. Se 0, spec-escrito-a-partir-dos-dados é cego.
 - **Contra-exemplo:** `turbo run build >out.log ALVO` não existe em nenhum
   `package.json` — a forma com task após redirect.
-- **Evidência:** exige **diferencial** (18 formas contra o sistema real, 0
-  divergentes); ver `turbo-redirect-differential.sh`.
+- **Evidência:** exige **diferencial** — o bloco `CASES` de
+  `turbo-redirect-differential.sh` contra o sistema real. O total de formas não
+  está fixado aqui porque **ele é** uma claim que envelhece: conta-se contando
+  as entradas não-vazias do heredoc.
 
 ### 6 — Ferramenta reporta sucesso corrompendo
 
@@ -108,17 +115,20 @@ forma que passa e não deveria) → **evidência medida** de que a receita pega.
 - **O que procurar:** um número **sem derivação** num `.md` versionado.
 - **Comando:** re-rodar o comando que o número afirma, **no mesmo dia** que
   for ler, e se o número não estiver lá, corrigir o `.md` (não o código).
-- **Contra-exemplo:** `X8` afirmava `0` hits de `/home/`; quando medido, 3.
+- **Contra-exemplo:** `X8` afirmava `0` hits de `/home/` em `*.ts`; quando medido,
+  **7** — e parte desses 7 é o próprio guard e suas fixtures, que a classe 3
+  manda não contar. O número bruto e o número útil divergem, e a **diferença** é
+  o que uma claim dessas precisa declarar.
 - **Evidência:** o sweep do `X8` é exatamente o que a task 2.2 do plano
   `guard-classes` corrigeu, com o comando e as exclusões **escritos no
   backlog** — porque um `0` que só fecha com exclusão escondida é um gate
   que não dispara.
 - **A variante que um guard de reconciliação não pega (2026-10-05).** O registro
   de dentes em `ci-defense-in-depth.md` **tinha** o comando de cada RED ao lado
-  do número esperado, e `check-teeth-registry` reconcilia toda linha. Três
-  números envelheceram assim mesmo: a classe 3 dizia **9** (são **8**) e o
-  comando 4 dizia "8 dos **9** gates" (são **12 dos 13** — a tabela cresceu de
-  9 para 13). As mutações eram as mesmas; mudou o corpus. **O guard validava o
+  do número esperado, e `check-teeth-registry` reconcilia toda linha. Os
+  números envelheceram assim mesmo — a classe 3 e o comando 4 declaravam
+  totais que a tabela de dentes não tinha. As mutações eram as mesmas; mudou o
+  corpus. **O guard validava o
   endereço da claim — o `path` da linha — e não a claim.** Reconciliar onde a
   evidência mora não a impede de envelhecer; só reexecutar o comando, no dia da
   leitura, impede.
