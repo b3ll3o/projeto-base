@@ -4,20 +4,33 @@
 // (lines, functions, branches, statements) — ver
 // .agents/specs/conventions/cobertura-testes.md.
 //
-// STATUS ATUAL (2026-10-02): o gate de 80% está **desabilitado**
-// (thresholds = 0) porque apps/web está em fase de scaffolding. A
-// cobertura real medida é **47.24%** (6 arquivos) — o número é confiável
-// desde que o `.next/` voltou a ser excluído (ver `coverage.exclude`);
-// antes disso o relatório lia 16.28% com 67 dos 74 arquivos sendo build
-// output do Next.js. Este app ainda não tem feature associada no roadmap
-// imediato. Quando o primeiro BC do frontend começar (ex: página de
-// listagem de users), reativar thresholds para 80% seguindo o mesmo
-// padrão de apps/api#unit.
+// STATUS ATUAL (re-medido em 2026-10-06): o gate de 80% continua
+// **desabilitado** (thresholds = 0). A cobertura real medida é **72,83% em
+// 8 arquivos** (`pnpm exec vitest run --coverage`, a partir de apps/web).
 //
-// Por que isso é aceitável sob a regra global: o mesmo doc de cobertura
-// já trata o projeto `integration` de apps/api como report-only (não
-// gate-enforced) por motivo análogo (cobre apenas adapters Prisma).
-// Padrão equivalente aqui: apps/web fica report-only até o primeiro BC.
+// Este número é uma FOTOGRAFIA, não uma constante: ele muda a cada teste e a
+// cada arquivo novo. Re-meça antes de citá-lo em qualquer lugar.
+//
+// O que puxa a média para baixo são os 4 arquivos de telemetria
+// (`instrumentation-client.ts` e os três de `telemetry/`), todos em 0% —
+// nenhum exercitado por teste unitário. O que a tela de cadastro acrescenta
+// está em 100%: `components/cadastro-usuario-form.tsx` e
+// `lib/cadastro-usuario-schema.ts`.
+//
+// Duas ressalvas que o número sozinho esconde:
+//  - `app/**` está no `coverage.exclude` (decisão de diseño abaixo), então
+//    `app/users/novo/actions.ts` — a Server Action, ~120 linhas de tradução de
+//    erro — NÃO aparece no relatório. Os 13 testes dela rodam; a cobertura
+//    dela não é medida. Green por ausência, que é o modo de falha que a
+//    classe 3 descreve.
+//  - Reativar o gate a 80% hoje ficaria VERMELHO: 72,83% < 80%. O gatilho
+//    declarado abaixo ("quando o primeiro BC do frontend começar") já
+//    dispara, mas desligar o número ou escribilhar o teto não são a mesma
+//    coisa — a decisão é de quem mantém o gate, não de um comentário.
+//
+// Por que report-only é aceitável sob a regra global: o mesmo doc de
+// cobertura já trata o projeto `integration` de apps/api como report-only
+// (não gate-enforced) por motivo análogo (cobre apenas adapters Prisma).
 //
 // Exclusões canônicas:
 //   - app/** → Next.js RSC + client component pages — testadas via E2E
@@ -33,9 +46,25 @@ import { coverageConfigDefaults, defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
+    // pt-BR (2026-10-06): a tela de cadastro introduces o PRIMEIRO
+    // Client Component com DOM do app, e a primeira Server Action com
+    // I/O. O glob anterior só enxergava `components/**/*.spec.ts`, que
+    // não casa um spec em `.tsx` (o `.tsx` só aparecia sob `src/`, por
+    // causa do glob do web-vitals). Sem estes dois globs, os testes da
+    // tela de cadastro seriam silenciosamente NÃO EXECUTADOS — o Vitest
+    // não falha por arquivo não coletado, ele apenas roda menos. É o
+    // mesmo modo de falha de "gate que casa vazio": o verde sem ter
+    // testado nada.
     include: [
       'lib/**/*.spec.ts',
       'components/**/*.spec.ts',
+      // pt-BR: spec de Client Component (renderiza DOM, precisa de
+      // `// @vitest-environment jsdom` no topo do arquivo).
+      'components/**/*.spec.tsx',
+      // pt-BR: a Server Action mora em `app/users/novo/actions.ts`. O
+      // `app/**` continua excluído da COBERTURA (decisão de diseño
+      // acima, inalterada) — aqui é só `include` de descoberta.
+      'app/**/*.spec.ts',
       // pt-BR: Task 4.1 (plano telemetria) introduziu o reporter de
       // Web Vitals sob `src/telemetry/`. Client Components ficam fora
       // de `lib/` (utilities puras) e `components/` (UI), então
@@ -44,6 +73,10 @@ export default defineConfig({
       'src/**/*.spec.ts',
       'src/**/*.spec.tsx',
     ],
+    // pt-BR: matcher do Testing Library (`toBeInTheDocument`, `toHaveValue`…).
+    // Carregado só nos specs que declaram ambiente DOM, mas é global —
+    // não custa nada nos de `node`.
+    setupFiles: ['./vitest.setup.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary'],
@@ -110,8 +143,25 @@ export default defineConfig({
       ],
     },
   },
+  // pt-BR (2026-10-06): o tsconfig do app declara `jsx: "preserve"`, que é
+  // o correto para o Next — quem compila JSX é o compilador dele. Mas o
+  // Vitest usa o esbuild, e com `preserve` ele volta ao transform CLÁSSICO,
+  // que exige `React` no escopo de cada arquivo: o sintoma é
+  // `ReferenceError: React is not defined` em TODO spec `.tsx`, com o teste
+  // morrendo no `render` e não no que ele deveria verificar.
+  esbuild: {
+    jsx: 'automatic',
+  },
   resolve: {
     alias: {
+      // pt-BR (2026-10-06): o alias `@/` é o que o Next resolve em runtime
+      // (tsconfig `paths`), e todo import dentro de `app/` e `components/`
+      // o usa. Sem espelhá-lo aqui, QUALQUER spec que importe um módulo do
+      // app morre em "Failed to load url @/lib/..." — e o sintoma é o teste
+      // inteiro sumindo, não um erro de import legível. A lista de aliases
+      // tem de ser derivada do mesmo `paths` do tsconfig, senão as duas
+      // resoluções divergem em silêncio.
+      '@': new URL('.', import.meta.url).pathname,
       '@projeto/shared-types': new URL('../../packages/shared-types/src', import.meta.url).pathname,
     },
   },
