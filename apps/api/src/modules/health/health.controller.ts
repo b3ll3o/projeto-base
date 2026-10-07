@@ -13,12 +13,19 @@
 // `app.setGlobalPrefix('api/v1')` no main.ts → URL final `/api/v1/health`.
 // `version: '1'` é exigência do FastifyAdapter para VERSIONING.
 
-import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
+import { Controller, Get, Inject, ServiceUnavailableException } from '@nestjs/common';
 import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service.js';
 
 @Controller({ path: 'health', version: '1' })
 export class HealthController {
-  constructor(private readonly prisma: PrismaService) {}
+  // pt-BR: `@Inject` explícito é OBRIGATÓRIO aqui, não redundância.
+  // `dev` roda com `tsx` (esbuild), que NÃO emite `design:paramtypes`
+  // mesmo com `emitDecoratorMetadata: true` no tsconfig — sem `@Inject`,
+  // o Nest resolve `prisma` como `undefined` e o healthcheck cai em
+  // `catch` → 503 com o banco no ar. O build (`tsc`) emite metadata, então
+  // o defeito só aparece em dev. Mesmo idioma do resto do repo
+  // (ver `prisma-audit.service.ts`).
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   @Get()
   async check(): Promise<{

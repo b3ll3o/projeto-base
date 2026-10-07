@@ -12,7 +12,8 @@ export type {
   AuditOperationType,
   UserHistoryEntryDto,
   UserArchiveEntryDto,
-  PaginatedResponse,
+  UsersPageDto,
+  UserHistoryPageDto,
   ProblemDetailsDto,
   ProblemDetailsError,
 } from './user.js';

@@ -1,9 +1,9 @@
 ---
 name: specialist-routing
-version: 1.2
-updated: 2026-09-23
+version: 1.3
+updated: 2026-10-06
 maintainer: specialist-router
-description: "Matriz canônica de roteamento de demanda — mapeia paths/keywords/scopes para 9 specialists. Source of truth para o classificador headless (tooling/scripts/specialist-router.ts) e para o lint da matriz. Atualizada por PR."
+description: "Matriz canônica de roteamento de demanda — mapeia paths/keywords/scopes para 10 specialists. Source of truth para o classificador headless (tooling/scripts/specialist-router.ts) e para o lint da matriz. Atualizada por PR."
 ---
 
 # Convenção: specialist-routing (matriz de roteamento de specialists)
@@ -57,7 +57,16 @@ path_globs:
     rationale: "Frontend Next.js (app/, components/, lib/, styles/)"
 
   - pattern: "apps/web/components/**"
-    specialists: [nextjs-specialist]
+    specialists: [nextjs-specialist, ux-design-specialist]
+    rationale: "Componentes de UI (aparência, estados, acessibilidade)"
+
+  - pattern: "apps/web/app/**.tsx"
+    specialists: [ux-design-specialist]
+    rationale: "Páginas e componentes de rota (layout visual, microcopy, estados de tela)"
+
+  - pattern: "apps/web/app/globals.css"
+    specialists: [ux-design-specialist]
+    rationale: "Tokens de design (cor, espaçamento, tipografia) e resets"
 
   - pattern: "packages/**"
     specialists: [monorepo-specialist]
@@ -167,6 +176,10 @@ demand_keywords:
   - regex: "(?i)telemetry|tracing|opentelemetry|\\botel\\b|spans?"
     specialists: [telemetry-specialist]
     rationale: "Demanda sobre telemetria/observabilidade (OpenTelemetry SDK, exporters, sampling, propagação W3C, web-vitals, OTel Collector)"
+
+  - regex: "(?i)\\btela(s)?\\b|\\bux\\b|\\bdesign\\b|layout|formul[áa]rio|acessibilidade|\\ba11y\\b|EmptyState|estados? de"
+    specialists: [ux-design-specialist]
+    rationale: "Demanda sobre UX/design de interface (tokens, estados de tela, formulários, acessibilidade, microcopy)"
 ```
 
 ## 3. DEMAND SCOPES
@@ -280,6 +293,7 @@ derived_tags:
 
 | Versão | Data | Mudança |
 |--------|------|---------|
+| 1.3 | 2026-10-06 | Bump menor — adiciona `ux-design-specialist` (UX/design de interface). `apps/web/components/**` passa a listar `ux-design-specialist` junto de `nextjs-specialist`; 2 path_globs novos (`apps/web/app/**.tsx`, `apps/web/app/globals.css`) + 1 demand_keyword novo (`tela\|ux\|design\|layout\|formulário\|acessibilidade\|a11y\|EmptyState\|estados`). Sem skip rule nova: os path_globs já são exclusivos de UI e `**/*.md` rota para `doc-writer`, então a demanda de docs/housekeeping não aciona este specialist. Total: 10 specialists; 31 path_globs; 10 demand_keywords. |
 | 1.2 | 2026-09-23 | Bump menor — adiciona `telemetry-specialist` transversal (cross-stack: backend + frontend + docker). 4 path_globs novos (`apps/api/**/telemetry/**`, `apps/web/**/instrumentation*`, `apps/web/**/web-vitals*`, `infra/otelcol/**`) + 1 demand_keyword novo (`telemetry\|tracing\|opentelemetry\|\botel\b\|spans?`). Total: 9 specialists; 29 path_globs; 9 demand_keywords. |
 | 1.1 | 2026-09-23 | Adiciona `derived_tags` (prisma_binary + compose_with_healthcheck). Atualiza `classify()` para retornar `derived_tags` no resultado. Atualiza skill docker com checklist healthcheck. B22 polish. |
 | 1.0 | 2026-09-23 | Lançamento inicial: 8 specialists (monorepo, nestjs, nextjs, docker, security-auditor, test-writer, doc-writer, refactorer); 21 path_globs; 8 demand_keywords; 8 demand_scopes; 5 skip_rules; `monorepo-specialist` always-on. Source of truth para classificador headless e lint. |

@@ -11,7 +11,7 @@ projeto-base/
 ├── .markdownlint.json                  # Configuração do lint de Markdown
 ├── .agents/
 │   ├── agents/                         # Definições de agents (cada um ≤ 300 linhas)
-│   │   ├── <agent-name>.md             # 10 agents genéricos + 3 specialists de stack
+│   │   ├── <agent-name>.md             # 20 agents (12 genéricos + 2 routers + 6 specialists de stack)
 │   ├── memory/                         # Memória acumulada por agent (evolução)
 │   │   └── <agent-name>.md
 │   ├── skills/
@@ -98,7 +98,7 @@ infrastructure ─→ application + domain + libs externas (NestJS, Prisma)
 
 Referência cruzada: [`docs/MONOREPO.md` §11](../../../docs/MONOREPO.md) e [`docs/STACK.md` §8](../../../docs/STACK.md).
 
-**Versão da convenção:** 1.9.1
+**Versão da convenção:** 1.10.0
 
 ## Histórico de Versões
 
@@ -115,3 +115,4 @@ Referência cruzada: [`docs/MONOREPO.md` §11](../../../docs/MONOREPO.md) e [`do
 | `1.7.0` | Bump menor — adição de **novo agent `telemetry-specialist`** (transversal cross-stack: backend + frontend + docker; boundary explícito com `nestjs-specialist`/`nextjs-specialist`/`docker-specialist`; migração de §2.7 OpenTelemetry) + **nova convenção `state-aware-planning`** (camada 0 do pre-planner: estado atual AS-IS + gap analysis TO-BE antes de planejar; skill `state-aware-planning` + workflow + memory companions; alimenta `specialist-router` camada 1) + memory files `.agents/memory/telemetry-specialist.md` e `.agents/memory/state-aware-planning.md` + updates cirúrgicos em `AGENTS.md §3.1+§5+§6`, `.agents/specs/conventions/README.md`, `.agents/WORKFLOWS.md`. Pendente: bump da matriz `specialist-routing.md` (path_globs + demand_keywords) + `review-routing.md` (diff_patterns) em release subsequente quando plano de telemetria entrar em execução. |
 | `1.9.0` | **Engineering Loop unificado** — adição das convenções `engineering-loop.md` (ciclo UNDERSTAND → IMPLEMENT → TEST → REVIEW → OBSERVE → LEARN) + `evals.md` (framework canônico dos 7 tipos: Domain, Architecture, Contract, Integration, Regression, Security, Observability; path `specs/<feature>/evals/*.evals.yaml`; gate rules por severidade) + 6 templates de fase em `.agents/specs/templates/engineering-loop/01..06-*.md` + template genérico `spec.md` e `business-rules.md`. Novo workflow `feedback-to-spec` (fecha o Engineering Loop transformando proposals T1/T2/T3 em specs filhas). Header de `AGENTS.md` ganha referência a templates. CI defense-in-depth: `tooling:test` cobre `.tooling/scripts/ci` (6 specs / 32 testes que nunca rodavam); lint real em `apps/api` (antes era stub `exit 0`); gate DDD barra import de `infrastructure/` em `domain/`; `turbo.json` sem tasks órfãs; `checkDocRefs` com escopo via `git ls-files` e máscara de inline-code. PRs #37 (Engineering Loop), #38 (fix web), #39 (format), #40/#41 (coverage gate), #43 (plano de melhorias de fluxo) fecharam a janela. |
 | `1.9.1` | Bump de metadata — cross-refs pós-#50: `docs/fluxo-desenvolvimento.md` (v1.1.0, re-medido em 2026-10-06) linkado de `AGENTS.md §6`, `README.md`, `docs/MONOREPO.md §7`, `docs/STACK.md §5`. Contagem de agents corrigida de 19 para 20 em `README.md` (inclui sub-dir `telemetry-specialist/`). `pnpm ci:preflight` e `pnpm ci:local` adicionados à tabela canônica de scripts do `MONOREPO.md §7`. `docs/fluxo-desenvolvimento.md` re-medido: 14 checks (13 ✓ + 1 ✗ local por Node 20.20 vs turbo 2.11.2 querer ≥ 22.6; **✓ no CI** que roda Node 22); 5 unwired (era 5) + 5 gates novos pós-#44; `turbo-redirect-differential.sh` adicionado à tabela §4. Sem mudança estrutural. |
+| `1.10.0` | **Adição de novo agent** (minor bump, conforme a regra "Adição de novo agent é minor bump" acima) — `.agents/agents/ux-design-specialist.md` (specialist em UX/design de interface: tokens, estados, formulários, a11y, microcopy) + companion `.agents/memory/ux-design-specialist.md`. Registrado nos índices: `AGENTS.md §3.1`, `README.md` (árvore + tabela de specialists), matrizes `specialist-routing.md` (v1.3: 2 path_globs novos + 1 alterado, + 1 demand_keyword; total 29 → 31 medido do disco) e `review-routing.md` (v1.5: 1 path_glob novo + 2 alterados, + 1 diff_pattern). Correção de contagem obsoleta na árvore desta convenção (era "10 agents genéricos + 3 specialists", agora medido do disco: 20 arquivos em `.agents/agents/` = 12 genéricos + 2 routers + 6 specialists) e da contagem de memórias no `README.md` (21 → 22). Sem breaking change. |

@@ -2,7 +2,12 @@
 
 @theme {
   --color-background: 0 0% 100%;
-  --color-foreground: 222.2 84%;
+  /* pt-BR (2026-10-06): era `222.2 84%` — HSL com DOIS componentes. O
+     `hsl(222.2 84%)` resultante é inválido, a declaração é descartada
+     silenciosamente e o texto herda a cor do navegador em vez da
+     família slate que o resto das telas usa. Sem sintaxe visível aqui: só
+     um texto que não é o que ele deveria ser. */
+  --color-foreground: 222.2 84% 4.9%;
   /* shadcn/ui tokens podem ser adicionados depois */
 }
 

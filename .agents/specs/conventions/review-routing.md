@@ -1,7 +1,7 @@
 ---
 name: review-routing
-version: 1.4
-updated: 2026-09-23
+version: 1.5
+updated: 2026-10-06
 maintainer: review-router
 description: "Matriz de roteamento de revisores consultada pelo review-router"
 ---
@@ -39,10 +39,13 @@ path_globs:
     stacks: [prisma]
 
   - pattern: "apps/web/app/**"
-    reviewers: [nextjs-specialist, stack-code-reviewer]
+    reviewers: [nextjs-specialist, stack-code-reviewer, ux-design-specialist]
 
   - pattern: "apps/web/components/**"
-    reviewers: [nextjs-specialist]
+    reviewers: [nextjs-specialist, ux-design-specialist]
+
+  - pattern: "apps/web/app/globals.css"
+    reviewers: [ux-design-specialist]
 
   - pattern: "packages/**"
     reviewers: [monorepo-specialist, stack-code-reviewer]
@@ -155,6 +158,8 @@ diff_patterns:
     reviewers_added: [monorepo-specialist]
   - regex: "@Trace\\(|@Span\\(|SpanKind\\.|context\\.with\\(|\\.setAttribute\\("
     reviewers_added: [telemetry-specialist]
+  - regex: "className=|aria-|role=\"|<label|@Input\\(|\\bvariant=|\\bsize="
+    reviewers_added: [ux-design-specialist]
 ```
 
 ## 4. SKIP HEURISTICS
@@ -291,3 +296,4 @@ production signal sem FP).
 | 1.2 | 2026-09-22 | 2 P1 gaps resolvidos: propagação de `blocking` em path_globs (`e4c0971`) + narrowing do regex de segurança (`f496b05`). Classifier agora propaga corretamente a flag `blocking: true` para a exit code; regex narrow elimina FPs em test fixtures e docs. (Seção 6) |
 | 1.3 | 2026-09-22 | 3 P2 gaps resolvidos: PR #20 (enrich `domains[]` em `ClassifyResult`), PR #21 (lint WARNING em `blocking: true` c/ paths ilegíveis), PR #22 (cenários multi-commit/multi-path migrados para apêndice `review-routing-examples.md` para preservar limite de 300 linhas). Zero breaking change em todos. (Seção 6) |
 | 1.4 | 2026-09-23 | Adicionar diff_pattern OpenTelemetry + 3 path_globs (`apps/api/**/telemetry/**`, `apps/web/**/instrumentation*`, `infra/otelcol/**`) roteando para `telemetry-specialist`. Cobre NestJS decorators (`@Trace\(`, `@Span\(`), OTel enums (`SpanKind\.`), context API (`context\.with\(`) e span API (`\.setAttribute\(`). Acionado por T6.2 do plano de telemetria. Aditivo — sem breaking change. (Seção 6) |
+| 1.5 | 2026-10-06 | Adicionar `ux-design-specialist` (UX/design de interface). `apps/web/app/**` e `apps/web/components/**` passam a incluí-lo junto do `nextjs-specialist`; 1 path_glob novo (`apps/web/app/globals.css`) + 1 diff_pattern novo (`className=|aria-|role=|<label|@Input(|variant=|size=`) detectando mudança visual/JSX/CSS/tokens. Aditivo — sem breaking change. |

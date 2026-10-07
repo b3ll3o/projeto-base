@@ -26,24 +26,43 @@ declare global {
   var __otel_sdk__: NodeSDK | undefined;
 }
 
+// pt-BR (2026-10-06): este arquivo age por importação, e um `throw` aqui
+// NÃO é um erro de telemetria — é o servidor inteiro fora do ar. RSC, API
+// routes e Server Actions morrem juntos, porque todos passam por aqui.
+//
+// Este é o mesmo defeito que já foi corrigido em `instrumentation-client.ts`
+// (lá, matava a hidratação do browser): o `OTLPTraceExporter` exige URL
+// ABSOLUTA e lança "Could not parse user-provided export URL" no construtor.
+// O conserto tinha sido aplicado de um lado só — o cliente ganhou os dois
+// filtros (URL absoluta + `try/catch`), o servidor ficou com nenhum.
+//
+// `instrumentation.node.spec.ts` é o que segura esta invariante.
+const endpointBruto = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+const endpoint =
+  endpointBruto && /^https?:\/\//i.test(endpointBruto)
+    ? endpointBruto
+    : 'http://otel-collector:4318/v1/traces';
+
 if (!globalThis.__otel_sdk__) {
-  const sdk = new NodeSDK({
-    resource: new Resource({
-      [SemanticResourceAttributes.SERVICE_NAME]:
-        process.env.OTEL_SERVICE_NAME ?? 'projeto-base-web',
-      [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: process.env.NODE_ENV ?? 'development',
-    }),
-    traceExporter: new OTLPTraceExporter({
-      url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? 'http://otel-collector:4318/v1/traces',
-    }),
-    instrumentations: [
-      getNodeAutoInstrumentations({
-        // fs instrumentation gera ruído massivo em RSC e build pipeline;
-        // desabilitar para manter o collector legível.
-        '@opentelemetry/instrumentation-fs': { enabled: false },
+  try {
+    const sdk = new NodeSDK({
+      resource: new Resource({
+        [SemanticResourceAttributes.SERVICE_NAME]:
+          process.env.OTEL_SERVICE_NAME ?? 'projeto-base-web',
+        [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: process.env.NODE_ENV ?? 'development',
       }),
-    ],
-  });
-  sdk.start();
-  globalThis.__otel_sdk__ = sdk;
+      traceExporter: new OTLPTraceExporter({ url: endpoint }),
+      instrumentations: [
+        getNodeAutoInstrumentations({
+          // fs instrumentation gera ruído massivo em RSC e build pipeline;
+          // desabilitar para manter o collector legível.
+          '@opentelemetry/instrumentation-fs': { enabled: false },
+        }),
+      ],
+    });
+    sdk.start();
+    globalThis.__otel_sdk__ = sdk;
+  } catch (erro) {
+    console.warn('[otel] telemetria do server desabilitada:', erro);
+  }
 }
