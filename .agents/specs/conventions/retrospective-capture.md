@@ -143,12 +143,30 @@ arquivo não é localizável por nenhum consumidor.
 
 **O `N` sem o qual o gate não mede nada.** A versão intermediária —
 `ls -1 "${MEMORY_DIR}" | grep -E '^b[0-9]+.*-result\.md$'` — era verde por
-acúmulo: MEDIDO 2026-10-06, o diretório já tinha **41** result files de
-campanhas anteriores, então o gate saía 0 sem esta retrospectiva ter escrito
-nada. É a mesma classe do `skipped` que se confunde com aprovação, uma geração
-adiante: um critério que mede *"o diretório tem result file"* quando o que ele
-promete é *"esta campanha tem result file"*. O mesmo comando também não enxerga
-um `b24` faltando — a numeração tem buraco e nenhum check acima o vê.
+acúmulo: ela casa **qualquer** result file que já esteja no diretório, então o
+gate saía 0 sem esta retrospectiva ter escrito nada. É a mesma classe do
+`skipped` que se confunde com aprovação, uma geração adiante: um critério que
+mede *"o diretório tem result file"* quando o que ele promete é *"esta campanha
+tem result file"*. O mesmo comando também não enxerga um `b24` faltando — a
+numeração tem buraco e nenhum check acima o vê.
+
+**Não ponha a contagem aqui.** Ela envelhece a cada campanha, e este arquivo é
+lido como verdade; um número nesse lugar é uma claim de classe 7 que o próximo
+a abrir vai tratar como medida. Meça na hora:
+
+```bash
+ls -1 "${MEMORY_DIR}" | grep -cE '^b[0-9]+.*-result\.md$'
+```
+
+**O alcance do `b<N>`: três result files ficam fora dele.** O padrão exige que o
+nome comece em `b<N>`, e existem campanhas cujo result file não começa assim
+(`ci-robustness-plan-result.md`, `guard-classes-plan-result.md`,
+`guard-classes-implementation-result.md`). MEDIDO 2026-10-06: 38 arquivos do
+diretório terminam em `-result.md`, 35 casam `^b<N>`. Os 3 restantes são
+campanhas reais que nenhum gate desta convenção alcança. É limitação conhecida e
+aceita — o gate promete o que a retro escreve, não inventariar o histórico
+inteiro. O que não é aceitável é contá-los por um `grep` sem filtro e chamar o
+total de "result files da campanha".
 
 ## Comandos / Triggers
 

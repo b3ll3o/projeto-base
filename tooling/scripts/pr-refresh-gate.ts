@@ -146,14 +146,15 @@ export function verificarMarcador(body: string, relatorio: Relatorio): Resultado
         `${MARCADOR}.\n` +
         (citacao === '' ? '' : `    ${citacao}\n`) +
         `\n` +
+        `  Antes de escolher: marcar a frase errada não produz erro, produz uma\n` +
+        `  MENTIRA VERDADEIRA. O hook troca o número pela contagem de commits/\n` +
+        `  arquivos DO PR, e a frase sai verdadeira sobre outro assunto — sem\n` +
+        `  nenhum sinal depois disso, e com o gate VERDE.\n` +
+        `\n` +
         `  Escolha o conserto pelo ASSUNTO da frase, não pela forma dela:\n` +
         `  • a frase é sobre ESTE PR → marque o parágrafo e rode \`pnpm pr:refresh\`;\n` +
         `  • a frase só tem a FORMA de uma claim (ex.: "15 arquivos" falando de\n` +
-        `    scripts, não do diff) → NÃO marque: reescreva a frase.\n` +
-        `\n` +
-        `  Marcar no segundo caso não conserta nada: o hook troca o número pela\n` +
-        `  contagem de commits/arquivos DO PR, e a frase sai verdadeira sobre\n` +
-        `  outro assunto — sem nenhum sinal depois disso.`
+        `    scripts, não do diff) → NÃO marque: reescreva a frase.`
       );
     }),
   };

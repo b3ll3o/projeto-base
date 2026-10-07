@@ -188,6 +188,35 @@ describe('verificarMarcador', () => {
     expect(r.errors[0]).toContain('declara "31 commits"');
   });
 
+  it('a 1ª passada remove ANSI completo — sem ela sobram os `[31m` órfãos', () => {
+    // MEDIDO 2026-10-06: o teste acima usa só `\x1b[31mVERMELHO\x1b[0m`, e a
+    // classe que ele afirma (`[\x00-\x09\x0b\x0c\x0e-\x1f\x7f]`) é satisfeita
+    // INTEIRAMENTE pela 2ª passada — ela troca o ESC por espaço e não deixa
+    // nenhum byte de controle. Ou seja: removendo a 1ª passada a suíte ficava
+    // 25/25 verde, e o resultado seria `x [31mVERMELHO [0m y`.
+    //
+    // Nenhum byte de controle denuncia a ausência; o resto da sequência, sim.
+    const corpo = 'linha 1 \x1b[31mVERMELHO\x1b[0m fim';
+    const r = verificarMarcador(corpo, relatorio([claim(1, true)]));
+    expect(r.errors[0]).not.toMatch(/\[\d+m/);
+    expect(r.errors[0]).toContain('VERMELHO');
+  });
+
+  it('a 2ª passada remove controle que NÃO é ANSI — sem ela BEL/NUL/ESC-cru sobrevivem', () => {
+    // Os três vetores de propósito: a 1ª passada só casa `\x1b[` seguido de um
+    // byte final em `@-~`, então não toca em NENHUM deles (o ESC cru nem
+    // começa com `[`). Se a 2ª desaparecer, os três entram inteiros no log.
+    //
+    // A classe exclui `\x0a` porque a mensagem é multi-linha e o `\n` é
+    // legítimo — mas inclui `\x0d`, que é justamente o vetor do `declarado`.
+    const corpo = 'linha 1 a\x07b\x00c\x1bHd fim';
+    const r = verificarMarcador(corpo, relatorio([claim(1, true)]));
+    // eslint-disable-next-line no-control-regex
+    expect(r.errors[0]).not.toMatch(/[\x00-\x09\x0b-\x1f\x7f]/);
+    // ...e o texto continua legível, não virou vazio nem espaços.
+    expect(r.errors[0]).toMatch(/a b c Hd fim/);
+  });
+
   it('trunca a citação longa para caber num log de CI', () => {
     // pt-BR: `LARGURA_CITACAO` é o limite entre "cite o texto que o autor
     // reconheça" e "despeje o parágrafo inteiro no log". Sem este teste, dois
@@ -206,9 +235,21 @@ describe('verificarMarcador', () => {
   it('NÃO imprime citação quando a linha citada não existe no corpo', () => {
     // Linha fora do corpo é dado corrompido upstream, não motivo para inventar
     // texto: o gate degrada para o `L<n>` e segue dizendo a mesma coisa.
+    //
+    // MEDIDO 2026-10-06: esta versão só afirmava `ok === false` e
+    // `toContain('L99')`, e as DUAS continuam verdadeiras se `citarLinha`
+    // inventar texto — trocando `return ''` por `return 'INVENTADO'` a suíte
+    // ficava verde. Era um teste que afirmava ter provado algo que não provava,
+    // a mesma forma do `gate-blind-to-uncommitted-work` que o repo já catalogou.
+    //
+    // O que segura é a AUSÊNCIA. A citação ocupa a linha 2 da mensagem
+    // (índice 1) quando existe; sem citação, essa linha é a que sobrou do `\n`
+    // do cabeçalho e fica vazia.
     const r = verificarMarcador(CORPO_SEM_MARCADOR, relatorio([claim(99, true)]));
     expect(r.ok).toBe(false);
     expect(r.errors[0]).toContain('L99');
+    expect(r.errors[0]!.split('\n')[1]).toBe('');
+    expect(r.errors[0]).not.toContain('INVENTADO');
   });
 
   it('o marcador que o gate exige é o mesmo que o apply escreve', () => {
