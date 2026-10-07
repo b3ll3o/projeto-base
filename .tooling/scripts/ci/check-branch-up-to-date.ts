@@ -160,8 +160,8 @@ export function checkBranchUpToDate(opts?: {
     // local sobre uma ref velha seja lido como prova.
     return {
       ok: false,
-      errors: [
-        corpo,
+      errors: [corpo],
+      advisories: [
         `Atenção: medido contra a ref \`${base}\` local. Se ela estiver velha, ` +
           `este verde (ou este número) subdeclara — \`git fetch ${base}\` antes ` +
           `de confiar na leitura.`,

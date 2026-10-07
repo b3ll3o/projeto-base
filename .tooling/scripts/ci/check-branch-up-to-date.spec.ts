@@ -147,6 +147,29 @@ describe('checkBranchUpToDate', () => {
       expect(r.errors[0]).toMatch(/rebase/);
     });
 
+    it('a ressalva da ref local NÃO é contada como erro — 1 defeito, 1 erro', () => {
+      // MEDIDO 2026-10-06: a ressalva "Atenção: medido contra a ref local"
+      // vivia no MESMO array `errors`, e o preflight faz
+      // `totalErrors += result.errors.length`. Resultado no console: uma branch
+      // 1 commit atrás printava "❌ 2 erro(s) encontrado(s)" — dois defeitos
+      // onde há um. Quem lê o número passa a procurar um segundo bug que não
+      // existe, e o que existe de verdade é a contagem.
+      //
+      // A ressalva é conteúdo de verdade e não pode ser jogada fora: sem ela,
+      // um verde local sobre uma ref velha vira prova. Então ela continua
+      // impressa — o que muda é o CANAL, e é só isso que este teste fixa.
+      const r = checkBranchUpToDate({
+        run: fakeGit({ 'rev-parse': SHA, 'is-ancestor': 1, 'rev-list': '1\n' }),
+      });
+      expect(r.ok).toBe(false);
+      // Um defeito = um erro. A ressalva não vira o segundo.
+      expect(r.errors).toHaveLength(1);
+      // ...e não foi silenciada: ela aparece, em outro canal.
+      expect(r.advisories).toHaveLength(1);
+      expect(r.advisories![0]).toMatch(/Atenção/);
+      expect(r.advisories![0]).toMatch(/fetch/);
+    });
+
     it('NÃO confunde "sem ancestral comum" com "atrasada"', () => {
       // `merge-base --is-ancestor` devolve 128 quando não há ancestral. Não é
       // "está 7 atrás": a história não converge, e o conserto é outro

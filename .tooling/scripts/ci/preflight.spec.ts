@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { checkDocRefs } from './check-doc-refs';
-import { formatMark } from './preflight';
+import { detalhar, formatMark } from './preflight';
 import type { CheckResult } from './check-types';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -210,5 +210,40 @@ describe('checkDocRefs', () => {
     it('deve manter ✗ para o check que rodou e falhou', () => {
       expect(formatMark({ ok: false, errors: ['algo quebrado'] })).toBe('✗');
     });
+  });
+});
+
+describe('detalhar - a contagem que o painel anuncia', () => {
+  // MEDIDO 2026-10-06: uma branch 1 commit atrasada printava
+  // "❌ 2 erro(s) encontrado(s)". Havia UM defeito. O segundo "erro" era a
+  // ressalva "medido contra a ref `origin/main` local" — verdadeira sobre a
+  // própria medição, e portanto conteúdo, não defeito.
+  //
+  // A consequência de errar a contagem não é cosmética: quem lê "2 erro(s)"
+  // para caçar o segundo bug, não acha, e volta a olhar o primeiro — que era
+  // o único que existia. Um número que não reconcilia com o que está impresso
+  // acima dele treina a leitura a ignorar o número.
+  const atrasada: CheckResult = {
+    ok: false,
+    errors: ['a branch está 1 commit(s) atrás de `origin/main`'],
+    advisories: ['Atenção: medido contra a ref `origin/main` local'],
+  };
+
+  it('conta 1 erro para 1 defeito + 1 ressalva', () => {
+    expect(detalhar(atrasada).erros).toBe(1);
+  });
+
+  it('IMPRIME a ressalva mesmo assim — silenciar não é o conserto', () => {
+    const { linhas } = detalhar(atrasada);
+    expect(linhas).toHaveLength(2);
+    expect(linhas.join('\n')).toMatch(/Atenção/);
+    // A ordem também é o contrato: o defeito primeiro, a ressalva depois.
+    expect(linhas[0]).toMatch(/atrás/);
+  });
+
+  it('NÃO inventa advisory: check sem ressalva devolve só os erros', () => {
+    const semRessalva = detalhar({ ok: false, errors: ['só o defeito'] });
+    expect(semRessalva.erros).toBe(1);
+    expect(semRessalva.linhas).toEqual(['só o defeito']);
   });
 });

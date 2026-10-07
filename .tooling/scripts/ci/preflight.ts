@@ -136,6 +136,25 @@ export function formatMark(r: CheckResult): string {
   return '✓';
 }
 
+/**
+ * As linhas de detalhe de um check vermelho, e quantos ERROS ele vale.
+ *
+ * Extraído de `main()` só porque era impossível testar a contagem onde ela
+ * estava: o somatório vivia no meio de um `for` com `console.log` entrelaçado,
+ * e nada media se uma ressalva inflava o total.
+ *
+ * MEDIDO 2026-10-06: `check-branch-up-to-date` devolvia a ressalva "medido
+ * contra a ref local" dentro de `errors`, e o painel anunciava "❌ 2 erro(s)"
+ * para uma branch 1 commit atrás — mandando quem lê procurar um segundo bug
+ * inexistente. A ressalva continua impressa; ela só não é mais contada.
+ */
+export function detalhar(r: CheckResult): { linhas: string[]; erros: number } {
+  return {
+    linhas: [...r.errors, ...(r.advisories ?? [])],
+    erros: r.errors.length,
+  };
+}
+
 async function main(): Promise<void> {
   console.log('\u{1F50D} Pre-flight CI checks\n');
   const checks: Array<{
@@ -303,10 +322,11 @@ async function main(): Promise<void> {
     const result = await check.fn();
     if (!result.ok) {
       console.log('✗');
-      for (const err of result.errors) {
-        console.log(`      ${err}`);
+      const { linhas, erros } = detalhar(result);
+      for (const linha of linhas) {
+        console.log(`      ${linha}`);
       }
-      totalErrors += result.errors.length;
+      totalErrors += erros;
     } else {
       if (result.skipped) totalSkipped++;
       console.log(formatMark(result));
