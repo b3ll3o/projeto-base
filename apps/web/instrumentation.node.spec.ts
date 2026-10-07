@@ -68,6 +68,14 @@ async function carregar(): Promise<void> {
   await import('./instrumentation.node');
 }
 
+// pt-BR: o Next declara `NODE_ENV` como readonly no tipo de `process.env`, e o
+// `tsc` recusa a atribuição direta (`TS2540`). O valor é o que o `NodeSDK` lê,
+// então o teste precisa escrever nele mesmo — o cast é local e não muda o
+// contrato do módulo sob teste.
+function forcarProducao(): void {
+  (process.env as Record<string, string | undefined>).NODE_ENV = 'production';
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   h.explodirNoExporter = false;
@@ -123,7 +131,7 @@ describe('instrumentation.node — a telemetria do servidor nunca derruba o serv
 
   it('os atributos de recurso saem das variáveis de ambiente', async () => {
     process.env[CHAVE_SERVICO] = 'cadastro-web';
-    process.env.NODE_ENV = 'production';
+    forcarProducao();
 
     await carregar();
 
@@ -143,7 +151,7 @@ describe('instrumentation.node — a telemetria do servidor nunca derruba o serv
     // pt-BR: `?? 'projeto-base-web'` é o que impede o atributo de virar
     // `undefined` e sumir do painel de quem lê o collector.
     delete process.env[CHAVE_SERVICO];
-    process.env.NODE_ENV = 'production';
+    forcarProducao();
 
     await carregar();
 

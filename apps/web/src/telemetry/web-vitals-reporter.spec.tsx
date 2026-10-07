@@ -146,7 +146,7 @@ describe('WebVitalsReporter — inscrição no module-load', () => {
     // foi chamado, uma vez, e nenhum vizinho foi tocado".
     await importar();
 
-    for (const { registrar, histogram } of METRICAS) {
+    for (const { registrar } of METRICAS) {
       vi.mocked(registrar).mock.calls[0]![0]({ value: 1 } as never);
     }
 
