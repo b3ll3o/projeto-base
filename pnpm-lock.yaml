@@ -35,9 +35,6 @@ importers:
 
   apps/api:
     dependencies:
-      '@fastify/static':
-        specifier: ^10.1.2
-        version: 10.1.5
       '@nestjs/common':
         specifier: ^11.0.0
         version: 11.2.5(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -5516,7 +5513,8 @@ snapshots:
     optionalDependencies:
       '@noble/hashes': 1.8.0
 
-  '@fastify/accept-negotiator@2.1.0': {}
+  '@fastify/accept-negotiator@2.1.0':
+    optional: true
 
   '@fastify/ajv-compiler@4.0.6':
     dependencies:
@@ -5568,6 +5566,7 @@ snapshots:
       fast-decode-uri-component: 1.0.1
       http-errors: 2.0.1
       mime: 3.0.0
+    optional: true
 
   '@fastify/static@10.1.5':
     dependencies:
@@ -5578,6 +5577,7 @@ snapshots:
       fastify-plugin: 6.0.0
       fastq: 1.20.3
       glob: 13.0.6
+    optional: true
 
   '@grpc/grpc-js@1.14.5':
     dependencies:
@@ -5767,7 +5767,8 @@ snapshots:
 
   '@lukeed/csprng@1.1.0': {}
 
-  '@lukeed/ms@2.0.2': {}
+  '@lukeed/ms@2.0.2':
+    optional: true
 
   '@microsoft/tsdoc@0.16.0': {}
 
@@ -7868,7 +7869,8 @@ snapshots:
 
   consola@3.4.2: {}
 
-  content-disposition@3.0.0: {}
+  content-disposition@3.0.0:
+    optional: true
 
   cookie-signature@1.2.2: {}
 
@@ -7967,7 +7969,8 @@ snapshots:
 
   delayed-stream@1.0.0: {}
 
-  depd@2.0.0: {}
+  depd@2.0.0:
+    optional: true
 
   dequal@2.0.3: {}
 
@@ -8227,7 +8230,8 @@ snapshots:
 
   escalade@3.2.0: {}
 
-  escape-html@1.0.3: {}
+  escape-html@1.0.3:
+    optional: true
 
   escape-string-regexp@4.0.0: {}
 
@@ -8752,6 +8756,7 @@ snapshots:
       minimatch: 10.2.6
       minipass: 7.1.3
       path-scurry: 2.0.2
+    optional: true
 
   globals@14.0.0: {}
 
@@ -8813,6 +8818,7 @@ snapshots:
       setprototypeof: 1.2.0
       statuses: 2.0.2
       toidentifier: 1.0.1
+    optional: true
 
   https-proxy-agent@7.0.6:
     dependencies:
@@ -9242,7 +9248,8 @@ snapshots:
 
   mime@2.6.0: {}
 
-  mime@3.0.0: {}
+  mime@3.0.0:
+    optional: true
 
   min-indent@1.0.1: {}
 
@@ -9437,6 +9444,7 @@ snapshots:
     dependencies:
       lru-cache: 11.5.3
       minipass: 7.1.3
+    optional: true
 
   path-to-regexp@8.4.2: {}
 
@@ -9878,7 +9886,8 @@ snapshots:
       es-errors: 1.3.0
       es-object-atoms: 1.1.2
 
-  setprototypeof@1.2.0: {}
+  setprototypeof@1.2.0:
+    optional: true
 
   sharp@0.35.4(@types/node@20.19.43):
     dependencies:
@@ -9983,7 +9992,8 @@ snapshots:
 
   stackback@0.0.2: {}
 
-  statuses@2.0.2: {}
+  statuses@2.0.2:
+    optional: true
 
   std-env@3.10.0: {}
 
@@ -10254,7 +10264,8 @@ snapshots:
 
   toad-cache@3.7.4: {}
 
-  toidentifier@1.0.1: {}
+  toidentifier@1.0.1:
+    optional: true
 
   token-types@6.1.2:
     dependencies:
