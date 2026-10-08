@@ -287,31 +287,91 @@ export interface Matrix {
 export const YAML_BLOCK_RE = /```yaml\n([\s\S]*?)```/g;
 
 /**
- * Extrai blocos YAML de markdown e merge em objeto Matrix.
+ * Como o YAML chamaria o tipo, em português — o nome vai para a mensagem de erro
+ * que o lint mostra, e `typeof` sozinho diz "object" tanto para um mapa quanto
+ * para o `null` que `YAML.parse('')` devolve.
+ */
+export function nomeDoTipoYaml(valor: unknown): string {
+  if (valor === null) return 'nulo (bloco vazio)';
+  if (Array.isArray(valor)) return 'lista';
+  const t = typeof valor;
+  if (t === 'object') return 'mapa';
+  return t === 'string' ? 'texto' : t === 'number' ? 'número' : t === 'boolean' ? 'booleano' : t;
+}
+
+/** Bloco que o YAML aceitou, mas que não virou mapa de regras. */
+export interface BlocoNaoMapa {
+  /** Posição do bloco no documento, contada a partir de 1. */
+  bloco: number;
+  /** O que o YAML devolveu no lugar do mapa. */
+  tipo: string;
+}
+
+/** Bloco que o YAML recusou. */
+export interface BlocoInvalido {
+  bloco: number;
+  motivo: string;
+}
+
+export interface MatrizCarregada {
+  matrix: Matrix;
+  /** Blocos que o YAML recusou — `matrix` não recebeu nada deles. */
+  invalidos: BlocoInvalido[];
+  /** Blocos que parsearam, mas não como mapa — o mais silencioso dos três. */
+  naoMapas: BlocoNaoMapa[];
+}
+
+/**
+ * Extrai blocos YAML de markdown e merge em objeto Matrix, **contando o que
+ * ficou de fora**.
  *
- * Comportamento: blocos são processados em ordem; chaves duplicadas têm o valor
- * do ÚLTIMO bloco YAML (Object.assign). Arrays (path_globs, diff_patterns) são
- * sobrescritos inteiros — não concatena. Para evitar perda de regras, mantenha
- * no máximo 1 bloco por chave (path_globs, commit_types, diff_patterns).
+ * Por que o diagnóstico: `loadMatrix` engole o erro de YAML bloco a bloco, e o
+ * lint só olhava o resultado. Um bloco que parseia como lista/escalar entrava
+ * em `Object.assign({}, ['a'])` e virava `{0: 'a'}` — matriz **não vazia**,
+ * nenhuma regra, nenhuma complaint. Quem consumisse essa matriz tinha um gate
+ * que passou sem ter medido nada (medido 2026-10-08, ver
+ * `lint-review-routing.spec.ts`). O runtime não muda: `loadMatrix` continua
+ * devolvendo só a matriz.
  *
+ * Comportamento: blocos em ordem; chaves duplicadas têm o valor do ÚLTIMO bloco
+ * (Object.assign). Arrays (path_globs, diff_patterns) são sobrescritos inteiros
+ * — não concatena. Para evitar perda de regras, mantenha no máximo 1 bloco por
+ * chave (path_globs, commit_types, diff_patterns).
+ */
+export function loadMatrixComDiagnostico(markdown: string): MatrizCarregada {
+  const invalidos: BlocoInvalido[] = [];
+  const naoMapas: BlocoNaoMapa[] = [];
+  const result: Matrix = {};
+  let bloco = 0;
+
+  for (const match of markdown.matchAll(YAML_BLOCK_RE)) {
+    bloco += 1;
+    const yamlContent = match[1] ?? '';
+    let parsed: unknown;
+    try {
+      parsed = YAML.parse(yamlContent);
+    } catch (e) {
+      invalidos.push({ bloco, motivo: e instanceof Error ? e.message : String(e) });
+      continue;
+    }
+    // `typeof null === 'object'` e array também passa: sem estas duas checagens
+    // o `Object.assign` abaixo transforma lista e escalar em matriz fantasma.
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      naoMapas.push({ bloco, tipo: nomeDoTipoYaml(parsed) });
+      continue;
+    }
+    Object.assign(result, parsed as Matrix);
+  }
+
+  return { matrix: result, invalidos, naoMapas };
+}
+
+/**
  * @param markdown Conteúdo markdown com 0+ blocos ```yaml ... ```
  * @returns Matrix parcial (apenas chaves presentes nos blocos válidos)
  */
 export function loadMatrix(markdown: string): Matrix {
-  const yamlBlocks = markdown.matchAll(YAML_BLOCK_RE);
-  const result: Matrix = {};
-
-  for (const match of yamlBlocks) {
-    const yamlContent = match[1] ?? '';
-    try {
-      const parsed = YAML.parse(yamlContent) as Matrix;
-      Object.assign(result, parsed);
-    } catch {
-      continue; // Skip invalid YAML blocks (lint catches)
-    }
-  }
-
-  return result;
+  return loadMatrixComDiagnostico(markdown).matrix;
 }
 
 // CLI entrypoint

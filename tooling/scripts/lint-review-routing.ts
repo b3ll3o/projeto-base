@@ -16,7 +16,14 @@
 // todos em .gitignore). Pattern morto é dead rule que nunca dispararia
 // — visibility sem breaking change (warnings não bloqueiam exit).
 
-import { loadMatrix, YAML_BLOCK_RE } from './review-router.js';
+import {
+  loadMatrixComDiagnostico,
+  nomeDoTipoYaml,
+  YAML_BLOCK_RE,
+  type CommitTypeRule,
+  type DiffPatternRule,
+  type PathGlobRule,
+} from './review-router.js';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 
@@ -100,6 +107,34 @@ function isPathGitignored(filePath: string): boolean {
   }
 }
 
+/**
+ * Devolve a chave como lista, ou devolve lista vazia **e um erro** se ela veio
+ * como outra coisa.
+ *
+ * MEDIDO 2026-10-08: `for (const rule of matrix.path_globs ?? [])` com
+ * `path_globs` escrito como mapa (sem o `-`) não itera — `for...of` sobre objeto
+ * lança `TypeError`, que sai de `lintMatrix` como exceção crua em vez de
+ * diagnóstico. E `?? []` não protege: ele só cobre ausência, não o tipo errado.
+ */
+function exigirLista<T>(valor: unknown, chave: string, errors: string[]): T[] {
+  if (valor === undefined || valor === null) return [];
+  if (Array.isArray(valor)) return valor as T[];
+  errors.push(
+    `\`${chave}\` precisa ser uma lista no arquivo; o YAML devolveu ${nomeDoTipoYaml(valor)} — nenhuma regra dela foi verificada`,
+  );
+  return [];
+}
+
+/** Mesma ideia de `exigirLista`, para a chave que é mapa por contrato. */
+function exigirMapa<T>(valor: unknown, chave: string, errors: string[]): Record<string, T> {
+  if (valor === undefined || valor === null) return {};
+  if (typeof valor === 'object' && !Array.isArray(valor)) return valor as Record<string, T>;
+  errors.push(
+    `\`${chave}\` precisa ser um mapa no arquivo; o YAML devolveu ${nomeDoTipoYaml(valor)} — nenhuma regra dele foi verificada`,
+  );
+  return {};
+}
+
 export function lintMatrix(markdown: string, knownReviewers?: string[]): LintResult {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -111,14 +146,18 @@ export function lintMatrix(markdown: string, knownReviewers?: string[]): LintRes
     errors.push(`LOC ${lineCount} exceeds maximum ${MAX_LOC}`);
   }
 
-  // Parse matrix (loadMatrix já trata YAML inválido com skip)
-  let matrix;
-  try {
-    matrix = loadMatrix(markdown);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    errors.push(`YAML parse error: ${msg}`);
-    return { errors, warnings, info };
+  // Parse matrix, com o diagnóstico do que ficou de fora. MEDIDO 2026-10-08: o
+  // `try/catch` que existia aqui era inalcançável — `loadMatrix` engole o erro de
+  // YAML bloco a bloco e, para todo `string`, não lança. Um guard que não pode
+  // disparar é documentação de uma intenção, não verificação.
+  const { matrix, invalidos, naoMapas } = loadMatrixComDiagnostico(markdown);
+  for (const { bloco, motivo } of invalidos) {
+    errors.push(`bloco yaml #${bloco} inválido: ${motivo} — as regras dele NÃO entraram na matriz`);
+  }
+  for (const { bloco, tipo } of naoMapas) {
+    errors.push(
+      `bloco yaml #${bloco} não é um mapa (o YAML devolveu ${tipo}) — nenhuma regra dele foi verificada`,
+    );
   }
 
   const seenPatterns = new Set<string>();
@@ -129,7 +168,7 @@ export function lintMatrix(markdown: string, knownReviewers?: string[]): LintRes
   let trackedFiles: string[] | null = null;
 
   // Check path_globs
-  for (const rule of matrix.path_globs ?? []) {
+  for (const rule of exigirLista<PathGlobRule>(matrix.path_globs, 'path_globs', errors)) {
     if (seenPatterns.has(rule.pattern)) {
       errors.push(`duplicate pattern: ${rule.pattern}`);
     }
@@ -166,7 +205,9 @@ export function lintMatrix(markdown: string, knownReviewers?: string[]): LintRes
   }
 
   // Check commit_types reviewers
-  for (const [type, rule] of Object.entries(matrix.commit_types ?? {})) {
+  for (const [type, rule] of Object.entries(
+    exigirMapa<CommitTypeRule>(matrix.commit_types, 'commit_types', errors),
+  )) {
     if (knownReviewers) {
       for (const reviewer of rule.reviewers_added ?? []) {
         if (!knownReviewers.includes(reviewer)) {
@@ -180,7 +221,7 @@ export function lintMatrix(markdown: string, knownReviewers?: string[]): LintRes
 
   // Check diff_patterns reviewers (assimetria com commit_types — antes só validava
   // regex, não refs de reviewer)
-  for (const rule of matrix.diff_patterns ?? []) {
+  for (const rule of exigirLista<DiffPatternRule>(matrix.diff_patterns, 'diff_patterns', errors)) {
     if (knownReviewers) {
       for (const reviewer of rule.reviewers_added) {
         if (!knownReviewers.includes(reviewer)) {
@@ -193,7 +234,7 @@ export function lintMatrix(markdown: string, knownReviewers?: string[]): LintRes
   }
 
   // Check diff_patterns regex validity
-  for (const rule of matrix.diff_patterns ?? []) {
+  for (const rule of exigirLista<DiffPatternRule>(matrix.diff_patterns, 'diff_patterns', errors)) {
     try {
       new RegExp(rule.regex);
     } catch (e) {
@@ -202,11 +243,13 @@ export function lintMatrix(markdown: string, knownReviewers?: string[]): LintRes
     }
   }
 
-  // Se há blocos YAML mas nenhum deles parseou, reporta erro
-  const yamlBlocks = markdown.match(YAML_BLOCK_RE);
-  if (yamlBlocks && yamlBlocks.length > 0 && Object.keys(matrix).length === 0) {
-    errors.push('YAML blocks present but matrix is empty (all blocks invalid)');
+  // Rede final: há bloco(s) ```yaml no documento e nenhum deles produziu regra.
+  // Os dois laços acima já cobrem bloco inválido e bloco não-mapa; o que sobra
+  // para cá é o mapa vazio (`{}`), que passa pelos dois e não entra na matriz.
+  if (Object.keys(matrix).length === 0 && YAML_BLOCK_RE.test(markdown)) {
+    errors.push('há bloco(s) ```yaml no documento e nenhum virou regra — a matriz saiu vazia');
   }
+  YAML_BLOCK_RE.lastIndex = 0; // `/g`: `test` deixa o cursor colado para o próximo uso
 
   return { errors, warnings, info };
 }

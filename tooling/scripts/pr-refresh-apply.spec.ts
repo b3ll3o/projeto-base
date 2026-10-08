@@ -59,7 +59,10 @@ import { linhasVivas, reescrever } from './pr-refresh-apply.js';
  * real passa aqui e quebra no runner — foi o que o próprio
  * `pr-refresh-scan.spec.ts` registrou.
  */
-function relatorioDe(texto: string, medido: Record<string, number>): Relatorio {
+// `null` = "não medido". Não é um número ausente por descuido: a classe que o
+// git não mede precisa continuar no relatório, senão some do painel — que é
+// o defeito que `pr-refresh-gate` existe para pegar.
+function relatorioDe(texto: string, medido: Record<string, number | null>): Relatorio {
   const padroes: Record<string, number | null> = {
     commits: null,
     arquivos: null,

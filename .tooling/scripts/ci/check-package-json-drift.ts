@@ -32,7 +32,8 @@ const REQUIRED_SCRIPTS = [
  *    `.tooling/scripts/...`, etc.)
  * 5. Tasks "fantasma": `turbo run <task>` onde `<task>` não é resolvível
  *    pelo turbo — nem declarada em `turbo.json`, nem presente como script em
- *    algum pacote do workspace.
+ *    algum pacote do workspace — nem, quando o comando traz `--filter`, em
+ *    algum dos pacotes que o filtro alcança.
  *
  * Limitações:
  * - Apenas detecta scripts `tsx <path>` — não cobre `node <path>`,
@@ -48,6 +49,10 @@ const REQUIRED_SCRIPTS = [
  *   `pnpm --filter @projeto/web e2e:typo` quebra com o preflight verde.
  *   Os 4 call-sites `pnpm turbo run` do `ci.yml` também não são varridos.
  *   Fechar isso é change próprio.
+ * - O `--filter` só é resolvido quando casa **exatamente** com o nome ou o
+ *   diretório de um pacote. Forma que ele não entende (`. .[HEAD^1]`,
+ *   `{apps,packages}/*`) cai na união — o comportamento antigo, nunca um
+ *   vermelho inventado. Ver `alvoDosFiltros`.
  */
 export async function checkPackageJsonDrift(opts: {
   packageJsonPath: string;
@@ -125,6 +130,11 @@ export async function checkPackageJsonDrift(opts: {
   //
   // Erro nas duas direções custa caro: aceitar a task órfã é o gate que
   // reporta verde; acusar uma task legítima é o gate que trava o push errado.
+  //
+  // A terceira via — o `--filter` — só apareceu MEDIDO 2026-10-08:
+  // `turbo run test:e2e --filter=@projeto/web` responde "No tasks were
+  // executed as part of this run", "Tasks: 0 successful, 0 total" e **sai 0**.
+  // Julgar pela união dos pacotes dá verde, e o passo de CI não roda nada.
   const turboSkip = await collectUnresolvableTurboTasks(projectRoot, parsed.scripts);
   if (turboSkip.reason) {
     return {
@@ -150,16 +160,16 @@ async function collectUnresolvableTurboTasks(
   projectRoot: string,
   scripts: Record<string, string>,
 ): Promise<{ unresolvable: { task: string; error: string }[]; reason?: string }> {
-  const referenced: { script: string; task: string }[] = [];
+  const referenced: { script: string; task: string; filtros: string[] }[] = [];
   for (const [name, command] of Object.entries(scripts)) {
     for (const task of extractTurboRunTasks(command)) {
-      referenced.push({ script: name, task });
+      referenced.push({ script: name, task, filtros: extractTurboRunFilters(command) });
     }
   }
   if (referenced.length === 0) return { unresolvable: [] };
 
-  const packageScripts = await readWorkspaceScriptNames(projectRoot);
-  if (!packageScripts) {
+  const pacotes = await readWorkspacePackages(projectRoot);
+  if (!pacotes) {
     return {
       unresolvable: [],
       reason:
@@ -169,22 +179,33 @@ async function collectUnresolvableTurboTasks(
 
   const declared = await readTurboTaskNames(projectRoot);
   const declaredSet = new Set(declared);
+  const uniao = new Set<string>();
+  for (const p of pacotes) for (const s of Object.keys(p.scripts)) uniao.add(s);
 
   const unresolvable: { task: string; error: string }[] = [];
-  for (const { script, task } of referenced) {
+  for (const { script, task, filtros } of referenced) {
     // Conjunção, e não disjunção. Medido em turbo 2.11.2:
     //   - `openapi:export` é script de `apps/api` e NÃO está no turbo.json →
     //     `turbo run openapi:export` responde "Could not find task in project".
     //     Estar em `turbo.json` é condição necessária.
     //   - `tdd:check` no `main` ESTAVA no turbo.json e nenhum pacote a tinha →
     //     mesma resposta. Estar em `turbo.json` não é condição suficiente.
-    // A chave `tasks` é a porta de entrada do `turbo run`; o turbo então
-    // procura nos pacotes do workspace um script com aquele nome. Faltando um
-    // dos dois lados, o comando quebra.
-    if (declaredSet.has(task) && packageScripts.has(task)) continue;
-    const falta = !declaredSet.has(task)
+    const naTurbo = declaredSet.has(task);
+
+    // `--filter` estreita o alcance: o turbo só roda nos pacotes escolhidos, e
+    // MEDIDO 2026-10-08 (`turbo run test:e2e --filter=@projeto/web`) ele
+    // responde "No tasks were executed", "0 successful, 0 total" e sai 0.
+    // Julgar pela união aqui é verde por ausência: o passo de CI roda nada, e
+    // nada no painel denuncia que ele não rodou.
+    const alvo = alvoDosFiltros(pacotes, filtros);
+    const implementam = alvo ? alvo.some((p) => task in p.scripts) : uniao.has(task);
+
+    if (naTurbo && implementam) continue;
+    const falta = !naTurbo
       ? 'não está declarada em turbo.json'
-      : 'está declarada em turbo.json mas nenhum pacote do workspace a implementa';
+      : alvo
+        ? `está declarada em turbo.json mas nenhum dos pacotes do filtro ${filtros.join(', ')} a implementa`
+        : 'está declarada em turbo.json mas nenhum pacote do workspace a implementa';
     unresolvable.push({
       task,
       error: `drift detectado: script '${script}' roda 'turbo run ${task}' mas a task '${task}' ${falta} (task fantasma)`,
@@ -193,7 +214,26 @@ async function collectUnresolvableTurboTasks(
   return { unresolvable };
 }
 
-/** Nomes das tasks declaradas em `turbo.json` (vazio se o arquivo não existir). */
+/**
+ * Os pacotes que os `--filter` alcançam, ou `null` para "não se sabe".
+ *
+ * Só resolve quando o valor casa **exatamente** com o nome ou com o diretório
+ * de um pacote. Filtro que não casa nenhum pacote conhecido cai em `null` e o
+ * chamador volta à união — o comportamento antigo. É deliberado: um gate que
+ * inventa vermelho para uma forma de filtro que ele não entende treina a
+ * desligar o gate, e `--filter=...[HEAD^1]` é forma comum em monorepo.
+ */
+function alvoDosFiltros(
+  pacotes: Array<{ name: string; dir: string; scripts: Record<string, string> }>,
+  filtros: string[],
+): Array<{ name: string; dir: string; scripts: Record<string, string> }> | null {
+  if (filtros.length === 0) return null;
+  const resolvidos = filtros
+    .map((f) => pacotes.find((p) => p.name === f || p.dir === f || p.dir === `./${f}`))
+    .filter((p): p is (typeof pacotes)[number] => p !== undefined);
+  return resolvidos.length > 0 ? resolvidos : null;
+}
+
 async function readTurboTaskNames(projectRoot: string): Promise<string[]> {
   let raw: string;
   try {
@@ -209,27 +249,25 @@ async function readTurboTaskNames(projectRoot: string): Promise<string[]> {
   }
 }
 
-/** Um pacote do workspace com o nome declarado e seus scripts. */
-export interface PacoteLeido {
-  nome: string;
+export interface WorkspacePackage {
+  name: string;
+  dir: string;
   scripts: Record<string, string>;
 }
 
 /**
- * Lê nome e scripts de **todos** os pacotes do workspace.
+ * Os pacotes do workspace, com nome, diretorio e scripts.
  *
- * Devolve `null` — nunca uma lista vazia — quando os pacotes não podem ser
- * enumerados. Uma lista vazia seria indistinguível de "workspace sem pacotes",
- * e o caller que só precisa de nomes acabaria acusando drift em tudo, ou
- * verde em nada. Os dois casos são erros diferentes e precisam sair por caminhos
- * diferentes.
+ * Devolve `null` — nunca uma lista vazia — quando os pacotes nao podem ser
+ * enumerados. Uma lista vazia seria indistinguivel de "workspace sem scripts",
+ * que e a condicao em que todo `turbo run` acusaria drift.
  *
- * Vive aqui, e não no gate que o consome, porque um segundo leitor de
- * `pnpm-workspace.yaml` criaria duas semânticas de "pacote do workspace" no
- * mesmo repo — e a divergência entre elas seria invisível justamente nos casos
- * que importam.
+ * Antes esta funcao devolvia so a union dos nomes; MEDIDO 2026-10-08 que essa
+ * union e o que torna o gate cego a `--filter`. Ver `alvoDosFiltros`.
  */
-export async function lerPacotesDoWorkspace(projectRoot: string): Promise<PacoteLeido[] | null> {
+export async function readWorkspacePackages(
+  projectRoot: string,
+): Promise<WorkspacePackage[] | null> {
   let yaml: string;
   try {
     yaml = await fs.readFile(path.join(projectRoot, 'pnpm-workspace.yaml'), 'utf-8');
@@ -239,7 +277,7 @@ export async function lerPacotesDoWorkspace(projectRoot: string): Promise<Pacote
   const globs = parseWorkspaceGlobs(yaml);
   if (!globs) return null;
 
-  const pacotes: PacoteLeido[] = [];
+  const pacotes: WorkspacePackage[] = [];
   for (const glob of globs) {
     // Só a forma `dir/*` é suportada. Qualquer outra (nested, negação,
     // variável) devolve null em vez de ser interpretada pela metade.
@@ -263,30 +301,19 @@ export async function lerPacotesDoWorkspace(projectRoot: string): Promise<Pacote
       try {
         const pkgRaw = await fs.readFile(path.join(parentDir, entry.name, 'package.json'), 'utf-8');
         const pkg = JSON.parse(pkgRaw) as { name?: string; scripts?: Record<string, string> };
-        const nome = pkg.name ?? entry.name;
-        pacotes.push({ nome, scripts: pkg.scripts ?? {} });
+        pacotes.push({
+          // `name` ausente cai no diretorio: e o que o turbo imprime no aviso
+          // de "No tasks were executed", e sem ele o filtro nunca casaria.
+          name: pkg.name ?? entry.name,
+          dir: `${dirPattern}/${entry.name}`,
+          scripts: pkg.scripts ?? {},
+        });
       } catch {
         // Diretório sem package.json legível não é pacote.
       }
     }
   }
   return pacotes;
-}
-
-/**
- * Union dos nomes de script de todos os pacotes do workspace.
- *
- * Casca de `lerPacotesDoWorkspace`: quem só precisa do conjunto de nomes não
- * tem por que duplicar a enumeração.
- */
-async function readWorkspaceScriptNames(projectRoot: string): Promise<Set<string> | null> {
-  const pacotes = await lerPacotesDoWorkspace(projectRoot);
-  if (!pacotes) return null;
-  const names = new Set<string>();
-  for (const pacote of pacotes) {
-    for (const scriptName of Object.keys(pacote.scripts)) names.add(scriptName);
-  }
-  return names;
 }
 
 /**
@@ -397,6 +424,75 @@ const BOTH_STREAMS = '\u0000';
 const QUOTED_OPEN = '\u0001';
 const QUOTED_SPACE = '\u0002';
 
+/**
+ * Neutraliza aspas e operadores de redirect antes de segmentar.
+ *
+ * Compartilhado por `extractTurboRunTasks` e `extractTurboRunFilters`: os dois
+ * leem o MESMO comando, e um parser de flags com tratamento de aspas diferente
+ * do parser de tasks é a forma mais barata de os dois discordarem sobre o que
+ * o comando diz.
+ */
+function protegerComando(command: string): string {
+  return command
+    .replace(
+      /'([^']*)'|"([^"]*)"/g,
+      (_m, single, double) =>
+        `${QUOTED_OPEN}${(single ?? double).replace(/\s+/g, QUOTED_SPACE)}${QUOTED_OPEN}`,
+    )
+    .replace(/&>/g, BOTH_STREAMS)
+    .replace(/>&/g, `>${BOTH_STREAMS}`);
+}
+
+/** Tira os sentinelas de aspas, devolvendo o argumento literal. */
+function desembrulhar(token: string): string {
+  if (!token.startsWith(QUOTED_OPEN)) return token;
+  return token.slice(QUOTED_OPEN.length, -QUOTED_OPEN.length).split(QUOTED_SPACE).join(' ');
+}
+
+/**
+ * Os valores de `--filter` de um comando `turbo run`.
+ *
+ * Por que isto existe — MEDIDO 2026-10-08 no repo real, turbo 2.11.2:
+ * `npx turbo run test:e2e --filter=@projeto/web` responde
+ * `WARNING  No tasks were executed as part of this run.`,
+ * `Tasks: 0 successful, 0 total` e **sai 0**. O gate resolvia a task contra a
+ * UNIÃO de scripts de todos os pacotes, então uma task que só o `@projeto/api`
+ * implementa passa — e o passo de CI fica verde sem executar nada.
+ *
+ * O que este parser NÃO afirma: nada sobre se o filtro casa algum pacote. Quem
+ * decide é o chamador, e ele só相差 quando o valor casa EXATAMENTE com um
+ * pacote — forma exótica (`...[HEAD^1]`, `{./apps/*}`) cai na união, que é o
+ * comportamento antigo, nunca num vermelho novo.
+ */
+export function extractTurboRunFilters(command: string): string[] {
+  const filtros: string[] = [];
+  const segment = /(?:^|[|&;])[^|&;]*?\bturbo\s+run\s+([^|&;]*)/g;
+  for (const match of protegerComando(command).matchAll(segment)) {
+    const tokens = (match[1] ?? '')
+      .trim()
+      .split(/\s+/)
+      .filter((t) => t !== '');
+    for (let i = 0; i < tokens.length; i++) {
+      const token = desembrulhar(tokens[i] ?? '');
+      if (token.startsWith('--filter=')) {
+        const valor = token.slice('--filter='.length).trim();
+        if (valor !== '') filtros.push(valor);
+        continue;
+      }
+      if (token === '--filter') {
+        const valor = desembrulhar(tokens[i + 1] ?? '').trim();
+        // `--filter` sem operando é erro do COMANDO, não coisa do gate; e um
+        // operando que começa com `-` é outra flag, não o nome do pacote.
+        if (valor !== '' && !valor.startsWith('-')) {
+          filtros.push(valor);
+          i++;
+        }
+      }
+    }
+  }
+  return filtros;
+}
+
 export function extractTurboRunTasks(command: string): string[] {
   // Argumento entre aspas é UM argumento só, e o shell não o reinterpreta.
   // Medido em turbo 2.11.2, com a task `a<b` declarada E implementada:
@@ -404,19 +500,7 @@ export function extractTurboRunTasks(command: string): string[] {
   //   turbo run "a<b"  -> aspas protegem o operador; turbo EXECUTA `a<b`
   // Remover aspas (o que esta função fazia) apagava essa distinção, e a task
   // real sumia do gate — falso negativo, o modo de falha mais caro.
-  const protectedCmd = command
-    .replace(
-      /'([^']*)'|"([^"]*)"/g,
-      (_m, single, double) =>
-        `${QUOTED_OPEN}${(single ?? double).replace(/\s+/g, QUOTED_SPACE)}${QUOTED_OPEN}`,
-    )
-    // `&` que é parte de um operador de redirect deixa de parecer separador.
-    // São duas formas: `&>file` / `&>>file` (o `&` antecede `>`) e `2>&1` /
-    // `2>&-` (o `&` segue `>`). Precisa vir ANTES da segmentação, senão o
-    // segmentador corta no `&` e perde as tasks seguintes — medido: o turbo
-    // real trata `ALVO` como task em `turbo run build 2>&1 ALVO`.
-    .replace(/&>/g, BOTH_STREAMS)
-    .replace(/>&/g, `>${BOTH_STREAMS}`);
+  const protectedCmd = protegerComando(command);
 
   const tasks: string[] = [];
   const segment = /(?:^|[|&;])[^|&;]*?\bturbo\s+run\s+([^|&;]*)/g;

@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { UserValidationException } from '../exceptions/user.exceptions.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -39,7 +40,11 @@ export class UserId {
   static create(value?: string): UserId {
     const v = value ?? generateUuidV7();
     if (!UUID_RE.test(v)) {
-      throw new Error(`UserId: valor não é UUID v7 válido: '${value ?? '(undefined)'}'`);
+      // pt-BR (2026-10-08): `Error` puro aqui virava 500. Um id
+      // malformado no path é erro do CALLER — e o cenário 04 aceitava
+      // `[400, 500]`, que é a forma de um teste afirmar que o defeito
+      // está dentro do contrato.
+      throw new UserValidationException('id', 'o identificador precisa ser um UUID v7 válido.');
     }
     return new UserId(v);
   }

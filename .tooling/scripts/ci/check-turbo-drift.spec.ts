@@ -70,6 +70,30 @@ describe('checkTurboDrift', () => {
     expect(result.errors.some((e) => e.includes('$schema'))).toBe(true);
   });
 
+  it('deve falhar se o $schema NÃO for o do turbo.build, mesmo sendo uma URL', async () => {
+    // MEDIDO 2026-10-08: este ramo NÃO tinha teste. Neutralizar o
+    // `startsWith('https://turbo.build/schema.json')` deixava a suíte
+    // **6 de 6 verde** — o gate aceitaria `https://exemplo.com/schema.json`
+    // como se fosse o schema oficial. `$schema` apontando para outro lugar é
+    // exatamente o drift #3 que o check se propõe a pegar: um `turbo.json`
+    // copiado de outro projeto, ou apontando para um schema fork.
+    const turboDir = path.join(tmpRoot, 'schema-errado');
+    await fs.mkdir(turboDir, { recursive: true });
+    await fs.writeFile(
+      path.join(turboDir, 'turbo.json'),
+      JSON.stringify({
+        $schema: 'https://exemplo.com/schema.json',
+        tasks: { build: { outputs: ['dist/**'] } },
+      }),
+    );
+    const result = await checkTurboDrift({ turboPath: path.join(turboDir, 'turbo.json') });
+    expect(result.ok).toBe(false);
+    expect(result.errors.join('\n')).toMatch(/turbo\.build\/schema\.json/);
+    // E a mensagem tem de dizer o que foi encontrado, senão o gate acusa sem
+    // dizer onde — o leitor teria de abrir o arquivo pra saber o que consertar.
+    expect(result.errors.join('\n')).toContain('https://exemplo.com/schema.json');
+  });
+
   it('deve falhar se task tiver nome inválido (caracteres não permitidos)', async () => {
     const badNameDir = path.join(tmpRoot, 'bad-name');
     await fs.mkdir(badNameDir, { recursive: true });

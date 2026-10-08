@@ -9,7 +9,7 @@ ou push direto.
 
 ## Regra Inegociável
 
-- ❌ **PROIBIDO** `git commit` em `main` (exceto via PR de hotify)
+- ❌ **PROIBIDO** `git commit` em `main` (exceto via PR de hotfix)
 - ❌ **PROIBIDO** `git push origin main`
 - ❌ **PROIBIDO** `--force-push` em qualquer branch compartilhada
 - ❌ **PROIBIDO** iniciar trabalho sem atualizar `main` — branch criada a partir
@@ -35,23 +35,23 @@ de revisão humana, e por isso deve ser cobrada no PR.
 | Commit pequeno e focado           | Um commit = uma mudança coerente; facilita `bisect` e `revert` | **Convenção**: revisão no PR |
 | Sem branch permanente            | Nenhuma branch vive além do seu PR (só `main` e tags) | **Convenção**: limpeza pós-merge é manual |
 
-> **Nota — o que o GitHub de fato impõe.** O ruleset `master`
-> (`23853096`) tem `deletion`, `non_fast_forward`, `pull_request` **e**
-> `required_status_checks` com context `quality` (`strict: false`).
+> **Nota — o que o GitHub de fato impõe.** O ruleset `master` (`23853096`) tem
+> `deletion`, `non_fast_forward`, `pull_request` **e** `required_status_checks`
+> com context `quality` (`strict: false`).
 >
 > `quality` tem `needs: preflight` no [`ci.yml`](../../../.github/workflows/ci.yml),
 > então os dois jobs gateiam o merge — mas a garantia é da **cadeia de
-> workflows**, não de cada check: se `quality` deixar de ter `needs: preflight`,
-> `preflight` continua opcional sem nenhum aviso. Ainda **não** há
+> workflows**: se `quality` deixar de ter `needs: preflight`, `preflight`
+> continua opcional sem nenhum aviso. Ainda **não** há
 > `required_approving_review_count` (segue `0` — o repositório é de contributor
 > único, e exigir aprovação travaria o autor em PR solo).
 >
-> Como o [`ci.yml`](../../../.github/workflows/ci.yml) só dispara em
-> `push: feat/**` e `pull_request: main`, **`main` só é atualizável por PR**:
-> um push direto não tem check `quality` reportado naquele commit e é
-> rejeitado. `bypass_actors` é vazio — ninguém contorna, nem administrador.
-> A barreira local (`pre-push`) continua sendo a camada mais rápida, mas
-> deixou de ser a única.
+> Como o [`ci.yml`](../../../.github/workflows/ci.yml) só dispara em `push:
+> feat/**` e `pull_request: main` (MEDIDO 2026-10-08: `gh run list --branch
+> fix/…` volta vazio depois do push), **`main` só é atualizável por PR** — push
+> direto não tem check `quality` reportado e é rejeitado. `bypass_actors` é
+> vazio: nem administrador contorna. A barreira local (`pre-push`) é a camada
+> mais rápida, mas não é mais a única.
 
 ## Ponto de Partida Obrigatório
 
@@ -85,10 +85,8 @@ você está — como último comando, não como último do raciocínio:**
 git branch --show-current
 ```
 
-Esse passo não é opcional — é a defesa contra commit acidental em
-`main`, que só é detectado depois que já aconteceu. E "último comando" é
-literal: um `git branch --show-current` seguido de um `git branch X` ou um
-`git checkout` é uma verificação que já estava velha quando você leu.
+Esse passo não é opcional — é a defesa contra commit acidental em `main`, que
+só é detectado depois que já aconteceu.
 
 ## Rebase Obrigatório: Demanda Implementada com `main` Desatualizada
 
@@ -242,26 +240,18 @@ git push origin --delete <branch>
 | `merged` (tem `mergedAt`) | **Sim**, direto — se nenhum arquivo da branch estiver ausente em `main` |
 | `closed` sem merge, ou nunca teve PR | **Só após exame de conteúdo** — apêndice §Caso 2 e §Caso 3 |
 
-**O que decide é `mergedAt`, não a recusa do `-d`.** `-d` recusa apagar branch não
-mergeada e essa recusa protege — mas o caso comum deste repo é o oposto: com
+**O que decide é `mergedAt`, não a recusa do `-d`.** `-d` recusa apagar branch
+não mergeada e essa recusa protege — mas o caso comum deste repo é o oposto: com
 squash merge o tip deixa de ser ancestral de `main`, então **`-d` recusa branch
-mergeada**. Nenhuma tag `backup/*` deste repo é ancestral de `origin/main` —
-inclusive as cujas branches mergeadas já estão inteiras em `main`, que é
-justamente o caso que torna a limpeza impossível aqui:
-
-```bash
-git tag --list 'backup/*' | while read t; do
-  git merge-base --is-ancestor "$t" origin/main || echo "não-ancestral: $t"
-done
-```
+mergeada**.
 
 **`closed` sem merge** exige o exame de conteúdo — foi ele que separou as duas
-branches fechadas: #35 entregou 1 arquivo, #36 entregou 0 (passo 3 do
-[apêndice](./git-workflow-apendice.md) §Caso 1). O predicado de "está tudo em
-`main`" é o **arquivo**, não o commit: `--not --remotes` mede *"não está em
-nenhuma ref remota"* — inerte enquanto `origin/<branch>` existir, e **não-zero
-depois** do `push --delete`, que é o passo seguinte do mesmo bloco; já
-`--not origin/main` acusa falso positivo com squash.
+branches fechadas: #35 entregou 1 arquivo, #36 entregou 0. O predicado de "está
+tudo em `main`" é o **arquivo**, não o commit: `--not --remotes` mede *"não está
+em nenhuma ref remota"* — inerte enquanto `origin/<branch>` existir, e
+**não-zero depois** do `push --delete`, que é o passo seguinte do mesmo bloco;
+já `--not origin/main` acusa falso positivo com squash. O exame inteiro, e a
+tag de recuperação, estão no [apêndice](./git-workflow-apendice.md) §Caso 1.
 
 ## Pre-Push Quality Gate
 
@@ -274,12 +264,10 @@ pnpm ci:local
 Este comando executa as validações que o CI roda — **69,5 s, 69,6 s e 74,1 s** medido de ponta a ponta em 2026-10-08 (n=3; `turbo.json` marca as duas tasks e2e com `cache: false`, então o custo não encolhe com o tempo), e **22,6 s** eram o total antes de elas entrarem. Se falhar, **NÃO fazer push** antes.
 
 > **O hook não faz isto por você.** `.husky/pre-push` roda apenas
-> `pnpm ci:preflight` (camada 1 do defense-in-depth: cross-refs,
-> drift de tsconfig, drift de ESLint) — é o que o hook promete na saída
-> dele. Lint, typecheck e os testes com coverage **não** são cobertos
-> pelo hook; é por isso que `ci:local` continua sendo passo manual
-> obrigatório no fluxo. Para o hook passar a cobrir mais, o ajuste é em
-> `.husky/pre-push`, não neste doc.
+> `pnpm ci:preflight` (camada 1 do defense-in-depth) — é o que o hook promete
+> na saída dele. Lint, typecheck e os testes com coverage **não** são cobertos
+> pelo hook; para o hook cobrir mais, o ajuste é em `.husky/pre-push`, não
+> neste doc.
 
 Exceção: hotfix trivial (typo, doc-only). Mesmo nesses casos,
 rodar `pnpm ci:preflight` para validar refs em docs.
@@ -305,6 +293,6 @@ Nenhuma — hotfixes urgentes também usam PR (label `hotfix` para SLA diferenci
 
 Os gates que rodam em todo PR são o job `preflight` (executa `pnpm ci:preflight`)
 e o job `quality`. **Nenhum agente é despachado automaticamente**: quem invoca o
-de TDD e o de revisão de código é o operador ou a matriz
+agente de TDD e o de revisão de código é o operador ou a matriz
 [`review-routing.md`](./review-routing.md). O fluxo completo, com o que de fato
 bloqueia, está em [`docs/fluxo-desenvolvimento.md`](../../../docs/fluxo-desenvolvimento.md).

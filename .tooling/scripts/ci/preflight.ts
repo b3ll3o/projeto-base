@@ -29,6 +29,7 @@ import { checkCiLocalE2e } from './check-ci-local-e2e';
 import { existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
+import { PREFLIGHT_CHECKS, idsDeclarados } from './preflight-gates';
 
 /**
  * Valida a matriz de roteamento do review-router (Task 1.10).
@@ -139,11 +140,28 @@ export function formatMark(r: CheckResult): string {
 }
 
 /**
+ * A ÚNICA fonte de "isto reprovou".
+ *
+ * `CheckResult.ok` e `CheckResult.errors` são independentes por contrato, e o
+ * painel lia os dois — cada um para uma decisão diferente. MEDIDO 2026-10-08: em
+ * `ok: true` + `errors` preenchido a linha saía VERDE, os erros eram contados, e
+ * o processo saía 1: o build reprovava com uma linha verde na tela, que é a
+ * pior leitura possível porque o token de sucesso é o primeiro que o olho pega.
+ *
+ * Por que `errors` e não `ok`: `errors` é o que o painel PRINTA. Um veredito
+ * que ninguém consegue ler não pode ser o que decide a marca. E `ok: false` sem
+ * `errors` continua vermelho por `formatMark` — ver `detalhar`.
+ */
+function falhou(r: CheckResult): boolean {
+  return r.errors.length > 0;
+}
+
+/**
  * As linhas de detalhe que o painel imprime DEPOIS da marca, em qualquer ramo.
  *
  * Deliberadamente **sem** a linha de skip que `linhasDoRelato` inclui: o painel
  * já carrega o motivo na própria marca (`– (skipped: …)`, via `formatMark`), e
- * usar as duas listas aqui imprimiria o motivo duas vezes. São contratos
+ * usar as duas listas aqui imprimiria duas vezes. São contratos
  * diferentes — o CLI de um check não tem marca e precisa dizer por que não
  * rodou — e a diferença é essa, não uma divergência acidental.
  *
@@ -167,10 +185,29 @@ export function detalhar(r: CheckResult): { linhas: string[]; erros: number } {
   // `check-package-json-drift.ts` devolve `ok: errors.length === 0` JUNTO com
   // `skipped: true`. No caso "não rodou E errou", o motivo do skip era o dado
   // mais importante da linha e ele não aparecia em lugar nenhum.
-  const motivo = r.skipped && !r.ok ? [`(skipped: ${r.reason ?? 'sem motivo declarado'})`] : [];
+  //
+  // O gatilho é `falhou`, e não `!r.ok`, pelo mesmo motivo da marca: `ok: true`
+  // com erros preenchidos é o estado que produzia a linha verde, e o motivo do
+  // skip é justamente o dado que a linha verde estava engolindo.
+  const motivo = r.skipped && falhou(r) ? [`(skipped: ${r.reason ?? 'sem motivo declarado'})`] : [];
+  // O outro lado da classe: `ok: false` com `errors` VAZIO imprimia `✗` (o
+  // `formatMark` lê `ok`), contava 0 e saía 0 — uma linha vermelha em cima de
+  // "Todos os checks passaram". MEDIDO 2026-10-08: hoje nenhum gate produz este
+  // estado, porque todos derivam `ok` de `errors.length === 0`
+  // (`grep -rn "ok: errors.length === 0" .tooling/scripts/ci/*.ts` → 11
+  // ocorrências). É um furo latente: o conserto é de 2 linhas, e deixar o furo
+  // é esperar o próximo gate que erre a derivação.
+  //
+  // A recusa sem causa precisa ser CONTADA e DITA. Contada só, ela some — e um
+  // erro que não aparece em lugar nenhum é indistinguível de um gate que não
+  // rodou.
+  const semCausa =
+    !r.ok && r.errors.length === 0
+      ? ['(o check devolveu `ok: false` sem nenhum `errors` — a recusa não tem causa registrada)']
+      : [];
   return {
-    linhas: [...r.errors, ...(r.advisories ?? []), ...motivo],
-    erros: r.errors.length,
+    linhas: [...r.errors, ...(r.advisories ?? []), ...motivo, ...semCausa],
+    erros: Math.max(r.errors.length, r.ok ? 0 : 1),
   };
 }
 
@@ -196,7 +233,7 @@ export function relatarUmCheck(result: CheckResult): {
 } {
   const { linhas, erros } = detalhar(result);
   return {
-    mark: result.ok ? formatMark(result) : '✗',
+    mark: falhou(result) ? '✗' : formatMark(result),
     linhas,
     erros,
     // `skipped` sozinho, sem o `&& result.ok`: "não rodou" e "rodou e errou"
@@ -246,193 +283,72 @@ export function resumir(
   return { linhas, codigo: totalErrors > 0 ? 1 : 0 };
 }
 
+/**
+ * O COMO: `id` → função. Fica aqui, e não em `preflight-gates.ts`, porque é o
+ * único ponto do sistema que sabe chamar os gates — e porque um módulo com as
+ * funções importaria `checkTeethRegistry`, que importa este módulo de volta.
+ *
+ * As duas metades formam um par fechado, e o par é testado: nenhum `id` de
+ * `PREFLIGHT_CHECKS` sem runner, nenhum runner sem `id`. Um gate com `fn`
+ * apontando para o vazio é verde até alguém rodar a happy path dele.
+ */
+export const RUNNERS: Record<string, () => CheckResult | Promise<CheckResult>> = {
+  'check-doc-refs': () => checkDocRefs({ docsRoot: '.', docsRoots: ['docs', '.agents/specs'] }),
+  'check-tsconfig-drift': () =>
+    checkTsconfigDrift({
+      tsconfigsRoot: '.',
+      consistentKeys: ['strict', 'noUncheckedIndexedAccess'],
+    }),
+  'check-eslint-drift:apps': () => checkEslintDrift({ appsRoot: 'apps', allowlist: [] }),
+  'check-eslint-drift:packages': () => checkEslintDrift({ appsRoot: 'packages', allowlist: [] }),
+  'check-turbo-drift': () => checkTurboDrift({ turboPath: 'turbo.json' }),
+  'check-package-json-drift': () =>
+    checkPackageJsonDrift({ packageJsonPath: 'package.json', projectRoot: '.' }),
+  'check-docker-drift': () => checkDockerDrift('.'),
+  'lint-review-routing': () => checkReviewRoutingLint(),
+  'check-archive-integrity': () => checkArchiveIntegrity('.'),
+  'check-memory-dir-concordance': () => checkMemoryDirConcordance({ repoRoot: '.' }),
+  'check-agent-memory-drift': () => checkAgentMemoryDrift('.'),
+  'check-tooling-typecheck': () => checkToolingTypecheck({ repoRoot: '.' }),
+  'check-teeth-registry': () => checkTeethRegistry(),
+  'check-self-firing-guard': () => checkSelfFiringGuards(),
+  'turbo-redirect-differential': () => checkTurboRedirectDifferential(),
+  'check-harness-owner': () => checkHarnessOwner(),
+  'check-branch-up-to-date': () => checkBranchUpToDate(),
+  'check-e2e-flow-coverage': () => checkE2eFlowCoverage({ repoRoot: '.' }),
+  'check-ci-local-e2e': () => checkCiLocalE2e({ repoRoot: '.' }),
+};
+
+/**
+ * Junta a lista (QUEM, DE ONDE) com os runners (COMO) na ordem do painel.
+ *
+ * A falha aqui é explícita e nomeia o id: um gate declarado e não rodado
+ * some do painel em silêncio, e "parte do painel acima não foi medida" é a
+ * forma mais cara de erro silencioso que existe — a linha verde ao lado é
+ * indistinguível de um gate que passou.
+ */
+export function resolverChecks(): Array<{
+  name: string;
+  file: string;
+  fn: () => CheckResult | Promise<CheckResult>;
+}> {
+  const faltando = idsDeclarados().filter((id) => !(id in RUNNERS));
+  if (faltando.length > 0) {
+    throw new Error(
+      `preflight-gates.ts declara ${faltando.length} gate(s) sem runner em ` +
+        `preflight.ts: ${faltando.join(', ')}`,
+    );
+  }
+  return PREFLIGHT_CHECKS.map(({ name, file, id }) => ({
+    name,
+    file,
+    fn: RUNNERS[id] as () => CheckResult | Promise<CheckResult>,
+  }));
+}
+
 async function main(): Promise<void> {
   console.log('\u{1F50D} Pre-flight CI checks\n');
-  const checks: Array<{
-    name: string;
-    /**
-     * O ARQUIVO que implementa o gate. Não é decoração: a task 3.2 do plano
-     * `guard-classes` reconcilia este array contra o registro de dentes, e
-     * contra a matriz de roteamento — e não há como casar um nome de
-     * exibição ('Cross-refs em .md versionados') com uma entrada de registro
-     * ('`check-doc-refs`') sem o path. Sem este campo, a reconciliação seria
-     * por semelhança de nome: exatamente a classe 2 — cobre a forma que você
-     * conhece e só ela.
-     */
-    file: string;
-    fn: () => CheckResult | Promise<CheckResult>;
-  }> = [
-    // F2-T2: escopo = todo `.md` versionado (git ls-files), nao só `docs` +
-    // `.agents/specs`. Antes, `AGENTS.md` — o indice que todo agent le
-    // primeiro para decidir a quem despachar — ficava fora do gate.
-    // `docsRoots` é o fallback (walk) caso o git não esteja disponível.
-    {
-      name: 'Cross-refs em .md versionados',
-      file: '.tooling/scripts/ci/check-doc-refs.ts',
-      fn: () => checkDocRefs({ docsRoot: '.', docsRoots: ['docs', '.agents/specs'] }),
-    },
-    {
-      name: 'tsconfig drift (strict, noUncheckedIndexedAccess)',
-      file: '.tooling/scripts/ci/check-tsconfig-drift.ts',
-      fn: () =>
-        checkTsconfigDrift({
-          tsconfigsRoot: '.',
-          consistentKeys: ['strict', 'noUncheckedIndexedAccess'],
-        }),
-    },
-    {
-      name: 'ESLint config drift (apps)',
-      file: '.tooling/scripts/ci/check-eslint-drift.ts',
-      fn: () => checkEslintDrift({ appsRoot: 'apps', allowlist: [] }),
-    },
-    {
-      name: 'ESLint config drift (packages)',
-      file: '.tooling/scripts/ci/check-eslint-drift.ts',
-      fn: () => checkEslintDrift({ appsRoot: 'packages', allowlist: [] }),
-    },
-    {
-      name: 'turbo.json drift (pipeline canônico)',
-      file: '.tooling/scripts/ci/check-turbo-drift.ts',
-      fn: () => checkTurboDrift({ turboPath: 'turbo.json' }),
-    },
-    {
-      name: 'package.json drift (scripts canônicos + fantasmas)',
-      file: '.tooling/scripts/ci/check-package-json-drift.ts',
-      fn: () => checkPackageJsonDrift({ packageJsonPath: 'package.json', projectRoot: '.' }),
-    },
-    {
-      name: 'docker drift (.dockerignore + Dockerfile size/base)',
-      file: '.tooling/scripts/ci/check-docker-drift.ts',
-      fn: () => checkDockerDrift('.'),
-    },
-    {
-      name: 'review-routing matrix lint (YAML + LOC + reviewer refs)',
-      file: 'tooling/scripts/lint-review-routing.ts',
-      fn: () => checkReviewRoutingLint(),
-    },
-    {
-      name: 'archive integrity (.agents/runs/archive/*.md frontmatter canônico)',
-      file: '.tooling/scripts/ci/check-archive-integrity.ts',
-      fn: () => checkArchiveIntegrity('.'),
-    },
-    {
-      // Task 1.3 do plano guard-classes. Fecha a divergência que reinava em
-      // silêncio: o destino da retrospectiva já foi declarado 10 vezes, em 7
-      // arquivos, em 6 notações — uma delas um `test -f` executável com path
-      // de máquina, falso em toda máquina.
-      name: 'destino da retrospectiva (fonte única, sem 2ª declaração)',
-      file: '.tooling/scripts/ci/check-memory-dir-concordance.ts',
-      fn: () => checkMemoryDirConcordance({ repoRoot: '.' }),
-    },
-    {
-      // Issue #47. Fecha a classe 1 que a própria tabela de guard nomeia:
-      // `evolucao-agents.md` obriga a atualizar "o agent E sua memória" após
-      // mudança de comportamento, e nenhum gate media o par. O caso medido foi
-      // o próprio `doc-sync`, que virou report-only com a memória intocada
-      // desde 2026-09-22.
-      //
-      // O gate distingue comportamento de correção de path de propósito: no
-      // mesmo commit, `nestjs-specialist` e `stack-code-reviewer` só
-      // corrigiram `../../../docs/adr/` → `../../docs/adr/`, delta zero.
-      // Acusar os três ensinaria o autor a atualizar memória por ruído.
-      name: 'drift agent↔memória (comportamento novo com memória intocada)',
-      file: '.tooling/scripts/ci/check-agent-memory-drift.ts',
-      fn: () => checkAgentMemoryDrift('.'),
-    },
-    {
-      // Issue #46. `.tooling/` decide se o CI passa, e era a única superfície do
-      // repo sem typecheck: `pnpm typecheck` é `turbo run typecheck`, que só
-      // alcança workspaces declarados. O gate executa o `tsc` sobre o tsconfig
-      // desta própria árvore — que inclui este arquivo.
-      name: 'typecheck tooling (.tooling/)',
-      file: '.tooling/scripts/ci/check-tooling-typecheck.ts',
-      fn: () => checkToolingTypecheck({ repoRoot: '.' }),
-    },
-    {
-      // Task 3.2 do plano guard-classes. Reconcilia o registro de dentes com
-      // o preflight E com a matriz de roteamento. Sem ele, o registro
-      // envelhece em silêncio e um gate pode morar num diretório que nenhuma
-      // `path_glob` alcança — classe 1, condição inalcançável: todo mundo
-      // vê verde e nenhuma revisão é despachada.
-      name: 'registro de dentes (registro ↔ preflight ↔ roteamento)',
-      file: '.tooling/scripts/ci/check-teeth-registry.ts',
-      fn: () => checkTeethRegistry(),
-    },
-    {
-      // Task 3.3 do plano guard-classes. Classe 3 — o guard que dispara em
-      // si mesmo. Não pergunta se o guard está verde: pergunta se a isenção
-      // que o impede de se acusar está pagando pelo trabalho que declara.
-      // Um 0 → 0 aqui significa isenção inerte, e a próxima mudança de padrão
-      // a transforma num catch que engole o que vier.
-      name: 'classe 3 (guard que dispara em si mesmo)',
-      file: '.tooling/scripts/ci/check-self-firing-guard.ts',
-      fn: () => checkSelfFiringGuards(),
-    },
-    {
-      // Task 4.1 do plano guard-classes. O `turbo-redirect-differential.sh`
-      // era o único instrumento do diretório sem dono. Entrou pelo preflight
-      // — e não pelo `ci:local` — porque o CI roda `ci:preflight` e nunca
-      // roda `ci:local`.
-      //
-      // O `file` é o `.sh` de propósito: é o próprio harness que ganha dono,
-      // e não um wrapper. Ver a nota em `checkTurboRedirectDifferential`.
-      name: 'turbo: differential parser × turbo real',
-      file: '.tooling/scripts/ci/turbo-redirect-differential.sh',
-      fn: () => checkTurboRedirectDifferential(),
-    },
-    {
-      // Task 3.4 do plano guard-classes. Controle desligado: (a) todo
-      // harness é invocado por algo, (b) todo destino declarado tem guard
-      // ligado. Nasceu VERMELHO em 3.4 — nomeando o differential sem dono —
-      // e só entra aqui em 4.1, quando esse dono existe. Registrá-lo antes
-      // teria tornado todo push impossível por causa de uma dívida conhecida.
-      name: 'controle desligado (harness órfão + destino sem guard)',
-      file: '.tooling/scripts/ci/check-harness-owner.ts',
-      fn: () => checkHarnessOwner(),
-    },
-    {
-      // Regra de `git-workflow.md`: demanda implementada com a main
-      // desatualizada é rebaseada na main atualizada. Entrei pelo preflight e
-      // não pelo `ci:local` pelo mesmo motivo do differential acima — o CI
-      // roda `ci:preflight`, e uma regra que só roda na máquina de quem a
-      // escreveu não é uma regra do repo.
-      //
-      // `skipped` quando `origin/main` não existe: aí não há o que medir, e
-      // um verde aqui afirmaria que a demanda contém a main atual sem ter
-      // perguntado a ninguém.
-      name: 'demanda rebaseda na main atual (regra de rebase)',
-      file: '.tooling/scripts/ci/check-branch-up-to-date.ts',
-      fn: () => checkBranchUpToDate(),
-    },
-    {
-      // Regra de `e2e-playwright.md`: todo fluxo mapeado tem spec e todo spec
-      // pertence a um fluxo mapeado. Entra pelo preflight — e não pelo
-      // `ci:local` — pelo mesmo motivo do rebase: o CI roda `ci:preflight`.
-      //
-      // O que ele mede é PARIDADE DECLARATIVA entre o inventário da convenção e
-      // os cabeçalhos `// FLUXO:` dos specs. Que os testes PASSEM é outra
-      // camada (`test:e2e` no job `quality`), e confundir as duas é como um
-      // gate passa a afirmar verde sobre algo que não mediu.
-      name: 'inventário de fluxos ⇄ specs e2e (regra de cobertura e2e)',
-      file: '.tooling/scripts/ci/check-e2e-flow-coverage.ts',
-      fn: () => checkE2eFlowCoverage({ repoRoot: '.' }),
-    },
-    {
-      // A Camada 1 da convenção promete que `ci:local` roda as suítes e2e antes
-      // do push, e o script é a única coisa que decide se cumpre. MEDIDO
-      // 2026-10-08: `check-package-json-drift` exige que `ci:local` EXISTA
-      // (REQUIRED_SCRIPTS) e nunca lê o conteúdo — foi por isso que a
-      // pendência "não roda nenhuma das duas suítes e2e" sobreviveu a três
-      // releases sem nenhum vermelho.
-      //
-      // Entra pelo preflight, e não pelo `ci:local`, pelo mesmo motivo do gate
-      // de e2e e do rebase: o CI roda `ci:preflight`. Um guard que só existe
-      // na máquina de quem escreveu a pendência não vigia nada.
-      name: 'ci:local roda as suítes e2e (regra da Camada 1)',
-      file: '.tooling/scripts/ci/check-ci-local-e2e.ts',
-      fn: () => checkCiLocalE2e({ repoRoot: '.' }),
-    },
-  ];
+  const checks = resolverChecks();
 
   let totalErrors = 0;
   let totalSkipped = 0;

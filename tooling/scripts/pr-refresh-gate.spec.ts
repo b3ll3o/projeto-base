@@ -453,4 +453,48 @@ describe('CLI (o caminho que o CI usa)', () => {
     expect(r.stderr).toMatch(/37 erros/);
     expect(r.stderr).not.toMatch(/em parágrafo marcado/);
   });
+
+  it('NÃO afirma marcação quando há claim no corpo e NENHUMA é divergente', () => {
+    // O mesmo defeito que o caso do corpo vazio corrige, uma branch acima.
+    //
+    // MEDIDO 2026-10-08 no PR #66: corpo com 12 claim(s) reconhecidas, ZERO
+    // marcadores e ZERO divergentes — e a saída foi
+    //
+    //     pr-refresh-gate: 0 claim(s) divergente(s) de 12 reconhecida(s),
+    //     todas em parágrafo marcado — OK
+    //
+    // As duas spec anteriores cobrem só a branch `claims.length === 0`. Esta
+    // cobre a outra: existe claim, então o `if (relatorio.claims.length === 0)`
+    // não pega e a mensagem cai no `if (r.ok)`, que afirma a marcação sem
+    // haver nada marcado. A afirmação é vazia de verdade — "todas" sobre um
+    // conjunto de zero — e é pior que silêncio porque parece uma aprovação
+    // que o corpo nunca deu.
+    //
+    // `300 testes` é a claim mais barata para isto: a classe `testes` tem
+    // `medir: () => null`, então NUNCA é divergente, e o corpo não depende do
+    // git para ser verde.
+    const arquivo = join(mkdtempSync(join(tmpdir(), 'pr-body-')), 'body.md');
+    writeFileSync(arquivo, 'Corrigi 300 testes.\n');
+    const r = rodar({ PR_BODY_FILE: arquivo, PR_BASE: 'origin/main', GITHUB_WORKSPACE: REPO });
+
+    expect(r.status).toBe(0);
+    expect(r.stderr).toMatch(/0 claim\(s\) divergente\(s\) de 1 reconhecida\(s\)/);
+    expect(r.stderr).not.toMatch(/em parágrafo marcado/);
+  });
+
+  it('ainda afirma a marcação quando existe claim divergente num parágrafo marcado', () => {
+    // O par do teste acima. A correção do gate bifurcou a mensagem em dois
+    // ramos, e sem isto só um deles tem spec — a mesma forma de buraco que a
+    // spec anterior deixou (ela cobria o corpo vazio e não o corpo com claim).
+    //
+    // `999999999 commits` é divergente por construção: nenhum repo tem esse
+    // número de commits, e o corpo não depende de nenhum arquivo do disco.
+    const arquivo = join(mkdtempSync(join(tmpdir(), 'pr-body-')), 'body.md');
+    writeFileSync(arquivo, `${MARCADOR} foram 999999999 commits\n`);
+    const r = rodar({ PR_BODY_FILE: arquivo, PR_BASE: 'origin/main', GITHUB_WORKSPACE: REPO });
+
+    expect(r.status).toBe(0);
+    expect(r.stderr).toMatch(/1 claim\(s\) divergente\(s\)/);
+    expect(r.stderr).toMatch(/todas em parágrafo marcado/);
+  });
 });

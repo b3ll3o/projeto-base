@@ -75,7 +75,13 @@ describe('checkEslintDrift', () => {
     expect(result.ok).toBe(true);
   });
 
-  it('deve falhar quando há flat e legacy misturados no mesmo workspace', async () => {
+  it('NÃO deixa o flat config vizinho mascarar a config legada', async () => {
+    // O nome antigo era "deve falhar quando há flat e legacy misturados no
+    // mesmo workspace", e ele **não** media mistura: o gate não tem lógica de
+    // mistura nenhuma, ele acha o arquivo legado pelo nome. O teste passava
+    // pelo mesmo motivo do anterior — pelo arquivo — e o nome prometia uma
+    // cobertura que não existe. Renomeado para o que ele de fato prova: o
+    // `eslint.config.mjs` ao lado não esconde o `.eslintrc.cjs`.
     const result = await checkEslintDrift({
       appsRoot: path.join(tmpRoot, 'mixed'),
       allowlist: [],

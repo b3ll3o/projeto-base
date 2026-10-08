@@ -119,5 +119,5 @@ Resultado esperado:
 
 - [review-routing.md](./review-routing.md) — matrix canônica (cenários A/B; C/D/E aqui)
 - [tooling/scripts/review-router.ts](../../../tooling/scripts/review-router.ts) — classifier headless
-- [tooling/scripts/review-router.spec.ts](../../../tooling/scripts/review-router.spec.ts) — 30 testes TDD
+- [tooling/scripts/review-router.spec.ts](../../../tooling/scripts/review-router.spec.ts) — 32 testes TDD (`grep -cE '^\s*(it|test)\('` medido 2026-10-08)
 - [tooling/scripts/lint-review-routing.ts](../../../tooling/scripts/lint-review-routing.ts) — linter da matrix

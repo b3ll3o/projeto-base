@@ -20,6 +20,7 @@
 //     EmailAlreadyInUse                     → 409 CONFLICT
 //     ConcurrencyException                  → 412 PRECONDITION_FAILED
 //     InvalidRestore                        → 422 UNPROCESSABLE_ENTITY
+//     UserValidationException               → 400 VALIDATION_ERROR
 //
 //   APLICAÇÃO (camada inbound — use cases sempre re-jogam nestas):
 //     ApplicationResourceNotFoundException  → 404 USER_NOT_FOUND
@@ -38,6 +39,7 @@ import {
   ConcurrencyException,
   UserDeletedException,
   InvalidRestoreException,
+  UserValidationException,
 } from '../../../modules/users/domain/exceptions/user.exceptions.js';
 import {
   AuditHistoryNotFoundException,
@@ -56,6 +58,17 @@ export interface HttpErrorMapping {
   readonly status: number;
   readonly code: string;
   readonly title: string;
+  /**
+   * Erros por campo, no formato de RFC 7807 — opcional porque a maioria
+   * das falhas não é de validação de campo.
+   *
+   * pt-BR (2026-10-08): sem isto, um 400 de VO saía com `errors`
+   * ausente. O Server Action do web (`app/users/novo/actions.ts`,
+   * `estadoDeErro`) mapeia `errors[].field` para o erro do campo e, com
+   * a lista vazia, cai em `formError: ERRO_GENERICO` — a pessoa via
+   * "erro genérico" num erro inteiramente dela. Medido.
+   */
+  readonly errors?: { field: string; message: string; code: string }[];
 }
 
 export function mapExceptionToHttp(err: unknown): HttpErrorMapping {
@@ -95,6 +108,18 @@ export function mapExceptionToHttp(err: unknown): HttpErrorMapping {
       status: HttpStatus.UNPROCESSABLE_ENTITY,
       code: 'INVALID_RESTORE',
       title: 'Restauração inválida',
+    };
+  }
+  // pt-BR (2026-10-08): invariante de VO violada é erro do CALLER, não
+  // falha interna. Sem esta entrada, `UserName.create`/`Email.create`
+  // recusavam com 500 e ainda vazavam a mensagem interna no `detail`
+  // (medido: `detail="UserName: muito curto (mín 2 chars)"`).
+  if (err instanceof UserValidationException) {
+    return {
+      status: HttpStatus.BAD_REQUEST,
+      code: 'VALIDATION_ERROR',
+      title: 'Erro de validação',
+      errors: [{ field: err.campo, message: err.motivo, code: 'VALIDATION_ERROR' }],
     };
   }
 

@@ -13,8 +13,8 @@ Um **monorepo base reutilizável** que implementa o **padrão genérico de agent
 **Diferencial:** enquanto o template anterior era genérico para qualquer projeto, este é um **monorepo base opinativo** com:
 
 - Apps `apps/api` (NestJS) + `apps/web` (Next.js) **já implementados** — bounded context `users` em camadas `domain/`, `application/`, `infrastructure/`
-- 21 agents (12 genéricos + 2 routers + 6 specialists + 1 sub-dir) interoperáveis via skill `agents:coordinate`
-- 9 skills + 10 workflows + 17 convenções canônicas
+- **26 agents** (12 genéricos + 2 routers + 6 specialists de stack + 6 specialists de auditoria) + 3 arquivos companheiro em `telemetry-specialist/`, interoperáveis via skill `agents:coordinate` — medido do disco 2026-10-08, `ls .agents/agents/*.md | wc -l`
+- **15 skills + 15 workflows + 21 convenções canônicas** — medido do disco 2026-10-08 (`ls .agents/skills/*/SKILL.md | wc -l`, `ls .agents/workflows/*.md | wc -l`, entradas de índice em `AGENTS.md §6`)
 - **Paradigma DDD + Hexagonal** canônico (ADR-0001) com guardiões automáticos
 - **OpenTelemetry cross-stack** (backend + frontend + Collector)
 - **CI Defense-in-Depth** em 3 camadas
@@ -27,7 +27,7 @@ projeto-base/
 ├── README.md                           # Este arquivo
 ├── .markdownlint.json                  # Configuração do lint de Markdown
 ├── .agents/
-│   ├── agents/                         # 21 agents (12 genéricos + 2 routers + 6 specialists de stack + 1 sub-dir `agent-architect`)
+│   ├── agents/                         # 26 agents (12 genéricos + 2 routers + 6 de stack + 6 de auditoria)
 │   │   ├── agent-architect.md
 │   │   ├── code-reviewer.md
 │   │   ├── docker-specialist.md
@@ -48,10 +48,10 @@ projeto-base/
 │   │   ├── telemetry-specialist.md
 │   │   ├── test-writer.md
 │   │   └── ux-design-specialist.md
-│   ├── memory/                         # Memória acumulada (22 arquivos: 20 agents + `state-aware-planning` + `_template`)
+│   ├── memory/                         # Memória acumulada (28 arquivos: 26 agents + `state-aware-planning` + `_template`)
 │   ├── skills/                         # coordenação, routing, validação (ver AGENTS.md §3)
 │   ├── specs/conventions/              # tdd, git-workflow, cobertura, tamanho… (ver AGENTS.md §6)
-│   └── WORKFLOWS.md                    # Fluxos pré-configurados (10 workflows)
+│   └── WORKFLOWS.md                    # Fluxos pré-configurados (15 workflows em `.agents/workflows/`)
 ├── apps/                              # api (NestJS 11) + web (Next.js 15)
 ├── packages/                          # eslint-config, shared-types, tsconfig
 ├── tooling/scripts/                   # stack-code-reviewer, doc-sync, routers
@@ -297,4 +297,4 @@ Detalhes em [`docs/TEMPLATE_USAGE.md`](./docs/TEMPLATE_USAGE.md).
 
 ## Versão & Licença
 
-**Versão:** 1.9.1 — Cross-refs pós-#50: link para `docs/fluxo-desenvolvimento.md`; agents 19 → 20. Bump 1.9.0 → 1.9.1. **Licença:** MIT.
+**Versão:** 1.10.0 — contagens do disco corrigidas: agents 21 → 26, memórias 22 → 28, skills 9 → 15, workflows 10 → 15, convenções 17 → 21. **Licença:** MIT.

@@ -61,7 +61,7 @@ const FRONTMATTER_RE = /^---\n([\s\S]*?)\n---(?:\n|$)/;
 function checkFrontmatter(content: string): { ok: true } | { ok: false; error: string } {
   const m = FRONTMATTER_RE.exec(content);
   if (!m) return { ok: false, error: 'frontmatter ausente (bloco --- ausente)' };
-  const fm = YAML.parse(m[1]) as Record<string, unknown> | null;
+  const fm = YAML.parse(m[1] ?? '') as Record<string, unknown> | null;
   if (!fm || typeof fm !== 'object') return { ok: false, error: 'frontmatter inválido (YAML)' };
   for (const field of REQUIRED_FM) {
     const v = fm[field];
@@ -90,7 +90,7 @@ export async function lintMatrix(content: string, opts: LintOptions): Promise<Li
   let parsedYaml: Record<string, unknown> = {};
   if (yamlMatch) {
     try {
-      parsedYaml = (YAML.parse(yamlMatch[1]) as Record<string, unknown>) ?? {};
+      parsedYaml = (YAML.parse(yamlMatch[1] ?? '') as Record<string, unknown>) ?? {};
     } catch (e) {
       errors.push(`YAML parse error: ${e instanceof Error ? e.message : String(e)}`);
       return { errors, warnings, info };

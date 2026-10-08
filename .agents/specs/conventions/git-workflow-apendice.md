@@ -180,6 +180,16 @@ vazio a main já tem tudo, e criar tag ali é ruído que se acumula a cada limpe
 git tag backup/<branch> <branch>
 ```
 
+E, para saber se alguma tag deste repo é ancestral de `main` (MEDIDO: **nenhuma**
+é — nem as de branches já inteiras em `main`, que é o caso que torna a limpeza
+impossível sem exame):
+
+```bash
+git tag --list 'backup/*' | while read t; do
+  git merge-base --is-ancestor "$t" origin/main || echo "não-ancestral: $t"
+done
+```
+
 Recuperar:
 
 ```bash

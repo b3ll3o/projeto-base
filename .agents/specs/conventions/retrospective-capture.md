@@ -126,8 +126,8 @@ não os distingue leva o autor a reescrever o arquivo no lugar errado até o
 2026-10-07, do worktree `base-wt-gate-fix`:
 
     $ git rev-parse --show-toplevel
-    /home/leo/Documentos/projetos/base-wt-gate-fix
-    # → MEMORY_DIR = …/-home-leo-Documentos-projetos-base-wt-gate-fix/memory
+    /caminho/absoluto/do/worktree   # <-- o que o gate mediu: um toplevel DIFERENTE do repo
+    # → MEMORY_DIR = …derivado-do-worktree/memory   # ≠ o MEMORY_DIR do repo principal
     $ test -d "$MEMORY_DIR"   # → 1, "derivação quebrada"
 
 O `test -d` **pega**, que é o que importa: a retrospectiva não passa por

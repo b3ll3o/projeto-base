@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { checkPackageJsonDrift, extractTurboRunTasks } from './check-package-json-drift';
+import {
+  checkPackageJsonDrift,
+  extractTurboRunFilters,
+  extractTurboRunTasks,
+} from './check-package-json-drift';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -25,7 +29,12 @@ describe('checkPackageJsonDrift', () => {
    */
   async function makeWorkspace(
     dir: string,
-    opts: { turboTasks: string[]; packageScripts: string[] },
+    opts: {
+      turboTasks: string[];
+      packageScripts: string[];
+      /** Pacotes adicionais: `{ dir, name, scripts }`. `apps/api` é sempre criado. */
+      pacotes?: Array<{ dir: string; name: string; scripts: string[] }>;
+    },
   ): Promise<void> {
     await fs.mkdir(path.join(dir, 'apps', 'api'), { recursive: true });
     await fs.writeFile(path.join(dir, 'pnpm-workspace.yaml'), "packages:\n  - 'apps/*'\n");
@@ -40,6 +49,16 @@ describe('checkPackageJsonDrift', () => {
         scripts: Object.fromEntries(opts.packageScripts.map((s) => [s, 'echo ok'])),
       }),
     );
+    for (const p of opts.pacotes ?? []) {
+      await fs.mkdir(path.join(dir, p.dir), { recursive: true });
+      await fs.writeFile(
+        path.join(dir, p.dir, 'package.json'),
+        JSON.stringify({
+          name: p.name,
+          scripts: Object.fromEntries(p.scripts.map((s) => [s, 'echo ok'])),
+        }),
+      );
+    }
   }
 
   it('deve passar quando package.json tem todos os scripts canônicos', async () => {
@@ -188,6 +207,77 @@ describe('checkPackageJsonDrift', () => {
     expect(result.skipped).toBeFalsy();
     expect(result.ok).toBe(false);
     expect(result.errors.some((e) => e.includes("'tdd:check'") && e.includes('turbo'))).toBe(true);
+  });
+
+  it('deve falhar quando `--filter` aponta para um pacote que NÃO implementa a task', async () => {
+    // MEDIDO 2026-10-08 no repo real, turbo 2.11.2:
+    //   `npx turbo run test:e2e --filter=@projeto/web` →
+    //   "WARNING  No tasks were executed as part of this run.",
+    //   "Tasks: 0 successful, 0 total", EXIT=0.
+    // O check antigo resolvia a task contra a UNÃO de scripts de todos os
+    // pacotes, então `test:e2e` (que só o `@projeto/api` tem) passava — e o
+    // passo de CI ficava verde sem executar nada. Verde por ausência é a pior
+    // leitura possível num gate: nada no painel denuncia que ele rodou.
+    const dir = path.join(tmpRoot, 'filter-sem-dono');
+    await fs.mkdir(dir, { recursive: true });
+    await makeWorkspace(dir, {
+      turboTasks: ['test:e2e'],
+      packageScripts: ['test:e2e'],
+      pacotes: [{ dir: 'apps/web', name: '@projeto/web', scripts: ['lint'] }],
+    });
+    await fs.writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        scripts: {
+          build: 'echo build',
+          dev: 'echo dev',
+          lint: 'echo lint',
+          typecheck: 'echo tc',
+          test: 'echo test',
+          'ci:preflight': 'echo ok',
+          'ci:local': 'turbo run test:e2e --filter=@projeto/web',
+        },
+      }),
+    );
+
+    const result = await checkPackageJsonDrift({ packageJsonPath: path.join(dir, 'package.json') });
+    expect(result.skipped).toBeFalsy();
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.includes('test:e2e') && e.includes('@projeto/web'))).toBe(
+      true,
+    );
+  });
+
+  it('deve PASSAR quando `--filter` aponta para o pacote que implementa a task', async () => {
+    // O contrafactual do spec acima: sem ele, "sempre falha com --filter" seria
+    // um conserto que só sabe dizer não — e um gate que não sabe dizer sim
+    // treina a desligar o gate.
+    const dir = path.join(tmpRoot, 'filter-com-dono');
+    await fs.mkdir(dir, { recursive: true });
+    await makeWorkspace(dir, {
+      turboTasks: ['test:e2e'],
+      packageScripts: ['test:e2e'],
+      pacotes: [{ dir: 'apps/web', name: '@projeto/web', scripts: ['lint'] }],
+    });
+    await fs.writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        scripts: {
+          build: 'echo build',
+          dev: 'echo dev',
+          lint: 'echo lint',
+          typecheck: 'echo tc',
+          test: 'echo test',
+          'ci:preflight': 'echo ok',
+          'ci:local': 'turbo run test:e2e --filter=@projeto/api',
+        },
+      }),
+    );
+
+    const result = await checkPackageJsonDrift({ packageJsonPath: path.join(dir, 'package.json') });
+    expect(result.skipped).toBeFalsy();
+    expect(result.ok).toBe(true);
+    expect(result.errors).toEqual([]);
   });
 
   it('deve falhar se a task fantasma vier com redirect COLADO no script', async () => {
@@ -341,6 +431,27 @@ describe('checkPackageJsonDrift', () => {
     const result = await checkPackageJsonDrift({ packageJsonPath: path.join(dir, 'package.json') });
     expect(result.skipped).toBeFalsy();
     expect(result.ok).toBe(true);
+  });
+});
+
+describe('extractTurboRunFilters', () => {
+  it('lê `--filter=` colado e `--filter` espaçado', () => {
+    expect(extractTurboRunFilters('turbo run test:e2e --filter=@projeto/web')).toEqual([
+      '@projeto/web',
+    ]);
+    expect(extractTurboRunFilters('turbo run test:e2e --filter @projeto/web')).toEqual([
+      '@projeto/web',
+    ]);
+  });
+
+  it('lê vários filtros', () => {
+    expect(
+      extractTurboRunFilters('turbo run lint --filter=@projeto/api --filter=@projeto/web'),
+    ).toEqual(['@projeto/api', '@projeto/web']);
+  });
+
+  it('devolve vazio quando não há filtro — e a união continua sendo o critério', () => {
+    expect(extractTurboRunFilters('turbo run build')).toEqual([]);
   });
 });
 

@@ -12,6 +12,17 @@ entravam em nenhum dos dois. Convenção ausente de índice é convenção que n
 lê — a task 2.2 do plano `guard-classes` fecha isso. **Regra: criar uma convenção
 é criar a linha nos DOIS índices**, no mesmo PR.
 
+**Há um terceiro conjunto, e ele é intencional.** O índice lista convenções
+**canônicas**; arquivos cujo frontmatter se declara apêndice histórico
+(`description` começando por "Apêndice histórico", com `Apenas leitura`) **não**
+entram no índice — existem para preservar o histórico de gaps resolvidos sem
+estourar o limite de 300 linhas do spec canônico, e são alcançáveis por link de
+seu próprio pai. MEDIDO 2026-10-08: `ls .agents/specs/conventions/*.md` → **23**
+arquivos, **21** no índice, e os **2** de fora são
+`review-routing-gaps-historical.md` e `specialist-routing-gaps-v1.0.md`. Sem essa
+cláusula, um `comm -23 <(ls disco) <(índices)` acusaria 2 convenções órfãs que
+são, por desenho, apêndices.
+
 | Convenção | Arquivo | Descrição |
 |-----------|---------|-----------|
 | Idioma pt-BR | [`idioma.md`](./idioma.md) | Português Brasileiro como idioma padrão |

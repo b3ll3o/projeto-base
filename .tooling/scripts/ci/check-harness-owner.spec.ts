@@ -30,6 +30,19 @@ import { PROTECTED_DESTINATION } from './check-memory-dir-concordance.js';
 
 const HARNESS = '.tooling/scripts/ci/turbo-redirect-differential.sh';
 
+/**
+ * Envelopa um trecho de fonte no formato que `OwnerSources` espera.
+ *
+ * MEDIDO 2026-10-08: a posse saiu de `main()` em `preflight.ts` para a lista
+ * compartilhada `PREFLIGHT_CHECKS` de `preflight-gates.ts`, e junto saiu o
+ * campo `file:` que o guard lê. Com o guard ainda apontando só para o
+ * `preflight.ts`, `checkHarnessOwner()` acusou 3 harnesses órfãos num repo que
+ * não tinha nenhum — o guard estava olhando a fonte que deixou de declarar.
+ */
+const comoFonte = (source: string, path = 'preflight.ts', simbolo = 'checks') => [
+  { path, simbolo, source },
+];
+
 // ── (a) o que é harness ─────────────────────────────────────────────────────
 
 describe('harnessFiles', () => {
@@ -80,7 +93,7 @@ describe('findOwners', () => {
 
   it('o array checks do preflight é dono', () => {
     expect(
-      findOwners(HARNESS, { preflightSource: PREFLIGHT_COM_DONO, packageJsonScripts: {} }),
+      findOwners(HARNESS, { poseSources: comoFonte(PREFLIGHT_COM_DONO), packageJsonScripts: {} }),
     ).toEqual(['preflight.ts#checks']);
   });
 
@@ -90,7 +103,7 @@ describe('findOwners', () => {
     // check só reconheceria uma delas.
     expect(
       findOwners(HARNESS, {
-        preflightSource: PREFLIGHT_SEM_DONO,
+        poseSources: comoFonte(PREFLIGHT_SEM_DONO),
         packageJsonScripts: { 'ci:local': `pnpm ci:preflight && bash ${HARNESS}` },
       }),
     ).toEqual(['package.json#scripts.ci:local']);
@@ -102,7 +115,7 @@ describe('findOwners', () => {
     // mais barata de um controle continuar desligado com a proibição em mãos.
     expect(
       findOwners(HARNESS, {
-        preflightSource: PREFLIGHT_SEM_DONO,
+        poseSources: comoFonte(PREFLIGHT_SEM_DONO),
         packageJsonScripts: { docs: `echo "veja ${HARNESS} no backlog"` },
       }),
     ).toEqual([]);
@@ -114,7 +127,7 @@ describe('findOwners', () => {
     // differential — que é o estado em que o repo está hoje.
     expect(
       findOwners(HARNESS, {
-        preflightSource: `// ver \`${HARNESS}\`\nconst checks = [];`,
+        poseSources: comoFonte(`// ver \`${HARNESS}\`\nconst checks = [];`),
         packageJsonScripts: {},
       }),
     ).toEqual([]);
@@ -122,14 +135,14 @@ describe('findOwners', () => {
 
   it('sem dono, lista vazia', () => {
     expect(
-      findOwners(HARNESS, { preflightSource: PREFLIGHT_SEM_DONO, packageJsonScripts: {} }),
+      findOwners(HARNESS, { poseSources: comoFonte(PREFLIGHT_SEM_DONO), packageJsonScripts: {} }),
     ).toEqual([]);
   });
 
   it('dois donos são nomeados, não um', () => {
     expect(
       findOwners(HARNESS, {
-        preflightSource: PREFLIGHT_COM_DONO,
+        poseSources: comoFonte(PREFLIGHT_COM_DONO),
         packageJsonScripts: { 'ci:local': HARNESS },
       }),
     ).toEqual(['preflight.ts#checks', 'package.json#scripts.ci:local']);
@@ -142,7 +155,7 @@ describe('orphanHarnesses', () => {
   it('o repo real tem um harness ÓRFÃO, e o check o NOMEIA', () => {
     const r = orphanHarnesses({
       harnesses: [HARNESS],
-      preflightSource: 'const checks = [];',
+      poseSources: comoFonte('const checks = [];'),
       packageJsonScripts: {},
     });
     expect(r.ok).toBe(false);
@@ -155,7 +168,7 @@ describe('orphanHarnesses', () => {
     const segundo = '.tooling/scripts/ci/segundo-differential.sh';
     const r = orphanHarnesses({
       harnesses: [HARNESS, segundo],
-      preflightSource: 'const checks = [];',
+      poseSources: comoFonte('const checks = [];'),
       packageJsonScripts: {},
     });
     expect(r.orphans).toEqual([HARNESS, segundo]);
@@ -164,7 +177,7 @@ describe('orphanHarnesses', () => {
   it('com dono, não há órfão', () => {
     const r = orphanHarnesses({
       harnesses: [HARNESS],
-      preflightSource: `const checks = [{ file: '${HARNESS}' }];`,
+      poseSources: comoFonte(`const checks = [{ file: '${HARNESS}' }];`),
       packageJsonScripts: {},
     });
     expect(r.orphans).toEqual([]);
@@ -234,10 +247,17 @@ describe('checkHarnessOwner contra o repo real', () => {
     // regra cobre só a forma que ele mesmo escreveu — a classe 2 — e o verde
     // do check e o verde deste teste deixam de ser a mesma coisa sem ninguém
     // perceber.
-    const src = readFileSync(join(process.cwd(), '.tooling/scripts/ci/preflight.ts'), 'utf8');
-    expect(findOwners(HARNESS, { preflightSource: src, packageJsonScripts: {} })).toEqual([
-      'preflight.ts#checks',
-    ]);
+    // A posse do differential vive na lista compartilhada, não no `preflight.ts`.
+    // Ler a fonte errada aqui daria um spec verde sobre um guard cego — e foi
+    // exatamente o que aconteceu quando o array saiu de `main()`: o guard ficou
+    // verde nos specs sintéticos e vermelho no repo real, ao mesmo tempo.
+    const src = readFileSync(join(process.cwd(), '.tooling/scripts/ci/preflight-gates.ts'), 'utf8');
+    expect(
+      findOwners(HARNESS, {
+        poseSources: comoFonte(src, 'preflight-gates.ts', 'PREFLIGHT_CHECKS'),
+        packageJsonScripts: {},
+      }),
+    ).toEqual(['preflight-gates.ts#PREFLIGHT_CHECKS']);
     // E o veredito derivado: com dono, nada órfão.
     expect(checkHarnessOwner().orphans).toEqual([]);
   });

@@ -4,11 +4,11 @@ import type { CheckResult } from './check-types';
 import { linhasDoRelato } from './check-types';
 import {
   extractTurboRunTasks,
-  lerPacotesDoWorkspace,
-  type PacoteLeido,
+  readWorkspacePackages,
+  type WorkspacePackage,
 } from './check-package-json-drift';
 
-export type { PacoteLeido };
+export type { WorkspacePackage };
 
 /**
  * Gate que impede a regressão mais cara desta convenção: um `package.json`
@@ -70,7 +70,7 @@ export interface EntradaCiLocalE2e {
   /** Valor de `scripts['ci:local']` na raiz — `undefined` se ausente. */
   ciLocal: string | undefined;
   /** Pacotes do workspace, com nome e scripts. */
-  pacotes: PacoteLeido[];
+  pacotes: WorkspacePackage[];
 }
 
 export interface ResultadoCiLocalE2e {
@@ -247,14 +247,14 @@ function desembrulhar(token: string): string {
  * test:e2e` como despachante e pulava as duas conferências dele — que é
  * exatamente o defeito que este gate existe para pegar.
  */
-function implementaTask(pacote: PacoteLeido, task: string): boolean {
+function implementaTask(pacote: WorkspacePackage, task: string): boolean {
   const script = pacote.scripts[task];
   if (typeof script !== 'string' || script.trim() === '') return false;
   return !extractTurboRunTasks(script).includes(task);
 }
 
 /** Pacotes que rodam Playwright em `test:e2e`, uj ou não sejam delegadores. */
-function pacotesComBrowser(pacotes: PacoteLeido[]): PacoteLeido[] {
+function pacotesComBrowser(pacotes: WorkspacePackage[]): WorkspacePackage[] {
   return pacotes.filter((p) => E2E_COM_BROWSER.test(p.scripts['test:e2e'] ?? ''));
 }
 
@@ -317,9 +317,9 @@ export function reconciliarCiLocalE2e(entrada: EntradaCiLocalE2e): ResultadoCiLo
     );
   } else {
     for (const pacote of pacotesE2e) {
-      if (filtros.includes(pacote.nome)) continue;
+      if (filtros.includes(pacote.name)) continue;
       errors.push(
-        `drift detectado: o pacote '${pacote.nome}' implementa 'test:e2e' mas não está ` +
+        `drift detectado: o pacote '${pacote.name}' implementa 'test:e2e' mas não está ` +
           `alcançado pelos --filter das invocações de e2e de 'ci:local' (${filtros.join(', ')}) ` +
           `— o turbo sai 0 e a suíte desse pacote só roda no CI, depois do push.`,
       );
@@ -335,7 +335,7 @@ export function reconciliarCiLocalE2e(entrada: EntradaCiLocalE2e): ResultadoCiLo
     const pre = pacote.scripts['pretest:e2e'];
     if (pre === undefined) {
       errors.push(
-        `drift detectado: '${pacote.nome}' roda 'test:e2e' com Playwright mas não declara ` +
+        `drift detectado: '${pacote.name}' roda 'test:e2e' com Playwright mas não declara ` +
           "'pretest:e2e' — MEDIDO 2026-10-08: sem browser a suíte levanta Postgres, a API e " +
           "um `next build` (33,5s) e só então falha com `Executable doesn't exist`, 43,4s " +
           'deixados pelo motivo errado.',
@@ -344,7 +344,7 @@ export function reconciliarCiLocalE2e(entrada: EntradaCiLocalE2e): ResultadoCiLo
     }
     if (!/playwright\s+install/i.test(pre)) {
       errors.push(
-        `drift detectado: o 'pretest:e2e' de '${pacote.nome}' é '${pre}' e não instala o ` +
+        `drift detectado: o 'pretest:e2e' de '${pacote.name}' é '${pre}' e não instala o ` +
           'browser — o pnpm roda `pre<script>` antes do script, então é aqui que o ' +
           '`playwright install chromium` pertence.',
       );
@@ -381,7 +381,7 @@ export async function checkCiLocalE2e(opts: { repoRoot: string }): Promise<Check
     };
   }
 
-  const pacotes = await lerPacotesDoWorkspace(raiz);
+  const pacotes = await readWorkspacePackages(raiz);
   if (pacotes === null) {
     // A lista vazia e a lista ilegível não são a mesma coisa, e o caller não
     // tem como distinguir. Sem esta distinção, um workspace ilegível seria
@@ -397,8 +397,8 @@ export async function checkCiLocalE2e(opts: { repoRoot: string }): Promise<Check
   }
 
   // O próprio pacote raiz faz parte do workspace.
-  const todos: PacoteLeido[] = [
-    { nome: String(raizLida.name ?? ''), scripts: raizLida.scripts ?? {} },
+  const todos: WorkspacePackage[] = [
+    { name: String(raizLida.name ?? ''), dir: '.', scripts: raizLida.scripts ?? {} },
     ...pacotes,
   ];
   const temE2e = todos.some((p) => implementaTask(p, 'test:e2e'));

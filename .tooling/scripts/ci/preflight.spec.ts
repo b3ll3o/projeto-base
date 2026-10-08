@@ -350,6 +350,82 @@ describe('relatarUmCheck - skip que ACOMPANHA erro não pode sumir', () => {
 });
 
 /**
+ * MEDIDO 2026-10-08: `mark` derivava de `result.ok`, e `erros` derivava de
+ * `errors.length`. Os dois discordam em `ok: true` + `errors` preenchido: a
+ * linha saía VERDE, os erros eram contados, e o processo saía 1. O build
+ * reprovava com uma linha verde na tela -- a pior leitura possível, porque o
+ * token de sucesso é o que o olho procura.
+ *
+ * `ok` e `errors` sao independentes no contrato `CheckResult`, e nenhum gate
+ * media se os dois concordam. Um dia um check novo devolve
+ * `{ ok: true, errors: [...] }` e o painel mente sozinho.
+ */
+describe('relatarUmCheck - ok:true com errors NÃO pode renderizar ✓', () => {
+  const verdeMentiroso: CheckResult = { ok: true, errors: ['pacote de e2e fora dos --filter'] };
+
+  it('a marca é ✗ — o olho lê a marca antes de ler as linhas', () => {
+    expect(relatarUmCheck(verdeMentiroso).mark).toBe('✗');
+  });
+
+  it('a marca vem dos ERROS, não de `ok` — a mesma fonte que a contagem', () => {
+    // Sem isto, `mark: erros > 0 ? '✗' : '✗'` também passaria no teste
+    // anterior. O que amarra os dois é que um check sem erro algum continua
+    // verde: é a outra metade do contrato.
+    const limpo = relatarUmCheck({ ok: true, errors: [] });
+    expect(limpo.mark).toBe('✓');
+  });
+
+  it('`ok: false` sem erro algum NÃO vira vermelho novo', () => {
+    // O contrafactual do contrafactual: `ok` sozinho já produz ✗, e é o que
+    // `formatMark` já fazia. O conserto não pode transformar esse caso em
+    // algo que o painel nunca mostrou.
+    expect(relatarUmCheck({ ok: false, errors: [] }).mark).toBe('✗');
+  });
+
+  it('skip com erro: a marca ainda carrega o motivo do skip nas LINHAS', () => {
+    // `formatMark` só imprime o motivo do skip quando `ok`. Com `ok: true` e
+    // erros, o `✗` perde o motivo -- e `detalhar` é quem tem de devolvê-lo,
+    // senão o painel diz que houve erro sem dizer por que não rodou.
+    const r = relatarUmCheck({
+      ok: true,
+      errors: ['task órfã: `foo`'],
+      skipped: true,
+      reason: 'pnpm-workspace.yaml ausente',
+    });
+    expect(r.mark).toBe('✗');
+    expect(r.linhas.some((l) => l.includes('pnpm-workspace.yaml'))).toBe(true);
+  });
+
+  it('`ok: false` sem NENHUM erro conta 1 — recusa sem causa não pode sair 0', () => {
+    // O buraco espelho: `formatMark` devolve ✗ para `!ok`, mas a contagem vinha
+    // de `errors.length`. O painel imprimia uma linha vermelha e fechava com
+    // "Todos os checks passaram" e exit 0.
+    //
+    // MEDIDO 2026-10-08: hoje nenhum gate produz este estado — todos derivam
+    // `ok` de `errors.length === 0` (`grep -rn "ok: errors.length === 0"
+    // .tooling/scripts/ci/*.ts` → 11 ocorrências, mais 4 `ok: true` puros de
+    // skip). É um furo latente, e o conserto é de 2 linhas; deixar o furo é
+    // esperar o próximo gate que erre a derivação.
+    const r = relatarUmCheck({ ok: false, errors: [] });
+    expect(r.erros).toBe(1);
+    expect(r.mark).toBe('✗');
+  });
+
+  it('a recusa sem causa é dita na linha, não contada em silêncio', () => {
+    // Contar sem dizer o quê é o outro jeito de mentir: o painel contaria 1
+    // erro e mandaria quem lê procurar um defeito que não está escrito.
+    const linhas = relatarUmCheck({ ok: false, errors: [] }).linhas;
+    expect(linhas.join('\n')).toMatch(/ok: false/);
+  });
+
+  it('`ok: true` puro continua 0 — a regra nova não infla erro', () => {
+    // O contrafactual: `erros: Math.max(errors.length, !ok ? 1 : 0)` feito
+    // errado como `errors.length + 1` reprovaria todo push verde.
+    expect(relatarUmCheck({ ok: true, errors: [] }).erros).toBe(0);
+  });
+});
+
+/**
  * MEDIDO 2026-10-08: `pulou` contava o skip que ACOMPANHA erro, mas a contagem
  * nao tinha para onde ir. `main()` fazia `process.exit(1)` no ramo de erro antes
  * de chegar na linha do resumo de skip -- entao `totalSkipped` era incrementado

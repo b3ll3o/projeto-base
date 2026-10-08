@@ -111,6 +111,18 @@ Ver [`apps/web/playwright.config.ts`](../../../apps/web/playwright.config.ts)
 para `workers: 1` (justificativa do isolamento por banco) e para o porquê de
 não haver `baseURL`.
 
+⚠️ **`workers: 1` é uma dependência com teeth, não um comentário.**MEDIDO
+2026-10-08: `grep -rn "workers"` sobre `.tooling/scripts`, `tooling/scripts`,
+`apps/web` e `.agents/specs` trazia 6 ocorrências e ZERO travas — só a config,
+comentários e esta linha. A dependência existia sem amarra desde que
+`e2e/support/banco.ts` passou a fazer `docker stop` no container COMPARTILHADO:
+com 2 workers o F5 derruba o Postgres enquanto o outro está no meio de um
+spec. O guard é
+[`apps/web/playwright-isolamento.spec.ts`](../../../apps/web/playwright-isolamento.spec.ts)
+— mutação verificada: `workers: 2` o deixa vermelho. Ele lê o arquivo, então
+**não** cobre `--workers` na CLI, que sobrescreve sem deixar rastro; o CI não
+passa a flag, e é por isso que vale.
+
 ## Regras que os Specs Devem Seguir
 
 **Medir o efeito, não o trajeto.** Não conte requisições de browser para

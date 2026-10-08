@@ -25,18 +25,34 @@ export type Matrix = {
   path_globs: PathGlobRule[];
   demand_keywords: DemandKeywordRule[];
   demand_scopes: Record<string, DemandScopeRule>;
-  skip_rules?: Record<string, { skip_if: string; rationale?: string }>;
-  always_on?: string[];
-  derived_tags?: Record<string, DerivedTagRule>;
+  skip_rules?: Record<string, { skip_if: string; rationale?: string }> | undefined;
+  always_on?: string[] | undefined;
+  derived_tags?: Record<string, DerivedTagRule> | undefined;
+};
+/**
+ * Evidências, chaveadas por tipo de regra.
+ *
+ * Tipo concreto, e não `Record<string, string[]>`: com `noUncheckedIndexedAccess`
+ * o `Record` devolve `string[] | undefined` em cada `evidence.<chave>.push(...)`,
+ * e o `!` que silencia isso é o `!` que esconde a chave errada. Chaveado, o
+ * push não compila em chave que não existe.
+ */
+export type ClassifyEvidence = {
+  path_glob: string[];
+  demand_keyword: string[];
+  demand_scope: string[];
+  always_on: string[];
 };
 export type ClassifyInput = { demand: string; paths: string[]; scope: string };
 export type ClassifyResult = {
   specialists: string[];
-  evidence: Record<string, string[]>;
+  /** O mesmo tipo concreto que `classify()` constrói — duas formas para o mesmo
+   * objeto é a classe do literal transcrito: uma delas envelhece sem ninguém ver. */
+  evidence: ClassifyEvidence;
   blocking: boolean;
   gap_detected: boolean;
-  suggested_specialist?: string;
-  derived_tags?: string[];
+  suggested_specialist?: string | undefined;
+  derived_tags?: string[] | undefined;
 };
 
 // pt-BR: single-pass glob→regex. `**/` opcional (casa raiz OU subpath),
@@ -45,7 +61,7 @@ export type ClassifyResult = {
 function globToRegex(glob: string): RegExp {
   let r = '';
   for (let i = 0; i < glob.length; i++) {
-    const ch = glob[i];
+    const ch = glob.charAt(i);
     if (glob.startsWith('**/', i)) {
       r += '(?:.*\\/)?';
       i += 2;
@@ -152,7 +168,7 @@ const inferSuggested = (input: ClassifyInput, matrix: Matrix): string | undefine
 };
 
 export function classify(input: ClassifyInput, matrix: Matrix): ClassifyResult {
-  const evidence: Record<string, string[]> = {
+  const evidence: ClassifyEvidence = {
     path_glob: [],
     demand_keyword: [],
     demand_scope: [],
@@ -205,7 +221,7 @@ export async function loadMatrix(matrixPath: string): Promise<Matrix> {
   const result: Partial<Matrix> = {};
   for (const m of fs.readFileSync(matrixPath, 'utf-8').matchAll(YAML_BLOCK_RE))
     try {
-      Object.assign(result, YAML.parse(m[1]) as Partial<Matrix>);
+      Object.assign(result, YAML.parse(m[1] ?? '') as Partial<Matrix>);
     } catch {}
   return {
     path_globs: result.path_globs || [],

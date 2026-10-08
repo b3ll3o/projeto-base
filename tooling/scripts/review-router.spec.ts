@@ -89,7 +89,7 @@ describe('review-router classifier', () => {
       ];
       const result = matchPathGlobs(['apps/api/src/users/domain/user.aggregate.ts'], rules);
       expect(result).toHaveLength(1);
-      expect(result[0].reviewers).toContain('nestjs-specialist');
+      expect(result[0]!.reviewers).toContain('nestjs-specialist');
     });
 
     it('returns empty when no match', () => {
@@ -121,7 +121,7 @@ describe('review-router classifier', () => {
         },
       ];
       const result = matchPathGlobs(['pnpm-workspace.yaml'], rules);
-      expect(result[0].blocking).toBe(true);
+      expect(result[0]!.blocking).toBe(true);
     });
   });
 
@@ -131,13 +131,13 @@ describe('review-router classifier', () => {
         { pattern: '.agents/specs/**', reviewers: ['doc-sync'], domain: 'agents-specs' },
       ];
       const result = matchPathGlobs(['.agents/specs/conventions/x.md'], rules);
-      expect(result[0].domain).toBe('agents-specs');
+      expect(result[0]!.domain).toBe('agents-specs');
     });
 
     it('matchPathGlobs leaves domain undefined when rule has no domain field', () => {
       const rules: PathGlobRule[] = [{ pattern: 'apps/api/**', reviewers: ['nestjs-specialist'] }];
       const result = matchPathGlobs(['apps/api/x.ts'], rules);
-      expect(result[0].domain).toBeUndefined();
+      expect(result[0]!.domain).toBeUndefined();
     });
 
     it('classify populates domains[] with unique domains from path_globs', () => {
@@ -345,7 +345,7 @@ path_globs:
 `;
       const result = loadMatrix(md);
       expect(result.path_globs).toHaveLength(1);
-      expect(result.path_globs![0].pattern).toBe('apps/api/**');
+      expect(result.path_globs![0]!.pattern).toBe('apps/api/**');
     });
 
     it('returns empty matrix when no YAML blocks found', () => {

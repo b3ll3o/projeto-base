@@ -1,14 +1,15 @@
 {
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "//": "Issue #46 fechou o buraco em `.tooling/`. Este arquivo é a MESMA barra estendida, e não uma segunda mais frouxa. MEDIDO 2026-10-06: ele declarava `strict` mas não `noUncheckedIndexedAccess`, e o `check-tsconfig-drift` não conseguia acusar — sem `extends`, \"ausente\" e \"herda\" são indistinguíveis para qualquer gate que leia só a chave. Também excluía `**/*.spec.ts` e limitava `include` a `./*.ts`, então nem `lib/` era verificada. Paridade plena custava 31 erros (medido 2026-10-08, não os 37 de 2026-10-06 — a contagem envelhece a cada commit posterior). Corrigidos no mesmo commit que adoptou esta barra. // module: `NodeNext` do base resolve `.ts` como CommonJS sem `package.json` sob `tooling/scripts/`… há um (`@repo/review-router-tooling`, `\"type\": \"module\"`), então aqui o `NodeNext` do base seria correto — mas `bundler`+`esnext` é o que o `tsx` executa de fato, e é o mesmo motivo registrado em `.tooling/tsconfig.json`.",
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "resolveJsonModule": true,
-    "outDir": "./dist"
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "types": ["node"],
+    "baseUrl": "../..",
+    "paths": {}
   },
-  "include": ["./*.ts"],
-  "exclude": ["node_modules", "dist", "**/*.spec.ts"]
+  "include": ["./**/*.ts"],
+  "exclude": ["node_modules", "dist"]
 }
