@@ -291,10 +291,10 @@
   --include=*.yml .` → 0; o CI usa `turbo run test:<nível> --filter=`). Fica
   registrado porque é a forma disponível de alguém passar a citar um comando
   que não mede nada — e ele é indistinguível de um que mede.
-- **`pr-refresh-scan` acusa 8 claims falsos numa tabela que só diz "N
-  arquivos"** (MEDIDO 2026-10-08: `pnpm pr:refresh` → 8 `DIVERGE`, todos
-  `medido=65`). O padrão é `(\d+)\s+(arquivos?)\b` e a régua é `git diff
-  --name-only base..HEAD | wc -l`. Na tabela de verificação "29 arquivos" são
-  spec files da API e 65 são arquivos do PR — e `EXIT=0 — 0 arquivos com
-  erro` vira `declarado=0`. Calibrado no PR #44, onde "34 arquivos" era o
-  diff. Advisory, não bloqueia — e por isso treina a ignorar.
+- **`pr-refresh-scan` acusa claims falsos em qualquer "N arquivos" que não seja
+  o diff — e o gate BLOQUEIA.** MEDIDO 2026-10-08, PR #66: `preflight` vermelho
+  no passo do marcador (`EXIT=1`), `quality` `skipped` atrás. O padrão casa os
+  spec files da tabela de verificação; a régua é `git diff --name-only`.
+  **Não corrigir sem reler a decisão do gate:** os dois consertos são
+  deliberados (MEDIDO no #58: marcar a frase errada fabrica MENTIRA VERDADEIRA)
+  e a classe 2 de `guard-classes` explica por que não há classificador.
