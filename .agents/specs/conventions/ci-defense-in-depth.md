@@ -62,7 +62,7 @@ Escopo de todos: **todo `.md` versionado** sob a raiz que o preflight passa
 | `check-archive-integrity` | archive | frontmatter canônico de `.agents/runs/archive/*.md` |
 | `check-memory-dir-concordance` | retro | segunda declaração do destino do result file, em 6 notações históricas |
 | `check-agent-memory-drift` | agents | agent com **mudança de comportamento** e memória (`.agents/memory/<agent>.md`) intocada no mesmo range |
-| `check-tooling-typecheck` | typecheck | erro de tipo em `.tooling/scripts/**` sob a barra de `tsconfig.base.json`; `tsc` != 0 **sem** diagnóstico também é vermelho (issue #46) |
+| `check-tooling-typecheck` | typecheck | erro de tipo em **cada** superfície da lista `SUPERFICIES` — `.tooling/scripts/**` **e** `tooling/scripts/**`, as duas na barra de `tsconfig.base.json`; `tsc` != 0 **sem** diagnóstico também é vermelho (issue #46, amplitude 2026-10-08) |
 | `review-routing` matrix lint | roteamento | YAML inválido, reviewer inexistente, pattern duplicado, LOC > 300, `blocking: true` casando 0 arquivos |
 | `check-branch-up-to-date` | git workflow | demanda que não contém `origin/main` (regra de rebase de [`git-workflow.md`](./git-workflow.md)); "sem ancestral comum" é motivo **diferente** de "atrasada"; rebase **parado em conflito** é vermelho antes de qualquer contagem; base ausente é `skipped`, nunca verde |
 | `check-e2e-flow-coverage` | testes | inventário de fluxos de [`e2e-playwright.md`](./e2e-playwright.md) ⇄ cabeçalhos `// FLUXO:` dos specs: meio-cumprido é vermelho nomeando o fluxo; inventário com 0 linhas e diretório de e2e sem spec são **erro**, nunca verde por conjunto vazio. Mede **paridade declarativa** — que os testes passem é a execução (`test:e2e`), outra camada |
@@ -106,28 +106,27 @@ extraído em commit `59eb083` (refactor que consolidou fixtures herméticas).
 | **controle positivo** | neutraliza-se o controle e o check tem de **ficar verde** | parcial — prova que o vermelho anterior vinha da dívida, não de outra coisa |
 | **desconhecida** | só afirma verde | **não** |
 
-O nível **controle positivo** entrou em 2026-10-08: `check-harness-owner` usava
-essa prova desde 2026-10-05, arquivada por engano como `mutação`. Gate que prova
-o contrário — "neutralizado, continua verde" — arquivado como mutação faz o
-leitor contar dentes que não são dentes. MEDIDO na tabela: **16** linhas =
-**10** mutação + **5** controle negativo + **1** controle positivo, **0** desconhecidas.
-A virada de `check-package-json-drift` para **mutação** (2026-10-08) foi a que
-trocou os dois últimos números: um gate com prova só em tmpdir não prova a
-integração, e foi exatamente na integração que ele era inerte.
+O nível **controle positivo** entrou em 2026-10-08: `check-harness-owner` usava essa
+prova desde 2026-10-05, arquivada por engano como `mutação` — gate que prova o
+contrário ("neutralizado, continua verde") arquivado como mutação faz o leitor contar
+dentes que não são dentes. MEDIDO na tabela: **16** linhas = **15** mutação + **0**
+controle negativo + **1** controle positivo + **0** desconhecidas. Viradas de
+2026-10-08: `check-tooling-typecheck`, `check-tsconfig-drift`, `check-eslint-drift`,
+`check-turbo-drift` e `check-doc-refs` — prova só em tmpdir não prova a integração.
 
 | Gate | Onde o dente está | Nível | Comando da prova | Arquivo |
 |---|---|---|---|---|
 | `check-archive-integrity` | `check-archive-integrity.spec.ts` — `arquivo INVÁLIDO no archive REAL` + `arquivo inválido no diretório ERRADO` (o par) | **mutação** | comando 1 → **3 de 7 vermelho** (medido 2026-10-05) | `.tooling/scripts/ci/check-archive-integrity.ts` |
 | `check-memory-dir-concordance` | `check-memory-dir-concordance.spec.ts` — `a derivação canônica resolve para um diretório que existe de verdade` | **mutação** | comando 2 → **3 de 27 vermelho** (medido 2026-10-05) | `.tooling/scripts/ci/check-memory-dir-concordance.ts` |
 | `check-agent-memory-drift` | `check-agent-memory-drift.spec.ts` — o par `APENAS path corrigido NÃO é delta` / `prosa NOVA É delta` + `findDriftedAgents` com memória tocada | **mutação** | `npx vitest run --root .tooling/scripts/ci check-agent-memory-drift` → **5 de 12** com `hasBehaviorDelta` sempre true, **3 de 12** com `findDriftedAgents` sempre vazio (medido 2026-10-06) | `.tooling/scripts/ci/check-agent-memory-drift.ts` |
-| `check-tooling-typecheck` | `check-tooling-typecheck.spec.ts` — `NÃO reporta verde quando o tsc falha sem imprimir diagnóstico` / `…sem saída nenhuma` (o par) | **mutação** | `npx vitest run --root .tooling/scripts/ci check-tooling-typecheck` → **3 de 11** com `parseTscDiagnostics` sempre `[]`, **2 de 11** com o `status !== 0` neutralizado (medido 2026-10-06, issue #46) | `.tooling/scripts/ci/check-tooling-typecheck.ts` |
-| `check-turbo-drift` | `check-turbo-drift.spec.ts` — 5 de 6 testes | controle negativo | `npx vitest run --root .tooling/scripts/ci check-turbo-drift` | `.tooling/scripts/ci/check-turbo-drift.ts` |
+| `check-tooling-typecheck` | `check-tooling-typecheck.spec.ts` — `NÃO reporta verde quando o tsc falha sem imprimir diagnóstico` / `…sem saída nenhuma` (o par), mais `typecheca TODAS as superfícies, não só a primeira` e `VERMELHO quando só uma das superfícies tem tsconfig` (o par da amplitude) | **mutação** | `npx vitest run --root .tooling/scripts/ci check-tooling-typecheck` (denominador **12**) → **4 de 12** com `parseTscDiagnostics` sempre `[]`, **2 de 12** com o `status !== 0` neutralizado, **2 de 12** com o `for` correndo só a 1ª superfície, **2 de 12** com só a 1ª ausência contada. **E o diferencial contra o repo real**: plantar um arquivo de prova sob tooling/scripts com um `noUncheckedIndexedAccess` → **EXIT=1** prefixando o tsconfig da própria superfície; sem o arquivo → EXIT=0 (medido 2026-10-08; as duas primeiras medições são de 2026-10-06, denominador 11) | `.tooling/scripts/ci/check-tooling-typecheck.ts` |
+| `check-turbo-drift` | `check-turbo-drift.spec.ts` — `deve falhar se o $schema NÃO for o do turbo.build, mesmo sendo uma URL` (ramo que era **inerte**: neutralizado, a suíte ficava 6 de 6 verde), mais `task com nome inválido` e `cache:false com outputs` | **mutação** | `npx vitest run --root .tooling/scripts/ci check-turbo-drift` (denominador **7**) → **1 de 7** com o `TASK_NAME_RE` neutralizado, **1 de 7** com o par `cache:false`+`outputs` neutralizado, **1 de 7** com a checagem de `$schema` ausente neutralizada, **1 de 7** com a de prefixo errado neutralizada (esta última era **0 de 6** antes do teste novo). **Diferencial contra o repo real**: task `Build` (maiúscula) plantada no `turbo.json` → preflight **vermelho nomeando a task**; restaurado → ✓ (medido 2026-10-08) | `.tooling/scripts/ci/check-turbo-drift.ts` |
 | `check-package-json-drift` | `check-package-json-drift.spec.ts` — 28 testes: o RED do `--filter` + seu contrafactual positivo (o par), mais `extractTurboRunFilters` em unidade | **mutação** | `npx vitest run --root .tooling/scripts/ci check-package-json-drift` → **1 de 28** com `alvoDosFiltros` neutralizado (`filtros.length === 0` → `>= 0`); e o **diferencial contra o repo real**, que é onde ele era inerte: plantar "e2e:web": "turbo run test:e2e --filter=@projeto/web" no `package.json` raiz → **EXIT=1** nomeando o filtro, sem o defeito → EXIT=0 (medido 2026-10-08) | `.tooling/scripts/ci/check-package-json-drift.ts` |
 | `check-docker-drift` | `check-docker-drift.spec.ts` — o par `alpine é VERMELHA por glibc` / `base image na major ATUALIZADA é VERDE`, mais `as duas são motivos DIFERENTES` | **mutação** | `npx vitest run --root .tooling/scripts/ci check-docker-drift` → **2 de 8** com o guarda de distro neutralizado, **2 de 8** com o de major (medido 2026-10-06, issue #48) | `.tooling/scripts/ci/check-docker-drift.ts` |
-| `check-eslint-drift` | `check-eslint-drift.spec.ts` — 2 de 5 | controle negativo | `npx vitest run --root .tooling/scripts/ci check-eslint-drift` | `.tooling/scripts/ci/check-eslint-drift.ts` |
-| `check-doc-refs` | `preflight.spec.ts` → `describe('checkDocRefs')` — **o spec não é `check-doc-refs.spec.ts`**, é o do runner | controle negativo | `npx vitest run --root .tooling/scripts/ci -t checkDocRefs` | `.tooling/scripts/ci/check-doc-refs.ts` |
-| `review-routing` matrix lint | `tooling/scripts/lint-review-routing.spec.ts` — **diretório diferente** (veja a armadilha abaixo) | controle negativo | `npx vitest run --root tooling/scripts lint-review-routing` | `tooling/scripts/lint-review-routing.ts` |
-| `check-tsconfig-drift` | `check-tsconfig-drift.spec.ts` — 1 de 2 | controle negativo | `npx vitest run --root .tooling/scripts/ci check-tsconfig-drift` | `.tooling/scripts/ci/check-tsconfig-drift.ts` |
+| `check-eslint-drift` | `check-eslint-drift.spec.ts` — `NÃO deixa o flat config vizinho mascarar a config legada`, mais `deve ignorar arquivos .eslintrc.js que estão na allowlist` | **mutação** | `npx vitest run --root .tooling/scripts/ci check-eslint-drift` (denominador **5**) → **2 de 5** com `LEGACY_NAMES.includes` neutralizado, **2 de 5** com a allowlist ignorando tudo; e o controle: excluir mais um diretório (`.next`) → **0 de 5**, que é o que uma mudança que não mexe em comportamento tem de produzir. **Diferencial contra o repo real**: um .eslintrc.js plantado sob apps/api → **vermelho nomeando o arquivo**; sem ele → verde em `apps` e `packages` (medido 2026-10-08) | `.tooling/scripts/ci/check-eslint-drift.ts` |
+| `check-doc-refs` | `preflight.spec.ts` → `describe('checkDocRefs')` — **o spec não é `check-doc-refs.spec.ts`**, é o do runner | **mutação** | `npx vitest run --root .tooling/scripts/ci preflight.spec` (denominador **40**) → **5 de 40** com a allowlist sempre `true`, **5 de 40** com o `errors.push` de link quebrado neutralizado. **E os dois controles, medidos**: allowlist sempre `false` → **0 de 40** nas specs, mas **VERMELHO no repo real** com 4 links de template quebrados (`.agents/specs/templates/**`) — a spec não cobre a allowlist, o repo real prova que ela carrega peso; `collectVersioned` devolvendo `null` → **0 de 40**, porque as fixtures em `/tmp` **já** caem no fallback do `walk` (é controle positivo, não buraco) (medido 2026-10-08) | `.tooling/scripts/ci/check-doc-refs.ts` |
+| `review-routing` matrix lint | `tooling/scripts/lint-review-routing.spec.ts` — **diretório diferente** (veja a armadilha abaixo) — mais os 7 testes do bloco `não é um mapa` | **mutação** | `npx vitest run --root tooling/scripts lint-review-routing` (denominador **20**) → **2 de 20** com o LOC neutralizado e **1 de 20** em cada uma das outras 6 (pattern duplicado, regex inválida, matriz vazia, bloco não-mapa registrado, `path_globs` fora de lista, `commit_types` fora de mapa). **Diferencial contra o repo real**: prosa no 2º bloco `yaml` da matriz → **EXIT=1** nomeando `bloco yaml #2 não é um mapa`; restaurado → EXIT=0. **Antes era EXIT=0** (medido 2026-10-08) | `tooling/scripts/lint-review-routing.ts` |
+| `check-tsconfig-drift` | `check-tsconfig-drift.spec.ts` — `NÃO fica em silêncio quando a chave é declarada por MENOS de dois configs` + seu contrafactual (`NÃO emite advisory quando a chave é declarada por TODOS`) + `no repo REAL a chave é declarada por 1 de 7 — e o gate diz essa` | **mutação** | `npx vitest run --root .tooling/scripts/ci check-tsconfig-drift` (denominador **5**) → **2 de 5** com a `advisory` neutralizada, **1 de 5** com a detecção de drift neutralizada (medido 2026-10-08) | `.tooling/scripts/ci/check-tsconfig-drift.ts` |
 | `check-teeth-registry` | `check-teeth-registry.spec.ts` — 13 testes | **mutação** | comando 3 → **vermelho nomeando o gate** (medido 2026-10-05) | `.tooling/scripts/ci/check-teeth-registry.ts` |
 | `check-self-firing-guard` | `check-self-firing-guard.spec.ts` — 10 testes | **mutação** | comando 5 → **diferencial 0 → 8 achados** (medido 2026-10-05) | `.tooling/scripts/ci/check-self-firing-guard.ts` |
 | `turbo-redirect-differential` | o próprio script — 18 formas de redirect contra o turbo REAL; e o comando 7. **O veredito** (`[ "$div" -eq 0 ]`) é coberto por `turbo-redirect-differential.spec.ts` — 2 de 3 | **mutação** | comando 7 → **1 e 3 de 18 divergentes**; e o veredito `-eq 0` → `-ge 0` → **2 de 3 vermelho** (medido 2026-10-05) | `.tooling/scripts/ci/turbo-redirect-differential.sh` |
@@ -136,17 +135,22 @@ integração, e foi exatamente na integração que ele era inerte.
 | `check-e2e-flow-coverage` | `check-e2e-flow-coverage.spec.ts` — `acusa spec que declara fluxo fora do inventário, nomeando os dois lados` / `acusa o meio-cumprido: spec novo sem linha no inventário` (o par), sobre **fixtures em tmpdir** | **mutação** | `npx vitest run --root .tooling/scripts/ci check-e2e-flow-coverage` → **2 de 15** com `if (!porId.has(id))` neutralizado, **5 de 15** com o VEREDITO (`ok: errors.length === 0`) neutralizado (medido 2026-10-08) | `.tooling/scripts/ci/check-e2e-flow-coverage.ts` |
 | `check-ci-local-e2e` | `check-ci-local-e2e.spec.ts` — `acusa pacote de e2e fora dos --filter — o gate que passaria verde com um app novo` e `o filtro de uma invocação que NÃO roda e2e não alcança ninguém para o e2e` (o par), sobre **fixtures em tmpdir**, mais o caso do repo real | **mutação** | `npx vitest run --root .tooling/scripts/ci check-ci-local-e2e` → **6 de 25** com o VEREDITO neutralizado, **2 de 25** só com o alcance por `--filter`, **1 de 25** tirando o escopo por invocação (medido 2026-10-08) | `.tooling/scripts/ci/check-ci-local-e2e.ts` |
 
-> A coluna **Arquivo** é a chave de reconciliação, e não um enfeite: o
-> `check-teeth-registry` casa o registro com o `preflight.ts` por ela. Sem a
-> coluna, o gate é identificado pelo **nome de exibição** — e aí
-> `'Cross-refs em .md versionados'` casa com `` check-doc-refs `` por
-> coincidência, `check-eslint-drift` (2 entradas) contaria como dois gates, e
-> qualquer gate novo entraria no preflight sem aviso. Foi a ausência desta
-> coluna que o check acusou na primeira execução (9 de 9 sem correspondência).
+> A coluna **Arquivo** é a chave de reconciliação: o `check-teeth-registry` casa o
+> registro com o `preflight.ts` por ela. Sem a coluna o gate é identificado pelo
+> **nome de exibição** — e aí `'Cross-refs em .md versionados'` casa com
+> `` check-doc-refs `` por coincidência, `check-eslint-drift` (2 entradas) contaria
+> como dois gates, e qualquer gate novo entraria no preflight sem aviso.
+>
+> ⚠️ **A regra de leitura é "qualquer path versionado em backtick, na linha"**, por
+> decisão (`check-teeth-drift.spec.ts`: *"um parse posicional só funciona enquanto
+> ninguém reordenar a tabela"*). Duas consequências medidas em 2026-10-08: **(1)**
+> citar um path de prova entre backticks numa célula registra um gate que não existe
+> → ao descrever uma medição, deixe o path **sem backtick**; **(2)** **três crases**
+> numa célula deixa o total ímpar, o emparelhamento desloca e o gate **da própria
+> linha** deixa de ser lido (foi assim que `lint-review-routing.ts` acusou órfão).
 
 Os **nove comandos de mutação** — 1 a 7 medidos 2026-10-05, 8 e 9 em 2026-10-08.
-Cada um reverte o arquivo ao final — a mutação é efêmera por desenho, e o
-`git diff` depois deles tem de estar vazio:
+Cada um reverte o arquivo ao final, e o `git diff` depois deles tem de estar vazio:
 
 ```bash
 # 1) check-archive-integrity — reintroduz o B19: sem --archive-dir, o linter
@@ -231,26 +235,21 @@ npx vitest run --root .tooling/scripts/ci check-ci-local-e2e  # -> 1 de 25 verme
 cp /tmp/cil2e.bak .tooling/scripts/ci/check-ci-local-e2e.ts   # restaurado byte-exato
 ```
 
-> **A cobertura do comando 7 tem um limite, nomeado porque um leitor que
-> tropeça nele vai concluir que o gate é inerte.** Remover o
-> `nextIsRedirectTarget = false` de dentro do `if` — o bug da 3ª versão do
-> parser — **deixa o differential VERDE**: nas 18 formas do corpus esse `reset`
-> só muda o resultado com um operador *nu* seguido de *duas* tasks, e o corpus
-> tem `build > ALVO` (uma depois) e `build >out.log ALVO` (alvo colado), nunca
-> `build > ALVO build2`. Não é dente fraco: é **cobertura** — a mesma
-> distinção da coluna Nível, e um gate diferencial mede o corpus dele, nunca o infinito.
+> **A cobertura do comando 7 tem um limite, nomeado porque um leitor que tropeça nele
+> vai concluir que o gate é inerte.** Remover o `nextIsRedirectTarget = false` de
+> dentro do `if` — o bug da 3ª versão do parser — **deixa o differential VERDE**:
+> nas 18 formas do corpus esse `reset` só muda o resultado com um operador *nu*
+> seguido de *duas* tasks, e o corpus nunca tem `build > ALVO build2`. Não é dente
+> fraco: é **cobertura** — a mesma distinção da coluna Nível.
 
 Os números deste registro são medidos e trazem o `n` ao lado: o comando 7 diverge
-em **1 e 3 de 18** formas (n=2 mutações), a classe 3 em **8** erros (n=1) — citar só um seria o erro do `3+` que já envelheceu, classe 7.
-Um segundo acerto: a redação anterior citava o símbolo que o guard procura, e
-o guard a acusou **enquanto eu a escrevia** — um guard que pega o autor da
-própria documentação está funcionando; o conserto é no texto, nunca no guard.
+em **1 e 3 de 18** formas (n=2 mutações), a classe 3 em **8** erros (n=1) — citar só um seria o erro do `3+` que já envelheceu, classe 7. Um segundo acerto: a redação anterior citava o símbolo que o guard procura, e o guard a acusou **enquanto eu a escrevia** — um guard que pega o autor da própria documentação está funcionando; o conserto é no texto, nunca no guard.
 
 > Comandos 3 a 5 **não** usam `git checkout --` como 1 e 2 (reverteriam trabalho não commitado de quem está no meio da task): a restauração é o `sed`/perl inverso, conferida com `diff` contra um backup.
 
-**A armadilha de ler este registro por nome de arquivo.** `tooling/` e
-`.tooling/` são **dois diretórios distintos**, ambos versionados e rodados pelo
-mesmo `pnpm tooling:test`: os `check-*` vivem em `.tooling/scripts/ci/`, o
+**A armadilha de ler este registro por nome de arquivo.** `tooling/` e `.tooling/`
+são **dois diretórios distintos**, ambos versionados e rodados pelo mesmo
+`pnpm tooling:test`: os `check-*` vivem em `.tooling/scripts/ci/`, o
 `lint-review-routing` e o `archive-lint` em `tooling/scripts/`, e o spec do
 `check-doc-refs` dentro do `preflight.spec.ts` — indexar por `ls check-*.spec.ts`
 conclui, errado, que dois deles não têm spec.
@@ -262,20 +261,13 @@ conclui, errado, que dois deles não têm spec.
 ## Comando de Verificação
 
 ```bash
-# Local (camada 1 — tudo que o CI roda)
-pnpm ci:local
-
-# Apenas preflight (camada 1 reduzida, ~10s)
-pnpm ci:preflight
+pnpm ci:local     # camada 1 inteira — pré-requisito de push (AGENTS.md §6)
+pnpm ci:preflight # camada 1 reduzida (~10s) — atalho para iterar em docs/tsconfig
 ```
-
-`pnpm ci:local` é o pré-requisito de push em `AGENTS.md` §6;
-`pnpm ci:preflight` é o atalho para devs iterando em docs/tsconfig.
 
 ## Histórico de drift detectado
 
-Só entram aqui os rows em que um check **achou** algo. A introdução de um
-check é TDD (Red→Green→Refactor — ver [tdd.md](./tdd.md)) e vive no git.
+Só entram aqui rows em que um check **achou** algo; a introdução de um check é TDD ([tdd.md](./tdd.md)) e vive no git.
 
 | PR / commit | Check | Drift | Correção |
 |---|---|---|---|
@@ -284,23 +276,19 @@ check é TDD (Red→Green→Refactor — ver [tdd.md](./tdd.md)) e vive no git.
 
 ## Pendências conhecidas
 
-As pendências abertas vivem no companion
-[`ci-defense-in-depth-pendencias.md`](./ci-defense-in-depth-pendencias.md).
-Elas crescem a cada gate novo e este documento está no teto de 300 linhas da
-convenção [`tamanho-e-revisao.md`](./tamanho-e-revisao.md) — um item novo aqui
-significa um corte em outro.
+Vivem no companion [`ci-defense-in-depth-pendencias.md`](./ci-defense-in-depth-pendencias.md); este documento está no teto de 300 linhas ([`tamanho-e-revisao.md`](./tamanho-e-revisao.md)), então um item novo aqui significa um corte em outro.
+
 ## Dívida de controles
 
 Controles que **existem e não rodam** — o oposto da tabela de dentes, que só
-lista o que o `preflight` invoca. Escrever a dívida aqui é o que impede a
+lista o que o `preflight` invoca. Declarar a dívida aqui é o que impede a
 convenção de publicar uma regra sobre controle desligado enquanto entrega um
 controle desligado.
 
 **Nenhuma em aberto (2026-10-05).** A única era o
-`turbo-redirect-differential.sh` — 2 menções, 0 invocações (B11) — e fechou na
-task 4.1, que lhe deu dono no `preflight`. A seção fica, e vazia de propósito:
-`check-harness-owner` garante que ela continue vazia, e um detector de dívida
-que some junto com a dívida deixa de existir no dia em que a dívida volta.
+`turbo-redirect-differential.sh` (B11), fechada na task 4.1. A seção fica, e
+vazia de propósito: `check-harness-owner` garante que continue vazia, e um
+detector que some junto com a dívida deixa de existir no dia em que ela volta.
 
 ## Cross-references
 

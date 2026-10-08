@@ -136,7 +136,7 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     // repo sem typecheck: `pnpm typecheck` é `turbo run typecheck`, que só
     // alcança workspaces declarados. O gate executa o `tsc` sobre o tsconfig
     // desta própria árvore — que inclui este arquivo.
-    name: 'typecheck tooling (.tooling/)',
+    name: 'typecheck tooling (.tooling/ + tooling/scripts/)',
     file: '.tooling/scripts/ci/check-tooling-typecheck.ts',
     id: 'check-tooling-typecheck',
   },

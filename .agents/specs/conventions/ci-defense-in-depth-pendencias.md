@@ -101,18 +101,41 @@
   `tooling/scripts/lint-review-routing.ts`, que mora fora de `.tooling/scripts/ci/`
   e não tem prefixo `check-`. Contar gates por glob é a classe 1 desta própria
   lista.)
-- **`tooling/scripts/` tem typecheck que NADA executa, e barra mais frouxa**
-  (medido 2026-10-06, issue #46). A #46 dizia que `.tooling/` era "a única
-  superfície do repo sem typecheck" — falso para `tooling/`, que tem
-  `tooling/scripts/tsconfig.json` com um `tsc` que nenhum script ou job roda.
-  Três divergências medidas: **não estende** o base (tem `strict`, não tem
-  `noUncheckedIndexedAccess` — e o `check-tsconfig-drift` não consegue acusar:
-  sem `extends`, "ausente" e "herda" são indistinguíveis); **exclui**
-  `**/*.spec.ts` e limita `include` a `./*.ts` (nem `lib/` entra); e paridade
-  plena custaria **37 erros** contra os **18** zerados na #46. Uma fração já é
-  coberta por acaso — `check-teeth-registry.ts` importa
-  `tooling/scripts/review-router.ts`, que passou a ser verificado pela barra do
-  base. Fechar a lacuna inteira é change próprio.
+- **FECHADO 2026-10-08 — `tooling/scripts/` tinha typecheck que NADA executava,
+  e barra mais frouxa.** A #46 dizia que `.tooling/` era "a única superfície do
+  repo sem typecheck" — falso para `tooling/`, que tem
+  `tooling/scripts/tsconfig.json` com um `tsc` que nenhum script ou job rodava.
+  Três divergências, todas medidas: **não estendia** o base (tinha `strict`,
+  não tinha `noUncheckedIndexedAccess` — e o `check-tsconfig-drift` não
+  conseguia acusar: sem `extends`, "ausente" e "herda" são indistinguíveis);
+  **excluía** `**/*.spec.ts` e limitava `include` a `./*.ts` (nem `lib/` entra);
+  e a cobertura era por acaso — `npx tsc --noEmit -p .tooling/tsconfig.json
+  --listFiles | grep -c "projetos/base/tooling/scripts"` → **1**, e só
+  `review-router.ts`, importado por outro arquivo.
+
+  ⚠️ **O número da pendência envelheceu e ninguém mediu.** O texto dizia **37
+  erros** para paridade plena; medido hoje, com o conteúdo atual do diretório, são
+  **31** — e a contagem envelhece a cada commit posterior, não por mês. O
+  registro antigo não é erro de cálculo, é erro de *fonte*.
+
+  Agora: `tooling/scripts/tsconfig.json` estende `tsconfig.base.json` com
+  `include: ["./**/*.ts"]`, e o `check-tooling-typecheck` typecheca **as duas**
+  superfícies — `SUPERFICIES` é lista exportada e o gate faz `for` nela, com
+  o prefixo da superfície em cada erro (dois vermelhos simultâneos precisam ser
+  distinguíveis por linha). Os **31** erros foram corrigidos, não escondidos:
+  `glob.charAt` em vez de `glob[i]`, `evidence` com tipo concreto em vez de
+  `Record<string, string[]>` (que sob `noUncheckedIndexedAccess` devolvia
+  `string[] | undefined` em cada `push`), `if (k === undefined) continue` nos
+  dois parsers de `process.argv`, e `ArchiveInput.frontmatter` passando a
+  `unknown` — porque a função existe para validar frontmatter que pode estar
+  errado, e o tipo canônico ali só empurrava o `as` para o spec.
+
+  Dentes medidos, denominador **12**: `parseTscDiagnostics` sempre `[]` →
+  **4 de 12**; `status !== 0` neutralizado → **2 de 12**; `for` correndo só a
+  1ª superfície → **2 de 12**; só a 1ª ausência contada → **2 de 12**. E o
+  diferencial contra o repo real: um arquivo de prova com um
+  `noUncheckedIndexedAccess` sob tooling/scripts → **EXIT=1** prefixando
+  `tooling/scripts/tsconfig.json:`; sem ele → EXIT=0.
 - **O gate do marcador `pr-refresh` é CI, não preflight** (issue #45 item 4),
   então ele **não** entra no [Registro de dentes](ci-defense-in-depth.md#registro-de-dentes): o
   registro reconcilia contra o `PREFLIGHT_GATES`, e uma linha para um gate de CI
@@ -159,15 +182,15 @@
   amplamente usado, então a hipótese padrão é que funcione — fica escrito
   como hipótese, não como fato. Se algum dia o repo abrir para fork, o teste
   é abrir um PR de fora e ver se o `preflight` acusa `NÃO VERIFICADO`.
-- **A cobertura de dentes não fecha a classe: 6 dos 16 gates provam a lógica
-  com `controle negativo` em tmpdir** (ver
-  [Registro de dentes](ci-defense-in-depth.md#registro-de-dentes)), o que não
-  prova a integração com o sistema real. MEDIDO 2026-10-08, contando as linhas
-  da tabela por nível: **16** = **10** mutação + **5** controle negativo + **1**
-  controle positivo, **0** desconhecidas. A frase anterior ("6 dos 13 … os
-  outros 7") tinha as categorias invertidas — o 6 era a contagem de controles
-  negativos e o 7 não casa com nenhuma coluna. Fechar os **5** restantes é
-  change próprio, um por gate.
+- **FECHADO 2026-10-08 — a cobertura de dentes fecha a classe.** Era 6 dos 16
+  gates provando a lógica com `controle negativo` em tmpdir, o que não prova a
+  integração com o sistema real. MEDIDO contando as linhas da tabela por nível:
+  agora **16** = **15** mutação + **0** controle negativo + **1** controle
+  positivo, **0** desconhecidas (ver
+  [Registro de dentes](ci-defense-in-depth.md#registro-de-dentes)). As cinco
+  viradas foram `check-tooling-typecheck`, `check-tsconfig-drift`,
+  `check-eslint-drift`, `check-turbo-drift` e `check-doc-refs`, mais a do lint
+  da matriz de review-routing, que era o último `controle negativo` da tabela.
 
   ⚠️ **Um SPEC verde não era prova de integração, e o `--filter` provou.**
   `check-package-json-drift` tinha **28** specs, todos verdes, e era inerte
@@ -176,6 +199,12 @@
   lógica num tmpdir, que é a mesma forma que a classe 6 descreve. O que fecha a
   classe não é mais spec — é um **diferencial contra o repo de verdade**,
   com o defeito real plantado e o gate rodando sobre ele.
+
+  E o lint da matriz era a prova de que a classe ainda tinha brecha: ao medir os
+  dentes dele, o gate **falhou** num bloco `yaml` que não é mapa (lista,
+  escalar ou prosa) — devolvia `errors: []` depois de **não verificar regra
+  nenhuma**. Verde por ausência, a mesma forma do `--filter`. Corrigido, com o
+  diferencial medido na matriz real (`bloco yaml #2` nomeado).
 - **`check-package-json-drift` só varre o `package.json` raiz.** Task
   turbo fantasma declarada em `apps/*/package.json` escapa do gate, e os
   4 call-sites `pnpm turbo run` do `ci.yml` também não são varridos.

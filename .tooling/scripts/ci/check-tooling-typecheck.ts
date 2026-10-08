@@ -5,14 +5,21 @@ import type { CheckResult } from './check-types';
 import { linhasDoRelato } from './check-types';
 
 /**
- * tsconfig da superfície `.tooling/` (issue #46).
+ * As superfícies de tooling que este gate typecheca — cada uma por um
+ * `tsconfig.json` próprio, todas na MESMA barra (`tsconfig.base.json`).
  *
- * `.tooling/` era a única árvore do repo sem typecheck: `pnpm typecheck` é
- * `turbo run typecheck`, que só alcança workspaces declarados, e nenhum gate
- * executava `tsc` sobre os scripts de CI — a mesma árvore que decide se o CI
- * passa.
+ * Duas, e não uma, porque MEDIDO 2026-10-08 que `.tooling/` não era a única
+ * árvore sem typecheck: `tooling/scripts/` tem um `tsconfig.json` próprio que
+ * **nenhum script e nenhum job executava**, e que declarava `strict` sem
+ * `noUncheckedIndexedAccess` — mais frouxo que a barra de `apps/` e
+ * `packages/`, num lugar que `check-tsconfig-drift` não alcança porque sem
+ * `extends` "ausente" e "herda" são a mesma chave.
+ *
+ * A lista é exportada e o gate faz `for` nela: um gate que cobre duas
+ * superfícies e pode correr só a primeira é verde por ausência, que é a
+ * mesma classe que este arquivo já documenta duas vezes.
  */
-const TSCONFIG_REL = '.tooling/tsconfig.json';
+export const SUPERFICIES = ['.tooling/tsconfig.json', 'tooling/scripts/tsconfig.json'] as const;
 
 /** Contrato mínimo de `spawnSync` que este gate usa. */
 export type TscRun = (args: string[]) => { status: number | null; stderr: string; stdout: string };
@@ -71,39 +78,46 @@ export function checkToolingTypecheck(opts?: { repoRoot?: string; run?: TscRun }
   const run = opts?.run ?? defaultRun(repoRoot);
   const errors: string[] = [];
 
-  const tsconfigPath = join(repoRoot, TSCONFIG_REL);
-  if (!existsSync(tsconfigPath)) {
+  const ausentes = SUPERFICIES.filter((rel) => !existsSync(join(repoRoot, rel)));
+  if (ausentes.length > 0) {
+    // Todas, e não a primeira: se o `for` parasse no primeiro faltante, o
+    // relatório diria um arquivo e deixaria o outro em silêncio.
     return {
       ok: false,
-      errors: [
-        `${TSCONFIG_REL} não existe em ${repoRoot} — sem ele esta superfície não tem ` +
+      errors: ausentes.map(
+        (rel) =>
+          `${rel} não existe em ${repoRoot} — sem ele esta superfície não tem ` +
           `nenhuma barra de tipo. Crie-o estendendo tsconfig.base.json.`,
-      ],
+      ),
     };
   }
 
-  const result = run(['--noEmit', '-p', TSCONFIG_REL]);
-  const diagnostics = parseTscDiagnostics(`${result.stderr}\n${result.stdout}`);
+  for (const rel of SUPERFICIES) {
+    const result = run(['--noEmit', '-p', rel]);
+    const diagnostics = parseTscDiagnostics(`${result.stderr}\n${result.stdout}`);
 
-  if (diagnostics.length > 0) {
-    // Lista plana, como os outros 13 gates: o preflight já imprime cada linha,
-    // e um cabeçalho com contagem entraria na lista como se fosse um erro.
-    return { ok: false, errors: diagnostics };
+    if (diagnostics.length > 0) {
+      // Lista plana, prefixada pela superfície, como os outros 13 gates: o
+      // preflight já imprime cada linha, e um cabeçalho com contagem entraria
+      // na lista como se fosse um erro. O prefixo é o que distingue o erro de
+      // `.tooling/` do de `tooling/scripts/` quando os dois estão vermelhos.
+      errors.push(...diagnostics.map((d) => `${rel}: ${d}`));
+      continue;
+    }
+
+    if (result.status !== 0) {
+      // Sem diagnóstico e com exit != 0: o compilador não chegou a typechecar.
+      // Isso NÃO é "0 erros" — é "não verificado".
+      const said =
+        `${result.stderr}${result.stdout}`.trim() || '(nenhuma saída — o tsc nem chegou a rodar)';
+      errors.push(
+        `${rel}: o tsc saiu com status ${result.status} sem emitir nenhum ` +
+          `diagnóstico — a superfície NÃO foi verificada. Saída do processo: ${said}`,
+      );
+    }
   }
 
-  if (result.status !== 0) {
-    // Sem diagnóstico e com exit != 0: o compilador não chegou a typechecar.
-    // Isso NÃO é "0 erros" — é "não verificado".
-    const said =
-      `${result.stderr}${result.stdout}`.trim() || '(nenhuma saída — o tsc nem chegou a rodar)';
-    errors.push(
-      `${TSCONFIG_REL}: o tsc saiu com status ${result.status} sem emitir nenhum ` +
-        `diagnóstico — a superfície NÃO foi verificada. Saída do processo: ${said}`,
-    );
-    return { ok: false, errors };
-  }
-
-  return { ok: true, errors: [] };
+  return { ok: errors.length === 0, errors };
 }
 
 if (process.argv[1]?.endsWith('check-tooling-typecheck.ts')) {

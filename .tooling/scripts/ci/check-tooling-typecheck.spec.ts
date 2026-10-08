@@ -1,5 +1,8 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { checkToolingTypecheck, parseTscDiagnostics } from './check-tooling-typecheck';
+import { SUPERFICIES, checkToolingTypecheck, parseTscDiagnostics } from './check-tooling-typecheck';
 
 /**
  * Raiz real do repo. Nao um path ficticio: o gate faz short-circuit quando o
@@ -17,7 +20,10 @@ function fakeTsc(result: { status: number | null; stderr: string; stdout?: strin
   return () => ({ status: result.status, stderr: result.stderr, stdout: result.stdout ?? '' });
 }
 
-const TSCONFIG = '.tooling/tsconfig.json';
+// A lista vem do PRÓPRIO gate. Transcrevê-la aqui seria uma segunda fonte —
+// e a spec que valida a lista é a spec que precisa dela; spec que usa uma
+// cópia passa quando o gate cobre menos do que a spec afirma.
+const TSCONFIG = SUPERFICIES[0];
 
 describe('parseTscDiagnostics', () => {
   it('extrai uma linha por diagnóstico de erro', () => {
@@ -62,7 +68,7 @@ describe('checkToolingTypecheck', () => {
     expect(r.errors).toEqual([]);
   });
 
-  it('vermelho listando os diagnósticos', () => {
+  it('vermelho listando os diagnósticos, um por superfície', () => {
     const r = checkToolingTypecheck({
       repoRoot: REPO_ROOT,
       run: fakeTsc({
@@ -72,14 +78,22 @@ describe('checkToolingTypecheck', () => {
     });
     expect(r.ok).toBe(false);
     expect(r.errors[0]).toMatch(/TS2322/);
-    // Estas duas separam os DOIS ramos. O fallback de `status !== 0`
+    // Estas três separam os DOIS ramos. O fallback de `status !== 0`
     // interpola a saída bruta do processo — que também contém `TS2322` —,
     // então `toMatch(/TS2322/)` sozinho é satisfeito tanto pelo gate que
     // listou o diagnóstico quanto pelo que nunca viu nenhum. Com o parser
     // neutralizado, este teste ficava VERDE: era o teste que deveria
     // prender o parser que não prendia.
-    expect(r.errors).toHaveLength(1);
+    //
+    // A contagem é por SUPERFÍCIE, não por diagnóstico: duas superfícies, uma
+    // linha cada. Um gate que rodasse só a primeira devolveria 1 e passaria
+    // aqui — por isso a segunda asserção existe, e por isso o prefixo da
+    // superfície está na linha.
+    expect(r.errors).toHaveLength(SUPERFICIES.length);
     expect(r.errors[0]).not.toMatch(/NÃO foi verificada/);
+    for (const superficie of SUPERFICIES) {
+      expect(r.errors.some((e) => e.startsWith(`${superficie}: `))).toBe(true);
+    }
   });
 
   // O tsc falha por motivos que não são diagnóstico de tipo: config inválida,
@@ -104,8 +118,9 @@ describe('checkToolingTypecheck', () => {
     expect(r.errors[0]).toMatch(/nenhum diagnóstico/i);
   });
 
-  it('diz qual arquivo de config foi typecheckado no caminho verde', () => {
-    // Sem isto, um gate que typechecasse o path errado continua verde.
+  it('typecheca TODAS as superfícies, não só a primeira', () => {
+    // Sem isto, um gate que cobrisse uma superfície e uma lista de duas
+    // continua verde — e `errors[0]` continuaria nomeando a que rodou.
     const seen: string[][] = [];
     checkToolingTypecheck({
       repoRoot: REPO_ROOT,
@@ -114,8 +129,40 @@ describe('checkToolingTypecheck', () => {
         return { status: 0, stderr: '', stdout: '' };
       },
     });
-    expect(seen[0]).toContain('--noEmit');
-    expect(seen[0]).toContain(TSCONFIG);
+    expect(seen).toHaveLength(SUPERFICIES.length);
+    for (const [i, superficie] of SUPERFICIES.entries()) {
+      expect(seen[i]).toContain('--noEmit');
+      expect(seen[i]).toContain(superficie);
+    }
+  });
+
+  it('VERMELHO quando só uma das superfícies tem tsconfig', () => {
+    // A classe que este gate já trilha duas vezes: um caminho não rodado
+    // reporta o mesmo que um caminho verde. Aqui a segunda superfície some e
+    // o gate tem de dizer qual — em silêncio, o verde seria indistinguível
+    // do caso "typechequei as duas".
+    const ausente = SUPERFICIES[SUPERFICIES.length - 1]!;
+    const temporario = mkdtempSync(join(tmpdir(), 'tooling-typecheck-'));
+    try {
+      for (const superficie of SUPERFICIES) {
+        if (superficie === ausente) continue;
+        mkdirSync(dirname(join(temporario, superficie)), { recursive: true });
+        writeFileSync(join(temporario, superficie), '{}');
+      }
+      let chamado = false;
+      const r = checkToolingTypecheck({
+        repoRoot: temporario,
+        run: () => {
+          chamado = true;
+          return { status: 0, stderr: '', stdout: '' };
+        },
+      });
+      expect(r.ok).toBe(false);
+      expect(r.errors[0]).toContain(ausente);
+      expect(chamado).toBe(false);
+    } finally {
+      rmSync(temporario, { recursive: true, force: true });
+    }
   });
 
   it('vermelho, e nomeando o config, quando o tsconfig nao existe na raiz', () => {
@@ -130,7 +177,10 @@ describe('checkToolingTypecheck', () => {
       },
     });
     expect(r.ok).toBe(false);
-    expect(r.errors[0]).toContain(TSCONFIG);
+    expect(r.errors).toHaveLength(SUPERFICIES.length);
+    for (const superficie of SUPERFICIES) {
+      expect(r.errors.some((e) => e.includes(superficie))).toBe(true);
+    }
     expect(called).toBe(false);
   });
 

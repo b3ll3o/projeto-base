@@ -31,6 +31,7 @@ export async function checkTsconfigDrift(opts: {
   consistentKeys: string[];
 }): Promise<CheckResult> {
   const errors: string[] = [];
+  const advisories: string[] = [];
   const root = path.resolve(opts.tsconfigsRoot);
 
   async function findTsconfigs(dir: string): Promise<string[]> {
@@ -98,8 +99,26 @@ export async function checkTsconfigDrift(opts: {
   for (const key of opts.consistentKeys) {
     const defined = configs.filter((c) => c.compilerOptions[key] !== undefined);
     if (defined.length < 2) {
-      // Sem configs suficientes que declarem a chave explicitamente
-      // para comparar; nada a reportar.
+      // `continue` em silêncio era o furo. MEDIDO 2026-10-08: no repo real o
+      // gate encontra **7** `tsconfig*.json` (o padrão é
+      // `/^tsconfig.*\.json$/`, então `packages/tsconfig/base.json` fica de
+      // fora — o nome do arquivo não começa com `tsconfig`), e só
+      // `tsconfig.base.json` declara `strict`/`noUncheckedIndexedAccess`: os
+      // outros 6 herdam por `extends`. `defined.length === 1 < 2`, o laço
+      // seguia, `errors` ficava vazio e o painel imprimia `✓` para um gate
+      // que não tinha comparado nada.
+      //
+      // A chave entra em `advisories` e não em `errors` por contrato
+      // (`check-types.ts`): é verdade sobre a PRÓPRIA medição, não defeito no
+      // objeto medido. Pô-la em `errors` faria o painel anunciar um erro de
+      // drift que não existe — e faria alguém desligar o gate por causa dele.
+      advisories.push(
+        `'${key}' foi comparado em ${defined.length} de ${configs.length} tsconfig(s) sob ` +
+          `'${opts.tsconfigsRoot}'; os outros ${configs.length - defined.length} não declaram a ` +
+          `chave (herdam por \`extends\`) e NÃO foram verificados por este gate. ` +
+          `Drift dentro de uma cadeia de \`extends\` é invisível aqui — ` +
+          `\`tsc --showConfig\` em cada projeto resolveria.`,
+      );
       continue;
     }
     const values = defined.map((c) => JSON.stringify(c.compilerOptions[key]));
@@ -113,5 +132,9 @@ export async function checkTsconfigDrift(opts: {
     }
   }
 
-  return { ok: errors.length === 0, errors };
+  return {
+    ok: errors.length === 0,
+    errors,
+    ...(advisories.length > 0 ? { advisories } : {}),
+  };
 }
