@@ -139,11 +139,28 @@ export function formatMark(r: CheckResult): string {
 }
 
 /**
+ * A ÚNICA fonte de "isto reprovou".
+ *
+ * `CheckResult.ok` e `CheckResult.errors` são independentes por contrato, e o
+ * painel lia os dois — cada um para uma decisão diferente. MEDIDO 2026-10-08: em
+ * `ok: true` + `errors` preenchido a linha saía VERDE, os erros eram contados, e
+ * o processo saía 1: o build reprovava com uma linha verde na tela, que é a
+ * pior leitura possível porque o token de sucesso é o primeiro que o olho pega.
+ *
+ * Por que `errors` e não `ok`: `errors` é o que o painel PRINTA. Um veredito
+ * que ninguém consegue ler não pode ser o que decide a marca. E `ok: false` sem
+ * `errors` continua vermelho por `formatMark` — ver `detalhar`.
+ */
+function falhou(r: CheckResult): boolean {
+  return r.errors.length > 0;
+}
+
+/**
  * As linhas de detalhe que o painel imprime DEPOIS da marca, em qualquer ramo.
  *
  * Deliberadamente **sem** a linha de skip que `linhasDoRelato` inclui: o painel
  * já carrega o motivo na própria marca (`– (skipped: …)`, via `formatMark`), e
- * usar as duas listas aqui imprimiria o motivo duas vezes. São contratos
+ * usar as duas listas aqui imprimiria duas vezes. São contratos
  * diferentes — o CLI de um check não tem marca e precisa dizer por que não
  * rodou — e a diferença é essa, não uma divergência acidental.
  *
@@ -167,10 +184,29 @@ export function detalhar(r: CheckResult): { linhas: string[]; erros: number } {
   // `check-package-json-drift.ts` devolve `ok: errors.length === 0` JUNTO com
   // `skipped: true`. No caso "não rodou E errou", o motivo do skip era o dado
   // mais importante da linha e ele não aparecia em lugar nenhum.
-  const motivo = r.skipped && !r.ok ? [`(skipped: ${r.reason ?? 'sem motivo declarado'})`] : [];
+  //
+  // O gatilho é `falhou`, e não `!r.ok`, pelo mesmo motivo da marca: `ok: true`
+  // com erros preenchidos é o estado que produzia a linha verde, e o motivo do
+  // skip é justamente o dado que a linha verde estava engolindo.
+  const motivo = r.skipped && falhou(r) ? [`(skipped: ${r.reason ?? 'sem motivo declarado'})`] : [];
+  // O outro lado da classe: `ok: false` com `errors` VAZIO imprimia `✗` (o
+  // `formatMark` lê `ok`), contava 0 e saía 0 — uma linha vermelha em cima de
+  // "Todos os checks passaram". MEDIDO 2026-10-08: hoje nenhum gate produz este
+  // estado, porque todos derivam `ok` de `errors.length === 0`
+  // (`grep -rn "ok: errors.length === 0" .tooling/scripts/ci/*.ts` → 11
+  // ocorrências). É um furo latente: o conserto é de 2 linhas, e deixar o furo
+  // é esperar o próximo gate que erre a derivação.
+  //
+  // A recusa sem causa precisa ser CONTADA e DITA. Contada só, ela some — e um
+  // erro que não aparece em lugar nenhum é indistinguível de um gate que não
+  // rodou.
+  const semCausa =
+    !r.ok && r.errors.length === 0
+      ? ['(o check devolveu `ok: false` sem nenhum `errors` — a recusa não tem causa registrada)']
+      : [];
   return {
-    linhas: [...r.errors, ...(r.advisories ?? []), ...motivo],
-    erros: r.errors.length,
+    linhas: [...r.errors, ...(r.advisories ?? []), ...motivo, ...semCausa],
+    erros: Math.max(r.errors.length, r.ok ? 0 : 1),
   };
 }
 
@@ -196,7 +232,7 @@ export function relatarUmCheck(result: CheckResult): {
 } {
   const { linhas, erros } = detalhar(result);
   return {
-    mark: result.ok ? formatMark(result) : '✗',
+    mark: falhou(result) ? '✗' : formatMark(result),
     linhas,
     erros,
     // `skipped` sozinho, sem o `&& result.ok`: "não rodou" e "rodou e errou"

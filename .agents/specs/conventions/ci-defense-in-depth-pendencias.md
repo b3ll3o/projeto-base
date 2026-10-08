@@ -17,6 +17,24 @@
 
 ## Pendências conhecidas
 
+- **FECHADO 2026-10-08 — o painel lia `ok` e `errors` para decisões
+  diferentes.** `relatarUmCheck` tirava a **marca** de `result.ok` e a
+  **contagem** de `errors.length`; `ok` e `errors` são independentes por
+  contrato `CheckResult`. MEDIDO: com `{ ok: true, errors: ['pacote de e2e
+  fora dos --filter'] }` a linha saía **VERDE**, os erros eram contados e o
+  processo saía 1 — o build reprovava com uma linha verde na tela, que é a
+  pior leitura possível porque o token de sucesso é o primeiro que o olho pega.
+  O outro lado da classe: `{ ok: false, errors: [] }` imprimia `✗` e saía **0**.
+  Hoje **inalcançável** (`grep -rn "ok: errors.length === 0"
+  .tooling/scripts/ci/*.ts` → 11 ocorrências; todo gate deriva `ok` de
+  `errors.length`), o que é exatamente por que era um furo: nada media se os
+  dois concordam. Agora `falhou(r) = r.errors.length > 0` é a **única** fonte
+  de "isto reprovou" — a marca, a contagem e o gatilho da linha de skip leem a
+  mesma variável, e `ok: false` sem erro algum conta **1** e **diz** que a
+  recusa não tem causa registrada. Dentes medidos em
+  `npx vitest run --root .tooling/scripts/ci preflight` (denominador **40**):
+  marca voltando a derivar de `ok` → **2 de 40** vermelho; `Math.max` voltando a
+  `errors.length` → **1 de 40**.
 - **Nenhum tooling lê `.github/workflows/ci.yml` — o arquivo que decide o que
   roda é prosa** (medido 2026-10-06, achado da revisão adversarial do PR deste
   branch). Comando: `grep -rn "workflows" tooling/scripts/*.ts
@@ -126,10 +144,15 @@
   amplamente usado, então a hipótese padrão é que funcione — fica escrito
   como hipótese, não como fato. Se algum dia o repo abrir para fork, o teste
   é abrir um PR de fora e ver se o `preflight` acusa `NÃO VERIFICADO`.
-- **Só 6 dos 13 gates têm mutação medida** (ver
-  [Registro de dentes](ci-defense-in-depth.md#registro-de-dentes)). Os outros 7 provam a lógica com
-  `controle negativo` em tmpdir, o que não prova a integração com o sistema
-  real. Fechar os 7 restantes é change próprio, um por gate.
+- **A cobertura de dentes não fecha a classe: 6 dos 16 gates provam a lógica
+  com `controle negativo` em tmpdir** (ver
+  [Registro de dentes](ci-defense-in-depth.md#registro-de-dentes)), o que não
+  prova a integração com o sistema real. MEDIDO 2026-10-08, contando as linhas
+  da tabela por nível: **16** = **9** mutação + **6** controle negativo + **1**
+  controle positivo, **0** desconhecidas. A frase anterior ("6 dos 13 … os
+  outros 7") tinha as categorias invertidas — o 6 é a contagem de controles
+  negativos e o 7 não casa com nenhuma coluna. Fechar os 6 é change próprio, um
+  por gate.
 - **`check-package-json-drift` só varre o `package.json` raiz.** Task
   turbo fantasma declarada em `apps/*/package.json` escapa do gate, e os
   4 call-sites `pnpm turbo run` do `ci.yml` também não são varridos.

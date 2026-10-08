@@ -103,7 +103,14 @@ extraído em commit `59eb083` (refactor que consolidou fixtures herméticas).
 |---|---|---|
 | **mutação** | o teste quebra o **sistema real** e afirma vermelho | **sim** — a única que prova |
 | **controle negativo** | alimenta entrada errada (tmpdir) e afirma vermelho | parcial — prova a lógica, não a integração |
+| **controle positivo** | neutraliza-se o controle e o check tem de **ficar verde** | parcial — prova que o vermelho anterior vinha da dívida, não de outra coisa |
 | **desconhecida** | só afirma verde | **não** |
+
+O nível **controle positivo** entrou em 2026-10-08: `check-harness-owner` usava
+essa prova desde 2026-10-05, arquivada por engano como `mutação`. Gate que prova
+o contrário — "neutralizado, continua verde" — arquivado como mutação faz o
+leitor contar dentes que não são dentes. MEDIDO na tabela: **16** linhas =
+**9** mutação + **6** controle negativo + **1** controle positivo, **0** desconhecidas.
 
 | Gate | Onde o dente está | Nível | Comando da prova | Arquivo |
 |---|---|---|---|---|
@@ -119,9 +126,9 @@ extraído em commit `59eb083` (refactor que consolidou fixtures herméticas).
 | `review-routing` matrix lint | `tooling/scripts/lint-review-routing.spec.ts` — **diretório diferente** (veja a armadilha abaixo) | controle negativo | `npx vitest run --root tooling/scripts lint-review-routing` | `tooling/scripts/lint-review-routing.ts` |
 | `check-tsconfig-drift` | `check-tsconfig-drift.spec.ts` — 1 de 2 | controle negativo | `npx vitest run --root .tooling/scripts/ci check-tsconfig-drift` | `.tooling/scripts/ci/check-tsconfig-drift.ts` |
 | `check-teeth-registry` | `check-teeth-registry.spec.ts` — 13 testes | **mutação** | comando 3 → **vermelho nomeando o gate** (medido 2026-10-05) | `.tooling/scripts/ci/check-teeth-registry.ts` |
-| `check-self-firing-guard` | `check-self-firing-guard.spec.ts` — 10 testes | **mutação** | comando 5 → **diferencial vira 0 → 0** (medido 2026-10-05) | `.tooling/scripts/ci/check-self-firing-guard.ts` |
+| `check-self-firing-guard` | `check-self-firing-guard.spec.ts` — 10 testes | **mutação** | comando 5 → **diferencial 0 → 8 achados** (medido 2026-10-05) | `.tooling/scripts/ci/check-self-firing-guard.ts` |
 | `turbo-redirect-differential` | o próprio script — 18 formas de redirect contra o turbo REAL; e o comando 7. **O veredito** (`[ "$div" -eq 0 ]`) é coberto por `turbo-redirect-differential.spec.ts` — 2 de 3 | **mutação** | comando 7 → **1 e 3 de 18 divergentes**; e o veredito `-eq 0` → `-ge 0` → **2 de 3 vermelho** (medido 2026-10-05) | `.tooling/scripts/ci/turbo-redirect-differential.sh` |
-| `check-harness-owner` | `check-harness-owner.spec.ts` — 19 testes, incluindo o segundo órfão | **mutação** | comando 6 → **exit 0** (medido 2026-10-05) | `.tooling/scripts/ci/check-harness-owner.ts` |
+| `check-harness-owner` | `check-harness-owner.spec.ts` — 19 testes, incluindo o segundo órfão | **controle positivo** | comando 6 → **exit 0** — a prova é invertida por desenho (medido 2026-10-05) | `.tooling/scripts/ci/check-harness-owner.ts` |
 | `check-branch-up-to-date` | `check-branch-up-to-date.spec.ts` — `VERMELHO numa demanda implementada com a main desatualizada` / `após o rebase, a mesma demanda fica verde` (o par, contra **git de verdade**), mais `NÃO confunde "sem ancestral comum" com "atrasada"` e `VERMELHO, e nomeando o estado, com um rebase PARADO em conflito` | **mutação** | `npx vitest run --root .tooling/scripts/ci check-branch-up-to-date` → **2 de 9** com a detecção de "atrasada" neutralizada, **1 de 9** com `128` fundido em "atrasada", **2 de 9** com o `skipped` removido, **1 de 9** com o rebase-em-andamento neutralizado, **1 de 9** com a junção do caminho ao `repoRoot` removida (medido 2026-10-06) | `.tooling/scripts/ci/check-branch-up-to-date.ts` |
 | `check-e2e-flow-coverage` | `check-e2e-flow-coverage.spec.ts` — `acusa spec que declara fluxo fora do inventário, nomeando os dois lados` / `acusa o meio-cumprido: spec novo sem linha no inventário` (o par), sobre **fixtures em tmpdir** | **mutação** | `npx vitest run --root .tooling/scripts/ci check-e2e-flow-coverage` → **2 de 15** com `if (!porId.has(id))` neutralizado, **5 de 15** com o VEREDITO (`ok: errors.length === 0`) neutralizado (medido 2026-10-08) | `.tooling/scripts/ci/check-e2e-flow-coverage.ts` |
 | `check-ci-local-e2e` | `check-ci-local-e2e.spec.ts` — `acusa pacote de e2e fora dos --filter — o gate que passaria verde com um app novo` e `o filtro de uma invocação que NÃO roda e2e não alcança ninguém para o e2e` (o par), sobre **fixtures em tmpdir**, mais o caso do repo real | **mutação** | `npx vitest run --root .tooling/scripts/ci check-ci-local-e2e` → **6 de 25** com o VEREDITO neutralizado, **2 de 25** só com o alcance por `--filter`, **1 de 25** tirando o escopo por invocação (medido 2026-10-08) | `.tooling/scripts/ci/check-ci-local-e2e.ts` |
@@ -173,7 +180,7 @@ sed -i 's|- pattern: "tooling/scripts/ci/\*\*"|- pattern: ".tooling/scripts/ci/*
 # 5) check-self-firing-guard (classe 3) — a isenção mecânica é neutralizada.
 #    O guard NÃO fica vermelho: a linha que cita o nome dele casa o símbolo
 #    que é parte do próprio nome, e a seção canônica o absorve. É por isso
-#    que este check é um DIFERENCIAL (N → 0) e não uma asserção de verde —
+#    que este check é um DIFERENCIAL (0 → 8) e não uma asserção de verde —
 #    sem o `N`, "verde" e "isenção inerte" são o mesmo resultado.
 perl -0pi -e "s|return line\.replaceAll\(SELF_NAME, ''\);|return line;|" \
   .tooling/scripts/ci/check-memory-dir-concordance.ts

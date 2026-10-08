@@ -11,7 +11,7 @@ projeto-base/
 ├── .markdownlint.json                  # Configuração do lint de Markdown
 ├── .agents/
 │   ├── agents/                         # Definições de agents (cada um ≤ 300 linhas)
-│   │   ├── <agent-name>.md             # 20 agents (12 genéricos + 2 routers + 6 specialists de stack)
+│   │   ├── <agent-name>.md             # 26 agents (12 genéricos + 2 routers + 6 de stack + 6 de auditoria)
 │   ├── memory/                         # Memória acumulada por agent (evolução)
 │   │   └── <agent-name>.md
 │   ├── skills/
