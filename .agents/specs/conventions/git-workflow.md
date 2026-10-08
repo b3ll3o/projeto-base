@@ -61,21 +61,34 @@ stash. O primeiro comando de qualquer tarefa de código é:
 ```bash
 git checkout main
 git pull --ff-only origin main
-git checkout -b <prefixo>/<nome-descritivo>
+git switch -c <prefixo>/<nome-descritivo>
 ```
 
 `--ff-only` é deliberado: sem ele, um `pull` pode criar um merge
 commit local em `main`, que é exatamente o que a convenção proíbe.
 
+**`git switch -c`, e não `git branch <nome>`:** `git branch <nome>` **cria** a
+branch e **não** troca para ela — o comando termina com exit 0 e você continua
+na branch anterior. `git switch -c` faz as duas coisas, e falha se a branch já
+existe, o que é a segunda metade da proteção.
+
+MEDIDO 2026-10-06, campanha do PR #59: um commit foi para a branch errada
+depois de `git branch --show-current` ter confirmado a branch certa. Não foi
+esquecimento de verificar — foi **verificar na posição errada**: o
+`--show-current` rodou antes do `git branch X`, e o `git branch X` invalidou a
+leitura sem desfazer a checagem.
+
 **Antes de qualquer `git commit` ou `git push`, confirme em qual branch
-você está:**
+você está — como último comando, não como último do raciocínio:**
 
 ```bash
 git branch --show-current
 ```
 
 Esse passo não é opcional — é a defesa contra commit acidental em
-`main`, que só é detectado depois que já aconteceu.
+`main`, que só é detectado depois que já aconteceu. E "último comando" é
+literal: um `git branch --show-current` seguido de um `git branch X` ou um
+`git checkout` é uma verificação que já estava velha quando você leu.
 
 ## Rebase Obrigatório: Demanda Implementada com `main` Desatualizada
 
@@ -162,14 +175,14 @@ O nome deve descrever **o problema**, não a ferramenta. `fix/coverage-gate-40`
        │
        ▼
 3. Criar branch descritiva a partir de main ATUALIZADA
-   git checkout -b feature/<nome-descritivo>
+   git switch -c feature/<nome-descritivo>
        │
        ▼
 4. Implementar (TDD + revisão contínua)
        │
        ▼
 5. Commitar com Conventional Commits em pt-BR
-   git branch --show-current   # confirmar branch antes de commitar
+   git branch --show-current   # confirmar branch ANTES do commit, como último comando
    git commit -m "feat(escopo): descrição em pt-BR"
        │
        ▼
