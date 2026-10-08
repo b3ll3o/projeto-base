@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import type { CheckResult } from './check-types';
+import { linhasDoRelato } from './check-types';
 
 /**
  * A branch contém a `main` atual? (regra de rebase — `git-workflow.md`)
@@ -184,7 +185,8 @@ export function checkBranchUpToDate(opts?: {
 // Executado como CLI.
 if (process.argv[1]?.endsWith('check-branch-up-to-date.ts')) {
   const r = checkBranchUpToDate();
-  for (const e of r.errors) process.stderr.write(`${e}\n`);
-  if (r.skipped) process.stderr.write(`(skipped: ${r.reason})\n`);
+  // `linhasDoRelato`, e não `r.errors`: um `for` sobre `errors` aqui é o que
+  // mantinha a ressalva invisível neste caminho. Ver `check-types.ts`.
+  for (const linha of linhasDoRelato(r)) process.stderr.write(`${linha}\n`);
   process.exit(r.ok ? 0 : 1);
 }

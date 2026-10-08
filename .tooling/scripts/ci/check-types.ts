@@ -34,3 +34,26 @@ export interface CheckResult {
    */
   advisories?: string[];
 }
+
+/**
+ * Tudo o que o check tem a dizer, na ordem em que deve sair.
+ *
+ * Um check carrega três coisas: defeito no objeto medido (`errors`), ressalva
+ * sobre a própria medição (`advisories`) e o motivo de não ter rodado
+ * (`skipped`/`reason`). Quem imprime tem de imprimir **as três** — omitir a
+ * ressalva troca um defeito (contar demais) por outro (esconder o aviso que dá
+ * sentido ao número).
+ *
+ * MEDIDO 2026-10-07: `check-branch-up-to-date` passou a devolver a ressalva em
+ * `advisories`, o painel do `preflight` passou a imprimi-la, e o modo CLI do
+ * próprio arquivo — a seis linhas de distância — continuava imprimindo só
+ * `errors`. Rodar o check isolado sumia com a ressalva, sem nenhum sinal, e
+ * nenhum teste caía: o caminho de impressão era um bloco `if` sob
+ * `process.argv[1]`, fora do alcance de qualquer spec.
+ *
+ * Vive aqui, e não em cada consumidor, porque dois lugares que imprimem por
+ * conta própria divergem no primeiro check que ganha uma quarta categoria.
+ */
+export function linhasDoRelato(r: CheckResult): string[] {
+  return [...r.errors, ...(r.advisories ?? []), ...(r.skipped ? [`(skipped: ${r.reason})`] : [])];
+}

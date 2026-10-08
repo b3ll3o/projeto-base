@@ -27,6 +27,7 @@ import { checkBranchUpToDate } from './check-branch-up-to-date';
 import { existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
+import { linhasDoRelato } from './check-types';
 
 /**
  * Valida a matriz de roteamento do review-router (Task 1.10).
@@ -150,7 +151,10 @@ export function formatMark(r: CheckResult): string {
  */
 export function detalhar(r: CheckResult): { linhas: string[]; erros: number } {
   return {
-    linhas: [...r.errors, ...(r.advisories ?? [])],
+    // `linhasDoRelato` vem de `check-types.ts`, o mesmo que o modo CLI de cada
+    // check usa. Duas cópias desta lista é uma divergência esperando o check
+    // seguinte ganhar uma categoria nova.
+    linhas: linhasDoRelato(r),
     erros: r.errors.length,
   };
 }
