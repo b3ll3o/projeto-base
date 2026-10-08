@@ -163,11 +163,19 @@
   com `controle negativo` em tmpdir** (ver
   [Registro de dentes](ci-defense-in-depth.md#registro-de-dentes)), o que não
   prova a integração com o sistema real. MEDIDO 2026-10-08, contando as linhas
-  da tabela por nível: **16** = **9** mutação + **6** controle negativo + **1**
+  da tabela por nível: **16** = **10** mutação + **5** controle negativo + **1**
   controle positivo, **0** desconhecidas. A frase anterior ("6 dos 13 … os
-  outros 7") tinha as categorias invertidas — o 6 é a contagem de controles
-  negativos e o 7 não casa com nenhuma coluna. Fechar os 6 é change próprio, um
-  por gate.
+  outros 7") tinha as categorias invertidas — o 6 era a contagem de controles
+  negativos e o 7 não casa com nenhuma coluna. Fechar os **5** restantes é
+  change próprio, um por gate.
+
+  ⚠️ **Um SPEC verde não era prova de integração, e o `--filter` provou.**
+  `check-package-json-drift` tinha **28** specs, todos verdes, e era inerte
+  contra o repo real: plantar `"e2e:web": "turbo run test:e2e
+  --filter=@projeto/web"` no `package.json` raiz saía **EXIT=0**. O spec media a
+  lógica num tmpdir, que é a mesma forma que a classe 6 descreve. O que fecha a
+  classe não é mais spec — é um **diferencial contra o repo de verdade**,
+  com o defeito real plantado e o gate rodando sobre ele.
 - **`check-package-json-drift` só varre o `package.json` raiz.** Task
   turbo fantasma declarada em `apps/*/package.json` escapa do gate, e os
   4 call-sites `pnpm turbo run` do `ci.yml` também não são varridos.

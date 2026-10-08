@@ -6,7 +6,7 @@ import {
   checkCiLocalE2e,
   invocacoesTurboRun,
   reconciliarCiLocalE2e,
-  type PacoteLeido,
+  type WorkspacePackage,
 } from './check-ci-local-e2e';
 
 /**
@@ -26,16 +26,18 @@ const CI_LOCAL_OK =
   'pnpm ci:preflight && pnpm turbo run lint typecheck test:unit test:coverage ' +
   'test:integration test:e2e --filter=@projeto/api --filter=@projeto/web';
 
-const PACOTE_API: PacoteLeido = {
-  nome: '@projeto/api',
+const PACOTE_API: WorkspacePackage = {
+  name: '@projeto/api',
+  dir: 'apps/api',
   scripts: {
     'test:integration': 'vitest run --config vitest.integration.config.ts',
     'test:e2e': 'vitest run --config vitest.e2e.config.ts',
   },
 };
 
-const PACOTE_WEB: PacoteLeido = {
-  nome: '@projeto/web',
+const PACOTE_WEB: WorkspacePackage = {
+  name: '@projeto/web',
+  dir: 'apps/web',
   scripts: {
     'test:e2e': 'playwright test',
     'pretest:e2e': 'playwright install chromium',
@@ -141,7 +143,7 @@ describe('reconciliarCiLocalE2e', () => {
       pacotes: [
         PACOTE_API,
         PACOTE_WEB,
-        { nome: '@projeto/admin', scripts: { 'test:e2e': 'vitest run' } },
+        { name: '@projeto/admin', dir: 'apps/admin', scripts: { 'test:e2e': 'vitest run' } },
       ],
     });
     expect(r.ok).toBe(false);
@@ -184,7 +186,11 @@ describe('reconciliarCiLocalE2e', () => {
       ciLocal: CI_LOCAL_OK,
       pacotes: [
         PACOTE_API,
-        { nome: '@projeto/web', scripts: { 'test:e2e': 'playwright test && turbo run test:e2e' } },
+        {
+          name: '@projeto/web',
+          dir: 'apps/web',
+          scripts: { 'test:e2e': 'playwright test && turbo run test:e2e' },
+        },
       ],
     });
     expect(r.ok).toBe(false);
@@ -206,7 +212,11 @@ describe('reconciliarCiLocalE2e', () => {
   it('não acusa quando o filtro é glob — indeterminado vai para advisories, não para errors', () => {
     const r = reconciliarCiLocalE2e({
       ciLocal: 'pnpm turbo run test:integration test:e2e --filter=@projeto/*',
-      pacotes: [PACOTE_API, PACOTE_WEB, { nome: '@projeto/admin', scripts: { 'test:e2e': 'x' } }],
+      pacotes: [
+        PACOTE_API,
+        PACOTE_WEB,
+        { name: '@projeto/admin', dir: 'apps/admin', scripts: { 'test:e2e': 'x' } },
+      ],
     });
     expect(r.errors).toEqual([]);
     expect(r.advisories.join('\n')).toContain('glob');
@@ -218,7 +228,10 @@ describe('reconciliarCiLocalE2e', () => {
     // erro, pelo motivo errado.
     const r = reconciliarCiLocalE2e({
       ciLocal: CI_LOCAL_OK,
-      pacotes: [PACOTE_API, { nome: '@projeto/web', scripts: { 'test:e2e': 'playwright test' } }],
+      pacotes: [
+        PACOTE_API,
+        { name: '@projeto/web', dir: 'apps/web', scripts: { 'test:e2e': 'playwright test' } },
+      ],
     });
     expect(r.ok).toBe(false);
     expect(r.errors.join('\n')).toContain('pretest:e2e');
@@ -231,7 +244,8 @@ describe('reconciliarCiLocalE2e', () => {
       pacotes: [
         PACOTE_API,
         {
-          nome: '@projeto/web',
+          name: '@projeto/web',
+          dir: 'apps/web',
           scripts: { 'test:e2e': 'playwright test', 'pretest:e2e': 'echo ok' },
         },
       ],
@@ -244,7 +258,10 @@ describe('reconciliarCiLocalE2e', () => {
     const r = reconciliarCiLocalE2e({
       ciLocal:
         'pnpm turbo run test:integration test:e2e --filter=@projeto/api --filter=@projeto/worker',
-      pacotes: [PACOTE_API, { nome: '@projeto/worker', scripts: { 'test:e2e': 'vitest run' } }],
+      pacotes: [
+        PACOTE_API,
+        { name: '@projeto/worker', dir: 'apps/worker', scripts: { 'test:e2e': 'vitest run' } },
+      ],
     });
     expect(r.errors).toEqual([]);
   });
@@ -257,7 +274,7 @@ describe('reconciliarCiLocalE2e', () => {
     const r = reconciliarCiLocalE2e({
       ciLocal: CI_LOCAL_OK,
       pacotes: [
-        { nome: 'projeto-base', scripts: { 'test:e2e': 'turbo run test:e2e' } },
+        { name: 'projeto-base', dir: '.', scripts: { 'test:e2e': 'turbo run test:e2e' } },
         PACOTE_API,
         PACOTE_WEB,
       ],
@@ -271,7 +288,7 @@ describe('reconciliarCiLocalE2e', () => {
     const r = reconciliarCiLocalE2e({
       ciLocal: CI_LOCAL_OK,
       pacotes: [
-        { nome: 'projeto-base', scripts: { 'test:e2e': 'pnpm turbo run test:e2e' } },
+        { name: 'projeto-base', dir: '.', scripts: { 'test:e2e': 'pnpm turbo run test:e2e' } },
         PACOTE_API,
         PACOTE_WEB,
       ],

@@ -57,7 +57,7 @@ Escopo de todos: **todo `.md` versionado** sob a raiz que o preflight passa
 | `check-tsconfig-drift` | tsconfig | extensões/extends divergentes entre tsconfigs |
 | `check-eslint-drift` | eslint config | regras duplicadas/legadas em configs ESLint |
 | `check-turbo-drift` | turbo pipeline | drift em `turbo.json` (`$schema` ausente, nomes inválidos, `cache:false` com `outputs`) |
-| `check-package-json-drift` | package.json raiz | scripts canônicos ausentes, `tsx <path>` fantasma, ou `turbo run <task>` que o turbo não resolve |
+| `check-package-json-drift` | package.json raiz | scripts canônicos ausentes, `tsx <path>` fantasma, ou `turbo run <task>` que o turbo não resolve — nem no `turbo.json`, nem em pacote algum, nem nos pacotes que o `--filter` alcança |
 | `check-docker-drift` | docker | `.dockerignore` ausente, `Dockerfile` > 100 linhas, base image sem glibc (distro) ou com major ≠ a de `engines.node` (major) — as duas são guardas separados |
 | `check-archive-integrity` | archive | frontmatter canônico de `.agents/runs/archive/*.md` |
 | `check-memory-dir-concordance` | retro | segunda declaração do destino do result file, em 6 notações históricas |
@@ -110,7 +110,10 @@ O nível **controle positivo** entrou em 2026-10-08: `check-harness-owner` usava
 essa prova desde 2026-10-05, arquivada por engano como `mutação`. Gate que prova
 o contrário — "neutralizado, continua verde" — arquivado como mutação faz o
 leitor contar dentes que não são dentes. MEDIDO na tabela: **16** linhas =
-**9** mutação + **6** controle negativo + **1** controle positivo, **0** desconhecidas.
+**10** mutação + **5** controle negativo + **1** controle positivo, **0** desconhecidas.
+A virada de `check-package-json-drift` para **mutação** (2026-10-08) foi a que
+trocou os dois últimos números: um gate com prova só em tmpdir não prova a
+integração, e foi exatamente na integração que ele era inerte.
 
 | Gate | Onde o dente está | Nível | Comando da prova | Arquivo |
 |---|---|---|---|---|
@@ -119,7 +122,7 @@ leitor contar dentes que não são dentes. MEDIDO na tabela: **16** linhas =
 | `check-agent-memory-drift` | `check-agent-memory-drift.spec.ts` — o par `APENAS path corrigido NÃO é delta` / `prosa NOVA É delta` + `findDriftedAgents` com memória tocada | **mutação** | `npx vitest run --root .tooling/scripts/ci check-agent-memory-drift` → **5 de 12** com `hasBehaviorDelta` sempre true, **3 de 12** com `findDriftedAgents` sempre vazio (medido 2026-10-06) | `.tooling/scripts/ci/check-agent-memory-drift.ts` |
 | `check-tooling-typecheck` | `check-tooling-typecheck.spec.ts` — `NÃO reporta verde quando o tsc falha sem imprimir diagnóstico` / `…sem saída nenhuma` (o par) | **mutação** | `npx vitest run --root .tooling/scripts/ci check-tooling-typecheck` → **3 de 11** com `parseTscDiagnostics` sempre `[]`, **2 de 11** com o `status !== 0` neutralizado (medido 2026-10-06, issue #46) | `.tooling/scripts/ci/check-tooling-typecheck.ts` |
 | `check-turbo-drift` | `check-turbo-drift.spec.ts` — 5 de 6 testes | controle negativo | `npx vitest run --root .tooling/scripts/ci check-turbo-drift` | `.tooling/scripts/ci/check-turbo-drift.ts` |
-| `check-package-json-drift` | `check-package-json-drift.spec.ts` — 9 de 23 | controle negativo | `npx vitest run --root .tooling/scripts/ci check-package-json-drift` | `.tooling/scripts/ci/check-package-json-drift.ts` |
+| `check-package-json-drift` | `check-package-json-drift.spec.ts` — 28 testes: o RED do `--filter` + seu contrafactual positivo (o par), mais `extractTurboRunFilters` em unidade | **mutação** | `npx vitest run --root .tooling/scripts/ci check-package-json-drift` → **1 de 28** com `alvoDosFiltros` neutralizado (`filtros.length === 0` → `>= 0`); e o **diferencial contra o repo real**, que é onde ele era inerte: plantar "e2e:web": "turbo run test:e2e --filter=@projeto/web" no `package.json` raiz → **EXIT=1** nomeando o filtro, sem o defeito → EXIT=0 (medido 2026-10-08) | `.tooling/scripts/ci/check-package-json-drift.ts` |
 | `check-docker-drift` | `check-docker-drift.spec.ts` — o par `alpine é VERMELHA por glibc` / `base image na major ATUALIZADA é VERDE`, mais `as duas são motivos DIFERENTES` | **mutação** | `npx vitest run --root .tooling/scripts/ci check-docker-drift` → **2 de 8** com o guarda de distro neutralizado, **2 de 8** com o de major (medido 2026-10-06, issue #48) | `.tooling/scripts/ci/check-docker-drift.ts` |
 | `check-eslint-drift` | `check-eslint-drift.spec.ts` — 2 de 5 | controle negativo | `npx vitest run --root .tooling/scripts/ci check-eslint-drift` | `.tooling/scripts/ci/check-eslint-drift.ts` |
 | `check-doc-refs` | `preflight.spec.ts` → `describe('checkDocRefs')` — **o spec não é `check-doc-refs.spec.ts`**, é o do runner | controle negativo | `npx vitest run --root .tooling/scripts/ci -t checkDocRefs` | `.tooling/scripts/ci/check-doc-refs.ts` |
