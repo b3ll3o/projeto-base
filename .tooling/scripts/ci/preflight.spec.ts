@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { checkDocRefs } from './check-doc-refs';
-import { detalhar, formatMark, relatarUmCheck } from './preflight';
+import { detalhar, formatMark, relatarUmCheck, resumir } from './preflight';
 import type { CheckResult } from './check-types';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -346,5 +346,105 @@ describe('relatarUmCheck - skip que ACOMPANHA erro não pode sumir', () => {
     expect(comMarca).toHaveLength(0);
     expect(verde.mark).toContain('sem harness');
     expect(verde.pulou).toBe(true);
+  });
+});
+
+/**
+ * MEDIDO 2026-10-08: `pulou` contava o skip que ACOMPANHA erro, mas a contagem
+ * nao tinha para onde ir. `main()` fazia `process.exit(1)` no ramo de erro antes
+ * de chegar na linha do resumo de skip -- entao `totalSkipped` era incrementado
+ * e nunca lido.
+ *
+ * O tell de que a propria mensagem mentia: o resumo interpolava
+ * `${totalErrors}`, e so era alcancavel quando `totalErrors === 0`. Uma variavel
+ * que nao pode variar.
+ */
+describe('resumir - o resumo de skip sobrevive ao ramo de erro', () => {
+  it('ERRO + SKIP: as DUAS linhas, e codigo 1', () => {
+    const r = resumir(2, 1);
+    expect(r.codigo).toBe(1);
+    expect(r.linhas).toHaveLength(2);
+    expect(r.linhas[0]).toContain('2 erro(s)');
+    expect(r.linhas[1]).toContain('1 check(s) não rodaram');
+  });
+
+  it('SO ERRO: uma linha, codigo 1 (nao inventa skip)', () => {
+    const r = resumir(2, 0);
+    expect(r.codigo).toBe(1);
+    expect(r.linhas).toHaveLength(1);
+    expect(r.linhas[0]).toContain('2 erro(s)');
+  });
+
+  it('SO SKIP: a linha do skip com o total de erro que existe (0)', () => {
+    const r = resumir(0, 3);
+    expect(r.codigo).toBe(0);
+    expect(r.linhas).toHaveLength(1);
+    expect(r.linhas[0]).toContain('0 erro(s)');
+    expect(r.linhas[0]).toContain('3 check(s) não rodaram');
+  });
+
+  it('NADA: a linha de sucesso', () => {
+    const r = resumir(0, 0);
+    expect(r.codigo).toBe(0);
+    expect(r.linhas).toHaveLength(1);
+    expect(r.linhas[0]).toContain('Todos os checks passaram');
+  });
+
+  it('a ordem e erro antes de skip: quem falha lê o erro primeiro', () => {
+    expect(resumir(2, 1).linhas[0]).toContain('erro(s) encontrado(s)');
+    expect(resumir(2, 1).linhas[1]).toContain('não rodaram');
+  });
+});
+
+/**
+ * A composicao inteira: CheckResult -> relatarUmCheck -> agregacao -> resumir.
+ * Sem este teste os dois lados podem estar verdes e o painel continuar mentindo,
+ * porque cada um sozinho mede uma metade.
+ */
+describe('composicao - do CheckResult ate a linha que o usuario le', () => {
+  const puladoComErro: CheckResult = {
+    ok: false,
+    errors: ['drift em package.json'],
+    skipped: true,
+    reason: 'turbo nao suporta --filter',
+  };
+
+  function painel(results: CheckResult[]): { linhas: string[]; codigo: 0 | 1 } {
+    // Espelha `main()`: marca + linhas de cada check, e DEPOIS o fechamento.
+    const detalhe: string[] = [];
+    const relatorios = results.map((r) => {
+      const relatorio = relatarUmCheck(r);
+      detalhe.push(relatorio.mark, ...relatorio.linhas);
+      return relatorio;
+    });
+    const fechamento = resumir(
+      relatorios.reduce((t, r) => t + r.erros, 0),
+      relatorios.filter((r) => r.pulou).length,
+    );
+    return { linhas: [...detalhe, ...fechamento.linhas], codigo: fechamento.codigo };
+  }
+
+  it('o check pulado COM erro tem o motivo no painel final', () => {
+    const saida = painel([puladoComErro]);
+    const texto = saida.linhas.join('\n');
+    expect(saida.codigo).toBe(1);
+    expect(texto).toContain('drift em package.json');
+    expect(texto).toContain('turbo nao suporta --filter');
+    expect(texto).toContain('1 check(s) não rodaram');
+  });
+
+  it('CONTROLE: pulado com erro continua sendo 1 erro, nao 2', () => {
+    // O skip NUNCA vira erro -- senao "nao rodou" se disfarca de "rodou e falhou".
+    expect(relatarUmCheck(puladoComErro).erros).toBe(1);
+  });
+
+  it('dois estados independentes nao se cancelam: erro real + pulo verde', () => {
+    const saida = painel([
+      puladoComErro,
+      { ok: true, errors: [], skipped: true, reason: 'offline' },
+    ]);
+    const texto = saida.linhas.join('\n');
+    expect(saida.codigo).toBe(1);
+    expect(texto).toContain('2 check(s) não rodaram');
   });
 });
