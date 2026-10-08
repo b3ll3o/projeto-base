@@ -58,7 +58,29 @@ function paraRegex(glob: string): RegExp {
   return new RegExp(`^${corpo}$`);
 }
 
-const IGNORAR = new Set(['node_modules', '.next', 'coverage', '.turbo']);
+// Diretórios que o guard NÃO varre: lixo de build, e agora `e2e`.
+//
+// pt-BR (2026-10-08): `e2e` entrou aqui ao chegar a suíte de Playwright do
+// frontend, e a entrada é deliberada — não é um "furo" conveniente.
+//
+// 1. Os specs de `e2e/` são coletados pelo Playwright (`testDir`), não pelo
+//    Vitest. Sem esta entrada o guard acusa cada um deles como órfão e o
+//    `pnpm typecheck`/`ci:local` fica vermelho com um nome de arquivo que o
+//    Vitest jamais executaria. Medido antes de decidir: criar
+//    `e2e/zz-probe.spec.ts` e rodar este guard produziu
+//    `Tests 1 failed | 9 passed`, com o probe listado como órfão.
+//
+// 2. A alternativa — nomear os arquivos `*.e2e.ts` e configure `testMatch` —
+//    desliga este guard para eles POR CONSTRUÇÃO: o nome deixa de casar com a
+//    convenção `*.spec.ts` do resto do app, então a checagem deixa de alcançar
+//    esses arquivos. Trocaria um guard barulhento por um silencioso, que é o
+//    modo de falha que este arquivo foi escrito para impedir.
+//
+// O que continua valendo: todo outro diretório da árvore segue coberto, e o
+// gate de paridade dos fluxos (`.tooling/scripts/ci/check-e2e-flow-coverage.ts`)
+// é quem garante que os specs de `e2e/` existem e são rastreáveis — o que
+// este guard não pode mais fazer por eles.
+const IGNORAR = new Set(['node_modules', '.next', 'coverage', '.turbo', 'e2e']);
 
 /** Todos os `*.spec.{ts,tsx}` do app, exceto lixo de build. */
 function specsNoDisco(raiz: string): string[] {

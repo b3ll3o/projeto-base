@@ -63,6 +63,7 @@ Escopo de todos: **todo `.md` versionado** sob a raiz que o preflight passa
 | `check-tooling-typecheck` | typecheck | erro de tipo em `.tooling/scripts/**` sob a barra de `tsconfig.base.json`; `tsc` != 0 **sem** diagnóstico também é vermelho (issue #46) |
 | `review-routing` matrix lint | roteamento | YAML inválido, reviewer inexistente, pattern duplicado, LOC > 300, `blocking: true` casando 0 arquivos |
 | `check-branch-up-to-date` | git workflow | demanda que não contém `origin/main` (regra de rebase de [`git-workflow.md`](./git-workflow.md)); "sem ancestral comum" é motivo **diferente** de "atrasada"; rebase **parado em conflito** é vermelho antes de qualquer contagem; base ausente é `skipped`, nunca verde |
+| `check-e2e-flow-coverage` | testes | inventário de fluxos de [`e2e-playwright.md`](./e2e-playwright.md) ⇄ cabeçalhos `// FLUXO:` dos specs: meio-cumprido é vermelho nomeando o fluxo; inventário com 0 linhas e diretório de e2e sem spec são **erro**, nunca verde por conjunto vazio. Mede **paridade declarativa** — que os testes passem é a execução (`test:e2e`), outra camada |
 
 > **`check-types.ts` NÃO é um check** e saiu desta tabela: tem um único
 > `export interface CheckResult` (medido, `wc -l` = 23) e é importado **só**
@@ -119,6 +120,7 @@ extraído em commit `59eb083` (refactor que consolidou fixtures herméticas).
 | `turbo-redirect-differential` | o próprio script — 18 formas de redirect contra o turbo REAL; e o comando 7. **O veredito** (`[ "$div" -eq 0 ]`) é coberto por `turbo-redirect-differential.spec.ts` — 2 de 3 | **mutação** | comando 7 → **1 e 3 de 18 divergentes**; e o veredito `-eq 0` → `-ge 0` → **2 de 3 vermelho** (medido 2026-10-05) | `.tooling/scripts/ci/turbo-redirect-differential.sh` |
 | `check-harness-owner` | `check-harness-owner.spec.ts` — 19 testes, incluindo o segundo órfão | **mutação** | comando 6 → **exit 0** (medido 2026-10-05) | `.tooling/scripts/ci/check-harness-owner.ts` |
 | `check-branch-up-to-date` | `check-branch-up-to-date.spec.ts` — `VERMELHO numa demanda implementada com a main desatualizada` / `após o rebase, a mesma demanda fica verde` (o par, contra **git de verdade**), mais `NÃO confunde "sem ancestral comum" com "atrasada"` e `VERMELHO, e nomeando o estado, com um rebase PARADO em conflito` | **mutação** | `npx vitest run --root .tooling/scripts/ci check-branch-up-to-date` → **2 de 9** com a detecção de "atrasada" neutralizada, **1 de 9** com `128` fundido em "atrasada", **2 de 9** com o `skipped` removido, **1 de 9** com o rebase-em-andamento neutralizado, **1 de 9** com a junção do caminho ao `repoRoot` removida (medido 2026-10-06) | `.tooling/scripts/ci/check-branch-up-to-date.ts` |
+| `check-e2e-flow-coverage` | `check-e2e-flow-coverage.spec.ts` — `acusa spec que declara fluxo fora do inventário, nomeando os dois lados` / `acusa o meio-cumprido: spec novo sem linha no inventário` (o par), sobre **fixtures em tmpdir** | **mutação** | `npx vitest run --root .tooling/scripts/ci check-e2e-flow-coverage` → **2 de 15** com `if (!porId.has(id))` neutralizado, **5 de 15** com o VEREDITO (`ok: errors.length === 0`) neutralizado (medido 2026-10-08) | `.tooling/scripts/ci/check-e2e-flow-coverage.ts` |
 
 > A coluna **Arquivo** é a chave de reconciliação, e não um enfeite: o
 > `check-teeth-registry` casa o registro com o `preflight.ts` por ela. Sem a
@@ -128,9 +130,9 @@ extraído em commit `59eb083` (refactor que consolidou fixtures herméticas).
 > qualquer gate novo entraria no preflight sem aviso. Foi a ausência desta
 > coluna que o check acusou na primeira execução (9 de 9 sem correspondência).
 
-Os **sete comandos de mutação**, medidos 2026-10-05. Cada um reverte o
-arquivo ao final — a mutação é efêmera por desenho, e o `git diff` depois
-deles tem de estar vazio:
+Os **oito comandos de mutação** — 1 a 7 medidos 2026-10-05, o 8 em 2026-10-08.
+Cada um reverte o arquivo ao final — a mutação é efêmera por desenho, e o
+`git diff` depois deles tem de estar vazio:
 
 ```bash
 # 1) check-archive-integrity — reintroduz o B19: sem --archive-dir, o linter
@@ -191,6 +193,17 @@ perl -0pi -e 's|\.replace\(/>&/g, `>\$\{BOTH_STREAMS\}`\);|.replace(/x-NEVER/g, 
   .tooling/scripts/ci/check-package-json-drift.ts
 bash .tooling/scripts/ci/turbo-redirect-differential.sh   # -> exit 1, "1 divergentes"
 cp /tmp/cpjd.bak .tooling/scripts/ci/check-package-json-drift.ts   # restaurado byte-exato
+
+# 8) check-e2e-flow-coverage — a reconciliação É o gate inteiro; o resto é I/O.
+#    Duas mutações medidas. A segunda é a que interessa: neutralizar o VEREDITO
+#    (`ok: errors.length === 0`) tira 5 de 15, e os 5 caem pelo motivo certo —
+#    conferido pelo nome, não só pela contagem. `acusa inventário vazio`
+#    continua VERDE por retornar antes da linha neutralizada: é o certo dele.
+cp .tooling/scripts/ci/check-e2e-flow-coverage.ts /tmp/e2eflow.bak
+perl -0pi -e 's/    if \(!porId\.has\(id\)\) \{/    if (false) {/' \
+  .tooling/scripts/ci/check-e2e-flow-coverage.ts
+npx vitest run --root .tooling/scripts/ci check-e2e-flow-coverage  # -> 2 de 15 vermelho
+cp /tmp/e2eflow.bak .tooling/scripts/ci/check-e2e-flow-coverage.ts   # restaurado byte-exato
 ```
 
 > **A cobertura do comando 7 tem um limite, nomeado porque um leitor que

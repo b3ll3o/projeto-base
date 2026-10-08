@@ -134,8 +134,9 @@ outro nível (E2E/integração):
   `unit`) + specs Testcontainers. Fora para evitar mock frágil do client.
 - `**/test/**` — diretório `test/` contém helpers de teste (não lógica
   de produção) e por isso é excluído da medição de cobertura.
-- Em `apps/web`: `app/**` — Next.js RSC pages, exigem testes E2E
-  (Playwright) **fora do escopo unitário** desta convenção.
+- Em `apps/web`: `app/**` — Next.js RSC pages. Ficam fora do denominador
+  unitário porque a cobertura delas é a suíte de **browser** — a definida em
+  [`e2e-playwright.md`](./e2e-playwright.md).
 - Em `apps/web`: `next-env.d.ts` — gerado pelo Next.js, não editado.
 - Em `apps/web`: `**/.next/**` (build output do Next.js) e
   `**/*.spec.{ts,tsx}` (testes — o `{ts,tsx}` é necessário porque o app

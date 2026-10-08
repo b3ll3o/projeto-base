@@ -24,6 +24,7 @@ import { checkTeethRegistry } from './check-teeth-registry';
 import { checkSelfFiringGuards } from './check-self-firing-guard';
 import { checkHarnessOwner } from './check-harness-owner';
 import { checkBranchUpToDate } from './check-branch-up-to-date';
+import { checkE2eFlowCoverage } from './check-e2e-flow-coverage';
 import { existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
@@ -401,6 +402,19 @@ async function main(): Promise<void> {
       name: 'demanda rebaseda na main atual (regra de rebase)',
       file: '.tooling/scripts/ci/check-branch-up-to-date.ts',
       fn: () => checkBranchUpToDate(),
+    },
+    {
+      // Regra de `e2e-playwright.md`: todo fluxo mapeado tem spec e todo spec
+      // pertence a um fluxo mapeado. Entra pelo preflight — e não pelo
+      // `ci:local` — pelo mesmo motivo do rebase: o CI roda `ci:preflight`.
+      //
+      // O que ele mede é PARIDADE DECLARATIVA entre o inventário da convenção e
+      // os cabeçalhos `// FLUXO:` dos specs. Que os testes PASSEM é outra
+      // camada (`test:e2e` no job `quality`), e confundir as duas é como um
+      // gate passa a afirmar verde sobre algo que não mediu.
+      name: 'inventário de fluxos ⇄ specs e2e (regra de cobertura e2e)',
+      file: '.tooling/scripts/ci/check-e2e-flow-coverage.ts',
+      fn: () => checkE2eFlowCoverage({ repoRoot: '.' }),
     },
   ];
 

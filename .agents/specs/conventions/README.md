@@ -21,6 +21,7 @@ lê — a task 2.2 do plano `guard-classes` fecha isso. **Regra: criar uma conve
 | Git Workflow | [`git-workflow.md`](./git-workflow.md) | `main` protegida; merge apenas via PR; branch cujo PR saiu de `open` (merged **ou** closed) é apagada ([apêndice](./git-workflow-apendice.md)) |
 | Estrutura & Versionamento | [`estrutura-e-versionamento.md`](./estrutura-e-versionamento.md) | Layout de diretórios e versionamento semântico |
 | Cobertura de Testes | [`cobertura-testes.md`](./cobertura-testes.md) | Mínimo 80% agregado por projeto vitest; hard fail CI |
+| E2E Playwright | [`e2e-playwright.md`](./e2e-playwright.md) | Todo fluxo de usuário com tela tem spec e2e Playwright que atravessa o backend; inventário de fluxos reconciliado por gate |
 | Release Automático (Post-Merge) | [`post-merge-release.md`](./post-merge-release.md) | Auto-tagging `vX.Y.Z` via `.github/workflows/release-template.yml` após bump em main |
 | CI Defense in Depth | [`ci-defense-in-depth.md`](./ci-defense-in-depth.md) | 3 camadas: pre-push local + preflight CI + quality CI gated |
 | CI Defense in Depth — pendências | [`ci-defense-in-depth-pendencias.md`](./ci-defense-in-depth-pendencias.md) | Pendências abertas dos gates (companion; cresce sem caber no documento da convenção) |

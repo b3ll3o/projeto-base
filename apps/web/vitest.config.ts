@@ -4,7 +4,7 @@
 // (lines, functions, branches, statements) — ver
 // .agents/specs/conventions/cobertura-testes.md.
 //
-// STATUS ATUAL (medido em 2026-10-06, `pnpm exec vitest run --coverage` a
+// STATUS ATUAL (re-medido em 2026-10-08, `npx vitest run --coverage` a
 // partir de apps/web): **99,70% statements · 93,54% branches · 100%
 // functions · 99,70% lines**, em 10 arquivos / 84 testes. O gate de 80% está
 // LIGADO e passa.
@@ -22,17 +22,32 @@
 //  - `app/**` estava excluído da cobertura, o que tirava do relatório a
 //    Server Action `actions.ts` e o `state.ts` (ver a nota do `exclude`).
 //
+// ⚠️ pt-BR (2026-10-08): o número acima é o MESMO de 2026-10-06 depois de
+// passar por uma quebra no meio do caminho. Ao entrar a suíte Playwright, o
+// agregado caiu para **38,88%** — o harness (`e2e/global-setup.ts`,
+// `e2e/global-teardown.ts` e os cinco arquivos de `e2e/support/`) entrou no
+// denominador a 0%, porque nenhum deles é carregado pelo Vitest e nenhum pode
+// ser. Sete arquivos de infraestrutura de teste derrubando o gate de produção
+// é a classe do "verde/vermelho pelo motivo errado": o número estava
+// descrevendo testes, não código. Corrigido com `'e2e/**'` no `exclude`
+// (ver a nota dele). O 99,70% voltou — e o fato de voltar ao centésimo é o que
+// diz que nada mais se moveu.
+//
 // Ressalvas honestas sobre o número:
 //  - `instrumentation.edge.ts` segue em 0% de statements: é um `export {}`,
 //    um stub deliberado para satisfazer o import do shim. Não há comportamento
 //    a testar ali, e um teste que afirma `export {}` não faz nada seria teatro.
 //  - `app/**/*.tsx` e `app/api/**` continuam fora da cobertura: são páginas
-//    RSC e route handlers sem teste unitário. São 5 arquivos de 0% que NÃO
-//    entram no agregado — o relatório honesto mostra o número com elas dentro
-//    seria 77,24% (medido 2026-10-06 removendo as duas linhas do `exclude`),
-//    com o gate estourando em `lines` e `functions`.
+//    RSC e route handlers sem teste unitário — mas que JÁ TÊM e2e de browser,
+//    em outro processo. São 5 arquivos de 0% que não entram no agregado; o
+//    número com eles dentro é **77,24%** (re-medido 2026-10-08, removendo as
+//    duas linhas do `exclude`), com o gate estourando em `lines`, `functions` e
+//    `statements`. A decisão de manter a exclusão, e o motivo novo, estão na
+//    nota do `exclude`.
 //  - `state.ts` está em 50% de branch (linha 45) e `actions.ts` em 91,66%
 //    (linhas 81-82). São os dois pontos Known-open mais honestos que restam.
+//  - O harness e2e está a 0% e EXCLUÍDO de propósito — ele é exercitado pela
+//    suíte `test:e2e`, que é o registro dele.
 //
 // Por que report-only não é o estado: a regra global exige 80% declarado no
 // config raiz, e há um teste no apps/api (`test/config/coverage-floor.spec.ts`)
@@ -185,11 +200,46 @@ export default defineConfig({
         // abaixo do teto de 80%. Não é o número que importa — é que ele
         // contava 5 páginas RSC como 0% e puxava a média junto com o resto.
         //
-        // Quando houver teste de página (Playwright/E2E), estas duas linhas
-        // são o lugar a revisar: menos exclusão, mais métrica honesta.
+        // pt-BR (2026-10-08) — a promessa desta linha foi cumprida e a revisão
+        // foi feita. Já existe teste de página: a suíte Playwright em `e2e/`,
+        // regida por `.agents/specs/conventions/e2e-playwright.md`. Removendo
+        // as duas linhas agora, o agregado cai para **77.24% em statements e
+        // linhas, 77.27% em functions** — o gate estoura nas três. Os 5
+        // arquivos entram como 0%: `layout.tsx`, `app/page.tsx`,
+        // `users/page.tsx`, `users/novo/page.tsx` e `api/health/route.ts`.
+        //
+        // O número reproduz o de 2026-10-06 ao centésimo, e essa coincidência
+        // é a informação: prova que o harness e2e (excluído logo abaixo) NÃO
+        // desloca o denominador. Medir de novo era o que separava "o aggregate
+        // mexeu por causa da suíte nova" de "ele mexeu por causa da exclusão
+        // que eu estava avaliando" — e são coisas diferentes.
+        //
+        // A exclusão fica, e o motivo mudou: não é mais "esperando o teste
+        // existir". É que o teste existe e mora em OUTRA CAMADA. O Vitest unit
+        // mede o que o unit exercita; as páginas RSC são exercitadas pelo
+        // browser, no processo `test:e2e`, cujo denominador é o do Playwright.
+        // Deixar a página entrar aqui não seria mais métrica honesta — seria o
+        // mesmo arquivo contado duas vezes, uma delas sempre a zero.
         'app/**/*.tsx',
         'app/api/**',
         'next-env.d.ts',
+        // pt-BR (2026-10-08): o harness e2e do Playwright é infraestrutura de
+        // TESTE, não código de produção — o mesmo papel de `test/` no apps/api,
+        // que já é excluído lá por `'**/test/**'`. Sem esta linha o gate do
+        // unit fica vermelho por causa dos testes: medido 99,70% → **38,88%**
+        // em linhas, com `global-setup.ts`, `global-teardown.ts` e os cinco
+        // arquivos de `support/` entrando a 0% (nenhum é carregado pelo Vitest,
+        // e nenhum pode ser — sobem processos e containers).
+        //
+        // O `**/*.spec.{ts,tsx}` abaixo já pegava os specs de dentro de `e2e/`;
+        // o que faltava era o resto do diretório. `e2e/**` pega os dois.
+        //
+        // Isto NÃO é a exclusão do `app/**/*.tsx` acima, que esconde páginas RSC
+        // sem cobertura: aqui o arquivo é exercitado de verdade — pela suíte
+        // `test:e2e`, que é a outra camada. O denominador do unit mede o que o
+        // unit exercita, e ele não exercita o harness.
+        'e2e/**',
+        'playwright.config.*',
         // pt-BR: `{ts,tsx}` e não só `.ts` — o app tem testes de Client
         // Component (`src/telemetry/web-vitals-reporter.spec.tsx`) e um glob
         // `**/*.spec.ts` não os casa. Com o spread presente a troca é

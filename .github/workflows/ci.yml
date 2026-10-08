@@ -106,8 +106,26 @@ jobs:
       - run: pnpm turbo run lint typecheck
       # Cobertura (gate-enforced) + unit para todos os apps via turbo task graph.
       - run: pnpm turbo run test:coverage test:unit
-      # Integration + E2E rodam só em apps/api (apps/web não tem esses níveis).
+      # Integration + E2E de API rodam em apps/api; o E2E de FRONTEND é a suíte
+      # Playwright, logo abaixo, e ela sobe Postgres + API + Next por conta própria
+      # (e2e/global-setup.ts) — não reaproveita nada deste passo.
       - run: pnpm turbo run test:integration test:e2e --filter=@projeto/api
+      # pt-BR: o `--filter` é obrigatório, não cosmético. `@playwright/test` está
+      # nos devDependencies do web e o pnpm isola `node_modules`: na raiz,
+      # `pnpm exec playwright` não resolve e sai 0 sem instalar nada — o pior tipo
+      # de passo de CI, o que parece verde e não mediu nada.
+      - run: pnpm --filter @projeto/web exec playwright install --with-deps chromium
+      - run: pnpm turbo run test:e2e --filter=@projeto/web
+      # Relatório + traces SEMPRE, inclusive quando o teste falha: um e2e que
+      # quebra sem artefato é um e2e que a próxima pessoa desativa.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: |
+            apps/web/playwright-report/
+            apps/web/test-results/
+          retention-days: 14
       # Upload de cobertura como artifact para auditoria (cobertura-testes.md §CI Enforcement).
       - uses: actions/upload-artifact@v4
         if: always()

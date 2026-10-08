@@ -1,0 +1,309 @@
+// apps/web/e2e/global-setup.ts
+//
+// Bootstrap da suíte e2e: Postgres efêmero → API Nest → build do Next →
+// servidor Next. Roda UMA vez, antes de qualquer spec.
+//
+// ── Por que tudo isso ───────────────────────────────────────────────────────
+//
+// Um e2e de frontend precisa que browser, Next, Server Action, HTTP e Postgres
+// participem do MESMO evento. As suítes que já existiam no repo param antes
+// disso: a de componente injeta a Action por prop (nunca fala com a API) e a
+// de API fala por `app.inject` (nunca renderiza uma tela). Cada uma é verde
+// com uma classe inteira de defeito invisível — o `POST` responde 201, a
+// Action mapeia o erro certo, e ainda assim o cadastro não aparece na tela.
+//
+// ── Por que `next build` e não `next dev` ───────────────────────────────────
+//
+// `next dev` economiza ~40s (medido) e traz três coisas que esta suíte não
+// quer: overlay de erro sobre a tela, avisos de StrictMode, e effects
+// duplicados. Esta suíte afirma justamente sobre `startTransition`/`pendente`
+// (o botão `Cadastrando…` e os campos travados durante o envio), que é
+// exatamente onde StrictMode mora. Fidelidade vale os 40s.
+//
+// E o build roda em `.next-e2e/`, não em `.next/` — ver o comentário de
+// `distDir` em `apps/web/next.config.mjs`. Sem isso, rodar a suíte com o
+// `pnpm dev` aberto quebra a app local.
+//
+// ── Isolamento ──────────────────────────────────────────────────────────────
+//
+// O Postgres é um container efêmero (Testcontainers), NÃO o banco de dev. O
+// banco de desenvolvimento tem dados reais e derrubar/reconstruir por conta
+// própria de uma suíte de teste não é uma decisão que um `test:e2e` toma
+// sozinho.
+
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import { cpSync, existsSync, readdirSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+// Reuso direto do helper que o e2e de API já usa — o Postgres efêmero, as
+// migrations e o prune entre testes. `apps/web` não declara
+// `@testcontainers/postgresql` no próprio `package.json`: o import resolve a
+// partir do arquivo, dentro de `apps/api`, que tem a dependência. Verificado
+// com `pnpm --filter @projeto/web typecheck`.
+import { setupTestDatabase, type TestContext } from '../../api/test/testcontainers-helper.js';
+import { API_ROOT, WEB_ROOT, gravarEstado, type EstadoE2E } from './support/estado';
+import { portaLivre, esperarTcpAberta } from './support/portas';
+import { subirApi } from './support/api';
+
+/** `distDir` do build exclusivo da suíte. Precisa casar com `next.config.mjs`. */
+const DIST_DIR_E2E = '.next-e2e';
+
+/**
+ * O contexto fica num global, não no arquivo de estado, porque só este
+ * processo tem o `PrismaClient` e o handle do container — os workers da
+ * Playwright são processos separados e não enxergam este objeto.
+ */
+const CHAVE_GLOBAL = '__e2ePlaywrightContexto';
+
+export default async function globalSetup(): Promise<void> {
+  const inicio = Date.now();
+  const log = (mensagem: string): void => {
+    process.stdout.write(`[e2e:setup] ${mensagem}\n`);
+  };
+
+  // ── 1. Postgres efêmero ────────────────────────────────────────────────────
+  //
+  // `setupTestDatabase()` roda `prisma migrate deploy` com `cwd:
+  // process.cwd()`, e a Playwright roda com cwd em `apps/web` — onde não há
+  // `schema.prisma`. O chdir é temporário de propósito: mudar o diretório
+  // do processo principal da Playwright pode afetar a resolução de caminhos
+  // de specs e reporters.
+  log('subindo Postgres efêmero (Testcontainers) e aplicando migrations…');
+  const cwdOriginal = process.cwd();
+  process.chdir(API_ROOT);
+  let ctx: TestContext;
+  try {
+    ctx = await setupTestDatabase();
+  } finally {
+    process.chdir(cwdOriginal);
+  }
+  (globalThis as Record<string, unknown>)[CHAVE_GLOBAL] = ctx;
+  const databaseUrl = process.env.DATABASE_URL ?? '';
+  log(`Postgres pronto em ${databaseUrl.replace(/:[^:@/]*@/, ':***@')}`);
+
+  // ── 2. API Nest ───────────────────────────────────────────────────────────
+  const apiPorta = await portaLivre();
+  const apiOrigem = `http://127.0.0.1:${apiPorta}`;
+  const apiBaseUrl = `${apiOrigem}/api/v1`;
+  log(`subindo API Nest em ${apiOrigem}…`);
+  const apiFilho = await subirApi({ porta: apiPorta, databaseUrl });
+  log('API respondendo /health.');
+
+  // ── 3. Build do Next ──────────────────────────────────────────────────────
+  //
+  // `API_BASE_URL` entra no ambiente do build de propósito. A página de
+  // listagem lê `process.env.API_BASE_URL` em tempo de REQUEST, então em
+  // teoria só o runtime bastaria — mas o Next substitui `process.env.X` por
+  // texto no bundle do servidor, e depender dessa semântica para escolher
+  // a porta seria descobrir por tentativa e erro. Passar no build funciona
+  // nos dois casos.
+  log(`rodando \`next build\` em ${DIST_DIR_E2E}/ (≈40s)…`);
+  const inicioBuild = Date.now();
+  try {
+    execFileSync('pnpm', ['exec', 'next', 'build'], {
+      cwd: WEB_ROOT,
+      stdio: 'inherit',
+      env: ambienteDeBuild(apiBaseUrl),
+    });
+  } catch (erro) {
+    // pt-BR: derruba o que já subiu. Um `throw` aqui deixaria o Postgres e a
+    // API vivos até o próximo `docker ps` do usuário, sem nenhuma pista de
+    // que foram eles.
+    await encerrar(apiFilho, ctx);
+    throw erro;
+  }
+  log(`build concluído em ${((Date.now() - inicioBuild) / 1000).toFixed(1)}s.`);
+
+  // ── 4. Servidor Next ──────────────────────────────────────────────────────
+  //
+  // `node <distDir>/standalone/server.js`, e NÃO `next start`: o `next.config.mjs`
+  // declara `output: 'standalone'`, e o Next 15.5 avisa que `next start` não
+  // funciona nessa configuração. O caminho standalone é o mesmo que o
+  // Dockerfile de produção copia.
+  const standalone = prepararstandalone();
+  const webPorta = await portaLivre();
+  const webUrl = `http://127.0.0.1:${webPorta}`;
+  log(`subindo Next standalone em ${webUrl} (${standalone.servidor})…`);
+  const webFilho = spawn(process.execPath, [standalone.servidor], {
+    cwd: standalone.raiz,
+    env: {
+      ...process.env,
+      PORT: String(webPorta),
+      HOSTNAME: '127.0.0.1',
+      API_BASE_URL: apiBaseUrl,
+      OTEL_SDK_DISABLED: 'true',
+      NODE_ENV: 'production',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  // pt-BR: o output do servidor é COLETADO, e não descartado. Um servidor
+  // standalone que morre no boot say nada e deixa a espera estourar por
+  // timeout — o sintoma (porta fechada) fica a três passos da causa (a exceção
+  // que o Next imprimiu). A captura é anexada à mensagem de erro por isso.
+  const saidaWeb: string[] = [];
+  const coletar = (fluxo: NodeJS.ReadableStream | null): void => {
+    fluxo?.setEncoding('utf8');
+    fluxo?.on('data', (pedaco: string) => {
+      saidaWeb.push(pedaco);
+      if (saidaWeb.length > 200) saidaWeb.shift();
+    });
+  };
+  coletar(webFilho.stdout);
+  coletar(webFilho.stderr);
+
+  try {
+    await esperarTcpAberta(webPorta);
+    await esperarHttp(`${webUrl}/users`);
+  } catch (erro) {
+    const causa = erro instanceof Error ? erro.message : String(erro);
+    await encerrar(webFilho, apiFilho, ctx);
+    throw new Error(
+      `O servidor Next (standalone) não respondeu.\n` +
+        `Saída do processo (últimos 200 registros):\n${saidaWeb.join('')}\n` +
+        `Erro da espera: ${causa}`,
+    );
+  }
+
+  // ── 5. Contrato com os workers ────────────────────────────────────────────
+  const estado: EstadoE2E = {
+    webPorta,
+    webUrl,
+    apiPorta,
+    apiOrigem,
+    apiBaseUrl,
+    apiPid: apiFilho.pid ?? null,
+    webPid: webFilho.pid ?? null,
+    databaseUrl,
+  };
+  gravarEstado(estado);
+  log(`pronto em ${((Date.now() - inicio) / 1000).toFixed(1)}s — web ${webUrl}, api ${apiBaseUrl}`);
+}
+
+async function esperarHttp(url: string, limiteMs = 60_000): Promise<void> {
+  const fim = Date.now() + limiteMs;
+  let ultimoErro = 'sem tentativa';
+  while (Date.now() < fim) {
+    try {
+      const resposta = await fetch(url);
+      // Qualquer status HTTP serve: o que interessa é que o Next respondeu.
+      // Um 500 aqui é defeito da aplicação sob teste e o spec precisa vê-lo.
+      if (resposta.status > 0) return;
+    } catch (erro) {
+      ultimoErro = erro instanceof Error ? erro.message : String(erro);
+    }
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  throw new Error(`esperarHttp(${url}): sem resposta em ${limiteMs}ms — ${ultimoErro}`);
+}
+
+async function encerrar(...processos: (ChildProcess | TestContext)[]): Promise<void> {
+  for (const item of processos.reverse()) {
+    if ('stop' in item) {
+      await item.stop().catch(() => undefined);
+    } else if (item.exitCode === null) {
+      item.kill('SIGKILL');
+    }
+  }
+}
+
+/**
+ * Localiza o `server.js` do output standalone e monta a árvore servível.
+ *
+ * MEDIDO em 2026-10-08: o caminho NÃO é `.next-e2e/standalone/server.js`, que é
+ * onde a documentação e a intuição apontam. Em monorepo, o Next grava o
+ * standalone espelhando a partir do `outputFileTracingRoot` — a raiz do repo —
+ * então o entrypoint real é `.next-e2e/standalone/apps/web/server.js`. Um `cd`
+ * a menos e a suíte morre com `MODULE_NOT_FOUND`, que não nomeia o monorepo.
+ *
+ * Por isso o caminho é **descoberto** (e a contagem é exigida), nunca escrito.
+ * E o `distDir` é lido do próprio `server.js`, porque é lá que o Next o assa
+ * (`__NEXT_PRIVATE_STANDALONE_CONFIG`): static e public são procurados em
+ * `<raiz>/<distDir>/static` e `<raiz>/public`. O `standalone` não traz esses
+ * dois — o Dockerfile de produção os copia por fora, e o mesmo é feito aqui.
+ */
+function prepararstandalone(): { raiz: string; servidor: string } {
+  const base = join(WEB_ROOT, DIST_DIR_E2E, 'standalone');
+  const candidatos: string[] = [];
+  const varrer = (dir: string, profundidade: number): void => {
+    if (profundidade > 3 || candidatos.length > 1) return;
+    for (const entrada of readdirSync(dir, { withFileTypes: true })) {
+      if (entrada.name === 'server.js') candidatos.push(join(dir, entrada.name));
+      // `node_modules` do standalone é a cópia rastreada das dependências: nele
+      // há `server.js` de outros pacotes, e um deles seria aceito por engano.
+      else if (entrada.isDirectory() && entrada.name !== 'node_modules') {
+        varrer(join(dir, entrada.name), profundidade + 1);
+      }
+    }
+  };
+  varrer(base, 0);
+
+  if (candidatos.length !== 1) {
+    throw new Error(
+      `Esperado exatamente 1 server.js em ${base}/ (até 3 níveis, fora de ` +
+        `node_modules); encontrados ${candidatos.length}: ` +
+        `${candidatos.join(', ') || '(nenhum)'}. ` +
+        'Se o Next mudou o layout do output standalone, é aqui que o contrato muda.',
+    );
+  }
+
+  const servidor = candidatos[0]!;
+  const raiz = dirname(servidor);
+
+  const fonte = readFileSync(servidor, 'utf8');
+  const distDir = fonte.match(/"distDir":"([^"]*)"/)?.[1]?.replace(/^\.\//, '');
+  if (distDir === undefined || distDir === '') {
+    throw new Error(
+      `Não achei "distDir" na config embutida de ${servidor}. O Next grava ` +
+        '`__NEXT_PRIVATE_STANDALONE_CONFIG` no topo do server.js; sem esse campo ' +
+        'não há como saber onde o servidor vai procurar `static`.',
+    );
+  }
+
+  const estatico = join(WEB_ROOT, DIST_DIR_E2E, 'static');
+  const destinoEstatico = join(raiz, distDir, 'static');
+  cpSync(estatico, destinoEstatico, { recursive: true });
+
+  const publico = join(WEB_ROOT, 'public');
+  if (existsSync(publico)) cpSync(publico, join(raiz, 'public'), { recursive: true });
+
+  return { raiz: base, servidor };
+}
+
+export { CHAVE_GLOBAL };
+
+/**
+ * Ambiente do `next build` — derivado, nunca `...process.env` cru.
+ *
+ * MEDIDO em 2026-10-08: o build falhava quando era disparado de dentro do
+ * `globalSetup` e passava quando o mesmo comando rodava no shell, com as
+ * mesmas flags e no mesmo `distDir`. A diferença era o ambiente herdado do
+ * processo da Playwright, e o sintoma era
+ * `<Html> should not be imported outside of pages/_document` na hora de
+ * exportar `/404` — que é o `pages/_document` do próprio Next sendo
+ * renderizado sem contexto, num processo que se acredita em modo de
+ * desenvolvimento.
+ *
+ * O que se remove é deliberado e nomeado, não uma lista de bloqueio:
+ * `NODE_ENV` (o `next build` decide o próprio modo) e `NODE_PATH` /
+ * `npm_*` (configuração de resolução de módulo do launcher do pnpm, que não
+ * descreve o build). Um build que só funciona com o ambiente do runner é um
+ * build que falha no CI, que roda em outro processo.
+ */
+function ambienteDeBuild(apiBaseUrl: string): NodeJS.ProcessEnv {
+  const ambiente: Record<string, string | undefined> = { ...process.env };
+  for (const chave of Object.keys(ambiente)) {
+    if (chave === 'NODE_ENV' || chave === 'NODE_PATH' || chave.startsWith('npm_')) {
+      delete ambiente[chave];
+    }
+  }
+  return {
+    ...ambiente,
+    NEXT_DIST_DIR: DIST_DIR_E2E,
+    API_BASE_URL: apiBaseUrl,
+    // pt-BR: sem isto o `tracing.ts` do web tenta postar web-vitals para
+    // um collector inexistente durante o build e em runtime.
+    OTEL_SDK_DISABLED: 'true',
+    // pt-BR: o tipo declara `NODE_ENV` como obrigatório porque o Next o
+    // augmentou; o campo é omitido de propósito, e é esse cast que diz isso
+    // em vez de repor a variável que a correção remove.
+  } as unknown as NodeJS.ProcessEnv;
+}
