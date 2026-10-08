@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { CheckResult } from './check-types';
+import { linhasDoRelato } from './check-types';
 
 /**
  * tsconfig da superfície `.tooling/` (issue #46).
@@ -107,6 +108,6 @@ export function checkToolingTypecheck(opts?: { repoRoot?: string; run?: TscRun }
 
 if (process.argv[1]?.endsWith('check-tooling-typecheck.ts')) {
   const r = checkToolingTypecheck();
-  for (const e of r.errors) process.stderr.write(`${e}\n`);
+  for (const linha of linhasDoRelato(r)) process.stderr.write(`${linha}\n`);
   process.exit(r.ok ? 0 : 1);
 }

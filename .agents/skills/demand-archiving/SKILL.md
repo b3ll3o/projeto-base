@@ -65,13 +65,16 @@ Resultado esperado: `state == "MERGED"`. Se `OPEN`/`CLOSED`, **abortar** (demand
 # (retrospective-capture.md §"Destino canônico do result file").
 # Dois detalhes não são estilo, são o que fecha o gate:
 #  - `git rev-parse --show-toplevel`: o bloco funciona de qualquer diretório.
-#    Um path relativo ao CWD dá vermelho num retro que EXISTE.
+#    Um path relativo ao CWD dá vermelho num retro que EXISTE. O `env -u
+#    GIT_DIR` não é estilo: o git exporta GIT_DIR para os hooks, e com ele
+#    definido `--show-toplevel` devolve o CWD — a promessa acima seria falsa
+#    justamente quando o bloco roda dentro de um hook.
 #  - `eval`, e não captura do valor: a linha canônica é `MEMORY_DIR="..."` com
 #    aspas e `${HOME}` dentro. Copiar só o valor (sem as aspas, via `sed s///`)
 #    devolve os metacaracteres como TEXTO, e o `test -f "${HOME}/..."` literal
 #    nunca acha o arquivo. É preciso EVALUAR a linha, não capturá-la.
 eval "$(sed -n '/^MEMORY_DIR=/p' \
-  "$(git rev-parse --show-toplevel)/.agents/specs/conventions/retrospective-capture.md")"
+  "$(env -u GIT_DIR git rev-parse --show-toplevel)/.agents/specs/conventions/retrospective-capture.md")"
 test -f "${MEMORY_DIR}/<retro>.md"
 ```
 

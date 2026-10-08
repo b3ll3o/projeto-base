@@ -56,6 +56,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { matchPathGlobs, loadMatrix } from '../../../tooling/scripts/review-router.js';
 import type { CheckResult } from './check-types';
+import { linhasDoRelato } from './check-types';
 
 /** Um gate como o preflight o declara. */
 export interface GateRef {
@@ -312,6 +313,6 @@ export function readRepoFiles(): string[] {
 // Executado como CLI.
 if (process.argv[1]?.endsWith('check-teeth-registry.ts')) {
   const r = checkTeethRegistry();
-  for (const e of r.errors) process.stderr.write(`${e}\n`);
+  for (const linha of linhasDoRelato(r)) process.stderr.write(`${linha}\n`);
   process.exit(r.ok ? 0 : 1);
 }

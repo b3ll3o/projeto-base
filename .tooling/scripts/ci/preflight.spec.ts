@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { checkDocRefs } from './check-doc-refs';
-import { formatMark } from './preflight';
+import { detalhar, formatMark, relatarUmCheck } from './preflight';
 import type { CheckResult } from './check-types';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -210,5 +210,141 @@ describe('checkDocRefs', () => {
     it('deve manter ✗ para o check que rodou e falhou', () => {
       expect(formatMark({ ok: false, errors: ['algo quebrado'] })).toBe('✗');
     });
+  });
+});
+
+describe('detalhar - a contagem que o painel anuncia', () => {
+  // MEDIDO 2026-10-06: uma branch 1 commit atrasada printava
+  // "❌ 2 erro(s) encontrado(s)". Havia UM defeito. O segundo "erro" era a
+  // ressalva "medido contra a ref `origin/main` local" — verdadeira sobre a
+  // própria medição, e portanto conteúdo, não defeito.
+  //
+  // A consequência de errar a contagem não é cosmética: quem lê "2 erro(s)"
+  // para caçar o segundo bug, não acha, e volta a olhar o primeiro — que era
+  // o único que existia. Um número que não reconcilia com o que está impresso
+  // acima dele treina a leitura a ignorar o número.
+  const atrasada: CheckResult = {
+    ok: false,
+    errors: ['a branch está 1 commit(s) atrás de `origin/main`'],
+    advisories: ['Atenção: medido contra a ref `origin/main` local'],
+  };
+
+  it('conta 1 erro para 1 defeito + 1 ressalva', () => {
+    expect(detalhar(atrasada).erros).toBe(1);
+  });
+
+  it('IMPRIME a ressalva mesmo assim — silenciar não é o conserto', () => {
+    const { linhas } = detalhar(atrasada);
+    expect(linhas).toHaveLength(2);
+    expect(linhas.join('\n')).toMatch(/Atenção/);
+    // A ordem também é o contrato: o defeito primeiro, a ressalva depois.
+    expect(linhas[0]).toMatch(/atrás/);
+  });
+
+  it('NÃO inventa advisory: check sem ressalva devolve só os erros', () => {
+    const semRessalva = detalhar({ ok: false, errors: ['só o defeito'] });
+    expect(semRessalva.erros).toBe(1);
+    expect(semRessalva.linhas).toEqual(['só o defeito']);
+  });
+});
+
+describe('relatarUmCheck - o ramo VERDE também tem linhas', () => {
+  // MEDIDO 2026-10-07: `main()` chamava `detalhar` dentro de `if (!result.ok)`.
+  // Nenhum check emitia `advisories` num resultado verde, então nada era
+  // perdido — e nenhum teste existia, porque a decisão morava dentro da
+  // preflight inteira. O primeiro check que emitir uma ressalva sobre um verde
+  // a teria visto sumir em silêncio, sem erro e sem contagem.
+  const verdeComRessalva: CheckResult = {
+    ok: true,
+    errors: [],
+    advisories: ['Atenção: medido contra a ref `origin/main` local, que pode estar velha'],
+  };
+
+  it('imprime a ressalva de um check VERDE — o verde é o caso que ela qualifica', () => {
+    const r = relatarUmCheck(verdeComRessalva);
+    expect(r.mark).toBe('✓');
+    expect(r.linhas).toHaveLength(1);
+    expect(r.linhas[0]).toMatch(/Atenção/);
+  });
+
+  it('NÃO soma a ressalva de um verde como erro', () => {
+    expect(relatarUmCheck(verdeComRessalva).erros).toBe(0);
+  });
+
+  it('um verde comum não ganha linha nenhuma', () => {
+    // O par dos dois anteriores: sem isto, `linhas: [algo]` passesaria em
+    // qualquer implementação, inclusive uma que inventasse uma linha.
+    const limpo = relatarUmCheck({ ok: true, errors: [] });
+    expect(limpo.linhas).toEqual([]);
+    expect(limpo.mark).toBe('✓');
+    expect(limpo.pulou).toBe(false);
+  });
+
+  it('skip continua sendo contado no ramo verde, sem virar erro', () => {
+    const pulado = relatarUmCheck({ ok: true, errors: [], skipped: true, reason: 'sem harness' });
+    expect(pulado.mark).toMatch(/skipped/);
+    expect(pulado.pulou).toBe(true);
+    expect(pulado.erros).toBe(0);
+  });
+
+  it('vermelho segue vermelho, com as linhas do defeito e da ressalva', () => {
+    const vermelho = relatarUmCheck({
+      ok: false,
+      errors: ['a branch está 1 commit(s) atrás'],
+      advisories: ['Atenção: ref local'],
+    });
+    expect(vermelho.mark).toBe('✗');
+    expect(vermelho.erros).toBe(1);
+    expect(vermelho.linhas).toHaveLength(2);
+    expect(vermelho.pulou).toBe(false);
+  });
+});
+
+describe('relatarUmCheck - skip que ACOMPANHA erro não pode sumir', () => {
+  // MEDIDO 2026-10-07: `pulou` era `Boolean(result.ok && result.skipped)`, e
+  // `&&` exige `ok: true`. Mas `ok` e `skipped` são independentes por contrato:
+  // `check-package-json-drift.ts:131-134` devolve `ok: errors.length === 0`
+  // JUNTO com `skipped: true`. Quando a validação do turbo não roda e JÁ há
+  // erros, o resultado é `ok: false` + `skipped: true` — estado que a condição
+  // descartava inteiro: o motivo do skip não saía, `totalSkipped` não
+  // incrementava, e o resumo "N check(s) não rodaram" não disparava.
+  //
+  // É o estado silencioso que esta branch se propõe a fechar, dentro dela mesma.
+  const puladoComErro: CheckResult = {
+    ok: false,
+    errors: ['task órfã: `foo`'],
+    skipped: true,
+    reason: 'validação de `turbo run <task>` não rodou: pnpm-workspace.yaml ausente',
+  };
+
+  it('conta o skip mesmo com erro — senão o resumo mente sobre o que rodou', () => {
+    expect(relatarUmCheck(puladoComErro).pulou).toBe(true);
+  });
+
+  it('imprime o motivo do skip — os erros não dizem por que não rodou', () => {
+    const linhas = relatarUmCheck(puladoComErro).linhas;
+    expect(linhas.some((l) => l.includes('pnpm-workspace.yaml'))).toBe(true);
+  });
+
+  it('NÃO converte o skip em erro: o que conta erro continua sendo o check', () => {
+    const r = relatarUmCheck(puladoComErro);
+    expect(r.erros).toBe(1);
+    expect(r.mark).toBe('✗');
+  });
+
+  it('NÃO duplica o motivo no pulo VERDE — a marca já o carrega', () => {
+    // O par necessário: incluir a linha do skip sem condición faria o verde
+    // imprimir o motivo duas vezes (uma na marca `– (skipped: …)`, outra nas
+    // linhas). O vermelho é que precisa dela, porque a marca dele é só `✗`.
+    const verde = relatarUmCheck({
+      ok: true,
+      errors: [],
+      skipped: true,
+      reason: 'sem harness',
+    });
+    const comMarca = verde.linhas.filter((l) => l.includes('sem harness'));
+    expect(comMarca).toHaveLength(0);
+    expect(verde.mark).toContain('sem harness');
+    expect(verde.pulou).toBe(true);
   });
 });

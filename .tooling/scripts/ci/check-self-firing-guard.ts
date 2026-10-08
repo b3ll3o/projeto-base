@@ -67,6 +67,7 @@ import {
   sweptCorpus,
 } from './check-memory-dir-concordance.js';
 import type { CheckResult } from './check-types';
+import { linhasDoRelato } from './check-types';
 
 export interface CorpusLine {
   file: string;
@@ -347,6 +348,6 @@ export function checkSelfFiringGuards(): CheckResult {
 
 if (process.argv[1]?.endsWith('check-self-firing-guard.ts')) {
   const r = checkSelfFiringGuards();
-  for (const e of r.errors) process.stderr.write(`${e}\n`);
+  for (const linha of linhasDoRelato(r)) process.stderr.write(`${linha}\n`);
   process.exit(r.ok ? 0 : 1);
 }

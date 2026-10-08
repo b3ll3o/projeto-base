@@ -2,9 +2,23 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { checkBranchUpToDate } from './check-branch-up-to-date';
 import type { GitRun } from './check-branch-up-to-date';
+import { linhasDoRelato } from './check-types';
+
+/**
+ * Raiz do repo, derivada do PRÓPRIO spec e não de `process.cwd()`.
+ *
+ * O teste abaixo executa o check com `cwd` no repo de mentira, e `tsx` é um
+ * caminho relativo a `node_modules`. Se qualquer um dos dois viesse do
+ * `process.cwd()`, o teste mediria um repo de verdade em vez do de mentira —
+ * e um gate que passa pelo motivo errado é pior que um gate que não existe.
+ */
+const REPO_ROOT = fileURLToPath(new URL('../../..', import.meta.url));
+const TSX = join(REPO_ROOT, 'node_modules/.bin/tsx');
+const SCRIPT = join(REPO_ROOT, '.tooling/scripts/ci/check-branch-up-to-date.ts');
 
 /**
  * Executa `git` com a identidade **explícita**.
@@ -147,6 +161,29 @@ describe('checkBranchUpToDate', () => {
       expect(r.errors[0]).toMatch(/rebase/);
     });
 
+    it('a ressalva da ref local NÃO é contada como erro — 1 defeito, 1 erro', () => {
+      // MEDIDO 2026-10-06: a ressalva "Atenção: medido contra a ref local"
+      // vivia no MESMO array `errors`, e o preflight faz
+      // `totalErrors += result.errors.length`. Resultado no console: uma branch
+      // 1 commit atrás printava "❌ 2 erro(s) encontrado(s)" — dois defeitos
+      // onde há um. Quem lê o número passa a procurar um segundo bug que não
+      // existe, e o que existe de verdade é a contagem.
+      //
+      // A ressalva é conteúdo de verdade e não pode ser jogada fora: sem ela,
+      // um verde local sobre uma ref velha vira prova. Então ela continua
+      // impressa — o que muda é o CANAL, e é só isso que este teste fixa.
+      const r = checkBranchUpToDate({
+        run: fakeGit({ 'rev-parse': SHA, 'is-ancestor': 1, 'rev-list': '1\n' }),
+      });
+      expect(r.ok).toBe(false);
+      // Um defeito = um erro. A ressalva não vira o segundo.
+      expect(r.errors).toHaveLength(1);
+      // ...e não foi silenciada: ela aparece, em outro canal.
+      expect(r.advisories).toHaveLength(1);
+      expect(r.advisories![0]).toMatch(/Atenção/);
+      expect(r.advisories![0]).toMatch(/fetch/);
+    });
+
     it('NÃO confunde "sem ancestral comum" com "atrasada"', () => {
       // `merge-base --is-ancestor` devolve 128 quando não há ancestral. Não é
       // "está 7 atrás": a história não converge, e o conserto é outro
@@ -231,6 +268,40 @@ describe('checkBranchUpToDate', () => {
       expect(r.errors[0]).toMatch(/--abort/);
       // E não pode ser reportado como "atrasada": o conserto é outro.
       expect(r.errors.join('\n')).not.toMatch(/atrás de/);
+    });
+
+    it('o modo CLI imprime a ressalva — o caminho isolado não engole o aviso', () => {
+      // MEDIDO 2026-10-07: com a ressalva em `advisories`, o painel do
+      // preflight passou a imprimi-la e o CLI do próprio arquivo continuou
+      // imprimindo só `errors`. Rodar o check isolado
+      // (`tsx .tooling/scripts/ci/check-branch-up-to-date.ts`) sumia com o
+      // aviso que dá sentido ao número — e nenhum teste caía, porque o bloco
+      // `if (process.argv[1])` estava fora do alcance de qualquer spec.
+      //
+      // Executa o binário de verdade contra um repo de verdade: o defeito é
+      // justamente do caminho de impressão, e testar a função não diria nada
+      // sobre ele.
+      const repo = repoReal(3);
+      // Precondição — sem isso o teste passa vacuamente: se o check deixasse
+      // de produzir ressalva nenhuma, a igualdade abaixo continuaria valendo.
+      const esperado = checkBranchUpToDate({ repoRoot: repo });
+      expect(esperado.advisories).toHaveLength(1);
+
+      let stderr = '';
+      try {
+        execFileSync(TSX, [SCRIPT], {
+          cwd: repo,
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+      } catch (err) {
+        stderr = (err as { stderr?: string }).stderr ?? '';
+      }
+
+      expect(stderr).toMatch(/Atenção/);
+      // Paridade estrita: a saída do CLI é exatamente o relato. Qualquer
+      // categoria que um caminho imprima e o outro não quebra aqui.
+      expect(stderr.trimEnd()).toBe(linhasDoRelato(esperado).join('\n'));
     });
   });
 });

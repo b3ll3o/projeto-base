@@ -136,6 +136,76 @@ export function formatMark(r: CheckResult): string {
   return '✓';
 }
 
+/**
+ * As linhas de detalhe que o painel imprime DEPOIS da marca, em qualquer ramo.
+ *
+ * Deliberadamente **sem** a linha de skip que `linhasDoRelato` inclui: o painel
+ * já carrega o motivo na própria marca (`– (skipped: …)`, via `formatMark`), e
+ * usar as duas listas aqui imprimiria o motivo duas vezes. São contratos
+ * diferentes — o CLI de um check não tem marca e precisa dizer por que não
+ * rodou — e a diferença é essa, não uma divergência acidental.
+ *
+ * Extraído de `main()` só porque era impossível testar a contagem onde ela
+ * estava: o somatório vivia no meio de um `for` com `console.log` entrelaçado,
+ * e nada media se uma ressalva inflava o total.
+ *
+ * MEDIDO 2026-10-06: `check-branch-up-to-date` devolvia a ressalva "medido
+ * contra a ref local" dentro de `errors`, e o painel anunciava "❌ 2 erro(s)"
+ * para uma branch 1 commit atrás — mandando quem lê procurar um segundo bug
+ * inexistente. A ressalva continua impressa; ela só não é mais contada.
+ */
+export function detalhar(r: CheckResult): { linhas: string[]; erros: number } {
+  // A linha do skip entra SÓ no vermelho. No verde a marca já carrega o motivo
+  // (`– (skipped: …)`, via `formatMark`) e repetir aqui imprimiria duas vezes;
+  // no vermelho a marca é apenas `✗`, e aí a linha é a única coisa que diz que
+  // o check NÃO rodou — os `errors` dizem o que ele errou, não por que ele não
+  // chegou a medir.
+  //
+  // MEDIDO 2026-10-07: `ok` e `skipped` são independentes por contrato —
+  // `check-package-json-drift.ts` devolve `ok: errors.length === 0` JUNTO com
+  // `skipped: true`. No caso "não rodou E errou", o motivo do skip era o dado
+  // mais importante da linha e ele não aparecia em lugar nenhum.
+  const motivo = r.skipped && !r.ok ? [`(skipped: ${r.reason ?? 'sem motivo declarado'})`] : [];
+  return {
+    linhas: [...r.errors, ...(r.advisories ?? []), ...motivo],
+    erros: r.errors.length,
+  };
+}
+
+/**
+ * Como UM check aparece no painel: a marca, as linhas de detalhe e o que ele
+ * soma.
+ *
+ * Existe para que o ramo VERDE seja testável. O defeito que motivou o split
+ * vivia dentro de `main()` — `detalhar` era chamado só em `if (!result.ok)` — e
+ * um `advisories` sobre um `ok: true` saía descartado em silêncio. Comportamento
+ * que só se vê rodando a preflight inteira (quinze checks, alguns segundos) não
+ * tem teste; e sem teste ele volta na próxima refatoração.
+ *
+ * MEDIDO 2026-10-07: a assimetria era real, e apontava para o caso que mais
+ * importa — a ressalva "isto mediu contra uma ref que pode estar velha"
+ * qualifica um **verde**, e o verde era justamente o ramo que não a lia.
+ */
+export function relatarUmCheck(result: CheckResult): {
+  mark: string;
+  linhas: string[];
+  erros: number;
+  pulou: boolean;
+} {
+  const { linhas, erros } = detalhar(result);
+  return {
+    mark: result.ok ? formatMark(result) : '✗',
+    linhas,
+    erros,
+    // `skipped` sozinho, sem o `&& result.ok`: "não rodou" e "rodou e errou"
+    // são fatos independentes, e um check pode ser os dois ao mesmo tempo. Com
+    // o `&&`, esse terceiro estado não incrementava a contagem de pulados — e
+    // o resumo "N check(s) não rodaram" deixava de disparar exatamente quando
+    // a leitura parcial importa mais.
+    pulou: Boolean(result.skipped),
+  };
+}
+
 async function main(): Promise<void> {
   console.log('\u{1F50D} Pre-flight CI checks\n');
   const checks: Array<{
@@ -300,17 +370,18 @@ async function main(): Promise<void> {
   let totalSkipped = 0;
   for (const check of checks) {
     process.stdout.write(`  • ${check.name}... `);
-    const result = await check.fn();
-    if (!result.ok) {
-      console.log('✗');
-      for (const err of result.errors) {
-        console.log(`      ${err}`);
-      }
-      totalErrors += result.errors.length;
-    } else {
-      if (result.skipped) totalSkipped++;
-      console.log(formatMark(result));
+    // As linhas saem nos DOIS ramos, porque é `relatarUmCheck` que decide isso.
+    // Um `advisories` sobre um `ok: true` é o caso que mais importa: "verde,
+    // mas medido contra uma ref que pode estar velha" é uma ressalva sobre o
+    // verde, e um painel que só a lê no ramo vermelho descarta exatamente a
+    // afirmação que ela existe para qualificar.
+    const relatorio = relatarUmCheck(await check.fn());
+    console.log(relatorio.mark);
+    for (const linha of relatorio.linhas) {
+      console.log(`      ${linha}`);
     }
+    if (relatorio.pulou) totalSkipped++;
+    totalErrors += relatorio.erros;
   }
 
   console.log('');
