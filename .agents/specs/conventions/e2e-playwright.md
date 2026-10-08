@@ -107,7 +107,7 @@ pnpm ci:preflight
 4. **`node .next-e2e/standalone/server.js`** — e **não** `next start`, que o
    Next 15.5 desaconseha sob `output: 'standalone'`.
 
-Ver [`apps/web/playwright.config.ts`](../../../../apps/web/playwright.config.ts)
+Ver [`apps/web/playwright.config.ts`](../../../apps/web/playwright.config.ts)
 para `workers: 1` (justificativa do isolamento por banco) e para o porquê de
 não haver `baseURL`.
 
