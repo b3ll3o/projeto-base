@@ -14,9 +14,17 @@
 // por último o Postgres. Inverter faria o Next receber ECONNREFUSED durante o
 // desligamento em vez de receber a conexão que ele esperava — inofensivo aqui,
 // mas é a ordem que produz uma saída limpa nos logs.
+//
+// pt-BR (2026-10-08): COMO derrubar está em `e2e/support/processos.ts`, não
+// aqui. Esta cópia existia e só neste arquivo; a mesma escalada para `SIGKILL`
+// estava duplicada em `support/api.ts`, e uma das duas só observava o PAI — que
+// morre no `SIGTERM` deixando o filho vivo com a porta. Duas implementações de
+// "derrubar o processo" divergindo é a forma de o teardown vazar e ninguém ver.
+// A medição que justifica o sinal de grupo está no cabeçalho de lá.
 
 import { execFileSync } from 'node:child_process';
 import { lerEstado } from './support/estado';
+import { derrubarPorPid } from './support/processos';
 import { esperarTcpFechada } from './support/portas';
 
 const CHAVE_GLOBAL = '__e2ePlaywrightContexto';
@@ -52,32 +60,6 @@ export default async function globalTeardown(): Promise<void> {
     if (restantes > 0) {
       log(`ATENÇÃO: sobraram ${restantes} container(s) de teste. Remova com: docker rm -f <id>`);
     }
-  }
-}
-
-/** Manda `SIGTERM` e, se não sair, `SIGKILL`. */
-async function derrubarPorPid(pid: number | null): Promise<void> {
-  if (pid === null) return;
-  try {
-    process.kill(pid, 'SIGTERM');
-  } catch {
-    // ESRCH: já morreu. É o caso normal quando a suíte terminou com a API
-    // derrubada por um spec (fluxo F1), e não é erro.
-    return;
-  }
-  const fim = Date.now() + 8_000;
-  while (Date.now() < fim) {
-    try {
-      process.kill(pid, 0);
-    } catch {
-      return;
-    }
-    await new Promise((r) => setTimeout(r, 150));
-  }
-  try {
-    process.kill(pid, 'SIGKILL');
-  } catch {
-    // Morreu entre a checagem e o sinal. Nada a fazer.
   }
 }
 

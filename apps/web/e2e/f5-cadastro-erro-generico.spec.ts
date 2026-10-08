@@ -38,9 +38,11 @@ test.describe('F5 — Erro genérico no cadastro', () => {
     await page.getByLabel('Nome').fill(NOME_ACIMA_DO_VO);
     // pt-BR: nenhum spec digita um email que VAI criar. Aqui o POST não cria
     // nada — é justamente esse o motivo do teste — mas um literal aqui seria
-    // o padrão copiado para o próximo spec que PRECISA criar, e aí volta o 412
-    // do soft-delete. (O F3 digita literais de propósito: são emails que a
-    // validação recusa, e recusado nunca ocupa o `@unique`.) Ver `emailUnico`.
+    // o padrão copiado para o próximo spec que PRECISA criar, e aí volta a
+    // colisão do soft-delete (409 `EMAIL_IN_USE` desde 2026-10-08; era 412
+    // `CONCURRENCY_CONFLICT` antes do conserto do `PrismaUserRepository`).
+    // (O F3 digita literais de propósito: são emails que a validação recusa, e
+    // recusado nunca ocupa o `@unique`.) Ver `emailUnico`.
     await page.getByLabel('Email').fill(emailUnico('ines'));
     await botaoEnviar(page).click();
 

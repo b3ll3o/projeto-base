@@ -111,6 +111,18 @@ export default defineConfig({
       // `src2/orfa.spec.ts` enquanto o vitest sozinho contava 84 testes,
       // os mesmos de antes.
       '*.spec.ts',
+      // pt-BR: o harness e2e tem uma parte que é LÓGICA PURA de arquivos, e ela
+      // precisa de spec — `abrirSaidaEmArquivo` decide para onde vai o stdout
+      // dos processos que a suíte sobe (ver `e2e/support/saida.ts`). O glob é
+      // `e2e/support/**` e não `e2e/**` DE PROPÓSITO: os specs `e2e/f*.spec.ts`
+      // são coletados pelo Playwright (`testDir`), e trazê-los para o Vitest faria
+      // o mesmo arquivo ser executado pelos dois runners.
+      //
+      // ⚠️ Sem este glob nada acusaria a ausência: o spec simplesmente não roda,
+      // e o Vitest não falha por arquivo não coletado — é a classe 3 do
+      // `guard-classes.md`. `vitest-include.spec.ts` não cobre o caso porque `e2e`
+      // está no `IGNORAR` dele (o motivo está no próprio arquivo).
+      'e2e/support/**/*.spec.ts',
     ],
     // pt-BR: matcher do Testing Library (`toBeInTheDocument`, `toHaveValue`…).
     // Carregado só nos specs que declaram ambiente DOM, mas é global —

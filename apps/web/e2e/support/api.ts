@@ -30,7 +30,9 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { API_ROOT, WEB_ROOT, exigirEstado, gravarEstado } from './estado';
-import { esperarTcpAberta, esperarTcpFechada } from './portas';
+import { derrubarFilho, derrubarGrupo } from './processos';
+import { esperarTcpAberta, portaFechouDentroDe } from './portas';
+import { abrirSaidaEmArquivo } from './saida';
 
 const REPO_ROOT = join(API_ROOT, '..', '..');
 const BIN_TSX = join(REPO_ROOT, 'node_modules', '.bin', 'tsx');
@@ -41,11 +43,17 @@ const BIN_TSX = join(REPO_ROOT, 'node_modules', '.bin', 'tsx');
  * pt-BR: MEDIDO em 2026-10-08 — a API morria no meio da suíte (todos os specs
  * seguintes levavam `ECONNREFUSED`) e o sintoma, sozinho, não dizia nada: o
  * processo podia ter sido sinalizado, ter estourado, ou o drain do Prisma
- * poderia ter derrubado o socket. Com `LOG_LEVEL: silent` e `stdio` herdado
- * pelo pai que morre, a causa não tinha para onde aparecer.
+ * poderia ter derrubado o socket. A causa estava no `stdio` — ver `saida.ts`.
  *
  * O log por PID é o que torna a morte observável: o nome do arquivo diz qual
  * instância morreu, e a última linha antes do fim diz por quê.
+ *
+ * ⚠️ `LOG_LEVEL: silent` no `subirApi` NÃO silencia nada: `LoggerModule.forRoot`
+ * em `apps/api/src/app.module.ts` só ramifica em `NODE_ENV === 'production'` e
+ * o Pino fica no default `info`. Medido: com a variável no ambiente, os logs
+ * saíam em INFO do mesmo jeito (o `.env` da api põe `LOG_LEVEL=info` e nenhuma
+ * linha do código lê a variável). A variável fica ali porque removê-la seria
+ * uma afirmação falsa — o silêncio que ela promete não existe.
  */
 const DIR_LOG = join(WEB_ROOT, 'node_modules', '.cache', 'e2e-playwright');
 
@@ -74,8 +82,39 @@ export interface OpcoesSubirApi {
  * depois que o bootstrap inteiro rodou — é o sinal certo.
  */
 export async function subirApi({ porta, databaseUrl }: OpcoesSubirApi): Promise<ChildProcess> {
+  // pt-BR (2026-10-08) — a causa do flake sob `--repeat-each 2`.
+  //
+  // `stdout` da API era um PIPE do worker do Playwright. O worker recicla no meio
+  // da suíte (medido: o PPID da API passou a 1719, systemd --user, ou seja o pai
+  // morreu) e, ao morrer, fecha a ponta leitora. A próxima linha de log é um
+  // `EPIPE`, o Node derruba o processo, e a API morre com a porta ainda aberta
+  // — e o repeat seguinte inteiro leva `ECONNREFUSED`.
+  //
+  // MEDIDO, isolando UMA variável fora da suíte (mesmo spawn, mesmo `detached:
+  // true`, mesmos pipes): filho que não escreve em stdout sobrevive com PPID
+  // 1719 por 6+ s e mantém a porta; filho que escreve morre em ~2 s. Um log de
+  // 29 linhas sem nenhuma linha `[saida]` era a impressão digital disso — o
+  // handler de `exit` mora no worker, e o worker já tinha morrido.
+  //
+  // O conserto é dar à API um ARQUIVO. Arquivo não tem ponta leitora viva, logo
+  // não tem `EPIPE` — e o log passa a sobreviver à morte do worker, que é
+  // justamente quando ele é mais necessário. A mecânica está em `saida.ts`.
+  const saida = abrirSaidaEmArquivo(DIR_LOG, 'api');
+
   const filho = spawn(BIN_TSX, ['src/main.ts'], {
     cwd: API_ROOT,
+    // pt-BR (2026-10-08): `detached: true` cria um PROCESS GROUP próprio, e é
+    // o que fecha a janela do órfão — ver `derrubarApi`, que sinaliza o grupo.
+    //
+    // MEDIDO: sem isto, `SIGTERM` no pai deixava o filho vivo e segurando a
+    // porta. Reproduzido fora da suíte (node forka um filho que faz `listen`):
+    // pai `MORREU`, filho `SEGUE com a porta`, órfão reparentado para o systemd
+    // --user. Na suíte isso aparecia como flake sob `--repeat-each 2`: a API
+    // "nova" subia, o `/health` respondia — do processo VELHO —, e todo request
+    // seguinte ia para a instância anterior. Foi a MEDIDA, não a hipótese, que
+    // amostras: `pgrep -fc src/main.ts` devolveu **16** com 12 órfãos de
+    // execuções anteriores, quase todos com PPID 1719 (systemd --user).
+    detached: true,
     env: {
       ...process.env,
       PORT: String(porta),
@@ -87,23 +126,13 @@ export async function subirApi({ porta, databaseUrl }: OpcoesSubirApi): Promise<
       LOG_LEVEL: 'silent',
       NODE_ENV: 'test',
     },
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['ignore', saida.descritor, saida.descritor],
   });
 
   const pid = filho.pid ?? -1;
-  let stderr = '';
-  for (const [nome, fluxo] of [
-    ['stdout', filho.stdout],
-    ['stderr', filho.stderr],
-  ] as const) {
-    fluxo?.setEncoding('utf8');
-    fluxo?.on('data', (pedaco: string) => {
-      stderr += pedaco;
-      anexarLog(pid, `[${nome}] ${pedaco}`);
-    });
-  }
+  saida.vincular(pid);
+
   filho.on('error', (erro) => {
-    stderr += `\nspawn falhou: ${erro.message}`;
     anexarLog(pid, `[erro] spawn falhou: ${erro.message}\n`);
   });
   // A linha que responde "quem matou o processo": sai por conta própria
@@ -118,7 +147,7 @@ export async function subirApi({ porta, databaseUrl }: OpcoesSubirApi): Promise<
   while (Date.now() < fim) {
     if (filho.exitCode !== null) {
       throw new Error(
-        `A API saiu com código ${filho.exitCode} antes de ficar saudável.\n${stderr.slice(-2000)}`,
+        `A API saiu com código ${filho.exitCode} antes de ficar saudável.\n${saida.cauda(pid)}`,
       );
     }
     try {
@@ -130,34 +159,38 @@ export async function subirApi({ porta, databaseUrl }: OpcoesSubirApi): Promise<
     await new Promise((r) => setTimeout(r, 200));
   }
   await derrubarApi(filho);
-  throw new Error(`A API não respondeu /health em 45s.\n${stderr.slice(-2000)}`);
+  throw new Error(`A API não respondeu /health em 45s.\n${saida.cauda(pid)}`);
 }
 
 /**
  * Derruba o processo e espera a porta ficar livre.
  *
- * pt-BR: o `SIGTERM` sozinho não basta. O Nest tem `enableShutdownHooks`, mas
- * o drain do Prisma leva alguns ms, e voltar a subir em cima de uma porta
- * ainda bindada produz `EADDRINUSE` — flake que só aparece na segunda
- * execução do spec. `esperarTcpFechada` é o que fecha a janela.
+ * pt-BR (2026-10-08): o sinal vai para o **GRUPO**, não para o PID.
+ *
+ * `filho.kill('SIGTERM')` mata o `tsx` pai — e só ele. O filho que faz o
+ * `listen` continua vivo, órfão, com a porta em mãos. Isso foi medido em duas
+ * direções: (1) fora da suíte, um pai que forca um filho com `listen` — pai
+ * `MORREU`, filho `SEGUE com a porta`; (2) na máquina, 12 processos
+ * `src/main.ts` órfãos de execuções passadas, com PPID 1719 (systemd --user),
+ * nenhum deles na porta que o `estado.json` aponta.
+ *
+ * O sintoma é a parte que enganava: `esperarTcpFechada` estourava o prazo de
+ * 20s, a `subirApiDoTeste` subia o processo novo, e o `/health` respondia — do
+ * órfão. A suíte ficava verde num teste e vermelha em todos os seguintes, com
+ * `ECONNREFUSED` aparecendo só depois, quando o órfão finalmente saía. Um
+ * health check que responde não prova que quem respondeu é o processo que
+ * acabou de subir; é a mesma classe do "verde que não mediu".
+ *
+ * `process.kill(-pid, sinal)` é o que cobre os dois: `-pid` é o grupo, criado
+ * por `detached: true`. O sinal chega ao pai E ao filho.
+ *
+ * A escalada (`SIGTERM` → espera → `SIGKILL`) fica em `processos.ts`, e é a
+ * MESMA que o teardown usa. Ela existia aqui duplicada, e só que observando o
+ * pai: o `tsx` pai morre no `SIGTERM` e ainda deixa o filho de pé, então esperar
+ * pela saída do pai dava "saiu" com a porta presa. Ver `derrubarPorPid`.
  */
 export async function derrubarApi(filho: ChildProcess): Promise<void> {
-  if (filho.exitCode !== null || filho.signalCode !== null) return;
-  filho.kill('SIGTERM');
-  // Se o SIGTERM não bastar (processo travado no drain), SIGKILL — mas só
-  // depois de um prazo, para não matar um processo que já estava saindo.
-  if (!(await esperarSaida(filho, 10_000))) filho.kill('SIGKILL');
-}
-
-function esperarSaida(filho: ChildProcess, ms: number): Promise<boolean> {
-  if (filho.exitCode !== null || filho.signalCode !== null) return Promise.resolve(true);
-  return new Promise<boolean>((resolve) => {
-    const temporizador = setTimeout(() => resolve(false), ms);
-    filho.once('exit', () => {
-      clearTimeout(temporizador);
-      resolve(true);
-    });
-  });
+  await derrubarFilho(filho, 10_000);
 }
 
 // ── Controlling a API de dentro de um spec ──────────────────────────────────
@@ -171,17 +204,60 @@ function esperarSaida(filho: ChildProcess, ms: number): Promise<boolean> {
 // com `workers: 1` e cada arquivo que precisa disso o levanta de volta no seu
 // próprio `afterAll`, a janela em que a API está fora é confinada ao arquivo.
 
-/** Derruba a API e espera a porta ficar livre. Idempotente. */
+/**
+ * Derruba a API e espera a porta ficar livre. Idempotente.
+ *
+ * pt-BR (2026-10-08): sinaliza o GRUPO (`-pid`), pelo mesmo motivo de
+ * `derrubarApi` — `apiPid` é o do pai `tsx`, e matar só ele deixa o filho
+ * segurando a porta. O `estado.json` guarda o PID do pai justamente porque é
+ * o que `spawn` devolve; o grupo sai de graça desse mesmo número.
+ *
+ * ── Por que a escalada vem ANTES do fim, e por que o `finally` ─────────────
+ *
+ * A primeira versão esperava a porta fechar, escalava para `SIGKILL` se ainda
+ * estivesse aberta, e só então gravava `apiPid: null`. Duas coisas davam errado,
+ * e as duas caminhavam na mesma direção:
+ *
+ *  1. A escalada era inalcançável na única situação em que existia. A espera
+ *     era feita por `esperarTcpFechada`, que LANÇA no estouro; e a checagem
+ *     `tcpAberta` ficava DEPOIS dela. Quando a porta não fechava — o caso
+ *     inteiro em que a escalada importa — a função já tinha acabado, num throw.
+ *     Era código morto.
+ *  2. O mesmo throw pulava o `gravarEstado({apiPid: null})`. O `apiPid` ficava
+ *     apontando para um processo morto, e a `subirApiDoTeste` do `afterAll` do
+ *     spec voltava cedo por `apiPid !== null` e NÃO levantava a API de novo.
+ *     Ou seja: a falha de teardown produzia o flake inteiro que o arquivo
+ *     existe para matar, e o sufixo era uma suíte vermelha a specs adiante,
+ *     longe da causa.
+ *
+ * A ordem certa é: sinaliza, espera sem lançar, escala se preciso, e grava o
+ * estado no `finally` para que nenhuma saída deixe o estado mentindo.
+ */
 export async function derrubarApiDoTeste(): Promise<void> {
   const estado = exigirEstado();
   if (estado.apiPid === null) return;
+  const pid = estado.apiPid;
+
   try {
-    process.kill(estado.apiPid, 'SIGTERM');
-  } catch {
-    // Já estava fora. Segue para a espera de porta, que é o que interessa.
+    derrubarGrupo(pid, 'SIGTERM');
+    if (!(await portaFechouDentroDe(estado.apiPorta, 20_000))) {
+      derrubarGrupo(pid, 'SIGKILL');
+      if (!(await portaFechouDentroDe(estado.apiPorta, 10_000))) {
+        throw new Error(
+          `A porta ${estado.apiPorta} continua ocupada depois de SIGTERM e SIGKILL no ` +
+            `grupo ${pid}. Algum processo fora do grupo a segura. Diagnóstico: ` +
+            `\`ss -tlnp 'sport = :${estado.apiPorta}'\` — o que aparecer ali é quem ` +
+            'segura a porta, e o teardown deste arquivo não alcança esse PID.',
+        );
+      }
+    }
+  } finally {
+    // O `finally` roda mesmo no throw acima, e é ele que impede o
+    // `apiPid` de sobreviver a uma falha. O `afterAll` do spec depende do
+    // `apiPid: null` para levantar a API de volta; sem isto, ele sai cedo e
+    // todos os specs seguintes levarem `ECONNREFUSED` sem causa visível.
+    gravarEstado({ ...estado, apiPid: null });
   }
-  await esperarTcpFechada(estado.apiPorta, 20_000);
-  gravarEstado({ ...estado, apiPid: null });
 }
 
 /** Levanta a API de volta na MESMA porta e registra o novo PID. */
@@ -191,5 +267,3 @@ export async function subirApiDoTeste(): Promise<void> {
   const filho = await subirApi({ porta: estado.apiPorta, databaseUrl: estado.databaseUrl });
   gravarEstado({ ...estado, apiPid: filho.pid ?? null });
 }
-
-export { esperarTcpFechada };

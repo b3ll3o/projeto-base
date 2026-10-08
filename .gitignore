@@ -108,3 +108,17 @@ test-results/
 # para o mesmo diretorio e se destroem. Mesmo formato de `.next/` acima, e por
 # isso e listado a parte em vez de fundido com aquela regra.
 .next-e2e/
+
+# pt-BR: `next-env.d.ts` e GERADO pelo Next, e o `distDir` da suite e2e faz os
+# dois builds disputarem o mesmo arquivo antes rastreado: o `next build` da
+# suite escreve `/// <reference path="./.next-e2e/types/routes.d.ts" />`, o
+# `next dev` local reescreve para `./.next/types/...`, e cada execucao deixava a
+# arvore suja. MEDIDO 2026-10-08: era exatamente esse o diff que a suite deixava
+# (`-.next/types/routes.d.ts` / `+.next-e2e/types/routes.d.ts`). Rastreado, o
+# arquivo nao tem um unico valor correto — ele tem dois, um por build. O proprio
+# `create-next-app` do Next ja nao versiona este arquivo.
+# MEDIDO que nada quebra sem ele: removendo o arquivo do disco, `pnpm typecheck`
+# (`tsc --noEmit`) sai com exit=0 em `apps/web` — as referencias de tipo que ele
+# carrega sao supridas pelo `next dev`/`next build`, que o geram antes de o
+# typecheck importar. `apps/web/eslint.config.mjs` ja o ignorava.
+apps/web/next-env.d.ts

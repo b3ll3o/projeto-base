@@ -9,7 +9,7 @@
 // de partida mais direto para o estado que o fluxo consome.
 
 import { expect, botaoEnviar, erroDoCampo, test } from './support/fixtures';
-import { emailUnico } from './support/dados';
+import { apagarUsuario, emailUnico } from './support/dados';
 
 const JA_CADASTRADO = { nome: 'Helena E2E' };
 
@@ -21,11 +21,23 @@ test.describe('F4 — Email duplicado', () => {
     contarUsuarios,
   }) => {
     // MEDIDO em 2026-10-08: com um email LITERAL em `JA_CADASTRADO`, o segundo
-    // teste do arquivo semeava com 412 e o primeiro passava. A causa não era o
-    // formulário: `limparBase()` faz soft-delete, o `email @unique` da linha
+    // teste do arquivo semeava e falhava, e o primeiro passava. A causa não era
+    // o formulário: `limparBase()` faz soft-delete, o `email @unique` da linha
     // apagada continua tomada, e o `findByEmail` do repositório filtra
     // soft-delado — a aplicação respondia "livre" enquanto o Postgres
     // respondia "ocupado". Um literal por execução resolve; ver `emailUnico`.
+    //
+    // O sintoma dessa colisão mudou no mesmo dia: era 412
+    // `CONCURRENCY_CONFLICT`, porque o `catch` sem binding do
+    // `PrismaUserRepository.save` transformava o P2002 de email em
+    // `ConcurrencyException(0, null)` (o find por `id` devolve `null` — a
+    // linha vencedora tem outro id). Hoje é 409 `EMAIL_IN_USE`.
+    //
+    // O que NÃO mudou, e é a decisão em aberto: a aplicação continua dizendo
+    // "livre" no pré-check para um email soft-deleted. O desfecho está certo
+    // (409), mas só porque o banco é a autoridade e o repositório agora conta
+    // que é colisão de email. Se algum dia essa resposta virar 200 em vez de
+    // 409, a causa será o pré-check dizer uma coisa que o índice não concorda.
     const email = emailUnico('helena');
     await semear(JA_CADASTRADO.nome, email);
 
@@ -73,5 +85,49 @@ test.describe('F4 — Email duplicado', () => {
     await expect(campoEmail).toHaveAttribute('aria-invalid', 'true');
     await expect(campoEmail).toHaveAttribute('aria-describedby', 'email-erro');
     await expect(page.getByLabel('Nome')).toHaveAttribute('aria-invalid', 'false');
+  });
+
+  test('email de um usuário APAGADO dá o mesmo erro de campo, não erro genérico', async ({
+    page,
+    irPara,
+    semear,
+    contarUsuarios,
+  }) => {
+    // pt-BR (2026-10-08): este é o caso que produzia 412, e ele é o que o
+    // conserto do `PrismaUserRepository.save` mudou. A cadeia, toda ela
+    // plausível só de relance:
+    //
+    //   `apagarUsuario` faz soft-delete → a linha continua com o `email`
+    //   `@unique` → `findByEmail` do repositório filtra soft-deleted → o
+    //   pré-check do use-case diz "livre" → o `create` estoura P2002 →
+    //   o `catch` sem binding virava `ConcurrencyException(0, null)` → 412.
+    //
+    // 412 é conflito de VERSÃO. A tela tradutor de 409 `EMAIL_IN_USE` para o
+    // campo `email`; qualquer outro código cai no erro genérico do topo. Então a
+    // diferença observável aqui é o LUGAR do erro, não só o texto — e é por
+    // isso que este teste afirma a MESMA mensagem do primeiro teste, num estado
+    // de banco diferente.
+    //
+    // Sem este teste, um conserto que devolvesse 200 passaria: o formulário
+    // voltaria para a listagem e nenhum outro spec deste arquivo notaria.
+    const emailApagado = emailUnico('helena');
+    const usuario = await semear(JA_CADASTRADO.nome, emailApagado);
+    await apagarUsuario(usuario.id, usuario.version);
+
+    // O apagado some da listagem — senão este teste seria o mesmo do primeiro,
+    // com um soft-delete a mais no meio que a tela não sabe que houve.
+    expect(await contarUsuarios()).toBe(0);
+
+    await irPara('/users/novo');
+    await page.getByLabel('Nome').fill('Outra Pessoa');
+    await page.getByLabel('Email').fill(emailApagado);
+    await botaoEnviar(page).click();
+
+    // O ponto do teste: o erro é NO CAMPO, como no email ocupado por um usuário
+    // ativo. Se a API voltar 412 (ou qualquer coisa que não seja
+    // `EMAIL_IN_USE`), a Server Action joga no topo e esta asserção falha.
+    await expect(erroDoCampo(page, 'email')).toHaveText('Este email já está cadastrado.');
+    await expect(page).toHaveURL(/\/users\/novo$/);
+    expect(await contarUsuarios()).toBe(0);
   });
 });

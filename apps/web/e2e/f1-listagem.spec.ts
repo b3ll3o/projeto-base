@@ -19,8 +19,14 @@ test.describe('F1 — Listagem de usuários', () => {
   }) => {
     // pt-BR: email por execução, nunca literal. `limparBase()` faz
     // soft-delete e o `email` continua `@unique` na linha apagada — um email
-    // fixo reprova no segundo `--repeat-each` com 412, longe do fluxo que
-    // este teste cobre. Ver `emailUnico`.
+    // fixo reprova no segundo `--repeat-each`, longe do fluxo que este teste
+    // cobre. Ver `emailUnico`.
+    //
+    // O código de resposta dessa colisao mudou em 2026-10-08: era 412
+    // `CONCURRENCY_CONFLICT` (o `catch` sem binding do repositório transformava
+    // P2002 de email em conflito de versão) e agora é 409 `EMAIL_IN_USE`. O
+    // motivo do `emailUnico` é o mesmo — a linha apagada continua ocupando o
+    // índice.
     const emailAna = emailUnico('ana');
     const emailBruno = emailUnico('bruno');
     await semear('Ana Verificacao Local', emailAna);

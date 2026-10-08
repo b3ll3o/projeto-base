@@ -35,6 +35,18 @@ export default defineConfig({
   // O guard `vitest-include.spec.ts` é quem exige isto — ele varre a árvore
   // atrás de specs que nenhum coletor pega. Ver o comentário em `IGNORAR`.
   testMatch: '**/*.spec.ts',
+  // pt-BR: `e2e/support/` é HARNESS (o que os specs importam), não specs.
+  // Ele precisa do `testIgnore` porque o `testMatch` acima é largo por opção —
+  // e a consequência de não declarar isto não é um warning: o Playwright carrega
+  // `e2e/support/saida.spec.ts` como se fosse um teste dele, o `import … from
+  // 'vitest'` quebra no require, e a suíte INTEIRA morre no bootstrap depois de
+  // pagar os 40 s do `next build` (medido 2026-10-08: 2 execuções, as duas
+  // `EXIT=1`, com o build já concluído).
+  //
+  // A alternativa seria nomear o spec de outra forma, mas aí ela deixa de casar
+  // com a convenção `*.spec.ts` — que é o que o `vitest-include.spec.ts` exige
+  // de todo spec do repositório.
+  testIgnore: '**/support/**',
 
   fullyParallel: false,
   workers: 1,

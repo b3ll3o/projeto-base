@@ -37,7 +37,7 @@ export function portaLivre(): Promise<number> {
 }
 
 /** `true` se algo estiver aceitando conexão TCP em `porta`. */
-function tcpAberta(porta: number): Promise<boolean> {
+export function tcpAberta(porta: number): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     const socket = connect({ port: porta, host: '127.0.0.1' });
     const encerrar = (aberta: boolean): void => {
@@ -66,18 +66,34 @@ export async function esperarTcpAberta(porta: number, limiteMs = 60_000): Promis
 }
 
 /**
- * Espera `porta` ficar SEM ninguém aceitando conexão.
+ * Espera `porta` ficar SEM ninguém aceitando conexão, e devolve se conseguiu.
  *
  * pt-BR: usada depois de derrubar a API. Sem esta espera, o spec que volta a
  * falar com ela pode acertar o socket ainda vivo do processo anterior (o SO
  * mantém a porta em TIME_WAIT e um novo processo pode falhar no bind). A
  * espera é o que torna o re-start determinístico em vez de flake.
+ *
+ * Devolve `false` em vez de lançar porque o CHAMADOR precisa decidir o que
+ * fazer quando a porta não fecha — normalmente escalar para `SIGKILL`. Com
+ * `throw` aqui embaixo, quem chamasse não teria como escalar: a escalada ficava
+ * depois de uma linha que já tinha encerrado a função. Ver `derrubarApiDoTeste`.
  */
-export async function esperarTcpFechada(porta: number, limiteMs = 20_000): Promise<void> {
+export async function portaFechouDentroDe(porta: number, limiteMs = 20_000): Promise<boolean> {
   const fim = Date.now() + limiteMs;
   while (Date.now() < fim) {
-    if (!(await tcpAberta(porta))) return;
+    if (!(await tcpAberta(porta))) return true;
     await dormir(150);
   }
+  return false;
+}
+
+/**
+ * Mesma espera, mas LANÇA no estouro.
+ *
+ * Existe para quem só quer a garantia e não tem escalada a fazer. O
+ * `expect(...).rejects` de quem chama e o `catch` do teardown já tratam o caso.
+ */
+export async function esperarTcpFechada(porta: number, limiteMs = 20_000): Promise<void> {
+  if (await portaFechouDentroDe(porta, limiteMs)) return;
   throw new Error(`esperarTcpFechada(${porta}): ainda havia alguém em ${limiteMs}ms`);
 }

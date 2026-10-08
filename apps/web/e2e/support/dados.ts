@@ -31,7 +31,12 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { exigirEstado, WEB_ROOT } from './estado';
 
-interface UsuarioWire {
+/**
+ * O que a API devolve ao criar um usuário — a MESMA forma que o fixture
+ * `semear` entrega ao spec. Exportado porque o F4 precisa do `id` e do
+ * `version` para montar o soft-delete que o seu terceiro teste mede.
+ */
+export interface UsuarioWire {
   id: string;
   nome: string;
   email: string;
@@ -173,6 +178,32 @@ export async function semearUsuario(nome: string, email: string): Promise<Usuari
     );
   }
   return corpo as UsuarioWire;
+}
+
+/**
+ * Soft-delete de UM usuário — o estado que `limparBase` produz para todos, mas
+ * que o F4 precisa montar para um usuário só.
+ *
+ * pt-BR (2026-10-08): existe para o caso do email APAGADO. A linha deletada
+ * continua com o `email` `@unique` (schema.prisma:21), e o `findByEmail` do
+ * repositório filtra soft-deleted — a aplicação respondia "livre" enquanto o
+ * Postgres respondia "ocupado". Antes do conserto do `PrismaUserRepository`,
+ * esse desfecho chegava à tela como **412 CONCURRENCY_CONFLICT**, e a Server
+ * Action o traduzia em erro genérico no topo, não no campo `email`.
+ *
+ * `If-Match` é obrigatório (RFC 7232 + optimistic locking): a versão vem do
+ * corpo que `semearUsuario` devolveu. Sem ele a API responde 428.
+ */
+export async function apagarUsuario(id: string, version: number): Promise<void> {
+  const { status, corpo } = await chamar('DELETE', `/users/${id}`, {
+    cabecalhos: { 'if-match': `W/"v${version}"` },
+  });
+  if (status !== 204) {
+    throw new Error(
+      `DELETE /users/${id} respondeu ${status} (esperado 204): ${JSON.stringify(corpo)}. ` +
+        'Sem isto o soft-delete não existe e o F4 mediria o caminho do email ocupado, não o do apagado.',
+    );
+  }
 }
 
 /**

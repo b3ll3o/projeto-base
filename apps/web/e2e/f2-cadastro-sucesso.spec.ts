@@ -28,8 +28,14 @@ test.describe('F2 — Cadastro com sucesso', () => {
 
     // pt-BR: email por execução. `limparBase()` faz soft-delete e o
     // `email @unique` da linha apagada continua tomado — com literal, o
-    // `--repeat-each 2` reprovava com 412 e o sintoma era "a tela não
-    // cadastrou". Ver `emailUnico`.
+    // `--repeat-each 2` reprovava e o sintoma era "a tela não cadastrou".
+    // Ver `emailUnico`.
+    //
+    // O código de resposta dessa colisao mudou em 2026-10-08: era 412
+    // `CONCURRENCY_CONFLICT`, hoje é 409 `EMAIL_IN_USE` (o `catch` sem binding
+    // do `PrismaUserRepository.save` convertia P2002 de email em conflito de
+    // versão). A causa do reprovar — a linha apagada segurar o índice — é a
+    // mesma.
     const email = emailUnico('carla');
 
     await irPara('/users/novo');

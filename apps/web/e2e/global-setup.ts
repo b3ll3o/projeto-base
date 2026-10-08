@@ -42,10 +42,15 @@ import { dirname, join } from 'node:path';
 import { setupTestDatabase, type TestContext } from '../../api/test/testcontainers-helper.js';
 import { API_ROOT, WEB_ROOT, gravarEstado, type EstadoE2E } from './support/estado';
 import { portaLivre, esperarTcpAberta } from './support/portas';
+import { derrubarFilho } from './support/processos';
 import { subirApi } from './support/api';
+import { abrirSaidaEmArquivo } from './support/saida';
 
 /** `distDir` do build exclusivo da suíte. Precisa casar com `next.config.mjs`. */
 const DIST_DIR_E2E = '.next-e2e';
+
+/** Log por processo — mesmo diretório que a API usa. Ver `support/saida.ts`. */
+const DIR_LOG = join(WEB_ROOT, 'node_modules', '.cache', 'e2e-playwright');
 
 /**
  * O contexto fica num global, não no arquivo de estado, porque só este
@@ -123,8 +128,19 @@ export default async function globalSetup(): Promise<void> {
   const webPorta = await portaLivre();
   const webUrl = `http://127.0.0.1:${webPorta}`;
   log(`subindo Next standalone em ${webUrl} (${standalone.servidor})…`);
+  // pt-BR (2026-10-08): a saída do Next vai para um ARQUIVO, pelo mesmo motivo
+  // da API — `saida.ts` traz a medida. Como pipe, o processo morre de `EPIPE`
+  // no instante em que o leitor (este `globalSetup`) deixa de existir; como
+  // arquivo, ele sobrevive e ainda deixa rastro depois disso.
+  const saidaWeb = abrirSaidaEmArquivo(DIR_LOG, 'web');
   const webFilho = spawn(process.execPath, [standalone.servidor], {
     cwd: standalone.raiz,
+    // pt-BR (2026-10-08): `detached: true` dá ao servidor Next um PROCESS
+    // GROUP próprio, que é o que o `derrubarFilho` sinaliza (`-pid`). Sem isto,
+    // `webFilho.pid` NÃO é o id de grupo de ninguém: o `kill(-pid, …)` dava
+    // `ESRCH` e caía no `kill(pid, …)` por sorte, não por desenho. A correção
+    // certa é tornar o PID o líder — o mesmo que a API já fazia.
+    detached: true,
     env: {
       ...process.env,
       PORT: String(webPorta),
@@ -133,22 +149,15 @@ export default async function globalSetup(): Promise<void> {
       OTEL_SDK_DISABLED: 'true',
       NODE_ENV: 'production',
     },
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['ignore', saidaWeb.descritor, saidaWeb.descritor],
   });
-  // pt-BR: o output do servidor é COLETADO, e não descartado. Um servidor
+  const webPid = webFilho.pid ?? -1;
+  saidaWeb.vincular(webPid);
+  // pt-BR: o output do servidor é LIDO, e não descartado. Um servidor
   // standalone que morre no boot say nada e deixa a espera estourar por
   // timeout — o sintoma (porta fechada) fica a três passos da causa (a exceção
-  // que o Next imprimiu). A captura é anexada à mensagem de erro por isso.
-  const saidaWeb: string[] = [];
-  const coletar = (fluxo: NodeJS.ReadableStream | null): void => {
-    fluxo?.setEncoding('utf8');
-    fluxo?.on('data', (pedaco: string) => {
-      saidaWeb.push(pedaco);
-      if (saidaWeb.length > 200) saidaWeb.shift();
-    });
-  };
-  coletar(webFilho.stdout);
-  coletar(webFilho.stderr);
+  // que o Next imprimiu). A leitura é anexada à mensagem de erro por isso.
+  const lerSaidaWeb = (): string => saidaWeb.cauda(webPid, 8000);
 
   try {
     await esperarTcpAberta(webPorta);
@@ -158,7 +167,7 @@ export default async function globalSetup(): Promise<void> {
     await encerrar(webFilho, apiFilho, ctx);
     throw new Error(
       `O servidor Next (standalone) não respondeu.\n` +
-        `Saída do processo (últimos 200 registros):\n${saidaWeb.join('')}\n` +
+        `Saída do processo (cauda de ${webPid}.log):\n${lerSaidaWeb()}\n` +
         `Erro da espera: ${causa}`,
     );
   }
@@ -195,12 +204,27 @@ async function esperarHttp(url: string, limiteMs = 60_000): Promise<void> {
   throw new Error(`esperarHttp(${url}): sem resposta em ${limiteMs}ms — ${ultimoErro}`);
 }
 
+/**
+ * Derruba o que já subiu, na ordem inversa.
+ *
+ * pt-BR (2026-10-08): sinaliza o GRUPO, com escalada, e não `kill('SIGKILL')`
+ * num PID cru. O `SIGKILL` direto matava o pai e deixava o filho — que é quem
+ * segura a porta — vivo e órfão. E `tsx` é justamente isso, dois processos.
+ * Ver `e2e/support/processos.ts` para a medição.
+ *
+ * Este caminho é o `catch` do `next build` e o `catch` da espera do servidor
+ * Next, e é ele que roda QUANDO `estado.json` ainda não existe: `gravarEstado`
+ * só acontece na linha 177, depois de tudo. Um `throw` que escapasse daqui sem
+ * derrubar deixaria API e container vivos até o próximo `docker ps`, e o
+ * `globalTeardown` não teria estado para ler — ele retorna cedo quando
+ * `lerEstado()` falha. Nada mais no processo alcançaria esses PIDs.
+ */
 async function encerrar(...processos: (ChildProcess | TestContext)[]): Promise<void> {
   for (const item of processos.reverse()) {
     if ('stop' in item) {
       await item.stop().catch(() => undefined);
-    } else if (item.exitCode === null) {
-      item.kill('SIGKILL');
+    } else {
+      await derrubarFilho(item).catch(() => undefined);
     }
   }
 }

@@ -30,7 +30,7 @@
 
 import { test as base, expect, type Page } from '@playwright/test';
 import { exigirEstado } from './estado';
-import { contarUsuarios, limparBase, semearUsuario } from './dados';
+import { contarUsuarios, limparBase, semearUsuario, type UsuarioWire } from './dados';
 
 export interface FixturesE2E {
   /** URL absoluta de um caminho do app. */
@@ -38,14 +38,24 @@ export interface FixturesE2E {
   /** `page.goto` na URL absoluta. */
   irPara: (caminho: string) => Promise<void>;
   /**
-   * Registra o estado prévio que o teste consome.
+   * Registra o estado prévio que o teste consome, e devolve o usuário criado.
    *
    * pt-BR: falha se o POST não voltar 201. Devolver `{status, corpo}` sem
    * olhar era verde por ausência — o pré-requisito sumia e a asserção
    * seguinte reprovava por outro motivo (medido em 2026-10-08, ver
    * `semearUsuario`).
+   *
+   * O `version` faz parte do tipo desde 2026-10-08 porque `apagarUsuario` exige
+   * ele no `If-Match`. A interface declarava o retorno SEM `version` e o spec
+   * lia mesmo assim: o Playwright transpila sem typecheck, então o spec rodava
+   * verde e `tsc --noEmit` era quem acusava. `e2e/` está fora do gate de
+   * cobertura, mas NÃO do typecheck — o `include` do `apps/web/tsconfig.json`
+   * cobre qualquer `.ts`.
+   *
+   * (O glob literal NÃO pode ser escrito aqui: a sequência de barra-estrela
+   * fecha o próprio comentário JSDoc no meio da frase.)
    */
-  semear: (nome: string, email: string) => Promise<{ id: string; nome: string; email: string }>;
+  semear: (nome: string, email: string) => Promise<UsuarioWire>;
   /** Quantos usuários a listagem da API devolve. */
   contarUsuarios: () => Promise<number>;
   /**
@@ -57,6 +67,15 @@ export interface FixturesE2E {
   baseLimpa: void;
 }
 
+// pt-BR: o `({}, use)` das fixtures sem dependência NÃO é estilo, é exigência
+// da API: `base.extend` valida que o primeiro argumento da fixture é um
+// padrão de desestruturação de objeto, e aborta a suíte inteira com
+// "First argument must use the object destructuring pattern" se não for.
+// MEDIDO 2026-10-08: a primeira tentativa de silenciar o `no-empty-pattern`
+// foi trocar `{}` por um parâmetro nomeado (`_fixtures`), e o resultado foi a
+// suíte inteira vermelha na carga dos specs — o lint ficou verde trocando um
+// contrato do framework por um estilo. A regra é que se desliga, e só para
+// `e2e/`: ver o bloco `no-empty-pattern` em `apps/web/eslint.config.mjs`.
 export const test = base.extend<FixturesE2E>({
   baseLimpa: [
     async ({}, use) => {
