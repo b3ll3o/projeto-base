@@ -87,7 +87,11 @@ Heurística de scoring:
 O diretório é **derivado do repositório**; não é fixo e não deve ser escrito à mão:
 
 ```bash
-MEMORY_DIR="${HOME}/.claude/projects/-$(git rev-parse --show-toplevel | sed 's|^/||;s|/|-|g')/memory"
+# `env -u GIT_DIR` NÃO é estilo: o git exporta GIT_DIR para todo hook que ele
+# dispara, e com GIT_DIR definido `git rev-parse --show-toplevel` devolve o CWD
+# em vez da raiz. Sem o `-u`, a derivação descreve `.tooling` quando roda de um
+# subdiretório dentro de um hook — e falha em toda máquina, não só em algumas.
+MEMORY_DIR="${HOME}/.claude/projects/-$(env -u GIT_DIR git rev-parse --show-toplevel | sed 's|^/||;s|/|-|g')/memory"
 
 # 1. A derivação aponta para um diretório que existe?
 test -d "${MEMORY_DIR}" || { echo "derivação quebrada: ${MEMORY_DIR}" >&2; exit 1; }

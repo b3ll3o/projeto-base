@@ -374,6 +374,59 @@ describe('checkMemoryDirConcordance', () => {
     ).toBe(true);
   });
 
+  it('a derivação sobrevive ao GIT_DIR que o git exporta para todo hook', () => {
+    // MEDIDO 2026-10-07: o `pre-push` abortava em TODA máquina, em qualquer
+    // clone, inclusive no checkout principal. Causa: o git exporta `GIT_DIR`
+    // para os hooks que ele dispara, e com `GIT_DIR` definido
+    // `git rev-parse --show-toplevel` devolve o CWD — não a raiz. Rodando de
+    // `.tooling`, a derivação descrevia `...-base-.tooling` em vez de
+    // `...-base`, e o gate acusava divergência numa derivação que o resto do
+    // repo trata como canônica.
+    //
+    // O teste acima passava calado: ele roda SEM `GIT_DIR`, que é exatamente
+    // a condição em que a linha antiga funcionava. A linha quebrada e a
+    // corrigida davam o mesmo verde.
+    const repoRoot = process.cwd();
+    const canon = readFileSync(
+      join(repoRoot, '.agents/specs/conventions/retrospective-capture.md'),
+      'utf8',
+    );
+    const line = canon.split('\n').find((l) => l.startsWith('MEMORY_DIR='));
+    expect(line, 'a fonte única precisa declarar MEMORY_DIR=').toBeTruthy();
+
+    // O valor REAL que o git exporta, lido do próprio repo. Um path de
+    // máquina hardcoded aqui seria verde local e vermelho no CI — verde que
+    // não corresponde a nada.
+    const gitDir = spawnSync('git', ['rev-parse', '--absolute-git-dir'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    }).stdout.trim();
+    expect(gitDir, 'não consegui ler o gitdir do repo').toBeTruthy();
+
+    // Precondição anti-vacuidade: o filho TEM de enxergar o `GIT_DIR`. Com um
+    // `env` mal digitado, a asserção abaixo rodaria a linha sem a variável e
+    // passaria — medindo nada. Um gate que não sabe o que mediu é o pior
+    // desfecho possível: um verde que não corresponde a nada.
+    const visto = spawnSync('bash', ['-c', 'printf %s "${GIT_DIR:-VAZIO}"'], {
+      env: { ...process.env, GIT_DIR: gitDir },
+      encoding: 'utf8',
+    }).stdout.trim();
+    expect(visto, 'o GIT_DIR do fixture não chegou ao processo filho').toBe(gitDir);
+
+    const out = spawnSync('bash', ['-c', `${line}; printf %s "$MEMORY_DIR"`], {
+      cwd: join(repoRoot, '.tooling'),
+      encoding: 'utf8',
+      env: { ...process.env, GIT_DIR: gitDir },
+    });
+
+    const memoryDir = out.stdout.trim();
+    const expectedSlug = `-${resolve(repoRoot).replace(/^\//, '').replace(/\//g, '-')}`;
+    expect(
+      memoryDir.endsWith(`/${expectedSlug}/memory`),
+      `com GIT_DIR="${gitDir}" a derivação produziu "${memoryDir}"; esperava o slug do repo (${expectedSlug})`,
+    ).toBe(true);
+  });
+
   it('convenção ausente → skipped com motivo, nunca ok silencioso', () => {
     withRepo((dir) => {
       const r = checkMemoryDirConcordance({ repoRoot: dir });
