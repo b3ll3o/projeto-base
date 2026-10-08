@@ -2,10 +2,17 @@
 // Cobre: a home renderiza, o link da listagem leva ao formulário, e o
 //        "Cancelar" do formulário devolve para a listagem.
 //
-// pt-BR: este é o primeiro arquivo da suíte de propósito — é o que não
-// precisa de banco nem de API, e portanto o que separa uma falha de
-// BOOTSTRAP (Postgres, Next, portas) de uma falha de FLUXO. Se a suíte
-// quebrar aqui, o problema está antes da aplicação.
+// pt-BR: este é o primeiro arquivo da suíte de propósito — o caminho mais curto
+// do fluxo inteiro.
+//
+// ⚠️ A versão anterior deste cabeçalho prometia que este arquivo "não precisa de
+// banco nem de API" e que, quebrando aqui, "o problema está antes da aplicação".
+// MEDIDO 2026-10-08: `grep -n "auto: true" e2e/support/fixtures.ts` → linha 85,
+// e `baseLimpa` chama `limparBase()` na linha 82 — as duas frases deste cabeçalho
+// são falsas. `limparBase()` faz `GET /users`, então sem API o fixture derruba
+// TODOS os testes deste arquivo, inclusive o da home, que não precisa de API
+// nenhuma. O sintoma que sobraria ("GET /users respondeu 500" no teste da home)
+// aponta para FLUXO e a causa está em BOOTSTRAP: o oposto do que se prometia.
 //
 // pt-BR (por que a home fica fora do teste de navegação): ela é uma tela
 // estática e não tem link para a listagem — o acesso é por URL direta.
@@ -35,5 +42,13 @@ test.describe('F6 — Navegação', () => {
 
     await expect(page).toHaveURL(/\/users$/);
     await expect(page.getByRole('heading', { name: 'Usuários' })).toBeVisible();
+    // ⚠️ `<h1>Usuários</h1>` e o link do cabeçalho estão FORA do ternário que
+    // escolhe entre erro / vazio / lista (`app/users/page.tsx`), então os dois
+    // testes acima passam igualmente no estado de ERRO — que é o que a tela
+    // mostra quando o Next não consegue falar com a API. As duas asserções
+    // abaixo são o que distingue "voltou para a listagem" de "voltou para uma
+    // página que não conseguiu carregar nada".
+    await expect(page.getByText('Nenhum usuário cadastrado')).toBeVisible();
+    await expect(page.getByText('Não foi possível carregar a lista.')).toHaveCount(0);
   });
 });

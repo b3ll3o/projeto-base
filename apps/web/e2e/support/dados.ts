@@ -77,14 +77,31 @@ async function chamar(
   return { status: resposta.status, corpo };
 }
 
-/** Usuários visíveis pela listagem — o mesmo conjunto que a tela mostra. */
+/**
+ * Usuários visíveis pela listagem — o mesmo conjunto que a tela mostra.
+ *
+ * ⚠️ `?? []` era o resto de um `casa vazio`: uma resposta 200 cujo envelope
+ * deixasse de ter a chave `users` (regressão de formato, do tipo da que a
+ * própria tela registra em `app/users/page.tsx`) virava "a listagem está vazia".
+ * Aí `contarUsuarios()` devolvia 0 para SEMPRE, e toda afirmação "não gravou"
+ * dos specs — F3, F5 — ficava verde por construção: o número que deveria
+ * distinguir 0 de 1 era cego. Validar a forma é o que transforma a quebra de
+ * formato em vermelho, que é o que ela é.
+ */
 export async function listarUsuarios(): Promise<UsuarioWire[]> {
   const { status, corpo } = await chamar('GET', '/users?limit=100');
   if (status !== 200) {
     throw new Error(`GET /users respondeu ${status}: ${JSON.stringify(corpo)}`);
   }
-  const pagina = corpo as { users: UsuarioWire[] };
-  return pagina.users ?? [];
+  const pagina = corpo as { users?: unknown };
+  if (!Array.isArray(pagina.users)) {
+    throw new Error(
+      `GET /users respondeu 200 sem a chave "users" (ou com valor que não é lista): ` +
+        `${JSON.stringify(corpo)}. O envelope mudou — se o formato mudou, os specs que ` +
+        'afirmam contagem estão medindo nada.',
+    );
+  }
+  return pagina.users as UsuarioWire[];
 }
 
 /**

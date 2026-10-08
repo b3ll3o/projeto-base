@@ -20,10 +20,11 @@ quality CI jobs (lint/typecheck/test/coverage, gated).
 
 ### Camada 1 — Pre-push local
 
-`pnpm ci:local` roda **tudo que o CI roda** antes de `git push`, detectando
-drift estrutural em ~11 s em vez de ~4 min de round-trip. Falha localmente
-antes de gastar CI remoto. Script no `package.json` raiz; detalhes em
-[git-workflow.md §Pre-Push Quality Gate](./git-workflow.md).
+`pnpm ci:local` roda a **Camada 2 mais lint, typecheck, unit e cobertura**
+antes do `git push`: drift estrutural em ~11 s em vez de ~4 min. ⚠️ **Não**
+roda `test:e2e` (API nem frontend) — a razão está nas
+[Pendências conhecidas](./ci-defense-in-depth-pendencias.md); script e demais
+detalhes em [git-workflow.md §Pre-Push Quality Gate](./git-workflow.md).
 
 ### Camada 2 — Preflight CI job
 
@@ -33,14 +34,13 @@ pipeline** — os demais (lint, typecheck, test, coverage) declaram
 registrados em [`preflight.ts`](../../../.tooling/scripts/ci/preflight.ts) —
 a contagem envelhece, então quem precisar dela roda
 `grep -cE "^\s+name: '" .tooling/scripts/ci/preflight.ts`. Todos vivem em
-`.tooling/scripts/ci/` exceto o lint da matriz;
-veja a [Tabela de Checks](#tabela-de-checks) e o
-[Registro de dentes](#registro-de-dentes).
+`.tooling/scripts/ci/` exceto o lint da matriz.
 
 ### Camada 3 — Quality CI
 
-Lint, typecheck, test, coverage. Roda **apenas se preflight passou**.
-~4min. Aplica as regras funcionais (negócio, tipos, cobertura 80% por
+Lint, typecheck, test, cobertura **e as duas suítes e2e** (API e frontend).
+Roda **apenas se preflight passou**. Aplica as regras funcionais (negócio,
+tipos, cobertura 80% por
 [cobertura-testes.md §CI Defense in Depth](./cobertura-testes.md)).
 
 ## Tabela de Checks

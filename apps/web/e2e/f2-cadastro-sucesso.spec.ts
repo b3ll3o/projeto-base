@@ -68,10 +68,9 @@ test.describe('F2 — Cadastro com sucesso', () => {
     contarUsuarios,
   }) => {
     // pt-BR: a API normaliza `trim().toLowerCase()` no email e colapsa
-    // whitespace no nome. Se a normalização saísse, o usuário seria criado
-    // duas vezes — uma por grafia — e a listagem mostraria duplicata.
-    // O `toUpperCase()` é para o valor digitado discordar do gravado em caixa
-    // E nas bordas, que é o que a normalização precisa cortar.
+    // whitespace no nome. O que é digitado aqui discorda do que é gravado em
+    // três dimensões ao mesmo tempo — caixa,Espaço nas pontas e espaço no meio
+    // — e é a versão GRAVADA que a listagem tem de mostrar.
     const email = emailUnico('diego');
     await irPara('/users/novo');
     await page.getByLabel('Nome').fill('  Diego   E2E  ');
@@ -79,7 +78,32 @@ test.describe('F2 — Cadastro com sucesso', () => {
     await botaoEnviar(page).click();
 
     await expect(page).toHaveURL(/\/users$/);
-    await expect(page.getByText(email)).toBeVisible();
+
+    // ⚠️ `exact: true` NÃO é picky-ness, é o que dá a esta asserção o poder de
+    // falhar. Sem ele o `getByText` casa por SUBSTRING e sem distinção de
+    // caixa (é o default documentado do Playwright), então procurar
+    // `diego.e2e.n@example.com` encontraria `DIEGO.E2E.N@EXAMPLE.COM` — que é
+    // exatamente o defeito que este teste existe para pegar, normalização
+    // ausente. MEDIDO 2026-10-08, `pnpm exec playwright test e2e/f2-cadastro-sucesso.spec.ts`:
+    // apagando o `.toLowerCase()` do `Email.create`, o resultado foi
+    // **`1 failed | 1 passed`**, e o vermelho é a linha de baixo.
+    //
+    // O escopo é o item da lista porque o email também aparece no formulário.
+    await expect(itensDaLista(page).getByText(email, { exact: true })).toBeVisible();
+    // E o nome, que é a outra metade do que a API normaliza.
+    //
+    // ⚠️ MEDIDO, e é o contrário do que eu esperava: esta asserção NÃO pega a
+    // ausência do colapso de whitespace. MEDIDO 2026-10-08,
+    // `pnpm exec playwright test e2e/f2-cadastro-sucesso.spec.ts`: removendo o
+    // `.replace(/\s+/g, ' ')` do `UserName.create`, o spec segue **`2 passed`**
+    // — porque o Playwright normaliza whitespace em TODO casamento de texto,
+    // então `Diego   E2E` e `Diego E2E` são a mesma string para ele. E não é um
+    // defeito do teste: o HTML também colapsa whitespace ao renderizar, então a
+    // diferença não é visível para a pessoa na tela — o e2e não TEM como medir
+    // isso. Onde ela é medida é na camada certa, `user-name.vo.spec.ts`, que já
+    // afirma `' João   Silva  Santos '` → `'João Silva Santos'`.
+    await expect(itensDaLista(page).getByText('Diego E2E', { exact: true })).toBeVisible();
+
     expect(await contarUsuarios()).toBe(1);
   });
 });

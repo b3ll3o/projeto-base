@@ -129,6 +129,36 @@
 - **`check-package-json-drift` só varre o `package.json` raiz.** Task
   turbo fantasma declarada em `apps/*/package.json` escapa do gate, e os
   4 call-sites `pnpm turbo run` do `ci.yml` também não são varridos.
+- **`ci:local` não roda nenhuma das duas suítes e2e, e a Camada 1 dizia que
+  rodava "tudo que o CI roda"** (medido 2026-10-08, revisão da branch
+  `feat/e2e-playwright-frontend`). Comando:
+  `node -e "console.log(require('./package.json').scripts['ci:local'])"`
+  devolve `pnpm ci:preflight && pnpm turbo run lint typecheck test:unit
+  test:coverage --filter=@projeto/api --filter=@projeto/web` — sem
+  `test:integration` e sem `test:e2e`, apesar de o `ci.yml` rodar os dois no
+  job `quality`. A frase da convenção estava já errada para o e2e da API
+  (commit anterior a esta branch); o que a branch acrescenta é a segunda
+  violação, e ela é a cara: `apps/web/e2e/global-setup.ts` sobe Postgres +
+  API Nest + um `next build` de produção (≈40s, medido pelo próprio repo) —
+  colocar isso em todo `git push` é uma decisão de projeto, não um detalhe de
+  script. **A convenção foi corrigida para descrever o que `ci:local` faz**, e
+  esta pendência registra o buraco em vez de escondê-lo atrás de um ajuste de
+  prosa. Fechar isto é change próprio: um `ci:local:e2e` separado, ou uma
+  flag.
+- **`testIgnore` do Playwright é o único asserto de não-dupla-coleta e
+  nenhum gate o lê** (medido 2026-10-08, mesma revisão). Comando:
+  `grep -rn "testIgnore" --include=*.ts --include=*.mts .tooling tooling apps`
+  devolve **2** linhas, ambas dentro do próprio `playwright.config.ts` (o
+  comentário e a chave). No mesmo commit, `vitest-include.spec.ts:83` ganhou
+  `'e2e'` no `IGNORAR` — o guard que existe para "arquivo escrito, coletado por
+  ninguém, verde sem ter testado nada" passou a ignorar exatamente o diretório
+  novo, e o espelho do lado do Playwright ficou sem rede. O gate de paridade
+  `check-e2e-flow-coverage.ts` também não vê: o `lerSpecs` usa `readdirSync`
+  **não-recursivo**, então `e2e/support/` não entra. Sintoma se alguém
+  renomear/remover o `testIgnore` ou criar `e2e/support2/`: a suíte INTEIRA
+  morre no bootstrap, **depois de pagar os ~40s do `next build`** (medido
+  2026-10-08: 2 execuções, as duas `EXIT=1`). Hoje o estado no disco está
+  correto — o que falta é o gate.
 - **Os Dockerfiles agora `node:22`, e o `engines.node` declara `>=22.6.0`** —
   resolvido pela issue #48. As duas propriedades do guard de base image foram
   separadas (`check-docker-drift.ts`): **distro** (glibc, por causa do engine

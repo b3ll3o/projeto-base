@@ -91,6 +91,16 @@ jobs:
     needs: preflight
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # pt-BR: os três passos de Playwright (abaixo) somam bootstrap + install +
+    # specs, contra um teto de 20 min que existia bem antes deles. MEDIDO
+    # 2026-10-08: `gh run view 37796560291 --json jobs` dá o job `quality` em
+    # **1m11s** (14:57:06 → 14:58:17) SEM nenhum passo de e2e; e no log de duas
+    # execuções locais o `next build` levou **34,5s** e **34,8s** ("build
+    # concluído em …" do `globalSetup`), com o setup inteiro em 40,7s e 41,4s.
+    # Somando Postgres, migrate, install e specs, a projeção fica em 5-8 min
+    # contra 20 — folga de ~3×. O timeout fica como está: mexer agora seria
+    # trocar um número medido por outro chutado. Reavaliar se a suíte e2e
+    # ganhar outros fluxos.
     # pt-BR: apps/api/test/testcontainers-helper.ts sobe Postgres próprio
     # (PostgreSqlContainer 'postgres:16-alpine') e sobrepõe DATABASE_URL.
     # Não usar service postgres aqui — é dead code.

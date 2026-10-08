@@ -16,6 +16,7 @@ import { describe, expect, it } from 'vitest';
 import {
   closeSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   openSync,
   readFileSync,
@@ -119,5 +120,42 @@ describe('abrirSaidaEmArquivo', () => {
     const saida = abrirSaidaEmArquivo(diretorio(), 'api');
 
     expect(saida.cauda(4242)).toBe('');
+  });
+
+  it('quando o link falha, devolve o parcial e a saída continua legível', () => {
+    // ⚠️ Este é o `catch` de `vincular`, e até 2026-10-08 (revisão da branch) ele
+    // não tinha NENHUMA spec — sendo o ramo em que a suíte continua verde e o
+    // diagnóstico morre, que é a falha silenciosa que este arquivo inteiro
+    // existe para caçar. Verde por ausência de teste é verde por ausência de
+    // medida.
+    //
+    // A falha é produzida pelo sistema de arquivos, não por mock: uma
+    // DIRETÓRIO no lugar de `api-4242.log` faz o `unlinkSync` interno lançar
+    // `EISDIR` (absorvido — é o mesmo `catch` do "ainda não existe") e o
+    // `linkSync` seguinte falhar com `EEXIST`. É uma das formas reais do
+    // `link` não acontecer, ao lado de disco cheio e de `node_modules/.cache`
+    // num mount sem hardlink, e não exige instrumentar `node:fs`.
+    const dir = diretorio();
+    mkdirSync(join(dir, 'api-4242.log'));
+    const saida = abrirSaidaEmArquivo(dir, 'api');
+    writeSync(saida.descritor, 'saída precious\n');
+
+    const caminho = saida.vincular(4242);
+
+    // Perder o NOME é aceitável; perder a SAÍDA não é. Por isso `vincular`
+    // devolve o parcial, e `cauda` — que já o tenta por último — lê dele.
+    //
+    // MEDIDO 2026-10-08, `pnpm --filter @projeto/web exec vitest run
+    // e2e/support/saida.spec.ts`: trocando o `return parcial` do `catch` por
+    // `return ''` (o modo como se perde a saída inteira), o resultado foi
+    // **`1 failed | 7 passed (8)`** — e o único vermelho é este teste. Os 7
+    // anteriores seguem verdes com o conserto neutralizado, o que confirma que
+    // o `catch` só era exercitado por este.
+    expect(caminho).toBe(saida.caminhoParcial);
+    expect(saida.cauda(4242)).toContain('saída precious');
+    // E o parcial não pode ter sido removido: o `unlinkSync(parcial)` está
+    // DEPOIS do `linkSync`, então o `catch` o pula — e é por isso que a saída
+    // ainda está lá.
+    expect(existsSync(saida.caminhoParcial)).toBe(true);
   });
 });

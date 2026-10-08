@@ -53,8 +53,32 @@ export default async function globalTeardown(): Promise<void> {
   const ctx = (globalThis as Record<string, unknown>)[CHAVE_GLOBAL] as
     { stop?: () => Promise<void> } | undefined;
   if (ctx?.stop) {
-    await ctx.stop();
-    log('Postgres efêmero parado.');
+    // ⚠️ Este era o ÚNICO `await` do teardown sem proteção, e a assimetria com
+    // `globalSetup.ts` (`item.stop().catch(() => undefined)`, dentro de
+    // `encerrar`) é o defeito. Ela é a MEDIÇÃO: o mesmo método, invocado no
+    // setup e no teardown, é protegido num e nu no outro.
+    //
+    // ⚠️ **NÃO MEDIDO** (2026-10-08, revisão da branch): não reproduzi a falha
+    // no runner. O cenário é plausível e descrito aqui como hipótese, não como
+    // fato — no CI o daemon do Docker reinicia, ou um `docker system prune` de
+    // um job vizinho remove o container, entre o último spec e o teardown;
+    // `container.stop()` do Testcontainers lança nesse estado, o
+    // `globalTeardown` rejeita, e `pnpm test:e2e` sai ≠ 0 **com todos os testes
+    // verdes**. O conserto não depende de a hipótese ser verdadeira: derrubar o
+    // container é DIAGNÓSTICO de fim de execução, não condição para o resultado
+    // da suíte, e `containersDoTeste()` (o caminho `else`, que já era
+    // `try/catch` por dentro) é justamente o tratamento correto.
+    try {
+      await ctx.stop();
+      log('Postgres efêmero parado.');
+    } catch (erro) {
+      const causa = erro instanceof Error ? erro.message : String(erro);
+      log(`Postgres efêmero não parou (${causa}). O sufixo do relatório dirá se sobrou algo.`);
+      const restantes = containersDoTeste();
+      if (restantes > 0) {
+        log(`ATENÇÃO: sobraram ${restantes} container(s) de teste. Remova com: docker rm -f <id>`);
+      }
+    }
   } else {
     const restantes = containersDoTeste();
     if (restantes > 0) {

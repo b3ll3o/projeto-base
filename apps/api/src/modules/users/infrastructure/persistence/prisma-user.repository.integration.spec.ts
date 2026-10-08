@@ -12,6 +12,7 @@
 // e o save recebe expectedVersion = version()-1, que é o estado pré-mutação.
 
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
+import { Prisma } from '@prisma/client';
 import {
   setupTestDatabase,
   cleanDatabase,
@@ -197,6 +198,58 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     });
     const saved = await repo.save(u, 0);
     expect(saved.email().value).toBe('joana@example.com');
+  });
+
+  it('save (INSERT) cujo id apareceu entre o pré-check e o create dá ConcurrencyException, não EmailAlreadyInUseException', async () => {
+    // pt-BR (2026-10-08): a PRIMEIRA das três perguntas de
+    // `traduzirFalhaDeUnicidade`, e a única que não tinha spec nenhuma.
+    //
+    // MEDIDO 2026-10-08 (revisão da branch): apagando o bloco `if
+    // (contexto.esperavaLinhaAusente)` inteiro e rodando este arquivo, o
+    // resultado foi **`Tests 1 failed | 16 passed (17)`** — e o único vermelho
+    // é este. Antes dele, os 16 anteriores seguiam verdes com o ramo apagado,
+    // porque nenhum exercita `atual !== null`. Sem este, o `P2002` de um `id`
+    // colidido responderia 409 `EMAIL_IN_USE`, que é o defeito que o conserto
+    // veio desfazer, agora no sentido oposto.
+    //
+    // A corrida é esta, e é a única forma de chegar ao ramo: o pré-check da
+    // linha 71 viu NADA, o `create` perdeu para quem gravou o MESMO `id`, e a
+    // reconsulta — feita só quando o `create` já falhou — agora acha a linha.
+    // O duplo `findUnique` abaixo é essa janela, e não um mock decorativo: o
+    // repositório chama o método nos dois momentos por razões diferentes.
+    const linhaVencida = { id: 'x', version: 7 } as unknown as Awaited<
+      ReturnType<typeof ctx.prisma.user.findUnique>
+    >;
+    let consultas = 0;
+    const prismaEmCorrida = {
+      user: {
+        findUnique: async (): Promise<typeof linhaVencida> => {
+          consultas += 1;
+          return consultas === 1 ? null : linhaVencida;
+        },
+        create: async (): Promise<never> => {
+          throw new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+            code: 'P2002',
+            clientVersion: '6',
+          });
+        },
+      },
+    } as unknown as typeof ctx.prisma;
+
+    const u = User.criar({
+      nome: 'Luana',
+      email: 'luana@example.com',
+      agora: new Date('2026-09-21T10:00:00Z'),
+    });
+
+    // 412 e não 409: a linha que eu tentava criar JÁ EXISTE, com a versão 7.
+    // O `expectedVersion` é 0 porque este é o caminho de INSERT — o que faz a
+    // exceção dizer "esperava 0, encontrei 7", que é a leitura honesta da
+    // corrida: eu não sabia da linha, e ela apareceu.
+    await expect(new PrismaUserRepository(prismaEmCorrida).save(u, 0)).rejects.toThrow(
+      ConcurrencyException,
+    );
+    expect(consultas, 'a reconsulta que decide o tipo tem de acontecer').toBe(2);
   });
 
   it('save (INSERT) com falha que NÃO é unicidade propaga o erro original, sem inventar "email em uso"', async () => {

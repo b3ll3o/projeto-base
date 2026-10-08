@@ -28,7 +28,7 @@
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import { appendFileSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { API_ROOT, WEB_ROOT, exigirEstado, gravarEstado } from './estado';
 import { derrubarFilho, derrubarGrupo } from './processos';
 import { esperarTcpAberta, portaFechouDentroDe } from './portas';
@@ -57,10 +57,24 @@ const BIN_TSX = join(REPO_ROOT, 'node_modules', '.bin', 'tsx');
  */
 const DIR_LOG = join(WEB_ROOT, 'node_modules', '.cache', 'e2e-playwright');
 
-function anexarLog(pid: number, texto: string): void {
+/**
+ * Acrescenta uma linha ao log DESTA instância.
+ *
+ * ⚠️ `caminho` vem de `saida.vincular(pid)`, e não é reconstruído aqui a partir
+ * do PID. LIDO 2026-10-08 (revisão da branch): quando o `linkSync` falha
+ * (disco cheio e `node_modules/.cache` num mount sem hardlink são cenários
+ * plausíveis; **não reproduzidos aqui**), `vincular` devolve o `.parcial`, mas um
+ * `anexarLog` que montasse o nome por conta própria criaria um `api-<pid>.log`
+ * NOVO contendo só a linha `[saida]`. O `cauda` tenta o nomeado primeiro,
+ * acharia esse arquivo — uma linha, sem o stack trace do Nest, que está no
+ * `.parcial` — e a mensagem de erro subiria apontando para o log errado. Era o
+ * mesmo defeito que o `saida.spec.ts` existe para impedir, entrando por outra
+ * porta. Quem decide o nome do arquivo é quem o criou.
+ */
+function anexarLog(caminho: string, texto: string): void {
   try {
-    mkdirSync(DIR_LOG, { recursive: true });
-    appendFileSync(join(DIR_LOG, `api-${pid}.log`), texto, 'utf8');
+    mkdirSync(dirname(caminho), { recursive: true });
+    appendFileSync(caminho, texto, 'utf8');
   } catch {
     // Log é diagnóstico, nunca controle: falhar em gravar não pode derrubar
     // a suíte — seria trocar um sintoma difícil de ler por um fácil de ler e
@@ -130,15 +144,15 @@ export async function subirApi({ porta, databaseUrl }: OpcoesSubirApi): Promise<
   });
 
   const pid = filho.pid ?? -1;
-  saida.vincular(pid);
+  const caminhoDoLog = saida.vincular(pid);
 
   filho.on('error', (erro) => {
-    anexarLog(pid, `[erro] spawn falhou: ${erro.message}\n`);
+    anexarLog(caminhoDoLog, `[erro] spawn falhou: ${erro.message}\n`);
   });
   // A linha que responde "quem matou o processo": sai por conta própria
   // (código), ou foi sinal (SIGTERM do teardown, SIGSEGV, OOM).
   filho.on('exit', (codigo, sinal) => {
-    anexarLog(pid, `[saida] codigo=${String(codigo)} sinal=${String(sinal)}\n`);
+    anexarLog(caminhoDoLog, `[saida] codigo=${String(codigo)} sinal=${String(sinal)}\n`);
   });
 
   await esperarTcpAberta(porta);
@@ -146,6 +160,16 @@ export async function subirApi({ porta, databaseUrl }: OpcoesSubirApi): Promise<
   const fim = Date.now() + 45_000;
   while (Date.now() < fim) {
     if (filho.exitCode !== null) {
+      // ⚠️ Este caminho NÃO chamava `derrubarApi` — só o de timeout (o
+      // `throw` de logo abaixo) chamava, e essa era a assimetria. LIDO
+      // 2026-10-08 (revisão da branch): o pai `tsx` pode morrer sem passar pelo
+      // encaminhamento de `SIGTERM` que o cabeçalho mediu — OOM dele, exceção
+      // não tratada no CLI; **não reproduzido aqui**, é o que a assimetria
+      // acima presume. Aí o filho que faz o `listen` continua vivo, órfão, com a
+      // porta em mãos, e o `globalSetup` aborta sem estado para o teardown
+      // alcançar. Chamar `derrubarApi` nos DOIS caminhos de erro é o que fecha
+      // isso — e fecha sem depender de o cenário ocorrer.
+      await derrubarApi(filho);
       throw new Error(
         `A API saiu com código ${filho.exitCode} antes de ficar saudável.\n${saida.cauda(pid)}`,
       );
@@ -201,8 +225,21 @@ export async function derrubarApi(filho: ChildProcess): Promise<void> {
 // resposta fabricada diz, não o que a aplicação faz quando a API não responde.
 //
 // Derrubar de verdade tem um custo: derruba para todo mundo. Como a suíte roda
-// com `workers: 1` e cada arquivo que precisa disso o levanta de volta no seu
-// próprio `afterAll`, a janela em que a API está fora é confinada ao arquivo.
+// com `workers: 1`, e cada arquivo que precisa disso levanta a API de volta no
+// `finally` do próprio teste (`subirApiDoTeste()`), a janela em que a API está
+// fora é confinada ao teste.
+//
+// ⚠️ MEDIDO 2026-10-08: `grep -cn "afterAll" e2e/f1-listagem.spec.ts
+// e2e/f5-cadastro-erro-generico.spec.ts` devolve **0** e **0** — esta frase
+// dizia "cada arquivo que precisa disso o levanta de volta no seu próprio
+// `afterAll`", e **não existe `afterAll` em nenhum dos dois arquivos**. O
+// mecanismo real é o
+// `try/finally` dentro do teste. A diferença importa porque o `finally` só roda
+// por caminhos que passam por ele: um worker morto, um `SIGINT` ou um abort do
+// run deixam a API fora para o resto da execução, e os specs seguintes falham
+// todos dentro de `baseLimpa` com um erro que não é do teste deles. Registrado
+// aqui em vez de eliminado do comentário porque ele é o que a frase precisa
+// dizer para quem for mexer no teardown.
 
 /**
  * Derruba a API e espera a porta ficar livre. Idempotente.

@@ -1,6 +1,13 @@
 **/node_modules
 **/dist
 **/.next
+# pt-BR (2026-10-08): `**/.next` casa o segmento `.next` e só ele. O build
+# exclusivo da suíte Playwright grava em `.next-e2e/` (`distDir` em
+# `apps/web/next.config.mjs`), que é outro nome — então o contexto de
+# `docker build` mandava o build de teste inteiro, `standalone/` incluído.
+**/.next-e2e
+**/playwright-report
+**/test-results
 **/.turbo
 **/coverage
 **/*.log

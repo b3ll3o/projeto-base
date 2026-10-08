@@ -141,8 +141,27 @@ export async function derrubarPorPid(
   if (processoVivo(pid) || grupoVivo(pid)) derrubarGrupo(pid, 'SIGKILL');
 }
 
-/** `derrubarPorPid` para quem tem o handle em vez do número. */
+/**
+ * `derrubarPorPid` para quem tem o handle em vez do número.
+ *
+ * ⚠️ O atalho `if (filhoMorto(filho)) return` que existia aqui era o defeito,
+ * e ele era do tipo que só aparece quando a morte é do lado de fora. LIDO
+ * 2026-10-08 (revisão da branch): `filhoMorto` diz que o PAI acabou, e aí a
+ * função saía sem sinalizar NADA. Mas `tsx` são dois processos, e o filho — que
+ * faz o `listen` e é quem segura a porta — continua vivo, órfão, no grupo
+ * `-pid`. O atalho lia "o processo que eu observei já foi" e escrevia por cima
+ * "não há mais nada para derrubar", que são coisas diferentes: a primeira é
+ * sobre o handle, a segunda é sobre o grupo.
+ *
+ * O pai pode morrer sem passar pelo encaminhamento de `SIGTERM` que o cabeçalho
+ * mediu — OOM dele, exceção não tratada no CLI do `tsx` — e é exatamente aí que
+ * esse caminho era tomado.
+ *
+ * A condição correta é "não há nada DELE para derrubar", que é pai morto E
+ * grupo morto. Só o primeiro é o `filhoMorto`.
+ */
 export async function derrubarFilho(filho: ChildProcess, limiteMs = 8_000): Promise<void> {
-  if (filhoMorto(filho)) return;
-  await derrubarPorPid(filho.pid, limiteMs);
+  const pid = filho.pid;
+  if (filhoMorto(filho) && (pid === undefined || !grupoVivo(pid))) return;
+  await derrubarPorPid(pid, limiteMs);
 }

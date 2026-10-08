@@ -40,7 +40,7 @@ import { dirname, join } from 'node:path';
 // partir do arquivo, dentro de `apps/api`, que tem a dependência. Verificado
 // com `pnpm --filter @projeto/web typecheck`.
 import { setupTestDatabase, type TestContext } from '../../api/test/testcontainers-helper.js';
-import { API_ROOT, WEB_ROOT, gravarEstado, type EstadoE2E } from './support/estado';
+import { API_ROOT, WEB_ROOT, apagarEstado, gravarEstado, type EstadoE2E } from './support/estado';
 import { portaLivre, esperarTcpAberta } from './support/portas';
 import { derrubarFilho } from './support/processos';
 import { subirApi } from './support/api';
@@ -64,6 +64,23 @@ export default async function globalSetup(): Promise<void> {
   const log = (mensagem: string): void => {
     process.stdout.write(`[e2e:setup] ${mensagem}\n`);
   };
+
+  // ── 0. Apagar o estado da execução anterior ───────────────────────────────
+  //
+  // ⚠️ LIDO 2026-10-08 (revisão da branch): o arquivo era só gravado, nunca
+  // removido, e o `globalTeardown` confia nele cegamente — é o que dá no código,
+  // não uma medição. O cenário que daí decorre é o `SIGKILL` no processo
+  // errado: a execução #1 deixa `apiPid: 4821`; aquele processo morre; semanas
+  // depois o PID 4821 pertence ao `pnpm dev` da pessoa. Ela roda `test:e2e`, o
+  // setup falha ANTES de gravar o estado novo (basta o `prepararstandalone()` não
+  // achar o `server.js`), e o teardown lê o estado VELHO e derruba o grupo
+  // `-4821` — derrubando o trabalho de quem está trabalhando.
+  //
+  // Apagar primeiro transforma esse caminho no mesmo que já é o normal: sem
+  // arquivo, o teardown não tem PIDs e não sinaliza ninguém. Precisa ser o
+  // PRIMEIRO passo — se viesse depois de `subirApi()`, a janela entre as duas
+  // continua aberta.
+  apagarEstado();
 
   // ── 1. Postgres efêmero ────────────────────────────────────────────────────
   //
@@ -90,7 +107,18 @@ export default async function globalSetup(): Promise<void> {
   const apiOrigem = `http://127.0.0.1:${apiPorta}`;
   const apiBaseUrl = `${apiOrigem}/api/v1`;
   log(`subindo API Nest em ${apiOrigem}…`);
-  const apiFilho = await subirApi({ porta: apiPorta, databaseUrl });
+  // ⚠️ Este `await` estava fora de QUALQUER `try`, e era a assimetria que o
+  // `catch` do `next build` (mais abaixo) não cobre. LIDO 2026-10-08 (revisão
+  // da branch): `subirApi` lança em dois casos — a API não fica sadia em 45 s, e
+  // o pai `tsx` morre antes disso. O processo da API ela própria já derruba nos
+  // dois (`api.ts`), então o que escapa é o resto: o Postgres de pé, e o
+  // `estado.json` **não gravado** — o teardown não tem PIDs e o `ctx` global
+  // vale num processo que já vai morrer. Um container Postgres por execução que
+  // falha.
+  const apiFilho = await subirApi({ porta: apiPorta, databaseUrl }).catch(async (erro: unknown) => {
+    await encerrar(ctx);
+    throw erro;
+  });
   log('API respondendo /health.');
 
   // ── 3. Build do Next ──────────────────────────────────────────────────────
@@ -124,7 +152,16 @@ export default async function globalSetup(): Promise<void> {
   // declara `output: 'standalone'`, e o Next 15.5 avisa que `next start` não
   // funciona nessa configuração. O caminho standalone é o mesmo que o
   // Dockerfile de produção copia.
-  const standalone = prepararstandalone();
+  // ⚠️ Este era o ÚNICO ponto do arquivo que lançava FORA de qualquer `try`: o
+  // `catch` do `next build` (linhas acima) terminava antes dele, e o `catch` da
+  // espera do Next (mais abaixo) começa depois. LIDO 2026-10-08 (revisão da
+  // branch): `prepararstandalone()` lança em três casos que nenhuma outra
+  // camada pega — `server.js` ausente ou duplicado (mudança de layout do Next) e
+  // `distDir` não embutido. Nesse instante: Postgres de pé, API Nest de pé, e
+  // `estado.json` não gravado — o teardown retorna cedo em `lerEstado()` e
+  // ninguém alcança esses PIDs. Deixava um `src/main.ts` órfão segurando a
+  // porta e um container por execução falha.
+  const standalone = await prepararComEncerramento(apiFilho, ctx);
   const webPorta = await portaLivre();
   const webUrl = `http://127.0.0.1:${webPorta}`;
   log(`subindo Next standalone em ${webUrl} (${standalone.servidor})…`);
@@ -212,12 +249,19 @@ async function esperarHttp(url: string, limiteMs = 60_000): Promise<void> {
  * segura a porta — vivo e órfão. E `tsx` é justamente isso, dois processos.
  * Ver `e2e/support/processos.ts` para a medição.
  *
- * Este caminho é o `catch` do `next build` e o `catch` da espera do servidor
- * Next, e é ele que roda QUANDO `estado.json` ainda não existe: `gravarEstado`
- * só acontece na linha 177, depois de tudo. Um `throw` que escapasse daqui sem
- * derrubar deixaria API e container vivos até o próximo `docker ps`, e o
- * `globalTeardown` não teria estado para ler — ele retorna cedo quando
- * `lerEstado()` falha. Nada mais no processo alcançaria esses PIDs.
+ * Este caminho é o `catch` de `subirApi`, o do `next build`, o de
+ * `prepararstandalone()` e o da espera do servidor Next — e é ele que roda em
+ * TODOS eles QUANDO `estado.json` ainda não existe: `gravarEstado` só acontece
+ * no fim, depois de tudo. Um `throw` que escapasse daqui sem derrubar deixaria
+ * API e container vivos até o próximo `docker ps`, e o `globalTeardown` não
+ * teria estado para ler — ele retorna cedo quando `lerEstado()` falha. Nada mais
+ * no processo alcançaria esses PIDs.
+ *
+ * ⚠️ LIDO 2026-10-08 (revisão da branch): eram **dois** destes quatro que
+ * faltavam, e a assimetria é o defeito — o `next build` e a espera do Next já
+ * derrubavam, `subirApi` e `prepararstandalone()` não. Um arquivo que é
+ * inconsistente entre caminhos de erro não tem "a garantia"; tem a estatística
+ * de quantos deles a pessoa lembrou de escrever.
  */
 async function encerrar(...processos: (ChildProcess | TestContext)[]): Promise<void> {
   for (const item of processos.reverse()) {
@@ -226,6 +270,31 @@ async function encerrar(...processos: (ChildProcess | TestContext)[]): Promise<v
     } else {
       await derrubarFilho(item).catch(() => undefined);
     }
+  }
+}
+
+/**
+ * `prepararstandalone()` com o mesmo contrato de `try/catch` dos outros
+ * caminhos de erro — jogado para fora porque a função é SÍNCRONA e não aceita
+ * `await`, mas a garantia é a mesma: se ela lançar, derruba a API e o Postgres
+ * antes de propagar.
+ *
+ * ⚠️ MEDIDO 2026-10-08: `pnpm turbo run typecheck --filter=@projeto/web` com a
+ * primeira tentativa (`prepararstandalone().catch(…)`) devolveu
+ * `e2e/global-setup.ts(164,43): error TS2339: Property 'catch' does not exist
+ * on type '{ raiz: string; servidor: string; }'`. O sintoma nomeia a linha em
+ * segundos; o que ele **não** diz é que o caminho original era um vazamento — e
+ * é por isso que o `tsc` é uma barreira e não um detalhe.
+ */
+async function prepararComEncerramento(
+  apiFilho: ChildProcess,
+  ctx: TestContext,
+): Promise<{ raiz: string; servidor: string }> {
+  try {
+    return prepararstandalone();
+  } catch (erro) {
+    await encerrar(apiFilho, ctx);
+    throw erro;
   }
 }
 

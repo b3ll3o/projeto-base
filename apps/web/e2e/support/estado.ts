@@ -16,7 +16,7 @@
 // O arquivo mora sob `node_modules/` de propósito: é lixo de execução, some
 // com `pnpm install`, e não depende de `.gitignore` estar certo.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 const AQUI = __dirname;
@@ -74,6 +74,29 @@ export function gravarEstado(estado: EstadoE2E): void {
 
 export function lerEstado(): EstadoE2E {
   return JSON.parse(readFileSync(ARQUIVO, 'utf8')) as EstadoE2E;
+}
+
+/**
+ * Apaga o estado de uma execução anterior.
+ *
+ * ⚠️ Sem isto, um `estado.json` velho é pior do que arquivo nenhum.
+ *
+ * LIDO 2026-10-08 (revisão da branch): o arquivo só era gravado, nunca
+ * removido, e o teardown confia nele cegamente — é o que o código mostra, não
+ * uma medição. O cenário que daí decorre é o `SIGKILL` no processo errado: a
+ * execução #1 deixa `apiPid: 4821`; aquele processo morre (reboot, `pkill`);
+ * semanas depois o PID 4821 pertence a um processo sem nenhuma relação com a
+ * suíte — o `pnpm dev` da pessoa. Ela roda `test:e2e`, o setup falha ANTES de
+ * gravar o estado novo (basta o `prepararstandalone()` não achar o `server.js`),
+ * e o teardown lê o estado velho e faz `derrubarGrupo(4821, 'SIGTERM')` e, 8 s
+ * depois, `SIGKILL` no grupo `-4821` — derrubando o trabalho de quem está
+ * trabalhando.
+ *
+ * Apagar primeiro transforma esse caminho no mesmo que já é o normal: sem
+ * arquivo, o teardown não tem PIDs e não sinaliza ninguém.
+ */
+export function apagarEstado(): void {
+  rmSync(ARQUIVO, { force: true });
 }
 
 /**
