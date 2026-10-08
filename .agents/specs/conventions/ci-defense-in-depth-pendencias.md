@@ -161,15 +161,15 @@
   `ci.yml` + `try/catch` em volta do `varrerTexto`. Dentes: os 3 testes de CLI de "não verificado"
   ficam vermelhos se `naoVerificado` voltar a devolver `0` — que é o
   "pular com verde" que a issue #45 denuncia, só que pelo outro lado.
-- **O gate não pode afirmar que mediu o que não existe** (achado da revisão de
-  especificação do PR deste branch, MEDIDO 2026-10-06). Com corpo vazio — que
-  o GitHub aceita — ou sem nenhuma contagem, a saída era `0 claim(s)
-  divergente(s), todas em parágrafo marcado — OK`: zero claims e **zero
-  marcadores**, com uma frase afirmando uma marcação inexistente. Sai `0`
-  por escolha (o corpo foi lido e varrido; é medição completa com resultado
-  zero, não "não consegui medir"), mas a mensagem agora nomeia a limitação:
-  o scanner reconhece `TOTAL_PADROES` formatos e um número fora deles é
-  **invisível** para o gate. Dentes: remover o ramo dá **2 de 18** vermelhos.
+- **O gate não pode afirmar que mediu o que não existe** (MEDIDO 2026-10-06;
+  **classe fechada** MEDIDO 2026-10-08). Com corpo vazio — que o GitHub
+  aceita — ou sem contagem, a saída era `0 claim(s) divergente(s), todas em
+  parágrafo marcado — OK`: zero claims e **zero marcadores**, com uma frase
+  afirmando uma marcação inexistente. Sai `0` por escolha (medição completa
+  com resultado zero). **O conserto original só cobriu a branch `claims.length
+  === 0`** — e MEDIDO no PR #66, corpo com 12 claim(s), zero marcadores e
+  zero divergentes ainda saía com "todas em parágrafo marcado". Dentes:
+  mutação `divergentes === 0` → `< 0` dá **1** dos 29 em vermelho.
 - **Risco não medido — `pull_request.head.sha` em PR de fork**
   (achado da revisão de especificação do PR deste branch, 2026-10-06). O
   `ref:` do checkout do `preflight` aponta para o commit do **fork**, não do

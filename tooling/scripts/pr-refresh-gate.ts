@@ -283,9 +283,24 @@ function main(): number {
   }
 
   if (r.ok) {
+    // "todas em parágrafo marcado" só é verdade quando existe ALGUMA claim
+    // divergente para estar num parágrafo. Com zero divergentes a frase afirma
+    // uma marcação que não existe — é o mesmo defeito que o
+    // `claims.length === 0` acima já corrige, uma branch acima, e ele
+    // sobreviveu porque aquela spec só cobria o corpo sem claim.
+    //
+    // MEDIDO 2026-10-08 no PR #66: corpo com 12 claim(s) reconhecidas, ZERO
+    // marcadores e ZERO divergentes, e a saída foi "0 claim(s) divergente(s) de
+    // 12 reconhecida(s), todas em parágrafo marcado — OK". Um "todas" sobre um
+    // conjunto de zero não é uma aprovação: é uma afirmação de que o corpo
+    // autorizou uma reescrita que ele não autorizou.
     process.stderr.write(
-      `pr-refresh-gate: ${divergentes} claim(s) divergente(s) de ${relatorio.claims.length} ` +
-        `reconhecida(s), todas em parágrafo marcado — OK\n`,
+      divergentes === 0
+        ? `pr-refresh-gate: 0 claim(s) divergente(s) de ${relatorio.claims.length} ` +
+            `reconhecida(s) — nenhuma contagem desatualizada, e portanto nada ` +
+            `a conferir com marcador.\n`
+        : `pr-refresh-gate: ${divergentes} claim(s) divergente(s) de ${relatorio.claims.length} ` +
+            `reconhecida(s), todas em parágrafo marcado — OK\n`,
     );
     return 0;
   }
