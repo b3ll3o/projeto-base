@@ -1,9 +1,9 @@
 ---
 name: specialist-routing
-version: 1.3
-updated: 2026-10-06
+version: 1.4
+updated: 2026-10-08
 maintainer: specialist-router
-description: "Matriz canônica de roteamento de demanda — mapeia paths/keywords/scopes para 10 specialists. Source of truth para o classificador headless (tooling/scripts/specialist-router.ts) e para o lint da matriz. Atualizada por PR."
+description: "Matriz canônica de roteamento de demanda — mapeia paths/keywords/scopes para 15 specialists (v1.3 adicionou 5 auditores + 1 orchestrator, v1.3 da main adicionou ux-design). Source of truth para o classificador headless (tooling/scripts/specialist-router.ts) e para o lint da matriz. Atualizada por PR."
 ---
 
 # Convenção: specialist-routing (matriz de roteamento de specialists)
@@ -84,12 +84,8 @@ path_globs:
 
   - pattern: "**/Dockerfile*"
     specialists: [docker-specialist]
-    rationale: "Dockerfile multi-stage dev+prod"
-
   - pattern: "**/docker-compose*.yml"
     specialists: [docker-specialist]
-    rationale: "Compose stacks + override files"
-
   - pattern: "**/.dockerignore"
     specialists: [docker-specialist]
 
@@ -109,30 +105,46 @@ path_globs:
     specialists: [telemetry-specialist]
     rationale: "OpenTelemetry Collector config (receivers, processors, exporters, pipelines)"
 
+  # v1.3 — Specialists de auditoria. Em geral, `finding-orchestrator` dispara
+  # todos os 5 em paralelo (cron `weekly-findings-scan` ou sob demanda). Aqui,
+  # roteamos para auditoria sob demanda do `specialist-router` quando a demanda cita
+  # o path. Ver WORKFLOWS.md §audit-mode.
+  - pattern: "apps/api/prisma/**"
+    specialists: [prisma-db-specialist]
+  - pattern: "apps/api/openapi.json"
+    specialists: [openapi-contract-specialist]
+  - pattern: "apps/api/src/modules/**/controllers/**"
+    specialists: [openapi-contract-specialist, nestjs-specialist]
+  - pattern: "apps/api/src/modules/**/application/dto/**"
+    specialists: [openapi-contract-specialist, nestjs-specialist]
+  - pattern: "apps/*/Dockerfile"
+    specialists: [docker-prod-specialist, docker-specialist]
+  - pattern: "docker-compose*.yml"
+    specialists: [docker-prod-specialist, docker-specialist]
+  - pattern: ".dockerignore"
+    specialists: [docker-prod-specialist, docker-specialist]
+  - pattern: "docs/{MONOREPO,STACK}.md"
+    specialists: [release-versioning-specialist, doc-writer]
+  - pattern: ".agents/specs/conventions/estrutura-e-versionamento.md"
+    specialists: [release-versioning-specialist, doc-writer]
+  - pattern: ".github/workflows/release-template.yml"
+    specialists: [release-versioning-specialist, monorepo-specialist]
+
   - pattern: ".github/workflows/**"
     specialists: [monorepo-specialist, security-auditor]
-
   - pattern: "**/.agents/**"
     specialists: [refactorer, doc-writer]
     domain: "agents-meta"
-
   - pattern: "tooling/scripts/**"
     specialists: [refactorer]
-    rationale: "Scripts TS puros (classifiers, linters, helpers)"
-
   - pattern: "docs/**"
     specialists: [doc-writer]
-
   - pattern: "docs/adr/**"
     specialists: [doc-writer]
-
   - pattern: "**/*.md"
     specialists: [doc-writer]
-    rationale: "Markdown files anywhere in repo (docs, agents, specs)"
-
   - pattern: "**/*.spec.ts"
     specialists: [test-writer]
-
   - pattern: "**/*.test.ts"
     specialists: [test-writer]
 ```
@@ -143,27 +155,34 @@ path_globs:
 demand_keywords:
   - regex: "(?i)docker(izar|ize)?|container(iza[çc][ãa]o)?|compose"
     specialists: [docker-specialist]
-    rationale: "Demanda sobre containerização"
-
   - regex: "(?i)monorepo|workspace|\\bturbo\\b|pnpm.?workspace"
     specialists: [monorepo-specialist]
-    rationale: "Mudança estrutural no monorepo"
-
   - regex: "(?i)nestjs|fastify|prisma|controller|module"
     specialists: [nestjs-specialist]
-    rationale: "Demanda backend NestJS"
-
   - regex: "(?i)next\\.?js|nextjs|react|tailwind|rsc|server.?component"
     specialists: [nextjs-specialist]
-    rationale: "Demanda frontend Next.js"
-
   - regex: "(?i)seguran[çc]a|vulnerab|owasp|secrets?|cve|exploit|\\bauth\\b|\\bjwt\\b"
     specialists: [security-auditor]
-    rationale: "Demanda de auditoria/segurança"
 
   - regex: "(?i)refactor|simplificar|simplify|dry|limpar|cleanup"
     specialists: [refactorer]
-    rationale: "Demanda de refactor"
+
+  # v1.3 — keywords para 5 specialists de auditoria (compactas; rationale único no grupo)
+  - regex: "(?i)\\bprisma\\b|schema\\.prisma|\\bmigrations?\\b|query lente|n\\+\\+1|índices?"
+    specialists: [prisma-db-specialist]
+    rationale: "DB/schema/query Prisma"
+  - regex: "(?i)openapi|swagger|contrato (http|api)|endpoint (sem|com) docs"
+    specialists: [openapi-contract-specialist]
+    rationale: "Spec OpenAPI / contrato HTTP"
+  - regex: "(?i)\\bprod.?readiness|hardening|cap_drop|non-root|healthcheck|imagem.*pinar"
+    specialists: [docker-prod-specialist]
+    rationale: "Hardening de container prod"
+  - regex: "(?i)\\bbumpar\\b|semver|tag v|conventional commit|changelog.*drift"
+    specialists: [release-versioning-specialist]
+    rationale: "Versionamento / release"
+  - regex: "(?i)rodar (auditoria|scan)|analisar (a )?stack|encontrar (bugs|drifts?|gaps?)"
+    specialists: [finding-orchestrator]
+    rationale: "Escaneamento de saúde / abertura de issues via findings"
 
   - regex: "(?i)\\btest(es)?\\b|tdd|cobertura|coverage|\\bspec\\b"
     specialists: [test-writer]
@@ -188,32 +207,18 @@ demand_keywords:
 demand_scopes:
   feat:
     specialists_added: [test-writer, doc-writer]
-    rationale: "Nova feature exige cobertura de testes + docs atualizadas"
-
   fix:
     specialists_added: [test-writer]
-    rationale: "Bug fix deve vir com regression test"
-
   refactor:
     specialists_added: [refactorer]
-    rationale: "Refactor confirmado pelo scope"
-
   infra:
     specialists_added: [docker-specialist, monorepo-specialist]
-    rationale: "Infra tipicamente toca docker + config monorepo"
-
   security:
     specialists_added: [security-auditor]
-    rationale: "Scope security sempre dispara auditoria"
-
   docs:
     specialists_added: [doc-writer]
-    rationale: "Scope docs"
-
   test:
     specialists_added: [test-writer]
-    rationale: "Scope test"
-
   perf:
     specialists_added: []
     rationale: "P3 — perf-specialist não existe em v1.0; v1.1 deve incluir"
@@ -254,23 +259,11 @@ always_on:
 > F: refactor simples) com demands, paths, scopes, expected output
 > e justificativas.
 
-## 6. GAPS CONHECIDOS (v1.0)
+> **Histórico de gaps conhecidos (v1.0)** migrado para o apêndice
+> [`specialist-routing-gaps-v1.0.md`](./specialist-routing-gaps-v1.0.md)
+> (apenas leitura) para preservar o limite de 300 linhas deste spec.
 
-> pt-BR: gaps remanescentes do lançamento v1.0; avaliados em B22 e
-> considerados fora do escopo do polish (P3 todos). Mantidos para
-> rastreabilidade até v1.2/v2.0.
-
-| # | Severidade | Gap | Mitigação |
-|---|------------|-----|-----------|
-| G1 | P3 | `docker-specialist` referenciado na matriz mas agent definition só será criado na Task 9. Mitigação: lint da matriz (Task 5) deve permitir a referência enquanto agent não existe, OU criar agent placeholder antes da Task 4 | Aceito em v1.0; lint permite ref pendente |
-| G2 | P3 | `perf` scope não adiciona nenhum specialist (sem `perf-specialist` em v1.0) | v1.1 deve incluir perf-specialist OU adicionar keyword/scope para `nestjs-specialist` + `nextjs-specialist` quando paths estão em apps/api ou apps/web |
-| G3 | P3 | Demand keywords regex é ingênuo (não semântico) — pode dar FP em demandas com "docker" como adjetivo ("docker hub" sem ser containerização real) | Adicionar `scope_filter: infra` para keywords docker; refinar após 5 demandas reais |
-| G4 | P3 | Skip rules são textuais (não programáticas) — futuro v2 pode parsear YAML para skip_if estruturado | Aceito em v1.0; alinhado com review-router (também usa strings textuais) |
-| G5 | P3 | `blocking` em path_globs v1.0 só aplicado a `pnpm-workspace.yaml` e `turbo.json`; paths em `apps/api/**` e `apps/web/**` são `blocking: false` mesmo quando mudança é cross-cutting | v1.1 deve anotar blocking por path_glob baseado em criticidade (security/auth, infra monorepo, etc.) |
-| G6 | P3 | **Retro B21 Gap #1:** heurística `diff_pattern: 'COPY.*--from=builder' + paths vs build context` não implementada — alto risco de FP. Sugerida após bug `COPY --from=builder /repo/pnpm-lock.yaml pnpm-workspace.yaml ./` (path relativo-Workdir, fixado em e4c4212) | Marcada para v1.2 após 5 demandas reais com dockerização. Implementação requer classificador de diff entre src paths do repo vs paths no Dockerfile (alto custo; ROI incerto) |
-| G7 | P3 | **Retro B21 Gap #3:** ordem processual "skill antes de agent na matriz" não codificada na matriz. Em B21 Fase 2, agent foi criado em Task 9 e skill em Task 10 — agent despachado antes da skill existir (funcionou, mas não garante consistência futura) | Codificar como convenção operacional em `.agents/specs/conventions/evolucao-agents.md` (v1.2). Matriz não é lugar natural para regra processual |
-
-## 7. DERIVED TAGS (v1.1)
+## 6. DERIVED TAGS (v1.1)
 
 > Tags derivadas da análise de paths que sinalizam requisitos
 > técnicos implícitos (não especialistas). O classificador
@@ -289,11 +282,12 @@ derived_tags:
     rationale: "Compose services com /health endpoint devem declarar block `healthcheck:` (compose level) — Dockerfile HEALTHCHECK sozinho não é suficiente para `docker compose ps` mostrar healthy."
 ```
 
-## 8. Histórico de Versões
+## 7. Histórico de Versões
 
 | Versão | Data | Mudança |
 |--------|------|---------|
-| 1.3 | 2026-10-06 | Bump menor — adiciona `ux-design-specialist` (UX/design de interface). `apps/web/components/**` passa a listar `ux-design-specialist` junto de `nextjs-specialist`; 2 path_globs novos (`apps/web/app/**.tsx`, `apps/web/app/globals.css`) + 1 demand_keyword novo (`tela\|ux\|design\|layout\|formulário\|acessibilidade\|a11y\|EmptyState\|estados`). Sem skip rule nova: os path_globs já são exclusivos de UI e `**/*.md` rota para `doc-writer`, então a demanda de docs/housekeeping não aciona este specialist. Total: 10 specialists; 31 path_globs; 10 demand_keywords. |
-| 1.2 | 2026-09-23 | Bump menor — adiciona `telemetry-specialist` transversal (cross-stack: backend + frontend + docker). 4 path_globs novos (`apps/api/**/telemetry/**`, `apps/web/**/instrumentation*`, `apps/web/**/web-vitals*`, `infra/otelcol/**`) + 1 demand_keyword novo (`telemetry\|tracing\|opentelemetry\|\botel\b\|spans?`). Total: 9 specialists; 29 path_globs; 9 demand_keywords. |
+| 1.4 | 2026-10-08 | Resolve conflitos: mergeia v1.3 (audit specialists + 1 orchestrator) + v1.3 da main (ux-design-specialist). 15 specialists; 41 path_globs; 16 demand_keywords. Aditivo. |
+| 1.3 | 2026-10-06 | Bump menor — adiciona `ux-design-specialist` (UX/design de interface). 2 path_globs novos (`apps/web/app/**.tsx`, `apps/web/app/globals.css`) + 1 demand_keyword novo. Total: 10 specialists; 31 path_globs; 10 demand_keywords. |
+| 1.2 | 2026-09-23 | Bump menor — adiciona `telemetry-specialist` transversal. 4 path_globs + 1 demand_keyword. Total: 9 specialists; 29 path_globs; 9 demand_keywords. |
 | 1.1 | 2026-09-23 | Adiciona `derived_tags` (prisma_binary + compose_with_healthcheck). Atualiza `classify()` para retornar `derived_tags` no resultado. Atualiza skill docker com checklist healthcheck. B22 polish. |
 | 1.0 | 2026-09-23 | Lançamento inicial: 8 specialists (monorepo, nestjs, nextjs, docker, security-auditor, test-writer, doc-writer, refactorer); 21 path_globs; 8 demand_keywords; 8 demand_scopes; 5 skip_rules; `monorepo-specialist` always-on. Source of truth para classificador headless e lint. |
