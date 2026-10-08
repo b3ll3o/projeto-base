@@ -198,3 +198,4 @@ echo "docs: $LAST_DOC_VERSION  tag: $LAST_TAG_VERSION"
 **Arquivo:** `.agents/agents/release-versioning-specialist.md`
 **Tipo:** Transversal specialist (release/versioning)
 **Memória:** `.agents/memory/release-versioning-specialist.md`
+**Skill carregada:** `.agents/skills/release-versioning-audit/SKILL.md` (auditoria determinística — extrai versões dos 3 docs canônicos, classifica commits, valida workflow release-template)

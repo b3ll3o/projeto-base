@@ -1,11 +1,19 @@
 ---
 agent: release-versioning-specialist
-scope: <what this agent remembers — filled per agent as needed>
+scope: drift entre 3 docs canônicos, semver, Conventional Commits, release-template — auditoria
+skill: .agents/skills/release-versioning-audit/SKILL.md
 ---
 
 # Memory: `release-versioning-specialist`
 
 Memory file canônico. **Estado atual: stub inicial** (criado em 2026-10-06 junto com a v2.0 dos specialists de auditoria).
+
+## Skill carregada
+
+Carrega `.agents/skills/release-versioning-audit/SKILL.md` quando a task é
+auditoria (extrai versões dos 3 docs canônicos, classifica commits via
+Conventional Commits, valida workflow release-template, verifica CHANGELOG).
+A skill encapsula os passos shell; este arquivo guarda estado entre execuções.
 
 ## Estado atual
 

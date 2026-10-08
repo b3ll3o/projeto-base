@@ -166,3 +166,4 @@ grep -rn "throw new " apps/api/src/modules/*/controllers/ | head -20
 **Arquivo:** `.agents/agents/openapi-contract-specialist.md`
 **Tipo:** Stack specialist (backend API contract)
 **Memória:** `.agents/memory/openapi-contract-specialist.md`
+**Skill carregada:** `.agents/skills/openapi-audit/SKILL.md` (auditoria determinística — re-gera spec, detecta drift DTO↔Prisma, breaking changes)

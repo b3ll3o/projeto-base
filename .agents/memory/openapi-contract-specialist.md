@@ -1,11 +1,19 @@
 ---
 agent: openapi-contract-specialist
-scope: <what this agent remembers — filled per agent as needed>
+scope: OpenAPI 3, drift DTO↔Prisma, breaking changes, cobertura de endpoints — auditoria
+skill: .agents/skills/openapi-audit/SKILL.md
 ---
 
 # Memory: `openapi-contract-specialist`
 
 Memory file canônico. **Estado atual: stub inicial** (criado em 2026-10-06 junto com a v2.0 dos specialists de auditoria).
+
+## Skill carregada
+
+Carrega `.agents/skills/openapi-audit/SKILL.md` quando a task é de auditoria
+(re-gera spec, detecta drift DTO↔Prisma, breaking changes, valida decorators
+Swagger). A skill encapsula os passos shell; este arquivo guarda estado entre
+execuções.
 
 ## Estado atual
 

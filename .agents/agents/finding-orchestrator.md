@@ -288,3 +288,4 @@ Cores e descriptions estão no script `~/.hermes/scripts/findings-scan.sh` (seç
 **Arquivo:** `.agents/agents/finding-orchestrator.md`
 **Tipo:** Orchestrator (scan + triage + issue creation)
 **Memória:** `.agents/memory/finding-orchestrator.md`
+**Skill carregada:** `.agents/skills/findings-orchestration/SKILL.md` (processo de orquestração — pre-flight gh auth, despacho paralelo, dedup, abertura de issues)

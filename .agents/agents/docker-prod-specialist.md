@@ -185,3 +185,4 @@ cat .dockerignore | sort
 **Arquivo:** `.agents/agents/docker-prod-specialist.md`
 **Tipo:** Stack specialist (container prod-readiness)
 **Memória:** `.agents/memory/docker-prod-specialist.md`
+**Skill carregada:** `.agents/skills/docker-prod-audit/SKILL.md` (auditoria determinística — hardening runtime, multi-stage, healthchecks, secrets, image pinning)

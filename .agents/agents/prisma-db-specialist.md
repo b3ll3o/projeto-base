@@ -177,3 +177,4 @@ Ele classifica e decide quais viram issue.
 **Arquivo:** `.agents/agents/prisma-db-specialist.md`
 **Tipo:** Stack specialist (backend data layer)
 **Memória:** `.agents/memory/prisma-db-specialist.md`
+**Skill carregada:** `.agents/skills/prisma-audit/SKILL.md` (auditoria determinística — mapeia schema, valida lens DDD/H1-H6, detecta N+1)

@@ -1,11 +1,19 @@
 ---
 agent: prisma-db-specialist
-scope: <what this agent remembers — filled per agent as needed>
+scope: schema Prisma, migrations, N+1, audit fields, lens DDD/H1-H6 — auditoria
+skill: .agents/skills/prisma-audit/SKILL.md
 ---
 
 # Memory: `prisma-db-specialist`
 
 Memory file canônico. **Estado atual: stub inicial** (criado em 2026-10-06 junto com a v2.0 dos specialists de auditoria).
+
+## Skill carregada
+
+Carrega `.agents/skills/prisma-audit/SKILL.md` quando a task é de auditoria
+(mapeia schema, valida lens DDD/H1-H6, detecta N+1, audita audit fields).
+A skill encapsula os passos shell + dedup + persistência; este arquivo de
+memória guarda estado entre execuções.
 
 ## Estado atual
 

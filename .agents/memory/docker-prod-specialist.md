@@ -1,11 +1,22 @@
 ---
 agent: docker-prod-specialist
-scope: <what this agent remembers — filled per agent as needed>
+scope: hardening runtime, multi-stage, healthchecks, secrets, image pinning — auditoria
+skill: .agents/skills/docker-prod-audit/SKILL.md
 ---
 
 # Memory: `docker-prod-specialist`
 
 Memory file canônico. **Estado atual: stub inicial** (criado em 2026-10-06 junto com a v2.0 dos specialists de auditoria).
+
+## Skill carregada
+
+Carrega `.agents/skills/docker-prod-audit/SKILL.md` quando a task é de auditoria
+(hardening runtime, multi-stage, healthchecks, secrets, image pinning, signal
+handling, `.dockerignore` estrito). A skill encapsula os passos shell; este
+arquivo guarda estado entre execuções.
+
+**Sobreposição intencional com `docker-specialist`:** este agent audita com lens
+prod-readiness; o `docker-specialist` escreve Dockerfiles/Compose.
 
 ## Estado atual
 

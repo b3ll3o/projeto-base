@@ -1,11 +1,19 @@
 ---
 agent: otelcol-infra-specialist
-scope: <what this agent remembers — filled per agent as needed>
+scope: OTel Collector, receivers/exporters/processors, sampling, W3C propagation — auditoria
+skill: .agents/skills/otelcol-audit/SKILL.md
 ---
 
 # Memory: `otelcol-infra-specialist`
 
 Memory file canônico. **Estado atual: stub inicial** (criado em 2026-10-06 junto com a v2.0 dos specialists de auditoria).
+
+## Skill carregada
+
+Carrega `.agents/skills/otelcol-audit/SKILL.md` quando a task é de auditoria
+(valida schema, receivers/processors, sampling, W3C propagation, profiles
+Compose, pinning de versão). A skill encapsula os passos shell; este arquivo
+guarda estado entre execuções.
 
 ## Estado atual
 

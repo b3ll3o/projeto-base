@@ -182,3 +182,4 @@ grep "image: otel/" docker-compose.yml
 **Arquivo:** `.agents/agents/otelcol-infra-specialist.md`
 **Tipo:** Stack specialist (infra de telemetria)
 **Memória:** `.agents/memory/otelcol-infra-specialist.md`
+**Skill carregada:** `.agents/skills/otelcol-audit/SKILL.md` (auditoria determinística — valida schema, receivers/processors, sampling, W3C propagation)

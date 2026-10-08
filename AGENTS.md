@@ -112,6 +112,15 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 >
 > **Sobreposição intencional:** `docker-prod-specialist` e `docker-specialist` coexistem — o primeiro foca em prod-readiness/hardening (auditoria), o segundo em Dockerfile/Compose autoral (escrita). O orchestrator dispara ambos quando o escopo é amplo.
 
+> **Skills de auditoria (1:1 com cada agent):** cada specialist de auditoria carrega
+> uma skill de processo determinístico (`.agents/skills/<name>-audit/SKILL.md`):
+> `prisma-db-specialist` → `prisma-audit`; `openapi-contract-specialist` → `openapi-audit`;
+> `otelcol-infra-specialist` → `otelcol-audit`; `docker-prod-specialist` → `docker-prod-audit`;
+> `release-versioning-specialist` → `release-versioning-audit`; `finding-orchestrator` →
+> `findings-orchestration`. A skill encapsula os passos shell + dedup + persistência;
+> o agent encapsula papel + coordenação + princípios. Skill não substitui agent — é
+> **carregada por** ele quando a task é de auditoria.
+
 > **State-Aware Planning (camada 0 do pre-planner, a partir de v1.8.0):** convenção
 > [`.agents/specs/conventions/state-aware-planning.md`](./.agents/specs/conventions/state-aware-planning.md)
 > obriga gerar `state-snapshot-<ts>.md` ANTES de planejar. Alimenta o `specialist-router` (camada 1).
