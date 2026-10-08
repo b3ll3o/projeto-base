@@ -403,23 +403,42 @@ describe('checkMemoryDirConcordance', () => {
     }).stdout.trim();
     expect(gitDir, 'não consegui ler o gitdir do repo').toBeTruthy();
 
-    // Precondição anti-vacuidade: o filho TEM de enxergar o `GIT_DIR`. Com um
-    // `env` mal digitado, a asserção abaixo rodaria a linha sem a variável e
-    // passaria — medindo nada. Um gate que não sabe o que mediu é o pior
-    // desfecho possível: um verde que não corresponde a nada.
-    const visto = spawnSync('bash', ['-c', 'printf %s "${GIT_DIR:-VAZIO}"'], {
-      env: { ...process.env, GIT_DIR: gitDir },
-      encoding: 'utf8',
-    }).stdout.trim();
-    expect(visto, 'o GIT_DIR do fixture não chegou ao processo filho').toBe(gitDir);
+    // UM PROCESSO SÓ, e a precondição lida DELE.
+    //
+    // MEDIDO 2026-10-08: a precondição rodava o seu próprio `bash` com o seu
+    // próprio `env`, e a medição tinha outro. Reverter a linha canônica para a
+    // forma quebrada E tirar o `GIT_DIR` do `env` do spawn medido dava
+    // 28/28 verde — o teste que existe para ser o dente do conserto do hook
+    // rodava inteiro sem a condição do hook. Compartilhar um objeto de `env`
+    // entre os dois spawns NÃO fecha isso: a mutação reintroduz a separação
+    // trocando um `env: envMedido` por um objeto novo, e voltamos a 199/199.
+    //
+    // O que fecha é não existir segunda fonte. O processo medido imprime o
+    // `GIT_DIR` que ELE enxergou, antes de derivar — e a precondição é
+    // asserção sobre essa linha. Não há outro `env` para divergir.
+    const out = spawnSync(
+      'bash',
+      [
+        '-c',
+        `printf 'GIT_DIR_VISTO=%s\\n' "\${GIT_DIR:-VAZIO}"; ${line}; printf 'MEMORY_DIR=%s\\n' "$MEMORY_DIR"`,
+      ],
+      {
+        cwd: join(repoRoot, '.tooling'),
+        encoding: 'utf8',
+        env: { ...process.env, GIT_DIR: gitDir },
+      },
+    );
 
-    const out = spawnSync('bash', ['-c', `${line}; printf %s "$MEMORY_DIR"`], {
-      cwd: join(repoRoot, '.tooling'),
-      encoding: 'utf8',
-      env: { ...process.env, GIT_DIR: gitDir },
-    });
+    // Precondição anti-vacuidade, lida do MESMO processo que faz a derivação:
+    // o filho TEM de ter enxergado o `GIT_DIR`. Se não enxergou, a derivação
+    // rodou na condição em que a LINHA ANTIGA funcionava — e o teste estaria
+    // medindo o conserto errado.
+    expect(
+      out.stdout,
+      'o GIT_DIR não chegou ao processo que deriva o MEMORY_DIR — o teste mediu a linha quebrada',
+    ).toContain(`GIT_DIR_VISTO=${gitDir}`);
 
-    const memoryDir = out.stdout.trim();
+    const memoryDir = out.stdout.match(/^MEMORY_DIR=(.*)$/m)?.[1]?.trim() ?? '';
     const expectedSlug = `-${resolve(repoRoot).replace(/^\//, '').replace(/\//g, '-')}`;
     expect(
       memoryDir.endsWith(`/${expectedSlug}/memory`),

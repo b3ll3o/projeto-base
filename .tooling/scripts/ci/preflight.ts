@@ -206,6 +206,44 @@ export function relatarUmCheck(result: CheckResult): {
   };
 }
 
+/**
+ * O fechamento do painel: o que sai, e com que codigo o processo termina.
+ *
+ * MEDIDO 2026-10-08: isto nao existia. `main()` tinha tres `console.log`
+ * sequenciais guarded por `if (totalErrors > 0) { … process.exit(1) }`, e o
+ * `exit` era a PRIMEIRA coisa do ramo de erro. Como um check pulado-com-erro
+ * contribui >= 1 erro, `totalErrors > 0` era garantido nesse caso e o resumo
+ * "N check(s) nao rodaram" ficava a um `exit` de distância para sempre.
+ *
+ * `pulou` contava o estado misto corretamente desde o conserto anterior — e a
+ * contagem nao tinha para onde ir. Era a metade do defeito que ainda faltava.
+ *
+ * O tell de que a propria mensagem mentia: o resumo antigo interpolava
+ * `${totalErrors}` e so era alcancavel com `totalErrors === 0`. Uma variavel
+ * que nao pode variar e a assinatura de um ramo inalcancavel.
+ *
+ * Por que "erro E skip" e uma linha so, e nao duas: quem falha lê o erro
+ * primeiro, e o skip qualifica o painel INTEIRO, nao um check. Por que o codigo
+ * continua sendo 1: pular nao é o que reprova — errar é.
+ */
+export function resumir(
+  totalErrors: number,
+  totalSkipped: number,
+): { linhas: string[]; codigo: 0 | 1 } {
+  const linhas: string[] = [];
+  if (totalErrors > 0) {
+    linhas.push(`❌ ${totalErrors} erro(s) encontrado(s). Corrigir antes de push.`);
+  }
+  if (totalSkipped > 0) {
+    linhas.push(
+      `⚠ ${totalErrors} erro(s); ${totalSkipped} check(s) não rodaram (skipped) — ` +
+        `parte do painel acima não foi medida.`,
+    );
+  }
+  if (linhas.length === 0) linhas.push('✓ Todos os checks passaram.');
+  return { linhas, codigo: totalErrors > 0 ? 1 : 0 };
+}
+
 async function main(): Promise<void> {
   console.log('\u{1F50D} Pre-flight CI checks\n');
   const checks: Array<{
@@ -385,20 +423,14 @@ async function main(): Promise<void> {
   }
 
   console.log('');
-  if (totalErrors > 0) {
-    console.error(`❌ ${totalErrors} erro(s) encontrado(s). Corrigir antes de push.`);
-    process.exit(1);
-  }
-  // O resumo repete a mesma regra do painel: um check que não rodou não pode
-  // ser somado como se tivesse passado.
-  if (totalSkipped > 0) {
-    console.log(
-      `⚠ ${totalErrors} erro(s); ${totalSkipped} check(s) não rodaram (skipped) — ` +
-        `ver as marcas acima. "Todos passaram" seria mentira enquanto houver skip.`,
-    );
-    return;
-  }
-  console.log('✓ Todos os checks passaram.');
+  // O resumo inteiro vem de UM lugar, para que "erro" e "não rodou" possam
+  // aparecer juntos. Antes eram duas cadeias `if` e o `process.exit(1)` do
+  // primeiro encerrava o processo antes do segundo — ver `resumir`.
+  const fechamento = resumir(totalErrors, totalSkipped);
+  const [principal, ...resto] = fechamento.linhas;
+  console[fechamento.codigo === 1 ? 'error' : 'log'](principal);
+  for (const linha of resto) console.log(linha);
+  if (fechamento.codigo === 1) process.exit(1);
 }
 
 // Gate IIFE: sem isso, importar `formatMark` num teste executa a preflight

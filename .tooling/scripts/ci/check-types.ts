@@ -55,5 +55,13 @@ export interface CheckResult {
  * conta própria divergem no primeiro check que ganha uma quarta categoria.
  */
 export function linhasDoRelato(r: CheckResult): string[] {
-  return [...r.errors, ...(r.advisories ?? []), ...(r.skipped ? [`(skipped: ${r.reason})`] : [])];
+  // O `?? 'sem motivo declarado'` é o mesmo de `formatMark` e `detalhar`: os
+  // três renderizam o motivo de um skip, e `skipped?`/`reason?` são campos
+  // independentes no tipo — sem o fallback, o CLI imprimia
+  // `(skipped: undefined)` onde o painel dizia "sem motivo declarado".
+  return [
+    ...r.errors,
+    ...(r.advisories ?? []),
+    ...(r.skipped ? [`(skipped: ${r.reason ?? 'sem motivo declarado'})`] : []),
+  ];
 }
