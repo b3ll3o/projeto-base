@@ -117,6 +117,21 @@ corrige recriando o diretório, o outro escrevendo o arquivo — e um check que
 não os distingue leva o autor a reescrever o arquivo no lugar errado até o
 `ls` acusar que nada mudou.
 
+**Limitação conhecida: worktree quebra a derivação.** O slug é derivado do
+*caminho*, e um worktree é outro caminho para o mesmo repositório. MEDIDO
+2026-10-07, do worktree `base-wt-gate-fix`:
+
+    $ git rev-parse --show-toplevel
+    /home/leo/Documentos/projetos/base-wt-gate-fix
+    # → MEMORY_DIR = …/-home-leo-Documentos-projetos-base-wt-gate-fix/memory
+    $ test -d "$MEMORY_DIR"   # → 1, "derivação quebrada"
+
+O `test -d` **pega**, que é o que importa: a retrospectiva não passa por
+acúmulo de outro repo, ela falha. Mas quem rodar a retro de dentro de um
+worktree tem de rodar o gate do checkout principal, ou exportar `MEMORY_DIR`
+apontando para lá. Registrado porque a mensagem "derivação quebrada" parece
+apontar config quebrada, e a causa é estar no lugar certo do reposito errado.
+
 **Por que não `test -f "${MEMORY_DIR}/<N>-result.md"`:** esta versão anterior
 não verificava nada, por dois defeitos independentes. O `<N>` é um placeholder —
 rodada literalmente, ela testa um arquivo chamado `<N>-result.md`, que não existe,
@@ -158,15 +173,22 @@ a abrir vai tratar como medida. Meça na hora:
 ls -1 "${MEMORY_DIR}" | grep -cE '^b[0-9]+.*-result\.md$'
 ```
 
-**O alcance do `b<N>`: três result files ficam fora dele.** O padrão exige que o
+**O alcance do `b<N>`: alguns result files ficam fora dele.** O padrão exige que o
 nome comece em `b<N>`, e existem campanhas cujo result file não começa assim
 (`ci-robustness-plan-result.md`, `guard-classes-plan-result.md`,
-`guard-classes-implementation-result.md`). MEDIDO 2026-10-06: 38 arquivos do
-diretório terminam em `-result.md`, 35 casam `^b<N>`. Os 3 restantes são
-campanhas reais que nenhum gate desta convenção alcança. É limitação conhecida e
-aceita — o gate promete o que a retro escreve, não inventariar o histórico
-inteiro. O que não é aceitável é contá-los por um `grep` sem filtro e chamar o
-total de "result files da campanha".
+`guard-classes-implementation-result.md`). São campanhas reais que nenhum gate
+desta convenção alcança. A diferença entre os dois conjuntos mede-se na hora:
+
+```bash
+ls -1 "${MEMORY_DIR}" | grep -cE 'result\.md$'                          # total
+ls -1 "${MEMORY_DIR}" | grep -cE '^b[0-9]+.*-result\.md$'               # dentro do padrão
+ls -1 "${MEMORY_DIR}" | grep -E 'result\.md$' | grep -vE '^b[0-9]+'      # fora, nomeados
+```
+
+É limitação conhecida e aceita — o gate promete o que a retro escreve, não
+inventariar o histórico inteiro. O que não é aceitável é contar os dois
+conjuntos por um `grep` sem filtro e chamar o total de "result files da
+campanha".
 
 ## Comandos / Triggers
 
