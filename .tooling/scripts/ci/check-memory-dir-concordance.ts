@@ -305,10 +305,26 @@ function verifyDerivation(repoRoot: string): string | null {
   try {
     // A linha só ATRIBUI a variável; sem imprimir, stdout sai vazio e o
     // check acusaria divergência numa derivação que funciona.
+    //
+    // O `GIT_DIR` é exportado pelo git para todo hook que ele dispara, e com
+    // ele definido `git rev-parse --show-toplevel` devolve o CWD. MEDIDO
+    // 2026-10-08: verificar SEM `GIT_DIR` é verificar na condição em que a
+    // derivação funciona — a mesma condição que escondia o defeito do #62.
+    // O gate precisa medir onde o uso real acontece, que é dentro do hook.
+    let gitDir: string | undefined;
+    try {
+      gitDir = execFileSync('git', ['rev-parse', '--absolute-git-dir'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      }).trim();
+    } catch {
+      // Sem gitdir legível: segue sem `GIT_DIR`, que é o comportamento antigo
+      // — melhor do que reprovar por um repositório sem `.git` utilizável.
+    }
     const out = execFileSync('bash', ['-c', `${line}; printf %s "$MEMORY_DIR"`], {
       cwd: subdir,
       encoding: 'utf8',
-      env: { ...process.env, HOME: process.env.HOME ?? '' },
+      env: { ...process.env, HOME: process.env.HOME ?? '', ...(gitDir ? { GIT_DIR: gitDir } : {}) },
     }).trim();
     if (!out.endsWith(`/${expectedSlug}/memory`)) {
       return `a derivação canônica produziu "${out}", que não termina em /${expectedSlug}/memory — rodada de um subdiretório, ela descreveu o cwd e não o repo`;
