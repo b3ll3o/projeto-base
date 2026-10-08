@@ -90,11 +90,19 @@ export default async function globalSetup(): Promise<void> {
   // do processo principal da Playwright pode afetar a resolução de caminhos
   // de specs e reporters.
   log('subindo Postgres efêmero (Testcontainers) e aplicando migrations…');
+  // ⚠️ A porta do HOST é fixada, e não é detalhe. O `PostgreSqlContainer`
+  // publica em `HostPort: "0"` (porta aleatória, sorteada a cada `docker
+  // start`) — então o `derrubarBancoDoTeste`/`subirBancoDoTeste` do F5 trocaria
+  // a porta ao levantar o banco, e a `DATABASE_URL` da API, assada no boot,
+  // ficaria apontando para o vazio. MEDIDO 2026-10-08: sem a porta fixa, o
+  // `docker port` foi de 33185 para 33186 e o TCP não voltou em 60,8 s; com a
+  // porta fixa, voltou em 5 ms. Ver `SetupTestDatabaseOptions.portaFixa`.
+  const portaBanco = await portaLivre();
   const cwdOriginal = process.cwd();
   process.chdir(API_ROOT);
   let ctx: TestContext;
   try {
-    ctx = await setupTestDatabase();
+    ctx = await setupTestDatabase({ portaFixa: portaBanco });
   } finally {
     process.chdir(cwdOriginal);
   }
@@ -219,6 +227,7 @@ export default async function globalSetup(): Promise<void> {
     apiPid: apiFilho.pid ?? null,
     webPid: webFilho.pid ?? null,
     databaseUrl,
+    databaseContainerId: ctx.containerId,
   };
   gravarEstado(estado);
   log(`pronto em ${((Date.now() - inicio) / 1000).toFixed(1)}s — web ${webUrl}, api ${apiBaseUrl}`);

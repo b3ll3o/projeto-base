@@ -104,28 +104,35 @@ test.describe('F3 — Validação no cliente', () => {
     await expect(page.getByLabel('Nome')).not.toBeFocused();
   });
 
-  test('o campo nome não aceita mais de 120 caracteres — o limite é do formulário', async ({
+  test('o campo nome não aceita mais de 100 caracteres — o limite é do formulário', async ({
     page,
     irPara,
     contarUsuarios,
   }) => {
     await irPara('/users/novo');
-    await page.getByLabel('Nome').fill('G'.repeat(121));
+    await page.getByLabel('Nome').fill('G'.repeat(101));
 
     // MEDIDO em 2026-10-08 no Chrome, e a versão anterior deste teste
     // afirmava o contrário. `fill()` NÃO escreve o valor direto no DOM: ele
     // passa por `Input.insertText`, e o browser APLICA o `maxlength`. Com
-    // `maxLength={NOME_MAX}` no input, `inputValue()` devolveu **120** para as
-    // 121 teclas. A versão anterior preenchia 121 e esperava a mensagem do
-    // Zod falhava com "element(s) not found" — uma falha que parece "a
-    // validação não rodou", e era o valor que nunca chegou ao schema.
+    // `maxLength={NOME_MAX}` no input, `inputValue()` devolveu o limite para as
+    // teclas excedentes. A versão anterior preenchia 121 e esperava a mensagem
+    // do Zod — e falhava com "element(s) not found", uma falha que parece "a
+    // validação não rodou" e era o valor que nunca chegou ao schema.
+    //
+    // ⚠️ MEDIDO 2026-10-08: o limite era **120** e virou **100**. Este teste
+    // afirmava `maxlength="120"`, herdado do schema web que declarava
+    // `NOME_MAX = 120` enquanto o VO de domínio aceita 2..100 — a divergência
+    // que produzia o 500 por digitação. Os dois lados passaram a declarar o
+    // número do VO (`cadastro-usuario-schema.parity.spec.ts` é o guardião do
+    // par), e este é o e2e do número novo: um nome de 101 caracteres é barrado
+    // pelo atributo, e o formulário nunca envia.
     //
     // O que sobra de observável é o atributo, e ele é real: é o que impede a
-    // pessoa de digitar o 121º caractere. O `.max(120)` do Zod fica
-    // INALCANÇÁVEL pela tela — o atributo barra antes — e quem o exercita de
-    // verdade é o F5, com 110 caracteres (abaixo de 120, acima do VO de 100).
-    await expect(page.getByLabel('Nome')).toHaveValue('G'.repeat(120));
-    await expect(page.getByLabel('Nome')).toHaveAttribute('maxlength', '120');
+    // pessoa de digitar o 101º caractere. O `.max(100)` do Zod fica
+    // INALCANÇÁVEL pela tela — o atributo barra antes.
+    await expect(page.getByLabel('Nome')).toHaveValue('G'.repeat(100));
+    await expect(page.getByLabel('Nome')).toHaveAttribute('maxlength', '100');
 
     // E nada foi gravado: o limite age antes de qualquer envio.
     expect(await contarUsuarios()).toBe(0);

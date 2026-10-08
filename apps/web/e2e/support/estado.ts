@@ -65,6 +65,16 @@ export interface EstadoE2E {
   webPid: number | null;
   /** Conexão do Postgres efêmero (Testcontainers). */
   databaseUrl: string;
+  /**
+   * Id do container do Postgres no Docker.
+   *
+   * pt-BR (2026-10-08): é o que permite a um spec produzir "API no ar,
+   * banco fora do ar" — o estado de erro de infraestrutura que o F5 mede.
+   * Sem ele, esse estado não tem como ser alcançado sem fabricar uma
+   * resposta HTTP, e uma resposta fabricada faz o teste afirmar o que a
+   * resposta diz, não o que a aplicação faz (ver `banco.ts`).
+   */
+  databaseContainerId: string;
 }
 
 export function gravarEstado(estado: EstadoE2E): void {

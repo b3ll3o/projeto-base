@@ -1,23 +1,38 @@
 // FLUXO: F5 — Cadastro que falha atrás da tela
-// Cobre: a API responde 500 (com `traceId`), e a rede cai (sem `traceId`). Os
+// Cobre: a API responde 5xx (com `traceId`), e a rede cai (sem `traceId`). Os
 //        dois precisam virar mensagem na tela — e não um error boundary.
 //
 // pt-BR (por que dois estados): eles exercitam caminhos DIFERENTES da Server
 // Action, e a diferença é exatamente o que o teste precisa pinning.
 //
-//  - 500 → `ApiError` → `estadoDeErro()` → `comTraceId(ERRO_GENERICO, traceId)`.
+//  - 5xx → `ApiError` → `estadoDeErro()` → `comTraceId(ERRO_GENERICO, traceId)`.
 //    A mensagem ganha "Código de rastreamento: …", que é o que permite retomar
 //    a conversa com o suporte.
 //  - rede caída → a `fetch` LANÇA, e o throw não é `ApiError`. Cai no
 //    `if (erro)` genérico, sem traceId — e sem isso a pessoa ficaria sem
 //    nenhuma explicação visível.
 //
-// pt-BR (como se produz o 500 sem fabricar): com um nome de 110 caracteres —
-// acima do VO de domínio (100), abaixo de `NOME_MAX` (120, o limite do Zod do
-// cliente). O cliente aceita, a API recusa, e a recusa sai como erro interno.
-// É um caminho REAL de produção, alcançado por digitação normal, e por isso
-// este teste não precisa fabricar resposta nenhuma.
+// pt-BR (como se produz o 5xx sem fabricar): a versão anterior usava um nome
+// de 110 caracteres — acima do VO de domínio (100), abaixo de `NOME_MAX` (120,
+// o limite do Zod do cliente). O cliente aceitava, a API recusava, e a recusa
+// saía como erro interno: um caminho real de produção, alcançado por digitação
+// normal.
+//
+// ⚠️ MEDIDO 2026-10-08: esse caminho DEIXOU DE EXISTIR, e a correção deste
+// arquivo é consequência direta do conserto que o matou. O VO de domínio
+// passou a lançar `UserValidationException`, o boundary importa os números do
+// VO, e o formulário usa os mesmos números — então o `maxlength` do input
+// barra o 101º caractere e o POST nunca sai do navegador. Não há mais entrada
+// que produza 500.
+//
+// Fabricar a resposta (`page.route` com um 500 de mentira) seria o atalho, e
+// é o que este arquivo se recusa a fazer: passaria a medir o que a resposta
+// fabricada diz, não o que a aplicação faz. O que resta — e é real — é o 5xx de
+// infraestrutura: **banco fora do ar**, API no ar. O Prisma não fala com o
+// Postgres, e o `GlobalExceptionFilter` responde 500 INTERNAL com `traceId`.
+// Ver `support/banco.ts` para por que derrubar o banco e não a API.
 
+import { derrubarBancoDoTeste, subirBancoDoTeste } from './support/banco';
 import { derrubarApiDoTeste, subirApiDoTeste } from './support/api';
 import { expect, alertaDoFormulario, botaoEnviar, test } from './support/fixtures';
 import { emailUnico } from './support/dados';
@@ -25,36 +40,52 @@ import { emailUnico } from './support/dados';
 const ERRO_GENERICO =
   'Não foi possível cadastrar o usuário. Verifique a conexão e tente novamente.';
 
-/** Comprimento aceito pelo Zod do cliente (120) e recusado pelo VO de domínio (100). */
-const NOME_ACIMA_DO_VO = 'H'.repeat(110);
-
 test.describe('F5 — Erro genérico no cadastro', () => {
-  test('500 da API vira mensagem no topo, com código de rastreamento', async ({
-    page,
-    irPara,
-    contarUsuarios,
-  }) => {
-    await irPara('/users/novo');
-    await page.getByLabel('Nome').fill(NOME_ACIMA_DO_VO);
-    // pt-BR: nenhum spec digita um email que VAI criar. Aqui o POST não cria
-    // nada — é justamente esse o motivo do teste — mas um literal aqui seria
-    // o padrão copiado para o próximo spec que PRECISA criar, e aí volta a
-    // colisão do soft-delete (409 `EMAIL_IN_USE` desde 2026-10-08; era 412
-    // `CONCURRENCY_CONFLICT` antes do conserto do `PrismaUserRepository`).
-    // (O F3 digita literais de propósito: são emails que a validação recusa, e
-    // recusado nunca ocupa o `@unique`.) Ver `emailUnico`.
-    await page.getByLabel('Email').fill(emailUnico('ines'));
-    await botaoEnviar(page).click();
+  test('5xx da API vira mensagem no topo, com código de rastreamento', async ({ page, irPara }) => {
+    // MEDIDO 2026-10-08: o prazo padrão (30 s) não basta, e o motivo é
+    // instructive. Este teste é o ÚNICO que mexe no banco compartilhado: se ele
+    // estoura o prazo, o Playwright mata o teste **sem rodar o `finally`** — e
+    // o `finally` é justamente o que levanta o banco. O sintoma medido foram
+    // três specs do F6 vermelhos em `limparBase()`, a dois arquivos dali, com
+    // `Can't reach database server` — um banco derrubado por um teste que já
+    // tinha acabado. O prazo maior é margem para o `docker stop` + o 5xx + o
+    // `docker start` com espera de prontidão.
+    //
+    // A margem é folga, não orçamento: com a porta do banco fixa (ver
+    // `support/banco.ts`), este teste inteiro roda em **977 ms** — suíte
+    // inteira em 52,8 s, 19/19 verdes (`pnpm --filter @projeto/web test:e2e`).
+    // Antes da correção da porta, o mesmo teste estourava 30 s e depois 120 s,
+    // sem nunca recuperar o banco.
+    test.setTimeout(120_000);
 
-    await expect(alertaDoFormulario(page)).toHaveText(
-      new RegExp(`${ERRO_GENERICO.replace(/[. ]/g, '\\$&')} Código de rastreamento: .+\\.`),
-    );
+    // O banco sai ANTES da navegação: a listagem do `/users/novo` é
+    // server-side e cairia no mesmo 5xx, e o teste mediria o erro do GET em
+    // vez do do POST.
+    await derrubarBancoDoTeste();
+    try {
+      await irPara('/users/novo');
+      await page.getByLabel('Nome').fill('Ines E2E');
+      // pt-BR: nenhum spec digita um email que VAI criar. Aqui o POST não cria
+      // nada — é justamente esse o motivo do teste — mas um literal aqui seria
+      // o padrão copiado para o próximo spec que PRECISA criar, e aí volta a
+      // colisão do soft-delete (409 `EMAIL_IN_USE` desde 2026-10-08; era 412
+      // `CONCURRENCY_CONFLICT` antes do conserto do `PrismaUserRepository`).
+      // (O F3 digita literais de propósito: são emails que a validação recusa, e
+      // recusado nunca ocupa o `@unique`.) Ver `emailUnico`.
+      await page.getByLabel('Email').fill(emailUnico('ines'));
+      await botaoEnviar(page).click();
 
-    // Nenhum erro por campo: um erro que não pertence a nenhum input não pode
-    // ser apresentado como se pertencesse a um.
-    await expect(page.locator('form [role="alert"]')).toHaveCount(1);
-    await expect(page).toHaveURL(/\/users\/novo$/);
-    expect(await contarUsuarios()).toBe(0);
+      await expect(alertaDoFormulario(page)).toHaveText(
+        new RegExp(`${ERRO_GENERICO.replace(/[. ]/g, '\\$&')} Código de rastreamento: .+\\.`),
+      );
+
+      // Nenhum erro por campo: um erro que não pertence a nenhum input não pode
+      // ser apresentado como se pertencesse a um.
+      await expect(page.locator('form [role="alert"]')).toHaveCount(1);
+      await expect(page).toHaveURL(/\/users\/novo$/);
+    } finally {
+      await subirBancoDoTeste();
+    }
   });
 
   test('rede caída vira mensagem no topo, sem código de rastreamento', async ({ page, irPara }) => {
