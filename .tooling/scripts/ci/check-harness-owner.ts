@@ -63,6 +63,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { PROTECTED_DESTINATION } from './check-memory-dir-concordance.js';
 import type { CheckResult } from './check-types';
+import { linhasDoRelato } from './check-types';
 
 const GATES_DIR = '.tooling/scripts/ci';
 const PREFLIGHT_FILE = `${GATES_DIR}/preflight.ts`;
@@ -350,6 +351,6 @@ export function checkHarnessOwner(): OrphanResult {
 
 if (process.argv[1]?.endsWith('check-harness-owner.ts')) {
   const r = checkHarnessOwner();
-  for (const e of r.errors) process.stderr.write(`${e}\n`);
+  for (const linha of linhasDoRelato(r)) process.stderr.write(`${linha}\n`);
   process.exit(r.ok ? 0 : 1);
 }
