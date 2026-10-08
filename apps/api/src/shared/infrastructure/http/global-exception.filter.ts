@@ -120,6 +120,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       code: mapped.code,
       title: mapped.title,
       detail: exception instanceof Error ? exception.message : String(exception),
+      // pt-BR: `errors[]` do mapper precisa chegar ao corpo. Sem esta
+      // propagação, um 400 de VO saía sem `errors` e o Server Action do
+      // web caía em `ERRO_GENERICO` em vez de apontar o campo.
+      ...(mapped.errors !== undefined ? { errors: mapped.errors } : {}),
     };
   }
 

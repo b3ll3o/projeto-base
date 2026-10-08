@@ -8,6 +8,7 @@ import {
   ConcurrencyException,
   UserDeletedException,
   InvalidRestoreException,
+  UserValidationException,
 } from '../../../modules/users/domain/exceptions/user.exceptions.js';
 import {
   AuditHistoryNotFoundException,
@@ -107,6 +108,26 @@ describe('mapExceptionToHttp (application layer)', () => {
     const m = mapExceptionToHttp(new ApplicationValidationException('name', 'empty string'));
     expect(m.status).toBe(HttpStatus.BAD_REQUEST);
     expect(m.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('UserValidationException → 400 VALIDATION_ERROR com errors[]', () => {
+    const m = mapExceptionToHttp(
+      new UserValidationException('nome', 'precisa de pelo menos 2 caracteres.'),
+    );
+    expect(m.status).toBe(HttpStatus.BAD_REQUEST);
+    expect(m.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('UserValidationException leva campo e motivo em errors[], não só o status', () => {
+    // O `status` sozinho não basta: o consumidor (Server Action do web)
+    // decide entre erro de campo e `ERRO_GENERICO` pelo `errors[]`. Um
+    // 400 sem essa lista deixa a pessoa sem saber qual campo corrigir.
+    const m = mapExceptionToHttp(
+      new UserValidationException('email', 'pode ter no máximo 254 caracteres.'),
+    );
+    expect(m.errors).toEqual([
+      { field: 'email', message: 'pode ter no máximo 254 caracteres.', code: 'VALIDATION_ERROR' },
+    ]);
   });
 });
 

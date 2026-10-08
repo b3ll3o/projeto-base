@@ -86,14 +86,23 @@ describe('E2E 03: Optimistic Locking + If-Match header enforcement', () => {
     const c = await app.inject({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome: 'N', email: 'noheader@b.com' },
+      payload: { nome: 'Ana', email: 'noheader@b.com' },
     });
+    // MEDIDO 2026-10-08: a semente usava `nome: 'N'` (1 char) e
+    // `novoNome: 'X'` (1 char). O POST devolvia 500 e o `id` vinha
+    // `undefined`; com o `UpdateUserSchema` corrigido, o `novoNome`
+    // inválido passou a ser recusado pelo Zod do body antes de o
+    // controller ver o `If-Match`. O teste falhava com
+    // `expected 'VALIDATION_ERROR' to be 'IF_MATCH_REQUIRED'` — e a
+    // versão anterior dele passava medindo o path param de
+    // `/users/undefined`, não o contrato de concorrência.
+    expect(c.statusCode).toBe(201);
     const userId = (JSON.parse(c.body) as { id: string }).id;
 
     const res = await app.inject({
       method: 'PATCH',
       url: `/api/v1/users/${userId}`,
-      payload: { novoNome: 'X' },
+      payload: { novoNome: 'Bruno' },
     });
     expect(res.statusCode).toBe(400);
     const body = JSON.parse(res.body) as { code: string };
