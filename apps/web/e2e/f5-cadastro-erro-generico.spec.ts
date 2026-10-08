@@ -41,6 +41,30 @@ const ERRO_GENERICO =
   'Não foi possível cadastrar o usuário. Verifique a conexão e tente novamente.';
 
 test.describe('F5 — Erro genérico no cadastro', () => {
+  // Rede de segurança do banco, e arazão dela não é "boa prática".
+  //
+  // O `finally` do teste de baixo é a recuperação primária, e é o que não roda
+  // quando o teste estoura o prazo. Sem esta segunda camada, o estado que
+  // sobra é "banco parado" e ela acende em specs de outros fluxos, a dois
+  // arquivos dali — foi o sintoma medido.
+  //
+  // MEDIDO 2026-10-08 (Playwright 1.60, config real deste repo): depois de um
+  // timeout o `afterEach` **roda**, e recebe orçamento PRÓPRIO — um hook
+  // assíncrono que esperou 2002 ms completou os 2002 ms com o orçamento do
+  // teste já esgotado. É isto que torna a camada válida: ela não depende do
+  // `finally`, que é justamente o que o estouro consome.
+  //
+  // Ser idempotente é o que a torna barata. MEDIDO: `docker start` num
+  // container já em pé sai **EXIT=0**, duas vezes seguidas, sem stderr — e o
+  // `/health` responde 200 na primeira volta, então o custo no caminho normal
+  // é um `docker start` e um fetch.
+  //
+  // ⚠️ Fica no `describe`, e não dentro do primeiro teste, para que uma falha
+  // que mude a ordem dos testes não deixe o banco para trás.
+  test.afterEach(async () => {
+    await subirBancoDoTeste();
+  });
+
   test('5xx da API vira mensagem no topo, com código de rastreamento', async ({ page, irPara }) => {
     // MEDIDO 2026-10-08: o prazo padrão (30 s) não basta, e o motivo é
     // instructive. Este teste é o ÚNICO que mexe no banco compartilhado: se ele
@@ -49,7 +73,8 @@ test.describe('F5 — Erro genérico no cadastro', () => {
     // três specs do F6 vermelhos em `limparBase()`, a dois arquivos dali, com
     // `Can't reach database server` — um banco derrubado por um teste que já
     // tinha acabado. O prazo maior é margem para o `docker stop` + o 5xx + o
-    // `docker start` com espera de prontidão.
+    // `docker start` com espera de prontidão. E o prazo é defesa, não garantia:
+    // o `afterEach` do `describe` é quem levanta o banco quando ele estoura.
     //
     // A margem é folga, não orçamento: com a porta do banco fixa (ver
     // `support/banco.ts`), este teste inteiro roda em **977 ms** — suíte
@@ -58,9 +83,14 @@ test.describe('F5 — Erro genérico no cadastro', () => {
     // sem nunca recuperar o banco.
     test.setTimeout(120_000);
 
-    // O banco sai ANTES da navegação: a listagem do `/users/novo` é
-    // server-side e cairia no mesmo 5xx, e o teste mediria o erro do GET em
-    // vez do do POST.
+    // O banco sai ANTES da navegação — e a ordem NÃO é por causa de listagem.
+    // Uma versão anterior deste comentário dizia que "a listagem do `/users/novo`
+    // é server-side e cairia no mesmo 5xx". MEDIDO: é falso — `app/users/novo/
+    // page.tsx` não tem fetch nenhum e diz no próprio cabeçalho que "a página não
+    // busca nada, ela só entrega o formulário". Derrubar antes ou depois
+    // renderizaria igual. A ordem real é outra, e menor: põe uma falha do
+    // `docker stop` no PRIMEIRO passo do teste, com a tela ainda intacta, em vez
+    // de no meio do preenchimento. O que este spec mede é o 5xx do POST.
     await derrubarBancoDoTeste();
     try {
       await irPara('/users/novo');

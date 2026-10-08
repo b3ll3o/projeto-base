@@ -280,3 +280,14 @@
 - **Drift real que justificou o `check-turbo-drift`** (v1.4.0): `stack:review`
   e `docs:sync` declaravam `outputs` apesar de `cache:false`. Corrigido.
 
+
+- **`pnpm --filter <pkg> test` sai 0 com ou sem projeto, e com ou sem o que
+  medir** (revisão independente, 2026-10-08). MEDIDO: `pnpm --filter
+  @projeto/web test` → sem saída, EXIT=0; `pnpm --filter @projeto/nao-existe
+  test` → "No projects matched", EXIT=0. O web não tem script `test` (tem
+  `test:unit`/`test:coverage`/`test:e2e`) e o pnpm não reclama; `apps/api`
+  tem um stub `echo … && exit 0`. **Hoje nada cita esse comando** (MEDIDO:
+  `grep -rnE "filter @projeto/web test\b" --include=*.md --include=*.ts
+  --include=*.yml .` → 0; o CI usa `turbo run test:<nível> --filter=`). Fica
+  registrado porque é a forma disponível de alguém passar a citar um comando
+  que não mede nada — e ele é indistinguível de um que mede.

@@ -114,4 +114,51 @@ para o Prisma. Os dois estavam bem — `pg_isready` dentro do container respondi
 `READY` durante os 30 s de espera, e um `PrismaClient` isolado reconectava em
 **427 ms** depois de um stop/start equivalente. O que não voltava era o TCP do
 host, porque a porta tinha mudado. Medir a camada que **falha** (o TCP do host),
-e não a que se supunha, é o que turned a 60 s de espera em 5 ms.
+e não a que se supunha, é o que transformou uma espera de 60 s em 5 ms.
+
+---
+
+## L3 — Revisão independente: 4 achados, 4 corrigidos, 1 registrado
+
+Revisor fresco sobre `origin/main...HEAD`, sem ver o histórico da investigação.
+Veredito: **a raiz está corrigida** — reproduziu o defeito, reproduziu a
+correção e confirmou o mecanismo por dentro da biblioteca
+(`testcontainers@10.28.0`, `generic-container.js:276-279`: o merge de
+`PortBindings` é por chave de porta do **container**, e é por isso que a
+chamada posterior sobrescreve). Os 4 achados são de fragilidade futura e de
+prosa, nenhum é conserto errado.
+
+| # | Achado | O que foi feito |
+|---|---|---|
+| MÉDIO-1 | `workers: 1` não é exigido por nada, e o F5 passou a depender dele | `apps/web/playwright-isolamento.spec.ts` |
+| MÉDIO-2 | A recuperação depende de orçamento de timeout, não de garantia | `test.afterEach` no `describe` do F5 |
+| BAIXO-3 | `banco.ts` é caminho crítico novo e não tem spec | `banco.spec.ts` + seam de DI |
+| BAIXO-4 | Uma razão falsa no comentário do F5 | comentário corrigido |
+| INFO-5 | `pnpm --filter <pkg> test` é verde por ausência | registrado em `ci-defense-in-depth-pendencias.md` |
+
+**Nenhum achado foi aceito por leitura — cada um foi medido antes de virar
+código, e dois deles mudaram de forma:**
+
+- O MÉDIO-2 dependia de "`docker start` em container de pé é no-op". MEDIDO:
+  `EXIT=0`, duas vezes, sem stderr (container de sonda próprio, removido depois).
+- O `afterEach` só ajuda se rodar **depois** do estouro, com orçamento próprio.
+  MEDIDO com Playwright 1.60 real: o hook é invocado e um hook assíncrono
+  completou **2002 ms** de espera com o orçamento do teste já esgotado. Sem essa
+  medida a recomendação seria uma camada que só *parece* de segurança.
+
+**Dentes verificadas por mutação, não por leitura:**
+
+- `workers: 1` → `2`: o guard fica vermelho (`expected 2 to be 1`), e a mensagem
+  nomeia `banco.ts` e o `Can't reach database server` como consequência.
+- `catch` de `derrubarBancoDoTeste` engolido: caem **exatamente** os 2 testes que
+  prometem a reprovação, e os outros 6 continuam verdes — eles medem outros
+  caminhos (`-t 2`, `start`, espera pelo `/health`, mensagem do estouro). A
+  contagem sozinho não provaria isso; WHICH testes caem é a prova.
+
+⚠️ **O achado BAIXO-3 exigiu refatorar código já commitado.** `banco.ts` virou
+`criarBancoDoTeste(lerEstado, docker, prazos)`, com os dois exports de antes
+preservados como a instância de módulo. Motivo: o `catch` é um guard contra
+verde-por-ausência, e um guard que só a suíte de 52 s alcança não é feedback
+rápido. O padrão é o de `saida.ts`, que já recebe o diretório em vez de ir
+buscar no ambiente. **Regressão verificada:** `test:e2e` → 19 passed (52,2 s),
+EXIT=0 depois do refactor.
