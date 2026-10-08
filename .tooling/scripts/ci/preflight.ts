@@ -155,8 +155,19 @@ export function formatMark(r: CheckResult): string {
  * inexistente. A ressalva continua impressa; ela só não é mais contada.
  */
 export function detalhar(r: CheckResult): { linhas: string[]; erros: number } {
+  // A linha do skip entra SÓ no vermelho. No verde a marca já carrega o motivo
+  // (`– (skipped: …)`, via `formatMark`) e repetir aqui imprimiria duas vezes;
+  // no vermelho a marca é apenas `✗`, e aí a linha é a única coisa que diz que
+  // o check NÃO rodou — os `errors` dizem o que ele errou, não por que ele não
+  // chegou a medir.
+  //
+  // MEDIDO 2026-10-07: `ok` e `skipped` são independentes por contrato —
+  // `check-package-json-drift.ts` devolve `ok: errors.length === 0` JUNTO com
+  // `skipped: true`. No caso "não rodou E errou", o motivo do skip era o dado
+  // mais importante da linha e ele não aparecia em lugar nenhum.
+  const motivo = r.skipped && !r.ok ? [`(skipped: ${r.reason ?? 'sem motivo declarado'})`] : [];
   return {
-    linhas: [...r.errors, ...(r.advisories ?? [])],
+    linhas: [...r.errors, ...(r.advisories ?? []), ...motivo],
     erros: r.errors.length,
   };
 }
@@ -186,7 +197,12 @@ export function relatarUmCheck(result: CheckResult): {
     mark: result.ok ? formatMark(result) : '✗',
     linhas,
     erros,
-    pulou: Boolean(result.ok && result.skipped),
+    // `skipped` sozinho, sem o `&& result.ok`: "não rodou" e "rodou e errou"
+    // são fatos independentes, e um check pode ser os dois ao mesmo tempo. Com
+    // o `&&`, esse terceiro estado não incrementava a contagem de pulados — e
+    // o resumo "N check(s) não rodaram" deixava de disparar exatamente quando
+    // a leitura parcial importa mais.
+    pulou: Boolean(result.skipped),
   };
 }
 

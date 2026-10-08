@@ -299,3 +299,52 @@ describe('relatarUmCheck - o ramo VERDE também tem linhas', () => {
     expect(vermelho.pulou).toBe(false);
   });
 });
+
+describe('relatarUmCheck - skip que ACOMPANHA erro não pode sumir', () => {
+  // MEDIDO 2026-10-07: `pulou` era `Boolean(result.ok && result.skipped)`, e
+  // `&&` exige `ok: true`. Mas `ok` e `skipped` são independentes por contrato:
+  // `check-package-json-drift.ts:131-134` devolve `ok: errors.length === 0`
+  // JUNTO com `skipped: true`. Quando a validação do turbo não roda e JÁ há
+  // erros, o resultado é `ok: false` + `skipped: true` — estado que a condição
+  // descartava inteiro: o motivo do skip não saía, `totalSkipped` não
+  // incrementava, e o resumo "N check(s) não rodaram" não disparava.
+  //
+  // É o estado silencioso que esta branch se propõe a fechar, dentro dela mesma.
+  const puladoComErro: CheckResult = {
+    ok: false,
+    errors: ['task órfã: `foo`'],
+    skipped: true,
+    reason: 'validação de `turbo run <task>` não rodou: pnpm-workspace.yaml ausente',
+  };
+
+  it('conta o skip mesmo com erro — senão o resumo mente sobre o que rodou', () => {
+    expect(relatarUmCheck(puladoComErro).pulou).toBe(true);
+  });
+
+  it('imprime o motivo do skip — os erros não dizem por que não rodou', () => {
+    const linhas = relatarUmCheck(puladoComErro).linhas;
+    expect(linhas.some((l) => l.includes('pnpm-workspace.yaml'))).toBe(true);
+  });
+
+  it('NÃO converte o skip em erro: o que conta erro continua sendo o check', () => {
+    const r = relatarUmCheck(puladoComErro);
+    expect(r.erros).toBe(1);
+    expect(r.mark).toBe('✗');
+  });
+
+  it('NÃO duplica o motivo no pulo VERDE — a marca já o carrega', () => {
+    // O par necessário: incluir a linha do skip sem condición faria o verde
+    // imprimir o motivo duas vezes (uma na marca `– (skipped: …)`, outra nas
+    // linhas). O vermelho é que precisa dela, porque a marca dele é só `✗`.
+    const verde = relatarUmCheck({
+      ok: true,
+      errors: [],
+      skipped: true,
+      reason: 'sem harness',
+    });
+    const comMarca = verde.linhas.filter((l) => l.includes('sem harness'));
+    expect(comMarca).toHaveLength(0);
+    expect(verde.mark).toContain('sem harness');
+    expect(verde.pulou).toBe(true);
+  });
+});
