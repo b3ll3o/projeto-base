@@ -27,7 +27,6 @@ import { checkBranchUpToDate } from './check-branch-up-to-date';
 import { existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
-import { linhasDoRelato } from './check-types';
 
 /**
  * Valida a matriz de roteamento do review-router (Task 1.10).
@@ -138,7 +137,13 @@ export function formatMark(r: CheckResult): string {
 }
 
 /**
- * As linhas de detalhe de um check vermelho, e quantos ERROS ele vale.
+ * As linhas de detalhe que o painel imprime DEPOIS da marca, em qualquer ramo.
+ *
+ * Deliberadamente **sem** a linha de skip que `linhasDoRelato` inclui: o painel
+ * já carrega o motivo na própria marca (`– (skipped: …)`, via `formatMark`), e
+ * usar as duas listas aqui imprimiria o motivo duas vezes. São contratos
+ * diferentes — o CLI de um check não tem marca e precisa dizer por que não
+ * rodou — e a diferença é essa, não uma divergência acidental.
  *
  * Extraído de `main()` só porque era impossível testar a contagem onde ela
  * estava: o somatório vivia no meio de um `for` com `console.log` entrelaçado,
@@ -151,11 +156,37 @@ export function formatMark(r: CheckResult): string {
  */
 export function detalhar(r: CheckResult): { linhas: string[]; erros: number } {
   return {
-    // `linhasDoRelato` vem de `check-types.ts`, o mesmo que o modo CLI de cada
-    // check usa. Duas cópias desta lista é uma divergência esperando o check
-    // seguinte ganhar uma categoria nova.
-    linhas: linhasDoRelato(r),
+    linhas: [...r.errors, ...(r.advisories ?? [])],
     erros: r.errors.length,
+  };
+}
+
+/**
+ * Como UM check aparece no painel: a marca, as linhas de detalhe e o que ele
+ * soma.
+ *
+ * Existe para que o ramo VERDE seja testável. O defeito que motivou o split
+ * vivia dentro de `main()` — `detalhar` era chamado só em `if (!result.ok)` — e
+ * um `advisories` sobre um `ok: true` saía descartado em silêncio. Comportamento
+ * que só se vê rodando a preflight inteira (quinze checks, alguns segundos) não
+ * tem teste; e sem teste ele volta na próxima refatoração.
+ *
+ * MEDIDO 2026-10-07: a assimetria era real, e apontava para o caso que mais
+ * importa — a ressalva "isto mediu contra uma ref que pode estar velha"
+ * qualifica um **verde**, e o verde era justamente o ramo que não a lia.
+ */
+export function relatarUmCheck(result: CheckResult): {
+  mark: string;
+  linhas: string[];
+  erros: number;
+  pulou: boolean;
+} {
+  const { linhas, erros } = detalhar(result);
+  return {
+    mark: result.ok ? formatMark(result) : '✗',
+    linhas,
+    erros,
+    pulou: Boolean(result.ok && result.skipped),
   };
 }
 
@@ -323,18 +354,18 @@ async function main(): Promise<void> {
   let totalSkipped = 0;
   for (const check of checks) {
     process.stdout.write(`  • ${check.name}... `);
-    const result = await check.fn();
-    if (!result.ok) {
-      console.log('✗');
-      const { linhas, erros } = detalhar(result);
-      for (const linha of linhas) {
-        console.log(`      ${linha}`);
-      }
-      totalErrors += erros;
-    } else {
-      if (result.skipped) totalSkipped++;
-      console.log(formatMark(result));
+    // As linhas saem nos DOIS ramos, porque é `relatarUmCheck` que decide isso.
+    // Um `advisories` sobre um `ok: true` é o caso que mais importa: "verde,
+    // mas medido contra uma ref que pode estar velha" é uma ressalva sobre o
+    // verde, e um painel que só a lê no ramo vermelho descarta exatamente a
+    // afirmação que ela existe para qualificar.
+    const relatorio = relatarUmCheck(await check.fn());
+    console.log(relatorio.mark);
+    for (const linha of relatorio.linhas) {
+      console.log(`      ${linha}`);
     }
+    if (relatorio.pulou) totalSkipped++;
+    totalErrors += relatorio.erros;
   }
 
   console.log('');

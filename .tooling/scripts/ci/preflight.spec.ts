@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { checkDocRefs } from './check-doc-refs';
-import { detalhar, formatMark } from './preflight';
+import { detalhar, formatMark, relatarUmCheck } from './preflight';
 import type { CheckResult } from './check-types';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -245,5 +245,57 @@ describe('detalhar - a contagem que o painel anuncia', () => {
     const semRessalva = detalhar({ ok: false, errors: ['só o defeito'] });
     expect(semRessalva.erros).toBe(1);
     expect(semRessalva.linhas).toEqual(['só o defeito']);
+  });
+});
+
+describe('relatarUmCheck - o ramo VERDE também tem linhas', () => {
+  // MEDIDO 2026-10-07: `main()` chamava `detalhar` dentro de `if (!result.ok)`.
+  // Nenhum check emitia `advisories` num resultado verde, então nada era
+  // perdido — e nenhum teste existia, porque a decisão morava dentro da
+  // preflight inteira. O primeiro check que emitir uma ressalva sobre um verde
+  // a teria visto sumir em silêncio, sem erro e sem contagem.
+  const verdeComRessalva: CheckResult = {
+    ok: true,
+    errors: [],
+    advisories: ['Atenção: medido contra a ref `origin/main` local, que pode estar velha'],
+  };
+
+  it('imprime a ressalva de um check VERDE — o verde é o caso que ela qualifica', () => {
+    const r = relatarUmCheck(verdeComRessalva);
+    expect(r.mark).toBe('✓');
+    expect(r.linhas).toHaveLength(1);
+    expect(r.linhas[0]).toMatch(/Atenção/);
+  });
+
+  it('NÃO soma a ressalva de um verde como erro', () => {
+    expect(relatarUmCheck(verdeComRessalva).erros).toBe(0);
+  });
+
+  it('um verde comum não ganha linha nenhuma', () => {
+    // O par dos dois anteriores: sem isto, `linhas: [algo]` passesaria em
+    // qualquer implementação, inclusive uma que inventasse uma linha.
+    const limpo = relatarUmCheck({ ok: true, errors: [] });
+    expect(limpo.linhas).toEqual([]);
+    expect(limpo.mark).toBe('✓');
+    expect(limpo.pulou).toBe(false);
+  });
+
+  it('skip continua sendo contado no ramo verde, sem virar erro', () => {
+    const pulado = relatarUmCheck({ ok: true, errors: [], skipped: true, reason: 'sem harness' });
+    expect(pulado.mark).toMatch(/skipped/);
+    expect(pulado.pulou).toBe(true);
+    expect(pulado.erros).toBe(0);
+  });
+
+  it('vermelho segue vermelho, com as linhas do defeito e da ressalva', () => {
+    const vermelho = relatarUmCheck({
+      ok: false,
+      errors: ['a branch está 1 commit(s) atrás'],
+      advisories: ['Atenção: ref local'],
+    });
+    expect(vermelho.mark).toBe('✗');
+    expect(vermelho.erros).toBe(1);
+    expect(vermelho.linhas).toHaveLength(2);
+    expect(vermelho.pulou).toBe(false);
   });
 });
