@@ -1,9 +1,9 @@
 ---
 name: review-routing
-version: 1.5
-updated: 2026-10-06
+version: 1.6
+updated: 2026-10-08
 maintainer: review-router
-description: "Matriz de roteamento de revisores consultada pelo review-router"
+description: "Matriz de roteamento de revisores consultada pelo review-router — v1.5 (audit specialists) + v1.5 da main (UX) mergidas em v1.6."
 ---
 
 # Convenção: review-routing (matriz de roteamento de revisores)
@@ -21,12 +21,9 @@ path_globs:
   - pattern: "apps/api/**/domain/**"
     reviewers: [nestjs-specialist, stack-code-reviewer]
     stacks: [ddd-hexagonal]
-    rationale: "Pureza DDD é crítica em domain/"
-
   - pattern: "apps/api/**/application/**"
     reviewers: [nestjs-specialist, stack-code-reviewer]
     stacks: [ddd-hexagonal]
-
   - pattern: "apps/api/**/infrastructure/**"
     reviewers: [nestjs-specialist, stack-code-reviewer]
     stacks: [nestjs]
@@ -99,7 +96,6 @@ path_globs:
 
   - pattern: "**/*.test.ts"
     reviewers: [test-writer]
-
   - pattern: "**/*.spec.ts"
     reviewers: [test-writer]
 
@@ -158,8 +154,22 @@ diff_patterns:
     reviewers_added: [monorepo-specialist]
   - regex: "@Trace\\(|@Span\\(|SpanKind\\.|context\\.with\\(|\\.setAttribute\\("
     reviewers_added: [telemetry-specialist]
+
+  # v1.5 da main — UX/design (PR #59)
   - regex: "className=|aria-|role=\"|<label|@Input\\(|\\bvariant=|\\bsize="
     reviewers_added: [ux-design-specialist]
+
+  # v1.6 (meu) — diff_patterns para 4 specialists de auditoria
+  - regex: "prisma\\.\\w+\\.(findMany|findFirst|findUnique|createMany|updateMany|deleteMany)"
+    reviewers_added: [prisma-db-specialist]
+  - regex: "@ApiTags|@ApiOperation|@ApiResponse|@ApiProperty"
+    reviewers_added: [openapi-contract-specialist]
+  - regex: "USER\\s+root|^USER\\s*$|privileged:\\s*true|--read-only|--cap-drop|--security-opt"
+    reviewers_added: [docker-prod-specialist]
+  - regex: "^!:\\s|\\nBREAKING CHANGE:"
+    reviewers_added: [release-versioning-specialist]
+  - regex: "\\*\\*[Vv]ers(?:ão|ao)[^:]*:\\*\\*\\s*v?[0-9]+\\.[0-9]+\\.[0-9]+"
+    reviewers_added: [release-versioning-specialist]
 ```
 
 ## 4. SKIP HEURISTICS
@@ -170,12 +180,10 @@ skip_rules:
     skip_if:
       - "task.scope == 'trivial' AND files_changed <= 1"
       - "commit_type == 'chore' AND task.scope != 'large'"
-    rationale: "Spec irrelevante para housekeeping"
   code-quality-reviewer:
     skip_if:
       - "all_changed_paths endsWith .md OR .txt"
       - "task.scope == 'docs'"
-    rationale: "Sem código, sem quality de código"
 
 always_on:
   - spec-compliance-reviewer
@@ -226,74 +234,21 @@ Resultado esperado:
 > [`guard-classes`](../../../docs/superpowers/plans/2026-10-03-guard-classes.md)
 > precisou corrigir.
 
-## 6. Gaps Conhecidos (forthcoming v1.3) — (v1.2: 2 P1; v1.3: 3 P2; ver Seção 7)
-
-### Resolvidos em v1.2
-
-#### Antigo P1 #1 — `blocking: true` em path_globs não propagado
-
-**Resolvido em v1.2** (`e4c0971`): flag `blocking: true` propaga de `path_globs` para exit code (4 alvos: `PathGlobRule`, `PathMatch`, `matchPathGlobs()`, `classify()`). 2 entries blocking (`pnpm-workspace.yaml`, `turbo.json`) disparam exit 3; 3 testes TDD em `review-router.spec.ts` (`eb0b6fd`).
-
-#### Antigo P1 #2 — FP de regex `bcrypt|argon2|hash\(|jwt\.sign|jwt\.verify`
-
-**Resolvido em v1.2** (este commit): narrowing do regex para call-site
-anchored. Novo regex:
-
-```regex
-bcrypt\.hash(?:Sync)?\(|bcrypt\.compare(?:Sync)?\(|argon2\.hash(?:Sync)?\(|argon2\.verify\(|jwt\.(?:sign|verify|decode)\(
-```
-
-Cobre: hash/hashSync/compare/compareSync (bcrypt); hash/hashSync/verify
-(argon2); sign/verify/decode (jwt). Não cobre: bare `bcrypt`/`argon2`
-tokens (low signal).
-
-Verificação no Pilot Task 1 (commit `7ddb93e`): o broad regex
-`bcrypt|argon2|hash\(|jwt\.sign|jwt\.verify` produzia **10 matches no
-classifier scan window de 50KB** e **20 matches no diff completo**
-(136977 bytes, ~134KB). Distribuição (verificada via `git show 7ddb93e
-| grep -nE ...`):
-
-- ~14 matches em test fixtures (`tooling/scripts/review-router.spec.ts`
-  e pilot-summary replication)
-- ~5 matches em plan/spec docs quotando o regex
-- ~1 match na própria matrix YAML
-
-**Total: 0 matches em production code.**
-
-O narrow regex (call-site anchored) tem **1 match nesse diff**: a fixture
-legítima `matchDiffPatterns('const hash = await bcrypt.hash(pwd);', rules)`
-em `tooling/scripts/review-router.spec.ts` (preservado por design —
-production signal sem FP).
-
-### Resolvidos em v1.3
-
-#### Antigo P2 #3 — `domains[]` em `ClassifyResult` sempre `[]`
-
-**Resolvido em v1.3** (PR #20): `PathGlobRule.domain?` propaga via `matchPathGlobs()` → `classify()` dedupe em `Set<string>`. 5 testes TDD; 2 regras anotadas em Seção 1 (`agents-specs`, `agents-meta`). Zero breaking change.
-
-#### Antigo P2 #5 — `blocking: true` em paths ilegíveis (lint silenciava)
-
-**Resolvido em v1.3** (PR #21): lint emite WARNING (não error — não bloqueia exit) quando `path_globs.blocking: true` casa files ilegíveis (no-match OU todos em `.gitignore`). +3 helpers (`globToRegexLocal`, `getTrackedFiles`, `isPathGitignored`) + bloco `if (rule.blocking === true)` em `lintMatrix`; +4 testes TDD. Matrix atual (tracked) → 0 warnings.
-
-#### Antigo P2 #4 — coverage scenarios multi-commit / multi-path
-
-**Resolvido em v1.3** (PR #22): Cenários D + E migrados para [review-routing-examples.md](./review-routing-examples.md) (apêndice, ~102 linhas) preservando limite de 300 linhas. Zero breaking change — aditivo.
-
-### Conhecidos (forthcoming v1.5) — _(nenhum)_
-
-### Adicionado em v1.4 — diff_patterns OpenTelemetry
-
-**Adicionado em v1.4** (T6.2): roteamento de PRs com código OTel (`@Trace\(` / `@Span\(` decorators NestJS, `SpanKind\.`, `context\.with\(`, `\.setAttribute\(`) e paths OTel (`apps/api/**/telemetry/**`, `apps/web/**/instrumentation*`, `infra/otelcol/**`) para `telemetry-specialist`. Aditivo — sem breaking change. Verifica com lint script (`pnpm tooling:test -- lint-review-routing`).
 
 ---
+
+> **Histórico de gaps conhecidos (v1.2 e v1.3)** migrado para o apêndice
+> [`review-routing-gaps-historical.md`](./review-routing-gaps-historical.md)
+> (apenas leitura) para preservar o limite de 300 linhas deste spec.
 
 ## 7. Histórico de Versões
 
 | Versão | Data | Mudança |
 |--------|------|---------|
-| 1 | 2026-09-22 | Versão inicial |
-| 1.1 | 2026-09-22 | Adicionar exemplos de uso (Seção 5) + Seção 6 "Gaps Conhecidos" priorizando 2 P1 + 2 P2 para v1.2; bump version frontmatter `1` → `1.1` (resolvia divergência entre `version: 1` declarado e docs que já referenciavam v1.1) |
-| 1.2 | 2026-09-22 | 2 P1 gaps resolvidos: propagação de `blocking` em path_globs (`e4c0971`) + narrowing do regex de segurança (`f496b05`). Classifier agora propaga corretamente a flag `blocking: true` para a exit code; regex narrow elimina FPs em test fixtures e docs. (Seção 6) |
-| 1.3 | 2026-09-22 | 3 P2 gaps resolvidos: PR #20 (enrich `domains[]` em `ClassifyResult`), PR #21 (lint WARNING em `blocking: true` c/ paths ilegíveis), PR #22 (cenários multi-commit/multi-path migrados para apêndice `review-routing-examples.md` para preservar limite de 300 linhas). Zero breaking change em todos. (Seção 6) |
-| 1.4 | 2026-09-23 | Adicionar diff_pattern OpenTelemetry + 3 path_globs (`apps/api/**/telemetry/**`, `apps/web/**/instrumentation*`, `infra/otelcol/**`) roteando para `telemetry-specialist`. Cobre NestJS decorators (`@Trace\(`, `@Span\(`), OTel enums (`SpanKind\.`), context API (`context\.with\(`) e span API (`\.setAttribute\(`). Acionado por T6.2 do plano de telemetria. Aditivo — sem breaking change. (Seção 6) |
-| 1.5 | 2026-10-06 | Adicionar `ux-design-specialist` (UX/design de interface). `apps/web/app/**` e `apps/web/components/**` passam a incluí-lo junto do `nextjs-specialist`; 1 path_glob novo (`apps/web/app/globals.css`) + 1 diff_pattern novo (`className=|aria-|role=|<label|@Input(|variant=|size=`) detectando mudança visual/JSX/CSS/tokens. Aditivo — sem breaking change. |
+| 1.6 | 2026-10-08 | Resolve conflito: mergeia v1.5 (mine, audit specialists diff_patterns) + v1.5 da main (ux-design-specialist). Mantém ambos. Aditivo. |
+| 1.5 | 2026-10-06 | Adicionar `ux-design-specialist` (UX/design de interface). 1 path_glob novo (`apps/web/app/globals.css`) + 1 diff_pattern novo. Aditivo. |
+| 1.1 | 2026-09-22 | Adicionar exemplos de uso (Seção 5) + Seção 6 "Gaps Conhecidos" priorizando 2 P1 + 2 P2 para v1.2; bump version frontmatter `1` → `1.1` |
+| 1.2 | 2026-09-22 | 2 P1 gaps resolvidos: propagação de `blocking` em path_globs (`e4c0971`) + narrowing do regex de segurança (`f496b05`). (Seção 6) |
+| 1.3 | 2026-09-22 | 3 P2 gaps resolvidos: PR #20 (enrich `domains[]`), PR #21 (lint WARNING em `blocking`), PR #22 (cenários migrados para apêndice). Zero breaking change. (Seção 6) |
+| 1.4 | 2026-09-23 | Adicionar diff_pattern OpenTelemetry + 3 path_globs (`apps/api/**/telemetry/**`, `apps/web/**/instrumentation*`, `infra/otelcol/**`) roteando para `telemetry-specialist`. Cobre NestJS decorators, OTel enums, context API e span API. Acionado por T6.2. Aditivo. |
+| 1.5 | 2026-10-06 | Adicionar `ux-design-specialist` (UX/design de interface). 1 path_glob novo (`apps/web/app/globals.css`) + 1 diff_pattern novo. Aditivo. |

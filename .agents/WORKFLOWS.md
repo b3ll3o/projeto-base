@@ -26,6 +26,8 @@
 | `specialist-routing` | specialist-router | sequential | router → controller (decide planejar ou bloquear) |
 | `pr-refresh` | "atualizar título/descrição do PR" | single | pr-refresh-scan → agente (reclassifica + reescreve) |
 | `pr-pendencias` (v1.11.0+) | "revisar pendências do PR / o que ficou para depois" | parallel→merge | 1 agente por pendência (mede) → adversarial (reroda) → agente (consolida) |
+| `audit-mode` (v2.0+) | "auditar stack / rodar scan / revisar saúde" | parallel + orchestrator | `finding-orchestrator` (despara 8 specialists em paralelo, agrega findings, dedup, abre issues via `gh`) |
+| `release-pre-tag` (v2.0+) | "auditar antes de tag vX.Y.Z" | sequential | `release-versioning-specialist` + `finding-orchestrator` (subset focado em versioning) |
 
 ### Por Stack (workflows detalhados em `.agents/workflows/`)
 
@@ -39,6 +41,49 @@
 | `feedback-to-spec` | "feedback to spec / próxima spec de finding / T1/T2/T3 → spec" | sequential | task-manager → orchestrator → specialist-router → specialist (template spec) → task-manager | [workflows/feedback-to-spec.md](./workflows/feedback-to-spec.md) |
 
 ---
+
+### `audit-mode` — Auditoria Periódica da Stack (v2.0+)
+
+**Composição:** parallel via `finding-orchestrator` → 8 specialists em batch único
+
+Disparado por:
+- Cron `weekly-findings-scan` (sextas 02:00 UTC, job id `0351feea8bf2`)
+- Demanda sob demanda: "rodar auditoria", "analisar stack", "gerar relatório de findings"
+- Pré-tag (`release-pre-tag` é variante focada)
+
+8 specialists em paralelo:
+
+| Specialist | Domínio | Path |
+|---|---|---|
+| `prisma-db-specialist` | Schema/migration/query | `apps/api/prisma/` |
+| `openapi-contract-specialist` | Spec OpenAPI 3 + drift DTO↔Prisma | `apps/api/openapi.json` + controllers |
+| `otelcol-infra-specialist` | OTel Collector config | `infra/otelcol/` |
+| `docker-prod-specialist` | Hardening prod/readiness | `apps/*/Dockerfile` + `docker-compose*.yml` |
+| `release-versioning-specialist` | Drift cross-doc + semver + release workflow | 3 docs canônicos + `.github/workflows/release-template.yml` |
+| `code-reviewer` | Genérico (qualidade geral) | `.` |
+| `security-auditor` | Genérico (supply chain, secrets, CVE) | `.` |
+| `doc-sync` | Genérico (drift docs↔code) | `.` |
+
+Output:
+- Findings consolidados com severity final (P0/P1/P2)
+- Issues abertas via `gh` com labels (apenas P0/P1)
+- Issues comentadas quando há duplicata
+- Relatório `~/.hermes/cron/output/findings-scan-<ts>/report.md`
+- YAML agregado em `~/.hermes/cron/output/findings-scan-<ts>/findings.yaml`
+
+Política de ruído: cap de 10 issues por scan; P2 só alimenta relatório.
+
+Pré-condição bloqueante: `gh auth status` válido (caso contrário aborta sem criar nenhuma issue).
+
+### `release-pre-tag` — Auditoria Pré-Tag (v2.0+)
+
+**Composição:** `release-versioning-specialist` → `finding-orchestrator` (subset)
+
+Disparado por: "auditar antes de tag vX.Y.Z", "posso taggear 1.5.0?"
+
+Diferente de `audit-mode`: subset focado em versioning — escaneia apenas docs canônicos (`docs/MONOREPO.md`, `docs/STACK.md`, `.agents/specs/conventions/estrutura-e-versionamento.md`), Conventional Commits entre última tag e HEAD, e o workflow `release-template.yml`. Não dispara os 7 specialists paralelos — só `release-versioning-specialist` + cruzamento com findings dos outros 6 archivados (se houver).
+
+Output: verdict + lista de blockers (drift cross-doc, BREAKING CHANGE não flagado, conventional commit inválido, workflow regex quebrado).
 
 ## Resumo dos workflows inline
 
