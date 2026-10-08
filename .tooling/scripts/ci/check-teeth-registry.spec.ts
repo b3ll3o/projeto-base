@@ -31,7 +31,7 @@ import {
   registryGateFiles,
   unroutedGateFiles,
   type GateRef,
-  PREFLIGHT_GATES,
+  preflightGates,
 } from './check-teeth-registry.js';
 
 // ── fixtures ────────────────────────────────────────────────────────────────
@@ -290,7 +290,7 @@ describe('checkTeethRegistry — contra o repo de verdade', () => {
       'utf8',
     );
     const found = registryGateFiles(registryMd);
-    const expected = new Set(PREFLIGHT_GATES.map((g) => g.file));
+    const expected = new Set(preflightGates().map((g) => g.file));
     expect(expected.size).toBeGreaterThan(0); // senão `found` vs `[]` seria vacuamente verde
     expect(new Set(found)).toEqual(expected);
     // E nenhum deles pode ser um spec — a coluna Arquivo documenta o GATE.

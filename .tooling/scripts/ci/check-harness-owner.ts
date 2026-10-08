@@ -67,6 +67,22 @@ import { linhasDoRelato } from './check-types';
 
 const GATES_DIR = '.tooling/scripts/ci';
 const PREFLIGHT_FILE = `${GATES_DIR}/preflight.ts`;
+/**
+ * Onde a posse é declarada HOJE. A lista de gates saiu de `main()` em
+ * `preflight.ts` para `preflight-gates.ts` (fonte única, item C das
+ * pendências), e com ela saiu o campo `file:` que este guard lê para saber
+ * quem é dono de quem. MEDIDO 2026-10-08: com só o `preflight.ts` na lista,
+ * `turbo-redirect-differential.sh`, `check-memory-dir-concordance` e o próprio
+ * `preflight-gates.ts` (via shebang) viraram órfãos — 3 vermelhos num check que
+ * antes estava verde.
+ *
+ * `preflight.ts` continua na lista de propósito: ele é quem EXECUTA, e um dia
+ * pode voltar a declarar posse própria (um gate que não é da lista compartilhada).
+ */
+const OWNERSHIP_SOURCES = [
+  { path: `${GATES_DIR}/preflight-gates.ts`, simbolo: 'PREFLIGHT_CHECKS' },
+  { path: PREFLIGHT_FILE, simbolo: 'checks' },
+] as const;
 
 /**
  * Arquivos de infraestrutura do diretório de gates — o runner e o módulo de
@@ -176,7 +192,12 @@ export function shellWords(command: string): string[] {
 }
 
 export interface OwnerSources {
-  preflightSource: string;
+  /**
+   * Onde a posse é declarada: path repo-relative + o conteúdo daquele arquivo.
+   * O rótulo do dono sai daqui (`<path>#<símbolo>`), então o nome do dono deixa
+   * de ser uma constante embutida no guard.
+   */
+  poseSources: Array<{ path: string; simbolo: string; source: string }>;
   packageJsonScripts: Record<string, string>;
 }
 
@@ -199,12 +220,15 @@ export interface OwnerSources {
 export function findOwners(harness: string, sources: OwnerSources): string[] {
   const owners: string[] = [];
 
-  PREFLIGHT_FILE_FIELD.lastIndex = 0;
-  for (const m of sources.preflightSource.matchAll(PREFLIGHT_FILE_FIELD)) {
-    if (m[2] === harness) {
-      owners.push('preflight.ts#checks');
-      break;
+  for (const origem of sources.poseSources) {
+    PREFLIGHT_FILE_FIELD.lastIndex = 0;
+    for (const m of origem.source.matchAll(PREFLIGHT_FILE_FIELD)) {
+      if (m[2] === harness) {
+        owners.push(`${origem.path}#${origem.simbolo}`);
+        break;
+      }
     }
+    if (owners.length > 0) break;
   }
 
   for (const [script, command] of Object.entries(sources.packageJsonScripts)) {
@@ -222,7 +246,7 @@ export interface OrphanResult extends CheckResult {
 
 export function orphanHarnesses(params: {
   harnesses: string[];
-  preflightSource: string;
+  poseSources: OwnerSources['poseSources'];
   packageJsonScripts: Record<string, string>;
 }): OrphanResult {
   const orphans = params.harnesses.filter((h) => findOwners(h, { ...params }).length === 0);
@@ -231,7 +255,7 @@ export function orphanHarnesses(params: {
     errors: orphans.map(
       (h) =>
         `${h} — HARNESS ÓRFÃO: mede contra o sistema real e não é executado por nada. ` +
-        `Registre-o no array "checks" do preflight.ts (campo "file") ou invoque-o ` +
+        `Registre-o na lista de gates (campo "file") ou invoque-o ` +
         `por um script de package.json#scripts. Enquanto isso ele é o que a B11 ` +
         `mediu: 2 menções, 0 invocações.`,
     ),
@@ -261,13 +285,19 @@ export function orphanDestinationRules(params: {
 // ── Camada 1: o repo de verdade ─────────────────────────────────────────────
 
 function readRepoSources(): OwnerSources & { wiredGuards: string[] } {
-  let preflightSource = '';
-  try {
-    preflightSource = readFileSync(join(process.cwd(), PREFLIGHT_FILE), 'utf8');
-  } catch {
-    // Falha explícita abaixo: um preflight ilegível tornaria todo harness
-    // órfão, e "tudo vermelho" é indistinguível de "o instrumento quebrou".
-  }
+  // Cada fonte ausente vira string VAZIA, e uma fonte vazia não casa
+  // `file:` nenhum — o guard acusa órfão em vez de fingir que leu. Um
+  // preflight ilegível tornaria todo harness órfão, e "tudo vermelho" é
+  // indistinguível de "o instrumento quebrou".
+  const poseSources = OWNERSHIP_SOURCES.map(({ path, simbolo }) => {
+    let source = '';
+    try {
+      source = readFileSync(join(process.cwd(), path), 'utf8');
+    } catch {
+      // idem: vazio, e o gate de instrumentalização abaixo acusa a falta.
+    }
+    return { path, simbolo, source };
+  });
 
   let scripts: Record<string, string> = {};
   try {
@@ -279,15 +309,15 @@ function readRepoSources(): OwnerSources & { wiredGuards: string[] } {
     // idem.
   }
 
-  PREFLIGHT_FILE_FIELD.lastIndex = 0;
-  const wiredGuards = [...preflightSource.matchAll(PREFLIGHT_FILE_FIELD)]
+  const wiredGuards = poseSources
+    .flatMap((o) => [...o.source.matchAll(PREFLIGHT_FILE_FIELD)])
     // `m[2]` é `string | undefined` sob `noUncheckedIndexedAccess` porque o
     // grupo é opcional no tipo da regex. Aqui nunca é: o padrão tem um grupo
     // capturado obrigatório, e o filtro abaixo deixa isso explícito em vez de
     // mendigar um `as string[]` que o compilador aceitaria e o leitor não.
     .map((m) => m[2])
     .filter((file): file is string => file !== undefined);
-  return { preflightSource, packageJsonScripts: scripts, wiredGuards };
+  return { poseSources, packageJsonScripts: scripts, wiredGuards };
 }
 
 function readGateDir(): Record<string, string> {
@@ -313,12 +343,12 @@ function readGateDir(): Record<string, string> {
 }
 
 export function checkHarnessOwner(): OrphanResult {
-  const { preflightSource, packageJsonScripts, wiredGuards } = readRepoSources();
-  if (preflightSource === '') {
+  const { poseSources, packageJsonScripts, wiredGuards } = readRepoSources();
+  if (poseSources.some((o) => o.source === '')) {
     return {
       ok: false,
       errors: [
-        `não foi possível ler ${PREFLIGHT_FILE} — sem ele todo harness parece órfão, e um vermelho que significa "instrumento quebrado" é indistinguível de um vermelho que significa dívida.`,
+        `não foi possível ler uma das fontes de posse (${OWNERSHIP_SOURCES.map((o) => o.path).join(', ')}) — sem elas todo harness parece órfão, e um vermelho que significa "instrumento quebrado" é indistinguível de um vermelho que significa dívida.`,
       ],
       orphans: [],
     };
@@ -329,7 +359,7 @@ export function checkHarnessOwner(): OrphanResult {
 
   const a = orphanHarnesses({
     harnesses: harnessFiles(readGateDir()),
-    preflightSource,
+    poseSources,
     packageJsonScripts,
   });
   orphans.push(...a.orphans);

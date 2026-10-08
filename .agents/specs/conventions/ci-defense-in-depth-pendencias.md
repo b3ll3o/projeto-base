@@ -52,22 +52,37 @@
   "essencial"), fica registrado em vez de corrigido. **Se algum dia alguém
   escrever um gate de workflow, este é o primeiro item que ele deveria pegar.**
 
-- **`PREFLIGHT_GATES` é uma transcrição à mão, e o reconciliador é cego nos
-  dois sentidos** (medido 2026-10-06, achado da revisão paralela do PR deste
-  branch). `check-teeth-registry.ts` reconcilia o registro contra um **literal**
-  seu, não contra o array `checks` que `preflight.ts` de fato executa — o array
-  vive dentro de `main()` e não é exportado. Medido: inserido um gate fantasma
-  em `preflight.ts`, o preflight imprimiu `✓`, `check-teeth-registry` devolveu
-  `EXIT=0` e os 13 testes do spec seguiram verdes. Gate novo no preflight sem
-  linha no registro **não é acusado por nada**. É a classe 1 dentro do guard que
-  existe para pegar a classe 1, e o comentário que ficava sobre o literal
-  afirmava "derivados do array `checks` por importação real" — o oposto do que
-  o código fazia. O comentário foi corrigido; a derivação não foi feita.
-  **Correção:** extrair `PREFLIGHT_CHECKS` para um módulo próprio
-  (`preflight-gates.ts`) importado por `preflight.ts` e por
-  `check-teeth-registry.ts`. Importar direto de `preflight.ts` criaria ciclo, e
-  na ordem inversa de importação `PREFLIGHT_GATES` cairia em TDZ. Change
-  próprio: mexe no runner do preflight, não num dos 5 gates.
+- **FECHADO 2026-10-08 — `PREFLIGHT_GATES` deixou de ser transcrição à mão.**
+  O item estava aberto desde 2026-10-06: `check-teeth-registry.ts` reconciliava
+  o registro contra um **literal** seu, e não contra o array `checks` que
+  `preflight.ts` de fato executa (o array vivia dentro de `main()`, sem
+  export). Gate novo rodava sem obrigação de entrar no registro; gate removido
+  continuava "registrado". O comentário sobre o literal afirmava "derivados do
+  array `checks` por importação real" — o oposto do que o código fazia.
+
+  A lista virou `PREFLIGHT_CHECKS` em
+  [`preflight-gates.ts`](../../../.tooling/scripts/ci/preflight-gates.ts),
+  **só dados** (`id`, `name`, `file`): o módulo que guardasse também a função
+  importaria `checkTeethRegistry`, que importa ele de volta. O `COMO` ficou em
+  `RUNNERS`, no `preflight.ts`, e `resolverChecks()` casa os dois lados.
+
+  **MEDIDO (dentes do spec novo, denominador 9):**
+  `preflightGates()` virando um retrato avaliado no carregamento do módulo →
+  **1 de 9 vermelho**; o `throw` de `resolverChecks` trocado por fallback verde
+  → **1 de 9 vermelho** (medido duas vezes: a primeira medida deu **8 de 8
+  verde**, porque no repo real todo `id` tem runner e o caminho de falha era
+  inerte — o gate vigiava um conjunto vazio).
+
+  **A extração quebrou dois guards, e eles estavam certos.** `check-harness-owner`
+  lia a posse do campo `file:` em `preflight.ts` → 3 harnesses viraram órfãos
+  ("expected [ …(3) ] to deeply equal []"), e `preflight-gates.ts` com
+  `#!/usr/bin/env tsx` no topo foi classificado como HARNESS ÓRFÃO — o guard
+  classifica como harness o que não começa com `check-`, não termina em
+  `.spec.ts` e tem shebang. O conserto foi nos dois: shebang removido do módulo
+  importado (que ninguém executa) e `OWNERSHIP_SOURCES` lendo as duas fontes, com
+  o rótulo do dono vindo delas (`preflight-gates.ts#PREFLIGHT_CHECKS`) em vez
+  de uma constante embutida no guard.
+
 - **A tabela de Checks acima é completa** (a task 3.1 do plano
   [`guard-classes`](../../../docs/superpowers/plans/2026-10-03-guard-classes.md)
   fechou as 3 lacunas que esta seção declarava). O `preflight` executa

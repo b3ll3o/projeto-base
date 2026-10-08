@@ -57,14 +57,8 @@ import { join } from 'node:path';
 import { matchPathGlobs, loadMatrix } from '../../../tooling/scripts/review-router.js';
 import type { CheckResult } from './check-types';
 import { linhasDoRelato } from './check-types';
-
-/** Um gate como o preflight o declara. */
-export interface GateRef {
-  /** Nome de exibição, para Humans. NÃO é a chave de reconciliação. */
-  name: string;
-  /** Path repo-relative do arquivo que implementa o gate. A chave. */
-  file: string;
-}
+import { preflightGates } from './preflight-gates';
+import type { GateRef } from './preflight-gates';
 
 export interface ReconcileInput {
   /** Gates que o preflight registra. */
@@ -207,54 +201,29 @@ const REGISTRY_DOC = join(process.cwd(), '.agents/specs/conventions/ci-defense-i
 const MATRIX_DOC = join(process.cwd(), '.agents/specs/conventions/review-routing.md');
 
 /**
- * Os gates do preflight — **transcrição à mão**, não derivação.
+ * Os gates do preflight, **derivados** da lista que o preflight de fato roda.
  *
- * Este comentário já disse o contrário ("Derivados do array `checks` por
- * importação real, não re-declarados") e a frase descrevia exatamente a
- * invariante que o código não tem. `PREFLIGHT_GATES` é um literal; o array
- * `checks` vive dentro de `main()` em `preflight.ts` e não é exportado. O
- * reconciliador compara o registro contra ESTE literal, então é cego nos
- * dois sentidos:
+ * Este bloco já foi um literal de 17 linhas transcrito à mão, e o comentário
+ * dizia o oposto do que o código fazia — descrevia a invariante que ele não
+ * tinha. O reconciliador comparava o registro contra AQUele literal, então era
+ * cego nos dois sentidos: gate novo em `preflight.ts` rodava sem obrigação
+ * nenhuma de entrar no registro, e gate removido de lá continuava "registrado".
+ * MEDIDO em 2026-10-06: gate fantasma inserido em `preflight.ts` → preflight
+ * imprimiu `✓`, `check-teeth-registry` devolveu `EXIT=0`, 13 testes verdes.
  *
- *   - gate novo entra em `checks` e não entra aqui → roda no preflight e
- *     **nada obriga a registrá-lo**;
- *   - gate sai de `checks` e continua aqui → o reconciliador segue verde
- *     sobre um gate que não roda mais.
+ * Agora a lista mora em `preflight-gates.ts` e este arquivo a chama. O módulo
+ * novo é só dados justamente para não criar ciclo: `preflight.ts` (que tem as
+ * funções) e este arquivo (que reconcilia) leem a mesma lista, e ninguém
+ * importa ninguém.
  *
- * MEDIDO em 2026-10-06: inserido um gate fantasma em `preflight.ts`, o
- * preflight imprimiu `✓` e `check-teeth-registry` devolveu `EXIT=0`, com os
- * 13 testes do spec verdes. É a classe 1 dentro do guard que existe para
- * pegar a classe 1.
- *
- * A correção é derivar: extrair o array para um módulo próprio
- * (`preflight-gates.ts`) importado pelos dois lados — direto de
- * `preflight.ts` criaria ciclo, e na ordem inversa de importação
- * `PREFLIGHT_GATES` cairia em TDZ. Registrado em §Pendências conhecidas do
- * companion; enquanto não for feito, **este gate não garante que todo gate do
- * preflight tem linha no registro** — garante que o registro bate com a lista
- * abaixo.
+ * `preflightGates()` é função, não constante, por um motivo medido: um
+ * `PREFLIGHT_GATES` derivado no carregamento do módulo é um RETRATO da lista.
+ * O `preflight-gates.spec.ts` empurra um gate fantasma e exige que a
+ * reconciliação o enxergue — com constante, o teste fica vermelho com 17 em
+ * vez de 18, que é a forma correta de um derivado tomar snapshot.
  */
-export const PREFLIGHT_GATES: GateRef[] = [
-  { name: 'Cross-refs em .md versionados', file: '.tooling/scripts/ci/check-doc-refs.ts' },
-  { name: 'tsconfig drift', file: '.tooling/scripts/ci/check-tsconfig-drift.ts' },
-  { name: 'typecheck tooling', file: '.tooling/scripts/ci/check-tooling-typecheck.ts' },
-  { name: 'eslint drift (api)', file: '.tooling/scripts/ci/check-eslint-drift.ts' },
-  { name: 'eslint drift (web)', file: '.tooling/scripts/ci/check-eslint-drift.ts' },
-  { name: 'turbo drift', file: '.tooling/scripts/ci/check-turbo-drift.ts' },
-  { name: 'package.json drift', file: '.tooling/scripts/ci/check-package-json-drift.ts' },
-  { name: 'docker drift', file: '.tooling/scripts/ci/check-docker-drift.ts' },
-  { name: 'matrix review-routing', file: 'tooling/scripts/lint-review-routing.ts' },
-  { name: 'archive integrity', file: '.tooling/scripts/ci/check-archive-integrity.ts' },
-  { name: 'memory dir concordance', file: '.tooling/scripts/ci/check-memory-dir-concordance.ts' },
-  { name: 'drift agent↔memória', file: '.tooling/scripts/ci/check-agent-memory-drift.ts' },
-  { name: 'registro de dentes', file: '.tooling/scripts/ci/check-teeth-registry.ts' },
-  { name: 'classe 3', file: '.tooling/scripts/ci/check-self-firing-guard.ts' },
-  { name: 'turbo differential', file: '.tooling/scripts/ci/turbo-redirect-differential.sh' },
-  { name: 'controle desligado', file: '.tooling/scripts/ci/check-harness-owner.ts' },
-  { name: 'regra de rebase', file: '.tooling/scripts/ci/check-branch-up-to-date.ts' },
-  { name: 'cobertura e2e', file: '.tooling/scripts/ci/check-e2e-flow-coverage.ts' },
-  { name: 'ci local e2e', file: '.tooling/scripts/ci/check-ci-local-e2e.ts' },
-];
+export { preflightGates };
+export type { GateRef } from './preflight-gates';
 
 export function checkTeethRegistry(): CheckResult {
   let registry: string;
@@ -278,7 +247,7 @@ export function checkTeethRegistry(): CheckResult {
   const trackedFiles = readRepoFiles();
 
   return reconcileTeethRegistry({
-    registeredGates: PREFLIGHT_GATES,
+    registeredGates: preflightGates(),
     registryMarkdown: registry,
     matrixMarkdown: matrix,
     trackedFiles,
