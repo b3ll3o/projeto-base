@@ -44,7 +44,7 @@ mode: "local" | "ci"                   # local = pnpm ci:local; ci = workflow
 
 | Camada              | Onde                          | Comando / Job                                  | Quando dispara            | Custo   |
 |---------------------|-------------------------------|------------------------------------------------|----------------------------|---------|
-| 1. Pre-push local   | máquina do dev                 | `pnpm ci:local`                                | antes de `git push`        | ~30s    |
+| 1. Pre-push local   | máquina do dev                 | `pnpm ci:local`                                | antes de `git push`        | 69,5s, 69,6s e 74,1s (n=3) |
 | 2. Preflight CI     | workflow `ci.yml` job `preflight` | primeiro job da pipeline                    | em todo PR                 | ~10s    |
 | 3. Quality CI       | workflow `ci.yml` job `quality` (gated por preflight) | após preflight verde | em todo PR                 | ~4min   |
 

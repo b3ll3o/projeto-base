@@ -209,14 +209,27 @@ async function readTurboTaskNames(projectRoot: string): Promise<string[]> {
   }
 }
 
+/** Um pacote do workspace com o nome declarado e seus scripts. */
+export interface PacoteLeido {
+  nome: string;
+  scripts: Record<string, string>;
+}
+
 /**
- * Union dos nomes de script de todos os pacotes do workspace.
+ * Lê nome e scripts de **todos** os pacotes do workspace.
  *
- * Devolve `null` — nunca um conjunto vazio — quando os pacotes não podem ser
- * enumerados. Um `Set` vazio seria indistinguível de "workspace sem scripts",
- * que é a condição em que todo `turbo run` acusaria drift.
+ * Devolve `null` — nunca uma lista vazia — quando os pacotes não podem ser
+ * enumerados. Uma lista vazia seria indistinguível de "workspace sem pacotes",
+ * e o caller que só precisa de nomes acabaria acusando drift em tudo, ou
+ * verde em nada. Os dois casos são erros diferentes e precisam sair por caminhos
+ * diferentes.
+ *
+ * Vive aqui, e não no gate que o consome, porque um segundo leitor de
+ * `pnpm-workspace.yaml` criaria duas semânticas de "pacote do workspace" no
+ * mesmo repo — e a divergência entre elas seria invisível justamente nos casos
+ * que importam.
  */
-async function readWorkspaceScriptNames(projectRoot: string): Promise<Set<string> | null> {
+export async function lerPacotesDoWorkspace(projectRoot: string): Promise<PacoteLeido[] | null> {
   let yaml: string;
   try {
     yaml = await fs.readFile(path.join(projectRoot, 'pnpm-workspace.yaml'), 'utf-8');
@@ -226,7 +239,7 @@ async function readWorkspaceScriptNames(projectRoot: string): Promise<Set<string
   const globs = parseWorkspaceGlobs(yaml);
   if (!globs) return null;
 
-  const names = new Set<string>();
+  const pacotes: PacoteLeido[] = [];
   for (const glob of globs) {
     // Só a forma `dir/*` é suportada. Qualquer outra (nested, negação,
     // variável) devolve null em vez de ser interpretada pela metade.
@@ -249,12 +262,29 @@ async function readWorkspaceScriptNames(projectRoot: string): Promise<Set<string
       if (!entry.isDirectory()) continue;
       try {
         const pkgRaw = await fs.readFile(path.join(parentDir, entry.name, 'package.json'), 'utf-8');
-        const pkg = JSON.parse(pkgRaw) as { scripts?: Record<string, string> };
-        for (const scriptName of Object.keys(pkg.scripts ?? {})) names.add(scriptName);
+        const pkg = JSON.parse(pkgRaw) as { name?: string; scripts?: Record<string, string> };
+        const nome = pkg.name ?? entry.name;
+        pacotes.push({ nome, scripts: pkg.scripts ?? {} });
       } catch {
         // Diretório sem package.json legível não é pacote.
       }
     }
+  }
+  return pacotes;
+}
+
+/**
+ * Union dos nomes de script de todos os pacotes do workspace.
+ *
+ * Casca de `lerPacotesDoWorkspace`: quem só precisa do conjunto de nomes não
+ * tem por que duplicar a enumeração.
+ */
+async function readWorkspaceScriptNames(projectRoot: string): Promise<Set<string> | null> {
+  const pacotes = await lerPacotesDoWorkspace(projectRoot);
+  if (!pacotes) return null;
+  const names = new Set<string>();
+  for (const pacote of pacotes) {
+    for (const scriptName of Object.keys(pacote.scripts)) names.add(scriptName);
   }
   return names;
 }

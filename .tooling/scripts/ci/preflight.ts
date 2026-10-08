@@ -24,6 +24,8 @@ import { checkTeethRegistry } from './check-teeth-registry';
 import { checkSelfFiringGuards } from './check-self-firing-guard';
 import { checkHarnessOwner } from './check-harness-owner';
 import { checkBranchUpToDate } from './check-branch-up-to-date';
+import { checkE2eFlowCoverage } from './check-e2e-flow-coverage';
+import { checkCiLocalE2e } from './check-ci-local-e2e';
 import { existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
@@ -401,6 +403,34 @@ async function main(): Promise<void> {
       name: 'demanda rebaseda na main atual (regra de rebase)',
       file: '.tooling/scripts/ci/check-branch-up-to-date.ts',
       fn: () => checkBranchUpToDate(),
+    },
+    {
+      // Regra de `e2e-playwright.md`: todo fluxo mapeado tem spec e todo spec
+      // pertence a um fluxo mapeado. Entra pelo preflight — e não pelo
+      // `ci:local` — pelo mesmo motivo do rebase: o CI roda `ci:preflight`.
+      //
+      // O que ele mede é PARIDADE DECLARATIVA entre o inventário da convenção e
+      // os cabeçalhos `// FLUXO:` dos specs. Que os testes PASSEM é outra
+      // camada (`test:e2e` no job `quality`), e confundir as duas é como um
+      // gate passa a afirmar verde sobre algo que não mediu.
+      name: 'inventário de fluxos ⇄ specs e2e (regra de cobertura e2e)',
+      file: '.tooling/scripts/ci/check-e2e-flow-coverage.ts',
+      fn: () => checkE2eFlowCoverage({ repoRoot: '.' }),
+    },
+    {
+      // A Camada 1 da convenção promete que `ci:local` roda as suítes e2e antes
+      // do push, e o script é a única coisa que decide se cumpre. MEDIDO
+      // 2026-10-08: `check-package-json-drift` exige que `ci:local` EXISTA
+      // (REQUIRED_SCRIPTS) e nunca lê o conteúdo — foi por isso que a
+      // pendência "não roda nenhuma das duas suítes e2e" sobreviveu a três
+      // releases sem nenhum vermelho.
+      //
+      // Entra pelo preflight, e não pelo `ci:local`, pelo mesmo motivo do gate
+      // de e2e e do rebase: o CI roda `ci:preflight`. Um guard que só existe
+      // na máquina de quem escreveu a pendência não vigia nada.
+      name: 'ci:local roda as suítes e2e (regra da Camada 1)',
+      file: '.tooling/scripts/ci/check-ci-local-e2e.ts',
+      fn: () => checkCiLocalE2e({ repoRoot: '.' }),
     },
   ];
 

@@ -252,6 +252,8 @@ export const PREFLIGHT_GATES: GateRef[] = [
   { name: 'turbo differential', file: '.tooling/scripts/ci/turbo-redirect-differential.sh' },
   { name: 'controle desligado', file: '.tooling/scripts/ci/check-harness-owner.ts' },
   { name: 'regra de rebase', file: '.tooling/scripts/ci/check-branch-up-to-date.ts' },
+  { name: 'cobertura e2e', file: '.tooling/scripts/ci/check-e2e-flow-coverage.ts' },
+  { name: 'ci local e2e', file: '.tooling/scripts/ci/check-ci-local-e2e.ts' },
 ];
 
 export function checkTeethRegistry(): CheckResult {

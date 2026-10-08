@@ -91,6 +91,16 @@ jobs:
     needs: preflight
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # pt-BR: os três passos de Playwright (abaixo) somam bootstrap + install +
+    # specs, contra um teto de 20 min que existia bem antes deles. MEDIDO
+    # 2026-10-08: `gh run view 37796560291 --json jobs` dá o job `quality` em
+    # **1m11s** (14:57:06 → 14:58:17) SEM nenhum passo de e2e; e no log de duas
+    # execuções locais o `next build` levou **34,5s** e **34,8s** ("build
+    # concluído em …" do `globalSetup`), com o setup inteiro em 40,7s e 41,4s.
+    # Somando Postgres, migrate, install e specs, a projeção fica em 5-8 min
+    # contra 20 — folga de ~3×. O timeout fica como está: mexer agora seria
+    # trocar um número medido por outro chutado. Reavaliar se a suíte e2e
+    # ganhar outros fluxos.
     # pt-BR: apps/api/test/testcontainers-helper.ts sobe Postgres próprio
     # (PostgreSqlContainer 'postgres:16-alpine') e sobrepõe DATABASE_URL.
     # Não usar service postgres aqui — é dead code.
@@ -106,8 +116,26 @@ jobs:
       - run: pnpm turbo run lint typecheck
       # Cobertura (gate-enforced) + unit para todos os apps via turbo task graph.
       - run: pnpm turbo run test:coverage test:unit
-      # Integration + E2E rodam só em apps/api (apps/web não tem esses níveis).
+      # Integration + E2E de API rodam em apps/api; o E2E de FRONTEND é a suíte
+      # Playwright, logo abaixo, e ela sobe Postgres + API + Next por conta própria
+      # (e2e/global-setup.ts) — não reaproveita nada deste passo.
       - run: pnpm turbo run test:integration test:e2e --filter=@projeto/api
+      # pt-BR: o `--filter` é obrigatório, não cosmético. `@playwright/test` está
+      # nos devDependencies do web e o pnpm isola `node_modules`: na raiz,
+      # `pnpm exec playwright` não resolve e sai 0 sem instalar nada — o pior tipo
+      # de passo de CI, o que parece verde e não mediu nada.
+      - run: pnpm --filter @projeto/web exec playwright install --with-deps chromium
+      - run: pnpm turbo run test:e2e --filter=@projeto/web
+      # Relatório + traces SEMPRE, inclusive quando o teste falha: um e2e que
+      # quebra sem artefato é um e2e que a próxima pessoa desativa.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: |
+            apps/web/playwright-report/
+            apps/web/test-results/
+          retention-days: 14
       # Upload de cobertura como artifact para auditoria (cobertura-testes.md §CI Enforcement).
       - uses: actions/upload-artifact@v4
         if: always()

@@ -12,6 +12,7 @@
 // e o save recebe expectedVersion = version()-1, que é o estado pré-mutação.
 
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
+import { Prisma } from '@prisma/client';
 import {
   setupTestDatabase,
   cleanDatabase,
@@ -21,7 +22,10 @@ import { PrismaUserRepository } from './prisma-user.repository.js';
 import { User } from '../../domain/user.aggregate.js';
 import { UserId } from '../../domain/value-objects/user-id.vo.js';
 import { Email } from '../../domain/value-objects/email.vo.js';
-import { ConcurrencyException } from '../../domain/exceptions/user.exceptions.js';
+import {
+  ConcurrencyException,
+  EmailAlreadyInUseException,
+} from '../../domain/exceptions/user.exceptions.js';
 
 describe('PrismaUserRepository (Testcontainers)', () => {
   let ctx: TestContext;
@@ -121,6 +125,269 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     const found = shown.users.find((x) => x.id().value === u.id().value);
     expect(found).toBeDefined();
     expect(found!.deletedAt()).toBeInstanceOf(Date);
+  });
+
+  it('save (INSERT) com email de um soft-deleted lança EmailAlreadyInUseException, não ConcurrencyException', async () => {
+    // pt-BR (2026-10-08): o defeito que este teste cobre foi MEDIDO na suíte
+    // e2e de frontend (F4): cadastrar de novo um email que estava soft-deleted
+    // respondia **412 CONCURRENCY_CONFLICT** em vez de **409 EMAIL_IN_USE**.
+    //
+    // A cadeia, toda ela neste repositório:
+    //   1. `findByEmail` filtra soft-deleted → o pré-check do use-case diz que o
+    //      email está livre;
+    //   2. o índice `email @unique` do schema (prisma/schema.prisma:21) NÃO sabe
+    //      de `deletedAt` → `prisma.user.create` estoura P2002;
+    //   3. o `catch` sem binding transformava QUALQUER erro em
+    //      `ConcurrencyException` — e só distinguia recarregando por `id`, que
+    //      num conflito de email devolve `null` (a linha vencedora tem outro id);
+    //   4. `ConcurrencyException(0, null)` → 412 no filtro de exceção.
+    //
+    // O critério não é só "lança exceção": é o TIPO. `ConcurrencyException` e
+    // `EmailAlreadyInUseException` ficam a mesma linha do HTTP (409), então um
+    // teste que afirmasse só `rejects.toThrow()` ficaria verde com o defeito.
+    const antigo = User.criar({
+      nome: 'Helena',
+      email: 'helena@example.com',
+      agora: new Date('2026-09-21T10:00:00Z'),
+    });
+    await repo.save(antigo, 0);
+    antigo.marcarExcluido('test', new Date());
+    await repo.save(antigo, antigo.version() - 1);
+
+    const novo = User.criar({
+      nome: 'Outra Helena',
+      email: 'helena@example.com',
+      agora: new Date('2026-09-21T11:00:00Z'),
+    });
+
+    // `await expect(...).rejects.toThrow(EmailAlreadyInUseException)` — a
+    // classe, não a instância: `ConcurrencyException` NÃO satisfaz isso, que é
+    // exatamente a distinção que o 412 escondia.
+    await expect(repo.save(novo, 0)).rejects.toThrow(EmailAlreadyInUseException);
+  });
+
+  it('save (INSERT) com email livre de soft-delete mas duplicado no mesmo instante segue sendo conflito de email', async () => {
+    // pt-BR: o mesmo caminho de código sem o soft-delete por baixo. Sem este
+    // par, um "conserto" que passasse a mascarar TODO conflito como
+    // ConcurrencyException (o comportamento anterior) ficaria verde.
+    const primeiro = User.criar({
+      nome: 'Iris',
+      email: 'iris@example.com',
+      agora: new Date('2026-09-21T10:00:00Z'),
+    });
+    await repo.save(primeiro, 0);
+
+    const segundo = User.criar({
+      nome: 'Outra Iris',
+      email: 'iris@example.com',
+      agora: new Date('2026-09-21T11:00:00Z'),
+    });
+
+    await expect(repo.save(segundo, 0)).rejects.toThrow(EmailAlreadyInUseException);
+  });
+
+  it('save (INSERT) com email realmente livre persiste sem tocar em ConcurrencyException', async () => {
+    // pt-BR: o contrafactual. Um conserto que transformasse qualquer erro de
+    // create em EmailAlreadyInUseException — inclusive uma falha de conexão —
+    // passaria nos dois testes acima e quebraria a aplicação. Este é o que
+    // segura essa regressão.
+    const u = User.criar({
+      nome: 'Joana',
+      email: 'joana@example.com',
+      agora: new Date('2026-09-21T10:00:00Z'),
+    });
+    const saved = await repo.save(u, 0);
+    expect(saved.email().value).toBe('joana@example.com');
+  });
+
+  it('save (INSERT) cujo id apareceu entre o pré-check e o create dá ConcurrencyException, não EmailAlreadyInUseException', async () => {
+    // pt-BR (2026-10-08): a PRIMEIRA das três perguntas de
+    // `traduzirFalhaDeUnicidade`, e a única que não tinha spec nenhuma.
+    //
+    // MEDIDO 2026-10-08 (revisão da branch): apagando o bloco `if
+    // (contexto.esperavaLinhaAusente)` inteiro e rodando este arquivo, o
+    // resultado foi **`Tests 1 failed | 16 passed (17)`** — e o único vermelho
+    // é este. Antes dele, os 16 anteriores seguiam verdes com o ramo apagado,
+    // porque nenhum exercita `atual !== null`. Sem este, o `P2002` de um `id`
+    // colidido responderia 409 `EMAIL_IN_USE`, que é o defeito que o conserto
+    // veio desfazer, agora no sentido oposto.
+    //
+    // A corrida é esta, e é a única forma de chegar ao ramo: o pré-check da
+    // linha 71 viu NADA, o `create` perdeu para quem gravou o MESMO `id`, e a
+    // reconsulta — feita só quando o `create` já falhou — agora acha a linha.
+    // O duplo `findUnique` abaixo é essa janela, e não um mock decorativo: o
+    // repositório chama o método nos dois momentos por razões diferentes.
+    const linhaVencida = { id: 'x', version: 7 } as unknown as Awaited<
+      ReturnType<typeof ctx.prisma.user.findUnique>
+    >;
+    let consultas = 0;
+    const prismaEmCorrida = {
+      user: {
+        findUnique: async (): Promise<typeof linhaVencida> => {
+          consultas += 1;
+          return consultas === 1 ? null : linhaVencida;
+        },
+        create: async (): Promise<never> => {
+          throw new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+            code: 'P2002',
+            clientVersion: '6',
+          });
+        },
+      },
+    } as unknown as typeof ctx.prisma;
+
+    const u = User.criar({
+      nome: 'Luana',
+      email: 'luana@example.com',
+      agora: new Date('2026-09-21T10:00:00Z'),
+    });
+
+    // 412 e não 409: a linha que eu tentava criar JÁ EXISTE, com a versão 7.
+    // O `expectedVersion` é 0 porque este é o caminho de INSERT — o que faz a
+    // exceção dizer "esperava 0, encontrei 7", que é a leitura honesta da
+    // corrida: eu não sabia da linha, e ela apareceu.
+    await expect(new PrismaUserRepository(prismaEmCorrida).save(u, 0)).rejects.toThrow(
+      ConcurrencyException,
+    );
+    expect(consultas, 'a reconsulta que decide o tipo tem de acontecer').toBe(2);
+  });
+
+  it('save (INSERT) com falha que NÃO é unicidade propaga o erro original, sem inventar "email em uso"', async () => {
+    // pt-BR: o terceiro ramo do `catch`, que é o que impede o conserto de virar
+    // uma mentira MAIOR. Os dois testes acima fixam que colisão de email dá
+    // `EmailAlreadyInUseException`; nenhum deles diz o que fazer quando o erro
+    // é outra coisa. Um `catch` que respondesse "email em uso" para QUALQUER
+    // falha passaria por ambos — porque nenhum dos dois provoca uma falha que
+    // não seja de unicidade. Este provoca.
+    //
+    // O repositório recebe o `PrismaClient` pelo construtor, então um objeto com
+    // o mesmo formato e um `create` que rejeita é suficiente — não é mock de
+    // framework, é a porta que o repositório realmente usa.
+    const falha = new Error('conexão perdida com o banco');
+    const prismaQuebrado = {
+      user: {
+        findUnique: ctx.prisma.user.findUnique.bind(ctx.prisma.user),
+        create: async (): Promise<never> => {
+          throw falha;
+        },
+      },
+    } as unknown as typeof ctx.prisma;
+
+    const u = User.criar({
+      nome: 'Karla',
+      email: 'karla@example.com',
+      agora: new Date('2026-09-21T10:00:00Z'),
+    });
+
+    // Nem `EmailAlreadyInUseException` (409) nem `ConcurrencyException` (412):
+    // o erro original. Um erro desconhecido é 500 — dizer que é conflito de
+    // email seria afirmar uma causa que ninguém mediu.
+    await expect(new PrismaUserRepository(prismaQuebrado).save(u, 0)).rejects.toThrow(falha);
+  });
+
+  it('save (UPDATE) com email de um soft-deleted lança EmailAlreadyInUseException, não erro cru', async () => {
+    // pt-BR (2026-10-08): a MESMA classe de defeito do INSERT, na metade que o
+    // conserto anterior não cobriu. `atualizarEmail` (user-use-cases.ts:175)
+    // faz o pré-check com `findByEmail`, que filtra soft-deleted — então o
+    // use-case libera a mutação, e o `updateMany` bate no mesmo índice
+    // `@unique` que não sabe de `deletedAt`.
+    //
+    // A diferença de sintoma é o que torna isto fácil de deixar passar: no
+    // INSERT o `catch` existed e mascarava tudo como 412; no UPDATE NÃO HÁ
+    // `catch` nenhum, o P2002 escapa cru, e um erro de Prisma sem tradução é
+    // **500**. Um email que o usuário lê como "já cadastrado" chega à tela como
+    // erro genérico de servidor — sem campo, sem mensagem, com um traceId.
+    //
+    // O critério é o TIPO pelo mesmo motivo do teste do INSERT: as duas
+    // exceções de domínio estão a uma linha do mesmo HTTP, então afirmar só
+    // `rejects.toThrow()` deixaria o defeito passar.
+    const antigo = User.criar({
+      nome: 'Iara',
+      email: 'iara@example.com',
+      agora: new Date('2026-09-21T10:00:00Z'),
+    });
+    await repo.save(antigo, 0);
+    antigo.marcarExcluido('test', new Date());
+    await repo.save(antigo, antigo.version() - 1);
+
+    const alvo = User.criar({
+      nome: 'Bruno',
+      email: 'bruno@example.com',
+      agora: new Date('2026-09-21T10:00:00Z'),
+    });
+    const salvo = await repo.save(alvo, 0);
+
+    salvo.alterarEmail('iara@example.com', new Date('2026-09-21T12:00:00Z'));
+
+    await expect(repo.save(salvo, salvo.version() - 1)).rejects.toThrow(EmailAlreadyInUseException);
+  });
+
+  it('save (UPDATE) com email realmente livre continua persistindo', async () => {
+    // O contrafactual do UPDATE. Sem ele, um `catch` que respondesse
+    // "email em uso" para QUALQUER falha do `updateMany` — inclusive uma
+    // conexão caída — ficaria verde no teste acima.
+    const alvo = User.criar({
+      nome: 'Carla',
+      email: 'carla@example.com',
+      agora: new Date('2026-09-21T10:00:00Z'),
+    });
+    const salvo = await repo.save(alvo, 0);
+
+    salvo.alterarEmail('carla.nova@example.com', new Date('2026-09-21T12:00:00Z'));
+    const depois = await repo.save(salvo, salvo.version() - 1);
+
+    expect(depois.email().value).toBe('carla.nova@example.com');
+  });
+
+  it('save (UPDATE) com falha que NÃO é unicidade propaga o erro original', async () => {
+    // pt-BR: o terceiro ramo, agora no UPDATE. Sem este, a correção do UPDATE
+    // viria junto com a mesma mentira que o INSERT já teve: afirmar "email em
+    // uso" para uma falha de conexão é inventar causa.
+    const alvo = User.criar({
+      nome: 'Dani',
+      email: 'dani@example.com',
+      agora: new Date('2026-09-21T10:00:00Z'),
+    });
+    const salvo = await repo.save(alvo, 0);
+    salvo.alterarEmail('dani.nova@example.com', new Date('2026-09-21T12:00:00Z'));
+
+    const falha = new Error('conexão perdida com o banco');
+    const prismaQuebrado = {
+      user: {
+        findUnique: ctx.prisma.user.findUnique.bind(ctx.prisma.user),
+        updateMany: async (): Promise<never> => {
+          throw falha;
+        },
+      },
+    } as unknown as typeof ctx.prisma;
+
+    await expect(
+      new PrismaUserRepository(prismaQuebrado).save(salvo, salvo.version() - 1),
+    ).rejects.toThrow(falha);
+  });
+
+  it('save (UPDATE) com email duplicado por OUTRO usuário vivo também dá EmailAlreadyInUseException', async () => {
+    // pt-BR: o par que fecha a classe. O teste de soft-delete acima prova a
+    // colisão pouco óbvia; este prova a ÓBVIA, que é a que o `updateMany`
+    // alcança sem soft-delete nenhum. Um conserto que tratasse P2002 como
+    // "conflito de concorrência" (o comportamento anterior no INSERT) passaria
+    // no primeiro e falharia aqui.
+    const primeiro = User.criar({
+      nome: 'Elis',
+      email: 'elis@example.com',
+      agora: new Date('2026-09-21T10:00:00Z'),
+    });
+    await repo.save(primeiro, 0);
+
+    const segundo = User.criar({
+      nome: 'Otto',
+      email: 'otto@example.com',
+      agora: new Date('2026-09-21T10:00:00Z'),
+    });
+    const salvo = await repo.save(segundo, 0);
+    salvo.alterarEmail('elis@example.com', new Date('2026-09-21T12:00:00Z'));
+
+    await expect(repo.save(salvo, salvo.version() - 1)).rejects.toThrow(EmailAlreadyInUseException);
   });
 
   it('restore (via save após restaurar) devolve User com deletedAt=null e version incrementada', async () => {

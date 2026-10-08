@@ -3,8 +3,12 @@
 // Implementação Prisma do UserRepositoryPort (Fase 6).
 //
 // - save(user, expectedVersion): faz INSERT (expectedVersion=0) ou UPDATE
-//   com `updateMany WHERE version=expected` para optimistic locking. Em
-//   falha, recarrega a versão atual e relança ConcurrencyException.
+//   com `updateMany WHERE version=expected` para optimistic locking. Nos DOIS
+//   caminhos, colisão de `email` (P2002 → EmailAlreadyInUseException, 409) é
+//   distinguida de race no `id` (→ ConcurrencyException, 412) e de qualquer
+//   outra falha (→ propaga o erro original) — ver `traduzirFalhaDeUnicidade`.
+//   O `email @unique` do schema não sabe de `deletedAt`, então a colisão é real
+//   mesmo quando `findByEmail` diz que o email está livre.
 // - findById/findByEmail: filtram soft-deleted por padrão (retornam null).
 // - list: cursor opaco (id do último item), respeita includeDeleted.
 //
@@ -14,7 +18,7 @@
 // O `User.criar` é chamado pelos use-cases; aqui só persistimos.
 
 import { Inject, Injectable } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service.js';
 import type {
   UserRepositoryPort,
@@ -25,7 +29,10 @@ import type {
 import type { User } from '../../domain/user.aggregate.js';
 import type { UserId } from '../../domain/value-objects/user-id.vo.js';
 import type { Email } from '../../domain/value-objects/email.vo.js';
-import { ConcurrencyException } from '../../domain/exceptions/user.exceptions.js';
+import {
+  ConcurrencyException,
+  EmailAlreadyInUseException,
+} from '../../domain/exceptions/user.exceptions.js';
 import { UserPrismaMapper, type UserRow } from './user.prisma-mapper.js';
 
 @Injectable()
@@ -56,8 +63,10 @@ export class PrismaUserRepository implements UserRepositoryPort {
     const id = user.id().value;
 
     // INSERT path: row ainda não existe no banco.
-    // Usamos `create` direto; se já existir (race), o Prisma lança P2002 /
-    // P2025 que tratamos como ConcurrencyException(expected=0, actual=null|1).
+    // Usamos `create` direto; um conflito de unicidade aqui tem DUAS causas
+    // possíveis — race no `id` (outro processo gravou o mesmo id) e colisão no
+    // `email` (@unique que não sabe de `deletedAt`). O `catch` abaixo separa as
+    // duas em vez de tratar as duas como conflito de concorrência.
     const existing = await this.prisma.user.findUnique({ where: { id } });
     if (existing === null) {
       if (expectedVersion !== 0) {
@@ -66,30 +75,52 @@ export class PrismaUserRepository implements UserRepositoryPort {
       }
       try {
         await this.prisma.user.create({ data: row });
-      } catch {
-        // Possível race: outro processo inseriu entre o findUnique e o create.
-        // Recarrega para distinguir 0 vs duplicado.
-        const actual = await this.prisma.user.findUnique({ where: { id } });
-        throw new ConcurrencyException(expectedVersion, actual?.version ?? null);
+      } catch (erro) {
+        throw await this.traduzirFalhaDeUnicidade(erro, {
+          id,
+          email: row.email,
+          expectedVersion,
+          esperavaLinhaAusente: true,
+        });
       }
       return this.loadSnapshot(id);
     }
 
     // UPDATE path: aplica lock otimista via WHERE version=expected.
-    const updated = await this.prisma.user.updateMany({
-      where: { id, version: expectedVersion },
-      data: {
+    //
+    // pt-BR (2026-10-08): o `try`/`catch` NÃO é decoração. O `updateMany` grava
+    // `email`, e o índice `@unique` do schema (prisma/schema.prisma:21) não
+    // sabe de `deletedAt` — a linha soft-deleted continua segurando o email.
+    // O pré-check de `atualizarEmail` (user-use-cases.ts:175) usa
+    // `findByEmail`, que filtra soft-deleted, então ele libera a mutação e o
+    // P2002 estoura aqui. Sem tradução, esse erro cru vira **500**: um email
+    // que o usuário lê como "já cadastrado" chega à tela como falha genérica
+    // de servidor. É a MESMA classe de defeito do INSERT, na metade que o
+    // conserto do INSERT não cobria.
+    let updated;
+    try {
+      updated = await this.prisma.user.updateMany({
+        where: { id, version: expectedVersion },
+        data: {
+          email: row.email,
+          name: row.name,
+          updatedAt: row.updatedAt,
+          updatedBy: row.updatedBy,
+          deletedAt: row.deletedAt,
+          deletedBy: row.deletedBy,
+          // Não incrementamos version manualmente — confiamos no mutator que já
+          // bumped no agregado; só persistimos o estado final.
+          version: row.version,
+        },
+      });
+    } catch (erro) {
+      throw await this.traduzirFalhaDeUnicidade(erro, {
+        id,
         email: row.email,
-        name: row.name,
-        updatedAt: row.updatedAt,
-        updatedBy: row.updatedBy,
-        deletedAt: row.deletedAt,
-        deletedBy: row.deletedBy,
-        // Não incrementamos version manualmente — confiamos no mutator que já
-        // bumped no agregado; só persistimos o estado final.
-        version: row.version,
-      },
-    });
+        expectedVersion,
+        esperavaLinhaAusente: false,
+      });
+    }
 
     if (updated.count === 0) {
       const actual = await this.prisma.user.findUnique({ where: { id } });
@@ -97,6 +128,76 @@ export class PrismaUserRepository implements UserRepositoryPort {
     }
 
     return this.loadSnapshot(id);
+  }
+
+  /**
+   * Devolve a exceção de domínio que corresponde a uma falha do Prisma.
+   *
+   * DEVOLVE, não lança — e o chamador escreve `throw await …`. Isso não é
+   * estilo: a primeira versão lançava e retornava `Promise<never>`, e o `tsc`
+   * acusou `'updated' is possibly 'undefined'` no UPDATE. O estreitamento por
+   * `never` não atravessa `await` (a promise pode rejeitar), então o `let
+   * updated` ficava possivelmente indefinido para o compilador — bem visto,
+   * porque é isso que o fluxo diz. Devolver a exceção deixa o `throw` no
+   * chamador, onde ele é inequívoco.
+   *
+   * pt-BR (2026-10-08): esta é a única implementação das três perguntas, e ela
+   * atende INSERT e UPDATE. Antes havia a lógica só no `catch` do INSERT, com
+   * um `catch` NO UPDATE inexistente — e o defeito que a suíte e2e mediu
+   * (fluxo F4, 412 onde o contrato pede 409) é o mesmo nos dois caminhos, com
+   * sintomas diferentes: no INSERT virava 412, no UPDATE virava 500.
+   *
+   * As três perguntas, nesta ordem — a ordem é o que dá o tipo certo:
+   *
+   *   1. A linha que deveria ter SUMIDO (`create` falhou e ela apareceu)?
+   *      → race de concorrência (412). Esta pergunta só tem sentido quando
+   *      `esperavaLinhaAusente` é verdadeiro — ver o MEDIDO abaixo.
+   *   2. P2002? → violação de unicidade. Depois de (1) — quando ela se aplica —
+   *      negativa, o único `@unique` que sobra é o `email` (schema.prisma:21).
+   *      → 409.
+   *   3. Qualquer outra coisa (conexão caiu, etc.) → propaga o erro original.
+   *      Ela virava 412, o que afirmava "outro processo gravou" sem nenhuma
+   *      evidência disso. Um erro desconhecido é 500, não 412.
+   *
+   * ── MEDIDO: a pergunta 1 precisa saber em que caminho está ────────────────
+   *
+   * A primeira versão desta extração perguntava "alguém gravou este id?" nos DOIS
+   * caminhos, e o `updateMany` falhando com P2002 dava `ConcurrencyException`
+   * — "versão esperada 1, encontrada 1", que não só é o tipo errado como é
+   * FALSO: a linha existe e está na versão esperada, porque foi o próprio
+   * `updateMany` que a encontrou. No INSERT a pergunta é a original; no UPDATE
+   * ela é a NEGAÇÃO da precondição, e por isso responde sempre "sim".
+   *
+   * Não dá para inferir o caminho pelo erro, nem pelo `expectedVersion` (que é
+   * 0 no INSERT e N>0 nos dois casos de UPDATE). Por isso o caminho é declarado
+   * pelo chamador, e o teste que prova isso é o de email duplicado por outro
+   * usuário VIVO: é o único em que o `id` procurado existe e o P2002 vem
+   * mesmo assim.
+   *
+   * O ramo 3 tem teste próprio (com um `PrismaClient` que rejeita), porque os
+   * dois primeiros provocam P2002 e nenhum deles diz o que fazer quando o erro
+   * é outra coisa. Um `catch` que respondesse "email em uso" para QUALQUER
+   * falha passaria por ambos.
+   */
+  private async traduzirFalhaDeUnicidade(
+    erro: unknown,
+    contexto: {
+      id: string;
+      email: string;
+      expectedVersion: number;
+      esperavaLinhaAusente: boolean;
+    },
+  ): Promise<unknown> {
+    if (contexto.esperavaLinhaAusente) {
+      const atual = await this.prisma.user.findUnique({ where: { id: contexto.id } });
+      if (atual !== null) {
+        return new ConcurrencyException(contexto.expectedVersion, atual.version);
+      }
+    }
+    if (erro instanceof Prisma.PrismaClientKnownRequestError && erro.code === 'P2002') {
+      return new EmailAlreadyInUseException(contexto.email);
+    }
+    return erro;
   }
 
   /**

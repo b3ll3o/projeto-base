@@ -134,8 +134,9 @@ outro nível (E2E/integração):
   `unit`) + specs Testcontainers. Fora para evitar mock frágil do client.
 - `**/test/**` — diretório `test/` contém helpers de teste (não lógica
   de produção) e por isso é excluído da medição de cobertura.
-- Em `apps/web`: `app/**` — Next.js RSC pages, exigem testes E2E
-  (Playwright) **fora do escopo unitário** desta convenção.
+- Em `apps/web`: `app/**` — Next.js RSC pages. Ficam fora do denominador
+  unitário porque a cobertura delas é a suíte de **browser** — a definida em
+  [`e2e-playwright.md`](./e2e-playwright.md).
 - Em `apps/web`: `next-env.d.ts` — gerado pelo Next.js, não editado.
 - Em `apps/web`: `**/.next/**` (build output do Next.js) e
   `**/*.spec.{ts,tsx}` (testes — o `{ts,tsx}` é necessário porque o app
@@ -224,8 +225,9 @@ falhas estruturais (drift de tsconfig, ESLint config legada, refs quebradas),
 o monorepo usa:
 
 1. **Pre-push local** (`pnpm ci:local`) — devs rodam antes de push; detecta
-   em ~30s o que o CI detectaria em ~4min. Ver [git-workflow.md §Pre-Push
-   Quality Gate](./git-workflow.md).
+   em **69,5 s, 69,6 s e 74,1 s** (n=3, `{ time pnpm ci:local; }`, 2026-10-08) o que o
+   CI detectaria em ~4min, e desde 2026-10-08 inclui `test:integration` e
+   `test:e2e`. Ver [git-workflow.md §Pre-Push Quality Gate](./git-workflow.md).
 2. **Pre-flight CI job** (workflow `ci.yml`) — primeiro job, valida
    cross-refs, tsconfig drift, ESLint drift. Falha rápido em 10s.
 3. **Quality CI job** (atual) — lint, typecheck, test, coverage. Roda

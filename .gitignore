@@ -92,3 +92,33 @@ apps/api/openapi.json
 /--help/
 /--version/
 
+# pt-BR: artefatos da suite e2e de frontend (Playwright) em `apps/web`.
+# `playwright-report/` e o relatorio HTML, `test-results/` guarda traces,
+# videos e screenshots de cada spec que falhou — ver a convencao
+# `.agents/specs/conventions/e2e-playwright.md`. Os dois sao saida de uma
+# execucao local; no CI sobem como artifact (step com `if: always()`), nunca
+# como arquivo versionado. Sem `/` inicial de proposito: o Playwright resolve
+# os caminhos relativos ao `cwd`, que e `apps/web`.
+playwright-report/
+test-results/
+
+# pt-BR: `.next-e2e/` e o `distDir` que a suite e2e usa para o proprio
+# `next build` (ver `distDir` em `apps/web/next.config.mjs`). Existe para
+# nao disputar o `.next/` com o `next dev` da app local — os dois apontam
+# para o mesmo diretorio e se destroem. Mesmo formato de `.next/` acima, e por
+# isso e listado a parte em vez de fundido com aquela regra.
+.next-e2e/
+
+# pt-BR: `next-env.d.ts` e GERADO pelo Next, e o `distDir` da suite e2e faz os
+# dois builds disputarem o mesmo arquivo antes rastreado: o `next build` da
+# suite escreve `/// <reference path="./.next-e2e/types/routes.d.ts" />`, o
+# `next dev` local reescreve para `./.next/types/...`, e cada execucao deixava a
+# arvore suja. MEDIDO 2026-10-08: era exatamente esse o diff que a suite deixava
+# (`-.next/types/routes.d.ts` / `+.next-e2e/types/routes.d.ts`). Rastreado, o
+# arquivo nao tem um unico valor correto — ele tem dois, um por build. O proprio
+# `create-next-app` do Next ja nao versiona este arquivo.
+# MEDIDO que nada quebra sem ele: removendo o arquivo do disco, `pnpm typecheck`
+# (`tsc --noEmit`) sai com exit=0 em `apps/web` — as referencias de tipo que ele
+# carrega sao supridas pelo `next dev`/`next build`, que o geram antes de o
+# typecheck importar. `apps/web/eslint.config.mjs` ja o ignorava.
+apps/web/next-env.d.ts
