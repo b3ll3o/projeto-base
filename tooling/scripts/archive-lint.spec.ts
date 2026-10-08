@@ -122,7 +122,9 @@ describe('validateArchive', () => {
     const r = validateArchive({
       frontmatter: {
         ...VALID_FRONT,
-        improvements: 'foo' as Partial<typeof VALID_FRONT>['improvements'],
+        // Sem cast: `validateArchive` recebe `unknown` justamente para o spec
+        // poder entregar o tipo errado e a função ter o que dizer sobre ele.
+        improvements: 'foo',
       },
       body: '# Title',
     });
@@ -182,7 +184,7 @@ demand_slug: foo
 `;
     const r = parseArchiveFile(content);
     expect(r).not.toBeNull();
-    expect(r?.frontmatter.demand_slug).toBe('foo');
+    expect((r?.frontmatter as { demand_slug?: string })?.demand_slug).toBe('foo');
     expect(r?.body).toContain('# Body content');
   });
 

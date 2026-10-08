@@ -153,7 +153,7 @@ export function syncDocs(files: string[]): DocSyncReport {
   let alerts = 0;
 
   for (const f of files) {
-    const stacks = detectStacksBatch([f])[0].stacks;
+    const stacks = detectStacksBatch([f])[0]?.stacks ?? [];
     // pt-BR: pula arquivos cujo único stack é `monorepo` (configs de
     // workspace como pnpm-workspace.yaml, turbo.json, package.json na
     // raiz de apps/packages). Arquivos sob apps/api/, apps/web/, etc.,
@@ -213,7 +213,11 @@ function parseArgs(): {
   const args = process.argv.slice(2);
   const opts: Record<string, string | boolean> = {};
   for (const a of args) {
-    const [k, v] = a.replace(/^--/, '').split('=');
+    // Default no destructure, e não `if (k === undefined) continue`: MEDIDO
+    // 2026-10-08, `''.split('=')` devolve `['']`, então a chave NUNCA é
+    // `undefined` — o guard era inerte e o `?? true` já cobre o valor ausente.
+    // O default abaixo é o valor real em runtime, escrito como tal.
+    const [k = '', v] = a.replace(/^--/, '').split('=');
     opts[k] = v ?? true;
   }
   const files = String(opts['files'] ?? '')

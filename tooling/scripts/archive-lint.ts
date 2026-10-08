@@ -23,7 +23,14 @@ export interface ArchiveFrontmatter {
 }
 
 export interface ArchiveInput {
-  frontmatter: ArchiveFrontmatter;
+  /**
+   * `unknown`, e não `ArchiveFrontmatter`: a função existe para **validar**
+   * frontmatter que pode estar errado, e cada spec deste arquivo constrói um
+   * frontmatter deliberadamente inválido. Declarar o tipo canônico aqui só
+   * empurrava o `as` para o spec — que é onde o tipo errado deixa de ser
+   * visível e vira verde sobre um input que a função nunca aceitaria.
+   */
+  frontmatter: unknown;
   body: string;
 }
 
@@ -49,11 +56,14 @@ const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
 
 export function validateArchive(input: ArchiveInput): LintResult {
   const errors: string[] = [];
-  const fm = input.frontmatter;
+  const bruto = input.frontmatter;
 
-  if (!fm || typeof fm !== 'object') {
+  if (!bruto || typeof bruto !== 'object') {
     return { valid: false, errors: ['frontmatter ausente ou não-objeto'] };
   }
+  // Estreitamento único, logo depois do guard: daqui para frente `fm` é um
+  // objeto de chaves desconhecidas, que é o que a validação realmente assume.
+  const fm = bruto as Record<string, unknown>;
 
   for (const field of REQUIRED_FIELDS) {
     if (fm[field] === undefined || fm[field] === null) {
@@ -87,9 +97,13 @@ export function validateArchive(input: ArchiveInput): LintResult {
         `improvements deve ser objeto (string/número/array rejeitados): ${typeof fm.improvements}`,
       );
     } else {
+      // Narrowing local: `fm.improvements` já saiu do `typeof` acima como
+      // `{}`, e indexar `{}` por `string` é o TS7053. O `Object.entries`
+      // abaixo já percorre exatamente estas chaves.
+      const improvements = fm.improvements as Record<string, unknown>;
       let hasNonZero = false;
       let invalidItem: string | null = null;
-      for (const [k, v] of Object.entries(fm.improvements)) {
+      for (const [k, v] of Object.entries(improvements)) {
         if (typeof v !== 'number') {
           invalidItem = k;
           break;
@@ -98,7 +112,7 @@ export function validateArchive(input: ArchiveInput): LintResult {
       }
       if (invalidItem !== null) {
         errors.push(
-          `improvements["${invalidItem}"] não é número: ${typeof fm.improvements[invalidItem]}`,
+          `improvements["${invalidItem}"] não é número: ${typeof improvements[invalidItem]}`,
         );
       } else if (!hasNonZero) {
         errors.push('improvements vazio ou zero (sem melhorias aplicadas = não arquivar)');

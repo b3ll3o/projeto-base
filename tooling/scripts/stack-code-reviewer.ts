@@ -64,7 +64,7 @@ function checkDomain(file: string, content: string): Finding[] {
   lines.forEach((line, idx) => {
     const m = /^import .* from ['"]([^'"]+)['"]/.exec(line);
     if (!m) return;
-    const src = m[1];
+    const src = m[1] ?? '';
     if (DDD_BLOCKED_IMPORTS.some((re) => re.test(src))) {
       findings.push({
         severity: 'blocker',
@@ -93,6 +93,11 @@ function checkPrisma(file: string, content: string): Finding[] {
   while ((m = modelRe.exec(content)) !== null) {
     const name = m[1];
     const body = m[2];
+    // `=== undefined`, e não `!`: `[\s\S]*?` casa string vazia, então
+    // `model Empty {\n}` produz body `''` — que é falsy, mas EXISTE. Com `!`
+    // o model sumia do laço inteiro (medido 2026-10-08: 3 blockers no HEAD,
+    // 0 com o `!`), e é o model sem campo nenhum o que mais precisa da regra.
+    if (name === undefined || body === undefined) continue;
     const isAux = name.endsWith('History') || name.endsWith('Archive');
     if (isAux) continue;
     const needs = [
@@ -167,7 +172,7 @@ export function reviewFiles(files: string[]): ReviewReport {
     } catch {
       continue;
     }
-    for (const s of detectStacksBatch([f])[0].stacks) stacks.add(s);
+    for (const s of detectStacksBatch([f])[0]?.stacks ?? []) stacks.add(s);
     findings.push(...checkDomain(f, content));
     findings.push(...checkPrisma(f, content));
     findings.push(...checkNestController(f, content));
@@ -207,7 +212,11 @@ function parseArgs(): {
   const args = process.argv.slice(2);
   const opts: Record<string, string> = {};
   for (const a of args) {
-    const [k, v] = a.replace(/^--/, '').split('=');
+    // Default no destructure, e não `if (k === undefined) continue`: MEDIDO
+    // 2026-10-08, `''.split('=')` devolve `['']`, então a chave NUNCA é
+    // `undefined` — o guard era inerte e o `?? 'true'` já cobre o valor ausente.
+    // O default abaixo é o valor real em runtime, escrito como tal.
+    const [k = '', v] = a.replace(/^--/, '').split('=');
     opts[k] = v ?? 'true';
   }
   const files = (opts['files'] ?? '').split('\n').filter(Boolean);

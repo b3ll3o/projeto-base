@@ -71,6 +71,17 @@ describe('stack-code-reviewer', () => {
     expect(report.findings.some((f) => f.rule === 'prisma-required-audit-fields')).toBe(true);
   });
 
+  it('detecta model Prisma VAZIO — o que mais precisa de campo de auditoria é justamente o que faltava', () => {
+    // MEDIDO 2026-10-08: o guard `if (!name || !body) continue` tratava body
+    // VAZIO como grupo ausente. `model Empty {\n}` produz body `''` — falsy, e
+    // o model inteiro sumia do laço. Repro medido contra `HEAD`: 3 blockers
+    // nele, 0 no código com o guard. `body === undefined` é o guard certo:
+    // distingue "o grupo não existe" de "o model não tem campo".
+    const file = tmpFile('schema.prisma', 'model Empty {\n}\n');
+    const report = reviewFiles([file]);
+    expect(report.findings.some((f) => f.rule === 'prisma-required-audit-fields')).toBe(true);
+  });
+
   it('detecta <img> em next component', () => {
     // pt-BR: regex casa `<img` no início de linha (forma JSX mais comum —
     // ex: <img src="..." /> em linha própria). O agent NÃO deve pegar
