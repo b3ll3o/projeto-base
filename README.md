@@ -145,6 +145,7 @@ Endpoints:
 ```bash
 # Atalho consolidado antes de push — ~1min
 pnpm ci:local    # preflight + lint + typecheck + test:unit + test:coverage
+                # + test:integration + test:e2e (API e web), ~70-75s medidos
 
 # Granular (debug de gate específico)
 pnpm ci:preflight                          # ~10s — drift

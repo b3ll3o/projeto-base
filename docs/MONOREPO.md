@@ -170,7 +170,7 @@ Cada mudança em `packages/` DEVE vir acompanhada de `.changeset/`.
 | `pnpm format` | `prettier --write .` | Formata código |
 | `pnpm clean` | `turbo run clean && rm -rf node_modules` | Limpa cache e deps |
 | `pnpm ci:preflight` | roda os checks estruturais registrados em [`preflight.ts`](../.tooling/scripts/ci/preflight.ts) | aborta com exit 1 |
-| `pnpm ci:local` | `preflight + lint + typecheck + test:unit + test:coverage` | atalho manual (não está em hook) |
+| `pnpm ci:local` | `preflight + lint + typecheck + test:unit + test:coverage + test:integration + test:e2e` | atalho manual (não está em hook) |
 
 **Fluxo canônico (do primeiro comando ao merge):** cada script acima é uma peça do quebra-cabeça — quem dispara, em qual ordem, e o que bloqueia está em [`docs/fluxo-desenvolvimento.md`](./fluxo-desenvolvimento.md) (documento factual, re-medido a cada merge).
 

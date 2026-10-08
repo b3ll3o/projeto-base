@@ -25,6 +25,7 @@ import { checkSelfFiringGuards } from './check-self-firing-guard';
 import { checkHarnessOwner } from './check-harness-owner';
 import { checkBranchUpToDate } from './check-branch-up-to-date';
 import { checkE2eFlowCoverage } from './check-e2e-flow-coverage';
+import { checkCiLocalE2e } from './check-ci-local-e2e';
 import { existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
@@ -415,6 +416,21 @@ async function main(): Promise<void> {
       name: 'inventário de fluxos ⇄ specs e2e (regra de cobertura e2e)',
       file: '.tooling/scripts/ci/check-e2e-flow-coverage.ts',
       fn: () => checkE2eFlowCoverage({ repoRoot: '.' }),
+    },
+    {
+      // A Camada 1 da convenção promete que `ci:local` roda as suítes e2e antes
+      // do push, e o script é a única coisa que decide se cumpre. MEDIDO
+      // 2026-10-08: `check-package-json-drift` exige que `ci:local` EXISTA
+      // (REQUIRED_SCRIPTS) e nunca lê o conteúdo — foi por isso que a
+      // pendência "não roda nenhuma das duas suítes e2e" sobreviveu a três
+      // releases sem nenhum vermelho.
+      //
+      // Entra pelo preflight, e não pelo `ci:local`, pelo mesmo motivo do gate
+      // de e2e e do rebase: o CI roda `ci:preflight`. Um guard que só existe
+      // na máquina de quem escreveu a pendência não vigia nada.
+      name: 'ci:local roda as suítes e2e (regra da Camada 1)',
+      file: '.tooling/scripts/ci/check-ci-local-e2e.ts',
+      fn: () => checkCiLocalE2e({ repoRoot: '.' }),
     },
   ];
 

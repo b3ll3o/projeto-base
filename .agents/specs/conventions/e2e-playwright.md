@@ -136,11 +136,12 @@ derrubaria F4 sem dizer qual dos dois quebrou.
 | Camada | Onde | O que mede |
 |--------|------|------------|
 | Paridade | `check-e2e-flow-coverage.ts` (preflight + CI) | inventário ⇄ specs |
-| Execução | `test:e2e` no job `quality` do CI | que os specs passam de verdade |
+| Fiação | `check-ci-local-e2e.ts` (preflight + CI) | que `ci:local` invoca `test:e2e`, alcança todo pacote de e2e por `--filter`, e que cada `test:e2e` com Playwright tem `pretest:e2e` instalando o browser |
+| Execução | `test:e2e` no job `quality` do CI **e** em `pnpm ci:local` (Camada 1, 2026-10-08+) | que os specs passam de verdade |
 
-São **camadas separadas**, e a distinção importa: o gate mede **paridade
-declarativa**, não execução. Ele não se prova passando — se prova
-**acusando**.
+São **camadas separadas**, e a distinção importa: os dois gates medem
+**declaração**, não execução; quem executa é o `test:e2e`. Eles não se provam
+passando — se provam **acusando**.
 
 ### Como verificar que o gate realmente fecha
 

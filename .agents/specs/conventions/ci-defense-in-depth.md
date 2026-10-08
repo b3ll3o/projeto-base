@@ -20,9 +20,11 @@ quality CI jobs (lint/typecheck/test/coverage, gated).
 
 ### Camada 1 — Pre-push local
 
-`pnpm ci:local` roda a **Camada 2 mais lint, typecheck, unit e cobertura**
-antes do `git push`: drift estrutural em ~11 s em vez de ~4 min. ⚠️ **Não**
-roda `test:e2e` (API nem frontend) — a razão está nas
+`pnpm ci:local` roda a **Camada 2 mais lint, typecheck, unit, cobertura e as
+duas suítes e2e** (API e frontend) antes do `git push`. MEDIDO 2026-10-08 de
+ponta a ponta (`{ time pnpm ci:local; }`, exit 0, n=3): **22,6 s → 69,5 s,
+69,6 s e 74,1 s**; `turbo.json` marca as duas tasks com `cache: false`, então o custo não
+encolhe com o tempo. A deliberação está em
 [Pendências conhecidas](./ci-defense-in-depth-pendencias.md); script e demais
 detalhes em [git-workflow.md §Pre-Push Quality Gate](./git-workflow.md).
 
@@ -64,6 +66,7 @@ Escopo de todos: **todo `.md` versionado** sob a raiz que o preflight passa
 | `review-routing` matrix lint | roteamento | YAML inválido, reviewer inexistente, pattern duplicado, LOC > 300, `blocking: true` casando 0 arquivos |
 | `check-branch-up-to-date` | git workflow | demanda que não contém `origin/main` (regra de rebase de [`git-workflow.md`](./git-workflow.md)); "sem ancestral comum" é motivo **diferente** de "atrasada"; rebase **parado em conflito** é vermelho antes de qualquer contagem; base ausente é `skipped`, nunca verde |
 | `check-e2e-flow-coverage` | testes | inventário de fluxos de [`e2e-playwright.md`](./e2e-playwright.md) ⇄ cabeçalhos `// FLUXO:` dos specs: meio-cumprido é vermelho nomeando o fluxo; inventário com 0 linhas e diretório de e2e sem spec são **erro**, nunca verde por conjunto vazio. Mede **paridade declarativa** — que os testes passem é a execução (`test:e2e`), outra camada |
+| `check-ci-local-e2e` | ci local | `ci:local` que deixou de rodar `test:integration`/`test:e2e`, pacote de e2e fora dos `--filter`, ou `test:e2e` com Playwright sem `pretest:e2e` instalando o browser. Filtro por glob → **aviso** (alcance indeterminado), não erro; workspace ilegível → `skipped` nomeando `pnpm-workspace.yaml`, nunca verde por lista vazia. Mede **fiação declarativa** — não roda suíte nem reconcilia com `ci.yml` |
 
 > **`check-types.ts` NÃO é um check** e saiu desta tabela: tem um único
 > `export interface CheckResult` (medido, `wc -l` = 23) e é importado **só**
@@ -121,6 +124,7 @@ extraído em commit `59eb083` (refactor que consolidou fixtures herméticas).
 | `check-harness-owner` | `check-harness-owner.spec.ts` — 19 testes, incluindo o segundo órfão | **mutação** | comando 6 → **exit 0** (medido 2026-10-05) | `.tooling/scripts/ci/check-harness-owner.ts` |
 | `check-branch-up-to-date` | `check-branch-up-to-date.spec.ts` — `VERMELHO numa demanda implementada com a main desatualizada` / `após o rebase, a mesma demanda fica verde` (o par, contra **git de verdade**), mais `NÃO confunde "sem ancestral comum" com "atrasada"` e `VERMELHO, e nomeando o estado, com um rebase PARADO em conflito` | **mutação** | `npx vitest run --root .tooling/scripts/ci check-branch-up-to-date` → **2 de 9** com a detecção de "atrasada" neutralizada, **1 de 9** com `128` fundido em "atrasada", **2 de 9** com o `skipped` removido, **1 de 9** com o rebase-em-andamento neutralizado, **1 de 9** com a junção do caminho ao `repoRoot` removida (medido 2026-10-06) | `.tooling/scripts/ci/check-branch-up-to-date.ts` |
 | `check-e2e-flow-coverage` | `check-e2e-flow-coverage.spec.ts` — `acusa spec que declara fluxo fora do inventário, nomeando os dois lados` / `acusa o meio-cumprido: spec novo sem linha no inventário` (o par), sobre **fixtures em tmpdir** | **mutação** | `npx vitest run --root .tooling/scripts/ci check-e2e-flow-coverage` → **2 de 15** com `if (!porId.has(id))` neutralizado, **5 de 15** com o VEREDITO (`ok: errors.length === 0`) neutralizado (medido 2026-10-08) | `.tooling/scripts/ci/check-e2e-flow-coverage.ts` |
+| `check-ci-local-e2e` | `check-ci-local-e2e.spec.ts` — `acusa pacote de e2e fora dos --filter — o gate que passaria verde com um app novo` e `o filtro de uma invocação que NÃO roda e2e não alcança ninguém para o e2e` (o par), sobre **fixtures em tmpdir**, mais o caso do repo real | **mutação** | `npx vitest run --root .tooling/scripts/ci check-ci-local-e2e` → **6 de 25** com o VEREDITO neutralizado, **2 de 25** só com o alcance por `--filter`, **1 de 25** tirando o escopo por invocação (medido 2026-10-08) | `.tooling/scripts/ci/check-ci-local-e2e.ts` |
 
 > A coluna **Arquivo** é a chave de reconciliação, e não um enfeite: o
 > `check-teeth-registry` casa o registro com o `preflight.ts` por ela. Sem a
@@ -130,7 +134,7 @@ extraído em commit `59eb083` (refactor que consolidou fixtures herméticas).
 > qualquer gate novo entraria no preflight sem aviso. Foi a ausência desta
 > coluna que o check acusou na primeira execução (9 de 9 sem correspondência).
 
-Os **oito comandos de mutação** — 1 a 7 medidos 2026-10-05, o 8 em 2026-10-08.
+Os **nove comandos de mutação** — 1 a 7 medidos 2026-10-05, 8 e 9 em 2026-10-08.
 Cada um reverte o arquivo ao final — a mutação é efêmera por desenho, e o
 `git diff` depois deles tem de estar vazio:
 
@@ -204,50 +208,46 @@ perl -0pi -e 's/    if \(!porId\.has\(id\)\) \{/    if (false) {/' \
   .tooling/scripts/ci/check-e2e-flow-coverage.ts
 npx vitest run --root .tooling/scripts/ci check-e2e-flow-coverage  # -> 2 de 15 vermelho
 cp /tmp/e2eflow.bak .tooling/scripts/ci/check-e2e-flow-coverage.ts   # restaurado byte-exato
+
+# 9) check-ci-local-e2e — TRÊS mutações medidas, denominador 25. O VEREDITO
+#    (`ok: errors.length === 0`) neutralizado tira 6; as duas de alcance, 2 e 1.
+cp .tooling/scripts/ci/check-ci-local-e2e.ts /tmp/cil2e.bak
+perl -0pi -e 's/  \} else \{\n/  } else if (false) {\n/' \
+  .tooling/scripts/ci/check-ci-local-e2e.ts
+npx vitest run --root .tooling/scripts/ci check-ci-local-e2e  # -> 2 de 25 vermelho
+perl -0pi -e 's/\.filter\(\(i\) => TASKS_E2E\.some\(\(t\) => i\.tasks\.includes\(t\)\)\)//' \
+  .tooling/scripts/ci/check-ci-local-e2e.ts
+npx vitest run --root .tooling/scripts/ci check-ci-local-e2e  # -> 1 de 25 vermelho
+cp /tmp/cil2e.bak .tooling/scripts/ci/check-ci-local-e2e.ts   # restaurado byte-exato
 ```
 
 > **A cobertura do comando 7 tem um limite, nomeado porque um leitor que
 > tropeça nele vai concluir que o gate é inerte.** Remover o
 > `nextIsRedirectTarget = false` de dentro do `if` — o bug da 3ª versão do
-> parser — **deixa o differential VERDE**: nas 18 formas do corpus esse
-> `reset` só muda o resultado quando um operador *nu* é seguido de *duas*
-> tasks, e o corpus tem `build > ALVO` (uma task depois) e
-> `build >out.log ALVO` (alvo colado), nunca `build > ALVO build2`. Não é
-> dente fraco: é **cobertura** — a mesma distinção da coluna Nível, e um gate
-> diferencial mede o corpus dele, nunca o infinito.
+> parser — **deixa o differential VERDE**: nas 18 formas do corpus esse `reset`
+> só muda o resultado com um operador *nu* seguido de *duas* tasks, e o corpus
+> tem `build > ALVO` (uma depois) e `build >out.log ALVO` (alvo colado), nunca
+> `build > ALVO build2`. Não é dente fraco: é **cobertura** — a mesma
+> distinção da coluna Nível, e um gate diferencial mede o corpus dele, nunca o infinito.
 
-Os números deste registro são medidos e trazem o `n` ao lado. O comando 7
-divergente em **1 e 3 de 18** formas (n=2 mutações: perder o `>&`, perder a
-proteção de aspas) — citar uma só seria o mesmo erro do `3+` com outro
-número. A classe 3 diverge em **8** erros (n=1 mutação). A primeira redação
-dizia "`3+`" por ter lido três linhas: o mesmo erro do `X8` do backlog, e a
-coluna Nível existe para torná-lo visível. Já envelheceram — classe 7.
+Os números deste registro são medidos e trazem o `n` ao lado: o comando 7 diverge
+em **1 e 3 de 18** formas (n=2 mutações), a classe 3 em **8** erros (n=1) — citar só um seria o erro do `3+` que já envelheceu, classe 7.
+Um segundo acerto: a redação anterior citava o símbolo que o guard procura, e
+o guard a acusou **enquanto eu a escrevia** — um guard que pega o autor da
+própria documentação está funcionando; o conserto é no texto, nunca no guard.
 
-Um segundo acerto veio da redação anterior: ela citava o símbolo que o guard
-procura, e o guard — com razão — a acusou enquanto eu a escrevia. Um guard que
-pega o autor da própria documentação está funcionando; o conserto é no texto,
-nunca no guard.
-
-> Comandos 3 a 5 **não** usam `git checkout --` como 1 e 2: reverteriam
-> trabalho ainda não commitado de quem está no meio da task. O `sed`/perl
-> inverso é a restauração, conferido com `diff` contra um backup.
+> Comandos 3 a 5 **não** usam `git checkout --` como 1 e 2 (reverteriam trabalho não commitado de quem está no meio da task): a restauração é o `sed`/perl inverso, conferida com `diff` contra um backup.
 
 **A armadilha de ler este registro por nome de arquivo.** `tooling/` e
-`.tooling/` são **dois diretórios distintos**, ambos versionados, ambos rodados
-pelo mesmo `pnpm tooling:test`. Todos os `check-*` vivem em `.tooling/scripts/ci/`;
-o `lint-review-routing` e o `archive-lint` em `tooling/scripts/`; e o spec do
-`check-doc-refs` mora dentro do `preflight.spec.ts`. Indexar por
-`ls check-*.spec.ts` conclui, errado, que dois deles não têm spec.
+`.tooling/` são **dois diretórios distintos**, ambos versionados e rodados pelo
+mesmo `pnpm tooling:test`: os `check-*` vivem em `.tooling/scripts/ci/`, o
+`lint-review-routing` e o `archive-lint` em `tooling/scripts/`, e o spec do
+`check-doc-refs` dentro do `preflight.spec.ts` — indexar por `ls check-*.spec.ts`
+conclui, errado, que dois deles não têm spec.
 
-**Três claims da tabela já tinham envelhecido**, corrigidas ao montá-la:
-(a) `check-types` nunca foi check — ver a nota acima; (b) a coluna "Custo" foi
-removida, e o motivo está na [Tabela de Checks](#tabela-de-checks); (c) o
-teste `a derivação canônica resolve para um diretório que existe de verdade`
-tinha **o nome de um dente e a assertion de um verde** (`ok:true, errors:[]`,
-idêntica à do vizinho). Um teste cujo nome promete mais do que a assertion
-entrega é a classe 7 em forma de spec — e só apareceu porque o registro exige
-classificar por **nível**, e não por **contagem de testes**. Corrigido: o teste
-agora executa a derivação e verifica que o path derivado existe.
+**Três claims da tabela já tinham envelhecido**, corrigidas ao montá-la: (a)
+`check-types` nunca foi check (nota acima); (b) a coluna "Custo" saiu (motivo na
+[Tabela de Checks](#tabela-de-checks)); (c) `a derivação canônica resolve…` tinha **o nome de um dente e a assertion de um verde** — a classe 7 em forma de spec.
 
 ## Comando de Verificação
 

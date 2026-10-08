@@ -53,12 +53,16 @@
 - **A tabela de Checks acima é completa** (a task 3.1 do plano
   [`guard-classes`](../../../docs/superpowers/plans/2026-10-03-guard-classes.md)
   fechou as 3 lacunas que esta seção declarava). O `preflight` executa
-  **17 entradas** no preflight para **16 arquivos de gate distintos** — a
+  **19 entradas** no preflight para **18 arquivos de gate distintos** — a
   diferença 1 é `check-eslint-drift`, que entra duas vezes (uma por app:
-  `apps` e `packages`), não um gate sem registro. Esses 16 são exatamente as
+  `apps` e `packages`), não um gate sem registro. Esses 18 são exatamente as
   linhas do [Registro de dentes](ci-defense-in-depth.md#registro-de-dentes), e o
   `check-teeth-registry` é o que reconcilia as duas listas.
   (Reconciliado por `name:`×`file:` em [`preflight.ts`](../../../.tooling/scripts/ci/preflight.ts)
+  — contagens medidas 2026-10-08 com `grep -cE "^\s+name: '"
+  .tooling/scripts/ci/preflight.ts` e `grep -oE "file: '[^']+'" | sort -u | wc -l`.
+  A checagem anterior (17/16) tinha envelhecido por 2 entradas: o gate novo não
+  foi contado quando esta pendência foi escrita.
   — não por contagem de glob. O "15" anterior era um **undercount**: o glob
   `'.tooling/scripts/ci/check-*.ts'` não enxerga
   `tooling/scripts/lint-review-routing.ts`, que mora fora de `.tooling/scripts/ci/`
@@ -129,22 +133,42 @@
 - **`check-package-json-drift` só varre o `package.json` raiz.** Task
   turbo fantasma declarada em `apps/*/package.json` escapa do gate, e os
   4 call-sites `pnpm turbo run` do `ci.yml` também não são varridos.
-- **`ci:local` não roda nenhuma das duas suítes e2e, e a Camada 1 dizia que
-  rodava "tudo que o CI roda"** (medido 2026-10-08, revisão da branch
-  `feat/e2e-playwright-frontend`). Comando:
+- ✅ **FECHADO 2026-10-08 — `ci:local` roda as duas suítes e2e.** Era esta
+  pendência: `ci:local` não rodava `test:integration` nem `test:e2e`, e a
+  Camada 1 dizia que rodava "tudo que o CI roda". Comando:
   `node -e "console.log(require('./package.json').scripts['ci:local'])"`
-  devolve `pnpm ci:preflight && pnpm turbo run lint typecheck test:unit
-  test:coverage --filter=@projeto/api --filter=@projeto/web` — sem
-  `test:integration` e sem `test:e2e`, apesar de o `ci.yml` rodar os dois no
-  job `quality`. A frase da convenção estava já errada para o e2e da API
-  (commit anterior a esta branch); o que a branch acrescenta é a segunda
-  violação, e ela é a cara: `apps/web/e2e/global-setup.ts` sobe Postgres +
-  API Nest + um `next build` de produção (≈40s, medido pelo próprio repo) —
-  colocar isso em todo `git push` é uma decisão de projeto, não um detalhe de
-  script. **A convenção foi corrigida para descrever o que `ci:local` faz**, e
-  esta pendência registra o buraco em vez de escondê-lo atrás de um ajuste de
-  prosa. Fechar isto é change próprio: um `ci:local:e2e` separado, ou uma
-  flag.
+  devolve hoje `pnpm ci:preflight && pnpm turbo run lint typecheck test:unit
+  test:coverage test:integration test:e2e --filter=@projeto/api
+  --filter=@projeto/web`. **Custo medido de ponta a ponta: 22,6 s → 69,5 s,
+  69,6 s e 74,1 s** (`{ time pnpm ci:local; }`, exit 0, n=3, 2026-10-08); o `turbo run`
+  isolado e forçado deu 71,50 s — uma invocação com 6 tasks, contra 71,31 s da
+  variante de duas invocações encadeadas, e os 0,19 s são ruído, então uma só
+  invocação é o que fica. `turbo.json` marca `test:integration` e `test:e2e` com
+  `cache: false`, então esse custo não encolhe com o tempo. **O que pagou o custo:** `apps/web` ganhou
+  `pretest:e2e: "playwright install chromium"`, sem o qual a suíte levantava
+  Postgres + API + `next build` (33,5 s) e só então falhava com
+  `Executable doesn't exist` — 43,4 s pelo motivo errado. Provado com cache de
+  browser vazio (`PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-cache-prova`):
+  `pnpm --filter @projeto/web test:e2e` → **19 passed (54,9s)** em **92,17 s**,
+  e o `chromium-1223` apareceu na cache, o que prova que o pnpm disparou o
+  `pre`. **O que fecha a regressão é `check-ci-local-e2e`** (registrado nos
+  três lugares: array `checks`, `PREFLIGHT_GATES` e Registro de dentes), não o
+  ajuste de prosa: ele acusa task ausente, pacote de e2e fora dos `--filter` e
+  `test:e2e` com Playwright sem `pretest:e2e` instalando o browser. Dentes
+  medidos 2026-10-08, denominador **25** (o spec cresceu na revisão em dois
+  estágios, que achou 3 falsos verdes): veredito (`ok: errors.length === 0`)
+  neutralizado → **6 de 25** vermelho; alcance por `--filter` → **2 de 25**;
+  escopo do filtro por invocação → **1 de 25**. Os três foram corrigidos.
+- **`relatarUmCheck` marca ✓ a partir de `ok`, não de `errors.length`**
+  (`preflight.ts:199`, `mark: result.ok ? formatMark(result) : '✗'`). Um check
+  que devolve `ok: true` **e** `errors` preenchidos imprime **✓** e ainda assim
+  conta os erros e sai com 1 — o build falha com uma linha verde na tela.
+  MEDIDO 2026-10-08, achado ao implementar `check-ci-local-e2e`, que reporta
+  `ok: resultado.ok` com `errors` derivado de `errors.length === 0`: os dois
+  caminhos concordam hoje, o que torna o harness seguro **por coincidência**,
+  não por construção. Nenhum gate mede se os dois concordam. Fechar isto é
+  change próprio: `mark` deve derivar de `errors.length === 0` (ou o contrato
+  `CheckResult` deve proibir `ok: true` com `errors` não vazio).
 - **`testIgnore` do Playwright é o único asserto de não-dupla-coleta e
   nenhum gate o lê** (medido 2026-10-08, mesma revisão). Comando:
   `grep -rn "testIgnore" --include=*.ts --include=*.mts .tooling tooling apps`

@@ -271,8 +271,7 @@ Antes de `git push`, **OBRIGATÓRIO** rodar:
 pnpm ci:local
 ```
 
-Este comando executa as **mesmas validações que o CI roda** em ~30-60s
-localmente. Se falhar, **NÃO fazer push** — corrigir primeiro.
+Este comando executa as validações que o CI roda — **69,5 s, 69,6 s e 74,1 s** medido de ponta a ponta em 2026-10-08 (n=3; `turbo.json` marca as duas tasks e2e com `cache: false`, então o custo não encolhe com o tempo), e **22,6 s** eram o total antes de elas entrarem. Se falhar, **NÃO fazer push** antes.
 
 > **O hook não faz isto por você.** `.husky/pre-push` roda apenas
 > `pnpm ci:preflight` (camada 1 do defense-in-depth: cross-refs,

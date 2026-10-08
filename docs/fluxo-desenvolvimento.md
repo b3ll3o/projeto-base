@@ -134,7 +134,7 @@ grep -cE "^\s+name: '" .tooling/scripts/ci/preflight.ts
 | `test:coverage` | `pnpm turbo run test:coverage` | B (quality job) | Cobertura de `apps/api` < 80% (`COVERAGE_FLOOR`, só quando `isCoverageEnforced`) | — |
 | `test:integration` / `test:e2e` | `pnpm turbo run test:integration test:e2e --filter=@projeto/api` | B (quality job) | Teste falhando (exige Docker) | — |
 | `playwright install` | `pnpm --filter @projeto/web exec playwright install --with-deps chromium` | B (quality job) | Nada por si — é o que dá binário ao passo seguinte. ⚠️ o `--filter` é o que impede o pior modo de falha de CI: na raiz, `pnpm exec playwright` não resolve e sai **0 sem instalar nada** | — |
-| `test:e2e` (frontend) | `pnpm turbo run test:e2e --filter=@projeto/web` | B (quality job) | Spec Playwright falhando. Sobe Postgres + API + `next build` (~40s) + Next standalone por conta própria (`apps/web/e2e/global-setup.ts`) — **não** reaproveita o container do passo de API | Não — `ci:local` (Camada A) não roda e2e; ver [`ci-defense-in-depth-pendencias.md`](../.agents/specs/conventions/ci-defense-in-depth-pendencias.md) |
+| `test:e2e` (frontend) | `pnpm turbo run test:e2e --filter=@projeto/web` | A (via `ci:local`) + B (quality job) | Spec Playwright falhando. Sobe Postgres + API + `next build` (~40s) + Next standalone por conta própria (`apps/web/e2e/global-setup.ts`) — **não** reaproveita o container do passo de API | Sim — `ci:local` roda desde 2026-10-08, e `check-ci-local-e2e` impede a regressão (task ausente, pacote fora dos `--filter`, ou `test:e2e` sem `pretest:e2e` instalando o browser) |
 | `stack-code-review` (job) | `pnpm stack:review --files=… --mode=ci` | B (PR job) | Mesmo `blocker`/`major` do local | — |
 | `docker-build-prod` | `docker buildx build … --target prod` | B (só PR) | Dockerfile quebrado | Não — não roda em push |
 | `release-template` | automático | B (merge em main) | Nada — e o noop foi desfeito: o footer pede `1.9.0`, tag `v1.9.0` não existe, então a criação sairia. O que falta é o check que amarra footer↔tag (**BL1**) | — |
@@ -167,7 +167,7 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 | Comando | O que faz | Camada |
 |---------|-----------|--------|
 | `pnpm ci:preflight` | checks estruturais de drift; aborta com exit 1 | A + B |
-| `pnpm ci:local` | `ci:preflight` + `turbo run lint typecheck test:unit test:coverage --filter=@projeto/api --filter=@projeto/web` | manual (não está em hook) |
+| `pnpm ci:local` | `ci:preflight` + `turbo run lint typecheck test:unit test:coverage test:integration test:e2e --filter=@projeto/api --filter=@projeto/web` — **69,5 s, 69,6 s e 74,1 s** medidos de ponta a ponta (n=3, 2026-10-08; era 22,6 s sem as suítes e2e) | manual (não está em hook) |
 | `pnpm format:check` | Prettier em modo check sobre ts/tsx/json/yaml/yml | B |
 | `pnpm stack:review` | `stack-code-reviewer` standalone (mesmo gate do pre-commit e do CI) | A + B |
 | `pnpm docs:sync` | `doc-sync` standalone — **só relatório** | A + B |

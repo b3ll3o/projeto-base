@@ -225,8 +225,9 @@ falhas estruturais (drift de tsconfig, ESLint config legada, refs quebradas),
 o monorepo usa:
 
 1. **Pre-push local** (`pnpm ci:local`) — devs rodam antes de push; detecta
-   em ~30s o que o CI detectaria em ~4min. Ver [git-workflow.md §Pre-Push
-   Quality Gate](./git-workflow.md).
+   em **69,5 s, 69,6 s e 74,1 s** (n=3, `{ time pnpm ci:local; }`, 2026-10-08) o que o
+   CI detectaria em ~4min, e desde 2026-10-08 inclui `test:integration` e
+   `test:e2e`. Ver [git-workflow.md §Pre-Push Quality Gate](./git-workflow.md).
 2. **Pre-flight CI job** (workflow `ci.yml`) — primeiro job, valida
    cross-refs, tsconfig drift, ESLint drift. Falha rápido em 10s.
 3. **Quality CI job** (atual) — lint, typecheck, test, coverage. Roda
