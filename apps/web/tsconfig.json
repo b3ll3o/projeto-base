@@ -13,5 +13,6 @@
     ".next/types/**/*.ts",
     ".next-e2e/types/**/*.ts"
   ],
-  "exclude": ["node_modules"]
+  "//e2e": "pt-BR (2026-10-08): `e2e/` sai do escopo DESTE projeto e entra no `tsconfig.e2e.json`. MEDIDO no CI (run 37811180706, job `docker-build-prod`): `Type error: Cannot find module '../../api/test/testcontainers-helper.js'` — o `include` era `**/*.ts`, o `next build` typechecava `e2e/global-setup.ts`, e o estágio `builder` do Dockerfile não copia `apps/api`. Um build de produção não deve carregar a suíte de testes; o typecheck dela continua existindo, no projeto próprio.",
+  "exclude": ["node_modules", "e2e"]
 }

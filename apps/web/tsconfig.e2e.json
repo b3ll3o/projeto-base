@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "@projeto/tsconfig/react.json",
+  "//": "pt-BR (2026-10-08): o harness Playwright NÃO faz parte do app que o Next compila. MEDIDO no CI (run 37811180706, job `docker-build-prod`): `Type error: Cannot find module '../../api/test/testcontainers-helper.js'`. Causa: o `include` do tsconfig do projeto era `**/*.ts`, o `next build` roda `tsc` sobre ele e portanto puxava `e2e/global-setup.ts` para dentro do build de produção — enquanto o estágio `builder` do `apps/web/Dockerfile` faz `COPY apps/web apps/web` e nunca copia `apps/api`. MEDIDO o contrafactual com o módulo ESCONDIDO (`mv apps/api/test/testcontainers-helper.ts .escondido`, e `apps/web` inteiro acessível): com o `include` antigo, `tsc --noEmit` sai 2 com `e2e/global-setup.ts(42,53): error TS2307: Cannot find module '../../api/test/testcontainers-helper.js'`; com o `exclude: [\"e2e\"]` de `tsconfig.json`, `next build` inteiro sai 0 com o mesmo módulo escondido. A correção é de ESCOPO, não de Dockerfile: o build da imagem de produção não deve conhecer a suíte de testes, e o typecheck dela deve existir em algum lugar. Ele existe aqui, e `pnpm typecheck` roda os dois projetos — o app continua com o `tsc --noEmit` de sempre, e nada de e2e entra na imagem.",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": { "@/*": ["./*"] },
+    "types": ["node"]
+  },
+  "include": ["e2e/**/*.ts"],
+  "exclude": ["node_modules", ".next", ".next-e2e", ".turbo"]
+}
