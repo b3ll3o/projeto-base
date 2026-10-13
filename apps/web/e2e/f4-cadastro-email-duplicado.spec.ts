@@ -9,7 +9,7 @@
 // de partida mais direto para o estado que o fluxo consome.
 
 import { expect, botaoEnviar, erroDoCampo, test } from './support/fixtures';
-import { apagarUsuario, emailUnico } from './support/dados';
+import { SENHA_DE_TESTE, apagarUsuario, emailUnico } from './support/dados';
 
 const JA_CADASTRADO = { nome: 'Helena E2E' };
 
@@ -44,6 +44,7 @@ test.describe('F4 — Email duplicado', () => {
     await irPara('/users/novo');
     await page.getByLabel('Nome').fill('Outra Pessoa');
     await page.getByLabel('Email').fill(email);
+    await page.getByLabel('Senha').fill(SENHA_DE_TESTE);
     await botaoEnviar(page).click();
 
     // O erro é por CAMPO, não no topo: a Server Action mapeia
@@ -75,6 +76,7 @@ test.describe('F4 — Email duplicado', () => {
     await irPara('/users/novo');
     await page.getByLabel('Nome').fill('Outra Pessoa');
     await page.getByLabel('Email').fill(emailCadastrado);
+    await page.getByLabel('Senha').fill(SENHA_DE_TESTE);
     await botaoEnviar(page).click();
 
     // `aria-invalid` + `aria-describedby` é o que liga a mensagem ao campo
@@ -121,6 +123,7 @@ test.describe('F4 — Email duplicado', () => {
     await irPara('/users/novo');
     await page.getByLabel('Nome').fill('Outra Pessoa');
     await page.getByLabel('Email').fill(emailApagado);
+    await page.getByLabel('Senha').fill(SENHA_DE_TESTE);
     await botaoEnviar(page).click();
 
     // O ponto do teste: o erro é NO CAMPO, como no email ocupado por um usuário

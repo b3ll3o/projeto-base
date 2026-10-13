@@ -27,6 +27,7 @@
 // e que a suíte não pode confiar em "o processo com este PID é o servidor".
 
 import { spawn, type ChildProcess } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { API_ROOT, WEB_ROOT, exigirEstado, gravarEstado } from './estado';
@@ -56,6 +57,30 @@ const BIN_TSX = join(REPO_ROOT, 'node_modules', '.bin', 'tsx');
  * uma afirmação falsa — o silêncio que ela promete não existe.
  */
 const DIR_LOG = join(WEB_ROOT, 'node_modules', '.cache', 'e2e-playwright');
+
+/**
+ * Segredo de assinatura dos tokens, ALEATÓRIO POR EXECUÇÃO.
+ *
+ * pt-BR (2026-10-13, demanda `login-usuario-senha`): o `JwtTokenService`
+ * recusa o boot sem `JWT_SECRET` em NENHUM ambiente — não há default, por
+ * decisão (sem segredo embutido, um deploy sem configuração falha em vez de
+ * subir com um segredo que o repositório conhece). A consequência aqui é
+ * concreta: sem esta linha a API do e2e morre no boot e o global-setup
+ * falha esperando `/health`.
+ *
+ * Por que aleatório e não uma constante no arquivo: um segredo de teste
+ * fixo no repositório sobrevive à vida do container efêmero. Log de CI, artefato
+ * de upload, `.env` copiado — tudo isso continua valendo depois que o banco
+ * foi destruído, e quem ler o log consegue forjar um token válido para o
+ * ambiente que estiver em pé na hora. 48 bytes de entropia por execução é o
+ * que torna o token do e2e inútil fora da execução que o emitiu.
+ *
+ * ⚠️ Uma vez por PROCESSO, e não por `subirApi`: o F5 reinicia a API no meio
+ * da própria spec (para medir a tela com a API fora do ar). Um segredo novo a
+ * cada subida invalidaria a sessão do harness no meio do teste, e o sintoma
+ * seria um 401 intermitente dependendo de onde o reinício caiu.
+ */
+const SEGREDO_E2E = randomBytes(48).toString('base64');
 
 /**
  * Acrescenta uma linha ao log DESTA instância.
@@ -138,6 +163,7 @@ export async function subirApi({ porta, databaseUrl }: OpcoesSubirApi): Promise<
       // timeout de conexão que não é dele.
       OTEL_SDK_DISABLED: 'true',
       LOG_LEVEL: 'silent',
+      JWT_SECRET: SEGREDO_E2E,
       NODE_ENV: 'test',
     },
     stdio: ['ignore', saida.descritor, saida.descritor],

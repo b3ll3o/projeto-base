@@ -66,6 +66,7 @@ test.describe('F3 — Validação no cliente', () => {
     // texto que a tela nunca mostra.
     await expect(erroDoCampo(page, 'nome')).toHaveText('Informe o nome do usuário.');
     await expect(erroDoCampo(page, 'email')).toHaveText('Informe o email.');
+    await expect(erroDoCampo(page, 'senha')).toHaveText('Informe a senha.');
 
     await expect(page).toHaveURL(/\/users\/novo$/);
     expect(await contarUsuarios(), 'validação bloqueada não pode gravar').toBe(0);
@@ -149,7 +150,13 @@ test.describe('F3 — Validação no cliente', () => {
     // elementos, um deles vazio — é a live-region do Next. Sem o escopo, a
     // contagem aqui seria 3 e o teste passaria por uma razão que não é a
     // que ele mede.
-    await expect(alertaDoFormulario(page)).toHaveCount(2);
+    //
+    // ⚠️ MEDIDO 2026-10-13: a contagem subiu de 2 para 3 com a entrada do
+    // campo de senha — o formulário vazio mostra UM alerta por campo, e agora
+    // são três. O número acompanha a quantidade de campos por construção, e é
+    // por isso que ele é conferido contra a lista de campos e não decorado:
+    // quem acrescentar um quarto campo tem de mexer aqui.
+    await expect(alertaDoFormulario(page)).toHaveCount(3);
   });
 
   test('a barreira é do cliente: a Server Action nem chega a ser chamada', async ({
