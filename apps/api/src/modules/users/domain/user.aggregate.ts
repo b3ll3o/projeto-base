@@ -1,12 +1,43 @@
 import { UserId } from './value-objects/user-id.vo.js';
 import { Email } from './value-objects/email.vo.js';
 import { UserName } from './value-objects/user-name.vo.js';
+import { PasswordHash } from './value-objects/password-hash.vo.js';
 import type { DomainEvent } from '../../../shared/domain/domain-event.js';
 import { UserCreatedEvent } from './events/user-created.event.js';
 import { UserUpdatedEvent } from './events/user-updated.event.js';
 import { UserDeletedEvent } from './events/user-deleted.event.js';
 import { UserRestoredEvent } from './events/user-restored.event.js';
-import { UserDeletedException, InvalidRestoreException } from './exceptions/user.exceptions.js';
+import {
+  UserDeletedException,
+  InvalidRestoreException,
+  UserValidationException,
+} from './exceptions/user.exceptions.js';
+
+/**
+ * pt-BR: o TIPO já impede `trocarSenha('senha')` em tempo de compilação — o
+ * spec marca a linha com `@ts-expect-error`, e o `tsc` acusa a diretiva
+ * (TS2578) se ela deixar de valer. Mas tipos são apagados em runtime: um
+ * `as any`, um consumidor em JS puro ou um caminho de desserialização podem
+ * entregar uma string mesmo assim, e o agregado a aceitaria calado.
+ *
+ * A consequência de aceitar calado é silenciosa e cara: `senhaHash()` devolveria
+ * algo que não é `PasswordHash`, o mapper leria `.value` (que não existe) e
+ * gravaria `undefined` na coluna — a senha desapareceria do banco sem erro
+ * em lugar nenhum. Esta guarda transforma esse silêncio em exceção.
+ *
+ * A mensagem NÃO interpola o valor recebido: ele pode ser a senha em claro,
+ * e esta exceção é convertida em payload HTTP. Um template com `${candidato}`
+ * aqui seria um canal de vazamento direto.
+ */
+function exigirPasswordHash(candidato: unknown): PasswordHash {
+  if (!(candidato instanceof PasswordHash)) {
+    throw new UserValidationException(
+      'senhaHash',
+      'deve ser um PasswordHash; senha em claro não é aceita aqui',
+    );
+  }
+  return candidato;
+}
 
 /**
  * Aggregate Root do domínio de Users.
@@ -23,6 +54,10 @@ export class User {
   readonly #id: UserId;
   #name: UserName;
   #email: Email;
+  // pt-BR: `readonly` porque a senha muda por `trocarSenha()`, que é o
+  // mutator que faz `version++` — não por escrita direta. Um `#senhaHash`
+  // mutável seria uma segunda porta, e nenhuma delas emite evento.
+  #senhaHash: PasswordHash;
   readonly #createdAt: Date;
   #updatedAt: Date;
   #version: number;
@@ -33,6 +68,7 @@ export class User {
     id: UserId;
     name: UserName;
     email: Email;
+    senhaHash: PasswordHash;
     createdAt: Date;
     updatedAt: Date;
     version: number;
@@ -41,6 +77,7 @@ export class User {
     this.#id = props.id;
     this.#name = props.name;
     this.#email = props.email;
+    this.#senhaHash = exigirPasswordHash(props.senhaHash);
     this.#createdAt = props.createdAt;
     this.#updatedAt = props.updatedAt;
     this.#version = props.version;
@@ -50,8 +87,19 @@ export class User {
 
   /**
    * Factory: cria um novo User (versão inicial = 1) e emite UserCreatedEvent.
+   *
+   * `senhaHash` é OBRIGATÓRIO e é um `PasswordHash`, não uma string: não
+   * existe caminho para um User sem senha, e o tipo impede que alguém passe
+   * a senha em claro por descuido no call site. O `UserUseCases` hasheia
+   * antes de chamar aqui.
    */
-  static criar(props: { id?: string; nome: string; email: string; agora: Date }): User {
+  static criar(props: {
+    id?: string;
+    nome: string;
+    email: string;
+    senhaHash: PasswordHash;
+    agora: Date;
+  }): User {
     const id = UserId.create(props.id);
     const nome = UserName.create(props.nome);
     const email = Email.create(props.email);
@@ -59,6 +107,7 @@ export class User {
       id,
       name: nome,
       email,
+      senhaHash: props.senhaHash,
       createdAt: props.agora,
       updatedAt: props.agora,
       version: 1,
@@ -76,6 +125,7 @@ export class User {
     id: string;
     nome: string;
     email: string;
+    senhaHash: PasswordHash;
     createdAt: Date;
     updatedAt: Date;
     version: number;
@@ -85,6 +135,7 @@ export class User {
       id: UserId.create(props.id),
       name: UserName.create(props.nome),
       email: Email.create(props.email),
+      senhaHash: props.senhaHash,
       createdAt: props.createdAt,
       updatedAt: props.updatedAt,
       version: props.version,
@@ -102,6 +153,16 @@ export class User {
   }
   email(): Email {
     return this.#email;
+  }
+  /**
+   * O hash da senha.
+   *
+   * ⚠️ O que volta é o VO, e o VO redige `toString()`. Só o repositório
+   * (`toPersistence`) lê `.value`; nenhum DTO de saída faz. Converter isto
+   * em `string` aqui desfaria a barreira — daí o getter devolver o VO.
+   */
+  senhaHash(): PasswordHash {
+    return this.#senhaHash;
   }
   createdAt(): Date {
     return this.#createdAt;
@@ -147,6 +208,32 @@ export class User {
     }
     const previousVersion = this.#version;
     this.#email = Email.create(novoEmail);
+    this.#updatedAt = agora;
+    this.#version = previousVersion + 1;
+    this.#events.push(new UserUpdatedEvent(this.#id.value, this.#version, previousVersion, agora));
+  }
+
+  /**
+   * Troca a senha por um novo hash.
+   *
+   * Mesmo contrato de `renomear`/`alterarEmail` — e por opção de projeto:
+   * uma troca de senha muda o agregado, então ela gera `UserUpdatedEvent`
+   * (a entrada no histórico de auditoria) e `version++` (o optimistic
+   * locking rejeita um `save` com a versão pré-mudança). Uma troca de
+   * senha que não passa pelo histórico é uma troca de senha que o
+   * revisor de segurança não consegue ver.
+   *
+   * O parâmetro é o `PasswordHash` JÁ HASHEADO, nunca a senha em claro: é
+   * o tipo que garante que o agregado não tenha para onde armazenar a
+   * senha original. `UserUseCases` (Fase 3) chama `passwordHasher.hash()`
+   * antes de chegar aqui.
+   */
+  trocarSenha(novoHash: PasswordHash, agora: Date): void {
+    if (this.#deletedAt !== null) {
+      throw new UserDeletedException(this.#id.value);
+    }
+    const previousVersion = this.#version;
+    this.#senhaHash = exigirPasswordHash(novoHash);
     this.#updatedAt = agora;
     this.#version = previousVersion + 1;
     this.#events.push(new UserUpdatedEvent(this.#id.value, this.#version, previousVersion, agora));

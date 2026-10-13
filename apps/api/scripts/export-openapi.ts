@@ -34,6 +34,20 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from '../src/app.module.js';
 import { PrismaService } from '../src/shared/infrastructure/prisma/prisma.service.js';
 
+// pt-BR (2026-10-13): `JwtTokenService` NÃO tem valor default para
+// `JWT_SECRET` — por decisão de projeto, a API não boota sem ele. Isso é
+// correto no runtime e quebrado aqui: este script monta o AppModule inteiro
+// só para o Swagger ler metadados dos decorators, e nenhum token é assinado
+// no processo. Sem esta linha, `openapi:export` falha fora do ambiente de
+// dev com um erro que fala de JWT num export de documentação — e o documento
+// nunca é regenerado, que é como um `/auth` some do contrato sem ninguém
+// perceber.
+//
+// O valor é descartável POR DESENHO e vale só neste processo: um segredo real
+// colocado aqui passaria a morar no repositório. O `??=` respeita um
+// `JWT_SECRET` de verdade quando o operador tem um — só preenche a lacuna.
+process.env.JWT_SECRET ??= 'somente-para-o-export-do-openapi-nao-serve-para-autenticar';
+
 async function exportOpenApi(): Promise<void> {
   // pt-BR: stub PrismaService para evitar `$connect()`. Métodos
   // utilizados pelos controllers/adapters NÃO são chamados durante a

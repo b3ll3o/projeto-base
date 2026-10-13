@@ -29,6 +29,23 @@
 // via `getResponse()` (que é o payload propagado pelo
 // GlobalExceptionFilter para o cliente em RFC 7807).
 
+// MEDIDO 2026-10-13: `UsersController` ganhou um 3º/5º parâmetro
+// `@Req() request: RequestWithUser` (Fase 6/8 — o `sub` do JWT entra no
+// `actorId` da auditoria). Estes testes chamam os handlers DIRETAMENTE, e
+// a aridade nova quebrou 7 chamadas com TS2554.
+//
+// A correção aqui é `SEM_TOKEN`, e não um `request` de mentira: o
+// `UsersController.buildContext()` é quem decide o `actorId`, e
+// `resolveActorId(undefined)` devolve `null` — exatamente o valor que o
+// controller usava antes do `@Req()`, quando `actorId: null` era
+// hardcoded. Passar um request com `user.sub` aqui mudaria o `actorId`
+// de ~38 assertions por um valor que este arquivo não mede.
+//
+// `as never` (e não `as any`) é o mesmo idiom já usado neste arquivo
+// para `reply`, e é o que o tipo `RequestWithUser` — privado ao
+// controller — aceita de fora sem exportá-lo.
+const SEM_TOKEN = undefined as never;
+
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { BadRequestException } from '@nestjs/common';
 import type { Span } from '@opentelemetry/api';
@@ -251,8 +268,12 @@ describe('UsersController — handlers HTTP', () => {
     const runSpy = vi.spyOn(AuditContextStore, 'run');
     useCases.criarUser.mockResolvedValue(fakeUserOutput);
 
-    const input: CreateUserDto = { nome: 'João', email: 'joao@example.com' };
-    const result = await ctrl.create(input, reply as never);
+    const input: CreateUserDto = {
+      nome: 'João',
+      email: 'joao@example.com',
+      senha: 'senha-super-secreta',
+    };
+    const result = await ctrl.create(input, reply as never, SEM_TOKEN);
 
     expect(runSpy).toHaveBeenCalledTimes(1);
     expect(useCases.criarUser).toHaveBeenCalledWith(input);
@@ -288,6 +309,34 @@ describe('UsersController — handlers HTTP', () => {
     });
   });
 
+  // ── `includeDeleted`: normalização do query param ───────────────────
+  //
+  // MEDIDO 2026-10-13: `users.controller.ts` estava em 97,14% de branch —
+  // a única branch descoberta era a normalização de `includeDeleted`
+  // (linha 156), porque nenhum spec HTTP passava o query param. Os specs
+  // de repositório testavam `list({includeDeleted: true})` direto, o que
+  // pula a camada que traduz a string da URL.
+  //
+  // Os dois braços do `||` precisam ser exercitados: com 'true' o
+  // primeiro comparador resolve e o segundo NUNCA é avaliado; com 'True'
+  // (ou '1') é o segundo que decide. Sem o par, trocar `=== '1'` por
+  // `=== 'yes'` deixaria a suíte verde.
+  it.each([
+    ['true', true],
+    ['True', true],
+    ['TRUE', true],
+    ['1', true],
+    ['0', false],
+    ['yes', false],
+    ['', false],
+  ])('list() traduz includeDeleted=%j para %j', async (entrada, esperado) => {
+    useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
+    await ctrl.list(undefined, '20', entrada);
+    expect(useCases.listar).toHaveBeenCalledWith(
+      expect.objectContaining({ includeDeleted: esperado }),
+    );
+  });
+
   it('findOne() NÃO wrapa em AuditContextStore.run', async () => {
     const runSpy = vi.spyOn(AuditContextStore, 'run');
     useCases.obterPorId.mockResolvedValue(fakeUserOutput);
@@ -303,7 +352,7 @@ describe('UsersController — handlers HTTP', () => {
     const runSpy = vi.spyOn(AuditContextStore, 'run');
     useCases.atualizarNome.mockResolvedValue({ ...fakeUserOutput, version: 8 });
 
-    await ctrl.update('u-1', { novoNome: 'Maria' }, 'W/"v7"', reply as never);
+    await ctrl.update('u-1', { novoNome: 'Maria' }, 'W/"v7"', reply as never, SEM_TOKEN);
 
     expect(runSpy).toHaveBeenCalledTimes(1);
     expect(useCases.atualizarNome).toHaveBeenCalledWith({
@@ -319,7 +368,13 @@ describe('UsersController — handlers HTTP', () => {
   it('update() propaga BadRequestException quando If-Match ausente', async () => {
     const runSpy = vi.spyOn(AuditContextStore, 'run');
     await expect(
-      ctrl.update('u-1', { novoNome: 'x' }, undefined as unknown as string, reply as never),
+      ctrl.update(
+        'u-1',
+        { novoNome: 'x' },
+        undefined as unknown as string,
+        reply as never,
+        SEM_TOKEN,
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(runSpy).not.toHaveBeenCalled();
     expect(useCases.atualizarNome).not.toHaveBeenCalled();
@@ -354,7 +409,7 @@ describe('UsersController — handlers HTTP', () => {
     const runSpy = vi.spyOn(AuditContextStore, 'run');
     useCases.softDelete.mockResolvedValue(undefined);
 
-    await ctrl.remove('u-1', 'W/"v7"');
+    await ctrl.remove('u-1', 'W/"v7"', SEM_TOKEN);
 
     expect(runSpy).toHaveBeenCalledTimes(1);
     expect(useCases.softDelete).toHaveBeenCalledWith({
@@ -369,7 +424,7 @@ describe('UsersController — handlers HTTP', () => {
 
   it('remove() propaga BadRequestException quando If-Match malformado', async () => {
     const runSpy = vi.spyOn(AuditContextStore, 'run');
-    await expect(ctrl.remove('u-1', '"v3"')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(ctrl.remove('u-1', '"v3"', SEM_TOKEN)).rejects.toBeInstanceOf(BadRequestException);
     expect(runSpy).not.toHaveBeenCalled();
     expect(useCases.softDelete).not.toHaveBeenCalled();
     runSpy.mockRestore();
@@ -379,7 +434,7 @@ describe('UsersController — handlers HTTP', () => {
     const runSpy = vi.spyOn(AuditContextStore, 'run');
     useCases.restaurar.mockResolvedValue({ ...fakeUserOutput, version: 9 });
 
-    await ctrl.restore('u-1', 'W/"v8"', reply as never);
+    await ctrl.restore('u-1', 'W/"v8"', reply as never, SEM_TOKEN);
 
     expect(runSpy).toHaveBeenCalledTimes(1);
     expect(useCases.restaurar).toHaveBeenCalledWith({ id: 'u-1', expectedVersion: 8 });
@@ -434,8 +489,12 @@ describe('UsersController — handlers HTTP', () => {
     useCases.criarUser.mockResolvedValue(fakeUserOutput);
 
     try {
-      const input: CreateUserDto = { nome: 'João', email: 'joao@example.com' };
-      await ctrl.create(input, reply as never);
+      const input: CreateUserDto = {
+        nome: 'João',
+        email: 'joao@example.com',
+        senha: 'senha-super-secreta',
+      };
+      await ctrl.create(input, reply as never, SEM_TOKEN);
 
       expect(runSpy).toHaveBeenCalledTimes(1);
       const ctx = runSpy.mock.calls[0]?.[0] as AuditContext;
@@ -529,10 +588,20 @@ describe('UsersController — Zod validation at HTTP boundary', () => {
     expect(payload.code).toBe('VALIDATION_ERROR');
   });
 
-  it('create aceita payload válido (nome + email RFC 5322)', () => {
+  it('create aceita payload válido (nome + email RFC 5322 + senha)', () => {
     const pipe = new ZodValidationPipe(CreateUserSchema);
-    const out = pipe.transform({ nome: 'João', email: 'joao@example.com' }, { type: 'body' });
-    expect(out).toEqual({ nome: 'João', email: 'joao@example.com' });
+    const out = pipe.transform(
+      { nome: 'João', email: 'joao@example.com', senha: 'senha-super-secreta' },
+      { type: 'body' },
+    );
+    expect(out).toEqual({ nome: 'João', email: 'joao@example.com', senha: 'senha-super-secreta' });
+  });
+
+  it('create rejeita payload SEM senha (campo obrigatório no boundary)', () => {
+    const pipe = new ZodValidationPipe(CreateUserSchema);
+    expect(() =>
+      pipe.transform({ nome: 'João', email: 'joao@example.com' }, { type: 'body' }),
+    ).toThrow();
   });
 
   it('update rejeita novoNome vazio', () => {

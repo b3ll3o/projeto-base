@@ -104,6 +104,15 @@ export class PrismaUserRepository implements UserRepositoryPort {
         data: {
           email: row.email,
           name: row.name,
+          // ⚠️ `passwordHash` NÃO pode faltar aqui. O `updateMany` grava
+          // uma lista explícita de colunas — omitir o campo NÃO o mantém,
+          // o que seria inofensivo se o objetivo fosse preservar, mas é o
+          // caminho de `trocarSenha()` (Fase 4+): sem esta linha a troca
+          // de senha grava a hash ANTIGA e o login passa a falhar com a
+          // senha nova, sem erro em lugar nenhum. `rename`/`alterarEmail`
+          // reescrevem o mesmo campo com o valor que já estava no
+          // agregado, então aqui o efeito é idempotente.
+          passwordHash: row.passwordHash,
           updatedAt: row.updatedAt,
           updatedBy: row.updatedBy,
           deletedAt: row.deletedAt,
