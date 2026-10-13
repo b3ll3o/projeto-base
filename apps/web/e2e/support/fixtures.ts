@@ -30,7 +30,13 @@
 
 import { test as base, expect, type Page } from '@playwright/test';
 import { exigirEstado } from './estado';
-import { contarUsuarios, limparBase, semearUsuario, type UsuarioWire } from './dados';
+import {
+  contarUsuarios,
+  limparBase,
+  tokensDoHarness,
+  semearUsuario,
+  type UsuarioWire,
+} from './dados';
 
 export interface FixturesE2E {
   /** URL absoluta de um caminho do app. */
@@ -65,6 +71,12 @@ export interface FixturesE2E {
    * no momento em que a tela é desenhada.
    */
   baseLimpa: void;
+  /**
+   * Browser COM sessão, sem passar pela tela de login.
+   *
+   * Fixture sem valor: o que importa é o efeito colateral no contexto.
+   */
+  comSessao: void;
 }
 
 // pt-BR: o `({}, use)` das fixtures sem dependência NÃO é estilo, é exigência
@@ -103,6 +115,62 @@ export const test = base.extend<FixturesE2E>({
   contarUsuarios: async ({}, use) => {
     await use(() => contarUsuarios());
   },
+
+  /**
+   * Planta o par de tokens como cookie de sessão do browser.
+   *
+   * pt-BR (2026-10-13, demanda `login-usuario-senha`): `/users` e
+   * `/users/novo` chamam `exigirSessao()`, que redireciona para `/login`
+   * quando não há access token. Sem esta fixture os specs F1–F6 eram TODOS
+   * redirecionados, e cada um passava a afirmar "a tela de login apareceu"
+   * num arquivo cujo nome e cujo inventário prometem medir outra coisa.
+   *
+   * ⚠️ Por que plantar o cookie em vez de autenticar pela tela: o login pela
+   * tela É o F7, e é um caminho com asserções próprias. Se ele virasse o preço
+   * de entrada dos outros specs, uma falha no formulário de login derrubaria
+   * a listagem, a validação e a navegação — três arquivos vermelhos por uma
+   * causa que não é deles. É a mesma classe de falha que o cabeçalho deste
+   * arquivo já descreve ("verde que mente"), com o sinal trocado.
+   *
+   * O cookie precisa ser httpOnly porque `lib/sessao.ts` grava httpOnly, e
+   * browser nenhum — nem o Playwright por `evaluate` — consegue ler um cookie
+   * httpOnly. `addCookies` escreve direto no contexto, que é o único caminho
+   * possível. Os nomes estão escritos à mão em vez de importados de
+   * `lib/sessao.ts` porque aquele módulo importa `next/headers`: carregá-lo no
+   * processo do Playwright não funciona. Um desatualização aqui não passa
+   * silenciosa — o cookie errado faz `exigirSessao()` redirecionar, e os seis
+   * specs ficam vermelhos.
+   *
+   * `auto: true` porque o preço de NÃO ser automática é maior: quem escreve um
+   * spec novo não tem como saber que precisa lembrar, e o esquecimento seria
+   * silencioso. Um spec que precisa medir o estado DESLOGADO faz
+   * `context.clearCookies()` dentro do próprio teste — é uma afirmação
+   * explícita do que o teste quer, e é o que o F8 faz.
+   */
+  comSessao: [
+    async ({ page }, use) => {
+      const { webUrl } = exigirEstado();
+      // ⚠️ O par em cache, e NÃO um `parDeTokens()` novo. `baseLimpa` (auto,
+      // e declarado antes desta) faz soft-delete na conta de sessão — a mesma
+      // conta que autorizou o GET que a lista apagou. O token já emitido
+      // continua válido (stateless), mas um login novo com aquele e-mail dá
+      // 401, porque `findByEmail` filtra soft-deleted. MEDIDO: com o login
+      // novo, 29 de 29 specs caíam em `INVALID_CREDENTIALS`.
+      const { accessToken, refreshToken } = await tokensDoHarness();
+      await page.context().addCookies([
+        { name: 'access_token', value: accessToken, url: webUrl, httpOnly: true, sameSite: 'Lax' },
+        {
+          name: 'refresh_token',
+          value: refreshToken,
+          url: webUrl,
+          httpOnly: true,
+          sameSite: 'Lax',
+        },
+      ]);
+      await use();
+    },
+    { auto: true },
+  ],
 });
 
 export { expect };
@@ -119,8 +187,15 @@ export function alertaDoFormulario(page: Page) {
   return page.locator('form [role="alert"]');
 }
 
-/** Erro de UM campo (`nome` ou `email`). O id é o que o `aria-describedby` aponta. */
-export function erroDoCampo(page: Page, campo: 'nome' | 'email') {
+/**
+ * Erro de UM campo (`nome`, `email` ou `senha`). O id é o que o
+ * `aria-describedby` aponta.
+ *
+ * pt-BR (2026-10-13): `senha` entrou na união quando o campo entrou no
+ * formulário. A união é o que impede o caller de passar um campo que não tem
+ * `#<campo>-erro` — o locator viraria um não-casado silencioso.
+ */
+export function erroDoCampo(page: Page, campo: 'nome' | 'email' | 'senha') {
   return page.locator(`#${campo}-erro`);
 }
 
@@ -146,6 +221,19 @@ export function linkCadastrar(page: Page) {
   // pt-BR: quando a lista está vazia existem DOIS com este rótulo (o do
   // cabeçalho e o do estado vazio). O do cabeçalho vem primeiro no DOM.
   return page.getByRole('link', { name: 'Cadastrar usuário' }).first();
+}
+
+/**
+ * Esqueça a sessão do browser.
+ *
+ * pt-BR: existe porque `comSessao` é `auto` — o browser entra em TODO spec
+ * autenticado. Um teste que precisa medir o estado deslogado chama isto, e a
+ * chamada fica visível no corpo do teste em vez de ser um detalhe do
+ * fixture: é a diferença entre "este spec mede a porta fechada" e "este spec
+ * mede a porta fechada, porque apagou o cookie".
+ */
+export async function clearCookies(page: Page): Promise<void> {
+  await page.context().clearCookies();
 }
 
 /** Itens da listagem — um por usuário. */

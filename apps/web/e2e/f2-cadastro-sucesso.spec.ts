@@ -16,7 +16,7 @@
 // tela mente. Nenhum dos dois é redundante.
 
 import { expect, botaoEnviar, itensDaLista, test } from './support/fixtures';
-import { emailUnico } from './support/dados';
+import { SENHA_DE_TESTE, emailUnico } from './support/dados';
 
 test.describe('F2 — Cadastro com sucesso', () => {
   test('cria o usuário, redireciona para a listagem e mostra o que foi criado', async ({
@@ -41,6 +41,7 @@ test.describe('F2 — Cadastro com sucesso', () => {
     await irPara('/users/novo');
     await page.getByLabel('Nome').fill('Carla E2E');
     await page.getByLabel('Email').fill(email);
+    await page.getByLabel('Senha').fill(SENHA_DE_TESTE);
     await botaoEnviar(page).click();
 
     // O redirecionamento é parte do fluxo, não um detalhe: `redirect()` está
@@ -75,6 +76,7 @@ test.describe('F2 — Cadastro com sucesso', () => {
     await irPara('/users/novo');
     await page.getByLabel('Nome').fill('  Diego   E2E  ');
     await page.getByLabel('Email').fill(`  ${email.toUpperCase()}  `);
+    await page.getByLabel('Senha').fill(SENHA_DE_TESTE);
     await botaoEnviar(page).click();
 
     await expect(page).toHaveURL(/\/users$/);

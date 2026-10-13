@@ -35,7 +35,7 @@
 import { derrubarBancoDoTeste, subirBancoDoTeste } from './support/banco';
 import { derrubarApiDoTeste, subirApiDoTeste } from './support/api';
 import { expect, alertaDoFormulario, botaoEnviar, test } from './support/fixtures';
-import { emailUnico } from './support/dados';
+import { SENHA_DE_TESTE, emailUnico } from './support/dados';
 
 const ERRO_GENERICO =
   'Não foi possível cadastrar o usuário. Verifique a conexão e tente novamente.';
@@ -103,6 +103,7 @@ test.describe('F5 — Erro genérico no cadastro', () => {
       // (O F3 digita literais de propósito: são emails que a validação recusa, e
       // recusado nunca ocupa o `@unique`.) Ver `emailUnico`.
       await page.getByLabel('Email').fill(emailUnico('ines'));
+      await page.getByLabel('Senha').fill(SENHA_DE_TESTE);
       await botaoEnviar(page).click();
 
       await expect(alertaDoFormulario(page)).toHaveText(
@@ -124,6 +125,7 @@ test.describe('F5 — Erro genérico no cadastro', () => {
       await irPara('/users/novo');
       await page.getByLabel('Nome').fill('Joana E2E');
       await page.getByLabel('Email').fill(emailUnico('joana'));
+      await page.getByLabel('Senha').fill(SENHA_DE_TESTE);
       await botaoEnviar(page).click();
 
       // Sem traceId porque não houve resposta para extrair um. O texto exato
