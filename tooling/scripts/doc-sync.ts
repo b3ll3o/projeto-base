@@ -59,6 +59,20 @@ interface CodeDocMapping {
 
 const CODE_DOC_MAPPINGS: CodeDocMapping[] = [
   {
+    codePattern: /apps\/api\/src\/modules\/auth\/infrastructure\/http\/auth\.controller\.ts$/,
+    docFiles: [
+      'docs/api/auth.md',
+      'apps/api/openapi.json',
+      'docs/adr/0002-autenticacao-jwt-argon2.md',
+    ],
+    // pt-BR (2026-10-13): o mapeamento entrou junto com o módulo de auth.
+    // Sem ele, criar o controller não dispara NENHUMA verificação de doc —
+    // e o primeiro sintoma de um contrato de autenticação fora de sincronia
+    // é um 401 que ninguém sabe explicar. `docs/api/auth.md` é o contrato
+    // em prosa; o ADR é onde vive o que o JWT NÃO garante (revogação).
+    reason: 'Controller de auth modificado — verificar contrato e ADR',
+  },
+  {
     codePattern: /apps\/api\/src\/modules\/users\/infrastructure\/http\/users\.controller\.ts$/,
     docFiles: [
       'docs/api/users.md',

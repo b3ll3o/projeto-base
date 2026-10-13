@@ -36,7 +36,8 @@ projeto-base (monorepo)
 | Banco de Dados | PostgreSQL | 16 | Maduro, JSONB, extensions, performance |
 | Validação | class-validator + class-transformer | latest | Padrão de fato em NestJS, integrado com `ValidationPipe` |
 | Documentação API | @nestjs/swagger | latest | OpenAPI 3.0 automático a partir dos decorators |
-| Auth | @nestjs/jwt + passport-jwt | latest | Padrão da indústria, refresh tokens manuais |
+| Auth | @nestjs/jwt + `JwtAuthGuard` próprio | latest | Sem passport: o guard valida assinatura/expiração e um `@Public()` o libera. Detalhe em [`docs/api/auth.md`](./api/auth.md) |
+| Hash de senha | argon2 (argon2id) | latest | Recomendação OWASP; resiste a GPU e a ASIC. Alternativa ao bcrypt, que trunca a senha em 72 bytes — ver [ADR-0002](./adr/0002-autenticacao-jwt-argon2.md) |
 | Filas | BullMQ + Redis | latest | Jobs assíncronos, retries, scheduling |
 | Cache | Redis (ioredis) | latest | Compartilhado com BullMQ |
 | Logging | Pino | latest | Estruturado JSON, rápido |
