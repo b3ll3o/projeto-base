@@ -119,11 +119,17 @@ export const test = base.extend<FixturesE2E>({
   /**
    * Planta o par de tokens como cookie de sessão do browser.
    *
-   * pt-BR (2026-10-13, demanda `login-usuario-senha`): `/users` e
-   * `/users/novo` chamam `exigirSessao()`, que redireciona para `/login`
-   * quando não há access token. Sem esta fixture os specs F1–F6 eram TODOS
-   * redirecionados, e cada um passava a afirmar "a tela de login apareceu"
-   * num arquivo cujo nome e cujo inventário prometem medir outra coisa.
+   * pt-BR (2026-10-13, demanda `login-usuario-senha`): `/users` chama
+   * `exigirSessao()`, que redireciona para `/login` quando não há access
+   * token. Sem esta fixture os specs F1–F6 eram TODOS redirecionados, e cada
+   * um passava a afirmar "a tela de login apareceu" num arquivo cujo nome e
+   * cujo inventário prometem medir outra coisa.
+   *
+   * ⚠️ `/users/novo` DEIXOU de chamar `exigirSessao()` no mesmo dia (ver o
+   * comentário do `page.tsx`): proteger a tela de cadastro não impedia ninguém
+   * de criar conta, já que `POST /users` é público — só impedia a pessoa, num
+   * beco sem saída. A fixture continua valendo para os specs que navegam por
+   * `/users`.
    *
    * ⚠️ Por que plantar o cookie em vez de autenticar pela tela: o login pela
    * tela É o F7, e é um caminho com asserções próprias. Se ele virasse o preço

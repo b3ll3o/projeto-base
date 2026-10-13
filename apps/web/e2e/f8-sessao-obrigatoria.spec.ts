@@ -29,19 +29,24 @@ test.describe('F8 — Rota protegida sem sessão', () => {
     await expect(page.getByRole('heading', { name: 'Entrar' })).toBeVisible();
   });
 
-  test('sem cookie, /users/novo também leva ao login', async ({ page, irPara }) => {
+  test('sem cookie, /users/novo é alcançável — é a porta de entrada', async ({ page, irPara }) => {
     await clearCookies(page);
 
     await irPara('/users/novo');
 
-    // ⚠️ `/users/novo` é onde a pessoa se CADASTRA, e o cadastro em si é
-    // público na API (D-2). O que exige sessão é a PÁGINA: ela está atrás do
-    // `exigirSessao()` do `page.tsx`. Os dois são decisões diferentes, e esta
-    // é a segunda. Um teste futuro que "consertar" isto aqui, porque o cadastro
-    // é público quebraria o que o plano descreve como escopo — por isso o
-    // comentário, e por isso a asserção está aqui.
-    await expect(page).toHaveURL(/\/login$/);
-    await expect(page.getByRole('heading', { name: 'Entrar' })).toBeVisible();
+    // `/users/novo` é onde a pessoa se CADASTRA, e `POST /users` é PÚBLICO na
+    // API (D-2). Exigir sessão aqui não impedia ninguém de criar conta — só
+    // impedia a PESSOA, num beco sem saída: o link "Criar conta" da tela de
+    // login aponta para esta página, e quem não tem conta voltava para o
+    // login. Medido em 2026-10-13: com a tela protegida, este teste e o F7
+    // ("o login não deixa a pessoa numa tela sem saída") afirmavam coisas
+    // opostas, e o F7 falhava de forma intermitente — a proteção da tela não
+    // comprava nada que a API pública já não devolvesse.
+    //
+    // A tela que exige sessão é `/users`, a listagem, testada nos dois testes
+    // acima. Cadastro é a porta de entrada; listagem é onde os dados estão.
+    await expect(page).toHaveURL(/\/users\/novo$/);
+    await expect(page.getByRole('heading', { name: 'Cadastrar usuário' })).toBeVisible();
   });
 
   test('sem sessão, a listagem NÃO entrega os dados de ninguém', async ({
