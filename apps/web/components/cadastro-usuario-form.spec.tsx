@@ -19,13 +19,20 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { CadastroUsuarioForm } from './cadastro-usuario-form';
 import { CADASTRO_INICIAL, type CadastroUsuarioState } from '@/app/users/novo/state';
+import { SENHA_MAX, SENHA_MIN } from '@/lib/cadastro-usuario-schema';
 
 function resposta(over: Partial<CadastroUsuarioState> = {}): CadastroUsuarioState {
   return { ...CADASTRO_INICIAL, ...over };
 }
 
 function acaoQue(estado: CadastroUsuarioState | Promise<CadastroUsuarioState>) {
-  return vi.fn(async () => estado);
+  // pt-BR: os dois parâmetros são declarados de propósito. O `useActionState`
+  // CHAMA a Action com `(estadoAnterior, formData)`, e um stub de zero
+  // parâmetros tipa `mock.calls` como tupla de comprimento 0 — aí
+  // `mock.calls[0][1]` é TS2493 ("no element at index '1'") em vez de um
+  // dado, e o teste que precisa LER o FormData enviado não compila. O tipo do
+  // stub tem de ser a assinatura real do `ActionCadastro`.
+  return vi.fn(async (_estado: CadastroUsuarioState, _formData: FormData) => estado);
 }
 
 beforeEach(() => {
@@ -55,6 +62,192 @@ describe('CadastroUsuarioForm — rótulos e campos', () => {
 
     expect(screen.getByLabelText('Email')).toHaveAttribute('type', 'email');
   });
+
+  it('a senha é um campo de senha — nunca texto puro', () => {
+    render(<CadastroUsuarioForm action={acaoQue(resposta())} />);
+
+    expect(screen.getByLabelText('Senha')).toHaveAttribute('type', 'password');
+  });
+
+  it('a senha marca-se como senha NOVA, para o gerenciador oferecer uma forte', () => {
+    // pt-BR: `new-password` é o que faz o Chrome e o Safari oferecerem
+    // "sugerir uma senha forte" em vez de PREENCHER com a senha que a
+    // pessoa já tem guardada para este site. `current-password` aqui seria
+    // o valor errado e a sugestão forte nunca apareceria.
+    render(<CadastroUsuarioForm action={acaoQue(resposta())} />);
+
+    expect(screen.getByLabelText('Senha')).toHaveAttribute('autocomplete', 'new-password');
+  });
+
+  it('a senha tem o teto do schema, para o navegador travar o over typing', () => {
+    render(<CadastroUsuarioForm action={acaoQue(resposta())} />);
+
+    expect(screen.getByLabelText('Senha')).toHaveAttribute('maxlength', String(SENHA_MAX));
+  });
+});
+
+describe('CadastroUsuarioForm — o campo de senha', () => {
+  it('senha vazia pede a senha, não acusa comprimento', async () => {
+    const action = acaoQue(resposta());
+    const user = userEvent.setup();
+    render(<CadastroUsuarioForm action={action} />);
+
+    await user.type(screen.getByLabelText('Nome'), 'Maria Silva');
+    await user.type(screen.getByLabelText('Email'), 'maria@empresa.com');
+    await user.click(screen.getByRole('button', { name: /cadastrar/i }));
+
+    expect(await screen.findByText('Informe a senha.')).toBeInTheDocument();
+    expect(action).not.toHaveBeenCalled();
+  });
+
+  it('senha curta demais diz o número mínimo', async () => {
+    const action = acaoQue(resposta());
+    const user = userEvent.setup();
+    render(<CadastroUsuarioForm action={action} />);
+
+    await user.type(screen.getByLabelText('Nome'), 'Maria Silva');
+    await user.type(screen.getByLabelText('Email'), 'maria@empresa.com');
+    await user.type(screen.getByLabelText('Senha'), 'abc');
+    await user.click(screen.getByRole('button', { name: /cadastrar/i }));
+
+    expect(
+      await screen.findByText(`A senha deve ter pelo menos ${SENHA_MIN} caracteres.`),
+    ).toBeInTheDocument();
+    expect(action).not.toHaveBeenCalled();
+  });
+
+  it('a senha é anunciada como inválida e o erro é lido pelo leitor de tela', async () => {
+    const user = userEvent.setup();
+    render(<CadastroUsuarioForm action={acaoQue(resposta())} />);
+
+    await user.type(screen.getByLabelText('Nome'), 'Maria Silva');
+    await user.type(screen.getByLabelText('Email'), 'maria@empresa.com');
+    await user.type(screen.getByLabelText('Senha'), 'abc');
+    await user.click(screen.getByRole('button', { name: /cadastrar/i }));
+
+    const senha = screen.getByLabelText('Senha');
+    await waitFor(() => expect(senha).toHaveAttribute('aria-invalid', 'true'));
+    // `aria-describedby` + `role="alert"`: o primeiro LIGA o campo à
+    // mensagem, o segundo faz a mensagem ser anunciada quando ela aparece.
+    // Falta o primeiro e o campo fica vermelho para quem enxerga e
+    // silencioso para quem não enxerga.
+    expect(senha).toHaveAttribute('aria-describedby', 'senha-erro');
+    expect(document.querySelector('#senha-erro')).toHaveAttribute('role', 'alert');
+  });
+
+  it('só o campo de senha é marcado de inválido, e não os outros dois', async () => {
+    const user = userEvent.setup();
+    render(<CadastroUsuarioForm action={acaoQue(resposta())} />);
+
+    await user.type(screen.getByLabelText('Nome'), 'Maria Silva');
+    await user.type(screen.getByLabelText('Email'), 'maria@empresa.com');
+    await user.click(screen.getByRole('button', { name: /cadastrar/i }));
+
+    await waitFor(() =>
+      expect(screen.getByLabelText('Senha')).toHaveAttribute('aria-invalid', 'true'),
+    );
+    expect(screen.getByLabelText('Nome')).toHaveAttribute('aria-invalid', 'false');
+    expect(screen.getByLabelText('Email')).toHaveAttribute('aria-invalid', 'false');
+  });
+
+  it('a senha volta VAZIA depois de um erro, mas nome e email voltam preenchidos', async () => {
+    // pt-BR: o `form.reset` repõe o formulário a partir do estado devolvido pela
+    // Action, e a Action devolve a senha vazia de propósito (o estado
+    // atravessa a rede até o browser). CUIDADO com o alcance deste teste:
+    // ele afirma que o reset COPIA o que recebeu, e como o que chega já vem
+    // vazio, ele ficaria verde mesmo sem a barreira do `useEffect` — quem
+    // mede que o segredo é apagado no browser é o teste logo abaixo, que
+    // entrega o estado COM a senha.
+    const action = acaoQue(
+      resposta({
+        fieldErrors: { email: 'Este email já está cadastrado.' },
+        valores: { nome: 'Maria Silva', email: 'maria@empresa.com', senha: '' },
+      }),
+    );
+    const user = userEvent.setup();
+    render(<CadastroUsuarioForm action={action} />);
+
+    await user.type(screen.getByLabelText('Nome'), 'Maria Silva');
+    await user.type(screen.getByLabelText('Email'), 'maria@empresa.com');
+    await user.type(screen.getByLabelText('Senha'), 'minhaSenhaSecreta');
+    await user.click(screen.getByRole('button', { name: /cadastrar/i }));
+
+    await waitFor(() => expect(screen.getByLabelText('Nome')).toHaveValue('Maria Silva'));
+    expect(screen.getByLabelText('Email')).toHaveValue('maria@empresa.com');
+    expect(screen.getByLabelText('Senha')).toHaveValue('');
+  });
+
+  it('a senha NÃO volta preenchida MESMO que o estado venha com ela', async () => {
+    // pt-BR: o teste de cima passa `senha: ''` no stub, então ele mede que o
+    // reset COPIA o que recebeu — não que ele APAGUE o segredo. Com o valor já
+    // vazio na entrada, `toHaveValue('')` ficaria verde mesmo com um
+    // `form.reset(estado.valores)` cru, que repõe o que der. Aqui o estado
+    // chega COM a senha e a afirmação continua sendo que o campo volta vazio:
+    // é a segunda barreira, do lado do browser.
+    //
+    // Não é hipótese: `valoresSemSegredo` em `app/users/novo/actions.ts` já
+    // apaga no servidor, mas a única coisa que segura o segredo dentro do
+    // DOM é este `useEffect`. Sem ele, um caminho de erro novo que esqueça de
+    // passar por `valoresSemSegredo` repõe a senha na tela — e o `type="password"`
+    // só a mascara, continua no DOM.
+    const action = acaoQue(
+      resposta({
+        fieldErrors: { email: 'Este email já está cadastrado.' },
+        valores: { nome: 'Maria Silva', email: 'maria@empresa.com', senha: 'minhaSenhaSecreta' },
+      }),
+    );
+    const user = userEvent.setup();
+    render(<CadastroUsuarioForm action={action} />);
+
+    await user.type(screen.getByLabelText('Nome'), 'Maria Silva');
+    await user.type(screen.getByLabelText('Email'), 'maria@empresa.com');
+    await user.type(screen.getByLabelText('Senha'), 'minhaSenhaSecreta');
+    await user.click(screen.getByRole('button', { name: /cadastrar/i }));
+
+    await waitFor(() => expect(screen.getByLabelText('Nome')).toHaveValue('Maria Silva'));
+    expect(screen.getByLabelText('Email')).toHaveValue('maria@empresa.com');
+    expect(screen.getByLabelText('Senha')).toHaveValue('');
+    // o segredo não pode reaparecer em NENHUM input do formulário
+    for (const campo of screen.getAllByRole('textbox')) {
+      expect(campo).not.toHaveValue('minhaSenhaSecreta');
+    }
+  });
+
+  it('a senha digitada não aparece no texto da tela (o campo é password)', async () => {
+    const action = acaoQue(resposta());
+    const user = userEvent.setup();
+    render(<CadastroUsuarioForm action={action} />);
+
+    await user.type(screen.getByLabelText('Nome'), 'Maria Silva');
+    await user.type(screen.getByLabelText('Email'), 'maria@empresa.com');
+    await user.type(screen.getByLabelText('Senha'), 'minhaSenhaSecreta');
+    await user.click(screen.getByRole('button', { name: /cadastrar/i }));
+
+    // pt-BR: `type="password"` mascara o valor. Se alguém trocar por
+    // `type="text"` o valor SOME do value mas some também deste texto —
+    // é a assimetria que faz o teste valer.
+    await waitFor(() => expect(action).toHaveBeenCalled());
+    expect(screen.queryByText(/minhaSenhaSecreta/)).not.toBeInTheDocument();
+  });
+
+  it('a senha chega inteira à Action, sem espaço aparado', async () => {
+    const action = acaoQue(resposta());
+    const user = userEvent.setup();
+    render(<CadastroUsuarioForm action={action} />);
+
+    await user.type(screen.getByLabelText('Nome'), 'Maria Silva');
+    await user.type(screen.getByLabelText('Email'), 'maria@empresa.com');
+    await user.type(screen.getByLabelText('Senha'), '  abcdefgh  ');
+    await user.click(screen.getByRole('button', { name: /cadastrar/i }));
+
+    await waitFor(() => expect(action).toHaveBeenCalled());
+    // pt-BR: a senha chega CRUA — sem o `.trim()` que nome e email levam. É a
+    // diferença entre uma identidade, que tolera normalização, e um segredo,
+    // que não tolera. Se um dia alguém repassar a senha por um `.trim()`, o
+    // espaço das pontas deixa de participar do que a pessoa digitou.
+    const enviado = action.mock.calls[0]?.[1]?.get('senha');
+    expect(enviado).toBe('  abcdefgh  ');
+  });
 });
 
 describe('CadastroUsuarioForm — validação antes de enviar', () => {
@@ -76,6 +269,7 @@ describe('CadastroUsuarioForm — validação antes de enviar', () => {
 
     await user.type(screen.getByLabelText('Nome'), 'Maria Silva');
     await user.type(screen.getByLabelText('Email'), 'nao-e-email');
+    await user.type(screen.getByLabelText('Senha'), 'senha1234');
     await user.click(screen.getByRole('button', { name: /cadastrar/i }));
 
     expect(await screen.findByText(/Exemplo: nome@empresa\.com/)).toBeInTheDocument();
@@ -91,6 +285,7 @@ describe('CadastroUsuarioForm — validação antes de enviar', () => {
     // errado: marcaria os dois e não distinguiria "soube qual está errado"
     // de "marca tudo".
     await user.type(screen.getByLabelText('Email'), 'maria@empresa.com');
+    await user.type(screen.getByLabelText('Senha'), 'senha1234');
     await user.click(screen.getByRole('button', { name: /cadastrar/i }));
 
     await waitFor(() =>
@@ -127,7 +322,12 @@ describe('CadastroUsuarioForm — erros que vêm da API', () => {
     const action = acaoQue(
       resposta({
         fieldErrors: { email: 'Este email já está cadastrado.' },
-        valores: { nome: 'Maria Silva', email: 'maria@empresa.com' },
+        // pt-BR: `senha: ''` e não a senha digitada. O estado atravessa a
+        // rede até o browser, então devolver aqui o que a pessoa escreveu
+        // colocaria o segredo no payload da Server Action — no histórico de
+        // rede, no DevTools e no log de qualquer proxy no caminho. Ver a
+        // justificativa em `app/users/novo/state.ts`.
+        valores: { nome: 'Maria Silva', email: 'maria@empresa.com', senha: '' },
       }),
     );
     const user = userEvent.setup();
@@ -135,6 +335,7 @@ describe('CadastroUsuarioForm — erros que vêm da API', () => {
 
     await user.type(screen.getByLabelText('Nome'), 'Maria Silva');
     await user.type(screen.getByLabelText('Email'), 'maria@empresa.com');
+    await user.type(screen.getByLabelText('Senha'), 'senha1234');
     await user.click(screen.getByRole('button', { name: /cadastrar/i }));
 
     expect(await screen.findByText('Este email já está cadastrado.')).toBeInTheDocument();
@@ -147,7 +348,12 @@ describe('CadastroUsuarioForm — erros que vêm da API', () => {
     const action = acaoQue(
       resposta({
         formError: 'Não foi possível cadastrar o usuário. Código de rastreamento: trace-123.',
-        valores: { nome: 'Maria Silva', email: 'maria@empresa.com' },
+        // pt-BR: `senha: ''` e não a senha digitada. O estado atravessa a
+        // rede até o browser, então devolver aqui o que a pessoa escreveu
+        // colocaria o segredo no payload da Server Action — no histórico de
+        // rede, no DevTools e no log de qualquer proxy no caminho. Ver a
+        // justificativa em `app/users/novo/state.ts`.
+        valores: { nome: 'Maria Silva', email: 'maria@empresa.com', senha: '' },
       }),
     );
     const user = userEvent.setup();
@@ -155,6 +361,7 @@ describe('CadastroUsuarioForm — erros que vêm da API', () => {
 
     await user.type(screen.getByLabelText('Nome'), 'Maria Silva');
     await user.type(screen.getByLabelText('Email'), 'maria@empresa.com');
+    await user.type(screen.getByLabelText('Senha'), 'senha1234');
     await user.click(screen.getByRole('button', { name: /cadastrar/i }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('trace-123');
@@ -164,7 +371,12 @@ describe('CadastroUsuarioForm — erros que vêm da API', () => {
     const action = acaoQue(
       resposta({
         fieldErrors: { email: 'Este email já está cadastrado.' },
-        valores: { nome: 'Maria Silva', email: 'maria@empresa.com' },
+        // pt-BR: `senha: ''` e não a senha digitada. O estado atravessa a
+        // rede até o browser, então devolver aqui o que a pessoa escreveu
+        // colocaria o segredo no payload da Server Action — no histórico de
+        // rede, no DevTools e no log de qualquer proxy no caminho. Ver a
+        // justificativa em `app/users/novo/state.ts`.
+        valores: { nome: 'Maria Silva', email: 'maria@empresa.com', senha: '' },
       }),
     );
     const user = userEvent.setup();
@@ -172,6 +384,7 @@ describe('CadastroUsuarioForm — erros que vêm da API', () => {
 
     await user.type(screen.getByLabelText('Nome'), 'Maria Silva');
     await user.type(screen.getByLabelText('Email'), 'maria@empresa.com');
+    await user.type(screen.getByLabelText('Senha'), 'senha1234');
     await user.click(screen.getByRole('button', { name: /cadastrar/i }));
 
     await waitFor(() => expect(screen.getByLabelText('Nome')).toHaveValue('Maria Silva'));
@@ -196,6 +409,7 @@ describe('CadastroUsuarioForm — erros que vêm da API', () => {
 
     await user.type(screen.getByLabelText('Nome'), 'Maria Silva');
     await user.type(screen.getByLabelText('Email'), 'maria@empresa.com');
+    await user.type(screen.getByLabelText('Senha'), 'senha1234');
     await user.click(screen.getByRole('button', { name: /cadastrar/i }));
 
     await waitFor(() => expect(screen.getByLabelText('Nome')).toBeDisabled());
@@ -220,6 +434,7 @@ describe('CadastroUsuarioForm — durante e depois do envio', () => {
 
     await user.type(screen.getByLabelText('Nome'), 'Maria Silva');
     await user.type(screen.getByLabelText('Email'), 'maria@empresa.com');
+    await user.type(screen.getByLabelText('Senha'), 'senha1234');
     await user.click(screen.getByRole('button', { name: /cadastrar/i }));
 
     const botao = await screen.findByRole('button', { name: /cadastrando/i });
@@ -236,6 +451,7 @@ describe('CadastroUsuarioForm — durante e depois do envio', () => {
 
     await user.type(screen.getByLabelText('Nome'), 'Maria Silva');
     await user.type(screen.getByLabelText('Email'), 'maria@empresa.com');
+    await user.type(screen.getByLabelText('Senha'), 'senha1234');
     await user.click(screen.getByRole('button', { name: /cadastrar/i }));
 
     await waitFor(() => expect(action).toHaveBeenCalled());

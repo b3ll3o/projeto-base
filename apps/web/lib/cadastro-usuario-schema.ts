@@ -31,12 +31,22 @@
 //     pessoa realmente digitou.
 //  2. As mensagens são de UI, não de log: dizem o que fazer, não só o que
 //     está errado (regra do agent `ux-design-specialist`).
+//  3. A senha NÃO recebe `.trim()`, ao contrário de nome e email. Apagar
+//     espaço nas pontas de um segredo é mutá-lo em silêncio: a pessoa
+//     digita "senha " e entra "senha", e quando um dia o espaço voltar a
+//     ser legítimo ("senha " ≠ "senha") o que ela digitou deixa de ser o
+//     que foi usado. NOME/EMAIL são identidades e toleram normalização;
+//     senha é segredo e não tolera. Sem `.trim()`, o `min(1)` de "campo em
+//     branco" é alcançado só por string vazia — que é o caso que a
+//     microcopy precisa descrever.
 
 import { z } from 'zod';
 
 export const NOME_MIN = 2;
 export const NOME_MAX = 100;
 export const EMAIL_MAX = 254;
+export const SENHA_MIN = 8;
+export const SENHA_MAX = 72;
 
 export const cadastroUsuarioSchema = z.object({
   nome: z
@@ -56,6 +66,21 @@ export const cadastroUsuarioSchema = z.object({
     .min(1, 'Informe o email.')
     .email('Email inválido. Exemplo: nome@empresa.com')
     .max(EMAIL_MAX, `O email deve ter no máximo ${EMAIL_MAX} caracteres.`),
+  senha: z
+    .string()
+    // pt-BR: os dois `min` em cadeia são a mesma decisão do campo nome, e
+    // pelo mesmo motivo: "campo vazio" e "senha curta" são defeitos
+    // diferentes, e a pessoa precisa da mensagem de cada um. O Zod emite as
+    // duas issues e a tela mostra a primeira (`cadastro-usuario-form.tsx`
+    // deduplica por campo justamente para isso).
+    .min(1, 'Informe a senha.')
+    .min(SENHA_MIN, `A senha deve ter pelo menos ${SENHA_MIN} caracteres.`)
+    // pt-BR: o teto de 72 não é arbitrário — é o TAMANHO DE ENTRADA do
+    // bcrypt (72 bytes). Acima dele o hash começa a truncar em silêncio: os
+    // bytes finais deixam de participar do digest e duas senhas diferentes
+    // viram o mesmo hash. Por isso o teto é de senha e o de email é outro,
+    // e por isso os dois números não podem ser o mesmo número.
+    .max(SENHA_MAX, `A senha deve ter no máximo ${SENHA_MAX} caracteres.`),
 });
 
 export type CadastroUsuarioInput = z.infer<typeof cadastroUsuarioSchema>;

@@ -47,10 +47,12 @@ import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { cadastrarUsuario } from '@/app/users/novo/actions';
 import { CADASTRO_INICIAL, type CadastroUsuarioState } from '@/app/users/novo/state';
+import type { CampoCadastro } from '@/lib/cadastro-usuario-schema';
 import {
   cadastroUsuarioSchema,
   EMAIL_MAX,
   NOME_MAX,
+  SENHA_MAX,
   type CadastroUsuarioInput,
 } from '@/lib/cadastro-usuario-schema';
 
@@ -66,12 +68,12 @@ export function CadastroUsuarioForm({ action = cadastrarUsuario }: { action?: Ac
   );
 
   const form = useForm<CadastroUsuarioInput>({
-    defaultValues: { nome: '', email: '' },
+    defaultValues: { nome: '', email: '', senha: '' },
   });
 
   const { register, getValues, setError } = form;
 
-  const erroDe = (campo: 'nome' | 'email'): string | undefined =>
+  const erroDe = (campo: CampoCadastro): string | undefined =>
     form.formState.errors[campo]?.message ?? estado.fieldErrors[campo];
 
   // Repõe no formulário o que a Action devolveu depois de uma falha.
@@ -85,7 +87,14 @@ export function CadastroUsuarioForm({ action = cadastrarUsuario }: { action?: Ac
   // segura essa invariante; se ele cair, este reset volta a ser um bug.
   useEffect(() => {
     if (estado.formError || Object.keys(estado.fieldErrors).length > 0) {
-      form.reset(estado.valores);
+      // pt-BR: `senha: ''` AQUI, e não só do lado do servidor. A Action já
+      // apaga o segredo antes de devolver (`valoresSemSegredo` em
+      // `actions.ts`), mas um `form.reset(estado.valores)` cru repõe
+      // o que vier — e um caminho de erro novo que esqueça essa barreira
+      // colocaria a senha digitada de volta no DOM. `type="password"` só a
+      // mascara na tela; o valor continua no documento, no `value` e no que
+      // qualquer script da página consiga ler.
+      form.reset({ ...estado.valores, senha: '' });
     }
     // pt-BR: só `estado` muda quando a Action devolve. Incluir `form` aqui
     // reexecutaria o efeito a cada render.
@@ -107,7 +116,7 @@ export function CadastroUsuarioForm({ action = cadastrarUsuario }: { action?: Ac
       const jaTratados = new Set<string>();
       for (const issue of resultado.error.issues) {
         const campo = issue.path[0];
-        if (campo !== 'nome' && campo !== 'email') continue;
+        if (campo !== 'nome' && campo !== 'email' && campo !== 'senha') continue;
         if (jaTratados.has(campo)) continue;
         jaTratados.add(campo);
         setError(
@@ -123,6 +132,10 @@ export function CadastroUsuarioForm({ action = cadastrarUsuario }: { action?: Ac
     const dadosFormulario = new FormData();
     dadosFormulario.set('nome', resultado.data.nome);
     dadosFormulario.set('email', resultado.data.email);
+    // pt-BR: a senha vai CRUA, sem o `.trim()` que nome e email levam. O
+    // motivo está no schema: aparar um segredo é mutá-lo em silêncio. O
+    // `resultado.data.senha` aqui é exatamente o que a pessoa digitou.
+    dadosFormulario.set('senha', resultado.data.senha);
     // pt-BR: o despacho PRECISA estar dentro de `startTransition`. Fora
     // dela o React avisa em voz alta — "An async function with useActionState
     // was called outside of a transition ... isPending will not update
@@ -196,6 +209,35 @@ export function CadastroUsuarioForm({ action = cadastrarUsuario }: { action?: Ac
         {erroDe('email') ? (
           <p id="email-erro" role="alert" className="mt-1 text-sm text-red-700">
             {erroDe('email')}
+          </p>
+        ) : null}
+      </div>
+
+      <div>
+        <label htmlFor="senha" className="block text-sm font-medium text-slate-900">
+          Senha
+        </label>
+        <input
+          id="senha"
+          {...register('senha')}
+          type="password"
+          maxLength={SENHA_MAX}
+          // pt-BR: `new-password` e não `current-password`. O valor do
+          // atributo é o que o gerenciador de senhas usa para decidir entre
+          // PREENCHER um campo que é senha nova (oferece gerar uma) e
+          // PREENCHER-AGORA um que a pessoa já tem. Este formulário cria a
+          // conta, então é senha nova — e é o valor que faz o Chrome e o
+          // Safari oferecerem uma sugestão forte em vez de repetir a senha
+          // do próprio site.
+          autoComplete="new-password"
+          disabled={pendente}
+          aria-invalid={Boolean(erroDe('senha'))}
+          aria-describedby={erroDe('senha') ? 'senha-erro' : undefined}
+          className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none aria-[invalid=true]:border-red-500"
+        />
+        {erroDe('senha') ? (
+          <p id="senha-erro" role="alert" className="mt-1 text-sm text-red-700">
+            {erroDe('senha')}
           </p>
         ) : null}
       </div>
