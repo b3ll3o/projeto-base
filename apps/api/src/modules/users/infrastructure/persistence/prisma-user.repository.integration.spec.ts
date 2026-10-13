@@ -26,6 +26,8 @@ import {
   ConcurrencyException,
   EmailAlreadyInUseException,
 } from '../../domain/exceptions/user.exceptions.js';
+import { HASH_REAL as HASH } from '../../../../../test/fakes/fake-password-hasher.js';
+import { PasswordHash } from '../../domain/value-objects/password-hash.vo.js';
 
 describe('PrismaUserRepository (Testcontainers)', () => {
   let ctx: TestContext;
@@ -48,6 +50,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     const u = User.criar({
       nome: 'Ana',
       email: 'ana@example.com',
+      senhaHash: PasswordHash.create(HASH),
       agora: new Date('2026-09-21T10:00:00Z'),
     });
     const saved = await repo.save(u, 0);
@@ -65,6 +68,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     const u = User.criar({
       nome: 'Carla',
       email: 'carla@example.com',
+      senhaHash: PasswordHash.create(HASH),
       agora: new Date(),
     });
     await repo.save(u, 0);
@@ -83,6 +87,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     const u = User.criar({
       nome: 'Bob',
       email: 'bob@example.com',
+      senhaHash: PasswordHash.create(HASH),
       agora: new Date(),
     });
     await repo.save(u, 0);
@@ -96,6 +101,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     const u = User.criar({
       nome: 'Diego',
       email: 'diego@example.com',
+      senhaHash: PasswordHash.create(HASH),
       agora: new Date(),
     });
     await repo.save(u, 0);
@@ -111,6 +117,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     const u = User.criar({
       nome: 'Eva',
       email: 'eva@example.com',
+      senhaHash: PasswordHash.create(HASH),
       agora: new Date(),
     });
     await repo.save(u, 0);
@@ -148,6 +155,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     const antigo = User.criar({
       nome: 'Helena',
       email: 'helena@example.com',
+      senhaHash: PasswordHash.create(HASH),
       agora: new Date('2026-09-21T10:00:00Z'),
     });
     await repo.save(antigo, 0);
@@ -157,6 +165,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     const novo = User.criar({
       nome: 'Outra Helena',
       email: 'helena@example.com',
+      senhaHash: PasswordHash.create(HASH),
       agora: new Date('2026-09-21T11:00:00Z'),
     });
 
@@ -173,6 +182,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     const primeiro = User.criar({
       nome: 'Iris',
       email: 'iris@example.com',
+      senhaHash: PasswordHash.create(HASH),
       agora: new Date('2026-09-21T10:00:00Z'),
     });
     await repo.save(primeiro, 0);
@@ -180,6 +190,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     const segundo = User.criar({
       nome: 'Outra Iris',
       email: 'iris@example.com',
+      senhaHash: PasswordHash.create(HASH),
       agora: new Date('2026-09-21T11:00:00Z'),
     });
 
@@ -194,6 +205,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     const u = User.criar({
       nome: 'Joana',
       email: 'joana@example.com',
+      senhaHash: PasswordHash.create(HASH),
       agora: new Date('2026-09-21T10:00:00Z'),
     });
     const saved = await repo.save(u, 0);
@@ -239,6 +251,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     const u = User.criar({
       nome: 'Luana',
       email: 'luana@example.com',
+      senhaHash: PasswordHash.create(HASH),
       agora: new Date('2026-09-21T10:00:00Z'),
     });
 
@@ -276,6 +289,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     const u = User.criar({
       nome: 'Karla',
       email: 'karla@example.com',
+      senhaHash: PasswordHash.create(HASH),
       agora: new Date('2026-09-21T10:00:00Z'),
     });
 
@@ -304,6 +318,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     const antigo = User.criar({
       nome: 'Iara',
       email: 'iara@example.com',
+      senhaHash: PasswordHash.create(HASH),
       agora: new Date('2026-09-21T10:00:00Z'),
     });
     await repo.save(antigo, 0);
@@ -313,6 +328,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     const alvo = User.criar({
       nome: 'Bruno',
       email: 'bruno@example.com',
+      senhaHash: PasswordHash.create(HASH),
       agora: new Date('2026-09-21T10:00:00Z'),
     });
     const salvo = await repo.save(alvo, 0);
@@ -329,6 +345,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     const alvo = User.criar({
       nome: 'Carla',
       email: 'carla@example.com',
+      senhaHash: PasswordHash.create(HASH),
       agora: new Date('2026-09-21T10:00:00Z'),
     });
     const salvo = await repo.save(alvo, 0);
@@ -346,6 +363,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     const alvo = User.criar({
       nome: 'Dani',
       email: 'dani@example.com',
+      senhaHash: PasswordHash.create(HASH),
       agora: new Date('2026-09-21T10:00:00Z'),
     });
     const salvo = await repo.save(alvo, 0);
@@ -375,6 +393,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     const primeiro = User.criar({
       nome: 'Elis',
       email: 'elis@example.com',
+      senhaHash: PasswordHash.create(HASH),
       agora: new Date('2026-09-21T10:00:00Z'),
     });
     await repo.save(primeiro, 0);
@@ -382,6 +401,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     const segundo = User.criar({
       nome: 'Otto',
       email: 'otto@example.com',
+      senhaHash: PasswordHash.create(HASH),
       agora: new Date('2026-09-21T10:00:00Z'),
     });
     const salvo = await repo.save(segundo, 0);
@@ -394,6 +414,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     const u = User.criar({
       nome: 'Fabi',
       email: 'fabi@example.com',
+      senhaHash: PasswordHash.create(HASH),
       agora: new Date('2026-09-21T10:00:00Z'),
     });
     await repo.save(u, 0);
@@ -418,6 +439,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     const u = User.criar({
       nome: 'Gabi',
       email: 'gabi@example.com',
+      senhaHash: PasswordHash.create(HASH),
       agora: new Date(),
     });
     await repo.save(u, 0);
@@ -435,6 +457,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
       const u = User.criar({
         nome,
         email: `${nome.toLowerCase()}@example.com`,
+        senhaHash: PasswordHash.create(HASH),
         agora: new Date(),
       });
       await repo.save(u, 0);

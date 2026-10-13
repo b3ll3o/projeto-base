@@ -26,6 +26,7 @@ import {
   ApplicationEmailAlreadyInUseException,
 } from './exceptions/application.exceptions.js';
 import { ConcurrencyException } from '../domain/exceptions/user.exceptions.js';
+import { FakePasswordHasher, SENHA_VALIDA } from '../../../../test/fakes/fake-password-hasher.js';
 
 describe('UserUseCases (integration with Prisma)', () => {
   let ctx: TestContext;
@@ -45,7 +46,7 @@ describe('UserUseCases (integration with Prisma)', () => {
     await cleanDatabase(prisma);
     const repo = new PrismaUserRepository(prisma);
     const audit = new PrismaAuditService(prisma);
-    sut = new UserUseCases(repo, audit);
+    sut = new UserUseCases(repo, audit, new FakePasswordHasher());
   });
 
   // Actor IDs precisam ser UUID v7 válidos: as colunas `changedBy` (users_history)
@@ -64,7 +65,7 @@ describe('UserUseCases (integration with Prisma)', () => {
   it('criarUser persiste User + entrada INSERT em user_history', async () => {
     const auditCtx = makeCtx(ACTOR_ADMIN_1);
     const dto = await AuditContextStore.run(auditCtx, () =>
-      sut.criarUser({ nome: 'Alice', email: 'alice@example.com' }),
+      sut.criarUser({ nome: 'Alice', email: 'alice@example.com', senha: SENHA_VALIDA }),
     );
 
     expect(dto.nome).toBe('Alice');
@@ -90,11 +91,13 @@ describe('UserUseCases (integration with Prisma)', () => {
   it('criarUser rejeita email duplicado com ApplicationEmailAlreadyInUseException', async () => {
     const ctx = makeCtx();
     await AuditContextStore.run(ctx, () =>
-      sut.criarUser({ nome: 'Bob', email: 'bob@example.com' }),
+      sut.criarUser({ nome: 'Bob', email: 'bob@example.com', senha: SENHA_VALIDA }),
     );
 
     await expect(
-      AuditContextStore.run(ctx, () => sut.criarUser({ nome: 'Bob 2', email: 'BOB@example.com' })),
+      AuditContextStore.run(ctx, () =>
+        sut.criarUser({ nome: 'Bob 2', email: 'BOB@example.com', senha: SENHA_VALIDA }),
+      ),
     ).rejects.toThrow(ApplicationEmailAlreadyInUseException);
 
     // Nenhuma row extra foi criada
@@ -105,7 +108,7 @@ describe('UserUseCases (integration with Prisma)', () => {
   it('atualizarNome aplica mutação e grava UPDATE no histórico', async () => {
     const ctx = makeCtx();
     const created = await AuditContextStore.run(ctx, () =>
-      sut.criarUser({ nome: 'Carla', email: 'carla@example.com' }),
+      sut.criarUser({ nome: 'Carla', email: 'carla@example.com', senha: SENHA_VALIDA }),
     );
 
     const updated = await AuditContextStore.run(ctx, () =>
@@ -126,7 +129,7 @@ describe('UserUseCases (integration with Prisma)', () => {
   it('softDelete grava archive + DELETE no histórico; findById 404', async () => {
     const ctx = makeCtx(ACTOR_ADMIN_2);
     const created = await AuditContextStore.run(ctx, () =>
-      sut.criarUser({ nome: 'Diego', email: 'diego@example.com' }),
+      sut.criarUser({ nome: 'Diego', email: 'diego@example.com', senha: SENHA_VALIDA }),
     );
 
     const deleted = await AuditContextStore.run(ctx, () =>
@@ -161,7 +164,7 @@ describe('UserUseCases (integration with Prisma)', () => {
   it('restaurar limpa deletedAt e grava RESTORE no histórico', async () => {
     const ctx = makeCtx();
     const created = await AuditContextStore.run(ctx, () =>
-      sut.criarUser({ nome: 'Eva', email: 'eva@example.com' }),
+      sut.criarUser({ nome: 'Eva', email: 'eva@example.com', senha: SENHA_VALIDA }),
     );
     await AuditContextStore.run(ctx, () =>
       sut.softDelete({ id: created.id, reason: null, expectedVersion: 1 }),
@@ -187,7 +190,7 @@ describe('UserUseCases (integration with Prisma)', () => {
   it('atualizarEmail lança ApplicationConcurrencyException em cenário concorrente', async () => {
     const ctx = makeCtx();
     const created = await AuditContextStore.run(ctx, () =>
-      sut.criarUser({ nome: 'Fabio', email: 'fabio@example.com' }),
+      sut.criarUser({ nome: 'Fabio', email: 'fabio@example.com', senha: SENHA_VALIDA }),
     );
 
     // Simula concorrência: o caller A lê o user (version=1), depois o caller B
@@ -215,7 +218,7 @@ describe('UserUseCases (integration with Prisma)', () => {
     // ou emitir audit — preservando o histórico.
     const ctx = makeCtx();
     const created = await AuditContextStore.run(ctx, () =>
-      sut.criarUser({ nome: 'Gabriela', email: 'gabriela@example.com' }),
+      sut.criarUser({ nome: 'Gabriela', email: 'gabriela@example.com', senha: SENHA_VALIDA }),
     );
     expect(created.version).toBe(1);
 

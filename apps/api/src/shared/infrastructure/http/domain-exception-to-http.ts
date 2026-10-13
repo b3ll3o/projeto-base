@@ -15,6 +15,8 @@
 // Mapeamento atual (alinhado com a Fase 6 — optimistic lock = 412, não 409):
 //
 //   DOMÍNIO (puro, sem dependência NestJS):
+//     InvalidCredentials                    → 401 INVALID_CREDENTIALS
+//     InvalidToken                          → 401 INVALID_TOKEN
 //     UserNotFound / AuditHistoryNotFound   → 404 NOT_FOUND
 //     UserDeleted / AuditArchiveNotFound    → 410 GONE
 //     EmailAlreadyInUse                     → 409 CONFLICT
@@ -45,6 +47,8 @@ import {
   AuditHistoryNotFoundException,
   AuditArchiveNotFoundException,
 } from '../../audit/domain/audit.exceptions.js';
+import { InvalidTokenException } from '../../../modules/auth/domain/exceptions/token.exceptions.js';
+import { InvalidCredentialsException } from '../../../modules/auth/domain/exceptions/auth.exceptions.js';
 import {
   ApplicationValidationException,
   ApplicationResourceNotFoundException,
@@ -72,6 +76,34 @@ export interface HttpErrorMapping {
 }
 
 export function mapExceptionToHttp(err: unknown): HttpErrorMapping {
+  // ─── AUTENTICAÇÃO (BC Auth) ──────────────────────────────────────────────
+  //
+  // pt-BR: as duas negativas de auth são 401 com `code` DISTINTO, e a
+  // distinção é o que evita que o cliente faça a coisa errada:
+  //
+  //   INVALID_CREDENTIALS → o LOGIN falhou. Volte para a tela de login.
+  //   INVALID_TOKEN       → o TOKEN não serve. Renove a sessão (refresh).
+  //   UNAUTHORIZED        → nem há token. Autentique-se.
+  //
+  // O `detail` dos dois primeiros é FIXO e genérico por decisão de não
+  // enumeração: "e-mail não encontrado" e "senha errada" são o mesmo
+  // erro, porque um login que distingue os dois é um oráculo de quais
+  // e-mails existem na base.
+  if (err instanceof InvalidCredentialsException) {
+    return {
+      status: HttpStatus.UNAUTHORIZED,
+      code: 'INVALID_CREDENTIALS',
+      title: 'Credenciais inválidas',
+    };
+  }
+  if (err instanceof InvalidTokenException) {
+    return {
+      status: HttpStatus.UNAUTHORIZED,
+      code: 'INVALID_TOKEN',
+      title: 'Sessão inválida',
+    };
+  }
+
   // ─── DOMÍNIO (puro) ──────────────────────────────────────────────────────
   if (err instanceof UserNotFoundException) {
     return {

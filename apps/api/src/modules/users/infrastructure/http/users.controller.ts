@@ -27,7 +27,9 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   Res,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -41,6 +43,10 @@ import type { FastifyAdapter } from '@nestjs/platform-fastify';
 import { trace, context } from '@opentelemetry/api';
 import { randomUUID } from 'node:crypto';
 
+import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
+import { Public } from '../../../auth/infrastructure/http/public.decorator.js';
+import type { TokenSubject } from '../../../auth/domain/ports/token-issuer.port.js';
+
 import { AUDIT_SERVICE_PORT } from '../../../../shared/audit/shared/audit.tokens.js';
 import { AuditContextStore } from '../../../../shared/audit/shared/audit-context-store.js';
 import { AuditContext } from '../../../../shared/audit/domain/audit-context.vo.js';
@@ -49,6 +55,8 @@ import type {
   ListHistoryInput,
 } from '../../../../shared/audit/application/audit-service.port.js';
 import { ZodValidationPipe } from '../../../../shared/infrastructure/http/zod-validation.pipe.js';
+
+import { UserId } from '../../domain/value-objects/user-id.vo.js';
 
 import { UserUseCases, USER_USE_CASES } from '../../application/user-use-cases.js';
 import type { GetUserByIdInput } from '../../application/dto/get-user-by-id.input.js';
@@ -67,8 +75,21 @@ import {
 // porque o pacote 'fastify' não é dep direta de @projeto/api nesta fase.
 type FastifyReply = Parameters<FastifyAdapter['setHeader']>[0];
 
+/**
+ * Request com o campo `user` publicado pelo `JwtAuthGuard`.
+ *
+ * pt-BR: `users/` NÃO importa o guard por caminho de arquivo para montar
+ * isto — importa o símbolo `TokenSubject` do PORT e o tipo do request aqui.
+ * O guard em si é resolvido pelo container (ver o `@UseGuards` da classe).
+ * A aresta entre módulos é `users → auth`, um caminho só; importar o
+ * arquivo do guard aqui criaria a aresta que o `AuthModule` já satisfaz.
+ */
+interface RequestWithUser {
+  user?: TokenSubject;
+}
+
 @ApiTags('users')
-@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller('users')
 export class UsersController {
   constructor(
@@ -77,7 +98,17 @@ export class UsersController {
   ) {}
 
   // ───────────────────────── POST /users ─────────────────────────
+  // Decisão D-2: o cadastro é ABERTO — `POST /users` fica público mesmo
+  // com `@UseGuards` na classe. Sem este `@Public()`, aplicar o guard na
+  // classe trancaria o cadastro e não existiria mais caminho para criar
+  // o primeiro usuário.
+  @Public()
   @Post()
+  // pt-BR: NÃO PONHA `@ApiBearerAuth()` aqui. No documento OpenAPI a rota
+  // pública é a ÚNICA que não declara `security` — e `@ApiBearerAuth()` é o
+  // que a faria declarar (defeito medido em 2026-10-13: `openapi.json`
+  // anunciava token no cadastro ABERTO, com o runtime correto o tempo todo).
+  // Quem trava isso é a spec "o carve-out público sobrevive ao OpenAPI".
   @ApiOperation({ summary: 'Criar novo usuário' })
   @ApiResponse({
     status: 201,
@@ -89,8 +120,9 @@ export class UsersController {
   async create(
     @Body(new ZodValidationPipe(CreateUserSchema)) body: CreateUserDto,
     @Res({ passthrough: true }) reply: FastifyReply,
+    @Req() request: RequestWithUser,
   ): Promise<unknown> {
-    const user = await AuditContextStore.run(this.buildContext(), () =>
+    const user = await AuditContextStore.run(this.buildContext(request), () =>
       this.userUseCases.criarUser(body),
     );
     reply.header('ETag', `W/"v${user.version}"`);
@@ -100,6 +132,7 @@ export class UsersController {
 
   // ───────────────────────── GET /users ──────────────────────────
   @Get()
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Listar usuários (paginado por cursor)' })
   @ApiQuery({ name: 'cursor', required: false, type: String })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -127,6 +160,7 @@ export class UsersController {
 
   // ───────────────────────── GET /users/:id ──────────────────────
   @Get(':id')
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Buscar usuário por ID' })
   @ApiResponse({ status: 200, description: 'User encontrado' })
   @ApiResponse({ status: 404, description: 'User não encontrado' })
@@ -137,6 +171,7 @@ export class UsersController {
 
   // ───────────────────────── PATCH /users/:id ───────────────────
   @Patch(':id')
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Renomear usuário (optimistic locking via If-Match)' })
   @ApiHeader({
     name: 'If-Match',
@@ -152,6 +187,7 @@ export class UsersController {
     @Body(new ZodValidationPipe(UpdateUserSchema)) body: UpdateUserDto,
     @Headers('if-match') ifMatch: string,
     @Res({ passthrough: true }) reply: FastifyReply,
+    @Req() request: RequestWithUser,
   ): Promise<unknown> {
     const expectedVersion = this.parseIfMatch(ifMatch);
     const input: UpdateUserNameInput = {
@@ -159,7 +195,7 @@ export class UsersController {
       novoNome: body.novoNome,
       expectedVersion,
     };
-    const user = await AuditContextStore.run(this.buildContext(), () =>
+    const user = await AuditContextStore.run(this.buildContext(request), () =>
       this.userUseCases.atualizarNome(input),
     );
     reply.header('ETag', `W/"v${user.version}"`);
@@ -169,24 +205,32 @@ export class UsersController {
   // ───────────────────────── DELETE /users/:id ──────────────────
   @Delete(':id')
   @HttpCode(204)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Soft-delete do usuário (optimistic locking via If-Match)' })
   @ApiHeader({ name: 'If-Match', required: true })
   @ApiResponse({ status: 204, description: 'User soft-deletado' })
   @ApiResponse({ status: 400, description: 'Header If-Match ausente ou inválido' })
   @ApiResponse({ status: 404, description: 'User não encontrado' })
   @ApiResponse({ status: 412, description: 'Conflito de versão' })
-  async remove(@Param('id') id: string, @Headers('if-match') ifMatch: string): Promise<void> {
+  async remove(
+    @Param('id') id: string,
+    @Headers('if-match') ifMatch: string,
+    @Req() request: RequestWithUser,
+  ): Promise<void> {
     const expectedVersion = this.parseIfMatch(ifMatch);
     const input: SoftDeleteUserInput = {
       id,
       reason: null,
       expectedVersion,
     };
-    await AuditContextStore.run(this.buildContext(), () => this.userUseCases.softDelete(input));
+    await AuditContextStore.run(this.buildContext(request), () =>
+      this.userUseCases.softDelete(input),
+    );
   }
 
   // ───────────────────────── POST /users/:id/restore ────────────
   @Post(':id/restore')
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Restaurar usuário soft-deletado (optimistic locking)' })
   @ApiHeader({ name: 'If-Match', required: true })
   @ApiResponse({ status: 201, description: 'User restaurado' })
@@ -197,10 +241,11 @@ export class UsersController {
     @Param('id') id: string,
     @Headers('if-match') ifMatch: string,
     @Res({ passthrough: true }) reply: FastifyReply,
+    @Req() request: RequestWithUser,
   ): Promise<unknown> {
     const expectedVersion = this.parseIfMatch(ifMatch);
     const input: RestoreUserInput = { id, expectedVersion };
-    const user = await AuditContextStore.run(this.buildContext(), () =>
+    const user = await AuditContextStore.run(this.buildContext(request), () =>
       this.userUseCases.restaurar(input),
     );
     reply.header('ETag', `W/"v${user.version}"`);
@@ -210,6 +255,7 @@ export class UsersController {
 
   // ───────────────────────── GET /users/:id/history ─────────────
   @Get(':id/history')
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Histórico de auditoria do usuário' })
   @ApiQuery({ name: 'cursor', required: false, type: String })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -254,22 +300,58 @@ export class UsersController {
   }
 
   /**
-   * pt-BR: monta o AuditContext a partir da request. `actorId` é null
-   * por enquanto — Fase 8 decodificará o header Authorization (JWT)
-   * para popular o campo. `correlationId` é W3C-compliant quando há
-   * um span OTel ativo no contexto (32 chars hex minúsculos),
-   * correlacionando audit com traces no backend OTel. Fallback para
-   * `randomUUID()` mantém compat com testes e callers fora de uma
-   * span ativa — o VO AuditContext rejeita correlationId vazio.
+   * pt-BR: monta o AuditContext a partir da request.
+   *
+   * `actorId` é o `sub` do token (o id do usuário) — é o que o
+   * `PrismaAuditService` grava em `users_history.changed_by` e
+   * `users_archive.deleted_by`. Antes da Fase 6 era `null` hardcoded,
+   * porque não havia de onde tirar a identidade; agora o `JwtAuthGuard`
+   * a publica em `request.user` e a auditoria fica atribuída.
+   *
+   * `correlationId` é W3C-compliant quando há um span OTel ativo no
+   * contexto (32 chars hex minúsculos), correlacionando audit com
+   * traces no backend OTel. Fallback para `randomUUID()` mantém compat
+   * com testes e callers fora de uma span ativa — o VO AuditContext
+   * rejeita correlationId vazio.
+   *
+   * ── POR QUE O `sub` PASSA PELO VO `UserId` ──────────────────────────────
+   *
+   * `changed_by` é `@db.Uuid` no Postgres. Um `sub` que não seja UUID
+   * faria o INSERT estourar na camada de dados — um 500 num request que
+   * deveria ter sido gravado. O `sub` vem de um token que NÓS assinamos,
+   * então hoje ele sempre é um `UserId` (UUID v7); a validação existe
+   * para o caso em que o emissor mudar, e o efeito do descasamento é
+   * `actorId: null` (auditoria sem ator) em vez de 500.
+   *
+   * A validação é a DO VO, não uma regex reescrita aqui: o limite fica
+   * num lugar só.
    */
-  private buildContext(): AuditContext {
+  private buildContext(request?: RequestWithUser): AuditContext {
     const span = trace.getSpan(context.active());
     const w3cTraceId = span?.spanContext().traceId;
     return new AuditContext({
-      actorId: null,
+      actorId: this.resolveActorId(request),
       correlationId: w3cTraceId ?? randomUUID(),
       source: 'http',
       timestamp: new Date(),
     });
+  }
+
+  /**
+   * Extrai o `sub` do token para `actorId`, ou `null` se não houver
+   * ator válido. `undefined` numa rota `@Public()` (POST /users sem
+   * token) e num `sub` malformado dão o mesmo resultado: auditoria sem
+   * ator, nunca exceção.
+   */
+  private resolveActorId(request?: RequestWithUser): string | null {
+    const sub = request?.user?.sub;
+    if (typeof sub !== 'string' || sub.trim() === '') {
+      return null;
+    }
+    try {
+      return UserId.create(sub).value;
+    } catch {
+      return null;
+    }
   }
 }

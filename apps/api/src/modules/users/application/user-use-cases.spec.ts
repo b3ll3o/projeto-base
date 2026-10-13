@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { UserUseCases } from './user-use-cases.js';
 import { InMemoryUserRepository } from '../infrastructure/persistence/in-memory-user.repository.js';
 import { InMemoryAuditService } from '../../../shared/audit/application/in-memory-audit-service.js';
@@ -14,6 +14,12 @@ import {
   ApplicationResourceNotFoundException,
   ApplicationValidationException,
 } from './exceptions/application.exceptions.js';
+import {
+  FakePasswordHasher,
+  HASH_REAL,
+  SENHA_VALIDA,
+  stringifyParaBusca,
+} from '../../../../test/fakes/fake-password-hasher.js';
 
 const T0 = new Date('2026-09-21T10:00:00Z');
 const T1 = new Date('2026-09-21T11:00:00Z');
@@ -30,19 +36,21 @@ function makeCtx(actorId: string | null = 'actor-1'): AuditContext {
 describe('UserUseCases', () => {
   let repo: InMemoryUserRepository;
   let audit: InMemoryAuditService;
+  let hasher: FakePasswordHasher;
   let useCases: UserUseCases;
 
   beforeEach(() => {
     repo = new InMemoryUserRepository();
     audit = new InMemoryAuditService();
-    useCases = new UserUseCases(repo, audit);
+    hasher = new FakePasswordHasher();
+    useCases = new UserUseCases(repo, audit, hasher);
   });
 
   describe('criarUser()', () => {
     it('cria User, persiste, retorna DTO, registra INSERT no audit', async () => {
       const ctx = makeCtx();
       const out = await AuditContextStore.run(ctx, () =>
-        useCases.criarUser({ nome: 'João', email: 'joao@example.com' }),
+        useCases.criarUser({ nome: 'João', email: 'joao@example.com', senha: SENHA_VALIDA }),
       );
       expect(out.nome).toBe('João');
       expect(out.email).toBe('joao@example.com');
@@ -56,14 +64,93 @@ describe('UserUseCases', () => {
       });
     });
 
+    // ── a senha é hasheada ANTES de tocar o agregado ────────────────────────
+    //
+    // O teste de `criarUser` acima passaria com `User.criar` recebendo a
+    // senha em claro: o VO `PasswordHash` receberia um `string` que não é
+    // argon2id e LANCEARIA — o defeito apareceria como erro, não como
+    // vazamento silencioso. O que estes testes medem é o caminho feliz
+    // completo: a senha plana entra, e o que chega ao repositório é o hash.
+    it('hasheia a senha ANTES de criar o agregado', async () => {
+      const ctx = makeCtx();
+      await AuditContextStore.run(ctx, () =>
+        useCases.criarUser({ nome: 'João', email: 'joao@example.com', senha: SENHA_VALIDA }),
+      );
+
+      expect(hasher.hashCalls).toBe(1);
+      expect(hasher.senhasEmClaro).toEqual([SENHA_VALIDA]);
+
+      // O que foi persistido é o hash argon2id, não a senha.
+      const persistido = await repo.findByEmail(
+        (await import('../domain/value-objects/email.vo.js')).Email.create('joao@example.com'),
+      );
+      expect(persistido?.senhaHash().value).toBe(HASH_REAL);
+    });
+
+    it('a senha em claro NÃO aparece em nenhum argumento capturado pelo mock', async () => {
+      // Spy no `save` para capturar o agregado exato que atravessa o
+      // boundary de persistência. Um `expect(out).not.toHaveProperty('senha')`
+      // só olha o DTO de SAÍDA — e o DTO de saída é justamente a barreira
+      // que já existe. O caminho que este teste cobre é o do meio: o que
+      // chega ao repositório.
+      const saveSpy = vi.spyOn(repo, 'save');
+      const ctx = makeCtx();
+      await AuditContextStore.run(ctx, () =>
+        useCases.criarUser({ nome: 'João', email: 'joao@example.com', senha: SENHA_VALIDA }),
+      );
+
+      expect(saveSpy).toHaveBeenCalledTimes(1);
+      const agregado = saveSpy.mock.calls[0]?.[0];
+      // `toBeDefined()` antes de usar: sem ele o `agregado.senhaHash()`
+      // abaixo seria `undefined.senhaHash()` — um TypeError que o teste
+      // leria como falha do hasher, não como "o save não aconteceu".
+      expect(agregado).toBeDefined();
+      // Narrowing explícito: o `?.` acima deixa `agregado` possivelmente
+      // `undefined`, e o TypeScript não estreita a partir do `toBeDefined`.
+      if (agregado === undefined) throw new Error('save() não foi chamado');
+      expect(stringifyParaBusca(agregado)).not.toContain(SENHA_VALIDA);
+      // …e o hash está lá, o que distingue "não vazou" de "não gravou nada".
+      expect(agregado.senhaHash().value).toBe(HASH_REAL);
+
+      // O snapshot de auditoria (`users_history.snapshot`) é o terceiro
+      // destino onde a senha poderia vazar, e é montado a partir do
+      // `toUserOutput`. A segunda barreira (`toUserOutput` não ler o campo)
+      // é a que cobre este — e ela não pode quebrar.
+      expect(JSON.stringify(audit.history)).not.toContain(SENHA_VALIDA);
+      expect(JSON.stringify(audit.history)).not.toContain(HASH_REAL);
+
+      saveSpy.mockRestore();
+    });
+
+    it('a senha em claro NÃO aparece na saída (UserOutput) — segunda barreira', async () => {
+      const ctx = makeCtx();
+      const out = await AuditContextStore.run(ctx, () =>
+        useCases.criarUser({ nome: 'João', email: 'joao@example.com', senha: SENHA_VALIDA }),
+      );
+
+      expect(stringifyParaBusca(out)).not.toContain(SENHA_VALIDA);
+      expect(stringifyParaBusca(out)).not.toContain(HASH_REAL);
+      expect(out).not.toHaveProperty('senha');
+      expect(out).not.toHaveProperty('senhaHash');
+      expect(out).not.toHaveProperty('passwordHash');
+    });
+
     it('rejeita email duplicado com ApplicationEmailAlreadyInUseException', async () => {
       const ctx = makeCtx();
       await AuditContextStore.run(ctx, () =>
-        useCases.criarUser({ nome: 'João', email: 'duplicado@example.com' }),
+        useCases.criarUser({
+          nome: 'João',
+          email: 'duplicado@example.com',
+          senha: SENHA_VALIDA,
+        }),
       );
       await expect(
         AuditContextStore.run(ctx, () =>
-          useCases.criarUser({ nome: 'Maria', email: 'duplicado@example.com' }),
+          useCases.criarUser({
+            nome: 'Maria',
+            email: 'duplicado@example.com',
+            senha: SENHA_VALIDA,
+          }),
         ),
       ).rejects.toThrow(ApplicationEmailAlreadyInUseException);
     });
@@ -71,14 +158,18 @@ describe('UserUseCases', () => {
     it('rejeita nome vazio com ApplicationValidationException', async () => {
       const ctx = makeCtx();
       await expect(
-        AuditContextStore.run(ctx, () => useCases.criarUser({ nome: '', email: 'a@b.com' })),
+        AuditContextStore.run(ctx, () =>
+          useCases.criarUser({ nome: '', email: 'a@b.com', senha: SENHA_VALIDA }),
+        ),
       ).rejects.toThrow(ApplicationValidationException);
     });
 
     it('rejeita email vazio com ApplicationValidationException', async () => {
       const ctx = makeCtx();
       await expect(
-        AuditContextStore.run(ctx, () => useCases.criarUser({ nome: 'João', email: '' })),
+        AuditContextStore.run(ctx, () =>
+          useCases.criarUser({ nome: 'João', email: '', senha: SENHA_VALIDA }),
+        ),
       ).rejects.toThrow(ApplicationValidationException);
     });
   });
@@ -87,7 +178,7 @@ describe('UserUseCases', () => {
     it('retorna User existente', async () => {
       const ctx = makeCtx();
       const created = await AuditContextStore.run(ctx, () =>
-        useCases.criarUser({ nome: 'João', email: 'joao@example.com' }),
+        useCases.criarUser({ nome: 'João', email: 'joao@example.com', senha: SENHA_VALIDA }),
       );
       const got = await AuditContextStore.run(ctx, () => useCases.obterPorId({ id: created.id }));
       expect(got.id).toBe(created.id);
@@ -107,7 +198,7 @@ describe('UserUseCases', () => {
     it('renomeia, persiste e registra UPDATE no audit', async () => {
       const ctx = makeCtx();
       const created = await AuditContextStore.run(ctx, () =>
-        useCases.criarUser({ nome: 'João', email: 'joao@example.com' }),
+        useCases.criarUser({ nome: 'João', email: 'joao@example.com', senha: SENHA_VALIDA }),
       );
       const ctx1 = new AuditContext({
         actorId: 'actor-1',
@@ -132,7 +223,7 @@ describe('UserUseCases', () => {
     it('rejeita se User foi soft-deleted', async () => {
       const ctx = makeCtx();
       const created = await AuditContextStore.run(ctx, () =>
-        useCases.criarUser({ nome: 'João', email: 'joao@example.com' }),
+        useCases.criarUser({ nome: 'João', email: 'joao@example.com', senha: SENHA_VALIDA }),
       );
       await AuditContextStore.run(ctx, () =>
         useCases.softDelete({ id: created.id, reason: null, expectedVersion: 1 }),
@@ -155,7 +246,7 @@ describe('UserUseCases', () => {
     it('lança ApplicationConcurrencyException quando expectedVersion diverge (sem mutar)', async () => {
       const ctx = makeCtx();
       const created = await AuditContextStore.run(ctx, () =>
-        useCases.criarUser({ nome: 'João', email: 'joao@example.com' }),
+        useCases.criarUser({ nome: 'João', email: 'joao@example.com', senha: SENHA_VALIDA }),
       );
       // created.version === 1; cliente envia expectedVersion=999
       const historyBefore = audit.history.length;
@@ -184,7 +275,7 @@ describe('UserUseCases', () => {
     it('troca email e registra UPDATE no audit', async () => {
       const ctx = makeCtx();
       const created = await AuditContextStore.run(ctx, () =>
-        useCases.criarUser({ nome: 'João', email: 'joao@example.com' }),
+        useCases.criarUser({ nome: 'João', email: 'joao@example.com', senha: SENHA_VALIDA }),
       );
       const updated = await AuditContextStore.run(ctx, () =>
         useCases.atualizarEmail({
@@ -201,10 +292,10 @@ describe('UserUseCases', () => {
     it('rejeita se novo email já em uso', async () => {
       const ctx = makeCtx();
       const u1 = await AuditContextStore.run(ctx, () =>
-        useCases.criarUser({ nome: 'Ana', email: 'a@example.com' }),
+        useCases.criarUser({ nome: 'Ana', email: 'a@example.com', senha: SENHA_VALIDA }),
       );
       await AuditContextStore.run(ctx, () =>
-        useCases.criarUser({ nome: 'Bob', email: 'b@example.com' }),
+        useCases.criarUser({ nome: 'Bob', email: 'b@example.com', senha: SENHA_VALIDA }),
       );
       await expect(
         AuditContextStore.run(ctx, () =>
@@ -220,7 +311,7 @@ describe('UserUseCases', () => {
     it('lança ApplicationConcurrencyException quando expectedVersion diverge', async () => {
       const ctx = makeCtx();
       const created = await AuditContextStore.run(ctx, () =>
-        useCases.criarUser({ nome: 'João', email: 'joao@example.com' }),
+        useCases.criarUser({ nome: 'João', email: 'joao@example.com', senha: SENHA_VALIDA }),
       );
       await expect(
         AuditContextStore.run(ctx, () =>
@@ -238,7 +329,7 @@ describe('UserUseCases', () => {
     it('marca como deleted, registra DELETE no audit + archive', async () => {
       const ctx = makeCtx();
       const created = await AuditContextStore.run(ctx, () =>
-        useCases.criarUser({ nome: 'João', email: 'joao@example.com' }),
+        useCases.criarUser({ nome: 'João', email: 'joao@example.com', senha: SENHA_VALIDA }),
       );
       const deleted = await AuditContextStore.run(ctx, () =>
         useCases.softDelete({ id: created.id, reason: 'LGPD', expectedVersion: 1 }),
@@ -253,7 +344,7 @@ describe('UserUseCases', () => {
     it('rejeita soft-delete duplicado', async () => {
       const ctx = makeCtx();
       const created = await AuditContextStore.run(ctx, () =>
-        useCases.criarUser({ nome: 'João', email: 'joao@example.com' }),
+        useCases.criarUser({ nome: 'João', email: 'joao@example.com', senha: SENHA_VALIDA }),
       );
       await AuditContextStore.run(ctx, () =>
         useCases.softDelete({ id: created.id, reason: null, expectedVersion: 1 }),
@@ -270,7 +361,7 @@ describe('UserUseCases', () => {
     it('lança ApplicationConcurrencyException quando expectedVersion diverge', async () => {
       const ctx = makeCtx();
       const created = await AuditContextStore.run(ctx, () =>
-        useCases.criarUser({ nome: 'João', email: 'joao@example.com' }),
+        useCases.criarUser({ nome: 'João', email: 'joao@example.com', senha: SENHA_VALIDA }),
       );
       await expect(
         AuditContextStore.run(ctx, () =>
@@ -284,7 +375,7 @@ describe('UserUseCases', () => {
     it('limpa deletedAt e registra RESTORE', async () => {
       const ctx = makeCtx();
       const created = await AuditContextStore.run(ctx, () =>
-        useCases.criarUser({ nome: 'João', email: 'joao@example.com' }),
+        useCases.criarUser({ nome: 'João', email: 'joao@example.com', senha: SENHA_VALIDA }),
       );
       await AuditContextStore.run(ctx, () =>
         useCases.softDelete({ id: created.id, reason: null, expectedVersion: 1 }),
@@ -300,7 +391,7 @@ describe('UserUseCases', () => {
     it('rejeita restaurar User não-deletado', async () => {
       const ctx = makeCtx();
       const created = await AuditContextStore.run(ctx, () =>
-        useCases.criarUser({ nome: 'João', email: 'joao@example.com' }),
+        useCases.criarUser({ nome: 'João', email: 'joao@example.com', senha: SENHA_VALIDA }),
       );
       await expect(
         AuditContextStore.run(ctx, () =>
@@ -312,7 +403,7 @@ describe('UserUseCases', () => {
     it('lança ApplicationConcurrencyException quando expectedVersion diverge', async () => {
       const ctx = makeCtx();
       const created = await AuditContextStore.run(ctx, () =>
-        useCases.criarUser({ nome: 'João', email: 'joao@example.com' }),
+        useCases.criarUser({ nome: 'João', email: 'joao@example.com', senha: SENHA_VALIDA }),
       );
       await AuditContextStore.run(ctx, () =>
         useCases.softDelete({ id: created.id, reason: null, expectedVersion: 1 }),
@@ -330,10 +421,10 @@ describe('UserUseCases', () => {
     it('lista Users excluindo soft-deleted por padrão', async () => {
       const ctx = makeCtx();
       await AuditContextStore.run(ctx, () =>
-        useCases.criarUser({ nome: 'Ana', email: 'a@example.com' }),
+        useCases.criarUser({ nome: 'Ana', email: 'a@example.com', senha: SENHA_VALIDA }),
       );
       await AuditContextStore.run(ctx, () =>
-        useCases.criarUser({ nome: 'Bob', email: 'b@example.com' }),
+        useCases.criarUser({ nome: 'Bob', email: 'b@example.com', senha: SENHA_VALIDA }),
       );
       const page = await AuditContextStore.run(ctx, () => useCases.listar({ limit: 10 }));
       expect(page.users).toHaveLength(2);
@@ -341,8 +432,8 @@ describe('UserUseCases', () => {
   });
 
   it('lança AuditContextMissingError se AuditContext não está no scope', async () => {
-    await expect(useCases.criarUser({ nome: 'João', email: 'joao@example.com' })).rejects.toThrow(
-      AuditContextMissingError,
-    );
+    await expect(
+      useCases.criarUser({ nome: 'João', email: 'joao@example.com', senha: SENHA_VALIDA }),
+    ).rejects.toThrow(AuditContextMissingError);
   });
 });
