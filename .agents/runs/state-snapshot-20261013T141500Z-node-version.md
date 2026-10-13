@@ -120,7 +120,7 @@ que foge do escopo deste repo.
 
 ## §4. Cross-refs
 
-- [`state-aware-planning.md §3 Passo 2`](../../specs/conventions/state-aware-planning.md) — formato canônico seguido
-- [`state-aware-planning.md §3 Passo 3`](../../specs/conventions/state-aware-planning.md) — `proceed: true` com 3 opções
-- [`fluxo-desenvolvimento.md §3.1`](../../../docs/fluxo-desenvolvimento.md) — pre-commit/pre-push descritos
-- [`fluxo-desenvolvimento.md §7.1`](../../../docs/fluxo-desenvolvimento.md) — `ci:preflight` está wired e funcionando **remotamente**
+- [`state-aware-planning.md §3 Passo 2`](../specs/conventions/state-aware-planning.md) — formato canônico seguido
+- [`state-aware-planning.md §3 Passo 3`](../specs/conventions/state-aware-planning.md) — `proceed: true` com 3 opções
+- [`fluxo-desenvolvimento.md §3.1`](../../docs/fluxo-desenvolvimento.md) — pre-commit/pre-push descritos
+- [`fluxo-desenvolvimento.md §7.1`](../../docs/fluxo-desenvolvimento.md) — `ci:preflight` está wired e funcionando **remotamente**
