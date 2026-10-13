@@ -37,7 +37,7 @@ test.describe('F8 — Rota protegida sem sessão', () => {
     // ⚠️ `/users/novo` é onde a pessoa se CADASTRA, e o cadastro em si é
     // público na API (D-2). O que exige sessão é a PÁGINA: ela está atrás do
     // `exigirSessao()` do `page.tsx`. Os dois são decisões diferentes, e esta
-    // é a segunda. Um teste futuro que "consertar" isto于此 porque o cadastro
+    // é a segunda. Um teste futuro que "consertar" isto aqui, porque o cadastro
     // é público quebraria o que o plano descreve como escopo — por isso o
     // comentário, e por isso a asserção está aqui.
     await expect(page).toHaveURL(/\/login$/);
