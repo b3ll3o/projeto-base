@@ -252,6 +252,25 @@ export default defineConfig({
         // unit exercita, e ele não exercita o harness.
         'e2e/**',
         'playwright.config.*',
+        // pt-BR (2026-10-13): `e2e/**` acima exclui o CÓDIGO do harness. As
+        // DUAS linhas pegam a SAÍDA do harness — que é outra coisa, e ficou de
+        // fora. `playwright-report/` e `test-results/` são gitignored e não
+        // versionados: existem só na máquina que rodou e2e.
+        //
+        // Medido neste dia: o turbo roda `test:coverage` e `test:e2e` ao mesmo
+        // tempo, então os bundles de trace (`*.js` com hash no nome,
+        // `sw.bundle.js`) existem enquanto a cobertura roda e entram no
+        // denominador a 0% — nenhum é carregado pelo Vitest, nenhum pode ser.
+        // Gate medido: **179/179 testes verdes e cobertura em 67,24%**, o
+        // threshold estourando em `lines` e `statements`. Um vermelho por causa
+        // do relatório HTML do próprio Playwright. Reproduzido plantando os
+        // mesmos nomes: eles aparecem no relatório a 0% e o agregado cai.
+        //
+        // Isto é a mesma classe que `e2e/**` já corrigiu em 2026-10-08 (99,70%
+        // → 38,88%), agora pelo outro lado da pasta: corrigir o harness e
+        // deixar o artefato continua sendo o mesmo gate medindo teste.
+        'playwright-report/**',
+        'test-results/**',
         // pt-BR: `{ts,tsx}` e não só `.ts` — o app tem testes de Client
         // Component (`src/telemetry/web-vitals-reporter.spec.tsx`) e um glob
         // `**/*.spec.ts` não os casa. Com o spread presente a troca é

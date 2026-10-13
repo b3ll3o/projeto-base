@@ -172,9 +172,16 @@ describe('CadastroUsuarioForm — o campo de senha', () => {
     await user.type(screen.getByLabelText('Senha'), 'minhaSenhaSecreta');
     await user.click(screen.getByRole('button', { name: /cadastrar/i }));
 
-    await waitFor(() => expect(screen.getByLabelText('Nome')).toHaveValue('Maria Silva'));
+    // A espera é pela SENHA, e não pelo nome. `Nome` já vale 'Maria Silva'
+    // desde o `user.type` acima, então esperá-lo resolve na hora e as linhas
+    // seguintes medem o DOM de ANTES do `useEffect` rodar. Medido em
+    // 2026-10-13: em 12 repetições, 1 leu o campo com a senha ainda
+    // digitada — e foi assim que este teste ficou vermelho no gate, com
+    // `minhaSenhaSecreta` no documento. `Senha` começa preenchida e só fica
+    // vazia quando o reset passa, então é a âncora que prova que ele rodou.
+    await waitFor(() => expect(screen.getByLabelText('Senha')).toHaveValue(''));
+    expect(screen.getByLabelText('Nome')).toHaveValue('Maria Silva');
     expect(screen.getByLabelText('Email')).toHaveValue('maria@empresa.com');
-    expect(screen.getByLabelText('Senha')).toHaveValue('');
   });
 
   it('a senha NÃO volta preenchida MESMO que o estado venha com ela', async () => {
@@ -204,9 +211,14 @@ describe('CadastroUsuarioForm — o campo de senha', () => {
     await user.type(screen.getByLabelText('Senha'), 'minhaSenhaSecreta');
     await user.click(screen.getByRole('button', { name: /cadastrar/i }));
 
-    await waitFor(() => expect(screen.getByLabelText('Nome')).toHaveValue('Maria Silva'));
+    // Mesma âncora do teste acima, e pelo mesmo motivo: `Nome` já está no
+    // valor esperado desde o `user.type`, então esperar por ele não exige o
+    // reset. Aqui a consequência seria pior — o `for` abaixo vasculha o DOM
+    // procurando o segredo, e vasculhar o DOM antes do reset encontra o
+    // segredo que ele deveria ter provado estar ausente.
+    await waitFor(() => expect(screen.getByLabelText('Senha')).toHaveValue(''));
+    expect(screen.getByLabelText('Nome')).toHaveValue('Maria Silva');
     expect(screen.getByLabelText('Email')).toHaveValue('maria@empresa.com');
-    expect(screen.getByLabelText('Senha')).toHaveValue('');
     // o segredo não pode reaparecer em NENHUM input do formulário
     for (const campo of screen.getAllByRole('textbox')) {
       expect(campo).not.toHaveValue('minhaSenhaSecreta');
@@ -387,7 +399,14 @@ describe('CadastroUsuarioForm — erros que vêm da API', () => {
     await user.type(screen.getByLabelText('Senha'), 'senha1234');
     await user.click(screen.getByRole('button', { name: /cadastrar/i }));
 
-    await waitFor(() => expect(screen.getByLabelText('Nome')).toHaveValue('Maria Silva'));
+    // Este era o teste mais vazio do arquivo: a âncora era `Nome` valendo
+    // 'Maria Silva', o que já era verdade desde o `user.type` — então ele
+    // ficava verde com a falha nunca tendo acontecido, que é exatamente o
+    // oposto do que o nome promete. Agora ele exige as DUAS coisas que a
+    // falha produz: a mensagem de erro na tela e o reset já aplicado.
+    await waitFor(() => expect(screen.getByLabelText('Senha')).toHaveValue(''));
+    expect(document.querySelector('#email-erro')).not.toBeNull();
+    expect(screen.getByLabelText('Nome')).toHaveValue('Maria Silva');
     expect(screen.getByLabelText('Email')).toHaveValue('maria@empresa.com');
   });
 
