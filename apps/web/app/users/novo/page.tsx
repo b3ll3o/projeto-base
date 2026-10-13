@@ -9,11 +9,22 @@
 //
 // Um único `h1` por tela: a listagem (`/users`) já tem o dela, e são telas
 // diferentes.
+//
+// pt-BR (Fase 8): esta tela passou a exigir sessão. `POST /users` é
+// PÚBLICA na API (decisão D-2 — cadastro aberto), mas a TELA é protegida: a
+// pessoa precisa entrar para usar o sistema. São coisas diferentes — a
+// abertura do cadastro é uma decisão de produto sobre a API, e a proteção
+// desta tela é sobre a navegação do web.
+//
+// O `await` é obrigatório: em Next 15 `cookies()` é assíncrono, e por isso
+// `exigirSessao()` é uma função async e a página inteira precisa ser async.
 
 import { CadastroUsuarioForm } from '@/components/cadastro-usuario-form';
+import { exigirSessao } from '@/lib/sessao';
 import { cadastrarUsuario } from './actions';
 
-export default function NovoUsuarioPage() {
+export default async function NovoUsuarioPage() {
+  await exigirSessao();
   return (
     <main className="mx-auto max-w-3xl p-8">
       <h1 className="text-2xl font-semibold text-slate-900">Cadastrar usuário</h1>

@@ -19,14 +19,23 @@ export interface CadastroUsuarioState {
   /** Erro que não pertence a um campo — aparece no topo do formulário. */
   formError: string | null;
   /** O que a pessoa digitou, para o formulário não limpar o que ela preencheu. */
-  valores: { nome: string; email: string };
+  valores: { nome: string; email: string; senha: string };
 }
 
 export const CADASTRO_INICIAL: CadastroUsuarioState = {
   ok: false,
   fieldErrors: {},
   formError: null,
-  valores: { nome: '', email: '' },
+  // pt-BR: a senha volta VAZIA, nunca com o que foi digitado. Este estado é
+  // devolvido ao Client Component e mora no payload da Server Action — um
+  // segredo dentro dele viraria um segredo no histórico de rede do browser,
+  // no DevTools e no log de qualquer proxy no caminho. O campo existe no
+  // estado só para a forma ser uniforme com os outros; quem repõe os campos
+  // depois de uma falha é o `useEffect` em `cadastro-usuario-form.tsx`, que
+  // escreve `senha: ''` por conta própria. São DUAS barreiras independentes:
+  // `valoresSemSegredo` em `actions.ts` apaga no servidor, e o `useEffect`
+  // apaga no browser. Uma delas caindo ainda não expõe o segredo.
+  valores: { nome: '', email: '', senha: '' },
 };
 
 /**
