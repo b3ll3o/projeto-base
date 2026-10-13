@@ -1,7 +1,7 @@
 ---
 name: findings-orchestration
-version: 1.0
-updated: 2026-10-08
+version: 1.1
+updated: 2026-10-13
 description: "Processo de orquestração de findings — pre-flight gh auth, coleta issues abertas para dedup, despacho paralelo de 8 specialists, agregação com severity, abertura de issues via `gh` com labels canônicos, persistência de relatório. Carregado por `finding-orchestrator` (agent). Use para escaneamento semanal automatizado ou on-demand."
 ---
 
@@ -14,8 +14,8 @@ description: "Processo de orquestração de findings — pre-flight gh auth, col
 ## Pré-condições
 
 - `gh` autenticado (`gh auth status`)
-- Repo em `/root/projeto-base` (ou `$REPO`)
-- Script `~/.hermes/scripts/findings-scan.sh` disponível (fonte única de pre-flight + labels + artefatos)
+- Repo no cwd (`$REPO`, default = diretório de trabalho do agent)
+- `.agents/runs/` gravável (destino dos artefatos)
 - **Política:** NUNCA aceitar token GitHub no chat. Se `gh` falha, abortar e pedir intervenção do user.
 
 ## Inputs (do controller)
@@ -45,84 +45,98 @@ context:
 # 1.1 gh autenticado?
 gh auth status || {
   echo "❌ gh NÃO autenticado. Abortando."
-  echo "Política: Hermes NUNCA aceita token no chat."
+  echo "Política: NUNCA aceitar token no chat."
   echo "User precisa: gh auth login"
   exit 4
 }
 
-# 1.2 Repo existe?
-test -d "$REPO" || { echo "❌ $REPO não existe"; exit 5; }
-
-# 1.3 Script de pre-flight disponível?
-test -x ~/.hermes/scripts/findings-scan.sh || {
-  echo "❌ findings-scan.sh não encontrado. Esperado em ~/.hermes/scripts/"
-  exit 6
-}
+# 1.2 Repo no cwd?
+REPO="${REPO:-$PWD}"
+test -d "$REPO/.agents/runs" || { echo "❌ não é o repo esperado (sem .agents/runs em $REPO)"; exit 5; }
 ```
 
-## Passo 2 — Rodar pre-flight (gera artefatos + labels)
+## Passo 2 — Gerar artefatos de pre-flight + labels
+
+Não existe script externo para isto: os dois passos são estes comandos. Os
+artefatos vão para `.agents/runs/findings-<ts>/` — dentro do repo, então
+sobrevive a sandbox e é versionável.
 
 ```bash
-bash ~/.hermes/scripts/findings-scan.sh
-# Gera em ~/.hermes/cron/output/findings-<ts>/:
-#   - open-issues.json (base de dedup)
-#   - as-is-map.md (mapa AS-IS da stack)
-#   - stats.md (métricas pré-scan)
-#   - summary.txt (instruções pro agent)
-# Cria/atualiza 12 labels canônicos no GitHub (5 agent:* + 3 severity:* + 4 type:*)
+TS=$(date -u +%Y-%m-%dT%H%M%SZ)
+REPORT_DIR=".agents/runs/findings-$TS"
+mkdir -p "$REPORT_DIR"
+
+# 2.1 Base de dedup: issues abertas
+gh issue list --state open --json number,title,labels,createdAt \
+  --limit 200 > "$REPORT_DIR/open-issues.json"
+
+# 2.2 Mapa AS-IS da stack (o que cada specialist vai ler)
+{
+  echo "# AS-IS map — $TS"
+  echo "## Árvore de código"
+  git ls-files 'apps/*/**' 'packages/*/**' | head -80
+  echo "## Migrations"
+  git ls-files 'apps/api/prisma/migrations/*'
+} > "$REPORT_DIR/as-is-map.md"
+
+# 2.3 Métricas pré-scan
+git log --oneline -20 > "$REPORT_DIR/stats.md"
+```
+
+**Labels canônicas (idempotentes).** As 12 já existem no repo — criado em
+2026-09-23. Este passo é `create --force`, então reexecutar corrige drift sem
+duplicar. Cores e descrições abaixo foram lidas de `gh label list` em
+2026-10-13.
+
+```bash
+# agent:<specialist> — 5
+for a in prisma-db docker-prod openapi-contract otelcol-infra release-versioning; do
+  gh label create "agent:$a-specialist" --color 0E8A16 \
+    --description "Finding do $a-specialist" --force
+done
+# severity:* — 3
+gh label create severity:p0 --color B60205 --description "Crítico — bloqueia produção" --force
+gh label create severity:p1 --color D93F0B --description "Alto — impacto mensurável" --force
+gh label create severity:p2 --color FBCA04 --description "Médio — cosmético ou teórico" --force
+# type:* — 4
+gh label create type:bug        --color B60205 --description "Bug confirmado" --force
+gh label create type:drift      --color D93F0B --description "Drift estrutural cross-doc/config" --force
+gh label create type:gap        --color FBCA04 --description "Lacuna vs convenção/ADR" --force
+gh label create type:regression --color B60205 --description "Regressão vs versão anterior" --force
 ```
 
 ## Passo 3 — Despachar specialists em paralelo
 
-```python
-# Pseudo-código (a executar via Agent tool com subagent dispatch)
-# specialists_to_run = context.specialists ou default 8
+Despachar **em paralelo**, cada um carregando a skill de processo do §0 da
+[matriz de review-routing](../../specs/conventions/review-routing.md):
 
-# Para cada specialist, dispatch em batch (não sequential):
-parallel_dispatch([
-  {agent: "prisma-db-specialist", skill: "prisma-audit", context: as_is_map},
-  {agent: "openapi-contract-specialist", skill: "openapi-audit", context: as_is_map},
-  {agent: "otelcol-infra-specialist", skill: "otelcol-audit", context: as_is_map},
-  {agent: "docker-prod-specialist", skill: "docker-prod-audit", context: as_is_map},
-  {agent: "release-versioning-specialist", skill: "release-versioning-audit", context: as_is_map},
-  {agent: "code-reviewer", task: "general repo review", context: as_is_map},
-  {agent: "security-auditor", task: "supply-chain + secrets", context: as_is_map},
-  {agent: "doc-sync", task: "drift docs↔code", context: as_is_map},
-])
-```
+| Subagent | Skill | Escopo |
+|---|---|---|
+| `prisma-db-specialist` | `prisma-audit` | schema, migrations, N+1, audit fields |
+| `openapi-contract-specialist` | `openapi-audit` | spec OpenAPI, drift DTO↔Prisma |
+| `otelcol-infra-specialist` | `otelcol-audit` | collector, sampling, propagação |
+| `docker-prod-specialist` | `docker-prod-audit` | hardening, healthchecks, secrets |
+| `release-versioning-specialist` | `release-versioning-audit` | drift docs↔semver↔commits |
+| `code-reviewer` | — | review geral do repo |
+| `security-auditor` | — | supply-chain + secrets |
+| `doc-sync` | — | drift docs↔código |
 
-Cada specialist carrega a skill correspondente (prisma-audit, openapi-audit, etc) e devolve uma lista de findings no formato canônico.
+Todos recebem o `as-is-map.md` do Passo 2 como `context` e devolvem a lista
+canônica de findings. Sem `context.specialists`, são estes 8.
 
 ## Passo 4 — Agregar findings
 
-```python
-findings = []
-for specialist_output in parallel_runs:
-    findings.extend(specialist_output.findings)
-
-# Calcular severity final (cruzando lens de múltiplos agents)
-for f in findings:
-    # P0 se: 2+ agents confirmam OU bloqueia produção OU CVE crítica
-    # P1 se: 1 agente + impacto mensurável
-    # P2 se: cosmético ou teórico
-    f.severity = classify_severity(f)
-```
+Concatenar a lista de findings de cada subagent e recalcular a severity final
+(ninguém passa direto): **P0** se 2+ agents confirmam, ou bloqueia produção, ou
+CVE crítica; **P1** se 1 agente + impacto mensurável; **P2** se cosmético ou
+teórico.
 
 ## Passo 5 — Detectar duplicação contra issues abertas
 
-```python
-# Para cada finding P0/P1, cruzar com issues abertas por:
-# 1. Mesmo location (file:line)
-# 2. Mesmo título (fuzzy match via Levenshtein, threshold 0.85)
-# 3. Label matching (agent:<specialist> em ambos)
-
-for f in findings_p0_p1:
-    matches = search_open_issues(f, base=open_issues.json)
-    if matches:
-        f.duplicate_of = matches[0].number
-    else:
-        f.action = "open_new_issue"
-```
+Para cada finding P0/P1, cruzar com `open-issues.json` (Passo 2) por três chaves:
+mesmo `location` (file:line), mesmo título (fuzzy, Levenshtein ≥ 0.85) e label
+`agent:<specialist>` em ambos. Havendo match, marcar `duplicate_of: <número>`;
+sem match, `action: open_new_issue`.
 
 ## Passo 6 — Decidir ações
 
@@ -137,10 +151,7 @@ for f in findings_p0_p1:
       **Specialist**: <f.specialist>
       **Location**: <f.location>
 
-      ### Análise
-      <f.cause>
-
-      ### Causa-raiz provável
+      ### Causa-raiz
       <f.cause>
 
       ### Impacto
@@ -174,19 +185,10 @@ for f in findings_p0_p1:
 
 ## Passo 7 — Aplicar cap de issues abertas
 
-```python
-# Se mais de open_issue_limit (default 10) seriam abertas:
-#   ordena por severity (P0 > P1) e pega top-N
-#   marca excedentes como "skipped (cap)" no report
-
-to_open = [f for f in findings if f.action == "open_new_issue"]
-if len(to_open) > open_issue_limit:
-    to_open.sort(key=lambda f: (0 if f.severity == "P0" else 1, f.impact_score), reverse=True)
-    skipped = to_open[open_issue_limit:]
-    to_open = to_open[:open_issue_limit]
-    for f in skipped:
-        f.action = "skipped (cap)"
-```
+Ordenar as findings candidatas a abrir por severity (P0 > P1) e, se passarem de
+`open_issue_limit` (default 10), manter só o top-N. As excedentes viram
+`action: "skipped (cap)"` e aparecem no report — nunca são silenciosamente
+descartadas.
 
 ## Passo 8 — Abrir issues via `gh`
 
@@ -212,8 +214,8 @@ done
 ## Passo 10 — Persistir relatório
 
 ```bash
-TS=$(date -u +%Y-%m-%dT%H%M%SZ)
-REPORT_DIR="$HOME/.hermes/cron/output/findings-$TS"
+# $TS e $REPORT_DIR vêm do Passo 2 — não recalcular: dois timestamps
+# diferentes no mesmo scan deixam o relatório fora do diretório de artefatos.
 mkdir -p "$REPORT_DIR"
 
 # YAML raw (machine-readable)
@@ -268,7 +270,7 @@ findings:
   p2: Z
 issues_opened: [...]   # URLs
 issues_commented: [...] # URLs
-report_path: ~/.hermes/cron/output/findings-<ts>/report.md
+report_path: .agents/runs/findings-<ts>/report.md
 ```
 
 ## Erros comuns
@@ -276,16 +278,14 @@ report_path: ~/.hermes/cron/output/findings-<ts>/report.md
 | Erro | Causa | Fix |
 |---|---|---|
 | `gh auth status` falha | Token expirou / sandbox reciclado | STOP. Pedir user pra rodar `gh auth login` na máquina dele. **NUNCA aceitar token no chat.** |
-| `findings-scan.sh` retorna RC=1 | Pre-flight ou stats falhou (provavelmente `set -e` + glob vazio) | Ver log; corrigir script; re-rodar |
-| `gh issue create` falha com "label not found" | Labels não criados antes | `gh label create --force` (idempotente); `findings-scan.sh` já faz |
+| `gh issue create` falha com "label not found" | Passo 2 (labels) pulado | Rodar o bloco `gh label create --force` do Passo 2 |
 | Specialist retorna exception | Skill mal carregada ou path errado | Reportar no summary; não abortar escaneamento inteiro |
 | `open_issue_limit` atingido | Muitos P0/P1 simultâneos | Top-N por severity; excedentes vão pro report como "skipped (cap)" |
 | Issues duplicadas (fuzzy match falha) | Threshold de Levenshtein muito alto | Tuning; reportar como "potential duplicate" no report |
-| Cron executa mas pre-flight script não existe | Path errado em `~/.hermes/scripts/` | Verificar; `findings-scan.sh` deve ser executável |
 
 ## Saída + política crítica
 
-- `findings.yaml` + `report.md` em `~/.hermes/cron/output/findings-<ts>/`; issues abertas até `open_issue_limit`; comentários em duplicatas; summary YAML pro chamador.
+- `findings.yaml` + `report.md` em `.agents/runs/findings-<ts>/`; issues abertas até `open_issue_limit`; comentários em duplicatas; summary YAML pro chamador.
 - **Token NUNCA no chat.** Se `gh auth status` falha, abortar; user autentica fora.
 - **P2 nunca vira issue.** Só relatório. **Cap é lei.** Top-N por severity.
 - **Labels idempotentes.** `gh label create --force` antes de aplicar.
@@ -294,6 +294,5 @@ report_path: ~/.hermes/cron/output/findings-<ts>/report.md
 ## Referências
 
 - Agent: `.agents/agents/finding-orchestrator.md`
-- Script: `~/.hermes/scripts/findings-scan.sh` (fonte única de labels + pre-flight)
 - Skills por specialist: `prisma-audit`, `openapi-audit`, `otelcol-audit`, `docker-prod-audit`, `release-versioning-audit`
 - Convenção: `.agents/specs/conventions/evolucao-agents.md`

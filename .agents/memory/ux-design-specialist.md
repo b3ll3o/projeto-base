@@ -39,6 +39,26 @@ description: Memória acumulada do agent ux-design-specialist — decisões sobr
 
 **Consequências:** com os dois corrigidos, `GET /api/v1/health` → `200 {"status":"ok","checks":{"database":"ok"}}` e `POST /api/v1/users` → `201`. O form passa a ter backend real para ser verificado.
 
+### 2026-10-13 — O agent ganha processo: 5 skills de UI
+
+**Contexto:** três repositórios externos de skill de UI foram adicionados como referência: [emilkowalski/skills](https://github.com/emilkowalski/skills) (MIT), [pbakaus/impeccable](https://github.com/pbakaus/impeccable) (Apache-2.0) e [leonxlnx/taste-skill](https://github.com/leonxlnx/taste-skill) (MIT). O material é bom, mas foi escrito para app com design system maduro e para landing page. Este repo tem 2 tokens e telas de operação. Copiar as house rules literais produzia opinion-plating: regras que ninguém consegue aplicar porque não têm contraexemplo medido aqui.
+
+**Decisão:**
+
+- **Adaptar, não vendorizar.** 4 skills de conteúdo (`ui-modes`, `ui-craft`, `ui-break`, `motion`) mais 1 de processo (`ui-review`), cada uma abaixo de 300 linhas, com frontmatter do repo, prosa em pt-BR e sem scripts ou binários.
+- **`ui-modes` roda primeiro, sempre.** Ela decide o MODO da tela (Persuadir, Operar, Ler, Experienciar). Medido: 3 das 4 telas de `apps/web` são modo **Operar** (`app/page.tsx` é o boilerplate do `create-next-app`, Persuadir por acidente). Sem essa decisão `ui-craft` (que quer densidade) e `motion` (que quer expressão) dão conselhos que se contradizem, e o reviewer escolhe o que quiser.
+- **As regras anti-slop foram reescritas para tela de app.** No original o proibido é ornamento de landing page (glass, gradiente, badge). Em tela de Operar o proibido é o que **compete com a hierarquia de ação**: emoji, palavra-chave estilizada, número decorativo, cartão com ícone no topo, sombra em repouso.
+- **`ui-break` é a mais cara das quatro**: constrói fixture e mede em 320px, zoom 200%, dark mode e RTL. Só entra quando a tela renderiza dado vindo da API — rodar em componente estático é desperdício.
+- **Atribuição em cada skill.** Origem e licença ficam no §Referências. Apache-2.0 (impeccable) exige NOTICE quando redistribuído.
+
+**Consequências:**
+
+- Arquivos novos: `.agents/skills/{ui-modes,ui-craft,ui-break,motion,ui-review}/SKILL.md`.
+- `review-routing.md` subiu para v1.7: nova seção `## 0. Reviewer com skill de processo` (a tabela reviewer → skill) e 2 `diff_patterns` (foco e movimento). Regra adotada: entrada de matriz e skill entram no mesmo PR.
+- Novo workflow `ui-review-mode`, começando em `WORKFLOWS.md` e `AGENTS.md` §5.
+- A skill `motion` assume CSS puro porque é o que existe: `apps/web/package.json` não tem biblioteca de animação. Se uma entrar, muda a coluna de propriedade GPU, não as regras.
+- Os dois índices de workflow não receberam número de versão novo: `WORKFLOWS.md` ainda diz 1.9.1 enquanto já carrega linhas marcadas v1.11.0. A numeração de linha está adiantada em relação ao rodapé.
+
 ## Padrões Descobertos
 
 - **`apps/web` não tinha design system para estender.** `app/globals.css` tem exatamente 2 tokens em `@theme`; `packages/ui` não existe; `apps/web/components/` não existe. Antes desta feature não havia **nenhum** `<form>`, `<input>`, `<button>` ou `<label>` no monorepo inteiro — o único Client Component era `web-vitals-reporter.tsx`. Verificável:
@@ -62,3 +82,43 @@ description: Memória acumulada do agent ux-design-specialist — decisões sobr
 - [ ] Promover a seção "Estados de componente" (vazio/carregando/erro/sucesso) a convenção própria quando a 2ª tela existir: o padrão se repetindo em uma só tela é premature, mas em duas já é regra.
 - [ ] Quando `packages/ui` nascer, os tokens propostos aqui devem virar a base dele — e não uma segunda fonte de verdade.
 - [ ] Corrigir `--color-foreground` (falta o canal alpha) antes da próxima tela usar cor de texto do token.
+
+### 2026-10-13 — Revisão adversarial: 4 claims das skills eram falsas
+
+**Contexto:** duas reviewers independentes leram as 5 skills procurando claim que
+o repo não sustenta. Quatro caíram; todas as correções são medição com o
+comando ao lado, não ajuste de redação.
+
+**Defeito 1 (o que morde).** O bloco `@theme` que `ui-craft` prescreve guardava
+tripla HSL crua (`--color-surface: 220 14% 97%`). O Tailwind 4 emite
+`background-color: var(--color-surface)` literalmente, e tripla sem `hsl()` não é
+cor: a declaração é descartada em silêncio e o elemento fica transparente.
+**A skill prescrevia repetir 8 vezes o bug que o comentário de
+`apps/web/app/globals.css:5-9` já documenta** — e os 2 tokens atuais só
+funcionam porque `globals.css:15-16` envolve o valor na mão.
+*Medido:* `npx @tailwindcss/cli` com `220 14% 97%` → `var(--color-surface)`
+crua; com `hsl(222 84% 5%)` → cor válida.
+
+**Defeito 2.** `ui-modes` afirmava "as telas de `apps/web` são **todas** modo
+Operar" citando 3 arquivos, e marcava como medido. São 4 telas: `app/page.tsx`
+é o hero do `create-next-app`, justamente o arquétipo que `ui-craft` §1 proíbe.
+*Medido:* `find apps/web/app -name page.tsx | wc -l` → 4.
+
+**Defeito 3.** `ui-craft` dizia "tudo o mais é valor literal espalhado pelos
+componentes". Literal é **zero**; o que se espalha é a paleta stock do Tailwind
+(39 usos de `text-slate-*`, `bg-red-*`). A diferença muda o conserto: tokenizar
+literais é trabalho de hoisting; trocar `text-slate-500` por
+`text-muted-foreground` é migração de fonte de cor, e a paleta sobrevive a
+todos os `--color-*` novos.
+*Medido:* o grep de literal → 0; o grep de paleta → 39.
+
+**Defeito 4.** `ui-break` receitava `overflow-wrap-anywhere` como classe. Ela
+não existe no Tailwind 4.3.3 — o conserto é o valor arbitrário
+`[overflow-wrap:anywhere]`. *Medido:* compilando a classe com o CLI da 4.3.3,
+ela não emite; as 7 classes vizinhas do mesmo probe emitem.
+
+**Consequências:** `ui-modes` (120 ln), `ui-craft` (187), `ui-break` (243) e
+`.agents/memory/ux-design-specialist.md` corrigidos. O lesson que generaliza: o
+marker "Medido em <data>" não tem peso probatório nenhum — `ui-modes` usou a
+mesma marcação num claim verdadeiro e num falso, e nenhum reviewer anterior
+notou. A marcação que tem é o comando.

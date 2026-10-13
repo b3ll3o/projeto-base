@@ -1,9 +1,9 @@
 ---
 name: review-routing
-version: 1.6
-updated: 2026-10-08
+version: 1.7
+updated: 2026-10-13
 maintainer: review-router
-description: "Matriz de roteamento de revisores consultada pelo review-router — v1.5 (audit specialists) + v1.5 da main (UX) mergidas em v1.6."
+description: "Matriz de roteamento de revisores consultada pelo review-router — v1.5 (audit specialists) + UX com skill de processo, v1.7."
 ---
 
 # Convenção: review-routing (matriz de roteamento de revisores)
@@ -13,6 +13,27 @@ description: "Matriz de roteamento de revisores consultada pelo review-router �
 > - Novo specialist agent for criado em `.agents/agents/`
 > - Nova classe de arquivos surgir (ex: novo app `apps/landing/`)
 > - Regra de skip precisar ajuste
+
+## 0. Reviewer com skill de processo
+
+Um reviewer sem processo só emite opinião. Todo specialist desta matriz que tem
+skill de processo **carrega a skill ao ser despachado** — o `review-router`
+despacha o agent, o agent executa o processo, e o resultado volta em formato
+declarado.
+
+| Reviewer despachado | Skill que ele carrega | Onde a skill está |
+|---------------------|-----------------------|-------------------|
+| `prisma-db-specialist` | `prisma-audit` | `.agents/skills/prisma-audit/` |
+| `docker-prod-specialist` | `docker-prod-audit` | `.agents/skills/docker-prod-audit/` |
+| `openapi-contract-specialist` | `openapi-audit` | `.agents/skills/openapi-audit/` |
+| `otelcol-infra-specialist` | `otelcol-audit` | `.agents/skills/otelcol-audit/` |
+| `release-versioning-specialist` | `release-versioning-audit` | `.agents/skills/release-versioning-audit/` |
+| `finding-orchestrator` | `findings-orchestration` | `.agents/skills/findings-orchestration/` |
+| `ux-design-specialist` | `ui-review` → `ui-modes` · `ui-craft` · `ui-break` · `motion` | `.agents/skills/ui-*/`, `.agents/skills/motion/` |
+
+**Regra:** a entrada na matriz e a skill correspondentes entram no **mesmo PR**.
+Um reviewer roteado sem skill é um opinionador com nome de especialista — foi
+exatamente o que a v1.6 aceitou em `ux-design-specialist` até a v1.7.
 
 ## 1. PATH GLOBS
 
@@ -159,6 +180,16 @@ diff_patterns:
   - regex: "className=|aria-|role=\"|<label|@Input\\(|\\bvariant=|\\bsize="
     reviewers_added: [ux-design-specialist]
 
+  # v1.7 — UX/design: movimento e foco (skills `motion` + `ui-craft`)
+  # `outline-none`/`outline: none` sem substituto é achado P0 (a11y de foco).
+  # transition/animation/@keyframes puxa a skill `motion`, que tem os valores
+  # exatos (curva, duração, origem) — regex sozinha não pega `scale(0)` nem
+  # `ease-in`, mas garante que o specialist seja despachado.
+  - regex: "outline-none|outline:\\s*none"
+    reviewers_added: [ux-design-specialist]
+  - regex: "transition-|transition:|@keyframes|animation:|prefers-reduced-motion|transform:\\s*scale"
+    reviewers_added: [ux-design-specialist]
+
   # v1.6 (meu) — diff_patterns para 4 specialists de auditoria
   - regex: "prisma\\.\\w+\\.(findMany|findFirst|findUnique|createMany|updateMany|deleteMany)"
     reviewers_added: [prisma-db-specialist]
@@ -245,10 +276,11 @@ Resultado esperado:
 
 | Versão | Data | Mudança |
 |--------|------|---------|
+| 1.7 | 2026-10-13 | UX/design ganha **processo**, não só reviewer: 5 skills (`ui-modes`, `ui-craft`, `ui-break`, `motion`, `ui-review`) em `.agents/skills/`, carregadas por `ux-design-specialist`. 2 diff_patterns novos — `outline-none`/`outline: none` e movimento (`transition`/`@keyframes`/`prefers-reduced-motion`/`transform: scale`). Nenhum path_glob novo: os globs de `apps/web/**` (v1.5) já roteavam para o specialist; o que faltava era o processo que ele executa. Aditivo. |
 | 1.6 | 2026-10-08 | Resolve conflito: mergeia v1.5 (mine, audit specialists diff_patterns) + v1.5 da main (ux-design-specialist). Mantém ambos. Aditivo. |
 | 1.5 | 2026-10-06 | Adicionar `ux-design-specialist` (UX/design de interface). 1 path_glob novo (`apps/web/app/globals.css`) + 1 diff_pattern novo. Aditivo. |
 | 1.1 | 2026-09-22 | Adicionar exemplos de uso (Seção 5) + Seção 6 "Gaps Conhecidos" priorizando 2 P1 + 2 P2 para v1.2; bump version frontmatter `1` → `1.1` |
 | 1.2 | 2026-09-22 | 2 P1 gaps resolvidos: propagação de `blocking` em path_globs (`e4c0971`) + narrowing do regex de segurança (`f496b05`). (Seção 6) |
 | 1.3 | 2026-09-22 | 3 P2 gaps resolvidos: PR #20 (enrich `domains[]`), PR #21 (lint WARNING em `blocking`), PR #22 (cenários migrados para apêndice). Zero breaking change. (Seção 6) |
 | 1.4 | 2026-09-23 | Adicionar diff_pattern OpenTelemetry + 3 path_globs (`apps/api/**/telemetry/**`, `apps/web/**/instrumentation*`, `infra/otelcol/**`) roteando para `telemetry-specialist`. Cobre NestJS decorators, OTel enums, context API e span API. Acionado por T6.2. Aditivo. |
-| 1.5 | 2026-10-06 | Adicionar `ux-design-specialist` (UX/design de interface). 1 path_glob novo (`apps/web/app/globals.css`) + 1 diff_pattern novo. Aditivo. |
+| 1.5 | 2026-10-08 | Adicionar os 5 audit specialists (prisma-db, openapi-contract, otelcol-infra, docker-prod, release-versioning) com 5 `diff_patterns` correspondentes. Aditivo. |

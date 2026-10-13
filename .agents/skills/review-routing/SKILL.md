@@ -41,6 +41,12 @@ Agent(
 )
 ```
 
+O reviewer SPECIALIST que o router despacha **carrega a skill de processo
+correspondente** antes de revisar — a tabela está na seção 0 da
+[matriz](../../specs/conventions/review-routing.md). Ex.: `ux-design-specialist`
+carrega `ui-review`. Controller não precisa carregar a skill; precisa exigir que
+o reviewer a tenha executado (o output volta em formato declarado).
+
 ## Passo 3: Interpretar output
 
 Ler `.agents/runs/<timestamp>-review-<n>.yaml`. Validar schema:
@@ -88,4 +94,5 @@ Após fix DONE, **re-despachar router** (re-rodar Task 1-5 com branch atualizada
 
 - [`.agents/agents/review-router.md`](../../agents/review-router.md)
 - [`.agents/specs/conventions/review-routing.md`](../../specs/conventions/review-routing.md)
+- Skills de processo dos reviewers: `ui-review` (UX, que carrega `ui-modes` · `ui-craft` · `ui-break` · `motion`), `prisma-audit`, `openapi-audit`, `otelcol-audit`, `docker-prod-audit`, `release-versioning-audit`, `findings-orchestration`
 - Memory: `two-stage-review-after-each-task`, `review-and-fix-after-each-task` (precedentes Fase 2 — plain text evita paths absolutos quebrados)

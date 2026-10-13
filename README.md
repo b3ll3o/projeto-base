@@ -49,7 +49,7 @@ projeto-base/
 │   │   ├── test-writer.md
 │   │   └── ux-design-specialist.md
 │   ├── memory/                         # Memória acumulada (28 arquivos: 26 agents + `state-aware-planning` + `_template`)
-│   ├── skills/                         # coordenação, routing, validação (ver AGENTS.md §3)
+│   ├── skills/                         # coordenação, routing, auditoria, UI (mapeamento agent↔skill: AGENTS.md §3.2)
 │   ├── specs/conventions/              # tdd, git-workflow, cobertura, tamanho… (ver AGENTS.md §6)
 │   └── WORKFLOWS.md                    # Fluxos pré-configurados (15 workflows em `.agents/workflows/`)
 ├── apps/                              # api (NestJS 11) + web (Next.js 15)
