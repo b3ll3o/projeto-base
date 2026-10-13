@@ -10,21 +10,28 @@
 // Um único `h1` por tela: a listagem (`/users`) já tem o dela, e são telas
 // diferentes.
 //
-// pt-BR (Fase 8): esta tela passou a exigir sessão. `POST /users` é
-// PÚBLICA na API (decisão D-2 — cadastro aberto), mas a TELA é protegida: a
-// pessoa precisa entrar para usar o sistema. São coisas diferentes — a
-// abertura do cadastro é uma decisão de produto sobre a API, e a proteção
-// desta tela é sobre a navegação do web.
+// pt-BR (Fase 8, CORRIGIDO em 2026-10-13): esta tela exigia sessão, e a
+// exigência foi REMOVIDA. O motivo de ter sido posta, e o de ter sido
+// tirada, são o mesmo:
 //
-// O `await` é obrigatório: em Next 15 `cookies()` é assíncrono, e por isso
-// `exigirSessao()` é uma função async e a página inteira precisa ser async.
+// `POST /users` é PÚBLICA na API (decisão D-2 — cadastro aberto). Exigir
+// sessão aqui não impedia ninguém de criar conta: bastava um `curl`. O que
+// ela impedia era a PESSOA — que precisa de conta para chegar ao formulário
+// e precisa de conta para ter conta. Sem seed script no projeto, o beco era
+// sem saída: o link "Criar conta" da tela de login apontava para cá e a
+// pessoa voltava para o login. Um link que devolve para onde a pessoa veio é
+// pior do que a ausência de link.
+//
+// A proteção que COMPRA algo continua: `/users`, a listagem, que é onde os
+// dados estão. Cadastro é a porta de entrada; listagem é o produto.
+//
+// Quem muda esta linha muda o F8:32 (`/users/novo` sem cookie), que hoje
+// afirma que a tela é alcançável sem sessão.
 
 import { CadastroUsuarioForm } from '@/components/cadastro-usuario-form';
-import { exigirSessao } from '@/lib/sessao';
 import { cadastrarUsuario } from './actions';
 
-export default async function NovoUsuarioPage() {
-  await exigirSessao();
+export default function NovoUsuarioPage() {
   return (
     <main className="mx-auto max-w-3xl p-8">
       <h1 className="text-2xl font-semibold text-slate-900">Cadastrar usuário</h1>
