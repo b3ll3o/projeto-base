@@ -1,7 +1,7 @@
 ---
 name: e2e-playwright
-version: 1.0
-updated: 2026-10-08
+version: 1.1
+updated: 2026-10-13
 maintainer: test-writer
 description: "Convenção canônica de cobertura e2e de frontend — todo fluxo de usuário COM tela é mapeado no inventário abaixo e coberto por um spec Playwright que atravessa browser, Next, Server Action, API HTTP e Postgres de ponta a ponta. Gate automatizado em check-e2e-flow-coverage.ts; execução no CI."
 ---
@@ -57,11 +57,31 @@ endpoint que ninguém vê seria custo sem cobertura.
 | F4 | `/users/novo` | Email duplicado | `f4-cadastro-email-duplicado.spec.ts` | 409 → erro no campo · valores preservados · `aria-invalid` |
 | F5 | `/users/novo` | Erro genérico | `f5-cadastro-erro-generico.spec.ts` | 500 com traceId · rede caída sem traceId |
 | F6 | `/` ↔ `/users` ↔ `/users/novo` | Navegação | `f6-navegacao.spec.ts` | home · link da listagem · Cancelar |
+| F7 | `/login` → `/users` | Login de usuário | `f7-login.spec.ts` | válido · senha errada · e-mail inexistente · `autocomplete` · saída para o cadastro |
+| F8 | `/users` ↔ `/login`, `/users/novo` | Rota protegida sem sessão | `f8-sessao-obrigatoria.spec.ts` | sem cookie vai ao login · **sem cookie o cadastro é alcançável** · conteúdo NÃO entregue · cookie inválido · volta pelo login |
 
-⚠️ **3 rotas, 6 fluxos.** F2–F5 são quatro estados **da mesma** rota, e F6
-atravessa três. Por isso o gate **não** deriva o inventário das rotas: um
-mapeamento rota→fluxo 1:1 falha sempre, e uma segunda tabela transcrita à mão
-volta a ser o literal que `check-teeth-registry.ts` existe para desconfiar.
+⚠️ **4 rotas, 8 fluxos.** F2–F5 são quatro estados **da mesma** rota, e F6
+atravessa três. F7–F8 são os fluxos que a demanda `login-usuario-senha`
+acrescentou: o login e a rota protegida sem sessão. Por isso o gate **não**
+deriva o inventário das rotas: um mapeamento rota→fluxo 1:1 falha sempre, e uma
+segunda tabela transcrita à mão volta a ser o literal que
+`check-teeth-registry.ts` existe para desconfiar.
+
+⚠️ **Desde 2026-10-13 quase todo spec roda autenticado, e isso é invisível na
+tabela.** `/users` — a LISTAGEM — chama `exigirSessao()`, que redireciona para
+`/login` sem access token. A sessão é plantada por cookie numa fixture `auto`
+(`comSessao`, em `support/fixtures.ts`), e não pelo login pela tela — porque o
+login pela tela **é** o F7, e transformá-lo em pré-requisito faria uma falha no
+formulário derrubar a listagem, a validação e a navegação. Um spec que precisa
+medir o estado deslogado chama `clearCookies(page)` no próprio corpo.
+
+⚠️ **`/users/novo` NÃO está protegida, e a coluna de rota diz isso.** `POST /users`
+é público na API (decisão D-2), então exigir sessão na tela de cadastro não
+impedia ninguém de criar conta — só impedia a pessoa, num beco sem saída: o link
+"Criar conta" do login aponta para lá e quem não tinha conta voltava para o
+login. O F8 afirma as duas metades (`/users` leva ao login, `/users/novo` é
+alcançável) porque o par é o que segura a decisão; uma metade sozinha passaria
+com o produto inteiro do avesso.
 
 Cada spec declara o id do fluxo na **primeira linha**:
 
@@ -174,6 +194,7 @@ do par, não um.
 | Versão | Data | Mudança |
 |---------|------|---------|
 | 1.0 | 2026-10-08 | Criação. Inventário F1–F6; gate de paridade; execução no CI. |
+| 1.1 | 2026-10-13 | Demanda `login-usuario-senha`: F7 (login) e F8 (rota protegida sem sessão). F1–F6 passam a rodar autenticados pela fixture `auto` `comSessao`; `JWT_SECRET` aleatório por execução no `subirApi`; helper `credenciais` exposto. `/users/novo` sai do conjunto protegido — a tela de cadastro deixou de chamar `exigirSessao()`, porque `POST /users` já é público. |
 
 ## Ver Também
 
