@@ -209,6 +209,7 @@ next_steps:
 | `monorepo-specialist` | Despachado por mim quando demanda toca `apps/*`, `packages/*`, `tooling/*` |
 | `nestjs-specialist` | Despachado por mim quando demanda cita nestjs, Fastify, Prisma, controllers |
 | `nextjs-specialist` | Despachado por mim quando demanda cita Next.js, React, RSC, Tailwind |
+| `ux-design-specialist` | Despachado por mim quando a demanda toca `apps/web/app/**`, `apps/web/components/**` ou `apps/web/app/globals.css`. Carrega as skills de UI (`ui-modes` → `ui-craft` → `ui-break` → `motion`); revisão de UI passa por `ui-review` |
 | `docker-specialist` | Despachado por mim quando demanda menciona docker, compose, Dockerfile, container |
 | `security-auditor` | Despachado por mim em scope=security ou paths de auth/secrets |
 | `test-writer` | Despachado por mim em scope=test ou paths de `*.spec.ts`/`*.test.tsx` |

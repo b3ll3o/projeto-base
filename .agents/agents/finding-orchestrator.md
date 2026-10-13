@@ -17,7 +17,7 @@ tools: Read, Glob, Grep, Bash, Agent, Write
 4. **Classifico severity** final (P0/P1/P2) cruzando lens dos specialists
 5. **Abro issues** via `gh` com body estruturado (análise + causa + impacto + correção sugerida)
 6. **Aplico labels** por especialidade + tipo (`bug`, `drift`, `gap`, `regression`)
-7. **Emito relatório consolidado** em `.agents/runs/findings-<ts>.yaml` e `~/.hermes/cron/output/findings-<ts>/report.md`
+7. **Emito relatório consolidado** em `.agents/runs/findings-<ts>/findings.yaml` e `.agents/runs/findings-<ts>/report.md`
 
 > **Pré-condição crítica:** este agent **NUNCA** roda sem `gh auth status` validado. Se `gh` não está autenticado, devolve relatório e pede intervenção. **Política: nunca aceitar token no chat.**
 
@@ -186,7 +186,7 @@ fi
 
 ```bash
 TS=$(date -u +%Y-%m-%dT%H%M%SZ)
-REPORT_DIR="$HOME/.hermes/cron/output/findings-$TS"
+REPORT_DIR=".agents/runs/findings-$TS"
 mkdir -p "$REPORT_DIR"
 
 # YAML raw + markdown summary
@@ -225,7 +225,7 @@ findings:
   p2: Z
 issues_opened: [...]
 issues_commented: [...]
-report_path: ~/.hermes/cron/output/findings-<ts>/report.md
+report_path: .agents/runs/findings-<ts>/report.md
 gh_auth: valid
 ```
 
@@ -235,7 +235,11 @@ gh_auth: valid
 - **Por severity:** `severity:p0|p1|p2` (vermelho/laranja/amarelo)
 - **Por tipo:** `type:bug|drift|gap|regression`
 
-Cores e descriptions estão no script `~/.hermes/scripts/findings-scan.sh` (seção labels) — fonte única, evita drift entre doc e código.
+Cores e descrições canônicas estão no Passo 2 da skill
+[`findings-orchestration`](../skills/findings-orchestration/SKILL.md), que
+recria as 12 com `gh label create --force` — fonte única, evita drift entre doc
+e repo. As 12 já existem (criadas em 2026-09-23); o passo corrige divergência
+sem duplicar.
 
 ## Coordenação
 
@@ -258,7 +262,8 @@ Cores e descriptions estão no script `~/.hermes/scripts/findings-scan.sh` (seç
 6. **Body padronizado.** Sem texto livre inconsistente — template é lei.
 7. **Labels idempotentes.** `gh label create` antes de aplicar.
 8. **Relatório sempre persiste.** Mesmo quando gh auth falha — para auditoria.
-9. **TDD em scripts de orquestração.** Script `~/.hermes/scripts/findings-scan.sh` tem spec em `tooling/scripts/`.
+9. **TDD em código de orquestração.** Se a orquestração virar script (hoje são
+   comandos na skill `findings-orchestration`), o script tem spec em `tooling/scripts/`.
 10. **Política de token.** NUNCA aceitar token no chat. Se `gh` falha, pedir pro user autenticar fora.
 
 ## Anti-Padrões
@@ -272,7 +277,7 @@ Cores e descriptions estão no script `~/.hermes/scripts/findings-scan.sh` (seç
 - ❌ Issue P2 com issue aberta (gera ruído)
 - ❌ Rodar sem `gh auth status` válido (descartar tudo)
 - ❌ Especializar em só 1 agente (perde o valor agregado)
-- ❌ Persistir relatório fora de `$HOME/.hermes/cron/output/` (não sobrevive sandbox)
+- ❌ Persistir relatório fora de `.agents/runs/` (fora do repo não sobrevive sandbox nem revisão)
 
 ## Referências
 

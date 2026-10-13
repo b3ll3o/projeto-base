@@ -252,6 +252,22 @@ result:
 - ❌ Criar componente novo sem antes procurar reuso (`grep` nos componentes existentes)
 - ❌ Anunciar design aprovado sem revisar o render real no browser
 
+## Skills Carregadas
+
+A skill é o **processo**; este agent é o papel. Carregue conforme a task:
+
+| Skill | Quando | O que traz que o agent não traz |
+|-------|--------|--------------------------------|
+| [`ui-modes`](../skills/ui-modes/SKILL.md) | tela nova, redesign, ou conselhos de UI que se contradizem | Os 4 modos (Persuadir/Operar/Ler/Experienciar) + brief-vences + refinamento-preserva vs redesenho-substitui |
+| [`ui-craft`](../skills/ui-craft/SKILL.md) | cria/revisa aparência, ou define tokens | A escala de tokens, a hierarquia tipográfica, os 4 estados, e as regras anti-slop de tela de app |
+| [`ui-break`](../skills/ui-break/SKILL.md) | a tela renderiza dado vindo da API | O catálogo de pior caso + as assinaturas de falha com a causa CSS de cada uma |
+| [`motion`](../skills/motion/SKILL.md) | o diff toca transição, animação, `@keyframes` | Os 10 padrões não-negociáveis e os **valores exatos** (curva, duração, origem) para não chutar |
+| [`ui-review`](../skills/ui-review/SKILL.md) | a task é de **revisão** (não de criação) | Passo 1–5: mapeia superfície → escolhe skills → agrega com severidade → persiste em `.agents/runs/` |
+
+> **Ordem importa:** `ui-modes` primeiro. Ele diz **para que** a tela serve, e sem
+> isso as outras três discordam entre si (a queixo da densidade, a do viés
+> artístico). Se a tela já existe e não muda de propósito: modo **Operar**, siga.
+
 ## Referências Canônicas
 
 - WCAG 2.2 (níveis A/AA): <https://www.w3.org/TR/WCAG22/>
@@ -266,3 +282,4 @@ result:
 **Arquivo:** `.agents/agents/ux-design-specialist.md`
 **Tipo:** Specialist transversal (UX + design de interface)
 **Memória:** [`.agents/memory/ux-design-specialist.md`](../memory/ux-design-specialist.md)
+**Skills carregadas:** `ui-modes` · `ui-craft` · `ui-break` · `motion` · `ui-review` (todas em `.agents/skills/`)

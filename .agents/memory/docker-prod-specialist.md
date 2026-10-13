@@ -22,7 +22,7 @@ prod-readiness; o `docker-specialist` escreve Dockerfiles/Compose.
 
 - Agent file: `.agents/agents/docker-prod-specialist.md`
 - Primeira aparição: v2.0 (escaneamento inicial)
-- Findings emitidos até o momento: vide `~/.hermes/cron/output/findings-<ts>/findings.yaml`
+- Findings emitidos até o momento: vide `.agents/runs/findings-<ts>/findings.yaml`
 
 ## Convenções observadas
 

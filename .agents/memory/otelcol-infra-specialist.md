@@ -19,7 +19,7 @@ guarda estado entre execuções.
 
 - Agent file: `.agents/agents/otelcol-infra-specialist.md`
 - Primeira aparição: v2.0 (escaneamento inicial)
-- Findings emitidos até o momento: vide `~/.hermes/cron/output/findings-<ts>/findings.yaml`
+- Findings emitidos até o momento: vide `.agents/runs/findings-<ts>/findings.yaml`
 
 ## Convenções observadas
 

@@ -263,7 +263,7 @@ Referência cruzada: [`.agents/specs/conventions/estrutura-e-versionamento.md`](
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão do documento:** 1.10.0
+**Versão do documento:** 1.11.0
 
 ### Histórico de Versões
 
@@ -281,3 +281,4 @@ Referência cruzada: [`.agents/specs/conventions/estrutura-e-versionamento.md`](
 | `1.9.0` | §1 — árvore de estrutura e contagens de agents/memórias/workflows realinhadas com o disco (19/21/10). §CI — `tooling:test` passou a cobrir `.tooling/scripts/ci` (6 specs / 32 testes que nunca rodavam) e roda no job `preflight`; lint real em `apps/api` (antes era stub `exit 0`); gate DDD barra import de `infrastructure/` em `domain/`; `turbo.json` sem tasks órfãs; `checkDocRefs` com escopo via `git ls-files` e máscara de inline-code. |
 | `1.9.1` | §1 — contagem de agents corrigida de 19 para 20 (inclui o sub-dir `telemetry-specialist/` além do `.md` correspondente). §7 — `pnpm ci:preflight` e `pnpm ci:local` adicionados à tabela canônica de scripts; cross-ref para [`docs/fluxo-desenvolvimento.md`](./fluxo-desenvolvimento.md) (fluxo end-to-end re-medido a cada merge). |
 | `1.10.0` | Adição do agent `ux-design-specialist` (UX/design de interface: tokens, estados, formulários, a11y, microcopy) — 6º specialist de stack; índices atualizados em `AGENTS.md §3.1`, `README.md` e nas matrizes `specialist-routing.md` (v1.3) e `review-routing.md` (v1.5). O §1 não enumera agents individualmente (só o diretório `.agents/`), então não houve contagem a corrigir ali. |
+| `1.11.0` | Adição de 5 skills de UI (`ui-modes`, `ui-craft`, `ui-break`, `motion`, `ui-review`) adaptadas de 3 repositórios externos (emilkowalski/skills MIT, pbakaus/impeccable Apache-2.0, leonxlnx/taste-skill MIT) e carregadas pelo `ux-design-specialist` — única relação 1:N do repo. Índice: `AGENTS.md §3.2` (nota nova) + `§5` (rows `ui-review-mode`, `audit-mode`, `release-pre-tag`), `WORKFLOWS.md`, matriz `review-routing.md` v1.7. Nenhuma mudança de stack, script ou count de §1. |

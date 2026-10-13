@@ -75,15 +75,47 @@ grep -rn "findMany(" apps/api/src/modules/ | grep -v "take:" | head -20
 
 ## Passo 4 — Validar migration safety
 
-```bash
-# 4.1 Status atual
-pnpm prisma migrate status
+**Offline por padrão.** Uma auditoria é read-only: nada aqui escreve no banco.
+O diff contra o banco vivo (`migrate diff --to-schema-datasource`) e o
+`migrate status` exigem `DATABASE_URL` alcançável, e o primeiro emite DDL
+mutável dentro de um passo de leitura — os dois ficam como **opcionais**.
 
-# 4.2 Diff de schema (gera SQL que seria aplicado)
-pnpm prisma migrate diff \
-  --from-schema-datamodel apps/api/prisma/schema.prisma \
-  --to-schema-datasource apps/api/prisma/schema.prisma --script
+```bash
+cd apps/api
+MIGS=prisma/migrations
+
+# 4.1 Toda migration tem migration.sql não-vazio (migration vazia = deploy que não faz nada)
+find "$MIGS" -mindepth 1 -maxdepth 1 -type d -name '20*' \
+  | while read -r d; do [ -s "$d/migration.sql" ] || echo "VAZIA: $d"; done
+
+# 4.2 Timestamp único — colisão torna a ordem de aplicação ambígua
+find "$MIGS" -mindepth 1 -maxdepth 1 -type d -name '20*' -printf '%f\n' \
+  | cut -d_ -f1 | sort | uniq -d | sed 's/^/COLIDE: /'
+
+# 4.3 Provider do lock bate com o do datasource no schema
+grep '^provider' "$MIGS/migration_lock.toml"
+grep -A 2 'datasource db' prisma/schema.prisma | grep provider
 ```
+
+> `cd apps/api` é obrigatório: `pnpm exec prisma` resolve o `schema.prisma` a
+> partir do cwd, e da raiz ele não acha. Ver
+> [`.agents/memory/state-aware-planning.md`](../../memory/state-aware-planning.md).
+
+**Opcionais (só com `DATABASE_URL` alcançável — nunca obrigatórios):**
+
+```bash
+cd apps/api
+pnpm exec prisma migrate status                                    # exige DB
+pnpm exec prisma migrate diff \
+  --from-schema-datamodel prisma/schema.prisma \
+  --to-schema-datasource prisma/schema.prisma --script            # exige DB; emite DDL
+```
+
+> O `--from-migrations` (comparar diretório de migrations ↔ schema) **não é
+> offline**: em prisma 6.19.3 ele aborta com
+> `You must pass the --shadow-database-url if you want to diff a migrations directory.`
+> Medido em 2026-10-13. Não existe equivalente sem banco para essa comparação —
+> por isso 4.1–4.3 checam integridade do diretório, não equivalência com o schema.
 
 ## Passo 5 — Auditar audit fields por model
 
@@ -101,7 +133,7 @@ done
 ## Passo 6 — Persistir findings (formato canônico)
 
 ```yaml
-# findings.yaml (em ~/.hermes/cron/output/findings-<ts>/ ou local)
+# findings.yaml (em .agents/runs/findings-<ts>/ ou local)
 - id: prisma-N1-001
   title: "Query N+1 em UserRepository.findAllWithRoles"
   severity: P1
@@ -122,7 +154,7 @@ Ele classifica severity final, deduplica contra issues abertas via `gh issue lis
 
 | Erro | Causa | Fix |
 |---|---|---|
-| `pnpm prisma migrate status` falha com "schema drift" | Migrations locais não commitadas ou schema sem migration | `pnpm prisma migrate dev` (só dev) ou `prisma migrate deploy` (CI) |
+| Drift entre `schema.prisma` e `migrations/` | Migration não commitada, ou migration vazia | **Reportar como finding**, com `evidence` = output de 4.1–4.3. Não aplicar correction: auditoria não escreve migration. O conserto é do implementador (`pnpm exec prisma migrate dev` a partir de `apps/api`, ou `migrate deploy` no CI). |
 | `grep @prisma/client` retorna vazio em modules | Modules não usam Prisma direto (correto — repository pattern) | Esperado; não reportar como finding |
 | `find` retorna vazio em `*repository.ts` | Repositories nomeados fora do padrão (ex: `users.repo.ts`) | Não é finding; ajustar grep se quiser cobrir mais patterns |
 | Auditoria roda em main com migrations não-deployadas | Working tree dirty | `git status` antes; abortar se houver migrations uncommitted |

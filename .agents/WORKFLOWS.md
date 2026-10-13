@@ -24,6 +24,7 @@
 | `retrospective-mode` | "capturar aprendizados / post-mortem" | sequential | explorer → retrospective-capture → doc-writer (+ task-manager) |
 | `review-routing` | — | sequential | review-router → specialists (auto-dispatched via matriz) |
 | `specialist-routing` | specialist-router | sequential | router → controller (decide planejar ou bloquear) |
+| `ui-review-mode` (v1.11.0+) | "revisar a UI / essa tela está feia / auditar a11y" | sequential | `ux-design-specialist` (`ui-review` → `ui-modes` · `ui-craft` · `ui-break` · `motion`) |
 | `pr-refresh` | "atualizar título/descrição do PR" | single | pr-refresh-scan → agente (reclassifica + reescreve) |
 | `pr-pendencias` (v1.11.0+) | "revisar pendências do PR / o que ficou para depois" | parallel→merge | 1 agente por pendência (mede) → adversarial (reroda) → agente (consolida) |
 | `audit-mode` (v2.0+) | "auditar stack / rodar scan / revisar saúde" | parallel + orchestrator | `finding-orchestrator` (despara 8 specialists em paralelo, agrega findings, dedup, abre issues via `gh`) |
@@ -68,8 +69,8 @@ Output:
 - Findings consolidados com severity final (P0/P1/P2)
 - Issues abertas via `gh` com labels (apenas P0/P1)
 - Issues comentadas quando há duplicata
-- Relatório `~/.hermes/cron/output/findings-scan-<ts>/report.md`
-- YAML agregado em `~/.hermes/cron/output/findings-scan-<ts>/findings.yaml`
+- Relatório `.agents/runs/findings-<ts>/report.md`
+- YAML agregado em `.agents/runs/findings-<ts>/findings.yaml`
 
 Política de ruído: cap de 10 issues por scan; P2 só alimenta relatório.
 
@@ -151,6 +152,18 @@ Classifica demanda (keywords + paths + scope) via matriz canônica e despacha sp
 
 Detalhes: [`workflows/specialist-routing.md`](./workflows/specialist-routing.md) · spec: [`.agents/specs/conventions/specialist-routing.md`](./specs/conventions/specialist-routing.md).
 
+### `ui-review-mode` — Revisão de UI
+
+**Composição:** `UX-DESIGN-SPECIALIST` (single agent, 5 skills em ordem)
+
+**Triggers:** "revisar a UI", "essa tela está feia", "auditar a11y", ou automático via `review-router` quando o diff toca `apps/web/**` (matriz [`review-routing.md`](./specs/conventions/review-routing.md) §1 e §3).
+
+**Ordem das skills:** `ui-modes` decide para que a tela serve → `ui-craft` aplica tokens/estados → `ui-break` quebra com dado real → `motion` julga o movimento. Pular `ui-modes` faz as outras três discordarem entre si.
+
+**Outputs:** `.agents/runs/ui-review-<ts>.yaml` com `mode`, `skills_loaded`, `findings` (P0/P1/P2, cada um com `file:line`) e `skipped` quando o escopo é vazio.
+
+Detalhes: skills em [`.agents/skills/`](./skills/) · agent: [`ux-design-specialist.md`](./agents/ux-design-specialist.md).
+
 ### `retrospective-mode` — Captura de Aprendizados Pós-Atividade
 
 **Trigger:** "capturar aprendizados" · plano ≥3 tasks · bugfix > 30min · 1ª adoção de skill.
@@ -231,4 +244,4 @@ Detalhes: [`.agents/workflows/pr-pendencias.md`](./workflows/pr-pendencias.md) �
 Para criar um workflow customizado: defina `trigger`, escolha a `composição` (sequential/parallel/hierarchical), liste os `agents` em ordem, defina os `handoffs`, adicione entrada na tabela acima, e documente em `.agents/workflows/<id>.md` se for complexo (>30 linhas).
 
 **Mantido por:** projeto-base contributors
-**Versão do padrão:** 1.9.1
+**Versão do padrão:** 1.11.0

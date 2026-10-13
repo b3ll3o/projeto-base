@@ -94,3 +94,11 @@ B22-4 implementou `matchDerivedTags()` + 5 testes novos em commit único (`0b9a0
 - ❌ Refactor com mudança comportamental: 3 commits separados
 
 **Documentar para próximos implementers:** o report do implementer deve SEMPRE incluir linha "RED confirmado: <output do test runner>" mesmo em commit único, para satisfazer auditoria do tdd-enforcer.
+
+## 2026-10-13 — Demanda de UI entra na tabela de coordenação
+
+**Contexto:** o agent despachava `nextjs-specialist` para qualquer demanda que citasse `apps/web`, mas `ux-design-specialist` não estava na tabela "Coordenação com Outros Agents" — ele existia na matriz (`specialist-routing.md` v1.3/v1.4) e não no agent que decide quem despachar. Demanda de UI já roteava, mas por um caminho que o reader do agent não consegue conferir.
+
+**Decisão:** acrescentar a linha do `ux-design-specialist` na tabela de coordenação, declarando as skills que ele carrega (`ui-modes` → `ui-craft` → `ui-break` → `motion`, com `ui-review` embrulhando a revisão).
+
+**Consequências:** a matriz não mudou — os globs de `apps/web/**` já roteavam. O que faltava era a linha no agent. Skill-first de novo: a linha só entrou depois que as 5 skills existiram, e foi essa ordem que deixou a entrada honesta.

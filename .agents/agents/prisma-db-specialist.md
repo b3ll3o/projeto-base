@@ -91,11 +91,11 @@ grep -B 1 "@@index\|@@unique\|@@id" apps/api/prisma/schema.prisma
 
 ### Passo 4 — Validar migration safety
 
-```bash
-pnpm prisma migrate status
-pnpm prisma migrate diff --from-schema-datamodel apps/api/prisma/schema.prisma \
-  --to-schema-datasource apps/api/prisma/schema.prisma --script
-```
+O processo detalhado está na skill [`prisma-audit`](../skills/prisma-audit/SKILL.md)
+(Passo 4). Resumo: a auditoria é **read-only** e roda **offline** —
+integridade do diretório de migrations (`migration.sql` vazio, timestamp
+colidido, provider do lock). `migrate status` e `migrate diff` exigem
+`DATABASE_URL` e são opcionais; `cd apps/api` é obrigatório para o `pnpm exec`.
 
 ### Passo 5 — Auditar audit fields
 

@@ -121,6 +121,15 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 > o agent encapsula papel + coordenação + princípios. Skill não substitui agent — é
 > **carregada por** ele quando a task é de auditoria.
 
+> **Skills de UI (única relação 1:N do repo, v1.11.0+):** o `ux-design-specialist`
+> carrega **5** skills, nesta ordem — `ui-review` (processo) → `ui-modes` (decide o
+> propósito da tela) → `ui-craft` (tokens, estados, anti-slop) → `ui-break` (pior caso)
+> → `motion` (movimento). Adapted de [emilkowalski/skills](https://github.com/emilkowalski/skills)
+> (MIT), [pbakaus/impeccable](https://github.com/pbakaus/impeccable) (Apache-2.0) e
+> [leonxlnx/taste-skill](https://github.com/leonxlnx/taste-skill) (MIT). `ui-modes`
+> roda primeiro porque sem ele as outras discordam entre si: quem quer densidade e
+> quem quer expressão dão conselhos opostos para a mesma tela.
+
 > **State-Aware Planning (camada 0 do pre-planner, a partir de v1.8.0):** convenção
 > [`.agents/specs/conventions/state-aware-planning.md`](./.agents/specs/conventions/state-aware-planning.md)
 > obriga gerar `state-snapshot-<ts>.md` ANTES de planejar. Alimenta o `specialist-router` (camada 1).
@@ -185,6 +194,9 @@ Workflows genéricos prontos para uso estão em [`.agents/WORKFLOWS.md`](./.agen
 | `feedback-to-spec` (v1.9.0+) | "feedback to spec / próxima spec de finding / T1/T2/T3 → spec" | task-manager → orchestrator (state-aware) → specialist-router → specialist (template spec) → task-manager (loop close) |
 | `pr-refresh` (v1.10.0+) | "atualizar título/descrição do PR" | pr-refresh-scan (mede) → agente (reclassifica + reescreve) — hook local, nunca bloqueia |
 | `pr-pendencias` (v1.11.0+) | "revisar pendências do PR / o que ficou para depois" | 1 agente por pendência (mede) → adversarial (reroda o comando) → consolida; cada uma sai como `resolvida`, `viva`, `mudou-de-forma` ou `decisão-de-não-construir` |
+| `ui-review-mode` (v1.11.0+) | "revisar a UI / essa tela está feia / auditar a11y" | ux-design-specialist (`ui-review` → `ui-modes` · `ui-craft` · `ui-break` · `motion`) |
+| `audit-mode` (v2.0+) | "auditar stack / rodar scan / revisar saúde" | finding-orchestrator (8 specialists em paralelo → agrega → dedup → abre issues via `gh`) |
+| `release-pre-tag` (v2.0+) | "auditar antes de tag vX.Y.Z" | release-versioning-specialist + finding-orchestrator (subset focado em versioning) |
 
 ---
 
@@ -253,5 +265,5 @@ Quando seguido corretamente, este padrão garante:
 
 **Mantido por:** projeto-base contributors
 **Licença:** MIT
-**Versão do documento:** 1.10.0
+**Versão do documento:** 1.11.0
 **Status:** Estável
