@@ -132,7 +132,17 @@ pnpm dev    # turbo run dev em paralelo — api em :3000, web em :3001
 
 # 5. Rodar migrations
 pnpm --filter @projeto/api prisma:migrate:deploy
+
+# 6. Configurar o segredo JWT — OBRIGATÓRIO, sem valor default
+# A API recusa o boot sem ele, em qualquer NODE_ENV. Copie o exemplo e
+# preencha: `cp apps/api/.env.example apps/api/.env`
+# Gere um valor com: openssl rand -base64 48
 ```
+
+⚠️ **`JWT_SECRET` não tem valor default, por decisão de projeto** (ver
+[ADR-0002](docs/adr/0002-autenticacao-jwt-argon2.md)). Um segredo JWT padrão em
+repositório é pior que nenhum: todos que instalaram o projeto compartilhariam a
+chave de assinatura, e qualquer um poderia forjar um token de administrador.
 
 Endpoints:
 
