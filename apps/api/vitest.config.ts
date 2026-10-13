@@ -75,6 +75,18 @@ export default defineConfig({
     },
   },
   test: {
+    // pt-BR: o `AuthModule` (Fase 6) falha-fast no boot quando `JWT_SECRET`
+    // está ausente — a política é "sem default", e um default no repo seria
+    // um segredo que ninguém rotaciona e que vaza no `git log`. Qualquer
+    // spec que suba o AppModule (users.module, e2e, export-openapi) passa
+    // por essa factory, então o valor de teste é injetado AQUI, uma vez, em
+    // vez de `process.env.X = 'y'` espalhado por arquivo — que vaza entre
+    // workers e tornaria a spec dependente da ordem de execução.
+    //
+    // É credencial DE TESTE: só assina/verifica tokens de specs locais.
+    env: {
+      JWT_SECRET: 'segredo-de-teste-nao-usar-em-producao',
+    },
     coverage: {
       provider: 'v8',
       // Gate de 80% — único lugar onde o Vitest 2.1.9 o honra. O piso

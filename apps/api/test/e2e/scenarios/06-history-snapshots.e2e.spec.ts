@@ -13,6 +13,7 @@ import {
   teardownE2E,
   cleanE2EDatabase,
   type E2EContext,
+  SENHA_DE_TESTE,
 } from '../test-app.helper.js';
 
 describe('E2E 06: Histórico preserva snapshots por versão', () => {
@@ -27,11 +28,11 @@ describe('E2E 06: Histórico preserva snapshots por versão', () => {
   });
 
   beforeEach(async () => {
-    await cleanE2EDatabase(e2e.ctx);
+    await cleanE2EDatabase(e2e);
   });
 
   it('cada entry contém snapshot da sua versão + previousVersion encadeia', async () => {
-    const { app } = e2e;
+    const { injetar } = e2e;
 
     // pt-BR: API atual só expõe PATCH de nome (PATCH /users/:id chama
     // use case 'renomear'). Por isso o cenário testa 3 updates de nome.
@@ -39,15 +40,15 @@ describe('E2E 06: Histórico preserva snapshots por versão', () => {
     // mutation aqui para cobrir dois campos.
 
     // INSERT → v1
-    const c = await app.inject({
+    const c = await injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome: 'Snap v1', email: 'snap-v1@b.com' },
+      payload: { nome: 'Snap v1', email: 'snap-v1@b.com', senha: SENHA_DE_TESTE },
     });
     const userId = (JSON.parse(c.body) as { id: string }).id;
 
     // UPDATE nome → v2
-    await app.inject({
+    await injetar({
       method: 'PATCH',
       url: `/api/v1/users/${userId}`,
       headers: { 'if-match': 'W/"v1"' },
@@ -55,7 +56,7 @@ describe('E2E 06: Histórico preserva snapshots por versão', () => {
     });
 
     // UPDATE nome → v3
-    await app.inject({
+    await injetar({
       method: 'PATCH',
       url: `/api/v1/users/${userId}`,
       headers: { 'if-match': 'W/"v2"' },
@@ -63,7 +64,7 @@ describe('E2E 06: Histórico preserva snapshots por versão', () => {
     });
 
     // GET /history
-    const h = await app.inject({ method: 'GET', url: `/api/v1/users/${userId}/history` });
+    const h = await injetar({ method: 'GET', url: `/api/v1/users/${userId}/history` });
     expect(h.statusCode).toBe(200);
     const body = JSON.parse(h.body) as {
       entries: Array<{

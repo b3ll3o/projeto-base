@@ -14,6 +14,7 @@ import {
   teardownE2E,
   cleanE2EDatabase,
   type E2EContext,
+  SENHA_DE_TESTE,
 } from '../test-app.helper.js';
 
 describe('E2E 05: Cursor pagination + includeDeleted', () => {
@@ -28,19 +29,19 @@ describe('E2E 05: Cursor pagination + includeDeleted', () => {
   });
 
   beforeEach(async () => {
-    await cleanE2EDatabase(e2e.ctx);
+    await cleanE2EDatabase(e2e);
   });
 
   it('cursor pagination percorre todas as páginas sem duplicar nem perder ids', async () => {
-    const { app } = e2e;
+    const { injetar } = e2e;
 
     // Cria 5 users
     const createdIds: string[] = [];
     for (let i = 0; i < 5; i++) {
-      const c = await app.inject({
+      const c = await injetar({
         method: 'POST',
         url: '/api/v1/users',
-        payload: { nome: `P${i}`, email: `p${i}@b.com` },
+        payload: { nome: `P${i}`, email: `p${i}@b.com`, senha: SENHA_DE_TESTE },
       });
       createdIds.push((JSON.parse(c.body) as { id: string }).id);
     }
@@ -53,7 +54,7 @@ describe('E2E 05: Cursor pagination + includeDeleted', () => {
       const url = cursor
         ? `/api/v1/users?limit=2&cursor=${encodeURIComponent(cursor)}`
         : '/api/v1/users?limit=2';
-      const r = await app.inject({ method: 'GET', url });
+      const r = await injetar({ method: 'GET', url });
       expect(r.statusCode).toBe(200);
       const body = JSON.parse(r.body) as {
         users: Array<{ id: string }>;
@@ -72,25 +73,25 @@ describe('E2E 05: Cursor pagination + includeDeleted', () => {
   });
 
   it('?includeDeleted=true inclui soft-deleted; lista normal oculta', async () => {
-    const { app } = e2e;
+    const { injetar } = e2e;
 
     // Cria 2 users
-    const keep = await app.inject({
+    const keep = await injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome: 'Keep', email: 'keep@b.com' },
+      payload: { nome: 'Keep', email: 'keep@b.com', senha: SENHA_DE_TESTE },
     });
     const keepId = (JSON.parse(keep.body) as { id: string }).id;
 
-    const rm = await app.inject({
+    const rm = await injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome: 'Romeo', email: 'rm@b.com' },
+      payload: { nome: 'Romeo', email: 'rm@b.com', senha: SENHA_DE_TESTE },
     });
     const rmId = (JSON.parse(rm.body) as { id: string }).id;
 
     // Soft-delete o segundo
-    const d = await app.inject({
+    const d = await injetar({
       method: 'DELETE',
       url: `/api/v1/users/${rmId}`,
       headers: { 'if-match': 'W/"v1"' },
@@ -98,14 +99,14 @@ describe('E2E 05: Cursor pagination + includeDeleted', () => {
     expect(d.statusCode).toBe(204);
 
     // Lista normal: NÃO vê o deletado
-    const normal = await app.inject({ method: 'GET', url: '/api/v1/users?limit=100' });
+    const normal = await injetar({ method: 'GET', url: '/api/v1/users?limit=100' });
     expect(normal.statusCode).toBe(200);
     const normalBody = JSON.parse(normal.body) as { users: Array<{ id: string }> };
     expect(normalBody.users.find((u) => u.id === rmId)).toBeUndefined();
     expect(normalBody.users.find((u) => u.id === keepId)).toBeDefined();
 
     // Lista com includeDeleted=true: vê ambos
-    const withDel = await app.inject({
+    const withDel = await injetar({
       method: 'GET',
       url: '/api/v1/users?limit=100&includeDeleted=true',
     });
