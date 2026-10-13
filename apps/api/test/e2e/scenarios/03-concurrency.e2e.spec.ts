@@ -15,6 +15,7 @@ import {
   teardownE2E,
   cleanE2EDatabase,
   type E2EContext,
+  SENHA_DE_TESTE,
 } from '../test-app.helper.js';
 
 describe('E2E 03: Optimistic Locking + If-Match header enforcement', () => {
@@ -29,20 +30,20 @@ describe('E2E 03: Optimistic Locking + If-Match header enforcement', () => {
   });
 
   beforeEach(async () => {
-    await cleanE2EDatabase(e2e.ctx);
+    await cleanE2EDatabase(e2e);
   });
 
   it('PATCH com If-Match desatualizado -> 412 CONCURRENCY_CONFLICT', async () => {
-    const { app } = e2e;
-    const c = await app.inject({
+    const { injetar } = e2e;
+    const c = await injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome: 'Concur', email: 'concur@b.com' },
+      payload: { nome: 'Concur', email: 'concur@b.com', senha: SENHA_DE_TESTE },
     });
     const userId = (JSON.parse(c.body) as { id: string }).id;
 
     // Cliente A: atualiza para v2
-    const a = await app.inject({
+    const a = await injetar({
       method: 'PATCH',
       url: `/api/v1/users/${userId}`,
       headers: { 'if-match': 'W/"v1"' },
@@ -51,7 +52,7 @@ describe('E2E 03: Optimistic Locking + If-Match header enforcement', () => {
     expect(a.statusCode).toBe(200);
 
     // Cliente B: ainda com If-Match v1, tenta atualizar
-    const stale = await app.inject({
+    const stale = await injetar({
       method: 'PATCH',
       url: `/api/v1/users/${userId}`,
       headers: { 'if-match': 'W/"v1"' },
@@ -63,15 +64,15 @@ describe('E2E 03: Optimistic Locking + If-Match header enforcement', () => {
   });
 
   it('DELETE com If-Match errado -> 412 CONCURRENCY_CONFLICT', async () => {
-    const { app } = e2e;
-    const c = await app.inject({
+    const { injetar } = e2e;
+    const c = await injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome: 'Delta', email: 'd@b.com' },
+      payload: { nome: 'Delta', email: 'd@b.com', senha: SENHA_DE_TESTE },
     });
     const userId = (JSON.parse(c.body) as { id: string }).id;
 
-    const wrong = await app.inject({
+    const wrong = await injetar({
       method: 'DELETE',
       url: `/api/v1/users/${userId}`,
       headers: { 'if-match': 'W/"v99"' },
@@ -82,11 +83,11 @@ describe('E2E 03: Optimistic Locking + If-Match header enforcement', () => {
   });
 
   it('PATCH sem If-Match -> 400 IF_MATCH_REQUIRED', async () => {
-    const { app } = e2e;
-    const c = await app.inject({
+    const { injetar } = e2e;
+    const c = await injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome: 'Ana', email: 'noheader@b.com' },
+      payload: { nome: 'Ana', email: 'noheader@b.com', senha: SENHA_DE_TESTE },
     });
     // MEDIDO 2026-10-08: a semente usava `nome: 'N'` (1 char) e
     // `novoNome: 'X'` (1 char). O POST devolvia 500 e o `id` vinha
@@ -99,7 +100,7 @@ describe('E2E 03: Optimistic Locking + If-Match header enforcement', () => {
     expect(c.statusCode).toBe(201);
     const userId = (JSON.parse(c.body) as { id: string }).id;
 
-    const res = await app.inject({
+    const res = await injetar({
       method: 'PATCH',
       url: `/api/v1/users/${userId}`,
       payload: { novoNome: 'Bruno' },

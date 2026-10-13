@@ -29,10 +29,20 @@ import { setupTestDatabase, cleanDatabase, type TestContext } from '../testconta
 import { AppModule } from '../../src/app.module.js';
 import { GlobalExceptionFilter } from '../../src/shared/infrastructure/http/global-exception.filter.js';
 import { ZodValidationPipe } from '../../src/shared/infrastructure/http/zod-validation.pipe.js';
+import { SENHA_DE_TESTE, emitirTokenDeSessao } from './test-app.helper.js';
 
 describe('Users E2E (Supertest + Testcontainers)', () => {
   let app: NestFastifyApplication;
   let ctx: TestContext;
+  // pt-BR: este spec tem bootstrap PRÓPRIO (não usa `bootstrapE2E`), então
+  // traz a sessão junto. `emitirTokenDeSessao` é o mesmo helper do resto da
+  // suíte — a conta nasce pelo `POST /users` público e o par vem do login
+  // real. O `beforeEach` restaura a sessão depois de truncar as tabelas.
+  let injetar: (
+    r: Parameters<NestFastifyApplication['inject']>[0],
+  ) => Promise<Awaited<ReturnType<NestFastifyApplication['inject']>>>;
+  /** Token vivo da conta de sessão; reemitido no `beforeEach`. */
+  let token: string;
 
   beforeAll(async () => {
     // pt-BR: container Postgres compartilhado via singleFork.
@@ -51,6 +61,20 @@ describe('Users E2E (Supertest + Testcontainers)', () => {
     app.useGlobalPipes(new ZodValidationPipe(z.any()));
 
     await app.init();
+
+    token = await emitirTokenDeSessao(app, ctx.prisma);
+    injetar = (r) =>
+      // `inject` aceita `string | InjectOptions`; a forma string não tem
+      // header, então segue sem token (mesmo tratamento do helper).
+      typeof r === 'string'
+        ? app.inject(r)
+        : app.inject({
+            ...r,
+            headers: {
+              ...((r.headers ?? {}) as Record<string, unknown>),
+              authorization: `Bearer ${token}`,
+            },
+          });
   });
 
   afterAll(async () => {
@@ -60,15 +84,19 @@ describe('Users E2E (Supertest + Testcontainers)', () => {
 
   beforeEach(async () => {
     await cleanDatabase(ctx.prisma);
+    // A conta de sessão foi apagada junto com o resto; sem recriá-la, o
+    // próximo login com aquele e-mail daria 401 (`findByEmail` filtra
+    // soft-deleted) e a suíte inteira cairia por um motivo que não é dela.
+    token = await emitirTokenDeSessao(app, ctx.prisma);
   });
 
   // ───────────────────────── POST /users ─────────────────────────
 
   it('POST /api/v1/users cria usuário e retorna ETag W/"v1"', async () => {
-    const res = await app.inject({
+    const res = await injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome: 'Alice', email: 'a@b.com' },
+      payload: { nome: 'Alice', email: 'a@b.com', senha: SENHA_DE_TESTE },
     });
 
     expect(res.statusCode).toBe(201);
@@ -81,17 +109,17 @@ describe('Users E2E (Supertest + Testcontainers)', () => {
   });
 
   it('POST /api/v1/users duplicado (case-insensitive) -> 409 EMAIL_IN_USE', async () => {
-    const first = await app.inject({
+    const first = await injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome: 'Alice', email: 'a@b.com' },
+      payload: { nome: 'Alice', email: 'a@b.com', senha: SENHA_DE_TESTE },
     });
     expect(first.statusCode).toBe(201);
 
-    const second = await app.inject({
+    const second = await injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome: 'Alice 2', email: 'A@B.COM' },
+      payload: { nome: 'Alice 2', email: 'A@B.COM', senha: SENHA_DE_TESTE },
     });
 
     expect(second.statusCode).toBe(409);
@@ -101,10 +129,10 @@ describe('Users E2E (Supertest + Testcontainers)', () => {
 
   it('POST /api/v1/users com payload inválido -> 400 VALIDATION_ERROR', async () => {
     // pt-BR: email vazio viola `z.string().email()`.
-    const res = await app.inject({
+    const res = await injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome: 'Alice', email: '' },
+      payload: { nome: 'Alice', email: '', senha: SENHA_DE_TESTE },
     });
 
     expect(res.statusCode).toBe(400);
@@ -117,15 +145,15 @@ describe('Users E2E (Supertest + Testcontainers)', () => {
 
   it('GET /api/v1/users lista paginado (limit=2 retorna 2 itens + nextCursor)', async () => {
     for (let i = 0; i < 3; i++) {
-      const r = await app.inject({
+      const r = await injetar({
         method: 'POST',
         url: '/api/v1/users',
-        payload: { nome: `User ${i}`, email: `u${i}@b.com` },
+        payload: { nome: `User ${i}`, email: `u${i}@b.com`, senha: SENHA_DE_TESTE },
       });
       expect(r.statusCode).toBe(201);
     }
 
-    const res = await app.inject({
+    const res = await injetar({
       method: 'GET',
       url: '/api/v1/users?limit=2',
     });
@@ -139,14 +167,14 @@ describe('Users E2E (Supertest + Testcontainers)', () => {
   // ───────────────────────── PATCH /users/:id ───────────────────
 
   it('PATCH /api/v1/users/:id sem If-Match -> 400 IF_MATCH_REQUIRED', async () => {
-    const c = await app.inject({
+    const c = await injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome: 'Alice', email: 'a@b.com' },
+      payload: { nome: 'Alice', email: 'a@b.com', senha: SENHA_DE_TESTE },
     });
     const id = (JSON.parse(c.body) as { id: string }).id;
 
-    const res = await app.inject({
+    const res = await injetar({
       method: 'PATCH',
       url: `/api/v1/users/${id}`,
       payload: { novoNome: 'Alice 2' },
@@ -158,14 +186,14 @@ describe('Users E2E (Supertest + Testcontainers)', () => {
   });
 
   it('PATCH /api/v1/users/:id com If-Match correto atualiza e bump version', async () => {
-    const c = await app.inject({
+    const c = await injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome: 'Alice', email: 'a@b.com' },
+      payload: { nome: 'Alice', email: 'a@b.com', senha: SENHA_DE_TESTE },
     });
     const id = (JSON.parse(c.body) as { id: string }).id;
 
-    const res = await app.inject({
+    const res = await injetar({
       method: 'PATCH',
       url: `/api/v1/users/${id}`,
       headers: { 'if-match': 'W/"v1"' },
@@ -180,14 +208,14 @@ describe('Users E2E (Supertest + Testcontainers)', () => {
   });
 
   it('PATCH /api/v1/users/:id com If-Match errado -> 412 CONCURRENCY_CONFLICT', async () => {
-    const c = await app.inject({
+    const c = await injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome: 'Alice', email: 'a@b.com' },
+      payload: { nome: 'Alice', email: 'a@b.com', senha: SENHA_DE_TESTE },
     });
     const id = (JSON.parse(c.body) as { id: string }).id;
 
-    const res = await app.inject({
+    const res = await injetar({
       method: 'PATCH',
       url: `/api/v1/users/${id}`,
       headers: { 'if-match': 'W/"v999"' },
@@ -202,36 +230,36 @@ describe('Users E2E (Supertest + Testcontainers)', () => {
   // ───────────────────────── DELETE /users/:id ──────────────────
 
   it('DELETE /api/v1/users/:id soft-deleta; GET subsequente -> 404', async () => {
-    const c = await app.inject({
+    const c = await injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome: 'Alice', email: 'a@b.com' },
+      payload: { nome: 'Alice', email: 'a@b.com', senha: SENHA_DE_TESTE },
     });
     const id = (JSON.parse(c.body) as { id: string }).id;
 
-    const d = await app.inject({
+    const d = await injetar({
       method: 'DELETE',
       url: `/api/v1/users/${id}`,
       headers: { 'if-match': 'W/"v1"' },
     });
     expect(d.statusCode).toBe(204);
 
-    const g = await app.inject({ method: 'GET', url: `/api/v1/users/${id}` });
+    const g = await injetar({ method: 'GET', url: `/api/v1/users/${id}` });
     expect(g.statusCode).toBe(404);
   });
 
   // ───────────────────────── POST /users/:id/restore ────────────
 
   it('POST /api/v1/users/:id/restore ressuscita soft-deleted; version incrementa para 3', async () => {
-    const c = await app.inject({
+    const c = await injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome: 'Alice', email: 'a@b.com' },
+      payload: { nome: 'Alice', email: 'a@b.com', senha: SENHA_DE_TESTE },
     });
     const id = (JSON.parse(c.body) as { id: string }).id;
 
     // v1 -> soft-delete -> v2
-    const d = await app.inject({
+    const d = await injetar({
       method: 'DELETE',
       url: `/api/v1/users/${id}`,
       headers: { 'if-match': 'W/"v1"' },
@@ -239,7 +267,7 @@ describe('Users E2E (Supertest + Testcontainers)', () => {
     expect(d.statusCode).toBe(204);
 
     // restore usando If-Match v2 -> v3
-    const r = await app.inject({
+    const r = await injetar({
       method: 'POST',
       url: `/api/v1/users/${id}/restore`,
       headers: { 'if-match': 'W/"v2"' },
@@ -253,14 +281,14 @@ describe('Users E2E (Supertest + Testcontainers)', () => {
   // ───────────────────────── GET /users/:id/history ─────────────
 
   it('GET /api/v1/users/:id/history retorna versões (INSERT + UPDATE >= 2)', async () => {
-    const c = await app.inject({
+    const c = await injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome: 'Alice', email: 'a@b.com' },
+      payload: { nome: 'Alice', email: 'a@b.com', senha: SENHA_DE_TESTE },
     });
     const id = (JSON.parse(c.body) as { id: string }).id;
 
-    const p = await app.inject({
+    const p = await injetar({
       method: 'PATCH',
       url: `/api/v1/users/${id}`,
       headers: { 'if-match': 'W/"v1"' },
@@ -268,7 +296,7 @@ describe('Users E2E (Supertest + Testcontainers)', () => {
     });
     expect(p.statusCode).toBe(200);
 
-    const res = await app.inject({ method: 'GET', url: `/api/v1/users/${id}/history` });
+    const res = await injetar({ method: 'GET', url: `/api/v1/users/${id}/history` });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as { entries: unknown[]; nextCursor: string | null };
     expect(body.entries.length).toBeGreaterThanOrEqual(2);

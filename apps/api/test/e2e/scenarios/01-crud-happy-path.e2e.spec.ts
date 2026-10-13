@@ -11,7 +11,7 @@
 //  - GET by id (atualizado) → confirma novo nome
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { bootstrapE2E, teardownE2E, type E2EContext } from '../test-app.helper.js';
+import { bootstrapE2E, teardownE2E, type E2EContext, SENHA_DE_TESTE } from '../test-app.helper.js';
 
 describe('E2E 01: CRU happy path completo', () => {
   let e2e: E2EContext;
@@ -25,13 +25,13 @@ describe('E2E 01: CRU happy path completo', () => {
   });
 
   it('CREATE → GET → LIST → UPDATE → GET(updated)', async () => {
-    const { app } = e2e;
+    const { injetar } = e2e;
 
     // CREATE
-    const c = await app.inject({
+    const c = await injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome: 'Alice', email: 'a@b.com' },
+      payload: { nome: 'Alice', email: 'a@b.com', senha: SENHA_DE_TESTE },
     });
     expect(c.statusCode).toBe(201);
     const created = JSON.parse(c.body) as { id: string; email: string; version: number };
@@ -40,20 +40,20 @@ describe('E2E 01: CRU happy path completo', () => {
     expect(c.headers.etag).toBe('W/"v1"');
 
     // GET
-    const g = await app.inject({ method: 'GET', url: `/api/v1/users/${created.id}` });
+    const g = await injetar({ method: 'GET', url: `/api/v1/users/${created.id}` });
     expect(g.statusCode).toBe(200);
     const got = JSON.parse(g.body) as { id: string };
     expect(got.id).toBe(created.id);
 
     // LIST — cenário isolado em container dedicado, então exatamente 1 item
-    const l = await app.inject({ method: 'GET', url: '/api/v1/users?limit=10' });
+    const l = await injetar({ method: 'GET', url: '/api/v1/users?limit=10' });
     expect(l.statusCode).toBe(200);
     const list = JSON.parse(l.body) as { users: Array<{ id: string; version: number }> };
     expect(list.users).toHaveLength(1);
     expect(list.users[0]?.id).toBe(created.id);
 
     // UPDATE (com If-Match correto)
-    const u = await app.inject({
+    const u = await injetar({
       method: 'PATCH',
       url: `/api/v1/users/${created.id}`,
       headers: { 'if-match': 'W/"v1"' },
@@ -66,7 +66,7 @@ describe('E2E 01: CRU happy path completo', () => {
     expect(u.headers.etag).toBe('W/"v2"');
 
     // GET updated
-    const g2 = await app.inject({ method: 'GET', url: `/api/v1/users/${created.id}` });
+    const g2 = await injetar({ method: 'GET', url: `/api/v1/users/${created.id}` });
     expect(g2.statusCode).toBe(200);
     const gotUpdated = JSON.parse(g2.body) as { nome: string };
     expect(gotUpdated.nome).toBe('Alice 2');

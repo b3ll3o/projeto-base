@@ -9,7 +9,7 @@
 //    UPDATE, UPDATE] e cada entry tem snapshot completo (id, email, …).
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { bootstrapE2E, teardownE2E, type E2EContext } from '../test-app.helper.js';
+import { bootstrapE2E, teardownE2E, type E2EContext, SENHA_DE_TESTE } from '../test-app.helper.js';
 
 describe('E2E 02: DELETE → RESTORE → audit trail completo', () => {
   let e2e: E2EContext;
@@ -23,18 +23,18 @@ describe('E2E 02: DELETE → RESTORE → audit trail completo', () => {
   });
 
   it('audit trail completo: INSERT, UPDATE, UPDATE, DELETE, RESTORE', async () => {
-    const { app } = e2e;
+    const { injetar } = e2e;
 
     // INSERT → v1
-    const c = await app.inject({
+    const c = await injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome: 'Audit', email: 'audit@b.com' },
+      payload: { nome: 'Audit', email: 'audit@b.com', senha: SENHA_DE_TESTE },
     });
     const userId = (JSON.parse(c.body) as { id: string }).id;
 
     // UPDATE → v2
-    await app.inject({
+    await injetar({
       method: 'PATCH',
       url: `/api/v1/users/${userId}`,
       headers: { 'if-match': 'W/"v1"' },
@@ -42,7 +42,7 @@ describe('E2E 02: DELETE → RESTORE → audit trail completo', () => {
     });
 
     // UPDATE → v3
-    await app.inject({
+    await injetar({
       method: 'PATCH',
       url: `/api/v1/users/${userId}`,
       headers: { 'if-match': 'W/"v2"' },
@@ -50,7 +50,7 @@ describe('E2E 02: DELETE → RESTORE → audit trail completo', () => {
     });
 
     // DELETE → v4 (archive.version)
-    const d = await app.inject({
+    const d = await injetar({
       method: 'DELETE',
       url: `/api/v1/users/${userId}`,
       headers: { 'if-match': 'W/"v3"' },
@@ -60,7 +60,7 @@ describe('E2E 02: DELETE → RESTORE → audit trail completo', () => {
     // pt-BR: HTTP contract — GET /history deve ter entry DELETE com
     // version=4 (que é o archiveRow.version). Validamos via contrato HTTP
     // em vez de acessar Prisma diretamente (acoplamento ao schema interno).
-    const histAfterDelete = await app.inject({
+    const histAfterDelete = await injetar({
       method: 'GET',
       url: `/api/v1/users/${userId}/history`,
     });
@@ -72,7 +72,7 @@ describe('E2E 02: DELETE → RESTORE → audit trail completo', () => {
     expect(deleteEntry?.version).toBe(4);
 
     // RESTORE → v5
-    const r = await app.inject({
+    const r = await injetar({
       method: 'POST',
       url: `/api/v1/users/${userId}/restore`,
       headers: { 'if-match': 'W/"v4"' },
@@ -83,7 +83,7 @@ describe('E2E 02: DELETE → RESTORE → audit trail completo', () => {
     expect(restored.isDeleted).toBe(false);
 
     // Histórico completo
-    const h = await app.inject({
+    const h = await injetar({
       method: 'GET',
       url: `/api/v1/users/${userId}/history`,
     });
