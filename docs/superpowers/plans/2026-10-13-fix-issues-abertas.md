@@ -290,27 +290,25 @@ PR-4 (web) ─────┘
 
 ## §6. Riscos e mitigações
 
-| Risco | Probabilidade | Impacto | Mitigação |
+> Detalhamento (5 riscos A.1–A.5 + cenários e mitigação estendida) em
+> [`2026-10-13-fix-issues-abertas-apendice.md`](./2026-10-13-fix-issues-abertas-apendice.md) §A.
+
+| Risco | Prob. | Imp. | Mitigação curta |
 |---|---|---|---|
-| `ALTER TABLE ... SET DEFAULT` em prod tem lock implícito | média | médio | PR-3 não roda em prod sem `prisma migrate resolve --applied`; revisão do prisma-db-specialist valida |
-| `digest` errado de imagem postgres:16-alpine trava build | baixa | alto | Validar `docker pull postgres:16-alpine` retorna mesmo SHA256 antes de pinar; usar `docker inspect` |
-| `@nestjs/throttler` quebra spec e2e que dispara muitas requests | média | médio | Throttler com TTL 60s/limit 100 é folgado para spec (que faz ~5 req); spec e2e roda com `@SkipThrottle()` em health |
-| PR-5 com bump errado dispara release-template antes da hora | baixa | alto | PR-5 só mergeia **depois** dos 4 anteriores; bump de versão em PR dedicado, não em merge acidental |
-| Token de release (GITHUB_TOKEN) sem permissão de tag | baixa | médio | Workflow release-template já tem `permissions: contents: write`; verificar no PR |
+| `ALTER TABLE ... SET DEFAULT` em prod tem lock implícito | média | médio | PR-3 só após `prisma migrate resolve --applied`; `ADD DEFAULT` é instantâneo em PG ≥ 11 |
+| `digest` errado de imagem trava build | baixa | alto | PR-1 extrai SHA256 via `docker inspect` antes de pinar |
+| `@nestjs/throttler` quebra spec e2e | média | médio | Throttler 100/min é folgado; health com `@SkipThrottle()` |
+| PR-5 com bump errado dispara release cedo | baixa | alto | PR-5 só mergeia depois dos 4 anteriores; `main` exige `quality` |
+| Token de release sem permissão de tag | baixa | médio | Workflow já tem `contents: write`; tag manual como fallback |
 
 ## §7. Métricas esperadas (pós-PR-5)
 
-| Métrica | Antes | Depois (esperado) |
-|---|---|---|
-| Issues abertas | 9 (4 P0 + 5 P1) | 0 |
-| Tag git atual | v1.10.0 (af6af0a) | v1.11.0 (e8ed335 ou posterior) |
-| Drift de versão cross-doc | 2 (STACK + TEMPLATE) | 0 |
-| Containers com mem_limit | 0 | 4 (postgres, api, web, otel-collector) |
-| Imagens com @sha256 | 0 | 3 (postgres, node, otel) |
-| Rate-limit middleware | ausente | ThrottlerGuard 100/min |
-| CORS whitelist | `origin: true` | lista de origens via env |
-| Migration com DEFAULT uuid | 0 (drift) | 2 (users_history, users_archive) |
-| Fetch timeout (web) | ilimitado | 10s (configurável) |
+> Tabela completa (antes/depois com 12 linhas) em
+> [`2026-10-13-fix-issues-abertas-apendice.md`](./2026-10-13-fix-issues-abertas-apendice.md) §B.
+
+**Antes:** 9 issues abertas, 0 containers com mem_limit, 0 imagens com digest, CORS `origin: true`, fetch sem timeout, migration sem DEFAULT, tag em 1.10.0.
+
+**Depois:** 0 issues abertas, 4 containers com mem_limit, 3 imagens com digest, CORS whitelist via env, fetch 10s, 2 migrations com DEFAULT, tag em 1.11.0.
 
 ## §8. Próximos passos (handoff)
 
