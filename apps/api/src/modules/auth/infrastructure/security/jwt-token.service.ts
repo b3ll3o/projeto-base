@@ -36,6 +36,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
+import { InvalidTokenException } from '../../domain/exceptions/token.exceptions.js';
 import type {
   TokenIssuerPort,
   TokenPair,
@@ -64,8 +65,14 @@ export const DEFAULT_REFRESH_TTL = '7d';
  * `exactOptionalPropertyTypes: true` (herdado da base do repo) passar
  * `{ expiresIn: … | undefined }` para `expiresIn?: …` é erro — o valor
  * precisa ser atribuído de fato, nunca "talvez".
+ *
+ * É `export` porque o e2e de refresh precisa assinar token **vencido** com o
+ * segredo real do app, e tipar o TTL ali como `number | string` é
+ * exatamente o tipo que o `ms` recusa (`StringValue` é uma união de template
+ * literals, não `string`). Reexportar mantém a afirmação num lugar só, que é o
+ * que o comentário acima promete.
  */
-type Ttl = NonNullable<JwtSignOptions['expiresIn']>;
+export type Ttl = NonNullable<JwtSignOptions['expiresIn']>;
 
 @Injectable()
 export class JwtTokenService implements TokenIssuerPort {
@@ -134,24 +141,45 @@ export class JwtTokenService implements TokenIssuerPort {
    * em "token inválido" pelo mesmo caminho de um token adulterado, e não
    * num branch de erro que diga "este é um refresh token" — essa
    * informação não pode vazar para quem está com o token na mão.
+   *
+   * ⚠️ `verifyAsync` LANÇA a exceção da biblioteca (`JsonWebTokenError`
+   * "jwt malformed", `TokenExpiredError` "jwt expired", "invalid
+   * signature"). Deixá-la escapar produzia **HTTP 500** com a mensagem
+   * interna no `detail` — e o 500 em vez do 401 é o defeito, porque o
+   * contrato do endpoint (`auth.controller.ts`) promete 401 para refresh
+   * inválido. MEDIDO: `POST /auth/refresh` com token inválido, expirado ou
+   * de tipo trocado respondia 500 nos três casos.
+   *
+   * Por que o guard não salvava: `refresh` é `@Public()`, então
+   * `JwtAuthGuard.canActivate` retorna no passo 1 sem olhar o token, e o
+   * único `catch` em torno de `validar*Token` fica dentro do guard.
+   *
+   * O motivo interno vai em `motivo` (para o log) e NUNCA em `message`
+   * (que é o que o `GlobalExceptionFilter` serializa) — ver
+   * `token.exceptions.ts`.
    */
   private async validarCom(
     token: string,
     typEsperado: 'access' | 'refresh',
   ): Promise<TokenSubject> {
-    const payload = await this.jwt.verifyAsync<Record<string, unknown>>(token, {
-      secret: this.chave,
-    });
+    let payload: Record<string, unknown>;
+    try {
+      payload = await this.jwt.verifyAsync<Record<string, unknown>>(token, {
+        secret: this.chave,
+      });
+    } catch (erro) {
+      throw new InvalidTokenException(erro instanceof Error ? erro.message : 'token inválido');
+    }
 
     // Token sem `typ` é rejeitado pelos DOIS validadores: ele não veio de
     // `emitir()`, e aceitar abriria um caminho sem classificação.
     if (payload['typ'] !== typEsperado) {
-      throw new Error('token inválido');
+      throw new InvalidTokenException('token inválido');
     }
     const sub = payload['sub'];
     const email = payload['email'];
     if (typeof sub !== 'string' || typeof email !== 'string') {
-      throw new Error('token inválido');
+      throw new InvalidTokenException('token inválido');
     }
 
     return { sub, email, typ: typEsperado };

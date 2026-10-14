@@ -22,6 +22,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { JwtTokenService } from './jwt-token.service.js';
 import type { TokenIssuerPort } from '../../domain/ports/token-issuer.port.js';
+import { InvalidTokenException } from '../../domain/exceptions/token.exceptions.js';
 
 const SEGREDO = 'segredo-de-teste-com-tamanho-razoavel-0001';
 const OUTRO_SEGREDO = 'segredo-diferente-com-tamanho-razoavel-9';
@@ -228,7 +229,7 @@ describe('JwtTokenService', () => {
       const service = novoServico();
       const { refreshToken } = await service.emitir({ ...ASSUNTO });
 
-      await expect(service.validarAccessToken(refreshToken)).rejects.toThrow();
+      await expect(service.validarAccessToken(refreshToken)).rejects.toThrow(InvalidTokenException);
     });
 
     it('REJEITA token sem `typ` (assinado direto, fora do emitir())', async () => {
@@ -241,7 +242,7 @@ describe('JwtTokenService', () => {
         { secret: SEGREDO },
       );
 
-      await expect(service.validarAccessToken(token)).rejects.toThrow();
+      await expect(service.validarAccessToken(token)).rejects.toThrow(InvalidTokenException);
     });
 
     it('REJEITA token assinado com outro segredo', async () => {
@@ -251,14 +252,14 @@ describe('JwtTokenService', () => {
         { secret: OUTRO_SEGREDO },
       );
 
-      await expect(service.validarAccessToken(token)).rejects.toThrow();
+      await expect(service.validarAccessToken(token)).rejects.toThrow(InvalidTokenException);
     });
 
     it('REJEITA token expirado', async () => {
       const service = novoServico({ JWT_ACCESS_TTL: '-10s' });
       const { accessToken } = await service.emitir({ ...ASSUNTO });
 
-      await expect(service.validarAccessToken(accessToken)).rejects.toThrow();
+      await expect(service.validarAccessToken(accessToken)).rejects.toThrow(InvalidTokenException);
     });
 
     it.each([
@@ -275,7 +276,7 @@ describe('JwtTokenService', () => {
       const service = novoServico();
       const token = new JwtService().sign(payload, { secret: SEGREDO });
 
-      await expect(service.validarAccessToken(token)).rejects.toThrow();
+      await expect(service.validarAccessToken(token)).rejects.toThrow(InvalidTokenException);
     });
 
     it.each([
@@ -286,7 +287,7 @@ describe('JwtTokenService', () => {
     ])('REJEITA entrada malformada: %s', async (_caso, token) => {
       const service = novoServico();
 
-      await expect(service.validarAccessToken(token)).rejects.toThrow();
+      await expect(service.validarAccessToken(token)).rejects.toThrow(InvalidTokenException);
     });
   });
 
@@ -307,7 +308,7 @@ describe('JwtTokenService', () => {
       const service = novoServico();
       const { accessToken } = await service.emitir({ ...ASSUNTO });
 
-      await expect(service.validarRefreshToken(accessToken)).rejects.toThrow();
+      await expect(service.validarRefreshToken(accessToken)).rejects.toThrow(InvalidTokenException);
     });
 
     it('REJEITA refresh assinado com outro segredo', async () => {
@@ -317,14 +318,16 @@ describe('JwtTokenService', () => {
         { secret: OUTRO_SEGREDO },
       );
 
-      await expect(service.validarRefreshToken(token)).rejects.toThrow();
+      await expect(service.validarRefreshToken(token)).rejects.toThrow(InvalidTokenException);
     });
 
     it('REJEITA refresh expirado', async () => {
       const service = novoServico({ JWT_REFRESH_TTL: '-10s' });
       const { refreshToken } = await service.emitir({ ...ASSUNTO });
 
-      await expect(service.validarRefreshToken(refreshToken)).rejects.toThrow();
+      await expect(service.validarRefreshToken(refreshToken)).rejects.toThrow(
+        InvalidTokenException,
+      );
     });
   });
 
