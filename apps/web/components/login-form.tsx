@@ -50,7 +50,33 @@ import { loginSchema, type CampoLogin, type LoginInput } from '@/lib/login-schem
 
 type ActionLogin = (estado: LoginState, formData: FormData) => Promise<LoginState>;
 
-export function LoginForm({ action = entrar }: { action?: ActionLogin }) {
+export function LoginForm({
+  action = entrar,
+  aviso,
+}: {
+  action?: ActionLogin;
+  /**
+   * Confirmação de que a tela foi aberta por um cadastro recém-concluído.
+   *
+   * ⚠️ A tela de login era o destino de um `redirect` que não dizia nada:
+   * a pessoa chegava, digitava e-mail e senha, e não havia nenhum vínculo
+   * com o que tinha acabado de acontecer. É texto pronto — quem decide a
+   * frase é a página dona do fluxo, e este componente não conhece a query
+   * string.
+   *
+   * O `| undefined` explícito é **obrigatório** sob `exactOptionalPropertyTypes`
+   * (tsconfig.base.json:20): `aviso?: string` proíbe a propriedade de existir
+   * com valor `undefined`, e a página passa `aviso={aviso}` incondicionalmente,
+   * com `aviso: string | undefined` vindo da query string (page.tsx:42). Sem o
+   * `| undefined`, `tsc` reprova — e a suíte continua verde, porque o Vitest e
+   * o Playwright transpilam sem typecheck. Aqui "ausente" e "`undefined`" são
+   * a mesma coisa: o consumo é `{aviso ? … : …}` (abaixo), um teste de
+   * veracidade que não distingue os dois. Apontar o call-site como spread
+   * condicional também resolveria, e é a opção se algum dia essa distinção
+   * virar regra em vez de convenção.
+   */
+  aviso?: string | undefined;
+}) {
   const [estado, despachar, pendente] = useActionState<LoginState, FormData>(action, LOGIN_INICIAL);
 
   const form = useForm<LoginInput>({
@@ -124,6 +150,21 @@ export function LoginForm({ action = entrar }: { action?: ActionLogin }) {
       aria-busy={pendente}
       className="max-w-md space-y-5"
     >
+      {aviso ? (
+        // pt-BR: `role="status"`, e NÃO `role="alert"`. O aviso é uma
+        // confirmação — o leitor de tela deve anunciá-la, mas sem interromper
+        // o que a pessoa já está fazendo (`alert` é `assertive` e corta a
+        // fala em curso). E `aria-live="polite"` é redundante aqui por
+        // construção: `status` já é polite por definição, e escrever os dois
+        // cria um segundo lugar onde o comportamento do aviso mora.
+        <p
+          role="status"
+          className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900"
+        >
+          {aviso}
+        </p>
+      ) : null}
+
       {estado.formError ? (
         <p
           role="alert"

@@ -84,9 +84,21 @@ export default defineConfig({
       // `// @vitest-environment jsdom` no topo do arquivo).
       'components/**/*.spec.tsx',
       // pt-BR: a Server Action mora em `app/users/novo/actions.ts`. O
-      // `app/**` continua excluído da COBERTURA (decisão de diseño
+      // `app/**` continua excluído da COBERTURA (decisão de desenho
       // acima, inalterada) — aqui é só `include` de descoberta.
       'app/**/*.spec.ts',
+      // pt-BR: página com JSX mora em `app/` e precisa do mesmo glob `.tsx`
+      // que `components/` já tinha. MEDIDO 2026-10-13: sem esta linha,
+      // `vitest run app/login/page.spec.tsx` respondeu "No test files
+      // found, exiting with code 1" — o arquivo existia, estava correto, e
+      // simplesmente nunca era coletado. Nenhum `.spec.tsx` sob `app/` tinha
+      // rodado até agora, porque nunca existiu um; o furo era do glob, não
+      // de um arquivo esquecido.
+      //
+      // ⚠️ A exclusão de COBERTURA `app/**/*.tsx` (mais acima) continua
+      // valendo e é ela que impede este spec — e a `page.tsx` que ele mede —
+      // de entrarem no denominador. Ampliar `include` não amplia `exclude`.
+      'app/**/*.spec.tsx',
       // pt-BR: Task 4.1 (plano telemetria) introduziu o reporter de
       // Web Vitals sob `src/telemetry/`. Client Components ficam fora
       // de `lib/` (utilities puras) e `components/` (UI), então

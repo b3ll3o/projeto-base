@@ -132,6 +132,18 @@ export async function cadastrarUsuario(
   // exceção NEXT_REDIRECT; um `try/catch` em volta engoliria o sinal de
   // navegação e a pessoa ficaria parada no formulário, com o usuário
   // criado, sem nenhuma indicação disso.
+  //
+  // ⚠️ O destino é o LOGIN, e não `/users`. O cadastro é `@Public()` e NÃO
+  // emite sessão — `POST /users` devolve só o usuário, sem par de tokens
+  // (é `POST /auth/login` que assina), então quem acabou de se cadastrar
+  // não tem cookie nenhum. `/users` chama `exigirSessao()`, que sem cookie
+  // redireciona para `/login`. Redirecionar para lá era um beco sem saída de
+  // dois saltos, e a pessoa que acabara de ESCOLHER a senha era obrigada a
+  // digitá-la de novo sem nenhum aviso de por quê.
+  //
+  // O `?cadastrado=1` existe para o login abrir com uma linha de confirmação
+  // em vez de um formulário mudo — sem ele, o redirecionamento continua
+  // silencioso, só que em vez de duas telas sem contexto é uma.
   if (erro instanceof ApiError) {
     return estadoDeErro(erro, valores);
   }
@@ -142,5 +154,5 @@ export async function cadastrarUsuario(
     return { ...CADASTRO_INICIAL, valores: valoresSemSegredo(valores), formError: ERRO_GENERICO };
   }
 
-  redirect('/users');
+  redirect('/login?cadastrado=1');
 }

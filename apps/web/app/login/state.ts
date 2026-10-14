@@ -67,6 +67,29 @@ export const CREDENCIAIS_INVALIDAS = 'E-mail ou senha incorretos.';
 export const ERRO_GENERICO_LOGIN =
   'Não foi possível entrar. Verifique a conexão e tente novamente.';
 
+/**
+ * Query param que a tela de cadastro usa para avisar que a conta ficou criada.
+ *
+ * pt-BR: mora AQUI, e não em `actions.ts` do cadastro, porque um arquivo
+ * com `'use server'` só pode exportar funções async — a constante teria de
+ * ser duplicada no produtor e no consumidor, que é o jeito mais barato de
+ * um `redirect` calado apontar para uma rota que ninguém renderiza. E o valor
+ * precisa ser um sinal, não a mensagem: a query string é serializada e
+ * pode aparecer em log de borda e no histórico do browser.
+ */
+export const PARAM_CADASTRO_CONCLUIDO = 'cadastrado';
+
+/**
+ * Confirmação que o login abre depois de um cadastro.
+ *
+ * ⚠️ Não diz "você foi cadastrado com sucesso" e entra direto no produto: a
+ * conta foi criada, mas a pessoa AINDA NÃO TEM SESSÃO (o cadastro não assina
+ * token), e ela precisa digitar a senha que acabou de escolher. Uma
+ * mensagem que pulasse essa etapa seria uma promessa que o app não cumpre.
+ */
+export const AVISO_CADASTRO_CONCLUIDO =
+  'Cadastro feito. Agora entre com o e-mail e a senha que você acabou de escolher.';
+
 /** Anexa o traceId ao fim da mensagem, quando existe. */
 export function comTraceId(mensagem: string, traceId?: string): string {
   return traceId ? `${mensagem} Código de rastreamento: ${traceId}.` : mensagem;

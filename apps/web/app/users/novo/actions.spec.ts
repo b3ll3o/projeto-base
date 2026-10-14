@@ -91,18 +91,26 @@ afterEach(() => {
 });
 
 describe('cadastrarUsuario — caminho feliz', () => {
-  it('cria o usuário e redireciona para a listagem', async () => {
+  it('cria o usuário e redireciona para o LOGIN — não para a listagem', async () => {
     responder(okResponse());
 
     // pt-BR: `redirect()` sinaliza a navegação LANÇANDO — é assim que o
     // Next marca o fluxo. O sentinela chegar ao chamador é parte do
     // contrato: se a Action engolisse essa exceção, a pessoa ficaria
     // olhando um formulário preenchido de um usuário que já existe.
+    //
+    // ⚠️ E o destino é o LOGIN, não `/users`. MEDIDO 2026-10-13: o cadastro
+    // é `@Public()` e NÃO emite sessão (`POST /users` devolve só o usuário,
+    // sem par de tokens), enquanto `/users` chama `exigirSessao()`, que sem
+    // cookie de access redireciona para `/login`. A redireção para `/users`
+    // era portanto um beco sem saída: a pessoa criava a conta, era jogada
+    // numa rota protegida, voltava ao login sem nenhuma mensagem — e teria
+    // de digitar a senha que acabara de escolher.
     await expect(
       cadastrarUsuario(INICIAL, formData('Maria Silva', 'maria@empresa.com')),
-    ).rejects.toThrow('NEXT_REDIRECT:/users');
+    ).rejects.toThrow('NEXT_REDIRECT:/login?cadastrado=1');
 
-    expect(vi.mocked(redirect)).toHaveBeenCalledWith('/users');
+    expect(vi.mocked(redirect)).toHaveBeenCalledWith('/login?cadastrado=1');
   });
 
   it('envia nome e email aparados, e a senha CRUA, para POST /users', async () => {
