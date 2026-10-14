@@ -52,7 +52,7 @@ endpoint que ninguém vê seria custo sem cobertura.
 | Fluxo | Rota | Nome | Spec | Estados cobertos |
 |-------|------|------|------|-------------------|
 | F1 | `/users` | Listagem de usuários | `f1-listagem.spec.ts` | com dados · vazio · API fora do ar |
-| F2 | `/users/novo` → `/users` | Cadastro com sucesso | `f2-cadastro-sucesso.spec.ts` | cria · redireciona · aparece na lista · normalização |
+| F2 | `/users/novo` → `/login?cadastrado=1` → `/users` | Cadastro com sucesso | `f2-cadastro-sucesso.spec.ts` | cria · redireciona · confirmação no login · aparece na lista · normalização |
 | F3 | `/users/novo` | Validação no cliente | `f3-cadastro-validacao.spec.ts` | vazio · email malformado · limite de tamanho · foco no 1º inválido |
 | F4 | `/users/novo` | Email duplicado | `f4-cadastro-email-duplicado.spec.ts` | 409 → erro no campo · valores preservados · `aria-invalid` |
 | F5 | `/users/novo` | Erro genérico | `f5-cadastro-erro-generico.spec.ts` | 500 com traceId · rede caída sem traceId |
@@ -194,7 +194,7 @@ do par, não um.
 | Versão | Data | Mudança |
 |---------|------|---------|
 | 1.0 | 2026-10-08 | Criação. Inventário F1–F6; gate de paridade; execução no CI. |
-| 1.1 | 2026-10-13 | Demanda `login-usuario-senha`: F7 (login) e F8 (rota protegida sem sessão). F1–F6 passam a rodar autenticados pela fixture `auto` `comSessao`; `JWT_SECRET` aleatório por execução no `subirApi`; helper `credenciais` exposto. `/users/novo` sai do conjunto protegido — a tela de cadastro deixou de chamar `exigirSessao()`, porque `POST /users` já é público. |
+| 1.1 | 2026-10-13 | Demanda `login-usuario-senha`: F7 (login) e F8 (rota protegida sem sessão). F1–F6 passam a rodar autenticados pela fixture `auto` `comSessao`; `JWT_SECRET` aleatório por execução no `subirApi`; `SENHA_DE_TESTE` e `emailUnico` exportados de `e2e/support/dados.ts` (`:308` e `:359`) para o spec F7 semear a própria conta. `/users/novo` sai do conjunto protegido — a tela de cadastro deixou de chamar `exigirSessao()`, porque `POST /users` já é público. |
 
 ## Ver Também
 
