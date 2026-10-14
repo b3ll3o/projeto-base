@@ -68,3 +68,11 @@ CREATE UNIQUE INDEX "users_archive_entity_id_key" ON "users_archive"("entity_id"
 
 -- CreateIndex
 CREATE INDEX "users_archive_deleted_at_idx" ON "users_archive"("deleted_at" DESC);
+
+-- AddDefault (issue #69): schema declara @default(uuid()) mas migration não
+-- criou o DEFAULT gen_random_uuid() para users_history e users_archive. Sem
+-- isso, INSERTs pelo Prisma sem id explícito quebram em prod (drift entre
+-- schema e DDL). Em PG >= 11, ALTER COLUMN ... SET DEFAULT é instantâneo
+-- (não reescreve a tabela).
+ALTER TABLE "users_history" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();
+ALTER TABLE "users_archive" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();

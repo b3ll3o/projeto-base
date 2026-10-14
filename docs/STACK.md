@@ -136,7 +136,7 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão da stack:** 1.9.1
+**Versão da stack:** 1.11.0
 
 ### Histórico de Versões
 
@@ -153,3 +153,4 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 | `1.7.0` | Adição de **OpenTelemetry** ao stack backend (SDK Node + auto-instrumentations: NestJS/Fastify/Pino/Prisma/HTTP; exporter OTLP HTTP via OTel Collector perfil Compose `[observability]`); §Observabilidade agora instrumentável de fato (não apenas declarada). Frontend: `instrumentation.ts` + `@opentelemetry/sdk-web` + `web-vitals` (LCP/CLS/INP reporters → OTel Metrics). Estado correlacionado: `request.id` → `traceparent` W3C + `AuditContext.correlationId`. |
 | `1.9.0` | `apps/api` e `apps/web` documentados como **implementados** — o cabeçalho afirmava o contrário e o próprio arquivo se contradizia (a §Containerização e o Histórico já descreviam os Dockerfiles de api+web). `+ Redis` removido da lista do README: `grep -l 'redis\|bullmq' apps/*/package.json` não acha nenhum dos dois. |
 | `1.9.1` | §5 — CI reespecificado de "a definir por projeto" para GitHub Actions (com 4 workflows nomeados). Cross-ref para [`docs/fluxo-desenvolvimento.md`](./fluxo-desenvolvimento.md) (fluxo end-to-end re-medido a cada merge). |
+| `1.11.0` | Hardening: pin de `@sha256` em imagens Docker (`postgres:16-alpine`, `otel/opentelemetry-collector-contrib:0.103.0`); `mem_limit` em todos os 4 services; `memory_limiter` no OTel Collector; rate-limit global (`@nestjs/throttler`, 100 req/min) + CORS whitelist via `ALLOWED_ORIGINS`; `AbortController` timeout (10s) no `api-client`; migration `20260922003354` com `DEFAULT gen_random_uuid()` em `users_history.id` e `users_archive.id`. Drift de versão entre `STACK.md`/`TEMPLATE_USAGE.md` (1.9.1) e `MONOREPO.md`/`estrutura-e-versionamento.md` (1.10.0/1.11.0) resolvido — todos sincronizados em v1.11.0. |

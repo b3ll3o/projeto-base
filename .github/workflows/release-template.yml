@@ -5,9 +5,9 @@
 # Triggers:
 #   1. push → main com mudança em docs/MONOREPO.md (único arquivo onde a
 #      versão canônica é detectada pelo regex do step "Determinar versão").
-#      Os outros 2 arquivos versionados (docs/STACK.md e
-#      .agents/specs/conventions/estrutura-e-versionamento.md) DEVEM ser
-#      atualizados juntos para consistência mas não disparam o workflow.
+#      Os outros 3 arquivos versionados (docs/STACK.md,
+#      docs/TEMPLATE_USAGE.md, .agents/specs/conventions/estrutura-e-versionamento.md)
+#      DEVEM ser atualizados juntos para consistência mas não disparam o workflow.
 #   2. workflow_dispatch → backfill manual (ex: tag de v1.3.0 antes deste
 #      workflow existir, ou re-tagging após correção manual)
 #
@@ -15,6 +15,8 @@
 #   - Lê versão do footer de docs/MONOREPO.md ("**Versão do documento:** X.Y.Z")
 #     — usa o ÚLTIMO match (`tail -1`) para resiliência contra footers duplicados
 #   - Se workflow_dispatch passar input `version`, usa ele; senão extrai
+#   - #67: valida que os 4 footers (STACK, MONOREPO, TEMPLATE_USAGE, estrutura-e-versionamento)
+#     estão em sincronia — falha se drift detectado
 #   - Se tag `vX.Y.Z` já existe → noop (idempotente)
 #   - Senão cria annotated tag `vX.Y.Z` apontando para o merge commit + push
 #
@@ -87,6 +89,32 @@ jobs:
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Validar sincronia dos 4 footers de versao (issue #67)
+        id: drift
+        run: |
+          set -euo pipefail
+          target="${{ steps.version.outputs.version }}"
+          stack_ver=$(grep -oE '\*\*Versão da stack:\*\* [0-9]+\.[0-9]+\.[0-9]+' docs/STACK.md \
+            | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -1 || echo "")
+          mono_ver=$(grep -oE '\*\*Versão do documento:\*\* [0-9]+\.[0-9]+\.[0-9]+' docs/MONOREPO.md \
+            | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -1 || echo "")
+          tpl_ver=$(grep -oE '\*\*Versão do documento:\*\* [0-9]+\.[0-9]+\.[0-9]+' docs/TEMPLATE_USAGE.md \
+            | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -1 || echo "")
+          est_ver=$(grep -oE '\*\*Versão da convenção:\*\* [0-9]+\.[0-9]+\.[0-9]+' .agents/specs/conventions/estrutura-e-versionamento.md \
+            | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -1 || echo "")
+          echo "STACK=$stack_ver MONOREPO=$mono_ver TEMPLATE_USAGE=$tpl_ver ESTRUTURA=$est_ver TARGET=$target"
+          drift=0
+          for v in "$stack_ver" "$mono_ver" "$tpl_ver" "$est_ver"; do
+            if [ "$v" != "$target" ]; then
+              echo "::error::Drift detectado: footer em '$v' difere de MONOREPO ($target). Sincronize os 4 footers antes de mergear."
+              drift=1
+            fi
+          done
+          if [ $drift -ne 0 ]; then
+            exit 1
+          fi
+          echo "✓ 4 footers em sincronia em $target."
 
       - name: Criar annotated tag + push
         if: steps.check.outputs.exists == 'false'

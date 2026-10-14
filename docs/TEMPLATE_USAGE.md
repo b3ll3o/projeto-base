@@ -136,6 +136,7 @@ A regra `§1` do `AGENTS.md` é **mandatória por padrão**. Em casos excepciona
 | `1.0.0` | Lançamento inicial com 10 agents genéricos + skill `agents:coordinate` | Estável |
 | `1.1.0` | Adicionados 3 specialists de stack (monorepo, nestjs, nextjs) + docs STACK.md e MONOREPO.md | Estável |
 | `1.9.0` | Bump de metadata — alinhamento com o estado real do projeto (20 agents, 9 skills, 17 conventions, 10 workflows). Sem mudança no fluxo de integração por ferramenta; conteúdo das integrações em `docs/integrations/` continua válido e canônico. | Estável |
+| `1.11.0` | Bump de metadata — sincronização de versão com STACK.md (1.9.1 → 1.11.0) e MONOREPO.md (1.10.0 → 1.11.0). Resolve drift de versão cross-doc. Sem mudança no fluxo de integração por ferramenta. | Estável |
 
 **Regra de breaking change:**
 - Mudanças no formato de handoff (`task/context/expected_output/success_criteria`) exigem major bump
@@ -164,4 +165,4 @@ R: `.agents/` é vendor-neutral — funciona com qualquer IA (Claude Code, Curso
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão do documento:** 1.9.1
+**Versão do documento:** 1.11.0

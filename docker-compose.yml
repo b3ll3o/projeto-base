@@ -1,21 +1,31 @@
 # docker-compose.yml
+# Issues resolvidas: #68 (plaintext password + DATABASE_URL placeholder), #74 (digest pinning), #75 (mem_limit + memory_limiter)
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     container_name: projeto-base-postgres
     environment:
-      POSTGRES_USER: projeto
-      POSTGRES_PASSWORD: projeto
-      POSTGRES_DB: projeto_base
+      POSTGRES_USER: ${POSTGRES_USER:-projeto}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required} # #68: nunca plaintext; falha explícita se não setado
+      POSTGRES_DB: ${POSTGRES_DB:-projeto_base}
+    env_file:
+      - .env.production # #68: secrets em arquivo separado, fora do compose versionado
     ports:
       - '5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U projeto']
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER:-projeto}"']
       interval: 5s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M # #75: teto de memória explícito
+        reservations:
+          memory: 256M
+    restart: unless-stopped
   api:
     build:
       context: .
@@ -25,8 +35,11 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      DATABASE_URL: postgresql://projeto:projeto@postgres:5432/projeto_base?schema=public
-      LOG_LEVEL: info
+      DATABASE_URL: ${DATABASE_URL} # #68: obrigatório via env, sem placeholder literal
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3001} # #73: consumido pelo main.ts
+    env_file:
+      - .env.production
     ports:
       - '3000:3000'
     healthcheck:
@@ -38,6 +51,13 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+    restart: unless-stopped
   web:
     build:
       context: .
@@ -63,8 +83,15 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+    restart: unless-stopped
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.103.0
+    image: otel/opentelemetry-collector-contrib:0.103.0@sha256:0dffde3e58fc3f255cad861deb62d7c51505ce961a8a7e2107c7fc2668b774a3 # #74
     profiles: [observability]
     command: ['--config=/etc/otelcol/config.yaml']
     volumes:
@@ -72,6 +99,13 @@ services:
     ports:
       - '4317:4317' # OTLP gRPC
       - '4318:4318' # OTLP HTTP
+    deploy:
+      resources:
+        limits:
+          memory: 512M # #75: teto de memória explícito
+        reservations:
+          memory: 256M
+    restart: unless-stopped
 
 volumes:
   postgres_data:
