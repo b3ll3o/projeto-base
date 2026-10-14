@@ -38,9 +38,18 @@ export interface E2EContext {
    * 31 dos testes e2e caíam — os `GET`/`PATCH`/`DELETE` com 401 e os
    * `POST` com 400 (o cadastro é público, mas passou a exigir `senha`).
    *
-   * O token é REAL: a conta é criada pelo `POST /users` público e o par vem
-   * do `POST /auth/login`. Substituir o guard por um dublê aqui zeraria o
-   * custo e apagaria justamente o que estes testes existem para atravessar.
+   * ⚠️ **Um `authorization` explícito no request NÃO é sobrescrito** (medido
+   * no mesmo dia, com a política de propriedade): desde que
+   * `UserOwnershipGuard` compara `request.user.sub` com o `:id` da rota, um
+   * spec que opera sobre o usuário que acabou de criar precisa do token
+   * DELE. `tokenDe(app, { email, senha })` entrega esse token e o spec o passa
+   * em `headers`; sem esta ressalva, o header do spec seria apagado pelo
+   * default e o spec mediria 403 sem saber por quê.
+   *
+   * O token padrão é REAL: a conta é criada pelo `POST /users` público e o
+   * par vem do `POST /auth/login`. Substituir o guard por um dublê aqui
+   * zeraria o custo e apagaria justamente o que estes testes existem para
+   * atravessar.
    *
    * `POST /users` é `@Public()`, e levar o header nela é inofensivo — o
    * guard o ignora. Um spec que precise medir 401 tem `app` à mão, que é o
@@ -154,6 +163,91 @@ export async function emitirTokenDeSessao(
 }
 
 /**
+ * Faz login com um par (e-mail, senha) JÁ EXISTENTE e devolve o `accessToken`.
+ *
+ * pt-BR: existe desde que `UserOwnershipGuard` passou a comparar o `sub` do
+ * token com o `:id` da rota. Um spec que age sobre o usuário que acabou de
+ * criar precisa do token DELE — o token da sessão e2e é de outra conta (que
+ * ainda por cima é apagada depois de emitido), então ele não serve para nada
+ * por-id.
+ *
+ * ⚠️ NÃO recria a conta: quem cria é o `POST /users` do próprio spec, e é
+ * justamente esse `POST` que o spec precisa medir. Um helper que criasse a
+ * conta esconderia o cadastro da asserção.
+ */
+export async function tokenDe(
+  app: NestFastifyApplication,
+  conta: { email: string; senha: string },
+): Promise<string> {
+  const login = await app.inject({
+    method: 'POST',
+    url: '/api/v1/auth/login',
+    payload: { email: conta.email, senha: conta.senha },
+  });
+  if (login.statusCode !== 201) {
+    // ⚠️ A mensagem NÃO embute `conta.senha` nem o token devolvido: um erro de
+    // setup que joga a credencial no stdout do CI é um segredo no log do CI.
+    throw new Error(`o login de '${conta.email}' falhou: HTTP ${login.statusCode} — ${login.body}`);
+  }
+  const { accessToken } = JSON.parse(login.body) as { accessToken?: unknown };
+  if (typeof accessToken !== 'string' || accessToken.length === 0) {
+    throw new Error(`o login de '${conta.email}' devolveu um accessToken ausente ou vazio`);
+  }
+  return accessToken;
+}
+
+/**
+ * Cria uma conta pelo `POST /users` público e devolve o SEU token, mais os
+ * headers prontos para as rotas por-id.
+ *
+ * pt-BR: é o par que quase todo spec de CRUD precisa desde que
+ * `UserOwnershipGuard` compara o `sub` do token com o `:id` da rota — a conta
+ * de sessão e2e é de outra pessoa (e é apagada depois de emitida), então
+ * qualquer spec que atue sobre o registro que acabou de criar precisa do
+ * token DELE.
+ *
+ * Devolver `headers` pronto (e não o token cru) é deliberado: o erro mais
+ * fácil de cometer aqui é passar `{ 'if-match': … }` e esquecer o
+ * `authorization`, que produz um 403 que parece falha de autorização e é
+ * falha de montagem do spec.
+ */
+export async function criarUsuarioAutenticado(
+  e2e: E2EContext,
+  conta: { nome: string; email: string; senha?: string },
+): Promise<{
+  id: string;
+  email: string;
+  token: string;
+  headers: Record<string, string>;
+  /** A resposta crua do `POST /users` — specs que medem o `ETag` do 201. */
+  cadastro: { statusCode: number; headers: Record<string, unknown>; body: string };
+}> {
+  const senha = conta.senha ?? SENHA_DE_TESTE;
+  const cadastro = await e2e.injetar({
+    method: 'POST',
+    url: '/api/v1/users',
+    payload: { nome: conta.nome, email: conta.email, senha },
+  });
+  if (cadastro.statusCode !== 201) {
+    throw new Error(
+      `o cadastro de '${conta.email}' falhou: HTTP ${cadastro.statusCode} — ${cadastro.body}`,
+    );
+  }
+  const { id } = JSON.parse(cadastro.body) as { id?: unknown };
+  if (typeof id !== 'string' || id === '') {
+    throw new Error(`o cadastro de '${conta.email}' devolveu um id ausente`);
+  }
+  const token = await tokenDe(e2e.app, { email: conta.email, senha });
+  return {
+    id,
+    email: conta.email,
+    token,
+    headers: { authorization: `Bearer ${token}` },
+    cadastro: { statusCode: cadastro.statusCode, headers: cadastro.headers, body: cadastro.body },
+  };
+}
+
+/**
  * Sobe container Postgres via Testcontainers, compila AppModule, aplica
  * wiring idêntico ao main.ts de produção e devolve `{ app, ctx, injetar }`.
  */
@@ -189,6 +283,13 @@ export async function bootstrapE2E(): Promise<E2EContext> {
       return app.inject(requisicao);
     }
     const headers = (requisicao.headers ?? {}) as Record<string, unknown>;
+    // ⚠️ `authorization` que veio do request vence o default — é assim que um
+    // spec opera como o dono do registro (`tokenDe`) em vez da conta de
+    // sessão. Sobrepor aqui era o que faria a política de propriedade virar
+    // "403 em todos os specs" sem que nenhum deles dissesse por quê.
+    if (typeof headers['authorization'] === 'string') {
+      return app.inject(requisicao);
+    }
     return app.inject({
       ...requisicao,
       headers: { ...headers, authorization: `Bearer ${token}` },

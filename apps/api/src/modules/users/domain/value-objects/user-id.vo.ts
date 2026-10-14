@@ -1,7 +1,16 @@
 import { randomBytes } from 'node:crypto';
 import { UserValidationException } from '../exceptions/user.exceptions.js';
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/**
+ * UUID v7 canônico, em minúsculas.
+ *
+ * ⚠️ EXPORTADO desde 2026-10-13 porque `UserOwnershipGuard` precisa saber se o
+ * `:id` da rota é siquiera um id antes de cobrar propriedade dele. A regex
+ * mora aqui e não lá: duas cópias do que é "um id" neste repo divergem no
+ * primeiro ajuste do formato, e a que divergisse dentro do guard produziria
+ * 403 onde o domínio queria dizer 400.
+ */
+export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Gera um UUID v7 (RFC 9562): 48 bits de timestamp ms + versão 7 + variante 10xx + random.

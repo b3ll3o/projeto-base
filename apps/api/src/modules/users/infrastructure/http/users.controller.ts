@@ -55,6 +55,7 @@ import type {
   ListHistoryInput,
 } from '../../../../shared/audit/application/audit-service.port.js';
 import { ZodValidationPipe } from '../../../../shared/infrastructure/http/zod-validation.pipe.js';
+import { UserOwnershipGuard } from './user-ownership.guard.js';
 
 import { UserId } from '../../domain/value-objects/user-id.vo.js';
 
@@ -160,9 +161,14 @@ export class UsersController {
 
   // ───────────────────────── GET /users/:id ──────────────────────
   @Get(':id')
+  @UseGuards(UserOwnershipGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Buscar usuário por ID' })
   @ApiResponse({ status: 200, description: 'User encontrado' })
+  @ApiResponse({
+    status: 403,
+    description: 'O `:id` da rota não é o `sub` do token (USER_OWNERSHIP_VIOLATION)',
+  })
   @ApiResponse({ status: 404, description: 'User não encontrado' })
   async findOne(@Param('id') id: string): Promise<unknown> {
     const input: GetUserByIdInput = { id };
@@ -171,8 +177,13 @@ export class UsersController {
 
   // ───────────────────────── PATCH /users/:id ───────────────────
   @Patch(':id')
+  @UseGuards(UserOwnershipGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Renomear usuário (optimistic locking via If-Match)' })
+  @ApiResponse({
+    status: 403,
+    description: 'O `:id` da rota não é o `sub` do token (USER_OWNERSHIP_VIOLATION)',
+  })
   @ApiHeader({
     name: 'If-Match',
     required: true,
@@ -204,9 +215,14 @@ export class UsersController {
 
   // ───────────────────────── DELETE /users/:id ──────────────────
   @Delete(':id')
+  @UseGuards(UserOwnershipGuard)
   @HttpCode(204)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Soft-delete do usuário (optimistic locking via If-Match)' })
+  @ApiResponse({
+    status: 403,
+    description: 'O `:id` da rota não é o `sub` do token (USER_OWNERSHIP_VIOLATION)',
+  })
   @ApiHeader({ name: 'If-Match', required: true })
   @ApiResponse({ status: 204, description: 'User soft-deletado' })
   @ApiResponse({ status: 400, description: 'Header If-Match ausente ou inválido' })
@@ -230,8 +246,13 @@ export class UsersController {
 
   // ───────────────────────── POST /users/:id/restore ────────────
   @Post(':id/restore')
+  @UseGuards(UserOwnershipGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Restaurar usuário soft-deletado (optimistic locking)' })
+  @ApiResponse({
+    status: 403,
+    description: 'O `:id` da rota não é o `sub` do token (USER_OWNERSHIP_VIOLATION)',
+  })
   @ApiHeader({ name: 'If-Match', required: true })
   @ApiResponse({ status: 201, description: 'User restaurado' })
   @ApiResponse({ status: 400, description: 'Header If-Match ausente ou inválido' })
@@ -255,8 +276,13 @@ export class UsersController {
 
   // ───────────────────────── GET /users/:id/history ─────────────
   @Get(':id/history')
+  @UseGuards(UserOwnershipGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Histórico de auditoria do usuário' })
+  @ApiResponse({
+    status: 403,
+    description: 'O `:id` da rota não é o `sub` do token (USER_OWNERSHIP_VIOLATION)',
+  })
   @ApiQuery({ name: 'cursor', required: false, type: String })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'Histórico paginado' })

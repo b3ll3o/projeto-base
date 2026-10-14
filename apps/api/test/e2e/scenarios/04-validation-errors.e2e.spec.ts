@@ -15,6 +15,7 @@ import {
   bootstrapE2E,
   teardownE2E,
   cleanE2EDatabase,
+  criarUsuarioAutenticado,
   type E2EContext,
   SENHA_DE_TESTE,
 } from '../test-app.helper.js';
@@ -103,11 +104,8 @@ describe('E2E 04: Validation errors (Zod) + RFC 7807 Problem Details', () => {
 
   it('PATCH com payload vazio -> 400 VALIDATION_ERROR', async () => {
     const { injetar } = e2e;
-    const c = await injetar({
-      method: 'POST',
-      url: '/api/v1/users',
-      payload: { nome: 'Ana', email: 'a@b.com', senha: SENHA_DE_TESTE },
-    });
+    const dona = await criarUsuarioAutenticado(e2e, { nome: 'Ana', email: 'a@b.com' });
+    const c = dona.cadastro;
     // MEDIDO 2026-10-08: sem esta asserção o teste passava pelo motivo
     // errado. Com `nome: 'A'` o POST devolvia **500** (o VO recusa 1 char
     // e o Zod aceita), `id` vinha `undefined`, e o PATCH batia em
@@ -116,13 +114,13 @@ describe('E2E 04: Validation errors (Zod) + RFC 7807 Problem Details', () => {
     // A asserção abaixo é o que impede a regressão de voltar a ser verde
     // sem estar medindo nada.
     expect(c.statusCode).toBe(201);
-    const userId = (JSON.parse(c.body) as { id: string }).id;
+    const userId = dona.id;
     expect(typeof userId).toBe('string');
 
     const res = await injetar({
       method: 'PATCH',
       url: `/api/v1/users/${userId}`,
-      headers: { 'if-match': 'W/"v1"' },
+      headers: { ...dona.headers, 'if-match': 'W/"v1"' },
       payload: {},
     });
     expect(res.statusCode).toBe(400);

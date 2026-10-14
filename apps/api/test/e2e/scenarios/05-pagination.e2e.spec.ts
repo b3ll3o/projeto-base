@@ -13,6 +13,7 @@ import {
   bootstrapE2E,
   teardownE2E,
   cleanE2EDatabase,
+  criarUsuarioAutenticado,
   type E2EContext,
   SENHA_DE_TESTE,
 } from '../test-app.helper.js';
@@ -83,18 +84,16 @@ describe('E2E 05: Cursor pagination + includeDeleted', () => {
     });
     const keepId = (JSON.parse(keep.body) as { id: string }).id;
 
-    const rm = await injetar({
-      method: 'POST',
-      url: '/api/v1/users',
-      payload: { nome: 'Romeo', email: 'rm@b.com', senha: SENHA_DE_TESTE },
-    });
-    const rmId = (JSON.parse(rm.body) as { id: string }).id;
+    // Romeo precisa do token DELE: o `DELETE` abaixo é por-id, e a política
+    // de propriedade compara o `sub` com o `:id` da rota.
+    const romeo = await criarUsuarioAutenticado(e2e, { nome: 'Romeo', email: 'rm@b.com' });
+    const rmId = romeo.id;
 
     // Soft-delete o segundo
     const d = await injetar({
       method: 'DELETE',
       url: `/api/v1/users/${rmId}`,
-      headers: { 'if-match': 'W/"v1"' },
+      headers: { ...romeo.headers, 'if-match': 'W/"v1"' },
     });
     expect(d.statusCode).toBe(204);
 

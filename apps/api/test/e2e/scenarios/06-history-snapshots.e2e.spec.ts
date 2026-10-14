@@ -12,8 +12,8 @@ import {
   bootstrapE2E,
   teardownE2E,
   cleanE2EDatabase,
+  criarUsuarioAutenticado,
   type E2EContext,
-  SENHA_DE_TESTE,
 } from '../test-app.helper.js';
 
 describe('E2E 06: Histórico preserva snapshots por versão', () => {
@@ -40,18 +40,14 @@ describe('E2E 06: Histórico preserva snapshots por versão', () => {
     // mutation aqui para cobrir dois campos.
 
     // INSERT → v1
-    const c = await injetar({
-      method: 'POST',
-      url: '/api/v1/users',
-      payload: { nome: 'Snap v1', email: 'snap-v1@b.com', senha: SENHA_DE_TESTE },
-    });
-    const userId = (JSON.parse(c.body) as { id: string }).id;
+    const dona = await criarUsuarioAutenticado(e2e, { nome: 'Snap v1', email: 'snap-v1@b.com' });
+    const userId = dona.id;
 
     // UPDATE nome → v2
     await injetar({
       method: 'PATCH',
       url: `/api/v1/users/${userId}`,
-      headers: { 'if-match': 'W/"v1"' },
+      headers: { ...dona.headers, 'if-match': 'W/"v1"' },
       payload: { novoNome: 'Snap v2' },
     });
 
@@ -59,12 +55,16 @@ describe('E2E 06: Histórico preserva snapshots por versão', () => {
     await injetar({
       method: 'PATCH',
       url: `/api/v1/users/${userId}`,
-      headers: { 'if-match': 'W/"v2"' },
+      headers: { ...dona.headers, 'if-match': 'W/"v2"' },
       payload: { novoNome: 'Snap v3' },
     });
 
     // GET /history
-    const h = await injetar({ method: 'GET', url: `/api/v1/users/${userId}/history` });
+    const h = await injetar({
+      method: 'GET',
+      url: `/api/v1/users/${userId}/history`,
+      headers: dona.headers,
+    });
     expect(h.statusCode).toBe(200);
     const body = JSON.parse(h.body) as {
       entries: Array<{

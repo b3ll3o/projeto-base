@@ -39,6 +39,26 @@ export class InvalidRestoreException extends Error {
 }
 
 /**
+ * A pessoa autenticada tentou operar sobre o registro de **outro** usuário.
+ *
+ * pt-BR (2026-10-13): MEDIDO ao vivo antes desta exceção existir — um token
+ * válido da conta A recebia `200`/`204` sobre o id da conta B em `PATCH`,
+ * `DELETE`, `restore`, `GET :id` e `GET :id/history`. A branch entregava
+ * **autenticação sem autorização**: "sou alguém" sem "esse registro é meu".
+ *
+ * A mensagem NÃO embute os dois ids. Um id de vítima no corpo do erro é
+ * confirmação de que o registro existe para quem só podia chutar o id — que é
+ * exatamente o que o 403 já está dizendo.
+ */
+export class UserOwnershipViolationException extends Error {
+  constructor() {
+    super('Você só pode operar sobre o próprio registro');
+    this.name = 'UserOwnershipViolationException';
+    Object.setPrototypeOf(this, UserOwnershipViolationException.prototype);
+  }
+}
+
+/**
  * Invariante de value object violada — o `nome` ou o `email` está fora da
  * faixa que o VO aceita.
  *

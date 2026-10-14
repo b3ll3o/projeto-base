@@ -9,7 +9,12 @@
 //    UPDATE, UPDATE] e cada entry tem snapshot completo (id, email, …).
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { bootstrapE2E, teardownE2E, type E2EContext, SENHA_DE_TESTE } from '../test-app.helper.js';
+import {
+  bootstrapE2E,
+  teardownE2E,
+  criarUsuarioAutenticado,
+  type E2EContext,
+} from '../test-app.helper.js';
 
 describe('E2E 02: DELETE → RESTORE → audit trail completo', () => {
   let e2e: E2EContext;
@@ -25,19 +30,16 @@ describe('E2E 02: DELETE → RESTORE → audit trail completo', () => {
   it('audit trail completo: INSERT, UPDATE, UPDATE, DELETE, RESTORE', async () => {
     const { injetar } = e2e;
 
-    // INSERT → v1
-    const c = await injetar({
-      method: 'POST',
-      url: '/api/v1/users',
-      payload: { nome: 'Audit', email: 'audit@b.com', senha: SENHA_DE_TESTE },
-    });
-    const userId = (JSON.parse(c.body) as { id: string }).id;
+    // INSERT → v1. O helper já traz o login da MESMA pessoa: todas as rotas
+    // por-id abaixo exigem que o `sub` do token seja o `:id` da rota.
+    const dona = await criarUsuarioAutenticado(e2e, { nome: 'Audit', email: 'audit@b.com' });
+    const userId = dona.id;
 
     // UPDATE → v2
     await injetar({
       method: 'PATCH',
       url: `/api/v1/users/${userId}`,
-      headers: { 'if-match': 'W/"v1"' },
+      headers: { ...dona.headers, 'if-match': 'W/"v1"' },
       payload: { novoNome: 'Audit 2' },
     });
 
@@ -45,7 +47,7 @@ describe('E2E 02: DELETE → RESTORE → audit trail completo', () => {
     await injetar({
       method: 'PATCH',
       url: `/api/v1/users/${userId}`,
-      headers: { 'if-match': 'W/"v2"' },
+      headers: { ...dona.headers, 'if-match': 'W/"v2"' },
       payload: { novoNome: 'Audit 3' },
     });
 
@@ -53,7 +55,7 @@ describe('E2E 02: DELETE → RESTORE → audit trail completo', () => {
     const d = await injetar({
       method: 'DELETE',
       url: `/api/v1/users/${userId}`,
-      headers: { 'if-match': 'W/"v3"' },
+      headers: { ...dona.headers, 'if-match': 'W/"v3"' },
     });
     expect(d.statusCode).toBe(204);
 
@@ -63,6 +65,7 @@ describe('E2E 02: DELETE → RESTORE → audit trail completo', () => {
     const histAfterDelete = await injetar({
       method: 'GET',
       url: `/api/v1/users/${userId}/history`,
+      headers: dona.headers,
     });
     expect(histAfterDelete.statusCode).toBe(200);
     const histBodyAfterDelete = JSON.parse(histAfterDelete.body) as {
@@ -75,7 +78,7 @@ describe('E2E 02: DELETE → RESTORE → audit trail completo', () => {
     const r = await injetar({
       method: 'POST',
       url: `/api/v1/users/${userId}/restore`,
-      headers: { 'if-match': 'W/"v4"' },
+      headers: { ...dona.headers, 'if-match': 'W/"v4"' },
     });
     expect(r.statusCode).toBe(201);
     const restored = JSON.parse(r.body) as { version: number; isDeleted: boolean };
@@ -86,6 +89,7 @@ describe('E2E 02: DELETE → RESTORE → audit trail completo', () => {
     const h = await injetar({
       method: 'GET',
       url: `/api/v1/users/${userId}/history`,
+      headers: dona.headers,
     });
     expect(h.statusCode).toBe(200);
     const histBody = JSON.parse(h.body) as {

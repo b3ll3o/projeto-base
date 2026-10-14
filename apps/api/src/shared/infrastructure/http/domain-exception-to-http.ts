@@ -37,6 +37,7 @@
 import { HttpStatus } from '@nestjs/common';
 import {
   UserNotFoundException,
+  UserOwnershipViolationException,
   EmailAlreadyInUseException,
   ConcurrencyException,
   UserDeletedException,
@@ -105,6 +106,20 @@ export function mapExceptionToHttp(err: unknown): HttpErrorMapping {
   }
 
   // ─── DOMÍNIO (puro) ──────────────────────────────────────────────────────
+  //
+  // ⚠️ A NEGATIVA DE AUTORIZAÇÃO vem ANTES do 404 de propósito. A pergunta
+  // "o registro é meu?" é respondida sem tocar o banco: se o `sub` do token
+  // não for o `:id` da rota, o pedido é recusado pelo motivo certo. Devolver
+  // 404 aqui seria "o registro não existe" para um registro que existe — e um
+  // 404 que mente é pior que um 403 que diz a verdade, porque o cliente
+  // acredita que pode criar o id que chutar.
+  if (err instanceof UserOwnershipViolationException) {
+    return {
+      status: HttpStatus.FORBIDDEN,
+      code: 'USER_OWNERSHIP_VIOLATION',
+      title: 'Acesso negado a outro usuário',
+    };
+  }
   if (err instanceof UserNotFoundException) {
     return {
       status: HttpStatus.NOT_FOUND,

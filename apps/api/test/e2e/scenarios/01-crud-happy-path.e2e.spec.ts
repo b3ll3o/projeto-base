@@ -11,7 +11,13 @@
 //  - GET by id (atualizado) → confirma novo nome
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { bootstrapE2E, teardownE2E, type E2EContext, SENHA_DE_TESTE } from '../test-app.helper.js';
+import {
+  bootstrapE2E,
+  teardownE2E,
+  criarUsuarioAutenticado,
+  type E2EContext,
+  SENHA_DE_TESTE,
+} from '../test-app.helper.js';
 
 describe('E2E 01: CRU happy path completo', () => {
   let e2e: E2EContext;
@@ -27,20 +33,26 @@ describe('E2E 01: CRU happy path completo', () => {
   it('CREATE → GET → LIST → UPDATE → GET(updated)', async () => {
     const { injetar } = e2e;
 
-    // CREATE
-    const c = await injetar({
-      method: 'POST',
-      url: '/api/v1/users',
-      payload: { nome: 'Alice', email: 'a@b.com', senha: SENHA_DE_TESTE },
-    });
-    expect(c.statusCode).toBe(201);
-    const created = JSON.parse(c.body) as { id: string; email: string; version: number };
+    // CREATE — pelo endpoint público, e DEPOIS o login da mesma pessoa: a
+    // política de propriedade compara o `sub` do token com o `:id` da rota, e
+    // a conta de sessão e2e é de outra pessoa (que é apagada depois de
+    // emitida). Por isso `alice.headers`, e não o token padrão de `injetar`.
+    const alice = await criarUsuarioAutenticado(e2e, { nome: 'Alice', email: 'a@b.com' });
+    const created = JSON.parse(alice.cadastro.body) as {
+      id: string;
+      email: string;
+      version: number;
+    };
     expect(created.email).toBe('a@b.com');
     expect(created.version).toBe(1);
-    expect(c.headers.etag).toBe('W/"v1"');
+    expect(alice.cadastro.headers.etag).toBe('W/"v1"');
 
     // GET
-    const g = await injetar({ method: 'GET', url: `/api/v1/users/${created.id}` });
+    const g = await injetar({
+      method: 'GET',
+      url: `/api/v1/users/${created.id}`,
+      headers: alice.headers,
+    });
     expect(g.statusCode).toBe(200);
     const got = JSON.parse(g.body) as { id: string };
     expect(got.id).toBe(created.id);
@@ -56,7 +68,7 @@ describe('E2E 01: CRU happy path completo', () => {
     const u = await injetar({
       method: 'PATCH',
       url: `/api/v1/users/${created.id}`,
-      headers: { 'if-match': 'W/"v1"' },
+      headers: { ...alice.headers, 'if-match': 'W/"v1"' },
       payload: { novoNome: 'Alice 2' },
     });
     expect(u.statusCode).toBe(200);
@@ -66,7 +78,11 @@ describe('E2E 01: CRU happy path completo', () => {
     expect(u.headers.etag).toBe('W/"v2"');
 
     // GET updated
-    const g2 = await injetar({ method: 'GET', url: `/api/v1/users/${created.id}` });
+    const g2 = await injetar({
+      method: 'GET',
+      url: `/api/v1/users/${created.id}`,
+      headers: alice.headers,
+    });
     expect(g2.statusCode).toBe(200);
     const gotUpdated = JSON.parse(g2.body) as { nome: string };
     expect(gotUpdated.nome).toBe('Alice 2');
