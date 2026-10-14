@@ -218,6 +218,19 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     file: '.tooling/scripts/ci/check-ci-local-e2e.ts',
     id: 'check-ci-local-e2e',
   },
+  {
+    // Complemento do gate acima, na direção que ele não cobre: `check-ci-local-e2e`
+    // afirma que a TASK e2e roda; este afirma que o ESCOPO cobre o workspace.
+    // MEDIDO 2026-10-13, `ci:local` filtrava só `@projeto/api` e `@projeto/web`,
+    // e `@projeto/shared-types` (que declara `typecheck: tsc --noEmit`) ficava
+    // de fora — `turbo ... --dry=json` listava 12 tasks reais sem ele, enquanto
+    // `pnpm typecheck` (sem filtro) roda. `check-package-json-drift` não via:
+    // ele pergunta se a task pedida tem implementador alcançável, nunca se falta
+    // um pacote que devia ter sido pedido.
+    name: 'escopo do ci:local cobre o workspace (classe G-009)',
+    file: '.tooling/scripts/ci/check-ci-local-scope.ts',
+    id: 'check-ci-local-scope',
+  },
 ];
 
 /**

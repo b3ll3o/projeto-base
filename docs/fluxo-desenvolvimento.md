@@ -167,7 +167,7 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 | Comando | O que faz | Camada |
 |---------|-----------|--------|
 | `pnpm ci:preflight` | checks estruturais de drift; aborta com exit 1 | A + B |
-| `pnpm ci:local` | `ci:preflight` + `turbo run lint typecheck test:unit test:coverage test:integration test:e2e --filter=@projeto/api --filter=@projeto/web` — **69,5 s, 69,6 s e 74,1 s** medidos de ponta a ponta (n=3, 2026-10-08; era 22,6 s sem as suítes e2e) | manual (não está em hook) |
+| `pnpm ci:local` | `ci:preflight` + `turbo run lint typecheck test:unit test:coverage test:integration test:e2e --filter=@projeto/api --filter=@projeto/web --filter=@projeto/shared-types` + `pnpm tooling:test` — o tempo **envelhece**: re-meça, não cite (n=3 em 2026-10-08, antes do 3º filtro e do tooling, deu 69,5 s / 69,6 s / 74,1 s) | manual (não está em hook) |
 | `pnpm format:check` | Prettier em modo check sobre ts/tsx/json/yaml/yml | B |
 | `pnpm stack:review` | `stack-code-reviewer` standalone (mesmo gate do pre-commit e do CI) | A + B |
 | `pnpm docs:sync` | `doc-sync` standalone — **só relatório** | A + B |
@@ -177,7 +177,7 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 | `pnpm tooling:test` | Suíte de testes do próprio tooling, em **dois roots** — a contagem total é `pnpm tooling:test \| grep -E 'Test Files\|Tests '`, e ela **envelhece**: re-meça, não cite | nenhuma |
 | `pnpm review:route` / `pnpm specialist:route` | Roteamento headless: emite YAML de despacho | nenhuma |
 | `pnpm test:unit` / `test:coverage` / `test:integration` / `test:e2e` | Suítes via turbo | B |
-| `pnpm lint` | `turbo run lint` — no `apps/api` é stub `echo 'apps/api lint stub…' && exit 0` | B (parcial) |
+| `pnpm lint` | `turbo run lint` — real nos dois apps (`eslint .`, ESLint 9.39.5 medido em 2026-10-13). **A versão anterior desta linha dizia que o `apps/api` era um stub `echo … && exit 0`** — o stub foi trocado pelo lint real e a linha envelheceu sem ninguém re-medir | B |
 | `pnpm typecheck` | `turbo run typecheck` — real em `apps/api` (`tsc --noEmit`) | B |
 
 ---
