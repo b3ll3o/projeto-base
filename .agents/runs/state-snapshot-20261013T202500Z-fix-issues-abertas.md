@@ -180,5 +180,5 @@ docs/STACK.md + TEMPLATE ─── #67 drift versão ─────────
 
 - [state-aware-planning.md §3](../specs/conventions/state-aware-planning.md) — formato seguido
 - [fluxo-desenvolvimento.md §3](../../docs/fluxo-desenvolvimento.md) — fluxo de dev
-- [guard-classes-decisoes.md §3](../../../docs/superpowers/plans/2026-10-03-guard-classes-decisoes.md) — 7 classes (a #67 é classe 5 — drift cross-doc)
+- [guard-classes-decisoes.md §3](../../docs/superpowers/plans/2026-10-03-guard-classes-decisoes.md) — 7 classes (a #67 é classe 5 — drift cross-doc)
 - 9 issues GitHub: #67, #68, #69, #70, #71, #72, #73, #74, #75
