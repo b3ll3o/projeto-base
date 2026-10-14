@@ -33,11 +33,34 @@ const REPO_ROOT = new URL('../..', import.meta.url).pathname;
 
 function composeConfig(profile?: string): string {
   const profileFlag = profile ? ` --profile ${profile}` : '';
-  return execSync(`docker compose${profileFlag} config`, {
-    cwd: REPO_ROOT,
-    encoding: 'utf-8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  // pt-BR: #68 mudou `POSTGRES_PASSWORD` para failing-interpolation em
+  // produção. O spec precisa passar um dummy aqui (não roda postgres de
+  // verdade — só valida estrutura do YAML). Mesma coisa para DATABASE_URL,
+  // obrigatório em `api.environment`. .env.production é o env_file do
+  // service postgres e api — criamos um stub temporário para o spec não
+  // falhar em dev/CI onde ele não existe. Removido no `finally`.
+  const envFile = `${REPO_ROOT}.env.production`;
+  const fs = require('node:fs') as typeof import('node:fs');
+  const envFileExisted = fs.existsSync(envFile);
+  if (!envFileExisted) {
+    fs.writeFileSync(envFile, '# spec stub — não commitar\n', { mode: 0o600 });
+  }
+  try {
+    return execSync(`docker compose${profileFlag} config`, {
+      cwd: REPO_ROOT,
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        POSTGRES_PASSWORD: 'test-fixture-not-real',
+        DATABASE_URL: 'postgresql://test:test@localhost:5432/test',
+      },
+    });
+  } finally {
+    if (!envFileExisted) {
+      try { fs.unlinkSync(envFile); } catch { /* already removed */ }
+    }
+  }
 }
 
 describe('docker compose profile: observability (Task 5.4)', () => {
