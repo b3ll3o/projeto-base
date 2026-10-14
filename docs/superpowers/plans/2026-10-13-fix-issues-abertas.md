@@ -63,191 +63,59 @@ issues_resolved: 9
 | **PR-4** | #70 | `apps/web/lib/api-client.ts` | nextjs-specialist | code-reviewer | ~30 linhas |
 | **PR-5** | #67, #71 | `docs/STACK.md`, `docs/TEMPLATE_USAGE.md`, `.github/workflows/release-template.yml` | release-versioning-specialist | doc-writer | ~30 linhas + tag |
 
-## §3. Detalhamento por PR
+## §3. Detalhamento por PR (resumo)
+
+> **Diff completo + snippets inline** de cada PR estão em
+> [`2026-10-13-fix-issues-abertas-apendice.md`](./2026-10-13-fix-issues-abertas-apendice.md) §C.
+> Aqui só o suficiente pra entender o que cada PR faz e qual specialist é autor.
 
 ### PR-3 — prisma migration fix (#69)
 
-**Branch:** `fix/prisma-default-uuid-history`
+- **Branch:** `fix/prisma-default-uuid-history`
+- **Arquivo:** `apps/api/prisma/migrations/20260922003354_init_audit_user/migration.sql`
+- **Diff:** 2 linhas (`ALTER TABLE ... ALTER COLUMN id SET DEFAULT gen_random_uuid()`)
+- **Specialist autor:** `prisma-db-specialist`
+- **Reviewer:** `code-reviewer`
+- **Validação:** `prisma migrate status` + `prisma migrate diff` sem drift
 
-**Diff esperado** (`apps/api/prisma/migrations/20260922003354_init_audit_user/migration.sql`):
+### PR-1 — docker hardening (#68, #74, #75)
 
-```sql
--- Add: para users_history.id e users_archive.id
-ALTER TABLE "users_history" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();
-ALTER TABLE "users_archive" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();
-```
-
-**Validação:**
-- `pnpm exec prisma migrate status` → ambos aplicados
-- `pnpm exec prisma migrate diff` contra `schema.prisma` → sem drift
-- `pnpm -F @projeto/api exec prisma db execute --file ...` (smoke test)
-
-**TDD:** spec de migração existente em `apps/api/prisma/migrations/__tests__/` deve passar.
-
----
-
-### PR-1 — docker hardening (#68, #74, #75 parcial)
-
-**Branch:** `fix/docker-hardening-compose`
-
-**Diff esperado:**
-
-```yaml
-# docker-compose.yml — mudanças
-
-services:
-  postgres:
-    image: postgres:16-alpine@sha256:<digest>   # #74
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-projeto}    # #68
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?senha obrigatória}  # #68
-      POSTGRES_DB: ${POSTGRES_DB:-projeto_base}
-    env_file:                                     # novo
-      - .env.production
-    mem_limit: 512m                               # #75 indireto
-
-  api:
-    environment:
-      DATABASE_URL: ${DATABASE_URL}               # #68 — era placeholder literal
-    mem_limit: 1g
-
-  web:
-    mem_limit: 1g
-
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.103.0@sha256:<digest>  # #74
-    mem_limit: 512m                               # #75
-```
-
-**Arquivo novo:** `.env.production.example` com placeholders `CHANGE_ME_*`.
-
-**Validação:**
-- `docker compose config` → resolve sem erro
-- `docker compose up -d postgres` → sobe com env do `.env.production`
-- `docker inspect postgres | grep -i sha256` → confirma digest pinado
-- `OTel Collector config` (PR-3 do plano otelcol) adiciona `memory_limiter` no pipeline (issue #75 só fica 100% fechada com isso — a issue do OTel Collector é complementada em PR-5 ou em um PR-1.5 se necessário)
-
-**Nota sobre #75:** esta issue é em `infra/otelcol/config.yaml` (arquivo de config do collector). O compose é só parte. **PR-1 fecha a parte "compose" de #75** (mem_limit do container). A parte do processor fica para um follow-up dentro de PR-1 OU num patch rápido em PR-5.
-
-**Decisão:** vou incluir o `memory_limiter` no `infra/otelcol/config.yaml` já no PR-1 (4 linhas), para fechar #75 inteira em 1 PR. Custo: +2 linhas.
-
----
+- **Branch:** `fix/docker-hardening-compose`
+- **Arquivos:** `docker-compose.yml`, `infra/otelcol/config.yaml` (memory_limiter), `.env.production.example`
+- **Diff:** ~85 linhas (3 imagens com `@sha256`, 4 `mem_limit`, `env_file`, `memory_limiter` processor)
+- **Specialist autor:** `docker-prod-specialist`
+- **Reviewer:** `security-auditor`
+- **Decisão chave:** incluir o `memory_limiter` do OTel Collector já em PR-1
+  (custo +2 linhas) para fechar #75 inteira, em vez de espalhar em 2 PRs
 
 ### PR-2 — api hardening (#72, #73)
 
-**Branch:** `fix/api-hardening-cors-ratelimit`
-
-**Diff esperado:**
-
-```ts
-// apps/api/src/main.ts
-import { ThrottlerGuard } from '@nestjs/throttler';
-// ...
-
-// #72 — rate limit
-app.useGlobalGuards(new ThrottlerGuard({
-  throttlers: [{ ttl: 60_000, limit: 100 }],  // 100 req/min por IP
-}));
-
-// #73 — CORS whitelist
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? 'http://localhost:3001').split(',');
-if (process.env.NODE_ENV !== 'production') {
-  app.enableCors({
-    origin: ALLOWED_ORIGINS,  // não mais `true`
-    credentials: true,
-  });
-}
-```
-
-```ts
-// apps/api/src/app.module.ts
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-
-@Module({
-  imports: [
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
-    // ...
-  ],
-})
-export class AppModule {}
-```
-
-```ts
-// apps/api/src/modules/health/health.controller.ts (ou similar)
-import { SkipThrottle } from '@nestjs/throttler';
-
-@SkipThrottle()
-@Controller('health')
-export class HealthController { /* ... */ }
-```
-
-**Dependência nova:** `@nestjs/throttler` (a adicionar em `apps/api/package.json`).
-
-**Validação:**
-- spec e2e Playwright que autentica usuário deve continuar passando
-- spec manual: `for i in {1..150}; do curl localhost:3000/api/v1/users; done` → 429 após 100
-- `curl -H "Origin: http://evil.com" -v` → CORS bloqueia
-
----
+- **Branch:** `fix/api-hardening-cors-ratelimit`
+- **Arquivos:** `apps/api/src/main.ts`, `apps/api/src/app.module.ts`, `apps/api/package.json`
+- **Diff:** ~50 linhas (ThrottlerGuard 100/min + CORS whitelist via `ALLOWED_ORIGINS` env)
+- **Specialist autor:** `nestjs-specialist`
+- **Reviewer:** `security-auditor`
+- **Dependência nova:** `@nestjs/throttler` (a adicionar no `package.json` da API)
 
 ### PR-4 — web fetch timeout (#70)
 
-**Branch:** `fix/web-api-client-timeout`
-
-**Diff esperado:**
-
-```ts
-// apps/web/lib/api-client.ts
-const DEFAULT_TIMEOUT_MS = 10_000;
-
-class ApiClient {
-  async request<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
-
-    try {
-      const res = await fetch(`${this.config.baseUrl}${path}`, {
-        ...init,
-        signal: controller.signal,
-      });
-      // ...
-    } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        throw new ApiTimeoutError(path, DEFAULT_TIMEOUT_MS);
-      }
-      throw err;
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-}
-```
-
-**Validação:**
-- spec unit do `ApiClient` (existente) com mock que nunca resolve → assert throw
-- spec e2e Playwright da rota `/users` → continua passando
-- spec e2e simulando API hang → UI mostra estado de erro em ≤ 10s (não 60s)
-
----
+- **Branch:** `fix/web-api-client-timeout`
+- **Arquivo:** `apps/web/lib/api-client.ts`
+- **Diff:** ~30 linhas (AbortController com timeout 10s + `ApiTimeoutError`)
+- **Specialist autor:** `nextjs-specialist`
+- **Reviewer:** `code-reviewer`
+- **Validação:** spec unit com mock que nunca resolve + spec e2e da rota `/users`
 
 ### PR-5 — doc versioning + release v1.11.0 (#67, #71)
 
-**Branch:** `release/v1.11.0`
-
-**Diff esperado:**
-
-1. **`docs/STACK.md:139`** — `**Versão da stack:** 1.9.1` → `**1.11.0**`
-2. **`docs/STACK.md:154`** — adicionar entrada `## 1.11.0 (2026-10-13)` no histórico com bullets de #59, #64, #65 (feat) e #62, #63, #66 (fix)
-3. **`docs/TEMPLATE_USAGE.md:167`** — bump idem
-4. **`.github/workflows/release-template.yml`** — estender para bump atômico dos 4 footers (MONOREPO, STACK, estrutura-e-versionamento, TEMPLATE_USAGE) — atualmente só lê MONOREPO
-5. **`.agents/specs/conventions/estrutura-e-versionamento.md:101`** — bump + entrada no histórico
-6. **`.agents/specs/conventions/post-merge-release.md`** — nota sobre a nova automação
-7. **Tag git:** `git tag -a v1.11.0 -m "feat+fix+docs+chore acumulados pós-v1.10.0"`
-
-**Validação:**
-- `grep '^**Vers' docs/STACK.md docs/MONOREPO.md .agents/specs/conventions/estrutura-e-versionamento.md docs/TEMPLATE_USAGE.md` → todos 1.11.0
-- `git tag --list 'v*' | sort -V | tail` → v1.11.0
-- Workflow release-template: simular com `act` ou inspeção manual
+- **Branch:** `release/v1.11.0`
+- **Arquivos:** 4 footers de versão + workflow `release-template.yml` + tag `v1.11.0`
+- **Diff:** ~30 linhas (bump de versão em 4 docs + entrada no histórico STACK +
+  automação `release-template.yml` para sincronizar 4 footers atomicamente)
+- **Specialist autor:** `release-versioning-specialist`
+- **Reviewer:** `doc-writer`
+- **Nota:** PR-5 só mergeia depois de PR-3 + PR-1 + PR-2 + PR-4; o `quality`
+  gate do `main` + ordem de merge (regra §4 abaixo) garante isso
 
 ---
 
