@@ -94,11 +94,23 @@ describe('LoginForm — saída para quem não tem conta', () => {
   // justamente o caminho que uma tela de recusa precisa exercitar.
   //
   // O `href` é literal aqui de propósito: este teste fixa para ONDE a tela
-  // manda quem quer se cadastrar. E `/users/novo` é uma rota que
-  // `exigirSessao()` protege (ver `app/users/novo/page.tsx`), o que torna essa
-  // tensão visível no código em vez de morar só na conversa — ver o relatório
-  // da Fase 8. Fixar o destino é o que impede tanto a remoção silenciosa (quem
-  // não tem conta ficaria sem saída) quanto a troca de destino sem revisão.
+  // manda quem quer se cadastrar. Fixar o destino é o que impede tanto a
+  // remoção silenciosa (quem não tem conta ficaria sem saída) quanto a troca de
+  // destino sem revisão.
+  //
+  // ⚠️ Este comentário dizia, até 2026-10-13, que "`/users/novo` é uma rota que
+  // `exigirSessao()` protege" e chamava isso de tensão visível no código. A
+  // frase era falsa — e a tensão tinha sido resolvida de propósito, no commit
+  // `209d5a8`, removendo a exigência da tela de cadastro. Com ela no lugar, o
+  // link "Criar conta" levava ao cadastro, o cadastro voltava ao login, e o
+  // login oferecia de novo "Criar conta": em produção **ninguém conseguia
+  // criar a primeira conta** pela interface, porque `POST /users` é o único
+  // jeito de criar usuário e não há seed. Quem lesse o comentário hoje
+  // concluiria que a tela ainda é protegida, e reintroduziria o beco.
+  //
+  // O F8 é quem segura essa decisão com uma medição: ele afirma as duas
+  // metades — `/users` leva ao login, `/users/novo` é alcançável — porque
+  // uma metade sozinha passaria com o produto inteiro do avesso.
   it('oferece um caminho para criar conta, e ele vai para /users/novo', () => {
     render(<LoginForm action={acaoQue(resposta())} />);
 
@@ -179,10 +191,24 @@ describe('LoginForm — envio', () => {
     await pessoa.type(screen.getByLabelText('Senha'), 'segredo123');
     await pessoa.click(screen.getByRole('button', { name: 'Entrar' }));
 
+    // ⚠️ Aqui o `waitFor` NÃO é vácuo: no instante da asserção o campo tem
+    // 'segredo123', então a condição só fica verdadeira quando o reset
+    // roda. É o que distingue este teste do de e-mail, abaixo.
     await waitFor(() => expect(screen.getByLabelText('Senha')).toHaveValue(''));
   });
 
-  it('o e-mail volta preenchido depois do erro (não é segredo, é identidade)', async () => {
+  it('o e-mail é REPOPULADO com o que a Action devolveu — não é o que sobrou do que foi digitado', async () => {
+    // ⚠️ Este teste era VACUOSO até 2026-10-13. A versão anterior digitava
+    // `maria@empresa.com` e depois esperava o campo ter `maria@empresa.com`
+    // — condição verdadeira ANTES do round-trip, porque o próprio teste
+    // tinha digitado aquilo. O `waitFor` resolvia no primeiro poll e o
+    // teste ficava verde com o `form.reset` totalmente removido do
+    // componente: ele provava que o campo guardava o que estava nele, que
+    // é a propriedade mais banal possível de um input.
+    //
+    // A correção é trocar o valor de origem: o campo começa com
+    // `digitado-errado@…` e a Action devolve `maria@…`. Só o reset pode
+    // produzir essa troca, então agora o teste tem dente.
     const pessoa = userEvent.setup();
     render(
       <LoginForm
@@ -195,7 +221,7 @@ describe('LoginForm — envio', () => {
       />,
     );
 
-    await pessoa.type(screen.getByLabelText('E-mail'), 'maria@empresa.com');
+    await pessoa.type(screen.getByLabelText('E-mail'), 'digitado-errado@empresa.com');
     await pessoa.type(screen.getByLabelText('Senha'), 'segredo123');
     await pessoa.click(screen.getByRole('button', { name: 'Entrar' }));
 
@@ -265,5 +291,50 @@ describe('LoginForm — envio em andamento', () => {
 
     liberar();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Entrar' })).toBeEnabled());
+  });
+});
+
+describe('LoginForm — o aviso de "cadastro concluído"', () => {
+  it('aparece quando a página entrega o aviso, em `role="status"`', () => {
+    // ⚠️ `status` e NÃO `alert`: o aviso é uma confirmação, e `alert` é
+    // `assertive` — interrompe a fala de quem usa leitor de tela no meio
+    // do que já estava sendo anunciado.
+    render(<LoginForm action={acaoQue(resposta())} aviso="Cadastro feito." />);
+
+    expect(screen.getByRole('status')).toHaveTextContent('Cadastro feito.');
+  });
+
+  it('NÃO aparece sem o prop — o login comum não ganha um aviso que não explica nada', () => {
+    render(<LoginForm action={acaoQue(resposta())} />);
+
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('o aviso NÃO é anunciado como erro, e o erro NÃO é anunciado como aviso', async () => {
+    // ⚠️ Os dois convivem na mesma tela depois de um erro de credencial
+    // numa visita que veio do cadastro. Um nó com os DOIS papéis seria
+    // lido duas vezes, e por leitor de tela a segunda leitura chega na
+    // cor errada.
+    //
+    // O `formError` só existe DEPOIS do envio — `acaoQue` devolve o estado
+    // da resposta, não o inicial. Renderizar e consultar direto acharia
+    // zero `alert` e o teste falharia sem que houvesse defeito.
+    const pessoa = userEvent.setup();
+    render(
+      <LoginForm
+        action={acaoQue(resposta({ formError: 'E-mail ou senha incorretos.' }))}
+        aviso="Cadastro feito."
+      />,
+    );
+
+    await pessoa.type(screen.getByLabelText('E-mail'), 'maria@empresa.com');
+    await pessoa.type(screen.getByLabelText('Senha'), 'errada');
+    await pessoa.click(screen.getByRole('button', { name: 'Entrar' }));
+
+    await waitFor(() => expect(within(formDaTela()).getAllByRole('alert')).toHaveLength(1));
+    expect(within(formDaTela()).getByRole('status')).toHaveTextContent('Cadastro feito.');
+    expect(within(formDaTela()).getByRole('alert')).toHaveTextContent(
+      'E-mail ou senha incorretos.',
+    );
   });
 });
