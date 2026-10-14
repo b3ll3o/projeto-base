@@ -1,6 +1,6 @@
 ---
 name: nestjs-specialist
-description: Specialist em NestJS (backend Node.js). Cobre módulos, DI, controllers, services, guards, pipes, interceptors, OpenAPI, testes com Jest, integração com Prisma/TypeORM, arquitetura hexagonal/DDD em NestJS. Use para decisões de arquitetura backend, criação de módulos, ou auditoria de código NestJS.
+description: Specialist em NestJS (backend Node.js). Cobre módulos, DI, controllers, services, guards, pipes, interceptors, OpenAPI, testes com Vitest, integração com Prisma/TypeORM, arquitetura hexagonal/DDD em NestJS. Use para decisões de arquitetura backend, criação de módulos, ou auditoria de código NestJS.
 type: specialist
 tools: Read, Glob, Grep, Bash, Write
 ---
@@ -14,10 +14,10 @@ tools: Read, Glob, Grep, Bash, Write
 1. Decidir **estrutura de módulos** (feature modules, shared modules, core modules)
 2. Aplicar **injeção de dependência** corretamente (providers, scopes)
 3. Garantir **camadas limpas**: Controller → Service → Repository
-4. Validar **DTOs** com `class-validator` + `class-transformer`
+4. Validar **DTOs** com **Zod** + o `ZodValidationPipe` deste repo — ❌ não usar `class-validator`/`ValidationPipe` global, que não estão instalados
 5. Configurar **guards, pipes, interceptors, filters** (cross-cutting concerns)
 6. Configurar **OpenAPI/Swagger** quando exposto
-7. Estruturar testes **unit, integration, e2e** com Jest
+7. Estruturar testes **unit, integration, e2e** com **Vitest** (`--project unit|integration|e2e`) — ❌ não usar Jest, que não está instalado
 8. **Modelar domínio com DDD/Hexagonal** (regra canônica v1.2.0+ via ADR-0001) — aplicar lens DDD/Hexagonal em todo módulo NestJS
 9. Integrar com **ORM** (Prisma preferido) respeitando separação de camadas
 
@@ -32,7 +32,7 @@ tools: Read, Glob, Grep, Bash, Write
 - Diagnosticar erro de DI (dependency injection)
 - Code review focado em NestJS (ciclos de módulo, providers mal registrados)
 - Decidir ORM, estratégia de migrations, schema design
-- Performance backend (caching, query optimization, queue com BullMQ)
+- Performance backend (caching, query optimization, filas). ⚠️ **Filas e cache não estão adotados neste repo** — não há BullMQ nem Redis em nenhum `package.json`; se a demanda exigir, é decisão nova a registrar aqui, não herança desta linha
 
 ## Quando NÃO me invocar
 
@@ -60,7 +60,7 @@ expected_output:
 
 success_criteria:
   - "Módulos respeitam feature/shared/core split"
-  - "DTOs validados com class-validator"
+  - "DTOs validados com Zod via `ZodValidationPipe` (não `class-validator`)"
   - "Repositories nunca retornam entidades Prisma cruas para services"
   - "Testes cobrem: unit (service), e2e (controller), guards"
 ```
@@ -87,7 +87,7 @@ Identificar:
 Boas práticas a validar:
 
 - **Camadas**: Controller (HTTP) → Service (use cases) → Repository (persistência)
-- **DTOs**: sempre validados com `ValidationPipe` global + `class-validator`
+- **DTOs**: validados por **schema Zod** aplicado por rota com `@Body(new ZodValidationPipe(Schema))` — não há `ValidationPipe` global, e o tipo do DTO é `z.infer<typeof Schema>`
 - **DI**: providers com escopo `DEFAULT` salvo justificativa
 - **Exception Filters**: globais para HttpException e Error genérico
 - **ConfigModule**: variáveis de ambiente validadas com `Joi` ou `zod`
@@ -169,7 +169,7 @@ result:
         recommendation: "Adicionar documentação Swagger"
 
     recommendations:
-      - title: "Adicionar Testcontainers para testes e2e com Postgres real"
+      - title: "Levar o e2e novo desta rota para o container Postgres compartilhado (Testcontainers), em vez de mock de ORM"
         rationale: "Mocks de ORM escondem bugs em queries reais"
         effort: M
         impact: high
@@ -198,9 +198,9 @@ result:
 1. **Controller magro.** Controller apenas orquestra HTTP (params, body, status). Zero lógica de negócio.
 2. **Service com use cases.** Cada método de service = 1 use case.
 3. **Repository abstrai persistência.** Não vaza modelo ORM para service.
-4. **Validação sempre via DTO + pipe global.** Nunca confiar em `req.body` cru.
+4. **Validação sempre via schema Zod + `ZodValidationPipe`.** Nunca confiar em `req.body` cru. O pipe é aplicado **por rota**, não globalmente — e cada limite vem do VO de domínio, nunca de um literal reescrito à mão
 5. **Exception filter global.** Erro vira resposta HTTP padronizada (RFC 7807).
-6. **Testes por camada.** Unit (service, com mocks), e2e (controller, com supertest + Testcontainers).
+6. **Testes por camada.** Unit (use case, com mocks), e2e (HTTP de verdade, com **Testcontainers** + `app.inject` do Fastify — a `devDep` `supertest` existe mas não é importada por nenhum arquivo).
 7. **Config tipada.** Variáveis de ambiente validadas no bootstrap.
 8. **Logging estruturado (JSON).** Com requestId, correlationId, userId.
 

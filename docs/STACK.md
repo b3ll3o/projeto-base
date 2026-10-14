@@ -16,7 +16,6 @@ projeto-base (monorepo)
 │   └── web/      # Next.js 15 + React 19 + Tailwind 4
 ├── packages/
 │   ├── shared-types/        # Tipos compartilhados front↔back
-│   ├── ui/                  # Componentes UI (shadcn/ui)
 │   ├── tsconfig/            # tsconfig.base.json canônico
 │   └── eslint-config/       # Configuração ESLint compartilhada
 ├── tooling/
@@ -25,24 +24,31 @@ projeto-base (monorepo)
 └── docs/                    # Esta documentação
 ```
 
+> ⚠️ **Esta seção é auditada contra o disco, não contra a intenção.** Toda
+> linha das tabelas abaixo foi verificada com `grep` nos `package.json` e
+> `ls` nos diretórios em 2026-10-13, porque ela já afirmava seis tecnologias
+> que o repositório nunca teve (`class-validator`, BullMQ, Redis, Jest,
+> shadcn/ui, NextAuth.js) e um `packages/ui/` que não existe. Um documento de
+> stack que descreve o projeto errado é pior que nenhum: quem adota o
+> template copia a lista, e a lista mente.
+
 ## §2. Backend — NestJS (`apps/api`)
 
 | Camada | Escolha | Versão | Justificativa |
 |--------|---------|--------|---------------|
-| Runtime | Node.js | 20 LTS | Estabilidade, suporte longo, async/await maduro |
+| Runtime | Node.js | ≥ 22.6.0 | Medido em `package.json` → `engines.node`; casa com a imagem base `node:22-bookworm-slim` |
 | Framework | NestJS | 11.x | Estrutura modular, DI nativo, OpenAPI integrado |
 | HTTP Adapter | Fastify | (último) | 2-3× mais rápido que Express; menor footprint |
 | ORM | Prisma | 6.x | Type-safe, migrations versionadas, excelente DX |
 | Banco de Dados | PostgreSQL | 16 | Maduro, JSONB, extensions, performance |
-| Validação | class-validator + class-transformer | latest | Padrão de fato em NestJS, integrado com `ValidationPipe` |
+| Validação | **Zod** + `ZodValidationPipe` | ^3.25 | Schema único, executável no cliente E no servidor. `class-validator` NÃO está instalado — o pipe é `@Body(new ZodValidationPipe(Schema))`, não o `ValidationPipe` global |
 | Documentação API | @nestjs/swagger | latest | OpenAPI 3.0 automático a partir dos decorators |
 | Auth | @nestjs/jwt + `JwtAuthGuard` próprio | latest | Sem passport: o guard valida assinatura/expiração e um `@Public()` o libera. Detalhe em [`docs/api/auth.md`](./api/auth.md) |
 | Hash de senha | argon2 (argon2id) | latest | Recomendação OWASP; resiste a GPU e a ASIC. Alternativa ao bcrypt, que trunca a senha em 72 bytes — ver [ADR-0002](./adr/0002-autenticacao-jwt-argon2.md) |
-| Filas | BullMQ + Redis | latest | Jobs assíncronos, retries, scheduling |
-| Cache | Redis (ioredis) | latest | Compartilhado com BullMQ |
 | Logging | Pino | latest | Estruturado JSON, rápido |
 | Observabilidade | OpenTelemetry | latest | Vendor-neutral, traces + metrics + logs |
-| Testes | Jest + Supertest + Testcontainers | latest | Unit + e2e com Postgres real |
+| Testes | **Vitest** + Testcontainers | ^2.1.9 | Unit + e2e com Postgres real. **Não há Jest** no repositório, e o harness e2e usa `app.inject` do Fastify, não `supertest` — a `devDep` `supertest` não é importada em lugar nenhum |
+| Fila / Cache | — | — | Não existem. Nenhum serviço de fila ou cache foi adotado; a versão anterior desta tabela listava BullMQ + Redis (ioredis) e nenhuma das duas libs estava em nenhum `package.json` |
 
 ## §3. Frontend — Next.js (`apps/web`)
 
@@ -52,15 +58,15 @@ projeto-base (monorepo)
 | React | React | 19.x | Concurrent features, use() hook, ações |
 | Linguagem | TypeScript | 5.x estrito | Type safety end-to-end |
 | Styling | Tailwind CSS | 4.x | Utility-first, zero runtime, tree-shakeable |
-| Componentes | shadcn/ui | latest | Copy-paste (não dependência), base em Radix |
+| Componentes | **escritos à mão com Tailwind** | — | Não há biblioteca de componentes. As classes são inline e repetidas por design (`cadastro-usuario-form.tsx` e `login-form.tsx` compartilham as mesmas classes de campo). shadcn/ui NÃO está instalado — nem como dependência, nem como código copiado |
 | State (URL) | Next router | nativo | Filtros, paginação, tabs na URL |
 | Forms | react-hook-form + zod | latest | Client Component + validação tipada |
 | Server Actions | nativo | — | Mutações sem JS extra |
-| Auth client | NextAuth.js (Auth.js v5) | latest | JWT em cookie HttpOnly + middleware |
-| Testes unit | Vitest + Testing Library | latest | Rápido, compatível com Jest API |
-| Testes E2E | Playwright | latest | Multi-browser, fixtures robustas |
-| Ícones | lucide-react | latest | Tree-shakeable, design consistente |
-| Qualidade | Lighthouse | ≥ 90 | LCP < 2.5s, INP < 200ms, CLS < 0.1 |
+| Auth client | **`apps/web/lib/sessao.ts`** (casa própria) | — | grava/ler cookies httpOnly `access_token` + `refresh_token` e monta o `Authorization: Bearer`. NextAuth.js / Auth.js NÃO estão instalados. O browser nunca fala com a API: todo o tráfego passa por Server Action |
+| Testes unit | Vitest + Testing Library | ^2.1.0 | `@testing-library/react` + `user-event` + `jest-dom`, em jsdom |
+| Testes E2E | Playwright | latest | `apps/web/e2e/*.spec.ts` (8 specs), `testDir` separado do Vitest |
+| Ícones | — | — | Nenhuma biblioteca de ícones instalada; a UI atual não usa ícones |
+| Qualidade | — | — | **Lighthouse não está ligado**: sem dependência, sem `.lighthouserc*`, sem job. LCP/INP/CLS são *coletados* (`web-vitals` → OTel Metrics), mas não há orçamento que reprove. A menção a "Lighthouse ≥ 90" que sobrou é prosa de workflow, não gate |
 
 ## §4. Monorepo
 
@@ -68,17 +74,17 @@ projeto-base (monorepo)
 |--------|---------|--------|---------------|
 | Gerenciador de pacotes | pnpm | 9.x | Workspaces nativos, eficiente em disco, hoisting seguro |
 | Orquestrador de build | Turborepo | 2.x | Pipelines declarativos, cache distribuído |
-| Versionamento | Changesets | 2.x | Versionamento semântico + changelog automático |
+| Versionamento | — | — | **Changesets não está instalado** e não existe `.changeset/`. O versionamento real é o tag automático `vX.Y.Z` do workflow `release-template.yml`. A tabela anterior listava Changesets 2.x, e o `docs/MONOREPO.md` §6 mandava rodar `pnpm changeset` / `pnpm version` — scripts que não existem em nenhum `package.json`. O §6 foi corrigido junto; a tabela aqui é o registro do que a anterior afirmava |
 | Lint | ESLint | 9.x (flat config) | Padrão da indústria, plugins vastos |
 | Formatação | Prettier | 3.x | Consistência automática |
-| Lint Markdown | markdownlint | latest | Conformidade com `.markdownlint.json` |
+| Lint Markdown | — | — | Existe `.markdownlint.json`, mas **nada executa markdownlint**: sem dependência, sem script, sem hook, sem workflow. O arquivo é configuração órfã |
 
 ## §5. Ferramentas de Desenvolvimento
 
 | Categoria | Ferramenta | Uso |
 |-----------|-----------|-----|
 | Editor | VS Code | Suporte nativo a TS, ESLint, Prisma |
-| Container | Docker + Compose | Banco, Redis, serviços locais |
+| Container | Docker + Compose | Postgres + api + web + `otel-collector` (perfil `observability`). **Sem Redis** — nenhum serviço de cache/fila existe |
 | Git hooks | Husky + lint-staged | TDD enforcer, lint, format |
 | CI | GitHub Actions (`.github/workflows/`) | `ci.yml` + `review-stack.yml` + `sync-docs.yml` + `release-template.yml` |
 | Secrets | (a definir por projeto) | Doppler / Vault / 1Password |
@@ -154,4 +160,6 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 | `1.7.0` | Adição de **OpenTelemetry** ao stack backend (SDK Node + auto-instrumentations: NestJS/Fastify/Pino/Prisma/HTTP; exporter OTLP HTTP via OTel Collector perfil Compose `[observability]`); §Observabilidade agora instrumentável de fato (não apenas declarada). Frontend: `instrumentation.ts` + `@opentelemetry/sdk-web` + `web-vitals` (LCP/CLS/INP reporters → OTel Metrics). Estado correlacionado: `request.id` → `traceparent` W3C + `AuditContext.correlationId`. |
 | `1.9.0` | `apps/api` e `apps/web` documentados como **implementados** — o cabeçalho afirmava o contrário e o próprio arquivo se contradizia (a §Containerização e o Histórico já descreviam os Dockerfiles de api+web). `+ Redis` removido da lista do README: `grep -l 'redis\|bullmq' apps/*/package.json` não acha nenhum dos dois. |
 | `1.9.1` | §5 — CI reespecificado de "a definir por projeto" para GitHub Actions (com 4 workflows nomeados). Cross-ref para [`docs/fluxo-desenvolvimento.md`](./fluxo-desenvolvimento.md) (fluxo end-to-end re-medido a cada merge). |
-| `1.11.0` | Hardening: pin de `@sha256` em imagens Docker (`postgres:16-alpine`, `otel/opentelemetry-collector-contrib:0.103.0`); `mem_limit` em todos os 4 services; `memory_limiter` no OTel Collector; rate-limit global (`@nestjs/throttler`, 100 req/min) + CORS whitelist via `ALLOWED_ORIGINS`; `AbortController` timeout (10s) no `api-client`; migration `20260922003354` com `DEFAULT gen_random_uuid()` em `users_history.id` e `users_archive.id`. Drift de versão entre `STACK.md`/`TEMPLATE_USAGE.md` (1.9.1) e `MONOREPO.md`/`estrutura-e-versionamento.md` (1.10.0/1.11.0) resolvido — todos sincronizados em v1.11.0. |
+| `1.10.0` | Auditoria da tabela contra o disco (`grep` nos `package.json`, `ls` nos diretórios, 2026-10-13). Removidas 8 tecnologias que o repositório nunca teve e 3 que existem mas não são o que a tabela dizia: `class-validator`/`class-transformer` → Zod + `ZodValidationPipe`; BullMQ + Redis (fila/cache) → ausentes; Jest → Vitest; shadcn/ui → componentes escritos à mão com Tailwind; `packages/ui/` (diretório inexistente) removido da árvore; NextAuth.js → `lib/sessao.ts`; lucide-react → ausente; Lighthouse ≥ 90 → não ligado (sem dep, sem config, sem job); Node 20 → `engines.node` ≥ 22.6.0; Changesets → ausente (o versionamento é o tag automático do `release-template.yml`); markdownlint → config órfã; `supertest` declarado e nunca importado (o harness e2e usa `app.inject`). |
+| `1.11.0` | **Sem mudança de stack** — 5 skills de UI (`ui-modes`, `ui-craft`, `ui-break`, `motion`, `ui-review`), e nenhuma delas carrega dependência ou código: medido, cada diretório tem **um** arquivo (`SKILL.md`) e `find … -type f ! -name '*.md'` volta vazio nas 5. MEDIDO: a tag `v1.11.0` aponta para `e8ed335` ("5 skills de UI…", #78) — é este release, e só ele. As linhas de Auth/hash/sessão da tabela acima são da auditoria de `1.10.0` e já descrevem argon2id + cookies httpOnly. |
+| *(sem tag)* | Hardening de #80, **ainda não released** — pin de `@sha256` em imagens Docker (`postgres:16-alpine`, `otel/opentelemetry-collector-contrib:0.103.0`); `mem_limit` nos 4 services; `memory_limiter` no OTel Collector; rate-limit global (`@nestjs/throttler`, 100 req/min) + CORS whitelist via `ALLOWED_ORIGINS`; `AbortController` timeout (10s) no `api-client`; migration `20260922003354` com `DEFAULT gen_random_uuid()` em `users_history.id` e `users_archive.id`.<br>⚠️ A linha entra como "(sem tag)" e não como `1.11.0` porque MEDIDO: `git log --oneline v1.11.0..origin/main` devolve `ae5015a` e `0943662` — o hardening está **depois** da tag, e a `v1.11.0` já existe apontando para as skills de UI. Rotular o hardening de `1.11.0` faria a linha afirmar que um commit já tagado contém o que ele não contém; será a `1.12.0` (ou o que o `release-template.yml` extrair de `docs/MONOREPO.md`) quando houver tag. |
