@@ -65,6 +65,57 @@ describe('stack-code-reviewer', () => {
     ).toBe(true);
   });
 
+  // O prefixo `node:` nao era bloqueado: DDD_BLOCKED_IMPORTS casava framework,
+  // ORM e infrastructure, e um `import { readFileSync } from 'node:fs'` dentro
+  // de domain/ — I/O de disco no nucleo — passava limpo. Medido: existem 12
+  // builtins `node:` em uso no repo, 2 deles sob domain/, 9 com I/O.
+  it('bloqueia node: com I/O dentro de domain/', () => {
+    const file = tmpFile(
+      'domain/vo-io.vo.ts',
+      "import { readFileSync } from 'node:fs';\nexport class V {}\n",
+    );
+    const report = reviewFiles([file]);
+    const achado = report.findings.find(
+      (f) => f.severity === 'blocker' && f.rule === 'ddd-h1-no-framework-imports-in-domain',
+    );
+    expect(achado).toBeDefined();
+    expect(achado?.description).toContain('node:fs');
+  });
+
+  // Metade do falso-positivo: travar `node:` inteiro acusaria legitimate. Estes
+  // dois sao os unicos `node:` sob domain/ no repo, e ambos sao puros (sem I/O).
+  it('nao bloqueia node:crypto em domain/ — e o caso real do user-id.vo.ts', () => {
+    // apps/api/src/modules/users/domain/value-objects/user-id.vo.ts:1
+    const file = tmpFile(
+      'domain/value-objects/user-id.vo.ts',
+      "import { randomBytes } from 'node:crypto';\nexport function id() { return randomBytes(16); }\n",
+    );
+    expect(reviewFiles([file]).findings.filter((f) => f.severity === 'blocker')).toHaveLength(0);
+  });
+
+  it('nao bloqueia node:util em domain/ — e o caso real do password-hash.vo.spec.ts', () => {
+    // apps/api/src/modules/users/domain/value-objects/password-hash.vo.spec.ts:32
+    const file = tmpFile(
+      'domain/value-objects/password-hash.vo.spec.ts',
+      "import { inspect } from 'node:util';\nexport const x = inspect({});\n",
+    );
+    expect(reviewFiles([file]).findings.filter((f) => f.severity === 'blocker')).toHaveLength(0);
+  });
+
+  // A allow-list e por modulo, nao por arquivo: um `.spec.ts` sob domain/ que
+  // importe framework continua blocker (teste acima, 'domain/user.spec.ts').
+  it('nao abre brecha por extensao — .spec.ts com node:fs continua bloqueado', () => {
+    const file = tmpFile(
+      'domain/leitor.spec.ts',
+      "import { readFileSync } from 'node:fs';\nexport {};\n",
+    );
+    expect(
+      reviewFiles([file]).findings.some(
+        (f) => f.severity === 'blocker' && f.rule === 'ddd-h1-no-framework-imports-in-domain',
+      ),
+    ).toBe(true);
+  });
+
   it('detecta Prisma sem createdAt/updatedAt/version', () => {
     const file = tmpFile('schema.prisma', `model User {\n  id String @id\n  email String\n}\n`);
     const report = reviewFiles([file]);

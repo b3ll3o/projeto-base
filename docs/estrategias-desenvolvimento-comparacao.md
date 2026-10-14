@@ -184,21 +184,20 @@ footer, se um link existe. Conhecimento que muda é fonte viva, nunca cópia.
 | Especialização de comportamento | 1 caso real (roteamento de reviewer) | Regra, não agentic | ⚠️ chamada de "agentic", é TypeScript com regex |
 | Conhecimento que muda | contagens no README, footer de versão, links do AGENTS.md | **Check de drift** | ❌ guardado como memória/prosa → envelheceu |
 
-Os três "0" não são estimativas: são o resultado do `grep` de dependências de
-IA acima. Não há superfície vetorial, não há grafo, não há LLM em runtime.
+Os três "0" não são estimativas: são o resultado do `grep` de dependências de IA acima — não há vetorial, nem grafo, nem LLM em runtime.
 
 ## 6. Onde este repo acertou
 
 1. **Precisão de gate demonstrada nos dois sentidos** — `isDomainFile()`
-   (`stack-code-reviewer.ts:52`) é sensível *e* específico, que é a parte
-   difícil de gating determinístico.
-2. **O pipeline consertou o próprio gate mentiroso** — commit `5490de6`
-   moveu a lógica para `apps/api/test/config/coverage-floor.ts`, com spec
-   dedicado e caminho ligado em `vitest.config.ts:56`.
+   (`stack-code-reviewer.ts:52`) é sensível *e* específico, que é a parte difícil
+   de gating determinístico.
+2. **O pipeline consertou o próprio gate mentiroso** — commit `5490de6` moveu a
+   lógica para `apps/api/test/config/coverage-floor.ts`, com spec dedicado e
+   caminho ligado em `vitest.config.ts:56`.
 3. **Relaxamento de gate documentado e reversível** — `apps/web/vitest.config.ts`
    desliga o piso de 80% com baseline **medido** e gatilho de reativação.
-4. **FP → teste nomeado pelo incidente** — `review-router.spec.ts:275` é o
-   melhor artefato de aprendizado do repo, e está em código.
+4. **FP → teste nomeado pelo incidente** — `review-router.spec.ts:275` é o melhor
+   artefato de aprendizado do repo, e está em código.
 5. **Três disparadores independentes para a mesma regra** — `.husky/pre-commit:19`,
    `review-stack.yml:31` e CI; o buraco do `--no-verify` está fechado em `ci.yml:30`.
 6. **Correlação memória↔maturidade é real** — onde o agent rodou, a memória
@@ -220,36 +219,48 @@ IA acima. Não há superfície vetorial, não há grafo, não há LLM em runtime
 
 ## 8. Bypass silencioso — a classe que nenhuma estratégia captura sozinha
 
-O modo de falha mais caro **não** é a estratégia errada por imprecisão. É o
-**verde que não significa nada**. Quatro casos, todos verificáveis neste repo:
+O modo de falha mais caro **não** é a estratégia errada por imprecisão. É o **verde que não significa nada**.
 
-1. **Gate com stub no caminho** — `apps/api/package.json:7`:
-   `"lint": "echo 'apps/api lint stub (real wiring in Phase 3)' && exit 0"`.
-   A regra `ddd-hexagonal/no-domain-imports-from-infra` (`packages/eslint-config/index.js:14`),
-   apresentada em `docs/STACK.md:126` como guardião mecânico, **nunca executou**
-   contra o maior codebase do monorepo.
-2. **Gate que roda e não bloqueia** — `grep -c 'process.exit' tooling/scripts/doc-sync.ts`
-   → **0**. O `|| exit 1` em `.husky/pre-commit:25` é guarda de crash, não gate.
-3. **Token de sucesso ambíguo** — `check-archive-integrity.ts:33-36` faz
-   `return { ok: true, errors: [] }` quando `.agents/runs/archive` não existe
-   (verificado: inexistente). O painel emite o mesmo `✓` para "verifiquei e
-   passou" e para "não havia nada para verificar".
-4. **Gate parcial com bypass silencioso** — `check-doc-refs.ts:67` remove
-   inline-code **antes** do linkRegex de `:70`; como o regex exige 1+ caractere
-   no label, todo link de label 100% inline-code colapsa para `[]()` e nunca
-   casa. Agrava o escopo: `preflight.ts:60-61` cobre só `docs` (87 `.md`) e
-   `.agents/specs` (27), de 189 `.md` versionados.
+> ⚠️ **Re-medido em 2026-10-13: 3 dos 4 casos abaixo já não valem.** Foram
+> escritos quando eram verdade e envelheceram junto com o repo — uma seção que
+> ensina "o verde pode mentir" com espécimes mortos ensina o contrário. Vivo está
+> marcado **VIVO**; fechado vem com o que fecha, porque "corrigimos" sem
+> evidência também envelhece.
+
+1. **Gate com stub no caminho — FECHADO.** Era `apps/api/package.json:7` =
+   `"lint": "echo 'apps/api lint stub (real wiring in Phase 3)' && exit 0"`, e a
+   regra `ddd-hexagonal/no-domain-imports-from-infra` nunca executava contra o
+   maior codebase do monorepo. Hoje `apps/api#lint` é `eslint .` (ESLint
+   **9.39.5**) e a regra **dispara**: plantando `node:fs` em
+   `domain/value-objects/user-id.vo.ts`, o `stack-code-reviewer` acusou
+   `[blocker] … domain/ importa 'node:fs' — viola pureza do núcleo`.
+2. **Gate que roda e não bloqueia — VIVO.** `grep -c 'process.exit'
+   tooling/scripts/doc-sync.ts` → **0**. O `|| exit 1` em
+   `.husky/pre-commit:25` é guarda de crash, não gate.
+3. **Token de sucesso ambíguo — FECHADO.** `check-archive-integrity.ts` fazia
+   `return { ok: true, errors: [] }` quando `.agents/runs/archive` não existia.
+   Hoje devolve `skipped: true` com motivo (`:83`, `:93`, `:109`) e o painel
+   imprime `– (skipped: archive vazio — 0 arquivo …)` em vez de `✓`.
+4. **Gate parcial com bypass silencioso — FECHADO, nos dois braços.** (a) O
+   `check-doc-refs.ts` removia inline-code antes do `linkRegex`, e um link de label
+   100% inline-code colapsava para `[]()`, que nunca casa com `/\[([^\]]+)\]/`
+   (label 1+ char). Hoje **mascara preservando offset**, trocando o trecho por um
+   número igual de espaços (`:102`). (b) O escopo não é mais `docs` +
+   `.agents/specs`: é `git ls-files '*.md'` (`:156`) — **277** versionados, 110
+   sob `docs/`, 33 sob `.agents/specs/`.
 
 **Regra que daí decorre:** o token de sucesso não pode ser o mesmo para
 "verifiquei e passou" e "não havia nada para verificar". Todo check que faz
-short-circuit por ausência do alvo precisa de um terceiro estado (`skipped`)
-com motivo — sem isso o observador perde a capacidade de distinguir ausência de
-verificação, que é a pré-condição de auditar qualquer outra coisa.
+short-circuit por ausência do alvo precisa de um terceiro estado (`skipped`) com
+motivo — sem isso o observador perde a capacidade de distinguir ausência de
+verificação, que é a pré-condição de auditar qualquer outra coisa. E a regra que os
+casos fechados acrescentam: um exemplo que *ensina* bypass precisa continuar sendo
+bypass — verificar antes de republicar custa um `grep`; republicar morto custa a
+lição inteira.
 
 **E por que o híbrido não salva:** um gate que não pode falhar é **pior** do que
 nenhum gate, porque o time para de olhar. Hibridizar multiplica o número de
-painéis sem multiplicar o número de sinais — e aqui multiplica os dois com o
-mesmo token.
+painéis sem multiplicar o número de sinais.
 
 ## 9. Como pensar antes de escolher
 
@@ -263,22 +274,19 @@ mesmo token.
 3. **Nomeie a camada pelo mecanismo, não pela ambição.** Se a decisão sai de
    regex em YAML executada por TypeScript com testes, isso é regra determinística
    com prosa em volta — e vale como tal: ganha CI, ganha hook, ganha TDD.
-4. **Gate não ligado não é gate fraco — é pior que ausência**, porque consome
-   confiança. Gate que não pode falhar > nenhum gate.
-5. **Sub-invocação é o modo de falha mais caro, porque não tem sinal.** Se um
+4. **Sub-invocação é o modo de falha mais caro, porque não tem sinal.** Se um
    componente não tem gatilho, ele não é camada, é rascunho. O wiring importa
    mais que a sofisticação.
-6. **Defense-in-depth só é defesa se alguma camada for barreira no topo.**
+5. **Defense-in-depth só é defesa se alguma camada for barreira no topo.**
    Verifique o ruleset, não a documentação. Três camadas locais + CI sem
    `required_status_checks` são três vezes telemetria.
 
 ## 10. Footer
 
 **Manutenção:** revisar quando `preflight.ts` ganhar ou perder checks, ou quando
-a matriz `review-routing.md` mudar de versão.
-
-**Regras aplicadas:** `.agents/specs/conventions/tamanho-e-revisao.md`
-(≤300 linhas), `idioma.md` (pt-BR em prosa), `cobertura-testes.md`.
+a matriz `review-routing.md` mudar de versão. Regras aplicadas:
+`tamanho-e-revisao.md` (≤300 linhas), `idioma.md` (pt-BR em prosa),
+`cobertura-testes.md`.
 
 **Documentos relacionados:**
 [MONOREPO.md](./MONOREPO.md) ·

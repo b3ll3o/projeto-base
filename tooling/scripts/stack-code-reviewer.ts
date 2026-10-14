@@ -48,7 +48,31 @@ const DDD_BLOCKED_IMPORTS = [
   // adaptacao. Mesmo padrao do gate ESLint (no-domain-imports-from-infra.js),
   // para que os 2 gates nao discordem sobre o mesmo arquivo.
   /\/infrastructure\//,
+  // O PREFIXO e o que se bloqueia: travar cada builtin seria uma lista que
+  // envelhece a cada `node:*` novo. Antes o gate era cego a todos eles — um
+  // `import { readFileSync } from 'node:fs'` no nucleo passava limpo. A
+  // excecao e por modulo (abaixo), nao por extensao de arquivo: um `.spec.ts`
+  // sob domain/ que importe framework continua sendo blocker.
+  /^node:/,
 ];
+
+/**
+ * pt-BR: unicos builtins `node:` liberados em `domain/`. Criterio: **sem I/O e
+ * sem adapter** — computacao pura ou entropia, que o nucleo pode ter sem se
+ * acoplar a maquina.
+ *
+ * Medido no disco (2026-10-13): existem exatamente 2 imports `node:` sob
+ * qualquer `domain/` no repo, e os 2 sao destes. Repo inteiro usa 12 builtins
+ * `node:` distintos; os outros 10 (fs, path, child_process, os, url, net, …)
+ * fazem I/O ou conversam com o processo — e seguem bloqueados.
+ *
+ *   - `node:crypto` — `user-id.vo.ts` gera UUIDv7 a partir de entropia.
+ *   - `node:util`   — `password-hash.vo.spec.ts` usa `inspect` para afirmar
+ *                      que `PasswordHash.toString()` devolve `'[redacted]'`.
+ *
+ * Ao acrescentar aqui, registre o arquivo real que justifica, como as 2 acima.
+ */
+const DDD_PERMITIDOS_NODE = new Set(['node:crypto', 'node:util']);
 
 // pt-BR: regra do spec §1 ("Domain puro") só vale para arquivos cujo path
 // contém '/domain/' como componente de diretório. Sem esse gate, qualquer
@@ -65,6 +89,7 @@ function checkDomain(file: string, content: string): Finding[] {
     const m = /^import .* from ['"]([^'"]+)['"]/.exec(line);
     if (!m) return;
     const src = m[1] ?? '';
+    if (DDD_PERMITIDOS_NODE.has(src)) return;
     if (DDD_BLOCKED_IMPORTS.some((re) => re.test(src))) {
       findings.push({
         severity: 'blocker',
