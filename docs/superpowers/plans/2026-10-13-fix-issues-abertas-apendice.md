@@ -133,6 +133,6 @@ service:
 
 ## D. Cross-refs
 
-- Plano principal: [2026-10-13-fix-issues-abertas.md](../2026-10-13-fix-issues-abertas.md)
+- Plano principal: [2026-10-13-fix-issues-abertas.md](./2026-10-13-fix-issues-abertas.md)
 - State-snapshot: [`.agents/runs/state-snapshot-20261013T202500Z-fix-issues-abertas.md`](../../../.agents/runs/state-snapshot-20261013T202500Z-fix-issues-abertas.md)
-- Convenção: [`.agents/specs/conventions/tamanho-e-revisao.md`](../../.agents/specs/conventions/tamanho-e-revisao.md) §Tamanho Máximo
+- Convenção: [`.agents/specs/conventions/tamanho-e-revisao.md`](../../../.agents/specs/conventions/tamanho-e-revisao.md) §Tamanho Máximo

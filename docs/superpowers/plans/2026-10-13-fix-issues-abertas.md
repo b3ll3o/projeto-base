@@ -18,7 +18,7 @@ issues_resolved: 9
 > Plano multi-PR para fechar as **9 issues abertas** identificadas pelo
 > `finding-orchestrator` no escaneamento weekly de 2026-10-13_135620.
 > State-snapshot em
-> [`.agents/runs/state-snapshot-20261013T202500Z-fix-issues-abertas.md`](../../.agents/runs/state-snapshot-20261013T202500Z-fix-issues-abertas.md).
+> [`.agents/runs/state-snapshot-20261013T202500Z-fix-issues-abertas.md`](../../../.agents/runs/state-snapshot-20261013T202500Z-fix-issues-abertas.md).
 
 ## §0. Resumo executivo
 
@@ -188,13 +188,14 @@ PR-4 (web) ─────┘
 
 ## §9. Cross-refs
 
-- State-snapshot: [`.agents/runs/state-snapshot-20261013T202500Z-fix-issues-abertas.md`](../../.agents/runs/state-snapshot-20261013T202500Z-fix-issues-abertas.md)
+- State-snapshot: [`.agents/runs/state-snapshot-20261013T202500Z-fix-issues-abertas.md`](../../../.agents/runs/state-snapshot-20261013T202500Z-fix-issues-abertas.md)
+- Apêndice: [2026-10-13-fix-issues-abertas-apendice.md](./2026-10-13-fix-issues-abertas-apendice.md)
 - Issues: #67, #68, #69, #70, #71, #72, #73, #74, #75
 - Planos relacionados:
-  - [2026-10-03-guard-classes.md](./2026-10-03-guard-classes.md) — task 4.1 amarra turbo-redirect + Node 22.6
+  - [2026-10-03-guard-classes-decisoes.md](./2026-10-03-guard-classes-decisoes.md) — task 4.1 amarra turbo-redirect + Node 22.6
   - [2026-10-02-melhorias-fluxo-desenvolvimento.md](./2026-10-02-melhorias-fluxo-desenvolvimento.md) — define o próprio conceito de "fluxo de desenvolvimento"
 - Convenções aplicadas:
-  - [state-aware-planning.md](../.agents/specs/conventions/state-aware-planning.md) — camada 0 do pre-planner
-  - [retrospective-capture.md](../.agents/specs/conventions/retrospective-capture.md) — captura pós-campanha
-  - [git-workflow.md](../.agents/specs/conventions/git-workflow.md) — branch antes de commit
-  - [tamanho-e-revisao.md](../.agents/specs/conventions/tamanho-e-revisao.md) — limite 300 linhas
+  - [state-aware-planning.md](../../../.agents/specs/conventions/state-aware-planning.md) — camada 0 do pre-planner
+  - [retrospective-capture.md](../../../.agents/specs/conventions/retrospective-capture.md) — captura pós-campanha
+  - [git-workflow.md](../../../.agents/specs/conventions/git-workflow.md) — branch antes de commit
+  - [tamanho-e-revisao.md](../../../.agents/specs/conventions/tamanho-e-revisao.md) — limite 300 linhas
