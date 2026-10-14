@@ -58,7 +58,11 @@ function composeConfig(profile?: string): string {
     });
   } finally {
     if (!envFileExisted) {
-      try { fs.unlinkSync(envFile); } catch { /* already removed */ }
+      try {
+        fs.unlinkSync(envFile);
+      } catch {
+        /* already removed */
+      }
     }
   }
 }
