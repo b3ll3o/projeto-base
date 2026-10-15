@@ -17,6 +17,11 @@ apps/api/openapi.json
 .env.local
 .env.*.local
 .env.production
+# MEDIDO 2026-10-15 com `git check-ignore`: `.env.staging` e
+# `.env.development` NÃO casavam com nenhuma das 4 regras acima — a variante
+# de nome passava e seria commitada. `.env.*` fecha a classe; as 2 exceções
+# de baixo continuam valendo porque `!` tem precedência sobre o glob.
+.env.*
 !.env.example
 !.env.production.example
 .DS_Store
