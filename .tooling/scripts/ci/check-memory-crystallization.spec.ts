@@ -130,28 +130,6 @@ describe('parseTriage', () => {
     expect(malformed[0]).toContain('3 célula');
   });
 
-  // O outro lado da mesma classe: a âncora que transborda para uma 5ª célula era
-  // conferida só pela metade, e a cauda — que não existe em lugar nenhum — sumia
-  // sem aviso. Foi o verde falso medido: `✓` com metade da âncora inventada.
-  // Regressão do falso positivo que a guarda acima produziu: a tabela-legend
-  // das cinco disposições tem 2 colunas, e tratá-la como linha quebrada acusava o
-  // próprio ledger. O que separa as duas é a 2ª célula — a de triagem declara uma
-  // disposição válida, a legend declara uma frase.
-  it('NÃO acusa a tabela-legend de 2 colunas como linha quebrada', () => {
-    const { rows, malformed } = parseTriage(
-      LEDGER([]).replace(
-        '|---|---|---|---|',
-        [
-          '|---|---|---|---|',
-          '| `citada` | a regra **já está escrita** num arquivo versionado. |',
-          '| `pendente` | regra reutilizável que **ninguém escreveu ainda**. |',
-        ].join('\n'),
-      ),
-    );
-    expect(rows).toEqual([]);
-    expect(malformed).toEqual([]);
-  });
-
   it('linha com MAIS de 4 células é erro de forma — a cauda não some em silêncio', () => {
     const { rows, malformed } = parseTriage(
       LEDGER(['| `x` | `citada` | `a.md` | `Ferramenta (6)` | `TRECHO-QUE-NUNCA-EXISTIU` |']),
@@ -159,6 +137,96 @@ describe('parseTriage', () => {
     expect(rows).toEqual([]);
     expect(malformed).toHaveLength(1);
     expect(malformed[0]).toContain('5 célula');
+  });
+
+  // MEDIDO 2026-10-14 pelo revisor adversarial, e confirmado por mim: a guarda
+  // anterior (`isTriageRow`) decidia "isto é linha de triagem?" perguntando se a
+  // 2ª célula era uma disposição VÁLIDA. A janela é a própria pergunta: quando
+  // a disposição é a célula que sumiu ou que tem typo — exatamente o caso que
+  // mais precisa de acusação — a guarda deixa de reconhecer a linha e a descarta
+  // calada. MEDIDO, denominedor 6 formas de linha quebrada: 3 acusavam, 3 fugiam.
+  // O transbordo de âncora para a 5ª célula, que é o defeito original, voltava
+  // a ser silencioso desde que o autor também errasse a disposição.
+  //
+  // O sinal que substitui a pergunta é o cabeçalho: `| memória | disposição |` é
+  // escrito de propósito, e nomeia as colunas. A partir dele a linha é de
+  // triagem independente do que a linha diz.
+  it('acusa a linha de 3 células CUJO SLUG SOBROU e a disposição, não', () => {
+    const { rows, malformed } = parseTriage(LEDGER(['| `fantasma` | `a.md` | `x` |']));
+    expect(rows).toEqual([]);
+    expect(malformed).toHaveLength(1);
+    expect(malformed[0]).toContain('3 célula');
+  });
+
+  it('acusa o transbordo de âncora quando a disposição tem typo — o caso que juntava os dois defeitos', () => {
+    const { rows, malformed } = parseTriage(
+      LEDGER(['| `x` | `citadaa` | `a.md` | `Ferramenta (6)` | `CAUDA-INVENTADA` |']),
+    );
+    expect(rows).toEqual([]);
+    expect(malformed).toHaveLength(1);
+    expect(malformed[0]).toContain('5 célula');
+  });
+
+  it('acusa a linha de 1 célula — que a guarda de `>= 2` deixava passar calada', () => {
+    const { rows, malformed } = parseTriage(LEDGER(['| `fantasma` |']));
+    expect(rows).toEqual([]);
+    expect(malformed).toHaveLength(1);
+    expect(malformed[0]).toContain('1 célula');
+  });
+
+  // Regressão do falso POSITIVO: as outras tabelas do ledger (a legend de 2
+  // colunas e o resumo de 3) ficam ANTES da tabela de triagem no arquivo real,
+  // e é o cabeçalho que delimita a tabela — não a contagem de células.
+  it('NÃO acusa as outras tabelas do ledger, que têm 2 e 3 colunas', () => {
+    const { rows, malformed } = parseTriage(
+      [
+        '| disposição | quer dizer |',
+        '|---|---|',
+        '| `citada` | a regra **já está escrita** num arquivo versionado. |',
+        '| `pendente` | regra reutilizável que **ninguém escreveu ainda**. |',
+        '',
+        '| disposição | n | o que significa |',
+        '|---|---|---|',
+        '| `citada` | 35 | a âncora é o que a mantém presa |',
+        '| **total** | **72** | o que o gate mede |',
+      ].join('\n'),
+    );
+    expect(rows).toEqual([]);
+    expect(malformed).toEqual([]);
+  });
+
+  // A linha em branco NÃO fecha a tabela: um `\n` plantado logo abaixo do
+  // cabeçalho desligaria a acusação de forma sem tocar em nenhuma linha de
+  // triagem. O que fecha a tabela é prosa, não silêncio.
+  it('linha em branco logo abaixo do cabeçalho NÃO desarma a acusação de forma', () => {
+    const { rows, malformed } = parseTriage(
+      LEDGER([]).replace('|---|---|---|---|', '|---|---|---|---|\n\n') +
+        '| `fantasma` | `a.md` | `x` |\n',
+    );
+    expect(rows).toEqual([]);
+    expect(malformed).toHaveLength(1);
+    expect(malformed[0]).toContain('3 célula');
+  });
+
+  // MEDIDO 2026-10-15 pelo revisor adversarial: uma linha que COMEÇA com `|` e
+  // esquece o pipe final caía no mesmo ramo da prosa e levava o
+  // `emTabelaTriagem = false` junto — uma única delas no meio da tabela
+  // silenciava a acusação de forma de TODAS as seguintes, e a própria linha não
+  // virava `row` nem `malformed`. Sem este teste a mutação não caía em nada.
+  it('linha sem o pipe final é ACUSADA e NÃO desarma a tabela para as seguintes', () => {
+    const { rows, malformed } = parseTriage(
+      [
+        '| memória | disposição | alvo | âncora |',
+        '|---|---|---|---|',
+        '| `bom` | `citada` | `a.md` | `anc` |',
+        '| `sem-pipe` | `citada` | `a.md` | `anc`', // esqueceu o |
+        '| `fantasma` | `a.md` | `x` |', // 3 células — precisa ser acusada
+      ].join('\n'),
+    );
+    expect(rows).toHaveLength(1);
+    expect(malformed).toHaveLength(2);
+    expect(malformed[0]).toContain('falta o `|` final');
+    expect(malformed[1]).toContain('3 célula');
   });
 });
 
@@ -251,10 +319,22 @@ describe('findStaleAnchors — o dente', () => {
 });
 
 describe('findMissingTargets', () => {
-  it('acusa alvo inexistente em `citada` e em `gate`', () => {
+  // MEDIDO 2026-10-15 pelo revisor adversarial: o teste se intitulava "em
+  // `citada` e em `gate`" e construía SÓ a linha `gate`. O nome prometia o que o
+  // corpo não media, e é por isso que neutralizar o filtro de `citada` não
+  // derrubava teste nenhum — a cobertura era verde por ausência.
+  it('acusa alvo inexistente em `gate`', () => {
     const { repoRoot } = fixture();
     const { rows } = parseTriage(
       LEDGER(['| `x` | `gate` | `.tooling/scripts/ci/nao-existe.ts` | `-` |']),
+    );
+    expect(findMissingTargets(repoRoot, rows)[0]).toContain('não existe');
+  });
+
+  it('acusa alvo inexistente em `citada`', () => {
+    const { repoRoot } = fixture();
+    const { rows } = parseTriage(
+      LEDGER(['| `x` | `citada` | `.tooling/scripts/ci/nao-existe.ts` | `-` |']),
     );
     expect(findMissingTargets(repoRoot, rows)[0]).toContain('não existe');
   });
@@ -333,9 +413,9 @@ describe('checkMemoryCrystallization — integração contra a derivação real'
   // Os três testes abaixo atravessam o CORPO principal do gate — os que
   // agregam `uncovered` + `phantom` + `stale` no veredito. Eles existem
   // porque os testes de cima só cobrem *early returns*: MEDIDO 2026-10-14, com
-  // o veredito trocado por `ok: true` a suíte ficava 17/17 verde, porque nada
+  // o veredito trocado por `ok: true` a suíte ficava verde, porque nada
   // levava um defeito real até a linha do veredito. É a mutação que não cai
-  // parecendo sucesso.
+  // parecendo sucesso. MEDIDO 2026-10-15, denominador 28: **3 de 28** vermelhos.
   const comDefeito = (seed: (memDir: string, target: string) => string[]): CheckResult => {
     const { repoRoot, memDir, home } = fixture();
     mkdirSync(join(repoRoot, '.agents', 'runs'), { recursive: true });
@@ -360,6 +440,34 @@ describe('checkMemoryCrystallization — integração contra a derivação real'
     });
     expect(r.ok).toBe(false);
     expect(r.errors.join('\n')).toContain('esquecida');
+  });
+
+  // O `advisory` das `pendente` é dívida DECLARADA, não erro — o gate fica
+  // `ok`, mas a lista precisa aparecer. MEDIDO 2026-10-15: neutralizar o
+  // `rows.filter(r => r.disposition === 'pendente')` deixava a suíte 30/30
+  // verde, ou seja ninguém media essa linha. É a asymmetry que separa
+  // `findUncovered` (erro) de `pendentes` (advisory): os dois filtram o mesmo
+  // array por lados diferentes e só um tinha dente.
+  it('ADVISORY: `pendente` não é erro, mas a dívida é nomeada', () => {
+    const r = comDefeito((memDir) => {
+      writeFileSync(join(memDir, 'regra-nova.md'), memoria('feedback'));
+      return ['| `regra-nova` | `pendente` | `-` | `-` |'];
+    });
+    expect(r.ok).toBe(true);
+    // `CheckResult.advisories` é OPCIONAL no contrato compartilhado (mesmo
+    // `?? []` que a CLI usa na linha 396). O fallback não tira o dente:
+    // lista vazia não contém `regra-nova`, então o teste continua vermelho se
+    // o advisory sumir.
+    expect((r.advisories ?? []).join('\n')).toContain('regra-nova');
+  });
+
+  it('ADVISORY: `recusada` NÃO vira dívida — é decisão, não esquecimento', () => {
+    const r = comDefeito((memDir) => {
+      writeFileSync(join(memDir, 'campanha.md'), memoria('feedback'));
+      return ['| `campanha` | `recusada` | `é registro` | `-` |'];
+    });
+    expect(r.ok).toBe(true);
+    expect((r.advisories ?? []).join('\n')).not.toContain('campanha');
   });
 
   it('VERMELHO: linha do ledger apontando para memória que não existe', () => {

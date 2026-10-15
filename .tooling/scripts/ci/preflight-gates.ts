@@ -118,7 +118,7 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
   },
   {
     // Fecha o laço DURANTE → DEPOIS. MEDIDO 2026-10-14: o harness já grava
-    // memória estruturada durante a tarefa (`originSessionId` em 112 de 114
+    // memória estruturada durante a tarefa (`originSessionId` em 113 de 116
     // arquivos), mas nenhuma delas tem destinação — a regra foi absorvida pela
     // convenção sem que a procedência sobrevivesse. Este gate lê o ledger nas
     // DUAS direções: memória sem linha, e linha sem memória.

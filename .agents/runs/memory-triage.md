@@ -31,17 +31,26 @@ A linha tem **exatamente 4 células**, e um `|` dentro da âncora se escreve `\|
 MEDIDO 2026-10-14: o gate usava `split('|')`, que cortava a âncora no primeiro
 `|` e jogava a 5ª célula fora **em silêncio** — um `✓` com metade da âncora
 inventada. A crase não protege `|` em tabela markdown; o backslash é que
-protege. Uma linha que não tem 4 células agora é erro de forma, e não uma linha
-ignorada.
+protege.
 
-### Por que 72 linhas e não 75
+Uma linha que não tem 4 células é erro de forma, e não uma linha ignorada — mas
+só depois do **cabeçalho**. A 1ª correção decidia "isto é linha de triagem?"
+perguntando se a 2ª célula era uma disposição VÁLIDA, e a janela era a própria
+pergunta: quando a disposição é a célula que sumiu ou que tem typo — o caso que
+mais precisa de acusação — a guarda deixava de reconhecer a linha. MEDIDO
+2026-10-14, 6 formas de linha quebrada: 3 acusavam, **3 fugiam caladas**, e o
+transbordo de âncora para a 5ª célula voltava a ser silencioso desde que o autor
+também errasse a disposição. O cabeçalho `| memória | disposição |` nomeia as
+colunas e ninguém o escreve por engano.
+
+### Por que 73 linhas e não 76
 
 O gate isenta três categorias antes de formar o corpus: `MEMORY.md`,
 `*-result.md` (resultado de campanha) e `type: reference`. MEDIDO 2026-10-14:
 
 ```bash
-ls -1 <memdir>/*.md | wc -l                                                     # 115
-ls -1 <memdir>/*.md | grep -v '/MEMORY.md$' | grep -vc 'result\.md$'          #  75
+ls -1 <memdir>/*.md | wc -l                                                     # 116
+ls -1 <memdir>/*.md | grep -v '/MEMORY.md$' | grep -vc 'result\.md$'          #  76
 grep -l '^  type: reference$' <memdir>/*.md | wc -l                            #   3
 ```
 
@@ -52,7 +61,7 @@ gate mede:
 
 ```bash
 ls -1 <memdir>/*.md | grep -v '/MEMORY.md$' | grep -v 'result\.md$' \
-  | xargs grep -L '^  type: reference$' | wc -l                                 #  72
+  | xargs grep -L '^  type: reference$' | wc -l                                 #  73
 ```
 
 ### A dívida que a isenção dos 39 `*-result.md` esconde
@@ -65,7 +74,21 @@ outro conjunto e tem **0** arquivos. MEDIDO 2026-10-14:
 → **0**. Nenhum gate mede os 39.
 
 E pelo menos 2 dos 39 guardam regra reutilizável que **não chegou a nenhum `.md`
-versionado** — `git grep` → **0 hits** para cada uma:
+versionado**. As duas frases estão **quebradas em duas linhas** no result file de
+origem, então um `grep` de linha única devolveria 0 mesmo na origem — 0 por motivo
+errado, que é o pior tipo de 0. A medição que discrimina remove o `>` de
+blockquote antes de dobrar as linhas (MEDIDO 2026-10-15):
+
+```bash
+fold() { sed 's/^[[:space:]]*[>|][[:space:]]*//' | tr '\n' ' ' | sed 's/  */ /g'; }
+sed -n '92,93p' <memdir>/b41-*.md | fold | grep -cF "<a frase>"            #  1  existe
+sed -n '36,37p' <memdir>/b40-*.md | fold | grep -cF "<a frase>"            #  1  existe
+git grep -lF "<a frase>" -- '*.md' | grep -v memory-triage.md | wc -l     #  0  fora do ledger
+```
+
+O `grep -v memory-triage.md` não é cortesia: este arquivo cita as duas frases ao
+dizer que elas não chegaram a lugar nenhum, então sem a exclusão ele é o único
+hit — o guard disparando em si mesmo, na frase que documenta o guard.
 
 - `b41`: "anti-pattern precisa de gate ou de um passo no checklist, não de uma nota"
 - `b40`: "a frase tem um comando que a reproduz, ou a frase vai embora"
@@ -118,6 +141,7 @@ fazê-lo às cegas seria fabricar 39 linhas `citada` sem âncora verificada.
 | `mirror-tree-tests-a-script-that-has-no-seam` | `pendente` | — | — |
 | `mutation-can-fail-for-the-wrong-reason` | `pendente` | — | — |
 | `mutation-that-doesnt-land-looks-green` | `pendente` | — | — |
+| `non-fast-forward-is-not-divergent-work` | `pendente` | — | — |
 | `patch-medido-so-no-caminho-do-defeito` | `pendente` | — | — |
 | `pipe-stdout-dies-when-spawner-exits` | `pendente` | — | — |
 | `positive-test-must-assert-skip-state` | `citada` | `docs/fluxo-desenvolvimento.md` | `não havia nada para verificar` |
@@ -159,11 +183,11 @@ MEDIDO 2026-10-14 pelo gate, não por recontagem à mão — o painel de
 | disposição | n | o que significa |
 |---|---|---|
 | `citada` | 35 | a regra já está escrita; a âncora é o que a mantém presa ao arquivo |
-| `pendente` | 32 | regra reutilizável que **ninguém escreveu** — 44% do corpus |
+| `pendente` | 33 | regra reutilizável que **ninguém escreveu** — 45% do corpus |
 | `recusada` | 3 | registro de campanha, não é regra |
 | `removida` | 2 | tombstone; o corpus pode encolher por aqui |
 | `gate` | **0** | nenhuma memória do corpus é mecânica o bastante para um gate determinístico |
-| **total** | **72** | o que `ls` + as três isenções do gate medem |
+| **total** | **73** | o que `ls` + as três isenções do gate medem |
 
 **O `0` em `gate` é o achado, não uma omissão.** As candidatas naturais
 (`glob-in-block-comment-closes-it`, `gate-without-cli-block-runs-as-noop`) são
@@ -173,10 +197,12 @@ regra sem gate é a mesma *documentation-only prevention* que a
 classifica como a mais fraca. `gate:` aqui significa *existe um `.ts` no repo que
 mede isto*, e hoje não existe para nenhuma.
 
-**32 `pendente` não é o mesmo que 32 regras ignoradas.** Várias são
-**praticadas e nunca enunciadas**: o `ci-defense-in-depth.md` usa "o par" e "N de
-M vermelho" em **12** linhas da tabela de dentes sem nunca dizer por quê. Para
-essas, o que falta não é comportamento, é enunciado.
+**33 `pendente` não é o mesmo que 33 regras ignoradas.** Várias são
+**praticadas e nunca enunciadas**: o `ci-defense-in-depth.md` usa "o par" em
+**11** das 20 linhas da tabela de dentes, e a notação "N de M vermelho" em **3**,
+sem nunca dizer por quê. MEDIDO 2026-10-15, contando só as linhas de dados da
+tabela (as 22 com `|` são cabeçalho, separador e as 20 de dados). Para essas, o
+que falta não é comportamento, é enunciado.
 
 ## Longevidade
 

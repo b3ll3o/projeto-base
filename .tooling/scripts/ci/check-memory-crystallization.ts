@@ -5,11 +5,14 @@
 //
 // Task 1.1 do plano docs/superpowers/plans/2026-10-14-cristalizacao.md.
 //
-// O problema: o harness já escreve memória estruturada durante a tarefa (112 de
-// 114 arquivos com `originSessionId`). O que falta é a etapa DEPOIS. MEDIDO
-// 2026-10-14: de 6 memórias paradigmáticas, 5 não são citadas em nenhum `.md`
-// versionado — a regra foi absorvida pela convenção sem que a procedência
-// sobrevivesse, e sem procedência ninguém sabe se aquilo já foi decidido.
+// O problema: o harness já escreve memória estruturada durante a tarefa
+// (`grep -l originSessionId <memdir>/*.md | wc -l` → 113 de 116 arquivos, MEDIDO
+// 2026-10-15). O que falta é a etapa DEPOIS: das 73 do corpus, 38 não têm
+// destino — 33 `pendente`, 3 `recusada`, 2 `removida` (MEDIDO pelo parser do
+// gate). São números DIFERENTES: 33 é só a dívida declarada, e usá-lo como se
+// fosse "não citada" apaga 5 memórias da conta. A regra foi absorvida pela
+// convenção sem que a procedência sobrevivesse, e sem procedência ninguém sabe
+// se aquilo já foi decidido.
 //
 // A classe 1 deste check: um gate de cristalização cuja cobertura é
 // declarativa não liga nada. Por isso a tabela de triagem é lida NAS DUAS
@@ -113,7 +116,7 @@ export function corpusOf(memoryDir: string): string[] {
  * era **descartado em silêncio** — a metade que o autor não escreveu nunca era
  * conferida, e o gate ficava `✓` com uma âncora que não existe em lugar
  * nenhum. O `\|` é o que permite citar uma célula de tabela do markdown como
- * âncora; a.split é que não cumpria.
+ * âncora; o `split` cru é que não cumpria.
  */
 function splitCells(row: string): string[] {
   const body = row.slice(1, -1);
@@ -150,25 +153,52 @@ export function parseTriage(content: string): { rows: TriageRow[]; malformed: st
   const rows: TriageRow[] = [];
   const malformed: string[] = [];
   const lines = content.split('\n');
+  const unquote = (c: string): string => c.replace(/^`(.*)`$/s, '$1').trim();
+  let emTabelaTriagem = false;
 
   for (let i = 0; i < lines.length; i++) {
     const raw = lines[i]!.trim();
-    if (!raw.startsWith('|') || !raw.endsWith('|')) continue;
-    const cells = splitCells(raw);
     const line = i + 1;
+    if (!raw.startsWith('|')) {
+      // Linha em branco NÃO fecha a tabela: um `\n` plantado logo abaixo do
+      // cabeçalho desligaria a acusação de forma sem tocar em nenhuma linha de
+      // triagem — o mesmo verde falso por outra porta. O que fecha a tabela é
+      // prosa, não silêncio.
+      if (raw !== '') emTabelaTriagem = false;
+      continue;
+    }
+    // Começar com `|` é tentativa de linha de tabela mesmo sem o pipe final.
+    // MEDIDO 2026-10-15: no arranjo anterior esta linha caía no mesmo ramo da
+    // prosa, e o `emTabelaTriagem = false` que vinha junto desligava a acusação
+    // de forma de TODAS as linhas seguintes — uma única linha dessas no meio da
+    // tabela silenciava o gate inteiro, e ela própria não virava `row` nem
+    // `malformed`. Agora ela é acusada em voz alta e a mesa continua armada.
+    if (!raw.endsWith('|')) {
+      if (emTabelaTriagem) {
+        malformed.push(`linha ${line}: falta o \`|\` final — linha quebrada`);
+      }
+      continue;
+    }
+    const cells = splitCells(raw);
 
     // <> 4 células é linha QUEBRADA, não "não é linha de tabela": pular em
     // silêncio tirava do `findPhantomRows` a única acusação que ele tinha,
     // e da `âncora` a metade que ninguém escreveu.
     //
-    // O que separa uma linha quebrada de uma OUTRA tabela do ledger é a 2ª
-    // célula: a de triagem declara uma disposição válida ali, e a tabela-legend
-    // das cinco disposições (2 colunas) declara uma frase.
-    const unquote = (c: string): string => c.replace(/^`(.*)`$/s, '$1').trim();
-    const isTriageRow =
-      cells.length >= 2 && (DISPOSITIONS as readonly string[]).includes(unquote(cells[1]!));
+    // O que decide é o CABEÇALHO, e não o conteúdo da linha. MEDIDO 2026-10-14:
+    // a guarda anterior perguntava se a 2ª célula era uma disposição VÁLIDA, e a
+    // janela era a própria pergunta — quando a disposição é a célula que sumiu
+    // ou que tem typo, justamente o caso que mais precisa de acusação, a guarda
+    // deixava de reconhecer a linha e a descartava calada. Das 6 formas de linha
+    // quebrada medidas, 3 fugiam; o transbordo de âncora para a 5ª célula — o
+    // defeito original — voltava a ser silencioso desde que o autor também
+    // errasse a disposição. O cabeçalho nomeia as colunas e ninguém o escreve
+    // por engano.
+    const ehCabecalho = unquote(cells[1] ?? '') === 'disposição';
+    if (ehCabecalho) emTabelaTriagem = true;
+
     if (cells.length !== 4) {
-      if (isTriageRow) {
+      if (emTabelaTriagem) {
         malformed.push(
           `linha ${line}: ${cells.length} célula(s), esperado 4 — linha quebrada ` +
             `(um \`|\` de âncora se escapa como \`\\|\`)`,
@@ -177,8 +207,7 @@ export function parseTriage(content: string): { rows: TriageRow[]; malformed: st
       continue;
     }
 
-    // Cabeçalho e separador: a 2ª célula é `---`, e nenhum slug é `---`.
-    if (cells[1]!.replaceAll('`', '') === 'disposição') continue;
+    if (ehCabecalho) continue;
     if (cells[1]!.replaceAll('`', '').startsWith('-')) continue;
 
     const slug = unquote(cells[0]!);
