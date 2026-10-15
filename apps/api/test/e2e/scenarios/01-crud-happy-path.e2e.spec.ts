@@ -16,7 +16,6 @@ import {
   teardownE2E,
   criarUsuarioAutenticado,
   type E2EContext,
-  SENHA_DE_TESTE,
 } from '../test-app.helper.js';
 
 describe('E2E 01: CRU happy path completo', () => {

@@ -94,66 +94,90 @@ exportado de [`user-id.vo.ts`](../../../apps/api/src/modules/users/domain/value-
   que importa: o corpo não devolve nada que o caller não tivesse antes de
   perguntar.
 
-## T-B — Rate limiting: BLOQUEADO
+## T-B — Rate limiting: IMPLEMENTADA
 
-**Status: decisão tomada, implementação não feita.** O usuário aprovou
-("Adicionar throttler agora"), e o primeiro comando foi recusado:
+**Status: implementada.** O bloqueio era o `pnpm add`, e ele ficou sem objeto
+sem ter sido resolvido — o pacote não chegou por aqui:
 
 ```text
 pnpm --filter @projeto/api add @nestjs/throttler
 → Permission denied (auto mode classifier): "Untrusted Code Integration"
 ```
 
-O classificador exige aprovação explícita da **origem do pacote**, e o plano
-não pode instalar a dependência sem isso. Estado atual, verificado: `grep -n
-throttler apps/api/package.json` → vazio; o pacote não está em
-`node_modules/.pnpm`.
+MEDIDO (`git log -S'@nestjs/throttler' -- apps/api/package.json`): quem
+instalou foi `0943662`, "fix: resolve 9 issues abertas (4 P0 + 5 P1) em 1 PR
+unificado" (**#80**, merged em 2026-10-14T02:13:14Z) — aprovado e mergeado
+pelo usuário na main, e chegou a esta branch via rebase. A regra que barra
+`pnpm add` de origem não aprovada continua valendo; o que mudou é que a
+origem deixou de ser esta tarefa e passou a ser uma PR já revisada.
 
-### Colisão de escopo com o plano que está na main
+O que o #80 trouxe, e que a T-B não precisa mais decidir:
 
-MEDIDO em `origin/main` (`ae5015a`, "plano + state-snapshot de fix das 9 issues
-abertas", #79): a issue **#72** ("Sem `rate-limit` global na API") já está
-planejada, e o plano reserva para ela a branch
-`fix/api-hardening-cors-ratelimit`, com `apps/api/src/main.ts`,
-`apps/api/src/app.module.ts` e `apps/api/package.json` como arquivos
-principais — **os mesmos que a T-B tocaria aqui**.
+- `@nestjs/throttler ^6.5.0` em `apps/api/package.json`;
+- `ThrottlerModule.forRoot([{ ttl: THROTTLE_TTL_MS ?? 60_000, limit:
+  THROTTLE_LIMIT ?? 100 }])` e `providers: [{ provide: APP_GUARD, useClass:
+  ThrottlerGuard }]` — um teto **global por IP**, de 100/min.
 
-O usuário pediu o throttler **nesta** branch, o que é legítimo; o que precisa
-sair escrito é a consequência: se a T-B for implementada aqui, a PR-2 do plano
-da main tem de ser **reduzida à issue #73 (CORS)**, senão as duas branches
-mudam `app.module.ts` e `package.json` ao mesmo tempo e o conflito aparece no
-merge. Não corrigi o plano da main porque ele não é meu e a decisão de
-reparto é do usuário.
+### Colisão de escopo: resolvida pelo rebase
 
-### Decisões de desenho já tomadas (para quando o install for autorizado)
+MEDIDO: o plano da main era `ae5015a` (**#79**, merged 2026-10-14T01:40:08Z,
+"plano + state-snapshot de fix das 9 issues abertas"), que reservava a branch
+`fix/api-hardening-cors-ratelimit` para a issue #72 — a mesma que o #80
+resolveu. A colisão existiu e já aconteceu: o rebase desta branch sobre
+`origin/main` puxou `package.json`, `app.module.ts` e o lockfile do #80, e o
+que era uma colisão prevista virou integração. Não há PR-2 a reduzir: o #80
+veio inteiro.
 
-- **Números**: `POST /auth/login` — 5 tentativas por minuto por **conta**
-  (chave `ip:email`), não por IP. É a chave certa para brute force de senha:
-  o ataque que importa é "muitas senhas contra **um** e-mail", e chavear por IP
-  deixa passar o ataque distribuído e prende a rede inteira atrás de um
-  usuário legítimo atrás de NAT. `POST /users` (cadastro, `@Public()`) —
-  teto por IP, bem mais alto, porque é o que existe contra spam de conta.
-- **Ponto de aplicação**: `@Throttle` na rota, com `ThrottlerGuard` em
-  `@UseGuards` nos controllers, e **sem `APP_GUARD`**. O mesmo argumento que o
-  `JwtAuthGuard` usa neste repositório (ver o bloco no topo de
-  `auth.controller.ts`): um `APP_GUARD` global troca o marcador no ponto de
-  uso por uma lista centralizada que alguém esquece, e a rota nova fica
-  protegida por acidente em vez de por leitura.
-- **O que a e2e vai custar**: as suítes compartilham container e IP
-  (`127.0.0.1`), e `apps/api/test/e2e/users.e2e.spec.ts` sozinho faz **21**
-  `POST /users` num app — `grep -c "url: '/api/v1/users'"` → 5 literais, mais 6
-  de `criarUsuarioAutenticado` (`grep -c "criarUsuarioAutenticado(e2e,"`), mais
-  1 por `beforeEach` × 10 `it`s. Um teto de cadastro por IP abaixo de ~60/min
-  quebraria a suíte por um motivo que não é do spec. Por isso o limite de
-  cadastro é alto **e** a prova de dentes é um spec que importa o número do
-  código de produção e dispara até o `429` — medir que o limite existe, não que
-  o número é grande.
+### O que a T-B acrescenta por cima do teto global
+
+O global (100/min por IP) é a rede larga. O que falta é o **corte por conta**
+em `POST /auth/login`, que é o ataque que importa: "muitas senhas contra
+**um** e-mail". Com chave por IP, um atacante distribuído nunca esgota o bucket
+de nenhum IP seu, e um IP único de verdade (NAT, VPN) tranca a rede inteira
+atrás de um usuário que errou a senha uma vez.
+
+- **Número e chave**: `LIMITE_LOGIN_POR_MINUTO = 5` (NIST SP 800-63B), chave
+  `ip:email`, em `@Throttle({ default: { … } })` no ponto de uso — o
+  `limit`/`ttl` sobrescrevem o do `forRoot` **só** nessa rota.
+- **Por que `default` e não um nome próprio**: `forRoot` sem `name` registra
+  um único throttler. MEDIDO, com `@Throttle({ login: { … } })`: o header
+  continuava `x-ratelimit-limit: 100` em todo request e o spec caía 3/3 com
+  401 onde esperava 429. Um decorator que nomeia um throttler inexistente é
+  inerte, e o sintoma é justamente o 429 que nunca chega.
+- **Cadastro (`POST /users`)**: **não ganhou limite próprio**. O teto global
+  de 100/min por IP do #80 é o que existe contra spam de conta, e a T-B não
+  adiciona um segundo número para o mesmo teto.
+- **Dentes, nos dois sentidos**: `09-rate-limit.e2e.spec.ts` importa
+  `LIMITE_LOGIN_POR_MINUTO` do código de produção (número duplicado no spec
+  deixaria a suíte verde mentindo quando o limite mudasse) e mede que a 6ª
+  tentativa **da mesma conta** leva 429 e que uma **conta B** não herda o
+  bucket da A. Removendo o `getTracker` (o tracker padrão da lib volta a ser o
+  IP), 2 dos 3 testes caem — e o que morre é justamente o per-conta, com a
+  conta B recebendo 429 onde esperava 401.
+
+### O que a e2e custou, medido
+
+A previsão do plano era que a suíte quebraria por limite; a realidade foi a
+inversa, e mais interessante: **as duas quebras eram bugs de spec, não do
+controle**.
+
+- `users.e2e.spec.ts` fazia **6** logins da MESMA chave `ip:email` — seis `it()`
+  independentes que por acaso compartilhavam `a@b.com` (o banco é limpo entre
+  testes, então são seis contas diferentes). O 6º levou 429 e o teste de
+  histórico de versões caiu por um motivo que nada tinha a ver com histórico.
+- O harness gastava um `POST /users` + `POST /auth/login` da conta de sessão
+  em **todo** `beforeEach`: 17 testes vermelhos, 34 ocorrências de
+  `o login da conta de sessão do e2e falhou: HTTP 429`.
+
+As duas correções foram nos specs — e-mail próprio por teste, e o token da
+sessão reaproveitado em vez de reemitido (`emitirTokenDeSessao` já apaga a
+conta depois de emitir, então relogar não restaurava nada) — e **nenhuma no
+número**. Subir o teto para a suíte passar seria trocar o controle de segurança
+pela conveniência do teste.
 
 ## Abertos desta mudança (não corrigidos aqui)
 
-Registrados, não escondidos. Os dois primeiros já são issues abertas com PR
-planejada na main (`ae5015a`) — estão citados pelo número em vez de
-re-descritos aqui, porque copiar a decisão de outro plano é como ela envelhece:
+Registrados, não escondidos:
 
 - **Sem `jti` / revogação de refresh.** O `POST /auth/refresh` emite um par
   novo sem invalidar o anterior; um refresh vazado continua válido até expirar.
@@ -163,13 +187,28 @@ re-descritos aqui, porque copiar a decisão de outro plano é como ela envelhece
   nenhum spec afirma que o header **não** aparece no log. MEDIDO: a e2e imprime
   `"authorization":"[Redacted]"` no stdout, o que é evidência de que funciona —
   evidência de log, não asserção. Sem issue conhecida.
-- **Rate limiting global** — issue **#72**, planejada na PR-2 do plano da main.
-- **CORS `origin: true` em dev/staging** — issue **#73**, mesma PR-2.
-  `main.ts:32`, `app.enableCors({ origin: true, credentials: true })`.
+- **Logout sem revogação server-side.** O `Sair` existe e funciona no browser:
+  Server Action `sair` (`apps/web/app/users/actions.ts:21`) → `limparSessao()`
+  (`apps/web/lib/sessao.ts:109`), que apaga os dois cookies httpOnly. O que
+  não existe é o outro lado: MEDIDO, `grep -n logout` no `auth.controller.ts`
+  → vazio. Não há rota de logout nem tabela de revogação, então um par vazado
+  antes do `Sair` continua válido até expirar. Sem issue conhecida.
+
+### Fechadas pelo #80 enquanto esta branch existia
+
+O plano citava duas issues como "planejadas na PR-2 do plano da main". O #80
+veio antes, e elas não estão mais abertas — MEDIDO no código atual, não na
+memória do plano:
+
+- **#72 (rate limiting global)** — resolvida: `ThrottlerModule.forRoot` +
+  `APP_GUARD` em `app.module.ts`, 100/min por IP.
+- **#73 (CORS `origin: true`)** — resolvida: `main.ts:56-58` agora passa
+  `origin: allowedOrigins` / `parseAllowedOrigins()`, e o compose publica
+  `ALLOWED_ORIGINS`. O `origin: true` que este plano descreveu não existe mais.
 
 ---
 
 **Mantido por:** projeto-base contributors
 **Licença:** MIT
-**Versão do documento:** 1.0
-**Status:** T-A concluída · T-B bloqueada no install
+**Versão do documento:** 1.1
+**Status:** T-A e T-B concluídas

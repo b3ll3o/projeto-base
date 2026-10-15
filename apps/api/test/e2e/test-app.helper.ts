@@ -59,12 +59,13 @@ export interface E2EContext {
     requisicao: Parameters<NestFastifyApplication['inject']>[0],
   ) => Promise<Awaited<ReturnType<NestFastifyApplication['inject']>>>;
   /**
-   * Recria a conta de sessão e reemite o token.
+   * Garante que exista um token de sessão válido para o `injetar`.
    *
-   * pt-BR: `cleanE2EDatabase` trunca as três tabelas, e a conta de sessão é
-   * uma delas. O token já emitido continua válido (é stateless), mas a CONTA
-   * precisa voltar a existir — senão o próximo login com aquele e-mail dá
-   * 401. Chame sempre pela `cleanE2EDatabase`, que já faz isso.
+   * pt-BR: idempotente por desenho. Emitir token é um `POST /users` + um
+   * `POST /auth/login` para a MESMA conta em toda chamada, e `emitirTokenDeSessao`
+   * APAGA essa conta logo depois de emitir — o estado do banco depois do
+   * bootstrap e depois de cada limpeza é idêntico: conta ausente, token válido.
+   * Relogar não restaura nada; só gasta um login.
    */
   restabelecerSessao: () => Promise<void>;
 }
@@ -270,10 +271,14 @@ export async function bootstrapE2E(): Promise<E2EContext> {
 
   // ⚠️ A conta de sessão é criada ANTES de devolver o contexto, e o token é
   // capturado por referência em `token`. `cleanE2EDatabase` apaga todas as
-  // linhas — inclusive esta — e quem chama precisa poder RESTABELECER a
-  // sessão sem re-bootar o app, porque o token é stateless e sobrevive à
-  // limpeza; só a conta precisa voltar a existir para os próximos logins.
-  let token = await emitirTokenDeSessao(app, ctx.prisma);
+  // linhas — inclusive esta — e o token sobrevive à limpeza: ele é stateless, e
+  // o `JwtAuthGuard` valida assinatura/expiração sem consultar o banco. Nenhum
+  // spec precisa da CONTA de sessão de volta (MEDIDO: nenhum spec de e2e
+  // exercita `GET /auth/me`, que é a única rota que resolve `sub` → usuário).
+  // `undefined` é o estado "ainda sem token": o bootstrap nunca chega nele, e
+  // existe só para `restabelecerSessao` poder distinguir "não tenho token" de
+  // "tenho um token válido" sem relogar.
+  let token: string | undefined = await emitirTokenDeSessao(app, ctx.prisma);
 
   const injetar: E2EContext['injetar'] = (requisicao) => {
     // `inject` aceita `string | InjectOptions`. Nenhum spec deste arquivo
@@ -300,7 +305,16 @@ export async function bootstrapE2E(): Promise<E2EContext> {
     app,
     ctx,
     injetar,
+    // ⚠️ Idempotente: só reloga se não há token. Relogar em toda limpeza
+    // gastava um login da MESMA conta a cada `beforeEach`, e o limite por conta
+    // que o T-B acabou de instalar (5/min) corta isso — MEDIDO 2026-10-14: 17
+    // testes caíam com `o login da conta de sessão do e2e falhou: HTTP 429`,
+    // 34 ocorrências, todas do mesmo bucket `127.0.0.1:<email-da-sessão>`.
+    // A correção é aqui, e não no limite: o limite é o controle de segurança
+    // que o usuário pediu, e um login por teste para a MESMA conta é o
+    // comportamento que ele existe para travar.
     async restabelecerSessao() {
+      if (token !== undefined) return;
       token = await emitirTokenDeSessao(app, ctx.prisma);
     },
   };
@@ -316,12 +330,17 @@ export async function teardownE2E({ app, ctx }: E2EContext): Promise<void> {
 }
 
 /**
- * Trunca as tabelas do schema de users e RESTABELECE a sessão de teste.
+ * Trunca as tabelas do schema de users e garante a sessão de teste.
  *
- * ⚠️ Recebe o `E2EContext` inteiro, e não só o `ctx`, porque limpar sem
- * restaurar deixa a suíte num estado em que nenhum spec consegue logar. É o
- * mesmo cuidado que `baseLimpa` do harness de browser tem com a própria
- * conta de sessão.
+ * ⚠️ Recebe o `E2EContext` inteiro, e não só o `ctx`, porque a sessão vive no
+ * `e2e`, não no `prisma`.
+ *
+ * A documentação anterior deste helper afirmava que limpar sem restaurar
+ * "deixava a suíte num estado em que nenhum spec consegue logar". MEDIDO
+ * 2026-10-14: falso. O token da sessão é stateless e `emitirTokenDeSessao`
+ * apaga a conta depois de emitir, então restaurar não devolvia nada — e o
+ * `POST /auth/login` que ela fazia a cada `beforeEach` passou a ser cortado
+ * pelo limite por conta (17 testes vermelhos, 34 ocorrências de HTTP 429).
  *
  * Chame em `beforeEach` quando o spec tiver múltiplos `it()` com dados
  * conflitantes.

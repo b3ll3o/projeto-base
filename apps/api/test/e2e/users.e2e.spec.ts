@@ -143,9 +143,21 @@ describe('Users E2E (Fastify inject + Testcontainers)', () => {
   // precisa ser do DONO do registro" (`UserOwnershipGuard`). O token padrão
   // do `injetar` é da conta de sessão e2e, que é de outra pessoa — daí
   // `dona.headers` em todas elas.
+  //
+  // ⚠️ Cada `it()` cria a DONA com um e-mail diferente, e antes usavam todos
+  // `a@b.com`. Não é preciosismo: `POST /auth/login` tem limite de 5/min POR
+  // CONTA (chave `ip:email`), e seis logins da mesma chave num app só é
+  // exatamente o padrão que o limite existe para cortar — o 6º recebia 429 e o
+  // teste caía por um motivo que nada tinha a ver com histórico de versões.
+  // São seis contas diferentes (o banco é limpo entre testes) que por
+  // coincidência compartilhavam um e-mail; devolver a cada uma o seu nome
+  // traduz o que o spec realmente usa: uma dona por teste.
 
   it('PATCH /api/v1/users/:id sem If-Match -> 400 IF_MATCH_REQUIRED', async () => {
-    const dona = await criarUsuarioAutenticado(e2e, { nome: 'Alice', email: 'a@b.com' });
+    const dona = await criarUsuarioAutenticado(e2e, {
+      nome: 'Alice',
+      email: 'alice-sem-if-match@b.com',
+    });
 
     const res = await e2e.injetar({
       method: 'PATCH',
@@ -160,7 +172,10 @@ describe('Users E2E (Fastify inject + Testcontainers)', () => {
   });
 
   it('PATCH /api/v1/users/:id com If-Match correto atualiza e bump version', async () => {
-    const dona = await criarUsuarioAutenticado(e2e, { nome: 'Alice', email: 'a@b.com' });
+    const dona = await criarUsuarioAutenticado(e2e, {
+      nome: 'Alice',
+      email: 'alice-if-match-certo@b.com',
+    });
 
     const res = await e2e.injetar({
       method: 'PATCH',
@@ -177,7 +192,10 @@ describe('Users E2E (Fastify inject + Testcontainers)', () => {
   });
 
   it('PATCH /api/v1/users/:id com If-Match errado -> 412 CONCURRENCY_CONFLICT', async () => {
-    const dona = await criarUsuarioAutenticado(e2e, { nome: 'Alice', email: 'a@b.com' });
+    const dona = await criarUsuarioAutenticado(e2e, {
+      nome: 'Alice',
+      email: 'alice-if-match-errado@b.com',
+    });
 
     const res = await e2e.injetar({
       method: 'PATCH',
@@ -194,7 +212,10 @@ describe('Users E2E (Fastify inject + Testcontainers)', () => {
   // ───────────────────────── DELETE /users/:id ──────────────────
 
   it('DELETE /api/v1/users/:id soft-deleta; GET subsequente -> 404', async () => {
-    const dona = await criarUsuarioAutenticado(e2e, { nome: 'Alice', email: 'a@b.com' });
+    const dona = await criarUsuarioAutenticado(e2e, {
+      nome: 'Alice',
+      email: 'alice-soft-delete@b.com',
+    });
 
     const d = await e2e.injetar({
       method: 'DELETE',
@@ -214,7 +235,10 @@ describe('Users E2E (Fastify inject + Testcontainers)', () => {
   // ───────────────────────── POST /users/:id/restore ────────────
 
   it('POST /api/v1/users/:id/restore ressuscita soft-deleted; version incrementa para 3', async () => {
-    const dona = await criarUsuarioAutenticado(e2e, { nome: 'Alice', email: 'a@b.com' });
+    const dona = await criarUsuarioAutenticado(e2e, {
+      nome: 'Alice',
+      email: 'alice-restore@b.com',
+    });
 
     // v1 -> soft-delete -> v2
     const d = await e2e.injetar({
@@ -239,7 +263,10 @@ describe('Users E2E (Fastify inject + Testcontainers)', () => {
   // ───────────────────────── GET /users/:id/history ─────────────
 
   it('GET /api/v1/users/:id/history retorna versões (INSERT + UPDATE >= 2)', async () => {
-    const dona = await criarUsuarioAutenticado(e2e, { nome: 'Alice', email: 'a@b.com' });
+    const dona = await criarUsuarioAutenticado(e2e, {
+      nome: 'Alice',
+      email: 'alice-history@b.com',
+    });
 
     const p = await e2e.injetar({
       method: 'PATCH',
