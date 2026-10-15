@@ -152,6 +152,16 @@ export class AuthController {
   // distingue e-mail inexistente de senha errada). 400 = payload inválido.
   @ApiResponse({ status: 401, description: 'Credenciais inválidas' })
   @ApiResponse({ status: 400, description: 'Payload inválido' })
+  // ⚠️ 429 entrou no contrato em 2026-10-14, junto com o `@Throttle`. O
+  // `openapi.json` versionado listava 201/400/401 — a rota já devolvia 429
+  // desde que o limite por conta (`ip:email`) foi instalado, e o contrato
+  // continuava calado. O `doc-sync` pointed para estes arquivos no pre-commit
+  // do commit que trouxe o `@Throttle`; o contrato é gerado deste decorator,
+  // então corrigir aqui e reexportar é o caminho, e não editar o JSON.
+  @ApiResponse({
+    status: 429,
+    description: 'Limite de tentativas por conta (`ip:email`) excedido',
+  })
   async login(@Body(new ZodValidationPipe(LoginSchema)) body: LoginDto): Promise<unknown> {
     return this.authUseCases.login({ email: body.email, senha: body.senha });
   }

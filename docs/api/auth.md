@@ -18,7 +18,7 @@
 
 | # | Método | Path                    | Auth | Códigos principais            |
 |---|--------|-------------------------|------|-------------------------------|
-| 1 | `POST` | `/api/v1/auth/login`    | ❌   | `201`, `400`, `401`           |
+| 1 | `POST` | `/api/v1/auth/login`    | ❌   | `201`, `400`, `401`, `429`    |
 | 2 | `POST` | `/api/v1/auth/refresh`  | ❌   | `201`, `400`, `401`           |
 | 3 | `GET`  | `/api/v1/auth/me`       | ✅   | `200`, `401`                  |
 
@@ -68,6 +68,7 @@ Sem body. Devolve o perfil do usuário da sessão, resolvido pelo `sub` do token
 |--------|--------|
 | `400`  | Payload inválido (Zod no boundary, ou VO de domínio) |
 | `401`  | Credenciais inválidas — **genérico, por decisão de segurança** |
+| `429`  | Limite de tentativas por conta (`ip:email`) excedido — **só no `login`** |
 
 ⚠️ **A mensagem de `401` é a mesma para e-mail inexistente e senha errada.**
 `InvalidCredentialsException` não distingue os dois casos, e
@@ -80,6 +81,19 @@ O spec e2e `e2e/f7-login.spec.ts` compara **o texto** das duas telas, e não
 apenas a presença do erro — um `toBeVisible()` passaria com as duas mostrando
 mensagens diferentes.
 
+⚠️ **O `429` é por conta (`ip:email`), não só por IP.** O teto global de
+`THROTTLE_LIMIT` por IP é a rede larga: "muitas senhas contra UM e-mail" nunca
+esgota o bucket de nenhum IP do atacante, e um IP único de verdade (NAT, VPN)
+tranca a rede inteira atrás de quem errou a senha uma vez. Por isso o `login`
+carrega um `@Throttle` próprio, com chave `ip:email` e
+`LIMITE_LOGIN_POR_MINUTO = 5` (NIST SP 800-63B), **somando** ao global.
+
+O nome do throttler é `default` e não um nome próprio: `forRoot` sem `name`
+registra UM throttler, e um `@Throttle({ login: … })` que nomeia um throttler
+inexistente é inerte — o header continua `x-ratelimit-limit: 100` e o `429`
+nunca chega. MEDIDO: foi assim que o spec de limite caiu 3/3 com `401` onde
+esperava `429`.
+
 ## §5. Configuração
 
 | Variável | Obrigatória | Default | Efeito |
@@ -87,6 +101,12 @@ mensagens diferentes.
 | `JWT_SECRET` | **sim** | **nenhum** | Recusa o boot se ausente, em qualquer `NODE_ENV` |
 | `JWT_ACCESS_TTL` | não | `15m` | TTL do access token |
 | `JWT_REFRESH_TTL` | não | `7d` | TTL do refresh token |
+| `THROTTLE_TTL_MS` | não | `60000` | Janela do limite global por IP |
+| `THROTTLE_LIMIT` | não | `100` | Tentativas por IP na janela |
+
+`LIMITE_LOGIN_POR_MINUTO` **não** é variável de ambiente: é constante no
+controller, porque um teto de login que a configuração afrouxa é um controle de
+segurança que alguém afrouxa.
 
 O fallback é `\|\|` e não `??` **de propósito**: `JWT_ACCESS_TTL=` vazio numa
 linha de `.env` chega como string vazia, e `??` deixaria passar um
