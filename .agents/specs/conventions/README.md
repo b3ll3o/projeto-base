@@ -17,8 +17,8 @@ lê — a task 2.2 do plano `guard-classes` fecha isso. **Regra: criar uma conve
 (`description` começando por "Apêndice histórico", com `Apenas leitura`) **não**
 entram no índice — existem para preservar o histórico de gaps resolvidos sem
 estourar o limite de 300 linhas do spec canônico, e são alcançáveis por link de
-seu próprio pai. MEDIDO 2026-10-08: `ls .agents/specs/conventions/*.md` → **23**
-arquivos, **21** no índice, e os **2** de fora são
+seu próprio pai. MEDIDO 2026-10-15: `ls .agents/specs/conventions/*.md` → **25**
+arquivos, **22** no índice (o 25º é este README), e os **2** de fora são
 `review-routing-gaps-historical.md` e `specialist-routing-gaps-v1.0.md`. Sem essa
 cláusula, um `comm -23 <(ls disco) <(índices)` acusaria 2 convenções órfãs que
 são, por desenho, apêndices.

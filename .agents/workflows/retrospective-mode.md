@@ -59,9 +59,9 @@ retrospective-capture (skill) → doc-writer:
         memory: "<slug>"                # origem, quando veio do dreno DURANTE
         artifact: "skill|convention|memory|adr|backlog"
         target: "<path>"
-        confidence: 0..100
-        gate: "<path do .ts que já mede a regra, ou vazio = pendente>"
         content: "<yaml>"
+        confidence: 0..100               # >= 70 vira proposal; < 70 vira comentário
+        gate: "<path do .ts que já mede a regra, ou vazio = pendente>"
         justification: "<por que vale, referenciando o evento>"
         action: "create|update|comment"
   success_criteria: "0 proposals com confidence < 70; result file ≤ 300 linhas; ledger com 1 linha por memória do corpus, sem `citada:` cuja âncora não exista mais"

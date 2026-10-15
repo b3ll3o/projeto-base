@@ -111,14 +111,20 @@ pnpm tsx tooling/scripts/doc-sync.ts --files="$changed" --mode=incremental || ex
 `.husky/pre-push` roda **exclusivamente** `pnpm ci:preflight`. Ele **não** roda lint, typecheck nem teste — apesar de [`git-workflow.md`](../.agents/specs/conventions/git-workflow.md) recomendar `pnpm ci:local` como "Pre-Push Quality Gate".
 
 Os gates registrados são os `name:` de
-[`preflight.ts`](../.tooling/scripts/ci/preflight.ts) — **essa lista é a fonte de
-verdade, não este doc**. Uma cópia enumerada aqui envelhece a cada gate novo sem
-aviso nenhum; o veredito sai de `pnpm ci:preflight`, que separa `✓` / `✗` /
-`skipped`. Para quantos são agora:
+[`preflight-gates.ts`](../.tooling/scripts/ci/preflight-gates.ts) — **essa lista
+é a fonte de verdade, não este doc**. Uma cópia enumerada aqui envelhece a cada
+gate novo sem aviso nenhum; o veredito sai de `pnpm ci:preflight`, que separa `✓`
+/ `✗` / `skipped`. Para quantos são agora:
 
 ```bash
-grep -cE "^\s+name: '" .tooling/scripts/ci/preflight.ts
+grep -cE "^\s+name: '" .tooling/scripts/ci/preflight-gates.ts
 ```
+
+> MEDIDO 2026-10-15: o comando apontava para `preflight.ts`, que só importa o
+> registro e não tem nenhum literal `name:` — devolvia **0** com exit 1, e o
+> documento publicava um 0 como se fosse a contagem. `preflight-gates.ts` devolve
+> **21**. O sintoma (contagem que não se move) é indistinguível de "não mudou
+> nada desde a última vez".
 
 ---
 

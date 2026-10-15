@@ -19,7 +19,7 @@ type: specialist
 
 O harness do Claude Code **já** grava memória durante a tarefa, de forma
 estruturada e estável — MEDIDO 2026-10-14 com `grep -l "originSessionId" <memdir>/*.md | wc -l`
-sobre `ls -1 <memdir>/*.md | wc -l`: **112 de 115**. O número envelhece a cada
+sobre `ls -1 <memdir>/*.md | wc -l`: **113 de 116**. O número envelhece a cada
 memória nova; o que não envelhece é o que ele **não** faz, e é o escopo inteiro desta
 skill:
 

@@ -91,9 +91,11 @@
   `apps` e `packages`), não um gate sem registro. Esses 18 são exatamente as
   linhas do [Registro de dentes](ci-defense-in-depth.md#registro-de-dentes), e o
   `check-teeth-registry` é o que reconcilia as duas listas.
-  (Reconciliado por `name:`×`file:` em [`preflight.ts`](../../../.tooling/scripts/ci/preflight.ts)
+  (Reconciliado por `name:`×`file:` em [`preflight-gates.ts`](../../../.tooling/scripts/ci/preflight-gates.ts)
   — contagens medidas 2026-10-08 com `grep -cE "^\s+name: '"
-  .tooling/scripts/ci/preflight.ts` e `grep -oE "file: '[^']+'" | sort -u | wc -l`.
+  .tooling/scripts/ci/preflight-gates.ts` e `grep -oE "file: '[^']+'" | sort -u | wc -l`.
+  MEDIDO 2026-10-15: o comando apontava para `preflight.ts`, que só importa o
+  registro — 0 hits, exit 1. `preflight-gates.ts` devolve 21.
   A checagem anterior (17/16) tinha envelhecido por 2 entradas: o gate novo não
   foi contado quando esta pendência foi escrita.
   — não por contagem de glob. O "15" anterior era um **undercount**: o glob

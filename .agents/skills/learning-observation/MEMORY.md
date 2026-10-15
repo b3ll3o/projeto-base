@@ -9,8 +9,8 @@
 **Contexto:** MEDIDO 2026-10-14 — o harness já grava memória estruturada
 durante a tarefa e a cristalização DEPOIS não existe:
 `grep -l originSessionId <memdir>/*.md | wc -l` sobre `ls -1 <memdir>/*.md | wc -l`
-→ **112 de 115**. Das 6 memórias paradigmáticas medidas, **5** não são citadas
-em nenhum `.md` versionado: a regra foi absorvida pela convenção e a
+→ **113 de 116**. Das **73** do corpus que o gate mede, **33** não estão
+citadas em nenhum `.md` versionado: a regra foi absorvida pela convenção e a
 procedência evaporou.
 
 **Decisão:** criar a camada DURANTE, com o que o harness não faz — tri-taxonomia
@@ -55,5 +55,6 @@ a triagem é lida pelo `check-memory-crystallization` nas duas direções.
 - [ ] Promover as `pendente` que são **praticadas mas nunca enunciadas**
       (mutação que não cai, `patch` medido só no caminho do defeito,
       `red-gate-hides-the-queue`) — o repo já as segue, não as escreve.
-- [ ] 8ª classe de guard: "detector que fabrica o próprio dado" (medido 2026-10-14:
-      8/8 frases de busca dando 0 em nenhum `.md` versionado).
+- [ ] 8ª classe de guard: "detector que fabrica o próprio dado" — as frases e o
+      `git grep` de cada uma estão na memória `a-detector-that-fabricates-its-finding`;
+      o que falta aqui é o enunciado, não a medição.

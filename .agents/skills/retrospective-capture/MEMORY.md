@@ -8,7 +8,7 @@
 
 **Contexto:** MEDIDO 2026-10-14 — o harness grava memória estruturada
 durante a tarefa e nenhuma tinha destinação: `grep -l originSessionId <memdir>/*.md | wc -l`
-sobre `ls -1 <memdir>/*.md | wc -l` → **112 de 115**. Das **72** do corpus que o
+sobre `ls -1 <memdir>/*.md | wc -l` → **113 de 116**. Das **73** do corpus que o
 gate mede (as três isenções já descontadas), **0** viraram convenção por via
 mecânica; o painel de `ci:preflight` é quem mede as demais disposições, e um
 número recontado à mão envelhece no dia seguinte ao próximo `git add`.
