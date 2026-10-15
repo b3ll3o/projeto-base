@@ -8,10 +8,13 @@
 //   - nextjs-img-vs-image (major)
 
 import { describe, it, expect } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { reviewFiles } from './stack-code-reviewer.js';
+
+const REPO = new URL('../..', import.meta.url).pathname;
 
 function tmpFile(name: string, content: string): string {
   const dir = join(tmpdir(), 'stack-review-test');
@@ -204,5 +207,44 @@ describe('stack-code-reviewer', () => {
     const dir = join(tmpdir(), 'stack-review-test');
     rmSync(dir, { recursive: true, force: true });
     expect(() => mkdirSync(dir, { recursive: true })).not.toThrow();
+  });
+});
+
+describe('stack-code-reviewer CLI (o caminho que o review-stack.yml usa)', () => {
+  // MEDIDO 2026-10-15: o `review-stack.yml` montava a lista com
+  // `tr '\n' '\0'` e lia com `$(cat ...)` — o bash descarta byte nulo em
+  // substituição de comando (aviso: "byte nulo ignorado na entrada"), então
+  // `a.ts` e `b.ts` viravam o caminho inexistente `a.tsb.ts`. E, em segundo
+  // lugar, `pnpm stack:review` é `pnpm run`, que converte o newline do argv na
+  // par de caracteres `\n`. Duas causas independentes, uma medição: com 3
+  // arquivos o reviewer imprimia `files=1` e reportava verde.
+  it('processa a lista INTEIRA quando o argv traz `\\n` escapado', () => {
+    const outFile = join(tmpdir(), 'stack-review-cli-escaped.json');
+    const saida = execFileSync(
+      join(REPO, 'node_modules', '.bin', 'tsx'),
+      [
+        join(REPO, 'tooling', 'scripts', 'stack-code-reviewer.ts'),
+        '--files=apps/api/src/app.module.ts\\napps/api/prisma/schema.prisma\\npackages/shared-types/src/user.ts',
+        '--mode=ci',
+        `--out-file=${outFile}`,
+      ],
+      { cwd: REPO, encoding: 'utf8' },
+    );
+    expect(saida).toContain('files=3');
+  });
+
+  it('o mesmo argv com newlines reais continua valendo', () => {
+    const outFile = join(tmpdir(), 'stack-review-cli-cru.json');
+    const saida = execFileSync(
+      join(REPO, 'node_modules', '.bin', 'tsx'),
+      [
+        join(REPO, 'tooling', 'scripts', 'stack-code-reviewer.ts'),
+        '--files=apps/api/src/app.module.ts\napps/api/prisma/schema.prisma\npackages/shared-types/src/user.ts',
+        '--mode=ci',
+        `--out-file=${outFile}`,
+      ],
+      { cwd: REPO, encoding: 'utf8' },
+    );
+    expect(saida).toContain('files=3');
   });
 });

@@ -244,7 +244,11 @@ function parseArgs(): {
     const [k = '', v] = a.replace(/^--/, '').split('=');
     opts[k] = v ?? 'true';
   }
-  const files = (opts['files'] ?? '').split('\n').filter(Boolean);
+  // MEDIDO 2026-10-15: via `pnpm run` (o `pnpm stack:review` do
+  // review-stack.yml) o pnpm converte o newline do argv na PAR de caracteres
+  // `\n`, então `split('\n')` devolvia 1 item: o reviewer rodava sobre um
+  // caminho inexistente e reportava verde. Aceita as duas formas.
+  const files = (opts['files'] ?? '').split(/\\n|\n/).filter(Boolean);
   return {
     files,
     mode: opts['mode'] ?? 'pre-commit',
