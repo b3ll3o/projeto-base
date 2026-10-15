@@ -258,6 +258,23 @@ const DECLARED: Array<{ id: string; why: string }> = [
       'o nome contém `memory-dir`, o símbolo que o guard procura; citar o ' +
       'guard em qualquer `.md` varrido o faria se acusar (medido: 6 linhas)',
   },
+  // `check-memory-crystallization` NÃO entra aqui, e foi uma decisão medida.
+  // A primeira versão declarava `SELF_NAME` no guard novo e o catalogava
+  // nesta lista com o motivo "o ledger o nomeia em cada linha com destino
+  // `gate:`". MEDIDO 2026-10-14, pelo parser do próprio gate — 72 linhas, 0
+  // delas com destino `gate`:
+  //
+  //     parseTriage(readFileSync('.agents/runs/memory-triage.md','utf8'))
+  //     → { citada: 35, pendente: 32, recusada: 3, removida: 2 }
+  //
+  // ⚠️ `grep -c '\`gate\`'` no ledger responde **3**, e o motivo é que as três
+  // não são linhas de memória: a definição da destinação, uma linha de
+  // resumo que já diz `**0**`, e a prosa que a comenta. Citar só o `grep`
+  // aqui faria a próxima leitura concluir que este comentário mente.
+  //
+  // O motivo era falso, e `SELF_NAME` não era lido por nada. Declaração de
+  // auto-isenção sem trabalho a proteger é a classe 3 que este arquivo existe
+  // para caçar, com o nome dela escrita no campo `why`.
 ];
 
 export const DECLARED_IDS: string[] = DECLARED.map((d) => d.id);

@@ -43,15 +43,23 @@ EXPLORER               →  RETROSPECTIVE-CAPTURE (skill)  →  DOC-WRITER
 
 ```yaml
 - id: R-001
+  memory: "<slug>"                  # memória de origem, quando a proposta veio do DRENO (§Dreno)
   artifact: "skill|convention|memory|adr|backlog"
   target: ".agents/path/file.md"   # path alvo
   content: |
     Conteúdo proposto (yaml/markdown/skills/ADR body).
   confidence: 0..100                # >= 70 vira proposal
+  gate: ".tooling/scripts/ci/x.ts"  # SÓ quando existe um gate que mede a regra; vazio = `pendente`
   justification: |
     Por que isso é valioso (referência ao evento que motivou).
   action: "create|update|comment"
 ```
+
+`gate:` é o campo que dá **leitor** à disposição `gate` do ledger: escrevê-lo
+aqui sem apontar para um arquivo que existe é fabricar a prevenção mais fraca que
+existe. MEDIDO 2026-10-14: **0 das 72** memórias do corpus passam nele — nenhuma
+memória do repo é mecânica o bastante para um gate determinístico, e essa
+ausência é o diagnóstico, não uma lacuna a preencher com `gate:` vazio.
 
 ## Threshold de Confidence
 
@@ -75,6 +83,7 @@ Heurística de scoring:
 | Skill/convention new | `.agents/skills/`, `.agents/specs/conventions/` | PR `feat(retrospective)` |
 | ADR | `.docs/adr/NNNN-*.md` | PR com reviewer de arquitetura |
 | Backlog item | `TASK-NNN` em quadro do `task-manager` | item priorizado RICE |
+| Triagem de destino da memória | [`memory-triage.md`](../../runs/memory-triage.md) + gate [`check-memory-crystallization`](../../../.tooling/scripts/ci/check-memory-crystallization.ts) | uma linha por memória, 5 destinos |
 
 ## Destino canônico do result file
 
@@ -193,6 +202,57 @@ ls -1 "${MEMORY_DIR}" | grep -E 'result\.md$' | grep -vE '^b[0-9]+'      # fora,
 inventariar o histórico inteiro. O que não é aceitável é contar os dois
 conjuntos por um `grep` sem filtro e chamar o total de "result files da
 campanha".
+
+## Destino de cada memória (cristalização)
+
+O result file registra a **narrativa**; ele não impede que uma memória
+capturada evapore. Quem fecha o laço DURANTE → DEPOIS é o ledger
+[`memory-triage.md`](../../runs/memory-triage.md), com **uma linha por memória**
+e uma de cinco destinações: `citada` (a regra já está num `.md` versionado, e a
+coluna `âncora` guarda o trecho **verbatim** que continua lá), `gate` (a regra é
+mecânica e um gate versionado a mede), `recusada` (registro de estado, não
+reutilizável), `removida` (tombstone, que é o que permite ao corpus encolher) e
+`pendente` (dívida declarada — o gate reporta como ressalva, não como erro).
+
+O gate [`check-memory-crystallization`](../../../.tooling/scripts/ci/check-memory-crystallization.ts)
+lê a tabela nas **duas** direções: memória no disco sem linha no ledger é erro,
+e linha no ledger apontando para memória que não existe é erro. Conferir a
+`âncora` contra o arquivo citado é o que impede que a coluna `citada` vire
+decoração depois que alguém reescreve a convenção por motivo legítimo.
+
+⚠️ **Camada 1 local.** O corpus vive em `$HOME`, fora do repo, então o runner do
+CI não tem o que medir e o gate reporta `skipped` com o motivo — nunca verde.
+Publicar uma camada 2 exigiria mover o corpus para dentro do repo, que é
+decisão de outro tamanho.
+
+### Dreno — a retro consome o que a camada DURANTE capturou
+
+A skill [`learning-observation`](../../skills/learning-observation/SKILL.md)
+(classifica em T1/T2/T3 e exige o comando que mediu) escreve **memória**; esta
+convenção produz `decision-list`. Sem uma etapa que ligue uma à outra, a memória
+vira arquivo órfão e a proposta vira reescrita do que o diff já mostra.
+
+Na abertura da retro, antes de **Coletar**: ler as memórias que a
+`learning-observation` gravou durante a atividade, e para cada uma:
+
+1. Se o fato já está num `.md` versionado → linha `citada:` com a âncora verbatim.
+2. Se a regra é mecânica e **um gate que a mede já existe** → `gate:` com o path.
+3. Se é registro de estado ou campanha → `recusada:`, com o motivo.
+4. Se foi absorvida por outra e hoje seria enganosa mantê-la → `removida:`.
+5. Em qualquer outro caso → `pendente:`. É dívida **declarada**, não resolvida.
+
+O `confidence` do item no `decision-list` é **distinto** da disposição: um
+`confidence ≥ 70` diz que a regra é valiosa; a disposição diz se ela **já está**
+no repo. Uma regra de 95 que ninguém escreveu continua `pendente`.
+
+### Atribuição
+
+A mecânica de flush por turno, a tri-taxonomia de observação e a hierarquia de
+prevenção são adaptadas de
+[`task-observer`](https://github.com/iamneilroberts/claude-skills/blob/main/skills/task-observer/SKILL.md)
+(Eoghan Henn, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)). O
+ledger, a noção de âncora verbatim e a separação entre DURANTE e DEPOIS são
+deste repo.
 
 ## Comandos / Triggers
 

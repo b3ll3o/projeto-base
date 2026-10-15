@@ -460,7 +460,7 @@ function desembrulhar(token: string): string {
  * implementa passa — e o passo de CI fica verde sem executar nada.
  *
  * O que este parser NÃO afirma: nada sobre se o filtro casa algum pacote. Quem
- * decide é o chamador, e ele só相差 quando o valor casa EXATAMENTE com um
+ * decide é o chamador, e ele só difere quando o valor casa EXATAMENTE com um
  * pacote — forma exótica (`...[HEAD^1]`, `{./apps/*}`) cai na união, que é o
  * comportamento antigo, nunca num vermelho novo.
  */

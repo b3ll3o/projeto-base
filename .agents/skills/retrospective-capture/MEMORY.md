@@ -4,6 +4,23 @@
 
 ## Decisões Tomadas
 
+### 2026-10-14 — Nasce o dreno: `memory:` e `gate:` no `decision-list`
+
+**Contexto:** MEDIDO 2026-10-14 — o harness grava memória estruturada
+durante a tarefa e nenhuma tinha destinação: `grep -l originSessionId <memdir>/*.md | wc -l`
+sobre `ls -1 <memdir>/*.md | wc -l` → **112 de 115**. Das **72** do corpus que o
+gate mede (as três isenções já descontadas), **0** viraram convenção por via
+mecânica; o painel de `ci:preflight` é quem mede as demais disposições, e um
+número recontado à mão envelhece no dia seguinte ao próximo `git add`.
+
+**Decisão:** o `decision-list` ganha `memory:` (a origem da proposta) e `gate:`
+(o path do gate que **já** mede a regra). `confidence` passa a ser lido como
+distinto da disposição: uma regra de 95 que ninguém escreveu continua `pendente`.
+
+**Consequências:** a camada DURANTE (`learning-observation`) tem destino
+declarado, e o `check-memory-crystallization` exige uma linha no ledger por
+memória — nas duas direções.
+
 ### 2026-09-22 — Skill publicada na v1.4.0
 
 **Contexto:** aprendizados pós-atividade eram capturados ad-hoc via

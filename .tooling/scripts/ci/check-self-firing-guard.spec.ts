@@ -131,7 +131,7 @@ describe('selfExemptionDifferential — os três Arms', () => {
     const d = selfExemptionDifferential(g);
     expect(d.stillFires.map((h) => h.line)).toEqual([12]);
     // E ela NÃO entra em `exempted` — a linha é simultaneously isenta
-    // (pelo nome) e→「dispara」、 e é por isso que os dois conjuntos existem
+    // (pelo nome) e dispara, e é por isso que os dois conjuntos existem
     // separados em vez de um só.
     expect(d.exempted.some((h) => h.line === 12)).toBe(false);
   });

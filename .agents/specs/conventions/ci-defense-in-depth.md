@@ -61,6 +61,7 @@ Escopo de todos: **todo `.md` versionado** sob a raiz que o preflight passa
 | `check-docker-drift` | docker | `.dockerignore` ausente, `Dockerfile` > 100 linhas, base image sem glibc (distro) ou com major ≠ a de `engines.node` (major) — as duas são guardas separados |
 | `check-archive-integrity` | archive | frontmatter canônico de `.agents/runs/archive/*.md` |
 | `check-memory-dir-concordance` | retro | segunda declaração do destino do result file, em 6 notações históricas |
+| `check-memory-crystallization` | cristalização | memória do corpus **sem linha nenhuma** no ledger de destinação (fecha o laço DURANTE → DEPOIS); linha do ledger apontando para memória que não existe mais; `citada:` cuja âncora **deixou de estar** no arquivo que ela citava. `pendente:` é **aviso** — dívida declarada, não resolvida. Ledger ausente ou corpus de 0 → **erro**; diretório de memória fora do repo → `skipped` com motivo, nunca verde |
 | `check-agent-memory-drift` | agents | agent com **mudança de comportamento** e memória (`.agents/memory/<agent>.md`) intocada no mesmo range |
 | `check-tooling-typecheck` | typecheck | erro de tipo em **cada** superfície da lista `SUPERFICIES` — `.tooling/scripts/**` **e** `tooling/scripts/**`, as duas na barra de `tsconfig.base.json`; `tsc` != 0 **sem** diagnóstico também é vermelho (issue #46, amplitude 2026-10-08) |
 | `review-routing` matrix lint | roteamento | YAML inválido, reviewer inexistente, pattern duplicado, LOC > 300, `blocking: true` casando 0 arquivos |
@@ -70,12 +71,10 @@ Escopo de todos: **todo `.md` versionado** sob a raiz que o preflight passa
 | `check-ci-local-scope` | ci local | pacote do workspace que **implementa** uma task da invocação `turbo run` e não está nomeado por nenhum `--filter` dela; e `ci:local` sem `tooling:test` (o tooling não implementa task turbo alguma, então a checagem de filtro não o alcança). Complementa `check-ci-local-e2e` na direção oposta: aquele diz que a task roda, este diz que o escopo cobre. Filtro por glob **ou** ausência de filtro → **aviso**; pacote que só **delega** (`turbo run test`) não é acusado; `ci:local` ausente → `medidos: null`, nunca `{…: 0}` |
 
 > **`check-types.ts` NÃO é um check** e saiu desta tabela: tem um único
-> `export interface CheckResult` (medido, `wc -l` = 23) e é importado **só**
-> como `import type`. A versão anterior lhe atribuía uma capacidade e um custo
-> que **não existem** — foi a task 3.1 do plano
-> [`guard-classes`](../../../docs/superpowers/plans/2026-10-03-guard-classes.md)
-> que mediu e corrigiu. A [SKILL](../../skills/ci-defense-in-depth/SKILL.md)
-> já dizia certo ("— não roda"); a convenção é que estava errada.
+> `export interface CheckResult` (`wc -l` = 23) e é importado **só** como
+> `import type`. A versão anterior lhe atribuía uma capacidade e um custo que **não
+> existem** — a task 3.1 do plano [`guard-classes`](../../../docs/superpowers/plans/2026-10-03-guard-classes.md)
+> mediu e corrigiu; a [SKILL](../../skills/ci-defense-in-depth/SKILL.md) já dizia certo ("— não roda").
 >
 > **A coluna "Custo" foi removida, não corrigida.** Ela somava **16 s**
 > (5+3+3+1+2+2) para um preflight medido em **~2,6 s** — e o preflight não
@@ -110,7 +109,7 @@ extraído em commit `59eb083` (refactor que consolidou fixtures herméticas).
 O nível **controle positivo** entrou em 2026-10-08: `check-harness-owner` usava essa
 prova desde 2026-10-05, arquivada por engano como `mutação` — gate que prova o
 contrário ("neutralizado, continua verde") arquivado como mutação faz o leitor contar
-dentes que não são dentes. MEDIDO na tabela: **16** linhas = **15** mutação + **0**
+dentes que não são dentes. MEDIDO na tabela: **20** linhas = **19** mutação + **0**
 controle negativo + **1** controle positivo + **0** desconhecidas. Viradas de
 2026-10-08: `check-tooling-typecheck`, `check-tsconfig-drift`, `check-eslint-drift`,
 `check-turbo-drift` e `check-doc-refs` — prova só em tmpdir não prova a integração.
@@ -136,6 +135,7 @@ controle negativo + **1** controle positivo + **0** desconhecidas. Viradas de
 | `check-e2e-flow-coverage` | `check-e2e-flow-coverage.spec.ts` — `acusa spec que declara fluxo fora do inventário, nomeando os dois lados` / `acusa o meio-cumprido: spec novo sem linha no inventário` (o par), sobre **fixtures em tmpdir** | **mutação** | `npx vitest run --root .tooling/scripts/ci check-e2e-flow-coverage` → **2 de 15** com `if (!porId.has(id))` neutralizado, **5 de 15** com o VEREDITO (`ok: errors.length === 0`) neutralizado (medido 2026-10-08) | `.tooling/scripts/ci/check-e2e-flow-coverage.ts` |
 | `check-ci-local-e2e` | `check-ci-local-e2e.spec.ts` — `acusa pacote de e2e fora dos --filter — o gate que passaria verde com um app novo` e `o filtro de uma invocação que NÃO roda e2e não alcança ninguém para o e2e` (o par), sobre **fixtures em tmpdir**, mais o caso do repo real | **mutação** | `npx vitest run --root .tooling/scripts/ci check-ci-local-e2e` → **6 de 25** com o VEREDITO neutralizado, **2 de 25** só com o alcance por `--filter`, **1 de 25** tirando o escopo por invocação (medido 2026-10-08) | `.tooling/scripts/ci/check-ci-local-e2e.ts` |
 | `check-ci-local-scope` | `check-ci-local-scope.spec.ts` — `acusa o pacote que implementa a task e nao esta no filtro — e nomeia qual task` e `acusa ci:local que nao roda a suite do tooling` (o par), sobre **fixtures**, mais `mede e devolve o que olhou` e o `ci:local` ausente devolvendo `medidos: null` | **mutação** | `npx vitest run --root .tooling/scripts/ci check-ci-local-scope` → **2 de 10** com o VEREDITO neutralizado, **1 de 10** só com o alcance por `--filter`, **1 de 10** só com a checagem de `tooling:test` (medido 2026-10-13; restaurado byte-exato) | `.tooling/scripts/ci/check-ci-local-scope.ts` |
+| `check-memory-crystallization` | `check-memory-crystallization.spec.ts` — 24 testes: o par nas DUAS direções (`a evaporação` = memória sem destino, `a âncora que deixou de estar`), a **forma** da linha (`3 ou 5 células` = linha quebrada, nunca linha ignorada em silêncio) e a não-regressão da tabela-legend de 2 colunas, mais `a evaporação` contra a derivação REAL, não só em fixture | **mutação** | `npx vitest run --root .tooling/scripts/ci check-memory-crystallization` (denominador **24**) → **3 de 24** com o veredito neutralizado, **3 de 24** com o `findStaleAnchors` devolvendo lista vazia, **2 de 24** com o `findUncovered` devolvendo lista vazia, **1 de 24** com o `splitCells` voltando ao `split` cru (o `\|` de uma âncora deixa de proteger), **1 de 24** com a guarda de forma voltando a `< 4` (linha quebrada volta a sumir em silêncio), **1 de 24** com o `findMissingTargets` devolvendo lista vazia (medido 2026-10-14). ⚠️ **Camada 1 local por construção**: o corpus vive em `$HOME`, então no CI ele reporta `skipped` com o motivo — nunca verde | `.tooling/scripts/ci/check-memory-crystallization.ts` |
 
 > A coluna **Arquivo** é a chave de reconciliação: o `check-teeth-registry` casa o
 > registro com o `preflight.ts` por ela. Sem a coluna o gate é identificado pelo

@@ -20,6 +20,7 @@ import { checkArchiveIntegrity } from './check-archive-integrity';
 import { checkAgentMemoryDrift } from './check-agent-memory-drift';
 import { checkToolingTypecheck } from './check-tooling-typecheck';
 import { checkMemoryDirConcordance } from './check-memory-dir-concordance';
+import { checkMemoryCrystallization } from './check-memory-crystallization';
 import { checkTeethRegistry } from './check-teeth-registry';
 import { checkSelfFiringGuards } from './check-self-firing-guard';
 import { checkHarnessOwner } from './check-harness-owner';
@@ -309,6 +310,7 @@ export const RUNNERS: Record<string, () => CheckResult | Promise<CheckResult>> =
   'lint-review-routing': () => checkReviewRoutingLint(),
   'check-archive-integrity': () => checkArchiveIntegrity('.'),
   'check-memory-dir-concordance': () => checkMemoryDirConcordance({ repoRoot: '.' }),
+  'check-memory-crystallization': () => checkMemoryCrystallization({ repoRoot: '.' }),
   'check-agent-memory-drift': () => checkAgentMemoryDrift('.'),
   'check-tooling-typecheck': () => checkToolingTypecheck({ repoRoot: '.' }),
   'check-teeth-registry': () => checkTeethRegistry(),
