@@ -49,14 +49,15 @@ import { UserOwnershipViolationException } from '../exceptions/user.exceptions.j
  * ele roda em rotas `@Public()` onde não há subject. Nessas, `undefined` é
  * "ninguém" — e "ninguém" não é o dono de nada.
  *
- * ⚠️ Comparação por IGUALDADE de string, sem normalizar. Os dois valores são
- * UUIDs canônicos emitidos pelo mesmo gerador (`UserId`), então não existe
- * variante de caixa ou com traço a normalizar. Se um dia `actorId` vier de
- * fora, esta função precisa de `UserId` de verdade — e o tipo passa a dizer
- * isso, em vez de o teste passar por acaso.
+ * ⚠️ Comparação por IGUALDADE de string, sem normalizar. MEDIDO 2026-10-15: o
+ * `UUID_RE` do `UserId` tem a flag `/i`, então `GET /users/01A13FDB-…` passa na
+ * validação — e aqui virava 403 para o DONO do próprio registro, porque
+ * `/i` aceita e `!==` não. O Prisma e o Postgres resolvem o id sem diferenciar
+ * caixa, então o 403 dizia "registro inexistente" para um registro que existe.
+ * Comparar em minúsculas alinha a política com o que o `UserId` já aceita.
  */
 export function exigirPropriedade(actorId: string | undefined, alvoId: string): void {
-  if (actorId === undefined || actorId !== alvoId) {
+  if (actorId === undefined || actorId.toLowerCase() !== alvoId.toLowerCase()) {
     throw new UserOwnershipViolationException();
   }
 }

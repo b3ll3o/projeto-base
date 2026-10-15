@@ -38,6 +38,22 @@ describe('política de propriedade do registro de usuário', () => {
     );
   });
 
+  // MEDIDO 2026-10-15: o `UUID_RE` do `UserId` tem `/i`, então o id em caixa
+  // alta entra pela validação. Antes desta correção a política comparava por
+  // `!==` cru e devolvia 403 para o DONO do próprio registro — 403 que não
+  // confirmava o que ele dizia confirmar. Este teste segura o `.toLowerCase()`.
+  it('aceita o dono com o id em caixa ALTA — o `UUID_RE` tem `/i` e aceita', () => {
+    expect(() => exigirPropriedade(ALVO.toUpperCase(), ALVO)).not.toThrow();
+    expect(() => exigirPropriedade(ALVO, ALVO.toUpperCase())).not.toThrow();
+  });
+
+  it('a caixa alta NÃO abre a porta: outro id continua recusado', () => {
+    const outro = '0190a8b6-ffff-7c3d-8e4f-5a6b7c8d9e0f';
+    expect(() => exigirPropriedade(outro.toUpperCase(), ALVO)).toThrow(
+      UserOwnershipViolationException,
+    );
+  });
+
   it('a mensagem NÃO embute o id do alvo — um 403 não confirma existência', () => {
     let mensagem = '';
     try {
