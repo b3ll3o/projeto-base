@@ -156,12 +156,11 @@ export const test = base.extend<FixturesE2E>({
   comSessao: [
     async ({ page }, use) => {
       const { webUrl } = exigirEstado();
-      // ⚠️ O par em cache, e NÃO um `parDeTokens()` novo. `baseLimpa` (auto,
-      // e declarado antes desta) faz soft-delete na conta de sessão — a mesma
-      // conta que autorizou o GET que a lista apagou. O token já emitido
-      // continua válido (stateless), mas um login novo com aquele e-mail dá
-      // 401, porque `findByEmail` filtra soft-deleted. MEDIDO: com o login
-      // novo, 29 de 29 specs caíam em `INVALID_CREDENTIALS`.
+      // ⚠️ O par em cache, e NÃO um `parDeTokens()` novo. A conta de sessão é
+      // soft-deleted assim que nasce (ver `semearELogar`), então um login novo
+      // com aquele e-mail dá 401 — `findByEmail` filtra soft-deleted. O token
+      // já emitido continua válido (stateless). MEDIDO: com o login novo,
+      // 29 de 29 specs caíam em `INVALID_CREDENTIALS`.
       const { accessToken, refreshToken } = await tokensDoHarness();
       await page.context().addCookies([
         { name: 'access_token', value: accessToken, url: webUrl, httpOnly: true, sameSite: 'Lax' },

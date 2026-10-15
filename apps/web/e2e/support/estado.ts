@@ -75,6 +75,21 @@ export interface EstadoE2E {
    * resposta diz, não o que a aplicação faz (ver `banco.ts`).
    */
   databaseContainerId: string;
+  /**
+   * Segredo de assinatura dos tokens desta execução.
+   *
+   * pt-BR (2026-10-14): o segredo precisa viajar por aqui porque o processo da
+   * API sobrevive ao worker do Playwright que a subiu, e o worker é reciclado no
+   * meio da suíte. Gerado uma vez no `globalSetup` e relido por todo worker que
+   * precisar subir a API. Ver `gerarSegredoE2E`, que registra a medição.
+   *
+   * É uma credencial de execução, e o arquivo que a guarda é lixo de execução
+   * (some com `pnpm install`), exatamente como a `databaseUrl` logo acima — que
+   * também traz senha. A alternativa seria um segredo fixo no repositório, e
+   * essa está descartada por decisão: token de e2e que sobrevive ao banco que o
+   * emitiu é forjável por quem leia o log da execução.
+   */
+  jwtSecret: string;
 }
 
 export function gravarEstado(estado: EstadoE2E): void {

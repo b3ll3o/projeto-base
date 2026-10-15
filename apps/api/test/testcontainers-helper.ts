@@ -9,6 +9,12 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testconta
 import { execSync } from 'node:child_process';
 import { PrismaClient } from '@prisma/client';
 
+// pt-BR: reexportado para a suíte e2e do WEB, que não tem `@prisma/client` como
+// dependência e por isso importa deste arquivo (é a razão de o `global-setup.ts`
+// fazer o mesmo). Sem esta linha, `limparBase` só teria `cleanDatabase` e
+// nenhuma forma de construir o `PrismaClient` que ele exige.
+export { PrismaClient };
+
 let container: StartedPostgreSqlContainer | undefined;
 
 export type TestContext = {

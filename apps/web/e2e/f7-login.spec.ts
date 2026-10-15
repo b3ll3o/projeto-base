@@ -24,9 +24,9 @@ test.describe('F7 — Login de usuário', () => {
   test('com credenciais válidas, entra e cai na listagem', async ({ page, irPara, semear }) => {
     // A conta é semeada pelo PRÓPRIO spec, e não vem do harness. Duas
     // razões, e as duas importam: a conta do harness é apagada em
-    // soft-delete por `limparBase()` (portanto não consegue logar), e um
-    // login plantado pelo harness mediria o formulário provando o que o
-    // harness já tinha provado.
+    // soft-delete ao nascer (portanto não consegue logar), e um login
+    // plantado pelo harness mediria o formulário provando o que o harness já
+    // tinha provado.
     const email = emailUnico('login-ok');
     await semear('Pessoa Que Entra', email);
     // Sem isto o cookie da `comSessao` (auto) está presente, e `irPara('/login')`

@@ -15,20 +15,36 @@
 // mostraria uma lista vazia. O caminho de teste e o caminho do usuário são o
 // MESMO caminho — é essa a propriedade que um e2e deve ter.
 //
-// Consequência aceita e documentada: `limparBase()` faz SOFT-DELETE, então as
-// tabelas `users_history`/`user_archive` acumulam ao longo da execução. Isso
-// é irrelevante aqui porque o container é efêmero e nasce do zero a cada
-// `test:e2e` — e, mais importante, a listagem da tela esconde soft-deleted por
-// padrão (`includeDeleted=false`), que é exatamente o que "banco limpo" precisa
-// significar para um usuário.
+// ⚠️ A EXCEÇÃO, e ela nasceu de uma mudança no produto (2026-10-14).
 //
-// A consequência que NÃO é irrelevante: soft-deleted não devolve o `email`.
-// Ele continua `@unique` na linha apagada. Daí `emailUnico()` — nenhum spec
-// reusa um email, nem entre si nem no `--repeat-each`. O motivo inteiro está
-// em `semearUsuario`.
+// A regra acima ("tudo pela API, nunca pelo banco direto") vale para
+// VERIFICAÇÃO — é ela que faz `contarUsuarios()` passar pelo mesmo `GET /users`
+// que a tela percorre, e uma contagem direta no banco passaria mesmo com a
+// listagem quebrada. `contarUsuarios` continua na API, sem exceção.
+//
+// `limparBase()` saiu da regra, porque o caminho que ela usava deixou de
+// EXISTIR no produto. Ela apagava todo mundo chamando `DELETE /users/:id` com o
+// ÚNICO token do harness — e o guard de dono (T-A) responde `403
+// USER_OWNERSHIP_VIOLATION` para qualquer registro que não seja o do caller.
+// MEDIDO: 28 de 29 specs caíam no `beforeEach`, todos com o mesmo 403.
+//
+// A alternativa "cada um apaga o próprio registro" também não serve, e por um
+// motivo que não é de conveniência: os specs do F2 criam a conta pelo FORMULÁRIO
+// (`page.fill('#senha', …)`), então a senha pertence ao teste, não ao harness —
+// não há token a obter para quem a pessoa criou na tela. Sem rota de
+// administrative no produto (não existe modelo de papel), não sobrou caminho
+// público.
+//
+// A limpeza passou a truncar, que é o que `apps/api` já faz entre os testes
+// dele (`cleanDatabase`). A propriedade que o cabeçalho defendia continua de pé
+// onde ela vale: nada aqui AFIRMA nada — as asserções do F1 contam pela API.
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+// Três `../`, e não dois como no `global-setup.ts`: este arquivo está um nível
+// mais fundo (`e2e/support/`) — com dois, o caminho resolve para `apps/web/api`,
+// que não existe, e o erro aparece como TS2307 sem sugerir a profundidade.
+import { cleanDatabase, PrismaClient } from '../../../api/test/testcontainers-helper.js';
 import { exigirEstado, WEB_ROOT } from './estado';
 
 /**
@@ -56,6 +72,20 @@ interface InitChamada {
    * `DELETE /users/:id`) NÃO marcam isto: precisam de sessão.
    */
   publica?: boolean;
+  /**
+   * Token de QUEM age, em vez do token único do harness.
+   *
+   * pt-BR (2026-10-14): existe porque o guard de dono (T-A) faz
+   * `DELETE /users/:id` recusar quem não é o dono — `USER_OWNERSHIP_VIOLATION`.
+   * O token do harness é de outra pessoa, então ele só apaga a própria conta.
+   * `apagarUsuario` é a única chamada que precisa agir como o usuário-alvo, e
+   * ela consegue: quem foi semeado conhece a própria senha.
+   *
+   * Passar o token aqui também pula o retry de 401, que semeia de novo — e
+   * semear de novo durante um spec que prepara o estado dele é o que faz a
+   * contagem de usuários subir por um motivo que não é o do teste.
+   */
+  token?: string;
 }
 
 async function chamar(
@@ -96,6 +126,7 @@ async function chamar(
   };
 
   if (ehPublica) return executar(null);
+  if (init?.token !== undefined) return executar(init.token);
 
   // pt-BR: o token do harness tem TTL (`JWT_ACCESS_TTL`, 15 min por padrão) e
   // uma suíte longa pode ultrapassá-lo. Um 401 aqui é quase sempre isso — mas
@@ -132,13 +163,12 @@ async function chamar(
 // `401 INVALID_CREDENTIALS` numa conta cujo cadastro tinha acabado de dar
 // 201.
 //
-// A ordem mata: `baseLimpa` (fixture `auto`) chama `limparBase()`, que lista
-// e apaga em soft-delete — e a CONTA DE SESSÃO está na lista, porque é ela
-// que autorizou o GET. Ela é a primeira coisa semeada e a primeira apagada. O
-// JWT já emitido continua válido (é stateless), mas um login NOVO com aquele
-// e-mail não encontra a linha: `findByEmail` filtra soft-deleted. Reusar o
-// token em cache é o que sobrevive à limpeza — e torna a fixture independente
-// da ordem em que os dois `auto` rodam.
+// A CONTA DE SESSÃO é apagada — em soft-delete, por ela mesma, no fim de
+// `semearELogar` (o comentário de lá registra a medição). O JWT já emitido
+// continua válido (é stateless), mas um login NOVO com aquele e-mail não
+// encontra a linha: `findByEmail` filtra soft-deleted. Reusar o token em
+// cache é o que sobrevive — e é o que mantém a conta do harness FORA da
+// listagem que os specs contam.
 
 let sessao: (ParDeTokens & { email: string }) | null = null;
 
@@ -214,7 +244,32 @@ async function semearELogar(): Promise<ParDeTokens & { email: string }> {
     );
   }
 
-  return { email, ...(await parDeTokens(email, SENHA_DE_TESTE)) };
+  const conta = (await criacao.json()) as { id?: unknown; version?: unknown };
+  if (typeof conta.id !== 'string' || typeof conta.version !== 'number') {
+    throw new Error(
+      `POST /users respondeu 201 sem o par { id, version } utilizável: ` +
+        `${JSON.stringify(conta)}. A forma do contrato mudou.`,
+    );
+  }
+
+  const tokens = await parDeTokens(email, SENHA_DE_TESTE);
+
+  // ⚠️ A conta de sessão apaga a SI MESMA, e é assim que ela fica fora da
+  // listagem. MEDIDO 2026-10-14: sem esta linha, o F1 (que derruba e levanta a
+  // API) fazia o `GET /users` seguinte responder 401 `UNAUTHORIZED`, o retry de
+  // `chamar` ressemeava a sessão — e o `expect(await contarUsuarios(), 'a
+  // listagem deve começar vazia').toBe(0)` do F2 lia 1, que era a própria
+  // conta do harness. O sintoma apontava para o F2 e a causa era do F1.
+  //
+  // O token continua valendo porque é stateless e o `JwtAuthGuard` valida
+  // assinatura/expiração sem consultar o banco (ADR 0002) — nenhuma spec
+  // precisa da CONTA de volta (`grep -rn "auth/me" apps/api/test/e2e/` → nada).
+  // E o estado resultante é o que a suíte já rodava antes do guard de dono: o
+  // `limparBase` antigo apagava em soft-delete a conta de sessão junto com as
+  // outras, e nenhuma contagem por ele quebrava.
+  await apagarUsuario(email, conta.id, conta.version);
+
+  return { email, ...tokens };
 }
 
 /**
@@ -231,12 +286,12 @@ export async function tokensDoHarness(): Promise<ParDeTokens> {
 /**
  * Sessão corrente do harness, semeada no primeiro uso.
  *
- * ⚠️ A subtlety que só aparece depois de instrumentar: `limparBase()` faz
- * SOFT-DELETE na conta de sessão — como em qualquer outra. O token já emitido
- * continua válido (é JWT stateless, sem revogação; ver o ADR 0002), então a
- * sessão sobrevive à limpeza durante toda a execução. O que NÃO sobrevive é
- * um NOVO login com aquele email: `findByEmail` filtra soft-deleted e a linha
- * apagada ainda ocupa o `email` `@unique`. É por isso que o retry de 401 em
+ * ⚠️ A subtlety que só aparece depois de instrumentar: a conta de sessão é
+ * SOFT-DELETED assim que nasce, por `semearELogar`. O token já emitido continua
+ * válido (é JWT stateless, sem revogação; ver o ADR 0002), então a sessão
+ * sobrevive durante toda a execução. O que NÃO sobrevive é um NOVO login com
+ * aquele email: `findByEmail` filtra soft-deleted e a linha apagada ainda ocupa
+ * o `email` `@unique`. É por isso que o retry de 401 em
  * `chamar` ressemeia com `emailUnico()` em vez de reautenticar o mesmo email
  * — e é por isso que a `comSessao` planta o token em cache em vez de logar.
  */
@@ -403,9 +458,19 @@ export async function semearUsuario(nome: string, email: string): Promise<Usuari
  *
  * `If-Match` é obrigatório (RFC 7232 + optimistic locking): a versão vem do
  * corpo que `semearUsuario` devolveu. Sem ele a API responde 428.
+ *
+ * ⚠️ O `email` entrou na assinatura em 2026-10-14, e é o guard de dono (T-A)
+ * que o exigiu: `DELETE` passou a recusar quem não é o dono do registro, e o
+ * token do harness é de outra pessoa. MEDIDO — a chamada com o token do
+ * harness respondia `403 USER_OWNERSHIP_VIOLATION`. A correção é no HARNESS,
+ * não no guard: quem foi semeado conhece a própria senha, então ele entra
+ * como ele. Afrouxar o guard para o teste passar seria trocar o controle de
+ * segurança pelo conforto da suíte.
  */
-export async function apagarUsuario(id: string, version: number): Promise<void> {
+export async function apagarUsuario(email: string, id: string, version: number): Promise<void> {
+  const { accessToken } = await parDeTokens(email, SENHA_DE_TESTE);
   const { status, corpo } = await chamar('DELETE', `/users/${id}`, {
+    token: accessToken,
     cabecalhos: { 'if-match': `W/"v${version}"` },
   });
   if (status !== 204) {
@@ -417,22 +482,54 @@ export async function apagarUsuario(id: string, version: number): Promise<void> 
 }
 
 /**
- * Deixa a listagem vazia: soft-delete de tudo que ela devolve.
+ * Deixa a listagem vazia, truncando as tabelas do schema de users.
  *
- * pt-BR: `DELETE /users/:id` exige `If-Match: W/"v<n>"` (optimistic locking,
- * RFC 7232). A versão vem do próprio GET — que é o mesmo número que a tela
- * mostra como `v1`, `v2`… na listagem.
+ * pt-BR (2026-10-14): antes isto era soft-delete de tudo que a listagem
+ * devolvesse, com o token único do harness. O guard de dono (T-A) encerrou esse
+ * caminho — `DELETE /users/:id` só aceita o próprio registro — e a versão por
+ * usuário não tem como nascer: as contas do F2 são criadas pelo formulário, com
+ * senha que o harness não conhece. O cabeçalho deste arquivo registra a exceção
+ * e o motivo; aqui fica só o como.
+ *
+ * `PrismaClient` é importado do `apps/api` de propósito: `apps/web` não tem
+ * `@prisma/client` no grafo, e é a mesma razão que faz o `global-setup.ts`
+ * importar daqui. Singleton por processo de worker — o Playwright cria um
+ * processo por arquivo, e abrir um pool por `beforeEach` seria o custo mais
+ * caro da suíte por uma conexão que o worker inteiro vai reusar.
+ *
+ * ⚠️ A linha do `sessaoDoHarness()` vem ANTES da truncagem, e a ordem é a
+ * invariante, não o estilo. MEDIDO 2026-10-14: sem ela, F2 e F3 liam 1 e 2
+ * em `expect(await contarUsuarios(), …).toBe(0)`, em execução isolada.
+ *
+ * O motivo é que `contarUsuarios()` é quem CHAMA `sessaoDoHarness()` (via
+ * `listarUsuarios` → `chamar`). Com a sessão fria, ele semeia a conta para
+ * poder listar — e a conta recém-criada é justamente a que a listagem
+ * devolve. O soft-delete antigo escondia isso sem querer: o `limparBase`
+ * chamava `listarUsuarios()` primeiro, o que semeava a conta, e em seguida
+ * apagava ela no laço. Sessão em cache e conta FORA da listagem é o que
+ * aquele código entregava por acidente, e é o que a truncagem precisa
+ * reproduzir à mão: semear ANTES (o token é stateless e sobrevive à
+ * truncagem — ADR 0002), truncar DEPOIS (a linha vai junto).
  */
 export async function limparBase(): Promise<void> {
-  const usuarios = await listarUsuarios();
-  for (const usuario of usuarios) {
-    const { status, corpo } = await chamar('DELETE', `/users/${usuario.id}`, {
-      cabecalhos: { 'if-match': `W/"v${usuario.version}"` },
-    });
-    if (status !== 204) {
-      throw new Error(
-        `DELETE /users/${usuario.id} respondeu ${status} (esperado 204): ${JSON.stringify(corpo)}`,
-      );
-    }
+  await sessaoDoHarness();
+  prismaDoE2E ??= new PrismaClient({ datasourceUrl: exigirEstado().databaseUrl });
+  try {
+    await cleanDatabase(prismaDoE2E);
+  } catch {
+    // MEDIDO 2026-10-14: o F5 PARA o Postgres de propósito (é o caminho "rede
+    // caída"), e o `afterEach` do `describe` o levanta antes do `beforeEach`
+    // seguinte — o banco está de pé quando esta linha roda. O que não volta é
+    // a conexão que o pool do Prisma tinha aberta para o container parado: o
+    // `docker stop` fecha o lado do servidor, e a query seguinte morre com
+    // `Server has closed the connection` mesmo com o Postgres no ar.
+    //
+    // Reconectar e repetir é o conserto; repetir sem reconectar não é — e se a
+    // segunda também falhar, ela sobe com a mensagem do servidor em vez da
+    // primeira, que é a que mentia sobre a causa.
+    await prismaDoE2E.$disconnect();
+    await cleanDatabase(prismaDoE2E);
   }
 }
+
+let prismaDoE2E: PrismaClient | undefined;

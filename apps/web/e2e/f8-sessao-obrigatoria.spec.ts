@@ -105,7 +105,7 @@ test.describe('F8 — Rota protegida sem sessão', () => {
     // "redirect funcionou".
     //
     // A conta é semeada aqui, e não vem do harness: a conta do harness é
-    // apagada em soft-delete por `limparBase()` e não consegue mais logar.
+    // apagada em soft-delete ao nascer e não consegue mais logar.
     const email = emailUnico('login-volta');
     await semear('Pessoa Que Volta', email);
     await clearCookies(page);

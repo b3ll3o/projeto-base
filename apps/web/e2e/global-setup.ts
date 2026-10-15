@@ -43,7 +43,7 @@ import { setupTestDatabase, type TestContext } from '../../api/test/testcontaine
 import { API_ROOT, WEB_ROOT, apagarEstado, gravarEstado, type EstadoE2E } from './support/estado';
 import { portaLivre, esperarTcpAberta } from './support/portas';
 import { derrubarFilho } from './support/processos';
-import { subirApi } from './support/api';
+import { gerarSegredoE2E, subirApi } from './support/api';
 import { abrirSaidaEmArquivo } from './support/saida';
 
 /** `distDir` do build exclusivo da suíte. Precisa casar com `next.config.mjs`. */
@@ -123,10 +123,17 @@ export default async function globalSetup(): Promise<void> {
   // `estado.json` **não gravado** — o teardown não tem PIDs e o `ctx` global
   // vale num processo que já vai morrer. Um container Postgres por execução que
   // falha.
-  const apiFilho = await subirApi({ porta: apiPorta, databaseUrl }).catch(async (erro: unknown) => {
-    await encerrar(ctx);
-    throw erro;
-  });
+  // Uma vez por EXECUÇÃO, e antes da primeira subida: a API recebe este
+  // segredo, e um worker que recomeça no meio da suíte precisa semear sessão
+  // com o MESMO. Sem isto o token do worker novo é assinado por um segredo que
+  // a API não conhece — ver a medição em `gerarSegredoE2E`.
+  const jwtSecret = gerarSegredoE2E();
+  const apiFilho = await subirApi({ porta: apiPorta, databaseUrl, jwtSecret }).catch(
+    async (erro: unknown) => {
+      await encerrar(ctx);
+      throw erro;
+    },
+  );
   log('API respondendo /health.');
 
   // ── 3. Build do Next ──────────────────────────────────────────────────────
@@ -228,6 +235,7 @@ export default async function globalSetup(): Promise<void> {
     webPid: webFilho.pid ?? null,
     databaseUrl,
     databaseContainerId: ctx.containerId,
+    jwtSecret,
   };
   gravarEstado(estado);
   log(`pronto em ${((Date.now() - inicio) / 1000).toFixed(1)}s — web ${webUrl}, api ${apiBaseUrl}`);

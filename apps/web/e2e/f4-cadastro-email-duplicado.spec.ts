@@ -22,10 +22,10 @@ test.describe('F4 — Email duplicado', () => {
   }) => {
     // MEDIDO em 2026-10-08: com um email LITERAL em `JA_CADASTRADO`, o segundo
     // teste do arquivo semeava e falhava, e o primeiro passava. A causa não era
-    // o formulário: `limparBase()` faz soft-delete, o `email @unique` da linha
-    // apagada continua tomada, e o `findByEmail` do repositório filtra
-    // soft-delado — a aplicação respondia "livre" enquanto o Postgres
-    // respondia "ocupado". Um literal por execução resolve; ver `emailUnico`.
+    // o formulário: a linha soft-delada continua com o `email @unique` tomado,
+    // e o `findByEmail` do repositório filtra soft-delado — a aplicação
+    // respondia "livre" enquanto o Postgres respondia "ocupado". Um literal por
+    // execução resolve; ver `emailUnico`.
     //
     // O sintoma dessa colisão mudou no mesmo dia: era 412
     // `CONCURRENCY_CONFLICT`, porque o `catch` sem binding do
@@ -114,7 +114,7 @@ test.describe('F4 — Email duplicado', () => {
     // voltaria para a listagem e nenhum outro spec deste arquivo notaria.
     const emailApagado = emailUnico('helena');
     const usuario = await semear(JA_CADASTRADO.nome, emailApagado);
-    await apagarUsuario(usuario.id, usuario.version);
+    await apagarUsuario(emailApagado, usuario.id, usuario.version);
 
     // O apagado some da listagem — senão este teste seria o mesmo do primeiro,
     // com um soft-delete a mais no meio que a tela não sabe que houve.

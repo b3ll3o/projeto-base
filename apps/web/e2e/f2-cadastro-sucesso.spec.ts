@@ -65,9 +65,9 @@ test.describe('F2 — Cadastro com sucesso', () => {
   }) => {
     expect(await contarUsuarios(), 'a listagem deve começar vazia').toBe(0);
 
-    // pt-BR: email por execução. `limparBase()` faz soft-delete e o
-    // `email @unique` da linha apagada continua tomado — com literal, o
-    // `--repeat-each 2` reprovava e o sintoma era "a tela não cadastrou".
+    // pt-BR: email por execução. Quem a spec apaga fica com o `email @unique`
+    // tomado na linha soft-deleted — com literal, o `--repeat-each 2`
+    // reprovava e o sintoma era "a tela não cadastrou".
     // Ver `emailUnico`.
     //
     // O código de resposta dessa colisão mudou em 2026-10-08: era 412
