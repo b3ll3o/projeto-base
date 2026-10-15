@@ -6,7 +6,14 @@ services:
     container_name: projeto-base-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-projeto}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required} # #68: nunca plaintext; falha explícita se não setado
+      # ⚠️ `POSTGRES_PASSWORD` NÃO aparece neste bloco, e é deliberado — é a MESMA
+      # medida já aplicada ao `JWT_SECRET` mais abaixo (ver o comentário longo
+      # no serviço `api`). MEDIDO 2026-10-15: com o `:?` aqui, `docker compose
+      # config`, `ps` e `down` saíam 1 sem a variável no ambiente — e como a
+      # interpolação roda ANTES do `env_file` ler o arquivo, o `:?` nem era
+      # satisfeito por quem mora no `.env.production`, que é exatamente onde a
+      # convenção #68 manda o segredo morar. Uma stack quebrada ficava impossível
+      # de derrubar. Sem a chave, o `env_file` decide.
       POSTGRES_DB: ${POSTGRES_DB:-projeto_base}
     env_file:
       - .env.production # #68: secrets em arquivo separado, fora do compose versionado
