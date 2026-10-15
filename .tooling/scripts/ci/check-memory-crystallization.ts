@@ -6,11 +6,19 @@
 // Task 1.1 do plano docs/superpowers/plans/2026-10-14-cristalizacao.md.
 //
 // O problema: o harness já escreve memória estruturada durante a tarefa
-// (`grep -l originSessionId <memdir>/*.md | wc -l` → 113 de 116 arquivos, MEDIDO
-// 2026-10-15). O que falta é a etapa DEPOIS: das 73 do corpus, 38 não têm
-// destino — 33 `pendente`, 3 `recusada`, 2 `removida` (MEDIDO pelo parser do
-// gate). São números DIFERENTES: 33 é só a dívida declarada, e usá-lo como se
-// fosse "não citada" apaga 5 memórias da conta. A regra foi absorvida pela
+// (`grep -l '^ *originSessionId:' <memdir>/*.md | wc -l` sobre
+// `ls -1 <memdir>/*.md | wc -l` — o número ENVELHECE a cada memória nova, e a
+// memória que registra o achado é uma delas; cite o comando, não o número).
+// ⚠️ `grep -l '^originSessionId:'` devolve 0 SEM AVISO (exit 1): a chave é
+// aninhada em `metadata:` e indentada com 2 espaços. O padrão certo é
+// `'^ *originSessionId:'` — sem o `^`, casa em qualquer posição e dá o
+// número certo por motivo certo.
+// O que falta é a etapa DEPOIS: boa parte do corpus não tem
+// destino — a dívida declarada (`pendente`) é o bulk, e `recusada` e `removida`
+// são menores (MEDIDO pelo parser do gate; para os valores de hoje, o painel
+// do `ci:preflight` é a fonte). São números DIFERENTES: `pendente` é só a
+// dívida declarada, e usá-lo como se fosse "não citada" apaga as outras da
+// conta. A regra foi absorvida pela
 // convenção sem que a procedência sobrevivesse, e sem procedência ninguém sabe
 // se aquilo já foi decidido.
 //

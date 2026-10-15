@@ -8,10 +8,15 @@
 
 **Contexto:** MEDIDO 2026-10-14 — o harness já grava memória estruturada
 durante a tarefa e a cristalização DEPOIS não existe:
-`grep -l originSessionId <memdir>/*.md | wc -l` sobre `ls -1 <memdir>/*.md | wc -l`
-→ **113 de 116**. Das **73** do corpus que o gate mede, **33** não estão
-citadas em nenhum `.md` versionado: a regra foi absorvida pela convenção e a
-procedência evaporou.
+`grep -l "^ *originSessionId:" <memdir>/*.md | wc -l` sobre `ls -1 <memdir>/*.md | wc -l`.
+O par é omitido de propósito: ele envelhece a cada memória nova, e a memória
+que registra o achado é uma delas. Do corpus que o gate mede, boa parte não
+tem destino: a regra foi absorvida pela convenção e a procedência evaporou.
+⚠️ `pendente` **não é** "não citada": `pendente` é a dívida declarada
+(ninguém escreveu a regra), e `recusada`/`removida` são outras coisas. Usar o
+contador de `pendente` como se fosse "não citada" apaga as outras da conta —
+é o que este texto fazia até 2026-10-15. Para os valores de hoje, o painel do
+`ci:preflight` é a fonte.
 
 **Decisão:** criar a camada DURANTE, com o que o harness não faz — tri-taxonomia
 (T1 regra nova / T2 regra escrita que não pegou / T3 regra que deve morrer),

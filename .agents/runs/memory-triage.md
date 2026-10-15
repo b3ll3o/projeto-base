@@ -142,6 +142,7 @@ fazê-lo às cegas seria fabricar 39 linhas `citada` sem âncora verificada.
 | `mutation-can-fail-for-the-wrong-reason` | `pendente` | — | — |
 | `mutation-that-doesnt-land-looks-green` | `pendente` | — | — |
 | `non-fast-forward-is-not-divergent-work` | `pendente` | — | — |
+| `origin-session-id-nested-under-metadata` | `citada` | `.tooling/scripts/ci/check-memory-crystallization.ts` | `devolve 0 SEM AVISO (exit 1)` |
 | `patch-medido-so-no-caminho-do-defeito` | `pendente` | — | — |
 | `pipe-stdout-dies-when-spawner-exits` | `pendente` | — | — |
 | `positive-test-must-assert-skip-state` | `citada` | `docs/fluxo-desenvolvimento.md` | `não havia nada para verificar` |
@@ -177,17 +178,30 @@ fazê-lo às cegas seria fabricar 39 linhas `citada` sem âncora verificada.
 
 ## O que a tabela diz
 
-MEDIDO 2026-10-14 pelo gate, não por recontagem à mão — o painel de
-`ci:preflight` é a fonte, e `awk` confirmando:
+As contagens vivem no gate, que é a fonte — o painel de `ci:preflight` imprime
+`medido: N memória(s) no corpus, N linha(s) no ledger` e
+`N memória(s) com destinação \`pendente\``. Para re-derivar por linha:
 
-| disposição | n | o que significa |
-|---|---|---|
-| `citada` | 35 | a regra já está escrita; a âncora é o que a mantém presa ao arquivo |
-| `pendente` | 33 | regra reutilizável que **ninguém escreveu** — 45% do corpus |
-| `recusada` | 3 | registro de campanha, não é regra |
-| `removida` | 2 | tombstone; o corpus pode encolher por aqui |
-| `gate` | **0** | nenhuma memória do corpus é mecânica o bastante para um gate determinístico |
-| **total** | **73** | o que `ls` + as três isenções do gate medem |
+```bash
+awk -F'|' '/^\| `[a-z0-9][a-z0-9-]*` \|/ {print $3}' .agents/runs/memory-triage.md \
+  | tr -d ' ' | sort | uniq -c | sort -rn
+```
+
+**A coluna `n` foi removida de propósito.** MEDIDO 2026-10-15: ela publicava
+`35 / 33 / 3 / 2` e `total 73`, que fechavam entre si, mas o gate já imprimia
+`74` — e a linha do ledger que o `awk` acima não pegava só apareceria se
+alguém reconciliasse os dois números à mão. Publicar o número abre uma
+contagem que envelhece a cada memória e a cada linha novas; publicar o comando
+não. É a mesma razão que tirou o par de números de
+`check-memory-crystallization.ts` e de `learning-observation/`.
+
+| disposição | o que significa |
+|---|---|
+| `citada` | a regra já está escrita; a âncora é o que a mantém presa ao arquivo |
+| `pendente` | regra reutilizável que **ninguém escreveu** — é a maior fatia do corpus |
+| `recusada` | registro de campanha, não é regra |
+| `removida` | tombstone; o corpus pode encolher por aqui |
+| `gate` | **0** — nenhuma memória do corpus é mecânica o bastante para um gate determinístico |
 
 **O `0` em `gate` é o achado, não uma omissão.** As candidatas naturais
 (`glob-in-block-comment-closes-it`, `gate-without-cli-block-runs-as-noop`) são

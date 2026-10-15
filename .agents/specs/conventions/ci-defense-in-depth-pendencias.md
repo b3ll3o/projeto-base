@@ -12,8 +12,8 @@
 > sempre o que ninguém está olhando. Aqui pendência cresce sem custar
 > conteúdo.
 >
-> Um item só entra aqui **medido**: o comando, a data e o número. Pendência
-> sem comando é opinião, e opinião envelhece sem aviso.
+> Um item só entra aqui **medido**: o comando e a data. Pendência sem comando
+> é opinião, e opinião envelhece sem aviso.
 
 ## Pendências conhecidas
 
@@ -86,23 +86,21 @@
 - **A tabela de Checks acima é completa** (a task 3.1 do plano
   [`guard-classes`](../../../docs/superpowers/plans/2026-10-03-guard-classes.md)
   fechou as 3 lacunas que esta seção declarava). O `preflight` executa
-  **19 entradas** no preflight para **18 arquivos de gate distintos** — a
-  diferença 1 é `check-eslint-drift`, que entra duas vezes (uma por app:
-  `apps` e `packages`), não um gate sem registro. Esses 18 são exatamente as
-  linhas do [Registro de dentes](ci-defense-in-depth.md#registro-de-dentes), e o
+  **21 entradas** para **20 arquivos de gate distintos** — a diferença 1 é
+  `check-eslint-drift`, que entra duas vezes (uma por app: `apps` e
+  `packages`), não um gate sem registro. Esses 20 são exatamente as linhas do
+  [Registro de dentes](ci-defense-in-depth.md#registro-de-dentes), e o
   `check-teeth-registry` é o que reconcilia as duas listas.
-  (Reconciliado por `name:`×`file:` em [`preflight-gates.ts`](../../../.tooling/scripts/ci/preflight-gates.ts)
-  — contagens medidas 2026-10-08 com `grep -cE "^\s+name: '"
-  .tooling/scripts/ci/preflight-gates.ts` e `grep -oE "file: '[^']+'" | sort -u | wc -l`.
-  MEDIDO 2026-10-15: o comando apontava para `preflight.ts`, que só importa o
-  registro — 0 hits, exit 1. `preflight-gates.ts` devolve 21.
-  A checagem anterior (17/16) tinha envelhecido por 2 entradas: o gate novo não
-  foi contado quando esta pendência foi escrita.
-  — não por contagem de glob. O "15" anterior era um **undercount**: o glob
-  `'.tooling/scripts/ci/check-*.ts'` não enxerga
-  `tooling/scripts/lint-review-routing.ts`, que mora fora de `.tooling/scripts/ci/`
-  e não tem prefixo `check-`. Contar gates por glob é a classe 1 desta própria
-  lista.)
+  MEDIDO 2026-10-15, por `name:`×`file:` em
+  [`preflight-gates.ts`](../../../.tooling/scripts/ci/preflight-gates.ts):
+  `grep -cE "^\s+name: '" .tooling/scripts/ci/preflight-gates.ts` → 21, e
+  `grep -oE "file: '[^']+'" .tooling/scripts/ci/preflight-gates.ts | sort -u | wc -l`
+  → 20. O par já envelheceu duas vezes, 2 cada vez: 17/16 (2026-10-08) →
+  19/18 → 21/20 — o que envelhece é o número, não o comando, e é por isso que
+  o comando é que está aqui. E não por contagem de glob: um `*.ts` anterior era
+  **undercount**, porque `tooling/scripts/lint-review-routing.ts` mora fora de
+  `.tooling/scripts/ci/` e não tem prefixo `check-`. Contar gates por glob é a
+  classe 1 desta própria lista.)
 - **FECHADO 2026-10-08 — `tooling/scripts/` tinha typecheck que NADA executava,
   e barra mais frouxa.** A #46 dizia que `.tooling/` era "a única superfície do
   repo sem typecheck" — falso para `tooling/`, que tem

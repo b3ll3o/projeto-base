@@ -9,11 +9,32 @@ description: Memória acumulada do agent doc-sync — sincronização reativa co
 
 ## Decisões Tomadas
 
+### 2026-10-15 — report-only era contrato morto; agora só doc ausente reprova
+
+**Contexto:** a decisão de 2026-10-06 se provou por ela mesma: ela dizia "o
+script nunca chama `process.exit`" e citava `grep -c 'process.exit'` → `0`.
+MEDIDO 2026-10-15: o número era **0**, o `|| exit 1` do pre-commit era código
+morto, e `severity: 'major'` não era emitido por NENHUM caminho — os 3 emissores
+punham `minor`. `alerts` era estruturalmente 0.
+
+**Decisão:** existe 1 `process.exit(1)`, disparado só por `alerts > 0`, que só
+sobe quando um `docFile` mapeado **não existe**. Severidade `minor` não
+bloqueia. Artefato **gerado** e gitignored (`apps/api/openapi.json`) entra em
+`GENERATED_DOC_FILES`: continua alvo de `review`, sai do `existsSync` — senão
+todo PR que toca `auth.controller.ts` reprova em checkout limpo (MEDIDO:
+`Alerts: 1 | Health 90/100` e EXIT=1 num `git clone` sem o arquivo).
+
+**Consequências:** a barreira de merge passa a incluir o `sync-docs`, não só o
+`quality`. Os docs que afirmavam report-only (`.agents/agents/doc-sync.md`,
+`docs/fluxo-desenvolvimento.md`) foram corrigidos no mesmo commit.
+
 ### 2026-10-06 — doc-sync virou report-only
 
 **Contexto:** o Passo 4 deixou de bloquear merge.
 
 **Decisão:** report-only por contrato; o script nunca chama `process.exit`.
+**Revogada em 2026-10-15** — ver a entrada acima: o "nunca chama" era o motivo
+pelo qual o gate não existia.
 
 **Consequências:** a barreira de merge é o check `quality` do ruleset de `main`.
 
