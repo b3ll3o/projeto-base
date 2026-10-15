@@ -33,9 +33,27 @@ on:
 # de claim que o resto deste arquivo evita. Para remedir:
 #   gh run list --workflow ci.yml --event push --limit 100 \
 #     --json headBranch,createdAt,updatedAt
+#
+# `cancel-in-progress` NÃO pode ser `true` incondicional: o GitHub decide o
+# cancelling comparando quem começou mais tarde, e um RE-RUN de código
+# superseded começa sempre mais tarde que a run boa — o "mais recente vence"
+# fica invertido justamente no caso que não deveria vencer.
+#
+# MEDIDO no #81: a run `38800220277` (20:13:40, payload com o corpo já
+# corrigido, gate em `0 claim(s) divergente(s)`) foi CANCELADA às 20:19:26
+# porque um re-run da run velha `38799524907` começou às 20:18:31 no mesmo
+# grupo `ci-81`. O re-run entrega o payload de 20:08:22 e reprovou com
+# `1 claim(s) divergente(s)` — a contagem velha que já tinha sido corrigida.
+# Clicar em "Re-run failed jobs" era armadilha: matava a run saudável e
+# reinstalava a falha que a edição do corpo tinha eliminado.
+#
+# `github.run_attempt` vale 1 na primeira execução e incrementa a cada re-run
+# (docs.github.com/en/actions/reference/workflows-and-actions/contexts — o bloco
+# `concurrency` aceita o contexto `github`). Só a execução que representa
+# código novo cancela; o re-run, nunca.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.run_attempt == 1 }}
 
 jobs:
   # pt-BR: preflight detecta drift estrutural (cross-refs quebradas em
