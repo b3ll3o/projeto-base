@@ -12,6 +12,15 @@ on:
     branches: ['**']
   pull_request:
     branches: [main]
+    # MEDIDO 2026-10-15: sem `edited`, corrigir o corpo do PR não dispara nada
+    # — o gate do marcador lê `github.event.pull_request.body`, que é o snapshot
+    # do evento, e um re-run entrega o snapshot velho. Medido no #81: o corpo
+    # dizia `43 commits, 161 arquivos`, a contagem real já era 47/167, o
+    # `pr-refresh-gate` reprovou com `2 claim(s) divergente(s)`, e corrigir o
+    # corpo não conseguiu reprovar — só um push de código (ou um
+    # close/reopen) redespertaria. Listar `types` SUBSTITUI o padrão
+    # (`opened, synchronize, reopened`), então os quatro precisam estar.
+    types: [opened, synchronize, reopened, edited]
 
 # MEDIDO 2026-10-15: existem runs do `ci.yml` com `[createdAt, updatedAt]`
 # sobrepostos no MESMO grupo de concurrency — sem isto, cada push novo deixava a
