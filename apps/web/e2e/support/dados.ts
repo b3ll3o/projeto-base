@@ -15,20 +15,36 @@
 // mostraria uma lista vazia. O caminho de teste e o caminho do usuário são o
 // MESMO caminho — é essa a propriedade que um e2e deve ter.
 //
-// Consequência aceita e documentada: `limparBase()` faz SOFT-DELETE, então as
-// tabelas `users_history`/`user_archive` acumulam ao longo da execução. Isso
-// é irrelevante aqui porque o container é efêmero e nasce do zero a cada
-// `test:e2e` — e, mais importante, a listagem da tela esconde soft-deleted por
-// padrão (`includeDeleted=false`), que é exatamente o que "banco limpo" precisa
-// significar para um usuário.
+// ⚠️ A EXCEÇÃO, e ela nasceu de uma mudança no produto (2026-10-14).
 //
-// A consequência que NÃO é irrelevante: soft-deleted não devolve o `email`.
-// Ele continua `@unique` na linha apagada. Daí `emailUnico()` — nenhum spec
-// reusa um email, nem entre si nem no `--repeat-each`. O motivo inteiro está
-// em `semearUsuario`.
+// A regra acima ("tudo pela API, nunca pelo banco direto") vale para
+// VERIFICAÇÃO — é ela que faz `contarUsuarios()` passar pelo mesmo `GET /users`
+// que a tela percorre, e uma contagem direta no banco passaria mesmo com a
+// listagem quebrada. `contarUsuarios` continua na API, sem exceção.
+//
+// `limparBase()` saiu da regra, porque o caminho que ela usava deixou de
+// EXISTIR no produto. Ela apagava todo mundo chamando `DELETE /users/:id` com o
+// ÚNICO token do harness — e o guard de dono (T-A) responde `403
+// USER_OWNERSHIP_VIOLATION` para qualquer registro que não seja o do caller.
+// MEDIDO: 28 de 29 specs caíam no `beforeEach`, todos com o mesmo 403.
+//
+// A alternativa "cada um apaga o próprio registro" também não serve, e por um
+// motivo que não é de conveniência: os specs do F2 criam a conta pelo FORMULÁRIO
+// (`page.fill('#senha', …)`), então a senha pertence ao teste, não ao harness —
+// não há token a obter para quem a pessoa criou na tela. Sem rota de
+// administrative no produto (não existe modelo de papel), não sobrou caminho
+// público.
+//
+// A limpeza passou a truncar, que é o que `apps/api` já faz entre os testes
+// dele (`cleanDatabase`). A propriedade que o cabeçalho defendia continua de pé
+// onde ela vale: nada aqui AFIRMA nada — as asserções do F1 contam pela API.
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+// Três `../`, e não dois como no `global-setup.ts`: este arquivo está um nível
+// mais fundo (`e2e/support/`) — com dois, o caminho resolve para `apps/web/api`,
+// que não existe, e o erro aparece como TS2307 sem sugerir a profundidade.
+import { cleanDatabase, PrismaClient } from '../../../api/test/testcontainers-helper.js';
 import { exigirEstado, WEB_ROOT } from './estado';
 
 /**
@@ -43,10 +59,39 @@ export interface UsuarioWire {
   version: number;
 }
 
+interface InitChamada {
+  corpo?: unknown;
+  cabecalhos?: Record<string, string>;
+  /**
+   * A rota é pública e o harness deve chamá-la SEM token.
+   *
+   * pt-BR: existe porque `POST /auth/login` é o bootstrap da própria
+   * autenticação — pedir um token para conseguir o token é recursão. Vale
+   * para `POST /users`, que também é pública (D-2). As rotas que a
+   * listagem, a limpeza e o soft-delete usam (`GET /users`,
+   * `DELETE /users/:id`) NÃO marcam isto: precisam de sessão.
+   */
+  publica?: boolean;
+  /**
+   * Token de QUEM age, em vez do token único do harness.
+   *
+   * pt-BR (2026-10-14): existe porque o guard de dono (T-A) faz
+   * `DELETE /users/:id` recusar quem não é o dono — `USER_OWNERSHIP_VIOLATION`.
+   * O token do harness é de outra pessoa, então ele só apaga a própria conta.
+   * `apagarUsuario` é a única chamada que precisa agir como o usuário-alvo, e
+   * ela consegue: quem foi semeado conhece a própria senha.
+   *
+   * Passar o token aqui também pula o retry de 401, que semeia de novo — e
+   * semear de novo durante um spec que prepara o estado dele é o que faz a
+   * contagem de usuários subir por um motivo que não é o do teste.
+   */
+  token?: string;
+}
+
 async function chamar(
   metodo: string,
   caminho: string,
-  init?: { corpo?: unknown; cabecalhos?: Record<string, string> },
+  init?: InitChamada,
 ): Promise<{ status: number; corpo: unknown }> {
   const { apiBaseUrl } = exigirEstado();
   // MEDIDO em 2026-10-08: `content-type: application/json` só vai junto com um
@@ -59,22 +104,202 @@ async function chamar(
   // a causa estava no cabeçalho do próprio harness. Daí a regra: cabeçalho que
   // descreve um corpo, sem corpo, é erro de quem fez a chamada.
   const temCorpo = init?.corpo !== undefined;
-  const resposta = await fetch(`${apiBaseUrl}${caminho}`, {
-    method: metodo,
-    headers: {
-      ...(temCorpo ? { 'content-type': 'application/json' } : {}),
-      ...init?.cabecalhos,
-    },
-    ...(temCorpo ? { body: JSON.stringify(init.corpo) } : {}),
-  });
-  const texto = await resposta.text();
-  let corpo: unknown = null;
-  try {
-    corpo = texto === '' ? null : JSON.parse(texto);
-  } catch {
-    corpo = texto;
+  const ehPublica = init?.publica === true;
+  const executar = async (token: string | null) => {
+    const resposta = await fetch(`${apiBaseUrl}${caminho}`, {
+      method: metodo,
+      headers: {
+        ...(temCorpo ? { 'content-type': 'application/json' } : {}),
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...init?.cabecalhos,
+      },
+      ...(temCorpo ? { body: JSON.stringify(init.corpo) } : {}),
+    });
+    const texto = await resposta.text();
+    let corpo: unknown = null;
+    try {
+      corpo = texto === '' ? null : JSON.parse(texto);
+    } catch {
+      corpo = texto;
+    }
+    return { status: resposta.status, corpo };
+  };
+
+  if (ehPublica) return executar(null);
+  if (init?.token !== undefined) return executar(init.token);
+
+  // pt-BR: o token do harness tem TTL (`JWT_ACCESS_TTL`, 15 min por padrão) e
+  // uma suíte longa pode ultrapassá-lo. Um 401 aqui é quase sempre isso — mas
+  // "quase sempre" não é "sempre", e um retry cego esconderia um 401 legítimo
+  // (token inválido por um motivo real) atrás de uma segunda tentativa que
+  // devolve o mesmo 401. Por isso o retry invalida a sessão, ressemeia e
+  // tenta UMA vez: se o segundo também for 401, ele sobe.
+  let token = (await sessaoDoHarness()).accessToken;
+  let resposta = await executar(token);
+  if (resposta.status === 401) {
+    invalidarSessaoDoHarness();
+    token = (await sessaoDoHarness()).accessToken;
+    resposta = await executar(token);
   }
-  return { status: resposta.status, corpo };
+  return resposta;
+}
+
+// ── Sessão do harness ───────────────────────────────────────────────────────
+//
+// pt-BR (2026-10-13, demanda `login-usuario-senha` / decisão D-2): `POST /users`
+// ficou público, mas TODO o resto de `/users` passou a exigir sessão. Quatro
+// helpers deste arquivo — `listarUsuarios`, `contarUsuarios`, `limparBase` e
+// `apagarUsuario` — chamam exatamente essas rotas protegidas, então sem um JWT
+// o harness inteiro responde 401 no `beforeEach`: a suíte cai no pré-requisito
+// antes de qualquer asserção, e o sintoma parece "a listagem voltou vazia".
+//
+// O token é SEMEADO uma vez por worker, e não durante cada teste, porque
+// semear por teste custa um `argon2.hash` (~48 ms) por spec e não compra nada:
+// a sessão é do harness, não do dado sob teste.
+//
+// ⚠️ O token em cache é a FONTE da sessão do browser, e não um atalho. O
+// primeiro desenho da `comSessao` fazia um login NOVO a partir das
+// credenciais em cache, e isso falhava em 29 de 29 specs — o sintoma era
+// `401 INVALID_CREDENTIALS` numa conta cujo cadastro tinha acabado de dar
+// 201.
+//
+// A CONTA DE SESSÃO é apagada — em soft-delete, por ela mesma, no fim de
+// `semearELogar` (o comentário de lá registra a medição). O JWT já emitido
+// continua válido (é stateless), mas um login NOVO com aquele e-mail não
+// encontra a linha: `findByEmail` filtra soft-deleted. Reusar o token em
+// cache é o que sobrevive — e é o que mantém a conta do harness FORA da
+// listagem que os specs contam.
+
+let sessao: (ParDeTokens & { email: string }) | null = null;
+
+function invalidarSessaoDoHarness(): void {
+  sessao = null;
+}
+
+/** Par de tokens como o contrato `POST /auth/login` os devolve. */
+export interface ParDeTokens {
+  accessToken: string;
+  refreshToken: string;
+}
+
+/**
+ * Troca e-mail+senha pelo par de tokens.
+ *
+ * ⚠️ `fetch` direto, não `chamar`: isto é o bootstrap da autenticação, e
+ * `chamar` exige justamente o token que este comando vai produzir.
+ *
+ * Exported porque o browser do Playwright precisa do MESMO par — o cookie de
+ * sessão que o F7 autentica na tela e o `Authorization` que `chamar` manda
+ * saem daqui, e não de um segundo login: dois logins dariam dois tokens
+ * para a mesma conta, e o TTL do segundo acabaria estourando a sessão do
+ * primeiro sem que nada indicasse isso.
+ */
+export async function parDeTokens(email: string, senha: string): Promise<ParDeTokens> {
+  const { apiBaseUrl } = exigirEstado();
+  const login = await fetch(`${apiBaseUrl}/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email, senha }),
+  });
+  if (login.status !== 201) {
+    throw new Error(
+      `POST /auth/login respondeu ${login.status} (esperado 201): ${await login.text()}.`,
+    );
+  }
+  const wire = (await login.json()) as { accessToken?: unknown; refreshToken?: unknown };
+  if (
+    typeof wire.accessToken !== 'string' ||
+    wire.accessToken === '' ||
+    typeof wire.refreshToken !== 'string' ||
+    wire.refreshToken === ''
+  ) {
+    throw new Error(
+      `POST /auth/login respondeu 201 sem o par de tokens utilizável: ${JSON.stringify(wire)}. ` +
+        'A forma do contrato mudou — todo spec que depende de sessão está medindo nada.',
+    );
+  }
+  return { accessToken: wire.accessToken, refreshToken: wire.refreshToken };
+}
+
+/**
+ * Cria a conta do harness e troca a senha pelo par de tokens.
+ */
+async function semearELogar(): Promise<ParDeTokens & { email: string }> {
+  const { apiBaseUrl } = exigirEstado();
+  const email = emailUnico('sessao');
+
+  const criacao = await fetch(`${apiBaseUrl}/users`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      nome: 'Conta de Sessão E2E',
+      email,
+      senha: SENHA_DE_TESTE,
+    }),
+  });
+  if (criacao.status !== 201) {
+    throw new Error(
+      `semente da conta de sessão respondeu ${criacao.status} (esperado 201): ` +
+        `${await criacao.text()}. Sem esta conta o harness inteiro cai em 401.`,
+    );
+  }
+
+  const conta = (await criacao.json()) as { id?: unknown; version?: unknown };
+  if (typeof conta.id !== 'string' || typeof conta.version !== 'number') {
+    throw new Error(
+      `POST /users respondeu 201 sem o par { id, version } utilizável: ` +
+        `${JSON.stringify(conta)}. A forma do contrato mudou.`,
+    );
+  }
+
+  const tokens = await parDeTokens(email, SENHA_DE_TESTE);
+
+  // ⚠️ A conta de sessão apaga a SI MESMA, e é assim que ela fica fora da
+  // listagem. MEDIDO 2026-10-14: sem esta linha, o F1 (que derruba e levanta a
+  // API) fazia o `GET /users` seguinte responder 401 `UNAUTHORIZED`, o retry de
+  // `chamar` ressemeava a sessão — e o `expect(await contarUsuarios(), 'a
+  // listagem deve começar vazia').toBe(0)` do F2 lia 1, que era a própria
+  // conta do harness. O sintoma apontava para o F2 e a causa era do F1.
+  //
+  // O token continua valendo porque é stateless e o `JwtAuthGuard` valida
+  // assinatura/expiração sem consultar o banco (ADR 0002) — nenhuma spec
+  // precisa da CONTA de volta (`grep -rn "auth/me" apps/api/test/e2e/` → nada).
+  // E o estado resultante é o que a suíte já rodava antes do guard de dono: o
+  // `limparBase` antigo apagava em soft-delete a conta de sessão junto com as
+  // outras, e nenhuma contagem por ele quebrava.
+  await apagarUsuario(email, conta.id, conta.version);
+
+  return { email, ...tokens };
+}
+
+/**
+ * Par de tokens do harness, semeado no primeiro uso.
+ *
+ * É isto — e NÃO um login novo — que o browser recebe. Ver a nota do bloco
+ * acima para por que reautenticar a conta de sessão é 401 garantido depois
+ * que `limparBase()` passou por ela.
+ */
+export async function tokensDoHarness(): Promise<ParDeTokens> {
+  return sessaoDoHarness();
+}
+
+/**
+ * Sessão corrente do harness, semeada no primeiro uso.
+ *
+ * ⚠️ A subtlety que só aparece depois de instrumentar: a conta de sessão é
+ * SOFT-DELETED assim que nasce, por `semearELogar`. O token já emitido continua
+ * válido (é JWT stateless, sem revogação; ver o ADR 0002), então a sessão
+ * sobrevive durante toda a execução. O que NÃO sobrevive é um NOVO login com
+ * aquele email: `findByEmail` filtra soft-deleted e a linha apagada ainda ocupa
+ * o `email` `@unique`. É por isso que o retry de 401 em
+ * `chamar` ressemeia com `emailUnico()` em vez de reautenticar o mesmo email
+ * — e é por isso que a `comSessao` planta o token em cache em vez de logar.
+ */
+async function sessaoDoHarness(): Promise<ParDeTokens & { email: string }> {
+  if (sessao === null) {
+    sessao = await semearELogar();
+  }
+  return sessao;
 }
 
 /**
@@ -121,8 +346,31 @@ export interface ResultadoCriacao {
   corpo: unknown;
 }
 
+/**
+ * Senha que os specs digitam/semeiam.
+ *
+ * pt-BR (2026-10-13): `POST /users` passou a exigir `senha` no body
+ * (`CreateUserSchema` importa `PasswordHash.MIN_LENGTH..MAX_LENGTH`, 8..72, e
+ * ela é OBRIGATÓRIA). Sem este campo o boundary responde 400 e `semearUsuario`
+ * estoura — o pré-requisito do F1 e do F4 quebra antes de qualquer asserção.
+ * A senha não é argumento de `criarUsuario` de propósito: nenhum spec tem
+ * interesse em QUAL senha semeia, e expor o parâmetro só criaria uma
+ * segunda fonte de verdade para o mesmo dado.
+ *
+ * 13 caracteres: acima do mínimo de 8, abaixo do `maxlength` de 72, e não é um
+ * valor que um gerenciador de senhas sinalize como fraco.
+ */
+export const SENHA_DE_TESTE = 'SenhaDeTeste123';
+
 export async function criarUsuario(nome: string, email: string): Promise<ResultadoCriacao> {
-  const { status, corpo } = await chamar('POST', '/users', { corpo: { nome, email } });
+  const { status, corpo } = await chamar('POST', '/users', {
+    corpo: { nome, email, senha: SENHA_DE_TESTE },
+    // `publica`: o cadastro é a porta aberta do sistema (D-2). Marcar é
+    // afirmação de contrato — se alguém proteger `POST /users` por engano,
+    // este spec continua verde porque carrega um token, e a regressão só
+    // apareceria para quem não tem sessão. É o F7 que mede essa porta.
+    publica: true,
+  });
   return { status, corpo };
 }
 
@@ -210,9 +458,19 @@ export async function semearUsuario(nome: string, email: string): Promise<Usuari
  *
  * `If-Match` é obrigatório (RFC 7232 + optimistic locking): a versão vem do
  * corpo que `semearUsuario` devolveu. Sem ele a API responde 428.
+ *
+ * ⚠️ O `email` entrou na assinatura em 2026-10-14, e é o guard de dono (T-A)
+ * que o exigiu: `DELETE` passou a recusar quem não é o dono do registro, e o
+ * token do harness é de outra pessoa. MEDIDO — a chamada com o token do
+ * harness respondia `403 USER_OWNERSHIP_VIOLATION`. A correção é no HARNESS,
+ * não no guard: quem foi semeado conhece a própria senha, então ele entra
+ * como ele. Afrouxar o guard para o teste passar seria trocar o controle de
+ * segurança pelo conforto da suíte.
  */
-export async function apagarUsuario(id: string, version: number): Promise<void> {
+export async function apagarUsuario(email: string, id: string, version: number): Promise<void> {
+  const { accessToken } = await parDeTokens(email, SENHA_DE_TESTE);
   const { status, corpo } = await chamar('DELETE', `/users/${id}`, {
+    token: accessToken,
     cabecalhos: { 'if-match': `W/"v${version}"` },
   });
   if (status !== 204) {
@@ -224,22 +482,54 @@ export async function apagarUsuario(id: string, version: number): Promise<void> 
 }
 
 /**
- * Deixa a listagem vazia: soft-delete de tudo que ela devolve.
+ * Deixa a listagem vazia, truncando as tabelas do schema de users.
  *
- * pt-BR: `DELETE /users/:id` exige `If-Match: W/"v<n>"` (optimistic locking,
- * RFC 7232). A versão vem do próprio GET — que é o mesmo número que a tela
- * mostra como `v1`, `v2`… na listagem.
+ * pt-BR (2026-10-14): antes isto era soft-delete de tudo que a listagem
+ * devolvesse, com o token único do harness. O guard de dono (T-A) encerrou esse
+ * caminho — `DELETE /users/:id` só aceita o próprio registro — e a versão por
+ * usuário não tem como nascer: as contas do F2 são criadas pelo formulário, com
+ * senha que o harness não conhece. O cabeçalho deste arquivo registra a exceção
+ * e o motivo; aqui fica só o como.
+ *
+ * `PrismaClient` é importado do `apps/api` de propósito: `apps/web` não tem
+ * `@prisma/client` no grafo, e é a mesma razão que faz o `global-setup.ts`
+ * importar daqui. Singleton por processo de worker — o Playwright cria um
+ * processo por arquivo, e abrir um pool por `beforeEach` seria o custo mais
+ * caro da suíte por uma conexão que o worker inteiro vai reusar.
+ *
+ * ⚠️ A linha do `sessaoDoHarness()` vem ANTES da truncagem, e a ordem é a
+ * invariante, não o estilo. MEDIDO 2026-10-14: sem ela, F2 e F3 liam 1 e 2
+ * em `expect(await contarUsuarios(), …).toBe(0)`, em execução isolada.
+ *
+ * O motivo é que `contarUsuarios()` é quem CHAMA `sessaoDoHarness()` (via
+ * `listarUsuarios` → `chamar`). Com a sessão fria, ele semeia a conta para
+ * poder listar — e a conta recém-criada é justamente a que a listagem
+ * devolve. O soft-delete antigo escondia isso sem querer: o `limparBase`
+ * chamava `listarUsuarios()` primeiro, o que semeava a conta, e em seguida
+ * apagava ela no laço. Sessão em cache e conta FORA da listagem é o que
+ * aquele código entregava por acidente, e é o que a truncagem precisa
+ * reproduzir à mão: semear ANTES (o token é stateless e sobrevive à
+ * truncagem — ADR 0002), truncar DEPOIS (a linha vai junto).
  */
 export async function limparBase(): Promise<void> {
-  const usuarios = await listarUsuarios();
-  for (const usuario of usuarios) {
-    const { status, corpo } = await chamar('DELETE', `/users/${usuario.id}`, {
-      cabecalhos: { 'if-match': `W/"v${usuario.version}"` },
-    });
-    if (status !== 204) {
-      throw new Error(
-        `DELETE /users/${usuario.id} respondeu ${status} (esperado 204): ${JSON.stringify(corpo)}`,
-      );
-    }
+  await sessaoDoHarness();
+  prismaDoE2E ??= new PrismaClient({ datasourceUrl: exigirEstado().databaseUrl });
+  try {
+    await cleanDatabase(prismaDoE2E);
+  } catch {
+    // MEDIDO 2026-10-14: o F5 PARA o Postgres de propósito (é o caminho "rede
+    // caída"), e o `afterEach` do `describe` o levanta antes do `beforeEach`
+    // seguinte — o banco está de pé quando esta linha roda. O que não volta é
+    // a conexão que o pool do Prisma tinha aberta para o container parado: o
+    // `docker stop` fecha o lado do servidor, e a query seguinte morre com
+    // `Server has closed the connection` mesmo com o Postgres no ar.
+    //
+    // Reconectar e repetir é o conserto; repetir sem reconectar não é — e se a
+    // segunda também falhar, ela sobe com a mensagem do servidor em vez da
+    // primeira, que é a que mentia sobre a causa.
+    await prismaDoE2E.$disconnect();
+    await cleanDatabase(prismaDoE2E);
   }
 }
+
+let prismaDoE2E: PrismaClient | undefined;

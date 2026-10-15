@@ -4,7 +4,12 @@ on:
     paths:
       - 'apps/**'
       - 'packages/**'
+      # MEDIDO 2026-10-15: `.tooling/` (44 arquivos rastreados — os gates do
+      # `ci:preflight`) é um diretório DIFERENTE de `tooling/`, e a glob
+      # `tooling/**` não o cobre: uma mudança só em `.tooling/` não disparava
+      # este reviewer. Os dois precisam estar.
       - 'tooling/**'
+      - '.tooling/**'
       - '.agents/**'
 
 jobs:
@@ -22,13 +27,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Run stack-code-reviewer
-        env:
-          CHANGED_FILES: ${{ github.event.pull_request.base.ref }}
         run: |
           changed=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -E '\.(ts|tsx|prisma)$' || true)
           if [ -n "$changed" ]; then
-            echo "$changed" | tr '\n' '\0' > /tmp/files.txt
-            pnpm stack:review --files="$(cat /tmp/files.txt)" --mode=ci --out-file=stack-review-report.json
+            pnpm stack:review --files="$changed" --mode=ci --out-file=stack-review-report.json
           fi
       - uses: actions/upload-artifact@v4
         if: always()

@@ -21,15 +21,26 @@ import { UserUseCases, USER_USE_CASES } from './application/user-use-cases.js';
 import { PrismaPersistenceModule } from './infrastructure/prisma-persistence.module.js';
 import { AuditInfraModule } from '../../shared/audit/audit-infra.module.js';
 import { UsersController } from './infrastructure/http/users.controller.js';
+import { JwtAuthGuard } from '../auth/infrastructure/http/jwt-auth.guard.js';
+import { AuthModule } from '../auth/auth.module.js';
 
 @Module({
-  imports: [PrismaPersistenceModule, AuditInfraModule],
+  // pt-BR: `AuthModule` entra na lista de imports (e não só o guard) porque
+  // o `JwtAuthGuard` depende de `TOKEN_ISSUER_PORT`, que é provider do
+  // `AuthModule`. Trazer só a classe do guard para `providers` resolveria
+  // o guard e deixaria `TOKEN_ISSUER_PORT` indefinido — o mesmo modo de
+  // falha do `@Inject` faltando, um nível acima.
+  imports: [PrismaPersistenceModule, AuditInfraModule, AuthModule],
   controllers: [UsersController],
   providers: [
     {
       provide: USER_USE_CASES,
       useClass: UserUseCases,
     },
+    // Declarado localmente para que `@UseGuards(JwtAuthGuard)` no
+    // controller resolva a CLASSE (que é o token que o decorator usa),
+    // independentemente de o `AuthModule` exportá-la pelo nome do slot.
+    JwtAuthGuard,
   ],
   exports: [USER_USE_CASES],
 })

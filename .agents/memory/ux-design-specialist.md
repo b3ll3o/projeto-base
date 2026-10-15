@@ -106,19 +106,29 @@ Operar" citando 3 arquivos, e marcava como medido. São 4 telas: `app/page.tsx`
 
 **Defeito 3.** `ui-craft` dizia "tudo o mais é valor literal espalhado pelos
 componentes". Literal é **zero**; o que se espalha é a paleta stock do Tailwind
-(39 usos de `text-slate-*`, `bg-red-*`). A diferença muda o conserto: tokenizar
-literais é trabalho de hoisting; trocar `text-slate-500` por
+(68 usos de `text-slate-*`, `bg-red-*`, `border-*`). A diferença muda o conserto:
+tokenizar literais é trabalho de hoisting; trocar `text-slate-500` por
 `text-muted-foreground` é migração de fonte de cor, e a paleta sobrevive a
 todos os `--color-*` novos.
-*Medido:* o grep de literal → 0; o grep de paleta → 39.
+*Medido:* o grep de literal → 0. O grep de paleta, re-medido em 2026-10-13 com o
+escopo escrito ao lado, dá **68** e não os 39 que esta memória carregava — 39
+não fechava com nenhum escopo possível (44 em `components/`, 24 em `app/`):
+`grep -rhoE '(text|bg|border)-(slate|gray|red|blue|green|amber|zinc|neutral|stone)-[0-9]{2,3}' apps/web/components apps/web/app --include='*.tsx' | wc -l` → 68.
 
-**Defeito 4.** `ui-break` receitava `overflow-wrap-anywhere` como classe. Ela
-não existe no Tailwind 4.3.3 — o conserto é o valor arbitrário
-`[overflow-wrap:anywhere]`. *Medido:* compilando a classe com o CLI da 4.3.3,
-ela não emite; as 7 classes vizinhas do mesmo probe emitem.
+**Defeito 4 — não existia.** A revisão reportou que `ui-break:158` receitava
+`overflow-wrap-anywhere` como classe Tailwind e que a classe não compila. Falso:
+o arquivo diz `overflow-wrap: anywhere`, a **propriedade CSS**, e é exatamente
+isso que o texto descreve. O replace que eu tinha preparado não casou com nada
+e não mudou o arquivo. Registrar aqui porque a tentativa de "consertar" um
+defeito inexistente teria trocado instrução correta por uma classe arbitrária
+que o Tailwind emite como sintaxe de valor arbitrário — i.e., o reviewer teria
+"consertado" o arquivo para acomodar o próprio erro de leitura.
 
-**Consequências:** `ui-modes` (120 ln), `ui-craft` (187), `ui-break` (243) e
-`.agents/memory/ux-design-specialist.md` corrigidos. O lesson que generaliza: o
-marker "Medido em <data>" não tem peso probatório nenhum — `ui-modes` usou a
-mesma marcação num claim verdadeiro e num falso, e nenhum reviewer anterior
-notou. A marcação que tem é o comando.
+**Consequências:** `ui-modes` (120 ln), `ui-craft` (187) e
+`.agents/memory/ux-design-specialist.md` corrigidos; `ui-break` intocado.
+O lesson que generaliza: o marker "Medido em <data>" não tem peso probatório
+nenhum — `ui-modes` usou a mesma marcação num claim verdadeiro e num falso, e
+nenhum reviewer anterior notou. A marcação que tem é o comando. E o segundo:
+**um replace que não casa é um evento, não um sucesso** — conferir
+`git diff --stat` depois de cada replace em lote, porque "não casou" e "não
+tinha o que corrigir" produzem o mesmo silêncio.

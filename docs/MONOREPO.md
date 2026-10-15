@@ -48,7 +48,7 @@ Quando precisar compartilhar código entre apps:
 1. Identificar o que é compartilhável (tipos, utils, componentes)
 2. Criar/mover para `packages/<nome>`
 3. Adicionar como dependência via `workspace:*`
-4. Versionar via Changesets
+4. Versionar o `package.json` do package (o tag `vX.Y.Z` é feito pelo CI — ver §6)
 
 ## §3. Dependências
 
@@ -145,18 +145,27 @@ Cada app/package estende `tsconfig.base.json` e adiciona seus próprios aliases.
 - `dependsOn: ["^build"]` garante ordem topológica
 - `dev` é `cache: false, persistent: true` (watch mode)
 
-## §6. Versionamento com Changesets
+## §6. Versionamento
+
+> ⚠️ **Mudança de 2026-10-13: Changesets foi REMOVIDO desta seção.** Ela mandava
+> rodar `pnpm changeset`, `pnpm version` e `pnpm release`, e nenhum dos três
+> scripts existe em nenhum `package.json` — o pnpm responde "None of the
+> selected packages has a … script" e **sai 0**, que é verde para quem só olha
+> o exit code. Não há `@changesets/cli` instalado nem diretório `.changeset/`.
+>
+> O versionamento que existe de fato é o **tag automático `vX.Y.Z` em `main`**,
+> disparado por `.github/workflows/release-template.yml` após o merge. Ver
+> [`post-merge-release.md`](../.agents/specs/conventions/post-merge-release.md).
 
 ```bash
-# Após uma mudança em packages/
-pnpm changeset           # Cria .changeset/<branch>-<desc>.md
-
-# Ao preparar release
-pnpm version             # Aplica versões + gera CHANGELOG.md
-pnpm release             # Publica packages modificados
+# Nada a rodar localmente: o versionamento é feito pelo CI após o merge.
+# Para inspecionar a versão atual:
+node -p "require('./package.json').version"
 ```
 
-Cada mudança em `packages/` DEVE vir acompanhada de `.changeset/`.
+Mudança em `packages/` **DEVE** atualizar a versão no `package.json` do
+package e entrar no changelog que o workflow gera — não há arquivo
+`.changeset/` para escrever.
 
 ## §7. Scripts Canônicos (Root)
 
@@ -164,13 +173,13 @@ Cada mudança em `packages/` DEVE vir acompanhada de `.changeset/`.
 |--------|---------|--------|
 | `pnpm dev` | `turbo run dev` | Sobe todos os apps em watch |
 | `pnpm build` | `turbo run build` | Build de tudo (com cache) |
-| `pnpm test` | `turbo run test` | Roda testes de tudo |
+| `pnpm test` | `turbo run test:unit && pnpm tooling:test` | Unit dos 2 apps + suíte do tooling (`tooling/scripts` e `.tooling/scripts/ci`) |
 | `pnpm lint` | `turbo run lint` | ESLint em tudo |
 | `pnpm typecheck` | `turbo run typecheck` | tsc --noEmit em tudo |
 | `pnpm format` | `prettier --write .` | Formata código |
 | `pnpm clean` | `turbo run clean && rm -rf node_modules` | Limpa cache e deps |
 | `pnpm ci:preflight` | roda os checks estruturais registrados em [`preflight.ts`](../.tooling/scripts/ci/preflight.ts) | aborta com exit 1 |
-| `pnpm ci:local` | `preflight + lint + typecheck + test:unit + test:coverage + test:integration + test:e2e` | atalho manual (não está em hook) |
+| `pnpm ci:local` | `preflight + lint + typecheck + test:unit + test:coverage + test:integration + test:e2e` (apps) + `tooling:test` | atalho manual (não está em hook) |
 
 **Fluxo canônico (do primeiro comando ao merge):** cada script acima é uma peça do quebra-cabeça — quem dispara, em qual ordem, e o que bloqueia está em [`docs/fluxo-desenvolvimento.md`](./fluxo-desenvolvimento.md) (documento factual, re-medido a cada merge).
 
@@ -219,7 +228,9 @@ Apps NÃO compartilham:
 2. Adicionar tsconfig.json, package.json (com exports map)
 3. Adicionar ao pnpm-workspace.yaml (já coberto se for "packages/*")
 4. Adicionar path alias em tsconfig.base.json
-5. Criar .changeset/ descrevendo a mudança
+5. Bump da versão no `package.json` do package (o changelog é gerado pelo
+   workflow de release após o merge — não há `.changeset/` para escrever, ver
+   §6)
 6. Despachar monorepo-specialist → code-reviewer
 ```
 

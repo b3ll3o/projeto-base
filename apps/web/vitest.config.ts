@@ -84,9 +84,21 @@ export default defineConfig({
       // `// @vitest-environment jsdom` no topo do arquivo).
       'components/**/*.spec.tsx',
       // pt-BR: a Server Action mora em `app/users/novo/actions.ts`. O
-      // `app/**` continua excluído da COBERTURA (decisão de diseño
+      // `app/**` continua excluído da COBERTURA (decisão de desenho
       // acima, inalterada) — aqui é só `include` de descoberta.
       'app/**/*.spec.ts',
+      // pt-BR: página com JSX mora em `app/` e precisa do mesmo glob `.tsx`
+      // que `components/` já tinha. MEDIDO 2026-10-13: sem esta linha,
+      // `vitest run app/login/page.spec.tsx` respondeu "No test files
+      // found, exiting with code 1" — o arquivo existia, estava correto, e
+      // simplesmente nunca era coletado. Nenhum `.spec.tsx` sob `app/` tinha
+      // rodado até agora, porque nunca existiu um; o furo era do glob, não
+      // de um arquivo esquecido.
+      //
+      // ⚠️ A exclusão de COBERTURA `app/**/*.tsx` (mais acima) continua
+      // valendo e é ela que impede este spec — e a `page.tsx` que ele mede —
+      // de entrarem no denominador. Ampliar `include` não amplia `exclude`.
+      'app/**/*.spec.tsx',
       // pt-BR: Task 4.1 (plano telemetria) introduziu o reporter de
       // Web Vitals sob `src/telemetry/`. Client Components ficam fora
       // de `lib/` (utilities puras) e `components/` (UI), então
@@ -252,6 +264,25 @@ export default defineConfig({
         // unit exercita, e ele não exercita o harness.
         'e2e/**',
         'playwright.config.*',
+        // pt-BR (2026-10-13): `e2e/**` acima exclui o CÓDIGO do harness. As
+        // DUAS linhas pegam a SAÍDA do harness — que é outra coisa, e ficou de
+        // fora. `playwright-report/` e `test-results/` são gitignored e não
+        // versionados: existem só na máquina que rodou e2e.
+        //
+        // Medido neste dia: o turbo roda `test:coverage` e `test:e2e` ao mesmo
+        // tempo, então os bundles de trace (`*.js` com hash no nome,
+        // `sw.bundle.js`) existem enquanto a cobertura roda e entram no
+        // denominador a 0% — nenhum é carregado pelo Vitest, nenhum pode ser.
+        // Gate medido: **179/179 testes verdes e cobertura em 67,24%**, o
+        // threshold estourando em `lines` e `statements`. Um vermelho por causa
+        // do relatório HTML do próprio Playwright. Reproduzido plantando os
+        // mesmos nomes: eles aparecem no relatório a 0% e o agregado cai.
+        //
+        // Isto é a mesma classe que `e2e/**` já corrigiu em 2026-10-08 (99,70%
+        // → 38,88%), agora pelo outro lado da pasta: corrigir o harness e
+        // deixar o artefato continua sendo o mesmo gate medindo teste.
+        'playwright-report/**',
+        'test-results/**',
         // pt-BR: `{ts,tsx}` e não só `.ts` — o app tem testes de Client
         // Component (`src/telemetry/web-vitals-reporter.spec.tsx`) e um glob
         // `**/*.spec.ts` não os casa. Com o spread presente a troca é

@@ -111,14 +111,20 @@ pnpm tsx tooling/scripts/doc-sync.ts --files="$changed" --mode=incremental || ex
 `.husky/pre-push` roda **exclusivamente** `pnpm ci:preflight`. Ele **não** roda lint, typecheck nem teste — apesar de [`git-workflow.md`](../.agents/specs/conventions/git-workflow.md) recomendar `pnpm ci:local` como "Pre-Push Quality Gate".
 
 Os gates registrados são os `name:` de
-[`preflight.ts`](../.tooling/scripts/ci/preflight.ts) — **essa lista é a fonte de
-verdade, não este doc**. Uma cópia enumerada aqui envelhece a cada gate novo sem
-aviso nenhum; o veredito sai de `pnpm ci:preflight`, que separa `✓` / `✗` /
-`skipped`. Para quantos são agora:
+[`preflight-gates.ts`](../.tooling/scripts/ci/preflight-gates.ts) — **essa lista
+é a fonte de verdade, não este doc**. Uma cópia enumerada aqui envelhece a cada
+gate novo sem aviso nenhum; o veredito sai de `pnpm ci:preflight`, que separa `✓`
+/ `✗` / `skipped`. Para quantos são agora:
 
 ```bash
-grep -cE "^\s+name: '" .tooling/scripts/ci/preflight.ts
+grep -cE "^\s+name: '" .tooling/scripts/ci/preflight-gates.ts
 ```
+
+> MEDIDO 2026-10-15: o comando apontava para `preflight.ts`, que só importa o
+> registro e não tem nenhum literal `name:` — devolvia **0** com exit 1, e o
+> documento publicava um 0 como se fosse a contagem. `preflight-gates.ts` devolve
+> **21**. O sintoma (contagem que não se move) é indistinguível de "não mudou
+> nada desde a última vez".
 
 ---
 
@@ -167,7 +173,7 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 | Comando | O que faz | Camada |
 |---------|-----------|--------|
 | `pnpm ci:preflight` | checks estruturais de drift; aborta com exit 1 | A + B |
-| `pnpm ci:local` | `ci:preflight` + `turbo run lint typecheck test:unit test:coverage test:integration test:e2e --filter=@projeto/api --filter=@projeto/web` — **69,5 s, 69,6 s e 74,1 s** medidos de ponta a ponta (n=3, 2026-10-08; era 22,6 s sem as suítes e2e) | manual (não está em hook) |
+| `pnpm ci:local` | `ci:preflight` + `turbo run lint typecheck test:unit test:coverage test:integration test:e2e --filter=@projeto/api --filter=@projeto/web --filter=@projeto/shared-types` + `pnpm tooling:test` — o tempo **envelhece**: re-meça, não cite (n=3 em 2026-10-08, antes do 3º filtro e do tooling, deu 69,5 s / 69,6 s / 74,1 s) | manual (não está em hook) |
 | `pnpm format:check` | Prettier em modo check sobre ts/tsx/json/yaml/yml | B |
 | `pnpm stack:review` | `stack-code-reviewer` standalone (mesmo gate do pre-commit e do CI) | A + B |
 | `pnpm docs:sync` | `doc-sync` standalone — **só relatório** | A + B |
@@ -177,7 +183,7 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 | `pnpm tooling:test` | Suíte de testes do próprio tooling, em **dois roots** — a contagem total é `pnpm tooling:test \| grep -E 'Test Files\|Tests '`, e ela **envelhece**: re-meça, não cite | nenhuma |
 | `pnpm review:route` / `pnpm specialist:route` | Roteamento headless: emite YAML de despacho | nenhuma |
 | `pnpm test:unit` / `test:coverage` / `test:integration` / `test:e2e` | Suítes via turbo | B |
-| `pnpm lint` | `turbo run lint` — no `apps/api` é stub `echo 'apps/api lint stub…' && exit 0` | B (parcial) |
+| `pnpm lint` | `turbo run lint` — real nos dois apps (`eslint .`, ESLint 9.39.5 medido em 2026-10-13). **A versão anterior desta linha dizia que o `apps/api` era um stub `echo … && exit 0`** — o stub foi trocado pelo lint real e a linha envelheceu sem ninguém re-medir | B |
 | `pnpm typecheck` | `turbo run typecheck` — real em `apps/api` (`tsc --noEmit`) | B |
 
 ---
@@ -208,7 +214,7 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 |------|------------------------------|
 | **Nenhum check bloqueia merge** *(parcialmente corrigido)* | O ruleset `master` (id 23853096) tem `required_status_checks: [{context: "quality"}]` e `main` só é atualizável por PR. O que sobra: `required_approving_review_count = 0` e `required_reviewers = []` (contribuidor único). Só **1 dos 3** contexts é exigido — a garantia real é a cadeia do workflow (`preflight` bloqueia `quality` via `needs:`), não o check isolado. |
 | `lint-staged` não é linter | `node -e "console.log(Object.values(require('./package.json')['lint-staged']).join(' \| '))"` → `prettier --write \| prettier --write`. Nenhum eslint, tsc ou vitest. O ESLint entra pelo turbo. |
-| `doc-sync` nunca aborta | `grep -c 'process.exit' tooling/scripts/doc-sync.ts` → **0** (re-medido 2026-10-06). O `\|\| exit 1` do hook e o job de CI são guarda de crash, não gate. O contrato **documentado** diz report-only, em vez de prometer bloqueio que não existe. |
+| `doc-sync` **agora** aborta, mas só por doc ausente | MEDIDO 2026-10-15: `grep -c 'process.exit' tooling/scripts/doc-sync.ts` → **1** (era **0** até 2026-10-06, e o `\|\| exit 1` do hook era código morto). O `exit(1)` só dispara com `alerts > 0`, e `alerts` só sobe no `checkMissingDoc` — doc de referência mapeado e ausente. Severidade `minor` não bloqueia, e `docs_health_score` sozinho não reprova. Doc **gerado** (`apps/api/openapi.json`, gitignored) fica de fora do `existsSync` via `GENERATED_DOC_FILES`, ou todo PR que toca controller reprovaria em checkout limpo. |
 | `specialist:lint` fora do preflight | `grep -c specialist .tooling/scripts/ci/preflight.ts` → **1**, e o hit é um **comentário** que cita `nestjs-specialist` — não uma invocação. É classe 3: o sweep dispara em si mesmo. `review:lint` roda no preflight, `specialist:lint` não: duas matrizes de routing, dois scripts, um só no gate. |
 | Limite de 300 linhas não é imposto | `wc -l .agents/WORKFLOWS.md` → **189** (re-meça; a régua é do repo, não deste arquivo). **Mas** a regra `tamanho-e-revisao.md` segue sem gate mecânico: `grep -rln 'MAX_LOC' tooling/scripts/ .tooling/scripts/ \| grep -v spec` devolve **um** arquivo, `tooling/scripts/lint-review-routing.ts`, e ele mede `review-routing.md` apenas. **Cuidado com o path**: procurar por `.tooling/scripts/ci/*.ts` devolve **0** e leva à conclusão errada de que não existe limite nenhum. |
 

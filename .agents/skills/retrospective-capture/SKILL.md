@@ -80,11 +80,13 @@ Exemplos:
 
 ```yaml
 - id: R-001
+  memory: "<slug>"       # memória de origem, quando veio do DRENO
   artifact: "skill|convention|memory|adr|backlog"
   target: ".agents/path/to/file.md"
   content: |
     Conteúdo proposto (yaml/skills/markdown/ADR body).
   confidence: 0..100     # >= 70 vira proposal; < 70 vira comentário
+  gate: ".tooling/scripts/ci/x.ts"   # só se um gate JÁ mede a regra; vazio = `pendente`
   justification: |
     Por que isso é valioso (referência ao evento que motivou).
   action: "create|update|comment"
@@ -92,6 +94,12 @@ Exemplos:
 
 **Threshold:** `confidence < 70` → vira comentário no result file;
 **`confidence ≥ 70`** → vira proposal que dispara PR de harness.
+
+**`confidence` e a disposição do ledger são coisas diferentes.** O primeiro diz
+que a regra é valiosa; a disposição diz se ela **já está** escrita no repo. Uma
+regra de 95 que ninguém escreveu continua `pendente` — e é isso que o gate
+`check-memory-crystallization` mede, ver
+[`memory-triage.md`](../../runs/memory-triage.md).
 
 ## Comportamento (4 passos)
 
@@ -102,6 +110,15 @@ Reunir:
 - conversation_log do orquestrador
 - estado **atual** dos memory files dos involved agents
 - Convention files mencionadas (cross-refs)
+
+**Dreno primeiro.** Se a [`learning-observation`](../learning-observation/SKILL.md)
+rodou durante a atividade, as memórias que ela gravou entram na `decision-list`
+como `memory:` — uma linha cada no
+[ledger de cristalização](../../runs/memory-triage.md), com a disposição que a
+regra de dreno da
+[convenção](../../specs/conventions/retrospective-capture.md#dreno--a-retro-consome-o-que-a-camada-durante-capturou)
+define. Sem o dreno, elas são arquivo órfão e a proposta reescreve o que o diff
+já mostra.
 
 ### Passo 2: Triangular
 

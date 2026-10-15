@@ -285,22 +285,34 @@ export function findDivergentDeclarations(repoRoot: string): Divergence[] {
 }
 
 /**
- * Executa a derivação canônica DE UM SUBDIRECTÓRIO e confere que o slug
- * describe o repositório, não o diretório corrente.
+ * Resultado da derivação: o diretório, ou o motivo pelo qual ela não rodou.
  *
- * Rodar da raiz não provaria nada: `pwd` e `git rev-parse --show-toplevel`
- * coincidem lá. A divergência só aparece de um subdir — que é onde um agente
- * lendo a skill costuma estar.
+ * O motivo viaja no MESMO tipo que o valor porque quem consome precisa dos
+ * dois — um gate que descarta o erro e devolve `undefined` transforma "a
+ * derivação quebrou" em "não havia nada para medir", que é a classe 1.
  */
-function verifyDerivation(repoRoot: string): string | null {
-  const canonPath = join(repoRoot, CANONICAL_FILE);
+export type CanonicalMemoryDir = { ok: true; dir: string } | { ok: false; error: string };
+
+/**
+ * Lê a linha `MEMORY_DIR=` da seção canônica e a EXECUTA, devolvendo o
+ * diretório que ela produz.
+ *
+ * Exportado porque existe um segundo consumidor — o
+ * `check-memory-crystallization` precisa ler o mesmo diretório, e a
+ * alternativa seria reimplementar a derivação. Uma segunda cópia da derivação
+ * envelhece exatamente no cenário em que ela é necessária: alguém corrige a
+ * linha canônica e a cópia continua produciendo o caminho velho, sem nenhum
+ * gate apontando para a diferença.
+ */
+export function canonicalMemoryDir(repoRoot: string): CanonicalMemoryDir {
+  const root = resolve(repoRoot);
+  const canonPath = join(root, CANONICAL_FILE);
   const content = readFileSync(canonPath, 'utf8');
   const line = content.split('\n').find((l) => l.startsWith('MEMORY_DIR='));
-  if (!line) return 'a seção canônica não declara `MEMORY_DIR=`';
+  if (!line) return { ok: false, error: 'a seção canônica não declara `MEMORY_DIR=`' };
 
-  const expectedSlug = `-${repoRoot.replace(/^\//, '').replace(/\//g, '-')}`;
-  const subdir = join(repoRoot, '.tooling');
-  if (!existsSync(subdir)) return `não há subdiretório de teste (${subdir})`;
+  const subdir = join(root, '.tooling');
+  if (!existsSync(subdir)) return { ok: false, error: `não há subdiretório de teste (${subdir})` };
 
   try {
     // A linha só ATRIBUI a variável; sem imprimir, stdout sai vazio e o
@@ -314,7 +326,7 @@ function verifyDerivation(repoRoot: string): string | null {
     let gitDir: string | undefined;
     try {
       gitDir = execFileSync('git', ['rev-parse', '--absolute-git-dir'], {
-        cwd: repoRoot,
+        cwd: root,
         encoding: 'utf8',
       }).trim();
     } catch {
@@ -326,11 +338,31 @@ function verifyDerivation(repoRoot: string): string | null {
       encoding: 'utf8',
       env: { ...process.env, HOME: process.env.HOME ?? '', ...(gitDir ? { GIT_DIR: gitDir } : {}) },
     }).trim();
-    if (!out.endsWith(`/${expectedSlug}/memory`)) {
-      return `a derivação canônica produziu "${out}", que não termina em /${expectedSlug}/memory — rodada de um subdiretório, ela descreveu o cwd e não o repo`;
-    }
+    return { ok: true, dir: out };
   } catch (err) {
-    return `a derivação canônica não executou de um subdiretório: ${(err as Error).message.split('\n')[0]}`;
+    return {
+      ok: false,
+      error: `a derivação canônica não executou de um subdiretório: ${(err as Error).message.split('\n')[0]}`,
+    };
+  }
+}
+
+/**
+ * Executa a derivação canônica DE UM SUBDIRECTÓRIO e confere que o slug
+ * describe o repositório, não o diretório corrente.
+ *
+ * Rodar da raiz não provaria nada: `pwd` e `git rev-parse --show-toplevel`
+ * coincidem lá. A divergência só aparece de um subdir — que é onde um agente
+ * lendo a skill costuma estar.
+ */
+function verifyDerivation(repoRoot: string): string | null {
+  const root = resolve(repoRoot);
+  const derived = canonicalMemoryDir(root);
+  if (!derived.ok) return derived.error;
+
+  const expectedSlug = `-${root.replace(/^\//, '').replace(/\//g, '-')}`;
+  if (!derived.dir.endsWith(`/${expectedSlug}/memory`)) {
+    return `a derivação canônica produziu "${derived.dir}", que não termina em /${expectedSlug}/memory — rodada de um subdiretório, ela descreveu o cwd e não o repo`;
   }
   return null;
 }

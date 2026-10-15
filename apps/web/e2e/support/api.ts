@@ -27,6 +27,7 @@
 // e que a suíte não pode confiar em "o processo com este PID é o servidor".
 
 import { spawn, type ChildProcess } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { API_ROOT, WEB_ROOT, exigirEstado, gravarEstado } from './estado';
@@ -58,6 +59,46 @@ const BIN_TSX = join(REPO_ROOT, 'node_modules', '.bin', 'tsx');
 const DIR_LOG = join(WEB_ROOT, 'node_modules', '.cache', 'e2e-playwright');
 
 /**
+ * Segredo de assinatura dos tokens, ALEATÓRIO POR EXECUÇÃO.
+ *
+ * pt-BR (2026-10-13, demanda `login-usuario-senha`): o `JwtTokenService`
+ * recusa o boot sem `JWT_SECRET` em NENHUM ambiente — não há default, por
+ * decisão (sem segredo embutido, um deploy sem configuração falha em vez de
+ * subir com um segredo que o repositório conhece). A consequência aqui é
+ * concreta: sem esta linha a API do e2e morre no boot e o global-setup
+ * falha esperando `/health`.
+ *
+ * Por que aleatório e não uma constante no arquivo: um segredo de teste
+ * fixo no repositório sobrevive à vida do container efêmero. Log de CI, artefato
+ * de upload, `.env` copiado — tudo isso continua valendo depois que o banco
+ * foi destruído, e quem ler o log consegue forjar um token válido para o
+ * ambiente que estiver em pé na hora. 48 bytes de entropia por execução é o
+ * que torna o token do e2e inútil fora da execução que o emitiu.
+ *
+ * ⚠️ Uma vez por EXECUÇÃO, e o "onde" é o que estava errado. A versão anterior
+ * era uma constante de módulo — "uma vez por PROCESSO", dizia o comentário, e
+ * era esse o defeito. O Playwright recicla o worker no meio da suíte (o mesmo
+ * arquivo que registra isto na nota do `stdout` de `subirApi`: "o worker recicla
+ * no meio da suíte"), e a constante morre com ele.
+ *
+ * MEDIDO 2026-10-14: worker `363488` semeou a sessão do F1 e derrubou a API no
+ * seu `finally`; o worker seguinte (`364753`, no F2) tem OUTRA constante, assina
+ * o token com ela e a API — que recebeu o segredo do worker `363488` — responde
+ * `401 UNAUTHORIZED`. O sintoma aparecia no F2, longe da causa, e como
+ * "a listagem começou com 1 usuário": o `retry` de 401 do harness ressemeava a
+ * sessão e a conta nova era visível na listagem.
+ *
+ * Por isso o segredo é gerado uma vez no `globalSetup` e viaja pelo
+ * `estado.json` (ver `EstadoE2E.jwtSecret`) — que é o canal que já existe entre
+ * o setup e os workers. Continua aleatório por execução, então a propriedade
+ * acima (token inútil fora da execução que o emitiu) permanece: o arquivo mora
+ * sob `node_modules/.cache/` e some com `pnpm install`.
+ */
+export function gerarSegredoE2E(): string {
+  return randomBytes(48).toString('base64');
+}
+
+/**
  * Acrescenta uma linha ao log DESTA instância.
  *
  * ⚠️ `caminho` vem de `saida.vincular(pid)`, e não é reconstruído aqui a partir
@@ -85,6 +126,15 @@ function anexarLog(caminho: string, texto: string): void {
 export interface OpcoesSubirApi {
   porta: number;
   databaseUrl: string;
+  /**
+   * Segredo de assinatura dos tokens.
+   *
+   * ⚠️ Vem de FORA porque o processo da API sobrevive ao worker que a subiu, e
+   * o worker NÃO sobrevive à suíte. Gerar aqui dentro (por `subirApi`) devolvia
+   * um segredo diferente a cada reinício, e o sintoma era um `401` que só
+   * aparecia no spec seguinte ao reinício. Ver `gerarSegredoE2E`.
+   */
+  jwtSecret: string;
 }
 
 /**
@@ -95,7 +145,11 @@ export interface OpcoesSubirApi {
  * janela volta sem o header de problem-details. O `/health` só responde 200
  * depois que o bootstrap inteiro rodou — é o sinal certo.
  */
-export async function subirApi({ porta, databaseUrl }: OpcoesSubirApi): Promise<ChildProcess> {
+export async function subirApi({
+  porta,
+  databaseUrl,
+  jwtSecret,
+}: OpcoesSubirApi): Promise<ChildProcess> {
   // pt-BR (2026-10-08) — a causa do flake sob `--repeat-each 2`.
   //
   // `stdout` da API era um PIPE do worker do Playwright. O worker recicla no meio
@@ -138,6 +192,7 @@ export async function subirApi({ porta, databaseUrl }: OpcoesSubirApi): Promise<
       // timeout de conexão que não é dele.
       OTEL_SDK_DISABLED: 'true',
       LOG_LEVEL: 'silent',
+      JWT_SECRET: jwtSecret,
       NODE_ENV: 'test',
     },
     stdio: ['ignore', saida.descritor, saida.descritor],
@@ -301,6 +356,10 @@ export async function derrubarApiDoTeste(): Promise<void> {
 export async function subirApiDoTeste(): Promise<void> {
   const estado = exigirEstado();
   if (estado.apiPid !== null) return;
-  const filho = await subirApi({ porta: estado.apiPorta, databaseUrl: estado.databaseUrl });
+  const filho = await subirApi({
+    porta: estado.apiPorta,
+    databaseUrl: estado.databaseUrl,
+    jwtSecret: estado.jwtSecret,
+  });
   gravarEstado({ ...estado, apiPid: filho.pid ?? null });
 }

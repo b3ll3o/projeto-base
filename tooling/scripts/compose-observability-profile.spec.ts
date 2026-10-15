@@ -50,10 +50,38 @@ function composeConfig(profile?: string): string {
       cwd: REPO_ROOT,
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'pipe'],
+      // ⚠️ ESTE `env` É O QUE FAZ OS 6 TESTES ABAIXO DIZEREM ALGUMA COISA.
+      //
+      // Sem ele, o `execSync` HERDA o ambiente e o Compose lê o `.env` da RAIZ
+      // do repo (o project directory é o diretório do próprio compose file, não
+      // o `cwd`). Ou seja: numa máquina de dev que tenha `JWT_SECRET` no shell
+      // ou no `.env`, uma interpolação `${JWT_SECRET:?...}` — que faz TODOS os
+      // comandos do Compose falharem, `config` inclusive — aparecia como VERDE
+      // neste arquivo.
+      //
+      // MEDIDO 2026-10-13 contra um compose com `${JWT_SECRET:?...}`:
+      //
+      //   env -u JWT_SECRET …                                 -> exit 1  (guard)
+      //   JWT_SECRET=segredo-dev …                            -> exit 0  (falso verde)
+      //   COMPOSE_DISABLE_ENV_FILE=1 … + `.env` com segredo   -> exit 0  (falso verde)
+      //
+      // As duas travas juntas fecham as duas fontes: `JWT_SECRET: undefined`
+      // tira a variável exportada do ambiente (o Node descarta a chave
+      // inteira — medido) e `COMPOSE_DISABLE_ENV_FILE` impede o Compose de ir
+      // buscar o `.env`. Com as duas, o suite é verde por CONTA PRÓPRIA e o
+      // vermelho significa de fato "o compose não interpola sem segredo".
+      //
+      // ⚠️ `COMPOSE_DISABLE_ENV_FILE` NÃO desliga o `env_file:` explícito do
+      // serviço — MEDIDO: com a variável em `1` e os dois arquivos em disco,
+      // o `docker compose config` ainda imprimiu o valor do
+      // `.env.production` explícito. Só o `.env` implícito da raiz é
+      // desligado, que é exatamente a fonte que este guard precisa fechar.
       env: {
         ...process.env,
         POSTGRES_PASSWORD: 'test-fixture-not-real',
         DATABASE_URL: 'postgresql://test:test@localhost:5432/test',
+        JWT_SECRET: undefined,
+        COMPOSE_DISABLE_ENV_FILE: '1',
       },
     });
   } finally {

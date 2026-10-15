@@ -23,10 +23,32 @@ import { ApiClient, ApiError } from '@/lib/api-client';
 import { cadastroUsuarioSchema, type CampoCadastro } from '@/lib/cadastro-usuario-schema';
 import { CADASTRO_INICIAL, ERRO_GENERICO, comTraceId, type CadastroUsuarioState } from './state';
 
-const CAMPOS: CampoCadastro[] = ['nome', 'email'];
+const CAMPOS: CampoCadastro[] = ['nome', 'email', 'senha'];
 
 function ehCampoDoFormulario(campo: string): campo is CampoCadastro {
   return (CAMPOS as string[]).includes(campo);
+}
+
+/**
+ * O estado que volta para o browser, SEM o segredo dentro.
+ *
+ * pt-BR: `CadastroUsuarioState` é serializado e devolvido ao Client
+ * Component — ele passa pela rede, fica no payload da Server Action e é
+ * visível no DevTools. Devolver ali a senha digitada significaria que o
+ * segredo da pessoa sobrevive a um formulário que deu ERRO, stored num
+ * lugar que ninguém escolheu para guardá-lo e que o `httpOnly` dos cookies
+ * de sessão existe justamente para tornar inacessível ao script da página.
+ *
+ * Por isso a senha volta vazia em TODO caminho de erro. O preço é real e
+ * conhecido: depois de um erro a pessoa precisa redigitar a senha. É o
+ * preço de não devolver o segredo, e a alternativa (devolver) é pior.
+ * Nome e email continuam voltando, porque a utilidade deles é justamente a
+ * de não obrigar a pessoa a redigitar.
+ */
+function valoresSemSegredo(
+  valores: CadastroUsuarioState['valores'],
+): CadastroUsuarioState['valores'] {
+  return { ...valores, senha: '' };
 }
 
 /**
@@ -48,7 +70,7 @@ function estadoDeErro(
   valores: CadastroUsuarioState['valores'],
 ): CadastroUsuarioState {
   const { problem } = erro;
-  const base = { ...CADASTRO_INICIAL, valores };
+  const base = { ...CADASTRO_INICIAL, valores: valoresSemSegredo(valores) };
 
   if (problem.code === 'EMAIL_IN_USE') {
     return { ...base, fieldErrors: { email: 'Este email já está cadastrado.' } };
@@ -80,6 +102,7 @@ export async function cadastrarUsuario(
   const valores = {
     nome: String(formData.get('nome') ?? ''),
     email: String(formData.get('email') ?? ''),
+    senha: String(formData.get('senha') ?? ''),
   };
 
   const parsed = cadastroUsuarioSchema.safeParse(valores);
@@ -91,7 +114,7 @@ export async function cadastrarUsuario(
         fieldErrors[campo] ??= issue.message;
       }
     }
-    return { ...CADASTRO_INICIAL, fieldErrors, valores };
+    return { ...CADASTRO_INICIAL, fieldErrors, valores: valoresSemSegredo(valores) };
   }
 
   const api = new ApiClient({
@@ -109,6 +132,18 @@ export async function cadastrarUsuario(
   // exceção NEXT_REDIRECT; um `try/catch` em volta engoliria o sinal de
   // navegação e a pessoa ficaria parada no formulário, com o usuário
   // criado, sem nenhuma indicação disso.
+  //
+  // ⚠️ O destino é o LOGIN, e não `/users`. O cadastro é `@Public()` e NÃO
+  // emite sessão — `POST /users` devolve só o usuário, sem par de tokens
+  // (é `POST /auth/login` que assina), então quem acabou de se cadastrar
+  // não tem cookie nenhum. `/users` chama `exigirSessao()`, que sem cookie
+  // redireciona para `/login`. Redirecionar para lá era um beco sem saída de
+  // dois saltos, e a pessoa que acabara de ESCOLHER a senha era obrigada a
+  // digitá-la de novo sem nenhum aviso de por quê.
+  //
+  // O `?cadastrado=1` existe para o login abrir com uma linha de confirmação
+  // em vez de um formulário mudo — sem ele, o redirecionamento continua
+  // silencioso, só que em vez de duas telas sem contexto é uma.
   if (erro instanceof ApiError) {
     return estadoDeErro(erro, valores);
   }
@@ -116,8 +151,8 @@ export async function cadastrarUsuario(
     // Falha de rede, resposta sem corpo JSON, exceção inesperada: nenhuma
     // delas chega como ApiError, e todas precisam virar mensagem na tela
     // em vez de estourar para o error boundary.
-    return { ...CADASTRO_INICIAL, valores, formError: ERRO_GENERICO };
+    return { ...CADASTRO_INICIAL, valores: valoresSemSegredo(valores), formError: ERRO_GENERICO };
   }
 
-  redirect('/users');
+  redirect('/login?cadastrado=1');
 }

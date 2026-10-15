@@ -52,13 +52,19 @@ retrospective-capture (skill) → doc-writer:
   task: "Escrever result file + filtrar proposals por confidence"
   context: ["raw_evidence do explorer", "threshold = 70"]
   expected_output:
-    result_file: "<path canônico>/<N>+1-result.md"  # ver retrospective-capture.md §"Destino canônico do result file"
+    result_file: "derivado, não escrito aqui"  # path e nome em retrospective-capture.md §"Destino canônico do result file"; o nome tem de conter `b<N>` e terminar em `-result.md`
+    ledger: ".agents/runs/memory-triage.md"  # uma linha por memória, com disposição
     proposals:
-      - artifact: "skill|convention|memory|adr|backlog"
+      - id: "R-001"
+        memory: "<slug>"                # origem, quando veio do dreno DURANTE
+        artifact: "skill|convention|memory|adr|backlog"
         target: "<path>"
-        confidence: 0..100
         content: "<yaml>"
-  success_criteria: "0 proposals com confidence < 70; result file ≤ 300 linhas"
+        confidence: 0..100               # >= 70 vira proposal; < 70 vira comentário
+        gate: "<path do .ts que já mede a regra, ou vazio = pendente>"
+        justification: "<por que vale, referenciando o evento>"
+        action: "create|update|comment"
+  success_criteria: "0 proposals com confidence < 70; result file ≤ 300 linhas; ledger com 1 linha por memória do corpus, sem `citada:` cuja âncora não exista mais"
 
 doc-writer + task-manager (parallel):
   task: "Codificar proposals filtradas em artefatos duráveis"

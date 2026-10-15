@@ -14,6 +14,7 @@ import {
   bootstrapE2E,
   teardownE2E,
   cleanE2EDatabase,
+  criarUsuarioAutenticado,
   type E2EContext,
 } from '../test-app.helper.js';
 
@@ -29,32 +30,28 @@ describe('E2E 03: Optimistic Locking + If-Match header enforcement', () => {
   });
 
   beforeEach(async () => {
-    await cleanE2EDatabase(e2e.ctx);
+    await cleanE2EDatabase(e2e);
   });
 
   it('PATCH com If-Match desatualizado -> 412 CONCURRENCY_CONFLICT', async () => {
-    const { app } = e2e;
-    const c = await app.inject({
-      method: 'POST',
-      url: '/api/v1/users',
-      payload: { nome: 'Concur', email: 'concur@b.com' },
-    });
-    const userId = (JSON.parse(c.body) as { id: string }).id;
+    const { injetar } = e2e;
+    const dona = await criarUsuarioAutenticado(e2e, { nome: 'Concur', email: 'concur@b.com' });
+    const userId = dona.id;
 
     // Cliente A: atualiza para v2
-    const a = await app.inject({
+    const a = await injetar({
       method: 'PATCH',
       url: `/api/v1/users/${userId}`,
-      headers: { 'if-match': 'W/"v1"' },
+      headers: { ...dona.headers, 'if-match': 'W/"v1"' },
       payload: { novoNome: 'A wins' },
     });
     expect(a.statusCode).toBe(200);
 
     // Cliente B: ainda com If-Match v1, tenta atualizar
-    const stale = await app.inject({
+    const stale = await injetar({
       method: 'PATCH',
       url: `/api/v1/users/${userId}`,
-      headers: { 'if-match': 'W/"v1"' },
+      headers: { ...dona.headers, 'if-match': 'W/"v1"' },
       payload: { novoNome: 'B tries' },
     });
     expect(stale.statusCode).toBe(412);
@@ -63,18 +60,14 @@ describe('E2E 03: Optimistic Locking + If-Match header enforcement', () => {
   });
 
   it('DELETE com If-Match errado -> 412 CONCURRENCY_CONFLICT', async () => {
-    const { app } = e2e;
-    const c = await app.inject({
-      method: 'POST',
-      url: '/api/v1/users',
-      payload: { nome: 'Delta', email: 'd@b.com' },
-    });
-    const userId = (JSON.parse(c.body) as { id: string }).id;
+    const { injetar } = e2e;
+    const dona = await criarUsuarioAutenticado(e2e, { nome: 'Delta', email: 'd@b.com' });
+    const userId = dona.id;
 
-    const wrong = await app.inject({
+    const wrong = await injetar({
       method: 'DELETE',
       url: `/api/v1/users/${userId}`,
-      headers: { 'if-match': 'W/"v99"' },
+      headers: { ...dona.headers, 'if-match': 'W/"v99"' },
     });
     expect(wrong.statusCode).toBe(412);
     const body = JSON.parse(wrong.body) as { code: string };
@@ -82,12 +75,9 @@ describe('E2E 03: Optimistic Locking + If-Match header enforcement', () => {
   });
 
   it('PATCH sem If-Match -> 400 IF_MATCH_REQUIRED', async () => {
-    const { app } = e2e;
-    const c = await app.inject({
-      method: 'POST',
-      url: '/api/v1/users',
-      payload: { nome: 'Ana', email: 'noheader@b.com' },
-    });
+    const { injetar } = e2e;
+    const dona = await criarUsuarioAutenticado(e2e, { nome: 'Ana', email: 'noheader@b.com' });
+    const c = dona.cadastro;
     // MEDIDO 2026-10-08: a semente usava `nome: 'N'` (1 char) e
     // `novoNome: 'X'` (1 char). O POST devolvia 500 e o `id` vinha
     // `undefined`; com o `UpdateUserSchema` corrigido, o `novoNome`
@@ -97,11 +87,12 @@ describe('E2E 03: Optimistic Locking + If-Match header enforcement', () => {
     // versão anterior dele passava medindo o path param de
     // `/users/undefined`, não o contrato de concorrência.
     expect(c.statusCode).toBe(201);
-    const userId = (JSON.parse(c.body) as { id: string }).id;
+    const userId = dona.id;
 
-    const res = await app.inject({
+    const res = await injetar({
       method: 'PATCH',
       url: `/api/v1/users/${userId}`,
+      headers: dona.headers,
       payload: { novoNome: 'Bruno' },
     });
     expect(res.statusCode).toBe(400);

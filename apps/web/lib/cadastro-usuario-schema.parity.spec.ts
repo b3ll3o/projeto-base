@@ -16,12 +16,13 @@
 // número novo — e falha alto (ENOENT) se o VO for movido ou renomeado.
 //
 // ⚠️ Este spec NÃO mede que os testes passam, nem que a UI está certa. Ele
-// mede uma coisa só: os três números batem.
+// mede uma coisa só: os números batem (hoje: nome mín/máx, email máx e
+// senha mín/máx — cinco ao todo).
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { NOME_MIN, NOME_MAX, EMAIL_MAX } from './cadastro-usuario-schema.js';
+import { NOME_MIN, NOME_MAX, EMAIL_MAX, SENHA_MIN, SENHA_MAX } from './cadastro-usuario-schema.js';
 
 const VO_DIR = fileURLToPath(
   new URL('../../api/src/modules/users/domain/value-objects/', import.meta.url),
@@ -56,5 +57,25 @@ describe('paridade web ↔ domínio (a cópia é guardada, não é confiança)',
     // Era 255 contra 254 — um octeto, e era o suficiente para o email
     // de 255 chars virar 500.
     expect(EMAIL_MAX).toBe(limiteDoVo('email.vo.ts', 'MAX_LENGTH'));
+  });
+
+  // pt-BR: os dois casos abaixo dependem de um arquivo que este lado da
+  // branch ainda não tem. O VO `password-hash.vo.ts` é criado pelo outro
+  // agent, em paralelo, em `apps/api/` — e enquanto ele não existe,
+  // `limiteDoVo` levanta ENOENT do `readFileSync`. O vermelho aqui é o
+  // SINTOMA CORRETO de uma regra que ainda não aterrissou, e é
+  // deliberado: importar o VO "para o teste passar" desfaria a razão de
+  // o spec LER o fonte em vez de importar (o cabeçalho do arquivo explica).
+  // O que este spec NÃO faz é degradar em silêncio quando o VO some — ele
+  // falha alto e nomeia o arquivo, que é a informação que falta.
+  it('SENHA_MIN bate com PasswordHash.MIN_LENGTH', () => {
+    expect(SENHA_MIN).toBe(limiteDoVo('password-hash.vo.ts', 'MIN_LENGTH'));
+  });
+
+  it('SENHA_MAX bate com PasswordHash.MAX_LENGTH', () => {
+    // pt-BR: este número NÃO pode ser copiado de outro. 72 é o limite de
+    // ENTRADA do bcrypt, não uma escolha de estilo — e é o único dos quatro
+    // números cujo teto tem consequência de segurança em vez de só de UX.
+    expect(SENHA_MAX).toBe(limiteDoVo('password-hash.vo.ts', 'MAX_LENGTH'));
   });
 });

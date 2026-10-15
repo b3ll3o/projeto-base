@@ -10,6 +10,8 @@ import {
   InvalidRestoreException,
   UserValidationException,
 } from '../../../modules/users/domain/exceptions/user.exceptions.js';
+import { InvalidCredentialsException } from '../../../modules/auth/domain/exceptions/auth.exceptions.js';
+import { InvalidTokenException } from '../../../modules/auth/domain/exceptions/token.exceptions.js';
 import {
   AuditHistoryNotFoundException,
   AuditArchiveNotFoundException,
@@ -142,5 +144,73 @@ describe('mapExceptionToHttp (regression)', () => {
     const m = mapExceptionToHttp('boom');
     expect(m.status).toBe(HttpStatus.INTERNAL_SERVER_ERROR);
     expect(m.code).toBe('INTERNAL');
+  });
+});
+
+describe('mapExceptionToHttp — InvalidCredentials (contrato E, Fase 5)', () => {
+  // pt-BR: o motivo deste bloco existir é o `return` final do mapper. Uma
+  // exceção de domínio que NÃO tem entrada própria no mapper não falha:
+  // ela cai no fall-through e vira 500 INTERNAL — e o teste continua
+  // verde, porque nenhum teste anterior cobria este caso. O sintoma real
+  // seria o login respondendo 500 para senha errada.
+
+  it('vira 401 INVALID_CREDENTIALS', () => {
+    const m = mapExceptionToHttp(new InvalidCredentialsException());
+    expect(m.status).toBe(HttpStatus.UNAUTHORIZED);
+    expect(m.code).toBe('INVALID_CREDENTIALS');
+  });
+
+  it('NÃO é 500 — este é o defeito que o registro evita', () => {
+    const m = mapExceptionToHttp(new InvalidCredentialsException());
+    expect(m.status).not.toBe(HttpStatus.INTERNAL_SERVER_ERROR);
+  });
+
+  it('o título não distingue e-mail inexistente de senha errada', () => {
+    const m = mapExceptionToHttp(new InvalidCredentialsException());
+    expect(m.title).not.toMatch(/email|e-mail|senha|password|usuário|user/i);
+  });
+
+  it('sobrevive ao `instanceof` vindo de outro arquivo (Object.setPrototypeOf)', () => {
+    // pt-BR: sem o setPrototypeOf no construtor, esta linha vira false e
+    // o caso acima cai no 500 — é o mesmo modo de falha do VO.
+    expect(new InvalidCredentialsException()).toBeInstanceOf(InvalidCredentialsException);
+  });
+});
+
+describe('mapExceptionToHttp — InvalidToken (Fase 6)', () => {
+  // pt-BR: mesma razão do bloco da InvalidCredentialsException — sem
+  // entrada no mapper, a exceção cai no fall-through e vira 500. E aqui o
+  // 500 é pior: o `JwtAuthGuard` converte a exceção em 401 no caminho
+  // normal, então uma fuga deste mapper significaria que ALGUM caminho
+  // (refresh, uso fora do guard) responde 500 para token inválido.
+
+  it('vira 401 INVALID_TOKEN', () => {
+    const m = mapExceptionToHttp(new InvalidTokenException('jwt expired'));
+    expect(m.status).toBe(HttpStatus.UNAUTHORIZED);
+    expect(m.code).toBe('INVALID_TOKEN');
+  });
+
+  it('NÃO é 500 — este é o defeito que o registro evita', () => {
+    const m = mapExceptionToHttp(new InvalidTokenException('jwt expired'));
+    expect(m.status).not.toBe(HttpStatus.INTERNAL_SERVER_ERROR);
+  });
+
+  it('o motivo interno NÃO aparece no title nem no code', () => {
+    // pt-BR: `motivo` existe para o log do servidor. Se ele aparecesse no
+    // payload, "jwt expired" vs "invalid signature" viraria oráculo.
+    const m = mapExceptionToHttp(new InvalidTokenException('jwt expired'));
+    expect(m.code).not.toMatch(/expired|expirado/i);
+    expect(m.title).not.toMatch(/expired|expirado|signature|assinatura/i);
+  });
+
+  it('o title é o mesmo para motivos diferentes (não distingue o caso)', () => {
+    const expirado = mapExceptionToHttp(new InvalidTokenException('jwt expired'));
+    const adulterado = mapExceptionToHttp(new InvalidTokenException('invalid signature'));
+    expect(expirado.title).toBe(adulterado.title);
+    expect(expirado.code).toBe(adulterado.code);
+  });
+
+  it('sobrevive ao `instanceof` vindo de outro arquivo já transpilado', () => {
+    expect(new InvalidTokenException('x')).toBeInstanceOf(InvalidTokenException);
   });
 });

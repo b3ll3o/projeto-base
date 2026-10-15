@@ -17,16 +17,19 @@ enum AuditOperation {
 }
 
 model User {
-  id        String    @id @db.Uuid
-  email     String    @unique
-  name      String
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt       @map("updated_at")
-  createdBy String?   @map("created_by") @db.Uuid
-  updatedBy String?   @map("updated_by") @db.Uuid
-  deletedAt DateTime? @map("deleted_at")
-  deletedBy String?   @map("deleted_by") @db.Uuid
-  version   Int       @default(1)
+  id           String    @id @db.Uuid
+  email        String    @unique
+  name         String
+  // Hash argon2id da senha. NUNCA sai para fora: nem `UserOutputDto`, nem
+  // os snapshots JSONB de `users_history`/`users_archive`.
+  passwordHash String    @map("password_hash")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  createdBy    String?   @map("created_by") @db.Uuid
+  updatedBy    String?   @map("updated_by") @db.Uuid
+  deletedAt    DateTime? @map("deleted_at")
+  deletedBy    String?   @map("deleted_by") @db.Uuid
+  version      Int       @default(1)
 
   @@index([email])
   @@index([deletedAt])

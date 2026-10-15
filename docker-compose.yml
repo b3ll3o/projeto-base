@@ -6,7 +6,14 @@ services:
     container_name: projeto-base-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-projeto}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required} # #68: nunca plaintext; falha explícita se não setado
+      # ⚠️ `POSTGRES_PASSWORD` NÃO aparece neste bloco, e é deliberado — é a MESMA
+      # medida já aplicada ao `JWT_SECRET` mais abaixo (ver o comentário longo
+      # no serviço `api`). MEDIDO 2026-10-15: com o `:?` aqui, `docker compose
+      # config`, `ps` e `down` saíam 1 sem a variável no ambiente — e como a
+      # interpolação roda ANTES do `env_file` ler o arquivo, o `:?` nem era
+      # satisfeito por quem mora no `.env.production`, que é exatamente onde a
+      # convenção #68 manda o segredo morar. Uma stack quebrada ficava impossível
+      # de derrubar. Sem a chave, o `env_file` decide.
       POSTGRES_DB: ${POSTGRES_DB:-projeto_base}
     env_file:
       - .env.production # #68: secrets em arquivo separado, fora do compose versionado
@@ -39,7 +46,29 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3001} # #73: consumido pelo main.ts
     env_file:
-      - .env.production
+      - .env.production # #68: secrets fora do compose versionado
+    # ⚠️ `JWT_SECRET` NÃO aparece neste bloco, e é deliberado — duas medições
+    # successive fecharam as duas formas "óbvias" de colocá-lo:
+    #
+    # 1. NÃO pode ser `${JWT_SECRET:?...}`. O Compose interpola o arquivo
+    #    INTEIRO antes de executar QUALQUER comando, então a exigência é
+    #    avaliada mesmo para `config`, `ps` e `down`. MEDIDO: com o `:?` e a
+    #    variável ausente, os três saem 1 — e o caso real, `up -d postgres`,
+    #    também. Uma stack quebrada ficava impossível de derrubar. Pior: a
+    #    interpolação roda ANTES do `env_file` ler o arquivo, então a exigência
+    #    não é satisfeita por quem mora no `.env.production`, que é justamente
+    #    onde a convenção #68 manda o segredo morar.
+    # 2. NÃO pode ser `${JWT_SECRET:-}`. MEDIDO: chave presente em
+    #    `environment` ganha de `env_file` mesmo quando resolve para string
+    #    vazia — `docker compose config` imprime `JWT_SECRET: ""` e descarta o
+    #    valor do `.env.production`. Um default vazio aqui não é "neutro", é
+    #    "apaga o segredo que o outro arquivo tinha".
+    #
+    # Sem a chave, o `env_file` decide: o segredo mora no `.env.production`
+    # (ver `.env.production.example`) e a ausência é punida onde o problema é
+    # real — o `JwtTokenService` recusa o boot, e o healthcheck do serviço
+    # reprova. Fail-fast no lugar certo, sem transformar o compose num
+    # arquivo que o Postgres também não consegue ler.
     ports:
       - '3000:3000'
     healthcheck:

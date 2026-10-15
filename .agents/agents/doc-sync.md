@@ -254,12 +254,17 @@ jobs:
 - ❌ Reescrever docs sem mudança de código (escopo do `doc-writer`)
 - ❌ Auto-aplicar updates de breaking change sem humano
 - ❌ Inventar mapeamento code→docs sem evidência
-- ⚠️ **Não bloquear merge por severidade documental.** `doc-sync` é
-  **report-only** por contrato: o script nunca chama `process.exit`
-  (`grep -c 'process.exit' tooling/scripts/doc-sync.ts` → `0`). Ele gera
-  `doc-sync-report.json` e imprime as ações — artefato para revisão humana.
-  Bloquear antes de calibrar `docs_health_score` travaria commits legítimos.
-  A barreira de merge é o check `quality` exigido pelo ruleset de `main`.
+- ⚠️ **Não bloquear merge por severidade documental — exceto doc ausente.**
+  Até 2026-10-15 o script era **report-only** por contrato, e o próprio contrato
+  provava isso de mentira: `grep -c 'process.exit'` devolvia **0** e o
+  `|| exit 1` do hook era código morto. Hoje existe **1** chamada e ela só
+  dispara com `alerts > 0`, que por sua vez só sobe quando um `codeFile`
+  mapeado aponta para um `docFile` que não existe. Severidade `minor` não
+  bloqueia. `docs_health_score` sozinho não reprova.
+  Ao mapear um código para um artefato **gerado** (o `apps/api/openapi.json`,
+  gitignored e produzido por `openapi:export`), liste-o em
+  `GENERATED_DOC_FILES`: ele continua alvo de `review` e sai do `existsSync`,
+  senão todo PR que tocar o controller fica vermelho em checkout limpo.
 - ❌ Modificar código (só modifico docs)
 - ❌ Criar doc redundante (checar se já existe similar)
 

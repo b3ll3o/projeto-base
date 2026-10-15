@@ -14,7 +14,7 @@ Um **monorepo base reutilizável** que implementa o **padrão genérico de agent
 
 - Apps `apps/api` (NestJS) + `apps/web` (Next.js) **já implementados** — bounded context `users` em camadas `domain/`, `application/`, `infrastructure/`
 - **26 agents** (12 genéricos + 2 routers + 6 specialists de stack + 6 specialists de auditoria) + 3 arquivos companheiro em `telemetry-specialist/`, interoperáveis via skill `agents:coordinate` — medido do disco 2026-10-08, `ls .agents/agents/*.md | wc -l`
-- **15 skills + 15 workflows + 21 convenções canônicas** — medido do disco 2026-10-08 (`ls .agents/skills/*/SKILL.md | wc -l`, `ls .agents/workflows/*.md | wc -l`, entradas de índice em `AGENTS.md §6`)
+- **20 skills + 15 workflows + 19 convenções canônicas** — medido do disco 2026-10-13 (`ls .agents/skills/*/SKILL.md | wc -l`, `ls .agents/workflows/*.md | wc -l`, linhas de dados da tabela em `AGENTS.md §6`)
 - **Paradigma DDD + Hexagonal** canônico (ADR-0001) com guardiões automáticos
 - **OpenTelemetry cross-stack** (backend + frontend + Collector)
 - **CI Defense-in-Depth** em 3 camadas
@@ -23,53 +23,27 @@ Um **monorepo base reutilizável** que implementa o **padrão genérico de agent
 
 ```text
 projeto-base/
-├── AGENTS.md                           # Spec canônica do padrão (LEIA PRIMEIRO, ≤ 300 linhas)
-├── README.md                           # Este arquivo
-├── .markdownlint.json                  # Configuração do lint de Markdown
+├── AGENTS.md              # Spec canônica do padrão (LEIA PRIMEIRO, ≤ 300 linhas)
+├── README.md              # Este arquivo
 ├── .agents/
-│   ├── agents/                         # 26 agents (12 genéricos + 2 routers + 6 de stack + 6 de auditoria)
-│   │   ├── agent-architect.md
-│   │   ├── code-reviewer.md
-│   │   ├── docker-specialist.md
-│   │   ├── doc-sync.md
-│   │   ├── doc-writer.md
-│   │   ├── explorer.md
-│   │   ├── monorepo-specialist.md
-│   │   ├── nestjs-specialist.md
-│   │   ├── nextjs-specialist.md
-│   │   ├── orchestrator.md
-│   │   ├── refactorer.md
-│   │   ├── review-router.md            # roteia diffs pós-task para reviewers
-│   │   ├── security-auditor.md
-│   │   ├── specialist-router.md        # roteia demanda para o(s) specialist(s)
-│   │   ├── stack-code-reviewer.md
-│   │   ├── task-manager.md
-│   │   ├── tdd-enforcer.md
-│   │   ├── telemetry-specialist.md
-│   │   ├── test-writer.md
-│   │   └── ux-design-specialist.md
-│   ├── memory/                         # Memória acumulada (28 arquivos: 26 agents + `state-aware-planning` + `_template`)
-│   ├── skills/                         # coordenação, routing, auditoria, UI (mapeamento agent↔skill: AGENTS.md §3.2)
-│   ├── specs/conventions/              # tdd, git-workflow, cobertura, tamanho… (ver AGENTS.md §6)
-│   └── WORKFLOWS.md                    # Fluxos pré-configurados (15 workflows em `.agents/workflows/`)
-├── apps/                              # api (NestJS 11) + web (Next.js 15)
-├── packages/                          # eslint-config, shared-types, tsconfig
-├── tooling/scripts/                   # stack-code-reviewer, doc-sync, routers
-├── turbo.json                         # pipeline cacheado (turbo)
+│   ├── agents/            # 26 agents (12 genéricos + 2 routers + 6 de stack + 6 de auditoria)
+│   │                      # catálogo nominal, com papel e memória: AGENTS.md §3
+│   ├── memory/            # Memória acumulada (28 arquivos: 26 agents + state-aware-planning + _template)
+│   ├── skills/            # coordenação, routing, auditoria, UI (mapeamento agent↔skill: AGENTS.md §3.2)
+│   ├── specs/conventions/ # tdd, git-workflow, cobertura, tamanho… (ver AGENTS.md §6)
+│   ├── workflows/         # 15 workflows detalhados
+│   └── WORKFLOWS.md       # Fluxos pré-configurados, em tabela
+├── apps/                  # api (NestJS 11) + web (Next.js 15)
+├── packages/              # eslint-config, shared-types, tsconfig
+├── tooling/scripts/       # stack-code-reviewer, doc-sync, routers
+├── turbo.json             # pipeline cacheado (turbo)
 ├── pnpm-workspace.yaml
 └── docs/
-    ├── TEMPLATE_USAGE.md               # Guia principal (≤ 300 linhas)
-    ├── MONOREPO.md                     # NOVO (v1.1.0) — convenções de monorepo
-    ├── STACK.md                        # NOVO (v1.1.0) — stack escolhida e justificativas
-    └── integrations/                   # Integração por ferramenta
-        ├── claude-code.md
-        ├── cursor.md
-        ├── windsurf.md
-        ├── aider.md
-        ├── continue.md
-        ├── copilot.md
-        ├── cline.md
-        └── cody.md
+    ├── TEMPLATE_USAGE.md  # Guia principal (≤ 300 linhas)
+    ├── MONOREPO.md        # convenções de monorepo
+    ├── STACK.md           # stack escolhida e justificativas
+    └── integrations/      # Integração por ferramenta: claude-code, cursor, windsurf,
+                           # aider, continue, copilot, cline, cody
 ```
 
 ## Como executar localmente
@@ -86,6 +60,17 @@ projeto-base/
 ### Opção A — Docker Compose (recomendado)
 
 Reproduz fielmente o ambiente de produção com healthchecks, network interna e migrations automáticas.
+
+A API assina JWT e **recusa o boot sem `JWT_SECRET`** — sem valor, sem default,
+sem exceção. Gere um antes de subir o serviço `api`:
+
+```bash
+export JWT_SECRET=$(openssl rand -base64 48)
+```
+
+O Postgres não depende dele (`docker compose up -d postgres` funciona sem), porque
+o Compose interpola o arquivo inteiro antes de qualquer comando: exigir a variável
+no compose quebraria também `config`, `ps` e `down`.
 
 ```bash
 # Stack completa (postgres + api + web prod targets)
@@ -119,20 +104,34 @@ Mais rápido para iterar. Postgres ainda roda em Docker (B22 alternativa: Postgr
 # 1. Instalar deps
 pnpm install --frozen-lockfile
 
-# 2. Subir Postgres
+# 2. Subir Postgres (o compose lê o .env da RAIZ do repo)
 docker compose up -d postgres
-# ou apontar DATABASE_URL para Postgres existente:
-export DATABASE_URL="postgresql://projeto:projeto@localhost:5432/projeto_base?schema=public"
+# ou aponte para um Postgres existente:
+# export DATABASE_URL="postgresql://projeto:projeto@localhost:5432/projeto_base?schema=public"
 
-# 3. Gerar Prisma Client (uma vez, e após mudanças em schema.prisma)
+# 3. Gerar Prisma Client (uma vez, e após cada mudança em schema.prisma)
 pnpm turbo run db:generate
 
-# 4. Subir apps em watch mode
-pnpm dev    # turbo run dev em paralelo — api em :3000, web em :3001
+# 4. Configurar o segredo JWT — ANTES de subir a API: ela recusa o boot
+# sem o segredo em QUALQUER NODE_ENV, não só em produção
+cp apps/api/.env.example apps/api/.env
+openssl rand -base64 48    # preencha o valor na linha JWT_SECRET= de apps/api/.env
 
-# 5. Rodar migrations
-pnpm --filter @projeto/api prisma:migrate:deploy
+# 5. Rodar migrations — o binário do Prisma direto, de dentro de apps/api
+# para que ele leia o apps/api/.env. Não existe script
+# `prisma:migrate:deploy` em nenhum package.json: o pnpm responde
+# "None of the selected packages has a ... script" e SAI 0, que é verde
+# para quem só olha o exit code
+cd apps/api && pnpm exec prisma migrate deploy && cd ../..
+
+# 6. Subir apps em watch mode
+pnpm dev    # turbo run dev em paralelo — api em :3000, web em :3001
 ```
+
+⚠️ **`JWT_SECRET` não tem valor default, por decisão de projeto** (ver
+[ADR-0002](docs/adr/0002-autenticacao-jwt-argon2.md)). Um segredo JWT padrão em
+repositório é pior que nenhum: todos que instalaram o projeto compartilhariam a
+chave de assinatura, e qualquer um poderia forjar um token de administrador.
 
 Endpoints:
 
@@ -267,7 +266,7 @@ Workflows detalhados em [`.agents/WORKFLOWS.md`](./.agents/WORKFLOWS.md) (índic
 
 Conforme convenção [`docs/STACK.md`](./docs/STACK.md):
 
-- **Monorepo:** pnpm workspaces + Turborepo + Changesets
+- **Monorepo:** pnpm workspaces + Turborepo
 - **Backend (`apps/api`):** NestJS 11 + Fastify + Prisma 6 + PostgreSQL 16
 - **Frontend (`apps/web`):** Next.js 15 (App Router) + React 19 + Tailwind CSS 4
 - **Observabilidade:** OpenTelemetry SDK + OTel Collector (perfil Compose `observability`)
@@ -297,4 +296,4 @@ Detalhes em [`docs/TEMPLATE_USAGE.md`](./docs/TEMPLATE_USAGE.md).
 
 ## Versão & Licença
 
-**Versão:** 1.10.0 — contagens do disco corrigidas: agents 21 → 26, memórias 22 → 28, skills 9 → 15, workflows 10 → 15, convenções 17 → 21. **Licença:** MIT.
+**Versão:** 1.11.0 — contagens re-medidas do disco (2026-10-13): skills 15 → 20 (as 5 de UI que `v1.11.0` adicionou) e convenções 21 → 19 (linhas de dados de `AGENTS.md §6`); agents 26 e memórias 28 conferem. Footer alinhado ao de `docs/MONOREPO.md` e à tag `v1.11.0`. **Licença:** MIT.

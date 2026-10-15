@@ -57,7 +57,29 @@ interface CodeDocMapping {
   reason: string;
 }
 
+// MEDIDO 2026-10-15: `apps/api/openapi.json` é artefato GERADO por
+// `openapi:export` e GITIGNORED (`.gitignore:11`) — `git ls-files` não devolve a
+// linha. Assertar existência dele reprovava o CI: reproduzido num checkout
+// limpo (`git archive HEAD`), `auth.controller.ts` devolve `Alerts: 1 | Health
+// 90/100` e EXIT=1. Localmente passa porque o dev tem o arquivo gerado em
+// disco. Continua como alvo de `review` — só sai do `existsSync`.
+export const GENERATED_DOC_FILES = new Set(['apps/api/openapi.json']);
+
 const CODE_DOC_MAPPINGS: CodeDocMapping[] = [
+  {
+    codePattern: /apps\/api\/src\/modules\/auth\/infrastructure\/http\/auth\.controller\.ts$/,
+    docFiles: [
+      'docs/api/auth.md',
+      'apps/api/openapi.json',
+      'docs/adr/0002-autenticacao-jwt-argon2.md',
+    ],
+    // pt-BR (2026-10-13): o mapeamento entrou junto com o módulo de auth.
+    // Sem ele, criar o controller não dispara NENHUMA verificação de doc —
+    // e o primeiro sintoma de um contrato de autenticação fora de sincronia
+    // é um 401 que ninguém sabe explicar. `docs/api/auth.md` é o contrato
+    // em prosa; o ADR é onde vive o que o JWT NÃO garante (revogação).
+    reason: 'Controller de auth modificado — verificar contrato e ADR',
+  },
   {
     codePattern: /apps\/api\/src\/modules\/users\/infrastructure\/http\/users\.controller\.ts$/,
     docFiles: [
@@ -100,12 +122,19 @@ function mapCodeToDocFiles(file: string): string[] {
 function checkMissingDoc(file: string): DocAction | null {
   const docs = mapCodeToDocFiles(file);
   for (const d of docs) {
-    if (!existsSync(resolvePath(d))) {
+    if (!GENERATED_DOC_FILES.has(d) && !existsSync(resolvePath(d))) {
       return {
         type: 'create',
         doc_file: d,
         reason: `Doc de referência ausente para ${file}`,
-        blocking_for_merge: false,
+        // MEDIDO 2026-10-15: este era o ÚNICO caminho que podia acusar doc
+        // ausente e ele não trazia `severity` — as outras 3 Emissores punham
+        // `minor`. Sem nenhum `major` no código inteiro, `alerts` era
+        // estruturalmente 0, o health era estruturalmente 100, e o `|| exit 1`
+        // do pre-commit era código morto. Um doc ausente é a única coisa aqui
+        // que deve reprovar.
+        severity: 'major',
+        blocking_for_merge: true,
       };
     }
   }
@@ -220,8 +249,15 @@ function parseArgs(): {
     const [k = '', v] = a.replace(/^--/, '').split('=');
     opts[k] = v ?? true;
   }
+  // MEDIDO 2026-10-15: via `pnpm run` (o que os 2 workflows do CI usam) o
+  // pnpm converte o newline do argv na PAR de caracteres `\n`. Com 161
+  // arquivos, `split('\n')` devolvia 1 item e o gate revisava 1 arquivo
+  // reportando Health 100/100 — o caminho verde que o hook local nunca teve,
+  // porque o `.husky/pre-commit` chama `pnpm tsx` e o argv chega cru.
+  // Aceita as duas formas; um nome de arquivo com barra invertida é impossível
+  // num path versionado pelo git.
   const files = String(opts['files'] ?? '')
-    .split('\n')
+    .split(/\\n|\n/)
     .filter(Boolean);
   return {
     files,
@@ -244,6 +280,17 @@ function main(): void {
   );
   for (const a of report.actions) {
     console.log(`  [${a.type}] ${a.doc_file} — ${a.reason}`);
+  }
+  // MEDIDO 2026-10-15: `grep -c "process.exit" tooling/scripts/doc-sync.ts`
+  // devolvia 0 — o `|| exit 1` do pre-commit e o job sync-docs eram código
+  // morto. Mesmo formato do irmão `stack-code-reviewer.ts` (`grep -n
+  // "process.exit" tooling/scripts/stack-code-reviewer.ts`), sem número de
+  // linha: o próprio diff desloca a referência.
+  if (report.alerts > 0) {
+    console.error(
+      `✗ ${report.alerts} doc(s) de referência ausente(s) — Health ${report.docs_health_score}/100`,
+    );
+    process.exit(1);
   }
 }
 

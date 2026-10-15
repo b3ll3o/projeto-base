@@ -1,9 +1,59 @@
 name: ci
 on:
+  # MEDIDO 2026-10-15: `feat/**` deixava de fora 4 branches vivas
+  # (`fix/**`, `docs/**`) — 0 runs de CI no push delas, MEDIDO em
+  # `gh run list --workflow ci.yml --event push --limit 100` (91 runs, 0 em
+  # `main`) — e o resultado do merge nunca era validado, porque
+  # `pull_request` só dispara na abertura/sincronização do PR.
+  # `**` cobre `main` também, que era justamente o buraco: o push pós-merge
+  # não tinha job nenhum. `**` é o único glob que não volta a precisar de
+  # lista quando alguém cria uma branch com prefixo novo.
   push:
-    branches: [feat/**]
+    branches: ['**']
   pull_request:
     branches: [main]
+    # MEDIDO 2026-10-15: sem `edited`, corrigir o corpo do PR não dispara nada
+    # — o gate do marcador lê `github.event.pull_request.body`, que é o snapshot
+    # do evento, e um re-run entrega o snapshot velho. Medido no #81: o corpo
+    # dizia `43 commits, 161 arquivos`, a contagem real já era 47/167, o
+    # `pr-refresh-gate` reprovou com `2 claim(s) divergente(s)`, e corrigir o
+    # corpo não conseguiu reprovar — só um push de código (ou um
+    # close/reopen) redespertaria. Listar `types` SUBSTITUI o padrão
+    # (`opened, synchronize, reopened`), então os quatro precisam estar.
+    types: [opened, synchronize, reopened, edited]
+
+# MEDIDO 2026-10-15: existem runs do `ci.yml` com `[createdAt, updatedAt]`
+# sobrepostos no MESMO grupo de concurrency — sem isto, cada push novo deixava a
+# run velha queimando os ~4 min do `quality` em código já superseded.
+#
+# O NÚMERO de pares fica de fora de propósito: medido com interseção de
+# `[createdAt, updatedAt]` dá 10 entre push/push (mesma branch) e 19 entre
+# PR/PR, e depende de quais runs entram na janela. As variantes não fecham entre
+# si — um número publicado aqui envelhece a cada run nova e é exatamente o tipo
+# de claim que o resto deste arquivo evita. Para remedir:
+#   gh run list --workflow ci.yml --event push --limit 100 \
+#     --json headBranch,createdAt,updatedAt
+#
+# `cancel-in-progress` NÃO pode ser `true` incondicional: o GitHub decide o
+# cancelling comparando quem começou mais tarde, e um RE-RUN de código
+# superseded começa sempre mais tarde que a run boa — o "mais recente vence"
+# fica invertido justamente no caso que não deveria vencer.
+#
+# MEDIDO no #81: a run `38800220277` (20:13:40, payload com o corpo já
+# corrigido, gate em `0 claim(s) divergente(s)`) foi CANCELADA às 20:19:26
+# porque um re-run da run velha `38799524907` começou às 20:18:31 no mesmo
+# grupo `ci-81`. O re-run entrega o payload de 20:08:22 e reprovou com
+# `1 claim(s) divergente(s)` — a contagem velha que já tinha sido corrigida.
+# Clicar em "Re-run failed jobs" era armadilha: matava a run saudável e
+# reinstalava a falha que a edição do corpo tinha eliminado.
+#
+# `github.run_attempt` vale 1 na primeira execução e incrementa a cada re-run
+# (docs.github.com/en/actions/reference/workflows-and-actions/contexts — o bloco
+# `concurrency` aceita o contexto `github`). Só a execução que representa
+# código novo cancela; o re-run, nunca.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.run_attempt == 1 }}
 
 jobs:
   # pt-BR: preflight detecta drift estrutural (cross-refs quebradas em
@@ -148,8 +198,15 @@ jobs:
   # pt-BR: smoke job que builda os Dockerfiles prod completos. Defesa em profundidade
   # contra bugs latentes tipo `COPY --from=builder <path>` relativo (que só aparece
   # quando o cache do build local difere do cache CI). Roda só em PR para não
-  # inflar push em feat/** (custo ~5min em cold cache).
+  # inflar todo push em ~5min de cold cache.
+  #
+  # `needs: preflight` + `if:` sem função de status ⇒ o GitHub aplica um
+  # `success()` implícito: quando o `preflight` reprova, este job é SKIPPED, e
+  # é isso que se quer — são ~5min de build numa run já condenada. O mesmo
+  # mecanismo que já vale para o `quality`. Está aqui escrito porque um `if:`
+  # sem função de status parece omission e é decisão.
   docker-build-prod:
+    needs: preflight
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 15

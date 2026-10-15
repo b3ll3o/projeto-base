@@ -247,7 +247,7 @@ function desembrulhar(token: string): string {
  * test:e2e` como despachante e pulava as duas conferências dele — que é
  * exatamente o defeito que este gate existe para pegar.
  */
-function implementaTask(pacote: WorkspacePackage, task: string): boolean {
+export function implementaTask(pacote: WorkspacePackage, task: string): boolean {
   const script = pacote.scripts[task];
   if (typeof script !== 'string' || script.trim() === '') return false;
   return !extractTurboRunTasks(script).includes(task);

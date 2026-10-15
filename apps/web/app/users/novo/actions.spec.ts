@@ -26,7 +26,7 @@ const INICIAL: CadastroUsuarioState = {
   ok: false,
   fieldErrors: {},
   formError: null,
-  valores: { nome: '', email: '' },
+  valores: { nome: '', email: '', senha: '' },
 };
 
 /** Resposta JSON com o envelope RFC 7807 que a API devolve. */
@@ -51,10 +51,19 @@ function okResponse(body: unknown = { id: 'u1' }) {
   return { status: 201, ok: true, json: async () => body };
 }
 
-function formData(nome: string, email: string): FormData {
+/**
+ * pt-BR: a senha tem PADRÃO, e não é por conveniência. Os testes deste
+ * arquivo verificam erros de EMAIL, de rede e de status — none deles é
+ * sobre senha. Sem o padrão, `formData('Maria', 'maria@empresa.com')`
+ * pararia na validação de senha vazia e o teste passaria pelo motivo
+ * errado: ele estaria medindo a senha, não o que diz medir, e continuaria
+ * verde mesmo com a lógica de email quebrada.
+ */
+function formData(nome: string, email: string, senha = 'senha1234'): FormData {
   const fd = new FormData();
   fd.set('nome', nome);
   fd.set('email', email);
+  fd.set('senha', senha);
   return fd;
 }
 
@@ -82,21 +91,29 @@ afterEach(() => {
 });
 
 describe('cadastrarUsuario — caminho feliz', () => {
-  it('cria o usuário e redireciona para a listagem', async () => {
+  it('cria o usuário e redireciona para o LOGIN — não para a listagem', async () => {
     responder(okResponse());
 
     // pt-BR: `redirect()` sinaliza a navegação LANÇANDO — é assim que o
     // Next marca o fluxo. O sentinela chegar ao chamador é parte do
     // contrato: se a Action engolisse essa exceção, a pessoa ficaria
     // olhando um formulário preenchido de um usuário que já existe.
+    //
+    // ⚠️ E o destino é o LOGIN, não `/users`. MEDIDO 2026-10-13: o cadastro
+    // é `@Public()` e NÃO emite sessão (`POST /users` devolve só o usuário,
+    // sem par de tokens), enquanto `/users` chama `exigirSessao()`, que sem
+    // cookie de access redireciona para `/login`. A redireção para `/users`
+    // era portanto um beco sem saída: a pessoa criava a conta, era jogada
+    // numa rota protegida, voltava ao login sem nenhuma mensagem — e teria
+    // de digitar a senha que acabara de escolher.
     await expect(
       cadastrarUsuario(INICIAL, formData('Maria Silva', 'maria@empresa.com')),
-    ).rejects.toThrow('NEXT_REDIRECT:/users');
+    ).rejects.toThrow('NEXT_REDIRECT:/login?cadastrado=1');
 
-    expect(vi.mocked(redirect)).toHaveBeenCalledWith('/users');
+    expect(vi.mocked(redirect)).toHaveBeenCalledWith('/login?cadastrado=1');
   });
 
-  it('envia só nome e email, já aparados, para POST /users', async () => {
+  it('envia nome e email aparados, e a senha CRUA, para POST /users', async () => {
     responder(okResponse());
 
     await expect(
@@ -109,7 +126,23 @@ describe('cadastrarUsuario — caminho feliz', () => {
     expect(JSON.parse(String(chamadas[0]?.init?.body))).toEqual({
       nome: 'Maria Silva',
       email: 'maria@empresa.com',
+      senha: 'senha1234',
     });
+  });
+
+  it('a senha NÃO é aparada no envio — espaço digitado é espaço usado', async () => {
+    // pt-BR: nome e email levam `.trim()` porque são identidades e
+    // normalização é inofensiva. Senha NÃO leva: aparar um segredo é
+    // mutá-lo em silêncio. Se este teste um dia cair, o sintoma em produção
+    // é uma senha que a pessoa digitou e que não abre a conta — sem erro
+    // em lugar nenhum.
+    responder(okResponse());
+
+    await expect(
+      cadastrarUsuario(INICIAL, formData('Maria Silva', 'maria@empresa.com', '  abcdefgh  ')),
+    ).rejects.toThrow();
+
+    expect(JSON.parse(String(chamadas[0]?.init?.body)).senha).toBe('  abcdefgh  ');
   });
 });
 
@@ -134,12 +167,52 @@ describe('cadastrarUsuario — validação no cliente da Action', () => {
     expect(r.fieldErrors.email).toContain('Exemplo: nome@empresa.com');
   });
 
-  it('preserva o que a pessoa digitou ao voltar o erro', async () => {
+  it('não chama a API quando a senha está vazia, e pede a senha', async () => {
+    responder(okResponse());
+
+    const r = await cadastrarUsuario(INICIAL, formData('Maria Silva', 'maria@empresa.com', ''));
+
+    expect(chamadas).toHaveLength(0);
+    expect(r.fieldErrors.senha).toBe('Informe a senha.');
+    // pt-BR: os outros campos estavam válidos de propósito. Com o
+    // formulário todo vazio os três seriam inválidos e o teste passaria
+    // pelo motivo errado — marcaria todos em vez de mostrar que sabe
+    // qual está errado.
+    expect(r.fieldErrors.email).toBeUndefined();
+  });
+
+  it('senha curta demais é rejeitada com a mensagem de comprimento', async () => {
+    responder(okResponse());
+
+    const r = await cadastrarUsuario(INICIAL, formData('Maria Silva', 'maria@empresa.com', 'abc'));
+
+    expect(chamadas).toHaveLength(0);
+    expect(r.fieldErrors.senha).toContain('pelo menos');
+  });
+
+  it('preserva nome e email digitados ao voltar o erro', async () => {
     responder(okResponse());
 
     const r = await cadastrarUsuario(INICIAL, formData('Maria Silva', 'nao-e-email'));
 
-    expect(r.valores).toEqual({ nome: 'Maria Silva', email: 'nao-e-email' });
+    expect(r.valores).toEqual({ nome: 'Maria Silva', email: 'nao-e-email', senha: '' });
+  });
+
+  it('NÃO devolve a senha digitada no estado (o estado volta ao browser)', async () => {
+    // pt-BR: `CadastroUsuarioState` é serializado e entregue ao Client
+    // Component — passa pela rede e é visível no DevTools. Com a senha
+    // dentro, um erro de validação deixaria o segredo num lugar que
+    // ninguém escolheu para guardá-lo. O preço é a pessoa redigitar a
+    // senha depois do erro; o benefício é o segredo não passear.
+    responder(problem(409, 'EMAIL_IN_USE', 'Email já em uso'));
+
+    const r = await cadastrarUsuario(
+      INICIAL,
+      formData('Maria Silva', 'maria@empresa.com', 'minhaSenhaSecreta'),
+    );
+
+    expect(r.valores.senha).toBe('');
+    expect(JSON.stringify(r)).not.toContain('minhaSenhaSecreta');
   });
 });
 
@@ -168,7 +241,7 @@ describe('cadastrarUsuario — erro 409 (email duplicado)', () => {
     // caminho feliz, que afirma o sentinela `NEXT_REDIRECT`.
     expect(r.ok).toBe(false);
     expect(r.fieldErrors.email).toBe('Este email já está cadastrado.');
-    expect(r.valores).toEqual({ nome: 'Maria Silva', email: 'maria@empresa.com' });
+    expect(r.valores).toEqual({ nome: 'Maria Silva', email: 'maria@empresa.com', senha: '' });
   });
 });
 
@@ -193,9 +266,14 @@ describe('cadastrarUsuario — erro 400 (validação do backend)', () => {
   });
 
   it('um erro de campo que o formulário não tem vira erro de formulário, não some', async () => {
+    // pt-BR: o campo de exemplo mudou de `senha` para `apelido` quando a
+    // senha entrou no formulário. `senha` deixou de ser um campo
+    // desconhecido — usá-lo aqui faria o teste passar pelo motivo errado:
+    // ele mediria "o formulário conhece senha" e não "campo órfão não
+    // some". O nome abaixo é o que realmente não existe no formulário.
     responder(
       problem(400, 'VALIDATION_ERROR', 'Erro de validação', [
-        { field: 'senha', message: 'Senha obrigatória', code: 'required' },
+        { field: 'apelido', message: 'Apelido não permitido', code: 'unknown' },
       ]),
     );
 
@@ -204,8 +282,24 @@ describe('cadastrarUsuario — erro 400 (validação do backend)', () => {
     // pt-BR: o tipo de `fieldErrors` só conhece os campos do formulário —
     // é proposital. O teste olha por uma chave que NÃO existe no tipo, que
     // é exatamente o caso que precisa ser provado.
-    expect(Object.keys(r.fieldErrors)).not.toContain('senha');
-    expect(r.formError).toContain('Senha obrigatória');
+    expect(Object.keys(r.fieldErrors)).not.toContain('apelido');
+    expect(r.formError).toContain('Apelido não permitido');
+  });
+
+  it('um erro de senha da API vai PARA O CAMPO senha, não para o topo', async () => {
+    // Contrapartida do teste acima: agora que `senha` É campo do
+    // formulário, um erro de senha tem endereço próprio e não deve
+    // poluir o topo — a pessoa precisa ver qual campo corrigir.
+    responder(
+      problem(400, 'VALIDATION_ERROR', 'Erro de validação', [
+        { field: 'senha', message: 'Senha muito fraca', code: 'too_weak' },
+      ]),
+    );
+
+    const r = await cadastrarUsuario(INICIAL, formData('Maria Silva', 'maria@empresa.com'));
+
+    expect(r.fieldErrors.senha).toBe('Senha muito fraca');
+    expect(r.formError).toBeNull();
   });
 });
 

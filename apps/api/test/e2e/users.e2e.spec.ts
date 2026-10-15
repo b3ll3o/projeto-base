@@ -5,8 +5,9 @@
 // Stack:
 //  - NestJS 11 + FastifyAdapter (mesmo adapter de produção)
 //  - Testcontainers (postgres:16-alpine) — PrismaClient REAL, sem mocks
-//  - GlobalExceptionFilter + ZodValidationPipe(z.any()) replicando
-//    main.ts:19-23, então os erros chegam no formato RFC 7807 Problem Details
+//  - GlobalExceptionFilter + ZodValidationPipe(z.any()) replicando o
+//    wiring de main.ts, então os erros chegam no formato RFC 7807 Problem
+//    Details
 //
 // pt-BR:
 //  - Estes testes SOBEM o AppModule inteiro (controllers, PrismaModule,
@@ -20,55 +21,55 @@
 //    `**/test/e2e/**` para garantir.
 //  - TDD: este arquivo foi escrito ANTES da configuração do projeto
 //    `e2e` em vitest.workspace.ts (ver Task 7.7 do plano).
+//
+// ⚠️ Este arquivo USAVA um bootstrap próprio, cópia do que hoje é
+// `bootstrapE2E`. A duplicação custou caro quando `UserOwnershipGuard`
+// entrou: a cópia sobrescrevia `authorization` com o token da sessão, então
+// cada rota por-id respondia 403 e a correção precisava ser aplicada duas
+// vezes — uma no helper compartilhado, outra aqui. MEDIDO 2026-10-13: 6
+// testes deste arquivo caíam por isso. Agora este arquivo usa o harness de
+// `test-app.helper.ts`, e a paridade de wiring que o cabeçalho do helper
+// promete é garantida por construção (é o MESMO código), não por cópia.
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { Test } from '@nestjs/testing';
-import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
-import { z } from 'zod';
-import { setupTestDatabase, cleanDatabase, type TestContext } from '../testcontainers-helper.js';
-import { AppModule } from '../../src/app.module.js';
-import { GlobalExceptionFilter } from '../../src/shared/infrastructure/http/global-exception.filter.js';
-import { ZodValidationPipe } from '../../src/shared/infrastructure/http/zod-validation.pipe.js';
+import {
+  bootstrapE2E,
+  teardownE2E,
+  cleanE2EDatabase,
+  criarUsuarioAutenticado,
+  type E2EContext,
+  SENHA_DE_TESTE,
+} from './test-app.helper.js';
 
-describe('Users E2E (Supertest + Testcontainers)', () => {
-  let app: NestFastifyApplication;
-  let ctx: TestContext;
+describe('Users E2E (Fastify inject + Testcontainers)', () => {
+  let e2e: E2EContext;
 
   beforeAll(async () => {
-    // pt-BR: container Postgres compartilhado via singleFork.
-    // setupTestDatabase aplica migrations Prisma via `prisma migrate deploy`
-    // e injeta DATABASE_URL no process.env (PrismaService pega de lá).
-    ctx = await setupTestDatabase();
-
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-    app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
-
-    // pt-BR: replica o wiring de main.ts:19-23.
-    app.setGlobalPrefix('api/v1');
-    app.useGlobalFilters(new GlobalExceptionFilter());
-    app.useGlobalPipes(new ZodValidationPipe(z.any()));
-
-    await app.init();
+    // `bootstrapE2E` sobe o container Postgres compartilhado (singleFork),
+    // compila o AppModule, aplica o mesmo wiring de main.ts (prefixo
+    // 'api/v1' + GlobalExceptionFilter + ZodValidationPipe) e emite um par
+    // de tokens REAL por login real.
+    e2e = await bootstrapE2E();
   });
 
   afterAll(async () => {
-    await app.close();
-    await ctx.stop();
+    await teardownE2E(e2e);
   });
 
   beforeEach(async () => {
-    await cleanDatabase(ctx.prisma);
+    // Trunca as três tabelas E restaura a conta de sessão: sem recriá-la, o
+    // próximo login com aquele e-mail daria 401 (`findByEmail` filtra
+    // soft-deleted) e a suíte inteira cairia por um motivo que não é dela.
+    await cleanE2EDatabase(e2e);
   });
 
   // ───────────────────────── POST /users ─────────────────────────
 
   it('POST /api/v1/users cria usuário e retorna ETag W/"v1"', async () => {
-    const res = await app.inject({
+    const res = await e2e.injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome: 'Alice', email: 'a@b.com' },
+      payload: { nome: 'Alice', email: 'a@b.com', senha: SENHA_DE_TESTE },
     });
 
     expect(res.statusCode).toBe(201);
@@ -81,17 +82,17 @@ describe('Users E2E (Supertest + Testcontainers)', () => {
   });
 
   it('POST /api/v1/users duplicado (case-insensitive) -> 409 EMAIL_IN_USE', async () => {
-    const first = await app.inject({
+    const first = await e2e.injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome: 'Alice', email: 'a@b.com' },
+      payload: { nome: 'Alice', email: 'a@b.com', senha: SENHA_DE_TESTE },
     });
     expect(first.statusCode).toBe(201);
 
-    const second = await app.inject({
+    const second = await e2e.injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome: 'Alice 2', email: 'A@B.COM' },
+      payload: { nome: 'Alice 2', email: 'A@B.COM', senha: SENHA_DE_TESTE },
     });
 
     expect(second.statusCode).toBe(409);
@@ -101,10 +102,10 @@ describe('Users E2E (Supertest + Testcontainers)', () => {
 
   it('POST /api/v1/users com payload inválido -> 400 VALIDATION_ERROR', async () => {
     // pt-BR: email vazio viola `z.string().email()`.
-    const res = await app.inject({
+    const res = await e2e.injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome: 'Alice', email: '' },
+      payload: { nome: 'Alice', email: '', senha: SENHA_DE_TESTE },
     });
 
     expect(res.statusCode).toBe(400);
@@ -117,15 +118,15 @@ describe('Users E2E (Supertest + Testcontainers)', () => {
 
   it('GET /api/v1/users lista paginado (limit=2 retorna 2 itens + nextCursor)', async () => {
     for (let i = 0; i < 3; i++) {
-      const r = await app.inject({
+      const r = await e2e.injetar({
         method: 'POST',
         url: '/api/v1/users',
-        payload: { nome: `User ${i}`, email: `u${i}@b.com` },
+        payload: { nome: `User ${i}`, email: `u${i}@b.com`, senha: SENHA_DE_TESTE },
       });
       expect(r.statusCode).toBe(201);
     }
 
-    const res = await app.inject({
+    const res = await e2e.injetar({
       method: 'GET',
       url: '/api/v1/users?limit=2',
     });
@@ -137,18 +138,31 @@ describe('Users E2E (Supertest + Testcontainers)', () => {
   });
 
   // ───────────────────────── PATCH /users/:id ───────────────────
+  //
+  // ⚠️ Daqui para baixo toda rota é por-id, e por-id significa "o token
+  // precisa ser do DONO do registro" (`UserOwnershipGuard`). O token padrão
+  // do `injetar` é da conta de sessão e2e, que é de outra pessoa — daí
+  // `dona.headers` em todas elas.
+  //
+  // ⚠️ Cada `it()` cria a DONA com um e-mail diferente, e antes usavam todos
+  // `a@b.com`. Não é preciosismo: `POST /auth/login` tem limite de 5/min POR
+  // CONTA (chave `ip:email`), e seis logins da mesma chave num app só é
+  // exatamente o padrão que o limite existe para cortar — o 6º recebia 429 e o
+  // teste caía por um motivo que nada tinha a ver com histórico de versões.
+  // São seis contas diferentes (o banco é limpo entre testes) que por
+  // coincidência compartilhavam um e-mail; devolver a cada uma o seu nome
+  // traduz o que o spec realmente usa: uma dona por teste.
 
   it('PATCH /api/v1/users/:id sem If-Match -> 400 IF_MATCH_REQUIRED', async () => {
-    const c = await app.inject({
-      method: 'POST',
-      url: '/api/v1/users',
-      payload: { nome: 'Alice', email: 'a@b.com' },
+    const dona = await criarUsuarioAutenticado(e2e, {
+      nome: 'Alice',
+      email: 'alice-sem-if-match@b.com',
     });
-    const id = (JSON.parse(c.body) as { id: string }).id;
 
-    const res = await app.inject({
+    const res = await e2e.injetar({
       method: 'PATCH',
-      url: `/api/v1/users/${id}`,
+      url: `/api/v1/users/${dona.id}`,
+      headers: dona.headers,
       payload: { novoNome: 'Alice 2' },
     });
 
@@ -158,17 +172,15 @@ describe('Users E2E (Supertest + Testcontainers)', () => {
   });
 
   it('PATCH /api/v1/users/:id com If-Match correto atualiza e bump version', async () => {
-    const c = await app.inject({
-      method: 'POST',
-      url: '/api/v1/users',
-      payload: { nome: 'Alice', email: 'a@b.com' },
+    const dona = await criarUsuarioAutenticado(e2e, {
+      nome: 'Alice',
+      email: 'alice-if-match-certo@b.com',
     });
-    const id = (JSON.parse(c.body) as { id: string }).id;
 
-    const res = await app.inject({
+    const res = await e2e.injetar({
       method: 'PATCH',
-      url: `/api/v1/users/${id}`,
-      headers: { 'if-match': 'W/"v1"' },
+      url: `/api/v1/users/${dona.id}`,
+      headers: { ...dona.headers, 'if-match': 'W/"v1"' },
       payload: { novoNome: 'Alice 2' },
     });
 
@@ -180,17 +192,15 @@ describe('Users E2E (Supertest + Testcontainers)', () => {
   });
 
   it('PATCH /api/v1/users/:id com If-Match errado -> 412 CONCURRENCY_CONFLICT', async () => {
-    const c = await app.inject({
-      method: 'POST',
-      url: '/api/v1/users',
-      payload: { nome: 'Alice', email: 'a@b.com' },
+    const dona = await criarUsuarioAutenticado(e2e, {
+      nome: 'Alice',
+      email: 'alice-if-match-errado@b.com',
     });
-    const id = (JSON.parse(c.body) as { id: string }).id;
 
-    const res = await app.inject({
+    const res = await e2e.injetar({
       method: 'PATCH',
-      url: `/api/v1/users/${id}`,
-      headers: { 'if-match': 'W/"v999"' },
+      url: `/api/v1/users/${dona.id}`,
+      headers: { ...dona.headers, 'if-match': 'W/"v999"' },
       payload: { novoNome: 'Alice 2' },
     });
 
@@ -202,47 +212,47 @@ describe('Users E2E (Supertest + Testcontainers)', () => {
   // ───────────────────────── DELETE /users/:id ──────────────────
 
   it('DELETE /api/v1/users/:id soft-deleta; GET subsequente -> 404', async () => {
-    const c = await app.inject({
-      method: 'POST',
-      url: '/api/v1/users',
-      payload: { nome: 'Alice', email: 'a@b.com' },
+    const dona = await criarUsuarioAutenticado(e2e, {
+      nome: 'Alice',
+      email: 'alice-soft-delete@b.com',
     });
-    const id = (JSON.parse(c.body) as { id: string }).id;
 
-    const d = await app.inject({
+    const d = await e2e.injetar({
       method: 'DELETE',
-      url: `/api/v1/users/${id}`,
-      headers: { 'if-match': 'W/"v1"' },
+      url: `/api/v1/users/${dona.id}`,
+      headers: { ...dona.headers, 'if-match': 'W/"v1"' },
     });
     expect(d.statusCode).toBe(204);
 
-    const g = await app.inject({ method: 'GET', url: `/api/v1/users/${id}` });
+    const g = await e2e.injetar({
+      method: 'GET',
+      url: `/api/v1/users/${dona.id}`,
+      headers: dona.headers,
+    });
     expect(g.statusCode).toBe(404);
   });
 
   // ───────────────────────── POST /users/:id/restore ────────────
 
   it('POST /api/v1/users/:id/restore ressuscita soft-deleted; version incrementa para 3', async () => {
-    const c = await app.inject({
-      method: 'POST',
-      url: '/api/v1/users',
-      payload: { nome: 'Alice', email: 'a@b.com' },
+    const dona = await criarUsuarioAutenticado(e2e, {
+      nome: 'Alice',
+      email: 'alice-restore@b.com',
     });
-    const id = (JSON.parse(c.body) as { id: string }).id;
 
     // v1 -> soft-delete -> v2
-    const d = await app.inject({
+    const d = await e2e.injetar({
       method: 'DELETE',
-      url: `/api/v1/users/${id}`,
-      headers: { 'if-match': 'W/"v1"' },
+      url: `/api/v1/users/${dona.id}`,
+      headers: { ...dona.headers, 'if-match': 'W/"v1"' },
     });
     expect(d.statusCode).toBe(204);
 
     // restore usando If-Match v2 -> v3
-    const r = await app.inject({
+    const r = await e2e.injetar({
       method: 'POST',
-      url: `/api/v1/users/${id}/restore`,
-      headers: { 'if-match': 'W/"v2"' },
+      url: `/api/v1/users/${dona.id}/restore`,
+      headers: { ...dona.headers, 'if-match': 'W/"v2"' },
     });
     expect(r.statusCode).toBe(201);
     const body = JSON.parse(r.body) as { version: number; isDeleted: boolean };
@@ -253,22 +263,24 @@ describe('Users E2E (Supertest + Testcontainers)', () => {
   // ───────────────────────── GET /users/:id/history ─────────────
 
   it('GET /api/v1/users/:id/history retorna versões (INSERT + UPDATE >= 2)', async () => {
-    const c = await app.inject({
-      method: 'POST',
-      url: '/api/v1/users',
-      payload: { nome: 'Alice', email: 'a@b.com' },
+    const dona = await criarUsuarioAutenticado(e2e, {
+      nome: 'Alice',
+      email: 'alice-history@b.com',
     });
-    const id = (JSON.parse(c.body) as { id: string }).id;
 
-    const p = await app.inject({
+    const p = await e2e.injetar({
       method: 'PATCH',
-      url: `/api/v1/users/${id}`,
-      headers: { 'if-match': 'W/"v1"' },
+      url: `/api/v1/users/${dona.id}`,
+      headers: { ...dona.headers, 'if-match': 'W/"v1"' },
       payload: { novoNome: 'Alice 2' },
     });
     expect(p.statusCode).toBe(200);
 
-    const res = await app.inject({ method: 'GET', url: `/api/v1/users/${id}/history` });
+    const res = await e2e.injetar({
+      method: 'GET',
+      url: `/api/v1/users/${dona.id}/history`,
+      headers: dona.headers,
+    });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as { entries: unknown[]; nextCursor: string | null };
     expect(body.entries.length).toBeGreaterThanOrEqual(2);

@@ -20,12 +20,14 @@ import { checkArchiveIntegrity } from './check-archive-integrity';
 import { checkAgentMemoryDrift } from './check-agent-memory-drift';
 import { checkToolingTypecheck } from './check-tooling-typecheck';
 import { checkMemoryDirConcordance } from './check-memory-dir-concordance';
+import { checkMemoryCrystallization } from './check-memory-crystallization';
 import { checkTeethRegistry } from './check-teeth-registry';
 import { checkSelfFiringGuards } from './check-self-firing-guard';
 import { checkHarnessOwner } from './check-harness-owner';
 import { checkBranchUpToDate } from './check-branch-up-to-date';
 import { checkE2eFlowCoverage } from './check-e2e-flow-coverage';
 import { checkCiLocalE2e } from './check-ci-local-e2e';
+import { checkCiLocalScope } from './check-ci-local-scope';
 import { existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
@@ -308,6 +310,7 @@ export const RUNNERS: Record<string, () => CheckResult | Promise<CheckResult>> =
   'lint-review-routing': () => checkReviewRoutingLint(),
   'check-archive-integrity': () => checkArchiveIntegrity('.'),
   'check-memory-dir-concordance': () => checkMemoryDirConcordance({ repoRoot: '.' }),
+  'check-memory-crystallization': () => checkMemoryCrystallization({ repoRoot: '.' }),
   'check-agent-memory-drift': () => checkAgentMemoryDrift('.'),
   'check-tooling-typecheck': () => checkToolingTypecheck({ repoRoot: '.' }),
   'check-teeth-registry': () => checkTeethRegistry(),
@@ -317,6 +320,7 @@ export const RUNNERS: Record<string, () => CheckResult | Promise<CheckResult>> =
   'check-branch-up-to-date': () => checkBranchUpToDate(),
   'check-e2e-flow-coverage': () => checkE2eFlowCoverage({ repoRoot: '.' }),
   'check-ci-local-e2e': () => checkCiLocalE2e({ repoRoot: '.' }),
+  'check-ci-local-scope': () => checkCiLocalScope({ repoRoot: '.' }),
 };
 
 /**

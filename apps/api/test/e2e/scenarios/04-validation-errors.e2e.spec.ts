@@ -15,7 +15,9 @@ import {
   bootstrapE2E,
   teardownE2E,
   cleanE2EDatabase,
+  criarUsuarioAutenticado,
   type E2EContext,
+  SENHA_DE_TESTE,
 } from '../test-app.helper.js';
 
 describe('E2E 04: Validation errors (Zod) + RFC 7807 Problem Details', () => {
@@ -30,12 +32,12 @@ describe('E2E 04: Validation errors (Zod) + RFC 7807 Problem Details', () => {
   });
 
   beforeEach(async () => {
-    await cleanE2EDatabase(e2e.ctx);
+    await cleanE2EDatabase(e2e);
   });
 
   it('POST sem email -> 400 VALIDATION_ERROR com errors[] + RFC 7807 props', async () => {
-    const { app } = e2e;
-    const res = await app.inject({
+    const { injetar } = e2e;
+    const res = await injetar({
       method: 'POST',
       url: '/api/v1/users',
       payload: { nome: 'Ana' },
@@ -56,8 +58,8 @@ describe('E2E 04: Validation errors (Zod) + RFC 7807 Problem Details', () => {
   });
 
   it('GET id inválido (não-UUID) -> 400 VALIDATION_ERROR', async () => {
-    const { app } = e2e;
-    const res = await app.inject({ method: 'GET', url: '/api/v1/users/not-a-uuid' });
+    const { injetar } = e2e;
+    const res = await injetar({ method: 'GET', url: '/api/v1/users/not-a-uuid' });
     // MEDIDO 2026-10-08: a afirmação era `expect([400, 500]).toContain(...)`.
     // Aceitar os dois é a forma de um teste dizer que o defeito faz
     // parte do contrato — e o defeito era real: `UserId.create` lançava
@@ -68,11 +70,11 @@ describe('E2E 04: Validation errors (Zod) + RFC 7807 Problem Details', () => {
   });
 
   it('POST com email em formato inválido -> 400 VALIDATION_ERROR', async () => {
-    const { app } = e2e;
-    const res = await app.inject({
+    const { injetar } = e2e;
+    const res = await injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome: 'Ana', email: 'not-an-email' },
+      payload: { nome: 'Ana', email: 'not-an-email', senha: SENHA_DE_TESTE },
     });
     expect(res.statusCode).toBe(400);
     const body = JSON.parse(res.body) as { code: string; errors?: { field: string }[] };
@@ -84,16 +86,16 @@ describe('E2E 04: Validation errors (Zod) + RFC 7807 Problem Details', () => {
   });
 
   it('POST com email duplicado (case-insensitive) -> 409 EMAIL_IN_USE', async () => {
-    const { app } = e2e;
-    await app.inject({
+    const { injetar } = e2e;
+    await injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome: 'Alice', email: 'dup@b.com' },
+      payload: { nome: 'Alice', email: 'dup@b.com', senha: SENHA_DE_TESTE },
     });
-    const res = await app.inject({
+    const res = await injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome: 'Bob', email: 'DUP@B.COM' },
+      payload: { nome: 'Bob', email: 'DUP@B.COM', senha: SENHA_DE_TESTE },
     });
     expect(res.statusCode).toBe(409);
     const body = JSON.parse(res.body) as { code: string };
@@ -101,12 +103,9 @@ describe('E2E 04: Validation errors (Zod) + RFC 7807 Problem Details', () => {
   });
 
   it('PATCH com payload vazio -> 400 VALIDATION_ERROR', async () => {
-    const { app } = e2e;
-    const c = await app.inject({
-      method: 'POST',
-      url: '/api/v1/users',
-      payload: { nome: 'Ana', email: 'a@b.com' },
-    });
+    const { injetar } = e2e;
+    const dona = await criarUsuarioAutenticado(e2e, { nome: 'Ana', email: 'a@b.com' });
+    const c = dona.cadastro;
     // MEDIDO 2026-10-08: sem esta asserção o teste passava pelo motivo
     // errado. Com `nome: 'A'` o POST devolvia **500** (o VO recusa 1 char
     // e o Zod aceita), `id` vinha `undefined`, e o PATCH batia em
@@ -115,13 +114,13 @@ describe('E2E 04: Validation errors (Zod) + RFC 7807 Problem Details', () => {
     // A asserção abaixo é o que impede a regressão de voltar a ser verde
     // sem estar medindo nada.
     expect(c.statusCode).toBe(201);
-    const userId = (JSON.parse(c.body) as { id: string }).id;
+    const userId = dona.id;
     expect(typeof userId).toBe('string');
 
-    const res = await app.inject({
+    const res = await injetar({
       method: 'PATCH',
       url: `/api/v1/users/${userId}`,
-      headers: { 'if-match': 'W/"v1"' },
+      headers: { ...dona.headers, 'if-match': 'W/"v1"' },
       payload: {},
     });
     expect(res.statusCode).toBe(400);
@@ -146,11 +145,11 @@ describe('E2E 04: Validation errors (Zod) + RFC 7807 Problem Details', () => {
     { rotulo: '101 chars (acima do VO)', nome: 'A'.repeat(101) },
     { rotulo: '120 chars (acima do VO)', nome: 'A'.repeat(120) },
   ])('POST com nome $rotulo -> 400 VALIDATION_ERROR, não 500', async ({ nome }) => {
-    const { app } = e2e;
-    const res = await app.inject({
+    const { injetar } = e2e;
+    const res = await injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome, email: 'valido@exemplo.com' },
+      payload: { nome, email: 'valido@exemplo.com', senha: SENHA_DE_TESTE },
     });
     expect(res.statusCode).toBe(400);
     const body = JSON.parse(res.body) as { code: string; detail: string };
@@ -176,11 +175,11 @@ describe('E2E 04: Validation errors (Zod) + RFC 7807 Problem Details', () => {
     { rotulo: 'muitos espaços', nome: '   A   ' },
     { rotulo: 'tab nas pontas', nome: '\tA\t' },
   ])('POST com nome "$rotulo" -> 400, não 500 (assimetria de trim)', async ({ nome }) => {
-    const { app } = e2e;
-    const res = await app.inject({
+    const { injetar } = e2e;
+    const res = await injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome, email: 'valido@exemplo.com' },
+      payload: { nome, email: 'valido@exemplo.com', senha: SENHA_DE_TESTE },
     });
     expect(res.statusCode).toBe(400);
     const body = JSON.parse(res.body) as {
@@ -208,15 +207,15 @@ describe('E2E 04: Validation errors (Zod) + RFC 7807 Problem Details', () => {
   // diferente do que o spec de paridade mede — mas afirmar que protege
   // o limite seria uma afirmação que a medição desmente.
   it('POST com email de 255 chars -> 400 VALIDATION_ERROR, não 500', async () => {
-    const { app } = e2e;
+    const { injetar } = e2e;
     // Mesma classe do nome: o Zod aceita `.max(255)` e o `Email` VO recusa
     // `> 254`. MEDIDO 2026-10-08: 255 -> 500 INTERNAL com
     // `detail="Email: tamanho inválido (max 254)"`.
     const local = 'a'.repeat(255 - '@exemplo.com'.length);
-    const res = await app.inject({
+    const res = await injetar({
       method: 'POST',
       url: '/api/v1/users',
-      payload: { nome: 'Ana', email: `${local}@exemplo.com` },
+      payload: { nome: 'Ana', email: `${local}@exemplo.com`, senha: SENHA_DE_TESTE },
     });
     expect(res.statusCode).toBe(400);
     const body = JSON.parse(res.body) as { code: string; detail: string };

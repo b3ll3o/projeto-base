@@ -117,6 +117,24 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     id: 'check-memory-dir-concordance',
   },
   {
+    // Fecha o laço DURANTE → DEPOIS. MEDIDO 2026-10-14: o harness já grava
+    // memória estruturada durante a tarefa (`originSessionId` em 114 de 117
+    // arquivos, MEDIDO 2026-10-15 — o número envelhece a cada memória nova,
+    // então quem precisar do valor rode o comando do
+    // `check-memory-crystallization.ts`), mas nenhuma delas tem destinação — a
+    // regra foi absorvida pela
+    // convenção sem que a procedência sobrevivesse. Este gate lê o ledger nas
+    // DUAS direções: memória sem linha, e linha sem memória.
+    //
+    // **Camada 1 local, por construção.** O corpus vive em `$HOME`, que o
+    // runner do CI não tem — lá ele reporta `skipped` com motivo, nunca verde.
+    // Declarar isso aqui é o que impede a camada 2 de publicar uma regra sobre
+    // um controle que não roda nela.
+    name: 'Cristalização memória → repo (camada 1 local)',
+    file: '.tooling/scripts/ci/check-memory-crystallization.ts',
+    id: 'check-memory-crystallization',
+  },
+  {
     // Issue #47. Fecha a classe 1 que a própria tabela de guard nomeia:
     // `evolucao-agents.md` obriga a atualizar "o agent E sua memória" após
     // mudança de comportamento, e nenhum gate media o par. O caso medido foi
@@ -217,6 +235,19 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     name: 'ci:local roda as suítes e2e (regra da Camada 1)',
     file: '.tooling/scripts/ci/check-ci-local-e2e.ts',
     id: 'check-ci-local-e2e',
+  },
+  {
+    // Complemento do gate acima, na direção que ele não cobre: `check-ci-local-e2e`
+    // afirma que a TASK e2e roda; este afirma que o ESCOPO cobre o workspace.
+    // MEDIDO 2026-10-13, `ci:local` filtrava só `@projeto/api` e `@projeto/web`,
+    // e `@projeto/shared-types` (que declara `typecheck: tsc --noEmit`) ficava
+    // de fora — `turbo ... --dry=json` listava 12 tasks reais sem ele, enquanto
+    // `pnpm typecheck` (sem filtro) roda. `check-package-json-drift` não via:
+    // ele pergunta se a task pedida tem implementador alcançável, nunca se falta
+    // um pacote que devia ter sido pedido.
+    name: 'escopo do ci:local cobre o workspace (classe G-009)',
+    file: '.tooling/scripts/ci/check-ci-local-scope.ts',
+    id: 'check-ci-local-scope',
   },
 ];
 

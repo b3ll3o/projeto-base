@@ -17,8 +17,8 @@ lê — a task 2.2 do plano `guard-classes` fecha isso. **Regra: criar uma conve
 (`description` começando por "Apêndice histórico", com `Apenas leitura`) **não**
 entram no índice — existem para preservar o histórico de gaps resolvidos sem
 estourar o limite de 300 linhas do spec canônico, e são alcançáveis por link de
-seu próprio pai. MEDIDO 2026-10-08: `ls .agents/specs/conventions/*.md` → **23**
-arquivos, **21** no índice, e os **2** de fora são
+seu próprio pai. MEDIDO 2026-10-15: `ls .agents/specs/conventions/*.md` → **25**
+arquivos, **22** no índice (o 25º é este README), e os **2** de fora são
 `review-routing-gaps-historical.md` e `specialist-routing-gaps-v1.0.md`. Sem essa
 cláusula, um `comm -23 <(ls disco) <(índices)` acusaria 2 convenções órfãs que
 são, por desenho, apêndices.
@@ -36,7 +36,7 @@ são, por desenho, apêndices.
 | Release Automático (Post-Merge) | [`post-merge-release.md`](./post-merge-release.md) | Auto-tagging `vX.Y.Z` via `.github/workflows/release-template.yml` após bump em main |
 | CI Defense in Depth | [`ci-defense-in-depth.md`](./ci-defense-in-depth.md) | 3 camadas: pre-push local + preflight CI + quality CI gated |
 | CI Defense in Depth — pendências | [`ci-defense-in-depth-pendencias.md`](./ci-defense-in-depth-pendencias.md) | Pendências abertas dos gates (companion; cresce sem caber no documento da convenção) |
-| Retrospective Capture | [`retrospective-capture.md`](./retrospective-capture.md) | Captura estruturada de aprendizados pós-atividade (T1/T2/T3 + threshold confidence ≥ 70) |
+| Retrospective Capture | [`retrospective-capture.md`](./retrospective-capture.md) | Captura estruturada de aprendizados pós-atividade (T1/T2/T3 + threshold confidence ≥ 70). Camada **DURANTE** = [`learning-observation`](../../skills/learning-observation/SKILL.md); uma linha por memória no ledger [`memory-triage.md`](../../runs/memory-triage.md), lido pelo gate `check-memory-crystallization` nas duas direções |
 | State-Aware Planning (v1.8.0+) | [`state-aware-planning.md`](./state-aware-planning.md) | Camada 0 do pre-planner — `state-snapshot-<ts>.md` antes de planejar; alimenta `specialist-router` camada 1 |
 | Evals (v1.9.0+) | [`evals.md`](./evals.md) | 7 tipos de eval; `specs/<feature>/evals/*.evals.yaml`; gate rules por severidade |
 | Engineering Loop (v1.9.0+) | [`engineering-loop.md`](./engineering-loop.md) | Ciclo UNDERSTAND → IMPLEMENT → TEST → REVIEW → OBSERVE → LEARN; fecha via workflow `feedback-to-spec` |

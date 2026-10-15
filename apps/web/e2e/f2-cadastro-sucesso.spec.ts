@@ -1,6 +1,15 @@
 // FLUXO: F2 — Cadastro de usuário com sucesso
-// Cobre: o envio cria o usuário no backend, redireciona para a listagem, e o
-//        usuário criado aparece lá.
+// Cobre: o envio cria o usuário no backend, devolve a pessoa ao LOGIN com a
+//        confirmação do cadastro, e o usuário criado aparece na listagem.
+//
+// ⚠️ O destino do redirecionamento mudou em 2026-10-13, e este arquivo mudou
+// junto — o registro importa porque a versão anterior deste spec afirmava
+// `/users` e ficou **vermelha** quando o produto passou a mandar para `/login`.
+// O motivo está em `actions.ts:136`: `POST /users` é `@Public()` e NÃO assina
+// token, então quem acabou de se cadastrar não tem cookie nenhum; mandar para
+// `/users` aciona `exigirSessao()` e devolve para `/login` — beco sem saída de
+// dois saltos, com a pessoa que acabou de ESCOLHER a senha obrigada a digitá-la
+// de novo sem aviso de por quê.
 //
 // pt-BR: este arquivo e o `f3-cadastro-validacao.spec.ts` são um PAR, e vale
 // explicar por quê antes de ler qualquer um dos dois.
@@ -15,23 +24,53 @@
 // segura; F2 vermelho com o redirecionamento quebrado significaria que a
 // tela mente. Nenhum dos dois é redundante.
 
-import { expect, botaoEnviar, itensDaLista, test } from './support/fixtures';
-import { emailUnico } from './support/dados';
+import { expect, botaoEnviar, itensDaLista, test, type FixturesE2E } from './support/fixtures';
+import { SENHA_DE_TESTE, emailUnico } from './support/dados';
+
+/**
+ * Leva o browser à listagem, para conferir o que o cadastro gravou.
+ *
+ * ⚠️ A versão anterior deste arquivo **digitava e-mail e senha** para chegar
+ * aqui. Isso está errado por dois motivos, e o segundo é o que a torna uma
+ * armadilha de diagnóstico:
+ *
+ * 1. `comSessao` é `{ auto: true }` (fixtures.ts:178) — o browser JÁ entra
+ *    com access token em TODO spec. Uma segunda sessão não compra cobertura:
+ *    o login pela tela é o F7, que mede senha errada, e-mail inexistente e a
+ *    mensagem anti-enumeração.
+ * 2. Tornar o formulário de login pré-requisito deste arquivo acopla F2 ao
+ *    formulário: um defeito no `LoginForm` derrubaria a listagem, a
+ *    validação e a navegação. É a razão explícita da decisão em
+ *    `e2e-playwright.md:73` — e eu ia refazê-la sem saber que existia.
+ *
+ * O que essa navegação NÃO prova, e fica escrito para não ser lido como se
+ * provasse: que a senha escolhida no cadastro autentica. Essa afirmação é
+ * medida em `apps/api/test/e2e/scenarios/07-auth-refresh.e2e.spec.ts`, no
+ * teste de CONTROLE (`POST /users` e logo em seguida `POST /auth/login` com
+ * a mesma senha) — na camada onde ela é real, que é a API.
+ *
+ * O tipo do parâmetro é o declarado pela fixture (`FixturesE2E['irPara']`) em
+ * vez de redigitado: é a lição de `Ttl` em `jwt-token.service.ts`, um tipo
+ * local mais largo compila e só o `tsc --noEmit` reclama.
+ */
+async function abrirAListagem(irPara: FixturesE2E['irPara']) {
+  await irPara('/users');
+}
 
 test.describe('F2 — Cadastro com sucesso', () => {
-  test('cria o usuário, redireciona para a listagem e mostra o que foi criado', async ({
+  test('cria o usuário, confirma no login e mostra o que foi criado', async ({
     page,
     irPara,
     contarUsuarios,
   }) => {
     expect(await contarUsuarios(), 'a listagem deve começar vazia').toBe(0);
 
-    // pt-BR: email por execução. `limparBase()` faz soft-delete e o
-    // `email @unique` da linha apagada continua tomado — com literal, o
-    // `--repeat-each 2` reprovava e o sintoma era "a tela não cadastrou".
+    // pt-BR: email por execução. Quem a spec apaga fica com o `email @unique`
+    // tomado na linha soft-deleted — com literal, o `--repeat-each 2`
+    // reprovava e o sintoma era "a tela não cadastrou".
     // Ver `emailUnico`.
     //
-    // O código de resposta dessa colisao mudou em 2026-10-08: era 412
+    // O código de resposta dessa colisão mudou em 2026-10-08: era 412
     // `CONCURRENCY_CONFLICT`, hoje é 409 `EMAIL_IN_USE` (o `catch` sem binding
     // do `PrismaUserRepository.save` convertia P2002 de email em conflito de
     // versão). A causa do reprovar — a linha apagada segurar o índice — é a
@@ -41,13 +80,25 @@ test.describe('F2 — Cadastro com sucesso', () => {
     await irPara('/users/novo');
     await page.getByLabel('Nome').fill('Carla E2E');
     await page.getByLabel('Email').fill(email);
+    await page.getByLabel('Senha').fill(SENHA_DE_TESTE);
     await botaoEnviar(page).click();
 
     // O redirecionamento é parte do fluxo, não um detalhe: `redirect()` está
     // FORA do try/catch da Server Action de propósito (NEXT_REDIRECT é uma
     // exceção), e um `try/catch` que a engolisse deixaria a pessoa parada no
     // formulário com o usuário já criado.
-    await expect(page).toHaveURL(/\/users$/);
+    await expect(page).toHaveURL(/\/login\?cadastrado=1$/);
+
+    // O `?cadastrado=1` só existe para isto: sem o aviso, o redirecionamento
+    // continua silencioso — mudou de duas telas sem contexto para uma. É
+    // `role="status"` e não `role="alert"` porque é confirmação, não erro
+    // (ver o comentário em `login-form.tsx`); um seletor de `alert` aqui
+    // passaria por acidente ao encontrar o `formError` do `LoginForm`.
+    await expect(page.getByRole('status')).toContainText(
+      'Cadastro feito. Agora entre com o e-mail e a senha que você acabou de escolher.',
+    );
+
+    await abrirAListagem(irPara);
 
     // pt-BR (MEDIDO): o nome na listagem é um `<div>`, não um heading — ver o
     // mesmo registro em `f1-listagem.spec.ts`. Aqui o escopo é o item da
@@ -69,15 +120,20 @@ test.describe('F2 — Cadastro com sucesso', () => {
   }) => {
     // pt-BR: a API normaliza `trim().toLowerCase()` no email e colapsa
     // whitespace no nome. O que é digitado aqui discorda do que é gravado em
-    // três dimensões ao mesmo tempo — caixa,Espaço nas pontas e espaço no meio
+    // três dimensões ao mesmo tempo — caixa, espaço nas pontas e espaço no meio
     // — e é a versão GRAVADA que a listagem tem de mostrar.
     const email = emailUnico('diego');
     await irPara('/users/novo');
     await page.getByLabel('Nome').fill('  Diego   E2E  ');
     await page.getByLabel('Email').fill(`  ${email.toUpperCase()}  `);
+    await page.getByLabel('Senha').fill(SENHA_DE_TESTE);
     await botaoEnviar(page).click();
 
-    await expect(page).toHaveURL(/\/users$/);
+    // O cadastro normaliza o que foi digitado; a lista mostra o que foi
+    // GRAVADO. Por isso o `email` minúsculo é o que se procura abaixo, e é a
+    // normalização da API — não a do formulário — que está em jogo.
+    await expect(page).toHaveURL(/\/login\?cadastrado=1$/);
+    await abrirAListagem(irPara);
 
     // ⚠️ `exact: true` NÃO é picky-ness, é o que dá a esta asserção o poder de
     // falhar. Sem ele o `getByText` casa por SUBSTRING e sem distinção de

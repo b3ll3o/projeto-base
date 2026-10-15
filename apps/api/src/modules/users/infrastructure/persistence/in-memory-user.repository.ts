@@ -47,12 +47,19 @@ export class InMemoryUserRepository implements UserRepositoryPort {
    * Hidrata um snapshot defensivo a partir do User armazenado, para evitar
    * que mutações no agregado retornado pelo caller (renomear, alterarEmail,
    * marcarExcluido, ...) afetem diretamente o que está em byId.
+   *
+   * O `senhaHash` atravessa o VO, não a string: `source.senhaHash()` já é um
+   * `PasswordHash` e `restaurarDePersistencia` espera um. Copiar o VO é o
+   * que mantém a invariante "o agregado sempre tem um hash válido" também
+   * no repositório em memória — um `source.senhaHash().value` seguido de
+   * `PasswordHash.create(...)` revalidaria um valor que já passou pelo VO.
    */
   private clone(source: User): User {
     return User.restaurarDePersistencia({
       id: source.id().value,
       nome: source.nome().value,
       email: source.email().value,
+      senhaHash: source.senhaHash(),
       createdAt: source.createdAt(),
       updatedAt: source.updatedAt(),
       version: source.version(),
@@ -69,6 +76,7 @@ export class InMemoryUserRepository implements UserRepositoryPort {
       id: user.id().value,
       nome: user.nome().value,
       email: user.email().value,
+      senhaHash: user.senhaHash(),
       createdAt: user.createdAt(),
       updatedAt: user.updatedAt(),
       version: user.version(),

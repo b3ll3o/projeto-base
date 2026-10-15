@@ -41,10 +41,20 @@ export interface UserOutputDto {
   isDeleted: boolean;
 }
 
-/** Entrada para criação de usuário (POST /users). */
+/**
+ * Entrada para criação de usuário (POST /users).
+ *
+ * `senha` é a SENHA EM CLARO — é o único tipo deste arquivo que carrega um
+ * segredo. Ela NÃO volta: `UserOutputDto` (acima) não tem o campo, e é por
+ * isso que o tipo é seguro ter em dois lugares: o que entra tem a senha, o
+ * que sai não. Um consumidor de `UserOutputDto` que precisasse do hash teria
+ * de ir a outro endpoint — e esse endpoint não existe.
+ */
 export interface CreateUserInputDto {
   nome: string;
   email: string;
+  /** Senha em claro, 8..72 (limites de `password-hash.vo.ts`). */
+  senha: string;
 }
 
 /**

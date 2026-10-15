@@ -130,6 +130,13 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 > roda primeiro porque sem ele as outras discordam entre si: quem quer densidade e
 > quem quer expressão dão conselhos opostos para a mesma tela.
 
+> **Par DURANTE → DEPOIS:** [`learning-observation`](./.agents/skills/learning-observation/SKILL.md)
+> classifica em T1/T2/T3 e exige o comando que mediu, no checkpoint de review+fix que
+> a task já obriga; [`retrospective-capture`](./.agents/skills/retrospective-capture/SKILL.md)
+> drena essas memórias na `decision-list`. O destino de cada uma é uma linha no
+> ledger [`memory-triage.md`](./.agents/runs/memory-triage.md), e o gate
+> `check-memory-crystallization` lê o ledger nas duas direções.
+
 > **State-Aware Planning (camada 0 do pre-planner, a partir de v1.8.0):** convenção
 > [`.agents/specs/conventions/state-aware-planning.md`](./.agents/specs/conventions/state-aware-planning.md)
 > obriga gerar `state-snapshot-<ts>.md` ANTES de planejar. Alimenta o `specialist-router` (camada 1).
@@ -217,7 +224,7 @@ As convenções estão detalhadas em arquivos próprios sob [`.agents/specs/conv
 | Release Automático    | [`post-merge-release.md`](./.agents/specs/conventions/post-merge-release.md) | Auto-tagging `vX.Y.Z` em main via `.github/workflows/release-template.yml` |
 | CI Defense in Depth   | [`ci-defense-in-depth.md`](./.agents/specs/conventions/ci-defense-in-depth.md) | 3 camadas: pre-push local + preflight CI + quality CI gated |
 | ↳ Pendências conhecidas | [`ci-defense-in-depth-pendencias.md`](./.agents/specs/conventions/ci-defense-in-depth-pendencias.md) | Companion da de cima: itens medidos que ainda não foram corrigidos, com o comando e a data de cada um |
-| Retrospective Capture | [`retrospective-capture.md`](./.agents/specs/conventions/retrospective-capture.md) | Captura estruturada de aprendizados pós-atividade (T1/T2/T3 + threshold confidence ≥ 70) |
+| Retrospective Capture | [`retrospective-capture.md`](./.agents/specs/conventions/retrospective-capture.md) | Captura estruturada de aprendizados pós-atividade (T1/T2/T3 + threshold confidence ≥ 70). Para a camada **DURANTE** (`learning-observation`) e exige uma linha por memória no ledger [`memory-triage.md`](./.agents/runs/memory-triage.md) — o gate `check-memory-crystallization` lê nas duas direções |
 | State-Aware Planning (v1.8.0+) | [`state-aware-planning.md`](./.agents/specs/conventions/state-aware-planning.md) | Camada 0 do pre-planner — obriga gerar `state-snapshot-<ts>.md` antes de planejar (gap analysis AS-IS→TO-BE); alimenta `specialist-router` camada 1 |
 | Evals (v1.9.0+)               | [`evals.md`](./.agents/specs/conventions/evals.md)                         | Framework canônico dos 7 tipos (Domain, Architecture, Contract, Integration, Regression, Security, Observability); path `specs/<feature>/evals/*.evals.yaml`; gate rules por severidade |
 | Engineering Loop (v1.9.0+)    | [`engineering-loop.md`](./.agents/specs/conventions/engineering-loop.md)  | Convenção unificadora do ciclo UNDERSTAND → IMPLEMENT → TEST → REVIEW → OBSERVE → LEARN; 6 templates de fase em `.agents/specs/templates/engineering-loop/`; integra retro + archive + state-aware; fecha o loop via workflow `feedback-to-spec` |

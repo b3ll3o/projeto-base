@@ -1,6 +1,7 @@
 import { User } from '../domain/user.aggregate.js';
 import { UserId } from '../domain/value-objects/user-id.vo.js';
 import { Email } from '../domain/value-objects/email.vo.js';
+import { PasswordHash } from '../domain/value-objects/password-hash.vo.js';
 import {
   UserNotFoundException,
   UserDeletedException,
@@ -13,6 +14,10 @@ import {
   type UserRepositoryPort,
   type FindByIdOptions,
 } from '../domain/ports/user-repository.port.js';
+import {
+  PASSWORD_HASHER_PORT,
+  type PasswordHasherPort,
+} from '../domain/ports/password-hasher.port.js';
 import { AUDIT_SERVICE_PORT } from '../../../shared/audit/shared/audit.tokens.js';
 import type {
   AuditOperation,
@@ -62,16 +67,24 @@ export const USER_USE_CASES = Symbol.for('@projeto/api/users/UserUseCases');
 
 /**
  * pt-BR: decorado com `@Injectable()` + `@Inject(USER_REPOSITORY_PORT)` /
- * `@Inject(AUDIT_SERVICE_PORT)` no construtor porque os parâmetros são
- * interfaces (apagadas em runtime pelo TS). Sem tokens explícitos o
- * container DI passaria `undefined` para os params e `userRepo.findByEmail`
- * quebraria em runtime — bug latente descoberto pelos testes e2e (Task 7.7).
+ * `@Inject(AUDIT_SERVICE_PORT)` / `@Inject(PASSWORD_HASHER_PORT)` no
+ * construtor porque os parâmetros são interfaces (apagadas em runtime pelo
+ * TS). Sem tokens explícitos o container DI passaria `undefined` para os
+ * params e `userRepo.findByEmail` quebraria em runtime — bug latente
+ * descoberto pelos testes e2e (Task 7.7).
+ *
+ * O `@Inject(PASSWORD_HASHER_PORT)` segue a mesma regra e não é opcional:
+ * `PasswordHasherPort` é uma interface, então sem o token explícito o Nest
+ * resolveria `undefined` e `criarUser` gravaria a senha em claro — o
+ * defeito mais caro desta fase, e um que nenhuma asserção de tipo pega,
+ * porque `undefined.hash(...)` só estoura em runtime.
  */
 @Injectable()
 export class UserUseCases {
   constructor(
     @Inject(USER_REPOSITORY_PORT) private readonly userRepo: UserRepositoryPort,
     @Inject(AUDIT_SERVICE_PORT) private readonly auditService: AuditServicePort,
+    @Inject(PASSWORD_HASHER_PORT) private readonly passwordHasher: PasswordHasherPort,
   ) {}
 
   // ----- CREATE -----
@@ -86,6 +99,11 @@ export class UserUseCases {
     if (typeof input.email !== 'string' || input.email.trim() === '') {
       throw new ApplicationValidationException('email', 'campo obrigatório (string não-vazia)');
     }
+    if (typeof input.senha !== 'string' || input.senha.trim() === '') {
+      // ⚠️ A mensagem NÃO embute o valor recebido — um `throw` com
+      // `${input.senha}` no meio põe a senha em claro no log de erro.
+      throw new ApplicationValidationException('senha', 'campo obrigatório (string não-vazia)');
+    }
 
     // 2. Email uniqueness check (application-level, antes de chamar VO)
     const emailVO = Email.create(input.email);
@@ -94,20 +112,31 @@ export class UserUseCases {
       throw new ApplicationEmailAlreadyInUseException(emailVO.value);
     }
 
-    // 3. Criar agregado (User.criar emite UserCreatedEvent)
+    // 3. Hash da senha — ANTES de tocar o agregado.
+    //
+    //    ⚠️ Esta é a única linha do fluxo onde a senha em claro existe como
+    //    valor, e ela é destruída no fim da próxima. `input.senha` continua
+    //    referenciável pelo resto do método porque `input` é o objeto do
+    //    caller — daqui em diante nada o copia, e a senha não é passada a
+    //    `User.criar`, nem a `save`, nem ao `toUserOutput` (a segunda
+    //    barreira, em `dto/user.output.ts`).
+    const senhaHash = PasswordHash.create(await this.passwordHasher.hash(input.senha));
+
+    // 4. Criar agregado (User.criar emite UserCreatedEvent)
     const user = User.criar({
       nome: input.nome,
       email: input.email,
+      senhaHash,
       agora: ctx.timestamp,
     });
 
-    // 4. Persistir (INSERT, expectedVersion=0)
+    // 5. Persistir (INSERT, expectedVersion=0)
     await this.userRepo.save(user, 0);
 
-    // 5. Auditar evento de criação
+    // 6. Auditar evento de criação
     await this.emitAuditForEvents(user);
 
-    // 6. Retornar DTO
+    // 7. Retornar DTO
     return toUserOutput(user);
   }
 
