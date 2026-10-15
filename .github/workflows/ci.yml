@@ -1,9 +1,32 @@
 name: ci
 on:
+  # MEDIDO 2026-10-15: `feat/**` deixava de fora 4 branches vivas
+  # (`fix/**`, `docs/**`) — 0 runs de CI no push delas, MEDIDO em
+  # `gh run list --workflow ci.yml --event push --limit 100` (91 runs, 0 em
+  # `main`) — e o resultado do merge nunca era validado, porque
+  # `pull_request` só dispara na abertura/sincronização do PR.
+  # `**` cobre `main` também, que era justamente o buraco: o push pós-merge
+  # não tinha job nenhum. `**` é o único glob que não volta a precisar de
+  # lista quando alguém cria uma branch com prefixo novo.
   push:
-    branches: [feat/**]
+    branches: ['**']
   pull_request:
     branches: [main]
+
+# MEDIDO 2026-10-15: existem runs do `ci.yml` com `[createdAt, updatedAt]`
+# sobrepostos no MESMO grupo de concurrency — sem isto, cada push novo deixava a
+# run velha queimando os ~4 min do `quality` em código já superseded.
+#
+# O NÚMERO de pares fica de fora de propósito: medido com interseção de
+# `[createdAt, updatedAt]` dá 10 entre push/push (mesma branch) e 19 entre
+# PR/PR, e depende de quais runs entram na janela. As variantes não fecham entre
+# si — um número publicado aqui envelhece a cada run nova e é exatamente o tipo
+# de claim que o resto deste arquivo evita. Para remedir:
+#   gh run list --workflow ci.yml --event push --limit 100 \
+#     --json headBranch,createdAt,updatedAt
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # pt-BR: preflight detecta drift estrutural (cross-refs quebradas em
@@ -148,8 +171,15 @@ jobs:
   # pt-BR: smoke job que builda os Dockerfiles prod completos. Defesa em profundidade
   # contra bugs latentes tipo `COPY --from=builder <path>` relativo (que só aparece
   # quando o cache do build local difere do cache CI). Roda só em PR para não
-  # inflar push em feat/** (custo ~5min em cold cache).
+  # inflar todo push em ~5min de cold cache.
+  #
+  # `needs: preflight` + `if:` sem função de status ⇒ o GitHub aplica um
+  # `success()` implícito: quando o `preflight` reprova, este job é SKIPPED, e
+  # é isso que se quer — são ~5min de build numa run já condenada. O mesmo
+  # mecanismo que já vale para o `quality`. Está aqui escrito porque um `if:`
+  # sem função de status parece omission e é decisão.
   docker-build-prod:
+    needs: preflight
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 15
