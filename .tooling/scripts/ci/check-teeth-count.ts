@@ -9,9 +9,9 @@ import type { CheckResult } from './check-types';
 /**
  * Fecha a classe 7 de `guard-classes.md` aplicada ao próprio
  * `preflight-gates.ts`: o array `PREFLIGHT_CHECKS` pode crescer ou
- * encolher sem que o registro de dentes (Tabela de Checks em
- * `ci-defense-in-depth.md`) acompanhe. Sem este gate, a contagem "21
- * entradas / 20 arquivos" documentada na pendência vira número
+ * encolher sem que o registro de dentes (a tabela em
+ * `ci-defense-in-depth-dentes.md`, extraída do pai em 2026-10-16) acompanhe.
+ * Sem este gate, a contagem de entradas documentada na pendência vira número
  * envelhecido — a próxima pessoa que adicionar um gate fica sem sinal
  * automático de "esqueci de atualizar a tabela".
  *

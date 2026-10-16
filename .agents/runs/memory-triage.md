@@ -43,14 +43,14 @@ transbordo de âncora para a 5ª célula voltava a ser silencioso desde que o au
 também errasse a disposição. O cabeçalho `| memória | disposição |` nomeia as
 colunas e ninguém o escreve por engano.
 
-### Por que 73 linhas e não 76
+### Por que 78 linhas e não 81
 
 O gate isenta três categorias antes de formar o corpus: `MEMORY.md`,
-`*-result.md` (resultado de campanha) e `type: reference`. MEDIDO 2026-10-14:
+`*-result.md` (resultado de campanha) e `type: reference`. MEDIDO 2026-10-16:
 
 ```bash
-ls -1 <memdir>/*.md | wc -l                                                     # 116
-ls -1 <memdir>/*.md | grep -v '/MEMORY.md$' | grep -vc 'result\.md$'          #  76
+ls -1 <memdir>/*.md | wc -l                                                     # 121
+ls -1 <memdir>/*.md | grep -v '/MEMORY.md$' | grep -vc 'result\.md$'          #  81
 grep -l '^  type: reference$' <memdir>/*.md | wc -l                            #   3
 ```
 
@@ -61,7 +61,7 @@ gate mede:
 
 ```bash
 ls -1 <memdir>/*.md | grep -v '/MEMORY.md$' | grep -v 'result\.md$' \
-  | xargs grep -L '^  type: reference$' | wc -l                                 #  73
+  | xargs grep -L '^  type: reference$' | wc -l                                 #  78
 ```
 
 ### A dívida que a isenção dos 39 `*-result.md` esconde
@@ -118,6 +118,7 @@ fazê-lo às cegas seria fabricar 39 linhas `citada` sem âncora verificada.
 | `failed-commit-leaks-staged-files-into-next-commit` | `pendente` | — | — |
 | `fase-7-http-state` | `recusada` | checkpoint de campanha de 2026-09-22; envelheceu e não é instrução | — |
 | `gate-blind-to-uncommitted-work` | `citada` | `.agents/workflows/pr-refresh.md` | `não existe` |
+| `gate-compares-against-its-own-filter` | `pendente` | — | — |
 | `gate-must-not-depend-on-machine-ambient-state` | `pendente` | — | — |
 | `gate-that-prescribes-the-wrong-remedy` | `pendente` | — | — |
 | `gate-without-cli-block-runs-as-noop` | `pendente` | — | — |
@@ -174,7 +175,7 @@ fazê-lo às cegas seria fabricar 39 linhas `citada` sem âncora verificada.
 | `two-stage-review-after-each-task` | `citada` | `.agents/skills/review-routing/SKILL.md` | `Avançar com BLOCKING não tratado` |
 | `verify-before-the-action-that-invalidates-it` | `citada` | `.agents/specs/conventions/git-workflow.md` | `verificar na posição errada` |
 | `verify-branch-before-commit` | `citada` | `.agents/specs/conventions/git-workflow.md` | `git branch --show-current` |
-| `verify-check-against-reconstructed-state` | `citada` | `.agents/specs/conventions/ci-defense-in-depth.md` | `Verde não é prova` |
+| `verify-check-against-reconstructed-state` | `citada` | `.agents/specs/conventions/ci-defense-in-depth-dentes.md` | `Verde não é prova` |
 | `vi-mock-factory-cache-frozen-counter` | `pendente` | — | — |
 | `vitest-workspace-thresholds-and-dist-remap` | `citada` | `.agents/specs/conventions/cobertura-testes.md` | `config raiz` |
 | `zero-survived-is-not-zero-found` | `pendente` | — | — |
@@ -183,20 +184,31 @@ fazê-lo às cegas seria fabricar 39 linhas `citada` sem âncora verificada.
 
 As contagens vivem no gate, que é a fonte — o painel de `ci:preflight` imprime
 `medido: N memória(s) no corpus, N linha(s) no ledger` e
-`N memória(s) com destinação \`pendente\``. Para re-derivar por linha:
+`N memória(s) com destinação \`pendente\``. Para re-derivar por linha, use o
+**parser do gate** — ele é a fonte, e sabe ancorar na tabela:
 
 ```bash
-awk -F'|' '/^\| `[a-z0-9][a-z0-9-]*` \|/ {print $3}' .agents/runs/memory-triage.md \
-  | tr -d ' ' | sort | uniq -c | sort -rn
+npx tsx .tooling/scripts/ci/check-memory-crystallization.ts
 ```
+
+**Não re-derive com `awk`.** MEDIDO 2026-10-16: o `awk` que este arquivo usava
+(`/^\| `[a-z0-9][a-z0-9-]*` \|/ {print $3}`) errava nos dois sentidos ao mesmo
+tempo. Casa as **tabelas de prosa** do arquivo — as definições de `citada`,
+`gate`, `recusada`, `removida` e `pendente` — e enumera 10 linhas de lixo
+(`registro de campanha, não é regra`, …), inflando a contagem para **87 linhas
+onde a tabela tem 78**. E a classe `[a-z0-9-]` **não cobre maiúscula**, então
+`gh-api-F-vs-f-for-file-body` (linha 126) ficava de fora: o `citada` contava
+**35** onde o gate conta **36**. Um erro que esconde e outro que inventa — o
+`awk` contornava o parser e perdia nos dois casos onde o parser acerta
+(`splitCells` + guarda de cabeçalho, em `check-memory-crystallization.ts`).
 
 **A coluna `n` foi removida de propósito.** MEDIDO 2026-10-15: ela publicava
 `35 / 33 / 3 / 2` e `total 73`, que fechavam entre si, mas o gate já imprimia
-`74` — e a linha do ledger que o `awk` acima não pegava só apareceria se
-alguém reconciliasse os dois números à mão. Publicar o número abre uma
-contagem que envelhece a cada memória e a cada linha novas; publicar o comando
-não. É a mesma razão que tirou o par de números de
-`check-memory-crystallization.ts` e de `learning-observation/`.
+`74`. A divergência era real e apontava para uma linha faltando — reconciliar os
+dois números à mão era o preço de publicar o número. Hoje os dois fecham em
+`78 / 78`, e publicá-los de novo reabriria a mesma contagem que envelhece a cada
+memória e a cada linha novas; publicar o comando não. É a mesma razão que tirou
+o par de números de `check-memory-crystallization.ts` e de `learning-observation/`.
 
 | disposição | o que significa |
 |---|---|
@@ -214,12 +226,24 @@ regra sem gate é a mesma *documentation-only prevention* que a
 classifica como a mais fraca. `gate:` aqui significa *existe um `.ts` no repo que
 mede isto*, e hoje não existe para nenhuma.
 
-**33 `pendente` não é o mesmo que 33 regras ignoradas.** Várias são
-**praticadas e nunca enunciadas**: o `ci-defense-in-depth.md` usa "o par" em
-**11** das 20 linhas da tabela de dentes, e a notação "N de M vermelho" em **3**,
-sem nunca dizer por quê. MEDIDO 2026-10-15, contando só as linhas de dados da
-tabela (as 22 com `|` são cabeçalho, separador e as 20 de dados). Para essas, o
-que falta não é comportamento, é enunciado.
+**`pendente` não é o mesmo que regras ignoradas.** Várias são
+**praticadas e nunca enunciadas**: a tabela de dentes usa "o par" em **15** das
+**23** linhas, e a notação "N de M vermelho" em **20**, sem nunca dizer por quê.
+MEDIDO 2026-10-16. Para essas, o que falta não é comportamento, é enunciado.
+
+```bash
+f=.agents/specs/conventions/ci-defense-in-depth-dentes.md
+awk -F'|' '/^\| `check-/ {n++} END {print n}' $f   # 23
+awk -F'|' '/^\| `check-/ && /o par/ {n++} END {print n}' $f   # 15
+awk -F'|' '/^\| `check-/ && /[0-9]+ de [0-9]+/ {n++} END {print n}' $f   # 20
+```
+
+> Apontar para `ci-defense-in-depth.md` aqui devolve **20** — a outra tabela do
+> arquivo pai (a "Tabela de Checks"), porque o regex `^\| \`check-` casa as
+> duas. Só `ci-defense-in-depth-dentes.md` tem a tabela de dentes e nada mais
+> que comece com `| \`check-`. Foi exatamente esse deslize que deixou estes
+> números irreproduzíveis na primeira redação deles: o próprio PR que corrigiu
+> um `awk` mal ancorado reescreveu outro sem reancorar.
 
 ## Longevidade
 

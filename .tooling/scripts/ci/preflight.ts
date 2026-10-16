@@ -33,6 +33,8 @@ import { checkHarnessLocation } from './check-harness-location';
 import { checkAgentRoutingCoverage } from './check-agent-routing-coverage';
 import { checkEnginesConsistency } from './check-engines-consistency';
 import { checkDockerfileHardening } from './check-dockerfile-hardening';
+import { checkFlowMermaidSync } from './check-flow-mermaid-sync';
+import { checkTestSetCovered } from './check-test-set-covered';
 import { existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
@@ -346,6 +348,8 @@ export const RUNNERS: Record<string, () => CheckResult | Promise<CheckResult>> =
   'check-agent-routing-coverage': () => checkAgentRoutingCoverage({ repoRoot: '.' }),
   'check-engines-consistency': () => checkEnginesConsistency({ repoRoot: '.' }),
   'check-dockerfile-hardening': () => checkDockerfileHardening({ repoRoot: '.' }),
+  'check-flow-mermaid-sync': () => checkFlowMermaidSync({ repoRoot: '.' }),
+  'check-test-set-covered': () => checkTestSetCovered({ repoRoot: '.' }),
 };
 
 /**

@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
  * Reconcilia o **registro de dentes** (`.agents/specs/conventions/
- * ci-defense-in-depth.md` §"Registro de dentes") com o que de fato roda.
+ * ci-defense-in-depth-dentes.md` §"Registro de dentes") com o que de fato roda.
  *
  * Três reconciliações, cada uma caçando uma classe de guard diferente:
  *
@@ -63,7 +63,7 @@ import type { GateRef } from './preflight-gates';
 export interface ReconcileInput {
   /** Gates que o preflight registra. */
   registeredGates: GateRef[];
-  /** Markdown do `ci-defense-in-depth.md` (ou só a seção do registro). */
+  /** Markdown do `ci-defense-in-depth-dentes.md` (ou só a seção do registro). */
   registryMarkdown: string;
   /** Markdown da matriz `review-routing.md`. */
   matrixMarkdown: string;
@@ -103,6 +103,17 @@ function isGatePath(token: string): boolean {
  * Lê a seção a partir do heading, e dentro dela só as linhas que começam com
  * `|` — o que descarta automaticamente prosa abaixo da tabela (onde paths são
  * citados legitimamente, ex. no comando de mutação) e a linha separadora.
+ *
+ * Uma célula declara um path quando ela é INTEIRAMENTE o token entre crases —
+ * não quando o token aparece dentro dela. MEDIDO 2026-10-16: varrer todo token
+ * da linha punia a prosa, e citar o path na própria linha do registro ("plantar
+ * `X` → vermelho") entrava como gate declarado, quebrando o gate com "entrada
+ * que não corresponde a nenhum gate". Ou seja, o registro ficava
+ * **não-escrevível** para a mesma coisa que ele documenta.
+ *
+ * Continua cego à COLUNA de propósito (ver decisão b no topo do arquivo): o
+ * caminho é reconhecido pela forma da célula, não pela posição, então mover
+ * coluna ou renomear cabeçalho não quebra o parse.
  */
 export function registryGateFiles(markdown: string): string[] {
   const heading = REGISTRY_HEADING.exec(markdown);
@@ -115,11 +126,9 @@ export function registryGateFiles(markdown: string): string[] {
     if (files.length > 0 && !line.trimStart().startsWith('|')) break;
     if (!line.trimStart().startsWith('|')) continue;
 
-    for (const m of line.matchAll(/`([^`]+)`/g)) {
-      // `m[1]` é `string | undefined` sob `noUncheckedIndexedAccess`. O grupo
-      // é obrigatório no padrão; o filtro deixa isso explícito em vez de um
-      // `as string` que o compilador aceitaria e o leitor teria que conferir.
-      const token = m[1];
+    for (const cell of line.split('|')) {
+      // Célula vazia (antes/depois dos `|`) ou prosa: não é declaração.
+      const token = /^`([^`]+)`$/.exec(cell.trim())?.[1];
       if (token !== undefined && isGatePath(token)) files.push(token);
     }
   }
@@ -197,7 +206,7 @@ export function reconcileTeethRegistry(input: ReconcileInput): ReconcileResult {
 
 // ── Camada 1: o gate como o preflight o invoca ─────────────────────────────
 
-const REGISTRY_DOC = join(process.cwd(), '.agents/specs/conventions/ci-defense-in-depth.md');
+const REGISTRY_DOC = join(process.cwd(), '.agents/specs/conventions/ci-defense-in-depth-dentes.md');
 const MATRIX_DOC = join(process.cwd(), '.agents/specs/conventions/review-routing.md');
 
 /**

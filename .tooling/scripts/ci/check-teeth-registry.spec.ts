@@ -264,6 +264,19 @@ Fora da tabela, um path citado em prosa: \`.tooling/scripts/ci/check-fantasma.ts
 `;
     expect(registryGateFiles(md)).toEqual(['.tooling/scripts/ci/check-x.ts']);
   });
+
+  it('ignora path citado na PROSA de uma célula da linha, não só na prosa abaixo', () => {
+    // A diferença em relação ao teste acima: aqui o path está DENTRO da tabela,
+    // na mesma linha da declaração, como parte de uma frase. MEDIDO 2026-10-16:
+    // varrer todo token entre crases da linha transformava a frase em
+    // "entrada do registro que não corresponde a nenhum gate" + "aponta pra
+    // arquivo que não existe" — o registro ficava não-escrevível para a mesma
+    // coisa que ele documenta, e nenhuma formulação de prosa contornava.
+    const md = REGISTRY_WITH(
+      '| `check-x` | mutação: plantar `.tooling/scripts/ci/check-fantasma.ts` → vermelho | 1 de 9 | `.tooling/scripts/ci/check-x.ts` |\n',
+    );
+    expect(registryGateFiles(md)).toEqual(['.tooling/scripts/ci/check-x.ts']);
+  });
 });
 
 // ── 5. o estado real do repo ────────────────────────────────────────────────
@@ -286,7 +299,7 @@ describe('checkTeethRegistry — contra o repo de verdade', () => {
     // não é defeito — que é a classe 7 que este repo nomeia. O que o teste
     // quer é "um registro por gate", e é isso que ele afirma.
     const registryMd = readFileSync(
-      join(process.cwd(), '.agents/specs/conventions/ci-defense-in-depth.md'),
+      join(process.cwd(), '.agents/specs/conventions/ci-defense-in-depth-dentes.md'),
       'utf8',
     );
     const found = registryGateFiles(registryMd);
