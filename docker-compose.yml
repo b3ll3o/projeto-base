@@ -1,5 +1,8 @@
 # docker-compose.yml
-# Issues resolvidas: #68 (plaintext password + DATABASE_URL placeholder), #74 (digest pinning), #75 (mem_limit + memory_limiter)
+# Issues resolvidas: #68 (plaintext password + DATABASE_URL placeholder), #74 (digest pinning),
+# #75 (mem_limit + memory_limiter), #83 (runtime hardening: read_only/cap_drop/security_opt),
+# #90 (init: true para tini como PID 1 no api), #91 (network segmentation frontend/backend),
+# #92 (postgres hardening: read_only + tmpfs + caps mínimas).
 services:
   postgres:
     image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
@@ -17,8 +20,33 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-projeto_base}
     env_file:
       - .env.production # #68: secrets em arquivo separado, fora do compose versionado
-    ports:
-      - '5432:5432'
+    # pt-BR (#91, 2026-10-16): postgres sai da rede default e entra em `backend`
+    # apenas. Removido `ports: ['5432:5432']` (binding no host) — em prod o banco
+    # só fala com a api, e api/web/migration correm no mesmo Docker host via DNS interno.
+    expose:
+      - '5432'
+    networks:
+      - backend
+    # pt-BR (#83+#92, 2026-10-16): hardening runtime. Postgres aceita `read_only: true`
+    # desde PG 16 (bind-mount tmpfs em `/var/run/postgresql` + `/tmp`). Cap_drop ALL +
+    # cap_add mínimo (CHOWN, SETUID, SETGID, DAC_OVERRIDE, FOWNER) — caps do postgres real.
+    # user: "999:999" usa o user interno da imagem alpine (postgres:postgres).
+    # pids_limit 200 evita fork-bomb em exploit.
+    read_only: true
+    user: '999:999'
+    tmpfs:
+      - /tmp:size=64m
+      - /var/run/postgresql:size=64m,mode=0755,uid=999
+    security_opt:
+      - 'no-new-privileges:true'
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      - FOWNER
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -29,10 +57,12 @@ services:
     deploy:
       resources:
         limits:
+          cpus: '0.5'
           memory: 512M # #75: teto de memória explícito
+          pids: 200 # #92: limite de processos (postgres não tem motivo para mais de 200)
         reservations:
           memory: 256M
-    restart: unless-stopped
+    restart: unless-stopged
   api:
     build:
       context: .
@@ -71,6 +101,37 @@ services:
     # arquivo que o Postgres também não consegue ler.
     ports:
       - '3000:3000'
+    # pt-BR (#91): api em ambas networks — fala com web (frontend) e postgres (backend).
+    networks:
+      - frontend
+      - backend
+    # pt-BR (#90, 2026-10-16): `init: true` injeta tini como PID 1 do container.
+    # Sem isso, o `sh -c "pnpm ... && node ..."` no ENTRYPOINT vira PID 1 e não
+    # propaga SIGTERM ao processo node — só SIGKILL no grace do Docker, que é
+    # 30s default. Com tini, o node recebe SIGTERM, executa shutdown hooks
+    # (NestJS enableShutdownHooks), fecha DB pool e HTTP server gracefully.
+    init: true
+    # pt-BR (#83, 2026-10-16): hardening runtime espelhando o postgres. Api é
+    # stateless — tmpfs em /tmp + /repo/.cache (cache de runtime do Vite/tsc),
+    # cap_drop ALL + cap_add mínimo, security_opt no-new-privileges.
+    # Compose replica o `USER 1001:1001` do Dockerfile (sem isso, compose usa
+    # `user: root` e quebra a intenção do stage prod).
+    user: '1001:1001'
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m
+      - /repo/.cache:size=64m
+    security_opt:
+      - 'no-new-privileges:true'
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      - FOWNER
+      - NET_BIND_SERVICE # porta 3000
     healthcheck:
       test: ['CMD-SHELL', 'curl -fsS http://localhost:3000/api/v1/health || exit 1']
       interval: 10s
@@ -99,6 +160,29 @@ services:
       API_BASE_URL: http://api:3000/api/v1
     ports:
       - '3001:3001'
+    # pt-BR (#91): web só na `frontend` — não fala direto com postgres.
+    # Se um exploit no Next.js tentar vazar, lateral move para backend está bloqueado.
+    networks:
+      - frontend
+    # pt-BR (#83): hardening runtime para web. Não precisa de NET_BIND_SERVICE
+    # se a porta é 3001 e o container roda como user 1001, mas o cap_add inclui
+    # para consistência com a api.
+    user: '1001:1001'
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m
+      - /repo/.cache:size=64m
+    security_opt:
+      - 'no-new-privileges:true'
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      - FOWNER
+      - NET_BIND_SERVICE # porta 3001
     healthcheck:
       test:
         [
@@ -125,6 +209,16 @@ services:
     command: ['--config=/etc/otelcol/config.yaml']
     volumes:
       - ./infra/otelcol/config.yaml:/etc/otelcol/config.yaml:ro
+    # pt-BR (#87, 2026-10-16): OTLP endpoint vem de env var (`.env.production`).
+    # Sem o endpoint, o otlp exporter falha no startup — sinal correto de "configura o backend".
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    env_file:
+      - .env.production
+    # pt-BR (#91): otel-collector só na `frontend` — recebe do api (que está em ambas),
+    # mas não fala com postgres.
+    networks:
+      - frontend
     ports:
       - '4317:4317' # OTLP gRPC
       - '4318:4318' # OTLP HTTP
@@ -135,6 +229,16 @@ services:
         reservations:
           memory: 256M
     restart: unless-stopped
+
+# pt-BR (#91, 2026-10-16): topologia de redes — `frontend` para exposição pública
+# (web, otel-collector) e `backend` para camada de dados (postgres, api). `internal: false`
+# em ambos para permitir egress a registries (apt, npm, pypi) durante build de imagens
+# via stages que resolvem pacotes. Em prod k8s, isso é movido para NetworkPolicy + egress proxy.
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
 
 volumes:
   postgres_data:

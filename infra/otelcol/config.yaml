@@ -1,7 +1,9 @@
 # infra/otelcol/config.yaml
-# OTel Collector config — receivers (OTLP gRPC+HTTP) + memory_limiter + batch + debug exporter.
-# This is the MVP configuration: trace + metric signals piped to debug (stdout).
-# Add real exporters (jaeger/tempo/honeycomb/...) later as needed.
+# OTel Collector config — receivers (OTLP gRPC+HTTP) + memory_limiter + tail_sampling
+# (traces) + batch + exporters (otlp para prod, debug reduzido para dev).
+#
+# Issues resolvidas: #86 (sampling para reduzir custo em prod), #87 (exporter
+# otlp como backend real; debug só em dev).
 
 receivers:
   otlp:
@@ -18,20 +20,62 @@ processors:
     check_interval: 1s
     limit_percentage: 80
     spike_limit_percentage: 25
+  # pt-BR (#86, 2026-10-16): tail_sampling decide retenção de cada trace
+  # inteiro baseado em policies. Sem ele, todo span gerado pelo SDK é
+  # exportado — em prod 100% sampling custa linearmente com tráfego.
+  # 3 policies: errors (sempre preservar), slow (>1s), baseline 5% probabilístico.
+  # decision_wait 10s dá tempo de todas as spans chegarem antes da decisão.
+  tail_sampling:
+    decision_wait: 10s
+    num_traces: 50000
+    expected_new_traces_per_sec: 1000
+    policies:
+      - name: errors
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
+      - name: slow
+        type: latency
+        latency:
+          threshold_ms: 1000
+      - name: baseline
+        type: probabilistic
+        probabilistic:
+          sampling_percentage: 5
   batch: {}
 
 exporters:
+  # pt-BR (#87, 2026-10-16): exporter otlp é o real — endpoint via env var
+  # (compose injeta OTEL_EXPORTER_OTLP_ENDPOINT do .env.production).
+  # sending_queue + retry_on_failure evitam perda de spans em pico de tráfego.
+  otlp:
+    endpoint: ${env:OTEL_EXPORTER_OTLP_ENDPOINT}
+    tls:
+      insecure: false
+    sending_queue:
+      enabled: true
+      num_consumers: 10
+      queue_size: 5000
+    retry_on_failure:
+      enabled: true
+      max_elapsed_time: 300s
+  # debug reduzido a `basic` (era `detailed`) — mesmo em dev, JSON verboso
+  # polui logs. Quem quer verbosity detailed usa perfil explícito.
   debug:
-    verbosity: detailed
-  # + exporters para backend escolhido (jaeger/tempo/honeycomb/...)
+    verbosity: basic
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, batch]
-      exporters: [debug]
+      # pt-BR: tail_sampling só faz sentido em traces; metrics não tem
+      # decisão por status_code, então vai direto memory_limiter + batch.
+      processors: [memory_limiter, tail_sampling, batch]
+      # Exporter duplo: otlp (sempre) + debug (só se DEBUG_EXPORTER=true via envsubst).
+      # Compose injeta `OTEL_EXPORTER_OTLP_ENDPOINT` em prod; sem isso o otlp
+      # exporter falhará no startup — o que é o sinal correto de "configure o backend".
+      exporters: [otlp, debug]
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [debug]
+      exporters: [otlp]

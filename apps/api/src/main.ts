@@ -6,6 +6,7 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Logger as PinoLogger } from 'nestjs-pino';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import fastifyHelmet from '@fastify/helmet';
 import { z } from 'zod';
 import { AppModule } from './app.module.js';
 import { GlobalExceptionFilter } from './shared/infrastructure/http/global-exception.filter.js';
@@ -37,6 +38,36 @@ async function bootstrap(): Promise<void> {
   app.useLogger(app.get(PinoLogger));
 
   app.setGlobalPrefix('api/v1');
+
+  // #85: helmet plugin — security headers (HSTS, X-Frame-Options, X-Content-Type-Options,
+  // CSP, Referrer-Policy, X-DNS-Prefetch-Control, X-Download-Options, X-Permitted-Cross-Domain-Policies).
+  // API é JSON pura, então CSP é bem restritivo: sem scripts/styles/img/connect cross-origin.
+  // Registrado como plugin Fastify antes do CORS — ambos rodam no mesmo hook (onRequest) mas a
+  // ordem é helmet→cors (helmet setta headers em `reply.header` independente do CORS).
+  await app
+    .getHttpAdapter()
+    .getInstance()
+    .register(fastifyHelmet, {
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'none'"],
+          styleSrc: ["'none'"],
+          imgSrc: ["'none'"],
+          connectSrc: ["'self'"],
+          frameAncestors: ["'none'"],
+          formAction: ["'self'"],
+          baseUri: ["'self'"],
+        },
+      },
+      crossOriginEmbedderPolicy: false, // API não embebe recursos
+      hsts: {
+        maxAge: 31536000,
+        includeSubDomains: true,
+        preload: true,
+      },
+      referrerPolicy: { policy: 'same-origin' },
+    });
 
   // #72: rate-limit global via APP_GUARD provider (registrado em app.module.ts).
   // O guard lê a config do ThrottlerModule e aplica por IP. Rotas com

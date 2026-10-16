@@ -32,6 +32,7 @@ import { checkTeethCount } from './check-teeth-count';
 import { checkHarnessLocation } from './check-harness-location';
 import { checkAgentRoutingCoverage } from './check-agent-routing-coverage';
 import { checkEnginesConsistency } from './check-engines-consistency';
+import { checkDockerfileHardening } from './check-dockerfile-hardening';
 import { existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
@@ -344,6 +345,7 @@ export const RUNNERS: Record<string, () => CheckResult | Promise<CheckResult>> =
   'check-harness-location': () => checkHarnessLocation({ repoRoot: '.' }),
   'check-agent-routing-coverage': () => checkAgentRoutingCoverage({ repoRoot: '.' }),
   'check-engines-consistency': () => checkEnginesConsistency({ repoRoot: '.' }),
+  'check-dockerfile-hardening': () => checkDockerfileHardening({ repoRoot: '.' }),
 };
 
 /**
