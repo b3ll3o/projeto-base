@@ -24,16 +24,10 @@ export class ProfileSlug {
     }
     const trimmed = value.trim().toLowerCase();
     if (trimmed.length < MIN_LENGTH) {
-      throw new UserValidationException(
-        'slug',
-        `deve ter ao menos ${MIN_LENGTH} caracteres`,
-      );
+      throw new UserValidationException('slug', `deve ter ao menos ${MIN_LENGTH} caracteres`);
     }
     if (trimmed.length > MAX_LENGTH) {
-      throw new UserValidationException(
-        'slug',
-        `deve ter no máximo ${MAX_LENGTH} caracteres`,
-      );
+      throw new UserValidationException('slug', `deve ter no máximo ${MAX_LENGTH} caracteres`);
     }
     if (!SLUG_REGEX.test(trimmed)) {
       throw new UserValidationException(

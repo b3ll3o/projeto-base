@@ -128,9 +128,7 @@ describe('Profile (aggregate)', () => {
 
     it('removerAutorizacao inexistente lança', () => {
       const p = Profile.criar({ slug: 'admin', name: 'Admin', agora: T0 });
-      expect(() => p.removerAutorizacao('users.read', T0)).toThrow(
-        AuthorizationNotFoundException,
-      );
+      expect(() => p.removerAutorizacao('users.read', T0)).toThrow(AuthorizationNotFoundException);
     });
   });
 

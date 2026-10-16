@@ -70,7 +70,9 @@ export default async function AdminUsersPage(): Promise<React.JSX.Element> {
         </thead>
         <tbody>
           {users.map((u) => {
-            const atual = profiles.find((p) => p.id === (u as { profileId?: string | null }).profileId);
+            const atual = profiles.find(
+              (p) => p.id === (u as { profileId?: string | null }).profileId,
+            );
             return (
               <tr key={u.id}>
                 <td>{u.nome}</td>

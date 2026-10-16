@@ -17,7 +17,11 @@ import type { Authorization } from '../authorization.entity.js';
 export interface AuthorizationRepositoryPort {
   listByProfile(profileId: ProfileId): Promise<Authorization[]>;
   countByProfile(profileId: ProfileId): Promise<number>;
-  upsert(input: { profileId: ProfileId; key: AuthorizationKey; agora: Date }): Promise<Authorization>;
+  upsert(input: {
+    profileId: ProfileId;
+    key: AuthorizationKey;
+    agora: Date;
+  }): Promise<Authorization>;
   delete(input: { profileId: ProfileId; key: AuthorizationKey }): Promise<void>;
 }
 

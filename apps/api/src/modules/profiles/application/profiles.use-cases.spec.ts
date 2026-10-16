@@ -29,10 +29,14 @@ import {
 class InMemoryProfileRepo implements ProfileRepositoryPort {
   #store: Map<string, Profile> = new Map();
 
-  async findById(id: ReturnType<typeof import('../domain/value-objects/profile-id.vo.js').profileId>) {
+  async findById(
+    id: ReturnType<typeof import('../domain/value-objects/profile-id.vo.js').profileId>,
+  ) {
     return this.#store.get(id.value) ?? null;
   }
-  async findBySlug(slug: ReturnType<typeof import('../domain/value-objects/profile-slug.vo.js').profileSlug>) {
+  async findBySlug(
+    slug: ReturnType<typeof import('../domain/value-objects/profile-slug.vo.js').profileSlug>,
+  ) {
     for (const p of this.#store.values()) {
       if (p.slug().value === slug.value) return p;
     }
@@ -45,7 +49,9 @@ class InMemoryProfileRepo implements ProfileRepositoryPort {
     this.#store.set(profile.id().value, profile);
     return profile;
   }
-  async delete(id: ReturnType<typeof import('../domain/value-objects/profile-id.vo.js').profileId>): Promise<void> {
+  async delete(
+    id: ReturnType<typeof import('../domain/value-objects/profile-id.vo.js').profileId>,
+  ): Promise<void> {
     this.#store.delete(id.value);
   }
   /** helper p/ testes */
@@ -154,7 +160,11 @@ describe('ProfileUseCases', () => {
       const created = await uc.criar({ slug: 'custom', name: 'Custom' });
       users.count = 0;
       await uc.deletar(created.id);
-      const found = await repo.findById(created.id as unknown as ReturnType<typeof import('../domain/value-objects/profile-id.vo.js').profileId>);
+      const found = await repo.findById(
+        created.id as unknown as ReturnType<
+          typeof import('../domain/value-objects/profile-id.vo.js').profileId
+        >,
+      );
       expect(found).toBeNull();
     });
 
@@ -181,9 +191,9 @@ describe('ProfileUseCases', () => {
     });
 
     it('obterPorId retorna ProfileNotFound se não existe', async () => {
-      await expect(
-        uc.obterPorId('00000000-0000-0000-0000-000000000000'),
-      ).rejects.toThrow(ProfileNotFoundException);
+      await expect(uc.obterPorId('00000000-0000-0000-0000-000000000000')).rejects.toThrow(
+        ProfileNotFoundException,
+      );
     });
   });
 });

@@ -22,16 +22,10 @@ export class ProfileName {
     }
     const trimmed = value.trim();
     if (trimmed.length < MIN_LENGTH) {
-      throw new UserValidationException(
-        'name',
-        `deve ter ao menos ${MIN_LENGTH} caracteres`,
-      );
+      throw new UserValidationException('name', `deve ter ao menos ${MIN_LENGTH} caracteres`);
     }
     if (trimmed.length > MAX_LENGTH) {
-      throw new UserValidationException(
-        'name',
-        `deve ter no máximo ${MAX_LENGTH} caracteres`,
-      );
+      throw new UserValidationException('name', `deve ter no máximo ${MAX_LENGTH} caracteres`);
     }
     return new ProfileName(trimmed);
   }

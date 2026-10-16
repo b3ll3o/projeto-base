@@ -298,7 +298,9 @@ describe('UserPrismaMapper — passwordHash corrompido é falha de infraestrutur
   });
 
   it('carrega um correlationId não vazio, para o operador casar log e resposta', () => {
-    const erro = erroLancado(rowComHashCorrompido(HASH_CORROMPIDO, null)) as UserPersistenceException;
+    const erro = erroLancado(
+      rowComHashCorrompido(HASH_CORROMPIDO, null),
+    ) as UserPersistenceException;
 
     expect(erro.correlationId).toBeTypeOf('string');
     expect(erro.correlationId.trim()).not.toBe('');
@@ -320,7 +322,9 @@ describe('UserPrismaMapper — passwordHash corrompido é falha de infraestrutur
     } as unknown as Span;
     const getSpanSpy = vi.spyOn(trace, 'getSpan').mockReturnValue(fakeSpan);
     try {
-      const erro = erroLancado(rowComHashCorrompido(HASH_CORROMPIDO, null)) as UserPersistenceException;
+      const erro = erroLancado(
+        rowComHashCorrompido(HASH_CORROMPIDO, null),
+      ) as UserPersistenceException;
 
       expect(erro.correlationId).toBe(traceIdDoSpan);
       expect(erro.correlationId).toMatch(/^[0-9a-f]{32}$/);
@@ -331,7 +335,9 @@ describe('UserPrismaMapper — passwordHash corrompido é falha de infraestrutur
   });
 
   it('sem span ativo, o correlationId cai no UUID do node:crypto', () => {
-    const erro = erroLancado(rowComHashCorrompido(HASH_CORROMPIDO, null)) as UserPersistenceException;
+    const erro = erroLancado(
+      rowComHashCorrompido(HASH_CORROMPIDO, null),
+    ) as UserPersistenceException;
 
     expect(erro.correlationId).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,

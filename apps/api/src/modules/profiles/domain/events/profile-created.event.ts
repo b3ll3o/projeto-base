@@ -5,7 +5,11 @@ export class ProfileCreatedEvent implements DomainEvent {
   readonly occurredAt: Date;
   readonly aggregateId: string;
 
-  constructor(id: string, readonly version: number, occurredAt: Date) {
+  constructor(
+    id: string,
+    readonly version: number,
+    occurredAt: Date,
+  ) {
     this.aggregateId = id;
     this.occurredAt = occurredAt;
   }

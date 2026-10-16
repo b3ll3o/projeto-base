@@ -26,7 +26,10 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
     if (row === null) {
       return null;
     }
-    return this.toDomain(row, row.authorizations.map((a) => a.permissionKey));
+    return this.toDomain(
+      row,
+      row.authorizations.map((a) => a.permissionKey),
+    );
   }
 
   async findBySlug(slug: ReturnType<typeof makeProfileSlug>): Promise<Profile | null> {
@@ -37,7 +40,10 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
     if (row === null) {
       return null;
     }
-    return this.toDomain(row, row.authorizations.map((a) => a.permissionKey));
+    return this.toDomain(
+      row,
+      row.authorizations.map((a) => a.permissionKey),
+    );
   }
 
   async list(): Promise<Profile[]> {
@@ -45,7 +51,12 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
       orderBy: { createdAt: 'desc' },
       include: { authorizations: { select: { permissionKey: true } } },
     });
-    return rows.map((r) => this.toDomain(r, r.authorizations.map((a) => a.permissionKey)));
+    return rows.map((r) =>
+      this.toDomain(
+        r,
+        r.authorizations.map((a) => a.permissionKey),
+      ),
+    );
   }
 
   async save(profile: Profile): Promise<Profile> {
@@ -59,7 +70,10 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
       isSystem: profile.isSystem(),
       authorizations: {
         deleteMany: {},
-        create: profile.authorizations().toLista().map((k) => ({ permissionKey: k })),
+        create: profile
+          .authorizations()
+          .toLista()
+          .map((k) => ({ permissionKey: k })),
       },
     };
 
@@ -92,10 +106,13 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
     await this.prisma.authorization.deleteMany({ where: { profileId: id } });
     if (profile.authorizations().toLista().length > 0) {
       await this.prisma.authorization.createMany({
-        data: profile.authorizations().toLista().map((k) => ({
-          profileId: id,
-          permissionKey: k,
-        })),
+        data: profile
+          .authorizations()
+          .toLista()
+          .map((k) => ({
+            profileId: id,
+            permissionKey: k,
+          })),
       });
     }
     return profile;

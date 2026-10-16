@@ -271,19 +271,37 @@ export class UserProfileUseCases {
     }
     const user = await this.userRepo.findById(UserId.create(userId));
     if (user === null) {
-      const empty = { profileId: null, profileSlug: null, profileName: null, isAdmin: false, permissions: [] };
+      const empty = {
+        profileId: null,
+        profileSlug: null,
+        profileName: null,
+        isAdmin: false,
+        permissions: [],
+      };
       await this.cache.setUserProfileAndPermissions(userId, empty);
       return empty;
     }
     const userProfileId = user.profileId();
     if (userProfileId === null) {
-      const empty = { profileId: null, profileSlug: null, profileName: null, isAdmin: false, permissions: [] };
+      const empty = {
+        profileId: null,
+        profileSlug: null,
+        profileName: null,
+        isAdmin: false,
+        permissions: [],
+      };
       await this.cache.setUserProfileAndPermissions(userId, empty);
       return empty;
     }
     const profile = await this.profileRepo.findById(profileId(userProfileId));
     if (profile === null) {
-      const empty = { profileId: null, profileSlug: null, profileName: null, isAdmin: false, permissions: [] };
+      const empty = {
+        profileId: null,
+        profileSlug: null,
+        profileName: null,
+        isAdmin: false,
+        permissions: [],
+      };
       await this.cache.setUserProfileAndPermissions(userId, empty);
       return empty;
     }

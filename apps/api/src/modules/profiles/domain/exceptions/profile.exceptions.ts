@@ -34,21 +34,30 @@ export class ProfileAdminProtectedException extends Error {
 }
 
 export class ProfileHasUsersException extends Error {
-  constructor(public readonly id: string, public readonly userCount: number) {
+  constructor(
+    public readonly id: string,
+    public readonly userCount: number,
+  ) {
     super(`Profile tem ${userCount} usuário(s) atribuído(s); reatribua antes de deletar: ${id}`);
     this.name = 'ProfileHasUsersException';
   }
 }
 
 export class AuthorizationAlreadyAssignedException extends Error {
-  constructor(public readonly profileId: string, public readonly permissionKey: string) {
+  constructor(
+    public readonly profileId: string,
+    public readonly permissionKey: string,
+  ) {
     super(`Autorização já atribuída: ${permissionKey} em profile ${profileId}`);
     this.name = 'AuthorizationAlreadyAssignedException';
   }
 }
 
 export class AuthorizationNotFoundException extends Error {
-  constructor(public readonly profileId: string, public readonly permissionKey: string) {
+  constructor(
+    public readonly profileId: string,
+    public readonly permissionKey: string,
+  ) {
     super(`Autorização não encontrada: ${permissionKey} em profile ${profileId}`);
     this.name = 'AuthorizationNotFoundException';
   }

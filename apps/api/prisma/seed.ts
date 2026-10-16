@@ -65,7 +65,9 @@ async function main(): Promise<void> {
     });
     console.log(`Seed: primeiro user (${firstUser.email}) virou admin.`);
   } else {
-    console.log('Seed: nenhum user no DB ainda — vincule ao profile via POST /api/v1/admin/users/:id/profile depois do primeiro signup.');
+    console.log(
+      'Seed: nenhum user no DB ainda — vincule ao profile via POST /api/v1/admin/users/:id/profile depois do primeiro signup.',
+    );
   }
 
   console.log('Seed: OK.');

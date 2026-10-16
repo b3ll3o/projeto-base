@@ -5,7 +5,11 @@
 // users.read, profiles.write). Valida que existe no catalog — caso
 // contrário é typo ou permissão fantasma que o guard não vai reconhecer.
 
-import { isPermissionKey, listAllPermissions, type PermissionKey } from '../../../../shared/auth/permissions-catalog.js';
+import {
+  isPermissionKey,
+  listAllPermissions,
+  type PermissionKey,
+} from '../../../../shared/auth/permissions-catalog.js';
 
 export class InvalidPermissionKeyException extends Error {
   readonly code = 'INVALID_PERMISSION_KEY' as const;

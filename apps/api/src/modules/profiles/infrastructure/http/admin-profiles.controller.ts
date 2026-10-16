@@ -56,7 +56,9 @@ export class AdminProfilesController {
       ...(body.isAdmin !== undefined ? { isAdmin: body.isAdmin } : {}),
       ...(body.isSystem !== undefined ? { isSystem: body.isSystem } : {}),
       ...(body.description !== undefined ? { description: body.description } : {}),
-      ...(body.initialPermissions !== undefined ? { initialPermissions: body.initialPermissions } : {}),
+      ...(body.initialPermissions !== undefined
+        ? { initialPermissions: body.initialPermissions }
+        : {}),
     };
     return this.useCases.criar(input);
   }

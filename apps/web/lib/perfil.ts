@@ -34,7 +34,11 @@ export async function obterMeuPerfil(): Promise<MeProfileDto | null> {
     const client = await getClient();
     return await client.get<MeProfileDto>('/api/v1/me/profile');
   } catch (e) {
-    if (e instanceof Error && 'statusCode' in e && (e as { statusCode: number }).statusCode === 401) {
+    if (
+      e instanceof Error &&
+      'statusCode' in e &&
+      (e as { statusCode: number }).statusCode === 401
+    ) {
       return null;
     }
     throw e;

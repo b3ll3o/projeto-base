@@ -31,8 +31,7 @@ export default async function MeProfilePage(): Promise<React.JSX.Element> {
           <dd>
             {me.profile ? (
               <>
-                <strong>{me.profile.name}</strong>{' '}
-                <code>({me.profile.slug})</code>
+                <strong>{me.profile.name}</strong> <code>({me.profile.slug})</code>
               </>
             ) : (
               <em>Sem perfil — deny-by-default</em>
@@ -47,7 +46,10 @@ export default async function MeProfilePage(): Promise<React.JSX.Element> {
         <h2>Permissões ({me.permissions.length})</h2>
         {me.permissions.length === 0 ? (
           <p>
-            <em>Sem permissões explícitas. {me.isAdmin ? 'Mas você é admin, então passa em qualquer guard.' : ''}</em>
+            <em>
+              Sem permissões explícitas.{' '}
+              {me.isAdmin ? 'Mas você é admin, então passa em qualquer guard.' : ''}
+            </em>
           </p>
         ) : (
           <ul>

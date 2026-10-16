@@ -12,10 +12,7 @@ import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/c
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
 import { PermissionsGuard } from './guards/permissions.guard.js';
 import { RequirePermission } from './decorators/require-permission.decorator.js';
-import {
-  AuthorizationUseCases,
-  type ProfileDetail,
-} from '../../application/profiles.use-cases.js';
+import { AuthorizationUseCases, type ProfileDetail } from '../../application/profiles.use-cases.js';
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller()

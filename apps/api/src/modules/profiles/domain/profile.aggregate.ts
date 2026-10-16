@@ -220,7 +220,9 @@ export class Profile {
     this.#name = ProfileName.create(novoNome);
     this.#updatedAt = agora;
     this.#version = previousVersion + 1;
-    this.#events.push(new ProfileUpdatedEvent(this.#id.value, this.#version, previousVersion, agora));
+    this.#events.push(
+      new ProfileUpdatedEvent(this.#id.value, this.#version, previousVersion, agora),
+    );
   }
 
   alterarDescricao(novaDescricao: string | null, agora: Date): void {
@@ -228,7 +230,9 @@ export class Profile {
     this.#description = novaDescricao;
     this.#updatedAt = agora;
     this.#version = previousVersion + 1;
-    this.#events.push(new ProfileUpdatedEvent(this.#id.value, this.#version, previousVersion, agora));
+    this.#events.push(
+      new ProfileUpdatedEvent(this.#id.value, this.#version, previousVersion, agora),
+    );
   }
 
   /**
@@ -248,7 +252,9 @@ export class Profile {
     this.#authorizations = ProfileAuthorizations.deLista(novaLista);
     this.#updatedAt = agora;
     this.#version = previousVersion + 1;
-    this.#events.push(new ProfileUpdatedEvent(this.#id.value, this.#version, previousVersion, agora));
+    this.#events.push(
+      new ProfileUpdatedEvent(this.#id.value, this.#version, previousVersion, agora),
+    );
   }
 
   /**
@@ -267,7 +273,9 @@ export class Profile {
     this.#authorizations = ProfileAuthorizations.deLista(novaLista);
     this.#updatedAt = agora;
     this.#version = previousVersion + 1;
-    this.#events.push(new ProfileUpdatedEvent(this.#id.value, this.#version, previousVersion, agora));
+    this.#events.push(
+      new ProfileUpdatedEvent(this.#id.value, this.#version, previousVersion, agora),
+    );
   }
 
   /**
@@ -286,8 +294,6 @@ export class Profile {
     const previousVersion = this.#version;
     this.#updatedAt = agora;
     this.#version = previousVersion + 1;
-    this.#events.push(
-      new ProfileDeletedEvent(this.#id.value, this.#version, reason, agora),
-    );
+    this.#events.push(new ProfileDeletedEvent(this.#id.value, this.#version, reason, agora));
   }
 }

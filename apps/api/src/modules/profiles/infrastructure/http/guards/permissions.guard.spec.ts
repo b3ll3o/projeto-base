@@ -40,23 +40,19 @@ function makeGuard(meta: unknown): { guard: PermissionsGuard; reflector: Reflect
 describe('PermissionsGuard', () => {
   it('Nega (403) quando o user não tem `isAdmin` nem a permission', () => {
     const { guard } = makeGuard([KEY_GUARD]);
-    expect(() =>
-      guard.canActivate(makeCtx({ isAdmin: false, permissions: [] })),
-    ).toThrow(ForbiddenException);
+    expect(() => guard.canActivate(makeCtx({ isAdmin: false, permissions: [] }))).toThrow(
+      ForbiddenException,
+    );
   });
 
   it('Libera quando `isAdmin=true` mesmo sem a permission (bypass total)', () => {
     const { guard } = makeGuard([KEY_GUARD]);
-    expect(
-      guard.canActivate(makeCtx({ isAdmin: true, permissions: [] })),
-    ).toBe(true);
+    expect(guard.canActivate(makeCtx({ isAdmin: true, permissions: [] }))).toBe(true);
   });
 
   it('Libera quando `permissions` contém a key exigida', () => {
     const { guard } = makeGuard([KEY_GUARD]);
-    expect(
-      guard.canActivate(makeCtx({ isAdmin: false, permissions: [KEY_GUARD] })),
-    ).toBe(true);
+    expect(guard.canActivate(makeCtx({ isAdmin: false, permissions: [KEY_GUARD] }))).toBe(true);
   });
 
   it('Nega (403) quando `permissions` é NÃO-vazio mas NÃO contém a key', () => {
@@ -68,8 +64,6 @@ describe('PermissionsGuard', () => {
 
   it('Sem `@RequirePermission` no handler, libera qualquer user autenticado', () => {
     const { guard } = makeGuard(undefined);
-    expect(
-      guard.canActivate(makeCtx({ isAdmin: false, permissions: [] })),
-    ).toBe(true);
+    expect(guard.canActivate(makeCtx({ isAdmin: false, permissions: [] }))).toBe(true);
   });
 });

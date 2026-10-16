@@ -7,7 +7,11 @@
 // disponíveis em /api/v1/admin/profiles e /api/v1/me.
 
 import { Module } from '@nestjs/common';
-import { ProfileUseCases, AuthorizationUseCases, UserProfileUseCases } from './application/profiles.use-cases.js';
+import {
+  ProfileUseCases,
+  AuthorizationUseCases,
+  UserProfileUseCases,
+} from './application/profiles.use-cases.js';
 import { PrismaProfileRepository } from './infrastructure/persistence/prisma-profile.repository.js';
 import { PrismaAuthorizationRepository } from './infrastructure/persistence/prisma-authorization.repository.js';
 import { UserProfileCacheService } from '../../shared/infrastructure/security/user-profile-cache.service.js';
@@ -17,8 +21,14 @@ import { MeProfileController } from './infrastructure/http/me-profile.controller
 import { AdminUsersController } from './infrastructure/http/admin-users.controller.js';
 import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service.js';
 import { PermissionsGuard } from './infrastructure/http/guards/permissions.guard.js';
-import { PROFILE_REPOSITORY_PORT, type ProfileRepositoryPort } from './domain/ports/profile-repository.port.js';
-import { AUTHORIZATION_REPOSITORY_PORT, type AuthorizationRepositoryPort } from './domain/ports/authorization-repository.port.js';
+import {
+  PROFILE_REPOSITORY_PORT,
+  type ProfileRepositoryPort,
+} from './domain/ports/profile-repository.port.js';
+import {
+  AUTHORIZATION_REPOSITORY_PORT,
+  type AuthorizationRepositoryPort,
+} from './domain/ports/authorization-repository.port.js';
 
 @Module({
   providers: [

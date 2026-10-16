@@ -6,7 +6,13 @@
 
 import type * as React from 'react';
 import { notFound } from 'next/navigation';
-import { listarPerfis, listarAutorizacoes, obterMeuPerfil, obterPerfil, sincronizarAutorizacoes } from '../../../../lib/perfil';
+import {
+  listarPerfis,
+  listarAutorizacoes,
+  obterMeuPerfil,
+  obterPerfil,
+  sincronizarAutorizacoes,
+} from '../../../../lib/perfil';
 import type { PermissionKey } from '@projeto/shared-types';
 
 export const dynamic = 'force-dynamic';
@@ -15,7 +21,9 @@ interface PageProps {
   params: Promise<{ slug: string }>;
 }
 
-export default async function AdminProfileDetailPage({ params }: PageProps): Promise<React.JSX.Element> {
+export default async function AdminProfileDetailPage({
+  params,
+}: PageProps): Promise<React.JSX.Element> {
   const me = await obterMeuPerfil();
   if (me === null || me.isAdmin !== true) {
     return (
@@ -35,7 +43,9 @@ export default async function AdminProfileDetailPage({ params }: PageProps): Pro
 
   const [allProfiles, currentKeys] = await Promise.all([
     listarPerfis(),
-    listarAutorizacoes(profile.id).catch(() => [] as Awaited<ReturnType<typeof listarAutorizacoes>>),
+    listarAutorizacoes(profile.id).catch(
+      () => [] as Awaited<ReturnType<typeof listarAutorizacoes>>,
+    ),
   ]);
   const assignedKeys = new Set(currentKeys.map((a) => a.permissionKey));
   void allProfiles; // (reserved for "copy from another profile" UI)

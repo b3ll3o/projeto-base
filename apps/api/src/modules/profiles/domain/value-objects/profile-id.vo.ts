@@ -20,7 +20,9 @@ export class ProfileId {
       return new ProfileId(randomUUID());
     }
     if (typeof value !== 'string' || !UUID_REGEX.test(value)) {
-      throw new Error(`ProfileId inválido: ${typeof value === 'string' ? '[REDACTED]' : typeof value}`);
+      throw new Error(
+        `ProfileId inválido: ${typeof value === 'string' ? '[REDACTED]' : typeof value}`,
+      );
     }
     return new ProfileId(value);
   }

@@ -25,9 +25,7 @@ const TTL_MS = 5_000;
 export class UserProfileCacheService {
   readonly #store = new Map<string, CacheEntry>();
 
-  async getUserProfileAndPermissions(
-    userId: string,
-  ): Promise<CacheEntry['value'] | null> {
+  async getUserProfileAndPermissions(userId: string): Promise<CacheEntry['value'] | null> {
     const entry = this.#store.get(userId);
     if (entry === undefined) {
       return null;
@@ -39,10 +37,7 @@ export class UserProfileCacheService {
     return entry.value;
   }
 
-  async setUserProfileAndPermissions(
-    userId: string,
-    value: CacheEntry['value'],
-  ): Promise<void> {
+  async setUserProfileAndPermissions(userId: string, value: CacheEntry['value']): Promise<void> {
     this.#store.set(userId, {
       expiresAt: Date.now() + TTL_MS,
       value,
