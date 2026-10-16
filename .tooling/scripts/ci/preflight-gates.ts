@@ -294,6 +294,17 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     file: '.tooling/scripts/ci/check-engines-consistency.ts',
     id: 'check-engines-consistency',
   },
+  {
+    // Gate prophylático de hardening Docker — issues 83, 84, 88, 89, 90, 91, 92.
+    // Documenta o estado-novo (verde) e bloqueia regressões silenciosas
+    // (classe 5 de guard-classes.md). Cobre: digest pin em FROM, USER 1001:1001
+    // em stage prod, init: true no service api, read_only/cap_drop/security_opt
+    // nos 3 services prod, top-level networks: + services NÃO usando default,
+    // e .dockerignore excluindo .env.production*.
+    name: 'docker hardening (FROM digest + USER + init + cap_drop + networks + .env)',
+    file: '.tooling/scripts/ci/check-dockerfile-hardening.ts',
+    id: 'check-dockerfile-hardening',
+  },
 ];
 
 /**
