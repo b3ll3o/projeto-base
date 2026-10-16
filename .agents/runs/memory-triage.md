@@ -147,7 +147,7 @@ fazê-lo às cegas seria fabricar 39 linhas `citada` sem âncora verificada.
 | `pipe-stdout-dies-when-spawner-exits` | `pendente` | — | — |
 | `positive-test-must-assert-skip-state` | `citada` | `docs/fluxo-desenvolvimento.md` | `não havia nada para verificar` |
 | `post-task-retrospective-plan` | `removida` | os 3 artefatos que ela planejava já existem; mantê-la os lista como "a criar" | — |
-| `pr-body-gate-only-fires-at-push-time` | `citada` | `.github/workflows/ci.yml` | `REGRA OPERACIONAL` |
+| `pr-body-gate-only-fires-at-push-time` | `citada` | `.github/workflows/ci.yml` | `um RE-RUN entrega o corpo` |
 | `pr-body-has-no-base-directory` | `pendente` | — | — |
 | `prefer-agents-directory` | `citada` | `AGENTS.md` | `Modelo-agnóstico` |
 | `prefer-parallel-subagents-when-possible` | `citada` | `.agents/agents/specialist-router.md` | `paralelizar sempre que possível` |
