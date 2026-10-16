@@ -1,5 +1,9 @@
 # syntax=docker/dockerfile:1.7
-FROM node:22-bookworm-slim AS base
+# pt-BR (#89, 2026-10-16): mesma estratégia do Dockerfile da API — ARG
+# no topo do stage permite `--build-arg NODE_DIGEST=...` reescrever
+# o digest em todos os FROM de uma vez.
+ARG NODE_DIGEST=sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
+FROM node:22-bookworm-slim@${NODE_DIGEST} AS base
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 WORKDIR /repo
 
@@ -12,7 +16,9 @@ COPY packages packages
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile --filter @projeto/web...
 COPY apps/web apps/web
-USER node
+# pt-BR (#88): cria user 1001 para o stage dev — mesmo rationale da API.
+RUN groupadd --gid 1001 app && useradd --uid 1001 --gid 1001 --no-create-home --shell /bin/false app
+USER 1001:1001
 EXPOSE 3001
 CMD ["pnpm", "--filter", "@projeto/web", "dev"]
 
@@ -26,13 +32,19 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
 COPY apps/web apps/web
 RUN pnpm --filter @projeto/web build
 
-FROM node:22-bookworm-slim AS prod
+# pt-BR (#89): ARG re-declarado entre estágios (escopo é perdido).
+ARG NODE_DIGEST=sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
+FROM node:22-bookworm-slim@${NODE_DIGEST} AS prod
 WORKDIR /repo
 ENV NODE_ENV=production PORT=3001
 COPY --from=builder /repo/apps/web/.next/standalone /repo
 COPY --from=builder /repo/apps/web/.next/static /repo/apps/web/.next/static
 COPY --from=builder /repo/apps/web/public /repo/apps/web/public
-USER node
+# pt-BR (#88, 2026-10-16): mesmo rationale da API — UID numérico para
+# OPA/K8s runAsUser e mounts NFS/CIFS. Web não escreve em /repo, só serve
+# o build Next.js standalone.
+RUN groupadd --gid 1001 app && useradd --uid 1001 --gid 1001 --no-create-home --shell /bin/false app
+USER 1001:1001
 EXPOSE 3001
 HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3001/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"

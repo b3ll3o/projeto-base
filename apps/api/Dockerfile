@@ -1,5 +1,9 @@
 # syntax=docker/dockerfile:1.7
-FROM node:22-bookworm-slim AS base
+# pt-BR (#89, 2026-10-16): ARG no topo permite que `docker build --build-arg NODE_DIGEST=...`
+# reescreva o digest em todos os `FROM` de uma vez. Resolve o problema de duplicar
+# `@sha256:...` em 4 estágios (base/dev/builder/prod) — uma linha, 4 FROMs.
+ARG NODE_DIGEST=sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
+FROM node:22-bookworm-slim@${NODE_DIGEST} AS base
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
 WORKDIR /repo
@@ -12,7 +16,10 @@ COPY packages packages
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile --filter @projeto/api...
 COPY apps/api apps/api
-USER node
+# pt-BR (#88, 2026-10-16): cria user 1001 para o stage dev (não usado em prod,
+# mas mantém consistência — a regra é: todo stage que tem `USER` usa UID numérico).
+RUN groupadd --gid 1001 app && useradd --uid 1001 --gid 1001 --no-create-home --shell /bin/false app
+USER 1001:1001
 EXPOSE 3000
 CMD ["pnpm", "--filter", "@projeto/api", "dev"]
 
@@ -27,7 +34,10 @@ COPY apps/api apps/api
 RUN pnpm --filter @projeto/api db:generate
 RUN pnpm --filter @projeto/api build
 
-FROM node:22-bookworm-slim AS prod
+# pt-BR (#89): ARG re-declarado porque ARG de escopo global só vale para o
+# primeiro FROM; entre estágios é perdido. Mesma estratégia em todos os 4 estágios.
+ARG NODE_DIGEST=sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
+FROM node:22-bookworm-slim@${NODE_DIGEST} AS prod
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 RUN apt-get update && apt-get install -y --no-install-recommends openssl curl && rm -rf /var/lib/apt/lists/*
 WORKDIR /repo
@@ -44,7 +54,13 @@ RUN pnpm prune --prod
 # sem precisar runtime deps. Pega erros de parsing, missing modules em require/import
 # e typos em filenames antes do container subir. Custo: ~100ms por build.
 RUN node --check apps/api/dist/main.js
-USER node
+# pt-BR (#88, 2026-10-16): user dedicado UID 1001 com shell /bin/false.
+# Antes era `USER node` que dependia do UID 1000 implícito da imagem
+# upstream — qualquer mudança de UID na tag node:22-bookworm-slim quebrava
+# policies OPA/K8s `runAsUser` (que precisa de UID numérico) e mounts NFS/CIFS
+# (que autenticam por UID). Hardcoded numérico garante interface estável.
+RUN groupadd --gid 1001 app && useradd --uid 1001 --gid 1001 --no-create-home --shell /bin/false app
+USER 1001:1001
 EXPOSE 3000
 # pt-BR: Task 1.5 — auto-carrega tracing OTel antes de qualquer código de usuário.
 # `--import` é ESM-aware (Node 20.6+); `--require` é CJS-only e quebraria em
