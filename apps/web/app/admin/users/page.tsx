@@ -20,10 +20,10 @@ export const dynamic = 'force-dynamic';
 async function listarUsers(): Promise<UserOutputDto[]> {
   const accessToken = await exigirSessao();
   const client = new ApiClient({
-    baseUrl: process.env.API_BASE_URL ?? 'http://api:3000',
+    baseUrl: process.env.API_BASE_URL ?? 'http://localhost:3000/api/v1',
     getToken: () => accessToken,
   });
-  const pagina = await client.get<UsersPageDto>('/api/v1/users?limit=100');
+  const pagina = await client.get<UsersPageDto>('/users?limit=100');
   return pagina.users;
 }
 

@@ -30,7 +30,7 @@ import type {
 async function getClient(): Promise<ApiClient> {
   const accessToken = await exigirSessao();
   return new ApiClient({
-    baseUrl: process.env.API_BASE_URL ?? 'http://api:3000',
+    baseUrl: process.env.API_BASE_URL ?? 'http://localhost:3000/api/v1',
     getToken: () => accessToken,
   });
 }
@@ -46,7 +46,7 @@ async function getClientOpcional(): Promise<ApiClient | null> {
   const { accessToken } = await lerTokens();
   if (accessToken === null) return null;
   return new ApiClient({
-    baseUrl: process.env.API_BASE_URL ?? 'http://api:3000',
+    baseUrl: process.env.API_BASE_URL ?? 'http://localhost:3000/api/v1',
     getToken: () => accessToken,
   });
 }
@@ -55,7 +55,7 @@ export async function obterMeuPerfil(): Promise<MeProfileDto | null> {
   try {
     const client = await getClientOpcional();
     if (client === null) return null;
-    return await client.get<MeProfileDto>('/api/v1/me/profile');
+    return await client.get<MeProfileDto>('/me/profile');
   } catch (e) {
     if (
       e instanceof Error &&
@@ -73,13 +73,13 @@ export async function obterMeuPerfil(): Promise<MeProfileDto | null> {
 
 export async function listarPerfis(): Promise<ProfileSummary[]> {
   const client = await getClient();
-  return client.get<ProfileSummary[]>('/api/v1/admin/profiles');
+  return client.get<ProfileSummary[]>('/admin/profiles');
 }
 
 /** Detalhe por UUID. `id` NÃO é slug — a API faz `findById`. */
 export async function obterPerfil(id: string): Promise<ProfileDetail> {
   const client = await getClient();
-  return client.get<ProfileDetail>(`/api/v1/admin/profiles/${id}`);
+  return client.get<ProfileDetail>(`/admin/profiles/${id}`);
 }
 
 /**
@@ -106,12 +106,12 @@ export async function obterPerfilPorSlug(slug: string): Promise<ProfileDetail> {
  */
 export async function listarPermissoes(): Promise<string[]> {
   const client = await getClient();
-  return client.get<string[]>('/api/v1/admin/permissions');
+  return client.get<string[]>('/admin/permissions');
 }
 
 export async function criarPerfil(input: CreateProfileInputDto): Promise<ProfileDetail> {
   const client = await getClient();
-  return client.post<ProfileDetail>('/api/v1/admin/profiles', input);
+  return client.post<ProfileDetail>('/admin/profiles', input);
 }
 
 export async function atualizarPerfil(
@@ -119,24 +119,24 @@ export async function atualizarPerfil(
   input: UpdateProfileInputDto,
 ): Promise<ProfileDetail> {
   const client = await getClient();
-  return client.patch<ProfileDetail>(`/api/v1/admin/profiles/${id}`, input);
+  return client.patch<ProfileDetail>(`/admin/profiles/${id}`, input);
 }
 
 export async function deletarPerfil(id: string): Promise<void> {
   const client = await getClient();
-  await client.delete(`/api/v1/admin/profiles/${id}`);
+  await client.delete(`/admin/profiles/${id}`);
 }
 
 export async function atribuirPermissao(id: string, permissionKey: string): Promise<ProfileDetail> {
   const client = await getClient();
-  return client.post<ProfileDetail>(`/api/v1/admin/profiles/${id}/authorizations`, {
+  return client.post<ProfileDetail>(`/admin/profiles/${id}/authorizations`, {
     permissionKey,
   });
 }
 
 export async function revogarPermissao(id: string, permissionKey: string): Promise<void> {
   const client = await getClient();
-  await client.delete(`/api/v1/admin/profiles/${id}/authorizations/${permissionKey}`);
+  await client.delete(`/admin/profiles/${id}/authorizations/${permissionKey}`);
 }
 
 export function diffPermissoes(
@@ -218,5 +218,5 @@ export function decidirAtribuicaoPerfil({
 export async function atribuirPerfil(userId: string, profileId: string | null): Promise<void> {
   const client = await getClient();
   const body: AssignProfileInputDto = { profileId };
-  await client.put(`/api/v1/admin/users/${userId}/profile`, body);
+  await client.put(`/admin/users/${userId}/profile`, body);
 }

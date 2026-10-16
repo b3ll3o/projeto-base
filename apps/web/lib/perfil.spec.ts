@@ -58,7 +58,7 @@ const {
 
 const ID = '3f6a2b1c-0000-4000-8000-000000000001';
 const SLUG = 'editor'; // nunca é um id — se aparecer num path, o bug voltou
-const BASE = '/api/v1/admin/profiles';
+const BASE = '/admin/profiles';
 
 function callPaths(method: 'get' | 'post' | 'patch' | 'put' | 'delete'): string[] {
   return clientMock[method].mock.calls.map((c: unknown[]) => c[0] as string);
@@ -76,7 +76,7 @@ beforeEach(() => {
   clientMock.delete.mockResolvedValue(undefined);
 });
 
-describe('obterMeuPerfil — payload de GET /api/v1/me/profile', () => {
+describe('obterMeuPerfil — payload de GET me/profile', () => {
   it('devolve a resposta da API sem reinterpretar os campos', async () => {
     // O payload real: a API devolve profileId/profileSlug/profileName, e
     // NÃO devolve `userId` nem `profile`. Se o cliente voltar a inventar um
@@ -91,7 +91,7 @@ describe('obterMeuPerfil — payload de GET /api/v1/me/profile', () => {
     clientMock.get.mockResolvedValue(payload);
 
     await expect(obterMeuPerfil()).resolves.toEqual(payload);
-    expect(callPaths('get')).toEqual(['/api/v1/me/profile']);
+    expect(callPaths('get')).toEqual(['/me/profile']);
   });
 
   it('sem sessão devolve null em vez de redirecionar (Sidebar não pode quebrar o layout)', async () => {
@@ -140,7 +140,7 @@ describe('catálogo de permissões', () => {
   it('listarPermissoes lê GET /admin/permissions — não há rota de authorizations na API', async () => {
     clientMock.get.mockResolvedValue(['users.read']);
     const r = await listarPermissoes();
-    expect(callPaths('get')).toEqual(['/api/v1/admin/permissions']);
+    expect(callPaths('get')).toEqual(['/admin/permissions']);
     expect(r).toEqual(['users.read']);
   });
 });
@@ -232,14 +232,14 @@ describe('trocarPermissoes — o diff é o comportamento correto', () => {
 describe('atribuição de perfil a usuário', () => {
   it('atribui com PUT /admin/users/:id/profile', async () => {
     await atribuirPerfil('user-1', ID);
-    expect(clientMock.put).toHaveBeenCalledWith('/api/v1/admin/users/user-1/profile', {
+    expect(clientMock.put).toHaveBeenCalledWith('/admin/users/user-1/profile', {
       profileId: ID,
     });
   });
 
   it('LIMPAR o perfil usa o mesmo PUT com profileId null — DELETE não existe', async () => {
     await atribuirPerfil('user-1', null);
-    expect(clientMock.put).toHaveBeenCalledWith('/api/v1/admin/users/user-1/profile', {
+    expect(clientMock.put).toHaveBeenCalledWith('/admin/users/user-1/profile', {
       profileId: null,
     });
     expect(clientMock.delete).not.toHaveBeenCalled();
@@ -298,3 +298,54 @@ describe('decidirAtribuicaoPerfil — o que o valor selecionado significa (M3)',
     expect(clientMock.put).not.toHaveBeenCalled();
   });
 });
+
+// ─── O prefixo da API é UM, e ele vive no `baseUrl` ───────────────────────
+//
+// MEDIDO 2026-10-16 (#97): este arquivo afirmava path `/api/v1/...` com
+// `ApiClient` MOCKADO, e a suíte ficava verde enquanto as 4 telas admin
+// respondiam "Acesso restrito" para TODO mundo — inclusive admin de verdade —
+// em dev, em produção e no e2e. Motivo: `API_BASE_URL` JÁ vem com `/api/v1`
+// (é o que os 4 configs de deploy passam: `docker-compose.yml:164`,
+// `docker-compose.dev.yml:17`, `.env.production.example:35`,
+// `apps/web/.env.example:2`), e `lib/perfil.ts` prefixava de novo — a
+// chamada saía como `/api/v1/api/v1/me/profile`, o `ApiError` era engolido
+// pelo `catch` de `obterMeuPerfil`, e o 404 virava "sem perfil".
+//
+// A asserção abaixo é a que teria pegado: ela afirma a INVARIANTE, não cada
+// path. Os testes acima continuam válidos — eles fixam o shape de cada
+// chamada — mas nenhum deles notava o prefixo, porque o mock não concatena.
+describe('prefixo da API (MEDIDO — 4 telas admin respondiam "Acesso restrito")', () => {
+  it('nenhum path começa com /api/v1 — o prefixo já vem em API_BASE_URL', async () => {
+    await chamarTodasQueFalamComApi();
+
+    const todos = [
+      ...callPaths('get'),
+      ...callPaths('post'),
+      ...callPaths('patch'),
+      ...callPaths('put'),
+      ...callPaths('delete'),
+    ];
+    expect(todos.length).toBeGreaterThan(0);
+    expect(todos.filter((p) => p.startsWith('/api/v1'))).toEqual([]);
+  });
+});
+
+/**
+ * Chama um de cada função que fala com a API, para o guard acima ter o quê olhar.
+ *
+ * shortcut: a lista é manual — uma função nova com `/api/v1` NÃO é coberta.
+ * Quando existir, trocar por um gate que varra `perfil.ts` (o lugar do
+ * `check-e2e-flow-coverage`), não por mais um item nesta lista.
+ */
+async function chamarTodasQueFalamComApi(): Promise<void> {
+  await obterMeuPerfil();
+  await listarPerfis();
+  await obterPerfil(ID);
+  await listarPermissoes();
+  await criarPerfil({ slug: 'novo', name: 'Novo' });
+  await atualizarPerfil(ID, { name: 'Renomeado' });
+  await deletarPerfil(ID);
+  await atribuirPermissao(ID, 'users.read');
+  await revogarPermissao(ID, 'users.read');
+  await atribuirPerfil('user-1', ID);
+}
