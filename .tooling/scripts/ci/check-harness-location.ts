@@ -29,9 +29,7 @@ import type { CheckResult } from './check-types';
  * existe, este gate não distingue "rule incorreta" de "rule describing
  * something absent". O diferencial contra o repo real é o que prova.
  */
-export async function checkHarnessLocation(opts: {
-  repoRoot: string;
-}): Promise<CheckResult> {
+export async function checkHarnessLocation(opts: { repoRoot: string }): Promise<CheckResult> {
   const errors: string[] = [];
   const root = path.resolve(opts.repoRoot);
 

@@ -2,7 +2,11 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { checkEnginesConsistency, parseMinEngine, rootSatisfiesApp } from './check-engines-consistency';
+import {
+  checkEnginesConsistency,
+  parseMinEngine,
+  rootSatisfiesApp,
+} from './check-engines-consistency';
 
 describe('parseMinEngine', () => {
   it('parseia ">=22.6.0" em {op: ">=", major: 22, minor: 6, patch: 0}', () => {
@@ -62,14 +66,20 @@ describe('checkEnginesConsistency', () => {
 
   it('verde quando engines da app bate com a da raiz', async () => {
     writeFile('package.json', JSON.stringify({ engines: { node: '>=22.6.0' } }));
-    writeFile('apps/api/package.json', JSON.stringify({ name: 'api', engines: { node: '>=22.6.0' } }));
+    writeFile(
+      'apps/api/package.json',
+      JSON.stringify({ name: 'api', engines: { node: '>=22.6.0' } }),
+    );
     const r = await checkEnginesConsistency({ repoRoot: tmp });
     expect(r.ok).toBe(true);
   });
 
   it('vermelho quando app declara engines mais antigas que a raiz', async () => {
     writeFile('package.json', JSON.stringify({ engines: { node: '>=22.6.0' } }));
-    writeFile('apps/api/package.json', JSON.stringify({ name: 'api', engines: { node: '>=20.0.0' } }));
+    writeFile(
+      'apps/api/package.json',
+      JSON.stringify({ name: 'api', engines: { node: '>=20.0.0' } }),
+    );
     const r = await checkEnginesConsistency({ repoRoot: tmp });
     expect(r.ok).toBe(false);
     expect(r.errors[0]).toMatch(/apps\/api/);
@@ -78,7 +88,10 @@ describe('checkEnginesConsistency', () => {
 
   it('vermelho quando app declara engines mais novas que a raiz', async () => {
     writeFile('package.json', JSON.stringify({ engines: { node: '>=22.6.0' } }));
-    writeFile('apps/web/package.json', JSON.stringify({ name: 'web', engines: { node: '>=24.0.0' } }));
+    writeFile(
+      'apps/web/package.json',
+      JSON.stringify({ name: 'web', engines: { node: '>=24.0.0' } }),
+    );
     const r = await checkEnginesConsistency({ repoRoot: tmp });
     expect(r.ok).toBe(false);
     expect(r.errors[0]).toMatch(/>=24\.0\.0/);

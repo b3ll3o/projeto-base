@@ -27,7 +27,10 @@ describe('checkHarnessLocation', () => {
   // diferencial.
 
   it('verde quando preflight-gates.ts aponta para arquivos que existem', async () => {
-    writeFile('.tooling/scripts/ci/preflight-gates.ts', 'export const PREFLIGHT_CHECKS = [{name:"x",file:".tooling/scripts/ci/check-types.ts"}];');
+    writeFile(
+      '.tooling/scripts/ci/preflight-gates.ts',
+      'export const PREFLIGHT_CHECKS = [{name:"x",file:".tooling/scripts/ci/check-types.ts"}];',
+    );
     writeFile('.tooling/scripts/ci/check-types.ts');
     const r = await checkHarnessLocation({ repoRoot: tmp });
     expect(r.ok).toBe(true);
@@ -35,7 +38,10 @@ describe('checkHarnessLocation', () => {
   });
 
   it('vermelho, e nomeando o gate, quando o arquivo declarado não existe', async () => {
-    writeFile('.tooling/scripts/ci/preflight-gates.ts', 'export const PREFLIGHT_CHECKS = [{name:"falso",file:".tooling/scripts/ci/check-que-nao-existe.ts"}];');
+    writeFile(
+      '.tooling/scripts/ci/preflight-gates.ts',
+      'export const PREFLIGHT_CHECKS = [{name:"falso",file:".tooling/scripts/ci/check-que-nao-existe.ts"}];',
+    );
     const r = await checkHarnessLocation({ repoRoot: tmp });
     expect(r.ok).toBe(false);
     expect(r.errors[0]).toMatch(/falso/);

@@ -41,7 +41,10 @@ export function referencedAgents(matrixPath: string): { named: Set<string>; miss
 }
 
 /** Listas A ∖ B e B ∖ A como strings ordenadas. */
-export function diffAgents(real: string[], referenced: Set<string>): {
+export function diffAgents(
+  real: string[],
+  referenced: Set<string>,
+): {
   orphans: string[];
   ghosts: string[];
 } {

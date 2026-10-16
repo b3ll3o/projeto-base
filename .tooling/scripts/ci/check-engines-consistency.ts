@@ -23,7 +23,9 @@ interface PackageJson {
  * Devolve `null` para SPECs que o gate não entende (a `engines.node` da raiz
  * é um `>=`, então a regra prática é cobrir `>=`).
  */
-export function parseMinEngine(spec: string): { op: '>=' | '>' | '~' | '^' | '='; major: number; minor: number; patch: number } | null {
+export function parseMinEngine(
+  spec: string,
+): { op: '>=' | '>' | '~' | '^' | '='; major: number; minor: number; patch: number } | null {
   const m = spec.match(/^(>=|>|~|\^|=)?\s*(\d+)\.(\d+)\.(\d+)/);
   if (!m) return null;
   const op = (m[1] as '>=' | '>' | '~' | '^' | '=') || '=';
@@ -31,7 +33,10 @@ export function parseMinEngine(spec: string): { op: '>=' | '>' | '~' | '^' | '='
 }
 
 /** Compara duas engines: a do app é SATISFEITA pela da raiz? */
-export function rootSatisfiesApp(rootSpec: string | undefined, appSpec: string | undefined): boolean {
+export function rootSatisfiesApp(
+  rootSpec: string | undefined,
+  appSpec: string | undefined,
+): boolean {
   if (!appSpec) return true; // app não declara engines — não há o que comparar
   if (!rootSpec) return true; // raiz não declara — gate não tem como julgar; deixamos passar
   const root = parseMinEngine(rootSpec);
@@ -78,7 +83,9 @@ async function readJson(p: string): Promise<PackageJson | null> {
   }
 }
 
-async function findAppPackageJsons(appsRoot: string): Promise<{ file: string; pkg: PackageJson }[]> {
+async function findAppPackageJsons(
+  appsRoot: string,
+): Promise<{ file: string; pkg: PackageJson }[]> {
   const out: { file: string; pkg: PackageJson }[] = [];
   let entries: import('node:fs').Dirent[];
   try {
