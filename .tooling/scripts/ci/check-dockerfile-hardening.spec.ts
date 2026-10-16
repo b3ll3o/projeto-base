@@ -160,6 +160,49 @@ describe('checkDockerfileHardening', () => {
     expect(r.errors.some((e) => e.includes("bloco top-level 'networks:'"))).toBe(true);
   });
 
+  // MEDIDO 2026-10-16: o gate checava `postgres`, `web` e `otel-collector` —
+  // e `api`, que é o serviço backend DE VERDADE do compose (linha 66), ficava
+  // de fora: tirar o bloco `networks:` dele passava limpo. Mesma forma do subdir
+  // sombreado do `check-harness-location` — a lista cobre as formas nomeadas e
+  // deixa passar a que existe.
+  it('rejeita o serviço api sem networks explícito (#91)', async () => {
+    const file = path.join(root, 'docker-compose.yml');
+    const broken = VALID_COMPOSE.replace(
+      /^  api:\n    init: true\n    networks:\n      - frontend\n      - backend\n/m,
+      '  api:\n    init: true\n',
+    );
+    expect(broken).not.toBe(VALID_COMPOSE); // o replace tem que ter mordido
+    writeFileSync(file, broken);
+    const r = await checkDockerfileHardening({ repoRoot: root });
+    expect(r.errors.some((e) => e.includes("service 'api' sem 'networks:'"))).toBe(true);
+  });
+
+  // MEDIDO 2026-10-16: acrescentar `api` à lista de nomes não fechou a classe —
+  // um serviço NOVO (`cache`) entrava no compose sem `networks:` e o gate
+  // ficava verde. Nomear serviços transfere a manutenção para quem edita o
+  // compose. Estes dois testes pedem a enumeração: o serviço que entra depois
+  // é coberto por construção, e a lista zerada não passa em silêncio.
+  it('rejeita um serviço NOVO no compose sem networks — sem lista de nomes', async () => {
+    const file = path.join(root, 'docker-compose.yml');
+    const comCache = VALID_COMPOSE.replace(
+      /^networks:\n/m,
+      '  cache:\n    image: redis:7-alpine\n\nnetworks:\n',
+    );
+    expect(comCache).not.toBe(VALID_COMPOSE); // o replace tem que ter mordido
+    writeFileSync(file, comCache);
+    const r = await checkDockerfileHardening({ repoRoot: root });
+    expect(r.errors.some((e) => e.includes("service 'cache' sem 'networks:'"))).toBe(true);
+  });
+
+  it('NÃO aceita compose onde a enumeração de serviços volta vazia', async () => {
+    // Enumerar por regex que engole o bloco inteiro devolve `[]` — e `[]`
+    // itera zero vezes, então o gate passa sem ter olhado nada.
+    const file = path.join(root, 'docker-compose.yml');
+    writeFileSync(file, 'version: "3"\nservices:\n\nnetworks:\n  frontend:\n  backend:\n');
+    const r = await checkDockerfileHardening({ repoRoot: root });
+    expect(r.errors.some((e) => /0 serviço/.test(e))).toBe(true);
+  });
+
   it('rejeita .dockerignore sem .env.production* (issue 84)', async () => {
     const file = path.join(root, '.dockerignore');
     const broken = '**/.env\n**/.env.local\n';

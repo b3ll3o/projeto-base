@@ -61,6 +61,19 @@ function extractFrom(text: string, stage: string): string | null {
 }
 
 /**
+ * Nomes dos serviços do bloco `services:` do compose.
+ *
+ * Chave de 2 espaços distingue serviço de chave interna (4 espaços) e de
+ * chave top-level (coluna 0, como `networks:`/`volumes:`). Devolve `[]` se o
+ * bloco não casar — quem chama precisa tratar isso como erro, porque um
+ * `for` sobre `[]` itera zero vezes e passa sem olhar nada.
+ */
+export function listComposeServices(composeText: string): string[] {
+  const bloco = composeText.match(/^services:\s*\n([\s\S]*?)(?=^\S)/m)?.[1] ?? '';
+  return [...bloco.matchAll(/^ {2}([\w.-]+):\s*$/gm)].map((m) => m[1]!);
+}
+
+/**
  * Verifica se um FROM ... contém digest pin @sha256:...
  *
  * Casos aceitos:
@@ -191,11 +204,28 @@ export async function checkDockerfileHardening(opts: {
       `docker-compose.yml: sem bloco top-level 'networks:' — #91 exige segmentação frontend/backend`,
     );
   } else {
-    // Confere que pelo menos postgres e web declaram `networks:` (não usam default implícita).
-    for (const svc of ['postgres', 'web', 'otel-collector']) {
+    // Confere que TODO serviço do compose declara `networks:` (não usa a
+    // default implícita). **Enumerado, não hardcoded**: MEDIDO 2026-10-16, uma
+    // lista de nomes transferia a manutenção para quem edita o compose — `api`
+    // não era checado, e um serviço novo (`cache`) entrava sem `networks:` e o
+    // gate ficava verde. Nomear aqui seria repetir o defeito que este bloco
+    // existe para fechar.
+    const services = listComposeServices(composeText);
+    if (services.length === 0) {
+      // `[]` itera zero vezes: sem este erro, uma regex que engole o bloco
+      // inteiro passa o gate sem ter olhado serviço nenhum.
+      errors.push(
+        `docker-compose.yml: 0 serviço(s) enumerado(s) no bloco 'services:' — não posso validar #91`,
+      );
+    }
+    for (const svc of services) {
       const svcRe = new RegExp(`^  ${svc}:\\s*\\n([\\s\\S]*?)(?=^  \\w|^volumes:|^networks:)`, 'm');
       const m = composeText.match(svcRe);
-      if (m && !/^\s+networks:\s*\n/m.test(m[1]!)) {
+      if (!m) {
+        errors.push(`docker-compose.yml: serviço '${svc}' não encontrado — não posso validar #91`);
+        continue;
+      }
+      if (!/^\s+networks:\s*\n/m.test(m[1]!)) {
         errors.push(
           `docker-compose.yml: service '${svc}' sem 'networks:' explícito — pode estar usando default — #91`,
         );

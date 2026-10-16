@@ -19,7 +19,7 @@ import { registryGateFiles } from './check-teeth-registry';
  * igualdade e falha nessa — que é a diferença entre a forma e o sistema.
  */
 
-const REGISTRO = '.agents/specs/conventions/ci-defense-in-depth.md';
+const REGISTRO = '.agents/specs/conventions/ci-defense-in-depth-dentes.md';
 const PREFLIGHT_TS = '.tooling/scripts/ci/preflight.ts';
 
 describe('preflightGates() — é derivado, não literal', () => {

@@ -9,7 +9,7 @@ import * as path from 'node:path';
 import type { CheckResult } from './check-types';
 
 /**
- * Fecha a lacuna documentada em `ci-defense-in-depth.md` §"A armadilha de
+ * Fecha a lacuna documentada em `ci-defense-in-depth-dentes.md` §"A armadilha de
  * ler este registro por nome de arquivo": `tooling/` e `.tooling/` são
  * DOIS diretórios distintos. Os gates vivem em `.tooling/scripts/ci/`, o
  * lint de roteamento em `tooling/scripts/`. Convenção tácita, sem gate.
@@ -23,6 +23,20 @@ import type { CheckResult } from './check-types';
  *    um arquivo que existe no disco (fecha a classe 1 de
  *    `guard-classes.md` — "condição inalcançável" — para o caso do
  *    `preflight-gates.ts` declarar um path que ninguém criou).
+ * 4. Nenhum `check-*.ts` vive em SUBDIRETÓRIO de `.tooling/scripts/ci/`.
+ *    O preflight descobre os gates por glob PLANO, então um subdir é
+ *    sombreado: o gate continua registrado em `PREFLIGHT_CHECKS` (que aponta
+ *    por path explícito e continua verde) e some da varredura por glob.
+ *
+ *    MEDIDO 2026-10-16: os três primeiros sub-checks não olhavam subdir, e
+ *    o nome do gate no painel já prometia "sem subdirs" — o guard prometia
+ *    pegar uma forma que ele não media. Plantar
+ *    `.tooling/scripts/ci/sub/check-subdir-fantasma.ts` passava limpo por
+ *    este gate E por `check-harness-owner` — a razão NÃO é o `readdirSync`
+ *    dele (`check-harness-owner.ts:128` filtra `base.startsWith('check-')`
+ *    POR NOME, então um `check-*` nunca entra na lista dele, na raiz ou em
+ *    subdir; medido). Quem depurar pelo motivo errado instrumenta o gate
+ *    errado.
  *
  * O que este gate NÃO pega (vide `guard-classes.md` §3, classe 1):
  * intenção errada sem ocorrência no repo. Se o caminho certo também não
@@ -35,11 +49,14 @@ export async function checkHarnessLocation(opts: { repoRoot: string }): Promise<
 
   // (1) check-*.ts NÃO pode estar em tooling/scripts/
   try {
-    const saida = execSync('git ls-files tooling/scripts/check-*.ts', {
-      cwd: root,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    const saida = execSync(
+      'git ls-files --cached --others --exclude-standard tooling/scripts/check-*.ts',
+      {
+        cwd: root,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
     const vazamentos = saida
       .split('\n')
       .map((l) => l.trim())
@@ -55,11 +72,14 @@ export async function checkHarnessLocation(opts: { repoRoot: string }): Promise<
 
   // (2) lint-*.ts e *-gate.ts NÃO podem estar em .tooling/scripts/ci/
   try {
-    const saida = execSync('git ls-files .tooling/scripts/ci/', {
-      cwd: root,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    const saida = execSync(
+      'git ls-files --cached --others --exclude-standard .tooling/scripts/ci/',
+      {
+        cwd: root,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
     const arquivos = saida
       .split('\n')
       .map((l) => l.trim())
@@ -105,6 +125,39 @@ export async function checkHarnessLocation(opts: { repoRoot: string }): Promise<
     }
   } catch (err) {
     errors.push(`falha ao validar paridade preflight-gates ↔ disco: ${err}`);
+  }
+
+  // (4) Nenhum check-*.ts em SUBDIRETÓRIO de .tooling/scripts/ci/
+  // `git ls-files` devolve o path RELATIVO, então `sub/` aparece como
+  // segmento do caminho — é isso que diferencia "na raiz" de "sombreado".
+  try {
+    const saida = execSync(
+      'git ls-files --cached --others --exclude-standard .tooling/scripts/ci/',
+      {
+        cwd: root,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+    for (const arq of saida
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)) {
+      if (!arq.endsWith('.ts') || arq.endsWith('.spec.ts')) continue;
+      // `dirname` devolve `.` para quem está na raiz — o `!==` é o filtro
+      // que separa "na raiz" de "sombreado", e sem ele TODO check-*.ts do
+      // diretório seria acusado (o spec pegou isso antes do push).
+      if (path.dirname(arq) === '.tooling/scripts/ci') continue;
+      if (path.basename(arq).startsWith('check-')) {
+        errors.push(
+          `harness em subdir: '${arq}' está em subdiretório de .tooling/scripts/ci/, ` +
+            `mas o preflight descobre gates por glob PLANO — o arquivo fica sombreado ` +
+            `(registrado em PREFLIGHT_CHECKS e verde, invisível na varredura)`,
+        );
+      }
+    }
+  } catch {
+    // mesmo motivo de (1)
   }
 
   return { ok: errors.length === 0, errors };
