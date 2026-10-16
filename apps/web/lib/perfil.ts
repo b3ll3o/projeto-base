@@ -9,8 +9,8 @@
 // Segue o mesmo padrão de `api-client.ts` (server-side, tokens via
 // `getToken` seam).
 
-import { ApiClient } from './api-client.js';
-import { exigirSessao } from './sessao.js';
+import { ApiClient } from './api-client';
+import { exigirSessao } from './sessao';
 import type {
   AuthorizationOutputDto,
   CreateProfileInputDto,
