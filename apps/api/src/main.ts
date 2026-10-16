@@ -3,7 +3,7 @@ import './shared/infrastructure/telemetry/tracing.js';
 import { initTracing } from './shared/infrastructure/telemetry/tracing.js';
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
-import { FastifyAdapter } from '@nestjs/platform-fastify';
+import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Logger as PinoLogger } from 'nestjs-pino';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import fastifyHelmet from '@fastify/helmet';
