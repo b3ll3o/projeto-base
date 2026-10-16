@@ -1,0 +1,12 @@
+# MEDIDO 2026-10-15: `docs/flows/` tem 62 MB em 79 arquivos .html (workflow
+# diagrams gerados, JS embutido). Varrido no grafo vira ~90% de nós sem
+# sinal e infla o tempo de extracao. O .json ao lado de cada .html e o que
+# carrega a informacao, e esse fica.
+docs/flows/**/*.html
+
+# saida do proprio graphify: sem isso o grafo se indexa a si mesmo
+graphify-out/
+
+# artefatos de execucao por timestamp (um arquivo por comando medido, ~10 por
+# run). Volumosos, sem valor de longo prazo para o grafo.
+.agents/runs/

@@ -39,22 +39,15 @@ apps/api/openapi.json
 !/.vscode/extensions.json
 .pnpm-store/
 
-# pt-BR: dev-archify/ e' uma FERRAMENTA standalone (repo git proprio aninhado),
-# nao uma dependencia do monorepo nem parte de apps/packages. Foi clonado aqui
-# para iteracao local com claude sessions; ver ~/.claude/projects/-home-leo-
-# Documentos-projetos-base/memory/ para historico (B26+B27). Funciona via
-# `node dev-archify/bin/archify.mjs <sub>` — paths em scripts assumem esta
-# localizacao, entao NAO mover sem ajustar as memories e skills referenciadas.
-# Ignore explicito remove o "?? dev-archify/" do git status do base sem
-# afetar o repo git interno de dev-archify/.
-/dev-archify/
+# pt-BR: graphify-out/ e saida GERADA do graphify (grafo de conhecimento do
+# codebase). Derivada e reproduzivel com `graphify extract .`; `cache/` sozinho
+# ja e SHA-256 por arquivo e nao vale versionar. A SKILL em
+# `.agents/skills/graphify/` e o que vai para o git; o grafo, nao.
+/graphify-out/
 
-# pt-BR: visual-check gera screenshots PNG + receipt JSON + contact-sheet HTML
-# ao lado do HTML canonico. Outputs locais de validacao, NAO artefatos canonicos.
-# Use `archify visual-check <html>` para regenerar durante revisao; evidencia
-# vai em comentario de PR, nao via commit. Pattern cobre
-# `*.workflow.visual-check.{json,html}` e `*.{type}.visual-check.{w}x{h}.{theme}.png`.
-*.visual-check.*
+# pt-BR: scratch da extracao semantica do graphify (as 13 listas de chunk que a
+# SKILL gera antes de despachar os subagents). Regenerado a cada build.
+/graphify-out/chunks/
 
 # pt-BR: playwright-mcp MCP despeja accessibility-snapshots (`page-<ts>.yml`) e
 # console logs (`console-<ts>.log`) no cwd de onde a sessao foi aberta. Sao
