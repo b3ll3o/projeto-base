@@ -13,7 +13,6 @@
 import { Profile } from '../domain/profile.aggregate.js';
 import { profileId } from '../domain/value-objects/profile-id.vo.js';
 import { profileSlug } from '../domain/value-objects/profile-slug.vo.js';
-import { profileName } from '../domain/value-objects/profile-name.vo.js';
 import type { ProfileRepositoryPort } from '../domain/ports/profile-repository.port.js';
 import type { UserRepositoryPort } from '../../users/domain/ports/user-repository.port.js';
 import type { UserProfileCacheService } from '../../../shared/infrastructure/security/user-profile-cache.service.js';

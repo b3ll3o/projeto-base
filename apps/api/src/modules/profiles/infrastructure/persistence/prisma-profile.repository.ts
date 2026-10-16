@@ -10,8 +10,6 @@ import { Profile } from '../../domain/profile.aggregate.js';
 import type { ProfileRepositoryPort } from '../../domain/ports/profile-repository.port.js';
 import { profileId as makeProfileId } from '../../domain/value-objects/profile-id.vo.js';
 import { profileSlug as makeProfileSlug } from '../../domain/value-objects/profile-slug.vo.js';
-import { profileName as makeProfileName } from '../../domain/value-objects/profile-name.vo.js';
-import { authorizationKey } from '../../domain/value-objects/authorization-key.vo.js';
 import { ConcurrencyException } from '../../domain/exceptions/profile.exceptions.js';
 
 @Injectable()
