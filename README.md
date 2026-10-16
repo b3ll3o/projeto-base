@@ -48,6 +48,8 @@ projeto-base/
 
 ## Como executar localmente
 
+> **Mapa completo por ambiente** (dev, Docker, observabilidade, e2e, CI): [`docs/como-rodar.md`](./docs/como-rodar.md)
+>
 > Três modos suportados. Use Docker para reproduzir ambiente de produção, pnpm nativo para iterar rápido, ou só Postgres+apps nativos para debugar uma camada.
 
 ### Pré-requisitos
@@ -55,7 +57,9 @@ projeto-base/
 - **Node.js** ≥ 20 (LTS)
 - **pnpm** ≥ 9.12.0 (`corepack enable && corepack prepare pnpm@9.12.0 --activate`)
 - **Docker** + **Docker Compose** v2 (apenas para modos A e B)
-- **PostgreSQL 16** rodando em `localhost:5432` (ou usar `docker compose up -d postgres`)
+- **PostgreSQL 16** rodando em `localhost:5432`. ⚠️ Desde o #91 o `postgres` do compose
+  **não publica porta no host** (`expose` sem `ports`), então `docker compose up -d postgres`
+  não serve para apps rodando na máquina — veja [`docs/como-rodar.md` §1.1](./docs/como-rodar.md)
 
 ### Opção A — Docker Compose (recomendado)
 
@@ -104,8 +108,12 @@ Mais rápido para iterar. Postgres ainda roda em Docker (B22 alternativa: Postgr
 # 1. Instalar deps
 pnpm install --frozen-lockfile
 
-# 2. Subir Postgres (o compose lê o .env da RAIZ do repo)
-docker compose up -d postgres
+# 2. Subir Postgres COM PORTA PUBLICADA NO HOST.
+# ⚠️ O `postgres` do compose usa só `expose` desde o #91 — `docker compose up -d postgres`
+# sobe o banco, mas a API na máquina não alcança. Use um container próprio:
+docker run -d --name projeto-base-pg-local -p 5432:5432 \
+  -e POSTGRES_USER=projeto -e POSTGRES_PASSWORD=projeto -e POSTGRES_DB=projeto_base \
+  postgres:16-alpine
 # ou aponte para um Postgres existente:
 # export DATABASE_URL="postgresql://projeto:projeto@localhost:5432/projeto_base?schema=public"
 
