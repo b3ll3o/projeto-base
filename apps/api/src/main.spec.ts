@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { GlobalExceptionFilter } from './shared/infrastructure/http/global-exception.filter.js';
 import { HttpException, HttpStatus, type ArgumentsHost } from '@nestjs/common';
-import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
+import { FastifyAdapter } from '@nestjs/platform-fastify';
 import fastifyHelmet from '@fastify/helmet';
 
 describe('GlobalExceptionFilter', () => {
