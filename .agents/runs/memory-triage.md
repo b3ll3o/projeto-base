@@ -165,6 +165,9 @@ fazê-lo às cegas seria fabricar 39 linhas `citada` sem âncora verificada.
 | `spec-verde-com-tsc-vermelho` | `pendente` | — | — |
 | `state-that-lives-outside-the-repo-has-no-gate` | `citada` | `.agents/workflows/pr-refresh.md` | `verde por omissão` |
 | `subagent-driven-development-always` | `citada` | `AGENTS.md` | `Coordenação obrigatória` |
+| `one-boolean-state-is-two-states` | `pendente` | — | — |
+| `subagent-write-truncation-limit` | `pendente` | — | — |
+| `uniform-validator-beats-self-reports` | `pendente` | — | — |
 | `test-the-field-the-eye-reads-not-the-field-it-parses` | `pendente` | — | — |
 | `tool-reports-success-while-corrupting` | `citada` | `.agents/specs/conventions/guard-classes.md` | `Ferramenta reporta sucesso corrompendo` |
 | `tsx-esbuild-does-not-emit-di-metadata` | `citada` | `.agents/memory/nestjs-specialist.md` | `design:paramtypes` |
