@@ -295,6 +295,15 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     id: 'check-engines-consistency',
   },
   {
+    // O runbook envelhece sem aviso: um script sai do `package.json`, uma chave
+    // de env some do `.env.example`, e o doc segue mandando o leitor copiar um
+    // comando morto. `check-doc-refs` só checa que o arquivo é citado — não que
+    // o que ele afirma ainda é verdade.
+    name: 'runbook coerente (scripts e env citados ainda existem)',
+    file: '.tooling/scripts/ci/check-runbook-drift.ts',
+    id: 'check-runbook-drift',
+  },
+  {
     // Gate prophylático de hardening Docker — issues 83, 84, 88, 89, 90, 91, 92.
     // Documenta o estado-novo (verde) e bloqueia regressões silenciosas
     // (classe 5 de guard-classes.md). Cobre: digest pin em FROM, USER 1001:1001
