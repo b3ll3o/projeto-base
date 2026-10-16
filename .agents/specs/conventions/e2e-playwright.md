@@ -59,10 +59,17 @@ endpoint que ninguém vê seria custo sem cobertura.
 | F6 | `/` ↔ `/users` ↔ `/users/novo` | Navegação | `f6-navegacao.spec.ts` | home · link da listagem · Cancelar |
 | F7 | `/login` → `/users` | Login de usuário | `f7-login.spec.ts` | válido · senha errada · e-mail inexistente · `autocomplete` · saída para o cadastro |
 | F8 | `/users` ↔ `/login`, `/users/novo` | Rota protegida sem sessão | `f8-sessao-obrigatoria.spec.ts` | sem cookie vai ao login · **sem cookie o cadastro é alcançável** · conteúdo NÃO entregue · cookie inválido · volta pelo login |
+| F9 | `/admin/profiles` | Listagem de perfis (admin) | `f9-admin-profiles.spec.ts` | admin vê tabela com flags e contagem · quase-admin vê "Acesso restrito" · tabela não renderiza |
+| F10 | `/admin/profiles/new` → `/admin/profiles/[slug]` | Criação de perfil | `f10-admin-novo-perfil.spec.ts` | cria com permissão inicial · redireciona ao detalhe · `isAdmin` não é oferecido · quase-admin recusa |
+| F11 | `/admin/profiles/[slug]` | Detalhe e troca de permissões | `f11-admin-perfil-detalhe.spec.ts` | perfil comum: marca e salva · perfil de sistema: somente leitura, sem form · quase-admin recusa e não vê o slug |
+| F12 | `/admin/users` | Atribuição de perfil a usuário | `f12-admin-usuarios.spec.ts` | atribui e a coluna reflete · quase-admin recusa e não vê nome/e-mail |
 
-⚠️ **4 rotas, 8 fluxos.** F2–F5 são quatro estados **da mesma** rota, e F6
+⚠️ **8 rotas, 12 fluxos.** F2–F5 são quatro estados **da mesma** rota, e F6
 atravessa três. F7–F8 são os fluxos que a demanda `login-usuario-senha`
-acrescentou: o login e a rota protegida sem sessão. Por isso o gate **não**
+acrescentou: o login e a rota protegida sem sessão. F9–F12 são as quatro telas
+`/admin/*` do RBAC (#97), e cada uma tem um teste que é o **negativo** do
+acesso — sem eles, "admin vê a tela" e "qualquer um vê a tela" passam no mesmo
+spec. Por isso o gate **não**
 deriva o inventário das rotas: um mapeamento rota→fluxo 1:1 falha sempre, e uma
 segunda tabela transcrita à mão volta a ser o literal que
 `check-teeth-registry.ts` existe para desconfiar.
@@ -195,6 +202,7 @@ do par, não um.
 |---------|------|---------|
 | 1.0 | 2026-10-08 | Criação. Inventário F1–F6; gate de paridade; execução no CI. |
 | 1.1 | 2026-10-13 | Demanda `login-usuario-senha`: F7 (login) e F8 (rota protegida sem sessão). F1–F6 passam a rodar autenticados pela fixture `auto` `comSessao`; `JWT_SECRET` aleatório por execução no `subirApi`; `SENHA_DE_TESTE` e `emailUnico` exportados de `e2e/support/dados.ts` (`:308` e `:359`) para o spec F7 semear a própria conta. `/users/novo` sai do conjunto protegido — a tela de cadastro deixou de chamar `exigirSessao()`, porque `POST /users` já é público. |
+| 1.2 | 2026-10-16 | RBAC (#97): F9–F12 cobrem as quatro telas `/admin/*`, que não tinham spec. `e2e/support/rbac.ts` nasce como **segunda exceção** à regra de `dados.ts` (banco direto só em `limparBase()`) — não existe rota HTTP que crie `isAdmin`, então o banco é a única forma de produzir o pré-requisito. Fixture `comoAdmin` em `support/fixtures.ts` (planta os cookies do admin semeado por cima dos de `comSessao`). |
 
 ## Ver Também
 

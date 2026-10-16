@@ -35,8 +35,10 @@ import {
   limparBase,
   tokensDoHarness,
   semearUsuario,
+  type ParDeTokens,
   type UsuarioWire,
 } from './dados';
+import { semearAdmin } from './rbac';
 
 export interface FixturesE2E {
   /** URL absoluta de um caminho do app. */
@@ -77,6 +79,17 @@ export interface FixturesE2E {
    * Fixture sem valor: o que importa é o efeito colateral no contexto.
    */
   comSessao: void;
+  /**
+   * Browser COM sessão de ADMIN (`isAdmin` semeado por `rbac.ts`).
+   *
+   * ⚠️ Depende de `comSessao` de propósito, e a dependência é a mecânica:
+   * `comSessao` é `auto`, e uma fixture `auto` roda ANTES de qualquer fixture
+   * que o teste peça. Declarando `comSessao` como dependência, o Playwright
+   * garante que o cookie de sessão já foi plantado — e é aí que esta escreve
+   * por cima. Sem a dependência seria uma corrida entre duas escritas no mesmo
+   * cookie, e o vencedor dependeria da ordem de resolução do framework.
+   */
+  comoAdmin: void;
 }
 
 // pt-BR: o `({}, use)` das fixtures sem dependência NÃO é estilo, é exigência
@@ -176,9 +189,60 @@ export const test = base.extend<FixturesE2E>({
     },
     { auto: true },
   ],
+
+  comoAdmin: async ({ page, comSessao, baseLimpa }, use) => {
+    // ⚠️ `void` explícito: sem ele o `no-unused-vars` reclama das dependências
+    // que existem SÓ pela ordem. Nenhuma das duas é usada — são os gatilhos.
+    //
+    // ⚠️ `baseLimpa` na dependência é ORDEM DECLARADA, não conserto medido.
+    // Ela também é `auto`, e Playwright roda `auto` antes de qualquer fixture
+    // pedida — então hoje a dependência é redundante. Fica porque é a única
+    // forma de dizer "isto precisa da base limpa" no código em vez de num
+    // comentário, e porque `auto` é detalhe do framework, não contrato.
+    //
+    // 📌 O que o F9 mediu de verdade: o "Acesso restrito" do admin NÃO era
+    // ordem de fixture. Era `lib/perfil.ts` prefixando `/api/v1` num
+    // `API_BASE_URL` que já o trazia — `/api/v1/api/v1/me/profile`, 404, e o
+    // `catch` de `obterMeuPerfil` devolvendo "sem perfil". Causa oposta,
+    // mesmo sintoma: por isso o comentário antigo apontava para a ordem.
+    void comSessao;
+    void baseLimpa;
+    const admin = await semearAdmin();
+    await plantarSessao(page, admin.tokens);
+    await use();
+  },
 });
 
 export { expect };
+
+/**
+ * Troca o par de cookies de sessão pelo par informado.
+ *
+ * ⚠️ `addCookies` e não `context.clearCookies()` + write: os mesmos nomes de
+ * cookie com o mesmo `url` SUBSTITUEM o valor, então o par do harness sai sem
+ * passar por um estado sem cookie — que é o estado que o F8 mede, e que aqui
+ * faria a tela cair no redirecionamento antes de chegar na de "Acesso
+ * restrito". Os dois motivos-produzem-a-tela-errada, e o spec não diria qual.
+ */
+export async function plantarSessao(page: Page, tokens: ParDeTokens): Promise<void> {
+  const { webUrl } = exigirEstado();
+  await page.context().addCookies([
+    {
+      name: 'access_token',
+      value: tokens.accessToken,
+      url: webUrl,
+      httpOnly: true,
+      sameSite: 'Lax',
+    },
+    {
+      name: 'refresh_token',
+      value: tokens.refreshToken,
+      url: webUrl,
+      httpOnly: true,
+      sameSite: 'Lax',
+    },
+  ]);
+}
 
 // ── Seletores ───────────────────────────────────────────────────────────────
 
