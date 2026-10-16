@@ -23,6 +23,14 @@ model User {
   // Hash argon2id da senha. NUNCA sai para fora: nem `UserOutputDto`, nem
   // os snapshots JSONB de `users_history`/`users_archive`.
   passwordHash String    @map("password_hash")
+  // ProfileId: FK para Profile. Nullable para soft-rollout: a migration
+  // adiciona a coluna como null e o seed atribui 'viewer' como default.
+  // pt-BR (#93.1 — RBAC, 2026-10-16): o JwtAuthGuard consulta
+  // `users.profile_id` em cada request via cache de 5s, então o caminho
+  // `null` é tratado como "sem perfil" = 0 permissões (deny-by-default).
+  // O cascade (onDelete: Restrict) impede deletar um Profile que tem Users
+  // atribuídos — o admin precisa reatribuir antes.
+  profileId    String?   @map("profile_id") @db.Uuid
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
   createdBy    String?   @map("created_by") @db.Uuid
@@ -31,9 +39,15 @@ model User {
   deletedBy    String?   @map("deleted_by") @db.Uuid
   version      Int       @default(1)
 
+  // Relação: um User pertence a 0..1 Profile. Nullable para rollback /
+  // usuários legados sem profile. onDelete: Restrict porque o admin precisa
+  // reatribuir antes de deletar o Profile.
+  profile      Profile?  @relation(fields: [profileId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
   @@index([email])
   @@index([deletedAt])
   @@index([createdAt(sort: Desc)])
+  @@index([profileId])
   @@map("users")
 }
 
@@ -64,4 +78,66 @@ model UserArchive {
 
   @@index([deletedAt(sort: Desc)])
   @@map("users_archive")
+}
+
+// pt-BR (#93.1 — RBAC, 2026-10-16): Profile é o agregado de "papéis"
+// no sentido de RBAC. Cada Profile agrupa N Authorizations (permissões).
+// O flag `isAdmin` é o bypass total: mesmo que o perfil "admin" perca
+// todas as Authorizations, o guard continua deixando passar via
+// `permissionsGuard.isAdmin = true`. Defesa em profundidade.
+//
+// `isSystem` impede deletar o perfil — perfis de sistema são gerenciados
+// só pelo seed/migrations. Sem isso, um admin distraído poderia deletar
+// "admin" e perder acesso a si próprio (lock-out).
+//
+// Profile NÃO tem soft-delete: é config de admin, não dado de negócio.
+// Hard delete com proteção via `countUsersWithProfile` (FK onDelete:
+// Restrict + check explícito antes). Perfis de sistema (isSystem=true)
+// são protegidos no agregado (`marcarExcluido` lança).
+model Profile {
+  id          String    @id @default(uuid()) @db.Uuid
+  // Slug canônico: 'admin', 'manager', 'viewer'. Único, kebab-case, imutável
+  // após criação (renomear quebraria referências em audit logs). O `name` é
+  // o rótulo editável.
+  slug        String    @unique
+  name        String
+  description String?
+  // Bypass total: o guard dá true sem consultar Authorizations.
+  isAdmin     Boolean   @default(false) @map("is_admin")
+  // Perfil de sistema: protegido contra DELETE via use case.
+  isSystem    Boolean   @default(false) @map("is_system")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  version     Int       @default(1)
+
+  authorizations Authorization[]
+  users          User[]
+
+  @@index([slug])
+  @@map("profiles")
+}
+
+// pt-BR (#93.1 — RBAC, 2026-10-16): Authorization é a relação "perfil
+// TEM permissão X". A chave única `(profile_id, permission_key)` impede
+// duplicar a mesma permissão no mesmo perfil. O `permission_key` é uma
+// string hierárquica com pontos: 'users.read', 'users.write',
+// 'admin.manage_profiles', 'reports.view'.
+//
+// O guard usa a chave exata; permissões não são hierárquicas (ter
+// 'admin.*' não implica 'users.read'). O catálogo de chaves vive em
+// `permissions.catalog.ts` e é validado no seed/import.
+model Authorization {
+  id            String   @id @default(uuid()) @db.Uuid
+  profileId     String   @map("profile_id") @db.Uuid
+  permissionKey String   @map("permission_key")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  version       Int      @default(0)
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([profileId, permissionKey])
+  @@index([profileId])
+  @@index([permissionKey])
+  @@map("authorizations")
 }
