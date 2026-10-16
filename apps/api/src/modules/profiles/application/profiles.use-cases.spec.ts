@@ -12,7 +12,8 @@
 //     falha com isSystem
 //   - listar / obterPorId / obterPorSlug
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { Logger } from '@nestjs/common';
 import {
   ProfileUseCases,
   AuthorizationUseCases,
@@ -20,6 +21,7 @@ import {
   type AtorAutenticado,
 } from './profiles.use-cases.js';
 import { Profile } from '../domain/profile.aggregate.js';
+import { profileSlug } from '../domain/value-objects/profile-slug.vo.js';
 import type { ProfileRepositoryPort } from '../domain/ports/profile-repository.port.js';
 import type { UserRepositoryPort } from '../../users/domain/ports/user-repository.port.js';
 import { UserProfileCacheService } from '../../../shared/infrastructure/security/user-profile-cache.service.js';
@@ -120,7 +122,7 @@ describe('ProfileUseCases', () => {
 
   describe('criar', () => {
     it('cria profile com sucesso', async () => {
-      const result = await uc.criar({ slug: 'viewer', name: 'Visualizador' });
+      const result = await uc.criar({ slug: 'viewer', name: 'Visualizador' }, ATOR_ADMIN);
       expect(result.slug).toBe('viewer');
       expect(result.name).toBe('Visualizador');
       expect(result.version).toBe(1);
@@ -130,14 +132,14 @@ describe('ProfileUseCases', () => {
     // — um `POST {"slug":"Bad Slug"}` respondia 409 PROFILE_SLUG_IN_USE, que
     // é "esse slug já existe". É erro de VALIDAÇÃO: 400.
     it('rejeita slug inválido (uppercase com espaço) como erro de validação', async () => {
-      await expect(uc.criar({ slug: 'Bad Slug', name: 'X' })).rejects.toThrow(
+      await expect(uc.criar({ slug: 'Bad Slug', name: 'X' }, ATOR_ADMIN)).rejects.toThrow(
         UserValidationException,
       );
     });
 
     it('rejeita slug duplicado', async () => {
-      await uc.criar({ slug: 'viewer', name: 'V1' });
-      await expect(uc.criar({ slug: 'viewer', name: 'V2' })).rejects.toThrow(
+      await uc.criar({ slug: 'viewer', name: 'V1' }, ATOR_ADMIN);
+      await expect(uc.criar({ slug: 'viewer', name: 'V2' }, ATOR_ADMIN)).rejects.toThrow(
         ProfileSlugAlreadyInUseException,
       );
     });
@@ -145,7 +147,7 @@ describe('ProfileUseCases', () => {
 
   describe('atualizar', () => {
     it('atualiza profile comum com sucesso', async () => {
-      const created = await uc.criar({ slug: 'custom', name: 'Velho Long' });
+      const created = await uc.criar({ slug: 'custom', name: 'Velho Long' }, ATOR_ADMIN);
       const updated = await uc.atualizar(created.id, { name: 'Novo' });
       expect(updated.name).toBe('Novo');
       expect(updated.version).toBeGreaterThanOrEqual(2);
@@ -176,7 +178,7 @@ describe('ProfileUseCases', () => {
 
   describe('deletar', () => {
     it('deleta profile comum sem users', async () => {
-      const created = await uc.criar({ slug: 'custom', name: 'Custom' });
+      const created = await uc.criar({ slug: 'custom', name: 'Custom' }, ATOR_ADMIN);
       users.count = 0;
       await uc.deletar(created.id);
       const found = await repo.findById(
@@ -188,7 +190,7 @@ describe('ProfileUseCases', () => {
     });
 
     it('rejeita deletar profile com users atribuídos', async () => {
-      const created = await uc.criar({ slug: 'custom', name: 'Custom' });
+      const created = await uc.criar({ slug: 'custom', name: 'Custom' }, ATOR_ADMIN);
       users.count = 3;
       await expect(uc.deletar(created.id)).rejects.toThrow(ProfileHasUsersException);
     });
@@ -199,12 +201,27 @@ describe('ProfileUseCases', () => {
       users.count = 0;
       await expect(uc.deletar(p.id().value)).rejects.toThrow(ProfileSystemProtectedException);
     });
+
+    // pt-BR (#97, B6): `deletar` protegia `isSystem` e não `isAdmin`.
+    // Hoje o profile admin SÓ é protegido por acidente: se tem usuários, o
+    // contador de `ProfileHasUsersException` barra; se não tem, a FK
+    // `User.profileId` (onDelete: Restrict) não impede nada porque não há
+    // linha referenciando. A invariável depende de raciocínio sobre a FK
+    // que está a dois arquivos dali — e a próxima pessoa que lê `deletar`
+    // não tem como vê-lo daqui.
+    it('rejeita deletar profile isAdmin, mesmo sem users (B6)', async () => {
+      const p = Profile.criar({ slug: 'root', name: 'Root', isAdmin: true, agora: T0 });
+      repo.prime(p);
+      users.count = 0;
+
+      await expect(uc.deletar(p.id().value)).rejects.toThrow(ProfileAdminProtectedException);
+    });
   });
 
   describe('listar/obter', () => {
     it('listar retorna todos', async () => {
-      await uc.criar({ slug: 'aaa', name: 'Primeiro' });
-      await uc.criar({ slug: 'bbb', name: 'Segundo' });
+      await uc.criar({ slug: 'aaa', name: 'Primeiro' }, ATOR_ADMIN);
+      await uc.criar({ slug: 'bbb', name: 'Segundo' }, ATOR_ADMIN);
       const all = await uc.listar();
       expect(all).toHaveLength(2);
     });
@@ -219,20 +236,26 @@ describe('ProfileUseCases', () => {
   describe('catálogo de permissões (#97)', () => {
     it('rejeita initialPermissions com chave fora do catálogo', async () => {
       await expect(
-        uc.criar({
-          slug: 'suspenso',
-          name: 'Suspenso',
-          initialPermissions: ['chave-inexistente'],
-        }),
+        uc.criar(
+          {
+            slug: 'suspenso',
+            name: 'Suspenso',
+            initialPermissions: ['chave-inexistente'],
+          },
+          ATOR_ADMIN,
+        ),
       ).rejects.toThrow(InvalidPermissionKeyException);
     });
 
     it('aceita initialPermissions com chave catalogada', async () => {
-      const created = await uc.criar({
-        slug: 'com-permissao',
-        name: 'Com Permissão',
-        initialPermissions: ['users.read'],
-      });
+      const created = await uc.criar(
+        {
+          slug: 'com-permissao',
+          name: 'Com Permissão',
+          initialPermissions: ['users.read'],
+        },
+        ATOR_ADMIN,
+      );
       expect(created.permissions).toEqual(['users.read']);
     });
   });
@@ -247,21 +270,27 @@ describe('ProfileUseCases', () => {
 
   describe('criar — isAdmin/isSystem são seed-only (#97)', () => {
     it('ignora isAdmin=true que chegue em runtime', async () => {
-      const created = await uc.criar({
-        slug: 'sneaky',
-        name: 'Sneaky',
-        isAdmin: true,
-      } as never);
+      const created = await uc.criar(
+        {
+          slug: 'sneaky',
+          name: 'Sneaky',
+          isAdmin: true,
+        } as never,
+        ATOR_ADMIN,
+      );
 
       expect(created.isAdmin).toBe(false);
     });
 
     it('ignora isSystem=true que chegue em runtime', async () => {
-      const created = await uc.criar({
-        slug: 'sneaky-sistema',
-        name: 'Sneaky Sistema',
-        isSystem: true,
-      } as never);
+      const created = await uc.criar(
+        {
+          slug: 'sneaky-sistema',
+          name: 'Sneaky Sistema',
+          isSystem: true,
+        } as never,
+        ATOR_ADMIN,
+      );
 
       expect(created.isSystem).toBe(false);
     });
@@ -321,7 +350,16 @@ describe('AuthorizationUseCases — auto-concessão (#97)', () => {
     );
   });
 
-  it('recusa ator sem isAdmin revogar do PRÓPRIO profile', async () => {
+  // pt-BR (#97, B3): este teste ANTES afirmava o contrário — "recusa ator sem
+  // isAdmin revogar do PRÓPRIO profile" — e foi ele que segurava o lockout.
+  //
+  // O critério da casa está escrito no método vizinho (`recusaConcessaoQueNaoTem`)
+  // e é explícito: "remover privilégio nunca é escalada". Auto-concessão existe
+  // para barrar AUTO-Promoção (o ator se dá uma chave a si mesmo). Aplicá-la a
+  // `revogar` inverte o efeito: se um admin concedeu `users.delete` por engano a
+  // um não-admin, esse usuário FICA TRANCADO — a única rota de saída dele seria
+  // pedir a outro admin. Remover permissão não amplia poder de ninguém.
+  it('permite ator sem isAdmin revogar do PRÓPRIO profile (B3: revogar nunca é escalada)', async () => {
     const meu = Profile.criar({
       slug: 'meu-perfil',
       name: 'Meu Perfil',
@@ -331,9 +369,10 @@ describe('AuthorizationUseCases — auto-concessão (#97)', () => {
     repo.prime(meu);
     users.prime(userComProfile(ATOR_ID, meu.id().value));
 
-    await expect(uc.revogar(meu.id().value, 'users.read', ATOR)).rejects.toThrow(
-      ProfilePrivilegeEscalationException,
-    );
+    const detail = await uc.revogar(meu.id().value, 'users.read', ATOR);
+    // O estado tem que mudar: um "passa" que não revogasse nada seria verde
+    // aqui e o usuário continuaria trancado em produção.
+    expect(detail.permissions).not.toContain('users.read');
   });
 
   // pt-BR (#97): o antigo "permite ator sem isAdmin mexer em OUTRO profile"
@@ -698,5 +737,123 @@ describe('UserProfileUseCases — atribuir profile admin (#97)', () => {
     await expect(
       uc.atribuirProfileAoUser(ALVO_ID, null, { userId: ATOR_ID, isAdmin: true }),
     ).resolves.toBeUndefined();
+  });
+});
+
+// ─── A1.3: `criar` com permissão inicial é uma CONCESSÃO ───────────────────
+//
+// `POST /admin/profiles` exige `admin.manage-profiles` — a chave de GERIR
+// perfis, não a de conceder permissões. A1.1 fecha o caminho pelo
+// `atribuir`, mas o `criar` aceita `initialPermissions` e não tinha trava
+// nenhuma: um ator com SÓ `admin.manage-profiles` postava
+// `{"slug":"root","name":"root","initialPermissions":["admin.manage-users"]}`
+// e ficava com um profile que `atribuir` jamais deixaria existir — o mesmo
+// "cunha um profile vazio, enche do conjunto `admin.*`" que o comentário de
+// `recusaConcessaoQueNaoTem` descreve, só que pela porta de trás.
+describe('ProfileUseCases — `criar` com permissão inicial é concessão (#97/A1.3)', () => {
+  let repo: InMemoryProfileRepo;
+  let users: InMemoryUserRepo;
+  let cache: UserProfileCacheService;
+  let uc: ProfileUseCases;
+
+  beforeEach(() => {
+    repo = new InMemoryProfileRepo();
+    users = new InMemoryUserRepo();
+    cache = new UserProfileCacheService();
+    uc = new ProfileUseCases(repo, users, cache);
+  });
+
+  it('recusa criar com uma permissão que o ator não tem', async () => {
+    const meu = Profile.criar({
+      slug: 'meu-perfil',
+      name: 'Meu Perfil',
+      initialAuthorizations: ['admin.manage-profiles'],
+      agora: new Date(),
+    });
+    repo.prime(meu);
+    users.prime(userComProfile(ATOR_ID, meu.id().value));
+
+    await expect(
+      uc.criar({ slug: 'root', name: 'Root', initialPermissions: ['admin.manage-users'] }, ATOR),
+    ).rejects.toThrow(ProfilePrivilegeEscalationException);
+
+    // E nada foi criado: um 403 que deixa o profile no banco é uma escalada
+    // que o próximo `listar` entrega.
+    expect(await repo.findBySlug(profileSlug('root'))).toBeNull();
+  });
+
+  it('permite criar com uma permissão que o ator TEM (subconjunto)', async () => {
+    const meu = Profile.criar({
+      slug: 'meu-perfil',
+      name: 'Meu Perfil',
+      initialAuthorizations: ['admin.manage-profiles', 'users.read'],
+      agora: new Date(),
+    });
+    repo.prime(meu);
+    users.prime(userComProfile(ATOR_ID, meu.id().value));
+
+    const criado = await uc.criar(
+      { slug: 'leitor', name: 'Leitor', initialPermissions: ['users.read'] },
+      ATOR,
+    );
+    expect(criado.permissions).toEqual(['users.read']);
+  });
+
+  it('ator isAdmin cria com qualquer permissão (o bypass é total)', async () => {
+    const criado = await uc.criar(
+      { slug: 'root', name: 'Root', initialPermissions: ['admin.manage-users'] },
+      ATOR_ADMIN,
+    );
+    expect(criado.permissions).toEqual(['admin.manage-users']);
+  });
+
+  // Fail-CLOSED, igual a `recusaConcessaoQueNaoTem`: ator que não resolve no
+  // banco (soft-deleted) tem conjunto VAZIO de permissões — então qualquer
+  // `initialPermissions` é recusa. Sem este teste, trocar `findById` por um
+  // `?.` silencioso devolveria um conjunto `undefined` que passa em tudo.
+  it('recusa quando o ator não resolve no banco (soft-deleted)', async () => {
+    await expect(
+      uc.criar({ slug: 'root', name: 'Root', initialPermissions: ['users.read'] }, ATOR),
+    ).rejects.toThrow(ProfilePrivilegeEscalationException);
+  });
+});
+
+/**
+ * pt-BR (#97): o `motivo` da escalada é um campo que NENHUM log lia — a
+ * exceção não pode logar (`domain/` não importa `@nestjs/common`, e o hook
+ * `stack-code-reviewer` bloqueia), e o `GlobalExceptionFilter` só loga a
+ * partir de 500, então um 403 de escalada passava sem rastro nenhum.
+ *
+ * Este teste existe para a LINHA não virar código morto: se alguém trocar
+ * `recusaEscalada` por um `throw new ProfilePrivilegeEscalationException(...)`
+ * "só para simplifier", ele fica vermelho.
+ */
+describe('escalada recusada deixa rastro no log (#97)', () => {
+  it('loga o motivo ao recusar', async () => {
+    const repo = new InMemoryProfileRepo();
+    const users = new InMemoryUserRepo();
+    const uc = new AuthorizationUseCases(repo, users, new UserProfileCacheService());
+    const meu = Profile.criar({
+      slug: 'meu-perfil',
+      name: 'Meu Perfil',
+      initialAuthorizations: ['admin.manage-authorizations'],
+      agora: new Date(),
+    });
+    repo.prime(meu);
+    users.prime(userComProfile(ATOR_ID, meu.id().value));
+
+    const aviso = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    try {
+      await expect(uc.atribuir(meu.id().value, 'admin.manage-users', ATOR)).rejects.toThrow(
+        ProfilePrivilegeEscalationException,
+      );
+
+      expect(aviso).toHaveBeenCalledTimes(1);
+      // O motivo em texto, e não só "algo foi recusado": é o motivo que diz
+      // QUAL das 7 ramificações disparou.
+      expect(String(aviso.mock.calls[0]?.[0])).toContain('próprio profile');
+    } finally {
+      aviso.mockRestore();
+    }
   });
 });

@@ -13,6 +13,7 @@ import {
   Param,
   Patch,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
@@ -36,6 +37,16 @@ interface CreateProfileBody {
 interface UpdateProfileBody {
   name: string;
   description?: string;
+}
+
+/**
+ * O mínimo do `req.user` publicado pelo `JwtAuthGuard`. Mesma forma do
+ * `RequestComAtor` de `admin-authorizations.controller.ts` e
+ * `admin-users.controller.ts` — declarado localmente em cada controller em vez
+ * de extraído porque os três nunca são usados juntos.
+ */
+interface RequestComAtor {
+  user: { sub: string; isAdmin?: boolean };
 }
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -63,11 +74,18 @@ export class AdminProfilesController {
 
   @Post()
   @RequirePermission('admin.manage-profiles')
-  async create(@Body() body: CreateProfileBody): Promise<ProfileDetail> {
+  async create(
+    @Body() body: CreateProfileBody,
+    @Req() req: RequestComAtor,
+  ): Promise<ProfileDetail> {
     // pt-BR (#97): `isAdmin`/`isSystem` NÃO são repassados do body, mesmo
     // que o cliente os mande — um ator com `admin.manage-profiles` criaria
     // profile de bypass total. As flags vêm só do seed/migration
     // (`apps/api/prisma/seed.ts`), que escreve direto no Prisma.
+    //
+    // pt-BR (#97, A1.3): o ator vai junto porque `initialPermissions` é uma
+    // CONCESSÃO. `admin.manage-profiles` autoriza gerir perfis, não inventar
+    // permissão — o mesmo critério que `AuthorizationUseCases.atribuir` aplica.
     const input: CreateProfileInput = {
       slug: body.slug,
       name: body.name,
@@ -76,7 +94,10 @@ export class AdminProfilesController {
         ? { initialPermissions: body.initialPermissions }
         : {}),
     };
-    return this.useCases.criar(input);
+    return this.useCases.criar(input, {
+      userId: req.user.sub,
+      isAdmin: req.user.isAdmin === true,
+    });
   }
 
   @Patch(':id')
