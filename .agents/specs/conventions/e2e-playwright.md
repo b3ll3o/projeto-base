@@ -1,7 +1,7 @@
 ---
 name: e2e-playwright
-version: 1.1
-updated: 2026-10-13
+version: 1.3
+updated: 2026-10-16
 maintainer: test-writer
 description: "Convenção canônica de cobertura e2e de frontend — todo fluxo de usuário COM tela é mapeado no inventário abaixo e coberto por um spec Playwright que atravessa browser, Next, Server Action, API HTTP e Postgres de ponta a ponta. Gate automatizado em check-e2e-flow-coverage.ts; execução no CI."
 ---
@@ -42,6 +42,34 @@ history, get-by-id e `/api/health`. Esses continuam cobertos pelo e2e de API
 para eles — um `app.inject` não renderiza nada, e um browser para testar um
 endpoint que ninguém vê seria custo sem cobertura.
 
+## A Regra
+
+> **Toda tela da aplicação precisa de um fluxo mapeado e de um spec e2e que a
+> atravesse.** Tela nova sem linha no inventário é vermelho no preflight, com o
+> path nomeado.
+
+A regra tem duas metades, e a segunda é a que costuma faltar:
+
+1. **Todo fluxo tem spec, todo spec pertence a um fluxo.** Isso é paridade
+   entre o inventário e os cabeçalhos `// FLUXO:` dos specs — dois conjuntos
+   escritos à mão.
+2. **Toda rota da aplicação está no inventário.** O inventário transcreve a
+   coluna `Rota`, e o gate confere cada token dela contra os `page.tsx` de
+   `apps/web/app/**`, que ninguém escreve.
+
+Sem a segunda metade, a regra é circular: o inventário pode ficar em paridade
+consigo mesmo enquanto uma tela inteira passa sem cobertura. Foi exatamente o
+que aconteceu com `/me/profile` até 2026-10-16 — o preflight anunciava
+"reconciliado sobre 12 fluxo(s) e 12 spec(s)" com a tela fora, porque reconciliar
+dois conjuntos escritos à mão não é medir a aplicação.
+
+### Se uma tela não pode (ou não deve) ter spec
+
+Não se inventa uma linha vazia. A linha do inventário **precisa dizer por
+que** — e o nome da rota na coluna `Rota` continua obrigatório, porque é ele
+que faz a tela aparecer no gate. Uma rota isenta é uma decisão registrada, não
+um silêncio.
+
 ## Inventário de Fluxos
 
 > ⚠️ **Esta tabela é dado, não prosa.** O gate
@@ -63,13 +91,16 @@ endpoint que ninguém vê seria custo sem cobertura.
 | F10 | `/admin/profiles/new` → `/admin/profiles/[slug]` | Criação de perfil | `f10-admin-novo-perfil.spec.ts` | cria com permissão inicial · redireciona ao detalhe · `isAdmin` não é oferecido · quase-admin recusa |
 | F11 | `/admin/profiles/[slug]` | Detalhe e troca de permissões | `f11-admin-perfil-detalhe.spec.ts` | perfil comum: marca e salva · perfil de sistema: somente leitura, sem form · quase-admin recusa e não vê o slug |
 | F12 | `/admin/users` | Atribuição de perfil a usuário | `f12-admin-usuarios.spec.ts` | atribui e a coluna reflete · quase-admin recusa e não vê nome/e-mail |
+| F13 | `/me/profile` | Meu perfil | `f13-meu-perfil.spec.ts` | admin vê o bypass · perfil comum vê nome, slug e permissões · sem perfil: deny-by-default · sem sessão vai ao login |
 
-⚠️ **8 rotas, 12 fluxos.** F2–F5 são quatro estados **da mesma** rota, e F6
+⚠️ **9 rotas, 13 fluxos.** F2–F5 são quatro estados **da mesma** rota, e F6
 atravessa três. F7–F8 são os fluxos que a demanda `login-usuario-senha`
 acrescentou: o login e a rota protegida sem sessão. F9–F12 são as quatro telas
 `/admin/*` do RBAC (#97), e cada uma tem um teste que é o **negativo** do
 acesso — sem eles, "admin vê a tela" e "qualquer um vê a tela" passam no mesmo
-spec. Por isso o gate **não**
+spec. F13 é `/me/profile`, que era a única tela do app com `page.tsx` e nenhum
+spec — MEDIDO 2026-10-16, e a coluna `Rota` do inventário é conferida contra
+os `page.tsx` do disco, que foi o que apontou a falta. O gate **não**
 deriva o inventário das rotas: um mapeamento rota→fluxo 1:1 falha sempre, e uma
 segunda tabela transcrita à mão volta a ser o literal que
 `check-teeth-registry.ts` existe para desconfiar.
@@ -106,6 +137,11 @@ em vermelho:
 
 1. Uma linha na tabela de **Inventário de Fluxos** acima.
 2. Um `apps/web/e2e/f<N>-<slug>.spec.ts` começando com `// FLUXO: F<N>`.
+
+E a coluna `Rota` da linha nova não é decoração: ela é conferida contra os
+`page.tsx` do disco. Tela nova sem linha é o que o gate accuse — e a ordem
+importa, porque o gate roda no preflight e a linha sai antes do spec quebrar o
+build.
 
 Comandos:
 
@@ -203,6 +239,7 @@ do par, não um.
 | 1.0 | 2026-10-08 | Criação. Inventário F1–F6; gate de paridade; execução no CI. |
 | 1.1 | 2026-10-13 | Demanda `login-usuario-senha`: F7 (login) e F8 (rota protegida sem sessão). F1–F6 passam a rodar autenticados pela fixture `auto` `comSessao`; `JWT_SECRET` aleatório por execução no `subirApi`; `SENHA_DE_TESTE` e `emailUnico` exportados de `e2e/support/dados.ts` (`:308` e `:359`) para o spec F7 semear a própria conta. `/users/novo` sai do conjunto protegido — a tela de cadastro deixou de chamar `exigirSessao()`, porque `POST /users` já é público. |
 | 1.2 | 2026-10-16 | RBAC (#97): F9–F12 cobrem as quatro telas `/admin/*`, que não tinham spec. `e2e/support/rbac.ts` nasce como **segunda exceção** à regra de `dados.ts` (banco direto só em `limparBase()`) — não existe rota HTTP que crie `isAdmin`, então o banco é a única forma de produzir o pré-requisito. Fixture `comoAdmin` em `support/fixtures.ts` (planta os cookies do admin semeado por cima dos de `comSessao`). |
+| 1.3 | 2026-10-16 | O gate passa a reconciliar com um **terceiro** conjunto: as rotas de `apps/web/app/**/page.tsx`. Reconciliar dois conjuntos escritos à mão provava paridade, e paridade não é cobertura — `/me/profile` era a única tela do app sem spec e o preflight estava verde. A coluna `Rota` do inventário passa a ser conferida contra o disco (tela nova sem linha é vermelha, com o path nomeado). F13 fecha a lacuna encontrada por essa própria conferência: `/me/profile` com os quatro estados da tela (admin/bypass, perfil comum, deny-by-default, sem sessão). Contador corrigido: eram "8 rotas, 12 fluxos" e são 9 e 13. |
 
 ## Ver Também
 

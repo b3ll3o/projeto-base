@@ -26,6 +26,21 @@
  * mão, e este gate o reconcilia com o outro único conjunto escrito à mão: os
  * cabeçalhos `// FLUXO: F<N>` dos specs.
  *
+ * ## E as rotas? — o terceiro conjunto, que NÃO é escrito à mão
+ *
+ * MEDIDO 2026-10-16: reconciliar dois conjuntos escritos à mão provou paridade
+ * entre eles, e paridade não é cobertura. `/me/profile` era uma tela real
+ * (`apps/web/app/me/profile/page.tsx`), não tinha linha no inventário, não
+ * tinha spec, e o preflight anunciava "reconciliado sobre 12 fluxo(s) e 12
+ * spec(s)" como se estivesse tudo medido. Um gate que só compara o que alguém
+ * escreveu com o que alguém escreveu não vê a tela que ninguém declarou.
+ *
+ * A coluna `Rota` do inventário é o gancho: ela é transcrita à mão, mas cada
+ * token dela é conferido contra as rotas **do disco**, que ninguém escreve. É
+ * a única asserção do arquivo que não é declarativa — e é a que fecha o
+ * buraco. Rota nova no código sem linha no inventário é vermelha, nomeando o
+ * path.
+ *
  * ## Por que o parse acha a coluna pelo NOME e não pela posição
  *
  * Mesma doutrina de `check-teeth-registry.ts`: `split('|')[3]` funciona até
@@ -43,7 +58,7 @@
  */
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import type { CheckResult } from './check-types';
 import { linhasDoRelato } from './check-types';
 
@@ -52,6 +67,9 @@ const INVENTARIO_HEADING = /^##\s+Inventário de Fluxos\s*$/m;
 
 /** Coluna do cabeçalho da tabela que guarda o nome do spec. */
 const COLUNA_SPEC = 'spec';
+
+/** Coluna do cabeçalho da tabela que guarda a rota exercida pelo fluxo. */
+const COLUNA_ROTA = 'rota';
 
 /** Cabeçalho de fluxo que amarra um spec ao inventário. */
 const FLUXO_RE = /^\s*(?:\/\/|\/\*)\s*FLUXO:\s*(F\d+)\b/m;
@@ -62,6 +80,8 @@ const ID_RE = /^F\d+$/;
 export interface LinhaFluxo {
   id: string;
   spec: string;
+  /** Rotas que o fluxo exercita — reconciliadas com as rotas do disco. */
+  rotas: string[];
 }
 
 export interface SpecE2E {
@@ -73,6 +93,13 @@ export interface SpecE2E {
 export interface EntradasE2E {
   convencaoMarkdown: string;
   specs: SpecE2E[];
+  /**
+   * Rotas que EXISTEM no código, derivadas de `apps/web/app/**\/page.tsx`.
+   * Este é o único conjunto do gate que ninguém escreve à mão — é o que
+   * impede o inventário de ficar em paridade consigo mesmo enquanto uma tela
+   * nova passa sem fluxo. Vazio com o diretório de app presente é erro.
+   */
+  rotas: string[];
 }
 
 export interface ResultadoE2E {
@@ -80,6 +107,8 @@ export interface ResultadoE2E {
   errors: string[];
   /** Fluxos efetivamente medidos — o denominador do "verifiquei". */
   medidos: number;
+  /** Rotas do disco conferidas contra a coluna `Rota`. */
+  rotasMedidas: number;
 }
 
 /** Divide uma linha de tabela em células, já sem as bordas. */
@@ -96,6 +125,48 @@ function celulas(linha: string): string[] {
 function semCrases(token: string): string {
   const m = /`([^`]+)`/.exec(token);
   return (m?.[1] ?? token).trim();
+}
+
+/**
+ * Extrai as rotas de uma célula da coluna `Rota`.
+ *
+ * A célula descreve um PERCURSO, não um caminho: `` `/users/novo` →
+ * `/login?cadastrado=1` → `/users` `` e `` `/` ↔ `/users` ↔ `/users/novo` ``.
+ * Separar por `→`/`↔`, tirar a query string e normalizar a barra final é o que
+ * torna comparável com o que o App Router gera. `[slug]` fica como `[slug]`:
+ * o segmento dinâmico é a rota, e o disco tem a pasta com esse nome.
+ */
+export function rotasDeclaradas(celula: string): string[] {
+  return celula
+    .split(/→|↔/)
+    .map((p) => semCrases(p).split('?')[0]!.trim())
+    .filter((p) => p.startsWith('/'))
+    .map((p) => (p.length > 1 ? p.replace(/\/+$/, '') : p));
+}
+
+/**
+ * Deriva as rotas do App Router a partir dos `page.tsx` em disco.
+ *
+ * `app/page.tsx` → `/`; `app/users/novo/page.tsx` → `/users/novo`. É a
+ * definição de rota do próprio Next, não uma convenção nossa: qualquer
+ * segmento de pasta é um segmento de URL, incluindo `[slug]`.
+ */
+export function rotasDoApp(dirApp: string): string[] {
+  if (!existsSync(dirApp)) return [];
+  const achar = (dir: string): string[] => {
+    const rotas: string[] = [];
+    for (const entrada of readdirSync(dir, { withFileTypes: true })) {
+      const caminho = join(dir, entrada.name);
+      if (entrada.isDirectory()) {
+        rotas.push(...achar(caminho));
+      } else if (entrada.isFile() && entrada.name === 'page.tsx') {
+        const rel = relative(dirApp, dir).split('\\').join('/');
+        rotas.push(rel === '' ? '/' : `/${rel}`);
+      }
+    }
+    return rotas;
+  };
+  return achar(dirApp).sort();
 }
 
 /**
@@ -139,6 +210,16 @@ export function lerInventario(markdown: string): { linhas: LinhaFluxo[]; erro?: 
         `[${cabecalho.join(' | ')}]. Sem ela não há como ligar fluxo a arquivo.`,
     };
   }
+  const indiceRota = cabecalho.findIndex((c) => c.toLowerCase() === COLUNA_ROTA);
+  if (indiceRota < 0) {
+    return {
+      linhas: [],
+      erro:
+        `a tabela do inventário não tem a coluna "${COLUNA_ROTA}" — cabeçalho medido: ` +
+        `[${cabecalho.join(' | ')}]. Sem ela o inventário só se reconcilia com ele ` +
+        'próprio, e uma tela nova no código entra sem fluxo sem ninguém perceber.',
+    };
+  }
 
   const linhas: LinhaFluxo[] = [];
   for (const bruta of linhasTabela.slice(2)) {
@@ -147,7 +228,11 @@ export function lerInventario(markdown: string): { linhas: LinhaFluxo[]; erro?: 
     const colunas = celulas(bruta);
     const id = (colunas[0] ?? '').trim();
     if (id === '' || !ID_RE.test(id)) continue;
-    linhas.push({ id, spec: semCrases(colunas[indiceSpec] ?? '') });
+    linhas.push({
+      id,
+      spec: semCrases(colunas[indiceSpec] ?? ''),
+      rotas: rotasDeclaradas(colunas[indiceRota] ?? ''),
+    });
   }
   return { linhas };
 }
@@ -168,7 +253,7 @@ export function fluxoDeclarado(conteudo: string): string | null {
 export function reconciliarFluxosE2E(entrada: EntradasE2E): ResultadoE2E {
   const errors: string[] = [];
   const { linhas: inventario, erro } = lerInventario(entrada.convencaoMarkdown);
-  if (erro !== undefined) return { ok: false, errors: [erro], medidos: 0 };
+  if (erro !== undefined) return { ok: false, errors: [erro], medidos: 0, rotasMedidas: 0 };
 
   // Vazio não é verde: ver o cabeçalho deste arquivo.
   if (inventario.length === 0) {
@@ -180,6 +265,7 @@ export function reconciliarFluxosE2E(entrada: EntradasE2E): ResultadoE2E {
           'medido nada',
       ],
       medidos: 0,
+      rotasMedidas: 0,
     };
   }
 
@@ -256,7 +342,39 @@ export function reconciliarFluxosE2E(entrada: EntradasE2E): ResultadoE2E {
     }
   }
 
-  return { ok: errors.length === 0, errors, medidos: inventario.length };
+  // ─── Terceiro conjunto: as rotas do disco ────────────────────────────
+  //
+  // As duas reconciliações acima comparam o que foi escrito com o que foi
+  // escrito. Esta compara com o que o App Router montou, e é a única que
+  // acusa a tela que NINGUÉM declarou. Sem ela o gate fecha um círculo.
+  //
+  // Vazio aqui também não é verde: com `rotas: []` o `every` passaria e o
+  // gate anunciaria cobertura de zero rotas.
+  if (entrada.rotas.length === 0) {
+    errors.push(
+      'nenhuma rota foi derivada de `page.tsx` — com o conjunto vazio a ' +
+        'conferência de rotas passaria vacuamente, e um app sem nenhuma tela ' +
+        'seria indistinguível de um app todo coberto',
+    );
+  }
+  const declaradas = new Set(inventario.flatMap((l) => l.rotas));
+  for (const rota of entrada.rotas) {
+    if (!declaradas.has(rota)) {
+      errors.push(
+        `a rota \`${rota}\` existe no código (há um \`page.tsx\` para ela) e não ` +
+          'aparece na coluna "Rota" do inventário de ' +
+          '`.agents/specs/conventions/e2e-playwright.md` — toda tela precisa de ' +
+          'um fluxo com spec, ou de uma linha que diga por que não tem',
+      );
+    }
+  }
+
+  return {
+    ok: errors.length === 0,
+    errors,
+    medidos: inventario.length,
+    rotasMedidas: entrada.rotas.length,
+  };
 }
 
 /** Lê os specs `*.spec.ts` de um diretório de e2e, ordenados. */
@@ -272,6 +390,7 @@ export function checkE2eFlowCoverage(opts: { repoRoot: string }): CheckResult {
   const raiz = resolve(opts.repoRoot);
   const convencao = join(raiz, '.agents/specs/conventions/e2e-playwright.md');
   const dirE2E = join(raiz, 'apps/web/e2e');
+  const dirApp = join(raiz, 'apps/web/app');
 
   if (!existsSync(convencao)) {
     // Sem a convenção não há inventário: `skipped`, e não erro. Um template
@@ -298,6 +417,11 @@ export function checkE2eFlowCoverage(opts: { repoRoot: string }): CheckResult {
   // Mesmo critério do inventário vazio, do outro lado: um diretório de e2e sem
   // spec nenhum faria "fluxo sem spec" passar por ausência, e o inventário
   // inteiro ficaria verde por nada.
+  //
+  // MEDIDO: este `if` ficava DEPOIS do skip de `apps/web/app`, e um repo sem
+  // frontend com diretório de e2e vazio voltava `skipped` — o defeito real
+  // (diretório de e2e sem spec nenhum) escondido atrás de um motivo que não
+  // era o dele. Um skip nunca pode virar teto para um erro que já é erro.
   if (specs.length === 0) {
     return {
       ok: false,
@@ -309,9 +433,23 @@ export function checkE2eFlowCoverage(opts: { repoRoot: string }): CheckResult {
     };
   }
 
+  // Sem o app não há rota a conferir. `skipped` e não erro — pelo mesmo
+  // motivo da convenção ausente: um template que não tem frontend não é
+  // bloqueado por uma regra de frontend. O que não pode é virar `✓`
+  // fingindo que mediu.
+  if (!existsSync(dirApp)) {
+    return {
+      ok: true,
+      errors: [],
+      skipped: true,
+      reason: `${dirApp} não existe — nenhuma rota de página para conferir`,
+    };
+  }
+
   const resultado = reconciliarFluxosE2E({
     convencaoMarkdown: readFileSync(convencao, 'utf8'),
     specs,
+    rotas: rotasDoApp(dirApp),
   });
 
   return {
@@ -320,9 +458,9 @@ export function checkE2eFlowCoverage(opts: { repoRoot: string }): CheckResult {
     advisories:
       resultado.ok && resultado.medidos > 0
         ? [
-            `reconciliado sobre ${resultado.medidos} fluxo(s) e ${specs.length} spec(s) ` +
-              '— paridade DECLARATIVA: este gate não roda a suíte. A execução é ' +
-              '`test:e2e` no CI.',
+            `reconciliado sobre ${resultado.medidos} fluxo(s) e ${specs.length} spec(s), ` +
+              `com ${resultado.rotasMedidas} rota(s) de página conferidas contra o ` +
+              'código — paridade DECLARATIVA dos fluxos; a execução é `test:e2e` no CI.',
           ]
         : [],
   };
