@@ -30,13 +30,17 @@ services:
     # pt-BR (#83+#92, 2026-10-16): hardening runtime. Postgres aceita `read_only: true`
     # desde PG 16 (bind-mount tmpfs em `/var/run/postgresql` + `/tmp`). Cap_drop ALL +
     # cap_add mínimo (CHOWN, SETUID, SETGID, DAC_OVERRIDE, FOWNER) — caps do postgres real.
-    # user: "999:999" usa o user interno da imagem alpine (postgres:postgres).
+    # user: "70:70" é o user interno da imagem alpine. MEDIDO 2026-10-16: no
+    # `postgres:16-alpine` o `postgres` é uid/gid **70** (`id postgres` → `uid=70`),
+    # não 999. Com 999 o entrypoint caía no initdb e morria com "could not access
+    # directory /var/lib/postgresql/data: Permission denied" — o PGDATA é mode 700
+    # e pertence ao 70, e um uid que não é dono não consegue nem statá-lo.
     # pids_limit 200 evita fork-bomb em exploit.
     read_only: true
-    user: '999:999'
+    user: '70:70'
     tmpfs:
       - /tmp:size=64m
-      - /var/run/postgresql:size=64m,mode=0755,uid=999
+      - /var/run/postgresql:size=64m,mode=0755,uid=70
     security_opt:
       - 'no-new-privileges:true'
     cap_drop:
@@ -62,7 +66,7 @@ services:
           pids: 200 # #92: limite de processos (postgres não tem motivo para mais de 200)
         reservations:
           memory: 256M
-    restart: unless-stopged
+    restart: unless-stopped
   api:
     build:
       context: .
