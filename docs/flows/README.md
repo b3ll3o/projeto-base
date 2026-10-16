@@ -2,7 +2,49 @@
 
 > Índice dos 78 flows diagramáveis de `base/`. Gerado em 2026-09-24 via discovery 7-domínios (`workflows-discovery` workflow, run `wf_032f2074-6af`).
 
-**Status:** 0/78 gerados. Phase 0 = scaffold (este README). Phase 1 = 8 critical/auto. Phase 2+ = backlog.
+**Status:** **15 de 78 com IR `sequence`** — o resto ainda não tem IR. Medido em 2026-10-16 com
+`git ls-files 'docs/flows/*/*/*.sequence.json' | wc -l`. A linha anterior dizia `0/78 gerados` desde
+2026-09-24: o catálogo cresceu e o número ficou.
+
+## Quando um flow muda, o diagrama muda
+
+O `flow.md` de cada diretório é **derivado** da IR (`*.sequence.json`) do mesmo diretório, pelo
+conversor `tooling/scripts/flow-ir-to-mermaid.ts`. O cabeçalho de cada `flow.md` diz isso e cita o
+comando. Duas direções, e elas têm donos diferentes:
+
+| Mudança | O que fazer | Quem cobra |
+|---------|-------------|-----------|
+| A **IR** mudou (view nova, mensagem nova, rótulo corrigido) | `pnpm tsx tooling/scripts/flow-ir-to-mermaid.ts --diagram=sequence --write` | `check-flow-mermaid-sync` no preflight — fecha o `flow.md` no `--write` |
+| O **código** que o diagrama descreve mudou (endpoint, use case, guard, evento) | Atualizar a IR **e** rodar o `--write` | **Ninguém automaticamente** — ver o limite abaixo |
+
+O gate `check-flow-mermaid-sync` (`.tooling/scripts/ci/check-flow-mermaid-sync.ts`) é quem faz a
+primeira linha dejar de ser sugestão: ele regenera cada diagrama em memória e compara com o arquivo
+em disco, então `flow.md` editado à mão ou IR mudada sem regenerar deixa o preflight vermelho
+**nomeando o flow e o comando**. Ele fecha os dois lados do diretório, não só um: IR sem `flow.md`,
+`flow.md` sem IR (diagrama órfão, que uma IR deletada deixaria desenhando um fluxo morto) e IR fora
+do layout `<dominio>/<flow>/` — os três saíam **verde** quando a enumeração andava por posição fixa
+(medido em 2026-10-16, corrigido no mesmo dia).
+
+### O limite, nomeado
+
+A IR é autoral (`mechanism: hand`) e **não tem âncora de código** — nenhum campo dela aponta para o
+arquivo-fonte que o diagrama descreve (medido nas 15 IRs). A segunda linha da tabela, portanto, é
+humana: este gate **não** detecta que `POST /users` ganhou uma etapa. Dizer que ele cobre seria a
+classe 1 de `guard-classes.md` — condição inalcançável. Se algum dia essa linha precisar de dente
+mecânico, o caminho é âncora de código na IR (`sources: [...]` por participante), e não um gate que
+tenta inferir código a partir de rótulo.
+
+ Os outros três furos, porque **sincronia não é validade** e um diagrama em dia pode ser um diagrama
+que ninguém consegue ler:
+
+- **Renderização.** O gate compara o arquivo com o que o conversor produz, não com o que o GitHub
+  desenha: um `#` ou um `:` num rótulo de participante produz um `flow.md` em dia com o diagrama
+  quebrado. O furo é do conversor (que só valida `#`/`;` em `messages` e `segments`), não deste gate.
+- **Untracked.** A enumeração usa `readdirSync`, então localmente o gate enxerga uma IR ainda não
+  commitada que o CI não vai ter. A assimetria é do lado seguro (o CI mede um conjunto menor),
+  mas é assimetria.
+- **Catálogo parcial.** Só há IR para 15 dos 78 flows: os outros 63 não têm diagrama e, sem IR,
+  não têm o que sincronizar.
 
 ## Como ler
 

@@ -60,6 +60,8 @@ desconhecidas. Viradas de
 | `check-agent-routing-coverage` | `check-agent-routing-coverage.spec.ts` — `verde quando todos os agents estão referidos` / `vermelho quando há agent órfão` / `vermelho quando há agent fantasma` (o par) | **mutação** | `npx vitest run --root .tooling/scripts/ci check-agent-routing-coverage` → **2 de 14** com `diffAgents` neutralizado para `{orphans: [], ghosts: []}`, **1 de 14** com a regex de matriz quebrada. **Diferencial contra o repo real**: com este gate **desligado**, a árvore de #94 tinha **11 agents órfãos** (agent-architect, code-reviewer, doc-sync, explorer, orchestrator, otelcol-infra-specialist, review-router, specialist-router, stack-code-reviewer, task-manager, tdd-enforcer) — em disco, sem entrada em `specialist-routing.md`, e **todos passavam em silêncio**. `d3bbdf8` (#94) completou a matriz e o gate fechou em `0 órfãos / 0 fantasmas` (remedição medida em 2026-10-16; reverificar com `checkAgentRoutingCoverage()` — o arquivo não tem bloco CLI, então `tsx check-agent-routing-coverage.ts` carrega o módulo e sai `0` sem varrer nada) | `.tooling/scripts/ci/check-agent-routing-coverage.ts` |
 | `check-engines-consistency` | `check-engines-consistency.spec.ts` — `parseMinEngine` em unidade (3 casos) + `rootSatisfiesApp` em unidade (6 casos) + `checkEnginesConsistency` (6 casos: raiz OK, app bate, app mais antigo, app mais novo, raiz sem engines, sem apps) | **mutação** | `npx vitest run --root .tooling/scripts/ci check-engines-consistency` → **3 de 15** com `rootSatisfiesApp` neutralizado para `true`, **2 de 15** com a regex de parse neutra, **2 de 15** com o `skipped` removido. **Diferencial contra o repo real**: declarar `engines.node: ">=18"` em `apps/web/package.json` → preflight **vermelho** nomeando o path; restaurado → verde (medido 2026-10-16) | `.tooling/scripts/ci/check-engines-consistency.ts` |
 | `check-dockerfile-hardening` | `check-dockerfile-hardening.spec.ts` — 13 casos: verde base, sem @sha256:, sem USER 1001:1001 no stage prod, sem init: true, sem read_only, sem top-level networks, sem `networks:` no serviço `api`, sem `networks:` em serviço **novo** (a lista virou enumeração do bloco `services:`), enumeração vazia → erro, sem .env.production* no .dockerignore, e 2 do contrato ARG (aceita com sha256, rejeita com default não-sha256), e formas alternativas de .dockerignore | **diferencial** | `pnpm --config.engine-strict=false exec vitest run --root .tooling/scripts/ci check-dockerfile-hardening` (denominador **13**) → **4 de 13** com `listComposeServices` neutralizada para `[]`, e 13/13 no repo real (issue 83, 84, 88, 89, 90, 91, 92 fechadas). MEDIDO 2026-10-16: `api` não era checado, e a lista de nomes que o corrigiu deixava passar serviço NOVO — os dois caíram **2 de 13** antes das correções | `.tooling/scripts/ci/check-dockerfile-hardening.ts` |
+| `check-flow-mermaid-sync` | `check-flow-mermaid-sync.spec.ts` — **10 testes**: `IR mudou e o flow.md ficou velho → vermelho`, `flow.md editado à mão → vermelho`, `IR sem flow.md → vermelho`, `zero IR → vermelho` (critério inerte sobre conjunto vazio), `IR fora do layout → vermelho`, `flow.md sem IR → vermelho` (órfão), `duas IRs no mesmo diretório → 1 erro só`, `IR ilegível → vermelho sem derrubar o painel`, + `todos os diagramas batem com a IR deles` **contra o repo real**. Os 4 do meio foram achados da revisão adversarial de 2026-10-16, não features: a enumeração andava por posição fixa e devolvia o DIRETÓRIO, então uma IR mal posicionada nunca entrava na lista (verde), um `flow.md` sem IR ninguém notava (verde), e 2 IRs no mesmo diretório produziam o mesmo erro 2× mandando rodar `--write` — que regravava pela outra IR, vermelho sem caminho de conserto | **mutação** | `npx vitest run --root .tooling/scripts/ci check-flow-mermaid-sync` (denominador **10**) → **3 de 10** com a comparação `!==` neutralizada, **1 de 10** com o erro de conjunto vazio, **1 de 10** com a conferência de layout, **1 de 10** com a enumeração de docs órfãos (medido 2026-10-16). O teste de layout passou por 3 mutações com a asserção antiga (`toContain('fora-do-layout')`, que também casa no erro de "diagrama ausente") — corrigido para a mensagem específica; é o motivo de o denominador de cada mutação ser conferido contra o nome do teste que cai, não só contra a contagem. Estado real no mesmo dia: **15 IRs, 15 casando, 0 drift** — o gate nasce verde, e nasce verde porque ninguém editou IR sem regenerar, não porque ele não olha | `.tooling/scripts/ci/check-flow-mermaid-sync.ts` |
+| `check-test-set-covered` | `check-test-set-covered.spec.ts` — **13 testes**: `todo test* roda → verde`, `script declarado e nunca executado → vermelho`, `pacote fora dos --filter → vermelho`, `exceção declarada inaplicável → vermelho` (a promessa não cumprida), `exceção citando script inexistente → vermelho`, `zero script test* → vermelho` (conjunto vazio), `ci:local ausente → vermelho`, `alias do mesmo comando NÃO acusado mas visível em advisory`, `alias com comando diferente → ainda vermelho`, `filtro test* não casa lint-staged`, `tabela de exceções lida pelo NOME da coluna`, `reordenar colunas não quebra o parse`, `tabela ausente → vazio` | **mutação** | `npx vitest run --root .tooling/scripts/ci check-test-set-covered` (denominador **13**) → **6 de 13** com o veredito neutralizado, **2 de 13** com a exceção envelhecida ignorada, **1 de 13** com a regra do alias removida, **1 de 13** com 0 script aceito (medido 2026-10-16). Estado real: **12 script(s) `test*` em 6 pacote(s), 2 alias, 3 exceção(ões)** — e o alias existe porque `@projeto/api#test` e `@projeto/web#test` são byte-idênticos a `test:unit`, que entra; acusá-los seria pedir exceção para suíte que já executa. A exceção NÃO é inferida do conteúdo do script (`echo … && exit 0`), porque aí qualquer `echo` novo vira "sem testes" e a regra perde o dono | `.tooling/scripts/ci/check-test-set-covered.ts` |
 
 > A coluna **Arquivo** é a chave de reconciliação: o `check-teeth-registry` casa o
 > registro com o `preflight.ts` por ela. Sem a coluna o gate é identificado pelo
@@ -75,7 +77,7 @@ desconhecidas. Viradas de
 > numa célula deixa o total ímpar, o emparelhamento desloca e o gate **da própria
 > linha** deixa de ser lido (foi assim que `lint-review-routing.ts` acusou órfão).
 
-Os **nove comandos de mutação** — 1 a 7 medidos 2026-10-05, 8 e 9 em 2026-10-08.
+Os **onze comandos de mutação** — 1 a 7 medidos 2026-10-05, 8 e 9 em 2026-10-08, 10 e 11 em 2026-10-16.
 Cada um reverte o arquivo ao final, e o `git diff` depois deles tem de estar vazio:
 
 ```bash
@@ -96,9 +98,21 @@ git checkout -- .agents/specs/conventions/retrospective-capture.md
 # 3) check-teeth-registry (reconciliação) — some uma linha da tabela de dentes.
 #    O gate continua RODANDO; é a documentação que ficou órfã. Vermelho
 #    nomeando o arquivo, não um "registro divergente" genérico.
-sed -i '/^| `check-docker-drift` |/d' .agents/specs/conventions/ci-defense-in-depth.md
+cp .agents/specs/conventions/ci-defense-in-depth-dentes.md /tmp/dentes.bak
+sed -i '/^| `check-docker-drift` |/d' .agents/specs/conventions/ci-defense-in-depth-dentes.md
 npx tsx .tooling/scripts/ci/check-teeth-registry.ts   # -> 1 erro, nomeando check-docker-drift.ts
-cp /tmp/ci-defense.bak .agents/specs/conventions/ci-defense-in-depth.md   # restaurado byte-exato
+cp /tmp/dentes.bak .agents/specs/conventions/ci-defense-in-depth-dentes.md   # restaurado byte-exato
+# NOTA (2026-10-16): os mutadores perls acima foram reexecutados como escritos, e
+# 2 dos 4 NÃO casavam — `\)$` no fim do padrão não casa com uma linha que termina
+# em `;`, e o de "alias" reescrevia 3 linhas por 1 e quebrava o arquivo (transform
+# error, "Tests no tests": o denominador some). Mutador que não casa reporta
+# "verde" e parece dente. Um número do registro mudou com a correção: o veredito
+# do gate de testes é 6 de 13, não 8.
+#
+# NOTA: o `cp` de backup é obrigatório aqui, e não um cuidado de overkill — o
+# `sed -i` destrói a tabela in-place, então a linha de restauração sem backup
+# apaga o arquivo inteiro. Encontrado pela revisão adversarial de 2026-10-16,
+# num PR que justamente EDITAVA este arquivo.
 
 # 4) check-teeth-registry (roteamento) — o prefixo de "." some da path_glob.
 #    A rota continua existindo e o lint da matrix continua verde (a regra não é
@@ -159,6 +173,49 @@ perl -0pi -e 's/\.filter\(\(i\) => TASKS_E2E\.some\(\(t\) => i\.tasks\.includes\
   .tooling/scripts/ci/check-ci-local-e2e.ts
 npx vitest run --root .tooling/scripts/ci check-ci-local-e2e  # -> 1 de 25 vermelho
 cp /tmp/cil2e.bak .tooling/scripts/ci/check-ci-local-e2e.ts   # restaurado byte-exato
+
+# 10) check-flow-mermaid-sync — o comparador entre o que está em disco e o que
+#     o conversor produziria, mais as DUAS conferências que a revisão adversarial
+#     de 2026-10-16 mostrou que faltavam. QUATRO mutações medidas, denominador 10.
+cp .tooling/scripts/ci/check-flow-mermaid-sync.ts /tmp/cfms.bak
+perl -0pi -e "s/if \(readFileSync\(docPath, 'utf-8'\) !== esperado\)/if (false)/" \
+  .tooling/scripts/ci/check-flow-mermaid-sync.ts
+npx vitest run --root .tooling/scripts/ci check-flow-mermaid-sync  # -> 3 de 10 vermelho
+cp /tmp/cfms.bak .tooling/scripts/ci/check-flow-mermaid-sync.ts
+perl -0pi -e 's/  if \(irs\.length === 0\) \{/  if (false) {/' \
+  .tooling/scripts/ci/check-flow-mermaid-sync.ts
+npx vitest run --root .tooling/scripts/ci check-flow-mermaid-sync  # -> 1 de 10 vermelho
+cp /tmp/cfms.bak .tooling/scripts/ci/check-flow-mermaid-sync.ts
+perl -0pi -e 's/if \(noLayoutEsperado\(irPath, flowsRoot\)\) \{/if (false) {/' \
+  .tooling/scripts/ci/check-flow-mermaid-sync.ts
+npx vitest run --root .tooling/scripts/ci check-flow-mermaid-sync  # -> 1 de 10 vermelho
+cp /tmp/cfms.bak .tooling/scripts/ci/check-flow-mermaid-sync.ts
+perl -pi -e 's/^    if \(doc\.endsWith.*$/    if (false) { dirsComDoc.add(dirname(doc)); }/' \
+  .tooling/scripts/ci/check-flow-mermaid-sync.ts
+npx vitest run --root .tooling/scripts/ci check-flow-mermaid-sync  # -> 1 de 10 vermelho
+cp /tmp/cfms.bak .tooling/scripts/ci/check-flow-mermaid-sync.ts   # restaurado byte-exato
+
+# 11) check-test-set-covered — o que dá dentes a "todos os testes devem estar
+#     passando" (tdd.md). QUATRO mutações medidas, denominador 13. A de
+#     conjunto vazio é a que importa: sem ela, um workspace que perdeu todos
+#     os scripts test* deixaria a regra passar por vacuidade.
+cp .tooling/scripts/ci/check-test-set-covered.ts /tmp/ctsc.bak
+perl -0pi -e 's/ok: errors\.length === 0,/ok: true,/' \
+  .tooling/scripts/ci/check-test-set-covered.ts
+npx vitest run --root .tooling/scripts/ci check-test-set-covered  # -> 6 de 13 vermelho
+cp /tmp/ctsc.bak .tooling/scripts/ci/check-test-set-covered.ts
+perl -0pi -e 's/  if \(declaradosQueValem\.has\(chave\)\) continue;/  if (true) continue;/' \
+  .tooling/scripts/ci/check-test-set-covered.ts
+npx vitest run --root .tooling/scripts/ci check-test-set-covered  # -> 2 de 13 vermelho
+cp /tmp/ctsc.bak .tooling/scripts/ci/check-test-set-covered.ts
+perl -pi -e 's/^      if \(rodandoNoPacote.*$/      if (false) {/' \
+  .tooling/scripts/ci/check-test-set-covered.ts
+npx vitest run --root .tooling/scripts/ci check-test-set-covered  # -> 1 de 13 vermelho
+cp /tmp/ctsc.bak .tooling/scripts/ci/check-test-set-covered.ts
+perl -pi -e 's/^  if \(medidos === 0\) \{/  if (false) {/' \
+  .tooling/scripts/ci/check-test-set-covered.ts
+npx vitest run --root .tooling/scripts/ci check-test-set-covered  # -> 1 de 13 vermelho
+cp /tmp/ctsc.bak .tooling/scripts/ci/check-test-set-covered.ts   # restaurado byte-exato
 ```
 
 > **A cobertura do comando 7 tem um limite, nomeado porque um leitor que tropeça nele

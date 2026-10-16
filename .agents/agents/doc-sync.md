@@ -93,6 +93,12 @@ Heurística:
 - Mudança em DTO → atualizar seção de request/response no spec
 - Mudança em exception → atualizar tabela de erros HTTP
 - Mudança em workflow → atualizar WORKFLOWS.md
+- Mudança em código coberto por um flow de `docs/flows/` → **atualizar a IR
+  (`*.sequence.json`) e rodar `pnpm tsx tooling/scripts/flow-ir-to-mermaid.ts
+  --diagram=sequence --write`**. O `check-flow-mermaid-sync` do preflight só
+  fecha o elo `IR → flow.md`; ele **não** vê que o código mudou, porque a IR é
+  autoral e não tem âncora de código. O gatilho é humano — por isso está aqui.
+  Quais flows cobrem o que mudou: `docs/flows/README.md`.
 
 ### Passo 2: Para Cada Doc Afetada, Executar uma de 4 Ações
 

@@ -148,6 +148,8 @@ grep -cE "^\s+name: '" .tooling/scripts/ci/preflight-gates.ts
 | `review:lint` | `pnpm review:lint` | A+B (via preflight #8) | YAML inválido, LOC, regex, reviewer inexistente | Sim |
 | `archive:lint` | `pnpm archive:lint` | A+B (via preflight #9) | Frontmatter canônico; com o diretório vazio (só `.gitkeep`) o check se declara `skipped` em vez de verde | Sim |
 | `tooling:test` | `pnpm tooling:test` | B (job `preflight` do `ci.yml`) | Spec vermelho da própria camada de tooling | Sim |
+| `check-flow-mermaid-sync` | `pnpm ci:preflight` | A+B (via preflight #27) | Diagrama Mermaid de `docs/flows/` que não é o que a IR do mesmo diretório gera — **o `flow.md` editado à mão ou a IR mudada sem `--write`**. O conserto vem no erro: `pnpm tsx tooling/scripts/flow-ir-to-mermaid.ts --diagram=sequence --write`. Não alcança `código → IR` (a IR é autoral e não tem âncora de código); essa direção é humana, documentada em [`docs/flows/README.md`](./flows/README.md) | Sim |
+| `check-test-set-covered` | `pnpm ci:preflight` | A+B (via preflight #28) | Script `test*` declarado num pacote do workspace que nenhuma invocação `turbo run` do `ci:local` executa (task pedida **e** pacote alcançado por `--filter`), e exceção declarada em [`tdd.md`](../.agents/specs/conventions/tdd.md) que deixou de valer. **Mede o conjunto, não a execução**: suíte instável continua "verde" para quem olha uma execução só | Sim |
 | `turbo-redirect-differential` | `.tooling/scripts/ci/turbo-redirect-differential.sh` | A+B (via preflight #13) | Forma de `pnpm turbo run …` que o parser extrai diferente do turbo real — **classe 6** (especificação local diverge do sistema real) | Sim (se Node ≥ 22.6) |
 
 ---

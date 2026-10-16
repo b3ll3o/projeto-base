@@ -54,6 +54,21 @@ pelo qual o gate não existia.
 
 **Consequências:** confiança no pipeline + segurança editorial.
 
+### 2026-10-16 — Flow Mermaid entra no mapa code→doc
+
+**Contexto:** os diagramas de `docs/flows/` são DERIVADOS da IR do mesmo diretório, e
+`check-flow-mermaid-sync` (novo no preflight) fecha só o elo `IR → flow.md`. Ele NÃO vê
+mudança de código: a IR é autoral (`mechanism: hand`) e não tem âncora de código — medido
+nas 15 IRs, nenhum campo aponta para o fonte.
+
+**Decisão:** a heurística do Passo 1 ganhou a linha "mudança em código coberto por um flow →
+atualizar a IR e rodar `--write`". O gatilho é humano e o agente é quem o executa, porque
+o gate não pode.
+
+**Consequências:** o diagrama deixa de ser documento órfão; em troca, o Passo 1 ganhou uma
+ação que exige leitura da IR antes de escrever — mais cara que as outras, e o custo disso é
+justamente o custo de um diagrama que descreve comportamento.
+
 ## Padrões Descobertos
 
 - 4 ações por finding: `review` (padrão), `update` (auto-aplicado se info/minor), `create` (arquivo novo), `alert` (blocker/major → humano).

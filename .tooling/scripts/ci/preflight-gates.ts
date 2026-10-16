@@ -305,6 +305,31 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     file: '.tooling/scripts/ci/check-dockerfile-hardening.ts',
     id: 'check-dockerfile-hardening',
   },
+  {
+    // Fecha o elo `IR → flow.md` dos diagramas Mermaid de `docs/flows/`. O
+    // conversor tinha modo dry-run, mas ele só CONTAVA: editar a IR e não
+    // regenerar o `flow.md` saía verde com o markdown válido na frente de
+    // todos. MEDIDO 2026-10-16: 15 IRs, 15 casando, e nenhum sinal de que o
+    // drift é observável — porque não era.
+    //
+    // **O que este gate NÃO fecha:** o elo `código → IR`. A IR é autoral e não
+    // tem âncora de código (nenhum campo aponta para o fonte), então essa
+    // direção é humana e vive no processo documentado em `docs/flows/README.md`.
+    name: 'diagramas Mermaid em sincronia com a IR (docs/flows)',
+    file: '.tooling/scripts/ci/check-flow-mermaid-sync.ts',
+    id: 'check-flow-mermaid-sync',
+  },
+  {
+    // Dá dentes a "todos os testes devem estar passando" (tdd.md). A parte
+    // mecânica já existia — `ci:local` encadeia com `&&` e o turbo quebra o
+    // build — mas faltava o CONJUNTO: um pacote que declara `test:smoke` que
+    // ninguém executa continua "verde" para todo mundo, porque "passando" sem
+    // saber quais testes precisam passar é critério inerte sobre conjunto
+    // vazio. A exceção é DECLARADA na tabela de tdd.md, nunca inferida.
+    name: 'conjunto de testes: todo test* roda no ci:local ou é exceção declarada',
+    file: '.tooling/scripts/ci/check-test-set-covered.ts',
+    id: 'check-test-set-covered',
+  },
 ];
 
 /**
