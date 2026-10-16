@@ -31,20 +31,21 @@ const INICIAL: CadastroUsuarioState = {
 
 /** Resposta JSON com o envelope RFC 7807 que a API devolve. */
 function problem(status: number, code: string, title: string, errors?: unknown[]) {
-  return {
+  const body = {
+    type: 'about:blank',
+    title,
     status,
-    ok: false,
-    json: async () => ({
-      type: 'about:blank',
-      title,
-      status,
-      detail: title,
-      instance: '/api/v1/users',
-      code,
-      traceId: 'trace-123',
-      ...(errors ? { errors } : {}),
-    }),
+    detail: title,
+    instance: '/api/v1/users',
+    code,
+    traceId: 'trace-123',
+    ...(errors ? { errors } : {}),
   };
+  // pt-BR: `text` junto de `json` — o `request()` lê o corpo de ERRO via `text()`
+  // e cai para `JSON.parse`, porque um corpo de erro nem sempre é JSON (502 de
+  // proxy, HTML de gateway). Mesmo motivo do `okResponse` abaixo: um fake com só
+  // `json` mente sobre a plataforma, `Response` real tem os dois.
+  return { status, ok: false, json: async () => body, text: async () => JSON.stringify(body) };
 }
 
 function okResponse(body: unknown = { id: 'u1' }) {
@@ -338,9 +339,16 @@ describe('cadastrarUsuario — falha inesperada', () => {
     responder({
       status: 502,
       ok: false,
+      // pt-BR: o corpo NÃO é JSON — é o que um proxy devolve, e o fake
+      // precisa ter `text` para o `request()` conseguir lê-lo. Este teste
+      // prova que a Action não estoura; ele NÃO prova o fallback do
+      // `request()`, porque `estadoDeErro` mapeia tudo que não é
+      // `EMAIL_IN_USE` para `ERRO_GENERICO` — com ou sem o fix, a string
+      // é a mesma. O fallback é testado em `lib/api-client.spec.ts`.
       json: async () => {
         throw new SyntaxError('Unexpected end of JSON input');
       },
+      text: async () => '<html><body>502 Bad Gateway</body></html>',
     });
 
     const r = await cadastrarUsuario(INICIAL, formData('Maria Silva', 'maria@empresa.com'));

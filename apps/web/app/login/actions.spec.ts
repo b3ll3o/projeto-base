@@ -49,20 +49,21 @@ function formData(email = CREDENCIAIS_VALIDAS.email, senha = CREDENCIAIS_VALIDAS
 
 /** Envelope RFC 7807, como a API devolve nos erros. */
 function problem(status: number, code: string, title: string, errors?: unknown[]) {
-  return {
+  const body = {
+    type: 'about:blank',
+    title,
     status,
-    ok: false,
-    json: async () => ({
-      type: 'about:blank',
-      title,
-      status,
-      detail: title,
-      instance: '/api/v1/auth/login',
-      code,
-      traceId: 'trace-123',
-      ...(errors ? { errors } : {}),
-    }),
+    detail: title,
+    instance: '/api/v1/auth/login',
+    code,
+    traceId: 'trace-123',
+    ...(errors ? { errors } : {}),
   };
+  // pt-BR: `text` junto de `json` — o `request()` lê o corpo de ERRO via `text()`
+  // e cai para `JSON.parse`, porque um corpo de erro nem sempre é JSON (502 de
+  // proxy, HTML de gateway). Mesmo motivo do `okResponse` abaixo: um fake com só
+  // `json` mente sobre a plataforma, `Response` real tem os dois.
+  return { status, ok: false, json: async () => body, text: async () => JSON.stringify(body) };
 }
 
 function okResponse(body: unknown) {

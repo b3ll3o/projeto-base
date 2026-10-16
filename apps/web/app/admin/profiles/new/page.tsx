@@ -30,9 +30,9 @@ export default async function NewProfilePage(): Promise<React.JSX.Element> {
   const me = await obterMeuPerfil();
   if (me === null || me.isAdmin !== true) {
     return (
-      <main>
-        <h1>Acesso restrito</h1>
-        <p>Esta página exige perfil de administrador.</p>
+      <main className="mx-auto max-w-3xl p-8">
+        <h1 className="text-2xl font-semibold text-slate-900">Acesso restrito</h1>
+        <p className="mt-1 text-sm text-slate-500">Esta página exige perfil de administrador.</p>
       </main>
     );
   }
@@ -65,14 +65,15 @@ export default async function NewProfilePage(): Promise<React.JSX.Element> {
   }
 
   return (
-    <main>
-      <h1>Novo perfil</h1>
+    <main className="mx-auto max-w-3xl p-8">
+      <h1 className="text-2xl font-semibold text-slate-900">Novo perfil</h1>
 
-      <form action={create}>
+      <form action={create} className="mt-8 space-y-4 text-sm">
         <p>
-          <label>
-            Slug:{' '}
+          <label className="block space-y-1">
+            <span className="font-medium text-slate-700">Slug</span>
             <input
+              className="block w-full rounded-md border border-slate-300 px-3 py-2"
               type="text"
               name="slug"
               required
@@ -83,22 +84,33 @@ export default async function NewProfilePage(): Promise<React.JSX.Element> {
           </label>
         </p>
         <p>
-          <label>
-            Nome: <input type="text" name="name" required />
+          <label className="block space-y-1">
+            <span className="font-medium text-slate-700">Nome</span>
+            <input
+              className="block w-full rounded-md border border-slate-300 px-3 py-2"
+              type="text"
+              name="name"
+              required
+            />
           </label>
         </p>
         <p>
-          <label>
-            Descrição: <input type="text" name="description" />
+          <label className="block space-y-1">
+            <span className="font-medium text-slate-700">Descrição</span>
+            <input
+              className="block w-full rounded-md border border-slate-300 px-3 py-2"
+              type="text"
+              name="description"
+            />
           </label>
         </p>
 
-        <fieldset>
-          <legend>Permissões</legend>
-          <ul>
+        <fieldset className="rounded-md border border-slate-200 p-4">
+          <legend className="px-1 text-sm font-medium text-slate-700">Permissões</legend>
+          <ul className="space-y-1">
             {catalogo.map((k) => (
               <li key={k}>
-                <label>
+                <label className="flex items-center gap-2">
                   <input type="checkbox" name="permissionKey" value={k} />
                   <code>{k}</code>
                 </label>
@@ -107,7 +119,12 @@ export default async function NewProfilePage(): Promise<React.JSX.Element> {
           </ul>
         </fieldset>
 
-        <button type="submit">Criar perfil</button>
+        <button
+          type="submit"
+          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+        >
+          Criar perfil
+        </button>
       </form>
     </main>
   );

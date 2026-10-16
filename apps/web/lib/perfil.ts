@@ -56,17 +56,13 @@ export async function obterMeuPerfil(): Promise<MeProfileDto | null> {
     const client = await getClientOpcional();
     if (client === null) return null;
     return await client.get<MeProfileDto>('/me/profile');
-  } catch (e) {
-    if (
-      e instanceof Error &&
-      'statusCode' in e &&
-      (e as { statusCode: number }).statusCode === 401
-    ) {
-      return null;
-    }
-    // pt-BR: erro de rede/5xx no Sidebar não pode derrubar a página inteira.
-    // O chrome continua mostrando o que pode (links, "Sem perfil") e o
-    // conteúdo fica responsável por proteger a si mesmo.
+  } catch {
+    // pt-BR: 401 (sem sessão), 5xx e rede caída devolvem `null` — o Sidebar não
+    // pode derrubar a página. Havia um `if` que jurava separar o 401 testando
+    // `e.statusCode`, campo que o `ApiError` não tem: nunca entrava, e os dois
+    // ramos devolviam `null` por acidente. O `catch` sem `e` é a mesma
+    // comportamento sem a mentira. Quem precisar distinguir 401 de 5xx faz isso
+    // na página, que é onde a decisão (redirecionar ou mostrar erro) mora.
     return null;
   }
 }
@@ -84,13 +80,15 @@ export async function obterPerfil(id: string): Promise<ProfileDetail> {
 
 /**
  * Resolve o slug da URL (`/admin/profiles/[slug]`) no UUID que a API exige.
- * Lança se o slug não existir — a página traduz para `notFound()`.
+ * Devolve `null` se o slug não existir — a página traduz para `notFound()`.
+ *
+ * `null` e não `throw`: o "não existe" é uma resposta legítima desta função,
+ * e a página é quem decide virar 404. Um `Error` puro escapava de qualquer
+ * `catch` que procurasse `ApiError`, e o 404 virava 500.
  */
-export async function obterPerfilPorSlug(slug: string): Promise<ProfileDetail> {
+export async function obterPerfilPorSlug(slug: string): Promise<ProfileDetail | null> {
   const perfil = (await listarPerfis()).find((p) => p.slug === slug);
-  if (perfil === undefined) {
-    throw new Error(`perfil não encontrado: ${slug}`);
-  }
+  if (perfil === undefined) return null;
   return obterPerfil(perfil.id);
 }
 

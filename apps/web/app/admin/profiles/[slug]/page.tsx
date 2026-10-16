@@ -33,8 +33,9 @@ export default async function AdminProfileDetailPage({
   const me = await obterMeuPerfil();
   if (me === null || me.isAdmin !== true) {
     return (
-      <main>
-        <h1>Acesso restrito</h1>
+      <main className="mx-auto max-w-3xl p-8">
+        <h1 className="text-2xl font-semibold text-slate-900">Acesso restrito</h1>
+        <p className="mt-1 text-sm text-slate-500">Esta página exige perfil de administrador.</p>
       </main>
     );
   }
@@ -42,7 +43,11 @@ export default async function AdminProfileDetailPage({
   const { slug } = await params;
 
   const [profile, catalogo] = await Promise.all([
-    obterPerfilPorSlug(slug).catch(() => null),
+    // pt-BR: `null` = o slug não existe (a função só devolve isso nesse caso) e
+    // vira `notFound()`. Token expirado, 500 e rede caída PROPAGAM — o antigo
+    // `.catch(() => null)` transformava os três na mesma tela de "não encontrado",
+    // um erro de servidor vestindo a roupa do 404.
+    obterPerfilPorSlug(slug),
     listarPermissoes(),
   ]);
   if (profile === null) {
@@ -72,29 +77,31 @@ export default async function AdminProfileDetailPage({
   }
 
   return (
-    <main>
-      <h1>Perfil: {profile.name}</h1>
-      <p>
+    <main className="mx-auto max-w-3xl p-8">
+      <h1 className="text-2xl font-semibold text-slate-900">Perfil: {profile.name}</h1>
+      <p className="mt-1 text-sm text-slate-500">
         <code>{profile.slug}</code> · versão {profile.version}
       </p>
 
-      <section>
-        <h2>Flags</h2>
-        <ul>
+      <section className="mt-8">
+        <h2 className="text-lg font-medium text-slate-900">Flags</h2>
+        <ul className="mt-3 space-y-1 text-sm text-slate-900">
           <li>isAdmin: {profile.isAdmin ? '✅' : '—'} (bypass total no guard)</li>
           <li>isSystem: {profile.isSystem ? '✅' : '—'} (protegido contra DELETE)</li>
         </ul>
       </section>
 
-      <section>
-        <h2>Permissões ({profile.permissions.length})</h2>
+      <section className="mt-8">
+        <h2 className="text-lg font-medium text-slate-900">
+          Permissões ({profile.permissions.length})
+        </h2>
         {profile.isSystem ? (
           <>
-            <p>
+            <p className="mt-3 text-sm text-slate-500">
               Perfil de sistema: as permissões são <strong>somente leitura</strong>. A API recusa
               alterações com <code>ProfileSystemProtectedException</code>.
             </p>
-            <ul>
+            <ul className="mt-3 space-y-1 text-sm text-slate-900">
               {catalogo.map((k) => (
                 <li key={k}>
                   <code>{k}</code> {atribuidas.has(k) ? '✅' : '—'}
@@ -103,11 +110,11 @@ export default async function AdminProfileDetailPage({
             </ul>
           </>
         ) : (
-          <form action={saveAuthorizations}>
-            <ul>
+          <form action={saveAuthorizations} className="mt-3">
+            <ul className="space-y-1">
               {catalogo.map((k) => (
                 <li key={k}>
-                  <label>
+                  <label className="flex items-center gap-2 text-sm text-slate-900">
                     <input
                       type="checkbox"
                       name="permissionKey"
@@ -119,7 +126,12 @@ export default async function AdminProfileDetailPage({
                 </li>
               ))}
             </ul>
-            <button type="submit">Salvar</button>
+            <button
+              type="submit"
+              className="mt-4 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+            >
+              Salvar
+            </button>
           </form>
         )}
       </section>

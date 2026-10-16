@@ -69,7 +69,29 @@ export class ApiClient {
         signal: controller.signal,
       });
       if (!res.ok) {
-        const problem = (await res.json()) as ProblemDetailsDto;
+        // pt-BR: mesmo cuidado do caminho de sucesso (#97) — um corpo de erro
+        // nem sempre é JSON. 502/504 de proxy e HTML de gateway derrubavam o
+        // `res.json()` com `SyntaxError` DENTRO deste try, e o `catch`
+        // repassava a exceção crua: todo consumidor que testa
+        // `err instanceof ApiError` (ex.: o redirect de 401 em `/users`)
+        // recebia algo que não é ApiError, e a distinção de status se perdia.
+        const corpo = await res.text();
+        let problem: ProblemDetailsDto;
+        try {
+          problem = JSON.parse(corpo) as ProblemDetailsDto;
+        } catch {
+          problem = {
+            type: 'about:blank',
+            title: `Erro ${res.status}`,
+            status: res.status,
+            detail: corpo.slice(0, 200),
+            instance: path,
+            // Sem corpo RFC 7807 não há traceId; a tela compõe a mensagem com
+            // `comTraceId`, então a string vazia é o valor honesto.
+            code: 'UNKNOWN',
+            traceId: '',
+          };
+        }
         throw new ApiError(problem.title, problem.code, problem.status, problem);
       }
       // pt-BR (#97): endpoint `void` (ex: `DELETE /admin/profiles/:id`) responde
