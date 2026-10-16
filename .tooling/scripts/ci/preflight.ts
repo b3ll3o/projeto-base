@@ -59,7 +59,15 @@ function checkReviewRoutingLint(): CheckResult {
   }
 
   try {
-    execSync('pnpm review:lint', { stdio: ['ignore', 'pipe', 'pipe'] });
+    // `pnpm review:lint` falha quando o motor do package.json raiz é mais
+    // novo que o Node local (o `engines.node >=22.6.0` rejeita Node 20 com
+    // ERR_PNPM_UNSUPPORTED_ENGINE). O CI roda em Node 22 e o gate é verde lá;
+    // aqui no sandbox Hermes (Node 20.20.2) precisamos do mesmo veredito sem
+    // que o veredito seja "motor incompatível". `--config.engine-strict=false`
+    // é o knob que o próprio pnpm recomenda para esse caso.
+    execSync('pnpm --config.engine-strict=false review:lint', {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
     return { ok: true, errors: [] };
   } catch (err: any) {
     const stderr = (err.stderr?.toString() ?? '').trim();

@@ -175,6 +175,7 @@ fazê-lo às cegas seria fabricar 39 linhas `citada` sem âncora verificada.
 | `vi-mock-factory-cache-frozen-counter` | `pendente` | — | — |
 | `vitest-workspace-thresholds-and-dist-remap` | `citada` | `.agents/specs/conventions/cobertura-testes.md` | `config raiz` |
 | `zero-survived-is-not-zero-found` | `pendente` | — | — |
+| `b3-fix-cron-pnpm-engine-precheck-result` | `recusada` | registro de campanha; o PR #77 já carrega o fix e as 2 proposals de altíssima confiança (R-003 skill `cron-precheck-engines`, R-004 check de cross-refs em pre-commit) ficaram registradas para virar `pendente` quando decididas | — |
 
 ## O que a tabela diz
 

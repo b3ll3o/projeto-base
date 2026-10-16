@@ -124,10 +124,17 @@ while IFS= read -r form; do
     echo "--- fim ---"
     exit 1
   }
-  got=$(node --experimental-strip-types -e "
+  # Carrega o parser via `tsx` (Node 22+ aceita `--experimental-strip-types`,
+  # mas o gate roda no sandbox do Hermes que tem Node 20 — `tsx` funciona em
+  # ambos). `tsx -e` carrega como CJS, então o dynamic `import()` devolve
+  # `{default: <namespace>}`; a normalização abaixo serve ambos os formatos.
+  got=$(cd "$ROOT" && pnpm exec tsx -e "
     import('$PARSER')
-      .then((m) => console.log(m.extractTurboRunTasks('turbo run $form').sort().join(',')))
-      .catch((e) => console.log('ERRO:' + e.code))
+      .then((m) => {
+        const ns = m.default ?? m;
+        console.log(ns.extractTurboRunTasks('turbo run $form').sort().join(','));
+      })
+      .catch((e) => console.log('ERRO:' + (e.code ?? '') + ' ' + (e.message ?? '')))
   " 2>/dev/null | tail -1)
 
   case "$got" in
