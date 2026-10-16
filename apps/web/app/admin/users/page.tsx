@@ -5,10 +5,15 @@
 
 import type * as React from 'react';
 import { revalidatePath } from 'next/cache';
-import { obterMeuPerfil, listarPerfis, atribuirPerfil, removerPerfil } from '../../../lib/perfil';
+import {
+  obterMeuPerfil,
+  listarPerfis,
+  atribuirPerfil,
+  decidirAtribuicaoPerfil,
+} from '../../../lib/perfil';
 import { ApiClient } from '../../../lib/api-client';
 import { exigirSessao } from '../../../lib/sessao';
-import type { UserOutputDto, UsersPageDto, AssignProfileInputDto } from '@projeto/shared-types';
+import type { UserOutputDto, UsersPageDto } from '@projeto/shared-types';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,20 +42,23 @@ export default async function AdminUsersPage(): Promise<React.JSX.Element> {
   async function atribuir(formData: FormData): Promise<void> {
     'use server';
     const userId = String(formData.get('userId') ?? '');
-    const profileId = String(formData.get('profileId') ?? '');
-    if (userId && profileId) {
-      const body: AssignProfileInputDto = { profileId };
-      await atribuirPerfil(userId, profileId);
-      void body;
-    }
-    revalidatePath('/admin/users');
-  }
+    const selecionado = String(formData.get('profileId') ?? '');
+    // O perfil atual vem da MESMA fonte que o `defaultValue` do select, então
+    // comparar contra ele é o que distingue "não toquei em nada" de "escolhi
+    // a opção vazia de propósito".
+    const atual = String(formData.get('profileIdAtual') ?? '') || null;
 
-  async function limpar(formData: FormData): Promise<void> {
-    'use server';
-    const userId = String(formData.get('userId') ?? '');
+    // pt-BR (#97, M3): a decisão é fail-safe. A opção vazia limpa o perfil com
+    // o MESMO PUT e `profileId: null` (não existe DELETE para isso) — mas só
+    // quando havia perfil. Sem isso, `Salvar` sem tocar em nada removia o
+    // perfil de quem já estava sem perfil.
     if (userId) {
-      await removerPerfil(userId);
+      const decisao = decidirAtribuicaoPerfil({ selecionado, atual });
+      if (decisao.tipo === 'atribuir') {
+        await atribuirPerfil(userId, decisao.profileId);
+      } else if (decisao.tipo === 'remover') {
+        await atribuirPerfil(userId, null);
+      }
     }
     revalidatePath('/admin/users');
   }
@@ -70,9 +78,7 @@ export default async function AdminUsersPage(): Promise<React.JSX.Element> {
         </thead>
         <tbody>
           {users.map((u) => {
-            const atual = profiles.find(
-              (p) => p.id === (u as { profileId?: string | null }).profileId,
-            );
+            const atual = profiles.find((p) => p.id === u.profileId);
             return (
               <tr key={u.id}>
                 <td>{u.nome}</td>
@@ -81,22 +87,17 @@ export default async function AdminUsersPage(): Promise<React.JSX.Element> {
                 <td>
                   <form action={atribuir} style={{ display: 'inline-block' }}>
                     <input type="hidden" name="userId" value={u.id} />
+                    <input type="hidden" name="profileIdAtual" value={u.profileId ?? ''} />
                     <select name="profileId" defaultValue={atual?.id ?? ''}>
-                      <option value="">— escolha —</option>
+                      <option value="">— sem perfil —</option>
                       {profiles.map((p) => (
                         <option key={p.id} value={p.id}>
                           {p.slug} {p.isAdmin ? '(admin)' : ''}
                         </option>
                       ))}
                     </select>
-                    <button type="submit">Atribuir</button>
+                    <button type="submit">Salvar</button>
                   </form>
-                  {atual ? (
-                    <form action={limpar} style={{ display: 'inline-block', marginLeft: 8 }}>
-                      <input type="hidden" name="userId" value={u.id} />
-                      <button type="submit">Limpar</button>
-                    </form>
-                  ) : null}
                 </td>
               </tr>
             );

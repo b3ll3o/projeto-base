@@ -86,13 +86,20 @@ export const AUTH_GUARD_SLOT = JwtAuthGuard;
     { provide: TOKEN_ISSUER_PORT, useClass: JwtTokenService },
     { provide: PASSWORD_HASHER_PORT, useClass: Argon2PasswordHasher },
     { provide: AUTH_GUARD_SLOT, useClass: JwtAuthGuard },
-    // pt-BR (#93.1 — RBAC, 2026-10-16): cache do guard. Registrado aqui
-    // e não em ProfilesModule para evitar ciclo (auth ← profiles ← auth
-    // via `obterPerfilDoUsuario`). ProfilesModule também o registra (tem
-    // `invalidateAll` no fim de transações), mas o cache é singleton —
-    // o Nest reusa a mesma instância em todo o grafo.
+    // pt-BR (#97): DONO do cache. O `JwtAuthGuard` (que LÊ) mora aqui e as
+    // use cases de ProfilesModule (que INVALIDAM) precisam ser a MESMA
+    // instância — senão `invalidateAll()` não limpa o Map que o guard lê e
+    // uma permissão revogada continua valendo até o TTL (5s). Provider não
+    // é singleton por definição: cada `providers: [X]` cria uma instância.
+    // Por isso os outros módulos importam este e não redeclaram.
     UserProfileCacheService,
   ],
-  exports: [AUTH_GUARD_SLOT, TOKEN_ISSUER_PORT, AUTH_USE_CASES, PASSWORD_HASHER_PORT],
+  exports: [
+    AUTH_GUARD_SLOT,
+    TOKEN_ISSUER_PORT,
+    AUTH_USE_CASES,
+    PASSWORD_HASHER_PORT,
+    UserProfileCacheService,
+  ],
 })
 export class AuthModule {}

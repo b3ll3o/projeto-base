@@ -7,70 +7,81 @@
 // não o que o modelo de domínio tem. Os nomes de campo em camelCase
 // vêm do `class-transformer`/`JSON.stringify` (NÃO do `@@map` do Prisma,
 // que é para o DB).
+//
+// pt-BR (#97): este arquivo deixou de ser uma PALPITE e passou a ser o
+// espelho das formas reais. `ProfileSummary`/`ProfileDetail` reproduzem
+// `profiles.use-cases.ts:63-78` e `MeProfileDto` reproduz o retorno de
+// `me-profile.controller.ts`. Os tipos que não tinham rota por trás
+// (`AuthorizationOutputDto`, `SyncAuthorizationsInputDto`, `ProfileOutputDto`)
+// foram REMOVIDOS em vez de corrigidos: a API nunca devolveu um objeto de
+// autorização — permissões são `string[]` — e nunca teve PUT de sync.
+//
+// O `:id` de toda rota é **UUID**, não slug. Nenhuma rota aceita slug; as
+// páginas web recebem slug na URL e resolvem via `lib/perfil.ts`.
 
 import type { UUID, ISODateString } from './user.js';
 
-/** Permission key canônica (subset do `permissions-catalog.ts`). */
-export type PermissionKey =
-  | 'users.read'
-  | 'users.write'
-  | 'users.delete'
-  | 'admin.manage-profiles'
-  | 'admin.manage-authorizations'
-  | 'admin.manage-users'
-  | 'audits.read';
-
-/** Saída canônica de um perfil. */
-export interface ProfileOutputDto {
+/** Item de `GET /api/v1/admin/profiles`. */
+export type ProfileSummary = {
   id: UUID;
   slug: string;
   name: string;
-  description: string | null;
   isAdmin: boolean;
   isSystem: boolean;
+  description: string | null;
+  permissionCount: number;
+};
+
+/** Item de `GET|POST|PATCH /api/v1/admin/profiles/:id` e das rotas de autorização. */
+export type ProfileDetail = ProfileSummary & {
+  permissions: string[];
+  createdAt: ISODateString;
+  updatedAt: ISODateString;
   version: number;
-  createdAt: ISODateString;
-  updatedAt: ISODateString;
-}
+};
 
-/** Saída canônica de uma autorização (perfil TEM permissão). */
-export interface AuthorizationOutputDto {
-  id: UUID;
-  profileId: UUID;
-  permissionKey: PermissionKey;
-  createdAt: ISODateString;
-  updatedAt: ISODateString;
-}
-
-/** Resposta de `GET /api/v1/me/profile`. */
+/**
+ * Resposta de `GET /api/v1/me/profile`.
+ *
+ * pt-BR (#97): os campos são `profileId`/`profileSlug`/`profileName` — não
+ * existe `userId` nem um objeto `profile` aninhado. Ler `profile.name` aqui
+ * devolvia `undefined` em silêncio, e o rodapé do Sidebar mostrava
+ * "Sem perfil" para todo mundo.
+ */
 export interface MeProfileDto {
-  userId: UUID;
-  profile: ProfileOutputDto | null;
-  permissions: readonly PermissionKey[];
+  profileId: UUID | null;
+  profileSlug: string | null;
+  profileName: string | null;
   isAdmin: boolean;
+  permissions: readonly string[];
 }
 
-/** Input para `POST /api/v1/admin/profiles`. */
+/**
+ * Input de `POST /api/v1/admin/profiles`.
+ *
+ * pt-BR (#97): sem `isAdmin`. A API ignora o campo de propósito — um ator com
+ * `admin.manage-profiles` criaria profile de bypass total — e as flags vêm
+ * só do seed.
+ */
 export interface CreateProfileInputDto {
   slug: string;
   name: string;
   description?: string;
-  isAdmin?: boolean;
+  initialPermissions?: readonly string[];
 }
 
-/** Input para `PATCH /api/v1/admin/profiles/:slug`. */
+/** Input de `PATCH /api/v1/admin/profiles/:id` — `name` é obrigatório. */
 export interface UpdateProfileInputDto {
-  name?: string;
+  name: string;
   description?: string;
-  isAdmin?: boolean;
 }
 
-/** Input para `PUT /api/v1/admin/profiles/:slug/authorizations`. */
-export interface SyncAuthorizationsInputDto {
-  permissionKeys: readonly PermissionKey[];
-}
-
-/** Input para `PUT /api/v1/admin/users/:id/profile`. */
+/**
+ * Input de `PUT /api/v1/admin/users/:id/profile`.
+ *
+ * pt-BR (#97): `profileId` anulável — `null` LIMPA o perfil do usuário. É o
+ * mesmo PUT; não existe DELETE para isso.
+ */
 export interface AssignProfileInputDto {
-  profileId: UUID;
+  profileId: UUID | null;
 }

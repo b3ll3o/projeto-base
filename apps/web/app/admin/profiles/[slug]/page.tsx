@@ -3,17 +3,23 @@
 // pt-BR (#93.1 — RBAC, 2026-10-16): detalhe de um perfil — mostra
 // metadados (slug, name, isAdmin, isSystem) e a lista de permissões.
 // Form simples para togglar permissões (Server Action).
+//
+// pt-BR (#97): a URL continua sendo `[slug]` — é o que o admin digita e o que
+// fica nos links — mas o slug é RESOLVIDO para o UUID antes de qualquer
+// mutação. Antes, o slug ia cru pro path de um `:id` que a API faz por
+// `findById`, e a página dava 404 sempre. O catálogo de permissões vem de
+// `GET /admin/permissions` (antes era uma lista hardcoded que envelhecia
+// junto com a API) e as permissões atuais vêm do próprio `ProfileDetail`.
 
 import type * as React from 'react';
 import { notFound } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
 import {
-  listarPerfis,
-  listarAutorizacoes,
   obterMeuPerfil,
-  obterPerfil,
-  sincronizarAutorizacoes,
+  obterPerfilPorSlug,
+  listarPermissoes,
+  trocarPermissoes,
 } from '../../../../lib/perfil';
-import type { PermissionKey } from '@projeto/shared-types';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,36 +40,35 @@ export default async function AdminProfileDetailPage({
   }
 
   const { slug } = await params;
-  let profile;
-  try {
-    profile = await obterPerfil(slug);
-  } catch {
+
+  const [profile, catalogo] = await Promise.all([
+    obterPerfilPorSlug(slug).catch(() => null),
+    listarPermissoes(),
+  ]);
+  if (profile === null) {
     notFound();
   }
 
-  const [allProfiles, currentKeys] = await Promise.all([
-    listarPerfis(),
-    listarAutorizacoes(profile.id).catch(
-      () => [] as Awaited<ReturnType<typeof listarAutorizacoes>>,
-    ),
-  ]);
-  const assignedKeys = new Set(currentKeys.map((a) => a.permissionKey));
-  void allProfiles; // (reserved for "copy from another profile" UI)
+  const atribuidas = new Set(profile.permissions);
 
-  const allPermissionKeys: readonly PermissionKey[] = [
-    'users.read',
-    'users.write',
-    'users.delete',
-    'admin.manage-profiles',
-    'admin.manage-authorizations',
-    'admin.manage-users',
-    'audits.read',
-  ];
+  // pt-BR (#97, M1): o gate é `isSystem`, não `isAdmin`. Medido em
+  // `profiles.use-cases.ts` — `atribuir`/`revogar` recusam com
+  // `ProfileSystemProtectedException` só quando `isSystem()`; `isAdmin` só é
+  // bloqueado no RENAME (`atualizar`), que esta tela não chama. Renderizar o
+  // form num perfil de sistema dava duas falhas: erro na API ao marcar, e —
+  // pior — com zero mudanças o diff é vazio, nada sai, e o "Salvar" parece ter
+  // funcionado. `admin` e `viewer`, os dois do seed, são `isSystem: true`.
 
   async function saveAuthorizations(formData: FormData): Promise<void> {
     'use server';
-    const checked = formData.getAll('permissionKey').map(String) as PermissionKey[];
-    await sincronizarAutorizacoes(profile!.id, checked);
+    const desejadas = formData.getAll('permissionKey').map(String);
+    // Falha não é engolida: sem revalidate, o erro sobe e a tela não recarrega
+    // fingindo sucesso sobre um estado parcial (ver `trocarPermissoes`).
+    // Sem `error.tsx` no app, quem vê isso é a página de erro genérica do Next —
+    // a garantia é a de não haver "salvo" falso, não a de exibir a mensagem.
+    await trocarPermissoes(profile!.id, profile!.permissions, desejadas);
+    revalidatePath(`/admin/profiles/${profile!.slug}`);
+    revalidatePath('/admin/profiles');
   }
 
   return (
@@ -82,25 +87,41 @@ export default async function AdminProfileDetailPage({
       </section>
 
       <section>
-        <h2>Permissões ({currentKeys.length})</h2>
-        <form action={saveAuthorizations}>
-          <ul>
-            {allPermissionKeys.map((k) => (
-              <li key={k}>
-                <label>
-                  <input
-                    type="checkbox"
-                    name="permissionKey"
-                    value={k}
-                    defaultChecked={assignedKeys.has(k)}
-                  />
-                  <code>{k}</code>
-                </label>
-              </li>
-            ))}
-          </ul>
-          <button type="submit">Salvar</button>
-        </form>
+        <h2>Permissões ({profile.permissions.length})</h2>
+        {profile.isSystem ? (
+          <>
+            <p>
+              Perfil de sistema: as permissões são <strong>somente leitura</strong>. A API recusa
+              alterações com <code>ProfileSystemProtectedException</code>.
+            </p>
+            <ul>
+              {catalogo.map((k) => (
+                <li key={k}>
+                  <code>{k}</code> {atribuidas.has(k) ? '✅' : '—'}
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <form action={saveAuthorizations}>
+            <ul>
+              {catalogo.map((k) => (
+                <li key={k}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      name="permissionKey"
+                      value={k}
+                      defaultChecked={atribuidas.has(k)}
+                    />
+                    <code>{k}</code>
+                  </label>
+                </li>
+              ))}
+            </ul>
+            <button type="submit">Salvar</button>
+          </form>
+        )}
       </section>
     </main>
   );

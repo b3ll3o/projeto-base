@@ -24,6 +24,17 @@
 //     InvalidRestore                        → 422 UNPROCESSABLE_ENTITY
 //     UserValidationException               → 400 VALIDATION_ERROR
 //
+//   DOMÍNIO (BC Profiles):
+//     ProfileNotFound / AuthorizationNotFound        → 404 NOT_FOUND
+//     ProfileSlugAlreadyInUse / ProfileHasUsers      → 409 CONFLICT
+//     AuthorizationAlreadyAssigned                  → 409 CONFLICT
+//     ConcurrencyException (profiles)               → 409 CONFLICT
+//     ProfileSystemProtected / ProfileAdminProtected → 403 FORBIDDEN
+//     ProfilePrivilegeEscalation                    → 403 FORBIDDEN
+//     InvalidPermissionKey                          → 400 INVALID_PERMISSION_KEY
+//     (slug malformado é `UserValidationException` → 400 VALIDATION_ERROR;
+//      o 409 de slug é SÓ para o slug bem formado que já existe)
+//
 //   APLICAÇÃO (camada inbound — use cases sempre re-jogam nestas):
 //     ApplicationResourceNotFoundException  → 404 USER_NOT_FOUND
 //     ApplicationResourceDeletedException   → 410 USER_DELETED
@@ -50,6 +61,18 @@ import {
 } from '../../audit/domain/audit.exceptions.js';
 import { InvalidTokenException } from '../../../modules/auth/domain/exceptions/token.exceptions.js';
 import { InvalidCredentialsException } from '../../../modules/auth/domain/exceptions/auth.exceptions.js';
+import {
+  ProfileNotFoundException,
+  ProfileSlugAlreadyInUseException,
+  ProfileSystemProtectedException,
+  ProfileAdminProtectedException,
+  ProfileHasUsersException,
+  ProfilePrivilegeEscalationException,
+  AuthorizationAlreadyAssignedException,
+  AuthorizationNotFoundException,
+  ConcurrencyException as ProfileConcurrencyException,
+} from '../../../modules/profiles/domain/exceptions/profile.exceptions.js';
+import { InvalidPermissionKeyException } from '../../../modules/profiles/domain/value-objects/authorization-key.vo.js';
 import {
   ApplicationValidationException,
   ApplicationResourceNotFoundException,
@@ -167,6 +190,96 @@ export function mapExceptionToHttp(err: unknown): HttpErrorMapping {
       code: 'VALIDATION_ERROR',
       title: 'Erro de validação',
       errors: [{ field: err.campo, message: err.motivo, code: 'VALIDATION_ERROR' }],
+    };
+  }
+
+  // ─── DOMÍNIO (BC Profiles) ────────────────────────────────────────────────
+  //
+  // pt-BR (#97): antes desta seção TODA exceção de `profiles` caía no
+  // default e virava 500 — inclusive um slug duplicado (409) e um profile
+  // inexistente (404). A `ConcurrencyException` de profiles é uma CLASSE
+  // diferente da de `users` (arquivos separados, sem herança): o `instanceof`
+  // as distingue, e o alias `ProfileConcurrencyException` evita a colisão de
+  // nome no import. Ela é 409 (conflito de estado), não 412: o `Profile` não
+  // recebe `expectedVersion` do cliente, a divergência é interna do save.
+  if (err instanceof ProfileNotFoundException) {
+    return {
+      status: HttpStatus.NOT_FOUND,
+      code: 'PROFILE_NOT_FOUND',
+      title: 'Perfil não encontrado',
+    };
+  }
+  if (err instanceof ProfileSlugAlreadyInUseException) {
+    return {
+      status: HttpStatus.CONFLICT,
+      code: 'PROFILE_SLUG_IN_USE',
+      title: 'Slug de perfil já em uso',
+    };
+  }
+  if (err instanceof ProfileSystemProtectedException) {
+    return {
+      status: HttpStatus.FORBIDDEN,
+      code: 'PROFILE_SYSTEM_PROTECTED',
+      title: 'Perfil de sistema protegido',
+    };
+  }
+  if (err instanceof ProfileAdminProtectedException) {
+    return {
+      status: HttpStatus.FORBIDDEN,
+      code: 'PROFILE_ADMIN_PROTECTED',
+      title: 'Perfil admin protegido',
+    };
+  }
+  if (err instanceof ProfilePrivilegeEscalationException) {
+    return {
+      status: HttpStatus.FORBIDDEN,
+      code: 'PRIVILEGE_ESCALATION',
+      title: 'Escalada de privilégio bloqueada',
+    };
+  }
+  if (err instanceof ProfileHasUsersException) {
+    return {
+      status: HttpStatus.CONFLICT,
+      code: 'PROFILE_HAS_USERS',
+      title: 'Perfil ainda tem usuários',
+    };
+  }
+  if (err instanceof AuthorizationAlreadyAssignedException) {
+    return {
+      status: HttpStatus.CONFLICT,
+      code: 'AUTHORIZATION_ALREADY_ASSIGNED',
+      title: 'Autorização já atribuída',
+    };
+  }
+  if (err instanceof AuthorizationNotFoundException) {
+    return {
+      status: HttpStatus.NOT_FOUND,
+      code: 'AUTHORIZATION_NOT_FOUND',
+      title: 'Autorização não encontrada',
+    };
+  }
+  // pt-BR (#97, A4): `Profile.criar`/`adicionarAutorizacao` lançavam `Error`
+  // puro na chave fora do catálogo, e `Error` não é mapeado — caía no
+  // fall-through e saía 500. Violação de invariante é erro do CALLER: 400.
+  if (err instanceof InvalidPermissionKeyException) {
+    return {
+      status: HttpStatus.BAD_REQUEST,
+      code: 'INVALID_PERMISSION_KEY',
+      title: 'Permissão inválida',
+      errors: [
+        {
+          field: 'permissionKey',
+          message: 'a permissão precisa constar no catálogo',
+          code: 'INVALID_PERMISSION_KEY',
+        },
+      ],
+    };
+  }
+  if (err instanceof ProfileConcurrencyException) {
+    return {
+      status: HttpStatus.CONFLICT,
+      code: 'CONCURRENCY_CONFLICT',
+      title: 'Conflito de versão',
     };
   }
 

@@ -8,8 +8,9 @@
 // Para o escopo da task #93.1, o port oferece soft-delete como
 // contrato futuro mas o repo atual reflete o schema real.
 
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
+import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service.js';
 import type { AuthorizationRepositoryPort } from '../../domain/ports/authorization-repository.port.js';
 import type { ProfileId } from '../../domain/value-objects/profile-id.vo.js';
 import type { AuthorizationKey } from '../../domain/value-objects/authorization-key.vo.js';
@@ -17,7 +18,9 @@ import { Authorization } from '../../domain/authorization.entity.js';
 
 @Injectable()
 export class PrismaAuthorizationRepository implements AuthorizationRepositoryPort {
-  constructor(private readonly prisma: PrismaClient) {}
+  /** pt-BR: `@Inject(PrismaService)` explícito — `PrismaClient` é interface
+   * material e some em runtime (mesmo motivo do PrismaProfileRepository). */
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaClient) {}
 
   async listByProfile(profileId: ProfileId): Promise<Authorization[]> {
     const rows = await this.prisma.authorization.findMany({

@@ -63,6 +63,19 @@ export class AuthorizationNotFoundException extends Error {
   }
 }
 
+/**
+ * pt-BR (#97): tentativa de escalada de privilégio — ator sem `isAdmin`
+ * tentando alcançar um profile `isAdmin` ou alterar as permissões do
+ * próprio profile. É a exceção que fecha o caminho de auto-promoção
+ * aberto por `admin.manage-users` e `admin.manage-authorizations`.
+ */
+export class ProfilePrivilegeEscalationException extends Error {
+  constructor(motivo: string) {
+    super(`Escalada de privilégio bloqueada: ${motivo}`);
+    this.name = 'ProfilePrivilegeEscalationException';
+  }
+}
+
 export class ConcurrencyException extends Error {
   constructor(
     public readonly resource: string,

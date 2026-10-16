@@ -45,7 +45,7 @@ export async function Sidebar(): Promise<React.JSX.Element> {
 
       {me !== null ? (
         <p className="sidebar-footer">
-          {me.profile?.name ?? 'Sem perfil'} · {me.isAdmin ? 'admin' : 'usuário'}
+          {me.profileName ?? 'Sem perfil'} · {me.isAdmin ? 'admin' : 'usuário'}
         </p>
       ) : null}
     </nav>

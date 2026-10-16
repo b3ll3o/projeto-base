@@ -72,7 +72,12 @@ export class ApiClient {
         const problem = (await res.json()) as ProblemDetailsDto;
         throw new ApiError(problem.title, problem.code, problem.status, problem);
       }
-      return res.json() as Promise<T>;
+      // pt-BR (#97): endpoint `void` (ex: `DELETE /admin/profiles/:id`) responde
+      // 204 sem corpo, e `res.json()` em corpo vazio lança `SyntaxError`.
+      // Lê como texto e só faz parse quando TEM conteúdo — protege todos os
+      // endpoints vazios, não só este.
+      const texto = await res.text();
+      return (texto === '' ? undefined : JSON.parse(texto)) as T;
     } catch (err) {
       // #70: distinguir timeout (AbortError) de outros erros de rede.
       // Permite que a UI mostre "tempo esgotado" em vez de "erro genérico".

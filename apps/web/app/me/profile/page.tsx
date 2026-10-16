@@ -25,13 +25,11 @@ export default async function MeProfilePage(): Promise<React.JSX.Element> {
       <section>
         <h2>Identidade</h2>
         <dl>
-          <dt>User ID</dt>
-          <dd>{me.userId}</dd>
           <dt>Perfil</dt>
           <dd>
-            {me.profile ? (
+            {me.profileName !== null ? (
               <>
-                <strong>{me.profile.name}</strong> <code>({me.profile.slug})</code>
+                <strong>{me.profileName}</strong> <code>({me.profileSlug})</code>
               </>
             ) : (
               <em>Sem perfil — deny-by-default</em>

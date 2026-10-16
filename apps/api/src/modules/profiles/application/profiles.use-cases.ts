@@ -10,29 +10,45 @@
 // Authorizations DENTRO do aggregate (DDD-puro) — o repo apenas carrega
 // a lista do DB e o `Profile` aggregate valida invariantes.
 
+import { Inject, Injectable } from '@nestjs/common';
 import { Profile } from '../domain/profile.aggregate.js';
 import { profileId } from '../domain/value-objects/profile-id.vo.js';
 import { profileSlug } from '../domain/value-objects/profile-slug.vo.js';
-import type { ProfileRepositoryPort } from '../domain/ports/profile-repository.port.js';
-import type { UserRepositoryPort } from '../../users/domain/ports/user-repository.port.js';
-import type { UserProfileCacheService } from '../../../shared/infrastructure/security/user-profile-cache.service.js';
+import {
+  PROFILE_REPOSITORY_PORT,
+  type ProfileRepositoryPort,
+} from '../domain/ports/profile-repository.port.js';
+import {
+  USER_REPOSITORY_PORT,
+  type UserRepositoryPort,
+} from '../../users/domain/ports/user-repository.port.js';
+import { UserProfileCacheService } from '../../../shared/infrastructure/security/user-profile-cache.service.js';
 import {
   ProfileNotFoundException,
   ProfileSlugAlreadyInUseException,
   ProfileHasUsersException,
   ProfileSystemProtectedException,
   ProfileAdminProtectedException,
+  ProfilePrivilegeEscalationException,
 } from '../domain/exceptions/profile.exceptions.js';
-import { isValidProfileSlug } from '../domain/value-objects/profile-slug.vo.js';
 import { listAllPermissions } from '../../../shared/auth/permissions-catalog.js';
 import { UserNotFoundException } from '../../users/domain/exceptions/user.exceptions.js';
 import { UserId } from '../../users/domain/value-objects/user-id.vo.js';
+import type { User } from '../../users/domain/user.aggregate.js';
+
+/**
+ * Identidade do ator autenticado, o mínimo que as travas de escalada
+ * precisam: QUEM é e SE é admin. Vem do `req.user` publicado pelo
+ * `JwtAuthGuard` (que hidrata `isAdmin` do cache de profile).
+ */
+export interface AtorAutenticado {
+  readonly userId: string;
+  readonly isAdmin: boolean;
+}
 
 export interface CreateProfileInput {
   slug: string;
   name: string;
-  isAdmin?: boolean;
-  isSystem?: boolean;
   description?: string | null;
   initialPermissions?: readonly string[];
 }
@@ -59,12 +75,23 @@ export type ProfileDetail = ProfileSummary & {
   version: number;
 };
 
+/**
+ * pt-BR (#97): `@Injectable()` + `@Inject(TOKEN)` explícito em todo
+ * parâmetro que é interface/porta — elas somem em runtime, então sem o
+ * token o Nest **não passa `undefined`**: ele LANÇA no boot
+ * (`Nest can't resolve dependencies of the ProfileUseCases (?, Symbol(...), ...)`).
+ * A falha é loud no start, não silenciosa em runtime — e por isso
+ * `profiles.module.spec.ts` sobe o container de verdade. O param
+ * `agoraProvider` foi REMOVIDO em vez de virar provider de clock: com
+ * `@Injectable()` o Nest tentaria resolver aquele token no boot, e nenhum
+ * teste dependia de tempo determinístico.
+ */
+@Injectable()
 export class ProfileUseCases {
   constructor(
-    private readonly profileRepo: ProfileRepositoryPort,
-    private readonly userRepo: UserRepositoryPort,
-    private readonly cache: UserProfileCacheService,
-    private readonly agoraProvider: () => Date = () => new Date(),
+    @Inject(PROFILE_REPOSITORY_PORT) private readonly profileRepo: ProfileRepositoryPort,
+    @Inject(USER_REPOSITORY_PORT) private readonly userRepo: UserRepositoryPort,
+    @Inject(UserProfileCacheService) private readonly cache: UserProfileCacheService,
   ) {}
 
   async listar(): Promise<ProfileSummary[]> {
@@ -89,9 +116,15 @@ export class ProfileUseCases {
   }
 
   async criar(input: CreateProfileInput): Promise<ProfileDetail> {
-    if (!isValidProfileSlug(input.slug)) {
-      throw new ProfileSlugAlreadyInUseException(input.slug);
-    }
+    // pt-BR (#97, A3): `isAdmin`/`isSystem` saíram de `CreateProfileInput`.
+    // A garantia era do controller (um call-site só) — um segundo controller,
+    // um endpoint novo ou um seed a reabriam. Aqui a garantia é do TIPO: o
+    // campo não existe no contrato e `criar` fixa `false`. Só o
+    // seed/migration, que escreve direto no Prisma, cria profile admin.
+    //
+    // pt-BR (#97, A4): slug malformado NÃO é `ProfileSlugAlreadyInUse` —
+    // `ProfileSlug.create` (via `profileSlug()`) lança `UserValidationException`
+    // → 400. O 409 fica só para o slug bem formado que já existe.
     const existing = await this.profileRepo.findBySlug(profileSlug(input.slug));
     if (existing !== null) {
       throw new ProfileSlugAlreadyInUseException(input.slug);
@@ -100,10 +133,8 @@ export class ProfileUseCases {
       slug: input.slug,
       name: input.name,
       description: input.description ?? null,
-      isAdmin: input.isAdmin ?? false,
-      isSystem: input.isSystem ?? false,
       initialAuthorizations: input.initialPermissions ?? [],
-      agora: this.agoraProvider(),
+      agora: new Date(),
     });
     await this.profileRepo.save(profile);
     await this.cache.invalidateAll();
@@ -121,7 +152,7 @@ export class ProfileUseCases {
     if (profile.isAdmin()) {
       throw new ProfileAdminProtectedException(profile.id().value);
     }
-    const agora = this.agoraProvider();
+    const agora = new Date();
     profile.renomear(input.name, agora);
     profile.alterarDescricao(input.description ?? null, agora);
     await this.profileRepo.save(profile);
@@ -141,7 +172,7 @@ export class ProfileUseCases {
     if (count > 0) {
       throw new ProfileHasUsersException(profile.slug().value, count);
     }
-    const agora = this.agoraProvider();
+    const agora = new Date();
     profile.deletar(null, agora);
     await this.profileRepo.delete(profile.id());
     await this.cache.invalidateAll();
@@ -170,14 +201,103 @@ export class ProfileUseCases {
   }
 }
 
+@Injectable()
 export class AuthorizationUseCases {
   constructor(
-    private readonly profileRepo: ProfileRepositoryPort,
-    private readonly cache: UserProfileCacheService,
-    private readonly agoraProvider: () => Date = () => new Date(),
+    @Inject(PROFILE_REPOSITORY_PORT) private readonly profileRepo: ProfileRepositoryPort,
+    // Só para resolver o profile de QUEM pediu (trava de auto-concessão).
+    @Inject(USER_REPOSITORY_PORT) private readonly userRepo: UserRepositoryPort,
+    @Inject(UserProfileCacheService) private readonly cache: UserProfileCacheService,
   ) {}
 
-  async atribuir(profileIdStr: string, permissionKey: string): Promise<ProfileDetail> {
+  /**
+   * pt-BR (#97, A6): resolve o ator no banco. `null` = soft-deleted
+   * (o repo filtra `deletedAt`) ou id inexistente — o `UserId.create`
+   * exige UUID v7 e todos os writes de `users` passam por ele, então
+   * `users.id` é v7 por construção (o default `gen_random_uuid()` da
+   * migration é só das tabelas novas).
+   * shortcut: um id v4 plantado por fora quebra a resolução e devolve 400
+   * numa operação admin legítima; quando existir, alinhar `UserId` com o
+   * que o banco aceita é PR próprio deste VO.
+   */
+  private async userDoAtor(ator: AtorAutenticado): Promise<User | null> {
+    return this.userRepo.findById(UserId.create(ator.userId));
+  }
+
+  /**
+   * pt-BR (#97, A6): recusa auto-concessão. Um ator com
+   * `admin.manage-authorizations` que concede `admin.manage-users` ao
+   * PRÓPRIO profile se promove a root sem nunca tocar no profile `admin`.
+   * Só `isAdmin` escapa — é o único que já tem o bypass.
+   *
+   * Fail-CLOSED: ator que não resolve (`atorUser === null`) é RECUSADO.
+   * Com `?.` o "não sei quem eu sou" virava "não sou eu" e a trava não
+   * disparava — o pedido mais privilegiado do sistema passava porque o
+   * ATOR sumiu do banco.
+   */
+  private async recusaAutoConcessao(
+    ator: AtorAutenticado,
+    atorUser: User | null,
+    profileIdAlvo: string,
+  ): Promise<void> {
+    if (ator.isAdmin) {
+      return;
+    }
+    if (atorUser === null) {
+      throw new ProfilePrivilegeEscalationException(
+        'o ator não resolve no banco; a operação é negada por não se poder provar quem ele é',
+      );
+    }
+    if (atorUser.profileId() === profileIdAlvo) {
+      throw new ProfilePrivilegeEscalationException(
+        'um ator sem isAdmin não altera as permissões do próprio profile',
+      );
+    }
+  }
+
+  /**
+   * pt-BR (#97, A1.1): `admin.manage-authorizations` autoriza o ator a mexer
+   * nas permissões de QUALQUER profile; não autoriza a inventar permissão.
+   * Sem esta trava o ator cunha um profile vazio, enche-o do conjunto
+   * `admin.*` completo e se dá esse profile — o `isAdmin` (bypass) continua
+   * barrado, todo o resto não.
+   *
+   * O subconjunto NÃO considera o bypass de `isAdmin` como permissão
+   * concreta: quem é admin tem TODAS as permissões pelo próprio guard, logo
+   * comparar as dele com uma lista seria vacuamente verdadeiro. `isAdmin`
+   * escapa no topo, como em todas as travas deste arquivo.
+   *
+   * Fail-CLOSED: ator sem profile, ou com profile que não carregou esta
+   * chave, NÃO tem a chave. `revogar` não passa por aqui — remover
+   * privilégio nunca é escalada, e exigir posse da chave bloquearia a
+   * limpeza de uma permissão que o ator não tinha.
+   */
+  private async recusaConcessaoQueNaoTem(
+    ator: AtorAutenticado,
+    atorUser: User | null,
+    permissionKey: string,
+  ): Promise<void> {
+    if (ator.isAdmin) {
+      return;
+    }
+    let tem = false;
+    const idDoAtor = atorUser?.profileId() ?? null;
+    if (idDoAtor !== null) {
+      const meu = await this.profileRepo.findById(profileId(idDoAtor));
+      tem = meu?.authorizations().tem(permissionKey) === true;
+    }
+    if (!tem) {
+      throw new ProfilePrivilegeEscalationException(
+        'um ator sem isAdmin não concede a nenhum profile uma permissão que ele não tem',
+      );
+    }
+  }
+
+  async atribuir(
+    profileIdStr: string,
+    permissionKey: string,
+    ator: AtorAutenticado,
+  ): Promise<ProfileDetail> {
     const profile = await this.profileRepo.findById(profileId(profileIdStr));
     if (profile === null) {
       throw new ProfileNotFoundException(profileIdStr);
@@ -185,7 +305,10 @@ export class AuthorizationUseCases {
     if (profile.isSystem()) {
       throw new ProfileSystemProtectedException(profile.id().value);
     }
-    profile.adicionarAutorizacao(permissionKey, this.agoraProvider());
+    const atorUser = await this.userDoAtor(ator);
+    await this.recusaAutoConcessao(ator, atorUser, profile.id().value);
+    await this.recusaConcessaoQueNaoTem(ator, atorUser, permissionKey);
+    profile.adicionarAutorizacao(permissionKey, new Date());
     await this.profileRepo.save(profile);
     await this.cache.invalidateAll();
     return {
@@ -203,7 +326,11 @@ export class AuthorizationUseCases {
     };
   }
 
-  async revogar(profileIdStr: string, permissionKey: string): Promise<ProfileDetail> {
+  async revogar(
+    profileIdStr: string,
+    permissionKey: string,
+    ator: AtorAutenticado,
+  ): Promise<ProfileDetail> {
     const profile = await this.profileRepo.findById(profileId(profileIdStr));
     if (profile === null) {
       throw new ProfileNotFoundException(profileIdStr);
@@ -211,7 +338,8 @@ export class AuthorizationUseCases {
     if (profile.isSystem()) {
       throw new ProfileSystemProtectedException(profile.id().value);
     }
-    profile.removerAutorizacao(permissionKey, this.agoraProvider());
+    await this.recusaAutoConcessao(ator, await this.userDoAtor(ator), profile.id().value);
+    profile.removerAutorizacao(permissionKey, new Date());
     await this.profileRepo.save(profile);
     await this.cache.invalidateAll();
     return {
@@ -234,23 +362,95 @@ export class AuthorizationUseCases {
   }
 }
 
+@Injectable()
 export class UserProfileUseCases {
   constructor(
-    private readonly userRepo: UserRepositoryPort,
-    private readonly profileRepo: ProfileRepositoryPort,
-    private readonly cache: UserProfileCacheService,
+    @Inject(USER_REPOSITORY_PORT) private readonly userRepo: UserRepositoryPort,
+    @Inject(PROFILE_REPOSITORY_PORT) private readonly profileRepo: ProfileRepositoryPort,
+    @Inject(UserProfileCacheService) private readonly cache: UserProfileCacheService,
   ) {}
 
-  async atribuirProfileAoUser(userId: string, profileIdStr: string | null): Promise<void> {
+  /**
+   * pt-BR (#97, A1.2): as permission keys que o ATOR tem de fato.
+   * Fail-CLOSED — ator que não resolve (soft-deleted) ou sem profile devolve
+   * conjunto vazio, porque o subconjunto de nada é nada.
+   */
+  private async permissoesDoAtor(ator: AtorAutenticado): Promise<ReadonlySet<string>> {
+    const user = await this.userRepo.findById(UserId.create(ator.userId));
+    const idDoAtor = user?.profileId() ?? null;
+    if (idDoAtor === null) {
+      return new Set();
+    }
+    const perfil = await this.profileRepo.findById(profileId(idDoAtor));
+    return new Set(perfil?.authorizations().toLista() ?? []);
+  }
+
+  /**
+   * pt-BR (#97): o ator entra como parâmetro porque `admin.manage-users`
+   * sozinho não pode promover ninguém a root. Atribuir a si mesmo o profile
+   * `isAdmin` é a escalada mais barata que existe: um clique e o ator vira
+   * bypass total. Quem não é admin não atribui profile admin a ninguém.
+   */
+  async atribuirProfileAoUser(
+    userId: string,
+    profileIdStr: string | null,
+    ator: AtorAutenticado,
+  ): Promise<void> {
     if (profileIdStr !== null) {
       const profile = await this.profileRepo.findById(profileId(profileIdStr));
       if (profile === null) {
         throw new ProfileNotFoundException(profileIdStr);
       }
+      if (profile.isAdmin() && !ator.isAdmin) {
+        throw new ProfilePrivilegeEscalationException(
+          'só um ator com isAdmin pode atribuir um profile admin',
+        );
+      }
+      // pt-BR (#97, A1.2): o subconjunto vale para QUALQUER alvo, não só para
+      // si mesmo. MEDIDO 2026-10-16 (revisão de segurança do PR #97, achado
+      // B1): restringir a `userId === ator.userId` deixava a escalada aberta
+      // por DELEGAÇÃO — e `POST /users` é `@Public()`, então o "outro usuário"
+      // não é terceiro confiável, é uma conta que o próprio ator acabou de
+      // criar e cuja senha ele conhece. Cadeia medida: criar profile com
+      // `initialPermissions` que o ator não tem → atribuir a esse boneco →
+      // logar como boneco. Auto-atribuição é só o caso particular, já
+      // coberto pela regra geral.
+      //
+      // O subconjunto NÃO considera o bypass de `isAdmin` como permissão
+      // concreta (admin tem todas pelo guard; comparar seria vacuamente
+      // verdadeiro) — `isAdmin` escapa no topo, como nas demais travas.
+      if (!ator.isAdmin) {
+        const minhas = await this.permissoesDoAtor(ator);
+        const fora = profile
+          .authorizations()
+          .toLista()
+          .filter((k) => !minhas.has(k));
+        if (fora.length > 0) {
+          throw new ProfilePrivilegeEscalationException(
+            'um ator sem isAdmin não atribui a ninguém um profile com permissões que ele não tem',
+          );
+        }
+      }
     }
     const user = await this.userRepo.findById(UserId.create(userId));
     if (user === null) {
       throw new UserNotFoundException(userId);
+    }
+    // pt-BR (#97, achado B4): com `profileId === null` o bloco de autorização
+    // acima INTEIRO é pulado — nenhuma checagem roda. MEDIDO: um ator não-admin
+    // com `admin.manage-users` desligava assim o profile `isAdmin` do root,
+    // que é o único com bypass: lockout de toda a parte admin. Não é escalada
+    // (desligar nunca concede), mas é a mesma classe de B1 — a regra morava
+    // dentro de um `if` que o chamador controla. Desligar profile comum segue
+    // livre para quem tem `admin.manage-users`.
+    if (profileIdStr === null && !ator.isAdmin) {
+      const atualId = user.profileId();
+      const atual = atualId === null ? null : await this.profileRepo.findById(profileId(atualId));
+      if (atual?.isAdmin() === true) {
+        throw new ProfilePrivilegeEscalationException(
+          'só um ator com isAdmin remove de um usuário o profile admin',
+        );
+      }
     }
     user.atribuirPerfil(profileIdStr, new Date());
     await this.userRepo.save(user, user.version() - 1);

@@ -5,7 +5,7 @@
 // Sem `@RequirePermission` — qualquer user autenticado pode ler o
 // próprio profile (mesmo que seja null, indicando "sem permissões").
 
-import { Controller, Get, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Inject, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
 import { UserProfileUseCases } from '../../application/profiles.use-cases.js';
 
@@ -14,9 +14,15 @@ interface AuthedRequest {
 }
 
 @UseGuards(JwtAuthGuard)
-@Controller('api/v1/me')
+@Controller('me')
 export class MeProfileController {
-  constructor(private readonly useCases: UserProfileUseCases) {}
+  constructor(
+    // pt-BR (#97): `@Inject` EXPLÍCITO — `tsx` (esbuild) não emite
+    // `design:paramtypes`, então sem o token o Nest passa `undefined`. Esta
+    // rota não aparece no cenário e2e 10, mas é a mesma classe de defeito
+    // das outras três: nenhuma delas tem spec que suba o container.
+    @Inject(UserProfileUseCases) private readonly useCases: UserProfileUseCases,
+  ) {}
 
   @Get('profile')
   async me(@Req() req: AuthedRequest): Promise<{

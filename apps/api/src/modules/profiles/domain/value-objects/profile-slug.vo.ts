@@ -51,15 +51,6 @@ export class ProfileSlug {
   }
 }
 
-export function isValidProfileSlug(value: string): boolean {
-  return (
-    typeof value === 'string' &&
-    value.trim().length >= MIN_LENGTH &&
-    value.trim().length <= MAX_LENGTH &&
-    SLUG_REGEX.test(value.trim().toLowerCase())
-  );
-}
-
 export function profileSlug(value: string): ProfileSlug {
   return ProfileSlug.create(value);
 }

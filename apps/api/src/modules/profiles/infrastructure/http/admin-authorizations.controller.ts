@@ -8,33 +8,56 @@
 // DELETE /api/v1/admin/profiles/:id/authorizations/:key → revoga
 // GET    /api/v1/admin/permissions → lista o catálogo (para o dropdown do admin)
 
-import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Inject, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
 import { PermissionsGuard } from './guards/permissions.guard.js';
 import { RequirePermission } from './decorators/require-permission.decorator.js';
-import { AuthorizationUseCases, type ProfileDetail } from '../../application/profiles.use-cases.js';
+import {
+  AuthorizationUseCases,
+  type AtorAutenticado,
+  type ProfileDetail,
+} from '../../application/profiles.use-cases.js';
+
+/** `req.user` publicado pelo `JwtAuthGuard`. */
+interface RequestComAtor {
+  user: { sub: string; isAdmin?: boolean };
+}
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller()
 export class AdminAuthorizationsController {
-  constructor(private readonly useCases: AuthorizationUseCases) {}
+  constructor(
+    // pt-BR (#97): `@Inject` EXPLÍCITO — `tsx` (esbuild) não emite
+    // `design:paramtypes`, então sem o token o Nest passa `undefined` e a rota
+    // morre com 500 no primeiro request (MEDIDO 2026-10-16, cenário e2e 10).
+    @Inject(AuthorizationUseCases) private readonly useCases: AuthorizationUseCases,
+  ) {}
 
-  @Post('api/v1/admin/profiles/:id/authorizations')
+  @Post('admin/profiles/:id/authorizations')
   @RequirePermission('admin.manage-authorizations')
   async atribuir(
     @Param('id') id: string,
     @Body() body: { permissionKey: string },
+    @Req() req: RequestComAtor,
   ): Promise<ProfileDetail> {
-    return this.useCases.atribuir(id, body.permissionKey);
+    return this.useCases.atribuir(id, body.permissionKey, this.atorDe(req));
   }
 
-  @Delete('api/v1/admin/profiles/:id/authorizations/:key')
+  @Delete('admin/profiles/:id/authorizations/:key')
   @RequirePermission('admin.manage-authorizations')
-  async revogar(@Param('id') id: string, @Param('key') key: string): Promise<ProfileDetail> {
-    return this.useCases.revogar(id, key);
+  async revogar(
+    @Param('id') id: string,
+    @Param('key') key: string,
+    @Req() req: RequestComAtor,
+  ): Promise<ProfileDetail> {
+    return this.useCases.revogar(id, key, this.atorDe(req));
   }
 
-  @Get('api/v1/admin/permissions')
+  private atorDe(req: RequestComAtor): AtorAutenticado {
+    return { userId: req.user.sub, isAdmin: req.user.isAdmin === true };
+  }
+
+  @Get('admin/permissions')
   @RequirePermission('admin.manage-authorizations')
   async listar(): Promise<string[]> {
     return this.useCases.listarPermissoes();

@@ -14,12 +14,10 @@ import {
 } from './application/profiles.use-cases.js';
 import { PrismaProfileRepository } from './infrastructure/persistence/prisma-profile.repository.js';
 import { PrismaAuthorizationRepository } from './infrastructure/persistence/prisma-authorization.repository.js';
-import { UserProfileCacheService } from '../../shared/infrastructure/security/user-profile-cache.service.js';
 import { AdminProfilesController } from './infrastructure/http/admin-profiles.controller.js';
 import { AdminAuthorizationsController } from './infrastructure/http/admin-authorizations.controller.js';
 import { MeProfileController } from './infrastructure/http/me-profile.controller.js';
 import { AdminUsersController } from './infrastructure/http/admin-users.controller.js';
-import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service.js';
 import { PermissionsGuard } from './infrastructure/http/guards/permissions.guard.js';
 import {
   PROFILE_REPOSITORY_PORT,
@@ -30,14 +28,27 @@ import {
   type AuthorizationRepositoryPort,
 } from './domain/ports/authorization-repository.port.js';
 import { AuthModule } from '../auth/auth.module.js';
+import { PrismaPersistenceModule } from '../users/infrastructure/prisma-persistence.module.js';
+import { PrismaModule } from '../../shared/infrastructure/prisma/prisma.module.js';
 
 @Module({
-  imports: [AuthModule],
+  // pt-BR (#97): `PrismaPersistenceModule` é o módulo que PROVE
+  // `USER_REPOSITORY_PORT` — o `AuthModule` importa mas não re-exporta, e
+  // sem a aresta o Nest nem acha o token. `PrismaModule` entra pelo mesmo
+  // motivo do `AuthModule`: `PrismaService` só existe se o módulo global
+  // for registrado no grafo.
+  imports: [AuthModule, PrismaPersistenceModule, PrismaModule],
   providers: [
-    PrismaService,
+    // pt-BR (#97): `PrismaService` saiu daqui. Declarado localmente ele
+    // virava um SEGUNDO PrismaClient (outro pool de conexões) porque
+    // `PrismaModule` é `@Global()` e já entrega a instância singleton.
     { provide: PROFILE_REPOSITORY_PORT, useClass: PrismaProfileRepository },
     { provide: AUTHORIZATION_REPOSITORY_PORT, useClass: PrismaAuthorizationRepository },
-    UserProfileCacheService,
+    // pt-BR (#97): `UserProfileCacheService` NÃO é provider aqui. Declarado
+    // localmente virava uma segunda instância: as use cases invalidavam um
+    // Map e o `JwtAuthGuard` (instância do AuthModule) lia outro — revogar
+    // permissão não surtia efeito até o TTL. O `AuthModule` (importado acima)
+    // é o dono e o exporta.
     ProfileUseCases,
     AuthorizationUseCases,
     UserProfileUseCases,
@@ -50,7 +61,6 @@ import { AuthModule } from '../auth/auth.module.js';
     MeProfileController,
   ],
   exports: [
-    UserProfileCacheService,
     UserProfileUseCases,
     ProfileUseCases,
     AuthorizationUseCases,

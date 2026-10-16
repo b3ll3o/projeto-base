@@ -19,12 +19,10 @@ export type {
 } from './user.js';
 
 export type {
-  PermissionKey,
-  ProfileOutputDto,
-  AuthorizationOutputDto,
+  ProfileSummary,
+  ProfileDetail,
   MeProfileDto,
   CreateProfileInputDto,
   UpdateProfileInputDto,
-  SyncAuthorizationsInputDto,
   AssignProfileInputDto,
 } from './profile.js';

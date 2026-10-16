@@ -33,6 +33,14 @@ export interface UserOutputDto {
   /** pt-BR: a API usa `nome`, não `name`. Espelha `User.nome` do domínio. */
   nome: string;
   email: string;
+  /**
+   * pt-BR (#97): perfil atribuído ao usuário. `null` = sem perfil
+   * (deny-by-default). Espelha `UserOutput.profileId` de
+   * `apps/api/src/modules/users/application/dto/user.output.ts` (linha 15),
+   * que a API serializa — o web lia isto através de um cast que mascarava
+   * exatamente esta divergência.
+   */
+  profileId: UUID | null;
   version: number;
   createdAt: ISODateString;
   updatedAt: ISODateString;

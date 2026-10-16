@@ -8,16 +8,22 @@
 //
 // Segue o mesmo padrão de `api-client.ts` (server-side, tokens via
 // `getToken` seam).
+//
+// pt-BR (#97): este arquivo deixou de chamar rotas que não existem. Não há
+// `GET /admin/profiles/:id/authorizations`, não há `PUT .../authorizations`
+// e não há `DELETE /admin/users/:id/profile` — as três davam 404 em tempo
+// de execução com a suíte verde. O `:id` de tudo aqui é UUID; o slug que o
+// admin digita na URL entra só por `obterPerfilPorSlug`, que o resolve
+// antes de chamar a API.
 
 import { ApiClient } from './api-client';
 import { exigirSessao, lerTokens } from './sessao';
 import type {
-  AuthorizationOutputDto,
+  AssignProfileInputDto,
   CreateProfileInputDto,
   MeProfileDto,
-  PermissionKey,
-  ProfileOutputDto,
-  SyncAuthorizationsInputDto,
+  ProfileDetail,
+  ProfileSummary,
   UpdateProfileInputDto,
 } from '@projeto/shared-types';
 
@@ -65,65 +71,152 @@ export async function obterMeuPerfil(): Promise<MeProfileDto | null> {
   }
 }
 
-export async function listarPerfis(): Promise<ProfileOutputDto[]> {
+export async function listarPerfis(): Promise<ProfileSummary[]> {
   const client = await getClient();
-  return client.get<ProfileOutputDto[]>('/api/v1/admin/profiles');
+  return client.get<ProfileSummary[]>('/api/v1/admin/profiles');
 }
 
-export async function obterPerfil(slug: string): Promise<ProfileOutputDto> {
+/** Detalhe por UUID. `id` NÃO é slug — a API faz `findById`. */
+export async function obterPerfil(id: string): Promise<ProfileDetail> {
   const client = await getClient();
-  return client.get<ProfileOutputDto>(`/api/v1/admin/profiles/${slug}`);
+  return client.get<ProfileDetail>(`/api/v1/admin/profiles/${id}`);
 }
 
-export async function listarAutorizacoes(profileId: string): Promise<AuthorizationOutputDto[]> {
-  const client = await getClient();
-  return client.get<AuthorizationOutputDto[]>(`/api/v1/admin/profiles/${profileId}/authorizations`);
+/**
+ * Resolve o slug da URL (`/admin/profiles/[slug]`) no UUID que a API exige.
+ * Lança se o slug não existir — a página traduz para `notFound()`.
+ */
+export async function obterPerfilPorSlug(slug: string): Promise<ProfileDetail> {
+  const perfil = (await listarPerfis()).find((p) => p.slug === slug);
+  if (perfil === undefined) {
+    throw new Error(`perfil não encontrado: ${slug}`);
+  }
+  return obterPerfil(perfil.id);
 }
 
-export async function criarPerfil(input: CreateProfileInputDto): Promise<ProfileOutputDto> {
+/**
+ * Catálogo completo de permissões, para o dropdown do admin.
+ *
+ * shortcut: sem `catch` aqui — a página de detalhe faz
+ * `Promise.all([obterPerfilPorSlug(), listarPermissoes()])`, então um slug
+ * inexistente (404)races com o catálogo e o `notFound()` não é alcançado: o
+ * usuário vê 500 em vez de 404. Não alcançável hoje porque a API rejeita quem
+ * não tem `admin.manage-profiles` ANTES de resolver o slug. Quando o catálogo
+ * virar editável fora do admin, trocar por `Promise.allSettled`.
+ */
+export async function listarPermissoes(): Promise<string[]> {
   const client = await getClient();
-  return client.post<ProfileOutputDto>('/api/v1/admin/profiles', input);
+  return client.get<string[]>('/api/v1/admin/permissions');
+}
+
+export async function criarPerfil(input: CreateProfileInputDto): Promise<ProfileDetail> {
+  const client = await getClient();
+  return client.post<ProfileDetail>('/api/v1/admin/profiles', input);
 }
 
 export async function atualizarPerfil(
-  slug: string,
+  id: string,
   input: UpdateProfileInputDto,
-): Promise<ProfileOutputDto> {
+): Promise<ProfileDetail> {
   const client = await getClient();
-  return client.patch<ProfileOutputDto>(`/api/v1/admin/profiles/${slug}`, input);
+  return client.patch<ProfileDetail>(`/api/v1/admin/profiles/${id}`, input);
 }
 
-export async function deletarPerfil(slug: string): Promise<void> {
+export async function deletarPerfil(id: string): Promise<void> {
   const client = await getClient();
-  await client.delete(`/api/v1/admin/profiles/${slug}`);
+  await client.delete(`/api/v1/admin/profiles/${id}`);
 }
 
-export async function sincronizarAutorizacoes(
-  profileId: string,
-  keys: readonly PermissionKey[],
-): Promise<AuthorizationOutputDto[]> {
+export async function atribuirPermissao(id: string, permissionKey: string): Promise<ProfileDetail> {
   const client = await getClient();
-  const body: SyncAuthorizationsInputDto = { permissionKeys: keys };
-  return client.put<AuthorizationOutputDto[]>(
-    `/api/v1/admin/profiles/${profileId}/authorizations`,
-    body,
-  );
+  return client.post<ProfileDetail>(`/api/v1/admin/profiles/${id}/authorizations`, {
+    permissionKey,
+  });
 }
 
-export interface UserWithProfileDto {
-  id: string;
-  email: string;
-  nome: string;
-  profileId: string | null;
-  isAdmin: boolean;
+export async function revogarPermissao(id: string, permissionKey: string): Promise<void> {
+  const client = await getClient();
+  await client.delete(`/api/v1/admin/profiles/${id}/authorizations/${permissionKey}`);
 }
 
-export async function atribuirPerfil(userId: string, profileId: string): Promise<void> {
-  const client = await getClient();
-  await client.put(`/api/v1/admin/users/${userId}/profile`, { profileId });
+export function diffPermissoes(
+  atuais: readonly string[],
+  desejadas: readonly string[],
+): { remover: string[]; adicionar: string[] } {
+  const atuaisSet = new Set(atuais);
+  const desejadasSet = new Set(desejadas);
+  return {
+    remover: [...atuaisSet].filter((k) => !desejadasSet.has(k)),
+    adicionar: [...desejadasSet].filter((k) => !atuaisSet.has(k)),
+  };
 }
 
-export async function removerPerfil(userId: string): Promise<void> {
+/**
+ * Aplica o conjunto desejado de permissões. A API não tem sync atômico, então
+ * isto é um diff de chamadas — e o ORDEM é deliberado:
+ *
+ * pt-BR (#97): revoga ANTES de conceder. Se a concessão falhar no meio, o
+ * perfil fica com MENOS privilégio do que o admin pediu, nunca com um
+ * privilégio a mais. O inverso (conceder primeiro) deixaria um perfil mais
+ * permissivo do que a tela mostra.
+ *
+ * Falha não é engolida: propaga para a Server Action, que não revalida a
+ * página. O que isso garante é o que existe hoje sem `error.tsx` no app: o
+ * erro SOBE em vez de a tela recarregar com um "salvo" falso sobre um estado
+ * parcial. O usuário vê a página de erro genérica do Next — não a mensagem de
+ * domínio.
+ */
+export async function trocarPermissoes(
+  id: string,
+  atuais: readonly string[],
+  desejadas: readonly string[],
+): Promise<void> {
+  // shortcut: `atuais` é o snapshot do RENDER, não o estado corrente — dois
+  // admins salvando a mesma tela se sobrescrevem em silêncio. Não alcançável
+  // hoje porque a API valida a chave de cada chamada na escrita (permissão
+  // inexistente / já atribuída é recusada), o que limita o estrago ao diff
+  // visual. Quando a API ganhar sync atômico com ETag/If-Match, o baseline
+  // passa a ser lido do servidor em `trocarPermissoes` em vez de vir da tela.
+  const { remover, adicionar } = diffPermissoes(atuais, desejadas);
+  for (const key of remover) {
+    await revogarPermissao(id, key);
+  }
+  for (const key of adicionar) {
+    await atribuirPermissao(id, key);
+  }
+}
+
+/** O que o admin escolheu no `<select>` deve resultar em qual chamada. */
+export type DecisaoAtribuicaoPerfil =
+  { tipo: 'sem-mudanca' } | { tipo: 'atribuir'; profileId: string } | { tipo: 'remover' };
+
+/**
+ * Traduz (selecionado, atual) na chamada — ou em nada.
+ *
+ * pt-BR (#97, M3): a decisão é fail-safe para o lado seguro. Selecionar a
+ * opção vazia só REMOVE quando o usuário de fato tem perfil e escolheu a
+ * vazia; sem perfil atual, a opção vazia é o estado que já estava lá e não
+ * gera PUT. O inverso — tratar a opção vazia como "sempre limpar" — fazia
+ * `Salvar` sem tocar em nada apagar o perfil de quem já estava sem perfil
+ * (e apagar o de quem tinha, se o `defaultValue` do `<select>` não batesse).
+ */
+export function decidirAtribuicaoPerfil({
+  selecionado,
+  atual,
+}: {
+  selecionado: string;
+  atual: string | null;
+}): DecisaoAtribuicaoPerfil {
+  // `null` e `''` são o MESMO estado ("sem perfil"); comparar direto faria
+  // "sem perfil + nada escolhido" parecer mudança.
+  if (selecionado === (atual ?? '')) return { tipo: 'sem-mudanca' };
+  if (selecionado === '') return { tipo: 'remover' };
+  return { tipo: 'atribuir', profileId: selecionado };
+}
+
+/** `profileId: null` limpa o perfil do usuário — é o mesmo PUT, não um DELETE. */
+export async function atribuirPerfil(userId: string, profileId: string | null): Promise<void> {
   const client = await getClient();
-  await client.delete(`/api/v1/admin/users/${userId}/profile`);
+  const body: AssignProfileInputDto = { profileId };
+  await client.put(`/api/v1/admin/users/${userId}/profile`, body);
 }

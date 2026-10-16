@@ -32,6 +32,7 @@ import {
   AuthorizationNotFoundException,
 } from './exceptions/profile.exceptions.js';
 import { isPermissionKey } from '../../../shared/auth/permissions-catalog.js';
+import { InvalidPermissionKeyException } from './value-objects/authorization-key.vo.js';
 
 /**
  * Representa as permissões como Set imutável de chaves.
@@ -83,6 +84,15 @@ export class Profile {
   readonly #createdAt: Date;
   #updatedAt: Date;
   #version: number;
+  /**
+   * pt-BR (#97): versão do BANCO no momento em que este agregado foi
+   * carregado. É o que o optimistic lock compara (`where: { version }`).
+   * Não dá para derivar de `#version`: cada mutador bumpa uma vez, e
+   * `atualizar()` faz dois (`renomear` + `alterarDescricao`) — com
+   * `version - 1` o `updateMany` não casa nenhuma linha e TODO update
+   * quebra com `ConcurrencyException`.
+   */
+  readonly #loadedVersion: number;
   readonly #events: DomainEvent[] = [];
 
   private constructor(props: {
@@ -96,6 +106,7 @@ export class Profile {
     createdAt: Date;
     updatedAt: Date;
     version: number;
+    loadedVersion: number;
   }) {
     this.#id = props.id;
     this.#slug = props.slug;
@@ -107,6 +118,7 @@ export class Profile {
     this.#createdAt = props.createdAt;
     this.#updatedAt = props.updatedAt;
     this.#version = props.version;
+    this.#loadedVersion = props.loadedVersion;
     Object.freeze(this);
   }
 
@@ -114,8 +126,14 @@ export class Profile {
 
   /**
    * Cria Profile novo (não-persistido, version=1).
-   * `isAdmin` só pode ser true na criação via seed; use cases não-admin
-   * recebem isAdmin=false fixo no input.
+   *
+   * pt-BR (#97): `isAdmin`/`isSystem` existem aqui só para seed/migration e
+   * teste — o seed escreve direto no Prisma (`apps/api/prisma/seed.ts`), e o
+   * caminho HTTP não os alcança mais: saíram de `CreateProfileInput` (#97,
+   * A3), então `criar()` fixa `false` e a garantia é do tipo, não do
+   * controller. `initialAuthorizations` é validado contra o catálogo porque
+   * antes uma chave inexistente era persistida silenciosamente — e a recusa é
+   * `InvalidPermissionKeyException` (400), não `Error` puro (500).
    */
   static criar(props: {
     slug: string;
@@ -126,6 +144,11 @@ export class Profile {
     initialAuthorizations?: readonly string[];
     agora: Date;
   }): Profile {
+    for (const key of props.initialAuthorizations ?? []) {
+      if (!isPermissionKey(key)) {
+        throw new InvalidPermissionKeyException(key);
+      }
+    }
     const p = new Profile({
       id: ProfileId.create(),
       slug: ProfileSlug.create(props.slug),
@@ -137,6 +160,7 @@ export class Profile {
       createdAt: props.agora,
       updatedAt: props.agora,
       version: 1,
+      loadedVersion: 0,
     });
     p.#events.push(new ProfileCreatedEvent(p.#id.value, 1, props.agora));
     return p;
@@ -169,6 +193,7 @@ export class Profile {
       createdAt: props.createdAt,
       updatedAt: props.updatedAt,
       version: props.version,
+      loadedVersion: props.version,
     });
   }
 
@@ -206,6 +231,10 @@ export class Profile {
   version(): number {
     return this.#version;
   }
+  /** Versão do banco no momento do load — a âncora do optimistic lock. */
+  loadedVersion(): number {
+    return this.#loadedVersion;
+  }
 
   pullEvents(): DomainEvent[] {
     const out = [...this.#events];
@@ -242,7 +271,7 @@ export class Profile {
    */
   adicionarAutorizacao(permissionKey: string, agora: Date): void {
     if (!isPermissionKey(permissionKey)) {
-      throw new Error('permission key inválida (não consta no catálogo)');
+      throw new InvalidPermissionKeyException(permissionKey);
     }
     if (this.#authorizations.tem(permissionKey)) {
       throw new AuthorizationAlreadyAssignedException(this.#id.value, permissionKey);
@@ -263,7 +292,7 @@ export class Profile {
    */
   removerAutorizacao(permissionKey: string, agora: Date): void {
     if (!isPermissionKey(permissionKey)) {
-      throw new Error('permission key inválida (não consta no catálogo)');
+      throw new InvalidPermissionKeyException(permissionKey);
     }
     if (!this.#authorizations.tem(permissionKey)) {
       throw new AuthorizationNotFoundException(this.#id.value, permissionKey);

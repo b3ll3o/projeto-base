@@ -4,8 +4,9 @@
 // ProfileRepositoryPort. Cada operação carrega também as
 // Authorizations em transação para o agregado vir completo.
 
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
+import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service.js';
 import { Profile } from '../../domain/profile.aggregate.js';
 import type { ProfileRepositoryPort } from '../../domain/ports/profile-repository.port.js';
 import { profileId as makeProfileId } from '../../domain/value-objects/profile-id.vo.js';
@@ -14,7 +15,13 @@ import { ConcurrencyException } from '../../domain/exceptions/profile.exceptions
 
 @Injectable()
 export class PrismaProfileRepository implements ProfileRepositoryPort {
-  constructor(private readonly prisma: PrismaClient) {}
+  /**
+   * pt-BR: `@Inject(PrismaService)` explícito porque o parâmetro é tipado
+   * como `PrismaClient` (interface material, apagada em runtime pelo TS).
+   * Sem o token o Nest LANÇA no boot (`Nest can't resolve dependencies
+   * of the PrismaProfileRepository (?)`) — não passa `undefined`.
+   */
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaClient) {}
 
   async findById(id: ReturnType<typeof makeProfileId>): Promise<Profile | null> {
     const row = await this.prisma.profile.findUnique({
@@ -59,26 +66,31 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
 
   async save(profile: Profile): Promise<Profile> {
     const id = profile.id().value;
-    const expectedVersion = profile.version() - 1;
+    // pt-BR (#97): âncora do optimistic lock é a versão em que o agregado
+    // foi CARREGADO, não `version() - 1` — um save pode ter vários mutators
+    // atrás (atualizar = renomear + alterarDescricao).
+    const expectedVersion = profile.loadedVersion();
+    const keys = profile.authorizations().toLista();
     const data = {
       slug: profile.slug().value,
       name: profile.nome().value,
       description: profile.descricao(),
       isAdmin: profile.isAdmin(),
       isSystem: profile.isSystem(),
-      authorizations: {
-        deleteMany: {},
-        create: profile
-          .authorizations()
-          .toLista()
-          .map((k) => ({ permissionKey: k })),
-      },
     };
 
     const isNew = expectedVersion === 0;
     if (isNew) {
       const created = await this.prisma.profile.create({
-        data: { id, ...data },
+        // pt-BR (#97): o nested-write de CREATE aceita só `create` /
+        // `createMany` / `connectOrCreate` / `connect` — `deleteMany`
+        // pertence ao tipo do UPDATE. Mandá-lo aqui dá
+        // `PrismaClientValidationError` em runtime.
+        data: {
+          id,
+          ...data,
+          authorizations: { create: keys.map((k) => ({ permissionKey: k })) },
+        },
         include: { authorizations: { select: { permissionKey: true } } },
       });
       return this.toDomain(
@@ -87,32 +99,24 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
       );
     }
 
-    const updated = await this.prisma.profile.updateMany({
-      where: { id, version: expectedVersion },
-      data: {
-        slug: data.slug,
-        name: data.name,
-        description: data.description,
-        isAdmin: data.isAdmin,
-        version: profile.version(),
-      },
-    });
-    if (updated.count === 0) {
-      throw new ConcurrencyException('Profile', expectedVersion, -1);
-    }
-    // Re-sync authorizations na transação implícita do save.
-    await this.prisma.authorization.deleteMany({ where: { profileId: id } });
-    if (profile.authorizations().toLista().length > 0) {
-      await this.prisma.authorization.createMany({
-        data: profile
-          .authorizations()
-          .toLista()
-          .map((k) => ({
-            profileId: id,
-            permissionKey: k,
-          })),
+    // pt-BR (#97): as três escritas vão na MESMA `$transaction`. Sem ela,
+    // um `createMany` que falha deixa o profile com a version incrementada
+    // e ZERO permissões — o aggregate em memória e o banco divergem.
+    await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.profile.updateMany({
+        where: { id, version: expectedVersion },
+        data: { ...data, version: profile.version() },
       });
-    }
+      if (updated.count === 0) {
+        throw new ConcurrencyException('Profile', expectedVersion, -1);
+      }
+      await tx.authorization.deleteMany({ where: { profileId: id } });
+      if (keys.length > 0) {
+        await tx.authorization.createMany({
+          data: keys.map((k) => ({ profileId: id, permissionKey: k })),
+        });
+      }
+    });
     return profile;
   }
 
@@ -129,6 +133,7 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
       isAdmin: boolean;
       isSystem: boolean;
       createdAt: Date;
+      updatedAt: Date;
       version: number;
     },
     authKeys: string[],
@@ -142,7 +147,7 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
       isSystem: row.isSystem,
       authorizations: authKeys,
       createdAt: row.createdAt,
-      updatedAt: row.createdAt, // sem updatedAt no model
+      updatedAt: row.updatedAt,
       version: row.version,
     });
   }

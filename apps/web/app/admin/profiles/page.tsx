@@ -1,9 +1,14 @@
 // apps/web/app/admin/profiles/page.tsx
 //
 // pt-BR (#93.1 — RBAC, 2026-10-16): lista de perfis (apenas admin).
-// Server Component: chama `listarPerfis()`. O guard do backend rejeita
-// a request se o user não for admin — mas aqui no front não duplicamos
-// a checagem (a API é a fonte da verdade).
+// Server Component: chama `listarPerfis()`.
+//
+// pt-BR (#97): esta página checa `isAdmin` no front MESMO com a API como fonte
+// da verdade — a checagem é duplicada de propósito. Ela é mais ESTRITA que a da
+// API: um ator com `admin.manage-profiles` mas sem `isAdmin` passa pelo guard
+// do backend e veria a tela; aqui ele vê "Acesso restrito". Aceitável nesta tela
+// porque ela é a navegação de topo do admin — mostrar a lista de perfis para
+// quem não tem o bypass de admin seria inconsistente com o resto da tela.
 
 import type * as React from 'react';
 import Link from 'next/link';
@@ -40,7 +45,7 @@ export default async function AdminProfilesPage(): Promise<React.JSX.Element> {
             <th>Nome</th>
             <th>Admin?</th>
             <th>Sistema?</th>
-            <th>Version</th>
+            <th>Permissões</th>
             <th></th>
           </tr>
         </thead>
@@ -53,7 +58,7 @@ export default async function AdminProfilesPage(): Promise<React.JSX.Element> {
               <td>{p.name}</td>
               <td>{p.isAdmin ? '✅' : '—'}</td>
               <td>{p.isSystem ? '✅' : '—'}</td>
-              <td>{p.version}</td>
+              <td>{p.permissionCount}</td>
               <td>
                 <Link href={`/admin/profiles/${p.slug}`}>editar</Link>
               </td>
