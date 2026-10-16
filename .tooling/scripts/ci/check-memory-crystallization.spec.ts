@@ -280,6 +280,42 @@ describe('findPhantomRows — a direção inversa', () => {
     );
     expect(findPhantomRows(rows, [])).toEqual([]);
   });
+
+  // Os dois testes acima passam `corpus` como array literal, então medem a
+  // FUNÇÃO e não a COMPOSIÇÃO. A composição é onde a isenção morde: `corpusOf`
+  // devolve só as memórias que NÃO são isentas, e `findPhantomRows` recebia esse
+  // mesmo conjunto -- então memória isenta estava fora do conjunto por
+  // construção, e uma linha que a apontasse virava phantom sem que ela tivesse
+  // sumido. MEDIDO 2026-10-16: a linha 181 do ledger era isenta PELO NOME
+  // (`b3-fix-cron-pnpm-engine-precheck-result`) e ausente do disco ao mesmo
+  // tempo -- as duas causas dão a mesma acusação, e o gate não distinguia.
+  it('NÃO acusa memória isenta que está no disco: isenta é não-medir, não ausente', () => {
+    const { repoRoot, memDir, home } = fixture();
+    mkdirSync(join(repoRoot, '.agents', 'runs'), { recursive: true });
+    writeFileSync(join(memDir, 'regra.md'), memoria('feedback'));
+    // Isenta pelo NOME (`*-result.md`) e PRESENTE no disco.
+    writeFileSync(join(memDir, 'campanha-result.md'), memoria('project'));
+    writeFileSync(
+      join(repoRoot, TRIAGE_FILE),
+      LEDGER([
+        '| `regra` | `citada` | `.agents/specs/conventions/retrospective-capture.md` | `canônico` |',
+        '| `campanha-result` | `citada` | `.agents/specs/conventions/retrospective-capture.md` | `canônico` |',
+      ]),
+    );
+    const antes = process.env.HOME;
+    process.env.HOME = home;
+    try {
+      const r = checkMemoryCrystallization({ repoRoot });
+      // `ok` sozinho não distingue "verifiquei e passei" de "não havia nada" --
+      // então se afirma a AUSÊNCIA da acusação, com o texto real da mensagem
+      // (com acento): um `.not.toContain` sem acento casaria vazio e passaria.
+      expect(r.errors.join('\n')).not.toContain('memórias que não existem mais');
+      expect(r.errors).toEqual([]);
+      expect(r.ok).toBe(true);
+    } finally {
+      process.env.HOME = antes;
+    }
+  });
 });
 
 describe('findStaleAnchors — o dente', () => {

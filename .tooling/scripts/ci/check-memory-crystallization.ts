@@ -92,6 +92,22 @@ export const EXEMPTIONS: ReadonlyArray<{
 ];
 
 /**
+ * Tudo que está no diretório de memória, com o conteúdo: a FATTA do disco.
+ *
+ * As duas derivações abaixo leem daqui, para que a regra de isenção não vire
+ * uma segunda leitura do mesmo diretório.
+ */
+export function memoriesOf(memoryDir: string): { file: string; content: string }[] {
+  if (!existsSync(memoryDir)) return [];
+  return readdirSync(memoryDir, { withFileTypes: true })
+    .filter((dirent) => dirent.isFile() && dirent.name.endsWith('.md'))
+    .map((dirent) => ({
+      file: dirent.name,
+      content: readFileSync(join(memoryDir, dirent.name), 'utf8'),
+    }));
+}
+
+/**
  * Memórias do diretório de memória que o gate mede: as que NÃO são isentas.
  *
  * Devolve slugs (sem `.md`), não paths absolutos: o `target` da tabela é
@@ -99,19 +115,34 @@ export const EXEMPTIONS: ReadonlyArray<{
  * do destino que o `check-memory-dir-concordance` existe para impedir.
  */
 export function corpusOf(memoryDir: string): string[] {
-  if (!existsSync(memoryDir)) return [];
-  return readdirSync(memoryDir, { withFileTypes: true })
-    .filter((dirent) => dirent.isFile() && dirent.name.endsWith('.md'))
-    .filter((dirent) => {
-      const content = readFileSync(join(memoryDir, dirent.name), 'utf8');
-      // O parâmetro se chama `exempt`, não `e`: com `e` ele sombreia o
-      // `Dirent` e `e.test(e.name, …)` passa a chamar a PRÓPRIA exclusão com
-      // o nome dela — `MEMORY.md === 'MEMORY.md'` é verdadeiro para todo
-      // arquivo, e o corpus inteiro é isento. MEDIDO 2026-10-14: foi assim que
-      // o gate nasceu medindo 0 sem nunca reportar isso.
-      return !EXEMPTIONS.some((exempt) => exempt.test(dirent.name, content));
-    })
-    .map((dirent) => dirent.name.replace(/\.md$/, ''))
+  return memoriesOf(memoryDir)
+    .filter(
+      ({ file, content }) =>
+        // O parâmetro se chama `exempt`, não `e`: com `e` ele sombreia o
+        // `Dirent` e `e.test(file, …)` passa a chamar a PRÓPRIA exclusão com
+        // o nome dela — `MEMORY.md === 'MEMORY.md'` é verdadeiro para todo
+        // arquivo, e o corpus inteiro é isento. MEDIDO 2026-10-14: foi assim
+        // que o gate nasceu medindo 0 sem nunca reportar isso.
+        !EXEMPTIONS.some((exempt) => exempt.test(file, content)),
+    )
+    .map(({ file }) => file.replace(/\.md$/, ''))
+    .sort();
+}
+
+/**
+ * TODAS as slugs do disco, isentas inclusive.
+ *
+ * A direção "esta linha aponta para uma memória que não existe?" não pode usar
+ * `corpusOf`: memória isenta está fora do corpus POR CONSTRUÇÃO, então uma
+ * linha que a aponta vira phantom sem que a memória tenha sumido — e a
+ * acusação, que diz que ela "não existe mais", seria falsa. Isenção é
+ * isenção de MEDIÇÃO, não ausência. MEDIDO 2026-10-16: a linha 181 do ledger
+ * (`b3-fix-cron-pnpm-engine-precheck-result`, isenta pelo nome) eraBigrada
+ * pelas duas causas ao mesmo tempo, e o gate não conseguia dizer qual.
+ */
+export function allSlugsOf(memoryDir: string): string[] {
+  return memoriesOf(memoryDir)
+    .map(({ file }) => file.replace(/\.md$/, ''))
     .sort();
 }
 
@@ -330,6 +361,7 @@ export function checkMemoryCrystallization(opts: { repoRoot: string }): CheckRes
   }
 
   const corpus = corpusOf(derived.dir);
+  const allSlugs = allSlugsOf(derived.dir);
   const { rows, malformed } = parseTriage(readFileSync(triagePath, 'utf8'));
   const errors = [...malformed];
   const advisories: string[] = [];
@@ -361,7 +393,7 @@ export function checkMemoryCrystallization(opts: { repoRoot: string }): CheckRes
     );
   }
 
-  const phantoms = findPhantomRows(rows, corpus);
+  const phantoms = findPhantomRows(rows, allSlugs);
   if (phantoms.length > 0) {
     errors.push(
       `${phantoms.length} linha(s) do ledger apontam para memórias que não existem mais ` +
