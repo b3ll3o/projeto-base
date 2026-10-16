@@ -29,8 +29,10 @@ import {
   AUTHORIZATION_REPOSITORY_PORT,
   type AuthorizationRepositoryPort,
 } from './domain/ports/authorization-repository.port.js';
+import { AuthModule } from '../auth/auth.module.js';
 
 @Module({
+  imports: [AuthModule],
   providers: [
     PrismaService,
     { provide: PROFILE_REPOSITORY_PORT, useClass: PrismaProfileRepository },
