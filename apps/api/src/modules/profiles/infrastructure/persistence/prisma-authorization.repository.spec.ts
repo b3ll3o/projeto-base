@@ -7,14 +7,23 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { PrismaAuthorizationRepository } from './prisma-authorization.repository.js';
 
 class FakePrisma {
-  #auths: Array<{ id: string; profileId: string; permissionKey: string; createdAt: Date; updatedAt: Date; version: number }> = [];
+  #auths: Array<{
+    id: string;
+    profileId: string;
+    permissionKey: string;
+    createdAt: Date;
+    updatedAt: Date;
+    version: number;
+  }> = [];
   #ids = 0;
 
   authorization = {
     findMany: async (args: { where: { profileId: string } }) =>
       this.#auths.filter((a) => a.profileId === args.where.profileId),
     findFirst: async (args: { where: { profileId: string; permissionKey: string } }) =>
-      this.#auths.find((a) => a.profileId === args.where.profileId && a.permissionKey === args.where.permissionKey) ?? null,
+      this.#auths.find(
+        (a) => a.profileId === args.where.profileId && a.permissionKey === args.where.permissionKey,
+      ) ?? null,
     count: async (args: { where: { profileId: string } }) =>
       this.#auths.filter((a) => a.profileId === args.where.profileId).length,
     upsert: async (args: {

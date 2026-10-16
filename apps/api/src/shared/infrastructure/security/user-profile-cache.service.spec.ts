@@ -24,7 +24,13 @@ describe('UserProfileCacheService', () => {
   });
 
   it('set + get retorna valor armazenado', async () => {
-    await svc.setUserProfileAndPermissions('user-1', { isAdmin: true, permissions: ['users.read'], profileId: 'p1', profileSlug: 'admin', profileName: 'Admin' });
+    await svc.setUserProfileAndPermissions('user-1', {
+      isAdmin: true,
+      permissions: ['users.read'],
+      profileId: 'p1',
+      profileSlug: 'admin',
+      profileName: 'Admin',
+    });
     expect(await svc.getUserProfileAndPermissions('user-1')).toEqual({
       isAdmin: true,
       permissions: ['users.read'],
@@ -35,29 +41,65 @@ describe('UserProfileCacheService', () => {
   });
 
   it('valor expira após 5s (TTL)', async () => {
-    await svc.setUserProfileAndPermissions('user-1', { isAdmin: false, permissions: [], profileId: null, profileSlug: null, profileName: null });
+    await svc.setUserProfileAndPermissions('user-1', {
+      isAdmin: false,
+      permissions: [],
+      profileId: null,
+      profileSlug: null,
+      profileName: null,
+    });
     expect(await svc.getUserProfileAndPermissions('user-1')).not.toBeNull();
     vi.advanceTimersByTime(5_001);
     expect(await svc.getUserProfileAndPermissions('user-1')).toBeNull();
   });
 
   it('valor persiste antes de 5s', async () => {
-    await svc.setUserProfileAndPermissions('user-1', { isAdmin: true, permissions: [], profileId: null, profileSlug: null, profileName: null });
+    await svc.setUserProfileAndPermissions('user-1', {
+      isAdmin: true,
+      permissions: [],
+      profileId: null,
+      profileSlug: null,
+      profileName: null,
+    });
     vi.advanceTimersByTime(4_999);
     expect(await svc.getUserProfileAndPermissions('user-1')).not.toBeNull();
   });
 
   it('invalidateUser remove apenas o userId', async () => {
-    await svc.setUserProfileAndPermissions('user-1', { isAdmin: true, permissions: [], profileId: null, profileSlug: null, profileName: null });
-    await svc.setUserProfileAndPermissions('user-2', { isAdmin: false, permissions: [], profileId: null, profileSlug: null, profileName: null });
+    await svc.setUserProfileAndPermissions('user-1', {
+      isAdmin: true,
+      permissions: [],
+      profileId: null,
+      profileSlug: null,
+      profileName: null,
+    });
+    await svc.setUserProfileAndPermissions('user-2', {
+      isAdmin: false,
+      permissions: [],
+      profileId: null,
+      profileSlug: null,
+      profileName: null,
+    });
     await svc.invalidateUser('user-1');
     expect(await svc.getUserProfileAndPermissions('user-1')).toBeNull();
     expect(await svc.getUserProfileAndPermissions('user-2')).not.toBeNull();
   });
 
   it('invalidateAll limpa tudo', async () => {
-    await svc.setUserProfileAndPermissions('user-1', { isAdmin: true, permissions: [], profileId: null, profileSlug: null, profileName: null });
-    await svc.setUserProfileAndPermissions('user-2', { isAdmin: true, permissions: [], profileId: null, profileSlug: null, profileName: null });
+    await svc.setUserProfileAndPermissions('user-1', {
+      isAdmin: true,
+      permissions: [],
+      profileId: null,
+      profileSlug: null,
+      profileName: null,
+    });
+    await svc.setUserProfileAndPermissions('user-2', {
+      isAdmin: true,
+      permissions: [],
+      profileId: null,
+      profileSlug: null,
+      profileName: null,
+    });
     await svc.invalidateAll();
     expect(await svc.getUserProfileAndPermissions('user-1')).toBeNull();
     expect(await svc.getUserProfileAndPermissions('user-2')).toBeNull();
