@@ -10,7 +10,7 @@
 // `getToken` seam).
 
 import { ApiClient } from './api-client';
-import { exigirSessao } from './sessao';
+import { exigirSessao, lerTokens } from './sessao';
 import type {
   AuthorizationOutputDto,
   CreateProfileInputDto,
@@ -29,9 +29,26 @@ async function getClient(): Promise<ApiClient> {
   });
 }
 
+/**
+ * Versão tolerante: NÃO chama `exigirSessao()` (que redireciona) — em vez
+ * disso lê os cookies direto. Se não há token, devolve `null` em vez de jogar
+ * `NEXT_REDIRECT`. Serve para componentes que não devem forçar login só por
+ * estarem no layout (ex.: Sidebar) — o login de verdade é responsabilidade
+ * da página, não do chrome.
+ */
+async function getClientOpcional(): Promise<ApiClient | null> {
+  const { accessToken } = await lerTokens();
+  if (accessToken === null) return null;
+  return new ApiClient({
+    baseUrl: process.env.API_BASE_URL ?? 'http://api:3000',
+    getToken: () => accessToken,
+  });
+}
+
 export async function obterMeuPerfil(): Promise<MeProfileDto | null> {
   try {
-    const client = await getClient();
+    const client = await getClientOpcional();
+    if (client === null) return null;
     return await client.get<MeProfileDto>('/api/v1/me/profile');
   } catch (e) {
     if (
@@ -41,7 +58,10 @@ export async function obterMeuPerfil(): Promise<MeProfileDto | null> {
     ) {
       return null;
     }
-    throw e;
+    // pt-BR: erro de rede/5xx no Sidebar não pode derrubar a página inteira.
+    // O chrome continua mostrando o que pode (links, "Sem perfil") e o
+    // conteúdo fica responsável por proteger a si mesmo.
+    return null;
   }
 }
 
