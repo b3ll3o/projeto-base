@@ -16,6 +16,7 @@ describe('UserPrismaMapper', () => {
       email: 'Alice@Example.com',
       name: 'Alice',
       passwordHash: HASH_REAL,
+      profileId: null,
       createdAt: new Date('2026-09-21T10:00:00Z'),
       updatedAt: new Date('2026-09-21T10:00:00Z'),
       createdBy: null,
@@ -39,6 +40,7 @@ describe('UserPrismaMapper', () => {
       email: 'bob@example.com',
       name: 'Bob',
       passwordHash: HASH_REAL,
+      profileId: null,
       createdAt: new Date('2026-09-21T10:00:00Z'),
       updatedAt: new Date('2026-09-21T11:00:00Z'),
       createdBy: null,
@@ -68,6 +70,7 @@ describe('UserPrismaMapper', () => {
       email: 'dave@example.com',
       name: 'Dave',
       passwordHash: HASH_REAL,
+      profileId: null,
       createdAt: new Date('2026-09-21T10:00:00Z'),
       updatedAt: new Date('2026-09-21T10:00:00Z'),
       createdBy: null,
@@ -90,6 +93,7 @@ describe('UserPrismaMapper', () => {
         email: 'eve@example.com',
         name: 'Eve',
         passwordHash: 'senha-em-claro',
+        profileId: null,
         createdAt: new Date('2026-09-21T10:00:00Z'),
         updatedAt: new Date('2026-09-21T10:00:00Z'),
         createdBy: null,
@@ -126,6 +130,7 @@ describe('UserPrismaMapper', () => {
       email: 'Carla@Example.com',
       name: 'Carla',
       passwordHash: HASH_REAL,
+      profileId: null,
       createdAt: new Date('2026-09-21T10:00:00Z'),
       updatedAt: new Date('2026-09-21T11:30:00Z'),
       createdBy: null,
@@ -151,6 +156,7 @@ describe('UserPrismaMapper', () => {
       email: 'frank@example.com',
       name: 'Frank',
       passwordHash: HASH_REAL,
+      profileId: null,
       createdAt: new Date('2026-09-21T10:00:00Z'),
       updatedAt: new Date('2026-09-21T11:30:00Z'),
       createdBy: null,
@@ -212,12 +218,14 @@ describe('UserPrismaMapper — passwordHash corrompido é falha de infraestrutur
 
   function rowComHashCorrompido(
     passwordHash: string,
+    profileId: string | null,
   ): Parameters<typeof UserPrismaMapper.toDomain>[0] {
     return {
       id: '0190a8b6-1234-7abc-9def-0000000000c7',
       email: 'corrompido@example.com',
       name: 'Corrompido',
       passwordHash,
+      profileId: profileId ?? null,
       createdAt: new Date('2026-09-21T10:00:00Z'),
       updatedAt: new Date('2026-09-21T10:00:00Z'),
       createdBy: null,
@@ -246,7 +254,7 @@ describe('UserPrismaMapper — passwordHash corrompido é falha de infraestrutur
   }
 
   it('responde 500 na fronteira, e NÃO 400 VALIDATION_ERROR', () => {
-    const mapeado = mapExceptionToHttp(erroLancado(rowComHashCorrompido(HASH_CORROMPIDO)));
+    const mapeado = mapExceptionToHttp(erroLancado(rowComHashCorrompido(HASH_CORROMPIDO, null)));
 
     // Este é o teste que mede o A-07 propriamente dito. Sem a tradução, o
     // erro do VO cai no ramo `UserValidationException → 400` do mapper e o
@@ -256,7 +264,7 @@ describe('UserPrismaMapper — passwordHash corrompido é falha de infraestrutur
   });
 
   it('lança UserPersistenceException, e NÃO a UserValidationException que o filtro lê como 400', () => {
-    const erro = erroLancado(rowComHashCorrompido(HASH_CORROMPIDO));
+    const erro = erroLancado(rowComHashCorrompido(HASH_CORROMPIDO, null));
 
     expect(erro).toBeInstanceOf(UserPersistenceException);
     // Negativa explícita: o `instanceof` de positivo já cairia se
@@ -276,7 +284,7 @@ describe('UserPrismaMapper — passwordHash corrompido é falha de infraestrutur
       throw new UserValidationException('senhaHash', `valor recebido: ${HASH_CORROMPIDO}`);
     });
     try {
-      const erro = erroLancado(rowComHashCorrompido(HASH_CORROMPIDO));
+      const erro = erroLancado(rowComHashCorrompido(HASH_CORROMPIDO, null));
 
       // `message` é o que vira `detail` na resposta (GlobalExceptionFilter).
       expect((erro as Error).message).not.toContain(HASH_CORROMPIDO);
@@ -290,7 +298,7 @@ describe('UserPrismaMapper — passwordHash corrompido é falha de infraestrutur
   });
 
   it('carrega um correlationId não vazio, para o operador casar log e resposta', () => {
-    const erro = erroLancado(rowComHashCorrompido(HASH_CORROMPIDO)) as UserPersistenceException;
+    const erro = erroLancado(rowComHashCorrompido(HASH_CORROMPIDO, null)) as UserPersistenceException;
 
     expect(erro.correlationId).toBeTypeOf('string');
     expect(erro.correlationId.trim()).not.toBe('');
@@ -312,7 +320,7 @@ describe('UserPrismaMapper — passwordHash corrompido é falha de infraestrutur
     } as unknown as Span;
     const getSpanSpy = vi.spyOn(trace, 'getSpan').mockReturnValue(fakeSpan);
     try {
-      const erro = erroLancado(rowComHashCorrompido(HASH_CORROMPIDO)) as UserPersistenceException;
+      const erro = erroLancado(rowComHashCorrompido(HASH_CORROMPIDO, null)) as UserPersistenceException;
 
       expect(erro.correlationId).toBe(traceIdDoSpan);
       expect(erro.correlationId).toMatch(/^[0-9a-f]{32}$/);
@@ -323,7 +331,7 @@ describe('UserPrismaMapper — passwordHash corrompido é falha de infraestrutur
   });
 
   it('sem span ativo, o correlationId cai no UUID do node:crypto', () => {
-    const erro = erroLancado(rowComHashCorrompido(HASH_CORROMPIDO)) as UserPersistenceException;
+    const erro = erroLancado(rowComHashCorrompido(HASH_CORROMPIDO, null)) as UserPersistenceException;
 
     expect(erro.correlationId).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
@@ -337,8 +345,9 @@ describe('UserPrismaMapper — passwordHash corrompido é falha de infraestrutur
     // de requisição. Um `catch` amarrado em `UserValidationException` no lugar
     // passaria no caso do hash malformado e deixaria este vazar como 400.
     const erro = erroLancado({
-      ...rowComHashCorrompido(HASH_CORROMPIDO),
+      ...rowComHashCorrompido(HASH_CORROMPIDO, null),
       passwordHash: null as unknown as string,
+      profileId: null,
     });
 
     expect(mapExceptionToHttp(erro).status).toBe(500);
@@ -351,7 +360,7 @@ describe('UserPrismaMapper — passwordHash corrompido é falha de infraestrutur
     // login a confirmação de que aquele e-mail existe — o mesmo oráculo de
     // enumeração que o `detail` fixo do `InvalidCredentialsException` existe
     // para fechar. A investigação é pelo `correlationId`, não pela resposta.
-    const row = rowComHashCorrompido(HASH_CORROMPIDO);
+    const row = rowComHashCorrompido(HASH_CORROMPIDO, null);
     const erro = erroLancado(row) as Error;
     const serializado = JSON.stringify(erro);
 
@@ -365,7 +374,7 @@ describe('UserPrismaMapper — passwordHash corrompido é falha de infraestrutur
     // Sem isto, um `catch` com corpo de `return PasswordHash.create(...)`
     // invertido — ou um `catch` que engole a exceção e devolve `null` —
     // passaria em todos os testes acima e quebraria o login inteiro.
-    const user = UserPrismaMapper.toDomain(rowComHashCorrompido(HASH_REAL));
+    const user = UserPrismaMapper.toDomain(rowComHashCorrompido(HASH_REAL, null));
 
     expect(user.senhaHash().value).toBe(HASH_REAL);
   });

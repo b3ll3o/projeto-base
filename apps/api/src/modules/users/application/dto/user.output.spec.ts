@@ -20,6 +20,7 @@ describe('toUserOutput()', () => {
       id: '0190a8b6-1234-7abc-9def-000000000001',
       nome: 'João',
       email: 'joao@example.com',
+      profileId: null,
       createdAt: T0.toISOString(),
       updatedAt: T0.toISOString(),
       version: 1,

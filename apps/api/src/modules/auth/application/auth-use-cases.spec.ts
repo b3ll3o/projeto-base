@@ -61,6 +61,7 @@ function criarStubs(): Stubs {
       findByEmail: vi.fn(async () => null),
       save: vi.fn(),
       list: vi.fn(),
+      countByProfile: vi.fn(async () => 0),
     },
     hasher: {
       hash: vi.fn(async () => HASH_FALSO),
@@ -330,6 +331,7 @@ describe('AuthUseCases.eu', () => {
       'id',
       'isDeleted',
       'nome',
+      'profileId',
       'updatedAt',
       'version',
     ]);

@@ -48,6 +48,7 @@ import { TOKEN_ISSUER_PORT } from './domain/ports/token-issuer.port.js';
 import { PASSWORD_HASHER_PORT } from '../users/domain/ports/password-hasher.port.js';
 import { PrismaPersistenceModule } from '../users/infrastructure/prisma-persistence.module.js';
 import { PrismaModule } from '../../shared/infrastructure/prisma/prisma.module.js';
+import { UserProfileCacheService } from '../../shared/infrastructure/security/user-profile-cache.service.js';
 
 /**
  * Token estável do guard de autenticação.
@@ -85,6 +86,12 @@ export const AUTH_GUARD_SLOT = JwtAuthGuard;
     { provide: TOKEN_ISSUER_PORT, useClass: JwtTokenService },
     { provide: PASSWORD_HASHER_PORT, useClass: Argon2PasswordHasher },
     { provide: AUTH_GUARD_SLOT, useClass: JwtAuthGuard },
+    // pt-BR (#93.1 — RBAC, 2026-10-16): cache do guard. Registrado aqui
+    // e não em ProfilesModule para evitar ciclo (auth ← profiles ← auth
+    // via `obterPerfilDoUsuario`). ProfilesModule também o registra (tem
+    // `invalidateAll` no fim de transações), mas o cache é singleton —
+    // o Nest reusa a mesma instância em todo o grafo.
+    UserProfileCacheService,
   ],
   exports: [AUTH_GUARD_SLOT, TOKEN_ISSUER_PORT, AUTH_USE_CASES, PASSWORD_HASHER_PORT],
 })

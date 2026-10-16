@@ -23,6 +23,7 @@ import { AuditInfraModule } from '../../shared/audit/audit-infra.module.js';
 import { UsersController } from './infrastructure/http/users.controller.js';
 import { JwtAuthGuard } from '../auth/infrastructure/http/jwt-auth.guard.js';
 import { AuthModule } from '../auth/auth.module.js';
+import { UserProfileCacheService } from '../../shared/infrastructure/security/user-profile-cache.service.js';
 
 @Module({
   // pt-BR: `AuthModule` entra na lista de imports (e não só o guard) porque
@@ -41,6 +42,10 @@ import { AuthModule } from '../auth/auth.module.js';
     // controller resolva a CLASSE (que é o token que o decorator usa),
     // independentemente de o `AuthModule` exportá-la pelo nome do slot.
     JwtAuthGuard,
+    // pt-BR (#93.1 — RBAC, 2026-10-16): JwtAuthGuard agora também depende
+    // do UserProfileCacheService. Provider singleton — mesma instância
+    // compartilhada com AuthModule.
+    UserProfileCacheService,
   ],
   exports: [USER_USE_CASES],
 })

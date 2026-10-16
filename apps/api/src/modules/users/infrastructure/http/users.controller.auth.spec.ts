@@ -36,6 +36,7 @@ import { trace } from '@opentelemetry/api';
 import { UsersController } from './users.controller.js';
 import { UserUseCases, USER_USE_CASES } from '../../application/user-use-cases.js';
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
+import { UserProfileCacheService } from '../../../../shared/infrastructure/security/user-profile-cache.service.js';
 import {
   TOKEN_ISSUER_PORT,
   type TokenIssuerPort,
@@ -93,6 +94,23 @@ function makeAudit() {
   return { listHistory: vi.fn(async () => ({ entries: [], nextCursor: null })) };
 }
 
+// pt-BR (#93.1 — RBAC, 2026-10-16): stub do cache usado em todos os
+// TestingModule deste arquivo. A 3ª dependência do JwtAuthGuard.
+const CACHE_STUB = {
+  async getUserProfileAndPermissions() {
+    return null;
+  },
+  async setUserProfileAndPermissions() {
+    /* noop */
+  },
+  async invalidateUser() {
+    /* noop */
+  },
+  async invalidateAll() {
+    /* noop */
+  },
+} as unknown as UserProfileCacheService;
+
 /** Token de access que o emissor stub aceita. */
 const TOKEN_ACCESS = 'header.payload.assinatura-access';
 /** Token de refresh que o emissor stub aceita. */
@@ -142,6 +160,10 @@ describe('UsersController — fronteira HTTP de autenticação', () => {
         { provide: AUDIT_SERVICE_PORT, useValue: makeAudit() },
         { provide: TOKEN_ISSUER_PORT, useValue: issuer },
         JwtAuthGuard,
+        {
+          provide: UserProfileCacheService,
+          useValue: CACHE_STUB,
+        },
       ],
     }).compile();
 
@@ -279,6 +301,7 @@ describe('UsersController — fronteira HTTP de autenticação', () => {
         { provide: AUDIT_SERVICE_PORT, useValue: makeAudit() },
         { provide: TOKEN_ISSUER_PORT, useValue: sabota },
         JwtAuthGuard,
+        { provide: UserProfileCacheService, useValue: CACHE_STUB },
       ],
     }).compile();
     const sabotaApp = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
@@ -336,6 +359,7 @@ describe('UsersController — o carve-out público sobrevive ao OpenAPI', () => 
         { provide: AUDIT_SERVICE_PORT, useValue: makeAudit() },
         { provide: TOKEN_ISSUER_PORT, useValue: makeIssuer() },
         JwtAuthGuard,
+        { provide: UserProfileCacheService, useValue: CACHE_STUB },
       ],
     }).compile();
 

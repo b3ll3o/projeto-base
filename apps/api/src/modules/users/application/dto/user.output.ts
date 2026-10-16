@@ -9,6 +9,10 @@ export interface UserOutput {
   id: string;
   nome: string;
   email: string;
+  // pt-BR (#93.1 — RBAC, 2026-10-16): profileId do user atribuído.
+  // Null = sem permissões (deny-by-default). O endpoint /me/profile
+  // cruza este id com a tabela profiles para devolver nome + slug.
+  profileId: string | null;
   createdAt: string;
   updatedAt: string;
   version: number;
@@ -25,6 +29,10 @@ export function toUserOutput(user: User): UserOutput {
     id: user.id().value,
     nome: user.nome().value,
     email: user.email().value,
+    // pt-BR (#93.1 — RBAC, 2026-10-16): profileId do user atribuído.
+    // Null = sem permissões (deny-by-default). O endpoint /me/profille
+    // cruza este id com a tabela profiles para devolver nome + slug.
+    profileId: user.profileId(),
     createdAt: user.createdAt().toISOString(),
     updatedAt: user.updatedAt().toISOString(),
     version: user.version(),

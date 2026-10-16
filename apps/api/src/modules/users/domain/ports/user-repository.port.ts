@@ -76,4 +76,11 @@ export interface UserRepositoryPort {
    * Inclui soft-deleted quando `includeDeleted: true`.
    */
   list(input: UserListInput): Promise<UserListResult>;
+
+  /**
+   * pt-BR (#93.1 — RBAC, 2026-10-16): conta quantos users têm o
+   * `profileId` atribuído. Usado por ProfileUseCases.deletar() para
+   * garantir que um profile em uso não pode ser deletado (409).
+   */
+  countByProfile(profileId: string): Promise<number>;
 }

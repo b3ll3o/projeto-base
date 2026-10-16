@@ -60,6 +60,7 @@ export class InMemoryUserRepository implements UserRepositoryPort {
       nome: source.nome().value,
       email: source.email().value,
       senhaHash: source.senhaHash(),
+      profileId: null,
       createdAt: source.createdAt(),
       updatedAt: source.updatedAt(),
       version: source.version(),
@@ -77,6 +78,7 @@ export class InMemoryUserRepository implements UserRepositoryPort {
       nome: user.nome().value,
       email: user.email().value,
       senhaHash: user.senhaHash(),
+      profileId: null,
       createdAt: user.createdAt(),
       updatedAt: user.updatedAt(),
       version: user.version(),
@@ -137,6 +139,16 @@ export class InMemoryUserRepository implements UserRepositoryPort {
     const nextStart = startIdx + slice.length;
     const nextCursor = nextStart < all.length ? String(nextStart) : null;
     return { users: slice, nextCursor };
+  }
+
+  /**
+   * pt-BR (#93.1 — RBAC, 2026-10-16): stub para satisfazer o port.
+   * Não conta profileId no in-memory porque o `User.restaurarDePersistencia`
+   * ignora o campo `profileId` (sempre null no clone). A semântica
+   * "user com profile" no in-memory é zero até o caller atribuir via use case.
+   */
+  async countByProfile(_profileId: string): Promise<number> {
+    return 0;
   }
 
   // Helpers para testes

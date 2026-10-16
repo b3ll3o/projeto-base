@@ -53,6 +53,7 @@ import {
   type TokenSubject,
 } from '../../domain/ports/token-issuer.port.js';
 import { IS_PUBLIC_KEY } from './public.decorator.js';
+import { UserProfileCacheService } from '../../../../shared/infrastructure/security/user-profile-cache.service.js';
 
 /**
  * Extrai o token do header `Authorization`.
@@ -72,7 +73,10 @@ function extractBearerToken(raw: unknown): string | null {
 /** Request Fastify com o campo `user` que este guard publica. */
 interface RequestWithUser {
   headers?: Record<string, unknown>;
-  user?: TokenSubject;
+  user?: TokenSubject & {
+    isAdmin?: boolean;
+    permissions?: readonly string[];
+  };
 }
 
 @Injectable()
@@ -90,6 +94,12 @@ export class JwtAuthGuard implements CanActivate {
     // defeito — o problema só existe quando o CONTAINER constrói o guard.
     // Só a spec que sobe o controller de verdade via `app.inject` mediu.
     @Inject(Reflector) private readonly reflector: Reflector,
+    // pt-BR (#93.1 — RBAC, 2026-10-16): injeta o cache para popular
+    // `req.user.isAdmin` e `req.user.permissions` em CADA request.
+    // O cache é invalidado em writes (Profile update, Authorization
+    // assign/revoke, User atribuirPerfil) — TTL 5s é teto de staleness.
+    @Inject(UserProfileCacheService)
+    private readonly profileCache: UserProfileCacheService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -125,7 +135,17 @@ export class JwtAuthGuard implements CanActivate {
       throw this.unauthorized();
     }
 
-    request.user = subject;
+    // ── 5. pt-BR (#93.1 — RBAC, 2026-10-16): hidrata `isAdmin` e
+    // `permissions` do cache. Falha do cache NÃO bloqueia — se a key
+    // não estiver cacheada (TTL expirou, user sem profile, etc) o
+    // request passa com `isAdmin=false` e `permissions=[]`. O use case
+    // `obterMeuPerfil` é quem re-popula na próxima chamada.
+    const cached = await this.profileCache.getUserProfileAndPermissions(subject.sub);
+    request.user = {
+      ...subject,
+      isAdmin: cached?.isAdmin ?? false,
+      permissions: cached?.permissions ?? [],
+    };
     return true;
   }
 

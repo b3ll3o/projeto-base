@@ -113,6 +113,10 @@ export class PrismaUserRepository implements UserRepositoryPort {
           // reescrevem o mesmo campo com o valor que já estava no
           // agregado, então aqui o efeito é idempotente.
           passwordHash: row.passwordHash,
+          // pt-BR (#93.1 — RBAC, 2026-10-16): profileId é gravado aqui
+          // para suportar o mutator `atribuirPerfil()`. Sem isto, mudar
+          // o profile do user não persiste.
+          profileId: row.profileId,
           updatedAt: row.updatedAt,
           updatedBy: row.updatedBy,
           deletedAt: row.deletedAt,
@@ -274,5 +278,17 @@ export class PrismaUserRepository implements UserRepositoryPort {
       throw new ConcurrencyException(-1, null);
     }
     return UserPrismaMapper.toDomain(row);
+  }
+
+  /**
+   * pt-BR (#93.1 — RBAC, 2026-10-16): conta users ativos (não soft-
+   * deleted) com o profileId atribuído. Usado por ProfileUseCases.
+   * deletar() antes do DELETE na tabela `profiles` para devolver 409
+   * com mensagem útil em vez de quebrar a FK onDelete: Restrict.
+   */
+  async countByProfile(profileId: string): Promise<number> {
+    return this.prisma.user.count({
+      where: { profileId, deletedAt: null },
+    });
   }
 }
