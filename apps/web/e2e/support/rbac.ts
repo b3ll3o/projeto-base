@@ -23,16 +23,27 @@
 // `baseLimpa` é `auto` e trunca `profiles`/`users`/`authorizations` antes de
 // qualquer teste. Semeado antes, o pré-requisito morre no primeiro `beforeEach`.
 
-import { PrismaClient } from '../../../api/test/testcontainers-helper.js';
-import { exigirEstado } from './estado';
-import { emailUnico, parDeTokens, semearUsuario, SENHA_DE_TESTE, type ParDeTokens } from './dados';
+import {
+  prismaE2E,
+  emailUnico,
+  parDeTokens,
+  semearUsuario,
+  SENHA_DE_TESTE,
+  type ParDeTokens,
+} from './dados';
 
-let prisma: PrismaClient | undefined;
-
-function prismaDoE2E(): PrismaClient {
-  prisma ??= new PrismaClient({ datasourceUrl: exigirEstado().databaseUrl });
-  return prisma;
-}
+/**
+ * ⚠️ MEDIDO 2026-10-16: este arquivo tinha o seu PRÓPRIO `PrismaClient`, e era
+ * a causa do `quality` vermelho no CI (run 38978299713) — `f9-admin-profiles`
+ * morria em `Server has closed the connection` dentro de `semearPerfil()`.
+ *
+ * O `PrismaClient` do `dados.ts` já sabia se curar disso: o `catch` de
+ * `limparBase()` desconecta e repete, porque o `docker stop` do F5 mata as
+ * conexões que o pool já tinha. Este segundo pool não era curado por ninguém,
+ * então o F9 recebia a conexão morta do F5. Passava isolado e falhava na
+ * suíte completa, porque o Playwright reusa o processo do worker entre
+ * arquivos. Um pool, uma recuperação — daí `prismaE2E()`.
+ */
 
 /** Cria um profile direto no banco e devolve o id (UUID). */
 export async function semearPerfil(
@@ -40,7 +51,7 @@ export async function semearPerfil(
   chaves: readonly string[] = [],
   flags: { isAdmin?: boolean; isSystem?: boolean } = {},
 ): Promise<string> {
-  const criado = await prismaDoE2E().profile.create({
+  const criado = await prismaE2E().profile.create({
     data: {
       slug,
       name: slug,
@@ -50,7 +61,7 @@ export async function semearPerfil(
     select: { id: true },
   });
   if (chaves.length > 0) {
-    await prismaDoE2E().authorization.createMany({
+    await prismaE2E().authorization.createMany({
       data: chaves.map((permissionKey) => ({ profileId: criado.id, permissionKey })),
     });
   }
@@ -85,7 +96,7 @@ export async function semearContaComPerfil(
   const email = emailUnico('admin');
   const conta = await semearUsuario(nome, email);
 
-  await prismaDoE2E().user.update({ where: { id: conta.id }, data: { profileId: perfilId } });
+  await prismaE2E().user.update({ where: { id: conta.id }, data: { profileId: perfilId } });
 
   return { email, id: conta.id, tokens: await parDeTokens(email, SENHA_DE_TESTE) };
 }
