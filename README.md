@@ -48,6 +48,8 @@ projeto-base/
 
 ## Como executar localmente
 
+> **Mapa completo por ambiente** (dev, Docker, observabilidade, e2e, CI): [`docs/como-rodar.md`](./docs/como-rodar.md)
+>
 > Três modos suportados. Use Docker para reproduzir ambiente de produção, pnpm nativo para iterar rápido, ou só Postgres+apps nativos para debugar uma camada.
 
 ### Pré-requisitos
@@ -55,22 +57,23 @@ projeto-base/
 - **Node.js** ≥ 20 (LTS)
 - **pnpm** ≥ 9.12.0 (`corepack enable && corepack prepare pnpm@9.12.0 --activate`)
 - **Docker** + **Docker Compose** v2 (apenas para modos A e B)
-- **PostgreSQL 16** rodando em `localhost:5432` (ou usar `docker compose up -d postgres`)
+- **PostgreSQL 16** rodando em `localhost:5432`. ⚠️ Desde o #91 o `postgres` do compose
+  **não publica porta no host** (`expose` sem `ports`) — veja [`docs/como-rodar.md` §1.1](./docs/como-rodar.md)
 
 ### Opção A — Docker Compose (recomendado)
 
 Reproduz fielmente o ambiente de produção com healthchecks, network interna e migrations automáticas.
 
-A API assina JWT e **recusa o boot sem `JWT_SECRET`** — sem valor, sem default,
-sem exceção. Gere um antes de subir o serviço `api`:
+A API assina JWT e **recusa o boot sem `JWT_SECRET`** — sem valor, sem default, sem exceção.
+Gere um antes de subir o serviço `api`:
 
 ```bash
 export JWT_SECRET=$(openssl rand -base64 48)
 ```
 
-O Postgres não depende dele (`docker compose up -d postgres` funciona sem), porque
-o Compose interpola o arquivo inteiro antes de qualquer comando: exigir a variável
-no compose quebraria também `config`, `ps` e `down`.
+O Postgres não depende dele (`docker compose up -d postgres` funciona sem), porque o Compose
+interpola o arquivo inteiro antes de qualquer comando: exigir a variável no compose quebraria
+também `config`, `ps` e `down`.
 
 ```bash
 # Stack completa (postgres + api + web prod targets)
@@ -104,8 +107,9 @@ Mais rápido para iterar. Postgres ainda roda em Docker (B22 alternativa: Postgr
 # 1. Instalar deps
 pnpm install --frozen-lockfile
 
-# 2. Subir Postgres (o compose lê o .env da RAIZ do repo)
-docker compose up -d postgres
+# 2. Subir Postgres COM PORTA PUBLICADA NO HOST.
+# ⚠️ O `postgres` do compose usa só `expose` desde o #91 — a API na máquina não o alcança.
+docker run -d --name projeto-base-pg-local -p 5432:5432 -e POSTGRES_USER=projeto -e POSTGRES_PASSWORD=projeto -e POSTGRES_DB=projeto_base postgres:16-alpine
 # ou aponte para um Postgres existente:
 # export DATABASE_URL="postgresql://projeto:projeto@localhost:5432/projeto_base?schema=public"
 
@@ -117,11 +121,10 @@ pnpm turbo run db:generate
 cp apps/api/.env.example apps/api/.env
 openssl rand -base64 48    # preencha o valor na linha JWT_SECRET= de apps/api/.env
 
-# 5. Rodar migrations — o binário do Prisma direto, de dentro de apps/api
-# para que ele leia o apps/api/.env. Não existe script
-# `prisma:migrate:deploy` em nenhum package.json: o pnpm responde
-# "None of the selected packages has a ... script" e SAI 0, que é verde
-# para quem só olha o exit code
+# 5. Rodar migrations — o binário do Prisma direto, de dentro de apps/api, para que ele leia
+# o apps/api/.env. Não existe script `prisma:migrate:deploy` em nenhum package.json: o pnpm
+# responde "None of the selected packages has a ... script" e SAI 0 — verde para quem só olha
+# o exit code
 cd apps/api && pnpm exec prisma migrate deploy && cd ../..
 
 # 6. Subir apps em watch mode
@@ -129,9 +132,8 @@ pnpm dev    # turbo run dev em paralelo — api em :3000, web em :3001
 ```
 
 ⚠️ **`JWT_SECRET` não tem valor default, por decisão de projeto** (ver
-[ADR-0002](docs/adr/0002-autenticacao-jwt-argon2.md)). Um segredo JWT padrão em
-repositório é pior que nenhum: todos que instalaram o projeto compartilhariam a
-chave de assinatura, e qualquer um poderia forjar um token de administrador.
+[ADR-0002](docs/adr/0002-autenticacao-jwt-argon2.md)): um segredo padrão no repositório faria
+todos que instalaram o projeto compartilharem a chave de assinatura.
 
 Endpoints:
 
@@ -271,11 +273,10 @@ Conforme convenção [`docs/STACK.md`](./docs/STACK.md):
 - **Frontend (`apps/web`):** Next.js 15 (App Router) + React 19 + Tailwind CSS 4
 - **Observabilidade:** OpenTelemetry SDK + OTel Collector (perfil Compose `observability`)
 
-Os apps `apps/api` e `apps/web` **já estão implementados** — bounded context
-`users` com auditoria, em camadas `domain/`, `application/` e
-`infrastructure/`, conforme o
-[ADR-0001](./docs/adr/0001-arquitetura-ddd-hexagonal-auditoria.md). Para subir
-localmente, ver a seção "Como executar localmente" acima.
+Os apps `apps/api` e `apps/web` **já estão implementados** — bounded context `users` com
+auditoria, em camadas `domain/`, `application/` e `infrastructure/`, conforme o
+[ADR-0001](./docs/adr/0001-arquitetura-ddd-hexagonal-auditoria.md). Para subir localmente, ver
+a seção "Como executar localmente" acima.
 
 Veja [`docs/MONOREPO.md`](./docs/MONOREPO.md) para convenções detalhadas.
 
