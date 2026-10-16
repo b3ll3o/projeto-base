@@ -432,6 +432,86 @@ describe('checkPackageJsonDrift', () => {
     expect(result.skipped).toBeFalsy();
     expect(result.ok).toBe(true);
   });
+
+  it('cobre apps via extraPackageJsonPaths (pendência L208)', async () => {
+    const dir = path.join(tmpRoot, 'extra-paths');
+    await fs.mkdir(dir, { recursive: true });
+    await makeWorkspace(dir, {
+      turboTasks: ['build', 'dev', 'lint', 'typecheck', 'test'],
+      packageScripts: ['build', 'dev', 'lint', 'typecheck', 'test'],
+    });
+    // App com script fantasma: `tsx <path-inexistente>`. Sem o campo
+    // `extraPackageJsonPaths`, o gate varre só a raiz e volta verde.
+    await fs.mkdir(path.join(dir, 'apps', 'web'), { recursive: true });
+    await fs.writeFile(
+      path.join(dir, 'apps', 'web', 'package.json'),
+      JSON.stringify({
+        name: '@projeto/web',
+        scripts: { 'tsc:typo': 'tsx .tooling/scripts/ci/check-nao-existe-xyz.ts' },
+      }),
+    );
+    await fs.writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        scripts: {
+          build: 'turbo run build',
+          dev: 'turbo run dev',
+          lint: 'turbo run lint',
+          typecheck: 'turbo run typecheck',
+          test: 'turbo run test',
+          'ci:preflight': 'echo ok',
+        },
+      }),
+    );
+
+    const result = await checkPackageJsonDrift({
+      packageJsonPath: path.join(dir, 'package.json'),
+      extraPackageJsonPaths: [path.join(dir, 'apps/web/package.json')],
+    });
+    expect(result.ok).toBe(false);
+    expect(result.errors.join('\n')).toMatch(/tsc:typo/);
+  });
+
+  it('extraPackageJsonPaths vazio = comportamento antigo (só raiz)', async () => {
+    // Default do campo (undefined) tem que passar verde em apps com drift —
+    // o gate NÃO varre o workspace quando o campo não é passado.
+    const dir = path.join(tmpRoot, 'legacy-default');
+    await fs.mkdir(dir, { recursive: true });
+    await makeWorkspace(dir, {
+      turboTasks: ['build', 'dev', 'lint', 'typecheck', 'test'],
+      packageScripts: ['build', 'dev', 'lint', 'typecheck', 'test'],
+    });
+    // App web: o MESMO package.json que no test 1 continha o drift. Aqui ele
+    // existe, mas o gate NÃO o varre (campo opcional, ausente), então a
+    // ausência de `ci:local` da raiz é a única coisa que pode falhar, e
+    // incluir `ci:local` mantém o teste positivo.
+    await fs.mkdir(path.join(dir, 'apps', 'web'), { recursive: true });
+    await fs.writeFile(
+      path.join(dir, 'apps', 'web', 'package.json'),
+      JSON.stringify({
+        name: '@projeto/web',
+        scripts: { 'tsc:typo': 'tsx .tooling/scripts/ci/check-nao-existe-xyz.ts' },
+      }),
+    );
+    await fs.writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        scripts: {
+          build: 'turbo run build',
+          dev: 'turbo run dev',
+          lint: 'turbo run lint',
+          typecheck: 'turbo run typecheck',
+          test: 'turbo run test',
+          'ci:preflight': 'echo ok',
+          'ci:local': 'pnpm ci:preflight && pnpm stack:review && turbo run build',
+        },
+      }),
+    );
+
+    const result = await checkPackageJsonDrift({ packageJsonPath: path.join(dir, 'package.json') });
+    // Sem `extraPackageJsonPaths`, o drift do app não é checado.
+    expect(result.ok).toBe(true);
+  });
 });
 
 describe('extractTurboRunFilters', () => {
