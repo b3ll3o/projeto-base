@@ -35,6 +35,12 @@ export class ApiClient {
   async patch<T>(path: string, body?: unknown, init?: ApiRequestInit): Promise<T> {
     return this.request<T>('PATCH', path, { ...init, body: JSON.stringify(body) });
   }
+  // pt-BR (#93.1 — RBAC, 2026-10-16): PUT usado em
+  // `/admin/profiles/:id/authorizations` (sync) e
+  // `/admin/users/:id/profile` (assign).
+  async put<T>(path: string, body?: unknown, init?: ApiRequestInit): Promise<T> {
+    return this.request<T>('PUT', path, { ...init, body: JSON.stringify(body) });
+  }
   async delete<T>(path: string, init?: ApiRequestInit): Promise<T> {
     return this.request<T>('DELETE', path, init);
   }

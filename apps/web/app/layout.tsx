@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { WebVitalsReporter } from '../src/telemetry/web-vitals-reporter';
+import { Sidebar } from '../components/Sidebar';
 
 export const metadata: Metadata = {
   title: 'Projeto Base',
@@ -12,7 +13,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="pt-BR">
       <body className="antialiased">
         <WebVitalsReporter />
-        {children}
+        <div className="layout">
+          <Sidebar />
+          <main className="layout-content">{children}</main>
+        </div>
       </body>
     </html>
   );
