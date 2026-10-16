@@ -8,6 +8,7 @@
     "db:generate": "prisma generate",
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run --project unit",
+    "test": "vitest run --project unit",
     "test:coverage": "vitest run --project unit --coverage",
     "test:integration": "vitest run --project integration",
     "test:e2e": "vitest run --project e2e",

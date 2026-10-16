@@ -244,6 +244,13 @@
   não por construção. Nenhum gate mede se os dois concordam. Fechar isto é
   change próprio: `mark` deve derivar de `errors.length === 0` (ou o contrato
   `CheckResult` deve proibir `ok: true` com `errors` não vazio).
+- **FECHADO 2026-10-16 (T4) — `check-package-json-drift` estendido** com
+  `extraPackageJsonPaths` para cobrir `apps/{web,api}/package.json`
+  (pendência L208). O gate agora detecta scripts fantasma em apps e exige
+  canônicos só onde faz sentido: raiz exige `test`, `ci:preflight`, etc.;
+  apps exigem `test`, `test:unit`, `test:coverage` (não `ci:preflight`,
+  que vive só na raiz). Specs `extraPackageJsonPaths cobre apps` e
+  `extraPackageJsonPaths com legacy default` verde.
 - **`testIgnore` do Playwright é o único asserto de não-dupla-coleta e
   nenhum gate o lê** (medido 2026-10-08, mesma revisão). Comando:
   `grep -rn "testIgnore" --include=*.ts --include=*.mts .tooling tooling apps`
@@ -298,3 +305,14 @@
   **Não corrigir sem reler a decisão do gate:** os dois consertos são
   deliberados (MEDIDO no #58: marcar a frase errada fabrica MENTIRA VERDADEIRA)
   e a classe 2 de `guard-classes` explica por que não há classificador.
+
+## Pendências herdadas (T4 — gates que não couberam no PR v1.12)
+
+- **G-H-11 (testIgnore) — cancelado em T4** por saturação de contexto do
+  subagente. `check-testignore` foi entregue como draft (8/12 testes
+  falhando) e removido do PR. Pendência L247 continua.
+- **G-H-02 (otelcol-compose-parity) — cancelado em T4** pelo mesmo motivo.
+  Sem artefato produzido. Pendência L261 (engines / Dockerfiles) é
+  adjacente mas distinta.
+- **G-H-08 (workflow-yaml) — cancelado em T4.** Pendência L38 ("nenhum
+  tooling lê `.github/workflows/ci.yml`") continua.

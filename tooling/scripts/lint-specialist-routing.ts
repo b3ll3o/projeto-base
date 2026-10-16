@@ -82,8 +82,9 @@ export async function lintMatrix(content: string, opts: LintOptions): Promise<Li
   const warnings: string[] = [];
   const info: string[] = [];
 
-  if (content.split('\n').length > MAX_LOC) {
-    errors.push(`LOC ${content.split('\n').length} exceeds maximum ${MAX_LOC}`);
+  if (content.split('\n').length - (content.endsWith('\n') ? 1 : 0) > MAX_LOC) {
+    const loc = content.split('\n').length - (content.endsWith('\n') ? 1 : 0);
+    errors.push(`LOC ${loc} exceeds maximum ${MAX_LOC}`);
   }
 
   const yamlMatch = YAML_BLOCK_RE.exec(content);

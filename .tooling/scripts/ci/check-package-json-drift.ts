@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import type { CheckResult } from './check-types';
 
 /**
- * Scripts canônicos que devem existir no `package.json` raiz do template.
+ * Scripts canônicos que DEVEM existir no `package.json` raiz do template.
  *
  * Mantido sincronizado com o objeto `scripts` canônico definido em
  * `package.json` raiz + convenção `ci-defense-in-depth.md`. Se algum
@@ -18,6 +18,17 @@ const REQUIRED_SCRIPTS = [
   'ci:preflight',
   'ci:local',
 ] as const;
+
+/**
+ * Scripts que CADA `package.json` público (raiz + apps) tem de ter.
+ *
+ * Menor que `REQUIRED_SCRIPTS` de propósito: `ci:preflight` e `ci:local`
+ * são exclusivos da raiz (a convenção os coloca só lá, e o gate original
+ * media só a raiz). Quando o gate foi estendido para apps (pendência
+ * L208), a exigência continuou restrita — apps não implementam tarefas
+ * do CI, e exigir isso seria um vermelho falso.
+ */
+const SCRIPTS_PUBLICOS: readonly string[] = ['build', 'dev', 'lint', 'typecheck', 'test'];
 
 /**
  * Detecta drift no `package.json` raiz do template/monorepo.
@@ -57,6 +68,73 @@ const REQUIRED_SCRIPTS = [
 export async function checkPackageJsonDrift(opts: {
   packageJsonPath: string;
   projectRoot?: string;
+  /**
+   * Outros `package.json` a varrer — ex.: `apps/web/package.json`,
+   * `apps/api/package.json`. Pendência L208: o gate original varria só a
+   * raiz, e um drift em app passava. A assinatura aceita um ARRAY para
+   * cobrir raiz + apps num único check (1 entry em preflight-gates.ts).
+   * Default = só `packageJsonPath`.
+   *
+   * Scripts canônicos exigidos em cada `package.json` extra são apenas os
+   * `SCRIPTS_PUBLICOS` (build/dev/lint/typecheck/test). **E só se o
+   * package.json DECLARA scripts** — um app que decide não ter
+   * `package.json` com scripts (ou um diretório com `package.json` que
+   * é só metadado) é skip de propósito: o `pnpm-workspace` aceita
+   * `package.json` sem `scripts` e a regra de cobertura turbo
+   * continua valendo. Exigir `test` num app que explicitamente não
+   * roda teste quebraria o painel por uma dívida que o gate não está
+   * apontando.
+   *
+   * `tsx <path>` em scripts do app é resolvido **relativo ao package.json
+   * do app**, não à raiz — antes da L208 isso não importava (a varredura
+   * era só da raiz), e o `path.resolve(projectRoot, tsxPath)` usava o
+   * raiz como diretório-base. Resultado: `apps/api`'s `tsx src/main.ts`
+   * virava `path.resolve(root, 'src/main.ts')` e batia em
+   * `root/src/main.ts` — um fantasma que nunca existiu na app.
+   */
+  extraPackageJsonPaths?: string[];
+}): Promise<CheckResult> {
+  const errors: string[] = [];
+  const projectRoot = path.resolve(
+    opts.projectRoot ?? path.dirname(path.resolve(opts.packageJsonPath)),
+  );
+  const paths = [
+    { path: opts.packageJsonPath, required: REQUIRED_SCRIPTS },
+    ...(opts.extraPackageJsonPaths ?? []).map((p) => ({
+      path: p,
+      required: SCRIPTS_PUBLICOS,
+    })),
+  ];
+  for (const { path: p, required } of paths) {
+    const sub = await checkSinglePackageJson({
+      packageJsonPath: p,
+      projectRoot,
+      requiredScripts: required,
+      // Path é repo-relative; `pkgDir` é o diretório onde o `tsx <path>`
+      // deve ser resolvido (o do próprio package.json, não a raiz). Para o
+      // raiz coincide com `projectRoot`.
+      pkgDir: path.dirname(path.resolve(projectRoot, p)),
+    });
+    errors.push(...sub.errors);
+    if (sub.skipped) {
+      return {
+        ok: errors.length === 0,
+        errors,
+        skipped: true,
+        reason: sub.reason ?? 'sub-check skipped',
+      };
+    }
+  }
+  return { ok: errors.length === 0, errors };
+}
+
+async function checkSinglePackageJson(opts: {
+  packageJsonPath: string;
+  projectRoot: string;
+  /** Quais scripts canônicos EXIGIR para ESTE package.json. */
+  requiredScripts: readonly string[];
+  /** Diretório-base para resolver `tsx <path>` — o do package.json. */
+  pkgDir: string;
 }): Promise<CheckResult> {
   const errors: string[] = [];
   const fullPath = path.resolve(opts.packageJsonPath);
@@ -91,18 +169,27 @@ export async function checkPackageJsonDrift(opts: {
     };
   }
 
-  for (const required of REQUIRED_SCRIPTS) {
-    if (!(required in parsed.scripts)) {
-      errors.push(
-        `drift detectado: script canônico '${required}' ausente do package.json (ver convenção ci-defense-in-depth.md)`,
-      );
+  // Scripts canônicos só são exigidos se o package.json DECLARA scripts.
+  // Apps podem existir sem scripts (caso comum: metadado), e exigir `test`
+  // num app que explicitamente não tem `scripts` seria vermelho falso.
+  const hasScripts = Object.keys(parsed.scripts).length > 0;
+  if (hasScripts) {
+    for (const required of opts.requiredScripts) {
+      if (!(required in parsed.scripts)) {
+        errors.push(
+          `drift detectado: script canônico '${required}' ausente do package.json (ver convenção ci-defense-in-depth.md)`,
+        );
+      }
     }
   }
 
   for (const [name, command] of Object.entries(parsed.scripts)) {
     const tsxPath = extractTsxPath(command);
     if (!tsxPath) continue;
-    const resolved = path.resolve(projectRoot, tsxPath);
+    // Pendência L208: o path é relativo ao package.json (apps/api),
+    // não à raiz do monorepo. `tsx src/main.ts` significa
+    // `apps/api/src/main.ts` quando o script vive em `apps/api/`.
+    const resolved = path.resolve(opts.pkgDir, tsxPath);
     try {
       await fs.access(resolved);
     } catch {
@@ -359,14 +446,31 @@ function parseWorkspaceGlobs(yaml: string): string[] | null {
  * Extrai o primeiro path após `tsx` ou `pnpm tsx` em uma string de
  * comando. Retorna `null` se o comando não casa esses padrões.
  *
+ * Sub-comandos do `tsx` (hoje: `watch`) são pulados: o `tsx watch <path>`
+ * é um comando composto, e o path é o segundo argumento, não o primeiro.
+ * Sem o filtro, `tsx watch src/main.ts` casava `watch` como path
+ * (drift fantasma em `apps/api` desde 2026-09, pré-existente).
+ *
  * @example extractTsxPath('tsx .tooling/scripts/foo.ts') → '.tooling/scripts/foo.ts'
  * @example extractTsxPath('pnpm tsx tooling/scripts/foo.ts') → 'tooling/scripts/foo.ts'
  * @example extractTsxPath('echo hello && pnpm tsx tooling/x.ts') → 'tooling/x.ts'
+ * @example extractTsxPath('tsx watch src/main.ts') → 'src/main.ts'
  */
 function extractTsxPath(command: string): string | null {
+  // Sub-comandos que o `tsx` aceita na primeira posição; o path real
+  // (o que existe no repo) vem DEPOIS. Ver `tsx --help`.
+  const TSX_SUBCOMMANDS = new Set(['watch']);
   const tsxRegex = /tsx\s+([^\s|&;]+)/;
   const match = tsxRegex.exec(command);
-  return match?.[1] ?? null;
+  const first = match?.[1] ?? null;
+  if (first === null) return null;
+  if (TSX_SUBCOMMANDS.has(first)) {
+    // Próximo token após o sub-comando
+    const afterSub = command.slice(command.indexOf(first) + first.length).trim();
+    const m2 = /^([^\s|&;]+)/.exec(afterSub);
+    return m2?.[1] ?? null;
+  }
+  return first;
 }
 
 /**

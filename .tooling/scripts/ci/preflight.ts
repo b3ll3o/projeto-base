@@ -28,6 +28,10 @@ import { checkBranchUpToDate } from './check-branch-up-to-date';
 import { checkE2eFlowCoverage } from './check-e2e-flow-coverage';
 import { checkCiLocalE2e } from './check-ci-local-e2e';
 import { checkCiLocalScope } from './check-ci-local-scope';
+import { checkTeethCount } from './check-teeth-count';
+import { checkHarnessLocation } from './check-harness-location';
+import { checkAgentRoutingCoverage } from './check-agent-routing-coverage';
+import { checkEnginesConsistency } from './check-engines-consistency';
 import { existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
@@ -313,7 +317,14 @@ export const RUNNERS: Record<string, () => CheckResult | Promise<CheckResult>> =
   'check-eslint-drift:packages': () => checkEslintDrift({ appsRoot: 'packages', allowlist: [] }),
   'check-turbo-drift': () => checkTurboDrift({ turboPath: 'turbo.json' }),
   'check-package-json-drift': () =>
-    checkPackageJsonDrift({ packageJsonPath: 'package.json', projectRoot: '.' }),
+    checkPackageJsonDrift({
+      packageJsonPath: 'package.json',
+      projectRoot: '.',
+      // Pendência L208: gate original varria só a raiz; um drift em
+      // `apps/<x>/package.json` passava em silêncio. A varrer agora
+      // todos os package.json do workspace que tenham scripts.
+      extraPackageJsonPaths: ['apps/web/package.json', 'apps/api/package.json'],
+    }),
   'check-docker-drift': () => checkDockerDrift('.'),
   'lint-review-routing': () => checkReviewRoutingLint(),
   'check-archive-integrity': () => checkArchiveIntegrity('.'),
@@ -329,6 +340,10 @@ export const RUNNERS: Record<string, () => CheckResult | Promise<CheckResult>> =
   'check-e2e-flow-coverage': () => checkE2eFlowCoverage({ repoRoot: '.' }),
   'check-ci-local-e2e': () => checkCiLocalE2e({ repoRoot: '.' }),
   'check-ci-local-scope': () => checkCiLocalScope({ repoRoot: '.' }),
+  'check-teeth-count': () => checkTeethCount({ repoRoot: '.' }),
+  'check-harness-location': () => checkHarnessLocation({ repoRoot: '.' }),
+  'check-agent-routing-coverage': () => checkAgentRoutingCoverage({ repoRoot: '.' }),
+  'check-engines-consistency': () => checkEnginesConsistency({ repoRoot: '.' }),
 };
 
 /**

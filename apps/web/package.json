@@ -6,6 +6,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.e2e.json",
     "test:unit": "vitest run",
+    "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "pretest:e2e": "playwright install chromium",
     "test:e2e": "playwright test",

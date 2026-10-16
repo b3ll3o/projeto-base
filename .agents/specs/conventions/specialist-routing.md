@@ -1,29 +1,25 @@
 ---
 name: specialist-routing
-version: 1.4
-updated: 2026-10-08
+version: 1.5
+updated: 2026-10-16
 maintainer: specialist-router
-description: "Matriz canônica de roteamento de demanda — mapeia paths/keywords/scopes para 15 specialists (v1.3 adicionou 5 auditores + 1 orchestrator, v1.3 da main adicionou ux-design). Source of truth para o classificador headless (tooling/scripts/specialist-router.ts) e para o lint da matriz. Atualizada por PR."
+description: "Matriz canônica de roteamento de demanda — mapeia paths/keywords/scopes para 26 specialists. Source of truth do classificador headless (tooling/scripts/specialist-router.ts) e do lint da matriz. Atualizada por PR."
 ---
 
-# Convenção: specialist-routing (matriz de roteamento de specialists)
+# Convenção: specialist-routing
 
 > Fonte da verdade que o `specialist-router` consulta para classificar
-> uma demanda (texto + paths + scope) e despachar os specialists
-> apropriados. Edite aqui quando:
-> - Novo specialist agent for criado em `.agents/agents/`
-> - Nova classe de arquivos surgir (ex: novo app `apps/landing/`)
-> - Regra de skip precisar ajuste
-> - Demand keyword/escopo novo for identificado (≥ 3 demandas)
+> uma demanda (texto + paths + scope) e despachar os specialists.
+> Edite aqui quando: novo specialist for criado, nova classe de arquivos
+> surgir, regra de skip precisar ajuste, ou demand keyword/escopo novo
+> for identificado (≥ 3 demandas).
 
 ## 1. PATH GLOBS
-
 ```yaml
 path_globs:
   - pattern: "apps/api/**"
     specialists: [nestjs-specialist]
     rationale: "Backend NestJS (controllers, use cases, Prisma, infra)"
-
   - pattern: "apps/api/**/domain/**"
     specialists: [nestjs-specialist]
     stacks: [ddd-hexagonal]
@@ -147,6 +143,38 @@ path_globs:
     specialists: [test-writer]
   - pattern: "**/*.test.ts"
     specialists: [test-writer]
+  - pattern: "vitest.config.*"
+    specialists: [tdd-enforcer, test-writer]
+  - pattern: "**/TODO*"
+    specialists: [task-manager]
+  - pattern: "package.json"
+    specialists: [monorepo-specialist, orchestrator]
+  - pattern: "**/auth/**"
+    specialists: [security-auditor, nestjs-specialist]
+  - pattern: ".agents/agents/agent-architect.md"
+    specialists: [agent-architect]
+  - pattern: ".agents/agents/orchestrator.md"
+    specialists: [orchestrator, specialist-router]
+  - pattern: ".agents/agents/explorer.md"
+    specialists: [explorer]
+  - pattern: ".agents/agents/code-reviewer.md"
+    specialists: [code-reviewer]
+  - pattern: ".agents/agents/stack-code-reviewer.md"
+    specialists: [stack-code-reviewer]
+  - pattern: ".agents/agents/doc-sync.md"
+    specialists: [doc-sync]
+  - pattern: ".agents/agents/review-router.md"
+    specialists: [review-router]
+  - pattern: ".agents/agents/specialist-router.md"
+    specialists: [specialist-router]
+  - pattern: ".agents/agents/tdd-enforcer.md"
+    specialists: [tdd-enforcer]
+  - pattern: ".agents/agents/task-manager.md"
+    specialists: [task-manager]
+  - pattern: ".agents/agents/otelcol-infra-specialist.md"
+    specialists: [otelcol-infra-specialist, telemetry-specialist]
+  - pattern: "infra/otelcol/**"
+    specialists: [otelcol-infra-specialist, telemetry-specialist]
 ```
 
 ## 2. DEMAND KEYWORDS
@@ -166,39 +194,24 @@ demand_keywords:
 
   - regex: "(?i)refactor|simplificar|simplify|dry|limpar|cleanup"
     specialists: [refactorer]
-
-  # v1.3 — keywords para 5 specialists de auditoria (compactas; rationale único no grupo)
   - regex: "(?i)\\bprisma\\b|schema\\.prisma|\\bmigrations?\\b|query lente|n\\+\\+1|índices?"
     specialists: [prisma-db-specialist]
-    rationale: "DB/schema/query Prisma"
   - regex: "(?i)openapi|swagger|contrato (http|api)|endpoint (sem|com) docs"
     specialists: [openapi-contract-specialist]
-    rationale: "Spec OpenAPI / contrato HTTP"
   - regex: "(?i)\\bprod.?readiness|hardening|cap_drop|non-root|healthcheck|imagem.*pinar"
     specialists: [docker-prod-specialist]
-    rationale: "Hardening de container prod"
   - regex: "(?i)\\bbumpar\\b|semver|tag v|conventional commit|changelog.*drift"
     specialists: [release-versioning-specialist]
-    rationale: "Versionamento / release"
   - regex: "(?i)rodar (auditoria|scan)|analisar (a )?stack|encontrar (bugs|drifts?|gaps?)"
     specialists: [finding-orchestrator]
-    rationale: "Escaneamento de saúde / abertura de issues via findings"
-
   - regex: "(?i)\\btest(es)?\\b|tdd|cobertura|coverage|\\bspec\\b"
     specialists: [test-writer]
-    rationale: "Demanda sobre testes"
-
   - regex: "(?i)\\bdoc(umenta[çc][ãa]o)?\\b|readme|adr|spec(ification)?"
     specialists: [doc-writer]
-    rationale: "Demanda sobre documentação"
-
   - regex: "(?i)telemetry|tracing|opentelemetry|\\botel\\b|spans?"
     specialists: [telemetry-specialist]
-    rationale: "Demanda sobre telemetria/observabilidade (OpenTelemetry SDK, exporters, sampling, propagação W3C, web-vitals, OTel Collector)"
-
   - regex: "(?i)\\btela(s)?\\b|\\bux\\b|\\bdesign\\b|layout|formul[áa]rio|acessibilidade|\\ba11y\\b|EmptyState|estados? de"
     specialists: [ux-design-specialist]
-    rationale: "Demanda sobre UX/design de interface (tokens, estados de tela, formulários, acessibilidade, microcopy)"
 ```
 
 ## 3. DEMAND SCOPES
@@ -265,12 +278,10 @@ always_on:
 
 ## 6. DERIVED TAGS (v1.1)
 
-> Tags derivadas da análise de paths que sinalizam requisitos
-> técnicos implícitos (não especialistas). O classificador
+> Tags derivadas de paths que sinalizam requisitos técnicos. O classificador
 > `tooling/scripts/specialist-router.ts` expoe `derived_tags` em
-> `ClassifyResult` para que o controller saiba aplicar convenções
-> específicas (ex: ENTRYPOINT usa `pnpm exec prisma`, compose precisa
-> de healthcheck block).
+> `ClassifyResult` para o controller aplicar convenções (ex: ENTRYPOINT usa
+> `pnpm exec prisma`, compose precisa de healthcheck block).
 
 ```yaml
 derived_tags:
@@ -284,10 +295,6 @@ derived_tags:
 
 ## 7. Histórico de Versões
 
-| Versão | Data | Mudança |
-|--------|------|---------|
-| 1.4 | 2026-10-08 | Resolve conflitos: mergeia v1.3 (audit specialists + 1 orchestrator) + v1.3 da main (ux-design-specialist). 15 specialists; 41 path_globs; 16 demand_keywords. Aditivo. |
-| 1.3 | 2026-10-06 | Bump menor — adiciona `ux-design-specialist` (UX/design de interface). 2 path_globs novos (`apps/web/app/**.tsx`, `apps/web/app/globals.css`) + 1 demand_keyword novo. Total: 10 specialists; 31 path_globs; 10 demand_keywords. |
-| 1.2 | 2026-09-23 | Bump menor — adiciona `telemetry-specialist` transversal. 4 path_globs + 1 demand_keyword. Total: 9 specialists; 29 path_globs; 9 demand_keywords. |
-| 1.1 | 2026-09-23 | Adiciona `derived_tags` (prisma_binary + compose_with_healthcheck). Atualiza `classify()` para retornar `derived_tags` no resultado. Atualiza skill docker com checklist healthcheck. B22 polish. |
-| 1.0 | 2026-09-23 | Lançamento inicial: 8 specialists (monorepo, nestjs, nextjs, docker, security-auditor, test-writer, doc-writer, refactorer); 21 path_globs; 8 demand_keywords; 8 demand_scopes; 5 skip_rules; `monorepo-specialist` always-on. Source of truth para classificador headless e lint. |
+> Histórico completo migrado para
+> [`specialist-routing-historico.md`](./specialist-routing-historico.md)
+> (apenas leitura) para preservar o limite de 300 linhas deste spec.
