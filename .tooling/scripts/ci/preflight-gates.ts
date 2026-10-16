@@ -249,6 +249,51 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     file: '.tooling/scripts/ci/check-ci-local-scope.ts',
     id: 'check-ci-local-scope',
   },
+  {
+    // G-H-04 da campanha de auditoria (state-snapshot
+    // 20261016T013000Z-auditar-harness-gates-v1-12). Auto-checagem do
+    // `PREFLIGHT_CHECKS`: a contagem de `name: '...'` no fonte tem de
+    // bater com o tamanho do array exportado. Sem o gate, adicionar
+    // uma entrada sem reabrir a exportação silencia o gate (a classe 7
+    // de `guard-classes.md`).
+    name: 'preflight tem dentes: array vs regex no fonte',
+    file: '.tooling/scripts/ci/check-teeth-count.ts',
+    id: 'check-teeth-count',
+  },
+  {
+    // G-H-10 da campanha de auditoria. Todo `check-*.ts` em
+    // `.tooling/scripts/ci/` deve viver NA RAIZ — não em subdir —
+    // porque o preflight descobre por glob plano, e um subdir
+    // sombreado passa em silêncio. Mesmo gate cobre o par: a entrada
+    // PREFLIGHT_CHECKS aponta para um arquivo que existe.
+    name: 'harness em .tooling/scripts/ci/ vive na raiz (sem subdirs)',
+    file: '.tooling/scripts/ci/check-harness-location.ts',
+    id: 'check-harness-location',
+  },
+  {
+    // G-H-03 da campanha. Fecha o gap da auditoria: 26 agents em
+    // `.agents/agents/*.md` vs 11 referenciados pela matriz
+    // `specialist-routing.md`. Os 15 sem roteamento eram invisíveis:
+    // ninguém os disparava, e o gate de skeleton-frontmatter não
+    // perguntava se a demanda os alcançava. O gate captura os DOṠ
+    // lados: agent órfão (existe sem roteamento) e agent fantasma
+    // (citado sem arquivo).
+    name: 'agents ↔ matriz de roteamento (sem órfãos, sem fantasmas)',
+    file: '.tooling/scripts/ci/check-agent-routing-coverage.ts',
+    id: 'check-agent-routing-coverage',
+  },
+  {
+    // G-H-01 da campanha. Estende `check-package-json-drift` no
+    // caminho inverso: o `engines.node` declarado em
+    // `apps/*/package.json` (se houver) tem de casar com a faixa da
+    // raiz. Sem este gate, um app declarando `engines.node: ">=18"`
+    // passava em silêncio — o que torna o `pnpm --config.engine-
+    // strict=false` necessário em todos os lugares, e já é o modo de
+    // falha medido do PR #82.
+    name: 'engines node consistentes (raiz ↔ apps)',
+    file: '.tooling/scripts/ci/check-engines-consistency.ts',
+    id: 'check-engines-consistency',
+  },
 ];
 
 /**
