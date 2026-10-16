@@ -101,6 +101,27 @@ describe('lintMatrix', () => {
     expect(result.errors.some((e) => /loc|300|lines/i.test(e))).toBe(true);
   });
 
+  it('verde com exatamente 300 linhas + trailing newline', async () => {
+    // pt-BR: 300 linhas é o LIMITE, não passa. E arquivos versionados
+    // POSIX terminam com `\n`; `split('\n').length` nesse caso é 301
+    // (a string vazia final). Sem o ajuste `endsWith('\n') ? 1 : 0`,
+    // a matriz real do repo (300 linhas + \n) batia o limite e quebrava
+    // o CI de T4. Aqui geramos 300 linhas TOTAL (incluindo frontmatter
+    // e bloco yaml), terminadas com \n, e o gate deve considerar verde.
+    // Frontmatter = 8 quebras; yaml_open + yaml_close = 2 quebras. Logo
+    // o body precisa ter 300 - 8 - 2 = 290 quebras de linha.
+    const body = 'a\n'.repeat(290);
+    const matrix =
+      `---\nname: x\nversion: 1.0\nupdated: 2026-10-16\nmaintainer: x\ndescription: x\n---\n\n` +
+      '```yaml\n' +
+      body +
+      '```\n';
+    const loc = matrix.split('\n').length - (matrix.endsWith('\n') ? 1 : 0);
+    expect(loc).toBe(300);
+    const result = await lintMatrix(matrix, { agentsDir: '.agents/agents/' });
+    expect(result.errors.filter((e) => /LOC/.test(e))).toHaveLength(0);
+  });
+
   it('falha se version frontmatter ausente', async () => {
     const matrix =
       `---\nname: x\nupdated: 2026-09-23\nmaintainer: x\ndescription: x\n---\n\n` +
