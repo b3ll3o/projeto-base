@@ -48,6 +48,15 @@ const DO_ESCALADOR = [
   'users.read',
 ] as const;
 
+/**
+ * pt-BR (#97, B5): motivos internos que NÃO podem aparecer no `detail` de um
+ * 403. Idioma copiado do `RAZOES_INTERNAS` do cenário 07 — a razão interna de
+ * uma recusa de segurança é POLÍTICA, e dizê-la a um atacante é mapear o
+ * sistema: "não concede o que não tem" ensina exatamente onde está o limite.
+ */
+const RAZOES_DE_ESCALACAO =
+  /não concede|não tem|isAdmin|permissão que ele não tem|próprio profile/i;
+
 describe('E2E 10: escalada de privilégio e validação na fronteira HTTP', () => {
   let e2e: E2EContext;
 
@@ -210,6 +219,27 @@ describe('E2E 10: escalada de privilégio e validação na fronteira HTTP', () =
     // `admin.manage-authorizations` e tem de continuar funcionando.
     expect(res.statusCode).toBe(201);
     expect(JSON.parse(res.body).permissions).toContain('users.read');
+  });
+
+  // ─── B5: o `detail` não entrega a política de segurança ───────────────────
+
+  it('B5: o 403 de escalada não carrega a razão da política no `detail`', async () => {
+    const { alvo, ator } = await cenarioDoAtaque();
+
+    const res = await e2e.injetar({
+      method: 'POST',
+      url: `/api/v1/admin/profiles/${alvo}/authorizations`,
+      headers: auth(ator.token),
+      payload: { permissionKey: 'users.delete' },
+    });
+
+    expect(res.statusCode).toBe(403);
+    const body = JSON.parse(res.body) as { code: string; title: string; detail?: string };
+    // O `code` segue útil ao cliente (distingue 403-de-escalada de
+    // 403-de-permissão) e o `title` segue genérico — o que NÃO pode é o
+    // `detail`, que o `GlobalExceptionFilter` monta com `exception.message`.
+    expect(body.code).toBe('PRIVILEGE_ESCALATION');
+    expect(body.detail ?? '').not.toMatch(RAZOES_DE_ESCALACAO);
   });
 
   // ─── A1.2: auto-atribuição é concessão ──────────────────────────────────────

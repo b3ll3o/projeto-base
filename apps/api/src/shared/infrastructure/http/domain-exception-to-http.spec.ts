@@ -323,6 +323,28 @@ describe('mapExceptionToHttp — BC Profiles (#97)', () => {
     expect(m.title).not.toMatch(/isAdmin|profile|ator/i);
   });
 
+  // pt-BR (#97, B5): o teste acima é verde e o vazamento continuava. Motivo:
+  // ele afirma sobre `title`, que o mapper higieniza — mas é o
+  // `GlobalExceptionFilter` que monta `detail: exception.message`. O motivo
+  // crudo saía pelo campo que NENHUMA spec asserta. Sanitizar `title` não
+  // fecha nada; o que fecha é a MENSAGEM da exceção não carregar política,
+  // exatamente como a `InvalidTokenException` faz (ver `token.exceptions.ts`).
+  it('a mensagem da escalada NÃO carrega o motivo — é por ela que o `detail` vaza', () => {
+    const motivo = 'ator sem isAdmin não altera o próprio profile';
+    const excecao = new ProfilePrivilegeEscalationException(motivo);
+
+    expect(excecao.message).not.toContain(motivo);
+    // ⚠️ A regex não pode ser `/isAdmin|profile|ator/i` como a do teste de
+    // `title` acima: ela casa "Profile" DENTRO do nome da classe
+    // (`ProfilePrivilegeEscalationException`) e falha pela razão errada — o
+    // vazamento medido é o MOTIVO, não o nome. Aqui é o vocabulário de
+    // política que não pode aparecer.
+    expect(excecao.message).not.toMatch(/não concede|não tem|isAdmin/i);
+    // O motivo continua existindo — para o LOG do servidor, que é quem
+    // precisa distinguir auto-concessão de fail-closed.
+    expect(excecao.motivo).toBe(motivo);
+  });
+
   // ─── A4: entrada inválida é 400, não 500 ─────────────────────────────────
   //
   // `Profile.criar`/`adicionarAutorizacao` lançavam `Error` puro quando a
