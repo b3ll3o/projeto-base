@@ -19,14 +19,17 @@ export default async function MeProfilePage(): Promise<React.JSX.Element> {
   }
 
   return (
-    <main className="me-profile-page">
-      <h1>Meu perfil</h1>
+    // pt-BR: `me-profile-page` não existe em `globals.css` — a tela renderizava
+    // como texto solto, sem hierarquia visível. Mesmos utilitários de `/users`
+    // e `/login`, que são o padrão do resto do app.
+    <main className="mx-auto max-w-3xl p-8">
+      <h1 className="text-2xl font-semibold text-slate-900">Meu perfil</h1>
 
-      <section>
-        <h2>Identidade</h2>
-        <dl>
-          <dt>Perfil</dt>
-          <dd>
+      <section className="mt-8">
+        <h2 className="text-lg font-medium text-slate-900">Identidade</h2>
+        <dl className="mt-3 space-y-2 text-sm">
+          <dt className="font-medium text-slate-500">Perfil</dt>
+          <dd className="text-slate-900">
             {me.profileName !== null ? (
               <>
                 <strong>{me.profileName}</strong> <code>({me.profileSlug})</code>
@@ -35,24 +38,24 @@ export default async function MeProfilePage(): Promise<React.JSX.Element> {
               <em>Sem perfil — deny-by-default</em>
             )}
           </dd>
-          <dt>Admin?</dt>
-          <dd>{me.isAdmin ? 'Sim (bypass total)' : 'Não'}</dd>
+          <dt className="font-medium text-slate-500">Admin?</dt>
+          <dd className="text-slate-900">{me.isAdmin ? 'Sim (bypass total)' : 'Não'}</dd>
         </dl>
       </section>
 
-      <section>
-        <h2>Permissões ({me.permissions.length})</h2>
+      <section className="mt-8">
+        <h2 className="text-lg font-medium text-slate-900">Permissões ({me.permissions.length})</h2>
         {me.permissions.length === 0 ? (
-          <p>
+          <p className="mt-3 text-sm text-slate-500">
             <em>
               Sem permissões explícitas.{' '}
               {me.isAdmin ? 'Mas você é admin, então passa em qualquer guard.' : ''}
             </em>
           </p>
         ) : (
-          <ul>
+          <ul className="mt-3 space-y-1">
             {me.permissions.map((k) => (
-              <li key={k}>
+              <li key={k} className="text-sm text-slate-900">
                 <code>{k}</code>
               </li>
             ))}

@@ -21,9 +21,9 @@ export default async function AdminProfilesPage(): Promise<React.JSX.Element> {
   const me = await obterMeuPerfil();
   if (me === null || me.isAdmin !== true) {
     return (
-      <main>
-        <h1>Acesso restrito</h1>
-        <p>Esta página exige perfil de administrador.</p>
+      <main className="mx-auto max-w-3xl p-8">
+        <h1 className="text-2xl font-semibold text-slate-900">Acesso restrito</h1>
+        <p className="mt-1 text-sm text-slate-500">Esta página exige perfil de administrador.</p>
       </main>
     );
   }
@@ -31,36 +31,43 @@ export default async function AdminProfilesPage(): Promise<React.JSX.Element> {
   const profiles = await listarPerfis();
 
   return (
-    <main>
-      <h1>Perfis de acesso</h1>
+    <main className="mx-auto max-w-3xl p-8">
+      <h1 className="text-2xl font-semibold text-slate-900">Perfis de acesso</h1>
 
-      <p>
-        <Link href="/admin/profiles/new">+ Novo perfil</Link>
+      <p className="mt-4">
+        <Link
+          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+          href="/admin/profiles/new"
+        >
+          + Novo perfil
+        </Link>
       </p>
 
-      <table>
+      <table className="mt-6 w-full border-collapse text-sm">
         <thead>
-          <tr>
-            <th>Slug</th>
-            <th>Nome</th>
-            <th>Admin?</th>
-            <th>Sistema?</th>
-            <th>Permissões</th>
-            <th></th>
+          <tr className="border-b border-slate-200 text-left">
+            <th className="py-2 pr-4 font-medium text-slate-500">Slug</th>
+            <th className="py-2 pr-4 font-medium text-slate-500">Nome</th>
+            <th className="py-2 pr-4 font-medium text-slate-500">Admin?</th>
+            <th className="py-2 pr-4 font-medium text-slate-500">Sistema?</th>
+            <th className="py-2 pr-4 font-medium text-slate-500">Permissões</th>
+            <th className="py-2"></th>
           </tr>
         </thead>
         <tbody>
           {profiles.map((p) => (
-            <tr key={p.id}>
-              <td>
+            <tr key={p.id} className="border-b border-slate-100">
+              <td className="py-3 pr-4">
                 <code>{p.slug}</code>
               </td>
-              <td>{p.name}</td>
-              <td>{p.isAdmin ? '✅' : '—'}</td>
-              <td>{p.isSystem ? '✅' : '—'}</td>
-              <td>{p.permissionCount}</td>
-              <td>
-                <Link href={`/admin/profiles/${p.slug}`}>editar</Link>
+              <td className="py-3 pr-4 text-slate-900">{p.name}</td>
+              <td className="py-3 pr-4">{p.isAdmin ? '✅' : '—'}</td>
+              <td className="py-3 pr-4">{p.isSystem ? '✅' : '—'}</td>
+              <td className="py-3 pr-4">{p.permissionCount}</td>
+              <td className="py-3">
+                <Link className="text-slate-700 underline" href={`/admin/profiles/${p.slug}`}>
+                  editar
+                </Link>
               </td>
             </tr>
           ))}

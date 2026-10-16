@@ -130,9 +130,12 @@ describe('leitura de perfis', () => {
     for (const p of callPaths('get')) expect(p).not.toContain(SLUG);
   });
 
-  it('obterPerfilPorSlug propaga 404 quando o slug não existe em lugar nenhum', async () => {
+  it('obterPerfilPorSlug devolve null quando o slug não existe em lugar nenhum', async () => {
+    // O título antigo prometia "propaga 404" e a asserção era `rejects.toThrow()`
+    // sem tipo nem status — qualquer erro passava, então o teste não distinguia
+    // "não encontrado" de 500. O contrato agora é `null`, e a página decide.
     clientMock.get.mockResolvedValueOnce([{ id: ID, slug: 'outro' }]);
-    await expect(obterPerfilPorSlug(SLUG)).rejects.toThrow();
+    await expect(obterPerfilPorSlug(SLUG)).resolves.toBeNull();
   });
 });
 

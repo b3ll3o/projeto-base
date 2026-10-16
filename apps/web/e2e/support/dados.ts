@@ -513,9 +513,9 @@ export async function apagarUsuario(email: string, id: string, version: number):
  */
 export async function limparBase(): Promise<void> {
   await sessaoDoHarness();
-  prismaDoE2E ??= new PrismaClient({ datasourceUrl: exigirEstado().databaseUrl });
+  const prisma = prismaE2E();
   try {
-    await cleanDatabase(prismaDoE2E);
+    await cleanDatabase(prisma);
   } catch {
     // MEDIDO 2026-10-14: o F5 PARA o Postgres de propósito (é o caminho "rede
     // caída"), e o `afterEach` do `describe` o levanta antes do `beforeEach`
@@ -527,9 +527,34 @@ export async function limparBase(): Promise<void> {
     // Reconectar e repetir é o conserto; repetir sem reconectar não é — e se a
     // segunda também falhar, ela sobe com a mensagem do servidor em vez da
     // primeira, que é a que mentia sobre a causa.
-    await prismaDoE2E.$disconnect();
-    await cleanDatabase(prismaDoE2E);
+    await prisma.$disconnect();
+    await cleanDatabase(prisma);
   }
 }
 
 let prismaDoE2E: PrismaClient | undefined;
+
+/**
+ * O ÚNICO `PrismaClient` do worker de e2e — e o motivo de ser único é o
+ * `catch` de {@link limparBase}.
+ *
+ * MEDIDO 2026-10-16 (CI run 38978299713, `quality` vermelho): o F5 derruba o
+ * Postgres de propósito, e o `docker stop` fecha o lado do servidor de TODAS as
+ * conexões abertas. O `/health` voltando a 200 prova que o Postgres restarted —
+ * não que as conexões que o pool do Prisma já tinha voltaram, porque elas
+ * morreram com o container. Por isso o `catch` reconecta e repete.
+ *
+ * Havia um segundo cliente, em `rbac.ts`, que ninguém curava: `semearPerfil()`
+ * recebia `Server has closed the connection` e derrubava o F9 inteiro. Passava
+ * isolado e falhava na suíte completa, porque o Playwright REUSA o processo do
+ * worker entre arquivos — então a conexão morta do container do F5 sobrevivia
+ * dentro do processo em que o F9 roda.
+ *
+ * Consequência a levar junto: um `PrismaClient` novo neste diretório não é uma
+ * escolha de estilo, é um pool sem a recuperação, e volta a ser um flake que
+ * só aparece em suíte completa — a forma de falha mais cara de diagnosticar.
+ */
+export function prismaE2E(): PrismaClient {
+  prismaDoE2E ??= new PrismaClient({ datasourceUrl: exigirEstado().databaseUrl });
+  return prismaDoE2E;
+}

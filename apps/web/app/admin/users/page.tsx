@@ -31,8 +31,9 @@ export default async function AdminUsersPage(): Promise<React.JSX.Element> {
   const me = await obterMeuPerfil();
   if (me === null || me.isAdmin !== true) {
     return (
-      <main>
-        <h1>Acesso restrito</h1>
+      <main className="mx-auto max-w-3xl p-8">
+        <h1 className="text-2xl font-semibold text-slate-900">Acesso restrito</h1>
+        <p className="mt-1 text-sm text-slate-500">Esta página exige perfil de administrador.</p>
       </main>
     );
   }
@@ -64,31 +65,41 @@ export default async function AdminUsersPage(): Promise<React.JSX.Element> {
   }
 
   return (
-    <main>
-      <h1>Atribuir perfis</h1>
+    <main className="mx-auto max-w-3xl p-8">
+      <h1 className="text-2xl font-semibold text-slate-900">Atribuir perfis</h1>
 
-      <table>
+      <table className="mt-6 w-full border-collapse text-sm">
         <thead>
-          <tr>
-            <th>Nome</th>
-            <th>Email</th>
-            <th>Perfil atual</th>
-            <th>Atribuir</th>
+          <tr className="border-b border-slate-200 text-left">
+            <th className="py-2 pr-4 font-medium text-slate-500">Nome</th>
+            <th className="py-2 pr-4 font-medium text-slate-500">Email</th>
+            <th className="py-2 pr-4 font-medium text-slate-500">Perfil atual</th>
+            <th className="py-2 font-medium text-slate-500">Atribuir</th>
           </tr>
         </thead>
         <tbody>
           {users.map((u) => {
             const atual = profiles.find((p) => p.id === u.profileId);
             return (
-              <tr key={u.id}>
-                <td>{u.nome}</td>
-                <td>{u.email}</td>
-                <td>{atual ? <code>{atual.slug}</code> : <em>sem perfil</em>}</td>
-                <td>
-                  <form action={atribuir} style={{ display: 'inline-block' }}>
+              <tr key={u.id} className="border-b border-slate-100">
+                <td className="py-3 pr-4 text-slate-900">{u.nome}</td>
+                <td className="py-3 pr-4">{u.email}</td>
+                <td className="py-3 pr-4">
+                  {atual ? <code>{atual.slug}</code> : <em>sem perfil</em>}
+                </td>
+                <td className="py-3">
+                  <form action={atribuir} className="flex items-center gap-2">
                     <input type="hidden" name="userId" value={u.id} />
                     <input type="hidden" name="profileIdAtual" value={u.profileId ?? ''} />
-                    <select name="profileId" defaultValue={atual?.id ?? ''}>
+                    {/* pt-BR: sem nome acessível o leitor de tela anuncia um
+                        combo box anônimo, 1× por linha. `aria-label` não cria
+                        elemento — a estrutura que o e2e mede fica igual. */}
+                    <select
+                      aria-label={`Perfil de ${u.email}`}
+                      className="rounded-md border border-slate-300 px-2 py-1 text-sm"
+                      defaultValue={atual?.id ?? ''}
+                      name="profileId"
+                    >
                       <option value="">— sem perfil —</option>
                       {profiles.map((p) => (
                         <option key={p.id} value={p.id}>
@@ -96,7 +107,12 @@ export default async function AdminUsersPage(): Promise<React.JSX.Element> {
                         </option>
                       ))}
                     </select>
-                    <button type="submit">Salvar</button>
+                    <button
+                      type="submit"
+                      className="rounded-md border border-slate-300 px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                    >
+                      Salvar
+                    </button>
                   </form>
                 </td>
               </tr>

@@ -230,6 +230,33 @@ describe('ApiClient — respostas não-OK', () => {
       't',
     );
   });
+
+  it('corpo de erro NÃO-JSON (502 de proxy) vira ApiError, não SyntaxError cru', async () => {
+    // pt-BR: o corpo de erro de um gateway é HTML. `res.json()` estourava
+    // `SyntaxError` DENTRO do try do `request()`, o catch repassava a exceção
+    // crua e `err instanceof ApiError` ficava falso — o 401→login de `/users`
+    // nunca acontecia. `Response` real, então o corpo não-JSON é de verdade.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response('<html><body>502 Bad Gateway</body></html>', { status: 502 }),
+      );
+    const client = new ApiClient({ baseUrl: 'http://api' });
+
+    const err = await client
+      .get('/users', { fetch: fetchMock as unknown as typeof fetch })
+      .then(() => null)
+      .catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(ApiError);
+    const apiError = err as ApiError;
+    expect(apiError.status).toBe(502);
+    expect(apiError.code).toBe('UNKNOWN');
+    expect(apiError.message).toBe('Erro 502');
+    // `comTraceId` decide por truthiness: string vazia não gera o sufixo
+    // "Código de rastreamento: ." na tela.
+    expect(apiError.problem.traceId).toBe('');
+  });
 });
 
 describe('ApiError class', () => {
