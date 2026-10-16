@@ -24,6 +24,18 @@ import {
   ApplicationInvalidRestoreException,
   ApplicationEmailAlreadyInUseException,
 } from '../../../modules/users/application/exceptions/application.exceptions.js';
+import {
+  ProfileNotFoundException,
+  ProfileSlugAlreadyInUseException,
+  ProfileSystemProtectedException,
+  ProfileAdminProtectedException,
+  ProfileHasUsersException,
+  ProfilePrivilegeEscalationException,
+  AuthorizationAlreadyAssignedException,
+  AuthorizationNotFoundException,
+  ConcurrencyException as ProfileConcurrencyException,
+} from '../../../modules/profiles/domain/exceptions/profile.exceptions.js';
+import { InvalidPermissionKeyException } from '../../../modules/profiles/domain/value-objects/authorization-key.vo.js';
 
 describe('mapExceptionToHttp (domain layer)', () => {
   it('UserNotFound → 404 USER_NOT_FOUND', () => {
@@ -212,5 +224,150 @@ describe('mapExceptionToHttp — InvalidToken (Fase 6)', () => {
 
   it('sobrevive ao `instanceof` vindo de outro arquivo já transpilado', () => {
     expect(new InvalidTokenException('x')).toBeInstanceOf(InvalidTokenException);
+  });
+});
+
+// pt-BR (#97): antes desta seção o mapper não tinha NENHUMA linha do BC
+// Profiles. Toda exceção de profiles caía no fall-through e virava
+// 500 INTERNAL — inclusive "profile não encontrado" (404) e "slug já em
+// uso" (409). O sintoma em produção: toda chamada admin respondia 500.
+describe('mapExceptionToHttp — BC Profiles (#97)', () => {
+  const casos: ReadonlyArray<readonly [string, Error, number, string]> = [
+    [
+      'ProfileNotFoundException',
+      new ProfileNotFoundException('p-1'),
+      HttpStatus.NOT_FOUND,
+      'PROFILE_NOT_FOUND',
+    ],
+    [
+      'ProfileSlugAlreadyInUseException',
+      new ProfileSlugAlreadyInUseException('admin'),
+      HttpStatus.CONFLICT,
+      'PROFILE_SLUG_IN_USE',
+    ],
+    [
+      'ProfileSystemProtectedException',
+      new ProfileSystemProtectedException('p-1'),
+      HttpStatus.FORBIDDEN,
+      'PROFILE_SYSTEM_PROTECTED',
+    ],
+    [
+      'ProfileAdminProtectedException',
+      new ProfileAdminProtectedException('p-1'),
+      HttpStatus.FORBIDDEN,
+      'PROFILE_ADMIN_PROTECTED',
+    ],
+    [
+      'ProfilePrivilegeEscalationException',
+      new ProfilePrivilegeEscalationException('auto-concessão'),
+      HttpStatus.FORBIDDEN,
+      'PRIVILEGE_ESCALATION',
+    ],
+    [
+      'ProfileHasUsersException',
+      new ProfileHasUsersException('viewer', 3),
+      HttpStatus.CONFLICT,
+      'PROFILE_HAS_USERS',
+    ],
+    [
+      'AuthorizationAlreadyAssignedException',
+      new AuthorizationAlreadyAssignedException('p-1', 'users.read'),
+      HttpStatus.CONFLICT,
+      'AUTHORIZATION_ALREADY_ASSIGNED',
+    ],
+    [
+      'AuthorizationNotFoundException',
+      new AuthorizationNotFoundException('p-1', 'users.read'),
+      HttpStatus.NOT_FOUND,
+      'AUTHORIZATION_NOT_FOUND',
+    ],
+    [
+      'ConcurrencyException (profiles)',
+      new ProfileConcurrencyException('Profile', 1, 2),
+      HttpStatus.CONFLICT,
+      'CONCURRENCY_CONFLICT',
+    ],
+  ];
+
+  for (const [nome, erro, status, code] of casos) {
+    it(`${nome} → ${status} ${code}`, () => {
+      const m = mapExceptionToHttp(erro);
+      expect(m.status).toBe(status);
+      expect(m.code).toBe(code);
+    });
+
+    // A asserção que realmente importa: sem entrada no mapper a exceção
+    // NÃO falha — ela vira 500 e o teste de "status" acima ficaria verde
+    // por acidente se o esperado fosse também 500.
+    it(`${nome} NÃO cai no fall-through 500`, () => {
+      expect(mapExceptionToHttp(erro).status).not.toBe(HttpStatus.INTERNAL_SERVER_ERROR);
+    });
+  }
+
+  it('as DUAS ConcurrencyException são classes distintas e não se confundem', () => {
+    // A de `users` é 412 (optimistic lock com versão do cliente); a de
+    // `profiles` é 409 (divergência interna do save). São classes
+    // separadas em arquivos separados — se alguém unificasse os nomes sem
+    // unificar a semântica, uma das duas viraria 500.
+    const deUser = mapExceptionToHttp(new ConcurrencyException(1, 2));
+    const deProfile = mapExceptionToHttp(new ProfileConcurrencyException('Profile', 1, 2));
+    expect(deUser.status).toBe(HttpStatus.PRECONDITION_FAILED);
+    expect(deProfile.status).toBe(HttpStatus.CONFLICT);
+  });
+
+  it('o título da escalada não vaza o motivo interno', () => {
+    const m = mapExceptionToHttp(
+      new ProfilePrivilegeEscalationException('ator sem isAdmin não altera o próprio profile'),
+    );
+    expect(m.title).toBe('Escalada de privilégio bloqueada');
+    expect(m.title).not.toMatch(/isAdmin|profile|ator/i);
+  });
+
+  // pt-BR (#97, B5): o teste acima é verde e o vazamento continuava. Motivo:
+  // ele afirma sobre `title`, que o mapper higieniza — mas é o
+  // `GlobalExceptionFilter` que monta `detail: exception.message`. O motivo
+  // crudo saía pelo campo que NENHUMA spec asserta. Sanitizar `title` não
+  // fecha nada; o que fecha é a MENSAGEM da exceção não carregar política,
+  // exatamente como a `InvalidTokenException` faz (ver `token.exceptions.ts`).
+  it('a mensagem da escalada NÃO carrega o motivo — é por ela que o `detail` vaza', () => {
+    const motivo = 'ator sem isAdmin não altera o próprio profile';
+    const excecao = new ProfilePrivilegeEscalationException(motivo);
+
+    expect(excecao.message).not.toContain(motivo);
+    // ⚠️ A regex não pode ser `/isAdmin|profile|ator/i` como a do teste de
+    // `title` acima: ela casa "Profile" DENTRO do nome da classe
+    // (`ProfilePrivilegeEscalationException`) e falha pela razão errada — o
+    // vazamento medido é o MOTIVO, não o nome. Aqui é o vocabulário de
+    // política que não pode aparecer.
+    expect(excecao.message).not.toMatch(/não concede|não tem|isAdmin/i);
+    // O motivo continua existindo — para o LOG do servidor, que é quem
+    // precisa distinguir auto-concessão de fail-closed.
+    expect(excecao.motivo).toBe(motivo);
+  });
+
+  // ─── A4: entrada inválida é 400, não 500 ─────────────────────────────────
+  //
+  // `Profile.criar`/`adicionarAutorizacao` lançavam `Error` puro quando a
+  // chave não constava do catálogo, e o mapper não conhece `Error`: o
+  // `POST /admin/profiles/p/authorizations {"permissionKey":"typo"}`
+  // respondia 500 — o erro é do CALLER, não do servidor.
+
+  it('InvalidPermissionKeyException → 400 INVALID_PERMISSION_KEY (não 500)', () => {
+    const m = mapExceptionToHttp(new InvalidPermissionKeyException('chave.typo'));
+    expect(m.status).toBe(HttpStatus.BAD_REQUEST);
+    expect(m.code).toBe('INVALID_PERMISSION_KEY');
+    expect(m.errors?.[0]?.field).toBe('permissionKey');
+  });
+
+  it('slug malformado é 400 VALIDATION_ERROR e slug duplicado é 409 (nomes distintos)', () => {
+    // `ProfileSlug.create` já lança `UserValidationException` — o use case
+    // é que usava `ProfileSlugAlreadyInUseException` para o slug inválido.
+    const malformado = mapExceptionToHttp(new UserValidationException('slug', 'kebab-case'));
+    const duplicado = mapExceptionToHttp(new ProfileSlugAlreadyInUseException('admin'));
+
+    expect(malformado.status).toBe(HttpStatus.BAD_REQUEST);
+    expect(malformado.code).toBe('VALIDATION_ERROR');
+    expect(duplicado.status).toBe(HttpStatus.CONFLICT);
+    expect(duplicado.code).toBe('PROFILE_SLUG_IN_USE');
   });
 });

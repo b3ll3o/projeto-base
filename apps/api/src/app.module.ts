@@ -9,6 +9,7 @@ import { PrismaModule } from './shared/infrastructure/prisma/prisma.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
+import { ProfilesModule } from './modules/profiles/profiles.module.js';
 
 const REDACT_PATHS = ['req.headers.authorization', 'req.headers.cookie'] as const;
 
@@ -39,6 +40,10 @@ const REDACT_PATHS = ['req.headers.authorization', 'req.headers.cookie'] as cons
     HealthModule,
     AuthModule,
     UsersModule,
+    // pt-BR (#93.1 — RBAC, 2026-10-16): ProfilesModule (controllers admin
+    // + use cases). UserProfileCacheService é singleton (registrado em
+    // AuthModule e UsersModule também — Nest deduplica).
+    ProfilesModule,
   ],
   // #72: registra ThrottlerGuard globalmente via APP_GUARD (injetado pelo
   // container do Nest, sem precisar instanciar manualmente no main.ts).

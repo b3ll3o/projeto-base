@@ -14,32 +14,34 @@
 import { describe, it, expect, vi, type Mock } from 'vitest';
 import { ApiClient, ApiError } from './api-client.js';
 
-interface FetchResult {
-  ok: boolean;
-  status: number;
-  json: Mock;
+// pt-BR (#97): os dois helpers abaixo devolvem uma `Response` DE VERDADE do
+// runtime, e não um objeto com `json` mockado. O motivo é histórico: com
+// `json: vi.fn().mockResolvedValue(...)` o mock RESOLVE MESMO SEM CORPO, e o
+// `res.json()` incondicional do `request()` passava o teste enquanto
+// `DELETE /admin/profiles/:id` — que é `Promise<void>`, corpo vazio — estourava
+// `SyntaxError: Unexpected end of JSON input` em toda chamada real. Um teste
+// que só passa porque o mock mente sobre a plataforma é pior que nenhum.
+// Com `Response` real, corpo vazio rejeita, que é o comportamento do runtime.
+function makeFetchOk(body: unknown = { ok: true }): { fetch: Mock } {
+  const fetchMock = vi
+    .fn()
+    .mockImplementation(() => Promise.resolve(new Response(JSON.stringify(body), { status: 200 })));
+  return { fetch: fetchMock };
 }
 
-function makeFetchOk(body: unknown = { ok: true }): { fetch: Mock; responses: FetchResult[] } {
-  const responses: FetchResult[] = [];
-  const fetchMock = vi.fn().mockImplementation(() => {
-    const r: FetchResult = {
-      ok: true,
-      status: 200,
-      json: vi.fn().mockResolvedValue(body),
-    };
-    responses.push(r);
-    return Promise.resolve(r);
-  });
-  return { fetch: fetchMock, responses };
+/** Corpo vazio de verdade — o que um endpoint `Promise<void>` devolve. */
+function makeFetchOkVazio(status = 204): { fetch: Mock } {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status }));
+  return { fetch: fetchMock };
 }
 
 function makeFetchNotOk(body: Record<string, unknown>, status = 404): { fetch: Mock } {
-  const fetchMock = vi.fn().mockResolvedValue({
-    ok: false,
-    status,
-    json: vi.fn().mockResolvedValue(body),
-  });
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    }),
+  );
   return { fetch: fetchMock };
 }
 
@@ -104,6 +106,37 @@ describe('ApiClient — body handling', () => {
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(init.method).toBe('DELETE');
     expect(init.body).toBeUndefined();
+  });
+
+  // pt-BR (#97): o teste que não existia e que escondia M2.
+  // `DELETE /admin/profiles/:id` é `Promise<void>` no controller — a API
+  // responde 204 sem corpo. `res.json()` incondicional lança
+  // `SyntaxError: Unexpected end of JSON input` e `deletarPerfil` falhava em
+  // TODA chamada real, com a suíte inteira verde.
+  it('DELETE com resposta sem corpo resolve em vez de lançar SyntaxError', async () => {
+    const { fetch: fetchMock } = makeFetchOkVazio();
+    const client = new ApiClient({ baseUrl: 'http://api' });
+    await expect(
+      client.delete<void>('/admin/profiles/p-1', { fetch: fetchMock as unknown as typeof fetch }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('204 sem corpo também é tolerado em GET (qualquer endpoint void)', async () => {
+    // A proteção é de `request()`, não do método: um GET que resolve vazio
+    // não pode virar SyntaxError só porque o controller devolveu 204.
+    const { fetch: fetchMock } = makeFetchOkVazio();
+    const client = new ApiClient({ baseUrl: 'http://api' });
+    await expect(
+      client.get('/admin/profiles/p-1', { fetch: fetchMock as unknown as typeof fetch }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('200 com corpo JSON segue devolvendo o corpo parseado (não regrediu)', async () => {
+    const { fetch: fetchMock } = makeFetchOk({ id: 'p-1' });
+    const client = new ApiClient({ baseUrl: 'http://api' });
+    await expect(
+      client.get('/admin/profiles/p-1', { fetch: fetchMock as unknown as typeof fetch }),
+    ).resolves.toEqual({ id: 'p-1' });
   });
 });
 

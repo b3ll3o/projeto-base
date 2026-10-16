@@ -114,4 +114,14 @@ export async function cleanDatabase(prisma: PrismaClient): Promise<void> {
   await prisma.userArchive.deleteMany({});
   await prisma.userHistory.deleteMany({});
   await prisma.user.deleteMany({});
+  // `profiles`/`authorizations` (RBAC, #97): as tabelas passaram a existir DEPOIS
+  // deste helper, e a ausência era silenciosa — o primeiro spec e2e que criava
+  // um profile levou `Unique constraint (slug)` em todos os testes, que parece
+  // falha do spec e é falha de isolamento.
+  //
+  // Ordem: `users` ANTES. `User.profileId` é `onDelete: Restrict`, então apagar
+  // um profile ainda referenciado por um usuário rebenta; apagando as users
+  // primeiro não existe referência pendente. As `authorizations` caem por
+  // cascade (`Profile` → `Authorization` é `onDelete: Cascade`).
+  await prisma.profile.deleteMany({});
 }

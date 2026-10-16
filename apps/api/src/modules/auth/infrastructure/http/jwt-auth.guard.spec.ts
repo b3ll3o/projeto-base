@@ -88,7 +88,20 @@ function makeContext(options: {
 }
 
 function makeGuard(issuer: TokenIssuerPort): JwtAuthGuard {
-  return new JwtAuthGuard(issuer, new Reflector());
+  return new JwtAuthGuard(issuer, new Reflector(), {
+    async getUserProfileAndPermissions() {
+      return null;
+    },
+    async setUserProfileAndPermissions() {
+      /* noop */
+    },
+    async invalidateUser() {
+      /* noop */
+    },
+    async invalidateAll() {
+      /* noop */
+    },
+  } as never);
 }
 
 /** Executa o guard e devolve a exceção capturada, falhando o teste se NÃO houver. */
@@ -121,8 +134,12 @@ describe('JwtAuthGuard — token válido', () => {
     const allowed = await guard.canActivate(ctx);
 
     expect(allowed).toBe(true);
-    const request = ctx.switchToHttp().getRequest<{ user?: TokenSubject }>();
-    expect(request.user).toEqual(ACCESS_SUBJECT);
+    const request = ctx.switchToHttp().getRequest<{
+      user?: TokenSubject & { isAdmin: boolean; permissions: string[] };
+    }>();
+    // pt-BR (#93.1 — RBAC, 2026-10-16): guard adiciona `isAdmin`/`permissions`
+    // (cache lookup). Sem cache hit, default = `false`/`[]`.
+    expect(request.user).toEqual({ ...ACCESS_SUBJECT, isAdmin: false, permissions: [] });
   });
 
   it('consulta validarAccessToken com o token SEM o prefixo "Bearer "', async () => {

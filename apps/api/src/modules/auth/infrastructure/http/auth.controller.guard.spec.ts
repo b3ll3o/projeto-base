@@ -50,6 +50,7 @@ import {
 } from '../../domain/ports/token-issuer.port.js';
 import { AUTH_USE_CASES } from '../../application/auth-use-cases.js';
 import { GlobalExceptionFilter } from '../../../../shared/infrastructure/http/global-exception.filter.js';
+import { UserProfileCacheService } from '../../../../shared/infrastructure/security/user-profile-cache.service.js';
 
 const SUB = '0190a8b6-0000-7000-8000-000000000001';
 const EMAIL = 'joao@example.com';
@@ -111,6 +112,23 @@ describe('AuthController — fronteira de autenticação (Fase 6.1)', () => {
         { provide: AUTH_USE_CASES, useValue: useCases },
         { provide: TOKEN_ISSUER_PORT, useValue: issuer },
         JwtAuthGuard,
+        {
+          provide: UserProfileCacheService,
+          useValue: {
+            async getUserProfileAndPermissions() {
+              return null;
+            },
+            async setUserProfileAndPermissions() {
+              /* noop */
+            },
+            async invalidateUser() {
+              /* noop */
+            },
+            async invalidateAll() {
+              /* noop */
+            },
+          },
+        },
       ],
     }).compile();
 
@@ -200,6 +218,23 @@ describe('AuthController — fronteira de autenticação (Fase 6.1)', () => {
         { provide: AUTH_USE_CASES, useValue: makeUseCases() },
         { provide: TOKEN_ISSUER_PORT, useValue: sabota },
         JwtAuthGuard,
+        {
+          provide: UserProfileCacheService,
+          useValue: {
+            async getUserProfileAndPermissions() {
+              return null;
+            },
+            async setUserProfileAndPermissions() {
+              /* noop */
+            },
+            async invalidateUser() {
+              /* noop */
+            },
+            async invalidateAll() {
+              /* noop */
+            },
+          },
+        },
       ],
     }).compile();
     const sabotaApp = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());

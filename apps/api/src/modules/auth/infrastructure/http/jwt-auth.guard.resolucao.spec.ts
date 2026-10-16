@@ -73,6 +73,9 @@ describe('JwtAuthGuard — resolução no grafo real do AuthModule (Fase 6.1)', 
     ).toBeDefined();
     expect(guard['reflector']).toBeInstanceOf(Reflector);
     expect(guard['tokenIssuer']).toBeInstanceOf(JwtTokenService);
+    // pt-BR (#93.1 — RBAC, 2026-10-16): cache também precisa resolver
+    // (a 3ª dependência do JwtAuthGuard).
+    expect(guard['profileCache'], 'o cache de profile não resolveu').toBeDefined();
 
     // E o método precisa existir de fato (a classe certa, não um stub).
     expect(typeof guard['canActivate']).toBe('function');

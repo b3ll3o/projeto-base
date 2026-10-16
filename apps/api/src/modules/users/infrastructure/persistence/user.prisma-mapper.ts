@@ -21,6 +21,9 @@ export interface UserRow {
    * que impede o hash de ser projetado num `select` de listagem.
    */
   passwordHash: string;
+  // pt-BR (#93.1 — RBAC, 2026-10-16): FK para profiles. Null = sem
+  // permissões (deny-by-default). Persistido como `profile_id` no DB.
+  profileId: string | null;
   createdAt: Date;
   updatedAt: Date;
   createdBy: string | null;
@@ -41,6 +44,8 @@ export interface UserPersistenceRow {
    * nomeada: `.value` no getter `senhaHash()`. Ninguém mais deve ler.
    */
   passwordHash: string;
+  // pt-BR (#93.1 — RBAC, 2026-10-16): persistido como `profile_id`.
+  profileId: string | null;
   createdAt: Date;
   updatedAt: Date;
   createdBy: string | null;
@@ -131,6 +136,7 @@ export const UserPrismaMapper = {
       nome: row.name, // schema 'name' → domain 'nome'
       email: row.email,
       senhaHash: hidratarSenhaHash(row.passwordHash),
+      profileId: row.profileId,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       version: row.version,
@@ -144,6 +150,7 @@ export const UserPrismaMapper = {
       email: user.email().value,
       name: user.nome().value,
       passwordHash: user.senhaHash().value,
+      profileId: user.profileId(),
       createdAt: user.createdAt(),
       updatedAt: user.updatedAt(),
       createdBy: null,

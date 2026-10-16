@@ -17,3 +17,12 @@ export type {
   ProblemDetailsDto,
   ProblemDetailsError,
 } from './user.js';
+
+export type {
+  ProfileSummary,
+  ProfileDetail,
+  MeProfileDto,
+  CreateProfileInputDto,
+  UpdateProfileInputDto,
+  AssignProfileInputDto,
+} from './profile.js';

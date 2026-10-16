@@ -58,6 +58,10 @@ export class User {
   // mutator que faz `version++` — não por escrita direta. Um `#senhaHash`
   // mutável seria uma segunda porta, e nenhuma delas emite evento.
   #senhaHash: PasswordHash;
+  // pt-BR (#93.1 — RBAC, 2026-10-16): profileId do RBAC. Null = sem
+  // permissões (deny-by-default). Mutator `atribuirPerfil()` faz version++.
+  // O UserRepositoryPort.save() persiste o campo como `profile_id`.
+  #profileId: string | null;
   readonly #createdAt: Date;
   #updatedAt: Date;
   #version: number;
@@ -69,6 +73,7 @@ export class User {
     name: UserName;
     email: Email;
     senhaHash: PasswordHash;
+    profileId: string | null;
     createdAt: Date;
     updatedAt: Date;
     version: number;
@@ -78,6 +83,7 @@ export class User {
     this.#name = props.name;
     this.#email = props.email;
     this.#senhaHash = exigirPasswordHash(props.senhaHash);
+    this.#profileId = props.profileId;
     this.#createdAt = props.createdAt;
     this.#updatedAt = props.updatedAt;
     this.#version = props.version;
@@ -98,6 +104,7 @@ export class User {
     nome: string;
     email: string;
     senhaHash: PasswordHash;
+    profileId?: string | null;
     agora: Date;
   }): User {
     const id = UserId.create(props.id);
@@ -108,6 +115,7 @@ export class User {
       name: nome,
       email,
       senhaHash: props.senhaHash,
+      profileId: props.profileId ?? null,
       createdAt: props.agora,
       updatedAt: props.agora,
       version: 1,
@@ -126,6 +134,7 @@ export class User {
     nome: string;
     email: string;
     senhaHash: PasswordHash;
+    profileId: string | null;
     createdAt: Date;
     updatedAt: Date;
     version: number;
@@ -136,6 +145,7 @@ export class User {
       name: UserName.create(props.nome),
       email: Email.create(props.email),
       senhaHash: props.senhaHash,
+      profileId: props.profileId,
       createdAt: props.createdAt,
       updatedAt: props.updatedAt,
       version: props.version,
@@ -163,6 +173,14 @@ export class User {
    */
   senhaHash(): PasswordHash {
     return this.#senhaHash;
+  }
+  /**
+   * pt-BR (#93.1 — RBAC, 2026-10-16): profileId do user. Null = sem
+   * permissões (deny-by-default no guard). Mutator `atribuirPerfil()`
+   * é o ÚNICO caminho de escrita.
+   */
+  profileId(): string | null {
+    return this.#profileId;
   }
   createdAt(): Date {
     return this.#createdAt;
@@ -234,6 +252,30 @@ export class User {
     }
     const previousVersion = this.#version;
     this.#senhaHash = exigirPasswordHash(novoHash);
+    this.#updatedAt = agora;
+    this.#version = previousVersion + 1;
+    this.#events.push(new UserUpdatedEvent(this.#id.value, this.#version, previousVersion, agora));
+  }
+
+  /**
+   * pt-BR (#93.1 — RBAC, 2026-10-16): atribui (ou remove, com null) o
+   * profile do user. Bumpa version e emite UserUpdatedEvent. Lança
+   * UserDeletedException se o user está soft-deleted (não dá pra
+   * alterar uma conta que foi removida).
+   *
+   * O caller (use case) valida que o profileId existe antes de chamar
+   * — o agregado confia que a referência é válida. O repository tem
+   * a FK ON DELETE RESTRICT como rede de segurança.
+   */
+  atribuirPerfil(novoProfileId: string | null, agora: Date): void {
+    if (this.#deletedAt !== null) {
+      throw new UserDeletedException(this.#id.value);
+    }
+    if (this.#profileId === novoProfileId) {
+      return; // idempotente
+    }
+    const previousVersion = this.#version;
+    this.#profileId = novoProfileId;
     this.#updatedAt = agora;
     this.#version = previousVersion + 1;
     this.#events.push(new UserUpdatedEvent(this.#id.value, this.#version, previousVersion, agora));

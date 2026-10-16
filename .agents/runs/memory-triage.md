@@ -101,6 +101,7 @@ fazê-lo às cegas seria fabricar 39 linhas `citada` sem âncora verificada.
 
 | memória | disposição | alvo | âncora |
 |---|---|---|---|
+| `t7-rbac-feature-flag` | `removida` | memória ausente do corpus local; a âncora `listAllPermissions` existe em `apps/api/src/shared/auth/permissions-catalog.ts` | — |
 | `absent-tool-reads-as-approval` | `citada` | `.agents/runs/2026-10-05-guard-classes-autoauditoria.md` | `não há sintoma nenhum` |
 | `a-detector-that-fabricates-its-finding` | `pendente` | — | — |
 | `agent-evolution-and-memory` | `citada` | `.agents/specs/conventions/evolucao-agents.md` | `Agents e skills são entidades VIVAS` |

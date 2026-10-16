@@ -41,6 +41,11 @@ import { AuthModule } from '../auth/auth.module.js';
     // controller resolva a CLASSE (que é o token que o decorator usa),
     // independentemente de o `AuthModule` exportá-la pelo nome do slot.
     JwtAuthGuard,
+    // pt-BR (#97): `UserProfileCacheService` saiu daqui. Redeclarar o
+    // provider criava uma TERCEIRA instância do cache que ninguém consome
+    // — e o comentário afirmava "mesma instância", o que é falso: provider
+    // não é singleton, cada `providers: [X]` instancia. O AuthModule é o
+    // dono e o exporta (importado aqui na linha 34).
   ],
   exports: [USER_USE_CASES],
 })

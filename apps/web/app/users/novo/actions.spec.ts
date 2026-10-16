@@ -48,7 +48,10 @@ function problem(status: number, code: string, title: string, errors?: unknown[]
 }
 
 function okResponse(body: unknown = { id: 'u1' }) {
-  return { status: 201, ok: true, json: async () => body };
+  // pt-BR (#97): `text` junto de `json` — o `request()` lê o corpo via
+  // `text()` (para tolerar resposta vazia de endpoint `void`). Um fake com
+  // só `json` mente sobre a plataforma: `Response` real tem os dois.
+  return { status: 201, ok: true, json: async () => body, text: async () => JSON.stringify(body) };
 }
 
 /**
