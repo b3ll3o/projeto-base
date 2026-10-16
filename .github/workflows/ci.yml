@@ -117,18 +117,20 @@ jobs:
       # com `permissions: contents: read` como estava. Conceder
       # `pull-requests: read` seria trocar um arquivo por uma permissao nova.
       #
-      # O payload e um SNAPSHOT do momento do push. Editar o corpo depois nao
-      # dispara run (o tipo default de `pull_request` e opened/synchronize/
-      # reopened; `edited` nao esta nele), e um re-run entrega o payload
-      # antigo — a unica forma de o CI validar um corpo corrigido e o proximo
-      # push. MEDIDO no PR #53: corrigi a contagem depois de pushar, e a run
-      # seguinte reprovou com o corpo que eu ja tinha consertado.
-      # REGRA OPERACIONAL: ajuste o corpo ANTES de pushar.
+      # O payload e um SNAPSHOT do evento, entao um RE-RUN entrega o corpo
+      # velho — corrigir o corpo e reexecutar a run nao revalida nada. O que
+      # revalida e o proprio `edited`, que hoje esta em `types` no topo deste
+      # arquivo (listar `types` SUBSTITUI o padrao, entao os quatro precisam
+      # estar). MEDIDO no PR #93, 2026-10-15: a run 38840901582 reprovou com
+      # `5 claim(s) divergente(s)`; apos `PATCH` do corpo, a run 38841313926
+      # disparou no MESMO headSha `e27ecdb` (sem push de codigo) e o gate leu o
+      # corpo novo — `0 claim(s) divergente(s)`.
       #
-      # A semantica e a desejada — o gate valida o que foi submetido junto com
-      # o codigo, nao o que o corpo virou depois. O custo e ter que pushar de
-      # novo para revalidar, e ele e visivel (a run reprova) em vez de
-      # silencioso.
+      # MEDIDO no PR #53, antes de `edited` existir: corrigi a contagem depois
+      # de pushar e a run seguinte reprovou com o corpo ja consertado. O
+      # sintoma e o mesmo do que o `edited` conserta, entao "corrigi e nao
+      # revalidou" hoje significa DUAS coisas distintas: re-run (nao funciona)
+      # ou push/close-reopen (funciona). Nao confunda as duas.
       - name: Gate do marcador pr-refresh
         if: github.event_name == 'pull_request'
         env:

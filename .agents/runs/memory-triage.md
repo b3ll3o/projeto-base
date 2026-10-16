@@ -147,7 +147,7 @@ fazê-lo às cegas seria fabricar 39 linhas `citada` sem âncora verificada.
 | `pipe-stdout-dies-when-spawner-exits` | `pendente` | — | — |
 | `positive-test-must-assert-skip-state` | `citada` | `docs/fluxo-desenvolvimento.md` | `não havia nada para verificar` |
 | `post-task-retrospective-plan` | `removida` | os 3 artefatos que ela planejava já existem; mantê-la os lista como "a criar" | — |
-| `pr-body-gate-only-fires-at-push-time` | `citada` | `.github/workflows/ci.yml` | `REGRA OPERACIONAL` |
+| `pr-body-gate-only-fires-at-push-time` | `citada` | `.github/workflows/ci.yml` | `um RE-RUN entrega o corpo` |
 | `pr-body-has-no-base-directory` | `pendente` | — | — |
 | `prefer-agents-directory` | `citada` | `AGENTS.md` | `Modelo-agnóstico` |
 | `prefer-parallel-subagents-when-possible` | `citada` | `.agents/agents/specialist-router.md` | `paralelizar sempre que possível` |
@@ -165,6 +165,9 @@ fazê-lo às cegas seria fabricar 39 linhas `citada` sem âncora verificada.
 | `spec-verde-com-tsc-vermelho` | `pendente` | — | — |
 | `state-that-lives-outside-the-repo-has-no-gate` | `citada` | `.agents/workflows/pr-refresh.md` | `verde por omissão` |
 | `subagent-driven-development-always` | `citada` | `AGENTS.md` | `Coordenação obrigatória` |
+| `one-boolean-state-is-two-states` | `pendente` | — | — |
+| `subagent-write-truncation-limit` | `pendente` | — | — |
+| `uniform-validator-beats-self-reports` | `pendente` | — | — |
 | `test-the-field-the-eye-reads-not-the-field-it-parses` | `pendente` | — | — |
 | `tool-reports-success-while-corrupting` | `citada` | `.agents/specs/conventions/guard-classes.md` | `Ferramenta reporta sucesso corrompendo` |
 | `tsx-esbuild-does-not-emit-di-metadata` | `citada` | `.agents/memory/nestjs-specialist.md` | `design:paramtypes` |
@@ -175,7 +178,6 @@ fazê-lo às cegas seria fabricar 39 linhas `citada` sem âncora verificada.
 | `vi-mock-factory-cache-frozen-counter` | `pendente` | — | — |
 | `vitest-workspace-thresholds-and-dist-remap` | `citada` | `.agents/specs/conventions/cobertura-testes.md` | `config raiz` |
 | `zero-survived-is-not-zero-found` | `pendente` | — | — |
-| `b3-fix-cron-pnpm-engine-precheck-result` | `recusada` | registro de campanha; o PR #77 já carrega o fix e as 2 proposals de altíssima confiança (R-003 skill `cron-precheck-engines`, R-004 check de cross-refs em pre-commit) ficaram registradas para virar `pendente` quando decididas | — |
 
 ## O que a tabela diz
 
