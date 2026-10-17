@@ -105,6 +105,7 @@ fazê-lo às cegas seria fabricar 39 linhas `citada` sem âncora verificada.
 | `absent-tool-reads-as-approval` | `citada` | `.agents/runs/2026-10-05-guard-classes-autoauditoria.md` | `não há sintoma nenhum` |
 | `a-detector-that-fabricates-its-finding` | `pendente` | — | — |
 | `agent-evolution-and-memory` | `citada` | `.agents/specs/conventions/evolucao-agents.md` | `Agents e skills são entidades VIVAS` |
+| `artefato-publicado-nao-nomeia-o-segredo` | `pendente` | — | — |
 | `ambiguous-sentinel-silently-skips` | `citada` | `.agents/specs/conventions/guard-classes.md` | `devolvia` |
 | `b24-telemetry-progress` | `recusada` | registro de campanha; o plano de telemetria que ele resume já é versionado | — |
 | `b31-parser-vs-ground-truth-analysis` | `citada` | `docs/superpowers/specs/2026-09-25-b35-parser-regen-analysis.md` | `confirma o veredito de B31` |

@@ -257,6 +257,30 @@ repositório. O conserto foi o duplo **registrar** o que recebeu
 (`escoposPedidos`) e 4 specs afirmarem a sequência exata. `toContain` não serve:
 passaria com todos virados para o bucket de sistema.
 
+## Revisão pós-Fase 9 (2026-10-17, revisão independente do commit)
+
+Revisor ≠ implementador. Achados, e o que fazer com cada um:
+
+| # | Sev | Achado | Veredito |
+|---|-----|--------|-----------|
+| MT-9-1 | P1 | `prisma-tenant-membership.repository.ts:88 countByProfile` abre escopo de **SISTEMA** (`'*'`) e conta `tenantMembership` sem filtro de tenant — a sessão vê as empresas vizinhas | **Não corrigido, por decisão.** O valor vira booleano dentro de `deletar` e não sai: não há vazamento consumado. A semântica "a trava é global" *exige* esse escopo — restringir ao tenant do ator transformaria a trava global em por-empresa. A porta documenta. Superfície pronta, não defeito ativo. |
+| MT-9-2 | P1 | `users`, `users_history`, `users_archive` sem policy | **Não é brecha, é desenho.** `users` é global por construção (1 conta, N empresas; `email` único global por D4) — RLS por tenant nela não tem a quem pertencer. Declarado na migration §5. |
+| MT-9-3 | P2 | `CREATE ROLE app_runtime` exige `CREATEROLE`, que o `POSTGRES_USER` da imagem oficial tem por ser superusuário | **Documentado** em `apps/api/.env.example`. Em Postgres gerenciado o papel de migration raramente é superusuário e o `migrate deploy` quebra no deploy. |
+| MT-9-4 | P2 | 4 aberturas de escopo `'*'` cujo desenho é "descobrir o tenant, depois re-escopar" | **Estrutural, não corrigido.** O padrão é legítimo e comentado; o risco é alguém inserir uma query na janela entre a abertura e o re-escopo e ela rodar como sistema sem sinal no review. |
+| MT-9-5 | — | Cascatas de FK não passam por RLS: `DELETE FROM tenants` autorizado cascateia para `profiles`/`authorizations` ignorando as policies | **Não verificado.** O Postgres não aplica policy em `onDelete: Cascade`. Comportamento desejado aqui, mas significa que a policy de remoção de `authorizations` não protege um cascade. |
+
+⚠️ **Nenhum acesso ficou fora da `$transaction`** — os 32 acessos às 5 tabelas
+protegidas em `apps/api/src` são todos `tx.*` dentro de `comEscopo`. Era a
+hipótese principal do revisor, e ele a **não reproduziu**. Registrado porque
+hipótese não reproduzida é resultado, e porque o próximo revisor vai propor de
+novo.
+
+⚠️ **`prisma generate` NÃO resolve env de datasource — confirmado dos dois
+lados**: `generate` sai 0 sem nenhuma env; `validate` sai 1 e `migrate status`
+dá P1012. Cuidado ao medir: o Prisma carrega o `.env` do **cwd**, não o do
+`--schema`, então um teste que aponte `--schema` para fora ainda carrega o `.env`
+e dá falso verde.
+
 ## Triggers retroativos
 
 Findings repetidos sobre o mesmo arquivo/location (>3x) é sinal de **classe de
