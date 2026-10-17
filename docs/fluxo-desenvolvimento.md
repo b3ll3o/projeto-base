@@ -1,8 +1,8 @@
 ---
 name: fluxo-desenvolvimento
 description: Documento canonico do fluxo de desenvolvimento do repositorio, do primeiro comando ao merge — das 3 camadas (hooks locais, CI remoto, processo de agents) aos gates que cada uma dispara, com o estado real (wired / unwired) de cada mecanismo.
-version: 1.1.0
-updated: 2026-10-03
+version: 1.2.0
+updated: 2026-10-16
 maintainer: stack-code-reviewer
 ---
 
@@ -38,11 +38,12 @@ maintainer: stack-code-reviewer
 │     state-aware-planning → state-snapshot-<ts>.md            │
 │     specialist-router  → classifica demanda                  │
 │     specialist         → implementa (DDD/Hexagonal)          │
-│     review-router      → dispara reviewers em paralelo       │
+│     review-router      → emite N reviewers em YAML           │
 │     retrospective-mode → captura aprendizados                │
-│   ⚠ wired em prosa. Só 2 agents (stack-code-reviewer,       │
-│     doc-sync) são invocados por hook — os outros 17 são      │
-│     prosa pura (ver §7).                                     │
+│  ⚠ MEDIDO 2026-10-16: 25 dos 27 agents sem executor.         │
+│  Só 2 rodam por hook (stack-code-reviewer, doc-sync); os     │
+│  2 routers têm CLI, mas emitem despacho que ninguém consome. │
+│  Só 2 estão registrados como subagent — ver §3.4.            │
 └──────────────────────────────────────────────────────────────┘
                │
                ▼
@@ -126,6 +127,53 @@ grep -cE "^\s+name: '" .tooling/scripts/ci/preflight-gates.ts
 > **21**. O sintoma (contagem que não se move) é indistinguível de "não mudou
 > nada desde a última vez".
 
+### 3.4 Fan-out por fase — onde paralelizar dá ganho, e onde dá conflito
+
+O pedido "mais agents" esbarra num fato medido: **o despacho já é emitido e nunca executado.**
+`review-router.ts` emite 8 reviewers para um diff de 87 arquivos e termina em `console.log`
+(`review-router.ts:414-419`). MEDIDO: `git diff --name-only a6eaae7^ a6eaae7` = 87 arquivos. `grep -rn 'review:route|specialist:route' .github/workflows/ .husky/ .tooling/scripts/ci/preflight-gates.ts`
+→ **só as linhas do `package.json`**. A instrução de paralelo existe como prosa em
+`review-router.md:70` ("chamar Agent tool **na mesma mensagem**"), num arquivo que nenhum hook lê.
+
+| Fase | Fan-out | Por que |
+|------|---------|---------|
+| Análise / pesquisa | N agentes **read-only**, domínios disjuntos por `path_glob` | sem escrita, sem colisão; a matriz já separa `nestjs` de `nextjs` |
+| Auditoria | N reviewers em paralelo, todos read-only | o roteador já resolve quem; falta o executor |
+| `.agents/memory/*.md` | 1 agente por arquivo | 29 arquivos, convenção 1:1 verificável |
+| Implementação | **1 por vez no mesmo codebase** | ver paredes abaixo |
+| Gates do preflight | 29 gates em `Promise.all` | hoje serial (`preflight.ts:390`), nenhum escreve |
+
+**Paredes — aqui paralelizar não é ganho, é conflito garantido:**
+
+- **`apps/api/prisma/schema.prisma`** — fonte única, e `db:generate` é `cache: false`
+  (`turbo.json:8`, não o `package.json` — o cache é do turbo). Dois agents no schema não dão
+  conflito de merge: dão **veredito sobre dado stale**, porque o typecheck de um roda contra o
+  client gerado do schema que o outro ainda edita. O falso positivo multiplica o custo.
+- **`pnpm-lock.yaml`** — já tem `permissionDecision: "deny"` no PreToolUse
+  (`.claude/hooks/pretooluse-block-pnpm-lock.mjs`). Um `pnpm add` paralelo destrói o guard.
+- **`package.json` raiz, `turbo.json`, `pnpm-workspace.yaml`** — `check-package-json-drift` mede
+  exatamente esses arquivos; a matriz marca os dois últimos `blocking: true`.
+- **`specialist-routing.md`** — fonte da verdade de **todo** o roteamento. Dois `agent-architect`
+  colidem no arquivo que decide quem é chamado.
+- **Branches paralelas** — `check-branch-up-to-date` bloqueia contra `origin/main`. A segunda
+  branch nasce desatualizada por construção quando a primeira faz push. O histórico já escolheu o
+  lado oposto: PR #81 (167 arquivos), #95 (10 issues), #80 (9 issues).
+
+**Não converta gate determinístico em prompt.** Os 29 gates são regex + TypeScript com spec
+própria; §5 já registra que a camada "agentic" é *"regra determinística com prosa em volta"*.
+Reescrever um como LLM é a classe 6 de `guard-classes.md` — spec verde, sistema inerte.
+
+**As 3 peças que faltam** — nenhuma delas é "mais agents":
+
+1. **Executor** — `Agent` × N em paralelo sobre a saída do `review-router`. Menor diff e maior
+   retorno: o roteamento, a matriz e os testes já existem.
+2. **Registro** — 25 dos 27 agents não estão em `.claude/agents/`, logo o orquestrador não tem
+   handle. Agent não registrado não é invocado nem por LLM.
+3. **Relógio** — `grep -rn 'Date.now()' tooling/ .tooling/` devolve **1** ocorrência, num spec
+   unitário (`review-router.spec.ts:426`), nenhuma em código de produção. Sem
+   cronômetro, "mais agents é mais rápido" é raciocínio — e claim sem medida ao lado já
+   enveleceu neste repo mais de uma vez.
+
 ---
 
 ## §4. Tabela de gates
@@ -162,7 +210,7 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 |---------------|-----------|------------|---------------------|
 | **Determinística** (regra fixa, verificável) | `.tooling/scripts/ci/*.ts`, `.husky/*`, `tooling/scripts/*.ts` | Erra **alto e nomeado**: exit 1, arquivo, linha, regra | `stack-code-reviewer` (DDD imports bloqueados), `checkTsconfigDrift`, `checkPackageJsonDrift` |
 | **Agente / roteamento** (YAML + regex executado por TS — *não* é IA) | `.agents/specs/conventions/{review,specialist}-routing.md` + `tooling/scripts/*-router.ts` | Erra **baixo e anônimo**: classifica para o reviewer errado, sem sinal | `review-router.ts` (30 testes), `specialist-router.ts` (39 testes) |
-| **Memória / prosa** | `.agents/memory/*.md`, `.agents/runs/*.md` | **Evapora** — não existe evento detectável quando envelhece | 21 memórias versionadas; as retrospectivas `b<N>-result.md` gravam **fora** do repo |
+| **Memória / prosa** | `.agents/memory/*.md`, `.agents/runs/*.md` | **Evapora** — não existe evento detectável quando envelhece | 29 memórias versionadas; as retrospectivas `b<N>-result.md` gravam **fora** do repo |
 
 > **Tese honesta:** nenhum problema medido neste repo pede IA. `grep -rniE 'embedding\|openai\|langchain\|pgvector\|neo4j' apps/*/package.json packages/*/package.json` retorna zero. A camada "agentic" é regex em YAML executado por TypeScript — é **regra determinística com prosa em volta**. O custo do rótulo errado já apareceu: `review:lint` está dentro do preflight, `specialist:lint` (mesma família, 12 testes verdes) está fora.
 
@@ -241,11 +289,12 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 - [`docs/superpowers/plans/2026-09-21-cadastro-usuario-com-auditoria-plan.md`](./superpowers/plans/2026-09-21-cadastro-usuario-com-auditoria-plan.md) — plano de fundação do BC `users`
 - [`docs/superpowers/plans/2026-10-02-melhorias-fluxo-desenvolvimento.md`](./superpowers/plans/2026-10-02-melhorias-fluxo-desenvolvimento.md) — plano de melhorias que produziu o #43 e #44
 - [`docs/superpowers/plans/2026-10-03-guard-classes.md`](./superpowers/plans/2026-10-03-guard-classes.md) — plano das 7 classes de guard (gates do #44)
+- [`docs/superpowers/plans/2026-10-16-multi-tenant-plan.md`](./superpowers/plans/2026-10-16-multi-tenant-plan.md) — plano da demanda multi-tenant (perfil por empresa)
 - [`.agents/runs/backlog-2026-10-02.md`](../.agents/runs/backlog-2026-10-02.md) — backlog vivo de itens adiados + achados durante a execução (BL1–BL10 + X1–X15)
 
 ---
 
 **Mantido por:** projeto-base contributors
 **Licença:** MIT
-**Versão do documento:** 1.1.0
-**Última atualização:** 2026-10-06
+**Versão do documento:** 1.2.0
+**Última atualização:** 2026-10-16

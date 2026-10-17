@@ -87,6 +87,7 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 | **nextjs-specialist**  | [`.agents/agents/nextjs-specialist.md`](./.agents/agents/nextjs-specialist.md)    | [memory](./.agents/memory/nextjs-specialist.md)          | Arquiteto frontend Next.js                  | Criar rota/página, decidir RSC vs. Client, Server Actions    |
 | **telemetry-specialist**| [`.agents/agents/telemetry-specialist.md`](./.agents/agents/telemetry-specialist.md)| [memory](./.agents/memory/telemetry-specialist.md)        | Arquiteto de telemetria/observabilidade cross-stack (OpenTelemetry SDK init, exporters OTLP, propagação W3C, sampling, web-vitals, collector) | Decisões de instrumentação em backend/frontend/infra; correlação Pino↔OTel; bridge `request.id` → W3C `traceparent`; config OTel Collector Compose |
 | **ux-design-specialist**| [`.agents/agents/ux-design-specialist.md`](./.agents/agents/ux-design-specialist.md)| [memory](./.agents/memory/ux-design-specialist.md)        | Specialist em UX/design de interface (tokens, estados, formulários, a11y, microcopy) | Criar/revisar a aparência e o comportamento de telas e componentes, definir tokens, auditar a11y de UI |
+| **multi-tenant-specialist**| [`.agents/agents/multi-tenant-specialist.md`](./.agents/agents/multi-tenant-specialist.md)| [memory](./.agents/memory/multi-tenant-specialist.md)        | Arquiteto de tenancy (shared-schema + `tenant_id` + RLS, contexto de tenant na fronteira, escopo de query, cache por tenant, backfill, gate cross-tenant) | Criar/alterar tenancy: `Tenant`/`Membership`/`Invitation`, `tenant_id` em model, filtro de tenant em repositório, RLS, chave de cache por tenant, migração de dados pré-tenancy, spec de isolamento |
 
 > **Lens DDD/Hexagonal (a partir de v1.2.0, com adoção do ADR-0001):** ao criar/refatorar módulo NestJS,
 > `nestjs-specialist` aplica a lens DDD/Hexagonal — validar boundary `domain/application/infrastructure`
@@ -107,7 +108,7 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 | **finding-orchestrator** | [`.agents/agents/finding-orchestrator.md`](./.agents/agents/finding-orchestrator.md) | [memory](./.agents/memory/finding-orchestrator.md) | Dispara specialists em paralelo, agrega findings, dedup contra issues abertas, abre issues via `gh` | Cron semanal (sextas 02:00 UTC), pré-tag, on-demand do user |
 
 > **Diferença entre specialists de auditoria e specialists de stack:**
-> - **Stack specialists** (nestjs, nextjs, docker, monorepo, telemetry) **criam** código/configuração nova. São despachados antes de implementar.
+> - **Stack specialists** (nestjs, nextjs, docker, monorepo, telemetry, multi-tenant, ux-design) **criam** código/configuração nova. São despachados antes de implementar.
 > - **Auditoria specialists** (prisma-db, openapi-contract, otelcol-infra, docker-prod, release-versioning) **revisam e reportam** código/configuração existente. São despachados pelo `finding-orchestrator` ou sob demanda.
 >
 > **Sobreposição intencional:** `docker-prod-specialist` e `docker-specialist` coexistem — o primeiro foca em prod-readiness/hardening (auditoria), o segundo em Dockerfile/Compose autoral (escrita). O orchestrator dispara ambos quando o escopo é amplo.
@@ -120,6 +121,13 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 > `findings-orchestration`. A skill encapsula os passos shell + dedup + persistência;
 > o agent encapsula papel + coordenação + princípios. Skill não substitui agent — é
 > **carregada por** ele quando a task é de auditoria.
+>
+> **1:1 que não cabe na lista acima:** `multi-tenant-specialist` (§3.1) também é
+> stack specialist — cria a arquitetura de tenancy, é despachado antes de
+> implementar — mas carrega `multi-tenant-audit` pelo mesmo contrato 1:1
+> (`.agents/skills/multi-tenant-audit/SKILL.md`): skill = processo determinístico
+> read-only, agent = papel. Ele não entra na lista de audit specialists porque
+> `finding-orchestrator` não o despacha sozinho.
 
 > **Skills de UI (única relação 1:N do repo, v1.11.0+):** o `ux-design-specialist`
 > carrega **5** skills, nesta ordem — `ui-review` (processo) → `ui-modes` (decide o
@@ -233,6 +241,7 @@ As convenções estão detalhadas em arquivos próprios sob [`.agents/specs/conv
 | Review Routing     | [`review-routing.md`](./.agents/specs/conventions/review-routing.md) | Matriz que decide **quem revisa o quê**; apêndice de exemplos em [`review-routing-examples.md`](./.agents/specs/conventions/review-routing-examples.md) |
 | Specialist Routing | [`specialist-routing.md`](./.agents/specs/conventions/specialist-routing.md) | Roteamento por especialidade; apêndice de exemplos em [`specialist-routing-examples.md`](./.agents/specs/conventions/specialist-routing-examples.md) |
 | Guard Classes | [`guard-classes.md`](./.agents/specs/conventions/guard-classes.md) | As 7 classes pelas quais um controle falha reportando verde; receita de detecção por classe **e a coluna "não pega"** |
+| Migração de Dados | [`migracao-de-dados.md`](./.agents/specs/conventions/migracao-de-dados.md) | Regra dos 3 passos (add nullable, backfill, drop) + quando **não** há backfill a fazer; promovida de `prisma-db-specialist.md:160` na v1.12.0 |
 
 > **Os dois índices são o mesmo índice.** Este §6 e o
 > [`README.md`](./.agents/specs/conventions/README.md) das convenções listam os
@@ -273,5 +282,5 @@ Quando seguido corretamente, este padrão garante:
 
 **Mantido por:** projeto-base contributors
 **Licença:** MIT
-**Versão do documento:** 1.11.0
+**Versão do documento:** 1.12.0
 **Status:** Estável

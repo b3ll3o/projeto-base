@@ -1,0 +1,57 @@
+commit 32b285f7aa07d6b3a172dcddcede7edd235261d5
+Author:     Leonardo Andreazzi <andreazzi-leonardo@hotmail.com>
+AuthorDate: Fri Oct 16 20:44:25 2026 -0300
+Commit:     GitHub <noreply@github.com>
+CommitDate: Fri Oct 16 20:44:25 2026 -0300
+
+    feat(e2e): a regra de cobertura passa a conferir as rotas do disco (#100)
+    
+    MEDIDO 2026-10-16: `check-e2e-flow-coverage` reconcilia o inventário de
+    fluxos com os cabeçalhos `// FLUXO:` dos specs — DOIS conjuntos escritos à
+    mão. Isso prova paridade entre eles, e paridade não é cobertura.
+    `/me/profile` era uma tela real (`apps/web/app/me/profile/page.tsx`), não
+    tinha linha no inventário, não tinha spec, e o preflight anunciava
+    "reconciliado sobre 12 fluxo(s) e 12 spec(s)" com a tela fora. Um gate
+    que só compara o que alguém escreveu com o que alguém escreveu não vê a
+    tela que ninguém declarou.
+    
+    O gate passa a reconciliar com um TERCEIRO conjunto: os `page.tsx` de
+    `apps/web/app/**`, que ninguém escreve. A coluna `Rota` do inventário — já
+    existente, e até ontem decorativa — passa a ser conferida contra o disco.
+    Tela nova sem linha é vermelha, com o path nomeado.
+    
+    Dois buxo do caminho novo, ambos com o porquê no código:
+    
+    - coluna `Rota` ausente é erro NOMEADO, não um `-1` silencioso que faria a
+      conferência de rotas passar por nada;
+    - `rotas: []` é erro, não verde: é a forma "critério inerte sobre conjunto
+      vazio", e um app sem nenhuma tela seria indistinguível de um app coberto.
+    
+    A ordem das checagens em `checkE2eFlowCoverage` mudou: o skip de
+    `apps/web/app` vem DEPOIS do "diretório de e2e sem spec nenhum". Com o skip
+    na frente, um repo sem frontend devolvia `skipped` e escondia um defeito
+    real atrás de um motivo que não era o dele. Um skip nunca pode ser teto
+    para um erro que já é erro.
+    
+    F13 fecha a lacuna que essa conferência encontrou: `/me/profile` com os
+    quatro estados da tela — admin/bypass, perfil comum, deny-by-default e o
+    redirect de quem não tem sessão.
+    
+    Dente verificado por mutação, não por leitura:
+    - plantar `page.tsx` sem linha no inventário → vermelho nomeando o path
+    - remover a coluna `Rota` do cabeçalho → vermelho nomeando a coluna
+    - forçar o conjunto de rotas vazio → o guard dispara
+    - neutralizar o laço de rotas no fonte → caem exatamente os 2 testes da
+      cobertura de rotas, e nenhum outro
+    - trocar o texto "Sem perfil — deny-by-default" na tela → cai exatamente o
+      teste F13 que existe para aquele estado
+    
+    Medido: preflight 0 erros (o gate anunciando 13⇄13 e 9 rotas conferidas),
+    288+415 testes de tooling, 671 api, 221 web, gate de cobertura 0, e2e
+    42/42. O F9 falhou numa execução anterior desta sessão com "Server has
+    closed the connection" no `profile.create()` do fixture (pool do Postgres
+    efêmero com specs em paralelo) e NÃO reproduziu nesta — flake pré-existente
+    ao #99, sem relação com este diff.
+    
+    Co-authored-by: CEO Agent <ceo@paperclip.ai>
+    Co-authored-by: Claude <noreply@anthropic.com>

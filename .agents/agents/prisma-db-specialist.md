@@ -157,7 +157,7 @@ Ele classifica e decide quais viram issue.
 ## Anti-Padrões
 
 - ❌ Importar `@prisma/client` em `domain/`
-- ❌ Migration com `DROP COLUMN` direto (sempre 3 passos: add nullable, backfill, drop)
+- ❌ Migration com `DROP COLUMN` direto (sempre 3 passos: add nullable, backfill, drop — regra canônica em [`conventions/migracao-de-dados.md`](../specs/conventions/migracao-de-dados.md))
 - ❌ Query N+1 sem mitigação
 - ❌ `findMany()` sem `take` em endpoint de listagem
 - ❌ `prisma.user.delete()` quando soft-delete é padrão

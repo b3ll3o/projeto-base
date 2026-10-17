@@ -41,6 +41,18 @@ Formato de entrada (a ser preenchido pelo agent):
   lesson: <1-liner do que aprendemos>
 ```
 
+## Decisões Tomadas
+
+- **2026-10-16 — a regra de migração de dados sai do agent e vira convenção.** O
+  anti-padrão "sempre 3 passos: add nullable, backfill, drop" vivia só aqui (na
+  linha 160 do agent), sem arquivo em `conventions/` — gap G-003 do
+  `state-snapshot-20261017T000011Z`. Promovido para
+  [`conventions/migracao-de-dados.md`](../specs/conventions/migracao-de-dados.md),
+  registrada nos dois índices (`AGENTS.md §6` + `conventions/README.md`). O agent
+  agora aponta para lá: **este arquivo é a fonte, o agent é o consumidor.**
+  Ganho colateral: a convenção acrescenta o caso que faltava — **quando não há
+  backfill a fazer** (medir antes de inventar fixture).
+
 ## Triggers retroativos
 
 Quando o agent produzir findings repetidos sobre o mesmo arquivo/location (>3x), isso é sinal de **classe de bug sistêmico** — abrir issue classificada como tal, não como finding isolado.
