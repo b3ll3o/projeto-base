@@ -85,8 +85,26 @@ type FastifyReply = Parameters<FastifyAdapter['setHeader']>[0];
  * A aresta entre módulos é `users → auth`, um caminho só; importar o
  * arquivo do guard aqui criaria a aresta que o `AuthModule` já satisfaz.
  */
+/**
+ * `JwtAuthGuard` hidrata `tenantId` e `isAdmin` no `request.user` além do
+ * `TokenSubject` — a mesma forma de `RequestComAtor` em `admin-profiles.controller.ts`.
+ * É o `tenantId` daqui que vira o escopo de RLS, e ele NÃO vem do corpo nem da
+ * query: vem do `X-Tenant-Id` que o guard validou.
+ */
 interface RequestWithUser {
-  user?: TokenSubject;
+  user?: TokenSubject & { tenantId?: string | null; isAdmin?: boolean };
+}
+
+/**
+ * A empresa do ator, ou `null` (bucket de SISTEMA) quando a rota não tem header.
+ *
+ * `request?.` e não `request.`: o `resolveActorId` logo abaixo já é
+ * opcional por decisão (`request?: RequestWithUser`) porque uma rota `@Public()`
+ * pode chegar sem request, e um `undefined` aqui virava TypeError — 500 — no
+ * meio de um caminho que antes terminava em auditoria sem ator.
+ */
+function empresaDoAtor(request?: RequestWithUser): string | null {
+  return request?.user?.tenantId ?? null;
 }
 
 @ApiTags('users')
@@ -123,8 +141,10 @@ export class UsersController {
     @Res({ passthrough: true }) reply: FastifyReply,
     @Req() request: RequestWithUser,
   ): Promise<unknown> {
+    // `POST /users` é `@Public()`: não há ator, e a conta nasce sem empresa —
+    // logo o bucket de SISTEMA, que é o único onde "sem empresa" é visível.
     const user = await AuditContextStore.run(this.buildContext(request), () =>
-      this.userUseCases.criarUser(body),
+      this.userUseCases.criarUser(body, null),
     );
     reply.header('ETag', `W/"v${user.version}"`);
     reply.status(201);
@@ -145,6 +165,7 @@ export class UsersController {
   })
   @ApiResponse({ status: 200, description: 'Página de usuários' })
   async list(
+    @Req() request: RequestWithUser,
     @Query('cursor') cursor?: string,
     @Query('limit') limit = '20',
     @Query('includeDeleted') includeDeleted?: string,
@@ -156,7 +177,11 @@ export class UsersController {
       // aceita os dois valores truthy canônicos ('true' e '1').
       includeDeleted: includeDeleted?.toLowerCase() === 'true' || includeDeleted === '1',
     };
-    return this.userUseCases.listar(input);
+    // ⚠️ MUDANÇA DE COMPORTAMENTO (Fase 10): com `X-Tenant-Id`, a listagem
+    // passa a devolver SÓ os membros da empresa. Antes devolvia a conta toda
+    // do sistema para qualquer pessoa autenticada — que era o vazamento que a
+    // policy de `users` agora fecha no banco.
+    return this.userUseCases.listar(input, empresaDoAtor(request));
   }
 
   // ───────────────────────── GET /users/:id ──────────────────────
@@ -170,9 +195,9 @@ export class UsersController {
     description: 'O `:id` da rota não é o `sub` do token (USER_OWNERSHIP_VIOLATION)',
   })
   @ApiResponse({ status: 404, description: 'User não encontrado' })
-  async findOne(@Param('id') id: string): Promise<unknown> {
+  async findOne(@Param('id') id: string, @Req() request: RequestWithUser): Promise<unknown> {
     const input: GetUserByIdInput = { id };
-    return this.userUseCases.obterPorId(input);
+    return this.userUseCases.obterPorId(input, empresaDoAtor(request));
   }
 
   // ───────────────────────── PATCH /users/:id ───────────────────
@@ -207,7 +232,7 @@ export class UsersController {
       expectedVersion,
     };
     const user = await AuditContextStore.run(this.buildContext(request), () =>
-      this.userUseCases.atualizarNome(input),
+      this.userUseCases.atualizarNome(input, empresaDoAtor(request)),
     );
     reply.header('ETag', `W/"v${user.version}"`);
     return user;
@@ -240,7 +265,7 @@ export class UsersController {
       expectedVersion,
     };
     await AuditContextStore.run(this.buildContext(request), () =>
-      this.userUseCases.softDelete(input),
+      this.userUseCases.softDelete(input, empresaDoAtor(request)),
     );
   }
 
@@ -267,7 +292,7 @@ export class UsersController {
     const expectedVersion = this.parseIfMatch(ifMatch);
     const input: RestoreUserInput = { id, expectedVersion };
     const user = await AuditContextStore.run(this.buildContext(request), () =>
-      this.userUseCases.restaurar(input),
+      this.userUseCases.restaurar(input, empresaDoAtor(request)),
     );
     reply.header('ETag', `W/"v${user.version}"`);
     reply.status(201);
@@ -290,6 +315,7 @@ export class UsersController {
     @Param('id') id: string,
     @Query('cursor') cursor?: string,
     @Query('limit') limit = '20',
+    @Req() request?: RequestWithUser,
   ): Promise<unknown> {
     const input: ListHistoryInput = {
       entityName: 'User',
@@ -297,7 +323,10 @@ export class UsersController {
       cursor: cursor ?? null,
       limit: Number(limit),
     };
-    return this.auditService.listHistory(input);
+    // pt-BR (Fase 10+): o escopo vem do MESMO header que escopa as mutações.
+    // Sem ele a leitura cai em SISTEMA e devolve o histórico cross-tenant — que
+    // é o elo 1 da escalada fechada na migration `20261020000002`.
+    return this.auditService.listHistory(input, empresaDoAtor(request));
   }
 
   // ───────────────────────── helpers ─────────────────────────────
@@ -360,6 +389,10 @@ export class UsersController {
       correlationId: w3cTraceId ?? randomUUID(),
       source: 'http',
       timestamp: new Date(),
+      // pt-BR (Fase 10+): o mesmo header que escopa as mutações escopa a
+      // auditoria delas. Sem isto, `record()`/`archive()` gravam sob SISTEMA e
+      // as policies de `users_history`/`users_archive` leem isso como "vejo tudo".
+      tenantId: empresaDoAtor(request),
     });
   }
 

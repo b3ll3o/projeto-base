@@ -12,7 +12,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ApiClient, ApiError } from '@/lib/api-client';
-import { exigirSessao } from '@/lib/sessao';
+import { exigirSessao, lerTenant } from '@/lib/sessao';
 import type { UserOutputDto, UsersPageDto } from '@projeto/shared-types';
 import { sair } from './actions';
 
@@ -39,9 +39,11 @@ export const dynamic = 'force-dynamic';
 export default async function UsersPage() {
   const accessToken = await exigirSessao();
 
+  const tenantId = await lerTenant();
   const api = new ApiClient({
     baseUrl: process.env.API_BASE_URL ?? 'http://localhost:3000/api/v1',
     getToken: () => accessToken,
+    getTenant: () => tenantId,
   });
 
   let data: UsersPageDto | null = null;

@@ -20,7 +20,7 @@ import {
 
 /** `req.user` publicado pelo `JwtAuthGuard`. */
 interface RequestComAtor {
-  user: { sub: string; isAdmin?: boolean };
+  user: { sub: string; tenantId?: string | null; isAdmin?: boolean };
 }
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -54,7 +54,11 @@ export class AdminAuthorizationsController {
   }
 
   private atorDe(req: RequestComAtor): AtorAutenticado {
-    return { userId: req.user.sub, isAdmin: req.user.isAdmin === true };
+    return {
+      userId: req.user.sub,
+      tenantId: req.user.tenantId ?? null,
+      isAdmin: req.user.isAdmin === true,
+    };
   }
 
   @Get('admin/permissions')

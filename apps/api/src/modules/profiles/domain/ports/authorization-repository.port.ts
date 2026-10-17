@@ -15,14 +15,34 @@ import type { AuthorizationKey } from '../value-objects/authorization-key.vo.js'
 import type { Authorization } from '../authorization.entity.js';
 
 export interface AuthorizationRepositoryPort {
-  listByProfile(profileId: ProfileId): Promise<Authorization[]>;
-  countByProfile(profileId: ProfileId): Promise<number>;
+  /**
+   * pt-BR (Fase 9 — RLS): `tenantId` é o ESCOPO DA SESSÃO, o mesmo `null` de
+   * `ProfileRepositoryPort.findById` — `null` = bucket de SISTEMA, preenchido =
+   * aquela empresa. Ele NÃO vai para o `where`: `authorizations` não tem
+   * `tenant_id`, e quem decide a dona é a policy, que a resolve atravessando
+   * `profiles`.
+   *
+   * ⚠️ MEDIDO 2026-10-17: hoje NENHUM consumidor injeta esta porta — ela está
+   * registrada no `ProfilesModule` e é instanciável, mas nenhuma use case a
+   * recebe. O parâmetro entra mesmo assim porque o registro no DI é o que torna
+   * o próximo consumidor a UMA LINHA de distância, e o descuido de quem não
+   * abre o escopo seria silencioso: `authorizations` tem policy, então a sessão
+   * sem `app.tenant_id` volta com ZERO linhas — o sintoma é "as permissões do
+   * perfil sumiram", não um erro.
+   */
+  listByProfile(profileId: ProfileId, tenantId: string | null): Promise<Authorization[]>;
+  countByProfile(profileId: ProfileId, tenantId: string | null): Promise<number>;
   upsert(input: {
     profileId: ProfileId;
     key: AuthorizationKey;
     agora: Date;
+    tenantId: string | null;
   }): Promise<Authorization>;
-  delete(input: { profileId: ProfileId; key: AuthorizationKey }): Promise<void>;
+  delete(input: {
+    profileId: ProfileId;
+    key: AuthorizationKey;
+    tenantId: string | null;
+  }): Promise<void>;
 }
 
 /**

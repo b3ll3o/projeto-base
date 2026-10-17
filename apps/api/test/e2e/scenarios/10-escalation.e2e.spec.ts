@@ -175,8 +175,11 @@ describe('E2E 10: escalada de privilégio e validação na fronteira HTTP', () =
     // A resposta E o banco: responder `isAdmin:false` só no JSON deixaria a
     // linha do Prisma como `true`, que é o que o guard realmente lê.
     expect(JSON.parse(res.body).isAdmin).toBe(false);
-    const linha = await e2e.ctx.prisma.profile.findUnique({
-      where: { slug: 'forjado' },
+    const linha = await e2e.ctx.prisma.profile.findFirst({
+      // pt-BR (Fase 2 — tenancy): `slug` não é mais `@unique` (dois índices
+      // parciais na migration). O perfil criado aqui é global — POST
+      // /admin/profiles não recebe tenantId nesta fase.
+      where: { slug: 'forjado', tenantId: null },
       select: { isAdmin: true, isSystem: true },
     });
     expect(linha).toEqual({ isAdmin: false, isSystem: false });

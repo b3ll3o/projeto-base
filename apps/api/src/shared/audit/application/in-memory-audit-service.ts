@@ -39,8 +39,16 @@ export class InMemoryAuditService implements AuditServicePort {
     this.history.push(entry);
   }
 
+  // pt-BR (Fase 10+, 2026-10-17): as quatro leituras recebem `tenantId` para
+  // casar com `AuditServicePort`, mas o duplo NÃO filtra por empresa. Ele não
+  // tem como: `HistoryEntry`/`ArchiveEntry` não carregam `tenantId`, e
+  // inventar um filtro aqui exigiria um `tenantId` sintético nas entradas — que
+  // é contrato de domínio novo, não fiação. O filtro que vale é a policy; o
+  // `PrismaAuditService` é quem o executa. Mesma lacuna já registrada para
+  // `InMemoryUserRepository.list(input, _tenantId)`.
   async listHistory(
     input: ListHistoryInput,
+    _tenantId: string | null,
   ): Promise<{ entries: HistoryEntry[]; nextCursor: string | null }> {
     const filtered = this.history.filter((e) => e.entityId === input.entityId);
     const offset = input.cursor ? Number(input.cursor) : 0;
@@ -51,7 +59,10 @@ export class InMemoryAuditService implements AuditServicePort {
     return { entries: page, nextCursor };
   }
 
-  async getHistoryEntry(input: GetHistoryEntryInput): Promise<HistoryEntry | null> {
+  async getHistoryEntry(
+    input: GetHistoryEntryInput,
+    _tenantId: string | null,
+  ): Promise<HistoryEntry | null> {
     return (
       this.history.find((e) => e.entityId === input.entityId && e.version === input.version) ?? null
     );
@@ -77,6 +88,7 @@ export class InMemoryAuditService implements AuditServicePort {
 
   async listArchive(
     input: ListArchiveInput,
+    _tenantId: string | null,
   ): Promise<{ entries: ArchiveEntry[]; nextCursor: string | null }> {
     const offset = input.cursor ? Number(input.cursor) : 0;
     const limit = Math.max(1, input.limit);
@@ -86,7 +98,10 @@ export class InMemoryAuditService implements AuditServicePort {
     return { entries: page, nextCursor };
   }
 
-  async getArchiveEntry(input: GetArchiveEntryInput): Promise<ArchiveEntry | null> {
+  async getArchiveEntry(
+    input: GetArchiveEntryInput,
+    _tenantId: string | null,
+  ): Promise<ArchiveEntry | null> {
     return this.archives.find((e) => e.entityId === input.entityId) ?? null;
   }
 }

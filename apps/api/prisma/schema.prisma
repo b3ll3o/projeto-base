@@ -4,7 +4,18 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // pt-BR (Fase 9 — RLS): DUAS conexões, e a separação é o ponto.
+  //
+  // `url` é a da APLICAÇÃO: o papel `app_runtime`, NOSUPERUSER NOBYPASSRLS.
+  // É ela que faz as policies valerem — se o app conectasse como dono, o
+  // isolamento existiria só no papel e o RLS seria decoração.
+  //
+  // `directUrl` é a do DONO, e é a que o CLI do Prisma usa (`migrate`,
+  // `db seed`). A migration precisa dela: `CREATE ROLE`, `ALTER TABLE ...
+  // ENABLE ROW LEVEL SECURITY` e `GRANT` exigem o dono da tabela, e um papel
+  // sem BYPASSRLS não pode aplicá-las.
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 enum AuditOperation {
@@ -42,7 +53,11 @@ model User {
   // Relação: um User pertence a 0..1 Profile. Nullable para rollback /
   // usuários legados sem profile. onDelete: Restrict porque o admin precisa
   // reatribuir antes de deletar o Profile.
-  profile      Profile?  @relation(fields: [profileId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  profile     Profile?           @relation(fields: [profileId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  // D4: um User pode estar em N empresas. `users.profile_id` continua valendo
+  // (a Fase 4 troca só o caminho de leitura), mas o perfil efetivo passa a ser
+  // o do tenant — ver `multi-tenant-specialist` Passo 4.
+  memberships TenantMembership[]
 
   @@index([email])
   @@index([deletedAt])
@@ -95,25 +110,40 @@ model UserArchive {
 // Restrict + check explícito antes). Perfis de sistema (isSystem=true)
 // são protegidos no agregado (`marcarExcluido` lança).
 model Profile {
-  id          String    @id @default(uuid()) @db.Uuid
-  // Slug canônico: 'admin', 'manager', 'viewer'. Único, kebab-case, imutável
-  // após criação (renomear quebraria referências em audit logs). O `name` é
-  // o rótulo editável.
-  slug        String    @unique
+  id          String   @id @default(uuid()) @db.Uuid
+  // Slug canônico: 'admin', 'manager', 'viewer'. Kebab-case, imutável após
+  // criação (renomear quebraria referências em audit logs). O `name` é o
+  // rótulo editável.
+  //
+  // pt-BR (Fase 2 — tenancy, 2026-10-16): perdeu o `@unique`. A unicidade
+  // agora vem de DOIS índices parciais em SQL puro (migration
+  // `20261017000000_tenant_membership_invitation`), porque a D3 exige que
+  // duas empresas tenham ambas um perfil "manager" e que o "admin" global
+  // continue único. `@@unique([tenantId, slug])` não serviria: no Postgres
+  // NULL != NULL, então o seed duplicaria "admin" em silêncio.
+  slug        String
   name        String
   description String?
+  // NULL = perfil global (compartilhado por todas as empresas, é o caso do
+  // seed do #97). Preenchido = perfil customizado de UMA empresa.
+  tenantId    String?  @map("tenant_id") @db.Uuid
   // Bypass total: o guard dá true sem consultar Authorizations.
-  isAdmin     Boolean   @default(false) @map("is_admin")
+  isAdmin     Boolean  @default(false) @map("is_admin")
   // Perfil de sistema: protegido contra DELETE via use case.
-  isSystem    Boolean   @default(false) @map("is_system")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-  version     Int       @default(1)
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  version     Int      @default(1)
 
+  tenant         Tenant?            @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   authorizations Authorization[]
   users          User[]
+  // pt-BR (Fase 4 — tenancy, 2026-10-16): quem veste este perfil, POR
+  // EMPRESA. É a direção inversa de `users` (que é o bucket global).
+  memberships    TenantMembership[]
 
   @@index([slug])
+  @@index([tenantId])
   @@map("profiles")
 }
 
@@ -140,4 +170,93 @@ model Authorization {
   @@index([profileId])
   @@index([permissionKey])
   @@map("authorizations")
+}
+
+// pt-BR (Fase 2 — tenancy, 2026-10-16): a empresa. `slug` é GLOBAL entre
+// empresas (é o identificador de URL), enquanto o slug de PERFIL é por tenant
+// (D3) — são dois escopos diferentes e por isso dois `@unique` diferentes.
+//
+// Sem soft-delete: apagar uma empresa é raro e o efeito (cascatear perfis,
+// memberships e convites) é destrutivo demais para `deletedAt` silencioso.
+model Tenant {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  version   Int      @default(1)
+
+  profiles    Profile[]
+  memberships TenantMembership[]
+  invitations Invitation[]
+
+  @@map("tenants")
+}
+
+// pt-BR (Fase 2 — tenancy, 2026-10-16): a identidade do usuário NA empresa.
+// É esta tabela que faz "1 conta, N empresas" (D4) ser verdade: o login
+// resolve por `users.email` (global) e o tenant entra depois, por header.
+//
+// `role` é o rótulo de tenant ('owner' | 'member') e NÃO substitui o RBAC: a
+// autorização fina continua em `profiles.authorizations`. Aqui é só "quem
+// pode administrar a empresa".
+//
+// pt-BR (Fase 4 — tenancy, 2026-10-16): `profileId` é o elo que faltava na
+// D4 — QUAL perfil este usuário veste NESTA empresa. Sem ele, "perfil
+// diferente por empresa" não é representável, porque a única leitura possível
+// era `users.profile_id`, que é global. `null` = membership sem perfil
+// atribuído (convite aceito, aguardando o admin da empresa), e resolve para
+// zero permissões — não para perfil de sistema.
+model TenantMembership {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  role      String   @default("member")
+  profileId String?  @map("profile_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  version   Int      @default(1)
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  // `Restrict` como `users.profileId`: o admin reatribui antes de deletar.
+  profile Profile? @relation(fields: [profileId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  // A D4 inteira: uma conta pode estar em N empresas, mas só UMA vez em cada.
+  @@unique([userId, tenantId])
+  @@index([tenantId])
+  @@index([userId])
+  @@index([profileId])
+  @@map("tenant_memberships")
+}
+
+// pt-BR (Fase 2 — tenancy, 2026-10-16): a D5 — "empresa própria OU convite".
+// Um convite é POR EMAIL e por tenant: quem aceita precisa existir (ou criar
+// conta) e precisa estar autenticado, então o aceite acontece na Fase 4.
+model Invitation {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  email      String
+  role       String    @default("member")
+  // pt-BR (Fase 5 — tenancy, 2026-10-16): o segredo do convite. Sem ele,
+  // `POST /invitations/accept` seria "entre na empresa X": o id da empresa
+  // é um UUID que não se enumera, mas o de uma empresa da qual a pessoa já
+  // saiu continua no histórico dela — e aí o furo é real. O token é o que
+  // prova que o convite foi emitido. Sem mailer no repo, o token volta na
+  // resposta do produtor (`POST /tenants/:id/invitations`).
+  token      String    @unique @map("token")
+  // NULL = pendente. Preenchido = já consumida (aceite). Não há `revokedAt`
+  // nesta fase: revogar é um DELETE, e o histórico de convite não é dado
+  // regulado aqui.
+  acceptedAt DateTime? @map("accepted_at")
+  expiresAt  DateTime? @map("expires_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  version    Int       @default(1)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("invitations")
 }

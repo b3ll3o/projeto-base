@@ -13,8 +13,7 @@ Um **monorepo base reutilizável** que implementa o **padrão genérico de agent
 **Diferencial:** enquanto o template anterior era genérico para qualquer projeto, este é um **monorepo base opinativo** com:
 
 - Apps `apps/api` (NestJS) + `apps/web` (Next.js) **já implementados** — bounded context `users` em camadas `domain/`, `application/`, `infrastructure/`
-- **26 agents** (12 genéricos + 2 routers + 6 specialists de stack + 6 specialists de auditoria) + 3 arquivos companheiro em `telemetry-specialist/`, interoperáveis via skill `agents:coordinate` — medido do disco 2026-10-08, `ls .agents/agents/*.md | wc -l`
-- **20 skills + 15 workflows + 19 convenções canônicas** — medido do disco 2026-10-13 (`ls .agents/skills/*/SKILL.md | wc -l`, `ls .agents/workflows/*.md | wc -l`, linhas de dados da tabela em `AGENTS.md §6`)
+- **27 agents** (12 genéricos + 2 routers + 7 specialists de stack + 6 de auditoria) + 3 arquivos companheiros em `telemetry-specialist/`, interoperáveis via skill `agents:coordinate`; **23 skills + 15 workflows + 21 convenções canônicas** — tudo medido do disco 2026-10-16 (`ls .agents/agents/*.md | wc -l`, `ls .agents/memory/*.md | wc -l`, `ls .agents/skills/*/SKILL.md | wc -l`, `ls .agents/workflows/*.md | wc -l`; convenções = linhas de dados da tabela em `AGENTS.md §6`)
 - **Paradigma DDD + Hexagonal** canônico (ADR-0001) com guardiões automáticos
 - **OpenTelemetry cross-stack** (backend + frontend + Collector)
 - **CI Defense-in-Depth** em 3 camadas
@@ -26,9 +25,9 @@ projeto-base/
 ├── AGENTS.md              # Spec canônica do padrão (LEIA PRIMEIRO, ≤ 300 linhas)
 ├── README.md              # Este arquivo
 ├── .agents/
-│   ├── agents/            # 26 agents (12 genéricos + 2 routers + 6 de stack + 6 de auditoria)
+│   ├── agents/            # 27 agents (12 genéricos + 2 routers + 7 de stack + 6 de auditoria)
 │   │                      # catálogo nominal, com papel e memória: AGENTS.md §3
-│   ├── memory/            # Memória acumulada (28 arquivos: 26 agents + state-aware-planning + _template)
+│   ├── memory/            # Memória acumulada (29 arquivos: 27 agents + state-aware-planning + _template)
 │   ├── skills/            # coordenação, routing, auditoria, UI (mapeamento agent↔skill: AGENTS.md §3.2)
 │   ├── specs/conventions/ # tdd, git-workflow, cobertura, tamanho… (ver AGENTS.md §6)
 │   ├── workflows/         # 15 workflows detalhados
@@ -226,7 +225,7 @@ Detalhes completos em [`AGENTS.md`](./AGENTS.md) (seção §1).
 | `review-router` | Despacha reviewers em paralelo após task DONE (matriz `path_globs` × `commit_types` × `diff_patterns`) |
 | `specialist-router` | Pré-planejamento — classifica demanda e identifica specialist(s); bloqueia se `gap_detected` |
 
-### Specialists de Stack (6)
+### Specialists de Stack (7)
 
 | Agent | Uso |
 |---|---|
@@ -236,6 +235,7 @@ Detalhes completos em [`AGENTS.md`](./AGENTS.md) (seção §1).
 | `docker-specialist` | Containerização (Dockerfile multi-stage, Compose, hardening) |
 | `telemetry-specialist` | Observabilidade cross-stack (OTel SDK init, exporters OTLP, propagação W3C, web-vitals) |
 | `ux-design-specialist` | UX e design de interface (tokens, estados, formulários, a11y, microcopy) |
+| `multi-tenant-specialist` | Tenancy (schema + `tenant_id`, contexto por request, RLS, isolamento cross-tenant) |
 
 Cada agent possui arquivo de **memória** em `.agents/memory/<nome>.md` que armazena decisões, padrões e sugestões de evolução — garantindo que os agents evoluam junto com a aplicação.
 
@@ -297,4 +297,4 @@ Detalhes em [`docs/TEMPLATE_USAGE.md`](./docs/TEMPLATE_USAGE.md).
 
 ## Versão & Licença
 
-**Versão:** 1.11.0 — contagens re-medidas do disco (2026-10-13): skills 15 → 20 (as 5 de UI que `v1.11.0` adicionou) e convenções 21 → 19 (linhas de dados de `AGENTS.md §6`); agents 26 e memórias 28 conferem. Footer alinhado ao de `docs/MONOREPO.md` e à tag `v1.11.0`. **Licença:** MIT.
+**Versão:** 1.12.0 — re-medido do disco (2026-10-16): `ls .agents/agents/*.md | wc -l` = **27**, `ls .agents/memory/*.md | wc -l` = **29**, `ls .agents/skills/*/SKILL.md | wc -l` = **23**. O `1.12.0` adiciona `multi-tenant-specialist` + sua memória + a skill `multi-tenant-audit` (+1/+1/+1). **Drift pré-existente corrigido:** o rodapé anterior declarava skills 20 contra 22 reais antes deste PR. Footer alinhado ao de `docs/MONOREPO.md`; a tag `v1.12.0` ainda **não** existe — `release-template.yml` cria no merge em `main`. **Licença:** MIT.

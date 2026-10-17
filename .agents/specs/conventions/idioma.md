@@ -20,3 +20,17 @@
 ## Regra Prática
 
 Se cabe em código compilado → inglês técnico permitido. Se é prosa para humanos → pt-BR obrigatório.
+
+## Varrer antes de commitar: caractere fora do alfabeto latino
+
+O modo de falha MEDIDO (3× em 2026-10): a prosa pt-BR sai com caractere CJK
+(Kanji/Kana/Hangul) colado no meio da frase. **Nenhum gate acusa** — o arquivo
+continua sintaticamente válido, o TypeScript compila, o Prettier formata e o
+`tsc` passa. O defeito só aparece na revisão humana.
+
+```bash
+grep -rlP '[\x{4E00}-\x{9FFF}\x{3040}-\x{30FF}\x{AC00}-\x{D7AF}]' <arquivos alterados>
+```
+
+Rodar sobre **os arquivos alterados**, nunca sobre o diretório inteiro: um hit
+em arquivo de terceiro não é defeito desta change. Saída vazia é o alvo.

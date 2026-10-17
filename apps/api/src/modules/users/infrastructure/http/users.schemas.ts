@@ -70,10 +70,46 @@ import {
  * um User que nunca autentica, e o defeito só apareceria no login (Fase 4)
  * como "credencial inválida para sempre".
  */
+/**
+ * Para ONDE a conta entra (Fase 5, D5). Ausente = a conta solta de hoje.
+ *
+ * ⚠️ `discriminatedUnion` e não `z.union` de dois objetos: com `z.union` o Zod
+ * tenta os dois e o erro de um payload inválido sai como "chaves desconhecidas"
+ * das DUAS metades — a mensagem não diz qual campo falhou. E `destino` só é
+ * aceito porque está aqui: MEDIDO 2026-10-17, sem esta chave o boundary fazia
+ * strip silencioso e `POST /users { destino: … }` devolvia 201 criando a conta
+ * SEM empresa nenhuma, com o cliente acreditando que a empresa tinha sido criada.
+ *
+ * `slug`: minúsculo, dígitos e hífen, sem hífen nas pontas. É o que vai para a
+ * URL da empresa e a chave UNIQUE que o banco usa para recusar a segunda.
+ */
+const DestinoSchema = z.discriminatedUnion('tipo', [
+  z.object({
+    tipo: z.literal('empresa'),
+    nome: z.string().min(NOME_MIN).max(NOME_MAX),
+    slug: z
+      .string()
+      .min(3)
+      .max(50)
+      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'slug em minúsculo, com dígitos e hífens internos'),
+  }),
+  z.object({
+    tipo: z.literal('convite'),
+    // 32 bytes em hex — o comprimento que `randomBytes(32)` produz. Recusar
+    // fora dele aqui é o que impede que um segredo curto e chutável chegue ao
+    // `emitirConvite`.
+    token: z
+      .string()
+      .length(64)
+      .regex(/^[0-9a-f]{64}$/),
+  }),
+]);
+
 export const CreateUserSchema = z.object({
   nome: z.string().min(NOME_MIN).max(NOME_MAX),
   email: z.string().email().max(EMAIL_MAX),
   senha: z.string().min(SENHA_MIN).max(SENHA_MAX),
+  destino: DestinoSchema.optional(),
 });
 
 /** Tipo inferido do `CreateUserSchema` — consumido pelo controller. */

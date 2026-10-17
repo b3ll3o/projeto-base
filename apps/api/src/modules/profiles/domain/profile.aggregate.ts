@@ -80,6 +80,17 @@ export class Profile {
   #description: string | null;
   #isAdmin: boolean;
   readonly #isSystem: boolean;
+  /**
+   * pt-BR (Fase 6 — tenancy, 2026-10-16): a EMPRESA dona do perfil, ou `null`
+   * para o bucket global (D3). `readonly` de propósito: nenhum mutador muda a
+   * dona — trocar o dono de um perfil seria mover permissões entre empresas, e
+   * não é operação que a aplicação faz.
+   *
+   * É o mesmo conjunto que `findProfileId` já filtra na LEITURA
+   * (`profile: { OR: [{ tenantId: null }, { tenantId }] }`); a escrita da
+   * Fase 6 precisa dele, e sem o campo no agregado a regra seria inescritível.
+   */
+  readonly #tenantId: string | null;
   #authorizations: ProfileAuthorizations;
   readonly #createdAt: Date;
   #updatedAt: Date;
@@ -102,6 +113,7 @@ export class Profile {
     description: string | null;
     isAdmin: boolean;
     isSystem: boolean;
+    tenantId: string | null;
     authorizations: ProfileAuthorizations;
     createdAt: Date;
     updatedAt: Date;
@@ -114,6 +126,7 @@ export class Profile {
     this.#description = props.description;
     this.#isAdmin = props.isAdmin;
     this.#isSystem = props.isSystem;
+    this.#tenantId = props.tenantId;
     this.#authorizations = props.authorizations;
     this.#createdAt = props.createdAt;
     this.#updatedAt = props.updatedAt;
@@ -142,6 +155,19 @@ export class Profile {
     isAdmin?: boolean;
     isSystem?: boolean;
     initialAuthorizations?: readonly string[];
+    /**
+     * pt-BR (Fase 8): DONA do perfil. `null` = perfil global.
+     *
+     * Antes desta fase o parâmetro não existia e `criar` fixava `null`, com o
+     * argumento de que "só `provisionarEmpresaPropria` cria perfil de empresa,
+     * e ele grava direto no Prisma". MEDIDO que a consequência era o oposto do
+     * pretendido: `POST /admin/profiles` só alcançado por quem tem
+     * `admin.manage-profiles` — que, desde a Fase 5, é TODO dono de empresa
+     * (o onboarding lhe dá TODAS as permissões + `isAdmin: true`). Então o
+     * dono, ao criar um perfil, fabricava um perfil GLOBAL de sistema, e
+     * nenhuma empresa podia ter um perfil próprio.
+     */
+    tenantId?: string | null;
     agora: Date;
   }): Profile {
     for (const key of props.initialAuthorizations ?? []) {
@@ -156,6 +182,10 @@ export class Profile {
       description: props.description ?? null,
       isAdmin: props.isAdmin === true,
       isSystem: props.isSystem === true,
+      // pt-BR (Fase 8): a dona vem do CHAMADOR, que é quem sabe o escopo
+      // (o ator autenticado na empresa). `provisionarEmpresaPropria` continua
+      // o único a criar perfil `isAdmin`, e ele grava direto no Prisma.
+      tenantId: props.tenantId ?? null,
       authorizations: ProfileAuthorizations.deLista(props.initialAuthorizations ?? []),
       createdAt: props.agora,
       updatedAt: props.agora,
@@ -177,6 +207,7 @@ export class Profile {
     description: string | null;
     isAdmin: boolean;
     isSystem: boolean;
+    tenantId: string | null;
     authorizations: readonly string[];
     createdAt: Date;
     updatedAt: Date;
@@ -189,6 +220,7 @@ export class Profile {
       description: props.description,
       isAdmin: props.isAdmin,
       isSystem: props.isSystem,
+      tenantId: props.tenantId,
       authorizations: ProfileAuthorizations.deLista(props.authorizations),
       createdAt: props.createdAt,
       updatedAt: props.updatedAt,
@@ -216,6 +248,10 @@ export class Profile {
   }
   isSystem(): boolean {
     return this.#isSystem;
+  }
+  /** pt-BR (Fase 6): `null` = perfil global, que serve a qualquer empresa. */
+  tenantId(): string | null {
+    return this.#tenantId;
   }
   authorizations(): ProfileAuthorizations {
     // Cópia defensiva para impedir que o caller mutar o Set interno via

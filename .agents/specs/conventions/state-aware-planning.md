@@ -1,7 +1,7 @@
 ---
 name: state-aware-planning
-version: 1.0
-updated: 2026-09-23
+version: 2.0
+updated: 2026-10-16
 maintainer: telemetry-specialist
 description: "Convenção canônica de planejamento state-aware — institui a obrigatoriedade de verificar o estado atual da aplicação (working tree, última main alinhada, dependências, locks, schemas, env vars, métricas de saúde) ANTES de criar um plano, emitir um `state-snapshot` explícito, e alimentar o specialist-router com o gap analysis AS-IS→TO-BE. Camada 0 do pre-planner (antes do specialist-router camada 1)."
 ---
@@ -150,6 +150,15 @@ health_endpoint:
 otel_env_vars_declared: []         # OTEL_* keys
 otel_collector_running: false       # opt-in via perfil
 matrix_specialist_routing_lint: passed | failed
+# v2.0 — extensão ADITIVA: nenhum destes é obrigatório. Cada um carrega uma
+# medida que o v1.0 não tinha onde ir. `proceed`/`proceed_rationale` são a
+# decisão do Passo 3, e moram no mesmo arquivo que os gaps que a motivaram.
+written_at: 2026-09-23T20:05:00Z   # escrito ≠ gerado (o Passo 1 leva minutos)
+preflight_skipped: []              # checks que não rodaram, com a razão de cada um
+matrix_specialist_routing_warnings: 0
+matrix_specialist_routing_warnings_detail: ""
+proceed: true | false
+proceed_rationale: "..."
 
 gaps_detectados:
   - id: G-001
@@ -158,6 +167,10 @@ gaps_detectados:
     file: "apps/api/src/main.ts"
     rationale: "Zero dependências OTel; usuários sem tracing"
     source: "Stream B do research desta demanda"
+    status: open | resolved        # v2.0 — ausente = open (o v1.0 não tinha estado)
+    resolved_at: <ts>              # v2.0 — quando status = resolved
+    resolved_by: <como>            # v2.0
+    resolucao: <prosa>             # v2.0 — a medida que resolveu, não só o veredito
   - id: G-002
     categoria: "Frontend sem RUM"
     severity: major
@@ -282,4 +295,5 @@ Demanda: "fix typo in apps/api/src/main.ts comment"
 
 | Versão | Data       | Mudança                                                                                                              |
 |--------|------------|----------------------------------------------------------------------------------------------------------------------|
+| 2.0    | 2026-10-16 | **Extensão aditiva do schema, sem remover campo** (demanda `multi-tenant`, gap G-003): +6 top-level (`written_at`, `preflight_skipped`, `matrix_specialist_routing_warnings`, `matrix_specialist_routing_warnings_detail`, `proceed`, `proceed_rationale`) e +4 por gap (`status`, `resolved_at`, `resolved_by`, `resolucao`). MEDIDO antes: nenhum gate parseia esse frontmatter (`grep -rn 'state-snapshot' tooling/ .tooling/ --include=*.ts` → só comentário e fixture), então a extensão era inerte — mas a regra "mudança de schema exige bump major" existia e este era o contraexemplo. O `status` por gap é o que impede um gap resolvido continuar listado como aberto. |
 | 1.0    | 2026-09-23 | Lançamento inicial — convenção + skill + workflow + memory (camada 0 do pre-planner, gap analysis AS-IS→TO-BE canônico) |

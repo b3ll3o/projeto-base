@@ -22,6 +22,10 @@ import {
   USER_REPOSITORY_PORT,
   type UserRepositoryPort,
 } from '../../users/domain/ports/user-repository.port.js';
+import {
+  TENANT_MEMBERSHIP_REPOSITORY_PORT,
+  type TenantMembershipRepositoryPort,
+} from '../../tenancy/domain/ports/tenant-membership-repository.port.js';
 import { UserProfileCacheService } from '../../../shared/infrastructure/security/user-profile-cache.service.js';
 import {
   ProfileNotFoundException,
@@ -55,13 +59,90 @@ function recusaEscalada(motivo: string): never {
 }
 
 /**
+ * pt-BR (Fase 9, 2026-10-17): o bucket de SISTEMA tem dono, e o dono é `isAdmin`
+ * — não o bucket.
+ *
+ * `ator.tenantId === null` significa "rota sem `X-Tenant-Id`", e a Fase 8 leu
+ * isso como "sou o admin global, então vejo tudo". A leitura é falsa: o bucket
+ * de SISTEMA tem DOIS perfis no seed — `admin` (com `isAdmin`) e `viewer` (sem
+ * nada) — e o que dá bypass total no `PermissionsGuard` é o `isAdmin`, nunca o
+ * bucket. MEDIDO 2026-10-17 contra Postgres real: um perfil global **não-admin**
+ * com `admin.manage-*` listava, renomeava, apagava e injetava permissão em perfil
+ * de empresa vizinha sem header nenhum, e vestia perfil de empresa em conta
+ * alheia. O alvo do último caso perdia o perfil inteiro, porque
+ * `findProfileId(_, null)` só aceita `tenant_id IS NULL`.
+ *
+ * A contrapartida que não pode regredir: o admin de SISTEMA continua vendo
+ * tudo. Sem ele o seed volta a ser a única porta de administração, que é a
+ * dependência que a Fase 5 removeu de propósito.
+ *
+ * É a MESMA regra que `findProfileId` já aplica no ramo global do bucket
+ * (`profile: { is: { tenantId: null } }`, em
+ * `prisma-tenant-membership.repository.ts:49`): o bucket de sistema resolve o
+ * bucket de sistema. A leitura sempre teve a trava; a escrita não.
+ */
+function ehAdministradorDeSistema(ator: AtorAutenticado): boolean {
+  return ator.tenantId === null && ator.isAdmin;
+}
+
+/**
+ * pt-BR (Fase 8, 2026-10-17): o perfil é da EMPRESA do ator?
+ *
+ * A regra original é uma linha e a MEDIÇÃO é que ela não existia: com
+ * `provisionarEmpresaPropria` dando `listAllPermissions()` + `isAdmin: true` ao
+ * dono (Fase 5), e o catálogo documentando `is_admin` como BYPASS TOTAL do
+ * `PermissionsGuard`, TODO dono de empresa passava as 5 rotas de
+ * `/admin/profiles` — que não filhavam por empresa. MEDIDO por HTTP antes do
+ * conserto: listar, renomear, apagar e injetar permissão em perfil da GLOBEX
+ * respondiam 200/201 a partir da ACME.
+ *
+ * pt-BR (Fase 9): a condição passou a ser `!ehAdministradorDeSistema(ator)`, e a
+ * troca não é cosmética. Antes era `ator.tenantId !== null`, que tratava o
+ * bucket como se fosse superusuário — e o bucket tem membros não-admin.
+ *
+ * Função de arquivo como as outras: as duas classes (`ProfileUseCases` e
+ * `AuthorizationUseCases`) precisam dela, e um método duplicaria a regra.
+ */
+function exigePerfilDoEscopo(profile: Profile, ator: AtorAutenticado): void {
+  if (!ehAdministradorDeSistema(ator) && profile.tenantId() !== ator.tenantId) {
+    recusaEscalada('um ator administra os perfis do próprio bucket; o de SISTEMA exige isAdmin');
+  }
+}
+
+/**
  * Identidade do ator autenticado, o mínimo que as travas de escalada
  * precisam: QUEM é e SE é admin. Vem do `req.user` publicado pelo
  * `JwtAuthGuard` (que hidrata `isAdmin` do cache de profile).
  */
 export interface AtorAutenticado {
   readonly userId: string;
+  /**
+   * pt-BR (Fase 3): empresa em que o ato acontece. `null` = rota sem
+   * `X-Tenant-Id`.
+   *
+   * **Obrigatório** (não `?`) para que nenhuma chamada possa omitir a empresa
+   * em silêncio. Desde a Fase 4 ele é lido de verdade: o perfil efetivo do ator
+   * vem de `tenant_memberships.profile_id` quando há empresa, e do perfil
+   * GLOBAL (`users.profile_id`) quando não há.
+   *
+   * ⚠️ `null` NÃO é "sem permissão nenhuma": é o bucket dos perfis de sistema
+   * (D3, `profiles.tenant_id IS NULL`), onde mora o único `isAdmin`.
+   */
+  readonly tenantId: string | null;
   readonly isAdmin: boolean;
+}
+
+/**
+ * pt-BR (Fase 3): o perfil efetivo do ator numa empresa. Nomeado para que
+ * `obterMeuPerfil` e o controller `/me/profile` não repitam a estrutura
+ * inline — e para que o segundo veja o contrato que o primeiro devolve.
+ */
+export interface MeuPerfil {
+  profileId: string | null;
+  profileSlug: string | null;
+  profileName: string | null;
+  isAdmin: boolean;
+  permissions: string[];
 }
 
 export interface CreateProfileInput {
@@ -110,23 +191,38 @@ export class ProfileUseCases {
     @Inject(PROFILE_REPOSITORY_PORT) private readonly profileRepo: ProfileRepositoryPort,
     @Inject(USER_REPOSITORY_PORT) private readonly userRepo: UserRepositoryPort,
     @Inject(UserProfileCacheService) private readonly cache: UserProfileCacheService,
+    @Inject(TENANT_MEMBERSHIP_REPOSITORY_PORT)
+    private readonly memberships: TenantMembershipRepositoryPort,
   ) {}
 
-  async listar(): Promise<ProfileSummary[]> {
-    const profiles = await this.profileRepo.list();
-    return profiles.map((p) => this.toSummary(p));
+  async listar(ator: AtorAutenticado): Promise<ProfileSummary[]> {
+    // pt-BR (Fase 8): o filtro é o da EMPRESA do ator.
+    //
+    // pt-BR (Fase 9): `list(null)` no repositório é a lista INTEIRA — é a nota
+    // de sentido oposto da porta — e quem pode pedir a inteira é o admin de
+    // SISTEMA. Um ator do bucket de sistema que não é admin recebe só os
+    // perfis de sistema. Não é cosmético: `GET /admin/profiles` no bucket de
+    // sistema entregava o UUID dos perfis das DUAS empresas, e o UUID é o passo
+    // 1 de qualquer escalada que passe depois por uma rota que não cheque
+    // DONA.
+    const profiles = await this.profileRepo.list(ator.tenantId);
+    const visiveis = ehAdministradorDeSistema(ator)
+      ? profiles
+      : profiles.filter((p) => p.tenantId() === ator.tenantId);
+    return visiveis.map((p) => this.toSummary(p));
   }
 
-  async obterPorId(id: string): Promise<ProfileDetail> {
-    const profile = await this.profileRepo.findById(profileId(id));
+  async obterPorId(id: string, ator: AtorAutenticado): Promise<ProfileDetail> {
+    const profile = await this.profileRepo.findById(profileId(id), ator.tenantId);
     if (profile === null) {
       throw new ProfileNotFoundException(id);
     }
+    exigePerfilDoEscopo(profile, ator);
     return this.toDetail(profile);
   }
 
-  async obterPorSlug(slug: string): Promise<ProfileDetail> {
-    const profile = await this.profileRepo.findBySlug(profileSlug(slug));
+  async obterPorSlug(slug: string, ator: AtorAutenticado): Promise<ProfileDetail> {
+    const profile = await this.profileRepo.findBySlug(profileSlug(slug), ator.tenantId);
     if (profile === null) {
       throw new ProfileNotFoundException(slug);
     }
@@ -153,10 +249,12 @@ export class ProfileUseCases {
       return;
     }
     let doAtor: ReadonlySet<string> = new Set();
-    const atorUser = await this.userRepo.findById(UserId.create(ator.userId));
-    const idDoAtor = atorUser?.profileId() ?? null;
+    // pt-BR (Fase 4): o subconjunto é o do perfil que o ator veste NA EMPRESA
+    // em que está agindo, não o global — comparar o global deixaria a trava
+    // medindo o perfil errado em toda chamada com `X-Tenant-Id`.
+    const idDoAtor = await this.memberships.findProfileId(ator.userId, ator.tenantId);
     if (idDoAtor !== null) {
-      const meu = await this.profileRepo.findById(profileId(idDoAtor));
+      const meu = await this.profileRepo.findById(profileId(idDoAtor), ator.tenantId);
       doAtor = new Set(meu?.authorizations().toLista() ?? []);
     }
     for (const chave of chaves) {
@@ -176,7 +274,7 @@ export class ProfileUseCases {
     // pt-BR (#97, A4): slug malformado NÃO é `ProfileSlugAlreadyInUse` —
     // `ProfileSlug.create` (via `profileSlug()`) lança `UserValidationException`
     // → 400. O 409 fica só para o slug bem formado que já existe.
-    const existing = await this.profileRepo.findBySlug(profileSlug(input.slug));
+    const existing = await this.profileRepo.findBySlug(profileSlug(input.slug), ator.tenantId);
     if (existing !== null) {
       throw new ProfileSlugAlreadyInUseException(input.slug);
     }
@@ -186,6 +284,11 @@ export class ProfileUseCases {
       name: input.name,
       description: input.description ?? null,
       initialAuthorizations: input.initialPermissions ?? [],
+      // pt-BR (Fase 8): o perfil nasce da EMPRESA do ator. Antes desta fase
+      // este campo não era repassado e todo `POST /admin/profiles` fabricava um
+      // perfil GLOBAL — inclusive quando o ator é o dono de uma empresa
+      // cliente, que é quem pode chegar aqui.
+      tenantId: ator.tenantId,
       agora: new Date(),
     });
     await this.profileRepo.save(profile);
@@ -193,11 +296,16 @@ export class ProfileUseCases {
     return this.toDetail(profile);
   }
 
-  async atualizar(id: string, input: UpdateProfileInput): Promise<ProfileDetail> {
-    const profile = await this.profileRepo.findById(profileId(id));
+  async atualizar(
+    id: string,
+    input: UpdateProfileInput,
+    ator: AtorAutenticado,
+  ): Promise<ProfileDetail> {
+    const profile = await this.profileRepo.findById(profileId(id), ator.tenantId);
     if (profile === null) {
       throw new ProfileNotFoundException(id);
     }
+    exigePerfilDoEscopo(profile, ator);
     if (profile.isSystem()) {
       throw new ProfileSystemProtectedException(profile.id().value);
     }
@@ -212,11 +320,12 @@ export class ProfileUseCases {
     return this.toDetail(profile);
   }
 
-  async deletar(id: string): Promise<void> {
-    const profile = await this.profileRepo.findById(profileId(id));
+  async deletar(id: string, ator: AtorAutenticado): Promise<void> {
+    const profile = await this.profileRepo.findById(profileId(id), ator.tenantId);
     if (profile === null) {
       throw new ProfileNotFoundException(id);
     }
+    exigePerfilDoEscopo(profile, ator);
     if (profile.isSystem()) {
       throw new ProfileSystemProtectedException(profile.id().value);
     }
@@ -228,13 +337,25 @@ export class ProfileUseCases {
     if (profile.isAdmin()) {
       throw new ProfileAdminProtectedException(profile.id().value);
     }
-    const count = await this.userRepo.countByProfile(profile.id().value);
+    // pt-BR (Fase 4): as DUAS contagens, porque `users.profile_id` (bucket
+    // global) e `tenant_memberships.profile_id` (por empresa) são dois
+    // lugares distintos onde o mesmo perfil pode estar em uso. Somar só o
+    // primeiro deixaria a trava passar e o `ON DELETE RESTRICT` do banco
+    // estourar P2003 — 500 no lugar de 409.
+    // `null` = bucket de SISTEMA, e aqui é o escopo CORRETO: a pergunta é
+    // "este perfil está em uso por alguém, em qualquer lugar?", não "na minha
+    // empresa". Sob escopo de empresa a RLS de `users` cortaria o `count` e a
+    // trava passaria, e o `ON DELETE RESTICT` do banco estouraria P2003 — 500
+    // no lugar do 409 que estas duas linhas existem para dar.
+    const count =
+      (await this.userRepo.countByProfile(profile.id().value, null)) +
+      (await this.memberships.countByProfile(profile.id().value));
     if (count > 0) {
       throw new ProfileHasUsersException(profile.slug().value, count);
     }
     const agora = new Date();
     profile.deletar(null, agora);
-    await this.profileRepo.delete(profile.id());
+    await this.profileRepo.delete(profile.id(), ator.tenantId);
     await this.cache.invalidateAll();
   }
 
@@ -268,6 +389,8 @@ export class AuthorizationUseCases {
     // Só para resolver o profile de QUEM pediu (trava de auto-concessão).
     @Inject(USER_REPOSITORY_PORT) private readonly userRepo: UserRepositoryPort,
     @Inject(UserProfileCacheService) private readonly cache: UserProfileCacheService,
+    @Inject(TENANT_MEMBERSHIP_REPOSITORY_PORT)
+    private readonly memberships: TenantMembershipRepositoryPort,
   ) {}
 
   /**
@@ -281,7 +404,7 @@ export class AuthorizationUseCases {
    * que o banco aceita é PR próprio deste VO.
    */
   private async userDoAtor(ator: AtorAutenticado): Promise<User | null> {
-    return this.userRepo.findById(UserId.create(ator.userId));
+    return this.userRepo.findById(UserId.create(ator.userId), ator.tenantId);
   }
 
   /**
@@ -325,7 +448,12 @@ export class AuthorizationUseCases {
     if (ator.isAdmin || atorUser === null) {
       return;
     }
-    if (atorUser.profileId() === profileIdAlvo) {
+    // pt-BR (Fase 4): "o próprio profile" é o que o ator veste NA EMPRESA em
+    // que está agindo. Comparar `users.profile_id` faria a trava disparar por
+    // um perfil de outra empresa (falso positivo, prendendo o ator sem motivo)
+    // e NÃO disparar quando o perfil da empresa é o global (escalada aberta).
+    const idDoAtor = await this.memberships.findProfileId(ator.userId, ator.tenantId);
+    if (idDoAtor === profileIdAlvo) {
       recusaEscalada('um ator sem isAdmin não altera as permissões do próprio profile');
     }
   }
@@ -356,9 +484,11 @@ export class AuthorizationUseCases {
       return;
     }
     let tem = false;
-    const idDoAtor = atorUser?.profileId() ?? null;
+    // pt-BR (Fase 4): mesma troca de escopo de `recusaAutoConcessao` — a
+    // posse da chave é a do perfil NA EMPRESA, não a do global.
+    const idDoAtor = await this.memberships.findProfileId(ator.userId, ator.tenantId);
     if (idDoAtor !== null) {
-      const meu = await this.profileRepo.findById(profileId(idDoAtor));
+      const meu = await this.profileRepo.findById(profileId(idDoAtor), ator.tenantId);
       tem = meu?.authorizations().tem(permissionKey) === true;
     }
     if (!tem) {
@@ -373,10 +503,11 @@ export class AuthorizationUseCases {
     permissionKey: string,
     ator: AtorAutenticado,
   ): Promise<ProfileDetail> {
-    const profile = await this.profileRepo.findById(profileId(profileIdStr));
+    const profile = await this.profileRepo.findById(profileId(profileIdStr), ator.tenantId);
     if (profile === null) {
       throw new ProfileNotFoundException(profileIdStr);
     }
+    exigePerfilDoEscopo(profile, ator);
     if (profile.isSystem()) {
       throw new ProfileSystemProtectedException(profile.id().value);
     }
@@ -406,10 +537,11 @@ export class AuthorizationUseCases {
     permissionKey: string,
     ator: AtorAutenticado,
   ): Promise<ProfileDetail> {
-    const profile = await this.profileRepo.findById(profileId(profileIdStr));
+    const profile = await this.profileRepo.findById(profileId(profileIdStr), ator.tenantId);
     if (profile === null) {
       throw new ProfileNotFoundException(profileIdStr);
     }
+    exigePerfilDoEscopo(profile, ator);
     if (profile.isSystem()) {
       throw new ProfileSystemProtectedException(profile.id().value);
     }
@@ -448,20 +580,24 @@ export class UserProfileUseCases {
     @Inject(USER_REPOSITORY_PORT) private readonly userRepo: UserRepositoryPort,
     @Inject(PROFILE_REPOSITORY_PORT) private readonly profileRepo: ProfileRepositoryPort,
     @Inject(UserProfileCacheService) private readonly cache: UserProfileCacheService,
+    @Inject(TENANT_MEMBERSHIP_REPOSITORY_PORT)
+    private readonly memberships: TenantMembershipRepositoryPort,
   ) {}
 
   /**
    * pt-BR (#97, A1.2): as permission keys que o ATOR tem de fato.
    * Fail-CLOSED — ator que não resolve (soft-deleted) ou sem profile devolve
    * conjunto vazio, porque o subconjunto de nada é nada.
+   *
+   * pt-BR (Fase 4): o perfil é o DA EMPRESA (`ator.tenantId`), com o global
+   * como bucket de quem não mandou `X-Tenant-Id`.
    */
   private async permissoesDoAtor(ator: AtorAutenticado): Promise<ReadonlySet<string>> {
-    const user = await this.userRepo.findById(UserId.create(ator.userId));
-    const idDoAtor = user?.profileId() ?? null;
+    const idDoAtor = await this.memberships.findProfileId(ator.userId, ator.tenantId);
     if (idDoAtor === null) {
       return new Set();
     }
-    const perfil = await this.profileRepo.findById(profileId(idDoAtor));
+    const perfil = await this.profileRepo.findById(profileId(idDoAtor), ator.tenantId);
     return new Set(perfil?.authorizations().toLista() ?? []);
   }
 
@@ -476,10 +612,51 @@ export class UserProfileUseCases {
     profileIdStr: string | null,
     ator: AtorAutenticado,
   ): Promise<void> {
+    // pt-BR (Fase 6 — tenancy) R5: dentro da empresa, ninguém altera o PRÓPRIO
+    // perfil — nem para vestir outro, nem para tirar o que tem. O motivo é a
+    // irreversibilidade: `emitirConvite` grava `role: 'member'` fixo, então
+    // não existe rota que devolva `owner` a ninguém. Uma empresa de dono único
+    // que se rebaixasse ficaria sem administrador e sem caminho de volta.
+    // Custa a pessoa se ajustar sozinha; o preço alternativo é o lockout.
+    //
+    // A regra mora AQUI, antes do `profileIdStr`, e não dentro dele: a remoção
+    // (`null`) é justamente o caso perigoso, e era o que escapava quando a
+    // trava vivia no ramo do perfil. Fora da empresa (`tenantId === null`) não
+    // se aplica — sem header não há empresa para ficar sem dono.
+    if (ator.tenantId !== null && userId === ator.userId) {
+      recusaEscalada('ninguém altera o próprio perfil dentro da empresa');
+    }
     if (profileIdStr !== null) {
-      const profile = await this.profileRepo.findById(profileId(profileIdStr));
+      const profile = await this.profileRepo.findById(profileId(profileIdStr), ator.tenantId);
       if (profile === null) {
         throw new ProfileNotFoundException(profileIdStr);
+      }
+      // pt-BR (Fase 6 — tenancy): três travas que só existem no caminho da
+      // EMPRESA, e as três são sobre a DONA do perfil — um campo que o
+      // agregado não carregava até esta fase.
+      //
+      // pt-BR (Fase 9): a condição era `ator.tenantId !== null`, o que pulava
+      // R1/R2 no bucket de SISTEMA e deixava a DONA sem trava nenhuma nesse
+      // caminho — as travas de baixo (escalada e subconjunto) não cobrem DONA.
+      // MEDIDO: vestindo um perfil DE EMPRESA a partir do bucket de sistema, o
+      // `users.profile_id` do alvo deixava de apontar para o admin global e
+      // passava a apontar para um perfil que `findProfileId(alvo, null)` nunca
+      // resolve — o alvo perdia toda a parte administrativa, e a resposta era
+      // sucesso. Agora a condição é a mesma de `exigePerfilDoEscopo`: o bloco
+      // roda para todo mundo, menos o admin de SISTEMA.
+      if (!ehAdministradorDeSistema(ator)) {
+        // R1: o mesmo conjunto que `findProfileId` aceita na LEITURA. Perfil
+        // alheio concederia as permissões da empresa vizinha.
+        const dono = profile.tenantId();
+        if (dono !== null && dono !== ator.tenantId) {
+          recusaEscalada('um perfil de outra empresa não é vestível aqui');
+        }
+        // R2: `isAdmin` global em membership de empresa é bypass TOTAL — o
+        // `PermissionsGuard` aceita em QUALQUER empresa, inclusive numa em
+        // que a pessoa nunca entrou. Por isso o admin tem de ser DA empresa.
+        if (profile.isAdmin() && dono !== ator.tenantId) {
+          recusaEscalada('só se veste perfil admin o da própria empresa');
+        }
       }
       if (profile.isAdmin() && !ator.isAdmin) {
         recusaEscalada('só um ator com isAdmin pode atribuir um profile admin');
@@ -510,9 +687,39 @@ export class UserProfileUseCases {
         }
       }
     }
-    const user = await this.userRepo.findById(UserId.create(userId));
+    const user = await this.userRepo.findById(UserId.create(userId), ator.tenantId);
     if (user === null) {
       throw new UserNotFoundException(userId);
+    }
+
+    // pt-BR (Fase 6): aqui a rota bifurca no BUCKET. Com `X-Tenant-Id` a
+    // escrita vai para a membership — a mesma linha que `findProfileId` lê,
+    // que é o que faltava para "perfil diferente em cada empresa" ter efeito.
+    // Sem header, o bucket global (`users.profile_id`) é o de sempre.
+    if (ator.tenantId !== null) {
+      // pt-BR: R4 é o lockout de B4 no bucket CERTO. A leitura abaixo é o
+      // perfil do alvo NA EMPRESA; ler `user.profileId()` protegeria a coluna
+      // que esta rota não altera, e devolveria 403 por um motivo que o
+      // chamador não consegue reproduzir.
+      if (profileIdStr === null && !ator.isAdmin) {
+        const atualId = await this.memberships.findProfileId(userId, ator.tenantId);
+        const atual =
+          atualId === null
+            ? null
+            : await this.profileRepo.findById(profileId(atualId), ator.tenantId);
+        if (atual?.isAdmin() === true) {
+          recusaEscalada('só um ator com isAdmin remove de um membro o profile admin da empresa');
+        }
+      }
+      const gravado = await this.memberships.atribuirPerfil(userId, ator.tenantId, profileIdStr);
+      // `false` = a pessoa não é membro, ou o perfil é de outra empresa. Os
+      // dois casos NÃO são distinguidos para o chamador (expor qual deles é
+      // entregaria a existência de um perfil alheio), e ambos são 403.
+      if (!gravado) {
+        recusaEscalada('a atribuição sai da empresa e por isso é recusada');
+      }
+      await this.cache.invalidateUser(userId);
+      return;
     }
     // pt-BR (#97, achado B4): com `profileId === null` o bloco de autorização
     // acima INTEIRO é pulado — nenhuma checagem roda. MEDIDO: um ator não-admin
@@ -521,73 +728,90 @@ export class UserProfileUseCases {
     // (desligar nunca concede), mas é a mesma classe de B1 — a regra morava
     // dentro de um `if` que o chamador controla. Desligar profile comum segue
     // livre para quem tem `admin.manage-users`.
+    //
+    // pt-BR (Fase 4): a leitura abaixo é `user.profileId()` e NÃO o perfil da
+    // empresa, DE PROPÓSITO — a escrita logo mais abaixo
+    // (`user.atribuirPerfil`) é na coluna global. Trocar só a checagem
+    // deixaria trava e escrita medindo coisas diferentes, e a trava protegeria
+    // algo que esta rota não altera. Atribuir perfil POR EMPRESA é escrita
+    // nova, e é da Fase 6.
     if (profileIdStr === null && !ator.isAdmin) {
       const atualId = user.profileId();
-      const atual = atualId === null ? null : await this.profileRepo.findById(profileId(atualId));
+      const atual =
+        atualId === null
+          ? null
+          : await this.profileRepo.findById(profileId(atualId), ator.tenantId);
       if (atual?.isAdmin() === true) {
         recusaEscalada('só um ator com isAdmin remove de um usuário o profile admin');
       }
     }
     user.atribuirPerfil(profileIdStr, new Date());
-    await this.userRepo.save(user, user.version() - 1);
+    // `ator.tenantId` e `null` NESTE ponto — o caminho com header gravou a
+    // membership e voltou na linha acima. Passar o valor do ator em vez de um
+    // `null` fixo é o que mantém a coisa honesta se alguém mexer no `return`.
+    //
+    // ⚠️ O que NÃO fecha a escalada aqui é a RLS, e este texto já dizia que
+    // fechava. `null` vira o escopo de SISTEMA (`'*'`), e `perfil_do_escopo`
+    // (`migration.sql` da Fase 10) tem `escopo_atual() = '*'` como PRIMEIRO
+    // disjunto: sob `'*'` ela aceita qualquer `profile_id`. A policy é inerte
+    // neste caminho. Quem fecha é o `recusaEscalada` acima (R1/R2) — que
+    // confere o `isAdmin` do perfil ATUAL, e só nele.
+    //
+    // A distinção importa porque "o banco cobre" e "a aplicação cobre" pedem
+    // consertos diferentes: quem apagar R1/R2 acreditando na policy abre a
+    // escalada sem nem perceber que mexeu na única defesa que existe.
+    await this.userRepo.save(user, user.version() - 1, ator.tenantId);
     await this.cache.invalidateUser(userId);
   }
 
-  async obterMeuPerfil(userId: string): Promise<{
-    profileId: string | null;
-    profileSlug: string | null;
-    profileName: string | null;
-    isAdmin: boolean;
-    permissions: string[];
-  }> {
-    const cached = await this.cache.getUserProfileAndPermissions(userId);
+  /** pt-BR (Fase 3): grava e devolve, para os quatro caminhos de saída
+   *  compartilharem uma linha em vez de repetir o par `set` + `return`. */
+  private async cachear<T extends MeuPerfil>(
+    tenantId: string | null,
+    userId: string,
+    v: T,
+  ): Promise<T> {
+    await this.cache.setUserProfileAndPermissions(tenantId, userId, v);
+    return v;
+  }
+
+  /**
+   * pt-BR (Fase 4 — tenancy, 2026-10-16): `tenantId` é a empresa da requisição
+   * (header `X-Tenant-Id`) e é a **chave** do cache (Fase 3) **e a chave da
+   * leitura** (Fase 4): o perfil vem de `tenant_memberships.profile_id`, então a
+   * mesma conta em duas empresas lê dois perfis diferentes.
+   *
+   * `tenantId === null` cai no bucket GLOBAL (`users.profile_id`) — o dos
+   * perfis de sistema do seed (D3). Sem empresa não há como saber qual perfil o
+   * usuário veste, e adivinhar o global daria `isAdmin` a quem mandou a
+   * requisição sem header.
+   */
+  async obterMeuPerfil(userId: string, tenantId: string | null): Promise<MeuPerfil> {
+    const cached = await this.cache.getUserProfileAndPermissions(tenantId, userId);
     if (cached !== null) {
       return cached;
     }
-    const user = await this.userRepo.findById(UserId.create(userId));
-    if (user === null) {
-      const empty = {
-        profileId: null,
-        profileSlug: null,
-        profileName: null,
-        isAdmin: false,
-        permissions: [],
-      };
-      await this.cache.setUserProfileAndPermissions(userId, empty);
-      return empty;
+    const denied: MeuPerfil = {
+      profileId: null,
+      profileSlug: null,
+      profileName: null,
+      isAdmin: false,
+      permissions: [],
+    };
+    const profileIdDoAtor = await this.memberships.findProfileId(userId, tenantId);
+    if (profileIdDoAtor === null) {
+      return this.cachear(tenantId, userId, denied);
     }
-    const userProfileId = user.profileId();
-    if (userProfileId === null) {
-      const empty = {
-        profileId: null,
-        profileSlug: null,
-        profileName: null,
-        isAdmin: false,
-        permissions: [],
-      };
-      await this.cache.setUserProfileAndPermissions(userId, empty);
-      return empty;
-    }
-    const profile = await this.profileRepo.findById(profileId(userProfileId));
+    const profile = await this.profileRepo.findById(profileId(profileIdDoAtor), tenantId);
     if (profile === null) {
-      const empty = {
-        profileId: null,
-        profileSlug: null,
-        profileName: null,
-        isAdmin: false,
-        permissions: [],
-      };
-      await this.cache.setUserProfileAndPermissions(userId, empty);
-      return empty;
+      return this.cachear(tenantId, userId, denied);
     }
-    const result = {
+    return this.cachear(tenantId, userId, {
       profileId: profile.id().value,
       profileSlug: profile.slug().value,
       profileName: profile.nome().value,
       isAdmin: profile.isAdmin(),
       permissions: profile.authorizations().toLista(),
-    };
-    await this.cache.setUserProfileAndPermissions(userId, result);
-    return result;
+    });
   }
 }

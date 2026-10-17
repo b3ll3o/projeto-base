@@ -27,9 +27,10 @@
 // `ExecutionContext` é montado à mão, que é a forma unitária sem container.
 
 import { describe, it, expect, vi } from 'vitest';
-import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { ExecutionContext, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
+import type { UserProfileCacheService } from '../../../../shared/infrastructure/security/user-profile-cache.service.js';
 import { Public } from './public.decorator.js';
 import {
   TOKEN_ISSUER_PORT,
@@ -73,12 +74,16 @@ function makeContext(options: {
   handler?: (...args: never[]) => unknown;
   clazz?: unknown;
 }): ExecutionContext {
-  const request: Record<string, unknown> = {
-    ...(options.headers ?? {}),
-    ...(options.authorization === undefined
-      ? {}
-      : { headers: { ...(options.headers ?? {}), authorization: options.authorization } }),
-  };
+  // pt-BR (Fase 3, achado da revisão): o `request` do Fastify SEMPRE tem
+  // `headers` — mesmo sem `authorization`. A versão anterior só criava
+  // `headers` quando havia token e jogava o resto no TOPO do objeto, então o
+  // teste de `@Public()` (o único que não manda token) entregava um
+  // `x-tenant-id` num lugar que o guard nunca lêva e passava sem morder.
+  const headers: Record<string, unknown> = { ...(options.headers ?? {}) };
+  if (options.authorization !== undefined) {
+    headers['authorization'] = options.authorization;
+  }
+  const request = { headers };
 
   return {
     switchToHttp: () => ({ getRequest: () => request }),
@@ -87,7 +92,10 @@ function makeContext(options: {
   } as unknown as ExecutionContext;
 }
 
-function makeGuard(issuer: TokenIssuerPort): JwtAuthGuard {
+function makeGuard(
+  issuer: TokenIssuerPort,
+  cache?: Partial<UserProfileCacheService>,
+): JwtAuthGuard {
   return new JwtAuthGuard(issuer, new Reflector(), {
     async getUserProfileAndPermissions() {
       return null;
@@ -101,6 +109,7 @@ function makeGuard(issuer: TokenIssuerPort): JwtAuthGuard {
     async invalidateAll() {
       /* noop */
     },
+    ...cache,
   } as never);
 }
 
@@ -139,7 +148,14 @@ describe('JwtAuthGuard — token válido', () => {
     }>();
     // pt-BR (#93.1 — RBAC, 2026-10-16): guard adiciona `isAdmin`/`permissions`
     // (cache lookup). Sem cache hit, default = `false`/`[]`.
-    expect(request.user).toEqual({ ...ACCESS_SUBJECT, isAdmin: false, permissions: [] });
+    // pt-BR (Fase 3): e `tenantId`, que é `null` porque este request não
+    // manda `X-Tenant-Id`.
+    expect(request.user).toEqual({
+      ...ACCESS_SUBJECT,
+      tenantId: null,
+      isAdmin: false,
+      permissions: [],
+    });
   });
 
   it('consulta validarAccessToken com o token SEM o prefixo "Bearer "', async () => {
@@ -396,5 +412,135 @@ describe('JwtAuthGuard — contrato de injeção', () => {
     // acima continuaria verde e o guard quebraria em runtime — este
     // `paramtypes` fica declarado para tornar essa regressão visível.
     expect(paramtypes === undefined || Array.isArray(paramtypes)).toBe(true);
+  });
+});
+
+// pt-BR (Fase 3 — tenancy, 2026-10-16): o header `X-Tenant-Id` diz a que
+// empresa o token está agindo. Ele entra em `request.user.tenantId` e na
+// chave do cache de perfil — sem ele, a mesma conta serve o perfil da
+// empresa anterior (vazamento horizontal, medido no spec do cache).
+describe('JwtAuthGuard — X-Tenant-Id (Fase 3)', () => {
+  const ACME = '0190a8b6-0000-4000-8000-00000000000a';
+
+  it('publica o tenant do header em request.user.tenantId', async () => {
+    const guard = makeGuard(makeIssuer());
+
+    const ctx = makeContext({
+      authorization: 'Bearer abc.def.ghi',
+      headers: { 'x-tenant-id': ACME },
+    });
+    expect(await guard.canActivate(ctx)).toBe(true);
+
+    const request = ctx.switchToHttp().getRequest<{ user?: { tenantId?: string | null } }>();
+    expect(request.user?.tenantId).toBe(ACME);
+  });
+
+  it('canonicaliza a caixa do header — o escopo que desce é minúsculo', async () => {
+    // `UUID_RE` tem flag `/i`, então a forma em caixa alta PASSA na validação e
+    // era devolvida crua. O Postgres canoniza `uuid` para minúsculas e a policy
+    // compara por TEXTO (`alvo::text = escopo_atual()`), então o escopo em caixa
+    // alta não casa com nada. O sintoma é membro legítimo recebendo 403 em tudo,
+    // sem erro que aponte a causa. MEDIDO contra Postgres em
+    // `prisma-rls.integration.spec.ts`.
+    const guard = makeGuard(makeIssuer());
+    const maiusculo = ACME.toUpperCase();
+    // O dado precisa ter letras: um uuid só de dígitos não distingue.
+    expect(maiusculo).toMatch(/[A-Z]/);
+
+    const ctx = makeContext({
+      authorization: 'Bearer abc.def.ghi',
+      headers: { 'x-tenant-id': maiusculo },
+    });
+    expect(await guard.canActivate(ctx)).toBe(true);
+
+    const request = ctx.switchToHttp().getRequest<{ user?: { tenantId?: string | null } }>();
+    expect(request.user?.tenantId).toBe(ACME);
+  });
+
+  it('sem o header, tenantId é null — bucket do perfil global, não exceção', async () => {
+    const guard = makeGuard(makeIssuer());
+
+    const ctx = makeContext({ authorization: 'Bearer abc.def.ghi' });
+    expect(await guard.canActivate(ctx)).toBe(true);
+
+    // Ausência de header NÃO pode ser erro: as ~40 rotas que não são
+    // tenant-scoped (health, /users, /auth) seguem funcionando sem ele.
+    // Quem não tem empresa cai no bucket `null` do cache, que resolve o perfil
+    // GLOBAL — nunca o perfil de uma empresa.
+    const request = ctx.switchToHttp().getRequest<{ user?: { tenantId?: string | null } }>();
+    expect(request.user?.tenantId).toBeNull();
+  });
+
+  it('UUID malformado é 400 do cliente, não 401 e não 500', async () => {
+    const guard = makeGuard(makeIssuer());
+
+    const err = await captureRejection(
+      guard,
+      makeContext({
+        authorization: 'Bearer abc.def.ghi',
+        headers: { 'x-tenant-id': 'nao-e-um-uuid' },
+      }),
+    );
+
+    // 401 seria mentira (o token está válido); 500 seria o Prisma reclamando
+    // de uma coluna `@db.Uuid` mais tarde, num lugar onde o cliente não
+    // consegue corrigir nada. O header é entrada não confiável: valida na
+    // fronteira.
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as { getResponse?: () => { code?: string } }).getResponse?.()).toMatchObject({
+      code: 'INVALID_TENANT',
+    });
+  });
+
+  it('consulta o cache com o PAR (tenant, user), nunca só o user', async () => {
+    const get = vi.fn().mockResolvedValue(null);
+    const guard = makeGuard(makeIssuer(), {
+      getUserProfileAndPermissions: get,
+    } as never);
+
+    await guard.canActivate(
+      makeContext({ authorization: 'Bearer abc.def.ghi', headers: { 'x-tenant-id': ACME } }),
+    );
+
+    expect(get).toHaveBeenCalledWith(ACME, ACCESS_SUBJECT.sub);
+  });
+
+  it('header VAZIO é 400 — ausentes e vazios não são a mesma coisa', async () => {
+    // pt-BR (Fase 3, achado da revisão): `''` é a única das três formas de
+    // header sem cobertura. O comportamento escolhido é fail-hard (400), e o
+    // web omite o header justamente para não cair nele. O risco do outro lado:
+    // proxy que entrega `X-Tenant-Id;` como vazio derrubaria TODAS as
+    // chamadas com 400 — por isso a decisão precisa estar fixada num teste,
+    // e não implícita.
+    const guard = makeGuard(makeIssuer());
+
+    const err = await captureRejection(
+      guard,
+      makeContext({
+        authorization: 'Bearer abc.def.ghi',
+        headers: { 'x-tenant-id': '' },
+      }),
+    );
+
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as { getResponse?: () => { code?: string } }).getResponse?.()).toMatchObject({
+      code: 'INVALID_TENANT',
+    });
+  });
+
+  it('rota @Public() ignora o header de tenant (não há ator hidratado)', async () => {
+    const guard = makeGuard(makeIssuer());
+
+    // Header MALFORMADO de propósito: com um UUID válido o teste passaria
+    // mesmo se `extractTenantId` subisse para antes do early-return de
+    // `@Public()`. O que se quer fixar é a ORDEM — rota pública não valida
+    // empresa, porque não há ator para escopar.
+    const ctx = makeContext({
+      handler: DummyPublicController.prototype.create,
+      clazz: DummyPublicController,
+      headers: { 'x-tenant-id': 'nao-e-um-uuid' },
+    });
+
+    expect(await guard.canActivate(ctx)).toBe(true);
   });
 });

@@ -5,6 +5,14 @@ export interface ApiClientConfig {
   baseUrl: string;
   getToken?: () => string | null;
   /**
+   * pt-BR (Fase 3 — tenancy, 2026-10-16): a empresa em que a pessoa está
+   * agindo, enviada como `X-Tenant-Id`. `null` (ou ausente) OMITE o header —
+   * a API resolve então o perfil GLOBAL, sem assumir empresa nenhuma (e sem
+   * trocar de bucket de cache). Consultado a cada request, como `getToken`,
+   * para trocar de empresa pegar sem recriar o cliente.
+   */
+  getTenant?: () => string | null;
+  /**
    * #70: timeout default em ms para qualquer request. Default 10s.
    * Pode ser sobrescrito por request via `init.timeoutMs`.
    */
@@ -49,9 +57,14 @@ export class ApiClient {
     const { fetch: injectedFetch, timeoutMs, ...restInit } = init ?? {};
     const fetchFn: typeof fetch = injectedFetch ?? fetch;
     const token = this.config.getToken?.();
+    const tenant = this.config.getTenant?.();
     const headers = new Headers(restInit.headers);
     headers.set('content-type', 'application/json');
     if (token) headers.set('authorization', `Bearer ${token}`);
+    // pt-BR (Fase 3): `if (tenant)`, não `?? null` — header vazio seria
+    // rejeitado com 400 `INVALID_TENANT` do outro lado, e "sem empresa" é
+    // omitir, não enviar string vazia.
+    if (tenant) headers.set('x-tenant-id', tenant);
 
     // #70: timeout via AbortController. Sem isso, um fetch que nunca resolve
     // (API hang, network partition) segura a UI por minutos até o browser

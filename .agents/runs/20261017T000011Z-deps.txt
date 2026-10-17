@@ -1,0 +1,80 @@
+apps/api/package.json	@nestjs/common@^11.0.0
+apps/api/package.json	@nestjs/config@^12.0.0
+apps/api/package.json	@nestjs/core@^11.0.0
+apps/api/package.json	@nestjs/jwt@^12.0.2
+apps/api/package.json	@nestjs/platform-fastify@^11.0.0
+apps/api/package.json	@nestjs/swagger@^11.0.0
+apps/api/package.json	@nestjs/throttler@^6.5.0
+apps/api/package.json	@opentelemetry/api@^1.9.0
+apps/api/package.json	@opentelemetry/auto-instrumentations-node@^0.52.0
+apps/api/package.json	@opentelemetry/exporter-trace-otlp-http@^0.54.0
+apps/api/package.json	@opentelemetry/instrumentation-pino@^0.68.0
+apps/api/package.json	@opentelemetry/resources@^1.27.0
+apps/api/package.json	@opentelemetry/sdk-node@^0.54.0
+apps/api/package.json	@opentelemetry/semantic-conventions@^1.27.0
+apps/api/package.json	@prisma/client@^6.0.0
+apps/api/package.json	@projeto/shared-types@workspace:*
+apps/api/package.json	argon2@^0.45.1
+apps/api/package.json	nestjs-pino@^4.1.0
+apps/api/package.json	pino@^10.3.0
+apps/api/package.json	pino-http@^10.3.0
+apps/api/package.json	pino-pretty@^11.2.2
+apps/api/package.json	prisma@^6.0.0
+apps/api/package.json	reflect-metadata@^0.2.2
+apps/api/package.json	rxjs@^7.8.1
+apps/api/package.json	@fastify/helmet@^13.0.0
+apps/api/package.json	zod@^3.25.76
+apps/api/package.json	@nestjs/testing@^11.0.0 (dev)
+apps/api/package.json	@projeto/eslint-config@workspace:* (dev)
+apps/api/package.json	@projeto/tsconfig@workspace:* (dev)
+apps/api/package.json	@testcontainers/postgresql@^10.13.0 (dev)
+apps/api/package.json	@types/express@^5.0.0 (dev)
+apps/api/package.json	@types/node@^20.16.0 (dev)
+apps/api/package.json	@types/supertest@^6.0.2 (dev)
+apps/api/package.json	@vitest/coverage-v8@^2.1.0 (dev)
+apps/api/package.json	eslint@^9.12.0 (dev)
+apps/api/package.json	supertest@^7.0.0 (dev)
+apps/api/package.json	typescript@^5.6.0 (dev)
+apps/api/package.json	vitest@^2.1.9 (dev)
+apps/web/package.json	@opentelemetry/api@^1.9.0
+apps/web/package.json	@opentelemetry/auto-instrumentations-node@^0.52.0
+apps/web/package.json	@opentelemetry/auto-instrumentations-web@^0.43.0
+apps/web/package.json	@opentelemetry/exporter-trace-otlp-http@^0.54.0
+apps/web/package.json	@opentelemetry/instrumentation-document-load@^0.43.0
+apps/web/package.json	@opentelemetry/instrumentation-fetch@^0.54.0
+apps/web/package.json	@opentelemetry/instrumentation-user-interaction@^0.43.0
+apps/web/package.json	@opentelemetry/resources@^1.27.0
+apps/web/package.json	@opentelemetry/sdk-node@^0.54.0
+apps/web/package.json	@opentelemetry/sdk-trace-base@^1.27.0
+apps/web/package.json	@opentelemetry/sdk-trace-web@^1.27.0
+apps/web/package.json	@opentelemetry/semantic-conventions@^1.27.0
+apps/web/package.json	@projeto/shared-types@workspace:*
+apps/web/package.json	next@^15.0.0
+apps/web/package.json	react@^19.0.0
+apps/web/package.json	react-dom@^19.0.0
+apps/web/package.json	react-hook-form@^7
+apps/web/package.json	web-vitals@^4.2.4
+apps/web/package.json	zod@^3.25.76
+apps/web/package.json	@playwright/test@1.60.0 (dev)
+apps/web/package.json	@projeto/eslint-config@workspace:* (dev)
+apps/web/package.json	@projeto/tsconfig@workspace:* (dev)
+apps/web/package.json	@tailwindcss/postcss@^4.0.0 (dev)
+apps/web/package.json	@testing-library/jest-dom@^7.0.1 (dev)
+apps/web/package.json	@testing-library/react@^16.3.3 (dev)
+apps/web/package.json	@testing-library/user-event@^14.6.7 (dev)
+apps/web/package.json	@types/node@^20.16.0 (dev)
+apps/web/package.json	@types/react@^19.0.0 (dev)
+apps/web/package.json	@types/react-dom@^19.0.0 (dev)
+apps/web/package.json	@vitest/coverage-v8@^2.1.0 (dev)
+apps/web/package.json	autoprefixer@^10.4.0 (dev)
+apps/web/package.json	eslint@^9.12.0 (dev)
+apps/web/package.json	eslint-config-next@^15.0.0 (dev)
+apps/web/package.json	jsdom@^30.1.2 (dev)
+apps/web/package.json	postcss@^8.4.0 (dev)
+apps/web/package.json	tailwindcss@^4.0.0 (dev)
+apps/web/package.json	typescript@^5.6.0 (dev)
+apps/web/package.json	vitest@^2.1.0 (dev)
+tooling/scripts/package.json	@types/node@^20.11.0 (dev)
+tooling/scripts/package.json	tsx@^4.7.0 (dev)
+tooling/scripts/package.json	typescript@^5.3.3 (dev)
+tooling/scripts/package.json	yaml@^2.5.0 (dev)

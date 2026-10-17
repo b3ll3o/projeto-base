@@ -28,14 +28,18 @@ export class InMemoryUserRepository implements UserRepositoryPort {
   private readonly byId = new Map<string, User>();
   private readonly emailIndex = new Map<string, string>(); // email.value -> id.value
 
-  async findById(id: UserId, options?: FindByIdOptions): Promise<User | null> {
+  async findById(
+    id: UserId,
+    _tenantId: string | null,
+    options?: FindByIdOptions,
+  ): Promise<User | null> {
     const found = this.byId.get(id.value);
     if (found === undefined) return null;
     if (!options?.includeDeleted && found.isDeleted()) return null;
     return this.clone(found);
   }
 
-  async findByEmail(email: Email): Promise<User | null> {
+  async findByEmail(email: Email, _tenantId: string | null): Promise<User | null> {
     const id = this.emailIndex.get(email.value);
     if (id === undefined) return null;
     const found = this.byId.get(id);
@@ -68,7 +72,7 @@ export class InMemoryUserRepository implements UserRepositoryPort {
     });
   }
 
-  async save(user: User, expectedVersion: number): Promise<User> {
+  async save(user: User, expectedVersion: number, _tenantId: string | null): Promise<User> {
     // Snapshot defensivo: clonamos o agregado para evitar que mutações
     // posteriores na referência original do caller afetem o que ficou
     // persistido. Sem isso, o optimistic locking quebra (mesma referência
@@ -124,7 +128,7 @@ export class InMemoryUserRepository implements UserRepositoryPort {
     return snapshot;
   }
 
-  async list(input: UserListInput): Promise<UserListResult> {
+  async list(input: UserListInput, _tenantId: string | null): Promise<UserListResult> {
     const includeDeleted = input.includeDeleted === true;
     const limit = Math.max(1, Math.min(100, input.limit));
     const all = [...this.byId.values()]
@@ -147,7 +151,7 @@ export class InMemoryUserRepository implements UserRepositoryPort {
    * ignora o campo `profileId` (sempre null no clone). A semântica
    * "user com profile" no in-memory é zero até o caller atribuir via use case.
    */
-  async countByProfile(_profileId: string): Promise<number> {
+  async countByProfile(_profileId: string, _tenantId: string | null): Promise<number> {
     return 0;
   }
 

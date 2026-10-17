@@ -17,11 +17,15 @@ lê — a task 2.2 do plano `guard-classes` fecha isso. **Regra: criar uma conve
 (`description` começando por "Apêndice histórico", com `Apenas leitura`) **não**
 entram no índice — existem para preservar o histórico de gaps resolvidos sem
 estourar o limite de 300 linhas do spec canônico, e são alcançáveis por link de
-seu próprio pai. MEDIDO 2026-10-15: `ls .agents/specs/conventions/*.md` → **25**
-arquivos, **22** no índice (o 25º é este README), e os **2** de fora são
-`review-routing-gaps-historical.md` e `specialist-routing-gaps-v1.0.md`. Sem essa
-cláusula, um `comm -23 <(ls disco) <(índices)` acusaria 2 convenções órfãs que
-são, por desenho, apêndices.
+seu próprio pai. MEDIDO 2026-10-16: `ls .agents/specs/conventions/*.md` → **28**
+arquivos, **21** no índice (o outro é este README), e os **6** de fora são
+apêndices: `review-routing-gaps-historical.md`, `review-routing-examples.md`,
+`specialist-routing-gaps-v1.0.md`, `specialist-routing-examples.md`,
+`specialist-routing-historico.md` e `git-workflow-apendice.md`. Os 4 primeiros
+declaram "Apêndice histórico" no `description`; os 2 últimos não têm frontmatter e
+são alcançáveis por link do próprio pai. Sem essa cláusula, um
+`comm -23 <(ls disco) <(índices)` acusaria 6 convenções órfãs que são, por
+desenho, apêndices.
 
 | Convenção | Arquivo | Descrição |
 |-----------|---------|-----------|
@@ -45,6 +49,7 @@ são, por desenho, apêndices.
 | Review Routing | [`review-routing.md`](./review-routing.md) | Matriz que decide quem revisa o quê; apêndice de exemplos em [`review-routing-examples.md`](./review-routing-examples.md) |
 | Specialist Routing | [`specialist-routing.md`](./specialist-routing.md) | Roteamento por especialidade; apêndice de exemplos em [`specialist-routing-examples.md`](./specialist-routing-examples.md) |
 | Guard Classes | [`guard-classes.md`](./guard-classes.md) | As 7 classes pelas quais um controle falha reportando verde; receita de detecção por classe **e a coluna "não pega"** |
+| Migração de Dados | [`migracao-de-dados.md`](./migracao-de-dados.md) | Regra dos 3 passos (add nullable, backfill, drop) + quando **não** há backfill a fazer |
 
 ## Regra Geral
 

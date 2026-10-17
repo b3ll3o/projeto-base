@@ -169,6 +169,90 @@ describe('ApiClient — Authorization header', () => {
   });
 });
 
+// pt-BR (Fase 3 — tenancy, 2026-10-16): `X-Tenant-Id` diz à API em qual
+// empresa a pessoa está agindo. Sem ele a API resolve o perfil GLOBAL
+// (bucket `null`) e o perfil por empresa nunca chega a ser resolvido.
+describe('ApiClient — X-Tenant-Id header', () => {
+  const ACME = '0190a8b6-0000-4000-8000-00000000000a';
+  const GLOBEX = '0190a8b6-0000-4000-8000-00000000000b';
+
+  it('getTenant devolve o UUID → X-Tenant-Id no request', async () => {
+    const { fetch: fetchMock } = makeFetchOk();
+    const client = new ApiClient({
+      baseUrl: 'http://api',
+      getToken: () => 'tok',
+      getTenant: () => ACME,
+    });
+    await client.get('/x', { fetch: fetchMock as unknown as typeof fetch });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect((init.headers as Headers).get('x-tenant-id')).toBe(ACME);
+  });
+
+  it('getTenant devolve null → header AUSENTE, não string vazia', async () => {
+    // Header vazio (`''`) não é ausente: o guard do lado da API rejeita com
+    // 400 `INVALID_TENANT`. "Sem empresa" é omitir o header.
+    const { fetch: fetchMock } = makeFetchOk();
+    const client = new ApiClient({
+      baseUrl: 'http://api',
+      getToken: () => 'tok',
+      getTenant: () => null,
+    });
+    await client.get('/x', { fetch: fetchMock as unknown as typeof fetch });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect((init.headers as Headers).has('x-tenant-id')).toBe(false);
+  });
+
+  it('sem getTenant → sem header (clientes pré-auth não quebram)', async () => {
+    const { fetch: fetchMock } = makeFetchOk();
+    const client = new ApiClient({ baseUrl: 'http://api', getToken: () => 'tok' });
+    await client.get('/x', { fetch: fetchMock as unknown as typeof fetch });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect((init.headers as Headers).has('x-tenant-id')).toBe(false);
+  });
+
+  it('manda o header em TODOS os verbos, não só em GET', async () => {
+    // O tenant não é uma preocupação só de leitura: `PUT
+    // /admin/users/:id/profile` e `POST /admin/profiles/:id/authorizations`
+    // também são por empresa. Um header que só sai no GET deixa exatamente
+    // as escritas sem escopo.
+    const { fetch: fetchMock } = makeFetchOk();
+    const client = new ApiClient({
+      baseUrl: 'http://api',
+      getToken: () => 'tok',
+      getTenant: () => ACME,
+    });
+    const f = fetchMock as unknown as typeof fetch;
+    await client.post('/x', { a: 1 }, { fetch: f });
+    await client.patch('/x', { a: 1 }, { fetch: f });
+    await client.put('/x', { a: 1 }, { fetch: f });
+    await client.delete('/x', { fetch: f });
+
+    for (const call of fetchMock.mock.calls as [string, RequestInit][]) {
+      expect((call[1].headers as Headers).get('x-tenant-id')).toBe(ACME);
+    }
+  });
+
+  it('getTenant é consultado a CADA request (trocar de empresa pega na hora)', async () => {
+    let atual = ACME;
+    const { fetch: fetchMock } = makeFetchOk();
+    const client = new ApiClient({
+      baseUrl: 'http://api',
+      getToken: () => 'tok',
+      getTenant: () => atual,
+    });
+    const f = fetchMock as unknown as typeof fetch;
+
+    await client.get('/x', { fetch: f });
+    atual = GLOBEX;
+    await client.get('/x', { fetch: f });
+
+    const headers = (fetchMock.mock.calls as [string, RequestInit][]).map((call) =>
+      (call[1].headers as Headers).get('x-tenant-id'),
+    );
+    expect(headers).toEqual([ACME, GLOBEX]);
+  });
+});
+
 describe('ApiClient — content-type e merge de headers', () => {
   it('content-type default = application/json', async () => {
     const { fetch: fetchMock } = makeFetchOk();

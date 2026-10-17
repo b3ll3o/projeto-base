@@ -103,6 +103,17 @@ services:
     # real — o `JwtTokenService` recusa o boot, e o healthcheck do serviço
     # reprova. Fail-fast no lugar certo, sem transformar o compose num
     # arquivo que o Postgres também não consegue ler.
+    #
+    # ⚠️ `DIRECT_DATABASE_URL` NÃO aparece aqui pelo MESMO motivo, e a
+    # omissão é load-bearing — ela NÃO é um esquecimento. O serviço `api` não a
+    # consome em runtime (a aplicação usa `url`, que é `app_runtime`); ela é
+    # usada pelo `ENTRYPOINT` do Dockerfile, que roda `prisma migrate deploy`
+    # ANTES de subir o servidor, e `migrate` exige a conexão de DONO — porque
+    # `CREATE ROLE`, `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` e `GRANT`
+    # exigem posse da tabela. Trocar por `DIRECT_DATABASE_URL: ${...}` aqui
+    # quebraria o BOOT do container em toda máquina onde a variável não esteja
+    # no shell — e, pior, `docker compose config` mostraria a configuração como
+    # válida, pelo motivo 2 acima.
     ports:
       - '3000:3000'
     # pt-BR (#91): api em ambas networks — fala com web (frontend) e postgres (backend).

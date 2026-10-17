@@ -23,6 +23,7 @@ import { AuditInfraModule } from '../../shared/audit/audit-infra.module.js';
 import { UsersController } from './infrastructure/http/users.controller.js';
 import { JwtAuthGuard } from '../auth/infrastructure/http/jwt-auth.guard.js';
 import { AuthModule } from '../auth/auth.module.js';
+import { TenancyModule } from '../tenancy/tenancy.module.js';
 
 @Module({
   // pt-BR: `AuthModule` entra na lista de imports (e não só o guard) porque
@@ -30,7 +31,7 @@ import { AuthModule } from '../auth/auth.module.js';
   // `AuthModule`. Trazer só a classe do guard para `providers` resolveria
   // o guard e deixaria `TOKEN_ISSUER_PORT` indefinido — o mesmo modo de
   // falha do `@Inject` faltando, um nível acima.
-  imports: [PrismaPersistenceModule, AuditInfraModule, AuthModule],
+  imports: [PrismaPersistenceModule, AuditInfraModule, AuthModule, TenancyModule],
   controllers: [UsersController],
   providers: [
     {

@@ -27,6 +27,7 @@ import {
 } from './exceptions/application.exceptions.js';
 import { ConcurrencyException } from '../domain/exceptions/user.exceptions.js';
 import { FakePasswordHasher, SENHA_VALIDA } from '../../../../test/fakes/fake-password-hasher.js';
+import { tenancyQueNaoDeveSerChamado } from '../../../../test/fakes/fake-tenancy-use-cases.js';
 
 describe('UserUseCases (integration with Prisma)', () => {
   let ctx: TestContext;
@@ -46,7 +47,7 @@ describe('UserUseCases (integration with Prisma)', () => {
     await cleanDatabase(prisma);
     const repo = new PrismaUserRepository(prisma);
     const audit = new PrismaAuditService(prisma);
-    sut = new UserUseCases(repo, audit, new FakePasswordHasher());
+    sut = new UserUseCases(repo, audit, new FakePasswordHasher(), tenancyQueNaoDeveSerChamado());
   });
 
   // Actor IDs precisam ser UUID v7 válidos: as colunas `changedBy` (users_history)
@@ -65,7 +66,7 @@ describe('UserUseCases (integration with Prisma)', () => {
   it('criarUser persiste User + entrada INSERT em user_history', async () => {
     const auditCtx = makeCtx(ACTOR_ADMIN_1);
     const dto = await AuditContextStore.run(auditCtx, () =>
-      sut.criarUser({ nome: 'Alice', email: 'alice@example.com', senha: SENHA_VALIDA }),
+      sut.criarUser({ nome: 'Alice', email: 'alice@example.com', senha: SENHA_VALIDA }, null),
     );
 
     expect(dto.nome).toBe('Alice');
@@ -91,12 +92,12 @@ describe('UserUseCases (integration with Prisma)', () => {
   it('criarUser rejeita email duplicado com ApplicationEmailAlreadyInUseException', async () => {
     const ctx = makeCtx();
     await AuditContextStore.run(ctx, () =>
-      sut.criarUser({ nome: 'Bob', email: 'bob@example.com', senha: SENHA_VALIDA }),
+      sut.criarUser({ nome: 'Bob', email: 'bob@example.com', senha: SENHA_VALIDA }, null),
     );
 
     await expect(
       AuditContextStore.run(ctx, () =>
-        sut.criarUser({ nome: 'Bob 2', email: 'BOB@example.com', senha: SENHA_VALIDA }),
+        sut.criarUser({ nome: 'Bob 2', email: 'BOB@example.com', senha: SENHA_VALIDA }, null),
       ),
     ).rejects.toThrow(ApplicationEmailAlreadyInUseException);
 
@@ -108,11 +109,11 @@ describe('UserUseCases (integration with Prisma)', () => {
   it('atualizarNome aplica mutação e grava UPDATE no histórico', async () => {
     const ctx = makeCtx();
     const created = await AuditContextStore.run(ctx, () =>
-      sut.criarUser({ nome: 'Carla', email: 'carla@example.com', senha: SENHA_VALIDA }),
+      sut.criarUser({ nome: 'Carla', email: 'carla@example.com', senha: SENHA_VALIDA }, null),
     );
 
     const updated = await AuditContextStore.run(ctx, () =>
-      sut.atualizarNome({ id: created.id, novoNome: 'Carla Maria', expectedVersion: 1 }),
+      sut.atualizarNome({ id: created.id, novoNome: 'Carla Maria', expectedVersion: 1 }, null),
     );
     expect(updated.nome).toBe('Carla Maria');
     expect(updated.version).toBe(2);
@@ -129,11 +130,11 @@ describe('UserUseCases (integration with Prisma)', () => {
   it('softDelete grava archive + DELETE no histórico; findById 404', async () => {
     const ctx = makeCtx(ACTOR_ADMIN_2);
     const created = await AuditContextStore.run(ctx, () =>
-      sut.criarUser({ nome: 'Diego', email: 'diego@example.com', senha: SENHA_VALIDA }),
+      sut.criarUser({ nome: 'Diego', email: 'diego@example.com', senha: SENHA_VALIDA }, null),
     );
 
     const deleted = await AuditContextStore.run(ctx, () =>
-      sut.softDelete({ id: created.id, reason: 'duplicate', expectedVersion: 1 }),
+      sut.softDelete({ id: created.id, reason: 'duplicate', expectedVersion: 1 }, null),
     );
     expect(deleted.deletedAt).not.toBeNull();
 
@@ -157,21 +158,21 @@ describe('UserUseCases (integration with Prisma)', () => {
 
     // findById filtra soft-deleted por padrão → 404
     await expect(
-      AuditContextStore.run(ctx, () => sut.obterPorId({ id: created.id })),
+      AuditContextStore.run(ctx, () => sut.obterPorId({ id: created.id }, null)),
     ).rejects.toThrow(ApplicationResourceNotFoundException);
   });
 
   it('restaurar limpa deletedAt e grava RESTORE no histórico', async () => {
     const ctx = makeCtx();
     const created = await AuditContextStore.run(ctx, () =>
-      sut.criarUser({ nome: 'Eva', email: 'eva@example.com', senha: SENHA_VALIDA }),
+      sut.criarUser({ nome: 'Eva', email: 'eva@example.com', senha: SENHA_VALIDA }, null),
     );
     await AuditContextStore.run(ctx, () =>
-      sut.softDelete({ id: created.id, reason: null, expectedVersion: 1 }),
+      sut.softDelete({ id: created.id, reason: null, expectedVersion: 1 }, null),
     );
 
     const restored = await AuditContextStore.run(ctx, () =>
-      sut.restaurar({ id: created.id, expectedVersion: 2 }),
+      sut.restaurar({ id: created.id, expectedVersion: 2 }, null),
     );
     expect(restored.deletedAt).toBeNull();
     expect(restored.version).toBe(3);
@@ -183,14 +184,16 @@ describe('UserUseCases (integration with Prisma)', () => {
     expect(restoreEntry!.version).toBe(3);
 
     // Após restaurar, obterPorId volta a funcionar (não retorna 404)
-    const fetched = await AuditContextStore.run(ctx, () => sut.obterPorId({ id: created.id }));
+    const fetched = await AuditContextStore.run(ctx, () =>
+      sut.obterPorId({ id: created.id }, null),
+    );
     expect(fetched.deletedAt).toBeNull();
   });
 
   it('atualizarEmail lança ApplicationConcurrencyException em cenário concorrente', async () => {
     const ctx = makeCtx();
     const created = await AuditContextStore.run(ctx, () =>
-      sut.criarUser({ nome: 'Fabio', email: 'fabio@example.com', senha: SENHA_VALIDA }),
+      sut.criarUser({ nome: 'Fabio', email: 'fabio@example.com', senha: SENHA_VALIDA }, null),
     );
 
     // Simula concorrência: o caller A lê o user (version=1), depois o caller B
@@ -198,16 +201,16 @@ describe('UserUseCases (integration with Prisma)', () => {
     // expectedVersion=1, o repo detecta divergência.
     const repo = new PrismaUserRepository(prisma);
     const id = UserId.create(created.id);
-    const userFromA = await repo.findById(id);
+    const userFromA = await repo.findById(id, null);
     expect(userFromA!.version()).toBe(1);
 
-    const userFromB = await repo.findById(id);
+    const userFromB = await repo.findById(id, null);
     userFromB!.renomear('Fabio B', new Date());
-    await repo.save(userFromB!, 1); // esperado=1, persiste v=2
+    await repo.save(userFromB!, 1, null); // esperado=1, persiste v=2
 
     // A tenta salvar com expected=1 mas a versão real é 2
     userFromA!.renomear('Fabio A', new Date());
-    await expect(repo.save(userFromA!, 1)).rejects.toThrow(ConcurrencyException);
+    await expect(repo.save(userFromA!, 1, null)).rejects.toThrow(ConcurrencyException);
   });
 
   it('application-layer short-circuita com ApplicationConcurrencyException antes de qualquer mutação', async () => {
@@ -218,7 +221,7 @@ describe('UserUseCases (integration with Prisma)', () => {
     // ou emitir audit — preservando o histórico.
     const ctx = makeCtx();
     const created = await AuditContextStore.run(ctx, () =>
-      sut.criarUser({ nome: 'Gabriela', email: 'gabriela@example.com', senha: SENHA_VALIDA }),
+      sut.criarUser({ nome: 'Gabriela', email: 'gabriela@example.com', senha: SENHA_VALIDA }, null),
     );
     expect(created.version).toBe(1);
 
@@ -229,11 +232,14 @@ describe('UserUseCases (integration with Prisma)', () => {
 
     await expect(
       AuditContextStore.run(ctx, () =>
-        sut.atualizarNome({
-          id: created.id,
-          novoNome: 'Não aplicado',
-          expectedVersion: 999,
-        }),
+        sut.atualizarNome(
+          {
+            id: created.id,
+            novoNome: 'Não aplicado',
+            expectedVersion: 999,
+          },
+          null,
+        ),
       ),
     ).rejects.toThrow(ApplicationConcurrencyException);
 
