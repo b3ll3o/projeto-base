@@ -6,6 +6,77 @@ historico cresce a cada medicao que corrige uma decisao.
 
 ---
 
+## Revisao v1.5.0
+
+Revisao da Fase 4 depois de implementada, com subagente independente. **9
+achados, 2 com consequencia de codigo** — ambos fechados antes do commit.
+
+### Achado 2 — o bucket GLOBAL nao checava DONO do perfil (FECHADO)
+
+A porta `TenantMembershipRepositoryPort` diz que "a checagem de DONO e do
+implementador". O ramo por empresa a fazia (`profile: { OR: [global, da
+empresa] }`); o ramo global devolvia `users.profile_id` cru.
+
+Cenario medido: `PUT /admin/users/:id/profile` escreve `users.profile_id` sem
+olhar o dono do perfil. Um perfil `tenant_id = ACME` na coluna global resolveria
+em **toda** requisicao sem header — as permissoes da Acme valendo em toda
+parte, o oposto do que a coluna promete. Filtro de uma linha
+(`profile: { is: { tenantId: null } }`) + spec de integracao com premissa
+medida e braco de controle positivo.
+
+O mesmo teste de integracao expôs um segundo `null` pelo motivo errado: o de
+soft-delete apontava `users.profile_id` para um perfil **de empresa**, entao
+passaria pelo filtro de dono e nao pelo `deletedAt`. Passou a apontar para um
+perfil global — cada `null` agora tem um motivo e so um.
+
+### Achado 6 — comentario superdeclara o efeito de `profileId: { not: null }` (FECHADO)
+
+O filtro e redundante: `row?.profileId ?? null` ja devolve `null` para uma
+membership sem perfil. O comentario afirmava que o filtro e o que transforma "sem
+perfil" em zero permissoes. Reescrito para dizer a verdade (o efeito vem do
+`?? null`; o filtro fica como rede contra o proximo que mexer no `?? null`).
+
+### Achados 1, 4 e 5 — o caminho de escrita nao tem dono em nenhuma fase (REGISTRADO)
+
+Medidos como **latentes**, nao exploits: `grep -rn tenantMembership apps/api/src`
+nao acha nenhum `create`, e `guardarTenant` (web) nao tem caller, entao nenhum
+cliente manda `X-Tenant-Id` hoje. Ficam exigiveis no dia em que a Fase 5 criar
+membership, entao viraram pre-condicoes **da Fase 6**, com tabela e dono, na
+secao da Fase 4 do plano (P1/P2/P3).
+
+Nenhum deles cabe na Fase 4: o agregado `Profile` nao tem conceito de tenant
+(`grep -n tenantId src/modules/profiles/domain/profile.aggregate.ts` = 0), entao
+a checagem de DONO no **write path** nao tem onde morar ainda. Da para fechar no
+read path (e foi fechado), nao no write.
+
+### Achado 3 — divergencia nao registrada com o plano (REGISTRADO)
+
+O plano dizia que `users.profile_id` ficaria orfa. Implementar a letra quebraria
+a aplicacao. Registrado no plano como bucket GLOBAL vivo, com a consequencia de
+seguranca.
+
+### Sem consequencia de codigo (registrados, nao corrigidos)
+
+- **7a** `tenancy` nao tem `application/` nem `tenancy.module.ts`. Vira com a
+  Fase 5, quando houver controller para morar.
+- **7b** `PrismaPersistenceModule` (BC `users`) e o dono do adaptador do
+  tenancy. Haja justificativa no comentario (e o unico modulo que o resto da app
+  importa), mas a propriedade ideal seria do proprio `tenancy`.
+- **8** `findProfileId` aceita `userId` cru e perdeu o VO `UserId`. Inalcancavel:
+  o `sub` do JWT e UUID v7 emitido pela app e o guard valida o header.
+- **9** Nenhum arquivo em `.agents/` foi tocado; `doc-sync` e obrigatorio a
+  toda alteracao de codigo. Atualizado nesta revisao.
+
+### O que o reviewer NAO provou (declarado, nao reportado como bug)
+
+Nao existe caminho cross-tenant vivo hoje: nenhum `tenantMembership.create` em
+producao, `Profile.criar` nao conhece `tenantId`, `guardarTenant` nao tem caller.
+**Todo ramo por-empresa de `findProfileId` e codigo morto em producao**, exercitado
+so pelas specs. Nao houve validacao por HTTP real com header e dado semeado (nao ha
+banco de dev), e a e2e da API nao foi rodada pelo reviewer.
+
+---
+
 ## Revisao v1.4.0
 
 Revisao da Fase 3 depois de implementada: um subagente leu o diff procurando

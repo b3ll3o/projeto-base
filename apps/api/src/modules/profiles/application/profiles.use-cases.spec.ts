@@ -24,6 +24,7 @@ import { Profile } from '../domain/profile.aggregate.js';
 import { profileSlug } from '../domain/value-objects/profile-slug.vo.js';
 import type { ProfileRepositoryPort } from '../domain/ports/profile-repository.port.js';
 import type { UserRepositoryPort } from '../../users/domain/ports/user-repository.port.js';
+import type { TenantMembershipRepositoryPort } from '../../tenancy/domain/ports/tenant-membership-repository.port.js';
 import { UserProfileCacheService } from '../../../shared/infrastructure/security/user-profile-cache.service.js';
 import {
   ProfileNotFoundException,
@@ -106,6 +107,51 @@ class InMemoryUserRepo implements UserRepositoryPort {
   }
 }
 
+/**
+ * pt-BR (Fase 4 — tenancy): o bucket por empresa, em memória.
+ *
+ * ⚠️ O `tenantId === null` NÃO devolve `null` aqui — devolve o
+ * `users.profile_id`, exatamente como o `PrismaTenantMembershipRepository`.
+ * Não é conveniência: os testes de escalada do #97 (acima) semeiam o perfil no
+ * usuário e chamam com `tenantId: null`, e um stub que devolvesse `null` deixaria
+ * todos eles verdes por vazio — a trava dispararia sempre, por motivo errado.
+ * O stub tem de ser fiel ao contrato da porta, ou ele mede o stub.
+ *
+ * A regra de DONA do perfil (perfil de outra empresa → `null`) NÃO está aqui de
+ * propósito: ela é da implementação Prisma e é medida lá e no spec de
+ * integração. O que este stub mede é "a use case pede o perfil DA EMPRESA e usa
+ * a resposta".
+ */
+class InMemoryMembershipRepo implements TenantMembershipRepositoryPort {
+  /** `${tenantId}:${userId}` → `profileId`. */
+  #porEmpresa = new Map<string, string>();
+  /** helper p/ `deletar`: quantas memberships vestem o perfil. */
+  count = 0;
+
+  constructor(private readonly users: InMemoryUserRepo) {}
+
+  prime(userId: string, tenantId: string, profileId: string): void {
+    this.#porEmpresa.set(`${tenantId}:${userId}`, profileId);
+  }
+
+  async findProfileId(userId: string, tenantId: string | null): Promise<string | null> {
+    if (tenantId === null) {
+      // ⚠️ Este ramo NÃO checa se o perfil é global — e está correta assim,
+      // porque aqui todo perfil é global por construção: `Profile.criar` não
+      // conhece `tenantId`, e `perfilDaEmpresa` só o usa para dar slug próprio.
+      // O filtro `profile: { is: { tenantId: null } }` do repositório real tem
+      // spec próprio em `tenancy-migration.integration.spec.ts`.
+      const user = await this.users.findById({ value: userId });
+      return user?.profileId() ?? null;
+    }
+    return this.#porEmpresa.get(`${tenantId}:${userId}`) ?? null;
+  }
+
+  async countByProfile(): Promise<number> {
+    return this.count;
+  }
+}
+
 describe('ProfileUseCases', () => {
   let repo: InMemoryProfileRepo;
   let users: InMemoryUserRepo;
@@ -117,7 +163,7 @@ describe('ProfileUseCases', () => {
     repo = new InMemoryProfileRepo();
     users = new InMemoryUserRepo();
     cache = new UserProfileCacheService();
-    uc = new ProfileUseCases(repo, users, cache);
+    uc = new ProfileUseCases(repo, users, cache, new InMemoryMembershipRepo(users));
   });
 
   describe('criar', () => {
@@ -337,7 +383,7 @@ describe('AuthorizationUseCases — auto-concessão (#97)', () => {
     repo = new InMemoryProfileRepo();
     users = new InMemoryUserRepo();
     cache = new UserProfileCacheService();
-    uc = new AuthorizationUseCases(repo, users, cache);
+    uc = new AuthorizationUseCases(repo, users, cache, new InMemoryMembershipRepo(users));
   });
 
   it('recusa ator sem isAdmin conceder permissão ao PRÓPRIO profile', async () => {
@@ -499,7 +545,7 @@ describe('UserProfileUseCases — atribuir profile admin (#97)', () => {
     repo = new InMemoryProfileRepo();
     users = new InMemoryUserRepo();
     cache = new UserProfileCacheService();
-    uc = new UserProfileUseCases(users, repo, cache);
+    uc = new UserProfileUseCases(users, repo, cache, new InMemoryMembershipRepo(users));
   });
 
   it('recusa ator sem isAdmin atribuir profile admin a si mesmo', async () => {
@@ -763,7 +809,7 @@ describe('ProfileUseCases — `criar` com permissão inicial é concessão (#97/
     repo = new InMemoryProfileRepo();
     users = new InMemoryUserRepo();
     cache = new UserProfileCacheService();
-    uc = new ProfileUseCases(repo, users, cache);
+    uc = new ProfileUseCases(repo, users, cache, new InMemoryMembershipRepo(users));
   });
 
   it('recusa criar com uma permissão que o ator não tem', async () => {
@@ -835,7 +881,12 @@ describe('escalada recusada deixa rastro no log (#97)', () => {
   it('loga o motivo ao recusar', async () => {
     const repo = new InMemoryProfileRepo();
     const users = new InMemoryUserRepo();
-    const uc = new AuthorizationUseCases(repo, users, new UserProfileCacheService());
+    const uc = new AuthorizationUseCases(
+      repo,
+      users,
+      new UserProfileCacheService(),
+      new InMemoryMembershipRepo(users),
+    );
     const meu = Profile.criar({
       slug: 'meu-perfil',
       name: 'Meu Perfil',
@@ -858,5 +909,219 @@ describe('escalada recusada deixa rastro no log (#97)', () => {
     } finally {
       aviso.mockRestore();
     }
+  });
+});
+
+// ─── FASE 4: o perfil efetivo é o DA EMPRESA (D4) ───────────────────────────
+//
+// O que a Fase 3 deixou em aberto, medido: o `tenantId` chegava ao
+// `obterMeuPerfil` e virava chave de cache, mas o perfil lido continuava sendo
+// `users.profile_id` — GLOBAL. Uma conta em duas empresas vestia o mesmo
+// perfil nas duas, e as 4 travas anti-escalação comparavam esse mesmo perfil
+// global. Esta é a fase em que a leitura passa a ser por membership.
+const ACME = '0190a8b6-0000-4000-8000-0000000000ac';
+const GLOBEX = '0190a8b6-0000-4000-8000-0000000000ab';
+const ATOR_ACME: AtorAutenticado = { userId: ATOR_ID, tenantId: ACME, isAdmin: false };
+
+describe('Fase 4 — perfil por empresa (D4)', () => {
+  let repo: InMemoryProfileRepo;
+  let users: InMemoryUserRepo;
+  let memberships: InMemoryMembershipRepo;
+  let cache: UserProfileCacheService;
+  let uc: UserProfileUseCases;
+
+  beforeEach(() => {
+    repo = new InMemoryProfileRepo();
+    users = new InMemoryUserRepo();
+    memberships = new InMemoryMembershipRepo(users);
+    cache = new UserProfileCacheService();
+    uc = new UserProfileUseCases(users, repo, cache, memberships);
+  });
+
+  /** Perfil com slug próprio — dois perfis de empresas diferentes precisam de
+   *  slugs diferentes aqui, porque `InMemoryProfileRepo` indexa por valor. */
+  function perfilDaEmpresa(slug: string, permissoes: string[]): Profile {
+    const p = Profile.criar({
+      slug,
+      name: slug,
+      initialAuthorizations: permissoes,
+      agora: new Date(),
+    });
+    repo.prime(p);
+    return p;
+  }
+
+  it('a MESMA conta tem perfis DIFERENTES em duas empresas', async () => {
+    const daAcme = perfilDaEmpresa('gestor-acme', ['admin.manage-users']);
+    const daGlobex = perfilDaEmpresa('leitor-globex', ['users.read']);
+    users.prime(userComProfile(ATOR_ID, daAcme.id().value));
+    memberships.prime(ATOR_ID, ACME, daAcme.id().value);
+    memberships.prime(ATOR_ID, GLOBEX, daGlobex.id().value);
+
+    const naAcme = await uc.obterMeuPerfil(ATOR_ID, ACME);
+    const naGlobex = await uc.obterMeuPerfil(ATOR_ID, GLOBEX);
+
+    // Este é o teste que a demanda inteira pede. Com a leitura global (o que a
+    // Fase 3 entregou) as duas respostas seriam IGUAIS e ele ficaria verde
+    // pela metade — daí as duas metades em vez de uma.
+    expect(naAcme.profileSlug).toBe('gestor-acme');
+    expect(naGlobex.profileSlug).toBe('leitor-globex');
+    expect(naAcme.permissions).toEqual(['admin.manage-users']);
+    expect(naGlobex.permissions).toEqual(['users.read']);
+    expect(naAcme.isAdmin).toBe(false);
+  });
+
+  it('sem header de empresa, resolve o perfil GLOBAL (users.profile_id)', async () => {
+    const global = perfilDaEmpresa('viewer', ['users.read']);
+    users.prime(userComProfile(ATOR_ID, global.id().value));
+
+    await expect(uc.obterMeuPerfil(ATOR_ID, null)).resolves.toMatchObject({
+      profileSlug: 'viewer',
+      permissions: ['users.read'],
+    });
+  });
+
+  it('empresa sem membership resolve SEM perfil nenhum, não o global', async () => {
+    // O convite aceito entra como `member` e ainda não tem perfil. O que ele
+    // NÃO pode é herdar o perfil global: nasceria com `admin.manage-users`
+    // numa empresa onde nunca foi convidado com nada.
+    const global = perfilDaEmpresa('admin', ['admin.manage-users']);
+    users.prime(userComProfile(ATOR_ID, global.id().value));
+
+    await expect(uc.obterMeuPerfil(ATOR_ID, GLOBEX)).resolves.toMatchObject({
+      profileId: null,
+      profileSlug: null,
+      permissions: [],
+      isAdmin: false,
+    });
+  });
+
+  it('as duas empresas não compartilham o CACHE (trocar não devolve o velho)', async () => {
+    const daAcme = perfilDaEmpresa('gestor-acme', ['admin.manage-users']);
+    const daGlobex = perfilDaEmpresa('leitor-globex', ['users.read']);
+    users.prime(userComProfile(ATOR_ID, daAcme.id().value));
+    memberships.prime(ATOR_ID, ACME, daAcme.id().value);
+    memberships.prime(ATOR_ID, GLOBEX, daGlobex.id().value);
+
+    await uc.obterMeuPerfil(ATOR_ID, ACME);
+    // A segunda chamada NÃO pode ser servida pelo cache da primeira: é a
+    // chave `(tenantId, userId)` da Fase 3 segurando, e se a chave voltasse a
+    // ser só o usuário este teste leria o slug da Acme e passaria errado.
+    await expect(uc.obterMeuPerfil(ATOR_ID, GLOBEX)).resolves.toMatchObject({
+      profileSlug: 'leitor-globex',
+    });
+  });
+
+  it('a trava de auto-concessão compara o perfil DA EMPRESA, não o global', async () => {
+    // ⚠️ Global e Acme com AS MESMAS permissões, de propósito. Numa primeira
+    // versão deste teste o global era fraco e o da Acme forte: a escalada
+    // continuava aparecendo, mas vinda de `recusaConcessaoQueNaoTem` — o teste
+    // passava (e a mutação passava) pelo motivo errado, sem provar nada sobre
+    // a trava que ele diz medir. Com os dois conjuntos iguais, a única trava
+    // que pode disparar é a de auto-concessão.
+    const noGlobal = perfilDaEmpresa('forte-global', [
+      'admin.manage-authorizations',
+      'admin.manage-users',
+    ]);
+    const naAcme = perfilDaEmpresa('forte-acme', [
+      'admin.manage-authorizations',
+      'admin.manage-users',
+    ]);
+    users.prime(userComProfile(ATOR_ID, noGlobal.id().value));
+    memberships.prime(ATOR_ID, ACME, naAcme.id().value);
+
+    const auth = new AuthorizationUseCases(repo, users, cache, memberships);
+    // Na Acme ele veste o `forte-acme`, e é ele que ele tentaria auto-conceder.
+    // Se a trava comparasse `users.profile_id` (o `forte-global`, id distinto),
+    // ela não dispararia e `recusaConcessaoQueNaoTem` deixaria passar — a
+    // escalada passaria limpa.
+    await expect(auth.atribuir(naAcme.id().value, 'admin.manage-users', ATOR_ACME)).rejects.toThrow(
+      ProfilePrivilegeEscalationException,
+    );
+  });
+
+  it('`criar` mede o subconjunto do perfil DA EMPRESA, não o global dele', async () => {
+    const noGlobal = perfilDaEmpresa('criador-global', ['admin.manage-users']);
+    const naAcme = perfilDaEmpresa('leitor-acme', ['users.read']);
+    users.prime(userComProfile(ATOR_ID, noGlobal.id().value));
+    memberships.prime(ATOR_ID, ACME, naAcme.id().value);
+
+    const criar = new ProfileUseCases(repo, users, cache, memberships);
+    // Na Acme ele é leitor e não pode inventar `admin.manage-users`; no bucket
+    // global ele pode. Ler o global abria a escalada por `POST /profiles`.
+    await expect(
+      criar.criar(
+        { slug: 'cunhado', name: 'Cunhado', initialPermissions: ['admin.manage-users'] },
+        ATOR_ACME,
+      ),
+    ).rejects.toThrow(ProfilePrivilegeEscalationException);
+  });
+
+  it('atribuir um perfil a alguém mede o subconjunto DA EMPRESA, não o global', async () => {
+    const noGlobal = perfilDaEmpresa('poderoso-global', ['users.read', 'users.write']);
+    const naAcme = perfilDaEmpresa('leitor-acme', ['users.read']);
+    const alvo = perfilDaEmpresa('alvo-completo', ['users.read', 'users.write']);
+    users.prime(userComProfile(ATOR_ID, noGlobal.id().value));
+    memberships.prime(ATOR_ID, ACME, naAcme.id().value);
+
+    const atribuir = new UserProfileUseCases(users, repo, cache, memberships);
+    // `users.write` está no perfil global dele e NÃO no da Acme. Entregar o
+    // perfil completo a um terceiro exigiria a posse da chave na empresa em
+    // que ele está agindo; ler o global faria a entrega passar.
+    await expect(
+      atribuir.atribuirProfileAoUser(ALVO_ID, alvo.id().value, ATOR_ACME),
+    ).rejects.toThrow(ProfilePrivilegeEscalationException);
+  });
+
+  it('a trava de auto-concessão NÃO dispara por causa do perfil GLOBAL dele', async () => {
+    const global = perfilDaEmpresa('gestor-global', ['admin.manage-authorizations']);
+    const naAcme = perfilDaEmpresa('leitor-acme', ['users.read']);
+    const alvo = perfilDaEmpresa('outro-perfil', []);
+    // O global dele é forte; NA ACME ele é um leitor. Ele vai conceder uma
+    // permissão que TEM na Acme ao perfil `global` — que é o perfil dele no
+    // bucket global, mas NÃO é o que ele veste enquanto age na Acme.
+    users.prime(userComProfile(ATOR_ID, global.id().value));
+    memberships.prime(ATOR_ID, ACME, naAcme.id().value);
+
+    const auth = new AuthorizationUseCases(repo, users, cache, memberships);
+    // Se a trava ainda comparasse `users.profile_id`, `global` === profile do
+    // ator → falso positivo, e o ator ficava sem poder conceder a chave que
+    // ele legitimamente tem na empresa em que está agindo.
+    await expect(auth.atribuir(alvo.id().value, 'users.read', ATOR_ACME)).resolves.toBeDefined();
+  });
+});
+
+describe('Fase 4 — deletar um perfil que uma empresa ainda usa', () => {
+  it('devolve ProfileHasUsersException contando a membership, não 500 do banco', async () => {
+    const repo = new InMemoryProfileRepo();
+    const users = new InMemoryUserRepo();
+    const memberships = new InMemoryMembershipRepo(users);
+    const uc = new ProfileUseCases(repo, users, new UserProfileCacheService(), memberships);
+
+    const p = Profile.criar({ slug: 'gestor-acme', name: 'Gestor', agora: new Date() });
+    repo.prime(p);
+    // Nenhum user usa `users.profile_id` → `countByProfile` devolve 0. A
+    // membership é a única usuária, e é ela que tem de barrar o delete: sem
+    // essa contagem o `ON DELETE RESTRICT` do banco estouraria P2003, que o
+    // cliente não sabe ler como "perfil em uso".
+    users.count = 0;
+    memberships.count = 1;
+
+    await expect(uc.deletar(p.id().value)).rejects.toThrow(ProfileHasUsersException);
+  });
+
+  it('sem nenhum uso, apaga (o count somado não vira trava permanente)', async () => {
+    const repo = new InMemoryProfileRepo();
+    const users = new InMemoryUserRepo();
+    const memberships = new InMemoryMembershipRepo(users);
+    const uc = new ProfileUseCases(repo, users, new UserProfileCacheService(), memberships);
+
+    const p = Profile.criar({ slug: 'gestor-acme', name: 'Gestor', agora: new Date() });
+    repo.prime(p);
+    users.count = 0;
+    memberships.count = 0;
+
+    await expect(uc.deletar(p.id().value)).resolves.toBeUndefined();
+    await expect(repo.findById(p.id())).resolves.toBeNull();
   });
 });

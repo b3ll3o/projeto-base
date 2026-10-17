@@ -88,6 +88,49 @@ Formato de entrada (a ser preenchido pelo agent):
   lesson: <1-liner do que aprendemos>
 ```
 
+## Findings registrados
+
+```yaml
+- date: 2026-10-17
+  finding_id: MT-4-1
+  severity: P1
+  outcome: resolved
+  lesson: >-
+    A porta declarava "a checagem de DONO do perfil e do implementador" e o
+    implementador a fazia em UM dos dois ramos de findProfileId. Garantia
+    escrita na porta precisa de asserção em CADA caminho: o ramo que nenhum
+    teste exercita e onde a garantia morre em silencio.
+- date: 2026-10-17
+  finding_id: MT-4-2
+  severity: P2
+  outcome: resolved
+  lesson: >-
+    Um segundo `null` no mesmo teste pode vir do filtro errado. O teste de
+    soft-delete apontava users.profile_id para perfil DE EMPRESA e passava pelo
+    filtro de dono, nao pelo deletedAt. Quando um teste mede DUAS propriedades,
+    cada precisa do dado que isola a sua.
+- date: 2026-10-17
+  finding_id: MT-4-3
+  severity: P2
+  outcome: deferred
+  lesson: >-
+    Trocar o caminho de LEITURA sem fechar o de ESCRITA deixa o isolamento
+    pela metade, e nenhuma fase do plano tinha dono do write path. Achados
+    registrados como pre-condicoes P1/P2/P3 da Fase 6.
+```
+
+## Baseline medido (2026-10-17, depois da Fase 4)
+
+| Medida | Comando | Valor |
+|--------|---------|-------|
+| Writers de membership (`create`/`upsert` de `tenantMembership`) | `grep -rn "tenantMembership" apps/api/src --include=*.ts \| grep -v spec` | **2 linhas, ambas LEITURA** (`findFirst`, `count` no repositorio) — **0 escritas** |
+| Leituras de perfil global | `grep -rn "\.profileId()" apps/api/src --include=*.ts \| grep -v spec` | **4 linhas, 1 delas de decisão**: `user.output.ts:35` e `user.prisma-mapper.ts:153` sao serializacao do DTO, `profiles.use-cases.ts:579` e comentario. So `profiles.use-cases.ts:586` le para decidir, de proposito (a escrita logo abaixo e na mesma coluna) |
+| Isolamento cross-tenant provado | `grep -c "  it(" apps/api/src/modules/tenancy/infrastructure/persistence/tenancy-migration.integration.spec.ts` | **19**, Postgres real |
+
+> ⚠️ A primeira linha muda o que a auditoria pode encontrar: ate a Fase 5 criar
+> membership, **nenhum achado de vazamento cross-tenant e exploit** — e codigo
+> exercitado so por spec. Nao reportar como P0 o que e latente.
+
 ## Triggers retroativos
 
 Findings repetidos sobre o mesmo arquivo/location (>3x) é sinal de **classe de

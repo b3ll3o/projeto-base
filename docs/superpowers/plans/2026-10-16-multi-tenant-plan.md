@@ -1,7 +1,7 @@
 ---
 name: plano-multi-tenant
 description: Plano da demand multi-tenant — a aplicacao passa a ter Tenant, e o usuario pode ter um perfil diferente em cada empresa. Inclui a decisao de entrada (empresa propria ou convite) e a ordem de execucao sob o fluxo de desenvolvimento.
-version: 1.2.0
+version: 1.5.0
 updated: 2026-10-16
 status: revisto
 state_snapshot: .agents/runs/state-snapshot-20261017T000011Z.md
@@ -164,19 +164,36 @@ tocando Prisma, e o modo de falha de um wrapper esquecido e *ver linhas de outro
 tenant sem erro* — pior que nao ter RLS, porque a migration parece proteger. O
 controle que entregamos e o escopo de query na aplicacao (3.4/3.5), que e
 verificavel ponta a ponta pela Fase 7. ⚠️ **O escopo do qual se fala aqui e o do
-CACHE** (3.3/3.4): o perfil efetivo ainda e lido de `users.profile_id`, global
-— a Fase 4 e que troca a leitura. Ver §3.
+CACHE** (3.3/3.4): o perfil efetivo era lido de `users.profile_id`, global; a
+Fase 4 passou a resolve-lo pela membership da empresa. Ver §3.
 
 ### Fase 4 — Forma do dado por tenant
 
 | # | Ponto | Mudanca |
 |---|-------|---------|
 | 4.1 | **`tenant_memberships` nao tem `profile_id`** — so `role` | migration nova: coluna nullable + FK para `profiles` + `@@index([profileId])`. Sem ela a D4 nao e representavel (ver Revisao v1.3.0) |
-| 4.2 | `users/domain/user.aggregate.ts:64` `#profileId: string \| null` | sai do agregado: com D4 o User nao tem perfil proprio, o perfil vem da Membership. Os repos leem por tenant. (A *assinatura* que consome tenant ja foi feita na Fase 3 — aqui e a forma.) |
+| 4.2 | `users/domain/user.aggregate.ts:64` `#profileId: string \| null` | **nao saiu** (ver Revisao v1.5.0): a coluna virou o bucket GLOBAL vivo. `findProfileId(userId, tenantId)` le a membership quando ha empresa e `users.profile_id` quando `tenantId === null`. Sem isso, omitir o header daria zero permissao a todo mundo, e o unico `isAdmin` do sistema e global |
 
-A **coluna** `users.profile_id` permanece no schema, orfa. Quao remove-la e
-decisao adiada (ver §3): e a unica operacao deste trabalho que toca dado
-existente, e ela exige decidir para onde vai um usuario sem membership.
+**`users.profile_id` deixou de ser orfa** (Revisao v1.5.0, achado 3). O plano
+anterior dizia que ela ficaria orfa; implementar isso a letra quebraria a
+aplicacao — `criar` fixa `isAdmin: false` e o admin do sistema vem do seed, sem
+membership. A escolha real e a de **dois buckets**: empresa presente le a
+membership (perfil dela OU global, D3), `tenantId === null` le a coluna global.
+Consequencia de segurança que fica registrada: `users.profile_id` e uma segunda
+identidade funcional, e qualquer escritor dela precisa respeitar a regra de que
+ela so aceita perfil global — medido e fechado no filtro de leitura do
+repositorio, mas quem escrever na coluna pela primeira vez precisa repetir a
+checagem.
+
+**Pre-condicoes da Fase 6, com dono** (achados 1, 4 e 5 da Revisao v1.5.0 —
+achados de review de seguranca, nao de plano; nenhum e exploit hoje, todos ficam
+exigiveis no dia em que existir `tenantMembership.create`):
+
+| # | Pre-condicao | Por que |
+|---|---|---|
+| P1 | `atribuir`/`revogar`/`obterPorId`/`listar` de perfil tem de checar a DONO do perfil-alvo contra `ator.tenantId` | hoje `recusaAutoConcessao` compara so o perfil DA EMPRESA, e nada impede um ator da Acme conceder a chave K (que ele tem na Acme) ao perfil global dele ou ao perfil da vizinha |
+| P2 | a escrita de perfil por usuario tem de ser trocada junto com a leitura | `PUT /admin/users/:id/profile` escreve a coluna global; com header, a leitura passa a ser a membership (`null`) e a rota responde `{ok:true}` sem ter mudado nada |
+| P3 | quem escrever `tenant_memberships.profile_id` tem de repetir a checagem de `isAdmin` | `isAdmin` escapa em todas as travas de `profiles.use-cases.ts`; `findProfileId` aceita perfil global, e o perfil `isAdmin` de sistema e global |
 
 ### Fase 5 — Entrada: empresa propria OU convite (D5)
 **Um branch, na cabeca do use case**, nao dois fluxos:
@@ -244,10 +261,12 @@ Precedente: [`2026-10-13-idor-rate-limit.md`](./2026-10-13-idor-rate-limit.md).
 - Marketplace de tenants, billing por empresa, plano por tenant.
 - **Customizar os campos de um perfil global por tenant** (override). D3 = a
   empresa cria a propria row de perfil; nao e editar a row global.
-- **Remover a coluna `users.profile_id`.** Fica orfa apos a Fase 4. A
-  removela e `DROP COLUMN` — a regra de `prisma-db-specialist.md:160` exige
-  antes um tenant padrao para onde backfilhar, e esse tenant nao existe. Decisao
-  adiada, nao esquecida.
+- **Remover a coluna `users.profile_id`.** **Nao fica orfa** apos a Fase 4: ela
+  virou o bucket GLOBAL vivo (Revisao v1.5.0, achado 3), entao remover exige
+  decidir antes o que o admin do seed passa a vestir sem membership. A remocao
+  e `DROP COLUMN` — a regra de `prisma-db-specialist.md:160` exige antes um
+  tenant padrao para onde backfilhar, e esse tenant nao existe. Decisao adiada,
+  nao esquecida.
 - SSO, SCIM, auditoria em nivel de tenant.
 - Consertar o `gap_detected` inerte (G-002) — PR proprio.
 
@@ -276,4 +295,4 @@ e se comportaram como o esperado — nao veio so da doc.
 
 ---
 
-Historico de revisao (v1.1.0 / v1.2.0 / v1.3.0 / v1.4.0) em [`2026-10-16-multi-tenant-plan-revisoes.md`](./2026-10-16-multi-tenant-plan-revisoes.md).
+Historico de revisao (v1.1.0 / v1.2.0 / v1.3.0 / v1.4.0 / v1.5.0) em [`2026-10-16-multi-tenant-plan-revisoes.md`](./2026-10-16-multi-tenant-plan-revisoes.md).

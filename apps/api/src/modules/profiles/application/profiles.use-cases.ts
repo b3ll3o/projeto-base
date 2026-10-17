@@ -22,6 +22,10 @@ import {
   USER_REPOSITORY_PORT,
   type UserRepositoryPort,
 } from '../../users/domain/ports/user-repository.port.js';
+import {
+  TENANT_MEMBERSHIP_REPOSITORY_PORT,
+  type TenantMembershipRepositoryPort,
+} from '../../tenancy/domain/ports/tenant-membership-repository.port.js';
 import { UserProfileCacheService } from '../../../shared/infrastructure/security/user-profile-cache.service.js';
 import {
   ProfileNotFoundException,
@@ -65,11 +69,13 @@ export interface AtorAutenticado {
    * pt-BR (Fase 3): empresa em que o ato acontece. `null` = rota sem
    * `X-Tenant-Id`.
    *
-   * **Obrigatório** (não `?`) para que a Fase 4 não tenha nenhum call site
-   * capaz de omitir a empresa em silêncio: hoje ele é lido só como chave de
-   * cache, e as travas anti-escalada ainda comparam perfil GLOBAL. ⚠️ Não ler
-   * este campo como se a escalada já fosse por empresa — não é, e o perfil
-   * efetivo só vem do tenant com `tenant_memberships.profile_id` (Fase 4).
+   * **Obrigatório** (não `?`) para que nenhuma chamada possa omitir a empresa
+   * em silêncio. Desde a Fase 4 ele é lido de verdade: o perfil efetivo do ator
+   * vem de `tenant_memberships.profile_id` quando há empresa, e do perfil
+   * GLOBAL (`users.profile_id`) quando não há.
+   *
+   * ⚠️ `null` NÃO é "sem permissão nenhuma": é o bucket dos perfis de sistema
+   * (D3, `profiles.tenant_id IS NULL`), onde mora o único `isAdmin`.
    */
   readonly tenantId: string | null;
   readonly isAdmin: boolean;
@@ -134,6 +140,8 @@ export class ProfileUseCases {
     @Inject(PROFILE_REPOSITORY_PORT) private readonly profileRepo: ProfileRepositoryPort,
     @Inject(USER_REPOSITORY_PORT) private readonly userRepo: UserRepositoryPort,
     @Inject(UserProfileCacheService) private readonly cache: UserProfileCacheService,
+    @Inject(TENANT_MEMBERSHIP_REPOSITORY_PORT)
+    private readonly memberships: TenantMembershipRepositoryPort,
   ) {}
 
   async listar(): Promise<ProfileSummary[]> {
@@ -177,8 +185,10 @@ export class ProfileUseCases {
       return;
     }
     let doAtor: ReadonlySet<string> = new Set();
-    const atorUser = await this.userRepo.findById(UserId.create(ator.userId));
-    const idDoAtor = atorUser?.profileId() ?? null;
+    // pt-BR (Fase 4): o subconjunto é o do perfil que o ator veste NA EMPRESA
+    // em que está agindo, não o global — comparar o global deixaria a trava
+    // medindo o perfil errado em toda chamada com `X-Tenant-Id`.
+    const idDoAtor = await this.memberships.findProfileId(ator.userId, ator.tenantId);
     if (idDoAtor !== null) {
       const meu = await this.profileRepo.findById(profileId(idDoAtor));
       doAtor = new Set(meu?.authorizations().toLista() ?? []);
@@ -252,7 +262,14 @@ export class ProfileUseCases {
     if (profile.isAdmin()) {
       throw new ProfileAdminProtectedException(profile.id().value);
     }
-    const count = await this.userRepo.countByProfile(profile.id().value);
+    // pt-BR (Fase 4): as DUAS contagens, porque `users.profile_id` (bucket
+    // global) e `tenant_memberships.profile_id` (por empresa) são dois
+    // lugares distintos onde o mesmo perfil pode estar em uso. Somar só o
+    // primeiro deixaria a trava passar e o `ON DELETE RESTRICT` do banco
+    // estourar P2003 — 500 no lugar de 409.
+    const count =
+      (await this.userRepo.countByProfile(profile.id().value)) +
+      (await this.memberships.countByProfile(profile.id().value));
     if (count > 0) {
       throw new ProfileHasUsersException(profile.slug().value, count);
     }
@@ -292,6 +309,8 @@ export class AuthorizationUseCases {
     // Só para resolver o profile de QUEM pediu (trava de auto-concessão).
     @Inject(USER_REPOSITORY_PORT) private readonly userRepo: UserRepositoryPort,
     @Inject(UserProfileCacheService) private readonly cache: UserProfileCacheService,
+    @Inject(TENANT_MEMBERSHIP_REPOSITORY_PORT)
+    private readonly memberships: TenantMembershipRepositoryPort,
   ) {}
 
   /**
@@ -349,7 +368,12 @@ export class AuthorizationUseCases {
     if (ator.isAdmin || atorUser === null) {
       return;
     }
-    if (atorUser.profileId() === profileIdAlvo) {
+    // pt-BR (Fase 4): "o próprio profile" é o que o ator veste NA EMPRESA em
+    // que está agindo. Comparar `users.profile_id` faria a trava disparar por
+    // um perfil de outra empresa (falso positivo, prendendo o ator sem motivo)
+    // e NÃO disparar quando o perfil da empresa é o global (escalada aberta).
+    const idDoAtor = await this.memberships.findProfileId(ator.userId, ator.tenantId);
+    if (idDoAtor === profileIdAlvo) {
       recusaEscalada('um ator sem isAdmin não altera as permissões do próprio profile');
     }
   }
@@ -380,7 +404,9 @@ export class AuthorizationUseCases {
       return;
     }
     let tem = false;
-    const idDoAtor = atorUser?.profileId() ?? null;
+    // pt-BR (Fase 4): mesma troca de escopo de `recusaAutoConcessao` — a
+    // posse da chave é a do perfil NA EMPRESA, não a do global.
+    const idDoAtor = await this.memberships.findProfileId(ator.userId, ator.tenantId);
     if (idDoAtor !== null) {
       const meu = await this.profileRepo.findById(profileId(idDoAtor));
       tem = meu?.authorizations().tem(permissionKey) === true;
@@ -472,16 +498,20 @@ export class UserProfileUseCases {
     @Inject(USER_REPOSITORY_PORT) private readonly userRepo: UserRepositoryPort,
     @Inject(PROFILE_REPOSITORY_PORT) private readonly profileRepo: ProfileRepositoryPort,
     @Inject(UserProfileCacheService) private readonly cache: UserProfileCacheService,
+    @Inject(TENANT_MEMBERSHIP_REPOSITORY_PORT)
+    private readonly memberships: TenantMembershipRepositoryPort,
   ) {}
 
   /**
    * pt-BR (#97, A1.2): as permission keys que o ATOR tem de fato.
    * Fail-CLOSED — ator que não resolve (soft-deleted) ou sem profile devolve
    * conjunto vazio, porque o subconjunto de nada é nada.
+   *
+   * pt-BR (Fase 4): o perfil é o DA EMPRESA (`ator.tenantId`), com o global
+   * como bucket de quem não mandou `X-Tenant-Id`.
    */
   private async permissoesDoAtor(ator: AtorAutenticado): Promise<ReadonlySet<string>> {
-    const user = await this.userRepo.findById(UserId.create(ator.userId));
-    const idDoAtor = user?.profileId() ?? null;
+    const idDoAtor = await this.memberships.findProfileId(ator.userId, ator.tenantId);
     if (idDoAtor === null) {
       return new Set();
     }
@@ -545,6 +575,13 @@ export class UserProfileUseCases {
     // (desligar nunca concede), mas é a mesma classe de B1 — a regra morava
     // dentro de um `if` que o chamador controla. Desligar profile comum segue
     // livre para quem tem `admin.manage-users`.
+    //
+    // pt-BR (Fase 4): a leitura abaixo é `user.profileId()` e NÃO o perfil da
+    // empresa, DE PROPÓSITO — a escrita logo mais abaixo
+    // (`user.atribuirPerfil`) é na coluna global. Trocar só a checagem
+    // deixaria trava e escrita medindo coisas diferentes, e a trava protegeria
+    // algo que esta rota não altera. Atribuir perfil POR EMPRESA é escrita
+    // nova, e é da Fase 6.
     if (profileIdStr === null && !ator.isAdmin) {
       const atualId = user.profileId();
       const atual = atualId === null ? null : await this.profileRepo.findById(profileId(atualId));
@@ -569,14 +606,15 @@ export class UserProfileUseCases {
   }
 
   /**
-   * pt-BR (Fase 3 — tenancy, 2026-10-16): `tenantId` é a empresa da
-   * requisição (header `X-Tenant-Id`) e é a **chave** do cache desde já — a
-   * mesma conta em duas empresas não pode ler o perfil da outra.
+   * pt-BR (Fase 4 — tenancy, 2026-10-16): `tenantId` é a empresa da requisição
+   * (header `X-Tenant-Id`) e é a **chave** do cache (Fase 3) **e a chave da
+   * leitura** (Fase 4): o perfil vem de `tenant_memberships.profile_id`, então a
+   * mesma conta em duas empresas lê dois perfis diferentes.
    *
-   * ⚠️ O `tenantId` ainda NÃO resolve o perfil: a leitura continua em
-   * `user.profileId()`, que é coluna global. O elo por empresa
-   * (`tenant_memberships.profile_id`) é a Fase 4. Aqui o tenant é aceito e
-   * cacheado certo; o que ele resolve por tenant chega junto.
+   * `tenantId === null` cai no bucket GLOBAL (`users.profile_id`) — o dos
+   * perfis de sistema do seed (D3). Sem empresa não há como saber qual perfil o
+   * usuário veste, e adivinhar o global daria `isAdmin` a quem mandou a
+   * requisição sem header.
    */
   async obterMeuPerfil(userId: string, tenantId: string | null): Promise<MeuPerfil> {
     const cached = await this.cache.getUserProfileAndPermissions(tenantId, userId);
@@ -590,15 +628,11 @@ export class UserProfileUseCases {
       isAdmin: false,
       permissions: [],
     };
-    const user = await this.userRepo.findById(UserId.create(userId));
-    if (user === null) {
+    const profileIdDoAtor = await this.memberships.findProfileId(userId, tenantId);
+    if (profileIdDoAtor === null) {
       return this.cachear(tenantId, userId, denied);
     }
-    const userProfileId = user.profileId();
-    if (userProfileId === null) {
-      return this.cachear(tenantId, userId, denied);
-    }
-    const profile = await this.profileRepo.findById(profileId(userProfileId));
+    const profile = await this.profileRepo.findById(profileId(profileIdDoAtor));
     if (profile === null) {
       return this.cachear(tenantId, userId, denied);
     }
