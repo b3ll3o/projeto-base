@@ -7,10 +7,13 @@
 
 import { Controller, Get, Inject, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
-import { UserProfileUseCases } from '../../application/profiles.use-cases.js';
+import { type MeuPerfil, UserProfileUseCases } from '../../application/profiles.use-cases.js';
 
+// pt-BR (Fase 3): `tenantId` é opcional porque nem toda requisição manda
+// `X-Tenant-Id` — o guard publica `null` nesse caso, e `null` é um bucket
+// próprio, não falta de dado.
 interface AuthedRequest {
-  user: { sub: string };
+  user: { sub: string; tenantId?: string | null };
 }
 
 @UseGuards(JwtAuthGuard)
@@ -25,13 +28,7 @@ export class MeProfileController {
   ) {}
 
   @Get('profile')
-  async me(@Req() req: AuthedRequest): Promise<{
-    profileId: string | null;
-    profileSlug: string | null;
-    profileName: string | null;
-    isAdmin: boolean;
-    permissions: string[];
-  }> {
-    return this.useCases.obterMeuPerfil(req.user.sub);
+  async me(@Req() req: AuthedRequest): Promise<MeuPerfil> {
+    return this.useCases.obterMeuPerfil(req.user.sub, req.user.tenantId ?? null);
   }
 }

@@ -61,7 +61,12 @@ export class PermissionsGuard implements CanActivate {
       return true; // sem requisito = passa
     }
     const req = context.switchToHttp().getRequest<{
-      user?: { sub?: string; isAdmin?: boolean; permissions?: readonly string[] };
+      user?: {
+        sub?: string;
+        tenantId?: string | null;
+        isAdmin?: boolean;
+        permissions?: readonly string[];
+      };
     }>();
     const user = req.user;
     if (user === undefined) {
@@ -82,8 +87,13 @@ export class PermissionsGuard implements CanActivate {
     // sempre custa Map lookup quando quente e 2 queries + popula quando frio.
     // O `empty` de quem legitimamente não tem nada também é cacheado, então não
     // há Storm de queries para usuário sem permissão.
+    // pt-BR (Fase 3): o tenant vai junto para que a hidratação leia o cache
+    // do bucket da EMPRESA pedida — sem ele, uma rota `admin.*` da empresa B
+    // hidrataría com o perfil da empresa A.
     const perfil =
-      typeof user.sub === 'string' ? await this.useCases.obterMeuPerfil(user.sub) : null;
+      typeof user.sub === 'string'
+        ? await this.useCases.obterMeuPerfil(user.sub, user.tenantId ?? null)
+        : null;
     if (perfil !== null) {
       // Escreve de volta em `req.user` porque os controllers leem
       // `req.user.isAdmin` para montar o `AtorAutenticado` (o `atorDe`) — e é

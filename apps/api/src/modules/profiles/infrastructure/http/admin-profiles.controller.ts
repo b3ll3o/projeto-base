@@ -46,7 +46,7 @@ interface UpdateProfileBody {
  * de extraído porque os três nunca são usados juntos.
  */
 interface RequestComAtor {
-  user: { sub: string; isAdmin?: boolean };
+  user: { sub: string; tenantId?: string | null; isAdmin?: boolean };
 }
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -96,6 +96,7 @@ export class AdminProfilesController {
     };
     return this.useCases.criar(input, {
       userId: req.user.sub,
+      tenantId: req.user.tenantId ?? null,
       isAdmin: req.user.isAdmin === true,
     });
   }

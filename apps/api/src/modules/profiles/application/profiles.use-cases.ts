@@ -61,7 +61,31 @@ function recusaEscalada(motivo: string): never {
  */
 export interface AtorAutenticado {
   readonly userId: string;
+  /**
+   * pt-BR (Fase 3): empresa em que o ato acontece. `null` = rota sem
+   * `X-Tenant-Id`.
+   *
+   * **Obrigatório** (não `?`) para que a Fase 4 não tenha nenhum call site
+   * capaz de omitir a empresa em silêncio: hoje ele é lido só como chave de
+   * cache, e as travas anti-escalada ainda comparam perfil GLOBAL. ⚠️ Não ler
+   * este campo como se a escalada já fosse por empresa — não é, e o perfil
+   * efetivo só vem do tenant com `tenant_memberships.profile_id` (Fase 4).
+   */
+  readonly tenantId: string | null;
   readonly isAdmin: boolean;
+}
+
+/**
+ * pt-BR (Fase 3): o perfil efetivo do ator numa empresa. Nomeado para que
+ * `obterMeuPerfil` e o controller `/me/profile` não repitam a estrutura
+ * inline — e para que o segundo veja o contrato que o primeiro devolve.
+ */
+export interface MeuPerfil {
+  profileId: string | null;
+  profileSlug: string | null;
+  profileName: string | null;
+  isAdmin: boolean;
+  permissions: string[];
 }
 
 export interface CreateProfileInput {
@@ -533,61 +557,57 @@ export class UserProfileUseCases {
     await this.cache.invalidateUser(userId);
   }
 
-  async obterMeuPerfil(userId: string): Promise<{
-    profileId: string | null;
-    profileSlug: string | null;
-    profileName: string | null;
-    isAdmin: boolean;
-    permissions: string[];
-  }> {
-    const cached = await this.cache.getUserProfileAndPermissions(userId);
+  /** pt-BR (Fase 3): grava e devolve, para os quatro caminhos de saída
+   *  compartilharem uma linha em vez de repetir o par `set` + `return`. */
+  private async cachear<T extends MeuPerfil>(
+    tenantId: string | null,
+    userId: string,
+    v: T,
+  ): Promise<T> {
+    await this.cache.setUserProfileAndPermissions(tenantId, userId, v);
+    return v;
+  }
+
+  /**
+   * pt-BR (Fase 3 — tenancy, 2026-10-16): `tenantId` é a empresa da
+   * requisição (header `X-Tenant-Id`) e é a **chave** do cache desde já — a
+   * mesma conta em duas empresas não pode ler o perfil da outra.
+   *
+   * ⚠️ O `tenantId` ainda NÃO resolve o perfil: a leitura continua em
+   * `user.profileId()`, que é coluna global. O elo por empresa
+   * (`tenant_memberships.profile_id`) é a Fase 4. Aqui o tenant é aceito e
+   * cacheado certo; o que ele resolve por tenant chega junto.
+   */
+  async obterMeuPerfil(userId: string, tenantId: string | null): Promise<MeuPerfil> {
+    const cached = await this.cache.getUserProfileAndPermissions(tenantId, userId);
     if (cached !== null) {
       return cached;
     }
+    const denied: MeuPerfil = {
+      profileId: null,
+      profileSlug: null,
+      profileName: null,
+      isAdmin: false,
+      permissions: [],
+    };
     const user = await this.userRepo.findById(UserId.create(userId));
     if (user === null) {
-      const empty = {
-        profileId: null,
-        profileSlug: null,
-        profileName: null,
-        isAdmin: false,
-        permissions: [],
-      };
-      await this.cache.setUserProfileAndPermissions(userId, empty);
-      return empty;
+      return this.cachear(tenantId, userId, denied);
     }
     const userProfileId = user.profileId();
     if (userProfileId === null) {
-      const empty = {
-        profileId: null,
-        profileSlug: null,
-        profileName: null,
-        isAdmin: false,
-        permissions: [],
-      };
-      await this.cache.setUserProfileAndPermissions(userId, empty);
-      return empty;
+      return this.cachear(tenantId, userId, denied);
     }
     const profile = await this.profileRepo.findById(profileId(userProfileId));
     if (profile === null) {
-      const empty = {
-        profileId: null,
-        profileSlug: null,
-        profileName: null,
-        isAdmin: false,
-        permissions: [],
-      };
-      await this.cache.setUserProfileAndPermissions(userId, empty);
-      return empty;
+      return this.cachear(tenantId, userId, denied);
     }
-    const result = {
+    return this.cachear(tenantId, userId, {
       profileId: profile.id().value,
       profileSlug: profile.slug().value,
       profileName: profile.nome().value,
       isAdmin: profile.isAdmin(),
       permissions: profile.authorizations().toLista(),
-    };
-    await this.cache.setUserProfileAndPermissions(userId, result);
-    return result;
+    });
   }
 }

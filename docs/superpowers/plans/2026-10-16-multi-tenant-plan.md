@@ -119,17 +119,27 @@ E o gargalo. Sem isto, tenant e so um campo.
 
 | # | Ponto | Mudanca |
 |---|-------|---------|
-| 3.1 | `jwt-token.service.ts:185` reconstroi `TokenSubject` de 3 campos | **claim novo e descartado em silencio** — token assinado, valido, sem o claim. Nenhum erro, nenhum teste vermelho |
+| 3.1 | `jwt-token.service.ts:185` reconstroi `TokenSubject` de 3 campos | **NAO FEITO — decisao consciente.** Tenant no JWT seria um claim novo e descartado em silencio (token assinado, valido, sem o claim), e pior: o tenant muda dentro da mesma sessao (trocar de empresa nao e trocar de token). Ver a nota abaixo |
 | 3.2 | `jwt-auth.guard.ts:117` le o header via `extractBearerToken` (def. em `:65-71`) | ponto de insercao de `X-Tenant-Id` (unico no backend) |
 | 3.3 | `user-profile-cache.service.ts:29,41` chave = `userId` cru | 2 tenants do mesmo user colidem; `invalidateAll()` (`:51-53`) e global |
 | 3.4 | `permissions.guard.ts:86` chama `obterMeuPerfil(user.sub)` — sem tenant | passa a chamar `obterMeuPerfil(user.sub, tenantId)` |
-| 3.5 | `profiles.use-cases.ts:62-65` `AtorAutenticado { userId, isAdmin }` | vira `{ userId, tenantId, isAdmin }`. Atravessa **3** controllers (`admin-profiles`, `admin-users`, `admin-authorizations`) e alimenta as travas anti-escalada. Sem `tenantId` a checagem e **estruturalmente incapaz** de detectar cross-tenant |
+| 3.5 | `profiles.use-cases.ts:62-65` `AtorAutenticado { userId, isAdmin }` | vira `{ userId, tenantId, isAdmin }`. Atravessa **3** controllers (`admin-profiles`, `admin-users`, `admin-authorizations`). ⚠️ Medido na revisão: o campo e **obrigatorio mas ainda NAO lido** por nenhuma trava anti-escalada — hoje elas comparam perfil GLOBAL. Ele existe para a Fase 4 nao ter call site que omita a empresa; **nao** para ja detectar cross-tenant |
 | 3.6 | `api-client.ts:53-54` monta so 2 headers | ponto de insercao no front (unico) |
 
-**3.1, 3.4, 3.5 e a assinatura de `obterMeuPerfil` (`:536`) sao o MESMO
+**Por que 3.1 virou decisao, e nao tarefa.** Um claim de tenant no JWT e
+descartado em silencio (`TokenSubject` tem 3 campos) *e* fica errado no uso:
+trocar de empresa dentro da mesma sessao nao emite token novo. O header `D2`
+existe justamente para ser re-resolvido a cada request.
+
+**3.2, 3.3, 3.4, 3.5 e a assinatura de `obterMeuPerfil` (`:536`) sao o MESMO
 change-set.** Separados, 3.3/3.4 nao tem o que passar para o cache e para o
 guard: a assinatura so aceita tenant depois desta fase. E o inverso tambem
 segura — esta fase precisa do dado que a Fase 2 cria.
+
+**A coluna `tenant_memberships.profile_id` NAO e desta fase — e 4.1.** A Fase
+3 entrega o tenant resolvido e cacheado certo; ela nao resolve o perfil por
+empresa, porque resolver exige a coluna que a Fase 4 cria. O doc-comment de
+`obterMeuPerfil` diz isso em voz alta em vez de fingir que a fase esta pronta.
 
 **Rotas `@Public()` sao isentas de `X-Tenant-Id`.** `POST /users` e `@Public()`
 (`users.controller.ts:106-107`) dentro de uma classe com
@@ -138,24 +148,31 @@ segura — esta fase precisa do dado que a Fase 2 cria.
 autenticadas e tenant-scoped — e o signup grava a Tenant nova / a Membership
 do convite sem header de entrada.
 
-**RLS entra aqui, com produtor explicito.** Nao na Fase 2: RLS no Postgres e
-deny-by-default, e sem `SET LOCAL` **toda** query volta vazia — ligar na
-Fase 2 quebraria a aplicacao inteira ate a Fase 3, em silencio. O produtor,
-por requisicao, dentro da mesma transacao (Prisma usa pool — `SET` de sessao
-se perderia na devolucao da conexao):
+**RLS saiu desta fase. A medicao matou o plano original** (Revisao v1.3.0):
+`SET LOCAL app.current_tenant` sozinho **nao filtra nada** sob a conexao deste
+repo, porque ela e superuser e superuser ignora RLS — `FORCE` nao se aplica a
+ele. O produtor que funciona exige **dois** comandos e transforma todo acesso
+escopado em `$transaction`:
 
 ```sql
-SELECT set_config('app.current_tenant', $1, true);  -- true = local a transacao
-
-CREATE POLICY tenant_isolation ON <tabela>
-  USING (tenant_id = current_setting('app.current_tenant', true)::uuid);
+SET LOCAL ROLE app;                                       -- sem isto a policy nao e avaliada
+SELECT set_config('app.current_tenant', $1, true);        -- true = local a transacao
 ```
 
+O custo medido e o motivo da decisao: 3 tabelas com `tenant_id`, ~6 repositorios
+tocando Prisma, e o modo de falha de um wrapper esquecido e *ver linhas de outro
+tenant sem erro* — pior que nao ter RLS, porque a migration parece proteger. O
+controle que entregamos e o escopo de query na aplicacao (3.4/3.5), que e
+verificavel ponta a ponta pela Fase 7. ⚠️ **O escopo do qual se fala aqui e o do
+CACHE** (3.3/3.4): o perfil efetivo ainda e lido de `users.profile_id`, global
+— a Fase 4 e que troca a leitura. Ver §3.
+
 ### Fase 4 — Forma do dado por tenant
-`users/domain/user.aggregate.ts:64` `#profileId: string | null` sai do
-agregado: com D4 o User nao tem perfil proprio, o perfil vem da Membership.
-Os repos leem por tenant. (A *assinatura* que consome tenant ja foi feita na
-Fase 3 — aqui e a forma do dado.)
+
+| # | Ponto | Mudanca |
+|---|-------|---------|
+| 4.1 | **`tenant_memberships` nao tem `profile_id`** — so `role` | migration nova: coluna nullable + FK para `profiles` + `@@index([profileId])`. Sem ela a D4 nao e representavel (ver Revisao v1.3.0) |
+| 4.2 | `users/domain/user.aggregate.ts:64` `#profileId: string \| null` | sai do agregado: com D4 o User nao tem perfil proprio, o perfil vem da Membership. Os repos leem por tenant. (A *assinatura* que consome tenant ja foi feita na Fase 3 — aqui e a forma.) |
 
 A **coluna** `users.profile_id` permanece no schema, orfa. Quao remove-la e
 decisao adiada (ver §3): e a unica operacao deste trabalho que toca dado
@@ -196,12 +213,21 @@ O ramo do convite precisa de **produtor e aceite**, senao e inalcavel:
 vira comentario de review. Artefato nomeado:
 `apps/api/test/e2e/scenarios/11-tenant-isolation.e2e.spec.ts` — semeia 2
 tenants + 2 usuarios e afirma que **usuario(A) invocando recurso(B) da 403/404**
-(o inverso tambem). Cenario e2e registrado no inventario de fluxos
-(`e2e-playwright.md ## Inventario de Fluxos`), que o
-`check-e2e-flow-coverage` reconcilia.
+(o inverso tambem).
+
+> **Correcao v1.3.0 — o spec NAO entra no inventario de fluxos.** A versao
+> anterior desta fase mandava registra-lo, e seguir isso deixa o preflight
+> **vermelho**. MEDIDO: `check-e2e-flow-coverage.ts:392` faz
+> `const dirE2E = join(raiz, 'apps/web/e2e')` — o gate so varre o frontend, e
+> `:311-318` acusa como erro toda linha de inventario cujo fluxo nenhum spec
+> declara. Como `apps/api/test/e2e/scenarios/` esta fora de `dirE2E`, a linha
+> seria orfa por construcao. O precedente ja esta no disco: os cenarios
+> `01`–`10` da API **nao** tem cabecalho `// FLUXO:` e **nao** estao no
+> inventario, que e um artefato de **telas** (`page.tsx`), nao de API. O
+> cenario 11 segue o mesmo padrao da suite em que mora.
 
 So e executavel **depois da Fase 3**: o ator que o gate exercita e
-`AtorAutenticado`, e sem `tenantId` (3.5) o gate nao tem o que comparar.
+`AtorAutenticado`, e e `tenantId` (3.5) a empresa que o gate compara.
 Precedente: [`2026-10-13-idor-rate-limit.md`](./2026-10-13-idor-rate-limit.md).
 
 ---
@@ -209,6 +235,12 @@ Precedente: [`2026-10-13-idor-rate-limit.md`](./2026-10-13-idor-rate-limit.md).
 ## 3. Fora de escopo
 
 - Schema-per-tenant e DB-per-tenant (D1 ja decidiu contra).
+- **RLS como segunda camada.** Saiu da Fase 3 por medicao (Revisao v1.3.0), nao
+  por esquecimento. Pre-requisito quando voltar: role `NOSUPERUSER` + policies +
+  `SET LOCAL ROLE app; SET LOCAL app.current_tenant` **dentro de `$transaction`**,
+  em todo acesso as 3 tabelas com `tenant_id`. O teste que fixa o estado de hoje
+  e `tenancy-migration.integration.spec.ts` ("sem RLS, uma query sem SET LOCAL
+  ainda enxerga tudo") — ele **inverte de sentido** no dia em que RLS entrar.
 - Marketplace de tenants, billing por empresa, plano por tenant.
 - **Customizar os campos de um perfil global por tenant** (override). D3 = a
   empresa cria a propria row de perfil; nao e editar a row global.
@@ -244,58 +276,4 @@ e se comportaram como o esperado — nao veio so da doc.
 
 ---
 
-## Revisao v1.2.0
-
-Um defeito meu, achado ao ler `prisma/seed.ts` para checar a Fase 6. **G-004**
-afirmava que o banco de dev (`users=1, profiles=0`) deixava a Fase 2 "sem
-exercicio" e a Fase 7 "sem sobre o que rodar", exigindo uma "fixture
-pre-tenancy". **As duas metades sao falsas:**
-
-- **Fase 2 nao precisa de fixture** — o exercicio dela e a suite e2e, que roda
-  em testcontainers: `setupTestDatabase` sobe Postgres novo e aplica as
-  migrations (`testcontainers-helper.ts:91`). O proprio CI registra que service
-  postgres seria dead code (`ci.yml:158`). O volume do banco de dev nao
-  participa.
-- **Fase 7 tem sobre o que rodar** — semeia 2 tenants + 2 usuarios dentro do
-  proprio spec, no container novo.
-
-E o achado que substitui o problema: **nao existe banco de producao**. Um
-backfill precisaria de um tenant padrao para onde apontar, e criar esse tenant e
-decisao de produto que a demanda nao pede — ela pede perfis por empresa, nao
-uma empresa default. Correcao: **Fase 2 sem backfill**, `users.profile_id` fica
-orfa e a Fase 4 muda so o caminho de leitura. `DROP COLUMN` entra em §3 como
-decisao adiada, porque `prisma-db-specialist.md:160` exige o tenant padrao antes.
-
----
-
-## Revisao v1.1.0
-
-Dois subagentes independentes: um procurou erros de estrutura e execucao, o
-outro conferiu 20 afirmacoes contra o disco. Resultado: **17 verdadeiras,
-2 imprecisas, 1 com premissa falsa**, e 10 defeitos de execucao.
-
-### Defeitos que impediam a execucao
-
-| # | Defeito | Correcao |
-|---|---------|----------|
-| E1 | Fases 3 e 4 **circulares**: 3.4 passa tenant a `obterMeuPerfil`, que so aceita tenant na Fase 4 | assinatura movida para o change-set da Fase 3 (3.1-3.6) |
-| E2 | **RLS na Fase 2 liga deny-all sem produtor** — `SET LOCAL` so chega na Fase 3 | RLS movido para a Fase 3, com produtor e `set_config(..., true)` |
-| E3 | **Os indices parciais da D3 sao aditivos**: `profiles_slug_key` continua de pe e anula a customizacao por tenant | `ALTER TABLE profiles DROP CONSTRAINT profiles_slug_key;` antes dos `CREATE INDEX` |
-| E4 | **O ramo "convite" da D5 e inalcavel** — nada cria `Invitation` | produtor (`POST /tenants/:id/invitations`) + aceite para conta existente |
-| E5 | **`POST /users` e `@Public()`**: sem token, sem tenant hidratado | rotas `@Public()` declaradas isentas de `X-Tenant-Id` |
-| E6 | **O gate da Fase 7 nao tem moradia nem ator com tenant** | artefato nomeado (`11-tenant-isolation.e2e.spec.ts`) + `tenantId` no ator (3.5) |
-
-### Defeitos de precisão
-
-- **Contradicao interna:** a §Fase 1 dizia "3 hits" de convencao de backfill e a
-  tabela de Evidencia dizia "0". Medido: **3**. E "a fase de backfill nao tem
-  dono nem regra" era mais forte que o disco — a regra existe em
-  `prisma-db-specialist.md:160`.
-- **Citacoes erradas:** `permissions.guard.ts:85` → **:86**; o archive grava em
-  `prisma-audit.service.ts:**107**` (o `:45` so cobre o historico); a assinatura
-  real e `findByEmail(email: Email)`. "Atravessa 4 controllers" → **3**; os
-  specs `f9`-`f13` **nao existem** e foram citados os reais.
-- **Evidencia invalida:** `gap_detected` era chamado de "codigo morto" citando um
-  comando que **sai em exit 2 (Usage)** — `--demand`/`--paths` sao arquivos e o
-  `--paths` faltava. A medicao nunca aconteceu; refeita, a conclusao se
-  sustenta por `always_on` incondicional.
+Historico de revisao (v1.1.0 / v1.2.0 / v1.3.0 / v1.4.0) em [`2026-10-16-multi-tenant-plan-revisoes.md`](./2026-10-16-multi-tenant-plan-revisoes.md).

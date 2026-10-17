@@ -307,8 +307,8 @@ describe('ProfileUseCases', () => {
 const ATOR_ID = '0190a8b6-1234-7abc-9def-0000000000a1';
 const ROOT_ID = '0190a8b6-1234-7abc-9def-0000000000b1';
 const ALVO_ID = '0190a8b6-1234-7abc-9def-0000000000c1';
-const ATOR: AtorAutenticado = { userId: ATOR_ID, isAdmin: false };
-const ATOR_ADMIN: AtorAutenticado = { userId: ROOT_ID, isAdmin: true };
+const ATOR: AtorAutenticado = { userId: ATOR_ID, tenantId: null, isAdmin: false };
+const ATOR_ADMIN: AtorAutenticado = { userId: ROOT_ID, tenantId: null, isAdmin: true };
 
 /**
  * User com profile, para ser o ator das travas. `id` precisa ser UUID v7
@@ -402,6 +402,7 @@ describe('AuthorizationUseCases — auto-concessão (#97)', () => {
 
     await expect(
       uc.atribuir(outro.id().value, 'users.read', {
+        tenantId: null,
         userId: '0190a8b6-1234-7abc-9def-0000000000d1',
         isAdmin: false,
       }),
@@ -419,6 +420,7 @@ describe('AuthorizationUseCases — auto-concessão (#97)', () => {
 
     await expect(
       uc.revogar(outro.id().value, 'users.read', {
+        tenantId: null,
         userId: '0190a8b6-1234-7abc-9def-0000000000d1',
         isAdmin: false,
       }),
@@ -623,6 +625,7 @@ describe('UserProfileUseCases — atribuir profile admin (#97)', () => {
 
     await expect(
       uc.atribuirProfileAoUser('0190a8b6-1234-7abc-9def-0000000000d1', sub.id().value, {
+        tenantId: null,
         userId: '0190a8b6-1234-7abc-9def-0000000000d1',
         isAdmin: false,
       }),
@@ -735,7 +738,7 @@ describe('UserProfileUseCases — atribuir profile admin (#97)', () => {
     users.prime(userComProfile(ALVO_ID, admin.id().value));
 
     await expect(
-      uc.atribuirProfileAoUser(ALVO_ID, null, { userId: ATOR_ID, isAdmin: true }),
+      uc.atribuirProfileAoUser(ALVO_ID, null, { userId: ATOR_ID, tenantId: null, isAdmin: true }),
     ).resolves.toBeUndefined();
   });
 });
