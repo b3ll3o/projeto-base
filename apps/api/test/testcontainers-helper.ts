@@ -19,6 +19,17 @@ let container: StartedPostgreSqlContainer | undefined;
 
 export type TestContext = {
   prisma: PrismaClient;
+  /**
+   * URI do banco como **dono** (o superuser que o container cria).
+   *
+   * pt-BR (Fase 9 — RLS, 2026-10-17): existe para os specs que precisam provar
+   * o comportamento de um papel **sem** BYPASSRLS. `prisma` é o cliente de
+   * setup/asserção e continua no dono de propósito — o verificador precisa
+   * enxergar o banco inteiro, senão a asserção "a escrita não aconteceu" seria
+   * verificável só através da mesma política que deveria ter barrado a escrita.
+   * O papel de runtime é derivado desta URI pelo spec.
+   */
+  uriDoBanco: string;
   stop: () => Promise<void>;
   /**
    * Id do container no Docker.
@@ -86,16 +97,26 @@ export async function setupTestDatabase(
   container = await construtor.start();
   const uri = container.getConnectionUri();
   process.env.DATABASE_URL = uri;
+  // pt-BR (Fase 9 — RLS): `schema.prisma` tem `directUrl = env("DIRECT_DATABASE_URL")`,
+  // que é a conexão que o CLI do Prisma usa. As duas apontam para o MESMO banco
+  // aqui de propósito: o container nasce com o dono das tabelas, e o
+  // `migrate deploy` PRECISA do dono (`CREATE ROLE`, `ALTER TABLE ... ENABLE ROW
+  // LEVEL SECURITY` e `GRANT` exigem posse da tabela). O papel `app_runtime` é
+  // criado pela própria migration; quem o exercita é o spec de RLS, com o
+  // `uriComoPapelDeRuntime` — não este helper, que precisa enxergar o banco
+  // inteiro para montar o fixture.
+  process.env.DIRECT_DATABASE_URL = uri;
   const prisma = new PrismaClient({ datasourceUrl: uri });
 
   execSync('pnpm exec prisma migrate deploy', {
     cwd: process.cwd(),
-    env: { ...process.env, DATABASE_URL: uri },
+    env: { ...process.env, DATABASE_URL: uri, DIRECT_DATABASE_URL: uri },
     stdio: 'inherit',
   });
 
   return {
     prisma,
+    uriDoBanco: uri,
     containerId: container.getId(),
     stop: async () => {
       await prisma.$disconnect();

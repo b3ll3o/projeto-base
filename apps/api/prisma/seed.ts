@@ -12,7 +12,26 @@
 import { PrismaClient } from '@prisma/client';
 import { listAllPermissions } from '../src/shared/auth/permissions-catalog.js';
 
-const prisma = new PrismaClient();
+/**
+ * pt-BR (Fase 9 — RLS): o seed conecta como DONO, nunca pelo `DATABASE_URL`
+ * da aplicação. O motivo é concreto: o seed cria perfis GLOBAIS
+ * (`tenant_id IS NULL`, o bucket de sistema), e o papel `app_runtime` é
+ * fail-closed — sem `app.tenant_id` ele não enxerga nem escreve nada nesse
+ * bucket. Com `DATABASE_URL` apontando para o runtime, o seed "passaria"
+ * escrevendo zero linhas.
+ *
+ * Por que falhar alto em vez de cair no `DATABASE_URL`: o conserto de quem não
+ * ler este comentário seria um seed silenciosamente vazio, e o próximo
+ * sintoma seria "o perfil admin não existe" — num ambiente de produção.
+ */
+const urlDoDono = process.env['DIRECT_DATABASE_URL'];
+if (!urlDoDono) {
+  throw new Error(
+    'DIRECT_DATABASE_URL ausente: o seed escreve perfis GLOBAIS, que o papel de runtime (fail-closed) não enxerga. Rode com a conexão de DONO.',
+  );
+}
+
+const prisma = new PrismaClient({ datasourceUrl: urlDoDono });
 
 /**
  * Encontra (ou cria) um perfil GLOBAL.

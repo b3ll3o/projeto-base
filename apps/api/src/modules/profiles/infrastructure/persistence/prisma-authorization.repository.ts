@@ -15,6 +15,7 @@ import type { AuthorizationRepositoryPort } from '../../domain/ports/authorizati
 import type { ProfileId } from '../../domain/value-objects/profile-id.vo.js';
 import type { AuthorizationKey } from '../../domain/value-objects/authorization-key.vo.js';
 import { Authorization } from '../../domain/authorization.entity.js';
+import { comEscopo, escopoDoTenant } from '../../../../shared/infrastructure/prisma/escopo.js';
 
 @Injectable()
 export class PrismaAuthorizationRepository implements AuthorizationRepositoryPort {
@@ -22,11 +23,18 @@ export class PrismaAuthorizationRepository implements AuthorizationRepositoryPor
    * material e some em runtime (mesmo motivo do PrismaProfileRepository). */
   constructor(@Inject(PrismaService) private readonly prisma: PrismaClient) {}
 
-  async listByProfile(profileId: ProfileId): Promise<Authorization[]> {
-    const rows = await this.prisma.authorization.findMany({
-      where: { profileId: profileId.value },
-      orderBy: { permissionKey: 'asc' },
-    });
+  async listByProfile(profileId: ProfileId, tenantId: string | null): Promise<Authorization[]> {
+    // pt-BR (Fase 9 — RLS): `authorizations` não tem `tenant_id`; a policy
+    // (`authorizations_leitura`) atravessa `profiles` para resolver a dona, e
+    // ela só existe para quem tem `app.tenant_id` posto. Sem escopo a
+    // consulta volta vazia — o sintoma seria "as permissões do perfil
+    // sumiram", não um erro.
+    const rows = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+      tx.authorization.findMany({
+        where: { profileId: profileId.value },
+        orderBy: { permissionKey: 'asc' },
+      }),
+    );
     return rows.map((r) =>
       Authorization.restore({
         id: r.id,
@@ -38,30 +46,35 @@ export class PrismaAuthorizationRepository implements AuthorizationRepositoryPor
     );
   }
 
-  async countByProfile(profileId: ProfileId): Promise<number> {
-    return this.prisma.authorization.count({
-      where: { profileId: profileId.value },
-    });
+  async countByProfile(profileId: ProfileId, tenantId: string | null): Promise<number> {
+    return comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+      tx.authorization.count({
+        where: { profileId: profileId.value },
+      }),
+    );
   }
 
   async upsert(input: {
     profileId: ProfileId;
     key: AuthorizationKey;
     agora: Date;
+    tenantId: string | null;
   }): Promise<Authorization> {
-    const row = await this.prisma.authorization.upsert({
-      where: {
-        profileId_permissionKey: {
+    const row = await comEscopo(this.prisma, escopoDoTenant(input.tenantId), (tx) =>
+      tx.authorization.upsert({
+        where: {
+          profileId_permissionKey: {
+            profileId: input.profileId.value,
+            permissionKey: input.key.value,
+          },
+        },
+        create: {
           profileId: input.profileId.value,
           permissionKey: input.key.value,
         },
-      },
-      create: {
-        profileId: input.profileId.value,
-        permissionKey: input.key.value,
-      },
-      update: {},
-    });
+        update: {},
+      }),
+    );
     return Authorization.restore({
       id: row.id,
       profileId: input.profileId,
@@ -71,12 +84,18 @@ export class PrismaAuthorizationRepository implements AuthorizationRepositoryPor
     });
   }
 
-  async delete(input: { profileId: ProfileId; key: AuthorizationKey }): Promise<void> {
-    await this.prisma.authorization.deleteMany({
-      where: {
-        profileId: input.profileId.value,
-        permissionKey: input.key.value,
-      },
-    });
+  async delete(input: {
+    profileId: ProfileId;
+    key: AuthorizationKey;
+    tenantId: string | null;
+  }): Promise<void> {
+    await comEscopo(this.prisma, escopoDoTenant(input.tenantId), (tx) =>
+      tx.authorization.deleteMany({
+        where: {
+          profileId: input.profileId.value,
+          permissionKey: input.key.value,
+        },
+      }),
+    );
   }
 }

@@ -23,7 +23,7 @@ const PERFIL = '0190a8b6-0000-4000-8000-0000000000f1';
 
 /** Prisma de mentira que só registra o `where` — ver nota sobre teeth no fim. */
 function prismaFalso() {
-  return {
+  const duplo = {
     tenantMembership: {
       findFirst: vi.fn().mockResolvedValue(null),
       count: vi.fn(),
@@ -32,7 +32,23 @@ function prismaFalso() {
     // Fase 6: o pré-acerto de DONA lê o perfil antes de escrever.
     profile: { findFirst: vi.fn().mockResolvedValue({ id: PERFIL }) },
     user: { findFirst: vi.fn().mockResolvedValue(null) },
+    // pt-BR (Fase 9 — RLS): o escopo é aberto por `set_config`, que é tagged
+    // template. Resolver vazio é o comportamento do Postgres para um SELECT
+    // que só executa um side effect.
+    $queryRaw: vi.fn().mockResolvedValue([]),
   };
+  return Object.assign(duplo, {
+    // O `tx` é o PRÓPRIO duplo, e não uma cópia: as asserções do arquivo leem
+    // `prisma.tenantMembership.updateMany`, que é o mesmo `vi.fn` que o `tx`
+    // usa. Um `tx` separado obrigaria cada asserção a virar `tx.…` e o teste
+    // passaria a medir um duplo que o repositório nunca vê.
+    $transaction: vi.fn(async (fn: (tx: typeof duplo) => Promise<unknown>) => fn(duplo)),
+  });
+}
+
+/** Os escopos que o repositório pediu ao banco: `set_config('app.tenant_id', …, true)`. */
+function escoposAbertos(prisma: ReturnType<typeof prismaFalso>): string[] {
+  return prisma.$queryRaw.mock.calls.map((chamada) => chamada[2] as string);
 }
 
 describe('PrismaTenantMembershipRepository.findProfileId', () => {
@@ -200,5 +216,30 @@ describe('PrismaTenantMembershipRepository.atribuirPerfil', () => {
   it('NUNCA escreve em outra empresa: o tenantId do `where` é o da chamada', async () => {
     await repo.atribuirPerfil(USER, ACME, PERFIL);
     expect(whereDaUltimaEscrita().tenantId).toBe(ACME);
+  });
+
+  // pt-BR (Fase 9 — RLS): o filtro do `where` acima é o filtro da APLICAÇÃO; a
+  // policy do Postgres é a segunda linha, e ela só existe se o GUC
+  // `app.tenant_id` estiver posto na sessão. Sem esta aserção o arquivo inteiro
+  // fica verde com o escopo nunca aberto — que é o estado em que a policy
+  // fail-closed devolve ZERO linhas e a escrita "some" sem erro nenhum.
+  it('abre o escopo da empresa ANTES de escrever, e é a empresa da chamada', async () => {
+    await repo.atribuirPerfil(USER, ACME, PERFIL);
+    expect(escoposAbertos(prisma)).toEqual([ACME]);
+    // Ordem: o `set_config` é a primeira coisa da transação, para que a
+    // leitura de DONA e o `updateMany` já leiam a policy.
+    expect(prisma.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      prisma.tenantMembership.updateMany.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('recusa o perfil alheio ANTES de abrir qualquer escopo', async () => {
+    // O `findFirst` devolvendo `null` é o banco dizendo "não existe perfil
+    // assim NAQUELA empresa" — com a policy posposta, a resposta vira
+    // indistinguível de "perfil não existe". O pré-acerto de DONA tem de rodar
+    // DENTRO do escopo da empresa que se quer tocar, nunca de `'*'`.
+    prisma.profile.findFirst.mockResolvedValue(null);
+    await expect(repo.atribuirPerfil(USER, ACME, PERFIL)).resolves.toBe(false);
+    expect(escoposAbertos(prisma)).toEqual([ACME]);
   });
 });

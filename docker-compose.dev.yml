@@ -4,6 +4,11 @@ services:
     environment:
       NODE_ENV: development
       DATABASE_URL: postgresql://projeto:projeto@postgres:5432/projeto_base?schema=public
+      # shortcut: esta stack conecta como DONO, então as policies de RLS não
+      # valem aqui — quem as exercita de verdade é
+      # `src/shared/infrastructure/prisma/prisma-rls.integration.spec.ts`, que sobe
+      # o seu próprio container. Substituir por `app_runtime` quando este compose
+      # passar a rodar a migration (hoje ele roda só `pnpm dev`, sem migrate).
     volumes:
       - ./apps/api/src:/repo/apps/api/src:ro
       - ./apps/api/prisma:/repo/apps/api/prisma:ro

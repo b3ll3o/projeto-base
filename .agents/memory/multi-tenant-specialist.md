@@ -192,6 +192,71 @@ esperado do "antes do perfil", então o teste inteiro passa sem tocar a
 membership da empresa. Medido: `profileId` veio `null` na leitura "depois" e
 denunciou. O header da empresa tem de ser montado à mão no spec.
 
+## Revisão v1.7.0 (2026-10-17, Fase 9 — RLS e a inversão da conexão)
+
+O isolamento deixou de ser só da aplicação: existem policies no Postgres e a
+aplicação conecta com um papel que **não** as ignora.
+
+| Medida | Comando | Valor |
+|--------|---------|-------|
+| Policies criadas | `SELECT tablename FROM pg_policies WHERE schemaname='public'` (local, apos `prisma migrate deploy`) | **20** em **5** tabelas |
+| Tabelas com RLS | `SELECT c.relname FROM pg_class c ... WHERE c.relrowsecurity` | `authorizations`, `invitations`, `profiles`, `tenant_memberships`, `tenants` |
+| Atributos do papel | `SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname='app_runtime'` | `app_runtime` / `false` / `false` |
+| Papel do CLI vs. da aplicação | `DIRECT_DATABASE_URL` no `schema.prisma` (`directUrl`) | `migrate`/`seed` = DONO; `PrismaClient` = `app_runtime` |
+
+`users`, `users_history` e `users_archive` **deixaram de ter policy** — de
+propósito: são globais, e a Fase 9 não mexeu no dado de usuário.
+
+### `set_config(…, true)` é LOCAL: sem transação, não há escopo
+
+O parâmetro de sessão morre no fim da transação. Consequência que mudou código
+que já estava verde: **todo** acesso precisa de `$transaction` — inclusive o
+`CREATE`, que antes não tinha. Sem escopo a sessão volta com **zero linhas**, e
+o sintoma não é erro: é "as permissões do perfil sumiram".
+
+### Tabela sem `tenant_id` precisa de policy que ATRAVESSA a relação
+
+`authorizations` é onde mora `users.delete`, e a policy dela resolve a dona com
+`EXISTS` sobre `profiles`. Deliberadamente **não** é `SECURITY DEFINER`: assim a
+RLS de `profiles` também vale na travessia. Uma tabela sem `tenant_id` e sem
+essa travessia fica sem proteção nenhuma, e nenhuma revisão de `where` a pega.
+
+### Inversão de conexão: o que mede e o que só parece medir
+
+`url` = `app_runtime`, `directUrl` = DONO. Medido: `prisma generate` **não**
+resolve env de datasource (logo o CI não precisa da variável); `prisma validate`
+e `migrate` **precisam**; e o `PrismaClient` de runtime funciona sem
+`directUrl`. Um teste por conexão *parece* cobrir a exclusão mútua e mede só o
+`findMany`.
+
+⚠️ `docker-compose.yml` **não** ganhou a variável: `environment:` tem precedência
+sobre `env_file`, então `${DIRECT_DATABASE_URL}` não interpolado sobrescreveria o
+valor do `.env.production` com string vazia — a armadilha que o próprio compose
+documenta para o `JWT_SECRET`. O `env_file` já basta.
+
+### Conjunto vazio: "fail-closed devolve 0" semeia verde no vazio
+
+O banco local estava com **0 linhas** em `profiles`, `tenants` e
+`authorizations`. Aí a medição de que a sessão sem escopo não vê nada é
+**indistinguível** de não haver nada — os dois dão 0. O mesmo verde por
+conjunto vazio que já mordeu em critério de gate, agora em medição de segurança.
+Depois de popular com o DONO, a mesma medição separa: DONO vê 3/2/1;
+`app_runtime` sem escopo vê 0/0/0; com o escopo da empresa vê 2 perfis (o dela +
+o global) e **zero** da empresa vizinha.
+
+⚠️ Ao medir RLS, **confirme o total pelo dono antes** de afirmar que a sessão
+não enxerga nada. Sem isso o número medido não distingue garantia de ausência
+de dado.
+
+### Falso negativo de tipo: implementação com MENOS parâmetros compila
+
+O TypeScript aceita uma classe que implementa a porta com menos parâmetros que a
+interface. O `findById` do duplo das use cases ignorava `tenantId`, compilava,
+e os **779** testes seguiam verdes sem que nada afirmasse que o escopo chega ao
+repositório. O conserto foi o duplo **registrar** o que recebeu
+(`escoposPedidos`) e 4 specs afirmarem a sequência exata. `toContain` não serve:
+passaria com todos virados para o bucket de sistema.
+
 ## Triggers retroativos
 
 Findings repetidos sobre o mesmo arquivo/location (>3x) é sinal de **classe de

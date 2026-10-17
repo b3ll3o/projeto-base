@@ -9,10 +9,11 @@
 // CREATE não tinha onde aparecer. Um fake que não é a API real produz
 // verde sobre código que quebraria em produção.
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { PrismaProfileRepository } from './prisma-profile.repository.js';
 import { Profile } from '../../domain/profile.aggregate.js';
 import { ConcurrencyException } from '../../domain/exceptions/profile.exceptions.js';
+import { ESCOPO_DE_SISTEMA } from '../../../../shared/infrastructure/prisma/papel-de-runtime.js';
 
 type ProfileRow = {
   id: string;
@@ -143,7 +144,7 @@ class FakePrisma {
       return { ...row };
     },
     updateMany: async (args: {
-      where: { id: string; version: number };
+      where: { id: string; version: number; tenantId?: string | null };
       data: {
         slug: string;
         name: string;
@@ -155,6 +156,14 @@ class FakePrisma {
     }) => {
       const row = this.#profiles.find((p) => p.id === args.where.id);
       if (row === undefined || row.version !== args.where.version) {
+        return { count: 0 };
+      }
+      // pt-BR (Fase 9): o `where` carrega a dona e este filtro a compara —
+      // como o `findFirst` faz com o `tenantId`. `?? null` porque
+      // `undefined` = "o duplo ignoraria o filtro", que é o verde que não
+      // prova nada. A coluna NÃO é reatribuída aqui: o repositório parou de
+      // escrevê-la, e um duplo que ainda a move esconderia a mudança.
+      if (args.where.tenantId === undefined || row.tenantId !== args.where.tenantId) {
         return { count: 0 };
       }
       row.slug = args.data.slug;
@@ -200,6 +209,18 @@ class FakePrisma {
     this.transacoesAbertas += 1;
     return fn(this);
   }
+
+  /**
+   * pt-BR (Fase 9 — RLS): o escopo abre por `set_config`, que é tagged
+   * template. O `chunks[0]` é o SQL e `chunks[1..]` são os valores
+   * interpolados — o escopo é o ÚLTIMO.
+   */
+  readonly $queryRaw = vi.fn().mockResolvedValue([]);
+
+  /** Os escopos pedidos ao banco, em ordem. */
+  escopos(): string[] {
+    return this.$queryRaw.mock.calls.map((chamada) => chamada.at(-1) as string);
+  }
 }
 
 describe('PrismaProfileRepository', () => {
@@ -212,9 +233,19 @@ describe('PrismaProfileRepository', () => {
     repo = new PrismaProfileRepository(fake as any);
   });
 
-  /** Recarrega do "banco" — é o que todo use case faz antes de mutar. */
-  async function reler(id: ReturnType<Profile['id']>): Promise<Profile> {
-    const p = await repo.findById(id);
+  /**
+   * Recarrega do "banco" — é o que todo use case faz antes de mutar.
+   *
+   * pt-BR (Fase 9 — RLS): `tenantId` é o escopo da SESSÃO (bucket de sistema
+   * quando `null`). O duplo não filtra por dona, então o valor não muda o
+   * resultado aqui — ele muda o escopo pedido, e é isso que os testes do bloco
+   * `todo acesso abre o escopo` medem.
+   */
+  async function reler(
+    id: ReturnType<Profile['id']>,
+    tenantId: string | null = null,
+  ): Promise<Profile> {
+    const p = await repo.findById(id, tenantId);
     if (p === null) {
       throw new Error('profile não encontrado no fake');
     }
@@ -224,7 +255,7 @@ describe('PrismaProfileRepository', () => {
   it('save persiste profile novo + suas authorizations', async () => {
     const p = Profile.criar({ slug: 'admin', name: 'Administrador', agora: new Date() });
     await repo.save(p);
-    const found = await repo.findById(p.id());
+    const found = await repo.findById(p.id(), null);
     expect(found).not.toBeNull();
     expect(found?.slug().value).toBe('admin');
   });
@@ -270,7 +301,7 @@ describe('PrismaProfileRepository', () => {
     carregado.adicionarAutorizacao('users.write', new Date());
     await repo.save(carregado);
 
-    const found = await repo.findById(p.id());
+    const found = await repo.findById(p.id(), null);
     expect(found?.nome().value).toBe('Editor Chefe');
     expect(found?.authorizations().toLista()).toEqual(['users.read', 'users.write']);
     expect(found?.version()).toBe(3);
@@ -288,7 +319,7 @@ describe('PrismaProfileRepository', () => {
     carregado.alterarDescricao('descrição nova', new Date());
     await repo.save(carregado);
 
-    const found = await repo.findById(p.id());
+    const found = await repo.findById(p.id(), null);
     expect(found?.nome().value).toBe('Nome Novo');
     expect(found?.descricao()).toBe('descrição nova');
     expect(found?.version()).toBe(3);
@@ -297,16 +328,24 @@ describe('PrismaProfileRepository', () => {
   it('save (UPDATE) roda as três escritas dentro de $transaction', async () => {
     const p = Profile.criar({ slug: 'editor', name: 'Editor', agora: new Date() });
     await repo.save(p);
-    expect(fake.transacoesAbertas).toBe(0);
 
     const carregado = await reler(p.id());
     carregado.renomear('Outro Nome', new Date());
+    // pt-BR (Fase 9): a recarga também abre transação (o `findById` abre
+    // escopo), então o marcador sai DEPOIS dela — o que este teste mede é a
+    // transação do UPDATE, não a da leitura.
+    const antesDoUpdate = fake.transacoesAbertas;
     await repo.save(carregado);
 
     // Fora da `$transaction` o `createMany` que falha deixa o profile com
     // a version incrementada e ZERO permissões — o agregado em memória e o
     // banco divergem para sempre. A transação é o que fecha isso.
-    expect(fake.transacoesAbertas).toBe(1);
+    //
+    // pt-BR (Fase 9): o CREATE TAMBÉM abre transação agora — `set_config(…,
+    // true)` é LOCAL e morre no fim dela, então o escopo PRECISA dela. O que
+    // este teste segura é o DELTA do UPDATE (exatamente uma transação, com as
+    // três escritas dentro), não a contagem absoluta desde o começo da suíte.
+    expect(fake.transacoesAbertas).toBe(antesDoUpdate + 1);
   });
 
   it('save (UPDATE) propaga a falha do createMany (não engole a permissão perdida)', async () => {
@@ -352,7 +391,7 @@ describe('PrismaProfileRepository', () => {
     });
 
     await expect(repo.save(p2)).rejects.toThrow(ConcurrencyException);
-    const found = await repo.findById(p.id());
+    const found = await repo.findById(p.id(), null);
     expect(found?.authorizations().toLista()).toEqual(['users.read']);
   });
 
@@ -363,15 +402,16 @@ describe('PrismaProfileRepository', () => {
     carregado.renomear('Renomeado', new Date());
     await repo.save(carregado);
 
-    const found = await repo.findById(p.id());
+    const found = await repo.findById(p.id(), null);
     expect(found?.createdAt().toISOString()).toBe('2026-01-01T00:00:00.000Z');
     expect(found?.updatedAt().toISOString()).toBe('2026-02-02T00:00:00.000Z');
   });
 
   it('findById retorna null para id inexistente', async () => {
-    const result = await repo.findById({
-      value: '00000000-0000-0000-0000-000000000000',
-    } as never);
+    const result = await repo.findById(
+      { value: '00000000-0000-0000-0000-000000000000' } as never,
+      null,
+    );
     expect(result).toBeNull();
   });
 
@@ -466,8 +506,213 @@ describe('PrismaProfileRepository', () => {
   it('delete remove o profile', async () => {
     const p = Profile.criar({ slug: 'tmp', name: 'Temp Name', agora: new Date() });
     await repo.save(p);
-    await repo.delete(p.id());
-    const found = await repo.findById(p.id());
+    await repo.delete(p.id(), null);
+    const found = await repo.findById(p.id(), null);
     expect(found).toBeNull();
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Fase 9 — `save()` não MOVE a dona do perfil.
+  //
+  // MEDIDO 2026-10-17 no repositório: `updateMany` filtrava por `id` + `version`
+  // e escrevia `tenant_id` vindo do agregado, então um agregado reidratado com
+  // outra dona transferia o perfil de empresa — ACME → GLOBEX e ACME → global,
+  // ambos medidos. O agregado declara `#tenantId` como `readonly` e nenhum
+  // mutador HTTP o muda, então não há rota que alcance isto hoje: é uma
+  // lacuna de CONTRATO da porta, e a porta é o que a fase herdou. O comentário
+  // da linha 113 do repositório ("`readonly` no agregado garante que o UPDATE
+  // nunca move um perfil de empresa") afirmava uma garantia que o repositório
+  // não verificava — e um comentário que afirma o que o código não garante é
+  // pior do que nenhum.
+  // ───────────────────────────────────────────────────────────────────────────
+  describe('a dona do perfil é imutável no repositório', () => {
+    /**
+     * Perfil NOVO de empresa. `Profile.criar` aceita `tenantId` desde a Fase 8
+     * e é o que fixa `loadedVersion: 0` — que é o que faz `save()` escolher o
+     * `create`. A primeira versão desta fixture usava `restaurarDePersistencia`
+     * (que deixa `loadedVersion === version`), e aí `save` pegava o caminho de
+     * UPDATE contra uma linha inexistente: os 3 testes caíam em
+     * `ConcurrencyException` pelo motivo errado, e 2 deles ficariam verdes
+     * mesmo sem a correção — spec verde medindo o lock no lugar do dono.
+     */
+    function deEmpresa(slug: string, nome: string): Profile {
+      return Profile.criar({
+        slug,
+        name: nome,
+        tenantId: 't-acme',
+        initialAuthorizations: ['users.read'],
+        agora: new Date('2026-01-01T00:00:00Z'),
+      });
+    }
+
+    /**
+     * Reidrata o MESMO perfil (carregado do repo) com outra dona — a forma que
+     * a porta permite. `version: carregado.version()` mantém
+     * `loadedVersion === 1`, que é o que casa com a linha gravada.
+     */
+    function comOutraDona(carregado: Profile, tenantId: string | null, nome: string): Profile {
+      return Profile.restaurarDePersistencia({
+        id: carregado.id().value,
+        slug: carregado.slug().value,
+        name: nome,
+        description: carregado.descricao(),
+        isAdmin: carregado.isAdmin(),
+        isSystem: carregado.isSystem(),
+        tenantId,
+        authorizations: carregado.authorizations().toLista(),
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: new Date('2026-01-01T00:00:00Z'),
+        version: carregado.version(),
+      });
+    }
+
+    it('recusa mover um perfil DE EMPRESA para outra empresa', async () => {
+      const daAcme = deEmpresa('gerente', 'Gerente');
+      await repo.save(daAcme);
+      const movido = comOutraDona(
+        (await repo.findById(daAcme.id(), 't-acme')) as Profile,
+        't-globex',
+        'Gerente da GLOBEX',
+      );
+
+      await expect(repo.save(movido)).rejects.toThrow(ConcurrencyException);
+
+      const ficou = await repo.findById(daAcme.id(), 't-acme');
+      expect(ficou?.tenantId()).toBe('t-acme');
+      expect(ficou?.nome().value).toBe('Gerente');
+    });
+
+    it('recusa mover um perfil DE EMPRESA para o bucket de SISTEMA', async () => {
+      const daAcme = deEmpresa('viewer', 'Viewer');
+      await repo.save(daAcme);
+      const movido = comOutraDona(
+        (await repo.findById(daAcme.id(), 't-acme')) as Profile,
+        null,
+        'Virou global',
+      );
+
+      await expect(repo.save(movido)).rejects.toThrow(ConcurrencyException);
+
+      const ficou = await repo.findById(daAcme.id(), 't-acme');
+      expect(ficou?.tenantId()).toBe('t-acme');
+    });
+
+    it('e a escrita do nome continua funcionando na dona certa', async () => {
+      // O counterpart: o filtro novo não pode transformar `save` em no-op. E o
+      // caminho é o REAL — carregar, mutar, salvar — porque a âncora do
+      // optimistic lock é `loadedVersion`, e `restaurarDePersistencia` deixa
+      // `loadedVersion === version`: um agregado reidratado com `version: 2`
+      // casaria `where version = 2` contra a linha que está em 1, e o teste
+      // mediria o LOCK em vez do filtro de DONA.
+      const daAcme = deEmpresa('gerente', 'Gerente');
+      await repo.save(daAcme);
+
+      const carregado = (await repo.findById(daAcme.id(), 't-acme')) as Profile;
+      carregado.renomear('Gerente renamed', new Date('2026-01-02T00:00:00Z'));
+      await repo.save(carregado);
+
+      const ficou = await repo.findById(daAcme.id(), 't-acme');
+      expect(ficou?.nome().value).toBe('Gerente renamed');
+      expect(ficou?.tenantId()).toBe('t-acme');
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Fase 9 — todo acesso a `profiles` abre o escopo.
+  //
+  // POR QUE ISTO É UM TESTE E NÃO UM COMENTÁRIO
+  // A policy `profiles_leitura` só existe para quem tem `app.tenant_id` posto:
+  // sem escopo, `no_escopo_atual` devolve false e a consulta volta ZERO linhas.
+  // Um `findById` sem escopo não vaza nada — ele *apaga* a empresa, e o
+  // sintoma é um 404 que ninguém sabe explicar. Por isso "abrir o escopo" é
+  // comportamento observável, e a omissão é um teste vermelho.
+  //
+  // O limite honesto: este duplo NÃO avalia policy nenhuma, então o que se
+  // prova aqui é que o escopo PEDIDO é o certo — o efeito está medido contra
+  // Postgres em `prisma-rls.integration.spec.ts`, com `app_runtime` de verdade.
+  // ───────────────────────────────────────────────────────────────────────────
+  describe('todo acesso abre o escopo antes de tocar a tabela', () => {
+    it('findById abre o escopo DA EMPRESA que o chamador está falando', async () => {
+      const daAcme = Profile.criar({
+        slug: 'gerente',
+        name: 'Gerente',
+        tenantId: 't-acme',
+        agora: new Date(),
+      });
+      await repo.save(daAcme);
+
+      fake.$queryRaw.mockClear();
+      await repo.findById(daAcme.id(), 't-acme');
+      expect(fake.escopos()).toEqual(['t-acme']);
+    });
+
+    it('findById do bucket de SISTEMA abre o escopo DE SISTEMA, não o da empresa', async () => {
+      // `escopoDoTenant(null)` = `'*'`. Passar `'t-acme'` aqui seria o bucket
+      // de SISTEMA lido com a empresa do vizinho — e o `PermissionsGuard`
+      // resolve perfil por `users.profile_id`, que no bucket global é o perfil
+      // global: sem este teste, trocar os dois e continuar verde é fácil.
+      const global = Profile.criar({ slug: 'admin', name: 'Administrador', agora: new Date() });
+      await repo.save(global);
+
+      fake.$queryRaw.mockClear();
+      await repo.findById(global.id(), null);
+      expect(fake.escopos()).toEqual([ESCOPO_DE_SISTEMA]);
+    });
+
+    it('findBySlug e list abrem o escopo que receberam', async () => {
+      const p = Profile.criar({
+        slug: 'gerente',
+        name: 'Gerente',
+        tenantId: 't-acme',
+        agora: new Date(),
+      });
+      await repo.save(p);
+
+      fake.$queryRaw.mockClear();
+      await repo.findBySlug(p.slug(), 't-acme');
+      await repo.list('t-acme');
+      expect(fake.escopos()).toEqual(['t-acme', 't-acme']);
+    });
+
+    it('save (UPDATE) abre o escopo da DONA do agregado, não um escopo qualquer', async () => {
+      const daAcme = Profile.criar({
+        slug: 'gerente',
+        name: 'Gerente',
+        tenantId: 't-acme',
+        agora: new Date(),
+      });
+      await repo.save(daAcme);
+
+      const carregado = await repo.findById(daAcme.id(), 't-acme');
+      // O `findById` acima também abre escopo; o que este teste mede é o do
+      // `save`, então o marcador sai DEPOIS da recarga.
+      fake.$queryRaw.mockClear();
+      carregado?.renomear('Outro nome', new Date());
+      await repo.save(carregado as Profile);
+      expect(fake.escopos()).toEqual(['t-acme']);
+    });
+
+    it('save (CREATE) de perfil GLOBAL abre o escopo de SISTEMA', async () => {
+      // `profiles_insercao` é `no_escopo_atual(tenant_id, false)`: com escopo de
+      // empresa, um perfil GLOBAL não passa no `WITH CHECK`. O seed e o
+      // onboarding D5 criam global, então este caminho precisa do bucket certo.
+      fake.$queryRaw.mockClear();
+      await repo.save(Profile.criar({ slug: 'admin', name: 'Administrador', agora: new Date() }));
+      expect(fake.escopos()).toEqual([ESCOPO_DE_SISTEMA]);
+    });
+
+    it('delete abre o escopo da empresa que está apagando', async () => {
+      const daAcme = Profile.criar({
+        slug: 'gerente',
+        name: 'Gerente',
+        tenantId: 't-acme',
+        agora: new Date(),
+      });
+      await repo.save(daAcme);
+
+      fake.$queryRaw.mockClear();
+      await repo.delete(daAcme.id(), 't-acme');
+      expect(fake.escopos()).toEqual(['t-acme']);
+    });
   });
 });

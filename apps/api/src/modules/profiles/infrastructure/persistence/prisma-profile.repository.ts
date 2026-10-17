@@ -12,6 +12,11 @@ import type { ProfileRepositoryPort } from '../../domain/ports/profile-repositor
 import { profileId as makeProfileId } from '../../domain/value-objects/profile-id.vo.js';
 import { profileSlug as makeProfileSlug } from '../../domain/value-objects/profile-slug.vo.js';
 import { ConcurrencyException } from '../../domain/exceptions/profile.exceptions.js';
+import {
+  abrirEscopo,
+  comEscopo,
+  escopoDoTenant,
+} from '../../../../shared/infrastructure/prisma/escopo.js';
 
 @Injectable()
 export class PrismaProfileRepository implements ProfileRepositoryPort {
@@ -23,11 +28,20 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
    */
   constructor(@Inject(PrismaService) private readonly prisma: PrismaClient) {}
 
-  async findById(id: ReturnType<typeof makeProfileId>): Promise<Profile | null> {
-    const row = await this.prisma.profile.findUnique({
-      where: { id: id.value },
-      include: { authorizations: { select: { permissionKey: true } } },
-    });
+  async findById(
+    id: ReturnType<typeof makeProfileId>,
+    tenantId: string | null,
+  ): Promise<Profile | null> {
+    // pt-BR (Fase 9 — RLS): o `id` é único no schema, então o filtro de DONA
+    // NÃO vai para o `where` — quem o aplica é a policy, e ela aceita tanto a
+    // linha da empresa quanto a global (é assim que um ator de empresa veste o
+    // perfil global, via `users.profile_id`).
+    const row = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+      tx.profile.findUnique({
+        where: { id: id.value },
+        include: { authorizations: { select: { permissionKey: true } } },
+      }),
+    );
     if (row === null) {
       return null;
     }
@@ -67,10 +81,12 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
     // 409 a um slug que só colide na EMPRESA do ator (o índice parcial
     // `(slug, tenant_id)`exists mas a checagem não o via), e — o inverso —
     // deixava passar o `criar` que depois morria em P2002 → 500.
-    const row = await this.prisma.profile.findFirst({
-      where: { slug: slug.value, tenantId },
-      include: { authorizations: { select: { permissionKey: true } } },
-    });
+    const row = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+      tx.profile.findFirst({
+        where: { slug: slug.value, tenantId },
+        include: { authorizations: { select: { permissionKey: true } } },
+      }),
+    );
     if (row === null) {
       return null;
     }
@@ -81,14 +97,16 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
   }
 
   async list(tenantId: string | null): Promise<Profile[]> {
-    const rows = await this.prisma.profile.findMany({
-      // pt-BR (Fase 8): `null` = SEM filtro (o admin global, que é o único
-      // que alcança o bucket de sistema); preenchido = só os perfis daquela
-      // empresa. Ver a nota de sentido OPOSTO na porta.
-      ...(tenantId === null ? {} : { where: { tenantId } }),
-      orderBy: { createdAt: 'desc' },
-      include: { authorizations: { select: { permissionKey: true } } },
-    });
+    const rows = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+      tx.profile.findMany({
+        // pt-BR (Fase 8): `null` = SEM filtro (o admin global, que é o único
+        // que alcança o bucket de sistema); preenchido = só os perfis daquela
+        // empresa. Ver a nota de sentido OPOSTO na porta.
+        ...(tenantId === null ? {} : { where: { tenantId } }),
+        orderBy: { createdAt: 'desc' },
+        include: { authorizations: { select: { permissionKey: true } } },
+      }),
+    );
     return rows.map((r) =>
       this.toDomain(
         r,
@@ -110,27 +128,33 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
       description: profile.descricao(),
       isAdmin: profile.isAdmin(),
       isSystem: profile.isSystem(),
-      // pt-BR (Fase 8): a dona é lida do AGREGADO, não de parâmetro — e sem
-      // esta linha todo perfil criado por HTTP nascia `tenant_id = NULL`,
-      // isto é, global. `readonly` no agregado garante que o UPDATE nunca
-      // move um perfil de empresa.
-      tenantId: profile.tenantId(),
     };
 
     const isNew = expectedVersion === 0;
     if (isNew) {
-      const created = await this.prisma.profile.create({
-        // pt-BR (#97): o nested-write de CREATE aceita só `create` /
-        // `createMany` / `connectOrCreate` / `connect` — `deleteMany`
-        // pertence ao tipo do UPDATE. Mandá-lo aqui dá
-        // `PrismaClientValidationError` em runtime.
-        data: {
-          id,
-          ...data,
-          authorizations: { create: keys.map((k) => ({ permissionKey: k })) },
-        },
-        include: { authorizations: { select: { permissionKey: true } } },
-      });
+      // pt-BR (Fase 9): o escopo vem da DONA do agregado — perfil de empresa
+      // abre a empresa, perfil global abre `'*'`. Abrir o bucket de sistema
+      // para um perfil de empresa faria o `profiles_insercao`
+      // (`aceita_global = false`) aceitar, e abrir a empresa para um perfil
+      // global o faria recusar: os dois lados estão trocados.
+      const created = await comEscopo(this.prisma, escopoDoTenant(profile.tenantId()), (tx) =>
+        tx.profile.create({
+          // pt-BR (#97): o nested-write de CREATE aceita só `create` /
+          // `createMany` / `connectOrCreate` / `connect` — `deleteMany`
+          // pertence ao tipo do UPDATE. Mandá-lo aqui dá
+          // `PrismaClientValidationError` em runtime.
+          data: {
+            id,
+            ...data,
+            // pt-BR (Fase 8): a dona nasce do AGREGADO, não de parâmetro —
+            // sem esta linha todo perfil criado por HTTP nascia
+            // `tenant_id = NULL`, isto é, global.
+            tenantId: profile.tenantId(),
+            authorizations: { create: keys.map((k) => ({ permissionKey: k })) },
+          },
+          include: { authorizations: { select: { permissionKey: true } } },
+        }),
+      );
       return this.toDomain(
         created,
         created.authorizations.map((a) => a.permissionKey),
@@ -141,8 +165,28 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
     // um `createMany` que falha deixa o profile com a version incrementada
     // e ZERO permissões — o aggregate em memória e o banco divergem.
     await this.prisma.$transaction(async (tx) => {
+      // pt-BR (Fase 9): mesmo escopo do CREATE, e pela MESMA razão. O
+      // `profiles_atualizacao` é `USING (aceita_global = true)` com
+      // `WITH CHECK (aceita_global = false)` — assim uma empresa renomeia o
+      // perfil global que ela veste, mas não o converte em dela.
+      await abrirEscopo(tx, escopoDoTenant(profile.tenantId()));
       const updated = await tx.profile.updateMany({
-        where: { id, version: expectedVersion },
+        // pt-BR (Fase 9): `tenantId` no `where` é a TRAVA de dona, e a
+        // ausência dele no `data` é a PROVA. As duas juntas fecham a lacuna
+        // que a Fase 8 deixou aberta: `data` carregava `tenantId` do agregado
+        // e o `where` não conferia a dona, então um agregado reidratado com
+        // outra `tenantId` TRANSFERIA o perfil (ACME → GLOBEX e ACME → global,
+        // ambos medidos) sem erro nenhum. O comentário anterior da linha 113
+        // afirmava que o `readonly` do agregado garantia isto — garantia que o
+        // repositório não verificava, e um comentário que afirma o que o código
+        // não garante é pior do que nenhum.
+        //
+        // Por que `ConcurrencyException` e não uma exceção nova: o `count === 0`
+        // abaixo não distingue "outra sessão alterou" de "a linha é de outra
+        // dona", e nenhuma rota HTTP alcança a segunda forma hoje (o agregado é
+        // `readonly` e nenhum mutador o muda). Pagar uma query extra para
+        // nomear um 409 que ninguém alcança não é o que a fase pede.
+        where: { id, version: expectedVersion, tenantId: profile.tenantId() },
         data: { ...data, version: profile.version() },
       });
       if (updated.count === 0) {
@@ -158,8 +202,10 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
     return profile;
   }
 
-  async delete(id: ReturnType<typeof makeProfileId>): Promise<void> {
-    await this.prisma.profile.delete({ where: { id: id.value } });
+  async delete(id: ReturnType<typeof makeProfileId>, tenantId: string | null): Promise<void> {
+    await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+      tx.profile.delete({ where: { id: id.value } }),
+    );
   }
 
   private toDomain(

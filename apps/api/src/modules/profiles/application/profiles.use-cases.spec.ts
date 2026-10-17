@@ -43,9 +43,25 @@ import { UserId } from '../../users/domain/value-objects/user-id.vo.js';
 class InMemoryProfileRepo implements ProfileRepositoryPort {
   #store: Map<string, Profile> = new Map();
 
+  /**
+   * pt-BR (Fase 9 — RLS): os escopos que o use case PEDIU, em ordem.
+   *
+   * Por que isto existe: o TypeScript aceita uma implementação da porta com
+   * MENOS parâmetros que a interface, então um `findById` que ignora o
+   * `tenantId` compila, roda e deixa os 779 testes verdes — sem que nada em
+   * lugar nenhum afirme que o escopo chega ao repositório. O `findBySlug`
+   * acima filtra de propósito (a unicidade é por escopo); o `findById` NÃO
+   * filtra, porque na implementação real quem filtra é a policy, e ela aceita
+   * tanto a linha da empresa quanto a global — é assim que um ator de empresa
+   * veste o perfil de sistema. Aqui ele só REGISTRA.
+   */
+  readonly escoposPedidos: Array<string | null> = [];
+
   async findById(
     id: ReturnType<typeof import('../domain/value-objects/profile-id.vo.js').profileId>,
+    tenantId: string | null,
   ) {
+    this.escoposPedidos.push(tenantId);
     return this.#store.get(id.value) ?? null;
   }
   async findBySlug(
@@ -71,7 +87,9 @@ class InMemoryProfileRepo implements ProfileRepositoryPort {
   }
   async delete(
     id: ReturnType<typeof import('../domain/value-objects/profile-id.vo.js').profileId>,
+    tenantId: string | null,
   ): Promise<void> {
+    this.escoposPedidos.push(tenantId);
     this.#store.delete(id.value);
   }
   /** helper p/ testes */
@@ -275,6 +293,7 @@ describe('ProfileUseCases', () => {
         created.id as unknown as ReturnType<
           typeof import('../domain/value-objects/profile-id.vo.js').profileId
         >,
+        null,
       );
       expect(found).toBeNull();
     });
@@ -1186,7 +1205,7 @@ describe('Fase 4 — deletar um perfil que uma empresa ainda usa', () => {
     memberships.count = 0;
 
     await expect(uc.deletar(p.id().value, ATOR_ADMIN)).resolves.toBeUndefined();
-    await expect(repo.findById(p.id())).resolves.toBeNull();
+    await expect(repo.findById(p.id(), null)).resolves.toBeNull();
   });
 });
 
@@ -1415,5 +1434,314 @@ describe('Fase 6 — atribuir perfil POR EMPRESA', () => {
     await expect(uc.obterMeuPerfil(ALVO_ID, null)).resolves.toMatchObject({
       profileId: gestor.id().value,
     });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fase 9 — o bucket de SISTEMA tem DONO: ele é o bucket, não o superusuário.
+//
+// O que este bloco existe para travar, em uma frase: `tenantId === null` é o
+// bucket dos perfis de SISTEMA, e não um "vejo tudo". A Fase 8 escreveu
+// `exigePerfilDoEscopo` como `ator.tenantId !== null && …`, e esse `!== null`
+// tratava o bucket como se ele fosse o admin — mas quem dá o bypass total é o
+// `isAdmin`, não o bucket. MEDIDO 2026-10-17 contra Postgres real: um perfil
+// global NÃO-admin com `admin.manage-*` (dado legado pré-tenancy, exatamente o
+// cenário que o bucket global da Fase 4 existe para suportar) listava,
+// renomeava, apagava e injetava permissão em perfil de empresa vizinha sem
+// `X-Tenant-Id` — e vestia perfil de empresa em conta alheia, o que além de
+// escalar deixava o alvo SEM PERFIL nenhum, porque `findProfileId(_, null)` só
+// aceita `tenant_id IS NULL`.
+//
+// O counterpart que não pode regredir: o admin de SISTEMA (`tenantId === null`
+// E `isAdmin`) continua vendo tudo. Sem isso o seed volta a ser a única porta de
+// administração, que é a dependência que a Fase 5 removeu de propósito.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('Fase 9 — o bucket de SISTEMA administra só o bucket de SISTEMA', () => {
+  let repo: InMemoryProfileRepo;
+  let users: InMemoryUserRepo;
+  let memberships: InMemoryMembershipRepo;
+  let cache: UserProfileCacheService;
+  let perfis: ProfileUseCases;
+  let auths: AuthorizationUseCases;
+  let uc: UserProfileUseCases;
+
+  let seq = 0;
+  /** Mesma hidratação do bloco da Fase 6: é por ela que `tenantId` entra. */
+  function perfilDe(tenantId: string | null, perm: string[], isAdmin = false): Profile {
+    seq += 1;
+    const p = Profile.restaurarDePersistencia({
+      id: `0190a8b6-0000-4000-9000-${String(seq).padStart(12, '0')}`,
+      slug: `s-${tenantId === null ? 'global' : tenantId.slice(-4)}-${seq}`,
+      name: 'Perfil',
+      description: null,
+      isAdmin,
+      isSystem: isAdmin,
+      tenantId,
+      authorizations: perm,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+      version: 1,
+    });
+    repo.prime(p);
+    return p;
+  }
+
+  /**
+   * O atacante do achado: conta do bucket de sistema, `isAdmin === false`, mas
+   * com as chaves de `admin.manage-*`. É o perfil que o `PermissionsGuard`
+   * aceita — e é por isso que a defesa não pode morar nele.
+   */
+  const LEGADO = ['admin.manage-profiles', 'admin.manage-users', 'admin.manage-authorizations'];
+  function atorDoSistema(isAdmin = false): AtorAutenticado {
+    return { userId: ATOR_ID, tenantId: null, isAdmin };
+  }
+
+  /**
+   * Permissões de um alvo DENTRO do subconjunto das do atacante.
+   *
+   * Isto não é arbitrário: é o que separa o defeito do achado de uma trava que
+   * já existe. A trava de SUBCONJUNTO do #97 recusa `ator sem manage-X` de
+   * vestir um perfil com `X`. Se o alvo tivesse permissão que o atacante não
+   * tem, o teste passaria por essa trava e a de DONA continuaria sem dente
+   * nenhuma — um spec verde pelo motivo errado. Com o alvo dentro do
+   * subconjunto, a única regra que pode recusar é a de DONA.
+   */
+  const ALVO_DENTRO = ['admin.manage-profiles'];
+
+  /** O perfil que o `beforeEach` dá ao ator — ele também entra nas listas. */
+  let doAtor: Profile;
+
+  /** O que sobrou no ALVO depois da tentativa — a leitura que decide lockout. */
+  async function perfilDoAlvo(): Promise<string | null> {
+    const alvo = await users.findById(UserId.create(ALVO_ID));
+    return alvo?.profileId() ?? null;
+  }
+
+  beforeEach(() => {
+    repo = new InMemoryProfileRepo();
+    users = new InMemoryUserRepo();
+    memberships = new InMemoryMembershipRepo(users);
+    cache = new UserProfileCacheService();
+    perfis = new ProfileUseCases(repo, users, cache, memberships);
+    auths = new AuthorizationUseCases(repo, users, cache, memberships);
+    uc = new UserProfileUseCases(users, repo, cache, memberships);
+    // O ator PRECISA estar ligado ao perfil que o dá as permissões: sem isto
+    // `permissoesDoAtor` resolve `null` e é a trava de subconjunto que recusa,
+    // não a de DONA — e o teste mede a trava errada.
+    doAtor = perfilDe(null, LEGADO);
+    users.prime(userComProfile(ATOR_ID, doAtor.id().value));
+  });
+
+  describe('as 5 rotas que exigem perfil do escopo', () => {
+    it('obterPorId de um perfil DE EMPRESA é recusado', async () => {
+      const alheio = perfilDe(GLOBEX, ['users.read']);
+
+      await expect(perfis.obterPorId(alheio.id().value, atorDoSistema())).rejects.toThrow(
+        ProfilePrivilegeEscalationException,
+      );
+    });
+
+    it('atualizar (renomear) um perfil DE EMPRESA é recusado e não escreve', async () => {
+      const alheio = perfilDe(GLOBEX, ['users.read']);
+
+      await expect(
+        perfis.atualizar(alheio.id().value, { name: 'renomeado' }, atorDoSistema()),
+      ).rejects.toThrow(ProfilePrivilegeEscalationException);
+
+      // A recusa tem que ter deixado o agregado intacto — um `save` que
+      // rodasse antes da guarda deixaria o nome trocado apesar da recusa.
+      const depois = await repo.findById(alheio.id(), null);
+      expect(depois?.nome().value).toBe('Perfil');
+    });
+
+    it('deletar um perfil DE EMPRESA é recusado', async () => {
+      const alheio = perfilDe(GLOBEX, ['users.read']);
+
+      await expect(perfis.deletar(alheio.id().value, atorDoSistema())).rejects.toThrow(
+        ProfilePrivilegeEscalationException,
+      );
+
+      expect(await repo.findById(alheio.id(), null)).not.toBeNull();
+    });
+
+    it('injetar permissão em perfil DE EMPRESA é recusado', async () => {
+      const alheio = perfilDe(GLOBEX, ALVO_DENTRO);
+
+      await expect(
+        auths.atribuir(alheio.id().value, 'admin.manage-users', atorDoSistema()),
+      ).rejects.toThrow(ProfilePrivilegeEscalationException);
+
+      const depois = await repo.findById(alheio.id(), null);
+      expect(depois?.authorizations().toLista()).toEqual(ALVO_DENTRO);
+    });
+
+    it('revogar permissão de perfil DE EMPRESA é recusado', async () => {
+      const alheio = perfilDe(GLOBEX, [...ALVO_DENTRO, 'admin.manage-users']);
+
+      await expect(
+        auths.revogar(alheio.id().value, 'admin.manage-users', atorDoSistema()),
+      ).rejects.toThrow(ProfilePrivilegeEscalationException);
+
+      const depois = await repo.findById(alheio.id(), null);
+      expect(depois?.authorizations().toLista()).toEqual([...ALVO_DENTRO, 'admin.manage-users']);
+    });
+  });
+
+  describe('listar', () => {
+    it('o bucket de SISTEMA não-admin enxerga só os perfis DE SISTEMA', async () => {
+      // `doAtor` entra na lista: ele é um perfil de SISTEMA, e a regra não é
+      // "some com os meus", é "some com os de EMPRESA".
+      const outro = perfilDe(null, ['users.read']);
+      perfilDe(ACME, ['users.read']);
+      perfilDe(GLOBEX, ['users.read']);
+
+      const listados = await perfis.listar(atorDoSistema());
+
+      expect(listados.map((p) => p.slug).sort()).toEqual(
+        [doAtor.slug().value, outro.slug().value].sort(),
+      );
+    });
+
+    it('o admin de SISTEMA continua vendo tudo — o seed não pode regredir', async () => {
+      const daAcme = perfilDe(ACME, ['users.read']);
+      const daGlobex = perfilDe(GLOBEX, ['users.read']);
+
+      const listados = await perfis.listar(atorDoSistema(true));
+
+      expect(listados.map((p) => p.slug).sort()).toEqual(
+        [doAtor.slug().value, daAcme.slug().value, daGlobex.slug().value].sort(),
+      );
+    });
+  });
+
+  describe('vestir perfil alheio (o caminho do lockout administrativo)', () => {
+    it('o bucket de SISTEMA não-admin NÃO veste perfil DE EMPRESA em ninguém', async () => {
+      const alheio = perfilDe(GLOBEX, ALVO_DENTRO);
+      users.prime(userComProfile(ALVO_ID, null));
+
+      await expect(
+        uc.atribuirProfileAoUser(ALVO_ID, alheio.id().value, atorDoSistema()),
+      ).rejects.toThrow(ProfilePrivilegeEscalationException);
+
+      // O ALVO é a razão de o caso existir: `findProfileId(ALVO, null)` só
+      // aceita `tenant_id IS NULL`, então vestir perfil de empresa deixa o
+      // admin global do alvo com NENHUM perfil — lockout de toda a parte
+      // administrativa, sem que nenhuma resposta tenha sido de escalada.
+      expect(await perfilDoAlvo()).toBeNull();
+    });
+
+    it('o admin de SISTEMA ainda veste perfil de empresa (o seed não regride)', async () => {
+      const daGlobex = perfilDe(GLOBEX, ['users.read']);
+      users.prime(userComProfile(ALVO_ID, null));
+
+      await uc.atribuirProfileAoUser(ALVO_ID, daGlobex.id().value, atorDoSistema(true));
+
+      expect(await perfilDoAlvo()).toBe(daGlobex.id().value);
+    });
+
+    it('vestir perfil DE SISTEMA continua valendo dentro do bucket de SISTEMA', async () => {
+      // Este é o caminho que o teste "o #97 não regride" (lá em cima) mede:
+      // bucket global ↔ perfil global tem de continuar funcionando.
+      const gestor = perfilDe(null, ALVO_DENTRO);
+      users.prime(userComProfile(ALVO_ID, null));
+
+      await uc.atribuirProfileAoUser(ALVO_ID, gestor.id().value, atorDoSistema());
+
+      expect(await perfilDoAlvo()).toBe(gestor.id().value);
+    });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fase 9 — RLS: o use case tem de REPASSAR a empresa da sessão.
+//
+// A porta exige `tenantId` em `findById`/`delete`, e o TypeScript aceita uma
+// implementação com menos parâmetros — o que significa que um use case que
+// esquecesse de repassar passaria a porta, compilaria e deixaria a suíte
+// inteira verde. O único jeito de isso ser VISÍVEL é o duplo registrar o que
+// recebeu, e um teste afirmar o registro.
+//
+// O que este bloco prova: o escopo QUE CHEGA é o da sessão (`ator.tenantId`
+// nas rotas por ator, o `tenantId` do argumento em `obterMeuPerfil`). O que
+// ele NÃO prova — e o repositório tem a sua metade — é que a policy aceita
+// aquele escopo. Isso é medido contra Postgres em `prisma-rls.integration.spec.ts`.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Fase 9 — o use case repassa o escopo da sessão ao repositório', () => {
+  let repo: InMemoryProfileRepo;
+  let users: InMemoryUserRepo;
+  let perfis: ProfileUseCases;
+
+  beforeEach(() => {
+    repo = new InMemoryProfileRepo();
+    users = new InMemoryUserRepo();
+    const memberships = new InMemoryMembershipRepo(users);
+    perfis = new ProfileUseCases(repo, users, new UserProfileCacheService(), memberships);
+  });
+
+  it('obterPorId pede a EMPRESA do ator, não a empresa do perfil nem a global', async () => {
+    const daAcme = Profile.criar({
+      slug: 'gestor-acme',
+      name: 'Gestor',
+      tenantId: ACME,
+      agora: new Date(),
+    });
+    repo.prime(daAcme);
+
+    await perfis.obterPorId(daAcme.id().value, ATOR_ACME);
+
+    // Sem esta linha, um `findById(profileId(id))` voltaria a compilar — o
+    // TypeScript não reclama de menos argumentos — e a empresa leria a linha
+    // com o escopo de sistema, que é o bucket que a policy de escrita proíbe.
+    expect(repo.escoposPedidos).toEqual([ACME]);
+  });
+
+  it('obterPorId no bucket de SISTEMA pede o bucket de SISTEMA', async () => {
+    const global = Profile.criar({ slug: 'admin', name: 'Administrador', agora: new Date() });
+    repo.prime(global);
+
+    await perfis.obterPorId(global.id().value, ATOR_ADMIN);
+
+    expect(repo.escoposPedidos).toEqual([null]);
+  });
+
+  it('obterMeuPerfil repassa o tenantId do ARGUMENTO, não o de algum ator', async () => {
+    // É o que o `PermissionsGuard` chama (`obterMeuPerfil(user.sub,
+    // user.tenantId)`), e é o caminho que faz a conta mesma ler dois perfis
+    // diferentes conforme a empresa do header.
+    const daAcme = Profile.criar({
+      slug: 'gestor-acme',
+      name: 'Gestor',
+      tenantId: ACME,
+      initialAuthorizations: ['users.read'],
+      agora: new Date(),
+    });
+    repo.prime(daAcme);
+
+    const memberships = new InMemoryMembershipRepo(users);
+    memberships.prime(ATOR_ID, ACME, daAcme.id().value);
+    const uc = new UserProfileUseCases(users, repo, new UserProfileCacheService(), memberships);
+
+    await uc.obterMeuPerfil(ATOR_ID, ACME);
+
+    expect(repo.escoposPedidos).toEqual([ACME]);
+  });
+
+  it('deletar abre o escopo da empresa que apaga — a escrita também é filtrada', async () => {
+    const daAcme = Profile.criar({
+      slug: 'gestor-acme',
+      name: 'Gestor',
+      tenantId: ACME,
+      agora: new Date(),
+    });
+    repo.prime(daAcme);
+
+    await perfis.deletar(daAcme.id().value, ATOR_ACME);
+
+    // DOIS escopos, e é o esperado: `deletar` lê (para conferir DONA e as
+    // proteções de `isSystem`/`isAdmin`) e só depois apaga. O que este teste
+    // segura é que nenhum dos dois é o de sistema — a assertion mais frouxa
+    // (`toContain(ACME)`) passaria se a segunda virasse `'*'`.
+    expect(repo.escoposPedidos).toEqual([ACME, ACME]);
   });
 });

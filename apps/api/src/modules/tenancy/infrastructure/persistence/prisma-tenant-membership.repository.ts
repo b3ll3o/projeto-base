@@ -6,6 +6,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
 import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service.js';
+import { comEscopo, escopoDoTenant } from '../../../../shared/infrastructure/prisma/escopo.js';
 import type { TenantMembershipRepositoryPort } from '../../domain/ports/tenant-membership-repository.port.js';
 
 @Injectable()
@@ -18,6 +19,14 @@ export class PrismaTenantMembershipRepository implements TenantMembershipReposit
   /**
    * Duas leituras, um contrato. Ver a porta (`tenant-membership-repository.port.ts`)
    * para o porquê de `tenantId === null` ser o bucket global e não "sem perfil".
+   *
+   * pt-BR (Fase 9 — RLS): cada ramo abre o escopo ANTES de tocar a tabela, e é
+   * por isso que o filtro de DONA do perfil e o `OR: [{tenantId: null}, …]` do
+   * ramo de baixo dizem a mesma coisa que as policies dizem. Com a conexão de
+   * runtime, `escopoDoTenant(tenantId)` deixa passar o perfil DAQUELA empresa e o
+   * global — e a subquery `profile` do Prisma é o mesmo perfil que a policy
+   * `profiles_leitura` filtra. Sem o `comEscopo`, a policy devolveria zero linhas
+   * e este método resolveria `null` para qualquer pessoa.
    */
   async findProfileId(userId: string, tenantId: string | null): Promise<string | null> {
     if (tenantId === null) {
@@ -35,10 +44,12 @@ export class PrismaTenantMembershipRepository implements TenantMembershipReposit
       // parte, que é o oposto do que a coluna promete.
       // Revisão v1.5.0 (achado 2): a porta diz "a checagem de DONO é do
       // implementador", e só um dos dois ramos a fazia.
-      const user = await this.prisma.user.findFirst({
-        where: { id: userId, deletedAt: null, profile: { is: { tenantId: null } } },
-        select: { profileId: true },
-      });
+      const user = await comEscopo(this.prisma, escopoDoTenant(null), (tx) =>
+        tx.user.findFirst({
+          where: { id: userId, deletedAt: null, profile: { is: { tenantId: null } } },
+          select: { profileId: true },
+        }),
+      );
       return user?.profileId ?? null;
     }
 
@@ -49,32 +60,44 @@ export class PrismaTenantMembershipRepository implements TenantMembershipReposit
     // "ninguém pode esquecer" porque está na query é a única forma.
     // `tenantId: null` é aceito porque perfil GLOBAL serve a qualquer empresa
     // por definição (D3) — é o que permite o admin do sistema entrar numa.
-    const row = await this.prisma.tenantMembership.findFirst({
-      where: {
-        userId,
-        tenantId,
-        // Membership sem perfil atribuído (convite aceito) NÃO pode resolver
-        // perfil nenhum. O efeito vem do `?? null` lá embaixo — o `not: null`
-        // é redundante hoje e está aqui para o próximo que mexer no `?? null`
-        // não abrir essa porta sem perceber. Um teste que afirme que ESTE
-        // filtro é o que segura a propriedade mente: com ele removido o
-        // resultado é o mesmo.
-        profileId: { not: null },
-        profile: { OR: [{ tenantId: null }, { tenantId }] },
-        // Mesma razão do `deletedAt` do ramo global: a membership sobrevive ao
-        // soft-delete do usuário, e sem este filtro uma conta apagada com token
-        // ainda válido (15 min) voltaria a ter permissões na empresa — o
-        // fail-closed do bucket `null` ficaria só pela metade.
-        user: { deletedAt: null },
-      },
-      select: { profileId: true },
-    });
+    const row = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+      tx.tenantMembership.findFirst({
+        where: {
+          userId,
+          tenantId,
+          // Membership sem perfil atribuído (convite aceito) NÃO pode resolver
+          // perfil nenhum. O efeito vem do `?? null` lá embaixo — o `not: null`
+          // é redundante hoje e está aqui para o próximo que mexer no `?? null`
+          // não abrir essa porta sem perceber. Um teste que afirme que ESTE
+          // filtro é o que segura a propriedade mente: com ele removido o
+          // resultado é o mesmo.
+          profileId: { not: null },
+          profile: { OR: [{ tenantId: null }, { tenantId }] },
+          // Mesma razão do `deletedAt` do ramo global: a membership sobrevive ao
+          // soft-delete do usuário, e sem este filtro uma conta apagada com token
+          // ainda válido (15 min) voltaria a ter permissões na empresa — o
+          // fail-closed do bucket `null` ficaria só pela metade.
+          user: { deletedAt: null },
+        },
+        select: { profileId: true },
+      }),
+    );
     return row?.profileId ?? null;
   }
 
   async countByProfile(profileId: string): Promise<number> {
-    // Sem `tenantId`: a trava de `ProfileUseCases.deletar` é global.
-    return this.prisma.tenantMembership.count({ where: { profileId } });
+    // Sem `tenantId`: a trava de `ProfileUseCases.deletar` é global — um perfil
+    // usado na empresa B não pode ser apagado só porque a empresa A não usa.
+    //
+    // pt-BR (Fase 9): por isso o escopo é o de SISTEMA e não o da empresa do
+    // ator. É uma leitura de contagem, sem dado pessoal, e restricting ao tenant
+    // do ator transformaria "a trava é global" em "a trava é por empresa" — o
+    // que a porta diz que NÃO é. A porta `tenant-membership-repository.port.ts`
+    // documenta essa escolha; quem mudar uma coisa sem a outra quebra a
+    // semântica de `deletar` sem nenhum teste ficar vermelho.
+    return comEscopo(this.prisma, escopoDoTenant(null), (tx) =>
+      tx.tenantMembership.count({ where: { profileId } }),
+    );
   }
 
   /**
@@ -111,29 +134,38 @@ export class PrismaTenantMembershipRepository implements TenantMembershipReposit
     // esquece porque está aqui". `profile.tenant_id` é imutável no agregado
     // (`readonly #tenantId`, sem mutador), então ler-e-depois-escrever não tem
     // corrida a fechar: nenhuma escrita concorrente muda a dona entre as duas
-    // queries. Por isso NÃO há `$transaction` aqui — uma transação custaria
-    // uma conexão extra por atribuição sem fechar nada.
-    if (profileId !== null) {
-      const dona = await this.prisma.profile.findFirst({
-        where: { id: profileId, OR: [{ tenantId: null }, { tenantId }] },
-        select: { id: true },
-      });
-      if (dona === null) {
-        return false;
+    // queries.
+    //
+    // pt-BR (Fase 9): agora HÁ `$transaction`, e por um motivo novo — as duas
+    // queries precisam do MESMO escopo, e o escopo só existe dentro de uma
+    // transação (ver `escopo.ts`). O comentário anterior ("uma transação
+    // custaria uma conexão extra por atribuição sem fechar nada") foi escrito
+    // quando não havia policy; hoje ela é a que garante que a checagem de DONA
+    // e a escrita estão no mesmo escopo, e portanto que `count === 0` significa
+    // "fora do meu escopo" e não "outra sessão".
+    return comEscopo(this.prisma, escopoDoTenant(tenantId), async (tx) => {
+      if (profileId !== null) {
+        const dona = await tx.profile.findFirst({
+          where: { id: profileId, OR: [{ tenantId: null }, { tenantId }] },
+          select: { id: true },
+        });
+        if (dona === null) {
+          return false;
+        }
       }
-    }
-    const r = await this.prisma.tenantMembership.updateMany({
-      where: {
-        userId,
-        tenantId,
-        // Mesmo fail-closed do `findProfileId`: a membership sobrevive ao
-        // soft-delete, e sem este filtro uma conta apagada com token ainda
-        // válido (15 min) voltaria a ter permissões na empresa.
-        user: { deletedAt: null },
-      },
-      data: { profileId },
+      const r = await tx.tenantMembership.updateMany({
+        where: {
+          userId,
+          tenantId,
+          // Mesmo fail-closed do `findProfileId`: a membership sobrevive ao
+          // soft-delete, e sem este filtro uma conta apagada com token ainda
+          // válido (15 min) voltaria a ter permissões na empresa.
+          user: { deletedAt: null },
+        },
+        data: { profileId },
+      });
+      return r.count === 1;
     });
-    return r.count === 1;
   }
 
   async findRole(userId: string, tenantId: string): Promise<string | null> {
@@ -141,10 +173,12 @@ export class PrismaTenantMembershipRepository implements TenantMembershipReposit
     // membership sobrevive ao soft-delete, e sem este filtro uma conta
     // apagada continuaria "administrando" a empresa até a membership ser
     // removida à mão.
-    const row = await this.prisma.tenantMembership.findFirst({
-      where: { userId, tenantId, user: { deletedAt: null } },
-      select: { role: true },
-    });
+    const row = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+      tx.tenantMembership.findFirst({
+        where: { userId, tenantId, user: { deletedAt: null } },
+        select: { role: true },
+      }),
+    );
     return row?.role ?? null;
   }
 }

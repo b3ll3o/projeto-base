@@ -4,7 +4,18 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // pt-BR (Fase 9 — RLS): DUAS conexões, e a separação é o ponto.
+  //
+  // `url` é a da APLICAÇÃO: o papel `app_runtime`, NOSUPERUSER NOBYPASSRLS.
+  // É ela que faz as policies valerem — se o app conectasse como dono, o
+  // isolamento existiria só no papel e o RLS seria decoração.
+  //
+  // `directUrl` é a do DONO, e é a que o CLI do Prisma usa (`migrate`,
+  // `db seed`). A migration precisa dela: `CREATE ROLE`, `ALTER TABLE ...
+  // ENABLE ROW LEVEL SECURITY` e `GRANT` exigem o dono da tabela, e um papel
+  // sem BYPASSRLS não pode aplicá-las.
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 enum AuditOperation {

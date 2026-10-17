@@ -28,6 +28,11 @@ import {
   EmpresaJaExisteException,
 } from '../../domain/exceptions/tenancy.exceptions.js';
 import { listAllPermissions } from '../../../../shared/auth/permissions-catalog.js';
+import {
+  abrirEscopo,
+  comEscopo,
+  escopoDoTenant,
+} from '../../../../shared/infrastructure/prisma/escopo.js';
 import { Prisma } from '@prisma/client';
 
 type Tx = Parameters<Parameters<PrismaClient['$transaction']>[0]>[0];
@@ -83,6 +88,16 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
         const tenant = await tx.tenant.create({
           data: { name: empresa.nome, slug: empresa.slug },
         });
+
+        // pt-BR (Fase 9 — RLS): o escopo só pode ser aberto DEPOIS do insert do
+        // tenant e ANTES do insert do perfil, e é esta a ordem que a phase exige.
+        // O `WITH CHECK` de `profiles_insercao` avalia `no_escopo_atual(tenant_id,
+        // false)` no momento do insert, e `tenant.id` é o próprio dado que a
+        // policy compara — abrir o escopo depois deixaria a criação da empresa
+        // (o caminho D5 inteiro) sem poder produzir o admin que ela exige. O
+        // `INSERT` em `tenants` tem `WITH CHECK (true)` justamente para este
+        // caso: abrir a própria empresa acontece sem escopo nenhum.
+        await abrirEscopo(tx, tenant.id);
 
         // O admin nasce JUNTO com a empresa, e é DELA (`tenantId`). Ver o
         // port: buscar um admin global traria dois problemas — o seed não roda
@@ -177,6 +192,16 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
     novaConta: UsuarioParaProvisionar | null,
   ): Promise<void> {
     await this.prisma.$transaction(async (tx: Tx) => {
+      // pt-BR (Fase 9 — RLS): o escopo começa em SISTEMA e é APERFEIÇOADO assim
+      // que o convite revela a empresa. Isso não é um atalho: o `tenant_id` só
+      // é conhecido DEPOIS de ler o convite, e a `invitations_leitura` já está
+      // filtrando por escopo. Abrir `'*'` é a única forma de sair do
+      // chicken-and-egg — e o token (ou o id de convite, que o caso de uso só
+      // teve porque já leu o convite) é a credencial desse acesso. A partir da
+      // linha seguinte a sessão está no escopo da empresa e todo o resto é
+      // filtrado normalmente.
+      await abrirEscopo(tx, escopoDoTenant(null));
+
       // Relido dentro da transação, e não reusado o que o caso de uso viu:
       // entre a validação e aqui o convite pode ter sido usado por outra
       // pessoa. O `updateMany` condicionado a `accepted_at IS NULL` é o que
@@ -185,6 +210,10 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
       if (atual === null) {
         throw new ConviteInvalidoException('nao-encontrado');
       }
+
+      // A partir daqui a sessão é a DA empresa do convite, e o `updateMany`
+      // abaixo só alcança o convite dela.
+      await abrirEscopo(tx, escopoDoTenant(atual.tenantId));
 
       const consumido = await tx.invitation.updateMany({
         where: { id: atual.id, acceptedAt: null },
@@ -230,15 +259,17 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
 
   async emitirConvite(convite: ConviteParaEmitir): Promise<void> {
     try {
-      await this.prisma.invitation.create({
-        data: {
-          tenantId: convite.tenantId,
-          email: convite.email,
-          role: convite.role,
-          token: convite.token,
-          expiresAt: convite.expiresAt,
-        },
-      });
+      await comEscopo(this.prisma, escopoDoTenant(convite.tenantId), (tx) =>
+        tx.invitation.create({
+          data: {
+            tenantId: convite.tenantId,
+            email: convite.email,
+            role: convite.role,
+            token: convite.token,
+            expiresAt: convite.expiresAt,
+          },
+        }),
+      );
     } catch (erro) {
       // Dois uniques existem em `invitations`: `token` e `(tenantId, email)`, e
       // a resposta HTTP correta é DIFERENTE para cada um. Traduzir os dois
@@ -261,17 +292,29 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
   }
 
   async buscarConvitePorToken(token: string): Promise<ConvitePendente | null> {
-    const linha = await this.prisma.invitation.findUnique({
-      where: { token },
-      select: {
-        id: true,
-        tenantId: true,
-        email: true,
-        role: true,
-        acceptedAt: true,
-        expiresAt: true,
-      },
-    });
+    // pt-BR (Fase 9 — RLS): escopo de SISTEMA, e é a única leitura do sistema que
+    // é legitimamente ampla. O `token` é a CREDENCIAL: `randomBytes(32)` gerado
+    // fora do banco, impossível de adivinhar e de colidir (`emitirConvite` trata
+    // colisão como erro cru). A query é um `findUnique` por esse token — o
+    // resultado é a linha do convite ou nada.
+    //
+    // O que isto NÃO é: uma abertura para listar convites de outras empresas. O
+    // primeiro `it()` de `prisma-rls.integration.spec.ts` mede o fail-closed do
+    // escopo ausente; o escopo `'*'` aqui é uma ESCOLHA, e ela está escrita
+    // aqui — quem achar que é engano lê este comentário antes de mudar.
+    const linha = await comEscopo(this.prisma, escopoDoTenant(null), (tx) =>
+      tx.invitation.findUnique({
+        where: { token },
+        select: {
+          id: true,
+          tenantId: true,
+          email: true,
+          role: true,
+          acceptedAt: true,
+          expiresAt: true,
+        },
+      }),
+    );
     return linha;
   }
 }
