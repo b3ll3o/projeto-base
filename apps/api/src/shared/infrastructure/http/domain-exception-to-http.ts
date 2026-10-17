@@ -35,6 +35,16 @@
 //     (slug malformado é `UserValidationException` → 400 VALIDATION_ERROR;
 //      o 409 de slug é SÓ para o slug bem formado que já existe)
 //
+//   DOMÍNIO (BC Tenancy — Fase 5):
+//     ConviteInvalidoException  → 404/410/409/403 CONVITE_INVALIDO (por motivo)
+//     NaoAdministraEmpresaException → 403 FORBIDDEN
+//     EmpresaJaExisteException     → 409 EMPRESA_JA_EXISTE
+//     ConviteJaEmitidoException    → 409 CONVITE_JA_EMITIDO
+//     ⚠️ Um `code` só para os quatro motivos. O status distingue, o código não:
+//     `CONVITE_OUTRO_EMAIL` na resposta diria a quem só tem o token que o
+//     token é válido e o e-mail é que não bate — o que é exatamente o que o
+//     segredo existe para esconder.
+//
 //   APLICAÇÃO (camada inbound — use cases sempre re-jogam nestas):
 //     ApplicationResourceNotFoundException  → 404 USER_NOT_FOUND
 //     ApplicationResourceDeletedException   → 410 USER_DELETED
@@ -74,6 +84,13 @@ import {
 } from '../../../modules/profiles/domain/exceptions/profile.exceptions.js';
 import { InvalidPermissionKeyException } from '../../../modules/profiles/domain/value-objects/authorization-key.vo.js';
 import {
+  ConviteInvalidoException,
+  ConviteJaEmitidoException,
+  EmpresaJaExisteException,
+  NaoAdministraEmpresaException,
+  type MotivoConviteInvalido as ConviteMotivo,
+} from '../../../modules/tenancy/domain/exceptions/tenancy.exceptions.js';
+import {
   ApplicationValidationException,
   ApplicationResourceNotFoundException,
   ApplicationConcurrencyException,
@@ -98,6 +115,20 @@ export interface HttpErrorMapping {
    */
   readonly errors?: { field: string; message: string; code: string }[];
 }
+
+/**
+ * Motivo do convite recusado → status HTTP.
+ *
+ * `expirado` é 410 e não 404 porque o convite EXISTE e foi válido: 404 diria
+ * ao cliente que nunca houve convite, e a tela de aceite trataria os dois
+ * como "link inválido" quando só um deles é.
+ */
+const MOTIVO_CONVITE_NA_HTTP: Record<ConviteMotivo, number> = {
+  'nao-encontrado': HttpStatus.NOT_FOUND,
+  expirado: HttpStatus.GONE,
+  'ja-aceito': HttpStatus.CONFLICT,
+  'outro-email': HttpStatus.FORBIDDEN,
+};
 
 export function mapExceptionToHttp(err: unknown): HttpErrorMapping {
   // ─── AUTENTICAÇÃO (BC Auth) ──────────────────────────────────────────────
@@ -280,6 +311,43 @@ export function mapExceptionToHttp(err: unknown): HttpErrorMapping {
       status: HttpStatus.CONFLICT,
       code: 'CONCURRENCY_CONFLICT',
       title: 'Conflito de versão',
+    };
+  }
+
+  // ─── DOMÍNIO (BC Tenancy — Fase 5) ────────────────────────────────────────
+  //
+  // pt-BR: o status muda com o MOTIVO, o `code` não. Um `code` por motivo
+  // diria a quem só tem o token que o token é válido e o e-mail é que não
+  // bate — o segredo existe justamente para não entregar isso.
+  if (err instanceof ConviteInvalidoException) {
+    const status = MOTIVO_CONVITE_NA_HTTP[err.motivo];
+    return { status, code: 'CONVITE_INVALIDO', title: 'Convite inválido' };
+  }
+  if (err instanceof NaoAdministraEmpresaException) {
+    return {
+      status: HttpStatus.FORBIDDEN,
+      code: 'FORBIDDEN',
+      title: 'Só o dono da empresa pode convidar alguém',
+    };
+  }
+  // pt-BR (Fase 5, review): os dois 409 abaixo traduzem `P2002` cru. Sem eles,
+  // um `slug` repetido ou um segundo convite para o mesmo e-mail chegavam como
+  // **500 Erro interno** — indistinguível de banco fora do ar, e o cliente sem
+  // como saber que a resposta era "escolha outro slug". `code` separado nos
+  // dois casos porque aqui o remetente é o DONO, que já tem o direito de saber
+  // que o slug está tomado; o segredo do convite é outro assunto.
+  if (err instanceof EmpresaJaExisteException) {
+    return {
+      status: HttpStatus.CONFLICT,
+      code: 'EMPRESA_JA_EXISTE',
+      title: 'Já existe uma empresa com este identificador',
+    };
+  }
+  if (err instanceof ConviteJaEmitidoException) {
+    return {
+      status: HttpStatus.CONFLICT,
+      code: 'CONVITE_JA_EMITIDO',
+      title: 'Já existe um convite pendente para este e-mail nesta empresa',
     };
   }
 

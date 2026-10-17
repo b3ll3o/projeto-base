@@ -24,6 +24,12 @@ import type {
   AuditServicePort,
 } from '../../../shared/audit/application/audit-service.port.js';
 import { AuditContextStore } from '../../../shared/audit/shared/audit-context-store.js';
+import { TENANCY_USE_CASES } from '../../tenancy/application/tenancy.use-cases.js';
+// `import type` e não no import de cima: `TenancyUseCases` é apagado em
+// runtime (só entra como tipo do campo `tenancy`), e manter a aresta viva em
+// runtime criaria um ciclo users/application → tenancy/application →
+// users/domain.
+import type { TenancyUseCases } from '../../tenancy/application/tenancy.use-cases.js';
 
 import type { CreateUserInput } from './dto/create-user.input.js';
 import type { UpdateUserNameInput } from './dto/update-user-name.input.js';
@@ -85,6 +91,7 @@ export class UserUseCases {
     @Inject(USER_REPOSITORY_PORT) private readonly userRepo: UserRepositoryPort,
     @Inject(AUDIT_SERVICE_PORT) private readonly auditService: AuditServicePort,
     @Inject(PASSWORD_HASHER_PORT) private readonly passwordHasher: PasswordHasherPort,
+    @Inject(TENANCY_USE_CASES) private readonly tenancy: TenancyUseCases,
   ) {}
 
   // ----- CREATE -----
@@ -131,7 +138,34 @@ export class UserUseCases {
     });
 
     // 5. Persistir (INSERT, expectedVersion=0)
-    await this.userRepo.save(user, 0);
+    //
+    //    Fase 5 (D5): COM destino, o `users` NÃO é escrito por este
+    //    repositório — ele vai para `TenancyUseCases`, que o grava dentro da
+    //    mesma transação da empresa/perfil/membership. Salvar aqui e só depois
+    //    provisionar deixaria o estado intermediário observável de fora: uma
+    //    conta sem empresa, que a Fase 4 resolve para zero permissões sem
+    //    ninguém entender por quê — e um `slug` duplicado deixaria essa conta
+    //    órfã para sempre, porque o rollback do `$transaction` de tenancy não
+    //    alcança uma escrita que já saiu daqui.
+    if (input.destino === undefined) {
+      await this.userRepo.save(user, 0);
+    } else {
+      const usuario = {
+        id: user.id().value,
+        nome: user.nome().value,
+        email: emailVO.value,
+        senhaHash: senhaHash.value,
+        createdAt: ctx.timestamp,
+      };
+      if (input.destino.tipo === 'empresa') {
+        await this.tenancy.provisionarEmpresaPropria({
+          usuario,
+          empresa: { nome: input.destino.nome, slug: input.destino.slug },
+        });
+      } else {
+        await this.tenancy.criarContaPorConvite({ usuario, token: input.destino.token });
+      }
+    }
 
     // 6. Auditar evento de criação
     await this.emitAuditForEvents(user);

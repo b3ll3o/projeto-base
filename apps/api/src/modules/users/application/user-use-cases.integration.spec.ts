@@ -27,6 +27,7 @@ import {
 } from './exceptions/application.exceptions.js';
 import { ConcurrencyException } from '../domain/exceptions/user.exceptions.js';
 import { FakePasswordHasher, SENHA_VALIDA } from '../../../../test/fakes/fake-password-hasher.js';
+import { tenancyQueNaoDeveSerChamado } from '../../../../test/fakes/fake-tenancy-use-cases.js';
 
 describe('UserUseCases (integration with Prisma)', () => {
   let ctx: TestContext;
@@ -46,7 +47,7 @@ describe('UserUseCases (integration with Prisma)', () => {
     await cleanDatabase(prisma);
     const repo = new PrismaUserRepository(prisma);
     const audit = new PrismaAuditService(prisma);
-    sut = new UserUseCases(repo, audit, new FakePasswordHasher());
+    sut = new UserUseCases(repo, audit, new FakePasswordHasher(), tenancyQueNaoDeveSerChamado());
   });
 
   // Actor IDs precisam ser UUID v7 válidos: as colunas `changedBy` (users_history)

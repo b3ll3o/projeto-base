@@ -36,6 +36,13 @@ import {
   ConcurrencyException as ProfileConcurrencyException,
 } from '../../../modules/profiles/domain/exceptions/profile.exceptions.js';
 import { InvalidPermissionKeyException } from '../../../modules/profiles/domain/value-objects/authorization-key.vo.js';
+import {
+  ConviteInvalidoException,
+  ConviteJaEmitidoException,
+  EmpresaJaExisteException,
+  NaoAdministraEmpresaException,
+  type MotivoConviteInvalido,
+} from '../../../modules/tenancy/domain/exceptions/tenancy.exceptions.js';
 
 describe('mapExceptionToHttp (domain layer)', () => {
   it('UserNotFound → 404 USER_NOT_FOUND', () => {
@@ -369,5 +376,85 @@ describe('mapExceptionToHttp — BC Profiles (#97)', () => {
     expect(malformado.code).toBe('VALIDATION_ERROR');
     expect(duplicado.status).toBe(HttpStatus.CONFLICT);
     expect(duplicado.code).toBe('PROFILE_SLUG_IN_USE');
+  });
+});
+
+// pt-BR (Fase 5, review): o mapper ganhou uma seção de tenancy inteira e
+// NENHUM spec a cobria — sem entrada no mapper a exceção não falha, cai no
+// fall-through e vira 500, e nada aqui ficava vermelho. As duas correções
+// desta review (`EMPRESA_JA_EXISTE` e `CONVITE_JA_EMITIDO` traduzindo `P2002`)
+// nasceram sem este bloco.
+describe('mapExceptionToHttp — BC Tenancy (Fase 5)', () => {
+  // O status muda com o MOTIVO e o `code` não: um `code` por motivo diria a
+  // quem só tem o token que o token é válido e o e-mail é que não bate — o
+  // segredo existe justamente para não entregar isso.
+  const porMotivo: ReadonlyArray<readonly [MotivoConviteInvalido, number]> = [
+    ['nao-encontrado', HttpStatus.NOT_FOUND],
+    ['expirado', HttpStatus.GONE],
+    ['ja-aceito', HttpStatus.CONFLICT],
+    ['outro-email', HttpStatus.FORBIDDEN],
+  ];
+
+  for (const [motivo, status] of porMotivo) {
+    it(`ConviteInvalidoException('${motivo}') → ${status} CONVITE_INVALIDO`, () => {
+      const m = mapExceptionToHttp(new ConviteInvalidoException(motivo));
+      expect(m.status).toBe(status);
+      expect(m.code).toBe('CONVITE_INVALIDO');
+    });
+
+    it(`ConviteInvalidoException('${motivo}') NÃO cai no fall-through 500`, () => {
+      expect(mapExceptionToHttp(new ConviteInvalidoException(motivo)).status).not.toBe(
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    });
+  }
+
+  it('os 409 traduzidos de `P2002` têm `code` distinto cada um', () => {
+    // Sem tradução, os dois chegavam como 500 — indistinguível de banco fora do
+    // ar. `code` separado porque o remetente do convite é o DONO, que já tem
+    // o direito de saber que o slug está tomado; o segredo é outro assunto.
+    const slug = mapExceptionToHttp(new EmpresaJaExisteException('acme'));
+    const convite = mapExceptionToHttp(new ConviteJaEmitidoException('t-1', 'ana@acme.dev'));
+
+    expect(slug.status).toBe(HttpStatus.CONFLICT);
+    expect(slug.code).toBe('EMPRESA_JA_EXISTE');
+    expect(convite.status).toBe(HttpStatus.CONFLICT);
+    expect(convite.code).toBe('CONVITE_JA_EMITIDO');
+  });
+
+  it('NaoAdministraEmpresaException → 403 e NÃO vira "convite inválido"', () => {
+    // Colada em `ConviteInvalidoException` ela esconderia que o token era
+    // VÁLIDO e quem o tem é legítimo — o que falhou foi a autorização.
+    const m = mapExceptionToHttp(new NaoAdministraEmpresaException('t-1'));
+    expect(m.status).toBe(HttpStatus.FORBIDDEN);
+    expect(m.code).not.toBe('CONVITE_INVALIDO');
+  });
+
+  // pt-BR: a MESMA classe de vazamento já paga em
+  // `ProfilePrivilegeEscalationException` (#97, B5) — um teste que só
+  // afirma sobre `title` passa, porque o mapper higieniza o `title` e o
+  // `detail` sai de `exception.message` (`GlobalExceptionFilter:122`).
+  // O motivo do convite nomeia o ESTADO do segredo ("outro-email" = o token
+  // existe e foi emitido para outra pessoa).
+  it('a mensagem do convite NÃO carrega o motivo — é por ela que o `detail` vaza', () => {
+    for (const [motivo] of porMotivo) {
+      const excecao = new ConviteInvalidoException(motivo);
+      // Os quatro motivos são as ÚNICAS palavras que revelam o estado do
+      // segredo. Um teste que só checasse um deles passaria com os outros
+      // três vazando.
+      expect(excecao.message).not.toContain(motivo);
+      expect(excecao.message).not.toMatch(/outro-email|nao-encontrado|expirado|ja-aceito/);
+      // O motivo continua existindo — para o LOG do servidor.
+      expect(excecao.motivo).toBe(motivo);
+    }
+  });
+
+  it('o `detail` do convite não revela o motivo — é o campo que chega ao cliente', () => {
+    const excecao = new ConviteInvalidoException('outro-email');
+    // Reproduz o `GlobalExceptionFilter:122` sem subir o filtro inteiro.
+    const detail = excecao instanceof Error ? excecao.message : String(excecao);
+
+    expect(detail).not.toContain('outro-email');
+    expect(detail).not.toContain('outro');
   });
 });

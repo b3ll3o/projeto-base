@@ -227,6 +227,13 @@ model Invitation {
   tenantId   String    @map("tenant_id") @db.Uuid
   email      String
   role       String    @default("member")
+  // pt-BR (Fase 5 — tenancy, 2026-10-16): o segredo do convite. Sem ele,
+  // `POST /invitations/accept` seria "entre na empresa X": o id da empresa
+  // é um UUID que não se enumera, mas o de uma empresa da qual a pessoa já
+  // saiu continua no histórico dela — e aí o furo é real. O token é o que
+  // prova que o convite foi emitido. Sem mailer no repo, o token volta na
+  // resposta do produtor (`POST /tenants/:id/invitations`).
+  token      String    @unique @map("token")
   // NULL = pendente. Preenchido = já consumida (aceite). Não há `revokedAt`
   // nesta fase: revogar é um DELETE, e o histórico de convite não é dado
   // regulado aqui.

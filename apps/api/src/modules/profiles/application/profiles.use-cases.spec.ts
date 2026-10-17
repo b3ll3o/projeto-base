@@ -127,6 +127,18 @@ class InMemoryMembershipRepo implements TenantMembershipRepositoryPort {
   #porEmpresa = new Map<string, string>();
   /** helper p/ `deletar`: quantas memberships vestem o perfil. */
   count = 0;
+  /**
+   * Fase 5: `emitirConvite`authorize por `role === 'owner'`, e o stub não
+   * guardava papéis — só perfis. Sem este método o `tsc` reprovava a classe
+   * inteira (`TS2420`), que é o modo de falha "spec verde com tsc vermelho":
+   * o Vitest não faz typecheck, então os testes passavam e o build quebrava.
+   *
+   * `#porEmpresa` guarda `profileId`, não `role`; um convite nunca chega
+   * aqui, então o valor fixo serve e é explícito.
+   */
+  findRole(): Promise<string | null> {
+    return Promise.resolve('owner');
+  }
 
   constructor(private readonly users: InMemoryUserRepo) {}
 

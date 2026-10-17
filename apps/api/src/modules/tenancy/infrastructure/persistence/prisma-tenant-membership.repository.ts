@@ -76,4 +76,16 @@ export class PrismaTenantMembershipRepository implements TenantMembershipReposit
     // Sem `tenantId`: a trava de `ProfileUseCases.deletar` é global.
     return this.prisma.tenantMembership.count({ where: { profileId } });
   }
+
+  async findRole(userId: string, tenantId: string): Promise<string | null> {
+    // `user: { deletedAt: null }` pelo mesmo motivo do `findProfileId`: a
+    // membership sobrevive ao soft-delete, e sem este filtro uma conta
+    // apagada continuaria "administrando" a empresa até a membership ser
+    // removida à mão.
+    const row = await this.prisma.tenantMembership.findFirst({
+      where: { userId, tenantId, user: { deletedAt: null } },
+      select: { role: true },
+    });
+    return row?.role ?? null;
+  }
 }

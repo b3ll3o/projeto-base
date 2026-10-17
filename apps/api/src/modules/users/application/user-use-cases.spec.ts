@@ -20,6 +20,7 @@ import {
   SENHA_VALIDA,
   stringifyParaBusca,
 } from '../../../../test/fakes/fake-password-hasher.js';
+import { tenancyQueNaoDeveSerChamado } from '../../../../test/fakes/fake-tenancy-use-cases.js';
 
 const T0 = new Date('2026-09-21T10:00:00Z');
 const T1 = new Date('2026-09-21T11:00:00Z');
@@ -43,7 +44,7 @@ describe('UserUseCases', () => {
     repo = new InMemoryUserRepository();
     audit = new InMemoryAuditService();
     hasher = new FakePasswordHasher();
-    useCases = new UserUseCases(repo, audit, hasher);
+    useCases = new UserUseCases(repo, audit, hasher, tenancyQueNaoDeveSerChamado());
   });
 
   describe('criarUser()', () => {

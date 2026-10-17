@@ -10,6 +10,8 @@ import { PrismaUserRepository } from './persistence/prisma-user.repository.js';
 import { USER_REPOSITORY_PORT } from '../domain/ports/user-repository.port.js';
 import { PrismaTenantMembershipRepository } from '../../tenancy/infrastructure/persistence/prisma-tenant-membership.repository.js';
 import { TENANT_MEMBERSHIP_REPOSITORY_PORT } from '../../tenancy/domain/ports/tenant-membership-repository.port.js';
+import { PrismaTenantOnboardingRepository } from '../../tenancy/infrastructure/persistence/prisma-tenant-onboarding.repository.js';
+import { TENANT_ONBOARDING_PORT } from '../../tenancy/domain/ports/tenant-onboarding.port.js';
 
 @Module({
   providers: [
@@ -27,7 +29,15 @@ import { TENANT_MEMBERSHIP_REPOSITORY_PORT } from '../../tenancy/domain/ports/te
       provide: TENANT_MEMBERSHIP_REPOSITORY_PORT,
       useExisting: PrismaTenantMembershipRepository,
     },
+    // pt-BR (Fase 5): o binding mora aqui pelo mesmo motivo do de cima — este
+    // é o módulo que o resto da aplicação importa para ter Prisma ligado a um
+    // repositório.
+    PrismaTenantOnboardingRepository,
+    {
+      provide: TENANT_ONBOARDING_PORT,
+      useExisting: PrismaTenantOnboardingRepository,
+    },
   ],
-  exports: [USER_REPOSITORY_PORT, TENANT_MEMBERSHIP_REPOSITORY_PORT],
+  exports: [USER_REPOSITORY_PORT, TENANT_MEMBERSHIP_REPOSITORY_PORT, TENANT_ONBOARDING_PORT],
 })
 export class PrismaPersistenceModule {}

@@ -115,7 +115,15 @@ describe('Migration de tenancy (Fase 2)', () => {
       await cleanDatabase(ctx.prisma);
       const t = await criarTenant('acme');
       const inv = await ctx.prisma.invitation.create({
-        data: { tenantId: t, email: 'convidado@acme.dev', role: 'member' },
+        data: {
+          tenantId: t,
+          email: 'convidado@acme.dev',
+          role: 'member',
+          // pt-BR (Fase 5): `token` é `@unique` e obrigatório — a coluna
+          // nasceu na migration `20261019000000_invitation_token` com `SET
+          // NOT NULL`, que falha alto em vez de aceitar convite sem segredo.
+          token: 'token-de-teste-da-fase-2',
+        },
       });
       expect(inv.email).toBe('convidado@acme.dev');
 

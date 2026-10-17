@@ -140,6 +140,7 @@ fazê-lo às cegas seria fabricar 39 linhas `citada` sem âncora verificada.
 | `mandatory-tdd-rule` | `citada` | `.agents/specs/conventions/tdd.md` | `DEVEM seguir o ciclo TDD canônico` |
 | `md-file-size-and-revision-rules` | `citada` | `.agents/specs/conventions/tamanho-e-revisao.md` | `300 linhas` |
 | `measured-live-claim-requires-command` | `citada` | `.agents/specs/conventions/guard-classes.md` | `do que o número afirma` |
+| `minha-prosa-pt-br-vaza-caractere-cjk` | `citada` | `.agents/specs/conventions/idioma.md` | `Varrer antes de commitar` |
 | `mirror-tree-tests-a-script-that-has-no-seam` | `pendente` | — | — |
 | `mutation-can-fail-for-the-wrong-reason` | `pendente` | — | — |
 | `mutation-that-doesnt-land-looks-green` | `pendente` | — | — |
