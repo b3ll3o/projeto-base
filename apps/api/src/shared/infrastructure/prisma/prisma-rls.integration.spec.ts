@@ -253,6 +253,106 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
     expect(await ctx.prisma.profile.count({ where: { slug: 'falsao-sistema' } })).toBe(0);
   });
 
+  // ─────────────── remoção: o verbo que nenhum teste exercitava ───────────────
+  //
+  // MEDIDO 2026-10-17 (auditoria adversarial): com 11 testes verdes, `DELETE`
+  // não era exercitado por nenhum deles, e era por `USING` com
+  // `aceita_global = true` que uma empresa apagava o bucket de sistema inteiro.
+  // `DELETE` não tem `WITH CHECK`, então "legível" virou "apagável".
+
+  it('DELETE no perfil GLOBAL com o escopo da ACME não apaga nada', async () => {
+    const apagados = await comEscopo(acmeId, async (tx) => {
+      const r = await tx.profile.deleteMany({ where: { id: perfilGlobal } });
+      return r.count;
+    });
+
+    expect(apagados).toBe(0);
+    await expect(
+      ctx.prisma.profile.findUnique({ where: { id: perfilGlobal } }),
+    ).resolves.toMatchObject({ slug: 'admin-global', tenantId: null });
+  });
+
+  it('DELETE no perfil da GLOBEX com o escopo da ACME não apaga nada', async () => {
+    const apagados = await comEscopo(acmeId, async (tx) => {
+      const r = await tx.profile.deleteMany({ where: { id: perfilDaGlobex } });
+      return r.count;
+    });
+
+    expect(apagados).toBe(0);
+    await expect(
+      ctx.prisma.profile.findUnique({ where: { id: perfilDaGlobex } }),
+    ).resolves.toMatchObject({ slug: 'gestor-globex' });
+  });
+
+  it('DELETE no perfil GLOBAL com o escopo de SISTEMA continua funcionando — o conserto não fecha o caminho legítimo', async () => {
+    // Controle positivo: se os três de cima ficassem verdes por `USING (false)`
+    // em TODAS as linhas, o banco inteiro ficaria imutável e os testes
+    // transmitiriam uma garantia que não existe. O admin global tem de poder
+    // apagar perfil global — é o que `ProfileUseCases.deletar` faz.
+    const apagados = await comEscopo(ESCOPO_DE_SISTEMA, async (tx) => {
+      const r = await tx.profile.deleteMany({ where: { id: perfilGlobal } });
+      return r.count;
+    });
+
+    expect(apagados).toBe(1);
+    await expect(
+      ctx.prisma.profile.findUnique({ where: { id: perfilGlobal } }),
+    ).resolves.toBeNull();
+  });
+
+  it('UPDATE que MOVERIA o perfil GLOBAL para dentro da ACME é barrado', async () => {
+    // O `WITH CHECK (…, false)` desta policy só exige que o valor NOVO esteja
+    // no escopo. Mover `NULL → ACME` satisfaz isso, e `USING (…, true)` deixa
+    // a linha alcançável: trocava a DONA do perfil de sistema sem alterar nada
+    // que a política verificasse.
+    const alterados = await comEscopo(acmeId, async (tx) => {
+      const r = await tx.profile.updateMany({
+        where: { id: perfilGlobal },
+        data: { tenantId: acmeId },
+      });
+      return r.count;
+    });
+
+    expect(alterados).toBe(0);
+    await expect(
+      ctx.prisma.profile.findUnique({ where: { id: perfilGlobal } }),
+    ).resolves.toMatchObject({ tenantId: null, isSystem: false });
+  });
+
+  it('UPDATE que ROUBARIA a autorização do perfil GLOBAL para o perfil da ACME é barrado', async () => {
+    // `authorizations` é onde mora a permissão. Trocar o `profile_id` do dono
+    // não altera a chave nem viola o `WITH CHECK` (o novo dono está no escopo):
+    // é o mesmo formato do teste de mover perfil, na tabela mais perigosa.
+    //
+    // ⚠️ A permissão tem de ser uma que SÓ o global tem. Na primeira versão
+    // deste teste eu movi a `users.read` — que o `criarPerfil` dá a todos — e o
+    // `updateMany` morreu em `Unique constraint failed`. O teste ficou vermelho
+    // pelo motivo errado: mediu a chave única, não a policy. Mesma armadilha já
+    // registrada em `mutation-can-fail-for-the-wrong-reason`.
+    await ctx.prisma.authorization.create({
+      data: { profileId: perfilGlobal, permissionKey: 'users.delete' },
+    });
+
+    const alterados = await comEscopo(acmeId, async (tx) => {
+      const r = await tx.authorization.updateMany({
+        where: { profileId: perfilGlobal, permissionKey: 'users.delete' },
+        data: { profileId: perfilDaAcme },
+      });
+      return r.count;
+    });
+
+    expect(alterados).toBe(0);
+    const dona = await ctx.prisma.authorization.findFirst({
+      where: { profileId: perfilGlobal, permissionKey: 'users.delete' },
+    });
+    expect(dona).not.toBeNull();
+    await expect(
+      ctx.prisma.authorization.findFirst({
+        where: { profileId: perfilDaAcme, permissionKey: 'users.delete' },
+      }),
+    ).resolves.toBeNull();
+  });
+
   // ─────────────── a tabela que NÃO tem tenant_id ───────────────
 
   it('authorizations herdam o escopo do perfil: a da GLOBEX some com o escopo da ACME', async () => {

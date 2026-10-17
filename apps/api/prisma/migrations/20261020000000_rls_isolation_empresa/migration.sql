@@ -118,6 +118,25 @@ $$;
 -- de uma empresa. Essa assimetria e a escalada da Fase 8 fechada no banco: a
 -- guarda `exigePerfilDoEscopo` faz isso na aplicacao, e a policy faz o mesmo
 -- para qualquer codigo futuro que nao passe por ali.
+--
+-- ⚠️ A assimetria esta no VERBO, e o `USING` e o lugar onde ela se perde.
+-- MEDIDO 2026-10-17 (auditoria adversarial, reproduzido antes do conserto): com
+-- `USING (…, true)` nas duas policies de escrita, uma sessao `app_runtime` com o
+-- escopo de uma empresa VALIDA fez `DELETE FROM profiles WHERE slug='admin-global'`
+-- → `DELETE 1`, e o `ON DELETE CASCADE` levou as autorizacoes junto. Tres
+-- portas abertas pela mesma linha, e as duas primeiras sao de escrita:
+--   - UPDATE: `USING (…, true)` deixa a linha alcancavel e o `WITH CHECK (…, false)`
+--     so exige que o valor NOVO esteja no escopo — trocar `tenant_id` de `NULL`
+--     para a propria empresa satisfaz os dois lados e MOVER a dona do perfil.
+--   - DELETE: nao tem `WITH CHECK` nenhum, entao "legivel" era "apagavel".
+-- A terceira e o par em `authorizations`, que atravessa `profiles` com
+-- `aceita_global = true` e deixa trocar o `profile_id` — ou seja, ROUBAR a
+-- permissao de um perfil de sistema sem nem sair da empresa.
+-- Por isso `aceita_global = true` aparece em `LEITURA` e em nenhum outro verbo
+-- daqui para baixo. O caminho legitimo de mexer no bucket de sistema e o escopo
+-- `'*'`, que satisfaz o primeiro disjunto de `no_escopo_atual` sem depender do
+-- segundo. Coberto por `prisma-rls.integration.spec.ts` (5 testes: 3 de
+-- bloqueio, 2 de controle positivo, sendo um deles o `DELETE` com `'*'`).
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY profiles_leitura ON profiles FOR SELECT
@@ -127,11 +146,11 @@ CREATE POLICY profiles_insercao ON profiles FOR INSERT
   WITH CHECK (no_escopo_atual(tenant_id, false));
 
 CREATE POLICY profiles_atualizacao ON profiles FOR UPDATE
-  USING (no_escopo_atual(tenant_id, true))
+  USING (no_escopo_atual(tenant_id, false))
   WITH CHECK (no_escopo_atual(tenant_id, false));
 
 CREATE POLICY profiles_remocao ON profiles FOR DELETE
-  USING (no_escopo_atual(tenant_id, true));
+  USING (no_escopo_atual(tenant_id, false));
 
 -- 4.2 `tenants` — a empresa E a linha. INSERT liberado e o cadastro (D5): abrir
 -- a propria empresa acontece sem escopo nenhum, e a sessao que faz isso e a
@@ -208,7 +227,7 @@ CREATE POLICY authorizations_atualizacao ON authorizations FOR UPDATE
   USING (
     EXISTS (
       SELECT 1 FROM profiles p
-      WHERE p.id = profile_id AND no_escopo_atual(p.tenant_id, true)
+      WHERE p.id = profile_id AND no_escopo_atual(p.tenant_id, false)
     )
   )
   WITH CHECK (
@@ -222,7 +241,7 @@ CREATE POLICY authorizations_remocao ON authorizations FOR DELETE
   USING (
     EXISTS (
       SELECT 1 FROM profiles p
-      WHERE p.id = profile_id AND no_escopo_atual(p.tenant_id, true)
+      WHERE p.id = profile_id AND no_escopo_atual(p.tenant_id, false)
     )
   );
 
@@ -234,3 +253,20 @@ CREATE POLICY authorizations_remocao ON authorizations FOR DELETE
 -- quantificado com `tenant_memberships` — ciclico e caro, e o filtro de
 -- `deletedAt`/`profile` ja vive na aplicacao. Fica declarado aqui para que a
 -- ausencia seja uma DECISAO e nao um esquecimento.
+--
+-- ⚠️ MEDIDO 2026-10-17: esta ausencia NAO e como a de uma tabela comum, e a
+-- frase acima, sozinha, vende a garantia mais forte do que ela e. Com
+-- `app_runtime` e escopo de empresa valida, `UPDATE users SET profile_id = <perfil
+-- global admin> WHERE email = <alguem>` gravou — a sessao de uma empresa promove
+-- qualquer usuario a admin global, e o filtro de aplicacao (`profiles.use-cases.ts`,
+-- regra B1) e a UNICA coisa entre isso e a escalada. Onde a RLS "vale mesmo quando
+-- o codigo de aplicacao erra", aqui ela nao existe para a tabela que carrega a
+-- permissao. A doutrina vale para as outras 5; aqui vale a da aplicacao.
+--
+-- Fechar isto tem duas saidas, e a escolha e de projeto, nao daqui:
+--   (a) RLS via `EXISTS` sobre `tenant_memberships` (o join que o texto acima
+--       chama de "ciclico e caro" — e caro, e e o que impede a escalada);
+--   (b) `REVOKE UPDATE, DELETE` de `app_runtime` e escrita por funcao
+--       `SECURITY DEFINER`, que e o caminho curto e deixa a tabela so de leitura.
+-- Nenhuma das duas entra nesta migration: ambas mexem no desenho, e mexer no
+-- desenho sem decisao registrada e o que a Fase 8 cobrou caro.

@@ -267,13 +267,12 @@ Revisor ≠ implementador. Achados, e o que fazer com cada um:
 | MT-9-2 | P1 | `users`, `users_history`, `users_archive` sem policy | **Não é brecha, é desenho.** `users` é global por construção (1 conta, N empresas; `email` único global por D4) — RLS por tenant nela não tem a quem pertencer. Declarado na migration §5. |
 | MT-9-3 | P2 | `CREATE ROLE app_runtime` exige `CREATEROLE`, que o `POSTGRES_USER` da imagem oficial tem por ser superusuário | **Documentado** em `apps/api/.env.example`. Em Postgres gerenciado o papel de migration raramente é superusuário e o `migrate deploy` quebra no deploy. |
 | MT-9-4 | P2 | 4 aberturas de escopo `'*'` cujo desenho é "descobrir o tenant, depois re-escopar" | **Estrutural, não corrigido.** O padrão é legítimo e comentado; o risco é alguém inserir uma query na janela entre a abertura e o re-escopo e ela rodar como sistema sem sinal no review. |
-| MT-9-5 | — | Cascatas de FK não passam por RLS: `DELETE FROM tenants` autorizado cascateia para `profiles`/`authorizations` ignorando as policies | **Não verificado.** O Postgres não aplica policy em `onDelete: Cascade`. Comportamento desejado aqui, mas significa que a policy de remoção de `authorizations` não protege um cascade. |
+| MT-9-5 | — | Cascatas de FK não passam por RLS: `DELETE FROM tenants` autorizado cascateia para `profiles`/`authorizations` ignorando as policies | **Verificado em uma direção (2026-10-17):** apagar o perfil global levou as autorizações junto (`auth 3→2`), confirmando que o `onDelete: Cascade` ignora policy. Com o `DELETE` do bucket de sistema fechado, essa cascata deixou de ser alcançável a partir de uma empresa. O `DELETE FROM tenants` da própria empresa continua sem policy — comportamento desejado. |
 
 ⚠️ **Nenhum acesso ficou fora da `$transaction`** — os 32 acessos às 5 tabelas
 protegidas em `apps/api/src` são todos `tx.*` dentro de `comEscopo`. Era a
-hipótese principal do revisor, e ele a **não reproduziu**. Registrado porque
-hipótese não reproduzida é resultado, e porque o próximo revisor vai propor de
-novo.
+hipótese principal do revisor, e ele a **não reproduziu** — hipótese não
+reproduzida é resultado, e o próximo revisor vai propor de novo.
 
 ⚠️ **`prisma generate` NÃO resolve env de datasource — confirmado dos dois
 lados**: `generate` sai 0 sem nenhuma env; `validate` sai 1 e `migrate status`
@@ -281,9 +280,22 @@ dá P1012. Cuidado ao medir: o Prisma carrega o `.env` do **cwd**, não o do
 `--schema`, então um teste que aponte `--schema` para fora ainda carrega o `.env`
 e dá falso verde.
 
+### 3 furos reais que a auditoria adversarial mediu (2026-10-17, corrigidos)
+
+`USING (…, true)` em ESCRITA é onde "legível" vira "apagável": `DELETE` não tem
+`WITH CHECK`. MEDIDO contra Postgres **antes** do conserto — sessão `app_runtime`
+com escopo de empresa **válida**: `DELETE FROM profiles WHERE slug='admin-global'`
+→ `DELETE 1`. O `UPDATE` com `USING (…, true)` + `WITH CHECK (…, false)` aceitou
+`tenant_id` de `NULL` para a própria empresa (move a dona do perfil), e o mesmo
+formato em `authorizations` trocou `profile_id` e **roubou a permissão do sistema**.
+Os 3 → `aceita_global = false` no `USING` de escrita; `SELECT` mantém `true`, que
+é o que o admin da empresa precisa para LER o perfil global. 5 testes novos: 3 de
+bloqueio + 2 de controle positivo, um deles o `DELETE` com `'*'` — o que impede o
+conserto de virar "banco imutável" com tudo verde. ⚠️ **Com 11 testes verdes,
+nenhum exercitava `DELETE`**: a lacuna era o verbo que o conjunto nunca tocou.
+
 ## Triggers retroativos
 
 Findings repetidos sobre o mesmo arquivo/location (>3x) é sinal de **classe de
 bug sistêmico** — abrir issue classificada como tal, não como achado isolado.
-O caso já medido: cache de perfil sem tenant reaparece em toda alteração de
-perfil/RBAC desde o PR #97.
+Caso já medido: cache de perfil sem tenant reaparece desde o PR #97.
