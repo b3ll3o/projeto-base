@@ -218,8 +218,8 @@ O ramo do convite precisa de **produtor e aceite**, senao e inalcavel:
 ### Fase 6 — Superficie que quebra
 | Arquivo | Por que quebra |
 |---|---|
-| `prisma/seed.ts:21,46` | `profile.upsert({ where: { slug } })` perde o input unico quando `slug` sai do `@unique` global (D3). Migrar para a chave composta, `tenantId: null` para perfis de sistema |
-| `test/testcontainers-helper.ts:113-127` `cleanDatabase` | `tenants` precisa entrar, senao o isolamento entre specs quebra. `grep -i tenant` no arquivo = 0 |
+| `prisma/seed.ts` | **JA CORRIGIDO na Fase 2** — `upsertPerfilGlobal` monta o par `(slug, tenantId: null)`. MEDIDO no disco: esta linha nao quebra, ao contrario do que este plano afirmava |
+| `test/testcontainers-helper.ts` `cleanDatabase` | **JA CORRIGIDO na Fase 2** — `tenant`, `tenantMembership` e `invitation` ja entram em `:124-139`. A afirmacao "grep -i tenant = 0" deste plano era falsa quando escrita |
 | `apps/web/e2e/support/rbac.ts:92-102` `semearContaComPerfil` | liga `profileId` via `user.update` (`:99`); passa a criar membership |
 | `test/e2e/scenarios/01..10-*.e2e.spec.ts` + `users.e2e.spec.ts` | assumem login → 1 perfil |
 | `packages/shared-types/src/profile.ts:51-57` `MeProfileDto` | contrato compartilhado, sem tenant |
