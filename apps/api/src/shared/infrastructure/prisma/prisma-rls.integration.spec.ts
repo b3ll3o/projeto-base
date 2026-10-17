@@ -21,6 +21,7 @@
 // deveria tê-la barrado.
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import {
   setupTestDatabase,
@@ -76,6 +77,30 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
   }
 
   /**
+   * Usuário global, sem empresa. É o que `users` é por desenho: identidade é
+   * global (D4). O que muda é quem enxerga e quem escreve nele — e por isso o
+   * vínculo com a empresa é uma `membership`, criada à parte.
+   */
+  async function criarUsuario(slug: string): Promise<string> {
+    // `User.id` é `@id @db.Uuid` **sem** `@default` — é o domínio que gera
+    // (`User.criar` recebe o id). Omitir aqui dá `PrismaClientValidationError`
+    // nos 9 testes novos, que é vermelho pela fixture e não pela policy.
+    const u = await ctx.prisma.user.create({
+      data: {
+        id: randomUUID(),
+        email: `${slug}@teste.local`,
+        name: slug,
+        passwordHash: `${slug}-hash-secreto`,
+      },
+    });
+    return u.id;
+  }
+
+  async function associar(userId: string, tenantId: string): Promise<void> {
+    await ctx.prisma.tenantMembership.create({ data: { userId, tenantId } });
+  }
+
+  /**
    * Executa `fn` numa transação com o escopo de sessão definido.
    *
    * `set_config(..., true)` = **LOCAL**, que morre no fim da transação. Com
@@ -93,7 +118,11 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
     });
   }
 
-  /** Sem escopo: a sessão nunca define o parâmetro. */
+  /**
+   * Sem escopo: a sessão nunca define o parâmetro. É o estado em que a sessão
+   * fica quando alguém esquece o `comEscopo` — por isso ela precisa não fazer
+   * NADA, nem ler e nem escrever.
+   */
   async function semEscopo<T>(fn: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
     return runtime.$transaction(async (tx) => fn(tx));
   }
@@ -382,5 +411,211 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
         where: { profileId: perfilDaGlobex, permissionKey: 'users.delete' },
       }),
     ).resolves.toBeNull();
+  });
+
+  // ─────────────── `users`: a tabela sem `tenant_id`, e a mais exposta ───────────────
+  //
+  // MEDIDO 2026-10-17, sessão `app_runtime` com escopo de empresa VÁLIDA, contra
+  // a migration das outras 5 tabelas e SEM nenhuma policy em `users`:
+  //   - enxergava os 3 usuários do banco, `password_hash` legível;
+  //   - promovia usuário de outra empresa a admin global  (UPDATE 1);
+  //   - reescrevia a senha de usuário de outra empresa    (UPDATE 1);
+  //   - inseria usuário já nascendo admin global         (INSERT 1);
+  //   - apagava (hard) usuário de outra empresa          (DELETE 1).
+  // A §5 da migration chamava a ausência de "de propósito, são globais". A
+  // ausência é de propósito; a consequência medida não é o que o texto vendia.
+
+  it('com o escopo da ACME, o usuário da GLOBEX não aparece — nem o hash dele', async () => {
+    const daAcme = await criarUsuario('alice');
+    const daGlobex = await criarUsuario('bob');
+    await associar(daAcme, acmeId);
+    await associar(daGlobex, globexId);
+
+    const vistos = await comEscopo(acmeId, async (tx) => {
+      const r = await tx.user.findMany({ select: { id: true } });
+      return r.map((u) => u.id);
+    });
+
+    expect(vistos).toContain(daAcme);
+    // O vazamento de `password_hash` é o mais grave dos cinco:argon2id é caro
+    // de quebrar, mas uma tabela inteira de hashes de senha é o que a escalada
+    // de `profile_id` já pagava de UNIFIED — e ninguém estava olhando.
+    expect(vistos).not.toContain(daGlobex);
+  });
+
+  it('SEM escopo definido a sessão não vê NENHUM usuário (fail-closed)', async () => {
+    const daAcme = await criarUsuario('alice');
+    await associar(daAcme, acmeId);
+
+    const vistos = await semEscopo(async (tx) => {
+      const r = await tx.user.findMany({ select: { id: true } });
+      return r.map((u) => u.id);
+    });
+
+    expect(vistos).toEqual([]);
+  });
+
+  it('UPDATE que promoveria um usuário alheio a admin global é barrado', async () => {
+    const daAcme = await criarUsuario('alice');
+    const daGlobex = await criarUsuario('bob');
+    await associar(daAcme, acmeId);
+    await associar(daGlobex, globexId);
+
+    const alterados = await comEscopo(acmeId, async (tx) => {
+      const r = await tx.user.updateMany({
+        where: { id: daGlobex },
+        data: { profileId: perfilGlobal },
+      });
+      return r.count;
+    });
+
+    expect(alterados).toBe(0);
+    await expect(ctx.prisma.user.findUnique({ where: { id: daGlobex } })).resolves.toMatchObject({
+      profileId: null,
+    });
+  });
+
+  it('UPDATE que REESCREVERIA a senha de um usuário alheio é barrado', async () => {
+    const daAcme = await criarUsuario('alice');
+    const daGlobex = await criarUsuario('bob');
+    await associar(daAcme, acmeId);
+    await associar(daGlobex, globexId);
+
+    const alterados = await comEscopo(acmeId, async (tx) => {
+      const r = await tx.user.updateMany({
+        where: { id: daGlobex },
+        data: { passwordHash: 'senha-escrita-pela-acme' },
+      });
+      return r.count;
+    });
+
+    expect(alterados).toBe(0);
+    const intacto = await ctx.prisma.user.findUnique({ where: { id: daGlobex } });
+    expect(intacto?.passwordHash).toBe('bob-hash-secreto');
+  });
+
+  it('DELETE de um usuário alheio é barrado', async () => {
+    const daAcme = await criarUsuario('alice');
+    const daGlobex = await criarUsuario('bob');
+    await associar(daAcme, acmeId);
+    await associar(daGlobex, globexId);
+
+    const apagados = await comEscopo(acmeId, async (tx) => {
+      const r = await tx.user.deleteMany({ where: { id: daGlobex } });
+      return r.count;
+    });
+
+    expect(apagados).toBe(0);
+    await expect(ctx.prisma.user.findUnique({ where: { id: daGlobex } })).resolves.not.toBeNull();
+  });
+
+  it('INSERT de usuário já nascendo com perfil GLOBAL é barrado', async () => {
+    // O cadastro legítimo grava `profile_id: null` (medido em
+    // `prisma-tenant-onboarding.repository.ts`, os dois caminhos). Um usuário
+    // que nasce apontando para o admin global nasce ADMIN de todas as empresas
+    // — e por `isAdmin` isso é BYPASS TOTAL do `PermissionsGuard`.
+    const id = 'ffffffff-0000-0000-0000-0000000000ff';
+
+    await expect(
+      comEscopo(acmeId, async (tx) => {
+        await tx.user.create({
+          data: {
+            id,
+            email: 'intruso@teste.local',
+            name: 'Intruso',
+            passwordHash: 'x',
+            profileId: perfilGlobal,
+          },
+        });
+      }),
+    ).rejects.toThrow(/row-level security policy/);
+
+    await expect(ctx.prisma.user.findUnique({ where: { id } })).resolves.toBeNull();
+  });
+
+  it('sessão SEM escopo também não INSERE — esquecer o `comEscopo` não abre a porta', async () => {
+    // A primeira versão da policy de `INSERT` era `escopo_atual() IS NULL OR …`
+    // para não quebrar o cadastro público. Isso é uma brecha com nome: uma
+    // sessão que esqueceu de definir o escopo — exatamente o bug que o
+    // `set_config(..., true)` local previne em todo o resto — ganhava INSERT
+    // irrestrito, e [E] acima passaria dependendo do GUC. Fail-closed também
+    // aqui: sem escopo não se escreve, e o cadastro abre sessão de SISTEMA.
+    const id = 'dddddddd-0000-0000-0000-0000000000dd';
+
+    await expect(
+      semEscopo(async (tx) => {
+        await tx.user.create({
+          data: { id, email: 'sem-escopo@teste.local', name: 'Sem Escopo', passwordHash: 'x' },
+        });
+      }),
+    ).rejects.toThrow(/row-level security policy/);
+
+    await expect(ctx.prisma.user.findUnique({ where: { id } })).resolves.toBeNull();
+  });
+
+  // ─────────────── controles positivos: o conserto não pode virar "tudo fechado" ───────────────
+
+  it('CONTROLE: com o escopo da ACME, o usuário DA ACME continua visível e gravável', async () => {
+    const daAcme = await criarUsuario('alice');
+    await associar(daAcme, acmeId);
+
+    const alterados = await comEscopo(acmeId, async (tx) => {
+      const r = await tx.user.updateMany({
+        where: { id: daAcme },
+        data: { passwordHash: 'senha-nova-da-acme' },
+      });
+      return r.count;
+    });
+
+    expect(alterados).toBe(1);
+    await expect(ctx.prisma.user.findUnique({ where: { id: daAcme } })).resolves.toMatchObject({
+      passwordHash: 'senha-nova-da-acme',
+    });
+  });
+
+  it('CONTROLE: o escopo de SISTEMA ainda promove a perfil global (admin global não perde poder)', async () => {
+    // O caminho legítimo de `users.profile_id` é o bucket de sistema — é onde
+    // `profiles.use-cases.ts` grava quando o ator NÃO tem `X-Tenant-Id`. Se o
+    // `WITH CHECK` não abrir para `'*'`, a admin de sistema perde a atribuição.
+    const alvo = await criarUsuario('root');
+
+    const alterados = await comEscopo(ESCOPO_DE_SISTEMA, async (tx) => {
+      const r = await tx.user.updateMany({
+        where: { id: alvo },
+        data: { profileId: perfilGlobal },
+      });
+      return r.count;
+    });
+
+    expect(alterados).toBe(1);
+    await expect(ctx.prisma.user.findUnique({ where: { id: alvo } })).resolves.toMatchObject({
+      profileId: perfilGlobal,
+    });
+  });
+
+  it('CONTROLE: o cadastro público (escopo de SISTEMA) ainda cria conta com perfil nulo', async () => {
+    // A identidade é global por desenho (D4) e o cadastro acontece antes de
+    // existir empresa. Fechar `users` não pode quebrar a porta de entrada.
+    //
+    // ⚠️ Este teste é do `POST /users` (rota `@Public()`, que passa `null`).
+    // Os DOIS caminhos de onboarding NÃO são o mesmo caso e não são cobertos
+    // aqui: MEDIDO 2026-10-17, eles abrem o escopo da EMPRESA antes do
+    // `tx.user.create` e morriam em `42501` sob a sessão da aplicação. O que os
+    // conserta é `prisma-tenant-onboarding.repository.integration.spec.ts`, no
+    // bloco "com a sessão da aplicação (as policies valem)" — que é o único
+    // lugar do repo onde o onboarding fala com um papel sem BYPASSRLS.
+    const id = 'eeeeeeee-0000-0000-0000-0000000000ee';
+
+    const criado = await comEscopo(ESCOPO_DE_SISTEMA, async (tx) => {
+      const r = await tx.user.create({
+        data: { id, email: 'nova@teste.local', name: 'Nova', passwordHash: 'x' },
+      });
+      return r.id;
+    });
+
+    expect(criado).toBe(id);
+    await expect(ctx.prisma.user.findUnique({ where: { id } })).resolves.toMatchObject({
+      profileId: null,
+    });
   });
 });

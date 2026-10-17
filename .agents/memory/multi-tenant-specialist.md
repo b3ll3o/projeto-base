@@ -6,8 +6,7 @@ skill: .agents/skills/multi-tenant-audit/SKILL.md
 
 # Memory: `multi-tenant-specialist`
 
-Memory file canônico. **Estado atual: stub inicial** (criado em 2026-10-16
-com a Fase 1 do plano `docs/superpowers/plans/2026-10-16-multi-tenant-plan.md`).
+Memory file canônico (2026-10-16, Fase 1); o estado atual está nas seções de Fase 6/9/10.
 
 ## Skill carregada
 
@@ -41,20 +40,14 @@ mudou o que o agente checa:
 > `schema-per-tenant` e `db-per-tenant` estão **fora de escopo** (D1 decidiu
 > contra). Se alguém pedir, isso é revisão de D1, não execução.
 
-## Baseline medido (2026-10-16, antes de qualquer código de tenancy)
+## Baselines "antes" (2026-10-16, pós-Fase 4) — HISTÓRICOS, removidos de propósito
 
-Números que a primeira auditoria vai reencontrar — o "antes":
-
-| Medida | Comando | Valor |
-|--------|---------|-------|
-| Models sem `tenantId` | Passo 1.1 da skill | **5/5** |
-| `tenantId` no schema | `grep -cE "tenantId" apps/api/prisma/schema.prisma` | **0** |
-| Índice em tenant nas migrations | Passo 1.2 | **0** |
-| Arquivos com `tenant` em `apps/api/src/modules/` | `grep -rlniE "tenant" apps/api/src/modules/ \| wc -l` | **0** |
-| Queries Prisma sem filtro de tenant | Passo 2.1 | **17** |
-| Cache com chave sem tenant | Passo 3.3 | **4** (`user-profile-cache.service.ts`, chave = `userId`) |
-| RLS (policy ou produtor) | Passo 4 | **0** |
-| Spec de isolamento cross-tenant | Passo 5.1 | **ausente** |
+As tabelas que registravam o "antes" (17 queries sem filtro, 0 `tenantId`, 0
+policies, 0 specs cross-tenant) saíram de propósito: 4 fases depois todo número
+delas está errado, e número velho legível convence mais do que número ausente.
+Fica só a regra que elas davam — **nenhum achado de vazamento cross-tenant é P0
+enquanto a escrita não existe; re-medir o denominador antes de citar**. O estado
+atual está nas seções de Fase 9/10, com o comando ao lado.
 
 ## Falsos positivos conhecidos
 
@@ -118,18 +111,6 @@ Formato de entrada (a ser preenchido pelo agent):
     pela metade, e nenhuma fase do plano tinha dono do write path. Achados
     registrados como pre-condicoes P1/P2/P3 da Fase 6.
 ```
-
-## Baseline medido (2026-10-17, depois da Fase 4)
-
-| Medida | Comando | Valor |
-|--------|---------|-------|
-| Writers de membership (`create`/`upsert`/`update` de `tenantMembership`) | `grep -rn "tenantMembership\.\(create\|upsert\|update\|updateMany\)" apps/api/src --include=*.ts \| grep -v spec` | **v1.6.0: 3 escritas** (2 `create` no onboarding + 1 `updateMany` na Fase 6). Antes da Fase 6: **0 escritas** |
-| Leituras de perfil global | `grep -rn "\.profileId()" apps/api/src --include=*.ts \| grep -v spec` | **4 linhas, 1 delas de decisão**: `user.output.ts:35` e `user.prisma-mapper.ts:153` sao serializacao do DTO, `profiles.use-cases.ts:579` e comentario. So `profiles.use-cases.ts:586` le para decidir, de proposito (a escrita logo abaixo e na mesma coluna) |
-| Isolamento cross-tenant provado | `grep -c "  it(" apps/api/src/modules/tenancy/infrastructure/persistence/tenancy-migration.integration.spec.ts` | **19**, Postgres real |
-
-> ⚠️ A primeira linha muda o que a auditoria pode encontrar: ate a Fase 5 criar
-> membership, **nenhum achado de vazamento cross-tenant e exploit** — e codigo
-> exercitado so por spec. Nao reportar como P0 o que e latente.
 
 ## Revisão v1.6.0 (2026-10-17, Fase 6 — a escrita do perfil por empresa)
 
@@ -293,6 +274,25 @@ Os 3 → `aceita_global = false` no `USING` de escrita; `SELECT` mantém `true`,
 bloqueio + 2 de controle positivo, um deles o `DELETE` com `'*'` — o que impede o
 conserto de virar "banco imutável" com tudo verde. ⚠️ **Com 11 testes verdes,
 nenhum exercitava `DELETE`**: a lacuna era o verbo que o conjunto nunca tocou.
+
+## Fase 10 (2026-10-17) — RLS de `users`, a tabela sem `tenant_id`, e a auditoria
+
+`users` fecha por `EXISTS` em `tenant_memberships`; `perfil_do_escopo` aceita `NULL` de propósito.
+
+**MT-10-1 (P0, DUAS portas de entrada em 500): ajusta-se o CÓDIGO, não a
+policy.** Os DOIS `tx.user.create` do onboarding rodavam depois de
+`abrirEscopo(tx, <empresa>)` e `users_insercao` exige `'*'` → `42501`: INSERT
+em `users` sob escopo de empresa daria "cria conta + membership = herda o perfil".
+
+**MT-10-2 (a auditoria era um diretório de uuids cross-tenant).** `users_history`
+e `users_archive` estavam sem RLS e o `entity_id` delas É o id do agregado
+`User`: ler um `entity_id` alheio + `INSERT` em `tenant_memberships` (policy que
+confere SÓ o `tenant_id`) abria o `password_hash` dele. Fecha em
+`20261020000002`; o `tenantId` agora mora no `AuditContext` e no parâmetro.
+
+**O `RETURNING` do Prisma passa pela policy de SELECT.** MEDIDO, e não é do
+`users`: `INSERT` cru em `tenants` sem escopo PASSA (`tenants_insercao` é
+`WITH CHECK (true)`); com `RETURNING` falha `42501`. **Toda escrita com RLS exige escopo legível.**
 
 ## Triggers retroativos
 

@@ -92,7 +92,11 @@ export class AuthUseCases {
     // A MESMA normalização do cadastro (trim + toLowerCase). Sem ela,
     // ` Joao@Example.com ` não encontraria `joao@example.com`.
     const email = Email.create(input.email);
-    const user = await this.userRepo.findByEmail(email);
+    // `null` = bucket de SISTEMA (`escopoDoTenant(null)` → `'*'`). O login
+    // acontece ANTES de existir empresa: não há header, e um usuário sem
+    // membership é invisível sob qualquer outro escopo — a conta simplesmente
+    // não existiria para o login.
+    const user = await this.userRepo.findByEmail(email, null);
 
     // ── Timing: verify() roda nos DOIS caminhos ───────────────────────────
     const hashArmazenado = user === null ? await this.hashDescartavel() : user.senhaHash().value;
@@ -128,7 +132,9 @@ export class AuthUseCases {
     // ela sobe como está — quem a converte em 401 é o boundary HTTP.
     const subject = await this.tokenIssuer.validarRefreshToken(input.refreshToken);
 
-    const user = await this.userRepo.findById(UserId.create(subject.sub));
+    // Mesmo bucket do login: o refresh não sabe a empresa, e `eu()` é "quem eu
+    // sou", não "o que há na minha empresa".
+    const user = await this.userRepo.findById(UserId.create(subject.sub), null);
     if (user === null || user.isDeleted()) {
       throw new InvalidCredentialsException();
     }
@@ -153,7 +159,7 @@ export class AuthUseCases {
    * o apresenta.
    */
   async eu(userId: string): Promise<UserOutput> {
-    const user = await this.userRepo.findById(UserId.create(userId));
+    const user = await this.userRepo.findById(UserId.create(userId), null);
     if (user === null) {
       throw new InvalidCredentialsException();
     }

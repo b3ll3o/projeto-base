@@ -44,6 +44,22 @@ export interface FindByIdOptions {
  * versão diferente para o mesmo aggregateId, lança ConcurrencyException — o caller
  * precisa recarregar, re-aplicar as mutações e tentar de novo (ou abortar).
  */
+/**
+ * ── `tenantId` em TODOS os métodos (Fase 10, 2026-10-17) ──────────────────────
+ * `users` não tem `tenant_id`: o vínculo com a empresa é a `tenant_memberships`,
+ * e a RLS o resolve por `EXISTS` (ver `20261020000001_rls_isolation_users`).
+ * Sem este parâmetro a sessão não sabe que empresa está falando, e a policy
+ * falha fechada — a leitura devolve vazio e a escrita estoura.
+ *
+ * `null` é o bucket de SISTEMA (`escopoDoTenant(null)` → `'*'`), e é o correto
+ * para quem fala ANTES de existir empresa: `POST /users`, o `findByEmail` do
+ * login e o refresh. Não é "sem restrição nenhuma" — é a empresa de todos, o
+ * bucket que o admin global do seed usa.
+ *
+ * É TRADUÇÃO, não autorização: passar `null` onde se queria uma empresa abre o
+ * bucket de sistema. Quem valida se o ator pode ler a linha que quer continua
+ * sendo a query e a guarda de aplicação.
+ */
 export interface UserRepositoryPort {
   /**
    * Busca User pelo id. Retorna null se não existir.
@@ -52,13 +68,13 @@ export interface UserRepositoryPort {
    * este é o caminho "consulta de produção". Use `{ includeDeleted: true }`
    * para fluxos que precisam operar sobre soft-deleted (ex: restaurar).
    */
-  findById(id: UserId, options?: FindByIdOptions): Promise<User | null>;
+  findById(id: UserId, tenantId: string | null, options?: FindByIdOptions): Promise<User | null>;
 
   /**
    * Busca User pelo email (já normalizado). Retorna null se não existir.
    * Usado pelo application service para validar unicidade antes de criar.
    */
-  findByEmail(email: Email): Promise<User | null>;
+  findByEmail(email: Email, tenantId: string | null): Promise<User | null>;
 
   /**
    * Persiste o estado atual do agregado.
@@ -68,19 +84,19 @@ export interface UserRepositoryPort {
    *
    * Lança ConcurrencyException se a versão atual persistida divergir de expectedVersion.
    */
-  save(user: User, expectedVersion: number): Promise<User>;
+  save(user: User, expectedVersion: number, tenantId: string | null): Promise<User>;
 
   /**
    * Lista Users com paginação por cursor (opaca).
    * Por padrão exclui soft-deleted (deletedAt !== null).
    * Inclui soft-deleted quando `includeDeleted: true`.
    */
-  list(input: UserListInput): Promise<UserListResult>;
+  list(input: UserListInput, tenantId: string | null): Promise<UserListResult>;
 
   /**
    * pt-BR (#93.1 — RBAC, 2026-10-16): conta quantos users têm o
    * `profileId` atribuído. Usado por ProfileUseCases.deletar() para
    * garantir que um profile em uso não pode ser deletado (409).
    */
-  countByProfile(profileId: string): Promise<number>;
+  countByProfile(profileId: string, tenantId: string | null): Promise<number>;
 }

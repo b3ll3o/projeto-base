@@ -29,6 +29,25 @@ import {
 import { HASH_REAL as HASH } from '../../../../../test/fakes/fake-password-hasher.js';
 import { PasswordHash } from '../../domain/value-objects/password-hash.vo.js';
 
+/**
+ * pt-BR (Fase 10): desde que `save()` roda dentro de `comEscopo`, o duble
+ * precisa de TRÊS coisas e não uma — `$transaction`, o `$queryRaw` que escreve
+ * o GUC e o método de tabela. Sem as duas primeiras o repositório nem chega ao
+ * método que o teste quer exercitar: ele morre em `prisma.$transaction is not
+ * a function`, que é vermelho pela infra do duble e não pelo comportamento.
+ *
+ * `$transaction` devolve o PRÓPRIO duble como `tx`, porque `comEscopo` só o usa
+ * para o `$queryRaw` e repassar as chamadas — o mesmo pinamento que o Prisma
+ * real faz, sem segunda cópia que divergiria do contador de `findUnique`.
+ */
+function comTransacao<T extends object>(duplo: T): T {
+  const tx = { ...duplo, $queryRaw: async (): Promise<unknown[]> => [] };
+  return {
+    ...duplo,
+    $transaction: async (fn: (t: typeof tx) => Promise<unknown>): Promise<unknown> => fn(tx),
+  } as T;
+}
+
 describe('PrismaUserRepository (Testcontainers)', () => {
   let ctx: TestContext;
   let repo: PrismaUserRepository;
@@ -53,9 +72,9 @@ describe('PrismaUserRepository (Testcontainers)', () => {
       senhaHash: PasswordHash.create(HASH),
       agora: new Date('2026-09-21T10:00:00Z'),
     });
-    const saved = await repo.save(u, 0);
+    const saved = await repo.save(u, 0, null);
 
-    const got = await repo.findById(UserId.create(saved.id().value));
+    const got = await repo.findById(UserId.create(saved.id().value), null);
     expect(got).not.toBeNull();
     expect(got!.id().value).toBe(saved.id().value);
     expect(got!.email().value).toBe('ana@example.com');
@@ -71,14 +90,14 @@ describe('PrismaUserRepository (Testcontainers)', () => {
       senhaHash: PasswordHash.create(HASH),
       agora: new Date(),
     });
-    await repo.save(u, 0);
+    await repo.save(u, 0, null);
 
     u.renomear('Carla Maria', new Date());
-    const saved = await repo.save(u, u.version() - 1); // expectedVersion=1 (pré-mutação)
+    const saved = await repo.save(u, u.version() - 1, null); // expectedVersion=1 (pré-mutação)
     expect(saved.nome().value).toBe('Carla Maria');
     expect(saved.version()).toBe(2);
 
-    const refetched = await repo.findById(UserId.create(saved.id().value));
+    const refetched = await repo.findById(UserId.create(saved.id().value), null);
     expect(refetched!.nome().value).toBe('Carla Maria');
     expect(refetched!.version()).toBe(2);
   });
@@ -90,11 +109,11 @@ describe('PrismaUserRepository (Testcontainers)', () => {
       senhaHash: PasswordHash.create(HASH),
       agora: new Date(),
     });
-    await repo.save(u, 0);
+    await repo.save(u, 0, null);
 
     u.renomear('Bob Silva', new Date());
     // Esperado 999, mas a row está na versão 1 (pré-mutação).
-    await expect(repo.save(u, 999)).rejects.toThrow(ConcurrencyException);
+    await expect(repo.save(u, 999, null)).rejects.toThrow(ConcurrencyException);
   });
 
   it('softDelete (via save após marcarExcluido) esconde User nas consultas default', async () => {
@@ -104,13 +123,13 @@ describe('PrismaUserRepository (Testcontainers)', () => {
       senhaHash: PasswordHash.create(HASH),
       agora: new Date(),
     });
-    await repo.save(u, 0);
+    await repo.save(u, 0, null);
 
     u.marcarExcluido('test', new Date());
-    await repo.save(u, u.version() - 1);
+    await repo.save(u, u.version() - 1, null);
 
-    expect(await repo.findById(UserId.create(u.id().value))).toBeNull();
-    expect(await repo.findByEmail(Email.create('diego@example.com'))).toBeNull();
+    expect(await repo.findById(UserId.create(u.id().value), null)).toBeNull();
+    expect(await repo.findByEmail(Email.create('diego@example.com'), null)).toBeNull();
   });
 
   it('list com includeDeleted=true devolve soft-deleted', async () => {
@@ -120,15 +139,15 @@ describe('PrismaUserRepository (Testcontainers)', () => {
       senhaHash: PasswordHash.create(HASH),
       agora: new Date(),
     });
-    await repo.save(u, 0);
+    await repo.save(u, 0, null);
 
     u.marcarExcluido(null, new Date());
-    await repo.save(u, u.version() - 1);
+    await repo.save(u, u.version() - 1, null);
 
-    const hidden = await repo.list({ limit: 10 });
+    const hidden = await repo.list({ limit: 10 }, null);
     expect(hidden.users.find((x) => x.id().value === u.id().value)).toBeUndefined();
 
-    const shown = await repo.list({ limit: 10, includeDeleted: true });
+    const shown = await repo.list({ limit: 10, includeDeleted: true }, null);
     const found = shown.users.find((x) => x.id().value === u.id().value);
     expect(found).toBeDefined();
     expect(found!.deletedAt()).toBeInstanceOf(Date);
@@ -158,9 +177,9 @@ describe('PrismaUserRepository (Testcontainers)', () => {
       senhaHash: PasswordHash.create(HASH),
       agora: new Date('2026-09-21T10:00:00Z'),
     });
-    await repo.save(antigo, 0);
+    await repo.save(antigo, 0, null);
     antigo.marcarExcluido('test', new Date());
-    await repo.save(antigo, antigo.version() - 1);
+    await repo.save(antigo, antigo.version() - 1, null);
 
     const novo = User.criar({
       nome: 'Outra Helena',
@@ -172,7 +191,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     // `await expect(...).rejects.toThrow(EmailAlreadyInUseException)` — a
     // classe, não a instância: `ConcurrencyException` NÃO satisfaz isso, que é
     // exatamente a distinção que o 412 escondia.
-    await expect(repo.save(novo, 0)).rejects.toThrow(EmailAlreadyInUseException);
+    await expect(repo.save(novo, 0, null)).rejects.toThrow(EmailAlreadyInUseException);
   });
 
   it('save (INSERT) com email livre de soft-delete mas duplicado no mesmo instante segue sendo conflito de email', async () => {
@@ -185,7 +204,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
       senhaHash: PasswordHash.create(HASH),
       agora: new Date('2026-09-21T10:00:00Z'),
     });
-    await repo.save(primeiro, 0);
+    await repo.save(primeiro, 0, null);
 
     const segundo = User.criar({
       nome: 'Outra Iris',
@@ -194,7 +213,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
       agora: new Date('2026-09-21T11:00:00Z'),
     });
 
-    await expect(repo.save(segundo, 0)).rejects.toThrow(EmailAlreadyInUseException);
+    await expect(repo.save(segundo, 0, null)).rejects.toThrow(EmailAlreadyInUseException);
   });
 
   it('save (INSERT) com email realmente livre persiste sem tocar em ConcurrencyException', async () => {
@@ -208,7 +227,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
       senhaHash: PasswordHash.create(HASH),
       agora: new Date('2026-09-21T10:00:00Z'),
     });
-    const saved = await repo.save(u, 0);
+    const saved = await repo.save(u, 0, null);
     expect(saved.email().value).toBe('joana@example.com');
   });
 
@@ -233,7 +252,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
       ReturnType<typeof ctx.prisma.user.findUnique>
     >;
     let consultas = 0;
-    const prismaEmCorrida = {
+    const prismaEmCorrida = comTransacao({
       user: {
         findUnique: async (): Promise<typeof linhaVencida> => {
           consultas += 1;
@@ -246,7 +265,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
           });
         },
       },
-    } as unknown as typeof ctx.prisma;
+    }) as unknown as typeof ctx.prisma;
 
     const u = User.criar({
       nome: 'Luana',
@@ -259,7 +278,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     // O `expectedVersion` é 0 porque este é o caminho de INSERT — o que faz a
     // exceção dizer "esperava 0, encontrei 7", que é a leitura honesta da
     // corrida: eu não sabia da linha, e ela apareceu.
-    await expect(new PrismaUserRepository(prismaEmCorrida).save(u, 0)).rejects.toThrow(
+    await expect(new PrismaUserRepository(prismaEmCorrida).save(u, 0, null)).rejects.toThrow(
       ConcurrencyException,
     );
     expect(consultas, 'a reconsulta que decide o tipo tem de acontecer').toBe(2);
@@ -277,14 +296,14 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     // o mesmo formato e um `create` que rejeita é suficiente — não é mock de
     // framework, é a porta que o repositório realmente usa.
     const falha = new Error('conexão perdida com o banco');
-    const prismaQuebrado = {
+    const prismaQuebrado = comTransacao({
       user: {
         findUnique: ctx.prisma.user.findUnique.bind(ctx.prisma.user),
         create: async (): Promise<never> => {
           throw falha;
         },
       },
-    } as unknown as typeof ctx.prisma;
+    }) as unknown as typeof ctx.prisma;
 
     const u = User.criar({
       nome: 'Karla',
@@ -296,7 +315,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     // Nem `EmailAlreadyInUseException` (409) nem `ConcurrencyException` (412):
     // o erro original. Um erro desconhecido é 500 — dizer que é conflito de
     // email seria afirmar uma causa que ninguém mediu.
-    await expect(new PrismaUserRepository(prismaQuebrado).save(u, 0)).rejects.toThrow(falha);
+    await expect(new PrismaUserRepository(prismaQuebrado).save(u, 0, null)).rejects.toThrow(falha);
   });
 
   it('save (UPDATE) com email de um soft-deleted lança EmailAlreadyInUseException, não erro cru', async () => {
@@ -321,9 +340,9 @@ describe('PrismaUserRepository (Testcontainers)', () => {
       senhaHash: PasswordHash.create(HASH),
       agora: new Date('2026-09-21T10:00:00Z'),
     });
-    await repo.save(antigo, 0);
+    await repo.save(antigo, 0, null);
     antigo.marcarExcluido('test', new Date());
-    await repo.save(antigo, antigo.version() - 1);
+    await repo.save(antigo, antigo.version() - 1, null);
 
     const alvo = User.criar({
       nome: 'Bruno',
@@ -331,11 +350,13 @@ describe('PrismaUserRepository (Testcontainers)', () => {
       senhaHash: PasswordHash.create(HASH),
       agora: new Date('2026-09-21T10:00:00Z'),
     });
-    const salvo = await repo.save(alvo, 0);
+    const salvo = await repo.save(alvo, 0, null);
 
     salvo.alterarEmail('iara@example.com', new Date('2026-09-21T12:00:00Z'));
 
-    await expect(repo.save(salvo, salvo.version() - 1)).rejects.toThrow(EmailAlreadyInUseException);
+    await expect(repo.save(salvo, salvo.version() - 1, null)).rejects.toThrow(
+      EmailAlreadyInUseException,
+    );
   });
 
   it('save (UPDATE) com email realmente livre continua persistindo', async () => {
@@ -348,10 +369,10 @@ describe('PrismaUserRepository (Testcontainers)', () => {
       senhaHash: PasswordHash.create(HASH),
       agora: new Date('2026-09-21T10:00:00Z'),
     });
-    const salvo = await repo.save(alvo, 0);
+    const salvo = await repo.save(alvo, 0, null);
 
     salvo.alterarEmail('carla.nova@example.com', new Date('2026-09-21T12:00:00Z'));
-    const depois = await repo.save(salvo, salvo.version() - 1);
+    const depois = await repo.save(salvo, salvo.version() - 1, null);
 
     expect(depois.email().value).toBe('carla.nova@example.com');
   });
@@ -366,21 +387,21 @@ describe('PrismaUserRepository (Testcontainers)', () => {
       senhaHash: PasswordHash.create(HASH),
       agora: new Date('2026-09-21T10:00:00Z'),
     });
-    const salvo = await repo.save(alvo, 0);
+    const salvo = await repo.save(alvo, 0, null);
     salvo.alterarEmail('dani.nova@example.com', new Date('2026-09-21T12:00:00Z'));
 
     const falha = new Error('conexão perdida com o banco');
-    const prismaQuebrado = {
+    const prismaQuebrado = comTransacao({
       user: {
         findUnique: ctx.prisma.user.findUnique.bind(ctx.prisma.user),
         updateMany: async (): Promise<never> => {
           throw falha;
         },
       },
-    } as unknown as typeof ctx.prisma;
+    }) as unknown as typeof ctx.prisma;
 
     await expect(
-      new PrismaUserRepository(prismaQuebrado).save(salvo, salvo.version() - 1),
+      new PrismaUserRepository(prismaQuebrado).save(salvo, salvo.version() - 1, null),
     ).rejects.toThrow(falha);
   });
 
@@ -396,7 +417,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
       senhaHash: PasswordHash.create(HASH),
       agora: new Date('2026-09-21T10:00:00Z'),
     });
-    await repo.save(primeiro, 0);
+    await repo.save(primeiro, 0, null);
 
     const segundo = User.criar({
       nome: 'Otto',
@@ -404,10 +425,12 @@ describe('PrismaUserRepository (Testcontainers)', () => {
       senhaHash: PasswordHash.create(HASH),
       agora: new Date('2026-09-21T10:00:00Z'),
     });
-    const salvo = await repo.save(segundo, 0);
+    const salvo = await repo.save(segundo, 0, null);
     salvo.alterarEmail('elis@example.com', new Date('2026-09-21T12:00:00Z'));
 
-    await expect(repo.save(salvo, salvo.version() - 1)).rejects.toThrow(EmailAlreadyInUseException);
+    await expect(repo.save(salvo, salvo.version() - 1, null)).rejects.toThrow(
+      EmailAlreadyInUseException,
+    );
   });
 
   it('restore (via save após restaurar) devolve User com deletedAt=null e version incrementada', async () => {
@@ -417,24 +440,24 @@ describe('PrismaUserRepository (Testcontainers)', () => {
       senhaHash: PasswordHash.create(HASH),
       agora: new Date('2026-09-21T10:00:00Z'),
     });
-    await repo.save(u, 0);
+    await repo.save(u, 0, null);
     u.marcarExcluido('test', new Date('2026-09-21T11:00:00Z'));
-    await repo.save(u, u.version() - 1);
+    await repo.save(u, u.version() - 1, null);
 
     expect(u.deletedAt()).toBeInstanceOf(Date);
     expect(u.version()).toBe(2);
 
     u.restaurar(new Date('2026-09-21T12:00:00Z'));
-    await repo.save(u, u.version() - 1);
+    await repo.save(u, u.version() - 1, null);
 
-    const found = await repo.findById(UserId.create(u.id().value));
+    const found = await repo.findById(UserId.create(u.id().value), null);
     expect(found).not.toBeNull();
     expect(found!.deletedAt()).toBeNull();
     expect(found!.version()).toBe(3);
   });
 
   it('findByEmail retorna null para email inexistente ou soft-deleted', async () => {
-    expect(await repo.findByEmail(Email.create('nobody@example.com'))).toBeNull();
+    expect(await repo.findByEmail(Email.create('nobody@example.com'), null)).toBeNull();
 
     const u = User.criar({
       nome: 'Gabi',
@@ -442,14 +465,14 @@ describe('PrismaUserRepository (Testcontainers)', () => {
       senhaHash: PasswordHash.create(HASH),
       agora: new Date(),
     });
-    await repo.save(u, 0);
-    expect((await repo.findByEmail(Email.create('gabi@example.com')))?.id().value).toBe(
+    await repo.save(u, 0, null);
+    expect((await repo.findByEmail(Email.create('gabi@example.com'), null))?.id().value).toBe(
       u.id().value,
     );
 
     u.marcarExcluido(null, new Date());
-    await repo.save(u, u.version() - 1);
-    expect(await repo.findByEmail(Email.create('gabi@example.com'))).toBeNull();
+    await repo.save(u, u.version() - 1, null);
+    expect(await repo.findByEmail(Email.create('gabi@example.com'), null)).toBeNull();
   });
 
   it('list pagina por cursor opaco (id)', async () => {
@@ -460,14 +483,14 @@ describe('PrismaUserRepository (Testcontainers)', () => {
         senhaHash: PasswordHash.create(HASH),
         agora: new Date(),
       });
-      await repo.save(u, 0);
+      await repo.save(u, 0, null);
     }
 
-    const page1 = await repo.list({ limit: 2 });
+    const page1 = await repo.list({ limit: 2 }, null);
     expect(page1.users).toHaveLength(2);
     expect(page1.nextCursor).not.toBeNull();
 
-    const page2 = await repo.list({ limit: 2, cursor: page1.nextCursor });
+    const page2 = await repo.list({ limit: 2, cursor: page1.nextCursor }, null);
     expect(page2.users).toHaveLength(1);
     expect(page2.nextCursor).toBeNull();
   });

@@ -342,8 +342,13 @@ export class ProfileUseCases {
     // lugares distintos onde o mesmo perfil pode estar em uso. Somar só o
     // primeiro deixaria a trava passar e o `ON DELETE RESTRICT` do banco
     // estourar P2003 — 500 no lugar de 409.
+    // `null` = bucket de SISTEMA, e aqui é o escopo CORRETO: a pergunta é
+    // "este perfil está em uso por alguém, em qualquer lugar?", não "na minha
+    // empresa". Sob escopo de empresa a RLS de `users` cortaria o `count` e a
+    // trava passaria, e o `ON DELETE RESTICT` do banco estouraria P2003 — 500
+    // no lugar do 409 que estas duas linhas existem para dar.
     const count =
-      (await this.userRepo.countByProfile(profile.id().value)) +
+      (await this.userRepo.countByProfile(profile.id().value, null)) +
       (await this.memberships.countByProfile(profile.id().value));
     if (count > 0) {
       throw new ProfileHasUsersException(profile.slug().value, count);
@@ -399,7 +404,7 @@ export class AuthorizationUseCases {
    * que o banco aceita é PR próprio deste VO.
    */
   private async userDoAtor(ator: AtorAutenticado): Promise<User | null> {
-    return this.userRepo.findById(UserId.create(ator.userId));
+    return this.userRepo.findById(UserId.create(ator.userId), ator.tenantId);
   }
 
   /**
@@ -682,7 +687,7 @@ export class UserProfileUseCases {
         }
       }
     }
-    const user = await this.userRepo.findById(UserId.create(userId));
+    const user = await this.userRepo.findById(UserId.create(userId), ator.tenantId);
     if (user === null) {
       throw new UserNotFoundException(userId);
     }
@@ -741,7 +746,21 @@ export class UserProfileUseCases {
       }
     }
     user.atribuirPerfil(profileIdStr, new Date());
-    await this.userRepo.save(user, user.version() - 1);
+    // `ator.tenantId` e `null` NESTE ponto — o caminho com header gravou a
+    // membership e voltou na linha acima. Passar o valor do ator em vez de um
+    // `null` fixo é o que mantém a coisa honesta se alguém mexer no `return`.
+    //
+    // ⚠️ O que NÃO fecha a escalada aqui é a RLS, e este texto já dizia que
+    // fechava. `null` vira o escopo de SISTEMA (`'*'`), e `perfil_do_escopo`
+    // (`migration.sql` da Fase 10) tem `escopo_atual() = '*'` como PRIMEIRO
+    // disjunto: sob `'*'` ela aceita qualquer `profile_id`. A policy é inerte
+    // neste caminho. Quem fecha é o `recusaEscalada` acima (R1/R2) — que
+    // confere o `isAdmin` do perfil ATUAL, e só nele.
+    //
+    // A distinção importa porque "o banco cobre" e "a aplicação cobre" pedem
+    // consertos diferentes: quem apagar R1/R2 acreditando na policy abre a
+    // escalada sem nem perceber que mexeu na única defesa que existe.
+    await this.userRepo.save(user, user.version() - 1, ator.tenantId);
     await this.cache.invalidateUser(userId);
   }
 

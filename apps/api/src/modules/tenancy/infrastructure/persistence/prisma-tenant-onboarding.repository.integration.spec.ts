@@ -34,6 +34,7 @@ import {
   EmpresaJaExisteException,
 } from '../../domain/exceptions/tenancy.exceptions.js';
 import { listAllPermissions } from '../../../../shared/auth/permissions-catalog.js';
+import { uriComoPapelDeRuntime } from '../../../../shared/infrastructure/prisma/papel-de-runtime.js';
 
 const AGORA = new Date('2026-10-19T12:00:00.000Z');
 
@@ -51,14 +52,19 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
   let ctx: TestContext;
   let repo: PrismaTenantOnboardingRepository;
   let memberships: PrismaTenantMembershipRepository;
+  /** Sessão da APLICAÇÃO (Fase 10): papel sem BYPASSRLS, onde a RLS vale. */
+  let runtime: InstanceType<typeof import('@prisma/client').PrismaClient>;
 
   beforeAll(async () => {
     ctx = await setupTestDatabase();
     repo = new PrismaTenantOnboardingRepository(ctx.prisma);
     memberships = new PrismaTenantMembershipRepository(ctx.prisma);
+    const { PrismaClient } = await import('@prisma/client');
+    runtime = new PrismaClient({ datasourceUrl: uriComoPapelDeRuntime(ctx.uriDoBanco) });
   });
 
   afterAll(async () => {
+    await runtime.$disconnect();
     await ctx.stop();
   });
 
@@ -466,5 +472,71 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
     const { tenant } = await empresaComDono('acme', 'dono@acme.dev');
 
     expect(await memberships.findRole(randomUUID(), tenant.id)).toBeNull();
+  });
+
+  // ─────────── Fase 10: a entrada na empresa com a sessão da APLICAÇÃO ───────────
+  //
+  // MEDIDO 2026-10-17: a `users_insercao` da Fase 10 exige `escopo_atual() = '*'`,
+  // e as DUAS escritas de `tx.user.create` do onboarding rodavam DEPOIS de
+  // `abrirEscopo(tx, <empresa>)`. Sob a sessão da aplicação isso é `42501` —
+  // virando 500 no `POST /users` com destino 'empresa' e no cadastro por
+  // convite, as DUAS portas de entrada do produto.
+  //
+  // Por que estes dois testes são os únicos que enxergam: todo o resto do
+  // arquivo fala com `ctx.prisma`, que é o DONO das tabelas e ignora RLS.
+  // Nenhum e2e veria também — a API sobe como dono do container. O papel sem
+  // BYPASSRLS só existe aqui.
+  describe('com a sessão da aplicação (as policies valem)', () => {
+    it('provisionarEmpresaPropria conclui — o dono da empresa nova entra', async () => {
+      await cleanDatabase(ctx.prisma);
+      const app = new PrismaTenantOnboardingRepository(runtime);
+      const u = usuario('dono-runtime@acme.dev');
+
+      await app.provisionarEmpresaPropria(u, { nome: 'ACME', slug: 'acme-rt' });
+
+      // Verificado pelo DONO: quem mede precisa ver o banco inteiro, senão
+      // "a escrita não aconteceu" só é checável pela policy que deveria
+      // tê-la barrado.
+      expect(await ctx.prisma.user.findUnique({ where: { id: u.id } })).toMatchObject({
+        email: 'dono-runtime@acme.dev',
+        profileId: null,
+      });
+      const empresa = await ctx.prisma.tenant.findUnique({ where: { slug: 'acme-rt' } });
+      expect(empresa).not.toBeNull();
+      const vinculo = await ctx.prisma.tenantMembership.findFirst({
+        where: { userId: u.id },
+        include: { profile: true },
+      });
+      expect(vinculo?.role).toBe('owner');
+      expect(vinculo?.profile?.isAdmin).toBe(true);
+    });
+
+    it('criarContaPorConvite conclui — a conta nova entra e o convite é consumido', async () => {
+      await cleanDatabase(ctx.prisma);
+      const { tenant } = await empresaComDono('acme', 'dono@acme.dev');
+      await repo.emitirConvite({
+        tenantId: tenant.id,
+        email: 'nova@acme.dev',
+        role: 'member',
+        token: 'token-runtime',
+        expiresAt: new Date('2026-10-26T12:00:00.000Z'),
+      });
+      const convite = await repo.buscarConvitePorToken('token-runtime');
+
+      const app = new PrismaTenantOnboardingRepository(runtime);
+      const nova = usuario('nova@acme.dev');
+      await app.criarContaPorConvite({ userId: nova.id, invitationId: convite!.id }, nova);
+
+      expect(await ctx.prisma.user.findUnique({ where: { id: nova.id } })).toMatchObject({
+        email: 'nova@acme.dev',
+        profileId: null,
+      });
+      expect(
+        await ctx.prisma.tenantMembership.count({
+          where: { userId: nova.id, tenantId: tenant.id },
+        }),
+      ).toBe(1);
+      expect((await repo.buscarConvitePorToken('token-runtime'))?.acceptedAt).not.toBeNull();
+    });
   });
 });

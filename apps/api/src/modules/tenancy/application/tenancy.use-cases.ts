@@ -113,7 +113,10 @@ export class TenancyUseCases {
   async aceitarConvite(input: { userId: string; token: string }): Promise<void> {
     // O email vem da CONTA, não da entrada: o token prova que o convite foi
     // emitido para alguém, e a conta prova que essa alguém é você.
-    const user = await this.users.findById(UserId.create(input.userId));
+    // `null` = bucket de SISTEMA: a pergunta é "esta conta existe?", e a conta
+    // pode não ter membership nenhuma ainda — é justamente o caso de quem está
+    // aceitando o primeiro convite. Sob escopo de empresa ela seria invisível.
+    const user = await this.users.findById(UserId.create(input.userId), null);
     if (user === null || user.isDeleted()) {
       throw new ConviteInvalidoException('nao-encontrado');
     }

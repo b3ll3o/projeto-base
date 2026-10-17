@@ -21,6 +21,10 @@ const makeCtx = (actorId: string | null = 'actor-1') =>
 describe('InMemoryAuditService', () => {
   let svc: InMemoryAuditService;
   const PAGE_SIZE = 2;
+  // pt-BR (Fase 10+): as leituras ganharam `tenantId`, mas o duplo não filtra
+  // por empresa (as entradas não o carregam). `null` = bucket de SISTEMA, que é
+  // o que esses testes exercitam.
+  const SISTEMA = null;
 
   beforeEach(() => {
     svc = new InMemoryAuditService();
@@ -75,30 +79,39 @@ describe('InMemoryAuditService', () => {
       ctx,
     );
 
-    const page1 = await svc.listHistory({
-      entityName: 'User',
-      entityId: 'u1',
-      limit: PAGE_SIZE,
-    } satisfies ListHistoryInput);
+    const page1 = await svc.listHistory(
+      {
+        entityName: 'User',
+        entityId: 'u1',
+        limit: PAGE_SIZE,
+      } satisfies ListHistoryInput,
+      SISTEMA,
+    );
     expect(page1.entries).toHaveLength(2);
     expect(page1.entries.map((e) => e.version)).toEqual([1, 2]);
     expect(page1.nextCursor).not.toBeNull();
 
-    const page2 = await svc.listHistory({
-      entityName: 'User',
-      entityId: 'u1',
-      cursor: page1.nextCursor,
-      limit: PAGE_SIZE,
-    } satisfies ListHistoryInput);
+    const page2 = await svc.listHistory(
+      {
+        entityName: 'User',
+        entityId: 'u1',
+        cursor: page1.nextCursor,
+        limit: PAGE_SIZE,
+      } satisfies ListHistoryInput,
+      SISTEMA,
+    );
     expect(page2.entries.map((e) => e.version)).toEqual([3, 4]);
     expect(page2.nextCursor).not.toBeNull();
 
-    const page3 = await svc.listHistory({
-      entityName: 'User',
-      entityId: 'u1',
-      cursor: page2.nextCursor,
-      limit: PAGE_SIZE,
-    } satisfies ListHistoryInput);
+    const page3 = await svc.listHistory(
+      {
+        entityName: 'User',
+        entityId: 'u1',
+        cursor: page2.nextCursor,
+        limit: PAGE_SIZE,
+      } satisfies ListHistoryInput,
+      SISTEMA,
+    );
     expect(page3.entries.map((e) => e.version)).toEqual([5]);
     expect(page3.nextCursor).toBeNull();
   });
@@ -151,26 +164,35 @@ describe('InMemoryAuditService', () => {
       },
       ctx,
     );
-    const found = await svc.getHistoryEntry({
-      entityName: 'User',
-      entityId: 'u1',
-      version: 1,
-    } satisfies GetHistoryEntryInput);
+    const found = await svc.getHistoryEntry(
+      {
+        entityName: 'User',
+        entityId: 'u1',
+        version: 1,
+      } satisfies GetHistoryEntryInput,
+      SISTEMA,
+    );
     expect(found).not.toBeNull();
     expect(found?.version).toBe(1);
 
-    const missing = await svc.getHistoryEntry({
-      entityName: 'User',
-      entityId: 'u1',
-      version: 99,
-    } satisfies GetHistoryEntryInput);
+    const missing = await svc.getHistoryEntry(
+      {
+        entityName: 'User',
+        entityId: 'u1',
+        version: 99,
+      } satisfies GetHistoryEntryInput,
+      SISTEMA,
+    );
     expect(missing).toBeNull();
 
-    const wrongEntity = await svc.getHistoryEntry({
-      entityName: 'User',
-      entityId: 'uX',
-      version: 1,
-    } satisfies GetHistoryEntryInput);
+    const wrongEntity = await svc.getHistoryEntry(
+      {
+        entityName: 'User',
+        entityId: 'uX',
+        version: 1,
+      } satisfies GetHistoryEntryInput,
+      SISTEMA,
+    );
     expect(wrongEntity).toBeNull();
   });
 
@@ -185,24 +207,33 @@ describe('InMemoryAuditService', () => {
         ctx,
       } satisfies ArchiveInput);
     }
-    const page1 = await svc.listArchive({
-      entityName: 'User',
-      limit: PAGE_SIZE,
-    } satisfies ListArchiveInput);
+    const page1 = await svc.listArchive(
+      {
+        entityName: 'User',
+        limit: PAGE_SIZE,
+      } satisfies ListArchiveInput,
+      SISTEMA,
+    );
     expect(page1.entries).toHaveLength(2);
     expect(page1.entries.map((e) => e.entityId)).toEqual(['a', 'b']);
     expect(page1.nextCursor).not.toBeNull();
 
-    const found = await svc.getArchiveEntry({
-      entityName: 'User',
-      entityId: 'a',
-    } satisfies GetArchiveEntryInput);
+    const found = await svc.getArchiveEntry(
+      {
+        entityName: 'User',
+        entityId: 'a',
+      } satisfies GetArchiveEntryInput,
+      SISTEMA,
+    );
     expect(found).not.toBeNull();
 
-    const missing = await svc.getArchiveEntry({
-      entityName: 'User',
-      entityId: 'zzz',
-    } satisfies GetArchiveEntryInput);
+    const missing = await svc.getArchiveEntry(
+      {
+        entityName: 'User',
+        entityId: 'zzz',
+      } satisfies GetArchiveEntryInput,
+      SISTEMA,
+    );
     expect(missing).toBeNull();
   });
 
@@ -219,11 +250,14 @@ describe('InMemoryAuditService', () => {
       },
       ctx,
     );
-    const page = await svc.listHistory({
-      entityName: 'User',
-      entityId: 'noSuchUser',
-      limit: PAGE_SIZE,
-    } satisfies ListHistoryInput);
+    const page = await svc.listHistory(
+      {
+        entityName: 'User',
+        entityId: 'noSuchUser',
+        limit: PAGE_SIZE,
+      } satisfies ListHistoryInput,
+      SISTEMA,
+    );
     expect(page.entries).toEqual([]);
     expect(page.nextCursor).toBeNull();
   });

@@ -85,18 +85,59 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
     // "falhou o slug" e "falhou a transação".
     try {
       await this.prisma.$transaction(async (tx: Tx) => {
+        // pt-BR (Fase 10 — a correção): a sessão nasce em SISTEMA, na PRIMEIRA
+        // linha, e só desce para a empresa quando a empresa já existe.
+        //
+        // MEDIDO 2026-10-17, e a causa não é a que o texto sugeria. Não é a
+        // `WITH CHECK` da policy: `INSERT` cru em `tenants` SEM escopo nenhum
+        // PASSA (a `tenants_insercao` é `WITH CHECK (true)`). O que barra é o
+        // `RETURNING` — o Prisma emite `INSERT ... RETURNING`, e a linha do
+        // RETURNING é avaliada pela policy de **SELECT**, `tenants_leitura`
+        // → `no_escopo_atual(id, false)` → FALSE sem escopo. O Postgres reporta
+        // isso como "new row violates row-level security policy".
+        //
+        // Ou seja: em tabela com RLS, toda escrita do Prisma precisa de um
+        // escopo onde a linha também seja LEGÍVEL — o `RETURNING` não perdoa.
+        // E o mesmo vale para `users_insercao`, que exige `escopo_atual() = '*'`
+        // e barrava o `tx.user.create` logo abaixo (o `POST /users` com destino
+        // 'empresa' e o cadastro por convite, as DUAS portas de entrada,
+        // respondendo 500).
+        //
+        // A policy NÃO afrouxa para acomodar: `memberships_insercao`
+        // (`no_escopo_atual(tenant_id, false)`) já deixa uma sessão de empresa
+        // criar membership na PRÓPRIA empresa, então permitir INSERT em `users`
+        // sob escopo de empresa daria "cria conta + cria membership = herda o
+        // perfil da casa".
+        await abrirEscopo(tx, escopoDoTenant(null));
+
         const tenant = await tx.tenant.create({
           data: { name: empresa.nome, slug: empresa.slug },
         });
 
-        // pt-BR (Fase 9 — RLS): o escopo só pode ser aberto DEPOIS do insert do
-        // tenant e ANTES do insert do perfil, e é esta a ordem que a phase exige.
-        // O `WITH CHECK` de `profiles_insercao` avalia `no_escopo_atual(tenant_id,
-        // false)` no momento do insert, e `tenant.id` é o próprio dado que a
-        // policy compara — abrir o escopo depois deixaria a criação da empresa
-        // (o caminho D5 inteiro) sem poder produzir o admin que ela exige. O
-        // `INSERT` em `tenants` tem `WITH CHECK (true)` justamente para este
-        // caso: abrir a própria empresa acontece sem escopo nenhum.
+        await tx.user.create({
+          data: {
+            id: usuario.id,
+            name: usuario.nome,
+            email: usuario.email,
+            passwordHash: usuario.senhaHash,
+            // `users.profile_id` fica NULL: sem header a pessoa não está em
+            // empresa nenhuma, e a Fase 4 resolve esse bucket para zero
+            // permissões. Encher esta coluna seria desfazer a Fase 4.
+            profileId: null,
+            createdAt: usuario.createdAt,
+            updatedAt: usuario.createdAt,
+            version: 1,
+          },
+        });
+
+        // pt-BR (Fase 9 — RLS): daqui em diante a sessão é a DA empresa nova, e
+        // o `INSERT` do perfil avalia `no_escopo_atual(tenant_id, false)` no
+        // momento do insert — `tenant.id` é o próprio dado que a policy
+        // compara, então abrir o escopo depois deixaria a criação da empresa
+        // (o caminho D5 inteiro) sem poder produzir o admin que ela exige.
+        //
+        // O segundo `abrirEscopo` sobrescreve o primeiro: `set_config(..., true)`
+        // é LOCAL, e a última chamada dentro da transação é a que vale.
         await abrirEscopo(tx, tenant.id);
 
         // O admin nasce JUNTO com a empresa, e é DELA (`tenantId`). Ver o
@@ -118,22 +159,6 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
             profileId: perfil.id,
             permissionKey,
           })),
-        });
-
-        await tx.user.create({
-          data: {
-            id: usuario.id,
-            name: usuario.nome,
-            email: usuario.email,
-            passwordHash: usuario.senhaHash,
-            // `users.profile_id` fica NULL: sem header a pessoa não está em
-            // empresa nenhuma, e a Fase 4 resolve esse bucket para zero
-            // permissões. Encher esta coluna seria desfazer a Fase 4.
-            profileId: null,
-            createdAt: usuario.createdAt,
-            updatedAt: usuario.createdAt,
-            version: 1,
-          },
         });
 
         await tx.tenantMembership.create({
@@ -211,18 +236,12 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
         throw new ConviteInvalidoException('nao-encontrado');
       }
 
-      // A partir daqui a sessão é a DA empresa do convite, e o `updateMany`
-      // abaixo só alcança o convite dela.
-      await abrirEscopo(tx, escopoDoTenant(atual.tenantId));
-
-      const consumido = await tx.invitation.updateMany({
-        where: { id: atual.id, acceptedAt: null },
-        data: { acceptedAt: new Date() },
-      });
-      if (consumido.count !== 1) {
-        throw new ConviteInvalidoException('ja-aceito');
-      }
-
+      // pt-BR (Fase 10 — a correção): a conta nova nasce no bucket de SISTEMA,
+      // que é onde a sessão ainda está (a linha 222). MEDIDO: escrita depois do
+      // estreitamento, ela morria em `42501` — a `users_insercao` exige
+      // `escopo_atual() = '*'`. Mesma razão de `provisionarEmpresaPropria`, e
+      // pelo mesmo motivo a policy não afrouxa: `memberships_insercao` já deixa
+      // a sessão de empresa criar membership na própria empresa.
       if (novaConta !== null) {
         await tx.user.create({
           data: {
@@ -239,6 +258,18 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
             version: 1,
           },
         });
+      }
+
+      // A partir daqui a sessão é a DA empresa do convite, e o `updateMany`
+      // abaixo só alcança o convite dela.
+      await abrirEscopo(tx, escopoDoTenant(atual.tenantId));
+
+      const consumido = await tx.invitation.updateMany({
+        where: { id: atual.id, acceptedAt: null },
+        data: { acceptedAt: new Date() },
+      });
+      if (consumido.count !== 1) {
+        throw new ConviteInvalidoException('ja-aceito');
       }
 
       await tx.tenantMembership.create({

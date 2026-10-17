@@ -96,7 +96,7 @@ export class UserUseCases {
 
   // ----- CREATE -----
 
-  async criarUser(input: CreateUserInput): Promise<UserOutput> {
+  async criarUser(input: CreateUserInput, tenantId: string | null): Promise<UserOutput> {
     const ctx = AuditContextStore.get();
 
     // 1. Validar input no nível application (campos não-vazios antes de criar VO)
@@ -114,7 +114,7 @@ export class UserUseCases {
 
     // 2. Email uniqueness check (application-level, antes de chamar VO)
     const emailVO = Email.create(input.email);
-    const existing = await this.userRepo.findByEmail(emailVO);
+    const existing = await this.userRepo.findByEmail(emailVO, tenantId);
     if (existing !== null) {
       throw new ApplicationEmailAlreadyInUseException(emailVO.value);
     }
@@ -148,7 +148,7 @@ export class UserUseCases {
     //    órfã para sempre, porque o rollback do `$transaction` de tenancy não
     //    alcança uma escrita que já saiu daqui.
     if (input.destino === undefined) {
-      await this.userRepo.save(user, 0);
+      await this.userRepo.save(user, 0, tenantId);
     } else {
       const usuario = {
         id: user.id().value,
@@ -176,21 +176,24 @@ export class UserUseCases {
 
   // ----- READ -----
 
-  async obterPorId(input: GetUserByIdInput): Promise<UserOutput> {
+  async obterPorId(input: GetUserByIdInput, tenantId: string | null): Promise<UserOutput> {
     const id = UserId.create(input.id);
-    const user = await this.userRepo.findById(id);
+    const user = await this.userRepo.findById(id, tenantId);
     if (user === null) {
       throw new ApplicationResourceNotFoundException('User', id.value);
     }
     return toUserOutput(user);
   }
 
-  async listar(input: ListUsersInput): Promise<ListUsersOutput> {
-    const page = await this.userRepo.list({
-      cursor: input.cursor ?? null,
-      limit: input.limit,
-      includeDeleted: input.includeDeleted === true,
-    });
+  async listar(input: ListUsersInput, tenantId: string | null): Promise<ListUsersOutput> {
+    const page = await this.userRepo.list(
+      {
+        cursor: input.cursor ?? null,
+        limit: input.limit,
+        includeDeleted: input.includeDeleted === true,
+      },
+      tenantId,
+    );
     return {
       users: page.users.map(toUserOutput),
       nextCursor: page.nextCursor,
@@ -199,10 +202,10 @@ export class UserUseCases {
 
   // ----- UPDATE (rename / email) -----
 
-  async atualizarNome(input: UpdateUserNameInput): Promise<UserOutput> {
+  async atualizarNome(input: UpdateUserNameInput, tenantId: string | null): Promise<UserOutput> {
     const ctx = AuditContextStore.get();
     const id = UserId.create(input.id);
-    const user = await this.userRepo.findById(id);
+    const user = await this.userRepo.findById(id, tenantId);
     if (user === null) {
       throw new ApplicationResourceNotFoundException('User', id.value);
     }
@@ -215,15 +218,15 @@ export class UserUseCases {
     } catch (e) {
       this.translateDomainException(e, 'User', id.value);
     }
-    await this.userRepo.save(user, input.expectedVersion);
+    await this.userRepo.save(user, input.expectedVersion, tenantId);
     await this.emitAuditForEvents(user);
     return toUserOutput(user);
   }
 
-  async atualizarEmail(input: UpdateUserEmailInput): Promise<UserOutput> {
+  async atualizarEmail(input: UpdateUserEmailInput, tenantId: string | null): Promise<UserOutput> {
     const ctx = AuditContextStore.get();
     const id = UserId.create(input.id);
-    const user = await this.userRepo.findById(id);
+    const user = await this.userRepo.findById(id, tenantId);
     if (user === null) {
       throw new ApplicationResourceNotFoundException('User', id.value);
     }
@@ -235,7 +238,7 @@ export class UserUseCases {
     // Email-uniqueness check ANTES de mutar
     const novoEmailVO = Email.create(input.novoEmail);
     if (user.email().value !== novoEmailVO.value) {
-      const existing = await this.userRepo.findByEmail(novoEmailVO);
+      const existing = await this.userRepo.findByEmail(novoEmailVO, tenantId);
       if (existing !== null && existing.id().value !== id.value) {
         throw new ApplicationEmailAlreadyInUseException(novoEmailVO.value);
       }
@@ -246,17 +249,17 @@ export class UserUseCases {
     } catch (e) {
       this.translateDomainException(e, 'User', id.value);
     }
-    await this.userRepo.save(user, input.expectedVersion);
+    await this.userRepo.save(user, input.expectedVersion, tenantId);
     await this.emitAuditForEvents(user);
     return toUserOutput(user);
   }
 
   // ----- SOFT DELETE -----
 
-  async softDelete(input: SoftDeleteUserInput): Promise<UserOutput> {
+  async softDelete(input: SoftDeleteUserInput, tenantId: string | null): Promise<UserOutput> {
     const ctx = AuditContextStore.get();
     const id = UserId.create(input.id);
-    const user = await this.userRepo.findById(id);
+    const user = await this.userRepo.findById(id, tenantId);
     if (user === null) {
       throw new ApplicationResourceNotFoundException('User', id.value);
     }
@@ -269,7 +272,7 @@ export class UserUseCases {
     } catch (e) {
       this.translateDomainException(e, 'User', id.value);
     }
-    await this.userRepo.save(user, input.expectedVersion);
+    await this.userRepo.save(user, input.expectedVersion, tenantId);
     await this.emitAuditForEvents(user);
 
     // Soft-delete também vai para o archive
@@ -287,13 +290,13 @@ export class UserUseCases {
 
   // ----- RESTORE -----
 
-  async restaurar(input: RestoreUserInput): Promise<UserOutput> {
+  async restaurar(input: RestoreUserInput, tenantId: string | null): Promise<UserOutput> {
     const ctx = AuditContextStore.get();
     const id = UserId.create(input.id);
     // includeDeleted: precisamos carregar o agregado mesmo soft-deleted
     // para então restaurá-lo. Default (filter) seria null aqui.
     const findOptions: FindByIdOptions = { includeDeleted: true };
-    const user = await this.userRepo.findById(id, findOptions);
+    const user = await this.userRepo.findById(id, tenantId, findOptions);
     if (user === null) {
       throw new ApplicationResourceNotFoundException('User', id.value);
     }
@@ -306,7 +309,7 @@ export class UserUseCases {
     } catch (e) {
       this.translateDomainException(e, 'User', id.value);
     }
-    await this.userRepo.save(user, input.expectedVersion);
+    await this.userRepo.save(user, input.expectedVersion, tenantId);
     await this.emitAuditForEvents(user);
     return toUserOutput(user);
   }

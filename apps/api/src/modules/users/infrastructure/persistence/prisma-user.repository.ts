@@ -20,6 +20,11 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service.js';
+import {
+  comEscopo,
+  escopoDoTenant,
+  type ClienteTransacional,
+} from '../../../../shared/infrastructure/prisma/escopo.js';
 import type {
   UserRepositoryPort,
   UserListInput,
@@ -58,89 +63,90 @@ export class PrismaUserRepository implements UserRepositoryPort {
    *
    * Devolve o agregado persistido (snapshot via User.restaurarDePersistencia).
    */
-  async save(user: User, expectedVersion: number): Promise<User> {
+  async save(user: User, expectedVersion: number, tenantId: string | null): Promise<User> {
+    const escopo = escopoDoTenant(tenantId);
     const row = UserPrismaMapper.toPersistence(user);
     const id = user.id().value;
 
-    // INSERT path: row ainda não existe no banco.
-    // Usamos `create` direto; um conflito de unicidade aqui tem DUAS causas
-    // possíveis — race no `id` (outro processo gravou o mesmo id) e colisão no
-    // `email` (@unique que não sabe de `deletedAt`). O `catch` abaixo separa as
-    // duas em vez de tratar as duas como conflito de concorrência.
-    const existing = await this.prisma.user.findUnique({ where: { id } });
-    if (existing === null) {
-      if (expectedVersion !== 0) {
-        // Caller disse que esperava versão N>0 mas o agregado sumiu.
-        throw new ConcurrencyException(expectedVersion, null);
-      }
-      try {
-        await this.prisma.user.create({ data: row });
-      } catch (erro) {
-        throw await this.traduzirFalhaDeUnicidade(erro, {
-          id,
-          email: row.email,
-          expectedVersion,
-          esperavaLinhaAusente: true,
-        });
-      }
-      return this.loadSnapshot(id);
-    }
+    // Qual caminho foi percorrido, para o `catch` saber o que perguntar.
+    // Fica FORA do callback porque o `catch` roda depois que a transação
+    // morreu — e transação morta não responde a `findUnique`.
+    let esperavaLinhaAusente = false;
 
-    // UPDATE path: aplica lock otimista via WHERE version=expected.
-    //
-    // pt-BR (2026-10-08): o `try`/`catch` NÃO é decoração. O `updateMany` grava
-    // `email`, e o índice `@unique` do schema (prisma/schema.prisma:21) não
-    // sabe de `deletedAt` — a linha soft-deleted continua segurando o email.
-    // O pré-check de `atualizarEmail` (user-use-cases.ts:175) usa
-    // `findByEmail`, que filtra soft-deleted, então ele libera a mutação e o
-    // P2002 estoura aqui. Sem tradução, esse erro cru vira **500**: um email
-    // que o usuário lê como "já cadastrado" chega à tela como falha genérica
-    // de servidor. É a MESMA classe de defeito do INSERT, na metade que o
-    // conserto do INSERT não cobria.
-    let updated;
     try {
-      updated = await this.prisma.user.updateMany({
-        where: { id, version: expectedVersion },
-        data: {
-          email: row.email,
-          name: row.name,
-          // ⚠️ `passwordHash` NÃO pode faltar aqui. O `updateMany` grava
-          // uma lista explícita de colunas — omitir o campo NÃO o mantém,
-          // o que seria inofensivo se o objetivo fosse preservar, mas é o
-          // caminho de `trocarSenha()` (Fase 4+): sem esta linha a troca
-          // de senha grava a hash ANTIGA e o login passa a falhar com a
-          // senha nova, sem erro em lugar nenhum. `rename`/`alterarEmail`
-          // reescrevem o mesmo campo com o valor que já estava no
-          // agregado, então aqui o efeito é idempotente.
-          passwordHash: row.passwordHash,
-          // pt-BR (#93.1 — RBAC, 2026-10-16): profileId é gravado aqui
-          // para suportar o mutator `atribuirPerfil()`. Sem isto, mudar
-          // o profile do user não persiste.
-          profileId: row.profileId,
-          updatedAt: row.updatedAt,
-          updatedBy: row.updatedBy,
-          deletedAt: row.deletedAt,
-          deletedBy: row.deletedBy,
-          // Não incrementamos version manualmente — confiamos no mutator que já
-          // bumped no agregado; só persistimos o estado final.
-          version: row.version,
-        },
+      return await comEscopo(this.prisma, escopo, async (tx) => {
+        // INSERT path: row ainda não existe no banco.
+        // Usamos `create` direto; um conflito de unicidade aqui tem DUAS causas
+        // possíveis — race no `id` (outro processo gravou o mesmo id) e colisão no
+        // `email` (@unique que não sabe de `deletedAt`). O `catch` abaixo separa as
+        // duas em vez de tratar as duas como conflito de concorrência.
+        const existing = await tx.user.findUnique({ where: { id } });
+        if (existing === null) {
+          if (expectedVersion !== 0) {
+            // Caller disse que esperava versão N>0 mas o agregado sumiu.
+            throw new ConcurrencyException(expectedVersion, null);
+          }
+          esperavaLinhaAusente = true;
+          await tx.user.create({ data: row });
+          return this.loadSnapshot(tx, id);
+        }
+
+        // UPDATE path: aplica lock otimista via WHERE version=expected.
+        //
+        // pt-BR (2026-10-08): o `try`/`catch` NÃO é decoração. O `updateMany` grava
+        // `email`, e o índice `@unique` do schema (prisma/schema.prisma:21) não
+        // sabe de `deletedAt` — a linha soft-deleted continua segurando o email.
+        // O pré-check de `atualizarEmail` (user-use-cases.ts:175) usa
+        // `findByEmail`, que filtra soft-deleted, então ele libera a mutação e o
+        // P2002 estoura aqui. Sem tradução, esse erro cru vira **500**: um email
+        // que o usuário lê como "já cadastrado" chega à tela como falha genérica
+        // de servidor. É a MESMA classe de defeito do INSERT, na metade que o
+        // conserto do INSERT não cobria.
+        esperavaLinhaAusente = false;
+        const updated = await tx.user.updateMany({
+          where: { id, version: expectedVersion },
+          data: {
+            email: row.email,
+            name: row.name,
+            // ⚠️ `passwordHash` NÃO pode faltar aqui. O `updateMany` grava
+            // uma lista explícita de colunas — omitir o campo NÃO o mantém,
+            // o que seria inofensivo se o objetivo fosse preservar, mas é o
+            // caminho de `trocarSenha()` (Fase 4+): sem esta linha a troca
+            // de senha grava a hash ANTIGA e o login passa a falhar com a
+            // senha nova, sem erro em lugar nenhum. `rename`/`alterarEmail`
+            // reescrevem o mesmo campo com o valor que já estava no
+            // agregado, então aqui o efeito é idempotente.
+            passwordHash: row.passwordHash,
+            // pt-BR (#93.1 — RBAC, 2026-10-16): profileId é gravado aqui
+            // para suportar o mutator `atribuirPerfil()`. Sem isto, mudar
+            // o profile do user não persiste.
+            profileId: row.profileId,
+            updatedAt: row.updatedAt,
+            updatedBy: row.updatedBy,
+            deletedAt: row.deletedAt,
+            deletedBy: row.deletedBy,
+            // Não incrementamos version manualmente — confiamos no mutator que já
+            // bumped no agregado; só persistimos o estado final.
+            version: row.version,
+          },
+        });
+
+        if (updated.count === 0) {
+          const actual = await tx.user.findUnique({ where: { id } });
+          throw new ConcurrencyException(expectedVersion, actual?.version ?? null);
+        }
+
+        return this.loadSnapshot(tx, id);
       });
     } catch (erro) {
       throw await this.traduzirFalhaDeUnicidade(erro, {
         id,
         email: row.email,
         expectedVersion,
-        esperavaLinhaAusente: false,
+        esperavaLinhaAusente,
+        tenantId,
       });
     }
-
-    if (updated.count === 0) {
-      const actual = await this.prisma.user.findUnique({ where: { id } });
-      throw new ConcurrencyException(expectedVersion, actual?.version ?? null);
-    }
-
-    return this.loadSnapshot(id);
   }
 
   /**
@@ -199,10 +205,16 @@ export class PrismaUserRepository implements UserRepositoryPort {
       email: string;
       expectedVersion: number;
       esperavaLinhaAusente: boolean;
+      tenantId: string | null;
     },
   ): Promise<unknown> {
     if (contexto.esperavaLinhaAusente) {
-      const atual = await this.prisma.user.findUnique({ where: { id: contexto.id } });
+      // Roda FORA da transação que já morreu: uma transação abortada não
+      // responde a `findUnique` (`current transaction is aborted`), e o P2002
+      // aborta. Por isso `save()` fecha o escopo antes de chegar aqui.
+      const atual = await comEscopo(this.prisma, escopoDoTenant(contexto.tenantId), (tx) =>
+        tx.user.findUnique({ where: { id: contexto.id } }),
+      );
       if (atual !== null) {
         return new ConcurrencyException(contexto.expectedVersion, atual.version);
       }
@@ -220,8 +232,14 @@ export class PrismaUserRepository implements UserRepositoryPort {
    * - `options.includeDeleted === true`: retorna o agregado mesmo soft-deleted,
    *   usado por fluxos que precisam operar sobre ele (ex: `UserUseCases.restaurar`).
    */
-  async findById(id: UserId, options?: FindByIdOptions): Promise<User | null> {
-    const row = await this.prisma.user.findUnique({ where: { id: id.value } });
+  async findById(
+    id: UserId,
+    tenantId: string | null,
+    options?: FindByIdOptions,
+  ): Promise<User | null> {
+    const row = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+      tx.user.findUnique({ where: { id: id.value } }),
+    );
     if (row === null) return null;
     if (!options?.includeDeleted && row.deletedAt !== null) return null;
     return UserPrismaMapper.toDomain(row);
@@ -230,8 +248,10 @@ export class PrismaUserRepository implements UserRepositoryPort {
   /**
    * findByEmail: o VO já normaliza para lowercase. Filtra soft-deleted.
    */
-  async findByEmail(email: Email): Promise<User | null> {
-    const row = await this.prisma.user.findUnique({ where: { email: email.value } });
+  async findByEmail(email: Email, tenantId: string | null): Promise<User | null> {
+    const row = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+      tx.user.findUnique({ where: { email: email.value } }),
+    );
     if (row === null) return null;
     if (row.deletedAt !== null) return null;
     return UserPrismaMapper.toDomain(row);
@@ -241,20 +261,26 @@ export class PrismaUserRepository implements UserRepositoryPort {
    * Lista com cursor opaco (id do último item) e includeDeleted opcional.
    * Ordena por createdAt desc para casar com o índice do schema; usa id como
    * tie-breaker determinístico via ordem do id.
+   *
+   * ⚠️ O `where` NÃO filtra por empresa, e é a policy que filtra. Sob escopo de
+   * SISTEMA (`tenantId = null`) a listagem é de todo mundo — que é o que o
+   * admin global precisa. Sob escopo de empresa, a RLS devolve só os membros.
    */
-  async list(input: UserListInput): Promise<UserListResult> {
+  async list(input: UserListInput, tenantId: string | null): Promise<UserListResult> {
     const includeDeleted = input.includeDeleted === true;
     const where = includeDeleted ? {} : { deletedAt: null };
 
     // Cursor opaco = id da última row da página anterior; pegamos `take=limit+1`
     // para detectar se há próxima página sem count(*) custoso.
     const cursor = input.cursor ? { id: input.cursor } : undefined;
-    const rows = await this.prisma.user.findMany({
-      where,
-      ...(cursor ? { cursor, skip: 1 } : {}),
-      take: input.limit + 1,
-      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
-    });
+    const rows = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+      tx.user.findMany({
+        where,
+        ...(cursor ? { cursor, skip: 1 } : {}),
+        take: input.limit + 1,
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      }),
+    );
 
     const hasMore = rows.length > input.limit;
     const page = hasMore ? rows.slice(0, input.limit) : rows;
@@ -270,8 +296,8 @@ export class PrismaUserRepository implements UserRepositoryPort {
    * que mutações no agregado devolvido pelo caller afetem o que está
    * persistido). Espelha o `clone()` do InMemoryUserRepository.
    */
-  private async loadSnapshot(id: string): Promise<User> {
-    const row = await this.prisma.user.findUnique({ where: { id } });
+  private async loadSnapshot(tx: ClienteTransacional, id: string): Promise<User> {
+    const row = await tx.user.findUnique({ where: { id } });
     if (row === null) {
       // Em teoria inalcançável: só chamamos após persistir. Se acontecer,
       // propaga como ConcurrencyException(expectedVersion=?, actual=null).
@@ -286,9 +312,11 @@ export class PrismaUserRepository implements UserRepositoryPort {
    * deletar() antes do DELETE na tabela `profiles` para devolver 409
    * com mensagem útil em vez de quebrar a FK onDelete: Restrict.
    */
-  async countByProfile(profileId: string): Promise<number> {
-    return this.prisma.user.count({
-      where: { profileId, deletedAt: null },
-    });
+  async countByProfile(profileId: string, tenantId: string | null): Promise<number> {
+    return comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+      tx.user.count({
+        where: { profileId, deletedAt: null },
+      }),
+    );
   }
 }
