@@ -26,6 +26,7 @@ import {
 import { PrismaAuditService } from './prisma-audit.service.js';
 import { AuditContext } from '../domain/audit-context.vo.js';
 import { uriComoPapelDeRuntime } from '../../infrastructure/prisma/papel-de-runtime.js';
+import { abrirEscopo } from '../../infrastructure/prisma/escopo.js';
 
 describe('PrismaAuditService (Testcontainers)', () => {
   let ctx: TestContext;
@@ -408,6 +409,63 @@ describe('PrismaAuditService (Testcontainers)', () => {
         ),
       ).rejects.toThrow(/row-level security|42501/i);
       expect(await ctx.prisma.userHistory.count({ where: { entityId: BOB } })).toBe(1);
+    });
+
+    it('a trilha é append-only: DELETE é CONCEDIDO ao papel, apaga ZERO por falta de policy', async () => {
+      // O papel de runtime tem `DELETE` concedido — migration
+      // `20261020000000` §2 faz `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL
+      // TABLES` — e o código nunca chama `delete` nessas duas tabelas (só
+      // `create`, `findMany`, `findUnique` e `upsert`).
+      //
+      // O que fecha a trilha NÃO é a ausência da chamada: "ninguém chama" é um
+      // fato do código de hoje, e um `deleteMany` novo passaria por review como
+      // inofensivo. Fecha por não existir policy de DELETE — o RLS nega a linha.
+      // MEDIDO aqui porque a garantia que interessa é a do BANCO.
+      //
+      // ⚠️ Um `REVOKE DELETE` escopado seria a segunda trava sobre a mesma
+      // garantia. Não está aqui de propósito: ele não muda o que este teste
+      // mede, e quem quiser a redundância em vez do teste medido é decisão de
+      // endurecimento, não correção de um furo aberto.
+      const apagados = await runtime.$transaction(async (tx) => {
+        await abrirEscopo(tx, ACME);
+
+        // PRECONDIÇÃO MEDIDA: o escopo precisa estar DE PÉ. Sem esta leitura o
+        // teste passaria pelo motivo errado: se `abrirEscopo` virasse no-op,
+        // `usuario_no_escopo` devolveria falso para TUDO e o `DELETE` voltaria
+        // a dar 0 — verde, provando "a RLS barra a trilha" quando o que barra
+        // seria "não há escopo nenhum". O revisor independente apontou a
+        // lacuna; ela era real e fica fechada aqui.
+        const [escopoLido] = await tx.$queryRaw<Array<{ escopo_atual: string | null }>>`
+          SELECT escopo_atual() AS escopo_atual
+        `;
+        expect(escopoLido?.escopo_atual).toBe(ACME);
+
+        return tx.userHistory.deleteMany({ where: { entityId: ALICE } });
+      });
+
+      // Fail-closed e SEM erro: o DELETE não falha, ele não encontra a linha.
+      expect(apagados.count).toBe(0);
+
+      // O DONO confirma que a entrada continua lá. Sem isto, "count 0" é
+      // indistinguível de "já não havia nada" — o verde por conjunto vazio.
+      expect(await ctx.prisma.userHistory.count({ where: { entityId: ALICE } })).toBe(1);
+
+      // Mesma trava no arquivo: `archive()` é `upsert`, nunca há remoção.
+      const apagadosNoArquivo = await runtime.$transaction(async (tx) => {
+        await abrirEscopo(tx, ACME);
+        return tx.userArchive.deleteMany({ where: { entityId: ALICE } });
+      });
+      expect(apagadosNoArquivo.count).toBe(0);
+      expect(await ctx.prisma.userArchive.count({ where: { entityId: ALICE } })).toBe(1);
+
+      // DENTE DO TESTE: o DONO apaga a MESMA linha, e apaga. Sem isto, "count 0"
+      // acima é indistinguível de um `deleteMany` que simplesmente não rodou —
+      // e um teste que não pode falhar não prova que a trilha está fechada.
+      // O que bloqueia a sessão da aplicação é a AUSÊNCIA de policy, e é isso
+      // que o contraste entre as duas linhas mede.
+      const peloDono = await ctx.prisma.userHistory.deleteMany({ where: { entityId: ALICE } });
+      expect(peloDono.count).toBe(1);
+      expect(await ctx.prisma.userHistory.count({ where: { entityId: ALICE } })).toBe(0);
     });
   });
 });

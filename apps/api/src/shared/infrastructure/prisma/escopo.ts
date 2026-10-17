@@ -33,9 +33,25 @@ export type ClienteTransacional = Parameters<Parameters<PrismaClient['$transacti
  * Separado de `comEscopo` porque `provisionarEmpresaPropria` so sabe o id da
  * empresa DEPOIS de cria-la, dentro da mesma transacao — e o `WITH CHECK` do
  * perfil avalia o GUC no momento do insert. Ver o comentario do metodo.
+ *
+ * O `.toLowerCase()` e o UNICO lugar onde a forma canonica do escopo e
+ * garantida, e ele existe por uma MEDIDA. `no_escopo_atual` compara por TEXTO
+ * (`alvo::text = escopo_atual()`) porque o escopo pode valer `'*'`, que
+ * estouraria em `'*'::uuid`; e o Postgres canoniza `uuid` para MINUSCULAS ao
+ * converter para texto. Logo, um escopo em caixa alta nao casa com nada e o
+ * efeito nao e erro: e ZERO LINHAS. Membro legitimo com o header em caixa
+ * alta recebia 403 em todas as rotas de empresa, com dado existente, token
+ * valido e escopo valido.
+ *
+ * ⚠️ Por que aqui e nao no SQL: o banco nao tem como saber que o chamador
+ * quis dizer um uuid valido, e `lower()` no predicado transformaria um erro de
+ * validacao em silencio. Normalizar e translacao, e translacao pertence a
+ * quem traduz. `abrirEscopo` e o unico escritor do GUC do sistema, entao e o
+ * chocalho que cobre todos os call sites — inclusive o `tenant.id` do
+ * onboarding, que nao passa por `escopoDoTenant`.
  */
 export async function abrirEscopo(tx: ClienteTransacional, escopo: string): Promise<void> {
-  await tx.$queryRaw`SELECT set_config(${PARAMETRO_DE_ESCOPO}, ${escopo}, true)`;
+  await tx.$queryRaw`SELECT set_config(${PARAMETRO_DE_ESCOPO}, ${escopo.toLowerCase()}, true)`;
 }
 
 /**

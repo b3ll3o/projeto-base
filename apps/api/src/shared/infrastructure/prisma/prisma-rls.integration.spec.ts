@@ -29,6 +29,7 @@ import {
   type TestContext,
 } from '../../../../test/testcontainers-helper.js';
 import { ESCOPO_DE_SISTEMA, PAPEL_DE_RUNTIME, uriComoPapelDeRuntime } from './papel-de-runtime.js';
+import { abrirEscopo } from './escopo.js';
 
 describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
   let ctx: TestContext;
@@ -107,13 +108,18 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
    * `false` o parâmetro vazaria para a conexão do pool e a próxima requisição
    * herdaria o escopo da anterior — o defeito clássico de fazer `SET` em
    * conexão com pool.
+   *
+   * ⚠️ Chama `abrirEscopo`, a função DE PRODUÇÃO, em vez de repetir o
+   * `set_config` aqui. Repetir mediava uma cópia: um conserto na costura real
+   * deixaria este arquivo inteiro verde. Agora qualquer normalização do escopo
+   * que a aplicação faz é o que estes ~40 testes exercitam.
    */
   async function comEscopo<T>(
     escopo: string,
     fn: (tx: Prisma.TransactionClient) => Promise<T>,
   ): Promise<T> {
     return runtime.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT set_config('app.tenant_id', ${escopo}, true)`;
+      await abrirEscopo(tx, escopo);
       return fn(tx);
     });
   }
@@ -137,6 +143,53 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
     // Sem esta linha, um papel superuser passaria TODOS os testes abaixo e o
     // arquivo inteiro mediria nada.
     expect(papel).toEqual([{ rolname: PAPEL_DE_RUNTIME, rolsuper: false, rolbypassrls: false }]);
+  });
+
+  it('o papel de runtime NAO tem nenhum privilegio em `_prisma_migrations`', async () => {
+    // `GRANT ... ON ALL TABLES IN SCHEMA public` alcança `_prisma_migrations`
+    // tanto quanto alcança as tabelas de negócio — e ela NÃO tem RLS, então é a
+    // única das 9 onde o `DELETE` concedido não encontra trava no banco.
+    // Migration `20261020000003`.
+    //
+    // ⚠️ O privado é MEDIDO pelo DONO (`ctx.prisma`), não pela sessão da
+    // aplicação: perguntar a `app_runtime` se ela tem privilégio responderia
+    // "não" mesmo com o privilégio concedido, porque a própria lack de
+    // privilégio esconde a linha da consulta. Um gate cego para a própria coisa
+    // que mede.
+    const privilegios = await ctx.prisma.$queryRaw<Array<{ table_name: string }>>`
+      SELECT table_name FROM information_schema.table_privileges
+      WHERE grantee = ${PAPEL_DE_RUNTIME} AND table_schema = 'public'
+        AND table_name = '_prisma_migrations'
+    `;
+
+    expect(privilegios).toEqual([]);
+
+    // CONTROLE POSITIVO: o privilégio continua lá para o DONO, e as tabelas de
+    // negócio continuam com o que a RLS espera. Sem isto, "não tem privilégio
+    // nenhum" também seria verdade de uma sessão vazia ou de uma consulta que
+    // não achou nada.
+    const doDono = await ctx.prisma.$queryRaw<Array<{ privilege_type: string }>>`
+      SELECT privilege_type FROM information_schema.table_privileges
+      WHERE grantee = current_user AND table_schema = 'public'
+        AND table_name = '_prisma_migrations'
+    `;
+    expect(doDono.length).toBeGreaterThan(0);
+
+    const negocio = await ctx.prisma.$queryRaw<Array<{ privilege_type: string }>>`
+      SELECT privilege_type FROM information_schema.table_privileges
+      WHERE grantee = ${PAPEL_DE_RUNTIME} AND table_schema = 'public'
+        AND table_name = 'tenant_memberships'
+    `;
+    // Uma linha por tipo de privilégio — MEDIDO: 4 (DELETE, INSERT, SELECT,
+    // UPDATE). O que importa é que NÃO é zero: as tabelas de negócio seguem com
+    // o que a RLS espera, e o `REVOKE` não vazou para elas.
+    expect(negocio.length).toBeGreaterThan(0);
+    expect(negocio.map((p) => p.privilege_type).sort()).toEqual([
+      'DELETE',
+      'INSERT',
+      'SELECT',
+      'UPDATE',
+    ]);
   });
 
   // ─────────────── leitura ───────────────
@@ -617,5 +670,41 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
     await expect(ctx.prisma.user.findUnique({ where: { id } })).resolves.toMatchObject({
       profileId: null,
     });
+  });
+
+  it('o MESMO escopo em caixa alta enxerga o mesmo dado — o texto do GUC é canônico', async () => {
+    // `no_escopo_atual` compara por TEXTO (`alvo::text = escopo_atual()`) porque
+    // `escopo_atual()` pode valer `'*'` e `'*'::uuid` estoura. O Postgres
+    // canoniza `uuid` para minúsculas ao converter para texto, então um escopo
+    // em caixa alta NUNCA casa.
+    //
+    // O efeito não é erro: é ZERO LINHAS. Membro legítimo mandando o header em
+    // caixa alta cai em 403 em todas as rotas de empresa, e nada no sintoma
+    // aponta para a caixa — o dado existe, o escopo é válido, o token é válido.
+    // É fail-closed (não vaza), e por isso mesmo assim é um defeito: o
+    // `UUID_RE` do guard aceita a forma em caixa alta (flag `/i`) e a devolvia
+    // sem canonizar.
+    const maiusculo = acmeId.toUpperCase();
+    // O dado do teste PRECISA ter letras: um uuid só de dígitos não distingue.
+    expect(maiusculo).not.toBe(acmeId);
+    expect(maiusculo).toMatch(/[A-F]/);
+
+    const porMaiusculo = await comEscopo(maiusculo, (tx) =>
+      tx.profile.findMany({ where: { slug: 'gestor-acme' } }),
+    );
+
+    expect(porMaiusculo).toHaveLength(1);
+
+    // CONTROLE POSITIVO: em minúsculas continua igual, e o bucket de SISTEMA
+    // (`'*'`) não passa pela comparação de uuid. Sem estes dois, "viu 1" pode
+    // ser o conserto ter virado "liberar tudo".
+    await expect(
+      comEscopo(acmeId, (tx) => tx.profile.findMany({ where: { slug: 'gestor-acme' } })),
+    ).resolves.toHaveLength(1);
+    await expect(
+      comEscopo(ESCOPO_DE_SISTEMA, (tx) =>
+        tx.profile.findMany({ where: { slug: { in: ['gestor-acme', 'gestor-globex'] } } }),
+      ),
+    ).resolves.toHaveLength(2);
   });
 });

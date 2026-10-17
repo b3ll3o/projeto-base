@@ -435,6 +435,28 @@ describe('JwtAuthGuard — X-Tenant-Id (Fase 3)', () => {
     expect(request.user?.tenantId).toBe(ACME);
   });
 
+  it('canonicaliza a caixa do header — o escopo que desce é minúsculo', async () => {
+    // `UUID_RE` tem flag `/i`, então a forma em caixa alta PASSA na validação e
+    // era devolvida crua. O Postgres canoniza `uuid` para minúsculas e a policy
+    // compara por TEXTO (`alvo::text = escopo_atual()`), então o escopo em caixa
+    // alta não casa com nada. O sintoma é membro legítimo recebendo 403 em tudo,
+    // sem erro que aponte a causa. MEDIDO contra Postgres em
+    // `prisma-rls.integration.spec.ts`.
+    const guard = makeGuard(makeIssuer());
+    const maiusculo = ACME.toUpperCase();
+    // O dado precisa ter letras: um uuid só de dígitos não distingue.
+    expect(maiusculo).toMatch(/[A-Z]/);
+
+    const ctx = makeContext({
+      authorization: 'Bearer abc.def.ghi',
+      headers: { 'x-tenant-id': maiusculo },
+    });
+    expect(await guard.canActivate(ctx)).toBe(true);
+
+    const request = ctx.switchToHttp().getRequest<{ user?: { tenantId?: string | null } }>();
+    expect(request.user?.tenantId).toBe(ACME);
+  });
+
   it('sem o header, tenantId é null — bucket do perfil global, não exceção', async () => {
     const guard = makeGuard(makeIssuer());
 

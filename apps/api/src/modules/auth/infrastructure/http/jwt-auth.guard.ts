@@ -110,7 +110,16 @@ function extractTenantId(raw: unknown): string | null {
       detail: 'X-Tenant-Id deve ser um UUID de empresa válido.',
     });
   }
-  return raw;
+  // pt-BR: o `UUID_RE` acima tem flag `/i` — a forma em caixa alta é um uuid
+  // VÁLIDO e não pode ser recusada. Mas ela não pode descer crua: o Postgres
+  // canoniza `uuid` para minúsculas e a policy compara por texto, então a
+  // caixa alta não casa com nada. Um validador que aceita a entrada e entrega
+  // uma forma que significa outra coisa é o defeito, e a falha é silenciosa
+  // (zero linhas, não erro). Canonicaliza na fronteira para que
+  // `request.user.tenantId` — e a chave do cache de perfil, que é o par
+  // (empresa, usuário) — tenham uma forma só. `abrirEscopo` normaliza de novo,
+  // porque é o único escritor do GUC e o resto dos call sites não vem daqui.
+  return raw.toLowerCase();
 }
 
 @Injectable()
