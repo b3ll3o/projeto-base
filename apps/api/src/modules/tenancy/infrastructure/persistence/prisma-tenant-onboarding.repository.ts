@@ -132,9 +132,21 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
         });
       });
     } catch (erro) {
-      // `slug` é o ÚNICO unique de `tenants`, então qualquer P2002 aqui é o
-      // slug — não há como este `catch` acusar aconstraints errada.
-      if (ehViolacaoDeUnicidade(erro)) {
+      // pt-BR (Fase 5, revisão — achado 2): o comentário anterior dizia que
+      // "`slug` é o ÚNICO unique de `tenants`, então qualquer P2002 aqui é o
+      // slug". Isso era FALSO e o código fazia o que o comentário dizia não
+      // fazer: `tx.user.create` (linha 109) está dentro deste mesmo `try` e
+      // `users.email` também é único. MEDIDO: `provisionarEmpresaPropria` com
+      // email já em uso respondia 409 EMPRESA_JA_EXISTE / "Já existe uma
+      // empresa com este identificador" — o cliente é mandado mudar o SLUG
+      // quando o que colide é o EMAIL, e seguir a dica dá retry infinito.
+      //
+      // O discriminador já existia, 70 linhas abaixo, criado por
+      // `emitirConvite` para exatamente isto. `consumirEEntrar` fica sem catch
+      // de propósito: lá o P2002 de `users.email` sobe cru, e o 500 resultante
+      // está documentado como `shortcut:` — só sob CORRIDA, porque o caminho
+      // comum já devolve 409 por `findByEmail` antes de chegar aqui.
+      if (ehViolacaoDeUnicidade(erro) && constraintQueEstourou(erro).includes('slug')) {
         throw new EmpresaJaExisteException(empresa.slug);
       }
       throw erro;

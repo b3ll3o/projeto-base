@@ -224,7 +224,13 @@ describe('E2E 12 — entrada na empresa (D5)', () => {
     expect(await e2e.ctx.prisma.invitation.count()).toBe(1);
   });
 
-  it('o segredo volta na resposta porque não há mailer — e NÃO no log', async () => {
+  // pt-BR (Fase 5, revisão — achado 4): o título anterior dizia "e NÃO no
+  // log", e o corpo não tinha NENHUMA assertion sobre log — o harness e2e não
+  // captura `Logger`, então a propriedade era vacuamente verdadeira e um
+  // `Logger.log(token)` futuro manteria o teste verde. Renomeei para o que o
+  // corpo afirma. Medir "o token não aparece no log" é uma tarefa de e2e com
+  // captura de log, não uma linha de assertion.
+  it('o segredo volta na resposta porque não há mailer', async () => {
     const { headers, empresa } = await abrirEmpresa('acme');
 
     const convite = await e2e.injetar({

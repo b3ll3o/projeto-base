@@ -11,9 +11,13 @@
 // quando a última escrita falha. Isso só se mede em banco de verdade, e é a
 // razão de este arquivo existir.
 //
-// O que a rollback prova de concreto: `slug` duplicado é a falha que o banco
-// resolve por último (a `users` e a `profiles` são as primeiras escritas), e
-// sem `$transaction` o banco ficaria com o usuário criado e a empresa não.
+// O que a rollback prova de concreto: a ÚLTIMA escrita falhar depois de as
+// outras três terem passado. Por isso o teste derruba `users.email`, que é a
+// quarta escrita — `slug` duplicado é a PRIMEIRA (`tx.tenant.create`), e uma
+// colisão ali não tem o que desfazer, então o teste passaria com o
+// `$transaction` apagado. MEDIDO: removendo o `$transaction`, `slug` repetido
+// deixa users=0 profiles=0 auth=0 memb=0; `email` repetido deixa
+// users(dup)=1 profiles=1 auth=7 memb=0.
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomUUID } from 'node:crypto';
@@ -110,7 +114,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
     expect(globais).toBe(0);
   });
 
-  it('slug repetido NÃO deixa conta nem empresa pela metade (é o rollback)', async () => {
+  it('slug repetido NÃO deixa conta nem empresa pela metade', async () => {
     await cleanDatabase(ctx.prisma);
     await ctx.prisma.tenant.create({ data: { name: 'ACME', slug: 'acme' } });
     const u = usuario('dono@acme.dev');
@@ -119,13 +123,57 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
       repo.provisionarEmpresaPropria(u, { nome: 'ACME', slug: 'acme' }),
     ).rejects.toBeInstanceOf(EmpresaJaExisteException);
 
-    // As três primeiras escritas do `$transaction` já tinham passado. Sem
-    // rollback, o usuário e o perfil admin existiriam para uma empresa que
-    // nunca foi criada — e um `users` sem membership é exatamente a conta
-    // que a Fase 4 resolve para zero permissões sem ninguém entender por quê.
+    expect(await ctx.prisma.tenant.count()).toBe(1);
     expect(await ctx.prisma.user.count({ where: { id: u.id } })).toBe(0);
     expect(await ctx.prisma.profile.count()).toBe(0);
     expect(await ctx.prisma.tenantMembership.count()).toBe(0);
+  });
+
+  // pt-BR (Fase 5, revisão): ESTE é o teste que sustenta a transação, e o
+  // primeiro NÃO sustentava. A colisão do `slug` é a primeira escrita do
+  // `$transaction`, então o `P2002` chega antes de `profile.create`,
+  // `authorization.createMany` e `tenantMembership.create` existirem — e um
+  // teste que passa com o `$transaction` removido não está medindo rollback,
+  // está medindo que a falha veio cedo demais para ter estragado alguma coisa.
+  // MEDIDO: com o `$transaction` virando IIFE sobre `this.prisma`, este teste
+  // abaixo fica VERMelho e o do `slug` continua verde.
+  it('email repetido NA QUARTA escrita não deixa tenant, perfil, autorizações nem membership (é o rollback)', async () => {
+    await cleanDatabase(ctx.prisma);
+    // A conta que já existe é a de outra pessoa — é ela que faz o
+    // `users.email` estourar, e o estourar é na 4ª escrita.
+    await ctx.prisma.user.create({
+      data: {
+        id: randomUUID(),
+        name: 'Outra',
+        email: 'dono@acme.dev',
+        passwordHash: 'x',
+        version: 1,
+      },
+    });
+    const u = usuario('dono@acme.dev');
+
+    // Uma chamada só para as duas propriedades: o erro NÃO é
+    // `EmpresaJaExisteException` (o `catch` discrimina a constraint, senão o
+    // cliente recebe 409 EMPRESA_JA_EXISTE apontando o campo errado) E nada
+    // sobrou no banco.
+    const erro = await repo.provisionarEmpresaPropria(u, { nome: 'ACME', slug: 'acme' }).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(erro).toBeInstanceOf(Error);
+    expect(erro).not.toBeInstanceOf(EmpresaJaExisteException);
+
+    // As três escritas ANTERIORES passaram. Sem rollback sobrariam um tenant
+    // sem dono, um perfil `admin` com TODAS as permissões do catálogo e uma
+    // membership órfã — o estado "conta sem empresa / perfil sem dono" que o
+    // cabeçalho deste arquivo diz que a transação impede. `authorization` é
+    // a assertion mais afiada: são 7 linhas que nenhuma das outras mede.
+    expect(await ctx.prisma.tenant.count()).toBe(0);
+    expect(await ctx.prisma.profile.count()).toBe(0);
+    expect(await ctx.prisma.authorization.count()).toBe(0);
+    expect(await ctx.prisma.tenantMembership.count()).toBe(0);
+    // A conta preexistente é de outra pessoa e não pode ser tocada.
+    expect(await ctx.prisma.user.count()).toBe(1);
   });
 
   it('o dono de uma empresa NÃO ganha perfil na empresa alheia', async () => {
