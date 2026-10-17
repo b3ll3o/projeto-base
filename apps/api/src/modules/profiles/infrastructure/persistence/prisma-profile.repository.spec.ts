@@ -18,6 +18,11 @@ type ProfileRow = {
   id: string;
   slug: string;
   name: string;
+  // pt-BR (Fase 2 — tenancy): `null`/ausente = perfil GLOBAL. O fake precisa
+  // deste campo para que `findFirst({ tenantId: null })` signifique alguma
+  // coisa — sem ele o duplo aceitaria qualquer linha, e o teste de
+  // `findBySlug` ficaria verde sobre uma consulta que não filtra nada.
+  tenantId?: string | null;
   isAdmin: boolean;
   isSystem: boolean;
   description: string | null;
@@ -37,6 +42,28 @@ class FakePrisma {
   /** força o próximo `authorization.createMany` a falhar (teste de rollback) */
   falharCreateMany = false;
 
+  /**
+   * Insere uma linha crua, sem passar pelo agregado.
+   *
+   * pt-BR (Fase 2 — tenancy): o agregado `Profile` não conhece `tenantId` (a
+   * D3 é do repositório de perfis de tenant, que é a Fase 4). Sem este seeding
+   * não há como escrever um teste que fala do escopo de empresa.
+   */
+  semear(row: Partial<ProfileRow> & { id: string; slug: string }): void {
+    this.#profiles.push({
+      name: '',
+      tenantId: null,
+      isAdmin: false,
+      isSystem: false,
+      description: null,
+      version: 1,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      authorizations: [],
+      ...row,
+    });
+  }
+
   profile = {
     findUnique: async (args: { where: { id?: string; slug?: string } }) => {
       const found = this.#profiles.find(
@@ -44,6 +71,24 @@ class FakePrisma {
           (args.where.id !== undefined && p.id === args.where.id) ||
           (args.where.slug !== undefined && p.slug === args.where.slug),
       );
+      return found === undefined ? null : { ...found };
+    },
+    // pt-BR (Fase 2 — tenancy): `slug` não é mais `@unique`, então `findBySlug`
+    // virou `findFirst` filtrando `tenantId: null` (só o escopo GLOBAL). O
+    // fake filtra de verdade — se devolvesse a primeira linha com o slug, um
+    // profile de tenant com o mesmo `slug` seria aceito e o teste passaria
+    // sobre a consulta errada.
+    findFirst: async (args: {
+      where: { id?: string; slug?: string; tenantId?: string | null };
+    }) => {
+      const found = this.#profiles.find((p) => {
+        if (args.where.id !== undefined && p.id !== args.where.id) return false;
+        if (args.where.slug !== undefined && p.slug !== args.where.slug) return false;
+        if (args.where.tenantId !== undefined && (p.tenantId ?? null) !== args.where.tenantId) {
+          return false;
+        }
+        return true;
+      });
       return found === undefined ? null : { ...found };
     },
     findMany: async () => this.#profiles.map((p) => ({ ...p })),
@@ -326,6 +371,41 @@ describe('PrismaProfileRepository', () => {
     await repo.save(p);
     const found = await repo.findBySlug({ value: 'meu-slug' } as never);
     expect(found).not.toBeNull();
+  });
+
+  // pt-BR (Fase 2 — tenancy, D3): o teste acima passa tanto com `findFirst`
+  // filtrando `tenantId: null` quanto sem filtro nenhum — a linha que ele
+  // cria é global. Este é o que dá dente: um perfil customizado de UMA
+  // empresa, com o mesmo slug, não pode vazar. Se `findBySlug` devolvesse
+  // "a primeira linha com esse slug", o PermissionsGuard autorizaria pelo
+  // perfil da empresa errada — silenciosamente.
+  it('findBySlug NÃO devolve o perfil de uma empresa com o mesmo slug', async () => {
+    fake.semear({
+      id: 'aaaaaaaa-0000-4000-8000-000000000001',
+      slug: 'meu-slug',
+      name: 'Acme',
+      tenantId: 't-acme',
+    });
+    const found = await repo.findBySlug({ value: 'meu-slug' } as never);
+    expect(found).toBeNull();
+  });
+
+  it('findBySlug prefere o global quando o de tenant tem o mesmo slug', async () => {
+    fake.semear({
+      id: 'aaaaaaaa-0000-4000-8000-000000000001',
+      slug: 'meu-slug',
+      name: 'Acme',
+      tenantId: 't-acme',
+    });
+    fake.semear({
+      id: 'aaaaaaaa-0000-4000-8000-000000000002',
+      slug: 'meu-slug',
+      name: 'Global',
+      tenantId: null,
+    });
+    const found = await repo.findBySlug({ value: 'meu-slug' } as never);
+    expect(found).not.toBeNull();
+    expect(found?.nome().value).toBe('Global');
   });
 
   it('delete remove o profile', async () => {

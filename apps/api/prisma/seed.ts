@@ -14,20 +14,42 @@ import { listAllPermissions } from '../src/shared/auth/permissions-catalog.js';
 
 const prisma = new PrismaClient();
 
+/**
+ * Encontra (ou cria) um perfil GLOBAL.
+ *
+ * pt-BR (Fase 2 — tenancy, 2026-10-16): o `@unique` de `profiles.slug` foi
+ * removido em favor de DOIS índices parciais em SQL puro, porque a D3 exige
+ * que duas empresas tenham ambas um perfil "manager". `upsert({ where: { slug } })`
+ * existia só enquanto `slug` era `@unique`; sem ele, `ProfileWhereUniqueInput`
+ * não tem mais esse campo e o seed não compila.
+ *
+ * O índice global é `WHERE tenant_id IS NULL`, então o par que ele garante é
+ * `(slug, tenantId: null)`. O Prisma tipa isso como `findFirst`, não como
+ * `where` único — não há como escrever `upsert` aqui. O `update: {}` que o
+ * antigo upsert fazia também era no-op, então devolver a linha existente
+ * mantém a idempotência sem custar uma query.
+ */
+async function upsertPerfilGlobal(
+  slug: string,
+  name: string,
+  isAdmin: boolean,
+): Promise<{ id: string }> {
+  const existente = await prisma.profile.findFirst({
+    where: { slug, tenantId: null },
+  });
+  if (existente !== null) {
+    return existente;
+  }
+  return prisma.profile.create({
+    data: { slug, name, isAdmin, isSystem: true },
+  });
+}
+
 async function main(): Promise<void> {
   console.log('Seed: criando profiles padrão...');
 
   // 1) perfil admin (is_admin=true + todas as permissions)
-  const adminProfile = await prisma.profile.upsert({
-    where: { slug: 'admin' },
-    create: {
-      slug: 'admin',
-      name: 'Administrador',
-      isAdmin: true,
-      isSystem: true,
-    },
-    update: {},
-  });
+  const adminProfile = await upsertPerfilGlobal('admin', 'Administrador', true);
 
   // 2) Atribui todas as permissions do catalog ao admin
   const allKeys = listAllPermissions();
@@ -43,16 +65,7 @@ async function main(): Promise<void> {
   console.log(`Seed: ${allKeys.length} permissions atribuídas ao profile 'admin'`);
 
   // 3) perfil viewer (deny-by-default; só o que for explicitamente dado)
-  await prisma.profile.upsert({
-    where: { slug: 'viewer' },
-    create: {
-      slug: 'viewer',
-      name: 'Visualizador',
-      isAdmin: false,
-      isSystem: true,
-    },
-    update: {},
-  });
+  await upsertPerfilGlobal('viewer', 'Visualizador', false);
 
   // 4) Atribui 'admin' ao primeiro user (idempotente)
   const firstUser = await prisma.user.findFirst({

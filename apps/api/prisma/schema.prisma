@@ -42,7 +42,11 @@ model User {
   // Relação: um User pertence a 0..1 Profile. Nullable para rollback /
   // usuários legados sem profile. onDelete: Restrict porque o admin precisa
   // reatribuir antes de deletar o Profile.
-  profile      Profile?  @relation(fields: [profileId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  profile     Profile?           @relation(fields: [profileId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  // D4: um User pode estar em N empresas. `users.profile_id` continua valendo
+  // (a Fase 4 troca só o caminho de leitura), mas o perfil efetivo passa a ser
+  // o do tenant — ver `multi-tenant-specialist` Passo 4.
+  memberships TenantMembership[]
 
   @@index([email])
   @@index([deletedAt])
@@ -95,25 +99,37 @@ model UserArchive {
 // Restrict + check explícito antes). Perfis de sistema (isSystem=true)
 // são protegidos no agregado (`marcarExcluido` lança).
 model Profile {
-  id          String    @id @default(uuid()) @db.Uuid
-  // Slug canônico: 'admin', 'manager', 'viewer'. Único, kebab-case, imutável
-  // após criação (renomear quebraria referências em audit logs). O `name` é
-  // o rótulo editável.
-  slug        String    @unique
+  id          String   @id @default(uuid()) @db.Uuid
+  // Slug canônico: 'admin', 'manager', 'viewer'. Kebab-case, imutável após
+  // criação (renomear quebraria referências em audit logs). O `name` é o
+  // rótulo editável.
+  //
+  // pt-BR (Fase 2 — tenancy, 2026-10-16): perdeu o `@unique`. A unicidade
+  // agora vem de DOIS índices parciais em SQL puro (migration
+  // `20261017000000_tenant_membership_invitation`), porque a D3 exige que
+  // duas empresas tenham ambas um perfil "manager" e que o "admin" global
+  // continue único. `@@unique([tenantId, slug])` não serviria: no Postgres
+  // NULL != NULL, então o seed duplicaria "admin" em silêncio.
+  slug        String
   name        String
   description String?
+  // NULL = perfil global (compartilhado por todas as empresas, é o caso do
+  // seed do #97). Preenchido = perfil customizado de UMA empresa.
+  tenantId    String?  @map("tenant_id") @db.Uuid
   // Bypass total: o guard dá true sem consultar Authorizations.
-  isAdmin     Boolean   @default(false) @map("is_admin")
+  isAdmin     Boolean  @default(false) @map("is_admin")
   // Perfil de sistema: protegido contra DELETE via use case.
-  isSystem    Boolean   @default(false) @map("is_system")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-  version     Int       @default(1)
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  version     Int      @default(1)
 
+  tenant         Tenant?         @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   authorizations Authorization[]
   users          User[]
 
   @@index([slug])
+  @@index([tenantId])
   @@map("profiles")
 }
 
@@ -140,4 +156,75 @@ model Authorization {
   @@index([profileId])
   @@index([permissionKey])
   @@map("authorizations")
+}
+
+// pt-BR (Fase 2 — tenancy, 2026-10-16): a empresa. `slug` é GLOBAL entre
+// empresas (é o identificador de URL), enquanto o slug de PERFIL é por tenant
+// (D3) — são dois escopos diferentes e por isso dois `@unique` diferentes.
+//
+// Sem soft-delete: apagar uma empresa é raro e o efeito (cascatear perfis,
+// memberships e convites) é destrutivo demais para `deletedAt` silencioso.
+model Tenant {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  version   Int      @default(1)
+
+  profiles    Profile[]
+  memberships TenantMembership[]
+  invitations Invitation[]
+
+  @@map("tenants")
+}
+
+// pt-BR (Fase 2 — tenancy, 2026-10-16): a identidade do usuário NA empresa.
+// É esta tabela que faz "1 conta, N empresas" (D4) ser verdade: o login
+// resolve por `users.email` (global) e o tenant entra depois, por header.
+//
+// `role` é o rótulo de tenant ('owner' | 'member') e NÃO substitui o RBAC: a
+// autorização fina continua em `profiles.authorizations`. Aqui é só "quem
+// pode administrar a empresa".
+model TenantMembership {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  role      String   @default("member")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  version   Int      @default(1)
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  // A D4 inteira: uma conta pode estar em N empresas, mas só UMA vez em cada.
+  @@unique([userId, tenantId])
+  @@index([tenantId])
+  @@index([userId])
+  @@map("tenant_memberships")
+}
+
+// pt-BR (Fase 2 — tenancy, 2026-10-16): a D5 — "empresa própria OU convite".
+// Um convite é POR EMAIL e por tenant: quem aceita precisa existir (ou criar
+// conta) e precisa estar autenticado, então o aceite acontece na Fase 4.
+model Invitation {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  email      String
+  role       String    @default("member")
+  // NULL = pendente. Preenchido = já consumida (aceite). Não há `revokedAt`
+  // nesta fase: revogar é um DELETE, e o histórico de convite não é dado
+  // regulado aqui.
+  acceptedAt DateTime? @map("accepted_at")
+  expiresAt  DateTime? @map("expires_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  version    Int       @default(1)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("invitations")
 }

@@ -38,8 +38,28 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
   }
 
   async findBySlug(slug: ReturnType<typeof makeProfileSlug>): Promise<Profile | null> {
-    const row = await this.prisma.profile.findUnique({
-      where: { slug: slug.value },
+    // pt-BR (Fase 2 — tenancy, 2026-10-16): `slug` deixou de ser `@unique` — a
+    // D3 exige que duas empresas tenham ambas um perfil "manager", então a
+    // unicidade passou para dois índices PARCIAIS em SQL (migration
+    // `20261017000000_...`), que o Prisma não sabe expressar em `findUnique`.
+    //
+    // Quem chama: `obterPorSlug` (`profiles.use-cases.ts:129`, hoje sem rota
+    // HTTP) e a checagem de slug duplicado do `criar` (`:179`, que é o
+    // `POST /admin/profiles`). NÃO é o `PermissionsGuard` nem o
+    // `UserProfileCacheService` — o guard resolve perfil por `findById`, via
+    // `users.profile_id`.
+    //
+    // Por que filtrar `tenantId: null` é o certo AGORA (e não um
+    // "deny-by-default" conveniente): `Profile.criar` não tem `tenantId`, então
+    // toda escrita da aplicação é global por construção, e
+    // `profiles_slug_global_uniq` garante exatamente o mesmo par que este
+    // código consulta. Código e índice estão coerentes por construção, não por
+    // sorte.
+    //
+    // curto por natureza: na Fase 4 este método passa a receber o tenant e a
+    // checagem de duplicado em `:179` precisa do mesmo escopo de empresa.
+    const row = await this.prisma.profile.findFirst({
+      where: { slug: slug.value, tenantId: null },
       include: { authorizations: { select: { permissionKey: true } } },
     });
     if (row === null) {
