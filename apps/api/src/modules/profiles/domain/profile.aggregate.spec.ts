@@ -64,6 +64,7 @@ describe('Profile (aggregate)', () => {
         description: 'desc',
         isAdmin: true,
         isSystem: true,
+        tenantId: null,
         authorizations: ['users.read'],
         createdAt: T0,
         updatedAt: T0,
@@ -72,6 +73,34 @@ describe('Profile (aggregate)', () => {
       expect(p.version()).toBe(5);
       expect(p.isAdmin()).toBe(true);
       expect(pullEvents(p)).toHaveLength(0);
+    });
+
+    // pt-BR (Fase 6 — tenancy): a DONA do perfil é o que decide se o dono da
+    // Acme pode vesti-lo. Sem este campo no agregado a autorização é
+    // INESCRITÍVEL — a única forma de saber de quem é o perfil seria a mesma
+    // consulta da membership que a regra precisa proteger.
+    it('hidrata o tenantId da row (quem é o DONO do perfil)', () => {
+      const base = {
+        id: '00000000-0000-0000-0000-000000000002',
+        slug: 'gestor',
+        name: 'Gestor',
+        description: null,
+        isAdmin: false,
+        isSystem: false,
+        authorizations: [] as readonly string[],
+        createdAt: T0,
+        updatedAt: T0,
+        version: 1,
+      };
+
+      expect(Profile.restaurarDePersistencia({ ...base, tenantId: 'tenant-acme' }).tenantId()).toBe(
+        'tenant-acme',
+      );
+      // `null` é o bucket GLOBAL (D3) — o perfil do seed serve a qualquer
+      // empresa. Não pode virar string vazia nem `undefined` aqui, senão a
+      // regra `perfil.tenantId ∈ {null, ator.tenantId}` passa a errar em
+      // silêncio.
+      expect(Profile.restaurarDePersistencia({ ...base, tenantId: null }).tenantId()).toBeNull();
     });
   });
 

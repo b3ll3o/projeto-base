@@ -16,8 +16,22 @@ export const PROFILE_REPOSITORY_PORT = Symbol('ProfileRepositoryPort');
 
 export interface ProfileRepositoryPort {
   findById(id: ProfileId): Promise<Profile | null>;
-  findBySlug(slug: ProfileSlug): Promise<Profile | null>;
-  list(): Promise<Profile[]>;
+  /**
+   * `tenantId` é o escopo DENTRO do qual o slug tem de ser único, e é a
+   * mesma noção dos dois índices parciais do banco: `null` = os perfis
+   * globais, preenchido = os daquela empresa. Sem este escopo a checagem de
+   * slug duplicado de `criar` não veria a empresa, e o `P2002` do índice
+   * parcial viraria 500 no lugar do 409.
+   */
+  findBySlug(slug: ProfileSlug, tenantId: string | null): Promise<Profile | null>;
+  /**
+   * ⚠️ `tenantId` aqui tem o sentido OPOSTO de `findBySlug`: `null` significa
+   * **sem filtro** (a lista inteira), não "só os globais". A diferença é
+   * proposital — `null` no `findBySlug` é o escopo do índice parcial, e o
+   * ator sem empresa é o admin global (conta do seed), que precisa ver tudo.
+   * Passar `string` devolve só os perfis DAQUELA empresa.
+   */
+  list(tenantId: string | null): Promise<Profile[]>;
   save(profile: Profile): Promise<Profile>;
   delete(id: ProfileId): Promise<void>;
 }

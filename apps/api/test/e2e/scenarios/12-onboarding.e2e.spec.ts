@@ -349,4 +349,129 @@ describe('E2E 12 — entrada na empresa (D5)', () => {
     expect(await e2e.ctx.prisma.tenant.count()).toBe(0);
     expect(await e2e.ctx.prisma.tenantMembership.count()).toBe(0);
   });
+
+  // ─────────────── atribuir perfil DENTRO da empresa (Fase 6) ───────────────
+  //
+  // Fecha a funcionalidade: até aqui a empresa recém-aberta tinha o dono com
+  // perfil e todo convidado entrava com ZERO permissões sem caminho para sair
+  // disso. Este bloco mede a escrita pela rota de verdade — guard, header,
+  // membership e CACHE — que nenhuma spec unitária mede.
+  //
+  // ⚠️ O perfil da empresa é semeado por Prisma direto, e não por HTTP:
+  // `Profile.criar` fixa `tenantId: null`, então não existe rota que crie
+  // perfil de empresa (medido; comentário em `profile.aggregate.ts`).
+  async function convidarEAceitar(
+    empresaId: string,
+    headers: Record<string, string>,
+    email: string,
+  ) {
+    const convidado = await criarUsuarioAutenticado(e2e, { nome: 'Ana', email });
+    const convite = await e2e.injetar({
+      method: 'POST',
+      url: `/api/v1/tenants/${empresaId}/invitations`,
+      headers,
+      payload: { email },
+    });
+    expect(convite.statusCode).toBe(201);
+    const { token } = JSON.parse(convite.body) as { token: string };
+    const aceite = await e2e.injetar({
+      method: 'POST',
+      url: '/api/v1/invitations/accept',
+      headers: convidado.headers,
+      payload: { token },
+    });
+    expect(aceite.statusCode).toBe(201);
+    return convidado;
+  }
+
+  /** Perfil DONO de uma empresa, com UMA permissão — assim o efeito é visível. */
+  async function perfilDaEmpresa(tenantId: string, slug: string, permissionKey: string) {
+    const perfil = await e2e.ctx.prisma.profile.create({
+      data: { slug, name: slug, isAdmin: false, isSystem: false, tenantId },
+    });
+    await e2e.ctx.prisma.authorization.create({
+      data: { profileId: perfil.id, permissionKey },
+    });
+    return perfil;
+  }
+
+  it('o dono da empresa dá perfil ao convidado, e a PRÓXIMA requisição já vê', async () => {
+    const { headers, empresa } = await abrirEmpresa('acme');
+    const convidado = await convidarEAceitar(empresa.id, headers, 'ana+perfil@acme.dev');
+    const operador = await perfilDaEmpresa(empresa.id, 'operador-acme', 'users.read');
+
+    // ⚠️ O `x-tenant-id` é ADDICIONADO aqui, e não herdado do helper:
+    // `criarUsuarioAutenticado` devolve só o `authorization`. Sem o header as
+    // três leituras abaixo caem no bucket GLOBAL (`users.profile_id`, vazio)
+    // e o teste passaria inteiro sem nunca tocar a membership da empresa.
+    const naEmpresa = { ...convidado.headers, 'x-tenant-id': empresa.id };
+
+    // Antes: o convidado entrou com zero permissões.
+    const antes = await e2e.injetar({
+      method: 'GET',
+      url: '/api/v1/me/profile',
+      headers: naEmpresa,
+    });
+    expect(JSON.parse(antes.body).permissions).toEqual([]);
+
+    const atribuicao = await e2e.injetar({
+      method: 'PUT',
+      url: `/api/v1/admin/users/${convidado.id}/profile`,
+      headers,
+      payload: { profileId: operador.id },
+    });
+    expect(atribuicao.statusCode).toBe(200);
+
+    // ⚠️ Esta leitura é a que pega a AUSÊNCIA do `invalidateUser`: o cache é
+    // por (usuário, empresa) e já foi aquecido pela chamada `antes`. MEDIDO:
+    // sem a invalidação, esta resposta volta com `[]`.
+    const depois = await e2e.injetar({
+      method: 'GET',
+      url: '/api/v1/me/profile',
+      headers: naEmpresa,
+    });
+    expect(depois.statusCode).toBe(200);
+    const lido = JSON.parse(depois.body) as { profileId: string; permissions: string[] };
+    expect(lido.profileId).toBe(operador.id);
+    expect(lido.permissions).toEqual(['users.read']);
+
+    // O `header` é o que decide o bucket: a MESMA conta, sem header, continua
+    // sem permissão nenhuma.
+    const semEmpresa = await e2e.injetar({
+      method: 'GET',
+      url: '/api/v1/me/profile',
+      headers: { authorization: convidado.headers.authorization },
+    });
+    expect(JSON.parse(semEmpresa.body).permissions).toEqual([]);
+  });
+
+  it('o dono da empresa NÃO veste o convidado com o admin GLOBAL (403, e nada é gravado)', async () => {
+    const { headers, empresa } = await abrirEmpresa('acme');
+    const convidado = await convidarEAceitar(empresa.id, headers, 'ana+admin@acme.dev');
+    // Perfil admin GLOBAL (`tenant_id IS NULL`), que é o do seed.
+    const adminGlobal = await e2e.ctx.prisma.profile.create({
+      data: {
+        slug: 'admin-global',
+        name: 'admin-global',
+        isAdmin: true,
+        isSystem: true,
+        tenantId: null,
+      },
+    });
+
+    const resposta = await e2e.injetar({
+      method: 'PUT',
+      url: `/api/v1/admin/users/${convidado.id}/profile`,
+      headers,
+      payload: { profileId: adminGlobal.id },
+    });
+
+    // R2: o `PermissionsGuard` aceitaria esse perfil em QUALQUER empresa, o
+    // que faria do admin global um bypass de tenant inteiro.
+    expect(resposta.statusCode).toBe(403);
+    const membership = await e2e.ctx.prisma.tenantMembership.findUniqueOrThrow({
+      where: { userId_tenantId: { userId: convidado.id, tenantId: empresa.id } },
+    });
+    expect(membership.profileId).toBeNull();
+  });
 });

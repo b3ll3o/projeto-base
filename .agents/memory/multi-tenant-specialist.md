@@ -123,13 +123,74 @@ Formato de entrada (a ser preenchido pelo agent):
 
 | Medida | Comando | Valor |
 |--------|---------|-------|
-| Writers de membership (`create`/`upsert` de `tenantMembership`) | `grep -rn "tenantMembership" apps/api/src --include=*.ts \| grep -v spec` | **2 linhas, ambas LEITURA** (`findFirst`, `count` no repositorio) — **0 escritas** |
+| Writers de membership (`create`/`upsert`/`update` de `tenantMembership`) | `grep -rn "tenantMembership\.\(create\|upsert\|update\|updateMany\)" apps/api/src --include=*.ts \| grep -v spec` | **v1.6.0: 3 escritas** (2 `create` no onboarding + 1 `updateMany` na Fase 6). Antes da Fase 6: **0 escritas** |
 | Leituras de perfil global | `grep -rn "\.profileId()" apps/api/src --include=*.ts \| grep -v spec` | **4 linhas, 1 delas de decisão**: `user.output.ts:35` e `user.prisma-mapper.ts:153` sao serializacao do DTO, `profiles.use-cases.ts:579` e comentario. So `profiles.use-cases.ts:586` le para decidir, de proposito (a escrita logo abaixo e na mesma coluna) |
 | Isolamento cross-tenant provado | `grep -c "  it(" apps/api/src/modules/tenancy/infrastructure/persistence/tenancy-migration.integration.spec.ts` | **19**, Postgres real |
 
 > ⚠️ A primeira linha muda o que a auditoria pode encontrar: ate a Fase 5 criar
 > membership, **nenhum achado de vazamento cross-tenant e exploit** — e codigo
 > exercitado so por spec. Nao reportar como P0 o que e latente.
+
+## Revisão v1.6.0 (2026-10-17, Fase 6 — a escrita do perfil por empresa)
+
+O achado `MT-4-3` (leitura resolvida, escrita não) fechou: existe agora
+`TenantMembershipRepositoryPort.atribuirPerfil`, chamada por
+`ProfileUseCases.atribuirProfileAoUser` quando o ator manda `X-Tenant-Id`.
+Cinco travas, todas no caminho da empresa: R1 perfil alheio, R2 admin global,
+R3 subconjunto, R4 remoção de admin da empresa, R5 alterar o próprio perfil.
+
+### Lição que generaliza: `where` de `updateMany` não vê o valor que ele escreve
+
+Duas propriedades que o filtro **não** pode ter, ambas medidas contra Postgres:
+
+1. `where: { profileId }` casa linhas que **já** têm aquele valor — toda
+   escrita nova dava `count: 0` e `atribuirPerfil` devolvia `false` 100% das
+   vezes. Um `updateMany` de mentira responde `count: 1` para qualquer `where`,
+   então a spec unitária que confere o `where` entregue **passa**.
+2. `where: { profile: { OR: [...] } }` filtra a linha que EXISTE — e a linha é
+   a MEMBERSHIP, não o perfil que está entrando. O filtro protegia o perfil já
+   vestido e deixava passar o da empresa vizinha (MEDIDO: devolvia `true` e
+   escrevia).
+
+Consequência de projeto: **a checagem de DONA do valor novo tem de ser uma
+leitura antes da escrita**, não um filtro. `profile.tenant_id` é imutável no
+agregado (`readonly #tenantId`, sem mutador), então ler-e-depois não tem
+corrida a fechar e dispensou `$transaction`.
+
+⚠️ Isso vale para todo `updateMany`/`update` condicional deste repo, e a
+armadilha do "verde pelo motivo errado" é dupla: o teste passa E a segurança
+está aberta. Spec unitária de repositório com mock **não** prova `where` —
+prova a intenção.
+
+### Falso positivo de spec: guarda pré-existente mascara a regra nova
+
+R1 e R2 nasceram verdes com mutação que as apaga. Motivo: com ator
+`isAdmin: false`, a guarda do #97 (`profile.isAdmin() && !ator.isAdmin`) e a de
+subconjunto já recusavam — a regra nova nunca era alcançada. A correção foi
+mudar o ATOR do teste para `isAdmin: true`, que é também o cenário real: quem
+admin dentro da empresa pode vestir alguém, mas só com perfil **daquela**
+empresa.
+
+Corolário de método: ao adicionar uma guarda nova, o teste precisa de um
+ator para quem **as guardas antigas não mordem**. Sem isso, "teste verde" é
+informação sobre as guardas antigas.
+
+E o mascaramento **não desaparece** por consertar o unitário: sobrevive no
+e2e, porque por HTTP o único perfil alheio que dá para alcançar é o de DONO
+da empresa, que nasce `isAdmin: true`, e a guarda seguinte (R2) recusa
+primeiro. MEDIDO (2026-10-17): R1 virada no-op (`dono !== null && false`)
+deixa o e2e 11 em 6/6 e derruba UM teste unitário. Ou seja, uma guarda pode ter
+dente e ainda assim não ter dente no nível superior — e "o e2e cobre" não é
+prova de que a guarda é exercitada, é prova de que o conjunto delas é. Para
+saber qual guarda um e2e mede, desligue uma de cada vez.
+
+### Helper de e2e não carrega o header de empresa
+
+`criarUsuarioAutenticado` devolve só `authorization`. Ler `GET /me/profile`
+com esses headers cai no bucket GLOBAL e devolve `[]` — que é o resultado
+esperado do "antes do perfil", então o teste inteiro passa sem tocar a
+membership da empresa. Medido: `profileId` veio `null` na leitura "depois" e
+denunciou. O header da empresa tem de ser montado à mão no spec.
 
 ## Triggers retroativos
 

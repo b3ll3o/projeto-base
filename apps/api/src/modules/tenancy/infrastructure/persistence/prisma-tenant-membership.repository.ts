@@ -77,6 +77,65 @@ export class PrismaTenantMembershipRepository implements TenantMembershipReposit
     return this.prisma.tenantMembership.count({ where: { profileId } });
   }
 
+  /**
+   * pt-BR (Fase 6): a escrita do perfil por empresa. `updateMany` e não
+   * `update` porque o `where` é o PORTÃO — perfil de outra empresa ou pessoa
+   * que não é membro caem em `count === 0` e viram `false`, em vez de uma
+   * escrita que a leitura rejeitaria em silêncio (200 que não muda nada, que é
+   * exatamente o defeito que esta fase fecha).
+   *
+   * O filtro de DONA é o MESMO conjunto do `findProfileId` acima, e mora na
+   * query pelo mesmo motivo: um filtro que ninguém pode esquecer porque está
+   * no `where`.
+   */
+  async atribuirPerfil(
+    userId: string,
+    tenantId: string,
+    profileId: string | null,
+  ): Promise<boolean> {
+    // ⚠️ POR QUE A DONA DO PERFIL É VERIFICADA FORA DO `where` — e é o que o
+    // spec de integração mediu. Duas mecanicas do Prisma empurram para cá:
+    //
+    //   1. `where` de `updateMany` NÃO pode filtrar pelo valor que está sendo
+    //      ESCRITO — ele casaria linhas que JÁ têm aquele valor, e `count`
+    //      daria 0 para toda escrita nova. (MEDIDO: `profileId` no `where`
+    //      fazia `atribuirPerfil` devolver `false` em 100% dos casos.)
+    //   2. `where` filtra a linha que EXISTE, e a linha pertence à membership,
+    //      não ao perfil novo. Filtrar `profile: { OR: [...] }` ali protege a
+    //      membership que hoje carrega o perfil — nada a ver com o perfil que
+    //      está entrando. (MEDIDO: vestir o perfil da GLOBEX numa membership da
+    //      ACME devolvia `true` e escrevia.)
+    //
+    // Sem o pré-acerto, a checagem de DONA só existiria na camada de cima
+    // (`ProfileUseCases` R1), e a porta perderia a propriedade de "ninguém
+    // esquece porque está aqui". `profile.tenant_id` é imutável no agregado
+    // (`readonly #tenantId`, sem mutador), então ler-e-depois-escrever não tem
+    // corrida a fechar: nenhuma escrita concorrente muda a dona entre as duas
+    // queries. Por isso NÃO há `$transaction` aqui — uma transação custaria
+    // uma conexão extra por atribuição sem fechar nada.
+    if (profileId !== null) {
+      const dona = await this.prisma.profile.findFirst({
+        where: { id: profileId, OR: [{ tenantId: null }, { tenantId }] },
+        select: { id: true },
+      });
+      if (dona === null) {
+        return false;
+      }
+    }
+    const r = await this.prisma.tenantMembership.updateMany({
+      where: {
+        userId,
+        tenantId,
+        // Mesmo fail-closed do `findProfileId`: a membership sobrevive ao
+        // soft-delete, e sem este filtro uma conta apagada com token ainda
+        // válido (15 min) voltaria a ter permissões na empresa.
+        user: { deletedAt: null },
+      },
+      data: { profileId },
+    });
+    return r.count === 1;
+  }
+
   async findRole(userId: string, tenantId: string): Promise<string | null> {
     // `user: { deletedAt: null }` pelo mesmo motivo do `findProfileId`: a
     // membership sobrevive ao soft-delete, e sem este filtro uma conta

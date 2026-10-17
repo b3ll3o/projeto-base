@@ -15,7 +15,6 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
 import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service.js';
 import {
-  TENANT_ONBOARDING_PORT,
   type ConviteParaAceitar,
   type ConviteParaEmitir,
   type ConvitePendente,

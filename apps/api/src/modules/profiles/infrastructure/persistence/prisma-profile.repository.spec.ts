@@ -91,7 +91,19 @@ class FakePrisma {
       });
       return found === undefined ? null : { ...found };
     },
-    findMany: async () => this.#profiles.map((p) => ({ ...p })),
+    // pt-BR (Fase 8): `findMany` passou a receber `where` (o filtro de
+    // empresa do `list`), e antes ele IGNORAVA o argumento — um teste de
+    // escopo escrito sobre este duplo seria verde com e sem o filtro, que é
+    // verde que não prova nada. Reusa o mesmo predicado do `findFirst`.
+    findMany: async (args?: { where?: { tenantId?: string | null } }) => {
+      const alvo = args?.where;
+      return this.#profiles
+        .filter((p) => {
+          if (alvo?.tenantId !== undefined && (p.tenantId ?? null) !== alvo.tenantId) return false;
+          return true;
+        })
+        .map((p) => ({ ...p }));
+    },
     create: async (args: { data: Record<string, unknown> }) => {
       this.ultimaCreate = args;
       const nested = args.data['authorizations'] as
@@ -111,6 +123,11 @@ class FakePrisma {
         id: args.data['id'] as string,
         slug: args.data['slug'] as string,
         name: args.data['name'] as string,
+        // pt-BR (Fase 8): a dona passa a ser gravada no `create`. Sem esta
+        // linha o fake descartaria o campo e todo perfil criado por teste
+        // nasceria global — o teste de `list` por empresa passaria a medir o
+        // fake, não o repositório.
+        tenantId: (args.data['tenantId'] as string | null) ?? null,
         isAdmin: args.data['isAdmin'] as boolean,
         isSystem: args.data['isSystem'] as boolean,
         description: args.data['description'] as string | null,
@@ -327,6 +344,7 @@ describe('PrismaProfileRepository', () => {
       description: null,
       isAdmin: false,
       isSystem: false,
+      tenantId: p.tenantId(),
       authorizations: p.authorizations().toLista(),
       createdAt: p.createdAt(),
       updatedAt: p.updatedAt(),
@@ -362,14 +380,30 @@ describe('PrismaProfileRepository', () => {
     const p2 = Profile.criar({ slug: 'bbb', name: 'Bbb Name', agora: new Date() });
     await repo.save(p1);
     await repo.save(p2);
-    const list = await repo.list();
+    const list = await repo.list(null);
     expect(list).toHaveLength(2);
+  });
+
+  // pt-BR (Fase 8): `list(tenantId)` com empresa devolve SÓ os dela. Sem este
+  // teste o filtro de `where` do `findMany` podia sumir e o único sinal seria
+  // o e2e — que é lento e não diz qual camada quebrou.
+  it('list com empresa devolve só os perfis DAQUELA empresa', async () => {
+    await repo.save(
+      Profile.criar({ slug: 'acme-g', name: 'Acme', tenantId: 't-acme', agora: new Date() }),
+    );
+    await repo.save(
+      Profile.criar({ slug: 'globex-g', name: 'Globex', tenantId: 't-globex', agora: new Date() }),
+    );
+    await repo.save(Profile.criar({ slug: 'global-g', name: 'Global', agora: new Date() }));
+
+    const daAcme = await repo.list('t-acme');
+    expect(daAcme.map((p) => p.slug().value)).toEqual(['acme-g']);
   });
 
   it('findBySlug encontra por slug', async () => {
     const p = Profile.criar({ slug: 'meu-slug', name: 'Meu Nome', agora: new Date() });
     await repo.save(p);
-    const found = await repo.findBySlug({ value: 'meu-slug' } as never);
+    const found = await repo.findBySlug({ value: 'meu-slug' } as never, null);
     expect(found).not.toBeNull();
   });
 
@@ -386,7 +420,7 @@ describe('PrismaProfileRepository', () => {
       name: 'Acme',
       tenantId: 't-acme',
     });
-    const found = await repo.findBySlug({ value: 'meu-slug' } as never);
+    const found = await repo.findBySlug({ value: 'meu-slug' } as never, null);
     expect(found).toBeNull();
   });
 
@@ -403,9 +437,30 @@ describe('PrismaProfileRepository', () => {
       name: 'Global',
       tenantId: null,
     });
-    const found = await repo.findBySlug({ value: 'meu-slug' } as never);
+    const found = await repo.findBySlug({ value: 'meu-slug' } as never, null);
     expect(found).not.toBeNull();
     expect(found?.nome().value).toBe('Global');
+  });
+
+  // pt-BR (Fase 8): o espelho do teste acima para o escopo de EMPRESA. Sem
+  // ele, um `findBySlug` que ignorasse o `tenantId` recebido devolveria o
+  // perfil GLOBAL de mesmo slug para o dono da empresa — que é o inverso do
+  // vazamento que os dois testes de cima fecham.
+  it('findBySlug com empresa devolve o perfil DA EMPRESA, não o global de mesmo slug', async () => {
+    fake.semear({
+      id: 'aaaaaaaa-0000-4000-8000-000000000001',
+      slug: 'meu-slug',
+      name: 'Acme',
+      tenantId: 't-acme',
+    });
+    fake.semear({
+      id: 'aaaaaaaa-0000-4000-8000-000000000002',
+      slug: 'meu-slug',
+      name: 'Global',
+      tenantId: null,
+    });
+    const found = await repo.findBySlug({ value: 'meu-slug' } as never, 't-acme');
+    expect(found?.nome().value).toBe('Acme');
   });
 
   it('delete remove o profile', async () => {

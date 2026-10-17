@@ -24,7 +24,13 @@ const PERFIL = '0190a8b6-0000-4000-8000-0000000000f1';
 /** Prisma de mentira que só registra o `where` — ver nota sobre teeth no fim. */
 function prismaFalso() {
   return {
-    tenantMembership: { findFirst: vi.fn().mockResolvedValue(null), count: vi.fn() },
+    tenantMembership: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      count: vi.fn(),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
+    // Fase 6: o pré-acerto de DONA lê o perfil antes de escrever.
+    profile: { findFirst: vi.fn().mockResolvedValue({ id: PERFIL }) },
     user: { findFirst: vi.fn().mockResolvedValue(null) },
   };
 }
@@ -118,5 +124,81 @@ describe('PrismaTenantMembershipRepository.countByProfile', () => {
     expect(prisma.tenantMembership.count.mock.calls[0]![0]).toEqual({
       where: { profileId: PERFIL },
     });
+  });
+});
+
+// pt-BR (Fase 6 — tenancy): a ESCRITA do perfil por empresa. É a peça que
+// faltava desde a Fase 2 — até aqui ninguém escrevia `tenant_memberships.
+// profile_id` fora do onboarding.
+describe('PrismaTenantMembershipRepository.atribuirPerfil', () => {
+  let prisma: ReturnType<typeof prismaFalso>;
+  let repo: PrismaTenantMembershipRepository;
+
+  beforeEach(() => {
+    prisma = prismaFalso();
+    prisma.tenantMembership.updateMany.mockResolvedValue({ count: 1 });
+    repo = new PrismaTenantMembershipRepository(prisma as never);
+  });
+
+  function whereDaUltimaEscrita(): Record<string, unknown> {
+    const chamada = prisma.tenantMembership.updateMany.mock.calls.at(-1)![0] as {
+      where: Record<string, unknown>;
+      data: Record<string, unknown>;
+    };
+    return chamada.where;
+  }
+
+  it('grava a membership DAQUELA empresa e devolve true', async () => {
+    await expect(repo.atribuirPerfil(USER, ACME, PERFIL)).resolves.toBe(true);
+    // ⚠️ `profileId` e `profile` AUSENTES do `where`, de propósito: o `where`
+    // de `updateMany` filtra a linha pelo valor ANTIGO (o `profileId` novo
+    // nunca casaria) e a linha pertence à MEMBERSHIP, não ao perfil que entra.
+    // A DONA é conferida antes, em `profile.findFirst`.
+    expect(whereDaUltimaEscrita()).toEqual({
+      userId: USER,
+      tenantId: ACME,
+      user: { deletedAt: null },
+    });
+    expect(prisma.profile.findFirst).toHaveBeenCalledWith({
+      where: { id: PERFIL, OR: [{ tenantId: null }, { tenantId: ACME }] },
+      select: { id: true },
+    });
+  });
+
+  it('conta zero = false, para o chamador recusar em vez de responder 200 à toa', async () => {
+    prisma.tenantMembership.updateMany.mockResolvedValue({ count: 0 });
+    await expect(repo.atribuirPerfil(USER, ACME, PERFIL)).resolves.toBe(false);
+  });
+
+  // Remover não tem perfil para conferir DONA, então o pré-acerto nem roda.
+  // Um filtro de DONA no caminho da remoção (relação to-one anulável) daria
+  // `count` 0 e a remoção viraria recusa falso — o usuário nunca consegue
+  // limpar o perfil que o próprio dono lhe deu.
+  it('remover (profileId null) dispensa o pré-acerto de DONA, senão vira recusa falsa', async () => {
+    await expect(repo.atribuirPerfil(USER, ACME, null)).resolves.toBe(true);
+    const where = whereDaUltimaEscrita();
+    expect(where).toEqual({ userId: USER, tenantId: ACME, user: { deletedAt: null } });
+    expect(where).not.toHaveProperty('profile');
+    expect(where).not.toHaveProperty('profileId');
+    expect(prisma.profile.findFirst).not.toHaveBeenCalled();
+  });
+
+  // O port promete que o filtro de DONA mora AQUI, e não no chamador. Sem isto,
+  // a única checagem é a R1 do use case, e um chamador novo a_contornaria em
+  // silêncio — concede as permissões da empresa vizinha e nada denuncia.
+  it('perfil de OUTRA empresa é recusado sem chegar a escrever', async () => {
+    prisma.profile.findFirst.mockResolvedValue(null);
+    await expect(repo.atribuirPerfil(USER, ACME, PERFIL)).resolves.toBe(false);
+    expect(prisma.tenantMembership.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('conta deletedAt: null no filtro — conta apagada com token vivo não muda de perfil', async () => {
+    await repo.atribuirPerfil(USER, ACME, PERFIL);
+    expect(whereDaUltimaEscrita()).toHaveProperty('user.deletedAt', null);
+  });
+
+  it('NUNCA escreve em outra empresa: o tenantId do `where` é o da chamada', async () => {
+    await repo.atribuirPerfil(USER, ACME, PERFIL);
+    expect(whereDaUltimaEscrita().tenantId).toBe(ACME);
   });
 });

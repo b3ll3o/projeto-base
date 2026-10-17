@@ -60,16 +60,31 @@ export class AdminProfilesController {
     @Inject(ProfileUseCases) private readonly useCases: ProfileUseCases,
   ) {}
 
+  /**
+   * pt-BR (Fase 8): a EMPRESA do ator viaja nas 5 rotas, não só na de criação.
+   * Sem ela o `PermissionsGuard` via `admin.manage-profiles` — que a Fase 5
+   * dá a todo dono de empresa — abria o alcance GLOBAL destas rotas: MEDIDO,
+   * o dono da ACME listava, renomeava, apagava e injetava permissão em perfil
+   * da GLOBEX, todos 200/201.
+   */
+  private atorDe(req: RequestComAtor) {
+    return {
+      userId: req.user.sub,
+      tenantId: req.user.tenantId ?? null,
+      isAdmin: req.user.isAdmin === true,
+    };
+  }
+
   @Get()
   @RequirePermission('admin.manage-profiles')
-  async list(): Promise<ProfileSummary[]> {
-    return this.useCases.listar();
+  async list(@Req() req: RequestComAtor): Promise<ProfileSummary[]> {
+    return this.useCases.listar(this.atorDe(req));
   }
 
   @Get(':id')
   @RequirePermission('admin.manage-profiles')
-  async getById(@Param('id') id: string): Promise<ProfileDetail> {
-    return this.useCases.obterPorId(id);
+  async getById(@Param('id') id: string, @Req() req: RequestComAtor): Promise<ProfileDetail> {
+    return this.useCases.obterPorId(id, this.atorDe(req));
   }
 
   @Post()
@@ -94,26 +109,26 @@ export class AdminProfilesController {
         ? { initialPermissions: body.initialPermissions }
         : {}),
     };
-    return this.useCases.criar(input, {
-      userId: req.user.sub,
-      tenantId: req.user.tenantId ?? null,
-      isAdmin: req.user.isAdmin === true,
-    });
+    return this.useCases.criar(input, this.atorDe(req));
   }
 
   @Patch(':id')
   @RequirePermission('admin.manage-profiles')
-  async update(@Param('id') id: string, @Body() body: UpdateProfileBody): Promise<ProfileDetail> {
+  async update(
+    @Param('id') id: string,
+    @Body() body: UpdateProfileBody,
+    @Req() req: RequestComAtor,
+  ): Promise<ProfileDetail> {
     const input: UpdateProfileInput = {
       name: body.name,
       ...(body.description !== undefined ? { description: body.description } : {}),
     };
-    return this.useCases.atualizar(id, input);
+    return this.useCases.atualizar(id, input, this.atorDe(req));
   }
 
   @Delete(':id')
   @RequirePermission('admin.manage-profiles')
-  async delete(@Param('id') id: string): Promise<void> {
-    await this.useCases.deletar(id);
+  async delete(@Param('id') id: string, @Req() req: RequestComAtor): Promise<void> {
+    await this.useCases.deletar(id, this.atorDe(req));
   }
 }

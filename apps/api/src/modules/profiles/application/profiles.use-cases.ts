@@ -59,6 +59,30 @@ function recusaEscalada(motivo: string): never {
 }
 
 /**
+ * pt-BR (Fase 8, 2026-10-17): o perfil é da EMPRESA do ator?
+ *
+ * A regra é uma linha e a MEDIÇÃO é que ela não existia: com
+ * `provisionarEmpresaPropria` dando `listAllPermissions()` + `isAdmin: true` ao
+ * dono (Fase 5), e o catálogo documentando `is_admin` como BYPASS TOTAL do
+ * `PermissionsGuard`, TODO dono de empresa passava as 5 rotas de
+ * `/admin/profiles` — que não filhavam por empresa. MEDIDO por HTTP antes do
+ * conserto: listar, renomear, apagar e injetar permissão em perfil da GLOBEX
+ * respondiam 200/201 a partir da ACME.
+ *
+ * `ator.tenantId === null` é o admin global (conta do seed) e enxerga tudo —
+ * é o bucket de sistema, e negá-lo traria de volta a dependência do seed que
+ * a Fase 5 removeu de propósito.
+ *
+ * Função de arquivo como as outras: as duas classes (`ProfileUseCases` e
+ * `AuthorizationUseCases`) precisam dela, e um método duplicaria a regra.
+ */
+function exigePerfilDoEscopo(profile: Profile, ator: AtorAutenticado): void {
+  if (ator.tenantId !== null && profile.tenantId() !== ator.tenantId) {
+    recusaEscalada('um ator dentro de uma empresa só administra os perfis DAQUELA empresa');
+  }
+}
+
+/**
  * Identidade do ator autenticado, o mínimo que as travas de escalada
  * precisam: QUEM é e SE é admin. Vem do `req.user` publicado pelo
  * `JwtAuthGuard` (que hidrata `isAdmin` do cache de profile).
@@ -144,21 +168,24 @@ export class ProfileUseCases {
     private readonly memberships: TenantMembershipRepositoryPort,
   ) {}
 
-  async listar(): Promise<ProfileSummary[]> {
-    const profiles = await this.profileRepo.list();
+  async listar(ator: AtorAutenticado): Promise<ProfileSummary[]> {
+    // pt-BR (Fase 8): o filtro é o da EMPRESA do ator. `null` (admin global)
+    // devolve a lista inteira — ver a nota de sentido oposto na porta.
+    const profiles = await this.profileRepo.list(ator.tenantId);
     return profiles.map((p) => this.toSummary(p));
   }
 
-  async obterPorId(id: string): Promise<ProfileDetail> {
+  async obterPorId(id: string, ator: AtorAutenticado): Promise<ProfileDetail> {
     const profile = await this.profileRepo.findById(profileId(id));
     if (profile === null) {
       throw new ProfileNotFoundException(id);
     }
+    exigePerfilDoEscopo(profile, ator);
     return this.toDetail(profile);
   }
 
-  async obterPorSlug(slug: string): Promise<ProfileDetail> {
-    const profile = await this.profileRepo.findBySlug(profileSlug(slug));
+  async obterPorSlug(slug: string, ator: AtorAutenticado): Promise<ProfileDetail> {
+    const profile = await this.profileRepo.findBySlug(profileSlug(slug), ator.tenantId);
     if (profile === null) {
       throw new ProfileNotFoundException(slug);
     }
@@ -210,7 +237,7 @@ export class ProfileUseCases {
     // pt-BR (#97, A4): slug malformado NÃO é `ProfileSlugAlreadyInUse` —
     // `ProfileSlug.create` (via `profileSlug()`) lança `UserValidationException`
     // → 400. O 409 fica só para o slug bem formado que já existe.
-    const existing = await this.profileRepo.findBySlug(profileSlug(input.slug));
+    const existing = await this.profileRepo.findBySlug(profileSlug(input.slug), ator.tenantId);
     if (existing !== null) {
       throw new ProfileSlugAlreadyInUseException(input.slug);
     }
@@ -220,6 +247,11 @@ export class ProfileUseCases {
       name: input.name,
       description: input.description ?? null,
       initialAuthorizations: input.initialPermissions ?? [],
+      // pt-BR (Fase 8): o perfil nasce da EMPRESA do ator. Antes desta fase
+      // este campo não era repassado e todo `POST /admin/profiles` fabricava um
+      // perfil GLOBAL — inclusive quando o ator é o dono de uma empresa
+      // cliente, que é quem pode chegar aqui.
+      tenantId: ator.tenantId,
       agora: new Date(),
     });
     await this.profileRepo.save(profile);
@@ -227,11 +259,16 @@ export class ProfileUseCases {
     return this.toDetail(profile);
   }
 
-  async atualizar(id: string, input: UpdateProfileInput): Promise<ProfileDetail> {
+  async atualizar(
+    id: string,
+    input: UpdateProfileInput,
+    ator: AtorAutenticado,
+  ): Promise<ProfileDetail> {
     const profile = await this.profileRepo.findById(profileId(id));
     if (profile === null) {
       throw new ProfileNotFoundException(id);
     }
+    exigePerfilDoEscopo(profile, ator);
     if (profile.isSystem()) {
       throw new ProfileSystemProtectedException(profile.id().value);
     }
@@ -246,11 +283,12 @@ export class ProfileUseCases {
     return this.toDetail(profile);
   }
 
-  async deletar(id: string): Promise<void> {
+  async deletar(id: string, ator: AtorAutenticado): Promise<void> {
     const profile = await this.profileRepo.findById(profileId(id));
     if (profile === null) {
       throw new ProfileNotFoundException(id);
     }
+    exigePerfilDoEscopo(profile, ator);
     if (profile.isSystem()) {
       throw new ProfileSystemProtectedException(profile.id().value);
     }
@@ -427,6 +465,7 @@ export class AuthorizationUseCases {
     if (profile === null) {
       throw new ProfileNotFoundException(profileIdStr);
     }
+    exigePerfilDoEscopo(profile, ator);
     if (profile.isSystem()) {
       throw new ProfileSystemProtectedException(profile.id().value);
     }
@@ -460,6 +499,7 @@ export class AuthorizationUseCases {
     if (profile === null) {
       throw new ProfileNotFoundException(profileIdStr);
     }
+    exigePerfilDoEscopo(profile, ator);
     if (profile.isSystem()) {
       throw new ProfileSystemProtectedException(profile.id().value);
     }
@@ -530,10 +570,45 @@ export class UserProfileUseCases {
     profileIdStr: string | null,
     ator: AtorAutenticado,
   ): Promise<void> {
+    // pt-BR (Fase 6 — tenancy) R5: dentro da empresa, ninguém altera o PRÓPRIO
+    // perfil — nem para vestir outro, nem para tirar o que tem. O motivo é a
+    // irreversibilidade: `emitirConvite` grava `role: 'member'` fixo, então
+    // não existe rota que devolva `owner` a ninguém. Uma empresa de dono único
+    // que se rebaixasse ficaria sem administrador e sem caminho de volta.
+    // Custa a pessoa se ajustar sozinha; o preço alternativo é o lockout.
+    //
+    // A regra mora AQUI, antes do `profileIdStr`, e não dentro dele: a remoção
+    // (`null`) é justamente o caso perigoso, e era o que escapava quando a
+    // trava vivia no ramo do perfil. Fora da empresa (`tenantId === null`) não
+    // se aplica — sem header não há empresa para ficar sem dono.
+    if (ator.tenantId !== null && userId === ator.userId) {
+      recusaEscalada('ninguém altera o próprio perfil dentro da empresa');
+    }
     if (profileIdStr !== null) {
       const profile = await this.profileRepo.findById(profileId(profileIdStr));
       if (profile === null) {
         throw new ProfileNotFoundException(profileIdStr);
+      }
+      // pt-BR (Fase 6 — tenancy): três travas que só existem no caminho da
+      // EMPRESA, e as três são sobre a DONA do perfil — um campo que o
+      // agregado não carregava até esta fase.
+      //
+      // R1/R2: `ator.tenantId` é o dono da empresa onde a escrita acontece.
+      // Sem header (`null`) é o bucket global e nada aqui se aplica — as
+      // travas de baixo já cobrem esse caminho desde o #97.
+      if (ator.tenantId !== null) {
+        // R1: o mesmo conjunto que `findProfileId` aceita na LEITURA. Perfil
+        // alheio concederia as permissões da empresa vizinha.
+        const dono = profile.tenantId();
+        if (dono !== null && dono !== ator.tenantId) {
+          recusaEscalada('um perfil de outra empresa não é vestível aqui');
+        }
+        // R2: `isAdmin` global em membership de empresa é bypass TOTAL — o
+        // `PermissionsGuard` aceita em QUALQUER empresa, inclusive numa em
+        // que a pessoa nunca entrou. Por isso o admin tem de ser DA empresa.
+        if (profile.isAdmin() && dono !== ator.tenantId) {
+          recusaEscalada('só se veste perfil admin o da própria empresa');
+        }
       }
       if (profile.isAdmin() && !ator.isAdmin) {
         recusaEscalada('só um ator com isAdmin pode atribuir um profile admin');
@@ -567,6 +642,33 @@ export class UserProfileUseCases {
     const user = await this.userRepo.findById(UserId.create(userId));
     if (user === null) {
       throw new UserNotFoundException(userId);
+    }
+
+    // pt-BR (Fase 6): aqui a rota bifurca no BUCKET. Com `X-Tenant-Id` a
+    // escrita vai para a membership — a mesma linha que `findProfileId` lê,
+    // que é o que faltava para "perfil diferente em cada empresa" ter efeito.
+    // Sem header, o bucket global (`users.profile_id`) é o de sempre.
+    if (ator.tenantId !== null) {
+      // pt-BR: R4 é o lockout de B4 no bucket CERTO. A leitura abaixo é o
+      // perfil do alvo NA EMPRESA; ler `user.profileId()` protegeria a coluna
+      // que esta rota não altera, e devolveria 403 por um motivo que o
+      // chamador não consegue reproduzir.
+      if (profileIdStr === null && !ator.isAdmin) {
+        const atualId = await this.memberships.findProfileId(userId, ator.tenantId);
+        const atual = atualId === null ? null : await this.profileRepo.findById(profileId(atualId));
+        if (atual?.isAdmin() === true) {
+          recusaEscalada('só um ator com isAdmin remove de um membro o profile admin da empresa');
+        }
+      }
+      const gravado = await this.memberships.atribuirPerfil(userId, ator.tenantId, profileIdStr);
+      // `false` = a pessoa não é membro, ou o perfil é de outra empresa. Os
+      // dois casos NÃO são distinguidos para o chamador (expor qual deles é
+      // entregaria a existência de um perfil alheio), e ambos são 403.
+      if (!gravado) {
+        recusaEscalada('a atribuição sai da empresa e por isso é recusada');
+      }
+      await this.cache.invalidateUser(userId);
+      return;
     }
     // pt-BR (#97, achado B4): com `profileId === null` o bloco de autorização
     // acima INTEIRO é pulado — nenhuma checagem roda. MEDIDO: um ator não-admin

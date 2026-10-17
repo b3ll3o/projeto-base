@@ -37,7 +37,10 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
     );
   }
 
-  async findBySlug(slug: ReturnType<typeof makeProfileSlug>): Promise<Profile | null> {
+  async findBySlug(
+    slug: ReturnType<typeof makeProfileSlug>,
+    tenantId: string | null,
+  ): Promise<Profile | null> {
     // pt-BR (Fase 2 — tenancy, 2026-10-16): `slug` deixou de ser `@unique` — a
     // D3 exige que duas empresas tenham ambas um perfil "manager", então a
     // unicidade passou para dois índices PARCIAIS em SQL (migration
@@ -58,8 +61,14 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
     //
     // curto por natureza: na Fase 4 este método passa a receber o tenant e a
     // checagem de duplicado em `:179` precisa do mesmo escopo de empresa.
+    //
+    // pt-BR (Fase 8, 2026-10-17): o `tenantId` agora CHEGA do chamador, e o
+    // filtro deixou de ser `null` fixo. MEDIDO que a versão anterior dava
+    // 409 a um slug que só colide na EMPRESA do ator (o índice parcial
+    // `(slug, tenant_id)`exists mas a checagem não o via), e — o inverso —
+    // deixava passar o `criar` que depois morria em P2002 → 500.
     const row = await this.prisma.profile.findFirst({
-      where: { slug: slug.value, tenantId: null },
+      where: { slug: slug.value, tenantId },
       include: { authorizations: { select: { permissionKey: true } } },
     });
     if (row === null) {
@@ -71,8 +80,12 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
     );
   }
 
-  async list(): Promise<Profile[]> {
+  async list(tenantId: string | null): Promise<Profile[]> {
     const rows = await this.prisma.profile.findMany({
+      // pt-BR (Fase 8): `null` = SEM filtro (o admin global, que é o único
+      // que alcança o bucket de sistema); preenchido = só os perfis daquela
+      // empresa. Ver a nota de sentido OPOSTO na porta.
+      ...(tenantId === null ? {} : { where: { tenantId } }),
       orderBy: { createdAt: 'desc' },
       include: { authorizations: { select: { permissionKey: true } } },
     });
@@ -97,6 +110,11 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
       description: profile.descricao(),
       isAdmin: profile.isAdmin(),
       isSystem: profile.isSystem(),
+      // pt-BR (Fase 8): a dona é lida do AGREGADO, não de parâmetro — e sem
+      // esta linha todo perfil criado por HTTP nascia `tenant_id = NULL`,
+      // isto é, global. `readonly` no agregado garante que o UPDATE nunca
+      // move um perfil de empresa.
+      tenantId: profile.tenantId(),
     };
 
     const isNew = expectedVersion === 0;
@@ -152,6 +170,7 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
       description: string | null;
       isAdmin: boolean;
       isSystem: boolean;
+      tenantId: string | null;
       createdAt: Date;
       updatedAt: Date;
       version: number;
@@ -165,6 +184,7 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
       description: row.description,
       isAdmin: row.isAdmin,
       isSystem: row.isSystem,
+      tenantId: row.tenantId,
       authorizations: authKeys,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
