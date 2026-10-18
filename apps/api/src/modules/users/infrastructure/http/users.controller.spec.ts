@@ -394,6 +394,80 @@ describe('UsersController — handlers HTTP', () => {
     );
   });
 
+  // ── O header ALHEIO (issue #102) ─────────────────────────────────────
+  //
+  // MEDIDO contra Postgres real, sessão `app_runtime`, escopo de empresa
+  // VÁLIDA, conta sem nenhuma membership:
+  //
+  //   X-Tenant-Id: <ACME>  → HTTP 200 · 2 usuarios  → ana@…, carla@…
+  //   X-Tenant-Id: <HEX>   → HTTP 200 · 1 usuario   → bruno@…
+  //
+  // A causa é a resposta à pergunta errada: `usuario_no_escopo(alvo)` pergunta
+  // "o ALVO pertence à empresa do header?" e nunca "o ATOR pertence?". O guard
+  // valida o FORMATO do uuid e publica — logo o header é capacidade declarada
+  // pelo cliente. `perfil.profileId === null` é a prova de que não há vínculo
+  // (`findProfileId` só não resolve sem `tenant_memberships`), e é ela que
+  // precisa acionar o recorte.
+  it('list() header de empresa SEM vínculo recorta para o próprio ator', async () => {
+    profiles.obterMeuPerfil.mockResolvedValue({
+      profileId: null,
+      isAdmin: false,
+      permissions: [],
+    });
+    useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
+
+    await ctrl.list({ user: { sub: 'u-1', tenantId: EMPRESA } } as never);
+
+    // O escopo ainda é o do header — quem decide a empresa é o guard, e mexer
+    // nisso aqui seria mudar o contrato da rota, não corrigir o furo.
+    expect(profiles.obterMeuPerfil).toHaveBeenCalledWith('u-1', EMPRESA);
+    expect(useCases.listar).toHaveBeenCalledWith(
+      expect.objectContaining({ somenteUsuarioId: 'u-1' }),
+      EMPRESA,
+    );
+  });
+
+  // Contrapartida OBRIGATÓRIA: com vínculo (perfil resolvido NAQUELA empresa) o
+  // diretório da empresa abre. Sem este par, um `semVinculo` invertido — ou uma
+  // condition que confundisse `profileId === null` com "sem perfil em lugar
+  // nenhum" — derrubaria quem tem o direito, e o único sintoma seria o
+  // diretório vazio para o administrador da empresa.
+  it('list() header de empresa COM vínculo NÃO é recortado', async () => {
+    profiles.obterMeuPerfil.mockResolvedValue({
+      profileId: 'perfil-da-empresa',
+      isAdmin: false,
+      permissions: ['users.read'],
+    });
+    useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
+
+    await ctrl.list({ user: { sub: 'u-1', tenantId: EMPRESA } } as never);
+
+    expect(useCases.listar).toHaveBeenCalledWith(
+      expect.objectContaining({ somenteUsuarioId: null }),
+      EMPRESA,
+    );
+  });
+
+  // Um terceiro par para a ADMIN global com header alheio: `semVinculo` é
+  // verdadeiro para o admin global (o perfil global resolve fora do tenant), e
+  // sem este teste ele seria recortado para a própria linha — o que quebraria o
+  // acesso administrativo global justamente para quem tem o bypass.
+  it('list() admin global com header NÃO é recortado', async () => {
+    profiles.obterMeuPerfil.mockResolvedValue({
+      profileId: 'perfil-global',
+      isAdmin: true,
+      permissions: [],
+    });
+    useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
+
+    await ctrl.list({ user: { sub: 'u-1', tenantId: EMPRESA } } as never);
+
+    expect(useCases.listar).toHaveBeenCalledWith(
+      expect.objectContaining({ somenteUsuarioId: null }),
+      EMPRESA,
+    );
+  });
+
   // Contrapartida: com `users.read` o diretório abre. Sem este par, um
   // `semDireito` invertido (bug de `!`) derrubaria quem TEM o direito — e o
   // F2 voltaria a quebrar em silêncio, agora do outro lado.

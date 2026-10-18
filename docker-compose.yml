@@ -76,7 +76,26 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      DATABASE_URL: ${DATABASE_URL} # #68: obrigatório via env, sem placeholder literal
+      # ⚠️ (issue #105) `DATABASE_URL` FOI TIRADO deste bloco, e é deliberado.
+      # Estava como `DATABASE_URL: ${DATABASE_URL}` e MEDIDO assim quebrava:
+      #
+      #   $ docker compose config          # com .env.production correto, sem .env
+      #   api: DATABASE_URL: ""            ← VAZIO
+      #       DIRECT_DATABASE_URL: postgresql://projeto:***@…   ← correto
+      #
+      # Duas regras do Compose se cruzam: a interpolação roda ANTES do `env_file`
+      # ler o arquivo, e `environment:` tem precedência sobre `env_file`. Então a
+      # chave vazia sobrescrevia o valor certo que o `env_file` entregava. O
+      # sintoma downstream era `P1012 … You must provide a nonempty URL` saindo
+      # do `migrate deploy` — erro genérico de configuração, sem dizer de onde.
+      #
+      # COM a chave removida, o `env_file` decide e o valor chega. MEDIDO:
+      #   sem esta linha → DATABASE_URL: postgresql://projeto:***@…   ✓
+      #
+      # ⚠️ O `.env.production.example` precisa entregar `DATABASE_URL` com o papel
+      # `app_runtime` (não o dono), porque é ele que agora decide. Hoje o example
+      # traz o dono — o que deixa a RLS inerte sem erro (apps/api/.env.example:14
+      # exige o contrário). Isso é o item seguinte do mesmo PR.
       LOG_LEVEL: ${LOG_LEVEL:-info}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3001} # #73: consumido pelo main.ts
     env_file:

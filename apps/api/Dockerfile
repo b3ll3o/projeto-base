@@ -48,29 +48,51 @@ COPY --from=builder /repo/package.json ./
 COPY --from=builder /repo/apps/api/package.json apps/api/
 COPY --from=builder /repo/packages packages
 COPY --from=builder /repo/pnpm-lock.yaml /repo/pnpm-workspace.yaml ./
+# ⚠️ (issue #104) AS DEPS DA API VIVEM EM `apps/api/node_modules`, não na raiz —
+# topologia do pnpm em workspace. MEDIDO no `builder`: `node_modules/@nestjs` da
+# raiz AUSENTE, o de `apps/api` PRESENTE. O `prod` copiava só a raiz (12 devDeps)
+# e nenhuma das 26 `dependencies`.
+COPY --from=builder /repo/apps/api/node_modules apps/api/node_modules
 COPY --from=builder /repo/node_modules node_modules
-RUN pnpm prune --prod
-# pt-BR: defesa em profundidade — `node --check` valida syntax do entrypoint
-# sem precisar runtime deps. Pega erros de parsing, missing modules em require/import
-# e typos em filenames antes do container subir. Custo: ~100ms por build.
-RUN node --check apps/api/dist/main.js
-# pt-BR (#88, 2026-10-16): user dedicado UID 1001 com shell /bin/false.
-# Antes era `USER node` que dependia do UID 1000 implícito da imagem
-# upstream — qualquer mudança de UID na tag node:22-bookworm-slim quebrava
-# policies OPA/K8s `runAsUser` (que precisa de UID numérico) e mounts NFS/CIFS
-# (que autenticam por UID). Hardcoded numérico garante interface estável.
-RUN groupadd --gid 1001 app && useradd --uid 1001 --gid 1001 --no-create-home --shell /bin/false app
-USER 1001:1001
-EXPOSE 3000
 # pt-BR: Task 1.5 — auto-carrega tracing OTel antes de qualquer código de usuário.
 # `--import` é ESM-aware (Node 20.6+); `--require` é CJS-only e quebraria em
-# runtime `type: module`. O caminho é relativo ao WORKDIR (/repo), espelhando
-# a convenção do entrypoint (`apps/api/dist/main.js`). Aponta para `init.js`
-# (wrapper side-effect que chama initTracing() no top-level); `tracing.js` é
-# puro e NÃO tem side-effect (protegido por tracing.spec.ts:28-35), portanto
-# importá-lo diretamente NÃO dispararia o SDK no container. Side-effect: o
-# módulo init.js é registrado como import antes do bootstrap do NestFactory.
-ENV NODE_OPTIONS="--import ./apps/api/dist/shared/infrastructure/telemetry/init.js"
+# runtime `type: module`. `tracing.js` é puro (tracing.spec.ts:28-35), então
+# importá-lo direto NÃO dispararia o SDK — daí o wrapper `init.js`.
+# ⚠️ (issue #104) Este `ENV` vem ANTES do `node --check`, e o lugar é o ponto: estava
+# depois, e o `--check` mediava sintaxe sem resolver a cadeia de imports. O caminho
+# é ABSOLUTO porque o `--import` resolve contra o CWD de cada `node` (MEDIDO: com
+# `./apps/api/…` o `pnpm exec prisma` de `/repo/apps/api` procurava `apps/api/apps/api/dist/…`).
+ENV NODE_OPTIONS="--import /repo/apps/api/dist/shared/infrastructure/telemetry/init.js"
+# ⚠️ (issue #104) O `pnpm prune --prod` foi REMOVIDO, não corrigido: instalar as
+# dependências de produção explicitamente elimina a classe de "o prune rodou sem
+# ver o pacote certo" — o `COPY` acima é o que garante que ele o vê.
+RUN pnpm install --prod --frozen-lockfile --filter @projeto/api... \
+    && node --check apps/api/dist/main.js
+# pt-BR (#88, 2026-10-16): user dedicado UID 1001. Antes era `USER node`, que dependia
+# do UID 1000 implícito da imagem upstream — e qualquer mudança de UID na tag quebrava
+# policies OPA/K8s `runAsUser` e mounts NFS/CIFS (ambos autenticam por UID).
+#
+# ⚠️ (issue #104) `--create-home` NOVO, e a razão não é o diretório: o `pnpm` desta
+# imagem é shim do COREPACK, que grava em `$HOME/.cache`. Com `--no-create-home`,
+# QUALQUER `pnpm …` morre com `EACCES: … mkdir '/home/app/.cache/node/corepack/v1'`,
+# quebrando o ENTRYPOINT antes do servidor. MEDIDO: no stage `base` o mesmo
+# comando dá `9.12.0` — a falha é do usuário, não da imagem base.
+RUN groupadd --gid 1001 app && useradd --uid 1001 --gid 1001 --create-home --shell /bin/false app
+USER 1001:1001
+EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
   CMD curl -fsS http://localhost:3000/api/v1/health || exit 1
-ENTRYPOINT ["sh","-c","pnpm exec prisma migrate deploy --schema=apps/api/prisma/schema.prisma && node apps/api/dist/main.js"]
+# ⚠️ (issue #105) Guarda de `DATABASE_URL` vazia — o compose declarava
+# `DATABASE_URL: ${DATABASE_URL}` em `environment:`, que tem precedência sobre o
+# `env_file` e sobrescrevia o valor correto com string vazia (a chave foi removida
+# do compose). Sem a guarda o único sintoma é `P1012 … nonempty URL` do
+# `migrate deploy`, genérico e sem dizer de onde. O fail-fast é AQUI porque o
+# migrate roda ANTES do node — o desenho do `JWT_SECRET`
+# (`jwt-token.service.ts:201`) pelo motivo inverso. Não foi `${DATABASE_URL:?}`
+# no compose pelo motivo que o compose (:95-102) registra: quebra `config`/`ps`.
+# O `cd` NÃO é cosmético: `pnpm exec` procura em `./node_modules/.bin` e o binário
+# do prisma vive em `apps/api/node_modules/.bin` (MEDIDO: de `/repo` devolvia
+# `Command "prisma" not found`). E o `$` é UM, não `$$`: no JSON com `sh -c` quem
+# expande é o shell do container, e `$$` virava `$` literal — o teste rodava sobre
+# a STRING `"$DATABASE_URL"`, nunca vazia (MEDIDO: com `$$` a guarda não disparava).
+ENTRYPOINT ["sh","-c","if [ -z \"$DATABASE_URL\" ]; then echo 'ERRO: DATABASE_URL vazia ou ausente no container da api (issue #105). A linha precisa existir no .env.production apontando para o papel app_runtime (ver .env.production.example); a de DONO e a DIRECT_DATABASE_URL, que e outra chave.' >&2; exit 1; fi; cd /repo/apps/api && pnpm exec prisma migrate deploy --schema=prisma/schema.prisma && node dist/main.js"]

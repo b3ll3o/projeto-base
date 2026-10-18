@@ -230,13 +230,40 @@ export class UsersController {
     // Nenhuma delas é bug: é o produto. Mudar aqui é mudança de requisito, com
     // migração de dado junto, não correção de furo.
     const semDireito = perfil.isAdmin !== true && !perfil.permissions.includes('users.read');
+    //
+    // ⚠️ (issue #102) `semVinculo` é a peça que faltava. `perfil.profileId === null`
+    // significa que `findProfileId` NÃO resolveu perfil para o escopo pedido — e o
+    // banco só não resolve quando não há `tenant_memberships` ligando a conta
+    // àquela empresa. É a resposta a "o ATOR pertence a essa empresa?", que a
+    // RLS nunca fez: `usuario_no_escopo(alvo)` pergunta pelo ALVO
+    // (`EXISTS(… WHERE m.user_id = alvo AND m.tenant_id = escopo_atual())`), e o
+    // `JwtAuthGuard` valida o FORMATO do uuid do header sem consultar membership.
+    // Logo o header é capacidade declarada pelo cliente.
+    //
+    // MEDIDO antes do conserto (sessão `app_runtime`, escopo de empresa válida,
+    // transação commitada, conta sem nenhuma membership):
+    //
+    //   X-Tenant-Id: <ACME>  → HTTP 200 · 2 usuarios  → ana@…, carla@…
+    //   X-Tenant-Id: <HEX>   → HTTP 200 · 1 usuario   → bruno@…
+    //
+    // Com `semVinculo`, o recorte dispara nesses casos e a resposta é a própria
+    // linha — que é o mesmo tratamento que a conta sem header já recebia.
+    //
+    // ⚠️ POR QUE ISSO NÃO FECHA SOZINHO, E O QUE SOBRA: a invariante de que
+    // NENHUMA rota deve abrir escopo a partir de um header não conferido vale
+    // para as 24 rotas da API, e é mudança de contrato — decisão de produto, não
+    // correção. Aqui o efeito é contido por `semDireito`; numa rota `admin.*` (que
+    // exige `users.read` ou `isAdmin`) um header alheio sem vínculo já falha no
+    // `PermissionsGuard`, porque o perfil resolve `denied`. Ver a issue #102.
+    const semVinculo = perfil.profileId === null;
     const input: ListUsersInput = {
       cursor: cursor ?? null,
       limit: Number(limit),
       // pt-BR: normaliza case (clients podem mandar 'True'/'TRUE'/'1') +
       // aceita os dois valores truthy canônicos ('true' e '1').
       includeDeleted: includeDeleted?.toLowerCase() === 'true' || includeDeleted === '1',
-      somenteUsuarioId: empresa === null && semDireito ? (request?.user?.sub ?? null) : null,
+      somenteUsuarioId:
+        (empresa === null || semVinculo) && semDireito ? (request?.user?.sub ?? null) : null,
     };
     return this.userUseCases.listar(input, empresa);
   }
