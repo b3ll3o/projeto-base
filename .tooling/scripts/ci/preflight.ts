@@ -36,6 +36,7 @@ import { checkDockerfileHardening } from './check-dockerfile-hardening';
 import { checkFlowMermaidSync } from './check-flow-mermaid-sync';
 import { checkTestSetCovered } from './check-test-set-covered';
 import { checkRunbookDrift } from './check-runbook-drift';
+import { checkTenantScopeSource } from './check-tenant-scope-source';
 import { existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
@@ -352,6 +353,7 @@ export const RUNNERS: Record<string, () => CheckResult | Promise<CheckResult>> =
   'check-flow-mermaid-sync': () => checkFlowMermaidSync({ repoRoot: '.' }),
   'check-test-set-covered': () => checkTestSetCovered({ repoRoot: '.' }),
   'check-runbook-drift': () => checkRunbookDrift({ repoRoot: '.' }),
+  'check-tenant-scope-source': () => checkTenantScopeSource({ srcRoot: 'apps/api/src' }),
 };
 
 /**
