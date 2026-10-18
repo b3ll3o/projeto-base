@@ -11,6 +11,7 @@ import { UsersModule } from './modules/users/users.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { ProfilesModule } from './modules/profiles/profiles.module.js';
 import { TenancyModule } from './modules/tenancy/tenancy.module.js';
+import { FeatureFlagsModule } from './modules/feature-flags/feature-flags.module.js';
 
 const REDACT_PATHS = ['req.headers.authorization', 'req.headers.cookie'] as const;
 
@@ -50,6 +51,18 @@ const REDACT_PATHS = ['req.headers.authorization', 'req.headers.cookie'] as cons
     // importa para injetar o token — listar aqui é o que registra o
     // CONTROLLER, que o Nest não herda pelo módulo intermediário.
     TenancyModule,
+    // pt-BR (feature-flags): registra as rotas de `admin/feature-flags`.
+    // ⚠️ MEDIDO 2026-10-18: esta linha é REDUNDANTE, e o comentário que a
+    // justificava antes ("o Nest não herda o controller pelo módulo
+    // intermediário") era FALSO. Tirando `FeatureFlagsModule` daqui, o e2e
+    // `13-feature-flags` continua 10/10 verde — o `TenancyModule` importa o
+    // módulo pela aresta da porta (D13) e o `AppModule` importa o
+    // `TenancyModule`, e o Nest registra os controllers de um módulo assim que
+    // ele é instanciado em qualquer ponto do grafo.
+    // Ela fica porque a rota NÃO deve depender da aresta D13: se um dia o
+    // `TenancyModule` deixar de importar o módulo, `convidar` perde o guard e
+    // a tela de admin perde a rota — e nenhuma spec desse par acusaria.
+    FeatureFlagsModule,
   ],
   // #72: registra ThrottlerGuard globalmente via APP_GUARD (injetado pelo
   // container do Nest, sem precisar instanciar manualmente no main.ts).
