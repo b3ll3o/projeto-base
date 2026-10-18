@@ -353,10 +353,19 @@ O plano é um documento; a implementação o corrigiu. O que mudou, e por quê:
 
 | Alegação | Veredito | Como separei as duas leituras |
 |---|---|---|
-| O `prune` rodava contra "grafo de workspace incompleto" — o `COPY` não trazia os `package.json` de `packages/*` e `tooling/*` | **FALSO.** `apps/api/Dockerfile:49` é `COPY --from=builder /repo/packages packages`, o diretório inteiro | Comparando os **dois** `node_modules` no stage `builder`: `node_modules/@nestjs` AUSENTE, `apps/api/node_modules/@nestjs` PRESENTE. A causa é o `COPY` ausente do `apps/api/node_modules` — que eu tinha medido antes de escrever o plano e mesmo assim descrevi errado |
+| O `prune` rodava contra "grafo de workspace incompleto" — o `COPY` não trazia os `package.json` de `packages/*` e `tooling/*` | **FALSO.** `apps/api/Dockerfile:49` é `COPY --from=builder /repo/packages packages`, o diretório inteiro; a imagem construída tem `packages/eslint-config/package.json`, `packages/shared-types/package.json` e `packages/tsconfig/package.json` | Comparando os **dois** `node_modules` no stage `builder`: `node_modules/@nestjs` AUSENTE, `apps/api/node_modules/@nestjs` PRESENTE. A causa é o `COPY` ausente do `apps/api/node_modules` — que eu tinha medido antes de escrever o plano e mesmo assim descrevi errado |
+| `prune --prod` era a causa | **FALSO.** Removida a linha e reconstruído: resultado **idêntico** (16 pacotes, `@nestjs` ausente). `prune` é inocente — a raiz não declara `dependencies` nenhuma, os "16 pacotes" são os 8 devDeps da raiz | `sed '52s/^RUN pnpm prune --prod$/# removido/'` + rebuild + medir |
+| A correção prescrita (`pnpm install --prod`) funciona | **FALSO, e é a mais séria.** Em workspace ela pede confirmação interativa, não instala nada e — pior — **sai 0**. MEDIDO na imagem: ela deixa `vitest`, `@types` e `eslint` presentes, ou seja, não pruneou. O `COPY` sozinho é o que traz as 26 deps | Removendo o `COPY` e reconstruindo: o build **quebra** com `ERR_MODULE_NOT_FOUND`. Com ele: sobe. A linha do `install` foi REMOVIDA do Dockerfile |
 | C1 se resolve removendo a linha 79 do compose | **PARCIALMENTE FALSO.** Remover resolve a URL vazia, mas o `.env.production.example` entregava o papel **DONO** — o que deixa toda a RLS inerte sem erro | `sed -i '79d'` + `docker compose config` → a URL chega. O segundo defeito só apareceu quando olhei para o que o `env_file` passou a decidir |
+| A omissão de `DIRECT_DATABASE_URL` do `environment:` "não protege nada" | **FALSO.** A omissão é load-bearing, e é o que o próprio `docker-compose.yml:121-127` documenta: declará-la quebraria o boot em dois lugares (`migrate` e `AssinaturaDeMembership.onModuleInit`) | O problema da `DATABASE_URL` era que ela estava **declarada** com interpolação vazia; a omissão da `DIRECT_…` é justamente a correção |
 
-O plano original tratava C1 como um problema só. São **dois**: o compose apagava o valor, e o template entregava o valor errado. O primeiro conserto revela o segundo.
+**A soma de C0 é três erros meus empilhados**, e o terceiro só apareceu porque o primeiro estava errado: causa errada → correção errada → a correção errada mascarada pelo `&&`.
+
+### 8.1b O detalhe que quase deixou passar
+
+A linha inútil que eu commitei era **também a que mascarava um build quebrado**. No `RUN pnpm install --prod … && node --check`, o exit **243** do install era absorvido pelo `&&` porque o `--check` rodava depois e passava. Se o `--check` não existisse, o stage inteiro sairia 0 com a imagem sem dependência nenhuma.
+
+Isto é a mesma classe do `node --check` que o Dockerfile já documentava como "defesa em profundidade" — só que invertido: a defesa passava porque não media a coisa. Mover o `ENV` para antes dele (§8.3) foi o que deu dentes ao gate; e o gate só deu dentes **depois** que o `install` foi embora.
 
 ### 8.2 Defeito que eu introduzi e o teste pegou
 
