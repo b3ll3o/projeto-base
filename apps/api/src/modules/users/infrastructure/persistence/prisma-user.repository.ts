@@ -327,9 +327,18 @@ export class PrismaUserRepository implements UserRepositoryPort {
    * limite é do chamador — N+1 aqui seria o caminho que faz a tela
    * `/admin/users` ficar lenta exatamente onde há mais gente para ver.
    *
-   * `null` no map = a pessoa não pertence a esta empresa. `undefined` = pertence
-   * mas sem perfil atribuído. A distinção é o que permite à tela dizer
-   * "sem perfil" só para quem de fato não tem, e não para quem não pertence.
+   * ⚠️ A bifurcação por bucket NÃO é uma escolha: ela é a mesma de
+   * `findProfileId` (`prisma-tenant-membership.repository.ts:31`) e a mesma
+   * de `atribuirProfileAoUser` (`profiles.use-cases.ts:704`). As três
+   * concordar é o que mantém leitura, autorização e escrita falando da mesma
+   * coluna. MEDIDO: com só o ramo de membership, o e2e F12 caía — o admin do
+   * harness opera sem header (bucket global), e `PUT /admin/users/:id/profile`
+   * escreve `users.profile_id`. Ler a membership devolveva vazio, e a coluna
+   * "Perfil atual" ficava "sem perfil" mesmo depois de atribuir.
+   *
+   * O filtro `profile: { tenantId: null }` é o do `findProfileId`: sem ele um
+   * `users.profile_id` apontando para perfil de EMPRESA resolveria no bucket
+   * global, que é o oposto do que a coluna promete.
    */
   private async perfilEfetivoPorUsuario(
     userIds: readonly string[],
@@ -338,16 +347,28 @@ export class PrismaUserRepository implements UserRepositoryPort {
     const out = new Map<string, string | null>();
     if (userIds.length === 0) return out;
 
+    if (tenantId === null) {
+      const rows = await comEscopo(this.prisma, escopoDoTenant(null), (tx) =>
+        tx.user.findMany({
+          where: {
+            id: { in: [...userIds] },
+            deletedAt: null,
+            profile: { is: { tenantId: null } },
+          },
+          select: { id: true, profileId: true },
+        }),
+      );
+      for (const r of rows) out.set(r.id, r.profileId);
+      return out;
+    }
+
     const rows = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
       tx.tenantMembership.findMany({
-        where: { userId: { in: [...userIds] }, ...(tenantId !== null ? { tenantId } : {}) },
+        where: { userId: { in: [...userIds] }, tenantId },
         select: { userId: true, profileId: true },
       }),
     );
 
-    // Sem `tenantId` (bucket de sistema) pode haver mais de uma membership por
-    // usuário — uma por empresa. Escolher a primeira seria arbitrário e
-    // silencioso; o agregado continua sendo a fonte do perfil global nesse caso.
     for (const r of rows) {
       if (!out.has(r.userId)) out.set(r.userId, r.profileId);
     }

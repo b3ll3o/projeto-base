@@ -11,7 +11,28 @@ import type { MeProfileDto } from '@projeto/shared-types';
 import { obterMeuPerfil } from '../lib/perfil';
 
 export async function Sidebar(): Promise<React.JSX.Element> {
-  const me: MeProfileDto | null = await obterMeuPerfil();
+  // pt-BR (#107, 2026-10-18): este é o CHROME, e chrome não pode derrubar a
+  // página. `obterMeuPerfil()` passou a propagar 403/5xx/timeout/rede — certo
+  // para quem DECIDE (o guard de `/admin/*`, que distingue "acesso restrito"
+  // de "serviço fora"), errado para quem só desenha navegação.
+  //
+  // MEDIDO: sem este `catch`, os e2e F1 e F5 caíram. Com a API fora do ar, o
+  // Sidebar é renderizado pelo layout de TODAS as telas, e a exceção subia
+  // junto: `/users` e `/users/novo` deixavam de responder, e o teste que
+  // existe justamente para medir "a tela informa que não conseguiu carregar"
+  // mediava uma página que nem renderizou.
+  //
+  // O `null` aqui significa "não sei quem é" — e a consequência é só não
+  // desenhar o link "Admin". O chrome degrada, a página não. A distinção real
+  // (401 vs 403 vs 5xx) continua mora no guard, que é quem tem o que fazer
+  // com ela.
+  let me: MeProfileDto | null = null;
+  try {
+    me = await obterMeuPerfil();
+  } catch {
+    // Deliberadamente engolido: ver acima. A tela que FALOU é a que chama a
+    // API dela; o menu só não mostra um link.
+  }
 
   return (
     // pt-BR: `sidebar`/`sidebar-footer` não existem em `globals.css` — o menu

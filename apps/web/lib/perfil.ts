@@ -70,8 +70,7 @@ async function getClientOpcional(): Promise<ApiClient | null> {
  *
  * O que muda aqui é o que NÃO é dissolvido:
  *
- * - **sem sessão** (não há token) → `null`. Não é erro: é ausência de sessão, e
- *   o Sidebar não pode derrubar a página só por estar no chrome.
+ * - **sem sessão** (não há token) → `null`. Não é erro: é ausência de sessão.
  * - **401** → `null`. Token expirado (15 min) é o mesmo estado observável de
  *   "não autenticado" para quem só tem o token em cookie. Propagar aqui
  *   transformaria "saiu do login" em erro de página.
@@ -79,9 +78,18 @@ async function getClientOpcional(): Promise<ApiClient | null> {
  *   dizer "acesso restrito" ou oferecer retry são três respostas diferentes
  *   para três causas diferentes, e nenhuma delas é `null`.
  *
- * O padrão correto já existia no repo em `app/users/page.tsx`
- * (`err instanceof ApiError && err.status === 401` → `redirect('/login')`); o que
- * faltava era este arquivo parando de esconder o resto.
+ * ⚠️ Quem chama decide o que fazer com a propagação, e os dois chamadores
+ * decidem diferente — de propósito:
+ *
+ *   - o guard de `/admin/*` (`app/admin/guard-admin.tsx`) DISTINGUE os casos,
+ *     porque é quem tem o que fazer com a diferença;
+ *   - o `Sidebar` ENGOLE, porque é chrome: ele é renderizado pelo layout de
+ *     todas as telas, e uma exceção ali derruba páginas que não têm nada a ver
+ *     com perfil (MEDIDO: sem o `catch` dele, os e2e F1 e F5 caíram).
+ *
+ * O padrão de 401 já existia no repo em `app/users/page.tsx`
+ * (`err instanceof ApiError && err.status === 401` → `redirect('/login')`); o
+ * que faltava era este arquivo parando de esconder o resto.
  */
 export async function obterMeuPerfil(): Promise<MeProfileDto | null> {
   // `getClientOpcional()` devolve `null` (não lança) quando não há token, e

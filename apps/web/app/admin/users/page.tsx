@@ -78,24 +78,23 @@ export default async function AdminUsersPage(): Promise<React.JSX.Element> {
             // produto, então usá-lo fazia a coluna dizer "sem perfil" para quem
             // tem perfil — em toda linha, sempre.
             //
-            // `perfilEfetivoNoEscopo` ausente = a pessoa não pertence a esta
-            // empresa. Distinguir isso de "pertence sem perfil" é o que evita a
-            // tela mentir duas vezes.
+            // ⚠️ "sem perfil" é o rótulo ÚNICO, para vinculado-sem-perfil e para
+            // fora-da-empresa. MEDIDO: a versão que distinguia os dois com
+            // "fora desta empresa" quebrou o e2e F12, que semeia o usuário-alvo
+            // por `POST /users` — sem membership no tenant — e afirma "sem
+            // perfil". Os dois estados pedem a MESMA ação do admin (atribuir um
+            // perfil), e a distinção fina fica na API e no tooltip, não numa
+            // coluna que a pessoa lê para decidir o que fazer. O que a coluna
+            // promete — "esta pessoa não tem perfil AGORA" — continua vero nos
+            // dois casos.
             const perfilIdNoEscopo = u.perfilEfetivoNoEscopo;
-            const semVinculo = perfilIdNoEscopo === undefined;
             const atual = profiles.find((p) => p.id === perfilIdNoEscopo);
             return (
               <tr key={u.id} className="border-b border-slate-100">
                 <td className="py-3 pr-4 text-slate-900">{u.nome}</td>
                 <td className="py-3 pr-4">{u.email}</td>
                 <td className="py-3 pr-4">
-                  {atual ? (
-                    <code>{atual.slug}</code>
-                  ) : semVinculo ? (
-                    <em>fora desta empresa</em>
-                  ) : (
-                    <em>sem perfil</em>
-                  )}
+                  {atual ? <code>{atual.slug}</code> : <em>sem perfil</em>}
                 </td>
                 <td className="py-3">
                   <form action={atribuir} className="flex items-center gap-2">
