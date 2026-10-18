@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
   // pt-BR (Fase 9 — RLS): DUAS conexões, e a separação é o ponto.
   //
   // `url` é a da APLICAÇÃO: o papel `app_runtime`, NOSUPERUSER NOBYPASSRLS.
@@ -259,4 +259,31 @@ model Invitation {
   @@unique([tenantId, email])
   @@index([tenantId])
   @@map("invitations")
+}
+
+// pt-BR (feature-flags, 2026-10-18 — decisão D1): o estado das functionalities
+// que o administrador do sistema liga e desliga.
+//
+// SEM `tenant_id`, de propósito: a flag não é por empresa. Ela responde "esta
+// funcionalidade está disponível no sistema inteiro?", e a resposta é a mesma
+// para todo ator. Uma coluna de empresa aqui seria uma mentira estrutural — o
+// isolamento por empresa que a RLS garante em `profiles`/`users` não tem o que
+// filtrar.
+//
+// `chave` é a PRIMARY KEY e não um `id` uuid: a chave JÁ é o identificador
+// (é o que o `@RequireFeatureFlag('tenancy.invites')` traz), e uma segunda
+// coluna de identidade só criaria duas maneiras de dizer a mesma coisa.
+//
+// ⚠️ A LINHA AUSENTE SIGNIFICA ATIVADA (D4). A tabela guarda só as exceções —
+// quem está desligada. Por isso o `DEFAULT true` aqui é documentação, não o
+// mecanismo: quem decide na leitura é o repositório, que devolve `true` para
+// chave que não encontrou. Chave nova no catálogo não apaga nada.
+model FeatureFlag {
+  chave     String   @id
+  ativada   Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  version   Int      @default(1)
+
+  @@map("feature_flags")
 }
