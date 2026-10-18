@@ -66,7 +66,7 @@ describe('checkTenantScopeSource', () => {
 
   it('o resíduo cross-file é CONTADO, e não virado acusação nem silêncio', () => {
     // O repositório recebe o id de outro arquivo: o texto não prova de onde
-    // veio. Um gate que acusasse aqui acusaria os 66 call sites do repo; um que
+    // veio. Um gate que acusasse aqui acusaria todos os call sites do repo; um que
     // não dissesse nada esconderia o resíduo. O número é o meio-termo.
     const raiz = arvoreCom({
       'tenancy.controller.ts': `async convidar(@Param('id') tenantId: string) { return this.repo.listar(tenantId); }`,
@@ -91,8 +91,11 @@ describe('checkTenantScopeSource', () => {
 
     expect(r.errors).toEqual([]);
     // O número é o que separa "a classe está fechada" de "o corpus sumiu".
-    // MEDIDO 2026-10-17: 66 chamadas (32 escopoDoTenant, 28 comEscopo, 6 abrirEscopo).
-    expect(r.advisories?.[0]).toContain('66 call site(s)');
+    // MEDIDO 2026-10-17: 66 chamadas. MEDIDO 2026-10-18 (#106): 68 — as duas a
+    // mais são `perfilEfetivoPorUsuario` em `prisma-user.repository.ts`, que
+    // abre o escopo para ler `tenant_memberships`. Subir o número com o PR que
+    // o mediu é o comportamento certo deste gate: ele conta, não julga.
+    expect(r.advisories?.[0]).toContain('68 call site(s)');
   });
 
   it('🔴 corpus VAZIO é vermelho — o gate não pode reportar verde sem medir', () => {
