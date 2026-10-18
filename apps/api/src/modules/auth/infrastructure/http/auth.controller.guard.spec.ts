@@ -51,6 +51,20 @@ import {
 import { AUTH_USE_CASES } from '../../application/auth-use-cases.js';
 import { GlobalExceptionFilter } from '../../../../shared/infrastructure/http/global-exception.filter.js';
 import { UserProfileCacheService } from '../../../../shared/infrastructure/security/user-profile-cache.service.js';
+import {
+  TENANT_MEMBERSHIP_REPOSITORY_PORT,
+  type TenantMembershipRepositoryPort,
+} from '../../../tenancy/domain/ports/tenant-membership-repository.port.js';
+
+// pt-BR (PR #101, 2026-10-17): 4ª dependência do `JwtAuthGuard`. Este spec não
+// manda `X-Tenant-Id` em nenhuma das rotas que sobe, então a conferência não
+// chega a rodar — mas o token precisa estar declarado, ou o Nest não constrói o
+// guard e a falha aparece como `Nest can't resolve dependencies`.
+const MEMBERSHIPS_STUB = {
+  async findRole() {
+    return 'member';
+  },
+} as unknown as TenantMembershipRepositoryPort;
 
 const SUB = '0190a8b6-0000-7000-8000-000000000001';
 const EMAIL = 'joao@example.com';
@@ -129,6 +143,7 @@ describe('AuthController — fronteira de autenticação (Fase 6.1)', () => {
             },
           },
         },
+        { provide: TENANT_MEMBERSHIP_REPOSITORY_PORT, useValue: MEMBERSHIPS_STUB },
       ],
     }).compile();
 
@@ -235,6 +250,7 @@ describe('AuthController — fronteira de autenticação (Fase 6.1)', () => {
             },
           },
         },
+        { provide: TENANT_MEMBERSHIP_REPOSITORY_PORT, useValue: MEMBERSHIPS_STUB },
       ],
     }).compile();
     const sabotaApp = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());

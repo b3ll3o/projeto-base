@@ -39,9 +39,20 @@ const NOME_DA_CHAVE = 'membership';
  * assim nenhuma permutação colidiria. MEDIDO: era falso —
  * `corpo('a\nb', 'c', 'member', null)` e `corpo('a', 'b', 'c\nmember', '')`
  * davam o mesmo corpo. `profile_id` vira `''` quando é nulo (e não `'null'`),
- * e `role` é normalizada para `'member'` quando vazia, que é o que o
- * `COALESCE` do SQL faz: a assinatura tem de normalizar do MESMO lado que
- * grava, senão a role gravada e a role assinada divergem.
+ * e a assinatura normaliza do MESMO lado que grava, senão a role gravada e a
+ * role assinada divergem.
+ *
+ * ⚠️ O `??` no `role` NÃO é o mesmo que o `||`, e a primeira versão usava `||`.
+ * O SQL é `COALESCE(p_role, 'member')`, e `COALESCE` trata SÓ `NULL`: para a
+ * string vazia ele devolve a própria vazia. O `||` do JavaScript trata `''` como
+ * falsy e normaliza para `'member'`. Com `role = ''` os dois lados assinariam
+ * corpos diferentes — o Node `6:member`, o Postgres `0:` — e o `criar_membership`
+ * cairia com `42501 assinatura invalida`. MEDIDO o alcance: `role` não é alcançável
+ * vazio hoje (os dois únicos produtores passam os literais `'owner'`, em
+ * `prisma-tenant-onboarding.repository.ts:215`, e `'member'`, em
+ * `tenancy.use-cases.ts:90`), então isto é latente; mas o spec desta função
+ * FIXAVA a forma errada como esperada, e viraria armadilha no dia em que `role`
+ * passasse a ser configurável.
  */
 export function corpoDaAssinatura(
   userId: string,
@@ -53,7 +64,7 @@ export function corpoDaAssinatura(
   // dois só coincidem em ASCII. Uma role com acento faria a assinatura do Node
   // e a do Postgres divergirem, e o sintoma seria `42501` no onboarding.
   const campo = (valor: string): string => `${Buffer.byteLength(valor, 'utf8')}:${valor}`;
-  return campo(userId) + campo(tenantId) + campo(role || 'member') + campo(profileId ?? '');
+  return campo(userId) + campo(tenantId) + campo(role ?? 'member') + campo(profileId ?? '');
 }
 
 @Injectable()

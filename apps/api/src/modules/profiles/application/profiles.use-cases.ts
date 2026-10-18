@@ -623,7 +623,15 @@ export class UserProfileUseCases {
     // (`null`) é justamente o caso perigoso, e era o que escapava quando a
     // trava vivia no ramo do perfil. Fora da empresa (`tenantId === null`) não
     // se aplica — sem header não há empresa para ficar sem dono.
-    if (ator.tenantId !== null && userId === ator.userId) {
+    //
+    // ⚠️ MEDIDO 2026-10-17: a comparação NÃO normalizava, e o `UUID_RE` do
+    // `UserId` tem a flag `/i` — então um `PUT /admin/users/0190A8B6-…-EM-MAIÚSCULAS/
+    // profile` passava na validação do VO, o Postgres resolvia o id sem diferenciar
+    // caixa, e só este `===` negava: o R5 inteiro era burlável mandando o próprio
+    // id em caixa alta. Mesmo defeito e mesma correção de `exigirPropriedade`
+    // (`user-ownership.policy.ts:60`), que foi consertado por MEDIDO em 2026-10-15
+    // e não chegou aqui.
+    if (ator.tenantId !== null && userId?.toLowerCase() === ator.userId.toLowerCase()) {
       recusaEscalada('ninguém altera o próprio perfil dentro da empresa');
     }
     if (profileIdStr !== null) {
@@ -701,14 +709,25 @@ export class UserProfileUseCases {
       // perfil do alvo NA EMPRESA; ler `user.profileId()` protegeria a coluna
       // que esta rota não altera, e devolveria 403 por um motivo que o
       // chamador não consegue reproduzir.
-      if (profileIdStr === null && !ator.isAdmin) {
+      //
+      // ⚠️ MEDIDO 2026-10-17: a condição-raiz era `profileIdStr === null`, e é
+      // o `=== null` que abria o buraco — com um `profileId` NÃO nulo, nenhuma
+      // checagem olhava o perfil ATUAL do alvo, e as travas que sobram (R1/R2,
+      // subconjunto) medem o perfil NOVO. Cenário: dono `alice` (`isAdmin`) e
+      // membro `carlos` com um perfil `p-gestor` sem `isAdmin` e dentro do
+      // subconjunto do próprio `carlos`. `PUT /admin/users/<alice>/profile` com
+      // o id de `p-gestor` passa em todas as travas e rebaixa a dona — 200, e a
+      // ACME fica sem administrador sem caminho de volta. A forma "desligar"
+      // (B4) e a forma "trocar por um menor" são o mesmo defeito com o `if`
+      // estreitado demais.
+      if (!ator.isAdmin) {
         const atualId = await this.memberships.findProfileId(userId, ator.tenantId);
         const atual =
           atualId === null
             ? null
             : await this.profileRepo.findById(profileId(atualId), ator.tenantId);
         if (atual?.isAdmin() === true) {
-          recusaEscalada('só um ator com isAdmin remove de um membro o profile admin da empresa');
+          recusaEscalada('só um ator com isAdmin retira de um membro o profile admin da empresa');
         }
       }
       const gravado = await this.memberships.atribuirPerfil(userId, ator.tenantId, profileIdStr);
@@ -735,14 +754,18 @@ export class UserProfileUseCases {
     // deixaria trava e escrita medindo coisas diferentes, e a trava protegeria
     // algo que esta rota não altera. Atribuir perfil POR EMPRESA é escrita
     // nova, e é da Fase 6.
-    if (profileIdStr === null && !ator.isAdmin) {
+    //
+    // MEDIDO 2026-10-17: mesma correção do ramo da EMPRESA acima, e pela mesma
+    // razão — o `profileIdStr === null` estreitava a regra demais e deixava
+    // passar a troca por um perfil MENOR, que é a mesma lockout com outro verbo.
+    if (!ator.isAdmin) {
       const atualId = user.profileId();
       const atual =
         atualId === null
           ? null
           : await this.profileRepo.findById(profileId(atualId), ator.tenantId);
       if (atual?.isAdmin() === true) {
-        recusaEscalada('só um ator com isAdmin remove de um usuário o profile admin');
+        recusaEscalada('só um ator com isAdmin retira de um usuário o profile admin');
       }
     }
     user.atribuirPerfil(profileIdStr, new Date());

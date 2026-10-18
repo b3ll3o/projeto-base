@@ -198,16 +198,35 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
       'UPDATE',
     ]);
 
-    // E o que a `20261020000004` tirou, medido: `tenant_memberships` perdeu
-    // EXATAMENTE o `INSERT`, e nada além dele. Se o `REVOKE` tivesse vazado
-    // para os outros verbos, o teste acima continuaria verde e esta linha
-    // ficaria fora do alcance — por isso ela existe.
+    // E o que as `20261020000004` e `20261020000005` tiraram, medido:
+    // `tenant_memberships` sobrou com `SELECT` e nada mais. Se o `REVOKE` tivesse
+    // vazado para `SELECT`, o teste acima continuaria verde e esta linha ficaria
+    // fora do alcance — por isso ela existe.
+    //
+    // ⚠️ `UPDATE` NÃO aparece aqui de propósito: a `20261020000005` trocou o
+    // privilégio de TABELA por privilégio de COLUNA (`GRANT UPDATE (profile_id,
+    // updated_at)`), e `table_privileges` responde vazio para privilégio de
+    // coluna. Medir só esta vista diria "a escrita da membership foi perdida",
+    // que é exatamente o que o `atribuirPerfil` faz e depende. A vista de
+    // coluna vem logo abaixo, e as duas juntas fecham o par.
     const memberships = await ctx.prisma.$queryRaw<Array<{ privilege_type: string }>>`
       SELECT privilege_type FROM information_schema.table_privileges
       WHERE grantee = ${PAPEL_DE_RUNTIME} AND table_schema = 'public'
         AND table_name = 'tenant_memberships'
     `;
-    expect(memberships.map((p) => p.privilege_type).sort()).toEqual(['DELETE', 'SELECT', 'UPDATE']);
+    expect(memberships.map((p) => p.privilege_type).sort()).toEqual(['SELECT']);
+
+    const colunas = await ctx.prisma.$queryRaw<Array<{ column_name: string }>>`
+      SELECT column_name FROM information_schema.column_privileges
+      WHERE grantee = ${PAPEL_DE_RUNTIME} AND table_schema = 'public'
+        AND table_name = 'tenant_memberships' AND privilege_type = 'UPDATE'
+      ORDER BY column_name
+    `;
+    // `updated_at` porque `TenantMembership.updatedAt` é `@updatedAt`: o Prisma
+    // escreve a coluna a cada `updateMany`, e sem ela no `GRANT` a escrita
+    // legítima daria `42501`. E `user_id` e `role` NÃO entram — são as duas
+    // colunas que os verbos que sobraram tentavam reescrever.
+    expect(colunas.map((c) => c.column_name)).toEqual(['profile_id', 'updated_at']);
   });
 
   // ─────────────── leitura ───────────────
@@ -724,6 +743,195 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
         tx.profile.findMany({ where: { slug: { in: ['gestor-acme', 'gestor-globex'] } } }),
       ),
     ).resolves.toHaveLength(2);
+  });
+
+  /**
+   * O mesmo que `tentarComo`, mas COM escopo de sessão.
+   *
+   * Existe porque a `20261020000005` barra `role`/`user_id`/`DELETE` por
+   * PRIVILÉGIO, e privilégio recusado é uma EXCEÇÃO (`42501`), não uma linha a
+   * menos — `updateMany` aqui não devolve `count: 0`, ele estoura. Sem esta
+   * distinção o teste de bloqueio seria escrito na forma errada e mediria um
+   * `count: 0` que a policy nunca produziu.
+   */
+  async function tentarComEscopo(
+    escopo: string,
+    fn: (tx: Prisma.TransactionClient) => Promise<unknown>,
+  ): Promise<{ ok: boolean; detalhe: string }> {
+    return comEscopo(escopo, (tx) =>
+      fn(tx)
+        .then(() => ({ ok: true, detalhe: 'SUBIU' }))
+        .catch((e: unknown) => {
+          const mensagem = (e as Error).message;
+          const sqlstate = /Code: `([0-9A-Z]{5})`/.exec(mensagem)?.[1];
+          return {
+            ok: false,
+            detalhe: `${sqlstate ?? (e as { code?: string }).code ?? 'erro'}: ${mensagem}`,
+          };
+        }),
+    );
+  }
+
+  // ─────────────── os verbos que sobraram em `tenant_memberships` ───────────────
+
+  it('🔴 UPDATE do `role` na PRÓPRIA empresa é barrado — `memberships_atualizacao` só olha `tenant_id`', async () => {
+    // A `20261020000004` fechou o `INSERT` e esqueceu os verbos ao lado. Aqui o
+    // atacante é o dono da ACME agindo sobre a membership DELE: `USING` é
+    // verdadeiro (o `tenant_id` é o do escopo) e `WITH CHECK` também (o
+    // `tenant_id` não muda). Nenhum dos dois lados enxerga `role`.
+    //
+    // O efeito não é escalada: `emitirConvite` grava `role: 'member'` fixo, então
+    // não há rota que devolva 'owner'. É a ESCALA INVERTIDA — quem tem 'member'
+    // vira dono da empresa, e `findRole` é o que decide.
+    const alice = await criarUsuario('alice');
+    await associar(alice, acmeId);
+    await ctx.prisma.tenantMembership.update({
+      where: { userId_tenantId: { userId: alice, tenantId: acmeId } },
+      data: { role: 'member' },
+    });
+
+    const tentativa = await tentarComEscopo(acmeId, (tx) =>
+      tx
+        .$executeRaw(
+          Prisma.sql`UPDATE tenant_memberships SET role = 'owner' WHERE user_id = ${alice}::uuid`,
+        )
+        .then((n) => n as unknown),
+    );
+
+    // As DUAS asserções. `ok: false` sozinho provaria que o banco recusou;
+    // `findRole` intacto sozinho provaria que o `where` não casou. Juntas
+    // dizem o que importa: houve uma tentativa e a linha não mudou.
+    expect(tentativa.ok).toBe(false);
+    // ⚠️ (PR #101) `ok: false` sozinho é cego DENTRE "o banco recusou por
+    // PRIVILÉGIO" e "o banco recusou por outro motivo" (conexão, SQL malformado,
+    // `where` que não casou). O que fixa a propriedade é o SQLSTATE: os três
+    // testes vermelhos desta seção medem a `20261020000005`, que barra por
+    // privilégio — se um dia voltassem a ser barrados pela POLICY, o furo
+    // reabriria pelo caminho do privilégio e o teste passaria dizendo o
+    // contrário. MEDIDO (não deduzido): `42501` +
+    // `permission denied for table tenant_memberships`.
+    expect(tentativa.detalhe).toMatch(/^42501:/);
+    expect(tentativa.detalhe).toContain('permission denied for table tenant_memberships');
+    const role = await ctx.prisma.tenantMembership.findUnique({
+      where: { userId_tenantId: { userId: alice, tenantId: acmeId } },
+      select: { role: true },
+    });
+    expect(role).toEqual({ role: 'member' });
+  });
+
+  it('🔴 UPDATE do `user_id` para um usuário de OUTRA empresa é barrado — a elevate-self com um verbo a menos', async () => {
+    // O roteiro exato que a `20261020000004` mediu no `INSERT`, trocando o verbo:
+    // a linha continua no `tenant_id` da ACME (passa nos dois lados da policy) e
+    // passa a apontar para o Bruno da GLOBEX. Aí `usuario_no_escopo(<bruno>)` vale
+    // TRUE, porque a membership que o statement acabou de gravar É a coisa que a
+    // função mede.
+    const alice = await criarUsuario('alice');
+    const bruno = await criarUsuario('bruno');
+    await associar(alice, acmeId);
+    await associar(bruno, globexId);
+
+    // ANTES: a sessão da ACME não enxerga o Bruno. Sem esta linha, "depois não
+    // enxerga" não distingue "a escalada foi barrada" de "nunca esteve lá".
+    await expect(
+      comEscopo(acmeId, (tx) => tx.user.findMany({ select: { name: true } })),
+    ).resolves.toEqual([{ name: 'alice' }]);
+
+    const tentativa = await tentarComEscopo(acmeId, (tx) =>
+      tx
+        .$executeRaw(
+          Prisma.sql`UPDATE tenant_memberships SET user_id = ${bruno}::uuid WHERE user_id = ${alice}::uuid`,
+        )
+        .then((n) => n as unknown),
+    );
+
+    expect(tentativa.ok).toBe(false);
+    // (PR #101) Mesmo motivo do teste anterior: o SQLSTATE diz QUE classe de
+    // falha foi. MEDIDO: `42501` + `permission denied for table
+    // tenant_memberships`.
+    expect(tentativa.detalhe).toMatch(/^42501:/);
+    expect(tentativa.detalhe).toContain('permission denied for table tenant_memberships');
+    // O efeito é o que importa, e é a MESMA leitura que a escalada da
+    // `20261020000004` mediu como proibida.
+    await expect(
+      comEscopo(acmeId, (tx) => tx.user.findMany({ select: { name: true } })),
+    ).resolves.toEqual([{ name: 'alice' }]);
+    const memberships = await ctx.prisma.tenantMembership.findMany({
+      where: { tenantId: acmeId },
+      select: { userId: true },
+    });
+    expect(memberships).toEqual([{ userId: alice }]);
+  });
+
+  it('🔴 DELETE da membership da PRÓPRIA empresa é barrado, e o dono sobrevive', async () => {
+    // `memberships_remocao` é `USING (no_escopo_atual(tenant_id, false))` e o
+    // escopo é o da própria empresa: PASSA. Sem consumidor no código — o único
+    // `tenantMembership.*` escrito em todo o app é o `updateMany` de
+    // `atribuirPerfil`.
+    const alice = await criarUsuario('alice');
+    await associar(alice, acmeId);
+
+    const tentativa = await tentarComEscopo(acmeId, (tx) =>
+      tx
+        .$executeRaw(Prisma.sql`DELETE FROM tenant_memberships WHERE tenant_id = ${acmeId}::uuid`)
+        .then((n) => n as unknown),
+    );
+
+    expect(tentativa.ok).toBe(false);
+    // (PR #101) Terceiro da série. Sem isto, um `DELETE` barrado por qualquer
+    // outra coisa contaria como "o DELETE está barrado". MEDIDO: `42501` +
+    // `permission denied for table tenant_memberships`.
+    expect(tentativa.detalhe).toMatch(/^42501:/);
+    expect(tentativa.detalhe).toContain('permission denied for table tenant_memberships');
+    await expect(ctx.prisma.tenantMembership.count({ where: { tenantId: acmeId } })).resolves.toBe(
+      1,
+    );
+  });
+
+  it('🟢 UPDATE do `profile_id` — o caminho legítimo — continua funcionando com o privilégio por coluna', async () => {
+    // ⚠️ CONTROLE POSITIVO, e ele é o motivo de os outros três existirem. Um
+    // `REVOKE UPDATE ON tenant_memberships` sem o `GRANT` por coluna seguinte
+    // deixaria os três vermelhos acima verdes E quebraria o `atribuirPerfil` — que
+    // é a única escrita de membership que a aplicação faz. O conserto pareceria
+    // certo e seria uma mentira maior que o defeito.
+    const alice = await criarUsuario('alice');
+    await associar(alice, acmeId);
+
+    // Via Prisma, e não por SQL cru: é o `data` que o `atribuirPerfil` manda, e é
+    // ele que traz o `updated_at` implícito do `@updatedAt` — a coluna que ficaria
+    // de fora do `GRANT` quebraria aqui, não em produção.
+    await comEscopo(acmeId, (tx) =>
+      tx.tenantMembership.updateMany({
+        where: { userId: alice, tenantId: acmeId },
+        data: { profileId: perfilDaAcme },
+      }),
+    );
+    const membership = await ctx.prisma.tenantMembership.findUnique({
+      where: { userId_tenantId: { userId: alice, tenantId: acmeId } },
+      select: { profileId: true },
+    });
+    expect(membership).toEqual({ profileId: perfilDaAcme });
+  });
+
+  it('a chave de assinatura tem RLS ligado, e não só um `REVOKE`', async () => {
+    // A `20261020000004` protege `chaves_de_assinatura` com `REVOKE ALL`. Isso é
+    // pontual: a `20261020000000` dá `SELECT` a `app_runtime` em `ON ALL TABLES IN
+    // SCHEMA public`, e qualquer migration futura que repita esse padrão
+    // re-concede a leitura do segredo — o atacante de injeção de SQL assina o que
+    // quiser e a escalada inteira volta.
+    //
+    // O que fecha isso não é outro `REVOKE` (que o re-grant desfaz) e nem
+    // `FORCE ROW LEVEL SECURITY` (que quebraria o boot, porque o leitor da chave
+    // é o DONO): é RLS sem policy, que é o fail-closed do Postgres — qualquer
+    // papel que não seja o dono lê ZERO linhas mesmo com o privilégio de volta.
+    //
+    // Perguntado ao DONO: perguntar ao runtime se ele tem privilégio responderia
+    // "não" com ou sem o RLS, porque a falta de privilégio esconde a linha.
+    const rls = await ctx.prisma.$queryRaw<Array<{ relrowsecurity: boolean }>>`
+      SELECT c.relrowsecurity FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public' AND c.relname = 'chaves_de_assinatura'
+    `;
+    expect(rls).toEqual([{ relrowsecurity: true }]);
   });
 
   // ─────────────── a escalada que a §2 da 000002 dá por fechada ───────────────

@@ -35,6 +35,15 @@ const AceitarConviteSchema = z.object({
     .regex(/^[0-9a-f]{64}$/),
 });
 
+/**
+ * O `:id` é um `uuid` de coluna (`tenants.id @db.Uuid`), então o path tem a mesma
+ * obrigação de contrato que o body. Fica no NÍVEL DO MÓDULO, e não dentro da
+ * classe: um `const` no corpo da classe vira campo de instância, que não existe
+ * no escopo em que o decorator é avaliado (MEDIDO — `ReferenceError: TenantIdSchema
+ * is not defined`).
+ */
+const TenantIdSchema = z.string().uuid();
+
 // ⚠️ SEM `PermissionsGuard` e SEM `@RequirePermission`, e isso é deliberado.
 // O `PermissionsGuard` resolve as permissões pelo tenant do HEADER
 // (`X-Tenant-Id`), que pode ser diferente do `:id` desta rota — um header
@@ -55,7 +64,17 @@ export class TenancyInvitationsController {
 
   @Post('tenants/:id/invitations')
   async convidar(
-    @Param('id') tenantId: string,
+    // ⚠️ (PR #101) O `:id` É validado, e não só o body. Sem este pipe o valor
+    // chegava cru ao `emitirConvite`, que o leva até o Postgres — e a coluna é
+    // `uuid`. Um path malformado morria em erro de tipo do driver, que o
+    // `domain-exception-to-http.ts` não mapeia: 500 em vez de 400. MEDIDO no
+    // spec deste controller: antes da correção a rota devolvia 201 e o use case
+    // era chamado com `tenantId: 'nao-e-uuid'`.
+    //
+    // `@Param('id', pipe)` e não `@Param(pipe)`: a forma sem nome entrega o
+    // OBJETO de params inteiro, e o Zod recusa com `Expected string, received
+    // object` — um 400 que não distingue "uuid inválido" de "uuid válido".
+    @Param('id', new ZodValidationPipe(TenantIdSchema)) tenantId: string,
     @Body(new ZodValidationPipe(EmitirConviteSchema)) body: z.infer<typeof EmitirConviteSchema>,
     @Req() req: RequestComAtor,
   ): Promise<{ token: string; expiresAt: string }> {

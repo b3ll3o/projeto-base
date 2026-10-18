@@ -152,31 +152,38 @@ Mudanças em `apps/api/src/` → `tsx watch` recarrega; `apps/web/app/` → Fast
 
 ### 3.1 Preparar os arquivos de ambiente
 
-⚠️ **Este checkout não tem os dois arquivos de que a stack precisa** (medido 2026-10-16):
-`.env` da raiz **não existe** (só `.env.example`) — o serviço `api` declara
-`DATABASE_URL: ${DATABASE_URL}`, que o compose interpola da raiz; sem ele a chave resolve
-para string vazia e o healthcheck reprova. E `.env.production` existe mas é **stub de 1
-linha** (`# spec stub — não commitar`), de onde saem `POSTGRES_PASSWORD` e `JWT_SECRET`.
+**Estado medido em 2026-10-17** (só nomes de chave; valores não entram no doc):
+`.env` da raiz **existe**, 1 chave (`DATABASE_URL`); `.env.production` **existe**,
+7 chaves (`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `DATABASE_URL`,
+`ALLOWED_ORIGINS`, `JWT_SECRET`, `LOG_LEVEL`); `DIRECT_DATABASE_URL` é a **única
+ausente**.
+
+⚠️ **A versão anterior desta seção afirmava que `.env` não existia e que
+`.env.production` era um stub de 1 linha.** Ambas **medidas falsas** acima: os
+dois arquivos existem e estão preenchidos. As frases datavam de 2026-10-16 e
+envelheceram sem que o texto acompanhasse.
+
+⚠️ **DUAS conexões desde a Fase 9 (RLS).** A da APLICAÇÃO tem de ser o papel
+`app_runtime`, criado pela migration; a de DONO é a que o CLI do Prisma usa.
+Inverter as duas não dá erro — a stack sobe e as policies ficam inertes.
 
 ```bash
+# ⚠️ NÃO rode se o seu .env.production já tem segredo: o `cp` é DESTRUTIVO.
 cp .env.production.example .env.production     # preencher os CHANGE_ME_*
 #   POSTGRES_PASSWORD, JWT_SECRET  (openssl rand -base64 48)
 #   DIRECT_DATABASE_URL            (conexão de DONO — ver o aviso abaixo)
 
-# ⚠️ DUAS conexões desde a Fase 9 (RLS). A da APLICAÇÃO tem de ser o papel
-# `app_runtime`, criado pela migration; a de DONO é a que o CLI do Prisma usa.
-# Inverter as duas não dá erro — a stack sobe e as policies ficam inertes.
-#
-# .env da RAIZ: só o DATABASE_URL, com host = "postgres" (nome do serviço)
+# .env da RAIZ: só o DATABASE_URL, host = "postgres". O serviço `api` declara
+# `DATABASE_URL: ${DATABASE_URL}`, que o compose interpola da raiz; sem ele a
+# chave resolve para string vazia e o healthcheck reprova.
 echo 'DATABASE_URL=postgresql://app_runtime:<senha-de-runtime>@postgres:5432/projeto_base?schema=public' > .env
 
-# .env.production: o DIRECT_DATABASE_URL (DONO), porque o serviço `api` NÃO o
-# declara em `environment:` e o `env_file` é quem o entrega. ⚠️ Não o ponha no
-# .env da raiz: `environment:` tem precedência sobre `env_file`, e uma chave
-# não interpolada ali sobrescreveria o valor do `.env.production` com string
-# vazia — a mesma armadilha que o compose documenta para o `JWT_SECRET`.
-echo 'DIRECT_DATABASE_URL=postgresql://projeto:<senha>@postgres:5432/projeto_base?schema=public' >> .env.production
-
+# EDITE no .env.production a linha DIRECT_DATABASE_URL= que o cp já criou.
+# ⚠️ NÃO use `>>`: o example JÁ traz a chave (4ª linha), então anexar cria
+# duplicata — e qual das duas o `env_file` do Compose honra NÃO ESTÁ MEDIDO aqui.
+# Editar não deixa a pergunta existir. ⚠️ E não ponha a chave no `.env` da raiz:
+# `environment:` tem precedência sobre `env_file` e a sobrescreveria com vazio.
+#
 # ⚠️ A senha de `app_runtime` está em texto puro na migration (migration não lê
 # env). Troque-a fora de banda antes de usar isto fora de dev.
 

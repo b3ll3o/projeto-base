@@ -46,6 +46,10 @@ import {
 import { AUDIT_SERVICE_PORT } from '../../../../shared/audit/shared/audit.tokens.js';
 import { AuditContextStore } from '../../../../shared/audit/shared/audit-context-store.js';
 import type { AuditContext } from '../../../../shared/audit/domain/audit-context.vo.js';
+import {
+  TENANT_MEMBERSHIP_REPOSITORY_PORT,
+  type TenantMembershipRepositoryPort,
+} from '../../../tenancy/domain/ports/tenant-membership-repository.port.js';
 import { GlobalExceptionFilter } from '../../../../shared/infrastructure/http/global-exception.filter.js';
 import { ZodValidationPipe } from '../../../../shared/infrastructure/http/zod-validation.pipe.js';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -130,6 +134,16 @@ const CACHE_STUB = {
   },
 } as unknown as UserProfileCacheService;
 
+// pt-BR (PR #101, 2026-10-17): a 4ª dependência do `JwtAuthGuard`. Nenhum
+// teste deste arquivo manda `X-Tenant-Id`, então a conferência de membership não
+// chega a rodar — mas o token precisa estar declarado, ou o Nest não constrói o
+// guard e os 20 testes caem com `Nest can't resolve dependencies`.
+const MEMBERSHIPS_STUB = {
+  async findRole() {
+    return 'member';
+  },
+} as unknown as TenantMembershipRepositoryPort;
+
 /** Token de access que o emissor stub aceita. */
 const TOKEN_ACCESS = 'header.payload.assinatura-access';
 /** Token de refresh que o emissor stub aceita. */
@@ -179,6 +193,7 @@ describe('UsersController — fronteira HTTP de autenticação', () => {
         { provide: AUDIT_SERVICE_PORT, useValue: makeAudit() },
         { provide: UserProfileUseCases, useValue: PROFILE_USE_CASES_STUB },
         { provide: TOKEN_ISSUER_PORT, useValue: issuer },
+        { provide: TENANT_MEMBERSHIP_REPOSITORY_PORT, useValue: MEMBERSHIPS_STUB },
         JwtAuthGuard,
         {
           provide: UserProfileCacheService,
@@ -321,6 +336,7 @@ describe('UsersController — fronteira HTTP de autenticação', () => {
         { provide: AUDIT_SERVICE_PORT, useValue: makeAudit() },
         { provide: UserProfileUseCases, useValue: PROFILE_USE_CASES_STUB },
         { provide: TOKEN_ISSUER_PORT, useValue: sabota },
+        { provide: TENANT_MEMBERSHIP_REPOSITORY_PORT, useValue: MEMBERSHIPS_STUB },
         JwtAuthGuard,
         { provide: UserProfileCacheService, useValue: CACHE_STUB },
       ],
@@ -380,6 +396,7 @@ describe('UsersController — o carve-out público sobrevive ao OpenAPI', () => 
         { provide: AUDIT_SERVICE_PORT, useValue: makeAudit() },
         { provide: UserProfileUseCases, useValue: PROFILE_USE_CASES_STUB },
         { provide: TOKEN_ISSUER_PORT, useValue: makeIssuer() },
+        { provide: TENANT_MEMBERSHIP_REPOSITORY_PORT, useValue: MEMBERSHIPS_STUB },
         JwtAuthGuard,
         { provide: UserProfileCacheService, useValue: CACHE_STUB },
       ],

@@ -60,8 +60,8 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
     // unicidade passou para dois índices PARCIAIS em SQL (migration
     // `20261017000000_...`), que o Prisma não sabe expressar em `findUnique`.
     //
-    // Quem chama: `obterPorSlug` (`profiles.use-cases.ts:129`, hoje sem rota
-    // HTTP) e a checagem de slug duplicado do `criar` (`:179`, que é o
+    // Quem chama: `obterPorSlug` (`profiles.use-cases.ts:224`, hoje sem rota
+    // HTTP) e a checagem de slug duplicado do `criar` (`:267`, que é o
     // `POST /admin/profiles`). NÃO é o `PermissionsGuard` nem o
     // `UserProfileCacheService` — o guard resolve perfil por `findById`, via
     // `users.profile_id`.
@@ -166,9 +166,15 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
     // e ZERO permissões — o aggregate em memória e o banco divergem.
     await this.prisma.$transaction(async (tx) => {
       // pt-BR (Fase 9): mesmo escopo do CREATE, e pela MESMA razão. O
-      // `profiles_atualizacao` é `USING (aceita_global = true)` com
-      // `WITH CHECK (aceita_global = false)` — assim uma empresa renomeia o
-      // perfil global que ela veste, mas não o converte em dela.
+      // `profiles_atualizacao` é `USING (no_escopo_atual(tenant_id, false))` com
+      // `WITH CHECK` idêntico — os DOIS lados conferem a dona, e é o `WITH CHECK`
+      // que impede uma empresa de converter em dela o perfil global que veste.
+      //
+      // ⚠️ Este texto antes dizia `USING (aceita_global = true)` com
+      // `WITH CHECK (aceita_global = false)`. MEDIDO FALSO: a policy no banco é a
+      // de cima, desde o commit `5553ee3` ("a RLS da Fase 9 era legível E
+      // apagável"). O comentário descrevia a versão anterior e convencia quem o
+      // lessse de que `aceita_global` era o predicado.
       await abrirEscopo(tx, escopoDoTenant(profile.tenantId()));
       const updated = await tx.profile.updateMany({
         // pt-BR (Fase 9): `tenantId` no `where` é a TRAVA de dona, e a

@@ -68,11 +68,35 @@ export class UserProfileCacheService {
     userId: string,
     value: CacheEntry['value'],
   ): Promise<void> {
+    this.varreExpiradas();
     this.#store.set(chaveDe(tenantId, userId), {
       expiresAt: Date.now() + TTL_MS,
       userId,
       value,
     });
+  }
+
+  /**
+   * pt-BR (2026-10-17): o TTL era aplicado SÓ na leitura, e lá ele é um número
+   * comparado, não um evento — uma entrada escrita e nunca mais lida ficava no
+   * `Map` para sempre. O caminho que produz entradas que ninguém relê é o
+   * `GET /me/profile` com um `X-Tenant-Id` de empresa onde a pessoa não é
+   * membro: `extractTenantId` valida o FORMATO do uuid, não a existência da
+   * empresa, então cada tentativa vira uma chave nova e nenhuma volta a ser
+   * procurada. Sem varredura, o `Map` só cresce — e `invalidateUser` varre o
+   * `Map` inteiro a cada escrita de perfil, então os dois se reforçam.
+   *
+   * Varrer no `set`, e não num `setInterval`: é onde a entrada nasce, o custo é
+   * uma passagem por um `Map` que já está sendo alterado, e o processo não
+   * ganha uma tarefa de background para derrubar no shutdown.
+   */
+  varreExpiradas(): void {
+    const agora = Date.now();
+    for (const [chave, entry] of this.#store) {
+      if (entry.expiresAt < agora) {
+        this.#store.delete(chave);
+      }
+    }
   }
 
   /**
@@ -91,5 +115,15 @@ export class UserProfileCacheService {
 
   async invalidateAll(): Promise<void> {
     this.#store.clear();
+  }
+
+  /**
+   * pt-BR: existe para o teste da varredura poder observar o `Map` SEM passar
+   * por `get` — que é justamente o caminho que já apaga a entrada expirada, e
+   * então medir por ele provaria que "a entrada sumiu", não que "a varredura
+   * pegou". Uma leitura que só o teste usa e que não mente sobre o estado.
+   */
+  tamanho(): number {
+    return this.#store.size;
   }
 }

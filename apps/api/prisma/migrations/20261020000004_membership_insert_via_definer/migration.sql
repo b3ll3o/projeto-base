@@ -232,6 +232,20 @@ BEGIN
   -- que é o que aconteceu na primeira versão desta função, com 500 em todo o
   -- onboarding. `gen_random_uuid()` é o mesmo default que o resto do schema
   -- já usa (`users_history`, `users_archive`, `profiles`).
+  --
+  -- ⚠️ NÃO HÁ `EXISTS` sobre `p_user_id` nem sobre `p_tenant_id` nesta função,
+  -- e o `INSERT` abaixo é cru. O que impede o vínculo órfão são as FKs —
+  -- `tenant_memberships_user_id_fkey` e `tenant_memberships_tenant_id_fkey`,
+  -- declaradas na migration `20261017000000_tenant_membership_invitation`
+  -- (linhas 78-83), **OUTRO arquivo**. Um `p_user_id` inventado morre em
+  -- `23503` mesmo que a assinatura passasse. Isto está registrado porque um
+  -- `.sql` que se lê sozinho parece aceitar `p_user_id` arbitrário: quem
+  -- soltar as FKs tira a segunda barreira sem deixar sinal no código.
+  --
+  -- As demais barreiras, todas independentes: a assinatura (a chave está em
+  -- `chaves_de_assinatura`, sem `SELECT` para `app_runtime`), o
+  -- `REVOKE INSERT ... FROM app_runtime` (`20261020000004:133`), e o
+  -- `@@unique([userId, tenantId])` do schema, que impede vínculo duplicado.
   INSERT INTO tenant_memberships (
     id, user_id, tenant_id, role, profile_id, created_at, updated_at
   )

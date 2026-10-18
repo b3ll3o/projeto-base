@@ -1394,6 +1394,61 @@ describe('Fase 6 — atribuir perfil POR EMPRESA', () => {
     await expect(memberships.findProfileId(ATOR_ID, ACME)).resolves.toBe(adminDaEmpresa.id().value);
   });
 
+  it('R5 em CAIXA ALTA: o próprio id em maiúsculas não escapa da trava', async () => {
+    const adminDaEmpresa = perfilDe(ACME, ['admin.manage-users'], true);
+    users.prime(userComProfile(ATOR_ID, null));
+    memberships.prime(ATOR_ID, ACME, adminDaEmpresa.id().value);
+
+    // `UUID_RE` do `UserId` tem a flag `/i` e `UserId.create` guarda a string
+    // CRUA (medido em `user-id.vo.ts:46-54`, sem `toLowerCase`). Então a forma
+    // em caixa alta passa na validação do VO e o único `===` que nega é o da
+    // trava — o R5 inteiro é burlável mandando o próprio id em maiúsculas.
+    // O `motivo` é o que dá DENTE ao teste: `ProfilePrivilegeEscalationException`
+    // é a MESMA classe para as cinco travas, então `rejects.toThrow(Classe)`
+    // passaria por qualquer recusa. Aqui a recusa tem de ser a de R5.
+    const erro = await uc
+      .atribuirProfileAoUser(ATOR_ID.toUpperCase(), null, { ...atorDaAcme(), isAdmin: true })
+      .then(
+        () => null,
+        (e: unknown) => e as ProfilePrivilegeEscalationException,
+      );
+    expect(erro?.motivo).toBe('ninguém altera o próprio perfil dentro da empresa');
+  });
+
+  it('R6: trocar o admin da empresa por um perfil MENOR é o mesmo lockout — com `profileId` não-nulo', async () => {
+    // O cenário que o comentário da trava descreve e que nenhum teste cobria:
+    // `carlos` (sem admin, com `admin.manage-users`) rebaixa `alice` (dona,
+    // admin DA EMPRESA) para um perfil menor. `R3` deixa passar, porque
+    // `menor` é subconjunto do perfil do ator — e a precondição do lockout é o
+    // perfil ATUAL do alvo, que a forma antiga (`profileIdStr === null &&`)
+    // não alcançava: aqui o `profileIdStr` é não-nulo.
+    const doAtor = perfilDe(ACME, ['admin.manage-users', 'users.read']);
+    const adminDaEmpresa = perfilDe(ACME, ['admin.manage-users'], true);
+    // ⚠️ `menor` tem de ser SUBCONJUNTO do perfil do ator, senão `R3` dispara
+    // antes e é `R3` que o teste mede. MEDIDO: com `['users.read']` contra um
+    // ator de `['admin.manage-users']`, o motivo que sai é o de R3 — e o
+    // `rejects.toThrow(Classe)` passaria verde sem distinguir nada.
+    const menor = perfilDe(ACME, ['users.read']);
+    users.prime(userComProfile(ATOR_ID, null));
+    users.prime(userComProfile(ALVO_ID, null));
+    memberships.prime(ATOR_ID, ACME, doAtor.id().value);
+    memberships.prime(ALVO_ID, ACME, adminDaEmpresa.id().value);
+
+    const erro = await uc.atribuirProfileAoUser(ALVO_ID, menor.id().value, atorDaAcme()).then(
+      () => null,
+      (e: unknown) => e as ProfilePrivilegeEscalationException,
+    );
+    // `R3` lança a MESMA classe e `menor` é subconjunto do perfil do ator — só
+    // o `motivo` separa "lockout do admin da empresa" de "perfil perigoso". Com
+    // ele, o teste mede a trava que ele nomeia.
+    expect(erro?.motivo).toBe(
+      'só um ator com isAdmin retira de um membro o profile admin da empresa',
+    );
+    // A negativa tem de ter PARADO a escrita: a membership da dona continua no
+    // admin. Um `rejects` que viesse depois do `atribuirPerfil` passaria aqui.
+    await expect(memberships.findProfileId(ALVO_ID, ACME)).resolves.toBe(adminDaEmpresa.id().value);
+  });
+
   it('alvo que não é membro da empresa é recusado, não 200 à toa', async () => {
     const doAtor = perfilDe(ACME, ['admin.manage-users']);
     const gestor = perfilDe(ACME, ['users.read']);

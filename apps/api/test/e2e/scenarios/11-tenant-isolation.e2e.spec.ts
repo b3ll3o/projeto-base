@@ -113,6 +113,22 @@ describe('E2E 11 — isolamento entre empresas', () => {
     return JSON.parse(r.body) as { profileId: string | null; permissions: string[] };
   }
 
+  /**
+   * Recusa de empresa na fronteira (`JwtAuthGuard`, PR #101).
+   *
+   * Helper separado de `meuPerfil` porque o `code` faz parte do que se está
+   * medindo: 403 genérico também é o que a camada de PERMISSÃO devolve, e essa
+   * é outra propriedade. Conferir o `code` separa "o guard não reconheceu o
+   * requerente na empresa" de "o guard reconheceu e a permissão faltou".
+   */
+  async function recusaDeEmpresa(headers: Record<string, string>) {
+    const r = await e2e.injetar({ method: 'GET', url: '/api/v1/me/profile', headers });
+    return {
+      status: r.statusCode,
+      body: JSON.parse(r.body) as { code?: string; detail?: string },
+    };
+  }
+
   // ───────────────── a promessa inteira ─────────────────
 
   it('a MESMA conta tem perfil DIFERENTE em cada empresa, e cada header devolve o seu', async () => {
@@ -173,7 +189,7 @@ describe('E2E 11 — isolamento entre empresas', () => {
     expect(lidoNaGlobex.permissions).toEqual(['users.write']);
   });
 
-  it('pessoa que não é membro da empresa lê ZERO permissões com o header dela', async () => {
+  it('pessoa que NÃO é membro da empresa é recusada no header alheio', async () => {
     const acme = await abrirEmpresa('acme');
     await abrirEmpresa('globex');
     const intrusa = await criarUsuarioAutenticado(e2e, {
@@ -181,13 +197,16 @@ describe('E2E 11 — isolamento entre empresas', () => {
       email: 'intrusa+acme@outra.dev',
     });
 
-    const leitura = await meuPerfil({ ...intrusa.headers, 'x-tenant-id': acme.empresa.id });
+    // ⚠️ ESTE CENÁRIO MUDOU DE CONTRATO (PR #101, 2026-10-17). Ele afirmava
+    // 200 com `permissions: []` — e essa resposta ERA o furo: zero permissões
+    // numa empresa de que o requerente não participa mede que a camada de
+    // RESOLUÇÃO estava certainíssima e a de AUTORIZAÇÃO, ausente. O resto do
+    // cenário era o mesmo: o sintoma a evitar é herdar o admin do dono, e nem
+    // `GET /me/profile` respondia mais alguma vez.
+    const recusa = await recusaDeEmpresa({ ...intrusa.headers, 'x-tenant-id': acme.empresa.id });
 
-    // Não membro = zero permissões, e não "as permissões do dono da empresa".
-    // O sintoma oposto — herdar o admin da empresa — seria indistinguível de
-    // um perfil corretamente configurado.
-    expect(leitura.profileId).toBeNull();
-    expect(leitura.permissions).toEqual([]);
+    expect(recusa.status).toBe(403);
+    expect(recusa.body.code).toBe('TENANT_MEMBERSHIP_REQUIRED');
   });
 
   // ───────────────── eixos trocados (header de uma, path da outra) ─────────────────
@@ -256,7 +275,7 @@ describe('E2E 11 — isolamento entre empresas', () => {
     ).toBe(0);
   });
 
-  it('header de empresa que não existe não é 500: resolve zero permissões e nega', async () => {
+  it('header de empresa que não existe não é 500: o guard recusa com 403 nomeado', async () => {
     await abrirEmpresa('acme');
     const intrusa = await criarUsuarioAutenticado(e2e, {
       nome: 'Intrusa',
@@ -264,11 +283,14 @@ describe('E2E 11 — isolamento entre empresas', () => {
     });
     const tenantInexistente = '0190a8b6-0000-4000-8000-00000000ffff';
 
-    const leitura = await meuPerfil({ ...intrusa.headers, 'x-tenant-id': tenantInexistente });
+    const recusa = await recusaDeEmpresa({ ...intrusa.headers, 'x-tenant-id': tenantInexistente });
 
-    // Um UUID de tenant que não está no banco não pode virar erro de banco: a
-    // resolução é por query, e "não encontrou" é o mesmo que "sem perfil".
-    expect(leitura.permissions).toEqual([]);
+    // Um UUID de tenant que não está no banco não pode virar erro de banco. A
+    // pergunta que este cenário fazia — "200 com zero permissões?" — deixou de
+    // ser a resposta desejada: agora é 403, porque empresa que não existe não
+    // tem membro, e o requerente não é ninguém lá dentro.
+    expect(recusa.status).toBe(403);
+    expect(recusa.body.code).toBe('TENANT_MEMBERSHIP_REQUIRED');
 
     const escrita = await e2e.injetar({
       method: 'PUT',
@@ -276,8 +298,14 @@ describe('E2E 11 — isolamento entre empresas', () => {
       headers: { ...intrusa.headers, 'x-tenant-id': tenantInexistente },
       payload: { profileId: null },
     });
-    // 403 e não 404/500: sem empresa não há permissão nenhuma.
+    // ⚠️ O 403 vem do GUARD, não da camada de permissão. A frase antiga — "sem
+    // empresa não há permissão nenhuma" — continuaria verde medindo outra
+    // coisa: a recusa acontece um passo antes, na fronteira. A negação pela
+    // camada de permissão precisa de um requerente que SEJA membro, e empresa
+    // inexistente não tem membro; quem mede essa ponta é o cenário logo acima,
+    // "dono da ACME não veste com perfil da GLOBEX".
     expect(escrita.statusCode).toBe(403);
+    expect((JSON.parse(escrita.body) as { code?: string }).code).toBe('TENANT_MEMBERSHIP_REQUIRED');
   });
 
   // ─────────── a superfície de GESTÃO de perfis, que é cross-tenant ───────────

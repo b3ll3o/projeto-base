@@ -34,12 +34,19 @@ describe('AssinaturaDeMembership (Fase 10+)', () => {
       expect(corpoDaAssinatura('u', 't', 'owner', 'p')).toBe('1:u1:t5:owner1:p');
     });
 
-    it('profile_id nulo vira campo vazio, e role vazia vira `member`', () => {
+    it('profile_id nulo vira campo vazio, e role vazia NÃO vira `member`', () => {
       // Os dois normalizadores do SQL: `COALESCE(p_profile_id::text, '')` e
       // `COALESCE(p_role, 'member')`. A assinatura tem de normalizar do MESMO
       // lado que grava, senão a role gravada e a role assinada divergem.
       expect(corpoDaAssinatura('u', 't', 'member', null)).toBe('1:u1:t6:member0:');
-      expect(corpoDaAssinatura('u', 't', '', null)).toBe('1:u1:t6:member0:');
+      // ⚠️ `COALESCE` trata SÓ `NULL`. Para `''` ele devolve a própria vazia
+      // (`0:`), e é isso que este literal afirma. A versão anterior deste teste
+      // esperava `6:member` aqui — que é o que o `||` do JavaScript produz, e
+      // que o Postgres NÃO produz. O teste ficava verde com o contrato errado
+      // cravado, e o onboarding quebraria com `42501` no dia em que `role`
+      // passasse a ser configurável. MEDIDO o alcance: hoje nenhum produtor
+      // gera `''`.
+      expect(corpoDaAssinatura('u', 't', '', null)).toBe('1:u1:t0:0:');
     });
 
     it('a contagem é de BYTES, não de caracteres', () => {

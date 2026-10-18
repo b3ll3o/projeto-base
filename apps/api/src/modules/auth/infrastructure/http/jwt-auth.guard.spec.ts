@@ -31,6 +31,7 @@ import { ExecutionContext, BadRequestException, UnauthorizedException } from '@n
 import { Reflector } from '@nestjs/core';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
 import type { UserProfileCacheService } from '../../../../shared/infrastructure/security/user-profile-cache.service.js';
+import type { TenantMembershipRepositoryPort } from '../../../tenancy/domain/ports/tenant-membership-repository.port.js';
 import { Public } from './public.decorator.js';
 import {
   TOKEN_ISSUER_PORT,
@@ -95,22 +96,38 @@ function makeContext(options: {
 function makeGuard(
   issuer: TokenIssuerPort,
   cache?: Partial<UserProfileCacheService>,
+  memberships?: Partial<TenantMembershipRepositoryPort>,
 ): JwtAuthGuard {
-  return new JwtAuthGuard(issuer, new Reflector(), {
-    async getUserProfileAndPermissions() {
-      return null;
-    },
-    async setUserProfileAndPermissions() {
-      /* noop */
-    },
-    async invalidateUser() {
-      /* noop */
-    },
-    async invalidateAll() {
-      /* noop */
-    },
-    ...cache,
-  } as never);
+  return new JwtAuthGuard(
+    issuer,
+    new Reflector(),
+    {
+      async getUserProfileAndPermissions() {
+        return null;
+      },
+      async setUserProfileAndPermissions() {
+        /* noop */
+      },
+      async invalidateUser() {
+        /* noop */
+      },
+      async invalidateAll() {
+        /* noop */
+      },
+      ...cache,
+    } as never,
+    // pt-BR (PR #101, 2026-10-17): o 4º parâmetro é a conferência de
+    // membership. O default responde "membro" porque os testes deste arquivo
+    // exercitam o HEADER (canonicalização, cache por par, 400 de uuid
+    // malformado) e não a autorização — que tem spec próprio, em
+    // `jwt-auth.guard.tenant.spec.ts`.
+    {
+      async findRole() {
+        return 'member';
+      },
+      ...memberships,
+    } as never,
+  );
 }
 
 /** Executa o guard e devolve a exceção capturada, falhando o teste se NÃO houver. */

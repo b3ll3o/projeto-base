@@ -1,0 +1,113 @@
+-- 20261020000005 — os verbos que sobraram em `tenant_memberships`, e a chave de
+-- assinatura sem RLS
+--
+-- CONTEXTO
+-- A `20261020000004` fechou o `INSERT` de `tenant_memberships` com `REVOKE` +
+-- função `SECURITY DEFINER` assinada. O que ela NÃO fez — e o motivo desta
+-- migration — é o resto da frase que a própria `20261020000000` já apontava
+-- como saída (b): `UPDATE` e `DELETE` continuaram concedidos pelo
+-- `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES` da linha 55.
+--
+-- A policy `memberships_atualizacao` confere SÓ `tenant_id`
+-- (`USING (no_escopo_atual(tenant_id, false)) WITH CHECK (…, false)`). Isso era
+-- irrelevante enquanto ninguém podia escrever a linha, e é irrelevante para o
+-- `INSERT`, porque ele é barrado pelo PRIVILÉGIO antes de a policy ser avaliada.
+-- No `UPDATE` não: `user_id`, `role` e `profile_id` não aparecem em nenhum dos
+-- dois lados, então trocar qualquer um deles numa membership da PRÓPRIA empresa
+-- satisfaz `USING` e `WITH CHECK` sem esforço.
+--
+-- O QUE ESTA MIGRATION FECHA
+--
+--   1. `UPDATE` só nas DUAS colunas que o app escreve, e
+--   2. `DELETE` retirado inteiro — não há consumidor no código.
+--
+-- A MEDIÇÃO que fixa a propriedade (com `app_runtime`, escopo da ACME válido,
+-- transação commitada, partindo de `alice` como `owner` da ACME e `bruno` como
+-- `owner` da GLOBEX):
+--
+--   UPDATE tenant_memberships SET role='owner' WHERE user_id=<alice>;
+--     → o `role` de `alice` vai de 'member' para 'owner' na PRÓPRIA empresa, sem
+--       tocar em nada que a policy olhe. `findRole` passa a devolver 'owner' e
+--       `emitirConvite` libera. `emitirConvite` grava `role: 'member'` fixo,
+--       então isto não é escalada: é a ESCALA INVERTIDA — quem recebeu 'member'
+--       vira dono.
+--
+--   UPDATE tenant_memberships SET user_id=<bruno> WHERE user_id=<alice>;
+--     → a linha continua com o `tenant_id` da ACME, então os dois lados da
+--       policy passam. Mas agora `usuario_no_escopo(<bruno>)` vale TRUE, porque a
+--       membership que este statement acabou de gravar É a coisa que a função
+--       mede (`EXISTS` em `tenant_memberships`) — a mesma elevate-self que a
+--       `20261020000004` mediu no `INSERT`, com um verbo a menos de barreira.
+--       Daí em diante `users_leitura` devolve a linha de `<bruno>`,
+--       `password_hash` incluído, e `users_atualizacao` aceita reescrevê-la.
+--
+--   DELETE FROM tenant_memberships WHERE tenant_id=<ACME>;
+--     → `memberships_remocao` é `USING (no_escopo_atual(tenant_id, false))` e o
+--       escopo é o da PRÓPRIA empresa: PASSA. Apaga a autorização de qualquer
+--       membro da ACME, incluindo o dono. Sem consumidor no código — o único
+--       `tenantMembership.*` escrito em todo o app é o `updateMany` de
+--       `atribuirPerfil` (`prisma-tenant-membership.repository.ts:156`).
+--
+-- POR QUE PRIVILÉGIO POR COLUNA, E NÃO MAIS UM PREDICADO NA POLICY
+-- A policy poderia ganhar o `EXISTS` que confere `user_id`/`role`. Predicado não
+-- impede nada que o privilégio não alcance: ele é avaliado DEPOIS do privilégio,
+-- e o privilégio aqui é amplo demais justamente porque ninguém olhou qual verbo
+-- cada tabela precisa. O `GRANT` em bloco da `20261020000000` é a raiz, e a raiz
+-- se corrige no privilégio.
+--
+-- A policy `memberships_atualizacao` da `20261020000000` NÃO foi removida: ela
+-- fica como a segunda linha, e agora de verdade — com o `GRANT` por coluna, um
+-- `UPDATE` de `profile_id` ainda passa por `no_escopo_atual(tenant_id, false)`
+-- nos dois lados, que é o que impede mover a membership para outra empresa.
+--
+-- ⚠️ `updated_at` está no `GRANT` porque `TenantMembership.updatedAt` é
+-- `@updatedAt` no `schema.prisma`: o Prisma escreve a coluna a cada `updateMany`,
+-- e sem ela no `GRANT` a escrita legítima passaria a dar `42501`.
+--
+-- ⚠️ `GRANT UPDATE (coluna)` convive com `information_schema.table_privileges`
+-- respondendo VAZIO para `UPDATE` — o privilégio passa a ser de coluna e mora em
+-- `column_privileges`. O spec de RLS mede os dois; sem isso, o próprio teste de
+-- privilégio acusaria a tabela de ter perdido a escrita.
+
+REVOKE UPDATE ON tenant_memberships FROM app_runtime;
+GRANT UPDATE (profile_id, updated_at) ON tenant_memberships TO app_runtime;
+REVOKE DELETE ON tenant_memberships FROM app_runtime;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- `chaves_de_assinatura` sem RLS: a proteção do segredo é um `REVOKE` só
+--
+-- A `20261020000004` protege a chave com `REVOKE ALL … FROM PUBLIC` e
+-- `REVOKE ALL … FROM app_runtime` (linhas 130-131). Isso é pontual, não
+-- estrutural: a `20261020000000` §default-privileges dá `SELECT` a
+-- `app_runtime` em TODA tabela nova, e a linha 55 da mesma migration dá
+-- `SELECT` em `ON ALL TABLES IN SCHEMA public`.
+--
+-- Cenário: qualquer migration futura que repita o padrão da linha 55 —
+-- `GRANT … ON ALL TABLES IN SCHEMA public TO app_runtime`, que é literalmente o
+-- que a `20261020000000` faz — concede `SELECT` na chave. O atacante de
+-- injeção de SQL que a `20261020000004` pressupõe (o atacante rodando como
+-- `app_runtime`) passa a ler `segredo bytea`, assina `corpo_de_membership` com os
+-- parâmetros que quiser e chama `criar_membership` para se tornar membro de
+-- qualquer empresa. A escalada inteira que a `20261020000004` mediu e fechou
+-- volta, e nada no banco reclama.
+--
+-- A correção é uma linha, e não é `REVOKE` novo (o `REVOKE` não impede o
+-- re-grant) e nem `FORCE ROW LEVEL SECURITY` (que quebraria o próprio boot: o
+-- leitor da chave é o DONO). É `ENABLE ROW LEVEL SECURITY` SEM policy — que é o
+-- fail-closed do Postgres: mesmo com o privilégio de volta, qualquer papel que
+-- não seja o dono lê ZERO linhas, em vez de tudo.
+--
+-- O DONO continua lendo normalmente: `FORCE` não está ligado, e o dono ignora
+-- RLS por definição. O leitor da chave no boot é o DONO
+-- (`assinatura-de-membership.ts`, via `directUrl`).
+--
+-- ⚠️ Este texto antes dizia que `corpo_de_membership` também é `SECURITY
+-- DEFINER` — "também o dono". MEDIDO FALSO: ela é `LANGUAGE sql`
+-- (`20261020000004:169`) e roda como INVOCADOR. As duas coisas nunca
+-- conflitaram porque `corpo_de_membership` NÃO toca `chaves_de_assinatura` —
+-- ela só monta o texto da assinatura, que é o que o `app_runtime` tem
+-- permissão de fazer. Quem roda como dono é `criar_membership`
+-- (`20261020000004:195`), e é ela que chama a função de corpo. Os dois
+-- caminhos legítimos continuam exatamente como estavam.
+
+ALTER TABLE chaves_de_assinatura ENABLE ROW LEVEL SECURITY;

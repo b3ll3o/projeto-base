@@ -57,6 +57,33 @@ describe('UserProfileCacheService', () => {
     expect(await svc.getUserProfileAndPermissions(TENANT, 'user-1')).toBeNull();
   });
 
+  // pt-BR (2026-10-17): o teste de TTL acima é cego para o vazamento. Ele relê
+  // a chave, e o `get` é justamente o caminho que JÁ apaga a entrada expirada —
+  // então "a entrada sumiu" não distingue "a varredura pegou" de "a leitura
+  // pegou". Este aqui não lê nada: escreve 3, deixa expirar, e mede o `Map` pelo
+  // `tamanho()` logo depois do `set` que dispara a varredura. Sem a varredura,
+  // `tamanho()` seria 4.
+  it('a varredura no set apaga o que expirou sem ninguem reler', async () => {
+    const VAZIO = {
+      isAdmin: false,
+      permissions: [],
+      profileId: null,
+      profileSlug: null,
+      profileName: null,
+    };
+    await svc.setUserProfileAndPermissions(TENANT, 'user-1', VAZIO);
+    await svc.setUserProfileAndPermissions(TENANT, 'user-2', VAZIO);
+    await svc.setUserProfileAndPermissions(TENANT, 'user-3', VAZIO);
+    expect(svc.tamanho()).toBe(3);
+
+    vi.advanceTimersByTime(5_001);
+
+    // Sem ler nada: o unico `set` seguinte varre o `Map` antes de escrever.
+    await svc.setUserProfileAndPermissions(TENANT, 'user-4', VAZIO);
+
+    expect(svc.tamanho()).toBe(1);
+  });
+
   it('valor persiste antes de 5s', async () => {
     await svc.setUserProfileAndPermissions(TENANT, 'user-1', {
       isAdmin: true,

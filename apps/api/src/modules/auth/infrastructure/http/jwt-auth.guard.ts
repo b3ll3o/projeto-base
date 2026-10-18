@@ -43,6 +43,7 @@ import {
   BadRequestException,
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Inject,
   Injectable,
   UnauthorizedException,
@@ -55,6 +56,8 @@ import {
 } from '../../domain/ports/token-issuer.port.js';
 import { IS_PUBLIC_KEY } from './public.decorator.js';
 import { UserProfileCacheService } from '../../../../shared/infrastructure/security/user-profile-cache.service.js';
+import type { TenantMembershipRepositoryPort } from '../../../tenancy/domain/ports/tenant-membership-repository.port.js';
+import { TENANT_MEMBERSHIP_REPOSITORY_PORT } from '../../../tenancy/domain/ports/tenant-membership-repository.port.js';
 
 /**
  * Extrai o token do header `Authorization`.
@@ -143,6 +146,19 @@ export class JwtAuthGuard implements CanActivate {
     // assign/revoke, User atribuirPerfil) — TTL 5s é teto de staleness.
     @Inject(UserProfileCacheService)
     private readonly profileCache: UserProfileCacheService,
+    // pt-BR (PR #101, 2026-10-17): a ÚNICA dependência que prova que o
+    // requerente pertence à empresa que ele afirma no header. Sem ela, o
+    // `X-Tenant-Id` é uma declaração auto-declarada que decide qual escopo de
+    // RLS a sessão abre — e nenhuma policy do banco pergunta pelo requerente
+    // (MEDIDO: todo predicado de tenancy compara uma COLUNA da linha contra
+    // `escopo_atual()`, em todas as migrations).
+    //
+    // O token `@Inject` é redundante com o resto do arquivo, mas explícito
+    // porque o parâmetro é uma INTERFACE: `tsx` (esbuild) não emite
+    // `design:paramtypes` e o Nest resolveria `undefined` — em dev, no
+    // primeiro request.
+    @Inject(TENANT_MEMBERSHIP_REPOSITORY_PORT)
+    private readonly memberships: TenantMembershipRepositoryPort,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -183,6 +199,30 @@ export class JwtAuthGuard implements CanActivate {
     // campos e o tenant muda dentro da mesma sessão (trocar de empresa
     // não é trocar de token).
     const tenantId = extractTenantId(request.headers?.['x-tenant-id']);
+
+    // ── 5b. pt-BR (PR #101, 2026-10-17): a empresa AFIRMADA tem de ser uma
+    // empresa de quem faz a afirmação. É o mesmo `sub` que o token acabou de
+    // provar, então a afirmação está ligada a uma identidade, não ao header
+    // solto.
+    //
+    // `tenantId === null` é o bucket GLOBAL (`users.profile_id`), onde mora o
+    // `isAdmin` do seed — não é "empresa nenhuma", e por isso não exige
+    // membership: exigir trancaria o admin global fora do próprio bucket.
+    //
+    // ⚠️ A ORDEM IMPORTA e é o que o teste "a recusa acontece ANTES da chave
+    // de cache ser formada" trava. O `profileCache` é chaveado pelo par
+    // (empresa, usuário) — uma empresa arbitrária viraria uma chave que
+    // ninguém volta a procurar, e o `Map` só cresceria. Conferir a membership
+    // antes de formar a chave fecha isso e economiza a consulta.
+    if (tenantId !== null) {
+      const role = await this.memberships.findRole(subject.sub, tenantId);
+      if (role === null) {
+        throw new ForbiddenException({
+          code: 'TENANT_MEMBERSHIP_REQUIRED',
+          detail: 'A conta autenticada não pertence à empresa informada em X-Tenant-Id.',
+        });
+      }
+    }
 
     // ── 6. pt-BR (#93.1 — RBAC, 2026-10-16): hidrata `isAdmin` e
     // `permissions` do cache. Falha do cache NÃO bloqueia — se a key
