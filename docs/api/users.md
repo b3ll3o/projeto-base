@@ -31,6 +31,24 @@
 | 6 | `POST` | `/api/v1/users/:id/restore`       | ✅   | `201`, `400`, `404`, `412`                  |
 | 7 | `GET`  | `/api/v1/users/:id/history`       | ✅   | `200`                                       |
 
+**Códigos que valem para as 6 rotas autenticadas** (PR #101, 2026-10-17) — as 6
+passam pelo mesmo `JwtAuthGuard`:
+
+| `code` | Status | Quando |
+|---|---|---|
+| `INVALID_TENANT` | `400` | `X-Tenant-Id` não é um UUID válido |
+| `TENANT_MEMBERSHIP_REQUIRED` | `403` | a sessão autenticada não pertence à empresa afirmada no header |
+
+⚠️ **`POST /users` (rota 1) é `@Public()`** — `users.controller.ts:130`. O guard
+devolve `true` antes de ler o `X-Tenant-Id`, então **nenhum** dos dois códigos é
+possível no cadastro: um header malformado é ignorado e a resposta é `201`, não
+`400`.
+
+Ambas só ocorrem quando o cliente **manda** `X-Tenant-Id`; sem o header a rota age
+no bucket global e nenhuma das duas é possível. O header é opcional e não faz
+parte do JWT. Semântica e o limite da garantia:
+[contrato HTTP §7.2](../superpowers/specs/2026-09-21-cadastro-usuario-com-auditoria-04-contrato-http.md).
+
 ## §3. Payloads (request/response)
 
 ### 3.1 `POST /users` — Criar
