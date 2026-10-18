@@ -10,7 +10,8 @@
 
 import type * as React from 'react';
 import { redirect } from 'next/navigation';
-import { obterMeuPerfil, criarPerfil, listarPermissoes } from '../../../../lib/perfil';
+import { criarPerfil, listarPermissoes } from '../../../../lib/perfil';
+import { exigirAdmin } from '../../guard-admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,15 +28,7 @@ export const dynamic = 'force-dynamic';
 const SLUG_PATTERN = '[a-z0-9]+(?:-[a-z0-9]+)*';
 
 export default async function NewProfilePage(): Promise<React.JSX.Element> {
-  const me = await obterMeuPerfil();
-  if (me === null || me.isAdmin !== true) {
-    return (
-      <main className="mx-auto max-w-3xl p-8">
-        <h1 className="text-2xl font-semibold text-slate-900">Acesso restrito</h1>
-        <p className="mt-1 text-sm text-slate-500">Esta página exige perfil de administrador.</p>
-      </main>
-    );
-  }
+  await exigirAdmin();
 
   const catalogo = await listarPermissoes();
 

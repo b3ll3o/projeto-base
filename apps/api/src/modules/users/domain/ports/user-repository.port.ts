@@ -25,6 +25,19 @@ export interface UserListInput {
 export interface UserListResult {
   users: User[];
   nextCursor: string | null;
+  /**
+   * pt-BR (#106, 2026-10-18): perfil EFETIVO de cada usuário no escopo pedido,
+   * indexado por `userId`. Vem da `tenant_memberships.profile_id` — a mesma
+   * coluna que a autorização lê — e NÃO de `users.profile_id`, que é global e
+   * é `null` para toda conta criada pelo produto.
+   *
+   * O agregado NÃO é reescrito com este valor: `User.profileId` é o perfil da
+   * conta, e a conta não pertence a uma empresa. Isto é projeção de leitura.
+   *
+   * Ausente do map = sem vínculo no escopo pedido. Presente com `null` =
+   * vinculado sem perfil. A tela precisa da diferença.
+   */
+  perfilEfetivo?: ReadonlyMap<string, string | null>;
 }
 
 /**

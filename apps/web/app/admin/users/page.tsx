@@ -5,12 +5,8 @@
 
 import type * as React from 'react';
 import { revalidatePath } from 'next/cache';
-import {
-  obterMeuPerfil,
-  listarPerfis,
-  atribuirPerfil,
-  decidirAtribuicaoPerfil,
-} from '../../../lib/perfil';
+import { listarPerfis, atribuirPerfil, decidirAtribuicaoPerfil } from '../../../lib/perfil';
+import { exigirAdmin } from '../guard-admin';
 import { ApiClient } from '../../../lib/api-client';
 import { exigirSessao, lerTenant } from '../../../lib/sessao';
 import type { UserOutputDto, UsersPageDto } from '@projeto/shared-types';
@@ -30,15 +26,7 @@ async function listarUsers(): Promise<UserOutputDto[]> {
 }
 
 export default async function AdminUsersPage(): Promise<React.JSX.Element> {
-  const me = await obterMeuPerfil();
-  if (me === null || me.isAdmin !== true) {
-    return (
-      <main className="mx-auto max-w-3xl p-8">
-        <h1 className="text-2xl font-semibold text-slate-900">Acesso restrito</h1>
-        <p className="mt-1 text-sm text-slate-500">Esta página exige perfil de administrador.</p>
-      </main>
-    );
-  }
+  await exigirAdmin();
 
   const [users, profiles] = await Promise.all([listarUsers(), listarPerfis()]);
 
@@ -81,18 +69,34 @@ export default async function AdminUsersPage(): Promise<React.JSX.Element> {
         </thead>
         <tbody>
           {users.map((u) => {
-            const atual = profiles.find((p) => p.id === u.profileId);
+            // pt-BR (#106): o perfil exibido é o EFETIVO no escopo, não o global.
+            // `profileId` (users.profile_id) é null para toda conta criada pelo
+            // produto, então usá-lo fazia a coluna dizer "sem perfil" para quem
+            // tem perfil — em toda linha, sempre.
+            //
+            // `perfilEfetivoNoEscopo` ausente = a pessoa não pertence a esta
+            // empresa. Distinguir isso de "pertence sem perfil" é o que evita a
+            // tela mentir duas vezes.
+            const perfilIdNoEscopo = u.perfilEfetivoNoEscopo;
+            const semVinculo = perfilIdNoEscopo === undefined;
+            const atual = profiles.find((p) => p.id === perfilIdNoEscopo);
             return (
               <tr key={u.id} className="border-b border-slate-100">
                 <td className="py-3 pr-4 text-slate-900">{u.nome}</td>
                 <td className="py-3 pr-4">{u.email}</td>
                 <td className="py-3 pr-4">
-                  {atual ? <code>{atual.slug}</code> : <em>sem perfil</em>}
+                  {atual ? (
+                    <code>{atual.slug}</code>
+                  ) : semVinculo ? (
+                    <em>fora desta empresa</em>
+                  ) : (
+                    <em>sem perfil</em>
+                  )}
                 </td>
                 <td className="py-3">
                   <form action={atribuir} className="flex items-center gap-2">
                     <input type="hidden" name="userId" value={u.id} />
-                    <input type="hidden" name="profileIdAtual" value={u.profileId ?? ''} />
+                    <input type="hidden" name="profileIdAtual" value={perfilIdNoEscopo ?? ''} />
                     {/* pt-BR: sem nome acessível o leitor de tela anuncia um
                         combo box anônimo, 1× por linha. `aria-label` não cria
                         elemento — a estrutura que o e2e mede fica igual. */}

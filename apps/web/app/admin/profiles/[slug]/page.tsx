@@ -14,12 +14,8 @@
 import type * as React from 'react';
 import { notFound } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import {
-  obterMeuPerfil,
-  obterPerfilPorSlug,
-  listarPermissoes,
-  trocarPermissoes,
-} from '../../../../lib/perfil';
+import { obterPerfilPorSlug, listarPermissoes, trocarPermissoes } from '../../../../lib/perfil';
+import { exigirAdmin } from '../../guard-admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,15 +26,7 @@ interface PageProps {
 export default async function AdminProfileDetailPage({
   params,
 }: PageProps): Promise<React.JSX.Element> {
-  const me = await obterMeuPerfil();
-  if (me === null || me.isAdmin !== true) {
-    return (
-      <main className="mx-auto max-w-3xl p-8">
-        <h1 className="text-2xl font-semibold text-slate-900">Acesso restrito</h1>
-        <p className="mt-1 text-sm text-slate-500">Esta página exige perfil de administrador.</p>
-      </main>
-    );
-  }
+  await exigirAdmin();
 
   const { slug } = await params;
 

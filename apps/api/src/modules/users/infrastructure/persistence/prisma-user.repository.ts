@@ -293,10 +293,65 @@ export class PrismaUserRepository implements UserRepositoryPort {
     const hasMore = rows.length > input.limit;
     const page = hasMore ? rows.slice(0, input.limit) : rows;
     const last = page[page.length - 1];
+
+    // pt-BR (#106, 2026-10-18): o perfil EFETIVO no escopo pedido.
+    //
+    // `users.profile_id` é a coluna GLOBAL — e ela é `null` para toda conta
+    // criada pelo produto (`provisionarEmpresaPropria` e `consumirEEntrar`
+    // gravam `profileId: null` explicitamente). A autorização, porém, lê
+    // `tenant_memberships.profile_id`. São duas fontes, e só a segunda é a
+    // que vale: por isso `/admin/users` mostrava "sem perfil" para quem tem.
+    //
+    // ⚠️ Isto NÃO altera o agregado. `User.profileId` continua sendo o global:
+    // o agregado é a conta, e a conta não pertence a uma empresa. O que muda
+    // é o que a LISTAGEM projeta — a tela precisa do perfil no escopo, não do
+    // perfil da conta. Por isso o valor vem por fora, no `UserListResult`.
+    const efetivos = await this.perfilEfetivoPorUsuario(
+      page.map((r) => r.id),
+      tenantId,
+    );
+
     return {
       users: page.map((r: UserRow) => UserPrismaMapper.toDomain(r)),
       nextCursor: hasMore && last !== undefined ? last.id : null,
+      // `null` = sem vínculo no escopo pedido, que é resposta diferente de
+      // "vinculado sem perfil". O segundo elemento distingue os dois.
+      perfilEfetivo: efetivos,
     };
+  }
+
+  /**
+   * pt-BR (#106): perfil da membership de cada usuário no escopo pedido.
+   *
+   * Uma consulta por página, não uma por usuário: a listagem é paginada e o
+   * limite é do chamador — N+1 aqui seria o caminho que faz a tela
+   * `/admin/users` ficar lenta exatamente onde há mais gente para ver.
+   *
+   * `null` no map = a pessoa não pertence a esta empresa. `undefined` = pertence
+   * mas sem perfil atribuído. A distinção é o que permite à tela dizer
+   * "sem perfil" só para quem de fato não tem, e não para quem não pertence.
+   */
+  private async perfilEfetivoPorUsuario(
+    userIds: readonly string[],
+    tenantId: string | null,
+  ): Promise<Map<string, string | null>> {
+    const out = new Map<string, string | null>();
+    if (userIds.length === 0) return out;
+
+    const rows = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+      tx.tenantMembership.findMany({
+        where: { userId: { in: [...userIds] }, ...(tenantId !== null ? { tenantId } : {}) },
+        select: { userId: true, profileId: true },
+      }),
+    );
+
+    // Sem `tenantId` (bucket de sistema) pode haver mais de uma membership por
+    // usuário — uma por empresa. Escolher a primeira seria arbitrário e
+    // silencioso; o agregado continua sendo a fonte do perfil global nesse caso.
+    for (const r of rows) {
+      if (!out.has(r.userId)) out.set(r.userId, r.profileId);
+    }
+    return out;
   }
 
   /**

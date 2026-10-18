@@ -41,6 +41,18 @@ export interface UserOutputDto {
    * exatamente esta divergência.
    */
   profileId: UUID | null;
+  /**
+   * pt-BR (#106, 2026-10-18): perfil EFETIVO no tenant do escopo pedido, lido de
+   * `tenant_memberships.profile_id` — a mesma coluna que a autorização lê.
+   *
+   * `profileId` acima é o perfil GLOBAL da conta (`users.profile_id`), e é
+   * `null` para toda conta criada pelo produto. Usá-lo na tela `/admin/users`
+   * fazia a coluna dizer "sem perfil" para quem tem, sempre.
+   *
+   * Ausente = sem vínculo no escopo. `null` = vínculo sem perfil. A tela
+   * precisa da diferença, e por isso não é um campo com default.
+   */
+  perfilEfetivoNoEscopo?: UUID | null;
   version: number;
   createdAt: ISODateString;
   updatedAt: ISODateString;
