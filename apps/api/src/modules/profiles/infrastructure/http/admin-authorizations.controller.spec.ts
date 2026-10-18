@@ -132,7 +132,9 @@ describe('AdminAuthorizationsController', () => {
       // falharia fechada — devolvendo vazio sem erro.
       useCases.atribuir.mockResolvedValue({ id: 'p1' } as never);
       await controller.atribuir('p1', { permissionKey: 'users.read' }, req({ sub: 'u1' }));
-      expect(useCases.atribuir.mock.calls[0][2]).toEqual({
+      // `calls[0][2]` é o terceiro argumento; o `?.` e o `!` sao o que impede o
+      // `TS2532` sem afrouxar a verificacao do resto da linha.
+      expect(useCases.atribuir.mock.calls[0]?.[2]).toEqual({
         userId: 'u1',
         tenantId: null,
         isAdmin: false,
@@ -161,7 +163,7 @@ describe('AdminAuthorizationsController', () => {
       // recusaria por chave inexistente — 400, sem nenhuma pista do porquê.
       useCases.revogar.mockResolvedValue({ id: 'p1' } as never);
       await controller.revogar('p1', 'users.read', req({ sub: 'u1' }));
-      expect(useCases.revogar.mock.calls[0][1]).toBe('users.read');
+      expect(useCases.revogar.mock.calls[0]?.[1]).toBe('users.read');
     });
   });
 });

@@ -122,11 +122,18 @@ describe('obterMeuPerfil — payload de GET me/profile', () => {
   // caída lia uma tela afirmando o contrário.
   describe('distingue 401 de 5xx (#107)', () => {
     function erroApi(status: number): ApiError {
+      // `instance`, `code` e `traceId` são exigidos pelo `ProblemDetailsDto` —
+      // o tipo é o mesmo que a API serializa, e preenchê-los pela metade não
+      // compila. O que o teste usa é o `status`, que é o que o `perfil.ts`
+      // discrimina.
       const problem = {
         type: 'about:blank',
         title: 'erro',
         status,
         detail: 'detalhe',
+        instance: '/me/profile',
+        code: 'ERRO',
+        traceId: 'trace-1',
       };
       return new ApiError('erro', 'codigo', status, problem);
     }

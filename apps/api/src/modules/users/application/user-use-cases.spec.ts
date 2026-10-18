@@ -577,7 +577,7 @@ describe('UserUseCases', () => {
         const page = await AuditContextStore.run(ctx, () => useCases.listar({ limit: 10 }, null));
         expect(page.users).toHaveLength(1);
         // O in-memory não produz `perfilEfetivo`, e a listagem segue funcionando.
-        expect(page.users[0].perfilEfetivoNoEscopo).toBeUndefined();
+        expect(page.users[0]?.perfilEfetivoNoEscopo).toBeUndefined();
       });
     });
 

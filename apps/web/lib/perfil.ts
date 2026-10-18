@@ -84,14 +84,11 @@ async function getClientOpcional(): Promise<ApiClient | null> {
  * faltava era este arquivo parando de esconder o resto.
  */
 export async function obterMeuPerfil(): Promise<MeProfileDto | null> {
-  let client: ApiClient | null;
-  try {
-    client = await getClientOpcional();
-  } catch (erro) {
-    // Falha ao LER o cookie (`lerTokens`/`lerTenant`) é infraestrutura, não
-    // sessão ausente: propaga em vez de virar "não sou admin".
-    throw erro;
-  }
+  // `getClientOpcional()` devolve `null` (não lança) quando não há token, e
+  // propaga se a leitura do cookie falhar — que é infraestrutura, não sessão
+  // ausente. Por isso não há `try` em volta: um catch que só relança seria
+  // `no-useless-catch`, e o comportamento seria idêntico sem ele.
+  const client = await getClientOpcional();
   if (client === null) return null;
 
   try {
