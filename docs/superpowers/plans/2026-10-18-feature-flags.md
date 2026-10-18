@@ -158,8 +158,11 @@ distinto do implementer.
 
 ---
 
-> **Revisoes incrementais em arquivo proprio:** [`2026-10-18-feature-flags-revisoes.md`](./2026-10-18-feature-flags-revisoes.md).
-> Este plano carrega decisao e ordem de execucao; as revisoes de fase (com as
-> mutacoes medidas e o que cada revisor NAO mediu) foram extraidas para o
-> limite de 300 linhas da convencao
+> **Revisoes incrementais em arquivo proprio:**
+> [`2026-10-18-feature-flags-revisoes.md`](./2026-10-18-feature-flags-revisoes.md) (indice,
+> v1.6.0 em diante) e
+> [`2026-10-18-feature-flags-revisoes-fases-0-3.md`](./2026-10-18-feature-flags-revisoes-fases-0-3.md)
+> (v1.1.0 a v1.5.0). Este plano carrega decisao e ordem de execucao; as revisoes
+> de fase (com as mutacoes medidas e o que cada revisor NAO mediu) foram
+> extraidas para o limite de 300 linhas da convencao
 > [`tamanho-e-revisao.md`](../../../.agents/specs/conventions/tamanho-e-revisao.md).
