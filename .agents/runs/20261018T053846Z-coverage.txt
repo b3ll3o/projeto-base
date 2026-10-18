@@ -1,0 +1,462 @@
+• turbo 2.11.2
+
+   • Packages in scope: @projeto/api, @projeto/eslint-config, @projeto/shared-types, @projeto/tsconfig, @projeto/web, @repo/review-router-tooling
+   • Running test:coverage in 6 packages
+   • Remote caching disabled
+
+@projeto/web:test:coverage: cache hit, replaying logs ff5094073ea0381a
+@projeto/web:test:coverage: 
+@projeto/web:test:coverage: > @projeto/web@0.0.1 test:coverage /home/leo/Documentos/projetos/base/apps/web
+@projeto/web:test:coverage: > vitest run --coverage
+@projeto/web:test:coverage: 
+@projeto/web:test:coverage: [33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+@projeto/web:test:coverage: 
+@projeto/web:test:coverage:  RUN  v2.1.9 /home/leo/Documentos/projetos/base/apps/web
+@projeto/web:test:coverage:       Coverage enabled with v8
+@projeto/web:test:coverage: 
+@projeto/web:test:coverage:  ✓ components/Sidebar.spec.tsx (4 tests) 1792ms
+@projeto/web:test:coverage:    ✓ Sidebar — lê os campos que a API devolve > mostra o nome do perfil vindo de profileName, não de um objeto profile 319ms
+@projeto/web:test:coverage:    ✓ Sidebar — lê os campos que a API devolve > isAdmin vem do topo do payload — o link Admin aparece para admin 1242ms
+@projeto/web:test:coverage:  ✓ instrumentation-client.spec.ts (4 tests) 1444ms
+@projeto/web:test:coverage:    ✓ instrumentation-client — a telemetria nunca derruba a aplicação > sem endpoint configurado, importa sem lançar e não monta exporter 1198ms
+@projeto/web:test:coverage:  ✓ app/login/page.spec.tsx (4 tests) 1074ms
+@projeto/web:test:coverage:    ✓ LoginPage — o aviso de cadastro concluído > com o param de cadastro, mostra a confirmação que explica o próximo passo 822ms
+@projeto/web:test:coverage:  ✓ lib/perfil.spec.ts (30 tests) 76ms
+@projeto/web:test:coverage:  ✓ lib/api-client.spec.ts (21 tests) 277ms
+@projeto/web:test:coverage:  ✓ app/users/novo/actions.spec.ts (18 tests) 90ms
+@projeto/web:test:coverage:  ✓ app/login/actions.spec.ts (15 tests) 171ms
+@projeto/web:test:coverage:  ✓ lib/sessao.spec.ts (16 tests) 121ms
+@projeto/web:test:coverage:  ✓ vitest-include.spec.ts (10 tests) 46ms
+@projeto/web:test:coverage:  ✓ src/telemetry/web-vitals-reporter.spec.tsx (5 tests) 210ms
+@projeto/web:test:coverage:  ✓ e2e/support/saida.spec.ts (8 tests) 39ms
+@projeto/web:test:coverage:  ✓ instrumentation.node.spec.ts (7 tests) 1302ms
+@projeto/web:test:coverage:    ✓ instrumentation.node — a telemetria do servidor nunca derruba o servidor > sem endpoint configurado, sobe o SDK apontando para o collector padrão 730ms
+@projeto/web:test:coverage:  ✓ lib/cadastro-usuario-schema.spec.ts (20 tests) 98ms
+@projeto/web:test:coverage:  ✓ components/login-form.spec.tsx (17 tests) 12188ms
+@projeto/web:test:coverage:    ✓ LoginForm — rótulos e campos > cada campo tem um rótulo que o identifica (não só um placeholder) 570ms
+@projeto/web:test:coverage:    ✓ LoginForm — saída para quem não tem conta > oferece um caminho para criar conta, e ele vai para /users/novo 1618ms
+@projeto/web:test:coverage:    ✓ LoginForm — envio > com par válido, despacha a Action com email e senha 1439ms
+@projeto/web:test:coverage:    ✓ LoginForm — envio > campo inválido NÃO despacha a Action 1405ms
+@projeto/web:test:coverage:    ✓ LoginForm — envio > o erro de validação local fica ANNCORADO no campo que está errado 475ms
+@projeto/web:test:coverage:    ✓ LoginForm — envio > a pessoa precisa redigitar a senha depois do erro — o campo volta vazio 1043ms
+@projeto/web:test:coverage:    ✓ LoginForm — envio > o e-mail é REPOPULADO com o que a Action devolveu — não é o que sobrou do que foi digitado 1095ms
+@projeto/web:test:coverage:    ✓ LoginForm — o erro genérico de credencial > aparece num alerta dentro do formulário, com a mensagem que a pessoa lê 1060ms
+@projeto/web:test:coverage:    ✓ LoginForm — o erro genérico de credencial > o erro de credencial NÃO marca nenhum campo — a tela não diz qual falhou 1003ms
+@projeto/web:test:coverage:    ✓ LoginForm — envio em andamento > o botão desabilita e o texto muda, para o envio não valer duas vezes 1234ms
+@projeto/web:test:coverage:    ✓ LoginForm — o aviso de "cadastro concluído" > o aviso NÃO é anunciado como erro, e o erro NÃO é anunciado como aviso 794ms
+@projeto/web:test:coverage:  ✓ e2e/support/banco.spec.ts (8 tests) 123ms
+@projeto/web:test:coverage:  ✓ instrumentation.spec.ts (4 tests) 114ms
+@projeto/web:test:coverage:  ✓ lib/cadastro-usuario-schema.parity.spec.ts (5 tests) 35ms
+@projeto/web:test:coverage:  ✓ cliente-prisma-unico.spec.ts (1 test) 25ms
+@projeto/web:test:coverage:  ✓ lib/login-schema.spec.ts (7 tests) 39ms
+@projeto/web:test:coverage:  ✓ lib/next-config.spec.ts (3 tests) 8ms
+@projeto/web:test:coverage:  ✓ app/users/actions.spec.ts (2 tests) 47ms
+@projeto/web:test:coverage:  ✓ playwright-isolamento.spec.ts (1 test) 17ms
+@projeto/web:test:coverage:  ✓ components/cadastro-usuario-form.spec.tsx (24 tests) 20080ms
+@projeto/web:test:coverage:    ✓ CadastroUsuarioForm — rótulos e campos > cada campo tem um rótulo que o identifica (não só um placeholder) 656ms
+@projeto/web:test:coverage:    ✓ CadastroUsuarioForm — o campo de senha > senha vazia pede a senha, não acusa comprimento 2312ms
+@projeto/web:test:coverage:    ✓ CadastroUsuarioForm — o campo de senha > senha curta demais diz o número mínimo 1565ms
+@projeto/web:test:coverage:    ✓ CadastroUsuarioForm — o campo de senha > a senha é anunciada como inválida e o erro é lido pelo leitor de tela 1660ms
+@projeto/web:test:coverage:    ✓ CadastroUsuarioForm — o campo de senha > só o campo de senha é marcado de inválido, e não os outros dois 1161ms
+@projeto/web:test:coverage:    ✓ CadastroUsuarioForm — o campo de senha > a senha volta VAZIA depois de um erro, mas nome e email voltam preenchidos 935ms
+@projeto/web:test:coverage:    ✓ CadastroUsuarioForm — o campo de senha > a senha NÃO volta preenchida MESMO que o estado venha com ela 1454ms
+@projeto/web:test:coverage:    ✓ CadastroUsuarioForm — o campo de senha > a senha digitada não aparece no texto da tela (o campo é password) 1420ms
+@projeto/web:test:coverage:    ✓ CadastroUsuarioForm — o campo de senha > a senha chega inteira à Action, sem espaço aparado 731ms
+@projeto/web:test:coverage:    ✓ CadastroUsuarioForm — validação antes de enviar > nome vazio mostra a mensagem e não chama a Action 510ms
+@projeto/web:test:coverage:    ✓ CadastroUsuarioForm — validação antes de enviar > email inválido mostra a mensagem com exemplo e não chama a Action 848ms
+@projeto/web:test:coverage:    ✓ CadastroUsuarioForm — validação antes de enviar > o campo inválido é anunciado como inválido para leitor de tela 659ms
+@projeto/web:test:coverage:    ✓ CadastroUsuarioForm — erros que vêm da API > erro de campo da API aparece junto do campo, não só no topo 987ms
+@projeto/web:test:coverage:    ✓ CadastroUsuarioForm — erros que vêm da API > erro de formulário aparece num região anunciada como alerta 1321ms
+@projeto/web:test:coverage:    ✓ CadastroUsuarioForm — erros que vêm da API > o que a pessoa digitou sobrevive à falha 812ms
+@projeto/web:test:coverage:    ✓ CadastroUsuarioForm — erros que vêm da API > os campos ficam travados enquanto a requisição está em voo 600ms
+@projeto/web:test:coverage:    ✓ CadastroUsuarioForm — durante e depois do envio > o botão desabilita e avisa que está em andamento (não dá para enviar duas vezes) 903ms
+@projeto/web:test:coverage:    ✓ CadastroUsuarioForm — durante e depois do envio > sem erro, a tela não mostra nenhum alerta 579ms
+@projeto/web:test:coverage: 
+@projeto/web:test:coverage:  Test Files  23 passed (23)
+@projeto/web:test:coverage:       Tests  234 passed (234)
+@projeto/web:test:coverage:    Start at  20:18:37
+@projeto/web:test:coverage:    Duration  29.90s (transform 3.89s, setup 22.02s, collect 11.20s, tests 39.42s, environment 19.72s, prepare 11.04s)
+@projeto/web:test:coverage: 
+@projeto/web:test:coverage:  % Coverage report from v8
+@projeto/web:test:coverage: -------------------|---------|----------|---------|---------|-------------------
+@projeto/web:test:coverage: File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+@projeto/web:test:coverage: -------------------|---------|----------|---------|---------|-------------------
+@projeto/web:test:coverage: All files          |   98.47 |    93.56 |   94.73 |   98.47 |                   
+@projeto/web:test:coverage:  web               |   98.57 |    94.11 |     100 |   98.57 |                   
+@projeto/web:test:coverage:   ...ion-client.ts |     100 |      100 |     100 |     100 |                   
+@projeto/web:test:coverage:   ...ation.edge.ts |       0 |      100 |     100 |       0 | 9                 
+@projeto/web:test:coverage:   ...ation.node.ts |     100 |    85.71 |     100 |     100 | 52                
+@projeto/web:test:coverage:   ...umentation.ts |     100 |      100 |     100 |     100 |                   
+@projeto/web:test:coverage:  web/app/login     |     100 |    90.62 |     100 |     100 |                   
+@projeto/web:test:coverage:   actions.ts       |     100 |    93.33 |     100 |     100 | 88-89             
+@projeto/web:test:coverage:   state.ts         |     100 |       50 |     100 |     100 | 95                
+@projeto/web:test:coverage:  web/app/users     |     100 |      100 |     100 |     100 |                   
+@projeto/web:test:coverage:   actions.ts       |     100 |      100 |     100 |     100 |                   
+@projeto/web:test:coverage:  ...app/users/novo |     100 |    90.32 |     100 |     100 |                   
+@projeto/web:test:coverage:   actions.ts       |     100 |    89.28 |     100 |     100 | 103-105           
+@projeto/web:test:coverage:   state.ts         |     100 |      100 |     100 |     100 |                   
+@projeto/web:test:coverage:  web/components    |   99.66 |    95.71 |     100 |   99.66 |                   
+@projeto/web:test:coverage:   Sidebar.tsx      |   98.11 |    85.71 |     100 |   98.11 | 72                
+@projeto/web:test:coverage:   ...ario-form.tsx |     100 |    96.96 |     100 |     100 | 119               
+@projeto/web:test:coverage:   login-form.tsx   |     100 |    96.66 |     100 |     100 | 118               
+@projeto/web:test:coverage:  web/lib           |   96.12 |    93.33 |   91.66 |   96.12 |                   
+@projeto/web:test:coverage:   api-client.ts    |   89.65 |    83.33 |   88.88 |   89.65 | 120-121,147-153   
+@projeto/web:test:coverage:   ...rio-schema.ts |     100 |      100 |     100 |     100 |                   
+@projeto/web:test:coverage:   login-schema.ts  |     100 |      100 |     100 |     100 |                   
+@projeto/web:test:coverage:   perfil.ts        |   98.16 |    97.22 |      90 |   98.16 | 72-73             
+@projeto/web:test:coverage:   sessao.ts        |     100 |      100 |     100 |     100 |                   
+@projeto/web:test:coverage:  web/src/telemetry |     100 |      100 |     100 |     100 |                   
+@projeto/web:test:coverage:   ...-reporter.tsx |     100 |      100 |     100 |     100 |                   
+@projeto/web:test:coverage: -------------------|---------|----------|---------|---------|-------------------
+@projeto/api:test:coverage: cache hit, replaying logs 7351a0db7f49aab5
+@projeto/api:test:coverage: 
+@projeto/api:test:coverage: > @projeto/api@0.0.1 test:coverage /home/leo/Documentos/projetos/base/apps/api
+@projeto/api:test:coverage: > vitest run --project unit --coverage
+@projeto/api:test:coverage: 
+@projeto/api:test:coverage: 
+@projeto/api:test:coverage:  RUN  v2.1.9 /home/leo/Documentos/projetos/base/apps/api
+@projeto/api:test:coverage:       Coverage enabled with v8
+@projeto/api:test:coverage: 
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33mum ator sem isAdmin não altera as permissões do próprio profile[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33mo ator não resolve no banco; a operação é negada por não se poder provar quem ele é[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33mo ator não resolve no banco; a operação é negada por não se poder provar quem ele é[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33mum ator sem isAdmin não concede a nenhum profile uma permissão que ele não tem[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33mum ator sem isAdmin não concede a nenhum profile uma permissão que ele não tem[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33msó um ator com isAdmin pode atribuir um profile admin[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33msó um ator com isAdmin pode atribuir um profile admin[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33mum ator sem isAdmin não atribui a ninguém um profile com permissões que ele não tem[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33mum ator sem isAdmin não atribui a ninguém um profile com permissões que ele não tem[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33mum ator sem isAdmin não atribui a ninguém um profile com permissões que ele não tem[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33msó um ator com isAdmin retira de um usuário o profile admin[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33mum ator sem isAdmin não cria um profile com uma permissão que ele não tem[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33mum ator sem isAdmin não cria um profile com uma permissão que ele não tem[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33mum ator administra os perfis do próprio bucket; o de SISTEMA exige isAdmin[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33mum ator sem isAdmin não cria um profile com uma permissão que ele não tem[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33mum ator sem isAdmin não atribui a ninguém um profile com permissões que ele não tem[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33mum perfil de outra empresa não é vestível aqui[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33msó se veste perfil admin o da própria empresa[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33mum ator sem isAdmin não atribui a ninguém um profile com permissões que ele não tem[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33msó um ator com isAdmin retira de um membro o profile admin da empresa[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33mninguém altera o próprio perfil dentro da empresa[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33mninguém altera o próprio perfil dentro da empresa[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33mninguém altera o próprio perfil dentro da empresa[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33msó um ator com isAdmin retira de um membro o profile admin da empresa[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33ma atribuição sai da empresa e por isso é recusada[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33mum ator administra os perfis do próprio bucket; o de SISTEMA exige isAdmin[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33mum ator administra os perfis do próprio bucket; o de SISTEMA exige isAdmin[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33mum ator administra os perfis do próprio bucket; o de SISTEMA exige isAdmin[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33mum ator administra os perfis do próprio bucket; o de SISTEMA exige isAdmin[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33mum ator administra os perfis do próprio bucket; o de SISTEMA exige isAdmin[39m
+@projeto/api:test:coverage: [33m[Nest] 3778299  - [39m17/10/2026, 23:49:06 [33m   WARN[39m [38;5;3m[ProfilePrivilegeEscalation] [39m[33mum perfil de outra empresa não é vestível aqui[39m
+@projeto/api:test:coverage:  ✓ |unit| src/modules/profiles/application/profiles.use-cases.spec.ts (80 tests) 125ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/profiles/infrastructure/persistence/prisma-profile.repository.spec.ts (25 tests) 92ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/auth/infrastructure/http/jwt-auth.guard.spec.ts (26 tests) 61ms
+@projeto/api:test:coverage:  ✓ |unit| src/shared/infrastructure/http/domain-exception-to-http.spec.ts (61 tests) 163ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/users/infrastructure/http/users.controller.spec.ts (53 tests) 217ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/users/application/user-use-cases.spec.ts (26 tests) 104ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/users/infrastructure/persistence/user.prisma-mapper.spec.ts (20 tests) 40ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/users/domain/value-objects/password-hash.vo.spec.ts (38 tests) 48ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/users/domain/user.aggregate.spec.ts (32 tests) 56ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/users/infrastructure/http/users.controller.auth.spec.ts (20 tests) 1262ms
+@projeto/api:test:coverage:    ✓ UsersController — fronteira HTTP de autenticação > POST /users responde 201 SEM token (cadastro aberto) 448ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/auth/application/auth-use-cases.spec.ts (20 tests) 56ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/tenancy/application/tenancy.use-cases.spec.ts (16 tests) 126ms
+@projeto/api:test:coverage: [31m[Nest] 3780176  - [39m17/10/2026, 23:49:11 [31m  ERROR[39m [38;5;3m[GlobalExceptionFilter] [39m[31m[trace-1] GET /api/v1/users/u-1 -> SERVICE_UNAVAILABLE: falha generica[39m
+@projeto/api:test:coverage: HttpException: falha generica
+@projeto/api:test:coverage:     at /home/leo/Documentos/projetos/base/apps/api/src/shared/infrastructure/http/global-exception.filter.spec.ts:187:17
+@projeto/api:test:coverage:     at file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:146:14
+@projeto/api:test:coverage:     at file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:11
+@projeto/api:test:coverage:     at runWithTimeout (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:39:7)
+@projeto/api:test:coverage:     at runTest (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1056:17)
+@projeto/api:test:coverage:     at processTicksAndRejections (node:internal/process/task_queues:104:5)
+@projeto/api:test:coverage:     at runSuite (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+@projeto/api:test:coverage:     at runSuite (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+@projeto/api:test:coverage:     at runFiles (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1262:5)
+@projeto/api:test:coverage:     at startTests (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1271:3)
+@projeto/api:test:coverage: [31m[Nest] 3780176  - [39m17/10/2026, 23:49:11 [31m  ERROR[39m [38;5;3m[GlobalExceptionFilter] [39m[31m[trace-1] GET /api/v1/users/u-1 -> INTERNAL: boom[39m
+@projeto/api:test:coverage: Error: boom
+@projeto/api:test:coverage:     at /home/leo/Documentos/projetos/base/apps/api/src/shared/infrastructure/http/global-exception.filter.spec.ts:198:18
+@projeto/api:test:coverage:     at file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:146:14
+@projeto/api:test:coverage:     at file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:11
+@projeto/api:test:coverage:     at runWithTimeout (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:39:7)
+@projeto/api:test:coverage:     at runTest (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1056:17)
+@projeto/api:test:coverage:     at processTicksAndRejections (node:internal/process/task_queues:104:5)
+@projeto/api:test:coverage:     at runSuite (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+@projeto/api:test:coverage:     at runSuite (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+@projeto/api:test:coverage:     at runFiles (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1262:5)
+@projeto/api:test:coverage:     at startTests (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1271:3)
+@projeto/api:test:coverage: [31m[Nest] 3780176  - [39m17/10/2026, 23:49:11 [31m  ERROR[39m [38;5;3m[GlobalExceptionFilter] [39m[31m[trace-1] GET /api/v1/users/u-1 -> INTERNAL: literal-error[39m
+@projeto/api:test:coverage: [31m[Nest] 3780176  - [39m17/10/2026, 23:49:11 [31m  ERROR[39m [38;5;3m[GlobalExceptionFilter] [39m[31m[t-42] POST /api/v1/users -> INTERNAL: x[39m
+@projeto/api:test:coverage: Error: x
+@projeto/api:test:coverage:     at /home/leo/Documentos/projetos/base/apps/api/src/shared/infrastructure/http/global-exception.filter.spec.ts:218:7
+@projeto/api:test:coverage:     at file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:146:14
+@projeto/api:test:coverage:     at file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:11
+@projeto/api:test:coverage:     at runWithTimeout (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:39:7)
+@projeto/api:test:coverage:     at runTest (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1056:17)
+@projeto/api:test:coverage:     at processTicksAndRejections (node:internal/process/task_queues:104:5)
+@projeto/api:test:coverage:     at runSuite (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+@projeto/api:test:coverage:     at runSuite (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+@projeto/api:test:coverage:     at runFiles (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1262:5)
+@projeto/api:test:coverage:     at startTests (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1271:3)
+@projeto/api:test:coverage: [31m[Nest] 3780176  - [39m17/10/2026, 23:49:11 [31m  ERROR[39m [38;5;3m[GlobalExceptionFilter] [39m[31m[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa] GET /api/v1/users/u-1 -> INTERNAL: boom-otel[39m
+@projeto/api:test:coverage: Error: boom-otel
+@projeto/api:test:coverage:     at /home/leo/Documentos/projetos/base/apps/api/src/shared/infrastructure/http/global-exception.filter.spec.ts:265:20
+@projeto/api:test:coverage:     at file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:146:14
+@projeto/api:test:coverage:     at file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:11
+@projeto/api:test:coverage:     at runWithTimeout (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:39:7)
+@projeto/api:test:coverage:     at runTest (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1056:17)
+@projeto/api:test:coverage:     at processTicksAndRejections (node:internal/process/task_queues:104:5)
+@projeto/api:test:coverage:     at runSuite (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+@projeto/api:test:coverage:     at runSuite (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+@projeto/api:test:coverage:     at runSuite (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+@projeto/api:test:coverage:     at runFiles (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1262:5)
+@projeto/api:test:coverage: [31m[Nest] 3780176  - [39m17/10/2026, 23:49:11 [31m  ERROR[39m [38;5;3m[GlobalExceptionFilter] [39m[31m[t-42] POST /api/v1/users -> INTERNAL: x[39m
+@projeto/api:test:coverage: Error: x
+@projeto/api:test:coverage:     at /home/leo/Documentos/projetos/base/apps/api/src/shared/infrastructure/http/global-exception.filter.spec.ts:278:9
+@projeto/api:test:coverage:     at file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:146:14
+@projeto/api:test:coverage:     at file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:11
+@projeto/api:test:coverage:     at runWithTimeout (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:39:7)
+@projeto/api:test:coverage:     at runTest (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1056:17)
+@projeto/api:test:coverage:     at processTicksAndRejections (node:internal/process/task_queues:104:5)
+@projeto/api:test:coverage:     at runSuite (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+@projeto/api:test:coverage:     at runSuite (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+@projeto/api:test:coverage:     at runSuite (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+@projeto/api:test:coverage:     at runFiles (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1262:5)
+@projeto/api:test:coverage: [31m[Nest] 3780176  - [39m17/10/2026, 23:49:11 [31m  ERROR[39m [38;5;3m[GlobalExceptionFilter] [39m[31m[eba52ac9-5c63-4969-b077-9d4f5b7f32b1] GET /api/v1/x -> INTERNAL: x[39m
+@projeto/api:test:coverage: Error: x
+@projeto/api:test:coverage:     at /home/leo/Documentos/projetos/base/apps/api/src/shared/infrastructure/http/global-exception.filter.spec.ts:289:20
+@projeto/api:test:coverage:     at file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:146:14
+@projeto/api:test:coverage:     at file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:11
+@projeto/api:test:coverage:     at runWithTimeout (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:39:7)
+@projeto/api:test:coverage:     at runTest (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1056:17)
+@projeto/api:test:coverage:     at processTicksAndRejections (node:internal/process/task_queues:104:5)
+@projeto/api:test:coverage:     at runSuite (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+@projeto/api:test:coverage:     at runSuite (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+@projeto/api:test:coverage:     at runSuite (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+@projeto/api:test:coverage:     at runFiles (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1262:5)
+@projeto/api:test:coverage: [31m[Nest] 3780176  - [39m17/10/2026, 23:49:11 [31m  ERROR[39m [38;5;3m[GlobalExceptionFilter] [39m[31m[trace-1] GET /api/v1/users/u-1 -> INTERNAL: send-me[39m
+@projeto/api:test:coverage: Error: send-me
+@projeto/api:test:coverage:     at /home/leo/Documentos/projetos/base/apps/api/src/shared/infrastructure/http/global-exception.filter.spec.ts:329:18
+@projeto/api:test:coverage:     at file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:146:14
+@projeto/api:test:coverage:     at file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:11
+@projeto/api:test:coverage:     at runWithTimeout (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:39:7)
+@projeto/api:test:coverage:     at runTest (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1056:17)
+@projeto/api:test:coverage:     at processTicksAndRejections (node:internal/process/task_queues:104:5)
+@projeto/api:test:coverage:     at runSuite (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+@projeto/api:test:coverage:     at runSuite (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+@projeto/api:test:coverage:     at runFiles (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1262:5)
+@projeto/api:test:coverage:     at startTests (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1271:3)
+@projeto/api:test:coverage: [31m[Nest] 3780176  - [39m17/10/2026, 23:49:11 [31m  ERROR[39m [38;5;3m[GlobalExceptionFilter] [39m[31m[trace-1] GET /api/v1/users/u-1 -> INTERNAL: typed[39m
+@projeto/api:test:coverage: Error: typed
+@projeto/api:test:coverage:     at /home/leo/Documentos/projetos/base/apps/api/src/shared/infrastructure/http/global-exception.filter.spec.ts:341:18
+@projeto/api:test:coverage:     at file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:146:14
+@projeto/api:test:coverage:     at file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:11
+@projeto/api:test:coverage:     at runWithTimeout (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:39:7)
+@projeto/api:test:coverage:     at runTest (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1056:17)
+@projeto/api:test:coverage:     at processTicksAndRejections (node:internal/process/task_queues:104:5)
+@projeto/api:test:coverage:     at runSuite (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+@projeto/api:test:coverage:     at runSuite (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+@projeto/api:test:coverage:     at runFiles (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1262:5)
+@projeto/api:test:coverage:     at startTests (file:///home/leo/Documentos/projetos/base/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1271:3)
+@projeto/api:test:coverage:  ✓ |unit| src/shared/infrastructure/http/global-exception.filter.spec.ts (19 tests) 173ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/auth/infrastructure/security/jwt-token.service.spec.ts (30 tests) 1271ms
+@projeto/api:test:coverage:    ✓ JwtTokenService > emitir() > é DETERMINÍSTICO dentro do mesmo segundo — sem `jti`, o par repete 1106ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/auth/infrastructure/http/auth.controller.guard.spec.ts (10 tests) 666ms
+@projeto/api:test:coverage:    ✓ AuthController — fronteira de autenticação (Fase 6.1) > GET /auth/me responde 200 COM access token válido e delega o sub 511ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/users/infrastructure/persistence/in-memory-user.repository.spec.ts (21 tests) 65ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/tenancy/infrastructure/persistence/prisma-tenant-membership.repository.spec.ts (14 tests) 38ms
+@projeto/api:test:coverage:  ✓ |unit| src/shared/audit/application/in-memory-audit-service.spec.ts (7 tests) 63ms
+@projeto/api:test:coverage:  ✓ |unit| src/shared/infrastructure/security/user-profile-cache.service.spec.ts (12 tests) 36ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/auth/infrastructure/http/jwt-auth.guard.tenant.spec.ts (7 tests) 40ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/users/infrastructure/http/users.schemas.spec.ts (6 tests) 45ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/profiles/domain/profile.aggregate.spec.ts (14 tests) 51ms
+@projeto/api:test:coverage:  ✓ |unit| test/config/coverage-floor.spec.ts (27 tests) 66ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/profiles/infrastructure/persistence/prisma-authorization.repository.spec.ts (7 tests) 59ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/profiles/domain/value-objects/profile-id.vo.spec.ts (17 tests) 35ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/profiles/infrastructure/http/guards/permissions.guard.spec.ts (10 tests) 32ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/profiles/profiles.module.spec.ts (9 tests) 527ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/profiles/infrastructure/http/admin-profiles.controller.spec.ts (7 tests) 25ms
+@projeto/api:test:coverage:  ✓ |unit| src/shared/infrastructure/prisma/assinatura-de-membership.spec.ts (6 tests) 47ms
+@projeto/api:test:coverage:  ✓ |unit| src/shared/infrastructure/http/zod-validation.pipe.spec.ts (9 tests) 57ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/tenancy/infrastructure/http/tenancy-invitations.controller.spec.ts (4 tests) 458ms
+@projeto/api:test:coverage:    ✓ TenancyInvitationsController — o `:id` do convite > recusa um `:id` que não é uuid com 400, sem chamar o use case 401ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/auth/infrastructure/http/jwt-auth.guard.resolucao.spec.ts (2 tests) 118ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/auth/infrastructure/http/auth.controller.spec.ts (6 tests) 16ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/auth/auth.module.spec.ts (5 tests) 286ms
+@projeto/api:test:coverage:  ✓ |unit| src/shared/infrastructure/prisma/papel-de-runtime.spec.ts (9 tests) 14ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/auth/infrastructure/security/argon2-password-hasher.spec.ts (19 tests) 5411ms
+@projeto/api:test:coverage:    ✓ Argon2PasswordHasher > hash() > devolve algo que o PasswordHash VO aceita 347ms
+@projeto/api:test:coverage:    ✓ Argon2PasswordHasher > hash() > usa argon2id v=19 (não argon2i, nem a variante fraca v=0x10) 348ms
+@projeto/api:test:coverage:    ✓ Argon2PasswordHasher > hash() > atinge o PISO de custo, não os parâmetros literais de hoje 301ms
+@projeto/api:test:coverage:    ✓ Argon2PasswordHasher > hash() > é determinístico no VERIFY, não no hash: dois hashes da mesma senha diferem 1406ms
+@projeto/api:test:coverage:    ✓ Argon2PasswordHasher > hash() > NÃO embute a senha em claro em nenhum ponto do hash 319ms
+@projeto/api:test:coverage:    ✓ Argon2PasswordHasher > verify() > aceita a senha correta 732ms
+@projeto/api:test:coverage:    ✓ Argon2PasswordHasher > verify() > rejeita a senha errada 609ms
+@projeto/api:test:coverage:    ✓ Argon2PasswordHasher > verify() > rejeita senha errada que é prefixo da senha real 676ms
+@projeto/api:test:coverage:    ✓ Argon2PasswordHasher > verify() > devolve false para senha vazia contra hash válido 655ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/auth/infrastructure/http/auth.schemas.spec.ts (9 tests) 17ms
+@projeto/api:test:coverage:  ✓ |unit| src/shared/audit/shared/audit-context-store.spec.ts (9 tests) 22ms
+@projeto/api:test:coverage:  ✓ |unit| src/main.spec.ts (5 tests) 441ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/users/application/dto/user.output.spec.ts (4 tests) 20ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/users/domain/value-objects/user-name.vo.spec.ts (12 tests) 28ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/users/domain/policies/user-ownership.policy.spec.ts (7 tests) 16ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/profiles/domain/value-objects/profile-slug.vo.spec.ts (12 tests) 41ms
+@projeto/api:test:coverage:  ✓ |unit| src/shared/audit/domain/audit.exceptions.spec.ts (11 tests) 28ms
+@projeto/api:test:coverage:  ✓ |unit| src/Dockerfile.spec.ts (4 tests) 22ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/users/application/exceptions/application.exceptions.spec.ts (7 tests) 24ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/users/domain/value-objects/email.vo.spec.ts (8 tests) 31ms
+@projeto/api:test:coverage:  ✓ |unit| src/shared/audit/domain/audit-context.vo.spec.ts (9 tests) 51ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/profiles/domain/value-objects/authorization-key.vo.spec.ts (6 tests) 25ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/auth/domain/exceptions/auth.exceptions.spec.ts (4 tests) 6ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/health/health.controller.spec.ts (2 tests) 12ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/profiles/domain/value-objects/profile-name.vo.spec.ts (9 tests) 16ms
+@projeto/api:test:coverage:  ✓ |unit| src/main.ts.spec.ts (2 tests) 30ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/users/domain/value-objects/user-id.vo.spec.ts (6 tests) 17ms
+@projeto/api:test:coverage:  ✓ |unit| src/shared/infrastructure/telemetry/tracing-pino.spec.ts (1 test) 2102ms
+@projeto/api:test:coverage:    ✓ Pino-OTel bridge (PinoInstrumentation) > log entry inclui trace_id W3C (32 hex chars) quando há span ativo 2100ms
+@projeto/api:test:coverage:  ✓ |unit| src/shared/infrastructure/telemetry/resource.spec.ts (4 tests) 8ms
+@projeto/api:test:coverage:  ✓ |unit| src/modules/users/users.module.spec.ts (3 tests) 176ms
+@projeto/api:test:coverage:  ✓ |unit| src/shared/infrastructure/telemetry/tracing.spec.ts (3 tests) 1362ms
+@projeto/api:test:coverage:    ✓ initTracing (idempotência) > inicializa NodeSDK uma única vez (idempotente) 1298ms
+@projeto/api:test:coverage:  ✓ |unit| src/shared/infrastructure/prisma/prisma.service.spec.ts (1 test) 300ms
+@projeto/api:test:coverage:  ✓ |unit| src/shared/infrastructure/telemetry/init.spec.ts (2 tests) 1038ms
+@projeto/api:test:coverage:    ✓ init.ts (bootstrap side-effect) > chama initTracing() quando importado (via side-effect) 998ms
+@projeto/api:test:coverage: 
+@projeto/api:test:coverage:  Test Files  60 passed (60)
+@projeto/api:test:coverage:       Tests  834 passed (834)
+@projeto/api:test:coverage:    Start at  23:49:04
+@projeto/api:test:coverage:    Duration  22.93s (transform 4.26s, setup 0ms, collect 37.52s, tests 17.78s, environment 57ms, prepare 16.03s)
+@projeto/api:test:coverage: 
+@projeto/api:test:coverage:  % Coverage report from v8
+@projeto/api:test:coverage: -------------------|---------|----------|---------|---------|-------------------
+@projeto/api:test:coverage: File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+@projeto/api:test:coverage: -------------------|---------|----------|---------|---------|-------------------
+@projeto/api:test:coverage: All files          |   86.75 |    92.94 |   87.04 |   86.75 |                   
+@projeto/api:test:coverage:  prisma            |       0 |        0 |       0 |       0 |                   
+@projeto/api:test:coverage:   seed.ts          |       0 |        0 |       0 |       0 | 1-115             
+@projeto/api:test:coverage:  ...th/application |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...-use-cases.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:  ...pplication/dto |       0 |        0 |       0 |       0 |                   
+@projeto/api:test:coverage:   ...ion.output.ts |       0 |        0 |       0 |       0 |                   
+@projeto/api:test:coverage:   login.input.ts   |       0 |        0 |       0 |       0 |                   
+@projeto/api:test:coverage:   refresh.input.ts |       0 |        0 |       0 |       0 |                   
+@projeto/api:test:coverage:  ...ain/exceptions |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...exceptions.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...exceptions.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:  ...structure/http |   96.83 |    95.23 |    90.9 |   96.83 |                   
+@projeto/api:test:coverage:   ...controller.ts |   92.06 |      100 |      80 |   92.06 | 131-135           
+@projeto/api:test:coverage:   auth.schemas.ts  |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ....decorator.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...auth.guard.ts |     100 |    94.11 |     100 |     100 | 283-284           
+@projeto/api:test:coverage:   ....decorator.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:  ...cture/security |     100 |    95.83 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...ord-hasher.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...en.service.ts |     100 |    95.23 |     100 |     100 | 171               
+@projeto/api:test:coverage:  ...modules/health |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...controller.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:  ...es/application |   93.54 |    91.33 |    92.3 |   93.54 |                   
+@projeto/api:test:coverage:   ....use-cases.ts |   93.54 |    91.33 |    92.3 |   93.54 | ...15-816,830-831 
+@projeto/api:test:coverage:  ...rofiles/domain |   89.66 |    97.91 |   79.48 |   89.66 |                   
+@projeto/api:test:coverage:   ...ion.entity.ts |   57.77 |      100 |   33.33 |   57.77 | ...68,71-72,75-76 
+@projeto/api:test:coverage:   ....aggregate.ts |   96.95 |    97.77 |   93.33 |   96.95 | ...,68-69,331-332 
+@projeto/api:test:coverage:  .../domain/events |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...ated.event.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...eted.event.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...ated.event.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:  ...ain/exceptions |     100 |       90 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...exceptions.ts |     100 |       90 |     100 |     100 | 105               
+@projeto/api:test:coverage:  .../value-objects |   89.92 |    97.77 |      80 |   89.92 |                   
+@projeto/api:test:coverage:   ...ion-key.vo.ts |   94.28 |      100 |   88.88 |   94.28 | 55-56             
+@projeto/api:test:coverage:   profile-id.vo.ts |    86.2 |      100 |   71.42 |    86.2 | 41-42,45-46       
+@projeto/api:test:coverage:   ...le-name.vo.ts |   88.23 |      100 |   71.42 |   88.23 | 38-39,47-48       
+@projeto/api:test:coverage:   ...le-slug.vo.ts |   90.24 |     92.3 |   85.71 |   90.24 | 23-24,46-47       
+@projeto/api:test:coverage:  ...structure/http |   62.12 |      100 |    37.5 |   62.12 |                   
+@projeto/api:test:coverage:   ...controller.ts |   47.36 |      100 |      20 |   47.36 | ...54,57-62,67-68 
+@projeto/api:test:coverage:   ...controller.ts |   72.88 |      100 |   42.85 |   72.88 | ...18-127,132-133 
+@projeto/api:test:coverage:   ...controller.ts |   47.82 |      100 |      50 |   47.82 | 30-41             
+@projeto/api:test:coverage:   ...controller.ts |   83.33 |      100 |      50 |   83.33 | 32-33             
+@projeto/api:test:coverage:  ...ttp/decorators |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ....decorator.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:  ...re/http/guards |   95.12 |    89.47 |     100 |   95.12 |                   
+@projeto/api:test:coverage:   ...ions.guard.ts |   95.12 |    89.47 |     100 |   95.12 | 73-74             
+@projeto/api:test:coverage:  ...re/persistence |   75.79 |    97.61 |    92.3 |   75.79 |                   
+@projeto/api:test:coverage:   ...repository.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...repository.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...sma-mapper.ts |       0 |        0 |       0 |       0 | 1-124             
+@projeto/api:test:coverage:  ...cy/application |   97.18 |    95.23 |     100 |   97.18 |                   
+@projeto/api:test:coverage:   ....use-cases.ts |   97.18 |    95.23 |     100 |   97.18 | 121-122           
+@projeto/api:test:coverage:  ...ain/exceptions |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...exceptions.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:  ...structure/http |   84.61 |      100 |   66.66 |   84.61 |                   
+@projeto/api:test:coverage:   ...controller.ts |   84.61 |      100 |   66.66 |   84.61 | 94-99             
+@projeto/api:test:coverage:  ...re/persistence |   33.04 |      100 |   33.33 |   33.04 |                   
+@projeto/api:test:coverage:   ...repository.ts |    88.4 |      100 |      80 |    88.4 | 189-196           
+@projeto/api:test:coverage:   ...repository.ts |    9.31 |      100 |      10 |    9.31 | ...35-366,379-393 
+@projeto/api:test:coverage:  ...rs/application |   82.32 |     84.5 |     100 |   82.32 |                   
+@projeto/api:test:coverage:   ...-use-cases.ts |   82.32 |     84.5 |     100 |   82.32 | ...65-371,380-381 
+@projeto/api:test:coverage:  ...pplication/dto |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...user.input.ts |       0 |        0 |       0 |       0 |                   
+@projeto/api:test:coverage:   ...y-id.input.ts |       0 |        0 |       0 |       0 |                   
+@projeto/api:test:coverage:   ...sers.input.ts |       0 |        0 |       0 |       0 |                   
+@projeto/api:test:coverage:   ...ers.output.ts |       0 |        0 |       0 |       0 |                   
+@projeto/api:test:coverage:   ...user.input.ts |       0 |        0 |       0 |       0 |                   
+@projeto/api:test:coverage:   ...user.input.ts |       0 |        0 |       0 |       0 |                   
+@projeto/api:test:coverage:   ...mail.input.ts |       0 |        0 |       0 |       0 |                   
+@projeto/api:test:coverage:   ...name.input.ts |       0 |        0 |       0 |       0 |                   
+@projeto/api:test:coverage:   user.output.ts   |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:  ...ion/exceptions |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...exceptions.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:  ...s/users/domain |   97.68 |       95 |     100 |   97.68 |                   
+@projeto/api:test:coverage:   ....aggregate.ts |   97.68 |       95 |     100 |   97.68 | 272-273,275-276   
+@projeto/api:test:coverage:  .../domain/events |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...ated.event.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...eted.event.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...ored.event.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...ated.event.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:  ...ain/exceptions |     100 |     87.5 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...exceptions.ts |     100 |     87.5 |     100 |     100 | 21                
+@projeto/api:test:coverage:  ...omain/policies |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...hip.policy.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:  .../value-objects |   89.77 |     87.5 |      80 |   89.77 |                   
+@projeto/api:test:coverage:   email.vo.ts      |   82.35 |    77.77 |      75 |   82.35 | 21-22,25-26,44-45 
+@projeto/api:test:coverage:   ...rd-hash.vo.ts |   94.28 |     93.1 |     100 |   94.28 | 155-156,165-166   
+@projeto/api:test:coverage:   user-id.vo.ts    |   94.28 |    77.77 |      80 |   94.28 | 66-67             
+@projeto/api:test:coverage:   user-name.vo.ts  |   83.78 |    88.88 |      50 |   83.78 | 21-22,43-44,47-48 
+@projeto/api:test:coverage:  ...structure/http |   95.71 |    97.77 |    92.3 |   95.71 |                   
+@projeto/api:test:coverage:   ...ship.guard.ts |   29.41 |      100 |       0 |   29.41 | 46-75             
+@projeto/api:test:coverage:   ...controller.ts |     100 |    97.77 |     100 |     100 | 239               
+@projeto/api:test:coverage:   users.schemas.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:  ...re/persistence |    97.5 |    94.33 |   92.85 |    97.5 |                   
+@projeto/api:test:coverage:   ...repository.ts |   96.03 |    92.68 |   88.88 |   96.03 | 97-98,159-160     
+@projeto/api:test:coverage:   ...exceptions.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...sma-mapper.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:  ...it/application |     100 |    91.66 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...it-service.ts |     100 |    91.66 |     100 |     100 | 93-97             
+@projeto/api:test:coverage:  ...d/audit/domain |      95 |    73.07 |     100 |      95 |                   
+@projeto/api:test:coverage:   ...context.vo.ts |     100 |     90.9 |     100 |     100 | 46                
+@projeto/api:test:coverage:   ...exceptions.ts |      90 |       60 |     100 |      90 | 44-45,76-77       
+@projeto/api:test:coverage:  ...d/audit/shared |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...text-store.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   audit.tokens.ts  |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:  src/shared/auth   |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...ns-catalog.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:  ...structure/http |    97.7 |    93.39 |     100 |    97.7 |                   
+@projeto/api:test:coverage:   ...on-to-http.ts |   97.11 |    98.41 |     100 |   97.11 | 171-176           
+@projeto/api:test:coverage:   ...ion.filter.ts |   98.68 |    83.33 |     100 |   98.68 | 88                
+@projeto/api:test:coverage:   ...ation.pipe.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:  ...ructure/prisma |   73.49 |    76.47 |     100 |   73.49 |                   
+@projeto/api:test:coverage:   ...membership.ts |   60.71 |    63.63 |     100 |   60.71 | ...97-112,131-133 
+@projeto/api:test:coverage:   escopo.ts        |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...de-runtime.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:  ...cture/security |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...he.service.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:  ...ture/telemetry |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   init.ts          |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   resource.ts      |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   tracing.ts       |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage: -------------------|---------|----------|---------|---------|-------------------
+
+ Tasks:    2 successful, 2 total
+Cached:    2 cached, 2 total
+  Time:    37ms >>> FULL TURBO
+

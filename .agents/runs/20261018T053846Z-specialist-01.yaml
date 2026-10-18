@@ -1,0 +1,26 @@
+specialists:
+  - doc-writer
+  - monorepo-specialist
+  - nestjs-specialist
+  - nextjs-specialist
+  - prisma-db-specialist
+  - test-writer
+  - ux-design-specialist
+evidence:
+  path_glob:
+    - apps/api/**
+    - '**/prisma/**'
+    - apps/web/**
+    - apps/web/app/**.tsx
+    - apps/api/prisma/**
+  demand_keyword:
+    - (?i)\btela(s)?\b|\bux\b|\bdesign\b|layout|formul[áa]rio|acessibilidade|\ba11y\b|EmptyState|estados?
+      de
+  demand_scope:
+    - feat
+  always_on:
+    - monorepo-specialist
+blocking: false
+gap_detected: false
+derived_tags:
+  - prisma_binary

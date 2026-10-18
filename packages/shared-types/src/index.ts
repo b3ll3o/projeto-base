@@ -26,3 +26,5 @@ export type {
   UpdateProfileInputDto,
   AssignProfileInputDto,
 } from './profile.js';
+
+export type { FeatureFlagDto, UpdateFeatureFlagInputDto } from './feature-flag.js';

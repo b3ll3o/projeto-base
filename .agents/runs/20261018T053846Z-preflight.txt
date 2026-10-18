@@ -1,0 +1,51 @@
+
+> projeto-base@0.1.0 ci:preflight /home/leo/Documentos/projetos/base
+> tsx .tooling/scripts/ci/preflight.ts
+
+🔍 Pre-flight CI checks
+
+  • Cross-refs em .md versionados... ✓
+  • tsconfig drift (strict, noUncheckedIndexedAccess)... ✓
+      'strict' foi comparado em 1 de 8 tsconfig(s) sob '.'; os outros 7 não declaram a chave (herdam por `extends`) e NÃO foram verificados por este gate. Drift dentro de uma cadeia de `extends` é invisível aqui — `tsc --showConfig` em cada projeto resolveria.
+      'noUncheckedIndexedAccess' foi comparado em 1 de 8 tsconfig(s) sob '.'; os outros 7 não declaram a chave (herdam por `extends`) e NÃO foram verificados por este gate. Drift dentro de uma cadeia de `extends` é invisível aqui — `tsc --showConfig` em cada projeto resolveria.
+  • ESLint config drift (apps)... ✓
+  • ESLint config drift (packages)... ✓
+  • turbo.json drift (pipeline canônico)... ✓
+  • package.json drift (scripts canônicos + fantasmas)... ✓
+  • docker drift (.dockerignore + Dockerfile size/base)... ✓
+  • review-routing matrix lint (YAML + LOC + reviewer refs)... ✓
+  • archive integrity (.agents/runs/archive/*.md frontmatter canônico)... – (skipped: archive vazio — 0 arquivo .md para verificar em .agents/runs/archive)
+  • destino da retrospectiva (fonte única, sem 2ª declaração)... ✓
+  • Cristalização memória → repo (camada 1 local)... ✓
+      39 memória(s) com destinação `pendente` — dívida declarada, não resolvida: a-detector-that-fabricates-its-finding, artefato-publicado-nao-nomeia-o-segredo, check-verifies-path-then-delegates-elsewhere, classify-by-executability-not-count, commit-message-via-file-not-heredoc, conteudo-exclusivo-de-branch-defeito-ja-corrigido, correction-of-one-instance-closes-the-class, failed-commit-leaks-staged-files-into-next-commit, gate-compares-against-its-own-filter, gate-must-not-depend-on-machine-ambient-state, gate-that-prescribes-the-wrong-remedy, gate-without-cli-block-runs-as-noop, gauge-measures-a-different-object, git-commit-amend-danger, git-fixture-that-collapses-into-one-object, git-log-is-a-stack-not-a-queue, glob-in-block-comment-closes-it, healthy-tree-exercises-only-half-the-fix, infra-de-teste-contamina-o-gate-de-cobertura, mirror-tree-tests-a-script-that-has-no-seam, mutation-can-fail-for-the-wrong-reason, mutation-that-doesnt-land-looks-green, non-fast-forward-is-not-divergent-work, patch-medido-so-no-caminho-do-defeito, pipe-stdout-dies-when-spawner-exits, pr-body-has-no-base-directory, prettier-check-must-run-in-place, pr-refresh-scan-is-context-blind, rebase-ages-the-commit-message-too, rebase-skip-descarta-o-commit-inteiro, red-gate-hides-the-queue, reviewer-reads-shape-not-system-semantics, spec-verde-com-tsc-vermelho, one-boolean-state-is-two-states, subagent-write-truncation-limit, uniform-validator-beats-self-reports, test-the-field-the-eye-reads-not-the-field-it-parses, vi-mock-factory-cache-frozen-counter, zero-survived-is-not-zero-found
+      medido: 81 memória(s) no corpus, 82 linha(s) no ledger.
+      escopo: camada 1 local. O corpus vive fora do repo, então o CI runner não tem o que medir e reporta `skipped`.
+  • drift agent↔memória (comportamento novo com memória intocada)... – (skipped: nenhum agent alterado em origin/main...HEAD)
+  • typecheck tooling (.tooling/ + tooling/scripts/)... ✓
+  • registro de dentes (registro ↔ preflight ↔ roteamento)... ✓
+  • classe 3 (guard que dispara em si mesmo)... ✓
+  • turbo: differential parser × turbo real... ✓
+  • controle desligado (harness órfão + destino sem guard)... ✓
+  • demanda rebaseda na main atual (regra de rebase)... ✓
+  • inventário de fluxos ⇄ specs e2e (regra de cobertura e2e)... ✓
+      reconciliado sobre 13 fluxo(s) e 13 spec(s), com 9 rota(s) de página conferidas contra o código — paridade DECLARATIVA dos fluxos; a execução é `test:e2e` no CI.
+  • ci:local roda as suítes e2e (regra da Camada 1)... ✓
+      medição DECLARATIVA de fiação: este gate lê `package.json` e não roda nenhuma suíte, e NÃO reconcilia com `.github/workflows/ci.yml` — essa classe segue registrada como pendência em ci-defense-in-depth-pendencias.md. Medido agora: 6 task(s) no comando e 2 pacote(s) do workspace rodando 'test:e2e'.
+  • escopo do ci:local cobre o workspace (classe G-009)... ✓
+      medição DECLARATIVA de fiação: este gate lê `package.json` e não roda nenhuma suíte, e NÃO reconcilia com `.github/workflows/ci.yml` — essa classe segue registrada como pendência em ci-defense-in-depth-pendencias.md. Medido agora: 1 invocação(ões) turbo filtrada(s) em 'ci:local' sobre 7 pacote(s) do workspace, e 'tooling:test' presente.
+  • preflight tem dentes: array vs regex no fonte... ✓
+  • harness em .tooling/scripts/ci/ vive na raiz (sem subdirs)... ✓
+  • agents ↔ matriz de roteamento (sem órfãos, sem fantasmas)... ✓
+  • engines node consistentes (raiz ↔ apps)... ✓
+  • runbook coerente (scripts e env citados ainda existem)... ✓
+  • docker hardening (FROM digest + USER + init + cap_drop + networks + .env)... ✓
+  • diagramas Mermaid em sincronia com a IR (docs/flows)... ✓
+  • conjunto de testes: todo test* roda no ci:local ou é exceção declarada... ✓
+      '@projeto/api#test' não entra no ci:local pelo nome, e sim pelo comando idêntico ao de um script do mesmo pacote que entra — suíte executada, nome duplicado
+      '@projeto/web#test' não entra no ci:local pelo nome, e sim pelo comando idêntico ao de um script do mesmo pacote que entra — suíte executada, nome duplicado
+      conjunto medido: 12 script(s) test* em 6 pacote(s), 3 exceção(ões) em vigor. Este gate mede o CONJUNTO, não a execução: uma suíte instável está "verde" para quem olha uma execução só.
+  • escopo de tenancy não vem da rota (defeito + resíduo medido)... ✓
+      66 call site(s) de escopo medidos em apps/api/src
+      66 call site(s) abriram o escopo SEM PROVA de origem (a rota chega pelo repositório, em outro arquivo — ver o cabeçalho). Nenhum gate compara este número com o do run anterior: ler e comparar é ato humano. Fechar o resíduo exige mudar a assinatura dos call sites.
+
+⚠ 0 erro(s); 2 check(s) não rodaram (skipped) — parte do painel acima não foi medida.

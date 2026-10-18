@@ -33,6 +33,7 @@ export const PERMISSIONS = [
   'admin.manage-profiles',
   'admin.manage-authorizations',
   'admin.manage-users',
+  'admin.manage-feature-flags',
 
   // Auditoria (leitura de audit log)
   'audits.read',

@@ -174,6 +174,7 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `guard-must-cover-common-form-not-rare` | `citada` | `.agents/specs/conventions/guard-classes.md` | `a forma comum esquecida tem de vir do` |
 | `guard-that-can-never-fire` | `citada` | `.agents/specs/conventions/guard-classes.md` | `condição inalcançável` |
 | `guard-that-fires-on-itself` | `citada` | `.agents/specs/conventions/guard-classes.md` | `Dispara em si mesmo` |
+| `healthy-tree-exercises-only-half-the-fix` | `pendente` | — | — |
 | `infra-de-teste-contamina-o-gate-de-cobertura` | `pendente` | — | — |
 | `main-branch-protection-pr-only` | `citada` | `.agents/specs/conventions/git-workflow.md` | `Regra Inegociável` |
 | `mandatory-tdd-rule` | `citada` | `.agents/specs/conventions/tdd.md` | `DEVEM seguir o ciclo TDD canônico` |
