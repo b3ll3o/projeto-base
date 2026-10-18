@@ -474,4 +474,114 @@ describe('E2E 12 — entrada na empresa (D5)', () => {
     });
     expect(membership.profileId).toBeNull();
   });
+
+  // ─────────────── a flag que o admin do sistema desliga (Fase 4) ───────────────
+  //
+  // MEDIDO 2026-10-18: estes 3 testes são o que fecha o orçamento da Fase 4. Sem
+  // eles, TIRAR o `@RequireFeatureFlag` do `convidar`, ou tirar o
+  // `FeatureFlagGuard` do `@UseGuards`, ou trocar o 404 por 403, ou mover o
+  // decorator para a CLasse — tudo deixa a suíte inteira verde. A spec do
+  // guard prova a decisão; a spec do container prova a instanciação; nenhuma
+  // das duas sabe se o decorator está no handler.
+  //
+  // A linha da flag é semeada por Prisma direto, e não pelo PUT admin: o que
+  // está sob teste aqui é o CONSUMIDOR, e o PUT já é medido no cenário 13.
+  async function desligarChave(chave: string, ativada: boolean) {
+    await e2e.ctx.prisma.featureFlag.upsert({
+      where: { chave },
+      create: { chave, ativada },
+      update: { ativada },
+    });
+  }
+
+  it('flag DESLIGADA => 404 em `convidar`, e nenhum convite é gravado', async () => {
+    const { headers, empresa } = await abrirEmpresa('acme');
+    await desligarChave('tenancy.invites', false);
+
+    const resposta = await e2e.injetar({
+      method: 'POST',
+      url: `/api/v1/tenants/${empresa.id}/invitations`,
+      headers,
+      payload: { email: 'ana@acme.dev' },
+    });
+
+    // 404 e não 403: para o cliente a funcionalidade não existe. E 403 diria
+    // "você não pode", que é uma informação que o dono da empresa não tem.
+    expect(resposta.statusCode).toBe(404);
+
+    // ⚠️ O CORPO também é a afirmação, e MEDIDO 2026-10-18 (revisão
+    // adversarial, achado F1) ele não tinha dente: trocar o throw por um corpo
+    // que ANUNCIA a flag (`code: 'FEATURE_FLAG_DESLIGADA'`, `detail: 'a
+    // funcionalidade tenancy.invites está desligada'`) deixava os 18 testes
+    // verdes. A justificativa do 404 existia só como comentário do guard. O
+    // `detail` genérico é o que faz o 404 indistinguível do 404 de uma rota
+    // que não existe (`Cannot POST …`, medido pelo revisor) — nenhum dos dois
+    // diz que existe uma flag.
+    const corpo = await resposta.json();
+    expect(corpo.code).toBe('NOT_FOUND');
+    expect(corpo.detail).toBe('Not Found');
+
+    expect(await e2e.ctx.prisma.invitation.count()).toBe(0);
+  });
+
+  it('a MESMA chamada com a flag ligada => 201 — o 404 acima veio da flag', async () => {
+    // Controle positivo: sem ele, um 404 por qualquer outra causa (empresa
+    // errada, header, token) passaria no teste de cima com a flag desligada.
+    const { headers, empresa } = await abrirEmpresa('acme');
+    await desligarChave('tenancy.invites', false);
+    const desligada = await e2e.injetar({
+      method: 'POST',
+      url: `/api/v1/tenants/${empresa.id}/invitations`,
+      headers,
+      payload: { email: 'ana@acme.dev' },
+    });
+    expect(desligada.statusCode).toBe(404);
+
+    await desligarChave('tenancy.invites', true);
+    const ligada = await e2e.injetar({
+      method: 'POST',
+      url: `/api/v1/tenants/${empresa.id}/invitations`,
+      headers,
+      payload: { email: 'ana@acme.dev' },
+    });
+
+    expect(ligada.statusCode).toBe(201);
+  });
+
+  it('flag desligada NÃO tranca o ACEITE — quem já tem o token ainda entra', async () => {
+    // O `@UseGuards` e o `@RequireFeatureFlag` estão no HANDLER `convidar`, e
+    // não na classe: desligar "convites" não pode trancar quem já foi
+    // convidado.
+    //
+    // MEDIDO 2026-10-18: mover os DOIS para a classe deixa este teste
+    // vermelho (1 de 18). Mover só o decorator NÃO o deixa vermelho — e o
+    // motivo é o que torna o engano fácil: `@RequireFeatureFlag` na classe sem
+    // o guard na classe é metadata sem consumidor, um no-op silencioso que
+    // deixa o `convidar` protegido pelo guard do handler e o `accept` livre. A
+    // forma perigosa é a que move os dois, e é a que este teste cobre.
+    const { headers, empresa } = await abrirEmpresa('acme');
+    const convidado = await criarUsuarioAutenticado(e2e, {
+      nome: 'Ana',
+      email: 'ana@acme.dev',
+    });
+
+    const convite = await e2e.injetar({
+      method: 'POST',
+      url: `/api/v1/tenants/${empresa.id}/invitations`,
+      headers,
+      payload: { email: 'ana@acme.dev' },
+    });
+    expect(convite.statusCode).toBe(201);
+    const { token } = JSON.parse(convite.body) as { token: string };
+
+    await desligarChave('tenancy.invites', false);
+
+    const aceite = await e2e.injetar({
+      method: 'POST',
+      url: '/api/v1/invitations/accept',
+      headers: convidado.headers,
+      payload: { token },
+    });
+    expect(aceite.statusCode).toBe(201);
+  });
 });

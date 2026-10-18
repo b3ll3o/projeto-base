@@ -14,6 +14,8 @@ import { z } from 'zod';
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
 import { ZodValidationPipe } from '../../../../shared/infrastructure/http/zod-validation.pipe.js';
 import { TENANCY_USE_CASES, TenancyUseCases } from '../../application/tenancy.use-cases.js';
+import { FeatureFlagGuard } from '../../../feature-flags/infrastructure/http/guards/feature-flag.guard.js';
+import { RequireFeatureFlag } from '../../../feature-flags/infrastructure/http/decorators/require-feature-flag.decorator.js';
 
 /** `req.user` publicado pelo `JwtAuthGuard`. */
 interface RequestComAtor {
@@ -63,6 +65,13 @@ export class TenancyInvitationsController {
   ) {}
 
   @Post('tenants/:id/invitations')
+  // pt-BR (feature-flags, 2026-10-18 — Fase 4): a PRIMEIRA functionality a
+  // respeitar uma flag. `@UseGuards` no HANDLER, e não na classe: o
+  // `FeatureFlagGuard` desligaria também `accept`, que não é a mesma
+  // funcionalidade — desligar convites não pode trancar quem já tem o token.
+  // Precedente: `users.controller.ts:246,262,300,331,361`.
+  @UseGuards(JwtAuthGuard, FeatureFlagGuard)
+  @RequireFeatureFlag('tenancy.invites')
   async convidar(
     // ⚠️ (PR #101) O `:id` É validado, e não só o body. Sem este pipe o valor
     // chegava cru ao `emitirConvite`, que o leva até o Postgres — e a coluna é
