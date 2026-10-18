@@ -168,6 +168,19 @@ export class PrismaTenantMembershipRepository implements TenantMembershipReposit
     });
   }
 
+  // ⚠️ "TEM LINHA" ≡ "É MEMBRO" hoje, e isso é uma propriedade medida, não um
+  // atalho. Medido 2026-10-17:
+  //   - Convite PENDENTE não mora aqui — vive na tabela `Invitation`
+  //     (`prisma-tenant-onboarding.repository.ts:337`), e só vira linha aqui
+  //     quando o `criar_membership` roda, o que exige aceitar o convite.
+  //   - `tenant_memberships` não tem coluna de status: medido no schema, a
+  //     escrita de status não tem NENHUM escritor. Adicionar a coluna agora
+  //     produz um schema que mente — `status = 'ativo'` em todo lugar, e a
+  //     primeira vez que alguém usar a coluna descobre que nada a preenche.
+  //
+  // Quando a remoção de membro existir, o `REVOKE DELETE` da migration
+  // `20261020000005` (linha 74) precisa mudar e aí ESTE método é o lugar que
+  // passa a precisar de status. Até lá, uma coluna nova aqui é peso sem dono.
   async findRole(userId: string, tenantId: string): Promise<string | null> {
     // `user: { deletedAt: null }` pelo mesmo motivo do `findProfileId`: a
     // membership sobrevive ao soft-delete, e sem este filtro uma conta

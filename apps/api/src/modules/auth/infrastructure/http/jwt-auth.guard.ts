@@ -214,6 +214,50 @@ export class JwtAuthGuard implements CanActivate {
     // (empresa, usuário) — uma empresa arbitrária viraria uma chave que
     // ninguém volta a procurar, e o `Map` só cresceria. Conferir a membership
     // antes de formar a chave fecha isso e economiza a consulta.
+    //
+    // ── O LIMITE DA GARANTIA (leia antes de prometer "isolamento") ─────────────
+    // Isto vale a partir do INÍCIO do request. Um request que já começou quando
+    // a membership é removida termina como começou: revogar o escopo no meio da
+    // execução é impossível, porque o escopo é uma variável de sessão do banco
+    // (`set_config(..., true)`) e a transação já está aberta. Nenhuma
+    // autorização por request elimina essa janela — o que dá para garantir é
+    // que a janela é O REQUEST EM VOO, e não o TTL de nada.
+    //
+    // Por isso `findRole` é chamado a CADA request e o veredito NÃO é cacheado
+    // (ao contrário do `profileCache`, que é cacheado de propósito e só carrega
+    // `isAdmin`/`permissions`). Cachear o veredito daria à remoção um TTL de 5s e
+    // trocaria "o request em voo" por "o TTL". A spec "a decisão NÃO é
+    // cacheada" em `jwt-auth.guard.tenant.spec.ts` trava essa perna.
+    //
+    // ⚠️ HOJE A REMOÇÃO NÃO EXISTE — e por quê importa, porque a resposta NÃO é a
+    // mesma nos dois caminhos. Medido 2026-10-17:
+    //
+    // (a) DELETE direto em `tenant_memberships` — o BANCO fecha. Duas coisas
+    //     independentes: `REVOKE DELETE ON tenant_memberships FROM app_runtime`
+    //     (migration `20261020000005_membership_update_por_coluna`, linha 74) E
+    //     ausência de escritor (`grep -rE "tenantMembership\.(deleteMany|delete)\("
+    //     apps/api/src --include='*.ts'`, fora de `*.spec.ts` → 0). Convite
+    //     pendente vive em `Invitation`, não em `tenant_memberships`.
+    //
+    // (b) DELETE em `users` com cascade — o BANCO NÃO fecha, e aqui está o
+    //     motivo de (a) não geralizar. A migration `20261020000000…` (linha 55)
+    //     dá `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public
+    //     TO app_runtime`, e a `20261020000001…` (linha 122) cria
+    //     `users_remocao ON users FOR DELETE USING (usuario_no_escopo(id))`. Como
+    //     `TenantMembership.user` é `onDelete: Cascade`, um DELETE autorizado em
+    //     `users` leva as memberships junto sem passar por `tenant_memberships` —
+    //     logo o `REVOKE` não o alcança. O que fecha ESTE caminho hoje é só a
+    //     ausência de escritor: o mesmo grep, com `user\.` no lugar de
+    //     `tenantMembership\.` e fora de `*.spec.ts` → 0. (Um `grep user.delete`
+    //     cru devolve 10 e não prova nada: 9 das ocorrências são LEITURA de
+    //     `deletedAt`, e a décima é uma spec de integração.)
+    //
+    // Para quem revisar isto: não julgue se a remoção é possível olhando a policy
+    // — julgue pelo ESCRITOR. Um `DELETE` novo em `users` é aceito pelo banco
+    // hoje, com a policy que já existe; a garantia que temos é de que ninguém
+    // escreveu, e essa garantia morre no primeiro endpoint que escrever. (a)
+    // reabre quando a feature de remoção de membro mudar o `REVOKE` da
+    // `20261020000005`.
     if (tenantId !== null) {
       const role = await this.memberships.findRole(subject.sub, tenantId);
       if (role === null) {

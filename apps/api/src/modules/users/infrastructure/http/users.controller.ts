@@ -218,6 +218,17 @@ export class UsersController {
     // e NÃO tem `users.read`. Sob escopo de empresa a RLS já devolve só os
     // membros, e um membro da ACME com `users.read` precisa ver o diretório da
     // ACME — não a si mesmo.
+    //
+    // ⚠️ ESTE RECORTE NÃO VAI PARA A RLS. A proposta aparece a cada revisão
+    // ("o bucket '*' deveria ser estreitado no banco"), e ela quebra TRÊS
+    // comportamentos que `08-ownership.e2e.spec.ts:204` trava de propósito:
+    // (1) quem não tem perfil tem de LER UMA LINHA, a sua — `f2-cadastro-sucesso`
+    // afirma a conta recém-cadastrada na tela, e 403 apagava a tela;
+    // (2) quem tem `users.read` lê o diretório, mesmo sem empresa;
+    // (3) o admin global lê tudo por bypass — o `isAdmin` do seed é global, e uma
+    // policy que o escondesse trancaria o admin fora do próprio bucket.
+    // Nenhuma delas é bug: é o produto. Mudar aqui é mudança de requisito, com
+    // migração de dado junto, não correção de furo.
     const semDireito = perfil.isAdmin !== true && !perfil.permissions.includes('users.read');
     const input: ListUsersInput = {
       cursor: cursor ?? null,
