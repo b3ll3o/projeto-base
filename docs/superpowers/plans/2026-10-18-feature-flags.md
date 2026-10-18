@@ -1,7 +1,7 @@
 ---
 name: plano-feature-flags
 description: Plano da demand feature-flags — chaves de funcionalidade ligaveis e desligaveis pelo administrador do sistema, com tela de toggle em /admin/flags e um consumidor real (convite de empresa).
-version: 1.2.0
+version: 1.3.0
 updated: 2026-10-18
 status: revisto
 state_snapshot: .agents/runs/state-snapshot-20261018T053846Z.md
@@ -19,6 +19,8 @@ state_snapshot: .agents/runs/state-snapshot-20261018T053846Z.md
 > 4 delas mudam desenho. Ver [§Revisao](#revisão-v110).
 > **v1.2.0** — terceiro revisor (adversarial, mediu mutando o código) + reconciliação
 > com a árvore depois da Fase 1. Ver [§Revisao](#revisão-v120).
+> **v1.3.0** — quarto revisor, sobre a Fase 2: o código estava certo, o spec não.
+> Ver [§Revisao](#revisão-v130--fase-2).
 
 ---
 
@@ -77,9 +79,10 @@ distinto do implementer.
 
 | Ponto | Mudanca |
 |-------|---------|
-| ~~`domain/value-objects/feature-flag-key.vo.ts`~~ | **nao existe** — D15. O catalogo (`shared/auth/feature-flag-catalog.ts:38`) ja e o type union e `isFeatureFlagKey` ja e o guard |
-| `apps/api/src/modules/feature-flags/application/feature-flag.use-cases.ts` (novo) | `listar(ator)` e `definir(ator, chave, ativada)`. `listar` devolve a **uniao** catalogo x linhas (D4) — cabe na use case sem mudar a assinatura da porta, porque `listar()` nao recebe argumento. Ambos exigem `ehAdministradorDeSistema` (D2, D11). `definir` valida a chave com `isFeatureFlagKey` antes de gravar e **nao relê** o banco: devolve o DTO montado do input + descricao do catalogo |
-| `feature-flag.use-cases.spec.ts` (novo) | fake in-memory que `implements` a porta e **registra** o `ativada` gravado; casos: nao-admin recusa · admin de empresa recusa · admin do sistema lista a uniao · `definir` grava e a listagem seguinte devolve o valor novo · chave fora do catalogo recusa |
+| ~~`domain/value-objects/feature-flag-key.vo.ts`~~ | **nao existe** — D15. O catalogo (`shared/auth/feature-flag-catalog.ts:50`) ja e o type union e `isFeatureFlagKey` ja e o guard |
+| `apps/api/src/shared/auth/feature-flag-catalog.ts` | **+ `descricaoDe(chave)`** — acrescentado na F2, nao previsto aqui (achado A4 da revisao). Existe porque `noUncheckedIndexedAccess` esta ligado: um `find()` devolve `| undefined` e o caller teria de usar `!`. O `throw` interno e inalcancavel pelo tipo e **nao** em runtime (o array e mutavel e ha um `await` entre o guard e a linha) — ver o comentario da propria funcao |
+| `apps/api/src/modules/feature-flags/application/feature-flag.use-cases.ts` (novo) | `listar(ator)` e `definir(ator, chave, ativada)`. `listar` devolve a **uniao** catalogo x linhas (D4) — cabe na use case sem mudar a assinatura da porta, porque `listar()` nao recebe argumento. Ambos exigem `ehAdministradorDeSistema` (D2, D11), e a **autorizacao vem antes** da validacao da chave: 403 vence 400, senao um ator nao autorizado descobre quais chaves existem. `definir` valida a chave com `isFeatureFlagKey` antes de gravar e **nao relê** o banco: devolve o DTO montado do input + descricao do catalogo. Devolve `FeatureFlagDto` de `@projeto/shared-types` — **primeiro** `application/` do api a importar o pacote (achado A5): os outros 4 devolvem interface local e o web declara o DTO paralelo. Tipo-puro, `tsc` 0, e evita duplicar o shape; o preco e que nao ha mapper, entao **nao existe onde morar um campo que a API exponha e o web nao deva ver** — e foi exatamente o motivo de D16 recusar `updatedAt` |
+| `feature-flag.use-cases.spec.ts` (novo) | fake in-memory que `implements` a porta e **registra** o `ativada` gravado; casos: nao-admin recusa · admin de empresa recusa · admin do sistema lista a uniao · `definir` grava e a listagem seguinte devolve o valor novo · **religar devolve `true` e a listagem concorda com o PUT** · **403 vence 400** · chave fora do catalogo recusa |
 
 ### Fase 3 — HTTP
 
@@ -204,3 +207,35 @@ perfil do escopo", "vestir perfil alheio"). A extracao nao afrouxou nada.
 
 **O que o revisor nao mediu:** `next build`, comportamento com Postgres real das fases
 futuras, e a migration `20261020000006` (nao era do commit).
+
+---
+
+## Revisao (v1.3.0 — Fase 2)
+
+Quarto revisor, adversarial, com o codigo sob mutacao e um probe contra o modulo
+real. **Veredito: o codigo de producao esta certo; o que estava errado era o
+orcamento de dentes do spec.** Nenhum achado exigiu mudanca de logica — dois
+exigiram teste novo.
+
+| # | Achado | Gravidade | Destino |
+|---|--------|-----------|---------|
+| A1 | O caminho **religar** nao tinha medicao: as 7 chamadas de `definir` passavam `false`. Medido pelo revisor: mutar `definir` para devolver `ativada: false` fixo deixava **10/10 verdes**, e num probe real o PUT respondia `false` depois de gravar `true` enquanto a listagem dizia `true` — os dois discordando, que e o invariante que o proprio codigo nomeia em prosa | ALTA | **Corrigido**: teste novo que comeca desligada, religa e afirma `dto.ativada === true` **e** `listagem[0].ativada === dto.ativada`. **Re-medido**: a mutacao do revisor agora deixa **1 vermelho** (era 0) |
+| A2 | A ordem "autorizar antes de validar a entrada" nao tinha dente: mover `exigeAdministradorDoSistema` para depois da validacao deixava 10/10 verdes. Invertida, um ator nao autorizado descobre quais chaves existem (400 em vez de 403) | MEDIA | **Corrigido**: teste novo afirma 403 para chave errada e para chave valida. **Re-medido**: a mutacao do revisor agora deixa **1 vermelho** (era 0) |
+| A3 | O comentario de `descricaoDe` dizia "IMPOSSIVEL pelo tipo". Verdade no `tsc` (TS2345 medido, `as FeatureFlagKey` = 0 hits no repo), **falso em runtime**: o array e mutavel e ha um `await` entre o guard e o lookup. Medido com uma porta hostil | MEDIA-BAIXA | **Corrigido**: o comentario agora diz o que e verdade — inalcancavel para quem ja estreitou com `isFeatureFlagKey`, alcancavel se o catalogo for mutado em runtime. O ramo segue sem spec, e o preco (89,47% stmt / 83,33% branch no arquivo) esta escrito |
+| A4 | `descricaoDe` nao existia em nenhuma fase do plano, e F2 citava `feature-flag-catalog.ts:38` para o type union (que estava na 50) | BAIXA | **Corrigido** na tabela da F2, junto com o `:38` → `:50` |
+| A5 | `application/` devolvendo `@projeto/shared-types` e **primeiro no repo** — os outros 4 `application/*use-cases.ts` devolvem interface local e o web declara o DTO paralelo. Nao e defeito (pacote tipo-puro, `tsc` 0, sem duplicar shape) | BAIXA | Registrado na F2 com o preco: **sem mapper nao ha onde morar um campo que a API exponha e o web nao deva ver** — que foi o motivo de D16 recusar `updatedAt` |
+| A6 | `message:` onde a casa usa `detail:` no payload RFC 7807 | BAIXA | **Corrigido**: `detail` nos dois pontos. Medido pelo revisor que a diferenca no fio era zero; fica por remove um ramo de fallback |
+| A7 | Citacao off-by-one: `global-exception.filter.ts:76` em vez de `:77` | BAIXA | **Corrigido** |
+| A8 | `listAllFeatureFlags()` faz copia rasa: `lista[0] === FEATURE_FLAGS[0]`, e mutar o objeto aninhado corrompe o catalogo. O `tsc` bloqueia (`readonly`), entao so de JS | INFO | Nao mexido: o docstring precisa defender `.pop()`, que e o caso real. Registrado |
+
+O revisor **mediu** que o `code` novo nao quebra o `ApiError` do web: existe
+**uma unica** ramificacao por `code` em todo o web (`app/users/novo/actions.ts:75`,
+`EMAIL_IN_USE`) e nenhum registro central; `api-client.ts:108` carrega `problem.code`
+como string opaca. E rodou o filtro real: `FORBIDDEN` sai 403 e
+`FEATURE_FLAG_CHAVE_INVALIDA` sai 400, ambos RFC 7807.
+
+**O que o revisor nao mediu, e fica declarado:** Postgres real desta fase, o boot
+do container Nest (o spec instancia `new FeatureFlagUseCases(porta)`, entao
+**nao ve nada de DI** — quem pega o `@Inject` com token errado e o
+`feature-flags.module.spec.ts` da F3), o agregado de cobertura do api, `ci:preflight`,
+e `ci:local`.

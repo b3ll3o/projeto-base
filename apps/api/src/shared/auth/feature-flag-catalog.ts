@@ -61,3 +61,29 @@ export function isFeatureFlagKey(value: string): value is FeatureFlagKey {
 export function listAllFeatureFlags(): FeatureFlagDefinicao[] {
   return [...FEATURE_FLAGS];
 }
+
+/**
+ * Descrição de UMA chave, para o use case que acabou de gravar montar o DTO
+ * sem reler o banco.
+ *
+ * Existe como função porque `noUncheckedIndexedAccess` está ligado
+ * (`tsconfig.base.json`): um `find()` devolve `| undefined`, e o caller teria
+ * de usar `!` — afirmação que a linha de `isFeatureFlagKey` acima já pagou.
+ *
+ * ⚠️ O `throw` abaixo é inalcançável **para qualquer caller que passe o valor
+ * já estreitado por `isFeatureFlagKey`** — medido: `tsc` recusa
+ * `descricaoDe('tenancy.invit')` com TS2345, e `grep 'as FeatureFlagKey'`
+ * no repo inteiro dá 0. Ele NÃO é impossível em runtime: `FEATURE_FLAGS` é
+ * exportado mutável e há um `await` entre o guard e esta linha, então uma
+ * porta que esvaziasse o catálogo durante a gravação faria o throw disparar
+ * (provado pelo revisor da F2 com uma porta hostil). O ramo fica sem spec de
+ * propósito — é uma afirmação de tipo, não lógica — e o preço é o arquivo em
+ * 89,47% stmt / 83,33% branch, acima do gate de 80%.
+ */
+export function descricaoDe(chave: FeatureFlagKey): string {
+  const definicao = FEATURE_FLAGS.find((f) => f.chave === chave);
+  if (definicao === undefined) {
+    throw new Error(`chave de flag fora do catálogo: ${chave}`);
+  }
+  return definicao.descricao;
+}
