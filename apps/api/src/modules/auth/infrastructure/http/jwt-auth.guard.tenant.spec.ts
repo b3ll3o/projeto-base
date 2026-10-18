@@ -160,4 +160,32 @@ describe('JwtAuthGuard — a empresa afirmada no header é conferida', () => {
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
     expect(findRole).toHaveBeenCalledWith(SUB, ACME);
   });
+
+  // ── O LIMITE DA GARANTIA (achado do revisor no PR #101) ────────────────────
+  //
+  // A garantia que o C0 dá é "no INÍCIO do request", não "durante o request".
+  // Se a membership é removida com um request em voo, aquele request termina
+  // como começou — nenhuma autorização por request pode evitar isso sem
+  // revogar o escopo no meio da execução, e o escopo é transacional.
+  //
+  // Esta spec fixa a perna que sustenta a garantia: a decisão é refeita a CADA
+  // request. Com o veredito cacheado, a remoção levaria o TTL do cache (5s)
+  // para valer e a janela deixaria de ser "o request em voo" para ser "o TTL" —
+  // e a única prova de que isso não acontece é um segundo request, porque o
+  // primeiro já tinha dado verde.
+  it('🔴 a decisão NÃO é cacheada: a remoção vale já no request seguinte', async () => {
+    const { guard, findRole } = makeGuard('member');
+    findRole.mockReset();
+    findRole.mockResolvedValueOnce('member').mockResolvedValueOnce(null);
+
+    await expect(guard.canActivate(makeContext({ 'x-tenant-id': ACME }).ctx)).resolves.toBe(true);
+
+    // Mesmo token, mesma empresa, nada mudou no cliente: só a membership. Se
+    // este segundo request passasse, a remoção teria levado o TTL do cache.
+    await expect(
+      guard.canActivate(makeContext({ 'x-tenant-id': ACME }).ctx),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(findRole).toHaveBeenCalledTimes(2);
+  });
 });
