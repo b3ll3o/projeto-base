@@ -20,12 +20,16 @@
 // retorno: o que se quer verificar são as CHAMADAS de `set`/`delete`.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import {
   COOKIE_ACCESS,
   COOKIE_REFRESH,
+  COOKIE_TENANT,
   exigirSessao,
+  guardarTenant,
   guardarTokens,
+  lerTenant,
   lerTokens,
   limparSessao,
 } from './sessao';
@@ -146,6 +150,30 @@ describe('lerTokens', () => {
   });
 });
 
+// pt-BR (Fase 3 — tenancy, 2026-10-16): a empresa selecionada mora num
+// cookie PRÓPRIO (o `tenant_id` NÃO é httpOnly — ele não é segredo, e um
+// cookie httpOnly obrigaria toda troca de empresa a passar por Server
+// Action). A leitora é o que o `ApiClient` consome via `getTenant`.
+describe('lerTenant', () => {
+  it('sem cookie de empresa, devolve null (não undefined)', async () => {
+    await expect(lerTenant()).resolves.toBeNull();
+  });
+
+  it('com cookie, devolve o UUID da empresa', async () => {
+    await guardarTenant('0190a8b6-0000-4000-8000-00000000000a');
+
+    await expect(lerTenant()).resolves.toBe('0190a8b6-0000-4000-8000-00000000000a');
+  });
+
+  it('cookie VAZIO conta como ausente, não como empresa ""', async () => {
+    // `''` vazaria um `X-Tenant-Id:` sem valor, que a API rejeita com 400.
+    const store = await cookies();
+    store.set(COOKIE_TENANT, '', { path: '/' });
+
+    await expect(lerTenant()).resolves.toBeNull();
+  });
+});
+
 describe('exigirSessao', () => {
   it('com access token, DEVOLVE o token e não redireciona', async () => {
     await guardarTokens('access-abc', 'refresh-xyz');
@@ -181,12 +209,26 @@ describe('exigirSessao', () => {
 });
 
 describe('limparSessao', () => {
-  it('apaga os DOIS cookies, não só o access', async () => {
+  it('apaga os TRÊS cookies de sessão, não só o access', async () => {
     await guardarTokens('access-abc', 'refresh-xyz');
     await limparSessao();
 
-    expect(estado.removidos).toEqual([COOKIE_ACCESS, COOKIE_REFRESH]);
+    expect(estado.removidos).toEqual([COOKIE_ACCESS, COOKIE_REFRESH, COOKIE_TENANT]);
     await expect(lerTokens()).resolves.toEqual({ accessToken: null, refreshToken: null });
+  });
+
+  it('apaga a EMPRESA junto — senão ela atravessa a fronteira de sessão (Fase 3)', async () => {
+    // pt-BR (Fase 3, achado da revisão): a empresa escolhida é estado de sessão,
+    // não preferência permanente. Deixá-la sobreviver ao logout é a direção
+    // cross-tenant do bug: A escolhe ACME, clica em "Sair", B entra no mesmo
+    // browser — e TODA requisição de B sai declarando `X-Tenant-Id: ACME`,
+    // resolvendo perfil no bucket da empresa errada.
+    await guardarTokens('access-abc', 'refresh-xyz');
+    await guardarTenant('0190a8b6-0000-4000-8000-00000000000a');
+
+    await limparSessao();
+
+    await expect(lerTenant()).resolves.toBeNull();
   });
 
   it('apagar sem sessão nenhuma não é erro', async () => {

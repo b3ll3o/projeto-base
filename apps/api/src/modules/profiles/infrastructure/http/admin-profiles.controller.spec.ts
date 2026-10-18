@@ -131,20 +131,39 @@ describe('AdminProfilesController.create — isAdmin/isSystem só via seed (#97)
  * mesma classe do B1: o asserto afirma o objeto errado da sessão.
  */
 describe('AdminProfilesController.create — o ator chega ao use case (#97/A1.3)', () => {
-  it('repassa userId e isAdmin vindos do req.user', async () => {
+  it('repassa userId, tenantId e isAdmin vindos do req.user', async () => {
     const { controller, ator } = controllerComCaptura();
 
     await controller.create(
       { slug: 'editor', name: 'Editor' },
       {
-        user: { sub: '0190f2c1-7a4b-7000-8000-0000000000ff', isAdmin: false },
+        user: {
+          sub: '0190f2c1-7a4b-7000-8000-0000000000ff',
+          tenantId: '0190a8b6-0000-4000-8000-00000000000a',
+          isAdmin: false,
+        },
       },
     );
 
     expect(ator()).toEqual({
       userId: '0190f2c1-7a4b-7000-8000-0000000000ff',
+      tenantId: '0190a8b6-0000-4000-8000-00000000000a',
       isAdmin: false,
     });
+  });
+
+  it('tenantId AUSENTE vira null, nunca undefined (Fase 3)', async () => {
+    // pt-BR (Fase 3): `undefined` e `null` não são equivalentes aqui — o
+    // primeiro passaria por uma checagem `=== null` da Fase 4 e cairia num
+    // bucket de cache diferente do "sem empresa".
+    const { controller, ator } = controllerComCaptura();
+
+    await controller.create(
+      { slug: 'editor', name: 'Editor' },
+      { user: { sub: '0190f2c1-7a4b-7000-8000-0000000000ff' } },
+    );
+
+    expect(ator()).toHaveProperty('tenantId', null);
   });
 
   it('trata isAdmin AUSENTE como false (fail-closed, não undefined)', async () => {

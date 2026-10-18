@@ -23,6 +23,8 @@ import { AuditInfraModule } from '../../shared/audit/audit-infra.module.js';
 import { UsersController } from './infrastructure/http/users.controller.js';
 import { JwtAuthGuard } from '../auth/infrastructure/http/jwt-auth.guard.js';
 import { AuthModule } from '../auth/auth.module.js';
+import { TenancyModule } from '../tenancy/tenancy.module.js';
+import { ProfilesModule } from '../profiles/profiles.module.js';
 
 @Module({
   // pt-BR: `AuthModule` entra na lista de imports (e não só o guard) porque
@@ -30,7 +32,18 @@ import { AuthModule } from '../auth/auth.module.js';
   // `AuthModule`. Trazer só a classe do guard para `providers` resolveria
   // o guard e deixaria `TOKEN_ISSUER_PORT` indefinido — o mesmo modo de
   // falha do `@Inject` faltando, um nível acima.
-  imports: [PrismaPersistenceModule, AuditInfraModule, AuthModule],
+  //
+  // `ProfilesModule` entra pelo MESMO motivo, e o `@UseGuards(PermissionsGuard)`
+  // em `GET /users` é que precisa dele. O `PermissionsGuard` hidrata
+  // `req.user.permissions` a partir de `UserProfileUseCases`, provider do
+  // `ProfilesModule`. MEDIDO sem esta linha: o boot morre com "Nest can't
+  // resolve dependencies of the PermissionsGuard (Reflector, ?)", porque
+  // `tsx`/esbuild não emite a metadata de DI sem `@Inject` explícito — a mesma
+  // armadilha que o `JwtAuthGuard` já documenta acima.
+  //
+  // Sem ciclo: `ProfilesModule` importa `PrismaPersistenceModule`, que vive
+  // dentro de `users/` mas é um módulo próprio — ele não importa `UsersModule`.
+  imports: [PrismaPersistenceModule, AuditInfraModule, AuthModule, TenancyModule, ProfilesModule],
   controllers: [UsersController],
   providers: [
     {

@@ -339,6 +339,21 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     file: '.tooling/scripts/ci/check-test-set-covered.ts',
     id: 'check-test-set-covered',
   },
+  {
+    // PR #101 (2026-10-17): o `X-Tenant-Id` virou conferido no `JwtAuthGuard`,
+    // mas `escopoDoTenant` é uma TRADUÇÃO — nada impede o próximo repositório
+    // de abrir o escopo de um `@Param`. Todo predicado de RLS compara a coluna
+    // ALVO contra `escopo_atual()` e nenhuma função do banco pergunta pelo
+    // REQUERENTE: quem escreve o GUC decide de que empresa fala.
+    //
+    // **O que este gate NÃO fecha:** a rota chegando ao escopo de outro arquivo
+    // (controller → repositório), que exigiria grafo de chamadas. O resíduo sai
+    // em `advisories` como NÚMERO — silêncio seria vender cobertura que a
+    // varredura não fez.
+    name: 'escopo de tenancy não vem da rota (defeito + resíduo medido)',
+    file: '.tooling/scripts/ci/check-tenant-scope-source.ts',
+    id: 'check-tenant-scope-source',
+  },
 ];
 
 /**

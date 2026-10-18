@@ -10,6 +10,7 @@ import { HealthModule } from './modules/health/health.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { ProfilesModule } from './modules/profiles/profiles.module.js';
+import { TenancyModule } from './modules/tenancy/tenancy.module.js';
 
 const REDACT_PATHS = ['req.headers.authorization', 'req.headers.cookie'] as const;
 
@@ -44,6 +45,11 @@ const REDACT_PATHS = ['req.headers.authorization', 'req.headers.cookie'] as cons
     // + use cases). UserProfileCacheService é singleton (registrado em
     // AuthModule e UsersModule também — Nest deduplica).
     ProfilesModule,
+    // pt-BR (Fase 5 — tenancy): TenancyModule (rotas de convite +
+    // TENANCY_USE_CASES). Já vem por transitividade de `UsersModule`, que o
+    // importa para injetar o token — listar aqui é o que registra o
+    // CONTROLLER, que o Nest não herda pelo módulo intermediário.
+    TenancyModule,
   ],
   // #72: registra ThrottlerGuard globalmente via APP_GUARD (injetado pelo
   // container do Nest, sem precisar instanciar manualmente no main.ts).

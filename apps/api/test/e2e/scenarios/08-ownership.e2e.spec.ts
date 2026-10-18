@@ -201,24 +201,87 @@ describe('E2E 08: a pessoa só opera sobre o próprio registro', () => {
     expect(JSON.parse(r.body).code).toBe('VALIDATION_ERROR');
   });
 
-  it('o cadastro e a listagem seguem ABERTOS — a política é por-id, e isso é deliberado', async () => {
-    // ⚠️ Este teste trava uma ESCOLHA, não um comportamento herdado. A
-    // listagem é o diretório da tela `/users`; aplicar "só o próprio" nela
-    // devolveria uma linha e apagaria a tela. A exclusão está documentada no
-    // guard e registrada como pendência — se alguém "consertar" a listagem
-    // depois, este teste cai e a mudança vem com a decisão de produto que a
-    // acompanha.
+  it('a listagem só abre para quem tem `users.read`; sem perfil, devolve SÓ a própria linha', async () => {
+    // ⚠️ Este teste trava a ESCOLHA, nos TRÊS lados. Antes (2026-10-17) ele
+    // afirmava que a listagem é ABERTA; o bucket `'*'` — que é o que
+    // `empresaDoAtor(null)` devolve quando a request não traz `X-Tenant-Id` —
+    // fazia `usuario_no_escopo` responder TRUE para toda linha, e o diretório
+    // inteiro atravessava empresas. `POST /users` é `@Public()`, então criar
+    // conta e enumerar levava duas chamadas.
+    //
+    //   - fecha: quem não tem perfil lê UMA linha, a sua. Não é 403 porque a
+    //     conta recém-cadastrada PRECISA aparecer na lista — `f2-cadastro-sucesso`
+    //     afirma isso no browser, e 403 apagava a tela.
+    //   - preserva: quem tem `users.read` lê o diretório, mesmo sem empresa.
+    //   - preserva: o admin global lê tudo por bypass.
+    //
+    // ⚠️ O gate é PERMISSÃO, não propriedade. `UserOwnershipGuard` segue fora da
+    // listagem (`user-ownership.guard.ts:22-31`): "só o próprio" para TODO mundo
+    // devolveria uma linha e apagaria a tela `/users`.
     const { injetar } = e2e;
     await conta('Alfa', 'alfa@e2e.test');
     const eu = await conta('Bravo', 'bravo@e2e.test');
 
-    const lista = await injetar({
+    // LADO FECHADO — a pessoa comum não tem perfil, logo não tem `users.read`.
+    // ⚠️ A afirmação é de CONTEÚDO, não de status: `toEqual` com um item só é o
+    // que prova que a enumeração fechou. Um `statusCode === 403` passaria igual
+    // se a rota simplesmente quebrasse, e um `arrayContaining` passaria com o
+    // diretório inteiro — os dois medem o oposto do que este teste mede.
+    const restrito = await injetar({
       method: 'GET',
       url: '/api/v1/users?limit=50',
       headers: auth(eu.token),
     });
+    expect(restrito.statusCode).toBe(200);
+    expect(
+      (JSON.parse(restrito.body) as { users: Array<{ email: string }> }).users.map((u) => u.email),
+    ).toEqual(['bravo@e2e.test']);
+
+    // LADO PRESERVADO — a conta de sessão do harness é admin global.
+    const lista = await injetar({ method: 'GET', url: '/api/v1/users?limit=50' });
     expect(lista.statusCode).toBe(200);
     const { users } = JSON.parse(lista.body) as { users: Array<{ email: string }> };
-    expect(users.map((u) => u.email).sort()).toEqual(['alfa@e2e.test', 'bravo@e2e.test']);
+    expect(users.map((u) => u.email)).toEqual(
+      expect.arrayContaining(['alfa@e2e.test', 'bravo@e2e.test']),
+    );
+
+    // ⚠️ CONTROLE POSITIVO — o gate decide pela PERMISSÃO, não por quem a pessoa
+    // é. Uma conta comum, sem admin, com `users.read` num perfil comum, lê o
+    // diretório. Sem isto, o `toEqual` de cima seria indistinguível de "a rota
+    // devolve sempre uma linha" — que é um defeito que passa em review porque
+    // o teste fica verde.
+    //
+    // O perfil é GLOBAL (`tenantId: null`) porque a chamada não manda
+    // `x-tenant-id`, e nesse ramo o perfil vem de `users.profile_id`
+    // (`PrismaTenantMembershipRepository.findProfileId`, linha 47).
+    const charlie = await conta('Charlie', 'charlie@e2e.test');
+    const perfilLeitor = await e2e.ctx.prisma.profile.create({
+      data: {
+        slug: 'leitor-e2e',
+        name: 'Leitor E2E',
+        isAdmin: false,
+        isSystem: false,
+        tenantId: null,
+      },
+    });
+    await e2e.ctx.prisma.authorization.create({
+      data: { profileId: perfilLeitor.id, permissionKey: 'users.read' },
+    });
+    await e2e.ctx.prisma.user.update({
+      where: { id: charlie.id },
+      data: { profileId: perfilLeitor.id },
+    });
+
+    const comLeitura = await injetar({
+      method: 'GET',
+      url: '/api/v1/users?limit=50',
+      headers: auth(charlie.token),
+    });
+    expect(comLeitura.statusCode).toBe(200);
+    expect(
+      (JSON.parse(comLeitura.body) as { users: Array<{ email: string }> }).users.map(
+        (u) => u.email,
+      ),
+    ).toEqual(expect.arrayContaining(['alfa@e2e.test', 'bravo@e2e.test', 'charlie@e2e.test']));
   });
 });

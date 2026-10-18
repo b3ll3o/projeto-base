@@ -15,8 +15,9 @@
 // fica vermelho — não "verde por não ter olhado".
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { ApiClient } from './api-client';
 
-const { clientMock, exigirSessaoMock, lerTokensMock } = vi.hoisted(() => ({
+const { clientMock, exigirSessaoMock, lerTenantMock, lerTokensMock } = vi.hoisted(() => ({
   clientMock: {
     get: vi.fn(),
     post: vi.fn(),
@@ -25,6 +26,10 @@ const { clientMock, exigirSessaoMock, lerTokensMock } = vi.hoisted(() => ({
     delete: vi.fn(),
   },
   exigirSessaoMock: vi.fn(async () => 'token-admin'),
+  // pt-BR (Fase 3): `null` = nenhuma empresa escolhida → o `ApiClient` omite
+  // `X-Tenant-Id`. ⚠️ O bucket `null` NÃO é "sem permissão nenhuma": ele resolve
+  // o perfil GLOBAL, e o único `isAdmin` do sistema é global.
+  lerTenantMock: vi.fn(async (): Promise<string | null> => null),
   lerTokensMock: vi.fn(
     async (): Promise<{ accessToken: string | null; refreshToken: string | null }> => ({
       accessToken: 'token-admin',
@@ -36,6 +41,7 @@ const { clientMock, exigirSessaoMock, lerTokensMock } = vi.hoisted(() => ({
 vi.mock('./api-client', () => ({ ApiClient: vi.fn(() => clientMock) }));
 vi.mock('./sessao', () => ({
   exigirSessao: exigirSessaoMock,
+  lerTenant: lerTenantMock,
   lerTokens: lerTokensMock,
 }));
 
@@ -98,6 +104,51 @@ describe('obterMeuPerfil — payload de GET me/profile', () => {
     lerTokensMock.mockResolvedValueOnce({ accessToken: null, refreshToken: null });
     await expect(obterMeuPerfil()).resolves.toBeNull();
     expect(exigirSessaoMock).not.toHaveBeenCalled();
+  });
+});
+
+// pt-BR (Fase 3, achado da revisão): o `ApiClient` é mockado como construtor,
+// então o header `X-Tenant-Id` SÓ existe se alguém montou `getTenant` — e o
+// `api-client.spec.ts` mede o `ApiClient`, não quem o monta. Sem esta
+// asserção, apagar `getTenant` de `perfil.ts` deixa a suíte inteira verde e o
+// header desaparece da aplicação sem um único teste vermelho.
+describe('getTenant é montado no ApiClient (Fase 3)', () => {
+  const ACME = '0190a8b6-0000-4000-8000-00000000000a';
+
+  /** A config da ÚLTIMA construção — `beforeEach` não limpa o construtor. */
+  function configAtual(): { getTenant?: () => string | null } {
+    const ctor = ApiClient as unknown as { mock: { calls: unknown[][] } };
+    const ultima = ctor.mock.calls[ctor.mock.calls.length - 1];
+    return (ultima?.[0] ?? {}) as { getTenant?: () => string | null };
+  }
+
+  it('getClient passa getTenant devolvendo a empresa de lerTenant()', async () => {
+    lerTenantMock.mockResolvedValueOnce(ACME);
+    clientMock.get.mockResolvedValue([]);
+
+    await listarPerfis();
+
+    const getTenant = configAtual().getTenant;
+    expect(typeof getTenant).toBe('function');
+    expect(getTenant?.()).toBe(ACME);
+  });
+
+  it('sem empresa, getTenant ainda é montado e devolve null (header omitido, não string vazia)', async () => {
+    lerTenantMock.mockResolvedValueOnce(null);
+    clientMock.get.mockResolvedValue([]);
+
+    await listarPerfis();
+
+    expect(configAtual().getTenant?.()).toBeNull();
+  });
+
+  it('obterMeuPerfil também monta getTenant — é a rota por empresa', async () => {
+    lerTenantMock.mockResolvedValueOnce(ACME);
+    clientMock.get.mockResolvedValue(null);
+
+    await obterMeuPerfil();
+
+    expect(configAtual().getTenant?.()).toBe(ACME);
   });
 });
 

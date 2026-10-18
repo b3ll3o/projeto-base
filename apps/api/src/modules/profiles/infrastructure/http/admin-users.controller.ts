@@ -11,7 +11,7 @@ import { UserProfileUseCases, type AtorAutenticado } from '../../application/pro
 
 /** `req.user` publicado pelo `JwtAuthGuard`. */
 interface RequestComAtor {
-  user: { sub: string; isAdmin?: boolean };
+  user: { sub: string; tenantId?: string | null; isAdmin?: boolean };
 }
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -33,6 +33,7 @@ export class AdminUsersController {
   ): Promise<{ ok: true }> {
     const ator: AtorAutenticado = {
       userId: req.user.sub,
+      tenantId: req.user.tenantId ?? null,
       isAdmin: req.user.isAdmin === true,
     };
     await this.useCases.atribuirProfileAoUser(userId, body.profileId, ator);

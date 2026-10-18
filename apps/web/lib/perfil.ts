@@ -17,7 +17,7 @@
 // antes de chamar a API.
 
 import { ApiClient } from './api-client';
-import { exigirSessao, lerTokens } from './sessao';
+import { exigirSessao, lerTenant, lerTokens } from './sessao';
 import type {
   AssignProfileInputDto,
   CreateProfileInputDto,
@@ -29,9 +29,13 @@ import type {
 
 async function getClient(): Promise<ApiClient> {
   const accessToken = await exigirSessao();
+  const tenantId = await lerTenant();
   return new ApiClient({
     baseUrl: process.env.API_BASE_URL ?? 'http://localhost:3000/api/v1',
     getToken: () => accessToken,
+    // pt-BR (Fase 3): `/me/profile` é por empresa — sem o header a API
+    // responde no bucket `null` e o perfil mostrado é sempre o global.
+    getTenant: () => tenantId,
   });
 }
 
@@ -45,9 +49,11 @@ async function getClient(): Promise<ApiClient> {
 async function getClientOpcional(): Promise<ApiClient | null> {
   const { accessToken } = await lerTokens();
   if (accessToken === null) return null;
+  const tenantId = await lerTenant();
   return new ApiClient({
     baseUrl: process.env.API_BASE_URL ?? 'http://localhost:3000/api/v1',
     getToken: () => accessToken,
+    getTenant: () => tenantId,
   });
 }
 

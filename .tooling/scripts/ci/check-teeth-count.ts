@@ -4,7 +4,7 @@
 import { execSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import * as path from 'node:path';
-import type { CheckResult } from './check-types';
+import { linhasDoRelato, type CheckResult } from './check-types';
 
 /**
  * Fecha a classe 7 de `guard-classes.md` aplicada ao próprio
@@ -89,10 +89,10 @@ export async function checkTeethCount(opts: { repoRoot: string }): Promise<Check
     );
   }
 
-  // O par name/file esperado é: 21 entries, 20 arquivos (eslint-drift entra 2x).
-  // Não assertamos o número exato (envelhece); só assertamos que name > file (a
-  // diferença é a entrada duplicada por sufixo) ou name === file (cada entry
-  // aponta para arquivo único). Quebrar a relação é o sinal.
+  // O par name/file esperado é name = file + 1 (eslint-drift entra 2x, uma por
+  // app). Não assertamos o número exato (envelhece a cada gate novo — a versão
+  // anterior deste comentário dizia "21 entries, 20 arquivos" e já era falso);
+  // só assertamos a RELAÇÃO, que é o sinal. Quebrar a relação é o defeito.
   if (fileCount > 0 && fileCount >= nameCount) {
     errors.push(
       `paridade quebrada: ${nameCount} entradas casam ${fileCount} arquivos únicos — ` +
@@ -103,4 +103,33 @@ export async function checkTeethCount(opts: { repoRoot: string }): Promise<Check
   }
 
   return { ok: errors.length === 0, errors };
+}
+
+// Executado como CLI.
+//
+// Sem este bloco, `npx tsx .tooling/scripts/ci/check-teeth-count.ts` carregava o
+// módulo e saía 0 SEM IMPRIMIR NADA — e é exatamente o comando que o registro de
+// dentes manda rodar para remedir. Verde sem sentido: o gate que existe para
+// denunciar drift devolvia "tudo bem" sem olhar. MEDIDO 2026-10-17 (achado do
+// revisor): a FUNÇÃO accuse a paridade quebrada, a invocação por CLI não.
+if (process.argv[1]?.endsWith('check-teeth-count.ts')) {
+  // `.then` e não top-level `await`: o tsx compila este arquivo para CJS, onde
+  // `await` no topo do módulo é erro de sintaxe. MEDIDO 2026-10-17 — a primeira
+  // versão deste bloco usava `await` e crashava em TODA invocação, inclusive na
+  // árvore sadia: um no-op que pelo menos não falhava foi trocado por um crash.
+  void checkTeethCount({ repoRoot: '.' }).then((r) => {
+    const linhas = linhasDoRelato(r);
+    for (const linha of linhas) process.stderr.write(`${linha}\n`);
+    // MEDIDO 2026-10-17: `linhasDoRelato` devolve só `errors`/`advisories`/`skip`,
+    // então a árvore sadia produzia `[]` — e um CLI que não imprime NADA é
+    // indistinguível, por stdout, do no-op que este bloco substitui. A primeira
+    // versão deste conserto arrumou o `exit` e deixou o silêncio, que é metade do
+    // defeito. Verde precisa dizer que mediu.
+    if (r.ok && linhas.length === 0) {
+      process.stderr.write(
+        'paridade PREFLIGHT_CHECKS <-> `name:` <-> arquivos: OK (medido, sem acusação)\n',
+      );
+    }
+    process.exit(r.ok ? 0 : 1);
+  });
 }

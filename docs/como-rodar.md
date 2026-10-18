@@ -152,18 +152,40 @@ Mudanças em `apps/api/src/` → `tsx watch` recarrega; `apps/web/app/` → Fast
 
 ### 3.1 Preparar os arquivos de ambiente
 
-⚠️ **Este checkout não tem os dois arquivos de que a stack precisa** (medido 2026-10-16):
-`.env` da raiz **não existe** (só `.env.example`) — o serviço `api` declara
-`DATABASE_URL: ${DATABASE_URL}`, que o compose interpola da raiz; sem ele a chave resolve
-para string vazia e o healthcheck reprova. E `.env.production` existe mas é **stub de 1
-linha** (`# spec stub — não commitar`), de onde saem `POSTGRES_PASSWORD` e `JWT_SECRET`.
+**Estado medido em 2026-10-17** (só nomes de chave; valores não entram no doc):
+`.env` da raiz **existe**, 1 chave (`DATABASE_URL`); `.env.production` **existe**,
+7 chaves (`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `DATABASE_URL`,
+`ALLOWED_ORIGINS`, `JWT_SECRET`, `LOG_LEVEL`); `DIRECT_DATABASE_URL` é a **única
+ausente**.
+
+⚠️ **A versão anterior desta seção afirmava que `.env` não existia e que
+`.env.production` era um stub de 1 linha.** Ambas **medidas falsas** acima: os
+dois arquivos existem e estão preenchidos. As frases datavam de 2026-10-16 e
+envelheceram sem que o texto acompanhasse.
+
+⚠️ **DUAS conexões desde a Fase 9 (RLS).** A da APLICAÇÃO tem de ser o papel
+`app_runtime`, criado pela migration; a de DONO é a que o CLI do Prisma usa.
+Inverter as duas não dá erro — a stack sobe e as policies ficam inertes.
 
 ```bash
+# ⚠️ NÃO rode se o seu .env.production já tem segredo: o `cp` é DESTRUTIVO.
 cp .env.production.example .env.production     # preencher os CHANGE_ME_*
-#   POSTGRES_PASSWORD, DATABASE_URL, JWT_SECRET  (openssl rand -base64 48)
+#   POSTGRES_PASSWORD, JWT_SECRET  (openssl rand -base64 48)
+#   DIRECT_DATABASE_URL            (conexão de DONO — ver o aviso abaixo)
 
-# .env da RAIZ: só o DATABASE_URL, com host = "postgres" (nome do serviço)
-echo 'DATABASE_URL=postgresql://projeto:<senha>@postgres:5432/projeto_base?schema=public' > .env
+# .env da RAIZ: só o DATABASE_URL, host = "postgres". O serviço `api` declara
+# `DATABASE_URL: ${DATABASE_URL}`, que o compose interpola da raiz; sem ele a
+# chave resolve para string vazia e o healthcheck reprova.
+echo 'DATABASE_URL=postgresql://app_runtime:<senha-de-runtime>@postgres:5432/projeto_base?schema=public' > .env
+
+# EDITE no .env.production a linha DIRECT_DATABASE_URL= que o cp já criou.
+# ⚠️ NÃO use `>>`: o example JÁ traz a chave (4ª linha), então anexar cria
+# duplicata — e qual das duas o `env_file` do Compose honra NÃO ESTÁ MEDIDO aqui.
+# Editar não deixa a pergunta existir. ⚠️ E não ponha a chave no `.env` da raiz:
+# `environment:` tem precedência sobre `env_file` e a sobrescreveria com vazio.
+#
+# ⚠️ A senha de `app_runtime` está em texto puro na migration (migration não lê
+# env). Troque-a fora de banda antes de usar isto fora de dev.
 
 docker compose up -d --build
 docker compose ps
@@ -171,6 +193,9 @@ docker compose ps
 
 O entrypoint da imagem prod da api roda as migrations sozinho antes do boot
 (`ENTRYPOINT ["sh","-c","pnpm exec prisma migrate deploy --schema=apps/api/prisma/schema.prisma && node apps/api/dist/main.js"]`).
+Por isso a `DIRECT_DATABASE_URL` é **obrigatória** nesse ambiente: sem ela o
+`migrate deploy` falha na subida — que é o comportamento correto, porque a
+migration precisa de posse das tabelas para criar o papel e as policies.
 
 Portas publicadas: api `3000`, web `3001`, otel `4317`/`4318` (perfil observabilidade).
 
@@ -278,7 +303,8 @@ Rodar o mesmo localmente, na ordem: `pnpm ci:local` (≈1 min medido no README).
 | Variável | Onde mora | Consumida por |
 |---|---|---|
 | `JWT_SECRET` | `apps/api/.env` (pnpm) · `.env.production` (Docker) | `JwtTokenService` — **sem default** |
-| `DATABASE_URL` | `apps/api/.env` (pnpm, host `localhost`) · `.env` da raiz (Docker, host `postgres`) | Prisma |
+| `DATABASE_URL` | `apps/api/.env` (pnpm, host `localhost`) · `.env` da raiz (Docker, host `postgres`) — **deve ser `app_runtime`** | Prisma — a conexão da aplicação |
+| `DIRECT_DATABASE_URL` | `apps/api/.env` (pnpm) · `.env.production` (Docker) — **o DONO** | CLI do Prisma (`migrate`, `db seed`) |
 | `POSTGRES_PASSWORD` | `.env.production` | container do Postgres |
 | `API_BASE_URL` | opcional no web — **há fallback** `http://localhost:3000/api/v1` | RSC de `/users`, `/login`, Server Action de `/users/novo` |
 | `ALLOWED_ORIGINS` | `.env.production` / compose | CORS no `main.ts` |

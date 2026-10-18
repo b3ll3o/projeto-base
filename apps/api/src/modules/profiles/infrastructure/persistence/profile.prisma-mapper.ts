@@ -16,6 +16,8 @@ export interface ProfileRow {
   description: string | null;
   isAdmin: boolean;
   isSystem: boolean;
+  /** pt-BR (Fase 6): a empresa dona. `null` = perfil global (D3). */
+  tenantId: string | null;
   createdAt: Date;
   updatedAt: Date;
   version: number;
@@ -39,6 +41,7 @@ export const ProfilePrismaMapper = {
       description: row.description,
       isAdmin: row.isAdmin,
       isSystem: row.isSystem,
+      tenantId: row.tenantId,
       authorizations: row.authorizations.map((a) => a.permissionKey),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,

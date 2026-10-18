@@ -5,6 +5,10 @@
 // do `UserId` para manter a fronteira de tipos.
 
 import { randomUUID } from 'node:crypto';
+// pt-BR (PR #101, 2026-10-17): `UserValidationException` é a exceção que o
+// `domain-exception-to-http.ts:218` mapeia para 400 com `errors[].field`. Os VOs
+// gêmeos (`profile-name.vo.ts:7`, `profile-slug.vo.ts:8`) já importam daqui.
+import { UserValidationException } from '../../../users/domain/exceptions/user.exceptions.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -20,9 +24,11 @@ export class ProfileId {
       return new ProfileId(randomUUID());
     }
     if (typeof value !== 'string' || !UUID_REGEX.test(value)) {
-      throw new Error(
-        `ProfileId inválido: ${typeof value === 'string' ? '[REDACTED]' : typeof value}`,
-      );
+      // ⚠️ Antes era `new Error(...)`, e o mapper não tem caso para `Error` cru:
+      // o fall-through devolve 500. O `motivo` é ESTÁTICO de propósito — a
+      // versão anterior interpolava o valor recebido (redigido, mas ainda
+      // presente) numa mensagem que pode acabar em log.
+      throw new UserValidationException('profileId', 'deve ser um UUID válido');
     }
     return new ProfileId(value);
   }

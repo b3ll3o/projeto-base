@@ -40,8 +40,10 @@
 // `@Inject(USER_USE_CASES)` no `UsersController`.
 
 import {
+  BadRequestException,
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Inject,
   Injectable,
   UnauthorizedException,
@@ -54,6 +56,8 @@ import {
 } from '../../domain/ports/token-issuer.port.js';
 import { IS_PUBLIC_KEY } from './public.decorator.js';
 import { UserProfileCacheService } from '../../../../shared/infrastructure/security/user-profile-cache.service.js';
+import type { TenantMembershipRepositoryPort } from '../../../tenancy/domain/ports/tenant-membership-repository.port.js';
+import { TENANT_MEMBERSHIP_REPOSITORY_PORT } from '../../../tenancy/domain/ports/tenant-membership-repository.port.js';
 
 /**
  * Extrai o token do header `Authorization`.
@@ -74,9 +78,51 @@ function extractBearerToken(raw: unknown): string | null {
 interface RequestWithUser {
   headers?: Record<string, unknown>;
   user?: TokenSubject & {
+    tenantId?: string | null;
     isAdmin?: boolean;
     permissions?: readonly string[];
   };
+}
+
+/** pt-BR (Fase 3): `tenant_id` é `@db.Uuid` em toda tabela de tenancy. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Lê `X-Tenant-Id` — a empresa que o token está agindo (D2).
+ *
+ * Ausente → `null`. O bucket `null` é o do **perfil GLOBAL**
+ * (`users.profile_id`), nunca o de uma empresa: sem header nenhuma empresa é
+ * assumida e as rotas sem escopo de empresa seguem funcionando.
+ *
+ * ⚠️ "sem header" NÃO é "sem permissão": o perfil global é onde mora o
+ * `isAdmin` (é o seed que o cria). Quem ler este comentário não pode concluir
+ * que omitir o header derruba privilégio — derruba só o escopo. A Fase 4
+ * troca a leitura por `tenant_memberships.profile_id`.
+ *
+ * Presente e malformado → 400. Sem esta validação, o valor desce cru até uma
+ * coluna `@db.Uuid` e o cliente toma um 500 do Prisma que ele não tem como
+ * corrigir. O header é entrada não confiável: valida na fronteira.
+ */
+function extractTenantId(raw: unknown): string | null {
+  if (raw === undefined) {
+    return null;
+  }
+  if (typeof raw !== 'string' || !UUID_RE.test(raw)) {
+    throw new BadRequestException({
+      code: 'INVALID_TENANT',
+      detail: 'X-Tenant-Id deve ser um UUID de empresa válido.',
+    });
+  }
+  // pt-BR: o `UUID_RE` acima tem flag `/i` — a forma em caixa alta é um uuid
+  // VÁLIDO e não pode ser recusada. Mas ela não pode descer crua: o Postgres
+  // canoniza `uuid` para minúsculas e a policy compara por texto, então a
+  // caixa alta não casa com nada. Um validador que aceita a entrada e entrega
+  // uma forma que significa outra coisa é o defeito, e a falha é silenciosa
+  // (zero linhas, não erro). Canonicaliza na fronteira para que
+  // `request.user.tenantId` — e a chave do cache de perfil, que é o par
+  // (empresa, usuário) — tenham uma forma só. `abrirEscopo` normaliza de novo,
+  // porque é o único escritor do GUC e o resto dos call sites não vem daqui.
+  return raw.toLowerCase();
 }
 
 @Injectable()
@@ -100,6 +146,19 @@ export class JwtAuthGuard implements CanActivate {
     // assign/revoke, User atribuirPerfil) — TTL 5s é teto de staleness.
     @Inject(UserProfileCacheService)
     private readonly profileCache: UserProfileCacheService,
+    // pt-BR (PR #101, 2026-10-17): a ÚNICA dependência que prova que o
+    // requerente pertence à empresa que ele afirma no header. Sem ela, o
+    // `X-Tenant-Id` é uma declaração auto-declarada que decide qual escopo de
+    // RLS a sessão abre — e nenhuma policy do banco pergunta pelo requerente
+    // (MEDIDO: todo predicado de tenancy compara uma COLUNA da linha contra
+    // `escopo_atual()`, em todas as migrations).
+    //
+    // O token `@Inject` é redundante com o resto do arquivo, mas explícito
+    // porque o parâmetro é uma INTERFACE: `tsx` (esbuild) não emite
+    // `design:paramtypes` e o Nest resolveria `undefined` — em dev, no
+    // primeiro request.
+    @Inject(TENANT_MEMBERSHIP_REPOSITORY_PORT)
+    private readonly memberships: TenantMembershipRepositoryPort,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -135,14 +194,92 @@ export class JwtAuthGuard implements CanActivate {
       throw this.unauthorized();
     }
 
-    // ── 5. pt-BR (#93.1 — RBAC, 2026-10-16): hidrata `isAdmin` e
+    // ── 5. pt-BR (Fase 3 — tenancy, 2026-10-16): qual empresa o token
+    // está agindo. Vem do header, NÃO do JWT: o `TokenSubject` é de 3
+    // campos e o tenant muda dentro da mesma sessão (trocar de empresa
+    // não é trocar de token).
+    const tenantId = extractTenantId(request.headers?.['x-tenant-id']);
+
+    // ── 5b. pt-BR (PR #101, 2026-10-17): a empresa AFIRMADA tem de ser uma
+    // empresa de quem faz a afirmação. É o mesmo `sub` que o token acabou de
+    // provar, então a afirmação está ligada a uma identidade, não ao header
+    // solto.
+    //
+    // `tenantId === null` é o bucket GLOBAL (`users.profile_id`), onde mora o
+    // `isAdmin` do seed — não é "empresa nenhuma", e por isso não exige
+    // membership: exigir trancaria o admin global fora do próprio bucket.
+    //
+    // ⚠️ A ORDEM IMPORTA e é o que o teste "a recusa acontece ANTES da chave
+    // de cache ser formada" trava. O `profileCache` é chaveado pelo par
+    // (empresa, usuário) — uma empresa arbitrária viraria uma chave que
+    // ninguém volta a procurar, e o `Map` só cresceria. Conferir a membership
+    // antes de formar a chave fecha isso e economiza a consulta.
+    //
+    // ── O LIMITE DA GARANTIA (leia antes de prometer "isolamento") ─────────────
+    // Isto vale a partir do INÍCIO do request. Um request que já começou quando
+    // a membership é removida termina como começou: revogar o escopo no meio da
+    // execução é impossível, porque o escopo é uma variável de sessão do banco
+    // (`set_config(..., true)`) e a transação já está aberta. Nenhuma
+    // autorização por request elimina essa janela — o que dá para garantir é
+    // que a janela é O REQUEST EM VOO, e não o TTL de nada.
+    //
+    // Por isso `findRole` é chamado a CADA request e o veredito NÃO é cacheado
+    // (ao contrário do `profileCache`, que é cacheado de propósito e só carrega
+    // `isAdmin`/`permissions`). Cachear o veredito daria à remoção um TTL de 5s e
+    // trocaria "o request em voo" por "o TTL". A spec "a decisão NÃO é
+    // cacheada" em `jwt-auth.guard.tenant.spec.ts` trava essa perna.
+    //
+    // ⚠️ HOJE A REMOÇÃO NÃO EXISTE — e por quê importa, porque a resposta NÃO é a
+    // mesma nos dois caminhos. Medido 2026-10-17:
+    //
+    // (a) DELETE direto em `tenant_memberships` — o BANCO fecha. Duas coisas
+    //     independentes: `REVOKE DELETE ON tenant_memberships FROM app_runtime`
+    //     (migration `20261020000005_membership_update_por_coluna`, linha 74) E
+    //     ausência de escritor (`grep -rE "tenantMembership\.(deleteMany|delete)\("
+    //     apps/api/src --include='*.ts'`, fora de `*.spec.ts` → 0). Convite
+    //     pendente vive em `Invitation`, não em `tenant_memberships`.
+    //
+    // (b) DELETE em `users` com cascade — o BANCO NÃO fecha, e aqui está o
+    //     motivo de (a) não geralizar. A migration `20261020000000…` (linha 55)
+    //     dá `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public
+    //     TO app_runtime`, e a `20261020000001…` (linha 122) cria
+    //     `users_remocao ON users FOR DELETE USING (usuario_no_escopo(id))`. Como
+    //     `TenantMembership.user` é `onDelete: Cascade`, um DELETE autorizado em
+    //     `users` leva as memberships junto sem passar por `tenant_memberships` —
+    //     logo o `REVOKE` não o alcança. O que fecha ESTE caminho hoje é só a
+    //     ausência de escritor: o mesmo grep, com `user\.` no lugar de
+    //     `tenantMembership\.` e fora de `*.spec.ts` → 0. (Um `grep user.delete`
+    //     cru devolve 10 e não prova nada: 9 das ocorrências são LEITURA de
+    //     `deletedAt`, e a décima é uma spec de integração.)
+    //
+    // Para quem revisar isto: não julgue se a remoção é possível olhando a policy
+    // — julgue pelo ESCRITOR. Um `DELETE` novo em `users` é aceito pelo banco
+    // hoje, com a policy que já existe; a garantia que temos é de que ninguém
+    // escreveu, e essa garantia morre no primeiro endpoint que escrever. (a)
+    // reabre quando a feature de remoção de membro mudar o `REVOKE` da
+    // `20261020000005`.
+    if (tenantId !== null) {
+      const role = await this.memberships.findRole(subject.sub, tenantId);
+      if (role === null) {
+        throw new ForbiddenException({
+          code: 'TENANT_MEMBERSHIP_REQUIRED',
+          detail: 'A conta autenticada não pertence à empresa informada em X-Tenant-Id.',
+        });
+      }
+    }
+
+    // ── 6. pt-BR (#93.1 — RBAC, 2026-10-16): hidrata `isAdmin` e
     // `permissions` do cache. Falha do cache NÃO bloqueia — se a key
     // não estiver cacheada (TTL expirou, user sem profile, etc) o
     // request passa com `isAdmin=false` e `permissions=[]`. O use case
     // `obterMeuPerfil` é quem re-popula na próxima chamada.
-    const cached = await this.profileCache.getUserProfileAndPermissions(subject.sub);
+    //
+    // A chave é o PAR (tenant, user): com só o usuário, a mesma conta em
+    // duas empresas herdaria o `isAdmin` da anterior por até 5s.
+    const cached = await this.profileCache.getUserProfileAndPermissions(tenantId, subject.sub);
     request.user = {
       ...subject,
+      tenantId,
       isAdmin: cached?.isAdmin ?? false,
       permissions: cached?.permissions ?? [],
     };

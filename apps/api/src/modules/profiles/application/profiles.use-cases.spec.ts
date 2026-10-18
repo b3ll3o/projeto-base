@@ -24,6 +24,7 @@ import { Profile } from '../domain/profile.aggregate.js';
 import { profileSlug } from '../domain/value-objects/profile-slug.vo.js';
 import type { ProfileRepositoryPort } from '../domain/ports/profile-repository.port.js';
 import type { UserRepositoryPort } from '../../users/domain/ports/user-repository.port.js';
+import type { TenantMembershipRepositoryPort } from '../../tenancy/domain/ports/tenant-membership-repository.port.js';
 import { UserProfileCacheService } from '../../../shared/infrastructure/security/user-profile-cache.service.js';
 import {
   ProfileNotFoundException,
@@ -42,21 +43,43 @@ import { UserId } from '../../users/domain/value-objects/user-id.vo.js';
 class InMemoryProfileRepo implements ProfileRepositoryPort {
   #store: Map<string, Profile> = new Map();
 
+  /**
+   * pt-BR (Fase 9 — RLS): os escopos que o use case PEDIU, em ordem.
+   *
+   * Por que isto existe: o TypeScript aceita uma implementação da porta com
+   * MENOS parâmetros que a interface, então um `findById` que ignora o
+   * `tenantId` compila, roda e deixa os 779 testes verdes — sem que nada em
+   * lugar nenhum afirme que o escopo chega ao repositório. O `findBySlug`
+   * acima filtra de propósito (a unicidade é por escopo); o `findById` NÃO
+   * filtra, porque na implementação real quem filtra é a policy, e ela aceita
+   * tanto a linha da empresa quanto a global — é assim que um ator de empresa
+   * veste o perfil de sistema. Aqui ele só REGISTRA.
+   */
+  readonly escoposPedidos: Array<string | null> = [];
+
   async findById(
     id: ReturnType<typeof import('../domain/value-objects/profile-id.vo.js').profileId>,
+    tenantId: string | null,
   ) {
+    this.escoposPedidos.push(tenantId);
     return this.#store.get(id.value) ?? null;
   }
   async findBySlug(
     slug: ReturnType<typeof import('../domain/value-objects/profile-slug.vo.js').profileSlug>,
+    tenantId: string | null,
   ) {
+    // pt-BR (Fase 8): o escopo é FILTRADO de verdade. Sem isto o fake aceitaria
+    // o slug de qualquer empresa e um teste de escalada por slug passaria sem
+    // que a regra exista.
     for (const p of this.#store.values()) {
-      if (p.slug().value === slug.value) return p;
+      if (p.slug().value === slug.value && p.tenantId() === tenantId) return p;
     }
     return null;
   }
-  async list(): Promise<Profile[]> {
-    return [...this.#store.values()];
+  async list(tenantId: string | null): Promise<Profile[]> {
+    // pt-BR (Fase 8): `null` = sem filtro (admin global), preenchido = só a
+    // empresa. Mesma convenção da porta.
+    return [...this.#store.values()].filter((p) => tenantId === null || p.tenantId() === tenantId);
   }
   async save(profile: Profile): Promise<Profile> {
     this.#store.set(profile.id().value, profile);
@@ -64,7 +87,9 @@ class InMemoryProfileRepo implements ProfileRepositoryPort {
   }
   async delete(
     id: ReturnType<typeof import('../domain/value-objects/profile-id.vo.js').profileId>,
+    tenantId: string | null,
   ): Promise<void> {
+    this.escoposPedidos.push(tenantId);
     this.#store.delete(id.value);
   }
   /** helper p/ testes */
@@ -106,6 +131,89 @@ class InMemoryUserRepo implements UserRepositoryPort {
   }
 }
 
+/**
+ * pt-BR (Fase 4 — tenancy): o bucket por empresa, em memória.
+ *
+ * ⚠️ O `tenantId === null` NÃO devolve `null` aqui — devolve o
+ * `users.profile_id`, exatamente como o `PrismaTenantMembershipRepository`.
+ * Não é conveniência: os testes de escalada do #97 (acima) semeiam o perfil no
+ * usuário e chamam com `tenantId: null`, e um stub que devolvesse `null` deixaria
+ * todos eles verdes por vazio — a trava dispararia sempre, por motivo errado.
+ * O stub tem de ser fiel ao contrato da porta, ou ele mede o stub.
+ *
+ * A regra de DONA do perfil (perfil de outra empresa → `null`) NÃO está aqui de
+ * propósito: ela é da implementação Prisma e é medida lá e no spec de
+ * integração. O que este stub mede é "a use case pede o perfil DA EMPRESA e usa
+ * a resposta".
+ */
+class InMemoryMembershipRepo implements TenantMembershipRepositoryPort {
+  /** `${tenantId}:${userId}` → `profileId`. */
+  #porEmpresa = new Map<string, string>();
+  /** Fase 6: quem é membro, COM ou SEM perfil. */
+  readonly #membros = new Set<string>();
+  /** helper p/ `deletar`: quantas memberships vestem o perfil. */
+  count = 0;
+  /**
+   * Fase 5: `emitirConvite`authorize por `role === 'owner'`, e o stub não
+   * guardava papéis — só perfis. Sem este método o `tsc` reprovava a classe
+   * inteira (`TS2420`), que é o modo de falha "spec verde com tsc vermelho":
+   * o Vitest não faz typecheck, então os testes passavam e o build quebrava.
+   *
+   * `#porEmpresa` guarda `profileId`, não `role`; um convite nunca chega
+   * aqui, então o valor fixo serve e é explícito.
+   */
+  findRole(): Promise<string | null> {
+    return Promise.resolve('owner');
+  }
+
+  constructor(private readonly users: InMemoryUserRepo) {}
+
+  prime(userId: string, tenantId: string, profileId: string): void {
+    this.#membros.add(`${tenantId}:${userId}`);
+    this.#porEmpresa.set(`${tenantId}:${userId}`, profileId);
+  }
+
+  /**
+   * Fase 6: membership SEM perfil — o estado em que o convite aceito deixa a
+   * pessoa. Precisa existir separada de "não é membro" porque são recusas
+   * diferentes na tela, e um stub que confunde as duas mediria o stub.
+   */
+  semPerfil(userId: string, tenantId: string): void {
+    this.#membros.add(`${tenantId}:${userId}`);
+  }
+
+  /** Fase 6: o que o `findProfileId` devolveria depois da escrita. */
+  atribuirPerfil(userId: string, tenantId: string, profileId: string | null): Promise<boolean> {
+    const chave = `${tenantId}:${userId}`;
+    if (!this.#membros.has(chave)) {
+      return Promise.resolve(false);
+    }
+    if (profileId === null) {
+      this.#porEmpresa.delete(chave);
+    } else {
+      this.#porEmpresa.set(chave, profileId);
+    }
+    return Promise.resolve(true);
+  }
+
+  async findProfileId(userId: string, tenantId: string | null): Promise<string | null> {
+    if (tenantId === null) {
+      // ⚠️ Este ramo NÃO checa se o perfil é global — e está correta assim,
+      // porque aqui todo perfil é global por construção: `Profile.criar` não
+      // conhece `tenantId`, e `perfilDaEmpresa` só o usa para dar slug próprio.
+      // O filtro `profile: { is: { tenantId: null } }` do repositório real tem
+      // spec próprio em `tenancy-migration.integration.spec.ts`.
+      const user = await this.users.findById({ value: userId });
+      return user?.profileId() ?? null;
+    }
+    return this.#porEmpresa.get(`${tenantId}:${userId}`) ?? null;
+  }
+
+  async countByProfile(): Promise<number> {
+    return this.count;
+  }
+}
+
 describe('ProfileUseCases', () => {
   let repo: InMemoryProfileRepo;
   let users: InMemoryUserRepo;
@@ -117,7 +225,7 @@ describe('ProfileUseCases', () => {
     repo = new InMemoryProfileRepo();
     users = new InMemoryUserRepo();
     cache = new UserProfileCacheService();
-    uc = new ProfileUseCases(repo, users, cache);
+    uc = new ProfileUseCases(repo, users, cache, new InMemoryMembershipRepo(users));
   });
 
   describe('criar', () => {
@@ -148,21 +256,21 @@ describe('ProfileUseCases', () => {
   describe('atualizar', () => {
     it('atualiza profile comum com sucesso', async () => {
       const created = await uc.criar({ slug: 'custom', name: 'Velho Long' }, ATOR_ADMIN);
-      const updated = await uc.atualizar(created.id, { name: 'Novo' });
+      const updated = await uc.atualizar(created.id, { name: 'Novo' }, ATOR_ADMIN);
       expect(updated.name).toBe('Novo');
       expect(updated.version).toBeGreaterThanOrEqual(2);
     });
 
     it('rejeita atualizar profile não encontrado', async () => {
       await expect(
-        uc.atualizar('00000000-0000-0000-0000-000000000000', { name: 'X' }),
+        uc.atualizar('00000000-0000-0000-0000-000000000000', { name: 'X' }, ATOR_ADMIN),
       ).rejects.toThrow(ProfileNotFoundException);
     });
 
     it('rejeita atualizar profile isSystem', async () => {
       const p = Profile.criar({ slug: 'admin', name: 'Admin', isSystem: true, agora: T0 });
       repo.prime(p);
-      await expect(uc.atualizar(p.id().value, { name: 'X' })).rejects.toThrow(
+      await expect(uc.atualizar(p.id().value, { name: 'X' }, ATOR_ADMIN)).rejects.toThrow(
         ProfileSystemProtectedException,
       );
     });
@@ -170,7 +278,7 @@ describe('ProfileUseCases', () => {
     it('rejeita atualizar profile isAdmin (mesmo sem isSystem)', async () => {
       const p = Profile.criar({ slug: 'admin', name: 'Admin', isAdmin: true, agora: T0 });
       repo.prime(p);
-      await expect(uc.atualizar(p.id().value, { name: 'X' })).rejects.toThrow(
+      await expect(uc.atualizar(p.id().value, { name: 'X' }, ATOR_ADMIN)).rejects.toThrow(
         ProfileAdminProtectedException,
       );
     });
@@ -180,11 +288,12 @@ describe('ProfileUseCases', () => {
     it('deleta profile comum sem users', async () => {
       const created = await uc.criar({ slug: 'custom', name: 'Custom' }, ATOR_ADMIN);
       users.count = 0;
-      await uc.deletar(created.id);
+      await uc.deletar(created.id, ATOR_ADMIN);
       const found = await repo.findById(
         created.id as unknown as ReturnType<
           typeof import('../domain/value-objects/profile-id.vo.js').profileId
         >,
+        null,
       );
       expect(found).toBeNull();
     });
@@ -192,14 +301,16 @@ describe('ProfileUseCases', () => {
     it('rejeita deletar profile com users atribuídos', async () => {
       const created = await uc.criar({ slug: 'custom', name: 'Custom' }, ATOR_ADMIN);
       users.count = 3;
-      await expect(uc.deletar(created.id)).rejects.toThrow(ProfileHasUsersException);
+      await expect(uc.deletar(created.id, ATOR_ADMIN)).rejects.toThrow(ProfileHasUsersException);
     });
 
     it('rejeita deletar profile isSystem', async () => {
       const p = Profile.criar({ slug: 'admin', name: 'Admin', isSystem: true, agora: T0 });
       repo.prime(p);
       users.count = 0;
-      await expect(uc.deletar(p.id().value)).rejects.toThrow(ProfileSystemProtectedException);
+      await expect(uc.deletar(p.id().value, ATOR_ADMIN)).rejects.toThrow(
+        ProfileSystemProtectedException,
+      );
     });
 
     // pt-BR (#97, B6): `deletar` protegia `isSystem` e não `isAdmin`.
@@ -214,7 +325,9 @@ describe('ProfileUseCases', () => {
       repo.prime(p);
       users.count = 0;
 
-      await expect(uc.deletar(p.id().value)).rejects.toThrow(ProfileAdminProtectedException);
+      await expect(uc.deletar(p.id().value, ATOR_ADMIN)).rejects.toThrow(
+        ProfileAdminProtectedException,
+      );
     });
   });
 
@@ -222,14 +335,14 @@ describe('ProfileUseCases', () => {
     it('listar retorna todos', async () => {
       await uc.criar({ slug: 'aaa', name: 'Primeiro' }, ATOR_ADMIN);
       await uc.criar({ slug: 'bbb', name: 'Segundo' }, ATOR_ADMIN);
-      const all = await uc.listar();
+      const all = await uc.listar(ATOR_ADMIN);
       expect(all).toHaveLength(2);
     });
 
     it('obterPorId retorna ProfileNotFound se não existe', async () => {
-      await expect(uc.obterPorId('00000000-0000-0000-0000-000000000000')).rejects.toThrow(
-        ProfileNotFoundException,
-      );
+      await expect(
+        uc.obterPorId('00000000-0000-0000-0000-000000000000', ATOR_ADMIN),
+      ).rejects.toThrow(ProfileNotFoundException);
     });
   });
 
@@ -307,8 +420,8 @@ describe('ProfileUseCases', () => {
 const ATOR_ID = '0190a8b6-1234-7abc-9def-0000000000a1';
 const ROOT_ID = '0190a8b6-1234-7abc-9def-0000000000b1';
 const ALVO_ID = '0190a8b6-1234-7abc-9def-0000000000c1';
-const ATOR: AtorAutenticado = { userId: ATOR_ID, isAdmin: false };
-const ATOR_ADMIN: AtorAutenticado = { userId: ROOT_ID, isAdmin: true };
+const ATOR: AtorAutenticado = { userId: ATOR_ID, tenantId: null, isAdmin: false };
+const ATOR_ADMIN: AtorAutenticado = { userId: ROOT_ID, tenantId: null, isAdmin: true };
 
 /**
  * User com profile, para ser o ator das travas. `id` precisa ser UUID v7
@@ -337,7 +450,7 @@ describe('AuthorizationUseCases — auto-concessão (#97)', () => {
     repo = new InMemoryProfileRepo();
     users = new InMemoryUserRepo();
     cache = new UserProfileCacheService();
-    uc = new AuthorizationUseCases(repo, users, cache);
+    uc = new AuthorizationUseCases(repo, users, cache, new InMemoryMembershipRepo(users));
   });
 
   it('recusa ator sem isAdmin conceder permissão ao PRÓPRIO profile', async () => {
@@ -402,6 +515,7 @@ describe('AuthorizationUseCases — auto-concessão (#97)', () => {
 
     await expect(
       uc.atribuir(outro.id().value, 'users.read', {
+        tenantId: null,
         userId: '0190a8b6-1234-7abc-9def-0000000000d1',
         isAdmin: false,
       }),
@@ -419,6 +533,7 @@ describe('AuthorizationUseCases — auto-concessão (#97)', () => {
 
     await expect(
       uc.revogar(outro.id().value, 'users.read', {
+        tenantId: null,
         userId: '0190a8b6-1234-7abc-9def-0000000000d1',
         isAdmin: false,
       }),
@@ -497,7 +612,7 @@ describe('UserProfileUseCases — atribuir profile admin (#97)', () => {
     repo = new InMemoryProfileRepo();
     users = new InMemoryUserRepo();
     cache = new UserProfileCacheService();
-    uc = new UserProfileUseCases(users, repo, cache);
+    uc = new UserProfileUseCases(users, repo, cache, new InMemoryMembershipRepo(users));
   });
 
   it('recusa ator sem isAdmin atribuir profile admin a si mesmo', async () => {
@@ -623,6 +738,7 @@ describe('UserProfileUseCases — atribuir profile admin (#97)', () => {
 
     await expect(
       uc.atribuirProfileAoUser('0190a8b6-1234-7abc-9def-0000000000d1', sub.id().value, {
+        tenantId: null,
         userId: '0190a8b6-1234-7abc-9def-0000000000d1',
         isAdmin: false,
       }),
@@ -735,7 +851,7 @@ describe('UserProfileUseCases — atribuir profile admin (#97)', () => {
     users.prime(userComProfile(ALVO_ID, admin.id().value));
 
     await expect(
-      uc.atribuirProfileAoUser(ALVO_ID, null, { userId: ATOR_ID, isAdmin: true }),
+      uc.atribuirProfileAoUser(ALVO_ID, null, { userId: ATOR_ID, tenantId: null, isAdmin: true }),
     ).resolves.toBeUndefined();
   });
 });
@@ -760,7 +876,7 @@ describe('ProfileUseCases — `criar` com permissão inicial é concessão (#97/
     repo = new InMemoryProfileRepo();
     users = new InMemoryUserRepo();
     cache = new UserProfileCacheService();
-    uc = new ProfileUseCases(repo, users, cache);
+    uc = new ProfileUseCases(repo, users, cache, new InMemoryMembershipRepo(users));
   });
 
   it('recusa criar com uma permissão que o ator não tem', async () => {
@@ -779,7 +895,7 @@ describe('ProfileUseCases — `criar` com permissão inicial é concessão (#97/
 
     // E nada foi criado: um 403 que deixa o profile no banco é uma escalada
     // que o próximo `listar` entrega.
-    expect(await repo.findBySlug(profileSlug('root'))).toBeNull();
+    expect(await repo.findBySlug(profileSlug('root'), ATOR.tenantId)).toBeNull();
   });
 
   it('permite criar com uma permissão que o ator TEM (subconjunto)', async () => {
@@ -832,7 +948,12 @@ describe('escalada recusada deixa rastro no log (#97)', () => {
   it('loga o motivo ao recusar', async () => {
     const repo = new InMemoryProfileRepo();
     const users = new InMemoryUserRepo();
-    const uc = new AuthorizationUseCases(repo, users, new UserProfileCacheService());
+    const uc = new AuthorizationUseCases(
+      repo,
+      users,
+      new UserProfileCacheService(),
+      new InMemoryMembershipRepo(users),
+    );
     const meu = Profile.criar({
       slug: 'meu-perfil',
       name: 'Meu Perfil',
@@ -855,5 +976,827 @@ describe('escalada recusada deixa rastro no log (#97)', () => {
     } finally {
       aviso.mockRestore();
     }
+  });
+});
+
+// ─── FASE 4: o perfil efetivo é o DA EMPRESA (D4) ───────────────────────────
+//
+// O que a Fase 3 deixou em aberto, medido: o `tenantId` chegava ao
+// `obterMeuPerfil` e virava chave de cache, mas o perfil lido continuava sendo
+// `users.profile_id` — GLOBAL. Uma conta em duas empresas vestia o mesmo
+// perfil nas duas, e as 4 travas anti-escalação comparavam esse mesmo perfil
+// global. Esta é a fase em que a leitura passa a ser por membership.
+const ACME = '0190a8b6-0000-4000-8000-0000000000ac';
+const GLOBEX = '0190a8b6-0000-4000-8000-0000000000ab';
+const ATOR_ACME: AtorAutenticado = { userId: ATOR_ID, tenantId: ACME, isAdmin: false };
+
+describe('Fase 4 — perfil por empresa (D4)', () => {
+  let repo: InMemoryProfileRepo;
+  let users: InMemoryUserRepo;
+  let memberships: InMemoryMembershipRepo;
+  let cache: UserProfileCacheService;
+  let uc: UserProfileUseCases;
+
+  beforeEach(() => {
+    repo = new InMemoryProfileRepo();
+    users = new InMemoryUserRepo();
+    memberships = new InMemoryMembershipRepo(users);
+    cache = new UserProfileCacheService();
+    uc = new UserProfileUseCases(users, repo, cache, memberships);
+  });
+
+  /** Perfil com slug próprio — dois perfis de empresas diferentes precisam de
+   *  slugs diferentes aqui, porque `InMemoryProfileRepo` indexa por valor. */
+  function perfilDaEmpresa(
+    slug: string,
+    permissoes: string[],
+    // pt-BR (Fase 8): o padrão é GLOBAL, que é o que os testes da Fase 4
+    // queriam. Passar a empresa deixa o alvo no mesmo escopo do ator — sem
+    // isso a guarda de escopo (que vem ANTES da de auto-concessão) recusa e o
+    // teste mede a regra errada.
+    tenantId: string | null = null,
+  ): Profile {
+    const p = Profile.criar({
+      slug,
+      name: slug,
+      initialAuthorizations: permissoes,
+      tenantId,
+      agora: new Date(),
+    });
+    repo.prime(p);
+    return p;
+  }
+
+  it('a MESMA conta tem perfis DIFERENTES em duas empresas', async () => {
+    const daAcme = perfilDaEmpresa('gestor-acme', ['admin.manage-users']);
+    const daGlobex = perfilDaEmpresa('leitor-globex', ['users.read']);
+    users.prime(userComProfile(ATOR_ID, daAcme.id().value));
+    memberships.prime(ATOR_ID, ACME, daAcme.id().value);
+    memberships.prime(ATOR_ID, GLOBEX, daGlobex.id().value);
+
+    const naAcme = await uc.obterMeuPerfil(ATOR_ID, ACME);
+    const naGlobex = await uc.obterMeuPerfil(ATOR_ID, GLOBEX);
+
+    // Este é o teste que a demanda inteira pede. Com a leitura global (o que a
+    // Fase 3 entregou) as duas respostas seriam IGUAIS e ele ficaria verde
+    // pela metade — daí as duas metades em vez de uma.
+    expect(naAcme.profileSlug).toBe('gestor-acme');
+    expect(naGlobex.profileSlug).toBe('leitor-globex');
+    expect(naAcme.permissions).toEqual(['admin.manage-users']);
+    expect(naGlobex.permissions).toEqual(['users.read']);
+    expect(naAcme.isAdmin).toBe(false);
+  });
+
+  it('sem header de empresa, resolve o perfil GLOBAL (users.profile_id)', async () => {
+    const global = perfilDaEmpresa('viewer', ['users.read']);
+    users.prime(userComProfile(ATOR_ID, global.id().value));
+
+    await expect(uc.obterMeuPerfil(ATOR_ID, null)).resolves.toMatchObject({
+      profileSlug: 'viewer',
+      permissions: ['users.read'],
+    });
+  });
+
+  it('empresa sem membership resolve SEM perfil nenhum, não o global', async () => {
+    // O convite aceito entra como `member` e ainda não tem perfil. O que ele
+    // NÃO pode é herdar o perfil global: nasceria com `admin.manage-users`
+    // numa empresa onde nunca foi convidado com nada.
+    const global = perfilDaEmpresa('admin', ['admin.manage-users']);
+    users.prime(userComProfile(ATOR_ID, global.id().value));
+
+    await expect(uc.obterMeuPerfil(ATOR_ID, GLOBEX)).resolves.toMatchObject({
+      profileId: null,
+      profileSlug: null,
+      permissions: [],
+      isAdmin: false,
+    });
+  });
+
+  it('as duas empresas não compartilham o CACHE (trocar não devolve o velho)', async () => {
+    const daAcme = perfilDaEmpresa('gestor-acme', ['admin.manage-users']);
+    const daGlobex = perfilDaEmpresa('leitor-globex', ['users.read']);
+    users.prime(userComProfile(ATOR_ID, daAcme.id().value));
+    memberships.prime(ATOR_ID, ACME, daAcme.id().value);
+    memberships.prime(ATOR_ID, GLOBEX, daGlobex.id().value);
+
+    await uc.obterMeuPerfil(ATOR_ID, ACME);
+    // A segunda chamada NÃO pode ser servida pelo cache da primeira: é a
+    // chave `(tenantId, userId)` da Fase 3 segurando, e se a chave voltasse a
+    // ser só o usuário este teste leria o slug da Acme e passaria errado.
+    await expect(uc.obterMeuPerfil(ATOR_ID, GLOBEX)).resolves.toMatchObject({
+      profileSlug: 'leitor-globex',
+    });
+  });
+
+  it('a trava de auto-concessão compara o perfil DA EMPRESA, não o global', async () => {
+    // ⚠️ Global e Acme com AS MESMAS permissões, de propósito. Numa primeira
+    // versão deste teste o global era fraco e o da Acme forte: a escalada
+    // continuava aparecendo, mas vinda de `recusaConcessaoQueNaoTem` — o teste
+    // passava (e a mutação passava) pelo motivo errado, sem provar nada sobre
+    // a trava que ele diz medir. Com os dois conjuntos iguais, a única trava
+    // que pode disparar é a de auto-concessão.
+    const noGlobal = perfilDaEmpresa('forte-global', [
+      'admin.manage-authorizations',
+      'admin.manage-users',
+    ]);
+    const naAcme = perfilDaEmpresa('forte-acme', [
+      'admin.manage-authorizations',
+      'admin.manage-users',
+    ]);
+    users.prime(userComProfile(ATOR_ID, noGlobal.id().value));
+    memberships.prime(ATOR_ID, ACME, naAcme.id().value);
+
+    const auth = new AuthorizationUseCases(repo, users, cache, memberships);
+    // Na Acme ele veste o `forte-acme`, e é ele que ele tentaria auto-conceder.
+    // Se a trava comparasse `users.profile_id` (o `forte-global`, id distinto),
+    // ela não dispararia e `recusaConcessaoQueNaoTem` deixaria passar — a
+    // escalada passaria limpa.
+    await expect(auth.atribuir(naAcme.id().value, 'admin.manage-users', ATOR_ACME)).rejects.toThrow(
+      ProfilePrivilegeEscalationException,
+    );
+  });
+
+  it('`criar` mede o subconjunto do perfil DA EMPRESA, não o global dele', async () => {
+    const noGlobal = perfilDaEmpresa('criador-global', ['admin.manage-users']);
+    const naAcme = perfilDaEmpresa('leitor-acme', ['users.read']);
+    users.prime(userComProfile(ATOR_ID, noGlobal.id().value));
+    memberships.prime(ATOR_ID, ACME, naAcme.id().value);
+
+    const criar = new ProfileUseCases(repo, users, cache, memberships);
+    // Na Acme ele é leitor e não pode inventar `admin.manage-users`; no bucket
+    // global ele pode. Ler o global abria a escalada por `POST /profiles`.
+    await expect(
+      criar.criar(
+        { slug: 'cunhado', name: 'Cunhado', initialPermissions: ['admin.manage-users'] },
+        ATOR_ACME,
+      ),
+    ).rejects.toThrow(ProfilePrivilegeEscalationException);
+  });
+
+  it('atribuir um perfil a alguém mede o subconjunto DA EMPRESA, não o global', async () => {
+    const noGlobal = perfilDaEmpresa('poderoso-global', ['users.read', 'users.write']);
+    const naAcme = perfilDaEmpresa('leitor-acme', ['users.read']);
+    const alvo = perfilDaEmpresa('alvo-completo', ['users.read', 'users.write']);
+    users.prime(userComProfile(ATOR_ID, noGlobal.id().value));
+    memberships.prime(ATOR_ID, ACME, naAcme.id().value);
+
+    const atribuir = new UserProfileUseCases(users, repo, cache, memberships);
+    // `users.write` está no perfil global dele e NÃO no da Acme. Entregar o
+    // perfil completo a um terceiro exigiria a posse da chave na empresa em
+    // que ele está agindo; ler o global faria a entrega passar.
+    await expect(
+      atribuir.atribuirProfileAoUser(ALVO_ID, alvo.id().value, ATOR_ACME),
+    ).rejects.toThrow(ProfilePrivilegeEscalationException);
+  });
+
+  it('a trava de auto-concessão NÃO dispara por causa do perfil GLOBAL dele', async () => {
+    const global = perfilDaEmpresa('gestor-global', ['admin.manage-authorizations']);
+    const naAcme = perfilDaEmpresa('leitor-acme', ['users.read']);
+    // pt-BR (Fase 8): o ALVO é da ACME, e não global. Com alvo global a guarda
+    // de escopo recusa — corretamente, porque perfil global é compartilhado
+    // por todas as empresas e conceder nele a partir da ACME é a mesma
+    // escalada cross-tenant que o e2e 11 bloqueia, só pelo bucket global. Com
+    // alvo no escopo, o que sobra para este teste medir é o que ele sempre
+    // quis medir: se a auto-concessão lê `users.profile_id` em vez da
+    // membership.
+    const alvo = perfilDaEmpresa('outro-perfil', [], ACME);
+    // O global dele é forte; NA ACME ele é um leitor. Ele vai conceder uma
+    // permissão que TEM na Acme a um terceiro perfil — que NÃO é o perfil dele
+    // em nenhum dos dois buckets.
+    users.prime(userComProfile(ATOR_ID, global.id().value));
+    memberships.prime(ATOR_ID, ACME, naAcme.id().value);
+
+    const auth = new AuthorizationUseCases(repo, users, cache, memberships);
+    // Se a trava ainda comparasse `users.profile_id`, `global` === profile do
+    // ator → falso positivo, e o ator ficava sem poder conceder a chave que
+    // ele legitimamente tem na empresa em que está agindo.
+    await expect(auth.atribuir(alvo.id().value, 'users.read', ATOR_ACME)).resolves.toBeDefined();
+  });
+});
+
+describe('Fase 4 — deletar um perfil que uma empresa ainda usa', () => {
+  it('devolve ProfileHasUsersException contando a membership, não 500 do banco', async () => {
+    const repo = new InMemoryProfileRepo();
+    const users = new InMemoryUserRepo();
+    const memberships = new InMemoryMembershipRepo(users);
+    const uc = new ProfileUseCases(repo, users, new UserProfileCacheService(), memberships);
+
+    const p = Profile.criar({ slug: 'gestor-acme', name: 'Gestor', agora: new Date() });
+    repo.prime(p);
+    // Nenhum user usa `users.profile_id` → `countByProfile` devolve 0. A
+    // membership é a única usuária, e é ela que tem de barrar o delete: sem
+    // essa contagem o `ON DELETE RESTRICT` do banco estouraria P2003, que o
+    // cliente não sabe ler como "perfil em uso".
+    users.count = 0;
+    memberships.count = 1;
+
+    await expect(uc.deletar(p.id().value, ATOR_ADMIN)).rejects.toThrow(ProfileHasUsersException);
+  });
+
+  it('sem nenhum uso, apaga (o count somado não vira trava permanente)', async () => {
+    const repo = new InMemoryProfileRepo();
+    const users = new InMemoryUserRepo();
+    const memberships = new InMemoryMembershipRepo(users);
+    const uc = new ProfileUseCases(repo, users, new UserProfileCacheService(), memberships);
+
+    const p = Profile.criar({ slug: 'gestor-acme', name: 'Gestor', agora: new Date() });
+    repo.prime(p);
+    users.count = 0;
+    memberships.count = 0;
+
+    await expect(uc.deletar(p.id().value, ATOR_ADMIN)).resolves.toBeUndefined();
+    await expect(repo.findById(p.id(), null)).resolves.toBeNull();
+  });
+});
+
+// pt-BR (Fase 6 — tenancy): a ESCRITA do perfil por empresa. A leitura existe
+// desde a Fase 4 e está verificada; o que faltava era o caminho que a
+// alimenta. Sem isto, uma empresa recém-aberta tem um membro com perfil — o
+// dono — e todo mundo que entra por convite fica com zero permissões sem
+// nenhum caminho para sair disso.
+describe('Fase 6 — atribuir perfil POR EMPRESA', () => {
+  let repo: InMemoryProfileRepo;
+  let users: InMemoryUserRepo;
+  let memberships: InMemoryMembershipRepo;
+  let cache: UserProfileCacheService;
+  let uc: UserProfileUseCases;
+
+  /** Perfil DONO de uma empresa — o caminho que `POST /admin/profiles` não
+   *  alcança (todo perfil criado por HTTP é global), então a fixture monta
+   *  pela hidratação, que é onde o `tenantId` entra. */
+  let seq = 0;
+  function perfilDe(tenantId: string | null, perm: string[], isAdmin = false): Profile {
+    // `ProfileId` exige UUID e `ProfileSlug` exige <= 40 chars — os dois
+    // limites valem, e um id derivado do `tenantId` estourava o primeiro
+    // deles dentro do `restaurarDePersistencia`, ou seja, antes de o teste
+    // chegar ao comportamento. Sequência curta resolve os dois.
+    seq += 1;
+    const p = Profile.restaurarDePersistencia({
+      id: `0190a8b6-0000-4000-8000-${String(seq).padStart(12, '0')}`,
+      slug: `p-${tenantId === null ? 'global' : tenantId.slice(-4)}-${seq}${isAdmin ? 'a' : 'n'}`,
+      name: 'Perfil',
+      description: null,
+      isAdmin,
+      isSystem: isAdmin,
+      tenantId,
+      authorizations: perm,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+      version: 1,
+    });
+    repo.prime(p);
+    return p;
+  }
+
+  /** Ator com `admin.manage-users` na ACME, que é quem a rota exige. */
+  function atorDaAcme(): AtorAutenticado {
+    return { userId: ATOR_ID, tenantId: ACME, isAdmin: false };
+  }
+
+  beforeEach(() => {
+    repo = new InMemoryProfileRepo();
+    users = new InMemoryUserRepo();
+    memberships = new InMemoryMembershipRepo(users);
+    cache = new UserProfileCacheService();
+    uc = new UserProfileUseCases(users, repo, cache, memberships);
+  });
+
+  it('o perfil dado dentro da empresa é o que a PRÓXIMA leitura devolve', async () => {
+    const gestor = perfilDe(ACME, ['users.read']);
+    const doAtor = perfilDe(ACME, ['admin.manage-users', 'users.read']);
+    users.prime(userComProfile(ATOR_ID, null));
+    users.prime(userComProfile(ALVO_ID, null));
+    memberships.prime(ATOR_ID, ACME, doAtor.id().value);
+    memberships.semPerfil(ALVO_ID, ACME);
+
+    await uc.atribuirProfileAoUser(ALVO_ID, gestor.id().value, atorDaAcme());
+
+    await expect(uc.obterMeuPerfil(ALVO_ID, ACME)).resolves.toMatchObject({
+      profileSlug: gestor.slug().value,
+      permissions: ['users.read'],
+    });
+  });
+
+  it('atribuir na empresa NÃO escreve a coluna GLOBAL (users.profile_id)', async () => {
+    const global = perfilDe(null, ['users.read']);
+    const gestor = perfilDe(ACME, ['admin.manage-users']);
+    users.prime(userComProfile(ATOR_ID, global.id().value));
+    users.prime(userComProfile(ALVO_ID, global.id().value));
+    memberships.prime(ATOR_ID, ACME, gestor.id().value);
+    memberships.semPerfil(ALVO_ID, ACME);
+
+    await uc.atribuirProfileAoUser(ALVO_ID, gestor.id().value, atorDaAcme());
+
+    // O global do alvo não pode ter mudado: ele é o bucket "sem empresa", e a
+    // rota com header é a da empresa.
+    await expect(uc.obterMeuPerfil(ALVO_ID, null)).resolves.toMatchObject({
+      profileId: global.id().value,
+    });
+  });
+
+  it('atribuir na ACME não muda o que a GLOBEX lê da MESMA conta', async () => {
+    const gestor = perfilDe(ACME, ['admin.manage-users']);
+    const daGlobex = perfilDe(GLOBEX, ['users.read']);
+    users.prime(userComProfile(ATOR_ID, null));
+    users.prime(userComProfile(ALVO_ID, null));
+    memberships.prime(ATOR_ID, ACME, gestor.id().value);
+    memberships.prime(ALVO_ID, GLOBEX, daGlobex.id().value);
+    memberships.semPerfil(ALVO_ID, ACME);
+
+    await uc.atribuirProfileAoUser(ALVO_ID, gestor.id().value, atorDaAcme());
+
+    await expect(uc.obterMeuPerfil(ALVO_ID, GLOBEX)).resolves.toMatchObject({
+      profileId: daGlobex.id().value,
+      permissions: ['users.read'],
+    });
+  });
+
+  it('R1: perfil de OUTRA empresa é recusado', async () => {
+    const doAtor = perfilDe(ACME, ['admin.manage-users']);
+    const alheio = perfilDe(GLOBEX, ['users.read']);
+    users.prime(userComProfile(ATOR_ID, null));
+    users.prime(userComProfile(ALVO_ID, null));
+    memberships.prime(ATOR_ID, ACME, doAtor.id().value);
+    memberships.semPerfil(ALVO_ID, ACME);
+
+    // ⚠️ O ator é `isAdmin: true` DE PROPÓSITO. Com ator comum, R3 (subset,
+    // do #97) já recusa `users.read` — o teste ficaria verde com a R1
+    // deletada. MEDIDO: deletar a R1 com ator comum não derruba nada.
+    await expect(
+      uc.atribuirProfileAoUser(ALVO_ID, alheio.id().value, { ...atorDaAcme(), isAdmin: true }),
+    ).rejects.toThrow(ProfilePrivilegeEscalationException);
+  });
+
+  it('R2: perfil admin GLOBAL é recusado para ator com empresa (viraria bypass em qualquer empresa)', async () => {
+    const doAtor = perfilDe(ACME, ['admin.manage-users']);
+    const adminGlobal = perfilDe(null, [], true);
+    users.prime(userComProfile(ATOR_ID, null));
+    users.prime(userComProfile(ALVO_ID, null));
+    memberships.prime(ATOR_ID, ACME, doAtor.id().value);
+    memberships.semPerfil(ALVO_ID, ACME);
+
+    // ⚠️ `isAdmin: true` pelo mesmo motivo da R1: a trava pré-existente
+    // `profile.isAdmin() && !ator.isAdmin` já recusaria com ator comum, e a
+    // R2 ficaria sem dente. O que a R2 segura é o ADMIN GLOBALvestindo
+    // alguém — ele pode, mas só com perfil DAQUELA empresa.
+    await expect(
+      uc.atribuirProfileAoUser(ALVO_ID, adminGlobal.id().value, { ...atorDaAcme(), isAdmin: true }),
+    ).rejects.toThrow(ProfilePrivilegeEscalationException);
+  });
+
+  it('R3: ator sem a permissão não veste ninguém com perfil que a excede', async () => {
+    const doAtor = perfilDe(ACME, ['admin.manage-users']);
+    const perigoso = perfilDe(ACME, ['users.delete']);
+    users.prime(userComProfile(ATOR_ID, null));
+    users.prime(userComProfile(ALVO_ID, null));
+    memberships.prime(ATOR_ID, ACME, doAtor.id().value);
+    memberships.semPerfil(ALVO_ID, ACME);
+
+    await expect(
+      uc.atribuirProfileAoUser(ALVO_ID, perigoso.id().value, atorDaAcme()),
+    ).rejects.toThrow(ProfilePrivilegeEscalationException);
+  });
+
+  it('R4: remover o perfil de um alvo que é admin NA EMPRESA exige admin (o lockout de B4, no bucket certo)', async () => {
+    const doAtor = perfilDe(ACME, ['admin.manage-users']);
+    const adminDaEmpresa = perfilDe(ACME, ['admin.manage-users'], true);
+    users.prime(userComProfile(ATOR_ID, null));
+    users.prime(userComProfile(ALVO_ID, null));
+    memberships.prime(ATOR_ID, ACME, doAtor.id().value);
+    memberships.prime(ALVO_ID, ACME, adminDaEmpresa.id().value);
+
+    await expect(uc.atribuirProfileAoUser(ALVO_ID, null, atorDaAcme())).rejects.toThrow(
+      ProfilePrivilegeEscalationException,
+    );
+  });
+
+  it('R5: ninguém tira o próprio perfil na empresa — e hoje não há como readmitir owner', async () => {
+    const adminDaEmpresa = perfilDe(ACME, ['admin.manage-users'], true);
+    users.prime(userComProfile(ATOR_ID, null));
+    memberships.prime(ATOR_ID, ACME, adminDaEmpresa.id().value);
+
+    await expect(
+      uc.atribuirProfileAoUser(ATOR_ID, null, { ...atorDaAcme(), isAdmin: true }),
+    ).rejects.toThrow(ProfilePrivilegeEscalationException);
+  });
+
+  it('R5 vale nas DUAS direções: vestir outro perfil em si mesmo também é recusado', async () => {
+    const adminDaEmpresa = perfilDe(ACME, ['admin.manage-users'], true);
+    const gestor = perfilDe(ACME, ['users.read']);
+    users.prime(userComProfile(ATOR_ID, null));
+    memberships.prime(ATOR_ID, ACME, adminDaEmpresa.id().value);
+
+    // Rebaixar-se para um perfil sem admin é o MESMO lockout pelo outro lado:
+    // R3 permite (é subconjunto), mas não há rota que devolva o admin.
+    await expect(
+      uc.atribuirProfileAoUser(ATOR_ID, gestor.id().value, { ...atorDaAcme(), isAdmin: true }),
+    ).rejects.toThrow(ProfilePrivilegeEscalationException);
+    await expect(memberships.findProfileId(ATOR_ID, ACME)).resolves.toBe(adminDaEmpresa.id().value);
+  });
+
+  it('R5 em CAIXA ALTA: o próprio id em maiúsculas não escapa da trava', async () => {
+    const adminDaEmpresa = perfilDe(ACME, ['admin.manage-users'], true);
+    users.prime(userComProfile(ATOR_ID, null));
+    memberships.prime(ATOR_ID, ACME, adminDaEmpresa.id().value);
+
+    // `UUID_RE` do `UserId` tem a flag `/i` e `UserId.create` guarda a string
+    // CRUA (medido em `user-id.vo.ts:46-54`, sem `toLowerCase`). Então a forma
+    // em caixa alta passa na validação do VO e o único `===` que nega é o da
+    // trava — o R5 inteiro é burlável mandando o próprio id em maiúsculas.
+    // O `motivo` é o que dá DENTE ao teste: `ProfilePrivilegeEscalationException`
+    // é a MESMA classe para as cinco travas, então `rejects.toThrow(Classe)`
+    // passaria por qualquer recusa. Aqui a recusa tem de ser a de R5.
+    const erro = await uc
+      .atribuirProfileAoUser(ATOR_ID.toUpperCase(), null, { ...atorDaAcme(), isAdmin: true })
+      .then(
+        () => null,
+        (e: unknown) => e as ProfilePrivilegeEscalationException,
+      );
+    expect(erro?.motivo).toBe('ninguém altera o próprio perfil dentro da empresa');
+  });
+
+  it('R6: trocar o admin da empresa por um perfil MENOR é o mesmo lockout — com `profileId` não-nulo', async () => {
+    // O cenário que o comentário da trava descreve e que nenhum teste cobria:
+    // `carlos` (sem admin, com `admin.manage-users`) rebaixa `alice` (dona,
+    // admin DA EMPRESA) para um perfil menor. `R3` deixa passar, porque
+    // `menor` é subconjunto do perfil do ator — e a precondição do lockout é o
+    // perfil ATUAL do alvo, que a forma antiga (`profileIdStr === null &&`)
+    // não alcançava: aqui o `profileIdStr` é não-nulo.
+    const doAtor = perfilDe(ACME, ['admin.manage-users', 'users.read']);
+    const adminDaEmpresa = perfilDe(ACME, ['admin.manage-users'], true);
+    // ⚠️ `menor` tem de ser SUBCONJUNTO do perfil do ator, senão `R3` dispara
+    // antes e é `R3` que o teste mede. MEDIDO: com `['users.read']` contra um
+    // ator de `['admin.manage-users']`, o motivo que sai é o de R3 — e o
+    // `rejects.toThrow(Classe)` passaria verde sem distinguir nada.
+    const menor = perfilDe(ACME, ['users.read']);
+    users.prime(userComProfile(ATOR_ID, null));
+    users.prime(userComProfile(ALVO_ID, null));
+    memberships.prime(ATOR_ID, ACME, doAtor.id().value);
+    memberships.prime(ALVO_ID, ACME, adminDaEmpresa.id().value);
+
+    const erro = await uc.atribuirProfileAoUser(ALVO_ID, menor.id().value, atorDaAcme()).then(
+      () => null,
+      (e: unknown) => e as ProfilePrivilegeEscalationException,
+    );
+    // `R3` lança a MESMA classe e `menor` é subconjunto do perfil do ator — só
+    // o `motivo` separa "lockout do admin da empresa" de "perfil perigoso". Com
+    // ele, o teste mede a trava que ele nomeia.
+    expect(erro?.motivo).toBe(
+      'só um ator com isAdmin retira de um membro o profile admin da empresa',
+    );
+    // A negativa tem de ter PARADO a escrita: a membership da dona continua no
+    // admin. Um `rejects` que viesse depois do `atribuirPerfil` passaria aqui.
+    await expect(memberships.findProfileId(ALVO_ID, ACME)).resolves.toBe(adminDaEmpresa.id().value);
+  });
+
+  it('alvo que não é membro da empresa é recusado, não 200 à toa', async () => {
+    const doAtor = perfilDe(ACME, ['admin.manage-users']);
+    const gestor = perfilDe(ACME, ['users.read']);
+    users.prime(userComProfile(ATOR_ID, null));
+    users.prime(userComProfile(ALVO_ID, null));
+    memberships.prime(ATOR_ID, ACME, doAtor.id().value);
+    // ALVO_ID sem `semPerfil`: não é membro da ACME.
+
+    // ⚠️ `isAdmin: true` é o que FAZ este teste medir a trava de membership.
+    // Com `isAdmin: false`, o R3 (subset, do #97) recusa primeiro — `users.read`
+    // não está nas permissões do ator — e o teste passava com a guarda do fake
+    // apagada. MEDIDO 2026-10-17: removendo `#membros.has(chave)` do
+    // `InMemoryMembershipRepo`, este teste seguia verde.
+    await expect(
+      uc.atribuirProfileAoUser(ALVO_ID, gestor.id().value, {
+        ...atorDaAcme(),
+        isAdmin: true,
+      }),
+    ).rejects.toThrow(ProfilePrivilegeEscalationException);
+  });
+
+  it('bucket GLOBAL (sem header) continua escrevendo users.profile_id — o #97 não regride', async () => {
+    // `users.read` no perfil do ator por necessity: R3 (subset, do #97) recusa
+    // um ator sem a permissão a vesti-la em alguém, e essa recusa não é o que
+    // este teste quer medir — o alvo é o bucket global continuar gravando
+    // `users.profile_id`.
+    const doAtor = perfilDe(null, ['admin.manage-users', 'users.read']);
+    const gestor = perfilDe(null, ['users.read']);
+    users.prime(userComProfile(ATOR_ID, doAtor.id().value));
+    users.prime(userComProfile(ALVO_ID, null));
+
+    await uc.atribuirProfileAoUser(ALVO_ID, gestor.id().value, {
+      userId: ATOR_ID,
+      tenantId: null,
+      isAdmin: false,
+    });
+
+    await expect(uc.obterMeuPerfil(ALVO_ID, null)).resolves.toMatchObject({
+      profileId: gestor.id().value,
+    });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fase 9 — o bucket de SISTEMA tem DONO: ele é o bucket, não o superusuário.
+//
+// O que este bloco existe para travar, em uma frase: `tenantId === null` é o
+// bucket dos perfis de SISTEMA, e não um "vejo tudo". A Fase 8 escreveu
+// `exigePerfilDoEscopo` como `ator.tenantId !== null && …`, e esse `!== null`
+// tratava o bucket como se ele fosse o admin — mas quem dá o bypass total é o
+// `isAdmin`, não o bucket. MEDIDO 2026-10-17 contra Postgres real: um perfil
+// global NÃO-admin com `admin.manage-*` (dado legado pré-tenancy, exatamente o
+// cenário que o bucket global da Fase 4 existe para suportar) listava,
+// renomeava, apagava e injetava permissão em perfil de empresa vizinha sem
+// `X-Tenant-Id` — e vestia perfil de empresa em conta alheia, o que além de
+// escalar deixava o alvo SEM PERFIL nenhum, porque `findProfileId(_, null)` só
+// aceita `tenant_id IS NULL`.
+//
+// O counterpart que não pode regredir: o admin de SISTEMA (`tenantId === null`
+// E `isAdmin`) continua vendo tudo. Sem isso o seed volta a ser a única porta de
+// administração, que é a dependência que a Fase 5 removeu de propósito.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('Fase 9 — o bucket de SISTEMA administra só o bucket de SISTEMA', () => {
+  let repo: InMemoryProfileRepo;
+  let users: InMemoryUserRepo;
+  let memberships: InMemoryMembershipRepo;
+  let cache: UserProfileCacheService;
+  let perfis: ProfileUseCases;
+  let auths: AuthorizationUseCases;
+  let uc: UserProfileUseCases;
+
+  let seq = 0;
+  /** Mesma hidratação do bloco da Fase 6: é por ela que `tenantId` entra. */
+  function perfilDe(tenantId: string | null, perm: string[], isAdmin = false): Profile {
+    seq += 1;
+    const p = Profile.restaurarDePersistencia({
+      id: `0190a8b6-0000-4000-9000-${String(seq).padStart(12, '0')}`,
+      slug: `s-${tenantId === null ? 'global' : tenantId.slice(-4)}-${seq}`,
+      name: 'Perfil',
+      description: null,
+      isAdmin,
+      isSystem: isAdmin,
+      tenantId,
+      authorizations: perm,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+      version: 1,
+    });
+    repo.prime(p);
+    return p;
+  }
+
+  /**
+   * O atacante do achado: conta do bucket de sistema, `isAdmin === false`, mas
+   * com as chaves de `admin.manage-*`. É o perfil que o `PermissionsGuard`
+   * aceita — e é por isso que a defesa não pode morar nele.
+   */
+  const LEGADO = ['admin.manage-profiles', 'admin.manage-users', 'admin.manage-authorizations'];
+  function atorDoSistema(isAdmin = false): AtorAutenticado {
+    return { userId: ATOR_ID, tenantId: null, isAdmin };
+  }
+
+  /**
+   * Permissões de um alvo DENTRO do subconjunto das do atacante.
+   *
+   * Isto não é arbitrário: é o que separa o defeito do achado de uma trava que
+   * já existe. A trava de SUBCONJUNTO do #97 recusa `ator sem manage-X` de
+   * vestir um perfil com `X`. Se o alvo tivesse permissão que o atacante não
+   * tem, o teste passaria por essa trava e a de DONA continuaria sem dente
+   * nenhuma — um spec verde pelo motivo errado. Com o alvo dentro do
+   * subconjunto, a única regra que pode recusar é a de DONA.
+   */
+  const ALVO_DENTRO = ['admin.manage-profiles'];
+
+  /** O perfil que o `beforeEach` dá ao ator — ele também entra nas listas. */
+  let doAtor: Profile;
+
+  /** O que sobrou no ALVO depois da tentativa — a leitura que decide lockout. */
+  async function perfilDoAlvo(): Promise<string | null> {
+    const alvo = await users.findById(UserId.create(ALVO_ID));
+    return alvo?.profileId() ?? null;
+  }
+
+  beforeEach(() => {
+    repo = new InMemoryProfileRepo();
+    users = new InMemoryUserRepo();
+    memberships = new InMemoryMembershipRepo(users);
+    cache = new UserProfileCacheService();
+    perfis = new ProfileUseCases(repo, users, cache, memberships);
+    auths = new AuthorizationUseCases(repo, users, cache, memberships);
+    uc = new UserProfileUseCases(users, repo, cache, memberships);
+    // O ator PRECISA estar ligado ao perfil que o dá as permissões: sem isto
+    // `permissoesDoAtor` resolve `null` e é a trava de subconjunto que recusa,
+    // não a de DONA — e o teste mede a trava errada.
+    doAtor = perfilDe(null, LEGADO);
+    users.prime(userComProfile(ATOR_ID, doAtor.id().value));
+  });
+
+  describe('as 5 rotas que exigem perfil do escopo', () => {
+    it('obterPorId de um perfil DE EMPRESA é recusado', async () => {
+      const alheio = perfilDe(GLOBEX, ['users.read']);
+
+      await expect(perfis.obterPorId(alheio.id().value, atorDoSistema())).rejects.toThrow(
+        ProfilePrivilegeEscalationException,
+      );
+    });
+
+    it('atualizar (renomear) um perfil DE EMPRESA é recusado e não escreve', async () => {
+      const alheio = perfilDe(GLOBEX, ['users.read']);
+
+      await expect(
+        perfis.atualizar(alheio.id().value, { name: 'renomeado' }, atorDoSistema()),
+      ).rejects.toThrow(ProfilePrivilegeEscalationException);
+
+      // A recusa tem que ter deixado o agregado intacto — um `save` que
+      // rodasse antes da guarda deixaria o nome trocado apesar da recusa.
+      const depois = await repo.findById(alheio.id(), null);
+      expect(depois?.nome().value).toBe('Perfil');
+    });
+
+    it('deletar um perfil DE EMPRESA é recusado', async () => {
+      const alheio = perfilDe(GLOBEX, ['users.read']);
+
+      await expect(perfis.deletar(alheio.id().value, atorDoSistema())).rejects.toThrow(
+        ProfilePrivilegeEscalationException,
+      );
+
+      expect(await repo.findById(alheio.id(), null)).not.toBeNull();
+    });
+
+    it('injetar permissão em perfil DE EMPRESA é recusado', async () => {
+      const alheio = perfilDe(GLOBEX, ALVO_DENTRO);
+
+      await expect(
+        auths.atribuir(alheio.id().value, 'admin.manage-users', atorDoSistema()),
+      ).rejects.toThrow(ProfilePrivilegeEscalationException);
+
+      const depois = await repo.findById(alheio.id(), null);
+      expect(depois?.authorizations().toLista()).toEqual(ALVO_DENTRO);
+    });
+
+    it('revogar permissão de perfil DE EMPRESA é recusado', async () => {
+      const alheio = perfilDe(GLOBEX, [...ALVO_DENTRO, 'admin.manage-users']);
+
+      await expect(
+        auths.revogar(alheio.id().value, 'admin.manage-users', atorDoSistema()),
+      ).rejects.toThrow(ProfilePrivilegeEscalationException);
+
+      const depois = await repo.findById(alheio.id(), null);
+      expect(depois?.authorizations().toLista()).toEqual([...ALVO_DENTRO, 'admin.manage-users']);
+    });
+  });
+
+  describe('listar', () => {
+    it('o bucket de SISTEMA não-admin enxerga só os perfis DE SISTEMA', async () => {
+      // `doAtor` entra na lista: ele é um perfil de SISTEMA, e a regra não é
+      // "some com os meus", é "some com os de EMPRESA".
+      const outro = perfilDe(null, ['users.read']);
+      perfilDe(ACME, ['users.read']);
+      perfilDe(GLOBEX, ['users.read']);
+
+      const listados = await perfis.listar(atorDoSistema());
+
+      expect(listados.map((p) => p.slug).sort()).toEqual(
+        [doAtor.slug().value, outro.slug().value].sort(),
+      );
+    });
+
+    it('o admin de SISTEMA continua vendo tudo — o seed não pode regredir', async () => {
+      const daAcme = perfilDe(ACME, ['users.read']);
+      const daGlobex = perfilDe(GLOBEX, ['users.read']);
+
+      const listados = await perfis.listar(atorDoSistema(true));
+
+      expect(listados.map((p) => p.slug).sort()).toEqual(
+        [doAtor.slug().value, daAcme.slug().value, daGlobex.slug().value].sort(),
+      );
+    });
+  });
+
+  describe('vestir perfil alheio (o caminho do lockout administrativo)', () => {
+    it('o bucket de SISTEMA não-admin NÃO veste perfil DE EMPRESA em ninguém', async () => {
+      const alheio = perfilDe(GLOBEX, ALVO_DENTRO);
+      users.prime(userComProfile(ALVO_ID, null));
+
+      await expect(
+        uc.atribuirProfileAoUser(ALVO_ID, alheio.id().value, atorDoSistema()),
+      ).rejects.toThrow(ProfilePrivilegeEscalationException);
+
+      // O ALVO é a razão de o caso existir: `findProfileId(ALVO, null)` só
+      // aceita `tenant_id IS NULL`, então vestir perfil de empresa deixa o
+      // admin global do alvo com NENHUM perfil — lockout de toda a parte
+      // administrativa, sem que nenhuma resposta tenha sido de escalada.
+      expect(await perfilDoAlvo()).toBeNull();
+    });
+
+    it('o admin de SISTEMA ainda veste perfil de empresa (o seed não regride)', async () => {
+      const daGlobex = perfilDe(GLOBEX, ['users.read']);
+      users.prime(userComProfile(ALVO_ID, null));
+
+      await uc.atribuirProfileAoUser(ALVO_ID, daGlobex.id().value, atorDoSistema(true));
+
+      expect(await perfilDoAlvo()).toBe(daGlobex.id().value);
+    });
+
+    it('vestir perfil DE SISTEMA continua valendo dentro do bucket de SISTEMA', async () => {
+      // Este é o caminho que o teste "o #97 não regride" (lá em cima) mede:
+      // bucket global ↔ perfil global tem de continuar funcionando.
+      const gestor = perfilDe(null, ALVO_DENTRO);
+      users.prime(userComProfile(ALVO_ID, null));
+
+      await uc.atribuirProfileAoUser(ALVO_ID, gestor.id().value, atorDoSistema());
+
+      expect(await perfilDoAlvo()).toBe(gestor.id().value);
+    });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fase 9 — RLS: o use case tem de REPASSAR a empresa da sessão.
+//
+// A porta exige `tenantId` em `findById`/`delete`, e o TypeScript aceita uma
+// implementação com menos parâmetros — o que significa que um use case que
+// esquecesse de repassar passaria a porta, compilaria e deixaria a suíte
+// inteira verde. O único jeito de isso ser VISÍVEL é o duplo registrar o que
+// recebeu, e um teste afirmar o registro.
+//
+// O que este bloco prova: o escopo QUE CHEGA é o da sessão (`ator.tenantId`
+// nas rotas por ator, o `tenantId` do argumento em `obterMeuPerfil`). O que
+// ele NÃO prova — e o repositório tem a sua metade — é que a policy aceita
+// aquele escopo. Isso é medido contra Postgres em `prisma-rls.integration.spec.ts`.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Fase 9 — o use case repassa o escopo da sessão ao repositório', () => {
+  let repo: InMemoryProfileRepo;
+  let users: InMemoryUserRepo;
+  let perfis: ProfileUseCases;
+
+  beforeEach(() => {
+    repo = new InMemoryProfileRepo();
+    users = new InMemoryUserRepo();
+    const memberships = new InMemoryMembershipRepo(users);
+    perfis = new ProfileUseCases(repo, users, new UserProfileCacheService(), memberships);
+  });
+
+  it('obterPorId pede a EMPRESA do ator, não a empresa do perfil nem a global', async () => {
+    const daAcme = Profile.criar({
+      slug: 'gestor-acme',
+      name: 'Gestor',
+      tenantId: ACME,
+      agora: new Date(),
+    });
+    repo.prime(daAcme);
+
+    await perfis.obterPorId(daAcme.id().value, ATOR_ACME);
+
+    // Sem esta linha, um `findById(profileId(id))` voltaria a compilar — o
+    // TypeScript não reclama de menos argumentos — e a empresa leria a linha
+    // com o escopo de sistema, que é o bucket que a policy de escrita proíbe.
+    expect(repo.escoposPedidos).toEqual([ACME]);
+  });
+
+  it('obterPorId no bucket de SISTEMA pede o bucket de SISTEMA', async () => {
+    const global = Profile.criar({ slug: 'admin', name: 'Administrador', agora: new Date() });
+    repo.prime(global);
+
+    await perfis.obterPorId(global.id().value, ATOR_ADMIN);
+
+    expect(repo.escoposPedidos).toEqual([null]);
+  });
+
+  it('obterMeuPerfil repassa o tenantId do ARGUMENTO, não o de algum ator', async () => {
+    // É o que o `PermissionsGuard` chama (`obterMeuPerfil(user.sub,
+    // user.tenantId)`), e é o caminho que faz a conta mesma ler dois perfis
+    // diferentes conforme a empresa do header.
+    const daAcme = Profile.criar({
+      slug: 'gestor-acme',
+      name: 'Gestor',
+      tenantId: ACME,
+      initialAuthorizations: ['users.read'],
+      agora: new Date(),
+    });
+    repo.prime(daAcme);
+
+    const memberships = new InMemoryMembershipRepo(users);
+    memberships.prime(ATOR_ID, ACME, daAcme.id().value);
+    const uc = new UserProfileUseCases(users, repo, new UserProfileCacheService(), memberships);
+
+    await uc.obterMeuPerfil(ATOR_ID, ACME);
+
+    expect(repo.escoposPedidos).toEqual([ACME]);
+  });
+
+  it('deletar abre o escopo da empresa que apaga — a escrita também é filtrada', async () => {
+    const daAcme = Profile.criar({
+      slug: 'gestor-acme',
+      name: 'Gestor',
+      tenantId: ACME,
+      agora: new Date(),
+    });
+    repo.prime(daAcme);
+
+    await perfis.deletar(daAcme.id().value, ATOR_ACME);
+
+    // DOIS escopos, e é o esperado: `deletar` lê (para conferir DONA e as
+    // proteções de `isSystem`/`isAdmin`) e só depois apaga. O que este teste
+    // segura é que nenhum dos dois é o de sistema — a assertion mais frouxa
+    // (`toContain(ACME)`) passaria se a segunda virasse `'*'`.
+    expect(repo.escoposPedidos).toEqual([ACME, ACME]);
   });
 });

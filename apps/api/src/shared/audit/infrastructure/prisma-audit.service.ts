@@ -18,6 +18,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { PrismaClient, type Prisma } from '@prisma/client';
 import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service.js';
+import { comEscopo, escopoDoTenant } from '../../infrastructure/prisma/escopo.js';
 import type { AuditContext } from '../domain/audit-context.vo.js';
 import type {
   ArchiveEntry,
@@ -41,31 +42,49 @@ export class PrismaAuditService implements AuditServicePort {
    */
   constructor(@Inject(PrismaService) private readonly prisma: PrismaClient) {}
 
+  // pt-BR (Fase 10+, 2026-10-17) — POR QUE TODO MÉTODO ABRE ESCOPO AGORA.
+  //
+  // `users_history.entity_id` e `users_archive.entity_id` são o **uuid do
+  // usuário**, e as duas tabelas passaram a ter RLS resolvida por
+  // `usuario_no_escopo(entity_id)` (migration `20261020000002`). Sem escopo
+  // aberto, `escopo_atual()` é `NULL` e `usuario_no_escopo` é FALSE para todo
+  // mundo — o serviço inteiro viraria "zero linhas" silenciosamente, que é o
+  // modo de falha que a §4.1 da migration `20261020000000` já descreveu.
+  //
+  // O escopo das DUAS escritas vem do `AuditContext` e o das TRÊS leituras vem
+  // do parâmetro: é o mesmo valor nos dois caminhos, vindo de fontes diferentes
+  // só porque uma já carregava o contexto e a outra não.
+
   async record(input: AuditRecordInput, ctx: AuditContext): Promise<void> {
-    await this.prisma.userHistory.create({
-      data: {
-        entityId: input.entityId,
-        version: input.newVersion,
-        previousVersion: input.previousVersion,
-        operation: input.operation,
-        snapshot: input.snapshot as Prisma.InputJsonValue,
-        changedAt: ctx.timestamp,
-        changedBy: ctx.actorId,
-        reason: input.reason ?? null,
-      },
-    });
+    await comEscopo(this.prisma, escopoDoTenant(ctx.tenantId), (tx) =>
+      tx.userHistory.create({
+        data: {
+          entityId: input.entityId,
+          version: input.newVersion,
+          previousVersion: input.previousVersion,
+          operation: input.operation,
+          snapshot: input.snapshot as Prisma.InputJsonValue,
+          changedAt: ctx.timestamp,
+          changedBy: ctx.actorId,
+          reason: input.reason ?? null,
+        },
+      }),
+    );
   }
 
   async listHistory(
     input: ListHistoryInput,
+    tenantId: string | null,
   ): Promise<{ entries: HistoryEntry[]; nextCursor: string | null }> {
     const cursor = input.cursor ? { id: input.cursor } : undefined;
-    const rows = await this.prisma.userHistory.findMany({
-      where: { entityId: input.entityId },
-      ...(cursor ? { cursor, skip: 1 } : {}),
-      take: input.limit + 1,
-      orderBy: [{ version: 'asc' }],
-    });
+    const rows = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+      tx.userHistory.findMany({
+        where: { entityId: input.entityId },
+        ...(cursor ? { cursor, skip: 1 } : {}),
+        take: input.limit + 1,
+        orderBy: [{ version: 'asc' }],
+      }),
+    );
     const hasMore = rows.length > input.limit;
     const page = hasMore ? rows.slice(0, input.limit) : rows;
     const last = page[page.length - 1];
@@ -84,12 +103,17 @@ export class PrismaAuditService implements AuditServicePort {
     };
   }
 
-  async getHistoryEntry(input: GetHistoryEntryInput): Promise<HistoryEntry | null> {
-    const row = await this.prisma.userHistory.findUnique({
-      where: {
-        entityId_version: { entityId: input.entityId, version: input.version },
-      },
-    });
+  async getHistoryEntry(
+    input: GetHistoryEntryInput,
+    tenantId: string | null,
+  ): Promise<HistoryEntry | null> {
+    const row = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+      tx.userHistory.findUnique({
+        where: {
+          entityId_version: { entityId: input.entityId, version: input.version },
+        },
+      }),
+    );
     if (!row) return null;
     return {
       entityId: row.entityId,
@@ -104,35 +128,40 @@ export class PrismaAuditService implements AuditServicePort {
   }
 
   async archive(input: ArchiveInput): Promise<void> {
-    await this.prisma.userArchive.upsert({
-      where: { entityId: input.entityId },
-      create: {
-        entityId: input.entityId,
-        version: input.version,
-        snapshot: input.snapshot as Prisma.InputJsonValue,
-        deletedAt: input.ctx.timestamp,
-        deletedBy: input.ctx.actorId,
-        reason: input.reason ?? null,
-      },
-      update: {
-        version: input.version,
-        snapshot: input.snapshot as Prisma.InputJsonValue,
-        deletedAt: input.ctx.timestamp,
-        deletedBy: input.ctx.actorId,
-        reason: input.reason ?? null,
-      },
-    });
+    await comEscopo(this.prisma, escopoDoTenant(input.ctx.tenantId), (tx) =>
+      tx.userArchive.upsert({
+        where: { entityId: input.entityId },
+        create: {
+          entityId: input.entityId,
+          version: input.version,
+          snapshot: input.snapshot as Prisma.InputJsonValue,
+          deletedAt: input.ctx.timestamp,
+          deletedBy: input.ctx.actorId,
+          reason: input.reason ?? null,
+        },
+        update: {
+          version: input.version,
+          snapshot: input.snapshot as Prisma.InputJsonValue,
+          deletedAt: input.ctx.timestamp,
+          deletedBy: input.ctx.actorId,
+          reason: input.reason ?? null,
+        },
+      }),
+    );
   }
 
   async listArchive(
     input: ListArchiveInput,
+    tenantId: string | null,
   ): Promise<{ entries: ArchiveEntry[]; nextCursor: string | null }> {
     const cursor = input.cursor ? { id: input.cursor } : undefined;
-    const rows = await this.prisma.userArchive.findMany({
-      ...(cursor ? { cursor, skip: 1 } : {}),
-      take: input.limit + 1,
-      orderBy: [{ deletedAt: 'desc' }],
-    });
+    const rows = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+      tx.userArchive.findMany({
+        ...(cursor ? { cursor, skip: 1 } : {}),
+        take: input.limit + 1,
+        orderBy: [{ deletedAt: 'desc' }],
+      }),
+    );
     const hasMore = rows.length > input.limit;
     const page = hasMore ? rows.slice(0, input.limit) : rows;
     const last = page[page.length - 1];
@@ -149,10 +178,15 @@ export class PrismaAuditService implements AuditServicePort {
     };
   }
 
-  async getArchiveEntry(input: GetArchiveEntryInput): Promise<ArchiveEntry | null> {
-    const row = await this.prisma.userArchive.findUnique({
-      where: { entityId: input.entityId },
-    });
+  async getArchiveEntry(
+    input: GetArchiveEntryInput,
+    tenantId: string | null,
+  ): Promise<ArchiveEntry | null> {
+    const row = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+      tx.userArchive.findUnique({
+        where: { entityId: input.entityId },
+      }),
+    );
     if (!row) return null;
     return {
       entityId: row.entityId,

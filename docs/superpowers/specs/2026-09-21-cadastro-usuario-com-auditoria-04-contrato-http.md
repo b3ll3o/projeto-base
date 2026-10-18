@@ -166,12 +166,83 @@ Exemplo — `409 ConcurrencyException`:
 
 ```text
 1. Cliente envia Authorization: Bearer <jwt>
-2. JwtAuthGuard valida e popula request.user = { id, email, roles }
-3. AuditContextMiddleware cria AsyncLocalStorage context:
-     { userId: request.user.id, now: new Date(), requestId }
-4. AuditContextPort.current() retorna o contexto em qualquer camada
-5. Use case lê ctx.userId e passa para auditServicePort.record(...)
+2. JwtAuthGuard valida e popula request.user
+3. O controller resolve o ator: resolveActorId(request) lê request.user.sub
+   e devolve null quando não há ator válido (rota @Public, ou sub malformado)
+4. O controller monta o AuditContext e ABRE o scope:
+     AuditContextStore.run(this.buildContext(request), () => useCase.executar(...))
+5. O use case, dentro do scope, lê AuditContextStore.get() e grava a auditoria
 ```
+
+> ⚠️ **Corrigido no PR #101 (2026-10-17).** Este bloco descrevia um
+> `AuditContextMiddleware` que cria o contexto, um `AuditContextPort.current()` e
+> um VO `{ userId, now, requestId }`. **Nenhum dos três existe** — medido:
+> `grep -rn "AuditContextMiddleware\|AuditContextPort" apps/api/src` → vazio. O
+> que existe é `AuditContextStore` (wrapper sobre `AsyncLocalStorage`) com
+> `run(ctx, fn)` / `get()` / `tryGet()`, e o VO é
+> `AuditContext { actorId, correlationId, source, timestamp, tenantId }`
+> (`audit-context.vo.ts`). Não há middleware: é o **controller** que abre o scope
+> (`users.controller.ts:152,291,324,351`), e quem monta o VO é `buildContext()`
+> (`users.controller.ts:444`). O `tenantId` entra junto do `actorId` de propósito —
+> passá-los por caminhos separados admite `actorId` da empresa A com `tenantId`
+> da B, que é escalada silenciosa.
+
+### §7.1 `request.user` publicado pelo guard
+
+```typescript
+{
+  sub: string;            // do JWT — é o que a auditoria grava como `actorId`
+  email: string;          // do JWT
+  typ: 'access';          // reconfirmado pelo guard (2ª barreira)
+  tenantId: string | null; // X-Tenant-Id canonicalizado; null = bucket global
+  isAdmin: boolean;       // cache de perfil; false quando o cache não tem a chave
+  permissions: readonly string[];
+}
+```
+
+> ⚠️ **Corrigido no PR #101 (2026-10-17).** Este bloco escrevia
+> `request.user = { id, email, roles }`, e os três campos estavam errados: o
+> identificador é `sub` (`token-issuer.port.ts:42`), e `roles` não existe — quem
+> carrega privilégio é `isAdmin` + `permissions`, lidos do
+> `UserProfileCacheService`. O passo 3 acima lia `request.user.id`, que é
+> `undefined`.
+
+### §7.2 `X-Tenant-Id` — a empresa que a sessão está agindo
+
+Header **opcional**, fora do JWT: `tenantId` troca dentro da mesma sessão sem
+trocar de token.
+
+Ausente, a sessão age no bucket **GLOBAL** (`users.profile_id IS NULL`), onde
+mora o `isAdmin` do seed. "Sem header" significa **sem escopo de empresa**, e
+não "sem privilégio" — quem inferir o contrário vai trancar o admin fora do
+próprio bucket.
+
+| Situação | Resposta |
+|---|---|
+| Ausente | segue; **sem** consulta de membership (bucket global não é empresa) |
+| Presente, UUID válido | `findRole(sub, tenantId)`; devolve `null` → 403 |
+| Presente, não é UUID | 400 |
+| Presente, caixa alta | aceito e canonicalizado para minúsculo (a policy compara por texto) |
+
+⚠️ **Rota `@Public()` não entra nesta tabela.** O guard devolve `true` no passo 1
+(`jwt-auth.guard.ts:165-172`), antes de `extractTenantId`: em `POST /users` um
+`X-Tenant-Id` malformado é **ignorado**, e a resposta é `201`, não `400`. A tabela
+vale para as rotas autenticadas.
+
+| `code` | Status | Quando |
+|---|---|---|
+| `INVALID_TENANT` | 400 | `X-Tenant-Id` não é um UUID válido |
+| `TENANT_MEMBERSHIP_REQUIRED` | 403 | a sessão autenticada não pertence à empresa afirmada |
+
+403 e não 401 porque o requerente **está** autenticado — 401 mandaria o cliente
+para um laço de re-login sem remédio possível, e o corpo não pode ser o mesmo
+do 401 de sessão ausente ("sem sessão" e "sessão válida, empresa errada" são
+fatos em que o cliente age diferente).
+
+**Limite da garantia:** a conferência vale a partir do **início** do request.
+Um request em voo quando a membership é removida termina como começou, e a
+remoção hoje é um privilégio **revogado** (`REVOKE DELETE ON tenant_memberships`
+em `20261020000005`), não um endpoint. Detalhes em `jwt-auth.guard.ts`.
 
 ## §8. Versionamento da API
 

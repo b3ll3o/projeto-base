@@ -78,21 +78,40 @@ export interface GetArchiveEntryInput {
 /**
  * Contrato que o domínio consome.
  * Implementações: InMemoryAuditService (Fase 2), PrismaAuditService (Fase 6).
+ *
+ * pt-BR (Fase 10+, 2026-10-17) — o escopo de tenant das LEITURAS:
+ * `tenantId` é o segundo argumento das três leituras, e é `string | null`
+ * porque `null` é o bucket de SISTEMA, não "sem escopo". As DUAS escritas não
+ * o recebem: elas já carregam `AuditContext`, que passou a ter `tenantId`
+ * (ver `AuditContextProps`) — e é justamente por isso que o escopo é o mesmo
+ * dado do ator, e não um argumento que pode divergir dele.
+ *
+ * Por que as leituras precisaram e antes não: `users_history.entity_id` é o
+ * uuid do usuário, então ler histórico cross-tenant é o que entregava o
+ * material da escalada descrita na §3 da migration `20261020000001`.
  */
 export interface AuditServicePort {
   record(input: AuditRecordInput, ctx: AuditContext): Promise<void>;
 
   listHistory(
     input: ListHistoryInput,
+    tenantId: string | null,
   ): Promise<{ entries: HistoryEntry[]; nextCursor: string | null }>;
 
-  getHistoryEntry(input: GetHistoryEntryInput): Promise<HistoryEntry | null>;
+  getHistoryEntry(
+    input: GetHistoryEntryInput,
+    tenantId: string | null,
+  ): Promise<HistoryEntry | null>;
 
   archive(input: ArchiveInput): Promise<void>;
 
   listArchive(
     input: ListArchiveInput,
+    tenantId: string | null,
   ): Promise<{ entries: ArchiveEntry[]; nextCursor: string | null }>;
 
-  getArchiveEntry(input: GetArchiveEntryInput): Promise<ArchiveEntry | null>;
+  getArchiveEntry(
+    input: GetArchiveEntryInput,
+    tenantId: string | null,
+  ): Promise<ArchiveEntry | null>;
 }

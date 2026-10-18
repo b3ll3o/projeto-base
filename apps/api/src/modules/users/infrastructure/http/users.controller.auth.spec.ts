@@ -36,6 +36,7 @@ import { trace } from '@opentelemetry/api';
 import { UsersController } from './users.controller.js';
 import { UserUseCases, USER_USE_CASES } from '../../application/user-use-cases.js';
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
+import { UserProfileUseCases } from '../../../profiles/application/profiles.use-cases.js';
 import { UserProfileCacheService } from '../../../../shared/infrastructure/security/user-profile-cache.service.js';
 import {
   TOKEN_ISSUER_PORT,
@@ -45,6 +46,10 @@ import {
 import { AUDIT_SERVICE_PORT } from '../../../../shared/audit/shared/audit.tokens.js';
 import { AuditContextStore } from '../../../../shared/audit/shared/audit-context-store.js';
 import type { AuditContext } from '../../../../shared/audit/domain/audit-context.vo.js';
+import {
+  TENANT_MEMBERSHIP_REPOSITORY_PORT,
+  type TenantMembershipRepositoryPort,
+} from '../../../tenancy/domain/ports/tenant-membership-repository.port.js';
 import { GlobalExceptionFilter } from '../../../../shared/infrastructure/http/global-exception.filter.js';
 import { ZodValidationPipe } from '../../../../shared/infrastructure/http/zod-validation.pipe.js';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -94,6 +99,24 @@ function makeAudit() {
   return { listHistory: vi.fn(async () => ({ entries: [], nextCursor: null })) };
 }
 
+// pt-BR (Fase 10+ — RLS, 2026-10-17): `GET /users` passou a trazer
+// `@UseGuards(PermissionsGuard)` + `@RequirePermission('users.read')`, e o
+// guard injeta `UserProfileUseCases` no índice [1]. Sem este provider o
+// TestingModule NÃO SOBE — e o sintoma (15 vermelhos, todos com
+// `await app.close()` no `afterEach`) não aponta para "falta uma dependência":
+// aponta para o teardown.
+//
+// A concessão abaixo é o que mantém ESTE arquivo medindo AUTENTICAÇÃO. Sem
+// `users.read`, o `GET /users` COM token viraria 403 e a afirmação "200 COM
+// token" passaria a medir autorização — que é o outro arquivo. Onde a
+// AUSÊNCIA da permissão é o que está sob medida é o e2e
+// `08-ownership.e2e.spec.ts`, com perfil sem a chave.
+const PROFILE_USE_CASES_STUB = {
+  async obterMeuPerfil() {
+    return { isAdmin: false, permissions: ['users.read'] };
+  },
+} as unknown as UserProfileUseCases;
+
 // pt-BR (#93.1 — RBAC, 2026-10-16): stub do cache usado em todos os
 // TestingModule deste arquivo. A 3ª dependência do JwtAuthGuard.
 const CACHE_STUB = {
@@ -110,6 +133,16 @@ const CACHE_STUB = {
     /* noop */
   },
 } as unknown as UserProfileCacheService;
+
+// pt-BR (PR #101, 2026-10-17): a 4ª dependência do `JwtAuthGuard`. Nenhum
+// teste deste arquivo manda `X-Tenant-Id`, então a conferência de membership não
+// chega a rodar — mas o token precisa estar declarado, ou o Nest não constrói o
+// guard e os 20 testes caem com `Nest can't resolve dependencies`.
+const MEMBERSHIPS_STUB = {
+  async findRole() {
+    return 'member';
+  },
+} as unknown as TenantMembershipRepositoryPort;
 
 /** Token de access que o emissor stub aceita. */
 const TOKEN_ACCESS = 'header.payload.assinatura-access';
@@ -158,7 +191,9 @@ describe('UsersController — fronteira HTTP de autenticação', () => {
       providers: [
         { provide: USER_USE_CASES, useValue: useCases },
         { provide: AUDIT_SERVICE_PORT, useValue: makeAudit() },
+        { provide: UserProfileUseCases, useValue: PROFILE_USE_CASES_STUB },
         { provide: TOKEN_ISSUER_PORT, useValue: issuer },
+        { provide: TENANT_MEMBERSHIP_REPOSITORY_PORT, useValue: MEMBERSHIPS_STUB },
         JwtAuthGuard,
         {
           provide: UserProfileCacheService,
@@ -299,7 +334,9 @@ describe('UsersController — fronteira HTTP de autenticação', () => {
       providers: [
         { provide: USER_USE_CASES, useValue: makeUseCases() },
         { provide: AUDIT_SERVICE_PORT, useValue: makeAudit() },
+        { provide: UserProfileUseCases, useValue: PROFILE_USE_CASES_STUB },
         { provide: TOKEN_ISSUER_PORT, useValue: sabota },
+        { provide: TENANT_MEMBERSHIP_REPOSITORY_PORT, useValue: MEMBERSHIPS_STUB },
         JwtAuthGuard,
         { provide: UserProfileCacheService, useValue: CACHE_STUB },
       ],
@@ -357,7 +394,9 @@ describe('UsersController — o carve-out público sobrevive ao OpenAPI', () => 
       providers: [
         { provide: USER_USE_CASES, useValue: makeUseCases() },
         { provide: AUDIT_SERVICE_PORT, useValue: makeAudit() },
+        { provide: UserProfileUseCases, useValue: PROFILE_USE_CASES_STUB },
         { provide: TOKEN_ISSUER_PORT, useValue: makeIssuer() },
+        { provide: TENANT_MEMBERSHIP_REPOSITORY_PORT, useValue: MEMBERSHIPS_STUB },
         JwtAuthGuard,
         { provide: UserProfileCacheService, useValue: CACHE_STUB },
       ],
@@ -427,7 +466,11 @@ describe('UsersController.buildContext — actorId vem do sub do token', () => {
 
   beforeEach(() => {
     useCases = makeUseCases();
-    ctrl = new UsersController(useCases as unknown as UserUseCases, makeAudit() as never);
+    ctrl = new UsersController(
+      useCases as unknown as UserUseCases,
+      makeAudit() as never,
+      {} as never,
+    );
   });
 
   function actorIdDeCreate(request?: unknown): string | null {

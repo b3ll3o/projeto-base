@@ -46,6 +46,9 @@
 // controller — aceita de fora sem exportá-lo.
 const SEM_TOKEN = undefined as never;
 
+/** Uma empresa qualquer; só o formato importa, o id nunca é consultado aqui. */
+const EMPRESA = '0190a8b6-1c2d-7e3f-8a4b-5c6d7e8f9a0b';
+
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { BadRequestException } from '@nestjs/common';
 import type { Span } from '@opentelemetry/api';
@@ -79,7 +82,7 @@ describe('UsersController.parseIfMatch', () => {
     // Stubs `{} as never` para os dois colaboradores — parseIfMatch
     // não chama nem userUseCases nem auditService. Outros testes
     // (integração / e2e Task 7.7) validam o caminho feliz + mutação.
-    ctrl = new UsersController({} as never, {} as never);
+    ctrl = new UsersController({} as never, {} as never, {} as never);
   });
 
   it('aceita W/"v3" canônico', () => {
@@ -255,13 +258,26 @@ describe('UsersController — handlers HTTP', () => {
   let useCases: UserUseCasesStub & UserUseCases;
   let audit: { listHistory: Mock } & AuditServicePort;
   let reply: ReplyStub;
+  // pt-BR (2026-10-17): `GET /users` hidrata o perfil para decidir o recorte,
+  // então `{}` no terceiro lugar do construtor não sobe — os testes de `list()`
+  // caíam com `this.profiles.obterMeuPerfil is not a function`. O stub é
+  // MUTÁVEL de propósito: é o `isAdmin`/`permissions` que decide entre
+  // "diretório inteiro" e "só a própria linha", e o teste que muda esses dois
+  // campos é o que mede o gate.
+  let profiles: { obterMeuPerfil: Mock };
   let ctrl: UsersController;
 
   beforeEach(() => {
     useCases = makeUserUseCasesStub() as unknown as UserUseCasesStub & UserUseCases;
     audit = makeAuditStub() as unknown as { listHistory: Mock } & AuditServicePort;
     reply = makeReply();
-    ctrl = new UsersController(useCases, audit);
+    // Default = quem TEM `users.read`: é o caso comum de uma conta com perfil
+    // e é o que mantém as asserções deste arquivo em `somenteUsuarioId: null`.
+    // O ramo restrito é exercitado pelo teste que troca o stub abaixo.
+    profiles = {
+      obterMeuPerfil: vi.fn().mockResolvedValue({ isAdmin: false, permissions: ['users.read'] }),
+    };
+    ctrl = new UsersController(useCases, audit, profiles as never);
   });
 
   it('create() wrapa em AuditContextStore.run e seta ETag + status 201', async () => {
@@ -276,7 +292,7 @@ describe('UsersController — handlers HTTP', () => {
     const result = await ctrl.create(input, reply as never, SEM_TOKEN);
 
     expect(runSpy).toHaveBeenCalledTimes(1);
-    expect(useCases.criarUser).toHaveBeenCalledWith(input);
+    expect(useCases.criarUser).toHaveBeenCalledWith(input, null);
     expect(reply.header).toHaveBeenCalledWith('ETag', 'W/"v7"');
     expect(reply.status).toHaveBeenCalledWith(201);
     expect(result).toBe(fakeUserOutput);
@@ -287,26 +303,122 @@ describe('UsersController — handlers HTTP', () => {
     const runSpy = vi.spyOn(AuditContextStore, 'run');
     useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
 
-    const result = await ctrl.list(undefined, '20');
+    const result = await ctrl.list({}, undefined, '20');
 
     expect(runSpy).not.toHaveBeenCalled();
-    expect(useCases.listar).toHaveBeenCalledWith({
-      cursor: null,
-      limit: 20,
-      includeDeleted: false,
-    });
+    expect(useCases.listar).toHaveBeenCalledWith(
+      {
+        cursor: null,
+        limit: 20,
+        includeDeleted: false,
+        somenteUsuarioId: null,
+      },
+      null,
+    );
     expect(result).toEqual({ items: [], nextCursor: null });
     runSpy.mockRestore();
   });
 
   it('list() passa cursor quando fornecido', async () => {
     useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
-    await ctrl.list('cur-1', '5');
-    expect(useCases.listar).toHaveBeenCalledWith({
-      cursor: 'cur-1',
-      limit: 5,
-      includeDeleted: false,
-    });
+    await ctrl.list({}, 'cur-1', '5');
+    expect(useCases.listar).toHaveBeenCalledWith(
+      {
+        cursor: 'cur-1',
+        limit: 5,
+        includeDeleted: false,
+        somenteUsuarioId: null,
+      },
+      null,
+    );
+  });
+
+  // ── Fase 10: a empresa do token É o escopo ──────────────────────────
+  //
+  // Todos os outros asserts deste arquivo afirmam `null` — e `null` é o bucket
+  // de SISTEMA, que enxerga todo mundo. Se `list()` voltasse a passar `null`
+  // fixo, NENHUM teste aqui cairia: a lista simplesmente passaria a devolver
+  // a conta inteira de novo, que é o vazamento que a RLS passou a fechar no
+  // banco. Este é o teste que mede a fiação, e ele precisa do tenantId real.
+  it('list() repassa a empresa do token como escopo', async () => {
+    useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
+    await ctrl.list({ user: { sub: 'u-1', tenantId: EMPRESA } } as never);
+    expect(useCases.listar).toHaveBeenCalledWith(expect.anything(), EMPRESA);
+  });
+
+  it('list() sem header de empresa cai no bucket de SISTEMA', async () => {
+    useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
+    await ctrl.list({ user: { sub: 'u-1' } } as never);
+    expect(useCases.listar).toHaveBeenCalledWith(expect.anything(), null);
+  });
+
+  // ── O recorte de quem não tem `users.read` ───────────────────────────
+  //
+  // MEDIDO 2026-10-17: sem este gate, `GET /users` sem header caía no bucket
+  // `'*'` e devolvia a base inteira (3 usuários visíveis) para qualquer conta
+  // — inclusive uma recém-cadastrada, porque `POST /users` é `@Public()`.
+  //
+  // Este teste é o POSITIVO do gate: ele afirma o estado do recorte (o
+  // `sub` chega ao use-case), não só que a chamada aconteceu. Um teste que
+  // dissesse apenas "não quebrou" continuaria verde se o gate sumisse.
+  it('list() sem `users.read` e sem empresa recorta para o próprio ator', async () => {
+    // O ator NÃO mudou em relação ao teste acima — só o perfil muda. Se o
+    // gate lesse o request em vez do perfil hidratado, os dois cairiam juntos.
+    profiles.obterMeuPerfil.mockResolvedValue({ isAdmin: false, permissions: [] });
+    useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
+
+    await ctrl.list({ user: { sub: 'u-1' } } as never);
+
+    // Prova de que o escopo FOI determinado: a hidratação aconteceu, com a
+    // empresa do ator (aqui ausente → `null`, o bucket de sistema).
+    expect(profiles.obterMeuPerfil).toHaveBeenCalledWith('u-1', null);
+    expect(useCases.listar).toHaveBeenCalledWith(
+      expect.objectContaining({ somenteUsuarioId: 'u-1' }),
+      null,
+    );
+  });
+
+  // O admin global é o ÚNICO que ignora o recorte mesmo sem empresa: é o
+  // contrato do seed e o que a rota de bootstrap precisa. Sem este par, trocar
+  // `semDireito` por `empresa === null` derrubaria o bootstrap e o teste
+  // anterior continuaria verde.
+  it('list() admin global sem empresa NÃO é recortado', async () => {
+    profiles.obterMeuPerfil.mockResolvedValue({ isAdmin: true, permissions: [] });
+    useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
+
+    await ctrl.list({ user: { sub: 'u-1' } } as never);
+
+    expect(useCases.listar).toHaveBeenCalledWith(
+      expect.objectContaining({ somenteUsuarioId: null }),
+      null,
+    );
+  });
+
+  // Contrapartida: com `users.read` o diretório abre. Sem este par, um
+  // `semDireito` invertido (bug de `!`) derrubaria quem TEM o direito — e o
+  // F2 voltaria a quebrar em silêncio, agora do outro lado.
+  it('list() com `users.read` sem empresa NÃO é recortado', async () => {
+    useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
+    await ctrl.list({ user: { sub: 'u-1' } } as never);
+    expect(useCases.listar).toHaveBeenCalledWith(
+      expect.objectContaining({ somenteUsuarioId: null }),
+      null,
+    );
+  });
+
+  // Sob escopo de empresa a RLS já devolve só os membros. Recortar aqui
+  // quebraria o diretório da empresa para quem tem `users.read` — o gate só
+  // existe porque o bucket de sistema não tem dono.
+  it('list() COM empresa não recorta, mesmo sem `users.read`', async () => {
+    profiles.obterMeuPerfil.mockResolvedValue({ isAdmin: false, permissions: [] });
+    useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
+
+    await ctrl.list({ user: { sub: 'u-1', tenantId: EMPRESA } } as never);
+
+    expect(useCases.listar).toHaveBeenCalledWith(
+      expect.objectContaining({ somenteUsuarioId: null }),
+      EMPRESA,
+    );
   });
 
   // ── `includeDeleted`: normalização do query param ───────────────────
@@ -331,9 +443,10 @@ describe('UsersController — handlers HTTP', () => {
     ['', false],
   ])('list() traduz includeDeleted=%j para %j', async (entrada, esperado) => {
     useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
-    await ctrl.list(undefined, '20', entrada);
+    await ctrl.list({}, undefined, '20', entrada);
     expect(useCases.listar).toHaveBeenCalledWith(
       expect.objectContaining({ includeDeleted: esperado }),
+      null,
     );
   });
 
@@ -341,10 +454,10 @@ describe('UsersController — handlers HTTP', () => {
     const runSpy = vi.spyOn(AuditContextStore, 'run');
     useCases.obterPorId.mockResolvedValue(fakeUserOutput);
 
-    await ctrl.findOne('u-1');
+    await ctrl.findOne('u-1', {});
 
     expect(runSpy).not.toHaveBeenCalled();
-    expect(useCases.obterPorId).toHaveBeenCalledWith({ id: 'u-1' });
+    expect(useCases.obterPorId).toHaveBeenCalledWith({ id: 'u-1' }, null);
     runSpy.mockRestore();
   });
 
@@ -355,11 +468,14 @@ describe('UsersController — handlers HTTP', () => {
     await ctrl.update('u-1', { novoNome: 'Maria' }, 'W/"v7"', reply as never, SEM_TOKEN);
 
     expect(runSpy).toHaveBeenCalledTimes(1);
-    expect(useCases.atualizarNome).toHaveBeenCalledWith({
-      id: 'u-1',
-      novoNome: 'Maria',
-      expectedVersion: 7,
-    });
+    expect(useCases.atualizarNome).toHaveBeenCalledWith(
+      {
+        id: 'u-1',
+        novoNome: 'Maria',
+        expectedVersion: 7,
+      },
+      null,
+    );
     expect(reply.header).toHaveBeenCalledWith('ETag', 'W/"v8"');
     expect(reply.status).not.toHaveBeenCalled();
     runSpy.mockRestore();
@@ -412,11 +528,14 @@ describe('UsersController — handlers HTTP', () => {
     await ctrl.remove('u-1', 'W/"v7"', SEM_TOKEN);
 
     expect(runSpy).toHaveBeenCalledTimes(1);
-    expect(useCases.softDelete).toHaveBeenCalledWith({
-      id: 'u-1',
-      reason: null,
-      expectedVersion: 7,
-    });
+    expect(useCases.softDelete).toHaveBeenCalledWith(
+      {
+        id: 'u-1',
+        reason: null,
+        expectedVersion: 7,
+      },
+      null,
+    );
     expect(reply.header).not.toHaveBeenCalled();
     expect(reply.status).not.toHaveBeenCalled();
     runSpy.mockRestore();
@@ -437,7 +556,7 @@ describe('UsersController — handlers HTTP', () => {
     await ctrl.restore('u-1', 'W/"v8"', reply as never, SEM_TOKEN);
 
     expect(runSpy).toHaveBeenCalledTimes(1);
-    expect(useCases.restaurar).toHaveBeenCalledWith({ id: 'u-1', expectedVersion: 8 });
+    expect(useCases.restaurar).toHaveBeenCalledWith({ id: 'u-1', expectedVersion: 8 }, null);
     expect(reply.header).toHaveBeenCalledWith('ETag', 'W/"v9"');
     expect(reply.status).toHaveBeenCalledWith(201);
     runSpy.mockRestore();
@@ -450,12 +569,15 @@ describe('UsersController — handlers HTTP', () => {
     const result = await ctrl.history('u-1', undefined, '20');
 
     expect(runSpy).not.toHaveBeenCalled();
-    expect(audit.listHistory).toHaveBeenCalledWith({
-      entityName: 'User',
-      entityId: 'u-1',
-      cursor: null,
-      limit: 20,
-    });
+    expect(audit.listHistory).toHaveBeenCalledWith(
+      {
+        entityName: 'User',
+        entityId: 'u-1',
+        cursor: null,
+        limit: 20,
+      },
+      null,
+    );
     expect(result).toEqual({ entries: [], nextCursor: null });
     runSpy.mockRestore();
   });
@@ -463,12 +585,45 @@ describe('UsersController — handlers HTTP', () => {
   it('history() propaga cursor quando fornecido', async () => {
     audit.listHistory.mockResolvedValue({ entries: [], nextCursor: null });
     await ctrl.history('u-1', 'cur-1', '5');
-    expect(audit.listHistory).toHaveBeenCalledWith({
-      entityName: 'User',
-      entityId: 'u-1',
-      cursor: 'cur-1',
-      limit: 5,
-    });
+    expect(audit.listHistory).toHaveBeenCalledWith(
+      {
+        entityName: 'User',
+        entityId: 'u-1',
+        cursor: 'cur-1',
+        limit: 5,
+      },
+      null,
+    );
+  });
+
+  // ── Fase 10: a auditoria é escopada pela empresa do token ─────────────
+  //
+  // Mesmo raciocínio do `list()` acima: os dois asserts acima afirmam `null`,
+  // e `null` é o bucket de SISTEMA. Se `history()` voltasse a passar `null`
+  // fixo, nenhum deles cairia — a rota continuaria devolvendo o histórico
+  // cross-tenant, que é o elo 1 da escalada fechada na migration
+  // `20261020000002`. Sem este teste, a fiação nova é código morto.
+  it('history() repassa a empresa do token como escopo', async () => {
+    audit.listHistory.mockResolvedValue({ entries: [], nextCursor: null });
+    await ctrl.history('u-1', undefined, '20', {
+      user: { sub: 'u-1', tenantId: EMPRESA },
+    } as never);
+    expect(audit.listHistory).toHaveBeenCalledWith(expect.anything(), EMPRESA);
+  });
+
+  it('as mutações gravam a auditoria no escopo da empresa do token', async () => {
+    const runSpy = vi.spyOn(AuditContextStore, 'run');
+    useCases.atualizarNome.mockResolvedValue({ ...fakeUserOutput, version: 8 });
+    await ctrl.update(
+      'u-1',
+      { novoNome: 'Maria' },
+      'W/"v7"',
+      reply as never,
+      { user: { sub: 'u-1', tenantId: EMPRESA } } as never,
+    );
+    const ctx = runSpy.mock.calls[0]?.[0] as unknown as { tenantId: string | null };
+    expect(ctx.tenantId).toBe(EMPRESA);
+    runSpy.mockRestore();
   });
 
   it('AuditContext.correlationId vem do span ativo quando há traceId W3C (32 hex chars)', async () => {

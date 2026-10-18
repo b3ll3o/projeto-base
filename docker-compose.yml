@@ -103,6 +103,28 @@ services:
     # real — o `JwtTokenService` recusa o boot, e o healthcheck do serviço
     # reprova. Fail-fast no lugar certo, sem transformar o compose num
     # arquivo que o Postgres também não consegue ler.
+    #
+    # ⚠️ `DIRECT_DATABASE_URL` NÃO aparece aqui pelo MESMO motivo, e a
+    # omissão é load-bearing — ela NÃO é um esquecimento.
+    #
+    # ⚠️ A versão anterior deste texto dizia que o serviço `api` "não consome em
+    # runtime". MEDIDO FALSO: `AssinaturaDeMembership.onModuleInit`
+    # (`apps/api/src/shared/infrastructure/prisma/assinatura-de-membership.ts:84`)
+    # lê `process.env['DIRECT_DATABASE_URL']` em TODO boot, e o provider está em
+    # `PrismaModule`, que é `@Global()`. O que a variável é: usada pelo
+    # `ENTRYPOINT` do Dockerfile, que roda `prisma migrate deploy` ANTES de subir o
+    # servidor (`migrate` exige a conexão de DONO — `CREATE ROLE`,
+    # `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` e `GRANT` exigem posse da
+    # tabela) E pela aplicação, que lê a chave de assinatura de membership com a
+    # mesma conexão de DONO, porque `app_runtime` não tem permissão sobre ela.
+    #
+    # Consequência prática: trocar por `DIRECT_DATABASE_URL: ${...}` aqui
+    # quebraria o BOOT do container em toda máquina onde a variável não esteja
+    # no shell — em DOIS lugares distintos, o `migrate` do ENTRYPOINT e o
+    # `onModuleInit` acima — e, pior, `docker compose config` mostraria a
+    # configuração como válida, pelo motivo 2 acima. Quem ler este comentário
+    # não deve concluir que dá para remover a chave do `.env.production` depois
+    # de uma migração bem-sucedida: o container não sobe.
     ports:
       - '3000:3000'
     # pt-BR (#91): api em ambas networks — fala com web (frontend) e postgres (backend).

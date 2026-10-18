@@ -16,7 +16,20 @@ test.describe('F1 — Listagem de usuários', () => {
     page,
     irPara,
     semear,
+    comoAdmin,
   }) => {
+    // ⚠️ MEDIDO 2026-10-17: este teste passou a pedir a fixture `comoAdmin`
+    // quando `GET /users` deixou de devolver o bucket de sistema e passou a
+    // devolver SÓ a própria linha para quem não tem `users.read`. A sessão do
+    // harness é uma conta **sem perfil** e **soft-deleted** — ela se apaga ao
+    // nascer, em `semearELogar` — então o recorte devolve ZERO linhas e o
+    // vermelho era `element(s) not found`, que parece falha de tela.
+    //
+    // Um diretório é, por definição, a leitura de quem tem `users.read`;
+    // medir o diretário com quem não tem o direito mede o gate, não a tela. A
+    // evidência de que o gate é o comportamento novo e desejado está na API,
+    // em `08-ownership.e2e.spec.ts`.
+    void comoAdmin;
     // pt-BR: email por execução, nunca literal. `limparBase()` faz
     // soft-delete e o `email` continua `@unique` na linha apagada — um email
     // fixo reprova no segundo `--repeat-each`, longe do fluxo que este teste
@@ -34,16 +47,23 @@ test.describe('F1 — Listagem de usuários', () => {
 
     await irPara('/users');
 
-    await expect(page.getByText('2 usuários cadastrados')).toBeVisible();
-    await expect(itensDaLista(page)).toHaveCount(2);
+    // ⚠️ A contagem é 3, não 2, e a diferença é o instrumento: quem olha é a
+    // conta `e2e-admin`, e ela é uma linha em `users` como qualquer outra.
+    // Antes a sessão do harness era quem olhava e ela é soft-deleted desde que
+    // nasce (`semearELogar`), então nunca aparecia — o "2" era limpo por
+    // acidente. Ninguém vê um diretório sem estar nele: descontar o
+    // instrumento aqui é o que `dados.ts:371` faz na versão de API, com o mesmo
+    // motivo e o mesmo cuidado.
+    await expect(page.getByText('3 usuários cadastrados')).toBeVisible();
+    await expect(itensDaLista(page)).toHaveCount(3);
     // pt-BR (MEDIDO): o nome é um `<div class="font-medium…">`, não um
     // heading. A primeira versão deste arquivo afirmava
     // `getByRole('heading', {name})` e falhava com "element(s) not found" —
     // uma falha que parece "a lista não renderizou", e era o seletor.
     await expect(itensDaLista(page).getByText('Ana Verificacao Local')).toBeVisible();
     await expect(page.getByText(emailAna)).toBeVisible();
-    // pt-BR: `v1` aparece nos DOIS itens. Sem escopo, `getByText('v1')` casa
-    // dois elementos e o Playwright aborta por `strict mode violation` — que
+    // pt-BR: `v1` aparece em TODOS os itens. Sem escopo, `getByText('v1')` casa
+    // três elementos e o Playwright aborta por `strict mode violation` — que
     // parece falha de tela e é falha de seletor.
     await expect(itensDaLista(page).first().getByText('v1')).toBeVisible();
   });

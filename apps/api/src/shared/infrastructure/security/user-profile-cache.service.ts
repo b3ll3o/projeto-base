@@ -5,11 +5,25 @@
 // o cache é invalidado em TODA escrita (Profile.update, Authorization.
 // assign/revoke, User.atribuirPerfil), então 5s é teto de staleness
 // aceitável. Trocar para Redis mais tarde se o sistema virar multi-instância.
+//
+// pt-BR (Fase 3 — tenancy, 2026-10-16): a chave passou de `userId` para o
+// PAR `(tenantId, userId)`. Chavear só pelo usuário é **vazamento horizontal
+// de privilégio**: a mesma conta em duas empresas herdaria o perfil — e o
+// `isAdmin` — da empresa anterior por até 5s. `tenantId = null` (rota sem
+// `X-Tenant-Id`) é um bucket próprio, que resolve o perfil GLOBAL
+// (`users.profile_id`) e nunca o de uma empresa.
+//
+// ⚠️ Não confundir com deny-by-default: o bucket `null` NÃO é "sem
+// permissão" — o perfil global é onde mora o `isAdmin`. O que a chave por
+// tenant garante é que nenhuma empresa contamine a outra, não que sem header
+// ninguém tenha poder.
 
 import { Injectable } from '@nestjs/common';
 
 interface CacheEntry {
   expiresAt: number;
+  /** pt-BR: guardado para `invalidateUser` varrer por usuário sem fatiar a chave. */
+  userId: string;
   value: {
     profileId: string | null;
     profileSlug: string | null;
@@ -21,34 +35,95 @@ interface CacheEntry {
 
 const TTL_MS = 5_000;
 
+/**
+ * pt-BR: os dois lados são UUID em produção e `sem-tenant` quando ausente, e
+ * nenhum dos dois é controlado por quem escreve a chave — `::` não colide.
+ */
+function chaveDe(tenantId: string | null, userId: string): string {
+  return `${tenantId ?? 'sem-tenant'}::${userId}`;
+}
+
 @Injectable()
 export class UserProfileCacheService {
   readonly #store = new Map<string, CacheEntry>();
 
-  async getUserProfileAndPermissions(userId: string): Promise<CacheEntry['value'] | null> {
-    const entry = this.#store.get(userId);
+  async getUserProfileAndPermissions(
+    tenantId: string | null,
+    userId: string,
+  ): Promise<CacheEntry['value'] | null> {
+    const chave = chaveDe(tenantId, userId);
+    const entry = this.#store.get(chave);
     if (entry === undefined) {
       return null;
     }
     if (entry.expiresAt < Date.now()) {
-      this.#store.delete(userId);
+      this.#store.delete(chave);
       return null;
     }
     return entry.value;
   }
 
-  async setUserProfileAndPermissions(userId: string, value: CacheEntry['value']): Promise<void> {
-    this.#store.set(userId, {
+  async setUserProfileAndPermissions(
+    tenantId: string | null,
+    userId: string,
+    value: CacheEntry['value'],
+  ): Promise<void> {
+    this.varreExpiradas();
+    this.#store.set(chaveDe(tenantId, userId), {
       expiresAt: Date.now() + TTL_MS,
+      userId,
       value,
     });
   }
 
+  /**
+   * pt-BR (2026-10-17): o TTL era aplicado SÓ na leitura, e lá ele é um número
+   * comparado, não um evento — uma entrada escrita e nunca mais lida ficava no
+   * `Map` para sempre. O caminho que produz entradas que ninguém relê é o
+   * `GET /me/profile` com um `X-Tenant-Id` de empresa onde a pessoa não é
+   * membro: `extractTenantId` valida o FORMATO do uuid, não a existência da
+   * empresa, então cada tentativa vira uma chave nova e nenhuma volta a ser
+   * procurada. Sem varredura, o `Map` só cresce — e `invalidateUser` varre o
+   * `Map` inteiro a cada escrita de perfil, então os dois se reforçam.
+   *
+   * Varrer no `set`, e não num `setInterval`: é onde a entrada nasce, o custo é
+   * uma passagem por um `Map` que já está sendo alterado, e o processo não
+   * ganha uma tarefa de background para derrubar no shutdown.
+   */
+  varreExpiradas(): void {
+    const agora = Date.now();
+    for (const [chave, entry] of this.#store) {
+      if (entry.expiresAt < agora) {
+        this.#store.delete(chave);
+      }
+    }
+  }
+
+  /**
+   * pt-BR (Fase 3): apaga o usuário em **todas** as empresas, não só numa.
+   * Uma escrita de perfil numa empresa não deveria deixar a entrada da outra
+   * pendurada, e o caminho seguro (limpar a mais) custa uma varredura num Map
+   * pequeno em vez de acertar o tenant certo.
+   */
   async invalidateUser(userId: string): Promise<void> {
-    this.#store.delete(userId);
+    for (const [chave, entry] of this.#store) {
+      if (entry.userId === userId) {
+        this.#store.delete(chave);
+      }
+    }
   }
 
   async invalidateAll(): Promise<void> {
     this.#store.clear();
+  }
+
+  /**
+   * pt-BR: existe para o teste da varredura poder observar o `Map` SEM passar
+   * por `get` — que é justamente o caminho que já apaga a entrada expirada, e
+   * então medir por ele provaria que "a entrada sumiu", não que "a varredura
+   * pegou". Uma leitura que só o teste usa e que não mente sobre o estado.
+   */
+  tamanho(): number {
+    return this.#store.size;
   }
 }

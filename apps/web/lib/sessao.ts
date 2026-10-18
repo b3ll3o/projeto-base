@@ -37,6 +37,11 @@ import { redirect } from 'next/navigation';
 
 export const COOKIE_ACCESS = 'access_token';
 export const COOKIE_REFRESH = 'refresh_token';
+/** pt-BR (Fase 3): a empresa selecionada. NÃO é httpOnly — o id da empresa
+ *  não é segredo, e um cookie httpOnly obrigaria toda troca de empresa a
+ *  passar por Server Action. Sem token não há sessão, e o header só é lido
+ *  depois da autenticação. */
+export const COOKIE_TENANT = 'tenant_id';
 
 /**
  * Atributos do cookie de sessão.
@@ -87,6 +92,28 @@ export async function lerTokens(): Promise<Tokens> {
 }
 
 /**
+ * pt-BR (Fase 3 — tenancy, 2026-10-16): a empresa escolhida na sessão.
+ * Só pode GRAVAR de Server Action.
+ */
+export async function guardarTenant(tenantId: string): Promise<void> {
+  const store = await cookies();
+  store.set(COOKIE_TENANT, tenantId, {
+    sameSite: 'lax' as const,
+    path: '/',
+    secure: process.env.NODE_ENV === 'production',
+  });
+}
+
+/**
+ * pt-BR (Fase 3): a empresa escolhida. Ausente ou vazio → `null`, e o
+ * `ApiClient` OMITE o header — mandar string vazia seria 400 do outro lado.
+ */
+export async function lerTenant(): Promise<string | null> {
+  const store = await cookies();
+  return store.get(COOKIE_TENANT)?.value || null;
+}
+
+/**
  * Devolve o access token, ou manda a pessoa para o login.
  *
  * pt-BR: o token volta para que o chamador monte o `ApiClient` com
@@ -105,10 +132,19 @@ export async function exigirSessao(): Promise<string> {
   return accessToken;
 }
 
-/** Apaga os dois tokens. Só pode ser chamada de Server Action/Route Handler. */
+/**
+ * Apaga a sessão inteira: os dois tokens E a empresa escolhida.
+ * Só pode ser chamada de Server Action/Route Handler.
+ *
+ * pt-BR (Fase 3, achado da revisão): a empresa é estado de sessão, não
+ * preferência permanente. Deixá-la sobreviver ao logout faz o estado de
+ * empresa atravessar a fronteira de sessão — A escolhe ACME, sai, B entra no
+ * mesmo browser e sai declarando `X-Tenant-Id: ACME`.
+ */
 export async function limparSessao(): Promise<void> {
   const store = await cookies();
 
   store.delete(COOKIE_ACCESS);
   store.delete(COOKIE_REFRESH);
+  store.delete(COOKIE_TENANT);
 }

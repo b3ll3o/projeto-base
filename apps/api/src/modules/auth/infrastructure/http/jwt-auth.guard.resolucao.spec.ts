@@ -57,7 +57,7 @@ describe('JwtAuthGuard — resolução no grafo real do AuthModule (Fase 6.1)', 
     else process.env.JWT_SECRET = segredo;
   });
 
-  it('o container constrói o JwtAuthGuard com AS DUAS dependências definidas', async () => {
+  it('o container constrói o JwtAuthGuard com AS QUATRO dependências definidas', async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }), AuthModule],
     }).compile();
@@ -76,6 +76,12 @@ describe('JwtAuthGuard — resolução no grafo real do AuthModule (Fase 6.1)', 
     // pt-BR (#93.1 — RBAC, 2026-10-16): cache também precisa resolver
     // (a 3ª dependência do JwtAuthGuard).
     expect(guard['profileCache'], 'o cache de profile não resolveu').toBeDefined();
+    // pt-BR (PR #101, 2026-10-17): a 4ª dependência, e o motivo de ela estar
+    // aqui. Sem resolver, o sintoma é `Cannot read properties of undefined
+    // (reading 'findRole')` no PRIMEIRO request que manda `X-Tenant-Id` — o
+    // mesmo modo de falha invisível que o cabeçalho deste arquivo descreve.
+    expect(guard['memberships'], 'o repositório de membership não resolveu').toBeDefined();
+    expect(guard['memberships']).toHaveProperty('findRole');
 
     // E o método precisa existir de fato (a classe certa, não um stub).
     expect(typeof guard['canActivate']).toBe('function');

@@ -1,9 +1,9 @@
 ---
 name: review-routing
-version: 1.7
-updated: 2026-10-13
+version: 1.8
+updated: 2026-10-16
 maintainer: review-router
-description: "Matriz de roteamento de revisores consultada pelo review-router — v1.5 (audit specialists) + UX com skill de processo, v1.7."
+description: "Matriz de roteamento de revisores consultada pelo review-router — v1.5 (audit specialists) + UX e tenancy com skill de processo, v1.8."
 ---
 
 # Convenção: review-routing (matriz de roteamento de revisores)
@@ -30,6 +30,7 @@ declarado.
 | `release-versioning-specialist` | `release-versioning-audit` | `.agents/skills/release-versioning-audit/` |
 | `finding-orchestrator` | `findings-orchestration` | `.agents/skills/findings-orchestration/` |
 | `ux-design-specialist` | `ui-review` → `ui-modes` · `ui-craft` · `ui-break` · `motion` | `.agents/skills/ui-*/`, `.agents/skills/motion/` |
+| `multi-tenant-specialist` | `multi-tenant-audit` | `.agents/skills/multi-tenant-audit/` |
 
 **Regra:** a entrada na matriz e a skill correspondentes entram no **mesmo PR**.
 Um reviewer roteado sem skill é um opinionador com nome de especialista — foi
@@ -276,6 +277,7 @@ Resultado esperado:
 
 | Versão | Data | Mudança |
 |--------|------|---------|
+| 1.8 | 2026-10-16 | `multi-tenant-specialist` entra na §0 (reviewer→skill) carregando `multi-tenant-audit`. Fecha para tenancy a mesma lacuna que a v1.7 fechou para UX: reviewer roteado sem skill é opinionador com nome de especialista. Nenhum path_glob novo — a v1.6 do `specialist-routing` já roteia `**/*tenant*` e `**/*tenancy*`; o que faltava era o processo que ele executa. Aditivo. |
 | 1.7 | 2026-10-13 | UX/design ganha **processo**, não só reviewer: 5 skills (`ui-modes`, `ui-craft`, `ui-break`, `motion`, `ui-review`) em `.agents/skills/`, carregadas por `ux-design-specialist`. 2 diff_patterns novos — `outline-none`/`outline: none` e movimento (`transition`/`@keyframes`/`prefers-reduced-motion`/`transform: scale`). Nenhum path_glob novo: os globs de `apps/web/**` (v1.5) já roteavam para o specialist; o que faltava era o processo que ele executa. Aditivo. |
 | 1.6 | 2026-10-08 | Resolve conflito: mergeia v1.5 (mine, audit specialists diff_patterns) + v1.5 da main (ux-design-specialist). Mantém ambos. Aditivo. |
 | 1.5 | 2026-10-06 | Adicionar `ux-design-specialist` (UX/design de interface). 1 path_glob novo (`apps/web/app/globals.css`) + 1 diff_pattern novo. Aditivo. |

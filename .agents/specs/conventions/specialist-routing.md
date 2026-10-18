@@ -1,9 +1,9 @@
 ---
 name: specialist-routing
-version: 1.5
+version: 1.6
 updated: 2026-10-16
 maintainer: specialist-router
-description: "Matriz canônica de roteamento de demanda — mapeia paths/keywords/scopes para 26 specialists. Source of truth do classificador headless (tooling/scripts/specialist-router.ts) e do lint da matriz. Atualizada por PR."
+description: "Matriz canônica de roteamento de demanda — mapeia paths/keywords/scopes para 27 specialists. Source of truth do classificador headless (tooling/scripts/specialist-router.ts) e do lint da matriz. Atualizada por PR."
 ---
 
 # Convenção: specialist-routing
@@ -24,11 +24,9 @@ path_globs:
     specialists: [nestjs-specialist]
     stacks: [ddd-hexagonal]
     rationale: "Pureza DDD é crítica em domain/"
-
   - pattern: "apps/api/**/application/**"
     specialists: [nestjs-specialist]
     stacks: [ddd-hexagonal]
-
   - pattern: "apps/api/**/infrastructure/**"
     specialists: [nestjs-specialist]
 
@@ -43,11 +41,9 @@ path_globs:
   - pattern: "**/secrets/**"
     specialists: [security-auditor]
     rationale: "Secrets/credentials storage"
-
   - pattern: "**/.env*"
     specialists: [security-auditor]
     rationale: "Environment files (may contain secrets)"
-
   - pattern: "apps/web/**"
     specialists: [nextjs-specialist]
     rationale: "Frontend Next.js (app/, components/, lib/, styles/)"
@@ -66,11 +62,9 @@ path_globs:
 
   - pattern: "packages/**"
     specialists: [monorepo-specialist]
-
   - pattern: "pnpm-workspace.yaml"
     specialists: [monorepo-specialist]
     blocking: true
-
   - pattern: "turbo.json"
     specialists: [monorepo-specialist]
     blocking: true
@@ -92,11 +86,9 @@ path_globs:
   - pattern: "apps/web/**/instrumentation*"
     specialists: [telemetry-specialist]
     rationale: "Next.js OpenTelemetry instrumentation hook (instrumentation.ts / instrumentation-client.ts / instrumentation-node.ts / instrumentation.edge.ts)"
-
   - pattern: "apps/web/**/web-vitals*"
     specialists: [telemetry-specialist]
     rationale: "Browser Real User Monitoring (LCP, CLS, INP, FID, TTFB) via web-vitals reporter"
-
   - pattern: "infra/otelcol/**"
     specialists: [telemetry-specialist]
     rationale: "OpenTelemetry Collector config (receivers, processors, exporters, pipelines)"
@@ -126,6 +118,14 @@ path_globs:
   - pattern: ".github/workflows/release-template.yml"
     specialists: [release-versioning-specialist, monorepo-specialist]
 
+  # v1.6 — tenancy. NÃO duplica `apps/api/prisma/**` (schema é do prisma-db).
+  # MEDIDO 2026-10-17: só BASENAME, case-sensitive, e `tenancy` NÃO contém
+  # `tenant` — por isso 2 padrões; `[Tt]enant` vira literal. Detalhe: historico.
+  - pattern: "**/*tenant*"
+    specialists: [multi-tenant-specialist]
+    rationale: "Tenant, TenantMembership, filtro por tenant_id, RLS — o domínio de tenancy, não o de schema"
+  - pattern: "**/*tenancy*"
+    specialists: [multi-tenant-specialist]
   - pattern: ".github/workflows/**"
     specialists: [monorepo-specialist, security-auditor]
   - pattern: "**/.agents/**"
@@ -196,6 +196,8 @@ demand_keywords:
     specialists: [refactorer]
   - regex: "(?i)\\bprisma\\b|schema\\.prisma|\\bmigrations?\\b|query lente|n\\+\\+1|índices?"
     specialists: [prisma-db-specialist]
+  - regex: "(?i)multi.?tenant|tenant_?id|\\btenants?\\b|\\bmembership\\b|isolamento entre (empresas|tenants)|row level security|\\brls\\b"
+    specialists: [multi-tenant-specialist]
   - regex: "(?i)openapi|swagger|contrato (http|api)|endpoint (sem|com) docs"
     specialists: [openapi-contract-specialist]
   - regex: "(?i)\\bprod.?readiness|hardening|cap_drop|non-root|healthcheck|imagem.*pinar"
@@ -267,12 +269,11 @@ always_on:
 
 ## 5. EXEMPLOS
 
-> Veja [specialist-routing-examples.md](./specialist-routing-examples.md)
-> para os 3 cenários E2E (D: docker+monorepo, E: security+test,
-> F: refactor simples) com demands, paths, scopes, expected output
-> e justificativas.
-
-> **Histórico de gaps conhecidos (v1.0)** migrado para o apêndice
+> [specialist-routing-examples.md](./specialist-routing-examples.md) traz os 3
+> cenários E2E (D: docker+monorepo, E: security+test, F: refactor simples) com
+> demands, paths, scopes, expected output e justificativas.
+>
+> O **histórico de gaps conhecidos (v1.0)** foi migrado para
 > [`specialist-routing-gaps-v1.0.md`](./specialist-routing-gaps-v1.0.md)
 > (apenas leitura) para preservar o limite de 300 linhas deste spec.
 
@@ -295,6 +296,5 @@ derived_tags:
 
 ## 7. Histórico de Versões
 
-> Histórico completo migrado para
-> [`specialist-routing-historico.md`](./specialist-routing-historico.md)
-> (apenas leitura) para preservar o limite de 300 linhas deste spec.
+> Completo em [`specialist-routing-historico.md`](./specialist-routing-historico.md)
+> (apenas leitura), para preservar o limite de 300 linhas deste spec.
