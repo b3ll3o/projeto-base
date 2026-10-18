@@ -99,89 +99,121 @@ fazê-lo às cegas seria fabricar 39 linhas `citada` sem âncora verificada.
 
 ## Tabela
 
+### Por que 78 linhas viraram `removida` em 2026-10-18
+
+Não são 78 decisões de triagem. As **78 memórias evaporaram do disco**, e o
+ledger passou a apontar para arquivos que ninguém mais tem.
+
+MEDIDO 2026-10-18, contra o que a própria §"Por que 78 linhas e não 81" mediu em
+2026-10-16:
+
+```bash
+ls -1 "$MEMORY_DIR"/*.md | wc -l          # 121 em 2026-10-16  →  2 hoje
+find /root/.claude /root/projeto-base/.agents -name '*absent-tool-reads-as-approval*'
+                                            # sem resultado: não foi movido de lugar
+```
+
+Não há backup, nem cópia em outro diretório de memória, nem arquivo com o slug.
+Apareceram `b3-fix-cron-pnpm-engine-precheck-result.md` (2026-10-13) e
+`t7-rbac-feature-flag.md` (2026-10-16) — as duas mais recentes do corpus antigo —
+e as anteriores sumiram. `t7-rbac-feature-flag` é a única que o gate ainda mede,
+porque é `type: reference`, uma das três categorias isentas.
+
+As linhas viraram `removida:` mantendo **alvo e âncora**. A disposição é a
+tombstone que a coluna `removida` do próprio ledger descreve como "permite ao
+corpus encolher"; o que a coluna guarda não é a memória, é a procedência da
+decisão. Uma linha `citada` que aponta para `.agents/specs/conventions/…` continua
+descrevendo uma citação **real** num arquivo versionado — a regra sobreviveu, foi
+o rascunho que evaporou — e por isso `alvo` e `âncora` foram preservados verbatim
+para que o destino possa ser reconstruído.
+
+**O que isto não é:** não é revisão das 78 regras. Nenhuma delas foi lida — não
+existem mais. Reconstatar a regra a partir da âncora verbatim é trabalho
+separado, e o gate que velaria aqui é o de cristalização, não o deste arquivo.
+
 | memória | disposição | alvo | âncora |
 |---|---|---|---|
 | `t7-rbac-feature-flag` | `removida` | memória ausente do corpus local; a âncora `listAllPermissions` existe em `apps/api/src/shared/auth/permissions-catalog.ts` | — |
-| `absent-tool-reads-as-approval` | `citada` | `.agents/runs/2026-10-05-guard-classes-autoauditoria.md` | `não há sintoma nenhum` |
-| `a-detector-that-fabricates-its-finding` | `pendente` | — | — |
-| `agent-evolution-and-memory` | `citada` | `.agents/specs/conventions/evolucao-agents.md` | `Agents e skills são entidades VIVAS` |
-| `artefato-publicado-nao-nomeia-o-segredo` | `pendente` | — | — |
-| `ambiguous-sentinel-silently-skips` | `citada` | `.agents/specs/conventions/guard-classes.md` | `devolvia` |
-| `b24-telemetry-progress` | `recusada` | registro de campanha; o plano de telemetria que ele resume já é versionado | — |
-| `b31-parser-vs-ground-truth-analysis` | `citada` | `docs/superpowers/specs/2026-09-25-b35-parser-regen-analysis.md` | `confirma o veredito de B31` |
-| `check-verifies-path-then-delegates-elsewhere` | `pendente` | — | — |
-| `class-7-needs-a-commit-not-a-month` | `citada` | `.agents/specs/conventions/guard-classes.md` | `re-meça pelo comando de` |
-| `classify-by-executability-not-count` | `pendente` | — | — |
-| `commit-message-via-file-not-heredoc` | `pendente` | — | — |
-| `conteudo-exclusivo-de-branch-defeito-ja-corrigido` | `pendente` | — | — |
-| `correction-of-one-instance-closes-the-class` | `pendente` | — | — |
-| `cost-must-reconcile-with-the-whole` | `citada` | `.agents/specs/conventions/ci-defense-in-depth.md` | `é uma história` |
-| `criterion-inert-on-empty-set` | `citada` | `.agents/specs/conventions/retrospective-capture.md` | `um critério escrito como` |
-| `failed-commit-leaks-staged-files-into-next-commit` | `pendente` | — | — |
-| `fase-7-http-state` | `recusada` | checkpoint de campanha de 2026-09-22; envelheceu e não é instrução | — |
-| `gate-blind-to-uncommitted-work` | `citada` | `.agents/workflows/pr-refresh.md` | `não existe` |
-| `gate-compares-against-its-own-filter` | `pendente` | — | — |
-| `gate-must-not-depend-on-machine-ambient-state` | `pendente` | — | — |
-| `gate-that-prescribes-the-wrong-remedy` | `pendente` | — | — |
-| `gate-without-cli-block-runs-as-noop` | `pendente` | — | — |
-| `gauge-measures-a-different-object` | `pendente` | — | — |
-| `gh-api-F-vs-f-for-file-body` | `citada` | `.agents/workflows/pr-refresh.md` | `conteúdo como valor literal` |
+| `absent-tool-reads-as-approval` | `removida` | `.agents/runs/2026-10-05-guard-classes-autoauditoria.md` | `não há sintoma nenhum` |
+| `a-detector-that-fabricates-its-finding` | `removida` | — | — |
+| `agent-evolution-and-memory` | `removida` | `.agents/specs/conventions/evolucao-agents.md` | `Agents e skills são entidades VIVAS` |
+| `artefato-publicado-nao-nomeia-o-segredo` | `removida` | — | — |
+| `ambiguous-sentinel-silently-skips` | `removida` | `.agents/specs/conventions/guard-classes.md` | `devolvia` |
+| `b24-telemetry-progress` | `removida` | registro de campanha; o plano de telemetria que ele resume já é versionado | — |
+| `b31-parser-vs-ground-truth-analysis` | `removida` | `docs/superpowers/specs/2026-09-25-b35-parser-regen-analysis.md` | `confirma o veredito de B31` |
+| `check-verifies-path-then-delegates-elsewhere` | `removida` | — | — |
+| `class-7-needs-a-commit-not-a-month` | `removida` | `.agents/specs/conventions/guard-classes.md` | `re-meça pelo comando de` |
+| `classify-by-executability-not-count` | `removida` | — | — |
+| `commit-message-via-file-not-heredoc` | `removida` | — | — |
+| `conteudo-exclusivo-de-branch-defeito-ja-corrigido` | `removida` | — | — |
+| `correction-of-one-instance-closes-the-class` | `removida` | — | — |
+| `cost-must-reconcile-with-the-whole` | `removida` | `.agents/specs/conventions/ci-defense-in-depth.md` | `é uma história` |
+| `criterion-inert-on-empty-set` | `removida` | `.agents/specs/conventions/retrospective-capture.md` | `um critério escrito como` |
+| `failed-commit-leaks-staged-files-into-next-commit` | `removida` | — | — |
+| `fase-7-http-state` | `removida` | checkpoint de campanha de 2026-09-22; envelheceu e não é instrução | — |
+| `gate-blind-to-uncommitted-work` | `removida` | `.agents/workflows/pr-refresh.md` | `não existe` |
+| `gate-compares-against-its-own-filter` | `removida` | — | — |
+| `gate-must-not-depend-on-machine-ambient-state` | `removida` | — | — |
+| `gate-that-prescribes-the-wrong-remedy` | `removida` | — | — |
+| `gate-without-cli-block-runs-as-noop` | `removida` | — | — |
+| `gauge-measures-a-different-object` | `removida` | — | — |
+| `gh-api-F-vs-f-for-file-body` | `removida` | memória evaporou do disco em 2026-10-18; a âncora `conteúdo como valor literal` continua verbatim em `.agents/workflows/pr-refresh.md` | `conteúdo como valor literal` |
 | `git-cherry-blind-to-squash-merge` | `removida` | absorvida por `git-workflow-apendice.md` §Caso 1; a metade que a memória manda seguir está **proibida por nome** lá | — |
-| `git-commit-amend-danger` | `pendente` | — | — |
-| `git-fixture-that-collapses-into-one-object` | `pendente` | — | — |
-| `git-log-is-a-stack-not-a-queue` | `pendente` | — | — |
-| `glob-in-block-comment-closes-it` | `pendente` | — | — |
-| `green-local-red-ci-is-ambient-config` | `citada` | `.agents/runs/state-snapshot-20261014T003513Z.md` | `vermelho no CI = os dois mediram objetos diferentes` |
-| `guard-class-absent-from-data` | `citada` | `.agents/specs/conventions/guard-classes.md` | `Classe ausente do dado` |
-| `guard-must-cover-common-form-not-rare` | `citada` | `.agents/specs/conventions/guard-classes.md` | `a forma comum esquecida tem de vir do` |
-| `guard-that-can-never-fire` | `citada` | `.agents/specs/conventions/guard-classes.md` | `condição inalcançável` |
-| `guard-that-fires-on-itself` | `citada` | `.agents/specs/conventions/guard-classes.md` | `Dispara em si mesmo` |
-| `infra-de-teste-contamina-o-gate-de-cobertura` | `pendente` | — | — |
-| `main-branch-protection-pr-only` | `citada` | `.agents/specs/conventions/git-workflow.md` | `Regra Inegociável` |
-| `mandatory-tdd-rule` | `citada` | `.agents/specs/conventions/tdd.md` | `DEVEM seguir o ciclo TDD canônico` |
-| `md-file-size-and-revision-rules` | `citada` | `.agents/specs/conventions/tamanho-e-revisao.md` | `300 linhas` |
-| `measured-live-claim-requires-command` | `citada` | `.agents/specs/conventions/guard-classes.md` | `do que o número afirma` |
-| `minha-prosa-pt-br-vaza-caractere-cjk` | `citada` | `.agents/specs/conventions/idioma.md` | `Varrer antes de commitar` |
-| `mirror-tree-tests-a-script-that-has-no-seam` | `pendente` | — | — |
-| `mutation-can-fail-for-the-wrong-reason` | `pendente` | — | — |
-| `mutation-that-doesnt-land-looks-green` | `pendente` | — | — |
-| `non-fast-forward-is-not-divergent-work` | `pendente` | — | — |
-| `origin-session-id-nested-under-metadata` | `citada` | `.tooling/scripts/ci/check-memory-crystallization.ts` | `devolve 0 SEM AVISO (exit 1)` |
-| `patch-medido-so-no-caminho-do-defeito` | `pendente` | — | — |
-| `pipe-stdout-dies-when-spawner-exits` | `pendente` | — | — |
-| `positive-test-must-assert-skip-state` | `citada` | `docs/fluxo-desenvolvimento.md` | `não havia nada para verificar` |
+| `git-commit-amend-danger` | `removida` | — | — |
+| `git-fixture-that-collapses-into-one-object` | `removida` | — | — |
+| `git-log-is-a-stack-not-a-queue` | `removida` | — | — |
+| `glob-in-block-comment-closes-it` | `removida` | — | — |
+| `green-local-red-ci-is-ambient-config` | `removida` | `.agents/runs/state-snapshot-20261014T003513Z.md` | `vermelho no CI = os dois mediram objetos diferentes` |
+| `guard-class-absent-from-data` | `removida` | `.agents/specs/conventions/guard-classes.md` | `Classe ausente do dado` |
+| `guard-must-cover-common-form-not-rare` | `removida` | `.agents/specs/conventions/guard-classes.md` | `a forma comum esquecida tem de vir do` |
+| `guard-that-can-never-fire` | `removida` | `.agents/specs/conventions/guard-classes.md` | `condição inalcançável` |
+| `guard-that-fires-on-itself` | `removida` | `.agents/specs/conventions/guard-classes.md` | `Dispara em si mesmo` |
+| `infra-de-teste-contamina-o-gate-de-cobertura` | `removida` | — | — |
+| `main-branch-protection-pr-only` | `removida` | `.agents/specs/conventions/git-workflow.md` | `Regra Inegociável` |
+| `mandatory-tdd-rule` | `removida` | `.agents/specs/conventions/tdd.md` | `DEVEM seguir o ciclo TDD canônico` |
+| `md-file-size-and-revision-rules` | `removida` | `.agents/specs/conventions/tamanho-e-revisao.md` | `300 linhas` |
+| `measured-live-claim-requires-command` | `removida` | `.agents/specs/conventions/guard-classes.md` | `do que o número afirma` |
+| `minha-prosa-pt-br-vaza-caractere-cjk` | `removida` | `.agents/specs/conventions/idioma.md` | `Varrer antes de commitar` |
+| `mirror-tree-tests-a-script-that-has-no-seam` | `removida` | — | — |
+| `mutation-can-fail-for-the-wrong-reason` | `removida` | — | — |
+| `mutation-that-doesnt-land-looks-green` | `removida` | — | — |
+| `non-fast-forward-is-not-divergent-work` | `removida` | — | — |
+| `origin-session-id-nested-under-metadata` | `removida` | `.tooling/scripts/ci/check-memory-crystallization.ts` | `devolve 0 SEM AVISO (exit 1)` |
+| `patch-medido-so-no-caminho-do-defeito` | `removida` | — | — |
+| `pipe-stdout-dies-when-spawner-exits` | `removida` | — | — |
+| `positive-test-must-assert-skip-state` | `removida` | `docs/fluxo-desenvolvimento.md` | `não havia nada para verificar` |
 | `post-task-retrospective-plan` | `removida` | os 3 artefatos que ela planejava já existem; mantê-la os lista como "a criar" | — |
-| `pr-body-gate-only-fires-at-push-time` | `citada` | `.github/workflows/ci.yml` | `um RE-RUN entrega o corpo` |
-| `pr-body-has-no-base-directory` | `pendente` | — | — |
-| `prefer-agents-directory` | `citada` | `AGENTS.md` | `Modelo-agnóstico` |
-| `prefer-parallel-subagents-when-possible` | `citada` | `.agents/agents/specialist-router.md` | `paralelizar sempre que possível` |
-| `prettier-check-must-run-in-place` | `pendente` | — | — |
-| `pr-refresh-scan-is-context-blind` | `pendente` | — | — |
-| `pt-br-default-language` | `citada` | `.agents/specs/conventions/idioma.md` | `idioma padrão e obrigatório` |
-| `rebase-ages-the-commit-message-too` | `pendente` | — | — |
-| `rebase-skip-descarta-o-commit-inteiro` | `pendente` | — | — |
-| `red-gate-hides-the-queue` | `pendente` | — | — |
-| `review-and-fix-after-each-task` | `citada` | `.agents/skills/review-routing/SKILL.md` | `Avançar com BLOCKING não tratado` |
-| `reviewer-must-differ-from-implementer` | `citada` | `.agents/agents/review-router.md` | `Sempre fresh` |
-| `reviewer-reads-shape-not-system-semantics` | `pendente` | — | — |
-| `review-router-rollout-state` | `recusada` | progresso de campanha encerrada (13 PRs merged, métricas de 2026-09-22) | — |
-| `spec-que-so-verifica-render-nao-tem-dente` | `citada` | `.agents/specs/conventions/e2e-playwright.md` | `verde por construção` |
-| `spec-verde-com-tsc-vermelho` | `pendente` | — | — |
-| `state-that-lives-outside-the-repo-has-no-gate` | `citada` | `.agents/workflows/pr-refresh.md` | `verde por omissão` |
-| `subagent-driven-development-always` | `citada` | `AGENTS.md` | `Coordenação obrigatória` |
-| `one-boolean-state-is-two-states` | `pendente` | — | — |
-| `subagent-write-truncation-limit` | `pendente` | — | — |
-| `uniform-validator-beats-self-reports` | `pendente` | — | — |
-| `test-the-field-the-eye-reads-not-the-field-it-parses` | `pendente` | — | — |
-| `tool-reports-success-while-corrupting` | `citada` | `.agents/specs/conventions/guard-classes.md` | `Ferramenta reporta sucesso corrompendo` |
-| `tsx-esbuild-does-not-emit-di-metadata` | `citada` | `.agents/memory/nestjs-specialist.md` | `design:paramtypes` |
-| `two-stage-review-after-each-task` | `citada` | `.agents/skills/review-routing/SKILL.md` | `Avançar com BLOCKING não tratado` |
-| `verify-before-the-action-that-invalidates-it` | `citada` | `.agents/specs/conventions/git-workflow.md` | `verificar na posição errada` |
-| `verify-branch-before-commit` | `citada` | `.agents/specs/conventions/git-workflow.md` | `git branch --show-current` |
-| `verify-check-against-reconstructed-state` | `citada` | `.agents/specs/conventions/ci-defense-in-depth-dentes.md` | `Verde não é prova` |
-| `vi-mock-factory-cache-frozen-counter` | `pendente` | — | — |
-| `vitest-workspace-thresholds-and-dist-remap` | `citada` | `.agents/specs/conventions/cobertura-testes.md` | `config raiz` |
-| `zero-survived-is-not-zero-found` | `pendente` | — | — |
+| `pr-body-gate-only-fires-at-push-time` | `removida` | `.github/workflows/ci.yml` | `um RE-RUN entrega o corpo` |
+| `pr-body-has-no-base-directory` | `removida` | — | — |
+| `prefer-agents-directory` | `removida` | `AGENTS.md` | `Modelo-agnóstico` |
+| `prefer-parallel-subagents-when-possible` | `removida` | `.agents/agents/specialist-router.md` | `paralelizar sempre que possível` |
+| `prettier-check-must-run-in-place` | `removida` | — | — |
+| `pr-refresh-scan-is-context-blind` | `removida` | — | — |
+| `pt-br-default-language` | `removida` | `.agents/specs/conventions/idioma.md` | `idioma padrão e obrigatório` |
+| `rebase-ages-the-commit-message-too` | `removida` | — | — |
+| `rebase-skip-descarta-o-commit-inteiro` | `removida` | — | — |
+| `red-gate-hides-the-queue` | `removida` | — | — |
+| `review-and-fix-after-each-task` | `removida` | `.agents/skills/review-routing/SKILL.md` | `Avançar com BLOCKING não tratado` |
+| `reviewer-must-differ-from-implementer` | `removida` | `.agents/agents/review-router.md` | `Sempre fresh` |
+| `reviewer-reads-shape-not-system-semantics` | `removida` | — | — |
+| `review-router-rollout-state` | `removida` | progresso de campanha encerrada (13 PRs merged, métricas de 2026-09-22) | — |
+| `spec-que-so-verifica-render-nao-tem-dente` | `removida` | `.agents/specs/conventions/e2e-playwright.md` | `verde por construção` |
+| `spec-verde-com-tsc-vermelho` | `removida` | — | — |
+| `state-that-lives-outside-the-repo-has-no-gate` | `removida` | `.agents/workflows/pr-refresh.md` | `verde por omissão` |
+| `subagent-driven-development-always` | `removida` | `AGENTS.md` | `Coordenação obrigatória` |
+| `one-boolean-state-is-two-states` | `removida` | — | — |
+| `subagent-write-truncation-limit` | `removida` | — | — |
+| `uniform-validator-beats-self-reports` | `removida` | — | — |
+| `test-the-field-the-eye-reads-not-the-field-it-parses` | `removida` | — | — |
+| `tool-reports-success-while-corrupting` | `removida` | `.agents/specs/conventions/guard-classes.md` | `Ferramenta reporta sucesso corrompendo` |
+| `tsx-esbuild-does-not-emit-di-metadata` | `removida` | `.agents/memory/nestjs-specialist.md` | `design:paramtypes` |
+| `two-stage-review-after-each-task` | `removida` | `.agents/skills/review-routing/SKILL.md` | `Avançar com BLOCKING não tratado` |
+| `verify-before-the-action-that-invalidates-it` | `removida` | `.agents/specs/conventions/git-workflow.md` | `verificar na posição errada` |
+| `verify-branch-before-commit` | `removida` | `.agents/specs/conventions/git-workflow.md` | `git branch --show-current` |
+| `verify-check-against-reconstructed-state` | `removida` | `.agents/specs/conventions/ci-defense-in-depth-dentes.md` | `Verde não é prova` |
+| `vi-mock-factory-cache-frozen-counter` | `removida` | — | — |
+| `vitest-workspace-thresholds-and-dist-remap` | `removida` | `.agents/specs/conventions/cobertura-testes.md` | `config raiz` |
+| `zero-survived-is-not-zero-found` | `removida` | — | — |
 
 ## O que a tabela diz
 
