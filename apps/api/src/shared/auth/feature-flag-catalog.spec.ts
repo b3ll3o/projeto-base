@@ -47,8 +47,18 @@ describe('feature-flag-catalog', () => {
   });
 
   it('não devolve o array interno (mutação do consumidor não vaza)', () => {
+    // ⚠️ O esperado é uma CONSTANTE LITERAL, não `FEATURE_FLAGS.length`.
+    // MEDIDO 2026-10-18: com `toHaveLength(FEATURE_FLAGS.length)`, tirar a cópia
+    // rasa (`return [...FEATURE_FLAGS]` → `return FEATURE_FLAGS`) deixava os 4
+    // testes verdes — a comparação era do array contra ele mesmo, e o `.pop()`
+    // já tinha mudado os dois lados. A propriedade declarada aqui é "o
+    // consumidor não altera o catálogo do processo"; ela só tem dente se o
+    // lado esperado não puder ser infectado pela mutação.
+    const esperado = 1;
+
     const a = listAllFeatureFlags();
     a.pop();
-    expect(listAllFeatureFlags()).toHaveLength(FEATURE_FLAGS.length);
+
+    expect(listAllFeatureFlags()).toHaveLength(esperado);
   });
 });

@@ -28,14 +28,26 @@ export interface FeatureFlagDefinicao {
   readonly descricao: string;
 }
 
-export const FEATURE_FLAGS: readonly FeatureFlagDefinicao[] = [
+export const FEATURE_FLAGS = [
   {
     chave: 'tenancy.invites',
     descricao: 'Convite de usuário para uma empresa (POST /tenants/:id/invitations).',
   },
 ] as const;
 
-export type FeatureFlagKey = 'tenancy.invites';
+/**
+ * Derivado do array, nunca escrito à mão — é o mesmo acordo de
+ * `permissions-catalog.ts:42` (`(typeof PERMISSIONS)[number]`).
+ *
+ * MEDIDO 2026-10-18 (revisão da Fase 0): com o union escrito à mão ao lado do
+ * array, os dois divergiam em silêncio. `'tenancy.exports'` adicionado só ao
+ * union compilava (`tsc` exit 0), passava o spec do catálogo (4/4 verdes) e
+ * `isFeatureFlagKey('tenancy.exports')` devolvia `false` em runtime — o
+ * compilador aceitando exatamente o que o programa rejeita. A anotação
+ * `readonly FeatureFlagDefinicao[]` no array era o que permitia: ela alarga
+ * `chave` para `string`, e o `as const` abaixo não tinha sobre o que agir.
+ */
+export type FeatureFlagKey = (typeof FEATURE_FLAGS)[number]['chave'];
 
 /** Type guard: a string é uma chave de flag catalogada? */
 export function isFeatureFlagKey(value: string): value is FeatureFlagKey {
