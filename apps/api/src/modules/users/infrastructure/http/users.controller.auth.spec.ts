@@ -36,6 +36,7 @@ import { trace } from '@opentelemetry/api';
 import { UsersController } from './users.controller.js';
 import { UserUseCases, USER_USE_CASES } from '../../application/user-use-cases.js';
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
+import { UserProfileUseCases } from '../../../profiles/application/profiles.use-cases.js';
 import { UserProfileCacheService } from '../../../../shared/infrastructure/security/user-profile-cache.service.js';
 import {
   TOKEN_ISSUER_PORT,
@@ -93,6 +94,24 @@ function makeUseCases() {
 function makeAudit() {
   return { listHistory: vi.fn(async () => ({ entries: [], nextCursor: null })) };
 }
+
+// pt-BR (Fase 10+ — RLS, 2026-10-17): `GET /users` passou a trazer
+// `@UseGuards(PermissionsGuard)` + `@RequirePermission('users.read')`, e o
+// guard injeta `UserProfileUseCases` no índice [1]. Sem este provider o
+// TestingModule NÃO SOBE — e o sintoma (15 vermelhos, todos com
+// `await app.close()` no `afterEach`) não aponta para "falta uma dependência":
+// aponta para o teardown.
+//
+// A concessão abaixo é o que mantém ESTE arquivo medindo AUTENTICAÇÃO. Sem
+// `users.read`, o `GET /users` COM token viraria 403 e a afirmação "200 COM
+// token" passaria a medir autorização — que é o outro arquivo. Onde a
+// AUSÊNCIA da permissão é o que está sob medida é o e2e
+// `08-ownership.e2e.spec.ts`, com perfil sem a chave.
+const PROFILE_USE_CASES_STUB = {
+  async obterMeuPerfil() {
+    return { isAdmin: false, permissions: ['users.read'] };
+  },
+} as unknown as UserProfileUseCases;
 
 // pt-BR (#93.1 — RBAC, 2026-10-16): stub do cache usado em todos os
 // TestingModule deste arquivo. A 3ª dependência do JwtAuthGuard.
@@ -158,6 +177,7 @@ describe('UsersController — fronteira HTTP de autenticação', () => {
       providers: [
         { provide: USER_USE_CASES, useValue: useCases },
         { provide: AUDIT_SERVICE_PORT, useValue: makeAudit() },
+        { provide: UserProfileUseCases, useValue: PROFILE_USE_CASES_STUB },
         { provide: TOKEN_ISSUER_PORT, useValue: issuer },
         JwtAuthGuard,
         {
@@ -299,6 +319,7 @@ describe('UsersController — fronteira HTTP de autenticação', () => {
       providers: [
         { provide: USER_USE_CASES, useValue: makeUseCases() },
         { provide: AUDIT_SERVICE_PORT, useValue: makeAudit() },
+        { provide: UserProfileUseCases, useValue: PROFILE_USE_CASES_STUB },
         { provide: TOKEN_ISSUER_PORT, useValue: sabota },
         JwtAuthGuard,
         { provide: UserProfileCacheService, useValue: CACHE_STUB },
@@ -357,6 +378,7 @@ describe('UsersController — o carve-out público sobrevive ao OpenAPI', () => 
       providers: [
         { provide: USER_USE_CASES, useValue: makeUseCases() },
         { provide: AUDIT_SERVICE_PORT, useValue: makeAudit() },
+        { provide: UserProfileUseCases, useValue: PROFILE_USE_CASES_STUB },
         { provide: TOKEN_ISSUER_PORT, useValue: makeIssuer() },
         JwtAuthGuard,
         { provide: UserProfileCacheService, useValue: CACHE_STUB },
@@ -427,7 +449,11 @@ describe('UsersController.buildContext — actorId vem do sub do token', () => {
 
   beforeEach(() => {
     useCases = makeUseCases();
-    ctrl = new UsersController(useCases as unknown as UserUseCases, makeAudit() as never);
+    ctrl = new UsersController(
+      useCases as unknown as UserUseCases,
+      makeAudit() as never,
+      {} as never,
+    );
   });
 
   function actorIdDeCreate(request?: unknown): string | null {

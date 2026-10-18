@@ -44,6 +44,7 @@ import { trace, context } from '@opentelemetry/api';
 import { randomUUID } from 'node:crypto';
 
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
+import { UserProfileUseCases } from '../../../profiles/application/profiles.use-cases.js';
 import { Public } from '../../../auth/infrastructure/http/public.decorator.js';
 import type { TokenSubject } from '../../../auth/domain/ports/token-issuer.port.js';
 
@@ -114,6 +115,11 @@ export class UsersController {
   constructor(
     @Inject(USER_USE_CASES) private readonly userUseCases: UserUseCases,
     @Inject(AUDIT_SERVICE_PORT) private readonly auditService: AuditServicePort,
+    // pt-BR (2026-10-17): `GET /users` hidrata o perfil para decidir o
+    // recorte. Provider do `ProfilesModule`, que `UsersModule` importa.
+    // `@Inject` explícito pela mesma razão do `Reflector` no `PermissionsGuard`:
+    // `tsx`/esbuild não emite `design:paramtypes`.
+    @Inject(UserProfileUseCases) private readonly profiles: UserProfileUseCases,
   ) {}
 
   // ───────────────────────── POST /users ─────────────────────────
@@ -152,6 +158,37 @@ export class UsersController {
   }
 
   // ───────────────────────── GET /users ──────────────────────────
+  //
+  // ⚠️ A rota NÃO tem `@RequirePermission` — o gate mora em `list()`, abaixo, e
+  // isso é deliberado. O decorator deny-first matava o produto: a conta
+  // recém-cadastrada não tem empresa e não tem perfil, então recebia 403, e
+  // `f2-cadastro-sucesso` (que afirma que ela aparece na lista, no browser)
+  // ficava VERMELHO com 2 falhas de "element(s) not found". MEDIDO 2026-10-17.
+  //
+  // O que o furo É: `empresaDoAtor` devolve `null` sem `X-Tenant-Id`, e
+  // `escopoDoTenant(null)` é `'*'` — bucket de SISTEMA. Em `'*'`,
+  // `usuario_no_escopo` satisfaz a PRIMEIRA cláusula do `OR` e a listagem
+  // devolvia a base INTEIRA, atravessando empresas. `POST /users` é `@Public()`,
+  // então criar conta e enumerar levava duas chamadas.
+  //
+  // O que o furo NÃO é: credencial. Um comentário anterior (deste arquivo) e o
+  // comentário do revisor no PR afirmavam que a conta voltava "INTEIRA,
+  // `password_hash` incluído". É FALSO: `UserOutput`
+  // (application/dto/user.output.ts) é um literal de chaves fixas — `id, nome,
+  // email, profileId, createdAt, updatedAt, version, deletedAt, isDeleted` — e
+  // `user.output.spec.ts:55` afirma a ausência de `passwordHash`. O hash entra
+  // no agregado do repositório (`findMany` sem `select`) e SAI no DTO. O que
+  // vazava era IDENTIFICAÇÃO cross-tenant: nome, e-mail, `profileId` e
+  // timestamps de toda a base.
+  //
+  // ⚠️ A HIDRATAÇÃO É FEITA AQUI, e não pelo `PermissionsGuard`, e é o ponto
+  // mais frágil desta rota. O guard retorna ANTES de hidratar quando não há
+  // `@RequirePermission` (permissions.guard.ts:58-60), e o `JwtAuthGuard` só lê
+  // um cache que o `GET /me/profile` produz. Sem a chamada abaixo, um cliente
+  // que chama a API direto — curl, e2e, outro app — leria cache frio e o
+  // `isAdmin` viraria `false` para o ADMIN, que perderia o bypass. Fail-open
+  // por omissão de um `await` é exatamente a classe de bug que o guard foi
+  // escrito para matar (o comentário dele mede exatamente esse incidente).
   @Get()
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Listar usuários (paginado por cursor)' })
@@ -170,18 +207,27 @@ export class UsersController {
     @Query('limit') limit = '20',
     @Query('includeDeleted') includeDeleted?: string,
   ): Promise<unknown> {
+    const empresa = empresaDoAtor(request);
+    // Read-through: quando o cache está quente é um Map lookup, quando frio são
+    // 2 queries que preenchem o cache. O `obterMeuPerfil` NUNCA lança aqui —
+    // para conta sem perfil ele devolve o "denied" (perfil nulo, zero
+    // permissões), que é o ramo que interessa a esta rota.
+    const perfil = await this.profiles.obterMeuPerfil(request?.user?.sub ?? '', empresa);
+    // ⚠️ A ordem das condições importa e não é estética. O recorte SÓ vale
+    // quando NÃO há empresa (bucket `'*'`, o furo) e o ator NÃO é admin global
+    // e NÃO tem `users.read`. Sob escopo de empresa a RLS já devolve só os
+    // membros, e um membro da ACME com `users.read` precisa ver o diretório da
+    // ACME — não a si mesmo.
+    const semDireito = perfil.isAdmin !== true && !perfil.permissions.includes('users.read');
     const input: ListUsersInput = {
       cursor: cursor ?? null,
       limit: Number(limit),
       // pt-BR: normaliza case (clients podem mandar 'True'/'TRUE'/'1') +
       // aceita os dois valores truthy canônicos ('true' e '1').
       includeDeleted: includeDeleted?.toLowerCase() === 'true' || includeDeleted === '1',
+      somenteUsuarioId: empresa === null && semDireito ? (request?.user?.sub ?? null) : null,
     };
-    // ⚠️ MUDANÇA DE COMPORTAMENTO (Fase 10): com `X-Tenant-Id`, a listagem
-    // passa a devolver SÓ os membros da empresa. Antes devolvia a conta toda
-    // do sistema para qualquer pessoa autenticada — que era o vazamento que a
-    // policy de `users` agora fecha no banco.
-    return this.userUseCases.listar(input, empresaDoAtor(request));
+    return this.userUseCases.listar(input, empresa);
   }
 
   // ───────────────────────── GET /users/:id ──────────────────────

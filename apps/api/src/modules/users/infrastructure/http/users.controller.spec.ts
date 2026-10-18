@@ -82,7 +82,7 @@ describe('UsersController.parseIfMatch', () => {
     // Stubs `{} as never` para os dois colaboradores — parseIfMatch
     // não chama nem userUseCases nem auditService. Outros testes
     // (integração / e2e Task 7.7) validam o caminho feliz + mutação.
-    ctrl = new UsersController({} as never, {} as never);
+    ctrl = new UsersController({} as never, {} as never, {} as never);
   });
 
   it('aceita W/"v3" canônico', () => {
@@ -258,13 +258,26 @@ describe('UsersController — handlers HTTP', () => {
   let useCases: UserUseCasesStub & UserUseCases;
   let audit: { listHistory: Mock } & AuditServicePort;
   let reply: ReplyStub;
+  // pt-BR (2026-10-17): `GET /users` hidrata o perfil para decidir o recorte,
+  // então `{}` no terceiro lugar do construtor não sobe — os testes de `list()`
+  // caíam com `this.profiles.obterMeuPerfil is not a function`. O stub é
+  // MUTÁVEL de propósito: é o `isAdmin`/`permissions` que decide entre
+  // "diretório inteiro" e "só a própria linha", e o teste que muda esses dois
+  // campos é o que mede o gate.
+  let profiles: { obterMeuPerfil: Mock };
   let ctrl: UsersController;
 
   beforeEach(() => {
     useCases = makeUserUseCasesStub() as unknown as UserUseCasesStub & UserUseCases;
     audit = makeAuditStub() as unknown as { listHistory: Mock } & AuditServicePort;
     reply = makeReply();
-    ctrl = new UsersController(useCases, audit);
+    // Default = quem TEM `users.read`: é o caso comum de uma conta com perfil
+    // e é o que mantém as asserções deste arquivo em `somenteUsuarioId: null`.
+    // O ramo restrito é exercitado pelo teste que troca o stub abaixo.
+    profiles = {
+      obterMeuPerfil: vi.fn().mockResolvedValue({ isAdmin: false, permissions: ['users.read'] }),
+    };
+    ctrl = new UsersController(useCases, audit, profiles as never);
   });
 
   it('create() wrapa em AuditContextStore.run e seta ETag + status 201', async () => {
@@ -298,6 +311,7 @@ describe('UsersController — handlers HTTP', () => {
         cursor: null,
         limit: 20,
         includeDeleted: false,
+        somenteUsuarioId: null,
       },
       null,
     );
@@ -313,6 +327,7 @@ describe('UsersController — handlers HTTP', () => {
         cursor: 'cur-1',
         limit: 5,
         includeDeleted: false,
+        somenteUsuarioId: null,
       },
       null,
     );
@@ -335,6 +350,75 @@ describe('UsersController — handlers HTTP', () => {
     useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
     await ctrl.list({ user: { sub: 'u-1' } } as never);
     expect(useCases.listar).toHaveBeenCalledWith(expect.anything(), null);
+  });
+
+  // ── O recorte de quem não tem `users.read` ───────────────────────────
+  //
+  // MEDIDO 2026-10-17: sem este gate, `GET /users` sem header caía no bucket
+  // `'*'` e devolvia a base inteira (3 usuários visíveis) para qualquer conta
+  // — inclusive uma recém-cadastrada, porque `POST /users` é `@Public()`.
+  //
+  // Este teste é o POSITIVO do gate: ele afirma o estado do recorte (o
+  // `sub` chega ao use-case), não só que a chamada aconteceu. Um teste que
+  // dissesse apenas "não quebrou" continuaria verde se o gate sumisse.
+  it('list() sem `users.read` e sem empresa recorta para o próprio ator', async () => {
+    // O ator NÃO mudou em relação ao teste acima — só o perfil muda. Se o
+    // gate lesse o request em vez do perfil hidratado, os dois cairiam juntos.
+    profiles.obterMeuPerfil.mockResolvedValue({ isAdmin: false, permissions: [] });
+    useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
+
+    await ctrl.list({ user: { sub: 'u-1' } } as never);
+
+    // Prova de que o escopo FOI determinado: a hidratação aconteceu, com a
+    // empresa do ator (aqui ausente → `null`, o bucket de sistema).
+    expect(profiles.obterMeuPerfil).toHaveBeenCalledWith('u-1', null);
+    expect(useCases.listar).toHaveBeenCalledWith(
+      expect.objectContaining({ somenteUsuarioId: 'u-1' }),
+      null,
+    );
+  });
+
+  // O admin global é o ÚNICO que ignora o recorte mesmo sem empresa: é o
+  // contrato do seed e o que a rota de bootstrap precisa. Sem este par, trocar
+  // `semDireito` por `empresa === null` derrubaria o bootstrap e o teste
+  // anterior continuaria verde.
+  it('list() admin global sem empresa NÃO é recortado', async () => {
+    profiles.obterMeuPerfil.mockResolvedValue({ isAdmin: true, permissions: [] });
+    useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
+
+    await ctrl.list({ user: { sub: 'u-1' } } as never);
+
+    expect(useCases.listar).toHaveBeenCalledWith(
+      expect.objectContaining({ somenteUsuarioId: null }),
+      null,
+    );
+  });
+
+  // Contrapartida: com `users.read` o diretório abre. Sem este par, um
+  // `semDireito` invertido (bug de `!`) derrubaria quem TEM o direito — e o
+  // F2 voltaria a quebrar em silêncio, agora do outro lado.
+  it('list() com `users.read` sem empresa NÃO é recortado', async () => {
+    useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
+    await ctrl.list({ user: { sub: 'u-1' } } as never);
+    expect(useCases.listar).toHaveBeenCalledWith(
+      expect.objectContaining({ somenteUsuarioId: null }),
+      null,
+    );
+  });
+
+  // Sob escopo de empresa a RLS já devolve só os membros. Recortar aqui
+  // quebraria o diretório da empresa para quem tem `users.read` — o gate só
+  // existe porque o bucket de sistema não tem dono.
+  it('list() COM empresa não recorta, mesmo sem `users.read`', async () => {
+    profiles.obterMeuPerfil.mockResolvedValue({ isAdmin: false, permissions: [] });
+    useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
+
+    await ctrl.list({ user: { sub: 'u-1', tenantId: EMPRESA } } as never);
+
+    expect(useCases.listar).toHaveBeenCalledWith(
+      expect.objectContaining({ somenteUsuarioId: null }),
+      EMPRESA,
+    );
   });
 
   // ── `includeDeleted`: normalização do query param ───────────────────

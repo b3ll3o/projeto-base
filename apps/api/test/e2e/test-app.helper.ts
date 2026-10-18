@@ -25,6 +25,7 @@ import { setupTestDatabase, cleanDatabase, type TestContext } from '../testconta
 import { AppModule } from '../../src/app.module.js';
 import { GlobalExceptionFilter } from '../../src/shared/infrastructure/http/global-exception.filter.js';
 import { ZodValidationPipe } from '../../src/shared/infrastructure/http/zod-validation.pipe.js';
+import { listAllPermissions } from '../../src/shared/auth/permissions-catalog.js';
 
 export interface E2EContext {
   app: NestFastifyApplication;
@@ -111,10 +112,103 @@ export const SENHA_DE_TESTE = 'senha-de-teste-e2e';
  * comportamento do harness de browser, onde a sessão é reemitida a cada
  * limpeza.
  */
+/**
+ * Estado da conta de sessão, capturado no bootstrap e **reaplicado** a cada
+ * `cleanDatabase` — que apaga `users`, `profiles` e `authorizations` por
+ * completo.
+ */
+type ContaDaSessao = {
+  id: string;
+  name: string;
+  passwordHash: string;
+  createdAt: Date;
+};
+
+let contaDaSessao: ContaDaSessao | undefined;
+
+/**
+ * Perfil GLOBAL de admin (`tenantId: null`) para a conta de sessão.
+ *
+ * ⚠️ `tenantId: null` não é detalhe. Sem o header `x-tenant-id` o
+ * `JwtAuthGuard` deixa `tenantId` nulo, e
+ * `PrismaTenantMembershipRepository.findProfileId` nesse ramo resolve o perfil
+ * pelo bucket GLOBAL — `users.profile_id`, filtrado por
+ * `profile.tenant_id IS NULL` (aquele arquivo, linha 47). Um perfil de EMPRESA
+ * aqui resolveria `null`, `PermissionsGuard` cairia no `user.isAdmin` do
+ * `JwtAuthGuard` (false) e o ator tomaria 403 em toda rota com
+ * `@RequirePermission` — inclusive `GET /users`.
+ *
+ * O slug é próprio (`e2e-admin-global`) e não `admin`: o seed de #93 usa
+ * `admin`, e o índice parcial de unicidade global é sobre `slug`.
+ */
+async function garantirPerfilGlobalAdminE2E(prisma: PrismaClient): Promise<string> {
+  const slug = 'e2e-admin-global';
+  const existente = await prisma.profile.findFirst({ where: { slug, tenantId: null } });
+  if (existente !== null) return existente.id;
+  const perfil = await prisma.profile.create({
+    data: {
+      slug,
+      name: 'Administrador Global E2E',
+      isAdmin: true,
+      isSystem: true,
+      tenantId: null,
+    },
+  });
+  await prisma.authorization.createMany({
+    data: listAllPermissions().map((permissionKey) => ({ profileId: perfil.id, permissionKey })),
+  });
+  return perfil.id;
+}
+
+/**
+ * Reaparece a conta de sessão DEPOIS da limpeza, com o MESMO `id` — que é o
+ * `sub` do token.
+ *
+ * ⚠️ O token NÃO é reemitido, e é deliberado: `JwtAuthGuard` valida
+ * assinatura e expiração sem tocar o banco, e re-logar a cada `beforeEach`
+ * esbarra no limite de 5/min por conta (MEDIDO 2026-10-14: 17 specs caíam com
+ * 429). Por isso a reaparição é uma escrita direta pelo DONO, e não um
+ * `POST /users` + login.
+ */
+async function reaparecerContaDeSessao(prisma: PrismaClient, c: ContaDaSessao): Promise<void> {
+  const perfilId = await garantirPerfilGlobalAdminE2E(prisma);
+  await prisma.user.create({
+    data: {
+      id: c.id,
+      name: c.name,
+      email: EMAIL_DA_SESSAO,
+      passwordHash: c.passwordHash,
+      profileId: perfilId,
+      createdAt: c.createdAt,
+      updatedAt: new Date(),
+      version: 1,
+    },
+  });
+}
+
 export async function emitirTokenDeSessao(
   app: NestFastifyApplication,
   prisma?: PrismaClient,
 ): Promise<string> {
+  // ⚠️ A conta de sessão agora SOBREVIVE ao bootstrap (ela deixou de ser
+  // apagada, porque precisa de perfil para passar do `PermissionsGuard`), e os
+  // 13 arquivos de spec dividem o mesmo container sob `singleFork`. O
+  // `POST /users` abaixo bateria em `P2002` com a conta do arquivo ANTERIOR
+  // sempre que esse arquivo não limpou no teardown — só 10 dos 13 limpam.
+  // Apagar a sobra aqui é o que torna o helper idempotente, em vez de
+  // depender da ordem dos arquivos.
+  if (prisma) {
+    const sobra = await prisma.user.findFirst({
+      where: { email: EMAIL_DA_SESSAO },
+      select: { id: true },
+    });
+    if (sobra) {
+      await prisma.userHistory.deleteMany({ where: { entityId: sobra.id } });
+      await prisma.userArchive.deleteMany({ where: { entityId: sobra.id } });
+      await prisma.user.delete({ where: { id: sobra.id } });
+    }
+  }
+
   const cadastro = await app.inject({
     method: 'POST',
     url: '/api/v1/users',
@@ -147,16 +241,28 @@ export async function emitirTokenDeSessao(
     throw new Error('o login do e2e devolveu um accessToken ausente ou vazio');
   }
   if (prisma) {
+    // ⚠️ A conta NÃO é mais apagada. Até 2026-10-17 ela era deletada logo em
+    // seguida e só o token sobrevivia — o que funcionava porque nenhuma rota
+    // exigia PERMISSÃO. `GET /users` passou a exigir `users.read`
+    // (`@RequirePermission`), e um ator sem perfil é 403
+    // (`permissions.guard.ts:104`). A conta continua viva, promovida a admin
+    // global: é o que preserva a decisão de produto registrada em
+    // `user-ownership.guard.ts:22-31` (o diretório continua legível), agora
+    // com um ator que de fato tem o direito.
     const conta = await prisma.user.findFirst({
       where: { email: EMAIL_DA_SESSAO },
-      select: { id: true },
     });
     if (conta) {
-      // As três tabelas: deixar o `users_history` órfão quebraria o spec de
-      // histórico, que conta versões por usuário.
-      await prisma.userHistory.deleteMany({ where: { entityId: conta.id } });
-      await prisma.userArchive.deleteMany({ where: { entityId: conta.id } });
-      await prisma.user.delete({ where: { id: conta.id } });
+      contaDaSessao = {
+        id: conta.id,
+        name: conta.name,
+        passwordHash: conta.passwordHash,
+        createdAt: conta.createdAt,
+      };
+      await prisma.user.update({
+        where: { id: conta.id },
+        data: { profileId: await garantirPerfilGlobalAdminE2E(prisma) },
+      });
     }
   }
 
@@ -314,7 +420,17 @@ export async function bootstrapE2E(): Promise<E2EContext> {
     // que o usuário pediu, e um login por teste para a MESMA conta é o
     // comportamento que ele existe para travar.
     async restabelecerSessao() {
-      if (token !== undefined) return;
+      // ⚠️ A ordem importa e não pode inverter: reaparecer a conta com o token
+      // que JÁ existe é o caso comum (o token é stateless e sobrevive à
+      // limpeza). Re-logar aqui gastaria o limite de 5/min por conta e
+      // derrubaria a suíte — foi o que MEDIDO em 2026-10-14 derrubou 17 specs.
+      // O login só acontece quando não há token nenhum.
+      if (token !== undefined) {
+        if (contaDaSessao !== undefined) {
+          await reaparecerContaDeSessao(ctx.prisma, contaDaSessao);
+        }
+        return;
+      }
       token = await emitirTokenDeSessao(app, ctx.prisma);
     },
   };

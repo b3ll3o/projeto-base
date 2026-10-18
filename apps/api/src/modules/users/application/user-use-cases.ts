@@ -191,6 +191,12 @@ export class UserUseCases {
         cursor: input.cursor ?? null,
         limit: input.limit,
         includeDeleted: input.includeDeleted === true,
+        // ⚠️ Este campo É repassado. A versão anterior da lista o esquecia, e o
+        // `list()` do repositório que o lia virava código morto — ninguém
+        // exercitava o caminho, então o teste de integração acusava 3 linhas
+        // onde devia vir 1. Campo novo no port que não é repassado aqui é
+        // exatamente a mudança que passa em review e não acontece em runtime.
+        somenteUsuarioId: input.somenteUsuarioId ?? null,
       },
       tenantId,
     );

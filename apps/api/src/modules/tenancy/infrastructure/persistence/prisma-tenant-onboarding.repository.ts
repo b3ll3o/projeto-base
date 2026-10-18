@@ -14,6 +14,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
 import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service.js';
+import { AssinaturaDeMembership } from '../../../../shared/infrastructure/prisma/assinatura-de-membership.js';
 import {
   type ConviteParaAceitar,
   type ConviteParaEmitir,
@@ -73,7 +74,57 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
    *  falha só aparece no primeiro `POST /users { destino: … }`. O parâmetro é
    *  tipado como `PrismaClient` (apagado em runtime), que é o que o spec de
    *  integração consegue passar. */
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaClient) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaClient,
+    @Inject(AssinaturaDeMembership) private readonly assinatura: AssinaturaDeMembership,
+  ) {}
+
+  /**
+   * Grava a vínculo de empresa — por FUNÇÃO, nunca por `INSERT` direto.
+   *
+   * A migration `20261020000004` revoga `INSERT` em `tenant_memberships` do
+   * `app_runtime`. Motivo: a membership é a credencial que
+   * `usuario_no_escopo(alvo)` mede, e `memberships_insercao` conferia só o
+   * `tenant_id` — o `user_id` era dado do cliente. Um ator de qualquer empresa
+   * criava o próprio vínculo com a conta de terceiro e passava a enxergar
+   * `users` dela (MEDIDO: `SELECT name FROM users` ia de `[alice]` para
+   * `[alice, bruno]`).
+   *
+   * Os DOIS caminhos legítimos passam por aqui: `provisionarEmpresaPropria`
+   * (a empresa acabou de nascer nesta transação) e `consumirEEntrar` (o convite
+   * pendente acabou de ser consumido nesta transação). Nenhum dos dois é "um
+   * membro adicionando outro membro", e é por isso que o banco não tem como
+   * separá-los por policy — não há predicado que distinga "owner criando o
+   * primeiro admin" de "membro adicionando um desconhecido".
+   *
+   * ⚠️ `criar_membership` é `SECURITY DEFINER`: ela grava com os privilégios do
+   * dono, porque a credencial que autoriza esta escrita não é legível sob a RLS
+   * de quem escreve. Ver a §"POR QUE REVOKE E NÃO UM PREDICADO NA POLICY" da
+   * migration.
+   *
+   * ⚠️ E a FUNÇÃO SOZINHA NÃO FECHAVA. Com `REVOKE INSERT` e uma função sem
+   * assinatura, a escalada continuava inteira — MEDIDO, chamando a função com o
+   * `user_id` alheio, `SELECT name FROM users` ia de `[alice]` para
+   * `[alice, bruno]`. A função era o `INSERT` revogado com um caminho mais
+   * curto. Por isso o 5º parâmetro: um HMAC do corpo assinado, que o
+   * `app_runtime` não consegue produzir porque não consegue ler a chave.
+   */
+  private async criarMembership(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    tenantId: string,
+    role: string,
+    profileId: string | null,
+  ): Promise<void> {
+    // ⚠️ Os casts `::uuid` não são cosmeticamente iguais ao resto: o Prisma
+    // envia todo parâmetro de `$queryRaw` como `text`, e a função é
+    // `(uuid, uuid, text, uuid, text)`. MEDIDO sem os casts: 500 com
+    // `criar_membership(text, text, text, text, text) does not exist` — que é a
+    // falha mais invisível possível, porque o nome da função está certo e a
+    // migration aplica sem erro.
+    const assinatura = this.assinatura.assinar(userId, tenantId, role, profileId);
+    await tx.$queryRaw`SELECT criar_membership(${userId}::uuid, ${tenantId}::uuid, ${role}::text, ${profileId}::uuid, ${assinatura}::text)`;
+  }
 
   async provisionarEmpresaPropria(
     usuario: UsuarioParaProvisionar,
@@ -161,14 +212,7 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
           })),
         });
 
-        await tx.tenantMembership.create({
-          data: {
-            userId: usuario.id,
-            tenantId: tenant.id,
-            role: 'owner',
-            profileId: perfil.id,
-          },
-        });
+        await this.criarMembership(tx, usuario.id, tenant.id, 'owner', perfil.id);
       });
     } catch (erro) {
       // pt-BR (Fase 5, revisão — achado 2): o comentário anterior dizia que
@@ -272,19 +316,18 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
         throw new ConviteInvalidoException('ja-aceito');
       }
 
-      await tx.tenantMembership.create({
-        data: {
-          userId: convite.userId,
-          tenantId: atual.tenantId,
-          // O papel vem do CONVITE, nunca do chamador: um port que aceitasse
-          // `role` da entrada transformaria o aceite em escalada — qualquer um
-          // com um token próprio criaria o próprio owner.
-          role: atual.role,
-          // `profile_id` NULL: quem entra por convite não tem perfil até o
-          // admin da empresa atribuir (Fase 4: NULL = zero permissões).
-          profileId: null,
-        },
-      });
+      await this.criarMembership(
+        tx,
+        convite.userId,
+        atual.tenantId,
+        // O papel vem do CONVITE, nunca do chamador: um port que aceitasse
+        // `role` da entrada transformaria o aceite em escalada — qualquer um
+        // com um token próprio criaria o próprio owner.
+        atual.role,
+        // `profile_id` NULL: quem entra por convite não tem perfil até o
+        // admin da empresa atribuir (Fase 4: NULL = zero permissões).
+        null,
+      );
     });
   }
 

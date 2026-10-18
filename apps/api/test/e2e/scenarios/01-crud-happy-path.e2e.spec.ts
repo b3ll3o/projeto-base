@@ -15,6 +15,7 @@ import {
   bootstrapE2E,
   teardownE2E,
   criarUsuarioAutenticado,
+  EMAIL_DA_SESSAO,
   type E2EContext,
 } from '../test-app.helper.js';
 
@@ -56,12 +57,20 @@ describe('E2E 01: CRU happy path completo', () => {
     const got = JSON.parse(g.body) as { id: string };
     expect(got.id).toBe(created.id);
 
-    // LIST — cenário isolado em container dedicado, então exatamente 1 item
+    // LIST — o diretório tem a conta do spec E a conta de sessão do harness
     const l = await injetar({ method: 'GET', url: '/api/v1/users?limit=10' });
     expect(l.statusCode).toBe(200);
-    const list = JSON.parse(l.body) as { users: Array<{ id: string; version: number }> };
-    expect(list.users).toHaveLength(1);
-    expect(list.users[0]?.id).toBe(created.id);
+    const list = JSON.parse(l.body) as { users: Array<{ id: string; email: string }> };
+    // ⚠️ Não é mais "exatamente 1 item". A conta de sessão do harness deixou de
+    // ser apagada no bootstrap e é admin global (ela precisa de perfil para
+    // atravessar o `@RequirePermission('users.read')` de `GET /users`), então
+    // ela aparece no diretório como qualquer outra. MEDIDO 2026-10-17:
+    // `toHaveLength(1)` recebeu 2. Filtrar pela conta do harness preserva a
+    // intenção original — "o diretório tem só o que este spec criou" — sem
+    // fixar um número que o harness decide.
+    const doSpec = list.users.filter((u) => u.email !== EMAIL_DA_SESSAO);
+    expect(doSpec).toHaveLength(1);
+    expect(doSpec[0]?.id).toBe(created.id);
 
     // UPDATE (com If-Match correto)
     const u = await injetar({

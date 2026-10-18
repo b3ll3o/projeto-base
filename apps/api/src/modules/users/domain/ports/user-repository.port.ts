@@ -13,6 +13,13 @@ export interface UserListInput {
   cursor?: string | null;
   limit: number;
   includeDeleted?: boolean;
+  /**
+   * pt-BR (2026-10-17): restringe o resultado a UM usuário. O controller de
+   * `GET /users` preenche quando o ator não tem `users.read` e não tem empresa
+   * — sem isto o bucket `'*'` devolve a base inteira. Não é autorização: quem
+   * decide é o controller, e o repositório só obedece.
+   */
+  somenteUsuarioId?: string | null;
 }
 
 export interface UserListResult {

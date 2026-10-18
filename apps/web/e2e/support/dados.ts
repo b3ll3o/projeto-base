@@ -46,6 +46,10 @@ import { dirname, join } from 'node:path';
 // que não existe, e o erro aparece como TS2307 sem sugerir a profundidade.
 import { cleanDatabase, PrismaClient } from '../../../api/test/testcontainers-helper.js';
 import { exigirEstado, WEB_ROOT } from './estado';
+// `import type` é apagado em runtime, então NÃO fecha ciclo com `rbac.ts` —
+// que é o motivo de o `semearAdmin` lá de baixo ser importado dinamicamente e
+// não no topo.
+import type { SessaoComPerfil } from './rbac';
 
 /**
  * O que a API devolve ao criar um usuário — a MESMA forma que o fixture
@@ -302,6 +306,41 @@ async function sessaoDoHarness(): Promise<ParDeTokens & { email: string }> {
   return sessao;
 }
 
+let sessaoDeListagem: SessaoComPerfil | null = null;
+
+/**
+ * Sessão com direito de LISTAR — distinta da sessão do harness.
+ *
+ * ⚠️ MEDIDO 2026-10-17: `GET /users` passou a exigir `users.read`, e a conta do
+ * harness não tem perfil nenhum. A correção NÃO é "dar perfil a ela", e ela é
+ * um beco: a conta do harness se **auto-apaga em soft-delete** no fim de
+ * `semearELogar` (é o que a mantém fora da contagem), e
+ * `findProfileId` filtra `deletedAt: null` — perfil de conta apagada resolve
+ * `null`, que é exatamente a negação que o guard transforma em 403. Ligar o
+ * perfil antes do apagamento não resolve, e religar depois também não, porque
+ * `semearELogar` é quem apaga.
+ *
+ * Por isso a listagem usa uma conta **viva** com perfil `isAdmin`, que o
+ * `PermissionsGuard` deixa passar por bypass. Ela não entra na contagem (é
+ * admin, não o perfil de membro que a tela mostra) e não depende do estado da
+ * conta de sessão.
+ *
+ * O import é DINÂMICO porque `rbac.ts` importa este arquivo: um import de topo
+ * aqui fecha o ciclo no momento em que o módulo é avaliado, e o
+ * `semearPerfil` do outro lado ainda não estaria definido. Dentro da função a
+ * ligação já está resolvida.
+ */
+async function sessaoQueLista(): Promise<SessaoComPerfil> {
+  if (sessaoDeListagem === null) {
+    const { semearAdmin } = await import('./rbac.js');
+    // ⚠️ Memoizado de propósito: `semearAdmin` cria o perfil com o slug fixo
+    // `e2e-admin`, e uma segunda chamada morreria com violação de unicidade —
+    // `contarUsuarios()` é chamado duas vezes por spec (antes e depois).
+    sessaoDeListagem = await semearAdmin();
+  }
+  return sessaoDeListagem;
+}
+
 /**
  * Usuários visíveis pela listagem — o mesmo conjunto que a tela mostra.
  *
@@ -314,7 +353,10 @@ async function sessaoDoHarness(): Promise<ParDeTokens & { email: string }> {
  * formato em vermelho, que é o que ela é.
  */
 export async function listarUsuarios(): Promise<UsuarioWire[]> {
-  const { status, corpo } = await chamar('GET', '/users?limit=100');
+  const listador = await sessaoQueLista();
+  const { status, corpo } = await chamar('GET', '/users?limit=100', {
+    token: listador.tokens.accessToken,
+  });
   if (status !== 200) {
     throw new Error(`GET /users respondeu ${status}: ${JSON.stringify(corpo)}`);
   }
@@ -326,7 +368,21 @@ export async function listarUsuarios(): Promise<UsuarioWire[]> {
         'afirmam contagem estão medindo nada.',
     );
   }
-  return pagina.users as UsuarioWire[];
+  // ⚠️ A conta do próprio instrumento é descontada, e não porque "não conta" —
+  // porque ela É uma linha em `users`, e somá-la faria `contarUsuarios()`
+  // devolver 1 para SEMPRE. MEDIDO 2026-10-17: sem esta linha os quatro specs
+  // do F3 que afirmam "não gravou" leram `Received: 1` — que era a conta de
+  // listagem, não o cadastro que o formulário bloqueou. O sintoma parece "a
+  // validação do cliente gravou mesmo", que é o defeito mais caro de
+  // diagnosticar que existe aqui: a falha aponta para a tela, e a causa está
+  // no instrumento que mede a tela.
+  //
+  // Só a conta de LISTAGEM é descontada. A conta de sessão do harness se
+  // auto-apaga em soft-delete e por isso nunca aparece na listagem — descontá-la
+  // também não faria mal, mas a exclusão é explícita porque "o instrumento não
+  // entra na contagem" é uma afirmação sobre UM corpo, e o outro é
+  // soft-deleted por outro motivo.
+  return (pagina.users as UsuarioWire[]).filter((u) => u.email !== listador.email);
 }
 
 /**
@@ -513,6 +569,17 @@ export async function apagarUsuario(email: string, id: string, version: number):
  */
 export async function limparBase(): Promise<void> {
   await sessaoDoHarness();
+  // ⚠️ A sessão de listagem é invalidada AQUI, e não em `sessaoQueLista()`: o
+  // token é JWT stateless e continua válido depois do truncamento, mas o
+  // `PermissionsGuard` chama `obterMeuPerfil` a CADA request, e `profile` foi
+  // apagado — a conta continua autenticada e sem nenhuma permissão, que é o
+  // 403 mais confuso de ler ("token válido, pessoa sem perfil, o quê?").
+  //
+  // Invalidar no wipe (e não ressemear a cada chamada) é o que evita o outro
+  // extremo: `semearAdmin` usa o slug fixo `e2e-admin`, e `contarUsuarios()` é
+  // chamado duas vezes no mesmo spec (antes e depois) — ressemear por chamada
+  // morreria com violação de unicidade na segunda.
+  sessaoDeListagem = null;
   const prisma = prismaE2E();
   try {
     await cleanDatabase(prisma);

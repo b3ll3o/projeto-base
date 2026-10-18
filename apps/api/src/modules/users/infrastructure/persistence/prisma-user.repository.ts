@@ -268,7 +268,15 @@ export class PrismaUserRepository implements UserRepositoryPort {
    */
   async list(input: UserListInput, tenantId: string | null): Promise<UserListResult> {
     const includeDeleted = input.includeDeleted === true;
-    const where = includeDeleted ? {} : { deletedAt: null };
+    const where = {
+      ...(includeDeleted ? {} : { deletedAt: null }),
+      // ⚠️ `somenteUsuarioId` NÃO é um filtro de permissão, é uma ESCOLHA do
+      // controller já decidida — o repositório não sabe quem tem `users.read` e
+      // não deve saber. Aplicado DEPOIS do `deletedAt`, então um soft-deleted
+      // continua fora: quem pede o recorte recebe no máximo a própria linha
+      // ativa, nunca a si mesmo apagado.
+      ...(input.somenteUsuarioId ? { id: input.somenteUsuarioId } : {}),
+    };
 
     // Cursor opaco = id da última row da página anterior; pegamos `take=limit+1`
     // para detectar se há próxima página sem count(*) custoso.

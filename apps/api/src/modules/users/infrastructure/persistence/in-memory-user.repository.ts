@@ -133,6 +133,10 @@ export class InMemoryUserRepository implements UserRepositoryPort {
     const limit = Math.max(1, Math.min(100, input.limit));
     const all = [...this.byId.values()]
       .filter((u) => includeDeleted || !u.isDeleted())
+      // Espelha o `where.id` do repositório Prisma: o recorte vem do
+      // controller e vale para qualquer backend, senão o in-memory mente sobre
+      // o que a rota devolve.
+      .filter((u) => !input.somenteUsuarioId || u.id().value === input.somenteUsuarioId)
       .sort((a, b) => a.id().value.localeCompare(b.id().value));
 
     const startIdx = input.cursor ? Number.parseInt(input.cursor, 10) : 0;

@@ -21,8 +21,8 @@
 // deveria tê-la barrado.
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { randomUUID } from 'node:crypto';
-import type { Prisma } from '@prisma/client';
+import { createHmac, randomUUID } from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import {
   setupTestDatabase,
   cleanDatabase,
@@ -30,6 +30,7 @@ import {
 } from '../../../../test/testcontainers-helper.js';
 import { ESCOPO_DE_SISTEMA, PAPEL_DE_RUNTIME, uriComoPapelDeRuntime } from './papel-de-runtime.js';
 import { abrirEscopo } from './escopo.js';
+import { corpoDaAssinatura } from './assinatura-de-membership.js';
 
 describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
   let ctx: TestContext;
@@ -175,10 +176,16 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
     `;
     expect(doDono.length).toBeGreaterThan(0);
 
+    // CONTROLE POSITIVO: uma tabela de negócio que MANTÉM os 4 verbos. Uso
+    // `tenants` e não `tenant_memberships` porque a `20261020000004` tirou o
+    // `INSERT` de `tenant_memberships` de propósito — usar aqui a tabela que o
+    // conserto mexe deixa o controle positivo preso ao conserto, e um controle
+    // positivo que falha junto com o defeito não é controle: é mais uma
+    // asserção que acusa a mesma coisa duas vezes.
     const negocio = await ctx.prisma.$queryRaw<Array<{ privilege_type: string }>>`
       SELECT privilege_type FROM information_schema.table_privileges
       WHERE grantee = ${PAPEL_DE_RUNTIME} AND table_schema = 'public'
-        AND table_name = 'tenant_memberships'
+        AND table_name = 'tenants'
     `;
     // Uma linha por tipo de privilégio — MEDIDO: 4 (DELETE, INSERT, SELECT,
     // UPDATE). O que importa é que NÃO é zero: as tabelas de negócio seguem com
@@ -190,6 +197,17 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
       'SELECT',
       'UPDATE',
     ]);
+
+    // E o que a `20261020000004` tirou, medido: `tenant_memberships` perdeu
+    // EXATAMENTE o `INSERT`, e nada além dele. Se o `REVOKE` tivesse vazado
+    // para os outros verbos, o teste acima continuaria verde e esta linha
+    // ficaria fora do alcance — por isso ela existe.
+    const memberships = await ctx.prisma.$queryRaw<Array<{ privilege_type: string }>>`
+      SELECT privilege_type FROM information_schema.table_privileges
+      WHERE grantee = ${PAPEL_DE_RUNTIME} AND table_schema = 'public'
+        AND table_name = 'tenant_memberships'
+    `;
+    expect(memberships.map((p) => p.privilege_type).sort()).toEqual(['DELETE', 'SELECT', 'UPDATE']);
   });
 
   // ─────────────── leitura ───────────────
@@ -706,5 +724,233 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
         tx.profile.findMany({ where: { slug: { in: ['gestor-acme', 'gestor-globex'] } } }),
       ),
     ).resolves.toHaveLength(2);
+  });
+
+  // ─────────────── a escalada que a §2 da 000002 dá por fechada ───────────────
+  //
+  // A `20261020000002` fecha o elo do `users_history` e o seu próprio texto diz
+  // que `memberships_insercao` "confere SÓ o `tenant_id`, nunca o `user_id`" e
+  // que o elo que falta fechar é o passo 1. Isso vale ENQUANTO o passo 1 for o
+  // único caminho para o `user_id` alheio. Não é.
+  //
+  // `usuario_no_escopo(alvo)` é `EXISTS (… tenant_memberships WHERE user_id =
+  // alvo AND tenant_id = escopo_atual())` — a membership É a credencial. E
+  // `memberships_insercao` é `WITH CHECK (no_escopo_atual(tenant_id, false))`:
+  // o `user_id` é dado do cliente e ninguém confere. Então o atacante escreve a
+  // credencial que o guarda exige, e o guarda abre. Elevate-self: a linha que
+  // o POLICY de escrita produz é a linha que a POLICY de leitura mede.
+
+  it('🔴 escalada: inserir membership com `user_id` alheio NÃO pode conceder acesso à conta alheia', async () => {
+    const alice = await criarUsuario('alice');
+    const bruno = await criarUsuario('bruno');
+    const carol = await criarUsuario('carol');
+    await associar(alice, acmeId);
+    await associar(bruno, globexId);
+
+    // ── CONTROLE POSITIVO A (antes do ataque): a policy de `users` DEIXA passar
+    // quem tem membership. Sem isto, `['alice']` no PASSO 2 seria
+    // indistinguível de uma consulta que não devolve nada por outro motivo —
+    // e a garantia toda seria vacuamente verdadeira. Consulta que só retorna
+    // vazio é o pior tipo de controle.
+    await expect(
+      comEscopo(globexId, (tx) => tx.user.findMany({ select: { name: true } })),
+    ).resolves.toEqual([{ name: 'bruno' }]);
+
+    // PASSO 0 (premissa do ataque): a Alice, no escopo da ACME, só se vê.
+    const antes = await comEscopo(acmeId, (tx) => tx.user.findMany({ select: { name: true } }));
+    expect(antes.map((u) => u.name)).toEqual(['alice']);
+
+    // PASSO 1: a Alice cria a membership do BRUNO na EMPRESA DELA. O
+    // `user_id` é dado do cliente e o `tenant_id` é o escopo dela, que é
+    // válido — `no_escopo_atual(tenant_id, false)` não tem o que reprovar.
+    const subiu = await comEscopo(acmeId, (tx) =>
+      tx.tenantMembership.create({ data: { userId: bruno, tenantId: acmeId } }),
+    )
+      .then(() => 'SUBIU')
+      .catch((e: unknown) => `BARRADO: ${(e as { code?: string }).code ?? 'erro'}`);
+
+    // PASSO 2: o Bruno NÃO pode ter aparecido. Este é o dente — a garantia é
+    // sobre o EFEITO, não sobre a sintaticidade do INSERT: uma policy que
+    // barra o INSERT mas deixa a leitura aberta daria a asserção do `subiu`
+    // verde e esta vermelha.
+    const depois = await comEscopo(acmeId, (tx) => tx.user.findMany({ select: { name: true } }));
+
+    // ⚠️ As DUAS asserções juntas são a garantia; uma só delas é meio
+    // conserto. `depois` mede o que o atacante GANHA. `subiu` mede por onde.
+    expect(depois.map((u) => u.name)).toEqual(['alice']);
+    expect(subiu).toMatch(/^BARRADO/);
+
+    // CONTROLE POSITIVO B (depois do ataque): o INSERT é real e o efeito é
+    // real. O DONO cria a membership da Carol na ACME — caminho legítimo, fora
+    // do escopo do atacante — e ela APARECE para a Alice. Sem esta linha, um
+    // `depois` igual a `['alice']` seria igualmente compatível com "a tabela
+    // está fechada para todo mundo", que é um produto quebrado vestindo um
+    // teste verde.
+    await associar(carol, acmeId);
+    await expect(
+      comEscopo(acmeId, (tx) => tx.user.findMany({ select: { name: true } })),
+    ).resolves.toEqual([{ name: 'alice' }, { name: 'carol' }]);
+  });
+
+  // ─────────────── o outro lado do REVOKE: a função tem que funcionar ───────────────
+
+  /**
+   * A assinatura que a aplicação produz.
+   *
+   * ⚠️ O corpo vem de `corpoDaAssinatura` — a FUNÇÃO DE PRODUÇÃO, importada, e
+   * não uma segunda cópia escrita aqui. A 1ª versão deste arquivo montava o
+   * corpo à mão com `\n`, e foi exatamente essa duplicação que deixou o formato
+   * divergir do SQL sem nenhum sinal: dois lugares dizendo a mesma verdade, e
+   * um teste verde dos dois lados enquanto a verdade era uma só. Aqui há um
+   * lugar só; o SQL é o segundo, e o `🟢` abaixo é quem diz se os dois casam.
+   */
+  async function assinarMembership(
+    userId: string,
+    tenantId: string,
+    role: string,
+    profileId: string | null,
+  ): Promise<string> {
+    const [linha] = await ctx.prisma.$queryRaw<Array<{ segredo: Buffer }>>`
+      SELECT segredo FROM chaves_de_assinatura WHERE nome = 'membership'
+    `;
+    return createHmac('sha256', linha!.segredo)
+      .update(corpoDaAssinatura(userId, tenantId, role, profileId), 'utf8')
+      .digest('hex');
+  }
+
+  /**
+   * Executa a consulta como `app_runtime` e devolve como foi.
+   *
+   * ⚠️ Recebe `Prisma.Sql` e não string: o `$queryRaw` do Prisma não aceita
+   * string crua (é o que impede injeção), e aqui os parâmetros são justamente
+   * o que o atacante escolheria — `user_id`, `tenant_id` e a assinatura são
+   * argumentos da chamada.
+   *
+   * ⚠️ Traz a MENSAGEM do erro junto do código, e isso não é capricho: com só o
+   * código, uma chamada a uma função que NÃO EXISTE devolve `42883` e uma
+   * recusa de assinatura devolve `42501` — mas um `toMatch(/BARRADO/)` aceitaria
+   * as duas, e o teste ficaria verde **sem nenhuma função no banco**. Medido
+   * nesta sessão: com a assinatura forjada, o teste só falhou porque a tabela da
+   * chave não existia, e não porque a escalada foi barrada. Exigir a mensagem é
+   * o que separa "a função existe e recusou" de "não havia o que chamar".
+   */
+  async function tentarComo(sql: Prisma.Sql): Promise<{ ok: boolean; detalhe: string }> {
+    return semEscopo((tx) =>
+      tx
+        .$queryRaw(sql)
+        .then(() => ({ ok: true, detalhe: 'SUBIU' }))
+        .catch((e: unknown) => {
+          // ⚠️ O Prisma re-embala erro do Postgres como `P2010` e DENTRO do texto
+          // deixa o SQLSTATE em `Raw query failed. Code: \`42501\``. Ler só
+          // `e.code` daria `P2010` para toda recusa — e `P2010` também é o que
+          // sai quando a tabela não existe, então a asserção perderia o poder de
+          // distinguir "a função recusou" de "não havia o que chamar". MEDIDO: sem
+          // esta extração, `expect(...).toMatch(/^42501/)` falhou com o
+          // comportamento CORRETO já funcionando.
+          const mensagem = (e as Error).message;
+          const sqlstate = /Code: `([0-9A-Z]{5})`/.exec(mensagem)?.[1];
+          return {
+            ok: false,
+            detalhe: `${sqlstate ?? (e as { code?: string }).code ?? 'erro'}: ${mensagem}`,
+          };
+        }),
+    );
+  }
+
+  it('🔴 a assinatura é o que separa "chamei" de "a aplicação me pediu"', async () => {
+    const alice = await criarUsuario('alice');
+    const bruno = await criarUsuario('bruno');
+    await associar(alice, acmeId);
+    await associar(bruno, globexId);
+
+    // CONTROLE POSITIVO: a Alice só se vê. Sem isto, o `['alice']` do fim seria
+    // compatível com uma consulta que não devolve nada por outro motivo.
+    await expect(
+      comEscopo(acmeId, (tx) => tx.user.findMany({ select: { name: true } })),
+    ).resolves.toEqual([{ name: 'alice' }]);
+
+    // ⚠️ A escalada, pela MESMA porta da aplicação: sessão `app_runtime`, no
+    // escopo da ACME, nomeando o Bruno. É a chamada que `provisionarEmpresaPropria`
+    // e `consumirEEntrar` fazem — e é a que a assinatura precisa travar.
+    const forjada = await tentarComo(Prisma.sql`
+      SELECT criar_membership(${bruno}::uuid, ${acmeId}::uuid, ${'owner'}::text, NULL::uuid, ${'assinatura-forjada'}::text)
+    `);
+    expect(forjada.ok).toBe(false);
+    expect(forjada.detalhe).toContain('assinatura invalida');
+
+    const depois = await comEscopo(acmeId, (tx) => tx.user.findMany({ select: { name: true } }));
+    expect(depois.map((u) => u.name)).toEqual(['alice']);
+
+    // E a assinatura NÃO é transferível entre chamadas: a que a aplicação produz
+    // para (bruno, acme, owner) não abre (bruno, globex, owner). Sem esta linha,
+    // "a função confere a assinatura" provaria que ela confere *uma* assinatura.
+    const paraAcme = await assinarMembership(bruno, acmeId, 'owner', null);
+    const cruzada = await tentarComo(Prisma.sql`
+      SELECT criar_membership(${bruno}::uuid, ${globexId}::uuid, ${'owner'}::text, NULL::uuid, ${paraAcme}::text)
+    `);
+    expect(cruzada.ok).toBe(false);
+    expect(cruzada.detalhe).toContain('assinatura invalida');
+  });
+
+  it('🔴 `app_runtime` não lê a chave de assinatura — senão ela não prova nada', async () => {
+    // ⚠️ Este é o teste que dá sentido ao anterior. Uma assinatura só prova
+    // alguma coisa enquanto o material da chave está fora do alcance de quem a
+    // está falsificando: se `app_runtime` lesse a chave, a injeção de SQL leria
+    // junto e assinaria o que quisesse — e o teste anterior passaria medindo um
+    // controle que não existe.
+    //
+    // A consulta é feita pelo DONO, e o que se mede é a AUSÊNCIA da linha para
+    // o runtime: perguntar ao runtime se ele enxerga a própria lack de
+    // privilégio devolveria "não" mesmo com o privilégio dado.
+    const comoDono = await ctx.prisma.$queryRaw<Array<{ segredo: Buffer }>>`
+      SELECT segredo FROM chaves_de_assinatura WHERE nome = 'membership'
+    `;
+    expect(comoDono).toHaveLength(1);
+    expect(comoDono[0]?.segredo.byteLength).toBeGreaterThanOrEqual(32);
+
+    const leaked = await tentarComo(Prisma.sql`SELECT segredo FROM chaves_de_assinatura`);
+    expect(leaked.ok).toBe(false);
+    // As duas linhas juntas: o SQLSTATE diz QUE classe de falha foi, e o nome
+    // da tabela diz QUAL leitura foi negada. Uma sem a outra aceitaria
+    // qualquer `42501` — inclusive o da assinatura, que é um `42501` legítimo e
+    // totalmente diferente.
+    expect(leaked.detalhe).toMatch(/^42501:/);
+    expect(leaked.detalhe).toContain('permission denied for table chaves_de_assinatura');
+  });
+
+  it('🟢 `criar_membership` com assinatura da aplicação grava, e a gravação vale como vínculo', async () => {
+    const alice = await criarUsuario('alice');
+    const bruno = await criarUsuario('bruno');
+    await associar(alice, acmeId);
+
+    // ⚠️ Este teste existe porque o da escalada mede o BLOQUEIO, e um conserto
+    // que fechasse a porta e deixasse o onboarding quebrado passaria lá inteiro.
+    // Aqui a porta é a porta: a assinatura é a que a aplicação produz, e a
+    // linha que a função grava CONCEDE acesso — medido pela MESMA leitura que a
+    // escalada mediu como proibida.
+    const assinatura = await assinarMembership(bruno, acmeId, 'member', null);
+    const id = await comEscopo(acmeId, (tx) =>
+      tx
+        .$queryRaw<Array<{ id: string }>>(
+          Prisma.sql`
+          SELECT criar_membership(${bruno}::uuid, ${acmeId}::uuid, ${'member'}::text, NULL::uuid, ${assinatura}::text) AS id
+        `,
+        )
+        .then((r) => r[0]?.id as string),
+    );
+    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-/);
+
+    // O EFEITO: o Bruno apareceu para a Alice. É aqui que a função deixa de ser
+    // "uma escrita que deu certo" e passa a ser "uma credencial que vale" — o
+    // mesmo predicado (`usuario_no_escopo`) que a escalada tentou explorar.
+    await expect(
+      comEscopo(acmeId, (tx) => tx.user.findMany({ select: { name: true } })),
+    ).resolves.toEqual([{ name: 'alice' }, { name: 'bruno' }]);
+
+    // E o papel/tenant gravados são os pedidos, não defaults silenciosos.
+    const gravado = await ctx.prisma.tenantMembership.findUnique({
+      where: { id: id as string },
+    });
+    expect(gravado).toMatchObject({ userId: bruno, tenantId: acmeId, role: 'member' });
   });
 });

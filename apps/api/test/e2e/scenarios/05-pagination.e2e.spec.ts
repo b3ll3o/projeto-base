@@ -16,6 +16,7 @@ import {
   criarUsuarioAutenticado,
   type E2EContext,
   SENHA_DE_TESTE,
+  EMAIL_DA_SESSAO,
 } from '../test-app.helper.js';
 
 describe('E2E 05: Cursor pagination + includeDeleted', () => {
@@ -58,18 +59,25 @@ describe('E2E 05: Cursor pagination + includeDeleted', () => {
       const r = await injetar({ method: 'GET', url });
       expect(r.statusCode).toBe(200);
       const body = JSON.parse(r.body) as {
-        users: Array<{ id: string }>;
+        users: Array<{ id: string; email: string }>;
         nextCursor: string | null;
       };
-      for (const u of body.users) seen.add(u.id);
+      // ⚠️ A conta de sessão do harness é admin global e aparece no diretório
+      // (MEDIDO 2026-10-17: `seen.size` deu 6 com as 5 deste spec). Ela é
+      // excluída da contagem — e a linha de baixo é o CONTROLE POSITIVO que
+      // impede essa exclusão de mascarar uma página perdida: todo id criado
+      // tem de estar em `seen`.
+      for (const u of body.users) {
+        if (u.email !== EMAIL_DA_SESSAO) seen.add(u.id);
+      }
       pages++;
       if (body.nextCursor === null) break;
       cursor = body.nextCursor;
       if (pages > 10) throw new Error('infinite loop guard');
     }
 
-    // Esperado: 5 ids únicos, 3 páginas (2+2+1)
-    expect(seen.size).toBe(5);
+    // Todos os ids criados, atravessando todas as páginas
+    expect(seen.size).toBe(createdIds.length);
     for (const id of createdIds) expect(seen.has(id)).toBe(true);
   });
 

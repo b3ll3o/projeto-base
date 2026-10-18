@@ -24,8 +24,15 @@
 // segura; F2 vermelho com o redirecionamento quebrado significaria que a
 // tela mente. Nenhum dos dois é redundante.
 
-import { expect, botaoEnviar, itensDaLista, test, type FixturesE2E } from './support/fixtures';
-import { SENHA_DE_TESTE, emailUnico } from './support/dados';
+import {
+  expect,
+  botaoEnviar,
+  itensDaLista,
+  plantarSessao,
+  test,
+  type FixturesE2E,
+} from './support/fixtures';
+import { SENHA_DE_TESTE, emailUnico, parDeTokens } from './support/dados';
 
 /**
  * Leva o browser à listagem, para conferir o que o cadastro gravou.
@@ -98,6 +105,21 @@ test.describe('F2 — Cadastro com sucesso', () => {
       'Cadastro feito. Agora entre com o e-mail e a senha que você acabou de escolher.',
     );
 
+    // ⚠️ MEDIDO 2026-10-17: desde que `GET /users` recorta para a PRÓPRIA
+    // linha quem não tem `users.read`, quem olha a listagem precisa ser alguém
+    // com direito — e a sessão do harness não tem nenhum (conta sem perfil e
+    // soft-deleted, ver `dados.ts:309`). Plantar o token da conta que acabou
+    // de se cadastrar é o que o produto manda fazer: a tela de login diz
+    // "Cadastro feito. Agora entre com o e-mail e a senha que você acabou de
+    // escolher." É o mesmo caminho do login, sem passar pelo formulário — que
+    // é o F7, e continua sendo.
+    //
+    // ⚠️ E o `toHaveCount(1)` abaixo NÃO ficou vazuo por causa disso: sem o
+    // recorte, esta sessão veria DUAS linhas (ela e a conta `e2e-admin` que
+    // `contarUsuarios()` semeia), então a contagem distingue "gate no lugar"
+    // de "gate fora".
+    await plantarSessao(page, await parDeTokens(email, SENHA_DE_TESTE));
+
     await abrirAListagem(irPara);
 
     // pt-BR (MEDIDO): o nome na listagem é um `<div>`, não um heading — ver o
@@ -133,6 +155,10 @@ test.describe('F2 — Cadastro com sucesso', () => {
     // GRAVADO. Por isso o `email` minúsculo é o que se procura abaixo, e é a
     // normalização da API — não a do formulário — que está em jogo.
     await expect(page).toHaveURL(/\/login\?cadastrado=1$/);
+    // Mesma premissa do teste de cima: quem olha a listagem é a conta criada
+    // (MEDIDO 2026-10-17, comentário completo na linha equivalente do
+    // primeiro teste).
+    await plantarSessao(page, await parDeTokens(email, SENHA_DE_TESTE));
     await abrirAListagem(irPara);
 
     // ⚠️ `exact: true` NÃO é picky-ness, é o que dá a esta asserção o poder de

@@ -35,6 +35,7 @@ import {
 } from '../../domain/exceptions/tenancy.exceptions.js';
 import { listAllPermissions } from '../../../../shared/auth/permissions-catalog.js';
 import { uriComoPapelDeRuntime } from '../../../../shared/infrastructure/prisma/papel-de-runtime.js';
+import { AssinaturaDeMembership } from '../../../../shared/infrastructure/prisma/assinatura-de-membership.js';
 
 const AGORA = new Date('2026-10-19T12:00:00.000Z');
 
@@ -54,10 +55,24 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
   let memberships: PrismaTenantMembershipRepository;
   /** Sessão da APLICAÇÃO (Fase 10): papel sem BYPASSRLS, onde a RLS vale. */
   let runtime: InstanceType<typeof import('@prisma/client').PrismaClient>;
+  /**
+   * A assinatura REAL, com a chave lida do banco — e não um dublê.
+   *
+   * ⚠️ Um dublê aqui mediria o repository com uma assinatura que o banco
+   * aceitaria por acidente, e a primeira versão deste arquivo era exatamente
+   * isso: nenhum teste checava que a chave de verdade produz a assinatura de
+   * verdade. Instanciar o signer de produção e rodar o `onModuleInit` contra a
+   * conexão de DONO (que `setupTestDatabase` publica em
+   * `DIRECT_DATABASE_URL`) é o que garante que o corpo assinado que o
+   * repository monta bate com o que `criar_membership` recalcula.
+   */
+  let assinatura: AssinaturaDeMembership;
 
   beforeAll(async () => {
     ctx = await setupTestDatabase();
-    repo = new PrismaTenantOnboardingRepository(ctx.prisma);
+    assinatura = new AssinaturaDeMembership();
+    await assinatura.onModuleInit();
+    repo = new PrismaTenantOnboardingRepository(ctx.prisma, assinatura);
     memberships = new PrismaTenantMembershipRepository(ctx.prisma);
     const { PrismaClient } = await import('@prisma/client');
     runtime = new PrismaClient({ datasourceUrl: uriComoPapelDeRuntime(ctx.uriDoBanco) });
@@ -489,7 +504,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
   describe('com a sessão da aplicação (as policies valem)', () => {
     it('provisionarEmpresaPropria conclui — o dono da empresa nova entra', async () => {
       await cleanDatabase(ctx.prisma);
-      const app = new PrismaTenantOnboardingRepository(runtime);
+      const app = new PrismaTenantOnboardingRepository(runtime, assinatura);
       const u = usuario('dono-runtime@acme.dev');
 
       await app.provisionarEmpresaPropria(u, { nome: 'ACME', slug: 'acme-rt' });
@@ -523,7 +538,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
       });
       const convite = await repo.buscarConvitePorToken('token-runtime');
 
-      const app = new PrismaTenantOnboardingRepository(runtime);
+      const app = new PrismaTenantOnboardingRepository(runtime, assinatura);
       const nova = usuario('nova@acme.dev');
       await app.criarContaPorConvite({ userId: nova.id, invitationId: convite!.id }, nova);
 

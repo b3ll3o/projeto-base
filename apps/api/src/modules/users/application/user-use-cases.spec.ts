@@ -471,7 +471,10 @@ describe('UserUseCases', () => {
       const ctx = makeCtx();
       const spy = vi.spyOn(repo, 'list');
       await AuditContextStore.run(ctx, () => useCases.listar({ limit: 10 }, EMPRESA));
-      expect(spy).toHaveBeenCalledWith({ cursor: null, limit: 10, includeDeleted: false }, EMPRESA);
+      expect(spy).toHaveBeenCalledWith(
+        { cursor: null, limit: 10, includeDeleted: false, somenteUsuarioId: null },
+        EMPRESA,
+      );
       spy.mockRestore();
     });
 
@@ -479,7 +482,29 @@ describe('UserUseCases', () => {
       const ctx = makeCtx();
       const spy = vi.spyOn(repo, 'list');
       await AuditContextStore.run(ctx, () => useCases.listar({ limit: 10 }, null));
-      expect(spy).toHaveBeenCalledWith({ cursor: null, limit: 10, includeDeleted: false }, null);
+      expect(spy).toHaveBeenCalledWith(
+        { cursor: null, limit: 10, includeDeleted: false, somenteUsuarioId: null },
+        null,
+      );
+      spy.mockRestore();
+    });
+
+    // ⚠️ Este teste é o que teria pegado o defeito real. O record-literal que
+    // traduz o DTO para o port ESQUECEU `somenteUsuarioId` na primeira versão,
+    // e o `list()` do repositório — que o lia — virava código morto. Nenhum
+    // teste caiu: os dois acima medem escopo e os de conteúdo mediam páginas
+    // inteiras, que é o que o recorte justamente impede. MEDIDO: sem esta
+    // linha, `08-ownership` lia 3 linhas onde devia ler 1.
+    it("repassa o recorte de UM usuário ao port — o campo que o bucket `'*'` não garante", async () => {
+      const ctx = makeCtx();
+      const spy = vi.spyOn(repo, 'list');
+      await AuditContextStore.run(ctx, () =>
+        useCases.listar({ limit: 10, somenteUsuarioId: 'u-1' }, null),
+      );
+      expect(spy).toHaveBeenCalledWith(
+        { cursor: null, limit: 10, includeDeleted: false, somenteUsuarioId: 'u-1' },
+        null,
+      );
       spy.mockRestore();
     });
   });
