@@ -1,7 +1,7 @@
 ---
 name: e2e-playwright
-version: 1.3
-updated: 2026-10-16
+version: 1.4
+updated: 2026-10-18
 maintainer: test-writer
 description: "Convenção canônica de cobertura e2e de frontend — todo fluxo de usuário COM tela é mapeado no inventário abaixo e coberto por um spec Playwright que atravessa browser, Next, Server Action, API HTTP e Postgres de ponta a ponta. Gate automatizado em check-e2e-flow-coverage.ts; execução no CI."
 ---
@@ -92,17 +92,21 @@ um silêncio.
 | F11 | `/admin/profiles/[slug]` | Detalhe e troca de permissões | `f11-admin-perfil-detalhe.spec.ts` | perfil comum: marca e salva · perfil de sistema: somente leitura, sem form · quase-admin recusa e não vê o slug |
 | F12 | `/admin/users` | Atribuição de perfil a usuário | `f12-admin-usuarios.spec.ts` | atribui e a coluna reflete · quase-admin recusa e não vê nome/e-mail |
 | F13 | `/me/profile` | Meu perfil | `f13-meu-perfil.spec.ts` | admin vê o bypass · perfil comum vê nome, slug e permissões · sem perfil: deny-by-default · sem sessão vai ao login |
+| F14 | `/admin/flags` | Ativação e desativação de funcionalidades (admin) | `f14-admin-flags.spec.ts` | admin desliga e religa e a tela reflete · a flag salva NA TELA é a que a rota respeita (404 desligada · 403 ligada) · quase-admin recusa e o menu não oferece o link |
 
-⚠️ **9 rotas, 13 fluxos.** F2–F5 são quatro estados **da mesma** rota, e F6
+⚠️ **10 rotas, 14 fluxos.** F2–F5 são quatro estados **da mesma** rota, e F6
 atravessa três. F7–F8 são os fluxos que a demanda `login-usuario-senha`
 acrescentou: o login e a rota protegida sem sessão. F9–F12 são as quatro telas
 `/admin/*` do RBAC (#97), e cada uma tem um teste que é o **negativo** do
 acesso — sem eles, "admin vê a tela" e "qualquer um vê a tela" passam no mesmo
 spec. F13 é `/me/profile`, que era a única tela do app com `page.tsx` e nenhum
 spec — MEDIDO 2026-10-16, e a coluna `Rota` do inventário é conferida contra
-os `page.tsx` do disco, que foi o que apontou a falta. O gate **não**
-deriva o inventário das rotas: um mapeamento rota→fluxo 1:1 falha sempre, e uma
-segunda tabela transcrita à mão volta a ser o literal que
+os `page.tsx` do disco, que foi o que apontou a falta. F14 é a quinta tela
+`/admin/*` (feature-flags) e a primeira cujo spec **não termina na tela**: ele
+salva pela tela e afirma o efeito chamando a API, porque a emenda entre "o que
+o admin marcou" e "o que o guard lê" não tem onde ser medida de outro jeito. O
+gate **não** deriva o inventário das rotas: um mapeamento rota→fluxo 1:1 falha
+sempre, e uma segunda tabela transcrita à mão volta a ser o literal que
 `check-teeth-registry.ts` existe para desconfiar.
 
 ⚠️ **Desde 2026-10-13 quase todo spec roda autenticado, e isso é invisível na
@@ -240,6 +244,7 @@ do par, não um.
 | 1.1 | 2026-10-13 | Demanda `login-usuario-senha`: F7 (login) e F8 (rota protegida sem sessão). F1–F6 passam a rodar autenticados pela fixture `auto` `comSessao`; `JWT_SECRET` aleatório por execução no `subirApi`; `SENHA_DE_TESTE` e `emailUnico` exportados de `e2e/support/dados.ts` (`:308` e `:359`) para o spec F7 semear a própria conta. `/users/novo` sai do conjunto protegido — a tela de cadastro deixou de chamar `exigirSessao()`, porque `POST /users` já é público. |
 | 1.2 | 2026-10-16 | RBAC (#97): F9–F12 cobrem as quatro telas `/admin/*`, que não tinham spec. `e2e/support/rbac.ts` nasce como **segunda exceção** à regra de `dados.ts` (banco direto só em `limparBase()`) — não existe rota HTTP que crie `isAdmin`, então o banco é a única forma de produzir o pré-requisito. Fixture `comoAdmin` em `support/fixtures.ts` (planta os cookies do admin semeado por cima dos de `comSessao`). |
 | 1.3 | 2026-10-16 | O gate passa a reconciliar com um **terceiro** conjunto: as rotas de `apps/web/app/**/page.tsx`. Reconciliar dois conjuntos escritos à mão provava paridade, e paridade não é cobertura — `/me/profile` era a única tela do app sem spec e o preflight estava verde. A coluna `Rota` do inventário passa a ser conferida contra o disco (tela nova sem linha é vermelha, com o path nomeado). F13 fecha a lacuna encontrada por essa própria conferência: `/me/profile` com os quatro estados da tela (admin/bypass, perfil comum, deny-by-default, sem sessão). Contador corrigido: eram "8 rotas, 12 fluxos" e são 9 e 13. |
+| 1.4 | 2026-10-18 | F14 cobre `/admin/flags` (feature flags) — a quinta tela `/admin/*` e a primeira cujo spec **não termina na tela**: ele salva pela tela e afirma o efeito **chamando a API** (404 desligada · 403 ligada, com o `title` nomeando quem recusou). O escenario 12 da API escreve a flag no banco e o `lib/flags.spec.ts` prova path contra um cliente mockado; nenhum dos dois via o que o admin marca NA TELA, e essa emenda era o buraco. Contador corrigido: eram "9 rotas, 13 fluxos" e são 10 e 14. MEDIDO 2026-10-18: `next build` **nao** pega uma Server Action sem `'use server'` (build sai 0; o digest `2923057904` so aparece no request, porque a página é `force-dynamic`), e `click()` resolve no despacho — o save precisa ser esperado por **estado**, nao por `waitForTimeout`. |
 
 ## Ver Também
 
