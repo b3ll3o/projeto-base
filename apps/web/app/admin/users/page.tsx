@@ -26,7 +26,11 @@ async function listarUsers(): Promise<UserOutputDto[]> {
 }
 
 export default async function AdminUsersPage(): Promise<React.JSX.Element> {
-  await exigirAdmin();
+  const guarda = await exigirAdmin();
+  // `bloqueio: true` e `me` nunca coexistem: o discriminante faz o compilador
+  // exigir este return, e foi o que impediu o formulário de vazar para quem não
+  // é admin (MEDIDO nos e2e F10/F11/F12 — ver o cabeçalho de guard-admin.tsx).
+  if (guarda.bloqueio) return guarda.tela;
 
   const [users, profiles] = await Promise.all([listarUsers(), listarPerfis()]);
 

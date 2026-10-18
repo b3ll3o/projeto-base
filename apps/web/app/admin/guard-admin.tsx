@@ -64,12 +64,31 @@ function AcessoRestrito(): React.JSX.Element {
 }
 
 /**
- * Resolve o perfil do ator e decide o que a página faz com isso.
- *
- * `redirect()` NÃO retorna — é `never`. Por isso o `return redirect(...)` é o
- * que satisfaz o compilador e não deixa fluxo cego depois dele.
+ * O discriminante `bloqueio` é `true`/`false` explícito nos DOIS ramos, e não
+ * uma chave ausente no ramo do `me`. Com `{ me }` sem `bloqueio`, o TypeScript
+ * não estreita a união em `guarda.bloqueio` e a tela não compila — o que é o
+ * comportamento desejado: o discriminante tem que ser total.
  */
-export async function exigirAdmin(): Promise<MeProfileDto> {
+type Bloqueio = { bloqueio: true; tela: React.JSX.Element };
+type Liberado = { bloqueio: false; me: MeProfileDto };
+
+/**
+ * Resolve o perfil do ator para uma tela `/admin/*` decidir o que renderizar.
+ *
+ * ## Por que isto NÃO é `exigirAdmin(): Promise<MeProfileDto>`
+ *
+ * A primeira versão devolvia o perfil e as telas faziam `await exigirAdmin()`.
+ * MEDIDO: isso renderizou o FORMULÁRIO INTEIRO para quem não é admin — os e2e
+ * F10/F11/F12 caíram juntos vendo o formulário vazado, e o `as never` usado
+ * para calar o compilador foi o que escondeu o erro de tipo. O `await` de uma
+ * função que retorna JSX **descarta** o JSX: só executa o efeito colateral e
+ * joga o valor fora.
+ *
+ * Por isso o retorno é o que a página precisa RENDERIZAR, e o tipo é
+ * discriminated: `bloqueio: true` nunca convive com `me`. Não há `as never`
+ * aqui — o compilador passa a conferir que a tela devolve o que recebeu.
+ */
+export async function exigirAdmin(): Promise<Bloqueio | Liberado> {
   let me: MeProfileDto | null;
   try {
     me = await obterMeuPerfil();
@@ -77,19 +96,19 @@ export async function exigirAdmin(): Promise<MeProfileDto> {
     // Rede caída / DNS / conexão recusada não chega como `ApiError`: o fetch
     // falhou antes de haver status. É infraestrutura, não autorização.
     if (erro instanceof ApiTimeoutError || !(erro instanceof ApiError)) {
-      return ServicoIndisponivel() as never;
+      return { bloqueio: true, tela: ServicoIndisponivel() };
     }
     if (erro.status === 401) return redirect('/login');
-    if (erro.status === 403) return AcessoRestrito() as never;
+    if (erro.status === 403) return { bloqueio: true, tela: AcessoRestrito() };
     // Qualquer outro 4xx/5xx da API: o servidor respondeu, então ele é a
     // fonte. Um 500 é falha do serviço, não negativa da conta.
-    return ServicoIndisponivel() as never;
+    return { bloqueio: true, tela: ServicoIndisponivel() };
   }
 
   // `null` aqui só pode ser "sem sessão" ou 401 — as duas são levadas ao login.
   // Um 403 nunca chega: foi tratado acima, como 403.
   if (me === null) return redirect('/login');
 
-  if (me.isAdmin !== true) return AcessoRestrito() as never;
-  return me;
+  if (me.isAdmin !== true) return { bloqueio: true, tela: AcessoRestrito() };
+  return { bloqueio: false, me };
 }
