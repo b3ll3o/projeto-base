@@ -82,6 +82,14 @@ export async function Sidebar(): Promise<React.JSX.Element> {
                 Atribuir perfis
               </Link>
             </li>
+            <li>
+              <Link
+                className="text-sm font-medium text-slate-700 hover:text-slate-900"
+                href="/admin/flags"
+              >
+                Feature flags
+              </Link>
+            </li>
           </>
         ) : null}
       </ul>
