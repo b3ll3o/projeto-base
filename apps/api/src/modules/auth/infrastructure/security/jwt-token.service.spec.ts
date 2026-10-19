@@ -161,7 +161,15 @@ describe('JwtTokenService', () => {
       expect(Math.abs(iat - antes)).toBeLessThanOrEqual(2);
 
       expect(Number(access['exp']) - iat).toBe(15 * 60);
-      expect(Number(refresh['exp']) - iat).toBe(7 * 24 * 60 * 60);
+      // ⚠️ O `exp` do refresh é medido contra o `iat` DO PRÓPRIO refresh, e
+      // não contra o do access. `emitir()` assina DOIS tokens, e cada `sign`
+      // recebe o `iat` do instante em que roda: na virada de segundo os dois
+      // caem em segundos diferentes, e a subtração cruzada dá 7d + 1.
+      // MEDIDO 2026-10-19 no CI: `expected 604801 to be 604800` — a falha é do
+      // spec, não do TTL, e é a razão de ele ser flaky e não falho.
+      const iatRefresh = Number(refresh['iat']);
+      expect(Math.abs(iatRefresh - iat)).toBeLessThanOrEqual(2);
+      expect(Number(refresh['exp']) - iatRefresh).toBe(7 * 24 * 60 * 60);
     });
 
     it('respeita JWT_ACCESS_TTL e JWT_REFRESH_TTL do env', async () => {
@@ -171,7 +179,9 @@ describe('JwtTokenService', () => {
 
       const iat = Number(payloadDe(par.accessToken)['iat']);
       expect(Number(payloadDe(par.accessToken)['exp']) - iat).toBe(30);
-      expect(Number(payloadDe(par.refreshToken)['exp']) - iat).toBe(2 * 60 * 60);
+      // Mesmo `iat` próprio do refresh, pelo mesmo motivo do teste anterior.
+      const iatRefresh = Number(payloadDe(par.refreshToken)['iat']);
+      expect(Number(payloadDe(par.refreshToken)['exp']) - iatRefresh).toBe(2 * 60 * 60);
     });
 
     it('cai nos defaults quando as env de TTL vêm vazias', async () => {
