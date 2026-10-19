@@ -28,10 +28,16 @@ import { FeatureFlagUseCases } from '../../application/feature-flag.use-cases.js
 import { PERMISSION_KEYS_METADATA } from '../../../profiles/infrastructure/http/decorators/require-permission.decorator.js';
 import type { AtorAutenticado } from '../../../../shared/auth/eh-administrador-de-sistema.js';
 
+// O controller não produz a `descricao` — ele repassa o que o use case devolve
+// (`admin-feature-flags.controller.ts:94`). O texto abaixo é payload opaco, e
+// por isso fica AQUI escrito à mão: ligar esta spec no catálogo seria acoplar o
+// controller a uma string que ele nunca lê. ⚠️ É a 4ª cópia da microcopy, e
+// `check-feature-flag-contract` só alcança as 2 primeiras — MEDIDO 2026-10-19,
+// esta ficou desatualizada calada quando a microcopy mudou.
 const DTO = {
   chave: 'tenancy.invites',
   descricao:
-    'Emissão e aceite de convites por empresa. Desligar tranca as duas portas: nem o dono convida, nem quem tem token entra.',
+    'Emissão e aceite de convites por empresa. Desligar tranca as três portas: convidar, aceitar e criar conta por convite.',
   ativada: false,
 };
 

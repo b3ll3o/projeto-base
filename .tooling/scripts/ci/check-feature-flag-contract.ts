@@ -3,13 +3,20 @@
  *
  * ## O furo que este gate fecha
  *
- * MEDIDO 2026-10-19: a `descricao` de cada chave vive em DUAS cópias — a
- * string em `feature-flag-catalog.ts` e o exemplo JSON repetido no contrato
+ * MEDIDO 2026-10-19: a `descricao` de cada chave vive em QUATRO cópias, nenhuma
+ * por derivação. Este gate compara DUAS — a string em
+ * `feature-flag-catalog.ts` e o exemplo JSON repetido no contrato
  * `docs/superpowers/specs/2026-10-18-feature-flags-contrato-http.md` (§4, duas
- * vezes: a listagem e o PUT). `grep` medido: 4 cópias do texto no repositório,
- * nenhuma por derivação. Mudei a descrição e a troca por script achou as 4 —
- * mas o que não as achasse (um `.md` gerado, um exemplo colado à mão)
- * continuaria mentindo em silêncio, e o contrato abre com a regra oposta:
+ * vezes: a listagem e o PUT). As outras duas são literais de spec —
+ * `admin-feature-flags.controller.spec.ts` e `feature-flag.use-cases.spec.ts` —
+ * e elas NÃO estão no alcance deste gate: MEDIDO, a microcopy passou de "duas
+ * portas" para "três portas", este gate ficou verde, e as duas specs ficaram
+ * desatualizadas caladas até um `grep` as achar. Contar "2" como se fosse o
+ * total é o que produz essa falsa segurança; o número honesto é 4, e as 2 de
+ * fora são um furo conhecido, não um resultado. Mudei a descrição e a troca por
+ * script achou as 4 — mas o que não as achasse (um `.md` gerado, um exemplo
+ * colado à mão) continuaria mentindo em silêncio, e o contrato abre com a regra
+ * oposta:
  *
  * > "Quando este documento e uma spec divergirem, **a spec ganha** — e este
  * > documento está errado."

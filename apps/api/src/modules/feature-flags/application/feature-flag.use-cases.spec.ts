@@ -80,9 +80,17 @@ function comPorta(): { porta: PortaEmMemoria; useCases: FeatureFlagUseCases } {
  * seria o outro extremo: se as duas fossem trocadas juntas, o teste confirma a
  * troca. A string literal só quebra quando alguém **reescreve a microcopy** —
  * e aí o vermelho é o aviso de que uma frase que o admin lê mudou.
+ *
+ * ⚠️ Este literal é a 3ª cópia da `descricao`, e `check-feature-flag-contract`
+ * só alcança as 2 primeiras (catálogo e contrato §4). MEDIDO 2026-10-19: a
+ * microcopy passou de "duas portas" para "três portas" e esta spec ficou
+ * desatualizada sem ninguém ver — o tripwire existia, mas fora do alcance do
+ * gate que compara as cópias. Se esta spec cair vermelha por microcopy, o
+ * conserto é atualizar a string AQUI e nas outras cópias, não relaxar o
+ * literal.
  */
 const DESCRICAO_INVITES =
-  'Emissão e aceite de convites por empresa. Desligar tranca as duas portas: nem o dono convida, nem quem tem token entra.';
+  'Emissão e aceite de convites por empresa. Desligar tranca as três portas: convidar, aceitar e criar conta por convite.';
 
 describe('FeatureFlagUseCases', () => {
   describe('D2 — quem alterna', () => {

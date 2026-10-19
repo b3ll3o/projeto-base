@@ -39,7 +39,7 @@ export const FEATURE_FLAGS = [
     // foram fechadas. Uma descrição de flag que mente é pior que ausente: o
     // admin lê aqui antes de desligar.
     descricao:
-      'Emissão e aceite de convites por empresa. Desligar tranca as duas portas: nem o dono convida, nem quem tem token entra.',
+      'Emissão e aceite de convites por empresa. Desligar tranca as três portas: convidar, aceitar e criar conta por convite.',
   },
 ] as const;
 
