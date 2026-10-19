@@ -1,0 +1,42 @@
+# infra/prometheus/prometheus.yml
+# pt-BR: o Prometheus não recebe push — ele faz *scrape*. O exporter
+# `prometheus` do collector (`infra/otelcol/config.yaml:90-91`) expõe as
+# métricas em `0.0.0.0:8889`, e é este job que as coleta.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # O próprio Prometheus: `up{a="prometheus"}` aqui responde "a stack inteira
+  # está viva?"
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # O collector. É este job que traz as métricas da aplicação — o exporter
+  # `prometheus` converte os resource attributes do OTel em labels
+  # (`resource_to_telemetry_conversion` em `infra/otelcol/config.yaml:96-97`),
+  # daí aparecer `service_name` e `deployment_environment` no lugar de quem
+  # exportou.
+  - job_name: otel-collector
+    static_configs:
+      - targets: ['otel-collector:8889']
+
+  # O pipeline do collector, que é um job à parte porque vive em OUTRA porta:
+  # o exporter `prometheus` (8889) serve só o que a aplicação exportou, e a
+  # telemetria interna do collector fica na porta padrão 8888.
+  #
+  # É este job que responde "a telemetria está chegando e o exportador está
+  # dando conta?" — e a segunda pergunta se responde com `send_failed`, NÃO com
+  # `sent`. `otelcol_exporter_sent_spans` conta o que *passou pelo
+  # `tail_sampling`*: com o sampling em duas camadas (o SDK já joga fora ~90% das
+  # raízes antes do collector, e a `tail_sampling` guarda 5% do resto), um `sent`
+  # baixo é o comportamento saudável esperado. Comparar `sent` com
+  # `receiver_accepted_spans` não isola nada e transforma configuração correta em
+  # incidente. O que acusa exportador quebrado é `otelcol_exporter_send_failed_spans`
+  # subindo ou `otelcol_exporter_queue_size` empilhando. Sem este job, uma falha
+  # de exportação aparece como um Grafana vazio, sem sinal nenhum de onde veio.
+  - job_name: otel-collector-pipeline
+    static_configs:
+      - targets: ['otel-collector:8888']

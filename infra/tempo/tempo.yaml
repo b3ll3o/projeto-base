@@ -1,0 +1,45 @@
+# infra/tempo/tempo.yaml
+# pt-BR: config mínima do Tempo para o perfil `observability` do Compose.
+# Backend de traces em disco local — sem S3/GCS, sem Thanos. Adequado para ver
+# telemetria da aplicação em desenvolvimento; para retenção longa ou multi-node
+# é outro produto (ver docs/adr/0003).
+
+# Exigido pelo Tempo 2.4+ quando o receiver OTLP atende HTTP streaming. gRPC
+# não precisa, mas o Tempo avisa no boot sem a chave.
+stream_over_http_enabled: true
+
+server:
+  http_listen_port: 3200
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        # `otlp/tempo` no collector (`infra/otelcol/config.yaml:72`) faz dial
+        # em `tempo:4317` — esta porta é a que o distributor escuta.
+        grpc:
+          endpoint: 0.0.0.0:4317
+
+ingester:
+  max_block_duration: 5m
+
+# Sem `block_retention`, o backend local guarda os blocos para sempre — num
+# volume nomeado isso é disco crescendo sem limite em uma máquina de dev que
+# sobe a stack todo dia. 24h é o suficiente para investigar "o que aconteceu
+# ontem à tarde" e o que descarta é o que ninguém está olhando.
+compactor:
+  compaction:
+    block_retention: 24h
+
+storage:
+  trace:
+    backend: local
+    # WAL primeiro: é o que permite escrita sem duplicar e recovery após
+    # restart. `local` guarda os blocos já compactados.
+    wal:
+      path: /var/tempo/wal
+    local:
+      path: /var/tempo/blocks
+
+usage_report:
+  reporting_enabled: false

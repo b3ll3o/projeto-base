@@ -96,9 +96,15 @@ Agent criado durante rollout do specialist-router (Fase 2 Task 9). Demanda atual
 docker build -f apps/api/Dockerfile --target prod -t projeto-base-api:prod .
 docker build -f apps/web/Dockerfile --target prod -t projeto-base-web:prod .
 
-# Validar YAML sem daemon:
-docker compose -f docker-compose.yml config
-docker compose -f docker-compose.yml -f docker-compose.dev.yml config
+# Validar YAML sem daemon — `-q` NÃO imprime nada (medido: stdout vazio), e é
+# o que mantém o comando abaixo inofensivo. Sem `-q`, o `config` materializa o
+# conteúdo do `env_file` em texto claro: MEDIDO 2026-10-19, 66 linhas de
+# variável de ambiente entre elas `JWT_SECRET` e `GF_SECURITY_ADMIN_PASSWORD`.
+# Se precisar do RENDER (e não só validar), acrescente `--no-interpolate` —
+# medido: é ele que impede a resolução do `env_file` (o `--no-env-resolution`
+# NÃO impede, apesar do `--help` dizer o contrário).
+docker compose -f docker-compose.yml config -q
+docker compose -f docker-compose.yml -f docker-compose.dev.yml config -q
 
 # Smoke test final (não exercitado em sandbox, mas validado por healthchecks no Dockerfile):
 docker compose up -d postgres api web
