@@ -82,7 +82,7 @@ describe('UsersController.parseIfMatch', () => {
     // Stubs `{} as never` para os dois colaboradores — parseIfMatch
     // não chama nem userUseCases nem auditService. Outros testes
     // (integração / e2e Task 7.7) validam o caminho feliz + mutação.
-    ctrl = new UsersController({} as never, {} as never, {} as never);
+    ctrl = new UsersController({} as never, {} as never, {} as never, {} as never);
   });
 
   it('aceita W/"v3" canônico', () => {
@@ -265,6 +265,9 @@ describe('UsersController — handlers HTTP', () => {
   // "diretório inteiro" e "só a própria linha", e o teste que muda esses dois
   // campos é o que mede o gate.
   let profiles: { obterMeuPerfil: Mock };
+  // pt-BR (2ª revisão, achado 1): o recorte pergunta ao port de membership se
+  // o ATOR é admin de SISTEMA. O default `null` é o caso comum.
+  let memberships: { findProfileId: Mock };
   let ctrl: UsersController;
 
   beforeEach(() => {
@@ -274,10 +277,11 @@ describe('UsersController — handlers HTTP', () => {
     // Default = quem TEM `users.read`: é o caso comum de uma conta com perfil
     // e é o que mantém as asserções deste arquivo em `somenteUsuarioId: null`.
     // O ramo restrito é exercitado pelo teste que troca o stub abaixo.
+    memberships = { findProfileId: vi.fn(async () => null) };
     profiles = {
       obterMeuPerfil: vi.fn().mockResolvedValue({ isAdmin: false, permissions: ['users.read'] }),
     };
-    ctrl = new UsersController(useCases, audit, profiles as never);
+    ctrl = new UsersController(useCases, audit, profiles as never, memberships as never);
   });
 
   it('create() wrapa em AuditContextStore.run e seta ETag + status 201', async () => {
@@ -391,6 +395,129 @@ describe('UsersController — handlers HTTP', () => {
     expect(useCases.listar).toHaveBeenCalledWith(
       expect.objectContaining({ somenteUsuarioId: null }),
       null,
+    );
+  });
+
+  // ── O header ALHEIO (issue #102) ─────────────────────────────────────
+  //
+  // MEDIDO contra Postgres real, sessão `app_runtime`, escopo de empresa
+  // VÁLIDA, conta sem nenhuma membership:
+  //
+  //   X-Tenant-Id: <ACME>  → HTTP 200 · 2 usuarios  → ana@…, carla@…
+  //   X-Tenant-Id: <HEX>   → HTTP 200 · 1 usuario   → bruno@…
+  //
+  // A causa é a resposta à pergunta errada: `usuario_no_escopo(alvo)` pergunta
+  // "o ALVO pertence à empresa do header?" e nunca "o ATOR pertence?". O guard
+  // valida o FORMATO do uuid e publica — logo o header é capacidade declarada
+  // pelo cliente. `perfil.profileId === null` é a prova de que não há vínculo
+  // (`findProfileId` só não resolve sem `tenant_memberships`), e é ela que
+  // precisa acionar o recorte.
+  it('list() header de empresa SEM vínculo recorta para o próprio ator', async () => {
+    profiles.obterMeuPerfil.mockResolvedValue({
+      profileId: null,
+      isAdmin: false,
+      permissions: [],
+    });
+    useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
+
+    await ctrl.list({ user: { sub: 'u-1', tenantId: EMPRESA } } as never);
+
+    // O escopo ainda é o do header — quem decide a empresa é o guard, e mexer
+    // nisso aqui seria mudar o contrato da rota, não corrigir o furo.
+    expect(profiles.obterMeuPerfil).toHaveBeenCalledWith('u-1', EMPRESA);
+    expect(useCases.listar).toHaveBeenCalledWith(
+      expect.objectContaining({ somenteUsuarioId: 'u-1' }),
+      EMPRESA,
+    );
+  });
+
+  // Contrapartida OBRIGATÓRIA: com vínculo (perfil resolvido NAQUELA empresa) o
+  // diretório da empresa abre. Sem este par, um `semVinculo` invertido — ou uma
+  // condition que confundisse `profileId === null` com "sem perfil em lugar
+  // nenhum" — derrubaria quem tem o direito, e o único sintoma seria o
+  // diretório vazio para o administrador da empresa.
+  it('list() header de empresa COM vínculo NÃO é recortado', async () => {
+    profiles.obterMeuPerfil.mockResolvedValue({
+      profileId: 'perfil-da-empresa',
+      isAdmin: false,
+      permissions: ['users.read'],
+    });
+    useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
+
+    await ctrl.list({ user: { sub: 'u-1', tenantId: EMPRESA } } as never);
+
+    expect(useCases.listar).toHaveBeenCalledWith(
+      expect.objectContaining({ somenteUsuarioId: null }),
+      EMPRESA,
+    );
+  });
+
+  // pt-BR (achado 2) ESTE TESTE MENTIA, e é o achado mais importante do PR.
+  //
+  // A versão anterior mockava `obterMeuPerfil` devolvendo `{ profileId:
+  // 'perfil-global', isAdmin: true }` — e passava. Mas esse é o estado que o
+  // fluxo REAL NUNCA produz: com `X-Tenant-Id`, `findProfileId` lê SÓ a
+  // `tenant_memberships`, e o perfil do admin do sistema vive em
+  // `users.profile_id`. O retorno real é o `denied`:
+  //
+  //   { profileId: null, profileSlug: null, profileName: null,
+  //     isAdmin: false, permissions: [] }
+  //
+  // MEDIDO (probe descartado, resultado anotado no commit): com esse `denied`
+  // e com `user.isAdmin: true` no token, `somenteUsuarioId` era
+  // `"admin-global"` — o admin recortado para a PRÓPRIA LINHA. O sintoma do
+  // #102 invertido: negação de acesso legítimo.
+  //
+  // Mutar a condição volta a recortar TEMPORARIAMENTE e este teste era o que
+  // deveria ter derrubado. Ele não derrubava porque mockava o estado impossível.
+  it('list() admin global com header NÃO é recortado — pelo DENIED real', async () => {
+    // O `denied` que `profiles.use-cases.ts:817` devolve.
+    profiles.obterMeuPerfil.mockResolvedValue({
+      profileId: null,
+      profileSlug: null,
+      profileName: null,
+      isAdmin: false,
+      permissions: [],
+    });
+    useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
+
+    // ⚠️ pt-BR (2ª revisão, achado 1) O `isAdmin: true` no request SAIU, e
+    // ele sair é a prova de que o conserto anterior era circular: esse campo é
+    // hidratado do MESMO cache que devolve o `denied`, então plantá-lo era
+    // plantar o conserto.
+    //
+    // Os DOIS sinais agora são independentes e realistas:
+    //   - `request.user.isAdmin = false` (o que o cache devolve de verdade)
+    //   - `findProfileId(sub, null)` devolve o perfil GLOBAL do ator, que é
+    //     onde o bypass vive de fato
+    memberships.findProfileId.mockResolvedValueOnce('perfil-global-admin');
+    await ctrl.list({ user: { sub: 'u-1', tenantId: EMPRESA, isAdmin: false } } as never);
+
+    expect(useCases.listar).toHaveBeenCalledWith(
+      expect.objectContaining({ somenteUsuarioId: null }),
+      EMPRESA,
+    );
+  });
+
+  // A CONTRAPARTIDA do achado 2, e ela é o que impede o conserto de virar
+  // "admin passa em tudo": sem `user.isAdmin` no token, o mesmo `denied`
+  // TEM de recortar. Se alguém afrouxar a condição, este é o vermelho.
+  it('list() conta COM o mesmo denied, mas SEM isAdmin no token, é recortada', async () => {
+    profiles.obterMeuPerfil.mockResolvedValue({
+      profileId: null,
+      profileSlug: null,
+      profileName: null,
+      isAdmin: false,
+      permissions: [],
+    });
+    useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
+
+    // Mesmo `denied`, mesmo token, e SEM perfil global: tem de recortar.
+    await ctrl.list({ user: { sub: 'u-1', tenantId: EMPRESA, isAdmin: false } } as never);
+
+    expect(useCases.listar).toHaveBeenCalledWith(
+      expect.objectContaining({ somenteUsuarioId: 'u-1' }),
+      EMPRESA,
     );
   });
 

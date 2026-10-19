@@ -15,7 +15,7 @@
 // fica vermelho — não "verde por não ter olhado".
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ApiClient } from './api-client';
+import { ApiClient, ApiError, ApiTimeoutError } from './api-client';
 
 const { clientMock, exigirSessaoMock, lerTenantMock, lerTokensMock } = vi.hoisted(() => ({
   clientMock: {
@@ -38,7 +38,15 @@ const { clientMock, exigirSessaoMock, lerTenantMock, lerTokensMock } = vi.hoiste
   ),
 }));
 
-vi.mock('./api-client', () => ({ ApiClient: vi.fn(() => clientMock) }));
+// Mock PARCIAL: só o `ApiClient` (o construtor) é dublê. `ApiError` e
+// `ApiTimeoutError` são as classes REAIS, e é exatamente isso que os testes do
+// #107 precisam: se o `perfil.ts` discrimina por `instanceof`, o teste tem que
+// discriminar pela mesma classe de verdade. Um `instanceof` contra uma classe
+// dublê passaria mesmo com a lógica errada.
+vi.mock('./api-client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./api-client')>();
+  return { ...actual, ApiClient: vi.fn(() => clientMock) };
+});
 vi.mock('./sessao', () => ({
   exigirSessao: exigirSessaoMock,
   lerTenant: lerTenantMock,
@@ -104,6 +112,66 @@ describe('obterMeuPerfil — payload de GET me/profile', () => {
     lerTokensMock.mockResolvedValueOnce({ accessToken: null, refreshToken: null });
     await expect(obterMeuPerfil()).resolves.toBeNull();
     expect(exigirSessaoMock).not.toHaveBeenCalled();
+  });
+
+  // ── pt-BR (#107): o `null` é do 401, e só do 401 ────────────────────────────
+  //
+  // O defeito: `catch { return null }` devolvia o mesmo `null` para 401, 403,
+  // 5xx, timeout e rede caída. As quatro telas `/admin/*` leem `null` como
+  // veredito ("não sou admin"), então uma administradora legítima com a API
+  // caída lia uma tela afirmando o contrário.
+  describe('distingue 401 de 5xx (#107)', () => {
+    function erroApi(status: number): ApiError {
+      // `instance`, `code` e `traceId` são exigidos pelo `ProblemDetailsDto` —
+      // o tipo é o mesmo que a API serializa, e preenchê-los pela metade não
+      // compila. O que o teste usa é o `status`, que é o que o `perfil.ts`
+      // discrimina.
+      const problem = {
+        type: 'about:blank',
+        title: 'erro',
+        status,
+        detail: 'detalhe',
+        instance: '/me/profile',
+        code: 'ERRO',
+        traceId: 'trace-1',
+      };
+      return new ApiError('erro', 'codigo', status, problem);
+    }
+
+    it('401 volta a ser null — token expirado é o mesmo estado de "sem sessão"', async () => {
+      clientMock.get.mockRejectedValueOnce(erroApi(401));
+      await expect(obterMeuPerfil()).resolves.toBeNull();
+    });
+
+    it('403 NÃO vira null — "não tem a permissão" não é "não sei quem você é"', async () => {
+      clientMock.get.mockRejectedValueOnce(erroApi(403));
+      await expect(obterMeuPerfil()).rejects.toThrow(ApiError);
+    });
+
+    it('500 NÃO vira null — o serviço caiu, e a conta está bem', async () => {
+      clientMock.get.mockRejectedValueOnce(erroApi(500));
+      await expect(obterMeuPerfil()).rejects.toThrow(ApiError);
+    });
+
+    it('timeout NÃO vira null — é transporte, e o guard de admin distingue', async () => {
+      // `ApiTimeoutError` é separado de `ApiError` de propósito (ver
+      // api-client.ts): o fetch nem chegou a ter status.
+      clientMock.get.mockRejectedValueOnce(new ApiTimeoutError('/me/profile', 10_000, 'GET'));
+      await expect(obterMeuPerfil()).rejects.toThrow(ApiTimeoutError);
+    });
+
+    it('rede caída NÃO vira null — erro sem status não é autorização', async () => {
+      clientMock.get.mockRejectedValueOnce(new TypeError('fetch failed'));
+      await expect(obterMeuPerfil()).rejects.toThrow(TypeError);
+    });
+
+    it('o status que importa é o do ApiError, não o nome da classe', async () => {
+      // Um ApiError de 503 é serviço indisponível. Se alguém "consertar" o
+      // guard testando `instanceof ApiError` como se fosse negação, este
+      // teste é o que diz que 503 não é 403.
+      clientMock.get.mockRejectedValueOnce(erroApi(503));
+      await expect(obterMeuPerfil()).rejects.toThrow(ApiError);
+    });
   });
 });
 

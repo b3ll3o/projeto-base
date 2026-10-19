@@ -45,6 +45,10 @@ import { randomUUID } from 'node:crypto';
 
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
 import { UserProfileUseCases } from '../../../profiles/application/profiles.use-cases.js';
+import {
+  TENANT_MEMBERSHIP_REPOSITORY_PORT,
+  type TenantMembershipRepositoryPort,
+} from '../../../tenancy/domain/ports/tenant-membership-repository.port.js';
 import { Public } from '../../../auth/infrastructure/http/public.decorator.js';
 import type { TokenSubject } from '../../../auth/domain/ports/token-issuer.port.js';
 
@@ -120,6 +124,12 @@ export class UsersController {
     // `@Inject` explícito pela mesma razão do `Reflector` no `PermissionsGuard`:
     // `tsx`/esbuild não emite `design:paramtypes`.
     @Inject(UserProfileUseCases) private readonly profiles: UserProfileUseCases,
+    // pt-BR (2ª revisão, achado 1): é por este port que o recorte descobre se o
+    // ATOR é admin de SISTEMA. `findProfileId(sub, null)` lê `users.profile_id`
+    // com o filtro `profiles.tenant_id IS NULL` — a origem do bypass global, e a
+    // única que não passa pelo cache resolvido por membership.
+    @Inject(TENANT_MEMBERSHIP_REPOSITORY_PORT)
+    private readonly memberships: TenantMembershipRepositoryPort,
   ) {}
 
   // ───────────────────────── POST /users ─────────────────────────
@@ -229,15 +239,87 @@ export class UsersController {
     // policy que o escondesse trancaria o admin fora do próprio bucket.
     // Nenhuma delas é bug: é o produto. Mudar aqui é mudança de requisito, com
     // migração de dado junto, não correção de furo.
-    const semDireito = perfil.isAdmin !== true && !perfil.permissions.includes('users.read');
+    // pt-BR (2ª revisão, achado 1) O conserto anterior lia `request.user.isAdmin`
+    // e era CIRCULAR: `jwt-auth.guard.ts:283` hidrata esse campo de
+    // `getUserProfileAndPermissions(tenantId, sub)` — o MESMO cache que
+    // `obterMeuPerfil` popula resolvendo POR MEMBERSHIP. `permissions.guard.ts:101`
+    // ainda sobrescreve com o perfil. Os dois leitores nunca discordam, e nunca
+    // discordam para o lado que derruba o admin global.
+    //
+    // MEDIDO (Postgres 16 real, admin global com `users.profile_id` → perfil
+    // `isAdmin`, `tenant_id` NULL, COM membership na empresa, COM header):
+    //
+    //   findProfileId(tenant) → 'membro-acme' (is_admin=false)
+    //   → perfil = denied{isAdmin:false}  →  isAdminGlobal = false  →  recorte
+    //
+    // A origem do bypass global é `users.profile_id` com perfil
+    // `tenant_id IS NULL`, e é a única que não passa pelo cache que causava o
+    // problema. Uma query a esta rota — que já abre escopo — é o preço.
+    const perfilGlobal = await this.memberships.findProfileId(request?.user?.sub ?? '', null);
+    const semDireito =
+      perfil.isAdmin !== true &&
+      perfilGlobal === null &&
+      !perfil.permissions.includes('users.read');
+    //
+    // ⚠️ (issue #102) `perfil.profileId === null` significa que `findProfileId`
+    // NÃO resolveu perfil para o escopo pedido — e o banco só não resolve quando
+    // não há `tenant_memberships` ligando a conta àquela empresa. É a resposta a
+    // "o ATOR pertence a essa empresa?", que a RLS nunca fez:
+    // `usuario_no_escopo(alvo)` pergunta pelo ALVO
+    // (`EXISTS(… WHERE m.user_id = alvo AND m.tenant_id = escopo_atual())`), e o
+    // `JwtAuthGuard` valida o FORMATO do uuid do header sem consultar membership.
+    // Logo o header é capacidade declarada pelo cliente.
+    //
+    // ⚠️ (achado 7) O NOME `semVinculo` afirma mais do que o dado sustenta:
+    // `profileId === null` é verdade tanto para "não pertence a esta empresa"
+    // quanto para "pertence e ainda não tem perfil". Os dois colapsam aqui.
+    // O conserto do admin (acima) torna essa ambiguidade INOFENSIVA para o
+    // recorte — quem pertence sem perfil e não tem `users.read` é recortado
+    // pelos dois caminhos —, mas o nome continua mentindo e a próxima pessoa vai
+    // raciocinar errado por ele. Fica anotado aqui em vez de renomeado porque
+    // renomear o sinal sem trocar a semântica seria cosmetismo.
+    //
+    // MEDIDO antes do conserto (sessão `app_runtime`, escopo de empresa válida,
+    // transação commitada, conta sem nenhuma membership):
+    //
+    //   X-Tenant-Id: <ACME>  → HTTP 200 · 2 usuarios  → ana@…, carla@…
+    //   X-Tenant-Id: <HEX>   → HTTP 200 · 1 usuario   → bruno@…
+    //
+    // Com `semVinculo`, o recorte dispara nesses casos e a resposta é a própria
+    // linha — que é o mesmo tratamento que a conta sem header já recebia.
+    //
+    // ⚠️ POR QUE ISSO NÃO FECHA SOZINHO, E O QUE SOBRA: a invariante de que
+    // NENHUMA rota deve abrir escopo a partir de um header não conferido vale
+    // para as 24 rotas da API, e é mudança de contrato — decisão de produto, não
+    // correção. Aqui o efeito é contido por `semDireito`; numa rota `admin.*` (que
+    // exige `users.read` ou `isAdmin`) um header alheio sem vínculo já falha no
+    // `PermissionsGuard`, porque o perfil resolve `denied`. Ver a issue #102.
+    // ⚠️ (achado 6) O nome antigo, `semVinculo`, foi renomeado: `profileId ===
+    // null` NÃO responde "o ator não pertence a esta empresa" — responde "o
+    // perfil não resolveu para o escopo pedido", que inclui membership criada
+    // e perfil ainda não atribuído. A anotação que o mantinha dizia que a
+    // ambiguidade era inofensiva "porque o V2 neutraliza"; o V2 está aberto, e
+    // o nome agora decide menos do que a frase prometia.
+    const perfilNaoResolveuParaOEscopo = perfil.profileId === null;
     const input: ListUsersInput = {
       cursor: cursor ?? null,
       limit: Number(limit),
       // pt-BR: normaliza case (clients podem mandar 'True'/'TRUE'/'1') +
       // aceita os dois valores truthy canônicos ('true' e '1').
       includeDeleted: includeDeleted?.toLowerCase() === 'true' || includeDeleted === '1',
-      somenteUsuarioId: empresa === null && semDireito ? (request?.user?.sub ?? null) : null,
+      somenteUsuarioId:
+        (empresa === null || perfilNaoResolveuParaOEscopo) && semDireito
+          ? (request?.user?.sub ?? null)
+          : null,
     };
+    // pt-BR (2ª revisão, achado 5) O parâmetro `comPerfilEfetivo` saiu. Ele
+    // tinha UM chamador, passando `true` fixo — e a justificativa escrita ("GET
+    // /users tem chamadores que não mostram perfil") descrevia um endpoint que
+    // não existe: as DUAS telas web que consomem `/users` (`app/users` e
+    // `app/admin/users`) renderizam o campo, pelo menos como `null`.
+    //
+    // Um parâmetro que ninguém usa para dizer "não" é um parâmetro que mente
+    // sobre existir um caso de não uso. A projeção é sempre paga.
     return this.userUseCases.listar(input, empresa);
   }
 

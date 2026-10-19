@@ -16,7 +16,7 @@
 // admin digita na URL entra só por `obterPerfilPorSlug`, que o resolve
 // antes de chamar a API.
 
-import { ApiClient } from './api-client';
+import { ApiClient, ApiError } from './api-client';
 import { exigirSessao, lerTenant, lerTokens } from './sessao';
 import type {
   AssignProfileInputDto,
@@ -57,19 +57,53 @@ async function getClientOpcional(): Promise<ApiClient | null> {
   });
 }
 
+/**
+ * Perfil do ator no tenant da sessão.
+ *
+ * pt-BR (#107, 2026-10-18): o `catch` deixou de ser `catch {}`.
+ *
+ * Antes, 401, 403, 5xx, timeout e rede caída devolviam o MESMO `null` do
+ * "não sou admin". As quatro telas `/admin/*` leem `null` como veredito
+ * (`me === null || me.isAdmin !== true` → "Esta página exige perfil de
+ * administrador"), então uma administradora legítima com a API caída recebia
+ * uma tela afirmando o contrário — e um 403 real recebia a mesma.
+ *
+ * O que muda aqui é o que NÃO é dissolvido:
+ *
+ * - **sem sessão** (não há token) → `null`. Não é erro: é ausência de sessão.
+ * - **401** → `null`. Token expirado (15 min) é o mesmo estado observável de
+ *   "não autenticado" para quem só tem o token em cookie. Propagar aqui
+ *   transformaria "saiu do login" em erro de página.
+ * - **403 e todo o resto** → propaga. A decisão é de quem chamou: redirecionar,
+ *   dizer "acesso restrito" ou oferecer retry são três respostas diferentes
+ *   para três causas diferentes, e nenhuma delas é `null`.
+ *
+ * ⚠️ Quem chama decide o que fazer com a propagação, e os dois chamadores
+ * decidem diferente — de propósito:
+ *
+ *   - o guard de `/admin/*` (`app/admin/guard-admin.tsx`) DISTINGUE os casos,
+ *     porque é quem tem o que fazer com a diferença;
+ *   - o `Sidebar` ENGOLE, porque é chrome: ele é renderizado pelo layout de
+ *     todas as telas, e uma exceção ali derruba páginas que não têm nada a ver
+ *     com perfil (MEDIDO: sem o `catch` dele, os e2e F1 e F5 caíram).
+ *
+ * O padrão de 401 já existia no repo em `app/users/page.tsx`
+ * (`err instanceof ApiError && err.status === 401` → `redirect('/login')`); o
+ * que faltava era este arquivo parando de esconder o resto.
+ */
 export async function obterMeuPerfil(): Promise<MeProfileDto | null> {
+  // `getClientOpcional()` devolve `null` (não lança) quando não há token, e
+  // propaga se a leitura do cookie falhar — que é infraestrutura, não sessão
+  // ausente. Por isso não há `try` em volta: um catch que só relança seria
+  // `no-useless-catch`, e o comportamento seria idêntico sem ele.
+  const client = await getClientOpcional();
+  if (client === null) return null;
+
   try {
-    const client = await getClientOpcional();
-    if (client === null) return null;
     return await client.get<MeProfileDto>('/me/profile');
-  } catch {
-    // pt-BR: 401 (sem sessão), 5xx e rede caída devolvem `null` — o Sidebar não
-    // pode derrubar a página. Havia um `if` que jurava separar o 401 testando
-    // `e.statusCode`, campo que o `ApiError` não tem: nunca entrava, e os dois
-    // ramos devolviam `null` por acidente. O `catch` sem `e` é a mesma
-    // comportamento sem a mentira. Quem precisar distinguir 401 de 5xx faz isso
-    // na página, que é onde a decisão (redirecionar ou mostrar erro) mora.
-    return null;
+  } catch (erro) {
+    if (erro instanceof ApiError && erro.status === 401) return null;
+    throw erro;
   }
 }
 

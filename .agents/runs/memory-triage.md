@@ -99,6 +99,44 @@ fazê-lo às cegas seria fabricar 39 linhas `citada` sem âncora verificada.
 
 ## Tabela
 
+### ⚠️ Por que este ledger só pode ser satisfeito onde o corpus existe
+
+A medição do corpus é **por ambiente**, e o gate `check-memory-crystallization`
+mede `$MEMORY_DIR` da máquina em que roda. Isso não é um detalhe: é a razão de
+este arquivo ter sido corrigido duas vezes em 2026-10-18.
+
+**O que aconteceu:** uma versão anterior converteu 78 linhas para `removida:`
+tombstone com a medição "o corpus tem 2 arquivos". A medição era verdadeira
+naquela máquina — e falsa na de quem maintaina o repositório, onde o mesmo
+`$MEMORY_DIR` tem **126 arquivos** e **todas** as 78 declaradas `removida`
+existem. Um tombstone afirma "essa memória foi removida"; aqui se apagou o
+rastro de 78 regras que continuam vivas, e a próxima pessoa a maintainer o
+ledger teria descartado trabalho real.
+
+**A correção:** as 78 linhas voltaram à disposição original (`citada`,
+`pendente`, `recusada`), preservando alvo e âncora verbatim. E a regra que
+falta: **quem satisfaz este gate mede o corpus no ambiente onde o gate roda, e
+declara qual ambiente foi.** Um gate que dá verde num ambiente e vermelho no
+outro não está medindo a mesma coisa duas vezes — está medindo duas coisas.
+
+⚠️ **A razão do vermelho local é outra, e vale registrar.** O commit anterior
+disse que o gate "volta a reprovar AQUI, porque aqui as memórias não existem".
+Medido contra o diretório **real** (127 arquivos), o gate reprova por
+`uncovered: 2` — duas memórias criadas **depois** do commit, não corpus
+ausente. `PHANTOM: 0`, `STALE ANCHORS: 0`, `MISSING TARGETS: 0`.
+
+A inversão das 78 estava certa. O erro foi a **explicação**: um gate de
+cristalização que reprova por memória nova é trabalho de triagem pendente, e
+dizer "o corpus sumiu" apontava para um incidente que não aconteceu.
+
+### O que a tombstone `removida` continua significando
+
+Permite ao corpus ENCOLHER, preservando a procedência. Quando uma memória for
+realmente removida, a linha vira `removida:` **com o alvo e a âncora que ela
+tinha** — o que se guarda não é a memória, é a decisão. É isso que a diferença
+entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
+
+
 | memória | disposição | alvo | âncora |
 |---|---|---|---|
 | `t7-rbac-feature-flag` | `removida` | memória ausente do corpus local; a âncora `listAllPermissions` existe em `apps/api/src/shared/auth/permissions-catalog.ts` | — |

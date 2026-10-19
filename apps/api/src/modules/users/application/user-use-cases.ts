@@ -38,7 +38,7 @@ import type { SoftDeleteUserInput } from './dto/soft-delete-user.input.js';
 import type { RestoreUserInput } from './dto/restore-user.input.js';
 import type { GetUserByIdInput } from './dto/get-user-by-id.input.js';
 import type { ListUsersInput } from './dto/list-users.input.js';
-import { toUserOutput, type UserOutput } from './dto/user.output.js';
+import { toUserOutput, toUserOutputNoEscopo, type UserOutput } from './dto/user.output.js';
 import type { ListUsersOutput } from './dto/list-users.output.js';
 
 import {
@@ -200,8 +200,12 @@ export class UserUseCases {
       },
       tenantId,
     );
+    // pt-BR (#106): o perfil efetivo vem por FORA do agregado, indexado por
+    // userId. Quem não estiver no map é porque a projeção não foi pedida ou o
+    // id não veio da página — `null` é quem não tem perfil.
+    const efetivos = page.perfilEfetivo;
     return {
-      users: page.users.map(toUserOutput),
+      users: page.users.map((u) => toUserOutputNoEscopo(u, efetivos?.get(u.id().value))),
       nextCursor: page.nextCursor,
     };
   }

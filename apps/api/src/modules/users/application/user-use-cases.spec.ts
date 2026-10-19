@@ -489,6 +489,123 @@ describe('UserUseCases', () => {
       spy.mockRestore();
     });
 
+    // ── pt-BR (#106): o perfil EFETIVO no escopo, e não o global ──────────────
+    //
+    // O caso que estes testes existem para impedir: `UserOutput.profileId` é a
+    // coluna GLOBAL (`users.profile_id`), e ela é `null` para toda conta criada
+    // pelo produto. A autorização lê `tenant_memberships.profile_id`. Usar a
+    // global na tela fazia `/admin/users` dizer "sem perfil" para quem tem.
+    describe('perfil efetivo no escopo (#106)', () => {
+      it('projeta o perfil da membership, não o global do agregado', async () => {
+        const ctx = makeCtx();
+        const [ana, carla] = await AuditContextStore.run(ctx, () =>
+          Promise.all([
+            useCases.criarUser({ nome: 'Ana', email: 'ana@x.com', senha: SENHA_VALIDA }, null),
+            useCases.criarUser({ nome: 'Carla', email: 'carla@x.com', senha: SENHA_VALIDA }, null),
+          ]),
+        );
+        const PERFIL = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+
+        // Os agregados vêm do próprio `list` do in-memory (sem mock), e o que
+        // muda é só o `perfilEfetivo` — que o in-memory não produz. Assim o
+        // teste mede a PROJEÇÃO do use case, não um dublê de repositório.
+        const reais = await AuditContextStore.run(ctx, () =>
+          repo.list(
+            { limit: 10, cursor: null, includeDeleted: false, somenteUsuarioId: null },
+            null,
+          ),
+        );
+        vi.spyOn(repo, 'list').mockResolvedValueOnce({
+          users: reais.users,
+          nextCursor: null,
+          perfilEfetivo: new Map([
+            [ana.id, PERFIL], // membership com perfil
+            [carla.id, null], // membership SEM perfil
+          ]),
+        });
+
+        const page = await AuditContextStore.run(ctx, () =>
+          useCases.listar({ limit: 10 }, EMPRESA),
+        );
+        const anaOut = page.users.find((u) => u.id === ana.id);
+
+        // O que a tela exibe é o da membership…
+        expect(anaOut?.perfilEfetivoNoEscopo).toBe(PERFIL);
+        // …e o global continua intacto e separado. Sobrescrever `profileId`
+        // com o valor do escopo apagaria a distinção que o campo existe pra fazer.
+        expect(anaOut?.profileId).toBeNull();
+      });
+
+      it('ausente do map = sem vínculo no escopo, que é diferente de sem perfil', async () => {
+        const ctx = makeCtx();
+        const ana = await AuditContextStore.run(ctx, () =>
+          useCases.criarUser({ nome: 'Ana', email: 'ana@x.com', senha: SENHA_VALIDA }, null),
+        );
+
+        // Ana não aparece no map: não pertence a esta empresa.
+        const reais = await AuditContextStore.run(ctx, () =>
+          repo.list(
+            { limit: 10, cursor: null, includeDeleted: false, somenteUsuarioId: null },
+            null,
+          ),
+        );
+        vi.spyOn(repo, 'list').mockResolvedValueOnce({
+          users: reais.users,
+          nextCursor: null,
+          perfilEfetivo: new Map(),
+        });
+
+        const page = await AuditContextStore.run(ctx, () =>
+          useCases.listar({ limit: 10 }, EMPRESA),
+        );
+        const out = page.users.find((u) => u.id === ana.id);
+
+        // `undefined`, não `null`: a tela distingue "fora desta empresa" de
+        // "sem perfil", e colapsar os dois é o defeito que ela já tinha.
+        expect(out?.perfilEfetivoNoEscopo).toBeUndefined();
+        expect('perfilEfetivoNoEscopo' in (out ?? {})).toBe(false);
+      });
+
+      it('o in-memory no bucket GLOBAL devolve mapa, igual à produção', async () => {
+        // ⚠️ pt-BR (2ª revisão, achado 7) Este teste afirmava `undefined` e o
+        // in-memory agora devolve `null` — que é o que o Prisma devolve no
+        // bucket global. A versão anterior era a divergência entre teste e
+        // produção: `toUserOutputNoEscopo` omitia a chave, e a tela recebia
+        // "ausente" no teste e "sem perfil" em produção.
+        const ctx = makeCtx();
+        await AuditContextStore.run(ctx, () =>
+          useCases.criarUser({ nome: 'Ana', email: 'ana@x.com', senha: SENHA_VALIDA }, null),
+        );
+        const page = await AuditContextStore.run(ctx, () => useCases.listar({ limit: 10 }, null));
+        expect(page.users).toHaveLength(1);
+        // `null`, e não ausente: Ana foi criada sem perfil, e o bucket global
+        // diz exatamente isso. É a mesma resposta do Prisma.
+        expect(page.users[0]?.perfilEfetivoNoEscopo).toBeNull();
+      });
+
+      it('repositório que não devolve mapa não quebra a listagem', async () => {
+        // A garantia continua valendo para adapter futuro: a ausência do mapa
+        // é "não sei", e a listagem segue respondendo.
+        const ctx = makeCtx();
+        await AuditContextStore.run(ctx, () =>
+          useCases.criarUser({ nome: 'Ana', email: 'ana@x.com', senha: SENHA_VALIDA }, null),
+        );
+        const spy = vi.spyOn(repo, 'list');
+        const reais = await AuditContextStore.run(ctx, () =>
+          repo.list(
+            { limit: 10, cursor: null, includeDeleted: false, somenteUsuarioId: null },
+            null,
+          ),
+        );
+        spy.mockResolvedValueOnce({ users: reais.users, nextCursor: null });
+
+        const page = await AuditContextStore.run(ctx, () => useCases.listar({ limit: 10 }, null));
+        expect(page.users).toHaveLength(1);
+        expect(page.users[0]?.perfilEfetivoNoEscopo).toBeUndefined();
+        spy.mockRestore();
+      });
+    });
+
     // ⚠️ Este teste é o que teria pegado o defeito real. O record-literal que
     // traduz o DTO para o port ESQUECEU `somenteUsuarioId` na primeira versão,
     // e o `list()` do repositório — que o lia — virava código morto. Nenhum

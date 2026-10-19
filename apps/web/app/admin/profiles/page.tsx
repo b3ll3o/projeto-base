@@ -13,20 +13,16 @@
 import type * as React from 'react';
 import Link from 'next/link';
 import { listarPerfis } from '../../../lib/perfil';
-import { obterMeuPerfil } from '../../../lib/perfil';
+import { exigirAdmin } from '../guard-admin';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminProfilesPage(): Promise<React.JSX.Element> {
-  const me = await obterMeuPerfil();
-  if (me === null || me.isAdmin !== true) {
-    return (
-      <main className="mx-auto max-w-3xl p-8">
-        <h1 className="text-2xl font-semibold text-slate-900">Acesso restrito</h1>
-        <p className="mt-1 text-sm text-slate-500">Esta página exige perfil de administrador.</p>
-      </main>
-    );
-  }
+  const guarda = await exigirAdmin();
+  // `bloqueio: true` e `me` nunca coexistem: o discriminante faz o compilador
+  // exigir este return, e foi o que impediu o formulário de vazar para quem não
+  // é admin (MEDIDO nos e2e F10/F11/F12 — ver o cabeçalho de guard-admin.tsx).
+  if (guarda.bloqueio) return guarda.tela;
 
   const profiles = await listarPerfis();
 

@@ -41,6 +41,19 @@ export interface UserOutputDto {
    * exatamente esta divergência.
    */
   profileId: UUID | null;
+  /**
+   * pt-BR (#106, 2026-10-18): perfil EFETIVO no tenant do escopo pedido, lido de
+   * `tenant_memberships.profile_id` — a mesma coluna que a autorização lê.
+   *
+   * `profileId` acima é o perfil GLOBAL da conta (`users.profile_id`), e é
+   * `null` para toda conta criada pelo produto. Usá-lo na tela `/admin/users`
+   * fazia a coluna dizer "sem perfil" para quem tem, sempre.
+   *
+   * ⚠️ pt-BR (achado 1) `null` = sem perfil. Ausente = a listagem não pediu a
+   * projeção. O contrato de três estados foi removido: no bucket global não
+   * havia dado que sustentasse "não pertence a esta empresa".
+   */
+  perfilEfetivoNoEscopo?: UUID | null;
   version: number;
   createdAt: ISODateString;
   updatedAt: ISODateString;

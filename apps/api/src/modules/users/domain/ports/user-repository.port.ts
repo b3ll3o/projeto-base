@@ -25,6 +25,29 @@ export interface UserListInput {
 export interface UserListResult {
   users: User[];
   nextCursor: string | null;
+  /**
+   * pt-BR (#106, 2026-10-18): perfil EFETIVO de cada usuário no escopo pedido,
+   * indexado por `userId`.
+   *
+   * Com `tenantId`, vem da `tenant_memberships.profile_id` — a mesma coluna que a
+   * autorização lê. Sem `tenantId`, vem de `users.profile_id`, que é a coluna
+   * que `findProfileId` e a escrita usam no bucket global. A bifurcação não é
+   * escolha: as três concordarem é o que impede a tela de discordar da escrita.
+   *
+   * O agregado NÃO é reescrito com este valor: `User.profileId` é o perfil da
+   * conta, e a conta não pertence a uma empresa. Isto é projeção de leitura.
+   *
+   * ⚠️ pt-BR (achado 1) **TODO `userId` da página está no mapa.** `null` = sem
+   * perfil. Map AUSENTE = a projeção não foi pedida (`list()` sem
+   * `comPerfilEfetivo`), ou o id não veio da página.
+   *
+   * Este contrato JÁ FOI de três estados (ausente = "não pertence", `null` =
+   * "pertence sem perfil") e foi REMOVIDO: no bucket global todo usuário da
+   * página pertence por definição, então "não pertence" não tinha dado que o
+   * sustentasse, e o filtro que tentava produzir esse dado (`profile: { is:
+   * { tenantId: null } }`) excluía justamente as contas criadas pelo produto.
+   */
+  perfilEfetivo?: ReadonlyMap<string, string | null>;
 }
 
 /**

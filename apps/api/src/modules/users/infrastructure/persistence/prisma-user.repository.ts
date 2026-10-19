@@ -293,10 +293,137 @@ export class PrismaUserRepository implements UserRepositoryPort {
     const hasMore = rows.length > input.limit;
     const page = hasMore ? rows.slice(0, input.limit) : rows;
     const last = page[page.length - 1];
+
+    // pt-BR (#106, 2026-10-18): o perfil EFETIVO no escopo pedido.
+    //
+    // `users.profile_id` é a coluna GLOBAL — e ela é `null` para toda conta
+    // criada pelo produto (`provisionarEmpresaPropria` e `consumirEEntrar`
+    // gravam `profileId: null` explicitamente). A autorização, porém, lê
+    // `tenant_memberships.profile_id`. São duas fontes, e só a segunda é a
+    // que vale: por isso `/admin/users` mostrava "sem perfil" para quem tem.
+    //
+    // ⚠️ Isto NÃO altera o agregado. `User.profileId` continua sendo o global:
+    // o agregado é a conta, e a conta não pertence a uma empresa. O que muda
+    // é o que a LISTAGEM projeta — a tela precisa do perfil no escopo, não do
+    // perfil da conta. Por isso o valor vem por fora, no `UserListResult`.
+    const efetivos = await this.perfilEfetivoPorUsuario(
+      page.map((r) => r.id),
+      tenantId,
+    );
+
     return {
       users: page.map((r: UserRow) => UserPrismaMapper.toDomain(r)),
       nextCursor: hasMore && last !== undefined ? last.id : null,
+      // ⚠️ `exactOptionalPropertyTypes` proíbe `{ x: undefined }` para `x?: T`.
+      // A chave é omitida de verdade quando a projeção não foi pedida, e é isso
+      // que o contrato diz: "ausente = não pediu".
+      ...(efetivos !== undefined ? { perfilEfetivo: efetivos } : {}),
+      // ⚠️ pt-BR (achado 1) TODO id da página está no mapa agora, com `null`
+      // para quem não tem perfil. Ausente no mapa significa "não pediu a
+      // projeção" (achado 10) ou "o id não veio da página" — nunca "não
+      // pertence a esta empresa". A distinção que o contrato de três estados
+      // prometia foi removida porque não havia dado que a sustentasse: no
+      // bucket global TODO usuário da página pertence por definição.
     };
+  }
+
+  /**
+   * pt-BR (#106): perfil da membership de cada usuário no escopo pedido.
+   *
+   * Uma consulta por página, não uma por usuário: a listagem é paginada e o
+   * limite é do chamador — N+1 aqui seria o caminho que faz a tela
+   * `/admin/users` ficar lenta exatamente onde há mais gente para ver.
+   *
+   * ⚠️ A bifurcação por bucket NÃO é uma escolha: ela é a mesma de
+   * `findProfileId` (`prisma-tenant-membership.repository.ts:31`) e a mesma
+   * de `atribuirProfileAoUser` (`profiles.use-cases.ts:704`). As três
+   * concordar é o que mantém leitura, autorização e escrita falando da mesma
+   * coluna. MEDIDO: com só o ramo de membership, o e2e F12 caía — o admin do
+   * harness opera sem header (bucket global), e `PUT /admin/users/:id/profile`
+   * escreve `users.profile_id`. Ler a membership devolveva vazio, e a coluna
+   * "Perfil atual" ficava "sem perfil" mesmo depois de atribuir.
+   *
+   * O filtro `profile: { tenantId: null }` é o do `findProfileId`: sem ele um
+   * `users.profile_id` apontando para perfil de EMPRESA resolveria no bucket
+   * global, que é o oposto do que a coluna promete.
+   */
+  private async perfilEfetivoPorUsuario(
+    userIds: readonly string[],
+    tenantId: string | null,
+  ): Promise<Map<string, string | null>> {
+    const out = new Map<string, string | null>();
+    if (userIds.length === 0) return out;
+
+    // ⚠️ pt-BR (achado 1) TODO userId ENTRA no mapa, mesmo sem perfil.
+    //
+    // A versão anterior preenchia o mapa só com quem casava no `findMany` — e o
+    // filtro `profile: { is: { tenantId: null } }` exclui quem tem
+    // `profile_id = NULL`, que é TODA conta criada pelo produto
+    // (`provisionarEmpresaPropria` e `consumirEEntrar` gravam `profileId: null`).
+    // Essa conta saía do mapa e voltava como `undefined`, que o contrato do port
+    // diz ser "não pertence a esta empresa". O caso mais comum do produto
+    // recebia a resposta de um caso raro.
+    //
+    // ⚠️ E o `deletedAt: null` sumiu de propósito. Ele contradizia o
+    // `includeDeleted` da listagem logo acima: `GET /users?includeDeleted=true`
+    // trazia o soft-deleted em `page.users` e o deixava fora do mapa, então a
+    // API afirmava "sem vínculo" para quem tem perfil. O ramo de tenant nunca
+    // filtrou — metade do método discordava da outra.
+
+    if (tenantId === null) {
+      // ⚠️ pt-BR (2ª revisão, achado 2) O filtro `profile: { tenantId: null }`
+      // VOLTOU, e a versão anterior que o removeu estava errada de um jeito que
+      // a leitura não pegou.
+      //
+      // O filtro não é só da AUTORIZAÇÃO. Removê-lo aqui para fazer o mapa ficar
+      // completo (achado 1 da 1ª revisão) deixou a tela mostrar um perfil que
+      // o sistema não reconhece. MEDIDO em Postgres 16 real, cenário alcançável
+      // (admin de sistema pulando R1/R2 em `atribuirProfileAoUser`):
+      //
+      //   AUTORIZACAO (filtro tenant IS NULL) | NULL
+      //   PROJECAO   (sem filtro, meu conserto) | gestor-acme
+      //
+      // O port promete que as três concordam. Elas discordavam.
+      //
+      // São DOIS problemas com uma correção só: o mapa precisava de todo id da
+      // página, e o filtro precisava ficar. Duas consultas, não uma sem filtro.
+      // Uma consulta basta: `userIds` JÁ é a página, e a listagem acima aplicou
+      // o `includeDeleted`. Quem está no mapa é quem a listagem devolveu.
+      // O filtro `tenantId: null` do perfil é o que faz o `null` significar
+      // "sem perfil EFETIVO" em vez de "tem um perfil que a tela não deveria
+      // mostrar" — e é o mesmo filtro do `findProfileId`.
+      const rows = await comEscopo(this.prisma, escopoDoTenant(null), (tx) =>
+        tx.user.findMany({
+          where: {
+            id: { in: [...userIds] },
+            OR: [{ profileId: null }, { profile: { is: { tenantId: null } } }],
+          },
+          select: { id: true, profileId: true },
+        }),
+      );
+
+      const achados = new Map(rows.map((r) => [r.id, r.profileId]));
+      // TODO id da página entra, com `null` para quem não casou — é o que o
+      // achado 1 pedia.
+      for (const id of userIds) out.set(id, achados.get(id) ?? null);
+      return out;
+    }
+
+    const rows = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+      tx.tenantMembership.findMany({
+        where: { userId: { in: [...userIds] }, tenantId },
+        select: { userId: true, profileId: true },
+      }),
+    );
+
+    // ⚠️ (achado 9) a guarda `if (!out.has(...))` saiu: o `@@unique([userId,
+    // tenantId])` garante uma linha por usuário, e o filtro de `tenantId` já
+    // fixou a empresa. A guarda sugeria que a duplicidade fosse possível, e
+    // quem a lê a manteria liberal se um dia o filtro mudasse — sem índice
+    // para justificar.
+    const porUser = new Map(rows.map((r) => [r.userId, r.profileId]));
+    for (const id of userIds) out.set(id, porUser.get(id) ?? null);
+    return out;
   }
 
   /**
