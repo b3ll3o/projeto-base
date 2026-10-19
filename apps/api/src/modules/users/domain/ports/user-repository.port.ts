@@ -121,16 +121,7 @@ export interface UserRepositoryPort {
    * Por padrão exclui soft-deleted (deletedAt !== null).
    * Inclui soft-deleted quando `includeDeleted: true`.
    */
-  /**
-   * pt-BR (achado 10): `opcoes.comPerfilEfetivo` decide se a projeção de perfil
-   * é paga. `false` (default) não abre a transação extra — `GET /users` tem
-   * chamadores que não renderizam o campo.
-   */
-  list(
-    input: UserListInput,
-    tenantId: string | null,
-    opcoes?: { comPerfilEfetivo?: boolean },
-  ): Promise<UserListResult>;
+  list(input: UserListInput, tenantId: string | null): Promise<UserListResult>;
 
   /**
    * pt-BR (#93.1 — RBAC, 2026-10-16): conta quantos users têm o

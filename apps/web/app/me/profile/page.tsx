@@ -9,6 +9,8 @@
 import type * as React from 'react';
 import { redirect } from 'next/navigation';
 import { obterMeuPerfil } from '../../../lib/perfil';
+import { ApiError } from '../../../lib/api-client';
+import { ServicoIndisponivel } from '../../admin/guard-admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,8 +24,27 @@ export default async function MeProfilePage(): Promise<React.JSX.Element> {
   // "Sem perfil — deny-by-default", que era um erro silencioso em direção
   // oposta (ela era administradora legítima e via "sem perfil").
   //
-  // O `null` abaixo é só ausência de sessão/401, como no guard: vai pro login.
-  const me = await obterMeuPerfil().catch(() => null);
+  // ⚠️ pt-BR (2ª revisão, achado 3) `.catch(() => null)` era o defeito que a
+  // issue #107 existe para matar, reintroduzido aqui: 403/5xx/timeout/rede
+  // viravam `null` e caíam no `redirect('/login')`. A administradora legítima
+  // com a API fora do ar era mandada para o login — que é exatamente o que o
+  // #107 conserta no guard (`guard-admin.tsx`, onde 403 e 5xx NÃO viram
+  // `null`). A soma dos dois revisores está certa: o 500 cru some, mas o
+  // sintoma vira "sessão expirada".
+  //
+  // Aqui a distinção é a mesma do guard:
+  //   sem sessão / 401 → login
+  //   403                → acesso restrito (é administradora, falta permissão)
+  //   5xx / timeout / rede → serviço fora, com retry
+  let me;
+  try {
+    me = await obterMeuPerfil();
+  } catch (erro) {
+    if (erro instanceof ApiError && (erro.status === 401 || erro.status === 403)) {
+      redirect('/login');
+    }
+    return ServicoIndisponivel();
+  }
   if (me === null) {
     redirect('/login');
   }

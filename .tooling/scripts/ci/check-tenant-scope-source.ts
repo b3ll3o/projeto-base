@@ -17,7 +17,7 @@
  * então qualquer repositório que receba um `tenantId` e abra o escopo aceita
  * abrir o escopo de qualquer empresa, desde que alguém lhe passe a string.
  *
- * MEDIDO hoje: **66 chamadas** em `apps/api/src` — 32 `escopoDoTenant`, 28
+ * MEDIDO hoje: **70 chamadas** em `apps/api/src` — 36 `escopoDoTenant`, 28
  * `comEscopo`, 6 `abrirEscopo` — distribuídas em **41 LINHAS**, porque 25 delas
  * são `comEscopo(prisma, escopoDoTenant(x), …)` e contam duas. Recebem `null`,
  * um identificador local, ou um acessor de domínio (`ctx.tenantId`,
@@ -355,7 +355,7 @@ export function checkTenantScopeSource(opts: { srcRoot: string }): CheckResult {
 
   // Anti-vacuuidade. Um gate que mede ZERO call sites está verde porque não
   // mediu nada: renomear o helper, ou a árvore perder os repositórios, esvazia o
-  // corpus sem nenhum sinal. MEDIDO hoje: 66 chamadas. O número no painel é o
+  // corpus sem nenhum sinal. MEDIDO hoje: 70 chamadas. O número no painel é o
   // que distingue "a classe está fechada" de "o corpus sumiu".
   if (total === 0) {
     erros.push(

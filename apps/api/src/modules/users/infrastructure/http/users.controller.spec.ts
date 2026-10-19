@@ -82,7 +82,7 @@ describe('UsersController.parseIfMatch', () => {
     // Stubs `{} as never` para os dois colaboradores — parseIfMatch
     // não chama nem userUseCases nem auditService. Outros testes
     // (integração / e2e Task 7.7) validam o caminho feliz + mutação.
-    ctrl = new UsersController({} as never, {} as never, {} as never);
+    ctrl = new UsersController({} as never, {} as never, {} as never, {} as never);
   });
 
   it('aceita W/"v3" canônico', () => {
@@ -265,6 +265,9 @@ describe('UsersController — handlers HTTP', () => {
   // "diretório inteiro" e "só a própria linha", e o teste que muda esses dois
   // campos é o que mede o gate.
   let profiles: { obterMeuPerfil: Mock };
+  // pt-BR (2ª revisão, achado 1): o recorte pergunta ao port de membership se
+  // o ATOR é admin de SISTEMA. O default `null` é o caso comum.
+  let memberships: { findProfileId: Mock };
   let ctrl: UsersController;
 
   beforeEach(() => {
@@ -274,10 +277,11 @@ describe('UsersController — handlers HTTP', () => {
     // Default = quem TEM `users.read`: é o caso comum de uma conta com perfil
     // e é o que mantém as asserções deste arquivo em `somenteUsuarioId: null`.
     // O ramo restrito é exercitado pelo teste que troca o stub abaixo.
+    memberships = { findProfileId: vi.fn(async () => null) };
     profiles = {
       obterMeuPerfil: vi.fn().mockResolvedValue({ isAdmin: false, permissions: ['users.read'] }),
     };
-    ctrl = new UsersController(useCases, audit, profiles as never);
+    ctrl = new UsersController(useCases, audit, profiles as never, memberships as never);
   });
 
   it('create() wrapa em AuditContextStore.run e seta ETag + status 201', async () => {
@@ -314,7 +318,6 @@ describe('UsersController — handlers HTTP', () => {
         somenteUsuarioId: null,
       },
       null,
-      true,
     );
     expect(result).toEqual({ items: [], nextCursor: null });
     runSpy.mockRestore();
@@ -331,7 +334,6 @@ describe('UsersController — handlers HTTP', () => {
         somenteUsuarioId: null,
       },
       null,
-      true,
     );
   });
 
@@ -345,13 +347,13 @@ describe('UsersController — handlers HTTP', () => {
   it('list() repassa a empresa do token como escopo', async () => {
     useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
     await ctrl.list({ user: { sub: 'u-1', tenantId: EMPRESA } } as never);
-    expect(useCases.listar).toHaveBeenCalledWith(expect.anything(), EMPRESA, true);
+    expect(useCases.listar).toHaveBeenCalledWith(expect.anything(), EMPRESA);
   });
 
   it('list() sem header de empresa cai no bucket de SISTEMA', async () => {
     useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
     await ctrl.list({ user: { sub: 'u-1' } } as never);
-    expect(useCases.listar).toHaveBeenCalledWith(expect.anything(), null, true);
+    expect(useCases.listar).toHaveBeenCalledWith(expect.anything(), null);
   });
 
   // ── O recorte de quem não tem `users.read` ───────────────────────────
@@ -377,7 +379,6 @@ describe('UsersController — handlers HTTP', () => {
     expect(useCases.listar).toHaveBeenCalledWith(
       expect.objectContaining({ somenteUsuarioId: 'u-1' }),
       null,
-      true,
     );
   });
 
@@ -394,7 +395,6 @@ describe('UsersController — handlers HTTP', () => {
     expect(useCases.listar).toHaveBeenCalledWith(
       expect.objectContaining({ somenteUsuarioId: null }),
       null,
-      true,
     );
   });
 
@@ -428,7 +428,6 @@ describe('UsersController — handlers HTTP', () => {
     expect(useCases.listar).toHaveBeenCalledWith(
       expect.objectContaining({ somenteUsuarioId: 'u-1' }),
       EMPRESA,
-      true,
     );
   });
 
@@ -450,7 +449,6 @@ describe('UsersController — handlers HTTP', () => {
     expect(useCases.listar).toHaveBeenCalledWith(
       expect.objectContaining({ somenteUsuarioId: null }),
       EMPRESA,
-      true,
     );
   });
 
@@ -483,14 +481,21 @@ describe('UsersController — handlers HTTP', () => {
     });
     useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
 
-    // O bypass vive no TOKEN — `request.user.isAdmin`, o mesmo sinal que o
-    // `PermissionsGuard` aceita.
-    await ctrl.list({ user: { sub: 'u-1', tenantId: EMPRESA, isAdmin: true } } as never);
+    // ⚠️ pt-BR (2ª revisão, achado 1) O `isAdmin: true` no request SAIU, e
+    // ele sair é a prova de que o conserto anterior era circular: esse campo é
+    // hidratado do MESMO cache que devolve o `denied`, então plantá-lo era
+    // plantar o conserto.
+    //
+    // Os DOIS sinais agora são independentes e realistas:
+    //   - `request.user.isAdmin = false` (o que o cache devolve de verdade)
+    //   - `findProfileId(sub, null)` devolve o perfil GLOBAL do ator, que é
+    //     onde o bypass vive de fato
+    memberships.findProfileId.mockResolvedValueOnce('perfil-global-admin');
+    await ctrl.list({ user: { sub: 'u-1', tenantId: EMPRESA, isAdmin: false } } as never);
 
     expect(useCases.listar).toHaveBeenCalledWith(
       expect.objectContaining({ somenteUsuarioId: null }),
       EMPRESA,
-      true,
     );
   });
 
@@ -507,12 +512,12 @@ describe('UsersController — handlers HTTP', () => {
     });
     useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
 
-    await ctrl.list({ user: { sub: 'u-1', tenantId: EMPRESA } } as never);
+    // Mesmo `denied`, mesmo token, e SEM perfil global: tem de recortar.
+    await ctrl.list({ user: { sub: 'u-1', tenantId: EMPRESA, isAdmin: false } } as never);
 
     expect(useCases.listar).toHaveBeenCalledWith(
       expect.objectContaining({ somenteUsuarioId: 'u-1' }),
       EMPRESA,
-      true,
     );
   });
 
@@ -525,7 +530,6 @@ describe('UsersController — handlers HTTP', () => {
     expect(useCases.listar).toHaveBeenCalledWith(
       expect.objectContaining({ somenteUsuarioId: null }),
       null,
-      true,
     );
   });
 
@@ -541,7 +545,6 @@ describe('UsersController — handlers HTTP', () => {
     expect(useCases.listar).toHaveBeenCalledWith(
       expect.objectContaining({ somenteUsuarioId: null }),
       EMPRESA,
-      true,
     );
   });
 
@@ -571,7 +574,6 @@ describe('UsersController — handlers HTTP', () => {
     expect(useCases.listar).toHaveBeenCalledWith(
       expect.objectContaining({ includeDeleted: esperado }),
       null,
-      true,
     );
   });
 

@@ -266,15 +266,7 @@ export class PrismaUserRepository implements UserRepositoryPort {
    * SISTEMA (`tenantId = null`) a listagem é de todo mundo — que é o que o
    * admin global precisa. Sob escopo de empresa, a RLS devolve só os membros.
    */
-  async list(
-    input: UserListInput,
-    tenantId: string | null,
-    // pt-BR (#108 revisão, achado 10): o perfil efetivo é PROJEÇÃO, e projeção
-    // só é paga quando alguém pede. Sem este parâmetro a listagem abre uma
-    // transação extra por página mesmo para quem nunca lê o campo — e
-    // `GET /users` é chamada pela tela de cadastro, que não mostra perfil.
-    opcoes: { comPerfilEfetivo?: boolean } = {},
-  ): Promise<UserListResult> {
+  async list(input: UserListInput, tenantId: string | null): Promise<UserListResult> {
     const includeDeleted = input.includeDeleted === true;
     const where = {
       ...(includeDeleted ? {} : { deletedAt: null }),
@@ -314,14 +306,10 @@ export class PrismaUserRepository implements UserRepositoryPort {
     // o agregado é a conta, e a conta não pertence a uma empresa. O que muda
     // é o que a LISTAGEM projeta — a tela precisa do perfil no escopo, não do
     // perfil da conta. Por isso o valor vem por fora, no `UserListResult`.
-    // pt-BR (achado 10): só paga a transação extra quando a projeção foi pedida.
-    const efetivos =
-      opcoes.comPerfilEfetivo === true
-        ? await this.perfilEfetivoPorUsuario(
-            page.map((r) => r.id),
-            tenantId,
-          )
-        : undefined;
+    const efetivos = await this.perfilEfetivoPorUsuario(
+      page.map((r) => r.id),
+      tenantId,
+    );
 
     return {
       users: page.map((r: UserRow) => UserPrismaMapper.toDomain(r)),
@@ -383,18 +371,41 @@ export class PrismaUserRepository implements UserRepositoryPort {
     // filtrou — metade do método discordava da outra.
 
     if (tenantId === null) {
+      // ⚠️ pt-BR (2ª revisão, achado 2) O filtro `profile: { tenantId: null }`
+      // VOLTOU, e a versão anterior que o removeu estava errada de um jeito que
+      // a leitura não pegou.
+      //
+      // O filtro não é só da AUTORIZAÇÃO. Removê-lo aqui para fazer o mapa ficar
+      // completo (achado 1 da 1ª revisão) deixou a tela mostrar um perfil que
+      // o sistema não reconhece. MEDIDO em Postgres 16 real, cenário alcançável
+      // (admin de sistema pulando R1/R2 em `atribuirProfileAoUser`):
+      //
+      //   AUTORIZACAO (filtro tenant IS NULL) | NULL
+      //   PROJECAO   (sem filtro, meu conserto) | gestor-acme
+      //
+      // O port promete que as três concordam. Elas discordavam.
+      //
+      // São DOIS problemas com uma correção só: o mapa precisava de todo id da
+      // página, e o filtro precisava ficar. Duas consultas, não uma sem filtro.
+      // Uma consulta basta: `userIds` JÁ é a página, e a listagem acima aplicou
+      // o `includeDeleted`. Quem está no mapa é quem a listagem devolveu.
+      // O filtro `tenantId: null` do perfil é o que faz o `null` significar
+      // "sem perfil EFETIVO" em vez de "tem um perfil que a tela não deveria
+      // mostrar" — e é o mesmo filtro do `findProfileId`.
       const rows = await comEscopo(this.prisma, escopoDoTenant(null), (tx) =>
         tx.user.findMany({
-          where: { id: { in: [...userIds] } },
+          where: {
+            id: { in: [...userIds] },
+            OR: [{ profileId: null }, { profile: { is: { tenantId: null } } }],
+          },
           select: { id: true, profileId: true },
         }),
       );
-      // O filtro `profile: { tenantId: null }` do `findProfileId` NÃO vem
-      // aqui: ele protege a AUTORIZAÇÃO (impedir que um `profile_id` de
-      // empresa conceda bypass no bucket global). Isto é PROJEÇÃO de tela, e
-      // mostrar o perfil que a pessoa realmente veste é o comportamento certo.
-      const porId = new Map(rows.map((r) => [r.id, r.profileId]));
-      for (const id of userIds) out.set(id, porId.get(id) ?? null);
+
+      const achados = new Map(rows.map((r) => [r.id, r.profileId]));
+      // TODO id da página entra, com `null` para quem não casou — é o que o
+      // achado 1 pedia.
+      for (const id of userIds) out.set(id, achados.get(id) ?? null);
       return out;
     }
 

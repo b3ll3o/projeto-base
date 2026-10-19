@@ -142,6 +142,13 @@ const MEMBERSHIPS_STUB = {
   async findRole() {
     return 'member';
   },
+  // pt-BR (achado 1): `GET /users` chama `findProfileId(sub, null)` para saber
+  // se o ATOR é admin de SISTEMA. Sem este método o controller estourava 500 —
+  // e o sintoma era "GET /users responde 200" virando 500, que parece falha de
+  // autenticação e não é.
+  async findProfileId() {
+    return null;
+  },
 } as unknown as TenantMembershipRepositoryPort;
 
 /** Token de access que o emissor stub aceita. */
@@ -470,6 +477,10 @@ describe('UsersController.buildContext — actorId vem do sub do token', () => {
       useCases as unknown as UserUseCases,
       makeAudit() as never,
       {} as never,
+      // pt-BR (achado 1): o recorte chama `findProfileId(sub, null)` para
+      // saber se o ator é admin de SISTEMA. `{}` explodes aqui; `null` é a
+      // resposta de quem não é.
+      { findProfileId: async () => null } as never,
     );
   });
 

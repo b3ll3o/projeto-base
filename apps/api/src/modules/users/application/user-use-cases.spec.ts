@@ -474,7 +474,6 @@ describe('UserUseCases', () => {
       expect(spy).toHaveBeenCalledWith(
         { cursor: null, limit: 10, includeDeleted: false, somenteUsuarioId: null },
         EMPRESA,
-        { comPerfilEfetivo: false },
       );
       spy.mockRestore();
     });
@@ -486,7 +485,6 @@ describe('UserUseCases', () => {
       expect(spy).toHaveBeenCalledWith(
         { cursor: null, limit: 10, includeDeleted: false, somenteUsuarioId: null },
         null,
-        { comPerfilEfetivo: false },
       );
       spy.mockRestore();
     });
@@ -568,18 +566,43 @@ describe('UserUseCases', () => {
         expect('perfilEfetivoNoEscopo' in (out ?? {})).toBe(false);
       });
 
-      it('repositório sem o campo não quebra: o DTO sai sem perfil efetivo', async () => {
-        // Um repositório que não implementa o `perfilEfetivo` (o in-memory, e
-        // qualquer adapter futuro) não pode fazer a listagem explodir — o
-        // campo é opcional por desenho, não por esquecimento.
+      it('o in-memory no bucket GLOBAL devolve mapa, igual à produção', async () => {
+        // ⚠️ pt-BR (2ª revisão, achado 7) Este teste afirmava `undefined` e o
+        // in-memory agora devolve `null` — que é o que o Prisma devolve no
+        // bucket global. A versão anterior era a divergência entre teste e
+        // produção: `toUserOutputNoEscopo` omitia a chave, e a tela recebia
+        // "ausente" no teste e "sem perfil" em produção.
         const ctx = makeCtx();
         await AuditContextStore.run(ctx, () =>
           useCases.criarUser({ nome: 'Ana', email: 'ana@x.com', senha: SENHA_VALIDA }, null),
         );
         const page = await AuditContextStore.run(ctx, () => useCases.listar({ limit: 10 }, null));
         expect(page.users).toHaveLength(1);
-        // O in-memory não produz `perfilEfetivo`, e a listagem segue funcionando.
+        // `null`, e não ausente: Ana foi criada sem perfil, e o bucket global
+        // diz exatamente isso. É a mesma resposta do Prisma.
+        expect(page.users[0]?.perfilEfetivoNoEscopo).toBeNull();
+      });
+
+      it('repositório que não devolve mapa não quebra a listagem', async () => {
+        // A garantia continua valendo para adapter futuro: a ausência do mapa
+        // é "não sei", e a listagem segue respondendo.
+        const ctx = makeCtx();
+        await AuditContextStore.run(ctx, () =>
+          useCases.criarUser({ nome: 'Ana', email: 'ana@x.com', senha: SENHA_VALIDA }, null),
+        );
+        const spy = vi.spyOn(repo, 'list');
+        const reais = await AuditContextStore.run(ctx, () =>
+          repo.list(
+            { limit: 10, cursor: null, includeDeleted: false, somenteUsuarioId: null },
+            null,
+          ),
+        );
+        spy.mockResolvedValueOnce({ users: reais.users, nextCursor: null });
+
+        const page = await AuditContextStore.run(ctx, () => useCases.listar({ limit: 10 }, null));
+        expect(page.users).toHaveLength(1);
         expect(page.users[0]?.perfilEfetivoNoEscopo).toBeUndefined();
+        spy.mockRestore();
       });
     });
 
@@ -598,7 +621,6 @@ describe('UserUseCases', () => {
       expect(spy).toHaveBeenCalledWith(
         { cursor: null, limit: 10, includeDeleted: false, somenteUsuarioId: 'u-1' },
         null,
-        { comPerfilEfetivo: false },
       );
       spy.mockRestore();
     });

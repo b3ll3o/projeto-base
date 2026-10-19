@@ -185,17 +185,7 @@ export class UserUseCases {
     return toUserOutput(user);
   }
 
-  /**
-   * pt-BR (#108 revisão, achado 10): `comPerfilEfetivo` é explícito porque a
-   * projeção custa uma transação extra por página, e `GET /users` tem chamadores
-   * que não mostram perfil (a tela de cadastro, por exemplo). O default é
-   * `false` — quem não pede não paga.
-   */
-  async listar(
-    input: ListUsersInput,
-    tenantId: string | null,
-    comPerfilEfetivo = false,
-  ): Promise<ListUsersOutput> {
+  async listar(input: ListUsersInput, tenantId: string | null): Promise<ListUsersOutput> {
     const page = await this.userRepo.list(
       {
         cursor: input.cursor ?? null,
@@ -209,7 +199,6 @@ export class UserUseCases {
         somenteUsuarioId: input.somenteUsuarioId ?? null,
       },
       tenantId,
-      { comPerfilEfetivo },
     );
     // pt-BR (#106): o perfil efetivo vem por FORA do agregado, indexado por
     // userId. Quem não estiver no map é porque a projeção não foi pedida ou o

@@ -119,6 +119,16 @@ falta: **quem satisfaz este gate mede o corpus no ambiente onde o gate roda, e
 declara qual ambiente foi.** Um gate que dá verde num ambiente e vermelho no
 outro não está medindo a mesma coisa duas vezes — está medindo duas coisas.
 
+⚠️ **A razão do vermelho local é outra, e vale registrar.** O commit anterior
+disse que o gate "volta a reprovar AQUI, porque aqui as memórias não existem".
+Medido contra o diretório **real** (127 arquivos), o gate reprova por
+`uncovered: 2` — duas memórias criadas **depois** do commit, não corpus
+ausente. `PHANTOM: 0`, `STALE ANCHORS: 0`, `MISSING TARGETS: 0`.
+
+A inversão das 78 estava certa. O erro foi a **explicação**: um gate de
+cristalização que reprova por memória nova é trabalho de triagem pendente, e
+dizer "o corpus sumiu" apontava para um incidente que não aconteceu.
+
 ### O que a tombstone `removida` continua significando
 
 Permite ao corpus ENCOLHER, preservando a procedência. Quando uma memória for

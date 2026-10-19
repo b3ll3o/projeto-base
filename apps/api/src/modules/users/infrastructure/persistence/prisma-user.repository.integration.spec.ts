@@ -494,4 +494,82 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     expect(page2.users).toHaveLength(1);
     expect(page2.nextCursor).toBeNull();
   });
+
+  // ── A4 (2ª revisão, achado 2): o filtro do bucket global tem dente ──────────
+  //
+  // Este teste não existia, e o revisor mediu por quê: mutando o ramo global
+  // para o defeito (sem o filtro `tenant_id IS NULL`), a suíte inteira ficava
+  // VERDE. O V1 estava fechado por leitura, não por teste.
+  //
+  // O que os três casos medem:
+  //
+  //   (a) `users.profile_id` apontando para perfil DE EMPRESA, no bucket global.
+  //       A AUTORIZAÇÃO (`findProfileId`) resolve `null` para ele. A projeção
+  //       precisa devolver `null` também — senão a tela mostra um perfil que o
+  //       sistema não reconhece. Sem o filtro, ela mostra o perfil da empresa.
+  //   (b) `users.profile_id` NULL — toda conta criada pelo produto. Precisa
+  //       entrar no mapa como `null`, não sumir (o defeito do achado 1).
+  //   (c) perfil GLOBAL (`tenant_id IS NULL`) é o que a projeção devolve.
+  it('ramo global: perfil de EMPRESA projeta null, como a autorização resolve', async () => {
+    const tenant = await ctx.prisma.tenant.create({ data: { name: 'Acme', slug: 'acme' } });
+    const perfilEmpresa = await ctx.prisma.profile.create({
+      data: { slug: 'gestor-acme', name: 'Gestor', tenantId: tenant.id },
+    });
+
+    const u = User.criar({
+      nome: 'Vazado',
+      email: 'vazado@example.com',
+      senhaHash: PasswordHash.create(HASH),
+      agora: new Date(),
+    });
+    const saved = await repo.save(u, 0, null);
+    await ctx.prisma.user.update({
+      where: { id: saved.id().value },
+      data: { profileId: perfilEmpresa.id },
+    });
+
+    const page = await repo.list({ limit: 10 }, null);
+    const id = saved.id().value;
+
+    expect(page.perfilEfetivo).toBeDefined();
+    expect(page.perfilEfetivo!.has(id)).toBe(true);
+    expect(page.perfilEfetivo!.get(id)).toBeNull();
+  });
+
+  it('ramo global: conta sem perfil entra no mapa como null, não some', async () => {
+    const u = User.criar({
+      nome: 'Ana',
+      email: 'ana@example.com',
+      senhaHash: PasswordHash.create(HASH),
+      agora: new Date(),
+    });
+    const saved = await repo.save(u, 0, null); // nasce com profileId null
+
+    const page = await repo.list({ limit: 10 }, null);
+    const id = saved.id().value;
+
+    expect(page.users).toHaveLength(1);
+    expect(page.perfilEfetivo!.has(id)).toBe(true);
+    expect(page.perfilEfetivo!.get(id)).toBeNull();
+  });
+
+  it('ramo global: perfil GLOBAL (tenant_id NULL) é o que projeta', async () => {
+    const perfilGlobal = await ctx.prisma.profile.create({
+      data: { slug: 'admin-global', name: 'Admin', isAdmin: true, tenantId: null },
+    });
+    const u = User.criar({
+      nome: 'Root',
+      email: 'root@example.com',
+      senhaHash: PasswordHash.create(HASH),
+      agora: new Date(),
+    });
+    const saved = await repo.save(u, 0, null);
+    await ctx.prisma.user.update({
+      where: { id: saved.id().value },
+      data: { profileId: perfilGlobal.id },
+    });
+
+    const page = await repo.list({ limit: 10 }, null);
+    expect(page.perfilEfetivo!.get(saved.id().value)).toBe(perfilGlobal.id);
+  });
 });

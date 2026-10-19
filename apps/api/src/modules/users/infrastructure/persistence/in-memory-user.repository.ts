@@ -128,16 +128,21 @@ export class InMemoryUserRepository implements UserRepositoryPort {
     return snapshot;
   }
 
-  // pt-BR (achado 10): o terceiro parâmetro existe para casar com o port. O
-  // in-memory NÃO tem `tenant_memberships`, então nem com `comPerfilEfetivo`
-  // ele produz mapa — e isso é honesto: ele não tem o dado. Devolver um mapa
-  // cheio de `null` seria afirmar "ninguém tem perfil", que é um estado que
-  // este repositório não pode observar.
-  async list(
-    input: UserListInput,
-    _tenantId: string | null,
-    _opcoes?: { comPerfilEfetivo?: boolean },
-  ): Promise<UserListResult> {
+  // pt-BR (2ª revisão, achado 7) Este repositório PASSA a devolver o mapa.
+  //
+  // A versão anterior dizia "o in-memory não tem `tenant_memberships`, então não
+  // produz mapa — e isso é honesto". Não era: `User.profileId()` está no
+  // agregado, e o bucket global do Prisma lê `users.profile_id` — a MESMA
+  // coluna. O que o in-memory não tem é `tenant_memberships`, que só importa no
+  // ramo COM tenant.
+  //
+  // A consequência de não devolver era pior que a de devolver errado: em
+  // `tenantId === null` o Prisma devolve `null` para quem não tem perfil, e o
+  // in-memory devolvia AUSENTE. Qualquer spec que subisse o controller real
+  // sobre o in-memory veria a chave omitida, e a produção veria `null` — o
+  // contrato de três estados que o achado 1 mandou remover voltava entre teste
+  // e produção.
+  async list(input: UserListInput, tenantId: string | null): Promise<UserListResult> {
     const includeDeleted = input.includeDeleted === true;
     const limit = Math.max(1, Math.min(100, input.limit));
     const all = [...this.byId.values()]
@@ -155,7 +160,20 @@ export class InMemoryUserRepository implements UserRepositoryPort {
     const slice = all.slice(startIdx, startIdx + limit);
     const nextStart = startIdx + slice.length;
     const nextCursor = nextStart < all.length ? String(nextStart) : null;
-    return { users: slice, nextCursor };
+
+    // ⚠️ (achado 7) O ramo COM tenant segue sem mapa — aqui não existe
+    // `tenant_memberships`, e inventar `null` seria afirmar que ninguém tem
+    // perfil numa empresa, que é um estado que este repositório não observa.
+    // A divergência com o Prisma fica explícita no port, que já diz que a
+    // projeção do bucket de empresa depende do adapter.
+    const comMapa =
+      tenantId === null ? new Map(slice.map((u) => [u.id().value, u.profileId()])) : undefined;
+
+    return {
+      users: slice,
+      nextCursor,
+      ...(comMapa !== undefined ? { perfilEfetivo: comMapa } : {}),
+    };
   }
 
   /**

@@ -34,8 +34,14 @@ import { ApiError, ApiTimeoutError } from '../../lib/api-client';
 import { obterMeuPerfil } from '../../lib/perfil';
 import type { MeProfileDto } from '@projeto/shared-types';
 
-/** Tela de serviço indisponível — com retry, que é o que a pessoa pode fazer. */
-function ServicoIndisponivel(): React.JSX.Element {
+/**
+ * Tela de serviço indisponível — com retry, que é o que a pessoa pode fazer.
+ *
+ * ⚠️ EXPORTADA porque `/me/profile` precisa da mesma (achado 3). Duas cópias
+ * do mesmo texto divergem sozinhas: foi assim que a segunda nasceu do
+ * conserto da primeira.
+ */
+export function ServicoIndisponivel(): React.JSX.Element {
   return (
     <main className="mx-auto max-w-3xl p-8">
       <h1 className="text-2xl font-semibold text-slate-900">Serviço indisponível</h1>
