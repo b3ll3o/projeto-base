@@ -201,6 +201,39 @@ contrapartida: com o corpo anunciando, os 18 testes do cenário 12 ficavam
 **verde**; a aserção que fixa o corpo genérico faz a mesma mutação dar 1
 vermelho.
 
+### §8.1 As portas por chave — DECLARATIVO (pt-BR #110, 2026-10-19)
+
+A lista abaixo é **fonte**, não prosa. Antes ela vivia só nesta seção e em
+comentário de código, e nada no repo conferia uma contra a outra — a 4ª porta
+nascia aberta com o preflight verde (#110).
+
+```yaml
+portas:
+  tenancy.invites:
+    - rota: POST /tenants/:id/invitations
+      mecanismo: decorator
+      controller: tenancy-invitations.controller.ts
+    - rota: POST /invitations/accept
+      mecanismo: decorator
+      controller: tenancy-invitations.controller.ts
+    - rota: POST /users
+      mecanismo: inline
+      controller: users.controller.ts
+```
+
+| campo | o que é |
+|---|---|
+| `rota` | o `decorator` de rota, como está no controller. Precisa casar **literalmente** com o que o `@Post`/`@Get` diz — é o que permite ao gate procurar a rota no código |
+| `mecanismo` | `decorator` (`@RequireFeatureFlag`) ou `inline` (chamada a `chaveDesligada` no corpo). `POST /users` **não pode** usar o decorator: `create()` também cria conta comum e owner, e a porta depende do `destino` do **corpo**, que o decorator não enxerga |
+| `controller` | o arquivo que declara a porta. O gate exige que este arquivo **mencione a chave** |
+
+⚠️ **O que esta lista NÃO garante**, declarado para quem for ler o gate e
+achar uma brecha: uma porta que **consuma** a funcionalidade sem mencionar a
+chave em lugar nenhum é indistinguível, para qualquer gate que leia texto, de
+uma rota que não consome nada. Detectar "consome" exigiria análise de fluxo, que
+é decisão de projeto e não de implementação. O gate pega **a porta esquecida de
+declarar**, que é o modo de falha real — abrir a quarta porta e não dizer.
+
 ⚠️ **O raio de alcance tem TRÊS portas, e as três respondem 404.** O decorator
 `@RequireFeatureFlag` cobre duas (`POST /tenants/:id/invitations` e
 `POST /invitations/accept`). A terceira — `POST /api/v1/users` com

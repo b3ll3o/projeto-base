@@ -369,6 +369,20 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     file: '.tooling/scripts/ci/check-feature-flag-contract.ts',
     id: 'check-feature-flag-contract',
   },
+  {
+    // pt-BR (#110, 2026-10-19): as PORTAS declaradas no contrato existem no
+    // código, e todo controller que tranca uma chave está na lista. Sem este
+    // gate, uma quarta porta de `tenancy.invites` nascia ABERTA com o preflight
+    // verde — `check-feature-flag-contract` compara catálogo ↔ contrato e não
+    // olha código nenhum.
+    //
+    // ⚠️ Gate novo fora do preflight não é gate fraco — é pior que ausência
+    // (fluxo §7.3), porque consome confiança. Por isso está aqui, e não num
+    // script solto.
+    name: 'as portas declaradas de cada flag existem no código (nos 2 sentidos)',
+    file: '.tooling/scripts/ci/check-feature-flag-portas.ts',
+    id: 'check-feature-flag-portas',
+  },
 ];
 
 /**
