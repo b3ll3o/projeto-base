@@ -738,5 +738,16 @@ describe('E2E 12 — entrada na empresa (D5)', () => {
     });
 
     expect(resposta.statusCode).toBe(201);
+
+    // ⚠️ O 201 sozinho NÃO fixa o que importa. Um 201 com a empresa criada e a
+    // conta fora dela seria "criou a conta" — o bypass que o recorte de
+    // `convite` existe para evitar. O vizinho (convite bloqueado) já faz
+    // exatamente estas duas contagens; aqui elas affirmam o lado POSITIVO.
+    expect(await e2e.ctx.prisma.user.count({ where: { email: 'eli@acme.dev' } })).toBe(1);
+    expect(await e2e.ctx.prisma.tenant.count({ where: { slug: 'acme-eli' } })).toBe(1);
+    const membership = await e2e.ctx.prisma.tenantMembership.findFirstOrThrow({
+      where: { tenant: { slug: 'acme-eli' }, user: { email: 'eli@acme.dev' } },
+    });
+    expect(membership).not.toBeNull();
   });
 });

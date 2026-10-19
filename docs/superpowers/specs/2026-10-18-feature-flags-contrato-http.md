@@ -71,7 +71,7 @@ GET /api/v1/admin/feature-flags
 [
   {
     "chave": "tenancy.invites",
-    "descricao": "Emissão e aceite de convites por empresa. Desligar tranca as duas portas: nem o dono convida, nem quem tem token entra.",
+    "descricao": "Emissão e aceite de convites por empresa. Desligar tranca as três portas: convidar, aceitar e criar conta por convite.",
     "ativada": true
   }
 ]
@@ -82,7 +82,7 @@ PUT /api/v1/admin/feature-flags/tenancy.invites     {"ativada": false}
 → 200
 {
   "chave": "tenancy.invites",
-  "descricao": "Emissão e aceite de convites por empresa. Desligar tranca as duas portas: nem o dono convida, nem quem tem token entra.",
+  "descricao": "Emissão e aceite de convites por empresa. Desligar tranca as três portas: convidar, aceitar e criar conta por convite.",
   "ativada": false
 }
 ```
@@ -201,12 +201,24 @@ contrapartida: com o corpo anunciando, os 18 testes do cenário 12 ficavam
 **verde**; a aserção que fixa o corpo genérico faz a mesma mutação dar 1
 vermelho.
 
-⚠️ **O raio de alcance é maior que a rota que o nome sugere.** Com a flag
-desligada, `POST /api/v1/users` com `destino: {tipo: 'convite', token}` **cria
-conta e membership** (201). É o `accept` por outra porta, e o token só existe se
-foi emitido antes do desligamento — desligar convites não pode trancar quem já
-foi convidado. Quem quiser que "desligar" pare de dar entrada precisa mexer
-nesse caminho também.
+⚠️ **O raio de alcance tem TRÊS portas, e as três respondem 404.** O decorator
+`@RequireFeatureFlag` cobre duas (`POST /tenants/:id/invitations` e
+`POST /invitations/accept`). A terceira — `POST /api/v1/users` com
+`destino: {tipo: 'convite', token}` — é `@Public()`, e o `FeatureFlagGuard`
+exige `req.user`, que rota pública nunca recebe (`jwt-auth.guard.ts:170-172`).
+A checagem mora no `create()`, depois do Zod, no único ponto onde
+`destino.tipo` é conhecido.
+
+⚠️ **A ordem entre 400 e 404 é assimétrica entre as portas, e é a ordem certa.**
+`ZodValidationPipe` resolve antes do handler, então um `destino.convite`
+malformado responde **400** com a flag ligada *ou* desligada — a validação vem
+antes da autorização, e o 400 não revela nada da flag. Com corpo bem formado e
+flag desligada, as três portas respondem **404**.
+
+⚠️ **O que o desligamento NÃO faz, e isso é recorte, não brecha.**
+`destino: {tipo: 'empresa'}` continua **201** com a flag desligada: `empresa` não
+usa token de convite e cria owner. O corte é em `convite`, não em "tem
+`destino`" — testado em `12-onboarding.e2e.spec.ts:724`.
 
 ## §9. O que este contrato NÃO garante
 
@@ -230,7 +242,10 @@ nesse caminho também.
 |---|---|
 | rota, guards, pipe, upsert, D2, 401 | `apps/api/test/e2e/scenarios/13-feature-flags.e2e.spec.ts` |
 | 404 do guard **e o corpo genérico** | `apps/api/test/e2e/scenarios/12-onboarding.e2e.spec.ts` |
-| `accept` continua 201 com a flag off | idem, cenário 12 |
+| `accept` responde **404** com a flag off | idem, cenário 12 |
+| as TRÊS portas trancadas com a flag off | `12-onboarding.e2e.spec.ts:551` e `:635` |
+| `empresa` continua 201 com a flag off (recorte, não brecha) | `12-onboarding.e2e.spec.ts:724` |
+| o bloqueio deixa rastro, e o rastro não leva o token | `users.controller.spec.ts` |
 | emenda tela → guarda (HTTP real) | `apps/web/e2e/f14-admin-flags.spec.ts` |
 | path, método, D14, escape da chave, erro propaga | `apps/web/lib/flags.spec.ts` |
 | corpo de erro NÃO-JSON vira `ApiError` (defeito do PR #99) | `apps/web/lib/api-client.spec.ts:318` — **fora** de `flags.spec.ts` por decisão (D-1 da v1.7.0): o caso é do cliente, não das flags, e duplicá-lo diria que a tela o mede |
