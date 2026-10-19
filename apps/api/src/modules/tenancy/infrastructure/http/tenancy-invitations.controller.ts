@@ -70,7 +70,14 @@ export class TenancyInvitationsController {
   // `FeatureFlagGuard` desligaria também `accept`, que não é a mesma
   // funcionalidade — desligar convites não pode trancar quem já tem o token.
   // Precedente: `users.controller.ts:246,262,300,331,361`.
-  @UseGuards(JwtAuthGuard, FeatureFlagGuard)
+  //
+  // ⚠️ `JwtAuthGuard` NÃO é repetido aqui, e a ordem é o que garante o
+  // `req.user`. O Nest CONCATENA metadata (`context-creator.js` devolve
+  // `[...global, ...classe, ...handler]`), então a classe (linha 57) roda
+  // primeiro e publica `req.user`; repetir o guard aqui o executaria DUAS
+  // vezes, com o mesmo custo e nenhum efeito. MEDIDO: remover o `JwtAuthGuard`
+  // daqui não muda um status só nos cenários 10 e 12.
+  @UseGuards(FeatureFlagGuard)
   @RequireFeatureFlag('tenancy.invites')
   async convidar(
     // ⚠️ (PR #101) O `:id` É validado, e não só o body. Sem este pipe o valor

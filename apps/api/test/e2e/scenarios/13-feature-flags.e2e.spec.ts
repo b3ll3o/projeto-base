@@ -159,6 +159,80 @@ describe('E2E 13: Feature flags (admin do sistema)', () => {
   });
 
   /**
+   * As três guarantias abaixo são afirmações do CONTRATO
+   * (`docs/superpowers/specs/2026-10-18-feature-flags-contrato-http.md`) que
+   * nenhuma spec fixava: o documento dizia e o código podia mudar sem que nada
+   * accusasse. Documento que não tem teste apodrece em silêncio — este bloco é
+   * o que o mantém verdadeiro.
+   *
+   * ⚠️ O primeiro é o mais importante e o mais caro de descobrir sozinho: o
+   * cliente web se recusa a mandar `X-Tenant-Id` (D14) e o comentário dela diz
+   * que enviar "tira o ator do bucket global". O que NINGUÉM tinha medido é o
+   * que acontece quando alguém manda mesmo assim: **403**, e um `code` que
+   * fala em EMPRESA (`TENANT_MEMBERSHIP_REQUIRED`), que não é o `FORBIDDEN`
+   * de D2. Um cliente novo, escrito a partir do contrato e sem o comentário,
+   * manda o header por hábito e recebe uma recusa que não menciona a flag.
+   */
+  it('X-Tenant-Id na listagem -> 403 TENANT_MEMBERSHIP_REQUIRED (D14, do lado do servidor)', async () => {
+    const res = await e2e.injetar({
+      method: 'GET',
+      url: ROTA,
+      headers: { 'x-tenant-id': '0190a8b6-0000-7000-8000-00000000ffff' },
+    });
+
+    expect(res.statusCode).toBe(403);
+    const body = JSON.parse(res.body) as { code: string; detail: string };
+    // O `code` NÃO é o `FORBIDDEN` de D2 — e essa distinção é o que permite ao
+    // cliente dizer "você mandou header de empresa" em vez de "você não é
+    // admin". As duas recusas compartilham o status e divergem aqui.
+    expect(body.code).toBe('TENANT_MEMBERSHIP_REQUIRED');
+    expect(body.detail).toContain('X-Tenant-Id');
+  });
+
+  /** §3 do contrato: campo a mais é descartado (strip do Zod), e o recurso é o do path. */
+  it('PUT com campo extra -> 200 e o campo é descartado, sem redirecionar o recurso', async () => {
+    const res = await e2e.injetar({
+      method: 'PUT',
+      url: `${ROTA}/${CHAVE}`,
+      payload: { ativada: false, chave: 'tenancy.exportacoes', descricao: 'injetado' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body) as { chave: string; ativada: boolean };
+    // O `chave` do CORPO não redireciona: a linha gravada é a do PATH.
+    expect(body.chave).toBe(CHAVE);
+    expect(body.ativada).toBe(false);
+
+    const linha = await e2e.ctx.prisma.featureFlag.findUniqueOrThrow({ where: { chave: CHAVE } });
+    expect(linha.ativada).toBe(false);
+    // E nada foi criado para a chave que veio no corpo — que nem existe no
+    // catálogo, mas que o strip impede de chegar ao `definir`.
+    expect(await e2e.ctx.prisma.featureFlag.count()).toBe(1);
+  });
+
+  /** §7.1 do contrato: `field` é `"(root)"` sem corpo e `"ativada"` com `{}`. */
+  it('o field do VALIDATION_ERROR distingue "corpo ausente" de "campo ausente"', async () => {
+    const semCorpo = await e2e.injetar({ method: 'PUT', url: `${ROTA}/${CHAVE}` });
+    const corpoVazio = await e2e.injetar({
+      method: 'PUT',
+      url: `${ROTA}/${CHAVE}`,
+      payload: {},
+    });
+
+    // `?.` e nao `!`: o `noUncheckedIndexedAccess` do projeto torna `errors[0]`
+    // possivelmente ausente. Com `!` o tsc passa mas um `errors: []` viraria
+    // `undefined` silencioso; com `?.` o `undefined` chega na assercao e falha
+    // alto — `undefined` nao e `'(root)'`. O dente fica, o typecheck fecha.
+    const campoDe = (res: { body: string }) =>
+      (JSON.parse(res.body) as { errors: { field: string }[] }).errors[0]?.field;
+
+    expect(semCorpo.statusCode).toBe(400);
+    expect(campoDe(semCorpo)).toBe('(root)');
+    expect(corpoVazio.statusCode).toBe(400);
+    expect(campoDe(corpoVazio)).toBe('ativada');
+  });
+
+  /**
    * O `@UseGuards` da CLASSSE fecha a porta. Sem ele as duas rotas abrem para
    * quem não tem token — e nada na suíte unitária vê isso, porque nenhuma
    * spec de unidade executa um guard.
