@@ -93,6 +93,15 @@ const RE_DECORATOR_ROTA = /^[ \t]*@(Get|Post|Put|Patch|Delete)\(\s*'([^']*)'\s*\
 /** `@Post()` sem path — a rota raiz do controller. */
 const RE_DECORATOR_ROTA_VAZIA = /^[ \t]*@(Get|Post|Put|Patch|Delete)\(\s*\)/gm;
 
+/**
+ * A chave dona de um bloco: `  tenancy.invites:` — indentada, no nível do
+ * bloco, TERMINADA em dois-pontos e seguida das entradas `- rota:`.
+ *
+ * ⚠️ Não pode casar a chave de uma ENTRADA (`    - rota:`) nem uma linha de
+ * prosa — e o termo precisa ser o da chave, não o de `portas:`.
+ */
+const RE_CHAVE_DONA = /^[ \t]{2}([a-z0-9][\w.-]*):[ \t]*$/gm;
+
 /** Só o nome do arquivo: `tenancy-invitations.controller.ts`. */
 function nomeDe(caminho: string): string {
   return caminho.split('/').pop() ?? caminho;
@@ -127,12 +136,23 @@ export function parsearPortas(contrato: string): PortaDeclarada[] {
   const fim = resto.search(/\n##\s/);
   const bloco = fim < 0 ? resto : resto.slice(0, fim);
 
-  // A chave dona é a última chave do CATÁLOGO citada antes do bloco — no
-  // contrato a lista vive logo abaixo da prosa que nomeia a chave.
-  const chaves = [...contrato.slice(0, i).matchAll(/"chave"\s*:\s*"([^"]+)"/g)].map((m) => m[1]);
-  // `string | undefined`: o bloco `portas:` sem chave dona é um contrato
-  // malformado, e o chamador acusa. Aqui só não deixa o `undefined` vazar.
-  const chave = chaves[chaves.length - 1] ?? '';
+  // A chave dona é a chave do PRÓPRIO YAML — `  tenancy.invites:` acima das
+  // entradas. Uma entrada de `portas:` herda a chave do bloco em que está.
+  //
+  // ⚠️ DEF 3 (PR #112). MEDIDO: a chave era inferida do CATÁLOGO JSON
+  // (`"chave": "tenancy.invites"`, a última citada antes do bloco), e o YAML
+  // era lido só como lista de entradas. Um erro de digitão na chave dona —
+  // `tenancy.invites:` → `tenancy.invite:` — não mudava NADA no gate, porque o
+  // nome vinha do JSON. As portas declaradas passavam a pertencer a uma chave
+  // que não existe, e o gate ficava verde. A lista de portas é o que o gate
+  // confere; inferir a chave de fora dela é medir a fonte errada.
+  //
+  // O catálogo ainda é conferido — mas em outro lugar: `chavesUsadasEmAlgumController`
+  // diz se a chave dona é trancada por ALGUM controller.
+  const chavesDoBloco = [...bloco.matchAll(RE_CHAVE_DONA)];
+  if (chavesDoBloco.length === 0) return [];
+  // Uma entrada herda a chave do bloco mais próximo acima dela.
+  const chaves = chavesDoBloco.map((m) => m[1] ?? '');
 
   // As entradas: cada `- rota:` pega os campos das 2 linhas seguintes.
   const entradas = [...bloco.matchAll(RE_ENTRADA)];
@@ -140,7 +160,10 @@ export function parsearPortas(contrato: string): PortaDeclarada[] {
   const controllers = [...bloco.matchAll(RE_CONTROLLER)];
 
   return entradas.map((m, idx) => ({
-    chave,
+    // A chave dona é a do bloco ACIMA desta entrada — não a última do YAML.
+    // Um contrato com duas chaves trancando portas precisa casar cada entrada
+    // com a sua, e "a última" erraria todas as da primeira.
+    chave: chaveVigenteA(bloco, chavesDoBloco, m.index ?? 0),
     // O regex garante os dois grupos; o `??` é para o `noUncheckedIndexedAccess`
     // do repo, e o fallback nunca acontece em runtime.
     rota: `${(m[1] ?? '').toUpperCase()} ${m[2] ?? ''}`,
@@ -215,7 +238,26 @@ export function rotaTrancaComAChave(texto: string, rota: string, chave: string):
     // eles é o que prova que o `@RequireFeatureFlag` pertence a ESTE `@Post`.
     const seguinte = i + 1 < ocorrencias.length ? ocorrencias[i + 1]?.inicio : texto.length;
     const janela = texto.slice(atual.inicio, seguinte);
-    return janela.includes(`'${chave}'`);
+
+    // ⚠️ DEF 1 e DEF 2 (PR #112). A janela era testada com `includes("'chave'")`,
+    // que casa QUALQUER ocorrência — inclusive a chave CRUA no corpo do handler:
+    //
+    //   (DEF 1) decorator removido + `chaveDesligada(this.flags, 'x')` no corpo
+    //           → a chave crua satisfazia a janela e a porta DECLARADA ficava
+    //             sem tranca, com o gate VERDE. MEDIDO: `ok=true`.
+    //   (DEF 2) uma chave crua numa janela acusava TODAS as rotas da janela
+    //           (o cascading), porque a janela não é a unidade de prova.
+    //
+    // A unidade de prova é o DECORATOR, e só ele: `@RequireFeatureFlag('chave')`
+    // em LINHA INTEIRA entre este `@Post` e o próximo decorator de rota. A
+    // checagem inline (`chaveDesligada`) é conferida à parte, no sentido 1.
+    for (const linha of janela.split('\n')) {
+      // ⚠️ Ancorado em início de linha: uma menção a `@RequireFeatureFlag` numa
+      // linha de comentário não é o decorator.
+      if (!/^[ \t]*@RequireFeatureFlag\(/.test(linha)) continue;
+      if (linha.includes(`'${chave}'`) || linha.includes(`"${chave}"`)) return true;
+    }
+    return false;
   }
   return false;
 }
@@ -232,27 +274,69 @@ export function chavesUsadasNoController(texto: string): Set<string> {
   return out;
 }
 
+/**
+ * A chave dona vigente na posição `pos` do bloco: a última chave do YAML
+ * declarada ANTES dela.
+ *
+ * ⚠️ DEF 3: casar por posição é o que impede um erro de digitação no nome da
+ * chave de virar verde. Com "a última chave do arquivo", a primeira chave
+ * herdaria o nome da segunda.
+ */
+function chaveVigenteA(bloco: string, chavesDoBloco: RegExpMatchArray[], pos: number): string {
+  let vigente = '';
+  for (const m of chavesDoBloco) {
+    if ((m.index ?? 0) > pos) break;
+    vigente = m[1] ?? '';
+  }
+  return vigente;
+}
+
+/**
+ * Junta prefixo do `@Controller` + path do decorator numa rota.
+ *
+ * ⚠️ DEF 6: a montagem vivia DUAS vezes — uma com prefixo (rotas de path
+ * vazio) e uma sem (rotas com path). Uma fonte só impede que a próxima porta
+ * declarada com prefixo nasça sem conferência.
+ */
+function juntarRota(prefixo: string, metodo: string, path: string): string {
+  const partes = [prefixo, path].filter((p) => p !== '');
+  return `${metodo.toUpperCase()} /${partes.join('/')}`.replace(/\/$/, '/');
+}
+
 /** As rotas declaradas no controller: `@Post('x')` e `@Post()` (raiz). */
 export function rotasDoController(texto: string): Set<string> {
   const out = new Set<string>();
+  // O prefixo do `@Controller('users')` é parte da ROTA, e vale para TODAS as
+  // rotas do arquivo — não só para as de path vazio.
+  //
+  // ⚠️ MEDIDO 2026-10-19 (DEF 6,achado no PR #112): o prefixo era aplicado só
+  // no caso `@Get()` sem path. As rotas com path saíam CRUAS — `users.controller.ts`
+  // produzia `GET /:id`, `PATCH /:id`, `DELETE /:id` em vez de `GET /users/:id`.
+  // As três portas declaradas do tenancy usam `@Controller()` vazio, então o
+  // gate passava verde com o prefixo errado — o defeito ficava invisível
+  // justamente porque o contrato só descreve controllers sem prefixo.
+  //
+  // Um `@Controller('users')` no repo TEM rotas com prefixo, e a próxima porta
+  // declarada em `users` teria comparada `POST /users` contra o código, que
+  // produzia `/` — sem match, e a porta ficaria sem conferência.
+  //
+  // ⚠️ O `s` (dotAll) não é estilo: o `@Controller` pode quebrar a linha depois
+  // do parêntese de abertura, e um regex de linha única perderia o prefixo.
+  const ctrl = /@Controller\(\s*'([^']*)'\s*\)/s.exec(texto);
+  const prefixo = ctrl?.[1] ?? '';
+
   // ⚠️ A barra inicial é NORMALIZAÇÃO, não cosmetics. MEDIDO 2026-10-19: sem
   // ela o gate produzia `POST tenants/:id/invitations` e o contrato escreve
   // `POST /tenants/:id/invitations` — as duas coisas não casam, a comparação
   // acusaria a rota INEXISTENTE e o gate viraria alarme falso em todas as três.
   for (const m of texto.matchAll(RE_DECORATOR_ROTA)) {
     if (m[1] !== undefined && m[2] !== undefined) {
-      out.add(`${m[1].toUpperCase()} /${m[2]}`.replace(/\/$/, '/'));
+      out.add(juntarRota(prefixo, m[1], m[2]));
     }
   }
   // `@Post()` sem path casa a rota RAIZ — o path real vem do `@Controller()`.
-  //
-  // O `s` (dotAll) não é estilo: o `@Controller` de um controller grande pode
-  // quebrar a linha depois do parêntese de abertura, e um regex de linha única
-  // perderia o prefixo e produziria `POST /` — que nenhuma porta declarada usa.
-  const ctrl = /@Controller\(\s*'([^']*)'\s*\)/s.exec(texto);
-  const prefixo = ctrl?.[1] ?? '';
   for (const m of texto.matchAll(RE_DECORATOR_ROTA_VAZIA)) {
-    if (m[1] !== undefined) out.add(`${m[1].toUpperCase()} /${prefixo}`.replace(/\/$/, '/'));
+    if (m[1] !== undefined) out.add(juntarRota(prefixo, m[1], ''));
   }
   return out;
 }
@@ -311,6 +395,14 @@ export function checkFeatureFlagPortas(
     }
   }
 
+  // As chaves que ALGUM controller tranca de verdade. Uma chave declarada que
+  // ninguém tranca é erro de contrato (DEF 3), e para dizer isso é preciso o
+  // conjunto — não dá para decidir olhando só o arquivo de uma porta por vez.
+  const chavesUsadasEmAlgumController = new Set<string>();
+  for (const texto of controllers.values()) {
+    for (const chave of chavesUsadasNoController(texto)) chavesUsadasEmAlgumController.add(chave);
+  }
+
   let conferidas = 0;
 
   // ── Sentido 1: a rota listada existe e o controller a tranca de verdade ──
@@ -338,6 +430,24 @@ export function checkFeatureFlagPortas(
       continue;
     }
 
+    // (0) a chave dona do bloco é a chave que o código tranca.
+    //
+    // ⚠️ DEF 3 (PR #112). MEDIDO: trocando `tenancy.invites:` por
+    // `tenancy.chave-que-nao-existe:` no YAML do contrato, o gate dava
+    // `ok=true`. O erro de digitação rebaixava o bloco inteiro a decoracao:
+    // as portas declaradas sumiam das 3 conferidas, e o sentidol 1 nao tinha
+    // o que comparar — o gate ficava verde COM METADE DO CONTRATO APAGADO.
+    if (!chavesUsadasEmAlgumController.has(porta.chave)) {
+      erros.push(
+        `a chave dona do bloco "${porta.chave}" (${porta.controller}) é declarada no ` +
+          `contrato §8.1, mas NENHUM controller tranca essa chave — @RequireFeatureFlag(` +
+          `'${porta.chave}') ou chaveDesligada(…, '${porta.chave}') aparecem em lugar nenhum. ` +
+          `Um erro de digitação aqui rebaixa o bloco inteiro a decoração: as portas somem ` +
+          `da conferência e o gate passa verde com metade do contrato apagado.`,
+      );
+      continue;
+    }
+
     // (b) o controller USA a chave — mas **nesta rota**.
     //
     // ⚠️ Este é o furo que a primeira versão tinha, e é o mais grave possível
@@ -359,7 +469,27 @@ export function checkFeatureFlagPortas(
       );
       continue;
     }
-    if (porta.mecanismo === 'decorator' && !rotaTrancaComAChave(texto, porta.rota, porta.chave)) {
+    // ⚠️ DEF 4 (PR #112). O `mecanismo` declarado precisa ser o que o código
+    // FAZ, e não o que o contrato afirma.
+    //
+    // MEDIDO: marcar `POST /tenants/:id/invitations` como `inline` no contrato,
+    // mantendo o `@RequireFeatureFlag` no código, dava `ok=true`. O sentidol 1
+    // só conferia `decorator`, então declarar `inline` desligava a conferência
+    // inteira daquela porta — inclusive o caso do decorator removido, que é
+    // justamente o que `inline` deveria cubrir.
+    //
+    // `inline` não significa "a porta está aberta": significa que a checagem
+    // está no CORPO do handler. Se o código tem o decorator, o mecanismo
+    // declarado está errado — e o contrato mente sobre como a porta tranca.
+    const trancaComDecorator = rotaTrancaComAChave(texto, porta.rota, porta.chave);
+    if (porta.mecanismo === 'inline' && trancaComDecorator) {
+      erros.push(
+        `porta "${porta.rota}" (${porta.chave}) declara mecanismo "inline", mas o código ` +
+          `tranca com @RequireFeatureFlag('${porta.chave}') — o mecanismo declarado não é o ` +
+          `do código, e a conferência desta porta ficaria desligada`,
+      );
+    }
+    if (porta.mecanismo === 'decorator' && !trancaComDecorator) {
       erros.push(
         `porta "${porta.rota}" (${porta.chave}) declara mecanismo "decorator", mas ` +
           `NENHUM @RequireFeatureFlag('${porta.chave}') está entre o @Post desta rota e o ` +

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   checkFeatureFlagPortas,
   parsearPortas,
@@ -285,6 +286,179 @@ export class C {
   it('o advisory declara o alcance: paridade, não inferência de consumo', () => {
     const r = checkFeatureFlagPortas({ contratoTexto: CONTRATO, controllers: ctl });
     expect(r.advisories?.join(' ')).toContain('NÃO infere consumo indireto');
+  });
+});
+
+// ── Os 6 defeitos do PR #112 ─────────────────────────────────────────────────
+//
+// Achados na revisão do PR, todos reproduzidos por mutação no repo ANTES de
+// consertar. Cada teste abaixo é a mutação que o revisor rodou, com o mesmo
+// `ok=true` que ele viu.
+//
+// ⚠️ Os seis têm a mesma assinatura: o gate ficava VERDE. Nenhum deles
+// aparecia nos testes, porque todos os testes usavam o MESMO código-fonte com
+// o MESMO defeito — um spec que só prova que a implementação faz o que a
+// implementação faz. É a razão de o bloco de fixtures acima existir ao lado
+// deste.
+describe('PR #112 — os seis defeitos que passaram verdes', () => {
+  const ctlDoTenancy = new Map([
+    [
+      'tenancy-invitations.controller.ts',
+      `
+@Controller()
+export class C {
+  @Post('tenants/:id/invitations')
+  @RequireFeatureFlag('tenancy.invites')
+  async convidar() {}
+}
+`,
+    ],
+  ]);
+
+  // DEF 1 ─────────────────────────────────────────────────────────────────────
+  // A janela era `includes("'chave'")`, que casa a chave CRUA no corpo do
+  // handler. Decorator removido + `chaveDesligada(...)` na linha seguinte:
+  // porta ABERTA, gate verde. O mais grave: é a mutação que o #110 existe para
+  // pegar, e ela passava.
+  it('DEF 1: chave crua no corpo NÃO substitui o decorator', () => {
+    const comCrua = new Map([
+      [
+        'tenancy-invitations.controller.ts',
+        `
+@Controller()
+export class C {
+  @Post('tenants/:id/invitations')
+  async convidar() {
+    const _f = chaveDesligada(this.flags, 'tenancy.invites');
+  }
+}
+`,
+      ],
+    ]);
+    const r = checkFeatureFlagPortas({ contratoTexto: CONTRATO, controllers: comCrua });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toContain('NENHUM @RequireFeatureFlag');
+  });
+
+  // DEF 2 ─────────────────────────────────────────────────────────────────────
+  // O cascading: com `includes`, uma chave crua numa janela valia para a rota.
+  // Agora a chave crua só pode virar erro se a rota FOR declarada — e a
+  // `POST /users` declarada tranca em `inline`, então não.
+  it('DEF 2: chave crua numa janela NÃO acusa rota que não tranca', () => {
+    const comCrua = new Map([
+      [
+        'tenancy-invitations.controller.ts',
+        `
+@Controller()
+export class C {
+  @Post('tenants/:id/invitations')
+  @RequireFeatureFlag('tenancy.invites')
+  async convidar() {}
+
+  @Post('tenants/:id/invitations/bulk')
+  async emLote() {
+    const _z = chaveDesligada(this.flags, 'tenancy.invites');
+  }
+}
+`,
+      ],
+    ]);
+    // A chave crua NÃO é tranca: a rota `bulk` segue não declarada, mas como
+    // ela não tranca nada com decorator, o gate não pode acusá-la de aberta.
+    // E a porta declarada continua verde — o cascading não a contaminou.
+    const r = checkFeatureFlagPortas({ contratoTexto: CONTRATO, controllers: comCrua });
+    expect(r.errors.join('\n')).not.toContain('/bulk');
+  });
+
+  // DEF 3 ─────────────────────────────────────────────────────────────────────
+  // A chave dona vinha do CATÁLOGO JSON (`"chave": "..."`), não do YAML. Um
+  // erro de digitão em `tenancy.invites:` não mudava NADA no gate.
+  it('DEF 3: a chave dona vem do YAML, e erro de digitão é erro', () => {
+    const comErro = CONTRATO.replace('  tenancy.invites:', '  tenancy.invite:');
+    expect(comErro).not.toBe(CONTRATO); // a mutation aconteceu
+
+    const r = checkFeatureFlagPortas({ contratoTexto: comErro, controllers: ctlDoTenancy });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toContain('tenancy.invite');
+  });
+
+  it('DEF 3b: cada entrada herda a chave do SEU bloco, não a última', () => {
+    // Dois blocos, duas chaves. "A última do arquivo" erraria o primeiro.
+    const duasChaves = CONTRATO.replace(
+      '```\n\n## §9. Fim',
+      `
+  tenancy.outra:
+    - rota: POST /outra/rota
+      mecanismo: decorator
+      controller: outra.controller.ts
+\`\`\`
+
+## §9. Fim`,
+    );
+    const portas = parsearPortas(duasChaves);
+    expect(portas.map((p) => p.chave)).toEqual(['tenancy.invites', 'tenancy.outra']);
+  });
+
+  // DEF 4 ─────────────────────────────────────────────────────────────────────
+  // O sentildo 1 só conferia `mecanismo === 'decorator'`, então declarar
+  // `inline` desligava a conferência da porta inteira.
+  it('DEF 4: `inline` declarado em porta que tranca por decorator é erro', () => {
+    const comoInline = CONTRATO.replace(
+      '- rota: POST /tenants/:id/invitations\n      mecanismo: decorator',
+      '- rota: POST /tenants/:id/invitations\n      mecanismo: inline',
+    );
+    expect(comoInline).not.toBe(CONTRATO);
+
+    const r = checkFeatureFlagPortas({ contratoTexto: comoInline, controllers: ctlDoTenancy });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toContain('mecanismo "inline"');
+  });
+
+  // DEF 5 ─────────────────────────────────────────────────────────────────────
+  it('DEF 5: controller declarado que não existe é erro nomeado', () => {
+    const sumido = CONTRATO.replace(
+      'controller: tenancy-invitations.controller.ts',
+      'controller: nao-existe.controller.ts',
+    );
+    expect(sumido).not.toBe(CONTRATO);
+
+    const r = checkFeatureFlagPortas({ contratoTexto: sumido, controllers: ctlDoTenancy });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toContain('nao-existe.controller.ts');
+  });
+
+  // DEF 6 ─────────────────────────────────────────────────────────────────────
+  // O prefixo do `@Controller('users')` era aplicado só nas rotas de path
+  // VAZIO. `@Get(':id')` saía como `GET /:id`. Invisible porque as três portas
+  // declaradas usam `@Controller()` sem prefixo — e a próxima porta em `users`
+  // teria comparada `POST /users` contra `/`, sem match e sem conferência.
+  it('DEF 6: o prefixo do @Controller vale para rota COM path', () => {
+    const rotas = rotasDoController(
+      `
+@Controller('users')
+export class UsersController {
+  @Get(':id')
+  async porId() {}
+
+  @Patch(':id')
+  async atualizar() {}
+
+  @Post()
+  async criar() {}
+}
+`,
+    );
+    expect([...rotas].sort()).toEqual(['GET /users/:id', 'PATCH /users/:id', 'POST /users']);
+  });
+
+  it('DEF 6b: o prefixo do repo real sai com as rotas de pathcheadas', () => {
+    // Contra o ARQUIVO REAL — é aqui que o defeito aparecia, e a fixture
+    // acima não provaria nada se o arquivo real divergisse.
+    const rotas = rotasDoController(
+      readFileSync('apps/api/src/modules/users/infrastructure/http/users.controller.ts', 'utf8'),
+    );
+    expect(rotas.has('GET /users/:id')).toBe(true);
+    expect(rotas.has('GET /:id')).toBe(false);
   });
 });
 
