@@ -228,6 +228,26 @@ describe('pr-refresh-scan: extração de claims', () => {
     expect(c.filter((x) => x.classe === 'remocoes').map((x) => x.valor)).toEqual([2000]);
   });
 
+  it('número que FECHA FRASE é claim — o ponto final não come a contagem', () => {
+    // MEDIDO no corpo real do #109 (2026-10-19): o cabeçalho termina em
+    // `+5836/−74.` e o scanner extraía **só** `insercoes`. A classe `remocoes`
+    // sumia — `(?![.\d])` de NUMERO rejeita o `.` de fim de frase — então o
+    // corpo afirmava `−63` com a branch em `−74`, e nem o hook nem o gate podiam
+    // ver: 0 claim é "nada divergente", não "está certo".
+    const c = extrairClaims('20 commits · 66 arquivos · +5836/−74.');
+    expect(c.find((x) => x.classe === 'insercoes')?.valor).toBe(5836);
+    expect(c.find((x) => x.classe === 'remocoes')?.valor).toBe(74);
+  });
+
+  it('abrir o ponto NÃO pode ressuscitar o `1` de `1.024`', () => {
+    // A correção acima relaxa o ponto; este é o limite dela. Sem este teste ela
+    // passa vindo de "remova o lookahead" — que é justamente o defeito de
+    // 2026-10-06, e faria `1.024` voltar como `declarado=1`.
+    expect(extrairClaims('1.024 commits')[0]?.valor).toBe(1024);
+    expect(extrairClaims('+5905/−1.024.')).toHaveLength(2);
+    expect(extrairClaims('+5905/−1.024.').find((x) => x.classe === 'remocoes')?.valor).toBe(1024);
+  });
+
   it('cada claim carrega os offsets do NÚMERO, e eles delimitam os dígitos', () => {
     // Sem isto a escrita por offset não tem alvo, e voltar para substring é o
     // caminho que transforma o cabeçalho em `**45, 50, 6000**`.
@@ -235,6 +255,169 @@ describe('pr-refresh-scan: extração de claims', () => {
     const c = extrairClaims(texto);
     for (const claim of c) {
       expect(texto.slice(claim.ini, claim.fim)).toBe(String(claim.valor));
+    }
+  });
+
+  // ───────────────── contagem de suíte não é contagem do PR ─────────────────
+  //
+  // MEDIDO contra `extrairClaims` e o corpo real do PR #109 (2026-10-19):
+  // `880 testes em 67 arquivos` era lido como `arquivos=67` do PR (que tem 68),
+  // e o hook REESCREVIA o número da suíte pela contagem da branch — uma frase
+  // verdadeira virando falsa, com o instrumento incluindo a correção.
+  //
+  // ⚠️ O corpo do #109 NÃO contém essa frase. A linha real é
+  // `` `arquivos de teste / testes`: api unit 67/880 `` (MEDIDO:
+  // `grep -c "67 arquivos" <corpo>` → 0). O defeito era LATENTE, não ativo: a
+  // frase que casava é forma que um autor escreve, não a que este PR escreveu.
+  //
+  // O guard que veio consertar a forma `67 arquivos/880 testes` não tinha
+  // NENHUM teste (`grep '880\|arquivos/'` neste arquivo dava zero) e media só as
+  // duas frases que o próprio autor escreveu. Estas specs são a medição que
+  // faltava: o corpus são claims do PR + frases de suíte, e não as frases que
+  // motivaram o achado. 4 das 12 de suíte são REGRESSÃO — `22c679b2` já as
+  // fechava, e ficam porque fechá-las de novo é um caminho de regressão real.
+  //
+  // Por que a classe `testes` não é o problema: ela sai `NÃO MENSURÁVEL`
+  // (`medir: () => null`), então uma frase de suíte que só produz `testes` é
+  // inofensiva. O dano vem inteiro da metade `arquivos`, que É comparada com a
+  // branch — e é por isso que o guard é deste arquivo e não do outro.
+
+  const FRASES_DE_SUITE: ReadonlyArray<readonly [string, number]> = [
+    // Regressão: `22c679b2` já fechava estas quatro.
+    ['api unit 67 arquivos/880 testes', 67],
+    ['web 25 arquivos / 255 testes verdes', 25],
+    ['67 arquivos de teste', 67],
+    ['1.234 arquivos de teste', 1234],
+    // O que ainda casava em HEAD, e é o que o lookbehind fecha.
+    ['880 testes em 67 arquivos', 67],
+    ['880 testes distribuídos em 67 arquivos', 67],
+    ['67 arquivos, 880 testes', 67],
+    ['**api unit**: 67 arquivos · 880 testes', 67],
+    ['67 arquivos (880 testes)', 67],
+    ['67 arquivos**/880 testes', 67],
+    ['**67 arquivos**/**880 testes**', 67],
+    ['67 arquivos com 880 testes', 67],
+  ];
+
+  it.each(FRASES_DE_SUITE)('NÃO lê "%s" como contagem de arquivos do PR', (frase) => {
+    // A classe `testes` continua sendo lida — ela é inofensiva e some do
+    // relatório. O que não pode sobrar é `arquivos`, que vira divergência.
+    expect(extrairClaims(frase).find((c) => c.classe === 'arquivos')).toBeUndefined();
+  });
+
+  it.each(FRASES_DE_SUITE)('MAS "%s" não some — sai como `arquivos-suite`', (frase, esperado) => {
+    // A regra é "nenhuma claim pode ser PERDIDA", e não "nenhuma claim pode
+    // ser comparada". As duas coisas são separadas por uma classe: `arquivos`
+    // compara com a branch, `arquivos-suite` não compara com nada e aparece no
+    // relatório como não mensurável — o mesmo destino que a classe `testes`
+    // já tinha (a entrada `classe: 'testes'` do próprio scanner, que também é
+    // `medir: () => null`: um gate que não mede e não diz que não mediu é verde
+    // por omissão). Citado por NOME e não por linha: este arquivo ganha e perde
+    // linhas a cada gate novo, e uma citação `file.ts:419-421` envelhece sem
+    // nunca ficar vermelha.
+    //
+    // Sem esta spec, a forma mais barata de "não comparar com a branch" é
+    // APAGAR do regex — e o apagamento não deixa rastro: nem relatório, nem
+    // erro, nem contagem. Era o que a 1ª redação deste guard fazia.
+    const suite = extrairClaims(frase).find((c) => c.classe === 'arquivos-suite');
+    expect(suite?.valor).toBe(esperado);
+  });
+
+  const CLAIMS_DO_PR: ReadonlyArray<readonly [string, number]> = [
+    ['24 commits · 68 arquivos · +5909/−78.', 68],
+    ['**12 commits · 31 arquivos**', 31],
+    ['20 commits · 66 arquivos · +5836/−74.', 66],
+    ['25 commits, 36 arquivos, +4654/−114', 36],
+    ['**2.000 commits**, 1.234 arquivos', 1234],
+    // Duas claims no mesmo parágrafo (a segunda é histórica: "foi aberta
+    // com 31 arquivos"). O `.find()` devolve a PRIMEIRA — é isso que se quer
+    // fixar: a menção seguinte não engole a contagem corrente.
+    ['20 commits, 66 arquivos, +5836/−74. Ela foi aberta com 31 arquivos', 66],
+    ['**3 commits, 4 arquivos, +10/−2**', 4],
+    ['ele foi aberta com "99 commits, 88 arquivos" e evoluiu', 88],
+    ['67 arquivos.', 67],
+  ];
+
+  it.each(CLAIMS_DO_PR)('continua lendo "%s" como claim do PR', (frase, esperado) => {
+    // O outro lado do guard. Um `lookbehind` guloso também é defeito: ele faz
+    // o gate passar verde porque não sobrou claim nenhuma.
+    expect(extrairClaims(frase).find((c) => c.classe === 'arquivos')?.valor).toBe(esperado);
+  });
+
+  it('claim do PR que chega perto da suíte: o limite do outro lado', () => {
+    // Nenhuma das 9 frases acima contém a palavra `testes`, então NENHUMA exercita
+    // o caminho que um `lookbehind` guloso quebraria — a proteção vinha só da
+    // tabela de suíte, do lado oposto. MEDIDO: com o lookbehind afinado para
+    // `\d+ testes` sem o `em`, `CLAIMS_DO_PR` dava 0/9 vermelho.
+    //
+    // A frase abaixo é a claim REAL escrita de trás para frente, que o scanner
+    // não distingue da suíte. Ela NÃO é comparada — mas também não some: sai
+    // como `arquivos-suite` com o valor 68, que é o número que a frase diz.
+    expect(
+      extrairClaims('286 testes em 68 arquivos, 25 commits, +4654/−114').find(
+        (c) => c.classe === 'arquivos-suite',
+      )?.valor,
+    ).toBe(68);
+    expect(
+      extrairClaims('286 testes em 68 arquivos, 25 commits, +4654/−114').find(
+        (c) => c.classe === 'arquivos',
+      ),
+    ).toBeUndefined();
+  });
+
+  it('o limite conhecido: suíte com texto livre no meio ainda casa', () => {
+    // O guard fecha o CLUSTER — número e palavra, com conector. Estas duas
+    // formas têm texto livre entre os, e um PR pode dizer as duas coisas
+    // legitimamente. Fixadas aqui como limite CONHECIDO: uma mudança futura
+    // que as feche tem que decidir isso de propósito, não por acaso de mexer
+    // no regex. (MEDIDO 2026-10-19, corpus dos specs: 21 frases — 9 claims do
+    // PR + 12 de suíte — das quais sobram 2 `fp`.)
+    const ambiguas = ['67 arquivos, dos quais 12 de teste', '67 arquivos — a suíte tem 880 testes'];
+    for (const frase of ambiguas) {
+      expect(extrairClaims(frase).find((c) => c.classe === 'arquivos')).toBeDefined();
+    }
+
+    // O que era PREÇO e virou REGRA: a claim real escrita na forma da suíte não
+    // é comparada com a branch, mas também não é APAGADA. Antes estas duas
+    // frases simplesmente não produziam nada — nem `arquivos`, nem registro de
+    // que havia um número ali. Agora elas saem como `arquivos-suite`.
+    for (const [frase, esperado] of [
+      ['25 commits, 68 arquivos, 286 testes adicionados', 68],
+      // E o pior membro da classe, porque é a forma que um PR REAL usa no
+      // cabeçalho: a linha de status deste PR com uma contagem a mais.
+      ['24 commits · 68 arquivos · 880 testes · +5909/−78', 68],
+    ] as const) {
+      const claims = extrairClaims(frase);
+      expect(claims.find((c) => c.classe === 'arquivos')).toBeUndefined();
+      expect(claims.find((c) => c.classe === 'arquivos-suite')?.valor).toBe(esperado);
+    }
+  });
+
+  it('as duas classes não coexistem: nenhum texto produz `arquivos` E `arquivos-suite`', () => {
+    // `arquivos` e `arquivos-suite` são complementos exatos, não dois
+    // padrões que "quase não se cruzam". Se um texto casar nos dois, o relatório
+    // soma a mesma frase duas vezes e a contagem de claims mente.
+    //
+    // ⚠️ O título antigo dizia "nenhum número sai duas vezes", que é uma
+    // propriedade MAIS FORTE que a que a spec mede — e falsa: duas claims da
+    // MESMA classe no mesmo texto são legítimas (a 6ª frase de `CLAIMS_DO_PR`
+    // tem duas `arquivos`, de propósito). O que está medido aqui é a
+    // sobreposição entre as duas CLASSES, não a repetição dentro de uma.
+    // MEDIDO 2026-10-19.
+    for (const [frase] of FRASES_DE_SUITE) {
+      const classes = extrairClaims(frase)
+        .filter((c) => c.classe === 'arquivos' || c.classe === 'arquivos-suite')
+        .map((c) => c.classe);
+      expect(new Set(classes).size).toBeLessThanOrEqual(1);
+    }
+    for (const [frase] of CLAIMS_DO_PR) {
+      const classes = extrairClaims(frase)
+        .filter((c) => c.classe === 'arquivos' || c.classe === 'arquivos-suite')
+        .map((c) => c.classe);
+      // Nenhuma claim do PR pode ser rebaixada para `arquivos-suite` — seria
+      // perder a comparação com a branch. Quantas `arquivos` há não é o que
+      // importa: a 6ª frase tem duas, de propósito.
+      expect(classes).not.toContain('arquivos-suite');
     }
   });
 });
@@ -363,6 +546,39 @@ describe('pr-refresh-scan: a divergência é o produto, e ela tem que aparecer',
     // E o relatório tem de nomear o buraco, não fechar em silêncio: um gate que
     // não mede e não diz que não mediu é verde por omissão.
     expect(r.resumo).toContain('não mensurável');
+  });
+
+  it('`arquivos-suite` sai no relatório pelo mesmo caminho de `testes` — não some', () => {
+    // A regra "nenhuma claim pode ser perdida" só é VERIFICÁVEL se a claim
+    // silenciada aparece em algum produto observável. Aqui o produto é o
+    // `Relatorio`: a classe entra em `claims` e o resumo a nomeia.
+    //
+    // O contra-teste é o que dá o dente: se alguém voltar a suprimir a forma no
+    // regex em vez de reclassificá-la, `suite` vira `undefined` aqui — o mesmo
+    // `expect(...).toBeDefined()` que a classe 3 deste repo descreve: um teste
+    // que só afirma `ok` não distingue "verifiquei e passei" de "não havia nada
+    // para verificar".
+    const { repo, base, esperado } = repoFixture();
+    const falso = `**${esperado.commits} commits, ${esperado.arquivos} arquivos, +${esperado.insercoes}/−${esperado.remocoes}**`;
+    const r = varrer({
+      bodyFile: corpoFixture(`${falso}\n\nA suíte: **880 testes em 42 arquivos**.`),
+      repo,
+      base,
+    });
+
+    const suite = r.claims.find((c) => c.classe === 'arquivos-suite');
+    expect(suite).toBeDefined();
+    expect(suite?.valor).toBe(42);
+    // Não mensurável e NÃO divergente — inerte para o `reescrever`
+    // (`pr-refresh-apply.ts:168`) e para o `verificarMarcador`
+    // (`pr-refresh-gate.ts:132`), que filtram por `divergente`.
+    expect(suite?.medido).toBeNull();
+    expect(suite?.divergente).toBe(false);
+    // E nomeado no resumo, ao lado de `testes` — o resumo já desambigua classes
+    // repetidas (o construtor do `resumo` em `pr-refresh-scan.ts`).
+    expect(r.resumo).toContain('arquivos-suite');
+    // O cabeçalho verdadeiro continua sendo `arquivos` COMPARÁVEL.
+    expect(r.claims.find((c) => c.classe === 'arquivos')?.medido).toBe(esperado.arquivos);
   });
 
   it('cabeçalho verdadeiro → zero divergências, e o relatório diz por quê', () => {

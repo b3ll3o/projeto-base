@@ -38,6 +38,18 @@
 ## §3. Schemas de Request/Response
 
 ### §3.1 `CreateUserDto` (request body)
+
+> ⚠️ **Superado pelo código (MEDIDO 2026-10-19).** O corpo abaixo é o do design
+> original e não corresponde mais ao boundary: o campo é `nome`, não `name`, e
+> faltam `senha` (obrigatória) e `destino` (opcional). A fonte de verdade é
+> [`users.schemas.ts`](../../../apps/api/src/modules/users/infrastructure/http/users.schemas.ts)
+> — o `CreateUserSchema` —, e o resumo vivo está em
+> [`docs/api/users.md` §3.1](../../../docs/api/users.md).
+>
+> `POST /users` com `destino.tipo === 'convite'` também devolve `404` quando a
+> flag `tenancy.invites` está desligada. Ver o
+> [contrato das feature flags](./2026-10-18-feature-flags-contrato-http.md).
+
 ```typescript
 {
   email: string;       // RFC 5322, max 255 chars

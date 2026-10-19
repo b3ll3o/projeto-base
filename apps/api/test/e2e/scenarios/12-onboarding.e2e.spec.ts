@@ -474,4 +474,280 @@ describe('E2E 12 — entrada na empresa (D5)', () => {
     });
     expect(membership.profileId).toBeNull();
   });
+
+  // ─────────────── a flag que o admin do sistema desliga (Fase 4) ───────────────
+  //
+  // MEDIDO 2026-10-18: estes 3 testes são o que fecha o orçamento da Fase 4. Sem
+  // eles, TIRAR o `@RequireFeatureFlag` do `convidar`, ou tirar o
+  // `FeatureFlagGuard` do `@UseGuards`, ou trocar o 404 por 403, ou mover o
+  // decorator para a CLasse — tudo deixa a suíte inteira verde. A spec do
+  // guard prova a decisão; a spec do container prova a instanciação; nenhuma
+  // das duas sabe se o decorator está no handler.
+  //
+  // A linha da flag é semeada por Prisma direto, e não pelo PUT admin: o que
+  // está sob teste aqui é o CONSUMIDOR, e o PUT já é medido no cenário 13.
+  async function desligarChave(chave: string, ativada: boolean) {
+    await e2e.ctx.prisma.featureFlag.upsert({
+      where: { chave },
+      create: { chave, ativada },
+      update: { ativada },
+    });
+  }
+
+  it('flag DESLIGADA => 404 em `convidar`, e nenhum convite é gravado', async () => {
+    const { headers, empresa } = await abrirEmpresa('acme');
+    await desligarChave('tenancy.invites', false);
+
+    const resposta = await e2e.injetar({
+      method: 'POST',
+      url: `/api/v1/tenants/${empresa.id}/invitations`,
+      headers,
+      payload: { email: 'ana@acme.dev' },
+    });
+
+    // 404 e não 403: para o cliente a funcionalidade não existe. E 403 diria
+    // "você não pode", que é uma informação que o dono da empresa não tem.
+    expect(resposta.statusCode).toBe(404);
+
+    // ⚠️ O CORPO também é a afirmação, e MEDIDO 2026-10-18 (revisão
+    // adversarial, achado F1) ele não tinha dente: trocar o throw por um corpo
+    // que ANUNCIA a flag (`code: 'FEATURE_FLAG_DESLIGADA'`, `detail: 'a
+    // funcionalidade tenancy.invites está desligada'`) deixava os 18 testes
+    // verdes. A justificativa do 404 existia só como comentário do guard. O
+    // `detail` genérico é o que faz o 404 indistinguível do 404 de uma rota
+    // que não existe (`Cannot POST …`, medido pelo revisor) — nenhum dos dois
+    // diz que existe uma flag.
+    const corpo = await resposta.json();
+    expect(corpo.code).toBe('NOT_FOUND');
+    expect(corpo.detail).toBe('Not Found');
+
+    expect(await e2e.ctx.prisma.invitation.count()).toBe(0);
+  });
+
+  it('a MESMA chamada com a flag ligada => 201 — o 404 acima veio da flag', async () => {
+    // Controle positivo: sem ele, um 404 por qualquer outra causa (empresa
+    // errada, header, token) passaria no teste de cima com a flag desligada.
+    const { headers, empresa } = await abrirEmpresa('acme');
+    await desligarChave('tenancy.invites', false);
+    const desligada = await e2e.injetar({
+      method: 'POST',
+      url: `/api/v1/tenants/${empresa.id}/invitations`,
+      headers,
+      payload: { email: 'ana@acme.dev' },
+    });
+    expect(desligada.statusCode).toBe(404);
+
+    await desligarChave('tenancy.invites', true);
+    const ligada = await e2e.injetar({
+      method: 'POST',
+      url: `/api/v1/tenants/${empresa.id}/invitations`,
+      headers,
+      payload: { email: 'ana@acme.dev' },
+    });
+
+    expect(ligada.statusCode).toBe(201);
+  });
+
+  it('flag DESLIGADA tranca o ACEITE — 404, e o convite continua pendente', async () => {
+    // INVERTIDO 2026-10-19. Este teste afirmava o contrário ("não tranca o
+    // aceite"), e a inversão é o pedido: *"a aplicação n pode ter bypass"*.
+    // Aceitar convite era uma segunda porta de entrada com a flag desligada —
+    // desligar `tenancy.invites` e ainda deixar alguém entrar por ela não era
+    // desligar nada.
+    //
+    // O token é emitido com a flag LIGADA, para que o 404 abaixo seja atribuível
+    // à flag e não a um convite que nunca existiu.
+    const { headers, empresa } = await abrirEmpresa('acme');
+    const convidado = await criarUsuarioAutenticado(e2e, {
+      nome: 'Ana',
+      email: 'ana@acme.dev',
+    });
+
+    const convite = await e2e.injetar({
+      method: 'POST',
+      url: `/api/v1/tenants/${empresa.id}/invitations`,
+      headers,
+      payload: { email: 'ana@acme.dev' },
+    });
+    expect(convite.statusCode).toBe(201);
+    const { token } = JSON.parse(convite.body) as { token: string };
+
+    await desligarChave('tenancy.invites', false);
+
+    const aceite = await e2e.injetar({
+      method: 'POST',
+      url: '/api/v1/invitations/accept',
+      headers: convidado.headers,
+      payload: { token },
+    });
+
+    expect(aceite.statusCode).toBe(404);
+    const corpo = await aceite.json();
+    expect(corpo.code).toBe('NOT_FOUND');
+    expect(corpo.detail).toBe('Not Found');
+
+    // O corpo não basta: um `accept` que respondesse 404 MAS consumisse o
+    // convite passaria verde, e a membership nunca apareceria.
+    const membership = await e2e.ctx.prisma.tenantMembership.findUnique({
+      where: { userId_tenantId: { userId: convidado.id, tenantId: empresa.id } },
+    });
+    expect(membership).toBeNull();
+  });
+
+  it('a MESMA requisição com a flag ligada => 201 — o 404 acima veio da flag', async () => {
+    // Controle positivo do teste acima, pela mesma razão do par de `convidar`:
+    // um 404 por qualquer outra causa (token inválido, sessão) passaria lá
+    // acima sem este aqui.
+    const { headers, empresa } = await abrirEmpresa('acme');
+    const convidado = await criarUsuarioAutenticado(e2e, {
+      nome: 'Ana',
+      email: 'ana@acme.dev',
+    });
+
+    const convite = await e2e.injetar({
+      method: 'POST',
+      url: `/api/v1/tenants/${empresa.id}/invitations`,
+      headers,
+      payload: { email: 'ana@acme.dev' },
+    });
+    const { token } = JSON.parse(convite.body) as { token: string };
+
+    await desligarChave('tenancy.invites', false);
+    const bloqueado = await e2e.injetar({
+      method: 'POST',
+      url: '/api/v1/invitations/accept',
+      headers: convidado.headers,
+      payload: { token },
+    });
+    expect(bloqueado.statusCode).toBe(404);
+
+    await desligarChave('tenancy.invites', true);
+    const ligado = await e2e.injetar({
+      method: 'POST',
+      url: '/api/v1/invitations/accept',
+      headers: convidado.headers,
+      payload: { token },
+    });
+
+    expect(ligado.statusCode).toBe(201);
+  });
+
+  it('flag DESLIGADA tranca `POST /users` com `destino.convite` — 404, e a conta NÃO nasce', async () => {
+    // A terceira porta. MEDIDO 2026-10-18 (achado F8): `POST /users` com
+    // `destino: {tipo: 'convite', token}` criava conta e membership COM A FLAG
+    // DESLIGADA — resposta 201. Era a porta mais silenciosa das três, porque
+    // não passa pelo `TenancyController` e nada no módulo `users` falava de
+    // flag nenhuma.
+    //
+    // O token é emitido com a flag LIGADA: o 404 tem que ser atribuível à flag,
+    // não a um convite inexistente. E `invitations/accept` fica de fora do
+    // recorte porque é o `POST /users` que cria a conta.
+    const { headers, empresa } = await abrirEmpresa('acme');
+
+    const convite = await e2e.injetar({
+      method: 'POST',
+      url: `/api/v1/tenants/${empresa.id}/invitations`,
+      headers,
+      payload: { email: 'carla@acme.dev' },
+    });
+    expect(convite.statusCode).toBe(201);
+    const { token } = JSON.parse(convite.body) as { token: string };
+
+    await desligarChave('tenancy.invites', false);
+
+    const resposta = await e2e.injetar({
+      method: 'POST',
+      url: '/api/v1/users',
+      payload: {
+        nome: 'Carla',
+        email: 'carla@acme.dev',
+        senha: 'senha-super-secreta',
+        destino: { tipo: 'convite', token },
+      },
+    });
+
+    expect(resposta.statusCode).toBe(404);
+    const corpo = await resposta.json();
+    expect(corpo.code).toBe('NOT_FOUND');
+    expect(corpo.detail).toBe('Not Found');
+
+    // ⚠️ Sem estas duas, um 404 depois de criar a conta passaria verde: o
+    // usuário existe mas "não entrou na empresa", que é o bypass que o teste
+    // precisa fechar.
+    expect(await e2e.ctx.prisma.user.count({ where: { email: 'carla@acme.dev' } })).toBe(0);
+    expect(await e2e.ctx.prisma.invitation.count({ where: { email: 'carla@acme.dev' } })).toBe(1);
+  });
+
+  it('a MESMA requisição com a flag ligada => 201 — o 404 acima veio da flag', async () => {
+    const { headers, empresa } = await abrirEmpresa('acme');
+
+    const convite = await e2e.injetar({
+      method: 'POST',
+      url: `/api/v1/tenants/${empresa.id}/invitations`,
+      headers,
+      payload: { email: 'dani@acme.dev' },
+    });
+    const { token } = JSON.parse(convite.body) as { token: string };
+
+    await desligarChave('tenancy.invites', false);
+    const bloqueado = await e2e.injetar({
+      method: 'POST',
+      url: '/api/v1/users',
+      payload: {
+        nome: 'Dani',
+        email: 'dani@acme.dev',
+        senha: 'senha-super-secreta',
+        destino: { tipo: 'convite', token },
+      },
+    });
+    expect(bloqueado.statusCode).toBe(404);
+
+    await desligarChave('tenancy.invites', true);
+    const ligado = await e2e.injetar({
+      method: 'POST',
+      url: '/api/v1/users',
+      payload: {
+        nome: 'Dani',
+        email: 'dani@acme.dev',
+        senha: 'senha-super-secreta',
+        destino: { tipo: 'convite', token },
+      },
+    });
+
+    expect(ligado.statusCode).toBe(201);
+    const membership = await e2e.ctx.prisma.tenantMembership.findFirst({
+      where: { user: { email: 'dani@acme.dev' }, tenantId: empresa.id },
+    });
+    expect(membership).not.toBeNull();
+  });
+
+  it('`destino.tipo === "empresa"` NÃO é convite — continua 201 com a flag desligada', async () => {
+    // O corte é `tipo === 'convite'`, e este teste é o que impede que ele vire
+    // "POST /users inteiro". `empresa` não usa token de convite: cria owner.
+    await desligarChave('tenancy.invites', false);
+
+    const resposta = await e2e.injetar({
+      method: 'POST',
+      url: '/api/v1/users',
+      payload: {
+        nome: 'Eli',
+        email: 'eli@acme.dev',
+        senha: 'senha-super-secreta',
+        destino: { tipo: 'empresa', nome: 'Acme Eli', slug: 'acme-eli' },
+      },
+    });
+
+    expect(resposta.statusCode).toBe(201);
+
+    // ⚠️ O 201 sozinho NÃO fixa o que importa. Um 201 com a empresa criada e a
+    // conta fora dela seria "criou a conta" — o bypass que o recorte de
+    // `convite` existe para evitar. O vizinho (convite bloqueado) já faz
+    // exatamente estas duas contagens; aqui elas affirmam o lado POSITIVO.
+    expect(await e2e.ctx.prisma.user.count({ where: { email: 'eli@acme.dev' } })).toBe(1);
+    expect(await e2e.ctx.prisma.tenant.count({ where: { slug: 'acme-eli' } })).toBe(1);
+    const membership = await e2e.ctx.prisma.tenantMembership.findFirstOrThrow({
+      where: { tenant: { slug: 'acme-eli' }, user: { email: 'eli@acme.dev' } },
+    });
+    expect(membership).not.toBeNull();
+  });
 });

@@ -143,7 +143,9 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `absent-tool-reads-as-approval` | `citada` | `.agents/runs/2026-10-05-guard-classes-autoauditoria.md` | `não há sintoma nenhum` |
 | `a-detector-that-fabricates-its-finding` | `pendente` | — | — |
 | `agent-evolution-and-memory` | `citada` | `.agents/specs/conventions/evolucao-agents.md` | `Agents e skills são entidades VIVAS` |
+| `api-response-substitui-o-default-do-post` | `pendente` | — | — |
 | `artefato-publicado-nao-nomeia-o-segredo` | `pendente` | — | — |
+| `assertion-is-not-a-wait` | `pendente` | — | — |
 | `ambiguous-sentinel-silently-skips` | `citada` | `.agents/specs/conventions/guard-classes.md` | `devolvia` |
 | `b24-telemetry-progress` | `recusada` | registro de campanha; o plano de telemetria que ele resume já é versionado | — |
 | `b31-parser-vs-ground-truth-analysis` | `citada` | `docs/superpowers/specs/2026-09-25-b35-parser-regen-analysis.md` | `confirma o veredito de B31` |
@@ -154,9 +156,11 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `conteudo-exclusivo-de-branch-defeito-ja-corrigido` | `pendente` | — | — |
 | `correction-of-one-instance-closes-the-class` | `pendente` | — | — |
 | `cost-must-reconcile-with-the-whole` | `citada` | `.agents/specs/conventions/ci-defense-in-depth.md` | `é uma história` |
+| `cross-artifact-subtraction-borrows-the-other-clock` | `pendente` | — | — |
 | `criterion-inert-on-empty-set` | `citada` | `.agents/specs/conventions/retrospective-capture.md` | `um critério escrito como` |
 | `failed-commit-leaks-staged-files-into-next-commit` | `pendente` | — | — |
 | `fase-7-http-state` | `recusada` | checkpoint de campanha de 2026-09-22; envelheceu e não é instrução | — |
+| `fixture-i-escolhi-nao-proibe-a-forma-do-arquivo-real` | `pendente` | — | — |
 | `gate-blind-to-uncommitted-work` | `citada` | `.agents/workflows/pr-refresh.md` | `não existe` |
 | `gate-compares-against-its-own-filter` | `pendente` | — | — |
 | `gate-must-not-depend-on-machine-ambient-state` | `pendente` | — | — |
@@ -174,6 +178,7 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `guard-must-cover-common-form-not-rare` | `citada` | `.agents/specs/conventions/guard-classes.md` | `a forma comum esquecida tem de vir do` |
 | `guard-that-can-never-fire` | `citada` | `.agents/specs/conventions/guard-classes.md` | `condição inalcançável` |
 | `guard-that-fires-on-itself` | `citada` | `.agents/specs/conventions/guard-classes.md` | `Dispara em si mesmo` |
+| `healthy-tree-exercises-only-half-the-fix` | `pendente` | — | — |
 | `infra-de-teste-contamina-o-gate-de-cobertura` | `pendente` | — | — |
 | `main-branch-protection-pr-only` | `citada` | `.agents/specs/conventions/git-workflow.md` | `Regra Inegociável` |
 | `mandatory-tdd-rule` | `citada` | `.agents/specs/conventions/tdd.md` | `DEVEM seguir o ciclo TDD canônico` |
@@ -186,6 +191,7 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `non-fast-forward-is-not-divergent-work` | `pendente` | — | — |
 | `origin-session-id-nested-under-metadata` | `citada` | `.tooling/scripts/ci/check-memory-crystallization.ts` | `devolve 0 SEM AVISO (exit 1)` |
 | `patch-medido-so-no-caminho-do-defeito` | `pendente` | — | — |
+| `pipe-maska-o-exit-code-do-comando` | `pendente` | — | — |
 | `pipe-stdout-dies-when-spawner-exits` | `pendente` | — | — |
 | `positive-test-must-assert-skip-state` | `citada` | `docs/fluxo-desenvolvimento.md` | `não havia nada para verificar` |
 | `post-task-retrospective-plan` | `removida` | os 3 artefatos que ela planejava já existem; mantê-la os lista como "a criar" | — |
@@ -217,6 +223,7 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `verify-before-the-action-that-invalidates-it` | `citada` | `.agents/specs/conventions/git-workflow.md` | `verificar na posição errada` |
 | `verify-branch-before-commit` | `citada` | `.agents/specs/conventions/git-workflow.md` | `git branch --show-current` |
 | `verify-check-against-reconstructed-state` | `citada` | `.agents/specs/conventions/ci-defense-in-depth-dentes.md` | `Verde não é prova` |
+| `spec-that-rederives-expected-from-implementation` | `pendente` | — | — |
 | `vi-mock-factory-cache-frozen-counter` | `pendente` | — | — |
 | `vitest-workspace-thresholds-and-dist-remap` | `citada` | `.agents/specs/conventions/cobertura-testes.md` | `config raiz` |
 | `zero-survived-is-not-zero-found` | `pendente` | — | — |

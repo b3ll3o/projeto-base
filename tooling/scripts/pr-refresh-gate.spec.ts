@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { MARCADOR } from './pr-refresh-apply';
 import { lerCorpo, verificarMarcador } from './pr-refresh-gate';
+import { extrairClaims } from './pr-refresh-scan';
 import type { ClaimVerificada, Relatorio } from './pr-refresh-scan';
 
 /** Claim verificada com os campos que o gate lê: `linha` e `divergente`. */
@@ -473,13 +474,99 @@ describe('CLI (o caminho que o CI usa)', () => {
     // `300 testes` é a claim mais barata para isto: a classe `testes` tem
     // `medir: () => null`, então NUNCA é divergente, e o corpo não depende do
     // git para ser verde.
+    //
+    // ⚠️ O denominador aqui é **0**, não 1: `300 testes` é reconhecida mas não
+    // mensurável, e um denominador que inclui o que não se comparou faz a
+    // fração afirmar uma cobertura que o gate não teve. A afirmação antiga
+    // (`de 1 reconhecida(s)`) era a forma desse defeito — e por isso este
+    // caso é ao mesmo tempo o teste da marcação vazia e o do denominador.
     const arquivo = join(mkdtempSync(join(tmpdir(), 'pr-body-')), 'body.md');
     writeFileSync(arquivo, 'Corrigi 300 testes.\n');
     const r = rodar({ PR_BODY_FILE: arquivo, PR_BASE: 'origin/main', GITHUB_WORKSPACE: REPO });
 
     expect(r.status).toBe(0);
-    expect(r.stderr).toMatch(/0 claim\(s\) divergente\(s\) de 1 reconhecida\(s\)/);
+    // O denominador é 0 porque `300 testes` é reconhecida mas não mensurável.
+    // E `0 de 0` NÃO pode sair como "nenhuma contagem desatualizada": é a mesma
+    // afirmação sobre conjunto vazio que as duas branches acima recusam, e o
+    // defeito sobreviveu à correção do denominador porque a spec afirmava a
+    // frase errada (`de 0 medida(s)`, com o "nenhuma" implícito) — MEDIDO
+    // 2026-10-19. O que a spec tem de fixar agora é a AUSÊNCIA da conclusão.
+    expect(r.stderr).not.toMatch(/nenhuma contagem desatualizada/);
     expect(r.stderr).not.toMatch(/em parágrafo marcado/);
+    // E o que substitui a conclusão: o gate diz que não há denominador, e a
+    // linha de reclassificação nomeia a classe que ele não julga.
+    expect(r.stderr).toMatch(/0 claim\(s\) medida\(s\)/);
+    expect(r.stderr).toMatch(/NÃO é o mesmo que "verificado e verde"/);
+    expect(r.stderr).toMatch(/testes/);
+  });
+
+  it('o DENOMINADOR é só o que foi medido — claim não mensurável não entra na fração', () => {
+    // MEDIDO 2026-10-19 no corpo do PR #109: `68 arquivos, 286 testes
+    // adicionados`. O gate respondia "0 claim(s) divergente(s) de 2
+    // reconhecida(s), todas em parágrafo marcado — OK" — duas claims no
+    // denominador, ZERO delas medidas, e a palavra "todas" sobre um
+    // conjunto que ele não comparou. A fração não era falsa; era maior que a
+    // medição.
+    //
+    // `999999999 commits` é divergente por construção (nenhum repo tem isso) e
+    // está no parágrafo marcado, então `r.ok` é Verdadeiro por via legítima —
+    // a fração tem de ser `1 de 1`, com a claim de `testes` fora dela. Um
+    // denominador que não distingue as duas cai em `2` e o teste fica vermelho.
+    const arquivo = join(mkdtempSync(join(tmpdir(), 'pr-body-')), 'body.md');
+    writeFileSync(arquivo, `${MARCADOR} foram 999999999 commits\n\nA suíte rodou: 880 testes.\n`);
+    const r = rodar({ PR_BODY_FILE: arquivo, PR_BASE: 'origin/main', GITHUB_WORKSPACE: REPO });
+
+    expect(r.status).toBe(0);
+    expect(r.stderr).toMatch(/1 claim\(s\) divergente\(s\) de 1 medida\(s\)/);
+    expect(r.stderr).not.toMatch(/de 2 medida\(s\)/);
+  });
+
+  it('NOMEIA a classe que o gate não julga, em vez de contá-la só no relatório', () => {
+    // A pendência literal: "`arquivos-suite` é contada mas não nomeada no
+    // output do CI". Contada onde? Em `relatorio.claims` — que nada no CI
+    // imprime. O gate era mudo sobre ela, e silêncio é indistinguível de "não
+    // havia nada": é o §4 de `guard-classes.md` ("quem não pode ser
+    // comparado é RECLASSIFICADO, nunca apagado") medido pelo outro lado.
+    //
+    // A afirmação positiva que dá o dente é `toMatch(/arquivos-suite/)`:
+    // MEDIDO, neutralizar a linha (`false && naoMensuraveis.length > 0`)
+    // derruba SÓ este teste, 1 vermelho de 33.
+    //
+    // A negativa é outra coisa, e vale dizer qual: ela **não** é o dente do
+    // denominador. MEDIDO — trocar o denominador de volta para
+    // `relatorio.claims.length` deixa esta spec VERDE, porque a palavra veio
+    // separada da conta. O que ela segura é o **renomear**: `medida(s)` é a
+    // palavra honesta para um denominador que só conta o que foi medido, e
+    // voltar a `reconhecida(s)` reaposta que a contagem é de claims
+    // reconhecidas — que é o defeito, de novo, pela metade.
+    const arquivo = join(mkdtempSync(join(tmpdir(), 'pr-body-')), 'body.md');
+    writeFileSync(arquivo, 'A suíte rodou: 880 testes em 67 arquivos.\n');
+    const r = rodar({ PR_BODY_FILE: arquivo, PR_BASE: 'origin/main', GITHUB_WORKSPACE: REPO });
+
+    expect(r.status).toBe(0);
+    expect(r.stderr).toMatch(/NÃO mensuráveis offline/);
+    expect(r.stderr).toMatch(/arquivos-suite/);
+    expect(r.stderr).not.toMatch(/reconhecida\(s\)/);
+  });
+
+  it('NÃO imprime a contagem de divergentes duas vezes com denominadores diferentes', () => {
+    // O contra da alternativa que eu descartei: imprimir `relatorio.resumo`
+    // (que abre com "X divergente(s) em Y claim(s)", a contagem TOTAL) ao
+    // lado da do gate (denominador = só o medido). O mesmo log passa a dizer
+    // "0 divergente(s) em 2 claim(s)" e "0 claim(s) divergente(s) de 1
+    // medida(s)" — a mesma palavra com dois números, nenhum deles explicado,
+    // e o leitor tem que adivinhar qual é o certo.
+    //
+    // Conta as OCORRÊNCIAS, não a existência: é assim que "conta uma vez"
+    // vira teeth. `expect(r.stderr).toContain('divergente(s)')` passaria com as
+    // duas linhas.
+    const arquivo = join(mkdtempSync(join(tmpdir(), 'pr-body-')), 'body.md');
+    writeFileSync(arquivo, `${MARCADOR} foram 999999999 commits\n\nA suíte rodou: 880 testes.\n`);
+    const r = rodar({ PR_BODY_FILE: arquivo, PR_BASE: 'origin/main', GITHUB_WORKSPACE: REPO });
+
+    expect(r.status).toBe(0);
+    const ocorrencias = r.stderr.match(/divergente\(s\)/g) ?? [];
+    expect(ocorrencias).toHaveLength(1);
   });
 
   it('ainda afirma a marcação quando existe claim divergente num parágrafo marcado', () => {
@@ -496,5 +583,67 @@ describe('CLI (o caminho que o CI usa)', () => {
     expect(r.status).toBe(0);
     expect(r.stderr).toMatch(/1 claim\(s\) divergente\(s\)/);
     expect(r.stderr).toMatch(/todas em parágrafo marcado/);
+  });
+
+  it('a contagem de suíte na PROSA não vira divergência que trava o PR', () => {
+    // O dente do GATE, não só o do scanner. O scanner é o sujeito; este
+    // gate é quem decide se o PR pode passar.
+    //
+    // MEDIDO 2026-10-19 no PR #109: `880 testes em 67 arquivos` na prosa era
+    // lida como `arquivos=67` do PR. O branch tem 68. Então a claim é
+    // divergente, está fora de qualquer parágrafo marcado, e
+    // `verificarMarcador:132` a dá como erro — o autor não tem saída: marcar
+    // move o número para dentro do marcador e é o `reescrever` que passa a
+    // trocar 67 por 68 (o corpo mente); não marcar mantém o gate vermelho
+    // sobre uma frase de suíte que ele não pode corrigir sem mentir também.
+    // O autor do PR #58 já bateu nessa parede, e o docstring do gate
+    // (`pr-refresh-gate.ts:115-127`) registra o precedente.
+    //
+    // ⚠️ Risco LATENTE, não ativo: MEDIDO `grep -c "67 arquivos" <corpo do
+    // #109>` → 0. A linha real do PR é ``api unit 67/880``. O gate real contra
+    // o corpo real dava `ok: true` antes e dá agora. O que este spec fixa é a
+    // armadilha para quem escrever a frase — não um PR já quebrado.
+    const corpo = [
+      `${MARCADOR} 24 commits · 68 arquivos · +5909/−78.`,
+      '',
+      'A suíte rodou: 880 testes em 67 arquivos.',
+    ].join('\n');
+
+    // O `Relatorio` sai da varredura REAL, não de um objeto montado à mão: um
+    // relatório inventado mediria o regex que eu escolhi, não o que existe.
+    // `medido` fixado em 68 = a contagem real da branch (medirBranch).
+    const varredura = extrairClaims(corpo);
+    const rel: Relatorio = {
+      base: 'origin/main',
+      claims: varredura.map((c): ClaimVerificada => ({
+        ...c,
+        medido: c.classe === 'arquivos' ? 68 : null,
+        divergente: c.classe === 'arquivos' && c.valor !== 68,
+      })),
+      resumo: '',
+    };
+
+    // ⚠️ As DUAS afirmações antes do veredito é o que dá dente ao teste.
+    // Sem elas, `ok: true` sai tanto do regex novo quanto de um regex que
+    // descarta TODA claim — um teste que só afirma o veredito passa vazio,
+    // que é a forma mais comum de spec sem dente neste repo.
+    //
+    // Filtradas pela LINHA, não pelo conjunto todo: o cabeçalho da linha 1 tem
+    // `68 arquivos` e DEVE continuar sendo lido como claim do PR. Assertar
+    // `not.toContain('arquivos')` no conjunto inteiro acusaria o acerto.
+    const naLinhaDaSuite = rel.claims.filter((c) => c.linha === 3);
+    expect(naLinhaDaSuite.map((c) => c.classe)).toContain('testes'); // achou algo
+    expect(naLinhaDaSuite.map((c) => c.classe)).not.toContain('arquivos'); // e não é a meia
+
+    // E o `67 arquivos` NÃO SOME — sai como `arquivos-suite`. É a regra
+    // "nenhuma claim pode ser perdida" vista do lado do gate: o gate não
+    // compara este número com a branch (portanto não trava o PR), mas ele
+    // CONTABiliza, o que é a diferença entre "esta frase não é claim do PR" e
+    // "esta frase não existe". Sem esta linha, voltar a suprimir a forma deixa
+    // o gate igualmente verde — e o spec acima não veria.
+    expect(naLinhaDaSuite.map((c) => c.classe)).toContain('arquivos-suite');
+    expect(naLinhaDaSuite.find((c) => c.classe === 'arquivos-suite')?.valor).toBe(67);
+
+    expect(verificarMarcador(corpo, rel).ok).toBe(true);
   });
 });

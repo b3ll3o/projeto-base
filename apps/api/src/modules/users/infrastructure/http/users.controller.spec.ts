@@ -50,7 +50,7 @@ const SEM_TOKEN = undefined as never;
 const EMPRESA = '0190a8b6-1c2d-7e3f-8a4b-5c6d7e8f9a0b';
 
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import type { Span } from '@opentelemetry/api';
 import { trace } from '@opentelemetry/api';
 import { UsersController } from './users.controller.js';
@@ -82,7 +82,7 @@ describe('UsersController.parseIfMatch', () => {
     // Stubs `{} as never` para os dois colaboradores — parseIfMatch
     // não chama nem userUseCases nem auditService. Outros testes
     // (integração / e2e Task 7.7) validam o caminho feliz + mutação.
-    ctrl = new UsersController({} as never, {} as never, {} as never, {} as never);
+    ctrl = new UsersController({} as never, {} as never, {} as never, {} as never, {} as never);
   });
 
   it('aceita W/"v3" canônico', () => {
@@ -268,6 +268,7 @@ describe('UsersController — handlers HTTP', () => {
   // pt-BR (2ª revisão, achado 1): o recorte pergunta ao port de membership se
   // o ATOR é admin de SISTEMA. O default `null` é o caso comum.
   let memberships: { findProfileId: Mock };
+  let flags: { listar: Mock };
   let ctrl: UsersController;
 
   beforeEach(() => {
@@ -281,7 +282,16 @@ describe('UsersController — handlers HTTP', () => {
     profiles = {
       obterMeuPerfil: vi.fn().mockResolvedValue({ isAdmin: false, permissions: ['users.read'] }),
     };
-    ctrl = new UsersController(useCases, audit, profiles as never, memberships as never);
+    // `listar` devolve `[]` = D4, ninguém desligou nada. O gate de `convite` só
+    // fecha quando a LINHA existe com `ativada: false` (specs abaixo).
+    flags = { listar: vi.fn(async () => []) };
+    ctrl = new UsersController(
+      useCases,
+      audit,
+      profiles as never,
+      memberships as never,
+      flags as never,
+    );
   });
 
   it('create() wrapa em AuditContextStore.run e seta ETag + status 201', async () => {
@@ -301,6 +311,142 @@ describe('UsersController — handlers HTTP', () => {
     expect(reply.status).toHaveBeenCalledWith(201);
     expect(result).toBe(fakeUserOutput);
     runSpy.mockRestore();
+  });
+
+  // ── `tenancy.invites` na porta `POST /users` (2026-10-19) ──────────────
+  //
+  // MEDIDO: `create()` com `destino: {tipo: 'convite', token}` criava conta e
+  // membership COM A FLAG DESLIGADA — resposta 201. Era "de propósito", e por
+  // isso ninguém tinha escrito o teste. Regra do usuário: *"a aplicação n pode
+  // ter bypass"*.
+  //
+  // O recorte é `destino.tipo === 'convite'` e só ele: `empresa` não usa token de
+  // convite (cria owner) e `ausente` é cadastro puro. Os três ficam abertos nos
+  // specs abaixo — é isso que impede o gate de virar "POST /users inteiro
+  // desligado", que seria um bypass diferente.
+  describe('create() com `destino.tipo === "convite"`', () => {
+    const COM_CONVITE = (destino: Record<string, unknown> | undefined): CreateUserDto =>
+      ({
+        nome: 'Convidada',
+        email: 'convidada@example.com',
+        senha: 'senha-super-secreta',
+        ...(destino === undefined ? {} : { destino }),
+      }) as CreateUserDto;
+
+    beforeEach(() => {
+      useCases.criarUser.mockResolvedValue(fakeUserOutput);
+    });
+
+    it('flag DESLIGADA → 404, e `criarUser` NÃO é chamado', async () => {
+      flags.listar.mockResolvedValue([{ chave: 'tenancy.invites', ativada: false }]);
+
+      await expect(
+        ctrl.create(COM_CONVITE({ tipo: 'convite', token: 'tok-abc' }), reply as never, SEM_TOKEN),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(useCases.criarUser).not.toHaveBeenCalled();
+    });
+
+    it('o bloqueio DEIXA RASTRO — e o rastro NÃO leva o token', async () => {
+      // ⚠️ Duas afirmações, e a segunda é a que segura a primeira: um log que
+      // "prova" que o bloqueio foi registrado também passa quando ele registra
+      // o segredo, e `Logger.warn` aceita qualquer coisa como argumento.
+      //
+      // O token é o de quem JÁ tem o convite legítimo — é exatamente o segredo
+      // que este 404 existe para esconder de quem não o tem. Um log com ele
+      // entrega o segredo a quem lê log.
+      const SECREDO = 'tok-conhecido-que-nao-pode-vazar';
+      const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      flags.listar.mockResolvedValue([{ chave: 'tenancy.invites', ativada: false }]);
+
+      // ⚠️ O request vai COM o token, e não `SEM_TOKEN`. MEDIDO 2026-10-19 por
+      // revisão adversarial: com `req === undefined`, `JSON.stringify(req)`
+      // dentro de `registrarBloqueio` produz `undefined` e a asserção
+      // `not.toContain(SECREDO)` passava para QUALQUER implementação — a spec
+      // afirmava uma proteção que não media. O `Request` real do Fastify carrega
+      // `.body`, e é lá que `destino.token` está.
+      //
+      // Sem `user`: `resolveActorId` só roda DEPOIS do `throw`, e um req com
+      // `user.sub` mudaria o `actorId` das ~38 assertions deste arquivo.
+      const reqComToken = {
+        method: 'POST',
+        url: '/api/v1/users',
+        id: 'req-teste',
+        body: { destino: { tipo: 'convite', token: SECREDO } },
+      } as never;
+
+      await expect(
+        ctrl.create(COM_CONVITE({ tipo: 'convite', token: SECREDO }), reply as never, reqComToken),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(warn).toHaveBeenCalled();
+      const registrado = JSON.stringify(warn.mock.calls);
+      expect(registrado).toContain('tenancy.invites');
+      expect(registrado).not.toContain(SECREDO);
+
+      warn.mockRestore();
+    });
+
+    it('flag LIGADA → cria (201)', async () => {
+      flags.listar.mockResolvedValue([{ chave: 'tenancy.invites', ativada: true }]);
+
+      await ctrl.create(
+        COM_CONVITE({ tipo: 'convite', token: 'tok-abc' }),
+        reply as never,
+        SEM_TOKEN,
+      );
+
+      expect(reply.status).toHaveBeenCalledWith(201);
+      expect(useCases.criarUser).toHaveBeenCalledTimes(1);
+    });
+
+    it('flag SEM LINHA → cria (D4: nasce ligado)', async () => {
+      flags.listar.mockResolvedValue([]);
+
+      await ctrl.create(
+        COM_CONVITE({ tipo: 'convite', token: 'tok-abc' }),
+        reply as never,
+        SEM_TOKEN,
+      );
+
+      expect(reply.status).toHaveBeenCalledWith(201);
+    });
+
+    it('OUTRA chave desligada → cria (o recorte é `tenancy.invites`, não "alguma flag")', async () => {
+      flags.listar.mockResolvedValue([{ chave: 'telemetry.otel', ativada: false }]);
+
+      await ctrl.create(
+        COM_CONVITE({ tipo: 'convite', token: 'tok-abc' }),
+        reply as never,
+        SEM_TOKEN,
+      );
+
+      expect(reply.status).toHaveBeenCalledWith(201);
+    });
+
+    it('flag desligada + `destino` AUSENTE → cria (cadastro não é convite)', async () => {
+      flags.listar.mockResolvedValue([{ chave: 'tenancy.invites', ativada: false }]);
+
+      await ctrl.create(COM_CONVITE(undefined), reply as never, SEM_TOKEN);
+
+      expect(reply.status).toHaveBeenCalledWith(201);
+    });
+
+    it('flag desligada + `destino.tipo === "empresa"` → cria (não usa token de convite)', async () => {
+      flags.listar.mockResolvedValue([{ chave: 'tenancy.invites', ativada: false }]);
+
+      await ctrl.create(
+        // A forma REAL do membro `empresa` (`users.schemas.ts:87-95`):
+        // `nome` + `slug`. `empresaId`/`papel` eram um corpo impossível que o
+        // Zod nunca produz — `create()` é chamado direto aqui, sem o pipe, e o
+        // teste passava. A asserção é a mesma; a âncora é que estava mentindo.
+        COM_CONVITE({ tipo: 'empresa', nome: 'Acme', slug: 'acme' }),
+        reply as never,
+        SEM_TOKEN,
+      );
+
+      expect(reply.status).toHaveBeenCalledWith(201);
+    });
   });
 
   it('list() NÃO wrapa em AuditContextStore.run (read path)', async () => {

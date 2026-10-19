@@ -31,7 +31,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import type { Deps } from './pr-refresh-hook.js';
-import { buscarBase, executar } from './pr-refresh-hook.js';
+import { argvPatchPr, buscarBase, executar } from './pr-refresh-hook.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fixture de repo: 1 commit, 2 arquivos, +2 inserções, −1 remoção contra a
@@ -377,6 +377,54 @@ describe('executar — nunca derruba o push', () => {
       },
     });
     expect(executar(deps).estado).toBe('falha');
+  });
+
+  it('o motivo da falha do PATCH chega em `detalhe`, não só o nome do estado', () => {
+    // MEDIDO 2026-10-19: o `aplicar` real produzia `gh: Body should be a JSON
+    // object (HTTP 400)` e o `catch` publicava só `erro inesperado: Command
+    // failed: gh api ...`. O `execFileSync` guarda a resposta boa em `.stderr`
+    // e a joga fora — o sintoma (genérico) mora longe da causa (o corpo nunca
+    // chegou ao request). `stderrDe` já existia, usado por `buscarBase`.
+    const { deps } = cenario(`${CABECALHO_VELHO} ${MARCA}`, {
+      aplicar: () => {
+        throw Object.assign(new Error('Command failed: gh api'), {
+          stderr: Buffer.from('gh: Body should be a JSON object (HTTP 400)\n'),
+        });
+      },
+    });
+    const r = executar(deps);
+    expect(r.estado).toBe('falha');
+    expect(r.detalhe).toContain('Body should be a JSON object');
+  });
+});
+
+describe('argvPatchPr — o par que faltava', () => {
+  it('o argv do PATCH carrega `--input -`, sem o qual o corpo nunca chega ao request', () => {
+    // A LITERAL é o teste. Montar o array esperado a partir das mesmas regras
+    // da implementação provaria que a regra concorda com ela mesma — e foi
+    // exatamente esse o tipo de spec que deixou o `--input -` faltar: o
+    // `aplicar` injetado nos specs nunca executa o `gh` de verdade, então o
+    // argv errado passava indistinguível do certo.
+    //
+    // MEDIDO 2026-10-19: com `input:` e sem `--input -`, o `gh` ignora o stdin
+    // e a API responde `Body should be a JSON object (HTTP 400)`.
+    expect(argvPatchPr(109)).toEqual([
+      'api',
+      '-X',
+      'PATCH',
+      'repos/{owner}/{repo}/pulls/109',
+      '--input',
+      '-',
+    ]);
+  });
+
+  it('o corpo nunca vira argumento: o número do PR é o único valor interpolado', () => {
+    // O corpo do PR é entrada não confiável. Ele viaja por stdin; o argv leva
+    // só o número. Um corpo com aspas ou `$()` em `-f body=` seria a superfície
+    // de RCE que o hook recusa.
+    const argv = argvPatchPr(109);
+    expect(argv.join(' ')).not.toContain('body');
+    expect(argv.filter((a) => a === '-')).toHaveLength(1);
   });
 });
 

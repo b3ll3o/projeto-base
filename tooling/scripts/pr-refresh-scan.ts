@@ -43,7 +43,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export type Classe = 'commits' | 'arquivos' | 'insercoes' | 'remocoes' | 'testes';
+export type Classe =
+  'commits' | 'arquivos' | 'arquivos-suite' | 'insercoes' | 'remocoes' | 'testes';
 
 export interface Claim {
   classe: Classe;
@@ -135,16 +136,25 @@ export interface Relatorio {
  * `declarado=0` (MEDIDO): um número que o corpo não contém, fabricado pela
  * regex e apresentado como se o autor o tivesse escrito.
  *
- * O guard `(?![.\d])` fecha o lado do fim: sem ele, `2.5 commits` casaria `2` e
+ * O guard `(?![.\d])` fechava o lado do fim: sem ele, `2.5 commits` casaria `2` e
  * viraria claim — invenção menor, do mesmo tipo. E o `(?<![\d.])` fecha o lado
  * do início, que o primeiro não pega: com só o `(?![.\d])`, o engine recua e
  * casa `5 commits` a partir do MEIO de `2.5` (MEDIDO — o teste ficou vermelho
  * com a frente do guard já posta). Com os dois, `2.5`, `1.23` e `2.11.2` não
  * casam, e nenhum número é lido a partir do meio.
+ *
+ * O guard do fim virou `(?![\d]|\.(?=\d{3}(?!\d)))` porque o antigo comia a
+ * contagem que FECHA A FRASE. MEDIDO no #109 (2026-10-19): o cabeçalho termina
+ * em `+5836/−74.` e a classe `remocoes` **não era extraída** — só `insercoes`.
+ * O corpo podia afirmar `−63` com a branch em `−74` e nem o hook nem o gate
+ * enxergavam, porque 0 claim é "nada divergente" e não "está certo".
+ *
+ * O ponto agora só rejeita quando é SEPARADOR DE MILHAR (`.` + 3 dígitos que não
+ * são o início de outro grupo). `−1.024.` continua 1024; `−74.` é 74.
  */
 const SEPARADORES_MILHAR = '.\\u202F\\u00A0\\u2009';
 const MILHAR = String.raw`\d{1,3}(?:[${SEPARADORES_MILHAR}]\d{3})+`;
-const NUMERO = String.raw`(?<![\d.])(?:${MILHAR}|\d+)(?![.\d])`;
+const NUMERO = String.raw`(?<![\d.])(?:${MILHAR}|\d+)(?![\d]|\.(?=\d{3}(?!\d)))`;
 
 const PADROES: Array<{
   classe: Classe;
@@ -171,10 +181,81 @@ const PADROES: Array<{
   },
   {
     classe: 'arquivos',
-    re: new RegExp(String.raw`(${NUMERO})\s+(arquivos?)\b`, 'gdi'),
+    // `arquivos` + `testes` no mesmo cluster é relatório de SUÍTE, não
+    // contagem do PR. O `testes` dessas frases sai `NÃO MENSURÁVEL`
+    // (`medir: () => null` abaixo), então o par só faz dano nesta metade — que
+    // é comparada com a branch.
+    //
+    // MEDIDO 2026-10-19 no #109: `880 testes em 67 arquivos` era lido como
+    // `arquivos=67` do PR (que tem 68), e o hook REESCREVIA o número da suíte —
+    // uma frase verdadeira virando falsa, com o instrumento incluindo a
+    // correção. Três partes, cada uma com a forma que ela fecha:
+    //
+    //   - lookbehind `\d+ testes … em ` — o cluster de trás para frente
+    //     ("880 testes em 67 arquivos"); o `(?:\S+\s+)?` é o verbo no meio;
+    //   - `(?!\s*(?:de\b|/))` — "67 arquivos de teste", "67 arquivos/880 testes"
+    //     (este último já fechado por `22c679b2`);
+    //   - conector + `NUMERO testes` — o cluster de frente para trás, com `,`
+    //     `;` `·` `(` e as duas formas markdown (`67 arquivos**/880 testes` e
+    //     `**67 arquivos**/**880 testes**`).
+    //
+    // shortcut: o limite é texto LIVRE entre os dois números, nos dois sentidos.
+    // MEDIDO no corpus dos specs (21 frases: 9 claims do PR + 12 de suíte):
+    // `fp=2`, e nenhuma claim perdida (ver `arquivos-suite` abaixo).
+    //   - fp: "67 arquivos, dos quais 12 de teste", "67 arquivos — a suíte tem
+    //     880 testes". Ambíguos por construção: um PR pode dizer isso sobre si.
+    //   - fn: QUALQUER "N arquivos" seguido de conector + "N testes", e
+    //     "N testes … em N arquivos" escrito como claim do PR. As duas eram
+    //     ACEITADAS COMO PREÇO até 2026-10-19: a 1ª redação deste guard
+    //     apagava essas claims, e apagar não deixa rastro — nem relatório,
+    //     nem erro, nem contagem. Hoje elas são `arquivos-suite`.
+    // Os 2 fecham com o sujeito da contagem, que o scanner não mede: ele é
+    // regex sobre texto (`:29`).
+    re: new RegExp(
+      String.raw`(?<!\d+\s*testes?\s+(?:\S+\s+)?em\s)(${NUMERO})\s+(arquivos?)\b` +
+        String.raw`(?!\s*(?:de\b|/))(?!\s*(?:[,;·(]?|\*+/?(?:\*+)?)\s*(?:com\s+|dos\s+quais\s+)?${NUMERO}\s+testes?\b)`,
+      'gdi',
+    ),
     grupo: 1,
     palavra: 2,
     medir: (m) => m.arquivos,
+  },
+  {
+    // O complemento EXATO das duas primeiras supressões de `arquivos` acima.
+    // Onde `arquivos` recua, este entra — e entra como CLASSE, não como
+    // ausência. É a regra "nenhuma claim pode ser perdida" em código:
+    // suprimir é proibido, RECLASSIFICAR é o mecanismo. A regra está escrita
+    // em `guard-classes.md` §4 — aqui é só a aplicação dela neste regex.
+    //
+    // Por que `medir: () => null` e não comparar: o número é da suíte, e a
+    // suíte não é a branch. `medido === null` + `divergente === false` deixa a
+    // claim inerte para `reescrever` (`pr-refresh-apply.ts:168`) e para
+    // `verificarMarcador` (`pr-refresh-gate.ts:132`), que filtram por
+    // `divergente` — sem tocar em nenhum dos dois.
+    //
+    // Duas entradas porque `grupo` é UM índice e a alternância mudaria a
+    // numeração: o `N arquivos` chega antes do `testes` numa forma e depois na
+    // outra. Os dois formatos são disjuntos — o primeiro exige o cluster ATRÁS
+    // (e herda o lookbehind negativo do `arquivos`), o segundo exige `de` ou o
+    // cluster À FRENTE (e o `arquivos` os proíbe) — então nenhum texto produz
+    // a mesma frase nas duas classes. Fixado em
+    // `pr-refresh-scan.spec.ts: "as duas classes não coexistem"`.
+    classe: 'arquivos-suite',
+    re: new RegExp(String.raw`\d+\s*testes?\s+(?:\S+\s+)?em\s+(${NUMERO})\s+(arquivos?)\b`, 'gdi'),
+    grupo: 1,
+    palavra: 2,
+    medir: () => null,
+  },
+  {
+    classe: 'arquivos-suite',
+    re: new RegExp(
+      String.raw`(?<!\d+\s*testes?\s+(?:\S+\s+)?em\s)(${NUMERO})\s+(arquivos?)\b` +
+        String.raw`(?:\s*de\b|\s*(?:[,;·(/]?|\*+/?(?:\*+)?)\s*(?:com\s+|dos\s+quais\s+)?${NUMERO}\s+testes?\b)`,
+      'gdi',
+    ),
+    grupo: 1,
+    palavra: 2,
+    medir: () => null,
   },
   {
     classe: 'testes',

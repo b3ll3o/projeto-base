@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -121,6 +121,15 @@ describe('checkHarnessLocation', () => {
     // gate roda no pre-push, e a janela entre "criei o gate" e "commitei o
     // gate" é exatamente quando ele ainda não está stageado — verde por não
     // ter o que ver. O repo já tem o padrão em `check-teeth-registry.ts:268`.
+    it('acusa `check-*.ts` em tooling/scripts/ — a regra (1), que não tinha teste', async () => {
+      repoComGateEm('tooling/scripts/check-vazado.ts');
+      const r = await checkHarnessLocation({ repoRoot: tmp });
+      expect(r.ok).toBe(false);
+      const e = r.errors.find((x) => x.includes('fora do lugar'));
+      expect(e).toMatch(/tooling\/scripts\/check-vazado\.ts/);
+      expect(e).toMatch(/\.tooling\/scripts\/ci/);
+    });
+
     it('acusa o gate em subdir mesmo SEM git add (untracked)', async () => {
       git('init', '-q');
       git('config', 'user.email', 't@t');
@@ -133,6 +142,72 @@ describe('checkHarnessLocation', () => {
       expect(r.errors.some((x) => x.includes('subdir') && x.includes('check-nao-stageado'))).toBe(
         true,
       );
+    });
+
+    // (1), (2) e (4) dependem de `git ls-files`. Sem `git` — ou sem history —
+    // os três caem, e o `catch {}` vazio de cada um devolvia `ok:true` sem ter
+    // medido nada: a §4 de `guard-classes.md` ("quem não pode ser comparado é
+    // RECLASSIFICADO, nunca apagado") num gate que nem é do diff desta branch.
+    describe('`git` indisponível', () => {
+      let pathOriginal: string;
+
+      beforeEach(() => {
+        // Repo git de verdade primeiro — o setup usa o `git` bom, e só a
+        // MEDIÇÃO roda contra o stub. Duas violações plantadas, uma por regra
+        // que depende de `git`: se o `git` responder, elas aparecem (é o
+        // controle de positividade dos testes acima).
+        repoComGateEm('tooling/scripts/check-vazado.ts');
+        repoComGateEm('.tooling/scripts/ci/sub/check-sombreado.ts');
+        const stub = join(tmp, 'bin');
+        mkdirSync(stub, { recursive: true });
+        // Sai com 1 e escreve em stderr, como o `git` real faz fora de repo —
+        // senão o motivo do skip não tem causa nenhuma para mostrar.
+        writeFileSync(
+          join(stub, 'git'),
+          '#!/bin/sh\necho "fatal: not a git repository" >&2\nexit 128\n',
+        );
+        chmodSync(join(stub, 'git'), 0o755);
+        pathOriginal = process.env['PATH'] ?? '';
+        process.env['PATH'] = `${stub}:${pathOriginal}`;
+      });
+
+      afterEach(() => {
+        process.env['PATH'] = pathOriginal;
+      });
+
+      it('NÃO devolve `ok:true` mudo — `skipped` nomeia o que não rodou', async () => {
+        const r = await checkHarnessLocation({ repoRoot: tmp });
+        expect(r.skipped).toBe(true);
+        expect(r.reason).toMatch(/NÃO rodaram/);
+        // `errors` vazio é o CORRETO aqui: nada foi medido, então não há o que
+        // acusar. O que não pode é o gate chamar isso de "verifiquei e passou".
+        expect(r.errors).toEqual([]);
+      });
+
+      it('o motivo do skip traz a CAUSA do `git`, não o "Command failed" repetindo o pathspec', async () => {
+        // MEDIDO 2026-10-19 por revisão independente: `String(err).split('\n')[0]`
+        // devolvia "Error: Command failed: git ls-files … <pathspec>", que repete
+        // o pathspec já impresso 20 caracteres antes e joga fora `err.stderr`,
+        // onde está a causa. Três causas distintas — git ausente, não é repo,
+        // índice corrompido — saíam idênticas, e um skip que não diz por que não
+        // mediu é o `✓` de novo com outro uniforme.
+        const r = await checkHarnessLocation({ repoRoot: tmp });
+        expect(r.reason).toMatch(/not a git repository/);
+        expect(r.reason).not.toMatch(/Command failed/);
+      });
+
+      it('`skipped` não engole o erro de (3), que NÃO depende de git', async () => {
+        // `ok` e `skipped` são independentes por contrato (`check-types.ts`):
+        // um defeito real continua defeito mesmo com o resto pulado.
+        writeFile(
+          '.tooling/scripts/ci/preflight-gates.ts',
+          'export const PREFLIGHT_CHECKS = [{name:"falso",file:".tooling/scripts/ci/check-nao-existe.ts"}];',
+        );
+        const r = await checkHarnessLocation({ repoRoot: tmp });
+        expect(r.skipped).toBe(true);
+        expect(r.ok).toBe(false);
+        expect(r.errors[0]).toMatch(/NÃO EXISTE/);
+      });
     });
   });
 });

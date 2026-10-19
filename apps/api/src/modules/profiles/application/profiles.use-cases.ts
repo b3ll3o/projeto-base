@@ -36,6 +36,10 @@ import {
   ProfilePrivilegeEscalationException,
 } from '../domain/exceptions/profile.exceptions.js';
 import { listAllPermissions } from '../../../shared/auth/permissions-catalog.js';
+import {
+  ehAdministradorDeSistema,
+  type AtorAutenticado,
+} from '../../../shared/auth/eh-administrador-de-sistema.js';
 import { UserNotFoundException } from '../../users/domain/exceptions/user.exceptions.js';
 import { UserId } from '../../users/domain/value-objects/user-id.vo.js';
 import type { User } from '../../users/domain/user.aggregate.js';
@@ -59,33 +63,6 @@ function recusaEscalada(motivo: string): never {
 }
 
 /**
- * pt-BR (Fase 9, 2026-10-17): o bucket de SISTEMA tem dono, e o dono é `isAdmin`
- * — não o bucket.
- *
- * `ator.tenantId === null` significa "rota sem `X-Tenant-Id`", e a Fase 8 leu
- * isso como "sou o admin global, então vejo tudo". A leitura é falsa: o bucket
- * de SISTEMA tem DOIS perfis no seed — `admin` (com `isAdmin`) e `viewer` (sem
- * nada) — e o que dá bypass total no `PermissionsGuard` é o `isAdmin`, nunca o
- * bucket. MEDIDO 2026-10-17 contra Postgres real: um perfil global **não-admin**
- * com `admin.manage-*` listava, renomeava, apagava e injetava permissão em perfil
- * de empresa vizinha sem header nenhum, e vestia perfil de empresa em conta
- * alheia. O alvo do último caso perdia o perfil inteiro, porque
- * `findProfileId(_, null)` só aceita `tenant_id IS NULL`.
- *
- * A contrapartida que não pode regredir: o admin de SISTEMA continua vendo
- * tudo. Sem ele o seed volta a ser a única porta de administração, que é a
- * dependência que a Fase 5 removeu de propósito.
- *
- * É a MESMA regra que `findProfileId` já aplica no ramo global do bucket
- * (`profile: { is: { tenantId: null } }`, em
- * `prisma-tenant-membership.repository.ts:49`): o bucket de sistema resolve o
- * bucket de sistema. A leitura sempre teve a trava; a escrita não.
- */
-function ehAdministradorDeSistema(ator: AtorAutenticado): boolean {
-  return ator.tenantId === null && ator.isAdmin;
-}
-
-/**
  * pt-BR (Fase 8, 2026-10-17): o perfil é da EMPRESA do ator?
  *
  * A regra original é uma linha e a MEDIÇÃO é que ela não existia: com
@@ -100,6 +77,9 @@ function ehAdministradorDeSistema(ator: AtorAutenticado): boolean {
  * troca não é cosmética. Antes era `ator.tenantId !== null`, que tratava o
  * bucket como se fosse superusuário — e o bucket tem membros não-admin.
  *
+ * `ehAdministradorDeSistema` foi para `shared/auth/` (feature-flags D11): o BC
+ * de flags precisa da MESMA regra, e duas escritas divergem com o tempo.
+ *
  * Função de arquivo como as outras: as duas classes (`ProfileUseCases` e
  * `AuthorizationUseCases`) precisam dela, e um método duplicaria a regra.
  */
@@ -109,28 +89,7 @@ function exigePerfilDoEscopo(profile: Profile, ator: AtorAutenticado): void {
   }
 }
 
-/**
- * Identidade do ator autenticado, o mínimo que as travas de escalada
- * precisam: QUEM é e SE é admin. Vem do `req.user` publicado pelo
- * `JwtAuthGuard` (que hidrata `isAdmin` do cache de profile).
- */
-export interface AtorAutenticado {
-  readonly userId: string;
-  /**
-   * pt-BR (Fase 3): empresa em que o ato acontece. `null` = rota sem
-   * `X-Tenant-Id`.
-   *
-   * **Obrigatório** (não `?`) para que nenhuma chamada possa omitir a empresa
-   * em silêncio. Desde a Fase 4 ele é lido de verdade: o perfil efetivo do ator
-   * vem de `tenant_memberships.profile_id` quando há empresa, e do perfil
-   * GLOBAL (`users.profile_id`) quando não há.
-   *
-   * ⚠️ `null` NÃO é "sem permissão nenhuma": é o bucket dos perfis de sistema
-   * (D3, `profiles.tenant_id IS NULL`), onde mora o único `isAdmin`.
-   */
-  readonly tenantId: string | null;
-  readonly isAdmin: boolean;
-}
+export type { AtorAutenticado } from '../../../shared/auth/eh-administrador-de-sistema.js';
 
 /**
  * pt-BR (Fase 3): o perfil efetivo do ator numa empresa. Nomeado para que

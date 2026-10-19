@@ -15,6 +15,7 @@ import { TENANCY_USE_CASES, TenancyUseCases } from './application/tenancy.use-ca
 import { PrismaPersistenceModule } from '../users/infrastructure/prisma-persistence.module.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { PrismaModule } from '../../shared/infrastructure/prisma/prisma.module.js';
+import { FeatureFlagsModule } from '../feature-flags/feature-flags.module.js';
 
 @Module({
   // pt-BR: `PrismaPersistenceModule` é quem PROVE `TENANT_ONBOARDING_PORT`,
@@ -22,7 +23,7 @@ import { PrismaModule } from '../../shared/infrastructure/prisma/prisma.module.j
   // que `TenancyUseCases` consome. `AuthModule` e `PrismaModule` entram pelo
   // mesmo motivo de `ProfilesModule`: `JwtAuthGuard` e `PrismaService` não
   // existem no grafo sem eles.
-  imports: [AuthModule, PrismaPersistenceModule, PrismaModule],
+  imports: [AuthModule, PrismaPersistenceModule, PrismaModule, FeatureFlagsModule],
   controllers: [TenancyInvitationsController],
   providers: [{ provide: TENANCY_USE_CASES, useClass: TenancyUseCases }],
   exports: [TENANCY_USE_CASES],

@@ -1,0 +1,167 @@
+# Camada 1 do pre-planner — agregacao dos 7 specialists despachados.
+# Classifier output bruto: 20261018T053846Z-specialist-01.yaml
+classification:
+  scope: feat
+  matrix_version: 1.6
+  matrix_updated: 2026-10-16
+  domains_detected: [nestjs, nextjs, prisma, ux, test, docs, monorepo]
+  classified_by: tooling/scripts/specialist-router.ts (headless, exit 0)
+  command: 'pnpm specialist:route --demand=... --paths=... --matrix=... --scope=feat --output=... '
+  evidence:
+    path_glob: [apps/api/**, '**/prisma/**', apps/web/**, 'apps/web/app/**.tsx', apps/api/prisma/**]
+    demand_keyword:
+      [
+        "(?i)\\btela(s)?\\b|\\bux\\b|\\bdesign\\b|layout|formulario|acessibilidade|a11y|EmptyState|estados? de",
+      ]
+    demand_scope: [feat]
+    always_on: [monorepo-specialist]
+  derived_tags: [prisma_binary]
+
+specialists_dispatched:
+  - nestjs-specialist
+  - nextjs-specialist
+  - prisma-db-specialist
+  - ux-design-specialist
+  - test-writer
+  - doc-writer
+  - monorepo-specialist
+
+gap_detected: false
+gap_rationale: 'Todos os 7 possuem arquivo em .agents/agents/ (conferido por ls). Nenhum cluster de keyword ficou sem owner.'
+
+conflicts_resolved: 4
+conflicts_open: 2
+
+plans_aggregated:
+  unified_plan:
+    order_note: 'Ordem por dependencia, nao por ordem de despacho.'
+    steps:
+      - id: p1
+        owner: prisma-db-specialist
+        files: [apps/api/prisma/schema.prisma, 'apps/api/prisma/migrations/<ts>_feature_flags/']
+        deliverable: 'model + 4 policies RLS (ENABLE ROW LEVEL SECURITY obrigatorio) + spec de comportamento da policy'
+        covers_gap: [G-002]
+        blocks: [p2, p6]
+      - id: p2
+        owner: nestjs-specialist
+        files: [apps/api/src/shared/auth/permissions-catalog.ts]
+        deliverable: 'chave nova admin.manage-feature-flags no array PERMISSIONS (o decorator valida contra o catalogo)'
+        blocks: [p4]
+      - id: p3
+        owner: nestjs-specialist
+        files: ['apps/api/src/modules/feature-flags/domain/**']
+        deliverable: 'VO da chave + agregado (criar/restaurarDePersistencia/definir, version p/ optimistic lock) + ports + exceptions'
+        depends_on: []
+        covers_gap: [G-002]
+      - id: p4
+        owner: nestjs-specialist
+        files:
+          [
+            'apps/api/src/modules/feature-flags/application/**',
+            'apps/api/src/modules/feature-flags/infrastructure/http/**',
+          ]
+        deliverable: 'use-cases (listar/alternar), service.estaAtiva(key) = ponto UNICO de leitura, schemas Zod, controller GET + PATCH /:key'
+        depends_on: [p2, p3]
+        nota: 'Nao criar application/dto/ — espelhar profiles (schemas.ts + z.infer). Arquivo de tipo puro entra no denominador de graca.'
+      - id: p5
+        owner: nestjs-specialist
+        files:
+          [
+            'apps/api/src/modules/feature-flags/infrastructure/persistence/prisma-feature-flag.repository.ts',
+            apps/api/src/modules/feature-flags/feature-flags.module.ts,
+            apps/api/src/app.module.ts,
+          ]
+        deliverable: 'adapter com comEscopo + escopoDoTenant(null); registro no AppModule; @Inject explicito em todo provider novo'
+        depends_on: [p1, p4]
+        covers_gap: [G-002]
+        RISCO: 'Adapter so coberto por spec de integration continua no denominador do projeto enforced (unit). integration e report-only.'
+      - id: p6
+        owner: test-writer
+        files:
+          [
+            'apps/api/src/modules/feature-flags/**/*.spec.ts',
+            packages/shared-types/src/feature-flag.ts,
+            packages/shared-types/src/index.ts,
+          ]
+        deliverable: 'specs RED-antes-de-GREEN por step + seed/backfill de Authorization para os perfis existentes (consequencia da chave nova p2)'
+        depends_on: [p1, p2, p3, p4, p5]
+        covers_gap: [G-002]
+      - id: p7
+        owner: nextjs-specialist
+        files:
+          [
+            apps/web/lib/feature-flags.ts,
+            apps/web/app/admin/feature-flags/page.tsx,
+            apps/web/components/Sidebar.tsx,
+          ]
+        deliverable: 'lib no padrao de lib/perfil.ts; page.tsx Server Component (force-dynamic, guard isAdmin copiado das telas irmaas, Server Action por linha + revalidatePath); link no Sidebar dentro do bloco isAdmin'
+        depends_on: [p4, p6]
+      - id: p8
+        owner: ux-design-specialist
+        files:
+          [apps/web/components/feature-flag-switch.tsx, apps/web/app/admin/feature-flags/page.tsx]
+        deliverable: 'unico componente novo. checkbox nativo role=switch, knob por transform, ZERO token novo (paleta slate crua ja usada 68x). Estados + rollback visivel.'
+        depends_on: [p7]
+        nota: 'page.tsx e propriedade de p7 — p8 entrega a especificacao visual, p7 executa o markup.'
+      - id: p9
+        owner: test-writer
+        files: [apps/web/e2e/f14-admin-feature-flags.spec.ts]
+        deliverable: "// FLUXO: F14. Admin liga/desliga e PERSISTE apos reload; flag desligada esconde efeito de quem nao e admin; NEGATIVO quase-admin recebe 'Acesso restrito' e o nome da flag nao vai no payload; API fora do ar sem estado otimista enganoso."
+        depends_on: [p8]
+        nota: 'Entrada no inventario e MESMO PR — ver p10.'
+      - id: p10
+        owner: doc-writer
+        files: [.agents/specs/conventions/e2e-playwright.md]
+        deliverable: 'linha F14 na tabela ## Inventario de Fluxos (Rota=/admin/feature-flags) + ajustar contador'
+        depends_on: []
+        BLOCKING: true
+        gate: check-e2e-flow-coverage
+        porque_bloqueia: 'Gate deriva as rotas do page.tsx em disco e compara com a coluna Rota. page.tsx nova sem esta linha = preflight vermelho.'
+      - id: p11
+        owner: doc-writer
+        files: [.agents/memory/nestjs-specialist.md, .agents/memory/nextjs-specialist.md]
+        deliverable: "editorial: os itens 'Documentar padrao de feature flag (Unleash/LaunchDarkly)' ficam obsoletos — a decisao e in-house (tabela + endpoint)"
+        gate: nenhum (check-agent-memory-drift so dispara se o ARQUIVO DO AGENTE mudou)
+      - id: p12
+        owner: prisma-db-specialist
+        files: [apps/api/prisma/schema.prisma]
+        deliverable: "DUP de p1, reexecutar aqui: 'prisma_binary' foi DESCARTADA apos ler apps/api/Dockerfile:76 — a demanda nao toca imagem. Nenhum passo de docker."
+      - id: p13
+        owner: monorepo-specialist
+        files: []
+        deliverable: 'VEREDITO: NENHUMA MUDANCA ESTRUTURAL DE MONOREPO (medido: apps inalterado, packages inalterado, pnpm-workspace globs casam os 2 apps). Unica decisao real de workspace = onde mora o tipo de wire (p6).'
+        files_modified: []
+
+conflicts_resolved_detail:
+  - id: C1
+    titulo: 'Chave de permissao (test-writer vs nestjs-specialist)'
+    resolucao: 'nestjs ja decidiu D2 = chave NOVA admin.manage-feature-flags. Isso FECHA a branch (a) que o test-writer deixou aberta: passa a ser obrigatorio seed/backfill de Authorization para os perfis existentes + crescimento do spec do catalogo. O 403 spec e identico nas duas branches, mas backfill e spec do catalogo so existem nesta.'
+  - id: C2
+    titulo: 'Mecanismo do toggle (ux-design vs nextjs)'
+    resolucao: "nextjs escolheu RSC puro + <form> por linha + Server Action (padrao F11, sem 'use client' na pagina). ux quer flip imediato de 1 clique. Merge: a PAGINA continua Server Component; so o interruptor vira ilha client com useOptimistic para o flip imediato, e o SERVE ACTION por linha faz a gravacao. Satisfez os dois. O 'Salvar' compartilhado de F11 fica de fora — diff-then-save e para form N-item, nao para toggle atomico."
+  - id: C3
+    titulo: 'Escopo global vs por-tenant (nestjs D1 vs prisma-db-specialist)'
+    resolucao: 'ABERTO — ver conflicts_open O1. Os dois discordam sobre existir coluna tenant_id.'
+  - id: C4
+    titulo: 'Dono dos arquivos tocados por 2 specialists'
+    resolucao: "Dedup por owner unico, com o outro entregando especificacao: page.tsx -> nextjs (ux entrega tokens/estados); e2e spec F14 -> test-writer (nextjs web-4 e ux ui-07/ui-08 sao o MESMO step); Sidebar -> nextjs (ux entrega o rotulo 'Funcionalidades'); feature-flag.ts em shared-types -> nestjs escreve o tipo, monorepo executa o edit."
+
+conflicts_open:
+  - id: O1
+    titulo: 'Existe coluna tenant_id em feature_flags?'
+    posicao_nestjs: "D1 — sem tenant_id. Demanda diz 'administrador do SISTEMA'. Per-tenant nao foi pedido."
+    posicao_prisma: 'tenantId nullable, NULL = global. Argumento: sem a coluna, o caminho quente de leitura nao consegue enxergar a flag por tenant depois.'
+    nota: "Prisma-db e o DONO do schema (AGENTS.md: 'Dono do schema Prisma em apps/api/prisma/'). A demanda literal nao pede por-tenant."
+    meu_lean: 'Sem tenant_id (o menor diff que faz o job). Nullable so se o prisma-db-specialist sustentar o caso do caminho quente com medicao, nao com argumento.'
+    resolucao_requerida: 'prisma-db-specialist, antes de p1 fechar.'
+  - id: O2
+    titulo: 'Gate doc-sync de docs/STACK.md secao 3'
+    posicao: 'prisma-db-specialist sinalizou como questao aberta. Se o schema novo obriga update em docs/STACK.md, isso e step que falta no plano.'
+    resolucao_requerida: 'checar o gate antes do CI, nao durante.'
+
+next_steps:
+  - 'Resolver O1 (prisma-db-specialist decide) e O2 antes de escrever o plano'
+  - 'unified_plan acima vira o input de writing-plans em docs/superpowers/plans/'
+  - 'TDD obrigatorio: cada step abre com RED antes de GREEN (.agents/specs/conventions/tdd.md)'
+  - 'G-002 e condicao de fechamento por step, nao task final: rodar pnpm --filter @projeto/api test:coverage e comparar contra os tripwire'
+  - 'depois de cada task: review-router (gate autonomo), nao dispatched por demanda'

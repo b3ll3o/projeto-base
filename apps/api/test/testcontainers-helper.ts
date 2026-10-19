@@ -144,6 +144,12 @@ export async function cleanDatabase(prisma: PrismaClient): Promise<void> {
   // antes deixaria o `profile.deleteMany` logo abaixo dependente de cascade.
   await prisma.invitation.deleteMany({});
   await prisma.tenantMembership.deleteMany({});
+  // pt-BR (feature-flags, 2026-10-18): `feature_flags` não tem FK, então a
+  // posição é irrelevante — entra no topo só por uniformidade. Sem esta linha a
+  // ausência é SILENCIOSA: o primeiro spec que grava uma flag deixa a linha
+  // para o seguinte, que começa esperando base vazia e falha como se o
+  // repositório inventasse estado.
+  await prisma.featureFlag.deleteMany({});
   await prisma.userArchive.deleteMany({});
   await prisma.userHistory.deleteMany({});
   await prisma.user.deleteMany({});

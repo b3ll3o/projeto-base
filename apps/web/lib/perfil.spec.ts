@@ -64,6 +64,7 @@ const {
   listarPerfis,
   listarPermissoes,
   obterMeuPerfil,
+  obterMeuPerfilGlobal,
   obterPerfil,
   obterPerfilPorSlug,
   revogarPermissao,
@@ -217,6 +218,83 @@ describe('getTenant é montado no ApiClient (Fase 3)', () => {
     await obterMeuPerfil();
 
     expect(configAtual().getTenant?.()).toBe(ACME);
+  });
+
+  /**
+   * O contrário, e é o dente do achado A (revisão adversarial 2026-10-18).
+   *
+   * A tela de feature flags autoriza pelo `isAdmin` do bucket **GLOBAL** — o
+   * que D2 exige (`ehAdministradorDeSistema`: `tenantId === null && isAdmin`) —
+   * e não pelo `isAdmin` de DONO que `obterMeuPerfil` devolve. O de dono é
+   * `true` em toda empresa nova
+   * (`prisma-tenant-onboarding.repository.ts:202`), então ler o sinal errado
+   * mostra a tabela para um ator que a API recusa.
+   *
+   * Por que a asserção é sobre `getTenant` e não sobre o retorno: `clientMock`
+   * não concatena header e o `ApiClient` é mockado como construtor. O `getTenant`
+   * é montado **sempre** — o que muda é o valor devolvido: `null`, e o
+   * `ApiClient` omite o header quando é `null` (`api-client.ts:66-67`, provado
+   * no `api-client.spec.ts`). Então a configuração montada é a única coisa
+   * observável daqui, e é onde o bug mora.
+   *
+   * ⚠️ O cenário `ACME` é o que dá o dente: com empresa escolhida no cookie,
+   * `obterMeuPerfilGlobal` devolvendo `null` prova que ela **ignora**
+   * `lerTenant()`; uma implementação que escopasse por empresa devolveria a ACME
+   * aqui — e mandaria `X-Tenant-Id`, tirando o ator do bucket global (D14/D2).
+   */
+  it('obterMeuPerfilGlobal devolve getTenant NULO mesmo com empresa escolhida', async () => {
+    // `beforeEach` não limpa este spy, e os testes acima já o chamaram — sem
+    // esta linha a asserção de contagem mede a suíte, não a função.
+    lerTenantMock.mockClear();
+    lerTenantMock.mockResolvedValueOnce(ACME);
+    clientMock.get.mockResolvedValue(null);
+
+    await obterMeuPerfilGlobal();
+
+    expect(configAtual().getTenant?.()).toBeNull();
+    // E ele realmente não pergunta — `lerTenant()` é a fonte do valor.
+    expect(lerTenantMock).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A política de ERRO é a mesma de `obterMeuPerfil`, e só o 401 vira `null`.
+   *
+   * O que o merge de #108 revelou: esta função nasceu com `catch { return null }`
+   * e um comentário jurando que era "mesma política" de `obterMeuPerfil` — mas
+   * `obterMeuPerfil` foi corrigida no #107 para distinguir 401 de 403/5xx, e o
+   * `catch` daqui ficou para trás. Consequência na tela de flags, que lê `null`
+   * como veredito (`me === null || me.isAdmin !== true` → "acesso restrito"):
+   * administradora do SISTEMA com a API fora do ar recebia a tela afirmando que
+   * não era administradora — o defeito que o #107 existe para matar.
+   *
+   * ⚠️ Por que estes dois e não todos: 401→`null` e 500→propaga são os dois
+   * lados do `if`. Um `catch { return null }` passa no primeiro e falha no
+   * segundo; um `throw` cego faz o contrário. Os dois juntos provam que a
+   * discriminação existe; 403/timeout/rede são o mesmo `if` com outro rótulo.
+   */
+  describe('a política de erro é a do #107 (só o 401 vira null)', () => {
+    function erroApi(status: number): ApiError {
+      const problem = {
+        type: 'about:blank',
+        title: 'erro',
+        status,
+        detail: 'detalhe',
+        instance: '/me/profile',
+        code: 'ERRO',
+        traceId: 'trace-1',
+      };
+      return new ApiError('erro', 'codigo', status, problem);
+    }
+
+    it('401 vira null — token expirado é o mesmo estado de "sem sessão"', async () => {
+      clientMock.get.mockRejectedValueOnce(erroApi(401));
+      await expect(obterMeuPerfilGlobal()).resolves.toBeNull();
+    });
+
+    it('500 NÃO vira null — "não é administradora" e "a API caiu" são telas diferentes', async () => {
+      clientMock.get.mockRejectedValueOnce(erroApi(500));
+      await expect(obterMeuPerfilGlobal()).rejects.toThrow(ApiError);
+    });
   });
 });
 

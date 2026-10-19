@@ -23,6 +23,7 @@ import {
   Headers,
   HttpCode,
   Inject,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -50,6 +51,14 @@ import {
   type TenantMembershipRepositoryPort,
 } from '../../../tenancy/domain/ports/tenant-membership-repository.port.js';
 import { Public } from '../../../auth/infrastructure/http/public.decorator.js';
+import {
+  FEATURE_FLAG_REPOSITORY_PORT,
+  type FeatureFlagRepositoryPort,
+} from '../../../feature-flags/domain/ports/feature-flag-repository.port.js';
+import {
+  chaveDesligada,
+  registrarBloqueio,
+} from '../../../feature-flags/infrastructure/http/guards/feature-flag.guard.js';
 import type { TokenSubject } from '../../../auth/domain/ports/token-issuer.port.js';
 
 import { AUDIT_SERVICE_PORT } from '../../../../shared/audit/shared/audit.tokens.js';
@@ -130,6 +139,10 @@ export class UsersController {
     // única que não passa pelo cache resolvido por membership.
     @Inject(TENANT_MEMBERSHIP_REPOSITORY_PORT)
     private readonly memberships: TenantMembershipRepositoryPort,
+    // `@Inject` EXPLÍCITO: `tsx`/esbuild não emite `design:paramtypes` e o Nest
+    // passaria `undefined` — o mesmo defeito de `permissions.guard.ts:31-43`.
+    @Inject(FEATURE_FLAG_REPOSITORY_PORT)
+    private readonly flags: FeatureFlagRepositoryPort,
   ) {}
 
   // ───────────────────────── POST /users ─────────────────────────
@@ -152,11 +165,31 @@ export class UsersController {
   })
   @ApiResponse({ status: 409, description: 'Email já em uso' })
   @ApiResponse({ status: 400, description: 'Payload inválido' })
+  // O 404 é condicional, e sua CONDICAÇÃO não pode entrar na descrição: ela
+  // diria ao leitor que existe um interruptor (o mesmo motivo do corpo genérico
+  // do guard, `contrato-http.md §8`). Só o status fica declarado.
+  @ApiResponse({ status: 404, description: 'Recurso não encontrado' })
   async create(
     @Body(new ZodValidationPipe(CreateUserSchema)) body: CreateUserDto,
     @Res({ passthrough: true }) reply: FastifyReply,
     @Req() request: RequestWithUser,
   ): Promise<unknown> {
+    // `tenancy.invites` nesta porta. A checagem mora AQUI, e não em
+    // `@RequireFeatureFlag`, por dois motivos que só o `destino` do corpo
+    // resolve: o decorator é por handler — `create()` também cria conta comum e
+    // conta de owner de empresa, e nenhuma das duas é convite; e o
+    // `FeatureFlagGuard` exige `req.user`, que `@Public()` nunca publica
+    // (`jwt-auth.guard.ts:170-172`). Recorte em `convite` e não em "tem
+    // `destino`": `empresa` não usa token de convite.
+    if (body.destino?.tipo === 'convite' && (await chaveDesligada(this.flags, 'tenancy.invites'))) {
+      // ⚠️ `body.destino.token` está no escopo e NÃO vai para o log: quem tem o
+      // token legítimo é exatamente quem este 404 esconde, e um log com ele
+      // entrega o segredo a quem lê log. O spec injeta um token conhecido e
+      // afirma que ele não aparece em nenhum argumento.
+      registrarBloqueio('tenancy.invites', request);
+      throw new NotFoundException();
+    }
+
     // `POST /users` é `@Public()`: não há ator, e a conta nasce sem empresa —
     // logo o bucket de SISTEMA, que é o único onde "sem empresa" é visível.
     const user = await AuditContextStore.run(this.buildContext(request), () =>

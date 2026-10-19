@@ -10,10 +10,13 @@
 // transação — o que um `@Post` separado não consegue prometer.
 
 import { Body, Controller, Inject, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { ApiResponse } from '@nestjs/swagger';
 import { z } from 'zod';
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
 import { ZodValidationPipe } from '../../../../shared/infrastructure/http/zod-validation.pipe.js';
 import { TENANCY_USE_CASES, TenancyUseCases } from '../../application/tenancy.use-cases.js';
+import { FeatureFlagGuard } from '../../../feature-flags/infrastructure/http/guards/feature-flag.guard.js';
+import { RequireFeatureFlag } from '../../../feature-flags/infrastructure/http/decorators/require-feature-flag.decorator.js';
 
 /** `req.user` publicado pelo `JwtAuthGuard`. */
 interface RequestComAtor {
@@ -44,6 +47,19 @@ const AceitarConviteSchema = z.object({
  */
 const TenantIdSchema = z.string().uuid();
 
+/**
+ * As DUAS portas respondem `404` quando `tenancy.invites` está desligada, e o
+ * corpo é genérico de propósito: nomear a flag diria a qualquer scanner externo
+ * que existe um interruptor. Sem esta declaração o `openapi:export` publicava
+ * só `201`, e um cliente gerado do documento não tratava o 404 como possível.
+ *
+ * ⚠️ O `201` é declarado JUNTO e não ficou implícito: MEDIDO 2026-10-19, um
+ * `@ApiResponse` único declarando só o 404 fez o documento sair com `['404']` —
+ * o `@ApiResponse` declarado por handler SUBSTITUI o default do `@Post`, não se
+ * soma a ele. Precedente: `users.controller.ts:161` declara o 201.
+ */
+const FLAG_DESLIGADA_404 = 'Recurso indisponível (funcionalidade desligada)';
+
 // ⚠️ SEM `PermissionsGuard` e SEM `@RequirePermission`, e isso é deliberado.
 // O `PermissionsGuard` resolve as permissões pelo tenant do HEADER
 // (`X-Tenant-Id`), que pode ser diferente do `:id` desta rota — um header
@@ -63,6 +79,19 @@ export class TenancyInvitationsController {
   ) {}
 
   @Post('tenants/:id/invitations')
+  // pt-BR (feature-flags, 2026-10-18 — Fase 4): a PRIMEIRA functionality a
+  // respeitar uma flag. Precedente: `users.controller.ts:246,262,300,331,361`.
+  //
+  // ⚠️ `JwtAuthGuard` NÃO é repetido aqui, e a ordem é o que garante o
+  // `req.user`. O Nest CONCATENA metadata (`context-creator.js` devolve
+  // `[...global, ...classe, ...handler]`), então a classe (linha 57) roda
+  // primeiro e publica `req.user`; repetir o guard aqui o executaria DUAS
+  // vezes, com o mesmo custo e nenhum efeito. MEDIDO: remover o `JwtAuthGuard`
+  // daqui não muda um status só nos cenários 10 e 12.
+  @UseGuards(FeatureFlagGuard)
+  @RequireFeatureFlag('tenancy.invites')
+  @ApiResponse({ status: 201, description: 'Convite emitido' })
+  @ApiResponse({ status: 404, description: FLAG_DESLIGADA_404 })
   async convidar(
     // ⚠️ (PR #101) O `:id` É validado, e não só o body. Sem este pipe o valor
     // chegava cru ao `emitirConvite`, que o leva até o Postgres — e a coluna é
@@ -90,6 +119,15 @@ export class TenancyInvitationsController {
   }
 
   @Post('invitations/accept')
+  // A SEGUNDA porta, fechada em 2026-10-19. Até aqui ela era de propósito:
+  // "desligar convites não pode trancar quem já tem o token". Isso é escolha de
+  // produto, e escolha de produto escrita só em comentário não é uma escolha de
+  // produto — é um bypass. O `FeatureFlagGuard` serve aqui (ao contrário de
+  // `POST /users`, que é `@Public()` e não tem `req.user` para o guard exigir).
+  @UseGuards(FeatureFlagGuard)
+  @RequireFeatureFlag('tenancy.invites')
+  @ApiResponse({ status: 201, description: 'Convite aceito' })
+  @ApiResponse({ status: 404, description: FLAG_DESLIGADA_404 })
   async aceitar(
     @Body(new ZodValidationPipe(AceitarConviteSchema)) body: z.infer<typeof AceitarConviteSchema>,
     @Req() req: RequestComAtor,

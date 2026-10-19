@@ -44,12 +44,16 @@ async function getClient(): Promise<ApiClient> {
  * disso lê os cookies direto. Se não há token, devolve `null` em vez de jogar
  * `NEXT_REDIRECT`. Serve para componentes que não devem forçar login só por
  * estarem no layout (ex.: Sidebar) — o login de verdade é responsabilidade
- * da página, não do chrome.
+ * da página, não o chrome.
+ *
+ * `tenantScoped = false` monta `getTenant` devolvendo `null` — e o `ApiClient`
+ * só manda o header quando o valor existe (`api-client.ts:66-67`), então o
+ * `/me/profile` responde no bucket global. Ver `obterMeuPerfilGlobal`.
  */
-async function getClientOpcional(): Promise<ApiClient | null> {
+async function getClientOpcional(tenantScoped = true): Promise<ApiClient | null> {
   const { accessToken } = await lerTokens();
   if (accessToken === null) return null;
-  const tenantId = await lerTenant();
+  const tenantId = tenantScoped ? await lerTenant() : null;
   return new ApiClient({
     baseUrl: process.env.API_BASE_URL ?? 'http://localhost:3000/api/v1',
     getToken: () => accessToken,
@@ -102,6 +106,45 @@ export async function obterMeuPerfil(): Promise<MeProfileDto | null> {
   try {
     return await client.get<MeProfileDto>('/me/profile');
   } catch (erro) {
+    if (erro instanceof ApiError && erro.status === 401) return null;
+    throw erro;
+  }
+}
+
+/**
+ * O MESMO perfil, lido no bucket GLOBAL — o que a tela de feature flags
+ * precisa, e o que `obterMeuPerfil` **não** devolve.
+ *
+ * Por que existe (achado A, revisão adversarial 2026-10-18): os dois `isAdmin`
+ * não são a mesma pessoa. O da empresa é o perfil de DONO (todo dono de empresa
+ * nova nasce com `isAdmin: true`, `prisma-tenant-onboarding.repository.ts:202`);
+ * o global é o do bucket de sistema. D2 exige o **global**
+ * (`ehAdministradorDeSistema`: `tenantId === null && isAdmin`). Autorizar por
+ * `obterMeuPerfil` usava um sinal que a API não usa — e, com `X-Tenant-Id` no
+ * cookie, o próprio pedido levava 403 `TENANT_MEMBERSHIP_REQUIRED` antes de
+ * chegar lá.
+ *
+ * ⚠️ O caminho está INALCANÇÁVEL pelo produto hoje: `guardarTenant` não tem
+ * caller de produção (`sessao.ts:98`), então o cookie `tenant_id` nunca é
+ * escrito e `lerTenant()` devolve `null`. A correção é para o código dizer a
+ * verdade, não para consertar um bug de hoje. Quando alguém chamar
+ * `guardarTenant`, esta função já é a certa.
+ */
+export async function obterMeuPerfilGlobal(): Promise<MeProfileDto | null> {
+  const client = await getClientOpcional(false);
+  if (client === null) return null;
+
+  try {
+    return await client.get<MeProfileDto>('/me/profile');
+  } catch (erro) {
+    // A MESMA política de `obterMeuPerfil` — e é a do #107, não a que existia
+    // quando esta função nasceu. Só o 401 vira `null`; 403, 5xx, timeout e rede
+    // sobem. O `catch { return null }` original jurava a mesma política e
+    // mentia depois do #108: a tela de flags lê `null` como veredito
+    // (`me === null || me.isAdmin !== true` → "acesso restrito"), então uma
+    // administradora do SISTEMA com a API fora do ar recebia a tela afirmando
+    // o contrário — o defeito que o #107 existe para matar, reintroduzido por
+    // um merge. O que sobe aqui é tratado por `app/error.tsx`.
     if (erro instanceof ApiError && erro.status === 401) return null;
     throw erro;
   }

@@ -1,0 +1,1 @@
+feature flags por funcionalidade, ativáveis/desativáveis pelo administrador do sistema, com tela de toggle para o admin

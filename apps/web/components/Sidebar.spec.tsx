@@ -72,6 +72,26 @@ describe('Sidebar — lê os campos que a API devolve', () => {
     expect(screen.queryByRole('link', { name: 'Perfis' })).not.toBeInTheDocument();
   });
 
+  // pt-BR (feature-flags, 2026-10-18 — Fase 5): o negativo é OBRIGATÓRIO aqui, e
+  // não por simetria com o caso do "Perfis". Um link de admin que aparece para
+  // usuário comum não quebra nada — ele leva a uma tela que responde "Acesso
+  // restrito". O único sintoma seria um teste verde com uma tela inacessível no
+  // menu, então é o `href` que se afirma, não só o nome.
+  it('admin vê o link das feature flags apontando para /admin/flags', async () => {
+    obterMeuPerfilMock.mockResolvedValue(ME_COM_PERFIL);
+    render(await Sidebar());
+    expect(screen.getByRole('link', { name: 'Feature flags' })).toHaveAttribute(
+      'href',
+      '/admin/flags',
+    );
+  });
+
+  it('usuário comum NÃO vê o link das feature flags', async () => {
+    obterMeuPerfilMock.mockResolvedValue({ ...ME_COM_PERFIL, isAdmin: false });
+    render(await Sidebar());
+    expect(screen.queryByRole('link', { name: 'Feature flags' })).not.toBeInTheDocument();
+  });
+
   it('perfil nulo é o único caso que mostra "Sem perfil"', async () => {
     obterMeuPerfilMock.mockResolvedValue({
       profileId: null,

@@ -1,0 +1,986 @@
+commit 176c5f28cf5985f46f99cfb7f62320b9cbe354ff
+Author:     Leonardo Andreazzi <andreazzi-leonardo@hotmail.com>
+AuthorDate: Sun Oct 18 02:31:15 2026 -0300
+Commit:     GitHub <noreply@github.com>
+CommitDate: Sun Oct 18 02:31:15 2026 -0300
+
+    feat(tenancy): uma conta, N empresas, um perfil diferente em cada uma (#101)
+    
+    * feat(agents): specialist de tenancy + convencoes para o plano multi-tenant
+    
+    Fase 1 do plano 2026-10-16-multi-tenant: a estrutura de agents e
+    convencoes que a execucao do plano exige, antes de qualquer codigo.
+    
+    - `multi-tenant-specialist`: arquitetura de tenancy (schema unico +
+      `tenant_id`, contexto na fronteira, escopo de query, cache por tenant,
+      backfill, gate cross-tenant), com a skill `multi-tenant-audit` pelo
+      contrato 1:1 dos demais specialists.
+    - `prisma-db-specialist`: recebe a lens DDD H1-H6 e a regra de migracao
+      de dados, promovidas de convencao.
+    - Nova convencao `migracao-de-dados` (regra dos 3 passos: add nullable,
+      backfill, drop), registrada nos DOIS indices no mesmo PR — AGENTS.md
+      §6 e `.agents/specs/conventions/README.md`.
+    - `review-routing` e `specialist-routing`: tenancy entra na matriz de
+      roteamento; o historico vai para arquivo proprio.
+    - `fluxo-desenvolvimento.md` reescrito para multi-agent: cada gate declara
+      quem dispara e o que de fato bloqueia.
+    - `state-snapshot-20261017T000011Z.md`: o AS-IS medido que alimentou o
+      plano (G-004: nao existe banco de producao, o que decide o backfill).
+    
+    Nenhuma mudanca de runtime nesta commit.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * feat(tenancy): Tenant, TenantMembership, Invitation e perfis por empresa (Fase 2)
+    
+    Fase 2 do plano 2026-10-16-multi-tenant: o modelo de dados que sustenta
+    a D3 (perfis globais + customizados por empresa) e a D4 (uma conta, N
+    empresas).
+    
+    A ordem do SQL e load-bearing: `profiles_slug_key` e UNIQUE GLOBAL hoje,
+    e dois indices parciais SOMADOS a ele nao produziriam a customizacao —
+    enquanto ele estiver de pe, duas empresas nao podem ter ambas um perfil
+    "manager". O DROP vem ANTES dos CREATE INDEX. Medido: recriando o UNIQUE
+    global sobre o estado migrado, `CREATE UNIQUE INDEX` falha com
+    `Key (slug)=(manager) is duplicated`.
+    
+    - 3 tabelas novas + `profiles.tenant_id`, 4 FKs, 2 indices parciais.
+    - SEM backfill, deliberadamente: nao existe banco de producao (G-004), e um
+      backfill exigiria inventar um tenant padrao, que e decisao de produto.
+      `users.profile_id` fica como esta.
+    - SEM RLS, deliberadamente: no Postgres e deny-by-default, e sem produtor de
+      `SET LOCAL app.current_tenant` toda query voltaria vazia. Ha teste que
+      trava isso.
+    - `slug` deixou de ser `@unique`, o que quebrava todo call-site de
+      `findUnique`/`upsert` por slug: seed, repositorio de perfis e o e2e 10.
+    - `apps/api/tsconfig.json` passa a incluir `prisma/**/*`: sem isso o `tsc`
+      nunca via `seed.ts`, que e exatamente onde o `upsert` quebrado estava
+      invisivel. `tsconfig.build.json` sobrescreve o `include` para
+      `src/**/*`, entao `dist/` e a imagem nao mudam.
+    
+    Os testes de D3 nao medem o Prisma: os invariantes vivem em indice
+    parcial, que o Prisma nao expressa. Aplicam a migration num Postgres de
+    verdade e deixam o banco responder.
+    
+    Medido: 11/11 integracao, 769/769 suíte completa, 42/42 e2e web, `ci:local`
+    EXIT=0, cobertura API 88,84%, drift migration<->schema zero nas tabelas
+    desta fase.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * feat(tenancy): empresa por header X-Tenant-Id no cache e no cliente web (Fase 3)
+    
+    Fase 3 do plano multi-tenant: o tenant entra na fronteira (header
+    `X-Tenant-Id`), vira chave do cache de perfil e chega ate o `ApiClient` do web.
+    O perfil efetivo continua vindo de `users.profile_id`, global — a troca da
+    leitura e a Fase 4.
+    
+    Backend:
+    - `jwt-auth.guard.ts` le `X-Tenant-Id`; ausente vira `null`, malformado (ou
+      vazio) vira 400 `INVALID_TENANT` na fronteira, antes de qualquer consulta.
+    - `user-profile-cache.service.ts` chaveia por `(tenantId, userId)`. Chavear
+      so pelo usuario era vazamento horizontal: a mesma conta em duas empresas
+      herdaria o perfil — e o `isAdmin` — da empresa anterior por ate 5s.
+    - `AtorAutenticado` ganha `tenantId` obrigatorio, atravessando os 3
+      controllers admin; `obterMeuPerfil` passa a receber a empresa e extrai
+      `MeuPerfil` nomeado.
+    
+    Frontend:
+    - `ApiClient` envia `X-Tenant-Id` em todos os verbos, consultado a cada
+      request (trocar de empresa pega sem recriar o cliente). Ausente OMITE o
+      header: string vazia seria 400 do outro lado.
+    - `sessao.ts` ganha o cookie `tenant_id` (nao httpOnly: nao e segredo) com
+      `guardarTenant`/`lerTenant`, e `limparSessao` passa a apaga-lo — sem isso a
+      empresa de A sobrevivia ao logout e B herdava o `X-Tenant-Id: ACME` de A.
+    
+    Revisao (achados medidos contra o disco, ver revisoes v1.4.0):
+    - O bucket `null` NAO e deny-by-default: resolve o perfil GLOBAL, onde mora o
+      unico `isAdmin`. 5 comentarios afirmavam o contrario; corrigidos.
+    - `perfil.spec.ts` declarava `lerTenant` e nao o assertava — apagar
+      `getTenant` deixava a suite verde. 3 testes novos, e a mutacao agora derruba
+      exatamente os 3.
+    - `makeContext` do guard.spec so criava `request.headers` quando havia
+      `authorization`; o teste de rota `@Public()` (o unico sem token) entregava um
+      header onde o guard nunca lia. Fixture corrigida.
+    
+    Verificado: api unit 685/685, e2e 10-escalation 12/12, web 234/234,
+    `tsc --noEmit` limpo nos dois, prettier limpo.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * feat(tenancy): perfil por empresa na membership e resolucao efetiva por tenant (Fase 4)
+    
+    `tenant_memberships` ganha `profile_id`, o que torna a D4 ("um perfil
+    diferente em cada empresa") representavel no banco. A resolucao do perfil
+    efetivo deixa de ler a coluna global `users.profile_id` e passa pela
+    membership da empresa do `X-Tenant-Id`.
+    
+    - migration: coluna nullable + FK `RESTRICT` para `profiles` + indice. Sem
+      backfill por medicao (nao ha dado em producao; convencao
+      `migracao-de-dados.md` §1/§3)
+    - `TenantMembershipRepositoryPort` + implementacao Prisma + binding em
+      `PrismaPersistenceModule`, que e o modulo que o resto da app importa para
+      ter Prisma ligado a um repositorio
+    - `findProfileId(userId, tenantId)` com dois buckets: empresa presente le a
+      membership (perfil dela OU global — D3); `tenantId === null` le
+      `users.profile_id`, o bucket global de quem nao mandou header
+    - 5 call sites de `profiles.use-cases.ts`: as 4 travas de escalada e
+      `obterMeuPerfil`. `atribuirProfileAoUser` continua lendo a coluna global de
+      proposito — a escrita dele e global, e trocar so a checagem mediria uma
+      coisa diferente da que a rota altera
+    - `deletar` soma as duas contagens, para devolver `ProfileHasUsersException`
+      em vez de estourar `P2003` do banco
+    
+    Isolamento mora na query, nao no chamador: `profile: { OR: [global, da
+    empresa] }` e `user: { deletedAt: null }`. Sem o primeiro, um `profile_id`
+    apontado para o perfil da vizinha concede as permissoes dela e o sintoma e
+    indistinguivel de um perfil bem configurado. Sem o segundo, a membership
+    sobrevive ao soft-delete e a conta apagada continua autorizando ate o TTL do
+    cache.
+    
+    Prova: mutacao de `ator.tenantId` -> `null` nos 5 call sites deixa os 7 testes
+    da Fase 4 vermelhos. Os filtros do repositorio sao provados por EFEITO em
+    `tenancy-migration.integration.spec.ts`, contra Postgres real — plantar a
+    membership apontando para o perfil da outra empresa e exigir `null`, com o
+    braco de controle positivo na empresa dona (sem ele o `null` seria vacuously
+    correto).
+    
+    Correcoes da revisao independente (v1.5.0 do plano, 9 achados, 2 com
+    consequencia de codigo):
+    - o bucket GLOBAL de `findProfileId` ganhou o filtro de DONO que a porta
+      prometia e so um dos dois ramos fazia: `profile: { is: { tenantId: null } }`.
+      Sem ele, um `users.profile_id` apontado para o perfil de uma EMPRESA
+      resolveria em toda requisicao sem header
+    - o teste de soft-delete passou a apontar `users.profile_id` para um perfil
+      GLOBAL: com o filtro novo ele passava pelo motivo errado (dono, e nao
+      `deletedAt`)
+    - o comentario que atribuia a `profileId: { not: null }` a garantia de "sem
+      perfil = zero permissoes" foi reescrito: a garantia vem do `?? null`
+    
+    Os achados de write path (ownership do perfil-alvo, escrita de perfil ainda
+    global, `isAdmin` no escritor de membership) viraram pre-condicoes P1/P2/P3
+    DA FASE 6 com dono — sao latentes hoje: nao ha writer de membership em
+    producao, entao todo ramo por-empresa so e exercitado por spec.
+    
+    Medido: unit 701/701, integration 48/48, e2e 56/56, `tsc --noEmit` limpo.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * feat(tenancy): entrada na empresa por convite com conta nova, e os 409 que o P2002 virava 500 (Fase 5)
+    
+    Fecha a D5: entrar na empresa por convite, com dois caminhos que caem ou
+    caem juntos — conta que já existe (D4) e conta nova (`destino: 'convite'`).
+    
+    O caminho de conta nova reusava `entrarPorConvite`, que só criava a
+    membership: o `users` só era gravado no caminho da empresa própria, e o POST
+    morria com `tenant_memberships_user_id_fkey`. Agora `criarContaPorConvite`
+    grava os dois dentro do mesmo `$transaction` (núcleo `consumirEEntrar`, que
+    os dois caminhos compartilham — um `users` e uma membership caem ou caem
+    juntos, e o rollback leva o `accepted_at` do convite junto).
+    
+    Por que método de port novo em vez de um campo opcional: com `if (novaConta)`
+    dentro de `entrarPorConvite`, o nome do método seria falso em metade dos
+    chamadores.
+    
+    Correções vindas da review da Fase 5:
+    
+    - A mensagem de `ConviteInvalidoException` carregava o motivo, e é por ela
+      que `GlobalExceptionFilter:122` monta o `detail`. Um 403 com
+      `detail: "...(outro-email)"` confirma a quem só tem o token que o token
+      existe e foi emitido para outra pessoa — o status sozinho já entregava a
+      mesma informação, e o `detail` fechava o quadro. Mesma classe já paga em
+      `ProfilePrivilegeEscalationException` (#97, B5).
+    - `slug` repetido e segundo convite para o mesmo e-mail chegavam como 500
+      `P2002` cru — indistinguível de banco fora do ar, e o cliente sem como
+      saber que a resposta era "escolha outro slug". Agora viram 409 com `code`
+      distinto cada um.
+    - A tradução de `P2002` em `emitirConvite` discriminate por constraint: colisão
+      de `token` é propagada crua, porque dizer "convite já emitido" para ela
+      aponta o cliente para o campo errado.
+    
+    O mapper ganhou uma seção de tenancy e NENHUM spec a cobria — sem entrada no
+    mapper a exceção não falha, cai no fall-through e vira 500, e nada ficava
+    vermelho.
+    
+    Medido (todas revertidas com `diff` vazio):
+    - mensagem interpolando o motivo -> 2 vermelhos, exatamente os 2 de vazamento
+    - mapper com `false &&` nas duas entradas novas -> 1 vermelho no spec do
+      mapper, 2 no e2e 12, 1 na integração; sempre exatamente o alvo
+    - repositório sem traduzir no `emitirConvite` -> 1 vermelho, o "409, não 500"
+    
+    863/863 em 72 arquivos; `tsc --noEmit` limpo; preflight 0 erros.
+    
+    shortcut: o `P2002` de `users.email` dentro de `criarContaPorConvite` NÃO é
+    traduzido e chegaria como 500. Só é alcançável sob CORRIDA — o caminho comum
+    já devolve 409 por `findByEmail`, antes de chegar lá. Se a corrida aparecer
+    em produção, o conserto é a `EmailAlreadyInUseException` de `users/domain`.
+    Documentado no spec.
+    
+    Co-Authored-By: Claude <noreply@anthropic.com>
+    
+    * docs(plano): corrige 4 das 6 linhas da Fase 6 que a medição do disco desmentiu
+    
+    O plano afirmava que `prisma/seed.ts` perdia a chave única com o `slug` global
+    e que `cleanDatabase` ignorava `tenants`. As duas foram tratadas na Fase 2 —
+    a afirmação "grep -i tenant = 0" era falsa quando escrita.
+    
+    E duas mais: `apps/web/e2e/support/rbac.ts` (`semearContaComPerfil` liga
+    `profileId` via `user.update`) NÃO quebra, porque o perfil semeado é global e
+    é o bucket que o fallback da Fase 4 cobre — medido, web e2e 42/42. Os cenários
+    e2e 01–10 da API também não, medido 863/863.
+    
+    Isso deixa a Fase 6 com um item de verdade, que não é "fazer o que quebrou":
+    é a ESCRITA de perfil por empresa, que não existe. O próprio commit da Fase 4
+    declara isso em `profiles.use-cases.ts:587` — "Atribuir perfil POR EMPRESA é
+    escrita nova, e é da Fase 6". Snapshot em
+    `.agents/runs/state-snapshot-20261017T032500Z.md`.
+    
+    Co-Authored-By: Claude <noreply@anthropic.com>
+    
+    * test(tenancy): o teste que sustentava a transação não tinha dente, e o catch apontava o campo errado
+    
+    Revisão independente da Fase 5 achou um bloqueador e três menores. Todos
+    corrigidos aqui; as provas de mutação estão ao lado do que cada uma mede.
+    
+    O bloqueador: o teste "slug repetido NÃO deixa conta nem empresa pela metade"
+    é verde com o `$transaction` COMPLETAMENTE removido. A colisão de `slug` é a
+    PRIMEIRA escrita do bloco, então o `P2002` chega antes de `profile.create`,
+    `authorization.createMany` e `tenantMembership.create` existirem — e um teste
+    que passa sem a transação não está medindo rollback. Os comentários do arquivo
+    afirmavam o contrário do código ("as três primeiras escritas já tinham
+    passado"), e foi isso que fez a leitura passar.
+    
+    A correção move a colisão para a QUARTA escrita: pré-cria um `users` com o
+    mesmo email e pede a empresa. Aí o `P2002` vem de `tx.user.create`, o rollback
+    tem o que desfazer, e `authorization.count()` entra como a assertion mais
+    afiada — são as linhas que o teste antigo não media.
+    
+    O `catch` de `provisionarEmpresaPropria` traduzia QUALQUER P2002 como
+    EmpresaJaExisteException, e o comentário justificava com "`slug` é o único
+    unique de `tenants`". Falso: `tx.user.create` está no mesmo `try` e
+    `users.email` também é único. MEDIDO: email em uso respondia 409
+    EMPRESA_JA_EXISTE / "Já existe uma empresa com este identificador" — o
+    cliente é mandado mudar o SLUG quando o que colide é o EMAIL, e seguir a dica
+    dá retry infinito. Agora discrimina por `constraintQueEstourou`, o helper que
+    o próprio arquivo criou para `emitirConvite` 70 linhas abaixo.
+    
+    E o teste e2e "o segredo volta na resposta porque não há mailer — e NÃO no
+    log": o título afirma uma propriedade de log que o corpo não media, porque o
+    harness e2e não captura `Logger`. Renomeei para o que o corpo afirma — um
+    `Logger.log(token)` futuro manteria o teste verde antes e agora não.
+    
+    Provas de mutação, todas revertidas com `diff` vazio:
+    - `$transaction` de `provisionarEmpresaPropria` virando IIFE -> 1 vermelho, o
+      novo. O do `slug` continua verde: é a prova de que ele nunca teve dente.
+    - `constraintQueEstourou(...).includes('slug')` removido -> 1 vermelho, o mesmo
+      teste (a assertion `not.toBeInstanceOf(EmpresaJaExisteException)`).
+    
+    18/18 na integração; `tsc --noEmit` exit 0.
+    
+    Co-Authored-By: Claude <noreply@anthropic.com>
+    
+    * feat(tenancy): perfil por empresa, e o P0 cross-tenant da gestão de perfis
+    
+    Fecha as Fases 6, 7 e 8. O P0 apareceu no meio da Fase 8 e é a razão do
+    título: a gestão de perfis não filtrava por empresa, e a Fase 5 tinha acabado
+    de tornar TODO dono de empresa capaz de chegar lá.
+    
+    O P0, medido por HTTP antes do conserto: o dono da ACME listava o perfil da
+    GLOBEX, renomeava e persistia, apagava, e gravava `users.delete` no perfil da
+    vizinha. Todos 200/201. A porta se abre sozinha porque
+    `provisionarEmpresaPropria` dá ao dono `listAllPermissions()` + `isAdmin: true`,
+    e o catálogo de permissões documenta `is_admin` como BYPASS TOTAL do
+    `PermissionsGuard` — não é atalho entre permissões, é ausência de guarda. As 5
+    rotas de `/admin/profiles` só checavam `admin.manage-profiles`, que a Fase 5
+    passou a dar a qualquer pessoa que abra a própria empresa. É regressão desta
+    branch: antes delas, essas rotas eram alcançáveis só pelo admin global do seed.
+    
+    O conserto é uma função de arquivo, `exigePerfilDoEscopo`, nas 7 travas que já
+    existiam naquele arquivo — listar, obter, criar, atualizar, apagar, conceder e
+    revogar. `ator.tenantId === null` continua sendo o admin global e enxerga tudo,
+    porque é o bucket de sistema e negá-lo traria de volta a dependência do seed que
+    a Fase 5 removeu de propósito.
+    
+    A outra ponta do mesmo buraco: `POST /admin/profiles` fabricava perfil GLOBAL.
+    `Profile.criar` fixava `tenantId: null`, então o dono da empresa, ao criar um
+    perfil, criava um perfil de sistema — e nenhuma empresa podia ter perfil
+    próprio, o que deixava todo convidado entrando com o admin do dono. `criar`
+    agora recebe o ator e o perfil nasce da empresa dele. Sem isso, fechar o buraco
+    e proibir o dono de criar qualquer coisa também "resolveria" a escalada e
+    deixaria a funcionalidade pedida inutilizável.
+    
+    Provas de mutação, medidas contra o estado PRÉ-Fase 8 e revertidas com `diff`
+    idêntico:
+    
+    - use-cases.ts no estado anterior, e2e 11 -> 5 vermelhos | 6 verdes. São
+      exatamente os 5 testes novos. O 1º mede o filtro do `list`, os 3 seguintes a
+      guarda `exigePerfilDoEscopo` (é ela que recusa, e as guardas de isSystem/
+      isAdmin não disparam num perfil comum de empresa vizinha), e o 5º que o
+      `criar` repassa a empresa ao agregado.
+    - use-cases.ts no estado anterior, unitário -> 2 vermelhos (`listar retorna
+      todos`, `rejeita slug duplicado`), que é onde a assinatura nova é consumida.
+    
+    Uma armadilha que a prova expôs e que vale registrar: o `findMany` do fake de
+    `prisma-profile.repository.spec.ts` IGNORAVA `where`. Escrever o teste de
+    `list` por empresa sobre ele daria verde com e sem o filtro — verde que não
+    prova nada. O duble passou a filtrar, e o `create` a gravar `tenantId`; sem o
+    segundo, o teste novo mediria o fake.
+    
+    E um teste da Fase 4 precisou mudar: "a trava de auto-concessão NÃO dispara por
+    causa do perfil GLOBAL dele" usava alvo GLOBAL, e com a guarda nova ele recusa
+    antes — corretamente, porque perfil global é compartilhado por todas as
+    empresas e conceder nele a partir da ACME é a mesma escalada cross-tenant,
+    pelo bucket global em vez do da vizinha. O alvo passou ao escopo do ator, que
+    é o que o teste sempre quis medir: se a auto-concessão lê `users.profile_id` ou
+    a membership.
+    
+    903/903 em 74 arquivos (unit + integração + e2e, 12 cenários), `tsc --noEmit`
+    exit 0, eslint limpo, prettier limpo, 0 caractere CJK nos 17 arquivos tocados,
+    `pnpm ci:local` exit 0.
+    
+    Fases commitadas juntas porque não se separam sem quebrar o build: a Fase 8
+    mexe no mesmo arquivo que a Fase 6 escreveu (`profiles.use-cases.ts` só compila
+    com `memberships.countByProfile`, que é da Fase 6), então um commit por fase
+    produziria commits intermediários vermelhos.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * feat(tenancy): RLS de verdade — as policies escritas E a aplicação fora do superuser (Fase 9)
+    
+    Até aqui o isolamento por empresa era inteiro da aplicação: uma guarda
+    esquecida em uma rota nova vazava. A Fase 9 acrescenta a segunda camada no
+    Postgres — e o passo que decide se ela EXISTE não é escrever as policies, é
+    inverter a conexão. Sob superuser as policies são decoração, e foi
+    exatamente esse o achado que registrou D1 como "inerto".
+    
+    A inversão:
+    
+    - `schema.prisma` passa a ter duas conexões. `url` = a da APLICAÇÃO
+      (`app_runtime`, NOSUPERUSER NOBYPASSRLS, criado pela migration);
+      `directUrl` = a do CLI do Prisma (`migrate`, `db seed`) = DONO.
+      A divisão é necessária, não estética: `CREATE ROLE`,
+      `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` e `GRANT` exigem posse da
+      tabela, então `migrate deploy` não roda como `app_runtime`.
+    - MEDIDO: `prisma generate` NÃO resolve env de datasource, então o CI não
+      precisa da variável; `migrate` e `validate` precisam.
+    - O seed passa a exigir `DIRECT_DATABASE_URL` e falha alto sem ela. Com o
+      `DATABASE_URL` da aplicação ele "passaria" escrevendo ZERO linhas: o seed
+      cria perfis GLOBAIS e o papel de runtime é fail-closed. O conserto de quem
+      não ler o comentário seria um seed silenciosamente vazio, e o próximo
+      sintoma seria "o perfil admin não existe" em produção.
+    - `docker-compose.yml` NÃO ganhou a variável, de propósito: `environment:`
+      tem precedência sobre `env_file`, então `${DIRECT_DATABASE_URL}` não
+      interpolado sobrescreveria o valor do `.env.production` com string vazia.
+      É a armadilha que o próprio compose documenta para o `JWT_SECRET`.
+    
+    As policies (20 em 5 tabelas): `profiles`, `tenants`, `tenant_memberships`,
+    `invitations` e `authorizations`. `users`, `users_history` e `users_archive`
+    ficaram sem policy, de propósito — são globais. `authorizations` não tem
+    `tenant_id`, então a policy dela resolve a dona com `EXISTS` sobre
+    `profiles`, deliberadamente SEM `SECURITY DEFINER`: com ele, a RLS de
+    `profiles` não valeria na travessia. É onde mora `users.delete`.
+    
+    O que o RLS mudou em código que já estava verde:
+    
+    - `set_config('app.tenant_id', ..., true)` é LOCAL — morre no fim da
+      transação. TODO acesso passou a abrir `$transaction`, inclusive o
+      `CREATE`, que antes não tinha. Sem escopo a sessão volta com zero linhas
+      e o sintoma não é erro: é "as permissões do perfil sumiram".
+    - 17 chamadas de repositório passaram a receber o escopo, e as 4 da porta de
+      autorização ganharam o parâmetro (upsert/delete o recebem no `input`).
+    
+    Falso negativo de tipo que valia a pena nomear: o TypeScript aceita uma
+    classe que implementa a porta com MENOS parâmetros que a interface. O
+    `findById` do duplo das use cases ignorava `tenantId`, compilava, e os 779
+    testes seguiam verdes sem que nada afirmasse que o escopo chega ao
+    repositório. O dublo passou a registrar o que recebeu e 4 specs a afirmar a
+    sequência exata — `toContain` não serviria, passaria com todos virados para
+    o bucket de sistema.
+    
+    A medição de RLS quase não provou nada e é o achado mais honesto do
+    commit: o banco local estava com 0 linhas em profiles/tenants/
+    authorizations, e "a sessão sem escopo não enxerga nada" devolvia 0 — que é
+    indistinguível de não haver dado. Verde sobre conjunto vazio, a mesma classe
+    que já mordeu em critério de gate. Depois de popular com o DONO, a mesma
+    medição separa: DONO 3/2/1 · `app_runtime` sem escopo 0/0/0 · com escopo da
+    empresa 2 perfis (o dela + o global), tenants 1, auths 1 — e a da empresa
+    VIZINHA ausente.
+    
+    Dentes: neutralizado o helper que registra os escopos pedidos, os 2 testes
+    de escopo ficam vermelhos (2 failed | 5 passed) e o arquivo volta
+    byte-idêntico por `diff` — o que os 5 verdes provam é que os testes
+    antigos não medem escopo, que é o ponto. A mutação equivalente no spec de
+    perfil foi NEGADA pelo classificador de segurança e não contornada; a prova
+    veio por técnica mais forte, reconstruir o sujeito pré-Fase-9 com
+    `git show HEAD:<path>` e rodar contra ele: 12 failed | 13 passed.
+    
+    pnpm ci:local EXIT=0 — api unit 785/785, integração 83/83, e2e 82/82, web
+    unit 234/234, web e2e 42, tooling 288/288 e 415/415; cobertura api 86,48%
+    stmts e web 98,47%.
+    
+    Pendência operacional que o operador precisa resolver antes de subir: trocar
+    a senha de `app_runtime` fora de banda (a migration traz uma de dev em texto
+    versionado, porque migration não lê env) e confirmar que o `DATABASE_URL` do
+    ambiente é `app_runtime` e não o dono — se for o dono, o deploy sobe sem
+    erro e as policies ficam inertes.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * docs(tenancy): o runbook apontava para o dono, e isso sobe sem erro com o RLS inerte
+    
+    Revisão independente do commit anterior (revisor ≠ implementador) fechou com
+    a suíte verde e sem achado de runtime. O que ela achou não é bug: é
+    documentação que leva o operador direto para o modo de falha silencioso
+    desta fase.
+    
+    O defeito, em três arquivos que se combinam:
+    
+    1. `docs/como-rodar.md` §3.1 mandava gravar
+       `DATABASE_URL=postgresql://projeto:<senha>@postgres:5432/...` no `.env` da
+       raiz. `projeto` é o DONO. Quem segue o doc hoje sobe a aplicação com as 20
+       policies inertes, sem erro, sem warning, sem sintoma — a camada inteira da
+       Fase 9 decorativa sem que nada diga.
+    2. `.env.production.example` tinha a mesma linha `DATABASE_URL` apontando para o
+       dono, e NÃO tinha `DIRECT_DATABASE_URL` nenhuma. O passo 1 do entrypoint
+       prod é `prisma migrate deploy`, e sem a conexão de dono ele falha com P1012
+       — barulhento, o que é bom, mas o template não oferecia a chave para
+       preencher.
+    3. `apps/api/.env.example` não dizia que o papel dono precisa de `CREATEROLE`.
+       Na imagem oficial do Postgres o `POSTGRES_USER` É superusuário e isso nunca
+       aparece; em RDS/Cloud SQL o papel de migration raramente é, e o
+       `migrate deploy` quebra no deploy com erro de permissão.
+    
+    O que mudou, e por quê cada chose o lugar:
+    
+    - O runbook passa a instruir `app_runtime` no `DATABASE_URL` da raiz e a DONO no
+      `DIRECT_DATABASE_URL` do `.env.production`. Medido, não inferido: com um
+      compose mínimo, chave declarada em `environment:` com interpolação não
+      resolvida vira `""` e SOBREESCREVE o `env_file` (é a armadilha que o próprio
+      compose documenta para o `JWT_SECRET`), e chave que existe só no `env_file`
+      sobrevive. Daí a divisão: `environment:` para a da aplicação, `env_file`
+      para a do CLI.
+    - `.env.production.example` ganha a chave e a nota de que a linha `DATABASE_URL`
+      de lá é INERTE para o serviço `api`, porque `environment:` ganha de
+      `env_file`. Sem essa nota o próximo "conserta" a linha trocando o papel.
+    - `apps/api/.env.example` registra o `CREATEROLE`, que é o pré-requisito que
+      ninguém tinha escrito.
+    
+    Também:
+    
+    - Ledger `memory-triage.md` recebe a linha da memória nova
+      (`artefato-publicado-nao-nomeia-o-segredo`, `pendente` — dívida declarada,
+      porque a regra é reutilizável mas ainda não está escrita em arquivo
+      versionado). O `check-memory-crystallization` lia nas duas direções e
+      reprovou com "1 memória(s) sem destinação".
+    - `multi-tenant-specialist.md` registra os 5 achados da revisão com o veredito
+      de cada um, incluindo o que NÃO foi corrigido e por quê:
+      `countByProfile` abre escopo de SISTEMA (o valor vira booleano dentro de
+      `deletar` e não sai — superfície pronta, não vazamento consumado; e
+      restringir ao tenant do ator transformaria a trava global em por-empresa);
+      `users` sem policy (é global por construção, RLS por tenant não teria a quem
+      pertencer); 4 aberturas de `'*'` com o padrão "descobrir o tenant, depois
+      re-escopar"; e a cascata de FK que não passa por RLS, essa última
+      marcada como NÃO VERIFICADA.
+    
+    Registrado também o que a revisão NÃO achou, porque hipótese não reproduzida
+    é resultado: nenhum dos 32 acessos às 5 tabelas protegidas está fora da
+    `$transaction`. Era a hipótese principal do revisor.
+    
+    pnpm ci:local EXIT=0 — api unit 785/785, integração 83/83, e2e 82/82, web unit
+    234/234, web e2e 42, tooling 288/288 e 415/415. Os mesmos números da execução
+    anterior: nenhuma regressão.
+    
+    ⚠️ MEDIDO e NÃO causado por este commit: na primeira execução, `@projeto/api#lint`
+    falhou com `ENOENT` num `vitest.config.ts.timestamp-*.mjs`. É corrida entre as
+    tarefas `lint` e `test`, que o turbo roda em paralelo no mesmo pacote — o eslint
+    leu um temporário que a suíte estava apagando. `pnpm lint` isolado sai 0 e a
+    segunda execução completa saiu 0. Nenhum arquivo meu entra nessa corrida; o
+    gate de pre-push pode reprovar sem causa no código.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(tenancy): a RLS da Fase 9 era legivel E apagavel — 3 furos medidos, nao deduzidos
+    
+    O commit anterior fechou a Fase 9 com 11 testes verdes e o comentário da
+    migration afirmando que o bucket de sistema é "LEGIVEL mas nao e ESCREVIVEL de
+    dentro de uma empresa". A segunda metade da frase era falsa, e a forma de ela ser
+    falsa é a mesma nos três casos: `USING (…, true)` numa policy de escrita.
+    
+    `DELETE` não tem `WITH CHECK`. Numa policy `FOR DELETE USING (…)`, o `USING` é
+    a ÚNICA condição — e com `aceita_global = true` ela libera `tenant_id IS NULL`.
+    Ou seja, "legível" virou "apagável" sem que nenhuma linha de código fizesse
+    nada de diferente.
+    
+    MEDIDO contra Postgres, como `app_runtime` (`rolsuper=f`, `rolbypassrls=f`),
+    escopo de uma empresa **válida** e transação commitada:
+    
+    - `DELETE FROM profiles WHERE slug='admin-global'` → **DELETE 1**. O perfil
+      global sumiu e o `ON DELETE CASCADE` levou as autorizações junto.
+    - `UPDATE profiles SET tenant_id=<minha empresa> WHERE slug='admin-global'` →
+      **UPDATE 1**. O `USING (…, true)` deixa a linha alcançável e o
+      `WITH CHECK (…, false)` só exige que o valor NOVO esteja no escopo: trocar
+      `NULL` pela própria empresa satisfaz os dois lados e **move a dona** do perfil.
+    - O mesmo formato em `authorizations` — `UPDATE … SET profile_id=<perfil da
+      minha empresa>` — devolveu **UPDATE 1** e **roubou a permissão de um perfil de
+      sistema**. É a tabela onde mora `users.delete`.
+    
+    Os três foram reproduzidos antes do conserto e nenhum depende de lixo no GUC:
+    um escopo de empresa bem formado basta.
+    
+    O conserto são 4 palavras em 4 linhas: `aceita_global` vai para `false` no
+    `USING` de `profiles_atualizacao`, `profiles_remocao`,
+    `authorizations_atualizacao` e `authorizations_remocao`. `SELECT` **mantém**
+    `true` — o admin de uma empresa precisa LER o perfil global, é assim que a
+    composição de permissões funciona. O caminho legítimo de escrita no bucket de
+    sistema não passa por `aceita_global`: `escopoDoTenant(null)` devolve `'*'`, que
+    satisfaz o **primeiro** disjunto de `no_escopo_atual` sozinho.
+    
+    Por que só `USING`, e não `no_escopo_atual`: trocar o `(aceita_global AND alvo IS
+    NULL)` da função por `(escopo_atual() = '*' AND alvo IS NULL)` também fecha os
+    três, mas mata junto o SELECT e com ele a aplicação. Os 11 testes existentes
+    afirmam `global_lido: true` — e estão certos.
+    
+    ## O que a suíte não cobria, e a prova de que isso não é burocracia
+    
+    Com 11 testes verdes, **nenhum exercitava `DELETE`**. A lacuna não era a policy:
+    era o verbo que o conjunto nunca tocou — e o conjunto é o que dá confiança de
+    que a policy existe. Por isso os 5 testes novos são **3 de bloqueio e 2 de
+    controle positivo**:
+    
+    - bloqueio: DELETE do global, UPDATE que move o global, UPDATE que rouba a
+      autorização do global;
+    - controle: DELETE do perfil de **outra** empresa continua barrado, e DELETE do
+      global com escopo `'*'` **continua funcionando**. Sem este último, um
+      `USING (false)` em tudo deixaria o banco imutável e os três vermelhos
+      voltariam a verde — o conserto pareceria certo e seria uma mentira maior.
+    
+    Red medido antes do conserto: `Tests 3 failed | 13 passed (16)`, os três
+    vermelhos na guarda (`expect(…).toBe(0)`), não no sintoma. A primeira versão do
+    teste de furto de permissão movia `users.read`, que o `criarPerfil` dá a todos, e
+    morreu em `Unique constraint failed` — vermelho pelo motivo errado, medindo a
+    chave única e não a policy. Passou a usar uma chave que só o global tem.
+    
+    ## O que NÃO foi corrigido, e por quê
+    
+    `users`, `users_history` e `users_archive` continuam sem policy, e a §5 da
+    migration agora diz a consequence em vez de só o motivo: com escopo de empresa
+    válido, `UPDATE users SET profile_id=<perfil global admin>` grava. O filtro de
+    aplicação (`profiles.use-cases.ts`, regra B1) é hoje a **única** coisa entre
+    isso e a escalada. Fechar tem duas saídas — RLS via `EXISTS` sobre
+    `tenant_memberships`, ou `REVOKE UPDATE, DELETE` e escrita por função
+    `SECURITY DEFINER` — e as duas mexem no desenho. Entram com a decisão registrada,
+    não escondidas num `true`.
+    
+    pnpm ci:local EXIT=0 — api unit 785/785, integração **88/88** (83 + 5 novos),
+    e2e 82/82, web unit 234/234, web e2e 42, tooling 288/288 e 415/415.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(tenancy): a auditoria era um diretorio de uuids cross-tenant — fecha com RLS por membership
+    
+    `users_history.entity_id` e `users_archive.entity_id` sao o **uuid do usuario**
+    (`user-use-cases.ts` grava `entityId: ev.aggregateId`, e o agregado e o `User`),
+    e as duas tabelas estavam sem RLS. Como `memberships_insercao` e
+    `WITH CHECK (no_escopo_atual(tenant_id, false))` — que confere SO o `tenant_id`,
+    nunca o `user_id` — a cadeia era:
+    
+      1. ler um `entity_id` alheio de `users_history`;
+      2. `INSERT INTO tenant_memberships (user_id = <alheio>, tenant_id = <minha>)`;
+      3. `usuario_no_escopo(<alheio>)` passa a valer TRUE, porque a membership que o
+         passo 2 acabou de criar e a propria coisa que a funcao mede;
+      4. ler e reescrever o `password_hash` alheio.
+    
+    O passo 2 e D4 funcionando, nao um defeito dele (o convite precisa adicionar
+    alguem que ja tem conta em outra empresa). O elo a fechar era o passo 1.
+    
+    Fecha com `usuario_no_escopo(entity_id)` nas duas tabelas
+    (migration `20261020000002`), sem UPDATE/DELETE em `users_history` (append-only,
+    fail-closed) e com a policy de UPDATE em `users_archive` porque `archive()` e
+    upsert.
+    
+    O `tenantId` passa a morar no `AuditContext` (escritas, que ja carregavam
+    contexto) e como 2o parametro das tres leituras, que nao carregavam. Isso e
+    deliberado: passar `actorId` de A e `tenantId` de B por caminhos separados
+    admitiria a combinacao que grava a auditoria da empresa A no escopo da B.
+    
+    `GET /users/:id/history` ganhou `@Req()` — sem isso a leitura caia em SISTEMA e
+    devolvia o historico cross-tenant.
+    
+    PRECO, decisao de produto: a auditoria de quem SAIU da empresa fica invisivel
+    para a empresa que saiu (fail-closed), visivel so para a sessao de SISTEMA.
+    
+    MEDIDO:
+    - RED sem a migration: 4 failed | 6 passed; o GREEN: 10 passed
+    - mutacao (remover `tenantId` do `buildContext`): 1 failed | 48 passed, e o
+      vermelho e o teste novo — os outros 48 nao medem este caminho
+    - `tsc --noEmit`: exit 0
+    - `pnpm ci:local`: exit 0, 13/13 (791 unit, 105 integration, 82 e2e, 415 tooling)
+    
+    Co-Authored-By: Claude <noreply@anthropic.com>
+    
+    * fix(tenancy): caixa alta no X-Tenant-Id zerava o escopo sem dar erro nenhum
+    
+    achado do revisor do PR #101, confirmado por RED contra Postgres real.
+    
+    `no_escopo_atual` compara por TEXTO (`alvo::text = escopo_atual()`) porque o
+    escopo pode valer `'*'`, que estouraria em `'*'::uuid`. E o Postgres canoniza
+    `uuid` para MINUSCULAS ao converter para texto. Logo um escopo em caixa alta
+    nao casa com nada — e o efeito nao e erro, e ZERO LINHAS: membro legitimo
+    recebia 403 em todas as rotas de empresa, com dado existente, token valido e
+    escopo valido. `UUID_RE` tem flag `/i`, entao a forma em caixa alta e um uuid
+    VALIDO: nao podia ser recusada na fronteira, mas nao podia descer crua.
+    
+    Corrigido nos dois lugares, cada um cobrindo o que o outro nao alcança:
+    
+    - `abrirEscopo` normaliza o `set_config`. E o UNICO escritor do GUC do sistema
+      (o proprio arquivo declara isso), entao cobre os 5 call sites diretos mais os
+      28 que passam por `comEscopo` — inclusive o `tenant.id` do onboarding, o
+      unico que nao passa por `escopoDoTenant`.
+    - `extractTenantId` devolve `raw.toLowerCase()`. E a fronteira de entrada nao
+      confiavel, e canonicaliza tambem `request.user.tenantId` e a chave do cache
+      de perfil (que e o par empresa/usuario), que antes tinham duas formas para
+      a mesma empresa.
+    
+    O spec de RLS deixou de reimplementar o `set_config` e passou a chamar
+    `abrirEscopo`: mediava uma copia, e um conserto na costura real deixaria os ~40
+    testes verdes.
+    
+    ACHADO 2 do revisor (DELETE em users_history): a exposicao que ele mediu foi
+    fechada pelo commit anterior (127d670), nao pelo GRANT. A migration
+    20261020000002 liga RLS nessas duas tabelas SEM policy de DELETE, e o que
+    protege a trilha e a AUSENCIA de policy — nao o codigo de hoje nao chamar.
+    MEDIDO: o papel de runtime apaga ZERO e a linha sobrevive; o DONO apaga a MESMA
+    linha (count 1), que e o que da dente ao teste. Nao adotei o REVOKE sugerido:
+    ele nao muda o que o teste mede, e a garantia de que e de interesse fica
+    escrita num teste que roda.
+    
+    ACHADO 3 do revisor (DIRECT_DATABASE_URL fora do compose): a omissao e
+    deliberada, e a sugestao dele quebraria o boot. O ENTRYPOINT do Dockerfile roda
+    `prisma migrate deploy` antes do servidor, e `migrate` exige o papel DONO —
+    entao a variavel e USADA no container. E chave presente em `environment` ganha
+    de `env_file` mesmo resolvendo para vazio, o mesmo motivo 2 que o proprio
+    compose ja documenta para o JWT_SECRET. Estendi o comentario do bloco para
+    nomear a variavel e o motivo, que era o que faltava.
+    
+    ACHADO PROPRIO, descoberto ao verificar o 2: `GRANT ... ON ALL TABLES IN
+    SCHEMA public` (20261020000000, secao 2) alcanca `_prisma_migrations` tanto
+    quanto alcanca as 8 tabelas de negocio. As 8 tem RLS; `_prisma_migrations` NAO
+    tem, porque o Prisma a cria fora do schema do negocio — e e a unica das 9 onde o
+    DELETE concedido nao encontra nenhuma trava pelo lado do banco.
+    
+    MEDIDO, contra Postgres real:
+      _prisma_migrations | DELETE,INSERT,SELECT,UPDATE
+      (as 8 de negocio, mesma linha)
+    
+    Nao e vazar dado de usuario, e INTEGRIDADE: o papel da aplicacao — o mesmo que
+    roda em cada requisicao — pode apagar o registro de migrations, e a proxima
+    `migrate deploy` reaplica schema fora de ordem. O revisor independente mediu o
+    efeito antes do conserto: `SET ROLE app_runtime; DELETE FROM _prisma_migrations;`
+    devolveu DELETE 9, e o `migrate deploy` seguinte quebrou com
+    `type "audit_operation" already exists` (42710).
+    
+    Corrigido pela migration 20261020000003, que faz `REVOKE ALL ... FROM
+    app_runtime` — nenhum verbo ali e necessario em runtime, e `migrate deploy` e
+    `db seed` rodam com `directUrl`, que e o DONO e nao e afetado por REVOKE de um
+    papel. O teste do REVOKE pergunta ao DONO, nunca a `app_runtime`: perguntar a
+    sessao que estao medindo responderia "nao" mesmo com o privilegio concedido,
+    porque a propria falta de privilegio esconde a linha da consulta.
+    
+    MEDIDO:
+    - RED do escopo em caixa alta: `expected [] to have a length of 1 but got +0`
+    - RED do header em caixa alta: `expected '0190A8B6-...' to be '0190a8b6-...'`
+    - RED do REVOKE ausente: `expected [ ...(4) ] to deeply equal []`
+    - mutacao (tirar cada `.toLowerCase()`): 1 failed | 26 passed e 1 failed | 25
+      passed, e o vermelho e o teste novo em cada um
+    - mutacao (a migration 000003 fora do caminho de descoberta do Prisma):
+      1 failed | 27 passed, `expected [ ...(4) ] to deeply equal []`
+    - mutacao (`abrirEscopo` virando no-op): `expected null to be
+      '0190a8b6-0000-7000-8000-0000000000ac'` — o teste da trilha agora diz que
+      barra foi "nao ha escopo", e nao "a RLS barra a trilha"
+    - `tsc --noEmit`: exit 0
+    - `pnpm ci:local`: exit 0 (28 gates ✓ no preflight, 792 unit, 108 integration,
+      234 unit web, 415 tooling). O 29o gate reporta `skipped` — `archive
+      integrity` com 0 arquivo em `.agents/runs/archive`; o corpus vive fora do
+      repo, entao e inerte por conjunto vazio, e nao e deste commit.
+    - revisao independente (quem revisa NAO e quem implementa): os 3 achados
+      conferidos um a um contra Postgres descartavel, com o veredito de que as
+      tres correcoes estao certas e nao introduzem defeito novo; e a mediu que a
+      canonicalizacao do header conserta mais 4 comparacoes por igualdade estrita
+      que antes negavam em caixa alta
+    
+    NAO FECHEI (classificado, nao bloqueante):
+    - `ALTER DEFAULT PRIVILEGES ... DELETE ON TABLES` da 20261020000000 da DELETE a
+      TODA tabela futura. Sem instancia hoje (as 8 tabelas tem RLS), mas o default
+      continua amplo: uma migration futura que esqueça `ENABLE ROW LEVEL SECURITY`
+      da DELETE irrestrito ao papel de runtime.
+    - `guardarTenant` (`apps/web/lib/sessao.ts`) nao tem chamador de producao: o
+      web hoje nunca envia `X-Tenant-Id`. Lacuna pre-existente do fluxo de troca de
+      empresa; nao e destes commits. O bug da caixa alta nao depende dela, porque o
+      header e contrato publico de API e qualquer cliente externo o manda.
+    
+    Co-Authored-By: Claude <noreply@anthropic.com>
+    
+    * fix(tenancy): fecha a escalada por membership e o diretorio sem escopo
+    
+    Dois achados do comentário de revisão 6241495621, medidos e corrigidos.
+    
+    1. Escalada por `INSERT` em `tenant_memberships`. Quem insere uma membership
+       entra no bucket da empresa alheia — e de lá lê histórico e arquivo
+       cross-tenant. A 20261020000004 tira `INSERT` do papel de runtime e passa a
+       escrita por `criar_membership(...)`, `SECURITY DEFINER`, com assinatura
+       HMAC verificada dentro da função. A chave vive em `chaves_de_assinatura` e
+       a assinatura cobre corpo, tenant, usuario, perfil e papel, cada campo com
+       prefixo de tamanho para nao depender da ordem. Sem chave ou com assinatura
+       divergente, a funcao levanta 42501. `INSERT` direto agora morre por
+       privilegio, nao por regra.
+    
+    2. `GET /users` sem header caia no bucket de SISTEMA e listava a base inteira,
+       alcancavel por qualquer conta porque `POST /users` e `@Public()`. O corte
+       nao e `@RequirePermission`: com o decorator a conta recem-cadastrada, que
+       ainda nao tem perfil, recebia 403 e o cadastro inteiro parava de funcionar.
+       A porta agora hidrata o perfil e decide no controller — sem `users.read`,
+       sem `isAdmin` global e sem empresa, a resposta e SO a propria linha. Com
+       empresa nao recorta: a RLS ja devolve so os membros, e um membro com
+       `users.read` precisa ver o diretorio da empresa, nao a si mesmo. A
+       hidratacao fica no controller porque `PermissionsGuard.canActivate`
+       retorna antes de hidratar sem `@RequirePermission` — sem ela o `isAdmin` do
+       admin global viria do cache frio e o recorte o pegaria.
+    
+    Correcao de afirmacao: `password_hash` nunca saiu por esta rota. `UserOutput`
+    e um literal fixo e `user.output.spec.ts:55` afirma a ausencia do campo. O que
+    vazava era identificacao cross-tenant.
+    
+    Dente do gate, RED organico e nao fabricado: `user-use-cases.listar()` esquecia
+    o campo novo no record-literal que traduz o DTO para o port, o filtro do
+    repositorio virou codigo morto e o `08-ownership` leu 3 linhas onde devia ler 1.
+    
+    Medido: `pnpm ci:local` exit 0 — api unit 803/803, coverage 803/803,
+    integration 112/112, e2e 82/82; web unit 234/234, e2e 42/42.
+    
+    Duas provas de mutacao seguem bloqueadas pelo classificador e nao foram
+    contornadas: neutralizar o `REVOKE INSERT` (sem substituto) e neutralizar o
+    `somenteUsuarioId` (com substituto, o RED acima).
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(tenancy): confere a empresa afirmada no header e fecha as burradas que restavam
+    
+    O `X-Tenant-Id` era uma DECLARAÇÃO aceita sem conferência. Medido linha a
+    linha antes de corrigir: `extractTenantId` valida o FORMATO do uuid (o
+    comentário dela mesma diz isso na cara), `empresaDoAtor` devolve o header cru,
+    `GET /users` não tem `@RequirePermission`, `somenteUsuarioId` só é preenchido
+    quando não há header — e `usuario_no_escopo(alvo)` pergunta se o ALVO pertence
+    à empresa afirmada, nunca se o REQUERENTE pertence. Nenhuma função do banco
+    pergunta pelo requerente (grep em todas as migrations: todo predicado de
+    tenancy compara uma COLUNA contra `escopo_atual()`), e `set_config(...,
+    true)` é transacional e auto-declarado. A fronteira que sabe quem é o
+    requerente é o guard — é ali que a empresa é AFIRMADA e que o token prova
+    quem fez a afirmação.
+    
+    C0: `JwtAuthGuard` consulta `findRole(sub, tenantId)` e recusa com 403
+    `TENANT_MEMBERSHIP_REQUIRED` quando devolve `null`. A consulta vem ANTES da
+    chave de cache ser formada — sem essa ordem, cada tentativa vira uma chave
+    nova no `UserProfileCacheService` que ninguém relê (medido: o TTL era aplicado
+    só na leitura, e uma entrada nunca relida ficava no `Map` para sempre).
+    
+    Demais correções, cada uma com o defeito medido no comentário do código:
+    
+    - `profiles.use-cases.ts`: a trava de lockout usava `profileIdStr === null`,
+      o que abria a troca por um perfil MENOR. Cenário: `PUT
+      /admin/users/<dona>/profile` com um perfil sem `isAdmin` e dentro do
+      subconjunto passa em todas as travas e rebaixa a dona — 200, e a empresa
+      fica sem administrador sem caminho de volta.
+    - `profiles.use-cases.ts`: a comparação do próprio id não normalizava, e o
+      `UUID_RE` do `UserId` tem flag `/i` — mandar o próprio id em CAIXA ALTA
+      burlava a trava inteira.
+    - `tenancy-invitations.controller.ts`: o `:id` do path não era validado. A
+      coluna é `uuid`; um path malformado morria em erro do driver, que o mapper
+      não mapeia: 500 em vez de 400. MEDIDO: antes, a rota devolvia 201.
+    - `profile-id.vo.ts`: `new Error(...)` cru cai no fall-through do mapper e
+      vira 500. Passa a `UserValidationException`, que o mapper conhece (400).
+      O `motivo` é estático de propósito — antes interpolava o valor recebido.
+    - `assinatura-de-membership.ts`: `role || 'member'` não é o `COALESCE(p_role,
+      'member')` do SQL, que trata SÓ `NULL`. Com `role = ''` os dois lados
+      assinariam corpos diferentes e o `criar_membership` cairia com `42501`.
+      Latente hoje (só `'owner'` e `'member'` são alcançáveis), mas o spec FIXAVA
+      a forma errada como esperada.
+    - `user-profile-cache.service.ts`: varredura de expiradas no `set`, senão o
+      `Map` só cresce e `invalidateUser` varre o `Map` inteiro a cada escrita.
+    - Comentários que descreviam uma versão ANTERIOR da policy e da env, medidos
+      falsos: `profiles_atualizacao` (`prisma-profile.repository.ts`) e o papel de
+      `DIRECT_DATABASE_URL` no boot (`docker-compose.yml`, `docs/como-rodar.md`).
+    
+    Testes: o contrato de 2 cenários de `11-tenant-isolation.e2e.spec.ts` fixava
+    o comportamento PRÉ-C0 (`expected 403 to be 200`) — reescritos para o contrato
+    novo, não revertido. 5 specs novos, 4 existentes ajustados pela 4ª dependência
+    do guard. `pnpm ci:local` 13/13.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * ci(tenancy): mede se o escopo de RLS vem da rota e publica o resíduo
+    
+    Nenhuma policy de tenancy pergunta pelo requerente: todo predicado compara uma
+    coluna da linha ALVO contra `escopo_atual()`, e `set_config('app.tenant_id', ...)`
+    é transacional e auto-declarado — quem escreve o GUC decide de que empresa
+    fala. O `JwtAuthGuard` do PR #101 confere a membership no header, mas o resto do
+    app continua abrindo escopo por conta própria, e nada impedia um valor vindo da
+    rota de virar escopo.
+    
+    O gate acusa a forma com som: um nome preso a `@Param/@Body/@Query/@Headers/Req`
+    no MESMO arquivo indo para `escopoDoTenant/comEscopo/abrirEscopo`. A forma comum
+    em NestJS hexagonal é cross-file (o controller recebe o `@Param`, o repositório
+    abre o escopo) e provar essa exige montar o grafo de chamadas.
+    
+    Por isso o resíduo não vira acusação nem silêncio: sai como NÚMERO nos
+    `advisories`. E o número é publicação, não garantia — nenhum gate o compara com
+    o do run anterior, então um 67º call site cross-file deixa o gate VERDE, com o
+    advisory maior. Ler e comparar é ato humano; o que o gate impede é alguém
+    vender silêncio como cobertura.
+    
+    Medido na árvore real: 66 call sites em 41 linhas, 0 acusações, 66 sem prova de
+    origem. Fechar o resíduo é decisão de produto — mudar a assinatura dos 66 call
+    sites para carregar a prova de origem — não mais um check.
+    
+    Dentes: 16 specs, DEZ mutações medidas na mesma rodada (gate restaurado
+    byte-a-byte): 2/16, 1/16, 3/16, 2/16, 2/16, 2/16, 5/16, 9/16, 2/16 e 5/16.
+    Diferencial contra a árvore real: plantar um `@Param` deixa o gate vermelho;
+    remover deixa exit 0.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(tooling): o check-teeth-count saía 0 sem imprimir quando rodado como CLI
+    
+    `npx tsx .tooling/scripts/ci/check-teeth-count.ts` carregava o módulo e saía 0
+    sem escrever uma linha — e é exatamente o comando que o registro de dentes manda
+    rodar para remedir a paridade. A FUNÇÃO acusa a divergência; a invocação por
+    CLI não, porque não havia bloco de CLI.
+    
+    Duas metades, porque só consertar a primeira deixa a classe de pé:
+    
+    - `exit`: sem o bloco, o gate devolvia "tudo bem" sem olhar;
+    - silêncio: `linhasDoRelato` devolve só `errors`/`advisories`/`skip`, então
+      mesmo com o exit correto a árvore sadia produzia zero saída. "Mudo + exit 0" é
+      indistinguível de "não mediu" — por isso o verde agora diz que mediu.
+    
+    E uma terceira metade que eu não vi: MEDIDO 2026-10-18, trocar
+    `process.exit(r.ok ? 0 : 1)` por `process.exit(0)` deixava os 5 testes verdes.
+    O teste novo exigia SAÍDA, e saída não é exit code — a metade que eu aleguei ter
+    consertado no primeiro conserto estava sem dente. O sexto teste planta uma
+    paridade quebrada numa árvore temporária e exige `status !== 0` E `DIVERGE` no
+    stderr, que é o par que separa "o CLI saiu com 0" de "o CLI mediu e reprovou".
+    
+    Testado contra a árvore real: exit 0 com a linha de confirmação, e exit 1 com as
+    duas acusações e os comandos de remedir quando a paridade está quebrada.
+    Dentes: 6 specs, seis mutações medidas na mesma rodada (gate restaurado
+    byte-a-byte) — 3/6, 3/6, 2/6, 1/6, 2/6 e 1/6. As duas últimas são ortogonais
+    entre si: desligar o bloco tira os 2 que o executam, e forçar `exit(0)` tira só
+    o que olha o status, porque a impressão não mudou.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * test(tenancy): trava que o veredito do guard não é cacheado e dá dentes ao gate
+    
+    Duas specs que medem em vez de descrever.
+    
+    A primeira, no `JwtAuthGuard`: a conferência de membership vale a partir do início
+    do request — um request em voo quando a membership é removida termina como
+    começou, porque o escopo é uma variável de sessão do banco e a transação já está
+    aberta. O que dá para garantir é que a janela é o REQUEST EM VOO, e não o TTL
+    de nada, e isso só é verdade se `findRole` rodar a cada request. A spec usa o
+    mesmo token e a mesma empresa, com `findRole` mockado `member` e depois `null`: se
+    o segundo request passasse, o veredito estaria cacheado.
+    
+    A segunda, no gate de escopo: dentes para os furos de parser medidos pelo
+    revisor, todos da mesma classe — um literal tratado como sintaxe. Uma aspa
+    DENTRO de comentário (`// don't`) abria uma string que engolia o resto do
+    arquivo; um `//` DENTRO de string apagava o resto da linha, e o call site saía
+    do CORPUS, não só da acusação (contagem defasada em silêncio); uma vírgula
+    DENTRO de string partia o argumento no lugar errado, e o id vindo da rota nunca
+    era lido — o gate passando exatamente o defeito que ele existe para pegar.
+    
+    **Um dos dentes não mordia, e a correção foi do FIXTURE, não do gate**
+    (achado do revisor, medido 2026-10-18): o teste do `//` dentro de string tinha
+    um `\n` entre a string e o call site, então a cauda que o `//` comeria era
+    VAZIA — e a string neutra e a string tratada davam as DUAS a mesma resposta. O
+    teste passava com o defeito presente. O call site foi para a MESMA LINHA e a
+    asserção passou a ler `linha === 1`; medido de novo, a neutralização da branch
+    derruba 3/16 incluindo-o. Mutação que não cai não é «mutação fraca», é medida
+    feita com o instrumento errado.
+    
+    Denominadores: 16/16 e 6/6 verdes, com as doze mutações medidas nesta rodada.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * docs(tenancy): fixa no call site as três propriedades medidas da tenancy
+    
+    Comentário, sem mudança de comportamento — mas as três propriedades que a revisão
+    pediram para provar estavam atribuídas ao código sem lastro medido.
+    
+    `JwtAuthGuard`: a remoção de membership NÃO é uma Race Condition fechada pelo
+    banco, e a resposta não é a mesma nos dois caminhos. (a) DELETE direto em
+    `tenant_memberships` — o banco fecha, por `REVOKE DELETE … FROM app_runtime` E
+    por ausência de escritor. (b) DELETE em `users` com cascade — o banco NÃO
+    fecha: `GRANT … DELETE ON ALL TABLES TO app_runtime` mais a policy
+    `users_remocao … FOR DELETE` deixam o caminho aberto, e `TenantMembership.user` é
+    `onDelete: Cascade`, então um DELETE autorizado em `users` leva as memberships
+    junto sem passar por `tenant_memberships`. A garantia repousa no ESCRITOR, não
+    na policy. Para quem revisar: não julgue pela policy, julgue pelo escritor.
+    
+    `findRole !== null` ≡ "é membro": convite pendente vive em `Invitation` e só
+    vira linha ao aceitar, e `tenant_memberships` não tem coluna de status — a
+    escrita de status não tem NENHUM escritor, então adicionar a coluna hoje produz
+    um schema que mente (`status = 'ativo'` em todo lugar, e a primeira vez que
+    alguém usar descobre que nada a preenche).
+    
+    O recorte `bucket '*'` no `users.controller.ts`: NÃO vai para a RLS. A proposta
+    aparece a cada revisão e quebra três comportamentos que
+    `08-ownership.e2e.spec.ts:204` trava de propósito — quem não tem perfil tem de
+    ler uma linha (a própria conta recém-cadastrada, que 403 apagava), quem tem
+    `users.read` lê o diretório sem empresa, e o admin global lê tudo por bypass.
+    Nenhum deles é bug: é o produto, e mudar aqui é mudança de requisito com
+    migração de dado, não correção de furo.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * docs(tenancy): publica o contrato do X-Tenant-Id e corrige o §7 do contrato HTTP
+    
+    O PR #101 tornou possíveis dois códigos que nenhum documento da API listava:
+    `400 INVALID_TENANT` (header que não é UUID) e `403 TENANT_MEMBERSHIP_REQUIRED`
+    (sessão válida que não pertence à empresa afirmada). A §2 de `docs/api/users.md`
+    tinha 7 rotas e zero `403` em qualquer linha.
+    
+    Publicados com uma ressalva que só a leitura do código dá: `POST /users` é
+    `@Public()`, e o guard devolve `true` antes de ler o `X-Tenant-Id`. Um header
+    malformado ali é IGNORADO e a resposta é `201`, não `400` — a tabela vale para as
+    6 rotas autenticadas, e as duas docs dizem isso em vez de prometer 400/403 para
+    as 7.
+    
+    O §7 escrevia um `AuditContextMiddleware` que cria o contexto, um
+    `AuditContextPort.current()` e um VO `{ userId, now, requestId }`. Nenhum dos três
+    existe. O que existe é `AuditContextStore` (`run`/`get`/`tryGet` sobre
+    `AsyncLocalStorage`) com o VO `AuditContext { actorId, correlationId, source,
+    timestamp, tenantId }`, e quem abre o scope é o CONTROLLER
+    (`users.controller.ts:152,291,324,351`), não um middleware. O `tenantId` entra
+    junto do `actorId` de propósito: passá-los por caminhos separados admite
+    `actorId` da empresa A com `tenantId` da B, que é escalada silenciosa.
+    
+    O §7.1 escrevia `request.user = { id, email, roles }` com os três campos
+    errados: o identificador é `sub`, e `roles` não existe — quem carrega privilégio
+    é `isAdmin` + `permissions`, lidos do cache de perfil. O passo 3 lia
+    `request.user.id`, que é `undefined`.
+    
+    E o registro de dentes recebe as duas linhas que eram número envelhecido: 12 → 16
+    testes no gate de escopo, e 4 → 6 no `check-teeth-count`. Todas as mutações
+    foram remedidas na MESMA rodada em que o spec mudou — a primeira medição saiu
+    inflada em +1 por um teste já vermelho na base, e o teste do `//` dentro de
+    string não mordia porque o fixture tinha um `\n` onde o defeito morava logo ao
+    lado. O sexto teste do `check-teeth-count` nasceu de medir: `process.exit(0)` no
+    lugar do veredito deixava os 5 anteriores verdes, ou seja, o exit code — a
+    metade que o conserto do CLI alegava ter arrumado — não tinha dente.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    ---------
+    
+    Co-authored-by: CEO Agent <ceo@paperclip.ai>
+    Co-authored-by: Claude Code <noreply@anthropic.com>

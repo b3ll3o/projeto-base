@@ -47,57 +47,64 @@ export async function checkHarnessLocation(opts: { repoRoot: string }): Promise<
   const errors: string[] = [];
   const root = path.resolve(opts.repoRoot);
 
-  // (1) check-*.ts NÃO pode estar em tooling/scripts/
-  try {
-    const saida = execSync(
-      'git ls-files --cached --others --exclude-standard tooling/scripts/check-*.ts',
-      {
+  /**
+   * Os sub-checks (1), (2) e (4) dependem de `git ls-files`. Sem `git` — ou sem
+   * history — os três caem juntos, e o `catch {}` vazio de cada um devolvia
+   * `ok:true` sem ter medido nada: a §4 de `guard-classes.md` ("quem não pode
+   * ser comparado é RECLASSIFICADO, nunca apagado") num gate que nem é do diff
+   * desta branch. MEDIDO 2026-10-19: mesma árvore, mesmo argv, só o `git`
+   * trocado por um stub que sai com 1 → `{"ok":true,"errors":[]}` com um
+   * `tooling/scripts/check-vazado.ts` violando a regra (1) plantado, e o
+   * painel imprimindo `✓`.
+   *
+   * `[]` é "medi e não achei"; `null` é "não medi". Os `?? []` nos laços não
+   * apagam a diferença porque a contagem vive separada, em `semGit`, e sai no
+   * `reason` do `skipped`.
+   */
+  const semGit: string[] = [];
+  const lsFiles = (pathspec: string): string[] | null => {
+    try {
+      return execSync(`git ls-files --cached --others --exclude-standard ${pathspec}`, {
         cwd: root,
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],
-      },
-    );
-    const vazamentos = saida
-      .split('\n')
-      .map((l) => l.trim())
-      .filter(Boolean);
-    for (const v of vazamentos) {
-      errors.push(
-        `harness check-* fora do lugar: '${v}' está em tooling/scripts/, mas gates vivem em .tooling/scripts/ci/`,
-      );
+      })
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean);
+    } catch (err) {
+      // MEDIDO 2026-10-19: `String(err).split('\n')[0]` devolvia só "Error:
+      // Command failed: git ls-files … <pathspec>" — que repete o pathspec que
+      // já está 20 caracteres antes e joga fora a CAUSA, que vive em
+      // `err.stderr`. Três causas distintas (git ausente, não é repo, índice
+      // corrompido) saíam idênticas, e um skip que não diz por que não mediu é
+      // o `✓` de novo com outro formato.
+      const causa =
+        (err as { stderr?: Buffer | string }).stderr?.toString().trim().split('\n')[0] || '';
+      semGit.push(causa ? `${pathspec} — ${causa}` : `${pathspec} (sem causa: git ausente?)`);
+      return null;
     }
-  } catch {
-    // git não disponível ou repo sem history — sem `git ls-files` este sub-check é pulado.
+  };
+
+  // (1) check-*.ts NÃO pode estar em tooling/scripts/
+  for (const v of lsFiles('tooling/scripts/check-*.ts') ?? []) {
+    errors.push(
+      `harness check-* fora do lugar: '${v}' está em tooling/scripts/, mas gates vivem em .tooling/scripts/ci/`,
+    );
   }
 
   // (2) lint-*.ts e *-gate.ts NÃO podem estar em .tooling/scripts/ci/
-  try {
-    const saida = execSync(
-      'git ls-files --cached --others --exclude-standard .tooling/scripts/ci/',
-      {
-        cwd: root,
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-      },
-    );
-    const arquivos = saida
-      .split('\n')
-      .map((l) => l.trim())
-      .filter(Boolean);
-    for (const arq of arquivos) {
-      const base = path.basename(arq);
-      if (
-        base.startsWith('lint-') ||
-        base.endsWith('-gate.ts') ||
-        base === 'lint-review-routing.ts'
-      ) {
-        errors.push(
-          `harness fora do lugar: '${arq}' está em .tooling/scripts/ci/, mas o sufixo 'lint-'/'*-gate' é exclusivo de tooling/scripts/`,
-        );
-      }
+  for (const arq of lsFiles('.tooling/scripts/ci/') ?? []) {
+    const base = path.basename(arq);
+    if (
+      base.startsWith('lint-') ||
+      base.endsWith('-gate.ts') ||
+      base === 'lint-review-routing.ts'
+    ) {
+      errors.push(
+        `harness fora do lugar: '${arq}' está em .tooling/scripts/ci/, mas o sufixo 'lint-'/'*-gate' é exclusivo de tooling/scripts/`,
+      );
     }
-  } catch {
-    // mesmo motivo de (1)
   }
 
   // (3) Toda entry de PREFLIGHT_CHECKS aponta para arquivo que existe
@@ -130,34 +137,34 @@ export async function checkHarnessLocation(opts: { repoRoot: string }): Promise<
   // (4) Nenhum check-*.ts em SUBDIRETÓRIO de .tooling/scripts/ci/
   // `git ls-files` devolve o path RELATIVO, então `sub/` aparece como
   // segmento do caminho — é isso que diferencia "na raiz" de "sombreado".
-  try {
-    const saida = execSync(
-      'git ls-files --cached --others --exclude-standard .tooling/scripts/ci/',
-      {
-        cwd: root,
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-      },
-    );
-    for (const arq of saida
-      .split('\n')
-      .map((l) => l.trim())
-      .filter(Boolean)) {
-      if (!arq.endsWith('.ts') || arq.endsWith('.spec.ts')) continue;
-      // `dirname` devolve `.` para quem está na raiz — o `!==` é o filtro
-      // que separa "na raiz" de "sombreado", e sem ele TODO check-*.ts do
-      // diretório seria acusado (o spec pegou isso antes do push).
-      if (path.dirname(arq) === '.tooling/scripts/ci') continue;
-      if (path.basename(arq).startsWith('check-')) {
-        errors.push(
-          `harness em subdir: '${arq}' está em subdiretório de .tooling/scripts/ci/, ` +
-            `mas o preflight descobre gates por glob PLANO — o arquivo fica sombreado ` +
-            `(registrado em PREFLIGHT_CHECKS e verde, invisível na varredura)`,
-        );
-      }
+  for (const arq of lsFiles('.tooling/scripts/ci/') ?? []) {
+    if (!arq.endsWith('.ts') || arq.endsWith('.spec.ts')) continue;
+    // `dirname` devolve `.` para quem está na raiz — o `!==` é o filtro
+    // que separa "na raiz" de "sombreado", e sem ele TODO check-*.ts do
+    // diretório seria acusado (o spec pegou isso antes do push).
+    if (path.dirname(arq) === '.tooling/scripts/ci') continue;
+    if (path.basename(arq).startsWith('check-')) {
+      errors.push(
+        `harness em subdir: '${arq}' está em subdiretório de .tooling/scripts/ci/, ` +
+          `mas o preflight descobre gates por glob PLANO — o arquivo fica sombreado ` +
+          `(registrado em PREFLIGHT_CHECKS e verde, invisível na varredura)`,
+      );
     }
-  } catch {
-    // mesmo motivo de (1)
+  }
+
+  // `ok` e `skipped` são independentes por contrato (`check-types.ts`): um erro
+  // de (3) continua erro mesmo com o resto pulado, e `formatMark` troca o `✓`
+  // por `–` para que ninguém leia um painel verde como "verifiquei e passei".
+  if (semGit.length > 0) {
+    return {
+      ok: errors.length === 0,
+      errors,
+      skipped: true,
+      reason:
+        `${semGit.length} varredura(s) por \`git ls-files\` NÃO rodaram — os ` +
+        `sub-checks (1), (2) e (4) deste gate não mediram nada, então o que ` +
+        `sobrou é metade do que o nome dele afirma: ${semGit.join(' · ')}`,
+    };
   }
 
   return { ok: errors.length === 0, errors };

@@ -354,6 +354,21 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     file: '.tooling/scripts/ci/check-tenant-scope-source.ts',
     id: 'check-tenant-scope-source',
   },
+  {
+    // MEDIDO 2026-10-19: a `descricao` de cada flag vivia em DUAS cópias sem
+    // derivação — a string do catálogo e o exemplo JSON do contrato HTTP, duas
+    // vezes. Trocar o texto do catálogo deixou o contrato mentindo, e o
+    // contrato abre dizendo que a spec ganha em caso de divergência (verdade
+    // para status, falsa para o texto que o admin lê antes de desligar).
+    //
+    // As DUAS direções são o gate: catálogo→contrato pega descrição
+    // desatualizada; contrato→catálogo pega o exemplo que sobreviveu à chave
+    // que saiu — o modo de falha silencioso, porque o documento continua bem
+    // formado.
+    name: 'contrato HTTP das feature flags bate com o catálogo (nos 2 sentidos)',
+    file: '.tooling/scripts/ci/check-feature-flag-contract.ts',
+    id: 'check-feature-flag-contract',
+  },
 ];
 
 /**

@@ -29,6 +29,7 @@ import { z } from 'zod';
 import { TenancyInvitationsController } from './tenancy-invitations.controller.js';
 import { TENANCY_USE_CASES, TenancyUseCases } from '../../application/tenancy.use-cases.js';
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
+import { FeatureFlagGuard } from '../../../feature-flags/infrastructure/http/guards/feature-flag.guard.js';
 import { GlobalExceptionFilter } from '../../../../shared/infrastructure/http/global-exception.filter.js';
 
 const SUB = '0190a8b6-0000-7000-8000-000000000001';
@@ -66,6 +67,16 @@ describe('TenancyInvitationsController — o `:id` do convite', () => {
           return true;
         },
       })
+      // O `FeatureFlagGuard` fica ABERTO pelo mesmo motivo do `JwtAuthGuard`:
+      // sob teste aqui é o `:id`, e um 404 de flag desligada esconderia o 400.
+      // O que o guard FAZ quando a flag está off é medido no e2e
+      // `test/e2e/scenarios/12-onboarding.e2e.spec.ts`, que tem o banco.
+      // MEDIDO 2026-10-19: esta linha apontava para `13-feature-flags`, que é
+      // CRUD admin da flag e NÃO toca nem o `accept` nem o `POST /users` —
+      // quem seguisse a referência abriria o arquivo errado e concluiria que a
+      // porta não tem cobertura.
+      .overrideGuard(FeatureFlagGuard)
+      .useValue({ canActivate: () => true })
       .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());

@@ -50,6 +50,7 @@ import {
   TENANT_MEMBERSHIP_REPOSITORY_PORT,
   type TenantMembershipRepositoryPort,
 } from '../../../tenancy/domain/ports/tenant-membership-repository.port.js';
+import { FEATURE_FLAG_REPOSITORY_PORT } from '../../../feature-flags/domain/ports/feature-flag-repository.port.js';
 import { GlobalExceptionFilter } from '../../../../shared/infrastructure/http/global-exception.filter.js';
 import { ZodValidationPipe } from '../../../../shared/infrastructure/http/zod-validation.pipe.js';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -138,6 +139,9 @@ const CACHE_STUB = {
 // teste deste arquivo manda `X-Tenant-Id`, então a conferência de membership não
 // chega a rodar — mas o token precisa estar declarado, ou o Nest não constrói o
 // guard e os 20 testes caem com `Nest can't resolve dependencies`.
+// `POST /users` lê `tenancy.invites` no corpo; `[]` = D4, ninguém desligou.
+const FLAGS_STUB = { listar: async () => [] };
+
 const MEMBERSHIPS_STUB = {
   async findRole() {
     return 'member';
@@ -201,6 +205,7 @@ describe('UsersController — fronteira HTTP de autenticação', () => {
         { provide: UserProfileUseCases, useValue: PROFILE_USE_CASES_STUB },
         { provide: TOKEN_ISSUER_PORT, useValue: issuer },
         { provide: TENANT_MEMBERSHIP_REPOSITORY_PORT, useValue: MEMBERSHIPS_STUB },
+        { provide: FEATURE_FLAG_REPOSITORY_PORT, useValue: FLAGS_STUB },
         JwtAuthGuard,
         {
           provide: UserProfileCacheService,
@@ -344,6 +349,7 @@ describe('UsersController — fronteira HTTP de autenticação', () => {
         { provide: UserProfileUseCases, useValue: PROFILE_USE_CASES_STUB },
         { provide: TOKEN_ISSUER_PORT, useValue: sabota },
         { provide: TENANT_MEMBERSHIP_REPOSITORY_PORT, useValue: MEMBERSHIPS_STUB },
+        { provide: FEATURE_FLAG_REPOSITORY_PORT, useValue: FLAGS_STUB },
         JwtAuthGuard,
         { provide: UserProfileCacheService, useValue: CACHE_STUB },
       ],
@@ -404,6 +410,7 @@ describe('UsersController — o carve-out público sobrevive ao OpenAPI', () => 
         { provide: UserProfileUseCases, useValue: PROFILE_USE_CASES_STUB },
         { provide: TOKEN_ISSUER_PORT, useValue: makeIssuer() },
         { provide: TENANT_MEMBERSHIP_REPOSITORY_PORT, useValue: MEMBERSHIPS_STUB },
+        { provide: FEATURE_FLAG_REPOSITORY_PORT, useValue: FLAGS_STUB },
         JwtAuthGuard,
         { provide: UserProfileCacheService, useValue: CACHE_STUB },
       ],
@@ -481,6 +488,9 @@ describe('UsersController.buildContext — actorId vem do sub do token', () => {
       // saber se o ator é admin de SISTEMA. `{}` explodes aqui; `null` é a
       // resposta de quem não é.
       { findProfileId: async () => null } as never,
+      // `create()` lê `tenancy.invites` no corpo; `buildContext` não usa, mas o
+      // token precisa resolver para o `new`.
+      { listar: async () => [] } as never,
     );
   });
 
