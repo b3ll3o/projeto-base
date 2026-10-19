@@ -297,5 +297,4 @@ que **nao recusa o push** — MEDIDO no push seguinte: `advisory, push liberado`
 `EXIT=0`. Eu escrevi que travava; o preco real e ruido que acusa um PR errado.
 Reescrito → `em-dia`, 0 divergentes. O corpo antigo tambem dizia *"18 dos arquivos
 sao os artefatos do `state-snapshot`"* — MEDIDO: 18 no **repo**, **1** neste diff.
-Duas regras: medir o scanner ANTES de ligar o marcador (nunca com `aplicar` real),
-e nenhuma `<numero> arquivos` no corpo que nao seja a contagem do PR.
+Duas regras: medir o scanner ANTES de ligar o marcador, nunca com `aplicar` real; e nenhuma `<numero> arquivos` que nao seja a contagem do PR.
