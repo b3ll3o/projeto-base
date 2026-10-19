@@ -155,6 +155,7 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `conteudo-exclusivo-de-branch-defeito-ja-corrigido` | `pendente` | — | — |
 | `correction-of-one-instance-closes-the-class` | `pendente` | — | — |
 | `cost-must-reconcile-with-the-whole` | `citada` | `.agents/specs/conventions/ci-defense-in-depth.md` | `é uma história` |
+| `cross-artifact-subtraction-borrows-the-other-clock` | `pendente` | — | — |
 | `criterion-inert-on-empty-set` | `citada` | `.agents/specs/conventions/retrospective-capture.md` | `um critério escrito como` |
 | `failed-commit-leaks-staged-files-into-next-commit` | `pendente` | — | — |
 | `fase-7-http-state` | `recusada` | checkpoint de campanha de 2026-09-22; envelheceu e não é instrução | — |
