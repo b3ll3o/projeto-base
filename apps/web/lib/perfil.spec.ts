@@ -64,6 +64,7 @@ const {
   listarPerfis,
   listarPermissoes,
   obterMeuPerfil,
+  obterMeuPerfilGlobal,
   obterPerfil,
   obterPerfilPorSlug,
   revogarPermissao,
@@ -217,6 +218,42 @@ describe('getTenant é montado no ApiClient (Fase 3)', () => {
     await obterMeuPerfil();
 
     expect(configAtual().getTenant?.()).toBe(ACME);
+  });
+
+  /**
+   * O contrário, e é o dente do achado A (revisão adversarial 2026-10-18).
+   *
+   * A tela de feature flags autoriza pelo `isAdmin` do bucket **GLOBAL** — o
+   * que D2 exige (`ehAdministradorDeSistema`: `tenantId === null && isAdmin`) —
+   * e não pelo `isAdmin` de DONO que `obterMeuPerfil` devolve. O de dono é
+   * `true` em toda empresa nova
+   * (`prisma-tenant-onboarding.repository.ts:202`), então ler o sinal errado
+   * mostra a tabela para um ator que a API recusa.
+   *
+   * Por que a asserção é sobre `getTenant` e não sobre o retorno: `clientMock`
+   * não concatena header e o `ApiClient` é mockado como construtor. O `getTenant`
+   * é montado **sempre** — o que muda é o valor devolvido: `null`, e o
+   * `ApiClient` omite o header quando é `null` (`api-client.ts:66-67`, provado
+   * no `api-client.spec.ts`). Então a configuração montada é a única coisa
+   * observável daqui, e é onde o bug mora.
+   *
+   * ⚠️ O cenário `ACME` é o que dá o dente: com empresa escolhida no cookie,
+   * `obterMeuPerfilGlobal` devolvendo `null` prova que ela **ignora**
+   * `lerTenant()`; uma implementação que escopasse por empresa devolveria a ACME
+   * aqui — e mandaria `X-Tenant-Id`, tirando o ator do bucket global (D14/D2).
+   */
+  it('obterMeuPerfilGlobal devolve getTenant NULO mesmo com empresa escolhida', async () => {
+    // `beforeEach` não limpa este spy, e os testes acima já o chamaram — sem
+    // esta linha a asserção de contagem mede a suíte, não a função.
+    lerTenantMock.mockClear();
+    lerTenantMock.mockResolvedValueOnce(ACME);
+    clientMock.get.mockResolvedValue(null);
+
+    await obterMeuPerfilGlobal();
+
+    expect(configAtual().getTenant?.()).toBeNull();
+    // E ele realmente não pergunta — `lerTenant()` é a fonte do valor.
+    expect(lerTenantMock).not.toHaveBeenCalled();
   });
 });
 

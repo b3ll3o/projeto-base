@@ -4,8 +4,15 @@
 // SISTEMA usa para ligar e desligar funcionalidades. Server Component.
 //
 // A checagem `isAdmin` no front é DUPLICA de propósito (mesma decisão declarada
-// em `app/admin/profiles/page.tsx:6-11`): ela é mais ESTRITA que a da API, e
-// quem não é admin do sistema não chega a ver a tabela.
+// em `app/admin/profiles/page.tsx:6-11`) — mas ela NÃO é "mais estrita" que a
+// da API, como o texto desta página dizia antes da revisão de 2026-10-18: é a
+// **mesma** decisão, lida do mesmo sinal. D2 exige `isAdmin` do bucket GLOBAL
+// (`ehAdministradorDeSistema`: `tenantId === null && isAdmin`), e por isso o
+// guard chama `obterMeuPerfilGlobal()`. `obterMeuPerfil` — a variante por
+// empresa — devolveria o `isAdmin` de DONO, que é `true` em toda empresa nova
+// e não é o que a API olha: a tela mostraria a tabela para um ator que a API
+// recusa. MEDIDO: `prisma-tenant-onboarding.repository.ts:202` dá
+// `isAdmin: true` ao dono.
 //
 // Um form POR LINHA, e não um form com vários checkboxes: cada linha é a
 // unidade de salvar — o mesmo formato de `app/admin/users/page.tsx` (select +
@@ -25,13 +32,13 @@
 
 import type * as React from 'react';
 import { revalidatePath } from 'next/cache';
-import { obterMeuPerfil } from '../../../lib/perfil';
+import { obterMeuPerfilGlobal } from '../../../lib/perfil';
 import { definirFeatureFlag, listarFeatureFlags } from '../../../lib/flags';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminFeatureFlagsPage(): Promise<React.JSX.Element> {
-  const me = await obterMeuPerfil();
+  const me = await obterMeuPerfilGlobal();
   if (me === null || me.isAdmin !== true) {
     return (
       <main className="mx-auto max-w-3xl p-8">
@@ -50,9 +57,15 @@ export default async function AdminFeatureFlagsPage(): Promise<React.JSX.Element
     // É por isso que este form não precisa de campo oculto "estado atual" — o
     // valor enviado é sempre o estado final que o admin deixou na tela.
     const ativada = formData.get('ativada') === 'on';
-    if (chave !== '') {
-      await definirFeatureFlag(chave, ativada);
-    }
+    // ⚠️ SEM guarda de chave vazia, e é deliberado. Havia um
+    // `if (chave !== '')` aqui: com `FormData` adulterado ele não gravava
+    // nada, revalidava, e a tela mostrava exatamente o mesmo resultado de um
+    // salvamento bom — sucesso aparente sobre nenhuma escrita. Sem a guarda o
+    // erro SOBE (o `ApiError` da API não é engolido aqui), e o servidor é o
+    // único portão: `isFeatureFlagKey` recusa com 400
+    // `FEATURE_FLAG_CHAVE_INVALIDA`. `FormData` é entrada não confiável — o
+    // browser envia o que o cliente mandar.
+    await definirFeatureFlag(chave, ativada);
     revalidatePath('/admin/flags');
   }
 
@@ -64,11 +77,22 @@ export default async function AdminFeatureFlagsPage(): Promise<React.JSX.Element
       </p>
 
       <table className="mt-6 w-full border-collapse text-sm">
+        {/* `<caption>` e `scope` não são enfeite: sem eles a tabela só é
+            legível por quem enxerga. Em modo de navegação por tabela, o leitor
+            de tela associa célula a coluna pelo `scope`, e sem `caption` não há
+            título que diga o que a tabela é. WCAG 1.3.1. */}
+        <caption className="sr-only">Funcionalidades do sistema e o estado de cada uma</caption>
         <thead>
           <tr className="border-b border-slate-200 text-left">
-            <th className="py-2 pr-4 font-medium text-slate-500">Chave</th>
-            <th className="py-2 pr-4 font-medium text-slate-500">O que faz</th>
-            <th className="py-2 font-medium text-slate-500">Ativa</th>
+            <th className="py-2 pr-4 font-medium text-slate-500" scope="col">
+              Chave
+            </th>
+            <th className="py-2 pr-4 font-medium text-slate-500" scope="col">
+              O que faz
+            </th>
+            <th className="py-2 font-medium text-slate-500" scope="col">
+              Ativa
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -82,7 +106,12 @@ export default async function AdminFeatureFlagsPage(): Promise<React.JSX.Element
                 <form action={alternar} className="flex items-center gap-2">
                   <input type="hidden" name="chave" value={f.chave} />
                   <input
-                    aria-label={`Ativar ${f.chave}`}
+                    // O nome acessível carrega o ESTADO, não a ação. Era
+                    // "Ativar <chave>" nos dois estados: descrevia o que o botão
+                    // faria, e quem navega por leitor de tela não tinha como
+                    // saber PELO NOME se a linha estava ligada — só inferindo do
+                    // `checked`. (Revisão adversarial 2026-10-18, achado D.)
+                    aria-label={`${f.chave} — ${f.ativada ? 'ligada' : 'desligada'}`}
                     className="size-4 rounded border-slate-300"
                     defaultChecked={f.ativada}
                     name="ativada"

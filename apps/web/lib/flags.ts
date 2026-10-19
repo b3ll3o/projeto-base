@@ -44,5 +44,9 @@ export async function listarFeatureFlags(): Promise<FeatureFlagDto[]> {
 export async function definirFeatureFlag(chave: string, ativada: boolean): Promise<FeatureFlagDto> {
   const client = await getClient();
   const body: UpdateFeatureFlagInputDto = { ativada };
-  return client.put<FeatureFlagDto>(`/admin/feature-flags/${chave}`, body);
+  // `encodeURIComponent` e não interpolação crua: a chave vem de um
+  // `FormData` no caminho da tela, e `/` ou `..` ali moldariam a URL ANTES de a
+  // API ver a chave — a revalidação `isFeatureFlagKey` acontece depois do
+  // roteamento. Hoje o catálogo só tem `a-z` e `.`, então é defesa de borda.
+  return client.put<FeatureFlagDto>(`/admin/feature-flags/${encodeURIComponent(chave)}`, body);
 }

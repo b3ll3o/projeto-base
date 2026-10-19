@@ -17,16 +17,26 @@
 //     vazia nem `undefined` (o defeito do PR #99).
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { ApiClientConfig } from './api-client';
 
 const { clientMock, configMock, exigirSessaoMock, lerTenantMock } = vi.hoisted(() => {
   // A anotação é o que segura o teste. Sem ela, `{ getToken: undefined }`
   // infere o tipo LITERAL `undefined`, e `configMock.getToken?.()` estreita
   // para `never` — o tsc falha em código que roda verde no Vitest, que não
   // typecheca. MEDIDO: `TS2349` em `flags.spec.ts:77` depois de 7/7 verde.
+  //
+  // `| undefined` EXPLÍCITO nas duas: o projeto liga `exactOptionalPropertyTypes`,
+  // e sem ele `Partial<ApiClientConfig>` recusa o `undefined` do estado inicial
+  // (MEDIDO: `TS2375` + 4× `TS2412`).
+  //
+  // ⚠️ `getTenant` é `() => string | null`, **síncrono** (`api-client.ts:14`) —
+  // e a anotação dizia `() => Promise<string | null>`. Ninguém conferiu contra
+  // o tipo real porque a factory recebia `config: unknown`: nenhuma ponte
+  // cruzava os dois. A ponte é a atribuição campo a campo lá embaixo.
   const configMock: {
     baseUrl: string;
-    getToken: (() => string) | undefined;
-    getTenant: (() => Promise<string | null>) | undefined;
+    getToken: (() => string | null) | undefined;
+    getTenant: (() => string | null) | undefined;
   } = { baseUrl: 'http://api/api/v1', getToken: undefined, getTenant: undefined };
   return {
     clientMock: { get: vi.fn(), put: vi.fn() },
@@ -37,8 +47,16 @@ const { clientMock, configMock, exigirSessaoMock, lerTenantMock } = vi.hoisted((
 });
 
 vi.mock('./api-client', () => ({
-  ApiClient: vi.fn((config: unknown) => {
-    Object.assign(configMock, config);
+  // ⚠️ ATRIBUIÇÃO CAMPO A CAMPO, e não `Object.assign`. `Object.assign` tem
+  // tipagem `(T, U) => T & U` e NÃO cruza `U` contra `T`: a anotação errada de
+  // `configMock.getTenant` passava no tsc com o `unknown` E passaria com o
+  // `ApiClientConfig` — MEDIDO 2026-10-18, as duas vezes `exit 0`. Aqui
+  // `config.getTenant` tem que caber em `configMock.getTenant`, e é essa
+  // ponte que faz o tipo real ser conferido.
+  ApiClient: vi.fn((config: ApiClientConfig) => {
+    configMock.baseUrl = config.baseUrl;
+    configMock.getToken = config.getToken;
+    configMock.getTenant = config.getTenant;
     return clientMock;
   }),
 }));
@@ -99,7 +117,24 @@ describe('lib/flags — o cliente da tela de admin', () => {
     expect(configMock.getTenant).toBeUndefined();
   });
 
-  it('erro 403 da API PROPAGA — não vira lista vazia (a tela mentiria: "nenhuma flag")', async () => {
+  it('o PUT escapa a chave na URL — `/` e `..` não moldam o caminho', async () => {
+    // O `FormData` da tela é entrada não confiável, e a revalidação
+    // `isFeatureFlagKey` da API só roda DEPOIS do roteamento: um `/` cru
+    // viraria um segmento novo e mudaria a rota antes de a chave ser lida.
+    await definirFeatureFlag('tenancy.invites/x', false);
+
+    expect(clientMock.put).toHaveBeenCalledWith(
+      `/admin/feature-flags/${encodeURIComponent('tenancy.invites/x')}`,
+      { ativada: false },
+    );
+  });
+
+  // ⚠️ O nome NÃO diz 403, e é de propósito. Antes dizia "erro 403 da API
+  // PROPAGA" e o corpo rejeitava um `Error('Forbidden')` cru — sem `ApiError`,
+  // sem `status`, sem `code`. O 403 estava só no nome, num teste cujo `client`
+  // é mockado, então o `ApiError` de `api-client.ts` nunca entrava em cena.
+  // O nome passa a dizer o que o corpo mede: o erro PROPAGA.
+  it('erro da API PROPAGA — não vira lista vazia (a tela mentiria: "nenhuma flag")', async () => {
     const erro = new Error('Forbidden');
     clientMock.get.mockRejectedValue(erro);
 

@@ -23,6 +23,21 @@ function linhaDaFlag(page: Page) {
   return page.locator('main table tbody tr').filter({ hasText: CHAVE });
 }
 
+/**
+ * O input da linha, pelo nome acessível.
+ *
+ * O nome carrega o ESTADO (`tenancy.invites — ligada`), não a ação — era
+ * "Ativar <chave>" nos dois estados, e quem navega por leitor de tela não
+ * tinha como saber pelo nome se a linha estava ligada. O `^…` com alternância
+ * deixa o locator estável entre os dois estados, e o estado em si é o que as
+ * asserções `.toBeChecked()`/`not` afirmam.
+ */
+function caixaDaFlag(page: Page) {
+  return linhaDaFlag(page).getByLabel(
+    new RegExp(`^${CHAVE.replace('.', '\\.')} — (ligada|desligada)$`),
+  );
+}
+
 test.describe('F14 — Ativação e desativação de funcionalidades (admin)', () => {
   test('admin desliga e religa a flag, e a tela reflete o que foi salvo', async ({
     comoAdmin,
@@ -34,11 +49,14 @@ test.describe('F14 — Ativação e desativação de funcionalidades (admin)', (
 
     await irPara('/admin/flags');
 
-    const caixa = linhaDaFlag(page).getByLabel(`Ativar ${CHAVE}`);
+    const caixa = caixaDaFlag(page);
     // D4: sem linha no banco a chave chega `true`, e a base está limpa
     // (`limparBase` trunca `feature_flags`), então `defaultChecked` mostra o
     // estado efetivo, não um palpite.
     await expect(caixa).toBeChecked();
+    // E o NOME acessível diz o mesmo — as duas afirmações juntas fecham "a tela
+    // mostra o estado, e o nome não mente sobre ele".
+    await expect(linhaDaFlag(page).getByLabel(`${CHAVE} — ligada`)).toBeChecked();
 
     await caixa.uncheck();
     await linhaDaFlag(page).getByRole('button', { name: 'Salvar' }).click();
@@ -51,14 +69,14 @@ test.describe('F14 — Ativação e desativação de funcionalidades (admin)', (
     // a depender do que foi gravado. (O F12 não recarrega porque a coluna que
     // ele afirma é texto re-renderizado pelo `revalidatePath`.)
     await irPara('/admin/flags');
-    await expect(linhaDaFlag(page).getByLabel(`Ativar ${CHAVE}`)).not.toBeChecked();
+    await expect(caixaDaFlag(page)).not.toBeChecked();
 
     // O caminho inverso no MESMO teste: um spec que só desliga passaria
     // também com um botão que só sabe desligar.
-    await linhaDaFlag(page).getByLabel(`Ativar ${CHAVE}`).check();
+    await caixaDaFlag(page).check();
     await linhaDaFlag(page).getByRole('button', { name: 'Salvar' }).click();
     await irPara('/admin/flags');
-    await expect(linhaDaFlag(page).getByLabel(`Ativar ${CHAVE}`)).toBeChecked();
+    await expect(caixaDaFlag(page)).toBeChecked();
   });
 
   test('a flag que o admin desliga na tela é a que a rota de convites respeita', async ({
@@ -88,7 +106,7 @@ test.describe('F14 — Ativação e desativação de funcionalidades (admin)', (
       });
 
     await irPara('/admin/flags');
-    await linhaDaFlag(page).getByLabel(`Ativar ${CHAVE}`).uncheck();
+    await caixaDaFlag(page).uncheck();
     await linhaDaFlag(page).getByRole('button', { name: 'Salvar' }).click();
 
     // ⚠️ O SALVAMENTO É ESPERADO ANTES do pedido, e não por `waitForTimeout`.
@@ -100,7 +118,7 @@ test.describe('F14 — Ativação e desativação de funcionalidades (admin)', (
     // save não persistiu, ela falha AQUI, nomeando a causa, em vez de fazer o
     // `pedir()` seguinte mentir.
     await irPara('/admin/flags');
-    await expect(linhaDaFlag(page).getByLabel(`Ativar ${CHAVE}`)).not.toBeChecked();
+    await expect(caixaDaFlag(page)).not.toBeChecked();
 
     const desligada = await pedir();
     expect(desligada.status()).toBe(404);
@@ -108,10 +126,10 @@ test.describe('F14 — Ativação e desativação de funcionalidades (admin)', (
     // O POSITIVO é obrigatório: 404 também é o que a rota devolve por outros
     // motivos, e sem o par o teste não distinguiria "a flag parou a rota" de
     // "a rota morreu antes, por outra coisa".
-    await linhaDaFlag(page).getByLabel(`Ativar ${CHAVE}`).check();
+    await caixaDaFlag(page).check();
     await linhaDaFlag(page).getByRole('button', { name: 'Salvar' }).click();
     await irPara('/admin/flags');
-    await expect(linhaDaFlag(page).getByLabel(`Ativar ${CHAVE}`)).toBeChecked();
+    await expect(caixaDaFlag(page)).toBeChecked();
 
     const ligada = await pedir();
     expect(ligada.status()).toBe(403);
