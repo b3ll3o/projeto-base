@@ -259,6 +259,33 @@ function main(): number {
   const r = verificarMarcador(corpo, relatorio);
   const divergentes = relatorio.claims.filter((c) => c.divergente).length;
 
+  // ⚠️ O DENOMINADOR é só o que o gate julga. `claims.length` punha no
+  // denominador as claims que o scanner declarou NÃO MENSURÁVEIS — e o gate
+  // saía affirmando "0 divergente(s) de 2 reconhecida(s), nenhuma contagem
+  // desatualizada" sobre duas claims que ele próprio não pode medir (MEDIDO
+  // 2026-10-19, corpo `68 arquivos, 286 testes adicionados`). Um denominador que
+  // inclui o que não se comparou faz a fração afirmar mais do que mediu.
+  const mensuraveis = relatorio.claims.filter((c) => c.medido !== null);
+  const naoMensuraveis = relatorio.claims.filter((c) => c.medido === null);
+
+  // A linha que NOMEIA o que o gate não julga. É a §4 de `guard-classes.md`
+  // ("quem não pode ser comparado é RECLASSIFICADO, nunca apagado"): sem ela a
+  // classe `arquivos-suite` é contada num relatório que ninguém lê e some da
+  // saída que o CI mostra.
+  //
+  // ⚠️ NÃO é `relatorio.resumo`: ele abre com "X divergente(s) em Y claim(s)",
+  // que é a contagem TOTAL, e o gate já imprime divergentes com outro
+  // denominador (`r.errors.length`, fora de parágrafo marcado). Printar os dois
+  // põe a mesma palavra com dois números no mesmo log. Aqui vai só o nome das
+  // classes, sem contagem de divergentes.
+  const linhaNaoMensuraveis =
+    naoMensuraveis.length > 0
+      ? `pr-refresh-gate: ${naoMensuraveis.length} claim(s) NÃO mensuráveis offline — ` +
+        `${[...new Set(naoMensuraveis.map((c) => c.classe))].join(', ')}: ` +
+        `fora do denominador acima, que é só o que foi comparado. Verificar ` +
+        `rodando a suíte, não pelo git.\n`
+      : '';
+
   if (relatorio.claims.length === 0) {
     // Sai 0, mas sem afirmar que mediu o que não existia.
     //
@@ -295,18 +322,19 @@ function main(): number {
     // conjunto de zero não é uma aprovação: é uma afirmação de que o corpo
     // autorizou uma reescrita que ele não autorizou.
     process.stderr.write(
-      divergentes === 0
-        ? `pr-refresh-gate: 0 claim(s) divergente(s) de ${relatorio.claims.length} ` +
-            `reconhecida(s) — nenhuma contagem desatualizada, e portanto nada ` +
-            `a conferir com marcador.\n`
-        : `pr-refresh-gate: ${divergentes} claim(s) divergente(s) de ${relatorio.claims.length} ` +
-            `reconhecida(s), todas em parágrafo marcado — OK\n`,
+      (divergentes === 0
+        ? `pr-refresh-gate: 0 claim(s) divergente(s) de ${mensuraveis.length} ` +
+          `medida(s) — nenhuma contagem desatualizada, e portanto nada ` +
+          `a conferir com marcador.\n`
+        : `pr-refresh-gate: ${divergentes} claim(s) divergente(s) de ${mensuraveis.length} ` +
+          `medida(s), todas em parágrafo marcado — OK\n`) + linhaNaoMensuraveis,
     );
     return 0;
   }
   for (const e of r.errors) process.stderr.write(`${e}\n`);
+  process.stderr.write(`\n${linhaNaoMensuraveis}`);
   process.stderr.write(
-    `\npr-refresh-gate: ${r.errors.length} claim(s) divergente(s) fora de parágrafo marcado.\n`,
+    `pr-refresh-gate: ${r.errors.length} claim(s) divergente(s) fora de parágrafo marcado.\n`,
   );
   return 1;
 }

@@ -474,13 +474,88 @@ describe('CLI (o caminho que o CI usa)', () => {
     // `300 testes` é a claim mais barata para isto: a classe `testes` tem
     // `medir: () => null`, então NUNCA é divergente, e o corpo não depende do
     // git para ser verde.
+    //
+    // ⚠️ O denominador aqui é **0**, não 1: `300 testes` é reconhecida mas não
+    // mensurável, e um denominador que inclui o que não se comparou faz a
+    // fração afirmar uma cobertura que o gate não teve. A afirmação antiga
+    // (`de 1 reconhecida(s)`) era a forma desse defeito — e por isso este
+    // caso é ao mesmo tempo o teste da marcação vazia e o do denominador.
     const arquivo = join(mkdtempSync(join(tmpdir(), 'pr-body-')), 'body.md');
     writeFileSync(arquivo, 'Corrigi 300 testes.\n');
     const r = rodar({ PR_BODY_FILE: arquivo, PR_BASE: 'origin/main', GITHUB_WORKSPACE: REPO });
 
     expect(r.status).toBe(0);
-    expect(r.stderr).toMatch(/0 claim\(s\) divergente\(s\) de 1 reconhecida\(s\)/);
+    expect(r.stderr).toMatch(/0 claim\(s\) divergente\(s\) de 0 medida\(s\)/);
     expect(r.stderr).not.toMatch(/em parágrafo marcado/);
+  });
+
+  it('o DENOMINADOR é só o que foi medido — claim não mensurável não entra na fração', () => {
+    // MEDIDO 2026-10-19 no corpo do PR #109: `68 arquivos, 286 testes
+    // adicionados`. O gate respondia "0 claim(s) divergente(s) de 2
+    // reconhecida(s), todas em parágrafo marcado — OK" — duas claims no
+    // denominador, ZERO delas medidas, e a palavra "todas" sobre um
+    // conjunto que ele não comparou. A fração não era falsa; era maior que a
+    // medição.
+    //
+    // `999999999 commits` é divergente por construção (nenhum repo tem isso) e
+    // está no parágrafo marcado, então `r.ok` é Verdadeiro por via legítima —
+    // a fração tem de ser `1 de 1`, com a claim de `testes` fora dela. Um
+    // denominador que não distingue as duas cai em `2` e o teste fica vermelho.
+    const arquivo = join(mkdtempSync(join(tmpdir(), 'pr-body-')), 'body.md');
+    writeFileSync(arquivo, `${MARCADOR} foram 999999999 commits\n\nA suíte rodou: 880 testes.\n`);
+    const r = rodar({ PR_BODY_FILE: arquivo, PR_BASE: 'origin/main', GITHUB_WORKSPACE: REPO });
+
+    expect(r.status).toBe(0);
+    expect(r.stderr).toMatch(/1 claim\(s\) divergente\(s\) de 1 medida\(s\)/);
+    expect(r.stderr).not.toMatch(/de 2 medida\(s\)/);
+  });
+
+  it('NOMEIA a classe que o gate não julga, em vez de contá-la só no relatório', () => {
+    // A pendência literal: "`arquivos-suite` é contada mas não nomeada no
+    // output do CI". Contada onde? Em `relatorio.claims` — que nada no CI
+    // imprime. O gate era mudo sobre ela, e silêncio é indistinguível de "não
+    // havia nada": é o §4 de `guard-classes.md` ("quem não pode ser
+    // comparado é RECLASSIFICADO, nunca apagado") medido pelo outro lado.
+    //
+    // A afirmação positiva que dá o dente é `toMatch(/arquivos-suite/)`:
+    // MEDIDO, neutralizar a linha (`false && naoMensuraveis.length > 0`)
+    // derruba SÓ este teste, 1 vermelho de 33.
+    //
+    // A negativa é outra coisa, e vale dizer qual: ela **não** é o dente do
+    // denominador. MEDIDO — trocar o denominador de volta para
+    // `relatorio.claims.length` deixa esta spec VERDE, porque a palavra veio
+    // separada da conta. O que ela segura é o **renomear**: `medida(s)` é a
+    // palavra honesta para um denominador que só conta o que foi medido, e
+    // voltar a `reconhecida(s)` reaposta que a contagem é de claims
+    // reconhecidas — que é o defeito, de novo, pela metade.
+    const arquivo = join(mkdtempSync(join(tmpdir(), 'pr-body-')), 'body.md');
+    writeFileSync(arquivo, 'A suíte rodou: 880 testes em 67 arquivos.\n');
+    const r = rodar({ PR_BODY_FILE: arquivo, PR_BASE: 'origin/main', GITHUB_WORKSPACE: REPO });
+
+    expect(r.status).toBe(0);
+    expect(r.stderr).toMatch(/NÃO mensuráveis offline/);
+    expect(r.stderr).toMatch(/arquivos-suite/);
+    expect(r.stderr).not.toMatch(/reconhecida\(s\)/);
+  });
+
+  it('NÃO imprime a contagem de divergentes duas vezes com denominadores diferentes', () => {
+    // O contra da alternativa que eu descartei: imprimir `relatorio.resumo`
+    // (que abre com "X divergente(s) em Y claim(s)", a contagem TOTAL) ao
+    // lado da do gate (denominador = só o medido). O mesmo log passa a dizer
+    // "0 divergente(s) em 2 claim(s)" e "0 claim(s) divergente(s) de 1
+    // medida(s)" — a mesma palavra com dois números, nenhum deles explicado,
+    // e o leitor tem que adivinhar qual é o certo.
+    //
+    // Conta as OCORRÊNCIAS, não a existência: é assim que "conta uma vez"
+    // vira teeth. `expect(r.stderr).toContain('divergente(s)')` passaria com as
+    // duas linhas.
+    const arquivo = join(mkdtempSync(join(tmpdir(), 'pr-body-')), 'body.md');
+    writeFileSync(arquivo, `${MARCADOR} foram 999999999 commits\n\nA suíte rodou: 880 testes.\n`);
+    const r = rodar({ PR_BODY_FILE: arquivo, PR_BASE: 'origin/main', GITHUB_WORKSPACE: REPO });
+
+    expect(r.status).toBe(0);
+    const ocorrencias = r.stderr.match(/divergente\(s\)/g) ?? [];
+    expect(ocorrencias).toHaveLength(1);
   });
 
   it('ainda afirma a marcação quando existe claim divergente num parágrafo marcado', () => {
