@@ -55,7 +55,10 @@ import {
   FEATURE_FLAG_REPOSITORY_PORT,
   type FeatureFlagRepositoryPort,
 } from '../../../feature-flags/domain/ports/feature-flag-repository.port.js';
-import { chaveDesligada } from '../../../feature-flags/infrastructure/http/guards/feature-flag.guard.js';
+import {
+  chaveDesligada,
+  registrarBloqueio,
+} from '../../../feature-flags/infrastructure/http/guards/feature-flag.guard.js';
 import type { TokenSubject } from '../../../auth/domain/ports/token-issuer.port.js';
 
 import { AUDIT_SERVICE_PORT } from '../../../../shared/audit/shared/audit.tokens.js';
@@ -179,6 +182,11 @@ export class UsersController {
     // (`jwt-auth.guard.ts:170-172`). Recorte em `convite` e não em "tem
     // `destino`": `empresa` não usa token de convite.
     if (body.destino?.tipo === 'convite' && (await chaveDesligada(this.flags, 'tenancy.invites'))) {
+      // ⚠️ `body.destino.token` está no escopo e NÃO vai para o log: quem tem o
+      // token legítimo é exatamente quem este 404 esconde, e um log com ele
+      // entrega o segredo a quem lê log. O spec injeta um token conhecido e
+      // afirma que ele não aparece em nenhum argumento.
+      registrarBloqueio('tenancy.invites', request);
       throw new NotFoundException();
     }
 

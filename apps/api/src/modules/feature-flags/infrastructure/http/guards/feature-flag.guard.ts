@@ -31,7 +31,8 @@
 // retorna ANTES de publicar `req.user` em rota pública (`jwt-auth.guard.ts:170-172`).
 // Por isso `POST /users` checa a chave em `create()`, depois do Zod — é o único
 // ponto onde `destino.tipo` é conhecido. As DUAS checagens usam `chaveDesligada`:
-// D4 em um lugar só.
+// D4 em um lugar só — MEDIDO 2026-10-19: o guard NÃO usava, tinha um `Set` inline
+// que era a segunda cópia da semântica. A frase era verdade só no outro sentido.
 
 import {
   CanActivate,
@@ -39,9 +40,11 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { trace } from '@opentelemetry/api';
 import { FEATURE_FLAG_KEYS_METADATA } from '../decorators/require-feature-flag.decorator.js';
 import {
   FEATURE_FLAG_REPOSITORY_PORT,
@@ -49,20 +52,64 @@ import {
 } from '../../../domain/ports/feature-flag-repository.port.js';
 import type { FeatureFlagKey } from '../../../../../shared/auth/feature-flag-catalog.js';
 
+// Em escopo de módulo, como `profiles.use-cases.ts:47`: `tsx` (esbuild) não
+// emite `design:paramtypes`, então um `Logger` recebido por construtor chega
+// `undefined` — o mesmo defeito que os `@Inject` explícitos abaixo evitam.
+const loggerBloqueio = new Logger('FeatureFlagBloqueio');
+
 /**
  * D4 em UMA função: chave SEM LINHA é ATIVADA, chave COM `ativada: false` é
  * desligada.
  *
- * Exportada porque a semântica não pode ter duas cópias. O guard precisa do
- * conjunto inteiro porque resolve chaves múltiplas (E, não OU); aqui é uma chave
- * por chamada. D4 é exatamente o detalhe que a segunda cópia esquece — ela passa
- * a exigir a linha, e o sistema passa a nascer desligado.
+ * Exportada porque a semântica não pode ter duas cópias, e porque a única
+ * "`FeatureFlagGuard` cobre o que o decorator cobre" não dá: esta é a segunda
+ * porta de `tenancy.invites`, a que `@Public()` torna inalcançável para o guard.
+ * D4 é exatamente o detalhe que a segunda cópia esquece — ela passa a exigir a
+ * linha, e o sistema passa a nascer desligado.
+ *
+ * ⚠️ O guard chama isto UMA VEZ POR CHAVE, então `listar()` sai uma vez por
+ * chave em `required` em vez de uma vez no total. São 1-2 chaves por rota hoje.
+ * Se um dia houver dezenas, a otimização vai reintroduzir a segunda cópia — e
+ * reintroduzi-la é justamente o defeito que esta função existe para evitar.
  */
 export async function chaveDesligada(
   repositorio: FeatureFlagRepositoryPort,
   chave: FeatureFlagKey,
 ): Promise<boolean> {
   return (await repositorio.listar()).some((l) => !l.ativada && l.chave === chave);
+}
+
+/**
+ * O 404 de bloqueio é idêntico ao 404 de rota inexistente, e **nenhum dos dois
+ * é logado** — o filtro global só registra `>= 500`. Um dono de empresa que
+ * manda um convite e recebe "não encontrado" não tem de onde começar.
+ *
+ * Uma função para os DOIS pontos de bloqueio (o guard e o `POST /users`), pelo
+ * mesmo motivo de `chaveDesligada`: duas logs do mesmo evento divergem, e a que
+ * diverge é a que ninguém lê.
+ *
+ * ⚠️ NUNCA registrar token. Em `POST /users` ele está literalmente no escopo
+ * (`body.destino.token`), e log é onde segredo vaza com mais frequência. O spec
+ * injeta um token conhecido e afirma que ele não aparece.
+ *
+ * O `traceId` é o mesmo que já volta ao cliente no corpo do 404
+ * (`global-exception.filter.ts:63`), então a linha de log e o erro que o
+ * usuário viu apontam para o mesmo lugar.
+ */
+export function registrarBloqueio(
+  chave: FeatureFlagKey,
+  // Opcional de propósito: um log que derruba a requisição que ele existe para
+  // registrar troca um 404 honesto por um 500. MEDIDO 2026-10-19: o spec do
+  // controller passa `undefined` (`SEM_TOKEN = undefined as never`), que o tsc
+  // aceita porque `never` casa com tudo e que o runtime não aguenta.
+  req?: { method?: string; url?: string; id?: string; user?: unknown },
+): void {
+  const traceId = trace.getActiveSpan()?.spanContext().traceId ?? req?.id ?? '-';
+  const ator = (req?.user as { sub?: string } | undefined)?.sub ?? 'anônimo';
+  loggerBloqueio.warn(
+    `[${traceId}] ${req?.method ?? '?'} ${req?.url ?? '?'} -> 404: feature "${chave}" ` +
+      `desligada (ator: ${ator})`,
+  );
 }
 
 @Injectable()
@@ -90,19 +137,21 @@ export class FeatureFlagGuard implements CanActivate {
       return true;
     }
 
-    const req = context.switchToHttp().getRequest<{ user?: unknown }>();
+    const req = context.switchToHttp().getRequest<{
+      user?: unknown;
+      method?: string;
+      url?: string;
+      id?: string;
+    }>();
     if (req.user === undefined) {
       throw new ForbiddenException('autenticação requerida');
     }
 
-    // D4 em UMA linha: só entra no conjunto o que está explicitamente
-    // desligado, então a ausência vira "passa" sem `if` por chave.
-    const desligadas = new Set(
-      (await this.repositorio.listar()).filter((l) => !l.ativada).map((l) => l.chave),
-    );
-    const bloqueada = required.find((chave) => desligadas.has(chave));
-    if (bloqueada !== undefined) {
-      throw new NotFoundException();
+    for (const chave of required) {
+      if (await chaveDesligada(this.repositorio, chave)) {
+        registrarBloqueio(chave, req);
+        throw new NotFoundException();
+      }
     }
     return true;
   }

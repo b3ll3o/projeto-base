@@ -50,7 +50,7 @@ const SEM_TOKEN = undefined as never;
 const EMPRESA = '0190a8b6-1c2d-7e3f-8a4b-5c6d7e8f9a0b';
 
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import type { Span } from '@opentelemetry/api';
 import { trace } from '@opentelemetry/api';
 import { UsersController } from './users.controller.js';
@@ -345,6 +345,30 @@ describe('UsersController — handlers HTTP', () => {
       ).rejects.toBeInstanceOf(NotFoundException);
 
       expect(useCases.criarUser).not.toHaveBeenCalled();
+    });
+
+    it('o bloqueio DEIXA RASTRO — e o rastro NÃO leva o token', async () => {
+      // ⚠️ Duas afirmações, e a segunda é a que segura a primeira: um log que
+      // "prova" que o bloqueio foi registrado também passa quando ele registra
+      // o segredo, e `Logger.warn` aceita qualquer coisa como argumento.
+      //
+      // O token é o de quem JÁ tem o convite legítimo — é exatamente o segredo
+      // que este 404 existe para esconder de quem não o tem. Um log com ele
+      // entrega o segredo a quem lê log.
+      const SECREDO = 'tok-conhecido-que-nao-pode-vazar';
+      const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      flags.listar.mockResolvedValue([{ chave: 'tenancy.invites', ativada: false }]);
+
+      await expect(
+        ctrl.create(COM_CONVITE({ tipo: 'convite', token: SECREDO }), reply as never, SEM_TOKEN),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(warn).toHaveBeenCalled();
+      const registrado = JSON.stringify(warn.mock.calls);
+      expect(registrado).toContain('tenancy.invites');
+      expect(registrado).not.toContain(SECREDO);
+
+      warn.mockRestore();
     });
 
     it('flag LIGADA → cria (201)', async () => {
