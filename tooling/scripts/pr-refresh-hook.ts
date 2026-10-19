@@ -174,6 +174,19 @@ const semRelatorio = (estado: Estado, detalhe: string): Resultado => ({
 });
 
 /**
+ * O argv do PATCH que reescreve o corpo do PR.
+ *
+ * Função, e não constante, porque o número do PR entra no meio do array. O
+ * spec fixa a LITERAL de retorno: um spec que montasse o mesmo array a partir
+ * das mesmas regras provaria que a regra concorda com ela mesma. O par
+ * `--input -` é o que liga o `input:` do `execFileSync` ao request; sem ele o
+ * `gh` ignora o stdin e a API responde `HTTP 400`.
+ */
+export function argvPatchPr(pr: number): string[] {
+  return ['api', '-X', 'PATCH', `repos/{owner}/{repo}/pulls/${pr}`, '--input', '-'];
+}
+
+/**
  * A orquestração. Puras as decisões; rede e disco entram por `Deps`.
  *
  * Não lança. Este é o único motivo de existir o estado `falha`: o hook roda
@@ -185,7 +198,11 @@ export function executar(deps: Deps): Resultado {
   try {
     return rodar(deps);
   } catch (e) {
-    return semRelatorio('falha', `erro inesperado: ${e instanceof Error ? e.message : String(e)}`);
+    // `stderrDe(e)` e não `e.message`: o `execFileSync` do `gh` joga a
+    // resposta boa em `.stderr` e deixa em `message` só "Command failed",
+    // que não diz o que fazer. MEDIDO 2026-10-19: o PATCH devolvia `HTTP 400`
+    // e o relatório dizia "erro inesperado: Command failed: gh api".
+    return semRelatorio('falha', `erro inesperado: ${stderrDe(e)}`);
   }
 }
 
@@ -405,11 +422,17 @@ function main(argv: string[]): number {
       return s.trim() as 'OPEN' | 'CLOSED' | 'MERGED';
     },
     // `gh pr edit` e a escrita via GraphQL, que o GitHub descontinuou; o PATCH
-    // REST aceita o corpo por stdin sem aspas intermediárias. O corpo vai por
-    // `input`, nunca por argumento — um corpo com aspas e `$()` num
-    // `-f body=` seria exatamente a superfície de RCE que este workflow recusa.
+    // REST aceita o corpo por stdin. O corpo vai por `input`, nunca por
+    // argumento — um corpo com aspas e `$()` num `-f body=` seria exatamente a
+    // superfície de RCE que este workflow recusa.
+    //
+    // O `--input -` NÃO é decorativo e foi o que faltava: sem ele o `gh` ignora
+    // o stdin e manda um corpo vazio, e a API responde `Body should be a JSON
+    // object (HTTP 400)`. MEDIDO 2026-10-19: era esse o erro real por trás de
+    // todo "pr-refresh reescreveu e o corpo não mudou". O `input:` sozinho não
+    // é o bastante — é o par `--input -` + `input:` que liga os dois.
     aplicar: (pr, corpo) => {
-      execFileSync('gh', ['api', '-X', 'PATCH', `repos/{owner}/{repo}/pulls/${pr}`], {
+      execFileSync('gh', argvPatchPr(pr), {
         cwd: repo,
         input: JSON.stringify({ body: corpo }),
         stdio: ['pipe', 'ignore', 'pipe'],

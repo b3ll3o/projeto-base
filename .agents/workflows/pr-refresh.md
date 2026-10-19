@@ -246,12 +246,16 @@ reusar o resultado de T1.
    > O `@` + aspas é o que faz o `gh` ler **arquivo** em vez de tratar o
    > conteúdo como valor literal. No `pr-refresh-hook.ts` o corpo nem chega
    > aqui: ele entra por `stdin` como JSON, o que fecha a mesma porta sem a
-   > parede de aspas.
+   > parede de aspas. O par que faz isso funcionar é `--input -` **junto** com
+   > o `input:` do `execFileSync` — MEDIDO 2026-10-19: sem a flag, o `gh`
+   > ignora o stdin, manda corpo vazio e a API responde `Body should be a JSON
+   > object (HTTP 400)`. Dizer "vai por stdin" sem a flag foi a origem desse
+   > bug: a frase estava certa e o código, incompleto.
 
 8. **Limpar.** Não há nada a limpar: o corpo é varrido **em memória**
-   (`varrerTexto`) e o PATCH recebe o novo corpo por `stdin`. Uma versão
-   anterior desta lista baixava o corpo para um `mktemp -d` porque o scanner
-   era offline-por-arquivo; o hook mantém essa propriedade sem o arquivo.
+   (`varrerTexto`) e o PATCH recebe o novo corpo por `stdin` (via `--input -`).
+   Uma versão anterior desta lista baixava o corpo para um `mktemp -d` porque o
+   scanner era offline-por-arquivo; o hook mantém essa propriedade sem o arquivo.
 
 ## O que este workflow NÃO faz
 

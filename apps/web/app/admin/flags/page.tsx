@@ -19,10 +19,14 @@
 // "Salvar" por linha). Evita estado no client e mantém o botão honesto:
 // "Salvar" salva o que está marcado NAQUEELA linha.
 //
-// ⚠️ SEM SPEC UNITÁRIO: `apps/web/vitest.config.ts` exclui `app/**/*.tsx` da
-// cobertura, e um spec de render não atravessa o Server Action. A tela é
-// coberta pelo Playwright da Fase 6 (`e2e/f14-admin-flags.spec.ts`), que
-// carrega a página de verdade.
+// ⚠️ A página segue FORA do denominador de cobertura
+// (`apps/web/vitest.config.ts` exclui `app/**/*.tsx`), e `page.spec.tsx` — que
+// existe ao lado — entra na suíte sem contar para o número. Ele fixa uma coisa
+// só, a ESCOLHA da função de perfil na linha 41, que nenhum outro arquivo
+// fixava; o resto (render, Server Action, fluxo) é do Playwright da Fase 6
+// (`e2e/f14-admin-flags.spec.ts`), que carrega a página de verdade. MEDIDO
+// 2026-10-19: trocar `obterMeuPerfilGlobal()` por `obterMeuPerfil()` deixava a
+// suíte verde e a tela errada; a mutação deixa os 2 testes vermelhos.
 //
 // ⚠️ E o `next build` NÃO é essa prova. MEDIDO 2026-10-18: com a diretiva
 // `'use server'` ausente de `alternar`, o build passou (saída 0, rota

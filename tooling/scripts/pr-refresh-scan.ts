@@ -171,7 +171,15 @@ const PADROES: Array<{
   },
   {
     classe: 'arquivos',
-    re: new RegExp(String.raw`(${NUMERO})\s+(arquivos?)\b`, 'gdi'),
+    // O guard `(?!\s*([/de]\b|de\b))` separa "61 arquivos" (contagem do PR) de
+    // "67 arquivos de teste" e "67 arquivos/880 testes" (contagens da suíte).
+    // MEDIDO 2026-10-19 no #109: sem ele, `api unit 67 arquivos/880 testes` era
+    // lido como `arquivos=67` do PR, e o hook REESCREVIA o número da suíte para
+    // 61 — uma frase verdadeira virando falsa, com o instrumento incluindo a
+    // correção. Limitação conhecida: "880 testes em 67 arquivos" (verbo sem
+    // "de"/"/") ainda casa. O scanner é regex sobre texto (`:29`); fechar isso
+    // exige distinguir o sujeito da contagem, que é o que ele não sabe fazer.
+    re: new RegExp(String.raw`(${NUMERO})\s+(arquivos?)\b(?!\s*(?:de\b|/))`, 'gdi'),
     grupo: 1,
     palavra: 2,
     medir: (m) => m.arquivos,
