@@ -218,6 +218,7 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `verify-before-the-action-that-invalidates-it` | `citada` | `.agents/specs/conventions/git-workflow.md` | `verificar na posição errada` |
 | `verify-branch-before-commit` | `citada` | `.agents/specs/conventions/git-workflow.md` | `git branch --show-current` |
 | `verify-check-against-reconstructed-state` | `citada` | `.agents/specs/conventions/ci-defense-in-depth-dentes.md` | `Verde não é prova` |
+| `spec-that-rederives-expected-from-implementation` | `pendente` | — | — |
 | `vi-mock-factory-cache-frozen-counter` | `pendente` | — | — |
 | `vitest-workspace-thresholds-and-dist-remap` | `citada` | `.agents/specs/conventions/cobertura-testes.md` | `config raiz` |
 | `zero-survived-is-not-zero-found` | `pendente` | — | — |

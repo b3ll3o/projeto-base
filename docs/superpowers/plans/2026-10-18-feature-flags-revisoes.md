@@ -243,58 +243,57 @@ contra ele — que foi exatamente o que aconteceu aqui.
 
 ### MEDIDO 2026-10-19 (F7)
 
-- `pnpm ci:local` → **13/13 tasks, EXIT 0**, 2m03 (2 cached). Por task:
+- `pnpm ci:local` → **13/13 tasks, EXIT 0**, 2m04 (2 cached). Por task:
   api unit 67 arquivos / **880** · api coverage 67 / **880** · api integration
-  8 / **122** · api e2e 14 / **98** · web unit 24 / **245** · web coverage
-  24 / **245** · web e2e **45 passed** (1,8 min) · tooling 15 / **288** e
-  30 / **433**
-- `npx tsc --noEmit` → exit 0 nos **dois** pacotes (web e api)
-- `npx playwright test e2e/f14-admin-flags.spec.ts` → **3/3** isolado (build
-  35,7 s; web no ar em 43,1 s)
-- `pnpm --filter @projeto/api test:coverage` → **87,16% stmt / 93,11% branch**,
-  exit 0 (F3 mediu 87,05 / 93,01)
-- `pnpm ci:preflight` → **0 erro**, 2 checks `skipped` por ambiente (archive
-  vazio; nenhum agent alterado vs `origin/main`); inventario de fluxos
-  reconciliado sobre **14 fluxo(s) e 14 spec(s)**, 10 rotas conferidas no disco
-- `npx prettier --check` nos 12 arquivos `.ts`/`.tsx` alterados → conforma
-- varredura CJK nos 16 arquivos alterados, **com controle positivo** → **0**
+  8 / **122** · api e2e 14 / **98** · web unit 25 / **247** · web coverage
+  25 / **247** · web e2e **45 passed** (1,8 min) · tooling 15 / **291** e 30 / **433**
+- `npx tsc --noEmit` → exit 0 nos **dois** pacotes · playwright F14 → **3/3**
+- `pnpm --filter @projeto/api test:coverage` → **87,16% stmt / 93,11% branch**, exit 0
+- `pnpm ci:preflight` → **0 erro**, 2 checks `skipped` por ambiente; inventario de
+  fluxos reconciliado sobre **14 fluxo(s) e 14 spec(s)**, 10 rotas no disco
+- `npx prettier --check` nos 12 `.ts`/`.tsx` alterados → conforma · varredura CJK
+  nos 16 alterados, **com controle positivo** → **0**
 
 ### O que a F7 NAO mediu (fica declarado)
 
-- **O F14 nao distingue `obterMeuPerfilGlobal` de `obterMeuPerfil`**, e continua
-  valendo o "caminho INALCANCAVEL" do docstring: `guardarTenant` nao tem caller
-  de producao (`sessao.ts:98`), entao `lerTenant()` devolve `null` e as duas
-  funcoes montam o mesmo cliente. Quem segura a correcao hoje e o **teste
-  unitario** acima; o e2e so passa a depender disso no dia em que o cookie
-  `tenant_id` for escrito por alguem. A tela ficaria verde com a funcao errada ate
-  la.
-- O `next build` standalone ja roda dentro do setup do Playwright (35,7 s) e
-  **nao prova a tela**: `force-dynamic`, quem executa e o request.
+- **O F14 nao distingue `obterMeuPerfilGlobal` de `obterMeuPerfil`** e nao
+  distinguira: `guardarTenant` nao tem caller de producao (`sessao.ts:98`), logo
+  as duas montam o mesmo cliente. Quem segura a correcao e o `page.spec.tsx`
+  (2 testes; MEDIDO, trocar a funcao → 2 vermelhos); o e2e so passa a depender
+  disso no dia em que `tenant_id` for escrito.
+- O `next build` standalone ja roda no setup do Playwright e **nao prova a tela**:
+  `force-dynamic`, quem executa e o request.
 - O rate limit da rota (`100/min`) segue nao exercitado, como na F3.
 
 ### Uma declaracao que enveleceu em minutos
 
 A primeira versao desta secao dizia *"o e2e do web inteiro: rodou so o f14; os
-outros 13 fluxos nao foram reexecutados"*. **Falso**: o `pnpm ci:local` rodado
-logo depois mediu `@projeto/web:test:e2e` → **45 passed**, cobrindo os 14
-fluxos. O claim morreu no intervalo entre a minha medicao e o proximo passo — e
-morreu **para o lado otimista**, que e a variante perigosa: a declaracao de
-"nao medido" e a que o leitor aceita sem conferir.
+outros 13 fluxos nao foram reexecutados"*. **Falso**: o `pnpm ci:local` mediu
+`@projeto/web:test:e2e` → **45 passed**, cobrindo os 14 fluxos. O claim morreu
+entre a minha medicao e o proximo passo, e morreu **para o lado otimista** —
+a declaracao de "nao medido" e a que o leitor aceita sem conferir.
 
-Regra que sai daqui, e que ja estava escrita em outro arquivo deste log: nao
-escrever "nao medido" antes de rodar o comando que mediria. Ou medir primeiro,
-ou escrever a declaracao com o comando que a tornaria verdadeira.
+Regra que sai daqui: nao escrever "nao medido" antes de rodar o comando que mediria.
 
-### O scanner le "arquivos de teste" como "arquivos do PR"
+### E2 — o scanner le "arquivos de teste" como "arquivos do PR" (CORRIGIDO)
 
-Ligar `<!--pr-refresh:live-->` no #109 entregou a prosa do corpo ao scanner.
-MEDIDO com `executar(...)` e `aplicar` no-op — o hook real reescreve o corpo
-(`pr-refresh-hook.ts:262`): **1 claim divergente em L131**, `declarado=67 medido=61`.
-O `67` era `api unit 67/880`, arquivos de **teste**; o regex e `(\d+)\s+(arquivos?)\b`
-(`pr-refresh-scan.ts:174`) — ve o numero e a palavra, nao o que a frase afirma.
-Fora da regiao viva o hook nao reescreve e sai em `divergencia-fora-do-vivo` (exit 3),
-que **nao recusa o push** — MEDIDO no push seguinte: `advisory, push liberado`,
-`EXIT=0`. Eu escrevi que travava; o preco real e ruido que acusa um PR errado.
-Reescrito → `em-dia`, 0 divergentes. O corpo antigo tambem dizia *"18 dos arquivos
-sao os artefatos do `state-snapshot`"* — MEDIDO: 18 no **repo**, **1** neste diff.
-Duas regras: medir o scanner ANTES de ligar o marcador, nunca com `aplicar` real; e nenhuma `<numero> arquivos` que nao seja a contagem do PR.
+Ligar `<!--pr-refresh:live-->` no #109 entregou a prosa ao scanner. MEDIDO com
+`executar(...)` e `aplicar` no-op: **1 claim divergente em L131**, `decl=67 med=61`
+— o `67` era `api unit 67/880`, arquivos de **teste**; o regex ve o numero e a
+palavra, nao o que a frase afirma. O gate nao podia pegar: claim nao divergente
+sem marcador nao e erro, por desenho (`pr-refresh-gate.ts:30-36`). Corrigido no
+codigo com o guard `(?!\s*(?:de\b|/))` (`pr-refresh-scan.ts:174`), que separa
+"61 arquivos" (do PR) de "67 arquivos/880 testes" (da suite) — MEDIDO no push
+seguinte: cabecalho 18→19 / 61→66, com a L130 intacta. Limitacao: "880 testes em
+67 arquivos" ainda casa.
+
+### E1 — o corpo nunca chegava ao PATCH (CORRIGIDO)
+
+`aplicar` mandava o corpo por `input:` sem `--input -`; o `gh` ignora o stdin sem
+a flag e a API responde `HTTP 400 Body should be a JSON object` — toda reescrita
+falhava, e o comentario afirmava que "aceita o corpo por stdin", verdade do `gh` e
+falso do argv usado. O mesmo `catch` publicava `erro inesperado: Command failed:
+gh api`: `e.message` nao tem o motivo, `stderrDe` tem. Dentes por mutacao: tirar
+`--input -` → 2 specs vermelhos; `stderrDe(e)` → `e.message` → 1. O spec do argv
+fixa a LITERAL do array: montar o esperado pelas mesmas regras da implementacao
+provaria que a regra concorda consigo mesma.
