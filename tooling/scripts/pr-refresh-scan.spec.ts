@@ -257,6 +257,121 @@ describe('pr-refresh-scan: extração de claims', () => {
       expect(texto.slice(claim.ini, claim.fim)).toBe(String(claim.valor));
     }
   });
+
+  // ───────────────── contagem de suíte não é contagem do PR ─────────────────
+  //
+  // MEDIDO contra `extrairClaims` e o corpo real do PR #109 (2026-10-19):
+  // `880 testes em 67 arquivos` era lido como `arquivos=67` do PR (que tem 68),
+  // e o hook REESCREVIA o número da suíte pela contagem da branch — uma frase
+  // verdadeira virando falsa, com o instrumento incluindo a correção.
+  //
+  // ⚠️ O corpo do #109 NÃO contém essa frase. A linha real é
+  // `` `arquivos de teste / testes`: api unit 67/880 `` (MEDIDO:
+  // `grep -c "67 arquivos" <corpo>` → 0). O defeito era LATENTE, não ativo: a
+  // frase que casava é forma que um autor escreve, não a que este PR escreveu.
+  //
+  // O guard que veio consertar a forma `67 arquivos/880 testes` não tinha
+  // NENHUM teste (`grep '880\|arquivos/'` neste arquivo dava zero) e media só as
+  // duas frases que o próprio autor escreveu. Estas specs são a medição que
+  // faltava: o corpus são claims do PR + frases de suíte, e não as frases que
+  // motivaram o achado. 4 das 12 de suíte são REGRESSÃO — `22c679b2` já as
+  // fechava, e ficam porque fechá-las de novo é um caminho de regressão real.
+  //
+  // Por que a classe `testes` não é o problema: ela sai `NÃO MENSURÁVEL`
+  // (`medir: () => null`), então uma frase de suíte que só produz `testes` é
+  // inofensiva. O dano vem inteiro da metade `arquivos`, que É comparada com a
+  // branch — e é por isso que o guard é deste arquivo e não do outro.
+
+  const FRASES_DE_SUITE = [
+    // Regressão: `22c679b2` já fechava estas quatro.
+    'api unit 67 arquivos/880 testes',
+    'web 25 arquivos / 255 testes verdes',
+    '67 arquivos de teste',
+    '1.234 arquivos de teste',
+    // O que ainda casava em HEAD, e é o que o lookbehind fecha.
+    '880 testes em 67 arquivos',
+    '880 testes distribuídos em 67 arquivos',
+    '67 arquivos, 880 testes',
+    '**api unit**: 67 arquivos · 880 testes',
+    '67 arquivos (880 testes)',
+    '67 arquivos**/880 testes',
+    '**67 arquivos**/**880 testes**',
+    '67 arquivos com 880 testes',
+  ] as const;
+
+  it.each(FRASES_DE_SUITE)('NÃO lê "%s" como contagem de arquivos do PR', (frase) => {
+    // A classe `testes` continua sendo lida — ela é inofensiva e some do
+    // relatório. O que não pode sobrar é `arquivos`, que vira divergência.
+    expect(extrairClaims(frase).find((c) => c.classe === 'arquivos')).toBeUndefined();
+  });
+
+  const CLAIMS_DO_PR: ReadonlyArray<readonly [string, number]> = [
+    ['24 commits · 68 arquivos · +5909/−78.', 68],
+    ['**12 commits · 31 arquivos**', 31],
+    ['20 commits · 66 arquivos · +5836/−74.', 66],
+    ['25 commits, 36 arquivos, +4654/−114', 36],
+    ['**2.000 commits**, 1.234 arquivos', 1234],
+    // Duas claims no mesmo parágrafo (a segunda é histórica: "foi aberta
+    // com 31 arquivos"). O `.find()` devolve a PRIMEIRA — é isso que se quer
+    // fixar: a menção seguinte não engole a contagem corrente.
+    ['20 commits, 66 arquivos, +5836/−74. Ela foi aberta com 31 arquivos', 66],
+    ['**3 commits, 4 arquivos, +10/−2**', 4],
+    ['ele foi aberta com "99 commits, 88 arquivos" e evoluiu', 88],
+    ['67 arquivos.', 67],
+  ];
+
+  it.each(CLAIMS_DO_PR)('continua lendo "%s" como claim do PR', (frase, esperado) => {
+    // O outro lado do guard. Um `lookbehind` guloso também é defeito: ele faz
+    // o gate passar verde porque não sobrou claim nenhuma.
+    expect(extrairClaims(frase).find((c) => c.classe === 'arquivos')?.valor).toBe(esperado);
+  });
+
+  it('claim do PR que chega perto da suíte: o limite do outro lado', () => {
+    // Nenhuma das 9 frases acima contém a palavra `testes`, então NENHUMA exercita
+    // o caminho que um `lookbehind` guloso quebraria — a proteção vinha só da
+    // tabela de suíte, do lado oposto. MEDIDO: com o lookbehind afinado para
+    // `\d+ testes` sem o `em`, `CLAIMS_DO_PR` dava 0/9 vermelho.
+    //
+    // A frase abaixo é a claim REAL escrita de trás para frente, que o scanner
+    // não distingue da suíte. Fica aqui como limite CONHECIDO pelo mesmo motivo
+    // das 2 `fp` do teste seguinte: fechá-la é decisão, não accidento de regex.
+    expect(
+      extrairClaims('286 testes em 68 arquivos, 25 commits, +4654/−114').find(
+        (c) => c.classe === 'arquivos',
+      ),
+    ).toBeUndefined();
+  });
+
+  it('o limite conhecido: suíte com texto livre no meio ainda casa', () => {
+    // O guard fecha o CLUSTER — número e palavra, com conector. Estas duas
+    // formas têm texto livre entre os, e um PR pode dizer as duas coisas
+    // legitimamente. Fixadas aqui como limite CONHECIDO: uma mudança futura
+    // que as feche tem que decidir isso de propósito, não por acaso de mexer
+    // no regex. (MEDIDO 2026-10-19, corpus dos specs: 21 frases — 9 claims do
+    // PR + 12 de suíte — das quais sobram 2 `fp` e custam 8 `fn`.)
+    const ambiguas = ['67 arquivos, dos quais 12 de teste', '67 arquivos — a suíte tem 880 testes'];
+    for (const frase of ambiguas) {
+      expect(extrairClaims(frase).find((c) => c.classe === 'arquivos')).toBeDefined();
+    }
+
+    // O PREÇO, na outra direção: claim real que passa a não casar. É o erro
+    // SEGURO — claim perdida não vira frase corrompida, e o gate ainda mostra
+    // as claims do cabeçalho.
+    expect(
+      extrairClaims('25 commits, 68 arquivos, 286 testes adicionados').find(
+        (c) => c.classe === 'arquivos',
+      ),
+    ).toBeUndefined();
+
+    // E o pior membro da classe, fixado à parte porque é a forma que um PR
+    // REAL usa no cabeçalho: é a linha de status deste PR com uma contagem a
+    // mais. MEDIDO: 8 `fn` no total; esta é a que dói.
+    expect(
+      extrairClaims('24 commits · 68 arquivos · 880 testes · +5909/−78').find(
+        (c) => c.classe === 'arquivos',
+      ),
+    ).toBeUndefined();
+  });
 });
 
 /**

@@ -81,7 +81,8 @@ function comPorta(): { porta: PortaEmMemoria; useCases: FeatureFlagUseCases } {
  * troca. A string literal só quebra quando alguém **reescreve a microcopy** —
  * e aí o vermelho é o aviso de que uma frase que o admin lê mudou.
  */
-const DESCRICAO_INVITES = 'Convite de usuário para uma empresa (POST /tenants/:id/invitations).';
+const DESCRICAO_INVITES =
+  'Emissão de convites por empresa. Desligar não impede quem já tem convite de entrar.';
 
 describe('FeatureFlagUseCases', () => {
   describe('D2 — quem alterna', () => {

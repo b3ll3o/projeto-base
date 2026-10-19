@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { MARCADOR } from './pr-refresh-apply';
 import { lerCorpo, verificarMarcador } from './pr-refresh-gate';
+import { extrairClaims } from './pr-refresh-scan';
 import type { ClaimVerificada, Relatorio } from './pr-refresh-scan';
 
 /** Claim verificada com os campos que o gate lê: `linha` e `divergente`. */
@@ -496,5 +497,58 @@ describe('CLI (o caminho que o CI usa)', () => {
     expect(r.status).toBe(0);
     expect(r.stderr).toMatch(/1 claim\(s\) divergente\(s\)/);
     expect(r.stderr).toMatch(/todas em parágrafo marcado/);
+  });
+
+  it('a contagem de suíte na PROSA não vira divergência que trava o PR', () => {
+    // O dente do GATE, não só o do scanner. O scanner é o sujeito; este
+    // gate é quem decide se o PR pode passar.
+    //
+    // MEDIDO 2026-10-19 no PR #109: `880 testes em 67 arquivos` na prosa era
+    // lida como `arquivos=67` do PR. O branch tem 68. Então a claim é
+    // divergente, está fora de qualquer parágrafo marcado, e
+    // `verificarMarcador:132` a dá como erro — o autor não tem saída: marcar
+    // move o número para dentro do marcador e é o `reescrever` que passa a
+    // trocar 67 por 68 (o corpo mente); não marcar mantém o gate vermelho
+    // sobre uma frase de suíte que ele não pode corrigir sem mentir também.
+    // O autor do PR #58 já bateu nessa parede, e o docstring do gate
+    // (`pr-refresh-gate.ts:115-127`) registra o precedente.
+    //
+    // ⚠️ Risco LATENTE, não ativo: MEDIDO `grep -c "67 arquivos" <corpo do
+    // #109>` → 0. A linha real do PR é ``api unit 67/880``. O gate real contra
+    // o corpo real dava `ok: true` antes e dá agora. O que este spec fixa é a
+    // armadilha para quem escrever a frase — não um PR já quebrado.
+    const corpo = [
+      `${MARCADOR} 24 commits · 68 arquivos · +5909/−78.`,
+      '',
+      'A suíte rodou: 880 testes em 67 arquivos.',
+    ].join('\n');
+
+    // O `Relatorio` sai da varredura REAL, não de um objeto montado à mão: um
+    // relatório inventado mediria o regex que eu escolhi, não o que existe.
+    // `medido` fixado em 68 = a contagem real da branch (medirBranch).
+    const varredura = extrairClaims(corpo);
+    const rel: Relatorio = {
+      base: 'origin/main',
+      claims: varredura.map((c): ClaimVerificada => ({
+        ...c,
+        medido: c.classe === 'arquivos' ? 68 : null,
+        divergente: c.classe === 'arquivos' && c.valor !== 68,
+      })),
+      resumo: '',
+    };
+
+    // ⚠️ As DUAS afirmações antes do veredito é o que dá dente ao teste.
+    // Sem elas, `ok: true` sai tanto do regex novo quanto de um regex que
+    // descarta TODA claim — um teste que só afirma o veredito passa vazio,
+    // que é a forma mais comum de spec sem dente neste repo.
+    //
+    // Filtradas pela LINHA, não pelo conjunto todo: o cabeçalho da linha 1 tem
+    // `68 arquivos` e DEVE continuar sendo lido como claim do PR. Assertar
+    // `not.toContain('arquivos')` no conjunto inteiro acusaria o acerto.
+    const naLinhaDaSuite = rel.claims.filter((c) => c.linha === 3);
+    expect(naLinhaDaSuite.map((c) => c.classe)).toContain('testes'); // achou algo
+    expect(naLinhaDaSuite.map((c) => c.classe)).not.toContain('arquivos'); // e não é a meia
+
+    expect(verificarMarcador(corpo, rel).ok).toBe(true);
   });
 });

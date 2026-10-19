@@ -180,15 +180,43 @@ const PADROES: Array<{
   },
   {
     classe: 'arquivos',
-    // O guard `(?!\s*([/de]\b|de\b))` separa "61 arquivos" (contagem do PR) de
-    // "67 arquivos de teste" e "67 arquivos/880 testes" (contagens da suíte).
-    // MEDIDO 2026-10-19 no #109: sem ele, `api unit 67 arquivos/880 testes` era
-    // lido como `arquivos=67` do PR, e o hook REESCREVIA o número da suíte para
-    // 61 — uma frase verdadeira virando falsa, com o instrumento incluindo a
-    // correção. Limitação conhecida: "880 testes em 67 arquivos" (verbo sem
-    // "de"/"/") ainda casa. O scanner é regex sobre texto (`:29`); fechar isso
-    // exige distinguir o sujeito da contagem, que é o que ele não sabe fazer.
-    re: new RegExp(String.raw`(${NUMERO})\s+(arquivos?)\b(?!\s*(?:de\b|/))`, 'gdi'),
+    // `arquivos` + `testes` no mesmo cluster é relatório de SUÍTE, não
+    // contagem do PR. O `testes` dessas frases sai `NÃO MENSURÁVEL`
+    // (`medir: () => null` abaixo), então o par só faz dano nesta metade — que
+    // é comparada com a branch.
+    //
+    // MEDIDO 2026-10-19 no #109: `880 testes em 67 arquivos` era lido como
+    // `arquivos=67` do PR (que tem 68), e o hook REESCREVIA o número da suíte —
+    // uma frase verdadeira virando falsa, com o instrumento incluindo a
+    // correção. Três partes, cada uma com a forma que ela fecha:
+    //
+    //   - lookbehind `\d+ testes … em ` — o cluster de trás para frente
+    //     ("880 testes em 67 arquivos"); o `(?:\S+\s+)?` é o verbo no meio;
+    //   - `(?!\s*(?:de\b|/))` — "67 arquivos de teste", "67 arquivos/880 testes"
+    //     (este último já fechado por `22c679b2`);
+    //   - conector + `NUMERO testes` — o cluster de frente para trás, com `,`
+    //     `;` `·` `(` e as duas formas markdown (`67 arquivos**/880 testes` e
+    //     `**67 arquivos**/**880 testes**`).
+    //
+    // shortcut: o limite é texto LIVRE entre os dois números, nos dois sentidos.
+    // MEDIDO no corpus dos specs (21 frases: 9 claims do PR + 12 de suíte):
+    // `fp=2 fn=8`.
+    //   - fp: "67 arquivos, dos quais 12 de teste", "67 arquivos — a suíte tem
+    //     880 testes". Ambíguos por construção: um PR pode dizer isso sobre si.
+    //   - fn: QUALQUER "N arquivos" seguido de conector + "N testes" — 8
+    //     medidos, entre eles "24 commits · 68 arquivos · 880 testes ·
+    //     +5909/−78", que é o cabeçalho deste PR com uma contagem a mais.
+    //     Preço deliberado e na direção segura: claim perdida não vira frase
+    //     corrompida, que é o defeito que este guard existe para impedir.
+    //   - fn: "N testes … em N arquivos" escrito como claim do PR (o oposto do
+    //     lookbehind) é indistinguível da suíte. É o mesmo preço.
+    // Os 3 fecham com o sujeito da contagem, que o scanner não mede: ele é
+    // regex sobre texto (`:29`).
+    re: new RegExp(
+      String.raw`(?<!\d+\s*testes?\s+(?:\S+\s+)?em\s)(${NUMERO})\s+(arquivos?)\b` +
+        String.raw`(?!\s*(?:de\b|/))(?!\s*(?:[,;·(]?|\*+/?(?:\*+)?)\s*(?:com\s+|dos\s+quais\s+)?${NUMERO}\s+testes?\b)`,
+      'gdi',
+    ),
     grupo: 1,
     palavra: 2,
     medir: (m) => m.arquivos,

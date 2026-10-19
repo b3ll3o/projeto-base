@@ -71,7 +71,7 @@ GET /api/v1/admin/feature-flags
 [
   {
     "chave": "tenancy.invites",
-    "descricao": "Convite de usuário para uma empresa (POST /tenants/:id/invitations).",
+    "descricao": "Emissão de convites por empresa. Desligar não impede quem já tem convite de entrar.",
     "ativada": true
   }
 ]
@@ -82,7 +82,7 @@ PUT /api/v1/admin/feature-flags/tenancy.invites     {"ativada": false}
 → 200
 {
   "chave": "tenancy.invites",
-  "descricao": "Convite de usuário para uma empresa (POST /tenants/:id/invitations).",
+  "descricao": "Emissão de convites por empresa. Desligar não impede quem já tem convite de entrar.",
   "ativada": false
 }
 ```

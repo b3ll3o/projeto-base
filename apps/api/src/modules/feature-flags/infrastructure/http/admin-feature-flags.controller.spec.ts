@@ -30,7 +30,7 @@ import type { AtorAutenticado } from '../../../../shared/auth/eh-administrador-d
 
 const DTO = {
   chave: 'tenancy.invites',
-  descricao: 'Convite de usuário para uma empresa (POST /tenants/:id/invitations).',
+  descricao: 'Emissão de convites por empresa. Desligar não impede quem já tem convite de entrar.',
   ativada: false,
 };
 

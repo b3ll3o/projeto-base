@@ -31,7 +31,11 @@ export interface FeatureFlagDefinicao {
 export const FEATURE_FLAGS = [
   {
     chave: 'tenancy.invites',
-    descricao: 'Convite de usuário para uma empresa (POST /tenants/:id/invitations).',
+    // O alcance e o limite estão em `feature-flag.guard.ts:18-25`. Esta é a
+    // linha que o admin LÊ, então ela repete o limite — não a rota, que era o
+    // que o texto antigo citava e não dizia o que desligar deixa de fazer.
+    descricao:
+      'Emissão de convites por empresa. Desligar não impede quem já tem convite de entrar.',
   },
 ] as const;
 
