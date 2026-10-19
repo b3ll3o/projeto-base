@@ -216,6 +216,89 @@ describe('checkFeatureFlagContract — contra os arquivos REAIS do repositório'
   it('o gate leu pelo menos UMA chave — a lista não está vazia', () => {
     // Positivo com DENTE: um gate que devolvesse `ok: true` sem ler nada
     // passaria no teste acima. Este diz quantas chaves ele viu.
-    expect(checkFeatureFlagContract().advisories[0]).toMatch(/\d+ chave\(s\)/);
+    //
+    // ⚠️ O `\d+` original casava com "0 chave(s)" — MEDIDO 2026-10-19 — então
+    // o teste afirmava o oposto do que o nome promete. `[1-9]\d*` é o que
+    // "pelo menos UMA" quer dizer.
+    expect(checkFeatureFlagContract().advisories[0]).toMatch(/\b[1-9]\d* chave\(s\)/);
+  });
+});
+
+describe('checkFeatureFlagContract — chave repetida no catálogo', () => {
+  // MEDIDO 2026-10-19: catálogo com `chave: 'tenancy.invites'` duas vezes,
+  // ambas com a descrição que o contrato exemplifica, dava `ok: true`,
+  // `semPareamento` vazio, zero erro — e o advisory dizia "1 chave(s)
+  // conferidas nos dois sentidos". O `Map` guarda a última e a primeira
+  // descrição nunca foi comparada com nada.
+  //
+  // O contrato, ao contrário do catálogo, repete o MESMO par de propósito (a
+  // listagem e o PUT) — por isso o erro é só do lado do catálogo.
+  const DUPLICADA = `[
+  {
+    chave: 'tenancy.invites',
+    descricao: 'Emissão e aceite de convites.',
+  },
+  {
+    chave: 'tenancy.invites',
+    descricao: 'Emissão e aceite de convites.',
+  },
+] as const;`;
+
+  it('NOMEIA a chave duplicada em vez de conferir só a última', () => {
+    // Contrato com SÓ a chave duplicada: com o `CONTRATO_IGUAL` a Direção 2
+    // acusaria `telemetry.otel` em separado e o teste mediria dois defeitos.
+    const contratoDeUma = `\`\`\`json
+[
+  { "chave": "tenancy.invites", "descricao": "Emissão e aceite de convites." }
+]
+\`\`\``;
+    const r = roda(DUPLICADA, contratoDeUma);
+
+    expect(r.ok).toBe(false);
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0]).toMatch(/tenancy\.invites/);
+    expect(r.errors[0]).toMatch(/MAIS DE UMA VEZ/);
+  });
+
+  it('o contrato repetir o mesmo par NÃO é erro — ele repete de propósito', () => {
+    // O caminho verde do erro: se a checagem fosse por posição em vez de por
+    // identidade, este caso acusaria e o gate viraria alarme falso.
+    const contratoRepetido = `\`\`\`json
+[
+  { "chave": "tenancy.invites", "descricao": "Emissão e aceite de convites." },
+  { "chave": "telemetry.otel", "descricao": "Telemetria OTel no servidor." },
+  { "chave": "tenancy.invites", "descricao": "Emissão e aceite de convites." }
+]
+\`\`\``;
+    const r = roda(CATALOGO_DUAS, contratoRepetido);
+
+    expect(r.errors).toEqual([]);
+    expect(r.ok).toBe(true);
+  });
+});
+
+describe('checkFeatureFlagContract — arquivo ausente é ERRO nomeado, não exceção', () => {
+  // MEDIDO 2026-10-19: `checkFeatureFlagContract({catalogo:'docs/nao-existe.md'})`
+  // LANÇAVA `ENOENT`. O `preflight.ts` chama `await check.fn()` sem `try`, então
+  // mover o `.md` do contrato derrubava o painel inteiro no meio da lista e
+  // todo check depois dele parava de rodar sem dizer nada.
+  //
+  // E `skipped` seria a resposta errada: este gate é o ÚNICO que compara
+  // catálogo e contrato, então pulá-lo devolve verde sobre uma comparação que
+  // não aconteceu.
+  it('devolve ok:false nomeando o path, em vez de levantar', () => {
+    const r = checkFeatureFlagContract({ catalogo: 'docs/nao-existe.md' });
+
+    expect(r.ok).toBe(false);
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0]).toMatch(/NÃO consegui ler o catálogo/);
+    expect(r.errors[0]).toMatch(/docs\/nao-existe\.md/);
+  });
+
+  it('o contrato ausente também: os dois lados são nomeados, não só o primeiro', () => {
+    const r = checkFeatureFlagContract({ contrato: 'docs/nao-existe.md' });
+
+    expect(r.ok).toBe(false);
+    expect(r.errors[0]).toMatch(/NÃO consegui ler o contrato/);
   });
 });

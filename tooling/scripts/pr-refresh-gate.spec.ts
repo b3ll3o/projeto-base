@@ -485,8 +485,19 @@ describe('CLI (o caminho que o CI usa)', () => {
     const r = rodar({ PR_BODY_FILE: arquivo, PR_BASE: 'origin/main', GITHUB_WORKSPACE: REPO });
 
     expect(r.status).toBe(0);
-    expect(r.stderr).toMatch(/0 claim\(s\) divergente\(s\) de 0 medida\(s\)/);
+    // O denominador é 0 porque `300 testes` é reconhecida mas não mensurável.
+    // E `0 de 0` NÃO pode sair como "nenhuma contagem desatualizada": é a mesma
+    // afirmação sobre conjunto vazio que as duas branches acima recusam, e o
+    // defeito sobreviveu à correção do denominador porque a spec afirmava a
+    // frase errada (`de 0 medida(s)`, com o "nenhuma" implícito) — MEDIDO
+    // 2026-10-19. O que a spec tem de fixar agora é a AUSÊNCIA da conclusão.
+    expect(r.stderr).not.toMatch(/nenhuma contagem desatualizada/);
     expect(r.stderr).not.toMatch(/em parágrafo marcado/);
+    // E o que substitui a conclusão: o gate diz que não há denominador, e a
+    // linha de reclassificação nomeia a classe que ele não julga.
+    expect(r.stderr).toMatch(/0 claim\(s\) medida\(s\)/);
+    expect(r.stderr).toMatch(/NÃO é o mesmo que "verificado e verde"/);
+    expect(r.stderr).toMatch(/testes/);
   });
 
   it('o DENOMINADOR é só o que foi medido — claim não mensurável não entra na fração', () => {

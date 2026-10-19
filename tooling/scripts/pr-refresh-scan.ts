@@ -239,7 +239,7 @@ const PADROES: Array<{
     // (e herda o lookbehind negativo do `arquivos`), o segundo exige `de` ou o
     // cluster À FRENTE (e o `arquivos` os proíbe) — então nenhum texto produz
     // a mesma frase nas duas classes. Fixado em
-    // `pr-refresh-scan.spec.ts: "as duas classes não se sobrepõem"`.
+    // `pr-refresh-scan.spec.ts: "as duas classes não coexistem"`.
     classe: 'arquivos-suite',
     re: new RegExp(String.raw`\d+\s*testes?\s+(?:\S+\s+)?em\s+(${NUMERO})\s+(arquivos?)\b`, 'gdi'),
     grupo: 1,

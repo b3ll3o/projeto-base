@@ -86,6 +86,17 @@ interface Pareamento {
   semPareamento: string[];
   /** `descricao` sem `chave` correspondente. */
   descricaoSolta: number;
+  /**
+   * `chave` que apareceu MAIS DE UMA VEZ. O `Map` sobrescreve a descrição da
+   * primeira pela da segunda, e só a última é conferida — a primeira some sem
+   * erro, sem contagem e sem advisory. MEDIDO 2026-10-19: catálogo com
+   * `chave: 'tenancy.invites'` duas vezes dava `ok: true` e o advisory
+   * afirmava "1 chave(s) conferidas". O TypeScript não pegaria: `as const` +
+   * `(typeof FEATURE_FLAGS)[number]['chave']` colapsa a duplicata no union, e
+   * o contrato pode repetir de propósito (a listagem e o PUT do mesmo par) —
+   * então é este gate, e só ele, que pode dizer.
+   */
+  duplicadas: string[];
 }
 
 /** Par `chave` → `descricao` casando por POSIÇÃO — a ordem em que é declarado. */
@@ -106,9 +117,13 @@ function parear(chaves: string[], descricoes: string[]): Pareamento {
   // `pares.size` = 1 com 2 iterações, então `slice(1)` acusava uma chave sem
   // `descricao` que estava lá. MEDIDO 2026-10-19 contra o arquivo real.
   let n = 0;
+  const duplicadas: string[] = [];
   for (let i = 0; i < chaves.length; i++) {
     const descricao = descricoes[i];
     if (descricao === undefined) break;
+    if (pares.has(chaves[i] as string) && !duplicadas.includes(chaves[i] as string)) {
+      duplicadas.push(chaves[i] as string);
+    }
     pares.set(chaves[i] as string, descricao);
     n++;
   }
@@ -116,6 +131,7 @@ function parear(chaves: string[], descricoes: string[]): Pareamento {
     pares,
     semPareamento: chaves.slice(n),
     descricaoSolta: Math.max(0, descricoes.length - n),
+    duplicadas,
   };
 }
 
@@ -176,8 +192,41 @@ export function checkFeatureFlagContract(
   const erros: string[] = [];
   const advisories: string[] = [];
 
-  const textoCatalogo = opts.catalogoTexto ?? readFileSync(caminhoCatalogo, 'utf8');
-  const textoContrato = opts.contratoTexto ?? readFileSync(caminhoContrato, 'utf8');
+  // ⚠️ Sem isto o gate LANÇA em vez de reprovar (MEDIDO 2026-10-19):
+  // `readFileSync` de um `.md` renomeado levanta `ENOENT`, e o `preflight.ts`
+  // chama `await check.fn()` sem `try` — então renomear o contrato do gate
+  // matava o painel inteiro no meio da lista, e todo check DEPOIS dele ficou
+  // sem rodar sem dizer nada. É a "red gate esconde a fila" de
+  // `guard-classes.md`. Arquivo ausente é ERRO nomeado, não `skipped`: este
+  // gate é o único que compara catálogo e contrato, e pulá-lo devolve verde
+  // sobre uma comparação que não aconteceu.
+  let textoCatalogo: string;
+  let textoContrato: string;
+  try {
+    textoCatalogo = opts.catalogoTexto ?? readFileSync(caminhoCatalogo, 'utf8');
+  } catch (e) {
+    return {
+      ok: false,
+      errors: [
+        `NÃO consegui ler o catálogo ${opts.catalogo ?? CATALOGO}: ` +
+          `${(e as Error).message}. Sem ele este gate não tem o que comparar.`,
+      ],
+      advisories: [],
+    };
+  }
+  try {
+    textoContrato = opts.contratoTexto ?? readFileSync(caminhoContrato, 'utf8');
+  } catch (e) {
+    return {
+      ok: false,
+      errors: [
+        `NÃO consegui ler o contrato ${opts.contrato ?? CONTRATO}: ` +
+          `${(e as Error).message}. Sem ele este gate não tem com o que ` +
+          `comparar o catálogo.`,
+      ],
+      advisories: [],
+    };
+  }
 
   const catalogo = descreverCatalogo(textoCatalogo);
   const contrato = descreverContrato(textoContrato);
@@ -195,6 +244,23 @@ export function checkFeatureFlagContract(
       ],
       advisories: [],
     };
+  }
+
+  // Direção 0 — chave repetida no CATÁLOGO.
+  //
+  // Só no catálogo: o contrato repete o mesmo par de propósito (a listagem e o
+  // PUT), e acusar isso seria alarme falso permanente. No catálogo a chave é a
+  // identidade da feature flag — duas entradas com a mesma chave significam que
+  // a segunda sobrescreveu a primeira e que a descrição da primeira nunca foi
+  // conferida contra o contrato. É a §4 de `guard-classes.md` ("quem não pode
+  // ser comparado é RECLASSIFICADO, nunca apagado") com o nome de quem sumiu.
+  for (const chave of catalogo.duplicadas) {
+    erros.push(
+      `${chave}: a chave aparece MAIS DE UMA VEZ no catálogo, e o ` +
+        `\`Map\` guarda só a ÚLTIMA descrição — a anterior nunca foi comparada com ` +
+        `o contrato, sem erro e sem contagem. Ou é a mesma flag escrita duas ` +
+        `vezes, ou são duas flags que colidem no nome.`,
+    );
   }
 
   // Direção 1 — catálogo → contrato, por VALOR.

@@ -393,10 +393,17 @@ describe('pr-refresh-scan: extração de claims', () => {
     }
   });
 
-  it('as duas classes não se sobrepõem: nenhum número sai duas vezes', () => {
+  it('as duas classes não coexistem: nenhum texto produz `arquivos` E `arquivos-suite`', () => {
     // `arquivos` e `arquivos-suite` são complementos exatos, não dois
     // padrões que "quase não se cruzam". Se um texto casar nos dois, o relatório
     // soma a mesma frase duas vezes e a contagem de claims mente.
+    //
+    // ⚠️ O título antigo dizia "nenhum número sai duas vezes", que é uma
+    // propriedade MAIS FORTE que a que a spec mede — e falsa: duas claims da
+    // MESMA classe no mesmo texto são legítimas (a 6ª frase de `CLAIMS_DO_PR`
+    // tem duas `arquivos`, de propósito). O que está medido aqui é a
+    // sobreposição entre as duas CLASSES, não a repetição dentro de uma.
+    // MEDIDO 2026-10-19.
     for (const [frase] of FRASES_DE_SUITE) {
       const classes = extrairClaims(frase)
         .filter((c) => c.classe === 'arquivos' || c.classe === 'arquivos-suite')

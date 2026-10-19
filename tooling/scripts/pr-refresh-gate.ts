@@ -322,12 +322,25 @@ function main(): number {
     // conjunto de zero não é uma aprovação: é uma afirmação de que o corpo
     // autorizou uma reescrita que ele não autorizou.
     process.stderr.write(
-      (divergentes === 0
-        ? `pr-refresh-gate: 0 claim(s) divergente(s) de ${mensuraveis.length} ` +
-          `medida(s) — nenhuma contagem desatualizada, e portanto nada ` +
-          `a conferir com marcador.\n`
-        : `pr-refresh-gate: ${divergentes} claim(s) divergente(s) de ${mensuraveis.length} ` +
-          `medida(s), todas em parágrafo marcado — OK\n`) + linhaNaoMensuraveis,
+      (mensuraveis.length === 0
+        ? // MEDIDO 2026-10-19: corpo só de claims não mensuráveis saía como
+          // "0 divergente(s) de 0 medida(s) — nenhuma contagem desatualizada".
+          // É a mesma afirmação sobre um conjunto vazio que a branch de cima
+          // existe para recusar, e ela sobreviveu à correção do denominador
+          // porque a spec só cobria corpo SEM claim, não corpo cujas claims
+          // todas caíram fora do mensurável. `divergente` exige
+          // `medido !== null`, então aqui `divergentes` é 0 por construção: o
+          // "0 de 0" não é uma aprovação, é um nada medido.
+          `pr-refresh-gate: 0 claim(s) medida(s) — o corpo tem ` +
+          `${naoMensuraveis.length} claim(s), e nenhuma delas pode ser ` +
+          `comparada offline. NÃO é o mesmo que "verificado e verde": não há ` +
+          `denominador para concluir.\n`
+        : divergentes === 0
+          ? `pr-refresh-gate: 0 claim(s) divergente(s) de ${mensuraveis.length} ` +
+            `medida(s) — nenhuma contagem desatualizada, e portanto nada ` +
+            `a conferir com marcador.\n`
+          : `pr-refresh-gate: ${divergentes} claim(s) divergente(s) de ${mensuraveis.length} ` +
+            `medida(s), todas em parágrafo marcado — OK\n`) + linhaNaoMensuraveis,
     );
     return 0;
   }
