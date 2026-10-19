@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { traceIdDe, type RequestComTrace } from './trace-id.js';
 
 // pt-BR (#111): a razão de `traceIdDe` existir. Sem ela, o log de bloqueio e o
