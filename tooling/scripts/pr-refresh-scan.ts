@@ -43,7 +43,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export type Classe = 'commits' | 'arquivos' | 'insercoes' | 'remocoes' | 'testes';
+export type Classe =
+  'commits' | 'arquivos' | 'arquivos-suite' | 'insercoes' | 'remocoes' | 'testes';
 
 export interface Claim {
   classe: Classe;
@@ -200,17 +201,15 @@ const PADROES: Array<{
     //
     // shortcut: o limite é texto LIVRE entre os dois números, nos dois sentidos.
     // MEDIDO no corpus dos specs (21 frases: 9 claims do PR + 12 de suíte):
-    // `fp=2 fn=8`.
+    // `fp=2`, e nenhuma claim perdida (ver `arquivos-suite` abaixo).
     //   - fp: "67 arquivos, dos quais 12 de teste", "67 arquivos — a suíte tem
     //     880 testes". Ambíguos por construção: um PR pode dizer isso sobre si.
-    //   - fn: QUALQUER "N arquivos" seguido de conector + "N testes" — 8
-    //     medidos, entre eles "24 commits · 68 arquivos · 880 testes ·
-    //     +5909/−78", que é o cabeçalho deste PR com uma contagem a mais.
-    //     Preço deliberado e na direção segura: claim perdida não vira frase
-    //     corrompida, que é o defeito que este guard existe para impedir.
-    //   - fn: "N testes … em N arquivos" escrito como claim do PR (o oposto do
-    //     lookbehind) é indistinguível da suíte. É o mesmo preço.
-    // Os 3 fecham com o sujeito da contagem, que o scanner não mede: ele é
+    //   - fn: QUALQUER "N arquivos" seguido de conector + "N testes", e
+    //     "N testes … em N arquivos" escrito como claim do PR. As duas eram
+    //     ACEITADAS COMO PREÇO até 2026-10-19: a 1ª redação deste guard
+    //     apagava essas claims, e apagar não deixa rastro — nem relatório,
+    //     nem erro, nem contagem. Hoje elas são `arquivos-suite`.
+    // Os 2 fecham com o sujeito da contagem, que o scanner não mede: ele é
     // regex sobre texto (`:29`).
     re: new RegExp(
       String.raw`(?<!\d+\s*testes?\s+(?:\S+\s+)?em\s)(${NUMERO})\s+(arquivos?)\b` +
@@ -220,6 +219,43 @@ const PADROES: Array<{
     grupo: 1,
     palavra: 2,
     medir: (m) => m.arquivos,
+  },
+  {
+    // O complemento EXATO das duas primeiras supressões de `arquivos` acima.
+    // Onde `arquivos` recua, este entra — e entra como CLASSE, não como
+    // ausência. É a regra "nenhuma claim pode ser perdida" em código:
+    // suprimir é proibido, RECLASSIFICAR é o mecanismo. A regra está escrita
+    // em `guard-classes.md` §4 — aqui é só a aplicação dela neste regex.
+    //
+    // Por que `medir: () => null` e não comparar: o número é da suíte, e a
+    // suíte não é a branch. `medido === null` + `divergente === false` deixa a
+    // claim inerte para `reescrever` (`pr-refresh-apply.ts:168`) e para
+    // `verificarMarcador` (`pr-refresh-gate.ts:132`), que filtram por
+    // `divergente` — sem tocar em nenhum dos dois.
+    //
+    // Duas entradas porque `grupo` é UM índice e a alternância mudaria a
+    // numeração: o `N arquivos` chega antes do `testes` numa forma e depois na
+    // outra. Os dois formatos são disjuntos — o primeiro exige o cluster ATRÁS
+    // (e herda o lookbehind negativo do `arquivos`), o segundo exige `de` ou o
+    // cluster À FRENTE (e o `arquivos` os proíbe) — então nenhum texto produz
+    // a mesma frase nas duas classes. Fixado em
+    // `pr-refresh-scan.spec.ts: "as duas classes não se sobrepõem"`.
+    classe: 'arquivos-suite',
+    re: new RegExp(String.raw`\d+\s*testes?\s+(?:\S+\s+)?em\s+(${NUMERO})\s+(arquivos?)\b`, 'gdi'),
+    grupo: 1,
+    palavra: 2,
+    medir: () => null,
+  },
+  {
+    classe: 'arquivos-suite',
+    re: new RegExp(
+      String.raw`(?<!\d+\s*testes?\s+(?:\S+\s+)?em\s)(${NUMERO})\s+(arquivos?)\b` +
+        String.raw`(?:\s*de\b|\s*(?:[,;·(/]?|\*+/?(?:\*+)?)\s*(?:com\s+|dos\s+quais\s+)?${NUMERO}\s+testes?\b)`,
+      'gdi',
+    ),
+    grupo: 1,
+    palavra: 2,
+    medir: () => null,
   },
   {
     classe: 'testes',

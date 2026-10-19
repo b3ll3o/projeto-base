@@ -1,7 +1,7 @@
 ---
 name: guard-classes
-version: 1.0
-updated: 2026-10-05
+version: 1.1
+updated: 2026-10-19
 maintainer: stack-code-reviewer
 description: "Convenção canônica das 7 classes de guard — como cada uma se manifesta, a receita de detecção por classe (o que procurar, o contra-exemplo, e a evidência medida de que a receita pega), e — criticamente — o que cada classe NÃO é detectável estaticamente. Existe para que um guard futuro não repita um modo de falha que o repo já pagou."
 ---
@@ -161,6 +161,69 @@ forma que passa e não deveria) → **evidência medida** de que a receita pega.
 > do domínio do parser de redirect, não de documentação. Ele pega 1, 2, 3, 7 no
 > seu escopo. Declarar isso é o que impede que o próximo guard prometente
 > demais.
+
+## §4 A regra fora das 7: nenhuma claim pode ser perdida
+
+> Não é uma 8ª classe. As 7 descrevem um controle que falha **reportando
+> verde**; esta descreve um controle que fica **preciso** custando recall — e
+> esse custo é invisível justamente porque o verde é honesto: o gate fez o que
+> disse. Por isso ela não cabe na tabela e mora aqui.
+
+**A regra, em uma linha: nenhum guard pode tornar uma entrada invisível para
+ganhar precisão. Quem não pode ser comparado é RECLASSIFICADO, nunca apagado.**
+
+O instrumento que separa as duas coisas é a **contagem**: um guard que descarta
+algo não muda nenhuma contagem, e um relatório sem contagem não tem por onde
+divergir. Um guard que reclassifica muda. Citar a regra não basta — o que a faz
+verdadeira é o objeto que carrega o número, o spec que o monta pela **varredura
+real** (não por um objeto à mão, que mediria o regex que o próprio teste escolheu)
+e a afirmação do estado **antes** do veredito.
+
+**A forma canônica do defeito** — um `(?<!…)`/`(?!…)` negativo num regex de
+extração cuja função declarada é "fechar uma ambiguidade". Ele não falha: ele
+**reduz o conjunto**, e o conjunto reduzido produz o mesmo verde. Todo lookahead
+negativo é um limite **silencioso** por construção — nada no resultado diz o que
+ele comeu. MEDIDO 2026-10-19 em `tooling/scripts/pr-refresh-scan.ts`: fechar
+`N arquivos` em cluster de suíte custava o corpus INTEIRO — as **12 de 12**
+frases de `FRASES_DE_SUITE` (`pr-refresh-scan.spec.ts:285-300`) deixam de
+carregar número de arquivo, e nada diz qual nem quantas. A 1ª redação do guard
+documentava esse preço como *"o erro seguro"*: **é o inseguro**, com o nome
+trocado.
+
+⚠️ **O número que ficava aqui (`fn=8`) não era reproduzível.** Tinha sido medido
+contra um estado intermediário e não commitado do próprio guard, então ninguém
+conseguia refazê-lo — e `tamanho-e-revisao.md` é explícito: se você não consegue
+rodar o comando que reproduz o número, **não cite o número**. Uma convenção que
+ensina a exigir o comando ao lado falha ela mesma quando o comando some; por
+isso os dois números desta seção foram remedidos antes de virar commit.
+
+### Receita
+
+- **O que procurar:** um `(?<!…)`/`(?!…)` negativo num regex de extração cuja
+  função declarada é "fechar uma ambiguidade".
+- **Comando:** o par de specs. O mesmo corpus em dois `it.each` sobre o mesmo
+  array — um afirma a classe que **deve** sair, o outro afirma a que **não** pode
+  sair. Sem o par, um regex que apaga tudo passa.
+- **Contra-exemplo:** `expect(claims).not.toContain('arquivos')` sozinho. Passa
+  com o regex correto **e** com um regex que descarta tudo — o veredito sai
+  verde nos dois casos.
+- **Evidência:** MEDIDO 2026-10-19. Comando:
+  `npx vitest run tooling/scripts/pr-refresh-scan` → base **74/74 verde**;
+  apagando as duas entradas `classe: 'arquivos-suite'`
+  (`pr-refresh-scan.ts:223-259`) → **15 de 74** vermelhos, incluindo o spec do
+  gate. No nível da claim, o mesmo corte leva o corpus de `FRASES_DE_SUITE` de
+  **12/12** frases carregando número de arquivo para **0/12** — e é esse
+  segundo número que é a MEDIDA DA REGRA, porque §4 fala de claim, não de teste.
+
+### O resíduo declarado
+
+O gate ainda tem **2 `fp`**: `"67 arquivos, dos quais 12 de teste"` e
+`"67 arquivos — a suíte tem 880 testes"` casam como claim do PR. São ambíguos
+por construção — um PR pode dizer as duas coisas sobre si — e ficam em
+`pr-refresh-scan.spec.ts` como limite **CONHECIDO**, para que uma mudança
+futura os feche por decisão e não por acaso de mexer no regex. Falso positivo é
+barulho; falso **negativo** é sumiço. A regra admite o primeiro e proíbe o
+segundo.
 
 ## Cross-refs
 

@@ -549,6 +549,15 @@ describe('CLI (o caminho que o CI usa)', () => {
     expect(naLinhaDaSuite.map((c) => c.classe)).toContain('testes'); // achou algo
     expect(naLinhaDaSuite.map((c) => c.classe)).not.toContain('arquivos'); // e não é a meia
 
+    // E o `67 arquivos` NÃO SOME — sai como `arquivos-suite`. É a regra
+    // "nenhuma claim pode ser perdida" vista do lado do gate: o gate não
+    // compara este número com a branch (portanto não trava o PR), mas ele
+    // CONTABiliza, o que é a diferença entre "esta frase não é claim do PR" e
+    // "esta frase não existe". Sem esta linha, voltar a suprimir a forma deixa
+    // o gate igualmente verde — e o spec acima não veria.
+    expect(naLinhaDaSuite.map((c) => c.classe)).toContain('arquivos-suite');
+    expect(naLinhaDaSuite.find((c) => c.classe === 'arquivos-suite')?.valor).toBe(67);
+
     expect(verificarMarcador(corpo, rel).ok).toBe(true);
   });
 });

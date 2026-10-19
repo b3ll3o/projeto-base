@@ -31,11 +31,15 @@ export interface FeatureFlagDefinicao {
 export const FEATURE_FLAGS = [
   {
     chave: 'tenancy.invites',
-    // O alcance e o limite estão em `feature-flag.guard.ts:18-25`. Esta é a
-    // linha que o admin LÊ, então ela repete o limite — não a rota, que era o
+    // O alcance e o limite estão no cabeçalho de `feature-flag.guard.ts`. Esta é
+    // a linha que o admin LÊ, então ela repete o limite — não a rota, que era o
     // que o texto antigo citava e não dizia o que desligar deixa de fazer.
+    // MEDIDO 2026-10-19: o texto anterior ("desligar não impede quem já tem
+    // convite de entrar") era verdade e deixou de ser, quando as duas portas
+    // foram fechadas. Uma descrição de flag que mente é pior que ausente: o
+    // admin lê aqui antes de desligar.
     descricao:
-      'Emissão de convites por empresa. Desligar não impede quem já tem convite de entrar.',
+      'Emissão e aceite de convites por empresa. Desligar tranca as duas portas: nem o dono convida, nem quem tem token entra.',
   },
 ] as const;
 

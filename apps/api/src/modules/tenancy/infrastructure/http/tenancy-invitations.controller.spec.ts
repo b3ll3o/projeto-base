@@ -70,7 +70,11 @@ describe('TenancyInvitationsController — o `:id` do convite', () => {
       // O `FeatureFlagGuard` fica ABERTO pelo mesmo motivo do `JwtAuthGuard`:
       // sob teste aqui é o `:id`, e um 404 de flag desligada esconderia o 400.
       // O que o guard FAZ quando a flag está off é medido no e2e
-      // `test/e2e/scenarios/13-feature-flags.e2e.spec.ts`, que tem o banco.
+      // `test/e2e/scenarios/12-onboarding.e2e.spec.ts`, que tem o banco.
+      // MEDIDO 2026-10-19: esta linha apontava para `13-feature-flags`, que é
+      // CRUD admin da flag e NÃO toca nem o `accept` nem o `POST /users` —
+      // quem seguisse a referência abriria o arquivo errado e concluiria que a
+      // porta não tem cobertura.
       .overrideGuard(FeatureFlagGuard)
       .useValue({ canActivate: () => true })
       .compile();

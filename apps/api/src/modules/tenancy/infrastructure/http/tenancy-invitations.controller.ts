@@ -66,10 +66,7 @@ export class TenancyInvitationsController {
 
   @Post('tenants/:id/invitations')
   // pt-BR (feature-flags, 2026-10-18 — Fase 4): a PRIMEIRA functionality a
-  // respeitar uma flag. `@UseGuards` no HANDLER, e não na classe: o
-  // `FeatureFlagGuard` desligaria também `accept`, que não é a mesma
-  // funcionalidade — desligar convites não pode trancar quem já tem o token.
-  // Precedente: `users.controller.ts:246,262,300,331,361`.
+  // respeitar uma flag. Precedente: `users.controller.ts:246,262,300,331,361`.
   //
   // ⚠️ `JwtAuthGuard` NÃO é repetido aqui, e a ordem é o que garante o
   // `req.user`. O Nest CONCATENA metadata (`context-creator.js` devolve
@@ -106,6 +103,13 @@ export class TenancyInvitationsController {
   }
 
   @Post('invitations/accept')
+  // A SEGUNDA porta, fechada em 2026-10-19. Até aqui ela era de propósito:
+  // "desligar convites não pode trancar quem já tem o token". Isso é escolha de
+  // produto, e escolha de produto escrita só em comentário não é uma escolha de
+  // produto — é um bypass. O `FeatureFlagGuard` serve aqui (ao contrário de
+  // `POST /users`, que é `@Public()` e não tem `req.user` para o guard exigir).
+  @UseGuards(FeatureFlagGuard)
+  @RequireFeatureFlag('tenancy.invites')
   async aceitar(
     @Body(new ZodValidationPipe(AceitarConviteSchema)) body: z.infer<typeof AceitarConviteSchema>,
     @Req() req: RequestComAtor,

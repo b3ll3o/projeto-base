@@ -82,7 +82,7 @@ function comPorta(): { porta: PortaEmMemoria; useCases: FeatureFlagUseCases } {
  * e aí o vermelho é o aviso de que uma frase que o admin lê mudou.
  */
 const DESCRICAO_INVITES =
-  'Emissão de convites por empresa. Desligar não impede quem já tem convite de entrar.';
+  'Emissão e aceite de convites por empresa. Desligar tranca as duas portas: nem o dono convida, nem quem tem token entra.';
 
 describe('FeatureFlagUseCases', () => {
   describe('D2 — quem alterna', () => {

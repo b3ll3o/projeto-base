@@ -25,6 +25,9 @@ import { JwtAuthGuard } from '../auth/infrastructure/http/jwt-auth.guard.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { TenancyModule } from '../tenancy/tenancy.module.js';
 import { ProfilesModule } from '../profiles/profiles.module.js';
+// `POST /users` lê `tenancy.invites` no corpo (`create()`). `TenancyModule`
+// importa este módulo, mas não re-exporta a porta — só a aresta direta resolve.
+import { FeatureFlagsModule } from '../feature-flags/feature-flags.module.js';
 
 @Module({
   // pt-BR: `AuthModule` entra na lista de imports (e não só o guard) porque
@@ -43,7 +46,14 @@ import { ProfilesModule } from '../profiles/profiles.module.js';
   //
   // Sem ciclo: `ProfilesModule` importa `PrismaPersistenceModule`, que vive
   // dentro de `users/` mas é um módulo próprio — ele não importa `UsersModule`.
-  imports: [PrismaPersistenceModule, AuditInfraModule, AuthModule, TenancyModule, ProfilesModule],
+  imports: [
+    PrismaPersistenceModule,
+    AuditInfraModule,
+    AuthModule,
+    TenancyModule,
+    ProfilesModule,
+    FeatureFlagsModule,
+  ],
   controllers: [UsersController],
   providers: [
     {

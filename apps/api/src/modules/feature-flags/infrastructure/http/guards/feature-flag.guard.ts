@@ -15,14 +15,23 @@
 // Várias chaves são E (todas ligadas), não OU como no `@RequirePermission`:
 // permissão é "basta uma destas", flag é "a funcionalidade depende destas".
 //
-// ⚠️ O RAIO DE ALCANCE de `tenancy.invites` NÃO é só `POST /tenants/:id/
-// invitations`. MEDIDO 2026-10-18 (revisão adversarial, achado F8): `POST /users`
-// com `destino: {tipo: 'convite', token}` cria conta e membership COM A FLAG
-// DESLIGADA — resposta 201. É de propósito (desligar convites não pode trancar
-// quem JÁ tem o token; esse `POST /users` é o `accept` por outra porta), mas a
-// herança era silenciosa: nem este cabeçalho nem o do controller a mencionavam.
-// Se um dia "desligar convites" precisar significar "parar de dar entrada", é
-// aqui que o raio muda — e este é o caminho que teria de mudar junto.
+// ⚠️ O RAIO DE ALCANCE de `tenancy.invites` tem TRÊS portas, e as três estão
+// fechadas (2026-10-19). MEDIDO 2026-10-18 (revisão adversarial, achado F8):
+// `POST /users` com `destino: {tipo: 'convite', token}` criava conta e
+// membership com a flag DESLIGADA — resposta 201 — e `POST /invitations/accept`
+// tinha o mesmo furo. As duas eram "de propósito", sob o argumento de que
+// desligar convites não pode trancar quem JÁ tem o token. Isso é uma escolha de
+// produto, não uma propriedade do sistema — e um comportamento que não está no
+// código é um comportamento que ninguém reverte. Hoje as duas respondem 404 com a
+// flag desligada, e a descrição no catálogo diz o que a chave cobre, sem cláusula
+// de exceção.
+//
+// O `FeatureFlagGuard` NÃO serve para a porta `@Public()`: `canActivate` exige
+// `req.user` (fail-closed, `feature-flag.guard.spec.ts:91-97`) e o `JwtAuthGuard`
+// retorna ANTES de publicar `req.user` em rota pública (`jwt-auth.guard.ts:170-172`).
+// Por isso `POST /users` checa a chave em `create()`, depois do Zod — é o único
+// ponto onde `destino.tipo` é conhecido. As DUAS checagens usam `chaveDesligada`:
+// D4 em um lugar só.
 
 import {
   CanActivate,
@@ -40,12 +49,28 @@ import {
 } from '../../../domain/ports/feature-flag-repository.port.js';
 import type { FeatureFlagKey } from '../../../../../shared/auth/feature-flag-catalog.js';
 
+/**
+ * D4 em UMA função: chave SEM LINHA é ATIVADA, chave COM `ativada: false` é
+ * desligada.
+ *
+ * Exportada porque a semântica não pode ter duas cópias. O guard precisa do
+ * conjunto inteiro porque resolve chaves múltiplas (E, não OU); aqui é uma chave
+ * por chamada. D4 é exatamente o detalhe que a segunda cópia esquece — ela passa
+ * a exigir a linha, e o sistema passa a nascer desligado.
+ */
+export async function chaveDesligada(
+  repositorio: FeatureFlagRepositoryPort,
+  chave: FeatureFlagKey,
+): Promise<boolean> {
+  return (await repositorio.listar()).some((l) => !l.ativada && l.chave === chave);
+}
+
 @Injectable()
 export class FeatureFlagGuard implements CanActivate {
   // `@Inject` EXPLÍCITO nos dois: `tsx` (esbuild) não emite
   // `design:paramtypes`, o Nest passa `undefined`, e o guard morre com
   // `Cannot read properties of undefined` no primeiro request — o mesmo
-  // defeito medido no `PermissionsGuard` (`permissions.guard.ts:28-36`), que
+  // defeito medido no `PermissionsGuard` (`permissions.guard.ts:31-43`), que
   // nenhuma spec unitária pegou porque ela monta o guard com `new`.
   constructor(
     @Inject(Reflector) private readonly reflector: Reflector,
