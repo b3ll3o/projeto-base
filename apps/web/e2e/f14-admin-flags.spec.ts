@@ -38,6 +38,27 @@ function caixaDaFlag(page: Page) {
   );
 }
 
+/**
+ * "Salvar" e ESPERA a Server Action responder.
+ *
+ * MEDIDO 2026-10-19: `click()` resolve quando o clique é DESPACHADO, não
+ * quando o POST volta. A recarga seguinte podia então renderizar a página
+ * ANTES do PUT commitar, e o checkbox voltava marcado — o spec acusava a tela
+ * de mentir quando quem mentia era o spec. Falha real, com assinatura própria:
+ * `14 × locator resolved to <input checked …>` são 14 tentativas em 5s contra
+ * uma página que não muda mais. Passou 3/3 isolado e 44/45 na suíte.
+ *
+ * A recarga + `expect()` que vem depois NÃO é a espera: asserção repete a
+ * CONDIÇÃO, não a OPERAÇÃO. Ela nunca volta a pedir o que o servidor não tinha.
+ */
+async function salvar(page: Page): Promise<void> {
+  const commitou = page.waitForResponse(
+    (r) => r.request().method() === 'POST' && r.url().endsWith('/admin/flags'),
+  );
+  await linhaDaFlag(page).getByRole('button', { name: 'Salvar' }).click();
+  await commitou;
+}
+
 test.describe('F14 — Ativação e desativação de funcionalidades (admin)', () => {
   test('admin desliga e religa a flag, e a tela reflete o que foi salvo', async ({
     comoAdmin,
@@ -59,7 +80,7 @@ test.describe('F14 — Ativação e desativação de funcionalidades (admin)', (
     await expect(linhaDaFlag(page).getByLabel(`${CHAVE} — ligada`)).toBeChecked();
 
     await caixa.uncheck();
-    await linhaDaFlag(page).getByRole('button', { name: 'Salvar' }).click();
+    await salvar(page);
 
     // ⚠️ RECARREGA, e é obrigatório. `defaultChecked` num input uncontrolled
     // só vale na montagem: sem recarregar, o checkbox já aparece desmarcado
@@ -74,7 +95,7 @@ test.describe('F14 — Ativação e desativação de funcionalidades (admin)', (
     // O caminho inverso no MESMO teste: um spec que só desliga passaria
     // também com um botão que só sabe desligar.
     await caixaDaFlag(page).check();
-    await linhaDaFlag(page).getByRole('button', { name: 'Salvar' }).click();
+    await salvar(page);
     await irPara('/admin/flags');
     await expect(caixaDaFlag(page)).toBeChecked();
   });
@@ -107,16 +128,23 @@ test.describe('F14 — Ativação e desativação de funcionalidades (admin)', (
 
     await irPara('/admin/flags');
     await caixaDaFlag(page).uncheck();
-    await linhaDaFlag(page).getByRole('button', { name: 'Salvar' }).click();
+    await salvar(page);
 
     // ⚠️ O SALVAMENTO É ESPERADO ANTES do pedido, e não por `waitForTimeout`.
-    // MEDIDO 2026-10-18: sem esta espera o teste é uma CORRIDA — `click()`
-    // resolve quando o clique é despachado, não quando a Server Action
-    // volta, e o `pedir()` seguinte saía antes do PUT. Duas execuções do MESMO
-    // código deram 403 e 404 para a mesma posição, em ordens opostas. Recarregar
-    // e exigir o estado novo é a espera CORRETA porque é uma afirmação: se o
-    // save não persistiu, ela falha AQUI, nomeando a causa, em vez de fazer o
-    // `pedir()` seguinte mentir.
+    // MEDIDO 2026-10-18: sem espera o teste é uma CORRIDA — `click()` resolve
+    // quando o clique é despachado, não quando a Server Action volta, e o
+    // `pedir()` seguinte saía antes do PUT. Duas execuções do MESMO código deram
+    // 403 e 404 para a mesma posição, em ordens opostas.
+    //
+    // ⚠️ E a espera que valia era `recarregar + exigir o estado novo`, com o
+    // argumento de que "uma afirmação é a espera CORRETA porque nomeia a causa".
+    // MEDIDO 2026-10-19: isso é FALSO, e foi o que produziu a falha real de hoje
+    // (`click()` sem `salvar` → `14 × … checked`, 3/3 isolado e 44/45 na
+    // suíte). `expect()` repete a CONDIÇÃO, não a OPERAÇÃO: a página já foi
+    // desenhada com o valor velho e não vai mudar sozinha, então os 14 pols
+    // só confirmam que ela não mudou. A espera é `salvar()` — aguardar a
+    // resposta — e a asserção continua aqui porque é ela que nomeia a causa de
+    // um save que de fato não persistiu.
     await irPara('/admin/flags');
     await expect(caixaDaFlag(page)).not.toBeChecked();
 
@@ -127,7 +155,7 @@ test.describe('F14 — Ativação e desativação de funcionalidades (admin)', (
     // motivos, e sem o par o teste não distinguiria "a flag parou a rota" de
     // "a rota morreu antes, por outra coisa".
     await caixaDaFlag(page).check();
-    await linhaDaFlag(page).getByRole('button', { name: 'Salvar' }).click();
+    await salvar(page);
     await irPara('/admin/flags');
     await expect(caixaDaFlag(page)).toBeChecked();
 

@@ -144,6 +144,7 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `a-detector-that-fabricates-its-finding` | `pendente` | — | — |
 | `agent-evolution-and-memory` | `citada` | `.agents/specs/conventions/evolucao-agents.md` | `Agents e skills são entidades VIVAS` |
 | `artefato-publicado-nao-nomeia-o-segredo` | `pendente` | — | — |
+| `assertion-is-not-a-wait` | `pendente` | — | — |
 | `ambiguous-sentinel-silently-skips` | `citada` | `.agents/specs/conventions/guard-classes.md` | `devolvia` |
 | `b24-telemetry-progress` | `recusada` | registro de campanha; o plano de telemetria que ele resume já é versionado | — |
 | `b31-parser-vs-ground-truth-analysis` | `citada` | `docs/superpowers/specs/2026-09-25-b35-parser-regen-analysis.md` | `confirma o veredito de B31` |
