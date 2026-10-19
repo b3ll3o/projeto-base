@@ -16,11 +16,18 @@ state_snapshot: .agents/runs/state-snapshot-20261018T053846Z.md
 > (`proceed: true`, `gap_blocker: false`, 4 gaps — 1 blocker resolvido antes do plano).
 > Branch: `feat/feature-flags`, base `main` @ `176c5f2` (PR #101, tenancy).
 > **v1.1.0** — revisado por dois agents distintos do implementador; 10 correções,
-> 4 delas mudam desenho. Ver [§Revisao](#revisão-v110).
+> 4 delas mudam desenho. Ver [§Revisao](./2026-10-18-feature-flags-revisoes-fases-0-3.md#revisao-v110).
 > **v1.2.0** — terceiro revisor (adversarial, mediu mutando o código) + reconciliação
-> com a árvore depois da Fase 1. Ver [§Revisao](#revisão-v120).
+> com a árvore depois da Fase 1. Ver [§Revisao](./2026-10-18-feature-flags-revisoes-fases-0-3.md#revisao-v120).
 > **v1.3.0** — quarto revisor, sobre a Fase 2: o código estava certo, o spec não.
-> Ver [§Revisao](#revisão-v130--fase-2).
+> Ver [§Revisao](./2026-10-18-feature-flags-revisoes-fases-0-3.md#revisao-v130--fase-2).
+> **v1.4.0** — rodada do contrato HTTP: criado
+> [`2026-10-18-feature-flags-contrato-http.md`](../specs/2026-10-18-feature-flags-contrato-http.md)
+> a partir de uma sonda e2e, e reconciliado o texto deste plano com o que foi
+> **entregue** (linhas de referência, percentages, os 3 testes do F14). A partir
+> de v1.5.0 as revisões vivem nos logs irmãos — v1.5.0 em
+> [`…-revisoes-fases-0-3.md`](./2026-10-18-feature-flags-revisoes-fases-0-3.md),
+> v1.6.0 em diante em [`…-revisoes.md`](./2026-10-18-feature-flags-revisoes.md).
 
 ---
 
@@ -41,10 +48,10 @@ state_snapshot: .agents/runs/state-snapshot-20261018T053846Z.md
 | D11 | Regra de admin do sistema | `ehAdministradorDeSistema` **sai** de `profiles.use-cases.ts` para `src/shared/auth/eh-administrador-de-sistema.ts`; os dois `import`s viram reuso | medido: a funcao **nao e exportada** (`grep 'export.*ehAdministradorDeSistema'` -> 0). O comentario em `profiles.use-cases.ts:103-105` diz que a privacao e deliberada porque as duas classes do arquivo a usam — e a regra nova e a mesma |
 | D12 | Timestamp da migration | `20261020000006_feature_flags` (fixado, nao `<ts>`) | as 12 migrations vao ate `20261020000005`, com datas 2 dias a frente de hoje e escritas a mao. Um `migrate dev` de hoje geraria `20261018HHMMSS`, que ordena **antes** de todo o bloco `20261019*`/`20261020*`. Nenhum gate olha migration |
 | D13 | O que o guard de flag injeta | **a porta do repositorio**, nao a use case | `listar`/`definir` exigem admin do sistema (D2), e o ator de `convidar` e o dono de uma empresa (`tenantId != null`). O guard so precisa de `listar` + a regra D4, que sao 3 linhas |
-| D14 | O client web da tela manda `X-Tenant-Id`? | **nao** — `lib/flags.ts` monta o `ApiClient` SEM `getTenant` | medido (`api-client.ts:60,67` + `extractTenantId`): enviar o header **tira** o ator do bucket global, e D2 e `tenantId === null && isAdmin`. O admin do sistema que tem empresa selecionada no cookie levaria 403 numa tela que acabou de nascer. A5 da v1.1.0 razou o contrario (mantendo o header); o terceiro revisor mediu o efeito e o status quo **nao e argumento para repetir o defeito numa rota nova** — ele ja vai existir em `/admin/profiles`, que nao e desta demanda. Omitir um campo opcional custa uma linha |
+| D14 | O client web da tela manda `X-Tenant-Id`? | **nao** — `lib/flags.ts` monta o `ApiClient` SEM `getTenant` | medido (`api-client.ts:60` le `getTenant?.()`, `:67` so seta o header se ele vier): enviar o header **tira** o ator do bucket global, e D2 e `tenantId === null && isAdmin`. O admin do sistema que tem empresa selecionada no cookie levaria 403 numa tela que acabou de nascer. A5 da v1.1.0 razou o contrario (mantendo o header); o terceiro revisor mediu o efeito e o status quo **nao e argumento para repetir o defeito numa rota nova** — ele ja vai existir em `/admin/profiles`, que nao e desta demanda. Omitir um campo opcional custa uma linha |
 | D15 | Value object `FeatureFlagKey` em `domain/` | **nao existe** — o type union do catalogo e o guard `isFeatureFlagKey` fazem esse papel | o VO seria uma segunda escrita da mesma lista de chaves dentro do BC, e o catalogo ja e type-safe. Um VO que valida contra um type union nao valida nada: quem ja nao pode escrever `'tenancy.invit'` e o compilador. Menos um arquivo, menos um lugar para divergir |
 | D16 | `updatedAt` no `FeatureFlagDto` | **nao entra** — o DTO e `{ chave, descricao, ativada }` | o revisor da F0 pediu a escolha: "ou o campo volta, ou o §3 precisa dizer que a tela não mostra 'quando'". Nenhum dos dois — o campo nao volta. A tela nao mostra timestamp, o `updated_at` existe na tabela por convencao das outras 6 models (e §3 ja diz que historico de toggles esta fora do escopo), e expor no contrato um campo que nada renderiza e a forma de o web começar a consumir. O revisor mandava voltar; **motivo de volta**: nenhum requisito da demand pede "quando", e a coluna na tabela ja responde a pergunta se ela um dia aparecer |
-| D17 | `FeatureFlagsModule` declara `PermissionsGuard` nos **proprios** providers | **nao — CORRIGIDA na F3** | o revisor da F0 mediu que `PermissionsGuard` nao esta nos `exports` do `ProfilesModule` e concluiu que o modulo novo precisa declara-lo provider. **MEDIDO 2026-10-18 na F3: a conclusao estava errada.** Tirando o `PermissionsGuard` dos `providers`, o modulo continua compilando e as 6 assertos do `feature-flags.module.spec.ts` seguem verdes — o Nest resolve o guard de `@UseGuards` pelos `injectables` de qualquer modulo do container, e o `ProfilesModule` ja o registra. A **premissa** do revisor (o guard nao esta exportado) continua verdadeira; a **conclusao** (morre no boot) nao. O que o modulo novo de fato precisa sao as **arestas**: `AuthModule` (guard + cache), `ProfilesModule` (`UserProfileUseCases`, de que o `PermissionsGuard` depende), `PrismaPersistenceModule` e `PrismaModule`. Como `moduleRef.get(X, { strict: false })` varre o container INTEIRO, a spec nao distingue "provider deste modulo" de "provider de outro" — e foi essa cegueira que deixou a decisao passar sem dente |
+| D17 | `FeatureFlagsModule` declara `PermissionsGuard` nos **proprios** providers | **nao — CORRIGIDA na F3** | o revisor da F0 mediu que `PermissionsGuard` nao esta nos `exports` do `ProfilesModule` e concluiu que o modulo novo precisa declara-lo provider. **MEDIDO 2026-10-18 na F3: a conclusao estava errada.** Tirando o `PermissionsGuard` dos `providers`, o modulo continua compilando e o `feature-flags.module.spec.ts` inteiro segue verde — o Nest resolve o guard de `@UseGuards` pelos `injectables` de qualquer modulo do container, e o `ProfilesModule` ja o registra. A **premissa** do revisor (o guard nao esta exportado) continua verdadeira; a **conclusao** (morre no boot) nao. O que o modulo novo de fato precisa sao as **arestas**: `AuthModule` (guard + cache), `ProfilesModule` (`UserProfileUseCases`, de que o `PermissionsGuard` depende), `PrismaPersistenceModule` e `PrismaModule`. Como `moduleRef.get(X, { strict: false })` varre o container INTEIRO, a spec nao distingue "provider deste modulo" de "provider de outro" — e foi essa cegueira que deixou a decisao passar sem dente |
 
 ---
 
@@ -102,14 +109,14 @@ distinto do implementer.
 | `.../decorators/require-feature-flag.decorator.ts` (novo) | `FEATURE_FLAG_KEYS_METADATA` + `RequireFeatureFlag(...keys)`, copia de `require-permission.decorator.ts:13-16` |
 | `.../guards/feature-flag.guard.ts` (novo) | injeta `FEATURE_FLAG_REPOSITORY_PORT` (D13). Sem metadata => `true` (como `permissions.guard.ts:60-62`). Sem `req.user` => `ForbiddenException`. Para cada chave: sem linha => ATIVADA (D4); com linha e `ativada=false` => `NotFoundException` (404 — o recurso nao existe enquanto a flag esta off). Le `getAllAndOverride([handler, classe])`, como o guard de permissao |
 | `feature-flag.guard.spec.ts` (novo) | sem decorator passa · flag on passa · linha ausente passa (D4) · flag off => 404 · sem `req.user` => 403. O fake da porta e in-memory e **nao** um `{ ativada: true }` literal |
-| `apps/api/src/modules/tenancy/infrastructure/http/tenancy-invitations.controller.ts:66` | `@UseGuards(JwtAuthGuard, FeatureFlagGuard)` + `@RequireFeatureFlag('tenancy.invites')` **no handler `convidar`**. A classe (linha 55) fica intacta — mexer nela atinge `accept` tambem. Precedente: `users.controller.ts:246,262,300,331,361` repetem `@UseGuards` em handler |
+| `apps/api/src/modules/tenancy/infrastructure/http/tenancy-invitations.controller.ts:67` | `@UseGuards(FeatureFlagGuard)` + `@RequireFeatureFlag('tenancy.invites')` **no handler `convidar`**. A classe (linha 59) fica intacta — mexer nela atinge `accept` tambem. Precedente: `users.controller.ts:246,262,300,331,361` repetem `@UseGuards` em handler. O `JwtAuthGuard` **nao** e repetido aqui: o Nest CONCATENA metadata (`context-creator.js` devolve `[...global, ...classe, ...handler]`) e a classe roda primeiro publicando `req.user`, entao repetir custaria o dobro sem efeito — medido: remover nao muda um status so nos cenarios 10 e 12 |
 
 ### Fase 5 — Web
 
 | Ponto | Mudanca |
 |-------|---------|
 | `apps/web/lib/flags.ts` (novo) | `listarFeatureFlags()` e `definirFeatureFlag(chave, ativada)`, copiando o factory `getClient()` de `lib/perfil.ts:30-40` **sem** `getTenant` (**D14**). `getTenant` e opcional (`api-client.ts:13-18`) e `api-client.ts:66-67` so manda o header quando ele existe — omitir custa **uma linha**. A razao de D14 em uma frase: enviar `X-Tenant-Id` tira o ator do bucket global (`tenantId !== null`), D2 exige `tenantId === null`, e o admin do sistema que tem empresa selecionada no cookie levaria 403 numa tela recem-nascida |
-| `apps/web/lib/flags.spec.ts` (novo) | corpo valido · corpo nao-JSON vira `ApiError` (defeito do PR #99) · `403` propaga · token ausente nao vaza segredo |
+| `apps/web/lib/flags.spec.ts` (novo) | corpo valido · PUT leva a chave na URL e o estado no corpo · escapa a chave · `403` e erro de API propagam · **nao** manda `X-Tenant-Id` (D14). O corpo nao-JSON vira `ApiError` (defeito do PR #99) fica em `api-client.spec.ts:318` e **nao** e duplicado aqui — decisao D-1 da v1.7.0, que este plano ainda prometia ao contrario |
 | `apps/web/app/admin/flags/page.tsx` (novo) | Server Component. Guard `me === null \|\| me.isAdmin !== true` => "Acesso restrito" (mesma duplicacao declarada de F9). Form de checkboxes + "Salvar", Server Action inline, `revalidatePath('/admin/flags')`. Classes copiadas literalmente. **Sem spec unitario:** `apps/web/vitest.config.ts:247` exclui `app/**/*.tsx` da cobertura; a tela e coberta pelo Playwright da F6 |
 | `apps/web/components/Sidebar.tsx` (bloco `me?.isAdmin === true`, ~linha 40) | link "Feature flags" -> `/admin/flags` |
 | `apps/web/components/Sidebar.spec.tsx` | o link aparece para admin e **nao** para usuario comum (negativo obrigatorio) |
@@ -118,8 +125,8 @@ distinto do implementer.
 
 | Ponto | Mudanca |
 |-------|---------|
-| `.agents/specs/conventions/e2e-playwright.md:95` | linha `\| F14 \| /admin/flags \| Feature flags (admin) \| f14-admin-flags.spec.ts \| admin alterna e a tela reflete · flag off barra \`convidar\` com 404 · quase-admin recusa \|` no `## Inventario de Fluxos` (cabecalho em 80, F13 em 94). A coluna `Spec` **nao pode ficar vazia** — e o que o gate reconcilia com o `// FLUXO:` do arquivo. O gate confere `Rota` contra `page.tsx` do disco nos dois sentidos (`check-e2e-flow-coverage.ts:38-41,154-167`). **Linha e spec no mesmo commit** — e o que o texto em `:78-79` avisa |
-| `apps/web/e2e/f14-admin-flags.spec.ts` (novo) | `// FLUXO: F14`. 3 testes: (1) admin ve as chaves, alterna e a tela reflete sem reload; (2) com a flag off, `convidar` responde 404 e com ela on responde como antes; (3) "quase admin" ve "Acesso restrito" e **nao** ve o conteudo da tabela. O (3) e o dente de D14 no mundo real: se `lib/flags.ts` mandar `getTenant`, o admin **de sistema** com empresa selecionada e o proprio (2) caem |
+| `.agents/specs/conventions/e2e-playwright.md:95` | linha **entregue**: `\| F14 \| /admin/flags \| Ativação e desativação de funcionalidades (admin) \| f14-admin-flags.spec.ts \| admin desliga e religa e a tela reflete · a flag salva NA TELA é a que a rota respeita (404 desligada · 403 ligada) · quase-admin recusa e o menu não oferece o link \|`. Este plano descrevia antes uma versao da linha ("Feature flags (admin)", "admin alterna e a tela reflete", "flag off barra `convidar` com 404") que **nao** foi a commitada — a versao entregue diz 403 na ligada e cita o `title` que nomeia quem recusou. Onde os dois divergem, a spec vence. A coluna `Spec` **nao pode ficar vazia** — e o que o gate reconcilia com o `// FLUXO:` do arquivo. O gate confere `Rota` contra `page.tsx` do disco nos dois sentidos (`check-e2e-flow-coverage.ts:38-41,154-167`). **Linha e spec no mesmo commit** — e o que o texto em `:78-79` avisa |
+| `apps/web/e2e/f14-admin-flags.spec.ts` (novo) | `// FLUXO: F14`. 3 testes: (1) admin ve as chaves, desliga, **recarrega** e a tela reflete; religa e repete — o reload e obrigatorio, porque `defaultChecked` num input uncontrolled so vale na montagem: sem ele o checkbox ja aparece desmarcado pelo gesto do usuario e a assercao passaria com o PUT descartado (verde por repeticao, nao por efeito); (2) com a flag off, `convidar` responde **404** e com ela on responde **403** cujo `title` contem "dono da empresa" — o par e obrigatorio, porque 404 tambem e o que a rota devolve por outros motivos; (3) "quase admin" ve "Acesso restrito", **nao** ve a tabela, e o menu nao oferece o link. O (3) e o dente de D14 no mundo real: se `lib/flags.ts` mandar `getTenant`, o admin **de sistema** com empresa selecionada e o proprio (2) caem |
 | `apps/web/e2e/support/rbac.ts` | nenhum helper novo: `semearQuaseAdmin` (`:126-130`, `isAdmin` falso) ja e barrado por D2 |
 
 ### Fase 7 — Fechamento
@@ -140,8 +147,8 @@ distinto do implementer.
 - **Consumidor #2** — `convidar` prova o mecanismo; outros filtros sao trabalho futuro.
 - **Swagger** na rota nova — nenhum dos 4 controllers `/admin/*` tem decorator (medido).
 - **`docs/STACK.md`** — nao enumera modulos (medido: `grep 'modules/'` -> 0) e nenhum gate a referencia. O `specialist-router` sinalizou O2 aqui; fechado, sem mudanca.
-- **`atorDe` duplicado (3a copia)** — medido 2026-10-18: `admin-profiles.controller.ts:70`, `admin-authorizations.controller.ts:56` e `admin-feature-flags.controller.ts:71` tem o corpo **identico** (`userId`/`tenantId ?? null`/`isAdmin === true`). A 3a foi escolhida para casar com o formato de `admin-profiles`, que e o que os 2 controllers `/admin/*` ja seguiam; um helper compartilhado seria um 3o arquivo novo e uma mudanca em 2 controllers que **nao** precisam dela. Débito registrado, nao pago.
-- **`PrismaModule` nos imports do `FeatureFlagsModule`** — medido redundante: o modulo e `@Global()` e ja esta no `AppModule`. **Mantido** por consistencia com os 5 modulos irmaos, que tambem o listam. Nenhum gate acusa nem deixa de acusar; e um gate que so mede `AppModule` acusaria os 6 modulos de uma vez, nao este.
+- **`atorDe` duplicado (3a copia)** — medido 2026-10-18: `admin-profiles.controller.ts:70`, `admin-authorizations.controller.ts:56` e `admin-feature-flags.controller.ts:83` tem o corpo **identico** (`userId`/`tenantId ?? null`/`isAdmin === true`). A 3a foi escolhida para casar com o formato de `admin-profiles`, que e o que os 2 controllers `/admin/*` ja seguiam; um helper compartilhado seria um 3o arquivo novo e uma mudanca em 2 controllers que **nao** precisam dela. Débito registrado, nao pago.
+- **`PrismaModule` nos imports do `FeatureFlagsModule`** — medido redundante: o modulo e `@Global()` e ja esta no `AppModule`. **Mantido** por consistencia com os outros modulos de feature — `auth`, `health`, `profiles`, `tenancy` e este, 5 no total, todos medidos por `grep -rln "prisma.module.js'" --include=*.module.ts apps/api/src` (6 linhas, contando o `AppModule`). Nenhum gate acusa nem deixa de acusar; e um gate que so mede `AppModule` acusaria os 6 de uma vez, nao este.
 
 ---
 
@@ -149,7 +156,7 @@ distinto do implementer.
 
 | # | Risco | Como esta tratado |
 |---|-------|-------------------|
-| R1 | G-002: cobertura do api | **re-medido 2026-10-18, depois da F1** (`apps/api/coverage/coverage-final.json`, 86 arquivos): **3425/3946 statements (86,80%)** e **311/357 funcs (87,11%)**. O agregado ja inclui os 2 specs novos da F1. As fases restantes somam ~200 statements e ~20 funcs; com 80% cobertos o agregado fica ~86,1% / ~86,6% — o gate de 80% **aguenta**. Cheapest headroom se precisar: `prisma-tenant-onboarding.repository.ts`, 15/161 statements (9,3%), mergeado ontem no #101 e sem teste |
+| R1 | G-002: cobertura do api | **re-medido 2026-10-18, depois da F1** (`apps/api/coverage/coverage-final.json`, 86 arquivos): **3425/3946 statements (86,80%)** e **311/357 funcs (87,11%)**. O agregado ja inclui os 2 specs novos da F1. As fases restantes somam ~200 statements e ~20 funcs; com 80% cobertos o agregado fica ~86,5% / ~86,7% — o gate de 80% **aguenta**. Cheapest headroom se precisar: `prisma-tenant-onboarding.repository.ts`, 15/161 statements (9,3%), mergeado ontem no #101 e sem teste |
 | R2 | `deny-by-default` do RLS nao se aplica aqui | D10 + R3; medido que `check-tenant-scope-source.ts` nao acusa repositorio que nao chama as funcoes de escopo |
 | R3 | Tabela visivel para o papel de runtime `app_runtime` (o unico que existe) | so a API fala com ela; nenhuma query de tenant a toca. Privilegios automaticos pelo `ALTER DEFAULT PRIVILEGES` de `20261020000000:59-62` |
 | R4 | `semearQuaseAdmin` so semeia `admin.manage-*` | irrelevante: D2 barra antes de qualquer chave |
@@ -166,3 +173,9 @@ distinto do implementer.
 > de fase (com as mutacoes medidas e o que cada revisor NAO mediu) foram
 > extraidas para o limite de 300 linhas da convencao
 > [`tamanho-e-revisao.md`](../../../.agents/specs/conventions/tamanho-e-revisao.md).
+
+> **Contrato HTTP:**
+> [`2026-10-18-feature-flags-contrato-http.md`](../specs/2026-10-18-feature-flags-contrato-http.md)
+> — as duas rotas de admin, os schemas, os codigos de erro e o efeito da chave
+> desligada nas rotas que a declaram. Escrito contra uma sonda e2e que mediu os
+> corpos reais, nao contra a leitura do codigo.

@@ -1,7 +1,7 @@
 ---
 name: revisoes-feature-flags-fases-0-3
 description: Historico das revisoes v1.1.0 a v1.5.0 do plano de feature flags (revisao do plano, Fases 2 e 3), com as mutacoes medidas e o que cada revisor nao mediu
-version: 1.0.0
+version: 1.5.0
 updated: 2026-10-18
 status: revisto
 plan: 2026-10-18-feature-flags.md
@@ -112,8 +112,8 @@ que ninguem tinha escrito.
 
 **D17 estava errada.** O plano afirmava que `PermissionsGuard` e `JwtAuthGuard`
 precisavam estar nos `providers` do `FeatureFlagsModule`. Medido: tirando o
-`PermissionsGuard` dos `providers`, o modulo compila e as 6 assertos do
-`feature-flags.module.spec.ts` seguem verdes. O Nest resolve o guard de
+`PermissionsGuard` dos `providers`, o modulo compila e o
+`feature-flags.module.spec.ts` inteiro segue verde. O Nest resolve o guard de
 `@UseGuards` pelos `injectables` de qualquer modulo do container — e o
 `ProfilesModule` ja registra o guard. A premissa do revisor da F0 (o guard nao
 esta nos `exports` do `ProfilesModule`) continua verdadeira; a conclusao nao.
@@ -179,7 +179,7 @@ do **web** (Playwright). A frase mandava o proximo revisor pular uma medicao de
 7 segundos que teria pego quatro defeitos reais.
 
 **A correcao:** `apps/api/test/e2e/scenarios/13-feature-flags.e2e.spec.ts`,
-10 testes, boot de 7 s. Atravessa `JwtAuthGuard`, `PermissionsGuard`,
+13 testes (8 `it` + um `it.each` de 5 casos), boot de ~7 s. Atravessa `JwtAuthGuard`, `PermissionsGuard`,
 `ZodValidationPipe` e `GlobalExceptionFilter`, e fecha as mutacoes 10-16.
 
 **O achado mais caro foi a 10.** Com cache de perfil FRIO — o estado de um

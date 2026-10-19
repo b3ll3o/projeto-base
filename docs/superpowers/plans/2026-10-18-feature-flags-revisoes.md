@@ -1,18 +1,11 @@
 ---
 name: revisoes-feature-flags
 description: Revisoes incrementais por fase do plano de feature flags, com as mutacoes medidas e o que cada revisor nao mediu
-version: 1.0.0
-updated: 2026-10-18
+version: 1.10.0
+updated: 2026-10-19
 status: revisto
 plan: 2026-10-18-feature-flags.md
 ---
-
-# Revisoes — plano de feature flags
-
-> Companheiro de [`2026-10-18-feature-flags.md`](./2026-10-18-feature-flags.md).
-> Cada `## Revisao (vX)` abaixo registra **uma fase**: o que mudou no plano, a
-> tabela de mutacoes medidas e — a parte que mais importa — **o que o revisor
-> NAO mediu**.
 
 # Revisoes — plano de feature flags (indice)
 
@@ -27,6 +20,11 @@ plan: 2026-10-18-feature-flags.md
 |---------|----------|-------|
 | [`…-revisoes-fases-0-3.md`](./2026-10-18-feature-flags-revisoes-fases-0-3.md) | v1.1.0 – v1.5.0 | revisao do plano · **F2** · **F3** |
 | **este** ([`…-revisoes.md`](./2026-10-18-feature-flags-revisoes.md)) | v1.6.0 em diante | **F4** · **F5** · **F6** · **F7** |
+
+O contrato HTTP das rotas esta em
+[`2026-10-18-feature-flags-contrato-http.md`](../specs/2026-10-18-feature-flags-contrato-http.md) —
+escrito contra os corpos MEDIDOS de uma sonda e2e, nao contra a leitura do
+codigo.
 
 ## Revisao (v1.6.0 — Fase 4)
 
@@ -92,12 +90,12 @@ a traiçoeira: metadata sem consumidor nao produz erro nenhum, produz *passagem*
 
 ### MEDIDO 2026-10-18 (F5 e F6)
 
-- `npx vitest run lib/flags.spec.ts` → 7/7 · `components/Sidebar.spec.tsx` → 6/6
+- `npx vitest run lib/flags.spec.ts` → 8/8 · `components/Sidebar.spec.tsx` → 6/6
   (era 4; os 2 novos)
 - `npx tsc --noEmit` (web) → exit 0. **Achado no meio:** com
   `configMock = { getToken: undefined }` sem anotacao, o tipo literal `undefined`
   estreita `getToken?.()` para `never` e o tsc acusa `TS2349` **em codigo que roda
-  7/7 verde** — o Vitest nao typecheca. A anotacao do `configMock` e o que segura
+  verde** — o Vitest nao typecheca. A anotacao do `configMock` e o que segura
   o teste
 - `npx next build` → exit 0, `/admin/flags` na tabela de rotas como dinamica
 - mutacao do Sidebar: link movido para **fora** do bloco `me?.isAdmin === true`
@@ -164,7 +162,7 @@ pagina de recusa de um digest de erro.
 
 ### A4 — o par 404/403 medido (fechei eu, com a janela livre)
 
-Trocar `NotFoundException` por `ForbiddenException` no `feature-flag.guard.ts:71`
+Trocar `NotFoundException` por `ForbiddenException` no `feature-flag.guard.ts:80`
 e rodar so o `f14`: **1 vermelho**, e na posicao certa —
 
 ```
@@ -205,3 +203,72 @@ E uma demanda nova (fronteira de erro do app), nao um efeito colateral das flags
 - **A2** — o "checkbox desmarcado nao e enviado, e a ausencia E o false" e
   sustentado pelo ciclo inverso do teste 1 (desmarca → salva → recarrega →
   exige desmarcado), mas nao por um teste dedicado a essa frase.
+
+## Revisao (v1.10.0 — Fase 7, fechamento)
+
+A F7 e medicao. O achado que ela produziu **nao** foi uma contagem: foi uma
+lacuna que a revisao adversarial da v1.9.0 deixou aberta sem declarar.
+
+### O `obterMeuPerfilGlobal` entrou no branch SEM NENHUM teste
+
+`grep -rln obterMeuPerfilGlobal apps/web` devolvia **2** arquivos:
+`lib/perfil.ts` e `app/admin/flags/page.tsx`. Nenhum spec. E a pagina nao tem
+spec unitario por decisao do `vitest.config.ts:247` — entao o ramo novo nao era
+testavel de lugar nenhum, apesar de ser **o** ramo que decide contra qual bucket
+a tela autoriza (achado A: `isAdmin` de dono e `true` em toda empresa nova, e
+nao e o que D2 exige).
+
+Corrigido com **um** teste, no bloco que ja media o sim (`obterMeuPerfil monta
+getTenant`): `obterMeuPerfilGlobal` devolve `getTenant` **nulo** mesmo com
+empresa escolhida no cookie, e `lerTenant()` nao e chamado.
+
+**Medido com mutacao:** trocar `getClientOpcional(false)` por
+`getClientOpcional()` deixa **1 vermelho**. Restaurado, `md5` conferido
+(`f3824f7f…`), 31/31 verde.
+
+### O RED que a propria assercao deu — e a correcao de um comentario que mentia
+
+O primeiro teste escrito afirmava `expect(configAtual().getTenant).toBeUndefined()`
+e ficou **vermelho**. O codigo esta certo: `getTenant` e montado **sempre**, e
+`tenantScoped=false` faz o valor ser `null` — quem omite o header e o `ApiClient`
+(`api-client.ts:66-67`, coberto pelo `api-client.spec.ts`). O `undefined` era a
+minha premissa, nao o comportamento.
+
+O episodio rendeu a correcao de uma **afirmacao falsa que o branch ja
+carregava**: o docstring de `getClientOpcional` dizia *"monta o cliente SEM
+`getTenant`"*. Nao monta. Reescrito para dizer o que e verdade (monta devolvendo
+`null`; quem omite o header e o `ApiClient`). Um comentario que descreve o
+comportamento inverso e pior que nenhum: o proximo que o le vai escrever o teste
+contra ele — que foi exatamente o que aconteceu aqui.
+
+### MEDIDO 2026-10-19 (F7)
+
+- `npx vitest run` (api inteiro, 3 projetos, e2e incluso) → **89 arquivos /
+  1100 testes verdes** (era 88 / 1086 na F3; a diferenca e a F3 mais a correcao
+  adversarial da v1.9.0, nao a F7)
+- `npx vitest run` (web) → **24 arquivos / 245 testes verdes** (+1 e +1: o
+  `obterMeuPerfilGlobal`)
+- `npx tsc --noEmit` → exit 0 nos **dois** pacotes (web e api)
+- `npx playwright test e2e/f14-admin-flags.spec.ts` → **3/3** (build 35,7 s; web
+  no ar em 43,1 s)
+- `pnpm --filter @projeto/api test:coverage` → **87,16% stmt / 93,11% branch**,
+  exit 0 (F3 mediu 87,05 / 93,01)
+- `pnpm ci:preflight` → **0 erro**, 2 checks `skipped` por ambiente (archive
+  vazio; nenhum agent alterado vs `origin/main`); inventario de fluxos
+  reconciliado sobre **14 fluxo(s) e 14 spec(s)**, 10 rotas conferidas no disco
+- `npx prettier --check` nos 12 arquivos `.ts`/`.tsx` alterados → conforma
+- varredura CJK nos 16 arquivos alterados, **com controle positivo** → **0**
+
+### O que a F7 NAO mediu (fica declarado)
+
+- **O e2e do web inteiro** — rodou so o `f14`. Os outros 13 fluxos nao foram
+  reexecutados nesta branch depois da correcao do achado A.
+- **O F14 nao distingue `obterMeuPerfilGlobal` de `obterMeuPerfil`**, e continua
+  valendo o "caminho INALCANCAVEL" do docstring: `guardarTenant` nao tem caller
+  de producao (`sessao.ts:98`), entao `lerTenant()` devolve `null` e as duas
+  funcoes montam o mesmo cliente. Quem segura a correcao hoje e o **teste
+  unitario** acima; o e2e so passa a depender disso no dia em que o cookie
+  `tenant_id` for escrito por alguem. A tela ficaria verde com a funcao errada ate
+  la.
+- O `next build` standalone ja roda dentro do setup do Playwright (35,7 s) e
+  **nao prova a tela**: `force-dynamic`, quem executa e o request.

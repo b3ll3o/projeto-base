@@ -15,9 +15,21 @@
 //
 // ⚠️ O `@RequirePermission` NÃO é o portão desta feature — o signup de empresa
 // concede `listAllPermissions()` ao dono de cada empresa nova
-// (`prisma-tenant-onboarding.repository.ts:209`), então todo dono de empresa já
-// tem `admin.manage-feature-flags` no banco. Quem barra de fato é D2, dentro
+// (`prisma-tenant-onboarding.repository.ts:209`), então todo dono de empresa
+// **CRIADA A PARTIR DESTA VERSÃO** já tem `admin.manage-feature-flags` no banco.
+//
+// MEDIDO 2026-10-18: a chave é NOVA neste branch (o diff do catálogo em relação
+// a `main` é só a linha `+ 'admin.manage-feature-flags',`) e NENHUMA migration
+// faz backfill de `authorizations` — `grep -rl manage-feature-flags
+// prisma/migrations/` não devolve nada. Então o dono de uma empresa ANTERIOR a
+// esta versão não tem a chave, e o `PermissionsGuard` barra ele aqui, ANTES de
+// D2. O desfecho é o mesmo 403; muda só QUEM recusou — e por isso o decorator
+// continua sendo defense in depth, não o portão. Quem barra de fato é D2, dentro
 // da use case (`tenantId === null && isAdmin`).
+//
+// O backfill foi considerado e **não** feito de propósito: ele não mudaria a
+// autorização de ninguém (D2 barra o mesmo ator logo em seguida), então seria
+// escrita em produção sem efeito de segurança, por um ganho de nada.
 
 import { Body, Controller, Get, Inject, Param, Put, Req, UseGuards } from '@nestjs/common';
 import { z } from 'zod';

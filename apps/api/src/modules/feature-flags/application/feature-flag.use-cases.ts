@@ -80,9 +80,15 @@ export class FeatureFlagUseCases {
    *
    * ⚠️ `admin.manage-feature-flags` NÃO segura nada aqui: o signup de empresa
    * concede `listAllPermissions()` ao dono de cada empresa nova
-   * (`prisma-tenant-onboarding.repository.ts:209`), então todo dono tem essa
-   * chave no banco desde a Fase 0. O `@RequirePermission` da rota é defense in
-   * depth e rastreabilidade; quem barra de fato é esta linha.
+   * (`prisma-tenant-onboarding.repository.ts:209`), então todo dono de empresa
+   * **criada a partir desta versão** tem essa chave no banco.
+   *
+   * MEDIDO 2026-10-18: a chave é nova neste branch e nenhuma migration faz
+   * backfill de `authorizations`. O dono de empresa anterior a esta versão não
+   * a tem, e é barrado pelo `PermissionsGuard` ANTES de chegar aqui — mesmo
+   * 403, outro recusor. O `@RequirePermission` da rota é defense in depth e
+   * rastreabilidade; quem barra de fato é esta linha, e ela barra o MESMO
+   * ator nos dois casos.
    *
    * `ForbiddenException` do Nest e não uma exceção de domínio nova: o
    * `GlobalExceptionFilter` resolve `HttpException` ANTES de

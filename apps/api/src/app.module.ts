@@ -48,17 +48,31 @@ const REDACT_PATHS = ['req.headers.authorization', 'req.headers.cookie'] as cons
     ProfilesModule,
     // pt-BR (Fase 5 — tenancy): TenancyModule (rotas de convite +
     // TENANCY_USE_CASES). Já vem por transitividade de `UsersModule`, que o
-    // importa para injetar o token — listar aqui é o que registra o
-    // CONTROLLER, que o Nest não herda pelo módulo intermediário.
+    // importa para injetar o token.
+    // ⚠️ MEDIDO 2026-10-18: a listagem aqui é REDUNDANTE, e o comentário que a
+    // justificava antes ("listar aqui é o que registra o CONTROLLER, que o Nest
+    // não herda pelo módulo intermediário") era FALSO. Tirando `TenancyModule`
+    // desta lista, os cenários 10, 12 e 13 continuam 43/43 verdes — o Nest
+    // registra os controllers de um módulo assim que ele é instanciado em
+    // qualquer ponto do grafo, e `UsersModule` (importado na linha acima) já o
+    // instancia. Ela fica pela mesma razão do `FeatureFlagsModule` abaixo: a
+    // rota não deve depender de transitividade — se um dia `UsersModule`
+    // deixar de importar o módulo de tenancy, as rotas de convite somem e
+    // nenhuma spec do par acusaria.
     TenancyModule,
     // pt-BR (feature-flags): registra as rotas de `admin/feature-flags`.
     // ⚠️ MEDIDO 2026-10-18: esta linha é REDUNDANTE, e o comentário que a
     // justificava antes ("o Nest não herda o controller pelo módulo
     // intermediário") era FALSO. Tirando `FeatureFlagsModule` daqui, o e2e
-    // `13-feature-flags` continua 10/10 verde — o `TenancyModule` importa o
+    // `13-feature-flags` continua VERDE — o `TenancyModule` importa o
     // módulo pela aresta da porta (D13) e o `AppModule` importa o
     // `TenancyModule`, e o Nest registra os controllers de um módulo assim que
     // ele é instanciado em qualquer ponto do grafo.
+    // ⚠️ O texto dizia "10/10" aqui. O número envelheceu sozinho: esta mesma
+    // branch adicionou 3 testes ao cenário 13 depois da medição, e ele virou
+    // 13/13 sem que ninguém voltasse nesta linha. Por isso não há contagem
+    // nenhuma — quem precisar mede com o comando, e a contagem que importa
+    // (todos verdes) é a que não envelhece.
     // Ela fica porque a rota NÃO deve depender da aresta D13: se um dia o
     // `TenancyModule` deixar de importar o módulo, `convidar` perde o guard e
     // a tela de admin perde a rota — e nenhuma spec desse par acusaria.

@@ -51,3 +51,14 @@ CREATE TABLE feature_flags (
 -- `schema.prisma`: o Prisma escreve a coluna a cada `update`. Sem ela, o
 -- `upsert` passaria a falhar depois que alguém fechar o privilégio por coluna
 -- (o caminho que a `20261020000005` tomou para `tenant_memberships`).
+--
+-- ⚠️ `version` ESTÁ INERTE, e é decisão (D16) — não sobra de outra feature.
+-- MEDIDO 2026-10-18: `PrismaFeatureFlagRepository` nunca escreve nem lê a
+-- coluna; o `upsert` do `definir` trata só `{chave, ativada}`. As duas rotas
+-- respondem sem `ETag` e o PUT não exige `If-Match`, ao contrário do resto do
+-- repositório (`users.controller.ts` manda `ETag: W/"v<n>"` e exige `If-Match`).
+-- Ela fica porque o optimistic locking é o caminho natural quando existir cache
+-- de flag — e o `FeatureFlagGuard` hoje lê o banco a CADA request da rota
+-- protegida, que é o comportamento desejado para uma kill-switch. Quando o
+-- cache entrar, ou a coluna passa a ser escrita e o PUT ganha `If-Match`, ou ela
+-- sai em migration. O que não pode é continuar muda sem ninguém dizer por quê.
