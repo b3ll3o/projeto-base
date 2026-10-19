@@ -38,6 +38,7 @@ import { checkTestSetCovered } from './check-test-set-covered';
 import { checkRunbookDrift } from './check-runbook-drift';
 import { checkTenantScopeSource } from './check-tenant-scope-source';
 import { checkFeatureFlagContract } from './check-feature-flag-contract';
+import { checkFeatureFlagPortas } from './check-feature-flag-portas';
 import { existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
@@ -356,6 +357,7 @@ export const RUNNERS: Record<string, () => CheckResult | Promise<CheckResult>> =
   'check-runbook-drift': () => checkRunbookDrift({ repoRoot: '.' }),
   'check-tenant-scope-source': () => checkTenantScopeSource({ srcRoot: 'apps/api/src' }),
   'check-feature-flag-contract': () => checkFeatureFlagContract(),
+  'check-feature-flag-portas': () => checkFeatureFlagPortas(),
 };
 
 /**

@@ -44,7 +44,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { trace } from '@opentelemetry/api';
+import {
+  traceIdDe,
+  type RequestComTrace,
+} from '../../../../../shared/infrastructure/http/trace-id.js';
 import { FEATURE_FLAG_KEYS_METADATA } from '../decorators/require-feature-flag.decorator.js';
 import {
   FEATURE_FLAG_REPOSITORY_PORT,
@@ -98,7 +101,14 @@ export async function chaveDesligada(
  * primeiros ramos — span OTel ativo, ou `request.id` do Fastify. No último
  * recurso os dois divergem, e MEDIDO 2026-10-19: aqui o fallback é `'-'`, lá
  * é `randomUUID()`. Quando os dois caem, a linha de log e o erro que o
- * usuário viu apontam para identificadores diferentes.
+ * usuário viu apontavam para identificadores diferentes.
+ *
+ * ⚠️ **CORRIGIDO na #111 (2026-10-19).** A derivação saiu daqui e foi para
+ * `shared/infrastructure/http/trace-id.ts`, usada também pelo
+ * `GlobalExceptionFilter`. O terceiro ramo deixou de divergir porque o id é
+ * **gravado no request**: quem pede primeiro fixa, quem pede depois recebe o
+ * mesmo. Este JSDoc fica porque ele registra o defeito, e o registro é o que
+ * impede a terceira cópia de nascer.
  */
 export function registrarBloqueio(
   chave: FeatureFlagKey,
@@ -106,18 +116,32 @@ export function registrarBloqueio(
   // registrar troca um 404 honesto por um 500. MEDIDO 2026-10-19: o spec do
   // controller passa `undefined` (`SEM_TOKEN = undefined as never`), que o tsc
   // aceita porque `never` casa com tudo e que o runtime não aguenta.
-  req?: { method?: string; url?: string; id?: string; user?: unknown },
+  req?: RequestComTrace & { method?: string; url?: string; user?: unknown },
 ): void {
-  const traceId = trace.getActiveSpan()?.spanContext().traceId ?? req?.id ?? '-';
+  const traceId = traceIdDe(req);
   const ator = (req?.user as { sub?: string } | undefined)?.sub ?? 'anônimo';
   // ⚠️ O `try` implementa o invariante que o JSDoc acima já declarava. Sem
   // ele, um `warn` que lança (stdout em pipe morto, disco cheio) impede o
   // `throw new NotFoundException()` de rodar: o filtro global mapeia 500 e
   // LOGA A STACK, trocando um 404 honesto por um 500.
   try {
+    // pt-BR (#111): CAMPOS, não concatenação. A versão anterior montava uma
+    // string e o `chave` era SUBSTRING do texto — o que a issue pede ("log
+    // estruturado") é consultável por campo, e substring não é campo. O Pino
+    // recebe o segundo argumento como objeto de campos.
     loggerBloqueio.warn(
-      `[${traceId}] ${req?.method ?? '?'} ${req?.url ?? '?'} -> 404: feature "${chave}" ` +
-        `desligada (ator: ${ator})`,
+      {
+        // O nome do campo é `featureFlag`, e não `chave`: a tela e o catálogo já
+        // chamam de "chave" e o log precisa ser filtrável por quem lê.
+        featureFlag: chave,
+        metodo: req?.method ?? '?',
+        rota: req?.url ?? '?',
+        ator,
+        // `traceId` no MESMO nome do corpo do 404 (`traceId`), para quem
+        // correlaciona log e resposta não precisar saber que são dois lugares.
+        traceId,
+      },
+      'feature flag desligada — recurso respondeu 404',
     );
   } catch {
     // Silêncio deliberado: um log que falha não pode virar resposta. O 404 é o

@@ -8,8 +8,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import type { FastifyAdapter } from '@nestjs/platform-fastify';
-import { trace, context } from '@opentelemetry/api';
-import { randomUUID } from 'node:crypto';
+import { traceIdDe } from './trace-id.js';
 import type { ProblemDetailsDto, ProblemDetailsError } from '@projeto/shared-types';
 import { mapExceptionToHttp } from './domain-exception-to-http.js';
 
@@ -38,10 +37,14 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     // pt-BR: prioridade para traceId W3C do span OTel ativo (32 hex chars),
     // correlacionando respostas HTTP com traces no backend OTel. Fallback
     // para request.id (Fastify) preserva compat com teste t-42 e logs já
-    // existentes; randomUUID é último recurso.
-    const span = trace.getSpan(context.active());
-    const w3cTraceId = span?.spanContext().traceId;
-    const traceId = w3cTraceId ?? request.id ?? randomUUID();
+    // existentes.
+    //
+    // pt-BR (#111): a derivação foi EXTRAÍDA para `traceIdDe`, porque o log de
+    // bloqueio de feature flag precisa do MESMO id. As duas cópias concordavam
+    // nos dois primeiros ramos e divergiam no terceiro — o `randomUUID()` de
+    // cada lado. Agora o último recurso grava no request e as duas leituras
+    // recebem o mesmo valor.
+    const traceId = traceIdDe(request);
 
     const { status, code, title, detail, errors } = this.mapException(exception);
 

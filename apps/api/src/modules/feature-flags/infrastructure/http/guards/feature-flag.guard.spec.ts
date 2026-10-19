@@ -14,7 +14,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Reflector } from '@nestjs/core';
 import { ExecutionContext, ForbiddenException, Logger, NotFoundException } from '@nestjs/common';
-import { FeatureFlagGuard } from './feature-flag.guard.js';
+import { FeatureFlagGuard, registrarBloqueio } from './feature-flag.guard.js';
 import {
   FEATURE_FLAG_REPOSITORY_PORT,
   type FeatureFlagEstado,
@@ -138,5 +138,58 @@ describe('FeatureFlagGuard', () => {
     await expect(guard.canActivate(makeCtx(ATOR))).rejects.toBeInstanceOf(NotFoundException);
 
     warn.mockRestore();
+  });
+
+  // ── pt-BR (#111): o rastro é CONSULTÁVEL ──────────────────────────────────
+  //
+  // A spec de `users.controller.spec.ts` afirma o rastro com
+  // `JSON.stringify(warn.mock.calls)` + `toContain` — que casa campo E
+  // substring. Uma implementação que voltasse a concatenar
+  // `` `[${id}] … feature "${chave}" desligada` `` PASSARIA nela, porque o
+  // nome da chave está no texto.
+  //
+  // Estes testes afirmam o **objeto**, não a string: é o que separa "campo
+  // consultável" de "linha legível".
+  describe('o rastro é estruturado, não texto', () => {
+    function camposDoWarn(): Record<string, unknown> {
+      const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      const req = { method: 'POST', url: '/api/v1/tenants/t1/invitations', id: 'req-1' };
+      registrarBloqueio('tenancy.invites', req);
+      const objeto = warn.mock.calls[0]?.[0];
+      warn.mockRestore();
+      // O Pino recebe objeto como 1º argumento; a assinatura do Nest é
+      // `warn(message, ...optionalParams)`.
+      return typeof objeto === 'object' && objeto !== null
+        ? (objeto as Record<string, unknown>)
+        : {};
+    }
+
+    it('`featureFlag`, `rota`, `metodo` e `traceId` são CAMPOS do objeto', () => {
+      const campos = camposDoWarn();
+      expect(campos.featureFlag).toBe('tenancy.invites');
+      expect(campos.rota).toBe('/api/v1/tenants/t1/invitations');
+      expect(campos.metodo).toBe('POST');
+      expect(campos.traceId).toBe('req-1');
+    });
+
+    it('o primeiro argumento NÃO é string — é o objeto de campos', () => {
+      // A mutação que este teste pega: voltar à concatenação. `expect.objectContaining`
+      // passaria numa string que contém os valores; `typeof` não.
+      const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      registrarBloqueio('tenancy.invites', { url: '/x' });
+      expect(typeof warn.mock.calls[0]?.[0]).toBe('object');
+      warn.mockRestore();
+    });
+
+    it('o ator vem de `req.user.sub`, e sem usuário é "anônimo"', () => {
+      const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      registrarBloqueio('tenancy.invites', { user: { sub: 'u-42' } });
+      expect((warn.mock.calls[0]?.[0] as Record<string, unknown>).ator).toBe('u-42');
+
+      warn.mockClear();
+      registrarBloqueio('tenancy.invites', {});
+      expect((warn.mock.calls[0]?.[0] as Record<string, unknown>).ator).toBe('anônimo');
+      warn.mockRestore();
+    });
   });
 });
