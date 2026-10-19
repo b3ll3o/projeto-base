@@ -1,7 +1,7 @@
 ---
 name: revisoes-feature-flags
 description: Revisoes incrementais por fase do plano de feature flags, com as mutacoes medidas e o que cada revisor nao mediu
-version: 1.10.0
+version: 1.11.0
 updated: 2026-10-19
 status: revisto
 plan: 2026-10-18-feature-flags.md
@@ -284,3 +284,17 @@ morreu **para o lado otimista**, que e a variante perigosa: a declaracao de
 Regra que sai daqui, e que ja estava escrita em outro arquivo deste log: nao
 escrever "nao medido" antes de rodar o comando que mediria. Ou medir primeiro,
 ou escrever a declaracao com o comando que a tornaria verdadeira.
+
+### O scanner le "arquivos de teste" como "arquivos do PR"
+
+Ligar `<!--pr-refresh:live-->` no #109 entregou a prosa do corpo ao scanner.
+MEDIDO com `executar(...)` e `aplicar` no-op — o hook real reescreve o corpo
+(`pr-refresh-hook.ts:262`): **1 claim divergente em L131**, `declarado=67 medido=61`.
+O `67` era `api unit 67/880`, arquivos de **teste**; o regex e `(\d+)\s+(arquivos?)\b`
+(`pr-refresh-scan.ts:174`) — ve o numero e a palavra, nao o que a frase afirma.
+Fora da regiao viva o hook nao reescreve e sai em `divergencia-fora-do-vivo` (exit 3):
+**todo push futuro deste PR seria recusado por uma acusacao falsa**. Reescrito →
+`em-dia`, 0 divergentes. O corpo antigo tambem dizia *"18 dos arquivos sao os artefatos
+do `state-snapshot`"* — MEDIDO: 18 no **repo**, **1** no diff deste PR.
+Duas regras: medir o scanner ANTES de ligar o marcador (nunca com `aplicar` real),
+e nenhuma `<numero> arquivos` no corpo que nao seja a contagem do PR.
