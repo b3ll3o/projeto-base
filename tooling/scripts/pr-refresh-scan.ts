@@ -135,16 +135,25 @@ export interface Relatorio {
  * `declarado=0` (MEDIDO): um número que o corpo não contém, fabricado pela
  * regex e apresentado como se o autor o tivesse escrito.
  *
- * O guard `(?![.\d])` fecha o lado do fim: sem ele, `2.5 commits` casaria `2` e
+ * O guard `(?![.\d])` fechava o lado do fim: sem ele, `2.5 commits` casaria `2` e
  * viraria claim — invenção menor, do mesmo tipo. E o `(?<![\d.])` fecha o lado
  * do início, que o primeiro não pega: com só o `(?![.\d])`, o engine recua e
  * casa `5 commits` a partir do MEIO de `2.5` (MEDIDO — o teste ficou vermelho
  * com a frente do guard já posta). Com os dois, `2.5`, `1.23` e `2.11.2` não
  * casam, e nenhum número é lido a partir do meio.
+ *
+ * O guard do fim virou `(?![\d]|\.(?=\d{3}(?!\d)))` porque o antigo comia a
+ * contagem que FECHA A FRASE. MEDIDO no #109 (2026-10-19): o cabeçalho termina
+ * em `+5836/−74.` e a classe `remocoes` **não era extraída** — só `insercoes`.
+ * O corpo podia afirmar `−63` com a branch em `−74` e nem o hook nem o gate
+ * enxergavam, porque 0 claim é "nada divergente" e não "está certo".
+ *
+ * O ponto agora só rejeita quando é SEPARADOR DE MILHAR (`.` + 3 dígitos que não
+ * são o início de outro grupo). `−1.024.` continua 1024; `−74.` é 74.
  */
 const SEPARADORES_MILHAR = '.\\u202F\\u00A0\\u2009';
 const MILHAR = String.raw`\d{1,3}(?:[${SEPARADORES_MILHAR}]\d{3})+`;
-const NUMERO = String.raw`(?<![\d.])(?:${MILHAR}|\d+)(?![.\d])`;
+const NUMERO = String.raw`(?<![\d.])(?:${MILHAR}|\d+)(?![\d]|\.(?=\d{3}(?!\d)))`;
 
 const PADROES: Array<{
   classe: Classe;

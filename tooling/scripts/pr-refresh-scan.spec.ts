@@ -228,6 +228,26 @@ describe('pr-refresh-scan: extração de claims', () => {
     expect(c.filter((x) => x.classe === 'remocoes').map((x) => x.valor)).toEqual([2000]);
   });
 
+  it('número que FECHA FRASE é claim — o ponto final não come a contagem', () => {
+    // MEDIDO no corpo real do #109 (2026-10-19): o cabeçalho termina em
+    // `+5836/−74.` e o scanner extraía **só** `insercoes`. A classe `remocoes`
+    // sumia — `(?![.\d])` de NUMERO rejeita o `.` de fim de frase — então o
+    // corpo afirmava `−63` com a branch em `−74`, e nem o hook nem o gate podiam
+    // ver: 0 claim é "nada divergente", não "está certo".
+    const c = extrairClaims('20 commits · 66 arquivos · +5836/−74.');
+    expect(c.find((x) => x.classe === 'insercoes')?.valor).toBe(5836);
+    expect(c.find((x) => x.classe === 'remocoes')?.valor).toBe(74);
+  });
+
+  it('abrir o ponto NÃO pode ressuscitar o `1` de `1.024`', () => {
+    // A correção acima relaxa o ponto; este é o limite dela. Sem este teste ela
+    // passa vindo de "remova o lookahead" — que é justamente o defeito de
+    // 2026-10-06, e faria `1.024` voltar como `declarado=1`.
+    expect(extrairClaims('1.024 commits')[0]?.valor).toBe(1024);
+    expect(extrairClaims('+5905/−1.024.')).toHaveLength(2);
+    expect(extrairClaims('+5905/−1.024.').find((x) => x.classe === 'remocoes')?.valor).toBe(1024);
+  });
+
   it('cada claim carrega os offsets do NÚMERO, e eles delimitam os dígitos', () => {
     // Sem isto a escrita por offset não tem alvo, e voltar para substring é o
     // caminho que transforma o cabeçalho em `**45, 50, 6000**`.
