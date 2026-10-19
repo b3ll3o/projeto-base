@@ -13,7 +13,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { Reflector } from '@nestjs/core';
-import { ExecutionContext, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ExecutionContext, ForbiddenException, Logger, NotFoundException } from '@nestjs/common';
 import { FeatureFlagGuard } from './feature-flag.guard.js';
 import {
   FEATURE_FLAG_REPOSITORY_PORT,
@@ -120,5 +120,23 @@ describe('FeatureFlagGuard', () => {
 
   it('o token da porta é um símbolo — o contrato com o `@Inject` do Nest', () => {
     expect(typeof FEATURE_FLAG_REPOSITORY_PORT).toBe('symbol');
+  });
+
+  it('um `warn` que LANÇA não troca o 404 por 500', async () => {
+    // O invariante está no JSDoc de `registrarBloqueio` e o código não o
+    // implementava: o `warn` era chamado antes do `throw` sem proteção, então
+    // stdout em pipe morto / disco cheio fazia o `NotFoundException` nunca
+    // rodar — e o filtro global mapeava 500 e logava a stack.
+    const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => {
+      throw new Error('EPIPE');
+    });
+    const { guard } = makeGuard(
+      ['tenancy.invites'],
+      [{ chave: 'tenancy.invites', ativada: false }],
+    );
+
+    await expect(guard.canActivate(makeCtx(ATOR))).rejects.toBeInstanceOf(NotFoundException);
+
+    warn.mockRestore();
   });
 });

@@ -359,8 +359,24 @@ describe('UsersController — handlers HTTP', () => {
       const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
       flags.listar.mockResolvedValue([{ chave: 'tenancy.invites', ativada: false }]);
 
+      // ⚠️ O request vai COM o token, e não `SEM_TOKEN`. MEDIDO 2026-10-19 por
+      // revisão adversarial: com `req === undefined`, `JSON.stringify(req)`
+      // dentro de `registrarBloqueio` produz `undefined` e a asserção
+      // `not.toContain(SECREDO)` passava para QUALQUER implementação — a spec
+      // afirmava uma proteção que não media. O `Request` real do Fastify carrega
+      // `.body`, e é lá que `destino.token` está.
+      //
+      // Sem `user`: `resolveActorId` só roda DEPOIS do `throw`, e um req com
+      // `user.sub` mudaria o `actorId` das ~38 assertions deste arquivo.
+      const reqComToken = {
+        method: 'POST',
+        url: '/api/v1/users',
+        id: 'req-teste',
+        body: { destino: { tipo: 'convite', token: SECREDO } },
+      } as never;
+
       await expect(
-        ctrl.create(COM_CONVITE({ tipo: 'convite', token: SECREDO }), reply as never, SEM_TOKEN),
+        ctrl.create(COM_CONVITE({ tipo: 'convite', token: SECREDO }), reply as never, reqComToken),
       ).rejects.toBeInstanceOf(NotFoundException);
 
       expect(warn).toHaveBeenCalled();

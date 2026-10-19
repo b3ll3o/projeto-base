@@ -23,7 +23,7 @@
 
 | # | Método | Path                              | Auth | Códigos principais                          |
 |---|--------|-----------------------------------|------|---------------------------------------------|
-| 1 | `POST` | `/api/v1/users`                   | ✅   | `201`, `400`, `409`                         |
+| 1 | `POST` | `/api/v1/users`                   | ✅   | `201`, `400`, `404`, `409`                  |
 | 2 | `GET`  | `/api/v1/users`                   | ✅   | `200`                                       |
 | 3 | `GET`  | `/api/v1/users/:id`               | ✅   | `200`, `404`                                |
 | 4 | `PATCH`| `/api/v1/users/:id`               | ✅   | `200`, `400`, `404`, `412`                  |
@@ -59,12 +59,18 @@ parte do JWT. Semântica e o limite da garantia:
 {
   nome: string;   // 1..120 chars
   email: string;  // RFC 5322, max 255 chars
+  senha: string;  // 8..72 chars — a senha EM CLARO (o argon2id tem ~96)
+  destino?:                       // ausente = a conta solta de hoje
+    | { tipo: 'empresa'; nome: string; slug: string }
+    | { tipo: 'convite'; token: string };  // 64 hex, o que randomBytes(32) produz
 }
 ```
 
 **Response `201`**: entidade `User` + header `ETag: W/"v<N>"`.
 
-Códigos de erro: `400` (payload inválido — Zod), `409` (email já em uso).
+Códigos de erro: `400` (payload inválido — Zod), `404` (só com `destino.tipo === 'convite'` e a flag `tenancy.invites` **desligada** — mesma resposta de porta fechada que as outras duas, ver [contrato das feature flags](../superpowers/specs/2026-10-18-feature-flags-contrato-http.md)), `409` (email já em uso).
+
+`destino: { tipo: 'empresa' }` **continua `201` com a flag desligada** — não usa token de convite.
 
 ### 3.2 `GET /users` — Listar (paginado por cursor)
 

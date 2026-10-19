@@ -94,7 +94,11 @@ export async function chaveDesligada(
  *
  * O `traceId` é o mesmo que já volta ao cliente no corpo do 404
  * (`global-exception.filter.ts:63`), então a linha de log e o erro que o
- * usuário viu apontam para o mesmo lugar.
+ * usuário viu apontam para o mesmo lugar. ⚠️ "No mesmo lugar" nos DOIS
+ * primeiros ramos — span OTel ativo, ou `request.id` do Fastify. No último
+ * recurso os dois divergem, e MEDIDO 2026-10-19: aqui o fallback é `'-'`, lá
+ * é `randomUUID()`. Quando os dois caem, a linha de log e o erro que o
+ * usuário viu apontam para identificadores diferentes.
  */
 export function registrarBloqueio(
   chave: FeatureFlagKey,
@@ -106,10 +110,19 @@ export function registrarBloqueio(
 ): void {
   const traceId = trace.getActiveSpan()?.spanContext().traceId ?? req?.id ?? '-';
   const ator = (req?.user as { sub?: string } | undefined)?.sub ?? 'anônimo';
-  loggerBloqueio.warn(
-    `[${traceId}] ${req?.method ?? '?'} ${req?.url ?? '?'} -> 404: feature "${chave}" ` +
-      `desligada (ator: ${ator})`,
-  );
+  // ⚠️ O `try` implementa o invariante que o JSDoc acima já declarava. Sem
+  // ele, um `warn` que lança (stdout em pipe morto, disco cheio) impede o
+  // `throw new NotFoundException()` de rodar: o filtro global mapeia 500 e
+  // LOGA A STACK, trocando um 404 honesto por um 500.
+  try {
+    loggerBloqueio.warn(
+      `[${traceId}] ${req?.method ?? '?'} ${req?.url ?? '?'} -> 404: feature "${chave}" ` +
+        `desligada (ator: ${ator})`,
+    );
+  } catch {
+    // Silêncio deliberado: um log que falha não pode virar resposta. O 404 é o
+    // contrato desta porta e ele não depende de o log ter funcionado.
+  }
 }
 
 @Injectable()

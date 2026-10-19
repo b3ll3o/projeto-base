@@ -143,6 +143,7 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `absent-tool-reads-as-approval` | `citada` | `.agents/runs/2026-10-05-guard-classes-autoauditoria.md` | `não há sintoma nenhum` |
 | `a-detector-that-fabricates-its-finding` | `pendente` | — | — |
 | `agent-evolution-and-memory` | `citada` | `.agents/specs/conventions/evolucao-agents.md` | `Agents e skills são entidades VIVAS` |
+| `api-response-substitui-o-default-do-post` | `pendente` | — | — |
 | `artefato-publicado-nao-nomeia-o-segredo` | `pendente` | — | — |
 | `assertion-is-not-a-wait` | `pendente` | — | — |
 | `ambiguous-sentinel-silently-skips` | `citada` | `.agents/specs/conventions/guard-classes.md` | `devolvia` |
