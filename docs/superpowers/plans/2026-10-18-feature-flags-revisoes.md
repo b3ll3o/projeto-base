@@ -292,11 +292,10 @@ MEDIDO com `executar(...)` e `aplicar` no-op — o hook real reescreve o corpo
 (`pr-refresh-hook.ts:262`): **1 claim divergente em L131**, `declarado=67 medido=61`.
 O `67` era `api unit 67/880`, arquivos de **teste**; o regex e `(\d+)\s+(arquivos?)\b`
 (`pr-refresh-scan.ts:174`) — ve o numero e a palavra, nao o que a frase afirma.
-Fora da regiao viva o hook nao reescreve e sai em `divergencia-fora-do-vivo` (exit 3):
-nao e bloqueio, e eu escrevi que era. MEDIDO no push seguinte — `pr-refresh saiu 3 —
-advisory, push liberado`, `EXIT=0`: o exit 3 **nao recusa o push**. O preco real e
-ruido que acusa um PR errado, nao um push travado. Reescrito → `em-dia`, 0 divergentes.
-O corpo antigo tambem dizia *"18 dos arquivos sao os artefatos do `state-snapshot`"* —
-MEDIDO: 18 no **repo**, **1** no diff deste PR.
+Fora da regiao viva o hook nao reescreve e sai em `divergencia-fora-do-vivo` (exit 3),
+que **nao recusa o push** — MEDIDO no push seguinte: `advisory, push liberado`,
+`EXIT=0`. Eu escrevi que travava; o preco real e ruido que acusa um PR errado.
+Reescrito → `em-dia`, 0 divergentes. O corpo antigo tambem dizia *"18 dos arquivos
+sao os artefatos do `state-snapshot`"* — MEDIDO: 18 no **repo**, **1** neste diff.
 Duas regras: medir o scanner ANTES de ligar o marcador (nunca com `aplicar` real),
 e nenhuma `<numero> arquivos` no corpo que nao seja a contagem do PR.
