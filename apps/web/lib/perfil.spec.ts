@@ -255,6 +255,47 @@ describe('getTenant é montado no ApiClient (Fase 3)', () => {
     // E ele realmente não pergunta — `lerTenant()` é a fonte do valor.
     expect(lerTenantMock).not.toHaveBeenCalled();
   });
+
+  /**
+   * A política de ERRO é a mesma de `obterMeuPerfil`, e só o 401 vira `null`.
+   *
+   * O que o merge de #108 revelou: esta função nasceu com `catch { return null }`
+   * e um comentário jurando que era "mesma política" de `obterMeuPerfil` — mas
+   * `obterMeuPerfil` foi corrigida no #107 para distinguir 401 de 403/5xx, e o
+   * `catch` daqui ficou para trás. Consequência na tela de flags, que lê `null`
+   * como veredito (`me === null || me.isAdmin !== true` → "acesso restrito"):
+   * administradora do SISTEMA com a API fora do ar recebia a tela afirmando que
+   * não era administradora — o defeito que o #107 existe para matar.
+   *
+   * ⚠️ Por que estes dois e não todos: 401→`null` e 500→propaga são os dois
+   * lados do `if`. Um `catch { return null }` passa no primeiro e falha no
+   * segundo; um `throw` cego faz o contrário. Os dois juntos provam que a
+   * discriminação existe; 403/timeout/rede são o mesmo `if` com outro rótulo.
+   */
+  describe('a política de erro é a do #107 (só o 401 vira null)', () => {
+    function erroApi(status: number): ApiError {
+      const problem = {
+        type: 'about:blank',
+        title: 'erro',
+        status,
+        detail: 'detalhe',
+        instance: '/me/profile',
+        code: 'ERRO',
+        traceId: 'trace-1',
+      };
+      return new ApiError('erro', 'codigo', status, problem);
+    }
+
+    it('401 vira null — token expirado é o mesmo estado de "sem sessão"', async () => {
+      clientMock.get.mockRejectedValueOnce(erroApi(401));
+      await expect(obterMeuPerfilGlobal()).resolves.toBeNull();
+    });
+
+    it('500 NÃO vira null — "não é administradora" e "a API caiu" são telas diferentes', async () => {
+      clientMock.get.mockRejectedValueOnce(erroApi(500));
+      await expect(obterMeuPerfilGlobal()).rejects.toThrow(ApiError);
+    });
+  });
 });
 
 describe('leitura de perfis', () => {

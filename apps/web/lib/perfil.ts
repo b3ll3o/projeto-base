@@ -131,14 +131,22 @@ export async function obterMeuPerfil(): Promise<MeProfileDto | null> {
  * `guardarTenant`, esta função já é a certa.
  */
 export async function obterMeuPerfilGlobal(): Promise<MeProfileDto | null> {
+  const client = await getClientOpcional(false);
+  if (client === null) return null;
+
   try {
-    const client = await getClientOpcional(false);
-    if (client === null) return null;
     return await client.get<MeProfileDto>('/me/profile');
-  } catch {
-    // Mesma política de `obterMeuPerfil`: falha de perfil vira `null` e quem
-    // decide é a página. Ver o comentário dela.
-    return null;
+  } catch (erro) {
+    // A MESMA política de `obterMeuPerfil` — e é a do #107, não a que existia
+    // quando esta função nasceu. Só o 401 vira `null`; 403, 5xx, timeout e rede
+    // sobem. O `catch { return null }` original jurava a mesma política e
+    // mentia depois do #108: a tela de flags lê `null` como veredito
+    // (`me === null || me.isAdmin !== true` → "acesso restrito"), então uma
+    // administradora do SISTEMA com a API fora do ar recebia a tela afirmando
+    // o contrário — o defeito que o #107 existe para matar, reintroduzido por
+    // um merge. O que sobe aqui é tratado por `app/error.tsx`.
+    if (erro instanceof ApiError && erro.status === 401) return null;
+    throw erro;
   }
 }
 
