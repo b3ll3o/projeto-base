@@ -159,6 +159,7 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `criterion-inert-on-empty-set` | `citada` | `.agents/specs/conventions/retrospective-capture.md` | `um critério escrito como` |
 | `failed-commit-leaks-staged-files-into-next-commit` | `pendente` | — | — |
 | `fase-7-http-state` | `recusada` | checkpoint de campanha de 2026-09-22; envelheceu e não é instrução | — |
+| `fixture-i-escolhi-nao-proibe-a-forma-do-arquivo-real` | `pendente` | — | — |
 | `gate-blind-to-uncommitted-work` | `citada` | `.agents/workflows/pr-refresh.md` | `não existe` |
 | `gate-compares-against-its-own-filter` | `pendente` | — | — |
 | `gate-must-not-depend-on-machine-ambient-state` | `pendente` | — | — |
@@ -189,6 +190,7 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `non-fast-forward-is-not-divergent-work` | `pendente` | — | — |
 | `origin-session-id-nested-under-metadata` | `citada` | `.tooling/scripts/ci/check-memory-crystallization.ts` | `devolve 0 SEM AVISO (exit 1)` |
 | `patch-medido-so-no-caminho-do-defeito` | `pendente` | — | — |
+| `pipe-maska-o-exit-code-do-comando` | `pendente` | — | — |
 | `pipe-stdout-dies-when-spawner-exits` | `pendente` | — | — |
 | `positive-test-must-assert-skip-state` | `citada` | `docs/fluxo-desenvolvimento.md` | `não havia nada para verificar` |
 | `post-task-retrospective-plan` | `removida` | os 3 artefatos que ela planejava já existem; mantê-la os lista como "a criar" | — |
