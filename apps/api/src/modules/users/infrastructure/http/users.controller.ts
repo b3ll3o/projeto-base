@@ -229,16 +229,40 @@ export class UsersController {
     // policy que o escondesse trancaria o admin fora do próprio bucket.
     // Nenhuma delas é bug: é o produto. Mudar aqui é mudança de requisito, com
     // migração de dado junto, não correção de furo.
-    const semDireito = perfil.isAdmin !== true && !perfil.permissions.includes('users.read');
+    // pt-BR (#108 revisão, achado 2): `perfil.isAdmin` NÃO é o único sinal de
+    // admin. Com `X-Tenant-Id`, `obterMeuPerfil` resolve o perfil pela
+    // MEMBERSHIP (`findProfileId` → só `tenant_memberships`), e o perfil do
+    // admin do sistema vive em `users.profile_id`. MEDIDO: o fluxo real devolve
+    // `denied { isAdmin: false, permissions: [] }` para o admin global com
+    // header — então `semDireito` era verdadeiro, `semVinculo` era verdadeiro,
+    // e o admin do sistema era recortado para a PRÓPRIA LINHA em qualquer
+    // listagem com header. O sintoma do #102 invertido: negação de acesso
+    // legítimo.
     //
-    // ⚠️ (issue #102) `semVinculo` é a peça que faltava. `perfil.profileId === null`
-    // significa que `findProfileId` NÃO resolveu perfil para o escopo pedido — e o
-    // banco só não resolve quando não há `tenant_memberships` ligando a conta
-    // àquela empresa. É a resposta a "o ATOR pertence a essa empresa?", que a
-    // RLS nunca fez: `usuario_no_escopo(alvo)` pergunta pelo ALVO
+    // O token é quem carrega o bypass global, e é o mesmo sinal que o
+    // `PermissionsGuard` aceita. `perfil.isAdmin` continua sendo consultado
+    // porque cobre o admin CUJO perfil resolve (o da própria empresa).
+    const isAdminGlobal = request?.user?.isAdmin === true;
+    const semDireito =
+      perfil.isAdmin !== true && !isAdminGlobal && !perfil.permissions.includes('users.read');
+    //
+    // ⚠️ (issue #102) `perfil.profileId === null` significa que `findProfileId`
+    // NÃO resolveu perfil para o escopo pedido — e o banco só não resolve quando
+    // não há `tenant_memberships` ligando a conta àquela empresa. É a resposta a
+    // "o ATOR pertence a essa empresa?", que a RLS nunca fez:
+    // `usuario_no_escopo(alvo)` pergunta pelo ALVO
     // (`EXISTS(… WHERE m.user_id = alvo AND m.tenant_id = escopo_atual())`), e o
     // `JwtAuthGuard` valida o FORMATO do uuid do header sem consultar membership.
     // Logo o header é capacidade declarada pelo cliente.
+    //
+    // ⚠️ (achado 7) O NOME `semVinculo` afirma mais do que o dado sustenta:
+    // `profileId === null` é verdade tanto para "não pertence a esta empresa"
+    // quanto para "pertence e ainda não tem perfil". Os dois colapsam aqui.
+    // O conserto do admin (acima) torna essa ambiguidade INOFENSIVA para o
+    // recorte — quem pertence sem perfil e não tem `users.read` é recortado
+    // pelos dois caminhos —, mas o nome continua mentindo e a próxima pessoa vai
+    // raciocinar errado por ele. Fica anotado aqui em vez de renomeado porque
+    // renomear o sinal sem trocar a semântica seria cosmetismo.
     //
     // MEDIDO antes do conserto (sessão `app_runtime`, escopo de empresa válida,
     // transação commitada, conta sem nenhuma membership):
@@ -265,7 +289,10 @@ export class UsersController {
       somenteUsuarioId:
         (empresa === null || semVinculo) && semDireito ? (request?.user?.sub ?? null) : null,
     };
-    return this.userUseCases.listar(input, empresa);
+    // pt-BR (#108 revisão, achado 10): só esta rota pede a projeção — é a que a
+    // tela `/admin/users` consome. As demais não pagariam uma transação extra
+    // por página para um campo que ninguém renderiza.
+    return this.userUseCases.listar(input, empresa, true);
   }
 
   // ───────────────────────── GET /users/:id ──────────────────────

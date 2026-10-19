@@ -98,7 +98,12 @@ export async function exigirAdmin(): Promise<Bloqueio | Liberado> {
     if (erro instanceof ApiTimeoutError || !(erro instanceof ApiError)) {
       return { bloqueio: true, tela: ServicoIndisponivel() };
     }
-    if (erro.status === 401) return redirect('/login');
+    // ⚠️ (achado 8) NÃO HÁ RAMO 401 AQUI, e não por esquecimento:
+    // `obterMeuPerfil` converte 401 em `null` antes de propagar, então o `me ===
+    // null` logo abaixo É o tratamento do 401. Um `if (status === 401)` aqui
+    // nunca dispararia — e num arquivo cuja razão de existir é a tabela
+    // 401 → login / 403 → restrito / 5xx → retry, o único caminho morto é o que
+    // a próxima pessoa leria como comportamento documentado.
     if (erro.status === 403) return { bloqueio: true, tela: AcessoRestrito() };
     // Qualquer outro 4xx/5xx da API: o servidor respondeu, então ele é a
     // fonte. Um 500 é falha do serviço, não negativa da conta.

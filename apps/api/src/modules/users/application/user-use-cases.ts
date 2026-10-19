@@ -185,7 +185,17 @@ export class UserUseCases {
     return toUserOutput(user);
   }
 
-  async listar(input: ListUsersInput, tenantId: string | null): Promise<ListUsersOutput> {
+  /**
+   * pt-BR (#108 revisão, achado 10): `comPerfilEfetivo` é explícito porque a
+   * projeção custa uma transação extra por página, e `GET /users` tem chamadores
+   * que não mostram perfil (a tela de cadastro, por exemplo). O default é
+   * `false` — quem não pede não paga.
+   */
+  async listar(
+    input: ListUsersInput,
+    tenantId: string | null,
+    comPerfilEfetivo = false,
+  ): Promise<ListUsersOutput> {
     const page = await this.userRepo.list(
       {
         cursor: input.cursor ?? null,
@@ -199,10 +209,11 @@ export class UserUseCases {
         somenteUsuarioId: input.somenteUsuarioId ?? null,
       },
       tenantId,
+      { comPerfilEfetivo },
     );
     // pt-BR (#106): o perfil efetivo vem por FORA do agregado, indexado por
-    // userId. Quem não estiver no map não tem vínculo neste escopo — e por isso
-    // o campo sai `undefined`, que é diferente de `null` ("vinculado sem perfil").
+    // userId. Quem não estiver no map é porque a projeção não foi pedida ou o
+    // id não veio da página — `null` é quem não tem perfil.
     const efetivos = page.perfilEfetivo;
     return {
       users: page.users.map((u) => toUserOutputNoEscopo(u, efetivos?.get(u.id().value))),

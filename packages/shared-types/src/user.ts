@@ -49,8 +49,9 @@ export interface UserOutputDto {
    * `null` para toda conta criada pelo produto. Usá-lo na tela `/admin/users`
    * fazia a coluna dizer "sem perfil" para quem tem, sempre.
    *
-   * Ausente = sem vínculo no escopo. `null` = vínculo sem perfil. A tela
-   * precisa da diferença, e por isso não é um campo com default.
+   * ⚠️ pt-BR (achado 1) `null` = sem perfil. Ausente = a listagem não pediu a
+   * projeção. O contrato de três estados foi removido: no bucket global não
+   * havia dado que sustentasse "não pertence a esta empresa".
    */
   perfilEfetivoNoEscopo?: UUID | null;
   version: number;

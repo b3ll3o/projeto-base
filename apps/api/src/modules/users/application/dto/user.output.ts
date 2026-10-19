@@ -20,9 +20,12 @@ export interface UserOutput {
   // ao lado. Não usar este para decidir permissão: ele não a representa.
   profileId: string | null;
   /**
-   * pt-BR (#106): perfil no tenant pedido, ou `null`/ausente conforme o caso.
-   * É este que `/admin/users` exibe. `undefined` = sem vínculo no escopo;
-   * `null` = vinculado sem perfil.
+   * pt-BR (#106): perfil no tenant pedido. É este que `/admin/users` exibe.
+   *
+   * ⚠️ pt-BR (achado 1) `null` = sem perfil. `undefined` = a listagem não pediu
+   * a projeção. O contrato de três estados que existiu aqui (ausente = "não
+   * pertence a esta empresa") foi REMOVIDO porque no bucket global não havia
+   * dado que o sustentasse.
    */
   perfilEfetivoNoEscopo?: string | null;
   createdAt: string;

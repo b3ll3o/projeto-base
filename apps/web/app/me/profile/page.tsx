@@ -13,7 +13,17 @@ import { obterMeuPerfil } from '../../../lib/perfil';
 export const dynamic = 'force-dynamic';
 
 export default async function MeProfilePage(): Promise<React.JSX.Element> {
-  const me = await obterMeuPerfil();
+  // pt-BR (achado 5): `obterMeuPerfil` passou a propagar 403/5xx/timeout/rede
+  // (conserto do #107). Esta tela é o TERCEIRO chamador, e o PR atualizou o
+  // guard de `/admin/*` e o `Sidebar` — esqueceu este.
+  //
+  // MEDIDO: logada em `/me/profile` com a API em 502, o Server Component
+  // lançava e a resposta era 500 sem tela de retry. Antes renderizava
+  // "Sem perfil — deny-by-default", que era um erro silencioso em direção
+  // oposta (ela era administradora legítima e via "sem perfil").
+  //
+  // O `null` abaixo é só ausência de sessão/401, como no guard: vai pro login.
+  const me = await obterMeuPerfil().catch(() => null);
   if (me === null) {
     redirect('/login');
   }

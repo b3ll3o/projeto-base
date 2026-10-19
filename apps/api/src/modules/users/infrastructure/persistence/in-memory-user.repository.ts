@@ -128,7 +128,16 @@ export class InMemoryUserRepository implements UserRepositoryPort {
     return snapshot;
   }
 
-  async list(input: UserListInput, _tenantId: string | null): Promise<UserListResult> {
+  // pt-BR (achado 10): o terceiro parâmetro existe para casar com o port. O
+  // in-memory NÃO tem `tenant_memberships`, então nem com `comPerfilEfetivo`
+  // ele produz mapa — e isso é honesto: ele não tem o dado. Devolver um mapa
+  // cheio de `null` seria afirmar "ninguém tem perfil", que é um estado que
+  // este repositório não pode observar.
+  async list(
+    input: UserListInput,
+    _tenantId: string | null,
+    _opcoes?: { comPerfilEfetivo?: boolean },
+  ): Promise<UserListResult> {
     const includeDeleted = input.includeDeleted === true;
     const limit = Math.max(1, Math.min(100, input.limit));
     const all = [...this.byId.values()]

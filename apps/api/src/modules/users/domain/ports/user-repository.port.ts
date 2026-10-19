@@ -27,15 +27,25 @@ export interface UserListResult {
   nextCursor: string | null;
   /**
    * pt-BR (#106, 2026-10-18): perfil EFETIVO de cada usuário no escopo pedido,
-   * indexado por `userId`. Vem da `tenant_memberships.profile_id` — a mesma
-   * coluna que a autorização lê — e NÃO de `users.profile_id`, que é global e
-   * é `null` para toda conta criada pelo produto.
+   * indexado por `userId`.
+   *
+   * Com `tenantId`, vem da `tenant_memberships.profile_id` — a mesma coluna que a
+   * autorização lê. Sem `tenantId`, vem de `users.profile_id`, que é a coluna
+   * que `findProfileId` e a escrita usam no bucket global. A bifurcação não é
+   * escolha: as três concordarem é o que impede a tela de discordar da escrita.
    *
    * O agregado NÃO é reescrito com este valor: `User.profileId` é o perfil da
    * conta, e a conta não pertence a uma empresa. Isto é projeção de leitura.
    *
-   * Ausente do map = sem vínculo no escopo pedido. Presente com `null` =
-   * vinculado sem perfil. A tela precisa da diferença.
+   * ⚠️ pt-BR (achado 1) **TODO `userId` da página está no mapa.** `null` = sem
+   * perfil. Map AUSENTE = a projeção não foi pedida (`list()` sem
+   * `comPerfilEfetivo`), ou o id não veio da página.
+   *
+   * Este contrato JÁ FOI de três estados (ausente = "não pertence", `null` =
+   * "pertence sem perfil") e foi REMOVIDO: no bucket global todo usuário da
+   * página pertence por definição, então "não pertence" não tinha dado que o
+   * sustentasse, e o filtro que tentava produzir esse dado (`profile: { is:
+   * { tenantId: null } }`) excluía justamente as contas criadas pelo produto.
    */
   perfilEfetivo?: ReadonlyMap<string, string | null>;
 }
@@ -111,7 +121,16 @@ export interface UserRepositoryPort {
    * Por padrão exclui soft-deleted (deletedAt !== null).
    * Inclui soft-deleted quando `includeDeleted: true`.
    */
-  list(input: UserListInput, tenantId: string | null): Promise<UserListResult>;
+  /**
+   * pt-BR (achado 10): `opcoes.comPerfilEfetivo` decide se a projeção de perfil
+   * é paga. `false` (default) não abre a transação extra — `GET /users` tem
+   * chamadores que não renderizam o campo.
+   */
+  list(
+    input: UserListInput,
+    tenantId: string | null,
+    opcoes?: { comPerfilEfetivo?: boolean },
+  ): Promise<UserListResult>;
 
   /**
    * pt-BR (#93.1 — RBAC, 2026-10-16): conta quantos users têm o

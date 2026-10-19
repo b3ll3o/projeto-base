@@ -88,7 +88,28 @@ export default async function AdminUsersPage(): Promise<React.JSX.Element> {
             // promete — "esta pessoa não tem perfil AGORA" — continua vero nos
             // dois casos.
             const perfilIdNoEscopo = u.perfilEfetivoNoEscopo;
+            // pt-BR (achado 3): o `<select>` só conhece os perfis que
+            // `GET /admin/profiles` devolveu. Se `perfilEfetivoNoEscopo` aponta
+            // para um perfil GLOBAL (aceito pelo `findProfileId` via
+            // `OR: [{ tenantId: null }, { tenantId }]`, mas filtrado por
+            // `tenantId` na lista), `atual` é `undefined` e o dropdown mostra
+            // "— sem perfil —".
+            //
+            // A versão anterior passava o id do membership no hidden
+            // `profileIdAtual` e o `''` do dropdown no select: as DUAS fontes
+            // discordavam, `decidirAtribuicaoPerfil` via `remover`, e apertar
+            // "Salvar" sem editar nada apagava o perfil. A divergência era o
+            // gatilho.
+            //
+            // A correção é o hidden deixar de ser uma fonte independente: ele
+            // carrega o que o SELECT está mostrando. Se o perfil não está na
+            // lista, o hidden também não o carrega — e salvar sem editar vira
+            // no-op, que é o comportamento correto.
+            //
+            // ⚠️ Isto é fail-safe para o lado que importa: o pior caso é a
+            // atribuição não parecer, e não um perfil sumir sem ação nenhuma.
             const atual = profiles.find((p) => p.id === perfilIdNoEscopo);
+            const perfilIdExibido = atual?.id ?? '';
             return (
               <tr key={u.id} className="border-b border-slate-100">
                 <td className="py-3 pr-4 text-slate-900">{u.nome}</td>
@@ -99,14 +120,14 @@ export default async function AdminUsersPage(): Promise<React.JSX.Element> {
                 <td className="py-3">
                   <form action={atribuir} className="flex items-center gap-2">
                     <input type="hidden" name="userId" value={u.id} />
-                    <input type="hidden" name="profileIdAtual" value={perfilIdNoEscopo ?? ''} />
+                    <input type="hidden" name="profileIdAtual" value={perfilIdExibido} />
                     {/* pt-BR: sem nome acessível o leitor de tela anuncia um
                         combo box anônimo, 1× por linha. `aria-label` não cria
                         elemento — a estrutura que o e2e mede fica igual. */}
                     <select
                       aria-label={`Perfil de ${u.email}`}
                       className="rounded-md border border-slate-300 px-2 py-1 text-sm"
-                      defaultValue={atual?.id ?? ''}
+                      defaultValue={perfilIdExibido}
                       name="profileId"
                     >
                       <option value="">— sem perfil —</option>

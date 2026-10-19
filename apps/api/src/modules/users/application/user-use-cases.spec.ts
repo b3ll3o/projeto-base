@@ -474,6 +474,7 @@ describe('UserUseCases', () => {
       expect(spy).toHaveBeenCalledWith(
         { cursor: null, limit: 10, includeDeleted: false, somenteUsuarioId: null },
         EMPRESA,
+        { comPerfilEfetivo: false },
       );
       spy.mockRestore();
     });
@@ -485,6 +486,7 @@ describe('UserUseCases', () => {
       expect(spy).toHaveBeenCalledWith(
         { cursor: null, limit: 10, includeDeleted: false, somenteUsuarioId: null },
         null,
+        { comPerfilEfetivo: false },
       );
       spy.mockRestore();
     });
@@ -596,6 +598,7 @@ describe('UserUseCases', () => {
       expect(spy).toHaveBeenCalledWith(
         { cursor: null, limit: 10, includeDeleted: false, somenteUsuarioId: 'u-1' },
         null,
+        { comPerfilEfetivo: false },
       );
       spy.mockRestore();
     });

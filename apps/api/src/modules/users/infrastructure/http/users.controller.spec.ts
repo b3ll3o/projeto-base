@@ -314,6 +314,7 @@ describe('UsersController — handlers HTTP', () => {
         somenteUsuarioId: null,
       },
       null,
+      true,
     );
     expect(result).toEqual({ items: [], nextCursor: null });
     runSpy.mockRestore();
@@ -330,6 +331,7 @@ describe('UsersController — handlers HTTP', () => {
         somenteUsuarioId: null,
       },
       null,
+      true,
     );
   });
 
@@ -343,13 +345,13 @@ describe('UsersController — handlers HTTP', () => {
   it('list() repassa a empresa do token como escopo', async () => {
     useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
     await ctrl.list({ user: { sub: 'u-1', tenantId: EMPRESA } } as never);
-    expect(useCases.listar).toHaveBeenCalledWith(expect.anything(), EMPRESA);
+    expect(useCases.listar).toHaveBeenCalledWith(expect.anything(), EMPRESA, true);
   });
 
   it('list() sem header de empresa cai no bucket de SISTEMA', async () => {
     useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
     await ctrl.list({ user: { sub: 'u-1' } } as never);
-    expect(useCases.listar).toHaveBeenCalledWith(expect.anything(), null);
+    expect(useCases.listar).toHaveBeenCalledWith(expect.anything(), null, true);
   });
 
   // ── O recorte de quem não tem `users.read` ───────────────────────────
@@ -375,6 +377,7 @@ describe('UsersController — handlers HTTP', () => {
     expect(useCases.listar).toHaveBeenCalledWith(
       expect.objectContaining({ somenteUsuarioId: 'u-1' }),
       null,
+      true,
     );
   });
 
@@ -391,6 +394,7 @@ describe('UsersController — handlers HTTP', () => {
     expect(useCases.listar).toHaveBeenCalledWith(
       expect.objectContaining({ somenteUsuarioId: null }),
       null,
+      true,
     );
   });
 
@@ -424,6 +428,7 @@ describe('UsersController — handlers HTTP', () => {
     expect(useCases.listar).toHaveBeenCalledWith(
       expect.objectContaining({ somenteUsuarioId: 'u-1' }),
       EMPRESA,
+      true,
     );
   });
 
@@ -445,17 +450,59 @@ describe('UsersController — handlers HTTP', () => {
     expect(useCases.listar).toHaveBeenCalledWith(
       expect.objectContaining({ somenteUsuarioId: null }),
       EMPRESA,
+      true,
     );
   });
 
-  // Um terceiro par para a ADMIN global com header alheio: `semVinculo` é
-  // verdadeiro para o admin global (o perfil global resolve fora do tenant), e
-  // sem este teste ele seria recortado para a própria linha — o que quebraria o
-  // acesso administrativo global justamente para quem tem o bypass.
-  it('list() admin global com header NÃO é recortado', async () => {
+  // pt-BR (achado 2) ESTE TESTE MENTIA, e é o achado mais importante do PR.
+  //
+  // A versão anterior mockava `obterMeuPerfil` devolvendo `{ profileId:
+  // 'perfil-global', isAdmin: true }` — e passava. Mas esse é o estado que o
+  // fluxo REAL NUNCA produz: com `X-Tenant-Id`, `findProfileId` lê SÓ a
+  // `tenant_memberships`, e o perfil do admin do sistema vive em
+  // `users.profile_id`. O retorno real é o `denied`:
+  //
+  //   { profileId: null, profileSlug: null, profileName: null,
+  //     isAdmin: false, permissions: [] }
+  //
+  // MEDIDO (probe descartado, resultado anotado no commit): com esse `denied`
+  // e com `user.isAdmin: true` no token, `somenteUsuarioId` era
+  // `"admin-global"` — o admin recortado para a PRÓPRIA LINHA. O sintoma do
+  // #102 invertido: negação de acesso legítimo.
+  //
+  // Mutar a condição volta a recortar TEMPORARIAMENTE e este teste era o que
+  // deveria ter derrubado. Ele não derrubava porque mockava o estado impossível.
+  it('list() admin global com header NÃO é recortado — pelo DENIED real', async () => {
+    // O `denied` que `profiles.use-cases.ts:817` devolve.
     profiles.obterMeuPerfil.mockResolvedValue({
-      profileId: 'perfil-global',
-      isAdmin: true,
+      profileId: null,
+      profileSlug: null,
+      profileName: null,
+      isAdmin: false,
+      permissions: [],
+    });
+    useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
+
+    // O bypass vive no TOKEN — `request.user.isAdmin`, o mesmo sinal que o
+    // `PermissionsGuard` aceita.
+    await ctrl.list({ user: { sub: 'u-1', tenantId: EMPRESA, isAdmin: true } } as never);
+
+    expect(useCases.listar).toHaveBeenCalledWith(
+      expect.objectContaining({ somenteUsuarioId: null }),
+      EMPRESA,
+      true,
+    );
+  });
+
+  // A CONTRAPARTIDA do achado 2, e ela é o que impede o conserto de virar
+  // "admin passa em tudo": sem `user.isAdmin` no token, o mesmo `denied`
+  // TEM de recortar. Se alguém afrouxar a condição, este é o vermelho.
+  it('list() conta COM o mesmo denied, mas SEM isAdmin no token, é recortada', async () => {
+    profiles.obterMeuPerfil.mockResolvedValue({
+      profileId: null,
+      profileSlug: null,
+      profileName: null,
+      isAdmin: false,
       permissions: [],
     });
     useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
@@ -463,8 +510,9 @@ describe('UsersController — handlers HTTP', () => {
     await ctrl.list({ user: { sub: 'u-1', tenantId: EMPRESA } } as never);
 
     expect(useCases.listar).toHaveBeenCalledWith(
-      expect.objectContaining({ somenteUsuarioId: null }),
+      expect.objectContaining({ somenteUsuarioId: 'u-1' }),
       EMPRESA,
+      true,
     );
   });
 
@@ -477,6 +525,7 @@ describe('UsersController — handlers HTTP', () => {
     expect(useCases.listar).toHaveBeenCalledWith(
       expect.objectContaining({ somenteUsuarioId: null }),
       null,
+      true,
     );
   });
 
@@ -492,6 +541,7 @@ describe('UsersController — handlers HTTP', () => {
     expect(useCases.listar).toHaveBeenCalledWith(
       expect.objectContaining({ somenteUsuarioId: null }),
       EMPRESA,
+      true,
     );
   });
 
@@ -521,6 +571,7 @@ describe('UsersController — handlers HTTP', () => {
     expect(useCases.listar).toHaveBeenCalledWith(
       expect.objectContaining({ includeDeleted: esperado }),
       null,
+      true,
     );
   });
 
