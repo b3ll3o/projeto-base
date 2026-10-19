@@ -243,14 +243,14 @@ contra ele — que foi exatamente o que aconteceu aqui.
 
 ### MEDIDO 2026-10-19 (F7)
 
-- `npx vitest run` (api inteiro, 3 projetos, e2e incluso) → **89 arquivos /
-  1100 testes verdes** (era 88 / 1086 na F3; a diferenca e a F3 mais a correcao
-  adversarial da v1.9.0, nao a F7)
-- `npx vitest run` (web) → **24 arquivos / 245 testes verdes** (+1 e +1: o
-  `obterMeuPerfilGlobal`)
+- `pnpm ci:local` → **13/13 tasks, EXIT 0**, 2m03 (2 cached). Por task:
+  api unit 67 arquivos / **880** · api coverage 67 / **880** · api integration
+  8 / **122** · api e2e 14 / **98** · web unit 24 / **245** · web coverage
+  24 / **245** · web e2e **45 passed** (1,8 min) · tooling 15 / **288** e
+  30 / **433**
 - `npx tsc --noEmit` → exit 0 nos **dois** pacotes (web e api)
-- `npx playwright test e2e/f14-admin-flags.spec.ts` → **3/3** (build 35,7 s; web
-  no ar em 43,1 s)
+- `npx playwright test e2e/f14-admin-flags.spec.ts` → **3/3** isolado (build
+  35,7 s; web no ar em 43,1 s)
 - `pnpm --filter @projeto/api test:coverage` → **87,16% stmt / 93,11% branch**,
   exit 0 (F3 mediu 87,05 / 93,01)
 - `pnpm ci:preflight` → **0 erro**, 2 checks `skipped` por ambiente (archive
@@ -261,8 +261,6 @@ contra ele — que foi exatamente o que aconteceu aqui.
 
 ### O que a F7 NAO mediu (fica declarado)
 
-- **O e2e do web inteiro** — rodou so o `f14`. Os outros 13 fluxos nao foram
-  reexecutados nesta branch depois da correcao do achado A.
 - **O F14 nao distingue `obterMeuPerfilGlobal` de `obterMeuPerfil`**, e continua
   valendo o "caminho INALCANCAVEL" do docstring: `guardarTenant` nao tem caller
   de producao (`sessao.ts:98`), entao `lerTenant()` devolve `null` e as duas
@@ -272,3 +270,17 @@ contra ele — que foi exatamente o que aconteceu aqui.
   la.
 - O `next build` standalone ja roda dentro do setup do Playwright (35,7 s) e
   **nao prova a tela**: `force-dynamic`, quem executa e o request.
+- O rate limit da rota (`100/min`) segue nao exercitado, como na F3.
+
+### Uma declaracao que enveleceu em minutos
+
+A primeira versao desta secao dizia *"o e2e do web inteiro: rodou so o f14; os
+outros 13 fluxos nao foram reexecutados"*. **Falso**: o `pnpm ci:local` rodado
+logo depois mediu `@projeto/web:test:e2e` → **45 passed**, cobrindo os 14
+fluxos. O claim morreu no intervalo entre a minha medicao e o proximo passo — e
+morreu **para o lado otimista**, que e a variante perigosa: a declaracao de
+"nao medido" e a que o leitor aceita sem conferir.
+
+Regra que sai daqui, e que ja estava escrita em outro arquivo deste log: nao
+escrever "nao medido" antes de rodar o comando que mediria. Ou medir primeiro,
+ou escrever a declaracao com o comando que a tornaria verdadeira.
