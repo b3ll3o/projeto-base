@@ -130,6 +130,29 @@ Pela UI: `http://localhost:3001/users` redireciona para `/login` (exige sessão)
 e-mail/senha com o usuário acima leva para `/users`, que lista o recém-criado ("1 usuário
 cadastrado"). `Cadastrar usuário` abre `/users/novo`.
 
+### 1.7 Usuário admin local (seed) ✅ medido
+
+O seed cria os perfis `admin`/`viewer` e, **fora de produção**, um usuário admin
+pronto para login:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T \
+  -w /repo/apps/api api pnpm exec tsx prisma/seed.ts
+```
+
+⚠️ Não existe `prisma.seed` no `package.json`: `pnpm exec prisma db seed` **sai 0 sem
+fazer nada** (medido 2026-10-20). Use o comando acima.
+
+| e-mail | senha | perfil |
+|---|---|---|
+| `admin@admin.com` | `Admin@123` | `admin` (todas as permissions, `is_admin=true`) |
+
+Credencial de DEV, no mesmo espírito da senha `projeto:projeto` do
+`docker-compose.dev.yml`: está em texto puro no repositório. O guard do seed é
+`NODE_ENV === 'development'` — **default-deny**: ausente, `staging` e `prod`
+(sem o "uction") não criam a conta. Para ambiente real, crie o admin pelo
+`POST /api/v1/users` e promova o perfil pela UI.
+
 ---
 
 ## Ambiente 2 — Dev local, Docker com hot reload 📖 lido do código

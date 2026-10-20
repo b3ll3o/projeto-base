@@ -11,6 +11,12 @@
 
 import { PrismaClient } from '@prisma/client';
 import { listAllPermissions } from '../src/shared/auth/permissions-catalog.js';
+import { Argon2PasswordHasher } from '../src/modules/auth/infrastructure/security/argon2-password-hasher.js';
+import { UserId } from '../src/modules/users/domain/value-objects/user-id.vo.js';
+
+/** Credencial de DEV — nunca de produção (ver o guard no passo 4). */
+const ADMIN_LOCAL_EMAIL = 'admin@admin.com';
+const ADMIN_LOCAL_SENHA = 'Admin@123';
 
 /**
  * pt-BR (Fase 9 — RLS): o seed conecta como DONO, nunca pelo `DATABASE_URL`
@@ -86,7 +92,42 @@ async function main(): Promise<void> {
   // 3) perfil viewer (deny-by-default; só o que for explicitamente dado)
   await upsertPerfilGlobal('viewer', 'Visualizador', false);
 
-  // 4) Atribui 'admin' ao primeiro user (idempotente)
+  // 4) Usuário admin LOCAL (idempotente). Senha fixa de propósito: é o mesmo
+  //    espírito da senha `projeto:projeto` do `docker-compose.dev.yml` — credencial
+  //    de DEV, conhecida por quem leu o repositório. Ela está em texto puro aqui,
+  //    então o guard é `=== 'development'` e não `!== 'production'`: ausente,
+  //    `staging` ou `prod` (sem "uction") criariam um admin de bypass total num
+  //    banco de produção. Mesmo padrão default-deny do `JWT_SECRET` no ADR-0002.
+  //    O CI não roda o seed, então este é o único controle — e ele é fechado.
+  if (process.env['NODE_ENV'] === 'development') {
+    const adminLocal = await prisma.user.findUnique({
+      where: { email: ADMIN_LOCAL_EMAIL },
+    });
+    if (adminLocal === null) {
+      await prisma.user.create({
+        data: {
+          id: UserId.create().value,
+          email: ADMIN_LOCAL_EMAIL,
+          name: 'Administrador',
+          passwordHash: await new Argon2PasswordHasher().hash(ADMIN_LOCAL_SENHA),
+          profileId: adminProfile.id,
+        },
+      });
+      console.log(`Seed: usuário admin local ${ADMIN_LOCAL_EMAIL} criado.`);
+    } else if (adminLocal.deletedAt !== null) {
+      // Três estados, três mensagens. Filtrar `deletedAt` no `findFirst` não
+      // resolvia: `email` é `@unique` e a linha apagada segue ocupando o
+      // índice, então o `create` estourava P2002 e matava o passo 5. Sem este
+      // ramo, o seed passava mudo e o login falhava com InvalidCredentials.
+      console.log(
+        `Seed: ${ADMIN_LOCAL_EMAIL} está soft-deleted (deleted_at=${adminLocal.deletedAt.toISOString()}) — não recriado. Restaure a linha ou use outro e-mail.`,
+      );
+    } else {
+      console.log(`Seed: usuário admin local ${ADMIN_LOCAL_EMAIL} já existe.`);
+    }
+  }
+
+  // 5) Atribui 'admin' ao primeiro user (idempotente)
   const firstUser = await prisma.user.findFirst({
     orderBy: { createdAt: 'asc' },
   });
