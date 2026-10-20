@@ -32,7 +32,26 @@
  *   que fingisse medir isso seria pior que não medir: consumiria confiança.
  */
 
-/** Tipos medidos no histórico, e que `review-routing.md` mapeia para reviewer. */
+/**
+ * Tipos medidos no `git log` deste repo — e só eles.
+ *
+ * ## São três listas, e elas divergem de propósito
+ *
+ * MEDIDO 2026-10-20: este gate aceita 7 tipos; `review-routing.md` mapeia 8
+ * (inclui `perf`, que aqui é REJEITADO); `review-router.ts` conhece 10 (inclui
+ * `perf`, `build` e `style`). As três divergem, e a divergência é deliberada:
+ *
+ * - esta lista responde "o que **foi usado** aqui". `perf`/`build`/`style`
+ *   nunca aparecem no `git log`, porque ninguém conseguiu commitar com eles
+ *   depois que o gate passou a existir — e o diferencial do spec, que é a
+ *   proteção contra lista envelhecida, mede o **histórico**, então ele é
+ *   cego a esse tipo de deriva por construção.
+ * - `review-router.ts` responde "o que o roteador **consegue** encaminhar".
+ *   Aceitar `build` aqui só adicionaria uma palavra que nenhum commit carrega.
+ *
+ * Se as três um dia devirem ser a mesma lista, a decisão é de semver do
+ *Conventional Commits, não um efeito colateral de fundir dois arrays.
+ */
 export const TIPOS: readonly string[] = ['feat', 'fix', 'chore', 'docs', 'test', 'refactor', 'ci'];
 
 /**
@@ -45,13 +64,18 @@ export const TIPOS: readonly string[] = ['feat', 'fix', 'chore', 'docs', 'test',
 const REGRA = /^(?<tipo>[a-z]+)(?:\((?<escopo>[^()\s]+)\))?!?: (?<descricao>\S.*)$/;
 
 /**
- * Commits que o git escreve sozinho, não uma pessoa.
+ * Commits que o git escreve sozinho.
  *
  * Um gate que exige Conventional Commit de um merge do GitHub está errado
  * sobre o que é Conventional Commit. Eles saem por `skipped` **com motivo
  * declarado** — nunca em silêncio, que é a diferença entre "não havia o que
  * verificar" e "verifiquei e passei" (regra dos 3 estados em
  * `docs/fluxo-desenvolvimento.md`).
+ *
+ * MEDIDO 2026-10-20: o padrão NÃO distingue autor. `Merge meu trabalho`
+ * escrito por uma pessoa casa e sai liberado com o motivo impresso. O que
+ * segura o bypass é o motivo à vista, não o autor — ninguém passa por um
+ * merge perdido entre `git commit` e `git log` sem deixar o registro.
  */
 const ISCAO = /^(?:Merge |Revert "|fixup! |squash! |amend! )/;
 
@@ -68,7 +92,12 @@ export interface ResultadoGate {
  * histórico inteiro sem spawn.
  */
 export function verificarMensagemCommit(mensagem: string): ResultadoGate {
-  const texto = mensagem.trim();
+  // CRLF normalizado ANTES do split. MEDIDO 2026-10-20: sem isto, o mesmo
+  // byte `\r` dava dois vereditos — `feat: x\r\n` passava (o `trim()` final
+  // come o `\r`) e `feat(gates): x\r\ncorpo\r\n` reprovava, porque o `.` do
+  // regex não casa `\r`. A reprovação é fail-closed, ou seja segura, mas a
+  // mensagem de erro imprimia o `\r` cru e o terminal comia a linha seguinte.
+  const texto = mensagem.replace(/\r\n?/g, '\n').trim();
 
   if (texto.length === 0) {
     return { ok: false, errors: ['mensagem de commit vazia'] };

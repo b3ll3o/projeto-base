@@ -6,7 +6,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -142,6 +143,78 @@ describe('diferencial contra o histórico real', () => {
     for (const legado of LEGADO) {
       expect(saida.split('\n')).toContain(legado);
     }
+  });
+});
+
+/**
+ * O caminho que o `.husky/commit-msg` de fato executa: o binário, o arquivo de
+ * mensagem e o **exit code**.
+ *
+ * MEDIDO 2026-10-20: apagar o `if (!r.ok) { … process.exit(1); }` do bloco CLI
+ * deixou os 20 testes verdes E o hook aceitando `perf(api): mais rapido`. Os
+ * testes acima cobrem a função pura; o hook consome o **outro** lado dela, e um
+ * lado que ninguém exercita regredi calado — sem CI que o note, porque este
+ * gate é local e deliberadamente não entra no `preflight`.
+ *
+ * `wip` e não `perf` de propósito: `perf` é rejeitado por este gate mas
+ * ACEITO por `review-router.ts`, então usá-lo aqui faria o teste depender de uma
+ * divergência de vocabulário que pode ser resolvida sem que este teste deva
+ * mudar. `wip` não está em lista nenhuma.
+ */
+describe('o caminho executado pelo hook — exit code do binário', () => {
+  const roda = (mensagem: string): { status: number; stdout: string; stderr: string } => {
+    const raiz = raizDoRepo();
+    const dir = mkdtempSync(join(tmpdir(), 'commit-msg-'));
+    const arq = join(dir, 'msg');
+    writeFileSync(arq, mensagem);
+    try {
+      const saida = execFileSync(
+        join(raiz, 'node_modules/.bin/tsx'),
+        [join(raiz, 'tooling/scripts/commit-msg-gate.ts'), arq],
+        { cwd: raiz, encoding: 'utf8', stdio: 'pipe' },
+      );
+      return { status: 0, stdout: saida, stderr: '' };
+    } catch (err) {
+      const e = err as { status: number; stdout: string; stderr: string };
+      return { status: e.status, stdout: e.stdout ?? '', stderr: e.stderr ?? '' };
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  it('BLOQUEIA com exit 1 e nomeia o culpado no stderr', () => {
+    const { status, stderr } = roda('wip(api): rascunho sem tipo válido');
+    expect(status, `o hook liberou uma mensagem inválida:\n${stderr}`).toBe(1);
+    expect(stderr).toContain('tipo "wip" fora da lista');
+  });
+
+  it('LIBERA com exit 0 uma mensagem válida', () => {
+    expect(roda('feat(gates): o que muda e por quê').status).toBe(0);
+  });
+
+  it('LIBERA um commit do git com exit 0 E o motivo no stdout — nunca em silêncio', () => {
+    // A árvore sadia só exercita metade do conserto se o `skipped` sair 0 sem
+    // dizer por quê: aí o gate não se distingue de um que não rodou.
+    const { status, stdout } = roda('Merge pull request #7 from origin/main');
+    expect(status).toBe(0);
+    expect(stdout).toContain('Conventional Commits não se aplica');
+  });
+});
+
+describe('CRLF — o mesmo byte, o mesmo veredito', () => {
+  it('aceita assunto com CRLF sem corpo', () => {
+    expect(verificarMensagemCommit('feat: x\r\n').ok).toBe(true);
+  });
+
+  it('aceita assunto com CRLF COM corpo — antes reprovava, e a mensagem comia a linha', () => {
+    const r = verificarMensagemCommit('feat(gates): x\r\n\r\ncorpo com\r\nlinhas\r\n');
+    expect(r.ok, `reprovou por causa do \\r:\n${r.errors.join('\n')}`).toBe(true);
+  });
+
+  it('a mensagem de erro não carrega \\r cru', () => {
+    const r = verificarMensagemCommit('nada disso é conventional\r\n\r\ncorpo\r\n');
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).not.toContain('\r');
   });
 });
 
