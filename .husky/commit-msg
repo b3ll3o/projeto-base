@@ -1,0 +1,21 @@
+#!/usr/bin/env sh
+#
+# Defense-in-Depth Layer 1 — commit-msg
+#
+# O Conventional Commits é regra declarada em prosa (`idioma.md` e
+# `git-workflow.md`) e não era executado por nada: `pre-commit` roda prettier e
+# os reviewers, `pre-push` roda o preflight, e a mensagem passava livre.
+#
+# Sem as duas linhas `#!/usr/bin/env sh` + `. .../husky.sh` que `pre-commit` e
+# `pre-push` ainda carregam: o husky as marca como DEPRECATED e avisa que vão
+# FALHAR na v10. Num hook novo elas só comprariam o mesmo aviso. Não as
+# reintroduza — se a v10 chegar, corrija os dois hooks antigos junto.
+
+echo "commit-msg: verificando Conventional Commits..."
+pnpm exec tsx tooling/scripts/commit-msg-gate.ts "$1" || {
+  echo "❌ commit-msg abortado: a mensagem não segue \`tipo(escopo?): descrição\`."
+  echo "   A regra e o histórico que a motivaram: .agents/specs/conventions/idioma.md"
+  echo "   Sem limite de tamanho e escopo opcional — o que o gate mede está em tooling/scripts/commit-msg-gate.ts"
+  exit 1
+}
+exit 0
