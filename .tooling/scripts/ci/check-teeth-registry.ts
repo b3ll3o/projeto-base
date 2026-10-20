@@ -3,7 +3,7 @@
  * Reconcilia o **registro de dentes** (`.agents/specs/conventions/
  * ci-defense-in-depth-dentes.md` §"Registro de dentes") com o que de fato roda.
  *
- * Três reconciliações, cada uma caçando uma classe de guard diferente:
+ * Quatro reconciliações, cada uma caçando uma classe de guard diferente:
  *
  *   1. **registro ↔ preflight** — todo gate que roda tem entrada no registro,
  *      e toda entrada do registro corresponde a um gate que roda. Sem isto, o
@@ -22,6 +22,32 @@
  *      gates vivem em `.tooling/scripts/ci/**`. Um prefixo de `.` que some —
  *      a rota existe, o lint passa (a regra não é `blocking`), e nenhum
  *      arquivo de CI tem revisão despachada. Classe 1: condição inalcançável.
+ *
+ *   4. **preflight ↔ catálogo humano** — todo gate que roda é citado na
+ *      §Tabela de Checks de `ci-defense-in-depth.md`, e nenhum gate citado ali
+ *      deixou de rodar. As três de cima vigiam o REGISTRO DE DENTES, que é a
+ *      fonte exigida; esta vigia o **catálogo**, que é a fonte que um humano
+ *      abre para saber o que o preflight roda. MEDIDO 2026-10-20: das 32
+ *      entradas, **11 não eram citadas** — as mais novas, exatamente as que
+ *      nenhuma das três reconciliacoes acima enxerga, porque o registro de
+ *      dentes estava em dia enquanto o catálogo envelhecia em silêncio.
+ *
+ *      O número é 10, e já foi 11 numa versão deste comentário: dois dos onze
+ *      eram escopos de um gate já citado (`check-eslint-drift:apps` e
+ *      `:packages`, cobertos pelo pai) e `lint-review-routing` é citado como
+ *      `review-routing`. A contagem errada não custou nada ao gate — só faria
+ *      o número envelhecer sem quem o medisse.
+ *
+ *      ## A coluna "Detecta" é território do gate, e a reconciliação ignora
+ *
+ *      `citedGateTokens` lê o backtick da **primeira** coluna só. Isso não é
+ *      descuido: a linha do `check-ci-local-scope` nomeia `check-ci-local-e2e`
+ *      na "Detecta" para dizer que os dois checam lados opostos do `ci:local` —
+ *      uma referência que é a **intenção da prosa**, não uma citação de catálogo.
+ *      Se a varredura varresse a linha inteira, cada gate que fizesse referência
+ *      a um par contaria como "citado" e a reconciliação perderia o dente nas
+ *      duas direções: gate ausente pareceria coberto e gate morto pareceria
+ *      vivo.
  *
  * ## Duas decisões que este check toma para não cair em classe 2
  *
@@ -57,8 +83,8 @@ import { join } from 'node:path';
 import { matchPathGlobs, loadMatrix } from '../../../tooling/scripts/review-router.js';
 import type { CheckResult } from './check-types';
 import { linhasDoRelato } from './check-types';
-import { preflightGates } from './preflight-gates';
-import type { GateRef } from './preflight-gates';
+import { PREFLIGHT_CHECKS, preflightGates } from './preflight-gates';
+import type { CheckSpec, GateRef } from './preflight-gates';
 
 export interface ReconcileInput {
   /** Gates que o preflight registra. */
@@ -152,6 +178,121 @@ export function unroutedGateFiles(params: {
   return params.gateFiles.filter((f) => !routed.has(f));
 }
 
+// ── 4. preflight ↔ catálogo humano ──────────────────────────────────────────
+
+/** Heading que delimita o catálogo de gates legível por gente. */
+const HUMAN_TABLE_HEADING = /^##\s+Tabela de Checks\s*$/m;
+
+/** Prefixo de ferramenta que o `id` carrega e a prosa costuma omitir. */
+const ID_TOOL_PREFIX_RE = /^(?:check|lint)-/;
+
+/**
+ * Um token que **nomeia um gate** — e não só uma palavra entre crases.
+ *
+ * Só o sentido inverso (citado no catálogo, sem gate que rode) usa este
+ * discriminador: as linhas da tabela citam `PREFLIGHT_CHECKS`, `wc -l`,
+ * `import type` e `engines.node`, que são tokens legítimos de prosa e não
+ * gates. O sentido direto não precisa dele — pergunta se um `id` está
+ * citado, e um id nunca é `wc -l`.
+ *
+ * `turbo-` entra na lista porque `turbo-redirect-differential` é um id real e
+ * não usa os outros dois prefixos; e `turbo.json` não casa, porque aqui a
+ * regra exige um hífen logo depois do prefixo.
+ */
+const GATE_TOKEN_RE = /^(?:check|lint|turbo)-[a-z0-9-]+(?::[a-z0-9-]+)?$/;
+
+/**
+ * Reduz um `id` (ou um token de prosa) à MESMA forma, dos dois lados.
+ *
+ * Duas reduções, e ambas existem por um caso real e não por elegância:
+ *
+ *   - `:escopo` cai — `check-eslint-drift:apps` e `:packages` são o MESMO
+ *     gate rodando duas vezes, e o catálogo documenta o gate.
+ *   - o prefixo `check-`/`lint-` cai — o catálogo escreve
+ *     `` `review-routing` matrix lint `` para o id `lint-review-routing`,
+ *     e o registro de dentes escreve do mesmo jeito. Sem esta redução o gate
+ *     acusaria um documento escrito na convenção dele.
+ */
+export function normalizaGateId(id: string): string {
+  return id
+    .replace(/:[^:]+$/, '')
+    .replace(ID_TOOL_PREFIX_RE, '')
+    .trim();
+}
+
+/**
+ * Todo token entre crases nas LINHAS DE TABELA do catálogo.
+ *
+ * Para na primeira linha que não é `|`, como `registryGateFiles` — a prosa
+ * abaixo da tabela cita `check-types.ts` e `turbo-redirect-differential.sh`
+ * ao explicar decisões antigas, e nenhum dos dois é uma declaração de gate.
+ *
+ * Varrer a linha INTEIRA (e não só a primeira célula) é o que faz a coluna
+ * mudar de lugar não quebrar: o catálogo já escreve o id na primeira célula
+ * como `` `review-routing` matrix lint ``, ou seja, o token está no meio da
+ * célula.
+ */
+export function citedGateTokens(markdown: string): string[] {
+  const heading = HUMAN_TABLE_HEADING.exec(markdown);
+  if (heading === null) return [];
+
+  const after = markdown.slice(heading.index + heading[0].length);
+  const tokens: string[] = [];
+  for (const line of after.split('\n')) {
+    if (tokens.length > 0 && !line.trimStart().startsWith('|')) break;
+    if (!line.trimStart().startsWith('|')) continue;
+    for (const m of line.matchAll(/`([^`]+)`/g)) {
+      if (m[1] !== undefined) tokens.push(m[1]);
+    }
+  }
+  return tokens;
+}
+
+/**
+ * Os dois lados da divergência entre o que roda e o que o catálogo diz.
+ *
+ * A classe 6 do `guard-classes.md` (`guard-classe-ausente-do-dado`) aplicada
+ * ao próprio catálogo: enquanto um gate novo não entra na tabela, ele não
+ * "falta" em lugar nenhum — ele simplesmente não é citado, e todo gate
+ * continua verde.
+ */
+export function reconcileCatalogoHumano(params: {
+  registeredGates: CheckSpec[];
+  humanTableMarkdown: string;
+}): ReconcileResult {
+  const tokens = citedGateTokens(params.humanTableMarkdown);
+  const citados = new Set(tokens.map(normalizaGateId));
+  const rodando = new Set(
+    params.registeredGates.map((g) => normalizaGateId(g.id)).filter((id) => id.length > 0),
+  );
+
+  const errors: string[] = [];
+
+  const semCitacao = [
+    ...new Set(
+      params.registeredGates.map((g) => g.id).filter((id) => !citados.has(normalizaGateId(id))),
+    ),
+  ];
+  for (const id of semCitacao) {
+    errors.push(
+      `gate roda no preflight sem entrada na §Tabela de Checks de ` +
+        `ci-defense-in-depth.md: ${id} — acrescente a linha na tabela`,
+    );
+  }
+
+  const semGate = [
+    ...new Set(tokens.filter((t) => GATE_TOKEN_RE.test(t) && !rodando.has(normalizaGateId(t)))),
+  ];
+  for (const token of semGate) {
+    errors.push(
+      `§Tabela de Checks cita um gate que não roda: ${token} — ` +
+        `ou o gate saiu do preflight, ou o id está errado`,
+    );
+  }
+
+  return { ok: errors.length === 0, errors };
+}
+
 /**
  * Reconcilia registro ↔ preflight, registro → artefato e registro ↔
  * roteamento. Cada erro NOMEIA o artefato culpado: um "registro divergente"
@@ -208,6 +349,12 @@ export function reconcileTeethRegistry(input: ReconcileInput): ReconcileResult {
 
 const REGISTRY_DOC = join(process.cwd(), '.agents/specs/conventions/ci-defense-in-depth-dentes.md');
 const MATRIX_DOC = join(process.cwd(), '.agents/specs/conventions/review-routing.md');
+/**
+ * O catálogo legível por gente — a fonte que alguém abre para saber o que o
+ * preflight roda. Não é a fonte exigida (isso é `REGISTRY_DOC`), e é
+ * justamente por isso que nenhuma das outras três reconciliações o alcança.
+ */
+const HUMAN_TABLE_DOC = join(process.cwd(), '.agents/specs/conventions/ci-defense-in-depth.md');
 
 /**
  * Os gates do preflight, **derivados** da lista que o preflight de fato roda.
@@ -232,14 +379,24 @@ const MATRIX_DOC = join(process.cwd(), '.agents/specs/conventions/review-routing
  * vez de 18, que é a forma correta de um derivado tomar snapshot.
  */
 export { preflightGates };
-export type { GateRef } from './preflight-gates';
+export type { CheckSpec, GateRef } from './preflight-gates';
 
-export function checkTeethRegistry(): CheckResult {
+/**
+ * `humanTable` existe para o spec conseguir exercitar o **call site** com um
+ * catálogo quebrado. MEDIDO 2026-10-20: desligar `...catalogo.errors` da
+ * agregação final deixava os 23 testes verdes e o gate sair 0 — os testes das
+ * funções puras passavam, e o que não tinha dente era a LIGAÇÃO. Ligação só
+ * ganha dente se um teste passar por ela, e o jeito de passar por ela sem
+ * escrever no doc do repo é injetar o markdown.
+ */
+export function checkTeethRegistry(opts: { humanTable?: string } = {}): CheckResult {
   let registry: string;
   let matrix: string;
+  let humanTable: string;
   try {
     registry = readFileSync(REGISTRY_DOC, 'utf8');
     matrix = readFileSync(MATRIX_DOC, 'utf8');
+    humanTable = opts.humanTable ?? readFileSync(HUMAN_TABLE_DOC, 'utf8');
   } catch (err) {
     return {
       ok: false,
@@ -255,12 +412,27 @@ export function checkTeethRegistry(): CheckResult {
   // fica antes do primeiro commit dele.
   const trackedFiles = readRepoFiles();
 
-  return reconcileTeethRegistry({
+  // Composto, e não somado como 4º item de `ReconcileInput`: as três
+  // reconciliações de lá casam por ARQUIVO, esta casa por ID, e misturar as
+  // duas chaves num único `ReconcileInput` obrigaria as 5 chamadas de spec já
+  // existentes a passar um campo que não têm.
+  const dentes = reconcileTeethRegistry({
     registeredGates: preflightGates(),
     registryMarkdown: registry,
     matrixMarkdown: matrix,
     trackedFiles,
   });
+
+  // `PREFLIGHT_CHECKS`, e não `preflightGates()`: `GateRef` é `{name, file}` —
+  // o id é descartado justamente porque as 3 de cima casam por arquivo. O
+  // catálogo é a única das 4 que precisa dele, e a lista viva é a fonte.
+  const catalogo = reconcileCatalogoHumano({
+    registeredGates: PREFLIGHT_CHECKS,
+    humanTableMarkdown: humanTable,
+  });
+
+  const errors = [...dentes.errors, ...catalogo.errors];
+  return { ok: errors.length === 0, errors };
 }
 
 /**

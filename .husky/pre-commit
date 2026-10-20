@@ -1,6 +1,3 @@
-#!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
-
 # Rodar lint-staged SOMENTE se houver arquivos staged que casem com os globs.
 # Sem isso, commits com só .gitkeep/.md/.png falham o hook.
 staged_lint=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx|json|yaml|yml)$' || true)

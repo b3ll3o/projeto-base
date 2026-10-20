@@ -1,6 +1,3 @@
-#!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
-
 # Defense-in-Depth Layer 1 — pre-push local
 # Bloqueia push se drift estrutural for detectado localmente,
 # poupando ~4min de round-trip no CI remoto.

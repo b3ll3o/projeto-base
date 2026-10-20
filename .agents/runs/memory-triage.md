@@ -43,26 +43,21 @@ transbordo de âncora para a 5ª célula voltava a ser silencioso desde que o au
 também errasse a disposição. O cabeçalho `| memória | disposição |` nomeia as
 colunas e ninguém o escreve por engano.
 
-### Por que 78 linhas e não 81
+### Por que o corpus é menor que os arquivos do diretório
 
 O gate isenta três categorias antes de formar o corpus: `MEMORY.md`,
-`*-result.md` (resultado de campanha) e `type: reference`. MEDIDO 2026-10-16:
-
-```bash
-ls -1 <memdir>/*.md | wc -l                                                     # 121
-ls -1 <memdir>/*.md | grep -v '/MEMORY.md$' | grep -vc 'result\.md$'          #  81
-grep -l '^  type: reference$' <memdir>/*.md | wc -l                            #   3
-```
-
-Os 3 são `claude-code-hook-schema-realities`, `gh-pr-edit-graphql-deprecation`
-e `resultados-b-por-campanha`. **Listá-los aqui seria linha órfã garantida** — a
-isenção é do gate, não uma omissão da triagem, e a contagem que fecha é a que o
-gate mede:
+`*-result.md` (resultado de campanha) e `type: reference`. Com `<memdir>` = o
+diretório de memória da máquina, a contagem que fecha é esta:
 
 ```bash
 ls -1 <memdir>/*.md | grep -v '/MEMORY.md$' | grep -v 'result\.md$' \
-  | xargs grep -L '^  type: reference$' | wc -l                                 #  78
+  | xargs grep -L '^  type: reference$' | wc -l
 ```
+
+**Listar** os isentos aqui seria linha órfã garantida — a isenção é do gate,
+não uma omissão da triagem. O gate imprime esse total em `medido: N memória(s)
+no corpus`; se a contagem do ledger divergir dele, é a do ledger que erra. O
+número fica no comando porque um literal aqui envelhece sem gate que aponte.
 
 ### A dívida que a isenção dos 39 `*-result.md` esconde
 
@@ -190,6 +185,7 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `mutation-that-doesnt-land-looks-green` | `pendente` | — | — |
 | `non-fast-forward-is-not-divergent-work` | `pendente` | — | — |
 | `origin-session-id-nested-under-metadata` | `citada` | `.tooling/scripts/ci/check-memory-crystallization.ts` | `devolve 0 SEM AVISO (exit 1)` |
+| `passar-no-gate-nao-e-o-que-o-hook-faz` | `citada` | `.github/PULL_REQUEST_TEMPLATE.md` | `mesmo evento visto de dois lados` |
 | `patch-medido-so-no-caminho-do-defeito` | `pendente` | — | — |
 | `pipe-maska-o-exit-code-do-comando` | `pendente` | — | — |
 | `pipe-stdout-dies-when-spawner-exits` | `pendente` | — | — |

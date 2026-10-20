@@ -278,6 +278,20 @@ Quando seguido corretamente, este padrão garante:
 ✅ **Componibilidade** — workflows são compostos de agents simples
 ✅ **Observabilidade** — chain of dispatch é explícita e auditável
 
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues deste repo, via CLI `gh`. Ver `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Sete papéis canônicos — duas categoria e cinco estado — mapeados para os rótulos do tracker. Ver `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` na raiz + `docs/adr/`. Ver `docs/agents/domain.md`.
+
 ---
 
 **Mantido por:** projeto-base contributors
