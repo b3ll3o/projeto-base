@@ -1,6 +1,8 @@
 # Plano — Admin editar perfil (nome/descrição) e permissões
 
 > Data: 2026-10-19 · Branch: `feat/admin-editar-perfis` (base `main` @ `39d65ba`)
+> Rebase: 2026-10-20 — o base real do PR é `main` @ `74dccba` (#114). O `39d65ba`
+> acima é o base quando o plano foi escrito, não a base de hoje.
 > Demanda: "usuário admin deve poder editar perfis e permissões dentro do perfil"
 
 ## 0. State snapshot (camada 0 — `state-aware-planning`)

@@ -148,10 +148,19 @@ fazer nada** (medido 2026-10-20). Use o comando acima.
 | `admin@admin.com` | `Admin@123` | `admin` (todas as permissions, `is_admin=true`) |
 
 Credencial de DEV, no mesmo espírito da senha `projeto:projeto` do
-`docker-compose.dev.yml`: está em texto puro no repositório. O guard do seed é
-`NODE_ENV === 'development'` — **default-deny**: ausente, `staging` e `prod`
-(sem o "uction") não criam a conta. Para ambiente real, crie o admin pelo
-`POST /api/v1/users` e promova o perfil pela UI.
+`docker-compose.dev.yml`: está em texto puro no repositório. O guard do seed tem
+**duas** condições, e as duas precisam valer:
+
+| condição | regra | por quê |
+|---|---|---|
+| modo | `NODE_ENV === 'development'` | **default-deny**: ausente, vazio, `staging` e `prod` (sem o "uction") não criam a conta |
+| destino | host da `DIRECT_DATABASE_URL` em `localhost`, `127.0.0.1` ou `postgres` | modo e destino vêm de arquivos diferentes — o overlay dev **força** `NODE_ENV: development` (`docker-compose.dev.yml:5`), mas a `DIRECT_DATABASE_URL` chega pelo `env_file: .env.production` do compose base (`docker-compose.yml:101`) |
+
+O comando acima satisfaz as duas: dentro do container o host é `postgres`. Se o
+destino não for local, o seed **recusa e sai 1**, nomeando o host — medido
+2026-10-20 com `projeto-base-postgres`, que resolve para o mesmo Postgres e mesmo
+assim é recusado. Para ambiente real, crie o admin pelo `POST /api/v1/users` e
+promova o perfil pela UI.
 
 ---
 
