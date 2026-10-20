@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -258,6 +258,70 @@ describe('verificarMarcador', () => {
     // que o apply nunca procura.
     const r = verificarMarcador(`linha 1 ${MARCADOR}`, relatorio([claim(1, true)]));
     expect(r.ok).toBe(true);
+  });
+
+  // ───────────────────────────────────────────────────────────────────────
+  // A FORMA DO TEMPLATE REAL — o que a tabela de formas do plano mede
+  // ───────────────────────────────────────────────────────────────────────
+
+  const TEMPLATE_PR = join(
+    dirname(fileURLToPath(import.meta.url)),
+    '../../.github/PULL_REQUEST_TEMPLATE.md',
+  );
+
+  /**
+   * O template de PR do repo, com o placeholder da saída trocado por uma claim
+   * DIVERGENTE real. Lido do disco, e não copiado aqui: uma cópia passaria
+   * verde depois de alguém mover o marcador no template — que é exatamente a
+   * alteração que a tabela de formas do plano documenta.
+   */
+  function corpoDoTemplateComClaim(declarado: string): string {
+    const linhas = readFileSync(TEMPLATE_PR, 'utf-8').split('\n');
+    const i = linhas.findIndex((l) => l.includes('<saída real>'));
+    if (i < 0) throw new Error('o template perdeu a linha "<saída real>"');
+    linhas[i] = `> ${declarado}`;
+    return linhas.join('\n');
+  }
+
+  /** A linha 1-based da claim dentro do corpo montado. */
+  function linhaDa(body: string, agulha: string): number {
+    return body.split('\n').findIndex((l) => l.includes(agulha)) + 1;
+  }
+
+  it('a forma que o TEMPLATE prescreve passa — medida no template, não numa cópia', () => {
+    const corpo = corpoDoTemplateComClaim('99 arquivos modificados');
+    const r = verificarMarcador(
+      corpo,
+      relatorio([claim(linhaDa(corpo, '99 arquivos'), true, 'arquivos')]),
+    );
+    expect(r.ok).toBe(true);
+  });
+
+  it('a MESMA claim na prosa reprova — é a diferença que a revisão mediu errado', () => {
+    // A revisão do #114 mediu a claim na prosa com o marcador no blockquote, e
+    // concluiu que "a forma que o template manda dá exit 1". São duas formas:
+    // aqui a prosa é o parágrafo 1 e o blockquote é outro, e `linhasVivas`
+    // escopa por parágrafo — reprovar é o comportamento certo.
+    const template = corpoDoTemplateComClaim('99 arquivos modificados').split('\n');
+    const prosa = ['A prova: 99 arquivos modificados.', '', ...template.slice(4)].join('\n');
+    const r = verificarMarcador(prosa, relatorio([claim(1, true, 'arquivos')]));
+    expect(r.ok).toBe(false);
+  });
+
+  it('o TEMPLATE não traz a linha em branco que separaria o marcador da claim', () => {
+    // `139d8d2` tirou a linha em branco entre a saída e o marcador. Repô-la
+    // volta à forma que dá exit 1 sem que uma palavra do template mude — o
+    // teste tem que ver a FORMA, não o texto.
+    //
+    // MEDIDO 2026-10-20: o que separa as duas formas é a LINHA EM BRANCO, não
+    // o `> ` do blockquote. Tirar o `> ` e deixar as linhas contíguas continua
+    // sendo um parágrafo só, e o gate continua aceitando — mutação que fiz e
+    // que deixou os 36 testes verdes. Então o `>` é o que o markdown USA para
+    // renderizar citação, e o gate escopa por parágrafo; quem escrever "o gate
+    // escopa pelo blockquote" está descrevendo outra regra que não existe.
+    const corpo = corpoDoTemplateComClaim('99 arquivos modificados');
+    const i = corpo.split('\n').findIndex((l) => l.includes(MARCADOR));
+    expect(corpo.split('\n')[i - 1]?.trim()).not.toBe('');
   });
 });
 
