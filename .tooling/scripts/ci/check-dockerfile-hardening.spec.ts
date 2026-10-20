@@ -44,6 +44,14 @@ const VALID_COMPOSE = `services:
       - ALL
     security_opt:
       - 'no-new-privileges:true'
+    deploy:
+      resources:
+        limits:
+          # cpus ANTES de memory, como no postgres real (docker-compose.yml):
+          # o teste verde abaixo é o dente contra o predicado que exigia memory
+          # como primeira chave sob limits.
+          cpus: '0.5'
+          memory: 512M
   api:
     init: true
     networks:
@@ -54,6 +62,10 @@ const VALID_COMPOSE = `services:
       - ALL
     security_opt:
       - 'no-new-privileges:true'
+    deploy:
+      resources:
+        limits:
+          memory: 1G
   web:
     networks:
       - frontend
@@ -62,6 +74,23 @@ const VALID_COMPOSE = `services:
       - ALL
     security_opt:
       - 'no-new-privileges:true'
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+  tempo:
+    profiles: [observability]
+    networks:
+      - backend
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - 'no-new-privileges:true'
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
 networks:
   frontend:
@@ -192,6 +221,95 @@ describe('checkDockerfileHardening', () => {
     writeFileSync(file, comCache);
     const r = await checkDockerfileHardening({ repoRoot: root });
     expect(r.errors.some((e) => e.includes("service 'cache' sem 'networks:'"))).toBe(true);
+  });
+
+  // pt-BR (#113): o `otel-collector` era a ÚNICA exceção por nome do hardening.
+  // A lista caducou — o serviço foi reescrito por esta branch e endurecido, e o
+  // `read_only` é seguro porque o collector não tem `file_storage` nem `wal` no
+  // config. Este caso fecha a classe pelo lado que importa: apagar o
+  // `cap_drop: ALL` do collector agora acusa, como para qualquer outro serviço.
+  it('cobre o otel-collector: serviço sem hardening é rejeitado', async () => {
+    const file = path.join(root, 'docker-compose.yml');
+    const semHardening = VALID_COMPOSE.replace(
+      /^networks:\n/m,
+      '  otel-collector:\n    networks:\n      - backend\n\nnetworks:\n',
+    );
+    expect(semHardening).not.toBe(VALID_COMPOSE); // o replace tem que ter mordido
+    writeFileSync(file, semHardening);
+    const r = await checkDockerfileHardening({ repoRoot: root });
+    expect(r.errors.some((e) => e.includes("'otel-collector' não tem 'read_only: true'"))).toBe(
+      true,
+    );
+  });
+
+  // pt-BR (#113): o `memory_limiter` do collector lê a CGROUP, então o teto de
+  // memória do serviço é o que transforma `limit_percentage: 80` em "410M". Sem
+  // `deploy:`, apagar esse limite deixa o preflight verde e o collector se
+  // auto-limita ao total da máquina.
+  it('rejeita serviço sem deploy.resources.limits.memory', async () => {
+    const file = path.join(root, 'docker-compose.yml');
+    const semTeto = VALID_COMPOSE.replace(
+      /( {2}tempo:\n(?: {4}\S.*\n| {6}\S.*\n)*?) {4}deploy:\n {6}resources:\n {8}limits:\n {10}memory: 512M\n/,
+      '$1',
+    );
+    expect(semTeto).not.toBe(VALID_COMPOSE); // o replace tem que ter mordido
+    writeFileSync(file, semTeto);
+    const r = await checkDockerfileHardening({ repoRoot: root });
+    expect(r.errors.some((e) => e.includes("'tempo' sem 'deploy.resources.limits.memory'"))).toBe(
+      true,
+    );
+  });
+
+  it('cobre serviço SEM profile nenhum (o caso do postgres, que TEM teto)', async () => {
+    // A primeira versão da regra exigia o teto só em serviço com
+    // `profiles: [observability]`, porque eu tinha medido — errado — que o
+    // `postgres` não tinha teto. MEDIDO 2026-10-20: ele tem, `512M` em
+    // `docker-compose.yml:65`. Estreitar por um fato que não existe deixa
+    // passar justamente o serviço que a regra larga pegaria.
+    const file = path.join(root, 'docker-compose.yml');
+    const semNada = VALID_COMPOSE.replace(
+      / {2}tempo:\n {4}profiles: \[observability\]\n( {4}networks:\n {6}- backend\n {4}read_only: true\n {4}cap_drop:\n {6}- ALL\n {4}security_opt:\n {6}- 'no-new-privileges:true'\n) {4}deploy:\n {6}resources:\n {8}limits:\n {10}memory: 512M\n/,
+      '  cache:\n$1',
+    );
+    expect(semNada).not.toBe(VALID_COMPOSE); // o replace tem que ter mordido
+    expect(semNada).toContain('  cache:');
+    expect(semNada).not.toContain('profiles:');
+    writeFileSync(file, semNada);
+    const r = await checkDockerfileHardening({ repoRoot: root });
+    expect(r.errors.some((e) => e.includes("'cache' sem 'deploy.resources.limits.memory'"))).toBe(
+      true,
+    );
+  });
+
+  // O gate contra o COMPOSE DE VERDADE. Sem este caso a suíte roda só contra
+  // fixture — e a fixture é escrita para o gate passar, então 17 testes verdes
+  // coexistiram com o preflight vermelho: a regra do teto aceitava `memory` como
+  // primeira chave sob `limits`, o `postgres` real tem `cpus` antes dela.
+  // O mesmo padrão de `check-archive-integrity.spec.ts` ("arquivo INVÁLIDO no
+  // archive REAL deixa o check vermelho"), pelo lado positivo.
+  it('o gate aceita o docker-compose.yml DESTE repo', async () => {
+    const r = await checkDockerfileHardening({
+      repoRoot: path.join(import.meta.dirname, '..', '..', '..'),
+    });
+    expect(r.errors).toEqual([]);
+  });
+
+  // `reservations.memory` é um PISO de memória, não um teto: aceitar ele como
+  // se fosse `limits` deixaria passar exatamente o serviço que a regra existe
+  // para pegar. O `postgres` real tem as duas chaves, então a fixture também tem
+  // — e a ordem importa: `limits` primeiro, `memory` depois dentro dele.
+  it('rejeita quando o memory está em reservations, não em limits', async () => {
+    const file = path.join(root, 'docker-compose.yml');
+    const soReserva = VALID_COMPOSE.replace(
+      '        limits:\n          memory: 512M\n',
+      '        reservations:\n          memory: 256M\n',
+    );
+    expect(soReserva).not.toBe(VALID_COMPOSE); // o replace tem que ter mordido
+    writeFileSync(file, soReserva);
+    const r = await checkDockerfileHardening({ repoRoot: root });
+    expect(r.errors.some((e) => e.includes("'tempo' sem 'deploy.resources.limits.memory'"))).toBe(
+      true,
+    );
   });
 
   it('NÃO aceita compose onde a enumeração de serviços volta vazia', async () => {

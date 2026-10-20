@@ -1,0 +1,33 @@
+# infra/grafana/provisioning/datasources/observabilidade.yaml
+# pt-BR: datasources do Grafana, provisionados por arquivo. Sem isto, quem
+# abre http://localhost:3300 pela primeira vez não tem nenhum datasource e a
+# tela de Explore não tem o que consultar.
+#
+# `uid` é fixo para que dashboard e link interno usem o mesmo identificador
+# estável, independente do nome que aparece na tela.
+#
+# ⚠️ `tracesToMetrics` e `serviceMap` NÃO estão aqui de propósito. MEDIDO
+# 2026-10-19: nada no stack produz as span-metrics que esses dois painéis
+# consultam — nem o `infra/tempo/tempo.yaml` (sem `metrics_generator`, que
+# faria remote-write para o Prometheus) nem o `infra/otelcol/config.yaml` (sem
+# o connector `spanmetrics`). Com o bloco aqui, o botão aparece, o clique abre,
+# e o gráfico sai vazio: um controle que promete dado e não entrega. Ligá-los
+# só faz sentido depois de T5 (`MeterProvider` na api), e aí junto com o produtor.
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    editable: true

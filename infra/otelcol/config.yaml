@@ -1,15 +1,37 @@
 # infra/otelcol/config.yaml
 # OTel Collector config — receivers (OTLP gRPC+HTTP) + memory_limiter + tail_sampling
-# (traces) + batch + exporters (otlp para prod, debug reduzido para dev).
+# (traces) + batch + exporters (Tempo para traces, Prometheus para metrics).
 #
-# Issues resolvidas: #86 (sampling para reduzir custo em prod), #87 (exporter
-# otlp como backend real; debug só em dev).
+# Issues resolvidas: #86 (sampling para reduzir custo), #87 (exporter que é
+# backend real). #87 apontava para um endpoint externo; esse endpoint era
+# `https://otelcol-backend.exemplo.com:4317` (chave
+# `OTEL_EXPORTER_OTLP_ENDPOINT` do `.env.production.example`),
+# um domínio que não existe — o collector subia, retentava por 300s e jogava
+# os spans fora. Trocar por um backend que existe de fato é o que fecha a
+# issue de verdade: Tempo (traces) e Prometheus (metrics), ambos no perfil
+# `observability` do Compose.
 
 receivers:
   otlp:
     protocols:
       grpc: {}
-      http: {}
+      http:
+        # pt-BR: a telemetria do browser (spans e web-vitals de
+        # `apps/web/instrumentation-client.ts`) chega por OTLP/HTTP a partir da
+        # origem do Next.js. Sem `cors`, o preflight OPTIONS é recusado pelo
+        # receiver e o browser não exporta NADA — sem erro visível no console,
+        # porque o SDK engole a falha. `allowed_origins` é lista literal (o
+        # CORSConfig do confighttp não aceita regex).
+        cors:
+          # 3001 é o web (`next dev --port 3001`), a ÚNICA origem que serve
+          # página — é a que o browser do `pnpm dev` realmente usa.
+          # 3000 é a api (Fastify, `PORT: 3000`): nenhuma página sai de lá, então
+          # não é uma origem de browser. Fica por tolerate o caso de alguém
+          # servir o front estático na porta da api. MEDIDO: o web do Compose
+          # publica 3001:3001.
+          allowed_origins:
+            - 'http://localhost:3001'
+            - 'http://localhost:3000'
 
 processors:
   # #75: memory_limiter é SEMPRE o primeiro processor de qualquer pipeline
@@ -23,8 +45,32 @@ processors:
   # pt-BR (#86, 2026-10-16): tail_sampling decide retenção de cada trace
   # inteiro baseado em policies. Sem ele, todo span gerado pelo SDK é
   # exportado — em prod 100% sampling custa linearmente com tráfego.
-  # 3 policies: errors (sempre preservar), slow (>1s), baseline 5% probabilístico.
+  # 3 policies: errors (sempre preservar *aqui dentro*), slow (>1s), baseline 5%
+  # probabilístico.
+  # ⚠️ "Sempre preservar" é VERDADE só no escopo deste collector: a policy
+  # errors realmente guarda todo trace que chega com span em ERROR. Ela NÃO
+  # garante que o trace chegue. A camada 1 (SDK, `tracing.ts` sem `sampler` →
+  # lê `OTEL_TRACES_SAMPLER`) já descartou ~90% das raízes ANTES daqui, e ela é
+  # cega ao status HTTP: ~10% dos traces de erro chegam, não 100%.
+  # Ver a seção de sampling em `docs/como-rodar.md`.
   # decision_wait 10s dá tempo de todas as spans chegarem antes da decisão.
+  #
+  # ⚠️ SEMÂNTICA ENTRE AS POLICIES = OR, e a ordem delas no YAML é IRRELEVANTE.
+  # O `tail_sampling` decide por trace: basta UMA policy casar para o trace ser
+  # exportado. Não há `policy_order` nesta config — MEDIDO 2026-10-20: nenhuma
+  # chave `policy_order` em `docker-compose.yml`, `infra/` ou nos specs — e o
+  # collector combina as policies com OR, então reordenar o YAML não muda nada.
+  # `policy_order` só entra para turnos do tipo "a primeira que casar vence", que
+  # não é o caso aqui.
+  #
+  # MEDIDO ao vivo 2026-10-20: 30 traces enviados ao collector, 10 por grupo, e
+  # a busca `/api/search` do Tempo devolveu —
+  #   5ms + status ERROR -> 10/10   (casou `errors`; `slow` não casou)
+  #   3s  + status OK    -> 10/10   (casou `slow`; `errors` não casou)
+  #   5ms + status OK    ->  0/10   (só `baseline` se aplica, a 5%)
+  # As duas primeiras linhas são a prova do OR: nenhuma delas casou nas DUAS
+  # policies, e as duas foram mantidas. A terceira mostra que `baseline` não é
+  # um teto global — é o piso de quem não casou com nenhuma outra.
   tail_sampling:
     decision_wait: 10s
     num_traces: 50000
@@ -45,13 +91,16 @@ processors:
   batch: {}
 
 exporters:
-  # pt-BR (#87, 2026-10-16): exporter otlp é o real — endpoint via env var
-  # (compose injeta OTEL_EXPORTER_OTLP_ENDPOINT do .env.production).
-  # sending_queue + retry_on_failure evitam perda de spans em pico de tráfego.
-  otlp:
-    endpoint: ${env:OTEL_EXPORTER_OTLP_ENDPOINT}
+  # pt-BR: traces vão para o Tempo, que é o backend de traces do perfil
+  # `observability`. `sending_queue` + `retry_on_failure` evitam perda de
+  # spans em pico de tráfego (mantido de #87).
+  otlp/tempo:
+    endpoint: tempo:4317
     tls:
-      insecure: false
+      # O Tempo do Compose é outro container na rede `observability` — não há
+      # TLS entre containers da mesma rede, e `insecure: false` aqui fazia o
+      # exporter recusar o dial.
+      insecure: true
     sending_queue:
       enabled: true
       num_consumers: 10
@@ -59,6 +108,18 @@ exporters:
     retry_on_failure:
       enabled: true
       max_elapsed_time: 300s
+  # pt-BR: métricas NÃO são enviadas — são *scrapedas*. O Prometheus faz
+  # `GET http://otel-collector:8889/metrics` a cada 15s
+  # (`infra/prometheus/prometheus.yml`). Push para um Prometheus exigiria o
+  # remote-write, que exige token de autenticação.
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    # Sem isto, os atributos de resource (`service.name`, `service.version`,
+    # `deployment.environment` — `resource.ts:7-10`) são descartados e TODA
+    # métrica perde a label que diz de qual serviço veio. No Grafana, api e
+    # web ficariam indistinguíveis.
+    resource_to_telemetry_conversion:
+      enabled: true
   # debug reduzido a `basic` (era `detailed`) — mesmo em dev, JSON verboso
   # polui logs. Quem quer verbosity detailed usa perfil explícito.
   debug:
@@ -71,11 +132,11 @@ service:
       # pt-BR: tail_sampling só faz sentido em traces; metrics não tem
       # decisão por status_code, então vai direto memory_limiter + batch.
       processors: [memory_limiter, tail_sampling, batch]
-      # Exporter duplo: otlp (sempre) + debug (só se DEBUG_EXPORTER=true via envsubst).
-      # Compose injeta `OTEL_EXPORTER_OTLP_ENDPOINT` em prod; sem isso o otlp
-      # exporter falhará no startup — o que é o sinal correto de "configure o backend".
-      exporters: [otlp, debug]
+      # `otlp/tempo` é o destino real; `debug` fica ligado porque o Compose
+      # deste perfil é de desenvolvimento — é a forma mais barata de ver o
+      # que saiu sem abrir o Grafana.
+      exporters: [otlp/tempo, debug]
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [otlp]
+      exporters: [prometheus]

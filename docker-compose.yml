@@ -166,6 +166,17 @@ services:
     tmpfs:
       - /tmp:size=128m
       - /repo/.cache:size=64m
+      # MEDIDO 2026-10-19: sem esta linha a api não sobe. O ENTRYPOINT roda
+      # `pnpm exec prisma migrate deploy` antes de qualquer código, e o corepack
+      # resolve o `pnpm` em `$HOME/.cache/node/corepack` — que precisa CRIAR o
+      # diretório. Com `read_only: true` não há como criar, e o container entra
+      # em crash loop a cada boot. Sem isto, nenhum trace da aplicação existe
+      # para olhar. `uid/gid` são necessários porque tmpfs nasce root:root e o
+      # processo roda como 1001:1001 — sem eles o erro muda de ENOENT para
+      # EACCES (medido: um sem o outro não sobe).
+      # (Custo: tmpfs nasce vazio a cada boot, então o pnpm é baixado de novo;
+      # o conserto definitivo é assar o cache no build, em PR separado.)
+      - /home/app/.cache:size=32m,mode=0755,uid=1001,gid=1001
     security_opt:
       - 'no-new-privileges:true'
     cap_drop:
@@ -198,6 +209,12 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       target: prod
+      # pt-BR (#113): `NEXT_PUBLIC_*` é inlined no BUILD do Next.js — colocá-la
+      # no `environment:` chegaria tarde demais, o bundle do cliente já estaria
+      # compilado sem ela. O ARG nasce vazio no Dockerfile, então build fora do
+      # Compose segue sem telemetria de browser.
+      args:
+        NEXT_PUBLIC_OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:4318/v1/traces
     container_name: projeto-base-web
     environment:
       NODE_ENV: production
@@ -254,23 +271,219 @@ services:
     command: ['--config=/etc/otelcol/config.yaml']
     volumes:
       - ./infra/otelcol/config.yaml:/etc/otelcol/config.yaml:ro
-    # pt-BR (#87, 2026-10-16): OTLP endpoint vem de env var (`.env.production`).
-    # Sem o endpoint, o otlp exporter falha no startup — sinal correto de "configura o backend".
-    environment:
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    # pt-BR: o `environment` com `OTEL_EXPORTER_OTLP_ENDPOINT` saiu. Ele existia
+    # para o exporter `otlp` do config (`#87`), que apontava para um endpoint
+    # externo inexistente (`otelcol-backend.exemplo.com`). O destino agora é o
+    # Tempo, hardcoded no config — o collector não lê mais env var nenhuma, e
+    # deixar a chave aqui era um env var morto que ainda sugeria "configure o
+    # backend aqui".
+    #
+    # A chave no `.env.production` CONTINUA válida para a **api**, que a lê
+    # pelo próprio `env_file` (e nem precisa dela: `tracing.ts` cai no mesmo
+    # default). O **web** NÃO tem `env_file` (MEDIDO: o bloco `web` só tem
+    # NODE_ENV, PORT, API_BASE_URL) e vai no default hardcoded de
+    # `apps/web/instrumentation.node.ts` — que por acaso é o mesmo endereço.
+    # Definir `OTEL_EXPORTER_OTLP_ENDPOINT` não muda nada no web.
+    #
+    # E o `env_file` do próprio collector é configuração morta: `grep -c '${env:'
+    # infra/otelcol/config.yaml` volta 0. Fica só porque o serviço herdou a
+    # configuração do resto do Compose; não é o que entrega nada ao config.
     env_file:
       - .env.production
-    # pt-BR (#91): otel-collector só na `frontend` — recebe do api (que está em ambas),
-    # mas não fala com postgres.
+    # pt-BR (#113): hardening, fechando a exceção que o
+    # `check-dockerfile-hardening` carregava desde o `main` por nome. A razão
+    # daquela exceção ("dívida pré-existente") caducou quando esta branch reescreveu
+    # o serviço, e serviço tocado em serviço não endurecido é exatamente o que o
+    # bloco (5) do gate diz ter eliminado.
+    #
+    # `read_only` é seguro aqui porque o collector NÃO escreve em disco: MEDIDO
+    # 2026-10-20, `infra/otelcol/config.yaml` não tem `file_storage` nem `wal`,
+    # e os exporters são `otlp/tempo`, `prometheus` e `debug` — nenhum escreve
+    # arquivo. O `/tmp` entra como tmpfs pelo mesmo motivo dos outros serviços.
+    # MEDIDO ao vivo 2026-10-20: container descartável com ESTES flags + o MESMO
+    # config, sem `deploy.resources` — 0 restart, recebe OTLP/HTTP 4318, e o Tempo
+    # devolve o trace. LIMITE: foi um descartável com as mesmas flags, não o
+    # serviço do Compose — recriar o collector que já rodava exigiu autorização
+    # fora do escopo.
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    security_opt:
+      - 'no-new-privileges:true'
+    cap_drop:
+      - ALL
+    # pt-BR (#91): otel-collector em `frontend` (recebe do api, que está em
+    # ambas) e agora também em `observability` (entrega para o Tempo e é
+    # scrapado pelo Prometheus). Não fala com postgres — segue fora da
+    # `backend`.
     networks:
       - frontend
+      - observability
+    # pt-BR (2026-10-19): bind em `127.0.0.1`, como grafana e prometheus. Sem
+    # isso o host expõe o receiver OTLP na interface toda: quem estiver na mesma
+    # rede injeta span e métrica com `service.name` forjado, e o `cors` do
+    # receiver não protege — ele segura o browser, não o `curl`. MEDIDO:
+    # `docker compose ps` mostrava `0.0.0.0:4317-4318->4317-4318`. Os containers
+    # (api e web) falam com `otel-collector:4318` pelo DNS do Compose e o browser
+    # com `localhost:4318` — nenhum dos dois sente a diferença.
     ports:
-      - '4317:4317' # OTLP gRPC
-      - '4318:4318' # OTLP HTTP
+      - '127.0.0.1:4317:4317' # OTLP gRPC
+      - '127.0.0.1:4318:4318' # OTLP HTTP
     deploy:
       resources:
         limits:
           memory: 512M # #75: teto de memória explícito
+        reservations:
+          memory: 256M
+    restart: unless-stopped
+  tempo:
+    image: grafana/tempo:2.5.0@sha256:f0200a9bff6d14eb3a4332194f7b77c37ee1a3535e7e41db024d95aab6f1b4e8 # #74
+    container_name: projeto-base-tempo
+    profiles: [observability]
+    command: ['-config.file=/etc/tempo/tempo.yaml']
+    volumes:
+      - ./infra/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    # pt-BR: uid/gid MEDIDO — o `Config.User` da imagem já vem `10001:10001`
+    # numérico (diferente das outras duas, que trazem nome).
+    user: '10001:10001'
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    security_opt:
+      - 'no-new-privileges:true'
+    cap_drop:
+      - ALL
+    networks:
+      - observability
+    # Só `expose`, sem `ports`: o Tempo é consultado pelo Grafana (pela rede) e
+    # por quem estiver depurando via `docker compose exec`. Publicar 3200 no
+    # host não é necessário para o fluxo de uso.
+    expose:
+      - '3200'
+    healthcheck:
+      # `wget` MEDIDO presente na imagem. `/ready` só responde 200 quando o
+      # ingester terminou de se recuperar — `/status` diria "estou vivo" cedo
+      # demais.
+      # ⚠️ Este healthcheck NÃO ordena a subida: não existe `depends_on` do
+      # collector para cá (MEDIDO), então quem lê a doc pode achar que sim.
+      # O que cobre a janela é o `retry_on_failure` (300s) do exporter
+      # `otlp/tempo` no collector. Para ordená-las de fato:
+      # `depends_on: [otel-collector: {condition: service_healthy}]`.
+      test: ['CMD-SHELL', 'wget -q -O- http://localhost:3200/ready >/dev/null || exit 1']
+      interval: 10s
+      timeout: 3s
+      start_period: 30s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    restart: unless-stopped
+  prometheus:
+    image: prom/prometheus:v2.54.1@sha256:f6639335d34a77d9d9db382b92eeb7fc00934be8eae81dbc03b31cfe90411a94 # #74
+    container_name: projeto-base-prometheus
+    profiles: [observability]
+    # pt-BR: `retention.time=1d` porque o /prometheus é volume nomeado, e sem
+    # isso o TSDB cresce sem limite numa máquina de dev.
+    command: ['--config.file=/etc/prometheus/prometheus.yml', '--storage.tsdb.retention.time=1d']
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    # pt-BR: MEDIDO no `/etc/passwd` da imagem — `nobody:x:65534:65534`. O
+    # `Config.User` da imagem traz o NOME (`nobody`), não o número.
+    user: '65534:65534'
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    security_opt:
+      - 'no-new-privileges:true'
+    cap_drop:
+      - ALL
+    networks:
+      - observability
+    # Prometheus não tem autenticação nenhuma — mesmo bind em loopback.
+    ports:
+      - '127.0.0.1:9090:9090'
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O- http://localhost:9090/-/healthy >/dev/null || exit 1']
+      interval: 10s
+      timeout: 3s
+      start_period: 30s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    restart: unless-stopped
+  grafana:
+    image: grafana/grafana:11.2.0@sha256:408afb9726de5122b00a2576763a8a57a3c86d5b0eff5305bc994ceb3eb96c3f # #74
+    container_name: projeto-base-grafana
+    profiles: [observability]
+    # pt-BR: Grafana COM login, não anônimo. A primeira versão deste serviço
+    # usava `GF_AUTH_ANONYMOUS_ENABLED` + `GF_AUTH_ANONYMOUS_ORG_ROLE: Admin`
+    # + login desabilitado — ou seja, painel de Admin sem senha. Vinculado a
+    # `127.0.0.1` isso só expõe à própria máquina, mas "só a minha máquina" é
+    # o tipo de justificativa que envelhece mal: o próximo compose deploy, o
+    # café compartilhado, o `0.0.0.0` que alguém troca porque a porta não
+    # abre. Exigir login é uma linha a mais e fecha a classe inteira.
+    #
+    # `GF_SECURITY_ADMIN_USER` é nome de usuário, não segredo — pode ficar
+    # aqui. A SENHA não: mesma convenção do `JWT_SECRET` e do
+    # `DIRECT_DATABASE_URL` mais acima (ver o comentário longo no serviço
+    # `api`). A chave sai do `environment:` e o `env_file` a entrega, morando
+    # no `.env.production` versionado-fora. Interpolação `${...:?}` aqui
+    # quebraria `docker compose config`/`ps`/`down` — motivo #68.
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-admin}
+    env_file:
+      - .env.production
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+      - grafana_logs:/var/log/grafana
+    # pt-BR: MEDIDO no `/etc/passwd` da imagem — `grafana:x:472:0`. O gid é 0
+    # (group root), não 472; declarar `472:472` faria o processo não conseguir
+    # escrever nos volumes.
+    user: '472:0'
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    security_opt:
+      - 'no-new-privileges:true'
+    cap_drop:
+      - ALL
+    networks:
+      - observability
+    # pt-BR (#113): o `grafana` provisiona datasource apontando para `tempo` e
+    # `prometheus` na primeira subida. Sem `depends_on`, ele sobe antes dos dois e
+    # o datasource dá "connection refused" — o `502` clássico de primeira subida.
+    # Os dois têm `healthcheck` (MEDIDO), então `service_healthy` ordena de fato.
+    depends_on:
+      tempo:
+        condition: service_healthy
+      prometheus:
+        condition: service_healthy
+    # 3300 no host porque a 3000 já é da api (ver serviço `api` acima).
+    # Bind em `127.0.0.1`, não em todas as interfaces: com autenticação
+    # anônima e papel Admin, publicar em `0.0.0.0` entregaria a quem estiver
+    # na mesma rede um painel de Admin sem senha. Loopback restringe a máquina.
+    ports:
+      - '127.0.0.1:3300:3000'
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O- http://localhost:3000/api/health >/dev/null || exit 1']
+      interval: 10s
+      timeout: 3s
+      start_period: 30s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
         reservations:
           memory: 256M
     restart: unless-stopped
@@ -279,11 +492,23 @@ services:
 # (web, otel-collector) e `backend` para camada de dados (postgres, api). `internal: false`
 # em ambos para permitir egress a registries (apt, npm, pypi) durante build de imagens
 # via stages que resolvem pacotes. Em prod k8s, isso é movido para NetworkPolicy + egress proxy.
+#
+# pt-BR (2026-10-19): `observability` é uma terceira rede, só do perfil homônimo
+# (tempo, prometheus, grafana, otel-collector). Separada de propósito: a stack
+# que *mostra* o que a aplicação fez não precisa alcançar o postgres nem ficar
+# alcançável a partir do web. O collector participa das duas porque recebe da
+# api pela `frontend` e entrega para o Tempo pela `observability`.
 networks:
   frontend:
     driver: bridge
   backend:
     driver: bridge
+  observability:
+    driver: bridge
 
 volumes:
   postgres_data:
+  tempo_data:
+  prometheus_data:
+  grafana_data:
+  grafana_logs:

@@ -217,6 +217,7 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `subagent-write-truncation-limit` | `pendente` | — | — |
 | `uniform-validator-beats-self-reports` | `pendente` | — | — |
 | `test-the-field-the-eye-reads-not-the-field-it-parses` | `pendente` | — | — |
+| `test-com-dado-somente-no-ci` | `citada` | `tooling/scripts/compose-observability-profile.spec.ts` | A sonda precisa estar NO RENDER antes da máscara, senão o teste mede o |
 | `tool-reports-success-while-corrupting` | `citada` | `.agents/specs/conventions/guard-classes.md` | `Ferramenta reporta sucesso corrompendo` |
 | `tsx-esbuild-does-not-emit-di-metadata` | `citada` | `.agents/memory/nestjs-specialist.md` | `design:paramtypes` |
 | `two-stage-review-after-each-task` | `citada` | `.agents/skills/review-routing/SKILL.md` | `Avançar com BLOCKING não tratado` |

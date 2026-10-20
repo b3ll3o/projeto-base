@@ -46,7 +46,7 @@ projeto-base (monorepo)
 | Auth | @nestjs/jwt + `JwtAuthGuard` próprio | latest | Sem passport: o guard valida assinatura/expiração e um `@Public()` o libera. Detalhe em [`docs/api/auth.md`](./api/auth.md) |
 | Hash de senha | argon2 (argon2id) | latest | Recomendação OWASP; resiste a GPU e a ASIC. Alternativa ao bcrypt, que trunca a senha em 72 bytes — ver [ADR-0002](./adr/0002-autenticacao-jwt-argon2.md) |
 | Logging | Pino | latest | Estruturado JSON, rápido |
-| Observabilidade | OpenTelemetry | latest | Vendor-neutral, traces + metrics + logs |
+| Observabilidade | OpenTelemetry + Grafana + Tempo + Prometheus | latest / 11.2.0 / 2.5.0 / v2.54.1 | Vendor-neutral na produção; backends locais no perfil `observability` do Compose. Grafana é a tela (http://localhost:3300), Tempo guarda traces e o Prometheus faz *scrape* das métricas. Sem Loki — o Pino escreve em stdout e quem indexa é o driver de container. Detalhe em [ADR-0003](./adr/0003-backends-locais-de-telemetria.md) |
 | Testes | **Vitest** + Testcontainers | ^2.1.9 | Unit + e2e com Postgres real. **Não há Jest** no repositório, e o harness e2e usa `app.inject` do Fastify, não `supertest` — a `devDep` `supertest` não é importada em lugar nenhum |
 | Fila / Cache | — | — | Não existem. Nenhum serviço de fila ou cache foi adotado; a versão anterior desta tabela listava BullMQ + Redis (ioredis) e nenhuma das duas libs estava em nenhum `package.json` |
 
@@ -84,7 +84,7 @@ projeto-base (monorepo)
 | Categoria | Ferramenta | Uso |
 |-----------|-----------|-----|
 | Editor | VS Code | Suporte nativo a TS, ESLint, Prisma |
-| Container | Docker + Compose | Postgres + api + web + `otel-collector` (perfil `observability`). **Sem Redis** — nenhum serviço de cache/fila existe |
+| Container | Docker + Compose | Postgres + api + web + `otel-collector` + `tempo` + `prometheus` + `grafana` (os 4 últimos, perfil `observability`). **Sem Redis** — nenhum serviço de cache/fila existe |
 | Git hooks | Husky + lint-staged | TDD enforcer, lint, format |
 | CI | GitHub Actions (`.github/workflows/`) | `ci.yml` + `review-stack.yml` + `sync-docs.yml` + `release-template.yml` |
 | Secrets | (a definir por projeto) | Doppler / Vault / 1Password |

@@ -7,13 +7,14 @@
  * estado-novo (verde) e bloqueia regressões silenciosas em PRs futuros
  * (classe 5 de guard-classes.md).
  *
- * O gate cobre 6 propriedades, todas refletidas nas correções do PR:
+ * O gate cobre 7 propriedades, todas refletidas nas correções do PR:
  *   1. apps Dockerfile: FROM tem @sha256: pin
  *   2. apps Dockerfile stage prod: tem USER 1001:1001 (não "node")
  *   3. docker-compose.yml service api: tem init: true
  *   4. docker-compose.yml services prod: read_only/cap_drop/security_opt
  *   5. docker-compose.yml: tem top-level networks: + services NÃO usam default
- *   6. .dockerignore: exclui .env.production*
+ *   6. docker-compose.yml services: deploy.resources.limits.memory
+ *   7. .dockerignore: exclui .env.production*
  *
  * O gate é "documento" do contrato: ele NÃO valida semântica runtime (a
  * classe 1 já tem check-docker-drift e docker-build-prod CI), mas falha
@@ -94,6 +95,57 @@ function hasDigestPin(text: string, fromLine: string): boolean {
   return false;
 }
 
+/**
+ * Corpo do bloco de um serviço, ou `null` se o serviço não casar.
+ *
+ * Extrair em UM lugar só: as três validações de serviço repetiam a mesma regex,
+ * e uma delas (`limits.memory`) fazia `continue` em silêncio no `null` — a
+ * forma de passar sem ter olhado. Caller trata `null` como erro.
+ */
+export function blocoDeServico(composeText: string, svc: string): string | null {
+  const re = new RegExp(`^  ${svc}:\\s*\\n([\\s\\S]*?)(?=^  \\w|^volumes:|^networks:)`, 'm');
+  return composeText.match(re)?.[1] ?? null;
+}
+
+/**
+ * Diz se o bloco de um serviço declara `deploy.resources.limits.memory`.
+ *
+ * Percorre a cadeia `deploy:` → `resources:` → `limits:` → `memory:` e exige
+ * que cada chave esteja MAIS aninhada que a anterior. Isso fecha duas formas que
+ * uma regex solta aceitaria: chaves não consecutivas (`deploy:` num canto e
+ * `memory:` num comentário) e `reservations.memory`, que é PISO, não teto.
+ *
+ * ⚠️ CORREÇÃO 2026-10-20: a primeira versão era uma regex única que exigia
+ * `limits:\n\s+memory:` — isto é, `memory:` como PRIMEIRA chave sob `limits:`.
+ * Ela pegava o `tempo` (onde `memory` é a primeira) e acusava `postgres` como
+ * sem teto, sendo que o `postgres` tem `memory: 512M` em `docker-compose.yml`
+ * logo depois de `cpus: '0.5'`. Predicado validado só no caminho onde ele
+ * passava é o mesmo defeito do código que ele caça.
+ */
+function temTetoDeMemoria(block: string): boolean {
+  const linhas = block.split('\n');
+  const cadeia = ['deploy', 'resources', 'limits', 'memory'];
+  let inicio = 0;
+  let piso = 0; // indentação mínima que a PRÓXIMA chave da cadeia pode ter
+  for (const chave of cadeia) {
+    let achou = -1;
+    for (let j = inicio; j < linhas.length; j++) {
+      const linha = linhas[j]!;
+      if (linha.trim() === '') continue;
+      const recuo = linha.length - linha.trimStart().length;
+      if (recuo < piso) break; // saiu do nível do pai
+      if (linha.trim().split(':')[0] === chave) {
+        achou = j;
+        break;
+      }
+    }
+    if (achou === -1) return false;
+    piso = linhas[achou]!.length - linhas[achou]!.trimStart().length + 2;
+    inicio = achou + 1;
+  }
+  return true;
+}
+
 export async function checkDockerfileHardening(opts: {
   repoRoot: string;
   appsRoots?: string[];
@@ -169,18 +221,38 @@ export async function checkDockerfileHardening(opts: {
     }
   }
 
-  // (4) hardening runtime nos 3 services prod (postgres, api, web)
-  const servicesToCheck = ['postgres', 'api', 'web'];
+  // (4) hardening runtime em TODO serviço do compose.
+  //
+  // MEDIDO 2026-10-19: esta lista era `['postgres','api','web']` hardcoded, e
+  // o bloco (5), logo abaixo, foi deliberadamente enumerado com um comentário
+  // que nomeia exatamente esse defeito ("uma lista de nomes transferia a
+  // manutenção para quem edita o compose"). O mesmo valia para cá: os três
+  // serviços de observabilidade que a branch `feat/stack-observabilidade`
+  // adicionou (tempo, prometheus, grafana) entravam sem cobertura — apagar o
+  // `cap_drop: ALL` do grafana deixava este gate verde.
+  //
+  // `otel-collector` era a ÚNICA exceção, por nome, e a razão ("dívida
+  // PRÉ-EXISTENTE do `main`") caducou quando a branch `feat/stack-observabilidade`
+  // reescreveu o serviço (portas em `127.0.0.1`, rede `observability`, `env_file`,
+  // `deploy.resources`). A lista saiu junto: exceção por nome é o anti-padrão que o
+  // bloco (5) logo abaixo diz ter eliminado, e serviço tocado em serviço não
+  // endurecido é o que o `check-dockerfile-hardening` existe para impedir.
+  // MEDIDO 2026-10-20: `infra/otelcol/config.yaml` não tem `file_storage` nem
+  // `wal`, então o collector não escreve em disco e `read_only` é seguro.
+  const servicesToCheck = listComposeServices(composeText);
+  if (servicesToCheck.length === 0) {
+    errors.push(
+      'docker-compose.yml: 0 serviço(s) para checar hardening (#83/#92) — não posso validar',
+    );
+  }
   for (const svc of servicesToCheck) {
-    const svcRe = new RegExp(`^  ${svc}:\\s*\\n([\\s\\S]*?)(?=^  \\w|^volumes:|^networks:)`, 'm');
-    const m = composeText.match(svcRe);
-    if (!m) {
+    const block = blocoDeServico(composeText, svc);
+    if (block === null) {
       errors.push(
         `docker-compose.yml: service '${svc}' não encontrado — não posso validar #83/#92`,
       );
       continue;
     }
-    const block = m[1]!;
     if (!/^\s+read_only:\s+true\s*$/m.test(block)) {
       errors.push(
         `docker-compose.yml: service '${svc}' não tem 'read_only: true' — #83/#92 exige FS read-only`,
@@ -219,13 +291,12 @@ export async function checkDockerfileHardening(opts: {
       );
     }
     for (const svc of services) {
-      const svcRe = new RegExp(`^  ${svc}:\\s*\\n([\\s\\S]*?)(?=^  \\w|^volumes:|^networks:)`, 'm');
-      const m = composeText.match(svcRe);
-      if (!m) {
+      const block = blocoDeServico(composeText, svc);
+      if (block === null) {
         errors.push(`docker-compose.yml: serviço '${svc}' não encontrado — não posso validar #91`);
         continue;
       }
-      if (!/^\s+networks:\s*\n/m.test(m[1]!)) {
+      if (!/^\s+networks:\s*\n/m.test(block)) {
         errors.push(
           `docker-compose.yml: service '${svc}' sem 'networks:' explícito — pode estar usando default — #91`,
         );
@@ -233,7 +304,39 @@ export async function checkDockerfileHardening(opts: {
     }
   }
 
-  // (6) .dockerignore exclui .env.production*
+  // (6) teto de memória em TODO serviço.
+  //
+  // O caso que originou esta regra: `infra/otelcol/config.yaml` tem
+  // `memory_limiter` com `limit_percentage: 80`, e o OTel lê o limite da CGROUP,
+  // não um número do config. Apagar o `deploy:` do collector faria ele se
+  // auto-limitar ao total da máquina em vez dos 512M — comportamento que o
+  // próprio config nomeia como "512M → 410M" e que ninguém notaria até o dia em
+  // que ele engolisse a máquina.
+  //
+  // MEDIDO 2026-10-20: os 7 serviços do compose JÁ declaram
+  // `deploy.resources.limits.memory` (`postgres` incluído, `512M` em
+  // `docker-compose.yml:65`). A regra nasce verde e não pede mudança nenhuma —
+  // ela trava um estado que já é o de todo mundo.
+  //
+  // ⚠️ CORREÇÃO 2026-10-20: a primeira versão desta regra exigia o teto só em
+  // serviço com `profiles: [observability]`, justificada por uma medição minha
+  // de que o `postgres` não tinha teto. Era FALSA, e a revisão independente a
+  // refutou com o número do próprio compose. Estreitar uma regra por um fato
+  // que não existe deixa passar tudo que ela pegaria.
+  for (const svc of listComposeServices(composeText)) {
+    const block = blocoDeServico(composeText, svc);
+    if (block === null) {
+      errors.push(`docker-compose.yml: service '${svc}' não encontrado — não posso validar #113`);
+      continue;
+    }
+    if (!temTetoDeMemoria(block)) {
+      errors.push(
+        `docker-compose.yml: service '${svc}' sem 'deploy.resources.limits.memory' — teto de memória ausente; o memory_limiter do collector lê a cgroup, então sem ele o serviço se auto-limita ao total da máquina (#113)`,
+      );
+    }
+  }
+
+  // (7) .dockerignore exclui .env.production*
   let dockerignoreText = '';
   try {
     dockerignoreText = await fs.readFile(dockerignoreFile, 'utf-8');
