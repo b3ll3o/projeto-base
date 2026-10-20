@@ -454,6 +454,29 @@ describe('checkTeethRegistry — contra o repo de verdade', () => {
     expect(r.ok, `check vermelho:\n${r.errors.join('\n')}`).toBe(true);
   });
 
+  it('a 4ª reconciliação está LIGADA ao veredito — medido no call site, não na função', () => {
+    // MEDIDO 2026-10-20: apagar `...catalogo.errors` da agregação final deixou
+    // os 23 testes verdes e o gate sair 0. Os testes das funções puras
+    // continuavam passando, porque eles nunca passam por esta linha. O que
+    // não tinha dente era a LIGAÇÃO — e a forma de ela sumir é um refactor
+    // FUTURE, que é o modo exato pelo qual os outros guards deste arquivo
+    // já concertam o resto do repo.
+    //
+    // Por isso o teste injeta um catálogo VAZIO e exige o erro, em vez de
+    // injetar e esperar o verde. Um catálogo sem citação acusa os 31 ids
+    // normalizados; a asserção conta os que citam §Tabela de Checks, que só
+    // a 4ª reconciliação produz — se o erro viesse de outra, o filtro zeraria.
+    const r = checkTeethRegistry({
+      humanTable: '## Tabela de Checks\n\n| Gate | Tipo | Detecta |\n| --- | --- | --- |\n',
+    });
+    const daTabela = r.errors.filter((e) => e.includes('§Tabela de Checks'));
+
+    expect(r.ok, `gate aceitou um catálogo sem nenhuma citação:\n${r.errors.join('\n')}`).toBe(
+      false,
+    );
+    expect(daTabela.length).toBeGreaterThan(20);
+  });
+
   it('o gate novo NÃO é cego a arquivo untracked', () => {
     // Regressão medida: com `git ls-files` puro, um gate recém-criado morava
     // em untracked até o primeiro commit, e este check acusava o PRÓPRIO

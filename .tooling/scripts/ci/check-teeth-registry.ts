@@ -32,6 +32,23 @@
  *      nenhuma das três reconciliacoes acima enxerga, porque o registro de
  *      dentes estava em dia enquanto o catálogo envelhecia em silêncio.
  *
+ *      O número é 10, e já foi 11 numa versão deste comentário: dois dos onze
+ *      eram escopos de um gate já citado (`check-eslint-drift:apps` e
+ *      `:packages`, cobertos pelo pai) e `lint-review-routing` é citado como
+ *      `review-routing`. A contagem errada não custou nada ao gate — só faria
+ *      o número envelhecer sem quem o medisse.
+ *
+ *      ## A coluna "Detecta" é território do gate, e a reconciliação ignora
+ *
+ *      `citedGateTokens` lê o backtick da **primeira** coluna só. Isso não é
+ *      descuido: a linha do `check-ci-local-scope` nomeia `check-ci-local-e2e`
+ *      na "Detecta" para dizer que os dois checam lados opostos do `ci:local` —
+ *      uma referência que é a **intenção da prosa**, não uma citação de catálogo.
+ *      Se a varredura varresse a linha inteira, cada gate que fizesse referência
+ *      a um par contaria como "citado" e a reconciliação perderia o dente nas
+ *      duas direções: gate ausente pareceria coberto e gate morto pareceria
+ *      vivo.
+ *
  * ## Duas decisões que este check toma para não cair em classe 2
  *
  * **a) A identidade do gate é o ARQUIVO, não o nome de exibição.**
@@ -364,14 +381,22 @@ const HUMAN_TABLE_DOC = join(process.cwd(), '.agents/specs/conventions/ci-defens
 export { preflightGates };
 export type { CheckSpec, GateRef } from './preflight-gates';
 
-export function checkTeethRegistry(): CheckResult {
+/**
+ * `humanTable` existe para o spec conseguir exercitar o **call site** com um
+ * catálogo quebrado. MEDIDO 2026-10-20: desligar `...catalogo.errors` da
+ * agregação final deixava os 23 testes verdes e o gate sair 0 — os testes das
+ * funções puras passavam, e o que não tinha dente era a LIGAÇÃO. Ligação só
+ * ganha dente se um teste passar por ela, e o jeito de passar por ela sem
+ * escrever no doc do repo é injetar o markdown.
+ */
+export function checkTeethRegistry(opts: { humanTable?: string } = {}): CheckResult {
   let registry: string;
   let matrix: string;
   let humanTable: string;
   try {
     registry = readFileSync(REGISTRY_DOC, 'utf8');
     matrix = readFileSync(MATRIX_DOC, 'utf8');
-    humanTable = readFileSync(HUMAN_TABLE_DOC, 'utf8');
+    humanTable = opts.humanTable ?? readFileSync(HUMAN_TABLE_DOC, 'utf8');
   } catch (err) {
     return {
       ok: false,
