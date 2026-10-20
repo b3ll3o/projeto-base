@@ -78,7 +78,15 @@ export class ApiClient {
     // dois operadores cria um ramo que nenhum caller exercita e que nenhum teste
     // distingue: `body: null` é o mesmo caso de `body` ausente, e tratá-lo
     // diferente devolveria o 400 que esta linha conserta.
-    if (restInit.body != null) {
+    //
+    // ⚠️ E `''` é o TERCEIRO "não há corpo" — o `!= null` sozinho não o pega,
+    // porque string vazia não é null. MEDIDO 2026-10-20 contra o Fastify real
+    // (`app.inject`): `content-type: application/json` + corpo vazio → 400
+    // `FST_ERR_CTP_EMPTY_JSON_BODY`; sem o header → 200, e o corpo
+    // simplesmente não é parseado. Declarar `application/json` para um corpo
+    // vazio é declarar um formato para um corpo que não existe — e é o 400 que
+    // a linha de cima conserta, voltando pela porta de trás.
+    if (restInit.body != null && restInit.body !== '') {
       headers.set('content-type', 'application/json');
     }
     if (token) headers.set('authorization', `Bearer ${token}`);
