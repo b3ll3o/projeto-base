@@ -17,7 +17,7 @@ maintainer: stack-code-reviewer
 ## §1. TL;DR
 
 1. **Antes de qualquer coisa**: `pnpm install` e, se for planejar, gerar um *state-snapshot* (camada de agents).
-2. **Commit** dispara `pre-commit`: `lint-staged` (só Prettier) + `stack-code-reviewer` (único que aborta em pre-commit) + `doc-sync` (roda mas nunca aborta — ver §7.2).
+2. **Commit** dispara `commit-msg` (Conventional Commits — `exit 1` se a mensagem não segue `tipo(escopo?): descrição`) e `pre-commit`: `lint-staged` (só Prettier) + `stack-code-reviewer` (único que aborta em pre-commit) + `doc-sync` (roda mas nunca aborta — ver §7.2).
 3. **Push** dispara `pre-push`: `pnpm ci:preflight` — os gates estruturais declarados em
    [`preflight.ts`](../.tooling/scripts/ci/preflight.ts); aborta com exit 1 se algum falhar.
 4. **PR para `main`** dispara 3 jobs de CI (`preflight`, `quality`, `docker-build-prod`) + `stack-code-review` + `docs-sync`. **Pós-#44** os jobs `preflight` e `quality` rodam a suíte do tooling, que valida os próprios dentes dele — contagem por `pnpm tooling:test` (dois roots).
@@ -49,6 +49,7 @@ maintainer: stack-code-reviewer
                ▼
 ┌──────────────────────────────────────────────────────────────┐
 │ (A) ENFORCEMENT LOCAL — antes de qualquer push               │
+│     commit-msg ─ Conventional Commits → exit 1 se violar     │
 │     pre-commit ─ lint-staged      → prettier --write         │
 │                  stack-code-reviewer → exit 1 se blocker     │
 │                  doc-sync          → NUNCA aborta (§7)       │
@@ -84,7 +85,7 @@ maintainer: stack-code-reviewer
 | 3 | Instalar / validar deps | `pnpm install` | nenhum |
 | 4 | (Camada C) Snapshot de estado | ver §5 | nenhum — prosa em [`state-aware-planning.md`](../.agents/workflows/state-aware-planning.md) |
 | 5 | Codar com o specialist | ver `.agents/agents/<specialist>.md` | nenhum — prosa |
-| 6 | Commit | `git add -A && git commit -m "…"` | **pre-commit**: lint-staged, stack-code-reviewer, doc-sync |
+| 6 | Commit | `git add -A && git commit -m "…"` | **commit-msg**: Conventional Commits · **pre-commit**: lint-staged, stack-code-reviewer, doc-sync |
 | 7 | Verificação completa local | `pnpm ci:local` | **nenhum** — `ci:local` não está em nenhum hook (§7) |
 | 8 | Push | `git push -u origin <branch>` | **pre-push**: `pnpm ci:preflight` |
 | 9 | Abrir PR | `gh pr create` | — |
@@ -181,6 +182,7 @@ Reescrever um como LLM é a classe 6 de `guard-classes.md` — spec verde, siste
 | Gate | Comando | Camada | O que bloqueia | Buraco coberto pelo CI? |
 |------|---------|--------|----------------|------------------------|
 | `lint-staged` | `pnpm exec lint-staged` | A (pre-commit) | Nada semântico: as 2 entradas são `prettier --write` | Sim — `format:check` roda no `ci.yml` |
+| `commit-msg-gate` | `pnpm exec tsx tooling/scripts/commit-msg-gate.ts` | A (commit-msg) | Mensagem fora de `tipo(escopo?): descrição` (`exit 1`). Commits do git (`Merge`/`Revert`/`fixup!`/`squash!`) saem liberados **com o motivo impresso**, nunca em silêncio | Não — nenhum job de CI o invoca; é gate deliberadamente local |
 | `stack-code-reviewer` | `pnpm tsx tooling/scripts/stack-code-reviewer.ts` | A (pre-commit) | `blocker` > 0 ou `major` > 3 (`exit 1`) | Sim — `review-stack.yml` chama o mesmo script |
 | `doc-sync` | `pnpm tsx tooling/scripts/doc-sync.ts` | A (pre-commit) | **Nada** — `grep -c 'process.exit' tooling/scripts/doc-sync.ts` = 0 | Não — e o job de CI também nunca falha |
 | `ci:preflight` | `pnpm ci:preflight` | A (pre-push) + B | os checks estruturais | Sim — `ci.yml` roda o mesmo script |
@@ -242,13 +244,9 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 
 ### 7.1 Wired e funcionando
 
-- `pre-commit` / `pre-push` instalados e executando.
+- `commit-msg` / `pre-commit` / `pre-push` instalados e executando.
 - `stack-code-reviewer` — gate com dentes reais em pre-commit: `process.exit(1)` em blocker.
-- `ci:preflight` — registrado e executando. **O veredito não é um número fixo:**
-  rode `pnpm ci:preflight` e leia a linha final — ela separa `✓` / `✗` /
-  `skipped`, e "todos passaram" é mentira enquanto houver skip. (2026-10-06 neste
-  working tree: 15 ✓, 0 ✗, 2 skipped — os dois skips são por **ausência de
-  alvo**, um deles porque `.agents/runs/archive/` está vazio.)
+- `ci:preflight` — registrado e executando. **O veredito não é um número fixo:** rode `pnpm ci:preflight` e leia a linha final — ela separa `✓` / `✗` / `skipped`, e "todos passaram" é mentira enquanto houver skip (o skip vem por **ausência de alvo**, não por aprovação).
 - Job `quality` do CI — encadeado por `needs: preflight`, roda cobertura 80% de `apps/api#unit` (gate era inerte até #40/#41).
 - Job `preflight` do CI — **pós-#44** roda a suíte `pnpm tooling:test`, que valida os próprios dentes do tooling (dois roots; a contagem por `grep -E 'Test Files|Tests '` envelhece a cada spec nova).
 - `docker-build-prod` — build real dos 2 Dockerfiles `prod` em toda PR.
