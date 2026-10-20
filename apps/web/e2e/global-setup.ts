@@ -154,6 +154,14 @@ export default async function globalSetup(): Promise<void> {
   // TODOS os specs caem com `TypeError: fetch failed` — 40 linhas abaixo da
   // causa, e parece "a API está fora".
   // REGRA: o build da suíte começa de um diretório limpo, sempre.
+  //
+  // ⚠️ A remoção é RECURSIVA e `force: true`, e o que a segura é o CAMINHO:
+  // `DIST_DIR_E2E` é uma constante deste arquivo e `WEB_ROOT` também, então
+  // `join(WEB_ROOT, DIST_DIR_E2E)` é `apps/web/.next-e2e` — o diretório
+  // exclusivo da suíte, que o `next.config.mjs` consome. NENHUM dos dois vem
+  // de env. Se um dia `DIST_DIR_E2E` passar a ler `process.env`, esta linha
+  // passa a apagar o que alguém apontar, e o `rmSync` não vai reclamar:
+  // quem parâmetrize tem que trocar esta linha por uma checagem de prefixo.
   rmSync(join(WEB_ROOT, DIST_DIR_E2E), { recursive: true, force: true });
   log(`rodando \`next build\` em ${DIST_DIR_E2E}/ (≈40s)…`);
   const inicioBuild = Date.now();
