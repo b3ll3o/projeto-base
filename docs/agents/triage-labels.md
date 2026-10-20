@@ -1,5 +1,9 @@
 # Triage Labels
 
+> Gerado por `/setup-matt-pocock-skills` e **versionado desde então**. Re-rodar a skill
+> sobrescreve este arquivo pelo template em inglês. Para trocar os rótulos, edite a coluna
+> "Label no nosso tracker" e crie o label com `gh label create`.
+
 As skills falam em papéis canônicos de triagem. Este arquivo mapeia cada papel para a
 string de label realmente usada no tracker deste repo.
 

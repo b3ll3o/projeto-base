@@ -1,5 +1,9 @@
 # Issue tracker: GitHub
 
+> Gerado por `/setup-matt-pocock-skills` e **versionado desde então**. Re-rodar a skill
+> sobrescreve este arquivo pelo template em inglês e leva junto os fallbacks medidos
+> (`Part of #<n>`, `type:bug` vs `bug`). Para trocar o tracker, edite aqui.
+
 Issues e specs deste repo vivem nas **GitHub Issues** de `b3ll3o/projeto-base`.
 Todas as operações usam a CLI `gh`, que infere o repo de `git remote -v`.
 
@@ -10,7 +14,7 @@ Todas as operações usam a CLI `gh`, que infere o repo de `git remote -v`.
 - **Ler**: `gh issue view <n> --json number,title,body,labels,comments`
 - **Listar**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'`, com `--label` / `--state` quando filtrar
 - **Sub-issue**: `gh issue create --parent <pai> ...` ou `gh issue edit <pai> --add-sub-issue <filha>`,
-  **mas ambos exigem `gh` 2.94+ e esta máquina está no 2.65** — use a API:
+  **mas ambos exigem `gh` 2.94+** — confira a sua com `gh --version`, e se for menor use a API:
   `gh api --method POST repos/<owner>/<repo>/issues/<pai>/sub_issues -F sub_issue_id=<db-id-da-filha>`
   (o `<db-id>` é o database id numérico, obtido com `gh api repos/<owner>/<repo>/issues/<n> --jq .id`).
   O endpoint está habilitado neste repo: `GET .../issues/111/sub_issues` responde `[]`.

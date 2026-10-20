@@ -1,5 +1,8 @@
 # Domain Docs
 
+> Gerado por `/setup-matt-pocock-skills` e **versionado desde então**. Re-rodar a skill
+> sobrescreve este arquivo pelo template em inglês e leva junto a lista de ADRs.
+
 Como as skills de engenharia devem consumir a documentação de domínio deste repo.
 
 ## Antes de explorar, leia estes
@@ -7,9 +10,11 @@ Como as skills de engenharia devem consumir a documentação de domínio deste r
 - **`GLOSSARY.md`** na raiz do repo — glossário e termos canônicos. **Ainda não existe**;
   a skill `domain-modeling` o cria quando um termo ou decisão é de fato resolvido.
   (Nome canônico **a partir da v1.3.0** do plugin; até a 1.2.3 o arquivo se chamava
-  `CONTEXT.md`. Enquanto a 1.2.3 estiver carregada nesta sessão, a `domain-modeling` ainda
-  escreve `CONTEXT.md`: assim que o plugin for atualizado para 1.3.1+, renomeie com
-  `git mv CONTEXT.md GLOSSARY.md`, senão o arquivo criado fica onde ninguém procura.)
+  `CONTEXT.md`. As duas versões estão em disco, mas a carregada nesta sessão é a
+  **1.3.1** — MEDIDO em `~/.claude/plugins/cache/claude-plugins-official/mattpocock-skills/`,
+  que lista `1.2.3` e `1.3.1`. Então `domain-modeling` escreve `GLOSSARY.md`, e o
+  `git mv CONTEXT.md GLOSSARY.md` só se aplica a uma sessão que carregue a 1.2.3.
+  Nenhum dos dois arquivos está na raiz hoje.)
 - **`docs/adr/`** — decisões arquiteturais registradas:
   - `0001-arquitetura-ddd-hexagonal-auditoria.md` — boundary `domain/application/infrastructure`
   - `0002-autenticacao-jwt-argon2.md` — auth, sessão, hashing de senha
@@ -50,7 +55,7 @@ convenção de módulos em `.agents/specs/conventions/estrutura-e-versionamento.
 rótulos `severity:` / `type:` de [`issue-tracker.md`](./issue-tracker.md). Na dúvida,
 o termo do repo ganha do termo genérico.
 
-## Flagre conflito com ADR
+## Conflito com ADR
 
 Se a saída contradisser um ADR existente, diga isso na cara em vez de sobrescrever em
 silêncio:

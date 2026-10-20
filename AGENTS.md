@@ -286,7 +286,7 @@ GitHub Issues deste repo, via CLI `gh`. Ver `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
-Cinco papéis canônicos, mapeados para os rótulos do tracker. Ver `docs/agents/triage-labels.md`.
+Sete papéis canônicos — duas categoria e cinco estado — mapeados para os rótulos do tracker. Ver `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
