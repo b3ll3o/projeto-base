@@ -6,7 +6,7 @@
 > todos os erros, revise o plano e implemente o plano".
 >
 > Aquele arquivo está em **300 linhas** — o teto de
-> [`tamanho-e-revisao.md`](../../.agents/specs/conventions/tamanho-e-revisao.md).
+> [`tamanho-e-revisao.md`](../../../.agents/specs/conventions/tamanho-e-revisao.md).
 > Por isso esta rodada é um arquivo novo, e não uma §9 colada no fim.
 
 ---
