@@ -1,7 +1,7 @@
 ---
 name: e2e-playwright
-version: 1.4
-updated: 2026-10-18
+version: 1.5
+updated: 2026-10-19
 maintainer: test-writer
 description: "Convenção canônica de cobertura e2e de frontend — todo fluxo de usuário COM tela é mapeado no inventário abaixo e coberto por um spec Playwright que atravessa browser, Next, Server Action, API HTTP e Postgres de ponta a ponta. Gate automatizado em check-e2e-flow-coverage.ts; execução no CI."
 ---
@@ -93,8 +93,9 @@ um silêncio.
 | F12 | `/admin/users` | Atribuição de perfil a usuário | `f12-admin-usuarios.spec.ts` | atribui e a coluna reflete · quase-admin recusa e não vê nome/e-mail |
 | F13 | `/me/profile` | Meu perfil | `f13-meu-perfil.spec.ts` | admin vê o bypass · perfil comum vê nome, slug e permissões · sem perfil: deny-by-default · sem sessão vai ao login |
 | F14 | `/admin/flags` | Ativação e desativação de funcionalidades (admin) | `f14-admin-flags.spec.ts` | admin desliga e religa e a tela reflete · a flag salva NA TELA é a que a rota respeita (404 desligada · 403 ligada) · quase-admin recusa e o menu não oferece o link |
+| F15 | `/admin/profiles/[slug]` | Edição dos metadados do perfil | `f15-admin-editar-perfil.spec.ts` | admin renomeia e descreve e **o banco é lido** (o `value` do input não prova gravação) · perfil `isAdmin`: somente leitura, sem formulário |
 
-⚠️ **10 rotas, 14 fluxos.** F2–F5 são quatro estados **da mesma** rota, e F6
+⚠️ **10 rotas, 15 fluxos.** F2–F5 são quatro estados **da mesma** rota, e F6
 atravessa três. F7–F8 são os fluxos que a demanda `login-usuario-senha`
 acrescentou: o login e a rota protegida sem sessão. F9–F12 são as quatro telas
 `/admin/*` do RBAC (#97), e cada uma tem um teste que é o **negativo** do
@@ -107,7 +108,16 @@ salva pela tela e afirma o efeito chamando a API, porque a emenda entre "o que
 o admin marcou" e "o que o guard lê" não tem onde ser medida de outro jeito. O
 gate **não** deriva o inventário das rotas: um mapeamento rota→fluxo 1:1 falha
 sempre, e uma segunda tabela transcrita à mão volta a ser o literal que
-`check-teeth-registry.ts` existe para desconfiar.
+`check-teeth-registry.ts` existe para desconfiar. F15 é a **segunda tela** com
+mais de um fluxo (a primeira é `/admin/profiles/[slug]`, de F11), e ele não
+termina na tela por escolha: `name`/`description` viraram formulário, e um
+`expect(input).toHaveValue(...)` passaria **sem gravação nenhuma** — `input`
+uncontrolled conserva o que foi digitado depois do re-render. O spec salva
+pela tela e **lê o Postgres** (`prismaE2E()`); na tela ele afirma o `<h1>`,
+que é derivado do servidor. MEDIDO 2026-10-19: foi a primeira execução do
+`PATCH /admin/profiles/:id` de **sucesso** contra Prisma real (o único PATCH
+e2e anterior esperava 403) — mutar a descrição esperada deixa o spec vermelho
+com o valor gravado no banco ao lado.
 
 ⚠️ **Desde 2026-10-13 quase todo spec roda autenticado, e isso é invisível na
 tabela.** `/users` — a LISTAGEM — chama `exigirSessao()`, que redireciona para
@@ -245,6 +255,7 @@ do par, não um.
 | 1.2 | 2026-10-16 | RBAC (#97): F9–F12 cobrem as quatro telas `/admin/*`, que não tinham spec. `e2e/support/rbac.ts` nasce como **segunda exceção** à regra de `dados.ts` (banco direto só em `limparBase()`) — não existe rota HTTP que crie `isAdmin`, então o banco é a única forma de produzir o pré-requisito. Fixture `comoAdmin` em `support/fixtures.ts` (planta os cookies do admin semeado por cima dos de `comSessao`). |
 | 1.3 | 2026-10-16 | O gate passa a reconciliar com um **terceiro** conjunto: as rotas de `apps/web/app/**/page.tsx`. Reconciliar dois conjuntos escritos à mão provava paridade, e paridade não é cobertura — `/me/profile` era a única tela do app sem spec e o preflight estava verde. A coluna `Rota` do inventário passa a ser conferida contra o disco (tela nova sem linha é vermelha, com o path nomeado). F13 fecha a lacuna encontrada por essa própria conferência: `/me/profile` com os quatro estados da tela (admin/bypass, perfil comum, deny-by-default, sem sessão). Contador corrigido: eram "8 rotas, 12 fluxos" e são 9 e 13. |
 | 1.4 | 2026-10-18 | F14 cobre `/admin/flags` (feature flags) — a quinta tela `/admin/*` e a primeira cujo spec **não termina na tela**: ele salva pela tela e afirma o efeito **chamando a API** (404 desligada · 403 ligada, com o `title` nomeando quem recusou). O escenario 12 da API escreve a flag no banco e o `lib/flags.spec.ts` prova path contra um cliente mockado; nenhum dos dois via o que o admin marca NA TELA, e essa emenda era o buraco. Contador corrigido: eram "9 rotas, 13 fluxos" e são 10 e 14. MEDIDO 2026-10-18: `next build` **nao** pega uma Server Action sem `'use server'` (build sai 0; o digest `2923057904` so aparece no request, porque a página é `force-dynamic`), e `click()` resolve no despacho — o save precisa ser esperado por **estado**, nao por `waitForTimeout`. |
+| 1.5 | 2026-10-19 | F15 cobre a edição de `name`/`description` em `/admin/profiles/[slug]` — a rota de F11, que passa a ter **dois** fluxos. É o primeiro spec do inventário que **lê o Postgres** (`prismaE2E()`) para provar gravação, e a razão está no `<input>`: uncontrolled, ele conserva o que foi digitado depois do re-render, então `toHaveValue` passaria com a escrita perdida. Na tela o spec afirma o `<h1>` (derivado do servidor) e no banco o `name`/`description`. MEDIDO 2026-10-19: foi a primeira execução do `PATCH /admin/profiles/:id` de **sucesso** contra Prisma real — o único PATCH e2e anterior (`11-tenant-isolation`) esperava 403 — e ela **verde**: o caminho de escrita estava sem prova desde que `atualizarPerfil` ganhou o cliente. Segundo caso: perfil `isAdmin` mostra "somente leitura" e não renderiza `input[name="name"]` (`atualizar` recusa `isSystem` **e** `isAdmin`, `profiles.use-cases.ts:268,271`). Contador: 14 → 15 fluxos, com as **10 rotas inalteradas**. |
 
 ## Ver Também
 

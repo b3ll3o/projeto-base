@@ -24,7 +24,10 @@ test.describe('F11 — Detalhe de perfil (admin)', () => {
     const caixa = page.locator('input[name="permissionKey"][value="users.read"]');
     await expect(caixa).not.toBeChecked();
     await caixa.check();
-    await page.getByRole('button', { name: 'Salvar' }).click();
+    // `exact`: a tela ganhou um segundo botão que CONTAÉM "Salvar" (o de
+    // metadados, F15), e `getByRole` casa por substring — sem isto, strict
+    // mode violation nos DOIS.
+    await page.getByRole('button', { name: 'Salvar', exact: true }).click();
 
     // Sem `reload`: o Server Action responde com a árvore re-renderizada, e
     // recarregar aqui transformaria "a tela mostra o salvo" em "a tela mostra

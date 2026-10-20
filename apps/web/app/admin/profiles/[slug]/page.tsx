@@ -14,7 +14,12 @@
 import type * as React from 'react';
 import { notFound } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { obterPerfilPorSlug, listarPermissoes, trocarPermissoes } from '../../../../lib/perfil';
+import {
+  obterPerfilPorSlug,
+  listarPermissoes,
+  trocarPermissoes,
+  atualizarPerfil,
+} from '../../../../lib/perfil';
 import { exigirAdmin } from '../../guard-admin';
 
 export const dynamic = 'force-dynamic';
@@ -51,10 +56,31 @@ export default async function AdminProfileDetailPage({
   // pt-BR (#97, M1): o gate é `isSystem`, não `isAdmin`. Medido em
   // `profiles.use-cases.ts` — `atribuir`/`revogar` recusam com
   // `ProfileSystemProtectedException` só quando `isSystem()`; `isAdmin` só é
-  // bloqueado no RENAME (`atualizar`), que esta tela não chama. Renderizar o
+  // bloqueado no RENAME (`atualizar`), que esta tela não chamava quando este
+  // comentário foi escrito (2026-10-19 passou a chamar — gate abaixo). Renderizar o
   // form num perfil de sistema dava duas falhas: erro na API ao marcar, e —
   // pior — com zero mudanças o diff é vazio, nada sai, e o "Salvar" parece ter
   // funcionado. `admin` e `viewer`, os dois do seed, são `isSystem: true`.
+
+  // pt-BR (admin editar perfil, 2026-10-19): `name` e `description` viram
+  // formulário. Gate é `isSystem || isAdmin` — `atualizar` recusa os dois
+  // (`profiles.use-cases.ts:268,271`) —, ao contrário do gate de PERMISSÕES
+  // acima, que é só `isSystem`. Sem a condição, o clique leva 403 garantido.
+  async function salvarMetadados(formData: FormData): Promise<void> {
+    'use server';
+    // `trim()` no `name` porque o VO mede o comprimento DEPOIS do trim
+    // (`profile-name.vo.ts:9-10`): sem isso, `" a "` passa o `minLength={2}`
+    // do browser e toma 400. A `description` também é aparada — não tem VO e
+    // não valida nada, mas sem o trim o admin "limpa" e grava `" "`, invisível
+    // em todo render. E string vazia é "limpar", não "manter" (por isso NÃO há o
+    // `...(description !== '' ? …)` de `new/page.tsx:57`, que torna impossível
+    // apagar a descrição).
+    const name = String(formData.get('name') ?? '').trim();
+    const description = String(formData.get('description') ?? '').trim();
+    await atualizarPerfil(profile!.id, { name, description });
+    revalidatePath(`/admin/profiles/${profile!.slug}`);
+    revalidatePath('/admin/profiles');
+  }
 
   async function saveAuthorizations(formData: FormData): Promise<void> {
     'use server';
@@ -81,6 +107,50 @@ export default async function AdminProfileDetailPage({
           <li>isAdmin: {profile.isAdmin ? '✅' : '—'} (bypass total no guard)</li>
           <li>isSystem: {profile.isSystem ? '✅' : '—'} (protegido contra DELETE)</li>
         </ul>
+      </section>
+
+      <section className="mt-8">
+        <h2 className="text-lg font-medium text-slate-900">Metadados</h2>
+        {profile.isSystem || profile.isAdmin ? (
+          <p className="mt-3 text-sm text-slate-500">
+            Perfil de {profile.isSystem ? 'sistema' : 'administrador'}: nome e descrição são{' '}
+            <strong>somente leitura</strong>. A API recusa alterações.
+          </p>
+        ) : (
+          <form action={salvarMetadados} className="mt-3 space-y-4 text-sm">
+            <p>
+              <label className="block space-y-1">
+                <span className="font-medium text-slate-700">Nome</span>
+                <input
+                  className="block w-full rounded-md border border-slate-300 px-3 py-2"
+                  type="text"
+                  name="name"
+                  defaultValue={profile.name}
+                  required
+                  minLength={2}
+                  maxLength={80}
+                />
+              </label>
+            </p>
+            <p>
+              <label className="block space-y-1">
+                <span className="font-medium text-slate-700">Descrição</span>
+                <input
+                  className="block w-full rounded-md border border-slate-300 px-3 py-2"
+                  type="text"
+                  name="description"
+                  defaultValue={profile.description ?? ''}
+                />
+              </label>
+            </p>
+            <button
+              type="submit"
+              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+            >
+              Salvar metadados
+            </button>
+          </form>
+        )}
       </section>
 
       <section className="mt-8">
