@@ -169,8 +169,29 @@ export async function checkDockerfileHardening(opts: {
     }
   }
 
-  // (4) hardening runtime nos 3 services prod (postgres, api, web)
-  const servicesToCheck = ['postgres', 'api', 'web'];
+  // (4) hardening runtime em TODO serviço do compose.
+  //
+  // MEDIDO 2026-10-19: esta lista era `['postgres','api','web']` hardcoded, e
+  // o bloco (5), logo abaixo, foi deliberadamente enumerado com um comentário
+  // que nomeia exatamente esse defeito ("uma lista de nomes transferia a
+  // manutenção para quem edita o compose"). O mesmo valia para cá: os três
+  // serviços de observabilidade que a branch `feat/stack-observabilidade`
+  // adicionou (tempo, prometheus, grafana) entravam sem cobertura — apagar o
+  // `cap_drop: ALL` do grafana deixava este gate verde.
+  //
+  // `otel-collector` é a ÚNICA exceção, e ela é dívida PRÉ-EXISTENTE: já no
+  // `main` ele não tinha hardening nenhum, e torná-lo read-only mexeria num
+  // serviço que é a espinha da stack sem haver um teste que prove que continua
+  // exportando. Fica nomeado aqui para não ser herdado em silêncio.
+  const EXCECOES_HARDENING = ['otel-collector'];
+  const servicesToCheck = listComposeServices(composeText).filter(
+    (svc) => !EXCECOES_HARDENING.includes(svc),
+  );
+  if (servicesToCheck.length === 0) {
+    errors.push(
+      'docker-compose.yml: 0 serviço(s) para checar hardening (#83/#92) — não posso validar',
+    );
+  }
   for (const svc of servicesToCheck) {
     const svcRe = new RegExp(`^  ${svc}:\\s*\\n([\\s\\S]*?)(?=^  \\w|^volumes:|^networks:)`, 'm');
     const m = composeText.match(svcRe);

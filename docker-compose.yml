@@ -291,9 +291,16 @@ services:
     networks:
       - frontend
       - observability
+    # pt-BR (2026-10-19): bind em `127.0.0.1`, como grafana e prometheus. Sem
+    # isso o host expõe o receiver OTLP na interface toda: quem estiver na mesma
+    # rede injeta span e métrica com `service.name` forjado, e o `cors` do
+    # receiver não protege — ele segura o browser, não o `curl`. MEDIDO:
+    # `docker compose ps` mostrava `0.0.0.0:4317-4318->4317-4318`. Os containers
+    # (api e web) falam com `otel-collector:4318` pelo DNS do Compose e o browser
+    # com `localhost:4318` — nenhum dos dois sente a diferença.
     ports:
-      - '4317:4317' # OTLP gRPC
-      - '4318:4318' # OTLP HTTP
+      - '127.0.0.1:4317:4317' # OTLP gRPC
+      - '127.0.0.1:4318:4318' # OTLP HTTP
     deploy:
       resources:
         limits:

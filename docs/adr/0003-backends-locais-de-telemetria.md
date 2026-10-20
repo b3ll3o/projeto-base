@@ -16,7 +16,8 @@ Três achados, todos medidos antes de decidir:
 
 1. **O collector exportava para um domínio que não existe.** `infra/otelcol/config.yaml`
    mandava `traces` e `metrics` para `${env:OTEL_EXPORTER_OTLP_ENDPOINT}`, e
-   `.env.production.example:84` fixava `https://otelcol-backend.exemplo.com:4317`.
+   `.env.production.example` (chave `OTEL_EXPORTER_OTLP_ENDPOINT`) fixava
+   `https://otelcol-backend.exemplo.com:4317`.
    O collector subia saudável, retentava por 300s (`retry_on_failure`) e descartava
    os spans. Nenhum erro: uma fila de reenvio que esvazia com sucesso para o vazio.
 

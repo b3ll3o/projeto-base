@@ -1,6 +1,6 @@
 # infra/prometheus/prometheus.yml
 # pt-BR: o Prometheus não recebe push — ele faz *scrape*. O exporter
-# `prometheus` do collector (`infra/otelcol/config.yaml:90-91`) expõe as
+# `prometheus` do collector (`infra/otelcol/config.yaml`) expõe as
 # métricas em `0.0.0.0:8889`, e é este job que as coleta.
 
 global:
@@ -16,7 +16,7 @@ scrape_configs:
 
   # O collector. É este job que traz as métricas da aplicação — o exporter
   # `prometheus` converte os resource attributes do OTel em labels
-  # (`resource_to_telemetry_conversion` em `infra/otelcol/config.yaml:96-97`),
+  # (`resource_to_telemetry_conversion` em `infra/otelcol/config.yaml`),
   # daí aparecer `service_name` e `deployment_environment` no lugar de quem
   # exportou.
   - job_name: otel-collector

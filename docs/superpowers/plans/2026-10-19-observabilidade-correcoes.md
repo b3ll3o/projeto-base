@@ -140,6 +140,10 @@ arquivos: **72**, **90-91**, **96-97**. As três estavam erradas — a que eu me
 | este plano, `:37` (T6) | `example:84` | idem | `:90` |
 | este plano, `:14` (D1) | `example:84` | ver abaixo | **fica `84`, marcado** |
 
+> ⚠️ **A coluna "Real" desta tabela está errada, e a §10 diz por quê:** os números
+> 72 / 90-91 / 96-97 foram medidos antes de a nota de escopo de 6 linhas entrar
+> no `config.yaml`, e essa inserção os deslocou para 79 / 97-98 / 103-104.
+
 `:14` e `:37` são casos diferentes e meu primeiro rascunho os tratou igual — uma
 contradição interna do próprio plano. `:37` descreve o estado **depois** do T6:
 vira `:90`. `:14` é o diagnóstico D1 e diz, no passado, que a linha 84 *definia*
@@ -215,19 +219,13 @@ arquivos, varredura CJK 0 com controle positivo que dispara.
 
 ### A correção de origem que este plano quase prescreveu
 
-A seção R2 apontava a redaction no ponto de uso como o caminho, mas a
-**correção de origem** (`--no-interpolate`, que zera os segredos antes de
-qualquer máscara) parecia melhor e foi tentada primeiro. **Medido, ela quebra o
-gating de profile** — que é justamente o que este spec existe para verificar:
-
-```text
-docker compose config                     -> api postgres web backend frontend
-docker compose config --no-interpolate    -> + tempo grafana otel-collector
-```
-
-Quatro testes caíram. Vale registrar porque o `--help` invita a tentá-la e o
-nome da flag mente (`--no-env-resolution` é que não impede nada, apesar do
-`--help` dizer que impede). Fica em comentário no código para ninguém repetir.
+R2 apontava a redaction no ponto de uso, mas a **correção de origem**
+(`--no-interpolate`, que zera os segredos antes de qualquer máscara) parecia
+melhor e foi tentada primeiro. **Medido, ela quebra o gating de profile** — o
+que este spec existe para verificar (`config` sem a flag: `api postgres web`;
+com ela: `+ tempo grafana otel-collector`). Quatro testes caíram. Fica em
+comentário no código: o `--help` invita a tentá-la e o nome mente
+(`--no-env-resolution` não impede nada).
 
 ### Dentes, medidos por mutação
 
@@ -244,28 +242,59 @@ do vermelho, e não outra asserção do mesmo arquivo.
 
 ### O que o plano errou sobre a própria prova
 
-A primeira redação do R2 dizia que o stub com canário dava o dado ao teste de
-vazamento. **Na máquina de dev ele não dá**: existe `.env.production` real, o
-`composeConfig()` usa o arquivo da máquina e o stub nunca é escrito — o canário
-não existe, e a asserção de ausência é verde por ausência de dado. A primeira
-mutação confirmou: desligar a máscara deixou **13/13 verdes**.
-
-O dente real foi movido para um teste unitário de `mascaraSegredos`, com a
-entrada escrita à mão, que tem conteúdo independente de a máquina ter ou não
-`.env.production`. O teste de integração ficou, com o aviso de onde ele morde.
+R2 dizia que o stub com canário dava o dado ao teste de vazamento. **Na máquina
+de dev ele não dá**: existe `.env.production` real, o `composeConfig()` usa o
+arquivo da máquina, o stub nunca é escrito — a asserção de ausência fica verde
+por ausência de dado. A mutação confirmou: máscara desligada = **13/13
+verdes**. O dente foi movido para um teste unitário de `mascaraSegredos` com
+entrada escrita à mão.
 
 ### Vazamento, provado com uma falha de verdade
 
 Inseri uma asserção impossível numa linha que recebe o render inteiro e li a
-saída do vitest. Os 8 lugares que casam para `JWT_SECRET` / `POSTGRES_PASSWORD`
-são todos `CHAVE:<oculto>` — nome preservado, valor ausente — e
-`app_runtime_dev` (a senha do example) não aparece nenhuma vez.
+saída do vitest. Os 8 hits de `JWT_SECRET`/`POSTGRES_PASSWORD` são todos
+`CHAVE:<oculto>` — nome preservado, valor ausente — e `app_runtime_dev` (a senha
+do example) não aparece nenhuma vez.
 
 ### Pendência que eu criei
 
 `docs/como-rodar.md` está com **406 linhas**, acima do teto de 300 da convenção
-`tamanho-e-revisao`. Ele já estava em **326** no `HEAD` — a violação é
-pré-existente — mas o trabalho de observabilidade somou **80 linhas** em cima
-disso. Deixou fora do alcance desta §8 porque corrigir significa dividir o
-runbook, o que é refactor com risco próprio (links, `check-runbook-drift`,
-`check-doc-refs`). Registrado aqui para não ser herdado em silêncio.
+`tamanho-e-revisao`. Já estava em **326** no `HEAD` (violação pré-existente);
+a observabilidade somou **80** em cima. Corrigir = dividir o runbook, refactor
+com risco próprio (links, `check-runbook-drift`), fora do alcance desta §8.
+
+## 10. 3ª rodada — a correção do R5 nasceu velha
+
+**R9 — o R5 errou de novo, e o motivo é a própria correção dele.** Os "números
+reais" (72 / 90-91 / 96-97) foram medidos ANTES de a nota de escopo de 6 linhas
+entrar no `config.yaml`. A inserção deslocou tudo abaixo: `otlp/tempo` 72→79,
+exporter `prometheus` 90→97, `resource_to_telemetry_conversion` 96→103. As três
+citações "corrigidas" nasceram velhas — e `config.yaml:7` / `adr:19`, que o R5
+mandava trocar, continuaram com `:84` (linha que é um `#`).
+
+A correção de agora **apaga o `:NN`** em vez de trocá-lo: a chave YAML já é
+auto-localizável e não envelhece quando o arquivo é editado.
+
+**R10 — o `otel-collector` publicava em `0.0.0.0`.** MEDIDO no
+`docker compose ps`: `0.0.0.0:4317-4318->4317-4318`. As 4 portas desta branch
+(`4317`, `4318`, `3300`, `9090`) estão agora em `127.0.0.1`. O `cors` do
+receiver não protege: ele segura o browser, não o `curl` — e span forjado com
+`service.name` falso entra no Prometheus.
+
+**R11 — o teste de loopback enumerava PORTAS (`['3300','9090']`).** Guard que
+lista o que já estava certo não vê o que chega depois: foi por isso que R10
+entrou com a suíte verde. Agora enumera SERVIÇOS e deriva as portas do render.
+Dente por mutação: tirar o prefixo de `4317` → `expected [ 'otel-collector:4317' ]`.
+
+**R12 — o gate de hardening enumerava `['postgres','api','web']`.** Os três
+serviços que a branch adiciona entravam sem cobertura, e o bloco (5) do MESMO
+arquivo foi enumerado de propósito, com comentário que nomeia esse defeito.
+Diferencial contra o `main` reconstruído, mesmo compose sem `cap_drop` no
+grafana: **gate do `main` → `ok=true`; gate novo → `ok=false`**. `otel-collector`
+é a única exceção, nomeada: dívida pré-existente, e torná-lo read-only mexeria
+na espinha da stack sem teste que prove que ela continua exportando.
+
+**Não revisado por agente:** as duas revisões paralelas caíram com **429 —
+limite de uso do plano**; nenhum achado voltou. Indeterminado, não aprovação —
+a §10 é revisão própria, por medição, e por isso mais curta que as outras.
+

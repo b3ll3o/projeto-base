@@ -61,6 +61,19 @@ function blocoDoServico(cfg: string, svc: string): string {
   return resto.slice(0, Math.min(corteServico, corteTopo));
 }
 
+// pt-BR: os nomes de serviço que o render traz, derivados do render — nunca
+// uma lista escrita à mão. Chave de serviço tem 2 espaços; chave de volume
+// (`  postgres_data:`) também tem, então o bloco PRECISA parar na primeira
+// chave de nível topo, senão os volumes entram como se fossem serviços.
+function servicosDo(cfg: string): string[] {
+  const inicio = cfg.search(/^services:$/m);
+  if (inicio < 0) return [];
+  const resto = cfg.slice(inicio);
+  const proxTopo = resto.slice(1).search(/\n(?=\S)/);
+  const bloco = proxTopo < 0 ? resto : resto.slice(0, proxTopo + 1);
+  return [...bloco.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gm)].map((m) => m[1]!);
+}
+
 // pt-BR: o `read_only: true` que prova que um MOUNT é read-only é o que vem
 // logo DEPOIS do `target:` daquele mount — não qualquer `read_only: true` do
 // render. MEDIDO 2026-10-19 com `:ro` removido do mount do tempo:
@@ -239,6 +252,10 @@ describe('docker compose profile: observability (Task 5.4)', () => {
 describe('docker compose profile: observability (backends de acompanhamento)', () => {
   const BACKENDS = ['tempo', 'prometheus', 'grafana'] as const;
 
+  // pt-BR: serviços que publicam em 0.0.0.0 por decisão PRÉ-EXISTENTE, fora do
+  // diff desta branch. Sem este comentário a exceção parece um esquecimento.
+  const EXCECOES_PUBLICA = ['api', 'web'];
+
   it('exclui tempo, prometheus e grafana do default profile', () => {
     const defaultConfig = composeConfig();
     for (const svc of BACKENDS) {
@@ -260,19 +277,32 @@ describe('docker compose profile: observability (backends de acompanhamento)', (
     }
   });
 
-  it('publica Grafana e Prometheus só no loopback', () => {
+  it('publica toda porta em 127.0.0.1 — nenhum serviço escuta em 0.0.0.0', () => {
     const obsConfig = composeConfig('observability');
     // MEDIDO 2026-10-19 no `docker compose config`: `127.0.0.1:3300:3000`
     // renderiza como `host_ip: 127.0.0.1` + `target` + `published`, e uma
-    // porta sem o prefixo de loopback NÃO emite `host_ip` nenhum. Assertar
-    // o par `host_ip`+`published` é o que prova o binding; assertar só
-    // `published: "3300"` passaria com a porta escutando em 0.0.0.0 — que é
-    // expor o Grafana para toda a rede em que a máquina estiver.
-    for (const published of ['3300', '9090']) {
-      expect(obsConfig).toMatch(
-        new RegExp(`host_ip:\\s+127\\.0\\.0\\.1[\\s\\S]{0,80}?published:\\s+"${published}"`),
-      );
+    // porta sem o prefixo de loopback NÃO emite `host_ip` nenhum.
+    //
+    // A versão anterior deste teste listava as PORTAS (`['3300','9090']`) — as
+    // que por acaso eram loopback quando ele foi escrito. Por isso
+    // `otel-collector`, cujas 4317/4318 entraram sem o prefixo, passou com a
+    // suíte verde: um guard que enumera o que já estava certo não vê o que
+    // chega depois. Aqui a lista é de SERVIÇOS e as portas saem do render.
+    //
+    // `api` e `web` ficam de fora: publicam em 0.0.0.0 desde antes desta
+    // branch, não estão no diff, e mudá-las muda o fluxo de dev do projeto.
+    const emRedeAberta: string[] = [];
+    for (const svc of servicosDo(obsConfig)) {
+      if (EXCECOES_PUBLICA.includes(svc)) continue;
+      const bloco = blocoDoServico(obsConfig, svc);
+      expect(bloco).not.toBe('');
+      for (const entrada of bloco.split('- mode: ingress')) {
+        const published = /published:\s*"?(\d+)/.exec(entrada)?.[1];
+        if (published === undefined) continue;
+        if (!entrada.includes('host_ip: 127.0.0.1')) emRedeAberta.push(`${svc}:${published}`);
+      }
     }
+    expect(emRedeAberta).toEqual([]);
   });
 
   it('blocoDoServico para no fim também quando o serviço é o ÚLTIMO do render', () => {

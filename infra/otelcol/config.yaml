@@ -4,7 +4,8 @@
 #
 # Issues resolvidas: #86 (sampling para reduzir custo), #87 (exporter que é
 # backend real). #87 apontava para um endpoint externo; esse endpoint era
-# `https://otelcol-backend.exemplo.com:4317` (`.env.production.example:84`),
+# `https://otelcol-backend.exemplo.com:4317` (chave
+# `OTEL_EXPORTER_OTLP_ENDPOINT` do `.env.production.example`),
 # um domínio que não existe — o collector subia, retentava por 300s e jogava
 # os spans fora. Trocar por um backend que existe de fato é o que fecha a
 # issue de verdade: Tempo (traces) e Prometheus (metrics), ambos no perfil

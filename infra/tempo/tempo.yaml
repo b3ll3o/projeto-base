@@ -15,7 +15,7 @@ distributor:
   receivers:
     otlp:
       protocols:
-        # `otlp/tempo` no collector (`infra/otelcol/config.yaml:72`) faz dial
+        # `otlp/tempo` no collector (`infra/otelcol/config.yaml`) faz dial
         # em `tempo:4317` — esta porta é a que o distributor escuta.
         grpc:
           endpoint: 0.0.0.0:4317
