@@ -209,6 +209,12 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       target: prod
+      # pt-BR (#113): `NEXT_PUBLIC_*` é inlined no BUILD do Next.js — colocá-la
+      # no `environment:` chegaria tarde demais, o bundle do cliente já estaria
+      # compilado sem ela. O ARG nasce vazio no Dockerfile, então build fora do
+      # Compose segue sem telemetria de browser.
+      args:
+        NEXT_PUBLIC_OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:4318/v1/traces
     container_name: projeto-base-web
     environment:
       NODE_ENV: production
@@ -284,6 +290,28 @@ services:
     # configuração do resto do Compose; não é o que entrega nada ao config.
     env_file:
       - .env.production
+    # pt-BR (#113): hardening, fechando a exceção que o
+    # `check-dockerfile-hardening` carregava desde o `main` por nome. A razão
+    # daquela exceção ("dívida pré-existente") caducou quando esta branch reescreveu
+    # o serviço, e serviço tocado em serviço não endurecido é exatamente o que o
+    # bloco (5) do gate diz ter eliminado.
+    #
+    # `read_only` é seguro aqui porque o collector NÃO escreve em disco: MEDIDO
+    # 2026-10-20, `infra/otelcol/config.yaml` não tem `file_storage` nem `wal`,
+    # e os exporters são `otlp/tempo`, `prometheus` e `debug` — nenhum escreve
+    # arquivo. O `/tmp` entra como tmpfs pelo mesmo motivo dos outros serviços.
+    # MEDIDO ao vivo 2026-10-20: container descartável com ESTES flags + o MESMO
+    # config, sem `deploy.resources` — 0 restart, recebe OTLP/HTTP 4318, e o Tempo
+    # devolve o trace. LIMITE: foi um descartável com as mesmas flags, não o
+    # serviço do Compose — recriar o collector que já rodava exigiu autorização
+    # fora do escopo.
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    security_opt:
+      - 'no-new-privileges:true'
+    cap_drop:
+      - ALL
     # pt-BR (#91): otel-collector em `frontend` (recebe do api, que está em
     # ambas) e agora também em `observability` (entrega para o Tempo e é
     # scrapado pelo Prometheus). Não fala com postgres — segue fora da
@@ -431,6 +459,15 @@ services:
       - ALL
     networks:
       - observability
+    # pt-BR (#113): o `grafana` provisiona datasource apontando para `tempo` e
+    # `prometheus` na primeira subida. Sem `depends_on`, ele sobe antes dos dois e
+    # o datasource dá "connection refused" — o `502` clássico de primeira subida.
+    # Os dois têm `healthcheck` (MEDIDO), então `service_healthy` ordena de fato.
+    depends_on:
+      tempo:
+        condition: service_healthy
+      prometheus:
+        condition: service_healthy
     # 3300 no host porque a 3000 já é da api (ver serviço `api` acima).
     # Bind em `127.0.0.1`, não em todas as interfaces: com autenticação
     # anônima e papel Admin, publicar em `0.0.0.0` entregaria a quem estiver

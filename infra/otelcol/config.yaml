@@ -54,6 +54,23 @@ processors:
   # cega ao status HTTP: ~10% dos traces de erro chegam, não 100%.
   # Ver a seção de sampling em `docs/como-rodar.md`.
   # decision_wait 10s dá tempo de todas as spans chegarem antes da decisão.
+  #
+  # ⚠️ SEMÂNTICA ENTRE AS POLICIES = OR, e a ordem delas no YAML é IRRELEVANTE.
+  # O `tail_sampling` decide por trace: basta UMA policy casar para o trace ser
+  # exportado. Não há `policy_order` nesta config — MEDIDO 2026-10-20: nenhuma
+  # chave `policy_order` em `docker-compose.yml`, `infra/` ou nos specs — e o
+  # collector combina as policies com OR, então reordenar o YAML não muda nada.
+  # `policy_order` só entra para turnos do tipo "a primeira que casar vence", que
+  # não é o caso aqui.
+  #
+  # MEDIDO ao vivo 2026-10-20: 30 traces enviados ao collector, 10 por grupo, e
+  # a busca `/api/search` do Tempo devolveu —
+  #   5ms + status ERROR -> 10/10   (casou `errors`; `slow` não casou)
+  #   3s  + status OK    -> 10/10   (casou `slow`; `errors` não casou)
+  #   5ms + status OK    ->  0/10   (só `baseline` se aplica, a 5%)
+  # As duas primeiras linhas são a prova do OR: nenhuma delas casou nas DUAS
+  # policies, e as duas foram mantidas. A terceira mostra que `baseline` não é
+  # um teto global — é o piso de quem não casou com nenhuma outra.
   tail_sampling:
     decision_wait: 10s
     num_traces: 50000

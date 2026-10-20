@@ -23,6 +23,22 @@ EXPOSE 3001
 CMD ["pnpm", "--filter", "@projeto/web", "dev"]
 
 FROM base AS builder
+# pt-BR (#113): `NEXT_PUBLIC_*` é INLINED no bundle do cliente pelo Next.js —
+# não lida em runtime. Sem esta chave no `build.args`, o serviço `web` do
+# Compose nasce sem endpoint e `instrumentation-client.ts` cai no `if (endpoint)`
+# e não registra provider: zero span de browser, sem erro e sem log (o sintoma
+# que o próprio arquivo documenta em `instrumentation-client.ts:26-33`).
+#
+# `ARG` nasce VAZIO de propósito: qualquer build fora do Compose (`docker build`,
+# o job `docker-build-prod` do CI) continua sem telemetria de browser, em vez de
+# exportar span para um collector que não existe.
+#
+# shortcut: o serviço `web` não tem `profiles`, então o `build.args` do Compose
+# vale para TODO build dele — inclusive produção sem collector, onde o browser
+# passa a exportar para `localhost:4318` e ninguém recebe. Quando o `web`
+# entrar no profile `observability`, mover o endpoint para um override.
+ARG NEXT_PUBLIC_OTEL_EXPORTER_OTLP_ENDPOINT=
+ENV NEXT_PUBLIC_OTEL_EXPORTER_OTLP_ENDPOINT=${NEXT_PUBLIC_OTEL_EXPORTER_OTLP_ENDPOINT}
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm fetch
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/web/package.json apps/web/

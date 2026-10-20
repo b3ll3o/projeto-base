@@ -31,11 +31,19 @@ import { describe, expect, it } from 'vitest';
 // em `.../base/`.
 const REPO_ROOT = new URL('../..', import.meta.url).pathname;
 
-// pt-BR: valor inventado, posto no `.env.production` stubado, para o teste de
-// vazamento ter algo REAL para não achar. Se o `.env.production` da máquina
-// existir, o teste roda contra ele — e aí a asserção (que é de ausência)
-// continua válida sem precisar do canário.
-const CANARIO = 'GF_SECURITY_ADMIN_PASSWORD=CANARIO_NAO_E_UM_SEGREDO_REAL';
+// pt-BR: valor inventado, para o teste de vazamento ter algo REAL para não
+// achar. MEDIDO 2026-10-20: ele precisa entrar por uma fonte que exista em
+// TODA máquina, senão a asserção `not.toContain` é verde por AUSÊNCIA DE DADO
+// em vez de verde por correção.
+//
+// Duas entradas, porque as duas cobremlassen diferentes de máquina:
+//   - `VALOR_CANARIO` entra pelo `env` do `execSync`, numa chave que o Compose
+//     JÁ interpola (`GF_SECURITY_ADMIN_USER`, `docker-compose.yml:444`). Entra
+//     em toda máquina, com ou sem `.env.production`.
+//   - `LINHA_CANARIO` entra no stub `.env.production`, que só é escrito quando o
+//     arquivo não existe. Sem ele o `docker compose config` falha em CI.
+const VALOR_CANARIO = 'CANARIO_NAO_E_UM_SEGREDO_REAL';
+const LINHA_CANARIO = `GF_SECURITY_ADMIN_PASSWORD=${VALOR_CANARIO}`;
 
 // pt-BR: `docker compose config` imprime os serviços em ORDEM ALFABÉTICA
 // (MEDIDO 2026-10-19: api, grafana, otel-collector, postgres, prometheus,
@@ -130,11 +138,11 @@ function composeConfig(profile?: string): string {
   const fs = require('node:fs') as typeof import('node:fs');
   const envFileExisted = fs.existsSync(envFile);
   if (!envFileExisted) {
-    // O canário é o que dá dente ao guard de vazamento (teste "não carrega o
-    // conteúdo do env_file"). Um stub vazio faria a asserção passar sem ter
-    // nada para verificar: `not.toContain` de uma string que nunca existiu é
-    // verde por ausência de dado, não por correção.
-    fs.writeFileSync(envFile, `${CANARIO}\n`, { mode: 0o600 });
+    // O stub só existe para o `docker compose config` não morrer num repo sem
+    // `.env.production`. O DENTE do guard de vazamento é o canário no `env`
+    // abaixo, que é incondicional — um stub vazio faria a asserção passar sem
+    // nada para verificar, e era isso que acontecia em toda máquina de dev.
+    fs.writeFileSync(envFile, `${LINHA_CANARIO}\n`, { mode: 0o600 });
   }
   try {
     return mascaraSegredos(
@@ -187,6 +195,14 @@ function composeConfig(profile?: string): string {
           DATABASE_URL: 'postgresql://test:test@localhost:5432/test',
           JWT_SECRET: undefined,
           COMPOSE_DISABLE_ENV_FILE: '1',
+          // pt-BR (#113): a SONDA do guard de vazamento, incondicional.
+          // MEDIDO 2026-10-20: `GF_SECURITY_ADMIN_USER` é interpolada em
+          // `docker-compose.yml:444` e `environment:` tem precedência sobre
+          // `env_file:`, então este valor aparece no render em TODA máquina —
+          // inclusive na de dev, onde `.env.production` existe e sobrepõe o
+          // stub. Antes disso o canário só entrava no CI, e aqui o
+          // `not.toContain` era verde por ausência de dado.
+          GF_SECURITY_ADMIN_USER: VALOR_CANARIO,
         },
       }),
     );
@@ -318,6 +334,22 @@ describe('docker compose profile: observability (backends de acompanhamento)', (
     expect(bloco).not.toMatch(/^volumes:/m);
   });
 
+  it('grafana espera tempo e prometheus saudáveis antes de subir', () => {
+    // pt-BR (#113): o `grafana` provisiona datasource para os dois. Sem
+    // `depends_on`, ele sobe primeiro e o datasource dá "connection refused" —
+    // o `502` clássico de primeira subida. Apagar o bloco derruba este teste,
+    // que é o dente exigido pelo plano.
+    const obsConfig = composeConfig('observability');
+    const bloco = blocoDoServico(obsConfig, 'grafana');
+    for (const alvo of ['tempo', 'prometheus']) {
+      expect(bloco).toMatch(new RegExp(`^ {6}${alvo}:$`, 'm'));
+    }
+    // `condition` importa: sem ele o Compose só espera o container *iniciar*,
+    // não ficar saudável — que é o que o `healthcheck` dos dois garante.
+    const blocoDepende = bloco.slice(bloco.search(/^ {4}depends_on:$/m));
+    expect((blocoDepende.match(/condition: service_healthy/g) ?? []).length).toBe(2);
+  });
+
   it('NÃO vaza o VALOR do env_file no render (a chave pode, e deve, aparecer)', () => {
     // ⚠️ MEDIDO 2026-10-19, no CI, NÃO aqui. A asserção era
     // `not.toMatch(/GF_SECURITY_ADMIN_PASSWORD:/)` — exigia que a CHAVE
@@ -325,21 +357,20 @@ describe('docker compose profile: observability (backends de acompanhamento)', (
     // uso) PRESERVA a chave e troca só o valor por `<oculto>`: teste e
     // implementação discordavam, e quem disse a verdade foi a CI.
     //
-    // Por que era verde aqui e vermelho lá: `composeConfig()` só escreve o stub
-    // com o canário quando NÃO existe `.env.production`. Na minha máquina existe
-    // — e o arquivo real não tem essa chave (MEDIDO: 0 ocorrências) — então a
-    // chave não aparece e o `not.toMatch` fica verde por AUSÊNCIA DE DADO. No CI
-    // não existe `.env.production`, o stub é escrito, a chave aparece
-    // (mascarada) e o teste fica vermelho.
+    // O segundo defeito, MEDIDO 2026-10-20: a asserção é de ausência, e o
+    // canário só entrava no render quando `.env.production` NÃO existia. Numa
+    // máquina de dev ele existe, a chave não aparece, e o `not.toContain` é
+    // verde por AUSÊNCIA DE DADO. O canário agora entra pelo `env` do
+    // `execSync` (`GF_SECURITY_ADMIN_USER`), que vale em toda máquina.
     //
     // O que não pode aparecer é o VALOR: é ele que o vitest imprimiria em
     // `+ Received:` quando outra asserção do arquivo falhasse.
-    //
-    // ⚠️ O dente continua onde havia dado: só onde o canário é escrito (CI). O
-    // dente de `mascaraSegredos` em qualquer máquina está no teste unitário
-    // abaixo.
     const obsConfig = composeConfig('observability');
-    expect(obsConfig).not.toContain('CANARIO_NAO_E_UM_SEGREDO_REAL');
+    // A sonda precisa estar NO RENDER antes da máscara, senão o teste mede o
+    // vazio. Sem esta linha, trocar `mascaraSegredos` por `identity` continua
+    // verde — que é o toothlessness que o #113 mediu (mutação: 1 passed).
+    expect(obsConfig).toContain(`GF_SECURITY_ADMIN_USER:<oculto>`);
+    expect(obsConfig).not.toContain(VALOR_CANARIO);
   });
 
   it('mascaraSegredos tira o valor e preserva a chave, sem comer o resto do render', () => {

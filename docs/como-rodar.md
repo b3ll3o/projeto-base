@@ -292,6 +292,11 @@ echo "GF_SECURITY_ADMIN_PASSWORD=$(openssl rand -base64 18 | tr -d '/+=' | cut -
 collector sobe normalmente, sem falhar. Em dev local (pnpm), para o web enviar traces do
 browser: `NEXT_PUBLIC_OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318/v1/traces`.
 
+No **Compose** a mesma telemetria de browser vem pelo `build.args` do serviço `web`, não
+pelo `environment:`: `NEXT_PUBLIC_*` é inlined no build do Next.js, então a chave no
+ambiente chegaria tarde demais. O `ARG` do `apps/web/Dockerfile` nasce vazio — build fora do
+Compose (inclusive o job `docker-build-prod` do CI) segue sem telemetria de browser.
+
 ### O sampling é em DUAS camadas — e é por isso que a tela fica vazia
 
 O `tail_sampling` segura cada trace por `decision_wait: 10s` antes de decidir se
@@ -302,7 +307,7 @@ ao collector.**
 | Camada | Onde | O que descarta |
 | --- | --- | --- |
 | 1. SDK | `tracing.ts` **não passa `sampler`**, então o SDK Node lê `OTEL_TRACES_SAMPLER` do ambiente | `parentbased_traceidratio` + `ARG=0.1` (o que `.env.production.example:96-97` entrega) mata 90% dos traces raiz. Sem essas chaves o fallback é `AlwaysOn` e a camada não descarta nada |
-| 2. Collector | `infra/otelcol/config.yaml` `tail_sampling` | dos que sobraram, só passam os de `status_code` erro, os mais lentos que 1s, e uma baseline probabilística de 5% |
+| 2. Collector | `infra/otelcol/config.yaml` `tail_sampling` | dos que sobraram, passa qualquer um destes: `status_code` erro, mais lento que 1s, **ou** a baseline probabilística de 5%. As policies são combinadas com **OR** (basta uma casar) e a ordem delas no YAML é irrelevante — MEDIDO ao vivo: 30 traces enviados por OTLP/HTTP, busca `/api/search` do Tempo devolveu erro 10/10, lenta 10/10, rápida 0/10; registro no bloco "MEDIDO ao vivo" acima de `tail_sampling` em `infra/otelcol/config.yaml` |
 
 **Para um request rápido e bem-sucedido, com o `.env.production` copiado do example:
 10% × 5% ≈ 0,5% de chance de aparecer no Grafana.** Trace de erro e request lento
