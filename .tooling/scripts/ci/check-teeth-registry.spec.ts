@@ -26,10 +26,14 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   checkTeethRegistry,
+  citedGateTokens,
+  normalizaGateId,
   readRepoFiles,
+  reconcileCatalogoHumano,
   reconcileTeethRegistry,
   registryGateFiles,
   unroutedGateFiles,
+  type CheckSpec,
   type GateRef,
   preflightGates,
 } from './check-teeth-registry.js';
@@ -279,7 +283,144 @@ Fora da tabela, um path citado em prosa: \`.tooling/scripts/ci/check-fantasma.ts
   });
 });
 
-// ── 5. o estado real do repo ────────────────────────────────────────────────
+// ── 5. preflight ↔ catálogo humano ──────────────────────────────────────────
+
+const CATALOGO = (rows: string): string => `
+## Tabela de Checks
+
+Escopo de todos: **todo \`.md\` versionado** sob a raiz.
+
+| Check | Tipo | Detecta |
+|---|---|---|
+${rows}
+`;
+
+const SPECS: CheckSpec[] = [
+  { id: 'check-doc-refs', name: 'Cross-refs', file: '.tooling/scripts/ci/check-doc-refs.ts' },
+  {
+    id: 'check-eslint-drift:apps',
+    name: 'ESLint (apps)',
+    file: '.tooling/scripts/ci/check-eslint-drift.ts',
+  },
+  {
+    id: 'check-eslint-drift:packages',
+    name: 'ESLint (packages)',
+    file: '.tooling/scripts/ci/check-eslint-drift.ts',
+  },
+  {
+    id: 'lint-review-routing',
+    name: 'matrix lint',
+    file: 'tooling/scripts/lint-review-routing.ts',
+  },
+];
+
+const CATALOGO_OK = CATALOGO(
+  '| `check-doc-refs` | cross-refs | paths quebrados |\n' +
+    '| `check-eslint-drift` | eslint | regras duplicadas |\n' +
+    '| `review-routing` matrix lint | roteamento | YAML inválido |',
+);
+
+describe('reconcileCatalogoHumano — preflight ↔ catálogo humano', () => {
+  it('catálogo que cobre tudo é verde — inclusive escopo pelo pai e prefixo omitido', () => {
+    // As duas reduções de `normalizaGateId` nascem daqui: `check-eslint-drift`
+    // cobre `:apps` e `:packages` (o catálogo documenta o GATE, não a
+    // invocação), e o catálogo escreve `review-routing` para o id
+    // `lint-review-routing` — é assim que o registro de dentes escreve.
+    // Sem as duas, um documento escrito na convenção dele acusaria divergência.
+    const r = reconcileCatalogoHumano({
+      registeredGates: SPECS,
+      humanTableMarkdown: CATALOGO_OK,
+    });
+    expect(r.errors).toEqual([]);
+    expect(r.ok).toBe(true);
+  });
+
+  it('gate que roda SEM citação é vermelho, e é NOMEADO', () => {
+    const r = reconcileCatalogoHumano({
+      registeredGates: [...SPECS, { id: 'check-fantasma', name: 'x', file: 'x.ts' }],
+      humanTableMarkdown: CATALOGO_OK,
+    });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toContain('check-fantasma');
+  });
+
+  it('gate citado que NÃO roda é vermelho, e é NOMEADO', () => {
+    const r = reconcileCatalogoHumano({
+      registeredGates: SPECS,
+      humanTableMarkdown: CATALOGO(
+        '| `check-doc-refs` | cross-refs | paths quebrados |\n' +
+          '| `check-eslint-drift` | eslint | regras duplicadas |\n' +
+          '| `review-routing` matrix lint | roteamento | YAML inválido |\n' +
+          '| `check-gone` | dentes | gate que saiu do preflight |',
+      ),
+    });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toContain('check-gone');
+  });
+
+  it('token de PROSA entre crases não vira gate fantasma', () => {
+    // A 3ª coluna da tabela cita `PREFLIGHT_CHECKS` e `wc -l`. Sem o
+    // discriminador de "isto nomeia um gate", qualquer um deles viraria um
+    // "citado sem gate que rode" — e o catálogo ficaria não-escrevível.
+    const r = reconcileCatalogoHumano({
+      registeredGates: SPECS,
+      humanTableMarkdown: CATALOGO(
+        '| `check-doc-refs` | cross-refs | conta `PREFLIGHT_CHECKS` e `wc -l` |\n' +
+          '| `check-eslint-drift` | eslint | regras duplicadas |\n' +
+          '| `review-routing` matrix lint | roteamento | YAML inválido |',
+      ),
+    });
+    expect(r.errors).toEqual([]);
+  });
+
+  it('a prosa ABAIXO da tabela não conta como citação nem como gate', () => {
+    // A convenção explica por que `check-types.ts` saiu da tabela, e cita
+    // `turbo-redirect-differential.sh` numa medição antiga. Nenhum dos dois
+    // é uma declaração de catálogo.
+    const r = reconcileCatalogoHumano({
+      registeredGates: SPECS,
+      humanTableMarkdown:
+        CATALOGO_OK +
+        '\n> `check-types.ts` **NÃO é um check**, e o histórico mediu ' +
+        '`turbo-redirect-differential.sh` com 8,17 s.\n',
+    });
+    expect(r.errors).toEqual([]);
+  });
+
+  it('CATÁLOGO AUSENTE é erro, não verde por conjunto vazio', () => {
+    // Sem heading, `citedGateTokens` devolve `[]` — e `[]` é indistinguível
+    // de "o catálogo não cita nada". Classe 5: se isto saísse verde, um
+    // rename do heading desligaria a reconciliação inteira sem um sintoma.
+    const r = reconcileCatalogoHumano({
+      registeredGates: SPECS,
+      humanTableMarkdown: '# Outra coisa\n\n| `check-doc-refs` | x | y |\n',
+    });
+    expect(r.ok).toBe(false);
+  });
+});
+
+describe('normalizaGateId — as duas reduções, e o que elas NÃO comem', () => {
+  it('tira o sufixo de escopo e o prefixo de ferramenta', () => {
+    expect(normalizaGateId('check-eslint-drift:apps')).toBe('eslint-drift');
+    expect(normalizaGateId('lint-review-routing')).toBe('review-routing');
+  });
+
+  it('deixa intacto um id que não usa nenhum dos dois formatos', () => {
+    // `turbo-redirect-differential` não é `check-` nem `lint-`, e o catálogo
+    // o escreve sem muda — normalizar além disso inventaria uma regra que
+    // ninguém pediu.
+    expect(normalizaGateId('turbo-redirect-differential')).toBe('turbo-redirect-differential');
+  });
+
+  it('só o último `:` conta como escopo — e o prefixo sai DEPOIS, não antes', () => {
+    // As duas reduções são encadeadas, nesta ordem. Invertê-las daria
+    // `x:a` no mesmo caso: tirar `check-` primeiro deixaria `x:a:b` sem
+    // prefixo para casar, e o `:b` sobreviveria como se fosse parte do nome.
+    expect(normalizaGateId('check-x:a:b')).toBe('x:a');
+  });
+});
+
+// ── 6. o estado real do repo ────────────────────────────────────────────────
 //
 // Até aqui tudo roda com fixture sintética, o que prova a LÓGICA mas não
 // prova que o check enxerga o repo. A diferença importa: um check que só
