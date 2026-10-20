@@ -238,6 +238,20 @@ describe('LoginForm — o erro genérico de credencial', () => {
     await pessoa.type(screen.getByLabelText('Senha'), 'errada');
     await pessoa.click(screen.getByRole('button', { name: 'Entrar' }));
 
+    // ⚠️ `waitFor` aqui, e a asserção DIRETA que ele substitui era um flake.
+    // `pessoa.click()` resolve no DESPACHO: o `useActionState` ainda tem que
+    // resolver a Action e o React tem que renderizar o estado novo, e nada
+    // disso está dentro do `await`. Sem a espera, `getAllByRole('alert')`
+    // consulta um form que ainda não tem alerta — e o erro que ela levanta é
+    // "não encontrou", que parece teste quebrado e não é.
+    // MEDIDO 2026-10-20: este caso caiu 1 vez em ~15 execuções do
+    // `test:coverage` do web, só quando a suíte rodava sob carga (turbo
+    // disparando as 11 tasks do gate em paralelo). Os outros dois casos que
+    // consultam o MESMO `role="alert"` (linhas 153 e 334) já usavam
+    // `waitFor` — este era o único sem ele.
+    await waitFor(() =>
+      expect(within(formDaTela()).getAllByRole('alert').length).toBeGreaterThan(0),
+    );
     const alertas = within(formDaTela()).getAllByRole('alert');
     expect(alertas.map((a) => a.textContent)).toContain('E-mail ou senha incorretos.');
   });
