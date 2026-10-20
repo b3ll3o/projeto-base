@@ -318,17 +318,28 @@ describe('docker compose profile: observability (backends de acompanhamento)', (
     expect(bloco).not.toMatch(/^volumes:/m);
   });
 
-  it('NÃO carrega o conteúdo do env_file no render (senha não vaza em falha)', () => {
-    // Verificação de integração: nada de `env_file` chega ao render.
+  it('NÃO vaza o VALOR do env_file no render (a chave pode, e deve, aparecer)', () => {
+    // ⚠️ MEDIDO 2026-10-19, no CI, NÃO aqui. A asserção era
+    // `not.toMatch(/GF_SECURITY_ADMIN_PASSWORD:/)` — exigia que a CHAVE
+    // sumisse. Mas a correção que o R2 acabou adotando (máscara no ponto de
+    // uso) PRESERVA a chave e troca só o valor por `<oculto>`: teste e
+    // implementação discordavam, e quem disse a verdade foi a CI.
     //
-    // ⚠️ Este teste só tem dente ONDE O CANÁRIO EXISTE — isto é, onde não há
-    // `.env.production` e o stub é escrito (CI). MEDIDO 2026-10-19 numa máquina
-    // de dev com o arquivo real: o stub não é criado, o canário não existe, e
-    // a asserção é verde por AUSÊNCIA DE DADO, não por correção. Por isso o
-    // dente real de `mascaraSegredos` está no teste unitário abaixo, que roda
-    // em qualquer máquina.
+    // Por que era verde aqui e vermelho lá: `composeConfig()` só escreve o stub
+    // com o canário quando NÃO existe `.env.production`. Na minha máquina existe
+    // — e o arquivo real não tem essa chave (MEDIDO: 0 ocorrências) — então a
+    // chave não aparece e o `not.toMatch` fica verde por AUSÊNCIA DE DADO. No CI
+    // não existe `.env.production`, o stub é escrito, a chave aparece
+    // (mascarada) e o teste fica vermelho.
+    //
+    // O que não pode aparecer é o VALOR: é ele que o vitest imprimiria em
+    // `+ Received:` quando outra asserção do arquivo falhasse.
+    //
+    // ⚠️ O dente continua onde havia dado: só onde o canário é escrito (CI). O
+    // dente de `mascaraSegredos` em qualquer máquina está no teste unitário
+    // abaixo.
     const obsConfig = composeConfig('observability');
-    expect(obsConfig).not.toMatch(/GF_SECURITY_ADMIN_PASSWORD:/);
+    expect(obsConfig).not.toContain('CANARIO_NAO_E_UM_SEGREDO_REAL');
   });
 
   it('mascaraSegredos tira o valor e preserva a chave, sem comer o resto do render', () => {
