@@ -18,27 +18,55 @@
 // opostas: um é a garantia (fail-safe fora de dev), o outro é o erro fatal.
 
 import { describe, expect, it } from 'vitest';
-import { decisaoDoAdminLocal } from './decisao-do-admin-local.js';
+import { HOSTS_DESTINO_LOCAL, decisaoDoAdminLocal } from './decisao-do-admin-local.js';
 
 const url = (host: string): string => `postgresql://projeto:projeto@${host}/projeto_base`;
 
+/**
+ * Os destinos locais CONHECIDOS — a whitelist, escrita AQUI e não derivada do
+ * código. Cada entrada diz POR QUE ela é local, e cada entrada é o caso
+ * favorável que a nomeia: acrescentar um destino novo é acrescentar uma linha
+ * aqui, com o motivo, e não mexer numa lista de produção às cegas.
+ */
+const DESTINOS_CONHECIDOS: readonly { host: string; motivo: string }[] = [
+  { host: 'localhost', motivo: 'loopback por nome' },
+  { host: '127.0.0.1', motivo: 'loopback por IPv4' },
+  { host: 'postgres', motivo: 'o nome do serviço do Compose' },
+];
+
 describe('decisaoDoAdminLocal', () => {
   // ── criar ────────────────────────────────────────────────────────────────
-  // `postgres` é o nome do serviço do Compose, que é o que o comando
-  // documentado em `docs/como-rodar.md` §1.7 usa de dentro do container.
-  it.each([
-    'postgres',
-    'postgres:5432',
-    'localhost',
-    'localhost:5432',
-    '127.0.0.1',
-    '127.0.0.1:5432',
-  ])('modo dev + destino %s: cria', (host) => {
+  // Cada destino CONHECIDO tem o seu caso favorável, e o caso o NOMEIA. A
+  // tabela acima é a whitelist; esta é a prova de que cada entrada dela
+  // realmente cria — e a asserção que vem depois é a que amarra a lista do
+  // código a esta tabela.
+  it.each(DESTINOS_CONHECIDOS)('modo dev + destino $host ($motivo): cria', ({ host }) => {
     expect(decisaoDoAdminLocal('development', url(host))).toBe('criar');
+    // A porta não muda o hostname: `new URL(...).hostname` joga fora a porta,
+    // e é por isso que `postgres:5432` — o que a URL do Compose traz — cai no
+    // mesmo caso que `postgres`.
+    expect(decisaoDoAdminLocal('development', url(`${host}:5432`))).toBe('criar');
   });
 
   it('modo dev + query string na URL: cria (o `?schema=` que o compose põe no DATABASE_URL)', () => {
     expect(decisaoDoAdminLocal('development', `${url('postgres')}?schema=public`)).toBe('criar');
+  });
+
+  // ── a lista é presa ──────────────────────────────────────────────────────
+  // A lista de destinos é a decisão de segurança deste arquivo: é ela que
+  // decide se o admin de senha pública, de TODAS as permissions e conectado
+  // como DONA, nasce num banco de produção. Uma lista literal sem nada que a
+  // prenda aceita qualquer acréscimo — e o erro de digitação (`db-producao`)
+  // é exatamente o tipo de coisa que ninguém testaria.
+  //
+  // MEDIDO 2026-10-20: sem esta asserção, a mutação de acrescentar
+  // `db-producao` à lista deixava os 20 testes VERDES. A comparação é
+  // EXATA nos dois sentidos: um hostname a mais no código e um hostname a
+  // menos quebram este spec. E como a whitelist é a tabela `DESTINOS_CONHECIDOS`
+  // — que é também a fonte dos casos favoráveis — acrescentar um destino
+  // exige um caso favorável que o NOMEIE, e não uma linha a mais na produção.
+  it('a lista de destinos é EXATAMENTE o conjunto conhecido', () => {
+    expect([...HOSTS_DESTINO_LOCAL].sort()).toEqual(DESTINOS_CONHECIDOS.map((d) => d.host).sort());
   });
 
   // ── recusar ──────────────────────────────────────────────────────────────

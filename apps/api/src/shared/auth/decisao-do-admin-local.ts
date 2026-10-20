@@ -25,8 +25,16 @@ export type DecisaoAdminLocal = 'criar' | 'recusar' | 'ignorar';
  * comparação é de STRING — o guard não resolve DNS, e é por isso que um
  * Postgres remoto de dev que se chame `postgres` passa, e que o
  * `projeto-base-postgres` (que resolve para o MESMO Postgres) é recusado.
+ *
+ * ⚠️ EXPORTADA porque a spec precisa PRENDER a lista. Sem isso, um hostname
+ * acrescentado por engano — `db-producao`, um typo — entra como destino "local"
+ * e o admin de senha pública nasce num banco que não é de dev, e NENHUM teste
+ * cai: MEDIDO 2026-10-20, a mutação de acrescentar um host remoto à lista
+ * deixava a spec INTEIRA verde (20 de 20). A lista é a decisão de segurança
+ * deste arquivo — ela decide se o bypass total do seed acontece — e uma
+ * decisão de segurança não pode depender de alguém lembrar de testar.
  */
-const HOSTS_DESTINO_LOCAL: readonly string[] = ['localhost', '127.0.0.1', 'postgres'];
+export const HOSTS_DESTINO_LOCAL: readonly string[] = ['localhost', '127.0.0.1', 'postgres'];
 
 /**
  * Modo default-deny: só `development` cria. Ausente, vazio, `staging`, `prod` ou
