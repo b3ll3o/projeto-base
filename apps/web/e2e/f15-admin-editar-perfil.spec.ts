@@ -66,11 +66,14 @@ test.describe('F15 — Edição dos metadados do perfil (admin)', () => {
     // relógio. `expect.poll` relê o Postgres até a escrita aparecer.
     //
     // A mutação que este caso existe para pegar: reintroduzir o
-    // `...(description !== '' ? { description } : {})` de `new/page.tsx:57`,
-    // que faz vazio significar "manter". Aí o controller omite o campo,
-    // `input.description ?? null` vira `null`, `alterarDescricao(null)` roda,
-    // e o banco volta `null` — com os outros dois casos deste arquivo ainda
-    // verdes, porque nenhum deles limpa a descrição.
+    // `...(description !== '' ? { description } : {})` de `new/page.tsx:57`.
+    // O efeito NÃO é "não apagar" — é apagar para `NULL`: o controller omite o
+    // campo, `input.description ?? null` vira `null`, `alterarDescricao(null)`
+    // roda, e o banco volta `null` em vez de `''`. A tela não denuncia a
+    // diferença (o input faz `profile.description ?? ''`), então só a leitura do
+    // banco separa as duas — e é por isso que a afirmação é `.toBe('')`, e não
+    // "a descrição sumiu". Os outros dois casos deste arquivo seguem verdes
+    // sob essa mutação, porque nenhum deles limpa a descrição.
     await expect
       .poll(
         async () => (await prismaE2E().profile.findUniqueOrThrow({ where: { id } })).description,

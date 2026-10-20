@@ -68,14 +68,29 @@ export default async function AdminProfileDetailPage({
   // acima, que é só `isSystem`. Sem a condição, o clique leva 403 garantido.
   async function salvarMetadados(formData: FormData): Promise<void> {
     'use server';
-    // `trim()` no `name` porque o VO mede o comprimento DEPOIS do trim
-    // (`profile-name.vo.ts:9-10`): sem isso, `" a "` passa o `minLength={2}`
-    // do browser e toma 400. A `description` também é aparada — não tem VO e
-    // não valida nada, mas sem o trim o admin "limpa" e grava `" "`, invisível
-    // em todo render. E string vazia é "limpar", não "manter" (por isso NÃO há o
-    // `...(description !== '' ? …)` de `new/page.tsx:57`, que torna impossível
-    // apagar a descrição).
-    const name = String(formData.get('name') ?? '').trim();
+    // shortcut: nenhum `version` viaja com o PATCH, então dois admins na mesma
+    // tela sobrescrevem em silêncio — o mesmo limite de `trocarPermissoes`
+    // (`lib/perfil.ts:254-259`). O lock otimista do repositório existe
+    // (`prisma-profile.repository.ts` compara `version`), mas ele compara contra
+    // a versão lida na MESMA requisição, nunca contra a do render — por isso
+    // `page.tsx` mostra `versão {n}` na tela sem nada mandar de volta. Quando a
+    // API aceitar `If-Match`, o número exibido vira o baseline enviado.
+    //
+    // shortcut: erro sobe como exceção para o `app/error.tsx` da raiz, igual ao
+    // `saveAuthorizations` desta tela e ao `criarPerfil` de `new/page.tsx:50-53`.
+    // O 4xx alcançável daqui é só o `ProfileName`: o `minLength={2}` do browser
+    // conta comprimento CRU, então `"  a  "` passa e o VO — que mede depois do
+    // trim (`profile-name.vo.ts:23-28`) — recusa com 400, e a página inteira
+    // some atrás do copy genérico do boundary. Mensagem inline exige
+    // `useActionState` + client component; quando o erro esperado aqui for
+    // frequente, vale pagar esse custo.
+    //
+    // `name` NÃO é aparado aqui: o VO já faz isso, e um `.trim()` antes seria
+    // redundante. `description` é, porque não tem VO — sem isso o admin "limpa"
+    // e grava `" "`, invisível em todo render. E string vazia é "limpar": o que
+    // se manda é o que o browser entregou, sem o `...(description !== '' ? …)`
+    // de `new/page.tsx:57`.
+    const name = String(formData.get('name') ?? '');
     const description = String(formData.get('description') ?? '').trim();
     await atualizarPerfil(profile!.id, { name, description });
     revalidatePath(`/admin/profiles/${profile!.slug}`);
