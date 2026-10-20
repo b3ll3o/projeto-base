@@ -15,15 +15,19 @@ O que muda e por quê. Duas ou três frases: o problema, a decisão, o efeito.
 
 O comando e a saída — antes e depois. Sem isto, o texto acima é afirmação.
 
-Toda claim numérica deste parágrafo precisa do marcador abaixo, senão
-`pr-refresh-gate` acusa divergência no CI:
-
-<!--pr-refresh:live-->
-
 > ```
 > $ <comando>
 > <saída real>
 > ```
+> <!--pr-refresh:live-->
+
+O marcador fica **dentro** do blockquote, colado da saída — e o motivo é
+medido, não estético: o gate escopa o marcador pelo parágrafo
+(`linhasVivas`, em `pr-refresh-apply.ts`), e parágrafo fecha em linha
+vazia. Marcado fora, ele cobre a instrução e deixa a saída — que é onde a
+claim vive — sem cobertura, e o PR sai vermelho contra o próprio
+template. MEDIDO com o gate real: nesta forma, exit 1; com o marcador
+colado na saída, exit 0.
 
 ## Merge Danger
 
