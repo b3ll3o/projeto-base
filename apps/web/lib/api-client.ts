@@ -59,7 +59,28 @@ export class ApiClient {
     const token = this.config.getToken?.();
     const tenant = this.config.getTenant?.();
     const headers = new Headers(restInit.headers);
-    headers.set('content-type', 'application/json');
+    // pt-BR (2026-10-20): `content-type` só quando HÁ corpo. O Fastify recusa
+    // um DELETE sem corpo que declare `application/json` com
+    // `Body cannot be empty when content-type is set to 'application/json'` (400),
+    // e era exatamente isso que quebrava `revogarPermissao` e `apagarPerfil` —
+    // os dois `client.delete(...)` do front, que não mandam body. MEDIDO contra
+    // a API acesa, mesmo request e mesmo token, mudando só este header:
+    // DELETE sem → 200; DELETE com → 400.
+    //
+    // `Content-Type` descreve o corpo, e um request sem corpo não tem o que
+    // descrever. O GET não sente a ausência (MEDIDO: 200 com e sem). POST/
+    // PATCH/PUT seguem mandando porque todo caller atual passa corpo real —
+    // e `JSON.stringify(undefined)` devolveria `undefined` (não string), o que
+    // faria um `client.post(path)` sem argumento cair aqui e mandar POST sem
+    // header nenhum. Nenhum caller faz isso hoje.
+    // `!= null` (solto) de propósito: cobre `undefined` E `null` numa condição
+    // só, porque os dois são a mesma coisa aqui — "não há corpo". Escrever os
+    // dois operadores cria um ramo que nenhum caller exercita e que nenhum teste
+    // distingue: `body: null` é o mesmo caso de `body` ausente, e tratá-lo
+    // diferente devolveria o 400 que esta linha conserta.
+    if (restInit.body != null) {
+      headers.set('content-type', 'application/json');
+    }
     if (token) headers.set('authorization', `Bearer ${token}`);
     // pt-BR (Fase 3): `if (tenant)`, não `?? null` — header vazio seria
     // rejeitado com 400 `INVALID_TENANT` do outro lado, e "sem empresa" é
