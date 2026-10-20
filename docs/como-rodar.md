@@ -154,7 +154,7 @@ Credencial de DEV, no mesmo espírito da senha `projeto:projeto` do
 | condição | regra | por quê |
 |---|---|---|
 | modo | `NODE_ENV === 'development'` | **default-deny**: ausente, vazio, `staging` e `prod` (sem o "uction") não criam a conta |
-| destino | host da `DIRECT_DATABASE_URL` em `localhost`, `127.0.0.1` ou `postgres` | modo e destino vêm de arquivos diferentes — o overlay dev **força** `NODE_ENV: development` (`docker-compose.dev.yml:5`), mas a `DIRECT_DATABASE_URL` chega pelo `env_file: .env.production` do compose base (`docker-compose.yml:101`) |
+| destino | host da `DIRECT_DATABASE_URL` em `localhost`, `127.0.0.1` ou `postgres` | modo e destino vêm de arquivos diferentes — o overlay dev **força** `NODE_ENV: development` (`docker-compose.dev.yml:5`), mas a `DIRECT_DATABASE_URL` chega pelo `env_file: .env.production` do compose base (`docker-compose.yml:101`). ⚠️ A checagem é sobre o **hostname que a URL resolve**, e é comparação de string: o guard **não resolve DNS**. `postgres` só vale porque é o nome do serviço do Compose — um Postgres remoto de dev que também se chame `postgres` passa, e um local que se chame `qualquer-coisa` é recusado |
 
 O comando acima satisfaz as duas: dentro do container o host é `postgres`. Se o
 destino não for local, o seed **recusa e sai 1**, nomeando o host — medido

@@ -17,6 +17,7 @@
 // `env_file: .env.production` e o NODE_ENV pelo overlay dev. Ver `docs/como-rodar.md` §1.7.
 
 import { PrismaClient } from '@prisma/client';
+import { decisaoDoAdminLocal } from '../src/shared/auth/decisao-do-admin-local.js';
 import { listAllPermissions } from '../src/shared/auth/permissions-catalog.js';
 import { Argon2PasswordHasher } from '../src/modules/auth/infrastructure/security/argon2-password-hasher.js';
 import { UserId } from '../src/modules/users/domain/value-objects/user-id.vo.js';
@@ -122,11 +123,13 @@ async function main(): Promise<void> {
   //    como DONA (o papel que ignora RLS). Chegar o host é o que fecha isso;
   //    MEDIDO 2026-10-20: o host do comando documentado é `postgres`, de onde vem
   //    o nome da lista.
-  const ehDestinoLocal = ['localhost', '127.0.0.1', 'postgres'].includes(
-    new URL(urlDoDono).hostname,
-  );
-  const ehModoDev = process.env['NODE_ENV'] === 'development';
-  if (ehModoDev && ehDestinoLocal) {
+  // A decisão saiu para `src/shared/auth/decisao-do-admin-local.ts` porque
+  // `prisma/` não tem um único `*.spec.ts` e o projeto `unit` do Vitest só
+  // enxerga `src/` — a tabela de destinos e o default-deny do modo estavam sem
+  // nenhum teste. Ela tem TRÊS saídas, e não duas: `ignorar` deixa o passo 5
+  // seguir, `recusar` mata o processo.
+  const decisao = decisaoDoAdminLocal(process.env['NODE_ENV'], urlDoDono);
+  if (decisao === 'criar') {
     const adminLocal = await prisma.user.findUnique({
       where: { email: ADMIN_LOCAL_EMAIL },
     });
@@ -152,12 +155,23 @@ async function main(): Promise<void> {
     } else {
       console.log(`Seed: usuário admin local ${ADMIN_LOCAL_EMAIL} já existe.`);
     }
-  } else if (ehModoDev) {
+  } else if (decisao === 'recusar') {
     // Silêncio aqui seria o pior dos dois mundos: o passo 5 seguiria promoting e
     // o seed fecharia "OK" sem nenhum admin para logar. Recusa explícita, no
     // mesmo espírito do `throw` de `DIRECT_DATABASE_URL` ausente lá em cima.
+    //
+    // O `try` do host não é decoração: `recusar` também é a saída quando a URL
+    // NÃO parseia, e aí `new URL(...).hostname` lançaria um TypeError por cima
+    // do motivo real. Na prática o passo 1 morre antes (MEDIDO), mas a
+    // mensagem que nomeia o destino não pode depender disso.
+    let host = '(URL ilegível)';
+    try {
+      host = new URL(urlDoDono).hostname;
+    } catch {
+      // segue com o rótulo acima
+    }
     throw new Error(
-      `Seed recusado: NODE_ENV=development, mas DIRECT_DATABASE_URL aponta para ${new URL(urlDoDono).hostname}, que não é local. O admin local tem senha pública e TODAS as permissions — ele é de DEV.`,
+      `Seed recusado: NODE_ENV=development, mas DIRECT_DATABASE_URL aponta para ${host}, que não é local. O admin local tem senha pública e TODAS as permissions — ele é de DEV.`,
     );
   }
 
