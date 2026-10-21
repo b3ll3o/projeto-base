@@ -94,6 +94,13 @@ export const PERMISSOES_DO_FUNCIONARIO: readonly string[] = ['users.read'];
  * chamada, e uma constante de módulo chamaria o catálogo uma única vez — o
  * que faria o `dono` carregar uma lista capturada no import, congelada
  * enquanto o catálogo cresce.
+ *
+ * ⚠️ As DUAS listas fixas (`gestor` e `funcionario`) também saem como CÓPIA.
+ * O `readonly` do tipo protege em tempo de compilação, e o que sobra é o
+ * runtime: uma constante de módulo devolvida por referência é uma lista que
+ * qualquer consumidor altera e contamina o processo inteiro — inclusive a
+ * chamada seguinte, que é a que a empresa nova lê. O catálogo é CONGELADO, e
+ * cópia é o que congela.
  */
 export function perfisDaEmpresa(): readonly PerfilDaEmpresa[] {
   return [
@@ -103,12 +110,12 @@ export function perfisDaEmpresa(): readonly PerfilDaEmpresa[] {
       isAdmin: true,
       permissoes: listAllPermissions(),
     },
-    { slug: 'gestor', nome: 'Gestor', isAdmin: false, permissoes: PERMISSOES_DO_GESTOR },
+    { slug: 'gestor', nome: 'Gestor', isAdmin: false, permissoes: [...PERMISSOES_DO_GESTOR] },
     {
       slug: 'funcionario',
       nome: 'Funcionário',
       isAdmin: false,
-      permissoes: PERMISSOES_DO_FUNCIONARIO,
+      permissoes: [...PERMISSOES_DO_FUNCIONARIO],
     },
   ];
 }
