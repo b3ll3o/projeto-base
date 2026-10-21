@@ -451,4 +451,159 @@ describe('E2E 11 — isolamento entre empresas', () => {
     expect(lido.profileId).toBe(id);
     expect(lido.permissions).toEqual(['users.read']);
   });
+
+  // ───────────── as DUAS rotas do onboarding de empresa ─────────────
+  //
+  // O par `GET /me/tenants` + `POST /tenants` é a entrada da empresa pelo
+  // onboarding, e é o ÚNICO par de rotas do sistema que atravessa empresas
+  // por natureza (a lista é "minhas empresas", não "a empresa do header").
+  // Por isso ele precisa do NEGATIVO que o resto do arquivo mede: um filtro
+  // que filtrasse demais (ou que não filtrasse nada) passaria Verde.
+
+  it('a listagem de empresas do ator NÃO devolve a empresa alheia', async () => {
+    const acme = await abrirEmpresa('acme');
+    const globex = await abrirEmpresa('globex');
+
+    // Ana é convidada na ACME — e SÓ na ACME.
+    const ana = await convidarEAceitar(acme.empresa.id, acme.headers, 'ana+lista@acme.dev');
+
+    const lista = await e2e.injetar({
+      method: 'GET',
+      url: '/api/v1/me/tenants',
+      headers: ana.headers,
+    });
+    expect(lista.statusCode).toBe(200);
+    const empresas = (JSON.parse(lista.body) as { id: string }[]).map((e) => e.id);
+
+    // O POSITIVO: a empresa onde ela está.
+    expect(empresas).toContain(acme.empresa.id);
+    // O NEGATIVO: a empresa onde ela NÃO está. Sem esta linha, o teste acima
+    // passaria mesmo com o filtro por `userId` removido.
+    expect(empresas).not.toContain(globex.empresa.id);
+  });
+
+  it('a listagem com o header de empresa ALHEIA é recusada pelo guard', async () => {
+    const acme = await abrirEmpresa('acme');
+    const globex = await abrirEmpresa('globex');
+    const ana = await convidarEAceitar(acme.empresa.id, acme.headers, 'ana+header@acme.dev');
+
+    const recusa = await e2e.injetar({
+      method: 'GET',
+      url: '/api/v1/me/tenants',
+      headers: { ...ana.headers, 'x-tenant-id': globex.empresa.id },
+    });
+    expect(recusa.statusCode).toBe(403);
+    expect((JSON.parse(recusa.body) as { code?: string }).code).toBe('TENANT_MEMBERSHIP_REQUIRED');
+  });
+
+  it('criar empresa com o slug de OUTRA empresa é 409 — o slug é GLOBAL', async () => {
+    const acme = await abrirEmpresa('acme');
+    const globex = await abrirEmpresa('globex');
+
+    const duplicada = await e2e.injetar({
+      method: 'POST',
+      url: '/api/v1/tenants',
+      headers: acme.headers,
+      payload: { nome: 'Globex Duplicada', slug: globex.empresa.slug },
+    });
+    expect(duplicada.statusCode).toBe(409);
+    expect((JSON.parse(duplicada.body) as { code?: string }).code).toBe('EMPRESA_JA_EXISTE');
+  });
+
+  it('a listagem põe PRIMEIRO a empresa onde a pessoa tem perfil — o login não pode levá-la a uma onde ela não pode agir', async () => {
+    const acme = await abrirEmpresa('acme');
+
+    // Dora é DONA da empresa própria: a membership dela tem perfil efetivo.
+    const dora = await criarUsuarioAutenticado(e2e, {
+      nome: 'Dora',
+      email: 'dora+ordem@acme.dev',
+    });
+    const criada = await e2e.injetar({
+      method: 'POST',
+      url: '/api/v1/tenants',
+      headers: dora.headers,
+      payload: { nome: 'Acme da Dora', slug: 'acme-dora' },
+    });
+    expect(criada.statusCode).toBe(201);
+
+    // DEPOIS ela é convidada na ACME: essa membership nasce SEM perfil
+    // (permissões zero até o dono atribuir um) — e é a MAIS RECENTE.
+    const convite = await e2e.injetar({
+      method: 'POST',
+      url: `/api/v1/tenants/${acme.empresa.id}/invitations`,
+      headers: acme.headers,
+      payload: { email: dora.email },
+    });
+    expect(convite.statusCode).toBe(201);
+    const { token } = JSON.parse(convite.body) as { token: string };
+    const aceite = await e2e.injetar({
+      method: 'POST',
+      url: '/api/v1/invitations/accept',
+      headers: dora.headers,
+      payload: { token },
+    });
+    expect(aceite.statusCode).toBe(201);
+
+    const lista = await e2e.injetar({
+      method: 'GET',
+      url: '/api/v1/me/tenants',
+      headers: dora.headers,
+    });
+    expect(lista.statusCode).toBe(200);
+    const slugs = (JSON.parse(lista.body) as { slug: string }[]).map((e) => e.slug);
+
+    // A PRIMEIRA é a empresa onde ela MANDA.
+    //
+    // ⚠️ A ordem dos FATOS é o que dá dente a este caso: a membership COM
+    // perfil é a MAIS ANTIGA. Ordenando só por data (`createdAt desc`), a
+    // membership mais RECENTE — a da ACME, onde ela não tem perfil nenhum —
+    // viraria a primeira, e o funil do login a levaria para lá: a tela
+    // principal responderia 403 sem dizer por quê.
+    //
+    // MEDIDO 2026-10-21: com o cenário na ordem inversa (convidada ANTES de
+    // criar a empresa própria), este teste passava com `createdAt desc` — a
+    // mutação era invisível. Trocar a ordem dos fatos foi o que deixou a
+    // ordem do repositório observável.
+    expect(slugs).toEqual(['acme-dora', 'acme']);
+  });
+
+  // ───────────── o dono da empresa NÃO é o administrador do SISTEMA ─────────────
+  //
+  // A distinção é load-bearing e os dois lados dela precisam ser medidos por
+  // HTTP: `dono` tem `isAdmin: true`, e é por isso que ele passa do
+  // `PermissionsGuard` DENTRO da empresa — mas as rotas de SISTEMA exigem
+  // `tenantId === null && isAdmin` (`ehAdministradorDeSistema`), e o dono tem
+  // `users.profile_id` NULL.
+  //
+  // Sem este caso, "dono = administrador" passava: o `isAdmin` do dono é
+  // real, e um teste que só olhasse o perfil veria acesso total.
+
+  it('o dono da empresa é recusado nas rotas de SISTEMA, mesmo com o header da empresa', async () => {
+    const acme = await abrirEmpresa('acme');
+
+    const recusa = await e2e.injetar({
+      method: 'GET',
+      url: '/api/v1/admin/feature-flags',
+      headers: acme.headers,
+    });
+
+    expect(recusa.statusCode).toBe(403);
+    // pt-BR: com o header, o `PermissionsGuard` DEIXA passar (o `dono` é
+    // `isAdmin` no escopo da empresa) e quem recusa é o use case, com o
+    // `code` no corpo. Sem o header, quem recusa é o guard — e a recusa
+    // dele não tem `code`. Os dois recusam; o que muda é QUEM.
+    expect((JSON.parse(recusa.body) as { code?: string }).code).toBe('FORBIDDEN');
+  });
+
+  it('o dono da empresa também é recusado sem header de empresa', async () => {
+    const acme = await abrirEmpresa('acme');
+
+    const recusa = await e2e.injetar({
+      method: 'GET',
+      url: '/api/v1/admin/feature-flags',
+      headers: { authorization: acme.headers.authorization },
+    });
+
+    expect(recusa.statusCode).toBe(403);
+  });
 });

@@ -11,6 +11,7 @@
 
 import { Module } from '@nestjs/common';
 import { TenancyInvitationsController } from './infrastructure/http/tenancy-invitations.controller.js';
+import { TenancyEmpresasController } from './infrastructure/http/tenancy-empresas.controller.js';
 import { TENANCY_USE_CASES, TenancyUseCases } from './application/tenancy.use-cases.js';
 import { PrismaPersistenceModule } from '../users/infrastructure/prisma-persistence.module.js';
 import { AuthModule } from '../auth/auth.module.js';
@@ -24,7 +25,7 @@ import { FeatureFlagsModule } from '../feature-flags/feature-flags.module.js';
   // mesmo motivo de `ProfilesModule`: `JwtAuthGuard` e `PrismaService` não
   // existem no grafo sem eles.
   imports: [AuthModule, PrismaPersistenceModule, PrismaModule, FeatureFlagsModule],
-  controllers: [TenancyInvitationsController],
+  controllers: [TenancyInvitationsController, TenancyEmpresasController],
   providers: [{ provide: TENANCY_USE_CASES, useClass: TenancyUseCases }],
   exports: [TENANCY_USE_CASES],
 })

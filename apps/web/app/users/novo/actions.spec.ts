@@ -150,6 +150,55 @@ describe('cadastrarUsuario — caminho feliz', () => {
   });
 });
 
+describe('cadastrarUsuario — entrada por convite', () => {
+  // pt-BR (onboarding de empresa, 2026-10-21): quem entra por convite nasce
+  // NA empresa que convidou, e o `destino` do corpo é o que diz isso. Sem o
+  // `destino`, a conta nasce sem empresa nenhuma e o funil do login a leva à
+  // página de criação de empresa — o oposto do que a pessoa veio fazer.
+  const TOKEN = 'a'.repeat(64);
+
+  function formDataComConvite(convite: string | null): FormData {
+    const fd = formData('Maria Silva', 'maria@empresa.com');
+    if (convite !== null) fd.set('convite', convite);
+    return fd;
+  }
+
+  it('manda o destino de convite para POST /users', async () => {
+    responder(okResponse());
+
+    await expect(cadastrarUsuario(INICIAL, formDataComConvite(TOKEN))).rejects.toThrow();
+
+    expect(JSON.parse(String(chamadas[0]?.init?.body)).destino).toEqual({
+      tipo: 'convite',
+      token: TOKEN,
+    });
+  });
+
+  it('sem convite, o corpo NÃO leva destino — a conta nasce sem empresa', async () => {
+    // pt-BR: `destino: undefined` no objeto NÃO é o mesmo que "sem destino" —
+    // o `JSON.stringify` apagaria a chave, mas o objeto em memória a teria.
+    // A asserção é sobre o CORPO ENVIADO, que é o que a API recebe.
+    responder(okResponse());
+
+    await expect(cadastrarUsuario(INICIAL, formDataComConvite(null))).rejects.toThrow();
+
+    expect(JSON.parse(String(chamadas[0]?.init?.body))).not.toHaveProperty('destino');
+  });
+
+  it('convite com formato inválido NÃO cria a conta — e diz por quê', async () => {
+    // pt-BR: o link de convite pode ter sido adulterado ou truncado. Criar
+    // a conta "normal" seria silenciar o problema: a pessoa entraria, não
+    // pertenceria a empresa nenhuma, e o motivo sumiria.
+    responder(okResponse());
+
+    const r = await cadastrarUsuario(INICIAL, formDataComConvite('token-adulterado'));
+
+    expect(chamadas).toHaveLength(0);
+    expect(r.ok).toBe(false);
+    expect(r.formError).toContain('convite');
+  });
+});
+
 describe('cadastrarUsuario — validação no cliente da Action', () => {
   it('não chama a API quando o nome está vazio e aponta o campo', async () => {
     responder(okResponse());

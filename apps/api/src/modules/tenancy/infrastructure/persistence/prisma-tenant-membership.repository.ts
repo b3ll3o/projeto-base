@@ -7,7 +7,10 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
 import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service.js';
 import { comEscopo, escopoDoTenant } from '../../../../shared/infrastructure/prisma/escopo.js';
-import type { TenantMembershipRepositoryPort } from '../../domain/ports/tenant-membership-repository.port.js';
+import type {
+  EmpresaDoUsuario,
+  TenantMembershipRepositoryPort,
+} from '../../domain/ports/tenant-membership-repository.port.js';
 
 @Injectable()
 export class PrismaTenantMembershipRepository implements TenantMembershipRepositoryPort {
@@ -193,5 +196,48 @@ export class PrismaTenantMembershipRepository implements TenantMembershipReposit
       }),
     );
     return row?.role ?? null;
+  }
+
+  /**
+   * As empresas a que o usuário pertence, com o papel dele em cada uma.
+   *
+   * ⚠️ O escopo é o de SISTEMA, e o filtro é o `userId` DENTRO do `where`.
+   * Não é uma abertura: a lista atravessa empresas, e o que a restringe é o
+   * filtro — o id do ator vem do token de sessão, e a linha devolvida é só a
+   * dele. Mesma justificativa de `buscarConvitePorToken`.
+   *
+   * `user: { deletedAt: null }` pelo mesmo motivo dos outros métodos: a
+   * membership sobrevive ao soft-delete, e uma conta apagada não deve ver as
+   * empresas na listagem.
+   */
+  async listarEmpresasDoUsuario(userId: string): Promise<EmpresaDoUsuario[]> {
+    const linhas = await comEscopo(this.prisma, escopoDoTenant(null), (tx) =>
+      tx.tenantMembership.findMany({
+        where: { userId, user: { deletedAt: null } },
+        select: {
+          role: true,
+          tenant: { select: { id: true, name: true, slug: true } },
+        },
+        // ⚠️ A ORDEM É FUNCIONAL, não estética: o funil do login (no web) leva a
+        // pessoa para a PRIMEIRA empresa da lista. A membership SEM perfil
+        // efetivo — o convidado que ainda não recebeu perfil — vai para o FIM.
+        //
+        // MEDIDO 2026-10-21: ordenando só por data, quem tinha sido convidada
+        // numa empresa ANTES de criar a empresa própria era levada para a
+        // empresa da UNTIGUAL, onde não pode fazer nada, em vez da empresa de
+        // que é DONA. O sintoma é um 403 na tela principal, sem causa nomeada.
+        //
+        // `profileId` ASC no Postgres põe NULL no FIM (ASC = NULLS LAST), e é
+        // exatamente isso que a ordem precisa. `createdAt` DESC desempatta: a
+        // empresa mais recente é a em que a pessoa está agora.
+        orderBy: [{ profileId: 'asc' }, { createdAt: 'desc' }],
+      }),
+    );
+    return linhas.map((linha) => ({
+      id: linha.tenant.id,
+      nome: linha.tenant.name,
+      slug: linha.tenant.slug,
+      role: linha.role,
+    }));
   }
 }

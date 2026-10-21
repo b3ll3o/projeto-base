@@ -137,6 +137,7 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `t7-rbac-feature-flag` | `removida` | memória ausente do corpus local; a âncora `listAllPermissions` existe em `apps/api/src/shared/auth/permissions-catalog.ts` | — |
 | `absent-tool-reads-as-approval` | `citada` | `.agents/runs/2026-10-05-guard-classes-autoauditoria.md` | `não há sintoma nenhum` |
 | `a-detector-that-fabricates-its-finding` | `pendente` | — | — |
+| `a-ordem-dos-fatos-no-cenario-decide-se-a-mutacao-e-observavel` | `pendente` | — | — |
 | `agent-evolution-and-memory` | `citada` | `.agents/specs/conventions/evolucao-agents.md` | `Agents e skills são entidades VIVAS` |
 | `api-response-substitui-o-default-do-post` | `pendente` | — | — |
 | `artefato-publicado-nao-nomeia-o-segredo` | `pendente` | — | — |
@@ -185,6 +186,7 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `mutation-can-fail-for-the-wrong-reason` | `pendente` | — | — |
 | `mutation-that-doesnt-land-looks-green` | `pendente` | — | — |
 | `non-fast-forward-is-not-divergent-work` | `pendente` | — | — |
+| `nome-quase-igual-cria-arquivo-paralelo` | `pendente` | — | — |
 | `origin-session-id-nested-under-metadata` | `citada` | `.tooling/scripts/ci/check-memory-crystallization.ts` | `devolve 0 SEM AVISO (exit 1)` |
 | `passar-no-gate-nao-e-o-que-o-hook-faz` | `citada` | `.github/PULL_REQUEST_TEMPLATE.md` | `mesmo evento visto de dois lados` |
 | `patch-medido-so-no-caminho-do-defeito` | `pendente` | — | — |
@@ -202,6 +204,8 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `rebase-ages-the-commit-message-too` | `pendente` | — | — |
 | `rebase-skip-descarta-o-commit-inteiro` | `pendente` | — | — |
 | `red-gate-hides-the-queue` | `pendente` | — | — |
+| `reserva-que-cria-nao-pode-ser-a-reserva-da-falha` | `citada` | `apps/web/app/login/actions.ts` | `A rota de reserva é `/users`, e NÃO `/empresa/nova`: a consulta falhou, e` |
+| `rota-protegida-sem-bearer-sai-publica-no-documento` | `citada` | `apps/api/src/modules/users/infrastructure/http/users.controller.ts` | `pública é a ÚNICA que não declara `security` — e `@ApiBearerAuth()` é o` |
 | `review-and-fix-after-each-task` | `citada` | `.agents/skills/review-routing/SKILL.md` | `Avançar com BLOCKING não tratado` |
 | `reviewer-must-differ-from-implementer` | `citada` | `.agents/agents/review-router.md` | `Sempre fresh` |
 | `reviewer-reads-shape-not-system-semantics` | `pendente` | — | — |
@@ -213,9 +217,11 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `one-boolean-state-is-two-states` | `pendente` | — | — |
 | `subagent-write-truncation-limit` | `pendente` | — | — |
 | `uniform-validator-beats-self-reports` | `pendente` | — | — |
+| `tabela-de-mutacoes-envelhece-com-a-spec` | `pendente` | — | — |
 | `test-the-field-the-eye-reads-not-the-field-it-parses` | `pendente` | — | — |
 | `test-com-dado-somente-no-ci` | `citada` | `tooling/scripts/compose-observability-profile.spec.ts` | A sonda precisa estar NO RENDER antes da máscara, senão o teste mede o |
 | `tool-reports-success-while-corrupting` | `citada` | `.agents/specs/conventions/guard-classes.md` | `Ferramenta reporta sucesso corrompendo` |
+| `trocar-de-identidade-limpa-o-estado-da-identidade-velha` | `citada` | `apps/web/lib/sessao.ts` | `É o mesmo motivo de `limparSessao` apagar a empresa, sem o resto.` |
 | `tsx-esbuild-does-not-emit-di-metadata` | `citada` | `.agents/memory/nestjs-specialist.md` | `design:paramtypes` |
 | `two-stage-review-after-each-task` | `citada` | `.agents/skills/review-routing/SKILL.md` | `Avançar com BLOCKING não tratado` |
 | `verify-before-the-action-that-invalidates-it` | `citada` | `.agents/specs/conventions/git-workflow.md` | `verificar na posição errada` |

@@ -25,6 +25,7 @@
 // `Record` explícito no lugar de `SearchParams`.
 
 import { LoginForm } from '@/components/login-form';
+import { ehTokenDeConvite, PARAM_CONVITE } from '@/lib/convite-schema';
 import { entrar } from './actions';
 import { AVISO_CADASTRO_CONCLUIDO, PARAM_CADASTRO_CONCLUIDO } from './state';
 
@@ -41,6 +42,17 @@ export default async function LoginPage({ searchParams }: Props) {
   // motivo que fecha o resto dos params duplicados do Next.
   const aviso = sinal !== undefined ? AVISO_CADASTRO_CONCLUIDO : undefined;
 
+  // pt-BR: o token do convite ATRAVESSA o login. A sessão vence em 15 min, e
+  // o aceite do convite devolve 401 quando isso acontece — o token precisa
+  // sobreviver ao login, ou a pessoa perde a empresa que a convidou (e o
+  // funil a leva a criar a PRÓPRIA empresa, que ela não queria).
+  //
+  // O token é validado AQUI e de novo na Action: a query string é entrada de
+  // usuário, e o que ela decide é para onde a pessoa vai depois de entrar.
+  const brutoConvite = params[PARAM_CONVITE];
+  const convite =
+    typeof brutoConvite === 'string' && ehTokenDeConvite(brutoConvite) ? brutoConvite : undefined;
+
   return (
     <main className="mx-auto max-w-3xl p-8">
       <h1 className="text-2xl font-semibold text-slate-900">Entrar</h1>
@@ -48,7 +60,7 @@ export default async function LoginPage({ searchParams }: Props) {
         Use o e-mail e a senha da sua conta para acessar o sistema.
       </p>
       <div className="mt-8">
-        <LoginForm action={entrar} aviso={aviso} />
+        <LoginForm action={entrar} aviso={aviso} convite={convite} />
       </div>
     </main>
   );

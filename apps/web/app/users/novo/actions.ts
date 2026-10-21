@@ -21,6 +21,8 @@
 import { redirect } from 'next/navigation';
 import { ApiClient, ApiError } from '@/lib/api-client';
 import { cadastroUsuarioSchema, type CampoCadastro } from '@/lib/cadastro-usuario-schema';
+import { ehTokenDeConvite } from '@/lib/convite-schema';
+import type { CreateUserInputDto } from '@projeto/shared-types';
 import { CADASTRO_INICIAL, ERRO_GENERICO, comTraceId, type CadastroUsuarioState } from './state';
 
 const CAMPOS: CampoCadastro[] = ['nome', 'email', 'senha'];
@@ -117,13 +119,42 @@ export async function cadastrarUsuario(
     return { ...CADASTRO_INICIAL, fieldErrors, valores: valoresSemSegredo(valores) };
   }
 
+  // pt-BR (onboarding de empresa, 2026-10-21): o token de convite, quando
+  // existe, é o que diz que a conta nasce NA empresa que CONVIDOU — o
+  // `destino` do corpo. Ele chega pelo campo oculto do formulário, e o
+  // NAVEGADOR não é fronteira de confiança: um token com formato errado é
+  // recusado aqui, sem chamar a API.
+  //
+  // E a recusa é o que impede o pior desfecho — criar a conta "normal",
+  // sem empresa nenhuma. A pessoa entraria, não pertenceria a empresa de
+  // quem a convidou, e nada na tela diria por quê.
+  //
+  // ⚠️ A checagem vem DEPOIS da validação dos campos: quem digitou o
+  // e-mail errado num link quebrado precisa corrigir o e-mail primeiro, e
+  // os valores digitados voltam no estado — o link é reavaliado no envio
+  // seguinte, sem ninguém redigitar nada.
+  const rawConvite = formData.get('convite');
+  const convite = rawConvite === null ? null : String(rawConvite);
+  if (convite !== null && !ehTokenDeConvite(convite)) {
+    return {
+      ...CADASTRO_INICIAL,
+      valores: valoresSemSegredo(valores),
+      formError: 'O link de convite é inválido. Peça um novo convite ao administrador da empresa.',
+    };
+  }
+
+  const corpo: CreateUserInputDto =
+    convite === null
+      ? parsed.data
+      : { ...parsed.data, destino: { tipo: 'convite', token: convite } };
+
   const api = new ApiClient({
     baseUrl: process.env.API_BASE_URL ?? 'http://localhost:3000/api/v1',
   });
 
   let erro: unknown;
   try {
-    await api.post('/users', parsed.data);
+    await api.post('/users', corpo);
   } catch (e) {
     erro = e;
   }

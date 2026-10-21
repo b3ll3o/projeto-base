@@ -166,6 +166,19 @@ class InMemoryMembershipRepo implements TenantMembershipRepositoryPort {
     return Promise.resolve('owner');
   }
 
+  /**
+   * Onboarding de empresa (2026-10-21): a port ganhou este método e o stub
+   * precisa implementá-lo — o `tsc` reprova a classe inteira (`TS2420`) quando
+   * falta um método da interface, e o Vitest não faz typecheck (o mesmo modo
+   * de falha de `findRole` acima).
+   *
+   * Lista VAZIA de propósito: os use cases de perfil não perguntam empresas,
+   * e um stub que devolvesse empresas mediria o stub.
+   */
+  listarEmpresasDoUsuario(): Promise<[]> {
+    return Promise.resolve([]);
+  }
+
   constructor(private readonly users: InMemoryUserRepo) {}
 
   prime(userId: string, tenantId: string, profileId: string): void {

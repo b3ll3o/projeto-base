@@ -40,6 +40,19 @@ export interface EmpresaParaAbrir {
   slug: string;
 }
 
+/**
+ * A empresa aberta — o que o chamador precisa para apontar a sessão para ela.
+ *
+ * O `id` volta porque o cookie de empresa (`X-Tenant-Id`) é o id: quem abre
+ * uma empresa precisa saber qual empresa é a SUA, e adivinhar por `slug` seria
+ * uma segunda consulta que pode dar a empresa de outra pessoa.
+ */
+export interface EmpresaAberta {
+  id: string;
+  nome: string;
+  slug: string;
+}
+
 export interface ConviteParaAceitar {
   userId: string;
   invitationId: string;
@@ -85,6 +98,21 @@ export interface TenantOnboardingPort {
     usuario: UsuarioParaProvisionar,
     empresa: EmpresaParaAbrir,
   ): Promise<void>;
+
+  /**
+   * Abre uma empresa para uma conta que **JÁ EXISTE** — tudo ou nada.
+   *
+   * Método separado de `provisionarEmpresaPropria` (e não um campo opcional em
+   * `UsuarioParaProvisionar`) porque as duas entradas têm requisitos
+   * diferentes: a primeira grava a CONTA junto, a segunda não toca em `users` —
+   * a conta já está lá. A página de criação de empresa é a segunda etapa do
+   * onboarding: a pessoa já se cadastrou e agora abre a empresa dela.
+   *
+   * O contrato é o MESMO do de `provisionarEmpresaPropria`: a empresa nasce com
+   * o perfil `admin` **dela** e TODAS as permissões do catálogo, e o dono
+   * (`role = 'owner'`) veste esse perfil. A diferença é só de onde vem a conta.
+   */
+  abrirEmpresaParaUsuario(userId: string, empresa: EmpresaParaAbrir): Promise<EmpresaAberta>;
 
   /**
    * `tenant_memberships` + `invitations.accepted_at`, tudo ou nada.

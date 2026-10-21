@@ -625,3 +625,92 @@ export function prismaE2E(): PrismaClient {
   prismaDoE2E ??= new PrismaClient({ datasourceUrl: exigirEstado().databaseUrl });
   return prismaDoE2E;
 }
+
+// ───────────────────────────── empresas ─────────────────────────────
+//
+// pt-BR (onboarding de empresa, 2026-10-21): as TRÊS rotas que fecham o
+// onboarding — `POST /tenants`, `POST /tenants/:id/invitations` e
+// `GET /me/tenants`.
+//
+// Elas moram aqui, e não num arquivo novo, por um motivo que já vale para o
+// resto deste arquivo: a verificação é pela MESMA API que a aplicação consome
+// (ver o cabeçalho). Um `prisma.tenant.create` direto montaria um estado que
+// a aplicação jamais produz — e o spec passaria medindo um banco de mentira.
+
+/** A empresa, como a API a devolve (`POST /tenants`). */
+export interface EmpresaWire {
+  id: string;
+  nome: string;
+  slug: string;
+}
+
+/** A empresa DO ATOR, com o papel que ele veste nela (`GET /me/tenants`). */
+export interface EmpresaDoAtorWire extends EmpresaWire {
+  role: string;
+}
+
+/**
+ * Cria a empresa de quem JÁ tem conta — o que a página de criação faz.
+ *
+ * pt-BR: quem precisa de uma empresa para convidar alguém não tem como
+ * esperar pela tela (o F16 mede a tela). Esta chamada é a MESMA rota, pela
+ * MESMA API — só muda quem aperta o botão.
+ */
+export async function criarEmpresa(
+  accessToken: string,
+  nome: string,
+  slug: string,
+): Promise<EmpresaWire> {
+  const { status, corpo } = await chamar('POST', '/tenants', {
+    corpo: { nome, slug },
+    token: accessToken,
+  });
+  if (status !== 201) {
+    throw new Error(
+      `POST /tenants respondeu ${status} (esperado 201): ${JSON.stringify(corpo)}. ` +
+        'Sem empresa o convidado não tem de quem ser convidado.',
+    );
+  }
+  return corpo as EmpresaWire;
+}
+
+/**
+ * O dono convida alguém — e o TOKEN volta na resposta.
+ *
+ * pt-BR: não há maileiro no repo, então o segredo volta para quem convida
+ * mostrar o link. É o mesmo caminho que a tela usaria.
+ */
+export async function emitirConvite(
+  accessToken: string,
+  tenantId: string,
+  email: string,
+): Promise<string> {
+  const { status, corpo } = await chamar('POST', `/tenants/${tenantId}/invitations`, {
+    corpo: { email },
+    token: accessToken,
+  });
+  if (status !== 201) {
+    throw new Error(
+      `POST /tenants/${tenantId}/invitations respondeu ${status} (esperado 201): ` +
+        `${JSON.stringify(corpo)}.`,
+    );
+  }
+  const token = (corpo as { token?: unknown }).token;
+  if (typeof token !== 'string' || token === '') {
+    throw new Error(
+      `POST /tenants/${tenantId}/invitations respondeu 201 sem token: ${JSON.stringify(corpo)}.`,
+    );
+  }
+  return token;
+}
+
+/** As empresas do ator — a MESMA lista que o login consulta (`GET /me/tenants`). */
+export async function listarEmpresasDoAtor(accessToken: string): Promise<EmpresaDoAtorWire[]> {
+  const { status, corpo } = await chamar('GET', '/me/tenants', { token: accessToken });
+  if (status !== 200) {
+    throw new Error(
+      `GET /me/tenants respondeu ${status} (esperado 200): ${JSON.stringify(corpo)}.`,
+    );
+  }
+  return corpo as EmpresaDoAtorWire[];
+}

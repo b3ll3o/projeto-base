@@ -477,3 +477,38 @@ describe('CadastroUsuarioForm — durante e depois do envio', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });
+
+describe('CadastroUsuarioForm — a entrada por convite', () => {
+  // pt-BR (onboarding de empresa, 2026-10-21): o token do convite é o que
+  // diz que a conta nasce NA empresa que convidou (o `destino` do
+  // `POST /users`). Sem ele, a conta nasce sem empresa nenhuma e o funil do
+  // login leva a pessoa à página de criação de empresa — o oposto do que o
+  // convite pediu.
+  const TOKEN = 'a'.repeat(64);
+
+  async function enviarCom(convite?: string) {
+    const action = acaoQue(resposta());
+    const user = userEvent.setup();
+    render(<CadastroUsuarioForm action={action} convite={convite} />);
+
+    await user.type(screen.getByLabelText('Nome'), 'Maria Silva');
+    await user.type(screen.getByLabelText('Email'), 'maria@empresa.com');
+    await user.type(screen.getByLabelText('Senha'), 'senha1234');
+    await user.click(screen.getByRole('button', { name: /cadastrar/i }));
+
+    await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
+    return action.mock.calls[0]?.[1];
+  }
+
+  it('o token viaja no FormData do cadastro', async () => {
+    const enviado = await enviarCom(TOKEN);
+
+    expect(enviado?.get('convite')).toBe(TOKEN);
+  });
+
+  it('sem convite, o FormData NÃO leva o campo — a conta nasce sem empresa', async () => {
+    const enviado = await enviarCom();
+
+    expect(enviado?.get('convite')).toBeNull();
+  });
+});

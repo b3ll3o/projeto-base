@@ -10,7 +10,7 @@
 // transação — o que um `@Post` separado não consegue prometer.
 
 import { Body, Controller, Inject, Param, Post, Req, UseGuards } from '@nestjs/common';
-import { ApiResponse } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { z } from 'zod';
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
 import { ZodValidationPipe } from '../../../../shared/infrastructure/http/zod-validation.pipe.js';
@@ -90,7 +90,15 @@ export class TenancyInvitationsController {
   // daqui não muda um status só nos cenários 10 e 12.
   @UseGuards(FeatureFlagGuard)
   @RequireFeatureFlag('tenancy.invites')
+  // pt-BR: `@ApiBearerAuth()` é OBRIGATÓRIO — no documento OpenAPI a rota
+  // PÚBLICA é a única que não declara `security`, e esta exige JWT (o
+  // `JwtAuthGuard` da classe). Sem o decorator, um cliente gerado do
+  // documento não manda `Authorization` e leva 401 na primeira chamada.
+  @ApiBearerAuth()
   @ApiResponse({ status: 201, description: 'Convite emitido' })
+  @ApiResponse({ status: 400, description: 'Payload inválido' })
+  @ApiResponse({ status: 401, description: 'Não autorizado' })
+  @ApiResponse({ status: 403, description: 'Quem convida não administra a empresa' })
   @ApiResponse({ status: 404, description: FLAG_DESLIGADA_404 })
   async convidar(
     // ⚠️ (PR #101) O `:id` É validado, e não só o body. Sem este pipe o valor
@@ -126,13 +134,30 @@ export class TenancyInvitationsController {
   // `POST /users`, que é `@Public()` e não tem `req.user` para o guard exigir).
   @UseGuards(FeatureFlagGuard)
   @RequireFeatureFlag('tenancy.invites')
+  // pt-BR: `@ApiBearerAuth()` — mesma razão da rota de cima. E os status que
+  // a API DEVOLVE estão declarados: o web ramifica em 410 (expirado), 409
+  // (já usado) e 403 (e-mail diferente), e um cliente gerado do documento que
+  // não os conhecesse não teria ramo para eles.
+  @ApiBearerAuth()
   @ApiResponse({ status: 201, description: 'Convite aceito' })
+  @ApiResponse({ status: 400, description: 'Token inválido' })
+  @ApiResponse({ status: 401, description: 'Não autorizado' })
+  @ApiResponse({ status: 403, description: 'O convite é de outro e-mail' })
+  @ApiResponse({ status: 409, description: 'O convite já foi usado' })
+  @ApiResponse({ status: 410, description: 'O convite expirou' })
   @ApiResponse({ status: 404, description: FLAG_DESLIGADA_404 })
   async aceitar(
     @Body(new ZodValidationPipe(AceitarConviteSchema)) body: z.infer<typeof AceitarConviteSchema>,
     @Req() req: RequestComAtor,
-  ): Promise<{ aceito: true }> {
-    await this.useCases.aceitarConvite({ userId: req.user.sub, token: body.token });
-    return { aceito: true };
+  ): Promise<{ aceito: true; tenantId: string }> {
+    // O `tenantId` volta porque a empresa do convite é o que o web precisa para
+    // apontar a sessão para ela (o cookie `tenant_id`). Sem ele, a conta
+    // entra na empresa e fica com ZERO permissões na tela — membership sem
+    // escopo.
+    const { tenantId } = await this.useCases.aceitarConvite({
+      userId: req.user.sub,
+      token: body.token,
+    });
+    return { aceito: true, tenantId };
   }
 }

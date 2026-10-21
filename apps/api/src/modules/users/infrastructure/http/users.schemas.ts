@@ -86,7 +86,11 @@ import {
 const DestinoSchema = z.discriminatedUnion('tipo', [
   z.object({
     tipo: z.literal('empresa'),
-    nome: z.string().min(NOME_MIN).max(NOME_MAX),
+    // pt-BR: o `.trim()` ANTES do `min` — sem ele, `"   "` (três espaços) passa
+    // o `min(2)` e a empresa nasce com o nome em branco. Este ramo e o
+    // `CriarEmpresaSchema` de `tenancy-empresas.controller.ts` são a MESMA
+    // regra: duas regras para o mesmo dado divergem sozinhas.
+    nome: z.string().trim().min(NOME_MIN).max(NOME_MAX),
     slug: z
       .string()
       .min(3)

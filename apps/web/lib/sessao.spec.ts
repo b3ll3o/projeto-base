@@ -32,6 +32,7 @@ import {
   lerTenant,
   lerTokens,
   limparSessao,
+  limparTenant,
 } from './sessao';
 
 vi.mock('next/navigation', () => ({
@@ -233,5 +234,29 @@ describe('limparSessao', () => {
 
   it('apagar sem sessão nenhuma não é erro', async () => {
     await expect(limparSessao()).resolves.toBeUndefined();
+  });
+});
+
+describe('limparTenant', () => {
+  it('apaga a EMPRESA e NÃO toca nos tokens — a sessão continua viva', async () => {
+    // pt-BR (onboarding de empresa, 2026-10-21): o login precisa trocar a
+    // empresa da sessão sem deslogar a pessoa — e o caso que exige isto é o
+    // administrador de sistema, que não pertence a empresa nenhuma e por isso
+    // não pode herdar a empresa de quem entrou antes no mesmo browser.
+    await guardarTokens('access-abc', 'refresh-xyz');
+    await guardarTenant('0190a8b6-0000-4000-8000-00000000000a');
+
+    await limparTenant();
+
+    await expect(lerTenant()).resolves.toBeNull();
+    await expect(lerTokens()).resolves.toEqual({
+      accessToken: 'access-abc',
+      refreshToken: 'refresh-xyz',
+    });
+    expect(estado.removidos).toEqual([COOKIE_TENANT]);
+  });
+
+  it('apagar sem empresa nenhuma não é erro', async () => {
+    await expect(limparTenant()).resolves.toBeUndefined();
   });
 });

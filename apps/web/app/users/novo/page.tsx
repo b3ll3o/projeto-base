@@ -29,17 +29,34 @@
 // afirma que a tela é alcançável sem sessão.
 
 import { CadastroUsuarioForm } from '@/components/cadastro-usuario-form';
+import { ehTokenDeConvite } from '@/lib/convite-schema';
 import { cadastrarUsuario } from './actions';
 
-export default function NovoUsuarioPage() {
+// pt-BR (onboarding de empresa, 2026-10-21): a pessoa que chega por um link
+// de convite (`/convite/<token>`) é mandada para cá COM o token, e é este
+// token que faz a conta nascer na empresa que convidou.
+export default async function NovoUsuarioPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ convite?: string | string[] }>;
+}) {
+  const { convite } = await searchParams;
+
+  // pt-BR: o token só é repassado se tem o formato que a API aceita. Um
+  // `?convite=` adulterado não chega ao formulário — e a Action valida de
+  // novo, porque o navegador não é fronteira de confiança.
+  const token = typeof convite === 'string' && ehTokenDeConvite(convite) ? convite : undefined;
+
   return (
     <main className="mx-auto max-w-3xl p-8">
       <h1 className="text-2xl font-semibold text-slate-900">Cadastrar usuário</h1>
       <p className="mt-1 text-sm text-slate-500">
-        Preencha os dados abaixo. O email identifica o usuário e não pode ser repetido.
+        {token
+          ? 'Você recebeu um convite para uma empresa. Crie sua conta para entrar na empresa que convidou.'
+          : 'Preencha os dados abaixo. O email identifica o usuário e não pode ser repetido.'}
       </p>
       <div className="mt-8">
-        <CadastroUsuarioForm action={cadastrarUsuario} />
+        <CadastroUsuarioForm action={cadastrarUsuario} convite={token} />
       </div>
     </main>
   );

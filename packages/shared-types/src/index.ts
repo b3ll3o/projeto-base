@@ -7,6 +7,7 @@ export type {
   ISODateString,
   UserOutputDto,
   CreateUserInputDto,
+  DestinoContaDto,
   UpdateUserInputDto,
   RestoreUserInputDto,
   AuditOperationType,
@@ -28,3 +29,10 @@ export type {
 } from './profile.js';
 
 export type { FeatureFlagDto, UpdateFeatureFlagInputDto } from './feature-flag.js';
+
+export type {
+  EmpresaDto,
+  EmpresaDoUsuarioDto,
+  CriarEmpresaInputDto,
+  ConviteAceitoDto,
+} from './tenant.js';

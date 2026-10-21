@@ -308,6 +308,47 @@ describe('LoginForm — envio em andamento', () => {
   });
 });
 
+describe('LoginForm — o token do convite', () => {
+  // pt-BR (onboarding de empresa, 2026-10-21): o token do convite precisa
+  // SOBREVIVER ao login — a sessão vence em 15 min, e o aceite do convite
+  // devolve 401 quando isso acontece. O formulário despacha o `FormData` à
+  // MÃO (ponto 2 do cabeçalho), então não há campo oculto no DOM que o
+  // browser anexasse sozinho: se o token não for posto no `FormData` aqui,
+  // ele simplesmente não existe para a Action.
+  const TOKEN = 'd'.repeat(64);
+
+  it('leva o token do convite no FormData que a Action recebe', async () => {
+    const action = acaoQue(resposta());
+    const pessoa = userEvent.setup();
+    render(<LoginForm action={action} convite={TOKEN} />);
+
+    await pessoa.type(screen.getByLabelText('E-mail'), 'maria@empresa.com');
+    await pessoa.type(screen.getByLabelText('Senha'), 'segredo123');
+    await pessoa.click(screen.getByRole('button', { name: 'Entrar' }));
+
+    await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
+    const enviado = action.mock.calls[0]?.[1] as FormData;
+    expect(enviado.get('convite')).toBe(TOKEN);
+  });
+
+  it('sem o prop, o FormData NÃO carrega convite — nada de campo vazio', async () => {
+    // pt-BR: um `convite` vazio no FormData seria lido pela Action como
+    // "convite presente" — e o desvio para `/convite/` acontece com o token
+    // em branco. Ausente e vazio precisam ser coisas diferentes.
+    const action = acaoQue(resposta());
+    const pessoa = userEvent.setup();
+    render(<LoginForm action={action} />);
+
+    await pessoa.type(screen.getByLabelText('E-mail'), 'maria@empresa.com');
+    await pessoa.type(screen.getByLabelText('Senha'), 'segredo123');
+    await pessoa.click(screen.getByRole('button', { name: 'Entrar' }));
+
+    await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
+    const enviado = action.mock.calls[0]?.[1] as FormData;
+    expect(enviado.get('convite')).toBeNull();
+  });
+});
+
 describe('LoginForm — o aviso de "cadastro concluído"', () => {
   it('aparece quando a página entrega o aviso, em `role="status"`', () => {
     // ⚠️ `status` e NÃO `alert`: o aviso é uma confirmação, e `alert` é

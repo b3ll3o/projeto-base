@@ -53,6 +53,7 @@ type ActionLogin = (estado: LoginState, formData: FormData) => Promise<LoginStat
 export function LoginForm({
   action = entrar,
   aviso,
+  convite,
 }: {
   action?: ActionLogin;
   /**
@@ -76,6 +77,23 @@ export function LoginForm({
    * virar regra em vez de convenção.
    */
   aviso?: string | undefined;
+  /**
+   * O token do convite, quando a pessoa chegou aqui por um link de convite
+   * com a sessão vencida.
+   *
+   * pt-BR (2026-10-21): a sessão vence em 15 min, e o aceite do convite
+   * devolve 401 quando isso acontece. O token viaja na query string porque o
+   * CONVITE É uma URL — e é por isso que ele precisa sobreviver ao login: sem
+   * ele, a pessoa entra no login sem convite nenhum, o funil pergunta "qual
+   * empresa?" e a responde `/empresa/nova`, porque o convite AINDA NÃO foi
+   * aceito e a conta não tem membership nenhuma.
+   *
+   * O `| undefined` explícito é obrigatório sob `exactOptionalPropertyTypes`
+   * — o mesmo motivo do `aviso` acima: a página passa a prop
+   * incondicionalmente, e `aviso?: string` proíbe a propriedade de existir
+   * com valor `undefined`.
+   */
+  convite?: string | undefined;
 }) {
   const [estado, despachar, pendente] = useActionState<LoginState, FormData>(action, LOGIN_INICIAL);
 
@@ -133,6 +151,13 @@ export function LoginForm({
     const dadosFormulario = new FormData();
     dadosFormulario.set('email', resultado.data.email);
     dadosFormulario.set('senha', resultado.data.senha);
+    // pt-BR: o token do convite viaja no MESMO FormData, porque o formulário
+    // é despachado à mão (ponto 2 do cabeçalho) — não há campo oculto no
+    // DOM que o browser anexasse sozinho. A Action valida o formato antes de
+    // usar; aqui o valor só é carregado.
+    if (convite) {
+      dadosFormulario.set('convite', convite);
+    }
     // pt-BR: o despacho PRECISA estar dentro de `startTransition` (ver o
     // ponto 2 do cabeçalho).
     startTransition(() => despachar(dadosFormulario));

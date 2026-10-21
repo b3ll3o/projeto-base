@@ -15,7 +15,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { redirect } from 'next/navigation';
 import { entrar } from './actions.js';
-import { guardarTokens } from '@/lib/sessao';
+import { guardarTenant, guardarTokens, limparTenant } from '@/lib/sessao';
 import { CREDENCIAIS_INVALIDAS, ERRO_GENERICO_LOGIN, type LoginState } from './state.js';
 
 vi.mock('next/navigation', () => ({
@@ -26,6 +26,8 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('@/lib/sessao', () => ({
   guardarTokens: vi.fn(async () => undefined),
+  guardarTenant: vi.fn(async () => undefined),
+  limparTenant: vi.fn(async () => undefined),
   lerTokens: vi.fn(async () => ({ accessToken: null, refreshToken: null })),
   exigirSessao: vi.fn(async () => 'token'),
   limparSessao: vi.fn(async () => undefined),
@@ -40,10 +42,15 @@ const INICIAL: LoginState = {
 
 const CREDENCIAIS_VALIDAS = { email: 'maria@empresa.com', senha: 'segredo123' };
 
-function formData(email = CREDENCIAIS_VALIDAS.email, senha = CREDENCIAIS_VALIDAS.senha) {
+function formData(
+  email = CREDENCIAIS_VALIDAS.email,
+  senha = CREDENCIAIS_VALIDAS.senha,
+  convite?: string,
+) {
   const fd = new FormData();
   fd.set('email', email);
   fd.set('senha', senha);
+  if (convite !== undefined) fd.set('convite', convite);
   return fd;
 }
 
@@ -79,6 +86,37 @@ const RESPOSTA_VALIDA = {
   user: { id: 'u1', nome: 'Maria', email: CREDENCIAIS_VALIDAS.email },
 };
 
+/** A forma que o `ApiClient` consome: `text` primeiro, `json` nunca. */
+type RespostaFake = {
+  status: number;
+  ok: boolean;
+  json: () => Promise<unknown>;
+  text: () => Promise<string>;
+};
+
+/**
+ * Respostas por TRECHO de URL.
+ *
+ * pt-BR (onboarding de empresa, 2026-10-21): o login passou a fazer TRÊS
+ * pedidos em sequência — `/auth/login`, `/me/tenants` e, só quando a lista
+ * vem vazia, `/me/profile`. Um stub que devolve sempre o mesmo corpo
+ * mentiria sobre os três: a lista de empresas viria com o corpo do login, e
+ * o perfil viria com o que fosse.
+ */
+function responderPorUrl(rotas: Record<string, RespostaFake | Error>) {
+  const fetchMock = vi.fn(async (url: string, _init?: RequestInit): Promise<RespostaFake> => {
+    for (const [trecho, resposta] of Object.entries(rotas)) {
+      if (String(url).includes(trecho)) {
+        if (resposta instanceof Error) throw resposta;
+        return resposta;
+      }
+    }
+    return okResponse(RESPOSTA_VALIDA);
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -88,11 +126,10 @@ afterEach(() => {
 });
 
 describe('entrar — caminho feliz', () => {
-  it('guarda os dois tokens devolvidos pela API e redireciona para /users', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => okResponse(RESPOSTA_VALIDA)),
-    );
+  it('guarda os dois tokens devolvidos pela API e leva a pessoa para a listagem', async () => {
+    responderPorUrl({
+      '/me/tenants': okResponse([{ id: 'empresa-1', nome: 'ACME', slug: 'acme' }]),
+    });
 
     await expect(entrar(INICIAL, formData())).rejects.toThrow('NEXT_REDIRECT:/users');
 
@@ -134,6 +171,169 @@ describe('entrar — caminho feliz', () => {
       email: 'maria@empresa.com',
       senha: 'segredo123',
     });
+  });
+});
+
+describe('entrar — para onde a pessoa vai depois de entrar', () => {
+  // pt-BR (onboarding de empresa, 2026-10-21): TODA conta pertence a uma
+  // empresa, exceto o administrador de SISTEMA — que administra a plataforma e
+  // não pertence a empresa nenhuma. O login deixou de ser "sempre `/users`" e
+  // passou a fazer as duas perguntas que separam esses três casos.
+
+  it('conta que JÁ tem empresa vai para a listagem, e a sessão passa a agir nela', async () => {
+    responderPorUrl({
+      '/me/tenants': okResponse([{ id: 'empresa-1', nome: 'ACME', slug: 'acme' }]),
+    });
+
+    await expect(entrar(INICIAL, formData())).rejects.toThrow('NEXT_REDIRECT:/users');
+
+    // pt-BR: o cookie `tenant_id` é o que faz a sessão agir na empresa. Sem
+    // ele, a pessoa cai no `/users` sem escopo e a listagem volta vazia sem
+    // dizer por quê.
+    expect(guardarTenant).toHaveBeenCalledWith('empresa-1');
+    // A empresa da sessão anterior é substituída, não acumulada.
+    expect(limparTenant).not.toHaveBeenCalled();
+  });
+
+  it('conta SEM empresa vai para a página de criação de empresa', async () => {
+    responderPorUrl({ '/me/tenants': okResponse([]) });
+
+    await expect(entrar(INICIAL, formData())).rejects.toThrow('NEXT_REDIRECT:/empresa/nova');
+
+    expect(guardarTenant).not.toHaveBeenCalled();
+    // pt-BR: a empresa de uma sessão ANTERIOR é apagada — ela viraria
+    // `X-Tenant-Id` de uma empresa que a pessoa não pertence, e a API
+    // responderia 403 `TENANT_MEMBERSHIP_REQUIRED` na tela principal, sem
+    // caminho de volta. (É o caso do administrador de sistema, que não
+    // pertence a empresa nenhuma.)
+    expect(limparTenant).toHaveBeenCalled();
+  });
+
+  it('administrador de SISTEMA vai para a listagem, sem empresa e sem criar uma', async () => {
+    responderPorUrl({
+      '/me/tenants': okResponse([]),
+      '/me/profile': okResponse({ isAdmin: true, permissions: [] }),
+    });
+
+    await expect(entrar(INICIAL, formData())).rejects.toThrow('NEXT_REDIRECT:/users');
+
+    expect(guardarTenant).not.toHaveBeenCalled();
+    expect(limparTenant).toHaveBeenCalled();
+  });
+
+  it('a pergunta "é admin de SISTEMA?" é feita no bucket GLOBAL', async () => {
+    // pt-BR: com `X-Tenant-Id`, a API responde o perfil DA EMPRESA — e o dono
+    // também é `isAdmin`. Aí o administrador de sistema cairia na página de
+    // criação de empresa, que é exatamente o oposto do que ele é.
+    const fetchMock = responderPorUrl({
+      '/me/tenants': okResponse([]),
+      '/me/profile': okResponse({ isAdmin: true, permissions: [] }),
+    });
+
+    await expect(entrar(INICIAL, formData())).rejects.toThrow('NEXT_REDIRECT:/users');
+
+    const pedidoDoPerfil = fetchMock.mock.calls.find((chamada) =>
+      String(chamada[0]).includes('/me/profile'),
+    );
+    expect(new Headers(pedidoDoPerfil?.[1]?.headers).get('x-tenant-id')).toBeNull();
+  });
+
+  it('a lista de empresas vem SEM header de empresa — ela é "por conta"', async () => {
+    const fetchMock = responderPorUrl({
+      '/me/tenants': okResponse([{ id: 'empresa-1', nome: 'ACME', slug: 'acme' }]),
+    });
+
+    await expect(entrar(INICIAL, formData())).rejects.toThrow('NEXT_REDIRECT:/users');
+
+    const pedidoDaLista = fetchMock.mock.calls.find((chamada) =>
+      String(chamada[0]).includes('/me/tenants'),
+    );
+    expect(new Headers(pedidoDaLista?.[1]?.headers).get('x-tenant-id')).toBeNull();
+  });
+
+  it('falha ao listar as empresas NÃO desfaz o login — a sessão já está guardada', async () => {
+    // pt-BR: a pessoa ENTROU. Um erro de rede na hora de escolher a empresa
+    // não pode apagar o login que deu certo — nem virar a tela de erro do
+    // Next, que diria "algo deu errado" a quem entrou com sucesso.
+    //
+    // E o destino é `/users`, NUNCA `/empresa/nova`: a consulta falhou, então
+    // NÃO se sabe se a conta tem empresa — e levar quem TEM empresa para a
+    // tela de criação produz uma empresa DUPLICADA, com o mesmo dono e mais
+    // um conjunto de perfis, sem nada na tela avisando que era duplicado.
+    responderPorUrl({ '/me/tenants': new Error('ECONNREFUSED') });
+
+    await expect(entrar(INICIAL, formData())).rejects.toThrow('NEXT_REDIRECT:/users');
+
+    expect(guardarTokens).toHaveBeenCalledWith('access-abc', 'refresh-xyz');
+  });
+});
+
+describe('entrar — o convite que atravessa o login', () => {
+  // pt-BR (onboarding de empresa, 2026-10-21): a sessão vence em 15 min, e o
+  // aceite do convite devolve 401 quando isso acontece. O token do convite
+  // precisa SOBREVIVER ao login — sem ele, a pessoa entra sem convite
+  // nenhum, o funil pergunta "qual empresa?" e a responde `/empresa/nova`,
+  // porque o convite AINDA NÃO foi aceito e a conta não tem membership
+  // nenhuma: ela criava a PRÓPRIA empresa, e o convite de quem a convidou
+  // nunca era usado.
+
+  const TOKEN = 'b'.repeat(64);
+
+  it('vai para a tela do CONVITE, e não para a de criação de empresa', async () => {
+    // pt-BR: a lista de empresas viria VAZIA de propósito — é o estado real
+    // de quem ainda não aceitou o convite. O desvio acontece ANTES do funil,
+    // e por isso o caminho de `/empresa/nova` (a reserva que CRIA empresa)
+    // fica fora do alcance desta pessoa.
+    responderPorUrl({ '/me/tenants': okResponse([]) });
+
+    await expect(
+      entrar(INICIAL, formData(CREDENCIAIS_VALIDAS.email, CREDENCIAIS_VALIDAS.senha, TOKEN)),
+    ).rejects.toThrow(`NEXT_REDIRECT:/convite/${TOKEN}`);
+
+    expect(guardarTokens).toHaveBeenCalledWith('access-abc', 'refresh-xyz');
+  });
+
+  it('NÃO consulta as empresas: quem decide a empresa é o aceite do convite', async () => {
+    const fetchMock = responderPorUrl({ '/me/tenants': okResponse([]) });
+
+    await expect(
+      entrar(INICIAL, formData(CREDENCIAIS_VALIDAS.email, CREDENCIAIS_VALIDAS.senha, TOKEN)),
+    ).rejects.toThrow(`NEXT_REDIRECT:/convite/${TOKEN}`);
+
+    const consultouEmpresas = fetchMock.mock.calls.some((chamada) =>
+      String(chamada[0]).includes('/me/tenants'),
+    );
+    expect(consultouEmpresas).toBe(false);
+  });
+
+  it('apaga o cookie de empresa da sessão ANTERIOR — ela não é a empresa do convite', async () => {
+    // pt-BR: o cookie `tenant_id` que sobrou pertence à IDENTIDADE que o
+    // login acabou de trocar. Mantido, ele sairia como `X-Tenant-Id` de uma
+    // empresa que a pessoa não pertence — e a API responderia 403
+    // `TENANT_MEMBERSHIP_REQUIRED`. É o aceite do convite que grava o cookie
+    // CERTO, logo depois.
+    responderPorUrl({ '/me/tenants': okResponse([]) });
+
+    await expect(
+      entrar(INICIAL, formData(CREDENCIAIS_VALIDAS.email, CREDENCIAIS_VALIDAS.senha, TOKEN)),
+    ).rejects.toThrow(`NEXT_REDIRECT:/convite/${TOKEN}`);
+
+    expect(limparTenant).toHaveBeenCalled();
+    expect(guardarTenant).not.toHaveBeenCalled();
+  });
+
+  it('token com formato errado NÃO desvia o funil — a pessoa entra normal', async () => {
+    // pt-BR: o `FormData` não é fronteira de confiança. Um token adulterado
+    // escolhe a rota, então precisa ser recusado pelo formato — e o caminho
+    // da recusa é o funil de sempre, sem desvio.
+    responderPorUrl({ '/me/tenants': okResponse([]) });
+
+    await expect(
+      entrar(
+        INICIAL,
+        formData(CREDENCIAIS_VALIDAS.email, CREDENCIAIS_VALIDAS.senha, 'token-adulterado'),
+      ),
+    ).rejects.toThrow('NEXT_REDIRECT:/empresa/nova');
   });
 });
 

@@ -19,6 +19,7 @@ import {
   type ConviteParaAceitar,
   type ConviteParaEmitir,
   type ConvitePendente,
+  type EmpresaAberta,
   type EmpresaParaAbrir,
   type TenantOnboardingPort,
   type UsuarioParaProvisionar,
@@ -28,7 +29,7 @@ import {
   ConviteJaEmitidoException,
   EmpresaJaExisteException,
 } from '../../domain/exceptions/tenancy.exceptions.js';
-import { listAllPermissions } from '../../../../shared/auth/permissions-catalog.js';
+import { perfisDaEmpresa } from '../../domain/perfis-da-empresa.js';
 import {
   abrirEscopo,
   comEscopo,
@@ -161,9 +162,7 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
         // perfil da casa".
         await abrirEscopo(tx, escopoDoTenant(null));
 
-        const tenant = await tx.tenant.create({
-          data: { name: empresa.nome, slug: empresa.slug },
-        });
+        const empresaCriada = await this.criarEmpresa(tx, empresa);
 
         await tx.user.create({
           data: {
@@ -189,30 +188,11 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
         //
         // O segundo `abrirEscopo` sobrescreve o primeiro: `set_config(..., true)`
         // é LOCAL, e a última chamada dentro da transação é a que vale.
-        await abrirEscopo(tx, tenant.id);
+        await abrirEscopo(tx, empresaCriada.id);
 
-        // O admin nasce JUNTO com a empresa, e é DELA (`tenantId`). Ver o
-        // port: buscar um admin global traria dois problemas — o seed não roda
-        // em teste, e um admin global dentro de uma empresa cliente é um perfil
-        // com TODAS as permissões do catálogo fora do alcance daquela empresa.
-        const perfil = await tx.profile.create({
-          data: {
-            slug: 'admin',
-            name: 'Administrador',
-            isAdmin: true,
-            isSystem: true,
-            tenantId: tenant.id,
-          },
-        });
+        const perfilId = await this.criarPerfisDaEmpresa(tx, empresaCriada.id);
 
-        await tx.authorization.createMany({
-          data: listAllPermissions().map((permissionKey) => ({
-            profileId: perfil.id,
-            permissionKey,
-          })),
-        });
-
-        await this.criarMembership(tx, usuario.id, tenant.id, 'owner', perfil.id);
+        await this.criarMembership(tx, usuario.id, empresaCriada.id, 'owner', perfilId);
       });
     } catch (erro) {
       // pt-BR (Fase 5, revisão — achado 2): o comentário anterior dizia que
@@ -234,6 +214,126 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
       }
       throw erro;
     }
+  }
+
+  /**
+   * Abre a empresa para uma conta que **JÁ EXISTE** — a segunda etapa do
+   * onboarding (a página de criação de empresa).
+   *
+   * O MESMO núcleo de `provisionarEmpresaPropria`, sem a escrita de `users`:
+   * empresa → os TRÊS perfis da empresa (`dono`, `gestor`, `funcionario`) →
+   * membership de `owner` vestindo o `dono`. A única diferença é que a conta
+   * vem de fora.
+   */
+  async abrirEmpresaParaUsuario(userId: string, empresa: EmpresaParaAbrir): Promise<EmpresaAberta> {
+    try {
+      return await this.prisma.$transaction(async (tx: Tx) => {
+        // A sessão nasce em SISTEMA: o `RETURNING` do `INSERT` em `tenants` é
+        // avaliado pela policy de SELECT, que sem escopo devolve zero linhas.
+        // Mesma razão de `provisionarEmpresaPropria`.
+        await abrirEscopo(tx, escopoDoTenant(null));
+
+        const empresaCriada = await this.criarEmpresa(tx, empresa);
+
+        // Daqui em diante a sessão é a DA empresa nova — o `INSERT` do perfil e
+        // a `criar_membership` comparam o `tenant_id` com o GUC.
+        await abrirEscopo(tx, empresaCriada.id);
+
+        const perfilId = await this.criarPerfisDaEmpresa(tx, empresaCriada.id);
+
+        await this.criarMembership(tx, userId, empresaCriada.id, 'owner', perfilId);
+
+        return { id: empresaCriada.id, nome: empresa.nome, slug: empresaCriada.slug };
+      });
+    } catch (erro) {
+      // A MESMA tradução de `provisionarEmpresaPropria`: só o `slug` é
+      // traduzido — aqui o `users.email` nem participa, porque a conta já
+      // existe e não é tocada.
+      if (ehViolacaoDeUnicidade(erro) && constraintQueEstourou(erro).includes('slug')) {
+        throw new EmpresaJaExisteException(empresa.slug);
+      }
+      throw erro;
+    }
+  }
+
+  /**
+   * A primeira escrita do caminho de empresa: a linha em `tenants`.
+   *
+   * Fica isolada porque as DUAS entradas de empresa precisam dela no MESMO
+   * ponto — antes de o escopo descer, e antes de a conta ser gravada.
+   */
+  private async criarEmpresa(
+    tx: Tx,
+    empresa: EmpresaParaAbrir,
+  ): Promise<{ id: string; slug: string }> {
+    const tenant = await tx.tenant.create({
+      data: { name: empresa.nome, slug: empresa.slug },
+    });
+    return { id: tenant.id, slug: tenant.slug };
+  }
+
+  /**
+   * Os TRÊS perfis DA empresa — dono, gestor e funcionário — e o id do
+   * `dono`, que é o perfil de quem cria a empresa.
+   *
+   * ⚠️ O `slug` é `dono`, e não `admin`: o conjunto da empresa tem três
+   * perfis, e o "administrador" deixou de ser o ÚNICO papel — ele virou o
+   * DONO, ao lado do gestor e do funcionário. Ver `domain/perfis-da-empresa.ts`
+   * para o conjunto e para a escolha de cada um.
+   *
+   * Os perfis nascem JUNTO com a empresa, e são DELA (`tenantId`). Ver o port:
+   * buscar um admin global traria dois problemas — o seed não roda em teste, e
+   * um admin global dentro de uma empresa cliente é um perfil com TODAS as
+   * permissões do catálogo fora do alcance daquela empresa.
+   *
+   * ⚠️ Precisa do escopo DA empresa: a `profiles_insercao` compara
+   * `tenant_id` com o GUC no momento do insert.
+   */
+  private async criarPerfisDaEmpresa(tx: Tx, tenantId: string): Promise<string> {
+    const perfis = perfisDaEmpresa();
+    let idDoDono: string | null = null;
+
+    for (const perfil of perfis) {
+      const criado = await tx.profile.create({
+        data: {
+          slug: perfil.slug,
+          name: perfil.nome,
+          isAdmin: perfil.isAdmin,
+          // ⚠️ `isSystem: true` CONGELA o perfil: `atribuir`, `revogar`,
+          // `atualizar` e `deletar` recusam com 403
+          // `PROFILE_SYSTEM_PROTECTED`. É deliberado — o trio é o CATÁLOGO, e
+          // uma empresa que apaga o seu `gestor` deixa de ter os três perfis
+          // que toda empresa tem. Quem precisa de um papel sob medida CRIA um
+          // perfil novo (`POST /admin/profiles`), e esse não é de sistema.
+          //
+          // MEDIDO 2026-10-21: o arquivo de domínio prometia o contrário
+          // ("o dono pode ajustar as permissões depois") — e a promessa era
+          // falsa. O código estava certo; a prosa é que mentia.
+          isSystem: true,
+          tenantId,
+        },
+      });
+
+      if (perfil.permissoes.length > 0) {
+        await tx.authorization.createMany({
+          data: perfil.permissoes.map((permissionKey) => ({
+            profileId: criado.id,
+            permissionKey,
+          })),
+        });
+      }
+
+      if (perfil.slug === 'dono') idDoDono = criado.id;
+    }
+
+    // O conjunto do catálogo TEM o `dono`, então isto só acontece se o
+    // catálogo mudar. Falhar alto é melhor do que devolver `null` como id de
+    // perfil: a membership nasceria com `profile_id` NULL e o dono ficaria
+    // sem nenhuma permissão, sem erro em lugar nenhum.
+    if (idDoDono === null) {
+      throw new Error('perfil "dono" ausente do conjunto de perfis da empresa');
+    }
+    return idDoDono;
   }
 
   async entrarPorConvite(convite: ConviteParaAceitar): Promise<void> {

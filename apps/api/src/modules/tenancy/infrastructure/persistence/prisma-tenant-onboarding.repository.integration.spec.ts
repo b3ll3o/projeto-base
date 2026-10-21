@@ -112,19 +112,64 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
     expect(vinculo?.profile?.isAdmin).toBe(true);
   });
 
-  it('o admin da empresa nova recebe TODAS as permissões do catálogo', async () => {
+  it('o DONO da empresa nova recebe TODAS as permissões do catálogo', async () => {
     await cleanDatabase(ctx.prisma);
     const u = usuario('dono@acme.dev');
     await repo.provisionarEmpresaPropria(u, { nome: 'ACME', slug: 'acme' });
 
     const perfil = await ctx.prisma.profile.findFirst({
-      where: { tenantId: { not: null }, slug: 'admin' },
+      where: { tenantId: { not: null }, slug: 'dono' },
       include: { authorizations: true },
     });
 
     // `isAdmin` já é bypass total, então as permissões são defesa em
     // profundidade — mas é a defesa que sobrevive a alguém desligar o bypass.
     expect(perfil?.authorizations).toHaveLength(listAllPermissions().length);
+  });
+
+  it('a empresa nova nasce com TRÊS perfis — dono, gestor e funcionário', async () => {
+    await cleanDatabase(ctx.prisma);
+    const u = usuario('dono@acme.dev');
+    await repo.provisionarEmpresaPropria(u, { nome: 'ACME', slug: 'acme' });
+
+    const empresa = await ctx.prisma.tenant.findUniqueOrThrow({ where: { slug: 'acme' } });
+    const perfis = await ctx.prisma.profile.findMany({
+      where: { tenantId: empresa.id },
+      include: { authorizations: true },
+      orderBy: { slug: 'asc' },
+    });
+
+    // O conjunto é o que o DONO precisa para executar: quem cria a empresa
+    // administra a empresa, quem éGestor administra pessoas, e quem é
+    // funcionário só olha o diretório.
+    expect(perfis.map((p) => p.slug)).toEqual(['dono', 'funcionario', 'gestor']);
+    expect(perfis.map((p) => p.name)).toEqual(['Dono', 'Funcionário', 'Gestor']);
+
+    // O `isAdmin` é do DONO só — o gestor administra PESSOAS, não o sistema
+    // de permissões (com `admin.manage-authorizations` ele se daria
+    // `admin.manage-profiles` e editaria o perfil do dono).
+    expect(perfis.find((p) => p.slug === 'dono')?.isAdmin).toBe(true);
+    expect(perfis.find((p) => p.slug === 'gestor')?.isAdmin).toBe(false);
+    expect(perfis.find((p) => p.slug === 'funcionario')?.isAdmin).toBe(false);
+
+    // E as permissões são as do conjunto, não "todas" para os três.
+    const chavesDe = (slug: string): string[] =>
+      (perfis.find((p) => p.slug === slug)?.authorizations ?? [])
+        .map((a) => a.permissionKey)
+        .sort();
+    expect(chavesDe('gestor')).toEqual(['audits.read', 'users.read', 'users.write']);
+    expect(chavesDe('funcionario')).toEqual(['users.read']);
+  });
+
+  it('os TRÊS perfis são DELE e de sistema (não podem ser apagados)', async () => {
+    await cleanDatabase(ctx.prisma);
+    await repo.provisionarEmpresaPropria(usuario('dono@acme.dev'), { nome: 'ACME', slug: 'acme' });
+
+    const empresa = await ctx.prisma.tenant.findUniqueOrThrow({ where: { slug: 'acme' } });
+    const perfis = await ctx.prisma.profile.findMany({ where: { tenantId: empresa.id } });
+
+    expect(perfis).toHaveLength(3);
+    expect(perfis.every((p) => p.isSystem)).toBe(true);
   });
 
   it('NENHUM perfil global é criado ao abrir empresa (o admin é DA empresa)', async () => {
@@ -185,7 +230,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
     expect(erro).not.toBeInstanceOf(EmpresaJaExisteException);
 
     // As três escritas ANTERIORES passaram. Sem rollback sobrariam um tenant
-    // sem dono, um perfil `admin` com TODAS as permissões do catálogo e uma
+    // sem dono, um perfil `dono` com TODAS as permissões do catálogo e uma
     // membership órfã — o estado "conta sem empresa / perfil sem dono" que o
     // cabeçalho deste arquivo diz que a transação impede. `authorization` é
     // a assertion mais afiada: são 7 linhas que nenhuma das outras mede.
@@ -552,6 +597,131 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
         }),
       ).toBe(1);
       expect((await repo.buscarConvitePorToken('token-runtime'))?.acceptedAt).not.toBeNull();
+    });
+  });
+
+  // ─────────── empresa de quem JÁ tem conta (a página de criação de empresa) ───────────
+  //
+  // O caminho do `POST /users { destino: 'empresa' }` grava a CONTA e a EMPRESA
+  // na mesma transação. Quem já tem conta não tem esse caminho: a página de
+  // criação de empresa é a segunda etapa do onboarding, e ela precisa abrir a
+  // empresa para uma conta EXISTENTE — sem tocar em `users`.
+  describe('abrirEmpresaParaUsuario — a empresa de quem já tem conta', () => {
+    async function contaExistente(email: string) {
+      const u = usuario(email);
+      await ctx.prisma.user.create({
+        data: {
+          id: u.id,
+          name: u.nome,
+          email: u.email,
+          passwordHash: u.senhaHash,
+          profileId: null,
+          createdAt: u.createdAt,
+        },
+      });
+      return u;
+    }
+
+    it('cria a empresa, os TRÊS perfis DELA e a membership de owner no `dono`', async () => {
+      await cleanDatabase(ctx.prisma);
+      const u = await contaExistente('dono@acme.dev');
+
+      const empresa = await repo.abrirEmpresaParaUsuario(u.id, { nome: 'ACME', slug: 'acme' });
+
+      expect(empresa).toMatchObject({ nome: 'ACME', slug: 'acme' });
+      const linha = await ctx.prisma.tenant.findUnique({ where: { slug: 'acme' } });
+      expect(linha?.id).toBe(empresa.id);
+
+      const vinculo = await ctx.prisma.tenantMembership.findFirst({
+        where: { userId: u.id },
+        include: { profile: true },
+      });
+      expect(vinculo?.role).toBe('owner');
+      expect(vinculo?.tenantId).toBe(empresa.id);
+      // O DONO é DA empresa — mesmo contrato de `provisionarEmpresaPropria`.
+      expect(vinculo?.profile?.tenantId).toBe(empresa.id);
+      expect(vinculo?.profile?.slug).toBe('dono');
+      expect(vinculo?.profile?.isAdmin).toBe(true);
+
+      const perfis = await ctx.prisma.profile.findMany({ where: { tenantId: empresa.id } });
+      expect(perfis.map((p) => p.slug).sort()).toEqual(['dono', 'funcionario', 'gestor']);
+
+      const dono = await ctx.prisma.profile.findFirst({
+        where: { tenantId: empresa.id, slug: 'dono' },
+        include: { authorizations: true },
+      });
+      expect(dono?.authorizations).toHaveLength(listAllPermissions().length);
+    });
+
+    it('NÃO mexe na conta — `users.profile_id` continua NULL (o perfil é o da empresa)', async () => {
+      await cleanDatabase(ctx.prisma);
+      const u = await contaExistente('dono@acme.dev');
+
+      await repo.abrirEmpresaParaUsuario(u.id, { nome: 'ACME', slug: 'acme' });
+
+      expect(await ctx.prisma.user.findUnique({ where: { id: u.id } })).toMatchObject({
+        email: 'dono@acme.dev',
+        profileId: null,
+      });
+    });
+
+    it('slug repetido NÃO deixa empresa, perfil, permissões nem membership pela metade', async () => {
+      await cleanDatabase(ctx.prisma);
+      await ctx.prisma.tenant.create({ data: { name: 'ACME', slug: 'acme' } });
+      const u = await contaExistente('dono@acme.dev');
+
+      await expect(
+        repo.abrirEmpresaParaUsuario(u.id, { nome: 'ACME', slug: 'acme' }),
+      ).rejects.toBeInstanceOf(EmpresaJaExisteException);
+
+      expect(await ctx.prisma.tenant.count()).toBe(1);
+      expect(await ctx.prisma.profile.count()).toBe(0);
+      expect(await ctx.prisma.authorization.count()).toBe(0);
+      expect(await ctx.prisma.tenantMembership.count()).toBe(0);
+    });
+
+    it('conclui sob a sessão da APLICAÇÃO (as policies valem)', async () => {
+      await cleanDatabase(ctx.prisma);
+      const u = await contaExistente('dono-runtime@acme.dev');
+      const app = new PrismaTenantOnboardingRepository(runtime, assinatura);
+
+      const empresa = await app.abrirEmpresaParaUsuario(u.id, { nome: 'ACME', slug: 'acme-rt' });
+
+      const vinculo = await ctx.prisma.tenantMembership.findFirst({
+        where: { userId: u.id },
+        include: { profile: true },
+      });
+      expect(vinculo?.role).toBe('owner');
+      expect(vinculo?.tenantId).toBe(empresa.id);
+      expect(vinculo?.profile?.isAdmin).toBe(true);
+    });
+  });
+
+  // ─────────── as empresas do ator ───────────
+  describe('listarEmpresasDoUsuario — as empresas de quem está logado', () => {
+    it('devolve as empresas com o papel, e nada das empresas alheias', async () => {
+      await cleanDatabase(ctx.prisma);
+      const { dono, tenant } = await empresaComDono('acme', 'dono@acme.dev');
+      const outro = await ctx.prisma.user.create({
+        data: { id: randomUUID(), name: 'Bia', email: 'bia@acme.dev', passwordHash: 'x' },
+      });
+
+      const empresas = await memberships.listarEmpresasDoUsuario(dono.id);
+
+      // O nome vem da empresa como foi criada — `empresaComDono` usa o slug
+      // como nome, então o campo é 'acme', não 'ACME'.
+      expect(empresas).toEqual([{ id: tenant.id, nome: 'acme', slug: 'acme', role: 'owner' }]);
+      expect(await memberships.listarEmpresasDoUsuario(outro.id)).toEqual([]);
+    });
+
+    it('a conta sem empresa nenhuma devolve lista vazia (e não a empresa do outro)', async () => {
+      await cleanDatabase(ctx.prisma);
+      await empresaComDono('acme', 'dono@acme.dev');
+      const solta = await ctx.prisma.user.create({
+        data: { id: randomUUID(), name: 'Sem', email: 'sem@acme.dev', passwordHash: 'x' },
+      });
+
+      expect(await memberships.listarEmpresasDoUsuario(solta.id)).toEqual([]);
     });
   });
 });

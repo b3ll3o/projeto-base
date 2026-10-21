@@ -61,7 +61,25 @@ type ActionCadastro = (
   formData: FormData,
 ) => Promise<CadastroUsuarioState>;
 
-export function CadastroUsuarioForm({ action = cadastrarUsuario }: { action?: ActionCadastro }) {
+export function CadastroUsuarioForm({
+  action = cadastrarUsuario,
+  convite,
+}: {
+  action?: ActionCadastro;
+  /**
+   * pt-BR (onboarding de empresa, 2026-10-21): o token do convite, quando a
+   * pessoa chegou por um link de convite. Ele viaja no MESMO FormData do
+   * cadastro, porque é o que diz que a conta nasce NA empresa que convidou
+   * (o `destino` do `POST /users`). Sem ele, a conta nasce sem empresa
+   * nenhuma e o funil do login leva a pessoa à página de criação de
+   * empresa — o oposto do que o convite pediu.
+   *
+   * ⚠️ O `| undefined` explícito é exigência do `exactOptionalPropertyTypes`
+   * (ligado no `tsconfig.base.json`): sem ele, a página não pode passar
+   * `undefined` para a prop — teria de omitir a propriedade inteira.
+   */
+  convite?: string | undefined;
+}) {
   const [estado, despachar, pendente] = useActionState<CadastroUsuarioState, FormData>(
     action,
     CADASTRO_INICIAL,
@@ -136,6 +154,11 @@ export function CadastroUsuarioForm({ action = cadastrarUsuario }: { action?: Ac
     // motivo está no schema: aparar um segredo é mutá-lo em silêncio. O
     // `resultado.data.senha` aqui é exatamente o que a pessoa digitou.
     dadosFormulario.set('senha', resultado.data.senha);
+    // pt-BR: o token do convite viaja no mesmo FormData — ver a prop
+    // `convite`. A Action o valida de novo antes de mandar qualquer coisa.
+    if (convite) {
+      dadosFormulario.set('convite', convite);
+    }
     // pt-BR: o despacho PRECISA estar dentro de `startTransition`. Fora
     // dela o React avisa em voz alta — "An async function with useActionState
     // was called outside of a transition ... isPending will not update

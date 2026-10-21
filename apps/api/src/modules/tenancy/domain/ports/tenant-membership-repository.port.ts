@@ -6,6 +6,15 @@
 /** Token de injeção — a interface é apagada em runtime, sem token o Nest LANÇA. */
 export const TENANT_MEMBERSHIP_REPOSITORY_PORT = Symbol('TenantMembershipRepositoryPort');
 
+/** Uma empresa a que o usuário pertence, com o papel que ele tem NELA. */
+export interface EmpresaDoUsuario {
+  id: string;
+  nome: string;
+  slug: string;
+  /** `owner` ou `member` — o mesmo rótulo de `findRole`. */
+  role: string;
+}
+
 export interface TenantMembershipRepositoryPort {
   /**
    * **Perfil efetivo** do usuário no escopo informado, ou `null`.
@@ -80,4 +89,18 @@ export interface TenantMembershipRepositoryPort {
    * use case.
    */
   atribuirPerfil(userId: string, tenantId: string, profileId: string | null): Promise<boolean>;
+
+  /**
+   * As empresas a que o usuário pertence, com o papel dele em cada uma.
+   *
+   * Lista VAZIA é uma resposta legítima — e é a que a conta sem empresa recebe
+   * (ainda em onboarding) e a que o administrador de SISTEMA recebe (que pode
+   * não pertencer a empresa nenhuma).
+   *
+   * ⚠️ O filtro é `userId`, e a query o carrega dentro do `where`: o id do ator
+   * vem do token de sessão, e a linha devolvida é só a dele. O escopo de
+   * leitura é o de SISTEMA pelo mesmo motivo de `buscarConvitePorToken` — a
+   * lista atravessa empresas, e o que a restringe é o filtro, não a RLS.
+   */
+  listarEmpresasDoUsuario(userId: string): Promise<EmpresaDoUsuario[]>;
 }

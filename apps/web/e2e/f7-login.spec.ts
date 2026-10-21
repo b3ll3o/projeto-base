@@ -16,7 +16,7 @@
 // teste existe para pegar. A garantia é a IGUALDADE.
 
 import { clearCookies, expect, test } from './support/fixtures';
-import { SENHA_DE_TESTE, emailUnico } from './support/dados';
+import { SENHA_DE_TESTE, criarEmpresa, emailUnico, parDeTokens } from './support/dados';
 
 const MENSAGEM_INVALIDA = 'E-mail ou senha incorretos.';
 
@@ -29,6 +29,14 @@ test.describe('F7 — Login de usuário', () => {
     // tinha provado.
     const email = emailUnico('login-ok');
     await semear('Pessoa Que Entra', email);
+    // ⚠️ pt-BR (onboarding de empresa, 2026-10-21): a conta ganha EMPRESA
+    // antes de entrar. O funil do login manda para `/empresa/nova` quem não
+    // pertence a empresa nenhuma, e o F16 é o fluxo que mede esse destino.
+    // Aqui o que se mede é o LOGIN — o cookie gravado e o destino alcançado —
+    // e o destino de quem TEM empresa é a listagem. Uma conta sem empresa
+    // levaria este teste a medir o onboarding, que é de outro arquivo.
+    const tokens = await parDeTokens(email, SENHA_DE_TESTE);
+    await criarEmpresa(tokens.accessToken, 'Empresa Do Login', 'empresa-do-login');
     // Sem isto o cookie da `comSessao` (auto) está presente, e `irPara('/login')`
     // mostraria a tela de login a quem JÁ tem sessão — o que não é o estado
     // que este arquivo mede.

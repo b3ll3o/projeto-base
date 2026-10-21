@@ -244,6 +244,26 @@ export async function plantarSessao(page: Page, tokens: ParDeTokens): Promise<vo
   ]);
 }
 
+/**
+ * Planta a EMPRESA da sessão — o cookie `tenant_id`.
+ *
+ * pt-BR (onboarding de empresa, 2026-10-21): sem este cookie a sessão age no
+ * bucket GLOBAL (`users.profile_id`), e a listagem volta recortada para a
+ * PRÓPRIA linha — a tela mostra uma pessoa e não diz por quê. O cookie é o
+ * que faz o `X-Tenant-Id` sair.
+ *
+ * ⚠️ NÃO é httpOnly, e não por descuido: `lib/sessao.ts` grava assim, e o id
+ * da empresa não é segredo.
+ */
+export async function plantarEmpresa(page: Page, tenantId: string): Promise<void> {
+  const { webUrl } = exigirEstado();
+  await page
+    .context()
+    .addCookies([
+      { name: 'tenant_id', value: tenantId, url: webUrl, httpOnly: false, sameSite: 'Lax' },
+    ]);
+}
+
 // ── Seletores ───────────────────────────────────────────────────────────────
 
 /**

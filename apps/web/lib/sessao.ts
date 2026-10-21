@@ -105,6 +105,21 @@ export async function guardarTenant(tenantId: string): Promise<void> {
 }
 
 /**
+ * Apaga a empresa escolhida — SEM tocar nos tokens.
+ *
+ * pt-BR (onboarding de empresa, 2026-10-21): o login grava a empresa quando
+ * descobre uma, e APAGA quando descobre que a conta não tem empresa nenhuma.
+ * Sem apagar, o cookie de uma sessão anterior sobrevive ao login — e o
+ * administrador de sistema, que não pertence a empresa nenhuma, passaria a
+ * levar 403 `TENANT_MEMBERSHIP_REQUIRED` na tela principal, sem caminho para
+ * sair. É o mesmo motivo de `limparSessao` apagar a empresa, sem o resto.
+ */
+export async function limparTenant(): Promise<void> {
+  const store = await cookies();
+  store.delete(COOKIE_TENANT);
+}
+
+/**
  * pt-BR (Fase 3): a empresa escolhida. Ausente ou vazio → `null`, e o
  * `ApiClient` OMITE o header — mandar string vazia seria 400 do outro lado.
  */
