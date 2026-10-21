@@ -91,8 +91,14 @@ const DestinoSchema = z.discriminatedUnion('tipo', [
     // `CriarEmpresaSchema` de `tenancy-empresas.controller.ts` são a MESMA
     // regra: duas regras para o mesmo dado divergem sozinhas.
     nome: z.string().trim().min(NOME_MIN).max(NOME_MAX),
+    // ⚠️ O `.trim()` do `slug` é a MESMA regra do `CriarEmpresaSchema` de
+    // `tenancy-empresas.controller.ts` — e as DUAS cópias divergiam: o
+    // formulário aparava e a API não. Sem ele, `" acme "` era recusado com a
+    // mensagem de FORMATO, que é a mensagem errada para o problema real
+    // (espaço em volta).
     slug: z
       .string()
+      .trim()
       .min(3)
       .max(50)
       .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'slug em minúsculo, com dígitos e hífens internos'),

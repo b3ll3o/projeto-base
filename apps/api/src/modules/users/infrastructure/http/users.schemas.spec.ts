@@ -174,4 +174,24 @@ describe('paridade boundary ↔ domínio', () => {
     });
     expect(comHash.success).toBe(false);
   });
+
+  // ── destino.empresa: o MESMO identificador, pela OUTRA porta ─────────────
+  //
+  // O cadastro com `destino: { tipo: 'empresa' }` e a página de criação
+  // gravam a MESMA empresa, e por isso usam a MESMA regra do identificador.
+  // As duas cópias eram uma cópia e meia: o formulário aparava, e esta aqui
+  // não — a divergência morava no único ponto que produz comportamento
+  // observável.
+  it('destino.empresa apara o identificador nas pontas', () => {
+    const resultado = CreateUserSchema.safeParse({
+      nome: 'Ana',
+      email: 'ok@exemplo.com',
+      senha: SENHA_OK,
+      destino: { tipo: 'empresa', nome: 'ACME', slug: ' acme ' },
+    });
+
+    expect(resultado.success).toBe(true);
+    if (!resultado.success) throw new Error(resultado.error.message);
+    expect(resultado.data.destino).toEqual({ tipo: 'empresa', nome: 'ACME', slug: 'acme' });
+  });
 });

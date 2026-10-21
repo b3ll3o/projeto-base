@@ -47,11 +47,20 @@ interface RequestComAtor {
  * ⚠️ O `.trim()` ANTES do `min`: sem ele, `"   "` (três espaços) passa o
  * `min(2)` — e a empresa nasce com o nome em branco. O web já aparava
  * (MEDIDO), mas a API é a fronteira de confiança: quem valida é ela.
+ *
+ * ⚠️ O `.trim()` do `slug` fecha a ÚLTIMA divergência entre as duas cópias
+ * da regra: o formulário (`empresa-schema.ts`) aparava o identificador e a
+ * API não. Sem ele, `" acme "` era RECUSADO com a mensagem de FORMATO
+ * ("slug em minúsculo…") — a mensagem errada para o problema real (espaço em
+ * volta) — e a divergência não era vista por nenhum teste, porque a spec de
+ * paridade comparava `min`, `max` e a expressão, e não o `trim`, que era a
+ * única das diferenças com comportamento observável.
  */
 const CriarEmpresaSchema = z.object({
   nome: z.string().trim().min(NOME_MIN).max(NOME_MAX),
   slug: z
     .string()
+    .trim()
     .min(3)
     .max(50)
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'slug em minúsculo, com dígitos e hífens internos'),

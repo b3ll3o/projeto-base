@@ -90,4 +90,22 @@ describe('paridade web ↔ API (a cópia é guardada, não é confiança)', () =
     const fonte = readFileSync(CONTROLLER, 'utf8');
     expect(fonte).toContain(SLUG_REGEX.source);
   });
+
+  it('a API também apara o identificador nas pontas', () => {
+    const fonte = readFileSync(CONTROLLER, 'utf8');
+
+    // ⚠️ O `.trim()` é a ÚNICA das diferenças entre as duas cópias que produz
+    // comportamento observável — e ela NÃO era comparada: a spec comparava
+    // `min`, `max` e a expressão. O resultado era a API recusando `" acme "`
+    // com a mensagem de formato, enquanto o formulário aceitava e aparava.
+    //
+    // O trecho é o do `slug`, e não o arquivo inteiro: o `nome` tem um
+    // `.trim()` ANTES do `slug: z`, e um `toContain('.trim()')` na fonte
+    // inteira passaria por causa do nome — o mesmo verde falso que a spec
+    // denuncia nos outros casos (comparar o `min` com ele mesmo).
+    const inicio = fonte.indexOf('slug: z');
+    const trechoDoSlug = fonte.slice(inicio, fonte.indexOf('});', inicio));
+
+    expect(trechoDoSlug).toContain('.trim()');
+  });
 });

@@ -118,6 +118,24 @@ describe('TenancyEmpresasController — as empresas do ator', () => {
     expect(criarEmpresa).not.toHaveBeenCalled();
   });
 
+  it('apara o identificador nas pontas — o formulário apara, e a API é a fronteira', async () => {
+    // pt-BR: o formulário (`empresa-schema.ts`) apara o identificador, e a
+    // API NÃO aparava — as DUAS cópias da MESMA regra divergiam no único
+    // ponto que produz comportamento observável. Sem o `.trim()` aqui,
+    // `" acme "` era RECUSADO com a mensagem de formato ("slug em
+    // minúsculo…"), que é a mensagem errada para o problema real (espaço em
+    // volta). E quem fala com a API sem passar pelo formulário — curl, outro
+    // cliente — levava o 400.
+    const resposta = await app.inject({
+      method: 'POST',
+      url: '/tenants',
+      payload: { nome: 'ACME', slug: ' acme ' },
+    });
+
+    expect(resposta.statusCode).toBe(201);
+    expect(criarEmpresa).toHaveBeenCalledWith({ userId: SUB, nome: 'ACME', slug: 'acme' });
+  });
+
   it('lista as empresas do ator', async () => {
     listarEmpresas.mockResolvedValue([
       { id: TENANT_OK, nome: 'ACME', slug: 'acme', role: 'owner' },
