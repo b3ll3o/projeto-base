@@ -161,6 +161,58 @@ test.describe('F16 — Onboarding de empresa', () => {
     await expect(itensDaLista(page).getByText('Pessoa Convidada')).toBeVisible();
   });
 
+  test('quem JÁ tem conta entra pelo mesmo link e entra NA empresa que convidou', async ({
+    page,
+    irPara,
+    semear,
+  }) => {
+    // A perna que faltava: o convite NÃO diz se a pessoa tem conta — o token
+    // é do CONVITE, não da conta. Então a tela de convite leva todo mundo ao
+    // CADASTRO, e quem já tem conta precisa de uma saída que a leve ao
+    // LOGIN com o token, para o aceite voltar a funcionar depois.
+    const emailDono = emailUnico('dona-convidante');
+    await semear('Dona Que Convida', emailDono);
+    const tokensDono = await parDeTokens(emailDono, SENHA_DE_TESTE);
+    const empresa = await criarEmpresa(
+      tokensDono.accessToken,
+      'Empresa Do Convite De Quem Ja Tem Conta',
+      'empresa-do-convite-com-conta',
+    );
+
+    // O convidado JÁ TEM CONTA — é a diferença entre esta perna e a de cima.
+    const emailConvidado = emailUnico('convidado-com-conta');
+    await semear('Pessoa Que Ja Tem Conta', emailConvidado);
+    const token = await emitirConvite(tokensDono.accessToken, empresa.id, emailConvidado);
+
+    // O convidado chega pelo link, SEM sessão.
+    await clearCookies(page);
+    await irPara(`/convite/${token}`);
+
+    // A tela de convite não sabe se a conta existe, então ela leva ao
+    // CADASTRO — e é aí que a pessoa com conta descobre que precisa entrar.
+    await expect(page).toHaveURL(new RegExp(`/users/novo\\?convite=${token}`));
+
+    // A saída que faltava: "Já tenho conta" leva ao LOGIN, com o token.
+    await page.getByRole('link', { name: 'Já tenho conta' }).click();
+    await expect(page).toHaveURL(new RegExp(`/login\\?convite=${token}`));
+
+    // Entra pela tela — e o token ATRAVESSA o login: a sessão está na conta
+    // errada (a conta de quem foi semeado pelo harness), e trocar de
+    // identidade sem o token perderia a empresa que convidou.
+    await entrarPelaTela(page, emailConvidado);
+    await expect(page).toHaveURL(new RegExp(`/convite/${token}`));
+
+    // E aceita.
+    await page.getByRole('button', { name: 'Aceitar convite', exact: true }).click();
+    await expect(page).toHaveURL(/\/users$/);
+
+    // A prova de que a empresa é a QUE CONVIDOU — a MESMA lista que o login
+    // consultou para decidir o destino.
+    const tokensConvidado = await parDeTokens(emailConvidado, SENHA_DE_TESTE);
+    const empresas = await listarEmpresasDoAtor(tokensConvidado.accessToken);
+    expect(empresas.map((e) => e.id)).toContain(empresa.id);
+  });
+
   test('o administrador de SISTEMA não é levado a criar empresa', async ({ page, irPara }) => {
     // O admin de sistema administra a PLATAFORMA e não pertence a empresa
     // nenhuma — é a exceção da regra. É semeado pelo banco porque não existe

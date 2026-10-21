@@ -23,10 +23,10 @@
 // diferentes.
 
 import { redirect } from 'next/navigation';
+import { CONVITE_INVALIDO } from '@/lib/convite-mensagens';
 import { ehTokenDeConvite } from '@/lib/convite-schema';
 import { lerTokens } from '@/lib/sessao';
 import { AceitarConvite } from './aceitar-convite';
-import { CONVITE_INVALIDO } from './state';
 
 export default async function PaginaConvite({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;

@@ -62,4 +62,14 @@ describe('AceitarConvite — o que a pessoa vê', () => {
     const erro = await screen.findByRole('alert');
     expect(erro).toHaveTextContent('Este convite já foi usado.');
   });
+
+  it('oferece a saída para entrar com outra conta — com o token do convite', () => {
+    // pt-BR: esta é a única tela do convite que a pessoa vê COM sessão, e ela
+    // pode estar logada na conta errada. Sem a saída, a pessoa fica presa:
+    // o convite é de outro e-mail e a tela só oferece "Aceitar".
+    render(<AceitarConvite token={TOKEN} />);
+
+    const saida = screen.getByRole('link', { name: 'Entrar com outra conta' });
+    expect(saida).toHaveAttribute('href', `/login?convite=${TOKEN}`);
+  });
 });

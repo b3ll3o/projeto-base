@@ -13,6 +13,8 @@
 'use client';
 
 import { useActionState } from 'react';
+import Link from 'next/link';
+import { PARAM_CONVITE } from '@/lib/convite-schema';
 import { aceitarConviteDoAtor } from './actions';
 import { CONVITE_INICIAL, type ConviteState } from './state';
 
@@ -42,6 +44,20 @@ export function AceitarConvite({ token }: { token: string }) {
       >
         {pendente ? 'Aceitando…' : 'Aceitar convite'}
       </button>
+
+      {/* pt-BR (onboarding de empresa, 2026-10-21): esta é a ÚNICA tela do
+          convite que a pessoa vê COM sessão — e ela pode estar logada na
+          conta ERRADA. Sem esta saída a pessoa fica presa: o convite é de
+          outro e-mail, e a tela só oferece "Aceitar", que vai falhar com
+          "enviado para outro e-mail". O token viaja na query porque o login
+          o leva de volta até aqui — e é o que faz o aceite voltar a
+          funcionar depois da troca de conta. */}
+      <Link
+        href={`/login?${PARAM_CONVITE}=${token}`}
+        className="block text-sm text-slate-600 underline underline-offset-2 hover:text-slate-900"
+      >
+        Entrar com outra conta
+      </Link>
     </form>
   );
 }

@@ -511,4 +511,21 @@ describe('CadastroUsuarioForm — a entrada por convite', () => {
 
     expect(enviado?.get('convite')).toBeNull();
   });
+
+  it('quem JÁ tem conta recebe a saída para o login — com o token do convite', () => {
+    // pt-BR: quem já tem conta e chega pelo link de convite cai NESTA tela.
+    // Sem a saída, o caminho é sem volta: o e-mail dela já está cadastrado,
+    // o cadastro recusa, e a pessoa não descobre que o que ela precisa é
+    // ENTRAR. O token viaja na query porque o login o leva até o aceite.
+    render(<CadastroUsuarioForm action={acaoQue(resposta())} convite={TOKEN} />);
+
+    const saida = screen.getByRole('link', { name: 'Já tenho conta' });
+    expect(saida).toHaveAttribute('href', `/login?convite=${TOKEN}`);
+  });
+
+  it('sem convite, a tela NÃO oferece o login — não há convite a atravessar', () => {
+    render(<CadastroUsuarioForm action={acaoQue(resposta())} />);
+
+    expect(screen.queryByRole('link', { name: 'Já tenho conta' })).toBeNull();
+  });
 });

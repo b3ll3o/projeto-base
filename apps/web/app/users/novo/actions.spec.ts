@@ -197,6 +197,41 @@ describe('cadastrarUsuario — entrada por convite', () => {
     expect(r.ok).toBe(false);
     expect(r.formError).toContain('convite');
   });
+
+  it('convite de OUTRO e-mail diz o motivo — e não "verifique a conexão"', async () => {
+    // pt-BR: a API responde 403 com `code: 'CONVITE_INVALIDO'` quando o
+    // convite foi emitido para outro e-mail. Sem o mapeamento, a pessoa lia
+    // "não foi possível cadastrar o usuário, verifique a conexão" — e o que
+    // tinha falhado era o CONVITE, não a internet. O que a pessoa precisa
+    // saber é que o e-mail dela não é o do convite.
+    responder(problem(403, 'CONVITE_INVALIDO', 'Convite inválido'));
+
+    const r = await cadastrarUsuario(INICIAL, formDataComConvite(TOKEN));
+
+    expect(r.ok).toBe(false);
+    expect(r.formError).toContain('outro e-mail');
+    expect(r.formError).not.toContain('Verifique a conexão');
+  });
+
+  it('convite EXPIRADO diz que expirou — o que a pessoa tem que fazer', async () => {
+    responder(problem(410, 'CONVITE_INVALIDO', 'Convite inválido'));
+
+    const r = await cadastrarUsuario(INICIAL, formDataComConvite(TOKEN));
+
+    expect(r.formError).toContain('expirou');
+  });
+
+  it('CONVITE_INVALIDO de motivo desconhecido cai no genérico COM traceId', async () => {
+    // O `status` é o motivo, e nem todo status é um motivo de convite: o que
+    // sobra é falha genérica — e a genérica carrega o traceId, para o
+    // suporte saber o que aconteceu.
+    responder(problem(422, 'CONVITE_INVALIDO', 'Convite inválido'));
+
+    const r = await cadastrarUsuario(INICIAL, formDataComConvite(TOKEN));
+
+    expect(r.formError).toContain('Verifique a conexão');
+    expect(r.formError).toContain('trace-123');
+  });
 });
 
 describe('cadastrarUsuario — validação no cliente da Action', () => {

@@ -48,6 +48,7 @@ import { useForm } from 'react-hook-form';
 import { cadastrarUsuario } from '@/app/users/novo/actions';
 import { CADASTRO_INICIAL, type CadastroUsuarioState } from '@/app/users/novo/state';
 import type { CampoCadastro } from '@/lib/cadastro-usuario-schema';
+import { PARAM_CONVITE } from '@/lib/convite-schema';
 import {
   cadastroUsuarioSchema,
   EMAIL_MAX,
@@ -281,6 +282,21 @@ export function CadastroUsuarioForm({
         >
           Cancelar
         </Link>
+        {/* pt-BR (onboarding de empresa, 2026-10-21): quem JÁ TEM CONTA e
+            chegou pelo link de convite cai NESTA tela — e sem esta saída o
+            caminho fica sem volta: o e-mail dela já está cadastrado, o
+            cadastro recusa com "este email já está cadastrado", e a pessoa
+            não descobre que o que ela precisa é ENTRAR. O token viaja na
+            query porque o login sabe levá-lo até a tela de aceite
+            (`/login?convite=…` → `/convite/<token>`). */}
+        {convite ? (
+          <Link
+            href={`/login?${PARAM_CONVITE}=${convite}`}
+            className="text-sm text-slate-600 underline underline-offset-2 hover:text-slate-900"
+          >
+            Já tenho conta
+          </Link>
+        ) : null}
       </div>
     </form>
   );

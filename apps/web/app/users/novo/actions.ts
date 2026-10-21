@@ -21,6 +21,7 @@
 import { redirect } from 'next/navigation';
 import { ApiClient, ApiError } from '@/lib/api-client';
 import { cadastroUsuarioSchema, type CampoCadastro } from '@/lib/cadastro-usuario-schema';
+import { mensagemDeConvite } from '@/lib/convite-mensagens';
 import { ehTokenDeConvite } from '@/lib/convite-schema';
 import type { CreateUserInputDto } from '@projeto/shared-types';
 import { CADASTRO_INICIAL, ERRO_GENERICO, comTraceId, type CadastroUsuarioState } from './state';
@@ -76,6 +77,20 @@ function estadoDeErro(
 
   if (problem.code === 'EMAIL_IN_USE') {
     return { ...base, fieldErrors: { email: 'Este email já está cadastrado.' } };
+  }
+
+  // pt-BR (onboarding de empresa, 2026-10-21): o `POST /users` com
+  // `destino.tipo='convite'` devolve `CONVITE_INVALIDO` quando o CONVITE não
+  // vale — e o motivo (vencido, já usado, emitido para outro e-mail) está no
+  // STATUS, não no corpo.
+  //
+  // ⚠️ Sem esta rama o erro caía no genérico "verifique a conexão": a pessoa
+  // lia que a internet tinha falhado, quando o que tinha falhado era o
+  // convite — e a mensagem não dizia o que fazer (pedir convite novo? entrar
+  // com outra conta?). O `code` é o sinal confiável; o `status` é o motivo.
+  if (problem.code === 'CONVITE_INVALIDO') {
+    const motivo = mensagemDeConvite(erro.status);
+    return { ...base, formError: motivo ?? comTraceId(ERRO_GENERICO, problem.traceId) };
   }
 
   const fieldErrors: Partial<Record<CampoCadastro, string>> = {};

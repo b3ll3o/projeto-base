@@ -26,15 +26,10 @@ import { aceitarConvite } from '@/lib/empresas';
 import { exigirSessao, guardarTenant } from '@/lib/sessao';
 import {
   CONVITE_ERRO_GENERICO,
-  CONVITE_EXPIRADO,
-  CONVITE_INICIAL,
   CONVITE_INVALIDO,
-  CONVITE_JA_USADO,
-  CONVITE_NAO_ENCONTRADO,
-  CONVITE_OUTRO_EMAIL,
-  comTraceId,
-  type ConviteState,
-} from './state';
+  mensagemDeConvite,
+} from '@/lib/convite-mensagens';
+import { CONVITE_INICIAL, comTraceId, type ConviteState } from './state';
 
 /**
  * A mensagem que a pessoa lê quando o convite não vale.
@@ -43,20 +38,13 @@ import {
  * escreve no corpo por decisão de segurança (o `detail` não pode confirmar a
  * quem só tem o token que o convite existe). O status já distingue os
  * casos, e a distinção é o que a pessoa precisa para agir.
+ *
+ * ⚠️ O mapeamento é o MESMO da tela de cadastro (`@/lib/convite-mensagens`):
+ * as duas portas do convite falam do mesmo motivo, e o que muda entre elas é
+ * só a mensagem genérica — cada tela diz o que a pessoa tentou fazer.
  */
 function mensagemDoConvite(erro: ApiError): string {
-  switch (erro.status) {
-    case 410:
-      return CONVITE_EXPIRADO;
-    case 409:
-      return CONVITE_JA_USADO;
-    case 403:
-      return CONVITE_OUTRO_EMAIL;
-    case 404:
-      return CONVITE_NAO_ENCONTRADO;
-    default:
-      return comTraceId(CONVITE_ERRO_GENERICO, erro.problem?.traceId);
-  }
+  return mensagemDeConvite(erro.status) ?? comTraceId(CONVITE_ERRO_GENERICO, erro.problem?.traceId);
 }
 
 export async function aceitarConviteDoAtor(
