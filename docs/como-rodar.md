@@ -60,7 +60,8 @@ docker run -d --name projeto-base-pg-local -p 5432:5432 \
 ```
 
 A URL tem que bater com `apps/api/.env` (✅ medido: `projeto:***@localhost:5432/projeto_base`);
-para derrubar, `docker rm -f projeto-base-pg-local`.
+para derrubar, `docker rm -f projeto-base-pg-local`; para **reiniciar** o que já existe
+(o caminho do `pre-push` quando a etapa `ci:boot` falha), `docker start projeto-base-pg-local`.
 
 ### 1.2 Segredo JWT
 
@@ -161,6 +162,32 @@ destino não for local, o seed **recusa e sai 1**, nomeando o host — medido
 2026-10-20 com `projeto-base-postgres`, que resolve para o mesmo Postgres e mesmo
 assim é recusado. Para ambiente real, crie o admin pelo `POST /api/v1/users` e
 promova o perfil pela UI.
+
+### 1.8 A etapa `ci:boot` — subir a aplicação local e derrubá-la ✅ medido
+
+`pnpm ci:boot` sobe a aplicação **do jeito que quem desenvolve roda** (`tsx src/main.ts`
+na API, `next dev` no web), espera a saúde dos dois e **derruba tudo** no fim. É a etapa
+que o `pnpm ci:local` e o `.husky/pre-push` rodam.
+
+```bash
+pnpm ci:boot
+# [ci:boot] ✓ API no ar (health: ok, banco: ok)
+# [ci:boot] ✓ web no ar (health: ok)
+# [ci:boot] ✓ aplicação local no ar — API :46095 · web :39149
+```
+
+✅ medido 2026-10-21: exit 0, e no fim **não sobra processo nem porta ocupada** — nem
+`apps/web/.next-boot/`, que é apagado junto.
+
+| detalhe | por quê |
+|---|---|
+| portas **livres**, não 3000/3001 | o `pnpm dev` da pessoa pode estar no ar, e uma etapa que briga pela porta falha por um motivo que não é defeito |
+| `distDir` = `.next-boot/` | `next dev` e `next build` não dividem o mesmo diretório — o Next apaga e reescreve o que o outro está servindo |
+| o banco local é **pré-requisito** e a etapa **não o sobe** | o `postgres` do Compose não publica a porta no host (§1.1); um banco efêmero aqui mediria outra configuração, não a local |
+| a etapa **falha alto** | sem banco (ou sem `JWT_SECRET` no `.env`) ela sai 1 com o ponteiro para §1.1/§1.2 — ela nunca "pula" |
+
+O log de cada processo fica em `node_modules/.cache/ci-boot/` — é lá que o sintoma
+aparece quando a etapa falha.
 
 ---
 

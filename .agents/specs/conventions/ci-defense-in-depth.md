@@ -28,6 +28,19 @@ encolhe com o tempo. A deliberação está em
 [Pendências conhecidas](./ci-defense-in-depth-pendencias.md); script e demais
 detalhes em [git-workflow.md §Pre-Push Quality Gate](./git-workflow.md).
 
+**O que o HOOK roda é menos que o `ci:local`** — e é proposital: o hook é
+rápido, o `ci:local` é lento. `.husky/pre-push` roda `pnpm ci:preflight`
+(Camada 2) e `pnpm ci:boot`. O `ci:boot` é a etapa que **sobe a aplicação
+local** (API em `tsx src/main.ts` + web em `next dev`, em portas livres) e a
+derruba no fim; o veredito é do processo que sobe — `/api/v1/health` 200 com
+`checks.database: "ok"` e `/api/health` 200 com `status: "ok"`.
+
+⚠️ **O banco local é pré-requisito e a etapa não o sobe**: sem ele o push é
+ barrado com o ponteiro para [`docs/como-rodar.md` §1.1](../../../docs/como-rodar.md).
+ É a única regra desta camada que depende do estado da máquina — e ela
+ **falha alto**, nunca pula. O e2e não cobre esse buraco: ele sobe a API em
+ `tsx` e o web no BUILD de produção, que é outro caminho do `pnpm dev`.
+
 ### Camada 2 — Preflight CI job
 
 Workflow `.github/workflows/ci.yml`, job `preflight`. **Primeiro job do

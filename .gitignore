@@ -109,6 +109,12 @@ test-results/
 # isso e listado a parte em vez de fundido com aquela regra.
 .next-e2e/
 
+# pt-BR: `.next-boot/` e o `distDir` da etapa "sobe a aplicacao localmente" do
+# `ci:local` (`pnpm ci:boot`, ver `.tooling/scripts/ci/boot-local.ts`). Mesmo
+# motivo do `.next-e2e/` acima: o `next dev` da etapa nao pode disputar o
+# `.next/` com o `pnpm dev` de quem esta desenvolvendo.
+.next-boot/
+
 # pt-BR: `next-env.d.ts` e GERADO pelo Next, e o `distDir` da suite e2e faz os
 # dois builds disputarem o mesmo arquivo antes rastreado: o `next build` da
 # suite escreve `/// <reference path="./.next-e2e/types/routes.d.ts" />`, o

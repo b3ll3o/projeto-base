@@ -263,11 +263,13 @@ pnpm ci:local
 
 Este comando executa as validações que o CI roda — **69,5 s, 69,6 s e 74,1 s** medido de ponta a ponta em 2026-10-08 (n=3; `turbo.json` marca as duas tasks e2e com `cache: false`, então o custo não encolhe com o tempo), e **22,6 s** eram o total antes de elas entrarem. Se falhar, **NÃO fazer push** antes.
 
-> **O hook não faz isto por você.** `.husky/pre-push` roda apenas
-> `pnpm ci:preflight` (camada 1 do defense-in-depth) — é o que o hook promete
-> na saída dele. Lint, typecheck e os testes com coverage **não** são cobertos
-> pelo hook; para o hook cobrir mais, o ajuste é em `.husky/pre-push`, não
-> neste doc.
+> **O hook não faz isto por você.** `.husky/pre-push` roda `pnpm ci:preflight`
+> (camada 1 do defense-in-depth) e `pnpm ci:boot` — a etapa que **sobe a aplicação
+> local** (API + web) e a derruba. Lint, typecheck e os testes com coverage **não**
+> são cobertos pelo hook; para o hook cobrir mais, o ajuste é em `.husky/pre-push`.
+>
+> ⚠️ O `ci:boot` exige o **banco local de pé** (runbook §1.1) — é o único gate da
+> camada 1 que depende da máquina, e ele **falha alto**: nunca pula.
 
 Exceção: hotfix trivial (typo, doc-only). Mesmo nesses casos,
 rodar `pnpm ci:preflight` para validar refs em docs.

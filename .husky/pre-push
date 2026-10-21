@@ -9,14 +9,39 @@ pnpm ci:preflight || {
   echo "   Para entender a estratégia defense-in-depth: cat .agents/specs/conventions/ci-defense-in-depth.md"
   exit 1
 }
-echo "✓ pre-push: preflight verde, push liberado."
+echo "✓ pre-push: preflight verde."
+
+# ---------------------------------------------------------------------------
+# ci:boot — a aplicação local tem que SUBIR antes de qualquer push.
+#
+# MEDIDO 2026-10-21: o `ci:local` rodava lint, tipos, unit, cobertura,
+# integração, e2e e o tooling — e NADA subia a aplicação. A suíte e2e sobe a
+# API em `tsx` e o web no BUILD de produção; o `pnpm dev` — o jeito que quem
+# desenvolve roda a aplicação — não era medido por nada. E a diferença não é
+# estética: `tsx` (esbuild) NÃO emite `design:paramtypes`, então um provider
+# sem `@Inject` explícito resolve `undefined` SÓ em dev.
+#
+# A ordem (DEPOIS do preflight) é carga, não estética: o preflight é rápido e
+# estrutural; o boot sobe processo, compila o web e leva dezenas de segundos.
+#
+# O banco local é PRÉ-REQUISITO e a etapa NÃO o sobe. Sem ele, o push é
+# barrado com o ponteiro para o runbook — nunca "pulado".
+echo "pre-push: subindo a aplicação localmente (pnpm ci:boot)..."
+pnpm ci:boot || {
+  echo "❌ pre-push abortado: a aplicação local não subiu."
+  echo "   O banco local é pré-requisito: docker start projeto-base-pg-local"
+  echo "   Veja docs/como-rodar.md §1.1 (banco) e §1.2 (JWT_SECRET)."
+  exit 1
+}
+echo "✓ pre-push: aplicação local no ar, push liberado."
 
 # ---------------------------------------------------------------------------
 # pr-refresh — atualiza as claims numéricas do corpo do PR a cada push.
 #
-# A ordem (DEPOIS do preflight) é carga, não estética: o preflight é a única
-# coisa aqui que bloqueia. Se o refresh viesse primeiro, um push barrado pelo
-# preflight já teria publicado um corpo descrevendo um push que não aconteceu.
+# A ordem (DEPOIS dos gates que bloqueiam) é carga, não estética: o preflight
+# e o boot são as únicas coisas aqui que bloqueiam. Se o refresh viesse antes,
+# um push barrado já teria publicado um corpo descrevendo um push que não
+# aconteceu.
 #
 # O refresh é ADVISORY. Rede, auth e `gh` podem falhar; nada disso pode virar
 # "não consegui commitar". O código de saída é capturado e NÃO propagado — sem
