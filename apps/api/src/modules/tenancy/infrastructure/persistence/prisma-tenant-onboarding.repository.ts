@@ -30,6 +30,7 @@ import {
   EmpresaJaExisteException,
 } from '../../domain/exceptions/tenancy.exceptions.js';
 import { perfisDaEmpresa } from '../../domain/perfis-da-empresa.js';
+import { EmailAlreadyInUseException } from '../../../users/domain/exceptions/user.exceptions.js';
 import {
   abrirEscopo,
   comEscopo,
@@ -65,6 +66,37 @@ function ehViolacaoDeUnicidade(erro: unknown): erro is Prisma.PrismaClientKnownR
 function constraintQueEstourou(erro: Prisma.PrismaClientKnownRequestError): string {
   const alvo = (erro.meta as { target?: unknown } | undefined)?.target;
   return Array.isArray(alvo) ? alvo.join(',') : String(alvo ?? '');
+}
+
+/**
+ * O e-mail da conta nova bateu na unicidade de `users.email`?
+ *
+ * MEDIDO 2026-10-21: este é um **P2002** (o `tx.user.create` é uma chamada
+ * do Prisma, não uma query crua) e o alvo é `email`.
+ */
+function ehViolacaoDeUnicidadeDoEmail(erro: unknown): erro is Prisma.PrismaClientKnownRequestError {
+  return ehViolacaoDeUnicidade(erro) && constraintQueEstourou(erro).includes('email');
+}
+
+/**
+ * A membership bateu na unicidade de `(user_id, tenant_id)`?
+ *
+ * ⚠️ NÃO é um P2002: o `INSERT` é `tx.$queryRaw` (a função `criar_membership`),
+ * e o Prisma reporta a falha de uma query CRUA como **P2010**, com o código do
+ * Postgres no `meta.code` (23505 = unique_violation). MEDIDO 2026-10-21:
+ * `PrismaClientKnownRequestError`, `code: 'P2010'`, `meta.code: '23505'`,
+ * mensagem `Key (user_id, tenant_id)=(…) already exists.`
+ *
+ * ⚠️ Por que a mensagem é conferida: o P2010 cobre QUALQUER falha de query
+ * crua, e traduzir todas por 409 esconderia um banco fora do ar.
+ */
+function ehViolacaoDeUnicidadeDaMembership(
+  erro: unknown,
+): erro is Prisma.PrismaClientKnownRequestError {
+  if (!(erro instanceof Prisma.PrismaClientKnownRequestError) || erro.code !== 'P2010')
+    return false;
+  const meta = erro.meta as { code?: unknown; message?: unknown } | undefined;
+  return meta?.code === '23505' && String(meta?.message ?? '').includes('user_id, tenant_id');
 }
 
 @Injectable()
@@ -387,21 +419,41 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
       // pelo mesmo motivo a policy não afrouxa: `memberships_insercao` já deixa
       // a sessão de empresa criar membership na própria empresa.
       if (novaConta !== null) {
-        await tx.user.create({
-          data: {
-            id: novaConta.id,
-            name: novaConta.nome,
-            email: novaConta.email,
-            passwordHash: novaConta.senhaHash,
-            // Mesma razão de `provisionarEmpresaPropria`: sem header a pessoa
-            // não está em empresa nenhuma, e a Fase 4 resolve esse bucket para
-            // zero permissões. O perfil vem da membership, não daqui.
-            profileId: null,
-            createdAt: novaConta.createdAt,
-            updatedAt: novaConta.createdAt,
-            version: 1,
-          },
-        });
+        try {
+          await tx.user.create({
+            data: {
+              id: novaConta.id,
+              name: novaConta.nome,
+              email: novaConta.email,
+              passwordHash: novaConta.senhaHash,
+              // Mesma razão de `provisionarEmpresaPropria`: sem header a pessoa
+              // não está em empresa nenhuma, e a Fase 4 resolve esse bucket para
+              // zero permissões. O perfil vem da membership, não daqui.
+              profileId: null,
+              createdAt: novaConta.createdAt,
+              updatedAt: novaConta.createdAt,
+              version: 1,
+            },
+          });
+        } catch (erro) {
+          // ⚠️ A CORRIDA do e-mail: dois cadastros com o MESMO e-mail passam
+          // pelo `findByEmail` antes de qualquer commit, e o segundo morre
+          // aqui. O `P2002` cru subia como **500** — e 500 é "banco fora do
+          // ar", a mensagem mais falsa que existe num pedido de cadastro.
+          //
+          // A exceção é a de `users/domain` (que `tenancy` já importa, como
+          // importa o `UserNotFoundException`), e não uma nova aqui: a regra
+          // do e-mail é do módulo de USUÁRIOS, e é o `GlobalExceptionFilter`
+          // que já sabe traduzir `EmailAlreadyInUseException` em 409
+          // `EMAIL_IN_USE` — que é a mensagem que o formulário sabe mostrar.
+          //
+          // O caminho sequencial já devolve 409 pelo `findByEmail`; este
+          // `catch` é a rede da janela.
+          if (ehViolacaoDeUnicidadeDoEmail(erro)) {
+            throw new EmailAlreadyInUseException(novaConta.email);
+          }
+          throw erro;
+        }
       }
 
       // A partir daqui a sessão é a DA empresa do convite, e o `updateMany`
@@ -416,18 +468,32 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
         throw new ConviteInvalidoException('ja-aceito');
       }
 
-      await this.criarMembership(
-        tx,
-        convite.userId,
-        atual.tenantId,
-        // O papel vem do CONVITE, nunca do chamador: um port que aceitasse
-        // `role` da entrada transformaria o aceite em escalada — qualquer um
-        // com um token próprio criaria o próprio owner.
-        atual.role,
-        // `profile_id` NULL: quem entra por convite não tem perfil até o
-        // admin da empresa atribuir (Fase 4: NULL = zero permissões).
-        null,
-      );
+      try {
+        await this.criarMembership(
+          tx,
+          convite.userId,
+          atual.tenantId,
+          // O papel vem do CONVITE, nunca do chamador: um port que aceitasse
+          // `role` da entrada transformaria o aceite em escalada — qualquer um
+          // com um token próprio criaria o próprio owner.
+          atual.role,
+          // `profile_id` NULL: quem entra por convite não tem perfil até o
+          // admin da empresa atribuir (Fase 4: NULL = zero permissões).
+          null,
+        );
+      } catch (erro) {
+        // ⚠️ A conta JÁ é membro da empresa: o dono pode se convidar, e o
+        // `@@unique([userId, tenantId])` barra o vínculo duplicado. Sem esta
+        // tradução, o erro do banco subia como **500** — indistinguível de
+        // banco fora do ar, para um pedido que é um CONFLITO (409).
+        //
+        // ⚠️ O `P2010` (query crua) é distinguido pelo `meta.code` 23505 e
+        // pela chave da mensagem — ver `ehViolacaoDeUnicidadeDaMembership`.
+        if (ehViolacaoDeUnicidadeDaMembership(erro)) {
+          throw new ConviteInvalidoException('ja-membro');
+        }
+        throw erro;
+      }
     });
   }
 

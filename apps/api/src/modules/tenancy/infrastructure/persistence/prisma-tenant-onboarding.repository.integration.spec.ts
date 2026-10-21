@@ -34,6 +34,7 @@ import {
   EmpresaJaExisteException,
 } from '../../domain/exceptions/tenancy.exceptions.js';
 import { listAllPermissions } from '../../../../shared/auth/permissions-catalog.js';
+import { EmailAlreadyInUseException } from '../../../users/domain/exceptions/user.exceptions.js';
 import { uriComoPapelDeRuntime } from '../../../../shared/infrastructure/prisma/papel-de-runtime.js';
 import { AssinaturaDeMembership } from '../../../../shared/infrastructure/prisma/assinatura-de-membership.js';
 
@@ -285,6 +286,32 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
     expect(await repo.buscarConvitePorToken('chute')).toBeNull();
   });
 
+  it('a conta que JÁ é membro da empresa não aceita outro convite dela', async () => {
+    // ⚠️ O dono pode se convidar, e aí o `INSERT` da membership bate no
+    // `@@unique([userId, tenantId])`. MEDIDO 2026-10-21: sem a tradução, isto
+    // saía como **500** — o `P2010` da query crua (`criar_membership`), com o
+    // `23505` no `meta` — indistinguível de banco fora do ar, num pedido que
+    // é um CONFLITO.
+    await cleanDatabase(ctx.prisma);
+    const { dono, tenant } = await empresaComDono('acme', 'dono@acme.dev');
+    await repo.emitirConvite({
+      tenantId: tenant.id,
+      email: 'dono@acme.dev',
+      role: 'member',
+      token: 'secreto',
+      expiresAt: new Date('2026-10-26T12:00:00.000Z'),
+    });
+    const convite = await ctx.prisma.invitation.findFirstOrThrow({ where: { token: 'secreto' } });
+
+    const erro = await repo.entrarPorConvite({ userId: dono.id, invitationId: convite.id }).then(
+      () => null,
+      (e: unknown) => e,
+    );
+
+    expect(erro).toBeInstanceOf(ConviteInvalidoException);
+    expect((erro as ConviteInvalidoException).motivo).toBe('ja-membro');
+  });
+
   it('mesmo token em duas empresas NÃO vira "convite já emitido" — é outra constraint', async () => {
     await cleanDatabase(ctx.prisma);
     const acme = await empresaComDono('acme', 'dono@acme.dev');
@@ -489,12 +516,11 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
     // não desfizesse tudo, o convite ficaria queimado (irrecuperável) sem
     // que ninguém tivesse entrado.
     //
-    // shortcut: aqui o `P2002` de `users.email` NÃO é traduzido, e chegaria
-    // como 500. Ele só é alcançável sob CORRIDA — o caminho comum já devolve
-    // 409 por `findByEmail`, antes de chegar aqui (`user-use-cases.ts`) —, e a
-    // tradução exigiria importar a exceção de `users` para um adaptador de
-    // `tenancy`. Se a corrida aparecer em produção, o conserto é a
-    // `EmailAlreadyInUseException` de `users/domain`, que tenancy já importa.
+    // MEDIDO 2026-10-21: o `P2002` é traduzido em `EmailAlreadyInUseException`
+    // — a exceção do PRÓPRIO módulo de `users` (que `tenancy` já importa), e
+    // não uma nova aqui. O `GlobalExceptionFilter` já sabe traduzir aquela em
+    // 409 `EMAIL_IN_USE`, que é a mensagem que o formulário sabe mostrar. O
+    // `shortcut:` que existia aqui ("chegaria como 500") não existe mais.
     await expect(
       repo.criarContaPorConvite(
         { userId: id, invitationId: convite!.id },
@@ -506,7 +532,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
           createdAt: new Date('2026-10-19T12:00:00.000Z'),
         },
       ),
-    ).rejects.toMatchObject({ code: 'P2002' });
+    ).rejects.toBeInstanceOf(EmailAlreadyInUseException);
 
     expect(await ctx.prisma.user.findUnique({ where: { id } })).toBeNull();
     expect(

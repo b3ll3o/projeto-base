@@ -128,6 +128,11 @@ const MOTIVO_CONVITE_NA_HTTP: Record<ConviteMotivo, number> = {
   expirado: HttpStatus.GONE,
   'ja-aceito': HttpStatus.CONFLICT,
   'outro-email': HttpStatus.FORBIDDEN,
+  // MEDIDO 2026-10-21: o motivo novo é CONFLITO, e não erro interno — o
+  // pedido era bem formado e o estado é o que impede a escrita. Sem esta
+  // linha, o erro cru do banco subia como 500 (indistinguível de banco fora
+  // do ar) num pedido que a pessoa pode resolver.
+  'ja-membro': HttpStatus.CONFLICT,
 };
 
 export function mapExceptionToHttp(err: unknown): HttpErrorMapping {

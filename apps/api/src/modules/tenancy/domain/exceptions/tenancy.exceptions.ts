@@ -9,7 +9,20 @@
 // outra pessoa). O mapeamento fica em
 // `shared/infrastructure/http/domain-exception-to-http.ts`.
 
-export type MotivoConviteInvalido = 'nao-encontrado' | 'expirado' | 'ja-aceito' | 'outro-email';
+export type MotivoConviteInvalido =
+  | 'nao-encontrado'
+  | 'expirado'
+  | 'ja-aceito'
+  | 'outro-email'
+  /**
+   * A conta JÁ é membro da empresa que convidou.
+   *
+   * MEDIDO 2026-10-21: o dono pode se convidar, e o `INSERT` da membership
+   * bate no `@@unique([userId, tenantId])`. Sem tradução, o erro cru sobe
+   * como **500** — indistinguível de banco fora do ar, para um pedido que
+   * era um conflito (409).
+   */
+  | 'ja-membro';
 
 export class ConviteInvalidoException extends Error {
   constructor(public readonly motivo: MotivoConviteInvalido) {
