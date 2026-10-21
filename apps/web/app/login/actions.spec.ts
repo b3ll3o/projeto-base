@@ -238,6 +238,41 @@ describe('entrar — para onde a pessoa vai depois de entrar', () => {
     expect(new Headers(pedidoDoPerfil?.[1]?.headers).get('x-tenant-id')).toBeNull();
   });
 
+  it('o administrador de SISTEMA NÃO fica preso na empresa que ele tem', async () => {
+    // pt-BR: o admin de sistema é a EXCEÇÃO da invariante — e a lista de
+    // empresas NÃO está vazia para ele: um convite aceito, ou uma empresa que
+    // ele mesmo criou, deixam uma membership lá. Escolher a primeira delas
+    // prenderia a sessão no escopo dela, onde
+    // `ehAdministradorDeSistema` (`tenantId === null && isAdmin`) é FALSO: as
+    // rotas de sistema responderiam 403 — e não há volta, porque todo login
+    // re-executa este funil e não existe tela de troca de empresa.
+    responderPorUrl({
+      '/me/tenants': okResponse([{ id: 'empresa-1', nome: 'ACME', slug: 'acme' }]),
+      '/me/profile': okResponse({ isAdmin: true, permissions: [] }),
+    });
+
+    await expect(entrar(INICIAL, formData())).rejects.toThrow('NEXT_REDIRECT:/users');
+
+    // O cookie de empresa NÃO é gravado — é ele que prende a sessão.
+    expect(guardarTenant).not.toHaveBeenCalled();
+    expect(limparTenant).toHaveBeenCalled();
+  });
+
+  it('a falha do perfil NÃO tira a empresa de quem a tem', async () => {
+    // pt-BR: o `/me/profile` é uma pergunta a MAIS, e ela não pode custar a
+    // empresa de quem já a tem: a lista de empresas já está na mão, e trocar
+    // um admin que perde o sistema por qualquer pessoa que perde a empresa
+    // seria um preço altíssimo.
+    responderPorUrl({
+      '/me/tenants': okResponse([{ id: 'empresa-1', nome: 'ACME', slug: 'acme' }]),
+      '/me/profile': new Error('ECONNREFUSED'),
+    });
+
+    await expect(entrar(INICIAL, formData())).rejects.toThrow('NEXT_REDIRECT:/users');
+
+    expect(guardarTenant).toHaveBeenCalledWith('empresa-1');
+  });
+
   it('a lista de empresas vem SEM header de empresa — ela é "por conta"', async () => {
     const fetchMock = responderPorUrl({
       '/me/tenants': okResponse([{ id: 'empresa-1', nome: 'ACME', slug: 'acme' }]),

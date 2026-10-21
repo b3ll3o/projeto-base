@@ -122,20 +122,38 @@ async function destinoAposLogin(
   accessToken: string,
 ): Promise<{ rota: string; tenantId: string | null }> {
   const empresas = await listarEmpresas(accessToken);
+
+  // ⚠️ O ADMINISTRADOR DE SISTEMA é a EXCEÇÃO da invariante, e a exceção é
+  // conferida ANTES da lista — porque a lista NÃO está vazia para ele: um
+  // convite aceito, ou uma empresa que ele mesmo criou, deixam uma
+  // membership lá. Escolher a PRIMEIRA empresa prenderia a sessão no escopo
+  // dela, e aí `ehAdministradorDeSistema` (`tenantId === null && isAdmin`) é
+  // FALSO: as rotas de sistema respondem 403 e o admin perde a capacidade de
+  // responder a incidente. E não há volta — todo login re-executa este funil,
+  // e não existe tela de troca de empresa.
+  //
+  // ⚠️ A pergunta é feita no bucket GLOBAL, e não no da empresa: o `isAdmin`
+  // do DONO é o da empresa, e o do ADMIN é o do bucket de sistema. São duas
+  // pessoas diferentes (ver `obterMeuPerfilGlobal`).
+  //
+  // ⚠️ A falha do `/me/profile` NÃO desiste da empresa: a lista já está na
+  // mão, e trocar um admin que perde o sistema por QUALQUER pessoa que perde
+  // a empresa seria um preço altíssimo. A degradação é a de sempre — o
+  // admin perde o bucket de sistema até o próximo login.
+  const perfil = await obterMeuPerfilGlobal(accessToken).catch(() => null);
+  if (perfil?.isAdmin === true) {
+    // Administrador de SISTEMA: administra a plataforma, não pertence a
+    // empresa nenhuma — é a exceção da invariante, e por isso não é levou a
+    // criar uma empresa que ele não vai usar.
+    return { rota: '/users', tenantId: null };
+  }
+
   // pt-BR: `noUncheckedIndexedAccess` está ligado — `empresas[0]` é
   // `T | undefined` mesmo com `length > 0` garantido. Pegar o primeiro
   // elemento pelo nome é o que fecha o tipo sem `!`.
   const primeira = empresas[0];
   if (primeira !== undefined) {
     return { rota: '/users', tenantId: primeira.id };
-  }
-
-  const perfil = await obterMeuPerfilGlobal(accessToken);
-  if (perfil?.isAdmin === true) {
-    // Administrador de SISTEMA: administra a plataforma, não pertence a
-    // empresa nenhuma — é a exceção da invariante, e por isso não é levado a
-    // criar uma empresa que ele não vai usar.
-    return { rota: '/users', tenantId: null };
   }
 
   return { rota: '/empresa/nova', tenantId: null };
