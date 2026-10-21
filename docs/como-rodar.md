@@ -130,6 +130,38 @@ Pela UI: `http://localhost:3001/users` redireciona para `/login` (exige sessão)
 e-mail/senha com o usuário acima leva para `/users`, que lista o recém-criado ("1 usuário
 cadastrado"). `Cadastrar usuário` abre `/users/novo`.
 
+### 1.7 Usuário admin local (seed) ✅ medido
+
+O seed cria os perfis `admin`/`viewer` e, **fora de produção**, um usuário admin
+pronto para login:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -T \
+  -w /repo/apps/api api pnpm exec tsx prisma/seed.ts
+```
+
+⚠️ Não existe `prisma.seed` no `package.json`: `pnpm exec prisma db seed` **sai 0 sem
+fazer nada** (medido 2026-10-20). Use o comando acima.
+
+| e-mail | senha | perfil |
+|---|---|---|
+| `admin@admin.com` | `Admin@123` | `admin` (todas as permissions, `is_admin=true`) |
+
+Credencial de DEV, no mesmo espírito da senha `projeto:projeto` do
+`docker-compose.dev.yml`: está em texto puro no repositório. O guard do seed tem
+**duas** condições, e as duas precisam valer:
+
+| condição | regra | por quê |
+|---|---|---|
+| modo | `NODE_ENV === 'development'` | **default-deny**: ausente, vazio, `staging` e `prod` (sem o "uction") não criam a conta |
+| destino | host da `DIRECT_DATABASE_URL` em `localhost`, `127.0.0.1` ou `postgres` | modo e destino vêm de arquivos diferentes — o overlay dev **força** `NODE_ENV: development` (`docker-compose.dev.yml:5`), mas a `DIRECT_DATABASE_URL` chega pelo `env_file: .env.production` do compose base (`docker-compose.yml:101`). ⚠️ A checagem é sobre o **hostname que a URL resolve**, e é comparação de string: o guard **não resolve DNS**. `postgres` só vale porque é o nome do serviço do Compose — um Postgres remoto de dev que também se chame `postgres` passa, e um local que se chame `qualquer-coisa` é recusado |
+
+O comando acima satisfaz as duas: dentro do container o host é `postgres`. Se o
+destino não for local, o seed **recusa e sai 1**, nomeando o host — medido
+2026-10-20 com `projeto-base-postgres`, que resolve para o mesmo Postgres e mesmo
+assim é recusado. Para ambiente real, crie o admin pelo `POST /api/v1/users` e
+promova o perfil pela UI.
+
 ---
 
 ## Ambiente 2 — Dev local, Docker com hot reload 📖 lido do código

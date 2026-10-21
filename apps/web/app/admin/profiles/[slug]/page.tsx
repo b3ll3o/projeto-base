@@ -14,7 +14,12 @@
 import type * as React from 'react';
 import { notFound } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { obterPerfilPorSlug, listarPermissoes, trocarPermissoes } from '../../../../lib/perfil';
+import {
+  obterPerfilPorSlug,
+  listarPermissoes,
+  trocarPermissoes,
+  atualizarPerfil,
+} from '../../../../lib/perfil';
 import { exigirAdmin } from '../../guard-admin';
 
 export const dynamic = 'force-dynamic';
@@ -51,10 +56,46 @@ export default async function AdminProfileDetailPage({
   // pt-BR (#97, M1): o gate é `isSystem`, não `isAdmin`. Medido em
   // `profiles.use-cases.ts` — `atribuir`/`revogar` recusam com
   // `ProfileSystemProtectedException` só quando `isSystem()`; `isAdmin` só é
-  // bloqueado no RENAME (`atualizar`), que esta tela não chama. Renderizar o
+  // bloqueado no RENAME (`atualizar`), que esta tela não chamava quando este
+  // comentário foi escrito (2026-10-19 passou a chamar — gate abaixo). Renderizar o
   // form num perfil de sistema dava duas falhas: erro na API ao marcar, e —
   // pior — com zero mudanças o diff é vazio, nada sai, e o "Salvar" parece ter
   // funcionado. `admin` e `viewer`, os dois do seed, são `isSystem: true`.
+
+  // pt-BR (admin editar perfil, 2026-10-19): `name` e `description` viram
+  // formulário. Gate é `isSystem || isAdmin` — `atualizar` recusa os dois
+  // (`profiles.use-cases.ts:268,271`) —, ao contrário do gate de PERMISSÕES
+  // acima, que é só `isSystem`. Sem a condição, o clique leva 403 garantido.
+  async function salvarMetadados(formData: FormData): Promise<void> {
+    'use server';
+    // shortcut: nenhum `version` viaja com o PATCH, então dois admins na mesma
+    // tela sobrescrevem em silêncio — o mesmo limite de `trocarPermissoes`
+    // (`lib/perfil.ts:254-259`). O lock otimista do repositório existe
+    // (`prisma-profile.repository.ts` compara `version`), mas ele compara contra
+    // a versão lida na MESMA requisição, nunca contra a do render — por isso
+    // `page.tsx` mostra `versão {n}` na tela sem nada mandar de volta. Quando a
+    // API aceitar `If-Match`, o número exibido vira o baseline enviado.
+    //
+    // shortcut: erro sobe como exceção para o `app/error.tsx` da raiz, igual ao
+    // `saveAuthorizations` desta tela e ao `criarPerfil` de `new/page.tsx:50-53`.
+    // O 4xx alcançável daqui é só o `ProfileName`: o `minLength={2}` do browser
+    // conta comprimento CRU, então `"  a  "` passa e o VO — que mede depois do
+    // trim (`profile-name.vo.ts:23-28`) — recusa com 400, e a página inteira
+    // some atrás do copy genérico do boundary. Mensagem inline exige
+    // `useActionState` + client component; quando o erro esperado aqui for
+    // frequente, vale pagar esse custo.
+    //
+    // `name` NÃO é aparado aqui: o VO já faz isso, e um `.trim()` antes seria
+    // redundante. `description` é, porque não tem VO — sem isso o admin "limpa"
+    // e grava `" "`, invisível em todo render. E string vazia é "limpar": o que
+    // se manda é o que o browser entregou, sem o `...(description !== '' ? …)`
+    // de `new/page.tsx:57`.
+    const name = String(formData.get('name') ?? '');
+    const description = String(formData.get('description') ?? '').trim();
+    await atualizarPerfil(profile!.id, { name, description });
+    revalidatePath(`/admin/profiles/${profile!.slug}`);
+    revalidatePath('/admin/profiles');
+  }
 
   async function saveAuthorizations(formData: FormData): Promise<void> {
     'use server';
@@ -81,6 +122,50 @@ export default async function AdminProfileDetailPage({
           <li>isAdmin: {profile.isAdmin ? '✅' : '—'} (bypass total no guard)</li>
           <li>isSystem: {profile.isSystem ? '✅' : '—'} (protegido contra DELETE)</li>
         </ul>
+      </section>
+
+      <section className="mt-8">
+        <h2 className="text-lg font-medium text-slate-900">Metadados</h2>
+        {profile.isSystem || profile.isAdmin ? (
+          <p className="mt-3 text-sm text-slate-500">
+            Perfil de {profile.isSystem ? 'sistema' : 'administrador'}: nome e descrição são{' '}
+            <strong>somente leitura</strong>. A API recusa alterações.
+          </p>
+        ) : (
+          <form action={salvarMetadados} className="mt-3 space-y-4 text-sm">
+            <p>
+              <label className="block space-y-1">
+                <span className="font-medium text-slate-700">Nome</span>
+                <input
+                  className="block w-full rounded-md border border-slate-300 px-3 py-2"
+                  type="text"
+                  name="name"
+                  defaultValue={profile.name}
+                  required
+                  minLength={2}
+                  maxLength={80}
+                />
+              </label>
+            </p>
+            <p>
+              <label className="block space-y-1">
+                <span className="font-medium text-slate-700">Descrição</span>
+                <input
+                  className="block w-full rounded-md border border-slate-300 px-3 py-2"
+                  type="text"
+                  name="description"
+                  defaultValue={profile.description ?? ''}
+                />
+              </label>
+            </p>
+            <button
+              type="submit"
+              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+            >
+              Salvar metadados
+            </button>
+          </form>
+        )}
       </section>
 
       <section className="mt-8">

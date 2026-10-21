@@ -153,6 +153,7 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `cost-must-reconcile-with-the-whole` | `citada` | `.agents/specs/conventions/ci-defense-in-depth.md` | `é uma história` |
 | `cross-artifact-subtraction-borrows-the-other-clock` | `pendente` | — | — |
 | `criterion-inert-on-empty-set` | `citada` | `.agents/specs/conventions/retrospective-capture.md` | `um critério escrito como` |
+| `e2e-web-exige-clean-antes` | `citada` | `apps/web/e2e/global-setup.ts` | `o build da suíte começa de um diretório limpo` |
 | `failed-commit-leaks-staged-files-into-next-commit` | `pendente` | — | — |
 | `fase-7-http-state` | `recusada` | checkpoint de campanha de 2026-09-22; envelheceu e não é instrução | — |
 | `fixture-i-escolhi-nao-proibe-a-forma-do-arquivo-real` | `pendente` | — | — |

@@ -254,22 +254,69 @@ describe('ApiClient — X-Tenant-Id header', () => {
 });
 
 describe('ApiClient — content-type e merge de headers', () => {
-  it('content-type default = application/json', async () => {
+  it('content-type default = application/json quando há corpo', async () => {
     const { fetch: fetchMock } = makeFetchOk();
     const client = new ApiClient({ baseUrl: 'http://api' });
-    await client.get('/x', { fetch: fetchMock as unknown as typeof fetch });
+    await client.post('/x', { a: 1 }, { fetch: fetchMock as unknown as typeof fetch });
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     const headers = init.headers as Headers;
     expect(headers.get('content-type')).toBe('application/json');
   });
 
+  // pt-BR (2026-10-20): este caso usava `GET` e exigia o header presente — era
+  // o teste que fixava o defeito como se fosse o desejado. O Fastify responde
+  // `Body cannot be empty when content-type is set to 'application/json'` (400),
+  // e `revogarPermissao`/`apagarPerfil` quebravam em produção por causa disso.
+  // MEDIDO contra a API acesa, mesmo request e mesmo token, mudando só o
+  // header: DELETE sem → 200, com → 400. GET → 200 nos dois sentidos.
+  it('sem corpo, nenhum content-type é declarado', async () => {
+    const { fetch: fetchMock } = makeFetchOk();
+    const client = new ApiClient({ baseUrl: 'http://api' });
+    await client.delete('/x', { fetch: fetchMock as unknown as typeof fetch });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Headers;
+    expect(headers.get('content-type')).toBeNull();
+  });
+
+  // pt-BR (2026-10-20, 2ª revisão do PR #115): `body: ''` é o TERCEIRO valor
+  // que a condição anterior (`!= null`) não cobria — `undefined` e `null` caem
+  // fora, e `''` NÃO é null, e também não é corpo. O Fastify real (MEDIDO com
+  // `app.inject`): `content-type: application/json` + corpo vazio → 400
+  // `FST_ERR_CTP_EMPTY_JSON_BODY`; sem o header → 200, o corpo simplesmente
+  // não é parseado. O `content-type` descreve o corpo, e um corpo vazio não
+  // tem o que descrever.
+  it('corpo VAZIO ("") também não declara content-type', async () => {
+    const { fetch: fetchMock } = makeFetchOk();
+    const client = new ApiClient({ baseUrl: 'http://api' });
+    await client.delete('/x', { body: '', fetch: fetchMock as unknown as typeof fetch });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Headers;
+    expect(headers.get('content-type')).toBeNull();
+  });
+
+  // O TERCEIRO valor, e o que fecha a condição: `null` explícito é o mesmo
+  // caso de body ausente — e é o que separa `!= null` de `!== undefined`.
+  // Sem este caso, trocar `!= null` por `!== undefined` passava inteiro.
+  it('corpo NULO (null) também não declara content-type', async () => {
+    const { fetch: fetchMock } = makeFetchOk();
+    const client = new ApiClient({ baseUrl: 'http://api' });
+    await client.delete('/x', { body: null, fetch: fetchMock as unknown as typeof fetch });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Headers;
+    expect(headers.get('content-type')).toBeNull();
+  });
+
   it('headers customizados são mergeados com content-type', async () => {
     const { fetch: fetchMock } = makeFetchOk();
     const client = new ApiClient({ baseUrl: 'http://api' });
-    await client.get('/x', {
-      headers: { 'x-correlation-id': 'abc' },
-      fetch: fetchMock as unknown as typeof fetch,
-    });
+    await client.post(
+      '/x',
+      { a: 1 },
+      {
+        headers: { 'x-correlation-id': 'abc' },
+        fetch: fetchMock as unknown as typeof fetch,
+      },
+    );
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     const headers = init.headers as Headers;
     expect(headers.get('content-type')).toBe('application/json');

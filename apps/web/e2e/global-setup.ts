@@ -32,7 +32,7 @@
 // sozinho.
 
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
-import { cpSync, existsSync, readdirSync, readFileSync } from 'node:fs';
+import { cpSync, existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 // Reuso direto do helper que o e2e de API já usa — o Postgres efêmero, as
 // migrations e o prune entre testes. `apps/web` não declara
@@ -144,6 +144,25 @@ export default async function globalSetup(): Promise<void> {
   // texto no bundle do servidor, e depender dessa semântica para escolher
   // a porta seria descobrir por tentativa e erro. Passar no build funciona
   // nos dois casos.
+  // pt-BR (MEDIDO 2026-10-20, 4 execuções): `next build` NÃO limpa o `distDir`,
+  // e um `.next-e2e/` de execução anterior deixa o standalone inconsistente — o
+  // Next copia um `page_client-reference-manifest.js` que a rodada nova já não
+  // gerou e morre com `ENOENT ... -> .../standalone/`. Sem isto a suíte
+  // alternava entre passar e falhar sem que nenhuma spec mudasse.
+  //
+  // O sintoma engana: o `globalSetup` morre ANTES de gravar `estado.json`, e aí
+  // TODOS os specs caem com `TypeError: fetch failed` — 40 linhas abaixo da
+  // causa, e parece "a API está fora".
+  // REGRA: o build da suíte começa de um diretório limpo, sempre.
+  //
+  // ⚠️ A remoção é RECURSIVA e `force: true`, e o que a segura é o CAMINHO:
+  // `DIST_DIR_E2E` é uma constante deste arquivo e `WEB_ROOT` também, então
+  // `join(WEB_ROOT, DIST_DIR_E2E)` é `apps/web/.next-e2e` — o diretório
+  // exclusivo da suíte, que o `next.config.mjs` consome. NENHUM dos dois vem
+  // de env. Se um dia `DIST_DIR_E2E` passar a ler `process.env`, esta linha
+  // passa a apagar o que alguém apontar, e o `rmSync` não vai reclamar:
+  // quem parâmetrize tem que trocar esta linha por uma checagem de prefixo.
+  rmSync(join(WEB_ROOT, DIST_DIR_E2E), { recursive: true, force: true });
   log(`rodando \`next build\` em ${DIST_DIR_E2E}/ (≈40s)…`);
   const inicioBuild = Date.now();
   try {
