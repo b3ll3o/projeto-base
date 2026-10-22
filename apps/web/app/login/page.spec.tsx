@@ -45,7 +45,12 @@ vi.mock('./actions', () => ({
 
 import LoginPage from './page';
 import { entrar } from './actions';
-import { AVISO_CADASTRO_CONCLUIDO, PARAM_CADASTRO_CONCLUIDO } from './state';
+import {
+  AVISO_CADASTRO_CONCLUIDO,
+  AVISO_EMPRESA_PENDENTE,
+  PARAM_CADASTRO_CONCLUIDO,
+  PARAM_EMPRESA_PENDENTE,
+} from './state';
 import { PARAM_CONVITE } from '@/lib/convite-schema';
 
 async function renderCom(params: Record<string, string | string[] | undefined>) {
@@ -104,6 +109,34 @@ describe('LoginPage — o aviso de cadastro concluído', () => {
     await renderCom({ [PARAM_CADASTRO_CONCLUIDO]: ['1', '2'] });
 
     expect(screen.getByRole('status')).toBeInTheDocument();
+  });
+});
+
+describe('LoginPage — o aviso de empresa pendente', () => {
+  it('com o param de empresa, mostra que a sessão venceu antes da empresa', async () => {
+    // pt-BR: sem este aviso, a pessoa que preenchia o formulário de criação
+    // de empresa era levada ao login sem explicação, entrava, e voltava para
+    // `/empresa/nova` com o formulário vazio — sem saber o que tinha
+    // acontecido. É o mesmo "beco sem saída de dois saltos" que o
+    // `?cadastrado=1` já resolve no cadastro.
+    await renderCom({ [PARAM_EMPRESA_PENDENTE]: '1' });
+
+    const aviso = screen.getByRole('status');
+    expect(aviso).toHaveTextContent(AVISO_EMPRESA_PENDENTE);
+  });
+
+  it('o aviso da empresa PENDENTE tem prioridade sobre o do cadastro', async () => {
+    // Os dois sinais nunca juntos na prática, e a ordem é uma decisão: o da
+    // empresa pendente é o mais acionável — a pessoa sabe exatamente o que
+    // fazer depois de entrar, e é ele que a traz de volta para `/empresa/nova`.
+    await renderCom({
+      [PARAM_EMPRESA_PENDENTE]: '1',
+      [PARAM_CADASTRO_CONCLUIDO]: '1',
+    });
+
+    const aviso = screen.getByRole('status');
+    expect(aviso).toHaveTextContent(AVISO_EMPRESA_PENDENTE);
+    expect(aviso).not.toHaveTextContent(AVISO_CADASTRO_CONCLUIDO);
   });
 });
 

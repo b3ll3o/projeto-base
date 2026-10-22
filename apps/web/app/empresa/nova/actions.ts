@@ -117,7 +117,11 @@ export async function criarEmpresaDoAtor(
     // isto ela leria "verifique a conexão" e tentaria de novo, com o mesmo
     // token velho. O repo já faz assim em `app/users/page.tsx`.
     if (erro.status === 401) {
-      redirect('/login');
+      // ⚠️ O sinal (`?empresa=1`) é o MESMO mecanismo do `?cadastrado=1` do
+      // cadastro: sem ele, a pessoa cai no login sem explicação, entra, e
+      // volta para `/empresa/nova` com o formulário vazio e sem saber por
+      // quê. É um SINAL — os valores digitados NÃO viajam na query string.
+      redirect('/login?empresa=1');
     }
     return estadoDeErro(erro, valores);
   }

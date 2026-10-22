@@ -191,17 +191,23 @@ describe('criarEmpresaDoAtor — erro 409 (identificador já usado)', () => {
 });
 
 describe('criarEmpresaDoAtor — sessão vencida (401)', () => {
-  it('um 401 é SESSÃO VENCIDA: leva ao login, não a "verifique a conexão"', async () => {
+  it('um 401 é SESSÃO VENCIDA: leva ao login COM o sinal, e não a "verifique a conexão"', async () => {
     // pt-BR: o access token dura 15 min, e a pessoa pode ter ficado na tela
     // mais que isso. Sem isto ela leria "não foi possível criar a empresa" e
     // tentaria de novo, com o mesmo token velho — um loop sem saída.
+    //
+    // ⚠️ O `?empresa=1` é o sinal de que a empresa ficou PENDENTE: sem ele,
+    // a pessoa entra, o funil a traz de volta para `/empresa/nova` com o
+    // formulário vazio, e não há explicação nenhuma do porquê. É o mesmo
+    // mecanismo do `?cadastrado=1` do cadastro — e é um SINAL: os valores
+    // digitados não viajam na query string.
     responder(problem(401, 'UNAUTHORIZED', 'Não autorizado'));
 
     await expect(criarEmpresaDoAtor(EMPRESA_INICIAL, formData('ACME', 'acme'))).rejects.toThrow(
       'NEXT_REDIRECT:/login',
     );
 
-    expect(vi.mocked(redirect)).toHaveBeenCalledWith('/login');
+    expect(vi.mocked(redirect)).toHaveBeenCalledWith('/login?empresa=1');
     // A empresa não foi criada — e a sessão não aponta para empresa nenhuma.
     expect(estado.valores.get('tenant_id')).toBeUndefined();
   });

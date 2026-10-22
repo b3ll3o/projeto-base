@@ -107,6 +107,32 @@ export const PARAM_CADASTRO_CONCLUIDO = 'cadastrado';
 export const AVISO_CADASTRO_CONCLUIDO =
   'Cadastro feito. Agora entre com o e-mail e a senha que você acabou de escolher.';
 
+/**
+ * Query param que a tela de criação de empresa usa para avisar que a sessão
+ * venceu no meio do formulário.
+ *
+ * pt-BR: é o MESMO mecanismo do `?cadastrado=1` — um SINAL na query string,
+ * nunca o dado. O nome e o identificador da empresa digitados NÃO viajam na
+ * URL: a query string é serializada, aparece no histórico do browser e no
+ * log de borda.
+ */
+export const PARAM_EMPRESA_PENDENTE = 'empresa';
+
+/**
+ * A sessão venceu antes de a empresa ser criada.
+ *
+ * pt-BR: sem este aviso, a pessoa que preenchia o formulário era levada para
+ * o login sem explicação nenhuma, voltava para `/empresa/nova` com o
+ * formulário vazio, e não sabia o que tinha acontecido. É o mesmo "beco sem
+ * saída de dois saltos" que o `?cadastrado=1` já resolve no cadastro.
+ *
+ * ⚠️ O que o aviso NÃO promete: os valores digitados são perdidos — a
+ * pessoa digita de novo. Preservá-los exigiria um cookie curto, e é decisão
+ * de produto, não correção.
+ */
+export const AVISO_EMPRESA_PENDENTE =
+  'Sua sessão venceu antes de a empresa ser criada. Entre de novo para criar a empresa.';
+
 /** Anexa o traceId ao fim da mensagem, quando existe. */
 export function comTraceId(mensagem: string, traceId?: string): string {
   return traceId ? `${mensagem} Código de rastreamento: ${traceId}.` : mensagem;
