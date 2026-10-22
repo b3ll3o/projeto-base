@@ -93,15 +93,30 @@ export interface PerfilDaEmpresa {
  *
  * `audits.read` entra porque quem administra pessoas precisa saber o que
  * aconteceu com elas — e o log de auditoria é esse o quê.
+ *
+ * ⚠️ `Object.freeze` e não só `readonly`: o `readonly` do TIPO protege em
+ * tempo de COMPILAÇÃO, e o que sobra é o runtime. Estas duas listas são
+ * EXPORTADAS, e a cópia que `perfisDaEmpresa()` devolve é feita A PARTIR
+ * delas — de modo que uma constante mutável contamina a CÓPIA de toda
+ * empresa criada a partir dali. MEDIDO 2026-10-22: sem o congelamento,
+ * `PERMISSOES_DO_COORDENADOR.push('admin.manage-profiles')` deixava o
+ * `coordenador` com a permissão de editar perfil — exatamente a escalada
+ * que o catálogo existe para impedir (`admin.manage-authorizations` no
+ * coordenador já o deixaria se dar `admin.manage-profiles`).
  */
-export const PERMISSOES_DO_COORDENADOR: readonly string[] = [
+export const PERMISSOES_DO_COORDENADOR: readonly string[] = Object.freeze([
   'users.read',
   'users.write',
   'audits.read',
-];
+]);
 
-/** As permissões do `funcionario`: ler o diretório, e só. */
-export const PERMISSOES_DO_FUNCIONARIO: readonly string[] = ['users.read'];
+/**
+ * As permissões do `funcionario`: ler o diretório, e só.
+ *
+ * Congelada pelo mesmo motivo de `PERMISSOES_DO_COORDENADOR` — e pelo mesmo
+ * `Object.freeze`: o `readonly` do tipo não é o que impede a alteração.
+ */
+export const PERMISSOES_DO_FUNCIONARIO: readonly string[] = Object.freeze(['users.read']);
 
 /**
  * Os TRÊS perfis de toda empresa, na ordem em que são criados.

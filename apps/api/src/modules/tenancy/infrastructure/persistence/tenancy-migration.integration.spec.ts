@@ -23,12 +23,21 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import {
   setupTestDatabase,
   cleanDatabase,
   type TestContext,
 } from '../../../../../test/testcontainers-helper.js';
 import { PrismaTenantMembershipRepository } from './prisma-tenant-membership.repository.js';
+
+// pt-BR: o caminho do arquivo de migration, resolvido a partir do próprio spec
+// (não de `process.cwd()`) — o mesmo motivo de `apps/api/src/main.ts.spec.ts`:
+// `pnpm test:integration` (via turbo/CI) roda com CWD=apps/api/, enquanto
+// `pnpm vitest run` direto roda com CWD=monorepo root.
+const specDir = dirname(fileURLToPath(import.meta.url));
 
 describe('Migration de tenancy (Fase 2)', () => {
   let ctx: TestContext;
@@ -436,5 +445,108 @@ describe('Perfil por empresa na membership (Fase 4 — D4)', () => {
     // `deletar` o apagaria debaixo dos pés da empresa A.
     await expect(repo.countByProfile(daAcme.id)).resolves.toBe(2);
     await expect(repo.countByProfile(daGlobex.id)).resolves.toBe(0);
+  });
+});
+
+/**
+ * pt-BR (onboarding de empresa, 2026-10-22): o PAPEL da membership mudou de
+ * nome, e o dado gravado ANTES do rename ficou com o nome VELHO.
+ *
+ * POR QUE ESTE BLOCO EXISTE
+ * `tenancy.use-cases.ts` exige `role = 'gerente'` para convidar alguém, e o
+ * `provisionarEmpresaPropria` que existia em `main` gravava `role = 'owner'`.
+ * Sem backfill, o dono de uma empresa criada ANTES do rename recebe 403 ao
+ * convidar — o mesmo dono que antes podia, e que a empresa sem dono não pode
+ * substituir. Um rename de VALOR que quebra dado gravado é backfill (a linha
+ * "RENAME COLUMN que quebra dado já gravado" da convenção `migracao-de-dados.md`
+ * §1), e o backfill é uma migration.
+ *
+ * O QUE ESTE TESTE PROVA (e o que ele NÃO prova)
+ * A migration é um ARQUIVO, e o que se prova é que o arquivo, aplicado no
+ * banco, converte a linha legada. Por isso o teste LÊ o `.sql` do disco e o
+ * executa contra o Postgres: uma cópia do `UPDATE` dentro do spec mediria a
+ * cópia, e não o artefato — a classe "spec que re-deriva o esperado da
+ * implementação".
+ *
+ * ⚠️ `setupTestDatabase` já aplicou TODAS as migrations — inclusive esta —
+ * num banco que NÃO tinha linha legada. Por isso o `UPDATE` não teria nada
+ * para converter, e a linha legada é plantada DEPOIS, à mão, para que o
+ * arquivo tenha o que transformar. É a diferença entre "a migration roda sem
+ * erro" (medido pela suíte inteira, que sobe o banco com ela) e "a migration
+ * FAZ O QUE PROMETE" (medido aqui).
+ */
+describe('O rename do papel e o backfill (2026-10-22)', () => {
+  let ctx: TestContext;
+  let memberships: PrismaTenantMembershipRepository;
+
+  const CAMINHO_DA_MIGRATION = resolve(
+    specDir,
+    '../../../../../prisma/migrations/20261022000001_papel_gerente_legado/migration.sql',
+  );
+
+  beforeAll(async () => {
+    ctx = await setupTestDatabase();
+    memberships = new PrismaTenantMembershipRepository(ctx.prisma as never);
+  });
+
+  afterAll(async () => {
+    await ctx.stop();
+  });
+
+  it('a membership com o papel VELHO ("owner") volta a ser "gerente"', async () => {
+    await cleanDatabase(ctx.prisma);
+    const user = await ctx.prisma.user.create({
+      data: {
+        id: randomUUID(),
+        email: 'legado@acme.dev',
+        name: 'Dona',
+        passwordHash: 'x',
+      },
+    });
+    const acme = await ctx.prisma.tenant.create({ data: { name: 'Acme', slug: 'acme' } });
+
+    // A linha LEGADA, como o `provisionarEmpresaPropria` de `main` gravava.
+    await ctx.prisma.tenantMembership.create({
+      data: { userId: user.id, tenantId: acme.id, role: 'owner' },
+    });
+
+    // A PREMISSA, medida: a linha existe e tem o papel VELHO. Sem esta
+    // conferência, a asserção final seria verde por AUSÊNCIA DE DADO — o
+    // mesmo vácuo que um spec sem fixture mede em silêncio.
+    await expect(memberships.findRole(user.id, acme.id)).resolves.toBe('owner');
+
+    // O artefato, lido do disco e aplicado no banco de verdade.
+    const sql = await readFile(CAMINHO_DA_MIGRATION, 'utf8');
+    const afetadas = await ctx.prisma.$executeRawUnsafe(sql);
+
+    // O `UPDATE` afetou EXATAMENTE a linha legada — e não zero (a migration
+    // vazia, que passaria no "sem erro"), e não duas (a que apaga papel de
+    // alguém que não deveria).
+    expect(afetadas).toBe(1);
+    await expect(memberships.findRole(user.id, acme.id)).resolves.toBe('gerente');
+  });
+
+  it('a membership que NÃO é legada não é tocada', async () => {
+    await cleanDatabase(ctx.prisma);
+    const user = await ctx.prisma.user.create({
+      data: {
+        id: randomUUID(),
+        email: 'convidade@acme.dev',
+        name: 'Convidado',
+        passwordHash: 'x',
+      },
+    });
+    const acme = await ctx.prisma.tenant.create({ data: { name: 'Acme', slug: 'acme' } });
+    await ctx.prisma.tenantMembership.create({
+      data: { userId: user.id, tenantId: acme.id, role: 'member' },
+    });
+
+    const sql = await readFile(CAMINHO_DA_MIGRATION, 'utf8');
+    const afetadas = await ctx.prisma.$executeRawUnsafe(sql);
+
+    // O backfill é idempotente E não é indiscriminado: o convidado, que
+    // entrou por convite, continua `member`.
+    expect(afetadas).toBe(0);
+    await expect(memberships.findRole(user.id, acme.id)).resolves.toBe('member');
   });
 });

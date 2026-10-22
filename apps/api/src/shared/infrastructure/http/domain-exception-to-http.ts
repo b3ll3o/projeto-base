@@ -324,9 +324,22 @@ export function mapExceptionToHttp(err: unknown): HttpErrorMapping {
   // pt-BR: o status muda com o MOTIVO, o `code` não. Um `code` por motivo
   // diria a quem só tem o token que o token é válido e o e-mail é que não
   // bate — o segredo existe justamente para não entregar isso.
+  //
+  // ⚠️ `ja-membro` é a ÚNICA exceção, e a razão é o contrário: os outros
+  // quatro motivos são sobre o ESTADO DO CONVITE, e todos são alcançáveis
+  // por quem só tem o token. `ja-membro` não é — ele é produzido pelo
+  // `@@unique([userId, tenantId])` no aceite, e o aceite exige uma conta
+  // AUTENTICADA que JÁ é membro da empresa que convidou. A pessoa sabe que
+  // pertence à empresa, e a resposta não diz nada sobre o token.
+  //
+  // E sem `code` próprio, o web não distingue "o convite já foi usado" de
+  // "você já é desta empresa" — e a segunda se resolve indo para `/users`,
+  // não pedindo um convite novo. MEDIDO 2026-10-22: os dois são 409, e a
+  // tela dizia "Este convite já foi usado" para quem já era da empresa.
   if (err instanceof ConviteInvalidoException) {
     const status = MOTIVO_CONVITE_NA_HTTP[err.motivo];
-    return { status, code: 'CONVITE_INVALIDO', title: 'Convite inválido' };
+    const code = err.motivo === 'ja-membro' ? 'CONVITE_JA_MEMBRO' : 'CONVITE_INVALIDO';
+    return { status, code, title: 'Convite inválido' };
   }
   if (err instanceof NaoAdministraEmpresaException) {
     return {

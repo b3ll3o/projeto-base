@@ -122,7 +122,7 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
    * (a empresa acabou de nascer nesta transação) e `consumirEEntrar` (o convite
    * pendente acabou de ser consumido nesta transação). Nenhum dos dois é "um
    * membro adicionando outro membro", e é por isso que o banco não tem como
-   * separá-los por policy — não há predicado que distinga "owner criando o
+   * separá-los por policy — não há predicado que distinga "gerente criando o
    * primeiro admin" de "membro adicionando um desconhecido".
    *
    * ⚠️ `criar_membership` é `SECURITY DEFINER`: ela grava com os privilégios do
@@ -497,7 +497,7 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
           atual.tenantId,
           // O papel vem do CONVITE, nunca do chamador: um port que aceitasse
           // `role` da entrada transformaria o aceite em escalada — qualquer um
-          // com um token próprio criaria o próprio owner.
+          // com um token próprio criaria o próprio gerente.
           atual.role,
           // `profile_id` NULL: quem entra por convite não tem perfil até o
           // admin da empresa atribuir (Fase 4: NULL = zero permissões).

@@ -409,6 +409,31 @@ describe('mapExceptionToHttp — BC Tenancy (Fase 5)', () => {
     });
   }
 
+  it("'ja-membro' é o ÚNICO motivo com `code` próprio — e é o que o web precisa", () => {
+    // MEDIDO 2026-10-22: `ja-membro` e `ja-aceito` são o MESMO status (409),
+    // e o web mapeava 409 para "Este convite já foi usado" — MENTIRA para quem
+    // já é membro da empresa. E era um beco sem saída: pedir um convite novo
+    // devolvia 409 outra vez, para sempre.
+    //
+    // A segurança dos outros QUATRO motivos continua intacta: eles são
+    // alcançáveis por quem só tem o token, e um `code` por motivo diria a
+    // essa pessoa que o token é válido e o e-mail é que não bate — que é o
+    // que o segredo existe para esconder. `ja-membro` exige uma conta
+    // AUTENTICADA que já é membro da empresa que convidou: ela sabe que
+    // pertence à empresa, e a resposta não diz nada sobre o token.
+    const m = mapExceptionToHttp(new ConviteInvalidoException('ja-membro'));
+    expect(m.status).toBe(HttpStatus.CONFLICT);
+    expect(m.code).toBe('CONVITE_JA_MEMBRO');
+
+    // E os OUTROS QUATRO continuam com o MESMO `code` — a regra de não
+    // entregar o estado do token não foi afrouxada.
+    for (const motivo of ['nao-encontrado', 'expirado', 'ja-aceito', 'outro-email'] as const) {
+      expect(mapExceptionToHttp(new ConviteInvalidoException(motivo)).code).toBe(
+        'CONVITE_INVALIDO',
+      );
+    }
+  });
+
   it('os 409 traduzidos de `P2002` têm `code` distinto cada um', () => {
     // Sem tradução, os dois chegavam como 500 — indistinguível de banco fora do
     // ar. `code` separado porque o remetente do convite é o DONO, que já tem

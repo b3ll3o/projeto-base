@@ -437,7 +437,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
     expect((await repo.buscarConvitePorToken('secreto'))?.acceptedAt).toBeNull();
   });
 
-  it('o aceite VESTE o papel do convite, e o convite NÃO promove a owner', async () => {
+  it('o aceite VESTE o papel do convite, e o convite NÃO promove a gerente', async () => {
     await cleanDatabase(ctx.prisma);
     const { tenant } = await empresaComDono('acme', 'dono@acme.dev');
     await repo.emitirConvite({
@@ -456,7 +456,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
 
     // O papel vem do convite, não do chamador. Um port que aceitasse `role`
     // do lado de fora transformaria o aceite em escalada: qualquer um com
-    // um token propio criaria o próprio owner.
+    // um token propio criaria o próprio gerente.
     const membership = await ctx.prisma.tenantMembership.findUniqueOrThrow({
       where: { userId_tenantId: { userId: ana.id, tenantId: tenant.id } },
     });
@@ -698,7 +698,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
       return u;
     }
 
-    it('cria a empresa, os TRÊS perfis DELA e a membership de owner no `dono`', async () => {
+    it('cria a empresa, os TRÊS perfis DELA e a membership de gerente no perfil `gerente`', async () => {
       await cleanDatabase(ctx.prisma);
       const u = await contaExistente('dono@acme.dev');
 

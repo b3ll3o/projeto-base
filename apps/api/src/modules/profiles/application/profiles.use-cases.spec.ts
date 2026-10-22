@@ -1383,7 +1383,7 @@ describe('Fase 6 — atribuir perfil POR EMPRESA', () => {
     );
   });
 
-  it('R5: ninguém tira o próprio perfil na empresa — e hoje não há como readmitir owner', async () => {
+  it('R5: ninguém tira o próprio perfil na empresa — e hoje não há como readmitir gerente', async () => {
     const adminDaEmpresa = perfilDe(ACME, ['admin.manage-users'], true);
     users.prime(userComProfile(ATOR_ID, null));
     memberships.prime(ATOR_ID, ACME, adminDaEmpresa.id().value);

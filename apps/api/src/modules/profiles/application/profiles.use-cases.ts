@@ -574,7 +574,7 @@ export class UserProfileUseCases {
     // pt-BR (Fase 6 — tenancy) R5: dentro da empresa, ninguém altera o PRÓPRIO
     // perfil — nem para vestir outro, nem para tirar o que tem. O motivo é a
     // irreversibilidade: `emitirConvite` grava `role: 'member'` fixo, então
-    // não existe rota que devolva `owner` a ninguém. Uma empresa de dono único
+    // não existe rota que devolva `gerente` a ninguém. Uma empresa de gerente único
     // que se rebaixasse ficaria sem administrador e sem caminho de volta.
     // Custa a pessoa se ajustar sozinha; o preço alternativo é o lockout.
     //

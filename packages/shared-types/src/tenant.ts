@@ -21,7 +21,7 @@ export interface EmpresaDto {
 /**
  * A empresa DO ATOR — a mesma empresa, mais o papel que ele veste nela.
  *
- * O `role` é o rótulo de tenant (`owner`, `member`), e NÃO o RBAC: quem diz o
+ * O `role` é o rótulo de tenant (`gerente`, `member`), e NÃO o RBAC: quem diz o
  * que a pessoa pode fazer é o PERFIL que ela veste na empresa
  * (`tenant_memberships.profile_id`), não este rótulo.
  */

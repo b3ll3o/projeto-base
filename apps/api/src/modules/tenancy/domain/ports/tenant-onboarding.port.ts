@@ -79,11 +79,11 @@ export interface ConviteParaEmitir {
 
 export interface TenantOnboardingPort {
   /**
-   * `users` + `tenants` + perfil admin da empresa + `tenant_memberships`,
+   * `users` + `tenants` + os perfis da empresa + `tenant_memberships`,
    * tudo ou nada.
    *
-   * O perfil admin é criado **daqui, com `tenant_id` da empresa nova** — e
-   * não buscado entre os perfis globais do seed. Duas razões, e a segunda é
+   * Os perfis são criados **daqui, com `tenant_id` da empresa nova** — e
+   * não buscados entre os perfis globais do seed. Duas razões, e a segunda é
    * a que importa:
    *
    * 1. O seed roda à mão (`pnpm exec tsx prisma/seed.ts`), e a suíte de
@@ -93,6 +93,12 @@ export interface TenantOnboardingPort {
    *    vestindo a membership de uma empresa recém-criada é um perfil com TODAS
    *    as permissões do catálogo morando dentro dela — a D3 existe para que
    *    a empresa controle os próprios perfis.
+   *
+   * ⚠️ O conjunto é o CATÁLOGO (`domain/perfis-da-empresa.ts`): `gerente`,
+   * `coordenador` e `funcionario`. NÃO é um perfil chamado `admin` — `admin` é
+   * o perfil GLOBAL de SISTEMA (o do seed), e a distinção é o que impede a
+   * empresa de nascer vestindo o perfil de outra empresa. A membership do
+   * dono grava `role = 'gerente'` e veste o perfil `gerente` — os dois.
    */
   provisionarEmpresaPropria(
     usuario: UsuarioParaProvisionar,
@@ -118,7 +124,7 @@ export interface TenantOnboardingPort {
    * `tenant_memberships` + `invitations.accepted_at`, tudo ou nada.
    *
    * `profile_id` fica `NULL` de propósito: quem entra por convite não tem
-   * perfil nenhum até o admin da empresa atribuir. A Fase 4 já documentou e
+   * perfil nenhum até o gerente da empresa atribuir. A Fase 4 já documentou e
    * testado que membership sem perfil resolve para ZERO permissões — que é o
    * estado certo para quem acabou de ser convidado.
    */

@@ -11,7 +11,7 @@ export interface EmpresaDoUsuario {
   id: string;
   nome: string;
   slug: string;
-  /** `owner` ou `member` — o mesmo rótulo de `findRole`. */
+  /** `gerente` ou `member` — o mesmo rótulo de `findRole`. */
   role: string;
 }
 
@@ -64,7 +64,7 @@ export interface TenantMembershipRepositoryPort {
    * **Grava** o perfil efetivo do usuário NA membership daquela empresa.
    *
    * É a escrita que faltava desde a Fase 2: até aqui os únicos escritores eram
-   * `provisionarEmpresaPropria` e `consumirEEntrar`, que gravam o dono/admin na
+   * `provisionarEmpresaPropria` e `consumirEEntrar`, que gravam o `gerente` na
    * própria transação ou `null`. Sem este método a conta criada pelo convite
    * entrava na empresa com `profile_id` NULL — resolvido pela leitura como
    * ZERO permissões, e a conta não podia fazer nada.
@@ -101,6 +101,20 @@ export interface TenantMembershipRepositoryPort {
    * vem do token de sessão, e a linha devolvida é só a dele. O escopo de
    * leitura é o de SISTEMA pelo mesmo motivo de `buscarConvitePorToken` — a
    * lista atravessa empresas, e o que a restringe é o filtro, não a RLS.
+   *
+   * ⚠️ A ORDEM É PARTE DO CONTRATO, e não um detalhe do adaptador: o funil do
+   * login (no web) leva a pessoa para a PRIMEIRA empresa da lista. A ordem é
+   * — primeiro as empresas onde há perfil EFETIVO (global ou da própria
+   * empresa), e entre elas a mais recente; por último as empresas SEM perfil
+   * efetivo.
+   *
+   * MEDIDO 2026-10-21: ordenando só pela data, quem tinha sido convidada
+   * numa empresa ANTES de criar a empresa própria era levada para a empresa da
+   * UNTIGUAL, onde não pode fazer nada, em vez da empresa de que é DONA. O
+   * sintoma é um 403 na tela principal, sem causa nomeada. Um segundo
+   * adaptador desta porta, ou um refactor do repositório que caia na ordem
+   * crua do banco (`createdAt desc`), reproduz esse bug sem nenhuma mudança
+   * de assinatura — por isso a regra mora AQUI, e não só no adaptador.
    */
   listarEmpresasDoUsuario(userId: string): Promise<EmpresaDoUsuario[]>;
 }

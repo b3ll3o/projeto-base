@@ -86,7 +86,7 @@ export class ConviteJaEmitidoException extends Error {
 }
 
 /**
- * Quem tentou administrar a empresa sem ser `owner` dela.
+ * Quem tentou administrar a empresa sem ser `gerente` dela.
  *
  * Separate de `ConviteInvalidoException` de propósito: aqui o token era
  * VÁLIDO e quem o tem é legítimo — o que falhou foi a autorização de quem
@@ -95,7 +95,12 @@ export class ConviteJaEmitidoException extends Error {
  */
 export class NaoAdministraEmpresaException extends Error {
   constructor(public readonly tenantId: string) {
-    super(`Só o owner da empresa pode convidar alguém: ${tenantId}`);
+    // ⚠️ O `title` do 403 (`domain-exception-to-http.ts`) diz "gerente", e esta
+    // mensagem vai para o `detail` do MESMO corpo RFC 7807 — os dois viajam
+    // juntos na resposta. Um nome velho num e o nome novo no outro produz um
+    // corpo que se contradiz: "Só o gerente…" no título e "Só o owner…" no
+    // detalhe. O rename de 2026-10-22 trocou o título e esqueceu esta linha.
+    super(`Só o gerente da empresa pode convidar alguém: ${tenantId}`);
     this.name = 'NaoAdministraEmpresaException';
     Object.setPrototypeOf(this, NaoAdministraEmpresaException.prototype);
   }

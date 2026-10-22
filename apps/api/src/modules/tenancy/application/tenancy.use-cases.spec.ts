@@ -199,7 +199,7 @@ describe('TenancyUseCases — entrada na empresa (D5)', () => {
     expect(primeiro.token).not.toBe(segundo.token);
   });
 
-  it('quem NÃO é owner da empresa não emite convite — e nada é gravado', async () => {
+  it('quem NÃO é gerente da empresa não emite convite — e nada é gravado', async () => {
     memberships.findRole.mockResolvedValue('member');
 
     await expect(

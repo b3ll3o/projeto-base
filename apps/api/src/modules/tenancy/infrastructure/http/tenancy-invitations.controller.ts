@@ -2,7 +2,7 @@
 //
 // pt-BR (Fase 5 — tenancy, 2026-10-16): as duas rotas de convite.
 //
-//   POST /tenants/:id/invitations  → o owner convida alguém
+//   POST /tenants/:id/invitations  → o gerente convida alguém
 //   POST /invitations/accept        → quem tem o token entra
 //
 // A entrada por CONTA NOVA não mora aqui: ela é o ramo `destino: 'convite'`
@@ -65,7 +65,7 @@ const FLAG_DESLIGADA_404 = 'Recurso indisponível (funcionalidade desligada)';
 // (`X-Tenant-Id`), que pode ser diferente do `:id` desta rota — um header
 // apontando para a Acme e um path para a Globex checariam "tenho
 // `admin.manage-users` na Acme?" para uma ação sobre a Globex. Eixos
-// trocados. A autorização certa aqui é "o `sub` é owner DESTE tenant", que é
+// trocados. A autorização certa aqui é "o `sub` é gerente DESTE tenant", que é
 // uma pergunta de um eixo só — e ela mora no use case (`findRole`), que é
 // onde o dado está.
 @UseGuards(JwtAuthGuard)

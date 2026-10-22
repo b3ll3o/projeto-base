@@ -19,7 +19,12 @@
 
 import { describe, expect, it } from 'vitest';
 import { listAllPermissions } from '../../../shared/auth/permissions-catalog.js';
-import { perfisDaEmpresa, type PerfilDaEmpresa } from './perfis-da-empresa.js';
+import {
+  PERMISSOES_DO_COORDENADOR,
+  PERMISSOES_DO_FUNCIONARIO,
+  perfisDaEmpresa,
+  type PerfilDaEmpresa,
+} from './perfis-da-empresa.js';
 
 /**
  * O perfil pelo SLUG, e não pela posição.
@@ -103,5 +108,27 @@ describe('perfisDaEmpresa — o catálogo de perfis de toda empresa', () => {
     permissoes.push('admin.manage-users');
 
     expect(perfil('coordenador').permissoes).not.toContain('admin.manage-users');
+  });
+
+  it('a ORIGEM das permissões é congelada — a constante exportada não é mutável', () => {
+    // O teste acima mede a CÓPIA devolvida. Este mede a FONTE, que é onde o
+    // defeito estava: as duas listas são EXPORTADAS, e a cópia de
+    // `perfisDaEmpresa()` é feita A PARTIR delas — então uma constante
+    // mutável contamina o catálogo de toda empresa criada dali em diante.
+    //
+    // MEDIDO 2026-10-22 (antes do congelamento): sem `Object.freeze`,
+    // `PERMISSOES_DO_COORDENADOR.push('admin.manage-profiles')` deixava o
+    // `coordenador` com a permissão de editar perfil — a escalada que o
+    // catálogo existe para impedir — e o `readonly` do TIPO não via nada
+    // disso, porque protege em tempo de compilação.
+    expect(Object.isFrozen(PERMISSOES_DO_COORDENADOR)).toBe(true);
+    expect(Object.isFrozen(PERMISSOES_DO_FUNCIONARIO)).toBe(true);
+
+    // E o EFEITO, que é o que importa: a tentativa de alterar a origem
+    // LANÇA (o módulo ESM é strict mode), e o catálogo segue intacto.
+    expect(() => (PERMISSOES_DO_COORDENADOR as string[]).push('admin.manage-profiles')).toThrow(
+      TypeError,
+    );
+    expect(perfil('coordenador').permissoes).not.toContain('admin.manage-profiles');
   });
 });
