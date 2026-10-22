@@ -246,7 +246,31 @@ function rodar(deps: Deps): Resultado {
     relatorio,
   };
 
-  if (divergentes === 0) return { ...base, detalhe: 'corpo em dia: nenhuma claim divergente' };
+  if (divergentes === 0) {
+    // ⚠️ "corpo em dia" afirma que NADA diverge — e não que algo foi
+    // conferido. Quando todas as claims do corpo são NÃO MENSURÁVEIS (as
+    // contagens de suíte, que nenhum `git` mede), o hook não conferiu nada:
+    // ele leu o corpo e não achou o que comparar. Dizer "em dia" sem isso é
+    // a mesma mentira que o gate do CI já nomeia ("NÃO é o mesmo que
+    // 'verificado e verde'").
+    //
+    // MEDIDO 2026-10-22: o corpo do PR #116 tem 18 claims (as contagens do
+    // sumário do Vitest) e ZERO mensuráveis. Antes desta frase, o hook
+    // imprimia "corpo em dia" — que se lê como "verificado".
+    const mensuraveis = relatorio.claims.filter((c) => c.medido !== null).length;
+    if (relatorio.claims.length > 0 && mensuraveis === 0) {
+      const classes = [...new Set(relatorio.claims.map((c) => c.classe))].join(', ');
+      return {
+        ...base,
+        detalhe:
+          `corpo em dia: nenhuma claim divergente — e nenhuma claim COMPARÁVEL: ` +
+          `as ${relatorio.claims.length} do corpo (${classes}) só se conferem rodando ` +
+          `a suíte, não pelo git. "Em dia" aqui quer dizer "não há o que comparar", ` +
+          `e não "conferido".`,
+      };
+    }
+    return { ...base, detalhe: 'corpo em dia: nenhuma claim divergente' };
+  }
 
   if (!saida.mudou) {
     // Duas causas muito diferentes caem aqui, e elas não podem virar o mesmo

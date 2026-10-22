@@ -264,6 +264,48 @@ const PADROES: Array<{
     palavra: 2,
     medir: () => null,
   },
+  // ── O sumário do Vitest, em INGLÊS ───────────────────────────────────────
+  //
+  // O sumário que o Vitest imprime é em inglês: `Test Files  73 passed (73)` e
+  // `Tests  959 passed (959)`. O scanner reconhecia `N testes` (pt-BR) e
+  // `N arquivos`, e as DUAS escritas em inglês passavam batendo por fora —
+  // invisíveis para o relatório e para o gate.
+  //
+  // MEDIDO 2026-10-22 no PR #116: o corpo afirmava `Tests  944 passed (944)`
+  // com a suíte em 959, e ninguém foi avisado — o `pr-refresh-gate` passou
+  // verde porque não tinha claim nenhuma para comparar, e o hook não tinha o
+  // que reescrever. É a regra do repo: "quem não pode ser comparado é
+  // RECLASSIFICADO, nunca apagado" — e o que era apagado aqui era a
+  // CONTAGEM, não a frase.
+  //
+  // A classe é a mesma das pt-BR, e a MEDIDA continua `null`: a suíte não é a
+  // branch, e nenhum `git` mede quantos testes passaram. O que muda é que a
+  // claim passa a EXISTIR no relatório — e o gate passa a dizer que ela não é
+  // mensurável offline, em vez de calar.
+  //
+  // ⚠️ A forma da MUTAÇÃO (`Tests  1 failed | 16 passed (17)`) é um padrão
+  // SEPARADO, e não uma variação: o padrão de baixo não casaria nela, porque
+  // depois do primeiro número vem `failed`, e não `passed`. Sem o padrão
+  // separado, a contagem de uma mutação — que é a claim mais importante do
+  // corpo — continuaria invisível.
+  {
+    classe: 'arquivos-suite',
+    re: new RegExp(String.raw`Test Files\s+(${NUMERO})\s+passed`, 'gdi'),
+    grupo: 1,
+    medir: () => null,
+  },
+  {
+    classe: 'testes',
+    re: new RegExp(String.raw`Tests\s+(${NUMERO})\s+passed`, 'gdi'),
+    grupo: 1,
+    medir: () => null,
+  },
+  {
+    classe: 'testes',
+    re: new RegExp(String.raw`Tests\s+${NUMERO}\s+failed\s*\|\s*(${NUMERO})\s+passed`, 'gdi'),
+    grupo: 1,
+    medir: () => null,
+  },
   // `+N/−M` carrega DOIS grupos. Ler sempre o grupo 1 faria `remocoes` reportar
   // as inserções — e as duas claims divergentes só apareceriam em paralelo,
   // quando o `+` e o `−` por acaso fossem iguais. E como as duas classes
