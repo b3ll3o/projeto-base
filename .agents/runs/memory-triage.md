@@ -231,6 +231,7 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `vi-mock-factory-cache-frozen-counter` | `pendente` | — | — |
 | `vitest-workspace-thresholds-and-dist-remap` | `citada` | `.agents/specs/conventions/cobertura-testes.md` | `config raiz` |
 | `zero-survived-is-not-zero-found` | `pendente` | — | — |
+| `suite-de-integracao-nao-ve-defeito-de-banco` | `pendente` | — | — |
 
 ## O que a tabela diz
 
