@@ -295,6 +295,20 @@ const PADROES: Array<{
     medir: () => null,
   },
   {
+    // ⚠️ A forma da MUTAÇÃO (`Test Files  1 failed | 72 passed (73)`) é um
+    // padrão SEPARADO, e não uma variação — o mesmo motivo do `Tests` logo
+    // abaixo: depois do primeiro número vem `failed`, e não `passed`.
+    //
+    // MEDIDO 2026-10-22: sem esta linha, a contagem de ARQUIVOS da mutação
+    // sumia do relatório, e o gate passava a reportar "N claim(s) NÃO
+    // mensuráveis" onde são N+1. A CONTAGEM é o observável do
+    // `guard-classes.md` §4 — e ela mentia para menos.
+    classe: 'arquivos-suite',
+    re: new RegExp(String.raw`Test Files\s+${NUMERO}\s+failed\s*\|\s*(${NUMERO})\s+passed`, 'gdi'),
+    grupo: 1,
+    medir: () => null,
+  },
+  {
     classe: 'testes',
     re: new RegExp(String.raw`Tests\s+(${NUMERO})\s+passed`, 'gdi'),
     grupo: 1,

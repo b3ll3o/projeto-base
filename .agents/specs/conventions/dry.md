@@ -102,30 +102,47 @@ TERMO.
 ## 6. A MEDIÇÃO (a revisão)
 
 ```bash
-npx tsx tooling/scripts/analisa-repeticao.ts --min=4
+npx tsx tooling/scripts/analisa-repeticao.ts --min=3 --producao
 ```
 
 A ferramenta conta, para cada literal, **quantos arquivos distintos** o
 carregam. Ela **conta**; ela não sabe o que é termo de domínio — a
 separação entre "domínio" e "ruído" é de quem lê.
 
-⚠️ **O que a medição mostra hoje** (2026-10-22, `--min=3 --producao`): 129
-literais repetidos em 3+ arquivos de produção, e **6** deles são de domínio —
+⚠️ **O que a medição mostra hoje** (2026-10-22, `--min=3 --producao`): **134**
+literais repetidos em 3+ arquivos de produção, e **8** deles são de domínio.
 
-| termo | arquivos | ocorrências | dono hoje |
+A coluna "arquivos" é a do comando acima. A coluna "fora do dono" é a
+**dívida** que o gate cobra — e ela sai da função do próprio gate
+(`arquivosQueHardcodam`, em `check-repeticao.ts`), que mede as mesmas raízes
+de produção e **exclui o dono** (é o dono quem DEFINE o valor):
+
+| termo | arquivos (produção) | fora do dono | dono hoje |
 |---|---|---|---|
-| `users.read` e irmãs | 29 | 155 | **existe** (`permissions-catalog.ts`), mas exporta o array |
-| `tenancy.invites` | 15 | 79 | **existe** (`feature-flag-catalog.ts`), mas exporta o array |
-| `gerente` / `coordenador` / `funcionario` | 20 | 60 | **existe** (`perfis-da-empresa.ts`) |
-| `member` (o papel do convidado) | 17 | 59 | **NÃO EXISTE** |
-| `VALIDATION_ERROR` (o código do problema) | 19 | 47 | **NÃO EXISTE** |
-| `convite` (o `destino.tipo`) | 23 | 44 | **NÃO EXISTE** (o TIPO está no shared-types; o literal, espalhado) |
+| `convite` (o `destino.tipo`) | 9 | 8 | o **TIPO** está no shared-types (`user.ts`); o LITERAL, espalhado |
+| `gerente` | 3 | 2 | **existe** (`perfis-da-empresa.ts`), mas exporta o array |
+| `users.read` e irmãs | 3 | 2 | **existe** (`permissions-catalog.ts`), mas exporta o array |
+| `tenancy.invites` | 3 | 2 | **existe** (`feature-flag-catalog.ts`), mas exporta o array |
+| `member` (o papel do convidado) | 2 | 2 | o arquivo existe (`shared-types/src/tenant.ts`), mas não exporta a constante |
+| `VALIDATION_ERROR` (o código do problema) | 2 | 2 | o arquivo existe (`domain-exception-to-http.ts`), mas não exporta a constante |
+| `coordenador` | 1 | **0** | **dívida paga** — só o dono carrega o literal |
+| `funcionario` | 1 | **0** | **dívida paga** — só o dono carrega o literal |
+
+⚠️ **O número desta tabela é um dado que ENVELHECE** — e a regra do repo é
+que número sem derivação é classe 7 (`guard-classes.md` §2). Por isso o
+comando está ao lado do número, e por isso a tabela mede **o que o gate
+mede**: os mesmos arquivos de produção, a mesma contagem por ARQUIVO, e a
+mesma exclusão do dono. A tabela anterior falava de "3+ arquivos de
+produção" e trazia números de um corpus que INCLUÍA specs — a legenda e os
+números mediam objetos diferentes.
 
 ⚠️ **A leitura que muda o plano: o problema NÃO é "faltam enums".** Três dos
-seis **já têm dono** — e o que falta é o **import**, não o enum. Por isso a
+oito **já têm dono** — e o que falta é o **import**, não o enum. Por isso a
 fase que mais destrava é a de **exportar a constante nomeada ao lado do
 array** (uma linha por termo), e a migração dos literais é mecânica depois
-disso. O plano é
+disso. E dois dos oito (`coordenador` e `funcionario`) **já não têm dívida**:
+só o dono carrega o literal, e por isso eles estão em `estado: 'ok'` — a
+partir de agora, voltar a hardcodar é ERRO. O plano é
 [`docs/superpowers/plans/2026-10-22-termos-de-dominio.md`](../../../docs/superpowers/plans/2026-10-22-termos-de-dominio.md).
 
 ## 7. O QUE ESTA REGRA **NÃO** COBRA

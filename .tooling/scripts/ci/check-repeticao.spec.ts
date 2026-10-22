@@ -136,6 +136,106 @@ describe('checkRepeticao — o dente', () => {
     expect(r.errors[0]).toContain('VAZIA');
   });
 
+  it('um dono que NÃO EXISTE é erro — a dívida precisa apontar para lugar nenhum', () => {
+    // MEDIDO 2026-10-22: o termo `VALIDATION_ERROR` declarava o dono
+    // `apps/api/src/shared/infrastructure/http/codigos-de-problema.ts`, que não
+    // existe. A dívida é declarada, o gate a publicava como ressalva — e a
+    // dívida apontava para um arquivo que não está lá. Uma dívida sem lugar
+    // não é pública: ninguém sabe onde ela mora.
+    const raiz = repoFalso(
+      [
+        {
+          valor: 'VALIDATION_ERROR',
+          dono: 'apps/api/src/shared/infrastructure/http/codigos-de-problema.ts',
+          constante: 'CODIGO_VALIDACAO',
+          estado: 'declarado',
+          motivo: 'fase T2 do plano',
+        },
+      ],
+      { 'apps/api/src/usuario.ts': "const codigo = 'VALIDATION_ERROR';\n" },
+    );
+
+    const r = checkRepeticao({ repoRoot: raiz });
+
+    expect(r.ok).toBe(false);
+    expect(r.errors[0]).toContain('NÃO EXISTE');
+    expect(r.errors[0]).toContain('codigos-de-problema.ts');
+  });
+
+  it('um termo em DÍVIDA sem MOTIVO é erro — a dívida é pública COM a razão', () => {
+    const raiz = repoFalso(
+      [
+        {
+          valor: 'gerente',
+          dono: 'apps/api/src/dono.ts',
+          constante: 'SLUG_GERENTE',
+          estado: 'declarado',
+        },
+      ],
+      {
+        'apps/api/src/dono.ts': "export const SLUG_GERENTE = 'gerente';\n",
+        'apps/api/src/usuario.ts': "const papel = 'gerente';\n",
+      },
+    );
+
+    const r = checkRepeticao({ repoRoot: raiz });
+
+    expect(r.ok).toBe(false);
+    expect(r.errors[0]).toContain('motivo');
+  });
+
+  it('a ressalva carrega o MOTIVO de cada dívida — a dívida é pública COM ele', () => {
+    const raiz = repoFalso(
+      [
+        {
+          valor: 'gerente',
+          dono: 'apps/api/src/dono.ts',
+          constante: 'SLUG_GERENTE',
+          estado: 'declarado',
+          motivo: 'fase T3 do plano',
+        },
+      ],
+      {
+        'apps/api/src/dono.ts': "export const SLUG_GERENTE = 'gerente';\n",
+        'apps/api/src/usuario.ts': "const papel = 'gerente';\n",
+      },
+    );
+
+    const r = checkRepeticao({ repoRoot: raiz });
+
+    expect(r.ok).toBe(true);
+    expect(r.advisories?.[0]).toContain('dívida DRY declarada');
+    // O MOTIVO dentro da ressalva: `dry.md` §5 promete que a dívida sai "como
+    // ressalva COM o motivo", e a frase antiga prometia um motivo que não
+    // aparecia em lugar nenhum.
+    expect(r.advisories?.[0]).toContain('fase T3 do plano');
+  });
+
+  it('um termo hardcoded em TEMPLATE LITERAL é achado — o backtick é o terceiro formato', () => {
+    // MEDIDO 2026-10-22: um literal em backtick era invisível para o gate,
+    // que é o instrumento que COBRA. Um termo que o gate não vê é um termo
+    // que ninguém paga a dívida.
+    const raiz = repoFalso(
+      [
+        {
+          valor: 'gerente',
+          dono: 'apps/api/src/dono.ts',
+          constante: 'SLUG_GERENTE',
+          estado: 'ok',
+        },
+      ],
+      {
+        'apps/api/src/dono.ts': "export const SLUG_GERENTE = 'gerente';\n",
+        'apps/api/src/usuario.ts': 'const papel = `gerente`;\n',
+      },
+    );
+
+    const r = checkRepeticao({ repoRoot: raiz });
+
+    expect(r.ok).toBe(false);
+    expect(r.errors[0]).toContain('apps/api/src/usuario.ts');
+  });
+
   it('o repo REAL está verde, com a dívida declarada em ressalva', () => {
     const r = checkRepeticao({ repoRoot: REPO_ROOT });
 

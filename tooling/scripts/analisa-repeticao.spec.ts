@@ -15,6 +15,7 @@ import { join, resolve } from 'node:path';
 import {
   contaPorArquivo,
   extraiLiterais,
+  normalizaLinha,
   raizDoRepo,
   varreArquivos,
   varreLiterais,
@@ -40,6 +41,29 @@ describe('analisa-repeticao — o que é um literal', () => {
   it('lê o que está em comentário — o termo citado também é um termo usado no arquivo', () => {
     const achados = extraiLiterais(`// o perfil 'dono' foi renomeado\nconst a = 'gerente';`);
     expect(achados).toContain('gerente');
+  });
+
+  it('lê o BACKTICK — o terceiro formato, e ele faltava', () => {
+    // MEDIDO 2026-10-22: um termo hardcoded em template literal era
+    // INVISÍVEL para os dois instrumentos. Um literal que o instrumento não vê
+    // é um termo que nunca entra na lista de exceções, e um termo que nunca
+    // entra na lista nunca é medido.
+    const achados = extraiLiterais('const p = `gerente`;');
+    expect(achados).toContain('gerente');
+  });
+
+  it('normalizaLinha NÃO come o `//` de uma URL dentro de uma string', () => {
+    // MEDIDO 2026-10-22: o corte com regex cortava a linha no `//` do
+    // protocolo, e duas linhas que só diferem no HOST viravam a MESMA —
+    // que é exatamente o que o gate de lógica acusa como "cópia".
+    expect(normalizaLinha("const url = 'https://a.example/x';")).not.toBe(
+      normalizaLinha("const url = 'https://b.example/y';"),
+    );
+  });
+
+  it('normalizaLinha CONTINUA tirando o comentário de verdade', () => {
+    expect(normalizaLinha('const x = 1; // comentário')).toBe('const x = 1;');
+    expect(normalizaLinha('// só comentário')).toBe('');
   });
 });
 

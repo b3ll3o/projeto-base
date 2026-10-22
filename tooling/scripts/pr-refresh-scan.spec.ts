@@ -170,6 +170,17 @@ describe('pr-refresh-scan: extração de claims', () => {
     expect(c.find((x) => x.classe === 'testes')?.valor).toBe(16);
   });
 
+  it('lê a forma da MUTAÇÃO dos ARQUIVOS — "1 failed | 72 passed (73)"', () => {
+    // MEDIDO 2026-10-22: o padrão existia para `Tests` e NÃO para `Test
+    // Files` — e a contagem de arquivos da mutação sumia do relatório. O
+    // gate passava a reportar "N claim(s) NÃO mensuráveis" onde eram N+1, e
+    // a CONTAGEM é o observável do `guard-classes.md` §4.
+    //
+    // O número que conta é o de PASSED (72), pelo mesmo motivo do `Tests`.
+    const c = extrairClaims('Test Files  1 failed | 72 passed (73)');
+    expect(c.find((x) => x.classe === 'arquivos-suite')?.valor).toBe(72);
+  });
+
   it('as contagens de suíte são RECLASSIFICADAS, e nunca medidas — a suíte não é a branch', () => {
     // `medir: () => null` é o que as torna INERTES para o `reescrever` e
     // para o `verificarMarcador`: elas existem no relatório e no gate, e o

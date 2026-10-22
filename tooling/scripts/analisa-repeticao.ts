@@ -134,10 +134,16 @@ export function removeComentarios(texto: string): string {
  */
 export function extraiLiterais(texto: string): string[] {
   const achados: string[] = [];
-  const re = /'([^'\\\n]{2,60})'|"([^"\\\n]{2,60})"/g;
+  // ⚠️ O BACKTICK é o terceiro formato, e ele faltava. MEDIDO 2026-10-22: um
+  // termo de domínio hardcoded em template literal (`const p = \`gerente\``)
+  // era INVISÍVEL para os dois instrumentos — o analyzer não o contava e o
+  // gate (`arquivosQueHardcodam`) não o achava. Um literal que o instrumento
+  // não vê é um termo que nunca entra na lista de exceções, e um termo que
+  // nunca entra na lista nunca é medido.
+  const re = /'([^'\\\n]{2,60})'|"([^"\\\n]{2,60})"|`([^`\\\n]{2,60})`/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(texto)) !== null) {
-    const valor = m[1] ?? m[2];
+    const valor = m[1] ?? m[2] ?? m[3];
     if (valor !== undefined && valor.trim() !== '') achados.push(valor);
   }
   return achados;
@@ -189,7 +195,15 @@ export interface BlocoDuplicado {
  * o olho ignora e a máquina não devia.
  */
 export function normalizaLinha(linha: string): string {
-  const semComentario = linha.replace(/\/\/.*$/, '').trim();
+  // ⚠️ `removeComentarios` e NÃO um corte com regex: o corte ingênuo
+  // (`/\/\/.*$/`) come o `//` de uma URL DENTRO de uma string, e duas linhas
+  // que só diferem no host viravam a MESMA linha — que é exatamente o que o
+  // gate de lógica acusa como "cópia". MEDIDO 2026-10-22:
+  // `normalizaLinha("const url = 'https://a.example/x';")` e
+  // `normalizaLinha("const url = 'https://b.example/y';")` davam as duas
+  // `"const url = 'https:"`. A máquina de estados (a mesma de
+  // `removeComentarios`) separa "comentário" de "string", e é o que fecha.
+  const semComentario = removeComentarios(linha).trim();
   return semComentario.replace(/\s+/g, ' ');
 }
 

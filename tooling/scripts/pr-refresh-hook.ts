@@ -258,7 +258,22 @@ function rodar(deps: Deps): Resultado {
     // sumário do Vitest) e ZERO mensuráveis. Antes desta frase, o hook
     // imprimia "corpo em dia" — que se lê como "verificado".
     const mensuraveis = relatorio.claims.filter((c) => c.medido !== null).length;
-    if (relatorio.claims.length > 0 && mensuraveis === 0) {
+
+    // O caso ZERO: o corpo não tem NENHUMA claim reconhecida. O gate irmão
+    // (`pr-refresh-gate.ts`) recusa "em dia" para o MESMO corpo — e dois
+    // consumidores do MESMO scanner não podem ter duas honestidades.
+    if (relatorio.claims.length === 0) {
+      return {
+        ...base,
+        detalhe:
+          `corpo em dia: nenhuma claim divergente — e nenhuma claim RECONHECIDA: ` +
+          `o hook leu e varreu, e não achou contagem viva para conferir. NÃO é o ` +
+          `mesmo que "verificado e verde": um número fora dos formatos que o ` +
+          `scanner reconhece é invisível para ele.`,
+      };
+    }
+
+    if (mensuraveis === 0) {
       const classes = [...new Set(relatorio.claims.map((c) => c.classe))].join(', ');
       return {
         ...base,
@@ -269,6 +284,24 @@ function rodar(deps: Deps): Resultado {
           `e não "conferido".`,
       };
     }
+
+    // Há claims COMPARÁVEIS e claims que não são: a ressalva tem que dizer
+    // quantas não puderam ser conferidas. Sem ela, "em dia" é lido como
+    // "conferido" para as que não foram.
+    const naoMensuraveis = relatorio.claims.length - mensuraveis;
+    if (naoMensuraveis > 0) {
+      const classes = [
+        ...new Set(relatorio.claims.filter((c) => c.medido === null).map((c) => c.classe)),
+      ].join(', ');
+      return {
+        ...base,
+        detalhe:
+          `corpo em dia: nenhuma claim divergente — e ${naoMensuraveis} de ` +
+          `${relatorio.claims.length} claim(s) (${classes}) não são comparáveis offline: ` +
+          `só se conferem rodando a suíte, não pelo git.`,
+      };
+    }
+
     return { ...base, detalhe: 'corpo em dia: nenhuma claim divergente' };
   }
 
