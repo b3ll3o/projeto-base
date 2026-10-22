@@ -228,6 +228,15 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
       (e: unknown) => e,
     );
     expect(erro).toBeInstanceOf(Error);
+    // ⚠️ A TRADUÇÃO: o `P2002` de `users.email` vira
+    // `EmailAlreadyInUseException` — a exceção do PRÓPRIO módulo de `users`
+    // (que `tenancy` já importa), e o `GlobalExceptionFilter` já a traduz em
+    // 409 `EMAIL_IN_USE`. MEDIDO 2026-10-21: sem o ramo, o `P2002` cru subia
+    // como **500** — "banco fora do ar" num cadastro que era um CONFLITO, e o
+    // retry devolvia 500 para sempre.
+    expect(erro).toBeInstanceOf(EmailAlreadyInUseException);
+    // E o `catch` discrimina a constraint: o cliente NÃO recebe 409
+    // EMPRESA_JA_EXISTE, que apontaria o campo errado (o SLUG).
     expect(erro).not.toBeInstanceOf(EmpresaJaExisteException);
 
     // As três escritas ANTERIORES passaram. Sem rollback sobrariam um tenant
@@ -385,6 +394,43 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
 
     const usado = await repo.buscarConvitePorToken('secreto');
     expect(usado?.acceptedAt).toBeInstanceOf(Date);
+  });
+
+  it('convite VENCIDO não entra — a validade é revalidada DENTRO da transação', async () => {
+    await cleanDatabase(ctx.prisma);
+    const { tenant } = await empresaComDono('acme', 'dono@acme.dev');
+    await repo.emitirConvite({
+      tenantId: tenant.id,
+      email: 'ana@acme.dev',
+      role: 'member',
+      token: 'secreto',
+      // VENCIDO: a data está no passado.
+      expiresAt: new Date('2026-10-18T12:00:00.000Z'),
+    });
+    const convite = await repo.buscarConvitePorToken('secreto');
+    const ana = await ctx.prisma.user.create({
+      data: { id: randomUUID(), email: 'ana@acme.dev', name: 'Ana', passwordHash: 'x' },
+    });
+
+    // O caso de uso (`exigirConviteValido`) recusa o convite vencido ANTES de
+    // chegar aqui — mas essa checagem é de FORA da transação, numa conexão
+    // diferente. O repositório revalida por conta própria: sem isso, um convite
+    // que vence NA JANELA entre as duas é aceito por uma transação já
+    // VENCIDA, e o convite fica CONSUMIDO (irrecuperável para as outras
+    // tentativas).
+    const erro = await repo.entrarPorConvite({ userId: ana.id, invitationId: convite!.id }).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(erro).toBeInstanceOf(ConviteInvalidoException);
+    // O motivo é o de "vencido" — o cliente recebe 410, não 409.
+    expect((erro as ConviteInvalidoException).motivo).toBe('expirado');
+
+    // E nada sobrou: a pessoa NÃO entrou, e o convite continua valendo.
+    expect(
+      await ctx.prisma.tenantMembership.count({ where: { userId: ana.id, tenantId: tenant.id } }),
+    ).toBe(0);
+    expect((await repo.buscarConvitePorToken('secreto'))?.acceptedAt).toBeNull();
   });
 
   it('o aceite VESTE o papel do convite, e o convite NÃO promove a owner', async () => {
