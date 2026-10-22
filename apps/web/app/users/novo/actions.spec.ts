@@ -232,6 +232,36 @@ describe('cadastrarUsuario — entrada por convite', () => {
     expect(r.formError).toContain('Verifique a conexão');
     expect(r.formError).toContain('trace-123');
   });
+
+  it('404 com convite no formulário NÃO é "verifique a conexão" — a funcionalidade pode estar desligada', async () => {
+    // pt-BR (2026-10-22): a API responde 404 — com `code: 'NOT_FOUND'`,
+    // DERIVADO do status — quando a funcionalidade de convite está DESLIGADA.
+    // E a decisão da API é de não revelar se o convite existe, o que é
+    // CORRETO: quem só tem o token não pode distinguir "não existe" de
+    // "desligado". Mas a tela não pode dizer "verifique a conexão" — a
+    // internet está ótima e o cadastro está proibido por política.
+    //
+    // A tela IRMÃ (o aceite) mapeia o MESMO 404 pelo status. As duas portas
+    // do mesmo feature discordavam do mesmo status, e a pessoa que entrou
+    // pelo link de convite era a que pagava a diferença.
+    responder(problem(404, 'NOT_FOUND', 'Not Found'));
+
+    const r = await cadastrarUsuario(INICIAL, formDataComConvite(TOKEN));
+
+    expect(r.formError).toContain('não encontrado');
+    expect(r.formError).not.toContain('Verifique a conexão');
+  });
+
+  it('404 SEM convite no formulário continua sendo o genérico — o 404 não é de convite', async () => {
+    // A contra-regra: o 404 só é do convite quando o formulário VEIO de um
+    // convite. Sem ele, o 404 é o que for — e a tela não pode inventar um
+    // motivo de convite que ninguém pediu.
+    responder(problem(404, 'NOT_FOUND', 'Not Found'));
+
+    const r = await cadastrarUsuario(INICIAL, formData('Ana', 'ana@acme.dev'));
+
+    expect(r.formError).toContain('Verifique a conexão');
+  });
 });
 
 describe('cadastrarUsuario — validação no cliente da Action', () => {

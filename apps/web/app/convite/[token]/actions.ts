@@ -23,13 +23,14 @@ import { redirect } from 'next/navigation';
 import { ApiError } from '@/lib/api-client';
 import { ehTokenDeConvite, PARAM_CONVITE } from '@/lib/convite-schema';
 import { aceitarConvite } from '@/lib/empresas';
-import { exigirSessao, guardarTenant } from '@/lib/sessao';
+import { lerTokens, guardarTenant } from '@/lib/sessao';
 import {
   CONVITE_ERRO_GENERICO,
   CONVITE_INVALIDO,
   mensagemDeConvite,
 } from '@/lib/convite-mensagens';
 import { CONVITE_INICIAL, comTraceId, type ConviteState } from './state';
+import type { ConviteAceitoDto } from '@projeto/shared-types';
 
 /**
  * A mensagem que a pessoa lê quando o convite não vale.
@@ -60,14 +61,25 @@ export async function aceitarConviteDoAtor(
     return { ...CONVITE_INICIAL, formError: CONVITE_INVALIDO };
   }
 
-  // pt-BR: `exigirSessao()` LANÇA o redirect quando não há sessão, e é por
-  // isso que ele fica FORA do `try` — um `catch` em volta engoliria o sinal
-  // de navegação e a pessoa ficaria na tela do convite sem explicação.
-  const accessToken = await exigirSessao();
+  // pt-BR: a sessão é conferida ANTES do `try` — um `catch` em volta
+  // engoliria o sinal de navegação e a pessoa ficaria na tela do convite sem
+  // explicação.
+  //
+  // ⚠️ O token do convite vai JUNTO no redirect. Sem ele, a pessoa entra no
+  // login sem convite nenhum, o funil pergunta "qual empresa?" e a leva para
+  // `/empresa/nova` — porque o convite AINDA NÃO foi aceito e a conta não tem
+  // membership nenhuma. A pessoa criava a PRÓPRIA empresa, e o convite de
+  // quem a convidou nunca era usado. O ramo 401, lá embaixo, já faz isso (a
+  // sessão pode vencer ENTRE a página e o clique); este é o MESMO cuidado no
+  // caminho da sessão que nunca existiu.
+  const { accessToken } = await lerTokens();
+  if (!accessToken) {
+    redirect(`/login?${PARAM_CONVITE}=${token}`);
+  }
 
-  let tenantId: string;
+  let aceite: ConviteAceitoDto | null = null;
   try {
-    ({ tenantId } = await aceitarConvite(accessToken, token));
+    aceite = await aceitarConvite(accessToken, token);
   } catch (erro) {
     // pt-BR: 401 é SESSÃO VENCIDA — o convite é válido, o token da sessão é
     // que não. Sem isto a pessoa leria "verifique a conexão" e ficaria presa
@@ -87,10 +99,20 @@ export async function aceitarConviteDoAtor(
     };
   }
 
+  // ⚠️ Um 201 SEM corpo é o mesmo defeito que o login e a criação de empresa
+  // já trataram: o `ApiClient` devolve `undefined` quando a resposta vem
+  // vazia, e desestruturar `undefined` estoura um `TypeError` — que a tela
+  // leria como "verifique a conexão", com a membership JÁ criada do lado da
+  // API e o convite já queimado. A pessoa clicava de novo e lia "este convite
+  // já foi usado", sem nunca ter usado, e sem empresa na sessão.
+  if (!aceite?.tenantId) {
+    return { ...CONVITE_INICIAL, formError: CONVITE_ERRO_GENERICO };
+  }
+
   // pt-BR: o cookie `tenant_id` é o que faz a sessão agir NA empresa que
   // convidou. Sem ele, a membership existe e a listagem volta vazia sem
   // dizer por quê.
-  await guardarTenant(tenantId);
+  await guardarTenant(aceite.tenantId);
 
   redirect('/users');
 }

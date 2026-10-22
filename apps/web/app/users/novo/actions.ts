@@ -71,6 +71,7 @@ function valoresSemSegredo(
 function estadoDeErro(
   erro: ApiError,
   valores: CadastroUsuarioState['valores'],
+  veioDeConvite = false,
 ): CadastroUsuarioState {
   const { problem } = erro;
   const base = { ...CADASTRO_INICIAL, valores: valoresSemSegredo(valores) };
@@ -88,7 +89,15 @@ function estadoDeErro(
   // lia que a internet tinha falhado, quando o que tinha falhado era o
   // convite — e a mensagem não dizia o que fazer (pedir convite novo? entrar
   // com outra conta?). O `code` é o sinal confiável; o `status` é o motivo.
-  if (problem.code === 'CONVITE_INVALIDO') {
+  //
+  // ⚠️ E o 404 com convite no formulário entra pelo MESMO caminho: a API
+  // responde 404 — com `code: 'NOT_FOUND'`, derivado do status — quando a
+  // funcionalidade de convite está DESLIGADA, e a decisão é de não revelar
+  // se o convite existe. O `code` NÃO é `CONVITE_INVALIDO` nesse caso, e a
+  // pessoa lia "verifique a conexão" num cadastro proibido por política. A
+  // tela IRMÃ do mesmo feature (o aceite) mapeia o MESMO 404 pelo status: as
+  // duas portas discordavam do mesmo status.
+  if (problem.code === 'CONVITE_INVALIDO' || (veioDeConvite && erro.status === 404)) {
     const motivo = mensagemDeConvite(erro.status);
     return { ...base, formError: motivo ?? comTraceId(ERRO_GENERICO, problem.traceId) };
   }
@@ -191,7 +200,7 @@ export async function cadastrarUsuario(
   // em vez de um formulário mudo — sem ele, o redirecionamento continua
   // silencioso, só que em vez de duas telas sem contexto é uma.
   if (erro instanceof ApiError) {
-    return estadoDeErro(erro, valores);
+    return estadoDeErro(erro, valores, convite !== null);
   }
   if (erro) {
     // Falha de rede, resposta sem corpo JSON, exceção inesperada: nenhuma

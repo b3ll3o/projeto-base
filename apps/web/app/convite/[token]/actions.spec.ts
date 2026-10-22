@@ -15,8 +15,9 @@ import { redirect } from 'next/navigation';
 import { aceitarConviteDoAtor } from './actions';
 import { CONVITE_INICIAL } from './state';
 import { aceitarConvite } from '@/lib/empresas';
-import { guardarTenant } from '@/lib/sessao';
+import { guardarTenant, lerTokens } from '@/lib/sessao';
 import { ApiError } from '@/lib/api-client';
+import type { ConviteAceitoDto } from '@projeto/shared-types';
 
 vi.mock('next/navigation', () => ({
   redirect: vi.fn((url: string) => {
@@ -25,6 +26,10 @@ vi.mock('next/navigation', () => ({
 }));
 
 vi.mock('@/lib/sessao', () => ({
+  // ⚠️ `lerTokens`, e não `exigirSessao`: a Action confere a sessão LEENDO
+  // os tokens, porque precisa preservar o token do convite no redirect quando
+  // não há sessão — e o `exigirSessao()` redireciona para `/login` sem ele.
+  lerTokens: vi.fn(async () => ({ accessToken: 'token-ator', refreshToken: 'refresh-ator' })),
   exigirSessao: vi.fn(async () => 'token-ator'),
   guardarTenant: vi.fn(async () => undefined),
 }));
@@ -182,5 +187,43 @@ describe('aceitarConviteDoAtor — sessão vencida (401)', () => {
     );
 
     expect(vi.mocked(redirect)).toHaveBeenCalledWith(`/login?convite=${TOKEN}`);
+  });
+
+  it('sem sessão: leva ao login COM o token do convite — sem ele, a pessoa perde o convite', async () => {
+    // pt-BR (2026-10-22): a sessão pode sumir entre a página e o clique — o
+    // cookie é de SESSÃO (sem `maxAge`), e logout em outra aba ou browser
+    // reiniciado o apagam. O `exigirSessao()` redirecionava para `/login`
+    // SEM o token, e a pessoa entrava no login sem convite nenhum: o funil
+    // perguntava "qual empresa?" e a levava para `/empresa/nova` — porque o
+    // convite AINDA NÃO foi aceito e a conta não tem membership nenhuma. A
+    // pessoa criava a PRÓPRIA empresa, e o convite de quem a convidou nunca
+    // era usado.
+    vi.mocked(lerTokens).mockResolvedValueOnce({ accessToken: null, refreshToken: null });
+
+    await expect(aceitarConviteDoAtor(CONVITE_INICIAL, formData())).rejects.toThrow(
+      `NEXT_REDIRECT:/login?convite=${TOKEN}`,
+    );
+
+    expect(vi.mocked(redirect)).toHaveBeenCalledWith(`/login?convite=${TOKEN}`);
+    // E nada foi aceito: o convite continua de pé.
+    expect(aceitarConvite).not.toHaveBeenCalled();
+    expect(guardarTenant).not.toHaveBeenCalled();
+  });
+
+  it('resposta SEM corpo: vira mensagem genérica, e não deixa a sessão sem empresa', async () => {
+    // pt-BR (2026-10-22): um 201 sem corpo é o mesmo defeito que o login e a
+    // criação de empresa já trataram. Desestruturar a resposta vazia estoura
+    // um `TypeError` — que a tela leria como "verifique a conexão", com a
+    // membership JÁ criada do lado da API e o convite já queimado: a pessoa
+    // clicava de novo e lia "este convite já foi usado", sem nunca ter usado,
+    // e sem empresa na sessão.
+    vi.mocked(aceitarConvite).mockResolvedValueOnce(undefined as unknown as ConviteAceitoDto);
+
+    const estado = await aceitarConviteDoAtor(CONVITE_INICIAL, formData());
+
+    expect(estado.formError).toBeTruthy();
+    // ⚠️ O cookie NÃO é gravado: sem `tenantId` não há empresa para apontar,
+    // e gravar uma string vazia seria pior que não gravar.
+    expect(guardarTenant).not.toHaveBeenCalled();
   });
 });
