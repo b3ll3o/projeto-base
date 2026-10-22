@@ -9,7 +9,8 @@
     "review:lint": "tsx lint-review-routing.ts",
     "specialist:route": "tsx specialist-router.ts",
     "specialist:lint": "tsx lint-specialist-routing.ts",
-    "archive:lint": "tsx archive-lint.ts"
+    "archive:lint": "tsx archive-lint.ts",
+    "repeticao:analisa": "tsx analisa-repeticao.ts"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

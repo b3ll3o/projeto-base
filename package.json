@@ -34,7 +34,8 @@
     "format": "prettier --write \"**/*.{ts,tsx,json,yaml,yml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,json,yaml,yml}\"",
     "clean": "turbo run clean && rm -rf node_modules .turbo",
-    "prepare": "husky"
+    "prepare": "husky",
+    "repeticao:analisa": "cd tooling/scripts && pnpm repeticao:analisa"
   },
   "lint-staged": {
     "*.{ts,tsx}": [

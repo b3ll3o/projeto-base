@@ -37,6 +37,8 @@ import { checkFlowMermaidSync } from './check-flow-mermaid-sync';
 import { checkTestSetCovered } from './check-test-set-covered';
 import { checkRunbookDrift } from './check-runbook-drift';
 import { checkTenantScopeSource } from './check-tenant-scope-source';
+import { checkRepeticao } from './check-repeticao';
+import { checkBlocoDuplicado } from './check-bloco-duplicado';
 import { checkFeatureFlagContract } from './check-feature-flag-contract';
 import { checkFeatureFlagPortas } from './check-feature-flag-portas';
 import { existsSync } from 'node:fs';
@@ -356,6 +358,8 @@ export const RUNNERS: Record<string, () => CheckResult | Promise<CheckResult>> =
   'check-test-set-covered': () => checkTestSetCovered({ repoRoot: '.' }),
   'check-runbook-drift': () => checkRunbookDrift({ repoRoot: '.' }),
   'check-tenant-scope-source': () => checkTenantScopeSource({ srcRoot: 'apps/api/src' }),
+  'check-repeticao': () => checkRepeticao({ repoRoot: process.cwd() }),
+  'check-bloco-duplicado': () => checkBlocoDuplicado({ repoRoot: process.cwd() }),
   'check-feature-flag-contract': () => checkFeatureFlagContract(),
   'check-feature-flag-portas': () => checkFeatureFlagPortas(),
 };

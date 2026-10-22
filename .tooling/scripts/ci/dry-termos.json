@@ -1,0 +1,54 @@
+{
+  "termos": [
+    {
+      "valor": "gerente",
+      "dono": "apps/api/src/modules/tenancy/domain/perfis-da-empresa.ts",
+      "constante": "SLUG_GERENTE",
+      "estado": "declarado",
+      "motivo": "O dono (`perfisDaEmpresa()`) EXPORTA o array e não a constante nomeada — é a fase T3 do plano. MEDIDO 2026-10-22: o termo está hardcoded em 6 arquivo(s) de produção."
+    },
+    {
+      "valor": "coordenador",
+      "dono": "apps/api/src/modules/tenancy/domain/perfis-da-empresa.ts",
+      "constante": "SLUG_COORDENADOR",
+      "estado": "declarado",
+      "motivo": "O mesmo dono de `gerente` — fase T3 do plano."
+    },
+    {
+      "valor": "funcionario",
+      "dono": "apps/api/src/modules/tenancy/domain/perfis-da-empresa.ts",
+      "constante": "SLUG_FUNCIONARIO",
+      "estado": "declarado",
+      "motivo": "O mesmo dono de `gerente` — fase T3 do plano."
+    },
+    {
+      "valor": "member",
+      "dono": "packages/shared-types/src/tenant.ts",
+      "constante": "PAPEL_MEMBRO",
+      "estado": "declarado",
+      "motivo": "O papel do convidado NÃO tem dono — é a fase T2 do plano. MEDIDO 2026-10-22: hardcoded em 4 arquivo(s) de produção."
+    },
+    {
+      "valor": "VALIDATION_ERROR",
+      "dono": "apps/api/src/shared/infrastructure/http/codigos-de-problema.ts",
+      "constante": "CODIGO_VALIDACAO",
+      "estado": "declarado",
+      "motivo": "O código do problem-details NÃO tem dono — é a fase T2 do plano. MEDIDO 2026-10-22: hardcoded em 2 arquivo(s) de produção."
+    },
+    {
+      "valor": "users.read",
+      "dono": "apps/api/src/shared/auth/permissions-catalog.ts",
+      "constante": "USERS_READ",
+      "estado": "declarado",
+      "motivo": "O dono EXPORTA o array `PERMISSIONS` e não a constante — fase T3 do plano. MEDIDO 2026-10-22: hardcoded em 3 arquivo(s) de produção."
+    },
+    {
+      "valor": "tenancy.invites",
+      "dono": "apps/api/src/shared/auth/feature-flag-catalog.ts",
+      "constante": "FLAG_CONVITES",
+      "estado": "declarado",
+      "motivo": "O dono EXPORTA o array `FEATURE_FLAGS` e não a constante — fase T3 do plano. MEDIDO 2026-10-22: hardcoded em 4 arquivo(s) de produção."
+    }
+  ],
+  "blocos": []
+}

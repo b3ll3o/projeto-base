@@ -242,6 +242,7 @@ As convenções estão detalhadas em arquivos próprios sob [`.agents/specs/conv
 | Specialist Routing | [`specialist-routing.md`](./.agents/specs/conventions/specialist-routing.md) | Roteamento por especialidade; apêndice de exemplos em [`specialist-routing-examples.md`](./.agents/specs/conventions/specialist-routing-examples.md) |
 | Guard Classes | [`guard-classes.md`](./.agents/specs/conventions/guard-classes.md) | As 7 classes pelas quais um controle falha reportando verde; receita de detecção por classe **e a coluna "não pega"** |
 | Migração de Dados | [`migracao-de-dados.md`](./.agents/specs/conventions/migracao-de-dados.md) | Regra dos 3 passos (add nullable, backfill, drop) + quando **não** há backfill a fazer; promovida de `prisma-db-specialist.md:160` na v1.12.0 |
+| DRY | [`dry.md`](./.agents/specs/conventions/dry.md) | Don't Repeat Yourself — o conhecimento tem UMA representação. No código: um termo de domínio tem UM dono (constante exportada) e quem usa importa; a medição é `npx tsx tooling/scripts/analisa-repeticao.ts`, e 2 gates cobram (`check-repeticao`, `check-bloco-duplicado`); adicionada na v1.13.0 |
 
 > **Os dois índices são o mesmo índice.** Este §6 e o
 > [`README.md`](./.agents/specs/conventions/README.md) das convenções listam os
@@ -296,5 +297,5 @@ Single-context: `GLOSSARY.md` na raiz + `docs/adr/`. Ver `docs/agents/domain.md`
 
 **Mantido por:** projeto-base contributors
 **Licença:** MIT
-**Versão do documento:** 1.12.0
+**Versão do documento:** 1.13.0
 **Status:** Estável
