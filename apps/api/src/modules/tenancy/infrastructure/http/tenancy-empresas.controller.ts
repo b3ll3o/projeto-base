@@ -90,6 +90,11 @@ export class TenancyEmpresasController {
   @ApiResponse({ status: 400, description: 'Payload inválido' })
   @ApiResponse({ status: 401, description: 'Não autorizado' })
   @ApiResponse({ status: 409, description: 'Já existe uma empresa com este identificador' })
+  // pt-BR: o 404 é o `USER_NOT_FOUND` — a conta foi APAGADA (soft-delete)
+  // entre o token ser emitido e este pedido, e o `findById` do caso de uso
+  // filtra conta apagada. O documento não o anunciava: um cliente gerado do
+  // documento não tem ramo para ele.
+  @ApiResponse({ status: 404, description: 'Conta não encontrada' })
   async criar(
     @Body(new ZodValidationPipe(CriarEmpresaSchema)) body: z.infer<typeof CriarEmpresaSchema>,
     @Req() req: RequestComAtor,

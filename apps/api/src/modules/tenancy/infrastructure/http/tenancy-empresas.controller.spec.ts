@@ -195,14 +195,35 @@ describe('TenancyEmpresasController — o documento OpenAPI não mente', () => {
     await app.close();
   });
 
-  function operacao(method: string, path: string): { security?: unknown } {
-    const op = (doc.paths[path] as Record<string, { security?: unknown }> | undefined)?.[method];
+  function operacao(
+    method: string,
+    path: string,
+  ): { security?: unknown; responses?: Record<string, unknown> } {
+    const op = (
+      doc.paths[path] as
+        Record<string, { security?: unknown; responses?: Record<string, unknown> }> | undefined
+    )?.[method];
     expect(op, `operação ${method.toUpperCase()} ${path} ausente do documento`).toBeDefined();
-    return op as { security?: unknown };
+    return op as { security?: unknown; responses?: Record<string, unknown> };
   }
 
   it('as DUAS rotas exigem bearer no documento', () => {
     expect(operacao('post', '/tenants').security).toEqual([{ bearer: [] }]);
     expect(operacao('get', '/me/tenants').security).toEqual([{ bearer: [] }]);
+  });
+
+  // pt-BR: os status DECLARADOS são o contrato que o cliente gerado do
+  // documento consome. O `POST /tenants` DEVOLVE 404 (a conta foi apagada
+  // entre o token ser emitido e o pedido) e o documento não o anunciava — um
+  // cliente gerado não tem ramo para ele, e o erro sai como falha genérica.
+  //
+  // ⚠️ O que este teste mede é o que o DOCUMENTO DIZ, e não o que o decorator
+  // faz: um status declarado que a rota nunca devolve também é mentira (o
+  // inverso do defeito, com o mesmo custo para o cliente que lê o documento).
+  it('o POST /tenants declara os status que a API devolve', () => {
+    const declarados = Object.keys(operacao('post', '/tenants').responses ?? {});
+    for (const status of ['201', '400', '401', '404', '409']) {
+      expect(declarados, `o documento não declara o ${status}`).toContain(status);
+    }
   });
 });

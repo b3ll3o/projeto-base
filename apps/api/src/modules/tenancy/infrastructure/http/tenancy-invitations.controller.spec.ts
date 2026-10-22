@@ -21,9 +21,10 @@
 // O `emitirConvite` ser chamado é a prova de que a borda deixou passar: com o
 // defeito ele É chamado, com a validação NÃO é.
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
+import { DocumentBuilder, SwaggerModule, type OpenAPIObject } from '@nestjs/swagger';
 import { z } from 'zod';
 
 import { TenancyInvitationsController } from './tenancy-invitations.controller.js';
@@ -134,5 +135,63 @@ describe('TenancyInvitationsController — o `:id` do convite', () => {
     const schema = z.string().uuid();
     expect(schema.safeParse(TENANT_OK).success).toBe(true);
     expect(schema.safeParse('nao-e-uuid').success).toBe(false);
+  });
+});
+
+// pt-BR (2026-10-22): o DOCUMENTO OpenAPI da rota que emite convite.
+//
+// A rota DEVOLVE 409 `CONVITE_JA_EMITIDO` (o `@@unique([tenantId, email])` de
+// `invitations` traduzido) quando o dono convida o mesmo e-mail duas vezes na
+// mesma empresa — e o documento NÃO declarava esse status. Um cliente gerado
+// do documento não tinha ramo para ele: o dono lia "algo deu errado" num
+// conflito que ele precisa resolver ("cancele o convite pendente ou convide
+// outro e-mail"). O irmão `tenancy-empresas` declara os seus.
+describe('TenancyInvitationsController — o documento OpenAPI não mente', () => {
+  let app: NestFastifyApplication;
+  let doc: OpenAPIObject;
+
+  beforeEach(async () => {
+    const moduleRef: TestingModule = await Test.createTestingModule({
+      controllers: [TenancyInvitationsController],
+      providers: [
+        {
+          provide: TENANCY_USE_CASES,
+          useValue: {
+            emitirConvite: vi.fn(),
+            aceitarConvite: vi.fn(),
+          } as unknown as TenancyUseCases,
+        },
+      ],
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(FeatureFlagGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
+
+    app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
+    await app.init();
+    await app.getHttpAdapter().getInstance().ready();
+    doc = SwaggerModule.createDocument(
+      app,
+      new DocumentBuilder().setTitle('t').addBearerAuth().build(),
+    );
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it('o POST /tenants/:id/invitations declara os status que a API devolve', () => {
+    const op = (
+      doc.paths['/tenants/{id}/invitations'] as
+        Record<string, { responses?: Record<string, unknown> }> | undefined
+    )?.post;
+    expect(op, 'a operação de emitir convite ausente do documento').toBeDefined();
+
+    const declarados = Object.keys(op?.responses ?? {});
+    for (const status of ['201', '400', '401', '403', '404', '409']) {
+      expect(declarados, `o documento não declara o ${status}`).toContain(status);
+    }
   });
 });

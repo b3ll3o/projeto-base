@@ -99,6 +99,14 @@ export class TenancyInvitationsController {
   @ApiResponse({ status: 400, description: 'Payload inválido' })
   @ApiResponse({ status: 401, description: 'Não autorizado' })
   @ApiResponse({ status: 403, description: 'Quem convida não administra a empresa' })
+  // pt-BR: o 409 é o `CONVITE_JA_EMITIDO` — o `@@unique([tenantId, email])` de
+  // `invitations` traduzido em `ConviteJaEmitidoException`. A rota DEVOLVE esse
+  // status (convidar o mesmo e-mail duas vezes na mesma empresa) e o documento
+  // não o anunciava: um cliente gerado do documento não tem ramo para ele, e o
+  // dono lê "algo deu errado" num conflito que ele precisa resolver ("cancele o
+  // convite pendente ou convide outro e-mail"). O irmão `tenancy-empresas`
+  // declara os seus — a omissão aqui era uma contradição do contrato.
+  @ApiResponse({ status: 409, description: 'Já existe um convite pendente para este e-mail' })
   @ApiResponse({ status: 404, description: FLAG_DESLIGADA_404 })
   async convidar(
     // ⚠️ (PR #101) O `:id` É validado, e não só o body. Sem este pipe o valor
