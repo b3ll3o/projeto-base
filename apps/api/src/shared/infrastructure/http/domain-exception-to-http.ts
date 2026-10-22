@@ -332,7 +332,7 @@ export function mapExceptionToHttp(err: unknown): HttpErrorMapping {
     return {
       status: HttpStatus.FORBIDDEN,
       code: 'FORBIDDEN',
-      title: 'Só o dono da empresa pode convidar alguém',
+      title: 'Só o gerente da empresa pode convidar alguém',
     };
   }
   // pt-BR (Fase 5, review): os dois 409 abaixo traduzem `P2002` cru. Sem eles,

@@ -222,7 +222,7 @@ describe('E2E 11 — isolamento entre empresas', () => {
       payload: { email: 'alguem@acme.dev' },
     });
 
-    // `role: 'owner'` na ACME não diz nada sobre a GLOBEX. Um dono de N empresas
+    // `role: 'gerente'` na ACME não diz nada sobre a GLOBEX. Um gerente de N empresas
     // seria dono de todas as outras se a autorização fosse por usuário.
     expect(convite.statusCode).toBe(403);
     expect(await e2e.ctx.prisma.invitation.count()).toBe(0);
@@ -317,7 +317,7 @@ describe('E2E 11 — isolamento entre empresas', () => {
   // filtrava.
   //
   // A porta se abre sozinha, e é por isso que isto é P0 e não dívida antiga:
-  // `provisionarEmpresaPropria` dá ao dono da empresa o perfil `admin` com
+  // `provisionarEmpresaPropria` dá ao gerente da empresa o perfil `admin` com
   // TODAS as permissões e `isAdmin: true`, e o catálogo de permissões
   // documenta que `is_admin` é BYPASS TOTAL do `PermissionsGuard` (não é
   // apenas um atalho entre permissões). Então qualquer pessoa que abra a
@@ -414,7 +414,7 @@ describe('E2E 11 — isolamento entre empresas', () => {
     ).resolves.toBeNull();
   });
 
-  it('o dono da empresa CRIA perfil da PRÓPRIA empresa, e ele é o que a listagem devolve', async () => {
+  it('o gerente da empresa CRIA perfil da PRÓPRIA empresa, e ele é o que a listagem devolve', async () => {
     const acme = await abrirEmpresa('acme');
 
     // ⚠️ Este é o caminho que não existia (Achado 4): `Profile.criar` fixava
@@ -567,7 +567,7 @@ describe('E2E 11 — isolamento entre empresas', () => {
     expect(slugs).toEqual(['acme-dora', 'acme']);
   });
 
-  // ───────────── o dono da empresa NÃO é o administrador do SISTEMA ─────────────
+  // ───────────── o gerente da empresa NÃO é o administrador do SISTEMA ─────────────
   //
   // A distinção é load-bearing e os dois lados dela precisam ser medidos por
   // HTTP: `dono` tem `isAdmin: true`, e é por isso que ele passa do
@@ -578,7 +578,7 @@ describe('E2E 11 — isolamento entre empresas', () => {
   // Sem este caso, "dono = administrador" passava: o `isAdmin` do dono é
   // real, e um teste que só olhasse o perfil veria acesso total.
 
-  it('o dono da empresa é recusado nas rotas de SISTEMA, mesmo com o header da empresa', async () => {
+  it('o gerente da empresa é recusado nas rotas de SISTEMA, mesmo com o header da empresa', async () => {
     const acme = await abrirEmpresa('acme');
 
     const recusa = await e2e.injetar({
@@ -595,7 +595,7 @@ describe('E2E 11 — isolamento entre empresas', () => {
     expect((JSON.parse(recusa.body) as { code?: string }).code).toBe('FORBIDDEN');
   });
 
-  it('o dono da empresa também é recusado sem header de empresa', async () => {
+  it('o gerente da empresa também é recusado sem header de empresa', async () => {
     const acme = await abrirEmpresa('acme');
 
     const recusa = await e2e.injetar({

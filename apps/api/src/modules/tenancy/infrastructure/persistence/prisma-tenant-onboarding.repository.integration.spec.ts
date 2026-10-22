@@ -107,7 +107,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
       where: { userId: u.id },
       include: { profile: true },
     });
-    expect(vinculo?.role).toBe('owner');
+    expect(vinculo?.role).toBe('gerente');
     expect(vinculo?.tenantId).toBe(empresa!.id);
     expect(vinculo?.profile?.tenantId).toBe(empresa!.id);
     expect(vinculo?.profile?.isAdmin).toBe(true);
@@ -119,7 +119,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
     await repo.provisionarEmpresaPropria(u, { nome: 'ACME', slug: 'acme' });
 
     const perfil = await ctx.prisma.profile.findFirst({
-      where: { tenantId: { not: null }, slug: 'dono' },
+      where: { tenantId: { not: null }, slug: 'gerente' },
       include: { authorizations: true },
     });
 
@@ -143,14 +143,18 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
     // O conjunto é o que o DONO precisa para executar: quem cria a empresa
     // administra a empresa, quem éGestor administra pessoas, e quem é
     // funcionário só olha o diretório.
-    expect(perfis.map((p) => p.slug)).toEqual(['dono', 'funcionario', 'gestor']);
-    expect(perfis.map((p) => p.name)).toEqual(['Dono', 'Funcionário', 'Gestor']);
+    // ⚠️ A ordem é a da QUERY (`orderBy: { slug: 'asc' }`), e por isso é
+    // alfabética — com `gerente`/`coordenador`/`funcionario` ela é
+    // c < f < g. A expectativa antiga fixava a posição do primeiro nome, e o
+    // rename trocou a posição no alfabeto.
+    expect(perfis.map((p) => p.slug)).toEqual(['coordenador', 'funcionario', 'gerente']);
+    expect(perfis.map((p) => p.name)).toEqual(['Coordenador', 'Funcionário', 'Gerente']);
 
     // O `isAdmin` é do DONO só — o gestor administra PESSOAS, não o sistema
     // de permissões (com `admin.manage-authorizations` ele se daria
     // `admin.manage-profiles` e editaria o perfil do dono).
-    expect(perfis.find((p) => p.slug === 'dono')?.isAdmin).toBe(true);
-    expect(perfis.find((p) => p.slug === 'gestor')?.isAdmin).toBe(false);
+    expect(perfis.find((p) => p.slug === 'gerente')?.isAdmin).toBe(true);
+    expect(perfis.find((p) => p.slug === 'coordenador')?.isAdmin).toBe(false);
     expect(perfis.find((p) => p.slug === 'funcionario')?.isAdmin).toBe(false);
 
     // E as permissões são as do conjunto, não "todas" para os três.
@@ -158,7 +162,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
       (perfis.find((p) => p.slug === slug)?.authorizations ?? [])
         .map((a) => a.permissionKey)
         .sort();
-    expect(chavesDe('gestor')).toEqual(['audits.read', 'users.read', 'users.write']);
+    expect(chavesDe('coordenador')).toEqual(['audits.read', 'users.read', 'users.write']);
     expect(chavesDe('funcionario')).toEqual(['users.read']);
   });
 
@@ -439,7 +443,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
     await repo.emitirConvite({
       tenantId: tenant.id,
       email: 'ana@acme.dev',
-      role: 'owner',
+      role: 'gerente',
       token: 'secreto',
       expiresAt: new Date('2026-10-26T12:00:00.000Z'),
     });
@@ -456,7 +460,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
     const membership = await ctx.prisma.tenantMembership.findUniqueOrThrow({
       where: { userId_tenantId: { userId: ana.id, tenantId: tenant.id } },
     });
-    expect(membership.role).toBe('owner');
+    expect(membership.role).toBe('gerente');
     expect(membership.profileId).toBeNull();
   });
 
@@ -595,7 +599,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
     const { dono, tenant } = await empresaComDono('acme', 'dono@acme.dev');
     const outra = await ctx.prisma.tenant.create({ data: { name: 'Globex', slug: 'globex' } });
 
-    expect(await memberships.findRole(dono.id, tenant.id)).toBe('owner');
+    expect(await memberships.findRole(dono.id, tenant.id)).toBe('gerente');
     expect(await memberships.findRole(dono.id, outra.id)).toBeNull();
   });
 
@@ -619,7 +623,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
   // Nenhum e2e veria também — a API sobe como dono do container. O papel sem
   // BYPASSRLS só existe aqui.
   describe('com a sessão da aplicação (as policies valem)', () => {
-    it('provisionarEmpresaPropria conclui — o dono da empresa nova entra', async () => {
+    it('provisionarEmpresaPropria conclui — o gerente da empresa nova entra', async () => {
       await cleanDatabase(ctx.prisma);
       const app = new PrismaTenantOnboardingRepository(runtime, assinatura);
       const u = usuario('dono-runtime@acme.dev');
@@ -639,7 +643,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
         where: { userId: u.id },
         include: { profile: true },
       });
-      expect(vinculo?.role).toBe('owner');
+      expect(vinculo?.role).toBe('gerente');
       expect(vinculo?.profile?.isAdmin).toBe(true);
     });
 
@@ -708,18 +712,18 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
         where: { userId: u.id },
         include: { profile: true },
       });
-      expect(vinculo?.role).toBe('owner');
+      expect(vinculo?.role).toBe('gerente');
       expect(vinculo?.tenantId).toBe(empresa.id);
       // O DONO é DA empresa — mesmo contrato de `provisionarEmpresaPropria`.
       expect(vinculo?.profile?.tenantId).toBe(empresa.id);
-      expect(vinculo?.profile?.slug).toBe('dono');
+      expect(vinculo?.profile?.slug).toBe('gerente');
       expect(vinculo?.profile?.isAdmin).toBe(true);
 
       const perfis = await ctx.prisma.profile.findMany({ where: { tenantId: empresa.id } });
-      expect(perfis.map((p) => p.slug).sort()).toEqual(['dono', 'funcionario', 'gestor']);
+      expect(perfis.map((p) => p.slug).sort()).toEqual(['coordenador', 'funcionario', 'gerente']);
 
       const dono = await ctx.prisma.profile.findFirst({
-        where: { tenantId: empresa.id, slug: 'dono' },
+        where: { tenantId: empresa.id, slug: 'gerente' },
         include: { authorizations: true },
       });
       expect(dono?.authorizations).toHaveLength(listAllPermissions().length);
@@ -763,7 +767,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
         where: { userId: u.id },
         include: { profile: true },
       });
-      expect(vinculo?.role).toBe('owner');
+      expect(vinculo?.role).toBe('gerente');
       expect(vinculo?.tenantId).toBe(empresa.id);
       expect(vinculo?.profile?.isAdmin).toBe(true);
     });
@@ -782,7 +786,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
 
       // O nome vem da empresa como foi criada — `empresaComDono` usa o slug
       // como nome, então o campo é 'acme', não 'ACME'.
-      expect(empresas).toEqual([{ id: tenant.id, nome: 'acme', slug: 'acme', role: 'owner' }]);
+      expect(empresas).toEqual([{ id: tenant.id, nome: 'acme', slug: 'acme', role: 'gerente' }]);
       expect(await memberships.listarEmpresasDoUsuario(outro.id)).toEqual([]);
     });
 

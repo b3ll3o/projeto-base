@@ -110,7 +110,7 @@ export interface TenantOnboardingPort {
    *
    * O contrato é o MESMO do de `provisionarEmpresaPropria`: a empresa nasce com
    * o perfil `admin` **dela** e TODAS as permissões do catálogo, e o dono
-   * (`role = 'owner'`) veste esse perfil. A diferença é só de onde vem a conta.
+   * (`role = 'gerente'`) veste esse perfil. A diferença é só de onde vem a conta.
    */
   abrirEmpresaParaUsuario(userId: string, empresa: EmpresaParaAbrir): Promise<EmpresaAberta>;
 

@@ -138,13 +138,15 @@ describe('TenancyEmpresasController — as empresas do ator', () => {
 
   it('lista as empresas do ator', async () => {
     listarEmpresas.mockResolvedValue([
-      { id: TENANT_OK, nome: 'ACME', slug: 'acme', role: 'owner' },
+      { id: TENANT_OK, nome: 'ACME', slug: 'acme', role: 'gerente' },
     ]);
 
     const resposta = await app.inject({ method: 'GET', url: '/me/tenants' });
 
     expect(resposta.statusCode).toBe(200);
-    expect(resposta.json()).toEqual([{ id: TENANT_OK, nome: 'ACME', slug: 'acme', role: 'owner' }]);
+    expect(resposta.json()).toEqual([
+      { id: TENANT_OK, nome: 'ACME', slug: 'acme', role: 'gerente' },
+    ]);
     expect(listarEmpresas).toHaveBeenCalledWith(SUB);
   });
 

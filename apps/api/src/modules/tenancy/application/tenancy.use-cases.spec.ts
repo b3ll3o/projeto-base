@@ -127,7 +127,7 @@ describe('TenancyUseCases — entrada na empresa (D5)', () => {
       buscarConvitePorToken: vi.fn().mockResolvedValue(convite()),
     };
     memberships = {
-      findRole: vi.fn().mockResolvedValue('owner'),
+      findRole: vi.fn().mockResolvedValue('gerente'),
       listarEmpresasDoUsuario: vi.fn().mockResolvedValue([]),
     };
     users = { findById: vi.fn().mockResolvedValue(userFalso(VISITANTE, 'ana@acme.com')) };
@@ -374,7 +374,7 @@ describe('TenancyUseCases — entrada na empresa (D5)', () => {
   });
 
   it('listar empresas devolve o que o port devolve, sem filtrar nada', async () => {
-    const lista = [{ id: ACME, nome: 'ACME', slug: 'acme', role: 'owner' }];
+    const lista = [{ id: ACME, nome: 'ACME', slug: 'acme', role: 'gerente' }];
     memberships.listarEmpresasDoUsuario.mockResolvedValue(lista);
 
     expect(await useCases.listarEmpresas(DONO)).toEqual(lista);

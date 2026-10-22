@@ -222,7 +222,7 @@ describe('entrar — para onde a pessoa vai depois de entrar', () => {
   });
 
   it('a pergunta "é admin de SISTEMA?" é feita no bucket GLOBAL', async () => {
-    // pt-BR: com `X-Tenant-Id`, a API responde o perfil DA EMPRESA — e o dono
+    // pt-BR: com `X-Tenant-Id`, a API responde o perfil DA EMPRESA — e o gerente
     // também é `isAdmin`. Aí o administrador de sistema cairia na página de
     // criação de empresa, que é exatamente o oposto do que ele é.
     const fetchMock = responderPorUrl({
@@ -293,7 +293,7 @@ describe('entrar — para onde a pessoa vai depois de entrar', () => {
     //
     // E o destino é `/users`, NUNCA `/empresa/nova`: a consulta falhou, então
     // NÃO se sabe se a conta tem empresa — e levar quem TEM empresa para a
-    // tela de criação produz uma empresa DUPLICADA, com o mesmo dono e mais
+    // tela de criação produz uma empresa DUPLICADA, com o mesmo gerente e mais
     // um conjunto de perfis, sem nada na tela avisando que era duplicado.
     responderPorUrl({ '/me/tenants': new Error('ECONNREFUSED') });
 

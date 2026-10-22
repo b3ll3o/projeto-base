@@ -13,7 +13,7 @@
 // diz, por decisão de segurança da API — o `detail` não pode confirmar a
 // quem só tem o token que o convite existe). O status já distingue os
 // casos, e a distinção é o que a pessoa precisa para agir: um convite
-// VENCIDO pede um convite NOVO ao dono da empresa; um convite de OUTRO
+// VENCIDO pede um convite NOVO ao gerente da empresa; um convite de OUTRO
 // e-mail pede entrar com a conta certa. Uma mensagem única para os quatro
 // diria "não deu" e não diria o que fazer.
 //

@@ -51,7 +51,7 @@ export interface TenantMembershipRepositoryPort {
    *
    * ⚠️ Este é o portão GROSSO de administração da empresa, não o RBAC fino.
    * `role` responde "esta pessoa administra esta empresa?" (e o único valor
-   * que concede é `'owner'`); a autorização por permissão continua em
+   * que concede é `'gerente'`); a autorização por permissão continua em
    * `profiles.authorizations`, lida pelo `PermissionsGuard` como em qualquer
    * outra rota. Usar `role` aqui em vez do `isAdmin` do perfil efetivo é uma
    * escolha de tamanho: `findRole` é UMA query nesta tabela, enquanto

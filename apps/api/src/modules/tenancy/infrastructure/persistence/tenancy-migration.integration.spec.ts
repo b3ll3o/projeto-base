@@ -76,7 +76,7 @@ describe('Migration de tenancy (Fase 2)', () => {
       const t2 = await criarTenant('globex');
 
       await ctx.prisma.tenantMembership.create({
-        data: { userId: user.id, tenantId: t1, role: 'owner' },
+        data: { userId: user.id, tenantId: t1, role: 'gerente' },
       });
       await ctx.prisma.tenantMembership.create({
         data: { userId: user.id, tenantId: t2, role: 'member' },
@@ -95,7 +95,7 @@ describe('Migration de tenancy (Fase 2)', () => {
       const t = await criarTenant('acme');
 
       await ctx.prisma.tenantMembership.create({
-        data: { userId: user.id, tenantId: t, role: 'owner' },
+        data: { userId: user.id, tenantId: t, role: 'gerente' },
       });
       // A constraint é o que a Fase 4 vai consultar para responder "já sou membro?"
       // sem distinguir "não existe" de "já existe" por consulta.
@@ -284,7 +284,7 @@ describe('Perfil por empresa na membership (Fase 4 — D4)', () => {
     const perfil = await criarPerfil('gestor-acme', acme.id);
 
     await ctx.prisma.tenantMembership.create({
-      data: { userId: user.id, tenantId: acme.id, role: 'owner', profileId: perfil.id },
+      data: { userId: user.id, tenantId: acme.id, role: 'gerente', profileId: perfil.id },
     });
 
     await expect(repo.findProfileId(user.id, acme.id)).resolves.toBe(perfil.id);
@@ -296,7 +296,7 @@ describe('Perfil por empresa na membership (Fase 4 — D4)', () => {
     const acme = await ctx.prisma.tenant.create({ data: { name: 'Acme', slug: 'acme' } });
     const perfil = await criarPerfil('gestor-acme', acme.id);
     await ctx.prisma.tenantMembership.create({
-      data: { userId: user.id, tenantId: acme.id, role: 'owner', profileId: perfil.id },
+      data: { userId: user.id, tenantId: acme.id, role: 'gerente', profileId: perfil.id },
     });
 
     // ⚠️ `P2003`, e não `toThrow()` nu: qualquer erro satisfaz `toThrow()`.
@@ -328,7 +328,7 @@ describe('Perfil por empresa na membership (Fase 4 — D4)', () => {
     // ausência de membership e o isolamento ficariam indistinguíveis, e um
     // repositório que devolvesse sempre `null` passaria.
     await ctx.prisma.tenantMembership.create({
-      data: { userId: user.id, tenantId: globex.id, role: 'owner', profileId: daGlobex.id },
+      data: { userId: user.id, tenantId: globex.id, role: 'gerente', profileId: daGlobex.id },
     });
 
     await expect(repo.findProfileId(user.id, acme.id)).resolves.toBeNull();
@@ -345,7 +345,7 @@ describe('Perfil por empresa na membership (Fase 4 — D4)', () => {
     const global = await criarPerfil('admin', null);
 
     await ctx.prisma.tenantMembership.create({
-      data: { userId: user.id, tenantId: acme.id, role: 'owner', profileId: global.id },
+      data: { userId: user.id, tenantId: acme.id, role: 'gerente', profileId: global.id },
     });
 
     await expect(repo.findProfileId(user.id, acme.id)).resolves.toBe(global.id);
@@ -379,7 +379,7 @@ describe('Perfil por empresa na membership (Fase 4 — D4)', () => {
     // Controle positivo: o MESMO usuário, na empresa dona, resolve. Sem isto o
     // `null` acima seria indistinguível de "a coluna não foi lida".
     await ctx.prisma.tenantMembership.create({
-      data: { userId: user.id, tenantId: acme.id, role: 'owner', profileId: daAcme.id },
+      data: { userId: user.id, tenantId: acme.id, role: 'gerente', profileId: daAcme.id },
     });
     await expect(repo.findProfileId(user.id, acme.id)).resolves.toBe(daAcme.id);
   });
@@ -403,7 +403,7 @@ describe('Perfil por empresa na membership (Fase 4 — D4)', () => {
     const daAcme = await criarPerfil('gestor-acme', acme.id);
     const global = await criarPerfil('viewer', null);
     await ctx.prisma.tenantMembership.create({
-      data: { userId: user.id, tenantId: acme.id, role: 'owner', profileId: daAcme.id },
+      data: { userId: user.id, tenantId: acme.id, role: 'gerente', profileId: daAcme.id },
     });
     // ⚠️ `viewer` é GLOBAL de propósito. Se este teste apontasse
     // `users.profile_id` para o perfil da Acme, o `null` do bucket global
@@ -425,7 +425,7 @@ describe('Perfil por empresa na membership (Fase 4 — D4)', () => {
     const daGlobex = await criarPerfil('gestor-globex', globex.id);
 
     await ctx.prisma.tenantMembership.create({
-      data: { userId: user.id, tenantId: acme.id, role: 'owner', profileId: daAcme.id },
+      data: { userId: user.id, tenantId: acme.id, role: 'gerente', profileId: daAcme.id },
     });
     await ctx.prisma.tenantMembership.create({
       data: { userId: user.id, tenantId: globex.id, role: 'member', profileId: daAcme.id },

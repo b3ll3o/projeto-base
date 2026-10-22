@@ -31,7 +31,7 @@ describe('AssinaturaDeMembership (Fase 10+)', () => {
       // este literal mudar e o SQL não, o onboarding inteiro cai com
       // `42501` — e o sintoma ("cadastro de empresa dá erro de permissão")
       // não aponta para "duas expressões que deviam ser iguais".
-      expect(corpoDaAssinatura('u', 't', 'owner', 'p')).toBe('1:u1:t5:owner1:p');
+      expect(corpoDaAssinatura('u', 't', 'gerente', 'p')).toBe('1:u1:t7:gerente1:p');
     });
 
     it('profile_id nulo vira campo vazio, e role vazia NÃO vira `member`', () => {
@@ -93,7 +93,7 @@ describe('AssinaturaDeMembership (Fase 10+)', () => {
       // do banco recusar, e a falha apareceria como `42501` — o mesmo sintoma de
       // assinatura errada, com outra causa embaixo.
       const signer = new AssinaturaDeMembership();
-      expect(() => signer.assinar('u', 't', 'owner', null)).toThrow(
+      expect(() => signer.assinar('u', 't', 'gerente', null)).toThrow(
         /não carregada: `AssinaturaDeMembership.onModuleInit` não rodou/,
       );
     });

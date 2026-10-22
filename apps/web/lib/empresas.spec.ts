@@ -51,7 +51,7 @@ beforeEach(() => {
 
 describe('listarEmpresas — GET /me/tenants', () => {
   it('lê as empresas do ator e devolve a lista como veio', async () => {
-    const lista = [{ ...EMPRESA, role: 'owner' }];
+    const lista = [{ ...EMPRESA, role: 'gerente' }];
     clientMock.get.mockResolvedValue(lista);
 
     await expect(listarEmpresas(TOKEN)).resolves.toEqual(lista);

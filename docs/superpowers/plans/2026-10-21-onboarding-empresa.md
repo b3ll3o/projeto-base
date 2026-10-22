@@ -36,7 +36,7 @@ base_main: f2041e2cb26b0d545c10671587a209040e19fc78
 | Criar conta **por convite** (`destino: {tipo:'convite', token}`) | `tenancy.use-cases.ts` → `criarContaPorConvite` |
 | Aceitar convite de conta **existente** | `POST /invitations/accept` |
 | Emitir convite (só `owner`) | `POST /tenants/:id/invitations` → `emitirConvite` |
-| **Perfil de dono com TODAS as permissões**, dentro da empresa nova | `prisma-tenant-onboarding.repository.ts` (perfil `dono` da empresa + `listAllPermissions()`) |
+| **Perfil de gerente com TODAS as permissões**, dentro da empresa nova | `prisma-tenant-onboarding.repository.ts` (perfil `gerente` da empresa + `listAllPermissions()`) |
 | Membership = identidade na empresa; `profile_id` NULL = zero permissões | `tenant-membership-repository.port.ts` |
 | Bucket GLOBAL = `users.profile_id` (admin do seed) | `findProfileId(userId, null)` |
 | `guardarTenant` (cookie de empresa) — **sem caller** | `apps/web/lib/sessao.ts` |
@@ -53,7 +53,7 @@ base_main: f2041e2cb26b0d545c10671587a209040e19fc78
 | G-004 | **`guardarTenant` nunca é chamado** — sem `X-Tenant-Id` o dono resolve o bucket GLOBAL (`users.profile_id` = NULL) e fica com zero permissões. | `apps/web/lib/sessao.ts` + `lib/perfil.ts` |
 | G-005 | **Convite não tem entrada pela UI** — nem página de convite, nem token no formulário de cadastro. | `apps/web/app/**` |
 | G-006 | **`aceitarConvite` devolve `void`** — o `tenantId` do convite aceito se perde, e o cookie de empresa não pode ser gravado. | `tenancy.use-cases.ts` |
-| G-007 | **A empresa nasce com UM perfil só** — o `admin` da empresa (apelido de "dono"). O pedido é TRÊS: `dono`, `gestor` e `funcionario`. | `prisma-tenant-onboarding.repository.ts` |
+| G-007 | **A empresa nasce com UM perfil só** — o `admin` da empresa (apelido de "dono"). O pedido é TRÊS: `gerente`, `coordenador` e `funcionario`. | `prisma-tenant-onboarding.repository.ts` |
 
 ### Fora de escopo (decidido, não por esquecimento)
 
@@ -67,11 +67,12 @@ base_main: f2041e2cb26b0d545c10671587a209040e19fc78
 
 - **BR-001** — Toda conta que não é administradora de SISTEMA pertence a pelo menos uma empresa.
 - **BR-002** — Quem entra por convite entra na empresa **que convidou**, com o papel do convite.
-- **BR-003** — Quem cria a própria empresa vira **dono** (`role = 'owner'`) e veste o perfil `dono` **daquela empresa**, com **todas** as permissões do catálogo.
+- **BR-003** — Quem cria a própria empresa vira **gerente** (`role = 'gerente'`) e veste o perfil `gerente` **daquela empresa**, com **todas** as permissões do catálogo.
 - **BR-004** — O administrador de SISTEMA (bucket global: `users.profile_id` → perfil com `tenant_id IS NULL` e `is_admin`) pode não pertencer a empresa nenhuma.
 - **BR-005** — Criar empresa é sempre "tudo ou nada": empresa + perfil + permissões + membership caem juntos, ou não cai nenhum.
-- **BR-006** — Toda empresa nasce com **TRÊS** perfis: `dono` (todas as permissões do catálogo + bypass **dentro da empresa**), `gestor` (`users.read`, `users.write`, `audits.read` — administra PESSOAS, nada de `admin.*`) e `funcionario` (`users.read`).
-- **BR-007** — **`admin` ≠ `dono`.** `admin` é o administrador do **SISTEMA**: perfil GLOBAL (`tenant_id IS NULL`), acesso total, apontado por `users.profile_id`, criado pelo seed. `dono` é o dono da **EMPRESA**: perfil da empresa (`tenant_id` = o tenant), e vale sobre as funcionalidades DAQUELA empresa. Um perfil de empresa chamado `admin` seria um nome que significa "sistema" apontando para a empresa — por isso o slug é `dono`.
+- **BR-006** — Toda empresa nasce com **TRÊS** perfis: `gerente` (todas as permissões do catálogo + bypass **dentro da empresa**), `coordenador` (`users.read`, `users.write`, `audits.read` — administra PESSOAS, nada de `admin.*`) e `funcionario` (`users.read`).
+- **BR-007** — **`admin` ≠ `gerente`.** `admin` é o administrador do **SISTEMA**: perfil GLOBAL (`tenant_id IS NULL`), acesso total, apontado por `users.profile_id`, criado pelo seed. `gerente` é o GERENTE da **EMPRESA**: perfil da empresa (`tenant_id` = o tenant), e vale sobre as funcionalidades DAQUELA empresa. Um perfil de empresa chamado `admin` seria um nome que significa "sistema" apontando para a empresa — por isso o slug é `gerente`.
+  - ⚠️ **Renomeado em 2026-10-22**: o catálogo nasceu com `dono`/`gestor`/`funcionario`, e o pedido de produto trocou para `gerente`/`coordenador`/`funcionario` — o vocabulário da empresa é a hierarquia de cargos, e "dono" não descrevia o cargo. O `role` da membership acompanha (`'owner'` → `'gerente'`); o papel do convidado (`'member'`) não muda.
 
 ## 3. Contratos novos
 
@@ -106,18 +107,18 @@ base_main: f2041e2cb26b0d545c10671587a209040e19fc78
 | T9 | Web `/convite/[token]`: logado → aceita e vai para `/users`; sem sessão → `/users/novo?convite=…`; o cadastro carrega o token (`destino: {tipo:'convite'}`) | spec do schema + e2e | T6, T5 |
 | T10 | e2e `f16-onboarding-empresa.spec.ts` (`// FLUXO: F16`) + linha no inventário de fluxos | spec novo | — |
 | T11 | `pnpm ci:preflight` + `pnpm ci:local` (lint, typecheck, unit, coverage, integration, e2e) + prettier | — | — |
-| T12 | Os **TRÊS perfis** de toda empresa (`dono`, `gestor`, `funcionario`) — catálogo no domínio (`domain/perfis-da-empresa.ts`), gravado nas DUAS entradas de empresa (cadastro com `destino` e página de criação) | spec unitário do catálogo + spec do repositório | T1 |
+| T12 | Os **TRÊS perfis** de toda empresa (`gerente`, `coordenador`, `funcionario`) — catálogo no domínio (`domain/perfis-da-empresa.ts`), gravado nas DUAS entradas de empresa (cadastro com `destino` e página de criação) | spec unitário do catálogo + spec do repositório | T1 |
 
 ### Notas de implementação (medidas que valem mais que a intuição)
 
 - **`POST /tenants` reusa a transação de `provisionarEmpresaPropria`**, que já resolve os três detalhes que matam: (a) a sessão nasce em SISTEMA (`abrirEscopo(tx, escopoDoTenant(null))`) porque o `RETURNING` do `INSERT` em `tenants` é avaliado pela policy de SELECT (`no_escopo_atual(id, false)` → FALSE sem escopo → "new row violates row-level security policy"); (b) o escopo desce para a empresa nova ANTES do `INSERT` do perfil, porque a policy `profiles_insercao` compara `tenant_id` com o GUC no momento do insert; (c) a membership é gravada por `criar_membership` (SECURITY DEFINER + HMAC do corpo), não por `INSERT` direto — o `REVOKE INSERT` da migration `20261020000004` é o que impede um ator de criar o próprio vínculo.
 - **`GET /me/tenants` lê em escopo SISTEMA** e filtra por `user_id` na query. O filtro é da APLICAÇÃO, não da RLS (`memberships_leitura` = `no_escopo_atual(tenant_id, false)`, e `'*'` passa em tudo) — a justificativa é a mesma de `buscarConvitePorToken`: o id do ator vem do token, e a linha devolvida é só a dele.
-- **O funil do login não confunde "dono de empresa" com "admin de sistema".** O dono de empresa tem `users.profile_id = NULL` (a empresa própria é criada com `profileId: null` — `prisma-tenant-onboarding.repository.ts`) e o perfil na **membership**; o admin de sistema tem `users.profile_id` apontando para o perfil global (`tenant_id IS NULL`). Logo `GET /me/profile` **sem** header (bucket global) é o que separa os dois: `isAdmin === true` ⇒ admin de sistema (BR-004).
+- **O funil do login não confunde "gerente de empresa" com "admin de sistema".** O gerente de empresa tem `users.profile_id = NULL` (a empresa própria é criada com `profileId: null` — `prisma-tenant-onboarding.repository.ts`) e o perfil na **membership**; o admin de sistema tem `users.profile_id` apontando para o perfil global (`tenant_id IS NULL`). Logo `GET /me/profile` **sem** header (bucket global) é o que separa os dois: `isAdmin === true` ⇒ admin de sistema (BR-004).
 - **`guardarTenant` grava cookie NÃO httpOnly** — o id da empresa não é segredo, e o cookie precisa ser lido por Server Action sem round-trip.
 - **A e2e F8 ("quem entra pelo login sai da tela de login para a listagem") muda de expectativa**: a conta semeada não pertence a empresa nenhuma, e o funil novo a manda para `/empresa/nova`. O teste precisa dizer isso — o funil é o produto pedido, não uma regressão.
 - **`POST /users` com `destino: {tipo:'convite'}` já existe e está medido** (e2e 12): a conta entra na empresa do convidador com `role = 'member'` e `profile_id = NULL`. O que falta é a ENTRADA pela UI (T9).
 - **Os TRÊS perfis vivem num CATÁLOGO no domínio** (`apps/api/src/modules/tenancy/domain/perfis-da-empresa.ts`), e não numa lista no repositório: as DUAS entradas de empresa (o cadastro com `destino` e a página de criação) precisam produzir EXATAMENTE o mesmo conjunto — e duas listas divergiriam na primeira alteração, silenciosamente.
-- **O `isAdmin` do `dono` é o bypass do GUARD DENTRO DA EMPRESA**, e é por isso que ele NÃO faz do dono um administrador de sistema: as rotas de sistema (feature flags) exigem `tenantId === null && isAdmin`, e o dono tem `users.profile_id` NULL — o bucket global dele resolve para zero permissões. O `dono` só é `isAdmin` no escopo em que o perfil EFETIVO é o dele. O `gestor` NÃO tem nada de `admin.*` por causa da escalada: com `admin.manage-authorizations` ele poderia se dar `admin.manage-profiles` e editar o perfil do próprio dono.
+- **O `isAdmin` do `gerente` é o bypass do GUARD DENTRO DA EMPRESA**, e é por isso que ele NÃO faz do gerente um administrador de sistema: as rotas de sistema (feature flags) exigem `tenantId === null && isAdmin`, e o gerente tem `users.profile_id` NULL — o bucket global dele resolve para zero permissões. O `gerente` só é `isAdmin` no escopo em que o perfil EFETIVO é o dele. O `coordenador` NÃO tem nada de `admin.*` por causa da escalada: com `admin.manage-authorizations` ele poderia se dar `admin.manage-profiles` e editar o perfil do próprio gerente.
 
 ## 5. Fluxo resultante
 
@@ -144,8 +145,8 @@ POST /users {nome,email,senha}        POST /users {…, destino:{tipo:'convite',
                                                         │
                                                         ▼
                                         empresa + os TRÊS perfis
-                                        (dono, gestor, funcionário)
-                                        + membership owner → o `dono`
+                                        (gerente, coordenador, funcionário)
+                                        + membership gerente → o `gerente`
 ```
 
 ## 6. Riscos

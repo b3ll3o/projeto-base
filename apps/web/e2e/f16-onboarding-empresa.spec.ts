@@ -19,9 +19,9 @@
 // funil que mandasse NINGUÉM passaria no 3 e falharia no 1.
 //
 // ⚠️ Por que o DONO é medido pelo PERFIL EFETIVO e não pelo nome da tela: o
-// `dono` é o único dos três perfis da empresa com `admin.manage-profiles`
+// `gerente` é o único dos três perfis da empresa com `admin.manage-profiles`
 // (o gestor administra PESSOAS, o funcionário só lê o diretório). Ver a
-// permissão que a tela mostra: é o que separa "dono" de "gestor" sem
+// permissão que a tela mostra: é o que separa "gerente" de "coordenador" sem
 // depender do rótulo.
 //
 // pt-BR — o CONVITE é emitido pela API, e não pela tela.
@@ -100,11 +100,11 @@ test.describe('F16 — Onboarding de empresa', () => {
     // E o perfil EFETIVO é o dono. O `<dd>` do perfil é o primeiro da
     // página (`Identidade`: Perfil · Admin?), e o do bypass o segundo.
     await irPara('/me/profile');
-    await expect(page.locator('dd').first()).toContainText('(dono)');
+    await expect(page.locator('dd').first()).toContainText('(gerente)');
     await expect(page.locator('dd').nth(1)).toHaveText('Sim (bypass total)');
 
     // A permissão que só o DONO tem: `admin.manage-profiles` não está no
-    // gestor nem no funcionário. Vê-la na lista é o que separa "dono" de
+    // coordenador nem no funcionário. Vê-la na lista é o que separa "gerente" de
     // "qualquer um dos três" — o rótulo sozinho não provaria nada.
     await expect(page.getByText('admin.manage-profiles', { exact: true })).toHaveCount(1);
   });

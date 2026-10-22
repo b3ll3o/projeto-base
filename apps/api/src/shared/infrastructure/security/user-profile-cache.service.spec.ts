@@ -166,8 +166,8 @@ describe('UserProfileCacheService — par (tenant, user)', () => {
     isAdmin: false,
     permissions: ['users.read'],
     profileId: 'p-gestor',
-    profileSlug: 'gestor',
-    profileName: 'Gestor',
+    profileSlug: 'coordenador',
+    profileName: 'Coordenador',
   };
 
   let svc: UserProfileCacheService;

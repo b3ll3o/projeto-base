@@ -81,7 +81,7 @@ describe('PrismaTenantMembershipRepository.atribuirPerfil — Postgres (Fase 6)'
     const gestorAcme = await criarPerfil(acme, 'gestor-acme');
     const gestorGlobex = await criarPerfil(globex, 'gestor-globex');
     await ctx.prisma.tenantMembership.create({
-      data: { userId: pessoa, tenantId: acme, role: 'owner', profileId: gestorAcme },
+      data: { userId: pessoa, tenantId: acme, role: 'gerente', profileId: gestorAcme },
     });
     await ctx.prisma.tenantMembership.create({
       data: { userId: pessoa, tenantId: globex, role: 'member', profileId: gestorGlobex },
@@ -185,7 +185,7 @@ describe('PrismaTenantMembershipRepository.atribuirPerfil — Postgres (Fase 6)'
       data: {
         id: '00000000-0000-0000-0000-000000000001',
         slug: 'gestor-antiga',
-        name: 'Gestor',
+        name: 'Coordenador',
         tenantId: antiga,
       },
     });
@@ -193,7 +193,7 @@ describe('PrismaTenantMembershipRepository.atribuirPerfil — Postgres (Fase 6)'
       data: {
         id: 'ffffffff-ffff-ffff-ffff-ffffffffffff',
         slug: 'gestor-recente',
-        name: 'Gestor',
+        name: 'Coordenador',
         tenantId: recente,
       },
     });
@@ -229,12 +229,12 @@ describe('PrismaTenantMembershipRepository.atribuirPerfil — Postgres (Fase 6)'
     const pessoa = await criarConta('ana@acme.dev');
     const comPerfil = await criarEmpresa('com-perfil');
     const semPerfil = await criarEmpresa('sem-perfil');
-    const perfil = await criarPerfil(comPerfil, 'gestor');
+    const perfil = await criarPerfil(comPerfil, 'coordenador');
     await ctx.prisma.tenantMembership.create({
       data: {
         userId: pessoa,
         tenantId: comPerfil,
-        role: 'owner',
+        role: 'gerente',
         profileId: perfil,
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
       },

@@ -513,7 +513,7 @@ describe('PrismaUserRepository (Testcontainers)', () => {
   it('ramo global: perfil de EMPRESA projeta null, como a autorização resolve', async () => {
     const tenant = await ctx.prisma.tenant.create({ data: { name: 'Acme', slug: 'acme' } });
     const perfilEmpresa = await ctx.prisma.profile.create({
-      data: { slug: 'gestor-acme', name: 'Gestor', tenantId: tenant.id },
+      data: { slug: 'coordenador-acme', name: 'Coordenador', tenantId: tenant.id },
     });
 
     const u = User.criar({

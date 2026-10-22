@@ -31,7 +31,8 @@ export default async function NovaEmpresaPage() {
     <main className="mx-auto max-w-3xl p-8">
       <h1 className="text-2xl font-semibold text-slate-900">Criar empresa</h1>
       <p className="mt-1 text-sm text-slate-500">
-        A empresa é o espaço onde ficam as pessoas e os perfis. Quem cria a empresa entra como dono.
+        A empresa é o espaço onde ficam as pessoas e os perfis. Quem cria a empresa entra como
+        gerente.
       </p>
       <div className="mt-8">
         <EmpresaForm action={criarEmpresaDoAtor} />

@@ -54,7 +54,7 @@ export async function listarEmpresas(accessToken: string): Promise<EmpresaDoUsua
 }
 
 /**
- * Cria a empresa e vira o ator DONO dela, com as permissões da empresa.
+ * Cria a empresa e vira o ator GERENTE dela, com as permissões da empresa.
  *
  * O `id` que volta é o que o web grava no cookie `tenant_id` — a empresa em que
  * a sessão vai agir a partir de agora.

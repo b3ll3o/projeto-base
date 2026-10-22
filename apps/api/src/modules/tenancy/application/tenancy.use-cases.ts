@@ -113,7 +113,7 @@ export class TenancyUseCases {
     email: string;
   }): Promise<{ token: string; expiresAt: Date }> {
     const role = await this.memberships.findRole(input.convidadorId, input.tenantId);
-    if (role !== 'owner') {
+    if (role !== 'gerente') {
       throw new NaoAdministraEmpresaException(input.tenantId);
     }
 

@@ -240,7 +240,7 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
 
       const perfilId = await this.criarPerfisDaEmpresa(tx, empresaCriada.id);
 
-      await this.criarMembership(tx, usuario.id, empresaCriada.id, 'owner', perfilId);
+      await this.criarMembership(tx, usuario.id, empresaCriada.id, 'gerente', perfilId);
     });
   }
 
@@ -249,8 +249,9 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
    * onboarding (a página de criação de empresa).
    *
    * O MESMO núcleo de `provisionarEmpresaPropria`, sem a escrita de `users`:
-   * empresa → os TRÊS perfis da empresa (`dono`, `gestor`, `funcionario`) →
-   * membership de `owner` vestindo o `dono`. A única diferença é que a conta
+   * empresa → os TRÊS perfis da empresa (`gerente`, `coordenador`,
+   * `funcionario`) → membership de `gerente` vestindo o perfil `gerente`. A
+   * única diferença é que a conta
    * vem de fora.
    */
   async abrirEmpresaParaUsuario(userId: string, empresa: EmpresaParaAbrir): Promise<EmpresaAberta> {
@@ -271,7 +272,7 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
 
       const perfilId = await this.criarPerfisDaEmpresa(tx, empresaCriada.id);
 
-      await this.criarMembership(tx, userId, empresaCriada.id, 'owner', perfilId);
+      await this.criarMembership(tx, userId, empresaCriada.id, 'gerente', perfilId);
 
       return { id: empresaCriada.id, nome: empresa.nome, slug: empresaCriada.slug };
     });
@@ -307,12 +308,13 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
   }
 
   /**
-   * Os TRÊS perfis DA empresa — dono, gestor e funcionário — e o id do
-   * `dono`, que é o perfil de quem cria a empresa.
+   * Os TRÊS perfis DA empresa — gerente, coordenador e funcionário — e o id do
+   * `gerente`, que é o perfil de quem cria a empresa.
    *
-   * ⚠️ O `slug` é `dono`, e não `admin`: o conjunto da empresa tem três
+   * ⚠️ O `slug` é `gerente`, e não `admin`: o conjunto da empresa tem três
    * perfis, e o "administrador" deixou de ser o ÚNICO papel — ele virou o
-   * DONO, ao lado do gestor e do funcionário. Ver `domain/perfis-da-empresa.ts`
+   * GERENTE, ao lado do coordenador e do funcionário. Ver
+   * `domain/perfis-da-empresa.ts`
    * para o conjunto e para a escolha de cada um.
    *
    * Os perfis nascem JUNTO com a empresa, e são DELA (`tenantId`). Ver o port:
@@ -325,7 +327,7 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
    */
   private async criarPerfisDaEmpresa(tx: Tx, tenantId: string): Promise<string> {
     const perfis = perfisDaEmpresa();
-    let idDoDono: string | null = null;
+    let idDoGerente: string | null = null;
 
     for (const perfil of perfis) {
       const criado = await tx.profile.create({
@@ -336,7 +338,7 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
           // ⚠️ `isSystem: true` CONGELA o perfil: `atribuir`, `revogar`,
           // `atualizar` e `deletar` recusam com 403
           // `PROFILE_SYSTEM_PROTECTED`. É deliberado — o trio é o CATÁLOGO, e
-          // uma empresa que apaga o seu `gestor` deixa de ter os três perfis
+          // uma empresa que apaga o seu `coordenador` deixa de ter os três perfis
           // que toda empresa tem. Quem precisa de um papel sob medida CRIA um
           // perfil novo (`POST /admin/profiles`), e esse não é de sistema.
           //
@@ -357,17 +359,17 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
         });
       }
 
-      if (perfil.slug === 'dono') idDoDono = criado.id;
+      if (perfil.slug === 'gerente') idDoGerente = criado.id;
     }
 
-    // O conjunto do catálogo TEM o `dono`, então isto só acontece se o
+    // O conjunto do catálogo TEM o `gerente`, então isto só acontece se o
     // catálogo mudar. Falhar alto é melhor do que devolver `null` como id de
-    // perfil: a membership nasceria com `profile_id` NULL e o dono ficaria
+    // perfil: a membership nasceria com `profile_id` NULL e o gerente ficaria
     // sem nenhuma permissão, sem erro em lugar nenhum.
-    if (idDoDono === null) {
-      throw new Error('perfil "dono" ausente do conjunto de perfis da empresa');
+    if (idDoGerente === null) {
+      throw new Error('perfil "gerente" ausente do conjunto de perfis da empresa');
     }
-    return idDoDono;
+    return idDoGerente;
   }
 
   async entrarPorConvite(convite: ConviteParaAceitar): Promise<void> {

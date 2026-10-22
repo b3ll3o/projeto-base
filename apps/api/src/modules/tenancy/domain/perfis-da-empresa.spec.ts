@@ -42,11 +42,11 @@ describe('perfisDaEmpresa — o catálogo de perfis de toda empresa', () => {
     // comparação contra o próprio catálogo seria o array contra ele mesmo, e
     // um catálogo que perdesse um perfil passaria. O mesmo cuidado do
     // `feature-flag-catalog.spec.ts`.
-    expect(perfisDaEmpresa().map((p) => p.slug)).toEqual(['dono', 'gestor', 'funcionario']);
+    expect(perfisDaEmpresa().map((p) => p.slug)).toEqual(['gerente', 'coordenador', 'funcionario']);
   });
 
   it('o dono tem o BYPASS e TODAS as permissões do catálogo', () => {
-    const dono = perfil('dono');
+    const dono = perfil('gerente');
 
     // O bypass vem do `isAdmin` e não de "todas as permissões" — é o que
     // acompanha o catálogo quando ele cresce, sem reescrita.
@@ -57,7 +57,7 @@ describe('perfisDaEmpresa — o catálogo de perfis de toda empresa', () => {
   });
 
   it('o gestor administra PESSOAS, e NADA de `admin.*`', () => {
-    const gestor = perfil('gestor');
+    const gestor = perfil('coordenador');
 
     expect(gestor.isAdmin).toBe(false);
     // A escalada que este spec existe para prender: com
@@ -99,9 +99,9 @@ describe('perfisDaEmpresa — o catálogo de perfis de toda empresa', () => {
     // ⚠️ O cast é o ponto: `readonly string[]` PROTEGE em tempo de
     // compilação, e o defeito que este teste persegue é justamente o que
     // sobra quando alguém contorna essa proteção.
-    const permissoes = perfil('gestor').permissoes as string[];
+    const permissoes = perfil('coordenador').permissoes as string[];
     permissoes.push('admin.manage-users');
 
-    expect(perfil('gestor').permissoes).not.toContain('admin.manage-users');
+    expect(perfil('coordenador').permissoes).not.toContain('admin.manage-users');
   });
 });

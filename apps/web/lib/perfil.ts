@@ -133,7 +133,7 @@ export async function obterMeuPerfil(): Promise<MeProfileDto | null> {
  * precisa, e o que `obterMeuPerfil` **não** devolve.
  *
  * Por que existe (achado A, revisão adversarial 2026-10-18): os dois `isAdmin`
- * não são a mesma pessoa. O da empresa é o perfil de DONO (todo dono de empresa
+ * não são a mesma pessoa. O da empresa é o perfil de GERENTE (todo gerente de empresa
  * nova nasce com `isAdmin: true`, `prisma-tenant-onboarding.repository.ts:202`);
  * o global é o do bucket de sistema. D2 exige o **global**
  * (`ehAdministradorDeSistema`: `tenantId === null && isAdmin`). Autorizar por
