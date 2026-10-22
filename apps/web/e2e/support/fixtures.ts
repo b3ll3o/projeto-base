@@ -39,6 +39,7 @@ import {
   type UsuarioWire,
 } from './dados';
 import { semearAdmin } from './rbac';
+import { garantirApiNoAr } from './api';
 
 export interface FixturesE2E {
   /** URL absoluta de um caminho do app. */
@@ -104,6 +105,16 @@ export interface FixturesE2E {
 export const test = base.extend<FixturesE2E>({
   baseLimpa: [
     async ({}, use) => {
+      // ⚠️ A API é conferida ANTES do banco, e o critério é a VIDA DO
+      // PROCESSO. A API pode morrer no meio da suíte (o F1 e o F5 a derrubam
+      // de propósito; um worker morto ou um abort do run a deixa fora), e
+      // quando ela fica fora os specs seguintes falham TODOS com
+      // `ECONNREFUSED` — um erro que não é do teste deles, e uma suíte
+      // inteira vermelha por uma causa que já passou.
+      //
+      // Aqui ela se levanta sozinha. MEDIDO 2026-10-22: numa execução do
+      // `ci:local` a API foi morta no meio e 33 specs caíram em cascata.
+      await garantirApiNoAr();
       await limparBase();
       await use();
     },

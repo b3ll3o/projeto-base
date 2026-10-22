@@ -31,7 +31,7 @@ import { randomBytes } from 'node:crypto';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { API_ROOT, WEB_ROOT, exigirEstado, gravarEstado } from './estado';
-import { derrubarFilho, derrubarGrupo } from './processos';
+import { derrubarFilho, derrubarGrupo, processoVivo } from './processos';
 import { esperarTcpAberta, portaFechouDentroDe } from './portas';
 import { abrirSaidaEmArquivo } from './saida';
 
@@ -362,4 +362,54 @@ export async function subirApiDoTeste(): Promise<void> {
     jwtSecret: estado.jwtSecret,
   });
   gravarEstado({ ...estado, apiPid: filho.pid ?? null });
+}
+
+/**
+ * A API precisa ser levantada?
+ *
+ * ⚠️ `apiPid !== null` NÃO é sinal de que a API está no ar: o PID é de um
+ * processo que pode ter MORRIDO, e o `estado.json` não foi reescrito. O
+ * `subirApiDoTeste` sai cedo nesse caso — ele confia no PID, e o PID mente.
+ *
+ * A decisão é uma função pura porque é ela que tem DENTE: um teste que
+ * subisse a API de verdade mediria o boot, e não a decisão.
+ */
+export function apiPrecisaSubir(apiPid: number | null): boolean {
+  return apiPid === null || !processoVivo(apiPid);
+}
+
+/**
+ * Garante que a API está NO AR — e levanta outra se ela não estiver.
+ *
+ * pt-BR (2026-10-22): o F1 e o F5 derrubam a API e o Postgres de propósito (é
+ * o caminho "a infraestrutura caiu"), e o `finally` de cada um os levanta de
+ * volta. O `finally` só roda por caminhos que passam por ele — e um worker
+ * morto, um `SIGINT` ou um abort do run deixam a API FORA para o resto da
+ * execução. O sintoma é o pior possível: os specs seguintes falham TODOS com
+ * `ECONNREFUSED`, um erro que não é do teste deles, e a suíte inteira fica
+ * vermelha por uma causa que já passou.
+ *
+ * MEDIDO 2026-10-22: numa execução do `ci:local`, a API foi morta no meio da
+ * suíte (o log dela termina sem linha de saída — a assinatura de um SIGKILL)
+ * e 33 specs falharam em cascata. A suíte agora se levanta sozinha: cada spec
+ * verifica se o processo da API está vivo e, se não, levanta um novo antes de
+ * medir o que é dele.
+ *
+ * ⚠️ O critério é a VIDA DO PROCESSO, e não o `/health`: o `/health` responde
+ * 503 quando o Postgres está fora, e o F5 mede justamente esse estado. Um
+ * `/health` aqui derrubaria a API no meio do F5 e destruiria o que ele mede.
+ */
+export async function garantirApiNoAr(): Promise<void> {
+  const estado = exigirEstado();
+  if (!apiPrecisaSubir(estado.apiPid)) return;
+
+  if (estado.apiPid !== null) {
+    // O processo morreu. O GRUPO é derrubado, e não o PID: o `tsx` são DOIS
+    // processos, e matar só o pai deixa o filho vivo segurando a porta — que
+    // é a mesma órfã que o cabeçalho deste arquivo mediu. A porta livre é o
+    // que permite subir a API nova.
+    derrubarGrupo(estado.apiPid, 'SIGKILL');
+    gravarEstado({ ...estado, apiPid: null });
+  }
+  await subirApiDoTeste();
 }
