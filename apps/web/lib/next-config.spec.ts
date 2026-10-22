@@ -49,3 +49,27 @@ describe('next.config.mjs — outputFileTracingIncludes (Task 3.5)', () => {
     expect(source).toMatch(/['"]\.\/node_modules\/web-vitals\/\*\*\/\*['"]/);
   });
 });
+
+describe('next.config.mjs — o token de convite não vaza por Referer', () => {
+  // pt-BR (onboarding de empresa, 2026-10-21): o token de convite viaja na
+  // URL, e o default do browser (`strict-origin-when-cross-origin`) manda a
+  // URL INTEIRA no `Referer` de um link MESMO ORIGEM — o token vai parar no
+  // log de acesso de outra rota do mesmo servidor. `no-referrer` fecha isso.
+  //
+  // ⚠️ O guard é sobre o FONTE, e não sobre a resposta HTTP: o `headers()`
+  // do config é lido pelo Next no boot, e um spec que o exercitasse exigiria
+  // subir a aplicação — caro para um guard de duas linhas.
+  it('as três telas que carregam o token têm Referrer-Policy e Cache-Control', () => {
+    expect(source).toMatch(/['"]Referrer-Policy['"]\s*,\s*value:\s*['"]no-referrer['"]/);
+    expect(source).toMatch(/['"]Cache-Control['"]\s*,\s*value:\s*['"]no-store['"]/);
+  });
+
+  it('cobre a tela do CONVITE, a de CADASTRO e o LOGIN', () => {
+    // As TRÊS: o token entra pela URL do convite, sai pela query do
+    // cadastro e atravessa o login. Uma rota que não carrega token não
+    // precisa da proteção; uma rota faltando carrega.
+    expect(source).toMatch(/source:\s*['"]\/convite\/:path\*['"]/);
+    expect(source).toMatch(/source:\s*['"]\/users\/novo['"]/);
+    expect(source).toMatch(/source:\s*['"]\/login['"]/);
+  });
+});

@@ -177,7 +177,7 @@ export class UsersController {
     // `tenancy.invites` nesta porta. A checagem mora AQUI, e não em
     // `@RequireFeatureFlag`, por dois motivos que só o `destino` do corpo
     // resolve: o decorator é por handler — `create()` também cria conta comum e
-    // conta de owner de empresa, e nenhuma das duas é convite; e o
+    // conta de gerente de empresa, e nenhuma das duas é convite; e o
     // `FeatureFlagGuard` exige `req.user`, que `@Public()` nunca publica
     // (`jwt-auth.guard.ts:170-172`). Recorte em `convite` e não em "tem
     // `destino`": `empresa` não usa token de convite.

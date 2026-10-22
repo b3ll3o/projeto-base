@@ -147,6 +147,53 @@ describe('pr-refresh-scan: extração de claims', () => {
     expect(c.find((x) => x.classe === 'testes')?.valor).toBe(286);
   });
 
+  // pt-BR (2026-10-22): o sumário do Vitest é em INGLÊS, e as duas escritas
+  // passavam batendo por fora — invisíveis para o relatório e para o gate.
+  //
+  // MEDIDO no PR #116: o corpo afirmava `Tests  944 passed (944)` com a suíte
+  // em 959, e o `pr-refresh-gate` respondeu "0 claim(s) reconhecida(s) no
+  // corpo". A contagem não divergiu: ela não EXISTIA para o instrumento.
+  it('lê o sumário do Vitest em INGLÊS — a forma que o corpo do PR #116 usa', () => {
+    const c = extrairClaims(
+      '@projeto/api:test:unit:       Test Files  73 passed (73)   Tests  959 passed (959)',
+    );
+    expect(c.find((x) => x.classe === 'arquivos-suite')?.valor).toBe(73);
+    expect(c.find((x) => x.classe === 'testes')?.valor).toBe(959);
+  });
+
+  it('lê a forma da MUTAÇÃO — "1 failed | 16 passed (17)"', () => {
+    // O número que conta é o de PASSED (16), e não o total (17): é o que
+    // responde "quantos passaram". E o padrão do sumário simples NÃO casa
+    // aqui — depois do primeiro número vem `failed` —, o que é por isso que
+    // este é um padrão SEPARADO.
+    const c = extrairClaims('Tests  1 failed | 16 passed (17)');
+    expect(c.find((x) => x.classe === 'testes')?.valor).toBe(16);
+  });
+
+  it('lê a forma da MUTAÇÃO dos ARQUIVOS — "1 failed | 72 passed (73)"', () => {
+    // MEDIDO 2026-10-22: o padrão existia para `Tests` e NÃO para `Test
+    // Files` — e a contagem de arquivos da mutação sumia do relatório. O
+    // gate passava a reportar "N claim(s) NÃO mensuráveis" onde eram N+1, e
+    // a CONTAGEM é o observável do `guard-classes.md` §4.
+    //
+    // O número que conta é o de PASSED (72), pelo mesmo motivo do `Tests`.
+    const c = extrairClaims('Test Files  1 failed | 72 passed (73)');
+    expect(c.find((x) => x.classe === 'arquivos-suite')?.valor).toBe(72);
+  });
+
+  it('as contagens de suíte são RECLASSIFICADAS, e nunca medidas — a suíte não é a branch', () => {
+    // `medir: () => null` é o que as torna INERTES para o `reescrever` e
+    // para o `verificarMarcador`: elas existem no relatório e no gate, e o
+    // gate diz que não pode compará-las. Sem isso, o gate tentaria trocar o
+    // número de testes pelo número de arquivos do PR — o que é a mentira que
+    // a reescrita produz.
+    const { repo, base } = repoFixture();
+    const relatorio = varrerTexto('Tests  959 passed (959)', repo, base);
+    const claim = relatorio.claims.find((x) => x.classe === 'testes');
+    expect(claim?.medido).toBeNull();
+    expect(claim?.divergente).toBe(false);
+  });
+
   it('NÃO casa número que não é uma claim — data, versão, issue e PR', () => {
     const c = extrairClaims('Em 2026-10-05, no PR #44, turbo 2.11.2, 7 classes.');
     expect(c).toHaveLength(0);

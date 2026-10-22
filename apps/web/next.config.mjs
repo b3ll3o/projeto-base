@@ -31,5 +31,33 @@ const nextConfig = {
       './node_modules/web-vitals/**/*',
     ],
   },
+
+  /**
+   * O token de CONVITE viaja na URL — e a URL vaza por `Referer`.
+   *
+   * pt-BR (onboarding de empresa, 2026-10-21): o convite tem DUAS portas
+   * (`/convite/<token>` e `/users/novo?convite=`) e o token atravessa o
+   * login (`/login?convite=`). O default do browser
+   * (`strict-origin-when-cross-origin`) manda a URL INTEIRA no `Referer` de
+   * um link MESMO ORIGEM — então um clique em link interno da tela de
+   * convite bota o token no log de acesso de outra rota do mesmo servidor.
+   * `no-referrer` fecha isso, e `no-store` impede que um proxy guarde a
+   * página com o token no corpo.
+   *
+   * ⚠️ Isto NÃO resolve o problema de fundo — o token na URL É o problema
+   * (achado MAJOR 1 da auditoria de segurança do PR #116). O que ele faz é
+   * não ESPALHAR o segredo para fora das três telas que o carregam.
+   */
+  async headers() {
+    const semVazarToken = [
+      { key: 'Referrer-Policy', value: 'no-referrer' },
+      { key: 'Cache-Control', value: 'no-store' },
+    ];
+    return [
+      { source: '/convite/:path*', headers: semVazarToken },
+      { source: '/users/novo', headers: semVazarToken },
+      { source: '/login', headers: semVazarToken },
+    ];
+  },
 };
 export default nextConfig;

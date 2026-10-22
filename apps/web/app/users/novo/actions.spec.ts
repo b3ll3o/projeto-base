@@ -150,6 +150,120 @@ describe('cadastrarUsuario — caminho feliz', () => {
   });
 });
 
+describe('cadastrarUsuario — entrada por convite', () => {
+  // pt-BR (onboarding de empresa, 2026-10-21): quem entra por convite nasce
+  // NA empresa que convidou, e o `destino` do corpo é o que diz isso. Sem o
+  // `destino`, a conta nasce sem empresa nenhuma e o funil do login a leva à
+  // página de criação de empresa — o oposto do que a pessoa veio fazer.
+  const TOKEN = 'a'.repeat(64);
+
+  function formDataComConvite(convite: string | null): FormData {
+    const fd = formData('Maria Silva', 'maria@empresa.com');
+    if (convite !== null) fd.set('convite', convite);
+    return fd;
+  }
+
+  it('manda o destino de convite para POST /users', async () => {
+    responder(okResponse());
+
+    await expect(cadastrarUsuario(INICIAL, formDataComConvite(TOKEN))).rejects.toThrow();
+
+    expect(JSON.parse(String(chamadas[0]?.init?.body)).destino).toEqual({
+      tipo: 'convite',
+      token: TOKEN,
+    });
+  });
+
+  it('sem convite, o corpo NÃO leva destino — a conta nasce sem empresa', async () => {
+    // pt-BR: `destino: undefined` no objeto NÃO é o mesmo que "sem destino" —
+    // o `JSON.stringify` apagaria a chave, mas o objeto em memória a teria.
+    // A asserção é sobre o CORPO ENVIADO, que é o que a API recebe.
+    responder(okResponse());
+
+    await expect(cadastrarUsuario(INICIAL, formDataComConvite(null))).rejects.toThrow();
+
+    expect(JSON.parse(String(chamadas[0]?.init?.body))).not.toHaveProperty('destino');
+  });
+
+  it('convite com formato inválido NÃO cria a conta — e diz por quê', async () => {
+    // pt-BR: o link de convite pode ter sido adulterado ou truncado. Criar
+    // a conta "normal" seria silenciar o problema: a pessoa entraria, não
+    // pertenceria a empresa nenhuma, e o motivo sumiria.
+    responder(okResponse());
+
+    const r = await cadastrarUsuario(INICIAL, formDataComConvite('token-adulterado'));
+
+    expect(chamadas).toHaveLength(0);
+    expect(r.ok).toBe(false);
+    expect(r.formError).toContain('convite');
+  });
+
+  it('convite de OUTRO e-mail diz o motivo — e não "verifique a conexão"', async () => {
+    // pt-BR: a API responde 403 com `code: 'CONVITE_INVALIDO'` quando o
+    // convite foi emitido para outro e-mail. Sem o mapeamento, a pessoa lia
+    // "não foi possível cadastrar o usuário, verifique a conexão" — e o que
+    // tinha falhado era o CONVITE, não a internet. O que a pessoa precisa
+    // saber é que o e-mail dela não é o do convite.
+    responder(problem(403, 'CONVITE_INVALIDO', 'Convite inválido'));
+
+    const r = await cadastrarUsuario(INICIAL, formDataComConvite(TOKEN));
+
+    expect(r.ok).toBe(false);
+    expect(r.formError).toContain('outro e-mail');
+    expect(r.formError).not.toContain('Verifique a conexão');
+  });
+
+  it('convite EXPIRADO diz que expirou — o que a pessoa tem que fazer', async () => {
+    responder(problem(410, 'CONVITE_INVALIDO', 'Convite inválido'));
+
+    const r = await cadastrarUsuario(INICIAL, formDataComConvite(TOKEN));
+
+    expect(r.formError).toContain('expirou');
+  });
+
+  it('CONVITE_INVALIDO de motivo desconhecido cai no genérico COM traceId', async () => {
+    // O `status` é o motivo, e nem todo status é um motivo de convite: o que
+    // sobra é falha genérica — e a genérica carrega o traceId, para o
+    // suporte saber o que aconteceu.
+    responder(problem(422, 'CONVITE_INVALIDO', 'Convite inválido'));
+
+    const r = await cadastrarUsuario(INICIAL, formDataComConvite(TOKEN));
+
+    expect(r.formError).toContain('Verifique a conexão');
+    expect(r.formError).toContain('trace-123');
+  });
+
+  it('404 com convite no formulário NÃO é "verifique a conexão" — a funcionalidade pode estar desligada', async () => {
+    // pt-BR (2026-10-22): a API responde 404 — com `code: 'NOT_FOUND'`,
+    // DERIVADO do status — quando a funcionalidade de convite está DESLIGADA.
+    // E a decisão da API é de não revelar se o convite existe, o que é
+    // CORRETO: quem só tem o token não pode distinguir "não existe" de
+    // "desligado". Mas a tela não pode dizer "verifique a conexão" — a
+    // internet está ótima e o cadastro está proibido por política.
+    //
+    // A tela IRMÃ (o aceite) mapeia o MESMO 404 pelo status. As duas portas
+    // do mesmo feature discordavam do mesmo status, e a pessoa que entrou
+    // pelo link de convite era a que pagava a diferença.
+    responder(problem(404, 'NOT_FOUND', 'Not Found'));
+
+    const r = await cadastrarUsuario(INICIAL, formDataComConvite(TOKEN));
+
+    expect(r.formError).toContain('não encontrado');
+    expect(r.formError).not.toContain('Verifique a conexão');
+  });
+
+  it('404 SEM convite no formulário continua sendo o genérico — o 404 não é de convite', async () => {
+    // A contra-regra: o 404 só é do convite quando o formulário VEIO de um
+    // convite. Sem ele, o 404 é o que for — e a tela não pode inventar um
+    // motivo de convite que ninguém pediu.
+    responder(problem(404, 'NOT_FOUND', 'Not Found'));
+
+    const r = await cadastrarUsuario(INICIAL, formData('Ana', 'ana@acme.dev'));
+
+    expect(r.formError).toContain('Verifique a conexão');
+  });
+});
+
 describe('cadastrarUsuario — validação no cliente da Action', () => {
   it('não chama a API quando o nome está vazio e aponta o campo', async () => {
     responder(okResponse());

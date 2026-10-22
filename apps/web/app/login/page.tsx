@@ -25,8 +25,14 @@
 // `Record` explícito no lugar de `SearchParams`.
 
 import { LoginForm } from '@/components/login-form';
+import { ehTokenDeConvite, PARAM_CONVITE } from '@/lib/convite-schema';
 import { entrar } from './actions';
-import { AVISO_CADASTRO_CONCLUIDO, PARAM_CADASTRO_CONCLUIDO } from './state';
+import {
+  AVISO_CADASTRO_CONCLUIDO,
+  AVISO_EMPRESA_PENDENTE,
+  PARAM_CADASTRO_CONCLUIDO,
+  PARAM_EMPRESA_PENDENTE,
+} from './state';
 
 type Props = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -39,7 +45,28 @@ export default async function LoginPage({ searchParams }: Props) {
   // array, e comparar array com string nunca seria verdadeiro — o aviso
   // sumiria em vez de aparecer. `Array.isArray` fecha esse caso pelo mesmo
   // motivo que fecha o resto dos params duplicados do Next.
-  const aviso = sinal !== undefined ? AVISO_CADASTRO_CONCLUIDO : undefined;
+  //
+  // ⚠️ A ORDEM dos dois sinais: o da EMPRESA PENDENTE é o mais acionável
+  // dos dois — a pessoa sabe exatamente o que fazer depois de entrar, e é
+  // ele que a traz de volta para `/empresa/nova`.
+  const sinalEmpresa = params[PARAM_EMPRESA_PENDENTE];
+  const aviso =
+    sinalEmpresa !== undefined
+      ? AVISO_EMPRESA_PENDENTE
+      : sinal !== undefined
+        ? AVISO_CADASTRO_CONCLUIDO
+        : undefined;
+
+  // pt-BR: o token do convite ATRAVESSA o login. A sessão vence em 15 min, e
+  // o aceite do convite devolve 401 quando isso acontece — o token precisa
+  // sobreviver ao login, ou a pessoa perde a empresa que a convidou (e o
+  // funil a leva a criar a PRÓPRIA empresa, que ela não queria).
+  //
+  // O token é validado AQUI e de novo na Action: a query string é entrada de
+  // usuário, e o que ela decide é para onde a pessoa vai depois de entrar.
+  const brutoConvite = params[PARAM_CONVITE];
+  const convite =
+    typeof brutoConvite === 'string' && ehTokenDeConvite(brutoConvite) ? brutoConvite : undefined;
 
   return (
     <main className="mx-auto max-w-3xl p-8">
@@ -48,7 +75,7 @@ export default async function LoginPage({ searchParams }: Props) {
         Use o e-mail e a senha da sua conta para acessar o sistema.
       </p>
       <div className="mt-8">
-        <LoginForm action={entrar} aviso={aviso} />
+        <LoginForm action={entrar} aviso={aviso} convite={convite} />
       </div>
     </main>
   );

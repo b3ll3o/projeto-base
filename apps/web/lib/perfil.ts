@@ -62,6 +62,23 @@ async function getClientOpcional(tenantScoped = true): Promise<ApiClient | null>
 }
 
 /**
+ * O cliente com um token JÁ CONHECIDO, no bucket GLOBAL.
+ *
+ * pt-BR (onboarding de empresa, 2026-10-21): existe para o LOGIN, que tem o
+ * token na mão e ainda não tem cookie. O `getTenant` devolve `null` — e o
+ * `ApiClient` só manda o header quando o valor existe (`api-client.ts:66-67`),
+ * então o `/me/profile` responde no bucket global, que é o que a função
+ * promete.
+ */
+function clientDoToken(accessToken: string): ApiClient {
+  return new ApiClient({
+    baseUrl: process.env.API_BASE_URL ?? 'http://localhost:3000/api/v1',
+    getToken: () => accessToken,
+    getTenant: () => null,
+  });
+}
+
+/**
  * Perfil do ator no tenant da sessão.
  *
  * pt-BR (#107, 2026-10-18): o `catch` deixou de ser `catch {}`.
@@ -116,7 +133,7 @@ export async function obterMeuPerfil(): Promise<MeProfileDto | null> {
  * precisa, e o que `obterMeuPerfil` **não** devolve.
  *
  * Por que existe (achado A, revisão adversarial 2026-10-18): os dois `isAdmin`
- * não são a mesma pessoa. O da empresa é o perfil de DONO (todo dono de empresa
+ * não são a mesma pessoa. O da empresa é o perfil de GERENTE (todo gerente de empresa
  * nova nasce com `isAdmin: true`, `prisma-tenant-onboarding.repository.ts:202`);
  * o global é o do bucket de sistema. D2 exige o **global**
  * (`ehAdministradorDeSistema`: `tenantId === null && isAdmin`). Autorizar por
@@ -124,14 +141,15 @@ export async function obterMeuPerfil(): Promise<MeProfileDto | null> {
  * cookie, o próprio pedido levava 403 `TENANT_MEMBERSHIP_REQUIRED` antes de
  * chegar lá.
  *
- * ⚠️ O caminho está INALCANÇÁVEL pelo produto hoje: `guardarTenant` não tem
- * caller de produção (`sessao.ts:98`), então o cookie `tenant_id` nunca é
- * escrito e `lerTenant()` devolve `null`. A correção é para o código dizer a
- * verdade, não para consertar um bug de hoje. Quando alguém chamar
- * `guardarTenant`, esta função já é a certa.
+ * ⚠️ O token pode chegar por PARÂMETRO (onboarding de empresa, 2026-10-21).
+ * Quem chama é o LOGIN, que acabou de RECEBER o token da API e ainda não tem
+ * cookie nenhum — depender do store do Next devolver um cookie recém-escrito
+ * é a mesma fragilidade que `lib/empresas.ts` documenta. Sem o parâmetro, o
+ * comportamento é o de sempre: o token vem do cookie.
  */
-export async function obterMeuPerfilGlobal(): Promise<MeProfileDto | null> {
-  const client = await getClientOpcional(false);
+export async function obterMeuPerfilGlobal(accessToken?: string): Promise<MeProfileDto | null> {
+  const client =
+    accessToken === undefined ? await getClientOpcional(false) : clientDoToken(accessToken);
   if (client === null) return null;
 
   try {

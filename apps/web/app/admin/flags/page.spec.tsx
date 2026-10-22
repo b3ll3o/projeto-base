@@ -50,8 +50,8 @@ describe('admin/flags — a página chama a variante GLOBAL do perfil', () => {
     expect(obterMeuPerfil).not.toHaveBeenCalled();
   });
 
-  it('D2: dono de empresa NÃO administrator do sistema não vê a tabela', async () => {
-    // Dono é `isAdmin: true` na empresa dele. Se a página usasse
+  it('D2: gerente de empresa NÃO administrator do sistema não vê a tabela', async () => {
+    // Gerente é `isAdmin: true` na empresa dele. Se a página usasse
     // `obterMeuPerfil`, este ator passaria pelo `isAdmin` e a API recusaria o
     // PATCH — a tela affirmando uma permissão que o servidor não tem.
     obterMeuPerfil.mockResolvedValue({ isAdmin: true });

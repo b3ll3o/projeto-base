@@ -81,7 +81,7 @@ describe('PrismaTenantMembershipRepository.atribuirPerfil — Postgres (Fase 6)'
     const gestorAcme = await criarPerfil(acme, 'gestor-acme');
     const gestorGlobex = await criarPerfil(globex, 'gestor-globex');
     await ctx.prisma.tenantMembership.create({
-      data: { userId: pessoa, tenantId: acme, role: 'owner', profileId: gestorAcme },
+      data: { userId: pessoa, tenantId: acme, role: 'gerente', profileId: gestorAcme },
     });
     await ctx.prisma.tenantMembership.create({
       data: { userId: pessoa, tenantId: globex, role: 'member', profileId: gestorGlobex },
@@ -163,5 +163,132 @@ describe('PrismaTenantMembershipRepository.atribuirPerfil — Postgres (Fase 6)'
       select: { profileId: true },
     });
     expect(linha?.profileId).toBeNull();
+  });
+
+  // ─────────── a ORDEM da lista de empresas ───────────
+  //
+  // ⚠️ A ordem é FUNCIONAL: o funil do login (no web) leva a pessoa para a
+  // PRIMEIRA empresa da lista. E a chave que decide é a DATA da membership.
+  //
+  // ⚠️ O `profileId` NÃO pode ser a chave: ele é um UUID DISTINTO por
+  // membership, e como chave entregava a ordem ao ALEATÓRIO do UUID. Os ids
+  // de perfil abaixo são ESCOLHIDOS (o menor e o maior possíveis) para que a
+  // ordem antiga fosse deterministicamente errada — com o `profileId` na
+  // frente, 'antiga' (uuid menor) viria antes de 'recente' (uuid maior), o
+  // contrário do que a recência manda.
+  it('entre as empresas onde a pessoa tem perfil, a MAIS RECENTE vem primeiro', async () => {
+    await cleanDatabase(ctx.prisma);
+    const pessoa = await criarConta('ana@acme.dev');
+    const antiga = await criarEmpresa('antiga');
+    const recente = await criarEmpresa('recente');
+    const perfilAntigo = await ctx.prisma.profile.create({
+      data: {
+        id: '00000000-0000-0000-0000-000000000001',
+        slug: 'gestor-antiga',
+        name: 'Coordenador',
+        tenantId: antiga,
+      },
+    });
+    const perfilRecente = await ctx.prisma.profile.create({
+      data: {
+        id: 'ffffffff-ffff-ffff-ffff-ffffffffffff',
+        slug: 'gestor-recente',
+        name: 'Coordenador',
+        tenantId: recente,
+      },
+    });
+    await ctx.prisma.tenantMembership.create({
+      data: {
+        userId: pessoa,
+        tenantId: antiga,
+        role: 'member',
+        profileId: perfilAntigo.id,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      },
+    });
+    await ctx.prisma.tenantMembership.create({
+      data: {
+        userId: pessoa,
+        tenantId: recente,
+        role: 'member',
+        profileId: perfilRecente.id,
+        createdAt: new Date('2026-06-01T00:00:00.000Z'),
+      },
+    });
+
+    const empresas = await repo.listarEmpresasDoUsuario(pessoa);
+
+    expect(empresas.map((empresa) => empresa.slug)).toEqual(['recente', 'antiga']);
+  });
+
+  it('a membership SEM perfil efetivo vai para o FIM, mesmo sendo a mais recente', async () => {
+    // ⚠️ Quem ainda não recebeu perfil não pode fazer nada na empresa, e o
+    // funil não pode levá-lo para lá. A data sozinha colocaria a empresa
+    // vazia na frente — que é a origem do 403 sem causa nomeada.
+    await cleanDatabase(ctx.prisma);
+    const pessoa = await criarConta('ana@acme.dev');
+    const comPerfil = await criarEmpresa('com-perfil');
+    const semPerfil = await criarEmpresa('sem-perfil');
+    const perfil = await criarPerfil(comPerfil, 'coordenador');
+    await ctx.prisma.tenantMembership.create({
+      data: {
+        userId: pessoa,
+        tenantId: comPerfil,
+        role: 'gerente',
+        profileId: perfil,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      },
+    });
+    await ctx.prisma.tenantMembership.create({
+      data: {
+        userId: pessoa,
+        tenantId: semPerfil,
+        role: 'member',
+        profileId: null,
+        createdAt: new Date('2026-06-01T00:00:00.000Z'),
+      },
+    });
+
+    const empresas = await repo.listarEmpresasDoUsuario(pessoa);
+
+    expect(empresas.map((empresa) => empresa.slug)).toEqual(['com-perfil', 'sem-perfil']);
+  });
+
+  it('a membership apontada para o perfil de OUTRA empresa vai para o FIM', async () => {
+    // ⚠️ A coluna CRUA (`profile_id` não nulo) não é perfil EFETIVO: o perfil
+    // de outra empresa não resolve nada na API — o filtro de DONA do
+    // `findProfileId` recusa. Uma lista que contasse a coluna crua
+    // colocaria essa empresa na FRENTE (é a mais recente aqui), e o funil do
+    // login escolheria uma empresa onde a pessoa não pode fazer nada.
+    await cleanDatabase(ctx.prisma);
+    const pessoa = await criarConta('ana@acme.dev');
+    const acme = await criarEmpresa('acme');
+    const globex = await criarEmpresa('globex');
+    const perfilDaGlobex = await criarPerfil(globex, 'gestor-globex');
+    // A membership na ACME aponta para o perfil da GLOBEX — o estado que o
+    // port admite ter existido.
+    await ctx.prisma.tenantMembership.create({
+      data: {
+        userId: pessoa,
+        tenantId: acme,
+        role: 'member',
+        profileId: perfilDaGlobex,
+        createdAt: new Date('2026-06-01T00:00:00.000Z'),
+      },
+    });
+    // E a membership da GLOBEX, com o perfil da PRÓPRIA empresa, mais antiga.
+    await ctx.prisma.tenantMembership.create({
+      data: {
+        userId: pessoa,
+        tenantId: globex,
+        role: 'member',
+        profileId: perfilDaGlobex,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      },
+    });
+
+    const empresas = await repo.listarEmpresasDoUsuario(pessoa);
+
+    expect(empresas.map((empresa) => empresa.slug)).toEqual(['globex', 'acme']);
   });
 });

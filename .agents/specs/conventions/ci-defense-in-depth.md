@@ -28,6 +28,19 @@ encolhe com o tempo. A deliberação está em
 [Pendências conhecidas](./ci-defense-in-depth-pendencias.md); script e demais
 detalhes em [git-workflow.md §Pre-Push Quality Gate](./git-workflow.md).
 
+**O que o HOOK roda é menos que o `ci:local`** — e é proposital: o hook é
+rápido, o `ci:local` é lento. `.husky/pre-push` roda `pnpm ci:preflight`
+(Camada 2) e `pnpm ci:boot`. O `ci:boot` é a etapa que **sobe a aplicação
+local** (API em `tsx src/main.ts` + web em `next dev`, em portas livres) e a
+derruba no fim; o veredito é do processo que sobe — `/api/v1/health` 200 com
+`checks.database: "ok"` e `/api/health` 200 com `status: "ok"`.
+
+⚠️ **O banco local é pré-requisito e a etapa não o sobe**: sem ele o push é
+ barrado com o ponteiro para [`docs/como-rodar.md` §1.1](../../../docs/como-rodar.md).
+ É a única regra desta camada que depende do estado da máquina — e ela
+ **falha alto**, nunca pula. O e2e não cobre esse buraco: ele sobe a API em
+ `tsx` e o web no BUILD de produção, que é outro caminho do `pnpm dev`.
+
 ### Camada 2 — Preflight CI job
 
 Workflow `.github/workflows/ci.yml`, job `preflight`. **Primeiro job do
@@ -64,6 +77,8 @@ Escopo de todos: **todo `.md` versionado** sob a raiz que o preflight passa
 | `check-runbook-drift` | runbook | script `pnpm` ou chave de env citados em `docs/como-rodar.md` que **não existem em nenhum** `package.json` do workspace. Runbook ausente → `skipped` COM MOTIVO, nunca verde. **Não** detecta o inverso (script que só existe em `apps/*` citado como se fosse da raiz): `scriptsDoWorkspace()` faz união plana de raiz + `apps/*` + `packages/*` e o teste é `!scripts.has(s)`, então o pacote de origem é descartado. MEDIDO 2026-10-20 |
 | `check-archive-integrity` | archive | frontmatter canônico de `.agents/runs/archive/*.md` |
 | `check-memory-dir-concordance` | retro | segunda declaração do destino do result file, em 6 notações históricas |
+| `check-repeticao` | DRY (termo) | termo de domínio declarado em `dry-termos.json` e hardcoded em arquivo de PRODUÇÃO — com `estado: 'ok'`, é erro; com `estado: 'declarado'`, é dívida publicada em ressalva. Mede por ARQUIVO, e não por ocorrência (um literal usado 40× num arquivo só é um arquivo só). O dono do termo e o spec que AFIRMA o valor não são acusados — o literal do spec é o dente dele |
+| `check-bloco-duplicado` | DRY (lógica) | bloco de **16+ linhas** repetido em 2+ arquivos de produção. A janela é 16 porque é MEDIDA: com 12, o gate acusaria o markup JSX do formulário — repetição de MARCAÇÃO, não de decisão |
 | `check-memory-crystallization` | cristalização | memória do corpus **sem linha nenhuma** no ledger de destinação (fecha o laço DURANTE → DEPOIS); linha do ledger apontando para memória que não existe mais; `citada:` cuja âncora **deixou de estar** no arquivo que ela citava. `pendente:` é **aviso** — dívida declarada, não resolvida. Ledger ausente ou corpus de 0 → **erro**; diretório de memória fora do repo → `skipped` com motivo, nunca verde |
 | `check-agent-memory-drift` | agents | agent com **mudança de comportamento** e memória (`.agents/memory/<agent>.md`) intocada no mesmo range |
 | `check-tooling-typecheck` | typecheck | erro de tipo em **cada** superfície da lista `SUPERFICIES` — `.tooling/scripts/**` **e** `tooling/scripts/**`, as duas na barra de `tsconfig.base.json`; `tsc` != 0 **sem** diagnóstico também é vermelho (issue #46, amplitude 2026-10-08) |

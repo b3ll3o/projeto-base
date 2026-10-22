@@ -48,7 +48,7 @@ const NOME_DA_CHAVE = 'membership';
  * falsy e normaliza para `'member'`. Com `role = ''` os dois lados assinariam
  * corpos diferentes — o Node `6:member`, o Postgres `0:` — e o `criar_membership`
  * cairia com `42501 assinatura invalida`. MEDIDO o alcance: `role` não é alcançável
- * vazio hoje (os dois únicos produtores passam os literais `'owner'`, em
+ * vazio hoje (os dois únicos produtores passam os literais `'gerente'`, em
  * `prisma-tenant-onboarding.repository.ts:215`, e `'member'`, em
  * `tenancy.use-cases.ts:90`), então isto é latente; mas o spec desta função
  * FIXAVA a forma errada como esperada, e viraria armadilha no dia em que `role`

@@ -22,11 +22,26 @@ nullable em `NOT NULL`:
 |---------|-----------|
 | `DROP COLUMN` | **sim** |
 | `RENAME COLUMN` que quebra dado já gravado | **sim** |
+| Renome de VALOR gravado (ex.: `role = 'owner'` → `'gerente'`) | **sim** — o dado gravado não muda com o código |
 | Nullable → `NOT NULL` | **sim** |
 | `SET NOT NULL` junto com `ADD COLUMN NOT NULL DEFAULT` | **não** — o default já popula |
 | `ADD COLUMN` nullable nova | **não** — nada a migrar |
 | Índice novo | **não** |
 | Mudança de tipo compatível, sem perda | só se o dado existente violar o tipo |
+
+⚠️ **Renome de VALOR é o mesmo furo do renome de COLUNA — e ele é mais
+silencioso.** A coluna continua existindo, o dado continua válido, e o banco
+não denuncia nada: quando a coluna é TEXT sem CHECK e sem enum, **os dois
+valores convivem** sem que nenhuma constraint reclame. O único sintoma é a
+**comparação que autoriza** passar a falhar para o dado velho — e essa
+comparação costuma estar em outro arquivo, longe do rename.
+
+MEDIDO 2026-10-22, PR #116: o catálogo da empresa renomeou o papel da
+membership de `'owner'` para `'gerente'`, o código que grava passou a gravar o
+valor novo, e a autorização do convite passou a exigir o valor novo. A
+empresa criada **antes** do rename ficou com `role = 'owner'` gravado, e o
+dono recebia **403 ao convidar** — sem erro, sem log, sem 500. O banco local
+tinha 10 memberships assim, em 10 empresas.
 
 ## 2. OS 3 PASSOS
 

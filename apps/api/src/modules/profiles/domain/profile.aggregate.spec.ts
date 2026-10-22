@@ -82,8 +82,8 @@ describe('Profile (aggregate)', () => {
     it('hidrata o tenantId da row (quem é o DONO do perfil)', () => {
       const base = {
         id: '00000000-0000-0000-0000-000000000002',
-        slug: 'gestor',
-        name: 'Gestor',
+        slug: 'coordenador',
+        name: 'Coordenador',
         description: null,
         isAdmin: false,
         isSystem: false,

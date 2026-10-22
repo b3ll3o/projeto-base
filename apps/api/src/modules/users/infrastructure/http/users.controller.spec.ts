@@ -321,7 +321,7 @@ describe('UsersController — handlers HTTP', () => {
   // ter bypass"*.
   //
   // O recorte é `destino.tipo === 'convite'` e só ele: `empresa` não usa token de
-  // convite (cria owner) e `ausente` é cadastro puro. Os três ficam abertos nos
+  // convite (cria gerente) e `ausente` é cadastro puro. Os três ficam abertos nos
   // specs abaixo — é isso que impede o gate de virar "POST /users inteiro
   // desligado", que seria um bypass diferente.
   describe('create() com `destino.tipo === "convite"`', () => {

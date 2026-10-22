@@ -94,7 +94,7 @@ test.describe('F8 — Rota protegida sem sessão', () => {
     await expect(page).toHaveURL(/\/login$/);
   });
 
-  test('quem entra pelo login sai da tela de login para a listagem', async ({
+  test('quem entra pelo login sai da tela de login — e, sem empresa, vai criar uma', async ({
     page,
     irPara,
     semear,
@@ -106,6 +106,14 @@ test.describe('F8 — Rota protegida sem sessão', () => {
     //
     // A conta é semeada aqui, e não vem do harness: a conta do harness é
     // apagada em soft-delete ao nascer e não consegue mais logar.
+    //
+    // ⚠️ pt-BR (onboarding de empresa, 2026-10-21): o DESTINO mudou, e a
+    // mudança é o produto pedido, não uma regressão. A regra é "toda conta
+    // pertence a uma empresa, exceto o administrador de sistema" — e uma
+    // conta sem empresa não tem para onde ir, então o login a leva à tela de
+    // criação. O F16 é o fluxo que mede o caminho INTEIRO; aqui o que se
+    // mede é o CICLO (sair da tela de login), e o destino novo é o que o
+    // funil entrega para quem não pertence a empresa nenhuma.
     const email = emailUnico('login-volta');
     await semear('Pessoa Que Volta', email);
     await clearCookies(page);
@@ -115,7 +123,7 @@ test.describe('F8 — Rota protegida sem sessão', () => {
     await page.locator('#senha').fill(SENHA_DE_TESTE);
     await page.getByRole('button', { name: 'Entrar', exact: true }).click();
 
-    await expect(page).toHaveURL(/\/users$/);
-    await expect(page.getByRole('heading', { name: 'Usuários' })).toBeVisible();
+    await expect(page).toHaveURL(/\/empresa\/nova$/);
+    await expect(page.getByRole('heading', { name: 'Criar empresa' })).toBeVisible();
   });
 });

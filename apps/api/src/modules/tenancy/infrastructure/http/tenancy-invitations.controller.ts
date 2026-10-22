@@ -2,7 +2,7 @@
 //
 // pt-BR (Fase 5 — tenancy, 2026-10-16): as duas rotas de convite.
 //
-//   POST /tenants/:id/invitations  → o owner convida alguém
+//   POST /tenants/:id/invitations  → o gerente convida alguém
 //   POST /invitations/accept        → quem tem o token entra
 //
 // A entrada por CONTA NOVA não mora aqui: ela é o ramo `destino: 'convite'`
@@ -10,7 +10,7 @@
 // transação — o que um `@Post` separado não consegue prometer.
 
 import { Body, Controller, Inject, Param, Post, Req, UseGuards } from '@nestjs/common';
-import { ApiResponse } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { z } from 'zod';
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
 import { ZodValidationPipe } from '../../../../shared/infrastructure/http/zod-validation.pipe.js';
@@ -65,7 +65,7 @@ const FLAG_DESLIGADA_404 = 'Recurso indisponível (funcionalidade desligada)';
 // (`X-Tenant-Id`), que pode ser diferente do `:id` desta rota — um header
 // apontando para a Acme e um path para a Globex checariam "tenho
 // `admin.manage-users` na Acme?" para uma ação sobre a Globex. Eixos
-// trocados. A autorização certa aqui é "o `sub` é owner DESTE tenant", que é
+// trocados. A autorização certa aqui é "o `sub` é gerente DESTE tenant", que é
 // uma pergunta de um eixo só — e ela mora no use case (`findRole`), que é
 // onde o dado está.
 @UseGuards(JwtAuthGuard)
@@ -90,7 +90,23 @@ export class TenancyInvitationsController {
   // daqui não muda um status só nos cenários 10 e 12.
   @UseGuards(FeatureFlagGuard)
   @RequireFeatureFlag('tenancy.invites')
+  // pt-BR: `@ApiBearerAuth()` é OBRIGATÓRIO — no documento OpenAPI a rota
+  // PÚBLICA é a única que não declara `security`, e esta exige JWT (o
+  // `JwtAuthGuard` da classe). Sem o decorator, um cliente gerado do
+  // documento não manda `Authorization` e leva 401 na primeira chamada.
+  @ApiBearerAuth()
   @ApiResponse({ status: 201, description: 'Convite emitido' })
+  @ApiResponse({ status: 400, description: 'Payload inválido' })
+  @ApiResponse({ status: 401, description: 'Não autorizado' })
+  @ApiResponse({ status: 403, description: 'Quem convida não administra a empresa' })
+  // pt-BR: o 409 é o `CONVITE_JA_EMITIDO` — o `@@unique([tenantId, email])` de
+  // `invitations` traduzido em `ConviteJaEmitidoException`. A rota DEVOLVE esse
+  // status (convidar o mesmo e-mail duas vezes na mesma empresa) e o documento
+  // não o anunciava: um cliente gerado do documento não tem ramo para ele, e o
+  // dono lê "algo deu errado" num conflito que ele precisa resolver ("cancele o
+  // convite pendente ou convide outro e-mail"). O irmão `tenancy-empresas`
+  // declara os seus — a omissão aqui era uma contradição do contrato.
+  @ApiResponse({ status: 409, description: 'Já existe um convite pendente para este e-mail' })
   @ApiResponse({ status: 404, description: FLAG_DESLIGADA_404 })
   async convidar(
     // ⚠️ (PR #101) O `:id` É validado, e não só o body. Sem este pipe o valor
@@ -126,13 +142,30 @@ export class TenancyInvitationsController {
   // `POST /users`, que é `@Public()` e não tem `req.user` para o guard exigir).
   @UseGuards(FeatureFlagGuard)
   @RequireFeatureFlag('tenancy.invites')
+  // pt-BR: `@ApiBearerAuth()` — mesma razão da rota de cima. E os status que
+  // a API DEVOLVE estão declarados: o web ramifica em 410 (expirado), 409
+  // (já usado) e 403 (e-mail diferente), e um cliente gerado do documento que
+  // não os conhecesse não teria ramo para eles.
+  @ApiBearerAuth()
   @ApiResponse({ status: 201, description: 'Convite aceito' })
+  @ApiResponse({ status: 400, description: 'Token inválido' })
+  @ApiResponse({ status: 401, description: 'Não autorizado' })
+  @ApiResponse({ status: 403, description: 'O convite é de outro e-mail' })
+  @ApiResponse({ status: 409, description: 'O convite já foi usado' })
+  @ApiResponse({ status: 410, description: 'O convite expirou' })
   @ApiResponse({ status: 404, description: FLAG_DESLIGADA_404 })
   async aceitar(
     @Body(new ZodValidationPipe(AceitarConviteSchema)) body: z.infer<typeof AceitarConviteSchema>,
     @Req() req: RequestComAtor,
-  ): Promise<{ aceito: true }> {
-    await this.useCases.aceitarConvite({ userId: req.user.sub, token: body.token });
-    return { aceito: true };
+  ): Promise<{ aceito: true; tenantId: string }> {
+    // O `tenantId` volta porque a empresa do convite é o que o web precisa para
+    // apontar a sessão para ela (o cookie `tenant_id`). Sem ele, a conta
+    // entra na empresa e fica com ZERO permissões na tela — membership sem
+    // escopo.
+    const { tenantId } = await this.useCases.aceitarConvite({
+      userId: req.user.sub,
+      token: body.token,
+    });
+    return { aceito: true, tenantId };
   }
 }

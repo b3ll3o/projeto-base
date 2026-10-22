@@ -26,6 +26,7 @@ import {
   NaoAdministraEmpresaException,
 } from '../domain/exceptions/tenancy.exceptions.js';
 import { User } from '../../users/domain/user.aggregate.js';
+import { UserNotFoundException } from '../../users/domain/exceptions/user.exceptions.js';
 import { PasswordHash } from '../../users/domain/value-objects/password-hash.vo.js';
 import type { UserRepositoryPort } from '../../users/domain/ports/user-repository.port.js';
 
@@ -76,15 +77,34 @@ function userFalso(id: string, email: string): User {
   });
 }
 
+/** A mesma conta, mas apagada — o soft-delete que precisa ser fail-closed. */
+function userApagado(id: string, email: string): User {
+  return User.restaurarDePersistencia({
+    id,
+    nome: 'Ana',
+    email,
+    senhaHash: PasswordHash.create(HASH),
+    profileId: null,
+    createdAt: AGORA,
+    updatedAt: AGORA,
+    version: 1,
+    deletedAt: AGORA,
+  });
+}
+
 describe('TenancyUseCases — entrada na empresa (D5)', () => {
   let onboarding: {
     provisionarEmpresaPropria: ReturnType<typeof vi.fn>;
+    abrirEmpresaParaUsuario: ReturnType<typeof vi.fn>;
     entrarPorConvite: ReturnType<typeof vi.fn>;
     criarContaPorConvite: ReturnType<typeof vi.fn>;
     emitirConvite: ReturnType<typeof vi.fn>;
     buscarConvitePorToken: ReturnType<typeof vi.fn>;
   };
-  let memberships: { findRole: ReturnType<typeof vi.fn> };
+  let memberships: {
+    findRole: ReturnType<typeof vi.fn>;
+    listarEmpresasDoUsuario: ReturnType<typeof vi.fn>;
+  };
   let users: { findById: ReturnType<typeof vi.fn> };
   let useCases: TenancyUseCases;
   let agora: Date;
@@ -96,12 +116,20 @@ describe('TenancyUseCases — entrada na empresa (D5)', () => {
 
     onboarding = {
       provisionarEmpresaPropria: vi.fn().mockResolvedValue(undefined),
+      abrirEmpresaParaUsuario: vi.fn().mockResolvedValue({
+        id: ACME,
+        nome: 'ACME',
+        slug: 'acme',
+      }),
       entrarPorConvite: vi.fn().mockResolvedValue(undefined),
       criarContaPorConvite: vi.fn().mockResolvedValue(undefined),
       emitirConvite: vi.fn().mockResolvedValue(undefined),
       buscarConvitePorToken: vi.fn().mockResolvedValue(convite()),
     };
-    memberships = { findRole: vi.fn().mockResolvedValue('owner') };
+    memberships = {
+      findRole: vi.fn().mockResolvedValue('gerente'),
+      listarEmpresasDoUsuario: vi.fn().mockResolvedValue([]),
+    };
     users = { findById: vi.fn().mockResolvedValue(userFalso(VISITANTE, 'ana@acme.com')) };
 
     useCases = new TenancyUseCases(
@@ -171,7 +199,7 @@ describe('TenancyUseCases — entrada na empresa (D5)', () => {
     expect(primeiro.token).not.toBe(segundo.token);
   });
 
-  it('quem NÃO é owner da empresa não emite convite — e nada é gravado', async () => {
+  it('quem NÃO é gerente da empresa não emite convite — e nada é gravado', async () => {
     memberships.findRole.mockResolvedValue('member');
 
     await expect(
@@ -287,9 +315,9 @@ describe('TenancyUseCases — entrada na empresa (D5)', () => {
     const limite = new Date(agora.getTime() + 1);
     onboarding.buscarConvitePorToken.mockResolvedValue(convite({ expiresAt: limite }));
 
-    await expect(
-      useCases.aceitarConvite({ userId: VISITANTE, token: TOKEN }),
-    ).resolves.toBeUndefined();
+    await expect(useCases.aceitarConvite({ userId: VISITANTE, token: TOKEN })).resolves.toEqual({
+      tenantId: ACME,
+    });
 
     vi.setSystemTime(limite);
     onboarding.buscarConvitePorToken.mockResolvedValue(convite({ expiresAt: limite }));
@@ -304,8 +332,66 @@ describe('TenancyUseCases — entrada na empresa (D5)', () => {
   it('convite sem prazo não vence nunca (`expiresAt` null = sem validade)', async () => {
     onboarding.buscarConvitePorToken.mockResolvedValue(convite({ expiresAt: null }));
 
+    await expect(useCases.aceitarConvite({ userId: VISITANTE, token: TOKEN })).resolves.toEqual({
+      tenantId: ACME,
+    });
+  });
+
+  // ───────────────────────── a empresa de quem já tem conta ─────────────────────────
+
+  it('criar empresa entrega a conta e a empresa ao port, e devolve a empresa aberta', async () => {
+    const empresa = await useCases.criarEmpresa({
+      userId: DONO,
+      nome: 'ACME',
+      slug: 'acme',
+    });
+
+    expect(onboarding.abrirEmpresaParaUsuario).toHaveBeenCalledTimes(1);
+    const [userId, dados] = onboarding.abrirEmpresaParaUsuario.mock.calls[0]!;
+    expect(userId).toBe(DONO);
+    expect(dados).toMatchObject({ nome: 'ACME', slug: 'acme' });
+    expect(empresa).toMatchObject({ id: ACME, nome: 'ACME', slug: 'acme' });
+  });
+
+  it('criar empresa para uma conta que NÃO existe não escreve nada', async () => {
+    users.findById.mockResolvedValue(null);
+
     await expect(
-      useCases.aceitarConvite({ userId: VISITANTE, token: TOKEN }),
-    ).resolves.toBeUndefined();
+      useCases.criarEmpresa({ userId: DONO, nome: 'ACME', slug: 'acme' }),
+    ).rejects.toBeInstanceOf(UserNotFoundException);
+
+    expect(onboarding.abrirEmpresaParaUsuario).not.toHaveBeenCalled();
+  });
+
+  it('criar empresa para uma conta APAGADA não escreve nada', async () => {
+    users.findById.mockResolvedValue(userApagado(VISITANTE, 'ana@acme.com'));
+
+    await expect(
+      useCases.criarEmpresa({ userId: VISITANTE, nome: 'ACME', slug: 'acme' }),
+    ).rejects.toBeInstanceOf(UserNotFoundException);
+
+    expect(onboarding.abrirEmpresaParaUsuario).not.toHaveBeenCalled();
+  });
+
+  it('listar empresas devolve o que o port devolve, sem filtrar nada', async () => {
+    const lista = [{ id: ACME, nome: 'ACME', slug: 'acme', role: 'gerente' }];
+    memberships.listarEmpresasDoUsuario.mockResolvedValue(lista);
+
+    expect(await useCases.listarEmpresas(DONO)).toEqual(lista);
+    expect(memberships.listarEmpresasDoUsuario).toHaveBeenCalledWith(DONO);
+  });
+
+  it('listar empresas de quem não tem nenhuma devolve lista vazia', async () => {
+    memberships.listarEmpresasDoUsuario.mockResolvedValue([]);
+
+    expect(await useCases.listarEmpresas(DONO)).toEqual([]);
+  });
+
+  // ───────────────────────── o aceite diz QUAL empresa ─────────────────────────
+
+  it('o aceite devolve a empresa QUE CONVIDOU — sem isso o web não sabe onde gravar o cookie', async () => {
+    const aceite = await useCases.aceitarConvite({ userId: VISITANTE, token: TOKEN });
+
+    expect(aceite).toEqual({ tenantId: ACME });
   });
 });

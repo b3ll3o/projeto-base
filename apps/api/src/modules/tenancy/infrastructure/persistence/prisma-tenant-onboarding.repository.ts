@@ -19,6 +19,7 @@ import {
   type ConviteParaAceitar,
   type ConviteParaEmitir,
   type ConvitePendente,
+  type EmpresaAberta,
   type EmpresaParaAbrir,
   type TenantOnboardingPort,
   type UsuarioParaProvisionar,
@@ -28,7 +29,8 @@ import {
   ConviteJaEmitidoException,
   EmpresaJaExisteException,
 } from '../../domain/exceptions/tenancy.exceptions.js';
-import { listAllPermissions } from '../../../../shared/auth/permissions-catalog.js';
+import { perfisDaEmpresa } from '../../domain/perfis-da-empresa.js';
+import { EmailAlreadyInUseException } from '../../../users/domain/exceptions/user.exceptions.js';
 import {
   abrirEscopo,
   comEscopo,
@@ -44,26 +46,52 @@ type Tx = Parameters<Parameters<PrismaClient['$transaction']>[0]>[0];
  * `prisma-user.repository.ts` (`traduzirFalhaDeUnicidade`), que existe pela
  * MESMA razão.
  *
- * Cada chamador traduz o SEU: `tx.tenant.create` só tem `slug` único, e
- * `invitation.create` só tem `(tenantId, email)` realisticamente colidível — o
- * `token` é `randomBytes(32)`. Traduzir aqui, e não por `meta.target`, evita
- * depender do formato que o Prisma usa para nomear a constraint.
+ * ⚠️ A tradução é por ONDE a escrita falhou, e NUNCA pelo nome da constraint.
+ * `meta.target` do Prisma é o nome do CAMPO — e ele vem **NULL** quando o
+ * Postgres tem a unicidade como ÍNDICE e não como constraint, que é como as
+ * migrations deste repo criam o `@unique` do `users.email`.
+ *
+ * MEDIDO 2026-10-22, contra o banco local (o mesmo shape do de produção): o
+ * `meta` do P2002 é `{"modelName":"User","target":null}` e a mensagem é
+ * "Unique constraint failed on the (not available)". O `catch` que casava com
+ * o nome casava com a STRING VAZIA, e o P2002 subia cru como **500** — o
+ * cadastro com e-mail repetido respondia "banco fora do ar" num pedido que
+ * era um CONFLITO.
+ *
+ * A suíte de integração NÃO pegou isso: no banco de testcontainers o `target`
+ * vem preenchido, e o mesmo código passava verde. Um discriminador que só
+ * funciona num dos dois bancos é pior do que nenhum — é um que mente sobre o
+ * banco em que a aplicação roda.
+ *
+ * O que sobra é o que `prisma-user.repository.ts` já faz: a ESCRITA diz qual
+ * é a constraint. `tx.tenant.create` só tem `slug` único; `tx.user.create` só
+ * tem `email` (o `id` é um UUID novo). E `invitation.create` é o único caso
+ * com DOIS uniques na MESMA escrita — `token` e `(tenantId, email)` — e ele é
+ * decidido por LEITURA, não por nome.
  */
 function ehViolacaoDeUnicidade(erro: unknown): erro is Prisma.PrismaClientKnownRequestError {
   return erro instanceof Prisma.PrismaClientKnownRequestError && erro.code === 'P2002';
 }
 
 /**
- * Nome da constraint que estourou, normalizado para string.
+ * A membership bateu na unicidade de `(user_id, tenant_id)`?
  *
- * O Prisma muda o formato de `meta.target` entre versões (`'token'`,
- * `['tenantId','email']`, `'tenantId_email'`), então a checagem é por
- * **substring** e não por igualdade: o objetivo é só separar "colidiu o
- * token" de "colidiu o par empresa+e-mail", e não reproduzir o formato.
+ * ⚠️ NÃO é um P2002: o `INSERT` é `tx.$queryRaw` (a função `criar_membership`),
+ * e o Prisma reporta a falha de uma query CRUA como **P2010**, com o código do
+ * Postgres no `meta.code` (23505 = unique_violation). MEDIDO 2026-10-21:
+ * `PrismaClientKnownRequestError`, `code: 'P2010'`, `meta.code: '23505'`,
+ * mensagem `Key (user_id, tenant_id)=(…) already exists.`
+ *
+ * ⚠️ Por que a mensagem é conferida: o P2010 cobre QUALQUER falha de query
+ * crua, e traduzir todas por 409 esconderia um banco fora do ar.
  */
-function constraintQueEstourou(erro: Prisma.PrismaClientKnownRequestError): string {
-  const alvo = (erro.meta as { target?: unknown } | undefined)?.target;
-  return Array.isArray(alvo) ? alvo.join(',') : String(alvo ?? '');
+function ehViolacaoDeUnicidadeDaMembership(
+  erro: unknown,
+): erro is Prisma.PrismaClientKnownRequestError {
+  if (!(erro instanceof Prisma.PrismaClientKnownRequestError) || erro.code !== 'P2010')
+    return false;
+  const meta = erro.meta as { code?: unknown; message?: unknown } | undefined;
+  return meta?.code === '23505' && String(meta?.message ?? '').includes('user_id, tenant_id');
 }
 
 @Injectable()
@@ -94,7 +122,7 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
    * (a empresa acabou de nascer nesta transação) e `consumirEEntrar` (o convite
    * pendente acabou de ser consumido nesta transação). Nenhum dos dois é "um
    * membro adicionando outro membro", e é por isso que o banco não tem como
-   * separá-los por policy — não há predicado que distinga "owner criando o
+   * separá-los por policy — não há predicado que distinga "gerente criando o
    * primeiro admin" de "membro adicionando um desconhecido".
    *
    * ⚠️ `criar_membership` é `SECURITY DEFINER`: ela grava com os privilégios do
@@ -130,41 +158,54 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
     usuario: UsuarioParaProvisionar,
     empresa: EmpresaParaAbrir,
   ): Promise<void> {
-    // O `try` fica FORA do `$transaction`: a tradução é da fronteira HTTP, e
-    // uma exceção de domínio jogada de dentro da transação a abortaria do
-    // mesmo jeito — mas deixá-la dentro tornaria o `catch` ambíguo entre
-    // "falhou o slug" e "falhou a transação".
-    try {
-      await this.prisma.$transaction(async (tx: Tx) => {
-        // pt-BR (Fase 10 — a correção): a sessão nasce em SISTEMA, na PRIMEIRA
-        // linha, e só desce para a empresa quando a empresa já existe.
-        //
-        // MEDIDO 2026-10-17, e a causa não é a que o texto sugeria. Não é a
-        // `WITH CHECK` da policy: `INSERT` cru em `tenants` SEM escopo nenhum
-        // PASSA (a `tenants_insercao` é `WITH CHECK (true)`). O que barra é o
-        // `RETURNING` — o Prisma emite `INSERT ... RETURNING`, e a linha do
-        // RETURNING é avaliada pela policy de **SELECT**, `tenants_leitura`
-        // → `no_escopo_atual(id, false)` → FALSE sem escopo. O Postgres reporta
-        // isso como "new row violates row-level security policy".
-        //
-        // Ou seja: em tabela com RLS, toda escrita do Prisma precisa de um
-        // escopo onde a linha também seja LEGÍVEL — o `RETURNING` não perdoa.
-        // E o mesmo vale para `users_insercao`, que exige `escopo_atual() = '*'`
-        // e barrava o `tx.user.create` logo abaixo (o `POST /users` com destino
-        // 'empresa' e o cadastro por convite, as DUAS portas de entrada,
-        // respondendo 500).
-        //
-        // A policy NÃO afrouxa para acomodar: `memberships_insercao`
-        // (`no_escopo_atual(tenant_id, false)`) já deixa uma sessão de empresa
-        // criar membership na PRÓPRIA empresa, então permitir INSERT em `users`
-        // sob escopo de empresa daria "cria conta + cria membership = herda o
-        // perfil da casa".
-        await abrirEscopo(tx, escopoDoTenant(null));
+    // ⚠️ SEM `try`/`catch` em volta: as DUAS escritas que podem violar
+    // unicidade traduzem o P2002 NO PRÓPRIO LUGAR — `criarEmpresa` (o slug) e
+    // o `tx.user.create` (o e-mail) abaixo. A tradução é da fronteira HTTP, e
+    // uma exceção de domínio jogada de dentro da transação a aborta do mesmo
+    // jeito — e é por isso que ela é lançada de onde o erro aconteceu, e não
+    // de um `catch` em volta, que não saberia qual das duas constraints
+    // estourou.
+    await this.prisma.$transaction(async (tx: Tx) => {
+      // pt-BR (Fase 10 — a correção): a sessão nasce em SISTEMA, na PRIMEIRA
+      // linha, e só desce para a empresa quando a empresa já existe.
+      //
+      // MEDIDO 2026-10-17, e a causa não é a que o texto sugeria. Não é a
+      // `WITH CHECK` da policy: `INSERT` cru em `tenants` SEM escopo nenhum
+      // PASSA (a `tenants_insercao` é `WITH CHECK (true)`). O que barra é o
+      // `RETURNING` — o Prisma emite `INSERT ... RETURNING`, e a linha do
+      // RETURNING é avaliada pela policy de **SELECT**, `tenants_leitura`
+      // → `no_escopo_atual(id, false)` → FALSE sem escopo. O Postgres reporta
+      // isso como "new row violates row-level security policy".
+      //
+      // Ou seja: em tabela com RLS, toda escrita do Prisma precisa de um
+      // escopo onde a linha também seja LEGÍVEL — o `RETURNING` não perdoa.
+      // E o mesmo vale para `users_insercao`, que exige `escopo_atual() = '*'`
+      // e barrava o `tx.user.create` logo abaixo (o `POST /users` com destino
+      // 'empresa' e o cadastro por convite, as DUAS portas de entrada,
+      // respondendo 500).
+      //
+      // A policy NÃO afrouxa para acomodar: `memberships_insercao`
+      // (`no_escopo_atual(tenant_id, false)`) já deixa uma sessão de empresa
+      // criar membership na PRÓPRIA empresa, então permitir INSERT em `users`
+      // sob escopo de empresa daria "cria conta + cria membership = herda o
+      // perfil da casa".
+      await abrirEscopo(tx, escopoDoTenant(null));
 
-        const tenant = await tx.tenant.create({
-          data: { name: empresa.nome, slug: empresa.slug },
-        });
+      const empresaCriada = await this.criarEmpresa(tx, empresa);
 
+      // ⚠️ A CORRIDA do e-mail: dois cadastros com o MESMO e-mail passam pelo
+      // `findByEmail` antes de qualquer commit, e o segundo morre aqui. O
+      // `P2002` cru subiria como **500** — e 500 é "banco fora do ar", a
+      // mensagem mais falsa que existe num pedido de cadastro.
+      //
+      // A tradução mora NO LUGAR da escrita, e não num `catch` em volta da
+      // transação: o `email` é o ÚNICO `@unique` de `users` que pode colidir
+      // aqui (o `id` é um UUID novo), então um P2002 neste ponto É o e-mail.
+      // E o `GlobalExceptionFilter` já sabe traduzir a exceção de
+      // `users/domain` em 409 `EMAIL_IN_USE` — a mensagem que o formulário
+      // sabe mostrar. O caminho sequencial já devolve 409 pelo `findByEmail`;
+      // este `catch` é a rede da janela.
+      try {
         await tx.user.create({
           data: {
             id: usuario.id,
@@ -180,60 +221,155 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
             version: 1,
           },
         });
+      } catch (erro) {
+        if (ehViolacaoDeUnicidade(erro)) {
+          throw new EmailAlreadyInUseException(usuario.email);
+        }
+        throw erro;
+      }
 
-        // pt-BR (Fase 9 — RLS): daqui em diante a sessão é a DA empresa nova, e
-        // o `INSERT` do perfil avalia `no_escopo_atual(tenant_id, false)` no
-        // momento do insert — `tenant.id` é o próprio dado que a policy
-        // compara, então abrir o escopo depois deixaria a criação da empresa
-        // (o caminho D5 inteiro) sem poder produzir o admin que ela exige.
-        //
-        // O segundo `abrirEscopo` sobrescreve o primeiro: `set_config(..., true)`
-        // é LOCAL, e a última chamada dentro da transação é a que vale.
-        await abrirEscopo(tx, tenant.id);
-
-        // O admin nasce JUNTO com a empresa, e é DELA (`tenantId`). Ver o
-        // port: buscar um admin global traria dois problemas — o seed não roda
-        // em teste, e um admin global dentro de uma empresa cliente é um perfil
-        // com TODAS as permissões do catálogo fora do alcance daquela empresa.
-        const perfil = await tx.profile.create({
-          data: {
-            slug: 'admin',
-            name: 'Administrador',
-            isAdmin: true,
-            isSystem: true,
-            tenantId: tenant.id,
-          },
-        });
-
-        await tx.authorization.createMany({
-          data: listAllPermissions().map((permissionKey) => ({
-            profileId: perfil.id,
-            permissionKey,
-          })),
-        });
-
-        await this.criarMembership(tx, usuario.id, tenant.id, 'owner', perfil.id);
-      });
-    } catch (erro) {
-      // pt-BR (Fase 5, revisão — achado 2): o comentário anterior dizia que
-      // "`slug` é o ÚNICO unique de `tenants`, então qualquer P2002 aqui é o
-      // slug". Isso era FALSO e o código fazia o que o comentário dizia não
-      // fazer: `tx.user.create` (linha 109) está dentro deste mesmo `try` e
-      // `users.email` também é único. MEDIDO: `provisionarEmpresaPropria` com
-      // email já em uso respondia 409 EMPRESA_JA_EXISTE / "Já existe uma
-      // empresa com este identificador" — o cliente é mandado mudar o SLUG
-      // quando o que colide é o EMAIL, e seguir a dica dá retry infinito.
+      // pt-BR (Fase 9 — RLS): daqui em diante a sessão é a DA empresa nova, e
+      // o `INSERT` do perfil avalia `no_escopo_atual(tenant_id, false)` no
+      // momento do insert — `tenant.id` é o próprio dado que a policy
+      // compara, então abrir o escopo depois deixaria a criação da empresa
+      // (o caminho D5 inteiro) sem poder produzir o admin que ela exige.
       //
-      // O discriminador já existia, 70 linhas abaixo, criado por
-      // `emitirConvite` para exatamente isto. `consumirEEntrar` fica sem catch
-      // de propósito: lá o P2002 de `users.email` sobe cru, e o 500 resultante
-      // está documentado como `shortcut:` — só sob CORRIDA, porque o caminho
-      // comum já devolve 409 por `findByEmail` antes de chegar aqui.
-      if (ehViolacaoDeUnicidade(erro) && constraintQueEstourou(erro).includes('slug')) {
+      // O segundo `abrirEscopo` sobrescreve o primeiro: `set_config(..., true)`
+      // é LOCAL, e a última chamada dentro da transação é a que vale.
+      await abrirEscopo(tx, empresaCriada.id);
+
+      const perfilId = await this.criarPerfisDaEmpresa(tx, empresaCriada.id);
+
+      await this.criarMembership(tx, usuario.id, empresaCriada.id, 'gerente', perfilId);
+    });
+  }
+
+  /**
+   * Abre a empresa para uma conta que **JÁ EXISTE** — a segunda etapa do
+   * onboarding (a página de criação de empresa).
+   *
+   * O MESMO núcleo de `provisionarEmpresaPropria`, sem a escrita de `users`:
+   * empresa → os TRÊS perfis da empresa (`gerente`, `coordenador`,
+   * `funcionario`) → membership de `gerente` vestindo o perfil `gerente`. A
+   * única diferença é que a conta
+   * vem de fora.
+   */
+  async abrirEmpresaParaUsuario(userId: string, empresa: EmpresaParaAbrir): Promise<EmpresaAberta> {
+    // A tradução do `slug` acontece em `criarEmpresa`, que é a PRIMEIRA
+    // escrita — e aqui o `users.email` nem participa, porque a conta já
+    // existe e não é tocada. Por isso não há `catch` em volta.
+    return await this.prisma.$transaction(async (tx: Tx) => {
+      // A sessão nasce em SISTEMA: o `RETURNING` do `INSERT` em `tenants` é
+      // avaliado pela policy de SELECT, que sem escopo devolve zero linhas.
+      // Mesma razão de `provisionarEmpresaPropria`.
+      await abrirEscopo(tx, escopoDoTenant(null));
+
+      const empresaCriada = await this.criarEmpresa(tx, empresa);
+
+      // Daqui em diante a sessão é a DA empresa nova — o `INSERT` do perfil e
+      // a `criar_membership` comparam o `tenant_id` com o GUC.
+      await abrirEscopo(tx, empresaCriada.id);
+
+      const perfilId = await this.criarPerfisDaEmpresa(tx, empresaCriada.id);
+
+      await this.criarMembership(tx, userId, empresaCriada.id, 'gerente', perfilId);
+
+      return { id: empresaCriada.id, nome: empresa.nome, slug: empresaCriada.slug };
+    });
+  }
+
+  /**
+   * A primeira escrita do caminho de empresa: a linha em `tenants`.
+   *
+   * Fica isolada porque as DUAS entradas de empresa precisam dela no MESMO
+   * ponto — antes de o escopo descer, e antes de a conta ser gravada.
+   *
+   * ⚠️ A tradução do P2002 mora AQUI, e não num `catch` em volta da
+   * transação: o `slug` é o ÚNICO `@unique` de `tenants`, e a empresa é a
+   * PRIMEIRA escrita — então um P2002 neste ponto é o slug, e só o slug. É a
+   * ESCRITA que diz qual é a constraint, e não o nome dela (ver
+   * `ehViolacaoDeUnicidade` para por que o nome não serve).
+   */
+  private async criarEmpresa(
+    tx: Tx,
+    empresa: EmpresaParaAbrir,
+  ): Promise<{ id: string; slug: string }> {
+    try {
+      const tenant = await tx.tenant.create({
+        data: { name: empresa.nome, slug: empresa.slug },
+      });
+      return { id: tenant.id, slug: tenant.slug };
+    } catch (erro) {
+      if (ehViolacaoDeUnicidade(erro)) {
         throw new EmpresaJaExisteException(empresa.slug);
       }
       throw erro;
     }
+  }
+
+  /**
+   * Os TRÊS perfis DA empresa — gerente, coordenador e funcionário — e o id do
+   * `gerente`, que é o perfil de quem cria a empresa.
+   *
+   * ⚠️ O `slug` é `gerente`, e não `admin`: o conjunto da empresa tem três
+   * perfis, e o "administrador" deixou de ser o ÚNICO papel — ele virou o
+   * GERENTE, ao lado do coordenador e do funcionário. Ver
+   * `domain/perfis-da-empresa.ts`
+   * para o conjunto e para a escolha de cada um.
+   *
+   * Os perfis nascem JUNTO com a empresa, e são DELA (`tenantId`). Ver o port:
+   * buscar um admin global traria dois problemas — o seed não roda em teste, e
+   * um admin global dentro de uma empresa cliente é um perfil com TODAS as
+   * permissões do catálogo fora do alcance daquela empresa.
+   *
+   * ⚠️ Precisa do escopo DA empresa: a `profiles_insercao` compara
+   * `tenant_id` com o GUC no momento do insert.
+   */
+  private async criarPerfisDaEmpresa(tx: Tx, tenantId: string): Promise<string> {
+    const perfis = perfisDaEmpresa();
+    let idDoGerente: string | null = null;
+
+    for (const perfil of perfis) {
+      const criado = await tx.profile.create({
+        data: {
+          slug: perfil.slug,
+          name: perfil.nome,
+          isAdmin: perfil.isAdmin,
+          // ⚠️ `isSystem: true` CONGELA o perfil: `atribuir`, `revogar`,
+          // `atualizar` e `deletar` recusam com 403
+          // `PROFILE_SYSTEM_PROTECTED`. É deliberado — o trio é o CATÁLOGO, e
+          // uma empresa que apaga o seu `coordenador` deixa de ter os três perfis
+          // que toda empresa tem. Quem precisa de um papel sob medida CRIA um
+          // perfil novo (`POST /admin/profiles`), e esse não é de sistema.
+          //
+          // MEDIDO 2026-10-21: o arquivo de domínio prometia o contrário
+          // ("o dono pode ajustar as permissões depois") — e a promessa era
+          // falsa. O código estava certo; a prosa é que mentia.
+          isSystem: true,
+          tenantId,
+        },
+      });
+
+      if (perfil.permissoes.length > 0) {
+        await tx.authorization.createMany({
+          data: perfil.permissoes.map((permissionKey) => ({
+            profileId: criado.id,
+            permissionKey,
+          })),
+        });
+      }
+
+      if (perfil.slug === 'gerente') idDoGerente = criado.id;
+    }
+
+    // O conjunto do catálogo TEM o `gerente`, então isto só acontece se o
+    // catálogo mudar. Falhar alto é melhor do que devolver `null` como id de
+    // perfil: a membership nasceria com `profile_id` NULL e o gerente ficaria
+    // sem nenhuma permissão, sem erro em lugar nenhum.
+    if (idDoGerente === null) {
+      throw new Error('perfil "gerente" ausente do conjunto de perfis da empresa');
+    }
+    return idDoGerente;
   }
 
   async entrarPorConvite(convite: ConviteParaAceitar): Promise<void> {
@@ -280,6 +416,19 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
         throw new ConviteInvalidoException('nao-encontrado');
       }
 
+      // ⚠️ A VALIDADE é revalidada AQUI, e não só no caso de uso. A checagem de
+      // `exigirConviteValido` (tenancy.use-cases.ts) roda ANTES desta
+      // transação, numa conexão diferente: um convite que vence na janela entre
+      // as duas é aceito por uma transação já VENCIDA — a membership é criada e
+      // o convite fica CONSUMIDO (irrecuperável para as outras tentativas).
+      //
+      // A revalidação do `acceptedAt` já era atômica (`updateMany` condicionado
+      // a `accepted_at IS NULL` + contagem); a do `expiresAt` não era, e é a
+      // mesma classe de janela.
+      if (atual.expiresAt !== null && atual.expiresAt.getTime() <= Date.now()) {
+        throw new ConviteInvalidoException('expirado');
+      }
+
       // pt-BR (Fase 10 — a correção): a conta nova nasce no bucket de SISTEMA,
       // que é onde a sessão ainda está (a linha 222). MEDIDO: escrita depois do
       // estreitamento, ela morria em `42501` — a `users_insercao` exige
@@ -287,21 +436,46 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
       // pelo mesmo motivo a policy não afrouxa: `memberships_insercao` já deixa
       // a sessão de empresa criar membership na própria empresa.
       if (novaConta !== null) {
-        await tx.user.create({
-          data: {
-            id: novaConta.id,
-            name: novaConta.nome,
-            email: novaConta.email,
-            passwordHash: novaConta.senhaHash,
-            // Mesma razão de `provisionarEmpresaPropria`: sem header a pessoa
-            // não está em empresa nenhuma, e a Fase 4 resolve esse bucket para
-            // zero permissões. O perfil vem da membership, não daqui.
-            profileId: null,
-            createdAt: novaConta.createdAt,
-            updatedAt: novaConta.createdAt,
-            version: 1,
-          },
-        });
+        try {
+          await tx.user.create({
+            data: {
+              id: novaConta.id,
+              name: novaConta.nome,
+              email: novaConta.email,
+              passwordHash: novaConta.senhaHash,
+              // Mesma razão de `provisionarEmpresaPropria`: sem header a pessoa
+              // não está em empresa nenhuma, e a Fase 4 resolve esse bucket para
+              // zero permissões. O perfil vem da membership, não daqui.
+              profileId: null,
+              createdAt: novaConta.createdAt,
+              updatedAt: novaConta.createdAt,
+              version: 1,
+            },
+          });
+        } catch (erro) {
+          // ⚠️ A CORRIDA do e-mail: dois cadastros com o MESMO e-mail passam
+          // pelo `findByEmail` antes de qualquer commit, e o segundo morre
+          // aqui. O `P2002` cru subia como **500** — e 500 é "banco fora do
+          // ar", a mensagem mais falsa que existe num pedido de cadastro.
+          //
+          // A exceção é a de `users/domain` (que `tenancy` já importa, como
+          // importa o `UserNotFoundException`), e não uma nova aqui: a regra
+          // do e-mail é do módulo de USUÁRIOS, e é o `GlobalExceptionFilter`
+          // que já sabe traduzir `EmailAlreadyInUseException` em 409
+          // `EMAIL_IN_USE` — que é a mensagem que o formulário sabe mostrar.
+          //
+          // O caminho sequencial já devolve 409 pelo `findByEmail`; este
+          // `catch` é a rede da janela.
+          //
+          // ⚠️ O discriminador é a ESCRITA, e não o nome da constraint: o
+          // `email` é o único `@unique` de `users` que pode colidir aqui (o
+          // `id` é um UUID novo), e `meta.target` vem NULL quando o Postgres
+          // tem a unicidade como índice (ver `ehViolacaoDeUnicidade`).
+          if (ehViolacaoDeUnicidade(erro)) {
+            throw new EmailAlreadyInUseException(novaConta.email);
+          }
+          throw erro;
+        }
       }
 
       // A partir daqui a sessão é a DA empresa do convite, e o `updateMany`
@@ -316,18 +490,32 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
         throw new ConviteInvalidoException('ja-aceito');
       }
 
-      await this.criarMembership(
-        tx,
-        convite.userId,
-        atual.tenantId,
-        // O papel vem do CONVITE, nunca do chamador: um port que aceitasse
-        // `role` da entrada transformaria o aceite em escalada — qualquer um
-        // com um token próprio criaria o próprio owner.
-        atual.role,
-        // `profile_id` NULL: quem entra por convite não tem perfil até o
-        // admin da empresa atribuir (Fase 4: NULL = zero permissões).
-        null,
-      );
+      try {
+        await this.criarMembership(
+          tx,
+          convite.userId,
+          atual.tenantId,
+          // O papel vem do CONVITE, nunca do chamador: um port que aceitasse
+          // `role` da entrada transformaria o aceite em escalada — qualquer um
+          // com um token próprio criaria o próprio gerente.
+          atual.role,
+          // `profile_id` NULL: quem entra por convite não tem perfil até o
+          // admin da empresa atribuir (Fase 4: NULL = zero permissões).
+          null,
+        );
+      } catch (erro) {
+        // ⚠️ A conta JÁ é membro da empresa: o dono pode se convidar, e o
+        // `@@unique([userId, tenantId])` barra o vínculo duplicado. Sem esta
+        // tradução, o erro do banco subia como **500** — indistinguível de
+        // banco fora do ar, para um pedido que é um CONFLITO (409).
+        //
+        // ⚠️ O `P2010` (query crua) é distinguido pelo `meta.code` 23505 e
+        // pela chave da mensagem — ver `ehViolacaoDeUnicidadeDaMembership`.
+        if (ehViolacaoDeUnicidadeDaMembership(erro)) {
+          throw new ConviteInvalidoException('ja-membro');
+        }
+        throw erro;
+      }
     });
   }
 
@@ -351,18 +539,43 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
       // resposta de quem emite, e dizer "convite já emitido" para uma colisão
       // de token aponta o cliente para o campo errado.
       //
+      // ⚠️ A distinção é por LEITURA, e não pelo nome da constraint: o
+      // `meta.target` do Prisma vem NULL quando o Postgres tem a unicidade
+      // como ÍNDICE e não como constraint (ver `ehViolacaoDeUnicidade`), e aí
+      // o nome não diz nada — o `catch` casava com a string vazia e a colisão
+      // de e-mail subia crua como **500**. A pergunta é factual, e a resposta
+      // é determinística: o convite para (empresa, e-mail) EXISTE? Se existe,
+      // foi ele que colidiu; se não existe, o que colidiu foi o `token`.
+      //
       // Colisão de token é, na prática, impossível: o segredo sai de
       // `randomBytes(32)` e o produtor é quem o gera. Ela continua sendo
       // propagada crua de propósito — é o estado que o `randomBytes` no use
       // case é quem protege.
       if (ehViolacaoDeUnicidade(erro)) {
-        if (constraintQueEstourou(erro).includes('token')) {
-          throw erro;
+        if (await this.existeConvitePara(convite.tenantId, convite.email)) {
+          throw new ConviteJaEmitidoException(convite.tenantId, convite.email);
         }
-        throw new ConviteJaEmitidoException(convite.tenantId, convite.email);
+        throw erro;
       }
       throw erro;
     }
+  }
+
+  /**
+   * Já existe um convite para o par (empresa, e-mail)?
+   *
+   * É a pergunta que decide o 409 do convite, e ela é respondida por LEITURA
+   * — não pelo nome da constraint (ver `ehViolacaoDeUnicidade`).
+   *
+   * ⚠️ A leitura é FORA da transação que morreu: uma transação abortada não
+   * responde a `findUnique` ("current transaction is aborted"), e o P2002
+   * aborta. Por isso ela abre a sua própria, no escopo da empresa.
+   */
+  private async existeConvitePara(tenantId: string, email: string): Promise<boolean> {
+    const encontrado = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+      tx.invitation.findUnique({ where: { tenantId_email: { tenantId, email } } }),
+    );
+    return encontrado !== null;
   }
 
   async buscarConvitePorToken(token: string): Promise<ConvitePendente | null> {

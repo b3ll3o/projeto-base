@@ -40,6 +40,19 @@ export interface EmpresaParaAbrir {
   slug: string;
 }
 
+/**
+ * A empresa aberta — o que o chamador precisa para apontar a sessão para ela.
+ *
+ * O `id` volta porque o cookie de empresa (`X-Tenant-Id`) é o id: quem abre
+ * uma empresa precisa saber qual empresa é a SUA, e adivinhar por `slug` seria
+ * uma segunda consulta que pode dar a empresa de outra pessoa.
+ */
+export interface EmpresaAberta {
+  id: string;
+  nome: string;
+  slug: string;
+}
+
 export interface ConviteParaAceitar {
   userId: string;
   invitationId: string;
@@ -66,11 +79,11 @@ export interface ConviteParaEmitir {
 
 export interface TenantOnboardingPort {
   /**
-   * `users` + `tenants` + perfil admin da empresa + `tenant_memberships`,
+   * `users` + `tenants` + os perfis da empresa + `tenant_memberships`,
    * tudo ou nada.
    *
-   * O perfil admin é criado **daqui, com `tenant_id` da empresa nova** — e
-   * não buscado entre os perfis globais do seed. Duas razões, e a segunda é
+   * Os perfis são criados **daqui, com `tenant_id` da empresa nova** — e
+   * não buscados entre os perfis globais do seed. Duas razões, e a segunda é
    * a que importa:
    *
    * 1. O seed roda à mão (`pnpm exec tsx prisma/seed.ts`), e a suíte de
@@ -80,6 +93,12 @@ export interface TenantOnboardingPort {
    *    vestindo a membership de uma empresa recém-criada é um perfil com TODAS
    *    as permissões do catálogo morando dentro dela — a D3 existe para que
    *    a empresa controle os próprios perfis.
+   *
+   * ⚠️ O conjunto é o CATÁLOGO (`domain/perfis-da-empresa.ts`): `gerente`,
+   * `coordenador` e `funcionario`. NÃO é um perfil chamado `admin` — `admin` é
+   * o perfil GLOBAL de SISTEMA (o do seed), e a distinção é o que impede a
+   * empresa de nascer vestindo o perfil de outra empresa. A membership do
+   * dono grava `role = 'gerente'` e veste o perfil `gerente` — os dois.
    */
   provisionarEmpresaPropria(
     usuario: UsuarioParaProvisionar,
@@ -87,10 +106,25 @@ export interface TenantOnboardingPort {
   ): Promise<void>;
 
   /**
+   * Abre uma empresa para uma conta que **JÁ EXISTE** — tudo ou nada.
+   *
+   * Método separado de `provisionarEmpresaPropria` (e não um campo opcional em
+   * `UsuarioParaProvisionar`) porque as duas entradas têm requisitos
+   * diferentes: a primeira grava a CONTA junto, a segunda não toca em `users` —
+   * a conta já está lá. A página de criação de empresa é a segunda etapa do
+   * onboarding: a pessoa já se cadastrou e agora abre a empresa dela.
+   *
+   * O contrato é o MESMO do de `provisionarEmpresaPropria`: a empresa nasce com
+   * o perfil `admin` **dela** e TODAS as permissões do catálogo, e o dono
+   * (`role = 'gerente'`) veste esse perfil. A diferença é só de onde vem a conta.
+   */
+  abrirEmpresaParaUsuario(userId: string, empresa: EmpresaParaAbrir): Promise<EmpresaAberta>;
+
+  /**
    * `tenant_memberships` + `invitations.accepted_at`, tudo ou nada.
    *
    * `profile_id` fica `NULL` de propósito: quem entra por convite não tem
-   * perfil nenhum até o admin da empresa atribuir. A Fase 4 já documentou e
+   * perfil nenhum até o gerente da empresa atribuir. A Fase 4 já documentou e
    * testado que membership sem perfil resolve para ZERO permissões — que é o
    * estado certo para quem acabou de ser convidado.
    */

@@ -50,6 +50,7 @@ desenho, apêndices.
 | Specialist Routing | [`specialist-routing.md`](./specialist-routing.md) | Roteamento por especialidade; apêndice de exemplos em [`specialist-routing-examples.md`](./specialist-routing-examples.md) |
 | Guard Classes | [`guard-classes.md`](./guard-classes.md) | As 7 classes pelas quais um controle falha reportando verde; receita de detecção por classe **e a coluna "não pega"** |
 | Migração de Dados | [`migracao-de-dados.md`](./migracao-de-dados.md) | Regra dos 3 passos (add nullable, backfill, drop) + quando **não** há backfill a fazer |
+| DRY | [`dry.md`](./dry.md) | Don't Repeat Yourself — o conhecimento tem UMA representação; um termo de domínio tem UM dono (constante exportada) e quem usa importa. 2 gates: `check-repeticao` (termo) e `check-bloco-duplicado` (lógica) |
 
 ## Regra Geral
 

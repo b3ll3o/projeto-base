@@ -197,7 +197,7 @@ model Tenant {
 // É esta tabela que faz "1 conta, N empresas" (D4) ser verdade: o login
 // resolve por `users.email` (global) e o tenant entra depois, por header.
 //
-// `role` é o rótulo de tenant ('owner' | 'member') e NÃO substitui o RBAC: a
+// `role` é o rótulo de tenant ('gerente' | 'member') e NÃO substitui o RBAC: a
 // autorização fina continua em `profiles.authorizations`. Aqui é só "quem
 // pode administrar a empresa".
 //

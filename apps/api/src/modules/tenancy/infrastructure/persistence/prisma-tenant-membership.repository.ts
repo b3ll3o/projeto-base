@@ -7,7 +7,28 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
 import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service.js';
 import { comEscopo, escopoDoTenant } from '../../../../shared/infrastructure/prisma/escopo.js';
-import type { TenantMembershipRepositoryPort } from '../../domain/ports/tenant-membership-repository.port.js';
+import type {
+  EmpresaDoUsuario,
+  TenantMembershipRepositoryPort,
+} from '../../domain/ports/tenant-membership-repository.port.js';
+
+/**
+ * A membership tem perfil EFETIVO?
+ *
+ * ⚠️ É o MESMO critério do `findProfileId` (o filtro `profile: { OR: [{ tenantId:
+ * null }, { tenantId }] }`): o perfil precisa ser GLOBAL — que serve a qualquer
+ * empresa por definição — ou DAQUELA empresa. A coluna CRUA (`profile_id` não
+ * nulo) não basta: um `profile_id` apontado para o perfil de outra empresa não
+ * resolve nada na API, e a empresa seria escolhida pelo funil do login sem que
+ * a pessoa pudesse fazer nada nela.
+ */
+function temPerfilEfetivo(linha: {
+  profile: { tenantId: string | null } | null;
+  tenant: { id: string };
+}): boolean {
+  if (linha.profile === null) return false;
+  return linha.profile.tenantId === null || linha.profile.tenantId === linha.tenant.id;
+}
 
 @Injectable()
 export class PrismaTenantMembershipRepository implements TenantMembershipRepositoryPort {
@@ -193,5 +214,69 @@ export class PrismaTenantMembershipRepository implements TenantMembershipReposit
       }),
     );
     return row?.role ?? null;
+  }
+
+  /**
+   * As empresas a que o usuário pertence, com o papel dele em cada uma.
+   *
+   * ⚠️ O escopo é o de SISTEMA, e o filtro é o `userId` DENTRO do `where`.
+   * Não é uma abertura: a lista atravessa empresas, e o que a restringe é o
+   * filtro — o id do ator vem do token de sessão, e a linha devolvida é só a
+   * dele. Mesma justificativa de `buscarConvitePorToken`.
+   *
+   * `user: { deletedAt: null }` pelo mesmo motivo dos outros métodos: a
+   * membership sobrevive ao soft-delete, e uma conta apagada não deve ver as
+   * empresas na listagem.
+   */
+  async listarEmpresasDoUsuario(userId: string): Promise<EmpresaDoUsuario[]> {
+    const linhas = await comEscopo(this.prisma, escopoDoTenant(null), (tx) =>
+      tx.tenantMembership.findMany({
+        where: { userId, user: { deletedAt: null } },
+        select: {
+          role: true,
+          profile: { select: { tenantId: true } },
+          tenant: { select: { id: true, name: true, slug: true } },
+        },
+        // ⚠️ A ORDEM É FUNCIONAL, não estética: o funil do login (no web) leva a
+        // pessoa para a PRIMEIRA empresa da lista. A membership SEM perfil
+        // efetivo — o convidado que ainda não recebeu perfil — vai para o FIM.
+        //
+        // MEDIDO 2026-10-21: ordenando só por data, quem tinha sido convidada
+        // numa empresa ANTES de criar a empresa própria era levada para a
+        // empresa da UNTIGUAL, onde não pode fazer nada, em vez da empresa de
+        // que é DONA. O sintoma é um 403 na tela principal, sem causa nomeada.
+        //
+        // ⚠️ A chave de ordenação no BANCO é só a data. `profileId` é um UUID
+        // DISTINTO por membership, então ele NÃO desempata: colocá-lo como
+        // primeira chave entregava a ordem ao ALEATÓRIO do UUID, e a recência
+        // que o texto prometia não existia. A partição (com perfil efetivo
+        // antes de sem) é feita em JS, logo abaixo, sobre a lista já
+        // ordenada por data.
+        orderBy: [{ createdAt: 'desc' }],
+      }),
+    );
+
+    // Com perfil efetivo ANTES de sem perfil: quem ainda não recebeu perfil
+    // não pode fazer nada na empresa, e o funil não pode levá-lo para lá.
+    // Entre as que TÊM perfil, a ordem é a da data — a mais recente primeiro,
+    // que é a em que a pessoa está agora.
+    //
+    // ⚠️ "Perfil efetivo" é o MESMO critério do `findProfileId` (linha 78): o
+    // perfil precisa ser GLOBAL (`tenantId` nulo) ou DAQUELA empresa. Ler a
+    // coluna crua (`profileId !== null`) contaria como "com perfil" uma
+    // membership apontada para o perfil de OUTRA empresa — e o funil escolheria
+    // essa empresa, onde a API não resolve perfil nenhum: zero permissões, sem
+    // causa nomeada.
+    const ordenadas = [
+      ...linhas.filter((linha) => temPerfilEfetivo(linha)),
+      ...linhas.filter((linha) => !temPerfilEfetivo(linha)),
+    ];
+
+    return ordenadas.map((linha) => ({
+      id: linha.tenant.id,
+      nome: linha.tenant.name,
+      slug: linha.tenant.slug,
+      role: linha.role,
+    }));
   }
 }

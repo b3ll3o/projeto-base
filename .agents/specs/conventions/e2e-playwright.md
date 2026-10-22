@@ -94,8 +94,9 @@ um silêncio.
 | F13 | `/me/profile` | Meu perfil | `f13-meu-perfil.spec.ts` | admin vê o bypass · perfil comum vê nome, slug e permissões · sem perfil: deny-by-default · sem sessão vai ao login |
 | F14 | `/admin/flags` | Ativação e desativação de funcionalidades (admin) | `f14-admin-flags.spec.ts` | admin desliga e religa e a tela reflete · a flag salva NA TELA é a que a rota respeita (404 desligada · 403 ligada) · quase-admin recusa e o menu não oferece o link |
 | F15 | `/admin/profiles/[slug]` | Edição dos metadados do perfil | `f15-admin-editar-perfil.spec.ts` | admin renomeia e descreve e **o banco é lido** (o `value` do input não prova gravação) · perfil `isAdmin`: somente leitura, sem formulário |
+| F16 | `/empresa/nova` → `/users` ↔ `/convite/[token]` → `/users/novo` → `/login` → `/users` | Onboarding de empresa | `f16-onboarding-empresa.spec.ts` | conta própria sem empresa é levada a criar uma · a empresa criada dá à pessoa o perfil de DONO · quem entra por convite entra NA empresa que convidou · o admin de SISTEMA não é levado a criar empresa |
 
-⚠️ **10 rotas, 15 fluxos.** F2–F5 são quatro estados **da mesma** rota, e F6
+⚠️ **12 rotas, 16 fluxos.** F2–F5 são quatro estados **da mesma** rota, e F6
 atravessa três. F7–F8 são os fluxos que a demanda `login-usuario-senha`
 acrescentou: o login e a rota protegida sem sessão. F9–F12 são as quatro telas
 `/admin/*` do RBAC (#97), e cada uma tem um teste que é o **negativo** do
@@ -118,6 +119,20 @@ que é derivado do servidor. MEDIDO 2026-10-19: foi a primeira execução do
 `PATCH /admin/profiles/:id` de **sucesso** contra Prisma real (o único PATCH
 e2e anterior esperava 403) — mutar a descrição esperada deixa o spec vermelho
 com o valor gravado no banco ao lado.
+
+F16 é o funil de onboarding de empresa, e ele é o primeiro fluxo que afirma
+**para ONDE** o login leva. Antes o destino era fixo (`/users`); agora ele
+depende de a conta pertencer a alguma empresa — e o par de testes que segura
+isso é o **mesmo código com decisões opostas**: a conta própria sem empresa vai
+criar uma, e o administrador de SISTEMA (que não pertence a empresa nenhuma
+por definição) NÃO vai. Um funil que mandasse todo mundo para `/empresa/nova`
+passaria no primeiro e falharia no segundo; um funil que mandasse ninguém
+passaria no segundo e falharia no primeiro. O F16 mede também o perfil EFETIVO
+(`dono`) pela permissão que só ele tem entre os três da empresa
+(`admin.manage-profiles`) — o rótulo do perfil na tela não separaria `dono` de
+`gestor`. MEDIDO 2026-10-21: a e2e F8 mudou de expectativa junto com o
+produto — a conta sem empresa passou a ser levada a `/empresa/nova`, e o F7
+ganhou uma empresa para continuar medindo o que sempre mediu (o login).
 
 ⚠️ **Desde 2026-10-13 quase todo spec roda autenticado, e isso é invisível na
 tabela.** `/users` — a LISTAGEM — chama `exigirSessao()`, que redireciona para
@@ -256,6 +271,7 @@ do par, não um.
 | 1.3 | 2026-10-16 | O gate passa a reconciliar com um **terceiro** conjunto: as rotas de `apps/web/app/**/page.tsx`. Reconciliar dois conjuntos escritos à mão provava paridade, e paridade não é cobertura — `/me/profile` era a única tela do app sem spec e o preflight estava verde. A coluna `Rota` do inventário passa a ser conferida contra o disco (tela nova sem linha é vermelha, com o path nomeado). F13 fecha a lacuna encontrada por essa própria conferência: `/me/profile` com os quatro estados da tela (admin/bypass, perfil comum, deny-by-default, sem sessão). Contador corrigido: eram "8 rotas, 12 fluxos" e são 9 e 13. |
 | 1.4 | 2026-10-18 | F14 cobre `/admin/flags` (feature flags) — a quinta tela `/admin/*` e a primeira cujo spec **não termina na tela**: ele salva pela tela e afirma o efeito **chamando a API** (404 desligada · 403 ligada, com o `title` nomeando quem recusou). O escenario 12 da API escreve a flag no banco e o `lib/flags.spec.ts` prova path contra um cliente mockado; nenhum dos dois via o que o admin marca NA TELA, e essa emenda era o buraco. Contador corrigido: eram "9 rotas, 13 fluxos" e são 10 e 14. MEDIDO 2026-10-18: `next build` **nao** pega uma Server Action sem `'use server'` (build sai 0; o digest `2923057904` so aparece no request, porque a página é `force-dynamic`), e `click()` resolve no despacho — o save precisa ser esperado por **estado**, nao por `waitForTimeout`. |
 | 1.5 | 2026-10-19 | F15 cobre a edição de `name`/`description` em `/admin/profiles/[slug]` — a rota de F11, que passa a ter **dois** fluxos. É o primeiro spec do inventário que **lê o Postgres** (`prismaE2E()`) para provar gravação, e a razão está no `<input>`: uncontrolled, ele conserva o que foi digitado depois do re-render, então `toHaveValue` passaria com a escrita perdida. Na tela o spec afirma o `<h1>` (derivado do servidor) e no banco o `name`/`description`. MEDIDO 2026-10-19: foi a primeira execução do `PATCH /admin/profiles/:id` de **sucesso** contra Prisma real — o único PATCH e2e anterior (`11-tenant-isolation`) esperava 403 — e ela **verde**: o caminho de escrita estava sem prova desde que `atualizarPerfil` ganhou o cliente. Segundo caso: perfil `isAdmin` mostra "somente leitura" e não renderiza `input[name="name"]` (`atualizar` recusa `isSystem` **e** `isAdmin`, `profiles.use-cases.ts:268,271`). Contador: 14 → 15 fluxos, com as **10 rotas inalteradas**. |
+| 1.6 | 2026-10-21 | F16 cobre o onboarding de empresa, e traz **duas rotas novas**: `/empresa/nova` (criar empresa) e `/convite/[token]` (entrar por convite). É o primeiro fluxo que afirma **para ONDE** o login leva: o destino deixou de ser fixo (`/users`) e passou a depender de a conta pertencer a alguma empresa. O par que segura isso é o mesmo código com decisões opostas — conta própria sem empresa vai criar uma, admin de SISTEMA NÃO vai — e um funil que mandasse todo mundo para `/empresa/nova` passaria no primeiro e falharia no segundo. O perfil `dono` é medido pela **permissão** que só ele tem entre os três da empresa (`admin.manage-profiles`), não pelo rótulo. O F16 também é o primeiro spec que planta o cookie `tenant_id` (`plantarEmpresa`, em `support/fixtures.ts`): sem ele a sessão age no bucket GLOBAL e a listagem volta recortada para a própria linha, sem dizer por quê. MEDIDO 2026-10-21: a e2e F8 mudou de expectativa junto com o produto (a conta sem empresa passou a ser levada a `/empresa/nova`) e o F7 ganhou uma empresa, para continuar medindo o login — o destino de quem TEM empresa é a listagem. Contador: 15 → 16 fluxos e 10 → 12 rotas. |
 
 ## Ver Também
 

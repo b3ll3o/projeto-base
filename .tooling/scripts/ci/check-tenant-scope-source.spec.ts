@@ -95,13 +95,24 @@ describe('checkTenantScopeSource', () => {
     // MEDIDO 2026-10-18 (#106): 70 — as 4 a mais são `perfilEfetivoPorUsuario`
     // em `prisma-user.repository.ts`, que bifurca por bucket e por isso abre o
     // escopo duas vezes (global e empresa).
+    // MEDIDO 2026-10-21 (onboarding de empresa): 75 — as 5 a mais são as
+    // aberturas de escopo do onboarding: 3 em `prisma-tenant-onboarding.repository.ts`
+    // (a transação da empresa nova, que abre o escopo SISTEMA, desce para a
+    // empresa e abre o da empresa de novo) e 2 em `prisma-tenant-membership.repository.ts`
+    // (a listagem das empresas do ator, em escopo SISTEMA).
+    // MEDIDO 2026-10-22 (revisão do #116): 77 — as 2 a mais são a leitura que
+    // distingue a colisão de TOKEN da colisão de (empresa, e-mail) em
+    // `emitirConvite`: `existeConvitePara` abre o escopo da empresa para
+    // perguntar se o convite já existe. A pergunta é uma LEITURA (o `P2002`
+    // não diz qual constraint colidiu, e o `meta.target` do Prisma vem NULL
+    // quando o Postgres tem a unicidade como índice), e ler exige escopo.
     //
     // Subir o número junto com o PR que o mediu é o comportamento certo deste
     // gate: ele CONTA, e não julga. O advisory existe justamente para dizer que
     // nenhum gate compara com o run anterior — e esta linha é o exemplo do
     // que acontece quando alguém esquece de atualizar o número: o CI reprova
     // por um conserto de tela que não tem nada a ver com escopo.
-    expect(r.advisories?.[0]).toContain('70 call site(s)');
+    expect(r.advisories?.[0]).toContain('77 call site(s)');
   });
 
   it('🔴 corpus VAZIO é vermelho — o gate não pode reportar verde sem medir', () => {

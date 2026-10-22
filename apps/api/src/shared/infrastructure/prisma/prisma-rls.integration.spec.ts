@@ -781,8 +781,8 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
     // `tenant_id` não muda). Nenhum dos dois lados enxerga `role`.
     //
     // O efeito não é escalada: `emitirConvite` grava `role: 'member'` fixo, então
-    // não há rota que devolva 'owner'. É a ESCALA INVERTIDA — quem tem 'member'
-    // vira dono da empresa, e `findRole` é o que decide.
+    // não há rota que devolva 'gerente'. É a ESCALA INVERTIDA — quem tem 'member'
+    // vira gerente da empresa, e `findRole` é o que decide.
     const alice = await criarUsuario('alice');
     await associar(alice, acmeId);
     await ctx.prisma.tenantMembership.update({
@@ -793,7 +793,7 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
     const tentativa = await tentarComEscopo(acmeId, (tx) =>
       tx
         .$executeRaw(
-          Prisma.sql`UPDATE tenant_memberships SET role = 'owner' WHERE user_id = ${alice}::uuid`,
+          Prisma.sql`UPDATE tenant_memberships SET role = 'gerente' WHERE user_id = ${alice}::uuid`,
         )
         .then((n) => n as unknown),
     );
@@ -1081,7 +1081,7 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
     // escopo da ACME, nomeando o Bruno. É a chamada que `provisionarEmpresaPropria`
     // e `consumirEEntrar` fazem — e é a que a assinatura precisa travar.
     const forjada = await tentarComo(Prisma.sql`
-      SELECT criar_membership(${bruno}::uuid, ${acmeId}::uuid, ${'owner'}::text, NULL::uuid, ${'assinatura-forjada'}::text)
+      SELECT criar_membership(${bruno}::uuid, ${acmeId}::uuid, ${'gerente'}::text, NULL::uuid, ${'assinatura-forjada'}::text)
     `);
     expect(forjada.ok).toBe(false);
     expect(forjada.detalhe).toContain('assinatura invalida');
@@ -1092,9 +1092,9 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
     // E a assinatura NÃO é transferível entre chamadas: a que a aplicação produz
     // para (bruno, acme, owner) não abre (bruno, globex, owner). Sem esta linha,
     // "a função confere a assinatura" provaria que ela confere *uma* assinatura.
-    const paraAcme = await assinarMembership(bruno, acmeId, 'owner', null);
+    const paraAcme = await assinarMembership(bruno, acmeId, 'gerente', null);
     const cruzada = await tentarComo(Prisma.sql`
-      SELECT criar_membership(${bruno}::uuid, ${globexId}::uuid, ${'owner'}::text, NULL::uuid, ${paraAcme}::text)
+      SELECT criar_membership(${bruno}::uuid, ${globexId}::uuid, ${'gerente'}::text, NULL::uuid, ${paraAcme}::text)
     `);
     expect(cruzada.ok).toBe(false);
     expect(cruzada.detalhe).toContain('assinatura invalida');

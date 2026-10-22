@@ -477,3 +477,55 @@ describe('CadastroUsuarioForm — durante e depois do envio', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });
+
+describe('CadastroUsuarioForm — a entrada por convite', () => {
+  // pt-BR (onboarding de empresa, 2026-10-21): o token do convite é o que
+  // diz que a conta nasce NA empresa que convidou (o `destino` do
+  // `POST /users`). Sem ele, a conta nasce sem empresa nenhuma e o funil do
+  // login leva a pessoa à página de criação de empresa — o oposto do que o
+  // convite pediu.
+  const TOKEN = 'a'.repeat(64);
+
+  async function enviarCom(convite?: string) {
+    const action = acaoQue(resposta());
+    const user = userEvent.setup();
+    render(<CadastroUsuarioForm action={action} convite={convite} />);
+
+    await user.type(screen.getByLabelText('Nome'), 'Maria Silva');
+    await user.type(screen.getByLabelText('Email'), 'maria@empresa.com');
+    await user.type(screen.getByLabelText('Senha'), 'senha1234');
+    await user.click(screen.getByRole('button', { name: /cadastrar/i }));
+
+    await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
+    return action.mock.calls[0]?.[1];
+  }
+
+  it('o token viaja no FormData do cadastro', async () => {
+    const enviado = await enviarCom(TOKEN);
+
+    expect(enviado?.get('convite')).toBe(TOKEN);
+  });
+
+  it('sem convite, o FormData NÃO leva o campo — a conta nasce sem empresa', async () => {
+    const enviado = await enviarCom();
+
+    expect(enviado?.get('convite')).toBeNull();
+  });
+
+  it('quem JÁ tem conta recebe a saída para o login — com o token do convite', () => {
+    // pt-BR: quem já tem conta e chega pelo link de convite cai NESTA tela.
+    // Sem a saída, o caminho é sem volta: o e-mail dela já está cadastrado,
+    // o cadastro recusa, e a pessoa não descobre que o que ela precisa é
+    // ENTRAR. O token viaja na query porque o login o leva até o aceite.
+    render(<CadastroUsuarioForm action={acaoQue(resposta())} convite={TOKEN} />);
+
+    const saida = screen.getByRole('link', { name: 'Já tenho conta' });
+    expect(saida).toHaveAttribute('href', `/login?convite=${TOKEN}`);
+  });
+
+  it('sem convite, a tela NÃO oferece o login — não há convite a atravessar', () => {
+    render(<CadastroUsuarioForm action={acaoQue(resposta())} />);
+
+    expect(screen.queryByRole('link', { name: 'Já tenho conta' })).toBeNull();
+  });
+});

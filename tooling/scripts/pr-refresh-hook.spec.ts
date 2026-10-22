@@ -288,6 +288,41 @@ describe('executar — os estados que NÃO são sucesso', () => {
     expect(spies.escritas).toHaveLength(0);
   });
 
+  it('claims só de SUÍTE → `em-dia` que diz "não há o que comparar", e não "conferido"', () => {
+    // MEDIDO 2026-10-22: o corpo do PR #116 tem 18 claims (as contagens do
+    // sumário do Vitest) e ZERO mensuráveis. O hook imprimia "corpo em dia" —
+    // que se lê como "verificado" — sem ter conferido nada: as contagens de
+    // suíte só se conferem rodando a suíte, e nenhum `git` as mede.
+    const { deps, spies } = cenario('Tests  959 passed (959)');
+    const r = executar(deps);
+    expect(r.estado).toBe('em-dia');
+    expect(r.detalhe).toContain('nenhuma claim COMPARÁVEL');
+    expect(spies.escritas).toHaveLength(0);
+  });
+
+  it('corpo SEM NENHUMA claim → `em-dia` que diz que não achou NADA para conferir', () => {
+    // O gate irmão (`pr-refresh-gate.ts`) recusa "em dia" para o MESMO corpo,
+    // e dois consumidores do MESMO scanner não podem ter duas honestidades:
+    // o hook dizia "corpo em dia: nenhuma claim divergente" para um corpo que
+    // não tinha claim nenhuma — o que se lê como "verificado".
+    const { deps, spies } = cenario('Um parágrafo sem nenhum número.');
+    const r = executar(deps);
+    expect(r.estado).toBe('em-dia');
+    expect(r.detalhe).toContain('nenhuma claim RECONHECIDA');
+    expect(r.detalhe).toContain('NÃO é o mesmo que "verificado e verde"');
+    expect(spies.escritas).toHaveLength(0);
+  });
+
+  it('claims comparáveis E não comparáveis → a ressalva nomeia as que não puderam ser conferidas', () => {
+    // "em dia" sem ressalva sobre as não comparáveis é lido como "conferido"
+    // para elas também — e elas não foram.
+    const { deps, spies } = cenario(`${CABECALHO_VERDADEIRO} ${MARCA} Tests  959 passed (959)`);
+    const r = executar(deps);
+    expect(r.estado).toBe('em-dia');
+    expect(r.detalhe).toContain('não são comparáveis offline');
+    expect(spies.escritas).toHaveLength(0);
+  });
+
   it('SEM MARCADOR e com divergência → `sem-marcador`, que diz que o hook está inativo', () => {
     // O estado que não pode virar verde. Um hook que não escreve porque não
     // encontrou o marcador e um hook que não escreve porque está em dia são o

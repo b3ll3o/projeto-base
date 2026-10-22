@@ -68,6 +68,23 @@ export const ERRO_GENERICO_LOGIN =
   'Não foi possível entrar. Verifique a conexão e tente novamente.';
 
 /**
+ * A sessão entrou, mas a CONSULTA das empresas falhou.
+ *
+ * pt-BR: este é o caso que o funil do login tratava em SILÊNCIO — a consulta
+ * falhava, o `catch` caía em `/users` sem empresa, e a pessoa que era DONA de
+ * uma empresa com cinco pessoas via "1 usuário cadastrado" (só ela), sem erro
+ * nenhum. "Não sei se a conta tem empresa" e "a conta não tem empresa" são
+ * ESTADOS DIFERENTES, e o segundo não pode ser assumido quando o primeiro é o
+ * que aconteceu.
+ *
+ * A mensagem diz o que fazer (entrar de novo), porque entrar de novo refaz a
+ * consulta — e a sessão já está guardada, então o login não precisa ser
+ * desfeito.
+ */
+export const ERRO_CONSULTA_DAS_EMPRESAS =
+  'Não foi possível consultar suas empresas. Tente entrar de novo.';
+
+/**
  * Query param que a tela de cadastro usa para avisar que a conta ficou criada.
  *
  * pt-BR: mora AQUI, e não em `actions.ts` do cadastro, porque um arquivo
@@ -89,6 +106,32 @@ export const PARAM_CADASTRO_CONCLUIDO = 'cadastrado';
  */
 export const AVISO_CADASTRO_CONCLUIDO =
   'Cadastro feito. Agora entre com o e-mail e a senha que você acabou de escolher.';
+
+/**
+ * Query param que a tela de criação de empresa usa para avisar que a sessão
+ * venceu no meio do formulário.
+ *
+ * pt-BR: é o MESMO mecanismo do `?cadastrado=1` — um SINAL na query string,
+ * nunca o dado. O nome e o identificador da empresa digitados NÃO viajam na
+ * URL: a query string é serializada, aparece no histórico do browser e no
+ * log de borda.
+ */
+export const PARAM_EMPRESA_PENDENTE = 'empresa';
+
+/**
+ * A sessão venceu antes de a empresa ser criada.
+ *
+ * pt-BR: sem este aviso, a pessoa que preenchia o formulário era levada para
+ * o login sem explicação nenhuma, voltava para `/empresa/nova` com o
+ * formulário vazio, e não sabia o que tinha acontecido. É o mesmo "beco sem
+ * saída de dois saltos" que o `?cadastrado=1` já resolve no cadastro.
+ *
+ * ⚠️ O que o aviso NÃO promete: os valores digitados são perdidos — a
+ * pessoa digita de novo. Preservá-los exigiria um cookie curto, e é decisão
+ * de produto, não correção.
+ */
+export const AVISO_EMPRESA_PENDENTE =
+  'Sua sessão venceu antes de a empresa ser criada. Entre de novo para criar a empresa.';
 
 /** Anexa o traceId ao fim da mensagem, quando existe. */
 export function comTraceId(mensagem: string, traceId?: string): string {

@@ -154,7 +154,7 @@ class InMemoryMembershipRepo implements TenantMembershipRepositoryPort {
   /** helper p/ `deletar`: quantas memberships vestem o perfil. */
   count = 0;
   /**
-   * Fase 5: `emitirConvite`authorize por `role === 'owner'`, e o stub não
+   * Fase 5: `emitirConvite` authorize por `role === 'gerente'`, e o stub não
    * guardava papéis — só perfis. Sem este método o `tsc` reprovava a classe
    * inteira (`TS2420`), que é o modo de falha "spec verde com tsc vermelho":
    * o Vitest não faz typecheck, então os testes passavam e o build quebrava.
@@ -163,7 +163,20 @@ class InMemoryMembershipRepo implements TenantMembershipRepositoryPort {
    * aqui, então o valor fixo serve e é explícito.
    */
   findRole(): Promise<string | null> {
-    return Promise.resolve('owner');
+    return Promise.resolve('gerente');
+  }
+
+  /**
+   * Onboarding de empresa (2026-10-21): a port ganhou este método e o stub
+   * precisa implementá-lo — o `tsc` reprova a classe inteira (`TS2420`) quando
+   * falta um método da interface, e o Vitest não faz typecheck (o mesmo modo
+   * de falha de `findRole` acima).
+   *
+   * Lista VAZIA de propósito: os use cases de perfil não perguntam empresas,
+   * e um stub que devolvesse empresas mediria o stub.
+   */
+  listarEmpresasDoUsuario(): Promise<[]> {
+    return Promise.resolve([]);
   }
 
   constructor(private readonly users: InMemoryUserRepo) {}
@@ -1181,7 +1194,7 @@ describe('Fase 4 — deletar um perfil que uma empresa ainda usa', () => {
     const memberships = new InMemoryMembershipRepo(users);
     const uc = new ProfileUseCases(repo, users, new UserProfileCacheService(), memberships);
 
-    const p = Profile.criar({ slug: 'gestor-acme', name: 'Gestor', agora: new Date() });
+    const p = Profile.criar({ slug: 'coordenador-acme', name: 'Coordenador', agora: new Date() });
     repo.prime(p);
     // Nenhum user usa `users.profile_id` → `countByProfile` devolve 0. A
     // membership é a única usuária, e é ela que tem de barrar o delete: sem
@@ -1199,7 +1212,7 @@ describe('Fase 4 — deletar um perfil que uma empresa ainda usa', () => {
     const memberships = new InMemoryMembershipRepo(users);
     const uc = new ProfileUseCases(repo, users, new UserProfileCacheService(), memberships);
 
-    const p = Profile.criar({ slug: 'gestor-acme', name: 'Gestor', agora: new Date() });
+    const p = Profile.criar({ slug: 'coordenador-acme', name: 'Coordenador', agora: new Date() });
     repo.prime(p);
     users.count = 0;
     memberships.count = 0;
@@ -1370,7 +1383,7 @@ describe('Fase 6 — atribuir perfil POR EMPRESA', () => {
     );
   });
 
-  it('R5: ninguém tira o próprio perfil na empresa — e hoje não há como readmitir owner', async () => {
+  it('R5: ninguém tira o próprio perfil na empresa — e hoje não há como readmitir gerente', async () => {
     const adminDaEmpresa = perfilDe(ACME, ['admin.manage-users'], true);
     users.prime(userComProfile(ATOR_ID, null));
     memberships.prime(ATOR_ID, ACME, adminDaEmpresa.id().value);
@@ -1737,7 +1750,7 @@ describe('Fase 9 — o use case repassa o escopo da sessão ao repositório', ()
   it('obterPorId pede a EMPRESA do ator, não a empresa do perfil nem a global', async () => {
     const daAcme = Profile.criar({
       slug: 'gestor-acme',
-      name: 'Gestor',
+      name: 'Coordenador',
       tenantId: ACME,
       agora: new Date(),
     });
@@ -1766,7 +1779,7 @@ describe('Fase 9 — o use case repassa o escopo da sessão ao repositório', ()
     // diferentes conforme a empresa do header.
     const daAcme = Profile.criar({
       slug: 'gestor-acme',
-      name: 'Gestor',
+      name: 'Coordenador',
       tenantId: ACME,
       initialAuthorizations: ['users.read'],
       agora: new Date(),
@@ -1785,7 +1798,7 @@ describe('Fase 9 — o use case repassa o escopo da sessão ao repositório', ()
   it('deletar abre o escopo da empresa que apaga — a escrita também é filtrada', async () => {
     const daAcme = Profile.criar({
       slug: 'gestor-acme',
-      name: 'Gestor',
+      name: 'Coordenador',
       tenantId: ACME,
       agora: new Date(),
     });

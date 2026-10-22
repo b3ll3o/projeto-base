@@ -1,0 +1,61 @@
+{
+  "termos": [
+    {
+      "valor": "gerente",
+      "dono": "apps/api/src/modules/tenancy/domain/perfis-da-empresa.ts",
+      "constante": "SLUG_GERENTE",
+      "estado": "declarado",
+      "motivo": "O dono (`perfisDaEmpresa()`) EXPORTA o array e não a constante nomeada — é a fase T3 do plano. MEDIDO 2026-10-22 com a função do gate (`arquivosQueHardcodam`): 2 arquivo(s) de produção fora do dono (`tenancy.use-cases.ts` e `prisma-tenant-onboarding.repository.ts`)."
+    },
+    {
+      "valor": "coordenador",
+      "dono": "apps/api/src/modules/tenancy/domain/perfis-da-empresa.ts",
+      "constante": "SLUG_COORDENADOR",
+      "estado": "ok",
+      "motivo": "Dívida PAGA: MEDIDO 2026-10-22 com a função do gate, o único arquivo de produção que carrega o literal é o DONO (`perfis-da-empresa.ts`) — que o gate exclui. Fora do dono, ZERO. O termo passou a `ok`, e a partir daqui voltar a hardcodar é ERRO."
+    },
+    {
+      "valor": "funcionario",
+      "dono": "apps/api/src/modules/tenancy/domain/perfis-da-empresa.ts",
+      "constante": "SLUG_FUNCIONARIO",
+      "estado": "ok",
+      "motivo": "Dívida PAGA: MEDIDO 2026-10-22 com a função do gate, o único arquivo de produção que carrega o literal é o DONO (`perfis-da-empresa.ts`) — que o gate exclui. Fora do dono, ZERO. O termo passou a `ok`, e a partir daqui voltar a hardcodar é ERRO."
+    },
+    {
+      "valor": "member",
+      "dono": "packages/shared-types/src/tenant.ts",
+      "constante": "PAPEL_MEMBRO",
+      "estado": "declarado",
+      "motivo": "O papel do convidado NÃO tem dono — é a fase T2 do plano. MEDIDO 2026-10-22 com a função do gate: 2 arquivo(s) de produção (`tenancy.use-cases.ts` e `assinatura-de-membership.ts`)."
+    },
+    {
+      "valor": "VALIDATION_ERROR",
+      "dono": "apps/api/src/shared/infrastructure/http/domain-exception-to-http.ts",
+      "constante": "CODIGO_VALIDACAO",
+      "estado": "declarado",
+      "motivo": "O código do problem-details NÃO tem dono — é a fase T2 do plano. MEDIDO 2026-10-22 com a função do gate: 2 arquivo(s) de produção (`domain-exception-to-http.ts` e `zod-validation.pipe.ts`)."
+    },
+    {
+      "valor": "users.read",
+      "dono": "apps/api/src/shared/auth/permissions-catalog.ts",
+      "constante": "USERS_READ",
+      "estado": "declarado",
+      "motivo": "O dono EXPORTA o array `PERMISSIONS` e não a constante — fase T3 do plano. MEDIDO 2026-10-22 com a função do gate: 2 arquivo(s) de produção fora do dono (`users.controller.ts` e `perfis-da-empresa.ts`)."
+    },
+    {
+      "valor": "tenancy.invites",
+      "dono": "apps/api/src/shared/auth/feature-flag-catalog.ts",
+      "constante": "FLAG_CONVITES",
+      "estado": "declarado",
+      "motivo": "O dono EXPORTA o array `FEATURE_FLAGS` e não a constante — fase T3 do plano. MEDIDO 2026-10-22 com a função do gate: 2 arquivo(s) de produção fora do dono (`users.controller.ts` e `tenancy-invitations.controller.ts`)."
+    },
+    {
+      "valor": "convite",
+      "dono": "packages/shared-types/src/user.ts",
+      "constante": "TIPO_CONVITE",
+      "estado": "declarado",
+      "motivo": "O TIPO do destino (`DestinoContaDto`) está no shared-types, mas o LITERAL está espalhado — é a fase T2 do plano. MEDIDO 2026-10-22 com a função do gate: 8 arquivo(s) de produção fora do dono — é o termo mais espalhado dos declarados."
+    }
+  ],
+  "blocos": []
+}

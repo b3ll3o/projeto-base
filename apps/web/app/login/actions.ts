@@ -2,13 +2,15 @@
 //
 // Server Action de login.
 //
-// pt-BR: quatro responsabilidades, nesta ordem.
+// pt-BR: cinco responsabilidades, nesta ordem.
 //  1. Validar de novo no servidor. O formulário valida com o mesmo schema
 //     Zod no cliente, mas o cliente não é fronteira de confiança.
 //  2. Traduzir a falha em algo que o formulário saiba exibir — SEM nunca
 //     dizer qual dos dois campos estava errado.
 //  3. Guardar os dois tokens em cookie httpOnly.
-//  4. Redirecionar para a listagem no sucesso.
+//  4. Decidir para ONDE a pessoa vai depois de entrar — a empresa em que a
+//     sessão vai agir.
+//  5. Redirecionar.
 //
 // A tela de login é a única do app em que a RECUSA é o caminho comum, e é
 // por isso que a tradução do passo 2 é minimalista: um `401` não vira erro de
@@ -19,10 +21,14 @@
 
 import { redirect } from 'next/navigation';
 import { ApiClient, ApiError } from '@/lib/api-client';
+import { ehTokenDeConvite } from '@/lib/convite-schema';
+import { listarEmpresas } from '@/lib/empresas';
 import { loginSchema, type CampoLogin } from '@/lib/login-schema';
-import { guardarTokens } from '@/lib/sessao';
+import { obterMeuPerfilGlobal } from '@/lib/perfil';
+import { guardarTenant, guardarTokens, limparTenant } from '@/lib/sessao';
 import {
   CREDENCIAIS_INVALIDAS,
+  ERRO_CONSULTA_DAS_EMPRESAS,
   ERRO_GENERICO_LOGIN,
   LOGIN_INICIAL,
   comTraceId,
@@ -81,6 +87,77 @@ function estadoDeErro(erro: ApiError, valores: LoginState['valores']): LoginStat
   }
 
   return { ...base, fieldErrors, formError: orfaos.length > 0 ? orfaos.join(' ') : null };
+}
+
+/**
+ * Para onde a pessoa vai depois de entrar, e em que empresa a sessão age.
+ *
+ * pt-BR (onboarding de empresa, 2026-10-21): o login deixou de ser "sempre
+ * `/users`" porque TODA conta pertence a uma empresa — exceto o administrador
+ * de SISTEMA, que administra a plataforma e não pertence a empresa nenhuma.
+ * A tela que essa regra produz é a de criação de empresa.
+ *
+ * A ordem das perguntas é a que não erra:
+ *
+ *  1. **`GET /me/tenants`** — as empresas do ator. Lista VAZIA é resposta
+ *     normal (conta em onboarding, ou o admin de sistema), não erro. Se há
+ *     alguma, a sessão passa a agir na PRIMEIRA delas — e o cookie
+ *     `tenant_id` é gravado, porque é ele que faz o `X-Tenant-Id` sair.
+ *  2. **`GET /me/profile` no bucket GLOBAL** — só para a conta sem empresa
+ *     nenhuma. É o que separa o DONO (da empresa, que se resolve pelo
+ *     membership) do ADMINISTRADOR DE SISTEMA (que se resolve por
+ *     `users.profile_id`). O `isAdmin` global é o mesmo sinal que a API usa
+ *     em `ehAdministradorDeSistema` (`tenantId === null && isAdmin`).
+ *
+ * ⚠️ Por que o perfil GLOBAL e não o da empresa: quem não tem empresa não
+ * tem perfil de empresa — e quem tem empresa pode não ter perfil NELA (a
+ * membership criada por convite deixa `profile_id` NULL). O sinal "pertence
+ * a alguma empresa" é o memberships, e o sinal "é admin de sistema" é o
+ * bucket global. Misturar os dois daria o resultado errado nos dois lados.
+ *
+ * ⚠️ A PRIMEIRA empresa é a escolhida quando há várias. Não há tela de
+ * escolha de empresa no produto, e nenhuma foi pedida — o que existe hoje é
+ * o mínimo para o funil funcionar.
+ */
+async function destinoAposLogin(
+  accessToken: string,
+): Promise<{ rota: string; tenantId: string | null }> {
+  const empresas = await listarEmpresas(accessToken);
+
+  // ⚠️ O ADMINISTRADOR DE SISTEMA é a EXCEÇÃO da invariante, e a exceção é
+  // conferida ANTES da lista — porque a lista NÃO está vazia para ele: um
+  // convite aceito, ou uma empresa que ele mesmo criou, deixam uma
+  // membership lá. Escolher a PRIMEIRA empresa prenderia a sessão no escopo
+  // dela, e aí `ehAdministradorDeSistema` (`tenantId === null && isAdmin`) é
+  // FALSO: as rotas de sistema respondem 403 e o admin perde a capacidade de
+  // responder a incidente. E não há volta — todo login re-executa este funil,
+  // e não existe tela de troca de empresa.
+  //
+  // ⚠️ A pergunta é feita no bucket GLOBAL, e não no da empresa: o `isAdmin`
+  // do DONO é o da empresa, e o do ADMIN é o do bucket de sistema. São duas
+  // pessoas diferentes (ver `obterMeuPerfilGlobal`).
+  //
+  // ⚠️ A falha do `/me/profile` NÃO desiste da empresa: a lista já está na
+  // mão, e trocar um admin que perde o sistema por QUALQUER pessoa que perde
+  // a empresa seria um preço altíssimo. A degradação é a de sempre — o
+  // admin perde o bucket de sistema até o próximo login.
+  const perfil = await obterMeuPerfilGlobal(accessToken).catch(() => null);
+  if (perfil?.isAdmin === true) {
+    // Administrador de SISTEMA: administra a plataforma, não pertence a
+    // empresa nenhuma — é a exceção da invariante, e por isso não é levou a
+    // criar uma empresa que ele não vai usar.
+    return { rota: '/users', tenantId: null };
+  }
+
+  // pt-BR: `noUncheckedIndexedAccess` está ligado — `empresas[0]` é
+  // `T | undefined` mesmo com `length > 0` garantido. Pegar o primeiro
+  // elemento pelo nome é o que fecha o tipo sem `!`.
+  const primeira = empresas[0];
+  if (primeira !== undefined) {
+    return { rota: '/users', tenantId: primeira.id };
+  }
+
+  return { rota: '/empresa/nova', tenantId: null };
 }
 
 export async function entrar(_estadoAnterior: LoginState, formData: FormData): Promise<LoginState> {
@@ -146,5 +223,75 @@ export async function entrar(_estadoAnterior: LoginState, formData: FormData): P
 
   await guardarTokens(resposta.accessToken, resposta.refreshToken);
 
-  redirect('/users');
+  // pt-BR (onboarding de empresa, 2026-10-21): a pessoa que entrou por um
+  // LINK DE CONVITE precisa terminar o aceite — e o aceite é o que cria a
+  // membership na empresa que convidou. Sem este desvio, o funil abaixo
+  // perguntaria "qual empresa?" e a conta (que ainda não tem membership
+  // nenhuma) seria levada a `/empresa/nova` — a reserva de uma falha de
+  // consulta virando o caminho que CRIA empresa.
+  //
+  // O token é validado AQUI, no servidor: o `FormData` não é fronteira de
+  // confiança, e um token adulterado não pode escolher a rota.
+  const convite = formData.get('convite');
+  if (typeof convite === 'string' && ehTokenDeConvite(convite)) {
+    // ⚠️ O cookie `tenant_id` é APAGADO: ele pertence à identidade ANTERIOR
+    // (a sessão que acabou de ser trocada), e a empresa que ele nomeia pode
+    // ser de outra conta. Mantido, ele sairia como `X-Tenant-Id` de uma
+    // empresa que a pessoa não pertence. É o mesmo motivo do `limparTenant()`
+    // abaixo, e aqui é ainda mais necessário: o aceite do convite é o que
+    // grava o cookie CERTO, logo depois.
+    await limparTenant();
+    redirect(`/convite/${convite}`);
+  }
+
+  // pt-BR: a sessão JÁ está guardada — o login deu certo. O que pode falhar
+  // aqui é a CONSULTA que decide a tela, e essa falha não pode virar a tela
+  // de erro do Next: a pessoa entrou, e um erro de rede na hora de escolher
+  // a empresa é o tipo de coisa que não pode apagar o login que deu certo.
+  //
+  // ⚠️ "NÃO SEI" E "NÃO TEM" SÃO ESTADOS DIFERENTES — e a falha da consulta
+  // é o PRIMEIRO deles. O `catch` tratava os dois como o mesmo: caía em
+  // `/users` sem empresa e em SILÊNCIO. MEDIDO 2026-10-22: a dona de uma
+  // empresa com cinco pessoas via "1 usuário cadastrado" (só ela), sem erro,
+  // sem aviso e sem menção a empresa nenhuma — e o escopo só voltaria no
+  // login seguinte.
+  //
+  // A rota de reserva `/users` era o menor dos dois males, porque a outra
+  // (`/empresa/nova`) produz uma empresa DUPLICADA — mesmo dono, mais um
+  // conjunto de perfis, e nada na tela avisa que era duplicado. Mas ela só
+  // faz sentido quando a CONSULTA VOLTOU; aqui ela não voltou, e a pessoa
+  // precisa ficar sabendo.
+  //
+  // ⚠️ A REGRA: o destino de exceção de uma LEITURA tem de ser um caminho que NÃO ESCREVE.
+  // `/empresa/nova` cria empresa + três perfis + membership, e trocar "não sei"
+  // por "sim, pode criar" é o que produz a duplicata.
+  //
+  // O que a pessoa recebe: a sessão vale (os tokens estão no cookie), e o
+  // cookie de empresa é APAGADO — ele pertence à identidade ANTERIOR, e a
+  // empresa que ele nomeia pode ser de outra conta, então mantê-lo faria a
+  // sessão agir numa empresa alheia. A mensagem diz o que fazer: entrar de
+  // novo, o que refaz a consulta.
+  let destino: { rota: string; tenantId: string | null };
+  try {
+    destino = await destinoAposLogin(resposta.accessToken);
+  } catch {
+    await limparTenant();
+    return {
+      ...LOGIN_INICIAL,
+      valores: valoresSemSegredo(valores),
+      formError: ERRO_CONSULTA_DAS_EMPRESAS,
+    };
+  }
+
+  if (destino.tenantId !== null) {
+    await guardarTenant(destino.tenantId);
+  } else {
+    // A conta NÃO tem empresa: a empresa de uma sessão ANTERIOR é apagada.
+    // Mantida, ela vira `X-Tenant-Id` de uma empresa que a pessoa não
+    // pertence — e a API responde 403 `TENANT_MEMBERSHIP_REQUIRED` na tela
+    // principal, sem caminho de volta.
+    await limparTenant();
+  }
+
+  redirect(destino.rota);
 }

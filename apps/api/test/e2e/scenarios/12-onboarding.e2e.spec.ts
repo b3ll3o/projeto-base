@@ -86,14 +86,14 @@ describe('E2E 12 — entrada na empresa (D5)', () => {
     });
 
     expect(membership.tenantId).toBe(empresa.id);
-    expect(membership.role).toBe('owner');
+    expect(membership.role).toBe('gerente');
     // O admin é DA empresa, não global: um perfil global aqui daria a uma
     // empresa recém-criada um perfil com todas as permissões do catálogo.
     expect(membership.profile?.tenantId).toBe(empresa.id);
     expect(membership.profile?.isAdmin).toBe(true);
   });
 
-  it('o dono da empresa nova tem as permissões quando manda o X-Tenant-Id', async () => {
+  it('o gerente da empresa nova tem as permissões quando manda o X-Tenant-Id', async () => {
     const { headers } = await abrirEmpresa('acme');
 
     const perfil = await e2e.injetar({
@@ -395,7 +395,7 @@ describe('E2E 12 — entrada na empresa (D5)', () => {
     return perfil;
   }
 
-  it('o dono da empresa dá perfil ao convidado, e a PRÓXIMA requisição já vê', async () => {
+  it('o gerente da empresa dá perfil ao convidado, e a PRÓXIMA requisição já vê', async () => {
     const { headers, empresa } = await abrirEmpresa('acme');
     const convidado = await convidarEAceitar(empresa.id, headers, 'ana+perfil@acme.dev');
     const operador = await perfilDaEmpresa(empresa.id, 'operador-acme', 'users.read');
@@ -445,7 +445,7 @@ describe('E2E 12 — entrada na empresa (D5)', () => {
     expect(JSON.parse(semEmpresa.body).permissions).toEqual([]);
   });
 
-  it('o dono da empresa NÃO veste o convidado com o admin GLOBAL (403, e nada é gravado)', async () => {
+  it('o gerente da empresa NÃO veste o convidado com o admin GLOBAL (403, e nada é gravado)', async () => {
     const { headers, empresa } = await abrirEmpresa('acme');
     const convidado = await convidarEAceitar(empresa.id, headers, 'ana+admin@acme.dev');
     // Perfil admin GLOBAL (`tenant_id IS NULL`), que é o do seed.
@@ -506,7 +506,7 @@ describe('E2E 12 — entrada na empresa (D5)', () => {
     });
 
     // 404 e não 403: para o cliente a funcionalidade não existe. E 403 diria
-    // "você não pode", que é uma informação que o dono da empresa não tem.
+    // "você não pode", que é uma informação que o gerente da empresa não tem.
     expect(resposta.statusCode).toBe(404);
 
     // ⚠️ O CORPO também é a afirmação, e MEDIDO 2026-10-18 (revisão

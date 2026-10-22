@@ -370,6 +370,20 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     id: 'check-feature-flag-contract',
   },
   {
+    // pt-BR (2026-10-22): a regra DRY tem DOIS gates, porque tem duas metades
+    // medíveis — o CONHECIMENTO (o termo, que tem um dono) e a LÓGICA (o bloco
+    // repetido). MEDIDO: o repo já é DRY na lógica (zero blocos de 16+ linhas
+    // repetidos em produção) e a repetição que sobra é de termo.
+    name: 'termo de domínio tem UM dono (regra DRY, parte 1)',
+    file: '.tooling/scripts/ci/check-repeticao.ts',
+    id: 'check-repeticao',
+  },
+  {
+    name: 'lógica não repete bloco (regra DRY, parte 2)',
+    file: '.tooling/scripts/ci/check-bloco-duplicado.ts',
+    id: 'check-bloco-duplicado',
+  },
+  {
     // pt-BR (#110, 2026-10-19): as PORTAS declaradas no contrato existem no
     // código, e todo controller que tranca uma chave está na lista. Sem este
     // gate, uma quarta porta de `tenancy.invites` nascia ABERTA com o preflight

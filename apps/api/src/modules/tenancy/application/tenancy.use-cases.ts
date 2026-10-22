@@ -19,12 +19,14 @@ import {
   TENANT_ONBOARDING_PORT,
   type ConviteParaAceitar,
   type ConvitePendente,
+  type EmpresaAberta,
   type EmpresaParaAbrir,
   type TenantOnboardingPort,
   type UsuarioParaProvisionar,
 } from '../domain/ports/tenant-onboarding.port.js';
 import {
   TENANT_MEMBERSHIP_REPOSITORY_PORT,
+  type EmpresaDoUsuario,
   type TenantMembershipRepositoryPort,
 } from '../domain/ports/tenant-membership-repository.port.js';
 import {
@@ -33,6 +35,7 @@ import {
 } from '../domain/exceptions/tenancy.exceptions.js';
 import { Email } from '../../users/domain/value-objects/email.vo.js';
 import { UserId } from '../../users/domain/value-objects/user-id.vo.js';
+import { UserNotFoundException } from '../../users/domain/exceptions/user.exceptions.js';
 import {
   USER_REPOSITORY_PORT,
   type UserRepositoryPort,
@@ -69,6 +72,39 @@ export class TenancyUseCases {
     await this.onboarding.provisionarEmpresaPropria(input.usuario, input.empresa);
   }
 
+  // ───────────────────────── empresa de quem já tem conta ─────────────────────────
+
+  /**
+   * Abre a empresa de uma conta que JÁ EXISTE — a segunda etapa do onboarding
+   * (a página de criação de empresa).
+   *
+   * A conta é conferida ANTES de qualquer escrita: quem não existe não pode
+   * deixar uma empresa órfã com o dono apontando para o nada. E a conferência
+   * é em `null` (bucket de SISTEMA) pelo mesmo motivo do aceite de convite —
+   * a conta pode não ter membership nenhuma ainda, que é justamente o caso de
+   * quem está criando a primeira empresa.
+   */
+  async criarEmpresa(input: {
+    userId: string;
+    nome: string;
+    slug: string;
+  }): Promise<EmpresaAberta> {
+    const user = await this.users.findById(UserId.create(input.userId), null);
+    if (user === null || user.isDeleted()) {
+      throw new UserNotFoundException(input.userId);
+    }
+
+    return this.onboarding.abrirEmpresaParaUsuario(input.userId, {
+      nome: input.nome,
+      slug: input.slug,
+    });
+  }
+
+  /** As empresas a que o ator pertence — lista vazia é uma resposta válida. */
+  async listarEmpresas(userId: string): Promise<EmpresaDoUsuario[]> {
+    return this.memberships.listarEmpresasDoUsuario(userId);
+  }
+
   // ───────────────────────── emitir convite ─────────────────────────
 
   async emitirConvite(input: {
@@ -77,7 +113,7 @@ export class TenancyUseCases {
     email: string;
   }): Promise<{ token: string; expiresAt: Date }> {
     const role = await this.memberships.findRole(input.convidadorId, input.tenantId);
-    if (role !== 'owner') {
+    if (role !== 'gerente') {
       throw new NaoAdministraEmpresaException(input.tenantId);
     }
 
@@ -110,7 +146,15 @@ export class TenancyUseCases {
 
   // ───────────────────────── conta existente ─────────────────────────
 
-  async aceitarConvite(input: { userId: string; token: string }): Promise<void> {
+  /**
+   * Aceita o convite de uma conta que já existe — e devolve a empresa que
+   * CONVIDOU.
+   *
+   * O `tenantId` no retorno não é enfeite: sem ele o web não sabe em qual
+   * empresa a pessoa entrou, e o cookie de empresa (`X-Tenant-Id`) fica sem
+   * valor — o resultado é uma conta com membership e ZERO permissões na tela.
+   */
+  async aceitarConvite(input: { userId: string; token: string }): Promise<{ tenantId: string }> {
     // O email vem da CONTA, não da entrada: o token prova que o convite foi
     // emitido para alguém, e a conta prova que essa alguém é você.
     // `null` = bucket de SISTEMA: a pergunta é "esta conta existe?", e a conta
@@ -123,6 +167,7 @@ export class TenancyUseCases {
 
     const convite = await this.exigirConviteValido(input.token, user.email().value);
     await this.onboarding.entrarPorConvite(this.entrada(convite, user.id().value));
+    return { tenantId: convite.tenantId };
   }
 
   // ───────────────────────── interno ─────────────────────────

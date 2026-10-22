@@ -130,7 +130,7 @@ describe('JwtAuthGuard — a empresa afirmada no header é conferida', () => {
   });
 
   it('um membro legítimo atravessa, com o `tenantId` publicado', async () => {
-    const { guard, findRole } = makeGuard('owner');
+    const { guard, findRole } = makeGuard('gerente');
     const { ctx, request } = makeContext({ 'x-tenant-id': ACME });
 
     await expect(guard.canActivate(ctx)).resolves.toBe(true);

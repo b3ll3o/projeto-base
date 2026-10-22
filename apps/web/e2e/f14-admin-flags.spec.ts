@@ -164,7 +164,7 @@ test.describe('F14 — Ativação e desativação de funcionalidades (admin)', (
     // E o `title` diz QUEM recusou: o guard não nomeia a flag desligada, a
     // exceção de domínio nomeia o motivo. É o que separa os dois desfechos
     // sem depender do número.
-    expect((await ligada.json()).title).toContain('dono da empresa');
+    expect((await ligada.json()).title).toContain('gerente da empresa');
   });
 
   test('quem não é admin do sistema vê "Acesso restrito" e não a lista de flags', async ({

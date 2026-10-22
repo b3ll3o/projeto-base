@@ -484,7 +484,7 @@ describe('PrismaProfileRepository', () => {
 
   // pt-BR (Fase 8): o espelho do teste acima para o escopo de EMPRESA. Sem
   // ele, um `findBySlug` que ignorasse o `tenantId` recebido devolveria o
-  // perfil GLOBAL de mesmo slug para o dono da empresa — que é o inverso do
+  // perfil GLOBAL de mesmo slug para o gerente da empresa — que é o inverso do
   // vazamento que os dois testes de cima fecham.
   it('findBySlug com empresa devolve o perfil DA EMPRESA, não o global de mesmo slug', async () => {
     fake.semear({

@@ -76,7 +76,26 @@ export interface CreateUserInputDto {
   email: string;
   /** Senha em claro, 8..72 (limites de `password-hash.vo.ts`). */
   senha: string;
+  /**
+   * Para ONDE a conta nasce. Ausente = conta sem empresa, e o funil do login
+   * leva essa pessoa à página de criação de empresa.
+   *
+   * pt-BR (onboarding de empresa, 2026-10-21): a origem da chave é o
+   * `DestinoSchema` de `users.schemas.ts` — `empresa` cria a empresa junto com
+   * a conta (e a conta nasce DONO), `convite` cria a conta dentro da empresa
+   * que convidou. A união é discriminada por `tipo`, como na API.
+   */
+  destino?: DestinoContaDto;
 }
+
+/**
+ * O destino da conta nova — o ramo do `destino` de `POST /users`.
+ *
+ * `empresa`: nome e identificador da empresa que a conta cria. `convite`: o
+ * token do convite, e a conta entra na empresa que convidou.
+ */
+export type DestinoContaDto =
+  { tipo: 'empresa'; nome: string; slug: string } | { tipo: 'convite'; token: string };
 
 /**
  * Entrada para atualização de usuário (PATCH /users/:id).

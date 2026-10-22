@@ -19,7 +19,8 @@
     "test:e2e": "turbo run test:e2e",
     "ci:preflight": "tsx .tooling/scripts/ci/preflight.ts",
     "typecheck:tooling": "tsc --noEmit -p .tooling/tsconfig.json",
-    "ci:local": "pnpm ci:preflight && pnpm turbo run lint typecheck test:unit test:coverage test:integration test:e2e --filter=@projeto/api --filter=@projeto/web --filter=@projeto/shared-types && pnpm tooling:test",
+    "ci:boot": "tsx .tooling/scripts/ci/boot-local.ts",
+    "ci:local": "pnpm ci:preflight && pnpm turbo run db:generate --filter=@projeto/api && pnpm turbo run lint typecheck test:unit test:coverage test:integration test:e2e --filter=@projeto/api --filter=@projeto/web --filter=@projeto/shared-types && pnpm tooling:test && pnpm ci:boot",
     "pr:refresh": "tsx tooling/scripts/pr-refresh-hook.ts",
     "pr:marker": "tsx tooling/scripts/pr-refresh-gate.ts",
     "stack:review": "tsx tooling/scripts/stack-code-reviewer.ts",
@@ -33,7 +34,8 @@
     "format": "prettier --write \"**/*.{ts,tsx,json,yaml,yml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,json,yaml,yml}\"",
     "clean": "turbo run clean && rm -rf node_modules .turbo",
-    "prepare": "husky"
+    "prepare": "husky",
+    "repeticao:analisa": "cd tooling/scripts && pnpm repeticao:analisa"
   },
   "lint-staged": {
     "*.{ts,tsx}": [

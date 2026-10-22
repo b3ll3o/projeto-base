@@ -12,7 +12,7 @@
 // empresa — devolveria o `isAdmin` de DONO, que é `true` em toda empresa nova
 // e não é o que a API olha: a tela mostraria a tabela para um ator que a API
 // recusa. MEDIDO: `prisma-tenant-onboarding.repository.ts:202` dá
-// `isAdmin: true` ao dono.
+// `isAdmin: true` ao gerente.
 //
 // Um form POR LINHA, e não um form com vários checkboxes: cada linha é a
 // unidade de salvar — o mesmo formato de `app/admin/users/page.tsx` (select +

@@ -39,6 +39,7 @@ import {
   type UsuarioWire,
 } from './dados';
 import { semearAdmin } from './rbac';
+import { garantirApiNoAr } from './api';
 
 export interface FixturesE2E {
   /** URL absoluta de um caminho do app. */
@@ -104,6 +105,16 @@ export interface FixturesE2E {
 export const test = base.extend<FixturesE2E>({
   baseLimpa: [
     async ({}, use) => {
+      // ⚠️ A API é conferida ANTES do banco, e o critério é a VIDA DO
+      // PROCESSO. A API pode morrer no meio da suíte (o F1 e o F5 a derrubam
+      // de propósito; um worker morto ou um abort do run a deixa fora), e
+      // quando ela fica fora os specs seguintes falham TODOS com
+      // `ECONNREFUSED` — um erro que não é do teste deles, e uma suíte
+      // inteira vermelha por uma causa que já passou.
+      //
+      // Aqui ela se levanta sozinha. MEDIDO 2026-10-22: numa execução do
+      // `ci:local` a API foi morta no meio e 33 specs caíram em cascata.
+      await garantirApiNoAr();
       await limparBase();
       await use();
     },
@@ -242,6 +253,26 @@ export async function plantarSessao(page: Page, tokens: ParDeTokens): Promise<vo
       sameSite: 'Lax',
     },
   ]);
+}
+
+/**
+ * Planta a EMPRESA da sessão — o cookie `tenant_id`.
+ *
+ * pt-BR (onboarding de empresa, 2026-10-21): sem este cookie a sessão age no
+ * bucket GLOBAL (`users.profile_id`), e a listagem volta recortada para a
+ * PRÓPRIA linha — a tela mostra uma pessoa e não diz por quê. O cookie é o
+ * que faz o `X-Tenant-Id` sair.
+ *
+ * ⚠️ NÃO é httpOnly, e não por descuido: `lib/sessao.ts` grava assim, e o id
+ * da empresa não é segredo.
+ */
+export async function plantarEmpresa(page: Page, tenantId: string): Promise<void> {
+  const { webUrl } = exigirEstado();
+  await page
+    .context()
+    .addCookies([
+      { name: 'tenant_id', value: tenantId, url: webUrl, httpOnly: false, sameSite: 'Lax' },
+    ]);
 }
 
 // ── Seletores ───────────────────────────────────────────────────────────────

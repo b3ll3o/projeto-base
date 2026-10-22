@@ -18,8 +18,7 @@ maintainer: stack-code-reviewer
 
 1. **Antes de qualquer coisa**: `pnpm install` e, se for planejar, gerar um *state-snapshot* (camada de agents).
 2. **Commit** dispara `commit-msg` (Conventional Commits — `exit 1` se a mensagem não segue `tipo(escopo?): descrição`) e `pre-commit`: `lint-staged` (só Prettier) + `stack-code-reviewer` (único que aborta em pre-commit) + `doc-sync` (roda mas nunca aborta — ver §7.2).
-3. **Push** dispara `pre-push`: `pnpm ci:preflight` — os gates estruturais declarados em
-   [`preflight.ts`](../.tooling/scripts/ci/preflight.ts); aborta com exit 1 se algum falhar.
+3. **Push** dispara `pre-push`: `pnpm ci:preflight` — os gates estruturais declarados em [`preflight.ts`](../.tooling/scripts/ci/preflight.ts) — e `pnpm ci:boot`, que sobe a aplicação local; ambos abortam com exit 1 se falhar.
 4. **PR para `main`** dispara 3 jobs de CI (`preflight`, `quality`, `docker-build-prod`) + `stack-code-review` + `docs-sync`. **Pós-#44** os jobs `preflight` e `quality` rodam a suíte do tooling, que valida os próprios dentes dele — contagem por `pnpm tooling:test` (dois roots).
 5. **Merge em `main`** só dispara `release-template` (auto-tag) **se** o commit tocar `docs/MONOREPO.md`.
 
@@ -53,7 +52,7 @@ maintainer: stack-code-reviewer
 │     pre-commit ─ lint-staged      → prettier --write         │
 │                  stack-code-reviewer → exit 1 se blocker     │
 │                  doc-sync          → NUNCA aborta (§7)       │
-│     pre-push   ─ ci:preflight     → exit 1 se falhar       │
+│     pre-push   ─ ci:preflight, ci:boot → exit 1 se falhar  │
 │   ✅ IMPOSTO localmente, burlável com --no-verify            │
 └──────────────────────────────────────────────────────────────┘
                │
@@ -86,8 +85,8 @@ maintainer: stack-code-reviewer
 | 4 | (Camada C) Snapshot de estado | ver §5 | nenhum — prosa em [`state-aware-planning.md`](../.agents/workflows/state-aware-planning.md) |
 | 5 | Codar com o specialist | ver `.agents/agents/<specialist>.md` | nenhum — prosa |
 | 6 | Commit | `git add -A && git commit -m "…"` | **commit-msg**: Conventional Commits · **pre-commit**: lint-staged, stack-code-reviewer, doc-sync |
-| 7 | Verificação completa local | `pnpm ci:local` | **nenhum** — `ci:local` não está em nenhum hook (§7) |
-| 8 | Push | `git push -u origin <branch>` | **pre-push**: `pnpm ci:preflight` |
+| 7 | Verificação completa local | `pnpm ci:local` | **nenhum** — o `ci:local` inteiro não está em nenhum hook (§7). A EXCEÇÃO é a etapa `ci:boot`, que o `pre-push` roda: ela sobe a aplicação local |
+| 8 | Push | `git push -u origin <branch>` | **pre-push**: `pnpm ci:preflight` + `pnpm ci:boot` (sobe a aplicação local) |
 | 9 | Abrir PR | `gh pr create` | — |
 | 10 | CI do PR | automático em `pull_request` | `preflight` → `quality`; `docker-build-prod` em paralelo; `stack-code-review` e `docs-sync` em workflows separados |
 | 11 | Revisão / fix loop | `gh pr merge` só após CI verde | **NENHUM** — sem `required_status_checks`, o botão decide (§7) |
@@ -110,7 +109,7 @@ pnpm tsx tooling/scripts/doc-sync.ts --files="$changed" --mode=incremental || ex
 
 ### 3.2 Detalhe do pre-push
 
-`.husky/pre-push` roda **exclusivamente** `pnpm ci:preflight`. Ele **não** roda lint, typecheck nem teste — apesar de [`git-workflow.md`](../.agents/specs/conventions/git-workflow.md) recomendar `pnpm ci:local` como "Pre-Push Quality Gate".
+`.husky/pre-push` roda `pnpm ci:preflight` e `pnpm ci:boot` — a etapa que **sobe a aplicação local** (API + web) e a derruba; o veredito é `/api/v1/health` 200 com `checks.database: "ok"` e `/api/health` 200 com `status: "ok"`, e o banco local é pré-requisito (§1.1 do [runbook](./como-rodar.md)). Ele **não** roda lint, typecheck nem teste — apesar de [`git-workflow.md`](../.agents/specs/conventions/git-workflow.md) recomendar `pnpm ci:local` como "Pre-Push Quality Gate".
 
 Os gates registrados são os `name:` de
 [`preflight-gates.ts`](../.tooling/scripts/ci/preflight-gates.ts) — **essa lista
@@ -186,6 +185,7 @@ Reescrever um como LLM é a classe 6 de `guard-classes.md` — spec verde, siste
 | `stack-code-reviewer` | `pnpm tsx tooling/scripts/stack-code-reviewer.ts` | A (pre-commit) | `blocker` > 0 ou `major` > 3 (`exit 1`) | Sim — `review-stack.yml` chama o mesmo script |
 | `doc-sync` | `pnpm tsx tooling/scripts/doc-sync.ts` | A (pre-commit) | **Nada** — `grep -c 'process.exit' tooling/scripts/doc-sync.ts` = 0 | Não — e o job de CI também nunca falha |
 | `ci:preflight` | `pnpm ci:preflight` | A (pre-push) + B | os checks estruturais | Sim — `ci.yml` roda o mesmo script |
+| `ci:boot` | `pnpm ci:boot` | A (pre-push) + (via `ci:local`) | A aplicação local **não sobe** (`exit 1`): `tsx src/main.ts` + `next dev` em portas livres, e o veredito é `/api/v1/health` 200 com `checks.database: "ok"` + `/api/health` 200 com `status: "ok"` | Não — nenhum job de CI sobe o app local; é gate deliberadamente local (o e2e sobe a API em `tsx` e o web no BUILD de produção, que é outro caminho) |
 | `format:check` | `pnpm format:check` | B (preflight job) | Arquivo não formatado | — |
 | `test:coverage` | `pnpm turbo run test:coverage` | B (quality job) | Cobertura de `apps/api` < 80% (`COVERAGE_FLOOR`, só quando `isCoverageEnforced`) | — |
 | `test:integration` / `test:e2e` | `pnpm turbo run test:integration test:e2e --filter=@projeto/api` | B (quality job) | Teste falhando (exige Docker) | — |
@@ -225,7 +225,7 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 | Comando | O que faz | Camada |
 |---------|-----------|--------|
 | `pnpm ci:preflight` | checks estruturais de drift; aborta com exit 1 | A + B |
-| `pnpm ci:local` | `ci:preflight` + `turbo run lint typecheck test:unit test:coverage test:integration test:e2e --filter=@projeto/api --filter=@projeto/web --filter=@projeto/shared-types` + `pnpm tooling:test` — o tempo **envelhece**: re-meça, não cite (n=3 em 2026-10-08, antes do 3º filtro e do tooling, deu 69,5 s / 69,6 s / 74,1 s) | manual (não está em hook) |
+| `pnpm ci:local` | `ci:preflight` + `turbo run lint typecheck test:unit test:coverage test:integration test:e2e --filter=@projeto/api --filter=@projeto/web --filter=@projeto/shared-types` + `pnpm tooling:test` + `ci:boot` — o tempo **envelhece**: re-meça, não cite (n=3 em 2026-10-08, antes do 3º filtro e do tooling, deu 69,5 s / 69,6 s / 74,1 s) | manual (não está em hook) — mas a etapa `ci:boot` **é** rodada pelo `pre-push` |
 | `pnpm format:check` | Prettier em modo check sobre ts/tsx/json/yaml/yml | B |
 | `pnpm stack:review` | `stack-code-reviewer` standalone (mesmo gate do pre-commit e do CI) | A + B |
 | `pnpm docs:sync` | `doc-sync` standalone — **só relatório** | A + B |

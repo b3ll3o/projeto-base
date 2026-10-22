@@ -81,6 +81,47 @@ describe('checkTeethCount', () => {
     expect(r.errors[0]).toMatch(/paridade quebrada/);
   });
 
+  it('vermelho quando a diferença é MAIOR que 1 (gate duplicado)', async () => {
+    // ⚠️ MEDIDO 2026-10-22: a condição era `fileCount >= nameCount`, e este
+    // caso PASSAVA VERDE — 4 entradas para 2 arquivos únicos é a diferença 2,
+    // e o gate que existe para denunciar gate duplicado não denunciava. A
+    // MENSAGEM do gate prometia pegar ("se for maior, algum gate está
+    // duplicado") e não pegava.
+    //
+    // ⚠️ E a diferença 1 NÃO é violação: é o `check-eslint-drift`, que entra
+    // duas vezes (uma por app) com o MESMO arquivo. Um fixture de "2 entradas
+    // para 1 arquivo" seria o caso LEGÍTIMO, e o gate acusando ele seria um
+    // gate errando.
+    writeFile(
+      '.tooling/scripts/ci/preflight-gates.ts',
+      `export const PREFLIGHT_CHECKS = [
+  { name: 'a', file: '.tooling/scripts/ci/check-x.ts', id: 'a' },
+  { name: 'b', file: '.tooling/scripts/ci/check-x.ts', id: 'b' },
+  { name: 'c', file: '.tooling/scripts/ci/check-y.ts', id: 'c' },
+  { name: 'd', file: '.tooling/scripts/ci/check-y.ts', id: 'd' },
+];`,
+    );
+    writeFile('.tooling/scripts/ci/check-x.ts');
+    writeFile('.tooling/scripts/ci/check-y.ts');
+    const r = await checkTeethCount({ repoRoot: tmp });
+    expect(r.ok).toBe(false);
+    expect(r.errors[0]).toMatch(/paridade quebrada/);
+  });
+
+  it('verde quando DUAS entradas apontam para o MESMO arquivo (o caso do eslint-drift)', async () => {
+    // A contra-regra do caso anterior: a diferença 1 é o par legítimo.
+    writeFile(
+      '.tooling/scripts/ci/preflight-gates.ts',
+      `export const PREFLIGHT_CHECKS = [
+  { name: 'a', file: '.tooling/scripts/ci/check-x.ts', id: 'a' },
+  { name: 'b', file: '.tooling/scripts/ci/check-x.ts', id: 'b' },
+];`,
+    );
+    writeFile('.tooling/scripts/ci/check-x.ts');
+    const r = await checkTeethCount({ repoRoot: tmp });
+    expect(r.ok).toBe(true);
+  });
+
   it('vermelho quando preflight-gates.ts não existe', async () => {
     const r = await checkTeethCount({ repoRoot: tmp });
     expect(r.ok).toBe(false);

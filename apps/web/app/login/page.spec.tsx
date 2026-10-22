@@ -15,8 +15,9 @@
 
 // @vitest-environment jsdom
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { render, screen, cleanup, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 vi.mock('next/navigation', () => ({
   redirect: vi.fn((url: string) => {
@@ -24,8 +25,33 @@ vi.mock('next/navigation', () => ({
   }),
 }));
 
+// pt-BR (onboarding de empresa, 2026-10-21): a Action de login é mockada
+// porque o que este spec mede é o CABO entre a página e o formulário — a
+// página LÊ a query string e ENTREGA o token. Com a Action real, o envio
+// sairia para a rede; mockada, o `FormData` chega no `mock.calls` e o token
+// pode ser conferido.
+//
+// ⚠️ O estado devolvido é literal, e não `LOGIN_INICIAL`: a fábrica do
+// `vi.mock` é içada para o topo do arquivo e não pode ler importações de
+// fora — o `LOGIN_INICIAL` ainda estaria no tempo de execução da ligação.
+vi.mock('./actions', () => ({
+  entrar: vi.fn(async (_estado: unknown, _formData: FormData) => ({
+    ok: false,
+    fieldErrors: {},
+    formError: null,
+    valores: { email: '', senha: '' },
+  })),
+}));
+
 import LoginPage from './page';
-import { AVISO_CADASTRO_CONCLUIDO, PARAM_CADASTRO_CONCLUIDO } from './state';
+import { entrar } from './actions';
+import {
+  AVISO_CADASTRO_CONCLUIDO,
+  AVISO_EMPRESA_PENDENTE,
+  PARAM_CADASTRO_CONCLUIDO,
+  PARAM_EMPRESA_PENDENTE,
+} from './state';
+import { PARAM_CONVITE } from '@/lib/convite-schema';
 
 async function renderCom(params: Record<string, string | string[] | undefined>) {
   render(await LoginPage({ searchParams: Promise.resolve(params) }));
@@ -37,6 +63,16 @@ async function renderCom(params: Record<string, string | string[] | undefined>) 
 // parece um defeito da página quando é sujeira de teste.
 afterEach(() => {
   cleanup();
+});
+
+// pt-BR: as chamadas da Action mockada ACUMULAM entre os testes, e o
+// `mock.calls[0]` do segundo teste seria a chamada do PRIMEIRO. Medido:
+// os dois casos "o convite NÃO é entregue" liam o token do caso anterior e
+// falhavam com um token de 64 hex que ninguém tinha passado. `clearAllMocks`
+// limpa as chamadas e preserva a implementação — que é o que o `vi.mock`
+// instalou.
+beforeEach(() => {
+  vi.clearAllMocks();
 });
 
 describe('LoginPage — o aviso de cadastro concluído', () => {
@@ -73,5 +109,76 @@ describe('LoginPage — o aviso de cadastro concluído', () => {
     await renderCom({ [PARAM_CADASTRO_CONCLUIDO]: ['1', '2'] });
 
     expect(screen.getByRole('status')).toBeInTheDocument();
+  });
+});
+
+describe('LoginPage — o aviso de empresa pendente', () => {
+  it('com o param de empresa, mostra que a sessão venceu antes da empresa', async () => {
+    // pt-BR: sem este aviso, a pessoa que preenchia o formulário de criação
+    // de empresa era levada ao login sem explicação, entrava, e voltava para
+    // `/empresa/nova` com o formulário vazio — sem saber o que tinha
+    // acontecido. É o mesmo "beco sem saída de dois saltos" que o
+    // `?cadastrado=1` já resolve no cadastro.
+    await renderCom({ [PARAM_EMPRESA_PENDENTE]: '1' });
+
+    const aviso = screen.getByRole('status');
+    expect(aviso).toHaveTextContent(AVISO_EMPRESA_PENDENTE);
+  });
+
+  it('o aviso da empresa PENDENTE tem prioridade sobre o do cadastro', async () => {
+    // Os dois sinais nunca juntos na prática, e a ordem é uma decisão: o da
+    // empresa pendente é o mais acionável — a pessoa sabe exatamente o que
+    // fazer depois de entrar, e é ele que a traz de volta para `/empresa/nova`.
+    await renderCom({
+      [PARAM_EMPRESA_PENDENTE]: '1',
+      [PARAM_CADASTRO_CONCLUIDO]: '1',
+    });
+
+    const aviso = screen.getByRole('status');
+    expect(aviso).toHaveTextContent(AVISO_EMPRESA_PENDENTE);
+    expect(aviso).not.toHaveTextContent(AVISO_CADASTRO_CONCLUIDO);
+  });
+});
+
+describe('LoginPage — o token do convite', () => {
+  // pt-BR (onboarding de empresa, 2026-10-21): a sessão vence em 15 min, e o
+  // aceite do convite devolve 401 quando isso acontece. O token do convite
+  // viaja na query string porque o CONVITE É uma URL — e é por isso que ele
+  // precisa sobreviver ao login: sem ele, a pessoa entra sem convite nenhum,
+  // o funil pergunta "qual empresa?" e a responde `/empresa/nova`, porque o
+  // convite AINDA NÃO foi aceito e a conta não tem membership nenhuma.
+  const TOKEN = 'c'.repeat(64);
+
+  async function enviar(params: Record<string, string | string[] | undefined>) {
+    await renderCom(params);
+
+    const pessoa = userEvent.setup();
+    await pessoa.type(screen.getByLabelText('E-mail'), 'maria@empresa.com');
+    await pessoa.type(screen.getByLabelText('Senha'), 'segredo123');
+    await pessoa.click(screen.getByRole('button', { name: 'Entrar' }));
+
+    await waitFor(() => expect(vi.mocked(entrar)).toHaveBeenCalled());
+    return vi.mocked(entrar).mock.calls[0]?.[1];
+  }
+
+  it('entrega o token do convite ao formulário — é o que o faz sobreviver ao login', async () => {
+    const enviado = await enviar({ [PARAM_CONVITE]: TOKEN });
+
+    expect(enviado?.get('convite')).toBe(TOKEN);
+  });
+
+  it('token com formato errado NÃO é entregue — a query string é entrada de usuário', async () => {
+    // pt-BR: a validação do formato é o que impede um token adulterado de
+    // escolher a rota. A página recusa antes de entregar, e a Action valida
+    // de novo (o `FormData` não é fronteira de confiança).
+    const enviado = await enviar({ [PARAM_CONVITE]: 'token-adulterado' });
+
+    expect(enviado?.get('convite')).toBeNull();
+  });
+
+  it('sem o param, o formulário NÃO recebe convite nenhum', async () => {
+    const enviado = await enviar({});
+
+    expect(enviado?.get('convite')).toBeNull();
   });
 });

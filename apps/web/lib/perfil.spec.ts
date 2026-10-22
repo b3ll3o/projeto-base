@@ -225,7 +225,7 @@ describe('getTenant é montado no ApiClient (Fase 3)', () => {
    *
    * A tela de feature flags autoriza pelo `isAdmin` do bucket **GLOBAL** — o
    * que D2 exige (`ehAdministradorDeSistema`: `tenantId === null && isAdmin`) —
-   * e não pelo `isAdmin` de DONO que `obterMeuPerfil` devolve. O de dono é
+   * e não pelo `isAdmin` de GERENTE que `obterMeuPerfil` devolve. O de gerente é
    * `true` em toda empresa nova
    * (`prisma-tenant-onboarding.repository.ts:202`), então ler o sinal errado
    * mostra a tabela para um ator que a API recusa.

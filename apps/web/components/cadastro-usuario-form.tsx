@@ -48,6 +48,7 @@ import { useForm } from 'react-hook-form';
 import { cadastrarUsuario } from '@/app/users/novo/actions';
 import { CADASTRO_INICIAL, type CadastroUsuarioState } from '@/app/users/novo/state';
 import type { CampoCadastro } from '@/lib/cadastro-usuario-schema';
+import { PARAM_CONVITE } from '@/lib/convite-schema';
 import {
   cadastroUsuarioSchema,
   EMAIL_MAX,
@@ -61,7 +62,25 @@ type ActionCadastro = (
   formData: FormData,
 ) => Promise<CadastroUsuarioState>;
 
-export function CadastroUsuarioForm({ action = cadastrarUsuario }: { action?: ActionCadastro }) {
+export function CadastroUsuarioForm({
+  action = cadastrarUsuario,
+  convite,
+}: {
+  action?: ActionCadastro;
+  /**
+   * pt-BR (onboarding de empresa, 2026-10-21): o token do convite, quando a
+   * pessoa chegou por um link de convite. Ele viaja no MESMO FormData do
+   * cadastro, porque é o que diz que a conta nasce NA empresa que convidou
+   * (o `destino` do `POST /users`). Sem ele, a conta nasce sem empresa
+   * nenhuma e o funil do login leva a pessoa à página de criação de
+   * empresa — o oposto do que o convite pediu.
+   *
+   * ⚠️ O `| undefined` explícito é exigência do `exactOptionalPropertyTypes`
+   * (ligado no `tsconfig.base.json`): sem ele, a página não pode passar
+   * `undefined` para a prop — teria de omitir a propriedade inteira.
+   */
+  convite?: string | undefined;
+}) {
   const [estado, despachar, pendente] = useActionState<CadastroUsuarioState, FormData>(
     action,
     CADASTRO_INICIAL,
@@ -136,6 +155,11 @@ export function CadastroUsuarioForm({ action = cadastrarUsuario }: { action?: Ac
     // motivo está no schema: aparar um segredo é mutá-lo em silêncio. O
     // `resultado.data.senha` aqui é exatamente o que a pessoa digitou.
     dadosFormulario.set('senha', resultado.data.senha);
+    // pt-BR: o token do convite viaja no mesmo FormData — ver a prop
+    // `convite`. A Action o valida de novo antes de mandar qualquer coisa.
+    if (convite) {
+      dadosFormulario.set('convite', convite);
+    }
     // pt-BR: o despacho PRECISA estar dentro de `startTransition`. Fora
     // dela o React avisa em voz alta — "An async function with useActionState
     // was called outside of a transition ... isPending will not update
@@ -179,7 +203,7 @@ export function CadastroUsuarioForm({ action = cadastrarUsuario }: { action?: Ac
           disabled={pendente}
           aria-invalid={Boolean(erroDe('nome'))}
           aria-describedby={erroDe('nome') ? 'nome-erro' : undefined}
-          className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none aria-[invalid=true]:border-red-500"
+          className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 aria-[invalid=true]:border-red-500"
         />
         {erroDe('nome') ? (
           // pt-BR: `role="alert"` anuncia a mensagem assim que ela aparece,
@@ -204,7 +228,7 @@ export function CadastroUsuarioForm({ action = cadastrarUsuario }: { action?: Ac
           disabled={pendente}
           aria-invalid={Boolean(erroDe('email'))}
           aria-describedby={erroDe('email') ? 'email-erro' : undefined}
-          className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none aria-[invalid=true]:border-red-500"
+          className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 aria-[invalid=true]:border-red-500"
         />
         {erroDe('email') ? (
           <p id="email-erro" role="alert" className="mt-1 text-sm text-red-700">
@@ -233,7 +257,7 @@ export function CadastroUsuarioForm({ action = cadastrarUsuario }: { action?: Ac
           disabled={pendente}
           aria-invalid={Boolean(erroDe('senha'))}
           aria-describedby={erroDe('senha') ? 'senha-erro' : undefined}
-          className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none aria-[invalid=true]:border-red-500"
+          className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 aria-[invalid=true]:border-red-500"
         />
         {erroDe('senha') ? (
           <p id="senha-erro" role="alert" className="mt-1 text-sm text-red-700">
@@ -258,6 +282,21 @@ export function CadastroUsuarioForm({ action = cadastrarUsuario }: { action?: Ac
         >
           Cancelar
         </Link>
+        {/* pt-BR (onboarding de empresa, 2026-10-21): quem JÁ TEM CONTA e
+            chegou pelo link de convite cai NESTA tela — e sem esta saída o
+            caminho fica sem volta: o e-mail dela já está cadastrado, o
+            cadastro recusa com "este email já está cadastrado", e a pessoa
+            não descobre que o que ela precisa é ENTRAR. O token viaja na
+            query porque o login sabe levá-lo até a tela de aceite
+            (`/login?convite=…` → `/convite/<token>`). */}
+        {convite ? (
+          <Link
+            href={`/login?${PARAM_CONVITE}=${convite}`}
+            className="text-sm text-slate-600 underline underline-offset-2 hover:text-slate-900"
+          >
+            Já tenho conta
+          </Link>
+        ) : null}
       </div>
     </form>
   );

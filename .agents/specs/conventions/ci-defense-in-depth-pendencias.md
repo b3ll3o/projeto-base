@@ -17,6 +17,21 @@
 
 ## Pendências conhecidas
 
+- **A Camada 1 (pre-push) passou a depender do estado da MÁQUINA, e o CI
+  remoto não cobre o buraco.** (medido 2026-10-22, PR #116). O `pre-push`
+  agora roda `pnpm ci:boot` depois do preflight, e a etapa sobe a aplicação
+  local — o que exige `apps/api/.env` (gitignored) e um Postgres no ar.
+  Comando: `time pnpm ci:boot` → **11,0 s** com o banco de pé, e a mensagem
+  final é `✓ aplicação local no ar — API :43353 · web :37133` (os dois
+  `/health` em `ok`). Comando do buraco: `grep -n "ci:boot\|ci:local"
+  .github/workflows/ci.yml` → **0 linhas**, ou seja, o CI remoto **nunca**
+  roda essa etapa.
+  Consequência: a regra **só protege quem já tem a infra e barra quem não
+  tem** — e ninguém mais verifica nada. O comportamento é o DECLARADO
+  (`ci-defense-in-depth.md` §Camada 1: "falha alto, nunca pula"), e o que
+  fica registrado aqui é a ASSIMETRIA. Alternativa a decidir: tornar a etapa
+  *skipped com motivo* quando `DATABASE_URL` não resolve, em vez de erro.
+
 - **FECHADO 2026-10-08 — o painel lia `ok` e `errors` para decisões
   diferentes.** `relatarUmCheck` tirava a **marca** de `result.ok` e a
   **contagem** de `errors.length`; `ok` e `errors` são independentes por
