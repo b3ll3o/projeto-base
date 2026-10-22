@@ -93,7 +93,13 @@ export async function checkTeethCount(opts: { repoRoot: string }): Promise<Check
   // app). Não assertamos o número exato (envelhece a cada gate novo — a versão
   // anterior deste comentário dizia "21 entries, 20 arquivos" e já era falso);
   // só assertamos a RELAÇÃO, que é o sinal. Quebrar a relação é o defeito.
-  if (fileCount > 0 && fileCount >= nameCount) {
+  //
+  // ⚠️ MEDIDO 2026-10-22: a condição era `fileCount >= nameCount`, que só
+  // pegava o caso "name ≤ file". O caso que a MENSAGEM promete — "se for
+  // maior, algum gate está duplicado" (name = file + 2, com o mesmo `file:` em
+  // duas entradas) — passava VERDE: o gate que existe para denunciar gate
+  // duplicado não denunciava. A condição agora é a RELAÇÃO inteira.
+  if (fileCount > 0 && nameCount !== fileCount + 1) {
     errors.push(
       `paridade quebrada: ${nameCount} entradas casam ${fileCount} arquivos únicos — ` +
         `a diferença deveria ser exatamente 1 (eslint-drift entra 2x, uma por app). ` +

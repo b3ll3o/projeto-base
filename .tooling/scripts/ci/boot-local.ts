@@ -29,7 +29,15 @@
  */
 
 import { spawn, type ChildProcess } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync } from 'node:fs';
+import {
+  appendFileSync,
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  rmSync,
+} from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 
@@ -181,7 +189,19 @@ interface Processo {
   filho: ChildProcess;
   pid: number;
   log: string;
+  /** O `spawn` falhou (o binário não existe) — o sintoma está no log. */
+  erro?: string;
 }
+
+/**
+ * O prazo do `fetch` de saúde, em ms.
+ *
+ * ⚠️ É MENOR que o prazo da etapa (60 s / 90 s) de propósito: o prazo da etapa
+ * governa o LAÇO, e este governa a TENTIVA. Sem ele, um servidor que aceita a
+ * conexão e não responde deixa o `fetch` pendurado e o laço nunca mais avalia
+ * o prazo (MEDIDO 2026-10-22).
+ */
+const PRAZO_DO_FETCH_MS = 5_000;
 
 /**
  * Sobe um processo em GRUPO próprio, com a saída em ARQUIVO.
@@ -212,7 +232,26 @@ function subir(
     stdio: ['ignore', descritor, descritor],
   });
   closeSync(descritor);
-  return { filho, pid: filho.pid ?? -1, log };
+  const processo: Processo = { filho, pid: filho.pid ?? -1, log };
+  // ⚠️ O `spawn` NÃO LANÇA quando o binário não existe: ele EMITE o evento
+  // `'error'`. Sem este listener, o EventEmitter lança, a exceção não capturada
+  // mata o processo — e o `finally` do `main()`, que é quem derruba os grupos,
+  // NÃO RODA: a API e o web sobem como órfãos segurando as portas, e a etapa
+  // morre com stack trace cru em vez do diagnóstico que ela promete.
+  // MEDIDO 2026-10-22 (revisão do harness): o `apps/web/e2e/support/api.ts`
+  // (mesma técnica) TEM o listener, e o `processos.ts` centraliza o
+  // `derrubarFilho` — a forma veio daqui, o tratamento do erro, não.
+  filho.on('error', (erro: Error) => {
+    processo.erro = erro.message;
+    try {
+      appendFileSync(log, `[erro] spawn falhou: ${erro.message}\n`);
+    } catch {
+      // Log é diagnóstico, nunca controle: falhar em gravar não pode derrubar
+      // a etapa — seria trocar um sintoma difícil de ler por um fácil de ler e
+      // impossível de investigar.
+    }
+  });
+  return processo;
 }
 
 /** `true` enquanto o grupo do processo tiver alguém vivo. */
@@ -251,6 +290,13 @@ async function derrubar(p: Processo): Promise<void> {
  * Devolve `null` quando o processo MORRE (o sintoma está no log) ou quando o
  * prazo estoura. Devolve a resposta assim que ela vier — inclusive uma 503:
  * quem julga é o `avaliarSaude*`, e um 503 do banco é informação, não ruído.
+ *
+ * ⚠️ O `fetch` tem PRÓPRIO prazo (MEDIDO 2026-10-22): sem ele, um servidor
+ * que ACEITA a conexão e não responde (o `next dev` engasgado numa compilação
+ * que não termina, o event loop do Node bloqueado) deixa o `fetch` pendurado
+ * para sempre — e o `while (Date.now() < fim)` nunca é reavaliado, porque a
+ * linha do prazo só é testada na BORDA do laço. A etapa ficava pendurada sem
+ * dar o diagnóstico que ela promete, e sem a cauda do log.
  */
 async function esperarSaude(
   url: string,
@@ -260,8 +306,11 @@ async function esperarSaude(
   const fim = Date.now() + limiteMs;
   while (Date.now() < fim) {
     if (p.filho.exitCode !== null || p.filho.signalCode !== null) return null;
+    // O `spawn` falhou (o binário não existe): o sintoma está no log, e esperar
+    // o prazo só atrasaria o diagnóstico.
+    if (p.erro !== undefined) return null;
     try {
-      const resposta = await fetch(url);
+      const resposta = await fetch(url, { signal: AbortSignal.timeout(PRAZO_DO_FETCH_MS) });
       const texto = await resposta.text();
       let corpo: unknown = texto;
       try {
