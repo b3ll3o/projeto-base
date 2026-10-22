@@ -136,7 +136,7 @@ export function EmpresaForm({ action = criarEmpresaDoAtor }: { action?: ActionEm
           disabled={pendente}
           aria-invalid={Boolean(erroDe('nome'))}
           aria-describedby={erroDe('nome') ? 'nome-erro' : undefined}
-          className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none aria-[invalid=true]:border-red-500"
+          className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 aria-[invalid=true]:border-red-500"
         />
         {erroDe('nome') ? (
           // pt-BR: `role="alert"` anuncia a mensagem assim que ela aparece,
@@ -165,12 +165,15 @@ export function EmpresaForm({ action = criarEmpresaDoAtor }: { action?: ActionEm
             [erroDe('slug') ? 'slug-erro' : null, 'slug-dica'].filter(Boolean).join(' ') ||
             undefined
           }
-          className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none aria-[invalid=true]:border-red-500"
+          className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 aria-[invalid=true]:border-red-500"
         />
         {/* pt-BR: a dica fica NO campo, e não só no placeholder: o placeholder
             desaparece quando a pessoa digita — e o formato do identificador
-            é a regra que ela mais erra (maiúscula, espaço, hífen na ponta). */}
-        <p id="slug-dica" className="mt-1 text-xs text-slate-500">
+            é a regra que ela mais erra (maiúscula, espaço, hífen na ponta).
+            E ela é `text-sm` pelo mesmo motivo do erro logo abaixo: a dica
+            que PREVINE o erro não pode ser menor que o erro. `text-xs` (12 px)
+            era menor que o `text-sm` (14 px) do erro. */}
+        <p id="slug-dica" className="mt-1 text-sm text-slate-500">
           Letras minúsculas, números e hífens. Ex.: acme-ltda
         </p>
         {erroDe('slug') ? (

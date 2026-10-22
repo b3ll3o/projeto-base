@@ -68,6 +68,23 @@ export const ERRO_GENERICO_LOGIN =
   'Não foi possível entrar. Verifique a conexão e tente novamente.';
 
 /**
+ * A sessão entrou, mas a CONSULTA das empresas falhou.
+ *
+ * pt-BR: este é o caso que o funil do login tratava em SILÊNCIO — a consulta
+ * falhava, o `catch` caía em `/users` sem empresa, e a pessoa que era DONA de
+ * uma empresa com cinco pessoas via "1 usuário cadastrado" (só ela), sem erro
+ * nenhum. "Não sei se a conta tem empresa" e "a conta não tem empresa" são
+ * ESTADOS DIFERENTES, e o segundo não pode ser assumido quando o primeiro é o
+ * que aconteceu.
+ *
+ * A mensagem diz o que fazer (entrar de novo), porque entrar de novo refaz a
+ * consulta — e a sessão já está guardada, então o login não precisa ser
+ * desfeito.
+ */
+export const ERRO_CONSULTA_DAS_EMPRESAS =
+  'Não foi possível consultar suas empresas. Tente entrar de novo.';
+
+/**
  * Query param que a tela de cadastro usa para avisar que a conta ficou criada.
  *
  * pt-BR: mora AQUI, e não em `actions.ts` do cadastro, porque um arquivo

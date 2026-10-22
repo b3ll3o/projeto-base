@@ -28,6 +28,7 @@ import { obterMeuPerfilGlobal } from '@/lib/perfil';
 import { guardarTenant, guardarTokens, limparTenant } from '@/lib/sessao';
 import {
   CREDENCIAIS_INVALIDAS,
+  ERRO_CONSULTA_DAS_EMPRESAS,
   ERRO_GENERICO_LOGIN,
   LOGIN_INICIAL,
   comTraceId,
@@ -248,26 +249,47 @@ export async function entrar(_estadoAnterior: LoginState, formData: FormData): P
   // de erro do Next: a pessoa entrou, e um erro de rede na hora de escolher
   // a empresa é o tipo de coisa que não pode apagar o login que deu certo.
   //
-  // A rota de reserva é `/users`, e NÃO `/empresa/nova`: a consulta falhou, e
-  // então NÃO sabemos se a conta tem empresa. Levar quem TEM empresa para a
-  // tela de criação produz uma empresa DUPLICADA — mesmo dono, mais um
-  // conjunto de perfis, e nada na tela avisa que era duplicado. `/users` não
-  // cria nada, e quem de fato não tem empresa cai na tela principal até
-  // entrar de novo.
+  // ⚠️ "NÃO SEI" E "NÃO TEM" SÃO ESTADOS DIFERENTES — e a falha da consulta
+  // é o PRIMEIRO deles. O `catch` tratava os dois como o mesmo: caía em
+  // `/users` sem empresa e em SILÊNCIO. MEDIDO 2026-10-22: a dona de uma
+  // empresa com cinco pessoas via "1 usuário cadastrado" (só ela), sem erro,
+  // sem aviso e sem menção a empresa nenhuma — e o escopo só voltaria no
+  // login seguinte.
+  //
+  // A rota de reserva `/users` era o menor dos dois males, porque a outra
+  // (`/empresa/nova`) produz uma empresa DUPLICADA — mesmo dono, mais um
+  // conjunto de perfis, e nada na tela avisa que era duplicado. Mas ela só
+  // faz sentido quando a CONSULTA VOLTOU; aqui ela não voltou, e a pessoa
+  // precisa ficar sabendo.
+  //
+  // ⚠️ A REGRA: o destino de exceção de uma LEITURA tem de ser um caminho que NÃO ESCREVE.
+  // `/empresa/nova` cria empresa + três perfis + membership, e trocar "não sei"
+  // por "sim, pode criar" é o que produz a duplicata.
+  //
+  // O que a pessoa recebe: a sessão vale (os tokens estão no cookie), e o
+  // cookie de empresa é APAGADO — ele pertence à identidade ANTERIOR, e a
+  // empresa que ele nomeia pode ser de outra conta, então mantê-lo faria a
+  // sessão agir numa empresa alheia. A mensagem diz o que fazer: entrar de
+  // novo, o que refaz a consulta.
   let destino: { rota: string; tenantId: string | null };
   try {
     destino = await destinoAposLogin(resposta.accessToken);
   } catch {
-    destino = { rota: '/users', tenantId: null };
+    await limparTenant();
+    return {
+      ...LOGIN_INICIAL,
+      valores: valoresSemSegredo(valores),
+      formError: ERRO_CONSULTA_DAS_EMPRESAS,
+    };
   }
 
   if (destino.tenantId !== null) {
     await guardarTenant(destino.tenantId);
   } else {
-    // A conta NÃO tem empresa (ou a consulta falhou): a empresa de uma sessão
-    // ANTERIOR é apagada. Mantida, ela vira `X-Tenant-Id` de uma empresa que
-    // a pessoa não pertence — e a API responde 403
-    // `TENANT_MEMBERSHIP_REQUIRED` na tela principal, sem caminho de volta.
+    // A conta NÃO tem empresa: a empresa de uma sessão ANTERIOR é apagada.
+    // Mantida, ela vira `X-Tenant-Id` de uma empresa que a pessoa não
+    // pertence — e a API responde 403 `TENANT_MEMBERSHIP_REQUIRED` na tela
+    // principal, sem caminho de volta.
     await limparTenant();
   }
 

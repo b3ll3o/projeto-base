@@ -45,7 +45,13 @@ import type { ConviteAceitoDto } from '@projeto/shared-types';
  * só a mensagem genérica — cada tela diz o que a pessoa tentou fazer.
  */
 function mensagemDoConvite(erro: ApiError): string {
-  return mensagemDeConvite(erro.status) ?? comTraceId(CONVITE_ERRO_GENERICO, erro.problem?.traceId);
+  // ⚠️ O `code` vai junto: `ja-membro` e `ja-aceito` são o MESMO status
+  // (409), e só o `code` diz que a pessoa JÁ é da empresa — que é um caso
+  // que se resolve indo para `/users`, não pedindo um convite novo.
+  return (
+    mensagemDeConvite(erro.status, erro.code) ??
+    comTraceId(CONVITE_ERRO_GENERICO, erro.problem?.traceId)
+  );
 }
 
 export async function aceitarConviteDoAtor(

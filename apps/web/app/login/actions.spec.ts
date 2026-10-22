@@ -16,7 +16,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { redirect } from 'next/navigation';
 import { entrar } from './actions.js';
 import { guardarTenant, guardarTokens, limparTenant } from '@/lib/sessao';
-import { CREDENCIAIS_INVALIDAS, ERRO_GENERICO_LOGIN, type LoginState } from './state.js';
+import {
+  CREDENCIAIS_INVALIDAS,
+  ERRO_CONSULTA_DAS_EMPRESAS,
+  ERRO_GENERICO_LOGIN,
+  type LoginState,
+} from './state.js';
 
 vi.mock('next/navigation', () => ({
   redirect: vi.fn((url: string) => {
@@ -291,15 +296,22 @@ describe('entrar — para onde a pessoa vai depois de entrar', () => {
     // não pode apagar o login que deu certo — nem virar a tela de erro do
     // Next, que diria "algo deu errado" a quem entrou com sucesso.
     //
-    // E o destino é `/users`, NUNCA `/empresa/nova`: a consulta falhou, então
-    // NÃO se sabe se a conta tem empresa — e levar quem TEM empresa para a
-    // tela de criação produz uma empresa DUPLICADA, com o mesmo gerente e mais
-    // um conjunto de perfis, sem nada na tela avisando que era duplicado.
+    // ⚠️ E ela precisa saber: "NÃO SEI se a conta tem empresa" e "a conta NÃO
+    // tem empresa" são estados diferentes, e a falha da consulta é o primeiro.
+    // O tratamento antigo caía em `/users` em SILÊNCIO — MEDIDO 2026-10-22: a
+    // dona de uma empresa com cinco pessoas via "1 usuário cadastrado" (só
+    // ela), sem erro e sem menção a empresa nenhuma.
     responderPorUrl({ '/me/tenants': new Error('ECONNREFUSED') });
 
-    await expect(entrar(INICIAL, formData())).rejects.toThrow('NEXT_REDIRECT:/users');
+    const estado = await entrar(INICIAL, formData());
 
+    // O login NÃO foi desfeito — a sessão vale.
     expect(guardarTokens).toHaveBeenCalledWith('access-abc', 'refresh-xyz');
+    // E a pessoa recebe a MENSAGEM, em vez de cair num destino arbitrário.
+    expect(estado.formError).toBe(ERRO_CONSULTA_DAS_EMPRESAS);
+    // O cookie de empresa ANTERIOR é apagado: ele pertence à identidade
+    // anterior, e a empresa que ele nomeia pode ser de outra conta.
+    expect(limparTenant).toHaveBeenCalled();
   });
 });
 

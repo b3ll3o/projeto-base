@@ -126,6 +126,18 @@ describe('aceitarConviteDoAtor — recusas', () => {
     expect(r.formError).toContain('já foi usado');
   });
 
+  it('conta que JÁ é da empresa diz isso — não "já foi usado"', async () => {
+    // MEDIDO 2026-10-22: `ja-membro` e `ja-aceito` são o MESMO status (409),
+    // e a tela dizia "Este convite já foi usado" para quem já era membro da
+    // empresa. E era um beco sem saída: pedir um convite novo devolvia 409 de
+    // novo, para sempre. O que resolve é dizer que a pessoa já é da empresa.
+    vi.mocked(aceitarConvite).mockRejectedValueOnce(apiError(409, 'CONVITE_JA_MEMBRO'));
+
+    const r = await aceitarConviteDoAtor(CONVITE_INICIAL, formData());
+
+    expect(r.formError).toContain('já faz parte');
+  });
+
   it('convite de outro e-mail diz que é de outro e-mail', async () => {
     vi.mocked(aceitarConvite).mockRejectedValueOnce(apiError(403));
 

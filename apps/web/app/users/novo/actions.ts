@@ -97,8 +97,14 @@ function estadoDeErro(
   // pessoa lia "verifique a conexão" num cadastro proibido por política. A
   // tela IRMÃ do mesmo feature (o aceite) mapeia o MESMO 404 pelo status: as
   // duas portas discordavam do mesmo status.
-  if (problem.code === 'CONVITE_INVALIDO' || (veioDeConvite && erro.status === 404)) {
-    const motivo = mensagemDeConvite(erro.status);
+  if (
+    problem.code === 'CONVITE_INVALIDO' ||
+    problem.code === 'CONVITE_JA_MEMBRO' ||
+    (veioDeConvite && erro.status === 404)
+  ) {
+    // ⚠️ O `code` vai junto: `ja-membro` e `ja-aceito` são o MESMO status
+    // (409), e só o `code` diz que a conta JÁ é membro da empresa.
+    const motivo = mensagemDeConvite(erro.status, problem.code);
     return { ...base, formError: motivo ?? comTraceId(ERRO_GENERICO, problem.traceId) };
   }
 
@@ -163,7 +169,7 @@ export async function cadastrarUsuario(
     return {
       ...CADASTRO_INICIAL,
       valores: valoresSemSegredo(valores),
-      formError: 'O link de convite é inválido. Peça um novo convite ao administrador da empresa.',
+      formError: 'O link de convite é inválido. Peça um novo convite ao gerente da empresa.',
     };
   }
 
