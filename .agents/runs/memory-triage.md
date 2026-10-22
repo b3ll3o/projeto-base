@@ -204,6 +204,7 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `rebase-ages-the-commit-message-too` | `pendente` | — | — |
 | `rebase-skip-descarta-o-commit-inteiro` | `pendente` | — | — |
 | `red-gate-hides-the-queue` | `pendente` | — | — |
+| `renomear-valor-gravado-e-o-furo-da-coluna` | `citada` | `.agents/specs/conventions/migracao-de-dados.md` | `Renome de VALOR gravado` |
 | `reserva-que-cria-nao-pode-ser-a-reserva-da-falha` | `citada` | `apps/web/app/login/actions.ts` | `o destino de exceção de uma LEITURA tem de ser um caminho que NÃO ESCREVE` |
 | `rota-protegida-sem-bearer-sai-publica-no-documento` | `citada` | `apps/api/src/modules/users/infrastructure/http/users.controller.ts` | `pública é a ÚNICA que não declara `security` — e `@ApiBearerAuth()` é o` |
 | `review-and-fix-after-each-task` | `citada` | `.agents/skills/review-routing/SKILL.md` | `Avançar com BLOCKING não tratado` |
