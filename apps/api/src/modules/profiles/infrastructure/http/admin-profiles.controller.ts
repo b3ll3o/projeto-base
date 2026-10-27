@@ -16,6 +16,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
 import { PermissionsGuard } from './guards/permissions.guard.js';
 import { RequirePermission } from './decorators/require-permission.decorator.js';
@@ -50,6 +51,7 @@ interface RequestComAtor {
 }
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
+@ApiTags('profiles')
 @Controller('admin/profiles')
 export class AdminProfilesController {
   constructor(
@@ -76,18 +78,21 @@ export class AdminProfilesController {
   }
 
   @Get()
+  @ApiOperation({ summary: 'Listar os perfis' })
   @RequirePermission('admin.manage-profiles')
   async list(@Req() req: RequestComAtor): Promise<ProfileSummary[]> {
     return this.useCases.listar(this.atorDe(req));
   }
 
   @Get(':id')
+  @ApiOperation({ summary: 'Ler um perfil' })
   @RequirePermission('admin.manage-profiles')
   async getById(@Param('id') id: string, @Req() req: RequestComAtor): Promise<ProfileDetail> {
     return this.useCases.obterPorId(id, this.atorDe(req));
   }
 
   @Post()
+  @ApiOperation({ summary: 'Criar um perfil' })
   @RequirePermission('admin.manage-profiles')
   async create(
     @Body() body: CreateProfileBody,
@@ -113,6 +118,7 @@ export class AdminProfilesController {
   }
 
   @Patch(':id')
+  @ApiOperation({ summary: 'Atualizar um perfil' })
   @RequirePermission('admin.manage-profiles')
   async update(
     @Param('id') id: string,
@@ -127,6 +133,7 @@ export class AdminProfilesController {
   }
 
   @Delete(':id')
+  @ApiOperation({ summary: 'Excluir um perfil' })
   @RequirePermission('admin.manage-profiles')
   async delete(@Param('id') id: string, @Req() req: RequestComAtor): Promise<void> {
     await this.useCases.deletar(id, this.atorDe(req));

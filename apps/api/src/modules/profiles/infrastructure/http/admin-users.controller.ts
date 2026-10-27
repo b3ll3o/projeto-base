@@ -4,6 +4,7 @@
 // user. Montado em /api/v1/admin/users/:id/profile.
 
 import { Body, Controller, Inject, Param, Put, Req, UseGuards } from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
 import { PermissionsGuard } from './guards/permissions.guard.js';
 import { RequirePermission } from './decorators/require-permission.decorator.js';
@@ -15,6 +16,7 @@ interface RequestComAtor {
 }
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
+@ApiTags('admin-users')
 @Controller('admin/users')
 export class AdminUsersController {
   constructor(
@@ -25,6 +27,7 @@ export class AdminUsersController {
   ) {}
 
   @Put(':id/profile')
+  @ApiOperation({ summary: 'Vestir um perfil em um usuário' })
   @RequirePermission('admin.manage-users')
   async atribuirProfile(
     @Param('id') userId: string,

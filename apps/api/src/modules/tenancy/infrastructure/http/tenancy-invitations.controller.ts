@@ -10,7 +10,7 @@
 // transação — o que um `@Post` separado não consegue prometer.
 
 import { Body, Controller, Inject, Param, Post, Req, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
 import { ZodValidationPipe } from '../../../../shared/infrastructure/http/zod-validation.pipe.js';
@@ -69,6 +69,7 @@ const FLAG_DESLIGADA_404 = 'Recurso indisponível (funcionalidade desligada)';
 // uma pergunta de um eixo só — e ela mora no use case (`findRole`), que é
 // onde o dado está.
 @UseGuards(JwtAuthGuard)
+@ApiTags('invitations')
 @Controller()
 export class TenancyInvitationsController {
   constructor(
@@ -79,6 +80,7 @@ export class TenancyInvitationsController {
   ) {}
 
   @Post('tenants/:id/invitations')
+  @ApiOperation({ summary: 'Convidar uma pessoa para a empresa' })
   // pt-BR (feature-flags, 2026-10-18 — Fase 4): a PRIMEIRA functionality a
   // respeitar uma flag. Precedente: `users.controller.ts:246,262,300,331,361`.
   //
@@ -135,6 +137,7 @@ export class TenancyInvitationsController {
   }
 
   @Post('invitations/accept')
+  @ApiOperation({ summary: 'Aceitar um convite e entrar na empresa' })
   // A SEGUNDA porta, fechada em 2026-10-19. Até aqui ela era de propósito:
   // "desligar convites não pode trancar quem já tem o token". Isso é escolha de
   // produto, e escolha de produto escrita só em comentário não é uma escolha de

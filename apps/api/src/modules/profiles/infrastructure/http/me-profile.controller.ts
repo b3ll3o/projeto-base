@@ -6,6 +6,7 @@
 // próprio profile (mesmo que seja null, indicando "sem permissões").
 
 import { Controller, Get, Inject, Req, UseGuards } from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
 import { type MeuPerfil, UserProfileUseCases } from '../../application/profiles.use-cases.js';
 
@@ -17,6 +18,7 @@ interface AuthedRequest {
 }
 
 @UseGuards(JwtAuthGuard)
+@ApiTags('me')
 @Controller('me')
 export class MeProfileController {
   constructor(
@@ -28,6 +30,7 @@ export class MeProfileController {
   ) {}
 
   @Get('profile')
+  @ApiOperation({ summary: 'Ler o perfil efetivo do ator' })
   async me(@Req() req: AuthedRequest): Promise<MeuPerfil> {
     return this.useCases.obterMeuPerfil(req.user.sub, req.user.tenantId ?? null);
   }

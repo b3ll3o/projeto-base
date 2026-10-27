@@ -9,6 +9,7 @@
 // GET    /api/v1/admin/permissions → lista o catálogo (para o dropdown do admin)
 
 import { Body, Controller, Delete, Get, Inject, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
 import { PermissionsGuard } from './guards/permissions.guard.js';
 import { RequirePermission } from './decorators/require-permission.decorator.js';
@@ -24,6 +25,7 @@ interface RequestComAtor {
 }
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
+@ApiTags('authorizations')
 @Controller()
 export class AdminAuthorizationsController {
   constructor(
@@ -34,6 +36,7 @@ export class AdminAuthorizationsController {
   ) {}
 
   @Post('admin/profiles/:id/authorizations')
+  @ApiOperation({ summary: 'Conceder uma permissão a um perfil' })
   @RequirePermission('admin.manage-authorizations')
   async atribuir(
     @Param('id') id: string,
@@ -44,6 +47,7 @@ export class AdminAuthorizationsController {
   }
 
   @Delete('admin/profiles/:id/authorizations/:key')
+  @ApiOperation({ summary: 'Revogar uma permissão de um perfil' })
   @RequirePermission('admin.manage-authorizations')
   async revogar(
     @Param('id') id: string,
@@ -62,6 +66,7 @@ export class AdminAuthorizationsController {
   }
 
   @Get('admin/permissions')
+  @ApiOperation({ summary: 'Listar as permissões do catálogo' })
   @RequirePermission('admin.manage-authorizations')
   async listar(): Promise<string[]> {
     return this.useCases.listarPermissoes();
