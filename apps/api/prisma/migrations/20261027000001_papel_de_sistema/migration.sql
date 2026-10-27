@@ -82,13 +82,17 @@ GRANT USAGE ON SCHEMA public TO app_system;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_system;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_system;
 
+-- ⚠️ O SQL EXECUTADO NÃO TEM PONTO-E-VÍRGULA: dentro do `format(...)` o `;`
+-- fecharia a instrução e o `)` que fecha a chamada ficaria órfão — o Postgres
+-- responde "mismatched parentheses at or near ';'". MEDIDO no CI (2026-10-27):
+-- a migration falhou com P3018 e 42601 por causa disso.
 DO $$
 BEGIN
   EXECUTE format(
-    'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app_system';
+    'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app_system'
   );
   EXECUTE format(
-    'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO app_system';
+    'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO app_system'
   );
 END
 $$;

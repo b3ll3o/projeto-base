@@ -353,42 +353,79 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
   // A correção: quem concede o bucket de sistema é a CREDENCIAL
   // (`current_user = 'app_system'`), e não o valor que a sessão escreve. O
   // GUC continua sendo `'*'` — o que muda é QUEM abre a transação.
-  it('#118: a sessão de RUNTIME com o escopo de SISTEMA NÃO abre o bucket', async () => {
+  it('#118: a sessão de RUNTIME com o escopo de SISTEMA NÃO abre o bucket de empresa', async () => {
     // O MESMO GUC, a MESMA sessão de runtime — e o resultado é o oposto.
     const ids = await comEscopo(ESCOPO_DE_SISTEMA, async (tx) => {
       const r = await tx.profile.findMany({ select: { id: true } });
       return r.map((p) => p.id);
     });
 
-    // Nenhuma empresa de outra — e nenhum perfil global.
+    // Nenhuma empresa de outra.
     expect(ids).not.toContain(perfilDaAcme);
     expect(ids).not.toContain(perfilDaGlobex);
-    expect(ids).not.toContain(perfilGlobal);
   });
 
   it('#118: e o que a sessão de RUNTIME vê é o bucket GLOBAL, e só', async () => {
-    // O bucket de sistema sem credencial não é "tudo": é o que a policy de
-    // cada tabela aceita sem escopo de empresa — aqui, nada além do global.
+    // ⚠️ O bucket GLOBAL (perfil de sistema, `tenant_id IS NULL`) CONTINUA
+    // legível — e é por DESIGN: a policy de leitura de `profiles` aceita
+    // `aceita_global`, e há um teste de acima que afirma isso ("o perfil
+    // GLOBAL aparece — o bucket de sistema é legível").
+    //
+    // O que o #118 fecha é o bucket de EMPRESA: antes, o `'*'` concedia TUDO
+    // — inclusive as empresas vizinhas. Agora ele concede só o global, e as
+    // empresas exigem a credencial de sistema.
     const ids = await comEscopo(ESCOPO_DE_SISTEMA, async (tx) => {
       const r = await tx.profile.findMany({ select: { id: true } });
       return r.map((p) => p.id);
     });
 
-    expect(ids).toHaveLength(0);
+    expect(ids).toEqual([perfilGlobal]);
+  });
+
+  it('#118: a sessão de RUNTIME não vê NENHUM USUÁRIO — o vetor medido pela issue', async () => {
+    // ⚠️ ESTE É O VETOR QUE A ISSUE #118 MEDIU: uma sessão `app_runtime`
+    // que fizesse `SET app.tenant_id = '*'` enxergava TODOS os usuários de
+    // TODAS as empresas. A tabela `users` tem a policy mais fechada (ela
+    // exige `usuario_no_escopo`, que pergunta pela MEMBERSHIP do alvo) — e
+    // por isso ela é a prova mais dura: sem a credencial, a sessão de runtime
+    // não vê NENHUM usuário.
+    //
+    // ⚠️ A fixture cria empresas e PERFIS, mas não usuários — e um teste
+    // sobre a tabela `users` com a tabela vazia mede NADA. Por isso os
+    // usuários são criados AQUI, um em cada empresa: sem eles, o veredito
+    // seria "a sessão não vê ninguém" por falta de dado, e não por causa da
+    // policy.
+    const ana = await criarUsuario('ana');
+    const bruno = await criarUsuario('bruno');
+    await associar(ana, acmeId);
+    await associar(bruno, globexId);
+
+    const ids = await comEscopo(ESCOPO_DE_SISTEMA, async (tx) => {
+      const r = await tx.user.findMany({ select: { id: true } });
+      return r.map((u) => u.id);
+    });
+
+    expect(ids).toEqual([]);
   });
 
   it('#118: as DUAS credenciais veem coisas diferentes — é a separação que fecha o furo', async () => {
     // O par que prova que a correção é de CREDENCIAL e não de GUC: mesmo GUC,
     // mesmo dado, vereditos opostos.
+    const ana = await criarUsuario('ana');
+    const bruno = await criarUsuario('bruno');
+    await associar(ana, acmeId);
+    await associar(bruno, globexId);
+
     const comRuntime = await comEscopo(ESCOPO_DE_SISTEMA, async (tx) =>
-      (await tx.profile.findMany({ select: { id: true } })).map((p) => p.id),
+      (await tx.user.findMany({ select: { id: true } })).map((u) => u.id),
     );
     const comSistema = await comEscopoDeSistema(async (tx) =>
-      (await tx.profile.findMany({ select: { id: true } })).map((p) => p.id),
+      (await tx.user.findMany({ select: { id: true } })).map((u) => u.id),
     );
 
-    expect(comRuntime).toHaveLength(0);
-    expect(comSistema.length).toBeGreaterThan(0);
+    // A sessão de RUNTIME: nenhum usuário. A de SISTEMA: os dois.
+    expect(comRuntime).toEqual([]);
+    expect(comSistema.sort()).toEqual([ana, bruno].sort());
   });
 
   it('#118: o runtime NÃO é membro do papel de sistema (o `SET ROLE` não serviria)', async () => {
