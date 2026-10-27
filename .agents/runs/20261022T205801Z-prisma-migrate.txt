@@ -1,0 +1,10 @@
+Environment variables loaded from .env
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "projeto_base", schema "public" at "localhost:5432"
+
+14 migrations found in prisma/migrations
+Following migration have not yet been applied:
+20261022000001_papel_gerente_legado
+
+To apply migrations in development run prisma migrate dev.
+To apply migrations in production run prisma migrate deploy.

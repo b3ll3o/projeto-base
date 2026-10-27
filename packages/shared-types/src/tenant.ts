@@ -47,3 +47,60 @@ export interface ConviteAceitoDto {
   aceito: true;
   tenantId: UUID;
 }
+
+/**
+ * pt-BR (visão de admin, 2026-10-22): o INVENTÁRIO da tenancy, visto pelo
+ * ADMINISTRADOR DO SISTEMA — as duas direções.
+ *
+ * São cópias do WIRE FORMAT (`GET /admin/tenants` e `GET /admin/users`), e
+ * não do modelo de domínio: o que a API devolve nestas duas rotas é o que
+ * está declarado aqui.
+ */
+
+/**
+ * Um membro de uma empresa, visto pelo administrador do sistema.
+ *
+ * `perfil` é o SLUG do perfil efetivo **naquela empresa** (o
+ * `tenant_memberships.profile_id`), e `null` quando a membership não tem
+ * perfil — ou quando o perfil é de OUTRA empresa (é o mesmo critério de
+ * `findProfileId`, na API).
+ */
+export interface MembroDaEmpresaDto {
+  id: UUID;
+  nome: string;
+  email: string;
+  /** Rótulo do vínculo: `'gerente'` ou `'member'`. NÃO é o RBAC. */
+  role: string;
+  perfil: string | null;
+}
+
+/** Uma empresa e os usuários que a vestem (`GET /admin/tenants`). */
+export interface EmpresaComMembrosDto {
+  id: UUID;
+  nome: string;
+  slug: string;
+  membros: MembroDaEmpresaDto[];
+}
+
+/** Uma empresa a que um usuário pertence, com o papel e o perfil que ele veste nela. */
+export interface EmpresaComPerfilDto {
+  id: UUID;
+  nome: string;
+  slug: string;
+  role: string;
+  perfil: string | null;
+}
+
+/**
+ * Um usuário e as empresas a que ele pertence (`GET /admin/users`).
+ *
+ * `empresas` vazia é uma RESPOSTA legítima — e não um defeito: a conta do
+ * administrador do sistema vive no bucket GLOBAL e não pertence a empresa
+ * nenhuma.
+ */
+export interface UsuarioComEmpresasDto {
+  id: UUID;
+  nome: string;
+  email: string;
+  empresas: EmpresaComPerfilDto[];
+}

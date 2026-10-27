@@ -12,7 +12,7 @@
 // E o caminho do quem JÁ tem conta, que é o comum sob D4 (1 conta, N
 // empresas): `POST /invitations/accept` → aceitaConvite.
 
-import { Inject, Injectable } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 
 import {
@@ -29,6 +29,16 @@ import {
   type EmpresaDoUsuario,
   type TenantMembershipRepositoryPort,
 } from '../domain/ports/tenant-membership-repository.port.js';
+import {
+  ADMIN_TENANCY_REPOSITORY_PORT,
+  type AdminTenancyRepositoryPort,
+  type EmpresaComMembros,
+  type UsuarioComEmpresas,
+} from '../domain/ports/admin-tenancy-repository.port.js';
+import {
+  ehAdministradorDeSistema,
+  type AtorAutenticado,
+} from '../../../shared/auth/eh-administrador-de-sistema.js';
 import {
   ConviteInvalidoException,
   NaoAdministraEmpresaException,
@@ -61,6 +71,11 @@ export class TenancyUseCases {
     @Inject(TENANT_MEMBERSHIP_REPOSITORY_PORT)
     private readonly memberships: TenantMembershipRepositoryPort,
     @Inject(USER_REPOSITORY_PORT) private readonly users: UserRepositoryPort,
+    // pt-BR (visão de admin, 2026-10-22): o inventário do bucket de SISTEMA.
+    // É a ÚNICA porta daqui que atravessa empresas — e a que o portão D2
+    // protege.
+    @Inject(ADMIN_TENANCY_REPOSITORY_PORT)
+    private readonly admin: AdminTenancyRepositoryPort,
   ) {}
 
   // ───────────────────────── empresa própria ─────────────────────────
@@ -103,6 +118,60 @@ export class TenancyUseCases {
   /** As empresas a que o ator pertence — lista vazia é uma resposta válida. */
   async listarEmpresas(userId: string): Promise<EmpresaDoUsuario[]> {
     return this.memberships.listarEmpresasDoUsuario(userId);
+  }
+
+  // ───────────────────── a visão do administrador do SISTEMA ─────────────────────
+
+  /**
+   * TODAS as empresas do sistema, com os membros de cada uma.
+   *
+   * ⚠️ É o INVENTÁRIO, e não a lista de empresas do ator (`listarEmpresas`).
+   * A diferença é o alcance: esta atravessa empresas, e o que a autoriza é
+   * D2 — o bucket GLOBAL (`tenantId === null`) com `isAdmin`.
+   *
+   * Lista VAZIA é uma resposta legítima: um sistema sem empresa aberta ainda
+   * é um sistema, e a tela do admin precisa mostrar isso.
+   */
+  async listarEmpresasDoSistema(ator: AtorAutenticado): Promise<EmpresaComMembros[]> {
+    this.exigeAdministradorDoSistema(ator);
+    return this.admin.listarEmpresasComMembros();
+  }
+
+  /**
+   * TODOS os usuários do sistema, com as empresas a que cada um pertence.
+   *
+   * A lista parte de `users` e não das memberships — pelo mesmo motivo de
+   * `listarUsuariosComEmpresas` no repositório: a conta do administrador do
+   * sistema não pertence a empresa nenhuma, e uma lista montada pelas
+   * memberships a esqueceria.
+   */
+  async listarUsuariosDoSistema(ator: AtorAutenticado): Promise<UsuarioComEmpresas[]> {
+    this.exigeAdministradorDoSistema(ator);
+    return this.admin.listarUsuariosComEmpresas();
+  }
+
+  /**
+   * D2 — o portão real da visão de admin.
+   *
+   * ⚠️ A lista de PERMISSÕES não segura nada aqui, e é o mesmo motivo das
+   * feature flags: o cadastro de empresa concede `listAllPermissions()` ao
+   * dono (`perfis-da-empresa.ts`), e o `gerente` tem `isAdmin: true` no
+   * perfil efetivo DA EMPRESA DELE. Quem decide é o bucket: `tenantId ===
+   * null` (o bucket GLOBAL, onde mora o `isAdmin` do seed) — a mesma regra de
+   * `ehAdministradorDeSistema`, que a Fase 9 escreveu para matar a escalada
+   * do bucket global.
+   *
+   * `ForbiddenException` do Nest e não uma exceção de domínio nova: o
+   * `GlobalExceptionFilter` resolve `HttpException` antes do mapper de
+   * domínio, e a recusa sai 403 RFC 7807 sem uma linha nova.
+   */
+  private exigeAdministradorDoSistema(ator: AtorAutenticado): void {
+    if (!ehAdministradorDeSistema(ator)) {
+      throw new ForbiddenException({
+        code: 'FORBIDDEN',
+        detail: 'só o administrador do sistema vê as empresas e os usuários do sistema',
+      });
+    }
   }
 
   // ───────────────────────── emitir convite ─────────────────────────

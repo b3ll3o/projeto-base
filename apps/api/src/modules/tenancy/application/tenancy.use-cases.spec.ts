@@ -12,6 +12,7 @@
 //   um `mock` não tem rollback para provar.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { ForbiddenException } from '@nestjs/common';
 import { TenancyUseCases } from './tenancy.use-cases.js';
 import type {
   TenantOnboardingPort,
@@ -21,6 +22,7 @@ import type {
   ConvitePendente,
 } from '../domain/ports/tenant-onboarding.port.js';
 import type { TenantMembershipRepositoryPort } from '../domain/ports/tenant-membership-repository.port.js';
+import type { AdminTenancyRepositoryPort } from '../domain/ports/admin-tenancy-repository.port.js';
 import {
   ConviteInvalidoException,
   NaoAdministraEmpresaException,
@@ -106,6 +108,10 @@ describe('TenancyUseCases — entrada na empresa (D5)', () => {
     listarEmpresasDoUsuario: ReturnType<typeof vi.fn>;
   };
   let users: { findById: ReturnType<typeof vi.fn> };
+  let admin: {
+    listarEmpresasComMembros: ReturnType<typeof vi.fn>;
+    listarUsuariosComEmpresas: ReturnType<typeof vi.fn>;
+  };
   let useCases: TenancyUseCases;
   let agora: Date;
 
@@ -131,11 +137,16 @@ describe('TenancyUseCases — entrada na empresa (D5)', () => {
       listarEmpresasDoUsuario: vi.fn().mockResolvedValue([]),
     };
     users = { findById: vi.fn().mockResolvedValue(userFalso(VISITANTE, 'ana@acme.com')) };
+    admin = {
+      listarEmpresasComMembros: vi.fn().mockResolvedValue([]),
+      listarUsuariosComEmpresas: vi.fn().mockResolvedValue([]),
+    };
 
     useCases = new TenancyUseCases(
       onboarding as unknown as TenantOnboardingPort,
       memberships as unknown as TenantMembershipRepositoryPort,
       users as unknown as UserRepositoryPort,
+      admin as unknown as AdminTenancyRepositoryPort,
     );
   });
 
@@ -393,5 +404,76 @@ describe('TenancyUseCases — entrada na empresa (D5)', () => {
     const aceite = await useCases.aceitarConvite({ userId: VISITANTE, token: TOKEN });
 
     expect(aceite).toEqual({ tenantId: ACME });
+  });
+
+  // ───────────────────── a visão do administrador do SISTEMA ─────────────────────
+  //
+  // ⚠️ O portão é D2 (`ehAdministradorDeSistema`: `tenantId === null && isAdmin`),
+  // e não a lista de permissões. O `gerente` de uma empresa recebe
+  // `listAllPermissions()` no cadastro da empresa — logo ele TEM
+  // `admin.manage-users` no banco — e tem `isAdmin: true` no perfil efetivo
+  // DA EMPRESA DELE. Se o portão fosse a permissão, ele leria a base INTEIRA.
+  // Por isso os casos abaixo de recusão cobrem os três atores que um
+  // "@RequirePermission" deixaria passar.
+
+  describe('a visão do administrador do sistema', () => {
+    const ADMIN_DO_SISTEMA = { userId: DONO, tenantId: null, isAdmin: true };
+    const GERENTE_DE_EMPRESA = { userId: DONO, tenantId: ACME, isAdmin: true };
+    const COMUM = { userId: DONO, tenantId: null, isAdmin: false };
+
+    it('o administrador do sistema vê as empresas com os membros', async () => {
+      const lista = [
+        {
+          id: ACME,
+          nome: 'ACME',
+          slug: 'acme',
+          membros: [
+            {
+              id: VISITANTE,
+              nome: 'Ana',
+              email: 'ana@acme.com',
+              role: 'gerente',
+              perfil: 'gerente',
+            },
+          ],
+        },
+      ];
+      admin.listarEmpresasComMembros.mockResolvedValue(lista);
+
+      await expect(useCases.listarEmpresasDoSistema(ADMIN_DO_SISTEMA)).resolves.toEqual(lista);
+      expect(admin.listarEmpresasComMembros).toHaveBeenCalled();
+    });
+
+    it('o administrador do sistema vê os usuários com as empresas', async () => {
+      const lista = [
+        {
+          id: VISITANTE,
+          nome: 'Ana',
+          email: 'ana@acme.com',
+          empresas: [{ id: ACME, nome: 'ACME', slug: 'acme', role: 'gerente', perfil: 'gerente' }],
+        },
+      ];
+      admin.listarUsuariosComEmpresas.mockResolvedValue(lista);
+
+      await expect(useCases.listarUsuariosDoSistema(ADMIN_DO_SISTEMA)).resolves.toEqual(lista);
+      expect(admin.listarUsuariosComEmpresas).toHaveBeenCalled();
+    });
+
+    it('o GERENTE de uma empresa é recusado — ele tem isAdmin, mas na empresa dele', async () => {
+      await expect(useCases.listarEmpresasDoSistema(GERENTE_DE_EMPRESA)).rejects.toThrow(
+        ForbiddenException,
+      );
+      await expect(useCases.listarUsuariosDoSistema(GERENTE_DE_EMPRESA)).rejects.toThrow(
+        ForbiddenException,
+      );
+
+      expect(admin.listarEmpresasComMembros).not.toHaveBeenCalled();
+      expect(admin.listarUsuariosComEmpresas).not.toHaveBeenCalled();
+    });
+
+    it('quem não é admin é recusado', async () => {
+      await expect(useCases.listarEmpresasDoSistema(COMUM)).rejects.toThrow(ForbiddenException);
+      await expect(useCases.listarUsuariosDoSistema(COMUM)).rejects.toThrow(ForbiddenException);
+    });
   });
 });

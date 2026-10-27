@@ -1,0 +1,21 @@
+Criar um plano (e depois implementá-lo) para que o USUÁRIO ADMINISTRADOR possa ver:
+(a) todas as empresas; (b) todos os usuários atrelados a cada empresa;
+(c) todos os usuários e todas as empresas atrelados a cada usuário.
+Ou seja: uma visão bidirecional de admin sobre a tenancy.
+
+Contexto técnico:
+- Prisma: Tenant (id, name, slug), TenantMembership (userId, tenantId, role, profileId),
+  User (id, email, name, profileId global), Profile (slug, tenantId|null, isAdmin).
+- RLS ativa em tenants/tenant_memberships/users com escopo app.tenant_id;
+  o bucket de SISTEMA é '*' (ver apps/api/src/shared/infrastructure/prisma/escopo.ts).
+  Leitura cross-tenant pelo admin exige escopo '*' (bucket de sistema).
+- Já existe: GET /me/tenants (empresas do ATOR), GET /users (lista recortada
+  por escopo), GET /admin/users/:id/profile, GET /admin/profiles,
+  GET /admin/flags. NÃO existe: listar TODAS as empresas, membros de uma
+  empresa, e empresas de um usuário dado.
+- PermissionsGuard + @RequirePermission(...) resolvem permissão pelo tenant
+  do header X-Tenant-Id; o admin de sistema usa o perfil global (tenant_id IS NULL).
+- Web tem telas /admin/users, /admin/profiles, /admin/flags com o guard
+  compartilhado apps/web/app/admin/guard-admin.tsx.
+
+Scope: feat
