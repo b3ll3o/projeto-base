@@ -17,6 +17,29 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { PrismaTenantMembershipRepository } from './prisma-tenant-membership.repository.js';
 
+/**
+ * #118: o bucket de SISTEMA e' aberto na CREDENCIAL de sistema — e a
+ * credencial vem do ambiente, nao do client que o repositorio recebe. Numa
+ * unit test nao ha `SYSTEM_DATABASE_URL`, e a costura e' mockada para usar o
+ * MESMO duplo — que e' o que preserva as assercoes deste arquivo (elas leem
+ * `prisma.tenantMembership.updateMany`, o mesmo `vi.fn` que o `tx` usa).
+ *
+ * ⚠️ A costura e' mockada AQUI, e nao no codigo de producao: um setter
+ * global em `escopo.ts` seria um global mutavel no fonte, e um global
+ * mutavel no fonte e' um caminho para o codigo de producao depender do
+ * estado do teste.
+ */
+const sistema = vi.hoisted(() => ({ cliente: null as unknown }));
+vi.mock('../../../../shared/infrastructure/prisma/escopo.js', async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import('../../../../shared/infrastructure/prisma/escopo.js')>();
+  return {
+    ...original,
+    comEscopoDeSistema: (fn: (tx: never) => Promise<unknown>) =>
+      (sistema.cliente as { $transaction: (f: typeof fn) => Promise<unknown> }).$transaction(fn),
+  };
+});
+
 const USER = '0190a8b6-0000-4000-8000-00000000000a';
 const ACME = '0190a8b6-0000-4000-8000-0000000000ac';
 const PERFIL = '0190a8b6-0000-4000-8000-0000000000f1';
@@ -57,6 +80,7 @@ describe('PrismaTenantMembershipRepository.findProfileId', () => {
 
   beforeEach(() => {
     prisma = prismaFalso();
+    sistema.cliente = prisma;
     repo = new PrismaTenantMembershipRepository(prisma as never);
   });
 
@@ -130,6 +154,10 @@ describe('PrismaTenantMembershipRepository.findProfileId', () => {
 describe('PrismaTenantMembershipRepository.countByProfile', () => {
   it('conta as memberships de qualquer empresa que vestem o perfil', async () => {
     const prisma = prismaFalso();
+    // #118: este teste cria o proprio duplo (nao usa o do `beforeEach`), e o
+    // bucket de sistema e' aberto na CREDENCIAL de sistema — entao o duplo
+    // do sistema tem de ser ESTE.
+    sistema.cliente = prisma;
     prisma.tenantMembership.count.mockResolvedValue(3);
 
     await expect(

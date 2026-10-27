@@ -38,6 +38,29 @@ import { describe, it, expect, vi } from 'vitest';
 import { Prisma, type PrismaClient } from '@prisma/client';
 
 import { PrismaTenantOnboardingRepository } from './prisma-tenant-onboarding.repository.js';
+
+/**
+ * #118: o bucket de SISTEMA e' aberto na CREDENCIAL de sistema — e a
+ * credencial vem do ambiente, nao do client que o repositorio recebe. Numa
+ * unit test nao ha `SYSTEM_DATABASE_URL`, e a costura e' mockada para usar o
+ * MESMO `tx` — que e' o que preserva as assercoes deste arquivo (elas leem
+ * `tx.tenant.create`, o mesmo `vi.fn` que o `tx` usa).
+ *
+ * ⚠️ A costura e' mockada AQUI, e nao no codigo de producao: um setter
+ * global em `escopo.ts` seria um global mutavel no fonte, e um global
+ * mutavel no fonte e' um caminho para o codigo de producao depender do
+ * estado do teste.
+ */
+const sistema = vi.hoisted(() => ({ cliente: null as unknown }));
+vi.mock('../../../../shared/infrastructure/prisma/escopo.js', async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import('../../../../shared/infrastructure/prisma/escopo.js')>();
+  return {
+    ...original,
+    comEscopoDeSistema: (fn: (tx: never) => Promise<unknown>) =>
+      (sistema.cliente as { $transaction: (f: typeof fn) => Promise<unknown> }).$transaction(fn),
+  };
+});
 import type { AssinaturaDeMembership } from '../../../../shared/infrastructure/prisma/assinatura-de-membership.js';
 import { EmailAlreadyInUseException } from '../../../users/domain/exceptions/user.exceptions.js';
 import {
@@ -71,9 +94,13 @@ function txFalso() {
 type Tx = ReturnType<typeof txFalso>;
 
 function clienteDe(tx: Tx): PrismaClient {
-  return {
+  const cliente = {
     $transaction: vi.fn(async (fn: (t: Tx) => Promise<unknown>) => fn(tx)),
   } as unknown as PrismaClient;
+  // #118: o bucket de sistema e' aberto na CREDENCIAL de sistema — e aqui a
+  // credencial de sistema e' o MESMO cliente do teste (o `tx` e' o mesmo).
+  sistema.cliente = cliente;
+  return cliente;
 }
 
 function assinaturaFalsa(): AssinaturaDeMembership {
