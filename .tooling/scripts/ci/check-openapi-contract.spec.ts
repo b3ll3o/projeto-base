@@ -44,14 +44,55 @@ describe('compararSpecs() (#125)', () => {
   });
 
   it('a mensagem de erro DIZ ONDE a divergência está', () => {
-    // Um "diverge" sem dizer onde é um gate que a pessoa desliga.
+    // Um "diverge" sem dizer onde é um gate que a pessoa desliga. A
+    // comparação é semântica, então o "onde" é o CAMINHO no documento
+    // (`paths./a.get.summary`), e não o número da linha — que mudaria a
+    // cada reformat do prettier.
     const erros = compararSpecs('{\n  "a": 1\n}\n', '{\n  "a": 2\n}\n');
+    expect(erros[0]).toMatch(/em: a\b/);
+  });
+
+  it('quando o JSON não parseia, a mensagem diz a LINHA', () => {
+    // Sem JSON válido dos dois lados, a comparação semântica é impossível —
+    // e a diferença de texto é a única informação que há.
+    const erros = compararSpecs('nao é json\nlinha 2\n', 'nao é json\noutra linha\n');
     expect(erros[0]).toMatch(/linha 2/);
   });
 
   it('a mensagem de erro diz como resolver', () => {
     const erros = compararSpecs('{"a":1}\n', '{"a":2}\n');
     expect(erros[0]).toMatch(/openapi:export/);
+  });
+
+  // ⚠️ A comparação é SEMÂNTICA, e a razão é o `prettier`: o `lint-staged`
+  // reformatta o `.json` versionado no commit, e um array curto vira uma
+  // linha no versionado e três no gerado. Um gate byte-a-byte reprovaria
+  // por FORMATAÇÃO — e um gate que reprova por formatação é um gate que
+  // alguém desliga.
+  it('PASSA quando o conteúdo é o mesmo e só a FORMATAÇÃO difere', () => {
+    const versionado = '{\n  "tags": ["Health"]\n}\n';
+    const gerado = '{\n  "tags": [\n    "Health"\n  ]\n}\n';
+    expect(compararSpecs(gerado, versionado)).toEqual([]);
+  });
+
+  it('PASSA quando só a ORDEM das chaves difere', () => {
+    const versionado = '{"b": 1, "a": 2}\n';
+    const gerado = '{"a": 2, "b": 1}\n';
+    expect(compararSpecs(gerado, versionado)).toEqual([]);
+  });
+
+  it('ERRO quando um VALOR difere, e a mensagem diz ONDE', () => {
+    const versionado = '{"paths": {"/a": {"get": {"summary": "antigo"}}}}\n';
+    const gerado = '{"paths": {"/a": {"get": {"summary": "novo"}}}}\n';
+    const erros = compararSpecs(gerado, versionado);
+    expect(erros.length).toBe(1);
+    expect(erros[0]).toMatch(/paths\.\/a\.get\.summary/);
+  });
+
+  it('ERRO quando falta um item num array', () => {
+    const erros = compararSpecs('{"tags":["a","b"]}\n', '{"tags":["a"]}\n');
+    expect(erros.length).toBe(1);
+    expect(erros[0]).toMatch(/tags/);
   });
 });
 

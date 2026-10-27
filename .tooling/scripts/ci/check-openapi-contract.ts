@@ -40,19 +40,77 @@ export const COMANDO_DE_EXPORT = [
 ];
 
 /**
+ * O primeiro caminho em que dois valores JSON divergem.
+ *
+ * Devolve `null` quando são iguais (considerando a ORDEM das chaves
+ * irrelevante: o `JSON.stringify` do `DocumentBuilder` pode emitir as chaves
+ * numa ordem e o prettier reordena o objeto inteiro).
+ */
+export function primeiroDivergente(a: unknown, b: unknown, caminho = ''): string | null {
+  if (Object.is(a, b)) return null;
+
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) {
+      return `${caminho} (${a.length} itens no versionado, ${b.length} no gerado)`;
+    }
+    for (let i = 0; i < a.length; i++) {
+      const d = primeiroDivergente(a[i], b[i], `${caminho}[${i}]`);
+      if (d !== null) return d;
+    }
+    return null;
+  }
+
+  if (a !== null && b !== null && typeof a === 'object' && typeof b === 'object') {
+    const chaves = new Set([...Object.keys(a), ...Object.keys(b)]);
+    for (const chave of [...chaves].sort()) {
+      const d = primeiroDivergente(
+        (a as Record<string, unknown>)[chave],
+        (b as Record<string, unknown>)[chave],
+        caminho === '' ? chave : `${caminho}.${chave}`,
+      );
+      if (d !== null) return d;
+    }
+    return null;
+  }
+
+  return caminho === '' ? '(a raiz)' : caminho;
+}
+
+/**
  * Compara a spec GERADA com a VERSIONADA.
  *
- * Função pura, e separada do gate de propósito: a spec não pode depender do
- * export de verdade (que é lento e frágil) — ela mede a COMPARAÇÃO, que é
- * onde o veredito mora.
+ * ⚠️ A comparação é **SEMÂNTICA** (o JSON parseado), e não byte a byte —
+ * e a razão é o `prettier`: o `lint-staged` reformatta o `.json` versionado
+ * no commit, e um array curto como `"tags": ["Health"]` vira
+ * `"tags": ["Health"]` em uma linha no versionado e em três no gerado. Um
+ * gate byte-a-byte reprovaria por isso — e o primeiro_gate-que-não-pode-falhar
+ * é o que não pode reprovar por formatação.
+ *
+ * A comparação semântica é a mais forte aqui: ela pega a diferença que
+ * importa (um campo, um valor, um item a mais) e ignora a que não importa
+ * (espaçamento, ordem das chaves).
  */
 export function compararSpecs(gerada: string, versionada: string): string[] {
   const errors: string[] = [];
 
   if (gerada.trim() === versionada.trim()) return errors;
 
-  // A diferença precisa ser LIDA, não só contada: "diverge" sem dizer onde
-  // é um gate que a pessoa desliga.
+  const geradaJson = tentaJson(gerada);
+  const versionadaJson = tentaJson(versionada);
+
+  if (geradaJson !== null && versionadaJson !== null) {
+    const divergente = primeiroDivergente(versionadaJson, geradaJson);
+    if (divergente === null) return errors; // iguais no conteúdo
+    errors.push(
+      `O OpenAPI versionado (${CAMINHO_DA_SPEC}) diverge do que o código gera ` +
+        `(${COMANDO_DE_EXPORT.join(' ')}) em: ${divergente}. ` +
+        `Rode o export e commite o arquivo: a spec versionada é a baseline do contrato.`,
+    );
+    return errors;
+  }
+
+  // Um dos dois não é JSON válido — a comparação semântica é impossível, e a
+  // diferença de TEXTO é a única informação que há.
   const linhasGeradas = gerada.split('\n');
   const linhasVersionadas = versionada.split('\n');
   const diferente = linhasGeradas.findIndex((linha, i) => linha !== linhasVersionadas[i]);
@@ -65,6 +123,15 @@ export function compararSpecs(gerada: string, versionada: string): string[] {
   );
 
   return errors;
+}
+
+/** `JSON.parse` que devolve `null` em vez de lançar. */
+function tentaJson(texto: string): unknown | null {
+  try {
+    return JSON.parse(texto) as unknown;
+  } catch {
+    return null;
+  }
 }
 
 /**
