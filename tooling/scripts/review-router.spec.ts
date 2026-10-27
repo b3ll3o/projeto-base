@@ -8,7 +8,7 @@
 // Tasks 1.3 (path glob), 1.4 (commit type), 1.5 (diff pattern).
 
 import { describe, it, expect } from 'vitest';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { writeFileSync, unlinkSync } from 'node:fs';
 import * as path from 'node:path';
 import {
@@ -391,8 +391,9 @@ path_globs:
 
       try {
         const scriptDir = path.resolve(__dirname);
-        const result = execSync(
-          `node --import tsx review-router.ts --paths=${tmpPaths} --matrix=${tmpMatrix}`,
+        const result = execFileSync(
+          'node',
+          ['--import', 'tsx', 'review-router.ts', `--paths=${tmpPaths}`, `--matrix=${tmpMatrix}`],
           {
             cwd: scriptDir,
             input: '@Injectable()\nclass FooService {}',
@@ -411,7 +412,7 @@ path_globs:
       const scriptDir = path.resolve(__dirname);
       let exitCode = -1;
       try {
-        execSync(`node --import tsx review-router.ts --matrix=/tmp/nonexistent`, {
+        execFileSync('node', ['--import', 'tsx', 'review-router.ts', '--matrix=/tmp/nonexistent'], {
           cwd: scriptDir,
           stdio: 'pipe',
         });
@@ -426,8 +427,15 @@ path_globs:
       const fakePaths = `/tmp/nonexistent-${Date.now()}-paths.txt`;
       let exitCode = -1;
       try {
-        execSync(
-          `node --import tsx review-router.ts --paths=${fakePaths} --matrix=/tmp/nonexistent-matrix`,
+        execFileSync(
+          'node',
+          [
+            '--import',
+            'tsx',
+            'review-router.ts',
+            `--paths=${fakePaths}`,
+            '--matrix=/tmp/nonexistent-matrix',
+          ],
           {
             cwd: scriptDir,
             stdio: 'pipe',
@@ -455,8 +463,9 @@ path_globs:
       );
       try {
         const scriptDir = path.resolve(__dirname);
-        const result = execSync(
-          `node --import tsx review-router.ts --paths=${tmpPaths} --matrix=${tmpMatrix}`,
+        const result = execFileSync(
+          'node',
+          ['--import', 'tsx', 'review-router.ts', `--paths=${tmpPaths}`, `--matrix=${tmpMatrix}`],
           {
             cwd: scriptDir,
             input: '',

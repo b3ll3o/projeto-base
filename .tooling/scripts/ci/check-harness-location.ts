@@ -2,7 +2,7 @@
  * SEM shebang, de propósito — ver preflight-gates.ts para a justificativa
  * (este módulo é importado, não executado).
  */
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
 import * as path from 'node:path';
@@ -64,11 +64,17 @@ export async function checkHarnessLocation(opts: { repoRoot: string }): Promise<
   const semGit: string[] = [];
   const lsFiles = (pathspec: string): string[] | null => {
     try {
-      return execSync(`git ls-files --cached --others --exclude-standard ${pathspec}`, {
-        cwd: root,
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-      })
+      // #117: o argv vai em array, e o `--` antes do pathspec é obrigatório —
+      // um pathspec que comece com `-` seria lido como opção do `git`.
+      return execFileSync(
+        'git',
+        ['ls-files', '--cached', '--others', '--exclude-standard', '--', pathspec],
+        {
+          cwd: root,
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      )
         .split('\n')
         .map((l) => l.trim())
         .filter(Boolean);
