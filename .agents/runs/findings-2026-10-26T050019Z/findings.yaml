@@ -1,0 +1,707 @@
+summary:
+  ts: '2026-10-26T05:00:19Z'
+  scope: weekly
+  gh_auth: valid
+  specialists_run: 8
+  repo: b3ll3o/projeto-base
+  branch: fix/issues-110-111
+  head_sha: e84ecc2
+  open_issue_limit: 10
+  findings:
+    total: 26
+    p0: 2
+    p1: 8
+    p2: 16
+  issues_opened: 10
+  issues_commented: 0
+  skipped_cap: 0
+
+opened_issues:
+  - id: sec-001
+    number: 117
+    url: https://github.com/b3ll3o/projeto-base/issues/117
+    title: 'P0 — Command injection no lint de review-routing: nome de arquivo do PR executa comando no CI'
+    specialist: security-auditor
+    severity: P0
+    type: bug
+    labels: [agent:security-auditor, severity:p0, type:bug]
+    duplicate_of: null
+    status: new
+    title_pt_br: 'Command injection no lint de review-routing: nome de arquivo do PR executa comando no CI'
+    location: 'tooling/scripts/lint-review-routing.ts:100'
+    cause: |
+      execSync recebe string e a entrega ao shell (/bin/sh -c). JSON.stringify nao
+      neutraliza $( ) nem crase — a expansao acontece DENTRO das aspas duplas.
+      O vetor e o nome do arquivo, controlado por quem abre o PR, via git ls-files.
+    impact: |
+      Execucao de comando arbitrario no runner do GitHub Actions em todo pull_request
+      que chega ao job preflight. Repo publico => qualquer pessoa pode abrir PR com
+      nome de arquivo escolhido. Com pull_request_target o codigo roda com segredos
+      do repo. Falha silenciosa: o comando executado nao aparece em log de erro.
+    evidence: |
+      PoC reproduzido neste scan, do zero, em repo git descartavel:
+      arquivo "$(touch PWNED).ts" commitado -> git ls-files devolve o nome ->
+      execSync(`git check-ignore ${JSON.stringify(f)}`) -> marcador PWNED criado.
+      Cadeia CI verificada por leitura: ci.yml:13 (pull_request) -> ci.yml:101
+      (pnpm ci:preflight) -> preflight.ts:79 (review:lint) -> package.json raiz ->
+      tooling/scripts/package.json -> lint-review-routing.ts:87 (git ls-files) -> :100.
+    fix: |
+      Trocar execSync por execFileSync com argv em array e '--' antes do path.
+      Auditar os outros execSync de tooling/scripts/. Adicionar teste de regressao
+      que constroi filePath com $( ) e afirma que nada e criado.
+    breaking_change: false
+    confirmed_by: [security-auditor, orchestrator] # PoC reproduzido independentemente
+
+  - id: sec-002
+    number: 118
+    url: https://github.com/b3ll3o/projeto-base/issues/118
+    title: 'P0 — Senha do papel app_runtime versionada em texto puro permite bypass total do RLS multi-tenant'
+    specialist: security-auditor
+    severity: P0
+    type: bug
+    labels: [agent:security-auditor, severity:p0, type:bug]
+    duplicate_of: null
+    status: new
+    title_pt_br: 'Senha do papel app_runtime versionada em texto puro permite bypass total do RLS multi-tenant'
+    location: 'apps/api/prisma/migrations/20261020000000_rls_isolation_empresa/migration.sql:32'
+    cause: |
+      A senha do role e constante versionada (migration.sql:32 e papel-de-runtime.ts:26),
+      em repo PUBLICO. E o escopo de tenant e um GUC de sessao que o proprio cliente
+      define (app.tenant_id), cujo valor '*' (bucket de sistema) e aceito por
+      no_escopo_atual. NOBYPASSRLS impede o papel de pular a policy; nao impede o
+      papel de escolher o valor do GUC.
+    impact: |
+      Bypass total do isolamento multi-tenant: com a senha publica, um atacante le e
+      ESCREVE dados de todas as empresas, contornando a defesa central do produto.
+      PoC do specialist ja alterou dados de outra empresa. Postgres nao tem ports:
+      no compose (so expose:), entao falta rota de rede ate o container — mas a
+      issue irma de command injection da essa rota. Rotacao de senha em prod e passo
+      manual sem gate.
+    evidence: |
+      gh repo view -> visibility PUBLIC.
+      grep -rn app_runtime_dev -> migration.sql, papel-de-runtime.ts, .env.production.example.
+      migration.sql:106-110: escopo_atual() = '*' OR alvo::text = escopo_atual().
+      PoC do specialist (Postgres 16 real, migrations do repo): SET app.tenant_id='*'
+      devolveu todos os usuarios de todas as empresas; UPDATE alterou b@globex.test.
+    fix: |
+      (1) senha fora do repo (env/secret manager; role criado por infra ou sem senha
+      na migration); (2) escopo nao escolhivel livremente — '*' exige credencial
+      separada da de aplicacao; (3) guard de boot que recuse a senha de dev conhecida;
+      (4) rotacionar a senha publicada (esta no historico git publico).
+    breaking_change: false
+    confirmed_by: [security-auditor]
+
+  - id: sec-005
+    number: 119
+    url: https://github.com/b3ll3o/projeto-base/issues/119
+    title: 'P1 — GET /users ignora a permissao users.read no escopo de tenant: membro sem a permissao le o diretorio inteiro'
+    specialist: security-auditor
+    severity: P1
+    type: bug
+    labels: [agent:security-auditor, severity:p1, type:bug]
+    duplicate_of: null
+    status: new
+    title_pt_br: 'GET /users ignora a permissao users.read no escopo de tenant: membro sem a permissao le o diretorio inteiro'
+    location: 'apps/api/src/modules/users/infrastructure/http/users.controller.ts:343'
+    cause: |
+      semDireito (permissao) e calculado nas linhas 291-295 e aplicado dentro de um
+      && cujo primeiro membro e (empresa === null || perfilNaoResolveuParaOEscopo)
+      (sinal de VINCULO). No caso "membro de tenant com perfil resolvido" o primeiro
+      membro e false, o && inteiro e false, e somenteUsuarioId fica null: sem
+      recorte. A permissao users.read e calculada e descartada.
+    impact: |
+      users.read nao e aplicada em nenhum lugar de fato. Qualquer membro com
+      qualquer perfil (inclusive invited/pending ou customizado sem permissao) ve
+      nome e e-mail de todos os membros da empresa. A web mascara o vazamento
+      (decidirAtribuicaoPerfil filtra antes), ou seja a protecao esta na camada
+      errada e nao vale para nenhum outro cliente da API.
+    evidence: |
+      users.controller.ts:291-295 (semDireito) e :336,:343-346 (aplicacao).
+      Ausencia de @RequirePermission na rota e deliberada (users.controller.ts:205).
+      Intencao de produto em docs/superpowers/plans/2026-10-18-auditoria-6-defeitos.md:313
+      ("membro com users.read continua vendo o diretorio da empresa" — caso negativo).
+      PoC do specialist (API real): conta com perfil de tenant e permissions: []
+      recebeu HTTP 200 com o diretorio completo do tenant.
+    fix: |
+      Separar recorte por vinculo (semVinculo) de recorte por permissao (semDireito)
+      e aplicar os dois: deveRecortar = perfilNaoResolveuParaOEscopo || semDireito.
+      Preservar o caso negativo do #102 (membro COM users.read continua vendo o
+      diretorio). Testar os 4 casos: sem users.read, com users.read, sem vinculo,
+      header alheio.
+    breaking_change: false
+    confirmed_by: [security-auditor]
+
+  - id: sec-004
+    number: 120
+    url: https://github.com/b3ll3o/projeto-base/issues/120
+    title: 'P1 — JWT_SECRET com placeholder CHANGE_ME e aceito como segredo valido: token de admin forjavel'
+    specialist: security-auditor
+    severity: P1
+    type: gap
+    labels: [agent:security-auditor, severity:p1, type:gap]
+    duplicate_of: null
+    status: new
+    title_pt_br: 'JWT_SECRET com placeholder CHANGE_ME e aceito como segredo valido: token de admin forjavel'
+    location: '.env.production.example:65'
+    cause: |
+      lerChaveObrigatoria (jwt-token.service.ts:201-214) recusa apenas string vazia
+      apos trim(). O placeholder CHANGE_ME_gerar_com_openssl_rand_base64_48 e uma
+      string nao vazia: passa e vira a chave de assinatura HS256 real. O guard
+      responde "tem valor?", nao "e um valor que eu aceitei como segredo?".
+    impact: |
+      Forja de token de qualquer usuario, inclusive admin global — o segredo esta
+      publico no repo. Sem sintoma: nao ha erro de boot nem log; a API assina tokens
+      com chave publica. Mesmo padrao no GF_SECURITY_ADMIN_PASSWORD (:118), que o
+      proprio example admite ("aqui nao ha downstream que recuse o boot").
+    evidence: |
+      .env.production.example:65 e :118 com CHANGE_ME_.
+      jwt-token.service.ts:201-214: if (!chave) { throw } — unico guard.
+      Verificado por leitura: JWT_SECRET nao e referenciado em nenhum outro lugar do
+      codigo-fonte alem do config.get acima.
+    fix: |
+      Recusar placeholders conhecidos e exigir >= 32 bytes no mesmo lugar onde ja se
+      recusa o vazio; mesmo guard para GF_SECURITY_ADMIN_PASSWORD; gate de preflight
+      que falhe quando .env.production contiver CHANGE_ME em chave de segredo.
+    breaking_change: false
+    confirmed_by: [security-auditor]
+
+  - id: sec-006
+    number: 121
+    url: https://github.com/b3ll3o/projeto-base/issues/121
+    title: 'P1 — Seed promove o primeiro usuario a admin global fora do guard de NODE_ENV=development'
+    specialist: security-auditor
+    severity: P1
+    type: bug
+    labels: [agent:security-auditor, severity:p1, type:bug]
+    duplicate_of: null
+    status: new
+    title_pt_br: 'Seed promove o primeiro usuario a admin global fora do guard de NODE_ENV=development'
+    location: 'apps/api/prisma/seed.ts:170'
+    cause: |
+      O seed tem dois passos que concedem admin e so um esta protegido. O passo 4
+      (cria admin@admin.com) tem guard NODE_ENV=development + host local e throw
+      explicito; o passo 5 (promove o primeiro user a admin, conectando como DONA)
+      esta fora de qualquer condicao de ambiente. A documentacao do proprio passo 4
+      diz que o admin local "e de DEV" — o passo 5 concede o mesmo admin sem o guard.
+    impact: |
+      Escalada de privilegio trivial: POST /users e @Public(), entao qualquer pessoa
+      cria a conta; rodar o seed promove essa conta a admin global (is_admin, todas
+      as permissions, tenant_id NULL) como DONA, ignorando RLS. O seed fecha com
+      "OK" e imprime "primeiro user virou admin". Condicional a rodar o seed fora de
+      dev — mas esse e o caminho documentado (docs/como-rodar.md:140).
+    evidence: |
+      seed.ts:129-131 (guard do passo 4) e :162-167 (throw).
+      seed.ts:164-180 (passo 5 sem guard, com findFirst por createdAt + update de profileId).
+      users.controller.ts:153-154: @Public() @Post().
+      docs/como-rodar.md:140 documenta "pnpm exec tsx prisma/seed.ts".
+      PoC do specialist com NODE_ENV=production: primeira conta promovida a admin.
+    fix: |
+      Aplicar ao passo 5 o mesmo guard do passo 4, mais estrito (so DEV + host local),
+      com throw nomeando o motivo. Em producao, promover pelo endpoint admin
+      auditado (POST /api/v1/admin/users/:id/profile), que grava users_history.
+      Separar seed:dev de seed:admin.
+    breaking_change: false
+    confirmed_by: [security-auditor]
+
+  - id: sec-007
+    number: 122
+    url: https://github.com/b3ll3o/projeto-base/issues/122
+    title: 'P1 — Swagger do OpenAPI exposto em producao sem condicao de NODE_ENV'
+    specialist: security-auditor
+    severity: P1
+    type: gap
+    labels: [agent:security-auditor, severity:p1, type:gap]
+    duplicate_of: null
+    status: new
+    title_pt_br: 'Swagger do OpenAPI exposto em producao sem condicao de NODE_ENV'
+    location: 'apps/api/src/main.ts:105'
+    cause: |
+      SwaggerModule.setup e chamado sem condicao de ambiente, enquanto o CORS 20
+      linhas acima tem guard NODE_ENV=production que aborta o bootstrap na config de
+      dev. O JwtAuthGuard e aplicado por controller (@UseGuards), nao globalmente,
+      entao /api/docs fica sem autenticacao. O servico escuta em 0.0.0.0 e o compose
+      publica 3000:3000.
+    impact: |
+      Documento completo da API publico em producao: paths, metodos, parametros,
+      schemas de DTO e descricoes — enumerao de superficie (rotas admin, tenancy,
+      auth) para quem nao tem acesso. /api/docs-json e consumivel por ferramenta
+      (geracao de client). Sem autenticacao nem throttling.
+    evidence: |
+      main.ts:98-105 (Swagger sem guard) vs main.ts:79-90 (CORS com guard).
+      app.module.ts:83: APP_GUARD e so o ThrottlerGuard; JwtAuthGuard e por controller
+      (7 controllers). docker-compose.yml:147-148: ports 3000:3000.
+      PoC do specialist: GET /api/docs -> 200 e /api/docs-json -> 200, sem auth.
+    fix: |
+      Condicionar o Swagger a NODE_ENV != production, com o mesmo padrao do CORS.
+      Alternativa: flag SWAGGER_ENABLED desligada em .env.production.example, com
+      o default desligado em prod. Se a doc precisa ficar acessivel, proteger a rota
+      em vez de remove-la.
+    breaking_change: false
+    confirmed_by: [security-auditor]
+
+  - id: code-001
+    number: 123
+    url: https://github.com/b3ll3o/projeto-base/issues/123
+    title: 'P1 — Reatribuicao idempotente de perfil responde 412: a ancora do optimistic lock assume um version++ que nao aconteceu'
+    specialist: code-reviewer
+    severity: P1
+    type: bug
+    labels: [agent:code-reviewer, severity:p1, type:bug]
+    duplicate_of: null
+    status: new
+    title_pt_br: 'Reatribuicao idempotente de perfil responde 412: a ancora do optimistic lock assume um version++ que nao aconteceu'
+    location: 'apps/api/src/modules/profiles/application/profiles.use-cases.ts:745'
+    cause: |
+      save(user, user.version() - 1) pressupoe exatamente um version++ no mutador.
+      Mas atribuirPerfil e idempotente (user.aggregate.ts:274-276: return sem
+      incrementar). A ancora fica uma unidade abaixo da versao persistida, o
+      updateMany otimista casa zero linhas e o 412 sai. O agregado User nao tem
+      loadedVersion() — o Profile tem (profile.aggregate.ts:271-272), e o comentario
+      do repositorio aponta exatamente para o padrao correto.
+    impact: |
+      PUT idempotente por contrato HTTP falha com 412 na segunda chamada. O web nao
+      aciona o bug (decidirAtribuicaoPerfil filtra antes), ou seja o contrato da API
+      esta quebrado por baixo dele. 412 fala "conflito de concurrencia" quando nao ha
+      conflito — diagnostico errado. Invisivel para a suite: o fake do repo ignora
+      expectedVersion (prefixado com _), e nao ha spec de integracao nem e2e que
+      reatribua o mesmo perfil.
+    evidence: |
+      profiles.use-cases.ts:745. user.aggregate.ts:274-276 (early return idempotente).
+      prisma-user.repository.ts:106-107 (where version: expectedVersion).
+      grep loadedVersion em user.aggregate.ts -> sem ocorrencias; em profile.aggregate.ts
+      -> linhas 106, 271-272.
+      profiles.use-cases.spec.ts:122-125: fake ignora expectedVersion.
+      Reproducao HTTP real do specialist: PUT -> 200, PUT igual -> 412 "versao
+      esperada 1, encontrada 2". Mesmo erro com profileId:null sobre alvo sem perfil.
+    fix: |
+      Dar ao agregado User o loadedVersion() que o Profile tem, e usar
+      user.loadedVersion() como ancora. Fazer atribuirPerfil sempre incrementar
+      quebraria a idempotencia semantica e o comentario do repo avisa que um save
+      pode ter varios mutadores atras. Alongar o fake do spec para respeitar
+      expectedVersion.
+    breaking_change: false
+    confirmed_by: [code-reviewer]
+
+  - id: code-002
+    number: 124
+    url: https://github.com/b3ll3o/projeto-base/issues/124
+    title: 'P1 — Query params de /users sem validacao: limit e cursor invalidos respondem 500 em vez de 400'
+    specialist: code-reviewer
+    severity: P1
+    type: bug
+    labels: [agent:code-reviewer, severity:p1, type:bug]
+    duplicate_of: null
+    status: new
+    title_pt_br: 'Query params de /users sem validacao: limit e cursor invalidos respondem 500 em vez de 400'
+    location: 'apps/api/src/modules/users/infrastructure/http/users.controller.ts:339'
+    cause: |
+      Number(limit) sem validacao: 'abc' -> NaN, '1e999' -> Infinity. O valor vai
+      direto para take: input.limit + 1; o Prisma valida o argumento antes de abrir
+      conexao e lanca PrismaClientValidationError, que mapExceptionToHttp nao mapeia
+      -> fall-through INTERNAL_SERVER_ERROR. cursor cru num slot @db.Uuid -> P2023,
+      mesmo fall-through. O ZodValidationPipe global e z.any() (noop) e so cobre
+      @Body. Alem disso: as duas implementacoes do mesmo port discordam sobre o
+      clamp — Prisma sem clamp (take: input.limit + 1), in-memory com clamp [1,100].
+      E o :id da rota de historico vai cru, sem UserId.create, quebrando a garantia
+      que o proprio guard de ownership afirma.
+    impact: |
+      Entrada invalida produz 500 onde o contrato diz 400 VALIDATION_ERROR (as rotas
+      de perfil ja devolvem 400 para limit invalido no corpo — a API e inconsistente
+      consigo mesma). 500 em erro de input polui o sinal de erro. limit sem teto
+      carrega a base inteira em memoria. limit=0 e limit=-5 respondem 200 com lista
+      VAZIA — falha silenciosa: o cliente recebe "nao ha mais usuarios" quando ha.
+      A rota de historico quebra a garantia documentada do guard.
+    evidence: |
+      users.controller.ts:338-339 e :495-496 (Number(limit) cru); :494 (entityId: id cru).
+      main.ts:95: ZodValidationPipe(z.any()).
+      user-ownership.guard.ts:65-70: o guard afirma "a deferencia e segura" — vale
+      para as 4 rotas com UserId.create (user-use-cases.ts:180,217,238,271), nao para
+      a rota de historico.
+      Medico (repositorio Prisma real, 12 usuarios semeados):
+        limit=20 -> 14 | limit=5 -> 5 | limit=0 -> 0 (sem erro) | limit=-5 -> 0 (sem erro).
+      HTTP real: ?limit=abc -> 500 | ?limit=1e999 -> 500 | ?cursor=nao-e-uuid -> 500 |
+      /users/not-a-uuid -> 400 | /users/not-a-uuid/history -> 500.
+    fix: |
+      Validar @Query na borda (z.coerce.number().int().min(1).max(100) e z.string().uuid()
+      para cursor) com ZodValidationPipe por rota, como o repo ja faz em @Body.
+      Validar o :id da rota de historico com UserId.create. Registrar a faixa [1,100]
+      no UserRepositoryPort para as duas implementacoes concordarem, ou clampar no
+      controller (fonte unica).
+    breaking_change: false
+    confirmed_by: [code-reviewer]
+
+  - id: openapi-001
+    number: 125
+    url: https://github.com/b3ll3o/projeto-base/issues/125
+    title: 'P1 — OpenAPI sem versionar e sem gate: 7 de 9 controllers sem @ApiTags e 16 endpoints sem @ApiOperation'
+    specialist: openapi-contract-specialist
+    severity: P1
+    type: gap
+    labels: [agent:openapi-contract-specialist, severity:p1, type:gap]
+    duplicate_of: null
+    status: new
+    title_pt_br: 'OpenAPI sem versionar e sem gate: 7 de 9 controllers sem @ApiTags e 16 endpoints sem @ApiOperation'
+    location: 'apps/api/openapi.json'
+    cause: |
+      A spec e gerada por script e fica no .gitignore, e nenhum workflow a exporta
+      — a politica "gitignore + export no CI" foi feita pela metade. Sem baseline
+      versionado nao ha contra o que comparar, entao o drift nao e detectavel.
+      Em cima disso, a cobertura de decorators do @nestjs/swagger esta incompleta:
+      onde falta @ApiTags/@ApiOperation o documento sai incompleto, sem erro.
+    impact: |
+      O contrato publicado esta errado: 5 paths / 8 operacoes contra 9 controllers no
+      codigo (faltam /auth/*, /admin/profiles/*, /admin/users/*, /admin/permissions,
+      /me/profile, /tenancy/*, /admin/flags/*). 7 controllers caem no grupo
+      "default" do Swagger UI; 16 endpoints ficam com summary vazio. O drift nao e
+      detectavel — ninguem descobre que a spec esta errada.
+    evidence: |
+      git ls-files --error-unmatch apps/api/openapi.json -> nao versionada.
+      git check-ignore -v -> .gitignore:11. stat -> mtime 2026-10-13 13:59 (artefato
+      local de 13 de outubro, anterior a 6 dos 9 controllers).
+      grep -rn openapi .github/workflows/ci.yml -> sem ocorrencias (nenhum export no CI).
+      7 controllers sem @ApiTags (tenancy, health, feature-flags, admin-authorizations,
+      admin-users, me-profile, admin-profiles); 16 endpoints sem @ApiOperation.
+      jq '.paths|keys' -> 5 paths; 8 operacoes.
+    fix: |
+      Versionar apps/api/openapi.json (sai do .gitignore) e adicionar
+      .tooling/scripts/ci/check-openapi-contract.ts, no padrao dos checks existentes,
+      rodando no job preflight: exporta, compara com a spec versionada, falha se
+      mudou. Fechar a cobertura de decorators (9/9 @ApiTags, @ApiOperation em todos).
+      Opcional: gate de breaking change contra a tag anterior.
+    breaking_change: false
+    confirmed_by: [openapi-contract-specialist]
+
+  - id: relver-001
+    number: 126
+    url: https://github.com/b3ll3o/projeto-base/issues/126
+    title: 'P1 — version footers dos 4 docs canonicos divergentes: release-template vai falhar no proximo tag'
+    specialist: release-versioning-specialist
+    severity: P1
+    type: drift
+    labels: [agent:release-versioning-specialist, severity:p1, type:drift]
+    duplicate_of: null
+    status: new
+    title_pt_br: 'version footers dos 4 docs canonicos divergentes: release-template vai falhar no proximo tag'
+    location: 'docs/STACK.md:146'
+    cause: |
+      O bump e manual e nao-atomico: quem versiona edita o footer do MONOREPO.md (o
+      unico que o workflow le) e nao propaga para STACK.md, TEMPLATE_USAGE.md e
+      estrutura-e-versionamento.md. O workflow detecta o drift, mas so depois que
+      alguem tenta o release, e abortando o release em vez de falhar no PR.
+      Recorrencia: a issue #67 (fechada) foi o mesmo drift com os mesmos docs.
+    impact: |
+      O proximo release FALHA: com o alvo vindo de MONOREPO (1.12.0), o STACK_ver
+      (1.11.0) e o tpl_ver (1.11.0) divergem -> drift=1 -> exit 1. 18 commits sem
+      tag (7 feat, 7 fix, 0 breaking) ficam pendentes, incluindo features entregues
+      (#109 flags, #101 tenancy, #97 RBAC). Leitor novo ve duas versoes diferentes;
+      TEMPLATE_USAGE.md (doc de integracao do template) e o pior lugar para divergir.
+    evidence: |
+      docs/MONOREPO.md:277 = 1.12.0 | docs/STACK.md:146 = 1.11.0 |
+      .agents/specs/conventions/estrutura-e-versionamento.md = 1.12.0 |
+      docs/TEMPLATE_USAGE.md:168 = 1.11.0.
+      git tag --sort=-v:refname | head -1 -> v1.11.0; git log v1.11.0..HEAD | wc -l -> 18.
+      Classificacao: breaking 0, feat 7, fix 7, other 4 -> bump minor (1.12.0).
+      .github/workflows/release-template.yml:98-118: o gate compara os 4 footers com o
+      target e faz exit 1 se qualquer um divergir.
+      Precedente: issue #67 (fechada) — mesmo drift, mesmos docs.
+    fix: |
+      Alinhar docs/STACK.md:146 e docs/TEMPLATE_USAGE.md:168 em 1.12.0 (destrava o
+      release v1.12.0). E o que impede a recorrencia: gate no preflight
+      (.tooling/scripts/ci/check-version-footers.ts) que falhe quando os 4 footers
+      divergem entre si, rodando no PR e nao so no release; mais um script que
+      escreva os 4 footers de uma vez.
+    breaking_change: false
+    confirmed_by: [release-versioning-specialist]
+
+commented_issues: []
+skipped_cap: []
+
+raw:
+  # ---------------------------------------------------------------- P0 (2)
+  - id: sec-001
+    specialist: security-auditor
+    severity: P0
+    type: bug
+    title: 'Command injection no lint de review-routing via nome de arquivo do PR'
+    location: 'tooling/scripts/lint-review-routing.ts:100'
+    status: opened
+    issue: 117
+  - id: sec-002
+    specialist: security-auditor
+    severity: P0
+    type: bug
+    title: 'Senha do role app_runtime em texto puro + escopo RLS escolhivel pelo cliente = bypass total'
+    location: 'apps/api/prisma/migrations/20261020000000_rls_isolation_empresa/migration.sql:32'
+    status: opened
+    issue: 118
+
+  # ---------------------------------------------------------------- P1 (9)
+  - id: sec-005
+    specialist: security-auditor
+    severity: P1
+    type: bug
+    title: 'GET /users ignora a permissao users.read no escopo de tenant'
+    location: 'apps/api/src/modules/users/infrastructure/http/users.controller.ts:343'
+    status: opened
+    issue: 119
+  - id: sec-004
+    specialist: security-auditor
+    severity: P1
+    type: gap
+    title: 'JWT_SECRET placeholder CHANGE_ME aceito como segredo valido'
+    location: '.env.production.example:65'
+    status: opened
+    issue: 120
+  - id: sec-006
+    specialist: security-auditor
+    severity: P1
+    type: bug
+    title: 'Seed promove o primeiro user a admin global fora do guard de dev'
+    location: 'apps/api/prisma/seed.ts:170'
+    status: opened
+    issue: 121
+  - id: sec-007
+    specialist: security-auditor
+    severity: P1
+    type: gap
+    title: 'Swagger do OpenAPI exposto em producao sem condicao de NODE_ENV'
+    location: 'apps/api/src/main.ts:105'
+    status: opened
+    issue: 122
+  - id: code-001
+    specialist: code-reviewer
+    severity: P1
+    type: bug
+    title: 'Reatribuicao idempotente de perfil responde 412 (ancora do optimistic lock)'
+    location: 'apps/api/src/modules/profiles/application/profiles.use-cases.ts:745'
+    status: opened
+    issue: 123
+  - id: code-002
+    specialist: code-reviewer
+    severity: P1
+    type: bug
+    title: 'limit/cursor de /users sem validacao: 500 em vez de 400; clamp divergente entre impls do port'
+    location: 'apps/api/src/modules/users/infrastructure/http/users.controller.ts:339'
+    status: opened
+    issue: 124
+  - id: openapi-001
+    specialist: openapi-contract-specialist
+    severity: P1
+    type: gap
+    title: 'OpenAPI nao versionado, sem gate no CI, cobertura de decorators incompleta'
+    location: 'apps/api/openapi.json'
+    status: opened
+    issue: 125
+  - id: relver-001
+    specialist: release-versioning-specialist
+    severity: P1
+    type: drift
+    title: '4 footers de versao divergentes — release-template aborta no proximo tag'
+    location: 'docs/STACK.md:146'
+    status: opened
+    issue: 126
+
+  # ---------------------------------------------------------------- P2 (16 — so relatorio)
+  - id: sec-008
+    specialist: security-auditor
+    severity: P2
+    type: gap
+    title: 'Refresh token nao revogavel; logout so limpa o cookie'
+    location: 'apps/api/src/modules/auth/infrastructure/security/jwt-token.service.ts:114'
+    status: report_only
+    detail: >
+      JWT stateless sem denylist de jti; refresh TTL de 7 dias; nao ha endpoint de
+      logout na API (apps/web/app/users/actions.ts apaga cookies). Token vazado
+      sobrevive ao logout. Decisao de desenho, nao bug — registrado para decisao.
+  - id: sec-009
+    specialist: security-auditor
+    severity: P2
+    type: gap
+    title: "CORS: credentials:true com array de origens que pode conter '*'"
+    location: 'apps/api/src/main.ts:87'
+    status: report_only
+    detail: >
+      O guard de producao so recusa o default de dev; ALLOWED_ORIGINS='*' passa, e o
+      @fastify/cors normaliza array com '*' para origin '*'. Condicional a config do
+      operador — hardening teorico, nao prova de explorabilidade.
+  - id: sec-010
+    specialist: security-auditor
+    severity: P2
+    type: gap
+    title: 'app web sem headers de seguranca (sem CSP/HSTS/X-Frame-Options)'
+    location: 'apps/web/next.config.mjs'
+    status: report_only
+    detail: >
+      A API usa helmet (main.ts:42-43); o front nao define headers() em
+      next.config.mjs nem tem middleware.ts. Cookies sameSite lax + httpOnly estao
+      corretos. Hardening, sem vetor de exploit demonstrado.
+  - id: sec-011
+    specialist: security-auditor
+    severity: P2
+    type: gap
+    title: 'GitHub Actions pinadas por tag, nao por SHA'
+    location: '.github/workflows/ci.yml:84'
+    status: report_only
+    detail: >
+      Tag movel e mutavel (ci.yml:84,88,89,160-162,183,192,216-218). Ranqueado abaixo
+      de sec-001 porque a execucao e no runner.
+  - id: sec-012
+    specialist: security-auditor
+    severity: P2
+    type: gap
+    title: 'Sem SCA automatico no CI (nenhum pnpm audit/OSV/Dependabot)'
+    location: '.github/workflows/ci.yml'
+    status: report_only
+    detail: >
+      pnpm-lock.yaml tem ~1.1k entradas com integrity, mas nenhuma checagem de CVE
+      transitiva roda. Limitacao declarada: nenhum scanner de CVE foi executado
+      offline, entao vulnerabilidades transitivas nao estao confirmadas nem
+      descartadas.
+  - id: prisma-001
+    specialist: prisma-db-specialist
+    severity: P2
+    type: gap
+    title: 'Modelos sem audit fields completos (deletedAt/createdBy/updatedBy)'
+    location: 'apps/api/prisma/schema.prisma'
+    status: report_only
+    detail: >
+      Profile, Authorization, Tenant, TenantMembership, Invitation e FeatureFlag tem
+      so createdAt/updatedAt. UserHistory e UserArchive nao tem nenhum. User e o
+      unico com os 6 campos. O modelo e OK para leitura de referencia, e o
+      soft-delete seletivo e uma decisao documentada no schema (memberships e
+      convites sao deliberadamente destrutivos).
+  - id: prisma-002
+    specialist: prisma-db-specialist
+    severity: P2
+    type: gap
+    title: 'findMany sem take em repositorios de listagem (paginacao nao limitada)'
+    location: 'apps/api/src/modules/profiles/infrastructure/persistence/prisma-profile.repository.ts:101'
+    status: report_only
+    detail: >
+      profile.repository.ts:101, authorization.repository.ts:33 e
+      feature-flag.repository.ts:33 usam findMany sem take e sem cursor. O usuario de
+      /users tem take: input.limit + 1 (limit+1 para detectar hasMore). As
+      colecoes sao pequenas no estado atual, mas crescem sem teto conforme o
+      dominio. A divergencia de clamp com a implementacao in-memory do mesmo port
+      (esta em code-002 / issue #124) e o mesmo defeito visto pelo outro lado.
+  - id: otelcol-001
+    specialist: otelcol-infra-specialist
+    severity: P2
+    type: gap
+    title: 'Propagacao W3C nao encontrada por grep explicito em api nem web'
+    location: 'apps/api/src/shared/infrastructure/telemetry/tracing.ts'
+    status: report_only
+    detail: >
+      Nenhuma ocorrencia de W3CTraceContextPropagator/traceparent em apps/api/src nem
+      apps/web (fora de node_modules/.next). O SDK Node registra propagators W3C por
+      padrao (W3CTraceContextPropagator + W3CBaggagePropagator) e o default do
+      NodeSDK e composite W3C — a ausencia de config explicita NAO significa ausencia
+      de W3C. Reportado por transparencia: o grep da skill nao distingue explicito de
+      default.
+  - id: otelcol-002
+    specialist: otelcol-infra-specialist
+    severity: P2
+    type: gap
+    title: 'otel-collector sem healthcheck e sem pin de versao no config (valores via compose)'
+    location: 'docker-compose.yml:269'
+    status: report_only
+    detail: >
+      O collector e o unico servico sem healthcheck (docker-compose.yml:269), e o
+      comment do proprio compose (linha 368-370) admite que o healthcheck do tempo
+      nao ordena a subida porque nao ha depends_on do collector. A imagem esta pinada
+      por digest no compose (0.103.0@sha256:0dffde...), entao a pinning de versao
+      existe no lado do compose; a confianca no digest foi verificada por
+      docker image inspect (User 10001). Reportado por transparencia.
+  - id: docker-001
+    specialist: docker-prod-specialist
+    severity: P2
+    type: gap
+    title: 'postgres sem start_period no healthcheck (5s timeout, retries 5)'
+    location: 'docker-compose.yml:56'
+    status: report_only
+    detail: >
+      postgres tem interval 5s / timeout 5s / retries 5 e nenhum start_period, contra o
+      criterio da skill (interval<=10s, timeout<=3s, retries=3, start_period<=30s).
+      Os outros 6 servicos estao dentro do criterio. postgres e dependido por
+      api com condition: service_healthy, entao o start_period nao bloqueia nada.
+  - id: docker-002
+    specialist: docker-prod-specialist
+    severity: P2
+    type: gap
+    title: '.dockerignore usa padroes com prefixo ** (node_modules, .env, coverage) em vez dos literais testados pela skill'
+    location: '.dockerignore'
+    status: report_only
+    detail: >
+      A skill testa por literais (^node_modules, ^.env, ^coverage/) e reporta FALTA;
+      o arquivo usa **/node_modules, **/.env, **/coverage — que excluem os mesmos
+      alvos. Alem disso .agents/runs esta excluido por ".agents". Falso positivo da
+      checagem por sintaxe, nao lacuna real — registrado para calibrar a skill.
+  - id: docker-003
+    specialist: docker-prod-specialist
+    severity: P2
+    type: gap
+    title: "otel-collector sem 'user:' explicito no compose (imagem ja roda como 10001)"
+    location: 'docker-compose.yml:269'
+    status: report_only
+    detail: >
+      Os outros 6 servicos declaram user:; o collector nao. Verificado por
+      docker image inspect: a imagem ja tem USER 10001, entao nao roda como root.
+      Drift de padrao, nao falha de hardening.
+  - id: doc-001
+    specialist: doc-sync
+    severity: P2
+    type: drift
+    title: 'Drift entre AGENTS.md (1.12.0) e docs/STACK.md + TEMPLATE_USAGE.md (1.11.0)'
+    location: 'AGENTS.md:1'
+    status: report_only
+    detail: >
+      Mesmo drift de versao do relver-001, visto pela lente de doc-sync. Nao foi issue
+      separada para nao duplicar — o fix e o mesmo. Demais docs conferidos:
+      check-doc-refs passou (exit 0) e o catalogo de agents em AGENTS.md bate com
+      .agents/agents/ e .agents/skills/ no disco.
+  - id: doc-002
+    specialist: doc-sync
+    severity: P2
+    type: gap
+    title: 'pnpm docs:sync nao executa no sandbox (Node v20.20.2 vs engines >=22.6.0)'
+    location: 'package.json'
+    status: report_only
+    detail: >
+      O script docs:sync aborta com ERR_PNPM_UNSUPPORTED_ENGINE. Limitacao do
+      ambiente de scan, nao do repo. O gate check-doc-refs (que nao exige o build)
+      rodou verde (exit 0). Registrado como limitacao de cobertura do scan.
+  - id: code-003
+    specialist: code-reviewer
+    severity: P2
+    type: gap
+    title: 'atualizarEmail sem rota HTTP (codigo morto, com TODO de issue)'
+    location: 'apps/api/src/modules/users/application/dto/list-users.output.ts'
+    status: report_only
+    detail: >
+      UpdateUserSchema declara o endpoint como rename-only e remete PATCH parcial a
+      issue propria. Codigo morto, nao defeito — registrado para nao reabrir.
+  - id: code-004
+    specialist: code-reviewer
+    severity: P2
+    type: gap
+    title: 'profiles.use-cases importa UserProfileCacheService (infra concreta) na camada application, sem port'
+    location: 'apps/api/src/modules/profiles/application/profiles.use-cases.ts:29'
+    status: report_only
+    detail: >
+      Unico desvio de camada DDD encontrado no repo (domain nao importa @prisma/client,
+      repositorios estao em infrastructure/persistence/). O cache nao e um adapter
+      trocavel e o acoplamento nao causa defeito funcional — nota de arquitetura.
+
+verification:
+  gh_auth: valid
+  open_issues_before: 0
+  issues_opened: 10
+  issues_commented: 0
+  open_issue_limit: 10
+  cap_reached: true
+  dedup_base: /root/.hermes/cron/output/findings-scan-2026-10-26_050019/open-issues.json
+  dedup_result: '0 issues abertas no momento do scan; nenhum finding casou com issue aberta. Cross-check contra as 25 issues fechadas recentes feito por titulo/local: #67 (drift de versao, mesma classe de relver-001) e #102 (vazamento cross-tenant, mesma area de code-002/sec-005) foram conferidas e NAO sao duplicatas do estado atual — #67 foi fechada e o drift reincidiu com outros numeros; #102 foi fechada e o codigo atual tem o gate diferente (permissao users.read) do que foi corrigido la (vazamento cross-tenant).'
+  issues_verified_after_create: true
+  verification_method: 'gh issue view --json number,title,labels,state conferiu as 10 issues criadas (labels + estado); gh issue view --json body conferiu presenca das secoes ### e dos criterios - [ ] em todas as 10.'
+  bodies: /root/.hermes/cron/output/findings-scan-2026-10-26_050019/bodies/
+  evidence: /root/.hermes/cron/output/findings-scan-2026-10-26_050019/evidence/
