@@ -39,6 +39,33 @@ export const COMANDO_DE_EXPORT = [
   'openapi:export',
 ];
 
+/** O comando que gera o cliente Prisma — o PRÉ-REQUISITO do export. */
+export const COMANDO_DE_GENERATE = [
+  'pnpm',
+  '--config.engine-strict=false',
+  '--filter',
+  '@projeto/api',
+  'run',
+  'db:generate',
+];
+
+/** O texto de erro do processo que falhou. */
+function stderrDe(err: unknown): string {
+  return (err as { stderr?: Buffer }).stderr?.toString() ?? '';
+}
+
+/**
+ * O export falhou por FALTA do cliente Prisma gerado?
+ *
+ * A assinatura é do módulo ESM do Node: "does not provide an export named
+ * 'PrismaClient'". A detecção é o próprio erro — e o erro de uma detecção
+ * errada é o gate REPROVAR de verdade, que é o lado seguro.
+ */
+export function faltaClientePrismaGerado(err: unknown): boolean {
+  const texto = `${stderrDe(err)}\n${(err as Error)?.message ?? ''}`;
+  return texto.includes('does not provide an export named') && texto.includes('PrismaClient');
+}
+
 /**
  * O primeiro caminho em que dois valores JSON divergem.
  *
@@ -144,6 +171,11 @@ export async function checkOpenapiContract(opts: {
    * (que precisa do `pnpm` e do workspace montado).
    */
   comandoDeExport?: string[];
+  /**
+   * O comando que gera o cliente Prisma — o PRÉ-REQUISITO do export.
+   * Injetável pelo mesmo motivo.
+   */
+  comandoDeGenerate?: string[];
 }): Promise<CheckResult> {
   const errors: string[] = [];
   const root = path.resolve(opts.repoRoot);
@@ -164,6 +196,7 @@ export async function checkOpenapiContract(opts: {
   }
 
   const comando = opts.comandoDeExport ?? COMANDO_DE_EXPORT;
+  const comandoDeGenerate = opts.comandoDeGenerate ?? COMANDO_DE_GENERATE;
 
   // ⚠️ O export ESCREVE no arquivo. Sem um caminho de saída próprio, o gate
   // sobrescreveria a spec versionada ANTES de compará-la — e compararia o
@@ -185,15 +218,56 @@ export async function checkOpenapiContract(opts: {
       env: { ...process.env, OPENAPI_OUTPUT_PATH: temporario },
     });
   } catch (err) {
-    const stderr = (err as { stderr?: Buffer }).stderr?.toString() ?? '';
-    return {
-      ok: false,
-      errors: [
-        `O export do OpenAPI falhou (\`${comando.join(' ')}\`): ` +
-          `${stderr.trim() || (err as Error).message}. ` +
-          `Sem a spec gerada, o gate não tem contra o que comparar.`,
-      ],
-    };
+    // ⚠️ O export IMPORTA o grafo da aplicação, e o grafo chega ao
+    // `PrismaService` — que importa `@prisma/client`. Num checkout novo, o
+    // cliente gerado NÃO existe, e o export morre com
+    // "does not provide an export named 'PrismaClient'".
+    //
+    // MEDIDO no CI (2026-10-27): o job de preflight roda `pnpm install` e
+    // NADA mais — o `db:generate` é do job `quality`. O gate era reprovado
+    // por um PRÉ-REQUISITO ausente, e não pela divergência que ele existe
+    // para medir.
+    //
+    // A correção é o gate garantir o PRÓPRIO pré-requisito: se o export
+    // falhar por falta do cliente gerado, ele o gera e tenta de novo. A
+    // detecção é o próprio erro — e o FALHO de uma detecção errada é
+    // "o gate reprova de verdade", nunca "o gate passa calado".
+    if (faltaClientePrismaGerado(err)) {
+      try {
+        execFileSync(comandoDeGenerate[0]!, comandoDeGenerate.slice(1), {
+          cwd: root,
+          encoding: 'utf-8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+          maxBuffer: 16 * 1024 * 1024,
+        });
+        execFileSync(comando[0]!, comando.slice(1), {
+          cwd: root,
+          encoding: 'utf-8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+          maxBuffer: 16 * 1024 * 1024,
+          env: { ...process.env, OPENAPI_OUTPUT_PATH: temporario },
+        });
+      } catch (err2) {
+        return {
+          ok: false,
+          errors: [
+            `O export do OpenAPI falhou mesmo depois de gerar o cliente Prisma ` +
+              `(\`${comandoDeGenerate.join(' ')}\`): ` +
+              `${stderrDe(err2) || (err2 as Error).message}.`,
+          ],
+        };
+      }
+    } else {
+      const stderr = (err as { stderr?: Buffer }).stderr?.toString() ?? '';
+      return {
+        ok: false,
+        errors: [
+          `O export do OpenAPI falhou (\`${comando.join(' ')}\`): ` +
+            `${stderr.trim() || (err as Error).message}. ` +
+            `Sem a spec gerada, o gate não tem contra o que comparar.`,
+        ],
+      };
+    }
   }
 
   try {

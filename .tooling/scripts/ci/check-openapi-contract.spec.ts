@@ -10,9 +10,15 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs/promises';
+import * as fsSync from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { checkOpenapiContract, compararSpecs, CAMINHO_DA_SPEC } from './check-openapi-contract.js';
+import {
+  checkOpenapiContract,
+  compararSpecs,
+  faltaClientePrismaGerado,
+  CAMINHO_DA_SPEC,
+} from './check-openapi-contract.js';
 
 let raiz: string;
 
@@ -131,6 +137,67 @@ describe('checkOpenapiContract (#125)', () => {
     // Sem o env com a spec, o export de mentira escreve vazio — e o gate
     // acusa a divergência, que é o comportamento correto.
     expect(r.ok).toBe(false);
+  });
+
+  // ── o PRÉ-REQUISITO: o cliente Prisma gerado ────────────────────────────
+  //
+  // MEDIDO no CI (2026-10-27): o job de preflight roda `pnpm install` e nada
+  // mais — o `db:generate` é do job `quality`. O export IMPORTA o grafo da
+  // aplicação, que chega ao `PrismaService`, que importa `@prisma/client` —
+  // e o export morre com "does not provide an export named 'PrismaClient'".
+  // O gate era reprovado por um PRÉ-REQUISITO ausente, e não pela divergência
+  // que ele existe para medir.
+  it('detecta a FALTA do cliente Prisma gerado no erro do export', () => {
+    const erro = new Error(
+      "SyntaxError: The requested module '@prisma/client' does not provide an export named 'PrismaClient'",
+    );
+    expect(faltaClientePrismaGerado(erro)).toBe(true);
+  });
+
+  it('NÃO confunde outro erro com a falta do cliente gerado', () => {
+    const outro = new Error('SyntaxError: Unexpected token }');
+    expect(faltaClientePrismaGerado(outro)).toBe(false);
+  });
+
+  it('o gate GERA o cliente Prisma e tenta de novo quando o export falha por isso', async () => {
+    await escreverSpec(SPEC);
+
+    // O "cliente Prisma gerado" é um MARCADOR: o export de mentira falha
+    // enquanto ele não existe, e o generate de mentira o cria. Assim o
+    // caminho de recuperação é medido de verdade — e uma mutação que
+    // desiste antes do generate cai aqui.
+    const marcador = path.join(raiz, 'cliente-gerado.marker');
+    process.env['MARCADOR'] = marcador;
+    process.env['SPEC_ESPERADA'] = SPEC;
+    try {
+      const r = await checkOpenapiContract({
+        repoRoot: raiz,
+        comandoDeExport: [
+          'node',
+          '-e',
+          `const fs=require('fs');
+           if(!fs.existsSync(process.env.MARCADOR)){
+             process.stderr.write("SyntaxError: The requested module '@prisma/client' does not provide an export named 'PrismaClient'");
+             process.exit(1);
+           }
+           fs.writeFileSync(process.env.OPENAPI_OUTPUT_PATH, process.env.SPEC_ESPERADA);`,
+        ],
+        comandoDeGenerate: [
+          'node',
+          '-e',
+          `require('fs').writeFileSync(process.env.MARCADOR, 'gerado');`,
+        ],
+      });
+
+      // O export falhou na primeira vez, o gate gerou o cliente, e o segundo
+      // export produziu a spec IGUAL à versionada — logo, verde.
+      expect(r.errors).toEqual([]);
+      expect(r.ok).toBe(true);
+      expect(fsSync.existsSync(marcador)).toBe(true);
+    } finally {
+      delete process.env['MARCADOR'];
+      delete process.env['SPEC_ESPERADA'];
+    }
   });
 
   it('o gate NÃO sobrescreve a spec versionada (a arvore fica intacta)', async () => {
