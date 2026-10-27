@@ -6,7 +6,11 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
 import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service.js';
-import { comEscopo, escopoDoTenant } from '../../../../shared/infrastructure/prisma/escopo.js';
+import {
+  comEscopo,
+  comEscopoDeSistema,
+  escopoDoTenant,
+} from '../../../../shared/infrastructure/prisma/escopo.js';
 import type {
   EmpresaDoUsuario,
   TenantMembershipRepositoryPort,
@@ -65,7 +69,7 @@ export class PrismaTenantMembershipRepository implements TenantMembershipReposit
       // parte, que é o oposto do que a coluna promete.
       // Revisão v1.5.0 (achado 2): a porta diz "a checagem de DONO é do
       // implementador", e só um dos dois ramos a fazia.
-      const user = await comEscopo(this.prisma, escopoDoTenant(null), (tx) =>
+      const user = await comEscopoDeSistema((tx) =>
         tx.user.findFirst({
           where: { id: userId, deletedAt: null, profile: { is: { tenantId: null } } },
           select: { profileId: true },
@@ -116,9 +120,7 @@ export class PrismaTenantMembershipRepository implements TenantMembershipReposit
     // que a porta diz que NÃO é. A porta `tenant-membership-repository.port.ts`
     // documenta essa escolha; quem mudar uma coisa sem a outra quebra a
     // semântica de `deletar` sem nenhum teste ficar vermelho.
-    return comEscopo(this.prisma, escopoDoTenant(null), (tx) =>
-      tx.tenantMembership.count({ where: { profileId } }),
-    );
+    return comEscopoDeSistema((tx) => tx.tenantMembership.count({ where: { profileId } }));
   }
 
   /**
@@ -229,7 +231,7 @@ export class PrismaTenantMembershipRepository implements TenantMembershipReposit
    * empresas na listagem.
    */
   async listarEmpresasDoUsuario(userId: string): Promise<EmpresaDoUsuario[]> {
-    const linhas = await comEscopo(this.prisma, escopoDoTenant(null), (tx) =>
+    const linhas = await comEscopoDeSistema((tx) =>
       tx.tenantMembership.findMany({
         where: { userId, user: { deletedAt: null } },
         select: {

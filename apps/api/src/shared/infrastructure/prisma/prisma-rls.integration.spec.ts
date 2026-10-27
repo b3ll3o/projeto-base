@@ -28,7 +28,12 @@ import {
   cleanDatabase,
   type TestContext,
 } from '../../../../test/testcontainers-helper.js';
-import { ESCOPO_DE_SISTEMA, PAPEL_DE_RUNTIME, uriComoPapelDeRuntime } from './papel-de-runtime.js';
+import {
+  ESCOPO_DE_SISTEMA,
+  PAPEL_DE_RUNTIME,
+  PAPEL_DE_SISTEMA,
+  uriComoPapelDeRuntime,
+} from './papel-de-runtime.js';
 import { abrirEscopo } from './escopo.js';
 import { corpoDaAssinatura } from './assinatura-de-membership.js';
 
@@ -36,6 +41,8 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
   let ctx: TestContext;
   /** Sessão da APLICAÇÃO: papel sem BYPASSRLS, onde as policies valem. */
   let runtime: InstanceType<typeof import('@prisma/client').PrismaClient>;
+  /** A credencial de SISTEMA (#118) — a que abre o bucket de sistema. */
+  let sistema: InstanceType<typeof import('@prisma/client').PrismaClient>;
 
   let acmeId: string;
   let globexId: string;
@@ -46,11 +53,19 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
   beforeAll(async () => {
     ctx = await setupTestDatabase();
     const { PrismaClient } = await import('@prisma/client');
-    runtime = new PrismaClient({ datasourceUrl: uriComoPapelDeRuntime(ctx.uriDoBanco) });
+    runtime = new PrismaClient({
+      datasourceUrl: uriComoPapelDeRuntime(ctx.uriDoBanco, ctx.senhaDoPapel),
+    });
+    // #118: a credencial de SISTEMA. O bucket de sistema deixou de ser
+    // concedido por um valor de GUC e passou a ser concedido pela
+    // CREDENCIAL — e as DUAS credenciais estão neste arquivo de proposito: é
+    // a separação que o teste abaixo mede.
+    sistema = new PrismaClient({ datasourceUrl: ctx.uriDoPapelDeSistema });
   });
 
   afterAll(async () => {
     await runtime.$disconnect();
+    await sistema.$disconnect();
     await ctx.stop();
   });
 
@@ -121,6 +136,22 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
   ): Promise<T> {
     return runtime.$transaction(async (tx) => {
       await abrirEscopo(tx, escopo);
+      return fn(tx);
+    });
+  }
+
+  /**
+   * O escopo de SISTEMA, na CREDENCIAL de sistema (#118).
+   *
+   * O GUC continua sendo `'*'` — o que muda é QUEM abre a transação, e por
+   * isso o que a policy vê. Uma sessão de RUNTIME com o mesmo GUC não abre
+   * nada (é o teste que mede isso).
+   */
+  async function comEscopoDeSistema<T>(
+    fn: (tx: Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    return sistema.$transaction(async (tx) => {
+      await abrirEscopo(tx, ESCOPO_DE_SISTEMA);
       return fn(tx);
     });
   }
@@ -304,12 +335,71 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
   });
 
   it('com o escopo de SISTEMA as três empresas aparecem', async () => {
-    const ids = await comEscopo(ESCOPO_DE_SISTEMA, async (tx) => {
+    const ids = await comEscopoDeSistema(async (tx) => {
       const r = await tx.profile.findMany({ select: { id: true } });
       return r.map((p) => p.id);
     });
 
     expect(ids).toEqual(expect.arrayContaining([perfilDaAcme, perfilDaGlobex, perfilGlobal]));
+  });
+
+  // ── #118: a PROVA de que o bypass fechou ────────────────────────────────
+  //
+  // MEDIDO (issue #118): antes desta migration, uma sessão `app_runtime` que
+  // fizesse `SET app.tenant_id = '*'` enxergava TODOS os usuários de TODAS as
+  // empresas. O `NOBYPASSRLS` impede o papel de *pular* a policy; não
+  // impede o papel de *escolher* o valor do GUC.
+  //
+  // A correção: quem concede o bucket de sistema é a CREDENCIAL
+  // (`current_user = 'app_system'`), e não o valor que a sessão escreve. O
+  // GUC continua sendo `'*'` — o que muda é QUEM abre a transação.
+  it('#118: a sessão de RUNTIME com o escopo de SISTEMA NÃO abre o bucket', async () => {
+    // O MESMO GUC, a MESMA sessão de runtime — e o resultado é o oposto.
+    const ids = await comEscopo(ESCOPO_DE_SISTEMA, async (tx) => {
+      const r = await tx.profile.findMany({ select: { id: true } });
+      return r.map((p) => p.id);
+    });
+
+    // Nenhuma empresa de outra — e nenhum perfil global.
+    expect(ids).not.toContain(perfilDaAcme);
+    expect(ids).not.toContain(perfilDaGlobex);
+    expect(ids).not.toContain(perfilGlobal);
+  });
+
+  it('#118: e o que a sessão de RUNTIME vê é o bucket GLOBAL, e só', async () => {
+    // O bucket de sistema sem credencial não é "tudo": é o que a policy de
+    // cada tabela aceita sem escopo de empresa — aqui, nada além do global.
+    const ids = await comEscopo(ESCOPO_DE_SISTEMA, async (tx) => {
+      const r = await tx.profile.findMany({ select: { id: true } });
+      return r.map((p) => p.id);
+    });
+
+    expect(ids).toHaveLength(0);
+  });
+
+  it('#118: as DUAS credenciais veem coisas diferentes — é a separação que fecha o furo', async () => {
+    // O par que prova que a correção é de CREDENCIAL e não de GUC: mesmo GUC,
+    // mesmo dado, vereditos opostos.
+    const comRuntime = await comEscopo(ESCOPO_DE_SISTEMA, async (tx) =>
+      (await tx.profile.findMany({ select: { id: true } })).map((p) => p.id),
+    );
+    const comSistema = await comEscopoDeSistema(async (tx) =>
+      (await tx.profile.findMany({ select: { id: true } })).map((p) => p.id),
+    );
+
+    expect(comRuntime).toHaveLength(0);
+    expect(comSistema.length).toBeGreaterThan(0);
+  });
+
+  it('#118: o runtime NÃO é membro do papel de sistema (o `SET ROLE` não serviria)', async () => {
+    // Se `app_runtime` fosse membro de `app_system`, um `SET ROLE` bastaria e
+    // o furo voltaria pela porta dos fundos.
+    const membros = await runtime.$queryRaw<{ pg_get_userbyid: string }[]>`
+      SELECT pg_get_userbyid(g.roleid) AS pg_get_userbyid
+      FROM pg_auth_members g
+      WHERE pg_get_userbyid(g.member) = 'app_runtime'
+    `;
+    expect(membros.map((m) => m.pg_get_userbyid)).not.toContain(PAPEL_DE_SISTEMA);
   });
 
   // ─────────────── escrita ───────────────
@@ -408,7 +498,7 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
     // em TODAS as linhas, o banco inteiro ficaria imutável e os testes
     // transmitiriam uma garantia que não existe. O admin global tem de poder
     // apagar perfil global — é o que `ProfileUseCases.deletar` faz.
-    const apagados = await comEscopo(ESCOPO_DE_SISTEMA, async (tx) => {
+    const apagados = await comEscopoDeSistema(async (tx) => {
       const r = await tx.profile.deleteMany({ where: { id: perfilGlobal } });
       return r.count;
     });
@@ -669,7 +759,7 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
     // `WITH CHECK` não abrir para `'*'`, a admin de sistema perde a atribuição.
     const alvo = await criarUsuario('root');
 
-    const alterados = await comEscopo(ESCOPO_DE_SISTEMA, async (tx) => {
+    const alterados = await comEscopoDeSistema(async (tx) => {
       const r = await tx.user.updateMany({
         where: { id: alvo },
         data: { profileId: perfilGlobal },
@@ -696,7 +786,7 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
     // lugar do repo onde o onboarding fala com um papel sem BYPASSRLS.
     const id = 'eeeeeeee-0000-0000-0000-0000000000ee';
 
-    const criado = await comEscopo(ESCOPO_DE_SISTEMA, async (tx) => {
+    const criado = await comEscopoDeSistema(async (tx) => {
       const r = await tx.user.create({
         data: { id, email: 'nova@teste.local', name: 'Nova', passwordHash: 'x' },
       });
@@ -739,7 +829,7 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
       comEscopo(acmeId, (tx) => tx.profile.findMany({ where: { slug: 'gestor-acme' } })),
     ).resolves.toHaveLength(1);
     await expect(
-      comEscopo(ESCOPO_DE_SISTEMA, (tx) =>
+      comEscopoDeSistema((tx) =>
         tx.profile.findMany({ where: { slug: { in: ['gestor-acme', 'gestor-globex'] } } }),
       ),
     ).resolves.toHaveLength(2);

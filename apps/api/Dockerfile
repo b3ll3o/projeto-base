@@ -1,7 +1,6 @@
 # syntax=docker/dockerfile:1.7
-# pt-BR (#89, 2026-10-16): ARG no topo permite que `docker build --build-arg NODE_DIGEST=...`
-# reescreva o digest em todos os `FROM` de uma vez. Resolve o problema de duplicar
-# `@sha256:...` em 4 estágios (base/dev/builder/prod) — uma linha, 4 FROMs.
+# pt-BR (#89, 2026-10-16): ARG no topo reescreve o digest em todos os `FROM` de uma vez
+# (4 estágios) — uma linha, 4 FROMs, e o `@sha256:` duplicado sai do fonte.
 ARG NODE_DIGEST=sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
 FROM node:22-bookworm-slim@${NODE_DIGEST} AS base
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
@@ -43,7 +42,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl curl &&
 WORKDIR /repo
 ENV NODE_ENV=production PORT=3000
 COPY --from=builder /repo/apps/api/dist apps/api/dist
-COPY --from=builder /repo/apps/api/prisma apps/api/prisma
+# #118: `scripts/` traz o setup que aplica a SENHA dos papeis a partir do ambiente (a migration cria o papel sem senha).
+COPY --from=builder /repo/apps/api/prisma /repo/apps/api/scripts apps/api/
 COPY --from=builder /repo/package.json ./
 COPY --from=builder /repo/apps/api/package.json apps/api/
 COPY --from=builder /repo/packages packages
@@ -96,4 +96,4 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
 # `Command "prisma" not found`). E o `$` é UM, não `$$`: no JSON com `sh -c` quem
 # expande é o shell do container, então `$$` virava `$` literal e o teste rodava
 # sobre a STRING `"$DATABASE_URL"`, nunca vazia (MEDIDO: a guarda não disparava).
-ENTRYPOINT ["sh","-c","if [ -z \"$DATABASE_URL\" ]; then echo 'ERRO: DATABASE_URL vazia ou ausente no container da api (issue #105). A linha precisa existir no .env.production apontando para o papel app_runtime (ver .env.production.example); a de DONO e a DIRECT_DATABASE_URL, que e outra chave.' >&2; exit 1; fi; cd /repo/apps/api && pnpm exec prisma migrate deploy --schema=prisma/schema.prisma && node dist/main.js"]
+ENTRYPOINT ["sh","-c","if [ -z \"$DATABASE_URL\" ]; then echo 'ERRO: DATABASE_URL vazia ou ausente no container da api (issue #105). A linha precisa existir no .env.production apontando para o papel app_runtime (ver .env.production.example); a de DONO e a DIRECT_DATABASE_URL, que e outra chave.' >&2; exit 1; fi; cd /repo/apps/api && pnpm exec prisma migrate deploy --schema=prisma/schema.prisma && sh ./scripts/prepara-papeis.sh && node dist/main.js"]

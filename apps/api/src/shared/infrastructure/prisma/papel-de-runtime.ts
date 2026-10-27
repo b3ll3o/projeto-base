@@ -9,26 +9,70 @@
 // aparenta proteger. O dono do schema continua conectando para migrar e semear; a
 // aplicação conecta por aqui, e é sobre esta sessão que as policies valem.
 //
-// ⚠️ `SENHA_DE_RUNTIME_DEV` está numa migration e não pode ser lida de env
-// (migration não recebe parâmetro). As duas cópias — esta e o SQL — são
-// guardadas por `papel-de-runtime.spec.ts`, que compara a migration com estas
-// constantes. Se alguém trocar num lado só, o spec fica vermelho.
+// #118: a senha do papel saiu do FONTE.
+//
+// Antes, `SENHA_DE_RUNTIME_DEV` vivia aqui E na migration (`PASSWORD
+// 'app_runtime_dev'`), em texto puro, num repositório público. Uma migration
+// não lê env — e foi por isso que a senha foi parar ali. Agora:
+//
+//   - a migration cria o papel SEM senha (`NOLOGIN`);
+//   - o setup (entrypoint do container, helper de testcontainers) aplica a
+//     senha a partir de `DATABASE_URL` / `SYSTEM_DATABASE_URL`, que são
+//     variáveis de ambiente;
+//   - este arquivo tem uma LISTA DE SENHAS EXPOSTAS (uma denylist), e não um
+//     default: o valor conhecido está aqui porque precisa ser RECUSADO, e
+//     porque ele já é público — tê-lo no repositório não piora o que a
+//     exposição já piorou. O que importa é que ele não seja mais o padrão.
 
 /** Nome do papel de runtime. Tem de bater com o `CREATE ROLE` da migration. */
 export const PAPEL_DE_RUNTIME = 'app_runtime';
 
 /**
- * Senha do papel de runtime. **É DE DESENVOLVIMENTO** — o container de teste e
- * o `docker-compose.dev.yml` nascem do zero, então nenhuma é segredo. Em
- * produção a senha é trocada por fora e esta constante não vale; o que continua
- * valendo é que o papel NÃO pode ser superuser.
+ * Nome do papel de SISTEMA (#118).
+ *
+ * É o papel que concede o bucket de sistema — e o que o concede é a
+ * CREDENCIAL, não um valor de GUC. `current_user = 'app_system'` na policy,
+ * e a sessão `app_runtime` não chega lá: `current_user` vem da credencial.
+ *
+ * `app_runtime` NÃO é membro de `app_system`: se fosse, um `SET ROLE`
+ * bastaria e o furo voltaria pela porta dos fundos.
  */
-export const SENHA_DE_RUNTIME_DEV = 'app_runtime_dev';
+export const PAPEL_DE_SISTEMA = 'app_system';
+
+/**
+ * Senhas que NUNCA podem estar em uso.
+ *
+ * ⚠️ NÃO é um default — é uma denylist. O primeiro valor é a senha que o
+ * repositório publikou (`app_runtime_dev`): ela está no histórico do Git, e
+ * qualquer pessoa que leia o repositório a conhece. O segundo é o prefixo do
+ * placeholder do `.env.production.example`.
+ *
+ * A segunda linha de defesa é o TAMANHO: `segredoDeServico` recusa segredos
+ * com menos de 32 bytes, e `app_runtime_dev` tem 16. A denylist existe para
+ * o caso em que alguém aumente o tamanho do placeholder e a recusa por
+ * tamanho deixe de pegar.
+ */
+export const SENHAS_EXPOSTAS: readonly string[] = ['app_runtime_dev'];
+
+/**
+ * Prefixos de senha que denunciam um valor de EXEMPLO.
+ *
+ * O placeholder do `.env.production.example` é
+ * `CHANGE_ME_gerar_com_openssl_rand_base64_48` — e o prefixo `CHANGE_ME` é o
+ * que denuncia, não o valor inteiro (o sufixo muda com o tamanho pedido).
+ *
+ * Comparados em minúsculas, no início do valor.
+ */
+export const PREFIXOS_DE_SENHAS_EXPOSTAS: readonly string[] = ['change_me'];
 
 /**
  * Escopo que significa "bucket de sistema": o admin global, que enxerga todas
  * as empresas. É o valor com que o bucket `tenantId === null` da aplicação
- * entra no banco, e é o que faz o seed alcançar tudo.
+ * entra no banco.
+ *
+ * ⚠️ #118: desde a migration `20261027000001_papel_de_sistema`, este valor
+ * NÃO concede nada sozinho. Ele é o valor que a aplicação ESCREVE; quem
+ * concede o bucket de sistema é a credencial (`current_user = 'app_system'`).
  */
 export const ESCOPO_DE_SISTEMA = '*';
 
@@ -38,10 +82,27 @@ export const ESCOPO_DE_SISTEMA = '*';
  */
 export const PARAMETRO_DE_ESCOPO = 'app.tenant_id';
 
-/** Troca o usuário da URI pelo papel de runtime, preservando host/porta/banco. */
-export function uriComoPapelDeRuntime(uriDoDono: string): string {
+/** Troca o usuário e a senha da URI pelo papel de runtime, preservando o resto. */
+export function uriComoPapelDeRuntime(uriDoDono: string, senha: string): string {
+  return uriComPapel(uriDoDono, PAPEL_DE_RUNTIME, senha);
+}
+
+/**
+ * Troca o usuário e a senha da URI pelo papel de SISTEMA (#118).
+ *
+ * É a credencial que o bucket de sistema exige — e ela é SEPARADA da de
+ * runtime, que é o ponto: a credencial que vive no container da API (a que
+ * mais vaza — está no env, em log, em mensagem de erro) deixa de dar acesso
+ * ao bucket de sistema.
+ */
+export function uriComoPapelDeSistema(uriDoDono: string, senha: string): string {
+  return uriComPapel(uriDoDono, PAPEL_DE_SISTEMA, senha);
+}
+
+/** O núcleo comum dos dois: troca usuário e senha, preservando host/porta/banco. */
+function uriComPapel(uriDoDono: string, papel: string, senha: string): string {
   const url = new URL(uriDoDono);
-  url.username = PAPEL_DE_RUNTIME;
-  url.password = SENHA_DE_RUNTIME_DEV;
+  url.username = papel;
+  url.password = senha;
   return url.toString();
 }

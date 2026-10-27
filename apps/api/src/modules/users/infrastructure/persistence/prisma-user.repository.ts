@@ -22,14 +22,16 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service.js';
 import {
   comEscopo,
+  comEscopoDeSistema,
   escopoDoTenant,
   type ClienteTransacional,
 } from '../../../../shared/infrastructure/prisma/escopo.js';
-import type {
-  UserRepositoryPort,
-  UserListInput,
-  UserListResult,
-  FindByIdOptions,
+import {
+  limitarPage,
+  type UserRepositoryPort,
+  type UserListInput,
+  type UserListResult,
+  type FindByIdOptions,
 } from '../../domain/ports/user-repository.port.js';
 import type { User } from '../../domain/user.aggregate.js';
 import type { UserId } from '../../domain/value-objects/user-id.vo.js';
@@ -280,18 +282,24 @@ export class PrismaUserRepository implements UserRepositoryPort {
 
     // Cursor opaco = id da última row da página anterior; pegamos `take=limit+1`
     // para detectar se há próxima página sem count(*) custoso.
+    //
+    // #124: o clamp mora no PORT (`limitarPage`), e não aqui — o
+    // repositório em memória clamps e este NÃO clamps, e as duas
+    // implementações do MESMO port discordavam sobre o MESMO input. Um
+    // `limit=0` chegava ao `take:` cru.
+    const limit = limitarPage(input.limit);
     const cursor = input.cursor ? { id: input.cursor } : undefined;
     const rows = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
       tx.user.findMany({
         where,
         ...(cursor ? { cursor, skip: 1 } : {}),
-        take: input.limit + 1,
+        take: limit + 1,
         orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
       }),
     );
 
-    const hasMore = rows.length > input.limit;
-    const page = hasMore ? rows.slice(0, input.limit) : rows;
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
     const last = page[page.length - 1];
 
     // pt-BR (#106, 2026-10-18): o perfil EFETIVO no escopo pedido.
@@ -392,7 +400,7 @@ export class PrismaUserRepository implements UserRepositoryPort {
       // O filtro `tenantId: null` do perfil é o que faz o `null` significar
       // "sem perfil EFETIVO" em vez de "tem um perfil que a tela não deveria
       // mostrar" — e é o mesmo filtro do `findProfileId`.
-      const rows = await comEscopo(this.prisma, escopoDoTenant(null), (tx) =>
+      const rows = await comEscopoDeSistema((tx) =>
         tx.user.findMany({
           where: {
             id: { in: [...userIds] },

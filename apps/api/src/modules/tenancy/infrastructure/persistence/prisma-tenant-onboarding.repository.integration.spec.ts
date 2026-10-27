@@ -76,7 +76,9 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
     repo = new PrismaTenantOnboardingRepository(ctx.prisma, assinatura);
     memberships = new PrismaTenantMembershipRepository(ctx.prisma);
     const { PrismaClient } = await import('@prisma/client');
-    runtime = new PrismaClient({ datasourceUrl: uriComoPapelDeRuntime(ctx.uriDoBanco) });
+    runtime = new PrismaClient({
+      datasourceUrl: uriComoPapelDeRuntime(ctx.uriDoBanco, ctx.senhaDoPapel),
+    });
   });
 
   afterAll(async () => {

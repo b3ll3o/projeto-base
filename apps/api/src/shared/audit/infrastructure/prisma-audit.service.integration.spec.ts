@@ -298,7 +298,9 @@ describe('PrismaAuditService (Testcontainers)', () => {
 
     beforeAll(async () => {
       const { PrismaClient } = await import('@prisma/client');
-      runtime = new PrismaClient({ datasourceUrl: uriComoPapelDeRuntime(ctx.uriDoBanco) });
+      runtime = new PrismaClient({
+        datasourceUrl: uriComoPapelDeRuntime(ctx.uriDoBanco, ctx.senhaDoPapel),
+      });
     });
 
     afterAll(async () => {

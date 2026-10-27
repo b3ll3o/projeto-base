@@ -22,7 +22,7 @@
 // e mudaria a semantica de transacao de todo o repositorio. O escopo e aberto
 // pelo repositorio, que e quem sabe de que tabela esta falando.
 
-import type { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { ESCOPO_DE_SISTEMA, PARAMETRO_DE_ESCOPO } from './papel-de-runtime.js';
 
 export type ClienteTransacional = Parameters<Parameters<PrismaClient['$transaction']>[0]>[0];
@@ -55,9 +55,67 @@ export async function abrirEscopo(tx: ClienteTransacional, escopo: string): Prom
 }
 
 /**
+ * O cliente do bucket de SISTEMA (#118).
+ *
+ * O bucket de sistema deixou de ser concedido por um valor de GUC e passou a
+ * ser concedido pela CREDENCIAL: a policy compara `current_user` com
+ * `app_system`. Uma sessao `app_runtime` que escreva `'*'` no GUC nao abre
+ * mais nada — e quem abre e o cliente de sistema, que conecta com a
+ * `SYSTEM_DATABASE_URL`.
+ *
+ * ⚠️ O cliente e um singleton preguiçoso, e ele CONECTA com a credencial do
+ * ambiente — nunca com a do dono. A `DIRECT_DATABASE_URL` e superuser: dar
+ * ao runtime o poder do dono trocaria um furo de ESCOPO por um furo de
+ * PRIVILEGIO.
+ */
+let clienteDeSistemaCache: PrismaClient | null = null;
+
+/** O cliente que abre o bucket de sistema, criado a partir da `SYSTEM_DATABASE_URL`. */
+export function clienteDeSistema(): PrismaClient {
+  if (clienteDeSistemaCache !== null) return clienteDeSistemaCache;
+
+  const url = process.env['SYSTEM_DATABASE_URL'];
+  if (url === undefined || url.trim() === '') {
+    throw new Error(
+      'SYSTEM_DATABASE_URL é obrigatório: é a credencial que abre o bucket de SISTEMA (#118). ' +
+        'Sem ela, o bucket de sistema não abre — e a API não sobe.',
+    );
+  }
+
+  clienteDeSistemaCache = new PrismaClient({ datasourceUrl: url });
+  return clienteDeSistemaCache;
+}
+
+/**
+ * Roda `fn` numa transacao com o escopo de SISTEMA, na CREDENCIAL de sistema.
+ *
+ * #118: e o equivalente de `comEscopo(prisma, ESCOPO_DE_SISTEMA, fn)` — mas na
+ * sessao certa. O GUC continua sendo `'*'` (a aplicacao nao muda de forma);
+ * o que muda e QUEM abre a transacao, e por isso o que a policy ve.
+ *
+ * A funcao nao recebe o client: ele vem do ambiente, e o ponto do desenho e
+ * que o codigo de aplicacao NAO possa escolher com que credencial abre o
+ * bucket de sistema. Um `comEscopo(prisma, ESCOPO_DE_SISTEMA, …)` deixaria
+ * essa escolha no call site — e o call site e o que o furo explorava.
+ */
+export async function comEscopoDeSistema<T>(
+  fn: (tx: ClienteTransacional) => Promise<T>,
+): Promise<T> {
+  const prisma = clienteDeSistema();
+  return prisma.$transaction(async (tx) => {
+    await abrirEscopo(tx, ESCOPO_DE_SISTEMA);
+    return fn(tx);
+  });
+}
+
+/**
  * Roda `fn` numa transacao com o escopo definido.
  *
  * `escopo` e o id da empresa, ou `ESCOPO_DE_SISTEMA` para o bucket global.
+ *
+ * ⚠️ #118: `ESCOPO_DE_SISTEMA` aqui NAO abre o bucket de sistema — a policy
+ * exige a credencial. Use `comEscopoDeSistema` para esse caso. O escopo de
+ * empresa (um uuid) continua funcionando igual, e é o caminho normal.
  */
 export async function comEscopo<T>(
   prisma: PrismaClient,
