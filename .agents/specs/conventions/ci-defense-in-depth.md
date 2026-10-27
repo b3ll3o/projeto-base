@@ -95,6 +95,9 @@ Escopo de todos: **todo `.md` versionado** sob a raiz que o preflight passa
 | `check-harness-location` | dentes | todo `check-*.ts` vive em `.tooling/scripts/ci/` (raiz do harness); subdir cria harness órfão e quebra a URL do painel |
 | `check-self-firing-guard` | dentes | classe 3 do `guard-classes.md`: o guard cujo único hit é o comentário que o documenta. Para cada guard declarado, o diferencial compara o corpus **com** e **sem** o comentário que o isenta e exige que o `stillFires` caia a zero. Meça com `npx tsx .tooling/scripts/ci/check-self-firing-guard.ts` (saída silenciosa + exit code) — **sem número de achados aqui**: ele envelhece a cada linha nova que cita o termo, e classe 7 é exatamente o claim numérico que ninguém re-mediu |
 | `check-harness-owner` | dentes | controle **desligado**: harness sob `.tooling/scripts/ci/` que nenhum runner invoca, e destino declarado sem guard ligado. A lista de destinos é a **união** do que cada guard exporta — não há lista para lembrar de atualizar |
+| `check-shell-injection` | shell (#117) | `execSync`/`exec`/`spawnSync` com o comando montado por **concatenação** (template literal com interpolação) — o valor interpolado vai cru para o shell. A implementação usa a **AST** do TypeScript, e não `grep`: um `grep` casaria os comentários que citam o defeito, e um gate que acusa o próprio comentário do conserto é um gate que alguém desliga. `execFileSync` com argv em array, e string/template SEM interpolação, passam |
+| `check-version-footers` | versionamento (#126) | os **quatro** footers de versão dos docs canônicos divergirem, ou a versão deles ficar **atrás** da última tag. A raiz do #126 era a PROCEDÊNCIA (o handoff do `release-mode.md` nomeava 3 dos 4 arquivos), então a lista dos quatro é exportada e presa na spec — uma lista de segurança que ninguém prende é uma lista que alguém encolhe sem querer |
+| `check-openapi-contract` | OpenAPI (#125) | o documento OpenAPI **versionado** divergir do que o código gera, ou não existir. O export escreve num **temporário** (`OPENAPI_OUTPUT_PATH`): um gate que reescreve a spec versionada antes de compará-la compara o arquivo com ele mesmo, e é "verde" sem medir nada |
 | `check-teeth-registry` | dentes | as reconciliações que impedem o registro de envelhecer em silêncio: registro de dentes ⇄ preflight, registro → artefato existente, registro ⇄ roteamento (gate sem rota = revisão nunca despachada), e preflight ⇄ **esta tabela** |
 | `check-flow-mermaid-sync` | docs/flows | diagramas Mermaid ⇄ a IR que documentam: IR mudou e o `flow.md` ficou velho, `flow.md` editado à mão, IR sem `flow.md`, `flow.md` sem IR (órfão), IR fora do layout `dominio/flow/nome.sequence.json`, e zero IR. **Não** detecta "duas IRs no mesmo diretório" como condição própria: `listSequenceIrs` devolve o ARQUIVO, não o diretório, justamente para matar a dupla contagem. MEDIDO 2026-10-20 |
 | `check-agent-routing-coverage` | agents | todo `*.md` em `.agents/agents/` precisa ser referenciado pela matriz `specialist-routing.md` em algum `specialists: [X]` (par: órfão = real sem rota, fantasma = citado sem real) |
@@ -126,7 +129,7 @@ extraído em commit `59eb083` (refactor que consolidou fixtures herméticas).
 
 ## Registro de dentes
 
-> A tabela de dentes (23 linhas: `mutação` / `diferencial` / `controle
+> A tabela de dentes (26 linhas: `mutação` / `diferencial` / `controle
 > positivo` por gate), a taxonomia dos níveis de prova e os **nove comandos
 > de mutação** vivem em
 > [`ci-defense-in-depth-dentes.md`](./ci-defense-in-depth-dentes.md) —

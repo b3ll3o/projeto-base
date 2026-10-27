@@ -112,7 +112,14 @@ describe('checkTenantScopeSource', () => {
     // nenhum gate compara com o run anterior — e esta linha é o exemplo do
     // que acontece quando alguém esquece de atualizar o número: o CI reprova
     // por um conserto de tela que não tem nada a ver com escopo.
-    expect(r.advisories?.[0]).toContain('77 call site(s)');
+    // MEDIDO 2026-10-27 (#118): **62**. Eram 77, e a queda é do conserto do
+    // #118: os 8 call sites de escopo de SISTEMA passaram a usar
+    // `comEscopoDeSistema` (que abre a transação na CREDENCIAL de sistema) e
+    // os 3 `abrirEscopo(tx, escopoDoTenant(null))` do onboarding saíram
+    // (o escopo é aberto dentro de `comEscopoDeSistema`). O gate conta os
+    // call sites de ESCOPO — e `comEscopoDeSistema` não é um deles: ele não
+    // recebe o escopo como argumento, ele ABRE o escopo de sistema.
+    expect(r.advisories?.[0]).toContain('62 call site(s)');
   });
 
   it('🔴 corpus VAZIO é vermelho — o gate não pode reportar verde sem medir', () => {

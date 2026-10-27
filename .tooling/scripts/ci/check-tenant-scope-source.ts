@@ -17,9 +17,12 @@
  * então qualquer repositório que receba um `tenantId` e abra o escopo aceita
  * abrir o escopo de qualquer empresa, desde que alguém lhe passe a string.
  *
- * MEDIDO hoje: **70 chamadas** em `apps/api/src` — 36 `escopoDoTenant`, 28
- * `comEscopo`, 6 `abrirEscopo` — distribuídas em **41 LINHAS**, porque 25 delas
- * são `comEscopo(prisma, escopoDoTenant(x), …)` e contam duas. Recebem `null`,
+ * MEDIDO 2026-10-27: **62 call sites** de escopo em `apps/api/src` (a queda
+ * de 77 é do #118: os 8 call sites de escopo de SISTEMA viraram
+ * `comEscopoDeSistema`, que abre a transação na CREDENCIAL de sistema e não
+ * recebe o escopo como argumento; e os 3 `abrirEscopo(tx, escopoDoTenant(null))`
+ * do onboarding saíram, porque o escopo é aberto dentro de
+ * `comEscopoDeSistema`). Recebem `null`,
  * um identificador local, ou um acessor de domínio (`ctx.tenantId`,
  * `profile.tenantId()`, `convite.tenantId`). Nenhuma recebe valor derivado da
  * rota. O gate existe para o **próximo**.
