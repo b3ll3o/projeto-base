@@ -118,8 +118,17 @@ class InMemoryUserRepo implements UserRepositoryPort {
   async list(_input?: any): Promise<any> {
     return { items: [], nextCursor: null };
   }
+  /**
+   * O `expectedVersion` do ÚLTIMO save (#123).
+   *
+   * O fake não valida o lock (o `InMemoryUserRepo` do módulo `users` valida) —
+   * mas REGISTRAR o valor é o que permite a spec afirmar que a âncora
+   * enviada é a versão LIDA do banco, e não a suposição `version() - 1`.
+   */
+  ultimoExpectedVersion: number | null = null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async save(user: User, _expectedVersion: number): Promise<any> {
+  async save(user: User, expectedVersion: number): Promise<any> {
+    this.ultimoExpectedVersion = expectedVersion;
     this.#store.set(user.id().value, user);
     return user;
   }
@@ -685,6 +694,50 @@ describe('UserProfileUseCases — atribuir profile admin (#97)', () => {
     await expect(
       uc.atribuirProfileAoUser(ALVO_ID, comum.id().value, ATOR),
     ).resolves.toBeUndefined();
+  });
+
+  // ── #123: a âncora do optimistic lock ───────────────────────────────────
+  //
+  // O save recebia `user.version() - 1` — a SUPOSTA de que a versão atual é
+  // sempre a pré-mutação mais 1. A suposição quebra no caso idempotente:
+  // `atribuirPerfil()` com o MESMO profileId retorna SEM bumpar a versão, e
+  // `version() - 1` ficava UM ABAIXO da versão persistida — o
+  // `where: { version }` não casava nenhuma linha e a reatribuição
+  // idempotente respondia 412.
+  //
+  // A âncora correta é `loadedVersion()` — a versão LIDA do banco, que é o
+  // que o lock compara. O `Profile` já fazia assim.
+  it('envia ao save a versão LIDA do banco, não `version() - 1` (#123)', async () => {
+    const comum = Profile.criar({ slug: 'viewer', name: 'Visualizador', agora: new Date() });
+    repo.prime(comum);
+
+    // Um usuário PERSISTIDO, na versão 5, que JÁ veste o profile — a
+    // reatribuição é idempotente e a versão NÃO muda.
+    const persistido = User.restaurarDePersistencia({
+      id: ALVO_ID,
+      nome: 'Ator Ativo',
+      email: `ator-${ALVO_ID}@exemplo.com`,
+      senhaHash: PasswordHash.create(
+        '$argon2id$v=19$m=65536,p=4,t=3$c2FsdGZhdG8xMjM0NTY$ZGlnZXN0ZmFkc2g',
+      ),
+      profileId: comum.id().value,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+      version: 5,
+      deletedAt: null,
+    });
+    users.prime(persistido);
+
+    await expect(
+      uc.atribuirProfileAoUser(ALVO_ID, comum.id().value, ATOR),
+    ).resolves.toBeUndefined();
+
+    // A versão NÃO mudou (idempotente) — então a âncora é 5. A âncora antiga
+    // (`version() - 1`) seria 4, e o `where: { version: 4 }` não casaria a
+    // linha, que está em 5.
+    expect(persistido.version()).toBe(5);
+    expect(users.ultimoExpectedVersion).toBe(5);
+    expect(users.ultimoExpectedVersion).not.toBe(persistido.version() - 1);
   });
 
   // ─── A1.2: auto-atribuição só de subconjunto ─────────────────────────────

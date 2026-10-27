@@ -57,3 +57,36 @@ export function decisaoDoAdminLocal(nodeEnv: string | undefined, url: string): D
 
   return HOSTS_DESTINO_LOCAL.includes(host) ? 'criar' : 'recusar';
 }
+
+/**
+ * O que o seed faz com o PRIMEIRO usuário cadastrado (o passo 5).
+ *
+ * #121: este passo promove o primeiro user a admin GLOBAL, e ele não tinha
+ * guard nenhum. `POST /users` é `@Public()` — ou seja, a primeira conta da
+ * fila pode ser de qualquer pessoa que se cadastrou, e o seed a promovia a
+ * administradora global do sistema.
+ *
+ * A decisão é a DO PASSO 4, e pela mesma razão: o admin local e a promoção do
+ * primeiro usuário são o mesmo risco (uma conta sem dono, com poder total),
+ * e as duas respostas são as mesmas — em dev local, promotes; fora de dev,
+ * não promove e aponta o caminho auditado.
+ *
+ * ⚠️ `recusar` (dev apontando para um banco que não é local) NÃO aparece
+ * aqui: o passo 4 já aborta o processo nesse caso, e o passo 5 nunca é
+ * alcançado. A função é escrita sobre a decisão de TRÊS estados para não
+ * ter um segundo vocabulário — mas o `throw` do passo 4 é a garantia.
+ */
+export type DecisaoPrimeiroUser = 'promover' | 'nao-promover';
+
+/**
+ * Decide se o passo 5 do seed promove o primeiro usuário a admin global.
+ *
+ * O `promover` só acontece em `development` apontando para um destino local
+ * — a MESMA condição do admin local, e pela MESMA razão.
+ */
+export function decisaoDoPrimeiroUser(
+  nodeEnv: string | undefined,
+  url: string,
+): DecisaoPrimeiroUser {
+  return decisaoDoAdminLocal(nodeEnv, url) === 'criar' ? 'promover' : 'nao-promover';
+}

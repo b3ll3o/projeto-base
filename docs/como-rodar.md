@@ -107,6 +107,11 @@ curl -s http://localhost:3001/api/health
 curl -o /dev/null -w '%{http_code}\n' http://localhost:3000/api/docs   # 200 (Swagger UI)
 ```
 
+⚠️ O `/api/docs` só existe em `development` (#122). Fora dele o Swagger é
+**desabilitado** — é o default-deny do `JWT_SECRET`: um documento OpenAPI
+publica a superfície completa da API (rotas, schemas, requisitos de auth) a
+quem descobrir a URL. Para ligar de propósito: `SWAGGER_ENABLED=true`.
+
 ⚠️ No boot do web saem uns `Module not found` de `@opentelemetry/winston-transport` e
 `@opentelemetry/exporter-jaeger`, peers opcionais do `auto-instrumentations-node`: ✅ medido —
 **não impedem o boot**, o Next segue e fica `✓ Ready in 5.9s`.

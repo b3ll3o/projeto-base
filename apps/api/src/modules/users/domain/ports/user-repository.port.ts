@@ -9,6 +9,36 @@ import type { Email } from '../value-objects/email.vo.js';
  */
 export const USER_REPOSITORY_PORT = Symbol('UserRepositoryPort');
 
+/**
+ * #124: o `limit` era clampado SÓ no repositório em memória
+ * (`Math.max(1, Math.min(100, …))`) e não no de Prisma — as DUAS
+ * implementações deste port discordavam sobre o MESMO input, e o `limit=0`
+ * ou `limit=-5` chegava ao `take:` cru.
+ *
+ * O clamp mora no PORT, para que as duas implementações concordem por
+ * construção. Os números são os mesmos que a borda HTTP valida (o schema
+ * Zod da query) — um número transcrito em dois lugares é um número que
+ * diverge.
+ */
+export const LIMITE_PADRAO = 20;
+export const LIMITE_MINIMO = 1;
+export const LIMITE_MAXIMO = 100;
+
+/**
+ * Normaliza o `limit` para a faixa válida.
+ *
+ * Um valor não-número (`NaN` de `Number('abc')`) cai no default — e não em
+ * `NaN`, que no `take:` do Prisma é um erro de banco, e no slice do
+ * repositório em memória é "lista vazia" (uma falha silenciosa).
+ *
+ * A MESMA regra vale para `Infinity` e `-Infinity`: nenhum dos dois é um
+ * page size, e um `Infinity` no `take:` é um pedido de "toda a tabela".
+ */
+export function limitarPage(limit: number): number {
+  if (!Number.isFinite(limit)) return LIMITE_PADRAO;
+  return Math.max(LIMITE_MINIMO, Math.min(LIMITE_MAXIMO, Math.trunc(limit)));
+}
+
 export interface UserListInput {
   cursor?: string | null;
   limit: number;

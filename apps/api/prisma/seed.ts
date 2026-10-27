@@ -17,7 +17,10 @@
 // `env_file: .env.production` e o NODE_ENV pelo overlay dev. Ver `docs/como-rodar.md` §1.7.
 
 import { PrismaClient } from '@prisma/client';
-import { decisaoDoAdminLocal } from '../src/shared/auth/decisao-do-admin-local.js';
+import {
+  decisaoDoAdminLocal,
+  decisaoDoPrimeiroUser,
+} from '../src/shared/auth/decisao-do-admin-local.js';
 import { listAllPermissions } from '../src/shared/auth/permissions-catalog.js';
 import { Argon2PasswordHasher } from '../src/modules/auth/infrastructure/security/argon2-password-hasher.js';
 import { UserId } from '../src/modules/users/domain/value-objects/user-id.vo.js';
@@ -176,25 +179,50 @@ async function main(): Promise<void> {
   }
 
   // 5) Atribui 'admin' ao primeiro user (idempotente)
+  //
+  //    #121: este passo não tinha GUARD NENHUM. `POST /users` é `@Public()`,
+  //    então a primeira conta da fila pode ser de qualquer pessoa que se
+  //    cadastrou — e o passo a promovia a ADMIN GLOBAL. O seed de produção
+  //    (que roda para criar o profile `admin`) promovia junto.
+  //
+  //    A decisão é a do passo 4 (`decisaoDoPrimeiroUser`): em dev local
+  //    promove; fora de dev NÃO promove, e diz o caminho auditado
+  //    (`POST /api/v1/admin/users/:id/profile`) em vez de fechar "OK" em
+  //    silêncio.
+  //
+  //    A decisão mora em `src/shared/auth/decisao-do-admin-local.ts` porque
+  //    `prisma/` não tem um único `*.spec.ts` e o projeto `unit` do Vitest
+  //    só enxerga `src/` — um spec ao lado do seed seria verde por nunca
+  //    rodar.
   //    `deletedAt: null` é obrigatório: sem ele o `findFirst` pode escolher uma
   //    linha APAGADA (o passo 4 acima avisa que `admin@admin.com` pode estar
   //    soft-deleted), escrever `profileId` nela e logar "virou admin" — conta que
   //    não autentica (`auth.use-cases` recusa `isDeleted()`), num seed que
   //    fecha "OK". Mesmo bug do passo 4, uma linha abaixo.
-  const firstUser = await prisma.user.findFirst({
-    where: { deletedAt: null },
-    orderBy: { createdAt: 'asc' },
-  });
-  if (firstUser !== null) {
-    await prisma.user.update({
-      where: { id: firstUser.id },
-      data: { profileId: adminProfile.id },
-    });
-    console.log(`Seed: primeiro user (${firstUser.email}) virou admin.`);
-  } else {
+  const decisaoPrimeiroUser = decisaoDoPrimeiroUser(process.env['NODE_ENV'], urlDoDono);
+  if (decisaoPrimeiroUser === 'nao-promover') {
+    // A mensagem nomeia o MOTIVO e o CAMINHO. Um seed que fecha "OK" sem
+    // admin nenhum é o pior dos dois mundos: o operador acredita que há
+    // admin para logar, e não há.
     console.log(
-      'Seed: nenhum user no DB ainda — vincule ao profile via POST /api/v1/admin/users/:id/profile depois do primeiro signup.',
+      'Seed: o primeiro user NÃO foi promovido a admin (#121) — a promoção só acontece em dev local, e `POST /users` é público, então a primeira conta cadastrada viraria admin global. Vincule pelo caminho auditado: POST /api/v1/admin/users/:id/profile.',
     );
+  } else {
+    const firstUser = await prisma.user.findFirst({
+      where: { deletedAt: null },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (firstUser !== null) {
+      await prisma.user.update({
+        where: { id: firstUser.id },
+        data: { profileId: adminProfile.id },
+      });
+      console.log(`Seed: primeiro user (${firstUser.email}) virou admin.`);
+    } else {
+      console.log(
+        'Seed: nenhum user no DB ainda — vincule ao profile via POST /api/v1/admin/users/:id/profile depois do primeiro signup.',
+      );
+    }
   }
 
   console.log('Seed: OK.');

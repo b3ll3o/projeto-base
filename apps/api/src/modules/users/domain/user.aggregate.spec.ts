@@ -256,6 +256,79 @@ describe('User aggregate', () => {
     });
   });
 
+  // ── #123: `loadedVersion()` — a âncora do optimistic lock ───────────────
+  //
+  // O `Profile` já tinha este campo pelo mesmo motivo. Sem ele, o caller
+  // tinha de SUPOR a versão pré-mutação (`version() - 1`), e a suposição
+  // quebrava no caso idempotente: `atribuirPerfil()` com o MESMO profileId
+  // retorna SEM bumpar a versão, e `version() - 1` ficava um abaixo da
+  // versão persistida — o `where: { version }` não casava e a operação
+  // respondia 412.
+  describe('loadedVersion() (#123)', () => {
+    it('um User NOVO tem loadedVersion 0 (a linha ainda não existe)', () => {
+      const u = criar({ nome: 'João', email: 'joao@example.com', agora: T0 });
+      expect(u.loadedVersion()).toBe(0);
+    });
+
+    it('um User HIDRATADO tem loadedVersion igual à versão persistida', () => {
+      const u = User.restaurarDePersistencia({
+        id: '0190a8b6-1234-7abc-9def-000000000001',
+        nome: 'João',
+        email: 'joao@example.com',
+        senhaHash: SENHA_HASH,
+        profileId: null,
+        createdAt: T0,
+        updatedAt: T1,
+        version: 5,
+        deletedAt: null,
+      });
+      expect(u.loadedVersion()).toBe(5);
+    });
+
+    it('loadedVersion NÃO muda quando um mutador bumpara a versão', () => {
+      // É a propriedade que faz a âncora valer: `loadedVersion` é o que foi
+      // LIDO, `version()` é o que SERÁ gravado.
+      const u = User.restaurarDePersistencia({
+        id: '0190a8b6-1234-7abc-9def-000000000001',
+        nome: 'João',
+        email: 'joao@example.com',
+        senhaHash: SENHA_HASH,
+        profileId: null,
+        createdAt: T0,
+        updatedAt: T1,
+        version: 5,
+        deletedAt: null,
+      });
+      u.atribuirPerfil('0190a8b6-1234-7abc-9def-0000000000ff', T1);
+      expect(u.version()).toBe(6);
+      expect(u.loadedVersion()).toBe(5);
+    });
+
+    it('loadedVersion NÃO muda quando o mutador é IDEMPOTENTE (o caso do bug)', () => {
+      // `atribuirPerfil` com o MESMO profileId retorna sem bumpar nada.
+      // Aqui `version()` continua 5 e `loadedVersion()` continua 5 — e é
+      // por isso que `version() - 1` (4) seria a âncora ERRADA.
+      const alvo = '0190a8b6-1234-7abc-9def-0000000000ff';
+      const u = User.restaurarDePersistencia({
+        id: '0190a8b6-1234-7abc-9def-000000000001',
+        nome: 'João',
+        email: 'joao@example.com',
+        senhaHash: SENHA_HASH,
+        profileId: alvo,
+        createdAt: T0,
+        updatedAt: T1,
+        version: 5,
+        deletedAt: null,
+      });
+      u.atribuirPerfil(alvo, T1);
+      expect(u.version()).toBe(5);
+      expect(u.loadedVersion()).toBe(5);
+      // A âncora errada seria 4 — e o `where: { version: 4 }` não casaria
+      // a linha, que está em 5.
+      expect(u.loadedVersion()).not.toBe(u.version() - 1);
+    });
+  });
+
   // ── senhaHash ─────────────────────────────────────────────────────────
   //
   // Regras que o agregado impõe sobre a senha:

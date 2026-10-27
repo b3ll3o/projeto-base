@@ -65,6 +65,21 @@ export class User {
   readonly #createdAt: Date;
   #updatedAt: Date;
   #version: number;
+  /**
+   * Versão do banco no momento do LOAD — a âncora do optimistic lock.
+   *
+   * #123: sem isto, o caller tinha de SUPOR a versão pré-mutação
+   * (`version() - 1`), e a suposição quebrava justamente no caso
+   * idempotente: `atribuirPerfil()` com o MESMO profileId retorna sem
+   * bumpar a versão, e `version() - 1` ficava UM ABAIXO da versão
+   * persistida — o `where: { version }` não casava nenhuma linha e a
+   * reatribuição idempotente respondia 412.
+   *
+   * Não dá para derivar de `#version`: cada mutador bumpa uma vez, e um
+   * save pode ter vários. O `Profile` já tinha este campo pelo mesmo
+   * motivo (`profile.aggregate.ts`).
+   */
+  readonly #loadedVersion: number;
   #deletedAt: Date | null;
   readonly #events: DomainEvent[] = [];
 
@@ -77,6 +92,7 @@ export class User {
     createdAt: Date;
     updatedAt: Date;
     version: number;
+    loadedVersion: number;
     deletedAt: Date | null;
   }) {
     this.#id = props.id;
@@ -87,6 +103,7 @@ export class User {
     this.#createdAt = props.createdAt;
     this.#updatedAt = props.updatedAt;
     this.#version = props.version;
+    this.#loadedVersion = props.loadedVersion;
     this.#deletedAt = props.deletedAt;
     Object.freeze(this);
   }
@@ -119,6 +136,8 @@ export class User {
       createdAt: props.agora,
       updatedAt: props.agora,
       version: 1,
+      // Não-persistido: a âncora do lock é 0 (a linha ainda não existe).
+      loadedVersion: 0,
       deletedAt: null,
     });
     u.#events.push(new UserCreatedEvent(id.value, 1, props.agora));
@@ -149,6 +168,7 @@ export class User {
       createdAt: props.createdAt,
       updatedAt: props.updatedAt,
       version: props.version,
+      loadedVersion: props.version,
       deletedAt: props.deletedAt,
     });
   }
@@ -190,6 +210,10 @@ export class User {
   }
   version(): number {
     return this.#version;
+  }
+  /** Versão do banco no momento do load — a âncora do optimistic lock (#123). */
+  loadedVersion(): number {
+    return this.#loadedVersion;
   }
   deletedAt(): Date | null {
     return this.#deletedAt;

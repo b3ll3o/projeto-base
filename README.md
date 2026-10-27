@@ -137,7 +137,7 @@ todos que instalaram o projeto compartilharem a chave de assinatura.
 Endpoints:
 
 - **API:** <http://localhost:3000>
-- **API Docs (Swagger):** <http://localhost:3000/api/docs>
+- **API Docs (Swagger):** <http://localhost:3000/api/docs> — só em `development` (#122); fora dele é desabilitado (`SWAGGER_ENABLED=true` liga de propósito)
 - **Web:** <http://localhost:3001>
 
 ### Verificação rápida (CI-equivalente local)

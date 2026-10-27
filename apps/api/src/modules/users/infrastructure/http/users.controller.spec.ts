@@ -471,16 +471,82 @@ describe('UsersController — handlers HTTP', () => {
 
   it('list() passa cursor quando fornecido', async () => {
     useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
-    await ctrl.list({}, 'cur-1', '5');
+    // #124: o cursor é validado como id (a `UUID_RE` do VO de id) — e o
+    // cursor que o repositório devolve É um id (`nextCursor: last.id`).
+    // O valor de teste antigo ('cur-1') não é um id, e o schema o recusa.
+    const cursor = '0190a8b6-1234-7abc-9def-000000000001';
+    await ctrl.list({}, cursor, '5');
     expect(useCases.listar).toHaveBeenCalledWith(
       {
-        cursor: 'cur-1',
+        cursor,
         limit: 5,
         includeDeleted: false,
         somenteUsuarioId: null,
       },
       null,
     );
+  });
+
+  // ── #124: a query é validada na borda ───────────────────────────────────
+  //
+  // Antes, `limit=abc` virava `Number('abc')` = `NaN` e chegava ao `take:`
+  // do Prisma — **500**, onde o certo é **400**. E `limit=0`/`limit=-5` davam
+  // 200 com lista vazia: uma falha silenciosa (o repositório em memória
+  // clamps, o de Prisma não — as duas implementações do MESMO port
+  // discordavam).
+  describe('list() — validação da query (#124)', () => {
+    const espera400 = async (cursor?: string, limit?: string): Promise<void> => {
+      await expect(ctrl.list({}, cursor, limit)).rejects.toBeInstanceOf(BadRequestException);
+    };
+
+    it('REJEITA limit não numérico com 400 (antes era 500 no repositório)', async () => {
+      await espera400(undefined, 'abc');
+    });
+
+    it('REJEITA limit=0 com 400 (antes: 200 com lista vazia)', async () => {
+      await espera400(undefined, '0');
+    });
+
+    it('REJEITA limit negativo com 400', async () => {
+      await espera400(undefined, '-5');
+    });
+
+    it('REJEITA limit acima do máximo com 400', async () => {
+      await espera400(undefined, '101');
+    });
+
+    it('REJEITA limit fracionário com 400', async () => {
+      await espera400(undefined, '2.5');
+    });
+
+    it('REJEITA cursor que não é id com 400', async () => {
+      await espera400('cur-1', '5');
+    });
+
+    it('o erro é RFC 7807 com o shape VALIDATION_ERROR', async () => {
+      // O `GlobalExceptionFilter` propaga o payload do BadRequestException —
+      // e o cliente precisa saber QUAL campo falhou, não só que falhou.
+      let capturado: unknown;
+      try {
+        await ctrl.list({}, undefined, 'abc');
+      } catch (e) {
+        capturado = e;
+      }
+      const resposta = (capturado as BadRequestException).getResponse() as {
+        code: string;
+        errors: { field: string }[];
+      };
+      expect(resposta.code).toBe('VALIDATION_ERROR');
+      expect(resposta.errors.some((e) => e.field === 'limit')).toBe(true);
+    });
+
+    it('ACEITA o limite máximo e o mínimo', async () => {
+      useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
+      await ctrl.list({}, undefined, '100');
+      expect(useCases.listar).toHaveBeenCalledWith(expect.objectContaining({ limit: 100 }), null);
+      await ctrl.list({}, undefined, '1');
+      expect(useCases.listar).toHaveBeenCalledWith(expect.objectContaining({ limit: 1 }), null);
+    });
   });
 
   // ── Fase 10: a empresa do token É o escopo ──────────────────────────
@@ -570,6 +636,35 @@ describe('UsersController — handlers HTTP', () => {
 
     // O escopo ainda é o do header — quem decide a empresa é o guard, e mexer
     // nisso aqui seria mudar o contrato da rota, não corrigir o furo.
+    expect(profiles.obterMeuPerfil).toHaveBeenCalledWith('u-1', EMPRESA);
+    expect(useCases.listar).toHaveBeenCalledWith(
+      expect.objectContaining({ somenteUsuarioId: 'u-1' }),
+      EMPRESA,
+    );
+  });
+
+  // ── #119: a permissão `users.read` no escopo de TENANT ──────────────
+  //
+  // O recorte era `(empresa === null || perfilNaoResolveuParaOEscopo) &&
+  // semDireito`. O `semDireito` (a permissão) só tinha efeito quando o
+  // primeiro membro era verdadeiro — e aqui ele é FALSO (o ator tem vínculo,
+  // o perfil resolveu), então o `semDireito` era DESCARTADO: um membro da
+  // empresa sem `users.read` via o diretório INTEIRO.
+  //
+  // Este é o caso que a issue descreve, e é o único que distingue a correção
+  // de uma mudança que derrubasse quem tem o direito.
+  it('list() membro da empresa SEM `users.read` recorta para o próprio ator', async () => {
+    // Vínculo resolvido (`profileId` presente) e SEM a permissão — a
+    // combinação que o `&&` antigo descartava.
+    profiles.obterMeuPerfil.mockResolvedValue({
+      profileId: 'p-1',
+      isAdmin: false,
+      permissions: [],
+    });
+    useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
+
+    await ctrl.list({ user: { sub: 'u-1', tenantId: EMPRESA } } as never);
+
     expect(profiles.obterMeuPerfil).toHaveBeenCalledWith('u-1', EMPRESA);
     expect(useCases.listar).toHaveBeenCalledWith(
       expect.objectContaining({ somenteUsuarioId: 'u-1' }),
@@ -682,14 +777,26 @@ describe('UsersController — handlers HTTP', () => {
   // Sob escopo de empresa a RLS já devolve só os membros. Recortar aqui
   // quebraria o diretório da empresa para quem tem `users.read` — o gate só
   // existe porque o bucket de sistema não tem dono.
-  it('list() COM empresa não recorta, mesmo sem `users.read`', async () => {
+  //
+  // ⚠️ ESTE TESTE MUDOU DE VEREDITO (#119), e a mudança é o ponto.
+  //
+  // Antes ele afirmava: "COM empresa não recorta, mesmo sem `users.read`".
+  // Isso era o VULNERABILIDADE que a #119 reporta — a permissão `users.read`
+  // era ignorada no escopo de tenant, e um membro sem ela via o diretório
+  // inteiro da empresa. O `&&` antigo (`(empresa === null || semVinculo) &&
+  // semDireito`) fazia a permissão só valer quando o VÍNCULO falhava, e num
+  // membro com vínculo resolvido ela era descartada.
+  //
+  // Agora: sem `users.read` e sem perfil global → RECORTA. Quem TEM
+  // `users.read` continua sem recorte (é o caso de baixo, que não mudou).
+  it('list() COM empresa recorta quando falta `users.read` (#119)', async () => {
     profiles.obterMeuPerfil.mockResolvedValue({ isAdmin: false, permissions: [] });
     useCases.listar.mockResolvedValue({ items: [], nextCursor: null });
 
     await ctrl.list({ user: { sub: 'u-1', tenantId: EMPRESA } } as never);
 
     expect(useCases.listar).toHaveBeenCalledWith(
-      expect.objectContaining({ somenteUsuarioId: null }),
+      expect.objectContaining({ somenteUsuarioId: 'u-1' }),
       EMPRESA,
     );
   });

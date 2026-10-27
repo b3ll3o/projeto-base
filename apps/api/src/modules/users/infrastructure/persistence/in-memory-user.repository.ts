@@ -1,8 +1,9 @@
-import type {
-  UserRepositoryPort,
-  UserListInput,
-  UserListResult,
-  FindByIdOptions,
+import {
+  limitarPage,
+  type UserRepositoryPort,
+  type UserListInput,
+  type UserListResult,
+  type FindByIdOptions,
 } from '../../domain/ports/user-repository.port.js';
 import { User } from '../../domain/user.aggregate.js';
 import type { UserId } from '../../domain/value-objects/user-id.vo.js';
@@ -144,7 +145,8 @@ export class InMemoryUserRepository implements UserRepositoryPort {
   // e produção.
   async list(input: UserListInput, tenantId: string | null): Promise<UserListResult> {
     const includeDeleted = input.includeDeleted === true;
-    const limit = Math.max(1, Math.min(100, input.limit));
+    // #124: o clamp agora vem do PORT — as duas implementações concordam.
+    const limit = limitarPage(input.limit);
     const all = [...this.byId.values()]
       .filter((u) => includeDeleted || !u.isDeleted())
       // Espelha o `where.id` do repositório Prisma: o recorte vem do
