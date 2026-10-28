@@ -964,16 +964,76 @@ describe('UsersController — handlers HTTP', () => {
 
   it('history() propaga cursor quando fornecido', async () => {
     audit.listHistory.mockResolvedValue({ entries: [], nextCursor: null });
-    await ctrl.history('u-1', 'cur-1', '5');
+    // ⚠️ O cursor é um id — o `nextCursor` que o repositório devolve é o
+    // `last.id` de `users_history`, que é um UUID. A fixture antiga ('cur-1')
+    // era uma string que o banco NUNCA devolveria, e por isso ela não
+    // exercitava a validação: ela só se parecia com um cursor.
+    const cursor = '0190a8b6-1234-7abc-9def-000000000001';
+    await ctrl.history('u-1', cursor, '5');
     expect(audit.listHistory).toHaveBeenCalledWith(
       {
         entityName: 'User',
         entityId: 'u-1',
-        cursor: 'cur-1',
+        cursor,
         limit: 5,
       },
       null,
     );
+  });
+
+  // ⚠️ #124 fechou só UMA das DUAS surfaces de query da API. `GET /users`
+  // validava a query; `GET /users/:id/history` continuava com
+  // `Number(limit)` cru — e `limit=abc` virava `NaN`, que chegava ao `take:`
+  // do Prisma: **500**, onde o certo é **400**.
+  describe('history() — validação da query (#124)', () => {
+    const espera400 = async (cursor?: string, limit?: string): Promise<void> => {
+      await expect(ctrl.history('u-1', cursor, limit)).rejects.toBeInstanceOf(BadRequestException);
+    };
+
+    it('REJEITA limit não numérico com 400 (antes era 500 no repositório)', async () => {
+      await espera400(undefined, 'abc');
+    });
+
+    it('REJEITA limit=0 com 400 (antes: 200 com lista vazia)', async () => {
+      await espera400(undefined, '0');
+    });
+
+    it('REJEITA limit negativo com 400', async () => {
+      await espera400(undefined, '-5');
+    });
+
+    it('REJEITA limit acima do máximo com 400', async () => {
+      await espera400(undefined, '101');
+    });
+
+    it('REJEITA limit fracionário com 400', async () => {
+      await espera400(undefined, '2.5');
+    });
+
+    it('REJEITA cursor que não é id com 400', async () => {
+      await espera400('cur-1', '5');
+    });
+
+    it('o erro é RFC 7807 com o shape VALIDATION_ERROR', async () => {
+      let capturado: unknown;
+      try {
+        await ctrl.history('u-1', undefined, 'abc');
+      } catch (e) {
+        capturado = e;
+      }
+      const resposta = (capturado as BadRequestException).getResponse() as {
+        code: string;
+        errors: { field: string }[];
+      };
+      expect(resposta.code).toBe('VALIDATION_ERROR');
+      expect(resposta.errors.some((e) => e.field === 'limit')).toBe(true);
+    });
+
+    it('ACEITA o limite máximo e o mínimo', async () => {
+      audit.listHistory.mockResolvedValue({ entries: [], nextCursor: null });
+      await ctrl.history('u-1', undefined, '100');
+      await ctrl.history('u-1', undefined, '1');
+    });
   });
 
   // ── Fase 10: a auditoria é escopada pela empresa do token ─────────────

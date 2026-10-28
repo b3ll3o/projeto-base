@@ -55,22 +55,22 @@ import {
 } from '../../domain/ports/user-repository.port.js';
 
 /**
- * Schema da QUERY de `GET /users` (#124).
+ * A PAGINAÇÃO — o contrato das DUAS surfaces de query da API (#124).
  *
- * ⚠️ A query era passada CRUA: `limit=abc` virava `Number('abc')` = `NaN`, e
- * o `NaN` chegava ao `take:` do Prisma — **500**, onde o certo era **400**.
- * E `limit=0`/`limit=-5` davam 200 com lista vazia: uma falha silenciosa.
+ * ⚠️ São DUAS, e a #124 fechou UMA. `GET /users` e `GET /users/:id/history`
+ * recebem `cursor` e `limit`; a primeira foi validada, a segunda continuava
+ * com `Number(limit)` cru — e `limit=abc` virava `NaN`, que chegava ao
+ * `take:` do Prisma: **500**, onde o certo é **400**.
+ *
+ * O schema da paginação é o DONO do contrato, e as duas surfaces o usam: um
+ * `limit` aceito em uma rota e recusado na outra é a mesma regra escrita duas
+ * vezes — e a segunda cópia é a que some.
  *
  * O `cursor` é validado com a `UUID_RE` do VO de id — a MESMA regex que o
  * `UserId` usa (e que a `UserOwnershipGuard` importa). Duas cópias do que é
  * "um id" divergem no primeiro ajuste do formato.
- *
- * ⚠️ `includeDeleted` NÃO é validado estritamente: a normalização
- * ('true'/'1', case-insensitive) é tolerante por contrato, e o que não bate
- * com ela é simply `false`. Validá-lo aqui quebraria clientes que mandam
- * lixo, sem fechar nada.
  */
-export const ListUsersQuerySchema = z.object({
+export const PaginacaoQuerySchema = z.object({
   cursor: z.string().regex(UUID_RE, 'cursor precisa ser um id (uuid v7)').optional(),
   limit: z.coerce
     .number({ invalid_type_error: 'limit precisa ser um número' })
@@ -78,6 +78,21 @@ export const ListUsersQuerySchema = z.object({
     .min(LIMITE_MINIMO, `limit precisa ser no mínimo ${LIMITE_MINIMO}`)
     .max(LIMITE_MAXIMO, `limit precisa ser no máximo ${LIMITE_MAXIMO}`)
     .default(LIMITE_PADRAO),
+});
+
+/**
+ * Schema da QUERY de `GET /users` (#124).
+ *
+ * ⚠️ A query era passada CRUA: `limit=abc` virava `Number('abc')` = `NaN`, e
+ * o `NaN` chegava ao `take:` do Prisma — **500**, onde o certo era **400**.
+ * E `limit=0`/`limit=-5` davam 200 com lista vazia: uma falha silenciosa.
+ *
+ * ⚠️ `includeDeleted` NÃO é validado estritamente: a normalização
+ * ('true'/'1', case-insensitive) é tolerante por contrato, e o que não bate
+ * com ela é simply `false`. Validá-lo aqui quebraria clientes que mandam
+ * lixo, sem fechar nada.
+ */
+export const ListUsersQuerySchema = PaginacaoQuerySchema.extend({
   includeDeleted: z.string().optional(),
 });
 

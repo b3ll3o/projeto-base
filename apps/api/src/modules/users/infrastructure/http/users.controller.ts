@@ -85,6 +85,7 @@ import type { UpdateUserNameInput } from '../../application/dto/update-user-name
 import {
   CreateUserSchema,
   ListUsersQuerySchema,
+  PaginacaoQuerySchema,
   UpdateUserSchema,
   type CreateUserDto,
   type UpdateUserDto,
@@ -534,11 +535,18 @@ export class UsersController {
     @Query('limit') limit = '20',
     @Req() request?: RequestWithUser,
   ): Promise<unknown> {
+    // ⚠️ #124: a SEGUNDA surface de query da API, e a #124 tinha fechado só a
+    // primeira. `limit=abc` virava `NaN` e chegava ao `take:` do Prisma —
+    // 500, onde o certo é 400. O schema é o mesmo da paginação de
+    // `GET /users`: um `limit` aceito numa rota e recusado na outra é a mesma
+    // regra escrita duas vezes.
+    const consulta = validarComZod(PaginacaoQuerySchema, { cursor, limit });
+
     const input: ListHistoryInput = {
       entityName: 'User',
       entityId: id,
-      cursor: cursor ?? null,
-      limit: Number(limit),
+      cursor: consulta.cursor ?? null,
+      limit: consulta.limit,
     };
     // pt-BR (Fase 10+): o escopo vem do MESMO header que escopa as mutações.
     // Sem ele a leitura cai em SISTEMA e devolve o histórico cross-tenant — que
