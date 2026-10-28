@@ -119,7 +119,21 @@ describe('checkTenantScopeSource', () => {
     // (o escopo é aberto dentro de `comEscopoDeSistema`). O gate conta os
     // call sites de ESCOPO — e `comEscopoDeSistema` não é um deles: ele não
     // recebe o escopo como argumento, ele ABRE o escopo de sistema.
-    expect(r.advisories?.[0]).toContain('62 call site(s)');
+    //
+    // MEDIDO 2026-10-27 (a auditoria, ainda no #118): **56**. A queda de 6 é
+    // do serviço de auditoria: os 4 métodos que abriam o escopo
+    // (`comEscopo(this.prisma, escopoDoTenant(x), …)`) passaram a chamar UM
+    // método privado, `comEscopoDeAuditoria(x, …)`, que decide entre a
+    // credencial de runtime e a de SISTEMA. Cada call site antigo casava
+    // DUAS vezes no gate (`comEscopo(` e `escopoDoTenant(`) — 4 × 2 = 8
+    // — e o helper casa 2 (o `comEscopo(` e o `escopoDoTenant(` dele).
+    // 8 − 2 = 6.
+    //
+    // ⚠️ A queda NÃO é cobertura perdida: o escopo continua sendo aberto nas
+    // 4 operações — em UM lugar, em vez de quatro. E o gate conta, não julga:
+    // subir o número junto com o PR que o mediu é o comportamento certo (ver o
+    // comentário acima desta linha).
+    expect(r.advisories?.[0]).toContain('56 call site(s)');
   });
 
   it('🔴 corpus VAZIO é vermelho — o gate não pode reportar verde sem medir', () => {
