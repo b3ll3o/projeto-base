@@ -29,7 +29,7 @@
 | 4 | `PATCH`| `/api/v1/users/:id`               | ✅   | `200`, `400`, `404`, `412`                  |
 | 5 | `DELETE`| `/api/v1/users/:id`              | ✅   | `204`, `400`, `404`, `412`                  |
 | 6 | `POST` | `/api/v1/users/:id/restore`       | ✅   | `201`, `400`, `404`, `412`                  |
-| 7 | `GET`  | `/api/v1/users/:id/history`       | ✅   | `200`                                       |
+| 7 | `GET`  | `/api/v1/users/:id/history`       | ✅   | `200`, `400`                                |
 
 **Códigos que valem para as 6 rotas autenticadas** (PR #101, 2026-10-17) — as 6
 passam pelo mesmo `JwtAuthGuard`:
@@ -84,6 +84,10 @@ Códigos de erro: `400` (payload inválido — Zod), `404` (só com `destino.tip
 
 **Response `200`**: `{ data: User[], pagination: { nextCursor, hasMore } }`.
 
+**Códigos de erro**: `400` (`VALIDATION_ERROR` — query inválida: `limit` fora de 1..100, não numérico
+ou fracionário; `cursor` que não é um id). Antes da #124, `limit=abc` virava `NaN` e chegava ao
+`take:` do Prisma — **500**, onde o certo é **400**.
+
 ### 3.3 `GET /users/:id` — Buscar por ID
 
 Resposta `200` com `User`; `404` se não encontrado (soft-deletado **não** retorna — usar `includeDeleted=true` em `GET /users` ou restaurar antes).
@@ -109,6 +113,10 @@ Resposta `200` com `User` + novo `ETag`. Conflito de versão → `412 Preconditi
 **Query params**: `cursor`, `limit` (mesma convenção de §3.2). `includeDeleted` **não** se aplica.
 
 **Response `200`**: lista paginada de snapshots de auditoria (`UserHistoryEntryDto`).
+
+**Códigos de erro**: `400` (`VALIDATION_ERROR` — query inválida, pela MESMA validação de §3.2). A
+#124 fechou só uma das DUAS surfaces de query da API; a outra (`GET /users/:id/history`) ainda
+passava `Number(limit)` cru, e `limit=abc` virava `NaN` no `take:` do Prisma — **500**.
 
 ## §4. `includeDeleted` — case-insensitive
 
