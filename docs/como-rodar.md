@@ -282,7 +282,11 @@ Inverter as duas não dá erro — a stack sobe e as policies ficam inertes.
 ```bash
 # ⚠️ NÃO rode se o seu .env.production já tem segredo: o `cp` é DESTRUTIVO.
 cp .env.production.example .env.production     # preencher os CHANGE_ME_*
-#   POSTGRES_PASSWORD, JWT_SECRET  (openssl rand -base64 48)
+#   POSTGRES_PASSWORD               (openssl rand -hex 32 — a senha do dono vai
+#                                    DENTRO da URI, e a URI não aceita o `/`
+#                                    do base64)
+#   JWT_SECRET                      (openssl rand -base64 48 — este NÃO vai
+#                                    dentro de uma URI)
 #   DIRECT_DATABASE_URL            (conexão de DONO — ver o aviso abaixo)
 #   DATABASE_URL                   (papel app_runtime  — §1.2.1)
 #   SYSTEM_DATABASE_URL            (papel app_system  — §1.2.1)
