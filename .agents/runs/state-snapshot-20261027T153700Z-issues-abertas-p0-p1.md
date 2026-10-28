@@ -1,4 +1,44 @@
+---
+generated_at: 2026-10-27T15:37:00Z
+agent: state-aware-planning
+demand_slug: issues-abertas-p0-p1
+branch_at_snapshot: feat/issues-abertas-p0-p1
+main_sha: 404a2458760b542b25e19329085969d3872b5c8a
+template_version_tag: v1.11.0
+working_tree: unknown
+working_tree_files: []
+last_commit:
+  sha: 404a245
+  author: CEO Agent <ceo@paperclip.ai>
+  message: "feat(tenancy): toda conta pertence a uma empresa, e a empresa nasce com três perfis (#116)"
+  conventional: true
+schema_drift_prisma: unknown
+coverage_aggregate_lines: null
+coverage_aggregate_branches: null
+coverage_aggregate_funcs: null
+coverage_threshold_met: false
+preflight_checks: unknown
+health_endpoint:
+  api: not_running
+  web: not_running
+otel_env_vars_declared: []
+otel_collector_running: false
+matrix_specialist_routing_lint: unknown
+written_at: 2026-10-27T15:37:00Z
+preflight_skipped: []
+matrix_specialist_routing_warnings: 0
+matrix_specialist_routing_warnings_detail: ""
+proceed: true
+proceed_rationale: "A demanda é uma correção de 10 issues (#117–#126) com plano revisado de forma adversarial ANTES da execução; o P0 (#118) foi medido contra Postgres 16 real na integração, e o resto é conserto pontual com gate."
+gaps_detectados: []
+---
+
 # State snapshot — issues abertas P0+P1 (2026-10-27)
+
+> ⚠️ Os campos `unknown` são os que este snapshot **NÃO mediu**. A skill
+> `state-aware-planning` diz «não inventar campos» — e um valor inventado
+> aqui seria uma claim que ninguém mediu, num arquivo que existe para ser a
+> MEDIDA. O corpo abaixo é o que este snapshot sabe.
 
 - **Branch:** `feat/issues-abertas-p0-p1`
 - **Base:** `main` @ `404a2458760b542b25e19329085969d3872b5c8a`

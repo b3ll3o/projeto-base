@@ -312,15 +312,26 @@ export class UsersController {
     //   perfilGlobal === null          // o ator não tem perfil GLOBAL
     //   !perfil.permissions…('users.read')  // falta a permissão
     //
-    // O segundo termo é o carve-out do admin global, e o terceiro é a
+    // O segundo termo é o carve-out do perfil GLOBAL, e o terceiro é a
     // permissão. Encadeados, o recorte final ficava
     // `(empresa === null || semVinculo) && semDireito` — e a PERMISSÃO só
     // tinha efeito quando o vínculo falhava. No caso que importa (membro da
     // empresa, perfil resolvido, sem `users.read`) o vínculo NÃO falha, então
     // a permissão era DESCARTADA e o diretório inteiro da empresa vazava.
     //
-    // Os dois sinais viram DISJUNTOS, e o carve-out do admin global sobe
+    // Os dois sinais viram DISJUNTOS, e o carve-out do perfil global sobe
     // para fora do recorte:
+    //
+    // ⚠️ O carve-out é do perfil GLOBAL, e não do ADMIN global — o código
+    // pergunta "tem perfil global?", e não "é admin?". MEDIDO: o seed cria
+    // um perfil global `viewer` (`is_admin=false`, `tenant_id IS NULL`), e
+    // um usuário com ele lê o diretório inteiro sem ter `users.read`. O
+    // comportamento é o de `origin/main` — a #119 reescreveu a EXPRESSÃO e
+    // não o alcance — mas o texto antigo dizia "admin global", e um
+    // comentário que afirma o que o código não garante é pior do que
+    // nenhum. Quem quiser estreitar o carve-out para o admin é uma decisão
+    // de produto (o perfil global `viewer` existe para ver tudo), e ela
+    // precisa de spec própria.
     const temPerfilGlobal = perfilGlobal !== null;
     const faltaPermissaoDeLeitura =
       perfil.isAdmin !== true && !perfil.permissions.includes('users.read');

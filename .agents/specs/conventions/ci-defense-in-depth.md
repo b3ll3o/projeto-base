@@ -129,7 +129,7 @@ extraído em commit `59eb083` (refactor que consolidou fixtures herméticas).
 
 ## Registro de dentes
 
-> A tabela de dentes (26 linhas: `mutação` / `diferencial` / `controle
+> A tabela de dentes (36 linhas: `mutação` / `diferencial` / `controle
 > positivo` por gate), a taxonomia dos níveis de prova e os **nove comandos
 > de mutação** vivem em
 > [`ci-defense-in-depth-dentes.md`](./ci-defense-in-depth-dentes.md) —

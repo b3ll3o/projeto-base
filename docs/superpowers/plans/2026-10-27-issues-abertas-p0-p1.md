@@ -451,7 +451,7 @@ o arquivo e a linha.
 | **R4** | A lista de placeholders da #120 como a issue sugere (`startsWith('secret')`) recusa um segredo **legítimo** — `secreto-da-empresa-2026` começa com `secret`. O example real usa `CHANGE_ME_…`. | `.env.production.example:65,118` | **Plano corrigido** (T3): lista estreita (`CHANGE_ME`/`changeme` por prefixo; `trocar-esta-senha`/`your-secret-here` exatos) + **tamanho ≥ 32 bytes** como criterion principal. |
 | **R5** | O critério de aceite da #117 ("`grep` que não devolve interpolação de valor externo") **não é verificável por `grep`** — o grep não distingue string fixa de template literal com dado externo. | `lint-review-routing.ts:100` e as outras 2 chamadas | **Plano corrigido** (T1): o gate passa a ser "nenhum `execSync` com template literal em `tooling/scripts/`" — verificável e mais forte. |
 | **R6** | O `openapi:export` (que o gate do #125 vai rodar) **sobrevive** ao guard de boot da #120: o script usa `JWT_SECRET='somente-para-o-export-do-openapi-nao-serve-para-autenticar'` — 59 bytes, sem prefixo de placeholder. | `apps/api/scripts/export-openapi.ts` | **Plano confirmado.** Registrado porque a interação era plausível e seria um falso positivo. |
-| **R7** | A ordem do setup da senha (#118) é ditada pelo entrypoint: `migrate deploy && node dist/main.js` (`Dockerfile:99`). Se a migration cria o papel `NOLOGIN`, o `ALTER ROLE` tem de vir **antes**, com a credencial de DONO que o container já tem. | `Dockerfile:99` | **Plano corrigido** (T10.2): o entrypoint passa a ser `ALTER ROLE → migrate → node`. |
+| **R7** | A ordem do setup da senha (#118) é ditada pelo entrypoint: `migrate deploy && node dist/main.js` (`Dockerfile:99`). Se a migration cria o papel `NOLOGIN`, o `ALTER ROLE` tem de vir **antes**, com a credencial de DONO que o container já tem. | `Dockerfile:99` | **Plano corrigido** (T10.2) — e **a implementação INVERTEU** (ver §9.1, item 7): o `ALTER ROLE` vem **depois** do `migrate deploy`, porque o papel que ele altera é **criado** pela migration. O entrypoint ficou `migrate deploy → prepara-papeis.sh (ALTER ROLE) → node`. |
 
 **O que a revisão NÃO mudou:** a ordem de execução (§4), a decisão de fazer o
 #118 por último (é o único que exige Postgres real para ser medido), e a lista
@@ -476,6 +476,7 @@ prometer o que não entrega.
 | 4 | #125: "o gate compara a spec versionada com a gerada" | **O export tem que escrever num caminho próprio** (`OPENAPI_OUTPUT_PATH`) | O `openapi:export` ESCREVE em `apps/api/openapi.json`. Um gate que roda o export e depois compara o arquivo com ele mesmo é "verde" sem medir nada — exatamente o "gate inócuo" que a issue descreve. O gate exporta para um temporário, e a árvore não é tocada. |
 | 5 | #126: "um script de bump" | **O gate `check-version-footers` compara com a tag com `>=`, não `>`** | Depois do release, os footers ficam IGUAIS à tag recém-criada — e o gate roda em todo preflight depois disso. Igualdade é o estado normal; o que é defeito é os footers ficarem ATRÁS. |
 | 6 | #117: "gate: nenhum `execSync` com interpolação" | **O gate achou 7 casos reais, não 2** | Os 2 do #117 (o `check-ignore` e o `gh pr view`) + 5 em spec e gate (`docker compose${flag}`, `node … --paths=${tmp}`, `git ls-files … ${pathspec}`, `bash ${script}`). **A auditoria que a issue pedia pagou mais do que o esperado** — e os 7 foram corrigidos. |
+| 7 | #118 (T10.2): "o entrypoint passa a ser `ALTER ROLE → migrate → node`" | **`migrate deploy → prepara-papeis.sh (ALTER ROLE) → node`** | O `ALTER ROLE` altera um papel que **a própria migration cria**. Antes do `migrate deploy`, o papel não existe — e o `ALTER ROLE` morre com "role does not exist". A ordem que o plano propôs é a que falha; a que funciona aplica a senha DEPOIS de o papel existir. E o `ALTER ROLE` saiu do entrypoint para um script (`prepara-papeis.sh`), porque o passo é o mesmo no ambiente local (runbook §1.2.1) e na imagem. |
 
 ### 9.2 O que a implementação REFUTOU do plano
 
@@ -577,14 +578,37 @@ não o achado.
 
 **MEDIDO**: integração 43 de 43 com a correção, e **1 de 43** com a correção
 desfeita. E o gate de escopo ganhou a entrada da nova costura: sem ela, os
-call sites que passaram a existir sumiriam do painel — o número cairia de 56
+call sites que passaram a existir sumiriam do painel — o número cairia de 39
 para 20 sem que ninguém tivesse removido um escopo.
+
+**A MESMA CLASSE, OUTRO MÓDULO — e a revisão do PR a achou.** A regra acima
+diz que *todo* repositório que aceita `tenantId: string | null` passou a usar
+o `comEscopoDeEmpresa`. O `PrismaAuditService` NÃO passou: ele tinha uma
+**cópia própria** do helper (`comEscopoDeAuditoria`), e a cópia foi aplicada
+em **QUATRO dos SEIS** métodos. `listHistory` e `archive` ficaram na
+tradução (`comEscopo` + `escopoDoTenant`), e os dois defeitos são do mesmo
+tipo do login — com o agravante de que o `archive` é a **ESCRITA** do
+soft-delete: ele morre em 42501 **depois** da exclusão já ter sido gravada, e
+o cliente recebia 500 para uma escrita que já tinha efeito. Em `origin/main`
+os dois fluxos funcionavam — é **regressão** do #118.
+
+⚠️ A lição da COPIA é a que faltava: a regra foi aplicada aos repositórios que
+o plano *nomeou*, e o serviço de auditoria ficou de fora — com a sua própria
+versão da regra, o que é pior que não ter regra, porque a duplicata parece
+correta. O conserto não é "lembrar do serviço de auditoria": é apagar a cópia
+e usar o `comEscopoDeEmpresa` (o DONO da regra), que é o que a §9.5 já
+afirmava ter sido feito.
+
+**MEDIDO**: a spec de auditoria passa de 11 para 13 casos; com o conserto
+revertido, **2 de 13 caem** (o histórico vazio em silêncio, e o 42501).
 
 **A lição, para quem plans o próximo `PRISMA`:** o defeito não era no código do
 escopo, era no **ambiente de teste**. O e2e mede a aplicação com a credencial
 que ignora a RLS — então nenhuma suite que suba a aplicação mede a policy. A
 regra que faltava: **quem muda a policy tem de medir com a credencial que a
-aplicação usa**, e não com a que ignora a proteção.
+aplicação usa**, e não com a que ignora a proteção. E a segunda, que este
+PR pagou: **quem escreve a regra, apaga as cópias** — uma regra duplicada é
+uma regra que diverge, e ninguém a mede.
 
 ### 9.6 O que ficou FORA (e é a mesma lista da §5, atualizada)
 

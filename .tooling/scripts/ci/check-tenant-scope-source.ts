@@ -17,12 +17,17 @@
  * então qualquer repositório que receba um `tenantId` e abra o escopo aceita
  * abrir o escopo de qualquer empresa, desde que alguém lhe passe a string.
  *
- * MEDIDO 2026-10-27: **62 call sites** de escopo em `apps/api/src` (a queda
- * de 77 é do #118: os 8 call sites de escopo de SISTEMA viraram
+ * MEDIDO 2026-10-28: **39 call sites** de escopo em `apps/api/src` — é o
+ * número que o gate IMPRIME, e o único que vale: um painel que aponta 62 (a
+ * prosa de 2026-10-27) ou 77 (o registro de dentes de 2026-10-21) quando o
+ * código diz 39 não serve para dimensionar o resíduo cross-file, que é para
+ * isso que o número existe.
+ *
+ * (A queda de 77 é do #118: os 8 call sites de escopo de SISTEMA viraram
  * `comEscopoDeSistema`, que abre a transação na CREDENCIAL de sistema e não
  * recebe o escopo como argumento; e os 3 `abrirEscopo(tx, escopoDoTenant(null))`
  * do onboarding saíram, porque o escopo é aberto dentro de
- * `comEscopoDeSistema`). Recebem `null`,
+ * `comEscopoDeSistema`.) Recebem `null`,
  * um identificador local, ou um acessor de domínio (`ctx.tenantId`,
  * `profile.tenantId()`, `convite.tenantId`). Nenhuma recebe valor derivado da
  * rota. O gate existe para o **próximo**.
@@ -84,7 +89,7 @@ import { linhasDoRelato } from './check-types';
  * vaidade: a #118 criou a costura que escolhe a CREDENCIAL pelo `tenantId`
  * (nulo = o bucket de SISTEMA), e os repositórios passaram a usá-la. Sem
  * esta entrada, o gate deixaria de enxergar os call sites que passaram a
- * existir — e o número cairia de 56 para 20 sem que NINGUÉM tivesse
+ * existir — e o número cairia de 39 para 20 sem que NINGUÉM tivesse
  * removido um escopo. Um gate que só enxerga a forma antiga do código
  *accompanha a forma antiga, e para de acompanhar o defeito.
  */
