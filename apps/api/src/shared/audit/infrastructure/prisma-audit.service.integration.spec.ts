@@ -381,6 +381,56 @@ describe('PrismaAuditService (Testcontainers)', () => {
       expect(page.entries).toHaveLength(2);
     });
 
+    // ⚠️ O MESMO QUE O `listArchive` ACIMA, no método IRMÃO.
+    //
+    // O #118 trocou o bucket de SISTEMA do valor de GUC para a CREDENCIAL: as
+    // policies `history_leitura` e `archive_leitura` passam a exigir
+    // `current_user = 'app_system'`. Uma sessão de RUNTIME com o GUC em `'*'`
+    // NÃO satisfaz isso — e ela enxerga ZERO linhas.
+    //
+    // `listArchive` foi consertado; `listHistory` NÃO. E o sintoma do que
+    // ficou é o mais silencioso que existe: o histórico do administrador do
+    // sistema volta VAZIO — sem erro, sem status, sem log. O conserto
+    // anterior trocou a TRADUÇÃO (`escopoDoTenant`) pela CREDENCIAL, mas
+    // deixou dois call sites na tradução: o serviço tem SEIS métodos, e o
+    // helper que escolhe a credencial entra em QUATRO deles.
+    it('listHistory do bucket de SISTEMA enxerga a trilha — e não volta vazio', async () => {
+      const daAlice = await app.listHistory(
+        { entityName: 'User', entityId: ALICE, limit: 20 },
+        null,
+      );
+      expect(daAlice.entries.map((e) => e.entityId)).toEqual([ALICE]);
+
+      const doBob = await app.listHistory({ entityName: 'User', entityId: BOB, limit: 20 }, null);
+      expect(doBob.entries.map((e) => e.entityId)).toEqual([BOB]);
+    });
+
+    // ⚠️ `archive()` é a ESCRITA do soft-delete, e o caminho de escrita não
+    // pode ser o caminho de leitura: enquanto a LEITURA errada devolve vazio
+    // (silencioso), a ESCRITA errada morre em 42501 — e o soft-delete do
+    // administrador do sistema devolvia 500 DEPOIS da exclusão já ter sido
+    // gravada (a escrita do agregado é confirmada antes).
+    //
+    // A policy `archive_insercao` é `WITH CHECK (usuario_no_escopo(entity_id))`,
+    // e `usuario_no_escopo` exige `current_user = 'app_system'` para o
+    // bucket global. Com a credencial de RUNTIME e o GUC em `'*'`, o INSERT
+    // não passa no `WITH CHECK`.
+    it('archive no bucket de SISTEMA grava — e não morre em RLS', async () => {
+      const ALVO = '0190a8b6-3333-7333-8333-000000000003';
+
+      await app.archive({
+        entityName: 'User',
+        entityId: ALVO,
+        version: 1,
+        snapshot: { id: ALVO },
+        ctx: ctxDoEscopo(null, null),
+      });
+
+      // O DONO confirma: a linha está lá. Sem isto, "não lançou" é
+      // indistinguível de "gravou".
+      expect(await ctx.prisma.userArchive.count({ where: { entityId: ALVO } })).toBe(1);
+    });
+
     it('gravar auditoria de usuário alheio morre em RLS, e a de membro passa', async () => {
       // O controle positivo é o que impede que o conserto vire "banco inútil com
       // tudo verde": sem ele, fechar tudo também passaria.

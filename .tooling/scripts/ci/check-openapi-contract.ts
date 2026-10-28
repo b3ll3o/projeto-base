@@ -10,12 +10,14 @@
  * comparar, e a derivação do `@Api*` decorator viraria a única fonte — que é
  * justamente o que se quer perder.
  *
- * A comparação é de TEXTO INTEIRO, e não de semântica: um `JSON.parse` dos
- * dois lados e uma comparação de campos deixaria passar uma reformatação
- * (chave reordenada, espaço a mais) que é ruído — e também deixaria passar
- * um campo a mais que é a DIFFERENÇA que interessa. O arquivo é gerado por
- * uma ferramenta, então é determinístico: byte a byte.
- *
+ * A comparação é **SEMÂNTICA** (o JSON parseado dos dois lados), e não byte a
+ * byte: o `lint-staged` reformatta o `.json` versionado no commit, e um array
+ * curto vira uma linha no versionado e três no gerado — um gate byte-a-byte
+ * reprovaria por FORMATAÇÃO, que é o primeiro motivo de um gate ser desligado.
+ * A comparação semântica é a mais forte aqui: ela pega a diferença que
+ * importa (um campo, um valor, um item a mais) e ignora a que não importa
+ * (espaçamento, ordem das chaves). Ver `compararSpecs`.
+ * *
  * ⚠️ O EXPORT NÃO PRECISA DE BANCO. O `export-openapi.ts` monta a aplicação
  * com um `PrismaService` stub e um `JWT_SECRET` stub — não há conexão nem
  * migration no caminho. É o que faz o gate poder rodar em todo preflight.
