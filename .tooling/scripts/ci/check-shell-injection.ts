@@ -21,15 +21,34 @@
  * TypeScript vê o CÓDIGO: um template literal dentro de um comentário não é
  * uma TemplateExpression.
  *
- * A regra: `execSync`/`exec`/`spawnSync` cujo PRIMEIRO argumento é um
- * TemplateExpression (template literal COM interpolação). O valor interpolado
- * vai cru para o shell.
+ * A regra: `execSync`/`exec`/`spawnSync` cujo PRIMEIRO argumento NÃO é uma
+ * constante — um template literal COM interpolação, ou uma concatenação com
+ * um valor que não é literal. O valor vai cru para o shell.
  *
  *   - `execSync('git ls-files')` → constante → PASSA.
  *   - `execSync(`git ls-files`)` → template SEM interpolação → é uma
  *     constante → PASSA.
  *   - `execSync(`cmd ${x}`)` → interpolação → ERRO.
+ *   - `execSync('cmd ' + x)` → concatenação → ERRO.
+ *   - `execSync('a' + 'b')` → concatenação de DOIS literais → é uma
+ *     constante → PASSA.
  *   - `execFileSync('git', ['check-ignore', '--', p])` → não é shell → PASSA.
+ *
+ * ⚠️ O QUE O GATE NÃO PEGA (e o porque de cada limit)
+ *
+ * Um guard sem limite declarado é um guard que a próxima pessoa estende por
+ * conta própria — e o limite é o que permite saber até onde ele alcança.
+ *
+ *   - **ALIAS** (`import { execSync as run }` + `run(`cmd ${x}`)`): para
+ *     resolver o alias é preciso o type-checker, e o gate roda sem ele (é o
+ *     que o torna barato o bastante para todo preflight). O nome da função
+ *     precisa ser literal.
+ *   - **NAMESPACE** (`cp.execSync(`cmd ${x}`)`): sem type-checker, o nome
+ *     `exec`/`execSync` como MEMBRO não distingue `child_process` de
+ *     `RegExp.prototype.exec` — e o repo usa `/re/.exec(x)` em dezenas de
+ *     lugares. O gate só acusa o IDENTIFICADOR de chamada direta.
+ *   - **SEGUNDO ARGUMENTO** (`execSync('sh', ['-c', p])`): o comando é o
+ *     primeiro argumento; com `shell: true` o vetor está no meio.
  */
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -39,8 +58,25 @@ import type { CheckResult } from './check-types';
 /** As funções que passam a primeira linha de comando para um shell. */
 const FUNCOES_DE_SHELL = new Set(['execSync', 'exec', 'spawnSync']);
 
-/** As pastas varridas. `node_modules` fica de fora pelo filtro de ignorar. */
-const DIRETORIOS_VARRIDOS = ['tooling/scripts', '.tooling/scripts'];
+/**
+ * As pastas varridas.
+ *
+ * ⚠️ O ESCOPO É O REPO INTEIRO, e não só o tooling. MEDIDO: com o escopo
+ * antigo (`tooling/scripts` + `.tooling/scripts`), um `execSync` interpolado
+ * em `apps/api/src/**` ou `packages/**` passava — e o gate é o que protege
+ * o P0 do #117, cujo vetor é um valor que vem do PR.
+ */
+const DIRETORIOS_VARRIDOS = ['tooling/scripts', '.tooling/scripts', 'apps', 'packages'];
+
+/**
+ * Pastas de ARTEFATO, fora da varredura.
+ *
+ * `node_modules` e as que começam com `.` (`.next`, `.next-e2e`, `.turbo`) já
+ * são puladas. `dist` e `build` entram aqui: são saídas de compilação, e o
+ * `.d.ts` gerado tem extensão `.ts` — o gate leria artefato como se fosse
+ * fonte.
+ */
+const DIRETORIOS_IGNORADOS = ['node_modules', 'dist', 'build', 'out', 'coverage'];
 
 /** As extensões varridas. */
 const EXTENSOES = ['.ts', '.mts', '.cts'];
@@ -66,7 +102,7 @@ async function listarArquivos(raiz: string, diretorio: string): Promise<string[]
   }
 
   for (const entrada of entradas) {
-    if (entrada.name === 'node_modules' || entrada.name.startsWith('.')) continue;
+    if (DIRETORIOS_IGNORADOS.includes(entrada.name) || entrada.name.startsWith('.')) continue;
     const caminho = path.join(absoluto, entrada.name);
     if (entrada.isDirectory()) {
       out.push(...(await listarArquivos(raiz, path.relative(raiz, caminho))));
@@ -76,6 +112,34 @@ async function listarArquivos(raiz: string, diretorio: string): Promise<string[]
   }
 
   return out;
+}
+
+/**
+ * O comando é um valor que NÃO é constante?
+ *
+ * Duas formas, e as duas são o mesmo vetor:
+ *   - `execSync(`git ls-files ${p}`)` — template COM interpolação;
+ *   - `execSync('git ls-files ' + p)` — concatenação com um valor externo.
+ *
+ * ⚠️ A concatenação de DOIS literais (`'a' + 'b'`) é uma constante — o
+ * `+` sozinho não é o vetor, e o que decide é se ALGUM dos lados traz um
+ * valor que não é literal.
+ */
+function comandoNaoConstante(no: ts.Expression): boolean {
+  if (ts.isTemplateExpression(no)) return true;
+
+  if (ts.isBinaryExpression(no) && no.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+    return !literalPuro(no.left) || !literalPuro(no.right);
+  }
+
+  return false;
+}
+
+/** A expressão é uma constante de texto? (string literal ou template sem interpolação) */
+function literalPuro(no: ts.Expression): boolean {
+  if (ts.isStringLiteral(no) || ts.isNoSubstitutionTemplateLiteral(no)) return true;
+  if (ts.isTemplateExpression(no)) return no.templateSpans.length === 0;
+  return false;
 }
 
 /**
@@ -93,7 +157,7 @@ function acharChamadasComInterpolacao(texto: string, arquivo: string): Achado[] 
       const funcao = no.expression.text;
       if (FUNCOES_DE_SHELL.has(funcao)) {
         const primeiro = no.arguments[0];
-        if (primeiro !== undefined && ts.isTemplateExpression(primeiro)) {
+        if (primeiro !== undefined && comandoNaoConstante(primeiro)) {
           const pos = fonte.getLineAndCharacterOfPosition(primeiro.getStart());
           achados.push({
             arquivo,
