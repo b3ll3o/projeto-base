@@ -471,6 +471,11 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "summary": "Listar as feature flags",
         "tags": ["feature-flags"]
       }
@@ -484,6 +489,11 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "summary": "Definir o valor de uma feature flag",
         "tags": ["feature-flags"]
       }
@@ -497,6 +507,11 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "summary": "Listar os perfis",
         "tags": ["profiles"]
       },
@@ -508,6 +523,11 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "summary": "Criar um perfil",
         "tags": ["profiles"]
       }
@@ -521,6 +541,11 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "summary": "Ler um perfil",
         "tags": ["profiles"]
       },
@@ -532,6 +557,11 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "summary": "Atualizar um perfil",
         "tags": ["profiles"]
       },
@@ -543,6 +573,11 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "summary": "Excluir um perfil",
         "tags": ["profiles"]
       }
@@ -556,6 +591,11 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "summary": "Conceder uma permissão a um perfil",
         "tags": ["authorizations"]
       }
@@ -569,6 +609,11 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "summary": "Revogar uma permissão de um perfil",
         "tags": ["authorizations"]
       }
@@ -582,6 +627,11 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "summary": "Listar as permissões do catálogo",
         "tags": ["authorizations"]
       }
@@ -595,6 +645,11 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "summary": "Vestir um perfil em um usuário",
         "tags": ["admin-users"]
       }
@@ -608,6 +663,11 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "summary": "Ler o perfil efetivo do ator",
         "tags": ["me"]
       }

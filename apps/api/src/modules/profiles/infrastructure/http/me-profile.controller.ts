@@ -6,7 +6,7 @@
 // próprio profile (mesmo que seja null, indicando "sem permissões").
 
 import { Controller, Get, Inject, Req, UseGuards } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
 import { type MeuPerfil, UserProfileUseCases } from '../../application/profiles.use-cases.js';
 
@@ -17,6 +17,16 @@ interface AuthedRequest {
   user: { sub: string; tenantId?: string | null };
 }
 
+// ⚠️ `@ApiBearerAuth()` NA CLASSE, e não em cada handler: no documento
+// OpenAPI a rota protegida é a que declara `security`, e a rota PÚBLICA é a
+// ÚNICA que não declara (o inverso disso é defeito medido: uma rota com
+// guard e sem `security` sai pública no contrato).
+//
+// ⚠️ Aqui todas as rotas são protegidas — não há uma pública neste
+// controller — então o decorator na CLASSE é o que fecha a classe: uma rota
+// NOVA herda a proteção do contrato, em vez de depender de alguém lembrar
+// de declarar o decorator no handler.
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @ApiTags('me')
 @Controller('me')
