@@ -37,6 +37,23 @@ vi.mock('../../../../shared/infrastructure/prisma/escopo.js', async (importOrigi
     ...original,
     comEscopoDeSistema: (fn: (tx: never) => Promise<unknown>) =>
       (sistema.cliente as { $transaction: (f: typeof fn) => Promise<unknown> }).$transaction(fn),
+    // #118: `comEscopoDeEmpresa` escolhe a CREDENCIAL pelo `tenantId` — e
+    // `tenantId` nulo e' o bucket de SISTEMA. E' a `comEscopoDeEmpresa` que e'
+    // mockada (e nao a `comEscopoDeSistema`): a primeira chama a segunda pelo
+    // LIGAMENTO LOCAL do modulo, e um mock do export nao intercepta essa
+    // chamada interna.
+    comEscopoDeEmpresa: async (
+      prisma: never,
+      tenantId: string | null,
+      fn: (tx: never) => Promise<unknown>,
+    ) => {
+      if (tenantId !== null) {
+        return original.comEscopo(prisma, original.escopoDoTenant(tenantId), fn);
+      }
+      return (sistema.cliente as { $transaction: (f: typeof fn) => Promise<unknown> }).$transaction(
+        fn,
+      );
+    },
   };
 });
 

@@ -52,6 +52,21 @@ describe('PrismaUserRepository (Testcontainers)', () => {
   let ctx: TestContext;
   let repo: PrismaUserRepository;
 
+  /**
+   * Uma empresa, para os testes que simulam FALHA do banco.
+   *
+   * ⚠️ #118: o `tenantId` nulo é o bucket de SISTEMA, e o bucket de sistema é a
+   * CREDENCIAL de sistema — então um repositório com `tenantId` nulo NEM USA o
+   * cliente que a spec injeta. Estes testes simulam a falha do banco no cliente
+   * INJETADO, e por isso precisam de um escopo de EMPRESA: o que eles medem (a
+   * tradução do erro) não depende do escopo, mas depende de o cliente quebrado
+   * SER o cliente usado.
+   */
+  async function empresaParaSimularFalha(): Promise<string> {
+    const t = await ctx.prisma.tenant.create({ data: { name: 'ACME', slug: 'acme-falha' } });
+    return t.id;
+  }
+
   beforeAll(async () => {
     ctx = await setupTestDatabase();
   });
@@ -278,9 +293,9 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     // O `expectedVersion` é 0 porque este é o caminho de INSERT — o que faz a
     // exceção dizer "esperava 0, encontrei 7", que é a leitura honesta da
     // corrida: eu não sabia da linha, e ela apareceu.
-    await expect(new PrismaUserRepository(prismaEmCorrida).save(u, 0, null)).rejects.toThrow(
-      ConcurrencyException,
-    );
+    await expect(
+      new PrismaUserRepository(prismaEmCorrida).save(u, 0, await empresaParaSimularFalha()),
+    ).rejects.toThrow(ConcurrencyException);
     expect(consultas, 'a reconsulta que decide o tipo tem de acontecer').toBe(2);
   });
 
@@ -315,7 +330,9 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     // Nem `EmailAlreadyInUseException` (409) nem `ConcurrencyException` (412):
     // o erro original. Um erro desconhecido é 500 — dizer que é conflito de
     // email seria afirmar uma causa que ninguém mediu.
-    await expect(new PrismaUserRepository(prismaQuebrado).save(u, 0, null)).rejects.toThrow(falha);
+    await expect(
+      new PrismaUserRepository(prismaQuebrado).save(u, 0, await empresaParaSimularFalha()),
+    ).rejects.toThrow(falha);
   });
 
   it('save (UPDATE) com email de um soft-deleted lança EmailAlreadyInUseException, não erro cru', async () => {
@@ -401,7 +418,11 @@ describe('PrismaUserRepository (Testcontainers)', () => {
     }) as unknown as typeof ctx.prisma;
 
     await expect(
-      new PrismaUserRepository(prismaQuebrado).save(salvo, salvo.version() - 1, null),
+      new PrismaUserRepository(prismaQuebrado).save(
+        salvo,
+        salvo.version() - 1,
+        await empresaParaSimularFalha(),
+      ),
     ).rejects.toThrow(falha);
   });
 

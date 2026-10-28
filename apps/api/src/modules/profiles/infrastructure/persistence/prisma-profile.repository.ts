@@ -14,7 +14,8 @@ import { profileSlug as makeProfileSlug } from '../../domain/value-objects/profi
 import { ConcurrencyException } from '../../domain/exceptions/profile.exceptions.js';
 import {
   abrirEscopo,
-  comEscopo,
+  clienteDeSistema,
+  comEscopoDeEmpresa,
   escopoDoTenant,
 } from '../../../../shared/infrastructure/prisma/escopo.js';
 
@@ -36,7 +37,7 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
     // NÃO vai para o `where` — quem o aplica é a policy, e ela aceita tanto a
     // linha da empresa quanto a global (é assim que um ator de empresa veste o
     // perfil global, via `users.profile_id`).
-    const row = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+    const row = await comEscopoDeEmpresa(this.prisma, tenantId, (tx) =>
       tx.profile.findUnique({
         where: { id: id.value },
         include: { authorizations: { select: { permissionKey: true } } },
@@ -81,7 +82,7 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
     // 409 a um slug que só colide na EMPRESA do ator (o índice parcial
     // `(slug, tenant_id)`exists mas a checagem não o via), e — o inverso —
     // deixava passar o `criar` que depois morria em P2002 → 500.
-    const row = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+    const row = await comEscopoDeEmpresa(this.prisma, tenantId, (tx) =>
       tx.profile.findFirst({
         where: { slug: slug.value, tenantId },
         include: { authorizations: { select: { permissionKey: true } } },
@@ -97,7 +98,7 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
   }
 
   async list(tenantId: string | null): Promise<Profile[]> {
-    const rows = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+    const rows = await comEscopoDeEmpresa(this.prisma, tenantId, (tx) =>
       tx.profile.findMany({
         // pt-BR (Fase 8): `null` = SEM filtro (o admin global, que é o único
         // que alcança o bucket de sistema); preenchido = só os perfis daquela
@@ -137,7 +138,7 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
       // para um perfil de empresa faria o `profiles_insercao`
       // (`aceita_global = false`) aceitar, e abrir a empresa para um perfil
       // global o faria recusar: os dois lados estão trocados.
-      const created = await comEscopo(this.prisma, escopoDoTenant(profile.tenantId()), (tx) =>
+      const created = await comEscopoDeEmpresa(this.prisma, profile.tenantId(), (tx) =>
         tx.profile.create({
           // pt-BR (#97): o nested-write de CREATE aceita só `create` /
           // `createMany` / `connectOrCreate` / `connect` — `deleteMany`
@@ -164,7 +165,14 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
     // pt-BR (#97): as três escritas vão na MESMA `$transaction`. Sem ela,
     // um `createMany` que falha deixa o profile com a version incrementada
     // e ZERO permissões — o aggregate em memória e o banco divergem.
-    await this.prisma.$transaction(async (tx) => {
+    //
+    // ⚠️ #118: o perfil GLOBAL (`tenant_id IS NULL`) é o bucket de SISTEMA, e
+    // o bucket de SISTEMA é a CREDENCIAL de sistema. A transação do perfil
+    // global roda, portanto, no cliente de SISTEMA — e não no de runtime, que
+    // veria ZERO linhas. MEDIDO no Postgres 16 real: a sessão de runtime com
+    // o escopo `'*'` não enxerga o perfil global para ESCREVER.
+    const cliente = profile.tenantId() === null ? clienteDeSistema() : this.prisma;
+    await cliente.$transaction(async (tx) => {
       // pt-BR (Fase 9): mesmo escopo do CREATE, e pela MESMA razão. O
       // `profiles_atualizacao` é `USING (no_escopo_atual(tenant_id, false))` com
       // `WITH CHECK` idêntico — os DOIS lados conferem a dona, e é o `WITH CHECK`
@@ -209,7 +217,7 @@ export class PrismaProfileRepository implements ProfileRepositoryPort {
   }
 
   async delete(id: ReturnType<typeof makeProfileId>, tenantId: string | null): Promise<void> {
-    await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+    await comEscopoDeEmpresa(this.prisma, tenantId, (tx) =>
       tx.profile.delete({ where: { id: id.value } }),
     );
   }

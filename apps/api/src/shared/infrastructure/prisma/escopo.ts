@@ -141,3 +141,42 @@ export async function comEscopo<T>(
 export function escopoDoTenant(tenantId: string | null): string {
   return tenantId ?? ESCOPO_DE_SISTEMA;
 }
+
+/**
+ * Abre o escopo de uma EMPRESA, ou o de SISTEMA quando o `tenantId` é nulo.
+ *
+ * ⚠️ #118 — ESTE HELPER EXISTE POR CAUSA DE UM P0 QUE O PR #118 MESMO
+ * INTRODUZIU.
+ *
+ * O bucket de SISTEMA é concedido pelo `current_user`, e o `current_user` vem
+ * da CREDENCIAL. Uma sessão de RUNTIME com o GUC em `'*'` NÃO abre o bucket
+ * de sistema: ela enxerga **ZERO linhas**. MEDIDO no Postgres 16 real
+ * (2026-10-28), com a migration `20261027000001` aplicada:
+ *
+ * ```
+ *   sessão de RUNTIME, escopo '*'  ->  empresas=0  usuarios=0
+ *   sessão de SISTEMA, escopo '*'  ->  empresas=2  usuarios=1
+ * ```
+ *
+ * E o LOGIN é exatamente esse caso: `findByEmail(email, null)` — o login
+ * acontece ANTES de existir empresa, então não há header, e o usuário sem
+ * membership é invisível sob qualquer outro escopo. Antes do #118 a policy
+ * tinha o disjunto `escopo_atual() = '*'`, e a sessão de runtime enxergava o
+ * usuário; depois, ela não enxerga MAIS. O sintoma em produção seria "todo
+ * login falha com credenciais inválidas" — e NENHUM teste pegou, porque o
+ * e2e e a integração sobem a aplicação com a URI do DONO (superusuário, que
+ * ignora a RLS por completo).
+ *
+ * A REGRA, então, é uma só: **`tenantId` nulo é o bucket de SISTEMA, e o
+ * bucket de SISTEMA é a CREDENCIAL de sistema.** Todo repositório que aceita
+ * `tenantId: string | null` escolhe a credencial pelo próprio `tenantId` —
+ * o chamador não decide, e não pode decidir errado.
+ */
+export async function comEscopoDeEmpresa<T>(
+  prisma: PrismaClient,
+  tenantId: string | null,
+  fn: (tx: ClienteTransacional) => Promise<T>,
+): Promise<T> {
+  if (tenantId === null) return comEscopoDeSistema(fn);
+  return comEscopo(prisma, escopoDoTenant(tenantId), fn);
+}

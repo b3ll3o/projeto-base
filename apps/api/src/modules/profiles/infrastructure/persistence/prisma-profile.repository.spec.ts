@@ -15,6 +15,52 @@ import { Profile } from '../../domain/profile.aggregate.js';
 import { ConcurrencyException } from '../../domain/exceptions/profile.exceptions.js';
 import { ESCOPO_DE_SISTEMA } from '../../../../shared/infrastructure/prisma/papel-de-runtime.js';
 
+/**
+ * #118 (a correção do LOGIN): `comEscopoDeEmpresa` escolhe a CREDENCIAL pelo
+ * `tenantId` — e `tenantId` nulo é o bucket de SISTEMA, que é a CREDENCIAL de
+ * sistema. Numa unit test não há `SYSTEM_DATABASE_URL`, e a costura é mockada
+ * para usar o MESMO duplo — com o escopo aberto, que é o que as asserções deste
+ * arquivo leem.
+ *
+ * ⚠️ A costura é mockada AQUI, e não no código de produção: um setter global
+ * em `escopo.ts` seria um global mutável no fonte — e um global mutável no
+ * fonte é um caminho para o código de produção depender do estado do teste.
+ *
+ * ⚠️ E é a `comEscopoDeEmpresa` que é mockada, e não a `comEscopoDeSistema`:
+ * a primeira chama a segunda pelo LIGAMENTO LOCAL do módulo, e um mock do
+ * export não intercepta essa chamada interna.
+ */
+const sistema = vi.hoisted(() => ({
+  cliente: null as {
+    $transaction: (f: (tx: never) => Promise<unknown>) => Promise<unknown>;
+  } | null,
+  escopo: '*',
+}));
+vi.mock('../../../../shared/infrastructure/prisma/escopo.js', async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import('../../../../shared/infrastructure/prisma/escopo.js')>();
+  return {
+    ...original,
+    // o `save` do perfil GLOBAL abre a transacao no cliente de SISTEMA
+    clienteDeSistema: () => sistema.cliente as never,
+    comEscopoDeEmpresa: async (
+      prisma: never,
+      tenantId: string | null,
+      fn: (tx: never) => Promise<unknown>,
+    ) => {
+      if (tenantId !== null) {
+        return original.comEscopo(prisma, original.escopoDoTenant(tenantId), fn);
+      }
+      const cliente = sistema.cliente;
+      if (cliente === null) throw new Error('a spec nao definiu o cliente de SISTEMA');
+      return cliente.$transaction(async (tx: never) => {
+        await original.abrirEscopo(tx, sistema.escopo);
+        return fn(tx);
+      });
+    },
+  };
+});
+
 type ProfileRow = {
   id: string;
   slug: string;
@@ -229,6 +275,10 @@ describe('PrismaProfileRepository', () => {
 
   beforeEach(() => {
     fake = new FakePrisma();
+    // #118: o bucket de SISTEMA e' a credencial de sistema — o duplo dela
+    // e' o MESMO, para que as asercoes deste arquivo (que leem `escopos()`)
+    // continuem valendo.
+    sistema.cliente = fake as never;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     repo = new PrismaProfileRepository(fake as any);
   });

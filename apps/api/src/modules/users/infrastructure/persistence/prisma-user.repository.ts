@@ -21,9 +21,8 @@ import { Inject, Injectable } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service.js';
 import {
-  comEscopo,
+  comEscopoDeEmpresa,
   comEscopoDeSistema,
-  escopoDoTenant,
   type ClienteTransacional,
 } from '../../../../shared/infrastructure/prisma/escopo.js';
 import {
@@ -66,7 +65,6 @@ export class PrismaUserRepository implements UserRepositoryPort {
    * Devolve o agregado persistido (snapshot via User.restaurarDePersistencia).
    */
   async save(user: User, expectedVersion: number, tenantId: string | null): Promise<User> {
-    const escopo = escopoDoTenant(tenantId);
     const row = UserPrismaMapper.toPersistence(user);
     const id = user.id().value;
 
@@ -76,7 +74,7 @@ export class PrismaUserRepository implements UserRepositoryPort {
     let esperavaLinhaAusente = false;
 
     try {
-      return await comEscopo(this.prisma, escopo, async (tx) => {
+      return await comEscopoDeEmpresa(this.prisma, tenantId, async (tx) => {
         // INSERT path: row ainda não existe no banco.
         // Usamos `create` direto; um conflito de unicidade aqui tem DUAS causas
         // possíveis — race no `id` (outro processo gravou o mesmo id) e colisão no
@@ -214,7 +212,7 @@ export class PrismaUserRepository implements UserRepositoryPort {
       // Roda FORA da transação que já morreu: uma transação abortada não
       // responde a `findUnique` (`current transaction is aborted`), e o P2002
       // aborta. Por isso `save()` fecha o escopo antes de chegar aqui.
-      const atual = await comEscopo(this.prisma, escopoDoTenant(contexto.tenantId), (tx) =>
+      const atual = await comEscopoDeEmpresa(this.prisma, contexto.tenantId, (tx) =>
         tx.user.findUnique({ where: { id: contexto.id } }),
       );
       if (atual !== null) {
@@ -239,7 +237,7 @@ export class PrismaUserRepository implements UserRepositoryPort {
     tenantId: string | null,
     options?: FindByIdOptions,
   ): Promise<User | null> {
-    const row = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+    const row = await comEscopoDeEmpresa(this.prisma, tenantId, (tx) =>
       tx.user.findUnique({ where: { id: id.value } }),
     );
     if (row === null) return null;
@@ -251,7 +249,7 @@ export class PrismaUserRepository implements UserRepositoryPort {
    * findByEmail: o VO já normaliza para lowercase. Filtra soft-deleted.
    */
   async findByEmail(email: Email, tenantId: string | null): Promise<User | null> {
-    const row = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+    const row = await comEscopoDeEmpresa(this.prisma, tenantId, (tx) =>
       tx.user.findUnique({ where: { email: email.value } }),
     );
     if (row === null) return null;
@@ -289,7 +287,7 @@ export class PrismaUserRepository implements UserRepositoryPort {
     // `limit=0` chegava ao `take:` cru.
     const limit = limitarPage(input.limit);
     const cursor = input.cursor ? { id: input.cursor } : undefined;
-    const rows = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+    const rows = await comEscopoDeEmpresa(this.prisma, tenantId, (tx) =>
       tx.user.findMany({
         where,
         ...(cursor ? { cursor, skip: 1 } : {}),
@@ -417,7 +415,7 @@ export class PrismaUserRepository implements UserRepositoryPort {
       return out;
     }
 
-    const rows = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+    const rows = await comEscopoDeEmpresa(this.prisma, tenantId, (tx) =>
       tx.tenantMembership.findMany({
         where: { userId: { in: [...userIds] }, tenantId },
         select: { userId: true, profileId: true },
@@ -456,7 +454,7 @@ export class PrismaUserRepository implements UserRepositoryPort {
    * com mensagem útil em vez de quebrar a FK onDelete: Restrict.
    */
   async countByProfile(profileId: string, tenantId: string | null): Promise<number> {
-    return comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+    return comEscopoDeEmpresa(this.prisma, tenantId, (tx) =>
       tx.user.count({
         where: { profileId, deletedAt: null },
       }),

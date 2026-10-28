@@ -35,6 +35,7 @@ import {
   uriComoPapelDeRuntime,
 } from './papel-de-runtime.js';
 import { abrirEscopo } from './escopo.js';
+import { UserId } from '../../../modules/users/domain/value-objects/user-id.vo.js';
 import { corpoDaAssinatura } from './assinatura-de-membership.js';
 
 describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
@@ -98,16 +99,34 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
    * global (D4). O que muda é quem enxerga e quem escreve nele — e por isso o
    * vínculo com a empresa é uma `membership`, criada à parte.
    */
+  /**
+   * Um envelope argon2id COM FORMA.
+   *
+   * ⚠️ O `UserPrismaMapper` hidrata a senha (`PasswordHash.create`), e o VO
+   * recusa o que não PARECE um argon2id. A fixture usava
+   * `${slug}-hash-secreto`, que não é um hash — e o mapper lançava
+   * `UserPersistenceException` DEPOIS de a conta ser encontrada, o que
+   * media a exception e não o achado. Não é um hash real: nada aqui verifica
+   * senha, e a conta do login é a de uma sessão de teste.
+   */
+  const HASH_COM_FORMA =
+    '$argon2id$v=19$m=65536,t=3,p=4$c2FsdHNhbHRzYWx0c2FsdHNhbHQ$ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0';
+
   async function criarUsuario(slug: string): Promise<string> {
     // `User.id` é `@id @db.Uuid` **sem** `@default` — é o domínio que gera
     // (`User.criar` recebe o id). Omitir aqui dá `PrismaClientValidationError`
     // nos 9 testes novos, que é vermelho pela fixture e não pela policy.
+    //
+    // ⚠️ E o id é um **UUID v7**, não um v4: o `UserId` (e o mapper que o
+    // hidrata) só aceita v7. A fixture usava `randomUUID()` (v4), e o
+    // repositório achava a conta e LANÇAVA ao hidratar o agregado — o
+    // vermelheiro mediava a exception, não o achado.
     const u = await ctx.prisma.user.create({
       data: {
-        id: randomUUID(),
+        id: UserId.create().value,
         email: `${slug}@teste.local`,
         name: slug,
-        passwordHash: `${slug}-hash-secreto`,
+        passwordHash: HASH_COM_FORMA,
       },
     });
     return u.id;
@@ -428,6 +447,49 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
     expect(comSistema.sort()).toEqual([ana, bruno].sort());
   });
 
+  it('#118: o LOGIN acha a conta — o repositório abre o bucket de SISTEMA na CREDENCIAL', async () => {
+    // ⚠️ ESTE É O TESTE QUE FALTAVA, e a razão de o P0 ter passado.
+    //
+    // `findByEmail(email, null)` é o LOGIN: ele acontece ANTES de existir
+    // empresa — não há header, e um usuário sem membership é invisível sob
+    // qualquer outro escopo. `tenantId` nulo é o bucket de SISTEMA, e o
+    // bucket de sistema é a CREDENCIAL de sistema.
+    //
+    // MEDIDO 2026-10-28: a #118 trocou o disjunto `escopo_atual() = '*'` da
+    // policy por `current_user = 'app_system'`, e a sessão de RUNTIME com o
+    // escopo `'*'` passou a ver ZERO usuários. O repositório, que abria o
+    // escopo de SISTEMA pela sessão de RUNTIME, deixou de achar a conta — e o
+    // login passaria a falhar em PRODUÇÃO com "credenciais inválidas", sem
+    // erro em lugar nenhum.
+    //
+    // ⚠️ E NENHUM TESTE PEGOU: o e2e e a integração sobem a aplicação com a
+    // URI do DONO (superusuário, que ignora a RLS por completo) — e a spec de
+    // integração do repositório de usuários também. Aqui o REPOSITÓRIO roda
+    // contra o Postgres de verdade, com a credencial que a aplicação usa.
+    const ana = await criarUsuario('ana');
+    const bruno = await criarUsuario('bruno');
+    await associar(ana, acmeId);
+    await associar(bruno, globexId);
+
+    const { PrismaUserRepository } =
+      await import('../../../modules/users/infrastructure/persistence/prisma-user.repository.js');
+    const { Email } = await import('../../../modules/users/domain/value-objects/email.vo.js');
+    // ⚠️ O repositório recebe a sessão de RUNTIME — a credencial que a
+    // aplicação usa. E é o REPOSITÓRIO que escolhe a credencial do bucket de
+    // sistema, pelo `tenantId` nulo.
+    const repo = new PrismaUserRepository(runtime);
+
+    // O LOGIN: achar pelo e-mail, sem escopo de empresa.
+    const achado = await repo.findByEmail(Email.create('ana@teste.local'), null);
+    expect(achado).not.toBeNull();
+    expect(achado?.id().value).toBe(ana);
+
+    // E o escopo de EMPRESA continua fechado para a sessão de runtime: a
+    // conta da outra empresa não aparece.
+    const alheio = await repo.findByEmail(Email.create('bruno@teste.local'), acmeId);
+    expect(alheio).toBeNull();
+  });
+
   it('#118: o runtime NÃO é membro do papel de sistema (o `SET ROLE` não serviria)', async () => {
     // Se `app_runtime` fosse membro de `app_system`, um `SET ROLE` bastaria e
     // o furo voltaria pela porta dos fundos.
@@ -708,7 +770,8 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
 
     expect(alterados).toBe(0);
     const intacto = await ctx.prisma.user.findUnique({ where: { id: daGlobex } });
-    expect(intacto?.passwordHash).toBe('bob-hash-secreto');
+    // o hash e' o da FIXTURE — a assercao e' "nao foi alterado", nao o valor
+    expect(intacto?.passwordHash).toBe(HASH_COM_FORMA);
   });
 
   it('DELETE de um usuário alheio é barrado', async () => {

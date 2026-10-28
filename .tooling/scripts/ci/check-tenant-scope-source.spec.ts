@@ -133,7 +133,15 @@ describe('checkTenantScopeSource', () => {
     // 4 operações — em UM lugar, em vez de quatro. E o gate conta, não julga:
     // subir o número junto com o PR que o mediu é o comportamento certo (ver o
     // comentário acima desta linha).
-    expect(r.advisories?.[0]).toContain('56 call site(s)');
+    //
+    // MEDIDO 2026-10-28 (a correção do LOGIN, ainda no #118): **39**. Os
+    // repositórios passaram a usar `comEscopoDeEmpresa(prisma, tenantId, fn)`,
+    // que casa UMA vez no gate — a forma antiga casava DUAS (`comEscopo(` e
+    // `escopoDoTenant(`). E o gate ganhou a entrada da nova costura: sem
+    // ela, os call sites que passaram a existir sumiriam do painel (o número
+    // cairia para 20 sem que ninguém tivesse removido um escopo) — e um gate
+    // que só enxerga a forma antiga do código deixa de acompanhar o defeito.
+    expect(r.advisories?.[0]).toContain('39 call site(s)');
   });
 
   it('🔴 corpus VAZIO é vermelho — o gate não pode reportar verde sem medir', () => {

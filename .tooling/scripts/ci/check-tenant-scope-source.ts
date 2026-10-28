@@ -77,17 +77,34 @@ import { join, relative } from 'node:path';
 import type { CheckResult } from './check-types';
 import { linhasDoRelato } from './check-types';
 
-/** As três funções que abrem o escopo de tenancy. */
-const FUNCOES_DE_ESCOPO = ['escopoDoTenant', 'comEscopo', 'abrirEscopo'] as const;
+/**
+ * As funções que abrem o escopo de tenancy.
+ *
+ * ⚠️ `comEscopoDeEmpresa` entrou aqui em 2026-10-28, e a entrada NÃO é
+ * vaidade: a #118 criou a costura que escolhe a CREDENCIAL pelo `tenantId`
+ * (nulo = o bucket de SISTEMA), e os repositórios passaram a usá-la. Sem
+ * esta entrada, o gate deixaria de enxergar os call sites que passaram a
+ * existir — e o número cairia de 56 para 20 sem que NINGUÉM tivesse
+ * removido um escopo. Um gate que só enxerga a forma antiga do código
+ *accompanha a forma antiga, e para de acompanhar o defeito.
+ */
+const FUNCOES_DE_ESCOPO = [
+  'escopoDoTenant',
+  'comEscopo',
+  'comEscopoDeEmpresa',
+  'abrirEscopo',
+] as const;
 
 /**
  * `comEscopo(prisma, ESCOPO, fn)` — o escopo é o SEGUNDO argumento.
+ * `comEscopoDeEmpresa(prisma, TENANT_ID, fn)` — também o segundo.
  * `escopoDoTenant(x)` e `abrirEscopo(tx, x)` — é o PRIMEIRO.
  */
 const POSICAO_DO_ESCOPO: Record<(typeof FUNCOES_DE_ESCOPO)[number], number> = {
   escopoDoTenant: 0,
   abrirEscopo: 1,
   comEscopo: 1,
+  comEscopoDeEmpresa: 1,
 };
 
 /** Fonte derivada da rota: por onde um `tenantId` entra NÃO verificado. */
