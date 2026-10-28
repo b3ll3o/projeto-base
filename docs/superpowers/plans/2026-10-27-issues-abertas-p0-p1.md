@@ -499,6 +499,9 @@ prometer o que não entrega.
 | #117 | o gate de shell injection para de detectar | **4** | 12 (spec do gate) |
 | #118 | a policy volta a `escopo_atual() = '*'` | **1** (o de "as TRÊS funcoes") | 18 (spec do papel) |
 | #118 | o guard aceita a senha exposta | **4** | 10 (spec do guard de credenciais) |
+| #118 | a sessão de runtime volta a ler o bucket de sistema | **3** | 42 (spec de RLS, contra Postgres real) |
+| #118 | o papel de sistema perde o `EXECUTE` da membership | **26** | 30 (integração do onboarding) |
+| #118 | a auditoria volta a abrir o escopo de sistema na sessão de runtime | **1** | 11 (integração da auditoria) |
 | #119 | a fórmula volta a `version() - 1`… (a do lock) | **1** | 117 (agregado + use case) |
 | #119 | o recorte volta ao `&&` antigo | **2** | 65 (spec do controller) |
 | #120 | o prefixo de placeholder é neutrizado | **4** | 49 (segredo + jwt) |
@@ -513,7 +516,28 @@ prometer o que não entrega.
 | #126 | a divergência é ignorada | **1** | 12 (spec do gate) |
 | #126 | o bump pula um arquivo | **1** | 8 (spec do bump) |
 
-### 9.4 O que ficou FORA (e é a mesma lista da §5, atualizada)
+### 9.4 O que o CI do PR mediu DEPOIS da primeira versão
+
+O plano previa a implementação; o CI mediu o que o plano não previu. Cada item
+aqui nasceu de um run **vermelho**, e a correção é o que o run seguintes mediu
+de novo.
+
+| O que o CI mediu | Causa | Correção | Como ficou |
+|---|---|---|---|
+| `P3018` / `42601` — `mismatched parentheses at or near ";"` na migration | o `;` estava DENTRO do literal de `format(...)`, e ele encerra a instrução — o `)` que fecha a chamada ficava órfão | o `;` saiu de dentro do literal; o SQL que o `EXECUTE` executa não leva ponto-e-vírgula | migration aplicada do zero, em Postgres 16 real |
+| `permission denied for function criar_membership` (26 de 30 testes de integração) | o escopo de sistema passou a rodar como `app_system`, e a migration `20261020000004` dá `EXECUTE` em `criar_membership` **só** a `app_runtime` | o papel de sistema recebe o mesmo `EXECUTE` — ele faz o mesmo trabalho | integração 145 de 145 |
+| o teste "a sessão de SISTEMA continua enxergando as duas" caía com 0 entradas | o serviço de auditoria abria o escopo de SISTEMA na sessão de RUNTIME, e a policy da auditoria exige `current_user = 'app_system'` | o escopo de sistema abre na CREDENCIAL de sistema, em um método privado | 11 de 11 |
+| a API não subia: "a senha do papel de runtime é uma senha EXPOSTA" | o `.env.example` ainda carregava a senha que a migration publicava — e o guard a recusa em qualquer `NODE_ENV` | o exemplo leva **placeholder**, e o runbook/README gained o passo de gerar e aplicar as duas senhas | `ci:boot`: API e web no ar |
+| `expected '56 call site(s)' to contain '62 call site(s)'` | o serviço de auditoria passou a abrir o escopo em **um** método privado em vez de quatro: 4 × 2 casamentos → 2 | o número sobe com o PR que o mediu — é o comportamento certo de um gate que CONTA | 578 de 578 nos gates |
+
+E um defeito **pré-existente** que o PR carregou junto: os 8 testes de entrada por
+convite caíam com "expirado" desde 2026-10-26T12:00Z, porque a fixture usava
+`expiresAt` **fixo** (`2026-10-26T12:00:00.000Z`). **MEDIDO na `main`**: os
+mesmos 8 caem, com a mesma data — e o CI da `main` está verde porque o último
+run dela é de 2026-10-22, antes do prazo. A fixture passou a usar instante
+**relativo**; o commit é **separado**, com diagnóstico próprio.
+
+### 9.5 O que ficou FORA (e é a mesma lista da §5, atualizada)
 
 O escopo de tenant continua forgeável: a policy compara
 `alvo::text = escopo_atual()`, e uma sessão com a credencial de runtime pode
