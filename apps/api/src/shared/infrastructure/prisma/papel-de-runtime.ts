@@ -62,8 +62,16 @@ export const SENHAS_EXPOSTAS: readonly string[] = ['app_runtime_dev'];
  * que denuncia, não o valor inteiro (o sufixo muda com o tamanho pedido).
  *
  * Comparados em minúsculas, no início do valor.
+ *
+ * ⚠️ O `***` é o placeholder que o `.env.production.example` JÁ TRUXE para as
+ * duas credenciais dos papeis — e ele NÃO é recusado por nenhum destes
+ * prefixos: `***` não começa com `change_me`, e não é a senha publicada.
+ * MEDIDO: o guard aceitava `***`, o boot passava, e o `prepara-papeis.sh`
+ * aplicava `***` como a senha VIVA do papel de produção. A isca não pode
+ * passar — e o `.env.production.example` diz do `JWT_SECRET` que "ele é a
+ * isca, e a isca não pode passar". Para a credencial do BANCO, a isca passava.
  */
-export const PREFIXOS_DE_SENHAS_EXPOSTAS: readonly string[] = ['change_me'];
+export const PREFIXOS_DE_SENHAS_EXPOSTAS: readonly string[] = ['change_me', '***'];
 
 /**
  * Escopo que significa "bucket de sistema": o admin global, que enxerga todas
