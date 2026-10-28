@@ -82,6 +82,34 @@ GRANT USAGE ON SCHEMA public TO app_system;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_system;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_system;
 
+-- ⚠️ As FUNÇÕES `SECURITY DEFINER` que o caminho de SISTEMA usa.
+--
+-- MEDIDO no CI (2026-10-27): com o bucket de sistema aberto na credencial de
+-- sistema, a transação de sistema passa a rodar como `app_system` — e ela
+-- perdeu o `EXECUTE` em `criar_membership`, que a migration
+-- `20261020000004` dá APENAS a `app_runtime`. O sintoma: "permission denied
+-- for function criar_membership" em 26 dos 30 testes de integração do
+-- onboarding.
+--
+-- O papel de sistema FAZ o mesmo trabalho que o de runtime (é o mesmo bucket),
+-- então ele precisa das mesmas permissões de função. E a tabela do segredo
+-- (`chaves_de_assinatura`) NÃO entra aqui: ela é lida DENTRO da função
+-- `SECURITY DEFINER`, que roda como o dono.
+GRANT EXECUTE ON FUNCTION corpo_de_membership(uuid, uuid, text, uuid) TO app_system;
+GRANT EXECUTE ON FUNCTION criar_membership(uuid, uuid, text, uuid, text) TO app_system;
+
+-- ⚠️ A TABELA DO SEGREDO NÃO ENTRA. O `GRANT ... ON ALL TABLES` acima
+-- pega `chaves_de_assinatura` — e ela guarda o segredo da assinatura da
+-- membership, que a migration `20261020000004` revoga de `PUBLIC` **e** de
+-- `app_runtime` (a linha 131). Dar SELECT dela ao papel de SISTEMA seria
+-- devolver a escalada que aquele `REVOKE` tirou do caminho: quem tem a
+-- credencial de sistema leria o segredo e forjaria a assinatura de qualquer
+-- membership.
+--
+-- O papel de sistema não precisa dela: o segredo é lido DENTRO da função
+-- `SECURITY DEFINER`, que roda como o dono.
+REVOKE ALL ON chaves_de_assinatura FROM app_system;
+
 -- ⚠️ O SQL EXECUTADO NÃO TEM PONTO-E-VÍRGULA: dentro do `format(...)` o `;`
 -- fecharia a instrução e o `)` que fecha a chamada ficaria órfão — o Postgres
 -- responde "mismatched parentheses at or near ';'". MEDIDO no CI (2026-10-27):

@@ -18,7 +18,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { PrismaClient, type Prisma } from '@prisma/client';
 import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service.js';
-import { comEscopo, escopoDoTenant } from '../../infrastructure/prisma/escopo.js';
+import {
+  type ClienteTransacional,
+  comEscopo,
+  comEscopoDeSistema,
+  escopoDoTenant,
+} from '../../infrastructure/prisma/escopo.js';
 import type { AuditContext } from '../domain/audit-context.vo.js';
 import type {
   ArchiveEntry,
@@ -55,8 +60,29 @@ export class PrismaAuditService implements AuditServicePort {
   // do parâmetro: é o mesmo valor nos dois caminhos, vindo de fontes diferentes
   // só porque uma já carregava o contexto e a outra não.
 
+  /**
+   * Abre o escopo do bucket de SISTEMA na CREDENCIAL de sistema.
+   *
+   * ⚠️ #118: o escopo de sistema (`tenantId === null`) deixou de ser uma
+   * simples tradução para `'*'`. A policy da tabela de auditoria exige
+   * `current_user = 'app_system'`, e a sessão de RUNTIME não satisfaz isso —
+   * ela enxerga ZERO linhas. MEDIDO: o teste "a sessão de SISTEMA continua
+   * enxergando as duas" caía com 0 entradas onde esperava 2.
+   *
+   * A correção é a mesma do resto do #118: o escopo de sistema ABRE NA
+   * CREDENCIAL DE SISTEMA, e o escopo de empresa continua na de runtime.
+   * E o chamador NÃO escolhe a credencial — ela vem do ambiente.
+   */
+  private comEscopoDeAuditoria<T>(
+    tenantId: string | null,
+    fn: (tx: ClienteTransacional) => Promise<T>,
+  ): Promise<T> {
+    if (tenantId === null) return comEscopoDeSistema(fn);
+    return comEscopo(this.prisma, escopoDoTenant(tenantId), fn);
+  }
+
   async record(input: AuditRecordInput, ctx: AuditContext): Promise<void> {
-    await comEscopo(this.prisma, escopoDoTenant(ctx.tenantId), (tx) =>
+    await this.comEscopoDeAuditoria(ctx.tenantId, (tx) =>
       tx.userHistory.create({
         data: {
           entityId: input.entityId,
@@ -107,7 +133,7 @@ export class PrismaAuditService implements AuditServicePort {
     input: GetHistoryEntryInput,
     tenantId: string | null,
   ): Promise<HistoryEntry | null> {
-    const row = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+    const row = await this.comEscopoDeAuditoria(tenantId, (tx) =>
       tx.userHistory.findUnique({
         where: {
           entityId_version: { entityId: input.entityId, version: input.version },
@@ -155,7 +181,7 @@ export class PrismaAuditService implements AuditServicePort {
     tenantId: string | null,
   ): Promise<{ entries: ArchiveEntry[]; nextCursor: string | null }> {
     const cursor = input.cursor ? { id: input.cursor } : undefined;
-    const rows = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+    const rows = await this.comEscopoDeAuditoria(tenantId, (tx) =>
       tx.userArchive.findMany({
         ...(cursor ? { cursor, skip: 1 } : {}),
         take: input.limit + 1,
@@ -182,7 +208,7 @@ export class PrismaAuditService implements AuditServicePort {
     input: GetArchiveEntryInput,
     tenantId: string | null,
   ): Promise<ArchiveEntry | null> {
-    const row = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+    const row = await this.comEscopoDeAuditoria(tenantId, (tx) =>
       tx.userArchive.findUnique({
         where: { entityId: input.entityId },
       }),
