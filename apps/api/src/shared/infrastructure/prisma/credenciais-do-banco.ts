@@ -78,19 +78,27 @@ function senhaDaUri(uri: string | undefined): string | undefined {
 /**
  * Decide se as credenciais do banco servem para a API subir.
  *
- * Em produção, duas coisas são recusadas:
+ * Duas coisas são recusadas:
  *   1. a senha do papel de runtime é uma das EXPOSTAS (o `app_runtime_dev`
  *      do repositório, ou o placeholder do example);
  *   2. falta o `SYSTEM_DATABASE_URL` — o bucket de sistema não abre sem a
  *      credencial que o concede.
  *
- * Fora de produção, o `SYSTEM_DATABASE_URL` ausente é só um aviso (o bucket
- * de sistema não abre, e o dev que não usa onboarding cross-tenant não
- * sente) — mas a senha exposta é recusada em TODO ambiente: uma senha
- * pública num banco de dev vaza para o de teste, e de lá para o de staging.
+ * ⚠️ O item 2 é **default-DENY**: a credencial é exigida em TODO ambiente
+ * que não seja `development`. MEDIDO: a versão anterior exigia só quando
+ * `NODE_ENV === 'production'` — a string EXATA. `prod`, `Prod`, `staging` e
+ * `NODE_ENV` ausente passavam todos, a API SOBIA, e o primeiro login
+ * estourava: `clienteDeSistema()` LANÇA, e o `Error` cru vira 500 no
+ * cadastro. O cabeçalho deste arquivo prometia o contrário ("a API precisa
+ * dizer isso no boot, e não no primeiro cadastro") e a mensagem do erro
+ * afirma "a API não sobe" — mas a API subia; o que não funcionava era o
+ * serviço.
+ *
+ * É a MESMA polaridade do `decisaoDoAdminLocal` (PR #115) e do `JWT_SECRET`
+ * (ADR-0002): `development` é o único ambiente com direito ao atalho.
  */
 export function verificarCredenciaisDoBanco(env: AmbienteDoBanco): VereditoCredenciais {
-  const emProducao = env.NODE_ENV?.trim().toLowerCase() === 'production';
+  const ambiente = env.NODE_ENV?.trim().toLowerCase();
 
   const senhaRuntime = senhaDaUri(env.DATABASE_URL);
   if (senhaExposta(senhaRuntime)) {
@@ -103,12 +111,13 @@ export function verificarCredenciaisDoBanco(env: AmbienteDoBanco): VereditoCrede
   }
 
   if (env.SYSTEM_DATABASE_URL === undefined || env.SYSTEM_DATABASE_URL.trim() === '') {
-    if (emProducao) {
+    if (ambiente !== 'development') {
       return {
         ok: false,
         motivo:
-          `SYSTEM_DATABASE_URL é obrigatório em produção: é a credencial que abre o bucket de ` +
-          `SISTEMA (#118). Sem ela, o bucket de sistema não abre.`,
+          `SYSTEM_DATABASE_URL é obrigatório: é a credencial que abre o bucket de ` +
+          `SISTEMA (#118). Sem ela, o bucket de sistema não abre — e o primeiro ` +
+          `login devolve 500.`,
       };
     }
     return { ok: true };

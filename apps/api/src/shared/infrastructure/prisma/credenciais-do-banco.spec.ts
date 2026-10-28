@@ -87,6 +87,41 @@ describe('verificarCredenciaisDoBanco() (#118)', () => {
     expect(veredito.ok).toBe(true);
   });
 
+  it('RECUSA fora de `development` quando falta o SYSTEM_DATABASE_URL — default-deny', () => {
+    // ⚠️ O caso que a polaridade antiga (`=== 'production'`) deixava passar:
+    // `staging`, `prod`, `Prod` e `NODE_ENV` ausente. A API SOBIA, e o
+    // primeiro login estourava — `clienteDeSistema()` LANÇA, e o `Error` cru
+    // vira 500 no cadastro.
+    //
+    // `development` é o único ambiente com direito ao atalho — a MESMA
+    // polaridade do `decisaoDoAdminLocal` (PR #115).
+    for (const nodeEnv of ['staging', 'prod', 'Prod', 'PRODUCTION', undefined]) {
+      const veredito = verificarCredenciaisDoBanco({
+        NODE_ENV: nodeEnv,
+        DATABASE_URL: RUNTIME_BOM,
+      });
+      expect(veredito.ok, `NODE_ENV=${String(nodeEnv)}`).toBe(false);
+    }
+  });
+
+  it('RECUSA o placeholder `***` — a isca do example não pode passar', () => {
+    // ⚠️ O `.env.production.example` trouxeram `***` nas DUAS credenciais dos
+    // papeis, e `***` não é a senha publicada nem começa com `change_me`:
+    // o guard ACEITAVA, o boot passava, e o `prepara-papeis.sh` aplicava `***`
+    // como a senha VIVA do papel de produção.
+    for (const uri of [
+      'postgresql://app_runtime:***@postgres:5432/app',
+      'postgresql://app_system:***@postgres:5432/app',
+    ]) {
+      const veredito = verificarCredenciaisDoBanco({
+        NODE_ENV: 'production',
+        DATABASE_URL: uri,
+        SYSTEM_DATABASE_URL: uri,
+      });
+      expect(veredito.ok, uri).toBe(false);
+    }
+  });
+
   // ── o caminho feliz ──────────────────────────────────────────────────────
   it('ACEITA as duas credenciais em produção', () => {
     expect(
