@@ -537,7 +537,56 @@ mesmos 8 caem, com a mesma data — e o CI da `main` está verde porque o últim
 run dela é de 2026-10-22, antes do prazo. A fixture passou a usar instante
 **relativo**; o commit é **separado**, com diagnóstico próprio.
 
-### 9.5 O que ficou FORA (e é a mesma lista da §5, atualizada)
+### 9.5 O P0 que o PR #118 MESMO introduziu — e que só apareceu ao revisar o PR
+
+A §9.4 registra o que o CI mediu. O que segue é o que a **revisão** mediu, e
+é mais grave que o que o CI mediu: um defeito que a implementação do #118
+introduziu, que nenhuma suíte pegou, e que teria quebrado **todo login em
+produção**.
+
+**O defeito.** A #118 trocou o disjunto `escopo_atual() = '*'` das policies por
+`current_user = 'app_system'` — que é o ponto dela. MEDIDO no Postgres 16 real:
+a sessão de RUNTIME com o escopo `'*'` passou a ver **ZERO** empresas e **ZERO**
+usuários; a de SISTEMA vê todos. E o **LOGIN** é o caso que usava a sessão de
+runtime: `findByEmail(email, null)` acontece antes de existir empresa (não há
+header, e um usuário sem membership é invisível sob qualquer outro escopo).
+O repositório abria esse escopo pela sessão de runtime — e, depois da #118, ele
+via zero linhas. Em produção, todo login falharia com "credenciais inválidas",
+sem erro em lugar nenhum.
+
+**Por que nenhuma suíte pegou.** Porque o e2e e a integração sobem a aplicação
+com a URI do **DONO** — superusuário, que ignora a RLS por completo — e a spec
+de integração do repositório de usuários também. A spec que media a RLS de
+verdade media a **sessão**, e o "a sessão de runtime vê zero" foi escrito como
+se fosse a correção funcionando. Era a correção funcionando **e** o login
+quebrado, na mesma frase.
+
+**A correção** é uma regra, e não um conserto caso a caso: `tenantId` nulo é o
+bucket de SISTEMA, e o bucket de SISTEMA é a **credencial** de sistema. O novo
+`comEscopoDeEmpresa(prisma, tenantId, fn)` escolhe a credencial pelo próprio
+`tenantId`, e todo repositório que aceita `tenantId: string | null` passou a
+usá-lo: user, profile, authorization, membership — e o repositório de admin do
+#127, que carrega este PR.
+
+**O teste que faltava** está na spec de RLS: o login, pelo **repositório**,
+contra o Postgres de verdade, com a credencial que a aplicação usa. E a
+fixture foi corrigida pelo caminho — o id do usuário passou a ser UUID **v7**
+(o `UserId` só aceita v7) e o `passwordHash` passou a ter o **formato
+argon2id** (o mapper hidrata a senha). Sem isso, a fixture media a *exception*,
+não o achado.
+
+**MEDIDO**: integração 43 de 43 com a correção, e **1 de 43** com a correção
+desfeita. E o gate de escopo ganhou a entrada da nova costura: sem ela, os
+call sites que passaram a existir sumiriam do painel — o número cairia de 56
+para 20 sem que ninguém tivesse removido um escopo.
+
+**A lição, para quem plans o próximo `PRISMA`:** o defeito não era no código do
+escopo, era no **ambiente de teste**. O e2e mede a aplicação com a credencial
+que ignora a RLS — então nenhuma suite que suba a aplicação mede a policy. A
+regra que faltava: **quem muda a policy tem de medir com a credencial que a
+aplicação usa**, e não com a que ignora a proteção.
+
+### 9.6 O que ficou FORA (e é a mesma lista da §5, atualizada)
 
 O escopo de tenant continua forgeável: a policy compara
 `alvo::text = escopo_atual()`, e uma sessão com a credencial de runtime pode
