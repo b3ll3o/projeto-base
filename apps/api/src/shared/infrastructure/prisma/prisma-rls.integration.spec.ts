@@ -21,7 +21,7 @@
 // deveria tê-la barrado.
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { createHmac, randomUUID } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import {
   setupTestDatabase,
