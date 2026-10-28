@@ -41,23 +41,35 @@ vi.mock('../../../../shared/infrastructure/prisma/escopo.js', async (importOrigi
     await importOriginal<typeof import('../../../../shared/infrastructure/prisma/escopo.js')>();
   return {
     ...original,
+    comEscopoDeSistema: (fn: (tx: never) => Promise<unknown>) =>
+      (sistema.cliente as { $transaction: (f: typeof fn) => Promise<unknown> }).$transaction(fn),
     // o `save` do perfil GLOBAL abre a transacao no cliente de SISTEMA
     clienteDeSistema: () => sistema.cliente as never,
-    comEscopoDeEmpresa: async (
+    // #118: `comEscopoDeEmpresa` escolhe a CREDENCIAL pelo `tenantId` — e
+    // `tenantId` nulo e' o bucket de SISTEMA. E' a `comEscopoDeEmpresa` que e'
+    // mockada (e nao a `comEscopoDeSistema`): a primeira chama a segunda pelo
+    // LIGAMENTO LOCAL do modulo, e um mock do export nao intercepta essa
+    // chamada interna.
+    comEscopoDeEmpresa: (async (
       prisma: never,
       tenantId: string | null,
       fn: (tx: never) => Promise<unknown>,
     ) => {
       if (tenantId !== null) {
-        return original.comEscopo(prisma, original.escopoDoTenant(tenantId), fn);
+        // o `fn` do duplo e' `(tx: never) => ...`: o `never` e' o que o torna
+        // assignavel a qualquer `tx`, e o cast resolve a incompatibilidade do
+        // parametro generico do `comEscopo`.
+        return original.comEscopo(prisma, original.escopoDoTenant(tenantId), fn as never);
       }
-      const cliente = sistema.cliente;
+      const cliente = sistema.cliente as {
+        $transaction: (f: (tx: never) => Promise<unknown>) => Promise<unknown>;
+      } | null;
       if (cliente === null) throw new Error('a spec nao definiu o cliente de SISTEMA');
       return cliente.$transaction(async (tx: never) => {
         await original.abrirEscopo(tx, sistema.escopo);
         return fn(tx);
       });
-    },
+    }) as unknown as typeof original.comEscopoDeEmpresa,
   };
 });
 
