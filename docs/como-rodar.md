@@ -76,6 +76,40 @@ openssl rand -base64 48   # preencher a linha JWT_SECRET= de apps/api/.env
 ✅ medido: `apps/api/.env` já existia neste checkout com `NODE_ENV`, `PORT`, `DATABASE_URL`,
 `LOG_LEVEL` e `JWT_SECRET` — nada a fazer.
 
+### 1.2.1 Senhas dos papéis do banco ⚠️ desde a #118
+
+O `apps/api/.env.example` traz **placeholder** nas senhas dos papéis (`change_me_gere_a_sua`), e
+a API **recusa o boot com placeholder** — em qualquer `NODE_ENV`, inclusive em dev. Motivo: a
+senha que a migration publicava (`app_runtime_dev`) está no histórico do Git, e um guard que
+só barra em produção deixa o padrão público valendo em todo o resto.
+
+São **duas** senhas, de **dois** papéis, e elas não são a mesma:
+
+| papel | credencial | o que abre |
+|---|---|---|
+| `app_runtime` | `DATABASE_URL` | o escopo de **empresa** (o app) |
+| `app_system` | `SYSTEM_DATABASE_URL` | o **bucket de sistema** (o perfil global, a administração cross-empresa) |
+| dono | `DIRECT_DATABASE_URL` | `migrate`/`seed` — `CREATE ROLE`, `ALTER TABLE … ENABLE RLS`, `GRANT` |
+
+A separação não é cosmeticidade: desde a #118 o bucket de sistema é concedido pelo
+`current_user`, e o `current_user` vem da **credencial** — não de um GUC que a sessão escolhe.
+Um `SET app.tenant_id = '*'` na sessão de runtime não abre mais nada.
+
+Para subir:
+
+```bash
+openssl rand -base64 48   # senha do papel de RUNTIME  -> DATABASE_URL
+openssl rand -base64 48   # senha do papel de SISTEMA  -> SYSTEM_DATABASE_URL
+# … ponha cada uma na URI correspondente de apps/api/.env …
+
+cd apps/api && pnpm exec prisma migrate deploy && cd ../..   # cria os papéis (sem senha)
+cd apps/api && sh scripts/prepara-papeis.sh && cd ../..       # APLICA a senha de cada papel
+```
+
+`prepara-papeis.sh` lê a senha de cada URI e aplica no papel com a credencial de **DONO** — nenhuma
+senha de papel fica versionada, em nenhum ambiente. ✅ medido 2026-10-27: com as senhas geradas e
+aplicadas, `pnpm ci:boot` sobe a API (`health: ok, banco: ok`) e o web (`health: ok`).
+
 ### 1.3 Prisma Client + migrations
 
 ```bash

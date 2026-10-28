@@ -120,11 +120,22 @@ pnpm turbo run db:generate
 cp apps/api/.env.example apps/api/.env
 openssl rand -base64 48    # preencha o valor na linha JWT_SECRET= de apps/api/.env
 
+# 4.1. Senhas dos PAPÉIS do banco (#118) — o .env.example traz PLACEHOLDER, e a
+# API recusa o boot com placeholder (a senha que a migration publicava,
+# `app_runtime_dev`, está no histórico do Git — quem leu o repositório, conhece).
+# São DOIS papéis, com DUAS senhas: app_runtime (DATABASE_URL, o escopo de
+# empresa) e app_system (SYSTEM_DATABASE_URL, o bucket de sistema).
+openssl rand -base64 48    # -> senha do papel de RUNTIME, em DATABASE_URL
+openssl rand -base64 48    # -> senha do papel de SISTEMA, em SYSTEM_DATABASE_URL
+
 # 5. Rodar migrations — o binário do Prisma direto, de dentro de apps/api, para que ele leia
 # o apps/api/.env. Não existe script `prisma:migrate:deploy` em nenhum package.json: o pnpm
 # responde "None of the selected packages has a ... script" e SAI 0 — verde para quem só olha
 # o exit code
 cd apps/api && pnpm exec prisma migrate deploy && cd ../..
+
+# 5.1. Aplicar a senha de cada papel (a migration cria os papéis SEM senha)
+cd apps/api && sh scripts/prepara-papeis.sh && cd ../..
 
 # 6. Subir apps em watch mode
 pnpm dev    # turbo run dev em paralelo — api em :3000, web em :3001
