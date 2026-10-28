@@ -18,9 +18,67 @@
 // opostas: um é a garantia (fail-safe fora de dev), o outro é o erro fatal.
 
 import { describe, expect, it } from 'vitest';
-import { HOSTS_DESTINO_LOCAL, decisaoDoAdminLocal } from './decisao-do-admin-local.js';
+import {
+  HOSTS_DESTINO_LOCAL,
+  decisaoDoAdminLocal,
+  decisaoDoPrimeiroUser,
+} from './decisao-do-admin-local.js';
 
-const url = (host: string): string => `postgresql://projeto:projeto@${host}/projeto_base`;
+const url = (host: string): string => `postgresql://projeto:***@${host}/projeto_base`;
+
+// ── #121: a promoção do PRIMEIRO user a admin global ──────────────────────
+//
+// O passo 5 do seed promove o primeiro user a admin global, e não tinha
+// guard nenhum. `POST /users` é `@Public()` — a primeira conta da fila pode
+// ser de qualquer pessoa que se cadastrou. A decisão agora é a do passo 4, e
+// pela mesma razão: o admin local e a promoção do primeiro user são o mesmo
+// risco (uma conta sem dono, com poder total).
+describe('decisaoDoPrimeiroUser (#121)', () => {
+  it('PROMOVE em dev local', () => {
+    expect(decisaoDoPrimeiroUser('development', url('localhost'))).toBe('promover');
+    expect(decisaoDoPrimeiroUser('development', url('postgres'))).toBe('promover');
+  });
+
+  it('NÃO promove fora de development (default-deny)', () => {
+    expect(decisaoDoPrimeiroUser('production', url('localhost'))).toBe('nao-promover');
+    expect(decisaoDoPrimeiroUser('staging', url('localhost'))).toBe('nao-promover');
+    expect(decisaoDoPrimeiroUser(undefined, url('localhost'))).toBe('nao-promover');
+    // `Development` (com D maiúsculo) não casa — o match é exato.
+    expect(decisaoDoPrimeiroUser('Development', url('localhost'))).toBe('nao-promover');
+  });
+
+  it('NÃO promove quando dev aponta para um destino que não é local', () => {
+    // Aqui o passo 4 JÁ abortou o processo (`recusar`); o passo 5 nunca é
+    // alcançado. A função responde `nao-promover` mesmo assim, para não ter
+    // um segundo vocabulário de decisão.
+    expect(decisaoDoPrimeiroUser('development', url('db-producao'))).toBe('nao-promover');
+  });
+
+  it('NÃO promove quando a URL não parseia', () => {
+    expect(decisaoDoPrimeiroUser('development', 'nao-e-uma-url')).toBe('nao-promover');
+  });
+
+  it('a decisão do passo 5 coincide com a do passo 4 em TODOS os casos', () => {
+    // A propriedade que o seed depende: quem pode ter o admin local é quem
+    // pode promover o primeiro user. Se um dia divergirem, um dos dois
+    // bypasses fica aberto.
+    const casos: readonly (readonly [string | undefined, string])[] = [
+      ['development', 'localhost'],
+      ['development', '127.0.0.1'],
+      ['development', 'postgres'],
+      ['development', 'db-producao'],
+      ['production', 'localhost'],
+      ['production', 'postgres'],
+      ['staging', 'localhost'],
+      [undefined, 'localhost'],
+      ['development', 'nao-e-uma-url'],
+    ];
+    for (const [nodeEnv, host] of casos) {
+      const esperado = decisaoDoAdminLocal(nodeEnv, url(host)) === 'criar';
+      expect(decisaoDoPrimeiroUser(nodeEnv, url(host)) === 'promover').toBe(esperado);
+    }
+  });
+});
 
 /**
  * Os destinos locais CONHECIDOS — a whitelist, escrita AQUI e não derivada do

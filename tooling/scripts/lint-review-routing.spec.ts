@@ -5,7 +5,10 @@
 // e limites de LOC da convenção markdown.
 
 import { describe, it, expect } from 'vitest';
-import { lintMatrix } from './lint-review-routing.js';
+import { existsSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { lintMatrix, isPathGitignored } from './lint-review-routing.js';
 
 describe('lintMatrix()', () => {
   it('passes for valid matrix', () => {
@@ -203,5 +206,43 @@ describe('lintMatrix() — bloco yaml que não é mapa', () => {
 
   it('NÃO erra quando NÃO há bloco yaml nenhum', () => {
     expect(lintMatrix('# Review routing\n\nSem matriz ainda.\n').errors).toEqual([]);
+  });
+});
+
+// #117: command injection no lint de roteamento.
+//
+// Era `execSync(`git check-ignore ${JSON.stringify(filePath)}`)`. O
+// `JSON.stringify` embrulha em aspas DUPLAS, e dentro de aspas duplas o shell
+// expande `$(...)` — um nome de arquivo com `$(comando)` executava o comando
+// no CI. Este teste é o que dá dente à correção: se alguém voltar a
+// interpolar num shell, o marcador é criado e o teste cai.
+describe('isPathGitignored() — #117 command injection', () => {
+  it('NÃO executa o comando embutido no nome do arquivo', () => {
+    const marcador = join(tmpdir(), `pwned-lint-review-${process.pid}-${Date.now()}`);
+    // O nome do arquivo É o payload. O `git check-ignore` recebe isso como
+    // argumento literal; nada é executado.
+    const resultado = isPathGitignored(`$(touch ${marcador})`);
+    try {
+      expect(resultado).toBe(false);
+      expect(existsSync(marcador)).toBe(false);
+    } finally {
+      rmSync(marcador, { force: true });
+    }
+  });
+
+  it('NÃO executa comando com crase (o outro interpolador do shell)', () => {
+    const marcador = join(tmpdir(), `pwned-lint-review-backtick-${process.pid}-${Date.now()}`);
+    isPathGitignored(`\`touch ${marcador}\``);
+    try {
+      expect(existsSync(marcador)).toBe(false);
+    } finally {
+      rmSync(marcador, { force: true });
+    }
+  });
+
+  it('trata um path que começa com "-" como path, não como opção do git', () => {
+    // O `--` antes do path é o que garante isto: sem ele, `-x` seria lido
+    // como opção do `git check-ignore`.
+    expect(isPathGitignored('--help')).toBe(false);
   });
 });

@@ -33,6 +33,7 @@ import { perfisDaEmpresa } from '../../domain/perfis-da-empresa.js';
 import { EmailAlreadyInUseException } from '../../../users/domain/exceptions/user.exceptions.js';
 import {
   abrirEscopo,
+  comEscopoDeSistema,
   comEscopo,
   escopoDoTenant,
 } from '../../../../shared/infrastructure/prisma/escopo.js';
@@ -165,7 +166,7 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
     // jeito — e é por isso que ela é lançada de onde o erro aconteceu, e não
     // de um `catch` em volta, que não saberia qual das duas constraints
     // estourou.
-    await this.prisma.$transaction(async (tx: Tx) => {
+    await comEscopoDeSistema(async (tx: Tx) => {
       // pt-BR (Fase 10 — a correção): a sessão nasce em SISTEMA, na PRIMEIRA
       // linha, e só desce para a empresa quando a empresa já existe.
       //
@@ -189,7 +190,9 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
       // criar membership na PRÓPRIA empresa, então permitir INSERT em `users`
       // sob escopo de empresa daria "cria conta + cria membership = herda o
       // perfil da casa".
-      await abrirEscopo(tx, escopoDoTenant(null));
+      // #118: o escopo de SISTEMA ja' foi aberto por `comEscopoDeSistema` — e
+      // ele e' aberto na CREDENCIAL de sistema, que e' o que a policy exige
+      // (antes, o `'*'` no GUC era o que concedia o bucket).
 
       const empresaCriada = await this.criarEmpresa(tx, empresa);
 
@@ -258,11 +261,13 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
     // A tradução do `slug` acontece em `criarEmpresa`, que é a PRIMEIRA
     // escrita — e aqui o `users.email` nem participa, porque a conta já
     // existe e não é tocada. Por isso não há `catch` em volta.
-    return await this.prisma.$transaction(async (tx: Tx) => {
+    return await comEscopoDeSistema(async (tx: Tx) => {
       // A sessão nasce em SISTEMA: o `RETURNING` do `INSERT` em `tenants` é
       // avaliado pela policy de SELECT, que sem escopo devolve zero linhas.
       // Mesma razão de `provisionarEmpresaPropria`.
-      await abrirEscopo(tx, escopoDoTenant(null));
+      // #118: o escopo de SISTEMA ja' foi aberto por `comEscopoDeSistema` — e
+      // ele e' aberto na CREDENCIAL de sistema, que e' o que a policy exige
+      // (antes, o `'*'` no GUC era o que concedia o bucket).
 
       const empresaCriada = await this.criarEmpresa(tx, empresa);
 
@@ -396,7 +401,7 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
     convite: ConviteParaAceitar,
     novaConta: UsuarioParaProvisionar | null,
   ): Promise<void> {
-    await this.prisma.$transaction(async (tx: Tx) => {
+    await comEscopoDeSistema(async (tx: Tx) => {
       // pt-BR (Fase 9 — RLS): o escopo começa em SISTEMA e é APERFEIÇOADO assim
       // que o convite revela a empresa. Isso não é um atalho: o `tenant_id` só
       // é conhecido DEPOIS de ler o convite, e a `invitations_leitura` já está
@@ -405,7 +410,9 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
       // teve porque já leu o convite) é a credencial desse acesso. A partir da
       // linha seguinte a sessão está no escopo da empresa e todo o resto é
       // filtrado normalmente.
-      await abrirEscopo(tx, escopoDoTenant(null));
+      // #118: o escopo de SISTEMA ja' foi aberto por `comEscopoDeSistema` — e
+      // ele e' aberto na CREDENCIAL de sistema, que e' o que a policy exige
+      // (antes, o `'*'` no GUC era o que concedia o bucket).
 
       // Relido dentro da transação, e não reusado o que o caso de uso viu:
       // entre a validação e aqui o convite pode ter sido usado por outra
@@ -589,7 +596,7 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
     // primeiro `it()` de `prisma-rls.integration.spec.ts` mede o fail-closed do
     // escopo ausente; o escopo `'*'` aqui é uma ESCOLHA, e ela está escrita
     // aqui — quem achar que é engano lê este comentário antes de mudar.
-    const linha = await comEscopo(this.prisma, escopoDoTenant(null), (tx) =>
+    const linha = await comEscopoDeSistema((tx) =>
       tx.invitation.findUnique({
         where: { token },
         select: {

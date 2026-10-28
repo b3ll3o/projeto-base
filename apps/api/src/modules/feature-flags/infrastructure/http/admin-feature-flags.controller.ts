@@ -32,6 +32,7 @@
 // escrita em produção sem efeito de segurança, por um ganho de nada.
 
 import { Body, Controller, Get, Inject, Param, Put, Req, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import type { FeatureFlagDto, UpdateFeatureFlagInputDto } from '@projeto/shared-types';
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
@@ -64,7 +65,18 @@ interface RequestComAtor {
  */
 const DefinirFeatureFlagSchema = z.object({ ativada: z.boolean() });
 
+// ⚠️ `@ApiBearerAuth()` NA CLASSE, e não em cada handler: no documento
+// OpenAPI a rota protegida é a que declara `security`, e a rota PÚBLICA é a
+// ÚNICA que não declara (o inverso disso é defeito medido: uma rota com
+// guard e sem `security` sai pública no contrato).
+//
+// ⚠️ Aqui todas as rotas são protegidas — não há uma pública neste
+// controller — então o decorator na CLASSE é o que fecha a classe: uma rota
+// NOVA herda a proteção do contrato, em vez de depender de alguém lembrar
+// de declarar o decorator no handler.
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard)
+@ApiTags('feature-flags')
 @Controller('admin/feature-flags')
 export class AdminFeatureFlagsController {
   constructor(
@@ -89,12 +101,14 @@ export class AdminFeatureFlagsController {
   }
 
   @Get()
+  @ApiOperation({ summary: 'Listar as feature flags' })
   @RequirePermission('admin.manage-feature-flags')
   async listar(@Req() req: RequestComAtor): Promise<FeatureFlagDto[]> {
     return this.useCases.listar(this.atorDe(req));
   }
 
   @Put(':chave')
+  @ApiOperation({ summary: 'Definir o valor de uma feature flag' })
   @RequirePermission('admin.manage-feature-flags')
   async definir(
     @Param('chave') chave: string,

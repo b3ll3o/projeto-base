@@ -76,6 +76,54 @@ openssl rand -base64 48   # preencher a linha JWT_SECRET= de apps/api/.env
 ✅ medido: `apps/api/.env` já existia neste checkout com `NODE_ENV`, `PORT`, `DATABASE_URL`,
 `LOG_LEVEL` e `JWT_SECRET` — nada a fazer.
 
+### 1.2.1 Senhas dos papéis do banco ⚠️ desde a #118
+
+O `apps/api/.env.example` traz **placeholder** nas senhas dos papéis (`change_me_gere_a_sua`), e
+a API **recusa o boot com placeholder** — em qualquer `NODE_ENV`, inclusive em dev. Motivo: a
+senha que a migration publicava (`app_runtime_dev`) está no histórico do Git, e um guard que
+só barra em produção deixa o padrão público valendo em todo o resto.
+
+São **duas** senhas, de **dois** papéis, e elas não são a mesma:
+
+| papel | credencial | o que abre |
+|---|---|---|
+| `app_runtime` | `DATABASE_URL` | o escopo de **empresa** (o app) |
+| `app_system` | `SYSTEM_DATABASE_URL` | o **bucket de sistema** (o perfil global, a administração cross-empresa) |
+| dono | `DIRECT_DATABASE_URL` | `migrate`/`seed` — `CREATE ROLE`, `ALTER TABLE … ENABLE RLS`, `GRANT` |
+
+A separação não é cosmeticidade: desde a #118 o bucket de sistema é concedido pelo
+`current_user`, e o `current_user` vem da **credencial** — não de um GUC que a sessão escolhe.
+Um `SET app.tenant_id = '*'` na sessão de runtime não abre mais nada.
+
+Para subir:
+
+```bash
+openssl rand -hex 32      # senha do papel de RUNTIME  -> DATABASE_URL
+openssl rand -hex 32      # senha do papel de SISTEMA  -> SYSTEM_DATABASE_URL
+# … ponha cada uma na URI correspondente de apps/api/.env …
+
+cd apps/api && pnpm exec prisma migrate deploy && cd ../..   # cria os papéis (sem senha)
+cd apps/api && sh scripts/prepara-papeis.sh && cd ../..       # APLICA a senha de cada papel
+```
+
+⚠️ **A senha vai DENTRO da URI, e a URI não aceita qualquer caractere.** O `base64` do
+`openssl rand -base64 48` traz `/` e `+`, e o `/` ENCERRA a parte de credencial da URI — a
+aplicação subiria com "Invalid URL". Por isso o comando acima é `openssl rand -hex 32`: só
+`[0-9a-f]`, que não precisa de percent-encoding nenhum.
+
+`prepara-papeis.sh` lê a senha de cada URI e aplica no papel com a credencial de **DONO** — nenhuma
+senha de papel fica versionada, em nenhum ambiente. ✅ medido 2026-10-27: com as senhas geradas e
+aplicadas, `pnpm ci:boot` sobe a API (`health: ok, banco: ok`) e o web (`health: ok`).
+✅ medido 2026-10-28: o script lê o `apps/api/.env` (o README, este runbook e o `.env.example`
+mandam pôr as URIs LÁ, e o script só olhava o ambiente — então a instrução não podia ser seguida);
+e ele RECUSA aplicar um placeholder (`CHANGE_ME_…`) ou uma senha curta, porque é neste passo que
+a senha se torna VIVA no papel.
+
+⚠️ **`prisma migrate reset` deixa os papeis sem senha.** A migration `20261027000001` põe o
+`app_runtime` em `NOLOGIN` (é o que tira a senha publicada do histórico do Git), e o passo que
+restaura o LOGIN é o `prepara-papeis.sh`. Depois de um `reset`, rode o script de novo — senão o
+sintoma é "role app_runtime is not permitted to log in", com o banco aparentemente saudável.
+
 ### 1.3 Prisma Client + migrations
 
 ```bash
@@ -106,6 +154,11 @@ curl -s http://localhost:3001/api/health
 
 curl -o /dev/null -w '%{http_code}\n' http://localhost:3000/api/docs   # 200 (Swagger UI)
 ```
+
+⚠️ O `/api/docs` só existe em `development` (#122). Fora dele o Swagger é
+**desabilitado** — é o default-deny do `JWT_SECRET`: um documento OpenAPI
+publica a superfície completa da API (rotas, schemas, requisitos de auth) a
+quem descobrir a URL. Para ligar de propósito: `SWAGGER_ENABLED=true`.
 
 ⚠️ No boot do web saem uns `Module not found` de `@opentelemetry/winston-transport` e
 `@opentelemetry/exporter-jaeger`, peers opcionais do `auto-instrumentations-node`: ✅ medido —
@@ -229,8 +282,14 @@ Inverter as duas não dá erro — a stack sobe e as policies ficam inertes.
 ```bash
 # ⚠️ NÃO rode se o seu .env.production já tem segredo: o `cp` é DESTRUTIVO.
 cp .env.production.example .env.production     # preencher os CHANGE_ME_*
-#   POSTGRES_PASSWORD, JWT_SECRET  (openssl rand -base64 48)
+#   POSTGRES_PASSWORD               (openssl rand -hex 32 — a senha do dono vai
+#                                    DENTRO da URI, e a URI não aceita o `/`
+#                                    do base64)
+#   JWT_SECRET                      (openssl rand -base64 48 — este NÃO vai
+#                                    dentro de uma URI)
 #   DIRECT_DATABASE_URL            (conexão de DONO — ver o aviso abaixo)
+#   DATABASE_URL                   (papel app_runtime  — §1.2.1)
+#   SYSTEM_DATABASE_URL            (papel app_system  — §1.2.1)
 
 # .env da RAIZ: só o DATABASE_URL, host = "postgres". O serviço `api` declara
 # `DATABASE_URL: ${DATABASE_URL}`, que o compose interpola da raiz; sem ele a
@@ -243,18 +302,30 @@ echo 'DATABASE_URL=postgresql://app_runtime:<senha-de-runtime>@postgres:5432/pro
 # Editar não deixa a pergunta existir. ⚠️ E não ponha a chave no `.env` da raiz:
 # `environment:` tem precedência sobre `env_file` e a sobrescreveria com vazio.
 #
-# ⚠️ A senha de `app_runtime` está em texto puro na migration (migration não lê
-# env). Troque-a fora de banda antes de usar isto fora de dev.
+# ⚠️ As senhas dos DOIS papeis (`app_runtime` e `app_system`) saem do
+# AMBIENTE, e não da migration: a migration `20261027000001` cria os papeis
+# SEM senha (`NOLOGIN`), e o `prepara-papeis.sh` (no entrypoint) aplica a
+# senha que está nestas URIs. O placeholder `CHANGE_ME_…` é recusado pelo
+# guard de boot E pelo script — uma senha de exemplo aplicada aqui viraria a
+# senha VIVA do papel. Ver §1.2.1.
 
 docker compose up -d --build
 docker compose ps
 ```
 
-O entrypoint da imagem prod da api roda as migrations sozinho antes do boot
-(`ENTRYPOINT ["sh","-c","pnpm exec prisma migrate deploy --schema=apps/api/prisma/schema.prisma && node apps/api/dist/main.js"]`).
+O entrypoint da imagem prod da api roda TRÊS passos, e a ordem importa
+(`ENTRYPOINT ["sh","-c","… prisma migrate deploy --schema=prisma/schema.prisma && sh ./scripts/prepara-papeis.sh && node dist/main.js"]`):
+
+1. `prisma migrate deploy` — cria os papeis (sem senha);
+2. `prepara-papeis.sh` — aplica a senha dos dois papeis, com a credencial de
+   DONO;
+3. `node dist/main.js` — a API sobe.
+
 Por isso a `DIRECT_DATABASE_URL` é **obrigatória** nesse ambiente: sem ela o
 `migrate deploy` falha na subida — que é o comportamento correto, porque a
-migration precisa de posse das tabelas para criar o papel e as policies.
+migration precisa de posse das tabelas para criar o papel e as policies. E a
+`SYSTEM_DATABASE_URL` também é: sem ela o passo 2 aborta com
+"ERRO: SYSTEM_DATABASE_URL vazia", e o container entra em crash-loop.
 
 Portas publicadas: api `3000`, web `3001`, otel `4317`/`4318` (perfil observabilidade),
 Grafana `3300` e Prometheus `9090` — estas duas últimas **só em `127.0.0.1`**.
@@ -447,7 +518,8 @@ Rodar o mesmo localmente, na ordem: `pnpm ci:local` (≈1 min medido no README).
 |---|---|---|
 | `JWT_SECRET` | `apps/api/.env` (pnpm) · `.env.production` (Docker) | `JwtTokenService` — **sem default** |
 | `DATABASE_URL` | `apps/api/.env` (pnpm, host `localhost`) · `.env` da raiz (Docker, host `postgres`) — **deve ser `app_runtime`** | Prisma — a conexão da aplicação |
-| `DIRECT_DATABASE_URL` | `apps/api/.env` (pnpm) · `.env.production` (Docker) — **o DONO** | CLI do Prisma (`migrate`, `db seed`) |
+| `SYSTEM_DATABASE_URL` | `apps/api/.env` (pnpm) · `.env.production` (Docker) — **deve ser `app_system`** | `clienteDeSistema()` — a credencial que abre o **bucket de sistema** (#118). **Obrigatória** em todo ambiente que não seja `development`: sem ela o primeiro login devolve 500 |
+| `DIRECT_DATABASE_URL` | `apps/api/.env` (pnpm) · `.env.production` (Docker) — **o DONO** | CLI do Prisma (`migrate`, `db seed`) e o `prepara-papeis.sh` (`ALTER ROLE`) |
 | `POSTGRES_PASSWORD` | `.env.production` | container do Postgres |
 | `API_BASE_URL` | opcional no web — **há fallback** `http://localhost:3000/api/v1` | RSC de `/users`, `/login`, Server Action de `/users/novo` |
 | `ALLOWED_ORIGINS` | `.env.production` / compose | CORS no `main.ts` |

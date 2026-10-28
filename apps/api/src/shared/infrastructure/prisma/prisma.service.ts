@@ -1,5 +1,6 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { verificarCredenciaisDoBanco } from './credenciais-do-banco.js';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
@@ -29,6 +30,19 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   }
 
   async onModuleInit(): Promise<void> {
+    // #118: o guard das credenciais roda ANTES de conectar. Uma credencial
+    // exposta (a senha do papel de runtime está no histórico do Git) ou a
+    // ausência da credencial de SISTEMA têm que matar o boot aqui — e não
+    // aparecer como um comportamento estranho na primeira requisição.
+    const veredito = verificarCredenciaisDoBanco({
+      NODE_ENV: process.env['NODE_ENV'],
+      DATABASE_URL: process.env['DATABASE_URL'],
+      SYSTEM_DATABASE_URL: process.env['SYSTEM_DATABASE_URL'],
+    });
+    if (!veredito.ok) {
+      throw new Error(`Credenciais do banco recusadas: ${veredito.motivo}`);
+    }
+
     await this.$connect();
     this.logger.log('Prisma conectado');
   }

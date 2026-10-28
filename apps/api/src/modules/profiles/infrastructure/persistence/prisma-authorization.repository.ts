@@ -15,7 +15,7 @@ import type { AuthorizationRepositoryPort } from '../../domain/ports/authorizati
 import type { ProfileId } from '../../domain/value-objects/profile-id.vo.js';
 import type { AuthorizationKey } from '../../domain/value-objects/authorization-key.vo.js';
 import { Authorization } from '../../domain/authorization.entity.js';
-import { comEscopo, escopoDoTenant } from '../../../../shared/infrastructure/prisma/escopo.js';
+import { comEscopoDeEmpresa } from '../../../../shared/infrastructure/prisma/escopo.js';
 
 @Injectable()
 export class PrismaAuthorizationRepository implements AuthorizationRepositoryPort {
@@ -29,7 +29,7 @@ export class PrismaAuthorizationRepository implements AuthorizationRepositoryPor
     // ela só existe para quem tem `app.tenant_id` posto. Sem escopo a
     // consulta volta vazia — o sintoma seria "as permissões do perfil
     // sumiram", não um erro.
-    const rows = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+    const rows = await comEscopoDeEmpresa(this.prisma, tenantId, (tx) =>
       tx.authorization.findMany({
         where: { profileId: profileId.value },
         orderBy: { permissionKey: 'asc' },
@@ -47,7 +47,7 @@ export class PrismaAuthorizationRepository implements AuthorizationRepositoryPor
   }
 
   async countByProfile(profileId: ProfileId, tenantId: string | null): Promise<number> {
-    return comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+    return comEscopoDeEmpresa(this.prisma, tenantId, (tx) =>
       tx.authorization.count({
         where: { profileId: profileId.value },
       }),
@@ -60,7 +60,7 @@ export class PrismaAuthorizationRepository implements AuthorizationRepositoryPor
     agora: Date;
     tenantId: string | null;
   }): Promise<Authorization> {
-    const row = await comEscopo(this.prisma, escopoDoTenant(input.tenantId), (tx) =>
+    const row = await comEscopoDeEmpresa(this.prisma, input.tenantId, (tx) =>
       tx.authorization.upsert({
         where: {
           profileId_permissionKey: {
@@ -89,7 +89,7 @@ export class PrismaAuthorizationRepository implements AuthorizationRepositoryPor
     key: AuthorizationKey;
     tenantId: string | null;
   }): Promise<void> {
-    await comEscopo(this.prisma, escopoDoTenant(input.tenantId), (tx) =>
+    await comEscopoDeEmpresa(this.prisma, input.tenantId, (tx) =>
       tx.authorization.deleteMany({
         where: {
           profileId: input.profileId.value,

@@ -74,7 +74,13 @@ async function exportOpenApi(): Promise<void> {
 
   const document = SwaggerModule.createDocument(app, config);
 
-  const outputPath = resolve(process.cwd(), 'openapi.json');
+  // #125: o `OPENAPI_OUTPUT_PATH` permite exportar para outro caminho — que
+  // é o que o gate `check-openapi-contract` usa para comparar a spec GERADA
+  // com a versionada sem SOBRESCREVER a versionada (o export escreve no
+  // arquivo, e um gate que o reescreve antes de comparar não compara nada).
+  const outputPath = process.env.OPENAPI_OUTPUT_PATH
+    ? resolve(process.env.OPENAPI_OUTPUT_PATH)
+    : resolve(process.cwd(), 'openapi.json');
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, JSON.stringify(document, null, 2));
 

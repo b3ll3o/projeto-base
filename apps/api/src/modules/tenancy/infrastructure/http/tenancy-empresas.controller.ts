@@ -22,7 +22,7 @@
 // onboarding, é produto — e não foi pedida.)
 
 import { Body, Controller, Get, Inject, Post, Req, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
 import { ZodValidationPipe } from '../../../../shared/infrastructure/http/zod-validation.pipe.js';
@@ -67,6 +67,7 @@ const CriarEmpresaSchema = z.object({
 });
 
 @UseGuards(JwtAuthGuard)
+@ApiTags('tenancy')
 @Controller()
 export class TenancyEmpresasController {
   constructor(
@@ -77,6 +78,7 @@ export class TenancyEmpresasController {
   ) {}
 
   @Post('tenants')
+  @ApiOperation({ summary: 'Criar a própria empresa' })
   // pt-BR: `@ApiBearerAuth()` é OBRIGATÓRIO aqui. No documento OpenAPI a rota
   // PÚBLICA é a única que não declara `security` — e estas duas exigem JWT
   // (`JwtAuthGuard` na classe). Sem o decorator, um cliente gerado do
@@ -107,6 +109,7 @@ export class TenancyEmpresasController {
   }
 
   @Get('me/tenants')
+  @ApiOperation({ summary: 'Listar as empresas do ator' })
   // Lista vazia é 200 com corpo vazio — a conta em onboarding (ou o admin de
   // sistema) não pertence a empresa nenhuma, e isso é uma RESPOSTA, não uma
   // ausência de recurso.

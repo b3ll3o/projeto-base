@@ -40,6 +40,23 @@ import { AssinaturaDeMembership } from '../../../../shared/infrastructure/prisma
 
 const AGORA = new Date('2026-10-19T12:00:00.000Z');
 
+/**
+ * Um instante NO FUTURO — o convite ainda vale.
+ *
+ * ⚠️ MEDIDO 2026-10-27: a data era FIXA (`2026-10-26T12:00:00.000Z`), e ela
+ * passou. A partir de 2026-10-26T12:00Z os 8 testes de entrada por convite
+ * passaram a falhar com "expirado" — e a falha era da FIXTURE, não do
+ * código. MEDIDO na `main`: os mesmos 8 caem, com a mesma data; e o CI da
+ * `main` estava verde porque o ÚLTIMO run dela é de 2026-10-22 — antes do
+ * prazo.
+ *
+ * Uma data RELATIVA não vence: o teste passa hoje e daqui a um ano.
+ */
+const FUTURO = new Date(Date.now() + 60 * 60 * 1000);
+
+/** Um instante NO PASSADO — o convite já venceu. */
+const PASSADO = new Date(Date.now() - 60 * 60 * 1000);
+
 function usuario(email: string) {
   return {
     id: randomUUID(),
@@ -76,7 +93,9 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
     repo = new PrismaTenantOnboardingRepository(ctx.prisma, assinatura);
     memberships = new PrismaTenantMembershipRepository(ctx.prisma);
     const { PrismaClient } = await import('@prisma/client');
-    runtime = new PrismaClient({ datasourceUrl: uriComoPapelDeRuntime(ctx.uriDoBanco) });
+    runtime = new PrismaClient({
+      datasourceUrl: uriComoPapelDeRuntime(ctx.uriDoBanco, ctx.senhaDoPapel),
+    });
   });
 
   afterAll(async () => {
@@ -287,7 +306,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
       email: 'ana@acme.dev',
       role: 'member',
       token: 'secreto',
-      expiresAt: new Date('2026-10-26T12:00:00.000Z'),
+      expiresAt: FUTURO,
     });
 
     const achado = await repo.buscarConvitePorToken('secreto');
@@ -312,7 +331,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
       email: 'dono@acme.dev',
       role: 'member',
       token: 'secreto',
-      expiresAt: new Date('2026-10-26T12:00:00.000Z'),
+      expiresAt: FUTURO,
     });
     const convite = await ctx.prisma.invitation.findFirstOrThrow({ where: { token: 'secreto' } });
 
@@ -335,7 +354,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
       email: 'ana@acme.dev',
       role: 'member',
       token: 'mesmo',
-      expiresAt: new Date('2026-10-26T12:00:00.000Z'),
+      expiresAt: FUTURO,
     });
 
     await expect(
@@ -344,7 +363,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
         email: 'ana@globex.dev',
         role: 'member',
         token: 'mesmo',
-        expiresAt: new Date('2026-10-26T12:00:00.000Z'),
+        expiresAt: FUTURO,
       }),
     ).rejects.toMatchObject({ code: 'P2002' });
   });
@@ -357,7 +376,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
       email: 'ana@acme.dev',
       role: 'member',
       token: 't1',
-      expiresAt: new Date('2026-10-26T12:00:00.000Z'),
+      expiresAt: FUTURO,
     };
 
     await repo.emitirConvite(convite);
@@ -379,7 +398,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
       email: 'ana@acme.dev',
       role: 'member',
       token: 'secreto',
-      expiresAt: new Date('2026-10-26T12:00:00.000Z'),
+      expiresAt: FUTURO,
     });
     const convite = await repo.buscarConvitePorToken('secreto');
     const ana = await ctx.prisma.user.create({
@@ -409,7 +428,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
       role: 'member',
       token: 'secreto',
       // VENCIDO: a data está no passado.
-      expiresAt: new Date('2026-10-18T12:00:00.000Z'),
+      expiresAt: PASSADO,
     });
     const convite = await repo.buscarConvitePorToken('secreto');
     const ana = await ctx.prisma.user.create({
@@ -445,7 +464,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
       email: 'ana@acme.dev',
       role: 'gerente',
       token: 'secreto',
-      expiresAt: new Date('2026-10-26T12:00:00.000Z'),
+      expiresAt: FUTURO,
     });
     const convite = await repo.buscarConvitePorToken('secreto');
     const ana = await ctx.prisma.user.create({
@@ -472,7 +491,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
       email: 'ana@acme.dev',
       role: 'member',
       token: 'secreto',
-      expiresAt: new Date('2026-10-26T12:00:00.000Z'),
+      expiresAt: FUTURO,
     });
     const convite = await repo.buscarConvitePorToken('secreto');
     const ana = await ctx.prisma.user.create({
@@ -500,7 +519,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
       email: 'ana@acme.dev',
       role: 'member',
       token: 'secreto',
-      expiresAt: new Date('2026-10-26T12:00:00.000Z'),
+      expiresAt: FUTURO,
     });
     const convite = await repo.buscarConvitePorToken('secreto');
     const ana = await ctx.prisma.user.create({
@@ -522,7 +541,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
       email: 'ana@acme.dev',
       role: 'member',
       token: 'secreto',
-      expiresAt: new Date('2026-10-26T12:00:00.000Z'),
+      expiresAt: FUTURO,
     });
     const convite = await repo.buscarConvitePorToken('secreto');
     const id = randomUUID();
@@ -556,7 +575,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
       email: 'dono@acme.dev',
       role: 'member',
       token: 'secreto',
-      expiresAt: new Date('2026-10-26T12:00:00.000Z'),
+      expiresAt: FUTURO,
     });
     const convite = await repo.buscarConvitePorToken('secreto');
     const id = randomUUID();
@@ -655,7 +674,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
         email: 'nova@acme.dev',
         role: 'member',
         token: 'token-runtime',
-        expiresAt: new Date('2026-10-26T12:00:00.000Z'),
+        expiresAt: FUTURO,
       });
       const convite = await repo.buscarConvitePorToken('token-runtime');
 

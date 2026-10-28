@@ -61,7 +61,9 @@ import { Inject, Injectable } from '@nestjs/common';
  * 1. Puxa AuditContext do AuditContextStore (lançando se fora de run()).
  * 2. Carrega o agregado (load via repo) ou cria novo.
  * 3. Aplica o mutator correspondente.
- * 4. Persiste via repo.save(user, expectedVersion=version()-1).
+ * 4. Persiste via repo.save(user, expectedVersion) — o `expectedVersion` vem do
+ *    `If-Match` do cliente. #123: a âncora do optimistic lock é a versão LIDA
+ *    do banco (`loadedVersion()`), não uma suposição sobre a versão atual.
  * 5. Drena domain events e chama audit.record() para cada um (INSERT/UPDATE/DELETE/RESTORE).
  * 6. Em soft-delete: também chama audit.archive().
  *

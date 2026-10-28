@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { AppModule } from './app.module.js';
 import { GlobalExceptionFilter } from './shared/infrastructure/http/global-exception.filter.js';
 import { ZodValidationPipe } from './shared/infrastructure/http/zod-validation.pipe.js';
+import { swaggerHabilitado } from './shared/infrastructure/http/swagger-habilitado.js';
 
 // pt-BR: Inicializa OTel ANTES de qualquer outro código rodar (deve ser o
 // primeiro passo do bootstrap — ver tracing.ts:30-36 para o rationale ESM).
@@ -95,14 +96,25 @@ async function bootstrap(): Promise<void> {
   app.useGlobalPipes(new ZodValidationPipe(z.any()));
   app.enableShutdownHooks();
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('Projeto Base API')
-    .setDescription('API do projeto base — DDD + Hexagonal')
-    .setVersion('0.1.0')
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/docs', app, document);
+  // #122: o `/api/docs` era montado SEM CONDIÇÃO — inclusive em produção,
+  // publicando a superfície completa da API (rotas, schemas, requisitos de
+  // auth) a quem descobrisse a URL. O CORS, 20 linhas acima, já abortava o
+  // bootstrap em produção; o Swagger ficava fora dessa decisão.
+  //
+  // A decisão mora em `shared/infrastructure/http/swagger-habilitado.ts`
+  // (função pura, com spec) porque `main.ts` chama `bootstrap()` no
+  // carregamento do módulo — um spec que o importasse subiria a API
+  // inteira.
+  if (swaggerHabilitado(process.env)) {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('Projeto Base API')
+      .setDescription('API do projeto base — DDD + Hexagonal')
+      .setVersion('0.1.0')
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('api/docs', app, document);
+  }
 
   const port = Number(process.env.PORT ?? 3000);
   await app.listen(port, '0.0.0.0');

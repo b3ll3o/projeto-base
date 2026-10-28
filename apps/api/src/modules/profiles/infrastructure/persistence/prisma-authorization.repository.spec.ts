@@ -7,6 +7,62 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { PrismaAuthorizationRepository } from './prisma-authorization.repository.js';
 import { ESCOPO_DE_SISTEMA } from '../../../../shared/infrastructure/prisma/papel-de-runtime.js';
 
+/**
+ * #118 (a correção do LOGIN): `comEscopoDeEmpresa` escolhe a CREDENCIAL pelo
+ * `tenantId` — e `tenantId` nulo é o bucket de SISTEMA, que é a CREDENCIAL de
+ * sistema. Numa unit test não há `SYSTEM_DATABASE_URL`, e a costura é mockada
+ * para usar o MESMO duplo — com o escopo aberto, que é o que as asserções deste
+ * arquivo leem.
+ *
+ * ⚠️ A costura é mockada AQUI, e não no código de produção: um setter global
+ * em `escopo.ts` seria um global mutável no fonte — e um global mutável no
+ * fonte é um caminho para o código de produção depender do estado do teste.
+ *
+ * ⚠️ E é a `comEscopoDeEmpresa` que é mockada, e não a `comEscopoDeSistema`:
+ * a primeira chama a segunda pelo LIGAMENTO LOCAL do módulo, e um mock do
+ * export não intercepta essa chamada interna.
+ */
+const sistema = vi.hoisted(() => ({
+  cliente: null as {
+    $transaction: (f: (tx: never) => Promise<unknown>) => Promise<unknown>;
+  } | null,
+  escopo: '*',
+}));
+vi.mock('../../../../shared/infrastructure/prisma/escopo.js', async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import('../../../../shared/infrastructure/prisma/escopo.js')>();
+  return {
+    ...original,
+    comEscopoDeSistema: (fn: (tx: never) => Promise<unknown>) =>
+      (sistema.cliente as { $transaction: (f: typeof fn) => Promise<unknown> }).$transaction(fn),
+    // #118: `comEscopoDeEmpresa` escolhe a CREDENCIAL pelo `tenantId` — e
+    // `tenantId` nulo e' o bucket de SISTEMA. E' a `comEscopoDeEmpresa` que e'
+    // mockada (e nao a `comEscopoDeSistema`): a primeira chama a segunda pelo
+    // LIGAMENTO LOCAL do modulo, e um mock do export nao intercepta essa
+    // chamada interna.
+    comEscopoDeEmpresa: (async (
+      prisma: never,
+      tenantId: string | null,
+      fn: (tx: never) => Promise<unknown>,
+    ) => {
+      if (tenantId !== null) {
+        // o `fn` do duplo e' `(tx: never) => ...`: o `never` e' o que o torna
+        // assignavel a qualquer `tx`, e o cast resolve a incompatibilidade do
+        // parametro generico do `comEscopo`.
+        return original.comEscopo(prisma, original.escopoDoTenant(tenantId), fn as never);
+      }
+      const cliente = sistema.cliente as {
+        $transaction: (f: (tx: never) => Promise<unknown>) => Promise<unknown>;
+      } | null;
+      if (cliente === null) throw new Error('a spec nao definiu o cliente de SISTEMA');
+      return cliente.$transaction(async (tx: never) => {
+        await original.abrirEscopo(tx, sistema.escopo);
+        return fn(tx);
+      });
+    }) as unknown as typeof original.comEscopoDeEmpresa,
+  };
+});
+
 class FakePrisma {
   #auths: Array<{
     id: string;
@@ -94,6 +150,9 @@ describe('PrismaAuthorizationRepository', () => {
 
   beforeEach(() => {
     fake = new FakePrisma();
+    // #118: o bucket de SISTEMA e' a credencial de sistema — o duplo dela
+    // e' o MESMO.
+    sistema.cliente = fake as never;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     repo = new PrismaAuthorizationRepository(fake as any);
   });

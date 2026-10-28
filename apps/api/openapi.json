@@ -1,0 +1,694 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "operationId": "HealthController_check",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Verificar a saúde da API e do banco",
+        "tags": ["Health"]
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "AuthController_login",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Sessão emitida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "accessToken": "eyJhbGciOi…",
+                    "refreshToken": "eyJhbGciOi…",
+                    "user": {
+                      "id": "0190a8b6-…",
+                      "nome": "João",
+                      "email": "joao@example.com"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Payload inválido"
+          },
+          "401": {
+            "description": "Credenciais inválidas"
+          },
+          "429": {
+            "description": "Limite de tentativas por conta (`ip:email`) excedido"
+          }
+        },
+        "summary": "Autenticar e emitir sessão",
+        "tags": ["auth"]
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "operationId": "AuthController_refresh",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Par de tokens renovado"
+          },
+          "400": {
+            "description": "Payload inválido"
+          },
+          "401": {
+            "description": "Refresh token ausente, expirado ou inválido"
+          }
+        },
+        "summary": "Renovar a sessão a partir do refresh token",
+        "tags": ["auth"]
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "operationId": "AuthController_me",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Perfil do usuário autenticado"
+          },
+          "401": {
+            "description": "Sessão ausente ou inválida"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Dados do usuário da sessão atual",
+        "tags": ["auth"]
+      }
+    },
+    "/api/v1/users": {
+      "post": {
+        "operationId": "UsersController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "User criado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "id": "0190a8b6-…",
+                    "nome": "João",
+                    "email": "joao@example.com"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Payload inválido"
+          },
+          "404": {
+            "description": "Recurso não encontrado"
+          },
+          "409": {
+            "description": "Email já em uso"
+          }
+        },
+        "summary": "Criar novo usuário",
+        "tags": ["users"]
+      },
+      "get": {
+        "operationId": "UsersController_list",
+        "parameters": [
+          {
+            "name": "includeDeleted",
+            "required": false,
+            "in": "query",
+            "description": "Aceita \"true\" ou \"1\" (case-insensitive). Default: false (esconde soft-deleted)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de usuários"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar usuários (paginado por cursor)",
+        "tags": ["users"]
+      }
+    },
+    "/api/v1/users/{id}": {
+      "get": {
+        "operationId": "UsersController_findOne",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "User encontrado"
+          },
+          "403": {
+            "description": "O `:id` da rota não é o `sub` do token (USER_OWNERSHIP_VIOLATION)"
+          },
+          "404": {
+            "description": "User não encontrado"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Buscar usuário por ID",
+        "tags": ["users"]
+      },
+      "patch": {
+        "operationId": "UsersController_update",
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "ETag esperado no formato W/\"v<n>\"",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User renomeado"
+          },
+          "400": {
+            "description": "Header If-Match ausente ou inválido"
+          },
+          "403": {
+            "description": "O `:id` da rota não é o `sub` do token (USER_OWNERSHIP_VIOLATION)"
+          },
+          "404": {
+            "description": "User não encontrado"
+          },
+          "412": {
+            "description": "Conflito de versão (optimistic lock)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Renomear usuário (optimistic locking via If-Match)",
+        "tags": ["users"]
+      },
+      "delete": {
+        "operationId": "UsersController_remove",
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "User soft-deletado"
+          },
+          "400": {
+            "description": "Header If-Match ausente ou inválido"
+          },
+          "403": {
+            "description": "O `:id` da rota não é o `sub` do token (USER_OWNERSHIP_VIOLATION)"
+          },
+          "404": {
+            "description": "User não encontrado"
+          },
+          "412": {
+            "description": "Conflito de versão"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Soft-delete do usuário (optimistic locking via If-Match)",
+        "tags": ["users"]
+      }
+    },
+    "/api/v1/users/{id}/restore": {
+      "post": {
+        "operationId": "UsersController_restore",
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "User restaurado"
+          },
+          "400": {
+            "description": "Header If-Match ausente ou inválido"
+          },
+          "403": {
+            "description": "O `:id` da rota não é o `sub` do token (USER_OWNERSHIP_VIOLATION)"
+          },
+          "404": {
+            "description": "User não encontrado"
+          },
+          "412": {
+            "description": "Conflito de versão"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Restaurar usuário soft-deletado (optimistic locking)",
+        "tags": ["users"]
+      }
+    },
+    "/api/v1/users/{id}/history": {
+      "get": {
+        "operationId": "UsersController_history",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Histórico paginado"
+          },
+          "403": {
+            "description": "O `:id` da rota não é o `sub` do token (USER_OWNERSHIP_VIOLATION)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Histórico de auditoria do usuário",
+        "tags": ["users"]
+      }
+    },
+    "/api/v1/tenants/{id}/invitations": {
+      "post": {
+        "operationId": "TenancyInvitationsController_convidar",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Convite emitido"
+          },
+          "400": {
+            "description": "Payload inválido"
+          },
+          "401": {
+            "description": "Não autorizado"
+          },
+          "403": {
+            "description": "Quem convida não administra a empresa"
+          },
+          "404": {
+            "description": "Recurso indisponível (funcionalidade desligada)"
+          },
+          "409": {
+            "description": "Já existe um convite pendente para este e-mail"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Convidar uma pessoa para a empresa",
+        "tags": ["invitations"]
+      }
+    },
+    "/api/v1/invitations/accept": {
+      "post": {
+        "operationId": "TenancyInvitationsController_aceitar",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Convite aceito"
+          },
+          "400": {
+            "description": "Token inválido"
+          },
+          "401": {
+            "description": "Não autorizado"
+          },
+          "403": {
+            "description": "O convite é de outro e-mail"
+          },
+          "404": {
+            "description": "Recurso indisponível (funcionalidade desligada)"
+          },
+          "409": {
+            "description": "O convite já foi usado"
+          },
+          "410": {
+            "description": "O convite expirou"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Aceitar um convite e entrar na empresa",
+        "tags": ["invitations"]
+      }
+    },
+    "/api/v1/tenants": {
+      "post": {
+        "operationId": "TenancyEmpresasController_criar",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Empresa criada"
+          },
+          "400": {
+            "description": "Payload inválido"
+          },
+          "401": {
+            "description": "Não autorizado"
+          },
+          "404": {
+            "description": "Conta não encontrada"
+          },
+          "409": {
+            "description": "Já existe uma empresa com este identificador"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Criar a própria empresa",
+        "tags": ["tenancy"]
+      }
+    },
+    "/api/v1/me/tenants": {
+      "get": {
+        "operationId": "TenancyEmpresasController_listar",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "As empresas do ator"
+          },
+          "401": {
+            "description": "Não autorizado"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar as empresas do ator",
+        "tags": ["tenancy"]
+      }
+    },
+    "/api/v1/admin/feature-flags": {
+      "get": {
+        "operationId": "AdminFeatureFlagsController_listar",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar as feature flags",
+        "tags": ["feature-flags"]
+      }
+    },
+    "/api/v1/admin/feature-flags/{chave}": {
+      "put": {
+        "operationId": "AdminFeatureFlagsController_definir",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Definir o valor de uma feature flag",
+        "tags": ["feature-flags"]
+      }
+    },
+    "/api/v1/admin/profiles": {
+      "get": {
+        "operationId": "AdminProfilesController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar os perfis",
+        "tags": ["profiles"]
+      },
+      "post": {
+        "operationId": "AdminProfilesController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Criar um perfil",
+        "tags": ["profiles"]
+      }
+    },
+    "/api/v1/admin/profiles/{id}": {
+      "get": {
+        "operationId": "AdminProfilesController_getById",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ler um perfil",
+        "tags": ["profiles"]
+      },
+      "patch": {
+        "operationId": "AdminProfilesController_update",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Atualizar um perfil",
+        "tags": ["profiles"]
+      },
+      "delete": {
+        "operationId": "AdminProfilesController_delete",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Excluir um perfil",
+        "tags": ["profiles"]
+      }
+    },
+    "/api/v1/admin/profiles/{id}/authorizations": {
+      "post": {
+        "operationId": "AdminAuthorizationsController_atribuir",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Conceder uma permissão a um perfil",
+        "tags": ["authorizations"]
+      }
+    },
+    "/api/v1/admin/profiles/{id}/authorizations/{key}": {
+      "delete": {
+        "operationId": "AdminAuthorizationsController_revogar",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Revogar uma permissão de um perfil",
+        "tags": ["authorizations"]
+      }
+    },
+    "/api/v1/admin/permissions": {
+      "get": {
+        "operationId": "AdminAuthorizationsController_listar",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar as permissões do catálogo",
+        "tags": ["authorizations"]
+      }
+    },
+    "/api/v1/admin/users/{id}/profile": {
+      "put": {
+        "operationId": "AdminUsersController_atribuirProfile",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Vestir um perfil em um usuário",
+        "tags": ["admin-users"]
+      }
+    },
+    "/api/v1/me/profile": {
+      "get": {
+        "operationId": "MeProfileController_me",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ler o perfil efetivo do ator",
+        "tags": ["me"]
+      }
+    }
+  },
+  "info": {
+    "title": "Projeto Base API",
+    "description": "API do projeto base — DDD + Hexagonal",
+    "version": "0.1.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
+    "schemas": {}
+  }
+}

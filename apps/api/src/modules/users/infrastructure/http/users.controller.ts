@@ -68,7 +68,10 @@ import type {
   AuditServicePort,
   ListHistoryInput,
 } from '../../../../shared/audit/application/audit-service.port.js';
-import { ZodValidationPipe } from '../../../../shared/infrastructure/http/zod-validation.pipe.js';
+import {
+  ZodValidationPipe,
+  validarComZod,
+} from '../../../../shared/infrastructure/http/zod-validation.pipe.js';
 import { UserOwnershipGuard } from './user-ownership.guard.js';
 
 import { UserId } from '../../domain/value-objects/user-id.vo.js';
@@ -81,6 +84,8 @@ import type { SoftDeleteUserInput } from '../../application/dto/soft-delete-user
 import type { UpdateUserNameInput } from '../../application/dto/update-user-name.input.js';
 import {
   CreateUserSchema,
+  ListUsersQuerySchema,
+  PaginacaoQuerySchema,
   UpdateUserSchema,
   type CreateUserDto,
   type UpdateUserDto,
@@ -250,6 +255,17 @@ export class UsersController {
     @Query('limit') limit = '20',
     @Query('includeDeleted') includeDeleted?: string,
   ): Promise<unknown> {
+    // #124: a query é validada AQUI, no corpo do método — e não num
+    // `@Query(new ZodValidationPipe(…))`, porque o pipe não roda quando o
+    // handler é chamado direto, e a spec deste controller chama direto. A
+    // validação que a spec mede tem de rodar no caminho que a spec
+    // exercita.
+    //
+    // O motivo do schema existir: `limit=abc` virava `NaN` e chegava ao
+    // `take:` do Prisma — 500, onde o certo é 400. `limit=0` e `limit=-5`
+    // davam 200 com lista vazia, que é falha silenciosa.
+    const consulta = validarComZod(ListUsersQuerySchema, { cursor, limit, includeDeleted });
+
     const empresa = empresaDoAtor(request);
     // Read-through: quando o cache está quente é um Map lookup, quando frio são
     // 2 queries que preenchem o cache. O `obterMeuPerfil` NUNCA lança aqui —
@@ -289,10 +305,36 @@ export class UsersController {
     // `tenant_id IS NULL`, e é a única que não passa pelo cache que causava o
     // problema. Uma query a esta rota — que já abre escopo — é o preço.
     const perfilGlobal = await this.memberships.findProfileId(request?.user?.sub ?? '', null);
-    const semDireito =
-      perfil.isAdmin !== true &&
-      perfilGlobal === null &&
-      !perfil.permissions.includes('users.read');
+    //
+    // #119: `semDireito` era UM sinal com TRÊS termos encadeados por `&&`:
+    //
+    //   perfil.isAdmin !== true        // o ator não é admin
+    //   perfilGlobal === null          // o ator não tem perfil GLOBAL
+    //   !perfil.permissions…('users.read')  // falta a permissão
+    //
+    // O segundo termo é o carve-out do perfil GLOBAL, e o terceiro é a
+    // permissão. Encadeados, o recorte final ficava
+    // `(empresa === null || semVinculo) && semDireito` — e a PERMISSÃO só
+    // tinha efeito quando o vínculo falhava. No caso que importa (membro da
+    // empresa, perfil resolvido, sem `users.read`) o vínculo NÃO falha, então
+    // a permissão era DESCARTADA e o diretório inteiro da empresa vazava.
+    //
+    // Os dois sinais viram DISJUNTOS, e o carve-out do perfil global sobe
+    // para fora do recorte:
+    //
+    // ⚠️ O carve-out é do perfil GLOBAL, e não do ADMIN global — o código
+    // pergunta "tem perfil global?", e não "é admin?". MEDIDO: o seed cria
+    // um perfil global `viewer` (`is_admin=false`, `tenant_id IS NULL`), e
+    // um usuário com ele lê o diretório inteiro sem ter `users.read`. O
+    // comportamento é o de `origin/main` — a #119 reescreveu a EXPRESSÃO e
+    // não o alcance — mas o texto antigo dizia "admin global", e um
+    // comentário que afirma o que o código não garante é pior do que
+    // nenhum. Quem quiser estreitar o carve-out para o admin é uma decisão
+    // de produto (o perfil global `viewer` existe para ver tudo), e ela
+    // precisa de spec própria.
+    const temPerfilGlobal = perfilGlobal !== null;
+    const faltaPermissaoDeLeitura =
+      perfil.isAdmin !== true && !perfil.permissions.includes('users.read');
     //
     // ⚠️ (issue #102) `perfil.profileId === null` significa que `findProfileId`
     // NÃO resolveu perfil para o escopo pedido — e o banco só não resolve quando
@@ -334,16 +376,31 @@ export class UsersController {
     // ambiguidade era inofensiva "porque o V2 neutraliza"; o V2 está aberto, e
     // o nome agora decide menos do que a frase prometia.
     const perfilNaoResolveuParaOEscopo = perfil.profileId === null;
+    //
+    // #119: o recorte passa a ser a UNIÃO dos dois sinais, com o carve-out
+    // do admin global fora.
+    //
+    // Por que `empresa === null` sai do primeiro membro sem mudar o
+    // comportamento: sem header, o perfil é o GLOBAL — que resolve — logo
+    // `perfilNaoResolveuParaOEscopo` é falso; e quando o perfil global NÃO
+    // resolve, `perfil` é o `denied` (sem permissões), cujo
+    // `faltaPermissaoDeLeitura` já era verdadeiro. Os dois caminhos
+    // devolviam o mesmo veredito antes e devolvem o mesmo agora.
+    //
+    // O que NÃO pode regredir (issue #102): membro da empresa **com**
+    // `users.read` continua vendo o diretório inteiro, e o admin global
+    // continua ignorando o recorte. São os dois casos negativos que a spec
+    // cobre.
+    const deveRecortar =
+      !temPerfilGlobal && (perfilNaoResolveuParaOEscopo || faltaPermissaoDeLeitura);
     const input: ListUsersInput = {
-      cursor: cursor ?? null,
-      limit: Number(limit),
+      cursor: consulta.cursor ?? null,
+      limit: consulta.limit,
       // pt-BR: normaliza case (clients podem mandar 'True'/'TRUE'/'1') +
       // aceita os dois valores truthy canônicos ('true' e '1').
-      includeDeleted: includeDeleted?.toLowerCase() === 'true' || includeDeleted === '1',
-      somenteUsuarioId:
-        (empresa === null || perfilNaoResolveuParaOEscopo) && semDireito
-          ? (request?.user?.sub ?? null)
-          : null,
+      includeDeleted:
+        consulta.includeDeleted?.toLowerCase() === 'true' || consulta.includeDeleted === '1',
+      somenteUsuarioId: deveRecortar ? (request?.user?.sub ?? null) : null,
     };
     // pt-BR (2ª revisão, achado 5) O parâmetro `comPerfilEfetivo` saiu. Ele
     // tinha UM chamador, passando `true` fixo — e a justificativa escrita ("GET
@@ -489,11 +546,18 @@ export class UsersController {
     @Query('limit') limit = '20',
     @Req() request?: RequestWithUser,
   ): Promise<unknown> {
+    // ⚠️ #124: a SEGUNDA surface de query da API, e a #124 tinha fechado só a
+    // primeira. `limit=abc` virava `NaN` e chegava ao `take:` do Prisma —
+    // 500, onde o certo é 400. O schema é o mesmo da paginação de
+    // `GET /users`: um `limit` aceito numa rota e recusado na outra é a mesma
+    // regra escrita duas vezes.
+    const consulta = validarComZod(PaginacaoQuerySchema, { cursor, limit });
+
     const input: ListHistoryInput = {
       entityName: 'User',
       entityId: id,
-      cursor: cursor ?? null,
-      limit: Number(limit),
+      cursor: consulta.cursor ?? null,
+      limit: consulta.limit,
     };
     // pt-BR (Fase 10+): o escopo vem do MESMO header que escopa as mutações.
     // Sem ele a leitura cai em SISTEMA e devolve o histórico cross-tenant — que

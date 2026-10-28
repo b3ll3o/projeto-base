@@ -37,6 +37,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
 import { InvalidTokenException } from '../../domain/exceptions/token.exceptions.js';
+import { segredoDeServico } from '../../../../shared/auth/segredo-de-servico.js';
 import type {
   TokenIssuerPort,
   TokenPair,
@@ -199,16 +200,22 @@ export class JwtTokenService implements TokenIssuerPort {
  * de boot, e o log de boot costuma acabar em observabilidade com retenção.
  */
 function lerChaveObrigatoria(config: ConfigService): string {
-  const bruto = config.get<string>('JWT_SECRET');
-  const chave = bruto?.trim();
-
-  if (!chave) {
+  // #120: a validação era só "não está vazio" — e o valor de EXEMPLO do
+  // `.env.production.example` (`CHANGE_ME_gerar_com_openssl_rand_base64_48`)
+  // passava. Quem copiasse a linha do example para o `.env.production` teria
+  // um segredo JWT público no repositório.
+  //
+  // A decisão mora em `shared/auth/segredo-de-servico.ts` (função pura, com
+  // spec) — o mesmo motivo do `decisaoDoAdminLocal.ts` do PR #115: decisão
+  // de segurança dentro de um construtor é decisão sem spec.
+  const veredito = segredoDeServico(config.get<string>('JWT_SECRET'), 'JWT_SECRET');
+  if (!veredito.ok) {
     const onde =
       config.get<string>('NODE_ENV') === 'production'
         ? 'em produção (o serviço se recusa a assinar token sem ele)'
         : 'não tem valor default por decisão de projeto';
-    throw new Error(`JWT_SECRET é obrigatório (${onde}).`);
+    throw new Error(`${veredito.motivo} (${onde}).`);
   }
 
-  return chave;
+  return veredito.valor;
 }

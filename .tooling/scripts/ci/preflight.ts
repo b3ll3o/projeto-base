@@ -23,6 +23,9 @@ import { checkMemoryDirConcordance } from './check-memory-dir-concordance';
 import { checkMemoryCrystallization } from './check-memory-crystallization';
 import { checkTeethRegistry } from './check-teeth-registry';
 import { checkSelfFiringGuards } from './check-self-firing-guard';
+import { checkShellInjection } from './check-shell-injection';
+import { checkVersionFooters } from './check-version-footers';
+import { checkOpenapiContract } from './check-openapi-contract';
 import { checkHarnessOwner } from './check-harness-owner';
 import { checkBranchUpToDate } from './check-branch-up-to-date';
 import { checkE2eFlowCoverage } from './check-e2e-flow-coverage';
@@ -42,7 +45,7 @@ import { checkBlocoDuplicado } from './check-bloco-duplicado';
 import { checkFeatureFlagContract } from './check-feature-flag-contract';
 import { checkFeatureFlagPortas } from './check-feature-flag-portas';
 import { existsSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
 import { PREFLIGHT_CHECKS, idsDeclarados } from './preflight-gates';
 
@@ -53,7 +56,7 @@ import { PREFLIGHT_CHECKS, idsDeclarados } from './preflight-gates';
  * desconhecidos antes do push (defesa em profundidade simétrica ao
  * `pnpm review:lint` manual).
  *
- * Usa execSync em vez de importar lintMatrix diretamente para evitar
+ * Usa execFileSync em vez de importar lintMatrix diretamente para evitar
  * cross-package import (tooling/scripts é package isolado no monorepo).
  */
 function checkReviewRoutingLint(): CheckResult {
@@ -78,7 +81,9 @@ function checkReviewRoutingLint(): CheckResult {
     // aqui no sandbox Hermes (Node 20.20.2) precisamos do mesmo veredito sem
     // que o veredito seja "motor incompatível". `--config.engine-strict=false`
     // é o knob que o próprio pnpm recomenda para esse caso.
-    execSync('pnpm --config.engine-strict=false review:lint', {
+    // #117: o comando vai em array, sem shell — o mesmo padrao dos outros
+    // call sites do preflight.
+    execFileSync('pnpm', ['--config.engine-strict=false', 'review:lint'], {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     return { ok: true, errors: [] };
@@ -126,7 +131,7 @@ function checkTurboRedirectDifferential(): CheckResult {
   }
 
   try {
-    execSync(`bash ${script}`, {
+    execFileSync('bash', [script], {
       stdio: ['ignore', 'pipe', 'pipe'],
       encoding: 'utf8',
       maxBuffer: 16 * 1024 * 1024,
@@ -343,6 +348,9 @@ export const RUNNERS: Record<string, () => CheckResult | Promise<CheckResult>> =
   'check-tooling-typecheck': () => checkToolingTypecheck({ repoRoot: '.' }),
   'check-teeth-registry': () => checkTeethRegistry(),
   'check-self-firing-guard': () => checkSelfFiringGuards(),
+  'check-shell-injection': () => checkShellInjection({ repoRoot: '.' }),
+  'check-version-footers': () => checkVersionFooters({ repoRoot: '.' }),
+  'check-openapi-contract': () => checkOpenapiContract({ repoRoot: '.' }),
   'turbo-redirect-differential': () => checkTurboRedirectDifferential(),
   'check-harness-owner': () => checkHarnessOwner(),
   'check-branch-up-to-date': () => checkBranchUpToDate(),

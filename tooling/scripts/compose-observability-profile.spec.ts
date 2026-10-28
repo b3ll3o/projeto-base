@@ -21,7 +21,7 @@
 //   - `ports: ['4317:4317']` vira `published: "4317"` (string com aspas).
 //   - Indentação: 4 espaços para chaves de serviço, 8 para campos aninhados.
 
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 
 // spec vive em tooling/scripts/, REPO_ROOT está 2 níveis acima.
@@ -144,9 +144,20 @@ function composeConfig(profile?: string): string {
     // nada para verificar, e era isso que acontecia em toda máquina de dev.
     fs.writeFileSync(envFile, `${LINHA_CANARIO}\n`, { mode: 0o600 });
   }
+  // #117: o comando vai em array, sem shell. O `profileFlag` é uma
+  // constante interna, mas o PADRÃO é o que o gate mede: comando montado
+  // por concatenação vai cru para o shell.
+  //
+  // ⚠️ O argv usa o `profile` SOLTO, e não o `profileFlag`: o `profileFlag`
+  // é uma STRING com espaço (`' --profile observability'`), e como argumento
+  // de argv ela vira UM argumento só — que o docker não entende. A mutação
+  // de `execSync` para `execFileSync` é o que expôs isso; a spec o pegou.
+  const argsCompose = ['compose'];
+  if (profile) argsCompose.push('--profile', profile);
+  argsCompose.push('config');
   try {
     return mascaraSegredos(
-      execSync(`docker compose${profileFlag} config`, {
+      execFileSync('docker', argsCompose, {
         cwd: REPO_ROOT,
         encoding: 'utf-8',
         stdio: ['ignore', 'pipe', 'pipe'],

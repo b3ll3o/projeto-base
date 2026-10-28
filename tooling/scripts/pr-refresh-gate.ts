@@ -41,7 +41,7 @@
  * `naoVerificado()` abaixo, onde o motivo fica escrito.
  */
 import { readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { MARCADOR, linhasVivas } from './pr-refresh-apply.js';
 import { buscarBase } from './pr-refresh-hook.js';
 import { varrerTexto } from './pr-refresh-scan.js';
@@ -179,7 +179,18 @@ export function lerCorpo(repo: string, pr: string | undefined): string | null {
   }
   if (!repo) return null;
   try {
-    return execSync(`gh pr view ${pr ?? ''} --repo ${repo} --json body -q .body`, {
+    // #117: era `execSync(`gh pr view ${pr ?? ''} --repo ${repo} …`)`. O `pr`
+    // vem de `process.env.PR_NUMBER` e o `repo` de `process.env.GITHUB_REPOSITORY`
+    // — variáveis de ambiente interpoladas cruas num shell. Um `PR_NUMBER` com
+    // `1; <comando>` executava o comando. Agora o argv vai em array (sem shell).
+    //
+    // O `pr` só entra no argv quando é não-vazio: com a interpolação antiga,
+    // `pr` indefinido virava um espaço em branco no comando (o `gh` usava a PR
+    // da branch corrente); passar `''` como argumento seria um PR inexistente.
+    const args = ['pr', 'view'];
+    if (pr) args.push(pr);
+    args.push('--repo', repo, '--json', 'body', '-q', '.body');
+    return execFileSync('gh', args, {
       encoding: 'utf-8',
     });
   } catch {

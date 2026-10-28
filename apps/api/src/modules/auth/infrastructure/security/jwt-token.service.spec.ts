@@ -74,6 +74,26 @@ describe('JwtTokenService', () => {
       );
     });
 
+    it('NÃO boota com o placeholder do .env.production.example (#120)', () => {
+      // MEDIDO no example: `JWT_SECRET=CHANGE_ME_gerar_com_openssl_rand_base64_48`.
+      // A validação antiga era só "não está vazio" — e esse valor PASSAVA.
+      // Quem copiasse a linha do example para o `.env.production` teria um
+      // segredo JWT público no repositório.
+      const placeholder = 'CHANGE_ME_gerar_com_openssl_rand_base64_48';
+      expect(() => novoServico({ NODE_ENV: 'production', JWT_SECRET: placeholder })).toThrow(
+        /JWT_SECRET/,
+      );
+      expect(() => novoServico({ NODE_ENV: 'development', JWT_SECRET: placeholder })).toThrow(
+        /JWT_SECRET/,
+      );
+    });
+
+    it('NÃO boota com um segredo curto demais (#120)', () => {
+      expect(() => novoServico({ NODE_ENV: 'production', JWT_SECRET: 'curto' })).toThrow(
+        /JWT_SECRET/,
+      );
+    });
+
     it('NÃO boota sem JWT_SECRET em nenhum ambiente (não existe default)', () => {
       // Um default de desenvolvimento é a porta de entrada clássica do
       // "segredo JWT padrão" — o mesmo motivo pelo qual o repo já trata

@@ -14,6 +14,7 @@
 // `version: '1'` é exigência do FastifyAdapter para VERSIONING.
 
 import { Controller, Get, Inject, ServiceUnavailableException } from '@nestjs/common';
+import { ApiOperation } from '@nestjs/swagger';
 import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service.js';
 
 @Controller({ path: 'health', version: '1' })
@@ -28,6 +29,7 @@ export class HealthController {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   @Get()
+  @ApiOperation({ summary: 'Verificar a saúde da API e do banco' })
   async check(): Promise<{
     status: 'ok' | 'degraded';
     checks: { database: 'ok' | 'down' };

@@ -5,10 +5,14 @@ dist/
 out/
 coverage/
 *.tsbuildinfo
-# pt-BR: openapi.json é gerado por `pnpm --filter @projeto/api openapi:export`
-# (Fase 7 Task 7.6). Não versionar — o CI/docs pipeline regera a partir
-# dos decorators @Api* do código.
-apps/api/openapi.json
+# pt-BR (#125): o `openapi.json` era IGNORADO, e a issue aponta o porquê —
+# sem a spec versionada, um gate que a comparasse com a gerada não teria
+# contra o que comparar: "o gate compara a spec versionada com a gerada, e
+# ela é gerada por um script — se ela não for versionada, o gate fica inócuo".
+#
+# A spec agora é versionada, e o gate `check-openapi-contract` compara a
+# versionada com a gerada. O arquivo some do ignore e passa a ser um
+# artefato de build versionado, como o `package-lock.json`.
 # pt-BR: reports JSON gerados pelos tooling scripts (stack-code-reviewer +
 # doc-sync) via --out-file. Padrão `*-report.json` casa `stack-review-report.json`
 # e `doc-sync-report.json`; CI faz upload-artifact em vez de commit.

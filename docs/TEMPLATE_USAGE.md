@@ -164,5 +164,13 @@ R: `.agents/` é vendor-neutral — funciona com qualquer IA (Claude Code, Curso
 
 ---
 
+### Histórico de Versões
+
+| Versão | Mudanças |
+|--------|----------|
+| `1.12.0` | **Setup dos papeis do banco** — a migration `20261027000001` cria `app_runtime` e `app_system` **sem senha** (`NOLOGIN`: a senha do runtime estava versionada em texto puro no histórico do Git), e o `prepara-papeis.sh` aplica a senha a partir do ambiente. São **duas** URIs: `DATABASE_URL` (o escopo de empresa) e `SYSTEM_DATABASE_URL` (o bucket de sistema, que é concedido pela **credencial** — `current_user = 'app_system'` — e não por um GUC que a sessão escolhe). O passo de setup é o mesmo do container (`migrate deploy` → `prepara-papeis.sh` → a aplicação) e o script lê o `apps/api/.env`, onde o runbook diz para pôr as URIs. Ver `docs/como-rodar.md` §1.2.1. |
+
+---
+
 **Mantido por:** projeto-base contributors
-**Versão do documento:** 1.11.0
+**Versão do documento:** 1.12.0

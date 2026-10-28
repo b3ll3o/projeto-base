@@ -742,7 +742,16 @@ export class UserProfileUseCases {
     // A distinção importa porque "o banco cobre" e "a aplicação cobre" pedem
     // consertos diferentes: quem apagar R1/R2 acreditando na policy abre a
     // escalada sem nem perceber que mexeu na única defesa que existe.
-    await this.userRepo.save(user, user.version() - 1, ator.tenantId);
+    // #123: era `user.version() - 1` — a SUPOSTA de que a versão atual é
+    // sempre a pré-mutação mais 1. A suposição quebra no caso idempotente:
+    // `atribuirPerfil()` com o MESMO profileId retorna sem bumpar a
+    // versão, e `version() - 1` ficava UM ABAIXO da versão persistida — o
+    // `where: { version }` não casava nenhuma linha e a reatribuição
+    // idempotente respondia 412.
+    //
+    // `loadedVersion()` é a versão lida do banco, que é o que o optimistic
+    // lock compara — o mesmo mecanismo que o `Profile` já usava.
+    await this.userRepo.save(user, user.loadedVersion(), ator.tenantId);
     await this.cache.invalidateUser(userId);
   }
 

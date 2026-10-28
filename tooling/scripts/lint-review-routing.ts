@@ -25,7 +25,7 @@ import {
   type PathGlobRule,
 } from './review-router.js';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 
 export interface LintResult {
   errors: string[];
@@ -54,7 +54,7 @@ function globToRegexLocal(glob: string): RegExp {
 // pt-BR: detecta a raiz do repo via `git rev-parse --show-toplevel`.
 // Necessário porque o lint pode rodar de qualquer cwd (ex: tooling/scripts)
 // e `git ls-files` retorna paths relativos ao cwd, não ao repo root.
-// Memoizado em `cachedRepoRoot` para evitar N execSyncs de `git rev-parse`
+// Memoizado em `cachedRepoRoot` para evitar N execFileSyncs de `git rev-parse`
 // quando `isPathGitignored()` é invocado em loop sobre matched files.
 let cachedRepoRoot: string | null | undefined = undefined;
 function getRepoRoot(cwd: string = '.'): string | null {
@@ -62,7 +62,7 @@ function getRepoRoot(cwd: string = '.'): string | null {
     return cachedRepoRoot;
   }
   try {
-    const stdout = execSync('git rev-parse --show-toplevel', {
+    const stdout = execFileSync('git', ['rev-parse', '--show-toplevel'], {
       cwd,
       encoding: 'utf-8',
     });
@@ -84,7 +84,7 @@ function getTrackedFiles(): string[] {
   const root = getRepoRoot();
   if (!root) return [];
   try {
-    const stdout = execSync('git ls-files', { cwd: root, encoding: 'utf-8' });
+    const stdout = execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf-8' });
     return stdout.split('\n').filter((f) => f.trim());
   } catch {
     return [];
@@ -93,11 +93,18 @@ function getTrackedFiles(): string[] {
 
 // pt-BR: `git check-ignore` retorna exit 0 se path é gitignored, exit 1 se não.
 // Roda do repo root (cached) porque `filePath` é repo-relative.
-function isPathGitignored(filePath: string): boolean {
+//
+// #117: era `execSync(`git check-ignore ${JSON.stringify(filePath)}`)`. O
+// `JSON.stringify` embrulha em aspas DUPLAS — e dentro de aspas duplas o
+// shell expande `$(...)`, `\`` e `${...}`. Um nome de arquivo com
+// `$(touch /tmp/alvo)` executava o comando no CI. Agora o argv vai em array
+// (sem shell) e o `--` antes do path é obrigatório: um path que comece com
+// `-` seria lido como opção do `git`.
+export function isPathGitignored(filePath: string): boolean {
   const root = getRepoRoot();
   if (!root) return false;
   try {
-    execSync(`git check-ignore ${JSON.stringify(filePath)}`, {
+    execFileSync('git', ['check-ignore', '--', filePath], {
       cwd: root,
       stdio: 'pipe',
     });
@@ -164,7 +171,7 @@ export function lintMatrix(markdown: string, knownReviewers?: string[]): LintRes
 
   // pt-BR: cache de tracked files (lazy) para evitar N execuções de
   // `git ls-files` quando múltiplos path_globs têm `blocking: true`.
-  // Matrix atual tem 2 rules blocking → 2 execSyncs → após hoist: 1.
+  // Matrix atual tem 2 rules blocking → 2 execFileSyncs → após hoist: 1.
   let trackedFiles: string[] | null = null;
 
   // Check path_globs

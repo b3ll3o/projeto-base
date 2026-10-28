@@ -6,7 +6,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
 import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service.js';
-import { comEscopo, escopoDoTenant } from '../../../../shared/infrastructure/prisma/escopo.js';
+import {
+  comEscopoDeEmpresa,
+  comEscopoDeSistema,
+} from '../../../../shared/infrastructure/prisma/escopo.js';
 import type {
   EmpresaDoUsuario,
   TenantMembershipRepositoryPort,
@@ -65,7 +68,7 @@ export class PrismaTenantMembershipRepository implements TenantMembershipReposit
       // parte, que é o oposto do que a coluna promete.
       // Revisão v1.5.0 (achado 2): a porta diz "a checagem de DONO é do
       // implementador", e só um dos dois ramos a fazia.
-      const user = await comEscopo(this.prisma, escopoDoTenant(null), (tx) =>
+      const user = await comEscopoDeSistema((tx) =>
         tx.user.findFirst({
           where: { id: userId, deletedAt: null, profile: { is: { tenantId: null } } },
           select: { profileId: true },
@@ -81,7 +84,7 @@ export class PrismaTenantMembershipRepository implements TenantMembershipReposit
     // "ninguém pode esquecer" porque está na query é a única forma.
     // `tenantId: null` é aceito porque perfil GLOBAL serve a qualquer empresa
     // por definição (D3) — é o que permite o admin do sistema entrar numa.
-    const row = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+    const row = await comEscopoDeEmpresa(this.prisma, tenantId, (tx) =>
       tx.tenantMembership.findFirst({
         where: {
           userId,
@@ -116,9 +119,7 @@ export class PrismaTenantMembershipRepository implements TenantMembershipReposit
     // que a porta diz que NÃO é. A porta `tenant-membership-repository.port.ts`
     // documenta essa escolha; quem mudar uma coisa sem a outra quebra a
     // semântica de `deletar` sem nenhum teste ficar vermelho.
-    return comEscopo(this.prisma, escopoDoTenant(null), (tx) =>
-      tx.tenantMembership.count({ where: { profileId } }),
-    );
+    return comEscopoDeSistema((tx) => tx.tenantMembership.count({ where: { profileId } }));
   }
 
   /**
@@ -164,7 +165,7 @@ export class PrismaTenantMembershipRepository implements TenantMembershipReposit
     // quando não havia policy; hoje ela é a que garante que a checagem de DONA
     // e a escrita estão no mesmo escopo, e portanto que `count === 0` significa
     // "fora do meu escopo" e não "outra sessão".
-    return comEscopo(this.prisma, escopoDoTenant(tenantId), async (tx) => {
+    return comEscopoDeEmpresa(this.prisma, tenantId, async (tx) => {
       if (profileId !== null) {
         const dona = await tx.profile.findFirst({
           where: { id: profileId, OR: [{ tenantId: null }, { tenantId }] },
@@ -207,7 +208,7 @@ export class PrismaTenantMembershipRepository implements TenantMembershipReposit
     // membership sobrevive ao soft-delete, e sem este filtro uma conta
     // apagada continuaria "administrando" a empresa até a membership ser
     // removida à mão.
-    const row = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+    const row = await comEscopoDeEmpresa(this.prisma, tenantId, (tx) =>
       tx.tenantMembership.findFirst({
         where: { userId, tenantId, user: { deletedAt: null } },
         select: { role: true },
@@ -229,7 +230,7 @@ export class PrismaTenantMembershipRepository implements TenantMembershipReposit
    * empresas na listagem.
    */
   async listarEmpresasDoUsuario(userId: string): Promise<EmpresaDoUsuario[]> {
-    const linhas = await comEscopo(this.prisma, escopoDoTenant(null), (tx) =>
+    const linhas = await comEscopoDeSistema((tx) =>
       tx.tenantMembership.findMany({
         where: { userId, user: { deletedAt: null } },
         select: {

@@ -112,7 +112,36 @@ describe('checkTenantScopeSource', () => {
     // nenhum gate compara com o run anterior — e esta linha é o exemplo do
     // que acontece quando alguém esquece de atualizar o número: o CI reprova
     // por um conserto de tela que não tem nada a ver com escopo.
-    expect(r.advisories?.[0]).toContain('77 call site(s)');
+    // MEDIDO 2026-10-27 (#118): **62**. Eram 77, e a queda é do conserto do
+    // #118: os 8 call sites de escopo de SISTEMA passaram a usar
+    // `comEscopoDeSistema` (que abre a transação na CREDENCIAL de sistema) e
+    // os 3 `abrirEscopo(tx, escopoDoTenant(null))` do onboarding saíram
+    // (o escopo é aberto dentro de `comEscopoDeSistema`). O gate conta os
+    // call sites de ESCOPO — e `comEscopoDeSistema` não é um deles: ele não
+    // recebe o escopo como argumento, ele ABRE o escopo de sistema.
+    //
+    // MEDIDO 2026-10-27 (a auditoria, ainda no #118): **56**. A queda de 6 é
+    // do serviço de auditoria: os 4 métodos que abriam o escopo
+    // (`comEscopo(this.prisma, escopoDoTenant(x), …)`) passaram a chamar UM
+    // método privado, `comEscopoDeAuditoria(x, …)`, que decide entre a
+    // credencial de runtime e a de SISTEMA. Cada call site antigo casava
+    // DUAS vezes no gate (`comEscopo(` e `escopoDoTenant(`) — 4 × 2 = 8
+    // — e o helper casa 2 (o `comEscopo(` e o `escopoDoTenant(` dele).
+    // 8 − 2 = 6.
+    //
+    // ⚠️ A queda NÃO é cobertura perdida: o escopo continua sendo aberto nas
+    // 4 operações — em UM lugar, em vez de quatro. E o gate conta, não julga:
+    // subir o número junto com o PR que o mediu é o comportamento certo (ver o
+    // comentário acima desta linha).
+    //
+    // MEDIDO 2026-10-28 (a correção do LOGIN, ainda no #118): **39**. Os
+    // repositórios passaram a usar `comEscopoDeEmpresa(prisma, tenantId, fn)`,
+    // que casa UMA vez no gate — a forma antiga casava DUAS (`comEscopo(` e
+    // `escopoDoTenant(`). E o gate ganhou a entrada da nova costura: sem
+    // ela, os call sites que passaram a existir sumiriam do painel (o número
+    // cairia para 20 sem que ninguém tivesse removido um escopo) — e um gate
+    // que só enxerga a forma antiga do código deixa de acompanhar o defeito.
+    expect(r.advisories?.[0]).toContain('39 call site(s)');
   });
 
   it('🔴 corpus VAZIO é vermelho — o gate não pode reportar verde sem medir', () => {

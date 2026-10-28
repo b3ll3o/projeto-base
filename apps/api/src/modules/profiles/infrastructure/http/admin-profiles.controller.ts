@@ -16,6 +16,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
 import { PermissionsGuard } from './guards/permissions.guard.js';
 import { RequirePermission } from './decorators/require-permission.decorator.js';
@@ -49,7 +50,18 @@ interface RequestComAtor {
   user: { sub: string; tenantId?: string | null; isAdmin?: boolean };
 }
 
+// ⚠️ `@ApiBearerAuth()` NA CLASSE, e não em cada handler: no documento
+// OpenAPI a rota protegida é a que declara `security`, e a rota PÚBLICA é a
+// ÚNICA que não declara (o inverso disso é defeito medido: uma rota com
+// guard e sem `security` sai pública no contrato).
+//
+// ⚠️ Aqui todas as rotas são protegidas — não há uma pública neste
+// controller — então o decorator na CLASSE é o que fecha a classe: uma rota
+// NOVA herda a proteção do contrato, em vez de depender de alguém lembrar
+// de declarar o decorator no handler.
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard)
+@ApiTags('profiles')
 @Controller('admin/profiles')
 export class AdminProfilesController {
   constructor(
@@ -76,18 +88,21 @@ export class AdminProfilesController {
   }
 
   @Get()
+  @ApiOperation({ summary: 'Listar os perfis' })
   @RequirePermission('admin.manage-profiles')
   async list(@Req() req: RequestComAtor): Promise<ProfileSummary[]> {
     return this.useCases.listar(this.atorDe(req));
   }
 
   @Get(':id')
+  @ApiOperation({ summary: 'Ler um perfil' })
   @RequirePermission('admin.manage-profiles')
   async getById(@Param('id') id: string, @Req() req: RequestComAtor): Promise<ProfileDetail> {
     return this.useCases.obterPorId(id, this.atorDe(req));
   }
 
   @Post()
+  @ApiOperation({ summary: 'Criar um perfil' })
   @RequirePermission('admin.manage-profiles')
   async create(
     @Body() body: CreateProfileBody,
@@ -113,6 +128,7 @@ export class AdminProfilesController {
   }
 
   @Patch(':id')
+  @ApiOperation({ summary: 'Atualizar um perfil' })
   @RequirePermission('admin.manage-profiles')
   async update(
     @Param('id') id: string,
@@ -127,6 +143,7 @@ export class AdminProfilesController {
   }
 
   @Delete(':id')
+  @ApiOperation({ summary: 'Excluir um perfil' })
   @RequirePermission('admin.manage-profiles')
   async delete(@Param('id') id: string, @Req() req: RequestComAtor): Promise<void> {
     await this.useCases.deletar(id, this.atorDe(req));

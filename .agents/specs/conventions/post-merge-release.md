@@ -94,16 +94,25 @@ docs/MONOREPO.md, docs/STACK.md e
 |---|---|
 | `docs/MONOREPO.md` | Footer `**Versão do documento:** X.Y.Z` |
 | `docs/STACK.md` | Footer `**Versão da stack:** X.Y.Z` |
+| `docs/TEMPLATE_USAGE.md` | Footer `**Versão do documento:** X.Y.Z` |
 | `.agents/specs/conventions/estrutura-e-versionamento.md` | Histórico de Versões (linha por release) |
 
-Os 3 arquivos DEVEM ter a mesma versão. Divergência entre eles é bug.
+Os 4 arquivos DEVEM ter a mesma versão. Divergência entre eles é bug.
+
+⚠️ A lista tem QUATRO desde a #126 — e esta convenção dizia três. A omissão
+do `docs/TEMPLATE_USAGE.md` era exatamente a raiz do defeito que a #126
+corrigiu: o arquivo que ficava de fora era o do footer, e quem seguia esta
+procedência produzia a divergência que o `check-version-footers` accuse no
+PR — sem pista de qual arquivo faltou. A lista do gate
+(`FOOTERS_DE_VERSAO`, em `.tooling/scripts/ci/check-version-footers.ts`) é a
+que vale, e a spec dela prende a lista.
 
 ## Bump manual (fluxo de dev)
 
 Para bumpar a versão (ex: 1.3.0 → 1.4.0):
 
 1. Branch: `chore/bump-X.Y.Z` a partir de `main`.
-2. Editar os 3 docs (footer + adicionar linha no Histórico).
+2. Editar os 4 docs (footer + adicionar linha no Histórico).
 3. Commit conventional: `chore(template): bump version X.Y.Z → A.B.C`.
 4. Push + PR.
 5. Merge → workflow auto-tag `vA.B.C`.

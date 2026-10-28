@@ -4,11 +4,19 @@ services:
     environment:
       NODE_ENV: development
       DATABASE_URL: postgresql://projeto:projeto@postgres:5432/projeto_base?schema=public
-      # shortcut: esta stack conecta como DONO, então as policies de RLS não
-      # valem aqui — quem as exercita de verdade é
-      # `src/shared/infrastructure/prisma/prisma-rls.integration.spec.ts`, que sobe
-      # o seu próprio container. Substituir por `app_runtime` quando este compose
-      # passar a rodar a migration (hoje ele roda só `pnpm dev`, sem migrate).
+      # ⚠️ #118: o bucket de SISTEMA é concedido pela CREDENCIAL
+      # (`current_user = 'app_system'`), e o LOGIN é o caminho que o abre
+      # (`findByEmail(email, null)`). Sem esta linha, `clienteDeSistema()`
+      # LANÇA no primeiro login — 500, e o dev conclui que a senha está errada.
+      #
+      # Aponta para o DONO pelo mesmo motivo do `DATABASE_URL` acima: esta
+      # stack conecta como DONO (as policies de RLS não valem aqui — quem as
+      # exercita de verdade é
+      # `src/shared/infrastructure/prisma/prisma-rls.integration.spec.ts`, que
+      # sobe o seu próprio container). O papel `app_system` só existe depois
+      # da migration `20261027000001`, e esta stack roda `pnpm dev`, sem
+      # migrate.
+      SYSTEM_DATABASE_URL: postgresql://projeto:projeto@postgres:5432/projeto_base?schema=public
     volumes:
       - ./apps/api/src:/repo/apps/api/src:ro
       - ./apps/api/prisma:/repo/apps/api/prisma:ro

@@ -77,7 +77,7 @@ describe('PrismaFeatureFlagRepository — Postgres (Fase 1)', () => {
 
   it('o papel de runtime lê e escreve (é com ele que o app conecta)', async () => {
     const prismaRuntime = new PrismaClient({
-      datasourceUrl: uriComoPapelDeRuntime(ctx.uriDoBanco),
+      datasourceUrl: uriComoPapelDeRuntime(ctx.uriDoBanco, ctx.senhaDoPapel),
     });
     try {
       const repoRuntime = new PrismaFeatureFlagRepository(prismaRuntime);

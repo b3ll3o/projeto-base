@@ -179,6 +179,57 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     id: 'check-self-firing-guard',
   },
   {
+    // #117: comando de shell montado por concatenação de valor externo. O
+    // vetor é o `execSync` com template literal interpolado — o valor vai
+    // CRU para o shell, e um nome de arquivo com `$(comando)` executa o
+    // comando no CI.
+    //
+    // A implementação usa a AST do TypeScript, e não um `grep`: um `grep`
+    // casaria os COMENTÁRIOS que citam o defeito (o próprio repositório tem
+    // um), e um gate que acusa o próprio comentário do conserto é um gate que
+    // alguém desliga.
+    //
+    // A auditoria do #117 achou DOIS casos reais no repositório — o
+    // `check-ignore` (nome de arquivo vindo do PR) e o `gh pr view` do
+    // `pr-refresh-gate` (`PR_NUMBER` interpolado) — e o gate achou mais
+    // CINCO, todos em codigo de teste e de gate. Os SETE foram corrigidos
+    // para `execFileSync` com o argv em array.
+    name: 'shell injection (execSync com comando interpolado, #117)',
+    file: '.tooling/scripts/ci/check-shell-injection.ts',
+    id: 'check-shell-injection',
+  },
+  {
+    // #126: os footers de versão dos QUATRO docs canônicos divergirem.
+    //
+    // A raiz do defeito era a PROCEDÊNCIA, não o footer: o handoff do
+    // `release-mode.md` nomeava TRÊS dos quatro arquivos, e o
+    // `release-template.yml` — que LÊ os quatro e aborta se divergirem —
+    // só descobre isso no momento do release.
+    //
+    // Este gate move a checagem para o PR: a divergência é barrada aqui, e o
+    // release nunca chega a abortar. A segunda regra (a versão não pode
+    // estar ATRÁS da última tag) pega o outro lado do mesmo defeito — um
+    // bump que esqueceu um arquivo.
+    name: 'footers de versão divergentes (#126)',
+    file: '.tooling/scripts/ci/check-version-footers.ts',
+    id: 'check-version-footers',
+  },
+  {
+    // #125: o documento OpenAPI versionado divergir do que o código gera.
+    //
+    // A issue acerta o ponto: sem a spec VERSIONADA, o gate que a compara
+    // com a gerada não tem contra o que comparar — e a derivação do `@Api*`
+    // decorator fica sendo a única fonte, que é justamente o que se quer
+    // perder. A spec saiu do `.gitignore` e passou a ser versionada.
+    //
+    // ⚠️ O export ESCREVE no arquivo — por isso o gate exporta para um
+    // TEMPORÁRIO. Um gate que reescreve a spec versionada antes de compará-la
+    // compara o arquivo com ele mesmo, e é "verde" sem medir nada.
+    name: 'contrato do OpenAPI (spec versionada = spec gerada, #125)',
+    file: '.tooling/scripts/ci/check-openapi-contract.ts',
+    id: 'check-openapi-contract',
+  },
+  {
     // Task 4.1 do plano guard-classes. O `turbo-redirect-differential.sh`
     // era o único instrumento do diretório sem dono. Entrou pelo preflight
     // — e não pelo `ci:local` — porque o CI roda `ci:preflight` e nunca

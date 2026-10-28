@@ -25,6 +25,7 @@
     "pr:marker": "tsx tooling/scripts/pr-refresh-gate.ts",
     "stack:review": "tsx tooling/scripts/stack-code-reviewer.ts",
     "docs:sync": "tsx tooling/scripts/doc-sync.ts",
+    "tooling:bump-version": "tsx tooling/scripts/bump-version.ts",
     "review:route": "cd tooling/scripts && pnpm review:route",
     "review:lint": "cd tooling/scripts && pnpm review:lint --matrix=../../.agents/specs/conventions/review-routing.md --agents=../../.agents/agents/",
     "specialist:route": "cd tooling/scripts && pnpm specialist:route",

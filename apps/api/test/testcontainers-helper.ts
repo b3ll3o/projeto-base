@@ -8,6 +8,37 @@
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { execSync } from 'node:child_process';
 import { PrismaClient } from '@prisma/client';
+import {
+  PAPEL_DE_RUNTIME,
+  PAPEL_DE_SISTEMA,
+  uriComoPapelDeSistema,
+} from '../src/shared/infrastructure/prisma/papel-de-runtime.js';
+
+/**
+ * Senha dos papeis no container de teste.
+ *
+ * #118: e' do CONTAINER EFEMERO — ela morre com o container. Nao e' default
+ * de nenhum ambiente real, e nao e' usada pela migration (que cria os papeis
+ * sem senha). Ela existe aqui porque o container precisa de uma senha para
+ * os papeis fazerem LOGIN, e porque os specs de RLS precisam conectar
+ * como `app_runtime` e como `app_system`.
+ *
+ * Tem 43 bytes de proposito: o guard de segredo (`segredoDeServico`) recusa
+ * segredo com menos de 32, e um valor de teste que o proprio guard recusaria
+ * seria um teste que roda num regime diferente do de producao.
+ */
+export const SENHA_DE_TESTE_DO_PAPEL = 'senha-de-teste-do-papel-de-runtime-0001';
+
+/**
+ * Escapa um valor para literal SQL.
+ *
+ * `ALTER ROLE ... PASSWORD` nao aceita parametro (e DDL, em Postgres, nao
+ * aceita bind), entao o valor vai como literal — e um literal precisa ser
+ * escapado. O `'` do SQL e' o unico caracter que muda o sentido.
+ */
+function literalSql(valor: string): string {
+  return `'${valor.replace(/'/g, "''")}'`;
+}
 
 // pt-BR: reexportado para a suíte e2e do WEB, que não tem `@prisma/client` como
 // dependência e por isso importa deste arquivo (é a razão de o `global-setup.ts`
@@ -30,6 +61,13 @@ export type TestContext = {
    * O papel de runtime é derivado desta URI pelo spec.
    */
   uriDoBanco: string;
+  /**
+   * A URI do papel de SISTEMA (#118) — a credencial que abre o bucket de
+   * sistema, separada da de runtime.
+   */
+  uriDoPapelDeSistema: string;
+  /** A senha que o helper aplicou aos papeis do container efemero. */
+  senhaDoPapel: string;
   stop: () => Promise<void>;
   /**
    * Id do container no Docker.
@@ -114,9 +152,33 @@ export async function setupTestDatabase(
     stdio: 'inherit',
   });
 
+  // #118: a migration cria os papeis SEM senha (`NOLOGIN`) — uma migration
+  // nao le env, e foi por isso que a senha do `app_runtime` ficou versionada
+  // em texto puro. O setup e' quem aplica a senha, e aqui ele e' o proprio
+  // helper (o container de teste nasce do zero).
+  //
+  // A senha e' do CONTAINER EFEMERO, nao de nenhum ambiente real: ela morre
+  // com o container. O que importa e que ela NAO esta' no repositorio como
+  // um default aplicavel a producao — e que os papeis sao criados sem senha
+  // pela migration.
+  await prisma.$executeRawUnsafe(
+    `ALTER ROLE ${PAPEL_DE_RUNTIME} LOGIN PASSWORD ${literalSql(SENHA_DE_TESTE_DO_PAPEL)}`,
+  );
+  await prisma.$executeRawUnsafe(
+    `ALTER ROLE ${PAPEL_DE_SISTEMA} LOGIN PASSWORD ${literalSql(SENHA_DE_TESTE_DO_PAPEL)}`,
+  );
+
+  // A credencial de SISTEMA: e' ela que abre o bucket de sistema, e ela e'
+  // SEPARADA da de runtime. O bucket de sistema deixou de ser concedido por
+  // um valor de GUC e passou a ser concedido pela credencial.
+  const uriDeSistema = uriComoPapelDeSistema(uri, SENHA_DE_TESTE_DO_PAPEL);
+  process.env.SYSTEM_DATABASE_URL = uriDeSistema;
+
   return {
     prisma,
     uriDoBanco: uri,
+    uriDoPapelDeSistema: uriDeSistema,
+    senhaDoPapel: SENHA_DE_TESTE_DO_PAPEL,
     containerId: container.getId(),
     stop: async () => {
       await prisma.$disconnect();
