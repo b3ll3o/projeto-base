@@ -80,7 +80,17 @@ function paraRegex(glob: string): RegExp {
 // gate de paridade dos fluxos (`.tooling/scripts/ci/check-e2e-flow-coverage.ts`)
 // é quem garante que os specs de `e2e/` existem e são rastreáveis — o que
 // este guard não pode mais fazer por eles.
-const IGNORAR = new Set(['node_modules', '.next', 'coverage', '.turbo', 'e2e']);
+// ⚠️ `.next-e2e` está aqui pelo MESMO motivo do `.next`: é o `distDir` que a
+// suíte e2e usa para o build dela (ver `.gitignore:114`). Sem esta entrada, o
+// `test:coverage` e o `test:e2e` — que o turbo roda EM PARALELO — disputam o
+// mesmo diretório: o build da e2e cria e apaga arquivos dentro dele enquanto
+// esta varredura o percorre, e o `stat` de um arquivo que sumiu no meio do
+// caminho aborta a suíte com `ENOENT` — um erro que não é do código sob teste.
+//
+// MEDIDO 2026-10-29: `ENOENT: no such file or directory, stat
+// 'apps/web/.next-e2e/prerender-manifest.json'`, com `test:coverage` e
+// `test:e2e` rodando ao mesmo tempo.
+const IGNORAR = new Set(['node_modules', '.next', '.next-e2e', 'coverage', '.turbo', 'e2e']);
 
 /** Todos os `*.spec.{ts,tsx}` do app, exceto lixo de build. */
 function specsNoDisco(raiz: string): string[] {
