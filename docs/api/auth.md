@@ -1,14 +1,25 @@
 # API Reference — BC `auth`
 
 > Documento de referência da API HTTP do **Bounded Context `auth`**.
-> Contrato exportado para `apps/api/openapi.json` — artefato **derivado**,
-> gitignored (`.gitignore:11`). Para regenerar: `pnpm --filter @projeto/api openapi:export`.
+> Contrato exportado para `apps/api/openapi.json` — artefato **derivado e
+> versionado** (desde o #125); o gate `check-openapi-contract` compara a spec
+> versionada com a gerada. Para regenerar: `pnpm --filter @projeto/api openapi:export`.
 > ADR-0002 (o que o JWT **não** garante): [`../adr/0002-autenticacao-jwt-argon2.md`](../adr/0002-autenticacao-jwt-argon2.md).
-> Medido em 2026-10-13: os 3 endpoints abaixo conferem com o contrato gerado.
+> Medido em 2026-10-29: os 3 endpoints deste BC conferem com
+> `apps/api/openapi.json`. Contagem por
+> `grep -hoE "@(Get|Post|Patch|Put|Delete)\(" apps/api/src/modules/auth/infrastructure/http/auth.controller.ts | wc -l`
+> → `3`. O contrato inteiro tem 22 paths e 28 operações
+> (`node -e "const d=require('./apps/api/openapi.json');console.log(Object.keys(d.paths).length)"` → `22`;
+> `node -e "const d=require('./apps/api/openapi.json');console.log(Object.values(d.paths).flatMap(p=>Object.keys(p).filter(k=>['get','post','put','patch','delete'].includes(k))).length)"` → `28`),
+> das quais 3 são de `auth` — as outras 25 são `users` (7), `tenancy` (5),
+> `profiles` (10), `feature-flags` (2) e `health` (1).
 
 ## §1. Visão geral
 
 - **Base path**: `/api/v1/auth`
+- **Auth**: `Authorization: Bearer <jwt>` **só** em `GET /auth/me` — o
+  `@ApiBearerAuth()` é **por handler**. `login` e `refresh` são `@Public()` e não
+  declaram `security` no contrato.
 - **Content-Type**: `application/json; charset=utf-8`
 - **Erros**: RFC 7807 (Problem Details)
 - **Guard**: `JwtAuthGuard` na **classe** do controller. `login` e `refresh` se
@@ -54,8 +65,9 @@ enumeração que o 401 genérico existe para fechar.
 { "refreshToken": "eyJhbGciOi…" }
 ```
 
-Devolve o mesmo par do login. `401` para refresh token ausente, expirado ou
-inválido.
+Devolve o **mesmo par de tokens** do login — **sem** o `user`: o `RefreshOutput`
+tem só `accessToken` e `refreshToken`. `401` para refresh token ausente,
+expirado ou inválido.
 
 ### `GET /auth/me`
 
@@ -77,7 +89,7 @@ Sem body. Devolve o perfil do usuário da sessão, resolvido pelo `sub` do token
 "registro corrompido" (500) de "credencial errada" (401). Esse é o vetor de
 enumeração de contas que o 401 genérico fecha.
 
-O spec e2e `e2e/f7-login.spec.ts` compara **o texto** das duas telas, e não
+O spec e2e `apps/web/e2e/f7-login.spec.ts` compara **o texto** das duas telas, e não
 apenas a presença do erro — um `toBeVisible()` passaria com as duas mostrando
 mensagens diferentes.
 
