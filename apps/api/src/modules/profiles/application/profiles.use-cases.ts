@@ -227,8 +227,9 @@ export class ProfileUseCases {
     // pt-BR (#97, A3): `isAdmin`/`isSystem` saíram de `CreateProfileInput`.
     // A garantia era do controller (um call-site só) — um segundo controller,
     // um endpoint novo ou um seed a reabriam. Aqui a garantia é do TIPO: o
-    // campo não existe no contrato e `criar` fixa `false`. Só o
-    // seed/migration, que escreve direto no Prisma, cria profile admin.
+    // campo não existe no contrato e `criar` fixa `false`. Só quem escreve
+    // direto no Prisma cria profile admin: o seed, a migration e o
+    // onboarding da empresa (`prisma-tenant-onboarding.repository.ts:342-353`).
     //
     // pt-BR (#97, A4): slug malformado NÃO é `ProfileSlugAlreadyInUse` —
     // `ProfileSlug.create` (via `profileSlug()`) lança `UserValidationException`

@@ -60,7 +60,14 @@ jobs:
   # docs/specs, tsconfig drift, ESLint config legada) em ~10s antes do
   # quality rodar lint/typecheck/test (~4min). Falha rápido.
   preflight:
-    runs-on: ubuntu-latest
+    # Runner FIXADO, não `ubuntu-latest`. MEDIDO 2026-10-29: o alias `ubuntu-latest`
+    # passou de `ubuntu-24.04` para `ubuntu-26.04` no meio do dia (o run que rodou às
+    # 16:31 era 24.04 e passou; o das 21:47 era 26.04 e reprovou em
+    # `playwright install` com "Playwright does not support chromium on
+    # ubuntu26.04-x64"). O Playwright 1.60.0 não conhece a imagem nova; subir a
+    # versão do Playwright é decisão à parte (muda o Chromium e revalida a suíte e2e).
+    # Enquanto isso, o runner é fixado — `ubuntu-latest` é um alias que se move.
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read
@@ -141,7 +148,7 @@ jobs:
           PR_BODY_FILE="$RUNNER_TEMP/pr-body.md" pnpm pr:marker
   quality:
     needs: preflight
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     # pt-BR: os três passos de Playwright (abaixo) somam bootstrap + install +
     # specs, contra um teto de 20 min que existia bem antes deles. MEDIDO
@@ -210,7 +217,7 @@ jobs:
   docker-build-prod:
     needs: preflight
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4

@@ -104,7 +104,8 @@ export async function exigirAdmin(): Promise<Bloqueio | Liberado> {
  * pt-BR (visão de admin, 2026-10-22 — D8): por que o global e não o da
  * empresa. Os DOIS `isAdmin` não são a mesma pessoa: o da empresa é o perfil
  * de DONO — `true` em toda empresa nova (MEDIDO:
- * `prisma-tenant-onboarding.repository.ts:202`) — e o global é o do bucket de
+ * `apps/api/src/modules/tenancy/domain/perfis-da-empresa.ts:144`, gravado por
+ * `prisma-tenant-onboarding.repository.ts:334-342`) — e o global é o do bucket de
  * SISTEMA. D2 exige o global (`ehAdministradorDeSistema`: `tenantId === null &&
  * isAdmin`), e é o que a API olha: autorizar pelo `isAdmin` da empresa
  * mostraria o inventário inteiro para um gerente que a API recusa com 403.

@@ -12,6 +12,33 @@
 - **Agents, skills e workflows** seguem a mesma regra (definições devem ser focadas e legíveis)
 - A divisão é responsabilidade do agent que criar o arquivo; revisão posterior deve validar
 
+### O que o teto cobre
+
+O teto vale para a **documentação viva** — o que descreve o estado **ATUAL** do
+repo e é atualizado quando o código muda. Ele **não** vale para três categorias,
+cada uma com um critério verificável (e não uma lista de paths que apodrece):
+
+| Categoria | Onde | Critério |
+|---|---|---|
+| `registro-datado` | `docs/superpowers/**` | plano ou spec de uma demanda **já executada**. Editar ou dividir falsearia o registro do que foi decidido na data em que foi decidido. |
+| `artefato-de-execucao` | `.agents/runs/**` | snapshot e ledger de execução: são o **registro datado** de uma execução. O `check-memory-crystallization` lê a tabela do ledger **como uma unidade** — dividir a tabela quebraria o consumidor. |
+| `vendor` | `.agents/skills/graphify/**` | skill de ferramenta externa, versionada como está. |
+
+**O instrumento:** o gate [`check-doc-size`](../../../.tooling/scripts/ci/check-doc-size.ts)
+mede o teto sobre **todo `.md` versionado** fora dessas categorias. As
+categorias são a **fonte única** — exportadas do gate — e a tabela acima é a
+leitura humana delas. Mudou a categoria, mudou o gate no mesmo PR.
+
+**A contagem:** o gate conta o número de linhas que o arquivo **tem**
+(`split('\n').length` menos o último elemento quando ele é vazio). É a mesma
+contagem do `lint-specialist-routing.ts:85`; o `lint-review-routing.ts:151` não
+desconta o `\n` final e conta uma linha a mais. `wc -l` conta *newlines* e
+subestima em 1 os arquivos sem `\n` final — por isso o gate não usa `wc -l`.
+
+> **O que o gate NÃO mede:** a qualidade da prosa e o frescor do conteúdo. O
+> teto é sobre **foco**, e frescor é o que o `doc-sync` e a auditoria do
+> `documentation-specialist` fazem.
+
 ## Etapa Obrigatória de Revisão e Correção
 
 Após QUALQUER alteração em QUALQUER arquivo do projeto, executar uma etapa explícita de revisão com o checklist abaixo:

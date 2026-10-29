@@ -268,8 +268,7 @@ reusar o resultado de T1.
 
 ## Saídas
 
-- Relatório de claims: `L<linha>` + `declarado` vs `medido`, **uma linha por
-  ocorrência** — não por classe. Ver o passo 6.
+- Relatório de claims: `L<linha>` + `declarado` vs `medido`, **uma linha por ocorrência** — não por classe. Ver o passo 6.
 - Corpo do PR atualizado **apenas** nas linhas divergentes (se havia)
 - Nenhum arquivo do repo alterado
 
@@ -290,14 +289,12 @@ remeça.
 
 ## Decisões pendentes (o owner decide, não este workflow)
 
-1. **Claim inline (`spec (34 testes)`).** É o caso mais comum de
-   envelhecimento silencioso e o scanner **não** o cobre: só reconhece as cinco
-   classes da tabela. Cobrir exige parsear artefato-por-artefato, e um parser
-   que só reconhece o formato que ele mesmo escreveu cobre só esse formato.
+1. **Claim inline (`spec (34 testes)`).** O scanner **não** o cobre: só reconhece
+   as cinco classes da tabela, e cobri-lo exige parsear artefato-por-artefato —
+   parser que só reconhece o formato que ele mesmo escreveu cobre só esse formato.
 
 ## Cross-refs
 
 - Scripts: [`pr-refresh-scan.ts`](../../tooling/scripts/pr-refresh-scan.ts) (mede) · [`pr-refresh-apply.ts`](../../tooling/scripts/pr-refresh-apply.ts) (reescreve string) · [`pr-refresh-hook.ts`](../../tooling/scripts/pr-refresh-hook.ts) (gatilho + rede) · [`pr-refresh-gate.ts`](../../tooling/scripts/pr-refresh-gate.ts) (gate de CI: claim divergente em parágrafo sem marcador) — cada um com o spec homônimo ao lado
 - Convenção: [`.agents/specs/conventions/guard-classes.md`](../specs/conventions/guard-classes.md) (as 7 classes — em especial a 1 e a 7)
-- Git: [`.agents/specs/conventions/git-workflow.md`](../specs/conventions/git-workflow.md)
-- Retrospectiva: [`.agents/workflows/retrospective-mode.md`](./retrospective-mode.md)
+- Git: [`.agents/specs/conventions/git-workflow.md`](../specs/conventions/git-workflow.md) · Retrospectiva: [`.agents/workflows/retrospective-mode.md`](./retrospective-mode.md)

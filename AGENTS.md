@@ -11,12 +11,9 @@
 
 **SEMPRE use o padrão genérico de agents de IA onde TODOS os agents podem interoperar entre si.**
 
-Esta regra vale para:
-
-- Todo agent definido em `.agents/agents/*.md`
-- Toda skill definida em `.agents/skills/`
-- Todo workflow documentado em `.agents/WORKFLOWS.md`
-- Qualquer execução (manual, automatizada, CI/CD, hook, etc.)
+Esta regra vale para todo agent (`.agents/agents/*.md`), toda skill
+(`.agents/skills/`), todo workflow (`.agents/WORKFLOWS.md`) e toda execução
+(manual, automatizada, CI/CD, hook, etc.).
 
 **Princípios irrenunciáveis:**
 
@@ -26,13 +23,40 @@ Esta regra vale para:
 4. **Composição explícita.** Agents podem ser encadeados (sequential), paralelizados (parallel) ou organizados hierarquicamente (orchestrator → specialists) — mas o modo de composição DEVE ser documentado no despacho.
 5. **Modelo-agnóstico.** Agents são definidos em Markdown puro. Não há acoplamento com vendor. Toda instrução específica de ferramenta (Claude Code, Cursor, etc.) vive em `docs/TEMPLATE_USAGE.md`, nunca no corpo do agent.
 
-**Quando NÃO aplicar esta regra:**
-
-- Tarefa trivial resolvida por um único agent sem dependências externas
-- Interação puramente conversacional (sem execução)
-- Exploração read-only de um único arquivo ou trecho
+**Quando NÃO aplicar esta regra:** tarefa trivial de um único agent sem
+dependências externas, interação puramente conversacional (sem execução), ou
+exploração read-only de um único arquivo ou trecho.
 
 Em todos os outros casos, **coordene via `agents:coordinate`**.
+
+## §1.2. REGRA MANDATÓRIA — A documentação é parte do código
+
+> ### ⛔ Esta regra é OBRIGATÓRIA e não pode ser desativada
+
+**A documentação é tão parte do código quanto o código** — não é acessório,
+bônus ou "quando sobrar tempo". Um doc que **mente** é defeito (P0); um doc que
+**falta** é lacuna nomeada (P1); doc desatualizada é dívida **com dono**.
+
+1. **Toda unidade de código tem UM doc canônico** — o lugar está na matriz da
+   convenção [`documentacao.md`](./.agents/specs/conventions/documentacao.md).
+   O [`documentation-specialist`](./.agents/agents/documentation-specialist.md)
+   é o dono da matriz e da escrita; o
+   [`doc-writer`](./.agents/agents/doc-writer.md) escreve doc genérica e o
+   [`doc-sync`](./.agents/agents/doc-sync.md) reage ao diff — os três se
+   completam, nenhum substitui outro.
+2. **O fato tem UM dono** (DRY,
+   [`dry.md`](./.agents/specs/conventions/dry.md)); o resto **só referencia**.
+3. **Frescor é obrigatório** — toda alteração de código avalia a doc afetada
+   **no mesmo PR**; doc que envelhece é dívida com dono, nunca silêncio.
+4. **Claim sem comando não entra** — número, contagem e versão precisam do
+   comando que os reproduz
+   ([`tamanho-e-revisao.md`](./.agents/specs/conventions/tamanho-e-revisao.md)).
+5. **Regra sem instrumento é defeito** — `check-doc-coverage` cobra cobertura
+   (unidade → doc canônico), `check-doc-refs` cobra links, `check-runbook-drift`
+   cobra comandos e env citados que sumiram.
+
+**Quando NÃO aplicar:** artefato gerado, histórico (`docs/superpowers/plans/**`,
+`.agents/runs/**`), teste e fixture.
 
 ---
 
@@ -42,16 +66,13 @@ Este repositório é um **template reutilizável**. Para começar um novo projet
 
 ```bash
 # 1. Copie o template
-cp -r projeto-base/ meu-novo-projeto/
-cd meu-novo-projeto/
+cp -r projeto-base/ meu-novo-projeto/ && cd meu-novo-projeto/
 
-# 2. Customize o que precisar
-# - Edite AGENTS.md para adicionar regras específicas do projeto
-# - Adicione novos agents em .agents/agents/
-# - Ajuste workflows em .agents/WORKFLOWS.md
+# 2. Customize o que precisar: edite AGENTS.md (regras do projeto),
+#    adicione agents em .agents/agents/ e ajuste .agents/WORKFLOWS.md
 
-# 3. O padrão genérico permanece intacto:
-#    todos os agents continuam interoperando via agents:coordinate
+# 3. O padrão genérico permanece intacto: os agents continuam
+#    interoperando via agents:coordinate
 ```
 
 Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta (Claude Code, Cursor, Windsurf, etc.).
@@ -88,11 +109,13 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 | **telemetry-specialist**| [`.agents/agents/telemetry-specialist.md`](./.agents/agents/telemetry-specialist.md)| [memory](./.agents/memory/telemetry-specialist.md)        | Arquiteto de telemetria/observabilidade cross-stack (OpenTelemetry SDK init, exporters OTLP, propagação W3C, sampling, web-vitals, collector) | Decisões de instrumentação em backend/frontend/infra; correlação Pino↔OTel; bridge `request.id` → W3C `traceparent`; config OTel Collector Compose |
 | **ux-design-specialist**| [`.agents/agents/ux-design-specialist.md`](./.agents/agents/ux-design-specialist.md)| [memory](./.agents/memory/ux-design-specialist.md)        | Specialist em UX/design de interface (tokens, estados, formulários, a11y, microcopy) | Criar/revisar a aparência e o comportamento de telas e componentes, definir tokens, auditar a11y de UI |
 | **multi-tenant-specialist**| [`.agents/agents/multi-tenant-specialist.md`](./.agents/agents/multi-tenant-specialist.md)| [memory](./.agents/memory/multi-tenant-specialist.md)        | Arquiteto de tenancy (shared-schema + `tenant_id` + RLS, contexto de tenant na fronteira, escopo de query, cache por tenant, backfill, gate cross-tenant) | Criar/alterar tenancy: `Tenant`/`Membership`/`Invitation`, `tenant_id` em model, filtro de tenant em repositório, RLS, chave de cache por tenant, migração de dados pré-tenancy, spec de isolamento |
+| **documentation-specialist**| [`.agents/agents/documentation-specialist.md`](./.agents/agents/documentation-specialist.md)| [memory](./.agents/memory/documentation-specialist.md)        | Dono da documentação da aplicação, ciente das stacks (NestJS DDD/Hexagonal, Prisma, Next.js App Router, OpenTelemetry, Docker, pnpm/turbo): matriz de cobertura, drift, frescor e escrita no formato certo | Demanda que toca `docs/**`, README, doc de módulo, referência de API, ADR ou runbook; gap de cobertura acusado por gate; auditoria periódica de saúde da documentação |
 
-> **Lens DDD/Hexagonal (a partir de v1.2.0, com adoção do ADR-0001):** ao criar/refatorar módulo NestJS,
-> `nestjs-specialist` aplica a lens DDD/Hexagonal — validar boundary `domain/application/infrastructure`
-> e audit fields obrigatórios. A mesma lens é parte da atuação do `stack-code-reviewer` (D11) em pre-commit
-> (Husky) e em CI. Ver [`.agents/specs/conventions/estrutura-e-versionamento.md`](./.agents/specs/conventions/estrutura-e-versionamento.md).
+> **Lens DDD/Hexagonal (v1.2.0+, ADR-0001):** ao criar/refatorar módulo NestJS,
+> o `nestjs-specialist` aplica a lens DDD/Hexagonal (boundary
+> `domain/application/infrastructure` + audit fields). A mesma lens é ato do
+> `stack-code-reviewer` (D11) em pre-commit e em CI. Ver
+> [`estrutura-e-versionamento.md`](./.agents/specs/conventions/estrutura-e-versionamento.md).
 >
 > **Status:** Estável
 
@@ -107,47 +130,43 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 | **release-versioning-specialist** | [`.agents/agents/release-versioning-specialist.md`](./.agents/agents/release-versioning-specialist.md) | [memory](./.agents/memory/release-versioning-specialist.md) | Drift entre docs canônicos, Conventional Commits, semver, workflow release-template | Pré-tag, bump de versão, diagnóstico de release-template |
 | **finding-orchestrator** | [`.agents/agents/finding-orchestrator.md`](./.agents/agents/finding-orchestrator.md) | [memory](./.agents/memory/finding-orchestrator.md) | Dispara specialists em paralelo, agrega findings, dedup contra issues abertas, abre issues via `gh` | Cron semanal (sextas 02:00 UTC), pré-tag, on-demand do user |
 
-> **Diferença entre specialists de auditoria e specialists de stack:**
-> - **Stack specialists** (nestjs, nextjs, docker, monorepo, telemetry, multi-tenant, ux-design) **criam** código/configuração nova. São despachados antes de implementar.
-> - **Auditoria specialists** (prisma-db, openapi-contract, otelcol-infra, docker-prod, release-versioning) **revisam e reportam** código/configuração existente. São despachados pelo `finding-orchestrator` ou sob demanda.
+> **Stack vs. auditoria:** stack specialists (nestjs, nextjs, docker, monorepo,
+> telemetry, multi-tenant, ux-design) **criam** código/configuração nova — são
+> despachados antes de implementar. Auditoria specialists (prisma-db,
+> openapi-contract, otelcol-infra, docker-prod, release-versioning) **revisam** o
+> existente — são despachados pelo `finding-orchestrator` ou sob demanda.
+> Sobreposição intencional: `docker-prod-specialist` (hardening) e
+> `docker-specialist` (autoral) coexistem; o orchestrator dispara os dois quando
+> o escopo é amplo.
 >
-> **Sobreposição intencional:** `docker-prod-specialist` e `docker-specialist` coexistem — o primeiro foca em prod-readiness/hardening (auditoria), o segundo em Dockerfile/Compose autoral (escrita). O orchestrator dispara ambos quando o escopo é amplo.
-
-> **Skills de auditoria (1:1 com cada agent):** cada specialist de auditoria carrega
-> uma skill de processo determinístico (`.agents/skills/<name>-audit/SKILL.md`):
-> `prisma-db-specialist` → `prisma-audit`; `openapi-contract-specialist` → `openapi-audit`;
-> `otelcol-infra-specialist` → `otelcol-audit`; `docker-prod-specialist` → `docker-prod-audit`;
-> `release-versioning-specialist` → `release-versioning-audit`; `finding-orchestrator` →
-> `findings-orchestration`. A skill encapsula os passos shell + dedup + persistência;
-> o agent encapsula papel + coordenação + princípios. Skill não substitui agent — é
-> **carregada por** ele quando a task é de auditoria.
+> **Skills de auditoria (1:1):** cada specialist de auditoria carrega uma skill de
+> processo determinístico (`.agents/skills/<name>-audit/SKILL.md`) —
+> `prisma-audit`, `openapi-audit`, `otelcol-audit`, `docker-prod-audit`,
+> `release-versioning-audit`, `findings-orchestration`. A skill encapsula o
+> **processo**; o agent, o **papel**. Skill não substitui agent — é carregada por
+> ele. O mesmo contrato 1:1 vale para `multi-tenant-specialist` (§3.1), que
+> carrega `multi-tenant-audit` — mas não entra na lista de audit specialists
+> porque o `finding-orchestrator` não o despacha sozinho.
 >
-> **1:1 que não cabe na lista acima:** `multi-tenant-specialist` (§3.1) também é
-> stack specialist — cria a arquitetura de tenancy, é despachado antes de
-> implementar — mas carrega `multi-tenant-audit` pelo mesmo contrato 1:1
-> (`.agents/skills/multi-tenant-audit/SKILL.md`): skill = processo determinístico
-> read-only, agent = papel. Ele não entra na lista de audit specialists porque
-> `finding-orchestrator` não o despacha sozinho.
-
 > **Skills de UI (única relação 1:N do repo, v1.11.0+):** o `ux-design-specialist`
 > carrega **5** skills, nesta ordem — `ui-review` (processo) → `ui-modes` (decide o
 > propósito da tela) → `ui-craft` (tokens, estados, anti-slop) → `ui-break` (pior caso)
 > → `motion` (movimento). Adapted de [emilkowalski/skills](https://github.com/emilkowalski/skills)
 > (MIT), [pbakaus/impeccable](https://github.com/pbakaus/impeccable) (Apache-2.0) e
 > [leonxlnx/taste-skill](https://github.com/leonxlnx/taste-skill) (MIT). `ui-modes`
-> roda primeiro porque sem ele as outras discordam entre si: quem quer densidade e
-> quem quer expressão dão conselhos opostos para a mesma tela.
+> roda primeiro porque sem ele as outras discordam entre si.
 
 > **Par DURANTE → DEPOIS:** [`learning-observation`](./.agents/skills/learning-observation/SKILL.md)
-> classifica em T1/T2/T3 e exige o comando que mediu, no checkpoint de review+fix que
-> a task já obriga; [`retrospective-capture`](./.agents/skills/retrospective-capture/SKILL.md)
-> drena essas memórias na `decision-list`. O destino de cada uma é uma linha no
-> ledger [`memory-triage.md`](./.agents/runs/memory-triage.md), e o gate
-> `check-memory-crystallization` lê o ledger nas duas direções.
+> classifica em T1/T2/T3 e exige o comando que mediu, no checkpoint de review+fix;
+> [`retrospective-capture`](./.agents/skills/retrospective-capture/SKILL.md) drena
+> essas memórias. O destino de cada uma é uma linha no ledger
+> [`memory-triage.md`](./.agents/runs/memory-triage.md), lido pelo gate
+> `check-memory-crystallization` nas duas direções.
 
-> **State-Aware Planning (camada 0 do pre-planner, a partir de v1.8.0):** convenção
-> [`.agents/specs/conventions/state-aware-planning.md`](./.agents/specs/conventions/state-aware-planning.md)
-> obriga gerar `state-snapshot-<ts>.md` ANTES de planejar. Alimenta o `specialist-router` (camada 1).
+> **State-Aware Planning (camada 0 do pre-planner, v1.8.0+):** convenção
+> [`state-aware-planning.md`](./.agents/specs/conventions/state-aware-planning.md)
+> obriga gerar `state-snapshot-<ts>.md` ANTES de planejar. Alimenta o
+> `specialist-router` (camada 1).
 
 ---
 
@@ -157,33 +176,15 @@ Toda coordenação multi-agent passa pela skill **`agents:coordinate`**.
 
 **Definição:** [`.agents/skills/agents-coordinate/SKILL.md`](./.agents/skills/agents-coordinate/SKILL.md)
 
-**Resumo do protocolo:**
+**Resumo do protocolo:** A recebe a tarefa e identifica que precisa de B; A
+invoca B (Agent tool · Skill tool · handoff estruturado); B devolve
+`{ task, context, expected_output, success_criteria }`; A consolida ou encadeia
+o próximo agent. O diagrama completo, os campos e a validação do despacho
+estão na skill — este arquivo é o **índice**, não a fonte.
 
-```text
-Agent A recebe tarefa
-       │
-       ▼
-A identifica que precisa de B
-       │
-       ▼
-A invoca B via:
-  • Agent tool (subagent dispatch) — Claude Code, Aider
-  • Skill tool (se B é uma skill) — múltiplos vendors
-  • Handoff estruturado — TaskCreate/MCP
-       │
-       ▼
-B executa e devolve resultado no formato:
-  { task, context, expected_output, success_criteria }
-       │
-       ▼
-A consolida ou encadeia próximo agent
-```
-
-**Modos de composição suportados:**
-
-- **Sequential**: `A → B → C` (cada um depende do anterior)
-- **Parallel**: `A, B, C → merge` (independentes, juntar resultados)
-- **Hierarchical**: `orchestrator → specialists` (despacho centralizado)
+**Modos de composição:** *sequential* (`A → B → C`, cada um depende do
+anterior), *parallel* (`A, B, C → merge`, independentes) e *hierarchical*
+(`orchestrator → specialists`, despacho centralizado).
 
 ---
 
@@ -212,6 +213,7 @@ Workflows genéricos prontos para uso estão em [`.agents/WORKFLOWS.md`](./.agen
 | `ui-review-mode` (v1.11.0+) | "revisar a UI / essa tela está feia / auditar a11y" | ux-design-specialist (`ui-review` → `ui-modes` · `ui-craft` · `ui-break` · `motion`) |
 | `audit-mode` (v2.0+) | "auditar stack / rodar scan / revisar saúde" | finding-orchestrator (8 specialists em paralelo → agrega → dedup → abre issues via `gh`) |
 | `release-pre-tag` (v2.0+) | "auditar antes de tag vX.Y.Z" | release-versioning-specialist + finding-orchestrator (subset focado em versioning) |
+| `doc-audit-mode` (v1.14.0+) | "a documentação está em dia? / auditar a doc / revisar, atualizar e criar documentações" | documentation-specialist (`documentation-audit` → escreve → `check-doc-coverage` + `check-doc-refs`) |
 
 ---
 
@@ -222,7 +224,7 @@ As convenções estão detalhadas em arquivos próprios sob [`.agents/specs/conv
 | Convenção             | Sub-spec                                                                  | Resumo                                                |
 |-----------------------|---------------------------------------------------------------------------|-------------------------------------------------------|
 | Idioma pt-BR          | [`idioma.md`](./.agents/specs/conventions/idioma.md)                      | pt-BR obrigatório em toda prosa                       |
-| Tamanho & Revisão     | [`tamanho-e-revisao.md`](./.agents/specs/conventions/tamanho-e-revisao.md)| `.md` ≤ 300 linhas + checklist de revisão obrigatório |
+| Tamanho & Revisão     | [`tamanho-e-revisao.md`](./.agents/specs/conventions/tamanho-e-revisao.md)| `.md` ≤ 300 linhas (medido pelo gate `check-doc-size`; as 3 categorias fora do escopo estão declaradas na convenção) + checklist de revisão obrigatório |
 | TDD                   | [`tdd.md`](./.agents/specs/conventions/tdd.md)                            | Red→Green→Refactor de Kent Beck, bloqueia merge       |
 | Evolução de Agents    | [`evolucao-agents.md`](./.agents/specs/conventions/evolucao-agents.md)    | Agents/skills evoluem com a aplicação + memória       |
 | Git Workflow          | [`git-workflow.md`](./.agents/specs/conventions/git-workflow.md)          | `main` protegida; merge apenas via PR; branch cujo PR saiu de `open` (merged **ou** closed) é apagada ([apêndice](./.agents/specs/conventions/git-workflow-apendice.md)) |
@@ -243,13 +245,12 @@ As convenções estão detalhadas em arquivos próprios sob [`.agents/specs/conv
 | Guard Classes | [`guard-classes.md`](./.agents/specs/conventions/guard-classes.md) | As 7 classes pelas quais um controle falha reportando verde; receita de detecção por classe **e a coluna "não pega"** |
 | Migração de Dados | [`migracao-de-dados.md`](./.agents/specs/conventions/migracao-de-dados.md) | Regra dos 3 passos (add nullable, backfill, drop) + quando **não** há backfill a fazer; promovida de `prisma-db-specialist.md:160` na v1.12.0 |
 | DRY | [`dry.md`](./.agents/specs/conventions/dry.md) | Don't Repeat Yourself — o conhecimento tem UMA representação. No código: um termo de domínio tem UM dono (constante exportada) e quem usa importa; a medição é `npx tsx tooling/scripts/analisa-repeticao.ts`, e 2 gates cobram (`check-repeticao`, `check-bloco-duplicado`); adicionada na v1.13.0 |
+| Documentação | [`documentacao.md`](./.agents/specs/conventions/documentacao.md) | A documentação é parte do código: doc ausente = lacuna, doc que mente = defeito. Matriz de cobertura (unidade → doc canônico), fato com UM dono, frescor verificável; medida pelo gate `check-doc-coverage`; adicionada na v1.14.0 |
 
 > **Os dois índices são o mesmo índice.** Este §6 e o
-> [`README.md`](./.agents/specs/conventions/README.md) das convenções listam os
-> mesmos arquivos, e uma convenção nova entra **nos dois, no mesmo PR**. Eles
-> divergiram uma vez: `evals.md` e `engineering-loop.md` entraram só aqui, e
-> `demand-archiving`/`review-routing`/`specialist-routing` não entraram em
-> nenhum — 7 convenções órfãs de índice, corrigidas pela task 2.2 do plano
+> [`README.md`](./.agents/specs/conventions/README.md) listam os mesmos
+> arquivos: uma convenção nova entra **nos dois, no mesmo PR**. Eles já
+> divergiram (7 convenções órfãs de índice), corrigido pela task 2.2 do plano
 > [`guard-classes`](./docs/superpowers/plans/2026-10-03-guard-classes.md).
 >
 > **Templates:** [`.agents/specs/templates/`](./.agents/specs/templates/) contém templates canônicos versionados (ex.: [`spec.md`](./.agents/specs/templates/spec.md) — template de Spec de feature). Toda spec deve derivar de um template; criar templates novos via PR com bump major da convenção relacionada.
@@ -261,10 +262,12 @@ As convenções estão detalhadas em arquivos próprios sob [`.agents/specs/conv
 
 ## §7.5. Captura de Aprendizados Pós-Atividade (v1.4.0+)
 
-Após cada **grande atividade** (plano multi-task, bugfix não-trivial,
-ou adoção de novo padrão), o workflow [`retrospective-mode`](./.agents/workflows/retrospective-mode.md)
-DEVE ser disparado para codificar aprendizados em memory files + proposals
-de harness. Triggers e metodologia completos em [convenção dedicada](./.agents/specs/conventions/retrospective-capture.md).
+Após cada **grande atividade** (plano multi-task, bugfix não-trivial, ou adoção
+de novo padrão), o workflow
+[`retrospective-mode`](./.agents/workflows/retrospective-mode.md) DEVE ser
+disparado para codificar aprendizados em memory files + proposals de harness.
+Triggers e metodologia em
+[convenção dedicada](./.agents/specs/conventions/retrospective-capture.md).
 
 ---
 
@@ -281,21 +284,17 @@ Quando seguido corretamente, este padrão garante:
 
 ## Agent skills
 
-### Issue tracker
-
-GitHub Issues deste repo, via CLI `gh`. Ver `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Sete papéis canônicos — duas categoria e cinco estado — mapeados para os rótulos do tracker. Ver `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context: `GLOSSARY.md` na raiz + `docs/adr/`. Ver `docs/agents/domain.md`.
+- **Issue tracker** — GitHub Issues deste repo, via CLI `gh`. Ver
+  [`docs/agents/issue-tracker.md`](./docs/agents/issue-tracker.md).
+- **Triage labels** — sete papéis canônicos (duas categoria, cinco estado)
+  mapeados para os rótulos do tracker. Ver
+  [`docs/agents/triage-labels.md`](./docs/agents/triage-labels.md).
+- **Domain docs** — single-context: `GLOSSARY.md` na raiz + `docs/adr/`. Ver
+  [`docs/agents/domain.md`](./docs/agents/domain.md).
 
 ---
 
 **Mantido por:** projeto-base contributors
 **Licença:** MIT
-**Versão do documento:** 1.13.0
+**Versão do documento:** 1.14.0
 **Status:** Estável

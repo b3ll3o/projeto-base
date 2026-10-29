@@ -237,7 +237,7 @@ on:
     paths: ['apps/**', 'packages/**', 'tooling/**', 'docs/**', '.agents/**']
 jobs:
   sync:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
