@@ -98,7 +98,7 @@ infrastructure ─→ application + domain + libs externas (NestJS, Prisma)
 
 Referência cruzada: [`docs/MONOREPO.md` §11](../../../docs/MONOREPO.md) e [`docs/STACK.md` §8](../../../docs/STACK.md).
 
-**Versão da convenção:** 1.12.0
+**Versão da convenção:** 1.14.0
 
 ## Histórico de Versões
 

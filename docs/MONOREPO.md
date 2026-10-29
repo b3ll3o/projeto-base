@@ -274,7 +274,7 @@ Referência cruzada: [`estrutura-e-versionamento.md`](../.agents/specs/conventio
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão do documento:** 1.12.0
+**Versão do documento:** 1.14.0
 
 ### Histórico de Versões
 

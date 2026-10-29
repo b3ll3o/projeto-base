@@ -173,4 +173,4 @@ R: `.agents/` é vendor-neutral — funciona com qualquer IA (Claude Code, Curso
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão do documento:** 1.12.0
+**Versão do documento:** 1.14.0
