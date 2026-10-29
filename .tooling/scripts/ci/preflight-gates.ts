@@ -448,6 +448,21 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     file: '.tooling/scripts/ci/check-feature-flag-portas.ts',
     id: 'check-feature-flag-portas',
   },
+  {
+    // pt-BR (2026-10-29): a convenção `documentacao.md` diz que a documentação
+    // é parte do código, e nada media isso. MEDIDO: `apps/api/src/modules/` tem
+    // 6 bounded contexts e `docs/api/` tinha 2 — `feature-flags`, `health`,
+    // `profiles` e `tenancy` não tinham NENHUMA referência, e o preflight
+    // ficava verde. O `doc-sync` não cobre: o mapeamento dele é uma lista de
+    // 5 caminhos hardcoded, e um módulo novo não gera ação nem alerta.
+    //
+    // O gate mede COBERTURA (existe doc canônico para cada unidade da
+    // matriz da convenção). NÃO mede frescor — o doc existir não quer dizer
+    // que ele ainda diz a verdade — e isso é declarado no cabeçalho dele.
+    name: 'cobertura de documentação (unidade de código → doc canônico)',
+    file: '.tooling/scripts/ci/check-doc-coverage.ts',
+    id: 'check-doc-coverage',
+  },
 ];
 
 /**
