@@ -224,7 +224,7 @@ As convenções estão detalhadas em arquivos próprios sob [`.agents/specs/conv
 | Convenção             | Sub-spec                                                                  | Resumo                                                |
 |-----------------------|---------------------------------------------------------------------------|-------------------------------------------------------|
 | Idioma pt-BR          | [`idioma.md`](./.agents/specs/conventions/idioma.md)                      | pt-BR obrigatório em toda prosa                       |
-| Tamanho & Revisão     | [`tamanho-e-revisao.md`](./.agents/specs/conventions/tamanho-e-revisao.md)| `.md` ≤ 300 linhas + checklist de revisão obrigatório |
+| Tamanho & Revisão     | [`tamanho-e-revisao.md`](./.agents/specs/conventions/tamanho-e-revisao.md)| `.md` ≤ 300 linhas (medido pelo gate `check-doc-size`; as 3 categorias fora do escopo estão declaradas na convenção) + checklist de revisão obrigatório |
 | TDD                   | [`tdd.md`](./.agents/specs/conventions/tdd.md)                            | Red→Green→Refactor de Kent Beck, bloqueia merge       |
 | Evolução de Agents    | [`evolucao-agents.md`](./.agents/specs/conventions/evolucao-agents.md)    | Agents/skills evoluem com a aplicação + memória       |
 | Git Workflow          | [`git-workflow.md`](./.agents/specs/conventions/git-workflow.md)          | `main` protegida; merge apenas via PR; branch cujo PR saiu de `open` (merged **ou** closed) é apagada ([apêndice](./.agents/specs/conventions/git-workflow-apendice.md)) |

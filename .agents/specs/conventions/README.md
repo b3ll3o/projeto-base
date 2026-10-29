@@ -30,7 +30,7 @@ desenho, apêndices.
 | Convenção | Arquivo | Descrição |
 |-----------|---------|-----------|
 | Idioma pt-BR | [`idioma.md`](./idioma.md) | Português Brasileiro como idioma padrão |
-| Tamanho & Revisão | [`tamanho-e-revisao.md`](./tamanho-e-revisao.md) | Limite de 300 linhas + checklist de revisão |
+| Tamanho & Revisão | [`tamanho-e-revisao.md`](./tamanho-e-revisao.md) | Limite de 300 linhas (medido pelo gate `check-doc-size`) + checklist de revisão; as 3 categorias fora do escopo do teto estão declaradas em §O que o teto cobre |
 | TDD | [`tdd.md`](./tdd.md) | Desenvolvimento orientado a testes (Kent Beck) |
 | Evolução de Agents | [`evolucao-agents.md`](./evolucao-agents.md) | Agents e skills evoluem junto com a aplicação |
 | Git Workflow | [`git-workflow.md`](./git-workflow.md) | `main` protegida; merge apenas via PR; branch cujo PR saiu de `open` (merged **ou** closed) é apagada ([apêndice](./git-workflow-apendice.md)) |
@@ -39,7 +39,8 @@ desenho, apêndices.
 | E2E Playwright | [`e2e-playwright.md`](./e2e-playwright.md) | Todo fluxo de usuário com tela tem spec e2e Playwright que atravessa o backend; inventário de fluxos reconciliado por gate |
 | Release Automático (Post-Merge) | [`post-merge-release.md`](./post-merge-release.md) | Auto-tagging `vX.Y.Z` via `.github/workflows/release-template.yml` após bump em main |
 | CI Defense in Depth | [`ci-defense-in-depth.md`](./ci-defense-in-depth.md) | 3 camadas: pre-push local + preflight CI + quality CI gated |
-| CI Defense in Depth — pendências | [`ci-defense-in-depth-pendencias.md`](./ci-defense-in-depth-pendencias.md) | Pendências abertas dos gates (companion; cresce sem caber no documento da convenção) |
+| CI Defense in Depth — pendências | [`ci-defense-in-depth-pendencias.md`](./ci-defense-in-depth-pendencias.md) | Pendências **abertas** dos gates (companion; medido pelo gate `check-doc-size`) |
+| CI Defense in Depth — pendências encerradas | [`ci-defense-in-depth-pendencias-fechadas.md`](./ci-defense-in-depth-pendencias-fechadas.md) | O registro datado do que **já foi resolvido**: uma pendência que fecha sai do ledger de abertas e vem para aqui |
 | CI Defense in Depth — dentes | [`ci-defense-in-depth-dentes.md`](./ci-defense-in-depth-dentes.md) | Registro de dentes por gate + taxonomia dos níveis de prova (companion; extraído em 2026-10-16 pelo teto de 300 linhas) |
 | Retrospective Capture | [`retrospective-capture.md`](./retrospective-capture.md) | Captura estruturada de aprendizados pós-atividade (T1/T2/T3 + threshold confidence ≥ 70). Camada **DURANTE** = [`learning-observation`](../../skills/learning-observation/SKILL.md); uma linha por memória no ledger [`memory-triage.md`](../../runs/memory-triage.md), lido pelo gate `check-memory-crystallization` nas duas direções |
 | State-Aware Planning (v1.8.0+) | [`state-aware-planning.md`](./state-aware-planning.md) | Camada 0 do pre-planner — `state-snapshot-<ts>.md` antes de planejar; alimenta `specialist-router` camada 1 |

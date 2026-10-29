@@ -23,8 +23,8 @@ Mapa completo por ambiente (dev, Docker, observabilidade, e2e, CI). O índice e 
 
 O **runbook canônico do repo** é este arquivo: a tabela de variáveis (§2) e o
 catálogo de scripts `pnpm` (§3) mora aqui, e são o que o gate
-[`check-runbook-drift`](../.tooling/scripts/ci/check-runbook-drift.ts) mede. Os
-arquivos irmãos **não** são lidos por esse gate.
+[`check-runbook-drift`](../.tooling/scripts/ci/check-runbook-drift.ts) mede — os
+arquivos irmãos **não** são lidos por ele.
 
 ### §0.1 Pré-requisitos
 
@@ -47,7 +47,7 @@ novo/renomeado → §3; `.env.example` alterado → §2 + o passo que copia o ar
 porta trocada → §1.5, [runbook Docker](./runbooks/docker.md), §4; ambiente novo →
 uma linha em §0 e um arquivo em [`docs/runbooks/`](./runbooks/); defeito de boot →
 a seção dele, trocando 📖 por ✅ e a data. Regra prática: **quem mudou o comando
-escreve a linha nova no mesmo commit** — o gate pega o que ficou para trás.
+escreve a linha nova no mesmo commit**.
 
 ---
 
@@ -60,8 +60,7 @@ O caminho mais rápido para iterar: apps na máquina, só o banco em container.
 Desde o PR #91 (2026-10-16) o serviço `postgres` do compose usa apenas
 `expose: 5432`, **sem `ports:`** — ele é alcançável de dentro da rede Docker, não
 do host, então subir só ele não serve para o app na máquina. (O `README.md` Opção B
-mandava esse comando — corrigido junto.) Rode um Postgres próprio com porta
-publicada:
+mandava esse comando — corrigido junto.) Rode um Postgres próprio com porta publicada:
 
 ```bash
 docker run -d --name projeto-base-pg-local -p 5432:5432 \
@@ -72,7 +71,7 @@ docker run -d --name projeto-base-pg-local -p 5432:5432 \
 A URL tem que bater com `apps/api/.env` (✅ medido: `projeto:***@localhost:5432/projeto_base`
 — a do **DONO**, que é a `DIRECT_DATABASE_URL`; o `app_runtime` e o `app_system` vêm do
 §1.2.1); para derrubar, `docker rm -f projeto-base-pg-local`; para **reiniciar** o que já
-existe (o caminho do `pre-push` quando a etapa `ci:boot` falha), `docker start projeto-base-pg-local`.
+existe (o caminho do `pre-push` quando o `ci:boot` falha), `docker start projeto-base-pg-local`.
 
 ### §1.2 Segredo JWT
 
@@ -142,6 +141,11 @@ cd apps/api && pnpm exec prisma migrate deploy && cd ../..  # aplica as 15 migra
 > `prisma:migrate:deploy` em nenhum `package.json` — o pnpm responde "None of the
 > selected packages has a ... script" e **sai 0**, verde para quem só olha o exit
 > code.
+>
+> ⚠️ **`db:generate` pode vir do cache do turbo.** Se a task vier servida do
+> cache, o `prisma generate` não roda e a suíte morre com `Cannot find module
+> '.prisma/client/default'` — sintoma que parece "o Prisma está desatualizado" e
+> não é. O conserto é `pnpm turbo run db:generate --filter=@projeto/api --force`.
 
 ### §1.4 Subir os apps
 
@@ -162,14 +166,12 @@ curl -o /dev/null -w '%{http_code}\n' http://localhost:3000/api/docs   # 200 (Sw
 ```
 
 ⚠️ O `/api/docs` só existe em `development` (#122). Fora dele o Swagger é
-**desabilitado** — é o default-deny do `JWT_SECRET`: um documento OpenAPI publica a
-superfície completa da API (rotas, schemas, requisitos de auth) a quem descobrir a
-URL. Para ligar de propósito: `SWAGGER_ENABLED=true`.
+**desabilitado** — é o default-deny do `JWT_SECRET`: um OpenAPI publica a
+superfície completa da API a quem descobrir a URL. Para ligar: `SWAGGER_ENABLED=true`.
 
 ⚠️ No boot do web saem uns `Module not found` de
-`@opentelemetry/winston-transport` e `@opentelemetry/exporter-jaeger`, peers opcionais
-do `auto-instrumentations-node`: ✅ medido — **não impedem o boot**, o Next segue e
-fica `✓ Ready in 5.9s`.
+`@opentelemetry/winston-transport` e `@opentelemetry/exporter-jaeger` (peers
+opcionais): ✅ medido — **não impedem o boot**, o Next segue e fica `✓ Ready in 5.9s`.
 
 ### §1.6 Fluxo completo (API e UI) ✅ medido 2026-10-16
 
@@ -188,8 +190,8 @@ curl -H "authorization: Bearer $TOKEN" http://localhost:3000/api/v1/users       
 ```
 
 Pela UI: `http://localhost:3001/users` redireciona para `/login` (exige sessão);
-preencher e-mail/senha com o usuário acima leva para `/users`, que lista o
-recém-criado ("1 usuário cadastrado"). `Cadastrar usuário` abre `/users/novo`.
+com o usuário acima, o login leva a `/users`, que lista o recém-criado
+("1 usuário cadastrado"). `Cadastrar usuário` abre `/users/novo`.
 
 ### §1.7 Usuário admin local (seed)
 
@@ -204,15 +206,15 @@ overlay `docker-compose.dev.yml`), então o procedimento completo — inclusive 
 | `admin@admin.com` | `Admin@123` | `admin` (todas as permissions, `is_admin=true`) |
 
 Credencial de DEV, no mesmo espírito da senha `projeto:projeto` do
-`docker-compose.dev.yml`: está em texto puro no repositório. Para ambiente real,
-crie o admin pelo `POST /api/v1/users` e promova o perfil pela UI.
+`docker-compose.dev.yml`. Para ambiente real, crie o admin pelo
+`POST /api/v1/users` e promova o perfil pela UI.
 
 ### §1.8 A etapa `ci:boot` — subir a aplicação local e derrubá-la
 
 `pnpm ci:boot` sobe a aplicação **do jeito que quem desenvolve roda**, espera a
 saúde dos dois e **derruba tudo** no fim. É a etapa que o `pnpm ci:local` e o
-`.husky/pre-push` rodam — e o procedimento completo, com as medições e as
-razões de cada detalhe, está em [runbook de e2e/CI §3](./runbooks/e2e-e-ci.md).
+`.husky/pre-push` rodam — o procedimento completo está em
+[runbook de e2e/CI §3](./runbooks/e2e-e-ci.md).
 
 ---
 
@@ -258,10 +260,9 @@ e uma chave que só existe no código reprovaria o gate.
 
 - `THROTTLE_TTL_MS` — `apps/api/src/app.module.ts:26-31`; default **60000 ms**. No
   `.env.production.example` está **comentada** (`# THROTTLE_TTL_MS=60000`).
-- `THROTTLE_LIMIT` — mesma linha; default **100** req/min por IP. Comentada no example
-  (`# THROTTLE_LIMIT=100`).
-- `OPENAPI_OUTPUT_PATH` — `apps/api/scripts/export-openapi.ts:81`; caminho alternativo
-  do `openapi:export`. Lida pelo **script**, não pela API em execução.
+- `THROTTLE_LIMIT` — mesma linha; default **100** req/min por IP. Comentada no example.
+- `OPENAPI_OUTPUT_PATH` — `apps/api/scripts/export-openapi.ts:81`; caminho alternativo do
+  `openapi:export`. Lida pelo **script**, não pela API em execução.
 
 ---
 
@@ -288,6 +289,7 @@ pnpm test:e2e                    # suíte de navegador (runbook de e2e/CI)
 | Sintoma | Causa medida | Solução |
 |---|---|---|
 | `/api/v1/health` com `checks.database` ≠ `ok` | Postgres do compose não publica porta no host (#91) | §1.1 — container próprio com `-p 5432:5432` |
+| `Cannot find module '.prisma/client/default'` | o `db:generate` veio do cache do turbo | §1.3 — `pnpm turbo run db:generate --filter=@projeto/api --force` |
 | `PrismaClientInitializationError` | `DATABASE_URL` ausente ou vazia — em `apps/api/.env` (Ambiente 1) ou em `.env.production` (Ambiente 3) | §1.2.1 · [runbook Docker §2.1](./runbooks/docker.md) |
 | API morre no boot sem mensagem clara | `JWT_SECRET` ausente ou com placeholder | §1.2 — `openssl rand -base64 48` |
 | `prisma migrate deploy` "não fez nada" e saiu 0 | rodou da raiz / script inexistente | §1.3, de dentro de `apps/api` |

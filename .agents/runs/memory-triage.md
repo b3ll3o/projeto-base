@@ -133,6 +133,8 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 
 
 | memória | disposição | alvo | âncora |
+| `ci-boot-exige-postgres-local-com-porta-publicada` | `citada` | `docs/como-rodar.md` | `docker start projeto-base-pg-local` |
+| `db-generate-pode-ser-pulado-pelo-cache-do-turbo` | `citada` | `docs/como-rodar.md` | `pnpm turbo run db:generate --filter=@projeto/api --force` |
 |---|---|---|---|
 | `t7-rbac-feature-flag` | `removida` | memória ausente do corpus local; a âncora `listAllPermissions` existe em `apps/api/src/shared/auth/permissions-catalog.ts` | — |
 | `absent-tool-reads-as-approval` | `citada` | `.agents/runs/2026-10-05-guard-classes-autoauditoria.md` | `não há sintoma nenhum` |

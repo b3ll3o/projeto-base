@@ -162,6 +162,9 @@ exceção: a matriz §3 é fechada e todo módulo, rota e package tem doc.
 - **Testes e fixtures**: são autoexplicativos por definição.
 - **Prosa de PR/issue**: vive fora do repo — nenhum gate a alcança
   (`pr-refresh` cobre o corpo do PR).
+- **Acima do teto de 300 linhas**: o gate `check-doc-size` mede a documentação
+  **viva**; as três categorias fora do escopo estão declaradas em
+  [`tamanho-e-revisao.md`](./tamanho-e-revisao.md) §O que o teto cobre.
 - **Ledger que cresce por desenho**:
   `.agents/specs/conventions/ci-defense-in-depth-pendencias.md` — o próprio
   cabeçalho do arquivo diz por quê ("aqui pendência cresce sem custar

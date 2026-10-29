@@ -70,7 +70,13 @@ reage ao diff. Nenhum substitui outro, e o `AGENTS.md` §1.2 diz isso.
       a partir dele (hoje `docs/api/<bc>.md` é escrito à mão — deriva).
 - [ ] O gate de cobertura poderia medir também o **modelo de dados**: cada model
       do `schema.prisma` citado no doc do BC. Hoje é convenção, não gate.
-- [ ] `apps/api/.env.example` precisa do `openssl rand -hex 32` (ver acima).
-- [ ] O teto de 300 linhas de `.md` continua sem gate — 18 arquivos o violam,
-      a maioria histórico. Declarar as exceções na convenção e medir na
-      auditoria antes de virar gate.
+- [x] O teto de 300 linhas de `.md` **virou gate** (`check-doc-size`, 2026-10-29):
+      3 categorias fora do escopo declaradas (`registro-datado` · `artefato-de-execucao` ·
+      `vendor`), o ledger de pendências separado em **abertas** e **encerradas**, e o
+      `wc -l` — que subestima em 1 os arquivos sem `\n` final — fora da conta do gate.
+- [x] `apps/api/.env.example` com `openssl rand -base64 48` para as senhas de
+      papel — **corrigido** em 2026-10-29 (`-hex 32`; o `/` do base64 encerra a
+      credencial da URI).
+- [ ] O `@projeto/ui` (alias morto) saiu e o `check-path-alias` mede que todo
+      alias aponta para diretório existente; falta a mesma regra para os
+      **aliases de `paths` declarados nos apps** (hoje só a raiz é medida).
