@@ -32,7 +32,7 @@ base_main: 404a2458760b542b25e19329085969d3872b5c8a
 
 | Capacidade | Onde |
 |---|---|
-| Escopo de leitura (bucket de SISTEMA `'*'` vs empresa) | `apps/api/src/shared/infrastructure/prisma/escopo.ts` — `comEscopo`, `escopoDoTenant` |
+| Escopo de leitura (bucket de SISTEMA `'*'` vs empresa) | `apps/api/src/shared/infrastructure/prisma/escopo.ts` — `comEscopoDeSistema`, `comEscopoDeEmpresa` |
 | Regra do "administrador do sistema" (D2) | `apps/api/src/shared/auth/eh-administrador-de-sistema.ts` — `ehAdministradorDeSistema` |
 | Leitura das empresas do ATOR, com o papel | `tenant-membership-repository.port.ts` — `listarEmpresasDoUsuario` |
 | Guard de permissão + decorator | `profiles/infrastructure/http/guards/permissions.guard.ts`, `.../require-permission.decorator.ts` |
@@ -72,7 +72,7 @@ feature flags.
 | # | Decisão | Por quê |
 |---|---|---|
 | D1 | O ator é o **administrador do sistema** (D2: `tenantId === null && isAdmin`). O gerente de empresa é recusado. | `ehAdministradorDeSistema` já existe e é a trava do bucket global. `admin.manage-users` sozinho NÃO segura: o `gerente` recebe `listAllPermissions()` no cadastro da empresa (`perfis-da-empresa.ts`). |
-| D2 | A leitura abre o **bucket de SISTEMA** (`escopoDoTenant(null)` → `'*'`), explícito no repositório — nunca derivado do header. | `escopo.ts` traduz `null` em `'*'`; a RLS (`no_escopo_atual`, `usuario_no_escopo`) lê `'*'` como "vejo tudo". O header é **capacidade declarada pelo cliente** (issue #102) e não pode abrir escopo. |
+| D2 | A leitura abre o **bucket de SISTEMA**, explícito no repositório — nunca derivado do header. | ⚠️ **Desde o #118 o bucket de SISTEMA é a CREDENCIAL, e não o GUC**: quem abre a transação é o papel `app_system` (`comEscopoDeSistema`), e o GUC `'*'` na sessão de runtime devolve ZERO linhas. A RLS (`no_escopo_atual`, `usuario_no_escopo`) compara `current_user` com `app_system` no bucket global. O header é **capacidade declarada pelo cliente** (issue #102) e não pode abrir escopo. |
 | D3 | O perfil mostrado é o **efetivo da membership** (`tenant_memberships.profile_id`), aceitando o perfil GLOBAL ou o DAQUELA empresa — o mesmo conjunto de `findProfileId`. | O `users.profile_id` é global e é `null` para toda conta criada pelo produto: mostrar ele diria "sem perfil" para quem tem, em toda linha, sempre (o defeito do #106). |
 | D4 | Conta **soft-deleted** fora das DUAS listas (membros e usuários). | Mesma regra de `GET /users` (default `includeDeleted=false`) e de `listarEmpresasDoUsuario` (`user: { deletedAt: null }`). Uma lista só seria incoerente: o membro apagado sumiria do usuário mas continuaria na empresa. |
 | D5 | **Sem paginação** nestas rotas. Atalho declarado no código. | As outras rotas de admin (`/admin/profiles`, `/admin/feature-flags`) também não paginam. `shortcut: sem paginação; a lista é do bucket de SISTEMA e cresce com a base — paginar quando o admin reportar lentidão.` |
@@ -107,7 +107,7 @@ export interface AdminTenancyRepositoryPort {
 }
 ```
 
-- `listarEmpresasComMembros`: `tenant.findMany` com `include: { memberships: { include: { user, profile } } }`, em `comEscopo(prisma, escopoDoTenant(null), …)`, filtrando `user.deletedAt: null` e mapeando `tenant.name` → `nome`.
+- `listarEmpresasComMembros`: `tenant.findMany` com `include: { memberships: { include: { user, profile } } }`, em `comEscopoDeSistema(…)` (a credencial do bucket de SISTEMA — ver D2), filtrando `user.deletedAt: null` e mapeando `tenant.name` → `nome`.
 - `listarUsuariosComEmpresas`: `user.findMany` com `include: { memberships: { include: { tenant, profile } } }`, MESMO escopo, filtrando `deletedAt: null` na conta.
 - O `perfil` é o **slug** do perfil efetivo da membership, e `null` quando a membership não tem perfil (`profileId` nulo) — ou quando o perfil é de **outra** empresa (a mesma exclusão de `findProfileId`).
 - **Uma** query por lista (`include` do Prisma) — sem N+1.
