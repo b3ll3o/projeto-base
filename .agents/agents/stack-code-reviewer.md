@@ -233,7 +233,7 @@ on:
     paths: ['apps/**', 'packages/**', 'tooling/**']
 jobs:
   review:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v3
