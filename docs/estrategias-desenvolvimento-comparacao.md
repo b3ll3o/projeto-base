@@ -14,8 +14,8 @@ O framework de referência ("vetorial encontra similaridade, grafos encontram
 relacionamentos, fine-tuning especializa comportamento, e às vezes a resposta é
 software convencional") aplicado a este repo produz um veredito desconfortável:
 **quase nenhum problema aqui precisa de IA**, e mesmo assim o repo construiu
-três camadas — 1849 linhas de tooling determinístico (`find tooling/scripts -name '*.ts' -not -name '*.spec.ts' | xargs wc -l`), 19 agents, 1307 linhas de
-memória — para resolver o que, em 100% dos casos verificados, é regra
+três camadas — 4734 linhas de tooling determinístico (`find tooling/scripts -name '*.ts' -not -name '*.spec.ts' | xargs wc -l`), 28 agents, 2191 linhas de
+memória (`ls .agents/memory/*.md | xargs wc -l`) — para resolver o que, em 100% dos casos verificados, é regra
 determinística.
 
 Verificado:
@@ -25,8 +25,8 @@ grep -rliE 'embedding|openai|langchain|pgvector|neo4j' --include=package.json ap
 # → 0
 ```
 
-A camada que o repo chama de "agentic" é, estruturalmente, **26 `pattern:` em
-YAML** (`.agents/specs/conventions/review-routing.md:21-104`) executados por
+A camada que o repo chama de "agentic" é, estruturalmente, **28 `pattern:` em
+YAML** (`.agents/specs/conventions/review-routing.md:39-131`) executados por
 `tooling/scripts/review-router.ts` — TypeScript determinístico. Pelo framework,
 isso se chama software convencional. O nome errado produziu custo concreto, e a
 seção 7 lista os oito.
@@ -78,9 +78,9 @@ positivo em teste de regressão nomeado pelo incidente
 (`tooling/scripts/review-router.spec.ts:275`). É o único artefato do repo
 comparável a um fine-tuning bem feito — e está em código, não em prosa.
 
-**Custo:** ~0,5s por invocação. Manutenção: 26 `pattern:` em `review-routing.md`
-(297 linhas) + 30 em `specialist-routing.md` (285 linhas), medido por
-`grep -c 'pattern:'`.
+**Custo:** ~0,5s por invocação. Manutenção: 28 `pattern:` em `review-routing.md`
+(288 linhas) + 60 em `specialist-routing.md` (300 linhas), medido por
+`grep -c '^  - pattern:'`.
 
 **Modo de falha:** sub-invocação silenciosa.
 `grep -rn 'review:route\|specialist:route' .github .husky .tooling | wc -l` → **0**.
@@ -118,9 +118,9 @@ por hook ou CI. Agrava: 18 links em `AGENTS.md:65-88` apontam para
 - Camada 1 tem barreira **provada ao vivo**: violação DDD real em
   `domain/probe.ts` → `1 finding(s) — 1 blocker` + EXIT=1 pelo mesmo caminho que
   `.husky/pre-commit:19` e `review-stack.yml:31` executam.
-- Camada 2 é código testado: `pnpm tooling:test` → **16 arquivos / 207 testes
-  verdes**.
-- Camada 3 é artefato versionado: 1307 linhas em 21 arquivos.
+- Camada 2 é código testado: `pnpm tooling:test` → **57 arquivos / 999 testes
+  verdes** (dois runners: `tooling/scripts` → 18/402 e `.tooling/scripts/ci` → 39/597).
+- Camada 3 é artefato versionado: 2191 linhas em 30 arquivos (`ls .agents/memory/*.md | xargs wc -l`).
 
 **A carga de prova não está mais concentrada na Camada 1.** A Camada 2 era
 inert — os 6 specs de `.tooling/scripts/ci` (os próprios checks do preflight)
@@ -208,9 +208,9 @@ Os três "0" não são estimativas: são o resultado do `grep` de dependências 
 
 | O que o repo tentou | O que era de fato | Custo do erro de rótulo |
 | --- | --- | --- |
-| Camada "agentic" de roteamento | 26 `pattern:` regex em YAML rodados por TypeScript (`review-routing.md:21-104`) | Foi o que deixou `specialist:lint` **fora** do preflight (`grep -c specialist .tooling/scripts/ci/preflight.ts` = **0**) enquanto `review:lint` está dentro (`preflight.ts:50`, que executa `pnpm review:lint`). A camada tratada como "semântica" foi tratada como opcional. |
+| Camada "agentic" de roteamento | 28 `pattern:` regex em YAML rodados por TypeScript (`review-routing.md:39-131`) | Foi o que deixou `specialist:lint` **fora** do preflight (`grep -c specialist .tooling/scripts/ci/preflight.ts` = **0**) enquanto `review:lint` está dentro (`preflight.ts:50`, que executa `pnpm review:lint`). A camada tratada como "semântica" foi tratada como opcional. |
 | Memória acumulada como "fine-tuning" | Fine-tuning de conhecimento que **muda** — proibido pelo framework | `README.md:259` afirmava que os apps "ainda **não foram criados**"; existem, com 40 specs. Corrigido. `docs/MONOREPO.md:262` está em `1.9.0` enquanto a última tag é `v1.8.0` — o drift encolheu de 3 versões para 1, mas a classe é a mesma: fato volatile envelhecendo como se fosse estável, agora sem check que amarre os dois. |
-| Arquitetura de 3 camadas escolhida antes do problema | Nenhum problema verificado pede IA | Superfície de manutenção (1849 + 1307 linhas) e 12 furos de costura (§7 + §8), para resolver o que cabia num script de 1,6s. |
+| Arquitetura de 3 camadas escolhida antes do problema | Nenhum problema verificado pede IA | Superfície de manutenção (4734 + 2191 linhas) e 12 furos de costura (§7 + §8), para resolver o que cabia num script de 1,6s. |
 | Camada 2 como "barreira de roteamento" | Telemetria | `review-router.ts:350` tem exit 3 sem consumidor algum. Um exit code sem consumidor é uma constante, não um portão. |
 | `tdd:check` como verificação de TDD | Task sem dono: declarada no `package.json` como `turbo run tdd:check`, ausente do `turbo.json` e de todo pacote do workspace | **A análise original errou a classe do erro** e a tabela é a prova: afirmava "exit 0 com FULL TURBO em 37ms" (falso verde). Medido: `pnpm tdd:check` → **EXIT=1**, `Could not find task in project`. A task já tinha morrido; o script que a invocava ficou. Quem reportava verde era este documento, não o comando. |
 | `release-template.yml` como "automática e idempotente" | Era inerte — o footer tinha regredido para `1.5.0` e `v1.5.0` já existia, então todo push era noop. Footer alinhado em `1.9.0`; a idempotência agora emite `::warning::` em vez de encerrar em silêncio | Idempotência confundida com *correctly*-idempotência: o mecanismo criado para evitar erro mascarava drift. Falta o check que amarra footer↔tag (**BL1**). |

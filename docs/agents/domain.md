@@ -19,6 +19,9 @@ Como as skills de engenharia devem consumir a documentação de domínio deste r
   - `0001-arquitetura-ddd-hexagonal-auditoria.md` — boundary `domain/application/infrastructure`
   - `0002-autenticacao-jwt-argon2.md` — auth, sessão, hashing de senha
   - `0003-backends-locais-de-telemetria.md` — stack de telemetria e backends locais
+  - `0004-tenancy-multi-empresa.md` — tenancy por membership, escopo de banco + RLS, bucket de sistema por credencial
+  - `0005-rbac-por-perfil.md` — RBAC por perfil, `isAdmin` como bypass, catálogo de permissões em código, perfil por membership
+  - `0006-feature-flags-como-excecao.md` — a tabela de flags guarda só as exceções; bloqueio responde 404 genérico
 
 Se `GLOSSARY.md` não existir, **siga em silêncio**: não sinalize a ausência nem sugira
 criá-lo antecipadamente.
@@ -62,4 +65,4 @@ silêncio:
 
 > _Contradiz o ADR-0001 (boundary DDD/Hexagonal), mas vale reabrir porque…_
 
-Os três ADRs acima são decisões vigentes: violá-las é erro de review, não preferência.
+Os seis ADRs acima são decisões vigentes: violá-las é erro de review, não preferência.

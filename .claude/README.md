@@ -11,8 +11,8 @@
 
 | Caminho | Papel | Estado |
 |---|---|---|
-| `.claude/skills/<dir>/SKILL.md` | Wrapper que expõe a skill canônica | 15 de 15 |
-| `.claude/agents/<name>.md` | Wrapper que expõe o agent canônico | 2 de 26 (piloto) |
+| `.claude/skills/<dir>/SKILL.md` | Wrapper que expõe a skill canônica | 16 de 24 |
+| `.claude/agents/<name>.md` | Wrapper que expõe o agent canônico | 3 de 28 (piloto) |
 | `.claude/hooks/pretooluse-block-pnpm-lock.mjs` | Guard de escrita no lockfile | pipe-testado; inerte até `/hooks` |
 | `.claude/hooks/posttooluse-stack-review.sh` | Reviewer pós-edição, em modo feedback | pipe-testado; inerte até `/hooks` |
 | `.claude/settings.json` | Registra os dois hooks | válido; recarrega no `/hooks` |
@@ -25,10 +25,10 @@
 > [Ativação](#ativação-estes-hooks-não-sobem-sozinhos). "Ativo" aqui significaria
 > que o hook responde a uma edição real, e hoje não responde.
 
-## Skills (15 wrappers)
+## Skills (16 wrappers)
 
-Um wrapper por skill em `.agents/skills/`. Cada um tem 30 linhas e **não contém
-procedimento**: só `name`/`description` copiados literalmente do frontmatter
+Um wrapper por skill em `.agents/skills/`. Cada um tem no máximo 30 linhas e **não
+contém procedimento**: só `name`/`description` copiados literalmente do frontmatter
 canônico, e a instrução de ler o canônico antes de agir.
 
 O `name` e a `description` são copiados como **linha inteira**, nunca
@@ -41,13 +41,14 @@ Campos deliberadamente **não** copiados: `type`, `tools`, `version`, `updated`.
 São metadados de outra ferramenta ou convenção; carregá-los aqui seria
 dívida que quebra em outro vendor. Ver `prefer-agents-directory`.
 
-## Agents (2 wrappers, piloto)
+## Agents (3 wrappers, piloto)
 
-Só `review-router` e `specialist-router`. A escolha é deliberada: são os dois
-**orquestradores**, os únicos que despacham outros agents e, portanto, os únicos
-em que `tools` governa o comportamento de verdade. Ligar os outros 24 traria
-ao Claude Code agentes de papel único cujo frontmatter não tem nada de específico
-do Claude Code — ruído de descoberta em troca de nada.
+`review-router` e `specialist-router` (os dois **orquestradores**, os únicos que
+despacham outros agents e, portanto, os únicos em que `tools` governa o
+comportamento de verdade) e `documentation-specialist` (o dono da documentação da
+aplicação — o agent cujo frontmatter tem `Write`/`Edit`, e que precisa deles).
+Ligar os outros 25 traria ao Claude Code agentes de papel único cujo frontmatter
+não tem nada de específico do Claude Code — ruído de descoberta em troca de nada.
 
 Para estes dois, `tools` **é** copiado verbatim:
 
@@ -225,12 +226,17 @@ dele é a mesma cegueira: o hook não mede o que o reviewer não mede.
 `.mjs` é coberto pelo pre-commit; o `.sh` **não é coberto por nada**. A
 formatação dele é mantida à mão.
 
-### Só 2 de 26 agents têm wrapper
+### Só 3 de 28 agents têm wrapper
 
-Os outros 24 agents de `.agents/agents/` continuam sem binding. Não é falha de
+Os outros 25 agents de `.agents/agents/` continuam sem binding. Não é falha de
 cobertura do trabalho — foi a escolha registrada acima, para não poluir a
 descoberta do Claude Code com agentes que não têm nada de específico deste
 vendor.
+
+MEDIDO 2026-10-29: `ls .agents/agents/*.md | wc -l` → 28 agents;
+`ls .agents/skills/*/SKILL.md | wc -l` → 24 skills; `ls .claude/skills/*/SKILL.md | wc -l`
+→ 16 wrappers. O terceiro binding é o `documentation-specialist` (a
+`documentation-audit` é a 16ª skill wrapper).
 
 ## Verificação
 
