@@ -209,10 +209,12 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `rota-protegida-sem-bearer-sai-publica-no-documento` | `citada` | `apps/api/src/modules/users/infrastructure/http/users.controller.ts` | `pública é a ÚNICA que não declara `security` — e `@ApiBearerAuth()` é o` |
 | `review-and-fix-after-each-task` | `citada` | `.agents/skills/review-routing/SKILL.md` | `Avançar com BLOCKING não tratado` |
 | `reviewer-must-differ-from-implementer` | `citada` | `.agents/agents/review-router.md` | `Sempre fresh` |
+| `reviewer-que-mede-reverte-o-worktree` | `pendente` | — | — |
 | `reviewer-reads-shape-not-system-semantics` | `pendente` | — | — |
 | `review-router-rollout-state` | `recusada` | progresso de campanha encerrada (13 PRs merged, métricas de 2026-09-22) | — |
 | `spec-que-so-verifica-render-nao-tem-dente` | `citada` | `.agents/specs/conventions/e2e-playwright.md` | `verde por construção` |
 | `spec-verde-com-tsc-vermelho` | `pendente` | — | — |
+| `stale-clone-hides-the-resolving-merge` | `pendente` | — | — |
 | `state-that-lives-outside-the-repo-has-no-gate` | `citada` | `.agents/workflows/pr-refresh.md` | `verde por omissão` |
 | `subagent-driven-development-always` | `citada` | `AGENTS.md` | `Coordenação obrigatória` |
 | `one-boolean-state-is-two-states` | `pendente` | — | — |
