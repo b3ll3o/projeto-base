@@ -462,6 +462,54 @@
         "tags": ["tenancy"]
       }
     },
+    "/api/v1/admin/tenants": {
+      "get": {
+        "operationId": "AdminTenancyController_listarEmpresas",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "As empresas do sistema, com seus membros"
+          },
+          "401": {
+            "description": "Não autorizado"
+          },
+          "403": {
+            "description": "Só o administrador do sistema"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar todas as empresas, com os membros de cada uma",
+        "tags": ["admin"]
+      }
+    },
+    "/api/v1/admin/users": {
+      "get": {
+        "operationId": "AdminTenancyController_listarUsuarios",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Os usuários do sistema, com suas empresas"
+          },
+          "401": {
+            "description": "Não autorizado"
+          },
+          "403": {
+            "description": "Só o administrador do sistema"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Listar todos os usuários, com as empresas de cada um",
+        "tags": ["admin"]
+      }
+    },
     "/api/v1/admin/feature-flags": {
       "get": {
         "operationId": "AdminFeatureFlagsController_listar",
