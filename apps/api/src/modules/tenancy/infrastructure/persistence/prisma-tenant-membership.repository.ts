@@ -14,24 +14,7 @@ import type {
   EmpresaDoUsuario,
   TenantMembershipRepositoryPort,
 } from '../../domain/ports/tenant-membership-repository.port.js';
-
-/**
- * A membership tem perfil EFETIVO?
- *
- * ⚠️ É o MESMO critério do `findProfileId` (o filtro `profile: { OR: [{ tenantId:
- * null }, { tenantId }] }`): o perfil precisa ser GLOBAL — que serve a qualquer
- * empresa por definição — ou DAQUELA empresa. A coluna CRUA (`profile_id` não
- * nulo) não basta: um `profile_id` apontado para o perfil de outra empresa não
- * resolve nada na API, e a empresa seria escolhida pelo funil do login sem que
- * a pessoa pudesse fazer nada nela.
- */
-function temPerfilEfetivo(linha: {
-  profile: { tenantId: string | null } | null;
-  tenant: { id: string };
-}): boolean {
-  if (linha.profile === null) return false;
-  return linha.profile.tenantId === null || linha.profile.tenantId === linha.tenant.id;
-}
+import { temPerfilEfetivo } from '../../domain/perfil-efetivo.js';
 
 @Injectable()
 export class PrismaTenantMembershipRepository implements TenantMembershipRepositoryPort {
@@ -262,15 +245,15 @@ export class PrismaTenantMembershipRepository implements TenantMembershipReposit
     // Entre as que TÊM perfil, a ordem é a da data — a mais recente primeiro,
     // que é a em que a pessoa está agora.
     //
-    // ⚠️ "Perfil efetivo" é o MESMO critério do `findProfileId` (linha 78): o
-    // perfil precisa ser GLOBAL (`tenantId` nulo) ou DAQUELA empresa. Ler a
-    // coluna crua (`profileId !== null`) contaria como "com perfil" uma
-    // membership apontada para o perfil de OUTRA empresa — e o funil escolheria
-    // essa empresa, onde a API não resolve perfil nenhum: zero permissões, sem
-    // causa nomeada.
+    // ⚠️ "Perfil efetivo" é o MESMO critério do `findProfileId` — e o DONO do
+    // critério é `domain/perfil-efetivo.ts`, o mesmo que a visão de admin
+    // importa. Ler a coluna crua (`profileId !== null`) contaria como "com
+    // perfil" uma membership apontada para o perfil de OUTRA empresa — e o
+    // funil escolheria essa empresa, onde a API não resolve perfil nenhum:
+    // zero permissões, sem causa nomeada.
     const ordenadas = [
-      ...linhas.filter((linha) => temPerfilEfetivo(linha)),
-      ...linhas.filter((linha) => !temPerfilEfetivo(linha)),
+      ...linhas.filter((linha) => temPerfilEfetivo(linha.profile, linha.tenant.id)),
+      ...linhas.filter((linha) => !temPerfilEfetivo(linha.profile, linha.tenant.id)),
     ];
 
     return ordenadas.map((linha) => ({

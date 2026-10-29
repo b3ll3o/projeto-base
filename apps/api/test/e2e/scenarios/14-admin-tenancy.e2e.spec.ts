@@ -2,8 +2,8 @@
 //
 // Cenário E2E 14: o INVENTÁRIO de tenancy do ADMIN DO SISTEMA.
 //
-//   GET /api/v1/admin/tenants → todas as empresas, com os seus membros
-//   GET /api/v1/admin/users   → todos os usuários, com as suas empresas
+//   GET /api/v1/admin/tenancy → as empresas com os seus membros E os usuários
+//                                com as suas empresas
 //
 // POR QUE ESTE ARQUIVO EXISTE, e por que é e2e e não unitário
 //
@@ -17,13 +17,19 @@
 //
 //   - `AdminTenancyController` fora de `controllers` ............ 404
 //   - `ProfilesModule` fora dos imports do `TenancyModule` ...... DI quebrado
-//   - `PrismaAdminTenancyRepository` fora do `PrismaPersistenceModule` . DI
+//   - `PrismaAdminTenancyRepository` fora do `TenancyModule` ... DI quebrado
 //   - o portão D2 fora da use case .............................. ESCALA
 //
 // A quarta é a que muda COMPORTAMENTO e a que nenhum outro arquivo mede: o
 // `gerente` de uma empresa tem `isAdmin: true` no perfil efetivo DA EMPRESA
 // DELE e `listAllPermissions()` no banco — logo o `PermissionsGuard` o LIBERA.
 // Quem barra é o D2 (`tenantId === null && isAdmin`), dentro da use case.
+//
+// ⚠️ 2026-10-29 (revisão do PR #127): a rota era DUAS (`/admin/tenants` e
+// `/admin/users`) e virou UMA. O motivo é o invariante do próprio repositório
+// — "as DUAS listas precisam contar a mesma história" — que duas rotas HTTP
+// não conseguem garantir: duas rotas são dois requests, e cada request é uma
+// transação, e as duas lidas em instantes diferentes.
 //
 // ⚠️ Sem cabeçalho `// FLUXO:` — igual aos cenários `01`-`13`. O inventário
 // de fluxos (`.agents/specs/conventions/e2e-playwright.md`) é um artefato de
@@ -41,8 +47,7 @@ import {
   type E2EContext,
 } from '../test-app.helper.js';
 
-const ROTA_EMPRESAS = '/api/v1/admin/tenants';
-const ROTA_USUARIOS = '/api/v1/admin/users';
+const ROTA_INVENTARIO = '/api/v1/admin/tenancy';
 
 interface MembroWire {
   id: string;
@@ -70,9 +75,20 @@ interface UsuarioWire {
   email: string;
   empresas: EmpresaDoUsuarioWire[];
 }
+interface InventarioWire {
+  empresas: EmpresaWire[];
+  usuarios: UsuarioWire[];
+}
 
 describe('E2E 14: inventário de tenancy (admin do sistema)', () => {
   let e2e: E2EContext;
+
+  /**
+   * O contador do e-mail — o que faz cada login cair num balde DIFFERENTE.
+   *
+   * ⚠️ O porquê está no `emailDaConta`, logo abaixo.
+   */
+  let contadorDeContas = 0;
 
   beforeAll(async () => {
     e2e = await bootstrapE2E();
@@ -87,6 +103,28 @@ describe('E2E 14: inventário de tenancy (admin do sistema)', () => {
   });
 
   /**
+   * O e-mail da conta — ÚNICO a cada chamada.
+   *
+   * ⚠️ O e-mail precisa ser DIFERENTE a cada chamada, e o motivo é medido
+   * (revisão do PR #127, 2026-10-29): o limitador de login é POR CONTA
+   * (`LIMITE_LOGIN_POR_MINUTO = 5`, `ttl: 60_000`, e o tracker é
+   * `` `${ip}:${email}` ``). Com o e-mail derivado de um slug FIXO, os 5
+   * `it()` deste arquivo logavam a MESMA conta 5 vezes — o 5º login consumia
+   * a ÚLTIMA cota, e o spec ficaria vermelho no SETUP (por um motivo que não
+   * é a asserção que ele mede) no dia que um `it()` novo aparecesse, ou com um
+   * `--retry=1` do Vitest.
+   *
+   * ⚠️ A correção NÃO é subir o limite: `auth.controller.ts` diz exatamente
+   * que "subir o teto para a suíte passar seria trocar o controle de
+   * segurança pela conveniência do teste" — e o cenário `09-rate-limit` é o
+   * que mede esse controle. A correção é cada login cair num balde diferente.
+   */
+  function emailDaConta(slug: string): string {
+    contadorDeContas += 1;
+    return `${slug}-dono-${contadorDeContas}@projeto.test`;
+  }
+
+  /**
    * Uma empresa com o seu DONO — pelo MESMO caminho que a tela usaria
    * (`POST /users` com `destino.tipo='empresa'`).
    *
@@ -99,7 +137,7 @@ describe('E2E 14: inventário de tenancy (admin do sistema)', () => {
     empresaId: string;
     headersDaEmpresa: Record<string, string>;
   }> {
-    const email = `${slug}-dono@projeto.test`;
+    const email = emailDaConta(slug);
     const cadastro = await e2e.injetar({
       method: 'POST',
       url: '/api/v1/users',
@@ -124,17 +162,17 @@ describe('E2E 14: inventário de tenancy (admin do sistema)', () => {
 
   // ─────────── a rota existe e o ADMIN DO SISTEMA vê a base ───────────
 
-  it('GET /admin/tenants devolve as empresas do sistema, com os membros de cada uma', async () => {
+  it('GET /admin/tenancy devolve as empresas com os membros E os usuários com as empresas', async () => {
     const { email, empresaId } = await criarEmpresaComDono('acme');
 
-    const res = await e2e.injetar({ method: 'GET', url: ROTA_EMPRESAS });
+    const res = await e2e.injetar({ method: 'GET', url: ROTA_INVENTARIO });
 
     // 404 aqui = o controller não está em `controllers`, ou o módulo não está
     // no AppModule. 403 = o `PermissionsGuard` não rodou (cache frio).
     expect(res.statusCode).toBe(200);
-    const corpo = JSON.parse(res.body) as EmpresaWire[];
+    const corpo = JSON.parse(res.body) as InventarioWire;
 
-    const acme = corpo.find((e) => e.id === empresaId);
+    const acme = corpo.empresas.find((e) => e.id === empresaId);
     expect(acme).toBeDefined();
     expect(acme?.nome).toBe('ACME');
     expect(acme?.slug).toBe('acme');
@@ -142,24 +180,27 @@ describe('E2E 14: inventário de tenancy (admin do sistema)', () => {
     expect(acme?.membros.map((m) => m.email)).toContain(email);
     expect(acme?.membros[0]?.nome).toBe('Dona Da Empresa');
     expect(acme?.membros[0]?.perfil).toBe('gerente');
-  });
 
-  it('GET /admin/users devolve os usuários do sistema, com as empresas a que pertencem', async () => {
-    const { email, empresaId } = await criarEmpresaComDono('acme');
-
-    const res = await e2e.injetar({ method: 'GET', url: ROTA_USUARIOS });
-
-    expect(res.statusCode).toBe(200);
-    const corpo = JSON.parse(res.body) as UsuarioWire[];
-
-    const dona = corpo.find((u) => u.email === email);
+    // E a OUTRA direção, na MESMA resposta: as duas listas saem do mesmo
+    // instante — e é por isso que elas viajam juntas.
+    const dona = corpo.usuarios.find((u) => u.email === email);
     expect(dona).toBeDefined();
     expect(dona?.empresas.map((e) => e.id)).toContain(empresaId);
     expect(dona?.empresas[0]?.nome).toBe('ACME');
+  });
+
+  it('a conta do admin do sistema aparece — ela não pertence a empresa nenhuma', async () => {
+    await criarEmpresaComDono('acme');
+
+    const res = await e2e.injetar({ method: 'GET', url: ROTA_INVENTARIO });
+
+    expect(res.statusCode).toBe(200);
+    const corpo = JSON.parse(res.body) as InventarioWire;
+
     // ⚠️ E o INVERSO: a conta do admin do sistema não pertence a empresa
     // nenhuma, e mesmo assim é "todos os usuários" — uma lista montada pelas
     // empresas a esqueceria.
-    const admin = corpo.find((u) => u.email === 'conta-de-sessao-e2e@projeto.test');
+    const admin = corpo.usuarios.find((u) => u.email === 'conta-de-sessao-e2e@projeto.test');
     expect(admin?.empresas).toEqual([]);
   });
 
@@ -171,7 +212,11 @@ describe('E2E 14: inventário de tenancy (admin do sistema)', () => {
     // ⚠️ O `PermissionsGuard` LIBERA este ator: o dono de uma empresa nova
     // recebe `listAllPermissions()`, e o perfil efetivo dele tem `isAdmin:
     // true`. Se o portão fosse a PERMISSÃO, ele leria a base INTEIRA.
-    const res = await e2e.injetar({ method: 'GET', url: ROTA_EMPRESAS, headers: headersDaEmpresa });
+    const res = await e2e.injetar({
+      method: 'GET',
+      url: ROTA_INVENTARIO,
+      headers: headersDaEmpresa,
+    });
 
     expect(res.statusCode).toBe(403);
     const corpo = JSON.parse(res.body) as { code: string; detail: string };
@@ -188,7 +233,7 @@ describe('E2E 14: inventário de tenancy (admin do sistema)', () => {
     // EMPRESA, e não é o que a API olha.
     const res = await e2e.injetar({
       method: 'GET',
-      url: ROTA_USUARIOS,
+      url: ROTA_INVENTARIO,
       headers: { authorization: `Bearer ${token}` },
     });
 
@@ -216,7 +261,7 @@ describe('E2E 14: inventário de tenancy (admin do sistema)', () => {
 
     const res = await e2e.injetar({
       method: 'GET',
-      url: ROTA_EMPRESAS,
+      url: ROTA_INVENTARIO,
       headers: comum.headers,
     });
 
@@ -234,7 +279,7 @@ describe('E2E 14: inventário de tenancy (admin do sistema)', () => {
   it('X-Tenant-Id -> 403 TENANT_MEMBERSHIP_REQUIRED (o header é capacidade do cliente)', async () => {
     const res = await e2e.injetar({
       method: 'GET',
-      url: ROTA_EMPRESAS,
+      url: ROTA_INVENTARIO,
       headers: { 'x-tenant-id': '0190a8b6-0000-7000-8000-00000000ffff' },
     });
 
@@ -247,14 +292,33 @@ describe('E2E 14: inventário de tenancy (admin do sistema)', () => {
 
   it('a lista atravessa empresas: o admin vê a empresa que NÃO é dele', async () => {
     // A conta de sessão do harness é o admin do SISTEMA — e ela não pertence
-    // a empresa nenhuma. Ver a empresa acima é o que prova que o escopo
+    // a empresa nenhuma. Ver a empresa abaixo é o que prova que o escopo
     // aberto é o de SISTEMA, e não o da empresa do ator.
     const { empresaId } = await criarEmpresaComDono('acme');
 
-    const res = await e2e.injetar({ method: 'GET', url: ROTA_EMPRESAS });
+    const res = await e2e.injetar({ method: 'GET', url: ROTA_INVENTARIO });
 
     expect(res.statusCode).toBe(200);
-    const corpo = JSON.parse(res.body) as EmpresaWire[];
-    expect(corpo.map((e) => e.id)).toContain(empresaId);
+    const corpo = JSON.parse(res.body) as InventarioWire;
+    expect(corpo.empresas.map((e) => e.id)).toContain(empresaId);
+  });
+
+  // ─────────── a cota de login é POR CONTA ───────────
+
+  it('cada login deste spec cai num balde DIFERENTE — a cota é por conta', () => {
+    // ⚠️ O DENTE DA MARGEM. O limitador de login é POR CONTA
+    // (`LIMITE_LOGIN_POR_MINUTO = 5`, tracker `ip:email`), e o `cleanE2EDatabase`
+    // limpa o BANCO entre os testes — mas o storage do throttler é em memória
+    // no processo do Nest, e o contador NÃO é resetado.
+    //
+    // Com o e-mail derivado de um slug FIXO, os `it()` deste arquivo logavam a
+    // MESMA conta: MEDIDO (revisão do PR #127), os 5 logins saíram com
+    // `x-ratelimit-remaining: 4 → 3 → 2 → 1 → 0` — o 5º consumia a ÚLTIMA
+    // cota, e um `it()` novo (ou um `--retry=1`) deixaria o spec vermelho no
+    // SETUP, por um motivo que não é a asserção que ele mede.
+    //
+    // Este teste afirma a PROPRIEDADE: o MESMO slug dá e-mails diferentes —
+    // logo, baldes diferentes, e a margem é sempre a mesma.
+    expect(emailDaConta('acme')).not.toBe(emailDaConta('acme'));
   });
 });

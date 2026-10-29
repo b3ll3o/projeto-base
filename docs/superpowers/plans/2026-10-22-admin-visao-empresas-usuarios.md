@@ -14,6 +14,25 @@ base_main: 404a2458760b542b25e19329085969d3872b5c8a
 > Demanda: *"crie um plano para que o usuarios administrador possa ver todas as empresas e todos os usuarios atrelados a empresa e todos os usuarios e todas as empresas atrelados a cada usuario, revise o plano, execute o plano, revise tudo, corrija todos os erros, commit, push e abra um pr"*
 > State-snapshot: [`.agents/runs/state-snapshot-20261022T205801Z.md`](../../../.agents/runs/state-snapshot-20261022T205801Z.md)
 > Regra: [`.agents/specs/conventions/estrutura-e-versionamento.md`](../../../.agents/specs/conventions/estrutura-e-versionamento.md)
+>
+> ⚠️ **REVISÃO DE 2026-10-29** — a revisão do PR #127 mudou o desenho. O plano
+> da revisão está em
+> [`2026-10-29-admin-tenancy-correcoes-revisao.md`](./2026-10-29-admin-tenancy-correcoes-revisao.md),
+> e o que muda aqui é:
+>
+> - **D6 virou UMA rota** (`GET /admin/tenancy`), e não duas. Duas rotas são
+>   dois requests, e cada request é uma transação — e as DUAS listas precisam
+>   contar a mesma história, o que duas transações não garantem.
+> - **D5 ganhou o PRAZO da transação declarado** (15 s), e não só o atalho de
+>   paginação: o default do Prisma (5 s) é implícito, e a leitura que cresce
+>   com a base inteira é a que estoura nele.
+> - O wire format passou a ser o tipo COMPARTILHADO (`InventarioAdminTenancyDto`),
+>   e não o tipo da porta de domínio — o elo de compilação entre a API e o web.
+> - O "perfil efetivo" ganhou UM dono (`tenancy/domain/perfil-efetivo.ts`).
+> - O port do inventário saiu do `PrismaPersistenceModule` e foi para o
+>   `TenancyModule` — o portão D2 passou a estar a uma camada.
+>
+> As demais decisões (D1, D2, D3, D4, D7, D8, D9) seguem como estão.
 
 ## 0. State snapshot (camada 0 — `state-aware-planning`)
 
@@ -75,8 +94,8 @@ feature flags.
 | D2 | A leitura abre o **bucket de SISTEMA**, explícito no repositório — nunca derivado do header. | ⚠️ **Desde o #118 o bucket de SISTEMA é a CREDENCIAL, e não o GUC**: quem abre a transação é o papel `app_system` (`comEscopoDeSistema`), e o GUC `'*'` na sessão de runtime devolve ZERO linhas. A RLS (`no_escopo_atual`, `usuario_no_escopo`) compara `current_user` com `app_system` no bucket global. O header é **capacidade declarada pelo cliente** (issue #102) e não pode abrir escopo. |
 | D3 | O perfil mostrado é o **efetivo da membership** (`tenant_memberships.profile_id`), aceitando o perfil GLOBAL ou o DAQUELA empresa — o mesmo conjunto de `findProfileId`. | O `users.profile_id` é global e é `null` para toda conta criada pelo produto: mostrar ele diria "sem perfil" para quem tem, em toda linha, sempre (o defeito do #106). |
 | D4 | Conta **soft-deleted** fora das DUAS listas (membros e usuários). | Mesma regra de `GET /users` (default `includeDeleted=false`) e de `listarEmpresasDoUsuario` (`user: { deletedAt: null }`). Uma lista só seria incoerente: o membro apagado sumiria do usuário mas continuaria na empresa. |
-| D5 | **Sem paginação** nestas rotas. Atalho declarado no código. | As outras rotas de admin (`/admin/profiles`, `/admin/feature-flags`) também não paginam. `shortcut: sem paginação; a lista é do bucket de SISTEMA e cresce com a base — paginar quando o admin reportar lentidão.` |
-| D6 | **Duas** rotas: `GET /admin/tenants` e `GET /admin/users`. Não uma rota com os dois lados. | Um recurso por rota é o padrão do repositório (`/admin/profiles`, `/admin/feature-flags`); e cada lista é útil sozinha (o admin pergunta "quem está na ACME" e "de quais empresas o Bruno é"). |
+| D5 | **Sem paginação** nestas rotas. Atalho declarado no código — e o **prazo da transação declarado** (`timeout: 15_000`). | As outras rotas de admin (`/admin/profiles`, `/admin/feature-flags`) também não paginam. `shortcut: sem paginação; a lista é do bucket de SISTEMA e cresce com a base — paginar quando o admin reportar lentidão.` O prazo é explícito porque o default do Prisma (5 s) é implícito, e a leitura que cresce com a base inteira é a que estoura nele (`P2028` → 500). |
+| D6 | **Uma** rota: `GET /admin/tenancy`. Não duas. ⚠️ **Revisado em 2026-10-29** — era Duas (`GET /admin/tenants` e `GET /admin/users`). | As DUAS listas precisam contar a mesma história, e isso só é garantível se forem lidas no MESMO instante: duas rotas são dois requests, e cada request é uma transação. O inventário é um read-model (a tenancy nos dois sentidos), não dois recursos. |
 | D7 | O cliente web **omite** o header `X-Tenant-Id`. | D14 (o mesmo motivo de `lib/flags.ts`): mandar a empresa do cookie tira o ator do bucket global e D2 passa a recusar o admin legítimo. |
 | D8 | O front lê o perfil **GLOBAL** (`obterMeuPerfilGlobal`), e não o da empresa. | D2 olha o bucket global. `obterMeuPerfil` (por empresa) devolveria o `isAdmin` do DONO — `true` em toda empresa nova — e a tela mostraria a tabela para um ator que a API recusa. |
 | D9 | **Nenhuma escrita.** Só leitura — logo, **nenhuma migration** e **nenhuma mudança de schema**. | O pedido é ver. A migration pendente (G-001 do snapshot) é dívida de valor gravado, fora deste escopo. |
@@ -102,13 +121,12 @@ interface EmpresaComPerfil { id; nome; slug; role; perfil: string | null }
 interface UsuarioComEmpresas { id; nome; email; empresas: EmpresaComPerfil[] }
 
 export interface AdminTenancyRepositoryPort {
-  listarEmpresasComMembros(): Promise<EmpresaComMembros[]>;
-  listarUsuariosComEmpresas(): Promise<UsuarioComEmpresas[]>;
+  listarInventario(): Promise<InventarioAdminTenancy>;   // ⚠️ revisado em 2026-10-29
 }
 ```
 
-- `listarEmpresasComMembros`: `tenant.findMany` com `include: { memberships: { include: { user, profile } } }`, em `comEscopoDeSistema(…)` (a credencial do bucket de SISTEMA — ver D2), filtrando `user.deletedAt: null` e mapeando `tenant.name` → `nome`.
-- `listarUsuariosComEmpresas`: `user.findMany` com `include: { memberships: { include: { tenant, profile } } }`, MESMO escopo, filtrando `deletedAt: null` na conta.
+- `listarInventario`: **UM** `comEscopoDeSistema(…)` (a credencial do bucket de SISTEMA — ver D2) que faz as DUAS leituras — `tenant.findMany` e `user.findMany` — na MESMA transação. ⚠️ **Revisado em 2026-10-29**: eram DOIS métodos, e duas transações.
+- As DUAS leituras filtram `user.deletedAt: null` (a membership sobrevive ao soft-delete da conta) e `deletedAt: null` na conta, e mapeiam `tenant.name` → `nome`.
 - O `perfil` é o **slug** do perfil efetivo da membership, e `null` quando a membership não tem perfil (`profileId` nulo) — ou quando o perfil é de **outra** empresa (a mesma exclusão de `findProfileId`).
 - **Uma** query por lista (`include` do Prisma) — sem N+1.
 
@@ -117,8 +135,7 @@ export interface AdminTenancyRepositoryPort {
 - `tenancy.use-cases.ts`: `listarEmpresasDoSistema(ator)` e `listarUsuariosDoSistema(ator)`, ambas começando por `exigeAdministradorDoSistema(ator)` (D2 → 403 `FORBIDDEN`).
 - `tenancy.use-cases.spec.ts`: o caso do **recuso** (ator que não é admin do sistema → 403) e o caso da delegação (ator legítimo → o repositório é chamado).
 - **Novo** `apps/api/src/modules/tenancy/infrastructure/http/admin-tenancy.controller.ts`:
-  - `GET /admin/tenants` → `EmpresaComMembros[]`
-  - `GET /admin/users` → `UsuarioComEmpresas[]`
+  - `GET /admin/tenancy` → `InventarioAdminTenancyDto` (⚠️ **revisado em 2026-10-29**: eram DUAS rotas, `/admin/tenants` e `/admin/users`)
   - `@UseGuards(JwtAuthGuard, PermissionsGuard)` + `@RequirePermission('admin.manage-users')` em **cada handler** (defense in depth — quem barra de fato é D2, como nas feature flags).
   - `@ApiBearerAuth()` + `@ApiResponse` por rota (o documento OpenAPI é gerado e conferido).
 - `tenancy.module.ts`: `ProfilesModule` nos imports (o `PermissionsGuard` injeta `UserProfileUseCases`) + o binding da porta nova no `PrismaPersistenceModule` (é lá que os bindings Prisma moram).
@@ -130,7 +147,7 @@ export interface AdminTenancyRepositoryPort {
 
 ### T3 — Web
 
-- **Novo** `apps/web/lib/tenancy.ts`: `listarEmpresasComMembros()` e `listarUsuariosComEmpresas()`, com `ApiClient` **sem** `getTenant` (D7).
+- **Novo** `apps/web/lib/tenancy.ts`: `listarInventario(accessToken)`, com `ApiClient` **sem** `getTenant` (D7). ⚠️ **Revisado em 2026-10-29**: o token entra por PARÂMETRO (o padrão de `lib/empresas.ts`), e a leitura virou UMA.
 - `apps/web/app/admin/guard-admin.tsx`: **novo export** `exigirAdminDoSistema()` — o mesmo `exigirAdmin()`, mas lendo `obterMeuPerfilGlobal()` (D8), para não duplicar a distinção 401/403/5xx que o #107 consertou.
 - **Nova** `apps/web/app/admin/tenancy/page.tsx`: duas tabelas — empresas (com os membros) e usuários (com as empresas) — com `<caption>` e `scope="col"` (o padrão a11y das flags).
 - `apps/web/components/Sidebar.tsx`: link "Empresas e usuários" no bloco de admin.

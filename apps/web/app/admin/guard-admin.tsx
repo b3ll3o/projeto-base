@@ -113,9 +113,14 @@ export async function exigirAdmin(): Promise<Bloqueio | Liberado> {
  * aqui: as DUAS funções caem no mesmo `avaliarAcesso`, e é esse o motivo de
  * ele existir — duas cópias do `if` são dois lugares para o defeito do #107
  * voltar.
+ *
+ * ⚠️ O `accessToken` é OPCIONAL, e existe para a tela do inventário: ela lê
+ * a sessão UMA vez e passa o token para o guard E para a leitura do
+ * inventário. Sem ele, a página lia o cookie duas vezes — e a página é
+ * `force-dynamic`, então isso valia a cada navegação.
  */
-export async function exigirAdminDoSistema(): Promise<Bloqueio | Liberado> {
-  return avaliarAcesso(obterMeuPerfilGlobal);
+export async function exigirAdminDoSistema(accessToken?: string): Promise<Bloqueio | Liberado> {
+  return avaliarAcesso(() => obterMeuPerfilGlobal(accessToken));
 }
 
 /**

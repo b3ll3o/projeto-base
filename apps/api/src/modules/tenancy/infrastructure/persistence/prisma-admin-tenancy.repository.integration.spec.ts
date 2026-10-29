@@ -156,10 +156,10 @@ describe('PrismaAdminTenancyRepository — o inventário do bucket de SISTEMA (P
     await vincular(saindo, acmeId, 'member', perfilAcme);
   });
 
-  // ─────────────────────── listarEmpresasComMembros ───────────────────────
+  // ─────────────────────── o INVENTÁRIO (as DUAS listas) ───────────────────────
 
   it('devolve a empresa COM o membro, e a empresa SEM membro aparece com lista vazia', async () => {
-    const empresas = await repo.listarEmpresasComMembros();
+    const { empresas } = await repo.listarInventario();
 
     // A ordem é FUNCIONAL (a tela lista por nome), e a query a garante.
     expect(empresas.map((e) => e.slug)).toEqual(['acme', 'globex', 'vazia']);
@@ -180,8 +180,25 @@ describe('PrismaAdminTenancyRepository — o inventário do bucket de SISTEMA (P
     expect(empresas.find((e) => e.slug === 'vazia')?.membros).toEqual([]);
   });
 
+  /**
+   * A ORDEM DOS MEMBROS É FUNCIONAL, e ela é da QUERY.
+   *
+   * ⚠️ O `orderBy` do nível de topo NÃO alcança a relação aninhada: sem um
+   * `orderBy` próprio, os membros saem na ordem que o índice produzir — que
+   * não é garantida e MUDA depois de qualquer UPDATE em `tenant_memberships`
+   * ou de um VACUUM. O unitário confere o `orderBy` entregue ao Prisma; este
+   * confere o FATO contra o banco.
+   */
+  it('os MEMBROS de uma empresa vêm ORDENADOS pelo nome — a ordem é da query, não do heap', async () => {
+    const { empresas } = await repo.listarInventario();
+    const acme = empresas.find((e) => e.slug === 'acme');
+
+    // Ana, Bia e Zoe — em ORDEM, e não em qualquer ordem.
+    expect(acme?.membros.map((m) => m.nome)).toEqual(['Ana', 'Bia', 'Zoe']);
+  });
+
   it('a conta apagada NÃO aparece como membro — a membership sobrevive, o filtro a esconde', async () => {
-    const empresas = await repo.listarEmpresasComMembros();
+    const { empresas } = await repo.listarInventario();
     const acme = empresas.find((e) => e.slug === 'acme');
 
     expect(acme?.membros.map((m) => m.email)).not.toContain('saindo@acme.dev');
@@ -210,10 +227,10 @@ describe('PrismaAdminTenancyRepository — o inventário do bucket de SISTEMA (P
     expect(visiveis).toBe(4);
   });
 
-  // ─────────────────────── listarUsuariosComEmpresas ───────────────────────
+  // ─────────────────────── a LISTA DE USUÁRIOS ───────────────────────
 
   it('devolve o usuário com as empresas, e a conta sem empresa nenhuma aparece com lista vazia', async () => {
-    const usuarios = await repo.listarUsuariosComEmpresas();
+    const { usuarios } = await repo.listarInventario();
 
     // A ordem é por nome, e a conta apagada NÃO está na lista.
     expect(usuarios.map((u) => u.email)).toEqual([
@@ -241,7 +258,7 @@ describe('PrismaAdminTenancyRepository — o inventário do bucket de SISTEMA (P
   });
 
   it('a conta apagada NÃO aparece na lista de usuários', async () => {
-    const usuarios = await repo.listarUsuariosComEmpresas();
+    const { usuarios } = await repo.listarInventario();
 
     expect(usuarios.map((u) => u.email)).not.toContain('saindo@acme.dev');
     // E a conta continua no banco: apagada é soft-delete, não sumiu.
@@ -262,7 +279,7 @@ describe('PrismaAdminTenancyRepository — o inventário do bucket de SISTEMA (P
   // ─────────────────────── o perfil EFETIVO ───────────────────────
 
   it('o perfil devolvido é o EFETIVO: o da própria empresa e o GLOBAL valem, o de OUTRA empresa resolve nulo', async () => {
-    const empresas = await repo.listarEmpresasComMembros();
+    const { empresas } = await repo.listarInventario();
     const acme = empresas.find((e) => e.slug === 'acme');
 
     // CONTROLE POSITIVO: o perfil da PRÓPRIA empresa volta. Sem ele, um
@@ -277,7 +294,7 @@ describe('PrismaAdminTenancyRepository — o inventário do bucket de SISTEMA (P
   });
 
   it('na lista de usuários o perfil segue o MESMO critério (o efetivo daquela empresa)', async () => {
-    const usuarios = await repo.listarUsuariosComEmpresas();
+    const { usuarios } = await repo.listarInventario();
 
     expect(usuarios.find((u) => u.email === 'ana@acme.dev')?.empresas[0]?.perfil).toBe(
       'gerente-acme',
@@ -356,7 +373,7 @@ describe('PrismaAdminTenancyRepository — o inventário do bucket de SISTEMA (P
     // E o repositório — que abre o escopo de SISTEMA — devolve as TRÊS.
     // Sem este par, "devolveu tudo" seria indistinguível de "a policy não
     // existe".
-    const empresas = await repo.listarEmpresasComMembros();
+    const { empresas } = await repo.listarInventario();
     expect(empresas.map((e) => e.slug)).toEqual(['acme', 'globex', 'vazia']);
   });
 });

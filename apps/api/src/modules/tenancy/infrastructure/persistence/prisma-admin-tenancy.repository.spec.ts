@@ -16,6 +16,13 @@
 //      perfil alheio diria que a pessoa veste um perfil que a API não resolve
 //      para aquela empresa.
 //   4. **A empresa sem membro aparece** com `members: []` — é um estado real.
+//   5. **AS DUAS LISTAS SAEM DA MESMA TRANSAÇÃO** (2026-10-29) — é o que
+//      garante que o inventário conte a mesma história dos dois lados.
+//   6. **O PRAZO DA TRANSAÇÃO É DECLARADO** (2026-10-29) — o default do Prisma
+//      (5 s) é implícito, e a leitura que cresce com a base inteira é a que
+//      estoura nele (P2028 → 500).
+//   7. **A ORDEM É ESTÁVEL** (2026-10-29) — `name` não é única, e a relação
+//      aninhada não herda o `orderBy` do nível de cima.
 //
 // A integração com Postgres de verdade está no
 // `prisma-admin-tenancy.repository.integration.spec.ts`: o unitário confere o
@@ -37,7 +44,13 @@ import { PrismaAdminTenancyRepository } from './prisma-admin-tenancy.repository.
  * em `escopo.ts` seria um global mutável no fonte, e um global mutável no
  * fonte é um caminho para o código de produção depender do estado do teste.
  */
-const sistema = vi.hoisted(() => ({ cliente: null as unknown }));
+const sistema = vi.hoisted(() => ({
+  cliente: null as unknown,
+  /** Quantas vezes o repositório ABRIU uma transação de escopo. */
+  aberturas: 0,
+  /** O `transactionOptions` da ÚLTIMA abertura. */
+  opcoes: undefined as { timeout?: number; maxWait?: number } | undefined,
+}));
 vi.mock('../../../../shared/infrastructure/prisma/escopo.js', async (importOriginal) => {
   const original =
     await importOriginal<typeof import('../../../../shared/infrastructure/prisma/escopo.js')>();
@@ -49,15 +62,21 @@ vi.mock('../../../../shared/infrastructure/prisma/escopo.js', async (importOrigi
     // `set_config` que a asserção "abre o escopo de SISTEMA" deste arquivo
     // mede. Um mock que só executasse o `fn` deixaria essa asserção sem
     // sujidade — e ela passaria com o repositório errado.
-    comEscopoDeSistema: (fn: (tx: never) => Promise<unknown>) =>
-      (
+    comEscopoDeSistema: (
+      fn: (tx: never) => Promise<unknown>,
+      opcoes?: { timeout?: number; maxWait?: number },
+    ) => {
+      sistema.aberturas += 1;
+      sistema.opcoes = opcoes;
+      return (
         sistema.cliente as {
           $transaction: (f: (tx: never) => Promise<unknown>) => Promise<unknown>;
         }
       ).$transaction(async (tx: never) => {
         await original.abrirEscopo(tx, ESCOPO_DE_SISTEMA);
         return fn(tx);
-      }),
+      });
+    },
   };
 });
 
@@ -85,7 +104,7 @@ function escoposAbertos(prisma: ReturnType<typeof prismaFalso>): string[] {
   return prisma.$queryRaw.mock.calls.map((chamada) => chamada[2] as string);
 }
 
-describe('PrismaAdminTenancyRepository.listarEmpresasComMembros', () => {
+describe('PrismaAdminTenancyRepository.listarInventario', () => {
   let prisma: ReturnType<typeof prismaFalso>;
   let repo: PrismaAdminTenancyRepository;
 
@@ -93,13 +112,32 @@ describe('PrismaAdminTenancyRepository.listarEmpresasComMembros', () => {
     prisma = prismaFalso();
     // O cliente de SISTEMA é o duplo do repositório — a costura do #118.
     sistema.cliente = prisma;
+    sistema.aberturas = 0;
+    sistema.opcoes = undefined;
     repo = new PrismaAdminTenancyRepository();
   });
 
   it('abre o escopo de SISTEMA — a lista atravessa empresas', async () => {
-    await repo.listarEmpresasComMembros();
+    await repo.listarInventario();
 
     expect(escoposAbertos(prisma)).toEqual(['*']);
+  });
+
+  // ⚠️ O DENTE DO ACHADO "DUAS TRANSAÇÕES": as DUAS listas precisam contar a
+  // mesma história, e isso só é garantível se saírem do MESMO instante.
+  it('as DUAS listas saem da MESMA transação — uma só abertura', async () => {
+    await repo.listarInventario();
+
+    expect(sistema.aberturas).toBe(1);
+  });
+
+  // ⚠️ E o prazo é DECLARADO: o default do Prisma (5 s) é implícito, e uma
+  // leitura que cresce com a base inteira estoura nele com P2028 → 500.
+  it('declara o PRAZO da transação — o default implícito do Prisma estoura a leitura', async () => {
+    await repo.listarInventario();
+
+    expect(sistema.opcoes?.timeout).toBe(15_000);
+    expect(sistema.opcoes?.maxWait).toBe(5_000);
   });
 
   it('devolve nome, slug e os membros da empresa', async () => {
@@ -118,7 +156,9 @@ describe('PrismaAdminTenancyRepository.listarEmpresasComMembros', () => {
       },
     ]);
 
-    await expect(repo.listarEmpresasComMembros()).resolves.toEqual([
+    const { empresas } = await repo.listarInventario();
+
+    expect(empresas).toEqual([
       {
         id: ACME,
         nome: 'ACME',
@@ -131,7 +171,7 @@ describe('PrismaAdminTenancyRepository.listarEmpresasComMembros', () => {
   });
 
   it('a conta apagada some da lista de membros', async () => {
-    await repo.listarEmpresasComMembros();
+    await repo.listarInventario();
 
     const { select } = prisma.tenant.findMany.mock.calls[0]![0] as {
       select: { memberships: { where: Record<string, unknown> } };
@@ -162,9 +202,9 @@ describe('PrismaAdminTenancyRepository.listarEmpresasComMembros', () => {
       },
     ]);
 
-    const [empresa] = await repo.listarEmpresasComMembros();
+    const { empresas } = await repo.listarInventario();
 
-    expect(empresa!.membros.map((m) => m.perfil)).toEqual([null, null]);
+    expect(empresas[0]!.membros.map((m) => m.perfil)).toEqual([null, null]);
   });
 
   it('o perfil GLOBAL vale para qualquer empresa', async () => {
@@ -183,9 +223,9 @@ describe('PrismaAdminTenancyRepository.listarEmpresasComMembros', () => {
       },
     ]);
 
-    const [empresa] = await repo.listarEmpresasComMembros();
+    const { empresas } = await repo.listarInventario();
 
-    expect(empresa!.membros[0]!.perfil).toBe('admin');
+    expect(empresas[0]!.membros[0]!.perfil).toBe('admin');
   });
 
   it('a empresa sem membro aparece com lista vazia', async () => {
@@ -193,31 +233,38 @@ describe('PrismaAdminTenancyRepository.listarEmpresasComMembros', () => {
       { id: ACME, name: 'ACME', slug: 'acme', memberships: [] },
     ]);
 
-    await expect(repo.listarEmpresasComMembros()).resolves.toEqual([
-      { id: ACME, nome: 'ACME', slug: 'acme', membros: [] },
-    ]);
-  });
-});
+    const { empresas } = await repo.listarInventario();
 
-describe('PrismaAdminTenancyRepository.listarUsuariosComEmpresas', () => {
-  let prisma: ReturnType<typeof prismaFalso>;
-  let repo: PrismaAdminTenancyRepository;
-
-  beforeEach(() => {
-    prisma = prismaFalso();
-    // O cliente de SISTEMA é o duplo do repositório — a costura do #118.
-    sistema.cliente = prisma;
-    repo = new PrismaAdminTenancyRepository();
+    expect(empresas).toEqual([{ id: ACME, nome: 'ACME', slug: 'acme', membros: [] }]);
   });
 
-  it('abre o escopo de SISTEMA', async () => {
-    await repo.listarUsuariosComEmpresas();
+  // ⚠️ A ORDEM É FUNCIONAL, e `name` NÃO é única: sem desempate, duas
+  // empresas com o mesmo nome saem em qualquer ordem — e a ordem PODE mudar
+  // entre chamadas (seq scan vs index scan, VACUUM).
+  it('a ordem das empresas desempata pelo id — `name` não é única', async () => {
+    await repo.listarInventario();
 
-    expect(escoposAbertos(prisma)).toEqual(['*']);
+    const { orderBy } = prisma.tenant.findMany.mock.calls[0]![0] as {
+      orderBy: unknown;
+    };
+    expect(orderBy).toEqual([{ name: 'asc' }, { id: 'asc' }]);
+  });
+
+  // ⚠️ E a relação ANINHADA não herda o `orderBy` do nível de cima: sem um
+  // `orderBy` próprio, a ordem dos MEMBROS sai na ordem que a query interna
+  // produzir (heap/índice) — que não é garantida e muda depois de qualquer
+  // UPDATE em `tenant_memberships`.
+  it('a ordem dos MEMBROS é declarada na relação aninhada', async () => {
+    await repo.listarInventario();
+
+    const { select } = prisma.tenant.findMany.mock.calls[0]![0] as {
+      select: { memberships: { orderBy: unknown } };
+    };
+    expect(select.memberships.orderBy).toEqual([{ user: { name: 'asc' } }, { id: 'asc' }]);
   });
 
   it('a conta apagada fica fora da lista de usuários', async () => {
-    await repo.listarUsuariosComEmpresas();
+    await repo.listarInventario();
 
     const { where } = prisma.user.findMany.mock.calls[0]![0] as {
       where: Record<string, unknown>;
@@ -246,7 +293,9 @@ describe('PrismaAdminTenancyRepository.listarUsuariosComEmpresas', () => {
       },
     ]);
 
-    await expect(repo.listarUsuariosComEmpresas()).resolves.toEqual([
+    const { usuarios } = await repo.listarInventario();
+
+    expect(usuarios).toEqual([
       {
         id: USUARIO,
         nome: 'Ana',
@@ -270,7 +319,9 @@ describe('PrismaAdminTenancyRepository.listarUsuariosComEmpresas', () => {
       { id: USUARIO, name: 'Admin', email: 'admin@admin.com', memberships: [] },
     ]);
 
-    await expect(repo.listarUsuariosComEmpresas()).resolves.toEqual([
+    const { usuarios } = await repo.listarInventario();
+
+    expect(usuarios).toEqual([
       { id: USUARIO, nome: 'Admin', email: 'admin@admin.com', empresas: [] },
     ]);
   });
@@ -291,9 +342,9 @@ describe('PrismaAdminTenancyRepository.listarUsuariosComEmpresas', () => {
       },
     ]);
 
-    const [usuario] = await repo.listarUsuariosComEmpresas();
+    const { usuarios } = await repo.listarInventario();
 
-    expect(usuario!.empresas[0]!.perfil).toBeNull();
+    expect(usuarios[0]!.empresas[0]!.perfil).toBeNull();
   });
 
   it('o perfil da própria empresa e o global valem', async () => {
@@ -317,8 +368,26 @@ describe('PrismaAdminTenancyRepository.listarUsuariosComEmpresas', () => {
       },
     ]);
 
-    const [usuario] = await repo.listarUsuariosComEmpresas();
+    const { usuarios } = await repo.listarInventario();
 
-    expect(usuario!.empresas.map((e) => e.perfil)).toEqual(['coordenador', 'admin']);
+    expect(usuarios[0]!.empresas.map((e) => e.perfil)).toEqual(['coordenador', 'admin']);
+  });
+
+  it('a ordem dos usuários desempata pelo id — `name` não é única', async () => {
+    await repo.listarInventario();
+
+    const { orderBy } = prisma.user.findMany.mock.calls[0]![0] as {
+      orderBy: unknown;
+    };
+    expect(orderBy).toEqual([{ name: 'asc' }, { id: 'asc' }]);
+  });
+
+  it('a ordem das EMPRESAS de um usuário é declarada na relação aninhada', async () => {
+    await repo.listarInventario();
+
+    const { select } = prisma.user.findMany.mock.calls[0]![0] as {
+      select: { memberships: { orderBy: unknown } };
+    };
+    expect(select.memberships.orderBy).toEqual([{ tenant: { name: 'asc' } }, { id: 'asc' }]);
   });
 });

@@ -4,6 +4,10 @@
 // tenancy nas DUAS direções: as empresas com os seus membros, e os usuários
 // com as suas empresas.
 //
+// ⚠️ 2026-10-29: era DUAS rotas (`/admin/tenants` e `/admin/users`) e virou
+// UMA. As duas listas viajam JUNTAS no mesmo inventário — `{ empresas,
+// usuarios }` — e é isso que garante que a tela não discorde de si mesma.
+//
 // ⚠️ O que este arquivo segura é o PAR RECUSA/LIBERDADE. O quase-admin tem as
 // TRÊS chaves `admin.manage-*` no banco — o `PermissionsGuard` da API LIBERA
 // ele — e mesmo assim a tela tem de recusar. Sem o par, "o admin vê a tela" e
@@ -126,12 +130,12 @@ test.describe('F17 — Inventário de empresas e usuários (admin)', () => {
     // deixaria o spec passar com um guard de front QUE FOSSE O ÚNICO portão —
     // e a base inteira exposta, sem nada aqui vermelho.
     const { apiBaseUrl } = exigirEstado();
-    const resposta = await page.request.get(`${apiBaseUrl}/admin/tenants`, {
+    const resposta = await page.request.get(`${apiBaseUrl}/admin/tenancy`, {
       headers: {
         authorization: `Bearer ${quase.tokens.accessToken}`,
         // Sem `x-tenant-id` — D14. O header é capacidade declarada pelo
         // cliente, e mandá-lo tiraria o ator do bucket global (o caminho que
-        // o `lib/tenancy.ts` recusa por construction).
+        // o `lib/tenancy.ts` recusa por construção).
       },
     });
     expect(resposta.status()).toBe(403);
@@ -141,6 +145,9 @@ test.describe('F17 — Inventário de empresas e usuários (admin)', () => {
     // PERMISSÃO que faltou, e o D2 nomeia QUEM pode ver. Assertar o `code`
     // deixaria o spec passar com o portão errado.
     const corpo = await resposta.json();
+    // ⚠️ Este corpo é o PROBLEM DETAILS do 403 — e NÃO o envelope
+    // `{ empresas, usuarios }` do 200. As DUAS coisas convivem na rota: o
+    // formato do SUCESSO é o inventário, e o da RECUSA é o erro.
     expect(corpo.code).toBe('FORBIDDEN');
     expect(corpo.detail).toContain('administrador do sistema');
   });

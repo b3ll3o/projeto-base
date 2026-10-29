@@ -78,12 +78,33 @@ export function clienteDeSistema(): PrismaClient {
   if (url === undefined || url.trim() === '') {
     throw new Error(
       'SYSTEM_DATABASE_URL é obrigatório: é a credencial que abre o bucket de SISTEMA (#118). ' +
-        'Sem ela, o bucket de sistema não abre — e a API não sobe.',
+        'Sem ela o bucket de sistema NÃO ABRE — e a API sobe (o guard de boot só recusa fora ' +
+        'de `development`): a primeira operação que usa o bucket de sistema falha com este erro.',
     );
   }
 
   clienteDeSistemaCache = new PrismaClient({ datasourceUrl: url });
   return clienteDeSistemaCache;
+}
+
+/**
+ * O PRAZO de uma transação — o `transactionOptions` do Prisma.
+ *
+ * ⚠️ O DEFAULT do Prisma para transação interativa é `timeout: 5000` /
+ * `maxWait: 2000`, e ele é IMPLÍCITO: nenhuma linha do repositório o declara,
+ * e uma leitura que cresce com a base inteira estoura o prazo sem que ninguém
+ * tenha escrito o número. MEDIDO (2026-10-28, Prisma 6.19.3): uma transação
+ * que dorme 6 s morre com `P2028` — "Transaction already closed" — que NÃO é
+ * `HttpException`, e então sai 500 pelo `GlobalExceptionFilter`.
+ *
+ * Por isso o prazo é um PARAMETRO: a leitura que sabe que é longa declara o
+ * prazo dela, em vez de herdar um default que ninguém escreveu.
+ */
+export interface OpcoesDeTransacao {
+  /** Prazo da transação, em ms. */
+  timeout?: number;
+  /** Espera pela conexão do pool, em ms. */
+  maxWait?: number;
 }
 
 /**
@@ -100,12 +121,13 @@ export function clienteDeSistema(): PrismaClient {
  */
 export async function comEscopoDeSistema<T>(
   fn: (tx: ClienteTransacional) => Promise<T>,
+  opcoes?: OpcoesDeTransacao,
 ): Promise<T> {
   const prisma = clienteDeSistema();
   return prisma.$transaction(async (tx) => {
     await abrirEscopo(tx, ESCOPO_DE_SISTEMA);
     return fn(tx);
-  });
+  }, opcoes);
 }
 
 /**
@@ -121,11 +143,12 @@ export async function comEscopo<T>(
   prisma: PrismaClient,
   escopo: string,
   fn: (tx: ClienteTransacional) => Promise<T>,
+  opcoes?: OpcoesDeTransacao,
 ): Promise<T> {
   return prisma.$transaction(async (tx) => {
     await abrirEscopo(tx, escopo);
     return fn(tx);
-  });
+  }, opcoes);
 }
 
 /**

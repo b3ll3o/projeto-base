@@ -39,4 +39,5 @@ export type {
   EmpresaComMembrosDto,
   EmpresaComPerfilDto,
   UsuarioComEmpresasDto,
+  InventarioAdminTenancyDto,
 } from './tenant.js';

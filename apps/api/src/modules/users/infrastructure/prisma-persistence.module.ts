@@ -12,8 +12,6 @@ import { PrismaTenantMembershipRepository } from '../../tenancy/infrastructure/p
 import { TENANT_MEMBERSHIP_REPOSITORY_PORT } from '../../tenancy/domain/ports/tenant-membership-repository.port.js';
 import { PrismaTenantOnboardingRepository } from '../../tenancy/infrastructure/persistence/prisma-tenant-onboarding.repository.js';
 import { TENANT_ONBOARDING_PORT } from '../../tenancy/domain/ports/tenant-onboarding.port.js';
-import { PrismaAdminTenancyRepository } from '../../tenancy/infrastructure/persistence/prisma-admin-tenancy.repository.js';
-import { ADMIN_TENANCY_REPOSITORY_PORT } from '../../tenancy/domain/ports/admin-tenancy-repository.port.js';
 
 @Module({
   providers: [
@@ -39,20 +37,7 @@ import { ADMIN_TENANCY_REPOSITORY_PORT } from '../../tenancy/domain/ports/admin-
       provide: TENANT_ONBOARDING_PORT,
       useExisting: PrismaTenantOnboardingRepository,
     },
-    // pt-BR (visão de admin, 2026-10-22): o inventário do bucket de SISTEMA.
-    // Pelo mesmo motivo dos outros — este é o módulo que o resto da aplicação
-    // importa para ter Prisma ligado a um repositório.
-    PrismaAdminTenancyRepository,
-    {
-      provide: ADMIN_TENANCY_REPOSITORY_PORT,
-      useExisting: PrismaAdminTenancyRepository,
-    },
   ],
-  exports: [
-    USER_REPOSITORY_PORT,
-    TENANT_MEMBERSHIP_REPOSITORY_PORT,
-    TENANT_ONBOARDING_PORT,
-    ADMIN_TENANCY_REPOSITORY_PORT,
-  ],
+  exports: [USER_REPOSITORY_PORT, TENANT_MEMBERSHIP_REPOSITORY_PORT, TENANT_ONBOARDING_PORT],
 })
 export class PrismaPersistenceModule {}

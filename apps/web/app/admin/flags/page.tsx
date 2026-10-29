@@ -36,21 +36,27 @@
 
 import type * as React from 'react';
 import { revalidatePath } from 'next/cache';
-import { obterMeuPerfilGlobal } from '../../../lib/perfil';
+import { exigirAdminDoSistema } from '../guard-admin';
 import { definirFeatureFlag, listarFeatureFlags } from '../../../lib/flags';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminFeatureFlagsPage(): Promise<React.JSX.Element> {
-  const me = await obterMeuPerfilGlobal();
-  if (me === null || me.isAdmin !== true) {
-    return (
-      <main className="mx-auto max-w-3xl p-8">
-        <h1 className="text-2xl font-semibold text-slate-900">Acesso restrito</h1>
-        <p className="mt-1 text-sm text-slate-500">Esta página exige perfil de administrador.</p>
-      </main>
-    );
-  }
+  // ⚠️ 2026-10-29 (revisão do PR #127): o guard é o COMPARTILHADO
+  // (`exigirAdminDoSistema`), e não a checagem inline que esta página tinha.
+  //
+  // A checagem inline era uma COPIA da tela "Acesso restrito" do
+  // `guard-admin.tsx` — e ela tratava 401, 403 e 5xx como a MESMA coisa: o
+  // `obterMeuPerfilGlobal` converte 401 em `null`, e o `me === null` caía no
+  // mesmo texto. O defeito que o #107 existe para matar — "uma administradora
+  // legítima que abriu a página com a API caída lia uma tela afirmando que
+  // ela não era administradora" — continuava vivo NESTA tela, e o conserto
+  // estava a uma pasta de distância.
+  //
+  // O guard compartilhado distingue os três: 401 → login, 403 → "Acesso
+  // restrito", 5xx/timeout/rede → "Serviço indisponível" com retry.
+  const guarda = await exigirAdminDoSistema();
+  if (guarda.bloqueio) return guarda.tela;
 
   const flags = await listarFeatureFlags();
 

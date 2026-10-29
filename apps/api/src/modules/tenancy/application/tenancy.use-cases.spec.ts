@@ -109,8 +109,7 @@ describe('TenancyUseCases — entrada na empresa (D5)', () => {
   };
   let users: { findById: ReturnType<typeof vi.fn> };
   let admin: {
-    listarEmpresasComMembros: ReturnType<typeof vi.fn>;
-    listarUsuariosComEmpresas: ReturnType<typeof vi.fn>;
+    listarInventario: ReturnType<typeof vi.fn>;
   };
   let useCases: TenancyUseCases;
   let agora: Date;
@@ -138,8 +137,7 @@ describe('TenancyUseCases — entrada na empresa (D5)', () => {
     };
     users = { findById: vi.fn().mockResolvedValue(userFalso(VISITANTE, 'ana@acme.com')) };
     admin = {
-      listarEmpresasComMembros: vi.fn().mockResolvedValue([]),
-      listarUsuariosComEmpresas: vi.fn().mockResolvedValue([]),
+      listarInventario: vi.fn().mockResolvedValue({ empresas: [], usuarios: [] }),
     };
 
     useCases = new TenancyUseCases(
@@ -421,59 +419,55 @@ describe('TenancyUseCases — entrada na empresa (D5)', () => {
     const GERENTE_DE_EMPRESA = { userId: DONO, tenantId: ACME, isAdmin: true };
     const COMUM = { userId: DONO, tenantId: null, isAdmin: false };
 
-    it('o administrador do sistema vê as empresas com os membros', async () => {
-      const lista = [
-        {
-          id: ACME,
-          nome: 'ACME',
-          slug: 'acme',
-          membros: [
-            {
-              id: VISITANTE,
-              nome: 'Ana',
-              email: 'ana@acme.com',
-              role: 'gerente',
-              perfil: 'gerente',
-            },
-          ],
-        },
-      ];
-      admin.listarEmpresasComMembros.mockResolvedValue(lista);
+    it('o administrador do sistema vê o inventário inteiro', async () => {
+      const inventario = {
+        empresas: [
+          {
+            id: ACME,
+            nome: 'ACME',
+            slug: 'acme',
+            membros: [
+              {
+                id: VISITANTE,
+                nome: 'Ana',
+                email: 'ana@acme.com',
+                role: 'gerente',
+                perfil: 'gerente',
+              },
+            ],
+          },
+        ],
+        usuarios: [
+          {
+            id: VISITANTE,
+            nome: 'Ana',
+            email: 'ana@acme.com',
+            empresas: [
+              { id: ACME, nome: 'ACME', slug: 'acme', role: 'gerente', perfil: 'gerente' },
+            ],
+          },
+        ],
+      };
+      admin.listarInventario.mockResolvedValue(inventario);
 
-      await expect(useCases.listarEmpresasDoSistema(ADMIN_DO_SISTEMA)).resolves.toEqual(lista);
-      expect(admin.listarEmpresasComMembros).toHaveBeenCalled();
-    });
-
-    it('o administrador do sistema vê os usuários com as empresas', async () => {
-      const lista = [
-        {
-          id: VISITANTE,
-          nome: 'Ana',
-          email: 'ana@acme.com',
-          empresas: [{ id: ACME, nome: 'ACME', slug: 'acme', role: 'gerente', perfil: 'gerente' }],
-        },
-      ];
-      admin.listarUsuariosComEmpresas.mockResolvedValue(lista);
-
-      await expect(useCases.listarUsuariosDoSistema(ADMIN_DO_SISTEMA)).resolves.toEqual(lista);
-      expect(admin.listarUsuariosComEmpresas).toHaveBeenCalled();
+      await expect(useCases.listarInventarioDoSistema(ADMIN_DO_SISTEMA)).resolves.toEqual(
+        inventario,
+      );
+      expect(admin.listarInventario).toHaveBeenCalledTimes(1);
     });
 
     it('o GERENTE de uma empresa é recusado — ele tem isAdmin, mas na empresa dele', async () => {
-      await expect(useCases.listarEmpresasDoSistema(GERENTE_DE_EMPRESA)).rejects.toThrow(
-        ForbiddenException,
-      );
-      await expect(useCases.listarUsuariosDoSistema(GERENTE_DE_EMPRESA)).rejects.toThrow(
+      await expect(useCases.listarInventarioDoSistema(GERENTE_DE_EMPRESA)).rejects.toThrow(
         ForbiddenException,
       );
 
-      expect(admin.listarEmpresasComMembros).not.toHaveBeenCalled();
-      expect(admin.listarUsuariosComEmpresas).not.toHaveBeenCalled();
+      expect(admin.listarInventario).not.toHaveBeenCalled();
     });
 
     it('quem não é admin é recusado', async () => {
-      await expect(useCases.listarEmpresasDoSistema(COMUM)).rejects.toThrow(ForbiddenException);
-      await expect(useCases.listarUsuariosDoSistema(COMUM)).rejects.toThrow(ForbiddenException);
+      await expect(useCases.listarInventarioDoSistema(COMUM)).rejects.toThrow(ForbiddenException);
+
+      expect(admin.listarInventario).not.toHaveBeenCalled();
     });
   });
 });

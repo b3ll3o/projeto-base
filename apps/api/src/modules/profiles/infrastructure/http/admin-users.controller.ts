@@ -8,12 +8,8 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
 import { PermissionsGuard } from './guards/permissions.guard.js';
 import { RequirePermission } from './decorators/require-permission.decorator.js';
-import { UserProfileUseCases, type AtorAutenticado } from '../../application/profiles.use-cases.js';
-
-/** `req.user` publicado pelo `JwtAuthGuard`. */
-interface RequestComAtor {
-  user: { sub: string; tenantId?: string | null; isAdmin?: boolean };
-}
+import { UserProfileUseCases } from '../../application/profiles.use-cases.js';
+import { atorDe, type ReqComAtor } from '../../../../shared/auth/eh-administrador-de-sistema.js';
 
 // ⚠️ `@ApiBearerAuth()` NA CLASSE, e não em cada handler: no documento
 // OpenAPI a rota protegida é a que declara `security`, e a rota PÚBLICA é a
@@ -42,14 +38,9 @@ export class AdminUsersController {
   async atribuirProfile(
     @Param('id') userId: string,
     @Body() body: { profileId: string | null },
-    @Req() req: RequestComAtor,
+    @Req() req: ReqComAtor,
   ): Promise<{ ok: true }> {
-    const ator: AtorAutenticado = {
-      userId: req.user.sub,
-      tenantId: req.user.tenantId ?? null,
-      isAdmin: req.user.isAdmin === true,
-    };
-    await this.useCases.atribuirProfileAoUser(userId, body.profileId, ator);
+    await this.useCases.atribuirProfileAoUser(userId, body.profileId, atorDe(req));
     return { ok: true };
   }
 }

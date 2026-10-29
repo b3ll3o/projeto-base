@@ -12,7 +12,7 @@
 // E o caminho do quem JÁ tem conta, que é o comum sob D4 (1 conta, N
 // empresas): `POST /invitations/accept` → aceitaConvite.
 
-import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 
 import {
@@ -32,11 +32,10 @@ import {
 import {
   ADMIN_TENANCY_REPOSITORY_PORT,
   type AdminTenancyRepositoryPort,
-  type EmpresaComMembros,
-  type UsuarioComEmpresas,
+  type InventarioAdminTenancy,
 } from '../domain/ports/admin-tenancy-repository.port.js';
 import {
-  ehAdministradorDeSistema,
+  exigeAdministradorDeSistema,
   type AtorAutenticado,
 } from '../../../shared/auth/eh-administrador-de-sistema.js';
 import {
@@ -53,6 +52,14 @@ import {
 
 /** Validade do convite. Sem maileiro no repo, 7 dias é o prazo que a pessoa tem de verdade. */
 const VALIDADE_CONVITE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * O registro da leitura do inventário — a leitura mais densa em PII do sistema.
+ *
+ * ⚠️ O nome do logger é o que separa este registro dos outros: quem lê o log
+ * precisa saber que ali está "o administrador do sistema leu a base inteira".
+ */
+const loggerInventario = new Logger('AdminTenancyInventory');
 
 /**
  * Token de DI.
@@ -123,55 +130,50 @@ export class TenancyUseCases {
   // ───────────────────── a visão do administrador do SISTEMA ─────────────────────
 
   /**
-   * TODAS as empresas do sistema, com os membros de cada uma.
+   * O INVENTÁRIO do bucket de SISTEMA — as DUAS listas, num instante só.
    *
    * ⚠️ É o INVENTÁRIO, e não a lista de empresas do ator (`listarEmpresas`).
    * A diferença é o alcance: esta atravessa empresas, e o que a autoriza é
    * D2 — o bucket GLOBAL (`tenantId === null`) com `isAdmin`.
    *
+   * ⚠️ Por que as DUAS listas SAEM JUNTAS: o repositório diz que "as DUAS
+   * listas precisam contar a mesma história", e isso só é garantível se as
+   * duas forem lidas na MESMA transação. Duas listas em duas requisições são
+   * dois instantes — e a tela podia discordar de si mesma.
+   *
    * Lista VAZIA é uma resposta legítima: um sistema sem empresa aberta ainda
    * é um sistema, e a tela do admin precisa mostrar isso.
    */
-  async listarEmpresasDoSistema(ator: AtorAutenticado): Promise<EmpresaComMembros[]> {
-    this.exigeAdministradorDoSistema(ator);
-    return this.admin.listarEmpresasComMembros();
-  }
+  async listarInventarioDoSistema(ator: AtorAutenticado): Promise<InventarioAdminTenancy> {
+    // ⚠️ A lista de PERMISSÕES não segura nada aqui, e é o mesmo motivo das
+    // feature flags: o cadastro de empresa concede `listAllPermissions()` ao
+    // dono (`perfis-da-empresa.ts`), e o `gerente` tem `isAdmin: true` no
+    // perfil efetivo DA EMPRESA DELE. Quem decide é o bucket: `tenantId ===
+    // null` (o bucket GLOBAL, onde mora o `isAdmin` do seed) — a mesma regra de
+    // `ehAdministradorDeSistema`, que a Fase 9 escreveu para matar a escalada
+    // do bucket global.
+    exigeAdministradorDeSistema(
+      ator,
+      'só o administrador do sistema vê as empresas e os usuários do sistema',
+    );
 
-  /**
-   * TODOS os usuários do sistema, com as empresas a que cada um pertence.
-   *
-   * A lista parte de `users` e não das memberships — pelo mesmo motivo de
-   * `listarUsuariosComEmpresas` no repositório: a conta do administrador do
-   * sistema não pertence a empresa nenhuma, e uma lista montada pelas
-   * memberships a esqueceria.
-   */
-  async listarUsuariosDoSistema(ator: AtorAutenticado): Promise<UsuarioComEmpresas[]> {
-    this.exigeAdministradorDoSistema(ator);
-    return this.admin.listarUsuariosComEmpresas();
-  }
+    const inventario = await this.admin.listarInventario();
 
-  /**
-   * D2 — o portão real da visão de admin.
-   *
-   * ⚠️ A lista de PERMISSÕES não segura nada aqui, e é o mesmo motivo das
-   * feature flags: o cadastro de empresa concede `listAllPermissions()` ao
-   * dono (`perfis-da-empresa.ts`), e o `gerente` tem `isAdmin: true` no
-   * perfil efetivo DA EMPRESA DELE. Quem decide é o bucket: `tenantId ===
-   * null` (o bucket GLOBAL, onde mora o `isAdmin` do seed) — a mesma regra de
-   * `ehAdministradorDeSistema`, que a Fase 9 escreveu para matar a escalada
-   * do bucket global.
-   *
-   * `ForbiddenException` do Nest e não uma exceção de domínio nova: o
-   * `GlobalExceptionFilter` resolve `HttpException` antes do mapper de
-   * domínio, e a recusa sai 403 RFC 7807 sem uma linha nova.
-   */
-  private exigeAdministradorDoSistema(ator: AtorAutenticado): void {
-    if (!ehAdministradorDeSistema(ator)) {
-      throw new ForbiddenException({
-        code: 'FORBIDDEN',
-        detail: 'só o administrador do sistema vê as empresas e os usuários do sistema',
-      });
-    }
+    // ⚠️ O REGISTRO DA LEITURA. Esta é a leitura mais densa em dado pessoal do
+    // sistema — ela entrega o e-mail de TODAS as contas. O `AuditContext` do
+    // repo é auditoria de ESCRITA (INSERT/UPDATE/DELETE/RESTORE, com o
+    // snapshot da entidade), e uma leitura não é uma entidade: o precedente
+    // para operação sensível é o `Logger` dedicado (`ProfilePrivilegeEscalation`,
+    // `FeatureFlagBloqueio`), e é o que está aqui.
+    //
+    // O ATOR entra no registro — sem ele, o log diz que a base foi lida, e
+    // não por quem.
+    loggerInventario.log(
+      `inventário lido: ${inventario.empresas.length} empresa(s), ` +
+        `${inventario.usuarios.length} usuário(s) — ator ${ator.userId}`,
+    );
+
+    return inventario;
   }
 
   // ───────────────────────── emitir convite ─────────────────────────

@@ -3,16 +3,24 @@
 // pt-BR (visão de admin, 2026-10-22): o INVENTÁRIO da tenancy, para o
 // administrador do SISTEMA.
 //
-//   GET /admin/tenants → todas as empresas, com os membros de cada uma
-//   GET /admin/users   → todos os usuários, com as empresas de cada um
+//   GET /admin/tenancy → as empresas com os seus membros E os usuários com as
+//                        suas empresas
 //
-// ⚠️ É DUAS ROTAS e não UMA com os dois lados: um recurso por rota é o padrão
-// do repositório (`/admin/profiles`, `/admin/feature-flags`), e cada lista
-// responde a uma pergunta diferente ("quem está na ACME" e "de quais empresas
-// o Bruno é").
+// ⚠️ 2026-10-29 (revisão do PR #127): ERA DUAS ROTAS (`/admin/tenants` e
+// `/admin/users`) e virou UMA. O motivo é um invariante do próprio repositório
+// — "as DUAS listas precisam contar a mesma história" — que duas rotas HTTP
+// não conseguem garantir: duas rotas são dois requests, e cada request é uma
+// transação, e as duas lidas em instantes diferentes. O web disparava as duas
+// em paralelo, e a tela podia mostrar uma empresa "sem membros" ao lado de uma
+// pessoa numa empresa que a lista de empresas não conhecia.
 //
-// ⚠️ `@RequirePermission` em CADA handler, e não na CLASSE — o mesmo motivo
-// das feature flags: handler novo sem o decorator continua ABERTO, porque o
+// Uma rota, uma transação, um inventário. E o ganho de brinde: o wire format
+// deixa de ser declarado DUAS vezes sem elo de compilação entre a API e o web
+// (o controller tipava com o tipo da PORT e o web consumia um DTO escrito à
+// mão; um rename passava pelos dois `tsc` e a tela renderizava `undefined`).
+//
+// ⚠️ `@RequirePermission` no handler, e não na CLASSE — o mesmo motivo das
+// feature flags: handler novo sem o decorator continua ABERTO, porque o
 // `PermissionsGuard` devolve `true` quando não há requisito.
 //
 // ⚠️ O `@RequirePermission` NÃO é o portão. Quem barra de fato é D2, dentro
@@ -23,21 +31,13 @@
 
 import { Controller, Get, Inject, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import type { InventarioAdminTenancyDto } from '@projeto/shared-types';
 
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
 import { PermissionsGuard } from '../../../profiles/infrastructure/http/guards/permissions.guard.js';
 import { RequirePermission } from '../../../profiles/infrastructure/http/decorators/require-permission.decorator.js';
 import { TENANCY_USE_CASES, TenancyUseCases } from '../../application/tenancy.use-cases.js';
-import type {
-  EmpresaComMembros,
-  UsuarioComEmpresas,
-} from '../../domain/ports/admin-tenancy-repository.port.js';
-import type { AtorAutenticado } from '../../../../shared/auth/eh-administrador-de-sistema.js';
-
-/** O mínimo do `req.user` publicado pelo `JwtAuthGuard` — mesma forma local dos outros controllers. */
-interface RequestComAtor {
-  user: { sub: string; tenantId?: string | null; isAdmin?: boolean };
-}
+import { atorDe, type ReqComAtor } from '../../../../shared/auth/eh-administrador-de-sistema.js';
 
 @ApiTags('admin')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -50,44 +50,21 @@ export class AdminTenancyController {
     @Inject(TENANCY_USE_CASES) private readonly useCases: TenancyUseCases,
   ) {}
 
-  /**
-   * `req.user` → `AtorAutenticado`.
-   *
-   * `isAdmin === true` e não `isAdmin`: o ausente precisa virar `false`
-   * (fail-closed), não `undefined` — que é falsy num `if` e verdadeiro num
-   * `!== false`.
-   *
-   * `tenantId` viaja porque D2 o exige em `null` (bucket GLOBAL). Um ator
-   * com empresa no header chega aqui com `tenantId` preenchido e é recusado
-   * pela use case — que é o comportamento certo, e o mesmo das feature flags.
-   */
-  private atorDe(req: RequestComAtor): AtorAutenticado {
-    return {
-      userId: req.user.sub,
-      tenantId: req.user.tenantId ?? null,
-      isAdmin: req.user.isAdmin === true,
-    };
-  }
-
-  @Get('tenants')
+  @Get('tenancy')
   @RequirePermission('admin.manage-users')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Listar todas as empresas, com os membros de cada uma' })
-  @ApiResponse({ status: 200, description: 'As empresas do sistema, com seus membros' })
+  @ApiOperation({
+    summary:
+      'O inventário da tenancy: as empresas com seus membros e os usuários com suas empresas',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'As empresas do sistema com os seus membros, e os usuários do sistema com as suas empresas',
+  })
   @ApiResponse({ status: 401, description: 'Não autorizado' })
   @ApiResponse({ status: 403, description: 'Só o administrador do sistema' })
-  async listarEmpresas(@Req() req: RequestComAtor): Promise<EmpresaComMembros[]> {
-    return this.useCases.listarEmpresasDoSistema(this.atorDe(req));
-  }
-
-  @Get('users')
-  @RequirePermission('admin.manage-users')
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Listar todos os usuários, com as empresas de cada um' })
-  @ApiResponse({ status: 200, description: 'Os usuários do sistema, com suas empresas' })
-  @ApiResponse({ status: 401, description: 'Não autorizado' })
-  @ApiResponse({ status: 403, description: 'Só o administrador do sistema' })
-  async listarUsuarios(@Req() req: RequestComAtor): Promise<UsuarioComEmpresas[]> {
-    return this.useCases.listarUsuariosDoSistema(this.atorDe(req));
+  async inventario(@Req() req: ReqComAtor): Promise<InventarioAdminTenancyDto> {
+    return this.useCases.listarInventarioDoSistema(atorDe(req));
   }
 }

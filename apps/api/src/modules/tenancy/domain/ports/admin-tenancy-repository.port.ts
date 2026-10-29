@@ -83,15 +83,30 @@ export interface UsuarioComEmpresas {
   empresas: EmpresaComPerfil[];
 }
 
+/**
+ * O INVENTÁRIO — as DUAS listas, lidas no MESMO instante.
+ *
+ * ⚠️ Por que as duas lists moram num tipo só: o arquivo do repositório diz
+ * que "as DUAS listas precisam contar a mesma história", e a única forma de
+ * garantir isso é lê-las na MESMA transação. Duas listas em dois métodos são
+ * dois instantes — e o web disparava as duas em paralelo, o que podia mostrar
+ * uma empresa "sem membros" ao lado de uma pessoa numa empresa que a lista de
+ * empresas não conhecia.
+ */
+export interface InventarioAdminTenancy {
+  /** Todas as empresas do sistema, com os membros de cada uma. */
+  empresas: EmpresaComMembros[];
+  /** Todos os usuários do sistema, com as empresas de cada um. */
+  usuarios: UsuarioComEmpresas[];
+}
+
 export interface AdminTenancyRepositoryPort {
   /**
-   * Todas as empresas do sistema, com os membros de cada uma.
+   * O inventário do bucket de SISTEMA: as empresas com os seus membros, e os
+   * usuários com as suas empresas — lidos no MESMO instante.
    *
    * Empresa SEM membro aparece com `membros: []` — é um estado real (a empresa
    * acabada de abrir), e escondê-la diria que ela não existe.
    */
-  listarEmpresasComMembros(): Promise<EmpresaComMembros[]>;
-
-  /** Todos os usuários do sistema, com as empresas de cada um. */
-  listarUsuariosComEmpresas(): Promise<UsuarioComEmpresas[]>;
+  listarInventario(): Promise<InventarioAdminTenancy>;
 }

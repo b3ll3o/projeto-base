@@ -17,13 +17,24 @@
 // CAPACIDADE DECLARADA pelo cliente (issue #102). O `tenantId` do pedido é o
 // que a API lê para decidir o bucket — mandá-lo é o cliente asserting um
 // escopo que a tela de inventário não tem.
+//
+// ⚠️ 2026-10-29 (revisão do PR #127): o token entra por PARÂMETRO, e o
+// cliente nasce de uma função que o recebe — o mesmo desenho de
+// `lib/empresas.ts`. Antes este arquivo tinha a SUA cópia do `getClient()` de
+// `lib/flags.ts` (mesmo `baseUrl`, mesmo `getToken`, mesmo "sem `getTenant`"),
+// e as DUAS leituras da tela montavam DOIS clientes e liam o cookie DOIS
+// vezes — a página é `force-dynamic`, e isso valia a cada navegação.
 
 import { ApiClient } from './api-client';
-import { exigirSessao } from './sessao';
-import type { EmpresaComMembrosDto, UsuarioComEmpresasDto } from '@projeto/shared-types';
+import type { InventarioAdminTenancyDto } from '@projeto/shared-types';
 
-async function getClient(): Promise<ApiClient> {
-  const accessToken = await exigirSessao();
+/**
+ * O cliente do inventário.
+ *
+ * O token vem por parâmetro (e não do cookie): quem chama é a página, que já
+ * leu a sessão UMA vez para o guard — e o cliente nasce junto com a leitura.
+ */
+function client(accessToken: string): ApiClient {
   return new ApiClient({
     baseUrl: process.env.API_BASE_URL ?? 'http://localhost:3000/api/v1',
     getToken: () => accessToken,
@@ -32,25 +43,16 @@ async function getClient(): Promise<ApiClient> {
 }
 
 /**
- * Todas as empresas do sistema, com os membros de cada uma (`GET
- * /admin/tenants`).
+ * O inventário da tenancy (`GET /admin/tenancy`): as empresas com os seus
+ * membros E os usuários com as suas empresas.
  *
- * `membros: []` é uma RESPOSTA legítima — a empresa recém-aberta não tem
- * ninguém dentro ainda — e a lista volta como veio.
- */
-export async function listarEmpresasComMembros(): Promise<EmpresaComMembrosDto[]> {
-  const client = await getClient();
-  return client.get<EmpresaComMembrosDto[]>('/admin/tenants');
-}
-
-/**
- * Todos os usuários do sistema, com as empresas de cada um (`GET
- * /admin/users`).
+ * ⚠️ As DUAS listas viajam JUNTAS, e é o que garante que a tela não discorde
+ * de si mesma: em duas respostas seriam dois instantes do banco.
  *
- * `empresas: []` também é uma resposta legítima: a conta do administrador do
- * sistema vive no bucket GLOBAL e não pertence a empresa nenhuma.
+ * `empresas: []` e `usuarios: []` são RESPOSTAS legítimas — a empresa
+ * recém-aberta não tem ninguém dentro, e a conta do administrador do sistema
+ * vive no bucket GLOBAL e não pertence a empresa nenhuma.
  */
-export async function listarUsuariosComEmpresas(): Promise<UsuarioComEmpresasDto[]> {
-  const client = await getClient();
-  return client.get<UsuarioComEmpresasDto[]>('/admin/users');
+export async function listarInventario(accessToken: string): Promise<InventarioAdminTenancyDto> {
+  return client(accessToken).get<InventarioAdminTenancyDto>('/admin/tenancy');
 }

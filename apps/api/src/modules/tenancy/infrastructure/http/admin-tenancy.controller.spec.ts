@@ -1,16 +1,22 @@
 // apps/api/src/modules/tenancy/infrastructure/http/admin-tenancy.controller.spec.ts
 //
-// pt-BR (visão de admin, 2026-10-22): as DUAS rotas do inventário de tenancy.
+// pt-BR (visão de admin, 2026-10-22): a rota do inventário de tenancy.
 //
-//   GET /admin/tenants → todas as empresas, com os membros de cada uma
-//   GET /admin/users   → todos os usuários, com as empresas de cada um
+//   GET /admin/tenancy → as empresas com os membros de cada uma E os usuários
+//                        com as empresas de cada um
+//
+// ⚠️ 2026-10-29 (revisão do PR #127): ERA DUAS ROTAS (`/admin/tenants` e
+// `/admin/users`) e virou UMA. O motivo é o invariante do próprio repositório
+// — "as DUAS listas precisam contar a mesma história" — que duas rotas HTTP
+// não conseguem garantir: duas rotas são dois requests, e cada request é uma
+// transação, e as duas lidas em instantes diferentes.
 //
 // ── O QUE ESTE ARQUIVO SEGURA, E O QUE NÃO SEGURA ──────────────────────────
 //
 // Segura a BORDA: que a rota existe, que o ator viaja para a use case com o
 // `tenantId` e o `isAdmin` que o `JwtAuthGuard` publicou, e que o documento
-// OpenAPI declara `security` nas duas (a rota pública é a única que não
-// declara — e nenhuma destas duas é pública).
+// OpenAPI declara `security` (a rota pública é a única que não declara — e
+// esta não é pública).
 //
 // NÃO segura o PORTÃO: quem recusa o gerente de empresa é a use case (D2), e
 // o caso está em `tenancy.use-cases.spec.ts`. Aqui o `PermissionsGuard` é
@@ -35,16 +41,13 @@ const USER_OK = '0190a8b6-0000-7000-8000-00000000bbbb';
 
 describe('AdminTenancyController — o inventário de tenancy', () => {
   let app: NestFastifyApplication;
-  let listarEmpresasDoSistema: ReturnType<typeof vi.fn>;
-  let listarUsuariosDoSistema: ReturnType<typeof vi.fn>;
+  let listarInventarioDoSistema: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
-    listarEmpresasDoSistema = vi.fn().mockResolvedValue([]);
-    listarUsuariosDoSistema = vi.fn().mockResolvedValue([]);
+    listarInventarioDoSistema = vi.fn().mockResolvedValue({ empresas: [], usuarios: [] });
 
     const useCases = {
-      listarEmpresasDoSistema,
-      listarUsuariosDoSistema,
+      listarInventarioDoSistema,
     } as unknown as TenancyUseCases;
 
     const moduleRef: TestingModule = await Test.createTestingModule({
@@ -75,104 +78,106 @@ describe('AdminTenancyController — o inventário de tenancy', () => {
     await app.close();
   });
 
-  it('devolve todas as empresas com os membros', async () => {
-    listarEmpresasDoSistema.mockResolvedValue([
-      {
-        id: TENANT_OK,
-        nome: 'ACME',
-        slug: 'acme',
-        membros: [
-          {
-            id: USER_OK,
-            nome: 'Ana',
-            email: 'ana@acme.com',
-            role: 'gerente',
-            perfil: 'gerente',
-          },
-        ],
-      },
-    ]);
+  it('devolve as DUAS listas — as empresas com os membros e os usuários com as empresas', async () => {
+    listarInventarioDoSistema.mockResolvedValue({
+      empresas: [
+        {
+          id: TENANT_OK,
+          nome: 'ACME',
+          slug: 'acme',
+          membros: [
+            {
+              id: USER_OK,
+              nome: 'Ana',
+              email: 'ana@acme.com',
+              role: 'gerente',
+              perfil: 'gerente',
+            },
+          ],
+        },
+      ],
+      usuarios: [
+        {
+          id: USER_OK,
+          nome: 'Ana',
+          email: 'ana@acme.com',
+          empresas: [
+            { id: TENANT_OK, nome: 'ACME', slug: 'acme', role: 'gerente', perfil: 'gerente' },
+          ],
+        },
+      ],
+    });
 
-    const resposta = await app.inject({ method: 'GET', url: '/admin/tenants' });
-
-    expect(resposta.statusCode).toBe(200);
-    expect(resposta.json()).toEqual([
-      {
-        id: TENANT_OK,
-        nome: 'ACME',
-        slug: 'acme',
-        membros: [
-          {
-            id: USER_OK,
-            nome: 'Ana',
-            email: 'ana@acme.com',
-            role: 'gerente',
-            perfil: 'gerente',
-          },
-        ],
-      },
-    ]);
-  });
-
-  it('devolve todos os usuários com as empresas', async () => {
-    listarUsuariosDoSistema.mockResolvedValue([
-      {
-        id: USER_OK,
-        nome: 'Ana',
-        email: 'ana@acme.com',
-        empresas: [
-          { id: TENANT_OK, nome: 'ACME', slug: 'acme', role: 'gerente', perfil: 'gerente' },
-        ],
-      },
-    ]);
-
-    const resposta = await app.inject({ method: 'GET', url: '/admin/users' });
+    const resposta = await app.inject({ method: 'GET', url: '/admin/tenancy' });
 
     expect(resposta.statusCode).toBe(200);
-    expect(resposta.json()).toEqual([
-      {
-        id: USER_OK,
-        nome: 'Ana',
-        email: 'ana@acme.com',
-        empresas: [
-          { id: TENANT_OK, nome: 'ACME', slug: 'acme', role: 'gerente', perfil: 'gerente' },
-        ],
-      },
-    ]);
+    expect(resposta.json()).toEqual({
+      empresas: [
+        {
+          id: TENANT_OK,
+          nome: 'ACME',
+          slug: 'acme',
+          membros: [
+            {
+              id: USER_OK,
+              nome: 'Ana',
+              email: 'ana@acme.com',
+              role: 'gerente',
+              perfil: 'gerente',
+            },
+          ],
+        },
+      ],
+      usuarios: [
+        {
+          id: USER_OK,
+          nome: 'Ana',
+          email: 'ana@acme.com',
+          empresas: [
+            { id: TENANT_OK, nome: 'ACME', slug: 'acme', role: 'gerente', perfil: 'gerente' },
+          ],
+        },
+      ],
+    });
   });
 
   it('passa o ator para a use case — com o bucket GLOBAL (`tenantId: null`)', async () => {
-    await app.inject({ method: 'GET', url: '/admin/tenants' });
-    await app.inject({ method: 'GET', url: '/admin/users' });
+    await app.inject({ method: 'GET', url: '/admin/tenancy' });
 
-    expect(listarEmpresasDoSistema).toHaveBeenCalledWith({
-      userId: SUB,
-      tenantId: null,
-      isAdmin: true,
-    });
-    expect(listarUsuariosDoSistema).toHaveBeenCalledWith({
+    expect(listarInventarioDoSistema).toHaveBeenCalledWith({
       userId: SUB,
       tenantId: null,
       isAdmin: true,
     });
   });
 
-  it('a lista vazia is 200 com corpo vazio — um sistema sem empresa é um sistema', async () => {
-    const resposta = await app.inject({ method: 'GET', url: '/admin/tenants' });
+  it('a lista vazia é 200 com as DUAS listas vazias — um sistema sem empresa é um sistema', async () => {
+    const resposta = await app.inject({ method: 'GET', url: '/admin/tenancy' });
 
     expect(resposta.statusCode).toBe(200);
-    expect(resposta.json()).toEqual([]);
+    expect(resposta.json()).toEqual({ empresas: [], usuarios: [] });
   });
 
   it('a recusa da use case sai 403 — e não 500', async () => {
-    listarEmpresasDoSistema.mockRejectedValue(
+    listarInventarioDoSistema.mockRejectedValue(
       new ForbiddenException({ code: 'FORBIDDEN', detail: 'só o administrador do sistema' }),
     );
 
-    const resposta = await app.inject({ method: 'GET', url: '/admin/tenants' });
+    const resposta = await app.inject({ method: 'GET', url: '/admin/tenancy' });
 
     expect(resposta.statusCode).toBe(403);
     expect(resposta.json().code).toBe('FORBIDDEN');
+  });
+
+  // ⚠️ A ROTA ANTIGA NÃO EXISTE MAIS. As duas rotas eram dois requests — e
+  // dois requests são dois instantes do banco, que é o que o invariante do
+  // repositório proíbe ("as DUAS listas precisam contar a mesma história").
+  it('as DUAS rotas antigas não existem mais — 404', async () => {
+    const empresas = await app.inject({ method: 'GET', url: '/admin/tenants' });
+    const usuarios = await app.inject({ method: 'GET', url: '/admin/users' });
+
+    expect(empresas.statusCode).toBe(404);
+    expect(usuarios.statusCode).toBe(404);
   });
 });
 
@@ -187,8 +192,7 @@ describe('AdminTenancyController — o documento OpenAPI não mente', () => {
         {
           provide: TENANCY_USE_CASES,
           useValue: {
-            listarEmpresasDoSistema: vi.fn(),
-            listarUsuariosDoSistema: vi.fn(),
+            listarInventarioDoSistema: vi.fn(),
           } as unknown as TenancyUseCases,
         },
       ],
@@ -212,10 +216,9 @@ describe('AdminTenancyController — o documento OpenAPI não mente', () => {
     await app.close();
   });
 
-  it('as DUAS rotas exigem token — sem `security` no documento, o cliente não manda Authorization', () => {
+  it('a rota exige token — sem `security` no documento, o cliente não manda Authorization', () => {
     const rotas = doc.paths ?? {};
 
-    expect(rotas['/admin/tenants']?.get?.security).toBeDefined();
-    expect(rotas['/admin/users']?.get?.security).toBeDefined();
+    expect(rotas['/admin/tenancy']?.get?.security).toBeDefined();
   });
 });

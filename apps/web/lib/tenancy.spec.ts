@@ -1,20 +1,30 @@
 // apps/web/lib/tenancy.spec.ts
 //
-// Contrato web↔API do inventário da tenancy (visão de admin, 2026-10-22).
+// Contrato web↔API do inventário da tenancy (visão de admin, 2026-10-22;
+// revisão de 2026-10-29 — as DUAS rotas viraram UMA).
+//
+// O inventário é UMA chamada: `GET /admin/tenancy` devolve
+// `{ empresas, usuarios }` — as DUAS listas viajam juntas, e é isso que
+// garante que a tela não discorde de si mesma (em duas respostas seriam dois
+// instantes do banco).
 //
 // O que estes testes seguram, além do path e do método:
 //
-//  1. **D7** — `listarEmpresasComMembros` e `listarUsuariosComEmpresas` montam
-//     o `ApiClient` SEM `getTenant`. É a razão de o arquivo existir em vez de
-//     reusar o factory de `perfil.ts`: mandar `X-Tenant-Id` tira o ator do
-//     bucket global (`tenantId !== null`) e D2 exige `tenantId === null`,
-//     então o admin do sistema que tivesse empresa selecionada no cookie
-//     levaria 403 numa tela recem-nascida. O teste mede a CONFIGURAÇÃO do
-//     cliente, não só a chamada — um `getTenant` a mais passaria em qualquer
-//     asserção de path.
-//  2. O path e o método de cada chamada.
-//  3. Erro não vira sucesso: o erro da API PROPAGA, não vira lista vazia —
-//     a tela mentiria ("nenhuma empresa") sobre uma falha.
+//  1. **D7** — `listarInventario` monta o `ApiClient` SEM `getTenant`. É a
+//     razão de o arquivo existir em vez de reusar o factory de `perfil.ts`:
+//     mandar `X-Tenant-Id` tira o ator do bucket global (`tenantId !== null`)
+//     e D2 exige `tenantId === null`, então o admin do sistema que tivesse
+//     empresa selecionada no cookie levaria 403 numa tela recem-nascida. O
+//     teste mede a CONFIGURAÇÃO do cliente, não só a chamada — um `getTenant`
+//     a mais passaria em qualquer asserção de path.
+//  2. O path e o método da chamada.
+//  3. O INVENTÁRIO INTEIRO volta como veio — as DUAS listas dentro do mesmo
+//     envelope. É o contrato do DTO: um `toEqual` do envelope mede os dois
+//     lados de uma vez.
+//  4. Erro não vira sucesso: o erro da API PROPAGA, não vira inventário
+//     vazio — a tela mentiria ("nenhuma empresa") sobre uma falha.
+//  5. O TOKEN VEM POR PARÂMETRO e o cliente NÃO lê o cookie da sessão: a
+//     página é `force-dynamic` e já leu a sessão uma vez (para o guard).
 //
 // Este arquivo é o espelho de `lib/flags.spec.ts` (mesma ponte de tipos, mesma
 // medição de D7/D14, mesmo critério de erro que propaga).
@@ -22,7 +32,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ApiClientConfig } from './api-client';
 
-const { clientMock, configMock, exigirSessaoMock, lerTenantMock } = vi.hoisted(() => {
+const { clientMock, configMock, exigirSessaoMock } = vi.hoisted(() => {
   // A anotação é o que segura o teste. Sem ela, `{ getToken: undefined }`
   // infere o tipo LITERAL `undefined`, e `configMock.getToken?.()` estreita
   // para `never` — o tsc falha em código que roda verde no Vitest, que não
@@ -43,8 +53,7 @@ const { clientMock, configMock, exigirSessaoMock, lerTenantMock } = vi.hoisted((
   return {
     clientMock: { get: vi.fn() },
     configMock,
-    exigirSessaoMock: vi.fn(async () => 'token-admin'),
-    lerTenantMock: vi.fn(async (): Promise<string | null> => 'empresa-do-admin'),
+    exigirSessaoMock: vi.fn(async () => 'token-do-cookie'),
   };
 });
 
@@ -61,13 +70,19 @@ vi.mock('./api-client', () => ({
     return clientMock;
   }),
 }));
+// ⚠️ `lib/tenancy.ts` NÃO importa este módulo — o token chega por PARÂMETRO.
+// O mock existe para o NEGATIVO: se alguém voltar a ler o cookie aqui dentro,
+// a página passa a ler o cookie DUAS vezes por navegação (ela é
+// `force-dynamic`) e o teste do "token por parâmetro" fica vermelho.
 vi.mock('./sessao', () => ({
   exigirSessao: exigirSessaoMock,
-  lerTenant: lerTenantMock,
-  lerTokens: vi.fn(async () => ({ accessToken: 'token-admin', refreshToken: null })),
+  lerTenant: vi.fn(async (): Promise<string | null> => 'empresa-do-admin'),
+  lerTokens: vi.fn(async () => ({ accessToken: 'token-do-cookie', refreshToken: null })),
 }));
 
-const { listarEmpresasComMembros, listarUsuariosComEmpresas } = await import('./tenancy');
+const { listarInventario } = await import('./tenancy');
+
+const TOKEN = 'token-admin';
 
 const EMPRESA = {
   id: 'e1f2a3b4-0000-4000-8000-000000000001',
@@ -99,48 +114,47 @@ const USUARIO = {
   ],
 };
 
+const INVENTARIO = { empresas: [EMPRESA], usuarios: [USUARIO] };
+
 beforeEach(() => {
   vi.clearAllMocks();
   configMock.getToken = undefined;
   configMock.getTenant = undefined;
-  clientMock.get.mockResolvedValue([]);
+  clientMock.get.mockResolvedValue(INVENTARIO);
 });
 
 describe('lib/tenancy — o cliente do inventário de tenancy', () => {
-  it('lista as empresas por GET em `/admin/tenants` e devolve o que a API devolveu', async () => {
-    clientMock.get.mockResolvedValue([EMPRESA]);
+  it('lê o inventário por GET em `/admin/tenancy` e devolve o que a API devolveu', async () => {
+    clientMock.get.mockResolvedValue(INVENTARIO);
 
-    const resposta = await listarEmpresasComMembros();
+    const resposta = await listarInventario(TOKEN);
 
-    expect(clientMock.get).toHaveBeenCalledWith('/admin/tenants');
-    expect(resposta).toEqual([EMPRESA]);
-  });
-
-  it('lista os usuários por GET em `/admin/users` e devolve o que a API devolveu', async () => {
-    clientMock.get.mockResolvedValue([USUARIO]);
-
-    const resposta = await listarUsuariosComEmpresas();
-
-    expect(clientMock.get).toHaveBeenCalledWith('/admin/users');
-    expect(resposta).toEqual([USUARIO]);
+    expect(clientMock.get).toHaveBeenCalledWith('/admin/tenancy');
+    expect(resposta).toEqual(INVENTARIO);
   });
 
   it('NÃO manda `X-Tenant-Id` — D7: enviar o header tira o admin do bucket global', async () => {
-    // `lerTenant` DEVOLVE uma empresa de propósito: o defeito de D7 só
-    // aparece quando existe empresa escolhida. Com `lerTenant` devolvendo
-    // `null` o header seria omitido de qualquer jeito, e o teste passaria
-    // mesmo com o `getTenant` presente.
-    await listarEmpresasComMembros();
-    await listarUsuariosComEmpresas();
+    // ⚠️ O defeito de D7 mudou de FORMA, e a asserção acompanhou. Antes o
+    // cliente lia a empresa do COOKIE, e bastava `lerTenant` devolver uma
+    // empresa para o header aparecer. Agora o cliente não lê cookie nenhum (o
+    // token chega por parâmetro), então a garantia é ESTRUTURAL: o
+    // `getTenant` não existe na config. É a CONFIGURAÇÃO que este teste
+    // mede — um `getTenant` a mais passaria em qualquer asserção de path.
+    await listarInventario(TOKEN);
 
     expect(configMock.getTenant).toBeUndefined();
-    expect(lerTenantMock).not.toHaveBeenCalled();
   });
 
-  it('manda o token de sessão', async () => {
-    await listarEmpresasComMembros();
+  it('manda o token que recebeu por parâmetro', async () => {
+    await listarInventario(TOKEN);
 
-    expect(configMock.getToken?.()).toBe('token-admin');
+    expect(configMock.getToken?.()).toBe(TOKEN);
+  });
+
+  it('NÃO lê a sessão do cookie — o token chega por parâmetro (a página é `force-dynamic`)', async () => {
+    await listarInventario(TOKEN);
+
+    expect(exigirSessaoMock).not.toHaveBeenCalled();
   });
 
   // ⚠️ O nome NÃO diz 403, e é de propósito — o mesmo critério que
@@ -148,11 +162,10 @@ describe('lib/tenancy — o cliente do inventário de tenancy', () => {
   // de `api-client.ts` nunca entra em cena, então um 403 no nome seria uma
   // afirmação que o corpo não mede. O nome diz o que o corpo mede: o erro
   // PROPAGA.
-  it('erro da API PROPAGA — não vira lista vazia (a tela mentiria: "nenhuma empresa")', async () => {
+  it('erro da API PROPAGA — não vira inventário vazio (a tela mentiria: "nenhuma empresa")', async () => {
     const erro = new Error('Forbidden');
     clientMock.get.mockRejectedValue(erro);
 
-    await expect(listarEmpresasComMembros()).rejects.toBe(erro);
-    await expect(listarUsuariosComEmpresas()).rejects.toBe(erro);
+    await expect(listarInventario(TOKEN)).rejects.toBe(erro);
   });
 });
