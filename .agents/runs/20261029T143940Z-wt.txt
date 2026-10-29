@@ -1,0 +1,8 @@
+ M .tooling/scripts/ci/preflight-gates.ts
+ M .tooling/scripts/ci/preflight.ts
+?? .agents/agents/documentation-specialist.md
+?? .agents/runs/20261029T143940Z-wt.txt
+?? .agents/skills/documentation-audit/
+?? .agents/specs/conventions/documentacao.md
+?? .tooling/scripts/ci/check-doc-coverage.spec.ts
+?? .tooling/scripts/ci/check-doc-coverage.ts

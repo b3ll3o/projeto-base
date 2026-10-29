@@ -91,17 +91,17 @@ path_globs:
     reviewers: [agent-architect]
 
   - pattern: ".agents/specs/**"
-    reviewers: [doc-sync]
+    reviewers: [doc-sync, documentation-specialist]
     domain: "agents-specs"
 
   - pattern: ".agents/memory/**"
     reviewers: [agent-architect]
 
   - pattern: "docs/**"
-    reviewers: [doc-sync, doc-writer]
+    reviewers: [doc-sync, doc-writer, documentation-specialist]
 
   - pattern: "docs/adr/**"
-    reviewers: [doc-writer]
+    reviewers: [doc-writer, documentation-specialist]
 
   - pattern: ".tooling/scripts/ci/**"
     reviewers: [monorepo-specialist]
@@ -143,7 +143,7 @@ commit_types:
   perf:
     reviewers_added: []
   docs:
-    reviewers_added: [doc-sync]
+    reviewers_added: [doc-sync, documentation-specialist]
   chore:
     reviewers_added: []
   ci:
