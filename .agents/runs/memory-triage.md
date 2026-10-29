@@ -194,6 +194,7 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `pipe-stdout-dies-when-spawner-exits` | `pendente` | — | — |
 | `positive-test-must-assert-skip-state` | `citada` | `docs/fluxo-desenvolvimento.md` | `não havia nada para verificar` |
 | `post-task-retrospective-plan` | `removida` | os 3 artefatos que ela planejava já existem; mantê-la os lista como "a criar" | — |
+| `pr-body-edit-cancels-inflight-ci-run` | `pendente` | — | — |
 | `pr-body-gate-only-fires-at-push-time` | `citada` | `.github/workflows/ci.yml` | `um RE-RUN entrega o corpo` |
 | `pr-body-has-no-base-directory` | `pendente` | — | — |
 | `prefer-agents-directory` | `citada` | `AGENTS.md` | `Modelo-agnóstico` |
