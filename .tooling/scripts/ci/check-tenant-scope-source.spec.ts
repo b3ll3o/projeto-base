@@ -141,6 +141,21 @@ describe('checkTenantScopeSource', () => {
     // ela, os call sites que passaram a existir sumiriam do painel (o número
     // cairia para 20 sem que ninguém tivesse removido um escopo) — e um gate
     // que só enxerga a forma antiga do código deixa de acompanhar o defeito.
+    //
+    // MEDIDO 2026-10-28 (visão de admin, rebase sobre a #118): **39 — sem
+    // mudança**. O inventário de tenancy (`prisma-admin-tenancy.repository.ts`)
+    // abriu o bucket de SISTEMA com `comEscopoDeSistema(fn)`, e essa função
+    // NÃO é uma das que o gate conta — ela não recebe o escopo como
+    // argumento (ela ABRE o escopo de sistema, na credencial de sistema). O
+    // número do inventário é 0, e o total continua 39.
+    //
+    // ⚠️ MEDIDO, não deduzido: mutando o repositório para
+    // `comEscopoDeEmpresa(this.prisma, null, fn)` o gate imprime **41** — o
+    // gate VÊ este arquivo, e o 39 não é um ponto cego. A forma mutada é
+    // EQUIVALENTE (o `tenantId` nulo escolhe a credencial de sistema) — ela só
+    // diz "o tenantId é nulo" onde a forma direta diz "isto é o bucket de
+    // SISTEMA", e ainda conta 2 call sites que não abrem mais nenhuma
+    // empresa. O gate conta o que ele conta; a escolha é do repositório.
     expect(r.advisories?.[0]).toContain('39 call site(s)');
   });
 

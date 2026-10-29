@@ -14,9 +14,22 @@
 // domínio verifica.
 //
 // ⚠️ A ESCALA É DE SISTEMA, e a porta não a esconde: quem implementa tem de
-// abrir o bucket de SISTEMA (`escopoDoTenant(null)` → `'*'`), e a RLS deixa
-// passar. Quem NÃO deve abrir essa leitura não chega aqui — o portão é D2
-// (`ehAdministradorDeSistema`), na camada de aplicação.
+// abrir o bucket de SISTEMA, e a RLS deixa passar. Quem NÃO deve abrir essa
+// leitura não chega aqui — o portão é D2 (`ehAdministradorDeSistema`), na
+// camada de aplicação.
+//
+// ⚠️ #118 — O BUCKET DE SISTEMA É A CREDENCIAL, E NÃO O GUC. Quem implementa
+// tem de abrir a transação na CREDENCIAL de sistema (`comEscopoDeSistema`):
+// desde o #118 o bucket é concedido pelo `current_user`, e o GUC `'*'` na
+// sessão de RUNTIME devolve ZERO linhas — a lista viria VAZIA, sem erro
+// nenhum. MEDIDO na `main` (2026-10-28), no Postgres 16 real:
+//
+//   sessão de RUNTIME, escopo '*'  ->  empresas=0  usuarios=0
+//   sessão de SISTEMA, escopo '*'  ->  empresas=2  usuarios=1
+//
+// A porta não diz COMO abrir (isso é da infraestrutura), mas ela diz que a
+// leitura é do bucket de SISTEMA — e quem implementa precisa saber que isso
+// hoje significa a credencial.
 
 /** Token de injeção — a interface é apagada em runtime, sem token o Nest LANÇA. */
 export const ADMIN_TENANCY_REPOSITORY_PORT = Symbol('AdminTenancyRepositoryPort');

@@ -25,6 +25,42 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { PrismaAdminTenancyRepository } from './prisma-admin-tenancy.repository.js';
 
+/**
+ * #118: o bucket de SISTEMA é aberto na CREDENCIAL de sistema — que vem do
+ * ambiente (`SYSTEM_DATABASE_URL`), e não do client que o repositório recebe.
+ * Numa unit test não há `SYSTEM_DATABASE_URL`, e a costura é mockada: o
+ * cliente de SISTEMA é o MESMO duplo do repositório — que é o que preserva as
+ * asserções deste arquivo (elas leem `prisma.tenant.findMany`, o mesmo
+ * `vi.fn` que o `tx` usa).
+ *
+ * ⚠️ A costura é mockada AQUI, e não no código de produção: um setter global
+ * em `escopo.ts` seria um global mutável no fonte, e um global mutável no
+ * fonte é um caminho para o código de produção depender do estado do teste.
+ */
+const sistema = vi.hoisted(() => ({ cliente: null as unknown }));
+vi.mock('../../../../shared/infrastructure/prisma/escopo.js', async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import('../../../../shared/infrastructure/prisma/escopo.js')>();
+  const { ESCOPO_DE_SISTEMA } =
+    await import('../../../../shared/infrastructure/prisma/papel-de-runtime.js');
+  return {
+    ...original,
+    // A `comEscopoDeSistema` REAL abre o escopo DENTRO da transação, e é esse
+    // `set_config` que a asserção "abre o escopo de SISTEMA" deste arquivo
+    // mede. Um mock que só executasse o `fn` deixaria essa asserção sem
+    // sujidade — e ela passaria com o repositório errado.
+    comEscopoDeSistema: (fn: (tx: never) => Promise<unknown>) =>
+      (
+        sistema.cliente as {
+          $transaction: (f: (tx: never) => Promise<unknown>) => Promise<unknown>;
+        }
+      ).$transaction(async (tx: never) => {
+        await original.abrirEscopo(tx, ESCOPO_DE_SISTEMA);
+        return fn(tx);
+      }),
+  };
+});
+
 const USUARIO = '0190a8b6-0000-4000-8000-00000000000a';
 const ACME = '0190a8b6-0000-4000-8000-0000000000ac';
 const GLOBEX = '0190a8b6-0000-4000-8000-0000000000b1';
@@ -55,7 +91,9 @@ describe('PrismaAdminTenancyRepository.listarEmpresasComMembros', () => {
 
   beforeEach(() => {
     prisma = prismaFalso();
-    repo = new PrismaAdminTenancyRepository(prisma as never);
+    // O cliente de SISTEMA é o duplo do repositório — a costura do #118.
+    sistema.cliente = prisma;
+    repo = new PrismaAdminTenancyRepository();
   });
 
   it('abre o escopo de SISTEMA — a lista atravessa empresas', async () => {
@@ -167,7 +205,9 @@ describe('PrismaAdminTenancyRepository.listarUsuariosComEmpresas', () => {
 
   beforeEach(() => {
     prisma = prismaFalso();
-    repo = new PrismaAdminTenancyRepository(prisma as never);
+    // O cliente de SISTEMA é o duplo do repositório — a costura do #118.
+    sistema.cliente = prisma;
+    repo = new PrismaAdminTenancyRepository();
   });
 
   it('abre o escopo de SISTEMA', async () => {

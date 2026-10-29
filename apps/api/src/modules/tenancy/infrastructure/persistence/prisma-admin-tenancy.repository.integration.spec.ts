@@ -15,10 +15,11 @@
 //      para o admin;
 //   3. o perfil devolvido é o EFETIVO (GLOBAL ou DAQUELA empresa), e o de
 //      OUTRA empresa resolve `null`;
-//   4. ⚠️ A RLS: a sessão que mede é o papel da APLICAÇÃO (`app_runtime`, sem
-//      superuser e sem BYPASSRLS). Sem o escopo de SISTEMA (`'*'`), a policy
-//      devolveria ZERO linhas — e a tela do admin ficaria vazia sem erro
-//      nenhum. É o item que o unitário NÃO pode provar: mock não tem policy.
+//   4. ⚠️ A RLS: a sessão que mede é a CREDENCIAL de SISTEMA (`app_system`,
+//      sem superuser e sem BYPASSRLS). É a sessão que abre o bucket de
+//      SISTEMA desde o #118 — o GUC `'*'` na sessão de runtime devolveria
+//      ZERO linhas, e a tela do admin ficaria vazia sem erro nenhum. É o item
+//      que o unitário NÃO pode provar: mock não tem policy.
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { randomUUID } from 'node:crypto';
@@ -30,6 +31,7 @@ import {
 import {
   uriComoPapelDeRuntime,
   PAPEL_DE_RUNTIME,
+  PAPEL_DE_SISTEMA,
   ESCOPO_DE_SISTEMA,
 } from '../../../../shared/infrastructure/prisma/papel-de-runtime.js';
 import { abrirEscopo } from '../../../../shared/infrastructure/prisma/escopo.js';
@@ -42,13 +44,24 @@ describe('PrismaAdminTenancyRepository — o inventário do bucket de SISTEMA (P
   /**
    * Sessão da APLICAÇÃO: o papel `app_runtime`, sem superuser e sem BYPASSRLS.
    *
-   * ⚠️ É o papel CERTO e não o dono (`ctx.prisma`) que o repositório medido
-   * usa: o dono ignora RLS por construção, e um spec que roda no dono mede a
-   * query sem a policy — a tela do admin "funcionando" contra um banco onde
-   * o isolamento não existe. O dono fica só como quem MONTA o fixture e quem
-   * confere o dado bruto.
+   * ⚠️ É o papel CERTO e não o dono (`ctx.prisma`) que o spec mede: o dono
+   * ignora RLS por construção, e um spec que roda no dono mede a query sem a
+   * policy — a tela do admin "funcionando" contra um banco onde o isolamento
+   * não existe. O dono fica só como quem MONTA o fixture e quem confere o
+   * dado bruto.
    */
   let runtime: InstanceType<typeof import('@prisma/client').PrismaClient>;
+  /**
+   * Sessão do SISTEMA: o papel `app_system` (#118) — a CREDENCIAL que abre o
+   * bucket de SISTEMA.
+   *
+   * ⚠️ #118 — O BUCKET DE SISTEMA É A CREDENCIAL, E NÃO O GUC. O repositório
+   * medido abre a transação NESTA sessão (é o que `comEscopoDeSistema` faz):
+   * a sessão de runtime com o GUC em `'*'` enxerga ZERO linhas, e o GUC
+   * `'*'` na sessão de sistema enxerga tudo. A sessão de runtime segue aqui
+   * como o CONTRASTE — ela é a que mostra que o filtro não é o que esconde.
+   */
+  let sistema: InstanceType<typeof import('@prisma/client').PrismaClient>;
   let repo: PrismaAdminTenancyRepository;
 
   let acmeId: string;
@@ -57,12 +70,16 @@ describe('PrismaAdminTenancyRepository — o inventário do bucket de SISTEMA (P
   beforeAll(async () => {
     ctx = await setupTestDatabase();
     const { PrismaClient } = await import('@prisma/client');
-    runtime = new PrismaClient({ datasourceUrl: uriComoPapelDeRuntime(ctx.uriDoBanco) });
-    repo = new PrismaAdminTenancyRepository(runtime);
+    runtime = new PrismaClient({
+      datasourceUrl: uriComoPapelDeRuntime(ctx.uriDoBanco, ctx.senhaDoPapel),
+    });
+    sistema = new PrismaClient({ datasourceUrl: ctx.uriDoPapelDeSistema });
+    repo = new PrismaAdminTenancyRepository();
   });
 
   afterAll(async () => {
     await runtime.$disconnect();
+    await sistema.$disconnect();
     await ctx.stop();
   });
 
@@ -182,7 +199,11 @@ describe('PrismaAdminTenancyRepository — o inventário do bucket de SISTEMA (P
     // SISTEMA). Sem isto, "não apareceu" seria compatível com "a linha estava
     // escondida por outro motivo" — e o filtro não estaria provado: seria a
     // RLS, não o `where`, escondendo a conta.
-    const visiveis = await runtime.$transaction(async (tx) => {
+    //
+    // ⚠️ #118: a sessão que enxerga é a de SISTEMA (`app_system`), e não a de
+    // runtime. O bucket de SISTEMA é concedido pela CREDENCIAL — o GUC
+    // `'*'` na sessão de runtime devolve ZERO linhas.
+    const visiveis = await sistema.$transaction(async (tx) => {
       await abrirEscopo(tx, ESCOPO_DE_SISTEMA);
       return tx.tenantMembership.count({ where: { tenantId: acmeId } });
     });
@@ -227,7 +248,11 @@ describe('PrismaAdminTenancyRepository — o inventário do bucket de SISTEMA (P
     expect(await ctx.prisma.user.count({ where: { deletedAt: { not: null } } })).toBe(1);
     // ⚠️ E a sessão de VERDADE enxerga a conta apagada (o escopo é o de
     // SISTEMA) — logo quem a esconde é o `where`, e não a RLS.
-    const visiveis = await runtime.$transaction(async (tx) => {
+    //
+    // ⚠️ #118: a sessão que enxerga é a de SISTEMA (`app_system`) — o bucket
+    // de SISTEMA é concedido pela CREDENCIAL, e o GUC `'*'` na sessão de
+    // runtime devolve ZERO linhas.
+    const visiveis = await sistema.$transaction(async (tx) => {
       await abrirEscopo(tx, ESCOPO_DE_SISTEMA);
       return tx.user.count({ where: { deletedAt: { not: null } } });
     });
@@ -276,6 +301,47 @@ describe('PrismaAdminTenancyRepository — o inventário do bucket de SISTEMA (P
     // Sem esta linha, os testes acima medem a query SEM policy — e passariam
     // iguais num banco onde o isolamento não existe.
     expect(papel).toEqual([{ rolname: PAPEL_DE_RUNTIME, rolsuper: false, rolbypassrls: false }]);
+
+    // E a sessão que o REPOSITÓRIO medido usa é a de SISTEMA — que também não
+    // é superuser nem tem BYPASSRLS. Uma `app_system` com BYPASSRLS leria
+    // tudo sem policy, e a lista do admin "funcionaria" num banco onde o
+    // isolamento não existe.
+    const papelDoSistema = await sistema.$queryRaw<
+      Array<{ rolname: string; rolsuper: boolean; rolbypassrls: boolean }>
+    >`SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user`;
+
+    expect(papelDoSistema).toEqual([
+      { rolname: PAPEL_DE_SISTEMA, rolsuper: false, rolbypassrls: false },
+    ]);
+  });
+
+  /**
+   * O DENTE do #118: o GUC `'*'` na sessão de RUNTIME NÃO abre o bucket de
+   * SISTEMA.
+   *
+   * ⚠️ É o teste que pega a REGRESSÃO que a lista do admin traria de volta:
+   * com `comEscopo(prisma, escopoDoTenant(null), fn)` — o GUC `'*'` na sessão
+   * de runtime — a lista devolveria ZERO linhas, e a tela do admin ficaria
+   * VAZIA sem erro nenhum. O repositório abre a transação na CREDENCIAL de
+   * sistema (`comEscopoDeSistema`), e este teste prova que a diferença é
+   * REAL: o mesmo GUC, na sessão de runtime, não abre.
+   */
+  it('a sessão de RUNTIME com o GUC de SISTEMA NÃO abre o bucket de sistema — a CREDENCIAL é o que abre', async () => {
+    const noRuntime = await runtime.$transaction(async (tx) => {
+      await abrirEscopo(tx, ESCOPO_DE_SISTEMA);
+      return tx.tenant.count();
+    });
+
+    const noSistema = await sistema.$transaction(async (tx) => {
+      await abrirEscopo(tx, ESCOPO_DE_SISTEMA);
+      return tx.tenant.count();
+    });
+
+    // O MESMO GUC, nas DUAS sessões: uma devolve as empresas, a outra não
+    // devolve NENHUMA. Se as duas devolvessem o mesmo, a credencial não
+    // estaria decidindo nada — e a lista do admin voltaria a depender do GUC.
+    expect(noRuntime).toBe(0);
+    expect(noSistema).toBe(3);
   });
 
   it('o escopo de SISTEMA é o que ABRE a lista: com o escopo da EMPRESA, a outra não aparece', async () => {

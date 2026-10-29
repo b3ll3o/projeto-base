@@ -13,15 +13,27 @@
 //     declarada pelo cliente (issue #102), e uma leitura que abrange o
 //     sistema inteiro não pode ter o alcance decidido por quem pergunta.
 //
+// ⚠️ #118 — O BUCKET DE SISTEMA É A CREDENCIAL, E NÃO O GUC.
+//
+// `comEscopoDeSistema` (e não `comEscopo(prisma, escopoDoTenant(null), fn)`):
+// depois do #118 o bucket de SISTEMA é concedido pelo `current_user`, e quem
+// abre a transação é a CREDENCIAL de sistema. MEDIDO na `main` (2026-10-28),
+// no Postgres 16 real:
+//
+//   sessão de RUNTIME, escopo '*'  ->  empresas=0  usuarios=0
+//   sessão de SISTEMA, escopo '*'  ->  empresas=2  usuarios=1
+//
+// A forma antiga (GUC `'*'` na sessão de runtime) devolve ZERO linhas — e a
+// tela do admin ficaria VAZIA sem erro nenhum. É o mesmo P0 que o #118
+// consertou, e a lista do admin o trazia de volta.
+//
 // Uma lista por vez, sem N+1: o `select` do Prisma emite uma query POR
 // RELAÇÃO (3 por lista — tenants, memberships, profiles), e não uma por linha.
 // O que seria N+1 aqui é buscar a membership de cada empresa dentro de um
 // laço.
 
-import { Inject, Injectable } from '@nestjs/common';
-import type { PrismaClient } from '@prisma/client';
-import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service.js';
-import { comEscopo, escopoDoTenant } from '../../../../shared/infrastructure/prisma/escopo.js';
+import { Injectable } from '@nestjs/common';
+import { comEscopoDeSistema } from '../../../../shared/infrastructure/prisma/escopo.js';
 import type {
   AdminTenancyRepositoryPort,
   EmpresaComMembros,
@@ -52,13 +64,14 @@ function perfilEfetivo(membership: MembershipComPerfil, tenantId: string): strin
 
 @Injectable()
 export class PrismaAdminTenancyRepository implements AdminTenancyRepositoryPort {
-  /** pt-BR: mesmo motivo de `PrismaTenantMembershipRepository` — o parâmetro é
-   *  tipado como `PrismaClient`, apagado em runtime; sem o token o Nest
-   *  LANÇA no boot. */
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaClient) {}
+  // ⚠️ Este repositório NÃO recebe o `PrismaService`: as DUAS leituras são do
+  // bucket de SISTEMA, e o bucket de SISTEMA é aberto na CREDENCIAL de sistema
+  // (#118) — que vem do ambiente (`SYSTEM_DATABASE_URL`), não do client
+  // injetado. Injetar um client que a produção não usaria seria uma
+  // dependência que mente sobre quem abre a transação.
 
   async listarEmpresasComMembros(): Promise<EmpresaComMembros[]> {
-    const linhas = await comEscopo(this.prisma, escopoDoTenant(null), (tx) =>
+    const linhas = await comEscopoDeSistema((tx) =>
       tx.tenant.findMany({
         select: {
           id: true,
@@ -98,7 +111,7 @@ export class PrismaAdminTenancyRepository implements AdminTenancyRepositoryPort 
   }
 
   async listarUsuariosComEmpresas(): Promise<UsuarioComEmpresas[]> {
-    const linhas = await comEscopo(this.prisma, escopoDoTenant(null), (tx) =>
+    const linhas = await comEscopoDeSistema((tx) =>
       tx.user.findMany({
         // Mesma regra de `GET /users` (default `includeDeleted=false`): a conta
         // apagada não é pessoa para o admin, e o filtro mora no `where` para
