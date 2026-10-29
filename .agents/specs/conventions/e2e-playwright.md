@@ -1,7 +1,7 @@
 ---
 name: e2e-playwright
-version: 1.5
-updated: 2026-10-19
+version: 1.6
+updated: 2026-10-27
 maintainer: test-writer
 description: "Convenção canônica de cobertura e2e de frontend — todo fluxo de usuário COM tela é mapeado no inventário abaixo e coberto por um spec Playwright que atravessa browser, Next, Server Action, API HTTP e Postgres de ponta a ponta. Gate automatizado em check-e2e-flow-coverage.ts; execução no CI."
 ---
@@ -95,8 +95,9 @@ um silêncio.
 | F14 | `/admin/flags` | Ativação e desativação de funcionalidades (admin) | `f14-admin-flags.spec.ts` | admin desliga e religa e a tela reflete · a flag salva NA TELA é a que a rota respeita (404 desligada · 403 ligada) · quase-admin recusa e o menu não oferece o link |
 | F15 | `/admin/profiles/[slug]` | Edição dos metadados do perfil | `f15-admin-editar-perfil.spec.ts` | admin renomeia e descreve e **o banco é lido** (o `value` do input não prova gravação) · perfil `isAdmin`: somente leitura, sem formulário |
 | F16 | `/empresa/nova` → `/users` ↔ `/convite/[token]` → `/users/novo` → `/login` → `/users` | Onboarding de empresa | `f16-onboarding-empresa.spec.ts` | conta própria sem empresa é levada a criar uma · a empresa criada dá à pessoa o perfil de DONO · quem entra por convite entra NA empresa que convidou · o admin de SISTEMA não é levado a criar empresa |
+| F17 | `/admin/tenancy` | Inventário de empresas e usuários (admin) | `f17-admin-tenancy.spec.ts` | admin vê a empresa, o slug e o membro · admin vê o usuário e a empresa a que ele pertence · quase-admin recusa e não vê nome/e-mail |
 
-⚠️ **12 rotas, 16 fluxos.** F2–F5 são quatro estados **da mesma** rota, e F6
+⚠️ **13 rotas, 17 fluxos.** F2–F5 são quatro estados **da mesma** rota, e F6
 atravessa três. F7–F8 são os fluxos que a demanda `login-usuario-senha`
 acrescentou: o login e a rota protegida sem sessão. F9–F12 são as quatro telas
 `/admin/*` do RBAC (#97), e cada uma tem um teste que é o **negativo** do
@@ -133,6 +134,15 @@ passaria no segundo e falharia no primeiro. O F16 mede também o perfil EFETIVO
 `gestor`. MEDIDO 2026-10-21: a e2e F8 mudou de expectativa junto com o
 produto — a conta sem empresa passou a ser levada a `/empresa/nova`, e o F7
 ganhou uma empresa para continuar medindo o que sempre mediu (o login).
+
+F17 é o INVENTÁRIO de tenancy do administrador de SISTEMA — a tela que mostra
+as empresas com os seus membros e os usuários com as suas empresas, nas duas
+direções. O que o spec segura é o NEGATIVO: o quase-admin (que tem as três
+chaves `admin.manage-*` no banco) vê "Acesso restrito" e não vê o nome nem o
+e-mail de ninguém. Sem ele, "admin vê a tela" e "qualquer um vê a tela"
+passariam no mesmo arquivo — e a escalada que a permissão não segura (o
+`gerente` de empresa recebe `listAllPermissions()`) é exatamente o que esta
+tela não pode abrir.
 
 ⚠️ **Desde 2026-10-13 quase todo spec roda autenticado, e isso é invisível na
 tabela.** `/users` — a LISTAGEM — chama `exigirSessao()`, que redireciona para

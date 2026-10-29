@@ -40,15 +40,7 @@ import { PermissionsGuard } from '../../../profiles/infrastructure/http/guards/p
 import { RequirePermission } from '../../../profiles/infrastructure/http/decorators/require-permission.decorator.js';
 import { ZodValidationPipe } from '../../../../shared/infrastructure/http/zod-validation.pipe.js';
 import { FeatureFlagUseCases } from '../../application/feature-flag.use-cases.js';
-
-/**
- * O mínimo do `req.user` publicado pelo `JwtAuthGuard` — mesma forma local do
- * `admin-profiles.controller.ts` (declarada por controller, não extraída,
- * porque os dois nunca são usados juntos).
- */
-interface RequestComAtor {
-  user: { sub: string; tenantId?: string | null; isAdmin?: boolean };
-}
+import { atorDe, type ReqComAtor } from '../../../../shared/auth/eh-administrador-de-sistema.js';
 
 /**
  * Corpo do PUT. Fica no NÍVEL DO MÓDULO e não dentro da classe: um `const` no
@@ -91,20 +83,17 @@ export class AdminFeatureFlagsController {
    * `req.user` → `AtorAutenticado`. `isAdmin === true` e não `isAdmin`: o
    * ausente precisa virar `false` (fail-closed), não `undefined` — que é
    * falsy num `if` e verdadeiro num `!== false`.
+   *
+   * pt-BR (2026-10-29): o mapeamento é o do DONO (`atorDe`, em
+   * `shared/auth/eh-administrador-de-sistema.ts`) — este controller tinha a
+   * sua cópia, e eram CINCO.
    */
-  private atorDe(req: RequestComAtor) {
-    return {
-      userId: req.user.sub,
-      tenantId: req.user.tenantId ?? null,
-      isAdmin: req.user.isAdmin === true,
-    };
-  }
 
   @Get()
   @ApiOperation({ summary: 'Listar as feature flags' })
   @RequirePermission('admin.manage-feature-flags')
-  async listar(@Req() req: RequestComAtor): Promise<FeatureFlagDto[]> {
-    return this.useCases.listar(this.atorDe(req));
+  async listar(@Req() req: ReqComAtor): Promise<FeatureFlagDto[]> {
+    return this.useCases.listar(atorDe(req));
   }
 
   @Put(':chave')
@@ -113,8 +102,8 @@ export class AdminFeatureFlagsController {
   async definir(
     @Param('chave') chave: string,
     @Body(new ZodValidationPipe(DefinirFeatureFlagSchema)) body: UpdateFeatureFlagInputDto,
-    @Req() req: RequestComAtor,
+    @Req() req: ReqComAtor,
   ): Promise<FeatureFlagDto> {
-    return this.useCases.definir(this.atorDe(req), chave, body.ativada);
+    return this.useCases.definir(atorDe(req), chave, body.ativada);
   }
 }

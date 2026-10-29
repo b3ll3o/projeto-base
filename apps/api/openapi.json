@@ -462,6 +462,30 @@
         "tags": ["tenancy"]
       }
     },
+    "/api/v1/admin/tenancy": {
+      "get": {
+        "operationId": "AdminTenancyController_inventario",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "As empresas do sistema com os seus membros, e os usuários do sistema com as suas empresas"
+          },
+          "401": {
+            "description": "Não autorizado"
+          },
+          "403": {
+            "description": "Só o administrador do sistema"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "O inventário da tenancy: as empresas com seus membros e os usuários com suas empresas",
+        "tags": ["admin"]
+      }
+    },
     "/api/v1/admin/feature-flags": {
       "get": {
         "operationId": "AdminFeatureFlagsController_listar",

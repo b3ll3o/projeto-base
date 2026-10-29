@@ -352,6 +352,12 @@ export class PrismaUserRepository implements UserRepositoryPort {
    * O filtro `profile: { tenantId: null }` é o do `findProfileId`: sem ele um
    * `users.profile_id` apontando para perfil de EMPRESA resolveria no bucket
    * global, que é o oposto do que a coluna promete.
+   *
+   * ⚠️ O DONO do critério é `tenancy/domain/perfil-efetivo.ts` (2026-10-29) —
+   * o mesmo que o `findProfileId` e a visão de admin importam. O filtro Prisma
+   * continua AQUI, e é de propósito: o filtro que ninguém pode esquecer
+   * porque está no `where` é a forma como o repositório garante a DONA do
+   * perfil. O que mora no dono é o PREDICADO — a regra escrita em TypeScript.
    */
   private async perfilEfetivoPorUsuario(
     userIds: readonly string[],

@@ -13,16 +13,8 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
 import { PermissionsGuard } from './guards/permissions.guard.js';
 import { RequirePermission } from './decorators/require-permission.decorator.js';
-import {
-  AuthorizationUseCases,
-  type AtorAutenticado,
-  type ProfileDetail,
-} from '../../application/profiles.use-cases.js';
-
-/** `req.user` publicado pelo `JwtAuthGuard`. */
-interface RequestComAtor {
-  user: { sub: string; tenantId?: string | null; isAdmin?: boolean };
-}
+import { AuthorizationUseCases, type ProfileDetail } from '../../application/profiles.use-cases.js';
+import { atorDe, type ReqComAtor } from '../../../../shared/auth/eh-administrador-de-sistema.js';
 
 // ⚠️ `@ApiBearerAuth()` NA CLASSE, e não em cada handler: no documento
 // OpenAPI a rota protegida é a que declara `security`, e a rota PÚBLICA é a
@@ -51,9 +43,9 @@ export class AdminAuthorizationsController {
   async atribuir(
     @Param('id') id: string,
     @Body() body: { permissionKey: string },
-    @Req() req: RequestComAtor,
+    @Req() req: ReqComAtor,
   ): Promise<ProfileDetail> {
-    return this.useCases.atribuir(id, body.permissionKey, this.atorDe(req));
+    return this.useCases.atribuir(id, body.permissionKey, atorDe(req));
   }
 
   @Delete('admin/profiles/:id/authorizations/:key')
@@ -62,17 +54,9 @@ export class AdminAuthorizationsController {
   async revogar(
     @Param('id') id: string,
     @Param('key') key: string,
-    @Req() req: RequestComAtor,
+    @Req() req: ReqComAtor,
   ): Promise<ProfileDetail> {
-    return this.useCases.revogar(id, key, this.atorDe(req));
-  }
-
-  private atorDe(req: RequestComAtor): AtorAutenticado {
-    return {
-      userId: req.user.sub,
-      tenantId: req.user.tenantId ?? null,
-      isAdmin: req.user.isAdmin === true,
-    };
+    return this.useCases.revogar(id, key, atorDe(req));
   }
 
   @Get('admin/permissions')

@@ -12,7 +12,7 @@
 // E o caminho do quem JÁ tem conta, que é o comum sob D4 (1 conta, N
 // empresas): `POST /invitations/accept` → aceitaConvite.
 
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 
 import {
@@ -30,6 +30,15 @@ import {
   type TenantMembershipRepositoryPort,
 } from '../domain/ports/tenant-membership-repository.port.js';
 import {
+  ADMIN_TENANCY_REPOSITORY_PORT,
+  type AdminTenancyRepositoryPort,
+  type InventarioAdminTenancy,
+} from '../domain/ports/admin-tenancy-repository.port.js';
+import {
+  exigeAdministradorDeSistema,
+  type AtorAutenticado,
+} from '../../../shared/auth/eh-administrador-de-sistema.js';
+import {
   ConviteInvalidoException,
   NaoAdministraEmpresaException,
 } from '../domain/exceptions/tenancy.exceptions.js';
@@ -43,6 +52,14 @@ import {
 
 /** Validade do convite. Sem maileiro no repo, 7 dias é o prazo que a pessoa tem de verdade. */
 const VALIDADE_CONVITE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * O registro da leitura do inventário — a leitura mais densa em PII do sistema.
+ *
+ * ⚠️ O nome do logger é o que separa este registro dos outros: quem lê o log
+ * precisa saber que ali está "o administrador do sistema leu a base inteira".
+ */
+const loggerInventario = new Logger('AdminTenancyInventory');
 
 /**
  * Token de DI.
@@ -61,6 +78,11 @@ export class TenancyUseCases {
     @Inject(TENANT_MEMBERSHIP_REPOSITORY_PORT)
     private readonly memberships: TenantMembershipRepositoryPort,
     @Inject(USER_REPOSITORY_PORT) private readonly users: UserRepositoryPort,
+    // pt-BR (visão de admin, 2026-10-22): o inventário do bucket de SISTEMA.
+    // É a ÚNICA porta daqui que atravessa empresas — e a que o portão D2
+    // protege.
+    @Inject(ADMIN_TENANCY_REPOSITORY_PORT)
+    private readonly admin: AdminTenancyRepositoryPort,
   ) {}
 
   // ───────────────────────── empresa própria ─────────────────────────
@@ -103,6 +125,55 @@ export class TenancyUseCases {
   /** As empresas a que o ator pertence — lista vazia é uma resposta válida. */
   async listarEmpresas(userId: string): Promise<EmpresaDoUsuario[]> {
     return this.memberships.listarEmpresasDoUsuario(userId);
+  }
+
+  // ───────────────────── a visão do administrador do SISTEMA ─────────────────────
+
+  /**
+   * O INVENTÁRIO do bucket de SISTEMA — as DUAS listas, num instante só.
+   *
+   * ⚠️ É o INVENTÁRIO, e não a lista de empresas do ator (`listarEmpresas`).
+   * A diferença é o alcance: esta atravessa empresas, e o que a autoriza é
+   * D2 — o bucket GLOBAL (`tenantId === null`) com `isAdmin`.
+   *
+   * ⚠️ Por que as DUAS listas SAEM JUNTAS: o repositório diz que "as DUAS
+   * listas precisam contar a mesma história", e isso só é garantível se as
+   * duas forem lidas na MESMA transação. Duas listas em duas requisições são
+   * dois instantes — e a tela podia discordar de si mesma.
+   *
+   * Lista VAZIA é uma resposta legítima: um sistema sem empresa aberta ainda
+   * é um sistema, e a tela do admin precisa mostrar isso.
+   */
+  async listarInventarioDoSistema(ator: AtorAutenticado): Promise<InventarioAdminTenancy> {
+    // ⚠️ A lista de PERMISSÕES não segura nada aqui, e é o mesmo motivo das
+    // feature flags: o cadastro de empresa concede `listAllPermissions()` ao
+    // dono (`perfis-da-empresa.ts`), e o `gerente` tem `isAdmin: true` no
+    // perfil efetivo DA EMPRESA DELE. Quem decide é o bucket: `tenantId ===
+    // null` (o bucket GLOBAL, onde mora o `isAdmin` do seed) — a mesma regra de
+    // `ehAdministradorDeSistema`, que a Fase 9 escreveu para matar a escalada
+    // do bucket global.
+    exigeAdministradorDeSistema(
+      ator,
+      'só o administrador do sistema vê as empresas e os usuários do sistema',
+    );
+
+    const inventario = await this.admin.listarInventario();
+
+    // ⚠️ O REGISTRO DA LEITURA. Esta é a leitura mais densa em dado pessoal do
+    // sistema — ela entrega o e-mail de TODAS as contas. O `AuditContext` do
+    // repo é auditoria de ESCRITA (INSERT/UPDATE/DELETE/RESTORE, com o
+    // snapshot da entidade), e uma leitura não é uma entidade: o precedente
+    // para operação sensível é o `Logger` dedicado (`ProfilePrivilegeEscalation`,
+    // `FeatureFlagBloqueio`), e é o que está aqui.
+    //
+    // O ATOR entra no registro — sem ele, o log diz que a base foi lida, e
+    // não por quem.
+    loggerInventario.log(
+      `inventário lido: ${inventario.empresas.length} empresa(s), ` +
+        `${inventario.usuarios.length} usuário(s) — ator ${ator.userId}`,
+    );
+
+    return inventario;
   }
 
   // ───────────────────────── emitir convite ─────────────────────────

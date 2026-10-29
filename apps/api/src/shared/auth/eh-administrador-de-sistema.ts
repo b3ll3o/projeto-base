@@ -4,6 +4,15 @@
 // `profiles.use-cases.ts`, onde era função de arquivo (não exportada) porque as
 // classes daquele arquivo a usavam. O módulo de feature flags precisa da MESMA
 // regra, e "administrador do sistema" não pode ter duas escritas.
+//
+// pt-BR (visão de admin, 2026-10-29 — revisão do PR #127): este arquivo passou
+// a ser o dono de TRÊS coisas, e não de uma. A revisão mediu cinco cópias do
+// mapeamento `req.user` → `AtorAutenticado` e duas do portão D2 — todas
+// idênticas, todas com o mesmo nome de método, e nenhuma com um gate que
+// apontasse a divergência. "Administrador do sistema" é UMA decisão: ela tem
+// um dono, e este é ele.
+
+import { ForbiddenException } from '@nestjs/common';
 
 /**
  * Identidade do ator autenticado, o mínimo que as travas de escalada
@@ -53,4 +62,58 @@ export interface AtorAutenticado {
  */
 export function ehAdministradorDeSistema(ator: AtorAutenticado): boolean {
   return ator.tenantId === null && ator.isAdmin;
+}
+
+/**
+ * O `req.user` publicado pelo `JwtAuthGuard` — o mínimo que o ator precisa.
+ *
+ * ⚠️ Este tipo é o MESMO nos cinco controllers que montam o ator, e ele é
+ * exportado para que não haja uma cópia por controller: o `atorDe` abaixo
+ * depende dele, e um controller que declarar o seu próprio `RequestComAtor`
+ * pode declarar um `user` DIFERENTE — e o `atorDe` aceitaria os dois em
+ * silêncio.
+ */
+export interface ReqComAtor {
+  user: { sub: string; tenantId?: string | null; isAdmin?: boolean };
+}
+
+/**
+ * `req.user` → `AtorAutenticado`.
+ *
+ * ⚠️ `isAdmin === true` e não `isAdmin`: o ausente precisa virar `false`
+ * (fail-closed), não `undefined` — que é falsy num `if` e verdadeiro num
+ * `!== false`. O `undefined` só apareceria num ator sem `isAdmin` no token, e
+ * é exatamente ali que o esquecimento apareceria.
+ *
+ * `tenantId` viaja porque D2 o exige em `null` (bucket GLOBAL). Um ator com
+ * empresa no header chega aqui com `tenantId` preenchido e é recusado pela use
+ * case — que é o comportamento certo, e o mesmo das feature flags.
+ */
+export function atorDe(req: ReqComAtor): AtorAutenticado {
+  return {
+    userId: req.user.sub,
+    tenantId: req.user.tenantId ?? null,
+    isAdmin: req.user.isAdmin === true,
+  };
+}
+
+/**
+ * O portão D2 — e a RECUSA que ele produz.
+ *
+ * ⚠️ O `detail` é o que separa "a permissão faltou" (o `PermissionsGuard`
+ * recusa antes, com outro texto) de "você não é o administrador do sistema" —
+ * e o e2e da visão de admin mede essa diferença. Por isso o texto é parâmetro
+ * e não constante: as DUAS use cases que usam este portão nomeiam o que o
+ * ator não pode fazer, e um texto único diria a mesma coisa para o inventário
+ * e para as feature flags.
+ *
+ * `ForbiddenException` do Nest e não uma exceção de domínio nova: o
+ * `GlobalExceptionFilter` resolve `HttpException` ANTES do mapper de domínio
+ * (`global-exception.filter.ts:77`), e a recusa sai 403 RFC 7807 sem uma
+ * linha nova — e é a mesma exceção que os guards do repositório já lançam.
+ */
+export function exigeAdministradorDeSistema(ator: AtorAutenticado, detalhe: string): void {
+  if (!ehAdministradorDeSistema(ator)) {
+    throw new ForbiddenException({ code: 'FORBIDDEN', detail: detalhe });
+  }
 }

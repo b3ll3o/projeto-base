@@ -1,0 +1,760 @@
+commit 404a2458760b542b25e19329085969d3872b5c8a
+Author:     Leonardo Andreazzi <andreazzi-leonardo@hotmail.com>
+AuthorDate: Thu Oct 22 17:52:04 2026 -0300
+Commit:     GitHub <noreply@github.com>
+CommitDate: Thu Oct 22 17:52:04 2026 -0300
+
+    feat(tenancy): toda conta pertence a uma empresa, e a empresa nasce com três perfis (#116)
+    
+    * feat(tenancy): toda conta pertence a uma empresa, e a empresa nasce com três perfis
+    
+    A conta que entra por conta própria não tem empresa nenhuma, e a regra nova é
+    "toda conta pertence a uma empresa, exceto o administrador de sistema". O
+    login deixa de ser "sempre /users": ele consulta as empresas do ator, e quem
+    não tem nenhuma vai para a tela de criação — onde vira DONO, com todas as
+    permissões da empresa. Quem entra por convite nasce na empresa que convidou.
+    
+    O que entra:
+    
+    - API: `POST /tenants` (a empresa de quem já tem conta) e `GET /me/tenants`
+      (as empresas do ator, que é o que o funil consulta);
+      `POST /invitations/accept` passa a devolver o `tenantId` — sem ele, o cookie
+      de empresa não pode ser gravado depois do aceite.
+    - Domínio: o catálogo dos TRÊS perfis de toda empresa (`dono`, `gestor`,
+      `funcionario`), gravados pelas DUAS entradas de empresa — o cadastro com
+      `destino` e a página de criação. O catálogo é do DOMÍNIO porque as duas
+      entradas precisam produzir exatamente o mesmo conjunto: duas listas
+      divergiriam na primeira alteração, e a divergência seria silenciosa.
+    - Web: `/empresa/nova`, `/convite/[token]`, o funil do login, e o cadastro que
+      aceita `?convite=`.
+    - e2e: o fluxo F16 (as três pernas da regra: conta própria, convite e admin de
+      sistema) e a F8, cuja expectativa mudou porque o destino do login mudou.
+    
+    A distinção que o nome escondia: `admin` é o administrador do SISTEMA (perfil
+    global, acesso total, apontado por `users.profile_id`), e `dono` é o dono da
+    EMPRESA (perfil da empresa, sobre as funcionalidades dela). O perfil da
+    empresa chama-se `dono` justamente para não ser confundido com o de sistema.
+    O `isAdmin` do `dono` é o bypass do guard DENTRO da empresa — as rotas de
+    sistema exigem `tenantId === null && isAdmin`, e o dono tem `users.profile_id`
+    NULL. Medido por HTTP: com o header da empresa, a recusa vem do use case
+    (403 com `code: FORBIDDEN`); sem o header, vem do PermissionsGuard (403 sem
+    `code`). São dois 403 diferentes, e é isso que prova que a fronteira existe.
+    
+    A entrada por convite continua nascendo sem perfil (`profile_id = NULL`, zero
+    permissões) — é a empresa que é o vínculo, e o perfil é decisão de quem
+    administra a empresa.
+    
+    O que a revisão mudou, depois de medido:
+    
+    - o token do convite atravessa TRÊS elos (página → formulário → Action) e cada
+      elo tem o seu caso, com uma mutação por elo: sem isso, a pessoa que entrou
+      por convite com a sessão expirada era mandada para /empresa/nova e nunca
+      usava o convite;
+    - trocar de identidade limpa os tokens e o resto do estado da sessão: a empresa
+      da sessão anterior atravessava a troca e virava header de empresa alheia;
+    - as duas rotas novas declaram `security` no OpenAPI — a rota é pública no
+      documento se e somente se não declara, e nenhum teste de runtime acusa;
+    - `@ApiResponse` do `201` declarado JUNTO do `409` (um `@ApiResponse` único
+      substitui o default do verbo);
+    - `.trim()` ANTES do `.min()` no nome da empresa, nas DUAS entradas — sem ele
+      "   " passava o min(2);
+    - o e2e de ordenação da listagem foi reescrito: com os fatos na ordem em que
+      as duas ordens concordam, a mutação da ordem passava 17/17 em verde. Com os
+      fatos invertidos, a mutação cai (1 failed | 16 passed).
+    
+    `pnpm ci:local` EXIT=0: api 944 unit + 133 integração + 108 e2e, web 346 unit,
+    tooling 373 + 501. 87 casos de teste novos, 3 removidos.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(tenancy): o identificador é aparado nas DUAS cópias da regra, como o formulário faz
+    
+    O formulário (`empresa-schema.ts`) aparava o identificador nas pontas e a API
+    não: `POST /tenants` e `POST /users` com `destino.tipo='empresa'` recusavam
+    `" acme "` com a mensagem de FORMATO ("slug em minúsculo…") — a mensagem
+    errada para o problema real, que era o espaço em volta.
+    
+    A divergência morava no ÚNICO ponto das duas cópias que produz comportamento
+    observável, e nenhum teste a via: a spec de paridade comparava `min`, `max` e
+    a expressão — e não o `trim`. Agora ela compara o `.trim()` do TRECHO do
+    `slug`: o arquivo inteiro passaria por causa do `trim` do `nome`, que é o
+    mesmo verde falso que a spec já denunciava nos outros casos.
+    
+    Medido:
+    - a API cria a empresa com o identificador aparado (spec do controller);
+    - o cadastro com `destino.empresa` idem (spec do schema de usuário);
+    - a paridade web↔API passa a cobrir o `trim` (spec do `empresa-schema`).
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(tenancy): o catálogo de perfis entrega CÓPIA — e ganha spec na camada rápida
+    
+    `perfisDaEmpresa()` devolvia `PERMISSOES_DO_GESTOR` e
+    `PERMISSOES_DO_FUNCIONARIO` POR REFERÊNCIA: o `readonly` do tipo protege em
+    tempo de compilação, e o que sobra é o runtime — uma constante de módulo
+    alterada por um consumidor contamina o processo inteiro, inclusive a chamada
+    seguinte, que é a que a empresa nova lê. O `dono` já recebia cópia; as outras
+    duas não.
+    
+    O spec novo mede o catálogo na camada UNITÁRIA (segundos, sem banco): são
+    exatamente três perfis e o dono é o primeiro; o dono tem o bypass e todas as
+    permissões do catálogo; o gestor administra pessoas e NADA de `admin.*` (a
+    escalada que o `gestor` com `admin.manage-authorizations` abriria — editar o
+    perfil do próprio dono); o funcionário só lê o diretório; e as listas são
+    cópias.
+    
+    Medido (2026-10-21, antes deste spec): as três mutações do catálogo passavam
+    a suíte unitária INTEIRA (944 testes) e só morriam na de integração — o
+    comportamento estava coberto, a camada rápida é que faltava.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * feat(ci): a etapa que SUBE a aplicação localmente entra no ci:local e no pre-push
+    
+    MEDIDO 2026-10-21: o `ci:local` rodava lint, tipos, unit, cobertura,
+    integração, e2e e o tooling — e NADA subia a aplicação. A suíte e2e sobe a
+    API em `tsx` e o web no BUILD de produção; o `pnpm dev` — o jeito que quem
+    desenvolve roda a aplicação — não era medido por nada. E a diferença não é
+    estética: `tsx` (esbuild) NÃO emite `design:paramtypes`, então um provider
+    sem `@Inject` explícito resolve `undefined` SÓ em dev.
+    
+    A etapa (`pnpm ci:boot`) sobe a API em `tsx src/main.ts` e o web em `next
+    dev`, em PORTAS LIVRES (o `pnpm dev` da pessoa pode estar no ar), espera a
+    saúde dos dois — `/api/v1/health` 200 com `checks.database: 'ok'` e
+    `/api/health` 200 com `status: 'ok'` — e DERRUBA os dois, em qualquer
+    caminho de saída. O banco local é PRÉ-REQUISITO e a etapa não o sobe: sem
+    ele ela falha com o ponteiro para o runbook, nunca "pula".
+    
+    O `pre-push` roda a etapa: o dono pediu (2026-10-21) "a regra que deve rodar
+    a aplicação localmente todas as vezes antes de dar push". É a única regra da
+    camada 1 que depende do estado da máquina — e ela falha alto.
+    
+    Medido:
+    - `pnpm ci:boot` verde, e sem processo nem porta ocupada no fim;
+    - com o banco inalcançável, a etapa sai 1 e a mensagem diz que a aplicação
+      MORREU (o sintoma real), não "não respondeu em 60s" — que era mentira;
+    - o `.next-boot/` (o `distDir` da etapa) entra no `include` do tsconfig, senão
+      o `next dev` REESCREVE o `tsconfig.json` e a árvore fica suja.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(web): quem JÁ tem conta entra pelo convite — e o motivo do erro aparece
+    
+    Três furos no caminho do convite, medidos na tela:
+    
+    1. Quem JÁ TEM CONTA e chega pelo link de convite caía na tela de CADASTRO e
+       ficava sem volta: o e-mail dela já está cadastrado, o cadastro recusa, e
+       ela não descobria que o que precisava era ENTRAR. Agora a tela de cadastro
+       oferece "Já tenho conta" → `/login?convite=<token>`, e o login atravessa o
+       token e devolve a pessoa à tela de aceite.
+    
+    2. Um convite INVÁLIDO no cadastro caía no genérico "verifique a conexão" — a
+       pessoa lia que a internet tinha falhado, quando o que tinha falhado era o
+       convite. O motivo (vencido, já usado, de outro e-mail) está no STATUS, e o
+       mapeamento agora é o mesmo nas DUAS portas do convite (`lib/convite-mensagens`).
+    
+    3. A tela de aceite não tinha saída para a conta errada: o convite é de outro
+       e-mail e a tela só oferecia "Aceitar", que ia falhar. Agora há "Entrar com
+       outra conta", com o token.
+    
+    E o e2e da perna que faltava (F16): quem já tem conta entra pelo mesmo link e
+    entra NA empresa que convidou. MEDIDO: sem o token no link, o spec cai na
+    primeira asserção de URL — os outros 4 continuam verdes.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(tenancy): a ordem das empresas é a RECÊNCIA, e o perfil é o EFETIVO
+    
+    `GET /me/tenants` era ordenado por `profileId` primeiro, e o `profileId` é um
+    UUID DISTINTO por membership — então ele NÃO desempata: a ordem vinha do
+    ALEATÓRIO do UUID, e não da recência que o texto prometia ("a empresa mais
+    recente é a em que a pessoa está agora").
+    
+    A ordem é FUNCIONAL: o funil do login leva a pessoa para a PRIMEIRA empresa da
+    lista. Com a ordem antiga, ela ia parar numa empresa onde não pode fazer nada
+    — o 403 sem causa nomeada que o próprio texto do repositório descreve.
+    
+    Duas mudanças:
+    
+    1. A chave no BANCO é só a data, e a partição (membership COM perfil efetivo
+       antes de sem) é feita em JS — quem ainda não recebeu perfil não pode fazer
+       nada na empresa, e o funil não pode levá-lo para lá.
+    
+    2. "Perfil efetivo" é o MESMO critério do `findProfileId`: o perfil precisa ser
+       GLOBAL ou DAQUELA empresa. Ler a coluna crua contaria como "com perfil" uma
+       membership apontada para o perfil de OUTRA empresa — e o funil escolheria
+       essa empresa, onde a API não resolve perfil nenhum.
+    
+    Medido: com a ordem antiga, o teste "a MAIS RECENTE vem primeiro" cai (e só
+    ele); com a coluna crua, o teste "o perfil de OUTRA empresa vai para o FIM"
+    cai (e só ele).
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(web): o administrador de SISTEMA não fica preso no escopo de uma empresa
+    
+    Achado MAJOR 2 da auditoria de segurança do PR #116.
+    
+    O ADMINISTRADOR DE SISTEMA é a exceção da invariante ("toda conta pertence a
+    uma empresa, menos ele"), e o funil do login consultava a lista de empresas
+    ANTES de perguntar por ele. Para o admin, a lista NÃO está vazia: um convite
+    aceito, ou uma empresa que ele mesmo criou, deixam uma membership lá — e
+    escolher a PRIMEIRA prendia a sessão no escopo daquela empresa.
+    
+    Aí `ehAdministradorDeSistema` (`tenantId === null && isAdmin`) é FALSO: as
+    rotas de sistema respondem 403, e o admin perde a capacidade de responder a
+    incidente. E não há volta — todo login re-executa o funil, e não existe tela
+    de troca de empresa.
+    
+    A pergunta vem PRIMEIRO, e no bucket GLOBAL: o `isAdmin` do DONO é o da
+    empresa, e o do ADMIN é o do bucket de sistema. São duas pessoas diferentes.
+    
+    A falha do `/me/profile` NÃO desiste da empresa: a lista já está na mão, e
+    trocar um admin que perde o sistema por qualquer pessoa que perde a empresa
+    seria um preço altíssimo.
+    
+    Medido: com a verificação neutralizada, os 3 testes do admin caem.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(web): o token de convite não vaza mais pelo Referer
+    
+    Achado NIT 6 da auditoria de segurança do PR #116.
+    
+    O token de convite viaja na URL — `/convite/<token>`, `/users/novo?convite=`,
+    `/login?convite=`. O default do browser (`strict-origin-when-cross-origin`)
+    manda a URL INTEIRA no `Referer` de um link MESMO ORIGEM: um clique em link
+    interno da tela de convite bota o token no log de acesso de outra rota do
+    mesmo servidor.
+    
+    As três telas que carregam o token agora mandam `Referrer-Policy:
+    no-referrer` e `Cache-Control: no-store` — o segundo impede que um proxy
+    guarde a página com o token no corpo.
+    
+    ⚠️ Isto NÃO resolve o problema de fundo: o token na URL É o problema, e ele é
+    credencial de criação de conta (ver o corpo do PR #116, em "O que NÃO foi
+    consertado"). O que esta mudança faz é não ESPALHAR o segredo para fora das
+    três telas que o carregam.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(tenancy): a conta que já é membro e a corrida do e-mail param de ser 500
+    
+    Achados 1 e 4 da revisão de backend do PR #116: dois 500 onde o pedido era um
+    CONFLITO (409) — e 500 é "banco fora do ar", a mensagem mais falsa que existe
+    num pedido que a pessoa pode resolver.
+    
+    MEDIDO 2026-10-21 (Postgres de verdade, não leitura): o erro do vínculo
+    duplicado NÃO é um P2002. O `INSERT` da membership é `tx.$queryRaw` (a
+    função `criar_membership`), e o Prisma reporta a falha de uma query CRUA como
+    **P2010**, com o código do Postgres no `meta.code` (23505 = unique_violation)
+    e a chave na mensagem (`Key (user_id, tenant_id)=(…) already exists.`). Por
+    isso os `catch` que procuram P2002 não pegavam.
+    
+    Agora:
+    - o vínculo duplicado (a conta JÁ é membro da empresa que convidou — o dono
+      pode se convidar) vira `ConviteInvalidoException('ja-membro')` → 409;
+    - a corrida do e-mail (dois cadastros com o mesmo e-mail passam pelo
+      `findByEmail` antes de qualquer commit) vira
+      `EmailAlreadyInUseException` → 409 `EMAIL_IN_USE`, que é a exceção do
+      PRÓPRIO módulo de `users` — o `tenancy` já importa de lá, e o
+      `GlobalExceptionFilter` já sabe traduzir aquela em 409, que é a mensagem
+      que o formulário sabe mostrar.
+    
+    O `shortcut:` que o repositório registrava ("aqui o P2002 NÃO é traduzido, e
+    chegaria como 500") deixa de existir.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(tenancy): o P2002 deixa de virar 500, e o convite vencido não entra
+    
+    Duas falhas do mesmo repositório, e as duas somem sem tocar no resto.
+    
+    ⚠️ O `P2002` virava 500 no banco de produção. O `catch` decidia "colidiu o
+    slug ou o e-mail?" lendo `erro.meta.target` — o nome do CAMPO, que o Prisma
+    devolve NULL quando o Postgres tem a unicidade como ÍNDICE e não como
+    constraint, que é como as migrations deste repo criam o `@unique` do
+    `users.email`.
+    
+    MEDIDO 2026-10-22 contra o banco local (o mesmo shape do de produção): o
+    `meta` do P2002 é `{"modelName":"User","target":null}` e a mensagem é
+    "Unique constraint failed on the (not available)". O `catch` casava com a
+    STRING VAZIA, e o P2002 subia cru: o cadastro com e-mail repetido respondia
+    500 — "banco fora do ar" num pedido que era um CONFLITO (409).
+    
+    A suíte de integração NÃO pegava: no banco de testcontainers o `target` vem
+    preenchido, e o mesmo código passava verde. Um discriminador que só funciona
+    num dos dois bancos é pior do que nenhum — é um que mente sobre o banco em
+    que a aplicação roda.
+    
+    A tradução passou para ONDE a escrita falhou — `criarEmpresa` (o slug) e o
+    `tx.user.create` (o e-mail) —, que é o que `prisma-user.repository.ts` já
+    fazia. O único caso com DOIS uniques na mesma escrita, `invitation.create`
+    (`token` e `(tenantId, email)`), é decidido por LEITURA: existe convite para
+    (empresa, e-mail)? Se existe, foi ele que colidiu; se não, o que colidiu foi
+    o token — e a colisão de token continua propagada crua, como antes.
+    
+    MEDIDO contra o banco local, depois da correção: slug → EmpresaJaExiste,
+    e-mail → EmailAlreadyInUse, convite → ConviteJaEmitido. Antes, os três
+    subiam crus.
+    
+    O spec novo é UNITÁRIO de propósito: o que está sob teste é a FORMA do erro
+    que o Prisma devolve, e a forma do banco de produção é justamente a que o
+    testcontainers não produz. Tem dente: reintroduzir o discriminador por nome
+    deixa 4 dos 5 testes vermelhos.
+    
+    ⚠️ E o convite VENCIDO podia entrar. A validade era checada só no caso de
+    uso (`exigirConviteValido`), que roda ANTES da transação e numa conexão
+    diferente; a releitura dentro da transação revalidava o `acceptedAt` (de
+    forma atômica) e não o `expiresAt`. Um convite que vencia na janela entre as
+    duas era aceito por uma transação já VENCIDA: a membership nascia e o
+    convite ficava CONSUMIDO — irrecuperável para as outras tentativas. Agora a
+    validade é revalidada dentro da transação, e o motivo do erro é o de
+    "vencido" (410), não o de "já usado" (409).
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(tenancy): o documento OpenAPI declara os status que a API devolve
+    
+    Duas rotas devolviam um status que o documento não anunciava: o 409
+    CONVITE_JA_EMITIDO em `POST /tenants/:id/invitations` (o
+    `@@unique([tenantId, email])` traduzido) e o 404 USER_NOT_FOUND em
+    `POST /tenants` (a conta apagada entre o token e o pedido). Um cliente gerado
+    do documento não tem ramo para nenhum dos dois, e o dono lia "algo deu
+    errado" num conflito que ele precisa resolver.
+    
+    O spec de cada controller agora afirma a lista de status declarados — e ele
+    tem dente: removendo o decorator, o teste fica vermelho.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(web): a tela de criação de empresa ganha a spec que faltava
+    
+    A página tem UMA decisão — EXIGIR SESSÃO — e é a decisão que a página existe
+    para fazer: sem sessão, `POST /tenants` responderia 401, e a pessoa veria um
+    formulário que aceita, valida e recusa no fim, sem dizer por quê.
+    
+    O `EmpresaForm` é mockado de propósito: o que está sob teste é a LIGAÇÃO da
+    página, e um teste que renderizasse o formulário de verdade mediria o
+    formulário e passaria verde com a Action errada.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * test(gates): o gate de escopo de tenant conta 77, e o número sobe com a medição
+    
+    O gate CONTA e publica as aberturas de escopo de tenant — ele não julga, e o
+    advisory existe justamente para dizer que nenhum gate compara com o run
+    anterior. A spec fixa o número porque é ela que impede o corpus de sumir em
+    silêncio.
+    
+    São 2 a mais desde a medição de 2026-10-21: a leitura que distingue a
+    colisão de TOKEN da colisão de (empresa, e-mail) em `emitirConvite` abre o
+    escopo da empresa para perguntar se o convite já existe. A pergunta é uma
+    LEITURA — o `P2002` não diz qual constraint colidiu, e o `meta.target` do
+    Prisma vem NULL quando o Postgres tem a unicidade como índice —, e ler exige
+    escopo.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(e2e): a suíte se levanta sozinha quando a API morre no meio
+    
+    O F1 e o F5 derrubam a API de propósito (é o caminho "a infraestrutura
+    caiu"), e o `finally` de cada um a levanta de volta. O `finally` só roda por
+    caminhos que passam por ele — e um worker morto, um `SIGINT` ou um abort do
+    run deixam a API FORA para o resto da execução. O sintoma é o pior possível:
+    os specs seguintes falham TODOS com `ECONNREFUSED`, um erro que não é do teste
+    deles, e a suíte inteira fica vermelha por uma causa que já passou.
+    
+    MEDIDO 2026-10-22: numa execução do `ci:local` a API foi morta no meio da
+    suíte — o log dela termina sem linha de saída, que é a assinatura de um
+    SIGKILL — e 33 specs caíram em cascata. A suíte passou 57/57 logo em seguida,
+    isolada, com o MESMO código: a defesa fecha a classe, não o episódio.
+    
+    ⚠️ `apiPid !== null` NÃO é sinal de que a API está no ar: o PID é de um
+    processo que pode ter MORRIDO, e o `estado.json` não foi reescrito. O
+    `subirApiDoTeste` saía cedo nesse caso — ele confia no PID, e o PID mente.
+    
+    ⚠️ O critério é a VIDA DO PROCESSO, e não o `/health`: o `/health` responde
+    503 quando o Postgres está fora, e o F5 mede justamente esse estado. Um
+    `/health` aqui derrubaria a API no meio do F5 e destruiria o que ele mede.
+    
+    A decisão é uma função pura (`apiPrecisaSubir`) porque é ela que tem dente:
+    um teste que subisse a API de verdade mediria o bootstrap do Nest (45 s,
+    banco, migrations), e a decisão passaria verde com o PID errado.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(gates): o scanner reconhece o sumário do Vitest, que é em inglês
+    
+    O scanner reconhecia `N testes` (pt-BR) e `N arquivos`, e as DUAS escritas em
+    inglês do sumário do Vitest passavam batendo por fora — invisíveis para o
+    relatório e para o gate.
+    
+    MEDIDO 2026-10-22 no PR #116: o corpo afirmava `Tests  944 passed (944)` com
+    a suíte em 959, e o `pr-refresh-gate` respondeu "0 claim(s) reconhecida(s) no
+    corpo". A contagem não divergiu: ela não EXISTIA para o instrumento — o hook
+    não tinha o que reescrever e o gate não tinha o que comparar.
+    
+    É a regra do repo: "quem não pode ser comparado é RECLASSIFICADO, nunca
+    apagado" — e o que era apagado aqui era a CONTAGEM, não a frase. As claims
+    novas são das MESMAS classes das pt-BR (`testes` e `arquivos-suite`), e a
+    MEDIDA continua `null`: a suíte não é a branch, e nenhum `git` mede quantos
+    testes passaram. O que muda é que a claim passa a existir no relatório — e o
+    gate passa a dizer que ela não é mensurável offline, em vez de calar.
+    
+    MEDIDO, no corpo do PR #116, antes e depois:
+    
+      antes:  0 claim(s) reconhecida(s) no corpo
+      depois: o corpo tem 18 claim(s), e nenhuma delas pode ser comparada offline
+    
+    E o hook parou de dizer "corpo em dia" quando não conferiu nada: "em dia" é
+    afirmação de que nada diverge, e não de que algo foi conferido. Com claims
+    só de suíte, ele agora diz que não há o que comparar.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * chore(memória): a memória da suíte que não vê defeito de banco entra no ledger
+    
+    A memória `suite-de-integracao-nao-ve-defeito-de-banco` — o fato de que a
+    suíte de integração mede um Postgres (testcontainers) diferente do banco que
+    a aplicação roda, e de que um discriminador pode passar no CI e falhar em
+    produção — entrou no corpus sem linha no ledger.
+    
+    MEDIDO 2026-10-22: o `check-memory-crystallization` reprovou com "1
+    memória(s) sem destinação em .agents/runs/memory-triage.md". O gate lê o
+    ledger nas DUAS direções, e é o que impede uma captura de evaporar sem
+    deixar rastro.
+    
+    A disposição é `pendente`: a regra é reutilizável (é a "meça contra o banco
+    local, não só contra o testcontainers") e ninguém a escreveu ainda.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(web): o convite não se perde no caminho, e o erro do 404 diz o que é
+    
+    Três defeitos na mesma feature — a entrada por convite — medidos por leitura
+    do código e fechados com spec que morde (a mutação de cada um deixa
+    vermelho SÓ o teste dele).
+    
+    ⚠️ O primeiro é o mais caro: sem sessão, o `exigirSessao()` redirecionava
+    para `/login` SEM o token do convite. A pessoa entrava no login sem convite
+    nenhum, o funil perguntava "qual empresa?" e a levava para `/empresa/nova` —
+    porque o convite AINDA NÃO foi aceito e a conta não tem membership nenhuma. A
+    pessoa criava a PRÓPRIA empresa, e o convite de quem a convidou nunca era
+    usado. O arquivo já resolvia isso no ramo 401 (a sessão pode vencer ENTRE a
+    página e o clique); a linha da sessão que NUNCA existiu ficou de fora do
+    mesmo cuidado.
+    
+    ⚠️ O segundo: a tela de cadastro mapeia a falha pelo `code`, e o 404 da
+    funcionalidade DESLIGADA vem com `code: 'NOT_FOUND'` (derivado do status) —
+    então a pessoa lia "verifique a conexão" num cadastro proibido por política.
+    A tela IRMÃ (o aceite) mapeia o MESMO 404 pelo status: as duas portas do
+    mesmo feature discordavam do mesmo status, e quem entrou pelo link de
+    convite pagava a diferença. Agora o 404 só é do convite quando o formulário
+    VEIO de um convite — sem ele, o 404 é o que for.
+    
+    ⚠️ O terceiro: o aceite desestruturava a resposta sem conferir que o
+    `tenantId` veio. Um 201 sem corpo (o que o `ApiClient` devolve quando a
+    resposta vem vazia) estourava um `TypeError` — que a tela lia como
+    "verifique a conexão", com a membership JÁ criada do lado da API e o
+    convite já queimado. A pessoa clicava de novo e lia "este convite já foi
+    usado", sem nunca ter usado, e sem empresa na sessão. As DUAS outras Server
+    Actions do branch protegem esse mesmo caso; o aceite ficou de fora.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * feat(tenancy): o catálogo da empresa é gerente, coordenador e funcionário
+    
+    O vocabulário da empresa era `dono`/`gestor`/`funcionario`, e "dono" não
+    descrevia o cargo — descrevia a relação com a empresa. O pedido de produto
+    (2026-10-22) troca o trio por **gerente, coordenador, funcionário**: a
+    hierarquia de cargos de uma empresa.
+    
+    O rename pega o PERFIL (o slug e o rótulo) e o PAPEL da membership
+    (`role: 'owner'` → `'gerente'`, que é o que libera convidar). O papel do
+    convidado (`'member'`) não muda: quem entra por convite não tem perfil
+    ainda — ele recebe um depois — e o vocabulário dessa posição não foi
+    pedido.
+    
+    ⚠️ O `role` é TEXT no banco (`tenant_memberships.role`), sem constraint: o
+    rename não pede migration. E o único código que COMPARA o valor é o
+    `tenancy.use-cases.ts` (`role !== 'gerente'`) — o guard de JWT compara só
+    `role === null`.
+    
+    O que o rename mudou, além do catálogo:
+    - a mensagem de 403 (que dizia "Só o dono da empresa pode convidar alguém")
+      passa a dizer "gerente" — o texto é lido pela pessoa, e ele citava um
+      perfil que não existe mais;
+    - a tela de criação de empresa (que dizia "entra como dono") diz "entra como
+      gerente";
+    - o nome que a UI mostra vem do catálogo (`profileName`/`profileSlug`), e por
+      isso a e2e do web passa a esperar `(gerente)`.
+    
+    MEDIDO: a suíte inteira verde depois do rename — API unit 959, integração
+    138, e2e 108, web unit 366, e2e do web 57/57, `pnpm ci:local` → exit 0.
+    
+    ⚠️ E a lição que o renameDEU, que vira convenção
+    ([`termos-de-dominio-com-um-dono.md`](../../../.agents/specs/conventions/termos-de-dominio-com-um-dono.md)):
+    o nome estava **hardcoded em 14 arquivos**, e o rename foi uma caça ao
+    literal. Um termo de domínio tem UM dono — uma constante exportada —, e quem
+    usa importa.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * feat(gates): a regra DRY, com a medição e os dois gates que a cobram
+    
+    "Don't Repeat Yourself" — **cada pedaço de conhecimento tem UMA
+    representação autoritativa**. Em código o conhecimento tem três formas, e as
+    três têm dono: um **termo** (constante exportada), uma **decisão** (função) e
+    um **dado** (catálogo). Repetir não é o defeito; repetir CONHECIMENTO é.
+    
+    O que entra:
+    
+    - **`.agents/specs/conventions/dry.md`** — a regra, as **três repetições
+      legítimas** (o spec que afirma o valor — o literal é o dente dele; o texto
+      de UI — é decisão de produto; framework/rota/cabeçalho — o nome é de outro
+      dono), e a aplicação ao termo de domínio;
+    - **`tooling/scripts/analisa-repeticao.ts`** — a medição: para cada literal,
+      **quantos arquivos distintos** o carregam (é o critério do gate; um literal
+      usado 40× num arquivo só é um arquivo só). Comentários são removidos antes
+      da contagem — um termo *citado* não é um termo *usado*, e contá-lo inflava
+      a medição com arquivos que não têm nada a importar;
+    - **`.tooling/scripts/ci/dry-termos.json`** — a **declaração**: o termo, o
+      dono que o deve exportar, a constante que falta e o estado (`ok` = ninguém
+      hardcodeia; `declarado` = dívida com o motivo). É a revisão que produz a
+      declaração;
+    - **`check-repeticao`** — termo declarado hardcoded em **produção** é erro
+      (quando `estado: 'ok'`) ou ressalva (quando `declarado` — a dívida é
+      PUBLICA, não escondida);
+    - **`check-bloco-duplicado`** — a OUTRA metade do DRY: a **lógica** repetida.
+      Janela de 16 linhas porque foi MEDIDA: com 12, o gate acusaria o markup JSX
+      do formulário — repetição de MARCAÇÃO, não de decisão.
+    
+    ⚠️ **O gate mede os termos DECLARADOS, e não "todos os literais repetidos".**
+    MEDIDO 2026-10-22: a árvore tem 129 literais repetidos em 3+ arquivos de
+    produção, e quase todos são import path, classe de CSS ou nome de framework —
+    enumerá-los seria insustentível, e um gate com 129 exceções vivas é um gate
+    que ninguém lê. A **revisão** produz a declaração; o **gate** cobra o que
+    foi declarado.
+    
+    ⚠️ **A MEDIÇÃO MUDA O DIAGNÓSTICO: o problema não é "faltam enums".** Três dos
+    seis termos de domínio repetidos **já têm dono** — e o que falta é o
+    **import**, não o enum. O dono das permissões exporta `PERMISSIONS` (um
+    array), e quem precisa de `users.read` escreve o literal porque
+    `PERMISSIONS[3]` é um índice que muda quando o catálogo cresce. Por isso a
+    fase que mais destrava é **exportar a constante nomeada ao lado do array**.
+    
+    ⚠️ **O código de produção JÁ é DRY na lógica**: MEDIDO, com 16 linhas de
+    janela, **ZERO** blocos repetidos. A repetição que sobra é de TERMO — e é o
+    que a parte 1 mede.
+    
+    Dentes: `2 de 6` (check-repeticao) e `2 de 5` (check-bloco-duplicado),
+    medidos por mutação, e registrados no "Registro de dentes" + na §Tabela de
+    Checks — que o `check-teeth-registry` reconcilia.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(ci): três furos no harness que a revisão do PR #116 mediu
+    
+    Os três são da camada de CI — e um deles é a **raiz de um flake que esta
+    campanha reproduziu**.
+    
+    ⚠️ **O `prisma generate` rodava EM PARALELO com as suítes.** No `turbo.json`,
+    só o `typecheck` declara `dependsOn: ["db:generate"]` — as quatro suítes
+    (`test:unit`, `test:coverage`, `test:integration`, `test:e2e`) não dependem
+    dele, e o `ci:local` roda UM `turbo run` com todas elas. O `prisma generate`
+    APAGA e recria o cliente gerado, e as suítes o importam no arranque: se o
+    import cair na janela da reescrita, o sintoma é "Cannot find module
+    '../.prisma/client'" — que aponta para "faltou rodar prisma generate",
+    quando o comando ESTÁ rodando, só fora de ordem.
+    
+    **MEDIDO nesta campanha**: uma execução do `ci:local` derrubou as 14 suítes
+    e2e da API com `Cannot find module '.prisma/client/default'`, e a execução
+    seguinte passou. É o flake.
+    
+    O conserto alinha o `ci:local` com a FORMA do CI (`ci.yml:167` tem o
+    `db:generate` como passo SEPARADO, antes das suítes): `pnpm turbo run
+    db:generate --filter=@projeto/api` antes do `turbo run` das suítes. O filtro
+    mantém o `check-ci-local-scope` satisfeito — o gate exige que uma invocação
+    com filtro alcance todo pacote que implemente as tasks, e o `db:generate` só
+    existe no `@projeto/api`.
+    
+    ⚠️ **O `fetch` de saúde não tinha prazo.** O `while (Date.now() < fim)` do
+    `esperarSaude` só testa o prazo na BORDA do laço — e o `await fetch(url)` de
+    dentro pode ficar pendurado para sempre (um servidor que aceita a conexão e
+    não responde: o `next dev` engasgado numa compilação que não termina, o event
+    loop bloqueado). A etapa ficava pendurada SEM o diagnóstico que ela promete
+    ("não respondeu o healthcheck em 90s") e SEM a cauda do log. Agora o `fetch`
+    tem prazo próprio (5 s), menor que o da etapa — o da etapa governa o laço, e
+    o do fetch governa a tentativa.
+    
+    ⚠️ **O `spawn` sem listener de `'error'`.** O `spawn` NÃO LANÇA quando o
+    binário não existe: ele EMITE. Sem listener, o EventEmitter lança, a
+    exceção não capturada mata o processo — e o `finally` do `main()`, que é quem
+    derruba os grupos, NÃO RODA: a API e o web sobem como órfãos segurando as
+    portas. O `apps/web/e2e/support/api.ts` (mesma técnica) já tinha o listener;
+    a forma veio daqui, o tratamento do erro, não.
+    
+    ⚠️ **E o gate de paridade dos dentes não pegava o gate duplicado.** A condição
+    era `fileCount >= nameCount`, que só pegava o caso "name ≤ file"; o caso que
+    a PRÓPRIA MENSAGEM prometia ("se for maior, algum gate está duplicado")
+    passava VERDE. A condição agora é a RELAÇÃO inteira (`name = file + 1`), e o
+    spec fixa os DOIS lados: a diferença 2 é violação, e a diferença 1 (o par
+    legítimo do `check-eslint-drift`, que entra duas vezes com o mesmo arquivo)
+    continua verde.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(tenancy): o rename do papel tirou o direito de convidar de quem já tinha empresa
+    
+    O `provisionarEmpresaPropria` que existia em `main` gravava `role = 'owner'`, e
+    `tenancy.use-cases.ts` exige `role = 'gerente'` para convidar. A coluna é TEXT
+    sem CHECK, e o runtime não tem UPDATE nela — a migration `20261020000005`
+    libera só `profile_id` e `updated_at`. Logo, sem backfill, o dono de uma
+    empresa criada antes do rename recebia **403 ao convidar**, e não havia
+    caminho para destravar: o `@@unique([userId, tenantId])` barra o vínculo
+    novo, e ninguém pode mudar o papel.
+    
+    **MEDIDO no banco local**: 10 memberships com `role = 'owner'`, em 10
+    empresas. A regra "sem dado, sem backfill" da convenção `migracao-de-dados.md`
+    está satisfeita — o dado existe.
+    
+    A migration `20261022000001_papel_gerente_legado` faz o backfill idempotente.
+    O spec que a segura lê o `.sql` do disco e o aplica no Postgres: apagar a
+    migration deixa o spec vermelho.
+    
+    A mesma revisão achou mais três defeitos no caminho:
+    
+    - **o catálogo prometia congelamento e não congelava.** As listas de permissões
+      são EXPORTADAS, e `perfisDaEmpresa()` copia a partir delas — de modo que
+      uma constante mutável contaminava o `coordenador` de toda empresa criada
+      dali em diante. MEDIDO: um `push` de permissão de editar perfil na lista
+      exportada produzia um `coordenador` com essa permissão, que é exatamente a
+      escalada que o catálogo existe para impedir. O `readonly` do TIPO protege
+      em tempo de compilação, e o que sobra é o runtime.
+    - **o 403 se contradizia no mesmo corpo RFC 7807.** O `title` dizia "gerente" e
+      o `detail` — que é a `message` da exceção — dizia "owner". O rename da
+      rodada anterior trocou um e esqueceu o outro.
+    - **as portas descreviam o perfil da empresa como `admin`** (o perfil de
+      SISTEMA, que o catálogo não produz), e a porta da membership não declarava
+      a ORDEM da lista, que é funcional: o funil do login leva a pessoa para a
+      PRIMEIRA empresa, e a ordem morava só no adaptador.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(web): "não deu para perguntar" não é "não tem empresa"
+    
+    O `catch` do funil do login tratava a falha da consulta de empresas como a
+    resposta "a conta não tem empresa". A sessão ficava sem escopo, e a pessoa que
+    era DONA de uma empresa com cinco pessoas caía em `/users` sem empresa e via
+    **"1 usuário cadastrado"** — só ela. Sem erro, sem aviso, e sem menção a
+    empresa nenhuma; o escopo só voltaria no login seguinte.
+    
+    Agora "não sei" e "não tem" são estados diferentes: a falha **devolve a
+    mensagem** e a pessoa entra de novo, o que refaz a consulta. O cookie de
+    empresa da sessão anterior continua sendo apagado — ele pertence à identidade
+    anterior, e a empresa que ele nomeia pode ser de outra conta.
+    
+    A mesma revisão achou mais três defeitos de tela:
+    
+    - **o 409 do "já é membro" dizia "já foi usado".** `ja-membro` e `ja-aceito`
+      são o MESMO status, e a tela mandava pedir um convite novo — que devolvia
+      409 de novo, para sempre. A API agora dá `code` próprio ao motivo
+      (`CONVITE_JA_MEMBRO`), e a segurança dos outros quatro não muda: eles são
+      alcançáveis por quem só tem o token, e `ja-membro` exige uma conta
+      autenticada que já é membro — ela sabe que pertence à empresa, e a
+      resposta não diz nada sobre o token.
+    - **o texto de tela dizia "o administrador da empresa"**, que é exatamente a
+      ambiguidade que o rename de 2026-10-22 removeu: `admin` é o
+      administrador de SISTEMA, e o cargo da empresa é `gerente`.
+    - **o foco dos inputs era de 1 px.** A única indicação de foco era a mudança
+      de cor da borda, o que falha o SC 2.4.11 Focus Appearance (AA) do WCAG 2.2
+      (área equivalente a um perímetro de 2 px). Os botões das mesmas telas já
+      usavam o padrão certo; os inputs agora também.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(gates): a regra DRY passa a medir o que ela promete medir
+    
+    A regra e os dois gates do PR anterior mediam coisas diferentes da que
+    diziam:
+    
+    - **a tabela de medição da convenção não era reproduzível pelo comando que
+      ela citava.** A legenda falava de "3+ arquivos de produção" e os números
+      vinham de um corpus que INCLUÍA specs. Classe 7 (claim numérica sem
+      derivação). A tabela foi re-medida, e o comando agora está ao lado do
+      número.
+    - **a declaração de termos declarava um dono que NÃO EXISTIA**
+      (`codigos-de-problema.ts`), e o gate mandava "importe a constante de
+      'apps/api/src/.../codigos-de-problema.ts'" — uma instrução que ninguém
+      pode seguir, porque o arquivo não está lá. Ninguém conferia a declaração:
+      o gate agora verifica que o dono existe e que um termo `declarado` tem
+      motivo, e a ressalva carrega o motivo (a convenção promete que a dívida é
+      pública COM ele).
+    - **dois termos já não tinham dívida** (`coordenador` e `funcionario` — só o
+      dono carrega o literal), e continuavam em `declarado`, o que mantinha a
+      exceção aberta. Passaram a `ok`: a partir de agora, hardcodar é ERRO.
+    - **o termo `convite` estava na regra e fora da declaração** — é o mais
+      espalhado dos seis, e nenhum gate o mediava. Declarado.
+    - **os instrumentos não viam literal em BACKTICK**, e o `//` de uma URL
+      dentro de string cortava a linha: duas URLs de hosts diferentes viravam a
+      MESMA linha, que é o que o gate de lógica acusa como "cópia".
+    - **o scanner não reconhecia a forma da mutação do `Test Files`**, e a
+      contagem de claims não mensuráveis mentia para menos — e a CONTAGEM é o
+      observável do `guard-classes.md` §4.
+    - **o hook dizia "corpo em dia" para um corpo que ele não tinha conferido**,
+      enquanto o gate irmão recusava a mesma frase para o mesmo corpo. Dois
+      consumidores do mesmo scanner, duas honestidades.
+    
+    E o registro de dentes dizia "75 call site(s)" onde o gate imprime 77 — o
+    commit `d29ab8a` atualizou o spec e deixou o registro para trás.
+    
+    O `pre-push` passou a depender do estado da MÁQUINA (o `.env` gitignored e um
+    Postgres no ar), e o CI remoto não roda essa etapa: a assimetria ficou
+    registrada em `ci-defense-in-depth-pendencias.md`, com o comando e a data.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(web): a empresa que ficou pendente diz que ficou pendente
+    
+    O 401 da criação de empresa levava a pessoa para `/login` **sem nenhum
+    sinal**. Ela entrava, o funil a trazia de volta para `/empresa/nova` com o
+    formulário vazio, e não havia explicação nenhuma do que tinha acontecido.
+    
+    É o mesmo "beco sem saída de dois saltos" que o repo já resolveu no cadastro
+    com o `?cadastrado=1` — e a página nova repetia o buraco. O sinal é o mesmo
+    mecanismo: presença da chave, não o valor.
+    
+    ⚠️ O sinal é um SINAL, e não o dado: o nome e o identificador da empresa
+    digitados **não** viajam na query string (ela é serializada, aparece no
+    histórico do browser e no log de borda). O que os valores digitados
+    perdem — a pessoa digita de novo — é decisão de produto, e está declarado
+    no aviso.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * docs(migração): renome de VALOR é o mesmo furo do renome de COLUNA
+    
+    A convenção `migracao-de-dados.md` §1 nomeava o furo do renome de COLUNA, e
+    não o do renome de VALOR — que é o mesmo furo e é **mais silencioso**: a
+    coluna continua existindo, o dado continua válido, e o banco não denuncia
+    nada. Quando a coluna é TEXT sem CHECK e sem enum, os dois valores convivem
+    sem que nenhuma constraint reclame; o único sintoma é a comparação que
+    autoriza passar a falhar para o dado velho, e essa comparação costuma estar
+    em outro arquivo, longe do rename.
+    
+    MEDIDO 2026-10-22, PR #116: o catálogo da empresa renomeou o papel da
+    membership de `'owner'` para `'gerente'`, e o dono de uma empresa criada
+    antes do rename passou a receber 403 ao convidar — sem erro, sem log, sem
+    500. O banco local tinha 10 memberships assim, em 10 empresas.
+    
+    A regra entra na tabela dos 3 passos, com o motivo. A memória que a mediu
+    (`renomear-valor-gravado-e-o-furo-da-coluna`) passa a ser `citada` no
+    ledger — a lição está no repo, e não só fora dele.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    ---------
+    
+    Co-authored-by: CEO Agent <ceo@paperclip.ai>
+    Co-authored-by: Claude Code <noreply@anthropic.com>

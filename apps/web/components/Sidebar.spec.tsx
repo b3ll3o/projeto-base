@@ -31,7 +31,18 @@ vi.mock('next/link', () => ({
 }));
 
 const obterMeuPerfilMock = vi.hoisted(() => vi.fn());
-vi.mock('../lib/perfil', () => ({ obterMeuPerfil: obterMeuPerfilMock }));
+// ⚠️ 2026-10-29 (revisão do PR #127): o Sidebar lê DOIS perfis — o EFETIVO
+// (da empresa da sessão, que abre "Perfis"/"Atribuir perfis") e o GLOBAL (do
+// bucket de SISTEMA, que abre "Feature flags"/"Empresas e usuários"). São
+// pessoas diferentes: o DONO de uma empresa tem `isAdmin: true` no efetivo
+// e NÃO no global. Sem o segundo dublê no mock, o `Sidebar.tsx` morre em
+// "No obterMeuPerfilGlobal export is defined on the mock" — o spec some,
+// e o sintoma não é o do defeito.
+const obterMeuPerfilGlobalMock = vi.hoisted(() => vi.fn());
+vi.mock('../lib/perfil', () => ({
+  obterMeuPerfil: obterMeuPerfilMock,
+  obterMeuPerfilGlobal: obterMeuPerfilGlobalMock,
+}));
 
 const { Sidebar } = await import('./Sidebar');
 
@@ -46,6 +57,7 @@ const ME_COM_PERFIL: MeProfileDto = {
 
 beforeEach(() => {
   obterMeuPerfilMock.mockReset();
+  obterMeuPerfilGlobalMock.mockReset();
 });
 
 afterEach(() => {
@@ -77,8 +89,13 @@ describe('Sidebar — lê os campos que a API devolve', () => {
   // usuário comum não quebra nada — ele leva a uma tela que responde "Acesso
   // restrito". O único sintoma seria um teste verde com uma tela inacessível no
   // menu, então é o `href` que se afirma, não só o nome.
-  it('admin vê o link das feature flags apontando para /admin/flags', async () => {
+  //
+  // ⚠️ 2026-10-29: o link das feature flags é do bloco de SISTEMA, e quem o
+  // abre é o `isAdmin` do bucket GLOBAL — não o efetivo. É o global que se
+  // mocka aqui.
+  it('admin do SISTEMA vê o link das feature flags apontando para /admin/flags', async () => {
     obterMeuPerfilMock.mockResolvedValue(ME_COM_PERFIL);
+    obterMeuPerfilGlobalMock.mockResolvedValue(ME_COM_PERFIL);
     render(await Sidebar());
     expect(screen.getByRole('link', { name: 'Feature flags' })).toHaveAttribute(
       'href',
@@ -88,8 +105,38 @@ describe('Sidebar — lê os campos que a API devolve', () => {
 
   it('usuário comum NÃO vê o link das feature flags', async () => {
     obterMeuPerfilMock.mockResolvedValue({ ...ME_COM_PERFIL, isAdmin: false });
+    obterMeuPerfilGlobalMock.mockResolvedValue({ ...ME_COM_PERFIL, isAdmin: false });
     render(await Sidebar());
     expect(screen.queryByRole('link', { name: 'Feature flags' })).not.toBeInTheDocument();
+  });
+
+  // ⚠️ 2026-10-29 (revisão do PR #127): os DOIS `isAdmin` são de PESSOAS
+  // diferentes, e esta é a distinção que a revisão do menu corrigiu. O DONO de
+  // uma empresa tem `isAdmin: true` no perfil EFETIVO (medido: toda empresa
+  // nova nasce com o dono como admin) — e as telas de SISTEMA exigem o
+  // `isAdmin` do bucket GLOBAL. Sem esta distinção, o menu oferecia um link
+  // que levava a "Acesso restrito".
+  it('o link de SISTEMA segue o perfil GLOBAL — o dono da empresa (admin efetivo) não o vê', async () => {
+    obterMeuPerfilMock.mockResolvedValue(ME_COM_PERFIL);
+    obterMeuPerfilGlobalMock.mockResolvedValue({ ...ME_COM_PERFIL, isAdmin: false });
+
+    render(await Sidebar());
+
+    expect(screen.queryByRole('link', { name: 'Feature flags' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Empresas e usuários' })).not.toBeInTheDocument();
+    // E o de EMPRESA continua — o dono administra a empresa DELE.
+    expect(screen.getByRole('link', { name: 'Perfis' })).toBeInTheDocument();
+  });
+
+  it('o administrador do SISTEMA vê os links de SISTEMA sem ser admin de empresa', async () => {
+    obterMeuPerfilMock.mockResolvedValue({ ...ME_COM_PERFIL, isAdmin: false });
+    obterMeuPerfilGlobalMock.mockResolvedValue(ME_COM_PERFIL);
+
+    render(await Sidebar());
+
+    expect(screen.getByRole('link', { name: 'Feature flags' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Empresas e usuários' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Perfis' })).not.toBeInTheDocument();
   });
 
   it('perfil nulo é o único caso que mostra "Sem perfil"', async () => {

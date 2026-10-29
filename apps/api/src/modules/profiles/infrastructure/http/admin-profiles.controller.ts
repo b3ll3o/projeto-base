@@ -27,6 +27,7 @@ import {
   type ProfileDetail,
   type ProfileSummary,
 } from '../../application/profiles.use-cases.js';
+import { atorDe, type ReqComAtor } from '../../../../shared/auth/eh-administrador-de-sistema.js';
 
 interface CreateProfileBody {
   slug: string;
@@ -38,16 +39,6 @@ interface CreateProfileBody {
 interface UpdateProfileBody {
   name: string;
   description?: string;
-}
-
-/**
- * O mínimo do `req.user` publicado pelo `JwtAuthGuard`. Mesma forma do
- * `RequestComAtor` de `admin-authorizations.controller.ts` e
- * `admin-users.controller.ts` — declarado localmente em cada controller em vez
- * de extraído porque os três nunca são usados juntos.
- */
-interface RequestComAtor {
-  user: { sub: string; tenantId?: string | null; isAdmin?: boolean };
 }
 
 // ⚠️ `@ApiBearerAuth()` NA CLASSE, e não em cada handler: no documento
@@ -78,36 +69,30 @@ export class AdminProfilesController {
    * dá a todo dono de empresa — abria o alcance GLOBAL destas rotas: MEDIDO,
    * o dono da ACME listava, renomeava, apagava e injetava permissão em perfil
    * da GLOBEX, todos 200/201.
+   *
+   * pt-BR (2026-10-29): o mapeamento é o do DONO (`atorDe`, em
+   * `shared/auth/eh-administrador-de-sistema.ts`) — este controller tinha a
+   * sua cópia, e eram CINCO.
    */
-  private atorDe(req: RequestComAtor) {
-    return {
-      userId: req.user.sub,
-      tenantId: req.user.tenantId ?? null,
-      isAdmin: req.user.isAdmin === true,
-    };
-  }
 
   @Get()
   @ApiOperation({ summary: 'Listar os perfis' })
   @RequirePermission('admin.manage-profiles')
-  async list(@Req() req: RequestComAtor): Promise<ProfileSummary[]> {
-    return this.useCases.listar(this.atorDe(req));
+  async list(@Req() req: ReqComAtor): Promise<ProfileSummary[]> {
+    return this.useCases.listar(atorDe(req));
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Ler um perfil' })
   @RequirePermission('admin.manage-profiles')
-  async getById(@Param('id') id: string, @Req() req: RequestComAtor): Promise<ProfileDetail> {
-    return this.useCases.obterPorId(id, this.atorDe(req));
+  async getById(@Param('id') id: string, @Req() req: ReqComAtor): Promise<ProfileDetail> {
+    return this.useCases.obterPorId(id, atorDe(req));
   }
 
   @Post()
   @ApiOperation({ summary: 'Criar um perfil' })
   @RequirePermission('admin.manage-profiles')
-  async create(
-    @Body() body: CreateProfileBody,
-    @Req() req: RequestComAtor,
-  ): Promise<ProfileDetail> {
+  async create(@Body() body: CreateProfileBody, @Req() req: ReqComAtor): Promise<ProfileDetail> {
     // pt-BR (#97): `isAdmin`/`isSystem` NÃO são repassados do body, mesmo
     // que o cliente os mande — um ator com `admin.manage-profiles` criaria
     // profile de bypass total. As flags vêm só do seed/migration
@@ -124,7 +109,7 @@ export class AdminProfilesController {
         ? { initialPermissions: body.initialPermissions }
         : {}),
     };
-    return this.useCases.criar(input, this.atorDe(req));
+    return this.useCases.criar(input, atorDe(req));
   }
 
   @Patch(':id')
@@ -133,19 +118,19 @@ export class AdminProfilesController {
   async update(
     @Param('id') id: string,
     @Body() body: UpdateProfileBody,
-    @Req() req: RequestComAtor,
+    @Req() req: ReqComAtor,
   ): Promise<ProfileDetail> {
     const input: UpdateProfileInput = {
       name: body.name,
       ...(body.description !== undefined ? { description: body.description } : {}),
     };
-    return this.useCases.atualizar(id, input, this.atorDe(req));
+    return this.useCases.atualizar(id, input, atorDe(req));
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Excluir um perfil' })
   @RequirePermission('admin.manage-profiles')
-  async delete(@Param('id') id: string, @Req() req: RequestComAtor): Promise<void> {
-    await this.useCases.deletar(id, this.atorDe(req));
+  async delete(@Param('id') id: string, @Req() req: ReqComAtor): Promise<void> {
+    await this.useCases.deletar(id, atorDe(req));
   }
 }

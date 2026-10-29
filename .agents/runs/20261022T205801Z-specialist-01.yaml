@@ -1,0 +1,35 @@
+specialists:
+  - doc-writer
+  - monorepo-specialist
+  - multi-tenant-specialist
+  - nestjs-specialist
+  - nextjs-specialist
+  - openapi-contract-specialist
+  - prisma-db-specialist
+  - test-writer
+  - ux-design-specialist
+evidence:
+  path_glob:
+    - apps/api/**
+    - apps/api/**/domain/**
+    - apps/api/**/application/**
+    - apps/api/**/infrastructure/**
+    - apps/web/**
+    - apps/web/app/**.tsx
+    - packages/**
+    - apps/api/src/modules/**/application/dto/**
+    - '**/*tenant*'
+    - '**/*tenancy*'
+  demand_keyword:
+    - (?i)nestjs|fastify|prisma|controller|module
+    - (?i)\bprisma\b|schema\.prisma|\bmigrations?\b|query lente|n\+\+1|índices?
+    - (?i)multi.?tenant|tenant_?id|\btenants?\b|\bmembership\b|isolamento entre
+      (empresas|tenants)|row level security|\brls\b
+    - (?i)\btela(s)?\b|\bux\b|\bdesign\b|layout|formul[áa]rio|acessibilidade|\ba11y\b|EmptyState|estados?
+      de
+  demand_scope:
+    - feat
+  always_on:
+    - monorepo-specialist
+blocking: false
+gap_detected: false

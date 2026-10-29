@@ -6,7 +6,7 @@
 // porta direto, porque o ator de `convidar` é o dono de uma empresa e o portão
 // D2 barraria todo mundo. Ver `feature-flag.guard.ts`.
 
-import { BadRequestException, ForbiddenException, Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import type { FeatureFlagDto } from '@projeto/shared-types';
 import {
   FEATURE_FLAG_REPOSITORY_PORT,
@@ -18,10 +18,36 @@ import {
   listAllFeatureFlags,
 } from '../../../shared/auth/feature-flag-catalog.js';
 import {
-  ehAdministradorDeSistema,
+  exigeAdministradorDeSistema,
   type AtorAutenticado,
 } from '../../../shared/auth/eh-administrador-de-sistema.js';
 
+/**
+ * D2 — o portão real desta feature.
+ *
+ * ⚠️ `admin.manage-feature-flags` NÃO segura nada aqui: o signup de empresa
+ * concede `listAllPermissions()` ao dono de cada empresa nova
+ * (`prisma-tenant-onboarding.repository.ts:209`), então todo dono de empresa
+ * **criada a partir desta versão** tem essa chave no banco.
+ *
+ * MEDIDO 2026-10-18: a chave é nova neste branch e nenhuma migration faz
+ * backfill de `authorizations`. O dono de empresa anterior a esta versão não
+ * a tem, e é barrado pelo `PermissionsGuard` ANTES de chegar aqui — mesmo
+ * 403, outro recusor. O `@RequirePermission` da rota é defense in depth e
+ * rastreabilidade; quem barra de fato é esta linha, e ela barra o MESMO
+ * ator nos dois casos.
+ *
+ * `ForbiddenException` do Nest e não uma exceção de domínio nova: o
+ * `GlobalExceptionFilter` resolve `HttpException` ANTES de
+ * `mapExceptionToHttp` (`global-exception.filter.ts:77`), então a recusa sai
+ * 403 RFC 7807 sem uma linha nova no mapper — e os guards do repositório
+ * (`permissions.guard.ts:110`) já lançam a mesma.
+ *
+ * pt-BR (2026-10-29): o portão é o do DONO
+ * (`exigeAdministradorDeSistema`, em `shared/auth/`), e não uma cópia
+ * local — a visão de admin tinha a sua, e eram DUAS com o mesmo nome de
+ * método e o mesmo corpo.
+ */
 @Injectable()
 export class FeatureFlagUseCases {
   constructor(
@@ -38,7 +64,10 @@ export class FeatureFlagUseCases {
    * catálogo não apaga funcionalidade nenhuma.
    */
   async listar(ator: AtorAutenticado): Promise<FeatureFlagDto[]> {
-    this.exigeAdministradorDoSistema(ator);
+    exigeAdministradorDeSistema(
+      ator,
+      'só o administrador do sistema alterna funcionalidades do sistema',
+    );
 
     const linhas = await this.repositorio.listar();
     const gravadas = new Map(linhas.map((linha) => [linha.chave, linha.ativada]));
@@ -58,7 +87,10 @@ export class FeatureFlagUseCases {
    * seria um `listar` inteiro a mais por clique do admin.
    */
   async definir(ator: AtorAutenticado, chave: string, ativada: boolean): Promise<FeatureFlagDto> {
-    this.exigeAdministradorDoSistema(ator);
+    exigeAdministradorDeSistema(
+      ator,
+      'só o administrador do sistema alterna funcionalidades do sistema',
+    );
 
     // Validação ANTES da gravação, e a ordem é load-bearing: gravar e só
     // depois recusar deixaria a tela dando erro com o estado já mudado.
@@ -73,35 +105,5 @@ export class FeatureFlagUseCases {
     await this.repositorio.definir(chave, ativada);
 
     return { chave, descricao: descricaoDe(chave), ativada };
-  }
-
-  /**
-   * D2 — o portão real desta feature.
-   *
-   * ⚠️ `admin.manage-feature-flags` NÃO segura nada aqui: o signup de empresa
-   * concede `listAllPermissions()` ao dono de cada empresa nova
-   * (`prisma-tenant-onboarding.repository.ts:209`), então todo dono de empresa
-   * **criada a partir desta versão** tem essa chave no banco.
-   *
-   * MEDIDO 2026-10-18: a chave é nova neste branch e nenhuma migration faz
-   * backfill de `authorizations`. O dono de empresa anterior a esta versão não
-   * a tem, e é barrado pelo `PermissionsGuard` ANTES de chegar aqui — mesmo
-   * 403, outro recusor. O `@RequirePermission` da rota é defense in depth e
-   * rastreabilidade; quem barra de fato é esta linha, e ela barra o MESMO
-   * ator nos dois casos.
-   *
-   * `ForbiddenException` do Nest e não uma exceção de domínio nova: o
-   * `GlobalExceptionFilter` resolve `HttpException` ANTES de
-   * `mapExceptionToHttp` (`global-exception.filter.ts:77`), então a recusa sai
-   * 403 RFC 7807 sem uma linha nova no mapper — e os guards do repositório
-   * (`permissions.guard.ts:110`) já lançam a mesma.
-   */
-  private exigeAdministradorDoSistema(ator: AtorAutenticado): void {
-    if (!ehAdministradorDeSistema(ator)) {
-      throw new ForbiddenException({
-        code: 'FORBIDDEN',
-        detail: 'só o administrador do sistema alterna funcionalidades do sistema',
-      });
-    }
   }
 }

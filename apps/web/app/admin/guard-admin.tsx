@@ -31,7 +31,7 @@
 import type * as React from 'react';
 import { redirect } from 'next/navigation';
 import { ApiError, ApiTimeoutError } from '../../lib/api-client';
-import { obterMeuPerfil } from '../../lib/perfil';
+import { obterMeuPerfil, obterMeuPerfilGlobal } from '../../lib/perfil';
 import type { MeProfileDto } from '@projeto/shared-types';
 
 /**
@@ -95,9 +95,46 @@ type Liberado = { bloqueio: false; me: MeProfileDto };
  * aqui — o compilador passa a conferir que a tela devolve o que recebeu.
  */
 export async function exigirAdmin(): Promise<Bloqueio | Liberado> {
+  return avaliarAcesso(obterMeuPerfil);
+}
+
+/**
+ * O MESMO guard, mas lendo o perfil GLOBAL (`obterMeuPerfilGlobal`).
+ *
+ * pt-BR (visão de admin, 2026-10-22 — D8): por que o global e não o da
+ * empresa. Os DOIS `isAdmin` não são a mesma pessoa: o da empresa é o perfil
+ * de DONO — `true` em toda empresa nova (MEDIDO:
+ * `prisma-tenant-onboarding.repository.ts:202`) — e o global é o do bucket de
+ * SISTEMA. D2 exige o global (`ehAdministradorDeSistema`: `tenantId === null &&
+ * isAdmin`), e é o que a API olha: autorizar pelo `isAdmin` da empresa
+ * mostraria o inventário inteiro para um gerente que a API recusa com 403.
+ *
+ * A distinção 401 → login / 403 → restrito / 5xx → retry NÃO é reescrita
+ * aqui: as DUAS funções caem no mesmo `avaliarAcesso`, e é esse o motivo de
+ * ele existir — duas cópias do `if` são dois lugares para o defeito do #107
+ * voltar.
+ *
+ * ⚠️ O `accessToken` é OPCIONAL, e existe para a tela do inventário: ela lê
+ * a sessão UMA vez e passa o token para o guard E para a leitura do
+ * inventário. Sem ele, a página lia o cookie duas vezes — e a página é
+ * `force-dynamic`, então isso valia a cada navegação.
+ */
+export async function exigirAdminDoSistema(accessToken?: string): Promise<Bloqueio | Liberado> {
+  return avaliarAcesso(() => obterMeuPerfilGlobal(accessToken));
+}
+
+/**
+ * O veredito comum aos DOIS guards: quem é o ator, e o que a tela mostra.
+ *
+ * `lerPerfil` é a ÚNICA diferença entre eles — e ela fica na ASSINATURA, e
+ * não dentro do corpo, para que a tabela 401/403/5xx exista em UM lugar só.
+ */
+async function avaliarAcesso(
+  lerPerfil: () => Promise<MeProfileDto | null>,
+): Promise<Bloqueio | Liberado> {
   let me: MeProfileDto | null;
   try {
-    me = await obterMeuPerfil();
+    me = await lerPerfil();
   } catch (erro) {
     // Rede caída / DNS / conexão recusada não chega como `ApiError`: o fetch
     // falhou antes de haver status. É infraestrutura, não autorização.

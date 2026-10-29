@@ -138,6 +138,53 @@ export interface OpcoesSubirApi {
 }
 
 /**
+ * O ambiente com que a API do harness sobe.
+ *
+ * É uma função PURA e exportada de propósito: o `THROTTLE_LIMIT` abaixo é a
+ * única proteção da suíte contra o rate limiter da própria aplicação, e uma
+ * proteção que ninguém mede é uma proteção que alguém remove sem saber.
+ * O spec (`api.spec.ts`) afirma o que esta função entrega.
+ */
+export function ambienteDaApi({
+  porta,
+  databaseUrl,
+  jwtSecret,
+}: OpcoesSubirApi): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    PORT: String(porta),
+    DATABASE_URL: databaseUrl,
+    // pt-BR: sem isso o `tracing.ts` tenta exportar para um
+    // `otel-collector` que não existe neste ambiente, e cada spec paga um
+    // timeout de conexão que não é dele.
+    OTEL_SDK_DISABLED: 'true',
+    LOG_LEVEL: 'silent',
+    JWT_SECRET: jwtSecret,
+    NODE_ENV: 'test',
+    // pt-BR: o limitador global da API é POR IP (`ThrottlerModule.forRoot`
+    // em `app.module.ts`, 100 req/min por padrão) — e a suíte e2e inteira sai
+    // de 127.0.0.1, ou seja, TODAS as requisições caem no MESMO balde. A
+    // suíte passa de 100 requisições por minuto, e o limitador começava a
+    // responder 429 aos specs: uma falha que não tem nada a ver com o spec
+    // que a levou.
+    //
+    // MEDIDO 2026-10-27: na execução que derrubou o
+    // `f4-cadastro-email-duplicado`, o log da API tinha **8 respostas 429** no
+    // `/me/profile` — no meio da navegação de um spec que media outra coisa.
+    // É a MESMA classe da cascata que o `garantirApiNoAr` fechou (33 specs
+    // caíam com `ECONNREFUSED` por causa da API morta): um estado do ambiente
+    // que derruba specs que não são dele.
+    //
+    // ⚠️ Nenhuma spec e2e mede o rate limit — `grep -rn '429\|THROTTLE'
+    // apps/web/e2e/` não devolve nada — então levantar o limite aqui não
+    // esconde nenhum comportamento medido. E o comportamento de PRODUÇÃO não
+    // muda: o default (100/min) continua valendo em qualquer outro ambiente,
+    // porque isto é o ambiente do harness.
+    THROTTLE_LIMIT: '10000',
+  } as NodeJS.ProcessEnv;
+}
+
+/**
  * Sobe o `src/main.ts` da API e resolve quando ela responde `/health`.
  *
  * pt-BR: esperar porta TCP **não** basta. O Nest começa a bindar antes de o
@@ -183,18 +230,7 @@ export async function subirApi({
     // amostras: `pgrep -fc src/main.ts` devolveu **16** com 12 órfãos de
     // execuções anteriores, quase todos com PPID 1719 (systemd --user).
     detached: true,
-    env: {
-      ...process.env,
-      PORT: String(porta),
-      DATABASE_URL: databaseUrl,
-      // pt-BR: sem isso o `tracing.ts` tenta exportar para um
-      // `otel-collector` que não existe neste ambiente, e cada spec paga um
-      // timeout de conexão que não é dele.
-      OTEL_SDK_DISABLED: 'true',
-      LOG_LEVEL: 'silent',
-      JWT_SECRET: jwtSecret,
-      NODE_ENV: 'test',
-    },
+    env: ambienteDaApi({ porta, databaseUrl, jwtSecret }),
     stdio: ['ignore', saida.descritor, saida.descritor],
   });
 

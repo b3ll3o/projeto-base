@@ -1,0 +1,30 @@
+  • inventário de fluxos ⇄ specs e2e (regra de cobertura e2e)... ✓
+      reconciliado sobre 16 fluxo(s) e 16 spec(s), com 12 rota(s) de página conferidas contra o código — paridade DECLARATIVA dos fluxos; a execução é `test:e2e` no CI.
+  • ci:local roda as suítes e2e (regra da Camada 1)... ✓
+      medição DECLARATIVA de fiação: este gate lê `package.json` e não roda nenhuma suíte, e NÃO reconcilia com `.github/workflows/ci.yml` — essa classe segue registrada como pendência em ci-defense-in-depth-pendencias.md. Medido agora: 7 task(s) no comando e 2 pacote(s) do workspace rodando 'test:e2e'.
+  • escopo do ci:local cobre o workspace (classe G-009)... ✓
+      medição DECLARATIVA de fiação: este gate lê `package.json` e não roda nenhuma suíte, e NÃO reconcilia com `.github/workflows/ci.yml` — essa classe segue registrada como pendência em ci-defense-in-depth-pendencias.md. Medido agora: 2 invocação(ões) turbo filtrada(s) em 'ci:local' sobre 7 pacote(s) do workspace, e 'tooling:test' presente.
+  • preflight tem dentes: array vs regex no fonte... ✓
+  • harness em .tooling/scripts/ci/ vive na raiz (sem subdirs)... ✓
+  • agents ↔ matriz de roteamento (sem órfãos, sem fantasmas)... ✓
+  • engines node consistentes (raiz ↔ apps)... ✓
+  • runbook coerente (scripts e env citados ainda existem)... ✓
+  • docker hardening (FROM digest + USER + init + cap_drop + networks + .env)... ✓
+  • diagramas Mermaid em sincronia com a IR (docs/flows)... ✓
+  • conjunto de testes: todo test* roda no ci:local ou é exceção declarada... ✓
+      '@projeto/api#test' não entra no ci:local pelo nome, e sim pelo comando idêntico ao de um script do mesmo pacote que entra — suíte executada, nome duplicado
+      '@projeto/web#test' não entra no ci:local pelo nome, e sim pelo comando idêntico ao de um script do mesmo pacote que entra — suíte executada, nome duplicado
+      conjunto medido: 12 script(s) test* em 6 pacote(s), 3 exceção(ões) em vigor. Este gate mede o CONJUNTO, não a execução: uma suíte instável está "verde" para quem olha uma execução só.
+  • escopo de tenancy não vem da rota (defeito + resíduo medido)... ✓
+      77 call site(s) de escopo medidos em apps/api/src
+      77 call site(s) abriram o escopo SEM PROVA de origem (a rota chega pelo repositório, em outro arquivo — ver o cabeçalho). Nenhum gate compara este número com o do run anterior: ler e comparar é ato humano. Fechar o resíduo exige mudar a assinatura dos call sites.
+  • contrato HTTP das feature flags bate com o catálogo (nos 2 sentidos)... ✓
+      1 chave(s) conferidas nos dois sentidos contra 1 chave(s) exemplificada(s) no contrato
+  • termo de domínio tem UM dono (regra DRY, parte 1)... ✓
+      dívida DRY declarada: 6 termo(s) com hardcode em produção — 'gerente' (2 arq.) — O dono (`perfisDaEmpresa()`) EXPORTA o array e não a constante nomeada — é a fase T3 do plano. MEDIDO 2026-10-22 com a função do gate (`arquivosQueHardcodam`): 2 arquivo(s) de produção fora do dono (`tenancy.use-cases.ts` e `prisma-tenant-onboarding.repository.ts`).; 'member' (2 arq.) — O papel do convidado NÃO tem dono — é a fase T2 do plano. MEDIDO 2026-10-22 com a função do gate: 2 arquivo(s) de produção (`tenancy.use-cases.ts` e `assinatura-de-membership.ts`).; 'VALIDATION_ERROR' (1 arq.) — O código do problem-details NÃO tem dono — é a fase T2 do plano. MEDIDO 2026-10-22 com a função do gate: 2 arquivo(s) de produção (`domain-exception-to-http.ts` e `zod-validation.pipe.ts`).; 'users.read' (2 arq.) — O dono EXPORTA o array `PERMISSIONS` e não a constante — fase T3 do plano. MEDIDO 2026-10-22 com a função do gate: 2 arquivo(s) de produção fora do dono (`users.controller.ts` e `perfis-da-empresa.ts`).; 'tenancy.invites' (2 arq.) — O dono EXPORTA o array `FEATURE_FLAGS` e não a constante — fase T3 do plano. MEDIDO 2026-10-22 com a função do gate: 2 arquivo(s) de produção fora do dono (`users.controller.ts` e `tenancy-invitations.controller.ts`).; 'convite' (8 arq.) — O TIPO do destino (`DestinoContaDto`) está no shared-types, mas o LITERAL está espalhado — é a fase T2 do plano. MEDIDO 2026-10-22 com a função do gate: 8 arquivo(s) de produção fora do dono — é o termo mais espalhado dos declarados.. A lista completa está em dry-termos.json, e a fase que paga cada um está no plano docs/superpowers/plans/2026-10-22-termos-de-dominio.md.
+  • lógica não repete bloco (regra DRY, parte 2)... ✓
+  • as portas declaradas de cada flag existem no código (nos 2 sentidos)... ✓
+      medido: 3 porta(s) declarada(s), 3 conferida(s) contra o código real.
+      escopo: este gate confere a PARIDADE declarado ↔ código. NÃO infere consumo indireto de uma funcionalidade — ver o limite declarado no contrato §8.1.
+
+⚠ 0 erro(s); 2 check(s) não rodaram (skipped) — parte do painel acima não foi medida.
