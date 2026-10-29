@@ -60,8 +60,8 @@ function slugEfetivo(
   profile: { slug: string; tenantId: string | null } | null,
   tenantId: string,
 ): string | null {
-  if (!temPerfilEfetivo(profile, tenantId)) return null;
-  return profile === null ? null : profile.slug;
+  if (profile === null) return null;
+  return temPerfilEfetivo(profile, tenantId) ? profile.slug : null;
 }
 
 /**
