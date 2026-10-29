@@ -9,10 +9,10 @@
 ## §1. Layout Canônico
 
 > ⚠️ **Árvore medida contra o disco** em 2026-10-29 (`ls -1 packages/`,
-> `ls -1 infra/`, `ls -1 docker-compose*.yml`). A versão anterior declarava um
-> `packages/ui/` **que não existe** e um `infra/` com `docker-compose.yml` e
-> `postgres/` **que também não existem** — e se contradizia: a seção "Docker"
-> abaixo já dizia que o Compose mora na **raiz**.
+> `ls -1 infra/`, `ls -1 docker-compose*.yml`). A versão anterior declarava
+> `packages/ui/` e `infra/{docker-compose.yml,postgres/}` — **nenhum dos três
+> existe** — e se contradizia: a seção "Docker" abaixo já dizia que o Compose
+> mora na **raiz**.
 
 ```text
 .
@@ -39,10 +39,9 @@
 └── .markdownlint.json              # Config órfã (nada executa markdownlint)
 ```
 
-- **`packages/ui/` não existe** — o alias `@projeto/ui` continua apontando para um diretório inexistente (§4).
-- **`infra/` não tem Postgres nem Compose** — o Postgres vive no serviço `postgres` do `docker-compose.yml` (raiz).
-- **Todo package do workspace tem README** — o gate `check-doc-coverage` exige
-  um por package (`eslint-config`, `shared-types`, `tsconfig`).
+- **`packages/ui/` não existe** — o alias `@projeto/ui` saiu em 2026-10-29 (§4).
+- **`infra/` não tem Postgres nem Compose** — o Postgres vive no serviço `postgres` do compose (raiz).
+- **Todo package tem README** — o gate `check-doc-coverage` exige um por package.
 
 ## §2. Regra de Ouro — Apps Isolados
 
@@ -82,13 +81,16 @@ Quando precisar compartilhar código entre apps:
 - ❌ Versão fixa (`"1.2.3"`) — usar caret (`"^1.2.3"`) para permitir patches
 - ❌ Deps duplicadas (mesmo pacote, versões diferentes) — resolver via `pnpm dedupe`
 
-> **Exceção medida:** `@playwright/test` está **fixado** em `1.60.0` (sem
-> caret) em `apps/web/package.json` — a **única** violação da regra acima no
-> repositório, medido em 2026-10-29 com
+> **Sem exceção, desde 2026-10-29.** `@playwright/test` era a **única**
+> violação da regra acima (fixado em `1.60.0`, sem caret). O pin era
+> **acidental** — nasceu na instalação da suíte e2e, sem comentário nem motivo em
+> commit ou PR — e nada dependia dele: não há imagem do Playwright no repo, não
+> há `playwright install` com versão, e a revisão do browser mora **dentro do
+> pacote**. Virou caret (`^1.60.0`); o lock continua resolvendo `1.60.0` (o pnpm
+> não re-resolve o que a faixa aceita), então **a versão instalada não muda** —
+> a diferença é que agora um patch é permitido. MEDIDO:
 > `grep -rnE '"[^"]+": "[0-9]+\.[0-9]+\.[0-9]+"' --include=package.json package.json apps/*/package.json packages/*/package.json tooling/scripts/package.json | grep -v '"version":'`
-> → uma linha só, `apps/web/package.json:40`. O motivo do pin não está
-> documentado no repo: a regra e a exceção estão em conflito até alguém decidir
-> qual cede.
+> → **zero linhas**.
 
 ## §4. Path Aliases
 
@@ -102,15 +104,19 @@ medidos em 2026-10-29 com
   "paths": {
     "@projeto/shared-types": ["./packages/shared-types/src"],
     "@projeto/shared-audit": ["./apps/api/src/shared/audit"],
-    "@projeto/shared-domain": ["./apps/api/src/shared/domain"],
-    "@projeto/ui": ["./packages/ui/src"]      // ⚠️ ALIAS MORTO
+    "@projeto/shared-domain": ["./apps/api/src/shared/domain"]
   }
 }
 ```
 
-⚠️ **`@projeto/ui` é um alias morto**: aponta para `./packages/ui/src`, e
-`packages/ui/` não existe (§1). Removê-lo é mudança de código com blast radius
-(build dos 3 workspaces) — **reportado, não corrigido aqui**.
+Os **3** aliases declarados apontam para diretórios que **existem** (medido em
+2026-10-29). O quarto, `@projeto/ui` → `./packages/ui/src`, era um **alias
+morto** — `packages/ui/` não existe (§1) e **nenhum** import o usava: só a
+própria declaração. Saiu em 2026-10-29 (medido: `pnpm typecheck` 4/4, `pnpm
+lint` 2/2 e `pnpm build` 2/2 verdes **depois** da remoção). O gate
+[`check-path-alias`](../.tooling/scripts/ci/check-path-alias.ts) mede a regra
+"todo alias aponta para um diretório que existe" — sem ele, o próximo alias
+morto nascia em silêncio.
 
 Cada app/package estende `tsconfig.base.json` e adiciona seus próprios aliases.
 
@@ -147,10 +153,10 @@ que nunca cachear); `dependsOn: ["^build"]` garante a ordem topológica; `dev` �
 > ⚠️ **Changesets foi REMOVIDO desta seção** (2026-10-13). Ela mandava rodar
 > `pnpm changeset`, `pnpm version` e `pnpm release`, e nenhum dos três scripts
 > existe em nenhum `package.json` — o pnpm responde "None of the selected
-> packages has a … script" e **sai 0**, que é verde para quem só olha o exit
-> code. Não há `@changesets/cli` instalado nem diretório `.changeset/`. O
-> versionamento que existe é o **tag automático `vX.Y.Z` em `main`**, disparado
-> por `.github/workflows/release-template.yml` após o merge (ver
+> packages has a … script" e **sai 0**, verde para quem só olha o exit code.
+> Não há `@changesets/cli` nem `.changeset/`. O versionamento que existe é o
+> **tag automático `vX.Y.Z` em `main`**, disparado por
+> `.github/workflows/release-template.yml` após o merge (ver
 > [`post-merge-release.md`](../.agents/specs/conventions/post-merge-release.md)).
 
 A **fonte da verdade da versão do template é o rodapé deste arquivo** — é dele
@@ -231,6 +237,7 @@ Apps NÃO compartilham:
 7. Despachar monorepo-specialist → code-reviewer
 ```
 
+
 ## §10. Quando Adicionar um Package
 
 ```text
@@ -239,37 +246,27 @@ Apps NÃO compartilham:
 3. Adicionar ao pnpm-workspace.yaml (já coberto se for "packages/*")
 4. Adicionar path alias em tsconfig.base.json
 5. Bump da versão no `package.json` do package (o changelog é gerado pelo
-   workflow de release após o merge — não há `.changeset/` para escrever, ver §6)
+   workflow de release após o merge — não há `.changeset/`, ver §6)
 6. Despachar monorepo-specialist → code-reviewer
 ```
 
 ## §11. Estrutura Obrigatória por App (DDD/Hexagonal)
 
-> **Regra canônica** (a partir de `v1.2.0`): apps backend adotam **DDD + Hexagonal (Ports & Adapters)** como paradigma arquitetural obrigatório. Decisão justificada no [ADR-0001 — DDD + Hexagonal + Auditoria](./adr/0001-arquitetura-ddd-hexagonal-auditoria.md).
+> **O dono desta regra é a convenção
+> [`estrutura-e-versionamento.md`](./../.agents/specs/conventions/estrutura-e-versionamento.md)
+> §"Arquitetura por Módulo (DDD/Hexagonal)"** — a árvore das três camadas, a
+> regra de dependência invertida e os guardiões mecânicos moram lá. Este
+> índice aponta; **não repete** (regra do fato único, `dry.md`).
 
-```text
-apps/api/src/modules/<feature>/
-├── domain/          # TypeScript puro — entidades, VOs, eventos de domínio
-├── application/     # Use cases + ports (interfaces) — depende só de domain
-└── infrastructure/  # http/, persistence/, adapters — implementa ports
+Resumo: apps backend adotam **DDD + Hexagonal (Ports & Adapters)** como
+paradigma arquitetural obrigatório (`v1.2.0`), cada feature em
+`apps/api/src/modules/<feature>/{domain,application,infrastructure}/`, e os
+shared concerns em `apps/<app>/src/shared/{audit,domain,infrastructure}/`.
 
-domain         ─→ (nada além de typescript padrão)
-  ↑
-application    ─→ domain + ports próprias
-  ↑
-infrastructure ─→ application + domain + libs externas (NestJS, Prisma)
-```
-
-Cada app backend **DEVE** organizar cada feature como módulo com as três camadas acima. Shared concerns (auditoria, validação, infra HTTP) ficam em `apps/<app>/src/shared/{audit,domain,infrastructure}/`.
-
-- ❌ `domain/` **nunca** importa `@nestjs/*`, `@prisma/*`, `class-validator`, `reflect-metadata`, `rxjs`.
-- ❌ `application/` **nunca** importa de `infrastructure/`.
-- ✅ O fluxo inverso (camadas externas → internas) é livre.
-- ✅ `infrastructure/http/` implementa os ports definidos em `application/ports/`.
-
-**Guardiões:** agent `stack-code-reviewer` (D11 — pre-commit + CI) com lens
-DDD/Hexagonal + skill [`ddd-hexagonal-validation`](../.agents/skills/ddd-hexagonal-validation/SKILL.md).
-Referência cruzada: [`estrutura-e-versionamento.md`](../.agents/specs/conventions/estrutura-e-versionamento.md) e [`docs/STACK.md` §8](./STACK.md).
+Decisão: [ADR-0001](./adr/0001-arquitetura-ddd-hexagonal-auditoria.md) ·
+guardiões: agent `stack-code-reviewer` (D11) + skill
+[`ddd-hexagonal-validation`](../.agents/skills/ddd-hexagonal-validation/SKILL.md) ·
+visão de stack: [`docs/STACK.md` §8](./STACK.md).
 
 ---
 
@@ -295,4 +292,4 @@ Referência cruzada: [`estrutura-e-versionamento.md`](../.agents/specs/conventio
 | `1.11.0` | Adição de 5 skills de UI (`ui-modes`, `ui-craft`, `ui-break`, `motion`, `ui-review`) adaptadas de 3 repositórios externos (emilkowalski/skills MIT, pbakaus/impeccable Apache-2.0, leonxlnx/taste-skill MIT) e carregadas pelo `ux-design-specialist` — única relação 1:N do repo. Índice: `AGENTS.md §3.2` (nota nova) + `§5` (rows `ui-review-mode`, `audit-mode`, `release-pre-tag`), `WORKFLOWS.md`, matriz `review-routing.md` v1.7. Nenhuma mudança de stack, script ou count de §1. |
 | `1.12.0` | Adição do agent `multi-tenant-specialist` (tenancy: schema + `tenant_id`, contexto por request, RLS) + companion de memória + skill `multi-tenant-audit` + **promoção da convenção `migracao-de-dados.md`** (gap G-003). Índices: `AGENTS.md §3.1` + `§6`, `README.md`, matriz `specialist-routing.md` v1.6 (2 path_globs + 1 demand_keyword) e `review-routing.md` v1.8 (§0 reviewer→skill). Nenhuma mudança de stack, script ou count de §1. |
 | `1.13.0` | **Sem mudança de monorepo** — o footer do `AGENTS.md` subiu para `1.13.0` sozinho, e os outros 4 footers seguiam em `1.12.0` (drift medido em 2026-10-29). O gate `check-version-footers` (criado no #126) é o que fecha essa classe. |
-| `1.14.0` | **Correção de fatos medidos contra o código** (2026-10-29). §1 — a árvore perdeu o `packages/ui/` (não existe) e o `infra/` deixou de declarar `docker-compose.yml`/`postgres/` (o real é `grafana/`, `otelcol/`, `prometheus/`, `tempo/`; o Compose mora na raiz). §4 — os 4 aliases de `tsconfig.base.json` foram listados, com `@projeto/ui` marcado como **alias morto**. §5 — o `turbo.json` agora é o arquivo real (12 tasks, não 5). §6 — o comando que "inspeciona a versão" apontava para o `package.json` da raiz (`0.1.0`), que não é a versão do template; a fonte é o rodapé deste arquivo. §7 — os 9 scripts listados viraram índice; o catálogo dos **29** foi para [`MONOREPO-scriptarios.md`](./MONOREPO-scriptarios.md). §3.2 — a regra do caret ganhou a exceção medida de `@playwright/test` (`1.60.0`, sem caret). |
+| `1.14.0` | **Correção de fatos medidos contra o código** (2026-10-29). §1 — a árvore perdeu o `packages/ui/` (não existe) e o `infra/` deixou de declarar `docker-compose.yml`/`postgres/` (o real é `grafana/`, `otelcol/`, `prometheus/`, `tempo/`; o Compose mora na raiz). §4 — os 4 aliases de `tsconfig.base.json` foram listados, com `@projeto/ui` marcado como **alias morto**. §5 — o `turbo.json` agora é o arquivo real (12 tasks, não 5). §6 — o comando que "inspeciona a versão" apontava para o `package.json` da raiz (`0.1.0`), que não é a versão do template; a fonte é o rodapé deste arquivo. §7 — os 9 scripts listados viraram índice; o catálogo dos **29** foi para [`MONOREPO-scriptarios.md`](./MONOREPO-scriptarios.md). §3.2 — a regra do caret ficou **sem exceção**: `@playwright/test` ganhou caret (`^1.60.0`) e o `pnpm-lock.yaml` continua resolvendo `1.60.0`, então a versão instalada não muda. §4 — o alias morto `@projeto/ui` saiu do `tsconfig.base.json` (typecheck, lint e build verdes depois da remoção) e o gate `check-path-alias` passou a medir que todo alias aponta para um diretório que existe.  ||

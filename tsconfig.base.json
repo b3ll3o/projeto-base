@@ -24,7 +24,6 @@
     "baseUrl": ".",
     "paths": {
       "@projeto/shared-types": ["./packages/shared-types/src"],
-      "@projeto/ui": ["./packages/ui/src"],
       "@projeto/shared-audit": ["./apps/api/src/shared/audit"],
       "@projeto/shared-domain": ["./apps/api/src/shared/domain"]
     }
