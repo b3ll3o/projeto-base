@@ -1,7 +1,7 @@
 ---
 name: prisma-audit
 version: 1.0
-updated: 2026-10-08
+updated: 2026-10-13
 description: "Processo determinístico de auditoria Prisma — mapeia schema/migrations/queries, valida lens DDD/H1-H6, detecta N+1, audita audit fields. Carregado por `prisma-db-specialist` quando a task é de auditoria (não criação). Use para scan periódico via `finding-orchestrator` ou revisão sob demanda."
 ---
 

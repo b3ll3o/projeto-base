@@ -74,7 +74,11 @@ git log "${LAST_TAG}..HEAD" --pretty=format:"%s" \
 
 ```bash
 # 4.1 O workflow lê regex específico do MONOREPO.md
-grep -oE "Vers..o do documento.*[0-9]+\.[0-9]+\\.[0-9]+" docs/MONOREPO.md | head -3
+# MEDIDO em 2026-10-29: a regex anterior ("Vers..o") NÃO casa com "Versão" —
+# entre "Vers" e "o" há UM caractere (o "ã") e a regex pedia DOIS. O passo
+# saía vazio: ele não mediava o que o workflow lê. Esta é a mesma regex do
+# `release-template.yml` (verificado):
+grep -oE '\*\*Versão do documento:\*\* [0-9]+\.[0-9]+\.[0-9]+' docs/MONOREPO.md | head -3
 
 # 4.2 Workflow usa tail -1 (último match) — então múltiplas menções em MONOREPO podem dar match errado
 grep -cE "\*\*Vers[aã]o" docs/MONOREPO.md
@@ -107,14 +111,36 @@ fi
 ```bash
 # Antes de tag, docs devem estar consistentes:
 # - Footer de versão único (não duplicado)
-# - Versão em MONOREPO == STACK == estrutura-e-versionamento
-# - Última tag corresponde à versão declarada
-LAST_DOC_VERSION=$(grep -oE "[0-9]+\.[0-9]+\.[0-9]+" docs/MONOREPO.md | tail -1)
-LAST_TAG_VERSION=$(echo "$LAST_TAG" | sed 's/^v//')
-echo "docs: $LAST_DOC_VERSION  tag: $LAST_TAG_VERSION"
+# - A MESMA versão nos SEIS arquivos que têm footer
+# - A versão dos docs À FRENTE da última tag (a tag é criada no merge)
+#
+# MEDIDO em 2026-10-29: a versão anterior deste passo tinha DOIS defeitos.
+# (1) `grep -oE "[0-9.]+" | tail -1` pegava a ÚLTIMA versão do arquivo inteiro —
+#     a linha da tabela de histórico, não o footer (o footer vem antes). Rodava
+#     "1.12.0" num repo em que o footer dizia 1.14.0.
+# (2) Comparar a doc com a tag acusa DRIFT no estado NORMAL: antes do release a
+#     doc está sempre à frente da tag. E o passo só olhava 1 dos 6 arquivos —
+#     o `AGENTS.md` já tinha divergido para 1.13.0 sem este passo ver.
+VERSIONS=$(for f in docs/MONOREPO.md docs/STACK.md docs/TEMPLATE_USAGE.md \
+                .agents/specs/conventions/estrutura-e-versionamento.md \
+                AGENTS.md README.md; do
+            v=$(grep -oE '\*\*Vers[aã]o[^0-9]*[0-9]+\.[0-9]+\.[0-9]+' "$f" \
+                | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+            echo "$f=$v"
+          done)
+echo "$VERSIONS"
 
-if [ "$LAST_DOC_VERSION" != "$LAST_TAG_VERSION" ]; then
-  echo "✗ DRIFT: docs declaram $LAST_DOC_VERSION, tag é $LAST_TAG_VERSION"
+DISTINTAS=$(echo "$VERSIONS" | cut -d= -f2 | sort -u)
+if [ "$(echo "$DISTINTAS" | wc -l)" -ne 1 ]; then
+  echo "✗ DRIFT: os footers declaram versões diferentes — $DISTINTAS"
+fi
+
+LAST_TAG_VERSION=$(echo "$LAST_TAG" | sed 's/^v//')
+DOC_VERSION=$(echo "$DISTINTAS" | head -1)
+if [ -n "$DOC_VERSION" ] && [ "$(printf '%s\n%s\n' "$LAST_TAG_VERSION" "$DOC_VERSION" | sort -V | head -1)" != "$LAST_TAG_VERSION" ]; then
+  echo "✗ DRIFT: docs declaram $DOC_VERSION, que está ATRÁS da tag $LAST_TAG_VERSION"
+else
+  echo "✓ docs ($DOC_VERSION) à frente da tag ($LAST_TAG_VERSION) — estado normal pré-release"
 fi
 ```
 

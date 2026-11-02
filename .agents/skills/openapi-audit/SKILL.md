@@ -40,14 +40,33 @@ Se `openapi.json` não existe no repo (gerado on-demand): rodar e commitar antes
 
 ```bash
 # 2.1 Campos em DTOs (subset tipado de Prisma esperado)
-grep -E "^\s+[a-zA-Z]+:" apps/api/src/modules/*/application/dto/*.ts | sort -u > /tmp/dto-fields.txt
+# MEDIDO em 2026-10-29: este passo comparava DOIS FORMATOS DIFERENTES — o lado
+# do DTO saía como "arquivo: campo: tipo;" e o do Prisma como "campo" — então o
+# diff acusava 100 linhas ("1,55c1,43") e a regra "DTO deve ser subset" não
+# podia ser lida. Agora os dois lados são normalizados: só o nome do campo.
+grep -hE "^\s+[a-zA-Z]+:" apps/api/src/modules/*/application/dto/*.ts \
+  | sed 's/^ *//' | cut -d: -f1 | sort -u > /tmp/dto-fields.txt
 
 # 2.2 Campos em Prisma models
 grep -E "^\s+[a-zA-Z]+\s+" apps/api/prisma/schema.prisma | awk '{print $1}' | sort -u > /tmp/prisma-fields.txt
 
 # 2.3 Diff
 diff /tmp/dto-fields.txt /tmp/prisma-fields.txt | head -50
-# DTO deve ser subset (nunca mais) — campos em DTO que não existem em Prisma = finding DRIFT
+
+# 2.4 O QUE É DRIFT (o diff acima é ruído — os dois lados têm FORMATOS
+# diferentes; compare os NOMES). E a premissa "DTO é subset do Prisma" é
+# FALSA neste codebase: a API expõe campos que não são coluna, por design
+# (alias pt-BR, request-only, output computado). Medido em 2026-10-29: 13
+# campos de DTO que não existem no Prisma, e NENHUM é erro —
+#   alias do schema:  nome→name, senhaHash→passwordHash
+#   só na API:        accessToken, refreshToken, expectedVersion, isDeleted,
+#                     limit, nextCursor, perfilEfetivo, agora,
+#                     novoEmail, novoNome, senha (request-only)
+# Então o finding real é um campo DESCONHECIDO fora desta lista:
+comm -23 /tmp/dto-fields.txt /tmp/prisma-fields.txt \
+  | grep -vE '^(accessToken|refreshToken|expectedVersion|isDeleted|limit|nextCursor|perfilEfetivo|agora|novoEmail|novoNome|senha|nome|senhaHash)$'
+# Saída vazia = nenhum drift. Saída não vazia = campo de DTO que não existe
+# nem no Prisma nem na lista de aliases: ACHAR o porque antes de reportar.
 ```
 
 ## Passo 3 — Cobertura de decorators Swagger
