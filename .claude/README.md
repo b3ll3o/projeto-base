@@ -259,11 +259,11 @@ rm -rf /tmp/probe
 printf '%s' '{"tool_name":"Edit","tool_input":{"file_path":"apps/api/src/modules/users/domain/events/user-created.event.ts"}}' \
   | bash .claude/hooks/posttooluse-stack-review.sh
 
-# skills: 15, todas com ponteiro ao canônico (esperado: 0)
+# skills: 16, todas com ponteiro ao canônico (esperado: 0)
 ls .claude/skills | wc -l
 grep -L '\.agents/skills/' .claude/skills/*/SKILL.md | wc -l
 
-# agents: 2, ambos declarando tools explicitamente
+# agents: 3, todos declarando tools explicitamente
 ls .claude/agents | wc -l
 grep -c '^tools:' .claude/agents/*.md
 ```

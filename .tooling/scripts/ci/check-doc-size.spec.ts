@@ -1,6 +1,8 @@
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   CATEGORIAS_FORA_DO_ESCOPO,
@@ -13,6 +15,16 @@ import {
 
 /** Raiz do repo real — usada no caso "o repo real está dentro do teto". */
 const REPO_REAL = join(import.meta.dirname, '..', '..', '..');
+
+/**
+ * `tsx` e o script, derivados do PRÓPRIO spec — nunca de `process.cwd()`.
+ *
+ * O teste de CLI abaixo executa o gate com `cwd` no repo de mentira; se
+ * qualquer um dos dois viesse do `process.cwd()`, o teste mediria o repo de
+ * verdade e passaria pelo motivo errado.
+ */
+const TSX = join(REPO_REAL, 'node_modules/.bin/tsx');
+const SCRIPT = join(REPO_REAL, '.tooling/scripts/ci/check-doc-size.ts');
 
 describe('contarLinhas', () => {
   it('conta como o wc -l: um arquivo com N newlines tem N linhas', () => {
@@ -98,6 +110,42 @@ describe('arquivosAcimaDoTeto', () => {
   it('NÃO acusa arquivo de registro datado, por mais longo que seja', async () => {
     escrever('docs/superpowers/plans/gigante.md', 5_000);
     expect(await arquivosAcimaDoTeto(repo, ['docs/superpowers/plans/gigante.md'])).toHaveLength(0);
+  });
+});
+
+describe('rodado como CLI', () => {
+  it('mede e sai com exit 1 — MEDIDO 2026-10-29', () => {
+    // Sem o bloco IIFE, `pnpm exec tsx .tooling/scripts/ci/check-doc-size.ts`
+    // devolvia `exit 0` e **nenhuma saída** — inclusive contra um repo com um
+    // `.md` de 400 linhas. O gate só media alguma coisa pelo mapa `RUNNERS` do
+    // preflight; invocado direto, ele não media NADA.
+    const repo = mkdtempSync(join(tmpdir(), 'doc-size-cli-'));
+    try {
+      // O gate mede arquivos VERSIONADOS (`git ls-files`), então o `.md`
+      // grande precisa estar no índice — `git add -N` basta.
+      mkdirSync(join(repo, 'docs'), { recursive: true });
+      writeFileSync(join(repo, 'docs', 'gigante.md'), 'x\n'.repeat(LIMITE_DE_LINHAS + 100));
+      execFileSync('git', ['init', '-q'], { cwd: repo });
+      execFileSync('git', ['add', '-N', 'docs/gigante.md'], { cwd: repo });
+
+      let stderr = '';
+      let status: number | null = null;
+      try {
+        execFileSync(TSX, [SCRIPT], {
+          cwd: repo,
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+      } catch (err) {
+        stderr = (err as { stderr?: string }).stderr ?? '';
+        status = (err as { status?: number | null }).status ?? null;
+      }
+
+      expect(stderr).toContain('docs/gigante.md');
+      expect(status).toBe(1);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
   });
 });
 

@@ -37,7 +37,7 @@
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type { CheckResult } from './check-types';
+import { linhasDoRelato, type CheckResult } from './check-types';
 
 /** O teto, em linhas. O mesmo número de `tamanho-e-revisao.md`. */
 export const LIMITE_DE_LINHAS = 300;
@@ -177,4 +177,21 @@ export async function checkDocSize(opts: { repoRoot: string }): Promise<CheckRes
   );
 
   return { ok: errors.length === 0, errors };
+}
+
+// Executado como CLI.
+//
+// MEDIDO 2026-10-29: sem este bloco, `pnpm exec tsx
+// .tooling/scripts/ci/check-doc-size.ts` devolvia `exit 0` e **nenhuma saída** —
+// inclusive contra um repo com um `.md` de 400 linhas. O gate só media alguma
+// coisa pelo mapa `RUNNERS` do preflight; invocado direto, ele não media NADA.
+//
+// `checkDocSize` é **assíncrono**, então o bloco usa `.then()` — o mesmo padrão
+// de `check-ci-local-e2e.ts`. Um `const r = await ...` de topo não compila em
+// CJS-via-tsx.
+if (process.argv[1]?.endsWith('check-doc-size.ts')) {
+  checkDocSize({ repoRoot: '.' }).then((r) => {
+    for (const linha of linhasDoRelato(r)) process.stderr.write(`${linha}\n`);
+    process.exit(r.ok ? 0 : 1);
+  });
 }

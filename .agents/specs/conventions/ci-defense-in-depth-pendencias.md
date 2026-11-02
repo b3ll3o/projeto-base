@@ -5,12 +5,10 @@
 > [README das convenções](./README.md). pt-BR prose, English technical
 > identifiers.
 >
-> **Por que este arquivo existe:** a convenção está no teto de
-> [`tamanho-e-revisao.md`](./tamanho-e-revisao.md) (300 linhas) e pendência
-> cresce a cada gate novo. Deixá-las no corpo do documento da convenção
-> significa que registrar um item novo exige podar outro — e o item podado é
-> sempre o que ninguém está olhando. Aqui pendência cresce sem custar
-> conteúdo.
+> **Por que este arquivo existe:** pendência cresce a cada gate novo, e
+> deixá-las no corpo do documento da convenção significa que registrar um item
+> novo exige podar outro — e o item podado é sempre o que ninguém está
+> olhando. Aqui pendência cresce sem custar conteúdo.
 >
 > **A regra que faz isso funcionar:** este arquivo guarda só o que está
 > **ABERTO**. Uma pendência que fecha **sai** para
@@ -39,6 +37,57 @@
   fica registrado aqui é a ASSIMETRIA. Alternativa a decidir: tornar a etapa
   *skipped com motivo* quando `DATABASE_URL` não resolve, em vez de erro.
 
+- **O `check-path-alias` usa `JSON.parse` num arquivo que o `tsc` aceita como
+  JSONC — e o `catch` devolve verde silencioso.** (medido 2026-10-30). O
+  `tsconfig.json` do TypeScript é JSONC: comentário e vírgula final são legais.
+  O gate usa `JSON.parse`, que os rejeita; o `catch` devolve `[]` **sem
+  `skipped` e sem motivo**, ou seja, verde por ausência — a classe 5 do
+  `guard-classes.md`. Comando: um `tsconfig.base.json` com um `//` no meio
+  → `checkPathAlias` devolve `{ok: true, errors: []}` **e** `skipped:
+  undefined`, mesmo com um alias **realmente morto** declarado. Os tsconfigs
+  deste repo **já** adotam a convenção de comentário (`"//e2e"`, `"//"` como
+  chave em `apps/web/tsconfig.json`, `tooling/scripts/tsconfig.json` e
+  `.tooling/tsconfig.json`), e o `tsc` aceita (`ts.parseConfigFileTextToJson`).
+  **Latente**: o `tsconfig.base.json` (único que o gate mede) é JSON limpo.
+  É o **primeiro** da fila porque é o que morde primeiro — um `//` no
+  `tsconfig.base.json` desliga o gate em silêncio. Conserto:
+  `ts.parseConfigFileTextToJson`, que já está disponível (o
+  `check-shell-injection` importa o `typescript`).
+
+- **O `check-path-alias` mede uma semântica de `paths` que o TypeScript não
+  tem — e acusa formas legítimas como "alias morto".** (medido 2026-10-30).
+  O alvo de um `paths` do TS é um **local de módulo**, resolvido por wildcard
+  e por arquivo; o gate exige um **diretório** (`st.isDirectory()`). Duas
+  formas legítimas são acusadas: (a) alvo que é **arquivo** (`"./src/x.ts"`
+  resolve — `tsc --noEmit` sai 0); (b) alvo com **wildcard** (`"./*"` — que é
+  o que `apps/web/tsconfig.json` usa, com 76 imports `@/…`). Comando: o gate contra o tsconfig do web →
+  `alias morto: '@/*' aponta para './*' (…/apps/web/*), que não existe`.
+  Além disso, `extrairAliases` pega só o **primeiro** destino, e o TS tenta
+  **todos** em ordem (MEDIDO: `['./src/nao-existe','./src/real.ts']` resolve
+  para `real.ts`, `tsc` sai 0). **Latente**: o gate mede só o
+  `tsconfig.base.json`, cujos 3 aliases apontam para diretórios que existem.
+  Conserto: resolver o alvo como o TS resolve (globbing + fallback na ordem).
+
+- **O `check-doc-size` tira o corpus do ÍNDICE do git, então um `.md` não
+  versionado é invisível.** (medido 2026-10-30). `listarMarkdown` usa
+  `git ls-files '*.md'`, que devolve o índice. Um `.md` de 400 linhas no disco
+  e **fora** do índice → `ok: true, errors: 0`. É a classe da memória
+  `gate-blind-to-uncommitted-work`; o conserto é o que ela aponta:
+  `git add -N`. ⚠️ O caso inverso também é um buraco: arquivo removido do
+  disco mas ainda no índice faz o gate **lançar** `ENOENT`, e o `preflight`
+  (que chama `check.fn()` sem try/catch) aborta inteiro. A mudança é de
+  **escopo do gate** (o que "documentação viva" significa), e é decisão de
+  política — não correção pontual.
+
+- **O caso do repo real no spec do `check-doc-size` é um controle POSITIVO, e
+  não distingue "o gate mede" de "o gate não mede nada".** (medido 2026-10-30).
+  O `it` "toda documentação VIVA cabe no teto" é o único caso que toca o repo
+  real, mas **passa** se o repo estiver dentro do teto — e não exercita nenhum
+  caminho de falha. Neutralizando `checkDocSize` para `return { ok: true,
+  errors: [] }`, **13 de 13** testes seguem passando. Contraste com o padrão
+  certo: o `check-doc-coverage.spec` faz a mutação **no repo real** (planta
+  um módulo sem doc) e cai. Conserto: a mesma mutação — plantar um `.md`
+  acima do teto e exigir que o gate caia.
 
 - **Nenhum tooling lê `.github/workflows/ci.yml` — o arquivo que decide o que
   roda é prosa** (medido 2026-10-06, achado da revisão adversarial do PR deste
@@ -228,3 +277,24 @@
   deliberados (MEDIDO no #58: marcar a frase errada fabrica MENTIRA VERDADEIRA)
   e a classe 2 de `guard-classes` explica por que não há classificador.
 
+
+- **O `check-doc-claims` conta decorator de HTTP em COMENTÁRIO — o registry
+  aponta para arquivo, o que a protege por ACIDENTE.** (medido 2026-11-02).
+  `DECORADOR_HTTP` é um regex cru: `@Post()` num comentário conta. Comando:
+  `derivar('.', {tipo:'contar-decoradores-http', caminhos:['apps/api/src/
+  modules/auth/infrastructure/http']})` → **5**, e o `auth.md` afirma **3** —
+  os 2 a mais são decorators **dentro de comentários**.
+  **Latente**: as 6 entradas apontam para arquivo ou glob `*.controller.ts`, e
+  nenhum tem decorator comentado — a proteção é **acidental**, não
+  instrumentada. O conserto é o do `check-feature-flag-portas.ts`, mas ele
+  **não pode** ser só no gate: o `grep` que o doc cita também conta o
+  comentário.
+
+- **O runner do CI está fixado, mas nada impede o `ubuntu-latest` de voltar.**
+  (medido 2026-11-02). O alias `ubuntu-latest` se moveu de `ubuntu-24.04` para
+  `ubuntu-26.04` em 2026-10-29 e o Playwright 1.60.0 não instala o Chromium
+  lá; o commit `b46287c` fixou `ubuntu-24.04` nos 6 jobs. Comando: `grep -rn
+  'runs-on' .github/workflows/*.yml` → **6 × `ubuntu-24.04`**, `ubuntu-latest`
+  → **0**. **Latente**: nenhum tooling lê `.github/workflows/**`, então um PR
+  que reintroduza o alias passa sem ninguém ver (o conserto é a dívida do
+  `Nenhum tooling lê .github/workflows/ci.yml`).

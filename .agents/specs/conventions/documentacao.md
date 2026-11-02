@@ -112,27 +112,38 @@ declara a data da medição no cabeçalho:
 Sem data, o leitor não sabe se "conferem" é fato de hoje ou de seis meses
 atrás — e a diferença entre as duas é exatamente o que ele veio buscar.
 
-## §5. O gate — `check-doc-coverage`
+## §5. Os gates — `check-doc-coverage` e `check-doc-claims`
 
 A regra deste documento é **executável** (`guard-classes.md` §1: regra que
 só existe em prosa é defeito).
 
 ```bash
-pnpm ci:preflight        # roda o gate
+pnpm ci:preflight        # roda os gates
 ```
 
-O gate mede **uma** classe:
+Os gates medem **duas** classes — as duas metades de "doc que **falta**" e
+"doc que **mente**" (`AGENTS.md` §1.2):
 
-| Classe | Mede | Falha quando |
-|---|---|---|
-| **Cobertura** | toda unidade da matriz §3 tem o doc canônico | falta doc para um BC / rota / package |
+| Gate | Classe | Mede | Falha quando |
+|---|---|---|---|
+| `check-doc-coverage` | **Cobertura** | toda unidade da matriz §3 tem o doc canônico | falta doc para um BC / rota / package |
+| `check-doc-claims` | **Verdade** | o número que o doc afirma ao lado do comando que ele cita | a derivação (o código real) produz outro número |
 
-### O que o gate **NÃO** mede (e é humano)
+O `check-doc-claims` confere o par **comando → valor** que o doc **cita**:
+o comando tem que estar lá, e o valor **adjacente** a ele tem que bater com
+a derivação. O escopo é o registry
+(`.tooling/scripts/ci/doc-claims.json`) — hoje os **6 docs de API**, 18
+ocorrências, 8 comandos. A derivação é TypeScript, **nunca shell**: o
+registry é versionado, e um doc é texto livre.
 
-- **Frescor do conteúdo.** O gate vê se o doc **existe**, não se ele ainda
-  diz a verdade. Um doc que descreve um endpoint removido continua
-  "coberto" — quem pega é o `doc-sync` (reativo) e a auditoria do
-  `documentation-specialist`.
+### O que os gates **NÃO** medem (e é humano)
+
+- **Frescor do conteúdo, fora dos claims registrados.** O
+  `check-doc-coverage` vê se o doc **existe**, não se ele ainda diz a
+  verdade. O `check-doc-claims` confere a **verdade** dos claims que o
+  registry declara — e **não** dos demais: um doc que descreve um endpoint
+  removido e **não** tem claim registrado continua "coberto". Quem pega o
+  resto é o `doc-sync` (reativo) e a auditoria do `documentation-specialist`.
 - **O tamanho do doc.** O teto de 300 linhas é de
   [`tamanho-e-revisao.md`](./tamanho-e-revisao.md) e é medido na **auditoria**
   (skill `documentation-audit`), não por este gate: aplicá-lo a todo `.md`
@@ -142,14 +153,37 @@ O gate mede **uma** classe:
 - **Qualidade da prosa.** "Claro" não é propriedade mecânica.
 - **Acerto do quadrante Diátaxis.** Julgamento editorial.
 
-Dizer que o gate cobre freshness seria a classe 1 de `guard-classes.md` —
-condição inalcançável.
+Dizer que os gates cobrem freshness **todo** seria a classe 1 de
+`guard-classes.md` — condição inalcançável.
 
 ### Exceções declaradas (nunca inferidas)
 
 Uma exceção é uma **linha escrita**, com o motivo — o mesmo padrão de
-`tdd.md`. Exceção não declarada = gate quebrado. Hoje o gate **não tem**
-exceção: a matriz §3 é fechada e todo módulo, rota e package tem doc.
+`tdd.md`. Exceção não declarada = gate quebrado.
+
+O gate `check-doc-coverage` **lê** esta tabela (a §"Exceções declaradas" do
+próprio arquivo). Uma unidade listada aqui não gera erro de cobertura; uma
+unidade **não** listada e sem doc canônico continua gerando. E o sentido
+inverso também é medido: uma exceção que **não exclui nada** — porque a
+unidade já tem doc, ou deixou de existir — é **documentation lie**, e o gate
+acusa a linha para que seja removida.
+
+| Unidade | Motivo |
+|---|---|
+| (nenhuma — a matriz §3 é fechada) | — |
+
+A coluna **Unidade** é o caminho da unidade de código, o mesmo que a matriz
+§3 nomeia: `apps/api/src/modules/<bc>` para um bounded context,
+`apps/web/app/<...>/page.tsx` para uma rota, `packages/<pkg>` para um
+package. As colunas são lidas **por nome**, nunca por índice — a mesma
+doutrina de `check-test-set-covered.ts` com a `tdd.md`.
+
+⚠️ **Quando esta convenção não existe, o gate dá ERRO — não `skipped`.** A
+tabela de exceções é a **única** fonte delas, e um gate sem fonte mede nada:
+o precedente é `check-test-set-covered.ts`, que trata a `tdd.md` ilegível como
+erro e não como "sem exceções". Por isso o gate lê a convenção do **`repoRoot`**,
+nunca do `process.cwd()` — ele roda contra repos plantados nos specs, e ler
+do diretório de trabalho aplicaria a convenção **real** a um repo de mentira.
 
 ## §6. Quando NÃO aplicar
 
@@ -169,9 +203,13 @@ exceção: a matriz §3 é fechada e todo módulo, rota e package tem doc.
   `.agents/specs/conventions/ci-defense-in-depth-pendencias.md` — o próprio
   cabeçalho do arquivo diz por quê ("aqui pendência cresce sem custar
   conteúdo"): registrar um item novo não pode exigir podar outro, porque o
-  item podado é sempre o que ninguém está olhando. MEDIDO 2026-10-29:
-  `wc -l` → **333** linhas, contra o teto de 300 — exceção **declarada**,
-  não um descuido. O teto dos 300 continua valendo para todo o resto.
+  item podado é sempre o que ninguém está olhando. A regra que mantém isso é
+  **o ledger guardar só o que está ABERTO**: uma pendência que fecha sai para
+  o arquivo irmão `…-pendencias-fechadas.md`. **Quem mede se ele cabe no teto
+  é o `check-doc-size`**, que o trata como documentação viva (sem categoria
+  fora do escopo) — por isso esta convenção **não publica** o número de
+  linhas: um número que envelhece a cada pendência registrada é a classe 7 de
+  `guard-classes.md`, e o dono do fato é o gate.
 
 ## §7. Quem é responsável
 

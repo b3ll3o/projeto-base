@@ -42,8 +42,7 @@ bônus ou "quando sobrar tempo". Um doc que **mente** é defeito (P0); um doc qu
    O [`documentation-specialist`](./.agents/agents/documentation-specialist.md)
    é o dono da matriz e da escrita; o
    [`doc-writer`](./.agents/agents/doc-writer.md) escreve doc genérica e o
-   [`doc-sync`](./.agents/agents/doc-sync.md) reage ao diff — os três se
-   completam, nenhum substitui outro.
+   [`doc-sync`](./.agents/agents/doc-sync.md) reage ao diff — os três se completam.
 2. **O fato tem UM dono** (DRY,
    [`dry.md`](./.agents/specs/conventions/dry.md)); o resto **só referencia**.
 3. **Frescor é obrigatório** — toda alteração de código avalia a doc afetada
@@ -52,7 +51,8 @@ bônus ou "quando sobrar tempo". Um doc que **mente** é defeito (P0); um doc qu
    comando que os reproduz
    ([`tamanho-e-revisao.md`](./.agents/specs/conventions/tamanho-e-revisao.md)).
 5. **Regra sem instrumento é defeito** — `check-doc-coverage` cobra cobertura
-   (unidade → doc canônico), `check-doc-refs` cobra links, `check-runbook-drift`
+   (unidade → doc canônico), `check-doc-claims` cobra que o número que o doc
+   afirma bate com o código, `check-doc-refs` cobra links, `check-runbook-drift`
    cobra comandos e env citados que sumiram.
 
 **Quando NÃO aplicar:** artefato gerado, histórico (`docs/superpowers/plans/**`,

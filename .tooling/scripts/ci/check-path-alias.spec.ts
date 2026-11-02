@@ -1,11 +1,19 @@
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { aliasesMortos, checkPathAlias, extrairAliases } from './check-path-alias';
 
 /** Raiz do repo real — usada no caso "o repo real não tem alias morto". */
 const REPO_REAL = join(import.meta.dirname, '..', '..', '..');
+
+/**
+ * `tsx` e o script, derivados do PRÓPRIO spec — nunca de `process.cwd()`.
+ */
+const TSX = join(REPO_REAL, 'node_modules/.bin/tsx');
+const SCRIPT = join(REPO_REAL, '.tooling/scripts/ci/check-path-alias.ts');
 
 describe('extrairAliases', () => {
   it('lê o `paths` do tsconfig', () => {
@@ -108,6 +116,39 @@ describe('checkPathAlias', () => {
       expect(achados.map((a) => a.nome)).toEqual(['@projeto/ui']);
     } finally {
       rmSync(tmp2, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('rodado como CLI', () => {
+  it('mede e sai com exit 1 — MEDIDO 2026-10-29', () => {
+    // Sem o bloco IIFE, `pnpm exec tsx .tooling/scripts/ci/check-path-alias.ts`
+    // devolvia `exit 0` e **nenhuma saída**. O gate só media alguma coisa pelo
+    // mapa `RUNNERS` do preflight; invocado direto, ele não media NADA.
+    const repo = mkdtempSync(join(tmpdir(), 'path-alias-cli-'));
+    try {
+      writeFileSync(
+        join(repo, 'tsconfig.base.json'),
+        JSON.stringify({ compilerOptions: { paths: { '@projeto/ui': ['./packages/ui/src'] } } }),
+      );
+
+      let stderr = '';
+      let status: number | null = null;
+      try {
+        execFileSync(TSX, [SCRIPT], {
+          cwd: repo,
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+      } catch (err) {
+        stderr = (err as { stderr?: string }).stderr ?? '';
+        status = (err as { status?: number | null }).status ?? null;
+      }
+
+      expect(stderr).toContain('@projeto/ui');
+      expect(status).toBe(1);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
     }
   });
 });

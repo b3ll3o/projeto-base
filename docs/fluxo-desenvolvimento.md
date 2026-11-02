@@ -124,7 +124,7 @@ grep -cE "^\s+name: '" .tooling/scripts/ci/preflight-gates.ts
 > documento publicava um 0 como se fosse a contagem. O sintoma (contagem que não
 > se move) é indistinguível de "não mudou nada desde a última vez".
 >
-> **MEDIDO 2026-10-29: 40.** As contagens que este documento publicava antes (21,
+> **MEDIDO 2026-10-29: 41.** As contagens que este documento publicava antes (21,
 > depois 29) eram de revisões antigas — a lista cresce a cada gate novo. Por isso
 > a lista **enumerada** vive na §4 e a contagem vive do lado do comando.
 
@@ -132,8 +132,8 @@ grep -cE "^\s+name: '" .tooling/scripts/ci/preflight-gates.ts
 
 O pedido "mais agents" esbarra num fato medido: **o despacho já é emitido e nunca executado.**
 `review-router.ts` emite 8 reviewers para um diff de 87 arquivos (`git diff --name-only a6eaae7^ a6eaae7`) e
-termina em `console.log`. `grep -rn 'review:route|specialist:route' .github/workflows/ .husky/ .tooling/scripts/ci/preflight-gates.ts`
-→ **só as linhas do `package.json`**. A instrução de paralelo existe como prosa em `review-router.md:70`
+termina em `console.log`. `git grep -nE 'review:route|specialist:route' -- .husky .github` → **vazio**: os
+dois scripts existem no `package.json` (linhas 29 e 31) mas **nenhum hook os invoca**. A instrução de paralelo existe como prosa em `review-router.md:70`
 ("chamar Agent tool **na mesma mensagem**"), num arquivo que nenhum hook lê.
 
 | Fase | Fan-out | Por que |
@@ -142,7 +142,7 @@ termina em `console.log`. `grep -rn 'review:route|specialist:route' .github/work
 | Auditoria | N reviewers em paralelo, todos read-only | o roteador já resolve quem; falta o executor |
 | `.agents/memory/*.md` | 1 agente por arquivo | 30 arquivos (`find .agents/memory -name '*.md' | wc -l`), convenção 1:1 verificável |
 | Implementação | **1 por vez no mesmo codebase** | ver paredes abaixo |
-| Gates do preflight | 40 gates em `Promise.all` | hoje serial (`preflight.ts:412`), nenhum escreve |
+| Gates do preflight | 41 gates em `Promise.all` | hoje serial (`preflight.ts:412`), nenhum escreve |
 
 **Paredes — aqui paralelizar não é ganho, é conflito garantido:**
 
@@ -159,7 +159,7 @@ termina em `console.log`. `grep -rn 'review:route|specialist:route' .github/work
   branch nasce desatualizada por construção quando a primeira faz push. O histórico já escolheu o
   lado oposto: PR #81 (167 arquivos), #95 (10 issues), #80 (9 issues).
 
-**Não converta gate determinístico em prompt.** Os 40 gates são regex + TypeScript com spec
+**Não converta gate determinístico em prompt.** Os 41 gates são regex + TypeScript com spec
 própria; §5 já registra que a camada "agentic" é *"regra determinística com prosa em volta"*.
 Reescrever um como LLM é a classe 6 de `guard-classes.md` — spec verde, sistema inerte.
 
@@ -167,9 +167,9 @@ Reescrever um como LLM é a classe 6 de `guard-classes.md` — spec verde, siste
 
 1. **Executor** — `Agent` × N em paralelo sobre a saída do `review-router`. Menor diff e maior retorno: o roteamento, a matriz e os testes já existem.
 2. **Registro** — 25 dos 28 agents não estão em `.claude/agents/` (`ls .claude/agents/*.md | wc -l` = 3), logo o orquestrador não tem handle. Agent não registrado não é invocado nem por LLM.
-3. **Relógio** — `grep -rn 'Date.now()' tooling/ .tooling/` devolve **1** ocorrência, num spec
-   unitário, nenhuma em código de produção. Sem cronômetro, "mais agents é mais rápido" é raciocínio
-   — e claim sem medida ao lado já envelheceu neste repo mais de uma vez.
+3. **Relógio** — `grep -rn 'Date.now()' tooling/ .tooling/` devolve **6** ocorrências: **3** num spec
+   unitário e **3** em `boot-local.ts` (o deadline do boot local — produção, mas de harness, não de
+   dispatch). Sem cronômetro do dispatch, "mais agents é mais rápido" é raciocínio.
 
 ---
 
@@ -191,13 +191,14 @@ Reescrever um como LLM é a classe 6 de `guard-classes.md` — spec verde, siste
 | `stack-code-review` (job) | `pnpm stack:review --files=… --mode=ci` | B (PR job) | Mesmo `blocker`/`major` do local | — |
 | `docker-build-prod` | `docker buildx build … --target prod` | B (só PR) | Dockerfile quebrado | Não — não roda em push |
 | `release-template` | automático | B (merge em main) | Nada — e o noop foi desfeito: o footer pede `1.9.0`, tag `v1.9.0` não existe, então a criação sairia. O que falta é o check que amarra footer↔tag (**BL1**) | — |
-| `specialist:lint` | `pnpm specialist:lint` | **NENHUMA** | Nada — script existe, 12 testes verdes, fora do preflight | Não |
+| `specialist:lint` | `pnpm specialist:lint` | **NENHUMA** | Nada — script existe, 13 testes verdes, fora do preflight | Não |
 | `review:lint` | `pnpm review:lint` | A+B (gate `lint-review-routing`) | YAML inválido, LOC, regex, reviewer inexistente | Sim |
 | `archive:lint` | `pnpm archive:lint` | A+B (gate `check-archive-integrity`) | Frontmatter canônico; com o diretório vazio (só `.gitkeep`) o check se declara `skipped` em vez de verde | Sim |
 | `tooling:test` | `pnpm tooling:test` | B (job `preflight` do `ci.yml`) | Spec vermelho da própria camada de tooling | Sim |
 | `check-flow-mermaid-sync` | `pnpm ci:preflight` | A+B (gate `check-flow-mermaid-sync`) | Diagrama Mermaid de `docs/flows/` que não é o que a IR do mesmo diretório gera — **o `flow.md` editado à mão ou a IR mudada sem `--write`**. O conserto vem no erro: `pnpm tsx tooling/scripts/flow-ir-to-mermaid.ts --diagram=sequence --write`. Não alcança `código → IR` (a IR é autoral e não tem âncora de código); essa direção é humana, documentada em [`docs/flows/README.md`](./flows/README.md) | Sim |
 | `check-test-set-covered` | `pnpm ci:preflight` | A+B (gate `check-test-set-covered`) | Script `test*` declarado num pacote do workspace que nenhuma invocação `turbo run` do `ci:local` executa (task pedida **e** pacote alcançado por `--filter`), e exceção declarada em [`tdd.md`](../.agents/specs/conventions/tdd.md) que deixou de valer. **Mede o conjunto, não a execução**: suíte instável continua "verde" para quem olha uma execução só | Sim |
 | `check-doc-coverage` | `pnpm ci:preflight` | A+B (gate `check-doc-coverage`) | Unidade de código **sem doc canônico**: bounded context do NestJS sem `docs/api/<bc>.md`, rota do App Router ausente de `docs/web/rotas.md`, package do workspace sem `packages/<pkg>/README.md`. Mede **cobertura**, não frescor | Sim |
+| `check-doc-claims` | `pnpm ci:preflight` | A+B (gate `check-doc-claims`) | Claim numérico de doc que **mente**: o doc cita um comando e afirma um valor ao lado, e a derivação (o código real) produz outro número. A derivação é TypeScript — o gate **não executa shell**, porque o registry (`.tooling/scripts/ci/doc-claims.json`) é versionado e um PR pode editá-lo. A derivação mede **exatamente** o caminho que o comando cita (`dir/*.controller.ts` resolve o glob; um `*.spec.ts` não conta) e o **tying** exige que o caminho medido esteja no comando (registry desamarrado é erro), e o valor tem que estar **adjacente** ao comando — a janela antiga sangrava para o claim vizinho, e um doc que MENTIA passava verde. Escopo: os 6 docs de API | Sim |
 | `check-doc-size` | `pnpm ci:preflight` | A+B (gate `check-doc-size`) | Documentação **viva** acima de 300 linhas. As 3 categorias fora do escopo estão declaradas em `tamanho-e-revisao.md` §O que o teto cobre. A contagem é o número de linhas que o arquivo tem — `wc -l` subestima em 1 os arquivos sem `\n` final | Sim |
 | `check-path-alias` | `pnpm ci:preflight` | A+B (gate `check-path-alias`) | Alias de `compilerOptions.paths` do `tsconfig.base.json` apontando para um diretório que **não existe**. Não mede alias não usado — alias válido e sem import é decisão | Sim |
 | `turbo-redirect-differential` | `.tooling/scripts/ci/turbo-redirect-differential.sh` | A+B (gate `turbo-redirect-differential`) | Forma de `pnpm turbo run …` que o parser extrai diferente do turbo real — **classe 6** (especificação local diverge do sistema real) | Sim (se Node ≥ 22.6) |
@@ -214,7 +215,7 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 | **Agente / roteamento** (YAML + regex executado por TS — *não* é IA) | `.agents/specs/conventions/{review,specialist}-routing.md` + `tooling/scripts/*-router.ts` | Erra **baixo e anônimo**: classifica para o reviewer errado, sem sinal | `review-router.ts` (30 testes), `specialist-router.ts` (39 testes) |
 | **Memória / prosa** | `.agents/memory/*.md`, `.agents/runs/*.md` | **Evapora** — não existe evento detectável quando envelhece | 30 memórias versionadas (`find .agents/memory -name '*.md' | wc -l`); as retrospectivas `b<N>-result.md` gravam **fora** do repo |
 
-> **Tese honesta:** nenhum problema medido neste repo pede IA. `grep -rniE 'embedding\|openai\|langchain\|pgvector\|neo4j' apps/*/package.json packages/*/package.json` retorna zero. A camada "agentic" é regex em YAML executado por TypeScript — é **regra determinística com prosa em volta**. O custo do rótulo errado já apareceu: `review:lint` está dentro do preflight, `specialist:lint` (mesma família, 12 testes verdes) está fora.
+> **Tese honesta:** nenhum problema medido neste repo pede IA. `grep -rniE 'embedding\|openai\|langchain\|pgvector\|neo4j' apps/*/package.json packages/*/package.json` retorna zero. A camada "agentic" é regex em YAML executado por TypeScript — é **regra determinística com prosa em volta**. O custo do rótulo errado já apareceu: `review:lint` está dentro do preflight, `specialist:lint` (mesma família, 13 testes verdes) está fora.
 
 **Regra de bolso:** se a pergunta é "esse valor é igual ao esperado?" ou "esse import é proibido?", a resposta é regra determinística. Se o dado expira com o tempo (contagem de agents, versão de um footer, existência de um arquivo), ele pertence a um **check de drift**, não a um `.md` versionado.
 
@@ -252,7 +253,7 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 - `docker-build-prod` — build real dos 2 Dockerfiles `prod` em toda PR.
 - `release-template` — syntaticamente correto (idempotência via `git rev-parse --verify`, `concurrency`, `contents: write`) e **já não é noop**: quando a tag existe ele emite `::warning::` em vez de encerrar em silêncio. O que falta: check que amarra footer↔tag (**BL1**).
 - Boundary DDD/Hexagonal **existe de fato** em `apps/api/src/modules/users/{domain,application,infrastructure}`.
-- **Pós-2026-10-29**: 3 gates de documentação entraram no preflight — `check-doc-coverage` (cobertura: BC do NestJS sem `docs/api/<bc>.md`, rota do App Router fora de `docs/web/rotas.md`, package sem `packages/<pkg>/README.md`), `check-doc-size` (teto de 300 linhas da documentação viva) e `check-path-alias` (alias de `paths` para diretório inexistente). Nenhum mede frescor: o doc existir não quer dizer que ele ainda diz a verdade.
+- **Pós-2026-10-29**: 4 gates de documentação entraram no preflight — `check-doc-coverage` (cobertura: BC do NestJS sem `docs/api/<bc>.md`, rota do App Router fora de `docs/web/rotas.md`, package sem `packages/<pkg>/README.md`), `check-doc-claims` (claim numérico que **mente**: o doc afirma um valor que o código não produz mais), `check-doc-size` (teto de 300 linhas da documentação viva) e `check-path-alias` (alias de `paths` para diretório inexistente). Nenhum mede frescor: o doc existir não quer dizer que ele ainda diz a verdade.
 - **Pós-#44**: 5 gates novos sobre as 7 classes de guard, incluindo o `turbo-redirect-differential` (classe 6 — spec local diverge do sistema real) e o `check-self-firing-guard` (classe 3 — guard que dispara em si mesmo). Detalhes em [`guard-classes.md`](./superpowers/plans/2026-10-03-guard-classes.md) e [`guard-classes-decisoes.md`](./superpowers/plans/2026-10-03-guard-classes-decisoes.md).
 
 ### 7.2 Unwired / aspiracional
@@ -264,7 +265,7 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 | **Nenhum check bloqueia merge** *(parcialmente corrigido)* | O ruleset `master` (id 23853096) tem `required_status_checks: [{context: "quality"}]` e `main` só é atualizável por PR. O que sobra: `required_approving_review_count = 0` e `required_reviewers = []` (contribuidor único). Só **1 dos 3** contexts é exigido — a garantia real é a cadeia do workflow (`preflight` bloqueia `quality` via `needs:`), não o check isolado. |
 | `lint-staged` não é linter | `node -e "console.log(Object.values(require('./package.json')['lint-staged']).join(' \| '))"` → `prettier --write \| prettier --write`. Nenhum eslint, tsc ou vitest. O ESLint entra pelo turbo. |
 | `doc-sync` aborta — mas **só** por doc ausente | MEDIDO 2026-10-29: `grep -c 'process.exit' tooling/scripts/doc-sync.ts` → **3** (era **0** até 2026-10-06): 2 dos 3 são o comentário que explica o número, e **1** é o `exit(1)` do código (`tooling/scripts/doc-sync.ts:293`). O `exit(1)` só dispara com `alerts > 0`, e `alerts` só sobe no `checkMissingDoc` — doc de referência mapeado e ausente. Severidade `minor` não bloqueia, e `docs_health_score` sozinho não reprova. Doc **gerado** (`apps/api/openapi.json`, versionado desde o #125) fica de fora do `existsSync` via `GENERATED_DOC_FILES`, ou todo PR que toca controller reprovaria em checkout limpo. O job `docs-sync` do CI roda o mesmo script, então **ele também** falha nesse caso. |
-| `specialist:lint` fora do preflight | `grep -c specialist .tooling/scripts/ci/preflight.ts` → **1**, e o hit é um **comentário** que cita `nestjs-specialist` — não uma invocação. É classe 3: o sweep dispara em si mesmo. `review:lint` roda no preflight, `specialist:lint` não: duas matrizes de routing, dois scripts, um só no gate. |
+| `specialist:lint` fora do preflight | `grep -c specialist .tooling/scripts/ci/preflight.ts` → **0**: não há nem invocação nem comentário que cite o nome. `review:lint` roda no preflight, `specialist:lint` não: duas matrizes de routing, dois scripts, um só no gate. |
 | Limite de 300 linhas **imposto** (desde 2026-10-29) | O gate `check-doc-size` mede o teto sobre a documentação **viva**. As 3 categorias fora do escopo (`registro-datado` = `docs/superpowers/**` · `artefato-de-execucao` = `.agents/runs/**` · `vendor` = `.agents/skills/graphify/**`) estão declaradas em `tamanho-e-revisao.md` §O que o teto cobre. **Cuidado com o path**: procurar por `MAX_LOC` em `tooling/scripts/ .tooling/scripts/` não acha o gate novo — ele mede o teto pelo **número de linhas do arquivo**, não por uma constante `MAX_LOC`. |
 
 ### 7.3 Regra que resume a camada

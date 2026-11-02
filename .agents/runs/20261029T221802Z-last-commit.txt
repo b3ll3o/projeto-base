@@ -1,0 +1,28 @@
+commit b46287c17785ec20a7d0c25a85892d8aa225b06f
+Author:     CEO Agent <ceo@paperclip.ai>
+AuthorDate: Thu Oct 29 18:56:43 2026 -0300
+Commit:     CEO Agent <ceo@paperclip.ai>
+CommitDate: Thu Oct 29 18:56:43 2026 -0300
+
+    fix(ci): o runner deixa de ser `ubuntu-latest`, que se moveu debaixo dos pés
+    
+    MEDIDO 2026-10-29: o alias `ubuntu-latest` do GitHub Actions passou de
+    `ubuntu-24.04` para `ubuntu-26.04` **no meio do dia**. O run que rodou às
+    16:31 (imagem 24.04) passou; o das 21:47 (imagem 26.04) reprovou em
+    `playwright install` com
+    
+        Cannot install dependencies for ubuntu26.04-x64 with Playwright 1.60.0!
+        ERROR: Playwright does not support chromium on ubuntu26.04-x64
+    
+    O Playwright 1.60.0 não conhece a imagem nova — e a versão **é** a mesma das
+    duas: o `pnpm-lock.yaml` resolve `1.60.0` antes e depois desta mudança.
+    
+    `ubuntu-latest` é um alias que **se move**: um pipeline que depende dele
+    reprova sem que ninguém tenha tocado em nada. Os 6 jobs dos 4 workflows
+    passam a declarar `ubuntu-24.04` — a imagem em que a suíte e2e do Playwright
+    foi validada.
+    
+    Subir a versão do Playwright (o caret permite) é **decisão à parte**: muda o
+    Chromium e revalida os 17 specs e2e.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>

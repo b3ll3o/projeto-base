@@ -23,8 +23,9 @@
 - **Base path**: `/api/v1/users`
 - **Auth**: `Authorization: Bearer <jwt>` em **6 das 7** rotas — `POST /users` é
   `@Public()`. O `@ApiBearerAuth()` é **por handler**, não no controller.
-- **Guards**: `JwtAuthGuard` na **classe** do controller. As 5 rotas por `:id`
-  (`GET`, `PATCH`, `DELETE`, `POST /:id/restore`, `GET /:id/history`) somam
+- **Guards**: `JwtAuthGuard` na **classe** do controller. As 5 rotas por `{id}`
+  (`GET`, `PATCH`, `DELETE` em `/api/v1/users/{id}`, mais
+  `POST /api/v1/users/{id}/restore` e `GET /api/v1/users/{id}/history`) somam
   `@UseGuards(UserOwnershipGuard)` — a sessão precisa ser a **dona** do recurso.
 - **Content-Type**: `application/json; charset=utf-8` (request e response)
 - **Erros**: RFC 7807 (Problem Details)
@@ -32,15 +33,15 @@
 
 ## §2. Endpoints
 
-| # | Método | Path                              | Auth | Códigos declarados no contrato            |
-|---|--------|-----------------------------------|------|--------------------------------------------|
-| 1 | `POST` | `/api/v1/users`                   | ❌   | `201`, `400`, `404`, `409`                  |
-| 2 | `GET`  | `/api/v1/users`                   | ✅   | `200`                                       |
-| 3 | `GET`  | `/api/v1/users/:id`               | ✅   | `200`, `403`, `404`                         |
-| 4 | `PATCH`| `/api/v1/users/:id`               | ✅   | `200`, `400`, `403`, `404`, `412`           |
-| 5 | `DELETE`| `/api/v1/users/:id`              | ✅   | `204`, `400`, `403`, `404`, `412`           |
-| 6 | `POST` | `/api/v1/users/:id/restore`       | ✅   | `201`, `400`, `403`, `404`, `412`           |
-| 7 | `GET`  | `/api/v1/users/:id/history`       | ✅   | `200`, `403`                                |
+| # | Método | Path                                | Auth | Códigos declarados no contrato            |
+|---|--------|-------------------------------------|------|--------------------------------------------|
+| 1 | `POST` | `/api/v1/users`                     | ❌   | `201`, `400`, `404`, `409`                  |
+| 2 | `GET`  | `/api/v1/users`                     | ✅   | `200`                                       |
+| 3 | `GET`  | `/api/v1/users/{id}`                 | ✅   | `200`, `403`, `404`                         |
+| 4 | `PATCH`| `/api/v1/users/{id}`                 | ✅   | `200`, `400`, `403`, `404`, `412`           |
+| 5 | `DELETE`| `/api/v1/users/{id}`                | ✅   | `204`, `400`, `403`, `404`, `412`           |
+| 6 | `POST` | `/api/v1/users/{id}/restore`         | ✅   | `201`, `400`, `403`, `404`, `412`           |
+| 7 | `GET`  | `/api/v1/users/{id}/history`         | ✅   | `200`, `403`                                |
 
 Os códigos da tabela são os **declarados** no `openapi.json` — por `@ApiResponse`
 explícito ou pelo default do método. Códigos que o runtime pode produzir sem
@@ -108,11 +109,11 @@ página — o envelope **não** tem `hasMore`.
 ou fracionário; `cursor` que não é um id). Antes da #124, `limit=abc` virava `NaN` e chegava ao
 `take:` do Prisma — **500**, onde o certo é **400**.
 
-### 3.3 `GET /users/:id` — Buscar por ID
+### 3.3 `GET /users/{id}` — Buscar por ID
 
 Resposta `200` com `UserOutputDto`; `404` se não encontrado (soft-deletado **não** retorna — usar `includeDeleted=true` em `GET /users` ou restaurar antes); `403` (`USER_OWNERSHIP_VIOLATION`) se a sessão não for a dona da conta.
 
-### 3.4 `PATCH /users/:id` — Renomear
+### 3.4 `PATCH /users/{id}` — Renomear
 
 **Headers obrigatórios**: `If-Match: W/"v<N>"` (optimistic locking, RFC 7232). Ausência/invalidade → `400`.
 
@@ -120,15 +121,15 @@ Resposta `200` com `UserOutputDto`; `404` se não encontrado (soft-deletado **n�
 
 Resposta `200` com `UserOutputDto` + novo `ETag`. Conflito de versão → `412 Precondition Failed`.
 
-### 3.5 `DELETE /users/:id` — Soft delete
+### 3.5 `DELETE /users/{id}` — Soft delete
 
 `If-Match: W/"v<N>"` obrigatório. `204 No Content` em sucesso. Conflito → `412`.
 
-### 3.6 `POST /users/:id/restore` — Restaurar soft-deletado
+### 3.6 `POST /users/{id}/restore` — Restaurar soft-deletado
 
 `If-Match: W/"v<N>"` obrigatório. `201 Created` com `UserOutputDto` + novo `ETag`.
 
-### 3.7 `GET /users/:id/history` — Histórico de auditoria
+### 3.7 `GET /users/{id}/history` — Histórico de auditoria
 
 **Query params**: `cursor`, `limit` (mesma convenção de §3.2). `includeDeleted` **não** se aplica.
 
@@ -136,7 +137,7 @@ Resposta `200` com `UserOutputDto` + novo `ETag`. Conflito de versão → `412 P
 (`UserHistoryPageDto`, de `packages/shared-types`).
 
 **Códigos de erro**: `400` (`VALIDATION_ERROR` — query inválida, pela MESMA validação de §3.2) e `403` (`USER_OWNERSHIP_VIOLATION`). A
-#124 fechou só uma das DUAS surfaces de query da API; a outra (`GET /users/:id/history`) ainda
+#124 fechou só uma das DUAS surfaces de query da API; a outra (`GET /users/{id}/history`) ainda
 passava `Number(limit)` cru, e `limit=abc` virava `NaN` no `take:` do Prisma — **500**.
 
 ## §4. `includeDeleted` — case-insensitive
@@ -146,9 +147,9 @@ Aceita `"true"`, `"True"`, `"TRUE"`, `"1"`. Demais valores → `false`. Tipo Swa
 ## §5. Optimistic Locking (RFC 7232)
 
 - Toda resposta mutante **que devolve o usuário** (`POST /users`, `PATCH`,
-  `POST /:id/restore`) inclui `ETag: W/"v<N>"` (header). `DELETE` responde `204`
+  `POST /api/v1/users/{id}/restore`) inclui `ETag: W/"v<N>"` (header). `DELETE` responde `204`
   sem corpo e sem ETag.
-- Mutating endpoints (`PATCH`, `DELETE`, `POST /:id/restore`) exigem `If-Match: W/"v<N>"`.
+- Mutating endpoints (`PATCH`, `DELETE`, `POST /api/v1/users/{id}/restore`) exigem `If-Match: W/"v<N>"`.
 - Divergência de versão → `412 Precondition Failed` (RFC 7807 com `code: CONCURRENCY_CONFLICT`).
 - Parser tolerante a whitespace externo e case-insensitive em `W/` (ver `parseIfMatch` em `apps/api/src/modules/users/infrastructure/http/users.controller.ts`).
 

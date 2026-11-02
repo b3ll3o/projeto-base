@@ -20,7 +20,7 @@
  */
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type { CheckResult } from './check-types';
+import { linhasDoRelato, type CheckResult } from './check-types';
 
 /** O tsconfig que declara os aliases do workspace. */
 export const TSCONFIG_RAIZ = 'tsconfig.base.json';
@@ -135,6 +135,22 @@ export async function checkPathAlias(opts: {
   );
 
   return { ok: errors.length === 0, errors };
+}
+
+// Executado como CLI.
+//
+// MEDIDO 2026-10-29: sem este bloco, `pnpm exec tsx
+// .tooling/scripts/ci/check-path-alias.ts` devolvia `exit 0` e **nenhuma
+// saída**. O gate só media alguma coisa pelo mapa `RUNNERS` do preflight;
+// invocado direto, ele não media NADA.
+//
+// `checkPathAlias` é **assíncrono**, então o bloco usa `.then()` — o mesmo
+// padrão de `check-ci-local-e2e.ts`.
+if (process.argv[1]?.endsWith('check-path-alias.ts')) {
+  checkPathAlias({ repoRoot: '.' }).then((r) => {
+    for (const linha of linhasDoRelato(r)) process.stderr.write(`${linha}\n`);
+    process.exit(r.ok ? 0 : 1);
+  });
 }
 
 async function existe(p: string): Promise<boolean> {

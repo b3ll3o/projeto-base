@@ -464,6 +464,22 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     id: 'check-doc-coverage',
   },
   {
+    // pt-BR (2026-10-29): o `check-doc-coverage` mede COBERTURA (o doc
+    // EXISTE?). A regra mais forte do PR — "doc que mente é P0" — seguia sem
+    // instrumento. MEDIDO 2026-10-29: **5 claims numéricas do repo já
+    // mentem** (todas de "o doc afirma um número que o código não produz
+    // mais"), e nenhuma delas é de "o doc não existe".
+    //
+    // O gate confere o par comando → valor que o doc CITA: o comando tem
+    // que estar lá, e o valor ao lado dele tem que bater com a derivação
+    // (o código real). A derivação é TypeScript — o gate NÃO executa shell,
+    // porque o registry é versionado e um PR pode editá-lo (ele declara **o
+    // que** medir, não **quanto**).
+    name: 'claims numéricos dos docs (doc afirma o que o código produz)',
+    file: '.tooling/scripts/ci/check-doc-claims.ts',
+    id: 'check-doc-claims',
+  },
+  {
     // pt-BR (2026-10-29): o teto de 300 linhas para `.md` é a regra mais
     // antiga do repo e a única que NENHUM gate mediava. MEDIDO: `grep -rln
     // 'MAX_LOC' tooling/scripts/ .tooling/scripts/ | grep -v spec` devolve UM

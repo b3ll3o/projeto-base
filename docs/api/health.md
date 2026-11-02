@@ -10,7 +10,7 @@
 > pelo código — regenerar: `pnpm --filter @projeto/api openapi:export`.
 > Medido em 2026-10-29: o único endpoint deste BC confere com
 > `apps/api/openapi.json`. Contagem por
-> `grep -cE "@(Get|Post|Patch|Put|Delete)\(" apps/api/src/modules/health/health.controller.ts`
+> `grep -hoE "@(Get|Post|Patch|Put|Delete)\(" apps/api/src/modules/health/health.controller.ts | wc -l`
 > → `1`. O contrato inteiro tem 22 paths e 28 operações
 > (`node -e "const d=require('./apps/api/openapi.json');console.log(Object.keys(d.paths).length)"` → `22`;
 > `node -e "const d=require('./apps/api/openapi.json');console.log(Object.values(d.paths).flatMap(p=>Object.keys(p).filter(k=>['get','post','put','patch','delete'].includes(k))).length)"` → `28`),
