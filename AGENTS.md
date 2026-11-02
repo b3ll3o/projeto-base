@@ -163,10 +163,21 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 > [`memory-triage.md`](./.agents/runs/memory-triage.md), lido pelo gate
 > `check-memory-crystallization` nas duas direções.
 
-> **State-Aware Planning (camada 0 do pre-planner, v1.8.0+):** convenção
-> [`state-aware-planning.md`](./.agents/specs/conventions/state-aware-planning.md)
-> obriga gerar `state-snapshot-<ts>.md` ANTES de planejar. Alimenta o
-> `specialist-router` (camada 1).
+> **Skills de descoberta (v1.15.0+):** [`find-skills`](./.agents/skills/find-skills/SKILL.md)
+> é a única skill que **procura** skill. A ordem é fixa — **repo → registro → fazer
+> na mão**: as skills de `.agents/skills/` e a matriz `specialist-routing.md` respondem
+> "qual skill eu uso"; o registro (`hermes skills search`, catálogo `skills.sh`) só é
+> consultado quando o repo não cobre a demanda. Antes de instalar, a skill exige
+> auditar o candidato (origem oficial vs `community`, número de instalações, stars do
+> repositório, e **o que a SKILL.md pede** — rede, escrita fora do repo, token de
+> terceiro) e exige **adaptar** ao padrão do repo (pt-BR, ≤300 linhas, frontmatter
+> próprio, cabeçalho `Quem invoca`/`Quando invocar`), nunca vendorizar cru.
+> Adaptada de [vercel-labs/skills](https://github.com/vercel-labs/skills)
+> (`skills/find-skills/SKILL.md`, MIT, © Vercel, Inc.).
+
+> **State-Aware Planning (camada 0 do pre-planner, a partir de v1.8.0):** convenção
+> [`.agents/specs/conventions/state-aware-planning.md`](./.agents/specs/conventions/state-aware-planning.md)
+> obriga gerar `state-snapshot-<ts>.md` ANTES de planejar. Alimenta o `specialist-router` (camada 1).
 
 ---
 
