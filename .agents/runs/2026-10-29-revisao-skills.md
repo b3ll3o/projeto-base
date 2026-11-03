@@ -21,7 +21,7 @@
 | F8 | 11 skills sem o cabeçalho `Quem invoca`/`Quando invocar` | consistência | `viva` | sem regra que obrigue — propor |
 | F9 | 6 `description` com mais de 400 caracteres | custo de contexto | `viva` | sem teto declarado |
 | F10 | `findings-orchestration` a 2 linhas do teto de 300 | limite | `viva` | observação |
-| F11 | **Nenhum instrumento roda as procedures das skills de auditoria** |defesa em profundidade | `viva` | recomendação estrutural |
+| F11 | **Nenhum instrumento roda as procedures das skills de auditoria** | defesa geral | **fechada** (instrumento no PR #141) | `check-audit-skills` executa os passos declarados |
 
 ---
 
