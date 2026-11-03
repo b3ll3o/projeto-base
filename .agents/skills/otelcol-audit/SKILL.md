@@ -105,11 +105,24 @@ grep "image: otel/" docker-compose.yml
 ## Passo 7 — Validar W3C propagation end-to-end
 
 ```bash
-# apps/api [gate: run — confere a propagação de trace no código da API]
-grep -rn "W3CTraceContextPropagator\|traceparent" apps/api/src/ | head -5
-# apps/web
-grep -rn "traceparent\|traceContext" apps/web/ | head -5
-# Esperado: ambos propagam W3C
+# A propagação W3C é o DEFAULT do NodeSDK [gate: run — confere a propagação de trace nos dois lados] — o OTel JS usa
+# W3CTraceContextPropagator sem ninguém configurar. O que precisa existir é a
+# INICIALIZAÇÃO do SDK, nos dois lados.
+# MEDIDO em 2026-10-29: este passo procurava "W3CTraceContextPropagator" ou
+# "traceparent" no código e não achava NADA — porque a propagação é o default
+# e ninguém a declara. O passo mediava nada, e no CI (sem build output) a
+# saída saía vazia. Agora o passo mede a inicialização e AFIRMA que a achou.
+API_SDK=$(grep -rn "new NodeSDK" apps/api/src/ | head -3)
+WEB_SDK=$(grep -rn "new NodeSDK" apps/web/ --include='*.ts' | grep -v node_modules | head -3)
+if [ -z "$API_SDK" ]; then
+  echo "✗ a API não inicializa o NodeSDK — sem SDK não há propagação"
+fi
+if [ -z "$WEB_SDK" ]; then
+  echo "✗ o web não inicializa o NodeSDK — sem SDK não há propagação"
+fi
+echo "$API_SDK"
+echo "$WEB_SDK"
+# Esperado: ambos inicializam o SDK (e com ele, a propagação W3C)
 ```
 
 ## Passo 8 — Persistir findings
