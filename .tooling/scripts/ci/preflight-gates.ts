@@ -234,6 +234,28 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     id: 'check-audit-skills',
   },
   {
+    // Auditoria de seguranca de 2026-11-03: 89 advisories de dependencia
+    // (4 criticas, 23 altas) e NENHUM instrumento media. O gate roda o
+    // `pnpm audit --json` e reprova quando ha advisory critica ou alta que
+    // nao esteja na lista de excecoes versionada.
+    //
+    // Cada excecao carrega o motivo medido E a verificacao que prova que o
+    // motivo continua valendo — a verificacao roda, e se parar de valer a
+    // excecao e reprovada. (MEDIDO: o gate pegou a propria excecao do vite
+    // mal escrita no primeiro dia.)
+    name: 'as advisories de dependencia estao corrigidas ou declaradas',
+    file: '.tooling/scripts/ci/check-dependency-audit.ts',
+    id: 'check-dependency-audit',
+  },
+  {
+    // Auditoria de seguranca de 2026-11-03: as 21 actions do CI estavam
+    // pinadas por TAG — que e' ponteiro mutavel. Quem controla a action move
+    // a tag e o codigo novo entra no CI sem revisao nenhuma.
+    name: 'as actions do CI estao pinadas por SHA',
+    file: '.tooling/scripts/ci/check-ci-action-pinning.ts',
+    id: 'check-ci-action-pinning',
+  },
+  {
     // #125: o documento OpenAPI versionado divergir do que o código gera.
     //
     // A issue acerta o ponto: sem a spec VERSIONADA, o gate que a compara
