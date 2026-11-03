@@ -18,6 +18,7 @@
 | F13 | `docker-prod-audit` passo 2 precisa de `yq`, que não está no CI | procedimento cego | **corrigido** (declarado `skip` com o motivo) | ou o `yq` entra na imagem, ou o passo é reescrito |
 | F14 | `otelcol-audit` passo 2.2 varre o build output e estoura o tempo | procedimento cego | **corrigido** | `--exclude-dir` para `.next`/`.next-e2e`/`node_modules` |
 | F15 | `docker-prod-audit` passo 6.2 exige o padrão no início da linha | falso positivo | **corrigido** | o `.dockerignore` usa `**/` — e o segmento pai cobre |
+| F16 | `otelcol-audit` passo 7 procurava `W3CTraceContextPropagator` — que ninguém declara | procedimento cego | **corrigido** | a propagação W3C é o **default** do NodeSDK; o passo mede a inicialização |
 
 ---
 
@@ -161,6 +162,25 @@ excluídas**. E `.agents/runs/` é coberto pela exclusão do diretório pai
 
 Corrigido: o passo aceita o prefixo `**/` e confere o **segmento pai**
 (`${pattern%%/*}`).
+
+## F16 — `otelcol-audit` passo 7: a propagação W3C é o default do SDK
+
+**Classe:** procedimento cego · **Status:** **corrigido**
+
+O passo procurava `W3CTraceContextPropagator` ou `traceparent` no código —
+e não achava **nada**. A propagação W3C é o **default** do `NodeSDK` (o OTel
+JS usa `W3CTraceContextPropagator` sem ninguém configurar), então ninguém a
+declara. O passo mediava nada — e no CI, onde não há build output, a saída
+saía **vazia**: foi o primeiro passo que o gate novo derrubou na CI.
+
+O que existe de verdade é a **inicialização do SDK** nos dois lados:
+
+```
+apps/api/src/shared/infrastructure/telemetry/tracing.ts:15   new NodeSDK({...})
+apps/web/instrumentation.node.ts:48                          new NodeSDK({...})
+```
+
+O passo agora mede isso, e afirma que a achou: sem SDK não há propagação.
 
 ---
 
