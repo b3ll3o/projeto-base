@@ -1,7 +1,7 @@
 ---
 name: otelcol-audit
 version: 1.0
-updated: 2026-10-08
+updated: 2026-10-29
 description: "Processo determinístico de auditoria OTel Collector — valida schema YAML, audita receivers/processors, sampling, profiles Compose, pinning de versão. Carregado por `otelcol-infra-specialist` quando a task é de auditoria (não criação) do `infra/otelcol/config.yaml`."
 ---
 
@@ -28,7 +28,7 @@ context:
 ## Passo 1 — Validar schema do config
 
 ```bash
-# OTel Collector tem schema JSON próprio; validate é a primeira barreira
+# OTel Collector tem schema JSON próprio; validate é a primeira barreira [gate: skip — valida a config no container do Collector — precisa do Docker]
 docker run --rm -v "$(pwd)/infra/otelcol:/cfg" \
   otel/opentelemetry-collector-contrib:0.103.0 \
   validate --config=/cfg/config.yaml
@@ -39,17 +39,24 @@ Se `docker` indisponível, pular e marcar como "skipped (no docker)".
 ## Passo 2 — Auditar receivers (princípio do mínimo)
 
 ```bash
-# 2.1 Receivers declarados
+# 2.1 Receivers declarados [gate: run — lê a config do Collector]
 grep -A 10 "^receivers:" infra/otelcol/config.yaml
 
 # 2.2 Producers ativos (quem produz spans/metrics/logs que esse receiver consome?)
+# MEDIDO em 2026-10-29: o `grep -rn apps/` varria também o BUILD OUTPUT
+# (`apps/web/.next-e2e/standalone/...`, com sourcemaps de MB) — a saída era
+#Gigabytes e o passo ESTOURAVA o tempo limite. O `--exclude-dir` corta o que
+# não é fonte.
 echo "--- otlp producers ---"
-grep -rn "@opentelemetry/exporter-otlp\|OtlpExporter" apps/ | head -10
+grep -rn --exclude-dir=node_modules --exclude-dir=.next --exclude-dir=.next-e2e \
+  "@opentelemetry/exporter-otlp\|OtlpExporter" apps/ | head -10
 echo "--- prometheus producers ---"
-grep -rn "@opentelemetry/exporter-prometheus\|--set-process-metrics\|prom-client" apps/ \
+grep -rn --exclude-dir=node_modules --exclude-dir=.next --exclude-dir=.next-e2e \
+  "@opentelemetry/exporter-prometheus\|--set-process-metrics\|prom-client" apps/ \
   || echo "sem producer prometheus"
 echo "--- zipkin/jaeger producers ---"
-grep -rn "zipkin\|jaeger" apps/ || echo "sem producer zipkin/jaeger"
+grep -rn --exclude-dir=node_modules --exclude-dir=.next --exclude-dir=.next-e2e \
+  "zipkin\|jaeger" apps/ || echo "sem producer zipkin/jaeger"
 ```
 
 Regra: receiver ativo sem producer = finding DRIFT (custo de export vazio).
@@ -57,7 +64,7 @@ Regra: receiver ativo sem producer = finding DRIFT (custo de export vazio).
 ## Passo 3 — Auditar processors essenciais
 
 ```bash
-# 3.1 memory_limiter e batch (praticamente obrigatórios)
+# 3.1 memory_limiter e batch (praticamente obrigatórios) [gate: run — confere memory_limiter e batch]
 grep -E "memory_limiter|batch" infra/otelcol/config.yaml \
   || echo "✗ faltando memory_limiter ou batch"
 
@@ -72,7 +79,7 @@ grep -E "memory_limiter:|batch:|tail_sampling:" infra/otelcol/config.yaml
 ## Passo 4 — Validar sampling decision propagation
 
 ```bash
-# Esperado: parent_based para preservar decisão do caller (cost-efficiency)
+# Esperado: parent_based para preservar decisão do caller (cost-efficiency) [gate: run — confere a amostragem]
 grep -E "parent_based|probabilistic" infra/otelcol/config.yaml \
   || echo "✗ sem política de sampling declarada"
 ```
@@ -80,7 +87,7 @@ grep -E "parent_based|probabilistic" infra/otelcol/config.yaml \
 ## Passo 5 — Auditar profile Compose
 
 ```bash
-# OTel Collector NÃO pode ser default — deve ser opt-in via profile
+# OTel Collector NÃO pode ser default — deve ser opt-in via profile [gate: run — confere o perfil do Collector no compose]
 grep -B 1 -A 1 "profiles:" docker-compose.yml
 
 # Verificar se collector está em algum profile
@@ -90,7 +97,7 @@ grep -B 5 "otel-collector\|otelcol" docker-compose.yml | head -20
 ## Passo 6 — Drift OTel Collector version
 
 ```bash
-# Versão travada (sem :latest)
+# Versão travada (sem :latest) [gate: run — confere a imagem do Collector]
 grep "image: otel/" docker-compose.yml
 # Esperado: tag específica (ex: 0.103.0), nunca :latest
 ```
@@ -98,11 +105,24 @@ grep "image: otel/" docker-compose.yml
 ## Passo 7 — Validar W3C propagation end-to-end
 
 ```bash
-# apps/api
-grep -rn "W3CTraceContextPropagator\|traceparent" apps/api/src/ | head -5
-# apps/web
-grep -rn "traceparent\|traceContext" apps/web/ | head -5
-# Esperado: ambos propagam W3C
+# A propagação W3C é o DEFAULT do NodeSDK [gate: run — confere a propagação de trace nos dois lados] — o OTel JS usa
+# W3CTraceContextPropagator sem ninguém configurar. O que precisa existir é a
+# INICIALIZAÇÃO do SDK, nos dois lados.
+# MEDIDO em 2026-10-29: este passo procurava "W3CTraceContextPropagator" ou
+# "traceparent" no código e não achava NADA — porque a propagação é o default
+# e ninguém a declara. O passo mediava nada, e no CI (sem build output) a
+# saída saía vazia. Agora o passo mede a inicialização e AFIRMA que a achou.
+API_SDK=$(grep -rn "new NodeSDK" apps/api/src/ | head -3)
+WEB_SDK=$(grep -rn "new NodeSDK" apps/web/ --include='*.ts' | grep -v node_modules | head -3)
+if [ -z "$API_SDK" ]; then
+  echo "✗ a API não inicializa o NodeSDK — sem SDK não há propagação"
+fi
+if [ -z "$WEB_SDK" ]; then
+  echo "✗ o web não inicializa o NodeSDK — sem SDK não há propagação"
+fi
+echo "$API_SDK"
+echo "$WEB_SDK"
+# Esperado: ambos inicializam o SDK (e com ele, a propagação W3C)
 ```
 
 ## Passo 8 — Persistir findings

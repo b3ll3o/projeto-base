@@ -1,7 +1,7 @@
 ---
 name: openapi-audit
 version: 1.0
-updated: 2026-10-08
+updated: 2026-10-29
 description: "Processo determinístico de auditoria OpenAPI — re-gera spec, detecta drift DTO↔Prisma, valida cobertura de decorators Swagger, identifica breaking changes. Carregado por `openapi-contract-specialist` quando a task é de auditoria (não criação de spec). Use para scan periódico ou revisão pré-merge de contrato HTTP."
 ---
 
@@ -20,7 +20,7 @@ task:
 context:
   scope: "drift|breaking|coverage|full"
   openapi_path: "apps/api/openapi.json"
-  controllers: ["apps/api/src/modules/*/controllers/"]
+  controllers: ["apps/api/src/modules/*/infrastructure/http/"]
   dtos: ["apps/api/src/modules/*/application/dto/"]
   prisma_schema: "apps/api/prisma/schema.prisma"
   base_branch: "main"   # para diff de breaking changes
@@ -29,6 +29,7 @@ context:
 ## Passo 1 — Re-gerar spec e diff
 
 ```bash
+# [gate: skip — re-gera a spec com o toolchain e escreve o arquivo versionado]
 cd apps/api
 pnpm openapi:export   # gera apps/api/openapi.json (pode falhar se faltar script)
 git diff apps/api/openapi.json | head -100
@@ -39,30 +40,69 @@ Se `openapi.json` não existe no repo (gerado on-demand): rodar e commitar antes
 ## Passo 2 — Detectar drift DTO ↔ Prisma
 
 ```bash
-# 2.1 Campos em DTOs (subset tipado de Prisma esperado)
-grep -E "^\s+[a-zA-Z]+:" apps/api/src/modules/*/application/dto/*.ts | sort -u > /tmp/dto-fields.txt
+# 2.1 Campos em DTOs (subset tipado de Prisma esperado) [gate: run — compara DTO e Prisma pelo NOME do campo — é o passo que gerava falso positivo]
+# MEDIDO em 2026-10-29: este passo comparava DOIS FORMATOS DIFERENTES — o lado
+# do DTO saía como "arquivo: campo: tipo;" e o do Prisma como "campo" — então o
+# diff acusava 100 linhas ("1,55c1,43") e a regra "DTO deve ser subset" não
+# podia ser lida. Agora os dois lados são normalizados: só o nome do campo.
+grep -hE "^\s+[a-zA-Z]+:" apps/api/src/modules/*/application/dto/*.ts \
+  | sed 's/^ *//' | cut -d: -f1 | sort -u > /tmp/dto-fields.txt
 
 # 2.2 Campos em Prisma models
 grep -E "^\s+[a-zA-Z]+\s+" apps/api/prisma/schema.prisma | awk '{print $1}' | sort -u > /tmp/prisma-fields.txt
 
 # 2.3 Diff
 diff /tmp/dto-fields.txt /tmp/prisma-fields.txt | head -50
-# DTO deve ser subset (nunca mais) — campos em DTO que não existem em Prisma = finding DRIFT
+
+# 2.4 O QUE É DRIFT (o diff acima é ruído — os dois lados têm FORMATOS
+# diferentes; compare os NOMES). E a premissa "DTO é subset do Prisma" é
+# FALSA neste codebase: a API expõe campos que não são coluna, por design
+# (alias pt-BR, request-only, output computado). Medido em 2026-10-29: 13
+# campos de DTO que não existem no Prisma, e NENHUM é erro —
+#   alias do schema:  nome→name, senhaHash→passwordHash
+#   só na API:        accessToken, refreshToken, expectedVersion, isDeleted,
+#                     limit, nextCursor, perfilEfetivo, agora,
+#                     novoEmail, novoNome, senha (request-only)
+# Então o finding real é um campo DESCONHECIDO fora desta lista:
+comm -23 /tmp/dto-fields.txt /tmp/prisma-fields.txt \
+  | grep -vE '^(accessToken|refreshToken|expectedVersion|isDeleted|limit|nextCursor|perfilEfetivo|agora|novoEmail|novoNome|senha|nome|senhaHash)$'
+# Saída vazia = nenhum drift. Saída não vazia = campo de DTO que não existe
+# nem no Prisma nem na lista de aliases: ACHAR o porque antes de reportar.
+#
+# E o passo AFIRMA que os dois lados foram lidos: se o glob dos DTO ou o grep
+# do schema parassem de casar, a comparação viraria "nenhuma diferença" e
+# nenhum drift apareceria — o "não achei" viraria "não medi".
+if [ ! -s /tmp/dto-fields.txt ] || [ ! -s /tmp/prisma-fields.txt ]; then
+  echo "✗ um dos lados da comparação ficou vazio — o passo não mediu drift"
+fi
 ```
 
 ## Passo 3 — Cobertura de decorators Swagger
 
 ```bash
-# 3.1 Controllers sem @ApiTags
-grep -rn "@Controller" apps/api/src/modules/*/controllers/ -l | while read f; do
+# 3.1 Controllers sem @ApiTags [gate: run — confere os decorators Swagger de cada controller]
+grep -rn "@Controller" apps/api/src/modules/*/infrastructure/http/ -l | while read f; do
   grep -q "@ApiTags" "$f" || echo "✗ $f missing @ApiTags"
 done
 
 # 3.2 Endpoints sem @ApiOperation
-grep -rnE "@(Get|Post|Put|Patch|Delete)\(" apps/api/src/modules/*/controllers/ | while read line; do
+# MEDIDO em 2026-10-29: a versão anterior acusava 2 FALSOS positivos.
+# (1) `grep -rnE "@(Get|Post|...)"` casa dentro de COMENTÁRIO — o
+#     `@Get('me')` de um JSDoc @example em `current-user.decorator.ts` contava
+#     como endpoint. O decorator de verdade é o que está no INÍCIO da linha.
+# (2) a janela de 5 linhas não alcançava o `@ApiOperation` quando há um
+#     comentário longo entre o decorator da rota e o da doc (o
+#     `users.controller.ts` tem 7 linhas de comentário no meio). A janela é
+#     de -10 a +10: o `@ApiOperation` pode estar antes ou depois.
+grep -rnE "^\s*@(Get|Post|Put|Patch|Delete)\(" apps/api/src/modules/*/infrastructure/http/ | while read line; do
   file=$(echo "$line" | cut -d: -f1)
   lineno=$(echo "$line" | cut -d: -f2)
-  context=$(sed -n "${lineno},$((lineno+5))p" "$file")
+  # A janela começa em 1, nunca em zero: um decorator de rota nas 10 primeiras
+  # linhas do arquivo faria `sed -n "-7,13p"` — e o sed lê "-7" como opção e
+  # falha (MEDIDO em 2026-10-29: "sed: invalid option -- '7'"), o que esvaziaria
+  # o contexto e acusaria um "@ApiOperation" faltando que existe.
+  ini=$(( lineno > 10 ? lineno - 10 : 1 ))
+  context=$(sed -n "${ini},$((lineno+10))p" "$file")
   if ! echo "$context" | grep -q "@ApiOperation"; then
     echo "✗ $file:$lineno missing @ApiOperation"
   fi
@@ -75,7 +115,7 @@ grep -rL "@ApiProperty" apps/api/src/modules/*/application/dto/ 2>/dev/null | he
 ## Passo 4 — Detectar breaking changes vs base_branch
 
 ```bash
-# 4.1 Mudanças em path/method/param
+# 4.1 Mudanças em path/method/param [gate: skip — precisa da ref local `main`, que o checkout do CI não tem]
 git diff main..HEAD -- apps/api/src/modules/ \
   | grep -E "^\+.*@(Get|Post|Put|Patch|Delete|Body|Param|Query)" \
   | head -30
@@ -94,8 +134,8 @@ git diff main..HEAD -- apps/api/src/modules/ \
 ## Passo 5 — Validar error responses padronizados
 
 ```bash
-# 5.1 Shapes de exception (esperado: NestJS built-in ou Problem Details RFC 7807)
-grep -rn "throw new " apps/api/src/modules/*/controllers/ | head -20
+# 5.1 Shapes de exception (esperado: NestJS built-in ou Problem Details RFC 7807) [gate: run — lista os `throw new` e as exceptions custom]
+grep -rn "throw new " apps/api/src/modules/*/infrastructure/http/ | head -20
 
 # 5.2 Onde estão as exceptions custom
 find apps/api/src -name "*-exception.ts" -o -name "*exception.filter.ts" 2>/dev/null

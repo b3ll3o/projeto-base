@@ -1,7 +1,7 @@
 ---
 name: prisma-audit
 version: 1.0
-updated: 2026-10-08
+updated: 2026-10-29
 description: "Processo determinístico de auditoria Prisma — mapeia schema/migrations/queries, valida lens DDD/H1-H6, detecta N+1, audita audit fields. Carregado por `prisma-db-specialist` quando a task é de auditoria (não criação). Use para scan periódico via `finding-orchestrator` ou revisão sob demanda."
 ---
 
@@ -27,7 +27,7 @@ context:
 ## Passo 1 — Mapear estado AS-IS
 
 ```bash
-# 1.1 Schema
+# 1.1 Schema [gate: run — lê o schema]
 cat apps/api/prisma/schema.prisma
 
 # 1.2 Migrations em ordem
@@ -46,7 +46,7 @@ grep -E "(createdAt|updatedAt|deletedAt)" apps/api/prisma/schema.prisma
 ## Passo 2 — Validar lens DDD/H1-H6
 
 ```bash
-# H1: domain/ NÃO importa @prisma/client (boundary violation)
+# H1: domain/ NÃO importa @prisma/client (boundary violation) [gate: run — confere as lenses H1 (domain não importa Prisma) e H2]
 grep -rn "@prisma/client" apps/api/src/modules/*/domain/ 2>/dev/null \
   && echo "✗ LENS H1 VIOLADA" || echo "✓ H1 clean"
 
@@ -61,7 +61,7 @@ find apps/api/src/modules -name "*repository.ts" -o -name "*prisma-repository.ts
 ## Passo 3 — Detectar N+1 e missing indexes
 
 ```bash
-# 3.1 findMany dentro de loop sem include/select
+# 3.1 findMany dentro de loop sem include/select [gate: run — procura N+1 e listagem sem paginação]
 grep -rn -B 2 "findMany\|findFirst" apps/api/src/modules/ \
   | grep -B 2 "for.*of\|forEach\|for (" \
   | head -30
@@ -84,7 +84,7 @@ mutável dentro de um passo de leitura — os dois ficam como **opcionais**.
 cd apps/api
 MIGS=prisma/migrations
 
-# 4.1 Toda migration tem migration.sql não-vazio (migration vazia = deploy que não faz nada)
+# 4.1 Toda migration tem migration.sql não-vazio (migration vazia = deploy que não faz nada) [gate: run — confere as migrations: vazia, colisão de timestamp, provider]
 find "$MIGS" -mindepth 1 -maxdepth 1 -type d -name '20*' \
   | while read -r d; do [ -s "$d/migration.sql" ] || echo "VAZIA: $d"; done
 
@@ -104,6 +104,7 @@ grep -A 2 'datasource db' prisma/schema.prisma | grep provider
 **Opcionais (só com `DATABASE_URL` alcançável — nunca obrigatórios):**
 
 ```bash
+# [gate: skip — precisa do banco para o `prisma migrate status`]
 cd apps/api
 pnpm exec prisma migrate status                                    # exige DB
 pnpm exec prisma migrate diff \
@@ -120,7 +121,7 @@ pnpm exec prisma migrate diff \
 ## Passo 5 — Auditar audit fields por model
 
 ```bash
-# Para cada model, checar createdAt/updatedAt/deletedAt
+# Para cada model, checar createdAt/updatedAt/deletedAt [gate: run — confere os audit fields de cada model]
 grep -E "^model " apps/api/prisma/schema.prisma | while read m; do
   model=$(echo "$m" | awk '{print $2}')
   echo "=== $model ==="

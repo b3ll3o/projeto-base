@@ -108,19 +108,25 @@ describe('checkVersionFooters (#126)', () => {
   });
 
   // ── a lista é a raiz do defeito ─────────────────────────────────────────
-  it('a lista tem OS QUATRO footers, e os quatro arquivos existem no repo', async () => {
+  it('a lista tem OS SEIS footers, e os seis arquivos existem no repo', async () => {
     // ⚠️ Este é o teste que impede a reincidência do #126: a raiz do defeito
     // foi a lista do `release-mode.md` nomear TRÊS. Se a lista deste gate
-    // nomear três, o gate passa a medir a mesma coisa que media antes.
-    expect(FOOTERS_DE_VERSAO.length).toBe(4);
+    // nomear menos, o gate passa a medir a mesma coisa que media antes.
+    //
+    // MEDIDO em 2026-10-29: a lista nomeava QUATRO e o repo tem SEIS — o
+    // `AGENTS.md` divergiu para 1.13.0 sem o gate ver. Por isso os dois
+    // extras são nomeados aqui: é a lista, não o texto, que fecha a classe.
+    expect(FOOTERS_DE_VERSAO.length).toBe(6);
     const arquivos = FOOTERS_DE_VERSAO.map((f) => f.arquivo);
     expect(arquivos).toContain('docs/MONOREPO.md');
     expect(arquivos).toContain('docs/STACK.md');
     expect(arquivos).toContain('docs/TEMPLATE_USAGE.md');
     expect(arquivos).toContain('.agents/specs/conventions/estrutura-e-versionamento.md');
+    expect(arquivos).toContain('AGENTS.md');
+    expect(arquivos).toContain('README.md');
   });
 
-  it('os quatro arquivos da lista existem de verdade no repo', async () => {
+  it('os seis arquivos da lista existem de verdade no repo', async () => {
     for (const footer of FOOTERS_DE_VERSAO) {
       await expect(fs.access(path.join(process.cwd(), footer.arquivo))).resolves.toBeUndefined();
     }

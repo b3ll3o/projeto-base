@@ -28,6 +28,7 @@ context:
 ## Passo 1 — Inventariar os docs versionados
 
 ```bash
+# [gate: run — inventário read-only: lista os .md versionados e mede o tamanho]
 # 1.1 Todos os .md versionados, com tamanho
 git ls-files '*.md' | xargs wc -l | sort -rn | head -30
 
@@ -46,6 +47,7 @@ git ls-files '*.md' | grep -vE '^docs/superpowers/|^\.agents/runs/'
 ## Passo 2 — Medir a cobertura (unidade de código → doc canônico)
 
 ```bash
+# [gate: run — cobertura read-only: confere módulo→doc, rotas do front e packages]
 # 2.1 Bounded contexts do backend → docs/api/<bc>.md
 for m in apps/api/src/modules/*/; do
   bc=$(basename "$m")
@@ -72,6 +74,7 @@ Cada ausência vira **gap nomeado** (§Passo 6) — nunca uma menção avulsa.
 Três classes de claim verificável sem executar nada:
 
 ```bash
+# [gate: run — drift read-only: compara versões, comandos e paths citados]
 # 3.1 Versões declaradas em docs de stack vs package.json real
 grep -nE '^\|.*(NestJS|Prisma|Next\.js|React|Vitest|Playwright)' docs/STACK.md
 grep -E '"(nestjs/core|prisma/client|next|react|vitest|@playwright/test)"' apps/*/package.json
@@ -95,6 +98,7 @@ grep -rnoE '`(apps|packages|docs|\.agents)/[A-Za-z0-9._/-]+`' docs/ README.md \
 ## Passo 4 — Frescor
 
 ```bash
+# [gate: run — frescor read-only: conta docs com data de medição e compara footers]
 # 4.1 Docs canônicos com data de medição ("Medido em YYYY-MM-DD")
 grep -rn 'Medido em' docs/ README.md | sed 's/:.*Medido em/ → /' | cut -d' ' -f1 | sort | uniq -c
 
@@ -111,10 +115,15 @@ está **ótimo** — reescrevê-lo só para "tocar" é churn.
 ## Passo 5 — Refs e links
 
 ```bash
+# [gate: skip — 5.1 invoca o preflight inteiro; dentro do gate seria recursão
+#  (o preflight chama o gate, o gate chama a skill, a skill chama o preflight)]
 # 5.1 O gate oficial (roda no preflight)
 pnpm ci:preflight
+```
 
-# 5.2 Amostra do que ele mede, para o relatório
+```bash
+# [gate: run — mede quantos links markdown existem nos docs e no README]
+# 5.2 Amostra do que o gate mede, para o relatório
 grep -rnoE '\[[^]]+\]\([^)]+\)' docs/ README.md | wc -l
 ```
 

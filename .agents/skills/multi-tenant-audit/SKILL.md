@@ -1,7 +1,7 @@
 ---
 name: multi-tenant-audit
 version: 1.0
-updated: 2026-10-16
+updated: 2026-10-18
 description: "Processo determinístico de auditoria multi-tenant — mapeia models sem tenant_id, queries sem filtro de tenant, chaves de cache que não incluem tenant, RLS/políticas e o gate de isolamento cross-tenant. Carregado por `multi-tenant-specialist` quando a task é de auditoria (não criação). NÃO é despachada pelo `finding-orchestrator` (a lista de audit specialists dele é fixa em 5, `finding-orchestrator.md:82-91`, e não inclui tenancy). Para scan periódico, despache o `multi-tenant-specialist` direto."
 ---
 

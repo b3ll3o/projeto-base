@@ -31,12 +31,19 @@ interface FooterEsperado {
 }
 
 /**
- * Os QUATRO footers.
+ * Os SEIS footers.
  *
  * ⚠️ A lista é o que este gate mede — e ela é a RAIZ do #126: a lista do
  * `release-mode.md` nomeava três. Por isso ela está EXPORTADA, e a spec a
  * prende (o mesmo motivo do `HOSTS_DESTINO_LOCAL` do PR #115): uma lista de
  * segurança que ninguém prende é uma lista que alguém encolhe sem querer.
+ *
+ * MEDIDO em 2026-10-29: a lista nomeava QUATRO e o repo tem SEIS arquivos com
+ * footer de versão — `AGENTS.md` e `README.md` ficaram de fora, e o drift
+ * aconteceu: `AGENTS.md` foi para `1.13.0` no merge do #116 enquanto os
+ * quatro seguiam em `1.12.0`, e **nenhum gate olhou**. A mesma classe do
+ * #126 (um arquivo que não está na lista não é atualizado) reincidiu dentro
+ * do próprio gate que existe para fechá-la.
  */
 export const FOOTERS_DE_VERSAO: readonly FooterEsperado[] = [
   { arquivo: 'docs/MONOREPO.md', rotulo: '**Versão do documento:**' },
@@ -46,6 +53,10 @@ export const FOOTERS_DE_VERSAO: readonly FooterEsperado[] = [
     arquivo: '.agents/specs/conventions/estrutura-e-versionamento.md',
     rotulo: '**Versão da convenção:**',
   },
+  // Os dois que faltavam (medido em 2026-10-29, ver o cabeçalho): o
+  // `AGENTS.md` já tinha divergido para 1.13.0 sem nenhum gate ver.
+  { arquivo: 'AGENTS.md', rotulo: '**Versão do documento:**' },
+  { arquivo: 'README.md', rotulo: '**Versão:**' },
 ];
 
 /** A versão como tripla de números, ou `null` se não é uma versão. */
@@ -99,7 +110,7 @@ async function lerVersao(repoRoot: string, footer: FooterEsperado): Promise<stri
 }
 
 /**
- * Gate: os quatro footers declaram a mesma versão, e ela é maior que a da
+ * Gate: os seis footers declaram a mesma versão, e ela é maior que a da
  * última tag.
  */
 export async function checkVersionFooters(opts: { repoRoot: string }): Promise<CheckResult> {
@@ -119,7 +130,7 @@ export async function checkVersionFooters(opts: { repoRoot: string }): Promise<C
     encontradas.set(footer.arquivo, versao);
   }
 
-  // (1) os quatro têm de concordar.
+  // (1) os seis têm de concordar.
   const distintas = [...new Set(encontradas.values())];
   if (distintas.length > 1) {
     const detalhe = [...encontradas.entries()]

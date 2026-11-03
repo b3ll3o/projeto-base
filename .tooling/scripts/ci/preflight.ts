@@ -25,6 +25,7 @@ import { checkTeethRegistry } from './check-teeth-registry';
 import { checkSelfFiringGuards } from './check-self-firing-guard';
 import { checkShellInjection } from './check-shell-injection';
 import { checkVersionFooters } from './check-version-footers';
+import { checkAuditSkills } from './check-audit-skills';
 import { checkOpenapiContract } from './check-openapi-contract';
 import { checkHarnessOwner } from './check-harness-owner';
 import { checkBranchUpToDate } from './check-branch-up-to-date';
@@ -354,6 +355,7 @@ export const RUNNERS: Record<string, () => CheckResult | Promise<CheckResult>> =
   'check-self-firing-guard': () => checkSelfFiringGuards(),
   'check-shell-injection': () => checkShellInjection({ repoRoot: '.' }),
   'check-version-footers': () => checkVersionFooters({ repoRoot: '.' }),
+  'check-audit-skills': () => checkAuditSkills({ repoRoot: '.' }),
   'check-openapi-contract': () => checkOpenapiContract({ repoRoot: '.' }),
   'turbo-redirect-differential': () => checkTurboRedirectDifferential(),
   'check-harness-owner': () => checkHarnessOwner(),

@@ -215,6 +215,25 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     id: 'check-version-footers',
   },
   {
+    // O instrumento que faltava para as skills de auditoria (o F11 da
+    // revisão das 23 skills).
+    //
+    // MEDIDO em 2026-10-29: as 5 skills de auditoria são PROCEDIMENTOS shell
+    // determinísticos, e NADA no CI os executava. Três deles estavam
+    // quebrados — a regex morta do `release-versioning-audit` (saída vazia),
+    // o `tail -1` que lia a versão da tabela de histórico em vez do footer,
+    // e o `openapi-audit` que comparava formatos diferentes e gerava 13
+    // falsos positivos por auditoria. Nenhum reclamou: skill só quebra
+    // quando alguém a executa, e ninguém a executa há semanas.
+    //
+    // O gate executa os passos declarados `run` de cada skill de auditoria.
+    // O bloco bash sem declaração é ERRO — a lista não pode encolher em
+    // silêncio (a mesma lição da lista de footers do #126).
+    name: 'os passos das skills de auditoria rodam (F11)',
+    file: '.tooling/scripts/ci/check-audit-skills.ts',
+    id: 'check-audit-skills',
+  },
+  {
     // #125: o documento OpenAPI versionado divergir do que o código gera.
     //
     // A issue acerta o ponto: sem a spec VERSIONADA, o gate que a compara
