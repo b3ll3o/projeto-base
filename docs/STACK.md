@@ -171,7 +171,7 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão da stack:** 1.15.1
+**Versão da stack:** 1.15.2
 
 ### Histórico de Versões
 

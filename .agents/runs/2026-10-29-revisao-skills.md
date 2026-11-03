@@ -235,7 +235,7 @@ Levo como pontos para a conversa, não como defeito.
 
 **Classe:**defesa em profundidade (doença de fundo) · **Status:** `viva`
 
-**O que foi medido:** as 5 skills de auditoria (`prisma-audit`,
+**O que foi medido:** as 7 skills de auditoria (`prisma-audit`,
 `openapi-audit`, `otelcol-audit`, `docker-prod-audit`,
 `release-versioning-audit`) são **procedimentos shell determinísticos**. Nada
 no CI os executa. Consequência medida: **três dos passos que rodei estavam
@@ -256,7 +256,7 @@ divergência entre os dois é o que produziu o drift que ninguém viu.
 
 ---
 
-## F12–F21 — a revisão do PR #140 revisou o PR #140
+## F12–F22 — a revisão do PR #140 revisou o PR #140
 
 **Classe:** varied (o que sobrou no próprio PR) · **Status:** todas
 `corrigidas` neste PR — cada uma com medição, correção e, quando dava,
@@ -278,6 +278,7 @@ incluindo 3 nos consertos anteriores. O comando de cada um está no texto.
 | F19 | a mensagem de erro do gate ensinava o **formato antigo** da declaração | `grep '> \*\*Gate:'` → 3 lugares |
 | F20 | a `find-skills` afirmava "24 skills e 27 agents" (o disco tem 25 e 28) | `ls .agents/agents/*.md \| wc -l` |
 | F21 | `.agents/runs/findings-*/` **não é ignorado** — o `findings-orchestration` escreve lá | `git status` mostra `?? .agents/runs/findings-…/` |
+| F22 | o README dizia **24 skills** (o disco tem 25) e a `find-skills` ficou **sem wrapper** no `.claude/` | `grep '24 skills' README.md` |
 
 ### F15 — o conserto do F5 criou um defeito novo
 
@@ -336,6 +337,23 @@ recursão, e o 5.2 — que era um segundo comando dentro do bloco do 5.1 — com
 bloco próprio `run`), e a `documentation-audit` entrou na lista do gate, que a
 spec passa a **prender em 7**. Uma skill de auditoria nova não entra mais no
 repo sem ser auditada.
+
+### F22 — a contagem que o próprio PR desatualizou, e o wrapper que faltava
+
+O PR #140 adiciona uma skill — e por isso invalida a contagem do próprio
+README, que passou a dizer "24 skills" com 25 no disco. E a `find-skills`, por
+ser uma skill de **descoberta** (não carregada por nenhum agent — o AGENTS.md a
+registra como "skill de descoberta"), é justamente a que **precisa** do wrapper
+em `.claude/skills/`: é o que faz o Claude Code a descobrir.
+
+O padrão do repo é claro: as skills que um agent carrega 1:1 (as de UI,
+`multi-tenant-audit`, `learning-observation`) não têm wrapper; as de
+descoberta, têm.
+
+**Correção:** o wrapper da `find-skills` (30 linhas, `name`/`description`
+copiados literalmente do frontmatter canônico, sem procedimento) e as contagens
+do `.claude/README.md` (16 de 24 → **17 de 25**) e do `README.md` (24 → 25
+skills).
 
 ### F21 — o artefato de máquina que o `git add -A` commitaria
 

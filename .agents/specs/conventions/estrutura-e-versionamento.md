@@ -98,10 +98,11 @@ infrastructure ─→ application + domain + libs externas (NestJS, Prisma)
 
 Referência cruzada: [`docs/MONOREPO.md` §11](../../../docs/MONOREPO.md) e [`docs/STACK.md` §8](../../../docs/STACK.md).
 
-**Versão da convenção:** 1.15.1
+**Versão da convenção:** 1.15.2
 
 ## Histórico de Versões
 
+| `1.15.2` | Bump patch — o que o merge do #140 deixou para trás: a `find-skills` ganhou o wrapper que a torna **descobrível** pelo Claude Code (é uma skill de descoberta, não é carregada 1:1 por agent), e as contagens de skills foram re-medidas (o README dizia 24, o disco tem 25). Registrado como F22 na revisão das skills |
 | Versão | Mudanças |
 |--------|----------|
 | `1.0.0` | Lançamento inicial — 10 agents genéricos + skill `agents:coordinate` |
