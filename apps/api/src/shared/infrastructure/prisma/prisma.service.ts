@@ -62,7 +62,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     try {
       await this.$connect();
     } catch (erro) {
-      const traducao = traduzirFalhaDeConexao(erro, process.env['DATABASE_URL']);
+      const traducao = traduzirFalhaDeConexao(erro);
       if (traducao === undefined) throw erro;
       throw new Error(traducao);
     }

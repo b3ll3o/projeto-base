@@ -23,6 +23,36 @@
 // Traduzir só o P1001 é uma LIMITAÇÃO ACEITA, e o gatilho para ampliar é
 // alguém bater em P1000/P1003 cru no boot.
 //
+// ⚠️ POR QUE O APP NÃO PARSEIA A URL DO BANCO
+//
+// A primeira versão desta função recebia o `DATABASE_URL` e extraía o alvo
+// com `new URL(...)` — e o `.tooling/scripts/ci/ambiente-local.ts` fazia o
+// MESMO, byte a byte. Duas cópias de uma decisão que decide **o que entra no
+// log de boot**: se uma delas um dia ler `.username`/`.password`, a credencial
+// vai para o log, e **nenhum gate do repo acusa** (o `analisa-repeticao` varre
+// só `apps/api/src`, `apps/web/*` e `packages/shared-types/src` — o
+// `.tooling/scripts/ci` está FORA da lista).
+//
+// A correção não é "importar de um lado": o app não pode importar do tooling
+// (o `Dockerfile` copia só `apps/api`), e o tooling não importa do app por
+// desenho (os gates medem o app lendo arquivos como TEXTO, para não acoplar
+// duas unidades de build). A correção é **tirar o parser do app**: o alvo que
+// o Prisma já escreveu na própria mensagem é o **dono** desse dado (a §2 da
+// convenção `dry.md`: "o nome é de outro dono — um alias nosso seria um
+// espelho que envelhece").
+//
+// E o efeito é de segurança, não só de estilo: **esta função deixa de receber
+// a string que tem a senha**. Ela não descarta a credencial — ela nunca a vê.
+// O alvo extraído ainda passa por um filtro que recusa qualquer coisa com
+// `@` (a marca da credencial), então nem um alvo malformado vaza.
+//
+// MEDIDO em 2026-11-03 (Prisma 6.19.3): o `P1001` chega como
+// `PrismaClientInitializationError` com `errorCode`, `message`,
+// `clientVersion`, `retryable` e `name` — e **sem** `cause` estruturado
+// (o `cause.host` existe no runtime do Prisma, mas só dentro da construção da
+// mensagem). A mensagem é
+// "Can't reach database server at `host:port`".
+//
 // ⚠️ POR QUE DUCK-TYPING E NÃO `instanceof Prisma.*`
 //
 // A spec não pode depender do Prisma Client gerado — `prisma generate` não
@@ -36,12 +66,6 @@ interface ErroDoPrisma {
   errorCode?: unknown;
 }
 
-/** O alvo do banco: host e porta, **sem** user e **sem** senha. */
-interface AlvoDoBanco {
-  host: string;
-  porta: number;
-}
-
 /** O host que é a máquina de quem desenvolve. */
 const HOSTS_LOCAIS = new Set(['localhost', '127.0.0.1', '::1']);
 
@@ -49,22 +73,43 @@ const HOSTS_LOCAIS = new Set(['localhost', '127.0.0.1', '::1']);
 const CONTAINER_DO_BANCO_LOCAL = 'projeto-base-pg-local';
 
 /**
- * O alvo (host/porta) da URL do banco, sem credencial.
+ * O alvo (`host:porta`) que o Prisma escreveu na própria mensagem.
  *
- * ⚠️ A URL do banco TEM credencial (`app_runtime:<senha>@host:5432`), e esta
- * mensagem vai para o log de boot — log é onde senha vaza. Então só o host e
- * a porta saem daqui; o usuário e a senha nunca.
+ * A mensagem do P1001 é "Can't reach database server at `host:port`".
+ *
+ * ⚠️ O filtro de `@` é o que garante que ISTA função não pode imprimir uma
+ * credencial: a marca da credencial (`user:senha@host`) é justamente o `@`,
+ * e um alvo com `@` é descartado. A função também nunca recebe o
+ * `DATABASE_URL` — ela não tem como vazar o que não recebeu.
+ *
+ * Devolve `undefined` quando o Prisma não nomeou o alvo (formato diferente do
+ * esperado) — e o chamador cai na mensagem neutra, que ainda diz a causa e o
+ * remédio.
  */
-function alvoDoBanco(databaseUrl: string | undefined): AlvoDoBanco | undefined {
-  if (databaseUrl === undefined || databaseUrl.trim() === '') return undefined;
-  try {
-    const url = new URL(databaseUrl);
-    const porta = url.port === '' ? 5432 : Number(url.port);
-    if (url.hostname === '' || Number.isNaN(porta)) return undefined;
-    return { host: url.hostname, porta };
-  } catch {
-    return undefined;
+function alvoDaMensagem(mensagem: string): string | undefined {
+  const achado = /at `([^`]+)`/.exec(mensagem);
+  if (achado === null) return undefined;
+  const alvo = achado[1];
+  if (alvo === undefined || alvo.trim() === '') return undefined;
+  // Só host e porta: sem `@` (credencial), sem barra (caminho), sem espaço.
+  if (!/^[A-Za-z0-9._:-]+$/.test(alvo)) return undefined;
+  return alvo;
+}
+
+/** O host do alvo `host:porta` (ou o alvo inteiro, se não tem porta). */
+function hostDoAlvo(alvo: string): string {
+  const separador = alvo.lastIndexOf(':');
+  if (separador === -1) return alvo;
+  return alvo.slice(0, separador);
+}
+
+/** A mensagem do erro — o erro pode não ser uma `Error` (a spec usa objeto). */
+function mensagemDoErro(erro: unknown): string {
+  if (erro !== null && typeof erro === 'object') {
+    const mensagem = (erro as { message?: unknown }).message;
+    if (typeof mensagem === 'string') return mensagem;
   }
+  return '';
 }
 
 /**
@@ -85,17 +130,28 @@ function ehP1001(erro: unknown): boolean {
  * Devolve `undefined` quando o erro **não** é P1001 — o caller repassa o
  * erro original intacto, com a instância e o stack.
  */
-export function traduzirFalhaDeConexao(
-  erro: unknown,
-  databaseUrl: string | undefined,
-): string | undefined {
+export function traduzirFalhaDeConexao(erro: unknown): string | undefined {
   if (!ehP1001(erro)) return undefined;
 
-  const alvo = alvoDoBanco(databaseUrl);
-  const alvoLocal = alvo !== undefined && HOSTS_LOCAIS.has(alvo.host);
-  const endereco = alvo === undefined ? '' : `\`${alvo.host}:${alvo.porta}\``;
+  const alvo = alvoDaMensagem(mensagemDoErro(erro));
 
-  if (!alvoLocal) {
+  if (alvo === undefined) {
+    // O Prisma não nomeou o alvo (formato diferente do esperado). A mensagem
+    // continua dizendo a CAUSA e o que fazer — ela só não afirma se o alvo
+    // é local, porque não sabe.
+    return (
+      'O banco não está no ar (P1001).\n' +
+      '\n' +
+      'O `pnpm ambiente:check` diz o que falta no ambiente local (credencial, ' +
+      'Prisma Client, banco, porta da API) — e religa o banco local se ele estiver parado.\n' +
+      '\n' +
+      'Veja docs/como-rodar.md §1.1 e §1.4.'
+    );
+  }
+
+  const endereco = `\`${alvo}\``;
+
+  if (!HOSTS_LOCAIS.has(hostDoAlvo(alvo))) {
     // Alvo não local: `postgres:5432` é o serviço do Compose, dentro da rede
     // Docker. Recomendar o container local aqui seria MANDAR a pessoa caçar
     // um container que não existe no host — o erro do Compose é outro.

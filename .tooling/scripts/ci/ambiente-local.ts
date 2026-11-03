@@ -437,7 +437,28 @@ export function relatar(veredito: VereditoAmbiente): boolean {
   return false;
 }
 
-/** O host e a porta do banco, lidos da URI (sem credencial no relatório). */
+/**
+ * O host e a porta do banco, lidos da URI (sem credencial no relatório).
+ *
+ * ⚠️ ESTE É O ÚNICO PARSER DE URI DO REPO — e ele é o ÚNICO porque o outro foi
+ * removido (achado SEC-08 da revisão do #144): o
+ * `apps/api/src/shared/infrastructure/prisma/traducao-de-falha-de-conexao.ts`
+ * tinha uma CÓPIA byte a byte desta função, e as duas decidiam **o que entra
+ * no log de boot**. Se uma das duas passasse a ler `.username`/`.password`, a
+ * credencial iria para o log — e **nenhum gate do repo acusaria**, porque o
+ * `analisa-repeticao` varre só `apps/api/src`, `apps/web/*` e
+ * `packages/shared-types/src` (o `.tooling/scripts/ci` está FORA da lista).
+ *
+ * A correção foi TIRAR o parser do APP: o alvo que o Prisma escreveu na
+ * própria mensagem é o DONO desse dado, e o app não precisa de credencial
+ * nenhuma para dizer que o banco não está no ar. O app, hoje, **não recebe**
+ * a string que tem a senha.
+ *
+ * ⚠️ E ESTA cópia é a que fica: o app não pode importar daqui (o `Dockerfile`
+ * copia só `apps/api`) e o tooling não importa do app por desenho (os gates
+ * medem o app lendo arquivos como TEXTO, para não acoplar duas unidades de
+ * build).
+ */
 export function alvoDoBanco(
   databaseUrl: string | undefined,
 ): { host: string; porta: number } | undefined {

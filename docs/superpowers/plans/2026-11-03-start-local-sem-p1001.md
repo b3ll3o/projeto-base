@@ -285,6 +285,39 @@ API recusa), e o script ganhou o nome `ambiente-local.ts` / `pnpm ambiente:check
 | Specs | `ambiente-local.spec.ts` — **28 testes**; `traducao-de-falha-de-conexao.spec.ts` — 6; `prisma.service.spec.ts` — 4 (2 novos) |
 | Gates | `pnpm ci:preflight` 0 erro · `pnpm tooling:test` 734 verdes (46 arquivos) · `pnpm turbo run test:unit --filter=@projeto/api` verde · `pnpm format:check` verde · `pnpm typecheck:tooling` verde |
 
+### Achado da revisão de segurança (SEC-08) e a correção
+
+A revisão do #144 achou (severidade `minor`, **risco de drift, não defeito**):
+o parser de URI `alvoDoBanco` estava **duplicado byte a byte** em duas
+superfícies — `apps/api/src/.../traducao-de-falha-de-conexao.ts` (que decide
+**o que entra no log de boot**) e `.tooling/scripts/ci/ambiente-local.ts`. Se
+uma das duas passasse a ler `.username`/`.password`, a credencial iria para o
+log, e **nenhum gate do repo acusaria**: o `analisa-repeticao` varre só
+`apps/api/src`, `apps/web/*` e `packages/shared-types/src` — o
+`.tooling/scripts/ci` está FORA da lista.
+
+A correção **não** foi "importar de um lado": o app não pode importar do
+tooling (o `Dockerfile` copia só `apps/api`) e o tooling não importa do app por
+desenho (os gates medem o app lendo arquivos como **texto**, para não acoplar
+duas unidades de build). A correção foi **tirar o parser do app**:
+
+- **MEDIDO (Prisma 6.19.3):** o `P1001` chega como
+  `PrismaClientInitializationError` com `errorCode`, `message`,
+  `clientVersion`, `retryable` e `name` — e **sem** `cause` estruturado. Mas a
+  **mensagem** já traz o alvo: `Can't reach database server at \`host:port\``.
+- O app passou a ler o alvo **da mensagem do próprio Prisma** — que é o dono
+  desse dado (a §2 da convenção `dry.md`: "o nome é de outro dono — um alias
+  nosso seria um espelho que envelhece").
+- **O efeito é de segurança, não só de estilo:** a função do app **não recebe
+  mais** o `DATABASE_URL` — ela não descarta a credencial, ela **nunca a vê**.
+  E o alvo extraído passa por um filtro que recusa qualquer coisa com `@` (a
+  marca da credencial).
+- Um alvo que o Prisma não nomeia cai na **mensagem neutra** (causa + o que
+  fazer), sem afirmar se o alvo é local — degradação graciosa, sem crash.
+
+Medido com um **P1001 de verdade** (Prisma apontado para uma porta fechada):
+a tradução sai com o alvo, o comando e o ponteiro, e a senha **não** aparece.
+
 ### Ficou de fora (com o motivo)
 
 - **A medição ao vivo do `docker stop projeto-base-pg-local`** — o `docker stop`
