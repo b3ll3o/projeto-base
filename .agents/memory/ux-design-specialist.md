@@ -59,6 +59,35 @@ description: Memória acumulada do agent ux-design-specialist — decisões sobr
 - A skill `motion` assume CSS puro porque é o que existe: `apps/web/package.json` não tem biblioteca de animação. Se uma entrar, muda a coluna de propriedade GPU, não as regras.
 - Os dois índices de workflow não receberam número de versão novo: `WORKFLOWS.md` ainda diz 1.9.1 enquanto já carrega linhas marcadas v1.11.0. A numeração de linha está adiantada em relação ao rodapé.
 
+### 2026-11-03 — O agent ganha duas skills de terceiro (página pública e browser)
+
+**Contexto:** A skill `design-taste-frontend` (adaptada de
+`leonxlnx/taste-skill`, MIT) e a `agent-browser` (adaptada de
+`vercel-labs/agent-browser`, Apache-2.0) entraram no repo.
+
+**Decisão:** A `design-taste-frontend` entra aqui **com uma fronteira
+explícita**: ela cobre a **página pública**, e a tela de app continua sendo
+da `ui-craft`. Isso não é arbitrário — a `ui-craft` foi adaptada do mesmo
+upstream e declares no arquivo que *"as leis de tipo de landing page não
+valem aqui"*. As duas skills são as duas metades do mesmo material, e juntas
+cobrem o upstream inteiro sem repetir.
+
+A `agent-browser` entra como **olhar avulso**: a porta de entrada do repo
+para browser continua sendo a suíte e2e com Playwright (convenção
+`e2e-playwright.md`); a CLI é o complemento de quem precisa *ver* a tela sem
+escrever teste.
+
+**Por que o dono é este agent:** as duas produzem ou consomem **a aparência
+como ela aparece**, e este é o agent cujo papel é a aparência. Nenhum outro
+agent do repo tem essa competência — o `code-reviewer` lê diff, o
+`nextjs-specialist` cuida de RSC, caching e bundle.
+
+**O que não foi vendorizado:** o sorteador de direção (`draw.mjs`), o
+inspetor de browser (`inspect.mjs`) e o corpus de 1,6 MB do upstream. A
+decisão segue o precedente do `graphify`: o **método** é do repo, o
+**instrumento** é do upstream. O critério de critique e os números do
+estudo entraram traduzidos e condensados — e o §3 do `SKILL.md` diz
+explicitamente que eles não estão aqui.
 ## Padrões Descobertos
 
 - **`apps/web` não tinha design system para estender.** `app/globals.css` tem exatamente 2 tokens em `@theme`; `packages/ui` não existe; `apps/web/components/` não existe. Antes desta feature não havia **nenhum** `<form>`, `<input>`, `<button>` ou `<label>` no monorepo inteiro — o único Client Component era `web-vitals-reporter.tsx`. Verificável:

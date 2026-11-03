@@ -148,7 +148,7 @@ A skill está no lugar quando:
   cita a origem;
 - o corpo está em pt-BR e cabe em 300 linhas;
 - `AGENTS.md §5` e a tabela de versões mencionam a skill;
-- os quatro footers de versão concordam e estão à frente da última tag
+- os seis footers de versão concordam e estão à frente da última tag
   (gate `check-version-footers`).
 
 ## Cross-references
