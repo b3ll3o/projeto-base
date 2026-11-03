@@ -28,7 +28,7 @@
 
 ### O problema
 
-As 5 skills de auditoria (`prisma-audit`, `openapi-audit`, `otelcol-audit`,
+As 7 skills de auditoria (`prisma-audit`, `openapi-audit`, `otelcol-audit`,
 `docker-prod-audit`, `release-versioning-audit`) e a `findings-orchestration` são
 **procedimentos shell determinísticos**. Nenhum job do CI os executa. A
 consequência foi medida no PR #140: **três dos passos que rodei estavam
@@ -82,13 +82,13 @@ rodar a skill na mão. O comando vai como argv em array
 | um passo `run` que escreve no repo | 🔴 `redireciona para saida.txt` → gate vermelho |
 | um passo que imprime `✗` | 🔴 `REPORTOU falha` → gate vermelho |
 | um passo que não produz saída | 🔴 `NENHUMA saída` → gate vermelho |
-| a base (24 passos `run` nas 6 skills) | 🟢 `ok=true, errors=0` |
+| a base (29 passos `run` nas 7 skills) | 🟢 `ok=true, errors=0` |
 
-A spec tem **24 testes**: a lista presa (6 skills, com os nomes), a extração
+A spec tem **24 testes**: a lista presa (7 skills, com os nomes), a extração
 da declaração, o comentário ignorado, o redirect capturado por **alvo** (não por
 forma) e **não confundido com o `>` de uma comparação**, o código 1 como
 sucesso, o orçamento total cabendo no job de 5 min da CI, 5 casos sintéticos e
-**um teste sobre o repo real** que executa os 24 passos.
+**um teste sobre o repo real** que executa os 29 passos.
 
 ---
 
