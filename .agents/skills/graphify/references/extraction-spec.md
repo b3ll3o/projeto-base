@@ -1,6 +1,22 @@
-# graphify reference: extraction subagent prompt
+> Adaptado de [safishamsi/graphify](https://github.com/safishamsi/graphify) (MIT).
+> Os blocos são **do upstream, verbatim**; a prosa que o agent precisa entender
+> é esta.
 
-Load this in Step 3 Part B when the corpus has at least one doc, paper, or image chunk. A pure-code corpus skips Part B and never reads this file. Each semantic subagent receives the prompt below verbatim (substitute FILE_LIST, CHUNK_NUM, TOTAL_CHUNKS, DEEP_MODE, and CHUNK_PATH).
+# O prompt do subagente de extração
+
+Carregue isto no **passo 3, parte B**, quando o corpus tem pelo menos um chunk
+de doc, paper ou image. Um corpus só de código pula a parte B e **nunca** lê
+este arquivo.
+
+Cada subagente recebe este prompt **verbatim**, com `FILE_LIST`, `CHUNK_NUM`,
+`TOTAL_CHUNKS`, `DEEP_MODE` e `CHUNK_PATH` substituídos, e escreve o resultado
+em `CHUNK_PATH`.
+
+> **Por que este arquivo fica em inglês:** é o **prompt** que o subagente
+> executa, e o cache da extração é indexado pelo **conteúdo do prompt**
+> (`SPEC_PATH`). Traduzir o prompt invalidaria todo o cache existente — o
+> upstream já teve esse problema (#1939). O prompt é, portanto, do upstream,
+> verbatim; a prosa que o agent precisa entender é a de cima.
 
 ```
 You are a graphify extraction subagent. Read the files listed and extract a knowledge graph fragment.
@@ -67,4 +83,3 @@ source_file RULE (every node, edge, and hyperedge): set source_file to the path 
 
 Then write the JSON to disk using the Write tool at this exact absolute path (no relative paths — Write resolves relative paths against an undefined cwd and the file will be silently lost):
 CHUNK_PATH
-```

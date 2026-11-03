@@ -1,15 +1,22 @@
-# graphify reference: query, path, explain
+> Adaptado de [safishamsi/graphify](https://github.com/safishamsi/graphify) (MIT).
+> Os blocos são **do upstream, verbatim**; a prosa que o agent precisa entender
+> é esta.
 
-Load this when the user asks a question against an existing graph, or runs `/graphify path` or `/graphify explain`. The core's query stub points here for the full traversal flow. These flows use the `graphify query` CLI when it is available and fall back to an inline NetworkX traversal otherwise.
+# Consultar o grafo (`query`)
 
-Two traversal modes - choose based on the question:
+Carregue esta referência quando o usuário faz uma pergunta contra um grafo que
+**já existe**, ou roda `/graphify query`. O núcleo do `query` do graphify
+responde a pergunta a partir do grafo — sem reconstruir nada.
 
-| Mode | Flag | Best for |
-|------|------|----------|
-| BFS (default) | _(none)_ | "What is X connected to?" - broad context, nearest neighbors first |
-| DFS | `--dfs` | "How does X reach Y?" - trace a specific chain or dependency path |
+**Dois modos de travessia — escolha pela pergunta:**
 
-First check the graph exists:
+| Modo | Flag | melhor para |
+|------|------|-------------|
+| BFS (padrão) | _(nenhuma)_ | "com o que X se conecta?" — contexto amplo, vizinhos mais próximos primeiro |
+| DFS | `--dfs` | "como X chega a Y?" — rastreia uma cadeia ou caminho de dependência específico |
+
+**Primeiro confirme que o grafo existe:**
+
 ```bash
 $(cat graphify-out/.graphify_python) -c "
 from pathlib import Path
@@ -17,16 +24,20 @@ if not Path('graphify-out/graph.json').exists():
     print('ERROR: No graph found. Run /graphify <path> first to build the graph.')
     raise SystemExit(1)
 "
-```
-If it fails, stop and tell the user to run `/graphify <path>` first.
 
-### Step 0 — Constrained query expansion (REQUIRED before traversal)
+Se falhar, **pare** e diga ao usuário para rodar `/graphify <path>` primeiro.
 
-graphify's `query` CLI matches nodes via case-folded substring + IDF — there is **no stemming, no synonyms, no cross-language match** inside the binary, and the inline fallback below matches the same way. If the user's question uses different language or different domain vocabulary than the graph's labels (user says "обработчик" / graph says "handler"; user says "authentication" / graph says "Guardian"), the literal matcher returns 0 hits and the answer collapses to noise.
+## Passo 0 — expansão da consulta (OBRIGATÓRIA antes da travessia)
 
-Fix this **without inventing tokens** by expanding the query against the actual graph vocabulary first:
+O `query` do graphify casa nós por **substring case-folded + IDF** — não há
+stemming, sinônimos nem casamento entre idiomas. Uma pergunta com palavras
+diferentes das do grafo volta como ruído.
 
-1. Extract the token vocabulary from node labels:
+Conserte isso **sem inventar tokens**, expandindo a consulta contra o
+vocabulário real do grafo primeiro:
+
+1. Extraia o vocabulário dos rótulos dos nós:
+
 ```bash
 $(cat graphify-out/.graphify_python) -c "
 import json, re
@@ -43,38 +54,44 @@ for n in data['nodes']:
 Path('graphify-out/.vocab.txt').write_text('\n'.join(sorted(vocab)), encoding='utf-8')
 print(f'vocab: {len(vocab)} tokens')
 "
-```
 
-2. Read `graphify-out/.vocab.txt`. Then for the user's question, select **up to 12 tokens from this exact list** that semantically match the query intent. Hard constraints:
-   - You MUST pick only tokens present in the vocabulary file. Do NOT invent tokens.
-   - If a query concept has no plausible token in the vocab, skip it — do not substitute a near-synonym from training memory.
-   - If **no** vocab tokens match the query at all, output an empty list and tell the user the corpus has no relevant vocabulary for this question. Do not fabricate a search.
-   - Translate cross-language: Russian "аутентификация" → look for `auth`, `credential`, `token`, `security` IFF present in vocab.
-   - Morphology: "handlers" maps to `handler` IFF present; "todos" maps to `todo` IFF present.
+2. Leia `graphify-out/.vocab.txt`. Então, para a pergunta do usuário, escolha
+   **até 12 tokens desta lista exata** que casem semanticamente:
 
-3. Print the selection explicitly to the user before running the query, so the expansion is auditable:
+   - Você **tem** que escolher só tokens presentes no arquivo de vocabulário.
+     **Não invente tokens.**
+   - Se um conceito da pergunta não tiver token plausível no vocabulário,
+     **pule** — não substitua por um quase-sinônimo vindo da memória de
+     treino.
+   - Se **nenhum** token do vocabulário casar, devolva uma lista vazia e diga
+     ao usuário que o corpus não tem vocabulário relevante para a pergunta.
+   - **Traduza entre idiomas:** "autenticacao" → procure `auth`, `credential`,
+     `token`, `security` **SE** estiverem no vocabulário.
+   - **Morfologia:** "handlers" mapeia para `handler` **SE** estiver no
+     vocabulário; "todos" mapeia para `todo` **SE** estiver.
+
+3. **Imprima a seleção explicitamente** ao usuário antes de rodar a consulta,
+   para que a expansão seja auditável:
+
 ```
 Query expanded to (from graph vocab, N tokens): [token1, token2, ...]
-```
-If the list is empty, say so plainly and stop — do not proceed to traversal.
 
-### Step 1 — Traversal
+Se a lista vier vazia, **diga isso claramente e pare** — não siga para a
+travessia.
 
-Build the **expanded query string** by joining the selected tokens with spaces. Use this string as `QUESTION` below — NOT the original user question. (The original question is preserved only for `save-result` at the end.)
+## Passo 1 — a travessia
 
-Prefer the CLI when it is installed:
+Monte a **string expandida** juntando os tokens escolhidos com espaços. Use
+essa string como `QUESTION` abaixo — **não** a pergunta original.
+
+Prefira a CLI quando ela está instalada:
+
 ```bash
 graphify query "QUESTION"
 # or: graphify query "QUESTION" --dfs --budget 3000
-```
 
-If the CLI is unavailable, load `graphify-out/graph.json` and run the traversal inline:
-
-1. Find the 1-3 nodes whose label best matches the expanded tokens.
-2. Run the appropriate traversal from each starting node.
-3. Read the subgraph - node labels, edge relations, confidence tags, source locations.
-4. Answer using **only** what the graph contains. Quote `source_location` when citing a specific fact.
-5. If the graph lacks enough information, say so - do not hallucinate edges.
+Se a CLI não estiver disponível, carregue `graphify-out/graph.json` e rode a
+travessia inline:
 
 ```bash
 $(cat graphify-out/.graphify_python) -c "
@@ -167,151 +184,45 @@ if len(output) > char_budget:
     output = output[:char_budget] + f'\n... (truncated at ~{token_budget} token budget - use --budget N for more)'
 print(output)
 "
-```
 
-Replace `QUESTION` with the **expanded** query string, `MODE` with `bfs` or `dfs`, and `BUDGET` with the token budget (default `2000`, or whatever `--budget N` specifies). Then answer based on the subgraph output above, using only what the graph contains.
+O fallback inline:
 
-After writing the answer, save it back into the graph so it improves future queries. Include the expanded tokens inside the `--answer` text (e.g. `"Expanded from original query via vocab: [tokens]. Then traversed..."`) so the next `--update` extracts the expansion history as a graph node:
+1. Ache os 1-3 nós cujo rótulo casa melhor com os tokens expandidos.
+2. Rode a travessia adequada a partir de cada nó inicial.
+3. Leia o subgrafo — rótulos dos nós, relações das arestas, etiquetas de
+   confiança, localizações de origem.
+4. Responda usando **apenas** o que o grafo contém. Cite `source_location` ao
+   citar um fato específico.
+5. Se o grafo não tiver informação suficiente, **diga isso** — não invente
+   arestas.
+
+Substitua `QUESTION` pela string **expandida**, `MODE` por `bfs` ou `dfs` e
+`BUDGET` pelo orçamento de tokens (padrão `2000`).
+
+## Passo 2 — devolver a resposta para o grafo
+
+Depois de escrever a resposta, salve-a de volta no grafo, para que as consultas
+futuras melhorem. Inclua os tokens expandidos dentro do `--answer`, para que a
+expansão fique registrada:
 
 ```bash
 $(cat graphify-out/.graphify_python) -m graphify save-result --question "ORIGINAL_QUESTION" --answer "ANSWER" --type query --nodes NODE1 NODE2
-```
 
-Replace `ORIGINAL_QUESTION` with the user's verbatim question, `ANSWER` with your full answer text (containing the expanded-token trace), `NODE1 NODE2` with the list of node labels you cited. This closes the feedback loop: the next `--update` will extract this Q&A as a node in the graph.
+### A memória de trabalho (o laço que se melhora)
 
-**Work memory (self-improving loop).** Add an `--outcome` so future sessions learn from this one — append `--outcome useful|dead_end|corrected` to the `save-result` command (and `--correction "the right answer"` when correcting):
+Acrescente um `--outcome`, para que as sessões futuras aprendam com esta:
 
-- `useful` — the cited nodes answered the question well (they become *preferred sources*).
-- `dead_end` — the question/path led nowhere; don't re-derive it next time.
-- `corrected` — the saved answer was wrong; `--correction` records what was right.
+- `useful` — os nós citados responderam bem à pergunta (viram **fontes
+  preferidas**).
+- `dead_end` — a pergunta/caminho não levou a lugar algum; não refaça na
+  próxima vez.
+- `corrected` — a resposta salva estava errada; o `--correction` registra o
+  que estava certo.
 
-At the **start** of graph work, refresh and read the lessons: run `graphify reflect --if-stale` (cheap, deterministic, no LLM; `--if-stale` makes it a no-op when `LESSONS.md` is already newer than every input, e.g. when the git hook just refreshed it), then read `graphify-out/reflections/LESSONS.md`. It lists **preferred sources** (start there), **known dead ends** (skip them), and prior **corrections**. Running `reflect` yourself keeps the lessons current even without the git hook installed; if the post-commit hook *is* installed, `--if-stale` means your session-start run costs almost nothing.
-
----
-
-## For /graphify path
-
-Find the shortest path between two named concepts in the graph. Prefer the CLI when installed:
-
-```bash
-graphify path "NODE_A" "NODE_B"
-```
-
-If the CLI is unavailable, run it inline:
-
-```bash
-$(cat graphify-out/.graphify_python) -c "
-import json, sys
-import networkx as nx
-from networkx.readwrite import json_graph
-from pathlib import Path
-
-data = json.loads(Path('graphify-out/graph.json').read_text(encoding='utf-8'))
-G = json_graph.node_link_graph(data, edges='links')
-
-a_term = 'NODE_A'
-b_term = 'NODE_B'
-
-def find_node(term):
-    term = term.lower()
-    scored = sorted(
-        [(sum(1 for w in term.split() if w in G.nodes[n].get('label','').lower()), n)
-         for n in G.nodes()],
-        reverse=True
-    )
-    return scored[0][1] if scored and scored[0][0] > 0 else None
-
-src = find_node(a_term)
-tgt = find_node(b_term)
-
-if not src or not tgt:
-    print(f'Could not find nodes matching: {a_term!r} or {b_term!r}')
-    sys.exit(0)
-
-try:
-    path = nx.shortest_path(G, src, tgt)
-    print(f'Shortest path ({len(path)-1} hops):')
-    for i, nid in enumerate(path):
-        label = G.nodes[nid].get('label', nid)
-        if i < len(path) - 1:
-            _raw = G[nid][path[i+1]]; edge = next(iter(_raw.values()), {}) if isinstance(G, nx.MultiGraph) else _raw
-            rel = edge.get('relation', '')
-            conf = edge.get('confidence', '')
-            print(f'  {label} --{rel}--> [{conf}]')
-        else:
-            print(f'  {label}')
-except nx.NetworkXNoPath:
-    print(f'No path found between {a_term!r} and {b_term!r}')
-except nx.NodeNotFound as e:
-    print(f'Node not found: {e}')
-"
-```
-
-Replace `NODE_A` and `NODE_B` with the actual concept names from the user. Then explain the path in plain language - what each hop means, why it's significant.
-
-After writing the explanation, save it back:
-
-```bash
-$(cat graphify-out/.graphify_python) -m graphify save-result --question "Path from NODE_A to NODE_B" --answer "ANSWER" --type path_query --nodes NODE_A NODE_B
-```
+No **começo** do trabalho com o grafo, atualize e leia as lições: rode
+`graphify reflect --if-stale` (barato, determinístico, sem LLM).
 
 ---
 
-## For /graphify explain
-
-Give a plain-language explanation of a single node - everything connected to it. Prefer the CLI when installed:
-
-```bash
-graphify explain "NODE_NAME"
-```
-
-If the CLI is unavailable, run it inline:
-
-```bash
-$(cat graphify-out/.graphify_python) -c "
-import json, sys
-import networkx as nx
-from networkx.readwrite import json_graph
-from pathlib import Path
-
-data = json.loads(Path('graphify-out/graph.json').read_text(encoding='utf-8'))
-G = json_graph.node_link_graph(data, edges='links')
-
-term = 'NODE_NAME'
-term_lower = term.lower()
-
-# Find best matching node
-scored = sorted(
-    [(sum(1 for w in term_lower.split() if w in G.nodes[n].get('label','').lower()), n)
-     for n in G.nodes()],
-    reverse=True
-)
-if not scored or scored[0][0] == 0:
-    print(f'No node matching {term!r}')
-    sys.exit(0)
-
-nid = scored[0][1]
-data_n = G.nodes[nid]
-print(f'NODE: {data_n.get(\"label\", nid)}')
-print(f'  source: {data_n.get(\"source_file\",\"unknown\")}')
-print(f'  type: {data_n.get(\"file_type\",\"unknown\")}')
-print(f'  degree: {G.degree(nid)}')
-print()
-print('CONNECTIONS:')
-for neighbor in G.neighbors(nid):
-    _raw = G[nid][neighbor]; edge = next(iter(_raw.values()), {}) if isinstance(G, nx.MultiGraph) else _raw
-    nlabel = G.nodes[neighbor].get('label', neighbor)
-    rel = edge.get('relation', '')
-    conf = edge.get('confidence', '')
-    src_file = G.nodes[neighbor].get('source_file', '')
-    print(f'  --{rel}--> {nlabel} [{conf}] ({src_file})')
-"
-```
-
-Replace `NODE_NAME` with the concept the user asked about. Then write a 3-5 sentence explanation of what this node is, what it connects to, and why those connections are significant. Use the source locations as citations.
-
-After writing the explanation, save it back:
-
-```bash
-$(cat graphify-out/.graphify_python) -m graphify save-result --question "Explain NODE_NAME" --answer "ANSWER" --type explain --nodes NODE_NAME
-```
+O `/graphify path` e o `/graphify explain` estão em
+[`path-and-explain.md`](./path-and-explain.md).
