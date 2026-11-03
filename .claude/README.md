@@ -11,7 +11,7 @@
 
 | Caminho | Papel | Estado |
 |---|---|---|
-| `.claude/skills/<dir>/SKILL.md` | Wrapper que expõe a skill canônica | 16 de 24 |
+| `.claude/skills/<dir>/SKILL.md` | Wrapper que expõe a skill canônica | 17 de 25 |
 | `.claude/agents/<name>.md` | Wrapper que expõe o agent canônico | 3 de 28 (piloto) |
 | `.claude/hooks/pretooluse-block-pnpm-lock.mjs` | Guard de escrita no lockfile | pipe-testado; inerte até `/hooks` |
 | `.claude/hooks/posttooluse-stack-review.sh` | Reviewer pós-edição, em modo feedback | pipe-testado; inerte até `/hooks` |
@@ -25,7 +25,7 @@
 > [Ativação](#ativação-estes-hooks-não-sobem-sozinhos). "Ativo" aqui significaria
 > que o hook responde a uma edição real, e hoje não responde.
 
-## Skills (16 wrappers)
+## Skills (17 wrappers)
 
 Um wrapper por skill em `.agents/skills/`. Cada um tem no máximo 30 linhas e **não
 contém procedimento**: só `name`/`description` copiados literalmente do frontmatter
@@ -233,9 +233,9 @@ cobertura do trabalho — foi a escolha registrada acima, para não poluir a
 descoberta do Claude Code com agentes que não têm nada de específico deste
 vendor.
 
-MEDIDO 2026-10-29: `ls .agents/agents/*.md | wc -l` → 28 agents;
-`ls .agents/skills/*/SKILL.md | wc -l` → 24 skills; `ls .claude/skills/*/SKILL.md | wc -l`
-→ 16 wrappers. O terceiro binding é o `documentation-specialist` (a
+MEDIDO 2026-11-03: `ls .agents/agents/*.md | wc -l` → 28 agents;
+`ls .agents/skills/*/SKILL.md | wc -l` → 25 skills; `ls .claude/skills/*/SKILL.md | wc -l`
+→ 17 wrappers. O terceiro binding é o `documentation-specialist` (a
 `documentation-audit` é a 16ª skill wrapper).
 
 ## Verificação
