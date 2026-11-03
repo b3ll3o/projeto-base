@@ -14,7 +14,7 @@ const nextConfig = {
   // `pnpm start` não mudam de comportamento. Quem muda é a suíte, que passa
   // `NEXT_DIST_DIR=.next-e2e` (ver `apps/web/e2e/global-setup.ts`) — assim o
   // e2e pode rodar com a app local aberta, que é o estado normal de quem
-  // desenvolve. `.next-e2e/` está no `.gitignore` da raiz ao lado de `.next/`.
+  // desenvolvem. `.next-e2e/` está no `.gitignore` da raiz ao lado de `.next/`.
   distDir: process.env.NEXT_DIST_DIR ?? '.next',
   // Garante que as deps OTel (NodeSDK + instrumentations) e web-vitals
   // sejam empacotadas no output standalone do Next.js — sem esta chave
@@ -31,6 +31,10 @@ const nextConfig = {
       './node_modules/web-vitals/**/*',
     ],
   },
+};
+
+export default {
+  ...nextConfig,
 
   /**
    * O token de CONVITE viaja na URL — e a URL vaza por `Referer`.
@@ -60,4 +64,3 @@ const nextConfig = {
     ];
   },
 };
-export default nextConfig;
