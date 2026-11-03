@@ -318,6 +318,52 @@ duas unidades de build). A correção foi **tirar o parser do app**:
 Medido com um **P1001 de verdade** (Prisma apontado para uma porta fechada):
 a tradução sai com o alvo, o comando e o ponteiro, e a senha **não** aparece.
 
+### A revisão de 2 etapas e o que ela achou (2026-11-03)
+
+O `review-router` despachou 5 reviewers em paralelo (`.agents/runs/20261103T212948Z-review-01.yaml`):
+**47 findings** — 0 blocker, 5 major, 24 minor, 18 info. Todos os 5 majors foram
+corrigidos neste ciclo, e os minors que eram defeito real (ou mentira de doc)
+também.
+
+| # | Achado | Correção |
+|---|---|---|
+| M-01 | O corte compensatório do runbook juntou 3 linhas da tabela §2 numa célula e **desarmou o `check-runbook-drift`** (as 3 chaves `POSTGRES_*` saíram do alcance do gate: 22 → 19) | As 3 linhas voltaram, uma chave por célula. **Medido: 22 chaves, as 3 `POSTGRES_*` de volta no gate** — e o §0.2 agora avisa que a tabela exige UMA CHAVE POR CÉLULA |
+| M-02 | A mensagem do ramo `banco-mudo` **contradizia o estado que a produziu** (dizia que o container não publica a porta — mas só chega ali DEPOIS de ele publicar) | O ramo foi partido em dois (`container-imagem-inesperada` e `banco-mudo`), e cada mensagem só afirma o que o estado garante |
+| M-03 | A auto-recuperação (a feature-cabeçalho) **não tinha teste**: mutar `subirContainer`/`esperarPorta` para `return false` deixava 28/28 verde | Os efeitos viraram **parâmetro** (`EfeitosDoBanco`), a spec exercita cada ramo, e há uma spec de **caminho real** com um `docker` FALSO no `PATH` — que registra a chamada e prova que o `docker start` aconteceu. **Mutação agora VERMELHA** |
+| M-04 | `clienteDoPrismaGerado()` dava **falso positivo**: o postinstall do `@prisma/client` cria o stub `default.js` (que lança) incondicionalmente → o diagnóstico era inatingível num clone novo | A discriminação stub-vs-real virou função pura `temClientReal(dir)` (o real tem `schema.prisma` + `client.js`), com spec que monta um diretório só de stub. **Mutação agora VERMELHA** |
+| M-05 | A spec do SCRIPT fixava o diagnóstico por substring (`'não responde'`, que aparece em 5 mensagens) — trocar `banco-remoto` por `sem-container` deixava verde | A spec fixa a **PALAVRA do diagnóstico** e afirma a ausência dos outros. **Mutação agora VERMELHA** |
+
+**As mutações, medidas** (a suíte do `ambiente-local`):
+
+| Mutação | Antes | Depois |
+|---|---|---|
+| `subirContainer` real → sempre falha | 28/28 verde | **vermelho** ✓ |
+| `esperarPorta` real → sempre false | 28/28 verde | **vermelho** ✓ |
+| `banco-remoto` → `sem-container` | 28/28 verde | **vermelho** ✓ |
+| `porta-no-processo` → `porta-no-container` | 28/28 verde | **vermelho** ✓ |
+| `temClientReal` só pelo `default.js` | — | **vermelho** ✓ |
+| a mensagem do `banco-mudo` mente (2 variantes) | verde | **vermelho** ✓ |
+| o `pkill` volta como remédio | — | **vermelho** ✓ |
+| `clienteDoPrismaGerado()` → sempre `true` | verde | verde — **equivalente neste repo** (o client ESTÁ gerado aqui): a classe 5 de `guard-classes.md`, a forma defeituosa não existe na árvore |
+
+⚠️ Uma mutação escapou na primeira tentativa e a spec foi corrigida por causa
+disso: o `not.toContain('não publica')` **não** pegava a mensagem que diz "NÃO
+publica" — a negação e a afirmação se sobrepõem em caixa. A spec passou a usar
+`not.toMatch(/não publica/i)`.
+
+**Os minors corrigidos junto:** o host IPv6 (`[::1]`) e em caixa alta deixaram de
+ser "não local"; o `PORT` fora da faixa não estoura mais o erro cru do Node; a
+`DATABASE_URL` inválida não é mais reportada como ausente; o `SYSTEM_DATABASE_URL`
+entrou na asserção (é default-deny fora de `development`); o remédio da porta
+ocupada passou a ser o do dono real (`docker compose stop <serviço>` quando é
+serviço do Compose) e **nunca** um `pkill` cego (este repo é um template que as
+pessoas copiam); a espera pelo Postgres agora exige `pg_isready` (a porta abrir
+não é o banco estar pronto — o `docker-proxy` sobe antes); o cabeçalho do script
+não afirma mais que o shebang o tornaria "harness órfão" (afirmação falsa); o
+`.claude/settings.local.json` entrou no `.gitignore` do repo (não só no ignore
+global da máquina); e o `docs/fluxo-desenvolvimento.md` deixou de listar o
+`ambiente:check` como se fosse gate — ele é helper de start.
+
 ### Ficou de fora (com o motivo)
 
 - **A medição ao vivo do `docker stop projeto-base-pg-local`** — o `docker stop`

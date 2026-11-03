@@ -49,7 +49,7 @@ projeto-base/
     ├── articles/          # artigos de fundo
     ├── superpowers/       # planos e specs de trabalho
     ├── web/               # catálogo de rotas Next.js
-    ├── runbooks/          # runbooks por ambiente (dev, Docker, observabilidade, e2e/CI)
+    ├── runbooks/          # runbooks por ambiente (Docker, observabilidade, e2e/CI)
     ├── TEMPLATE_USAGE.md  # Guia principal (≤ 300 linhas)
     ├── MONOREPO.md        # convenções de monorepo
     ├── STACK.md           # stack escolhida e justificativas
@@ -199,7 +199,7 @@ docker compose up -d postgres api web && sleep 30 \
 
 ### Troubleshooting
 
-Os sintomas do **ambiente local** têm dono: [runbook §4](./docs/como-rodar.md).
+Estes são os sintomas do **dia a dia**; a tabela por ambiente está no [runbook §4](./docs/como-rodar.md).
 
 | Sintoma | Solução |
 |---|---|

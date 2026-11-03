@@ -37,16 +37,15 @@ pnpm install --frozen-lockfile
 
 ### §0.2 Quando este documento precisa mudar
 
-O gate `check-runbook-drift` (preflight, Camada 1) acusa sozinho **duas** formas
-de drift: um `pnpm <script>` citado aqui que não existe mais em nenhum
-`package.json` do workspace, e uma chave da tabela "Variáveis de ambiente" que
-sumiu dos `.env.example`.
+O gate `check-runbook-drift` (preflight, Camada 1) acusa **duas** formas de drift:
+um `pnpm <script>` citado aqui que não existe mais, e uma chave da tabela §2 que
+sumiu dos `.env.example`. ⚠️ A tabela §2 tem **UMA CHAVE POR CÉLULA**: uma célula
+com duas chaves tira as DUAS do alcance do gate.
 
-O que o gate **não** mede — e precisa do olho de quem mudou a coisa: script
-novo/renomeado → §3; `.env.example` alterado → §2 + o passo que copia o arquivo;
-porta trocada → §1.5, [runbook Docker](./runbooks/docker.md), §4; ambiente novo →
-uma linha em §0 e um arquivo em [`docs/runbooks/`](./runbooks/); defeito de boot →
-a seção dele, trocando 📖 por ✅ e a data. Regra prática: **quem mudou o comando
+O que o gate **não** mede — precisa do olho de quem mudou: script novo → §3;
+`.env.example` alterado → §2 + o passo que copia; porta trocada → §1.5 e §4;
+ambiente novo → §0 + [`docs/runbooks/`](./runbooks/); defeito de boot → a seção
+dele, trocando 📖 por ✅ e a data. Regra prática: **quem mudou o comando
 escreve a linha nova no mesmo commit**.
 
 ---
@@ -100,10 +99,9 @@ deixa o padrão público valendo em todo o resto. São **três** credenciais, de
 | `app_system` | `SYSTEM_DATABASE_URL` | o **bucket de sistema** (o perfil global, a administração cross-empresa) |
 | dono | `DIRECT_DATABASE_URL` | `migrate`/`seed` — `CREATE ROLE`, `ALTER TABLE … ENABLE RLS`, `GRANT` |
 
-A separação não é cosmeticidade: desde a #118 o bucket de sistema é concedido
-pelo `current_user`, e o `current_user` vem da **credencial** — não de um GUC que a
-sessão escolhe. Um `SET app.tenant_id = '*'` na sessão de runtime não abre mais
-nada. Para subir:
+A separação não é cosmeticidade: desde a #118 o bucket de sistema é concedido pelo
+`current_user`, e ele vem da **credencial** — não de um GUC que a sessão escolhe. Um
+`SET app.tenant_id = '*'` na sessão de runtime não abre mais nada. Para subir:
 
 ```bash
 openssl rand -hex 32      # senha do papel de RUNTIME  -> DATABASE_URL
@@ -115,9 +113,8 @@ cd apps/api && sh scripts/prepara-papeis.sh && cd ../..       # APLICA a senha d
 ```
 
 ⚠️ **A senha vai DENTRO da URI, e a URI não aceita qualquer caractere.** O `base64`
-do `openssl rand -base64 48` traz `/` e `+`, e o `/` ENCERRA a parte de credencial
-da URI — a aplicação subiria com "Invalid URL". Por isso o comando acima é
-`openssl rand -hex 32`: só `[0-9a-f]`, sem percent-encoding.
+traz `/` e `+`, e o `/` ENCERRA a parte de credencial da URI — a aplicação subiria
+com "Invalid URL". Por isso o comando acima é `openssl rand -hex 32`: só `[0-9a-f]`.
 
 `prepara-papeis.sh` lê a senha de cada URI e aplica no papel com a credencial de
 **DONO** — nenhuma senha de papel fica versionada, em nenhum ambiente. ✅ medido
@@ -157,7 +154,8 @@ pnpm dev     # roda o `pnpm ambiente:check` e depois sobe api :3000 + web :3001
 
 O `pnpm ambiente:check` é o preflight do ambiente local (✅ medido em 2026-11-03):
 verifica o `DATABASE_URL`/`JWT_SECRET`, o Prisma Client gerado, o banco e a porta
-da API **antes** de subir qualquer app — e **religa o container parado** (§1.1).
+da API **antes** de subir qualquer app — e **religa o container parado** (§1.1). E o
+P1001 do Prisma sai **traduzido** (causa + comando), por QUALQUER caminho de start.
 
 ### §1.5 Verificar
 
@@ -175,9 +173,8 @@ curl -o /dev/null -w '%{http_code}\n' http://localhost:3000/api/docs   # 200 (Sw
 **desabilitado** — é o default-deny do `JWT_SECRET`: um OpenAPI publica a
 superfície completa da API a quem descobrir a URL. Para ligar: `SWAGGER_ENABLED=true`.
 
-⚠️ No boot do web saem uns `Module not found` de
-`@opentelemetry/winston-transport` e `@opentelemetry/exporter-jaeger` (peers
-opcionais): ✅ medido — **não impedem o boot**, o Next segue e fica `✓ Ready in 5.9s`.
+⚠️ No boot do web saem uns `Module not found` de `@opentelemetry/winston-transport` e
+`@opentelemetry/exporter-jaeger` (peers opcionais): ✅ medido — **não impedem o boot**.
 
 ### §1.6 Fluxo completo (API e UI) ✅ medido 2026-10-16
 
@@ -241,7 +238,9 @@ existem para o container ou para o SDK de terceiros.
 | `JWT_ACCESS_TTL` | `apps/api/.env` · `.env.production` | sim — `jwt-token.service.ts` (default `15m`) |
 | `JWT_REFRESH_TTL` | `apps/api/.env` · `.env.production` | sim — `jwt-token.service.ts` (default `7d`) |
 | `SWAGGER_ENABLED` | `.env.production` | sim — `swagger-habilitado.ts`; default-deny fora de `development` |
-| `POSTGRES_USER` · `POSTGRES_PASSWORD` · `POSTGRES_DB` | `.env.production` | não — lidas pelo container do Postgres (defaults `projeto`/`projeto`/`projeto_base`) |
+| `POSTGRES_USER` | `.env.production` | não — lida pelo container do Postgres (default `projeto`) |
+| `POSTGRES_PASSWORD` | `.env.production` | não — lida pelo container do Postgres |
+| `POSTGRES_DB` | `.env.production` | não — lida pelo container do Postgres (default `projeto_base`) |
 | `LOG_LEVEL` | `apps/api/.env.example` · `.env.production` · `environment:` do compose | **não** — nenhum `process.env.LOG_LEVEL` no `apps/api/src` (`grep -rn 'LOG_LEVEL' apps/api/src` → 0 hits). O compose ainda a interpola |
 | `OTEL_SDK_DISABLED` | `.env.example` (raiz) | sim — `tracing.ts` (`'true'` desliga o SDK) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `.env.production` (opcional) | sim — `tracing.ts`; há default `http://otel-collector:4318/v1/traces` |
@@ -293,8 +292,9 @@ pnpm test:e2e                    # suíte de navegador (runbook de e2e/CI)
 |---|---|---|
 | `/api/v1/health` com `checks.database` ≠ `ok` | Postgres do compose não publica porta no host (#91) | §1.1 — container próprio com `-p 5432:5432` |
 | `Cannot find module '.prisma/client/default'` | o `db:generate` veio do cache do turbo | §1.3 — `pnpm turbo run db:generate --filter=@projeto/api --force` |
-| `PrismaClientInitializationError` **P1001** ("Can't reach database server") | ✅ medido em 2026-11-03: o banco local não está no ar — o `postgres` do compose não publica porta no host (#91) | §1.4 — `pnpm ambiente:check` religa o container parado; §1.1 tem a receita quando ele não existe |
+| `PrismaClientInitializationError` | **P1001** ("Can't reach database server"): o banco local não está no ar — o `postgres` do compose não publica porta no host (#91). Ou a `DATABASE_URL` está ausente/vazia (Ambiente 1) ou no `.env.production` (Ambiente 3) | §1.4 — `pnpm ambiente:check` religa o container parado; §1.1 tem a receita quando ele não existe · §1.2.1 |
 | API morre no boot sem mensagem clara | `JWT_SECRET` ausente ou com placeholder | §1.2 — `openssl rand -base64 48` |
 | `prisma migrate deploy` "não fez nada" e saiu 0 | rodou da raiz / script inexistente | §1.3, de dentro de `apps/api` |
 | `role app_runtime is not permitted to log in` | `prisma migrate reset` deixou o papel sem senha | §1.2.1 — rode o `prepara-papeis.sh` de novo |
 | `port already in use` em 3000/3001 | ambiente 1 e 3 não podem coexistir | derrube um (`pkill -f "turbo run dev"` ou `docker compose down`) |
+| `Cannot find package '@opentelemetry/sdk-node'` na imagem prod | o stage `prod` não copiava `apps/api/node_modules` | ✅ **corrigido** (issue #104, commit `376da79`) — o `Dockerfile` copia `apps/api/node_modules` e o `pnpm prune --prod` foi REMOVIDO; ver [runbook Docker §2.2](./runbooks/docker.md) |

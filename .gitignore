@@ -24,6 +24,9 @@ coverage/
 # mostrava `?? .agents/runs/findings-.../` e o proximo `git add -A` commitaria
 # o artefato.
 .agents/runs/findings-*/
+# Artefato LOCAL do Claude Code (permissões por usuário). Não é versionado —
+# e sem esta linha, `git add -A` commitaria as permissões da máquina.
+.claude/settings.local.json
 .env
 .env.local
 .env.*.local

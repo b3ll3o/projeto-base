@@ -187,7 +187,8 @@ O catálogo completo está em
 medidos em 2026-11-03 com
 `node -p "Object.keys(require('./package.json').scripts).length"` → `30`.
 A tabela desta seção listava **9** deles; os outros 21 não apareciam em lugar
-nenhum.
+nenhum — o `ambiente:check` (o 30º) foi direto para o catálogo, e os 20 demais
+continuam só no [`MONOREPO-scriptarios.md`](./MONOREPO-scriptarios.md).
 
 | Script | O que faz |
 |--------|------------|
