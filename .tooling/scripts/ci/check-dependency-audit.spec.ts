@@ -8,6 +8,7 @@ import {
   checkDependencyAudit,
   extrairAdvisories,
   auditoriaDeErro,
+  SEVERIDADES_QUE_REPROVAM,
   verificarExcecao,
   type ArquivoDeExcecoes,
   type Excecao,
@@ -100,7 +101,7 @@ describe('a extração das advisories', () => {
 
 describe('o gate, com auditoria sintética', () => {
   it('FALHA quando há advisory crítica sem exceção declarada', () => {
-    const root = repoCom({ severidadesQueReprovam: ['critical', 'high'], excecoes: [] });
+    const root = repoCom({ excecoes: [] });
     const r = checkDependencyAudit({
       repoRoot: root,
       auditoriaJson: auditoriaFake({ '1242817': ADVISORY_CRITICA }),
@@ -111,7 +112,7 @@ describe('o gate, com auditoria sintética', () => {
   });
 
   it('PASSA quando a advisory moderada está lá (só crítica e alta reprovam)', () => {
-    const root = repoCom({ severidadesQueReprovam: ['critical', 'high'], excecoes: [] });
+    const root = repoCom({ excecoes: [] });
     const r = checkDependencyAudit({
       repoRoot: root,
       auditoriaJson: auditoriaFake({ '1111111': ADVISORY_MODERADA }),
@@ -120,10 +121,7 @@ describe('o gate, com auditoria sintética', () => {
   });
 
   it('PASSA quando a crítica tem exceção declarada E a verificação ainda vale', () => {
-    const root = repoCom({
-      severidadesQueReprovam: ['critical', 'high'],
-      excecoes: [excecaoDoVitest()],
-    });
+    const root = repoCom({ excecoes: [excecaoDoVitest()] });
     const r = checkDependencyAudit({
       repoRoot: root,
       auditoriaJson: auditoriaFake({
@@ -138,7 +136,7 @@ describe('o gate, com auditoria sintética', () => {
     // A verificação de uma exceção é a AUSÊNCIA de um padrão. Quando o padrão
     // aparece, o motivo medido deixou de ser verdade — e a exceção é
     // reprovada. É o que impede a exceção de virar dívida silenciosa.
-    const root = repoCom({ severidadesQueReprovam: ['critical', 'high'], excecoes: [] });
+    const root = repoCom({ excecoes: [] });
     mkdirSync(join(root, 'apps'), { recursive: true });
     writeFileSync(
       join(root, 'apps/arquivo.ts'),
@@ -150,12 +148,43 @@ describe('o gate, com auditoria sintética', () => {
     expect(problema).toMatch(/parou de valer/);
   });
 
+  it('FALHA quando a exceção declara uma severidade que não é a da advisory', () => {
+    // MEDIDO em 2026-11-03 (revisão do PR #143): os campos `severidade` e
+    // `modulo` da exceção eram DECORATIVOS — o gate usava a severidade da
+    // advisory e ignorava a declarada. Quem mudasse "critical" para "low"
+    // no arquivo acharia que rebaixou a exceção; não rebaixou nada.
+    const excecao = excecaoDoVitest();
+    const root = repoCom({
+      excecoes: [{ ...excecao, severidade: 'low' }],
+    });
+    const r = checkDependencyAudit({
+      repoRoot: root,
+      auditoriaJson: auditoriaFake({
+        '1139528': { ...ADVISORY_CRITICA, module_name: 'vitest', severity: 'critical' },
+      }),
+    });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toMatch(/severidade "low"/);
+  });
+
+  it('FALHA quando a exceção declara um módulo que não é o da advisory', () => {
+    const excecao = excecaoDoVitest();
+    const root = repoCom({
+      excecoes: [{ ...excecao, modulo: 'outro-pacote' }],
+    });
+    const r = checkDependencyAudit({
+      repoRoot: root,
+      auditoriaJson: auditoriaFake({
+        '1139528': { ...ADVISORY_CRITICA, module_name: 'vitest', severity: 'critical' },
+      }),
+    });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toMatch(/módulo "outro-pacote"/);
+  });
+
   it('AVISA quando uma exceção da lista não casa com nenhuma advisory', () => {
     // A lista não pode encolher nem sobrar em silêncio.
-    const root = repoCom({
-      severidadesQueReprovam: ['critical', 'high'],
-      excecoes: [excecaoDoVitest()],
-    });
+    const root = repoCom({ excecoes: [excecaoDoVitest()] });
     const r = checkDependencyAudit({
       repoRoot: root,
       auditoriaJson: auditoriaFake({ '1111111': ADVISORY_MODERADA }),
@@ -182,6 +211,19 @@ describe('a lista de exceções versionada (o repo real)', () => {
     }
   });
 
+  it('a verificação do zod olha o web INTEIRO (não só `app/`)', () => {
+    // MEDIDO em 2026-11-03 (revisão do PR #143): a verificação cobria
+    // `apps/web/app` — e `apps/web/src`, `apps/web/lib` e
+    // `apps/web/components` ficavam de fora. Um `z.array(` em qualquer um
+    // deles escapava da verificação, e a exceção continuaria valendo com a
+    // exposição de verdade.
+    const lista = carregarExcecoes(REPO);
+    const zod = lista.excecoes.find((e) => e.modulo === 'zod');
+    expect(zod).toBeDefined();
+    expect(zod!.verificacao.caminhos).toContain('apps/web');
+    expect(zod!.verificacao.caminhos).not.toContain('apps/web/app');
+  });
+
   it('as verificações das exceções VALEM hoje no repo real', () => {
     // A afirmação é o contrário da exceção: o motivo continua valendo.
     const lista = carregarExcecoes(REPO);
@@ -190,11 +232,19 @@ describe('a lista de exceções versionada (o repo real)', () => {
     }
   });
 
+  it('a severidade que reprova mora no CÓDIGO — o arquivo de dados não pode enfraquecer o gate', () => {
+    // MEDIDO em 2026-11-03 (revisão do PR #143): a lista vinha do JSON, e
+    // quem editasse o arquivo trocando `["critical", "high"]` por `[]`
+    // zerava a reprovação. A regra mora no gate; o arquivo é só DADO.
+    expect(SEVERIDADES_QUE_REPROVAM).toContain('critical');
+    expect(SEVERIDADES_QUE_REPROVAM).toContain('high');
+    const cru = readFileSync(join(REPO, ARQUIVO_DE_EXCECOES), 'utf-8');
+    expect(cru).not.toMatch(/severidadesQueReprovam/);
+  });
+
   it('o arquivo é JSON válido e tem a forma declarada', () => {
     const cru = readFileSync(join(REPO, ARQUIVO_DE_EXCECOES), 'utf-8');
     const lista = JSON.parse(cru) as ArquivoDeExcecoes;
-    expect(lista.severidadesQueReprovam).toContain('critical');
-    expect(lista.severidadesQueReprovam).toContain('high');
     for (const e of lista.excecoes) {
       expect(e.id).toMatch(/^\d+$/);
       expect(e.modulo.length).toBeGreaterThan(0);

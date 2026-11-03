@@ -76,10 +76,19 @@ export interface Excecao {
 }
 
 export interface ArquivoDeExcecoes {
-  /** As severidades que reprovam. Abaixo disso, o gate só avisa. */
-  severidadesQueReprovam: string[];
   excecoes: Excecao[];
 }
+
+/**
+ * As severidades que REPROVAM — no CÓDIGO, não no arquivo de dados.
+ *
+ * MEDIDO em 2026-11-03 (revisão do PR #143): na primeira versão a lista
+ * vinhava do JSON (`severidadesQueReprovam`), e quem editasse o arquivo
+ * Couldia enfraquecer o gate — trocando `["critical", "high"]` por `[]` e
+ * zerando a reprovação. A regra do gate vive no gate (o mesmo princípio do
+ * `doc-claims.json`: o arquivo é DADO, o gate é REGRA).
+ */
+export const SEVERIDADES_QUE_REPROVAM: readonly string[] = ['critical', 'high'];
 
 export interface Advisory {
   id: string;
@@ -135,7 +144,18 @@ export function arquivosEm(caminho: string, excluir?: string[]): string[] {
   const saida: string[] = [];
   const andar = (dir: string) => {
     for (const entrada of readdirSync(dir, { withFileTypes: true })) {
-      if (entrada.name === 'node_modules' || entrada.name.startsWith('.next')) continue;
+      // Artefatos de build: o padrão da verificação pode casar neles (o
+      // `dist/` da API, o `.next/` do web) e acusar uma exceção que está
+      // válida — a verificação tem que olhar o CÓDIGO, não o que saiu dele.
+      if (
+        entrada.name === 'node_modules' ||
+        entrada.name.startsWith('.next') ||
+        entrada.name === 'dist' ||
+        entrada.name === 'coverage' ||
+        entrada.name === '.turbo'
+      ) {
+        continue;
+      }
       const completo = path.join(dir, entrada.name);
       if (entrada.isDirectory()) andar(completo);
       else if (!excluir?.some((re) => new RegExp(re).test(completo))) saida.push(completo);
@@ -194,9 +214,17 @@ export function verificarExcecao(repoRoot: string, excecao: Excecao): string | n
 export function carregarExcecoes(repoRoot: string): ArquivoDeExcecoes {
   const arquivo = path.join(repoRoot, ARQUIVO_DE_EXCECOES);
   if (!existsSync(arquivo)) {
-    return { severidadesQueReprovam: ['critical', 'high'], excecoes: [] };
+    return { excecoes: [] };
   }
-  return JSON.parse(readFileSync(arquivo, 'utf-8')) as ArquivoDeExcecoes;
+  try {
+    return JSON.parse(readFileSync(arquivo, 'utf-8')) as ArquivoDeExcecoes;
+  } catch (erro) {
+    // JSON quebrado não pode virar "nenhuma excecao" (que reprovaria tudo
+    // com uma mensagem confusa) nem derrubar o preflight com um stack trace.
+    throw new Error(
+      `${ARQUIVO_DE_EXCECOES} não é um JSON válido: ${String((erro as Error).message).slice(0, 160)}`,
+    );
+  }
 }
 
 /**
@@ -244,7 +272,7 @@ export function checkDependencyAudit(opts: {
 
   const lista = carregarExcecoes(root);
   const encontrados = extrairAdvisories(auditoria);
-  const reprovam = new Set(lista.severidadesQueReprovam);
+  const reprovam = new Set(SEVERIDADES_QUE_REPROVAM);
 
   const porId = new Map(lista.excecoes.map((e) => [e.id, e]));
   const usadas = new Set<string>();
@@ -262,6 +290,25 @@ export function checkDependencyAudit(opts: {
       continue;
     }
     usadas.add(advisory.id);
+
+    // Os campos declarados na exceção têm que BATER com a advisory. Sem
+    // esta conferência eles são decorativos — e decoativos que parecem
+    // valer: alguém que mudasse "severidade": "critical" para "low" no
+    // arquivo acharia que rebaixou a exceção, e não rebaixou nada (o gate
+    // usa a severidade da advisory).
+    if (excecao.severidade !== advisory.severidade) {
+      errors.push(
+        `a exceção ${excecao.id} declara severidade "${excecao.severidade}" ` +
+          `mas a advisory é "${advisory.severidade}" — a declaração tem que bater.`,
+      );
+    }
+    if (excecao.modulo !== advisory.modulo) {
+      errors.push(
+        `a exceção ${excecao.id} declara o módulo "${excecao.modulo}" ` +
+          `mas a advisory é de "${advisory.modulo}" — a declaração tem que bater.`,
+      );
+    }
+
     const problema = verificarExcecao(root, excecao);
     if (problema) errors.push(problema);
   }

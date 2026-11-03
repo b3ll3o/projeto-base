@@ -8,9 +8,9 @@
     "MEDIDO em 2026-11-03 com `pnpm audit --json` (89 advisories: 4 críticas,",
     "23 altas). Depois das 7 overrides do `pnpm` e do bump do `next`: 43",
     "advisories, das quais 4 na severidade que reprova — as 4 são as exceções",
-    "abaixo. Nenhuma outra."
+    "abaixo. Nenhuma outra.",
+    "A severidade que REPROVA mora no CÓDIGO do gate (SEVERIDADES_QUE_REPROVAM), não neste arquivo — quem edita este arquivo não pode enfraquecer o gate."
   ],
-  "severidadesQueReprovam": ["critical", "high"],
   "excecoes": [
     {
       "id": "1139528",
@@ -49,7 +49,7 @@
       "verificacao": {
         "tipo": "ausencia",
         "padrao": "z\\.(array|tuple)\\(",
-        "caminhos": ["apps/api/src", "apps/web/app"],
+        "caminhos": ["apps/api/src", "apps/web"],
         "excluir": ["\\.spec\\.ts$"]
       }
     },
