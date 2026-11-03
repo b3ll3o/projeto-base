@@ -448,6 +448,62 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     file: '.tooling/scripts/ci/check-feature-flag-portas.ts',
     id: 'check-feature-flag-portas',
   },
+  {
+    // pt-BR (2026-10-29): a convenção `documentacao.md` diz que a documentação
+    // é parte do código, e nada media isso. MEDIDO: `apps/api/src/modules/` tem
+    // 6 bounded contexts e `docs/api/` tinha 2 — `feature-flags`, `health`,
+    // `profiles` e `tenancy` não tinham NENHUMA referência, e o preflight
+    // ficava verde. O `doc-sync` não cobre: o mapeamento dele é uma lista de
+    // 5 caminhos hardcoded, e um módulo novo não gera ação nem alerta.
+    //
+    // O gate mede COBERTURA (existe doc canônico para cada unidade da
+    // matriz da convenção). NÃO mede frescor — o doc existir não quer dizer
+    // que ele ainda diz a verdade — e isso é declarado no cabeçalho dele.
+    name: 'cobertura de documentação (unidade de código → doc canônico)',
+    file: '.tooling/scripts/ci/check-doc-coverage.ts',
+    id: 'check-doc-coverage',
+  },
+  {
+    // pt-BR (2026-10-29): o `check-doc-coverage` mede COBERTURA (o doc
+    // EXISTE?). A regra mais forte do PR — "doc que mente é P0" — seguia sem
+    // instrumento. MEDIDO 2026-10-29: **5 claims numéricas do repo já
+    // mentem** (todas de "o doc afirma um número que o código não produz
+    // mais"), e nenhuma delas é de "o doc não existe".
+    //
+    // O gate confere o par comando → valor que o doc CITA: o comando tem
+    // que estar lá, e o valor ao lado dele tem que bater com a derivação
+    // (o código real). A derivação é TypeScript — o gate NÃO executa shell,
+    // porque o registry é versionado e um PR pode editá-lo (ele declara **o
+    // que** medir, não **quanto**).
+    name: 'claims numéricos dos docs (doc afirma o que o código produz)',
+    file: '.tooling/scripts/ci/check-doc-claims.ts',
+    id: 'check-doc-claims',
+  },
+  {
+    // pt-BR (2026-10-29): o teto de 300 linhas para `.md` é a regra mais
+    // antiga do repo e a única que NENHUM gate mediava. MEDIDO: `grep -rln
+    // 'MAX_LOC' tooling/scripts/ .tooling/scripts/ | grep -v spec` devolve UM
+    // arquivo, e ele mede UMA matriz só. Um agente podia escrever um `.md` de
+    // 3.000 linhas que ninguém veria.
+    //
+    // O teto NÃO vale para tudo, e a lista do que está fora é a fonte única
+    // (exportada do gate): registro datado (`docs/superpowers/**`), artefato
+    // de execução (`.agents/runs/**`) e vendor (`.agents/skills/graphify/**`).
+    name: 'teto de linhas da documentação viva (≤ 300)',
+    file: '.tooling/scripts/ci/check-doc-size.ts',
+    id: 'check-doc-size',
+  },
+  {
+    // pt-BR (2026-10-29): MEDIDO, `tsconfig.base.json` declarava `@projeto/ui`
+    // → `./packages/ui/src`, que não existe (o `packages/` tem
+    // `eslint-config`, `shared-types` e `tsconfig`). Nenhum import usava o
+    // alias — só a própria declaração. O `check-tsconfig-drift` não pega:
+    // ele compara `strict` e `noUncheckedIndexedAccess`, e `paths` não está
+    // entre elas.
+    name: 'alias de path aponta para diretório que existe',
+    file: '.tooling/scripts/ci/check-path-alias.ts',
+    id: 'check-path-alias',
+  },
 ];
 
 /**

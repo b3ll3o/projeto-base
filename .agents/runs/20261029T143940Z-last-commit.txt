@@ -1,0 +1,351 @@
+commit 194d305b88b176139379330baf07b622d3939910
+Author:     Leonardo Andreazzi <andreazzi-leonardo@hotmail.com>
+AuthorDate: Thu Oct 29 02:41:55 2026 -0300
+Commit:     GitHub <noreply@github.com>
+CommitDate: Thu Oct 29 02:41:55 2026 -0300
+
+    feat(admin): o administrador do sistema vê as empresas e os usuários, nos dois sentidos (#127)
+    
+    * feat(admin): o administrador do sistema vê as empresas e os usuários, nos dois sentidos
+    
+    Duas rotas novas e uma tela: `GET /admin/tenants` (todas as empresas com os
+    seus membros), `GET /admin/users` (todos os usuários com as empresas a que
+    pertencem) e a página `/admin/tenancy`, que mostra as duas listas.
+    
+    O ator é o administrador do SISTEMA — D2 (`tenantId === null && isAdmin`) — e
+    NÃO o gerente de empresa, que tem `isAdmin: true` no perfil efetivo da empresa
+    DELE e `listAllPermissions()` no banco. O `@RequirePermission` é defense in
+    depth; quem barra de fato é o D2, dentro da use case.
+    
+    A lista de usuários parte de `users` e não de `tenant_memberships`: a conta do
+    administrador do sistema não pertence a empresa nenhuma, e uma lista montada
+    pelas empresas a esqueceria — "todos os usuários" seria uma lista de
+    quase-todos.
+    
+    O que entra:
+    
+    - API: a porta `AdminTenancyRepositoryPort`, o repositório Prisma (que abre o
+      bucket de SISTEMA — o escopo NUNCA vem do header `X-Tenant-Id`), as duas use
+      cases com o portão D2, e o controller com `@RequirePermission` por handler.
+    - Tipos: `MembroDaEmpresaDto`, `EmpresaComMembrosDto`, `EmpresaComPerfilDto` e
+      `UsuarioComEmpresasDto` no pacote compartilhado.
+    - Web: o cliente SEM o header de empresa (D7), o guard `exigirAdminDoSistema()`
+      (que lê o perfil GLOBAL — D8), a página com as duas tabelas e o link no menu.
+    - e2e: o fluxo F17, com a linha no inventário de fluxos.
+    
+    ⚠️ O gate de escopo contou 4 call sites a mais (77 → 81): o repositório novo
+    abre o bucket de SISTEMA com `comEscopo(prisma, escopoDoTenant(null), fn)`, e o
+    gate conta as DUAS chamadas. O número subiu junto com o PR que o mediu — que é
+    o comportamento que o próprio gate documenta.
+    
+    MEDIDO: unit da API (983 testes), integração (148), unit do web (376), e2e (59)
+    e `pnpm ci:local` inteiro verdes. O portão D2 tem mutação medida: tirar o
+    bloqueio da tela deixa o F17 vermelho, e trocar o `detail` do 403 deixa
+    vermelho na asserção que nomeia QUEM recusou.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(e2e): a suíte não pode disparar o rate limiter da própria aplicação
+    
+    O limitador global da API é POR IP (`ThrottlerModule.forRoot`, 100 req/min) — e
+    a suíte e2e inteira sai de 127.0.0.1, ou seja, TODAS as requisições caem no
+    MESMO balde. A suíte passa de 100 requisições por minuto, e o limitador
+    começava a responder **429** aos specs: uma falha que não tem nada a ver com o
+    spec que a levou.
+    
+    MEDIDO 2026-10-27: na execução que derrubou o `f4-cadastro-email-duplicado`,
+    o log da API tinha **8 respostas 429** no `/me/profile` — no meio da navegação
+    de um spec que media outra coisa. E o log mostra que a API tinha respondido
+    **409** (o código certo) no POST do formulário: o que faltou foi o campo de
+    erro na tela, e a causa estava no ambiente, não no spec.
+    
+    É a MESMA classe da cascata que o `garantirApiNoAr` fechou (33 specs caíam com
+    `ECONNREFUSED` por causa da API morta): um estado do ambiente que derruba specs
+    que não são dele.
+    
+    O limite do harness sobe para 10000, e o `THROTTLE_LIMIT` virou uma função
+    PURA e exportada (`ambienteDaApi`) com spec próprio — porque uma proteção que
+    ninguém mede é uma proteção que alguém remove sem saber.
+    
+    ⚠️ Nenhuma spec e2e mede o rate limit (`grep -rn '429|THROTTLE' apps/web/e2e/`
+    não devolve nada), então nenhum comportamento medido é escondido. E o default
+    de PRODUÇÃO (100/min) continua valendo em qualquer outro ambiente: isto é o
+    ambiente do harness.
+    
+    MEDIDO depois da correção: a suíte inteira passa (59/59) e o log da API não
+    tem NENHUM 429 — eram 8.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * test(tenancy): o inventário de tenancy ganha o cenário e2e da API
+    
+    A API tem um cenário e2e por área (01-crud, 10-escalation, 11-tenant-isolation,
+    12-onboarding, 13-feature-flags) — e as rotas novas do inventário de tenancy
+    NÃO tinham nenhum. Os specs que existem não cobrem o que só aparece na
+    fronteira:
+    
+      - `admin-tenancy.controller.spec.ts` chama os handlers com `new` e um stub:
+        nenhum GUARD roda, o MODULE GRAPH não existe e a ROTA não é consultada;
+      - `prisma-admin-tenancy.repository.integration.spec.ts` prova a query, mas
+        instancia o repositório DIRETO — nunca passa pelo container.
+    
+    São as mesmas 3 mutações cegas que o cenário 13 fecha (rota fora de
+    `controllers` → 404; `ProfilesModule` fora dos imports → DI quebrado; o
+    repositório fora do `PrismaPersistenceModule` → DI quebrado) — e uma quarta
+    que muda COMPORTAMENTO e que nenhum outro arquivo mede: o portão D2 fora da
+    use case.
+    
+    ⚠️ O que este cenário mede e é o mais importante: o `gerente` de uma empresa
+    tem `isAdmin: true` no perfil efetivo DA EMPRESA DELE e `listAllPermissions()`
+    no banco — logo o `PermissionsGuard` o LIBERA. Quem barra é o D2
+    (`tenantId === null && isAdmin`), dentro da use case.
+    
+    MEDIDO 2026-10-27: a EXPECTATIVA do caso "gerente SEM o header de empresa" era
+    o `detail` do D2, e o que chegou foi o do `PermissionsGuard` — no bucket global
+    o gerente não tem perfil nenhum, e o guard barra ANTES da use case. A
+    expectativa estava errada, e a propriedade real é mais forte: o gerente é
+    recusado nos DOIS baldes (com o header pelo D2, sem o header pelo guard).
+    
+    MEDIDO: `pnpm --filter @projeto/api test:e2e` → 15 arquivos, 115 testes, todos
+    verdes (o cenário novo entra com 7).
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(tenancy): a lista do admin abre o bucket de SISTEMA na CREDENCIAL
+    
+    O rebase sobre a main trouxe de volta a forma antiga de abrir o bucket de
+    SISTEMA: `comEscopo(this.prisma, escopoDoTenant(null), fn)` — o GUC `'*'` na
+    sessao de RUNTIME.
+    
+    Desde o #118 o bucket de SISTEMA e' concedido pelo `current_user`, e quem abre
+    a transacao e' a CREDENCIAL de sistema. MEDIDO na main (2026-10-28), no
+    Postgres 16 real:
+    
+      sessao de RUNTIME, escopo '*'  ->  empresas=0  usuarios=0
+      sessao de SISTEMA, escopo '*'  ->  empresas=2  usuarios=1
+    
+    Com a forma antiga, as DUAS listas do admin (empresas e usuarios) devolviam
+    ZERO linhas — e a tela ficaria VAZIA sem erro nenhum. O mesmo P0 que o #118
+    consertou, trazido de volta pelo rebase.
+    
+    - `prisma-admin-tenancy.repository.ts`: as duas leituras passam a usar
+      `comEscopoDeSistema(fn)`, e o repositorio deixa de receber o `PrismaService`
+      — o client injetado nao era usado pela forma nova, e um client que a
+      producao nao usa e' uma dependencia que mente sobre quem abre a transacao.
+    - `prisma-admin-tenancy.repository.spec.ts`: a costura do `escopo.js` e'
+      mockada (o padrao de casa, de `prisma-tenant-membership.repository.spec.ts`),
+      e o cliente de SISTEMA e' o MESMO duplo do repositorio — que e' o que
+      preserva a assercao "abre o escopo de SISTEMA".
+    - `prisma-admin-tenancy.repository.integration.spec.ts`: a sessao que mede e'
+      a de SISTEMA (`ctx.uriDoPapelDeSistema`), e `uriComoPapelDeRuntime` ganhou
+      o segundo argumento que o #118 passou a exigir.
+    
+    Verificado:
+    - mutacao (o repositorio volta a `comEscopo(prisma, escopoDoTenant(null))`):
+      6 de 9 testes de integracao caem
+    - o numero do gate de escopo continua 39 — e MEDIDO, nao deduzido: mutando o
+      repositorio para `comEscopoDeEmpresa(prisma, null, fn)` o gate imprime 41,
+      ou seja, o gate VE este arquivo e o 39 nao e' um ponto cego
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * chore(api): o OpenAPI versionado ganha as duas rotas do admin
+    
+    O #125 transformou `apps/api/openapi.json` na baseline versionada do
+    contrato HTTP, e o gate `check-openapi-contract` compara o arquivo com o que
+    o codigo gera. As DUAS rotas novas do admin (`GET /api/v1/admin/tenants` e
+    `GET /api/v1/admin/users`) nao estavam no arquivo — e o gate acusava.
+    
+    O arquivo e' GERADO (`pnpm --filter @projeto/api run openapi:export`) e
+    formatado com Prettier, como o que esta versionado.
+    
+    As duas rotas declarao `security: bearer` — uma rota protegida que nao
+    declara isso sai PUBLICA no documento, e nenhum teste de runtime acusa.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * chore(ledger): destinação para as duas memórias que evaporaram sem deixar rastro
+    
+    O `check-memory-crystallization` le o ledger nas DUAS direcoes: memoria no
+    disco sem linha e' erro, e linha apontando para memoria que nao existe e'
+    erro. As duas memorias mais recentes do corpus — `reviewer-que-mede-reverte-o-
+    worktree` e `stale-clone-hides-the-resolving-merge` — nao tinham linha, e o
+    gate acusava.
+    
+    As DUAS sao `pendente`: regra reutilizavel que ninguem escreveu ainda.
+    MEDIDO por `git grep` em `.agents/` e `docs/` — nenhuma das duas regras esta
+    escrita em arquivo versionado, que e o que a disposicao `citada` exige (com a
+    ancora verbatim). A `pendente` e' a divida declarada: o gate a reporta como
+    ressalva, e nao como erro.
+    
+    Nao tem relacao com a demanda deste PR — e o gate que a barra tambem roda no
+    `preflight` local, e o `pnpm ci:local` do pre-push nao passa com o ledger
+    desatualizado.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * docs(admin): o plano da visão de admin descreve a credencial do bucket de SISTEMA
+    
+    O plano foi escrito em 2026-10-22, antes do #118 — e ele dizia, em três
+    lugares, que a leitura abre o bucket de SISTEMA com
+    `comEscopo(prisma, escopoDoTenant(null), …)`, isto e', o GUC `'*'` na sessao de
+    RUNTIME.
+    
+    Desde o #118 o bucket de SISTEMA e' concedido pelo `current_user`: quem abre a
+    transacao e' a CREDENCIAL de sistema. A forma que o plano descreve devolve
+    ZERO linhas (MEDIDO na main: sessao de RUNTIME com escopo '*' -> empresas=0;
+    sessao de SISTEMA -> empresas=2).
+    
+    O plano agora diz `comEscopoDeSistema` — e a tabela de decisoes (D2) registra
+    a MEDIDA, para quem ler o plano saber que a forma antiga nao e' equivalente.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(admin): o inventário lê as DUAS listas no mesmo instante
+    
+    A revisão do PR #127 (15 achados inline + 2 avisos + 2 melhorias) mediu
+    defeitos que nenhum teste pegava. Este commit fecha os de COMPORTAMENTO e
+    os de DUPLICAÇÃO.
+    
+    AS DUAS ROTAS VIRAM UMA
+    
+    `GET /admin/tenants` e `GET /admin/users` viram `GET /admin/tenancy`, que
+    devolve as DUAS listas numa resposta. O motivo é um invariante do próprio
+    repositório — "as DUAS listas precisam contar a mesma história" — que duas
+    rotas HTTP não conseguem garantir: duas rotas são dois requests, e cada
+    request é uma transação. O web disparava as duas em paralelo, e a tela podia
+    mostrar uma empresa "sem membros" ao lado de uma pessoa numa empresa que a
+    lista de empresas não conhecia.
+    
+    O ganho de brinde: o wire format deixa de ser declarado DUAS vezes sem elo
+    de compilação entre a API e o web (o controller tipava com o tipo da PORT e
+    o web consumia um DTO escrito à mão) — o controller agora tipa com o tipo
+    COMPARTILHADO, e um rename no wire quebra o `tsc` dos dois lados.
+    
+    O portão D2 ficou a UMA camada: `ADMIN_TENANCY_REPOSITORY_PORT` saiu do
+    `PrismaPersistenceModule` (importado por Auth, Users, Profiles, FeatureFlags
+    e Tenancy) e foi para o `TenancyModule`, que é o único que o consome. O
+    portão mora na use case, e a leitura que ATRAVESSA empresas (nome e e-mail de
+    TODAS as contas) agora só é alcançável por quem passa por ele.
+    
+    O QUE MAIS ENTRA
+    
+    - A ordem passou a ser DECLARADA: desempate pelo `id` no nível de topo (`name`
+      não é única) e `orderBy` na relação aninhada (o do nível de cima não a
+      alcança — a ordem dos membros saía na ordem do heap, e o spec dependia da
+      posição).
+    - O PRAZO da transação é explícito (15 s): o default do Prisma (5 s) era
+      implícito, e a leitura que cresce com a base INTEIRA é a que estourava nele
+      (P2028, que não é `HttpException` e sai 500).
+    - O "perfil efetivo" tem UM dono (`tenancy/domain/perfil-efetivo.ts`): a
+      regra tinha TRÊS casas, e o gate de dono não a via (a janela do
+      `check-bloco-duplicado` é de 16 linhas, e o predicado tem 5).
+    - O `atorDe` e o portão D2 também: eram CINCO cópias do mapeamento
+      `req.user` → `AtorAutenticado` e DUAS do portão, todas idênticas.
+    - O menu oferece só as portas que abrem: o `Sidebar` usava o `isAdmin` DA
+      EMPRESA para o link que a tela exige do bucket GLOBAL — o dono de uma
+      empresa via um link que dava "Acesso restrito", e o administrador do
+      SISTEMA perdia o link inteiro.
+    - A tela do inventário lê UMA vez e leva a falha para a tela certa (o
+      `ServicoIndisponivel` do guard, com retry), e `/admin/flags` passou a usar
+      o guard compartilhado — ele tratava 401, 403 e 5xx como a mesma coisa.
+    - O e2e 14 logava a MESMA conta 5 vezes, e o limite de login é 5 POR CONTA:
+      o 5º login consumia a última cota, e um `it()` novo (ou um `--retry=1`)
+      deixaria o spec vermelho no SETUP. Agora cada login cai num balde
+      diferente — e a correção NÃO é subir o limite.
+    - A mensagem da credencial de SISTEMA diz o que acontece de fato: a API SOBE
+      (o guard de boot só recusa fora de `development`) e a primeira operação que
+      usa o bucket falha. O aviso da revisão mediu `staging` como ambiente em que
+      a API sobe; o código já recusava em `staging` (o guard é default-deny fora
+      de `development`) — a mensagem é que estava errada.
+    
+    O QUE NÃO ENTRA, E POR QUÊ
+    
+    - Paginação: ⚠️ não bloqueante para a revisão, e ela exige UI que ninguém
+      pediu. O PRAZO explícito e o `shortcut:` no código registram o limite; o
+      teto, quando vier, vai no PORT (como o `limitarPage` do
+      `UserRepositoryPort`).
+    - Auditoria de leitura da PII: o `AuditContext` do repo é auditoria de
+      ESCRITA (INSERT/UPDATE/DELETE/RESTORE, com o snapshot da entidade), e uma
+      leitura não é uma entidade. O precedente para operação sensível é o
+      `Logger` dedicado, e é o que entrou — com o ator e o tamanho do inventário.
+    
+    O plano da revisão: `docs/superpowers/plans/2026-10-29-admin-tenancy-correcoes-revisao.md`.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * chore(ledger): destinação para a memória que evaporou sem deixar rastro
+    
+    O `check-memory-crystallization` le o ledger nas DUAS direcoes: memória no
+    disco sem linha e' erro, e linha apontando para memória que não existe e'
+    erro.
+    
+    A memória mais recente do corpus — `pr-body-edit-cancels-inflight-ci-run` —
+    não tinha linha, e o gate acusava. Ela e' `pendente`: regra reutilizavel que
+    ninguem escreveu ainda. MEDIDO — o `ci.yml` registra a armadilha IRMÃ (o
+    re-run de uma run superada cancelar a run boa), mas a regra de que EDITAR O
+    CORPO do PR dispara `pull_request: edited` e cancela a run em andamento não
+    está escrita em nenhum arquivo versionado, que e' o que a disposicao `citada`
+    exige (com a ancora verbatim).
+    
+    Nao tem relacao com a demanda deste PR — e o gate que a barra tambem roda no
+    `preflight` local, e o `pnpm ci:local` do pre-push nao passa com o ledger
+    desatualizado.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(web): a varredura de specs nao desce no build da suite e2e
+    
+    O `vitest-include.spec.ts` varre a arvore do app atrás de specs que nenhum
+    coletor pega, e pula o "lixo de build" — mas a lista tinha `.next` e nao
+    `.next-e2e`, que e' o `distDir` que a suite e2e usa para o build dela
+    (`.gitignore:114`).
+    
+    Como o turbo roda `test:coverage` e `test:e2e` EM PARALELO, o build da e2e
+    criava e apagava arquivos dentro de `.next-e2e` enquanto a varredura o
+    percorria — e o `stat` de um arquivo que sumiu no meio do caminho abortava a
+    suite com `ENOENT`, por um motivo que nao e' do codigo sob teste.
+    
+    MEDIDO 2026-10-29: `ENOENT: no such file or directory, stat
+    'apps/web/.next-e2e/prerender-manifest.json'`, com as duas suites rodando ao
+    mesmo tempo.
+    
+    Nao tem relacao com a demanda do PR — e o `pnpm ci:local` do pre-push roda as
+    duas suites, e nao passa com a varredura entrando no diretorio que a outra
+    suite esta escrevendo.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * docs(users): a terceira casa do "perfil efetivo" aponta para o dono
+    
+    A regra do "perfil efetivo" tinha TRÊS casas — `findProfileId`, o
+    `perfilEfetivoPorUsuario` e a visao de admin. O DONO agora e' o predicado em
+    `tenancy/domain/perfil-efetivo.ts`, e as duas que escrevem o predicado em
+    TypeScript o importam.
+    
+    A terceira (`prisma-user.repository.ts`) expressa o mesmo criterio como um
+    FILTRO Prisma (`profile: { is: { tenantId: null } }`), e ele continua la de
+    propósito: o filtro que ninguem pode esquecer porque esta no `where` e' a forma
+    como o repositorio garante a DONA do perfil. O que faltava era o ponteiro — o
+    comentario apontava para o `findProfileId`, e nao para o dono.
+    
+    Nao muda comportamento: e' comentario.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * refactor(tenancy): o slug do perfil efetivo confere o perfil antes do predicado
+    
+    A funcao `slugEfetivo` devolvia `null` pelo predicado e depois perguntava de
+    novo se o perfil era nulo — um ramo que so existe porque o TypeScript nao
+    estreita o `profile` atraves de uma chamada de funcao. A ordem invertida
+    resolve: o perfil nulo sai antes, e o predicado decide o resto.
+    
+    Nao muda comportamento: `temPerfilEfetivo` ja devolvia `false` para o perfil
+    nulo.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    ---------
+    
+    Co-authored-by: CEO Agent <ceo@paperclip.ai>
+    Co-authored-by: Claude Code <noreply@anthropic.com>

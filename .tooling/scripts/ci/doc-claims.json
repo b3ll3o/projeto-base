@@ -1,0 +1,155 @@
+{
+  "$fonte": "Cada entrada amarra um TRECHO DE DOC a uma DERIVAÇÃO nativa. O gate confere que o doc cita o comando e afirma o valor, e que a derivação (o código real) concorda. A derivação é TypeScript, nunca shell — o registry é uma superfície de DADOS, não de execução. O `caminhos` medido tem que estar CONTIDO no `comando` citado: é o tying que impede o gate de medir um objeto diferente do que o doc afirma (o tying quebrado é erro, com o nome dos dois).",
+  "claims": [
+    {
+      "doc": "docs/api/users.md",
+      "comando": "grep -hoE \"@(Get|Post|Patch|Put|Delete)\\(\" apps/api/src/modules/users/infrastructure/http/users.controller.ts | wc -l",
+      "derivacao": {
+        "tipo": "contar-decoradores-http",
+        "caminhos": ["apps/api/src/modules/users/infrastructure/http/users.controller.ts"]
+      },
+      "motivo": "Contagem de endpoints do BC `users`. O valor é o número de métodos HTTP declarados no controller."
+    },
+    {
+      "doc": "docs/api/auth.md",
+      "comando": "grep -hoE \"@(Get|Post|Patch|Put|Delete)\\(\" apps/api/src/modules/auth/infrastructure/http/auth.controller.ts | wc -l",
+      "derivacao": {
+        "tipo": "contar-decoradores-http",
+        "caminhos": ["apps/api/src/modules/auth/infrastructure/http/auth.controller.ts"]
+      },
+      "motivo": "Contagem de endpoints do BC `auth`."
+    },
+    {
+      "doc": "docs/api/tenancy.md",
+      "comando": "grep -hoE \"@(Get|Post|Patch|Put|Delete)\\(\" apps/api/src/modules/tenancy/infrastructure/http/*.controller.ts | wc -l",
+      "derivacao": {
+        "tipo": "contar-decoradores-http",
+        "caminhos": ["apps/api/src/modules/tenancy/infrastructure/http/*.controller.ts"]
+      },
+      "motivo": "Contagem de endpoints do BC `tenancy` — 3 controllers, 5 endpoints."
+    },
+    {
+      "doc": "docs/api/profiles.md",
+      "comando": "grep -hoE \"@(Get|Post|Patch|Put|Delete)\\(\" apps/api/src/modules/profiles/infrastructure/http/*.controller.ts | wc -l",
+      "derivacao": {
+        "tipo": "contar-decoradores-http",
+        "caminhos": ["apps/api/src/modules/profiles/infrastructure/http/*.controller.ts"]
+      },
+      "motivo": "Contagem de endpoints do BC `profiles` — 4 controllers, 10 endpoints."
+    },
+    {
+      "doc": "docs/api/feature-flags.md",
+      "comando": "grep -hoE \"@(Get|Post|Patch|Put|Delete)\\(\" apps/api/src/modules/feature-flags/infrastructure/http/*.controller.ts | wc -l",
+      "derivacao": {
+        "tipo": "contar-decoradores-http",
+        "caminhos": ["apps/api/src/modules/feature-flags/infrastructure/http/*.controller.ts"]
+      },
+      "motivo": "Contagem de endpoints do BC `feature-flags`."
+    },
+    {
+      "doc": "docs/api/health.md",
+      "comando": "grep -hoE \"@(Get|Post|Patch|Put|Delete)\\(\" apps/api/src/modules/health/health.controller.ts | wc -l",
+      "derivacao": {
+        "tipo": "contar-decoradores-http",
+        "caminhos": ["apps/api/src/modules/health/health.controller.ts"]
+      },
+      "motivo": "Contagem de endpoints do BC `health`. Este doc usava `grep -cE` (conta LINHAS) enquanto os outros 5 usam `grep -hoE | wc -l` (conta OCORRÊNCIAS) — as duas formas dão o mesmo número só porque há 1 decorador por linha, e a derivação conta OCORRÊNCIAS. MEDIDO 2026-11-02: o comando foi UNIFICADO no `grep -hoE … | wc -l`, para que a derivação meça exatamente o que o comando cita nos 6 docs."
+    },
+    {
+      "doc": "docs/api/users.md",
+      "comando": "node -e \"const d=require('./apps/api/openapi.json');console.log(Object.keys(d.paths).length)\"",
+      "derivacao": {
+        "tipo": "contar-paths-openapi"
+      },
+      "motivo": "Total de paths do contrato HTTP. O mesmo número é afirmado nos 6 docs de API — o registry declara os 6, porque o gate confere cada doc."
+    },
+    {
+      "doc": "docs/api/auth.md",
+      "comando": "node -e \"const d=require('./apps/api/openapi.json');console.log(Object.keys(d.paths).length)\"",
+      "derivacao": {
+        "tipo": "contar-paths-openapi"
+      },
+      "motivo": "Total de paths do contrato HTTP (mesmo valor nos 6 docs de API)."
+    },
+    {
+      "doc": "docs/api/health.md",
+      "comando": "node -e \"const d=require('./apps/api/openapi.json');console.log(Object.keys(d.paths).length)\"",
+      "derivacao": {
+        "tipo": "contar-paths-openapi"
+      },
+      "motivo": "Total de paths do contrato HTTP (mesmo valor nos 6 docs de API)."
+    },
+    {
+      "doc": "docs/api/profiles.md",
+      "comando": "node -e \"const d=require('./apps/api/openapi.json');console.log(Object.keys(d.paths).length)\"",
+      "derivacao": {
+        "tipo": "contar-paths-openapi"
+      },
+      "motivo": "Total de paths do contrato HTTP (mesmo valor nos 6 docs de API)."
+    },
+    {
+      "doc": "docs/api/tenancy.md",
+      "comando": "node -e \"const d=require('./apps/api/openapi.json');console.log(Object.keys(d.paths).length)\"",
+      "derivacao": {
+        "tipo": "contar-paths-openapi"
+      },
+      "motivo": "Total de paths do contrato HTTP (mesmo valor nos 6 docs de API)."
+    },
+    {
+      "doc": "docs/api/feature-flags.md",
+      "comando": "node -e \"const d=require('./apps/api/openapi.json');console.log(Object.keys(d.paths).length)\"",
+      "derivacao": {
+        "tipo": "contar-paths-openapi"
+      },
+      "motivo": "Total de paths do contrato HTTP (mesmo valor nos 6 docs de API)."
+    },
+    {
+      "doc": "docs/api/users.md",
+      "comando": "node -e \"const d=require('./apps/api/openapi.json');console.log(Object.values(d.paths).flatMap(p=>Object.keys(p).filter(k=>['get','post','put','patch','delete'].includes(k))).length)\"",
+      "derivacao": {
+        "tipo": "contar-operacoes-openapi"
+      },
+      "motivo": "Total de operações do contrato HTTP (mesmo valor nos 6 docs de API)."
+    },
+    {
+      "doc": "docs/api/auth.md",
+      "comando": "node -e \"const d=require('./apps/api/openapi.json');console.log(Object.values(d.paths).flatMap(p=>Object.keys(p).filter(k=>['get','post','put','patch','delete'].includes(k))).length)\"",
+      "derivacao": {
+        "tipo": "contar-operacoes-openapi"
+      },
+      "motivo": "Total de operações do contrato HTTP (mesmo valor nos 6 docs de API)."
+    },
+    {
+      "doc": "docs/api/health.md",
+      "comando": "node -e \"const d=require('./apps/api/openapi.json');console.log(Object.values(d.paths).flatMap(p=>Object.keys(p).filter(k=>['get','post','put','patch','delete'].includes(k))).length)\"",
+      "derivacao": {
+        "tipo": "contar-operacoes-openapi"
+      },
+      "motivo": "Total de operações do contrato HTTP (mesmo valor nos 6 docs de API)."
+    },
+    {
+      "doc": "docs/api/profiles.md",
+      "comando": "node -e \"const d=require('./apps/api/openapi.json');console.log(Object.values(d.paths).flatMap(p=>Object.keys(p).filter(k=>['get','post','put','patch','delete'].includes(k))).length)\"",
+      "derivacao": {
+        "tipo": "contar-operacoes-openapi"
+      },
+      "motivo": "Total de operações do contrato HTTP (mesmo valor nos 6 docs de API)."
+    },
+    {
+      "doc": "docs/api/tenancy.md",
+      "comando": "node -e \"const d=require('./apps/api/openapi.json');console.log(Object.values(d.paths).flatMap(p=>Object.keys(p).filter(k=>['get','post','put','patch','delete'].includes(k))).length)\"",
+      "derivacao": {
+        "tipo": "contar-operacoes-openapi"
+      },
+      "motivo": "Total de operações do contrato HTTP (mesmo valor nos 6 docs de API)."
+    },
+    {
+      "doc": "docs/api/feature-flags.md",
+      "comando": "node -e \"const d=require('./apps/api/openapi.json');console.log(Object.values(d.paths).flatMap(p=>Object.keys(p).filter(k=>['get','post','put','patch','delete'].includes(k))).length)\"",
+      "derivacao": {
+        "tipo": "contar-operacoes-openapi"
+      },
+      "motivo": "Total de operações do contrato HTTP (mesmo valor nos 6 docs de API)."
+    }
+  ]
+}

@@ -133,6 +133,8 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 
 
 | memória | disposição | alvo | âncora |
+| `ci-boot-exige-postgres-local-com-porta-publicada` | `citada` | `docs/como-rodar.md` | `docker start projeto-base-pg-local` |
+| `db-generate-pode-ser-pulado-pelo-cache-do-turbo` | `citada` | `docs/como-rodar.md` | `pnpm turbo run db:generate --filter=@projeto/api --force` |
 |---|---|---|---|
 | `t7-rbac-feature-flag` | `removida` | memória ausente do corpus local; a âncora `listAllPermissions` existe em `apps/api/src/shared/auth/permissions-catalog.ts` | — |
 | `absent-tool-reads-as-approval` | `citada` | `.agents/runs/2026-10-05-guard-classes-autoauditoria.md` | `não há sintoma nenhum` |
@@ -192,6 +194,7 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `patch-medido-so-no-caminho-do-defeito` | `pendente` | — | — |
 | `pipe-maska-o-exit-code-do-comando` | `pendente` | — | — |
 | `pipe-stdout-dies-when-spawner-exits` | `pendente` | — | — |
+| `playwright-caret-nao-sobe-de-version-sozinho` | `citada` | `docs/superpowers/plans/2026-10-29-teto-de-linhas-e-dividas-de-codigo.md` | `o pnpm não re-resolve uma versão que a faixa aceita` |
 | `positive-test-must-assert-skip-state` | `citada` | `docs/fluxo-desenvolvimento.md` | `não havia nada para verificar` |
 | `post-task-retrospective-plan` | `removida` | os 3 artefatos que ela planejava já existem; mantê-la os lista como "a criar" | — |
 | `pr-body-edit-cancels-inflight-ci-run` | `pendente` | — | — |
@@ -220,6 +223,7 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `subagent-driven-development-always` | `citada` | `AGENTS.md` | `Coordenação obrigatória` |
 | `one-boolean-state-is-two-states` | `pendente` | — | — |
 | `subagent-write-truncation-limit` | `pendente` | — | — |
+| `ubuntu-latest-mudou-e-quebrou-o-playwright` | `citada` | `.github/workflows/ci.yml` | `ubuntu-latest` é um alias que se move |
 | `uniform-validator-beats-self-reports` | `pendente` | — | — |
 | `tabela-de-mutacoes-envelhece-com-a-spec` | `pendente` | — | — |
 | `test-the-field-the-eye-reads-not-the-field-it-parses` | `pendente` | — | — |

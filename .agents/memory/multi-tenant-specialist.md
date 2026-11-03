@@ -13,10 +13,8 @@ Memory file canônico (2026-10-16, Fase 1); o estado atual está nas seções de
 Carrega `.agents/skills/multi-tenant-audit/SKILL.md` quando a task é de
 **auditoria** (o processo determinístico, read-only e offline são os passos
 shell). A skill encapsula os passos + dedup + persistência; este arquivo de
-memória guarda estado entre execuções.
-
-O resto do tempo (decidir estratégia, desenhar a fronteira, escrever migration)
-é papel do **agent**, não da skill.
+memória guarda estado entre execuções. O resto do tempo (decidir estratégia,
+desenhar a fronteira, escrever migration) é papel do **agent**, não da skill.
 
 ## Estado atual
 

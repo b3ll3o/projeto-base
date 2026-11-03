@@ -58,11 +58,17 @@ interface CodeDocMapping {
 }
 
 // MEDIDO 2026-10-15: `apps/api/openapi.json` é artefato GERADO por
-// `openapi:export` e GITIGNORED (`.gitignore:11`) — `git ls-files` não devolve a
-// linha. Assertar existência dele reprovava o CI: reproduzido num checkout
-// limpo (`git archive HEAD`), `auth.controller.ts` devolve `Alerts: 1 | Health
-// 90/100` e EXIT=1. Localmente passa porque o dev tem o arquivo gerado em
-// disco. Continua como alvo de `review` — só sai do `existsSync`.
+// `openapi:export`. Assertar a existência dele reprovava o CI: reproduzido num
+// checkout limpo (`git archive HEAD`), `auth.controller.ts` devolve `Alerts: 1 |
+// Health 90/100` e EXIT=1 — localmente passava porque o dev tem o arquivo
+// gerado em disco. Continua como alvo de `review` — só sai do `existsSync`.
+//
+// ATUALIZADO 2026-10-29: desde o #125 a spec é VERSIONADA
+// (`git ls-files apps/api/openapi.json` devolve a linha), então o motivo
+// original — o arquivo não existir em checkout limpo — não vale mais. A
+// exclusão foi mantida por ser defensiva (o alvo é um artefato gerado, não um
+// doc escrito à mão) e o comentário acima deixou de afirmar que ele é
+// gitignored, o que já não é verdade.
 export const GENERATED_DOC_FILES = new Set(['apps/api/openapi.json']);
 
 const CODE_DOC_MAPPINGS: CodeDocMapping[] = [

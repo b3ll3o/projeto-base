@@ -1,0 +1,20 @@
+commit c65c5946f87d22a333a18141c1e3f9b148def128
+Author:     CEO Agent <ceo@paperclip.ai>
+AuthorDate: Thu Oct 29 13:26:17 2026 -0300
+Commit:     CEO Agent <ceo@paperclip.ai>
+CommitDate: Thu Oct 29 13:26:17 2026 -0300
+
+    chore(version): o template vai para 1.14.0
+    
+    A regra nova, o agent novo e o gate novo mudam o template — e os 4 footers
+    canônicos são a fonte da tag (`release-template.yml` extrai do
+    `docs/MONOREPO.md` e aborta se os 4 divergirem).
+    
+    O `AGENTS.md` já estava em 1.13.0 enquanto os outros quatro docs estavam em
+    1.12.0: o drift vinha do PR que adicionou a convenção `dry.md` e atualizou só
+    o AGENTS.md. Este commit alinha os seis no mesmo número.
+    
+    MEDIDO 2026-10-29: `git describe --tags --abbrev=0` → `v1.11.0`; a tag
+    `v1.14.0` é criada no merge em `main` pelo `post-merge-release`.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>

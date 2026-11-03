@@ -119,8 +119,7 @@ path_globs:
     specialists: [release-versioning-specialist, monorepo-specialist]
 
   # v1.6 — tenancy. NÃO duplica `apps/api/prisma/**` (schema é do prisma-db).
-  # MEDIDO 2026-10-17: só BASENAME, case-sensitive, e `tenancy` NÃO contém
-  # `tenant` — por isso 2 padrões; `[Tt]enant` vira literal. Detalhe: historico.
+  # MEDIDO 2026-10-17: só BASENAME, case-sensitive, e `tenancy` NÃO contém `tenant`.
   - pattern: "**/*tenant*"
     specialists: [multi-tenant-specialist]
     rationale: "Tenant, TenantMembership, filtro por tenant_id, RLS — o domínio de tenancy, não o de schema"
@@ -129,16 +128,16 @@ path_globs:
   - pattern: ".github/workflows/**"
     specialists: [monorepo-specialist, security-auditor]
   - pattern: "**/.agents/**"
-    specialists: [refactorer, doc-writer]
+    specialists: [refactorer, doc-writer, documentation-specialist]
     domain: "agents-meta"
   - pattern: "tooling/scripts/**"
     specialists: [refactorer]
   - pattern: "docs/**"
-    specialists: [doc-writer]
+    specialists: [doc-writer, documentation-specialist]
   - pattern: "docs/adr/**"
-    specialists: [doc-writer]
+    specialists: [doc-writer, documentation-specialist]
   - pattern: "**/*.md"
-    specialists: [doc-writer]
+    specialists: [doc-writer, documentation-specialist]
   - pattern: "**/*.spec.ts"
     specialists: [test-writer]
   - pattern: "**/*.test.ts"
@@ -163,6 +162,8 @@ path_globs:
     specialists: [stack-code-reviewer]
   - pattern: ".agents/agents/doc-sync.md"
     specialists: [doc-sync]
+  - pattern: ".agents/agents/documentation-specialist.md"
+    specialists: [documentation-specialist]
   - pattern: ".agents/agents/review-router.md"
     specialists: [review-router]
   - pattern: ".agents/agents/specialist-router.md"
@@ -208,8 +209,8 @@ demand_keywords:
     specialists: [finding-orchestrator]
   - regex: "(?i)\\btest(es)?\\b|tdd|cobertura|coverage|\\bspec\\b"
     specialists: [test-writer]
-  - regex: "(?i)\\bdoc(umenta[çc][ãa]o)?\\b|readme|adr|spec(ification)?"
-    specialists: [doc-writer]
+  - regex: "(?i)\\bdoc(umenta[çc][ãa]o)?\\b|readme|adr|spec(ification)?|catálogo de rotas"
+    specialists: [doc-writer, documentation-specialist]
   - regex: "(?i)telemetry|tracing|opentelemetry|\\botel\\b|spans?"
     specialists: [telemetry-specialist]
   - regex: "(?i)\\btela(s)?\\b|\\bux\\b|\\bdesign\\b|layout|formul[áa]rio|acessibilidade|\\ba11y\\b|EmptyState|estados? de"
@@ -231,7 +232,7 @@ demand_scopes:
   security:
     specialists_added: [security-auditor]
   docs:
-    specialists_added: [doc-writer]
+    specialists_added: [doc-writer, documentation-specialist]
   test:
     specialists_added: [test-writer]
   perf:
@@ -269,13 +270,12 @@ always_on:
 
 ## 5. EXEMPLOS
 
-> [specialist-routing-examples.md](./specialist-routing-examples.md) traz os 3
-> cenários E2E (D: docker+monorepo, E: security+test, F: refactor simples) com
-> demands, paths, scopes, expected output e justificativas.
->
+> [specialist-routing-examples.md](./specialist-routing-examples.md) traz os 3 cenários
+> E2E (D: docker+monorepo, E: security+test, F: refactor simples) com demands, paths,
+> scopes, expected output e justificativas.
 > O **histórico de gaps conhecidos (v1.0)** foi migrado para
 > [`specialist-routing-gaps-v1.0.md`](./specialist-routing-gaps-v1.0.md)
-> (apenas leitura) para preservar o limite de 300 linhas deste spec.
+> (apenas leitura), preservando o limite de 300 linhas deste spec.
 
 ## 6. DERIVED TAGS (v1.1)
 

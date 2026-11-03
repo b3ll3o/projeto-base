@@ -12,11 +12,13 @@ Um **monorepo base reutilizável** que implementa o **padrão genérico de agent
 
 **Diferencial:** enquanto o template anterior era genérico para qualquer projeto, este é um **monorepo base opinativo** com:
 
-- Apps `apps/api` (NestJS) + `apps/web` (Next.js) **já implementados** — bounded context `users` em camadas `domain/`, `application/`, `infrastructure/`
-- **27 agents** (12 genéricos + 2 routers + 7 specialists de stack + 6 de auditoria) + 3 arquivos companheiros em `telemetry-specialist/`, interoperáveis via skill `agents:coordinate`; **23 skills + 15 workflows + 21 convenções canônicas** — tudo medido do disco 2026-10-16 (`ls .agents/agents/*.md | wc -l`, `ls .agents/memory/*.md | wc -l`, `ls .agents/skills/*/SKILL.md | wc -l`, `ls .agents/workflows/*.md | wc -l`; convenções = linhas de dados da tabela em `AGENTS.md §6`)
+- Apps `apps/api` (NestJS) + `apps/web` (Next.js) **já implementados** — **6 módulos** em `apps/api/src/modules/` (`auth`, `feature-flags`, `health`, `profiles`, `tenancy`, `users`), em camadas `domain/`, `application/`, `infrastructure/`. O app é **multi-tenant por empresa** (RLS no Postgres), com **RBAC por perfil**, **feature flags** e **administração de sistema** (usuários, empresas, perfis).
+- **28 agents** (12 genéricos + 2 routers + 7 specialists de stack + 6 de auditoria + 1 de documentação) + 3 arquivos companheiros em `telemetry-specialist/`, interoperáveis via skill `agents:coordinate`; **24 skills + 15 workflows + 23 convenções canônicas**
 - **Paradigma DDD + Hexagonal** canônico (ADR-0001) com guardiões automáticos
 - **OpenTelemetry cross-stack** (backend + frontend + Collector)
 - **CI Defense-in-Depth** em 3 camadas
+
+> Contagens medidas do disco em **2026-10-29** — o comando de cada uma está no rodapé.
 
 ## Estrutura
 
@@ -25,11 +27,11 @@ projeto-base/
 ├── AGENTS.md              # Spec canônica do padrão (LEIA PRIMEIRO, ≤ 300 linhas)
 ├── README.md              # Este arquivo
 ├── .agents/
-│   ├── agents/            # 27 agents (12 genéricos + 2 routers + 7 de stack + 6 de auditoria)
+│   ├── agents/            # 28 agents (12 genéricos + 2 routers + 7 de stack + 6 de auditoria + 1 de documentação)
 │   │                      # catálogo nominal, com papel e memória: AGENTS.md §3
-│   ├── memory/            # Memória acumulada (29 arquivos: 27 agents + state-aware-planning + _template)
-│   ├── skills/            # coordenação, routing, auditoria, UI (mapeamento agent↔skill: AGENTS.md §3.2)
-│   ├── specs/conventions/ # tdd, git-workflow, cobertura, tamanho… (ver AGENTS.md §6)
+│   ├── memory/            # 30 memórias (28 agents + state-aware-planning + _template)
+│   ├── skills/            # 24 skills — coordenação, routing, auditoria, UI (agent↔skill: AGENTS.md §3.2)
+│   ├── specs/conventions/ # 23 convenções (ver AGENTS.md §6)
 │   ├── workflows/         # 15 workflows detalhados
 │   └── WORKFLOWS.md       # Fluxos pré-configurados, em tabela
 ├── apps/                  # api (NestJS 11) + web (Next.js 15)
@@ -38,6 +40,16 @@ projeto-base/
 ├── turbo.json             # pipeline cacheado (turbo)
 ├── pnpm-workspace.yaml
 └── docs/
+    ├── como-rodar.md      # mapa de execução por ambiente (6 ambientes) — canônico do "como rodar"
+    ├── fluxo-desenvolvimento.md  # os gates: camada, comando, o que de fato bloqueia
+    ├── api/               # referência HTTP por bounded context
+    ├── adr/               # decisões arquiteturais (ADR-0001…)
+    ├── flows/             # fluxos (IR → diagrama)
+    ├── agents/            # issue tracker, labels de triagem, glossário
+    ├── articles/          # artigos de fundo
+    ├── superpowers/       # planos e specs de trabalho
+    ├── web/               # catálogo de rotas Next.js (em criação — PR paralelo)
+    ├── runbooks/          # runbooks por incidente (em criação — PR paralelo)
     ├── TEMPLATE_USAGE.md  # Guia principal (≤ 300 linhas)
     ├── MONOREPO.md        # convenções de monorepo
     ├── STACK.md           # stack escolhida e justificativas
@@ -47,15 +59,15 @@ projeto-base/
 
 ## Como executar localmente
 
-> **Mapa completo por ambiente** (dev, Docker, observabilidade, e2e, CI): [`docs/como-rodar.md`](./docs/como-rodar.md)
+> **Mapa completo por ambiente** (dev, Docker, observabilidade, e2e, CI): [`docs/como-rodar.md`](./docs/como-rodar.md) — **6 ambientes** indexados no §0 (`grep -cE '^\| [0-9]+ \| ' docs/como-rodar.md`). O **Ambiente 1** (dev local, pnpm nativo) está no runbook principal; os outros 5 são runbooks irmãos em `docs/runbooks/`.
 >
-> Três modos suportados. Use Docker para reproduzir ambiente de produção, pnpm nativo para iterar rápido, ou só Postgres+apps nativos para debugar uma camada.
+> **Dois modos** neste README: **Docker Compose** (reproduz o ambiente de produção) e **pnpm nativo** (itera rápido, com o Postgres em Docker).
 
 ### Pré-requisitos
 
-- **Node.js** ≥ 20 (LTS)
-- **pnpm** ≥ 9.12.0 (`corepack enable && corepack prepare pnpm@9.12.0 --activate`)
-- **Docker** + **Docker Compose** v2 (apenas para modos A e B)
+- **Node.js** ≥ 22.6.0 (`package.json` → `engines.node`)
+- **pnpm** ≥ 9.12.0 (`packageManager` → `corepack enable && corepack prepare pnpm@9.12.0 --activate`)
+- **Docker** + **Docker Compose** v2 (apenas para o modo Docker)
 - **PostgreSQL 16** rodando em `localhost:5432`. ⚠️ Desde o #91 o `postgres` do compose
   **não publica porta no host** (`expose` sem `ports`) — veja [`docs/como-rodar.md` §1.1](./docs/como-rodar.md)
 
@@ -100,7 +112,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 
 ### Opção B — pnpm nativo (sem Docker nos apps)
 
-Mais rápido para iterar. Postgres ainda roda em Docker (B22 alternativa: Postgres local via brew/apt).
+Mais rápido para iterar. Postgres ainda roda em Docker (alternativa: Postgres local via brew/apt).
 
 ```bash
 # 1. Instalar deps
@@ -109,8 +121,10 @@ pnpm install --frozen-lockfile
 # 2. Subir Postgres COM PORTA PUBLICADA NO HOST.
 # ⚠️ O `postgres` do compose usa só `expose` desde o #91 — a API na máquina não o alcança.
 docker run -d --name projeto-base-pg-local -p 5432:5432 -e POSTGRES_USER=projeto -e POSTGRES_PASSWORD=projeto -e POSTGRES_DB=projeto_base postgres:16-alpine
-# ou aponte para um Postgres existente:
-# export DATABASE_URL="postgresql://projeto:projeto@localhost:5432/projeto_base?schema=public"
+# ou aponte para um Postgres existente. São TRÊS URIs (apps/api/.env.example):
+#   DATABASE_URL        → papel app_runtime  (escopo de empresa; é o que faz as RLS valerem)
+#   SYSTEM_DATABASE_URL → papel app_system   (bucket de sistema, cross-empresa)
+#   DIRECT_DATABASE_URL → papel dono          (migrate/seed; precisa de CREATEROLE)
 
 # 3. Gerar Prisma Client (uma vez, e após cada mudança em schema.prisma)
 pnpm turbo run db:generate
@@ -125,8 +139,10 @@ openssl rand -base64 48    # preencha o valor na linha JWT_SECRET= de apps/api/.
 # `app_runtime_dev`, está no histórico do Git — quem leu o repositório, conhece).
 # São DOIS papéis, com DUAS senhas: app_runtime (DATABASE_URL, o escopo de
 # empresa) e app_system (SYSTEM_DATABASE_URL, o bucket de sistema).
-openssl rand -base64 48    # -> senha do papel de RUNTIME, em DATABASE_URL
-openssl rand -base64 48    # -> senha do papel de SISTEMA, em SYSTEM_DATABASE_URL
+# ⚠️ `-hex 32`, e NÃO `-base64 48`: o base64 traz `/`, e o `/` ENCERRA a parte
+# de credencial da URI → "Invalid URL". Detalhe em docs/como-rodar.md §1.2.1.
+openssl rand -hex 32    # -> senha do papel de RUNTIME, em DATABASE_URL
+openssl rand -hex 32    # -> senha do papel de SISTEMA, em SYSTEM_DATABASE_URL
 
 # 5. Rodar migrations — o binário do Prisma direto, de dentro de apps/api, para que ele leia
 # o apps/api/.env. Não existe script `prisma:migrate:deploy` em nenhum package.json: o pnpm
@@ -155,8 +171,9 @@ Endpoints:
 
 ```bash
 # Atalho consolidado antes de push — ~1min
-pnpm ci:local    # preflight + lint + typecheck + test:unit + test:coverage
-                # + test:integration + test:e2e (API e web), ~70-75s medidos
+pnpm ci:local    # ci:preflight → db:generate → lint/typecheck/test:unit/
+                # test:coverage/test:integration/test:e2e (api, web, shared-types)
+                # → tooling:test → ci:boot
 
 # Granular (debug de gate específico)
 pnpm ci:preflight                          # ~10s — drift
@@ -165,6 +182,8 @@ pnpm turbo run test:coverage --filter=@projeto/api --filter=@projeto/web  # gate
 pnpm stack:review --files="$(git diff --name-only main | tr '\n' ',' | sed 's/,$//')"
 pnpm docs:sync --files="$(git diff --name-only main | tr '\n' ',' | sed 's/,$//')" --mode=check
 ```
+
+> O `pnpm ci:local` real está no `package.json` da raiz (`scripts.ci:local`) — a linha acima é o resumo, não a fonte.
 
 **Fluxo canônico (do primeiro comando ao merge):** [`docs/fluxo-desenvolvimento.md`](./docs/fluxo-desenvolvimento.md) — documento factual com cada gate, em qual camada, e o que **de fato** bloqueia.
 
@@ -212,68 +231,22 @@ Detalhes completos em [`AGENTS.md`](./AGENTS.md) (seção §1).
 
 ## Agents Inclusos
 
-### Genéricos (12)
+**28 agents** no catálogo — o catálogo nominal (agent, papel e memória de cada um) é o [`AGENTS.md` §3 e §3.2](./AGENTS.md); o README só aponta, não duplica.
 
-| Agent | Uso |
-|---|---|
-| `agent-architect` | Cria/evolui agents (meta-agent) |
-| `orchestrator` | Despacha tarefas multi-step |
-| `explorer` | Mapeia código (read-only) |
-| `code-reviewer` | Revisão geral (bugs, smells, qualidade) |
-| `stack-code-reviewer` | Revisão com lens de stack (DDD/Hexagonal, NestJS, NextJS, Prisma) — gate em pre-commit + CI |
-| `security-auditor` | Auditoria OWASP Top 10 + supply chain |
-| `doc-sync` | Sincroniza docs após alteração de código — gate em pre-commit + CI |
-| `refactorer` | Refatoração incremental TDD-driven |
-| `test-writer` | Criação de testes (TDD/BDD/ATDD) |
-| `tdd-enforcer` | Valida ciclo Red→Green→Refactor (bloqueia merge) |
-| `doc-writer` | Geração de documentação |
-| `task-manager` | Gestão de tarefas e backlog |
-
-### Routers / Orquestradores (2)
-
-| Agent | Uso |
-|---|---|
-| `review-router` | Despacha reviewers em paralelo após task DONE (matriz `path_globs` × `commit_types` × `diff_patterns`) |
-| `specialist-router` | Pré-planejamento — classifica demanda e identifica specialist(s); bloqueia se `gap_detected` |
-
-### Specialists de Stack (7)
-
-| Agent | Uso |
-|---|---|
-| `monorepo-specialist` | Arquiteto de monorepo (workspaces, pipelines turbo, versionamento) |
-| `nestjs-specialist` | Arquitetura backend NestJS (módulos, DI, validação, Swagger, DDD/Hexagonal) |
-| `nextjs-specialist` | Arquitetura frontend Next.js (RSC, App Router, Server Actions) |
-| `docker-specialist` | Containerização (Dockerfile multi-stage, Compose, hardening) |
-| `telemetry-specialist` | Observabilidade cross-stack (OTel SDK init, exporters OTLP, propagação W3C, web-vitals) |
-| `ux-design-specialist` | UX e design de interface (tokens, estados, formulários, a11y, microcopy) |
-| `multi-tenant-specialist` | Tenancy (schema + `tenant_id`, contexto por request, RLS, isolamento cross-tenant) |
+- **Genéricos (12):** `agent-architect`, `orchestrator`, `explorer`, `code-reviewer`, `stack-code-reviewer`, `security-auditor`, `doc-sync`, `refactorer`, `test-writer`, `tdd-enforcer`, `doc-writer`, `task-manager`
+- **Routers (2):** `review-router` (dispensa reviewers em paralelo após task DONE), `specialist-router` (pré-planejamento; bloqueia se `gap_detected`)
+- **Specialists de stack (7):** `monorepo-specialist`, `nestjs-specialist`, `nextjs-specialist`, `docker-specialist`, `telemetry-specialist`, `ux-design-specialist`, `multi-tenant-specialist`
+- **Specialists de auditoria (6):** `prisma-db-specialist`, `openapi-contract-specialist`, `otelcol-infra-specialist`, `docker-prod-specialist`, `release-versioning-specialist`, `finding-orchestrator`
+- **Documentação (1):** `documentation-specialist` — dono da doc da aplicação (matriz de cobertura, drift, frescor); carrega a skill `documentation-audit`
 
 Cada agent possui arquivo de **memória** em `.agents/memory/<nome>.md` que armazena decisões, padrões e sugestões de evolução — garantindo que os agents evoluam junto com a aplicação.
 
 ## Workflows Pré-Configurados
 
-Workflows detalhados em [`.agents/WORKFLOWS.md`](./.agents/WORKFLOWS.md) (índice) e [`.agents/workflows/`](./.agents/workflows/) (detalhes por workflow).
-
-### Genéricos (10)
-
-- `feature-mode` — implementar nova feature
-- `bugfix-mode` — corrigir bug
-- `refactor-mode` — refatorar
-- `security-mode` — auditoria de segurança
-- `docs-mode` — documentar
-- `task-mode` — gerenciar tarefas
-- `explore-mode` — explorar código
-- `review-mode` — revisar PR/diff
-- `release-mode` — preparar release / bumpar versão
-- `retrospective-mode` — capturar aprendizados / post-mortem
-
-### Compostos (6)
-
-`ci-defense-mode` · `state-aware-planning` · `specialist-routing` · `feedback-to-spec` (v1.9.0+ — fecha o Engineering Loop) · `review-routing` · `archive-demand`
-
-### Por Stack (3)
-
-`backend-feature` · `frontend-feature` · `monorepo-change`
+O índice completo — trigger, tipo e cadeia de agents de cada workflow — é o
+[`.agents/WORKFLOWS.md`](./.agents/WORKFLOWS.md). **15** deles têm o detalhe passo a passo
+(`ls .agents/workflows/*.md | wc -l`), em [`.agents/workflows/`](./.agents/workflows/).
+Todo workflow é disparado pela skill `agents:coordinate` (§Regra Mandatória).
 
 ## Stack e Apps Implementados
 
@@ -284,28 +257,34 @@ Conforme convenção [`docs/STACK.md`](./docs/STACK.md):
 - **Frontend (`apps/web`):** Next.js 15 (App Router) + React 19 + Tailwind CSS 4
 - **Observabilidade:** OpenTelemetry SDK + OTel Collector (perfil Compose `observability`)
 
-Os apps `apps/api` e `apps/web` **já estão implementados** — bounded context `users` com
-auditoria, em camadas `domain/`, `application/` e `infrastructure/`, conforme o
-[ADR-0001](./docs/adr/0001-arquitetura-ddd-hexagonal-auditoria.md). Para subir localmente, ver
-a seção "Como executar localmente" acima.
+Os apps `apps/api` e `apps/web` **já estão implementados** — **6 módulos** em
+`apps/api/src/modules/` (`auth`, `feature-flags`, `health`, `profiles`, `tenancy`, `users`),
+em camadas `domain/`, `application/` e `infrastructure/`, conforme o
+[ADR-0001](./docs/adr/0001-arquitetura-ddd-hexagonal-auditoria.md). O domínio é multi-tenant
+(empresa), com RBAC por perfil, feature flags e administração de sistema. Para subir localmente,
+ver a seção "Como executar localmente" acima.
 
 Veja [`docs/MONOREPO.md`](./docs/MONOREPO.md) para convenções detalhadas.
 
 ## Compatibilidade por Ferramenta
 
-| Ferramenta | Suporte | Como integrar |
+O `AGENTS.md` da raiz é o ponto de entrada de **todas** as ferramentas. Os arquivos auxiliares de cada uma **não existem neste repo** — a coluna abaixo diz qual criar, e a receita está em [`docs/integrations/`](./docs/integrations/).
+
+| Ferramenta | Suporte | Arquivo auxiliar (opcional, **não existe no repo**) |
 |---|---|---|
 | Claude Code | ✅ Nativo | `AGENTS.md` carregado automaticamente |
-| Cursor | ✅ | `AGENTS.md` + `.cursorrules` opcional |
-| Windsurf | ✅ | `AGENTS.md` + `.windsurf/memories/` |
+| Cursor | ✅ | `.cursorrules` (legado) — [receita](./docs/integrations/cursor.md) |
+| Windsurf | ✅ | `.windsurf/memories/` — [receita](./docs/integrations/windsurf.md) |
 | Aider | ✅ | `--read AGENTS.md` |
 | Continue | ✅ | Custom slash commands |
-| GitHub Copilot | ✅ | `AGENTS.md` + `.github/copilot-instructions.md` |
-| Cline / Roo Code | ✅ | `.clinerules` |
-| Cody | ✅ | `.vscode/cody.json` recipes |
+| GitHub Copilot | ✅ | `.github/copilot-instructions.md` — [receita](./docs/integrations/copilot.md) |
+| Cline / Roo Code | ✅ | `.clinerules` (legado) — [receita](./docs/integrations/cline.md) |
+| Cody | ✅ | `.vscode/cody.json` (recipes) — [receita](./docs/integrations/cody.md) |
 
 Detalhes em [`docs/TEMPLATE_USAGE.md`](./docs/TEMPLATE_USAGE.md).
 
 ## Versão & Licença
 
-**Versão:** 1.12.0 — re-medido do disco (2026-10-16): `ls .agents/agents/*.md | wc -l` = **27**, `ls .agents/memory/*.md | wc -l` = **29**, `ls .agents/skills/*/SKILL.md | wc -l` = **23**. O `1.12.0` adiciona `multi-tenant-specialist` + sua memória + a skill `multi-tenant-audit` (+1/+1/+1). **Drift pré-existente corrigido:** o rodapé anterior declarava skills 20 contra 22 reais antes deste PR. Footer alinhado ao de `docs/MONOREPO.md`; a tag `v1.12.0` ainda **não** existe — `release-template.yml` cria no merge em `main`. **Licença:** MIT.
+**Versão:** 1.14.0 — re-medido do disco em **2026-10-29**: `ls .agents/agents/*.md | wc -l` = **28** agents · `ls .agents/memory/*.md | wc -l` = **30** memórias (1 por agent + `state-aware-planning` + `_template`) · `ls .agents/skills/*/SKILL.md | wc -l` = **24** skills · `ls .agents/workflows/*.md | wc -l` = **15** workflows · `ls .agents/specs/conventions/*.md | grep -vE 'README|gaps|examples|historico|apendice' | wc -l` = **23** convenções · `ls apps/api/src/modules/ | wc -l` = **6** módulos.
+
+A `1.14.0` adiciona o `documentation-specialist` (+1 agent, +1 memória), a skill `documentation-audit` (+1) e a convenção `documentacao` (+1) — e corrige os fatos errados da versão anterior: Node ≥ 20 → ≥ 22.6.0, `openssl rand -base64 48` → `-hex 32` nas senhas de papel, "três modos" → dois, e a lista de agents (faltavam os 6 de auditoria). A **tag do template** é a dos 4 footers canônicos (o de [`docs/MONOREPO.md`](./docs/MONOREPO.md) manda), extraída pelo `release-template.yml` — este rodapé não a define. **Licença:** MIT.

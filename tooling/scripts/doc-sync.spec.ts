@@ -125,7 +125,7 @@ describe('docFile gerado não pode reprovar o CI', () => {
   const CONTROLLER = 'apps/api/src/modules/auth/infrastructure/http/auth.controller.ts';
   const OPENAPI = join(REPO, 'apps', 'api', 'openapi.json');
 
-  /** Reproduz o checkout limpo escondendo o artefato gerado (gitignored). */
+  /** Reproduz o checkout limpo escondendo o artefato gerado (versionado desde o #125). */
   function semArquivoGerado<T>(fn: () => T): T {
     const existe = existsSync(OPENAPI);
     if (existe) renameSync(OPENAPI, `${OPENAPI}.bak-doc-sync-spec`);

@@ -15,6 +15,7 @@
 | `refactor-mode` | "refatorar" | sequential | refactorer → test-writer → code-reviewer → tdd-enforcer |
 | `security-mode` | "auditoria segurança" | sequential | security-auditor → code-reviewer |
 | `docs-mode` | "documentar" | sequential | doc-writer → code-reviewer |
+| `doc-audit-mode` (v1.14.0+) | "a documentação está em dia? / auditar a doc / revisar, atualizar e criar documentações" | sequential | documentation-specialist (`documentation-audit` → escreve → `check-doc-coverage` + `check-doc-refs`) → code-reviewer |
 | `task-mode` | "todo / tarefa" | single | task-manager |
 | `explore-mode` | "como funciona X?" | single | explorer |
 | `review-mode` | "revisar PR / código" | single | code-reviewer + tdd-enforcer |

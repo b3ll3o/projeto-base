@@ -30,14 +30,14 @@ login. O modo é **Operate** (ver skill `ui-modes`). Duas consequências practic
 Tudo referencia token. Valor solto em JSX é finding. A fonte é
 `apps/web/app/globals.css`, bloco `@theme` do Tailwind 4.
 
-Hoje existem **2** tokens (`--color-background`, `--color-foreground`) e **zero**
-valor literal em JSX — medido em 2026-10-13:
-`grep -rnE '#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(' apps/web/app apps/web/components --include='*.tsx' | wc -l` → `0`.
+Hoje existem **2** tokens (`--color-background`, `--color-foreground`) e **14**
+valores literais de cor em JSX — medido em 2026-11-02:
+`grep -rnE '#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(' apps/web/app apps/web/components --include='*.tsx' | wc -l` → `14`.
 
-O que se espalha é a **paleta stock do Tailwind**: **68** usos de
-`text-{slate,gray}-*`, `bg-red-*`, `border-*` — medido em 2026-10-13:
+O que se espalha é a **paleta stock do Tailwind**: **226** usos de
+`text-{slate,gray}-*`, `bg-red-*`, `border-*` — medido em 2026-11-02:
 `grep -rhoE '(text|bg|border)-(slate|gray|red|blue|green|amber|zinc|neutral|stone)-[0-9]{2,3}' apps/web/components apps/web/app --include='*.tsx' | wc -l`
-→ `68` (44 em `components/`, 24 em `app/`). Essa é a segunda fonte de cor — e
+→ `226` (87 em `components/`, 139 em `app/`). Essa é a segunda fonte de cor — e
 ela continua produzindo cor fora do sistema **depois** que todos os
 `--color-*` existirem. Tokenizar não é só hoistar literal: é trocar
 `text-slate-500` por `text-muted-foreground`. Ao propor tokens, cubra nesta ordem:

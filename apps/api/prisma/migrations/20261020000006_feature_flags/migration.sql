@@ -29,9 +29,11 @@
 --
 -- LINHA AUSENTE = ATIVADA (D4)
 -- O `DEFAULT true` abaixo documenta o padrão, mas não é o mecanismo: quem
--- decide é o `PrismaFeatureFlagRepository.listar`, que devolve `true` para
--- chave que não encontrou na tabela. Uma chave nova entra no catálogo sem
--- migration e sem linha, e aparece ligada na tela.
+-- decide é a USE CASE (`FeatureFlagUseCases.listar`), que junta as LINHAS
+-- devolvidas pelo repositório com o catálogo e treata chave sem linha como
+-- ligada (`gravadas.get(chave) ?? true`). O `PrismaFeatureFlagRepository.listar`
+-- devolve SÓ o que existe na tabela — a regra não mora na porta. Uma chave
+-- nova entra no catálogo sem migration e sem linha, e aparece ligada na tela.
 --
 -- ⚠️ `chave` é TEXT e não ENUM de propósito: o catálogo das chaves é código
 -- revisável (`apps/api/src/shared/auth/feature-flag-catalog.ts`), e um ENUM

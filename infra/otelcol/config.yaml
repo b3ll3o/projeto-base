@@ -52,7 +52,7 @@ processors:
   # garante que o trace chegue. A camada 1 (SDK, `tracing.ts` sem `sampler` →
   # lê `OTEL_TRACES_SAMPLER`) já descartou ~90% das raízes ANTES daqui, e ela é
   # cega ao status HTTP: ~10% dos traces de erro chegam, não 100%.
-  # Ver a seção de sampling em `docs/como-rodar.md`.
+  # Ver a seção de sampling em `docs/runbooks/observabilidade.md`.
   # decision_wait 10s dá tempo de todas as spans chegarem antes da decisão.
   #
   # ⚠️ SEMÂNTICA ENTRE AS POLICIES = OR, e a ordem delas no YAML é IRRELEVANTE.
