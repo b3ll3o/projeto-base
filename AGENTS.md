@@ -131,19 +131,19 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 | **finding-orchestrator** | [`.agents/agents/finding-orchestrator.md`](./.agents/agents/finding-orchestrator.md) | [memory](./.agents/memory/finding-orchestrator.md) | Dispara specialists em paralelo, agrega findings, dedup contra issues abertas, abre issues via `gh` | Cron semanal (sextas 02:00 UTC), pré-tag, on-demand do user |
 
 > **Stack vs. auditoria:** stack specialists (nestjs, nextjs, docker, monorepo,
-> telemetry, multi-tenant, ux-design) **criam** código/configuração nova e são
-> despachados antes de implementar; auditoria specialists (prisma-db,
-> openapi-contract, otelcol-infra, docker-prod, release-versioning) **revisam** o
-> existente, disparados pelo `finding-orchestrator` ou sob demanda.
-> `docker-prod-specialist` (hardening) e `docker-specialist` (autoral) coexistem —
-> o orchestrator dispara os dois quando o escopo é amplo.
+> telemetry, multi-tenant, ux-design) **criam** código novo e são despachados antes
+> de implementar; auditoria specialists (prisma-db, openapi-contract, otelcol-infra,
+> docker-prod, release-versioning) **revisam** o existente, disparados pelo
+> `finding-orchestrator` ou sob demanda. `docker-prod-specialist` (hardening) e
+> `docker-specialist` (autoral) coexistem — o orchestrator dispara os dois.
 >
 > **Skills de auditoria (1:1):** cada specialist de auditoria carrega uma skill de
 > processo determinístico (`.agents/skills/<name>-audit/SKILL.md`) — `prisma-audit`,
 > `openapi-audit`, `otelcol-audit`, `docker-prod-audit`, `release-versioning-audit`,
-> `findings-orchestration`. A skill encapsula o **processo**; o agent, o **papel** —
-> é carregada por ele, não o substitui. O mesmo contrato vale para o
-> `multi-tenant-specialist` (§3.1), que o `finding-orchestrator` não despacha.
+> `findings-orchestration`, `documentation-audit`. A skill encapsula o **processo**;
+> o agent, o **papel** — é carregada por ele, não o substitui. O mesmo contrato vale
+> para o `multi-tenant-specialist`, que carrega `multi-tenant-audit` sem ser
+> despachado pelo `finding-orchestrator`.
 >
 > **Skills de UI (única relação 1:N do repo, v1.11.0+):** o `ux-design-specialist`
 > carrega **5** skills, nesta ordem — `ui-review` (processo) → `ui-modes` (decide o
@@ -296,5 +296,5 @@ Quando seguido corretamente, este padrão garante:
 
 **Mantido por:** projeto-base contributors
 **Licença:** MIT
-**Versão do documento:** 1.15.0
+**Versão do documento:** 1.15.1
 **Status:** Estável

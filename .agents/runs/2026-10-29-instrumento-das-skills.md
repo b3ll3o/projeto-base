@@ -42,12 +42,17 @@ auditoria são a versão em prosa dessa regra.
 ### O que o gate mede
 
 1. **Declaração obrigatória.** Todo bloco ```bash de cada skill de auditoria
-   precisa de uma linha `> **Gate:** \`run\` — <motivo>` ou
-   `> **Gate:** \`skip\` — <motivo>` antes do bloco. **Bloco sem declaração é
-   erro** — é a lista que não pode encolher em silêncio (a mesma lição da
+   precisa do marcador `[gate: run — <motivo>]` ou `[gate: skip — <motivo>]`
+   no comentário da **primeira linha do bloco**. **Bloco sem declaração é**
+   **erro** — é a lista que não pode encolher em silêncio (a mesma lição da
    lista de footers do #126, que media 4 de 6 arquivos).
-2. **Execução.** Os passos `run` são executados (cwd = a raiz do repo, timeout
-   de 120s por passo). O gate falha se o passo:
+
+   > A declaração mora **dentro** do bloco porque a linha antes dele custava 2
+   > linhas por bloco (a declaração + a vazia) e estourou o teto de 300 linhas
+   > da `findings-orchestration` (299 → 310). Dentro do bloco, o custo é zero.
+2. **Execução.** Os passos `run` são executados (cwd = a raiz do repo, 60 s por
+   passo, com um **orçamento total de 120 s** para o gate inteiro — o job de
+   `preflight` tem 5 min na CI e roda com ~40 outros gates). O gate falha se o passo:
    - sair com código de **crash** (2, 126, 127, ≥128). O código **1** é
      sucesso: `grep`, `diff`, `comm` devolvem 1 quando não acham nada, e num
      passo de auditoria "não achei nada" é o estado **desejado**;
@@ -79,10 +84,11 @@ rodar a skill na mão. O comando vai como argv em array
 | um passo que não produz saída | 🔴 `NENHUMA saída` → gate vermelho |
 | a base (24 passos `run` nas 6 skills) | 🟢 `ok=true, errors=0` |
 
-A spec tem **22 testes**: a lista presa (6 skills, com os nomes), a extração
-da declaração, o comentário ignorado, o redirect capturado por **alvo** (não
-por forma), o código 1 como sucesso, 4 casos sintéticos e **um teste sobre o
-repo real** que executa os 24 passos.
+A spec tem **24 testes**: a lista presa (6 skills, com os nomes), a extração
+da declaração, o comentário ignorado, o redirect capturado por **alvo** (não por
+forma) e **não confundido com o `>` de uma comparação**, o código 1 como
+sucesso, o orçamento total cabendo no job de 5 min da CI, 5 casos sintéticos e
+**um teste sobre o repo real** que executa os 24 passos.
 
 ---
 

@@ -3,8 +3,10 @@
 > **Branch:** `feat/skill-find-skills` · **Base:** `origin/main` (`194d305`)
 > **Origem:** pedido do usuário — (1) adicionar a skill `find-skills` (Vercel) ao
 > projeto; (2) revisar **todas** as skills de `.agents/skills/`.
-> **Método:** inventário mecânico das 23 skills (frontmatter, tamanho, idioma,
-> links, órfãs) + **execução real** das procedures das skills de auditoria.
+> **Método:** inventário mecânico das 23 skills que existiam na primeira passada
+> (frontmatter, tamanho, idioma, links, órfãs) + **execução real** das procedures
+> das skills de auditoria. A segunda passada (F12–F21) re-mediu **25** skills —
+> a `documentation-audit` entrou pelo merge do #129 e escapou da primeira.
 > Um item só entra aqui **medido**: o comando, a data e o número.
 
 ## TL;DR
@@ -254,7 +256,111 @@ divergência entre os dois é o que produziu o drift que ninguém viu.
 
 ---
 
-## Inventário medido das 23 skills
+## F12–F21 — a revisão do PR #140 revisou o PR #140
+
+**Classe:** varied (o que sobrou no próprio PR) · **Status:** todas
+`corrigidas` neste PR — cada uma com medição, correção e, quando dava,
+instrumento.
+
+O inventário acima cobriu 23 skills. A revisão do PR #140 (o próprio PR) rodou
+o mesmo método por cima do que já tinha sido escrito — e achou 9 defeitos,
+incluindo 3 nos consertos anteriores. O comando de cada um está no texto.
+
+| # | Achado | Como se reproduz |
+|---|---|---|
+| F12 | a revisão cobriu **23 de 25** skills | `ls .agents/skills/*/SKILL.md \| wc -l` → 25 |
+| F13 | a `documentation-audit` (do merge do #129) tinha **5 blocos sem declaração** | `grep -c '```bash' .agents/skills/documentation-audit/SKILL.md` |
+| F14 | o passo 5.1 dela invoca o preflight → **recursão** se o gate a executar | `grep -A2 '5.1' .../documentation-audit/SKILL.md` |
+| F15 | o conserto do F5 criou um `sed` de **janela negativa** | `sed -n "-6,14p" f` → `sed: invalid option -- '6'` |
+| F16 | o gate lia o `>` de uma **comparação** como redirect | o gate acusou o próprio conserto do F15 |
+| F17 | o gate não tinha **orçamento total** (pior caso 48 min vs 5 min do job) | `TIMEOUT_POR_PASSO_MS × 24` vs `timeout-minutes: 5` |
+| F18 | o gate tratava um passo **morto** (código nulo) como aprovado | `exec.codigo === null` não estava na lista de erro |
+| F19 | a mensagem de erro do gate ensinava o **formato antigo** da declaração | `grep '> \*\*Gate:'` → 3 lugares |
+| F20 | a `find-skills` afirmava "24 skills e 27 agents" (o disco tem 25 e 28) | `ls .agents/agents/*.md \| wc -l` |
+| F21 | `.agents/runs/findings-*/` **não é ignorado** — o `findings-orchestration` escreve lá | `git status` mostra `?? .agents/runs/findings-…/` |
+
+### F15 — o conserto do F5 criou um defeito novo
+
+O passo 3.2 do `openapi-audit` ganhou uma janela de −10/+10 linhas em volta do
+decorator de rota, para o matcher achar `@ApiOperation` perto dele. Mas
+`sed -n "$((lineno-10)),..."` com `lineno < 10` gera um **início negativo**:
+
+```
+$ sed -n "-6,14p" arquivo
+sed: invalid option -- '6'
+```
+
+**Medido:** o decorator de rota mais alto do repo está na linha **35** — então
+o defeito era **latente**, não vivo: nenhum controller atual dispara. Mas
+qualquer controller novo com a rota nas 10 primeiras linhas acusaria um
+`@ApiOperation` faltando que **existe** (o contexto viria vazio).
+
+**Correção:** a janela começa em 1 (`ini=$(( lineno > 10 ? lineno - 10 : 1 ))`).
+
+### F16 — o gate acusou o próprio conserto (e tinha razão)
+
+O conserto do F15 introduziu um `>` — o da comparação no ternário. O denylist
+do gate, que casava QUALQUER `>`, leu como redirect para o arquivo `"10"` e
+**recusou o conserto**. O defeito era do gate, não do conserto.
+
+**Correção:** o que separa redirect de comparação é o **alvo**: um redirect
+aponta para um caminho (`saida.txt`, `/tmp/x`, `$VAR`); uma comparação aponta
+para um valor (`10`, `b`). O alvo precisa ter ponto, barra ou cifrão — e não
+pode ser só um número.
+
+### F17/F18 — o gate podia passar 48 min (o job tem 5)
+
+O passo tinha timeout de 120 s e são 29 passos: pior caso de **48 min**, num
+job de `preflight` que tem `timeout-minutes: 5` e roda com ~40 outros gates.
+A falha apareceria como "o job estourou o tempo", não como "o passo travou".
+
+**Correção:** 60 s por passo e um **orçamento total de 120 s** para o gate
+inteiro; quando o orçamento acaba, o gate **para e reporta** onde parou — um
+gate que sai em silêncio depois de rodar metade do que devia é pior do que um
+gate que falha dizendo onde parou.
+
+O F18 é o caso irmão: um passo que estoura o buffer do `spawn` (8 MB) morre
+com **código nulo** — e código nulo não está na lista de sucesso, mas também
+não é um código de crash. Sem guarda, o gate tratava o passo como aprovado
+(a saída parcial é não vazia).
+
+### F12/F13/F14 — a skill que entrou pelo merge do #129
+
+O inventário rodou antes do merge do #129; a `documentation-audit` veio com ele
+e **escapou da revisão**. Os 5 blocos dela estavam sem declaração — e o 5.1
+invoca `pnpm ci:preflight`: dentro do gate seria **recursão** (o preflight
+chama o gate, o gate chama a skill, a skill chama o preflight).
+
+**Correção:** os 5 blocos declarados (4 `run`, o 5.1 `skip` com o motivo da
+recursão, e o 5.2 — que era um segundo comando dentro do bloco do 5.1 — como
+bloco próprio `run`), e a `documentation-audit` entrou na lista do gate, que a
+spec passa a **prender em 7**. Uma skill de auditoria nova não entra mais no
+repo sem ser auditada.
+
+### F21 — o artefato de máquina que o `git add -A` commitaria
+
+O `findings-orchestration` (do #129) escreve em
+`.agents/runs/findings-<timestamp>/` a cada execução do preflight. Não há
+regra no `.gitignore` para esse caminho — e `.agents/runs/` guarda, por
+convenção, **registros datados** que são versionados de propósito. O
+resultado medido: rodar o preflight deixava `?? .agents/runs/findings-…/` no
+`git status`, pronto para o próximo `git add -A`.
+
+**Correção:** `.agents/runs/findings-*/` entra no `.gitignore` — o registro
+datado é o `*.md` que o agent escreve com nome; a pasta é saída de máquina.
+
+### F19/F20 — a documentação que ensina o formato errado
+
+A mensagem de erro do gate ("declare antes do bloco: `> **Gate:** ...`")
+ensinava o formato **antigo** — o parser só lê o marcador **dentro** do bloco.
+Quem obedecesse a mensagem jamais passaria. O cabeçalho do gate e o relatório
+do instrumento repetiam o mesmo erro.
+
+O `find-skills` afirmava "`.agents/skills/` tem 24 skills e 27 agents" — o
+disco tinha **25 e 28** (a contagem envelhece a cada skill nova). Agora o texto
+diz 25 e 28 **com a data da medição**, e o comando para remedir.
+
+## Inventário medido das 25 skills
 
 `linhas` = `wc -l` do `SKILL.md` · `refs` = quantos arquivos (agents, skills,
 `AGENTS.md`, `WORKFLOWS.md`) mencionam a skill · `fm` = campos do frontmatter.
@@ -265,8 +371,10 @@ divergência entre os dois é o que produziu o drift que ninguém viu.
 | `ci-defense-in-depth` | 248 | + type, tools | 8 | sem `version`/`updated`; 48 linhas do teto |
 | `ddd-hexagonal-validation` | 167 | name, description | 6 | sem `version`/`updated`; sem cabeçalho |
 | `demand-archiving` | 195 | name, description | 2 | sem `version`/`updated`; sem cabeçalho |
+| `documentation-audit` | 190 | name, version, updated, description | 1 | 5 blocos, todos declarados depois do F13 |
 | `docker` | 210 | + version, updated | 16 | `description` com 418 chars |
 | `docker-prod-audit` | 162 | + version, updated | 4 | — |
+| `find-skills` | 161 | name, version, updated, description | 1 | criada neste PR; a contagem de skills envelhece (F20) |
 | `findings-orchestration` | 298 | + version, updated | 3 | **2 linhas do teto** |
 | `graphify` | **739** | name, description | **0** | **F1** — órfã, inglês, >300 |
 | `learning-observation` | 167 | + type | 2 | sem `version`/`updated`; sem cabeçalho |

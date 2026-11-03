@@ -25,8 +25,9 @@ description: "Descoberta e instalação de skills — quando a demanda não tem 
 O erro caro aqui é pular direto para o registro e instalar uma skill de
 terceiro para algo que o repo já resolve. A ordem é fixa:
 
-1. **No repo.** `.agents/skills/` tem 24 skills e 27 agents (medido:
-   `ls .agents/skills/*/SKILL.md | wc -l`, `ls .agents/agents/*.md | wc -l`), e a
+1. **No repo.** `.agents/skills/` tem 25 skills e 28 agents (medido no disco em
+   2026-10-29: `ls .agents/skills/*/SKILL.md | wc -l`,
+   `ls .agents/agents/*.md | wc -l` — a contagem envelhece, meça de novo), e a
    matriz `specialist-routing.md` mapeia demanda → agent → skill. A dúvida "qual
    skill eu uso?" se responde lendo essa matriz, não buscando na internet.
 2. **No registro.** Só quando o passo 1 não cobre a demanda.
