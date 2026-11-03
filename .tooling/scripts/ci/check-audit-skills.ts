@@ -54,10 +54,33 @@ export const SKILLS_DE_AUDITORIA: readonly string[] = [
   'docker-prod-audit',
   'release-versioning-audit',
   'findings-orchestration',
+  // MEDIDO em 2026-10-29: esta skill entrou no repo pelo merge do #129 — DEPOIS
+  // do inventário da revisão, que por isso a deixou de fora (23 de 25 skills).
+  // Os 5 blocos dela estavam sem declaração, e um deles (5.1) invoca o
+  // preflight inteiro: executá-lo de dentro do gate seria recursão.
+  'documentation-audit',
 ];
 
-/** Tempo limite de um passo, em ms. */
-export const TIMEOUT_POR_PASSO_MS = 120_000;
+/**
+ * Tempo limite de UM passo, em ms.
+ *
+ * MEDIDO em 2026-10-29: o job de `preflight` na CI tem `timeout-minutes: 5`
+ * (`.github/workflows/ci.yml`), e ele roda com ~40 outros gates. Com 120s por
+ * passo e 24 passos, o pior caso do gate era 48 min — 10× o orçamento do job
+ * inteiro, e a falha apareceria como "o job estourou o tempo", não como "o
+ * passo travou". Por isso o passo é menor que o orçamento total.
+ */
+export const TIMEOUT_POR_PASSO_MS = 60_000;
+
+/**
+ * O orçamento TOTAL do gate, em ms.
+ *
+ * O gate para de rodar passos quando o orçamento acaba e **reporta**: um gate
+ * que sai em silêncio depois de rodar metade do que devia é pior do que um
+ * gate que falha dizendo onde parou. O preflight roda na frente de ~40 outros
+ * gates e tem 5 min no total.
+ */
+export const ORCAMENTO_TOTAL_MS = 120_000;
 
 /** O marcador de falha que os gates do repo imprimem. */
 export const MARCADOR_DE_FALHA = '✗';
@@ -128,7 +151,8 @@ const MARCADOR_DECLARACAO = /\[gate:\s*(run|skip)\s*—\s*([^\]]+)\]/;
 /**
  * Extrai os blocos `bash` de um SKILL.md e a declaração de cada um.
  *
- * A declaração é a linha `> **Gate:** ...` imediatamente anterior ao bloco.
+ * A declaração é o marcador `[gate: run|skip — motivo]`, no comentário da
+ * primeira linha do bloco.
  * Bloco sem declaração vem com `declaracao: null` — e o gate trata isso como
  * erro, não como "pode".
  */
@@ -215,12 +239,29 @@ export function violacoesDoBloco(corpo: string): string[] {
   return achadas;
 }
 
-/** Os alvos de redirect (`> alvo`) de um corpo de script. */
+/**
+ * Os alvos de redirect (`> alvo`) de um corpo de script.
+ *
+ * MEDIDO em 2026-10-29: a primeira versão casava QUALQUER `>`, e o `>` de uma
+ * comparação — o ternário `ini=$(( lineno > 10 ? lineno - 10 : 1 ))` — era lido
+ * como redirect para o arquivo "10". O próprio gate acusou o conserto de outro
+ * defeito.
+ *
+ * O que separa um redirect de uma comparação: o **alvo**. Um redirect aponta
+ * para um caminho (`saida.txt`, `/tmp/x`, `graphify-out/graph.json`, `$VAR`);
+ * uma comparação aponta para um valor (`10`, `b`). Por isso o alvo precisa ter
+ * ponto, barra ou cifrão — e não pode ser só um número.
+ */
 export function alvosDeRedirect(corpo: string): string[] {
   const alvos: string[] = [];
   const re = /(?<!\d)>\s*([^\s|&]+)/g;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(corpo)) !== null) alvos.push(m[1]!);
+  while ((m = re.exec(corpo)) !== null) {
+    const alvo = m[1]!;
+    if (/^\d+$/.test(alvo)) continue; // comparação numérica
+    if (!/[./$]/.test(alvo)) continue; // comparação com um valor qualquer
+    alvos.push(alvo);
+  }
   return alvos;
 }
 
@@ -267,6 +308,7 @@ export function checkAuditSkills(opts: { repoRoot: string }): CheckResult {
   const advisories: string[] = [];
   const root = path.resolve(opts.repoRoot);
   let passosRodados = 0;
+  const inicio = Date.now();
 
   for (const skill of SKILLS_DE_AUDITORIA) {
     const arquivo = path.join(root, '.agents/skills', skill, 'SKILL.md');
@@ -289,9 +331,9 @@ export function checkAuditSkills(opts: { repoRoot: string }): CheckResult {
 
       if (bloco.declaracao === null) {
         errors.push(
-          `${onde}: bloco bash SEM DECLARAÇÃO. Declare antes do bloco: ` +
-            `"> **Gate:** \`run\` — <motivo>" (o gate executa) ou ` +
-            `"> **Gate:** \`skip\` — <motivo>" (não executa). ` +
+          `${onde}: bloco bash SEM DECLARAÇÃO. Declare DENTRO do bloco, no comentário da ` +
+            `primeira linha: "[gate: run — <motivo>]" (o gate executa) ou ` +
+            `"[gate: skip — <motivo>]" (não executa). ` +
             `Bloco sem declaração é o que deixa um passo quebrado passar em silêncio.`,
         );
         continue;
@@ -316,6 +358,16 @@ export function checkAuditSkills(opts: { repoRoot: string }): CheckResult {
         continue;
       }
 
+      const decorrido = Date.now() - inicio;
+      if (decorrido > ORCAMENTO_TOTAL_MS) {
+        errors.push(
+          `${onde}: o orcamento do gate estourou (${ORCAMENTO_TOTAL_MS}ms) antes de rodar este passo. ` +
+            `O gate parou de propósito — o preflight tem 5 min no total na CI e roda com ~40 outros gates. ` +
+            `Passos rodados: ${passosRodados}.`,
+        );
+        break;
+      }
+
       const exec = executarPasso(bloco.corpo, root);
       passosRodados++;
 
@@ -325,7 +377,18 @@ export function checkAuditSkills(opts: { repoRoot: string }): CheckResult {
         );
         continue;
       }
-      if (exec.codigo !== null && !CODIGOS_DE_SUCESSO.includes(exec.codigo)) {
+      if (exec.codigo === null) {
+        // MEDIDO em 2026-10-29: um passo que estoura o buffer do spawn (8 MB)
+        // morre com código NULO — e o código nulo não está na lista de
+        // sucesso, mas também não é um código de crash. Sem esta guarda, o
+        // gate tratava o passo como aprovado (a saída parcial é não vazia).
+        errors.push(
+          `${onde}: o passo morreu sem código de saída (buffer estourado ou processo morto). ` +
+            `A saída parcial não é aprovação — corrija o passo ou reduza a saída.`,
+        );
+        continue;
+      }
+      if (!CODIGOS_DE_SUCESSO.includes(exec.codigo)) {
         errors.push(
           `${onde}: o passo saiu com código ${exec.codigo}. Saída:\n${recorte(exec.saida)}`,
         );

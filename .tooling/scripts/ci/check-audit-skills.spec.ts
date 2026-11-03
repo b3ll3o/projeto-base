@@ -8,6 +8,7 @@ import {
   CODIGOS_DE_SUCESSO,
   MARCADOR_DE_FALHA,
   TIMEOUT_POR_PASSO_MS,
+  ORCAMENTO_TOTAL_MS,
   checkAuditSkills,
   extrairBlocos,
   linhasDeFalha,
@@ -29,14 +30,19 @@ function repoCom(skills: Record<string, string>): string {
 describe('a lista de skills de auditoria', () => {
   // ⚠️ Este é o teste que impede a reincidência: a lista é o instrumento, e
   // uma lista que alguém encolhe sem querer volta a medir menos.
-  it('nomeia as SEIS skills de auditoria do repo', () => {
-    expect(SKILLS_DE_AUDITORIA.length).toBe(6);
+  it('nomeia as SETE skills de auditoria do repo', () => {
+    // A lista é o instrumento que impede uma skill de auditoria nova de entrar
+    // no repo sem ser auditada — sem este pino, uma skill nova escaparia.
+    // MEDIDO em 2026-10-29: a `documentation-audit` entrou pelo merge do #129
+    // depois do inventário da revisão e escapou por 23 de 25 skills.
+    expect(SKILLS_DE_AUDITORIA.length).toBe(7);
     expect(SKILLS_DE_AUDITORIA).toContain('prisma-audit');
     expect(SKILLS_DE_AUDITORIA).toContain('openapi-audit');
     expect(SKILLS_DE_AUDITORIA).toContain('otelcol-audit');
     expect(SKILLS_DE_AUDITORIA).toContain('docker-prod-audit');
     expect(SKILLS_DE_AUDITORIA).toContain('release-versioning-audit');
     expect(SKILLS_DE_AUDITORIA).toContain('findings-orchestration');
+    expect(SKILLS_DE_AUDITORIA).toContain('documentation-audit');
   });
 
   it('cada skill da lista tem SKILL.md de verdade', async () => {
@@ -120,6 +126,16 @@ describe('violacoesDoBloco()', () => {
     expect(violacoesDoBloco('grep x f 2>/dev/null')).toEqual([]);
     const para = violacoesDoBloco('grep x f > saida.txt');
     expect(para.length).toBeGreaterThan(0);
+  });
+
+  it('NÃO confunde o `>` de uma comparação com um redirect', () => {
+    // MEDIDO em 2026-10-29: o gate acusou o próprio conserto de outro defeito —
+    // o ternário `ini=$(( lineno > 10 ? lineno - 10 : 1 ))` era lido como
+    // redirect para o arquivo "10".
+    expect(violacoesDoBloco('ini=$(( lineno > 10 ? lineno - 10 : 1 ))')).toEqual([]);
+    expect(violacoesDoBloco('if (( a > b )); then :; fi')).toEqual([]);
+    // mas um redirect de verdade continua sendo acusado
+    expect(violacoesDoBloco('echo x > saida.txt').length).toBeGreaterThan(0);
   });
 
   it('os alvos de redirect são capturados, não inferidos', () => {
@@ -260,6 +276,17 @@ describe('o gate, sobre o repo real', () => {
         expect(bloco.motivo.length).toBeGreaterThanOrEqual(8);
       }
     }
+  });
+});
+
+describe('o orcamento do gate', () => {
+  it('o orcamento total e o passo cabem no job de 5 min da CI', () => {
+    // MEDIDO em 2026-10-29: o job de preflight tem `timeout-minutes: 5` e roda
+    // com ~40 outros gates. Com 120s por passo e 24 passos, o pior caso era
+    // 48 min — 10× o orçamento do job inteiro, e a falha apareceria como "o
+    // job estourou o tempo", não como "o passo travou".
+    expect(ORCAMENTO_TOTAL_MS).toBeLessThanOrEqual(120_000);
+    expect(TIMEOUT_POR_PASSO_MS).toBeLessThan(ORCAMENTO_TOTAL_MS);
   });
 });
 
