@@ -108,6 +108,8 @@ Escopo de todos: **todo `.md` versionado** sob a raiz que o preflight passa
 | `check-agent-routing-coverage` | agents | todo `*.md` em `.agents/agents/` precisa ser referenciado pela matriz `specialist-routing.md` em algum `specialists: [X]` (par: órfão = real sem rota, fantasma = citado sem real) |
 | `check-engines-consistency` | engines | `engines.node` em `apps/*/package.json` deve ser >= versão da raiz; app declarando major mais antigo é vermelho |
 | `check-dockerfile-hardening` | docker | apps/*/Dockerfile: FROM com @sha256:... (ou @${ARG} com ARG default = sha256:...) e stage prod com `USER 1001:1001`. docker-compose.yml: service api com `init: true`, services prod (postgres/api/web) com `read_only: true` + `cap_drop: [ALL]` + `security_opt: [no-new-privileges:true]`, top-level `networks:` + cada service com `networks:` explícito (não usar default). .dockerignore: exclui `.env.production*`. Cobre issues 83, 84, 88, 89, 90, 91, 92 |
+| `check-dependency-audit` | dependências | advisory **crítica ou alta** de dependência que não está na lista de exceções versionada; e exceção cuja verificação (o motivo medido) parou de valer |
+| `check-ci-action-pinning` | supply-chain | action do CI pinada por **tag** (ponteiro mutável) em vez de SHA |
 
 > **`check-types.ts` NÃO é um check** e saiu desta tabela: tem um único
 > `export interface CheckResult` (`wc -l` = 23) e é importado **só** como

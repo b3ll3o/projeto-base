@@ -1,0 +1,68 @@
+{
+  "_comoUsar": [
+    "Cada exceção aqui é uma admission consciente: um advisory CRÍTICO ou ALTA",
+    "cuja EXPOSIÇÃO foi medida e não existe no repo. A `verificacao` é a prova",
+    "de que o motivo continua valendo — o gate a roda, e se ela parar de valer,",
+    "a exceção é reprovada. Exceção sem verificação é dívida silenciosa.",
+    "",
+    "MEDIDO em 2026-11-03 com `pnpm audit --json` (89 advisories: 4 críticas,",
+    "23 altas). Depois das 7 overrides do `pnpm` e do bump do `next`: 43",
+    "advisories, das quais 4 na severidade que reprova — as 4 são as exceções",
+    "abaixo. Nenhuma outra.",
+    "A severidade que REPROVA mora no CÓDIGO do gate (SEVERIDADES_QUE_REPROVAM), não neste arquivo — quem edita este arquivo não pode enfraquecer o gate."
+  ],
+  "excecoes": [
+    {
+      "id": "1139528",
+      "modulo": "vitest",
+      "severidade": "critical",
+      "motivo": "O advisory é do UI SERVER do vitest (`--ui`): com ele no ar, um terceiro lê e executa arquivo do repositório. MEDIDO em 2026-11-03: o repo roda `vitest run` e NENHUM script, workflow ou fonte passa `--ui` — o UI server nunca é iniciado, então não há porta de entrada. Corrigir exigiria a major 2 → 3 do toolchain de teste inteiro (2.296 testes) por um advisory cujo gatilho não existe aqui.",
+      "verificacao": {
+        "tipo": "ausencia",
+        "padrao": "--ui(\\s|=|$)",
+        "caminhos": [
+          "package.json",
+          "apps/api/package.json",
+          "apps/web/package.json",
+          ".github/workflows",
+          "apps/api/src",
+          "apps/web/app"
+        ]
+      }
+    },
+    {
+      "id": "1242658",
+      "modulo": "vite",
+      "severidade": "high",
+      "motivo": "O bypass é do `launch-editor`, que o vite só usa no servidor de DEV, e a falha é do `fs.existsSync()` no Windows. MEDIDO em 2026-11-03: o CI é Linux (ubuntu-24.04) e o build de produção roda `next build`, que não sobe servidor de dev — nenhum workflow roda `next dev`/`vite dev`. O script `dev` do `apps/web` existe para o desenvolvimento local (e roda em `localhost`, fora da exposição), então a verificação é sobre os WORKFLOWS, não sobre o manifesto. Corrigir exigiria o vite 6 (major) dentro do vitest 2, e o vitest 3.2.7 ainda aceita `vite@^5` — a major do toolchain inteiro por um advisory de dev em Windows.",
+      "verificacao": {
+        "tipo": "ausencia",
+        "padrao": "(vite|next) dev",
+        "caminhos": [".github/workflows"]
+      }
+    },
+    {
+      "id": "1243066",
+      "modulo": "zod",
+      "severidade": "high",
+      "motivo": "O advisory é de exaustão de memória ao validar COLEÇÕES constritas (`z.array`, `z.tuple`). MEDIDO em 2026-11-03: `grep` por `z.array(` e `z.tuple(` em `apps/api/src` e `apps/web` → 0 ocorrências fora das specs — o repo não valida coleção nenhuma com zod, então o caminho do advisory não existe. Corrigir exigiria a major zod 3 → 4 (o advisory não tem correção na linha 3.x), que reescreve todos os DTOs da API por uma exaustão de memória que não tem onde acontecer.",
+      "verificacao": {
+        "tipo": "ausencia",
+        "padrao": "z\\.(array|tuple)\\(",
+        "caminhos": ["apps/api/src", "apps/web"],
+        "excluir": ["\\.spec\\.ts$"]
+      }
+    },
+    {
+      "id": "1124011",
+      "modulo": "@opentelemetry/propagator-jaeger",
+      "severidade": "high",
+      "motivo": "O DoS é no parser do header `uber-trace-id` (formato Jaeger). MEDIDO em 2026-11-03: a propagação W3C é o DEFAULT do NodeSDK e o repo NÃO registra o propagator Jaeger (0 ocorrências de `JaegerPropagator` no código) — o pacote está na árvore por transitive do `sdk-trace-node`, mas nunca parseia header nenhum. A versão corrigida (2.9.0+) está DEPRECADA no upstream ('package no longer supported'), então o override traria um pacote morto e um aviso em cada install por uma exposição que não existe.",
+      "verificacao": {
+        "tipo": "ausencia",
+        "padrao": "JaegerPropagator",
+        "caminhos": ["apps/api/src", "apps/web"]
+      }
+    }
+  ]
+}
