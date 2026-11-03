@@ -48,8 +48,8 @@ projeto-base/
     ├── agents/            # issue tracker, labels de triagem, glossário
     ├── articles/          # artigos de fundo
     ├── superpowers/       # planos e specs de trabalho
-    ├── web/               # catálogo de rotas Next.js (em criação — PR paralelo)
-    ├── runbooks/          # runbooks por incidente (em criação — PR paralelo)
+    ├── web/               # catálogo de rotas Next.js
+    ├── runbooks/          # runbooks por ambiente (dev, Docker, observabilidade, e2e/CI)
     ├── TEMPLATE_USAGE.md  # Guia principal (≤ 300 linhas)
     ├── MONOREPO.md        # convenções de monorepo
     ├── STACK.md           # stack escolhida e justificativas
@@ -120,7 +120,9 @@ pnpm install --frozen-lockfile
 
 # 2. Subir Postgres COM PORTA PUBLICADA NO HOST.
 # ⚠️ O `postgres` do compose usa só `expose` desde o #91 — a API na máquina não o alcança.
-docker run -d --name projeto-base-pg-local -p 5432:5432 -e POSTGRES_USER=projeto -e POSTGRES_PASSWORD=projeto -e POSTGRES_DB=projeto_base postgres:16-alpine
+# A receita (primeira vez) e o reinício (quando o container já existe) têm dono:
+# [runbook §1.1](./docs/como-rodar.md). O `pnpm dev` verifica e religa o banco local
+# sozinho ([runbook §1.4](./docs/como-rodar.md)) — este passo é o de primeira vez.
 # ou aponte para um Postgres existente. São TRÊS URIs (apps/api/.env.example):
 #   DATABASE_URL        → papel app_runtime  (escopo de empresa; é o que faz as RLS valerem)
 #   SYSTEM_DATABASE_URL → papel app_system   (bucket de sistema, cross-empresa)
@@ -197,12 +199,13 @@ docker compose up -d postgres api web && sleep 30 \
 
 ### Troubleshooting
 
+Os sintomas do **ambiente local** têm dono: [runbook §4](./docs/como-rodar.md).
+
 | Sintoma | Solução |
 |---|---|
 | `prisma migrate deploy` falha em container | `docker compose down -v` para resetar volume + re-up |
 | `pnpm dev` falha com `Cannot find module '@projeto/...'` | `pnpm install --frozen-lockfile` |
-| `docker compose` diz "port already in use" | `lsof -i :5432` → parar processo OU mudar porta no compose |
-| `curl /api/v1/health` retorna 503 | `docker compose logs postgres` |
+| `pnpm dev` falha com `PrismaClientInitializationError` (P1001) | `pnpm ambiente:check` — ele religa o banco local e diz o que falta ([runbook §1.4](./docs/como-rodar.md)) |
 | Traces não chegam no OTel Collector | Subir com `docker compose --profile observability up -d` |
 | `pnpm ci:preflight` falha com cross-ref quebrada | `pnpm docs:sync --mode=fix` ou ajustar manualmente |
 

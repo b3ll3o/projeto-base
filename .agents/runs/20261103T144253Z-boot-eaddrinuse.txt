@@ -1,0 +1,9 @@
+# MEDIDO 2026-11-03 11:51:45 — apps/api com o banco NO AR (docker start projeto-base-pg-local feito)
+# comando: cd apps/api && timeout 30 pnpm exec tsx src/main.ts
+# porta 3000 do host ocupada pelo container projeto-base-api
+
+Bootstrap falhou: Error: listen EADDRINUSE: address already in use 0.0.0.0:3000
+  code: 'EADDRINUSE',
+[11:51:45.220] [32mINFO[39m (132593): [36mPrisma conectado[39m [90m{"context":"PrismaService"}[39m
+[11:51:45.220] [32mINFO[39m (132593): [36mNest application successfully started[39m [90m{"context":"NestApplication"}[39m
+[11:51:45.220] [31mERROR[39m (132593): [36mError: listen EADDRINUSE: address already in use 0.0.0.0:3000[39m [90m{"context":"NestApplication"}[39m

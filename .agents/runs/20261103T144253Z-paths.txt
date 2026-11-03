@@ -1,0 +1,9 @@
+package.json
+apps/api/src/shared/infrastructure/prisma/prisma.service.ts
+apps/api/scripts/prepara-papeis.sh
+.tooling/scripts/ci/boot-local.ts
+.tooling/scripts/ci/preflight.ts
+docs/como-rodar.md
+README.md
+docker-compose.yml
+docker-compose.dev.yml

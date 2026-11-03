@@ -14,7 +14,7 @@ maintainer: stack-code-reviewer
 
 ## §1. TL;DR
 
-1. **Antes de qualquer coisa**: `pnpm install` e, se for planejar, gerar um *state-snapshot* (camada de agents).
+1. **Antes de qualquer coisa**: `pnpm install` e, se for planejar, gerar um *state-snapshot* (camada de agents). Quem vai **subir a aplicação** tem o `pnpm ambiente:check` como preflight: o `pnpm dev` não sobe nenhum app se o ambiente local não estiver pronto.
 2. **Commit** dispara `commit-msg` (Conventional Commits — `exit 1` se a mensagem não segue `tipo(escopo?): descrição`) e `pre-commit`: `lint-staged` (só Prettier) + `stack-code-reviewer` (aborta em blocker) + `doc-sync` (aborta **só** quando um doc de referência mapeado está ausente — §7.2).
 3. **Push** dispara `pre-push`: `pnpm ci:preflight` — os gates estruturais declarados em [`preflight.ts`](../.tooling/scripts/ci/preflight.ts) — e `pnpm ci:boot`, que sobe a aplicação local; ambos abortam com exit 1 se falhar.
 4. **PR para `main`** dispara 3 jobs de CI (`preflight`, `quality`, `docker-build-prod`) + `stack-code-review` + `docs-sync`. **Pós-#44** os jobs `preflight` e `quality` rodam a suíte do tooling, que valida os próprios dentes dele — contagem por `pnpm tooling:test` (dois roots).
@@ -51,6 +51,7 @@ maintainer: stack-code-reviewer
 │                  stack-code-reviewer → exit 1 se blocker     │
 │                  doc-sync          → aborta se doc ausente    │
 │     pre-push   ─ ci:preflight, ci:boot → exit 1 se falhar  │
+│     pnpm dev   ─ ambiente:check → o start não sobe cru      │
 │   ✅ IMPOSTO localmente, burlável com --no-verify            │
 └──────────────────────────────────────────────────────────────┘
                │
@@ -151,13 +152,11 @@ dois scripts existem no `package.json` (linhas 29 e 31) mas **nenhum hook os inv
   **veredito sobre dado stale**, porque o typecheck de um roda contra o client que o outro ainda edita.
 - **`pnpm-lock.yaml`** — já tem `permissionDecision: "deny"` no PreToolUse
   (`.claude/hooks/pretooluse-block-pnpm-lock.mjs`). Um `pnpm add` paralelo destrói o guard.
-- **`package.json` raiz, `turbo.json`, `pnpm-workspace.yaml`** — `check-package-json-drift` mede
-  exatamente esses arquivos; a matriz marca os dois últimos `blocking: true`.
+- **`package.json` raiz, `turbo.json`, `pnpm-workspace.yaml`** — `check-package-json-drift` mede exatamente esses arquivos.
 - **`specialist-routing.md`** — fonte da verdade de **todo** o roteamento. Dois `agent-architect`
   colidem no arquivo que decide quem é chamado.
-- **Branches paralelas** — `check-branch-up-to-date` bloqueia contra `origin/main`. A segunda
-  branch nasce desatualizada por construção quando a primeira faz push. O histórico já escolheu o
-  lado oposto: PR #81 (167 arquivos), #95 (10 issues), #80 (9 issues).
+- **Branches paralelas** — `check-branch-up-to-date` bloqueia contra `origin/main`: a segunda branch
+  nasce desatualizada por construção. O histórico já escolheu o lado oposto: PR #81 (167 arquivos), #95 (10 issues).
 
 **Não converta gate determinístico em prompt.** Os 41 gates são regex + TypeScript com spec
 própria; §5 já registra que a camada "agentic" é *"regra determinística com prosa em volta"*.
@@ -167,9 +166,8 @@ Reescrever um como LLM é a classe 6 de `guard-classes.md` — spec verde, siste
 
 1. **Executor** — `Agent` × N em paralelo sobre a saída do `review-router`. Menor diff e maior retorno: o roteamento, a matriz e os testes já existem.
 2. **Registro** — 25 dos 28 agents não estão em `.claude/agents/` (`ls .claude/agents/*.md | wc -l` = 3), logo o orquestrador não tem handle. Agent não registrado não é invocado nem por LLM.
-3. **Relógio** — `grep -rn 'Date.now()' tooling/ .tooling/` devolve **6** ocorrências: **3** num spec
-   unitário e **3** em `boot-local.ts` (o deadline do boot local — produção, mas de harness, não de
-   dispatch). Sem cronômetro do dispatch, "mais agents é mais rápido" é raciocínio.
+3. **Relógio** — `grep -rn 'Date.now()' tooling/ .tooling/` devolve **6** ocorrências (**3** num spec
+   unitário, **3** em `boot-local.ts`). Sem cronômetro do dispatch, "mais agents é mais rápido" é raciocínio.
 
 ---
 
@@ -183,6 +181,7 @@ Reescrever um como LLM é a classe 6 de `guard-classes.md` — spec verde, siste
 | `doc-sync` | `pnpm tsx tooling/scripts/doc-sync.ts` | A (pre-commit) + B (job `docs-sync`) | Aborta (`exit 1`) **só** quando um doc de referência **mapeado** está ausente (alerta `major`) — §7.2 | Sim — o job `docs-sync` roda o mesmo script e falha junto |
 | `ci:preflight` | `pnpm ci:preflight` | A (pre-push) + B | os checks estruturais | Sim — `ci.yml` roda o mesmo script |
 | `ci:boot` | `pnpm ci:boot` | A (pre-push) + (via `ci:local`) | A aplicação local **não sobe** (`exit 1`): `tsx src/main.ts` + `next dev` em portas livres, e o veredito é `/api/v1/health` 200 com `checks.database: "ok"` + `/api/health` 200 com `status: "ok"` | Não — nenhum job de CI sobe o app local; é gate deliberadamente local (o e2e sobe a API em `tsx` e o web no BUILD de produção, que é outro caminho) |
+| `ambiente:check` | `pnpm ambiente:check` | A (antes do `pnpm dev`) | O **ambiente local** não está pronto: falta `DATABASE_URL`/`JWT_SECRET`, falta o Prisma Client gerado, o banco não responde ou a porta da API está ocupada. Ele **religa o container do banco local parado** e diz o que falta. Bloqueia o **start**, não o push | Não — depende do Docker e do Postgres **da máquina**; no CI seria verde por inércia (classe 1 de `guard-classes.md`) |
 | `format:check` | `pnpm format:check` | B (preflight job) | Arquivo não formatado | — |
 | `test:coverage` | `pnpm turbo run test:coverage` | B (quality job) | Cobertura de `apps/api` < 80% (`COVERAGE_FLOOR`, só quando `isCoverageEnforced`) | — |
 | `test:integration` / `test:e2e` | `pnpm turbo run test:integration test:e2e --filter=@projeto/api` | B (quality job) | Teste falhando (exige Docker) | — |
@@ -296,5 +295,5 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 
 **Mantido por:** projeto-base contributors
 **Licença:** MIT
-**Versão do documento:** 1.3.0
-**Última atualização:** 2026-10-29
+**Versão do documento:** 1.4.0
+**Última atualização:** 2026-11-03

@@ -3,9 +3,9 @@
 Mapa completo por ambiente (dev, Docker, observabilidade, e2e, CI). O índice e o
 **Ambiente 1** (dev local com pnpm nativo) ficam aqui; os outros cinco são irmãos.
 
-> **Revisto em 2026-10-29** (commit `194d305`). Cada afirmação medida carrega a
-> data em que foi medida — as de 2026-10-16 são da primeira redação deste runbook
-> e **não** foram re-medidas nesta revisão. Legenda: **✅ medido** = executado, com
+> **Revisto em 2026-11-03** (o preflight do ambiente local, §1.4). Cada afirmação
+> medida carrega a data em que foi medida — as de 2026-10-16 são da primeira redação
+> deste runbook e **não** foram re-medidas. Legenda: **✅ medido** = executado, com
 > saída observada · **📖 lido do código** = derivado do YAML/Dockerfile/script.
 
 ---
@@ -71,7 +71,9 @@ docker run -d --name projeto-base-pg-local -p 5432:5432 \
 A URL tem que bater com `apps/api/.env` (✅ medido: `projeto:***@localhost:5432/projeto_base`
 — a do **DONO**, que é a `DIRECT_DATABASE_URL`; o `app_runtime` e o `app_system` vêm do
 §1.2.1); para derrubar, `docker rm -f projeto-base-pg-local`; para **reiniciar** o que já
-existe (o caminho do `pre-push` quando o `ci:boot` falha), `docker start projeto-base-pg-local`.
+existe, `docker start projeto-base-pg-local`.
+
+O `pnpm dev` **verifica e religa** esse container sozinho — ver §1.4.
 
 ### §1.2 Segredo JWT
 
@@ -150,8 +152,12 @@ cd apps/api && pnpm exec prisma migrate deploy && cd ../..  # aplica as 15 migra
 ### §1.4 Subir os apps
 
 ```bash
-pnpm dev     # turbo run dev em paralelo — api :3000, web :3001
+pnpm dev     # roda o `pnpm ambiente:check` e depois sobe api :3000 + web :3001
 ```
+
+O `pnpm ambiente:check` é o preflight do ambiente local (✅ medido em 2026-11-03):
+verifica o `DATABASE_URL`/`JWT_SECRET`, o Prisma Client gerado, o banco e a porta
+da API **antes** de subir qualquer app — e **religa o container parado** (§1.1).
 
 ### §1.5 Verificar
 
@@ -205,9 +211,8 @@ overlay `docker-compose.dev.yml`), então o procedimento completo — inclusive 
 |---|---|---|
 | `admin@admin.com` | `Admin@123` | `admin` (todas as permissions, `is_admin=true`) |
 
-Credencial de DEV, no mesmo espírito da senha `projeto:projeto` do
-`docker-compose.dev.yml`. Para ambiente real, crie o admin pelo
-`POST /api/v1/users` e promova o perfil pela UI.
+Credencial de DEV, no mesmo espírito da senha `projeto:projeto` do compose. Para
+ambiente real, crie o admin pelo `POST /api/v1/users` e promova o perfil pela UI.
 
 ### §1.8 A etapa `ci:boot` — subir a aplicação local e derrubá-la
 
@@ -236,9 +241,7 @@ existem para o container ou para o SDK de terceiros.
 | `JWT_ACCESS_TTL` | `apps/api/.env` · `.env.production` | sim — `jwt-token.service.ts` (default `15m`) |
 | `JWT_REFRESH_TTL` | `apps/api/.env` · `.env.production` | sim — `jwt-token.service.ts` (default `7d`) |
 | `SWAGGER_ENABLED` | `.env.production` | sim — `swagger-habilitado.ts`; default-deny fora de `development` |
-| `POSTGRES_USER` | `.env.production` | não — lida pelo container do Postgres (default `projeto`) |
-| `POSTGRES_PASSWORD` | `.env.production` | não — lida pelo container do Postgres |
-| `POSTGRES_DB` | `.env.production` | não — lida pelo container do Postgres (default `projeto_base`) |
+| `POSTGRES_USER` · `POSTGRES_PASSWORD` · `POSTGRES_DB` | `.env.production` | não — lidas pelo container do Postgres (defaults `projeto`/`projeto`/`projeto_base`) |
 | `LOG_LEVEL` | `apps/api/.env.example` · `.env.production` · `environment:` do compose | **não** — nenhum `process.env.LOG_LEVEL` no `apps/api/src` (`grep -rn 'LOG_LEVEL' apps/api/src` → 0 hits). O compose ainda a interpola |
 | `OTEL_SDK_DISABLED` | `.env.example` (raiz) | sim — `tracing.ts` (`'true'` desliga o SDK) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `.env.production` (opcional) | sim — `tracing.ts`; há default `http://otel-collector:4318/v1/traces` |
@@ -251,12 +254,11 @@ existem para o container ou para o SDK de terceiros.
 
 ### §2.1 Chaves lidas pelo código que não estão em nenhum `.env.example`
 
-Três chaves são lidas pelo código e **não** aparecem em nenhum dos quatro
-`.env.example` do repo — verificado com `grep -hoE '^[A-Z][A-Z0-9_]*=' .env.example
-.env.production.example apps/api/.env.example apps/web/.env.example | sort -u`
-(linha comentada com `#` não conta). Por isso elas **não** estão na tabela acima: o
-gate `check-runbook-drift` casa a 1ª coluna da tabela com as chaves dos `.env.example`,
-e uma chave que só existe no código reprovaria o gate.
+Três chaves são lidas pelo código e **não** aparecem em nenhum `.env.example` do repo
+(`grep -hoE '^[A-Z][A-Z0-9_]*=' .env.example .env.production.example
+apps/api/.env.example apps/web/.env.example | sort -u` — linha comentada não conta).
+Por isso não estão na tabela: o gate `check-runbook-drift` casa a 1ª coluna com as
+chaves dos `.env.example`, e uma chave só do código reprovaria o gate.
 
 - `THROTTLE_TTL_MS` — `apps/api/src/app.module.ts:26-31`; default **60000 ms**. No
   `.env.production.example` está **comentada** (`# THROTTLE_TTL_MS=60000`).
@@ -275,6 +277,7 @@ do workspace.
 ```bash
 pnpm install --frozen-lockfile   # §0.1 — deps do workspace
 pnpm turbo run db:generate       # §1.3 — Prisma Client
+pnpm ambiente:check              # §1.4 — preflight do ambiente local (banco, porta, env)
 pnpm dev                         # §1.4 — api :3000 + web :3001
 pnpm ci:boot                     # §1.8 — sobe e derruba a aplicação local
 pnpm ci:preflight                # os gates estruturais (pre-push e CI)
@@ -290,11 +293,8 @@ pnpm test:e2e                    # suíte de navegador (runbook de e2e/CI)
 |---|---|---|
 | `/api/v1/health` com `checks.database` ≠ `ok` | Postgres do compose não publica porta no host (#91) | §1.1 — container próprio com `-p 5432:5432` |
 | `Cannot find module '.prisma/client/default'` | o `db:generate` veio do cache do turbo | §1.3 — `pnpm turbo run db:generate --filter=@projeto/api --force` |
-| `PrismaClientInitializationError` | `DATABASE_URL` ausente ou vazia — em `apps/api/.env` (Ambiente 1) ou em `.env.production` (Ambiente 3) | §1.2.1 · [runbook Docker §2.1](./runbooks/docker.md) |
+| `PrismaClientInitializationError` **P1001** ("Can't reach database server") | ✅ medido em 2026-11-03: o banco local não está no ar — o `postgres` do compose não publica porta no host (#91) | §1.4 — `pnpm ambiente:check` religa o container parado; §1.1 tem a receita quando ele não existe |
 | API morre no boot sem mensagem clara | `JWT_SECRET` ausente ou com placeholder | §1.2 — `openssl rand -base64 48` |
 | `prisma migrate deploy` "não fez nada" e saiu 0 | rodou da raiz / script inexistente | §1.3, de dentro de `apps/api` |
 | `role app_runtime is not permitted to log in` | `prisma migrate reset` deixou o papel sem senha | §1.2.1 — rode o `prepara-papeis.sh` de novo |
 | `port already in use` em 3000/3001 | ambiente 1 e 3 não podem coexistir | derrube um (`pkill -f "turbo run dev"` ou `docker compose down`) |
-| `invalid restart policy: unknown policy 'unless-stopped'` | typo no `docker-compose.yml` | ✅ corrigido em 2026-10-16 |
-| `initdb: could not access directory` | uid do compose ≠ uid do `postgres` na imagem | ✅ corrigido em 2026-10-16 (`user: '70:70'`) |
-| `Cannot find package '@opentelemetry/sdk-node'` na imagem prod | o stage `prod` não copiava `apps/api/node_modules` | ✅ **corrigido** (issue #104, commit `376da79`) — o `Dockerfile` copia `apps/api/node_modules` e o `pnpm prune --prod` foi REMOVIDO; ver [runbook Docker §2.2](./runbooks/docker.md) |

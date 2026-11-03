@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { verificarCredenciaisDoBanco } from './credenciais-do-banco.js';
+import { traduzirFalhaDeConexao } from './traducao-de-falha-de-conexao.js';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
@@ -43,7 +44,28 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       throw new Error(`Credenciais do banco recusadas: ${veredito.motivo}`);
     }
 
-    await this.$connect();
+    // ⚠️ Só o `$connect()` é protegido. O guard de credenciais (acima) já
+    // lança um `Error` legível e não se mexe.
+    //
+    // O P1001 ("banco inalcançável") é traduzido na causa e no remédio: o
+    // erro cru do Prisma diz o SINTOMA e nada mais — a causa (o `postgres`
+    // do Compose usa só `expose:` desde o #91, e a máquina não o alcança) e o
+    // remédio (o container `projeto-base-pg-local`) estão no runbook §1.1, e
+    // ninguém chega lá olhando uma stack.
+    //
+    // ⚠️ `throw erro` (e não `throw new Error(...)`) preserva a INSTÂNCIA e o
+    // stack do que NÃO é P1001 — a tradução não mascara o que ela não sabe.
+    //
+    // ⚠️ Sem `process.exit` aqui dentro: quem encerra o processo é o
+    // `bootstrap().catch()` do `main.ts`. Sair dentro do hook mataria sem
+    // `$disconnect`.
+    try {
+      await this.$connect();
+    } catch (erro) {
+      const traducao = traduzirFalhaDeConexao(erro, process.env['DATABASE_URL']);
+      if (traducao === undefined) throw erro;
+      throw new Error(traducao);
+    }
     this.logger.log('Prisma conectado');
   }
 
