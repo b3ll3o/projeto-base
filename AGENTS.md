@@ -131,22 +131,19 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 | **finding-orchestrator** | [`.agents/agents/finding-orchestrator.md`](./.agents/agents/finding-orchestrator.md) | [memory](./.agents/memory/finding-orchestrator.md) | Dispara specialists em paralelo, agrega findings, dedup contra issues abertas, abre issues via `gh` | Cron semanal (sextas 02:00 UTC), pré-tag, on-demand do user |
 
 > **Stack vs. auditoria:** stack specialists (nestjs, nextjs, docker, monorepo,
-> telemetry, multi-tenant, ux-design) **criam** código/configuração nova — são
-> despachados antes de implementar. Auditoria specialists (prisma-db,
+> telemetry, multi-tenant, ux-design) **criam** código/configuração nova e são
+> despachados antes de implementar; auditoria specialists (prisma-db,
 > openapi-contract, otelcol-infra, docker-prod, release-versioning) **revisam** o
-> existente — são despachados pelo `finding-orchestrator` ou sob demanda.
-> Sobreposição intencional: `docker-prod-specialist` (hardening) e
-> `docker-specialist` (autoral) coexistem; o orchestrator dispara os dois quando
-> o escopo é amplo.
+> existente, disparados pelo `finding-orchestrator` ou sob demanda.
+> `docker-prod-specialist` (hardening) e `docker-specialist` (autoral) coexistem —
+> o orchestrator dispara os dois quando o escopo é amplo.
 >
 > **Skills de auditoria (1:1):** cada specialist de auditoria carrega uma skill de
-> processo determinístico (`.agents/skills/<name>-audit/SKILL.md`) —
-> `prisma-audit`, `openapi-audit`, `otelcol-audit`, `docker-prod-audit`,
-> `release-versioning-audit`, `findings-orchestration`. A skill encapsula o
-> **processo**; o agent, o **papel**. Skill não substitui agent — é carregada por
-> ele. O mesmo contrato 1:1 vale para `multi-tenant-specialist` (§3.1), que
-> carrega `multi-tenant-audit` — mas não entra na lista de audit specialists
-> porque o `finding-orchestrator` não o despacha sozinho.
+> processo determinístico (`.agents/skills/<name>-audit/SKILL.md`) — `prisma-audit`,
+> `openapi-audit`, `otelcol-audit`, `docker-prod-audit`, `release-versioning-audit`,
+> `findings-orchestration`. A skill encapsula o **processo**; o agent, o **papel** —
+> é carregada por ele, não o substitui. O mesmo contrato vale para o
+> `multi-tenant-specialist` (§3.1), que o `finding-orchestrator` não despacha.
 >
 > **Skills de UI (única relação 1:N do repo, v1.11.0+):** o `ux-design-specialist`
 > carrega **5** skills, nesta ordem — `ui-review` (processo) → `ui-modes` (decide o
@@ -158,22 +155,14 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 
 > **Par DURANTE → DEPOIS:** [`learning-observation`](./.agents/skills/learning-observation/SKILL.md)
 > classifica em T1/T2/T3 e exige o comando que mediu, no checkpoint de review+fix;
-> [`retrospective-capture`](./.agents/skills/retrospective-capture/SKILL.md) drena
-> essas memórias. O destino de cada uma é uma linha no ledger
-> [`memory-triage.md`](./.agents/runs/memory-triage.md), lido pelo gate
-> `check-memory-crystallization` nas duas direções.
+> [`retrospective-capture`](./.agents/skills/retrospective-capture/SKILL.md) drena essas memórias.
+> O destino de cada uma é uma linha no ledger [`memory-triage.md`](./.agents/runs/memory-triage.md),
+> lido pelo gate `check-memory-crystallization` nas duas direções.
 
 > **Skills de descoberta (v1.15.0+):** [`find-skills`](./.agents/skills/find-skills/SKILL.md)
-> é a única skill que **procura** skill. A ordem é fixa — **repo → registro → fazer
-> na mão**: as skills de `.agents/skills/` e a matriz `specialist-routing.md` respondem
-> "qual skill eu uso"; o registro (`hermes skills search`, catálogo `skills.sh`) só é
-> consultado quando o repo não cobre a demanda. Antes de instalar, a skill exige
-> auditar o candidato (origem oficial vs `community`, número de instalações, stars do
-> repositório, e **o que a SKILL.md pede** — rede, escrita fora do repo, token de
-> terceiro) e exige **adaptar** ao padrão do repo (pt-BR, ≤300 linhas, frontmatter
-> próprio, cabeçalho `Quem invoca`/`Quando invocar`), nunca vendorizar cru.
-> Adaptada de [vercel-labs/skills](https://github.com/vercel-labs/skills)
-> (`skills/find-skills/SKILL.md`, MIT, © Vercel, Inc.).
+> procura a skill mais adequada a cada situação: a ordem é **repo → registro → fazer na mão**,
+> a auditoria antes de instalar é obrigatória e a adaptação ao padrão do repo é o último passo.
+> De [vercel-labs/skills](https://github.com/vercel-labs/skills) (MIT).
 
 > **State-Aware Planning (camada 0 do pre-planner, a partir de v1.8.0):** convenção
 > [`.agents/specs/conventions/state-aware-planning.md`](./.agents/specs/conventions/state-aware-planning.md)
