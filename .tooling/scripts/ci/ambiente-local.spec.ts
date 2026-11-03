@@ -624,6 +624,25 @@ exit 0
 // ── o SCRIPT (o teste local de verdade) ──────────────────────────────────────
 
 describe('o script ambiente-local', () => {
+  /**
+   * O ambiente das specs do SCRIPT — TODO declarado aqui.
+   *
+   * ⚠️ MEDIDO em 2026-11-03 (no CI): a spec passava na máquina e falhava no
+   * runner. A causa: `SYSTEM_DATABASE_URL` e `NODE_ENV` NÃO vinham da spec —
+   * vinham do `apps/api/.env` da máquina (que tem `NODE_ENV=development` e a
+   * variável), e o CI não tem esse arquivo. O `decideSobreEnv` exigia o
+   * `SYSTEM_DATABASE_URL` fora de `development` → no CI o script saía 1.
+   *
+   * A spec que depende do estado da MÁQUINA é uma spec que mede a máquina, não
+   * o código. Tudo que o script lê é declarado aqui.
+   */
+  const AMBIENTE_DA_SPEC = {
+    NODE_ENV: 'development',
+    DATABASE_URL: '',
+    SYSTEM_DATABASE_URL: 'postgresql://app_system:x@127.0.0.1:5432/db',
+    JWT_SECRET: 'segredo-de-teste-com-tamanho-suficiente-1234',
+    PORT: '',
+  };
   it('com o banco inalcançável: sai com 1 e nomeia o DIAGNÓSTICO (não um "não responde" genérico)', async () => {
     const portaDaApi = await portaLivre();
     const resultado = spawnSync('pnpm', ['exec', 'tsx', SCRIPT], {
@@ -632,8 +651,8 @@ describe('o script ambiente-local', () => {
       timeout: 60_000,
       env: {
         ...process.env,
+        ...AMBIENTE_DA_SPEC,
         DATABASE_URL: `postgresql://app_runtime:x@${HOST_SEM_ROTA}:5432/db`,
-        JWT_SECRET: 'segredo-de-teste-com-tamanho-suficiente-1234',
         PORT: String(portaDaApi),
       },
     });
@@ -661,8 +680,8 @@ describe('o script ambiente-local', () => {
       timeout: 60_000,
       env: {
         ...process.env,
+        ...AMBIENTE_DA_SPEC,
         DATABASE_URL: `postgresql://app_runtime:x@127.0.0.1:${portaDoBanco}/db`,
-        JWT_SECRET: 'segredo-de-teste-com-tamanho-suficiente-1234',
         PORT: String(portaDaApi),
       },
     });
@@ -692,6 +711,7 @@ describe('o script ambiente-local', () => {
       timeout: 60_000,
       env: {
         ...process.env,
+        ...AMBIENTE_DA_SPEC,
         DATABASE_URL: `postgresql://app_runtime:x@${HOST_SEM_ROTA}:5432/db`,
         JWT_SECRET: '',
         PORT: String(portaDaApi),
@@ -711,8 +731,8 @@ describe('o script ambiente-local', () => {
       timeout: 60_000,
       env: {
         ...process.env,
+        ...AMBIENTE_DA_SPEC,
         DATABASE_URL: `postgresql://app_runtime:x@${HOST_SEM_ROTA}:5432/db`,
-        JWT_SECRET: 'segredo-de-teste-com-tamanho-suficiente-1234',
         PORT: '99999',
       },
     });
