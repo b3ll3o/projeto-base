@@ -1,7 +1,7 @@
 ---
 name: openapi-audit
 version: 1.0
-updated: 2026-10-08
+updated: 2026-10-29
 description: "Processo determinístico de auditoria OpenAPI — re-gera spec, detecta drift DTO↔Prisma, valida cobertura de decorators Swagger, identifica breaking changes. Carregado por `openapi-contract-specialist` quando a task é de auditoria (não criação de spec). Use para scan periódico ou revisão pré-merge de contrato HTTP."
 ---
 
@@ -20,13 +20,15 @@ task:
 context:
   scope: "drift|breaking|coverage|full"
   openapi_path: "apps/api/openapi.json"
-  controllers: ["apps/api/src/modules/*/controllers/"]
+  controllers: ["apps/api/src/modules/*/infrastructure/http/"]
   dtos: ["apps/api/src/modules/*/application/dto/"]
   prisma_schema: "apps/api/prisma/schema.prisma"
   base_branch: "main"   # para diff de breaking changes
 ```
 
 ## Passo 1 — Re-gerar spec e diff
+
+> **Gate:** `skip` — re-gera a spec com o toolchain e escreve o arquivo versionado
 
 ```bash
 cd apps/api
@@ -37,6 +39,8 @@ git diff apps/api/openapi.json | head -100
 Se `openapi.json` não existe no repo (gerado on-demand): rodar e commitar antes de auditar.
 
 ## Passo 2 — Detectar drift DTO ↔ Prisma
+
+> **Gate:** `run` — compara DTO e Prisma pelo NOME do campo — é o passo que gerava falso positivo
 
 ```bash
 # 2.1 Campos em DTOs (subset tipado de Prisma esperado)
@@ -67,21 +71,38 @@ comm -23 /tmp/dto-fields.txt /tmp/prisma-fields.txt \
   | grep -vE '^(accessToken|refreshToken|expectedVersion|isDeleted|limit|nextCursor|perfilEfetivo|agora|novoEmail|novoNome|senha|nome|senhaHash)$'
 # Saída vazia = nenhum drift. Saída não vazia = campo de DTO que não existe
 # nem no Prisma nem na lista de aliases: ACHAR o porque antes de reportar.
+#
+# E o passo AFIRMA que os dois lados foram lidos: se o glob dos DTO ou o grep
+# do schema parassem de casar, a comparação viraria "nenhuma diferença" e
+# nenhum drift apareceria — o "não achei" viraria "não medi".
+if [ ! -s /tmp/dto-fields.txt ] || [ ! -s /tmp/prisma-fields.txt ]; then
+  echo "✗ um dos lados da comparação ficou vazio — o passo não mediu drift"
+fi
 ```
 
 ## Passo 3 — Cobertura de decorators Swagger
 
+> **Gate:** `run` — confere os decorators Swagger de cada controller
+
 ```bash
 # 3.1 Controllers sem @ApiTags
-grep -rn "@Controller" apps/api/src/modules/*/controllers/ -l | while read f; do
+grep -rn "@Controller" apps/api/src/modules/*/infrastructure/http/ -l | while read f; do
   grep -q "@ApiTags" "$f" || echo "✗ $f missing @ApiTags"
 done
 
 # 3.2 Endpoints sem @ApiOperation
-grep -rnE "@(Get|Post|Put|Patch|Delete)\(" apps/api/src/modules/*/controllers/ | while read line; do
+# MEDIDO em 2026-10-29: a versão anterior acusava 2 FALSOS positivos.
+# (1) `grep -rnE "@(Get|Post|...)"` casa dentro de COMENTÁRIO — o
+#     `@Get('me')` de um JSDoc @example em `current-user.decorator.ts` contava
+#     como endpoint. O decorator de verdade é o que está no INÍCIO da linha.
+# (2) a janela de 5 linhas não alcançava o `@ApiOperation` quando há um
+#     comentário longo entre o decorator da rota e o da doc (o
+#     `users.controller.ts` tem 7 linhas de comentário no meio). A janela é
+#     de -10 a +10: o `@ApiOperation` pode estar antes ou depois.
+grep -rnE "^\s*@(Get|Post|Put|Patch|Delete)\(" apps/api/src/modules/*/infrastructure/http/ | while read line; do
   file=$(echo "$line" | cut -d: -f1)
   lineno=$(echo "$line" | cut -d: -f2)
-  context=$(sed -n "${lineno},$((lineno+5))p" "$file")
+  context=$(sed -n "$((lineno-10)),$((lineno+10))p" "$file")
   if ! echo "$context" | grep -q "@ApiOperation"; then
     echo "✗ $file:$lineno missing @ApiOperation"
   fi
@@ -92,6 +113,8 @@ grep -rL "@ApiProperty" apps/api/src/modules/*/application/dto/ 2>/dev/null | he
 ```
 
 ## Passo 4 — Detectar breaking changes vs base_branch
+
+> **Gate:** `skip` — precisa da ref local `main`, que o checkout do CI não tem
 
 ```bash
 # 4.1 Mudanças em path/method/param
@@ -112,9 +135,11 @@ git diff main..HEAD -- apps/api/src/modules/ \
 
 ## Passo 5 — Validar error responses padronizados
 
+> **Gate:** `run` — lista os `throw new` e as exceptions custom
+
 ```bash
 # 5.1 Shapes de exception (esperado: NestJS built-in ou Problem Details RFC 7807)
-grep -rn "throw new " apps/api/src/modules/*/controllers/ | head -20
+grep -rn "throw new " apps/api/src/modules/*/infrastructure/http/ | head -20
 
 # 5.2 Onde estão as exceptions custom
 find apps/api/src -name "*-exception.ts" -o -name "*exception.filter.ts" 2>/dev/null

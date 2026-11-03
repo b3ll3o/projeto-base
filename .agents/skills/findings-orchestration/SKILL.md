@@ -1,7 +1,7 @@
 ---
 name: findings-orchestration
 version: 1.1
-updated: 2026-10-13
+updated: 2026-10-29
 description: "Processo de orquestração de findings — pre-flight gh auth, coleta issues abertas para dedup, despacho paralelo de 8 specialists, agregação com severity, abertura de issues via `gh` com labels canônicos, persistência de relatório. Carregado por `finding-orchestrator` (agent). Use para escaneamento semanal automatizado ou on-demand."
 ---
 
@@ -41,6 +41,8 @@ context:
 
 ## Passo 1 — Pre-flight (BLOQUEANTE)
 
+> **Gate:** `skip` — confere a autenticação do `gh` — fala com a API
+
 ```bash
 # 1.1 gh autenticado?
 gh auth status || {
@@ -60,6 +62,8 @@ test -d "$REPO/.agents/runs" || { echo "❌ não é o repo esperado (sem .agents
 Não existe script externo para isto: os dois passos são estes comandos. Os
 artefatos vão para `.agents/runs/findings-<ts>/` — dentro do repo, então
 sobrevive a sandbox e é versionável.
+
+> **Gate:** `skip` — escreve em `.agents/runs` e lê a API do GitHub
 
 ```bash
 TS=$(date -u +%Y-%m-%dT%H%M%SZ)
@@ -87,6 +91,8 @@ git log --oneline -20 > "$REPORT_DIR/stats.md"
 2026-09-23. Este passo é `create --force`, então reexecutar corrige drift sem
 duplicar. Cores e descrições abaixo foram lidas de `gh label list` em
 2026-10-13.
+
+> **Gate:** `skip` — cria labels na API do GitHub
 
 ```bash
 # agent:<specialist> — 5
@@ -192,6 +198,8 @@ descartadas.
 
 ## Passo 8 — Abrir issues via `gh`
 
+> **Gate:** `skip` — abre issues na API do GitHub
+
 ```bash
 for f in findings_to_open:
   gh issue create \
@@ -205,6 +213,8 @@ done
 
 ## Passo 9 — Comentar em duplicatas
 
+> **Gate:** `skip` — abre issues na API do GitHub
+
 ```bash
 for f in findings_duplicates:
   gh issue comment "$f.duplicate_of" --body "$f.comment_body"
@@ -212,6 +222,8 @@ done
 ```
 
 ## Passo 10 — Persistir relatório
+
+> **Gate:** `skip` — cria diretório em `.agents/runs`
 
 ```bash
 # $TS e $REPORT_DIR vêm do Passo 2 — não recalcular: dois timestamps

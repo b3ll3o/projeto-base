@@ -1,7 +1,7 @@
 ---
 name: prisma-audit
 version: 1.0
-updated: 2026-10-13
+updated: 2026-10-29
 description: "Processo determinístico de auditoria Prisma — mapeia schema/migrations/queries, valida lens DDD/H1-H6, detecta N+1, audita audit fields. Carregado por `prisma-db-specialist` quando a task é de auditoria (não criação). Use para scan periódico via `finding-orchestrator` ou revisão sob demanda."
 ---
 
@@ -26,6 +26,8 @@ context:
 
 ## Passo 1 — Mapear estado AS-IS
 
+> **Gate:** `run` — lê o schema
+
 ```bash
 # 1.1 Schema
 cat apps/api/prisma/schema.prisma
@@ -45,6 +47,8 @@ grep -E "(createdAt|updatedAt|deletedAt)" apps/api/prisma/schema.prisma
 
 ## Passo 2 — Validar lens DDD/H1-H6
 
+> **Gate:** `run` — confere as lenses H1 (domain não importa Prisma) e H2
+
 ```bash
 # H1: domain/ NÃO importa @prisma/client (boundary violation)
 grep -rn "@prisma/client" apps/api/src/modules/*/domain/ 2>/dev/null \
@@ -59,6 +63,8 @@ find apps/api/src/modules -name "*repository.ts" -o -name "*prisma-repository.ts
 ```
 
 ## Passo 3 — Detectar N+1 e missing indexes
+
+> **Gate:** `run` — procura N+1 e listagem sem paginação
 
 ```bash
 # 3.1 findMany dentro de loop sem include/select
@@ -79,6 +85,8 @@ grep -rn "findMany(" apps/api/src/modules/ | grep -v "take:" | head -20
 O diff contra o banco vivo (`migrate diff --to-schema-datasource`) e o
 `migrate status` exigem `DATABASE_URL` alcançável, e o primeiro emite DDL
 mutável dentro de um passo de leitura — os dois ficam como **opcionais**.
+
+> **Gate:** `run` — confere as migrations: vazia, colisão de timestamp, provider
 
 ```bash
 cd apps/api
@@ -103,6 +111,8 @@ grep -A 2 'datasource db' prisma/schema.prisma | grep provider
 
 **Opcionais (só com `DATABASE_URL` alcançável — nunca obrigatórios):**
 
+> **Gate:** `skip` — precisa do banco para o `prisma migrate status`
+
 ```bash
 cd apps/api
 pnpm exec prisma migrate status                                    # exige DB
@@ -118,6 +128,8 @@ pnpm exec prisma migrate diff \
 > por isso 4.1–4.3 checam integridade do diretório, não equivalência com o schema.
 
 ## Passo 5 — Auditar audit fields por model
+
+> **Gate:** `run` — confere os audit fields de cada model
 
 ```bash
 # Para cada model, checar createdAt/updatedAt/deletedAt

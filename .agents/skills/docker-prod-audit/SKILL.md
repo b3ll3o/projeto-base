@@ -1,7 +1,7 @@
 ---
 name: docker-prod-audit
 version: 1.0
-updated: 2026-10-08
+updated: 2026-10-29
 description: "Processo determinístico de auditoria prod-readiness de containers — valida hardening runtime, multi-stage, healthchecks, secrets, image pinning, signal handling. Carregado por `docker-prod-specialist` quando a task é de auditoria (não escrita) de Dockerfiles/Compose."
 ---
 
@@ -27,6 +27,8 @@ context:
 
 ## Passo 1 — Validar build local
 
+> **Gate:** `skip` — builda as imagens prod — minutos de CI
+
 ```bash
 # Skip se Docker não disponível (marcar "skipped (no docker)" no findings)
 docker buildx build -f apps/api/Dockerfile --target prod -t api:audit --load . 2>&1 | tail -20
@@ -34,6 +36,8 @@ docker buildx build -f apps/web/Dockerfile --target prod -t web:audit --load . 2
 ```
 
 ## Passo 2 — Auditar hardening runtime (Compose)
+
+> **Gate:** `skip` — precisa de `yq`, que não está instalado no CI (o passo mede nada sem ele)
 
 ```bash
 # Esperado em todo serviço prod: user non-root, read_only, cap_drop, security_opt
@@ -46,6 +50,8 @@ done
 ```
 
 ## Passo 3 — Validar pinning de imagem
+
+> **Gate:** `run` — confere as imagens declaradas
 
 ```bash
 # 3.1 Sem :latest
@@ -62,6 +68,8 @@ grep -E "image: [a-z0-9/:.-]+:[a-zA-Z0-9_.-]+$" docker-compose.yml | head -10
 
 ## Passo 4 — Auditar healthchecks prod
 
+> **Gate:** `run` — confere os healthchecks
+
 ```bash
 # 4.1 Healthchecks em todos os serviços
 grep -A 6 "healthcheck:" docker-compose.yml
@@ -76,6 +84,8 @@ grep -B 1 "curl\|wget" docker-compose.yml
 
 ## Passo 5 — Validar signal handling
 
+> **Gate:** `run` — confere o init do container
+
 ```bash
 # Init no PID 1 (dumb-init, tini, ou node --init)
 grep -E "tini|dumb-init|init: " docker-compose.yml apps/*/Dockerfile
@@ -84,17 +94,31 @@ grep -E "tini|dumb-init|init: " docker-compose.yml apps/*/Dockerfile
 
 ## Passo 6 — Auditar .dockerignore
 
+> **Gate:** `run` — confere o `.dockerignore`
+
 ```bash
 # 6.1 Listar exclusões
 cat .dockerignore | sort
 
 # 6.2 Crítico: .git, node_modules (de apps que não são alvo), .env*, coverage/, .agents/runs/
+# MEDIDO em 2026-10-29: a versão anterior exigia o padrão no INÍCIO da linha
+# (`grep -q "^$pattern"`) e o `.dockerignore` usa o prefixo `**/` — que é
+# mais agressivo, e o certo. O passo acusava 4 exclusões que existem. E
+# `.agents/runs/` é coberto pela exclusão do diretório pai (`.agents`), que
+# é o que o build context precisa.
 for pattern in ".git" "node_modules" ".env" "coverage/" ".agents/runs/"; do
-  grep -q "^$pattern" .dockerignore && echo "✓ exclui $pattern" || echo "✗ NÃO exclui $pattern"
+  base="${pattern%%/*}"
+  if grep -qE "^(\*\*/)?${base}(/|$)" .dockerignore; then
+    echo "✓ exclui $pattern"
+  else
+    echo "✗ NÃO exclui $pattern"
+  fi
 done
 ```
 
 ## Passo 7 — Auditar secrets management
+
+> **Gate:** `run` — procura segredo exposto no compose
 
 ```bash
 # 7.1 Hardcoded secrets em environment (CRITICAL)
@@ -108,6 +132,8 @@ grep -A 3 "secrets:" docker-compose.yml | head -20
 ```
 
 ## Passo 8 — Auditar restart policy
+
+> **Gate:** `run` — confere a política de restart
 
 ```bash
 # 8.1 Em dev: unless-stopped é OK; em prod: orchestrator decide (omitir)

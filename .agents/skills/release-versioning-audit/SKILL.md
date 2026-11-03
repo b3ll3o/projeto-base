@@ -1,7 +1,7 @@
 ---
 name: release-versioning-audit
 version: 1.0
-updated: 2026-10-08
+updated: 2026-10-29
 description: "Processo determinístico de auditoria de versionamento semântico — extrai versões dos 3 docs canônicos, detecta drift, classifica commits (Conventional Commits), valida workflow release-template, verifica CHANGELOG. Carregado por `release-versioning-specialist` quando a task é de auditoria (não bump)."
 ---
 
@@ -29,6 +29,8 @@ context:
 
 ## Passo 1 — Extrair versão declarada em cada doc canônico
 
+> **Gate:** `run` — lê os footers de versão; nada de rede nem de escrita
+
 ```bash
 for f in docs/MONOREPO.md docs/STACK.md .agents/specs/conventions/estrutura-e-versionamento.md; do
   echo "=== $f ==="
@@ -38,6 +40,8 @@ done
 ```
 
 ## Passo 2 — Listar tags e diff vs última tag
+
+> **Gate:** `skip` — faz `git fetch --tags` — precisa de rede
 
 ```bash
 git fetch --tags
@@ -51,6 +55,8 @@ git log "${LAST_TAG}..HEAD" --oneline | head -30
 ```
 
 ## Passo 3 — Classificar commits (Conventional Commits)
+
+> **Gate:** `skip` — depende de `$LAST_TAG`, que vem do passo que precisa de rede
 
 ```bash
 # 3.1 BREAKING CHANGEs (vai para major)
@@ -72,13 +78,22 @@ git log "${LAST_TAG}..HEAD" --pretty=format:"%s" \
 
 ## Passo 4 — Validar workflow release-template
 
+> **Gate:** `run` — confere a regex que o `release-template.yml` usa — é o passo que estava morto
+
 ```bash
 # 4.1 O workflow lê regex específico do MONOREPO.md
 # MEDIDO em 2026-10-29: a regex anterior ("Vers..o") NÃO casa com "Versão" —
 # entre "Vers" e "o" há UM caractere (o "ã") e a regex pedia DOIS. O passo
 # saía vazio: ele não mediava o que o workflow lê. Esta é a mesma regex do
 # `release-template.yml` (verificado):
-grep -oE '\*\*Versão do documento:\*\* [0-9]+\.[0-9]+\.[0-9]+' docs/MONOREPO.md | head -3
+# O passo AFIRMA que a regex casou: uma regex que não casa sai vazia, e
+# "vazio" é indistinguível de "mediu e não achou" — foi exatamente assim que
+# o defeito do F3 passou semanas sem ninguém ver.
+MATCH=$(grep -oE '\*\*Versão do documento:\*\* [0-9]+\.[0-9]+\.[0-9]+' docs/MONOREPO.md | head -3)
+if [ -z "$MATCH" ]; then
+  echo "✗ a regex do release-template.yml NÃO casou com o footer de docs/MONOREPO.md"
+fi
+echo "$MATCH"
 
 # 4.2 Workflow usa tail -1 (último match) — então múltiplas menções em MONOREPO podem dar match errado
 grep -cE "\*\*Vers[aã]o" docs/MONOREPO.md
@@ -90,6 +105,8 @@ grep -E "concurrency:" .github/workflows/release-template.yml
 ```
 
 ## Passo 5 — Verificar CHANGELOG
+
+> **Gate:** `run` — confere se existe CHANGELOG ou changesets
 
 ```bash
 # 5.1 Existe?
@@ -108,6 +125,8 @@ fi
 
 ## Passo 6 — Validar pre-release constraint
 
+> **Gate:** `run` — confere os SEIS footers e a direção contra a última tag
+
 ```bash
 # Antes de tag, docs devem estar consistentes:
 # - Footer de versão único (não duplicado)
@@ -121,6 +140,11 @@ fi
 # (2) Comparar a doc com a tag acusa DRIFT no estado NORMAL: antes do release a
 #     doc está sempre à frente da tag. E o passo só olhava 1 dos 6 arquivos —
 #     o `AGENTS.md` já tinha divergido para 1.13.0 sem este passo ver.
+#
+# A tag é resolvida AQUI (sem `git fetch`): o passo precisa ser autossuficiente
+# para o gate poder rodá-lo sozinho, e o CI já faz checkout com
+# `fetch-depth: 0` — as tags estão lá.
+LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
 VERSIONS=$(for f in docs/MONOREPO.md docs/STACK.md docs/TEMPLATE_USAGE.md \
                 .agents/specs/conventions/estrutura-e-versionamento.md \
                 AGENTS.md README.md; do
