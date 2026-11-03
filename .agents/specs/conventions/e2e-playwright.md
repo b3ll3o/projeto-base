@@ -96,8 +96,9 @@ um silêncio.
 | F15 | `/admin/profiles/[slug]` | Edição dos metadados do perfil | `f15-admin-editar-perfil.spec.ts` | admin renomeia e descreve e **o banco é lido** (o `value` do input não prova gravação) · perfil `isAdmin`: somente leitura, sem formulário |
 | F16 | `/empresa/nova` → `/users` ↔ `/convite/[token]` → `/users/novo` → `/login` → `/users` | Onboarding de empresa | `f16-onboarding-empresa.spec.ts` | conta própria sem empresa é levada a criar uma · a empresa criada dá à pessoa o perfil de DONO · quem entra por convite entra NA empresa que convidou · o admin de SISTEMA não é levado a criar empresa |
 | F17 | `/admin/tenancy` | Inventário de empresas e usuários (admin) | `f17-admin-tenancy.spec.ts` | admin vê a empresa, o slug e o membro · admin vê o usuário e a empresa a que ele pertence · quase-admin recusa e não vê nome/e-mail |
+| F18 | `/login` | Cabeçalhos de segurança: CSP com nonce por requisição (o nonce do header é o dos scripts), `nosniff`, `X-Frame-Options`, HSTS, sem `X-Powered-By`, e o `Referrer-Policy` da rota do token | `f18-cabecalhos-de-seguranca.spec.ts` |
 
-⚠️ **13 rotas, 17 fluxos.** F2–F5 são quatro estados **da mesma** rota, e F6
+⚠️ **13 rotas, 18 fluxos.** F2–F5 são quatro estados **da mesma** rota, e F6
 atravessa três. F7–F8 são os fluxos que a demanda `login-usuario-senha`
 acrescentou: o login e a rota protegida sem sessão. F9–F12 são as quatro telas
 `/admin/*` do RBAC (#97), e cada uma tem um teste que é o **negativo** do
