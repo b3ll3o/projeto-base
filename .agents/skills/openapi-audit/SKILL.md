@@ -97,7 +97,12 @@ done
 grep -rnE "^\s*@(Get|Post|Put|Patch|Delete)\(" apps/api/src/modules/*/infrastructure/http/ | while read line; do
   file=$(echo "$line" | cut -d: -f1)
   lineno=$(echo "$line" | cut -d: -f2)
-  context=$(sed -n "$((lineno-10)),$((lineno+10))p" "$file")
+  # A janela começa em 1, nunca em zero: um decorator de rota nas 10 primeiras
+  # linhas do arquivo faria `sed -n "-7,13p"` — e o sed lê "-7" como opção e
+  # falha (MEDIDO em 2026-10-29: "sed: invalid option -- '7'"), o que esvaziaria
+  # o contexto e acusaria um "@ApiOperation" faltando que existe.
+  ini=$(( lineno > 10 ? lineno - 10 : 1 ))
+  context=$(sed -n "${ini},$((lineno+10))p" "$file")
   if ! echo "$context" | grep -q "@ApiOperation"; then
     echo "✗ $file:$lineno missing @ApiOperation"
   fi
