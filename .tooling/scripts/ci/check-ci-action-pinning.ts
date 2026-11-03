@@ -81,6 +81,22 @@ export function checkCiActionPinning(opts: { repoRoot: string }): CheckResult {
       // Action local (`uses: ./...`) não vem de fora — isento.
       if (site.uses.startsWith('./') || site.uses.startsWith('../')) continue;
       total++;
+      // `uses: docker://imagem:tag` não é uma action — é uma imagem. A
+      // regra dela é outra: digesta, não tag. (MEDIDO em 2026-11-03: o repo
+      // não usa essa forma hoje; a mensagem genérica de "SHA" seria enganosa.)
+      if (site.uses.startsWith('docker://')) {
+        // A `ref` é o que vem DEPOIS do `@` — então o digest é `sha256:...`,
+        // sem o `@` (que o `refDe` já comeu).
+        const ref = refDe(site.uses);
+        if (ref === null || !ref.startsWith('sha256:')) {
+          errors.push(
+            `${site.arquivo}:${site.linha}: \`${site.uses}\` é uma imagem por tag — ` +
+              `pinne por digest (\`docker://imagem@sha256:...\`). ` +
+              `Tag de imagem é ponteiro mutável, igual tag de action.`,
+          );
+        }
+        continue;
+      }
       const ref = refDe(site.uses);
       if (ref === null) {
         errors.push(

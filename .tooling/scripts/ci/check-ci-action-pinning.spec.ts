@@ -65,6 +65,22 @@ describe('o gate', () => {
     expect(r.ok).toBe(false);
   });
 
+  it('FALHA quando a imagem `docker://` está por TAG (a regra dela é digest)', () => {
+    // `uses: docker://imagem:tag` não é uma action — a mutação de tag vale
+    // igual: quem controla a imagem move a tag.
+    const root = repoCom({ 'ci.yml': '      - uses: docker://alpine:3.19\n' });
+    const r = checkCiActionPinning({ repoRoot: root });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toMatch(/pinne por digest/);
+  });
+
+  it('PASSA quando a imagem `docker://` está por digest', () => {
+    const digest = 'a' + 'b'.repeat(63);
+    const root = repoCom({ 'ci.yml': `      - uses: docker://alpine@sha256:${digest}\n` });
+    const r = checkCiActionPinning({ repoRoot: root });
+    expect(r.ok).toBe(true);
+  });
+
   it('FALHA quando o `uses:` não tem @ref', () => {
     const root = repoCom({ 'ci.yml': '      - uses: actions/checkout\n' });
     const r = checkCiActionPinning({ repoRoot: root });
