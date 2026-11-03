@@ -1,10 +1,15 @@
-# graphify reference: add a URL and watch a folder
+# `add` (uma URL no corpus) e `--watch` (reconstrução automática)
 
-Load this when the user ran `/graphify add <url>` or passed `--watch`. Neither is part of the default build.
+> Adaptado de [safishamsi/graphify](https://github.com/safishamsi/graphify) (MIT).
+> Os blocos são **do upstream, verbatim**; a prosa que o agent precisa entender
+> é esta.
 
-## For /graphify add
+Carregue esta referência quando o usuário rodou `/graphify add <url>` ou passou
+`--watch`. **Nenhum dos dois faz parte do build padrão.**
 
-Fetch a URL and add it to the corpus, then update the graph.
+## Para `/graphify add`
+
+Busca uma URL e a acrescenta ao corpus, depois atualiza o grafo.
 
 ```bash
 $(cat graphify-out/.graphify_python) -c "
@@ -23,34 +28,55 @@ except RuntimeError as e:
     sys.exit(1)
 "
 ```
+```
 
-Replace `URL` with the actual URL, `AUTHOR` with the user's name if provided, `CONTRIBUTOR` likewise. If the command exits with an error, tell the user what went wrong - do not silently continue. After a successful save, automatically run the `--update` pipeline on `./raw` to merge the new file into the existing graph.
+Substitua `URL` pela URL real, `AUTHOR` pelo nome do usuário (se tiver sido
+dado) e `CONTRIBUTOR` pelo mesmo. Se o comando sair com erro, **diga ao usuário
+o que deu errado** — não siga em silêncio. Depois de salvar com sucesso, rode
+automaticamente o pipeline `--update` em `./raw` para fundir o arquivo novo no
+grafo existente.
 
-Supported URL types (auto-detected):
-- YouTube / any video URL → audio downloaded via yt-dlp, transcribed to `.txt` on next run (requires `pip install 'graphifyy[video]'`)
-- Twitter/X → fetched via oEmbed, saved as `.md` with tweet text and author
-- arXiv → abstract + metadata saved as `.md`
-- PDF → downloaded as `.pdf`
-- Images (.png/.jpg/.webp) → downloaded, Claude vision extracts on next run
-- Any webpage → converted to markdown via html2text
+Tipos de URL suportados (detectados sozinhos):
+
+- YouTube / qualquer URL de vídeo → o áudio é baixado pelo yt-dlp e
+  transcrito para `.txt` na próxima execução (precisa de
+  `pip install 'graphifyy[video]'`)
+- Twitter/X → buscado via oEmbed, salvo como `.md` com o texto e o autor
+- arXiv → resumo + metadados salvos como `.md`
+- PDF → baixado como `.pdf`
+- Imagens (.png/.jpg/.webp) → baixadas; a visão do Claude extrai na próxima
+  execução
+- Qualquer página web → convertida para markdown via html2text
 
 ---
 
-## For --watch
+## Para `--watch`
 
-Start a background watcher that monitors a folder and auto-updates the graph when files change.
+Sobe um watcher em segundo plano que monitora uma pasta e atualiza o grafo
+sozinho quando os arquivos mudam.
 
 ```bash
 $(cat graphify-out/.graphify_python) -m graphify.watch "$(cat graphify-out/.graphify_root)" --debounce 3
 ```
+```
 
-This watches the same folder graphify extracted, read from the trusted `graphify-out/.graphify_root` that Step 1 resolved - there is no path to substitute, so a scan root containing shell metacharacters can never be re-interpreted here. Behavior depends on what changed:
+O watcher observa **a mesma pasta** que o graphify extraiu, lida do
+`graphify-out/.graphify_root` confiado que o passo 1 resolveu — não há caminho
+para substituir, então uma raiz de varredura com metacaracteres de shell nunca
+é reinterpretada aqui. O comportamento depende do que mudou:
 
-- **Code files only (.py, .ts, .go, etc.):** re-runs AST extraction + rebuild + cluster immediately, no LLM needed. `graph.json` and `GRAPH_REPORT.md` are updated automatically.
-- **Docs, papers, or images:** writes a `graphify-out/needs_update` flag and prints a notification to run `/graphify --update` (LLM semantic re-extraction required).
+- **Só arquivos de código (.py, .ts, .go, etc.):** refaz a extração AST +
+  reconstrução + agrupamento na hora, **sem LLM**. O `graph.json` e o
+  `GRAPH_REPORT.md` são atualizados sozinhos.
+- **Docs, papers ou imagens:** grava a flag `graphify-out/needs_update` e
+  imprime um aviso para rodar `/graphify --update` (a reextração semântica
+  exige LLM).
 
-Debounce (default 3s): waits until file activity stops before triggering, so a wave of parallel agent writes doesn't trigger a rebuild per file.
+O **debounce** (3 s por padrão) espera a atividade de arquivo cessar antes de
+disparar, para que uma leva de escritas paralelas de agents não dispare uma
+reconstrução por arquivo.
 
-Press Ctrl+C to stop.
+`Ctrl+C` para parar.
 
-For agentic workflows: run `--watch` in a background terminal. Code changes from agent waves are picked up automatically between waves. If agents are also writing docs or notes, you'll need a manual `/graphify --update` after those waves.
+Para fluxos agentic: rode `--watch` num terminal em segundo plano. As mudanças
+de código vindas de ondas de agents entram sozinhas entre as ondas.

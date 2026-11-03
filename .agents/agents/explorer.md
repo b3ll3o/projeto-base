@@ -125,6 +125,18 @@ result:
 | `refactorer` | Usa mapeamento para identificar débitos técnicos |
 | `doc-writer` | Usa mapeamento para gerar documentação estruturada |
 
+## Skills
+
+| Skill | Quando | O que traz que o agent não traz |
+|-------|--------|--------------------------------|
+| [`graphify`](../skills/graphify/SKILL.md) | a pergunta é sobre a **estrutura** (o que se conecta com o quê) e o `graphify-out/` já existe, ou o mapa precisa ser construído antes | o grafo de conhecimento: comunidades, god nodes, travessia BFS/DFS, e as regras de honestidade do grafo |
+
+> **O grafo é um upgrade opcional.** A CLI do `graphify` é externa e pode não
+> estar instalada — nesse caso, responda com grep/read como sempre. E o grafo é
+> um **snapshot**: ele envelhece quando o código muda.
+
+---
+
 ## Princípios
 
 1. **Read-only sempre.** Nunca modificar arquivos. Se precisar, despachar outro agent.

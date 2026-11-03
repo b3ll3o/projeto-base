@@ -1,16 +1,23 @@
-# graphify reference: GitHub clone and cross-repo merge
+> Adaptado de [safishamsi/graphify](https://github.com/safishamsi/graphify) (MIT).
+> Os blocos são **do upstream, verbatim**; a prosa que o agent precisa entender
+> é esta.
 
-Load this when the user passed one or more `https://github.com/...` URLs, or named several local subfolders to merge into one graph.
+# Clonar do GitHub e fundir grafos de repositórios diferentes
 
-### Step 0 - Clone GitHub repo(s) (only if a GitHub URL was given)
+Carregue esta referência quando o usuário passou uma ou mais URLs
+`https://github.com/...`, ou nomeou várias subpastas locais para fundir em um
+mesmo grafo.
 
-**Single repo:**
+## Passo 0 — clonar o(s) repositório(s) do GitHub (só se houve URL do GitHub)
+
+**Um repositório:**
+
 ```bash
 LOCAL_PATH=$(graphify clone <github-url> [--branch <branch>])
 # Use LOCAL_PATH as the target for all subsequent steps
-```
 
-**Multiple repos (cross-repo graph):**
+**Vários repositórios (grafo entre repositórios):**
+
 ```bash
 # Clone each repo, run the full pipeline on each, then merge
 graphify clone <url1>   # → ~/.graphify/repos/<owner1>/<repo1>
@@ -21,13 +28,12 @@ graphify merge-graphs \
   ~/.graphify/repos/<owner1>/<repo1>/graphify-out/graph.json \
   ~/.graphify/repos/<owner2>/<repo2>/graphify-out/graph.json \
   --out graphify-out/cross-repo-graph.json
-```
 
-Graphify clones into `~/.graphify/repos/<owner>/<repo>` and reuses existing clones on repeat runs. Each node in the merged graph carries a `repo` attribute so you can filter by origin.
+O graphify clona em `~/.graphify/repos/<owner>/<repo>` e reaproveita os clones
+existentes em execuções repetidas. Cada nó do grafo fundido carrega um atributo
+`repo` que diz de qual repositório veio.
 
-**Multiple local subfolders (monorepo or multi-service layout):**
-
-The skill pipeline writes all intermediate and final outputs to `graphify-out/` in the current working directory. Running the skill on each subfolder separately will clobber the same output dir. Instead, use the CLI directly for each subfolder — it places `graphify-out/` *inside* the scanned path:
+**Várias subpastas locais (layout de monorepo ou multi-serviço):**
 
 ```bash
 graphify extract ./core/     # → ./core/graphify-out/graph.json
@@ -41,6 +47,11 @@ graphify merge-graphs \
   ./service/graphify-out/graph.json \
   ./platform/graphify-out/graph.json \
   --out graphify-out/graph.json
-```
 
-Once `graphify-out/graph.json` exists, the fast path above takes over: any codebase question runs `graphify query` directly on the merged graph — no re-extraction, no size gate.
+O pipeline da skill escreve todas as saídas intermediárias e finais em
+`graphify-out/`, no diretório de trabalho atual. Rodar a skill em cada subpasta
+e fundir é a alternativa — mas o caminho rápido abaixo assume **um** grafo.
+
+Depois que `graphify-out/graph.json` existe, o caminho rápido assume: qualquer
+pergunta sobre o codebase roda `graphify query` direto no grafo fundido — sem
+reconstruir.

@@ -57,8 +57,11 @@ describe('categoriaDe', () => {
     expect(categoriaDe('.agents/runs/memory-triage.md')?.nome).toBe('artefato-de-execucao');
   });
 
-  it('a skill de terceiro é vendor', () => {
-    expect(categoriaDe('.agents/skills/graphify/SKILL.md')?.nome).toBe('vendor');
+  it('a skill adaptada de terceiro NAO está fora do escopo (o teto a mede)', () => {
+    // MEDIDO em 2026-10-29: enquanto a skill era "versionada como está", ela
+    // tinha uma categoria própria (`vendor`). Adaptada, ela cabe no teto — e
+    // uma exceção que não tem motivo é uma exceção que encolhe sozinha.
+    expect(categoriaDe('.agents/skills/graphify/SKILL.md')).toBeNull();
   });
 
   it('a documentação VIVA não cai em categoria nenhuma', () => {

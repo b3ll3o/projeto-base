@@ -22,7 +22,11 @@ cada uma com um critério verificável (e não uma lista de paths que apodrece):
 |---|---|---|
 | `registro-datado` | `docs/superpowers/**` | plano ou spec de uma demanda **já executada**. Editar ou dividir falsearia o registro do que foi decidido na data em que foi decidido. |
 | `artefato-de-execucao` | `.agents/runs/**` | snapshot e ledger de execução: são o **registro datado** de uma execução. O `check-memory-crystallization` lê a tabela do ledger **como uma unidade** — dividir a tabela quebraria o consumidor. |
-| `vendor` | `.agents/skills/graphify/**` | skill de ferramenta externa, versionada como está. |
+
+> **A categoria `vendor` saiu em 2026-10-29.** A skill `graphify` foi
+> adaptada (pt-BR, ≤300 linhas por arquivo, com o código do upstream
+> verbatim dentro das `references/`) e passou a caber no teto — a exceção
+> existia enquanto ela era "versionada como está".
 
 **O instrumento:** o gate [`check-doc-size`](../../../.tooling/scripts/ci/check-doc-size.ts)
 mede o teto sobre **todo `.md` versionado** fora dessas categorias. As

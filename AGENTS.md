@@ -130,12 +130,11 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 | **release-versioning-specialist** | [`.agents/agents/release-versioning-specialist.md`](./.agents/agents/release-versioning-specialist.md) | [memory](./.agents/memory/release-versioning-specialist.md) | Drift entre docs canônicos, Conventional Commits, semver, workflow release-template | Pré-tag, bump de versão, diagnóstico de release-template |
 | **finding-orchestrator** | [`.agents/agents/finding-orchestrator.md`](./.agents/agents/finding-orchestrator.md) | [memory](./.agents/memory/finding-orchestrator.md) | Dispara specialists em paralelo, agrega findings, dedup contra issues abertas, abre issues via `gh` | Cron semanal (sextas 02:00 UTC), pré-tag, on-demand do user |
 
-> **Stack vs. auditoria:** stack specialists (nestjs, nextjs, docker, monorepo,
-> telemetry, multi-tenant, ux-design) **criam** código novo e são despachados antes
-> de implementar; auditoria specialists (prisma-db, openapi-contract, otelcol-infra,
-> docker-prod, release-versioning) **revisam** o existente, disparados pelo
-> `finding-orchestrator` ou sob demanda. `docker-prod-specialist` (hardening) e
-> `docker-specialist` (autoral) coexistem — o orchestrator dispara os dois.
+> **Stack vs. auditoria:** stack specialists **criam** código/configuração nova e são
+> despachados antes de implementar; auditoria specialists **revisam** o existente,
+> disparados pelo `finding-orchestrator` ou sob demanda. `docker-prod-specialist`
+> (hardening) e `docker-specialist` (autoral) coexistem — o orchestrator dispara
+> os dois quando o escopo é amplo.
 >
 > **Skills de auditoria (1:1):** cada specialist de auditoria carrega uma skill de
 > processo determinístico (`.agents/skills/<name>-audit/SKILL.md`) — `prisma-audit`,
@@ -148,10 +147,8 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 > **Skills de UI (única relação 1:N do repo, v1.11.0+):** o `ux-design-specialist`
 > carrega **5** skills, nesta ordem — `ui-review` (processo) → `ui-modes` (decide o
 > propósito da tela) → `ui-craft` (tokens, estados, anti-slop) → `ui-break` (pior caso)
-> → `motion` (movimento). Adapted de [emilkowalski/skills](https://github.com/emilkowalski/skills)
-> (MIT), [pbakaus/impeccable](https://github.com/pbakaus/impeccable) (Apache-2.0) e
-> [leonxlnx/taste-skill](https://github.com/leonxlnx/taste-skill) (MIT). `ui-modes`
-> roda primeiro porque sem ele as outras discordam entre si.
+> → `motion` (movimento). `ui-modes` roda primeiro porque sem ele as outras
+> discordam entre si. Adapted de [emilkowalski/skills](https://github.com/emilkowalski/skills) (MIT), [pbakaus/impeccable](https://github.com/pbakaus/impeccable) (Apache-2.0) e [leonxlnx/taste-skill](https://github.com/leonxlnx/taste-skill) (MIT).
 
 > **Par DURANTE → DEPOIS:** [`learning-observation`](./.agents/skills/learning-observation/SKILL.md)
 > classifica em T1/T2/T3 e exige o comando que mediu, no checkpoint de review+fix;
@@ -163,6 +160,9 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 > procura a skill mais adequada a cada situação: a ordem é **repo → registro → fazer na mão**,
 > a auditoria antes de instalar é obrigatória e a adaptação ao padrão do repo é o último passo.
 > De [vercel-labs/skills](https://github.com/vercel-labs/skills) (MIT).
+
+> **Skills de grafo (v1.16.0+):** [`graphify`](./.agents/skills/graphify/SKILL.md) — o
+> `explorer` consulta o grafo de conhecimento quando a pergunta é sobre a estrutura do código.
 
 > **State-Aware Planning (camada 0 do pre-planner, a partir de v1.8.0):** convenção
 > [`.agents/specs/conventions/state-aware-planning.md`](./.agents/specs/conventions/state-aware-planning.md)
@@ -296,5 +296,5 @@ Quando seguido corretamente, este padrão garante:
 
 **Mantido por:** projeto-base contributors
 **Licença:** MIT
-**Versão do documento:** 1.15.2
+**Versão do documento:** 1.16.0
 **Status:** Estável

@@ -20,7 +20,12 @@
  * |----------------------|-----------------------------|----------------------------|
  * | `registro-datado`    | `docs/superpowers/**`       | plano/spec de demanda já executada |
  * | `artefato-de-execucao`| `.agents/runs/**`           | snapshot/ledger lido por gate como unidade |
- * | `vendor`             | `.agents/skills/graphify/**`| skill de ferramenta externa |
+ *
+ * A categoria `vendor` (`.agents/skills/graphify/**`) **saiu em 2026-10-29**:
+ * a skill foi adaptada (pt-BR, ≤300 linhas por arquivo, com o código do
+ * upstream verbatim nas references) e passou a caber no teto. A exceção
+ * existia enquanto a skill era "versionada como está" — adaptada, ela é
+ * medida como qualquer outra.
  *
  * **O que este gate NÃO mede:**
  * - **A qualidade da prosa** — "claro" não é propriedade mecânica.
@@ -71,11 +76,6 @@ export const CATEGORIAS_FORA_DO_ESCOPO: Categoria[] = [
     razao:
       'Snapshot e ledger de execução. O `check-memory-crystallization` lê o ' +
       'ledger como uma unidade — dividir a tabela quebraria o consumidor.',
-  },
-  {
-    nome: 'vendor',
-    globs: ['.agents/skills/graphify/**'],
-    razao: 'Skill de ferramenta externa, versionada como está.',
   },
 ];
 
