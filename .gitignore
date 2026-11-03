@@ -17,6 +17,13 @@ coverage/
 # doc-sync) via --out-file. Padrão `*-report.json` casa `stack-review-report.json`
 # e `doc-sync-report.json`; CI faz upload-artifact em vez de commit.
 *-report.json
+# MEDIDO 2026-11-03: o `findings-orchestration` (do #129) escreve em
+# `.agents/runs/findings-<timestamp>/` a cada execucao do preflight. O
+# `.agents/runs/` guarda, por convencao, registros datados que sao versionados
+# de proposito — mas essa pasta e saida de maquina. Sem esta regra, `git status`
+# mostrava `?? .agents/runs/findings-.../` e o proximo `git add -A` commitaria
+# o artefato.
+.agents/runs/findings-*/
 .env
 .env.local
 .env.*.local
