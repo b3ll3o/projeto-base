@@ -113,8 +113,17 @@ export const PRIMITIVAS_PROIBIDAS: readonly { padrao: RegExp; motivo: string }[]
   { padrao: /\bgit\s+(fetch|push|commit|reset|checkout|clean|apply|am)\b/, motivo: 'mexe no git' },
 ];
 
-/** O cabeçalho de declaração de um bloco: `> **Gate:** \`run\` — motivo`. */
-const MARCADOR_DECLARACAO = /^>\s*\*\*Gate:\*\*\s*`(run|skip)`\s*—\s*(.+)$/;
+/**
+ * A declaração de um bloco: `[gate: run — motivo]`.
+ *
+ * MEDIDO em 2026-10-29: a declaração mora **dentro** do bloco (no comentário
+ * da primeira linha), não numa linha antes dele. A linha antes custava 2
+ * linhas por bloco (a declaração + a vazia) e estourou o teto de 300 linhas
+ * de `findings-orchestration` (298 → 310). Dentro do bloco, o custo é zero:
+ * a declaração fica onde o comando está, e o bloco continua sendo o que
+ * o agente lê.
+ */
+const MARCADOR_DECLARACAO = /\[gate:\s*(run|skip)\s*—\s*([^\]]+)\]/;
 
 /**
  * Extrai os blocos `bash` de um SKILL.md e a declaração de cada um.
@@ -130,22 +139,15 @@ export function extrairBlocos(md: string, skill: string): Bloco[] {
   for (let i = 0; i < linhas.length; i++) {
     if (linhas[i]!.trim() !== '```bash') continue;
 
-    // A declaração: a linha anterior que casa com o marcador.
-    let declaracao: Declaracao | null = null;
-    let motivo = '';
-    for (let j = i - 1; j >= 0 && j >= i - 3; j--) {
-      const m = MARCADOR_DECLARACAO.exec(linhas[j]!.trim());
-      if (m !== null) {
-        declaracao = m[1] as Declaracao;
-        motivo = (m[2] ?? '').trim();
-        break;
-      }
-    }
-
     // O corpo: até o ``` de fecha.
     const corpo: string[] = [];
     let k = i + 1;
     for (; k < linhas.length && linhas[k]!.trim() !== '```'; k++) corpo.push(linhas[k]!);
+
+    // A declaração mora dentro do bloco.
+    const m = MARCADOR_DECLARACAO.exec(corpo.join('\n'));
+    const declaracao: Declaracao | null = m === null ? null : (m[1] as Declaracao);
+    const motivo = m === null ? '' : (m[2] ?? '').trim();
 
     blocos.push({
       skill,

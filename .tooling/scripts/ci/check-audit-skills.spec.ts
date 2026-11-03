@@ -53,9 +53,8 @@ describe('extrairBlocos()', () => {
     const md = [
       '# Skill',
       '',
-      '> **Gate:** `run` — lê o schema',
-      '',
       '```bash',
+      '# le o schema [gate: run — lê o schema]',
       'cat schema.prisma',
       '```',
       '',
@@ -70,7 +69,8 @@ describe('extrairBlocos()', () => {
     expect(blocos.length).toBe(1);
     expect(blocos[0]!.declaracao).toBe('run');
     expect(blocos[0]!.motivo).toBe('lê o schema');
-    expect(blocos[0]!.corpo).toBe('cat schema.prisma');
+    expect(blocos[0]!.corpo).toContain('cat schema.prisma');
+    expect(blocos[0]!.corpo).toContain('[gate: run');
   });
 
   it('um bloco sem declaração vem com declaracao null (e o gate trata como erro)', () => {
@@ -80,7 +80,7 @@ describe('extrairBlocos()', () => {
   });
 
   it('a declaração `skip` guarda o motivo', () => {
-    const md = ['> **Gate:** `skip` — precisa de rede', '', '```bash', 'curl x', '```'].join('\n');
+    const md = ['```bash', '# curl x [gate: skip — precisa de rede]', 'curl x', '```'].join('\n');
     const blocos = extrairBlocos(md, 'x');
     expect(blocos[0]!.declaracao).toBe('skip');
     expect(blocos[0]!.motivo).toBe('precisa de rede');
@@ -147,7 +147,9 @@ describe('o gate, sobre um repo sintético', () => {
     for (const skill of SKILLS_DE_AUDITORIA) {
       skills[skill] =
         declaracao === undefined
-          ? ['> **Gate:** `run` — mede o arquivo', '', '```bash', 'echo medida', '```'].join('\n')
+          ? ['```bash', '# mede o arquivo [gate: run — mede o arquivo]', 'echo medida', '```'].join(
+              '\n',
+            )
           : [declaracao, '', '```bash', 'echo medida', '```'].join('\n');
     }
     return repoCom(skills);
@@ -184,9 +186,12 @@ describe('o gate, sobre um repo sintético', () => {
       const arquivo = join(root, '.agents/skills/prisma-audit/SKILL.md');
       writeFileSync(
         arquivo,
-        ['> **Gate:** `run` — mede o arquivo', '', '```bash', 'echo x > saida.txt', '```'].join(
-          '\n',
-        ),
+        [
+          '```bash',
+          '# mede o arquivo [gate: run — mede o arquivo]',
+          'echo x > saida.txt',
+          '```',
+        ].join('\n'),
       );
       const r = checkAuditSkills({ repoRoot: root });
       expect(r.ok).toBe(false);
@@ -202,9 +207,12 @@ describe('o gate, sobre um repo sintético', () => {
       const arquivo = join(root, '.agents/skills/prisma-audit/SKILL.md');
       writeFileSync(
         arquivo,
-        ['> **Gate:** `run` — mede o arquivo', '', '```bash', 'echo "✗ achou drift"', '```'].join(
-          '\n',
-        ),
+        [
+          '```bash',
+          '# mede o arquivo [gate: run — mede o arquivo]',
+          'echo "✗ achou drift"',
+          '```',
+        ].join('\n'),
       );
       const r = checkAuditSkills({ repoRoot: root });
       expect(r.ok).toBe(false);
@@ -220,7 +228,7 @@ describe('o gate, sobre um repo sintético', () => {
       const arquivo = join(root, '.agents/skills/prisma-audit/SKILL.md');
       writeFileSync(
         arquivo,
-        ['> **Gate:** `run` — mede o arquivo', '', '```bash', 'true', '```'].join('\n'),
+        ['```bash', '# mede o arquivo [gate: run — mede o arquivo]', 'true', '```'].join('\n'),
       );
       const r = checkAuditSkills({ repoRoot: root });
       expect(r.ok).toBe(false);

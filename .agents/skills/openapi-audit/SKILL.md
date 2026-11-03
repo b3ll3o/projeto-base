@@ -28,9 +28,8 @@ context:
 
 ## Passo 1 — Re-gerar spec e diff
 
-> **Gate:** `skip` — re-gera a spec com o toolchain e escreve o arquivo versionado
-
 ```bash
+# [gate: skip — re-gera a spec com o toolchain e escreve o arquivo versionado]
 cd apps/api
 pnpm openapi:export   # gera apps/api/openapi.json (pode falhar se faltar script)
 git diff apps/api/openapi.json | head -100
@@ -40,10 +39,8 @@ Se `openapi.json` não existe no repo (gerado on-demand): rodar e commitar antes
 
 ## Passo 2 — Detectar drift DTO ↔ Prisma
 
-> **Gate:** `run` — compara DTO e Prisma pelo NOME do campo — é o passo que gerava falso positivo
-
 ```bash
-# 2.1 Campos em DTOs (subset tipado de Prisma esperado)
+# 2.1 Campos em DTOs (subset tipado de Prisma esperado) [gate: run — compara DTO e Prisma pelo NOME do campo — é o passo que gerava falso positivo]
 # MEDIDO em 2026-10-29: este passo comparava DOIS FORMATOS DIFERENTES — o lado
 # do DTO saía como "arquivo: campo: tipo;" e o do Prisma como "campo" — então o
 # diff acusava 100 linhas ("1,55c1,43") e a regra "DTO deve ser subset" não
@@ -82,10 +79,8 @@ fi
 
 ## Passo 3 — Cobertura de decorators Swagger
 
-> **Gate:** `run` — confere os decorators Swagger de cada controller
-
 ```bash
-# 3.1 Controllers sem @ApiTags
+# 3.1 Controllers sem @ApiTags [gate: run — confere os decorators Swagger de cada controller]
 grep -rn "@Controller" apps/api/src/modules/*/infrastructure/http/ -l | while read f; do
   grep -q "@ApiTags" "$f" || echo "✗ $f missing @ApiTags"
 done
@@ -114,10 +109,8 @@ grep -rL "@ApiProperty" apps/api/src/modules/*/application/dto/ 2>/dev/null | he
 
 ## Passo 4 — Detectar breaking changes vs base_branch
 
-> **Gate:** `skip` — precisa da ref local `main`, que o checkout do CI não tem
-
 ```bash
-# 4.1 Mudanças em path/method/param
+# 4.1 Mudanças em path/method/param [gate: skip — precisa da ref local `main`, que o checkout do CI não tem]
 git diff main..HEAD -- apps/api/src/modules/ \
   | grep -E "^\+.*@(Get|Post|Put|Patch|Delete|Body|Param|Query)" \
   | head -30
@@ -135,10 +128,8 @@ git diff main..HEAD -- apps/api/src/modules/ \
 
 ## Passo 5 — Validar error responses padronizados
 
-> **Gate:** `run` — lista os `throw new` e as exceptions custom
-
 ```bash
-# 5.1 Shapes de exception (esperado: NestJS built-in ou Problem Details RFC 7807)
+# 5.1 Shapes de exception (esperado: NestJS built-in ou Problem Details RFC 7807) [gate: run — lista os `throw new` e as exceptions custom]
 grep -rn "throw new " apps/api/src/modules/*/infrastructure/http/ | head -20
 
 # 5.2 Onde estão as exceptions custom

@@ -27,20 +27,16 @@ context:
 
 ## Passo 1 — Validar build local
 
-> **Gate:** `skip` — builda as imagens prod — minutos de CI
-
 ```bash
-# Skip se Docker não disponível (marcar "skipped (no docker)" no findings)
+# Skip se Docker não disponível (marcar "skipped (no docker)" no findings) [gate: skip — builda as imagens prod — minutos de CI]
 docker buildx build -f apps/api/Dockerfile --target prod -t api:audit --load . 2>&1 | tail -20
 docker buildx build -f apps/web/Dockerfile --target prod -t web:audit --load . 2>&1 | tail -20
 ```
 
 ## Passo 2 — Auditar hardening runtime (Compose)
 
-> **Gate:** `skip` — precisa de `yq`, que não está instalado no CI (o passo mede nada sem ele)
-
 ```bash
-# Esperado em todo serviço prod: user non-root, read_only, cap_drop, security_opt
+# Esperado em todo serviço prod: user non-root, read_only, cap_drop, security_opt [gate: skip — precisa de `yq`, que não está instalado no CI (o passo mede nada sem ele)]
 for svc in api web postgres; do
   echo "=== $svc ==="
   yq -P ".services.$svc" docker-compose.yml 2>/dev/null \
@@ -51,10 +47,8 @@ done
 
 ## Passo 3 — Validar pinning de imagem
 
-> **Gate:** `run` — confere as imagens declaradas
-
 ```bash
-# 3.1 Sem :latest
+# 3.1 Sem :latest [gate: run — confere as imagens declaradas]
 grep -E "image:" docker-compose.yml apps/*/Dockerfile \
   | grep -v ":latest" \
   | head -20
@@ -68,10 +62,8 @@ grep -E "image: [a-z0-9/:.-]+:[a-zA-Z0-9_.-]+$" docker-compose.yml | head -10
 
 ## Passo 4 — Auditar healthchecks prod
 
-> **Gate:** `run` — confere os healthchecks
-
 ```bash
-# 4.1 Healthchecks em todos os serviços
+# 4.1 Healthchecks em todos os serviços [gate: run — confere os healthchecks]
 grep -A 6 "healthcheck:" docker-compose.yml
 
 # 4.2 Critérios prod: interval≤10s, timeout≤3s, retries=3, start_period≤30s
@@ -84,20 +76,16 @@ grep -B 1 "curl\|wget" docker-compose.yml
 
 ## Passo 5 — Validar signal handling
 
-> **Gate:** `run` — confere o init do container
-
 ```bash
-# Init no PID 1 (dumb-init, tini, ou node --init)
+# Init no PID 1 (dumb-init, tini, ou node --init) [gate: run — confere o init do container]
 grep -E "tini|dumb-init|init: " docker-compose.yml apps/*/Dockerfile
 # Esperado: init para garantir reap de SIGTERM e shutdown gracioso
 ```
 
 ## Passo 6 — Auditar .dockerignore
 
-> **Gate:** `run` — confere o `.dockerignore`
-
 ```bash
-# 6.1 Listar exclusões
+# 6.1 Listar exclusões [gate: run — confere o `.dockerignore`]
 cat .dockerignore | sort
 
 # 6.2 Crítico: .git, node_modules (de apps que não são alvo), .env*, coverage/, .agents/runs/
@@ -118,10 +106,8 @@ done
 
 ## Passo 7 — Auditar secrets management
 
-> **Gate:** `run` — procura segredo exposto no compose
-
 ```bash
-# 7.1 Hardcoded secrets em environment (CRITICAL)
+# 7.1 Hardcoded secrets em environment (CRITICAL) [gate: run — procura segredo exposto no compose]
 grep -E "PASSWORD|SECRET|TOKEN|KEY" docker-compose.yml | grep -vE "^\s*#" | head -20
 
 # 7.2 env_file presente
@@ -133,10 +119,8 @@ grep -A 3 "secrets:" docker-compose.yml | head -20
 
 ## Passo 8 — Auditar restart policy
 
-> **Gate:** `run` — confere a política de restart
-
 ```bash
-# 8.1 Em dev: unless-stopped é OK; em prod: orchestrator decide (omitir)
+# 8.1 Em dev: unless-stopped é OK; em prod: orchestrator decide (omitir) [gate: run — confere a política de restart]
 grep -E "restart:" docker-compose.yml
 # Esperado: dev=unless-stopped, prod=sem restart (k8s/ECS decide)
 ```

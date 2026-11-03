@@ -41,10 +41,8 @@ context:
 
 ## Passo 1 — Pre-flight (BLOQUEANTE)
 
-> **Gate:** `skip` — confere a autenticação do `gh` — fala com a API
-
 ```bash
-# 1.1 gh autenticado?
+# 1.1 gh autenticado? [gate: skip — confere a autenticação do `gh` — fala com a API]
 gh auth status || {
   echo "❌ gh NÃO autenticado. Abortando."
   echo "Política: NUNCA aceitar token no chat."
@@ -63,14 +61,12 @@ Não existe script externo para isto: os dois passos são estes comandos. Os
 artefatos vão para `.agents/runs/findings-<ts>/` — dentro do repo, então
 sobrevive a sandbox e é versionável.
 
-> **Gate:** `skip` — escreve em `.agents/runs` e lê a API do GitHub
-
 ```bash
 TS=$(date -u +%Y-%m-%dT%H%M%SZ)
 REPORT_DIR=".agents/runs/findings-$TS"
 mkdir -p "$REPORT_DIR"
 
-# 2.1 Base de dedup: issues abertas
+# 2.1 Base de dedup: issues abertas [gate: skip — escreve em `.agents/runs` e lê a API do GitHub]
 gh issue list --state open --json number,title,labels,createdAt \
   --limit 200 > "$REPORT_DIR/open-issues.json"
 
@@ -92,10 +88,8 @@ git log --oneline -20 > "$REPORT_DIR/stats.md"
 duplicar. Cores e descrições abaixo foram lidas de `gh label list` em
 2026-10-13.
 
-> **Gate:** `skip` — cria labels na API do GitHub
-
 ```bash
-# agent:<specialist> — 5
+# agent:<specialist> — 5 [gate: skip — cria labels na API do GitHub]
 for a in prisma-db docker-prod openapi-contract otelcol-infra release-versioning; do
   gh label create "agent:$a-specialist" --color 0E8A16 \
     --description "Finding do $a-specialist" --force
@@ -198,9 +192,8 @@ descartadas.
 
 ## Passo 8 — Abrir issues via `gh`
 
-> **Gate:** `skip` — abre issues na API do GitHub
-
 ```bash
+# [gate: skip — abre issues na API do GitHub]
 for f in findings_to_open:
   gh issue create \
     --title "$f.title" \
@@ -213,9 +206,8 @@ done
 
 ## Passo 9 — Comentar em duplicatas
 
-> **Gate:** `skip` — abre issues na API do GitHub
-
 ```bash
+# [gate: skip — abre issues na API do GitHub]
 for f in findings_duplicates:
   gh issue comment "$f.duplicate_of" --body "$f.comment_body"
 done
@@ -223,10 +215,8 @@ done
 
 ## Passo 10 — Persistir relatório
 
-> **Gate:** `skip` — cria diretório em `.agents/runs`
-
 ```bash
-# $TS e $REPORT_DIR vêm do Passo 2 — não recalcular: dois timestamps
+# $TS e $REPORT_DIR vêm do Passo 2 — não recalcular: dois timestamps [gate: skip — cria diretório em `.agents/runs`]
 # diferentes no mesmo scan deixam o relatório fora do diretório de artefatos.
 mkdir -p "$REPORT_DIR"
 

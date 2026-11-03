@@ -27,10 +27,8 @@ context:
 
 ## Passo 1 — Validar schema do config
 
-> **Gate:** `skip` — valida a config no container do Collector — precisa do Docker
-
 ```bash
-# OTel Collector tem schema JSON próprio; validate é a primeira barreira
+# OTel Collector tem schema JSON próprio; validate é a primeira barreira [gate: skip — valida a config no container do Collector — precisa do Docker]
 docker run --rm -v "$(pwd)/infra/otelcol:/cfg" \
   otel/opentelemetry-collector-contrib:0.103.0 \
   validate --config=/cfg/config.yaml
@@ -40,10 +38,8 @@ Se `docker` indisponível, pular e marcar como "skipped (no docker)".
 
 ## Passo 2 — Auditar receivers (princípio do mínimo)
 
-> **Gate:** `run` — lê a config do Collector
-
 ```bash
-# 2.1 Receivers declarados
+# 2.1 Receivers declarados [gate: run — lê a config do Collector]
 grep -A 10 "^receivers:" infra/otelcol/config.yaml
 
 # 2.2 Producers ativos (quem produz spans/metrics/logs que esse receiver consome?)
@@ -67,10 +63,8 @@ Regra: receiver ativo sem producer = finding DRIFT (custo de export vazio).
 
 ## Passo 3 — Auditar processors essenciais
 
-> **Gate:** `run` — confere memory_limiter e batch
-
 ```bash
-# 3.1 memory_limiter e batch (praticamente obrigatórios)
+# 3.1 memory_limiter e batch (praticamente obrigatórios) [gate: run — confere memory_limiter e batch]
 grep -E "memory_limiter|batch" infra/otelcol/config.yaml \
   || echo "✗ faltando memory_limiter ou batch"
 
@@ -84,20 +78,16 @@ grep -E "memory_limiter:|batch:|tail_sampling:" infra/otelcol/config.yaml
 
 ## Passo 4 — Validar sampling decision propagation
 
-> **Gate:** `run` — confere a amostragem
-
 ```bash
-# Esperado: parent_based para preservar decisão do caller (cost-efficiency)
+# Esperado: parent_based para preservar decisão do caller (cost-efficiency) [gate: run — confere a amostragem]
 grep -E "parent_based|probabilistic" infra/otelcol/config.yaml \
   || echo "✗ sem política de sampling declarada"
 ```
 
 ## Passo 5 — Auditar profile Compose
 
-> **Gate:** `run` — confere o perfil do Collector no compose
-
 ```bash
-# OTel Collector NÃO pode ser default — deve ser opt-in via profile
+# OTel Collector NÃO pode ser default — deve ser opt-in via profile [gate: run — confere o perfil do Collector no compose]
 grep -B 1 -A 1 "profiles:" docker-compose.yml
 
 # Verificar se collector está em algum profile
@@ -106,20 +96,16 @@ grep -B 5 "otel-collector\|otelcol" docker-compose.yml | head -20
 
 ## Passo 6 — Drift OTel Collector version
 
-> **Gate:** `run` — confere a imagem do Collector
-
 ```bash
-# Versão travada (sem :latest)
+# Versão travada (sem :latest) [gate: run — confere a imagem do Collector]
 grep "image: otel/" docker-compose.yml
 # Esperado: tag específica (ex: 0.103.0), nunca :latest
 ```
 
 ## Passo 7 — Validar W3C propagation end-to-end
 
-> **Gate:** `run` — confere a propagação de trace no código da API
-
 ```bash
-# apps/api
+# apps/api [gate: run — confere a propagação de trace no código da API]
 grep -rn "W3CTraceContextPropagator\|traceparent" apps/api/src/ | head -5
 # apps/web
 grep -rn "traceparent\|traceContext" apps/web/ | head -5

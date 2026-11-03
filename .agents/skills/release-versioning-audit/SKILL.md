@@ -29,19 +29,15 @@ context:
 
 ## Passo 1 — Extrair versão declarada em cada doc canônico
 
-> **Gate:** `run` — lê os footers de versão; nada de rede nem de escrita
-
 ```bash
 for f in docs/MONOREPO.md docs/STACK.md .agents/specs/conventions/estrutura-e-versionamento.md; do
   echo "=== $f ==="
-  # Regex aceita "Versão do documento:", "Versão da stack:", "Versão do template:"
+  # Regex aceita "Versão do documento:", "Versão da stack:", "Versão do template:" [gate: run — lê os footers de versão; nada de rede nem de escrita]
   grep -oE "\*\*Vers[aã]o[^:]*:\*\*\s+v?[0-9]+\.[0-9]+\.[0-9]+" "$f" | tail -3
 done
 ```
 
 ## Passo 2 — Listar tags e diff vs última tag
-
-> **Gate:** `skip` — faz `git fetch --tags` — precisa de rede
 
 ```bash
 git fetch --tags
@@ -50,16 +46,14 @@ git tag --sort=-v:refname | head -10
 LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
 echo "Última tag: $LAST_TAG"
 
-# Commits desde a última tag
+# Commits desde a última tag [gate: skip — faz `git fetch --tags` — precisa de rede]
 git log "${LAST_TAG}..HEAD" --oneline | head -30
 ```
 
 ## Passo 3 — Classificar commits (Conventional Commits)
 
-> **Gate:** `skip` — depende de `$LAST_TAG`, que vem do passo que precisa de rede
-
 ```bash
-# 3.1 BREAKING CHANGEs (vai para major)
+# 3.1 BREAKING CHANGEs (vai para major) [gate: skip — depende de `$LAST_TAG`, que vem do passo que precisa de rede]
 git log "${LAST_TAG}..HEAD" --pretty=format:"%s" \
   | grep -E "^BREAKING|!: " | head -10
 
@@ -78,10 +72,8 @@ git log "${LAST_TAG}..HEAD" --pretty=format:"%s" \
 
 ## Passo 4 — Validar workflow release-template
 
-> **Gate:** `run` — confere a regex que o `release-template.yml` usa — é o passo que estava morto
-
 ```bash
-# 4.1 O workflow lê regex específico do MONOREPO.md
+# 4.1 O workflow lê regex específico do MONOREPO.md [gate: run — confere a regex que o `release-template.yml` usa — é o passo que estava morto]
 # MEDIDO em 2026-10-29: a regex anterior ("Vers..o") NÃO casa com "Versão" —
 # entre "Vers" e "o" há UM caractere (o "ã") e a regex pedia DOIS. O passo
 # saía vazio: ele não mediava o que o workflow lê. Esta é a mesma regex do
@@ -106,10 +98,8 @@ grep -E "concurrency:" .github/workflows/release-template.yml
 
 ## Passo 5 — Verificar CHANGELOG
 
-> **Gate:** `run` — confere se existe CHANGELOG ou changesets
-
 ```bash
-# 5.1 Existe?
+# 5.1 Existe? [gate: run — confere se existe CHANGELOG ou changesets]
 ls CHANGELOG.md 2>/dev/null || echo "(sem CHANGELOG.md)"
 
 # 5.2 Se Changesets:
@@ -125,10 +115,8 @@ fi
 
 ## Passo 6 — Validar pre-release constraint
 
-> **Gate:** `run` — confere os SEIS footers e a direção contra a última tag
-
 ```bash
-# Antes de tag, docs devem estar consistentes:
+# Antes de tag, docs devem estar consistentes: [gate: run — confere os SEIS footers e a direção contra a última tag]
 # - Footer de versão único (não duplicado)
 # - A MESMA versão nos SEIS arquivos que têm footer
 # - A versão dos docs À FRENTE da última tag (a tag é criada no merge)
