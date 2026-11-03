@@ -68,7 +68,12 @@ aviso em cada install é dívida trocada por dívida.
 Nenhum gate media advisory de dependência — a mesma doença do F11 (as
 procedures das skills de auditoria que ninguém executava). O gate novo roda o
 `pnpm audit --json` e reprova quando há advisory crítica ou alta fora da
-lista. **13 testes**; a spec fixa o denominador.
+lista. **17 testes**; a spec fixa o denominador.
+
+**A severidade que reprova mora no CÓDIGO** (`SEVERIDADES_QUE_REPROVAM`), não
+no arquivo de exceções: na primeira versão ela vinha do JSON, e quem editasse
+o arquivo trocando `["critical","high"]` por `[]` zerava a reprovação. O
+arquivo é DADO; o gate é REGRA.
 
 ### D. A CSP do web
 
@@ -127,3 +132,25 @@ pnpm exec vitest run --root .tooling/scripts/ci check-ci-action-pinning
 2. **A exceção do `vite` estava mal escrita** — o padrão `(vite|next) dev`
    casava com o script `dev` do `apps/web` (que é legítimo: dev local). O
    próprio gate acusou. A verificação passou a ser sobre os **workflows**.
+
+## A revisão do PR #143 sobre o PR #143
+
+O PR foi revisado com o mesmo método (medir, mutar, corrigir) e achou **9
+defeitos**, todos corrigidos com regressão:
+
+| # | Defeito | Como se reproduz |
+|---|---|---|
+| R1 | a CSP com `connect-src 'self'` **bloqueava a telemetria do browser** (o collector é de outra origem) — em silêncio, porque o `try/catch` do `instrumentation-client.ts` engole a recusa | `NEXT_PUBLIC_OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318` (o `.env.example`) vs a CSP |
+| R2 | a CSP sem `'unsafe-eval'` **quebrava o servidor de dev** (o HMR do webpack usa `eval`) | o padrão do Next: `isDev ? "'unsafe-eval'" : ""` |
+| R3 | a severidade que reprova vinha do **arquivo de dados** — quem editasse o JSON enfraquecia o gate | `severidadesQueReprovam` no JSON → `[]` |
+| R4 | a verificação do `zod` cobria `apps/web/app` e **não** `apps/web/src`, `lib` nem `components` | o path da exceção |
+| R5 | a regra do `uses:` acusava `docker://imagem:tag` como se fosse action (a mensagem estava errada) | `uses: docker://alpine:3.19` |
+| R6 | o `docker://` por **digest** era reprovado (o check do digest olhava `@sha256:` numa ref já sem o `@`) | o próprio spec pegou |
+| R7 | a verificação da exceção varria `dist/`, `coverage/` e `.turbo/` — o padrão podia casar em artefato de build | `arquivosEm` |
+| R8 | os campos `severidade` e `modulo` da exceção eram **decorativos** — quem mudasse `"critical"` para `"low"` no arquivo acharia que rebaixava a exceção, e não rebaixava nada | o gate usava a severidade da advisory |
+| R9 | o Next ainda anunciava a framework no `X-Powered-By` (Information exposure do OWASP) | `curl -I` no `/login` |
+
+O R1 é o mais caro: **telemetria que morre em silêncio** é o modo de falha
+mais difícil de notar — nenhum teste quebra, nenhum erro aparece no console.
+A correção mede: a origem do collector entra no `connect-src`, e o `unsafe-eval`
+entra **só** em desenvolvimento.

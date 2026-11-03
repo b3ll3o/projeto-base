@@ -173,15 +173,20 @@ plano marca a etapa como **pendente**, não como feita.
 ## 5. Aceite
 
 1. `pnpm audit --json` não tem **nenhuma** advisory crítica ou alta fora da
-   lista de exceções — e a lista tem no máximo 3 entradas, cada uma com a
-   verificação que a mantém.
-2. `pnpm ci:preflight` → **0 erro**, com o gate novo no painel.
+   lista de exceções — e a lista tem no máximo 4 entradas, cada uma com a
+   verificação que a mantém. ✅ **43 advisories; 1 crítica + 3 altas, as 4
+   com exceção verificada.**
+2. `pnpm ci:preflight` → **0 erro**, com os 2 gates novos no painel. ✅
 3. A suíte inteira verde, `pnpm ci:boot` com a API e o web no ar, e as
-   migrations do prisma aplicadas do zero.
-4. A CSP do web servida com nonce e sem `unsafe-inline`; o e2e passa.
-5. As actions do CI pinadas por SHA, com gate que impede a volta da tag.
+   migrations do prisma aplicadas do zero. ✅ **1.461 unit + 158 integração
+   + 59 e2e; boot com API e web no ar.**
+4. A CSP do web servida com nonce e sem `unsafe-inline`; o e2e passa. ✅
+   **O nonce do header bate com o dos 14 scripts do HTML.**
+5. As actions do CI pinadas por SHA, com gate que impede a volta da tag. ✅
+   **21 call-sites; o gate tem 12 testes.**
 6. O relatório da auditoria versionado em `.agents/runs/`, com o comando que
-   reproduz cada número.
+   reproduz cada número. ✅
+7. **A revisão do próprio PR** (§7) — 7 defeitos corrigidos com regressão. ✅
 
 ## 6. A revisão do plano (medida, 2026-11-03)
 
@@ -225,3 +230,28 @@ O plano foi revisado contra o repo real, antes de implementar. O que mudou:
   o navegador do usuário). Nenhuma medição de borda foi feita, e o plano
   marca a etapa como **pendente** — com o runbook pronto, não com um
   veredito inventado.
+
+## 7. A revisão do PR #143 sobre o PR #143
+
+O PR foi revisado com o mesmo método do §6 (medir, mutar, corrigir) e achou
+**9 defeitos** — todos corrigidos com regressão. O relatório da auditoria
+(`.agents/runs/2026-11-03-auditoria-de-seguranca.md`) traz o detalhe; os dois
+que mudam comportamento de produção:
+
+| # | Defeito | Correção |
+|---|---|---|
+| R1 | a CSP com `connect-src 'self'` **bloqueava a telemetria do browser** (o collector é de outra origem) — em silêncio, porque o `try/catch` do `instrumentation-client.ts` engole a recusa | a origem do collector entra no `connect-src` (medido: a env var é inlined no bundle do middleware) |
+| R2 | a CSP sem `'unsafe-eval'` **quebrava o servidor de dev** (o HMR do webpack usa `eval`) | `'unsafe-eval'` só em desenvolvimento — a produção não tem |
+
+Os outros sete: a severidade que reprova saía do **arquivo de dados** (quem
+editasse o JSON enfraqueceria o gate → foi para o código); os campos
+`severidade` e `modulo` da exceção eram **decorativos** (o gate passa a
+conferir os dois); a verificação do `zod` cobria só `apps/web/app` (deixava
+`src`, `lib` e `components` de fora); a regra do `uses:` tratava
+`docker://imagem:tag` como se fosse action; o check do digest olhava
+`@sha256:` numa ref já sem o `@`; a verificação varria `dist/`, `coverage/` e
+`.turbo/`; e o Next ainda anunciava a framework no `X-Powered-By`.
+
+**O e2e novo** (`f18-cabecalhos-de-seguranca.spec.ts`) prende o comportamento
+no navegador: a CSP chega, o nonce do header é o dos scripts, nenhum script
+inline fica sem nonce e o `X-Powered-By` não é exposto.
