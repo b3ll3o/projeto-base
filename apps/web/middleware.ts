@@ -36,34 +36,83 @@ export function middleware(request: NextRequest): NextResponse {
   requestHeaders.set('x-nonce', nonce);
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
-  response.headers.set('Content-Security-Policy', cspDoNonce(nonce));
+  response.headers.set(
+    'Content-Security-Policy',
+    cspDoNonce(nonce, {
+      endpointTelemetria: process.env.NEXT_PUBLIC_OTEL_EXPORTER_OTLP_ENDPOINT,
+      desenvolvimento: process.env.NODE_ENV !== 'production',
+    }),
+  );
   response.headers.set('X-Content-Type-Options', 'nosniff');
   response.headers.set('X-Frame-Options', 'DENY');
   response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   return response;
 }
 
+/** O que a CSP precisa saber do ambiente. */
+export interface AmbienteDaCsp {
+  /**
+   * O endpoint OTLP do browser (`NEXT_PUBLIC_OTEL_EXPORTER_OTLP_ENDPOINT`).
+   *
+   * MEDIDO em 2026-11-03: a telemetria do CLIENTE sai do browser para este
+   * endpoint — que é de OUTRA origem (`http://localhost:4318` no dev). Um
+   * `connect-src 'self'` bloqueia isso em silêncio: a telemetria some e
+   * ninguém vê erro nenhum (o `try/catch` do `instrumentation-client.ts`
+   * engole a recusa do navegador). A origem do endpoint entra no
+   * `connect-src` — e só a ORIGEM, não o host solto.
+   */
+  endpointTelemetria?: string | undefined;
+  /**
+   * Desenvolvimento local.
+   *
+   * O runtime de dev do Next usa `eval` (o HMR do webpack) — e a CSP sem
+   * `'unsafe-eval'` quebra o servidor de dev, com um erro de console que
+   * não é óbvio. O padrão do Next (`isDev ? "'unsafe-eval'" : ""`) resolve:
+   * a produção **não** tem `'unsafe-eval'`, e o `'unsafe-inline'` continua
+   * fora dos dois.
+   */
+  desenvolvimento?: boolean;
+}
+
+/** A origem de uma URL, ou `null` quando a URL não é absoluta. */
+export function origemDe(url: string | undefined | null): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * A CSP do web.
  *
- * `connect-src 'self'` basta: MEDIDO em 2026-11-03, o web **não** chama a
- * API pelo browser — as chamadas são server-side (RSC e Server Actions, com
- * `process.env.API_BASE_URL`). O browser fala só com a própria origem.
+ * `connect-src` leva a origem da API? **Não**: MEDIDO em 2026-11-03, o web
+ * **não** chama a API pelo browser — as chamadas são server-side (RSC e
+ * Server Actions, com `process.env.API_BASE_URL`). O browser fala só com a
+ * própria origem, **mais** o collector de telemetria (acima).
  *
  * `upgrade-insecure-requests` NÃO entra: em desenvolvimento local (http) ele
  * quebraria o HMR do Next, e quem precisa forçar HTTPS é a borda (o
  * `Strict-Transport-Security` acima e o helmet da API).
  */
-export function cspDoNonce(nonce: string): string {
+export function cspDoNonce(nonce: string, ambiente: AmbienteDaCsp = {}): string {
+  const connect = ["'self'"];
+  const origemTelemetria = origemDe(ambiente.endpointTelemetria);
+  if (origemTelemetria) connect.push(origemTelemetria);
+
+  const script = ["'self'", `'nonce-${nonce}'`, "'strict-dynamic'"];
+  if (ambiente.desenvolvimento) script.push("'unsafe-eval'");
+
   return [
     "default-src 'self'",
     // `strict-dynamic` faz o nonce valer para o que ele carrega; os
     // navegadores que o suportam ignoram o 'self' daqui.
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+    `script-src ${script.join(' ')}`,
     `style-src 'self' 'nonce-${nonce}'`,
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
-    "connect-src 'self'",
+    `connect-src ${connect.join(' ')}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",

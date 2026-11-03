@@ -1,6 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+  // MEDIDO em 2026-11-03 (auditoria de segurança): o Next anuncia a
+  // framework no header `X-Powered-By`. Não é uma falha grave, é
+  // informação que não precisa ser dita — e o `X-Powered-By` é
+  // Information exposure na lista do OWASP.
+  poweredByHeader: false,
   // pt-BR (2026-10-08): diretório de saída, sobreposto por variável de
   // ambiente para a suíte e2e de Playwright usar o seu próprio.
   //
