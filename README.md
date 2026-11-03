@@ -30,7 +30,7 @@ projeto-base/
 │   ├── agents/            # 28 agents (12 genéricos + 2 routers + 7 de stack + 6 de auditoria + 1 de documentação)
 │   │                      # catálogo nominal, com papel e memória: AGENTS.md §3
 │   ├── memory/            # 30 memórias (28 agents + state-aware-planning + _template)
-│   ├── skills/            # 24 skills — coordenação, routing, auditoria, UI (agent↔skill: AGENTS.md §3.2)
+│   ├── skills/            # 25 skills — coordenação, routing, auditoria, UI (agent↔skill: AGENTS.md §3.2)
 │   ├── specs/conventions/ # 23 convenções (ver AGENTS.md §6)
 │   ├── workflows/         # 15 workflows detalhados
 │   └── WORKFLOWS.md       # Fluxos pré-configurados, em tabela
