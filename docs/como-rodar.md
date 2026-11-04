@@ -20,11 +20,11 @@ Mapa completo por ambiente (dev, Docker, observabilidade, e2e, CI). O índice e 
 | 4 | Observabilidade (Grafana + Tempo + Prometheus) | [`docs/runbooks/observabilidade.md`](./runbooks/observabilidade.md) | ver traces e métricas |
 | 5 | E2E local (Playwright) | [`docs/runbooks/e2e-e-ci.md`](./runbooks/e2e-e-ci.md) | rodar a suíte de navegador |
 | 6 | CI (GitHub Actions) | [`docs/runbooks/e2e-e-ci.md`](./runbooks/e2e-e-ci.md) | o que o CI roda, job por job |
+| 7 | Borda Cloudflare da publicação | [`docs/runbooks/cloudflare-edge.md`](./runbooks/cloudflare-edge.md) | verificar e corrigir TLS, WAF, rate limiting, DNSSEC, MFA e tokens da conta |
 
-O **runbook canônico do repo** é este arquivo: a tabela de variáveis (§2) e o
-catálogo de scripts `pnpm` (§3) mora aqui, e são o que o gate
-[`check-runbook-drift`](../.tooling/scripts/ci/check-runbook-drift.ts) mede — os
-arquivos irmãos **não** são lidos por ele.
+O **runbook canônico** é este arquivo: §2 (variáveis) e §3 (scripts `pnpm`) moram
+aqui, e é o que o gate [`check-runbook-drift`](../.tooling/scripts/ci/check-runbook-drift.ts)
+mede — os irmãos **não** são lidos por ele.
 
 ### §0.1 Pré-requisitos
 
