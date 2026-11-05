@@ -62,7 +62,7 @@ node -p "Object.entries(require('./package.json').scripts)
 | `pnpm ci:preflight` | `tsx .tooling/scripts/ci/preflight.ts` | Roda os checks estruturais registrados em [`preflight-gates.ts`](../.tooling/scripts/ci/preflight-gates.ts) e aborta com exit 1. É o que o `.husky/pre-push` roda. |
 | `pnpm ci:boot` | `tsx .tooling/scripts/ci/boot-local.ts` | **Sobe a aplicação local** (api + web) e confere o health. O banco local é pré-requisito — a etapa não o sobe. |
 | `pnpm ci:local` | `preflight` + `db:generate` + `lint`/`typecheck`/`test:*` + `tooling:test` + `ci:boot` | Atalho manual da Camada 1 completa. Não está em hook nenhum. |
-| `pnpm ambiente:check` | `tsx .tooling/scripts/ci/ambiente-local.ts` | **Preflight do ambiente local**: verifica o `DATABASE_URL`/`JWT_SECRET`, o Prisma Client gerado, o banco no ar e a porta da API — e religa o container do banco local parado. **NÃO é gate**: roda só no `pnpm dev` (o `ci:boot` é o gate, e não sobe o banco). |
+| `pnpm ambiente:check` | `tsx .tooling/scripts/ci/ambiente-local.ts` | **Preflight do ambiente local**: verifica o `DATABASE_URL`/`JWT_SECRET`, o Prisma Client gerado, o banco no ar e as **duas** portas do `pnpm dev` (a da API, do `PORT`, e a do web, do `apps/web/package.json`) — e religa o container do banco local parado. **NÃO é gate**: roda só no `pnpm dev` (o `ci:boot` é o gate, e não sobe o banco). |
 | `pnpm pr:marker` | `tsx tooling/scripts/pr-refresh-gate.ts` | Gate do marcador `<!--pr-refresh:live-->` no corpo do PR. Bloqueia no **CI** (não no hook). |
 
 ### 2.4 Agents, roteamento e lint das matrizes

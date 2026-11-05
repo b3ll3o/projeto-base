@@ -1,7 +1,14 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createServer, type Server } from 'node:net';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, chmodSync, readFileSync, existsSync } from 'node:fs';
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  chmodSync,
+  readFileSync,
+  existsSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
@@ -16,6 +23,9 @@ import {
   temClientReal,
   publicaPortaNasBindings,
   inspecionarContainer,
+  dockerRespondeu,
+  portaDoWeb,
+  verificarPortaDoWeb,
   subirContainer,
   postgresPronto,
   EFEITOS_REAIS,
@@ -182,6 +192,7 @@ describe('decideSobreBanco', () => {
     containerParado: true,
     containerPublicaPorta: true,
     imagem: 'postgres:16-alpine',
+    dockerRespondeu: true,
   };
 
   it('banco no ar: passa', () => {
@@ -258,6 +269,41 @@ describe('decideSobreBanco', () => {
 
     expect(falha(veredito).codigo).toBe('subir-container');
   });
+
+  it('Docker que NÃO respondeu: diz que o Docker não respondeu — e NÃO afirma nada sobre o container', () => {
+    // ⚠️ "o container não existe" e "o Docker não respondeu" são defeitos
+    // diferentes: o primeiro manda recriar o container (que guarda o volume
+    // com as senhas dos papéis), o segundo manda olhar o socket.
+    const veredito = decideSobreBanco({
+      ...base,
+      dockerRespondeu: false,
+      containerExiste: false,
+      containerParado: false,
+    });
+
+    expect(veredito.ok).toBe(false);
+    expect(falha(veredito).codigo).toBe('docker-nao-respondeu');
+    // A mensagem NÃO pode afirmar que o container não existe — o check não
+    // sabe (é o que o Docker deixou de dizer).
+    expect(falha(veredito).mensagem).not.toMatch(/não existe/i);
+    expect(falha(veredito).mensagem).toMatch(/docker/i);
+    // O remédio é do DAEMON, não do container.
+    expect(falha(veredito).comando).toContain('docker info');
+    expect(falha(veredito).comando).not.toContain('docker start');
+    expect(falha(veredito).comando).not.toContain('docker run');
+  });
+
+  it('Docker que não respondeu tem PRECEDÊNCIA sobre "o container não existe" — o check não sabe', () => {
+    const veredito = decideSobreBanco({ ...base, dockerRespondeu: false, containerExiste: false });
+
+    expect(falha(veredito).codigo).toBe('docker-nao-respondeu');
+  });
+
+  it('Docker que não respondeu mas o banco RESPONDE: passa — o Docker não é necessário aqui', () => {
+    const veredito = decideSobreBanco({ ...base, bancoAlcancavel: true, dockerRespondeu: false });
+
+    expect(veredito.ok).toBe(true);
+  });
 });
 
 describe('temClientReal', () => {
@@ -325,6 +371,66 @@ describe('decideSobrePorta', () => {
     expect(falha(veredito).codigo).toBe('porta-no-processo');
     expect(falha(veredito).comando).not.toContain('pkill');
     expect(falha(veredito).comando).toContain('ss -ltnp');
+  });
+
+  it('a porta do web: o rótulo e QUEM não sobe são do web, não da API', () => {
+    // ⚠️ A mensagem que diz "A API local não sobe" para a porta do web seria
+    // uma afirmação FALSA: a API sobe; o web é que não sobe.
+    const veredito = decideSobrePorta({
+      rotulo: 'porta do web',
+      quem: 'O web local',
+      porta: 3001,
+      ocupada: true,
+      containersNaPorta: [{ nome: 'projeto-base-web', servicoCompose: 'web' }],
+    });
+
+    expect(veredito.rotulo).toBe('porta do web (:3001)');
+    expect(falha(veredito).mensagem).toContain('O web local');
+    expect(falha(veredito).mensagem).not.toContain('A API local');
+    expect(falha(veredito).comando).toBe('docker compose stop web');
+  });
+});
+
+describe('a porta do web (lida do dono)', () => {
+  it('a porta do web vem do `apps/web/package.json` — e no repo real é a 3001', () => {
+    // A porta NÃO é uma constante do check: hardcodar 3001 seria a mesma
+    // classe de drift do nome do container (o check mediria uma porta que o
+    // web não usa).
+    expect(portaDoWeb()).toBe(3001);
+  });
+
+  it('um `package.json` sem `--port` no `dev`: undefined (e o veredito diz por quê)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ambiente-web-sem-porta-'));
+    mkdirSync(join(dir, 'apps', 'web'), { recursive: true });
+    writeFileSync(
+      join(dir, 'apps', 'web', 'package.json'),
+      JSON.stringify({ name: '@projeto/web', scripts: { dev: 'next dev' } }),
+    );
+
+    expect(portaDoWeb(dir)).toBeUndefined();
+
+    const veredito = await verificarPortaDoWeb(dir);
+    expect(veredito.ok).toBe(false);
+    expect(falha(veredito).codigo).toBe('porta-do-web-desconhecida');
+    // A ausência NÃO é verde: sem `--port`, o Next cairia na 3000 — a da API.
+    expect(falha(veredito).mensagem).toContain('3000');
+  });
+
+  it('um `package.json` com `--port=NNNN`: a porta é lida', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ambiente-web-com-porta-'));
+    mkdirSync(join(dir, 'apps', 'web'), { recursive: true });
+    writeFileSync(
+      join(dir, 'apps', 'web', 'package.json'),
+      JSON.stringify({ name: '@projeto/web', scripts: { dev: 'next dev --port=4321' } }),
+    );
+
+    expect(portaDoWeb(dir)).toBe(4321);
+  });
+
+  it('um `apps/web/package.json` ausente: undefined, sem estourar erro cru', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ambiente-sem-web-'));
+
+    expect(portaDoWeb(dir)).toBeUndefined();
   });
 });
 
@@ -441,6 +547,73 @@ describe('os efeitos reais (sem container nenhum)', () => {
   });
 });
 
+describe('a distinção "o container não existe" × "o Docker não respondeu"', () => {
+  // MEDIDO em 2026-11-03 (Docker 29.1.3): os dois casos saem com código 1, e
+  // só o `stderr` os separa. Sem essa distinção, o `catch` tratava "o daemon
+  // está fora do ar" como "o container não existe" — e o check mandava a
+  // pessoa recriar o container do banco (que guarda o volume com as senhas
+  // dos papéis).
+  it('"no such object" = o Docker RESPONDEU (o container é que não existe)', () => {
+    expect(dockerRespondeu({ stderr: 'error: no such object: qualquer\n' })).toBe(true);
+    expect(dockerRespondeu({ stderr: 'Error: No such container: qualquer\n' })).toBe(true);
+  });
+
+  it('"Cannot connect to the Docker daemon" = o Docker NÃO respondeu', () => {
+    expect(
+      dockerRespondeu({
+        stderr: 'Cannot connect to the Docker daemon at unix:///var/run/docker.sock.\n',
+      }),
+    ).toBe(false);
+  });
+
+  it('"failed to connect to the docker API" = o Docker NÃO respondeu (o outro socket)', () => {
+    // MEDIDO: o binário escreve UM dos dois, conforme o socket — e o
+    // `includes` case-sensitivo pegaria só um deles.
+    expect(
+      dockerRespondeu({
+        stderr:
+          'failed to connect to the docker API at unix:///tmp/nada.sock; check if the path ' +
+          'is correct and if the daemon is running: dial unix /tmp/nada.sock: connect: ' +
+          'connection refused\n',
+      }),
+    ).toBe(false);
+  });
+
+  it('o `docker` fora do PATH (ENOENT, sem stderr) = o Docker NÃO respondeu', () => {
+    expect(dockerRespondeu({ code: 'ENOENT', stderr: undefined })).toBe(false);
+  });
+
+  it('timeout (stderr vazio) = o Docker NÃO respondeu', () => {
+    expect(dockerRespondeu({ stderr: '' })).toBe(false);
+    expect(dockerRespondeu(new Error('Command failed: docker inspect'))).toBe(false);
+  });
+
+  it('o caminho REAL com um `docker` que não tem daemon: `dockerRespondeu` é false', () => {
+    // Um `docker` FALSO que responde como um daemon fora do ar.
+    const dir = mkdtempSync(join(tmpdir(), 'ambiente-docker-sem-daemon-'));
+    const caminho = join(dir, 'docker');
+    writeFileSync(
+      caminho,
+      `#!/bin/sh
+echo "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?" >&2
+exit 1
+`,
+    );
+    chmodSync(caminho, 0o755);
+    const pathOriginal = process.env['PATH'];
+    process.env['PATH'] = `${dir}${pathOriginal === undefined ? '' : `:${pathOriginal}`}`;
+
+    try {
+      const estado = inspecionarContainer(CONTAINER_DO_BANCO_LOCAL, 5432);
+
+      expect(estado.existe).toBe(false);
+      expect(estado.dockerRespondeu).toBe(false);
+    } finally {
+      process.env['PATH'] = pathOriginal;
+    }
+  });
+});
+
 // ── a auto-recuperação (a feature-cabeçalho) ────────────────────────────────
 
 /** Os efeitos falsos — o container é simulado, nenhum Docker é tocado. */
@@ -452,6 +625,7 @@ function efeitosFalsos(sobrescritas: Partial<EfeitosDoBanco> = {}): EfeitosDoBan
       rodando: false,
       publicaPorta: true,
       imagem: 'postgres:16-alpine',
+      dockerRespondeu: true,
     }),
     subirContainer: () => true,
     esperarPorta: async () => true,
@@ -521,6 +695,7 @@ describe('a auto-recuperação (verificarBanco)', () => {
         rodando: false,
         publicaPorta: true,
         imagem: 'outra-imagem:1',
+        dockerRespondeu: true,
       }),
       subirContainer: subir,
     });
@@ -529,6 +704,28 @@ describe('a auto-recuperação (verificarBanco)', () => {
 
     expect(ok).toBe(false);
     expect(falha(veredito).codigo).toBe('container-imagem-inesperada');
+    expect(subir).not.toHaveBeenCalled();
+  });
+
+  it('Docker que NÃO respondeu: o `docker start` NÃO é chamado — o check não sabe do container', async () => {
+    const subir = vi.fn(() => true);
+    const efeitos = efeitosFalsos({
+      inspecionarContainer: () => ({
+        existe: false,
+        rodando: false,
+        publicaPorta: false,
+        imagem: undefined,
+        dockerRespondeu: false,
+      }),
+      subirContainer: subir,
+    });
+
+    const { ok, veredito } = await verificarBanco({ DATABASE_URL: URL_LOCAL }, efeitos);
+
+    expect(ok).toBe(false);
+    expect(falha(veredito).codigo).toBe('docker-nao-respondeu');
+    // Religar o container sem saber se ele existe é o efeito colateral que
+    // este ramo evita.
     expect(subir).not.toHaveBeenCalled();
   });
 
@@ -566,14 +763,18 @@ describe('a recuperação com os efeitos REAIS (docker falso no PATH)', () => {
   function dockerFalso(porta: number): { dir: string; log: string } {
     const dir = mkdtempSync(join(tmpdir(), 'ambiente-fake-docker-'));
     const log = join(dir, 'chamadas.log');
+    // ⚠️ O `inspect` responde ao TEMPLATE ÚNICO (os 3 campos num só formato,
+    // separados pelo `U+001F`) — é o que o `inspecionarContainer` faz. O
+    // `printf` com `\037` é o separador em octal, porque o caractere de
+    // controle não pode ser escrito literal num script `sh`.
     const script = `#!/bin/sh
 echo "$@" >> "$FAKE_DOCKER_LOG"
 case "$1" in
   inspect)
     case "$3" in
-      "{{.State.Status}}") echo "exited" ;;
-      "{{json .HostConfig.PortBindings}}") echo '{"5432/tcp":[{"HostIp":"","HostPort":"${porta}"}]}' ;;
-      "{{.Config.Image}}") echo "postgres:16-alpine" ;;
+      *HostConfig.PortBindings*)
+        printf 'exited\\037postgres:16-alpine\\037{"5432/tcp":[{"HostIp":"","HostPort":"${porta}"}]}\\n'
+        ;;
       *) echo "" ;;
     esac
     ;;

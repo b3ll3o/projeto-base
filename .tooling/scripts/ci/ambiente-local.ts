@@ -19,9 +19,9 @@
 //
 // O `pnpm dev` é o caminho que quem desenvolve usa TODA hora. Ele não tinha
 // NENHUMA verificação antes de subir a aplicação. Este script é a verificação
-// que faltava: **quatro** asserções do ambiente local (variáveis, Prisma
-// Client, banco, porta da API), cada uma com a decisão em FUNÇÃO PURA
-// (testável sem máquina) e o efeito isolado.
+// que faltava: **cinco** asserções do ambiente local (variáveis, Prisma
+// Client, banco, porta da API, porta do web), cada uma com a decisão em
+// FUNÇÃO PURA (testável sem máquina) e o efeito isolado.
 //
 // ⚠️ POR QUE NÃO É UM GATE DO PREFLIGHT
 //
@@ -200,6 +200,8 @@ export interface EstadoDoBanco {
   containerParado: boolean;
   containerPublicaPorta: boolean;
   imagem: string | undefined;
+  /** O daemon do Docker respondeu? (quando `false`, o check não sabe do container) */
+  dockerRespondeu: boolean;
 }
 
 /**
@@ -225,6 +227,23 @@ export function decideSobreBanco(estado: EstadoDoBanco): VereditoAmbiente {
       mensagem:
         `não responde em ${endereco}. O alvo não é local — se é um serviço do ` +
         'Compose, o problema é a rede ou o serviço, não o banco local da máquina.',
+    };
+  }
+
+  // ⚠️ O Docker não respondeu: o check NÃO SABE se o container existe, e
+  // dizer "não existe" seria mandar a pessoa recriar o container do banco
+  // (que guarda o volume com as senhas dos papéis). O sintoma é do DOCKER,
+  // e o remédio é do socket.
+  if (!estado.dockerRespondeu) {
+    return {
+      ok: false,
+      rotulo,
+      codigo: 'docker-nao-respondeu',
+      mensagem:
+        `não responde em ${endereco} e o Docker não respondeu ao inspect — o check não ` +
+        'consegue dizer se o container do banco existe. Verifique o daemon antes de mexer ' +
+        'no banco.',
+      comando: 'docker info   # o daemon responde? o socket está acessível?',
     };
   }
 
@@ -300,6 +319,21 @@ export interface ContainerNaPorta {
 
 /** O que o check sabe da porta da API. */
 export interface EstadoDaPorta {
+  /**
+   * O nome da porta no veredito — "porta da API" (o padrão) ou "porta do web".
+   *
+   * ⚠️ A porta do web é a MESMA asserção com outro rótulo: o que muda é de
+   * onde a porta vem (o `PORT` do ambiente vs. o `apps/web/package.json`).
+   */
+  rotulo?: string;
+  /**
+   * Quem não sobe enquanto a porta estiver ocupada — o padrão é a API.
+   *
+   * ⚠️ A mensagem tem de nomear QUEM não sobe: dizer "a API local não sobe"
+   * para a porta do web seria uma afirmação falsa (a API sobe; o web é que
+   * não sobe).
+   */
+  quem?: string;
   porta: number;
   ocupada: boolean;
   containersNaPorta: ContainerNaPorta[];
@@ -314,7 +348,8 @@ export interface EstadoDaPorta {
  * CÓPIA da pessoa que está ao lado. O comando diz como ACHAR o dono.
  */
 export function decideSobrePorta(estado: EstadoDaPorta): VereditoAmbiente {
-  const rotulo = `porta da API (:${estado.porta})`;
+  const rotulo = `${estado.rotulo ?? 'porta da API'} (:${estado.porta})`;
+  const quem = estado.quem ?? 'A API local';
 
   if (!estado.ocupada) {
     return { ok: true, rotulo, mensagem: 'livre' };
@@ -332,7 +367,7 @@ export function decideSobrePorta(estado: EstadoDaPorta): VereditoAmbiente {
       ok: false,
       rotulo,
       codigo: 'porta-no-container',
-      mensagem: `já está em uso por ${nomes}. A API local não sobe enquanto a porta estiver ocupada.`,
+      mensagem: `já está em uso por ${nomes}. ${quem} não sobe enquanto a porta estiver ocupada.`,
       comando,
     };
   }
@@ -342,7 +377,7 @@ export function decideSobrePorta(estado: EstadoDaPorta): VereditoAmbiente {
     rotulo,
     codigo: 'porta-no-processo',
     mensagem:
-      'já está em uso por um processo local — a API local não sobe assim. Este check ' +
+      `já está em uso por um processo local — ${quem} não sobe assim. Este check ` +
       'NÃO sugere `pkill`: este repo é um template que as pessoas copiam, e o padrão ' +
       'casa a CÓPIA que está ao lado. Descubra o dono e pare só ele.',
     comando: `ss -ltnp | grep :${estado.porta}   # ou: lsof -i :${estado.porta}`,
@@ -425,6 +460,15 @@ export interface EstadoDoContainer {
   rodando: boolean;
   publicaPorta: boolean;
   imagem: string | undefined;
+  /**
+   * O daemon do Docker RESPONDEU?
+   *
+   * ⚠️ "o container não existe" e "o Docker não respondeu" são defeitos
+   * DIFERENTES, e a mensagem errada manda a pessoa atrás do container errado
+   * (ou cria um container que já existe). O `docker` sai com código 1 nos
+   * dois casos — o que os distingue é o `stderr`.
+   */
+  dockerRespondeu: boolean;
 }
 
 /**
@@ -454,35 +498,91 @@ export function publicaPortaNasBindings(bindings: string | undefined, porta: num
 }
 
 /**
+ * O formato do ÚNICO `docker inspect` — os 3 campos num template só.
+ *
+ * ⚠️ O separador é o `U+001F` (UNIT SEPARATOR), e não o `|`: o campo do
+ * meio é um JSON (`PortBindings`) e o do fim é uma referência de imagem.
+ * Nenhum dos três pode conter `U+001F` por construção (o nome de container,
+ * a tag de imagem e o JSON do Docker não têm controle em byte) — e o `|`
+ * seria apenas "improvável" e não "impossível".
+ *
+ * MEDIDO em 2026-11-03 com o Docker 29.1.3:
+ * `docker inspect --format $'{{.State.Status}}\x1f{{.Config.Image}}\x1f{{json .HostConfig.PortBindings}}'`
+ * → `exited␟postgres:16-alpine␟{"5432/tcp":[{"HostIp":"127.0.0.1","HostPort":"5434"}]}`.
+ */
+const FORMATO_DO_INSPECT =
+  '{{.State.Status}}\u001f{{.Config.Image}}\u001f{{json .HostConfig.PortBindings}}';
+
+/** O separador do formato acima — o mesmo `U+001F`. */
+const SEPARADOR_DO_INSPECT = '\u001f';
+
+/**
+ * O `docker` respondeu, ou o container é que não existe?
+ *
+ * MEDIDO em 2026-11-03 (Docker 29.1.3), as 4 falhas saem com código 1 e só
+ * se distinguem pelo `stderr`:
+ *
+ * | caso | `stderr` | responde? |
+ * |---|---|---|
+ * | container inexistente | `error: no such object: <nome>` | **sim** |
+ * | daemon fora (socket TCP) | `Cannot connect to the Docker daemon at …` | não |
+ * | daemon fora (socket unix) | `failed to connect to the docker API at …` | não |
+ * | `docker` fora do PATH / timeout | (vazio) | não |
+ *
+ * ⚠️ A regra é "respondeu **só** quando o daemon disse `no such object`":
+ * qualquer outra falha é "o Docker não respondeu". O inverso — casar a prosa
+ * de cada caso — é o que faz um guard depender da versão do binário; e o
+ * `catch` genérico tratava TODAS elas como "o container não existe",
+ * mandando a pessoa recriar o container do banco (que guarda o volume com as
+ * senhas dos papéis).
+ */
+export function dockerRespondeu(erro: unknown): boolean {
+  const stderr =
+    erro !== null && typeof erro === 'object'
+      ? String((erro as { stderr?: unknown }).stderr ?? '')
+      : '';
+  // ⚠️ Case-INsensitive: o binário escreve `no such object` em minúsculo —
+  // um `includes('No such object')` case-sensitivo NÃO casaria o caso real.
+  return /no such (object|container)/i.test(stderr);
+}
+
+/**
  * Interroga o container do banco local.
  *
  * ⚠️ O `docker` é sempre chamado com argv em ARRAY — nunca interpolado. O
  * gate `check-shell-injection` recusa a forma interpolada. E TODO comando tem
  * prazo: um daemon travado não pode travar o check.
+ *
+ * ⚠️ UM `docker inspect`, não três: os 3 campos que o check precisa cabem
+ * num template só. MEDIDO: 3 processos viram 1, e o `stderr` passa a ser
+ * capturado — é o que separa "o container não existe" de "o Docker não
+ * respondeu".
  */
 export function inspecionarContainer(nome: string, porta: number): EstadoDoContainer {
-  const interrogando = (formato: string): string | undefined => {
-    try {
-      return execFileSync('docker', ['inspect', '--format', formato, nome], {
-        encoding: 'utf-8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-        timeout: PRAZO_DO_DOCKER_MS,
-      }).trim();
-    } catch {
-      return undefined;
-    }
-  };
-
-  const status = interrogando('{{.State.Status}}');
-  if (status === undefined) {
-    return { existe: false, rodando: false, publicaPorta: false, imagem: undefined };
+  let saida: string;
+  try {
+    saida = execFileSync('docker', ['inspect', '--format', FORMATO_DO_INSPECT, nome], {
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: PRAZO_DO_DOCKER_MS,
+    }).trim();
+  } catch (erro) {
+    return {
+      existe: false,
+      rodando: false,
+      publicaPorta: false,
+      imagem: undefined,
+      dockerRespondeu: dockerRespondeu(erro),
+    };
   }
 
+  const [status, imagem, bindings] = saida.split(SEPARADOR_DO_INSPECT);
   return {
     existe: true,
     rodando: status === 'running',
-    publicaPorta: publicaPortaNasBindings(interrogando('{{json .HostConfig.PortBindings}}'), porta),
-    imagem: interrogando('{{.Config.Image}}') || undefined,
+    publicaPorta: publicaPortaNasBindings(bindings, porta),
+    imagem: imagem === undefined || imagem === '' ? undefined : imagem,
+    dockerRespondeu: true,
   };
 }
 
@@ -666,6 +766,7 @@ export async function verificarBanco(
     bancoAlcancavel: alcanavel,
     host: alvo.host,
     porta: alvo.porta,
+    dockerRespondeu: container.dockerRespondeu,
     containerExiste: container.existe,
     containerParado: container.existe && !container.rodando,
     containerPublicaPorta: container.publicaPorta,
@@ -756,6 +857,66 @@ export async function verificarPorta(valores: Record<string, string>): Promise<V
   });
 }
 
+/**
+ * A porta do web, lida do DONO.
+ *
+ * ⚠️ A porta do web **não** é uma constante deste check: o dono é o
+ * `scripts.dev` do `apps/web/package.json` (`next dev --port 3001`). Hardcodar
+ * 3001 aqui seria a MESMA classe de drift que o nome do container tem: o
+ * check mediria uma porta que o web não usa, e a porta que o web usa ficaria
+ * sem cobertura — o `EADDRINUSE` cru voltaria pelo mesmo buraco.
+ *
+ * ⚠️ Sem `--port`, o Next usa a **3000** — que é a porta padrão da API. É
+ * por isso que a ausência é um VEREDITO (e não um "pula"): o web cairia em
+ * cima da API.
+ */
+export function portaDoWeb(raiz: string = RAIZ): number | undefined {
+  try {
+    const pkg = JSON.parse(readFileSync(join(raiz, 'apps', 'web', 'package.json'), 'utf-8')) as {
+      scripts?: Record<string, string>;
+    };
+    const dev = pkg.scripts?.['dev'];
+    if (dev === undefined) return undefined;
+    const achado = /--port[= ]+(\d{1,5})/.exec(dev);
+    if (achado === null || achado[1] === undefined) return undefined;
+    const porta = Number(achado[1]);
+    if (!Number.isInteger(porta) || porta <= 0 || porta > 65535) return undefined;
+    return porta;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * A asserção da porta do web — a SEGUNDA porta que o `pnpm dev` ocupa.
+ *
+ * ⚠️ Sem ela, o `pnpm dev` com a 3001 ocupada morre no Next com um
+ * `EADDRINUSE` cru — exatamente o tipo de erro que este check existe para
+ * eliminar (o mesmo motivo pelo qual a porta da API é verificada).
+ */
+export async function verificarPortaDoWeb(raiz: string = RAIZ): Promise<VereditoAmbiente> {
+  const porta = portaDoWeb(raiz);
+  if (porta === undefined) {
+    return {
+      ok: false,
+      rotulo: 'porta do web',
+      codigo: 'porta-do-web-desconhecida',
+      mensagem:
+        'não achei a porta do web: o `apps/web/package.json` não declara `--port` no script ' +
+        '`dev`. Sem ela o Next usaria a 3000 — a mesma da API — e o `pnpm dev` moriria com ' +
+        'EADDRINUSE.',
+    };
+  }
+  const ocupada = await portaAberta('127.0.0.1', porta);
+  return decideSobrePorta({
+    rotulo: 'porta do web',
+    quem: 'O web local',
+    porta,
+    ocupada,
+    containersNaPorta: ocupada ? containersNaPorta(porta) : [],
+  });
+}
+
 // ── o entrypoint ────────────────────────────────────────────────────────────
 
 async function main(): Promise<number> {
@@ -779,6 +940,8 @@ async function main(): Promise<number> {
   tudoOk = relatar(banco.veredito) && tudoOk;
 
   tudoOk = relatar(await verificarPorta(valores)) && tudoOk;
+
+  tudoOk = relatar(await verificarPortaDoWeb()) && tudoOk;
 
   if (tudoOk) {
     // ⚠️ "verificado", não "pronto": o check mede o que ele mede (variáveis,

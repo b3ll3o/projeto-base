@@ -64,7 +64,23 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     } catch (erro) {
       const traducao = traduzirFalhaDeConexao(erro);
       if (traducao === undefined) throw erro;
-      throw new Error(traducao);
+      // O `cause` (Node 16.9+) guarda o erro original do Prisma sem alterar a
+      // mensagem — a traduzida continua sendo a primeira coisa que se lê, e
+      // quem depura tem o stack do Prisma inteiro em vez de uma string.
+      //
+      // ⚠️ POR QUE ISSO NÃO VAZA A CREDENCIAL — e o motivo NÃO é o `Logger`:
+      // o `cause` **entra** no log de boot. O `main.ts` faz
+      // `console.error('Bootstrap falhou:', err)`, e o `util.inspect` do Node
+      // imprime a cadeia `[cause]` inteira.
+      //
+      // O que segura a credencial é o **CONTEÚDO** do erro do Prisma. MEDIDO
+      // no Prisma 6.19.3, com um P1001 de verdade (a URI com a senha no
+      // `DATABASE_URL`): a mensagem é "Can't reach database server at
+      // `host:port`" — ela nomeia o ALVO, não a URL; as propriedades
+      // enumeráveis são só `clientVersion`, `errorCode`, `retryable` e
+      // `name`; e nem a mensagem, nem o `stack`, nem o `util.inspect` têm a
+      // senha. A spec do `prisma.service` afirma isso no CANAL que imprime.
+      throw new Error(traducao, { cause: erro });
     }
     this.logger.log('Prisma conectado');
   }

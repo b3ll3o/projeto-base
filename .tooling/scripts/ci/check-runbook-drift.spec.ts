@@ -1,8 +1,19 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { checkRunbookDrift, extrairChavesEnv, extrairScriptsPnpm } from './check-runbook-drift';
+import {
+  checkRunbookDrift,
+  checkNomeDoContainer,
+  comparaNomesDoContainer,
+  extrairChavesEnv,
+  extrairScriptsPnpm,
+  nomeDoContainerNoCodigo,
+  nomeDoContainerNoRunbook,
+} from './check-runbook-drift';
+
+/** A raiz do repo — as specs do gate real leem as superfícies de verdade. */
+const RAIZ = resolve(__dirname, '..', '..', '..');
 
 /** Embrulha um trecho em bloco cercado — o gate só lê blocos de código. */
 function bloco(conteudo: string): string {
@@ -88,6 +99,29 @@ describe('checkRunbookDrift', () => {
     writeFileSync(join(repo, nome), conteudo);
   }
 
+  /**
+   * As superfícies de código que guardam o nome do container.
+   *
+   * ⚠️ O FIXTURE tem de ter a FORMA do repo real: o gate lê 3 superfícies
+   * (o runbook, o app e o tooling), e um fixture que só tem o runbook mediria
+   * "superfície ausente" em todo teste — que é uma falha do fixture, não do
+   * gate. (A mesma lição da spec que fixa a FORMA do arquivo real.)
+   */
+  function escreverSuperficiesDoContainer(nome: string = 'projeto-base-pg-local'): void {
+    const app = join(repo, 'apps/api/src/shared/infrastructure/prisma');
+    const tooling = join(repo, '.tooling/scripts/ci');
+    mkdirSync(app, { recursive: true });
+    mkdirSync(tooling, { recursive: true });
+    writeFileSync(
+      join(app, 'traducao-de-falha-de-conexao.ts'),
+      `// o container à parte, o \`${nome}\`.\nconst CONTAINER_DO_BANCO_LOCAL = '${nome}';\n`,
+    );
+    writeFileSync(
+      join(tooling, 'ambiente-local.ts'),
+      `export const CONTAINER_DO_BANCO_LOCAL = '${nome}';\n`,
+    );
+  }
+
   beforeEach(() => {
     tmp = mkdtempSync(join(tmpdir(), 'runbook-drift-'));
     repo = join(tmp, 'repo');
@@ -98,6 +132,7 @@ describe('checkRunbookDrift', () => {
       '.env.production.example',
       'POSTGRES_PASSWORD=CHANGE_ME\nJWT_SECRET=CHANGE_ME\n',
     );
+    escreverSuperficiesDoContainer();
     escreverDoc(
       [
         '# Como rodar',
@@ -106,6 +141,10 @@ describe('checkRunbookDrift', () => {
         'pnpm dev',
         'pnpm ci:local',
         'pnpm exec prisma migrate deploy',
+        '```',
+        '',
+        '```bash',
+        'docker run -d --name projeto-base-pg-local -p 5432:5432 postgres:16-alpine',
         '```',
         '',
         '| Variável | Onde mora | Consumida por |',
@@ -155,8 +194,11 @@ describe('checkRunbookDrift', () => {
   it('chave que só existe no exemplo de um app conta como válida', async () => {
     mkdirSync(join(repo, 'apps/web'), { recursive: true });
     escreverEnvExample('apps/web/.env.example', 'NEXT_PUBLIC_OTEL_SERVICE_NAME=x\n');
+    // ⚠️ O doc reescrito tem de manter a receita do container: a 3ª classe é
+    // uma regra INDEPENDENTE, e um doc sem receita é um doc que ela acusa.
     escreverDoc(
-      '# Como rodar\n\n| Variável | a | b |\n|---|---|---|\n| `NEXT_PUBLIC_OTEL_SERVICE_NAME` | a | b |\n',
+      '# Como rodar\n\n```bash\ndocker run -d --name projeto-base-pg-local -p 5432:5432 postgres:16-alpine\n```\n\n' +
+        '| Variável | a | b |\n|---|---|---|\n| `NEXT_PUBLIC_OTEL_SERVICE_NAME` | a | b |\n',
     );
     const r = await checkRunbookDrift({ repoRoot: repo, docPath });
     expect(r.errors).toEqual([]);
@@ -175,5 +217,125 @@ describe('checkRunbookDrift', () => {
     const r = await checkRunbookDrift({ repoRoot: repo, docPath });
     expect(r.errors.join('\n')).toContain('script-fantasma');
     expect(r.errors.join('\n')).not.toContain('JWT_SECRET');
+  });
+});
+
+describe('o nome do container do banco local (a 3ª classe de claim)', () => {
+  it('as 3 superfícies com o MESMO nome → verde', async () => {
+    const erros = await checkNomeDoContainer({
+      repoRoot: RAIZ,
+      doc: 'docker run -d --name projeto-base-pg-local -p 5432:5432 postgres:16-alpine\n',
+    });
+
+    expect(erros).toEqual([]);
+  });
+
+  it('o app com um nome DIFERENTE do runbook → VERMELHO, nomeando as duas superfícies', async () => {
+    const erros = await checkNomeDoContainer({
+      repoRoot: RAIZ,
+      doc: 'docker run -d --name projeto-base-pg-local -p 5432:5432 postgres:16-alpine\n',
+    });
+    // O repo REAL está coerente — o erro simulado é o da superfície do app.
+    expect(erros).toEqual([]);
+
+    const divergente = comparaNomesDoContainer([
+      {
+        rotulo: 'runbook',
+        caminho: 'docs/como-rodar.md',
+        nome: 'projeto-base-pg-local',
+        exigida: false,
+      },
+      {
+        rotulo: 'app',
+        caminho: 'apps/api/.../traducao-de-falha-de-conexao.ts',
+        nome: 'pg-velho',
+        exigida: true,
+      },
+      {
+        rotulo: 'tooling',
+        caminho: '.tooling/scripts/ci/ambiente-local.ts',
+        nome: 'pg-velho',
+        exigida: true,
+      },
+    ]);
+
+    expect(divergente).toHaveLength(1);
+    expect(divergente[0]).toContain('runbook=projeto-base-pg-local');
+    expect(divergente[0]).toContain('app=pg-velho');
+    expect(divergente[0]).toContain('tooling=pg-velho');
+  });
+
+  it('uma superfície AUSENTE → VERMELHO (verde por ausência é a classe 5)', async () => {
+    const erros = comparaNomesDoContainer([
+      {
+        rotulo: 'runbook',
+        caminho: 'docs/como-rodar.md',
+        nome: 'projeto-base-pg-local',
+        exigida: false,
+      },
+      {
+        rotulo: 'app',
+        caminho: 'apps/api/.../traducao-de-falha-de-conexao.ts',
+        nome: undefined,
+        exigida: true,
+      },
+      {
+        rotulo: 'tooling',
+        caminho: '.tooling/scripts/ci/ambiente-local.ts',
+        nome: 'projeto-base-pg-local',
+        exigida: true,
+      },
+    ]);
+
+    expect(erros).toHaveLength(1);
+    expect(erros[0]).toContain('não achei o nome do container');
+    expect(erros[0]).toContain('app');
+  });
+
+  it('a extração ancorada na DECLARAÇÃO, e não na 1ª ocorrência do literal', () => {
+    // O literal aparece ANTES, num COMENTÁRIO — e é o da declaração que vale.
+    const codigo = [
+      '// o container à parte, o `projeto-base-pg-local`.',
+      "const CONTAINER_DO_BANCO_LOCAL = 'pg-certain';",
+    ].join('\n');
+
+    expect(nomeDoContainerNoCodigo(codigo)).toBe('pg-certain');
+  });
+
+  it('o nome no runbook vem do `--name` da receita, não de um `docker start` solto', () => {
+    expect(nomeDoContainerNoRunbook('docker start projeto-base-pg-local\n')).toBeUndefined();
+    expect(
+      nomeDoContainerNoRunbook('docker run -d --name projeto-base-pg-local -p 5432:5432 \\\n'),
+    ).toBe('projeto-base-pg-local');
+  });
+
+  it('a mutação: renomear no app e NÃO no tooling → o gate reprova', async () => {
+    // A PROVA de que o gate tem dente: com os 3 nomes iguais ele passa, e com
+    // um deles trocado ele acusa — o que é exatamente o defeito que o #144
+    // deixou aberto ("renomeou o container e o `pnpm dev` mandou `docker start`
+    // de um nome que não existe").
+    const iguais = comparaNomesDoContainer([
+      {
+        rotulo: 'runbook',
+        caminho: 'docs/como-rodar.md',
+        nome: 'projeto-base-pg-local',
+        exigida: false,
+      },
+      { rotulo: 'app', caminho: 'x.ts', nome: 'projeto-base-pg-local', exigida: true },
+      { rotulo: 'tooling', caminho: 'y.ts', nome: 'projeto-base-pg-local', exigida: true },
+    ]);
+    expect(iguais).toEqual([]);
+
+    const divergentes = comparaNomesDoContainer([
+      {
+        rotulo: 'runbook',
+        caminho: 'docs/como-rodar.md',
+        nome: 'projeto-base-pg-local',
+        exigida: false,
+      },
+      { rotulo: 'app', caminho: 'x.ts', nome: 'pg-novo', exigida: true },
+      { rotulo: 'tooling', caminho: 'y.ts', nome: 'projeto-base-pg-local', exigida: true },
+    ]);
+    expect(divergentes).toHaveLength(1);
   });
 });

@@ -21,10 +21,8 @@ Mapa completo por ambiente (dev, Docker, observabilidade, e2e, CI). O índice e 
 | 5 | E2E local (Playwright) | [`docs/runbooks/e2e-e-ci.md`](./runbooks/e2e-e-ci.md) | rodar a suíte de navegador |
 | 6 | CI (GitHub Actions) | [`docs/runbooks/e2e-e-ci.md`](./runbooks/e2e-e-ci.md) | o que o CI roda, job por job |
 
-O **runbook canônico do repo** é este arquivo: a tabela de variáveis (§2) e o
-catálogo de scripts `pnpm` (§3) mora aqui, e são o que o gate
-[`check-runbook-drift`](../.tooling/scripts/ci/check-runbook-drift.ts) mede — os
-arquivos irmãos **não** são lidos por ele.
+O **runbook canônico do repo** é este arquivo: a tabela de variáveis (§2) e o catálogo de scripts `pnpm` (§3) mora aqui, e são o que o gate
+[`check-runbook-drift`](../.tooling/scripts/ci/check-runbook-drift.ts) mede — os arquivos irmãos **não** são lidos por ele.
 
 ### §0.1 Pré-requisitos
 
@@ -37,10 +35,10 @@ pnpm install --frozen-lockfile
 
 ### §0.2 Quando este documento precisa mudar
 
-O gate `check-runbook-drift` (preflight, Camada 1) acusa **duas** formas de drift:
-um `pnpm <script>` citado aqui que não existe mais, e uma chave da tabela §2 que
-sumiu dos `.env.example`. ⚠️ A tabela §2 tem **UMA CHAVE POR CÉLULA**: uma célula
-com duas chaves tira as DUAS do alcance do gate.
+O gate `check-runbook-drift` (preflight, Camada 1) acusa **três** formas de drift:
+um `pnpm <script>` citado aqui que não existe mais; uma chave da tabela §2 que
+sumiu dos `.env.example` (⚠️ a tabela tem **UMA CHAVE POR CÉLULA**); e o nome do
+container do banco local (§1.1) diferente do que o app e o tooling usam.
 
 O que o gate **não** mede — precisa do olho de quem mudou: script novo → §3;
 `.env.example` alterado → §2 + o passo que copia; porta trocada → §1.5 e §4;
@@ -153,9 +151,10 @@ pnpm dev     # roda o `pnpm ambiente:check` e depois sobe api :3000 + web :3001
 ```
 
 O `pnpm ambiente:check` é o preflight do ambiente local (✅ medido em 2026-11-03):
-verifica o `DATABASE_URL`/`JWT_SECRET`, o Prisma Client gerado, o banco e a porta
-da API **antes** de subir qualquer app — e **religa o container parado** (§1.1). E o
-P1001 do Prisma sai **traduzido** (causa + comando), por QUALQUER caminho de start.
+verifica o `DATABASE_URL`/`JWT_SECRET`, o Prisma Client, o banco e as **duas**
+portas que o `pnpm dev` ocupa (a da API, do `PORT`; a do web, do
+`apps/web/package.json`) **antes** de subir qualquer app, **religa o container
+parado** (§1.1) e traduz o P1001 do Prisma (causa + comando), por QUALQUER start.
 
 ### §1.5 Verificar
 

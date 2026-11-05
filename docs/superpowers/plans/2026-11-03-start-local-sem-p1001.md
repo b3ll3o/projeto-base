@@ -383,3 +383,19 @@ O `tsx watch` **sobrevive** ao crash (medido: o processo do watcher continua
 vivo depois do erro) — e o `pnpm dev` agora **não chega lá**, porque o check
 falha **antes** do `turbo run dev`. A §7 permanece como medição pendente para
 quem quiser o conserto do watcher.
+
+### §9 O ciclo da revisão do #144 (2026-11-05)
+
+A revisão do PR #144 (comentário de `b3ll3o`, 2026-11-03 21:06Z) levantou
+**3 erros e 4 melhorias**. O ciclo que os implementou tem o plano, as medidas e
+as correções da revisão de plano:
+[`2026-11-03-revisao-144-correcoes.md`](./2026-11-03-revisao-144-correcoes.md).
+
+O que mudou **neste** PR, em resumo: os 6 footers de versão foram para
+`1.18.0` (o PR não bumpara — a mesma lacuna do `1.13.0`); o README devolveu as
+2 linhas de troubleshooting que a revisão mediu como perdidas; o erro traduzido
+passou a guardar o `cause` do Prisma; o `check-runbook-drift` ganhou a 3ª
+classe de claim (o nome do container do banco local, igual nas 3 superfícies
+que o guardam); o `docker inspect` do check passou a ser **1** (e a distinguir
+"o container não existe" de "o Docker não respondeu"); e o check passou a
+verificar a **porta do web** (lida do `apps/web/package.json`, que é o dono).
