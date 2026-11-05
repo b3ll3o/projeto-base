@@ -1,0 +1,380 @@
+# review-router — 2ª revisão do PR #144 (rodada 2: 5 achados, 2 erros e 3 melhorias)
+#
+# Branch: feat/start-local-sem-p1001  ·  Base: origin/main (027095b)
+# Matriz: .agents/specs/conventions/review-routing.md (v1.8, 2026-10-16)
+# Escopo: o ciclo da 2ª rodada (444a943..4e736c6, 11 commits) + o diff da branch contra a main
+# Modo de composição: parallel (3 frentes: qualidade do código, convenção/doc, claims numéricas)
+# Regra do repo: NÃO editei nenhum arquivo do código revisado (worktree limpo no fim — `git status` vazio).
+# Método: MEDIÇÃO (diferencial contra o repo real + mutação), não leitura.
+
+classification:
+  scope: large
+  domains_detected: [tooling, prisma, docs, monorepo]
+  matrix_version: 1.8
+  files_changed: 49
+  diff_size: 6387 insertions / 115 deletions
+  commit_types: [fix, test, refactor, chore, docs]
+  ciclo_sob_revisao:
+    base: 444a943
+    head: 4e736c6
+    commits: 11
+    obs: >-
+      A branch foi REBASADA durante a revisão (reflog: `rebase (start): checkout HEAD~7`),
+      e 2 commits novos entraram (`54ef889 docs(plano)`, `4e736c6 docs(memory)`).
+      A ÁRVORE do código medido NÃO mudou (`git diff --stat 7fdf688..HEAD` → só
+      `.agents/runs/memory-triage.md` e o plano da rodada 2). As medições valem.
+
+reviewers_dispatched:
+  - id: review-router
+    role: 'orquestração + medição direta (mutação e diferencial)'
+    binding: '.agents/agents/review-router.md'
+    dispatched: true
+    findings: 6
+  - id: monorepo-specialist
+    role: 'convenções do harness de tooling (.tooling/scripts/ci/**) + porta de gate'
+    binding: '.agents/agents/monorepo-specialist.md'
+    dispatched: true
+    findings: 2
+  - id: test-writer
+    role: 'dente dos testes (mutação + caminho real)'
+    binding: '.agents/agents/test-writer.md'
+    dispatched: true
+    findings: 1
+  - id: documentation-specialist
+    role: 'a doc conta a verdade + claims numéricas'
+    skill: '.agents/skills/documentation-audit/SKILL.md'
+    binding: '.agents/agents/documentation-specialist.md'
+    dispatched: true
+    findings: 3
+  - id: stack-code-reviewer
+    role: 'decisões + efeitos + casa-padrão'
+    binding: '.agents/agents/stack-code-reviewer.md'
+    dispatched: true
+    findings: 1
+  - id: release-versioning-specialist
+    role: 'o diff bumpara 6 footers (E2 — a colisão com o #145)'
+    binding: '.agents/agents/release-versioning-specialist.md'
+    dispatched: true
+    findings: 0
+  - id: security-auditor
+    role: 'credencial no log de boot'
+    binding: '.agents/agents/security-auditor.md'
+    dispatched: true
+    findings: 0
+  - id: nestjs-specialist
+    role: 'lens DDD/Hexagonal'
+    skipped: true
+    skipped_reason: 'o diff do ciclo só toca o catch do `$connect()` e as specs da tradução — sem model, controller ou rota'
+  - id: doc-sync
+    role: 'doc ↔ código'
+    skipped: true
+    skipped_reason: 'coberto pelo documentation-specialist'
+  - id: doc-writer
+    role: 'redação de doc'
+    skipped: true
+    skipped_reason: 'a revisão é de VERDADE da doc, não de redação'
+  - id: prisma-db-specialist
+    role: 'schema/migrations'
+    skipped: true
+    skipped_reason: 'o diff NÃO toca `apps/api/prisma/**` — nem schema, nem migration'
+
+findings_aggregated:
+  totals:
+    blocker: 0
+    important: 2
+    minor: 4
+    info: 1
+  total: 7
+  consensus_count: 2
+  by_reviewer:
+    review-router: 6
+    monorepo-specialist: 2
+    test-writer: 1
+    documentation-specialist: 3
+    stack-code-reviewer: 1
+
+  findings:
+    # ── IMPORTANT ─────────────────────────────────────────────────────────────
+    - id: I-01
+      severity: important
+      consensus: true
+      reviewers_flagged: [documentation-specialist, review-router]
+      file: docs/fluxo-desenvolvimento.md
+      line: 169
+      what: >-
+        Claim numérica FALSA, e a PR a reescreveu sem corrigir: "grep -rn 'Date.now()'
+        tooling/ .tooling/ devolve **6** ocorrências (**3** num spec unitário, **3** em
+        `boot-local.ts`)". O disco tem **12**.
+      why: >-
+        A PR trocou a frase (tirou o parêntese sobre o deadline do boot), manteve o número
+        e RE-DATOU o doc (`updated: 2026-10-29` → `2026-11-03`, versão 1.3.0 → 1.4.0).
+        O número já era falso na main (8) e a PR o piorou: o `ambiente-local.ts` (novo,
+        no 1º ciclo) somou 4 ocorrências. O doc passa a ostentar uma data nova em cima de
+        um número velho — é a classe "doc que mente" da `documentacao.md` §1.2, e
+        NENHUM gate a pega (o `check-doc-claims` cobre só os 6 docs de API).
+      evidence: >-
+        MEDIDO: `grep -rn 'Date.now()' tooling/ .tooling/ | wc -l` → 12 (HOJE);
+        `origin/main` → 8; `444a943` (tip da 1ª rodada) → 12. O doc diz 6.
+        Distribuição real: 4 em `.tooling/scripts/ci/ambiente-local.ts`, 3 em
+        `.tooling/scripts/ci/boot-local.ts`, 2 em `check-audit-skills.ts`, 2 em
+        `tooling/scripts/lint-review-routing.spec.ts`, 1 em `tooling/scripts/review-router.spec.ts`.
+      command: "grep -rn 'Date.now()' tooling/ .tooling/ | wc -l   # → 12, o doc diz 6"
+      verified_by_router: true
+
+    - id: I-02
+      severity: important
+      consensus: false
+      reviewers_flagged: [review-router, monorepo-specialist]
+      file: .tooling/scripts/ci/check-runbook-drift.ts
+      line: 326
+      what: >-
+        A varredura derivada só enxerga o que está VERSIONADO — e isso introduz um FALSO
+        POSITIVO que a versão anterior (a lista de 4 literais) não tinha: um
+        `.env.example` novo, ainda não `git add`-ado, produz um gate VERMELHO acusando
+        uma chave que ESTÁ no disco.
+      why: >-
+        A implementação antiga lia os 4 caminhos literais do DISCO (`fs.readFile`): um
+        `apps/api/.env.example` recriado e não versionado era visto. A nova lê
+        `git ls-files` — que só enxerga o índice. O gate é o `check-runbook-drift`, que
+        ABROTA o `pre-push` e o job de preflight do CI, e a mensagem que ele manda
+        ("corrrija o runbook ou o exemplo") aponta para um arquivo que já está correto.
+        O caminho de reserva (sem git) tem aviso; o caminho PRINCIPAL não tem aviso nenhum
+        para o caso "o arquivo existe mas não está no índice" — o escopo encolhe sem
+        dizer nada, que é a falha que o próprio cabeçalho do gate diz querer eliminar.
+      evidence: >-
+        MEDIDO no repo real: `packages/novo/.env.example` com `CHAVE_DO_PACOTE_NOVO=x`,
+        a chave na tabela do runbook →
+          sem `git add`        → ok=false, "a tabela de variáveis cita 'CHAVE_DO_PACOTE_NOVO'
+                                  mas essa chave não está em nenhum .env.example do repo"
+          com `git add -N`     → ok=true
+          com `git add`        → ok=true
+        (restaurado: `git status` vazio)
+      command: >-
+        mkdir -p packages/novo && printf 'CHAVE_DO_PACOTE_NOVO=x\n' > packages/novo/.env.example
+        # (a chave na tabela do runbook) → pnpm exec tsx -e "import {checkRunbookDrift} from
+        # './.tooling/scripts/ci/check-runbook-drift'; checkRunbookDrift({repoRoot: process.cwd()}).then(r=>console.log(r.ok))"
+        # → false (o arquivo está no disco; o gate não o enxerga)
+      fix_sugestao: >-
+        `git ls-files --cached --others --exclude-standard -- '*.env.example' '*.env.production.example'`
+        — o mesmo `git ls-files`, com os não versionados e não ignorados. A regra do
+        `.gitignore` continua sendo a fonte única (o `node_modules` segue de fora).
+      verified_by_router: true
+
+    # ── MINOR ────────────────────────────────────────────────────────────────
+    - id: M-01
+      severity: minor
+      consensus: true
+      reviewers_flagged: [monorepo-specialist, review-router]
+      file: .tooling/scripts/ci/ambiente-local.ts
+      line: 51
+      what: >-
+        A extração do M3 deixou 3 imports PENDURADOS: `dockerRespondeu` (51),
+        `publicaPortaNasBindings` (55) e `servicoComposeDe` (56) são importados do
+        `./adaptador-docker` e nunca lidos no corpo.
+      why: >-
+        Antes do split as 3 funções eram DEFINIDAS localmente e usadas dentro do arquivo
+        (`inspecionarContainer` usava `publicaPortaNasBindings` e `dockerRespondeu`;
+        `containersNaPorta` usava `servicoComposeDe`). O split as moveu para o adaptador e
+        o bloco de import ficou com os 3 nomes. Nenhum gate pega: o `tsconfig.base.json`
+        não declara `noUnusedLocals` e o `.tooling/` NÃO é pacote do workspace
+        (`pnpm-workspace.yaml` lista `apps/*`, `packages/*`, `tooling/*` — o outro
+        `tooling/`, não o `.tooling/`), logo não há ESLint sobre ele. Impacto funcional:
+        ZERO (o `tsc --noEmit` passa e a suíte é verde) — é resíduo, não defeito de
+        comportamento.
+      evidence: >-
+        MEDIDO: `pnpm exec tsc --noEmit --noUnusedLocals --noUnusedParameters -p .tooling/tsconfig.json`
+        → 3× TS6133 em `ambiente-local.ts` (51, 55, 56).
+        ANTES do split (`git show 4899a81^:.tooling/scripts/ci/ambiente-local.ts`) as 3
+        eram `export function` LOCAIS (linhas 535, 590, 679) — não havia import pendurado.
+      command: 'pnpm exec tsc --noEmit --noUnusedLocals --noUnusedParameters -p .tooling/tsconfig.json'
+      verified_by_router: true
+
+    - id: M-02
+      severity: minor
+      consensus: false
+      reviewers_flagged: [documentation-specialist]
+      file: .agents/specs/conventions/estrutura-e-versionamento.md
+      line: 128
+      what: >-
+        A linha de histórico da 1.19.0 diz "o `ambiente-local.ts` tinha 1.017 linhas e
+        virou **dois**". O arquivo REALMENTE partido tinha **1.043** linhas.
+      why: >-
+        O número 1.017 foi medido em `444a943` (a ponta da 1ª rodada). Depois disso
+        entraram 2 commits que somaram 26 linhas ao arquivo (`8212c1c` a spec da imagem
+        qualificada, `b9e6a0d` o `nomeDaImagem`), e foi sobre os 1.043 que o `4899a81`
+        fez o corte. O claim descreve um estado que não era o do corte — e o doc de
+        versionamento é justamente o que registra "o que este PR entregou".
+      evidence: >-
+        MEDIDO: `git show 444a943:.tooling/scripts/ci/ambiente-local.ts | wc -l` → 1017;
+        `git show 4899a81^:.tooling/scripts/ci/ambiente-local.ts | wc -l` → 1043 (o que foi
+        partido); HEAD → 809 + 268.
+      command: 'git show 4899a81^:.tooling/scripts/ci/ambiente-local.ts | wc -l   # → 1043, o doc diz 1.017'
+      verified_by_router: true
+
+    - id: M-03
+      severity: minor
+      consensus: false
+      reviewers_flagged: [documentation-specialist]
+      file: .agents/specs/conventions/ci-defense-in-depth-dentes.md
+      line: 70
+      what: >-
+        A célula do `check-runbook-drift` tem o MESMO parágrafo DUPLICADO, verbatim:
+        "**O furo que a 2ª revisão achou (2026-11-05):** com a LIGAÇÃO desligada a suíte
+        ficava **24/24 verde** — nenhuma spec passava pelo `checkRunbookDrift` com
+        superfícies divergentes; e o `--name` **entre aspas** ..." — e a frase "**Diferencial
+        contra o repo real**: `pnpm comando-que-nao-existe` appendado ..." também aparece 2×.
+      why: >-
+        É a linha que o PR reescreveu por inteiro (o registro de dentes é a fonte da
+        verdade dos dentes) e o texto ficou com uma colagem a mais. A duplicação não muda
+        o veredito do gate, mas num registro que alguém lê para decidir "isto tem dente?",
+        o mesmo parágrafo duas vezes é ruído que enfraquece a leitura.
+      evidence: >-
+        MEDIDO: `grep -c 'O furo que a 2ª revisão achou' .agents/specs/conventions/ci-defense-in-depth-dentes.md`
+        → 2 (as duas ocorrências na MESMA linha, 70).
+      command: "grep -c 'O furo que a 2ª revisão achou' .agents/specs/conventions/ci-defense-in-depth-dentes.md   # → 2"
+      verified_by_router: true
+
+    - id: M-04
+      severity: minor
+      consensus: false
+      reviewers_flagged: [review-router]
+      file: .tooling/scripts/ci/check-runbook-drift.ts
+      line: 386
+      what: >-
+        Uma FIXTURE `.env.example` versionada passa a contar como "chave declarada" —
+        o gate não acusa uma chave que só existe em fixture (falso NEGATIVO de drift).
+      why: >-
+        A varredura alargou o conjunto de "quem declara uma chave" de 4 caminhos curados
+        para TODO `.env.example` versionado do repo. Um `.env.example` de fixture
+        versionado satisfaz a regra do runbook. Não há fixture hoje (MEDIDO: `git ls-files
+        -- '*.env.example' '*.env.production.example'` → exatamente 4, os 4 reais), então
+        o furo é para a frente — mas é a consequência direta de derivar a lista, e a
+        spec (§T3) não fixa essa fronteira.
+      evidence: >-
+        MEDIDO no repo real: `apps/api/test/fixtures/.env.example` com
+        `CHAVE_SO_DE_FIXTURE=x` + a chave na tabela do runbook → gate `ok=true`.
+      command: >-
+        mkdir -p apps/api/test/fixtures && printf 'CHAVE_SO_DE_FIXTURE=x\n' >
+        apps/api/test/fixtures/.env.example   # + a chave na tabela do runbook → gate verde
+      verified_by_router: true
+
+    # ── INFO (medido, sem defeito) ───────────────────────────────────────────
+    - id: N-01
+      severity: info
+      consensus: true
+      reviewers_flagged: [review-router, stack-code-reviewer]
+      file: .tooling/scripts/ci/adaptador-docker.ts
+      line: 44
+      what: >-
+        O `nomeDaImagem()` aceita qualquer imagem cujo REPOSITÓRIO se chame `postgres`,
+        de qualquer fornecedor: `bitnami/postgres:16` → `postgres` → RELIGA, enquanto o
+        irmão `bitnami/postgresql:16` → `postgresql` → recusa.
+      why: >-
+        O namespace é descartado de propósito (basename → sem digest → sem tag). A regra
+        resultante é "o repositório da imagem se chama postgres", não "é a imagem oficial
+        do Docker Hub". Não é defeito: o container que o check religa é o
+        `projeto-base-pg-local` — que, por construção, é o banco local de quem desenvolve,
+        e religá-lo é o remédio certo qualquer que seja o fornecedor da imagem. Fica
+        registrado porque a assimetria é real (`bitnami/postgres` passa, `bitnami/postgresql`
+        não) e porque o cabeçalho do arquivo fala em "o Postgres do projeto".
+      evidence: >-
+        MEDIDO (conjunto de aceitação completo, `tsx -e` sobre o módulo real):
+          RELIGA  postgres:16-alpine / postgres / docker.io/library/postgres:16-alpine /
+                 docker.io/library/postgres / postgres@sha256:abc /
+                 registry.local:5000/library/postgres:16 / bitnami/postgres:16
+          recusa  bitnami/postgresql:16 / postgresql:16 / postgres-alpine:1 /
+                 pgvector/pgvector:pg16 / timescale/timescaledb:latest / '' / localhost:5432
+      verified_by_router: true
+
+# ── O QUE O CICLO FECHOU, E O DENTE MEDIDO DE CADA ACHADO ────────────────────
+achados_do_ciclo:
+  - id: E1
+    o_que_era: "a imagem era comparada por PREFIXO (startsWith('postgres:')) — a forma QUALIFICADA caía no ramo `container-imagem-inesperada` e IMPEDIA a auto-recuperação"
+    o_que_foi_feito: "`nomeDaImagem()` (basename → sem digest → sem tag) em `adaptador-docker.ts`; a comparação em `ambiente-local.ts:283` virou `nomeDaImagem(estado.imagem) === 'postgres'`"
+    veredito: FECHOU
+    dente_mediado:
+      - "mutação: `=== 'postgres'` → `=== 'nunca'` → **10 de 76** caem (a spec mede o código, não o fixture)"
+      - 'mutação: `nomeDaImagem` volta ao prefixo (o defeito original) → **1 de 76** cai (é a spec da forma qualificada)'
+      - 'mutação: `nomeDaImagem` sem tirar a tag → **12 de 76** caem'
+      - 'conjunto de aceitação medido: as 6 formas reais do Postgres caem; `postgresql`/`pgvector`/`timescaledb` são recusadas'
+    comando: 'pnpm exec vitest run --root .tooling/scripts/ci ambiente-local'
+
+  - id: M1
+    o_que_era: 'a spec unitária FABRICAVA a mensagem do P1001 (`localhost:5432`) — um upgrade do Prisma degradaria a tradução em silêncio e a spec continuaria verde'
+    o_que_foi_feito: 'spec de INTEGRAÇÃO nova (P1001 real, porta fechada medida) + a unitária derivando da forma real'
+    veredito: FECHOU
+    dente_mediado:
+      - "SONDA do erro real (Prisma 6.19.3, porta fechada): `errorCode=P1001`, `name=PrismaClientInitializationError`, message REAL = `Can't reach database server at `127.0.0.1:39933`` + 2ª frase `Please make sure your database server is running at `127.0.0.1:39933`.`, 279 ms"
+      - 'a SENHA não vaza: `inspect(erro)` não contém a senha nem a URL (o erro não carrega a datasourceUrl); propriedades enumeráveis = `clientVersion`, `errorCode`, `retryable`, `name`'
+      - "o `datasourceUrl` é REAL: a porta medida (aleatória) aparece na mensagem — se o override fosse ignorado, a asserção `toContain('127.0.0.1:<porta>')` cairia"
+      - 'mutação: o regex da tradução deixa de casar a forma real → **4 de 12** caem (a spec de INTEGRAÇÃO cai)'
+      - 'mutação: a tradução devolve sempre o neutro → **4 de 12** caem'
+      - 'mutação: a tradução deixa de nomear `docker start projeto-base-pg-local` → **3 de 12** caem'
+    comando: 'cd apps/api && pnpm exec vitest run --project unit --project integration src/shared/infrastructure/prisma/traducao-de-falha-de-conexao'
+
+  - id: M2
+    o_que_era: 'a lista de `.env.example` do gate era ESCRITA À MÃO (4 literais) e não estava em asserção de spec nenhuma'
+    o_que_foi_feito: '`git ls-files` primeiro (o `.gitignore` do repo é a fonte única) + varredura do disco como reserva AVISADA'
+    veredito: 'FECHOU (com a ressalva I-02: o caminho principal não avisa quando o arquivo existe e não está versionado)'
+    dente_mediado:
+      - 'mutação: a lista volta a ser escrita à mão → **1 de 36** cai (a spec do pacote NOVO)'
+      - 'mutação: o `git ls-files` desligado → **1 de 36** cai'
+      - 'mutação: o `node_modules` fora da lista de pulo da reserva → **1 de 36** cai'
+      - 'mutação: o aviso da reserva desligado → **1 de 36** cai'
+      - 'as 4 mutações reproduzem EXATAMENTE os números do registro de dentes (`ci-defense-in-depth-dentes.md:70`)'
+    comando: 'pnpm exec vitest run --root .tooling/scripts/ci check-runbook-drift'
+
+  - id: M3
+    o_que_era: '`ambiente-local.ts` tinha 1.017 (→1.043 na hora do corte) linhas — o maior arquivo de harness do repo'
+    o_que_foi_feito: 'o adaptador do Docker saiu para `.tooling/scripts/ci/adaptador-docker.ts` (268 linhas); `CONTAINER_DO_BANCO_LOCAL` FICOU em `ambiente-local.ts` (constante de domínio)'
+    veredito: FECHOU
+    dente_mediado:
+      - '`tsc --noEmit -p .tooling/tsconfig.json` → exit 0 (a extração não quebrou a compilação)'
+      - 'DIFERENCIAL contra o repo real, o gate `check-runbook-drift` (não a spec): renomear `CONTAINER_DO_BANCO_LOCAL` no app → gate VERMELHO nomeando as 4 superfícies'
+      - "DIFERENCIAL: MOVER a constante de `ambiente-local.ts` para `adaptador-docker.ts` → gate VERMELHO por 'superfície ausente' (o split NÃO deixou o gate verde por inércia — a classe 5 de `guard-classes.md`)"
+      - "a spec do tooling importa o adaptador do SEU módulo (`from './adaptador-docker'`) — uma origem só"
+      - 'resíduo: 3 imports pendurados (M-01) — `tsc --noUnusedLocals` acusa 3× TS6133'
+    comando: >-
+      pnpm exec tsx -e "import {checkRunbookDrift} from './.tooling/scripts/ci/check-runbook-drift';
+      checkRunbookDrift({repoRoot: process.cwd()}).then(r=>console.log(r.ok, r.errors))"
+
+  - id: E2
+    o_que_era: 'este PR e o #145 claimavam a MESMA versão (1.18.0) com textos diferentes — `git merge-tree` acusava CONFLICT (content)'
+    o_que_foi_feito: 'o #144 vai para 1.19.0 (6 footers: README, AGENTS, MONOREPO, STACK, TEMPLATE_USAGE, estrutura-e-versionamento)'
+    veredito: FECHOU
+    dente_mediado:
+      - 'os 6 footers estão em 1.19.0 (MEDIDO por grep) e o gate `check-version-footers` passa (preflight verde)'
+      - 'a main está em 1.17.0; o #145 (MEDIDO no `refs/pull/145/head`) está em 1.18.0 → as três versões são distintas, a colisão sumiu'
+      - 'o #145 segue MERGEABLE e OPEN — a regra de renumeração para quem mergear depois está declarada no corpo do PR'
+    comando: "git show pr145:.agents/specs/conventions/estrutura-e-versionamento.md | grep 'Versão da convenção'   # → 1.18.0"
+
+# ── VERDE: O QUE FOI MEDIDO E PASSOU ─────────────────────────────────────────
+medicoes_verdes:
+  - 'pnpm ci:preflight → 0 erro(s); 2 check(s) skipped (declarados com motivo)'
+  - 'pnpm tooling:test → 46 arquivos, 800/800 testes verdes'
+  - 'pnpm turbo run test:unit --filter=@projeto/api → 81 arquivos, 1093/1093 verdes'
+  - 'cd apps/api && pnpm exec vitest run --project integration .../traducao-de-falha-de-conexao.integration.spec.ts → 3/3'
+  - 'pnpm typecheck:tooling → exit 0'
+  - 'pnpm turbo run typecheck --filter=@projeto/api → exit 0 (a spec de integração está no `include` do tsconfig: `src/**/*`)'
+  - 'pnpm format:check → All matched files use Prettier code style!'
+  - 'claims do README (rodapé 1.19.0, re-medido em 2026-11-05) → 28 agents / 30 memórias / 25 skills / 15 workflows / 24 convenções / 6 módulos — TODAS batem com o disco'
+  - 'o `ambiente:check` rodou no repo real: nomeou o dono da porta 3000 (`projeto-base-api`) e derivou o remédio `docker compose stop api` a partir do LABEL do compose (`com.docker.compose.service=api`)'
+
+# ── O QUE NÃO FOI MEDIDO (e por quê) ─────────────────────────────────────────
+nao_medido:
+  - 'a suíte `integration` COMPLETA (Testcontainers) — exige Docker com imagem do Postgres baixada; rodei só a spec nova'
+  - 'a suíte `e2e` do web — exige `next build`; fora do escopo do ciclo'
+  - 'o `pnpm ci:local` completo — exige o `ci:boot` (sobe a aplicação e derruba containers da máquina)'
+  - 'o merge de verdade com o #145 (a colisão foi conferida pelas versões dos dois lados, não re-executando o `git merge-tree`)'
+  - 'o `inspect(erro)` do Prisma com a URL de PRODUÇÃO — o probe usou a senha de teste'
+
+# ── PRÓXIMOS PASSOS ──────────────────────────────────────────────────────────
+next_steps:
+  - "corrigir I-01: `grep -rn 'Date.now()' tooling/ .tooling/ | wc -l` → 12 (e a decomposição real: 4 ambiente-local + 3 boot-local + 2 check-audit-skills + 3 specs)"
+  - 'corrigir I-02: `git ls-files --cached --others --exclude-standard` na varredura de `.env.example`'
+  - 'corrigir M-01: remover os 3 imports pendurados de `ambiente-local.ts` (51, 55, 56)'
+  - 'corrigir M-02 (1.043) e M-03 (a duplicação no registro de dentes)'
+  - 'decidir M-04: fixar a fronteira da fixture na spec do `check-runbook-drift`'
+  - 'revisar de novo depois das correções (o loop review→fix→review é o do repo)'
+
+regra_do_repo: 'NÃO editei nenhum arquivo do código revisado — só gravei este registro em `.agents/runs/`. `git status` no fim: só este arquivo.'

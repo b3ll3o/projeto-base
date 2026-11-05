@@ -1,8 +1,8 @@
 ---
 name: fluxo-desenvolvimento
 description: Documento canonico do fluxo de desenvolvimento do repositorio, do primeiro comando ao merge — das 3 camadas (hooks locais, CI remoto, processo de agents) aos gates que cada uma dispara, com o estado real (wired / unwired) de cada mecanismo.
-version: 1.4.0
-updated: 2026-11-03
+version: 1.5.0
+updated: 2026-11-05
 maintainer: stack-code-reviewer
 ---
 
@@ -125,8 +125,8 @@ grep -cE "^\s+name: '" .tooling/scripts/ci/preflight-gates.ts
 > documento publicava um 0 como se fosse a contagem. O sintoma (contagem que não
 > se move) é indistinguível de "não mudou nada desde a última vez".
 >
-> **MEDIDO 2026-10-29: 41.** As contagens que este documento publicava antes (21,
-> depois 29) eram de revisões antigas — a lista cresce a cada gate novo. Por isso
+> **MEDIDO 2026-11-05: 44.** As contagens que este documento publicava antes (21,
+> depois 29, depois 41) eram de revisões antigas — a lista cresce a cada gate novo. Por isso
 > a lista **enumerada** vive na §4 e a contagem vive do lado do comando.
 
 ### 3.4 Fan-out por fase — onde paralelizar dá ganho, e onde dá conflito
@@ -143,7 +143,7 @@ dois scripts existem no `package.json` (linhas 29 e 31) mas **nenhum hook os inv
 | Auditoria | N reviewers em paralelo, todos read-only | o roteador já resolve quem; falta o executor |
 | `.agents/memory/*.md` | 1 agente por arquivo | 30 arquivos (`find .agents/memory -name '*.md' | wc -l`), convenção 1:1 verificável |
 | Implementação | **1 por vez no mesmo codebase** | ver paredes abaixo |
-| Gates do preflight | 41 gates em `Promise.all` | hoje serial (`preflight.ts:412`), nenhum escreve |
+| Gates do preflight | 44 gates em `Promise.all` | hoje serial (`preflight.ts:412`), nenhum escreve |
 
 **Paredes — aqui paralelizar não é ganho, é conflito garantido:**
 
@@ -158,7 +158,7 @@ dois scripts existem no `package.json` (linhas 29 e 31) mas **nenhum hook os inv
 - **Branches paralelas** — `check-branch-up-to-date` bloqueia contra `origin/main`: a segunda branch
   nasce desatualizada por construção. O histórico já escolheu o lado oposto: PR #81 (167 arquivos), #95 (10 issues).
 
-**Não converta gate determinístico em prompt.** Os 41 gates são regex + TypeScript com spec
+**Não converta gate determinístico em prompt.** Os 44 gates são regex + TypeScript com spec
 própria; §5 já registra que a camada "agentic" é *"regra determinística com prosa em volta"*.
 Reescrever um como LLM é a classe 6 de `guard-classes.md` — spec verde, sistema inerte.
 
@@ -166,8 +166,8 @@ Reescrever um como LLM é a classe 6 de `guard-classes.md` — spec verde, siste
 
 1. **Executor** — `Agent` × N em paralelo sobre a saída do `review-router`. Menor diff e maior retorno: o roteamento, a matriz e os testes já existem.
 2. **Registro** — 25 dos 28 agents não estão em `.claude/agents/` (`ls .claude/agents/*.md | wc -l` = 3), logo o orquestrador não tem handle. Agent não registrado não é invocado nem por LLM.
-3. **Relógio** — `grep -rn 'Date.now()' tooling/ .tooling/` devolve **6** ocorrências (**3** num spec
-   unitário, **3** em `boot-local.ts`). Sem cronômetro do dispatch, "mais agents é mais rápido" é raciocínio.
+3. **Relógio** — `grep -rn 'Date.now()' tooling/ .tooling/ | wc -l` devolve **12** ocorrências (4 no
+   `ambiente-local.ts`, 3 no `boot-local.ts`, 2 no `check-audit-skills.ts`, 3 em specs) — sem cronômetro, "mais agents é mais rápido" é raciocínio.
 
 ---
 
@@ -295,5 +295,5 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 
 **Mantido por:** projeto-base contributors
 **Licença:** MIT
-**Versão do documento:** 1.4.0
-**Última atualização:** 2026-11-03
+**Versão do documento:** 1.5.0
+**Última atualização:** 2026-11-05

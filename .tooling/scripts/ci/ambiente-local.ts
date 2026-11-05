@@ -48,12 +48,9 @@ import { createRequire } from 'node:module';
 import { lerEnvDotEnv } from './boot-local';
 import {
   containersNaPorta,
-  dockerRespondeu,
   inspecionarContainer,
   nomeDaImagem,
   postgresPronto,
-  publicaPortaNasBindings,
-  servicoComposeDe,
   subirContainer,
   type ContainerNaPorta,
   type EstadoDoContainer,

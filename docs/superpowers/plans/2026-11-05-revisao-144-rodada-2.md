@@ -166,7 +166,7 @@ achou **buracos de envelope** que mudaram o como:
 | **Rebase antes do push**, e **revisão de novo depois do rebase** (`git-workflow.md`) | Passo explícito antes do push |
 | **`docs/como-rodar.md` está a 1 linha do teto** (299 de 300, contagem do gate) e o plano adicionava uma | A mudança no runbook é **de data, não de tamanho** (cabeçalho "Revisto em" + §1.4): zero linha nova. E as docs que **não** mudam são declaradas no corpo do PR (§1.2 pede dívida declarada, não silêncio) |
 | **A varredura de `.env.example` com lista de pulo é a mesma classe do M2** (outra lista escrita à mão) | T3.1 mudou: **`git ls-files` primeiro** (é o `.gitignore` do repo que exclui o `node_modules` — uma fonte só), com a varredura do disco como reserva **avisada** (`advisories`). O fixture da spec virou um repo git, com `.gitignore` — a forma do repo real |
-| **O M3 não tinha critério de aceite** — e o split não baixa o arquivo de 1.017 para 300 | Declarado: o alvo do corte é a **unidade Docker** (o adaptador, 268 linhas), e o que sobra (809 linhas no arquivo de decisão) é a próxima fatia, nomeada |
+| **O M3 não tinha critério de aceite** — e o split não baixa o arquivo de 1.043 (o que foi partido) para 300 | Declarado: o alvo do corte é a **unidade Docker** (o adaptador, 268 linhas), e o que sobra (809 linhas no arquivo de decisão) é a próxima fatia, nomeada |
 | **Claims numéricos sem o comando que os reproduz** (`tamanho-e-revisao.md` §4) | Cada número do plano ganhou o comando: 428 (`wc -l .tooling/scripts/ci/check-audit-skills.ts`), "centenas de `.env.example`" (`find . -path '*/node_modules/*' -prune -o -name '.env.example' -print \| wc -l` no `node_modules`), 125 ms (a spec de integração mede), "exatamente os 4" (`git ls-files -- '*.env.example' '*.env.production.example'`) |
 | **A citação do regex do gate não era literal** | Corrigida para o literal de `check-runbook-drift.ts:139` |
 | **`state-aware-planning` (camada 0) e `retrospective-capture` (plano ≥ 3 tasks) disparavam** | A §0 deste plano **é** o estado medido (commitada, com o comando que reproduz cada número) — um snapshot separado, gerado depois, seria um registro datado de uma medição que não aconteceu naquela data. O que a retro devolve é a **linha no ledger** (`.agents/runs/memory-triage.md`), e ela foi paga: a memória `spec-so-do-helper-nao-cobre-a-ligacao` (do ciclo anterior) nunca tinha ganhado linha, e o `check-memory-crystallization` acusava — o preflight local estava **vermelho** por causa disso |
@@ -177,3 +177,25 @@ achou **buracos de envelope** que mudaram o como:
 - A decisão do E2 (`1.19.0`): a colisão entre os dois PRs abertos é real e
   independe da ordem de merge, e o único conserto que o #144 controla é
   **não claimar** a mesma versão que o #145.
+
+## 5. A REVISÃO DO DIFF IMPLEMENTADO (o `review-router`, e o que ela achou)
+
+O `review-router` despachou 7 reviewers (4 pulados com motivo) e gravou a
+evidência em `.agents/runs/20261105T134833Z-review-02.yaml`. Veredito: **os 5
+achados do ciclo FECHOU** — cada um com o dente medido (mutação + diferencial
+contra o repo real) — e abriu **2 IMPORTANT + 4 MINOR + 1 INFO**.
+
+| Achado | O que é | Correção |
+|---|---|---|
+| **I-01** | `docs/fluxo-desenvolvimento.md:169` afirmava **6** ocorrências de `Date.now()`; o disco tem **12**. E a PR re-datou o doc mantendo o número velho | O número foi corrigido (com a decomposição real: 4 no `ambiente-local.ts`, 3 no `boot-local.ts`, 2 no `check-audit-skills.ts`, 3 em specs), e o doc foi re-datado. ⚠️ Re-datar um doc obriga a **re-medir todos os números dele** — e o "41 gates" também estava velho (o comando do próprio doc devolve **44**). Os 3 lugares foram corrigidos, e os **outros** números do doc foram medidos um a um (memórias 30 ✓, `.claude/agents` 3 ✓, `process.exit` 3 ✓, `specialist` 0 ✓) |
+| **I-02** | A varredura derivada só enxergava o **versionado** — um `.env.example` novo, sem `git add`, produzia gate **vermelho** acusando uma chave que ESTAVA no disco. Era uma **regressão**: a versão anterior lia o disco | `git ls-files --cached --others --exclude-standard` — o `.gitignore` continua sendo a fonte única do que fica de fora, e um arquivo novo **sem versionar** passa a contar. Spec nova para o caso |
+| **M-01** | O split deixou **3 imports pendurados** (`dockerRespondeu`, `publicaPortaNasBindings`, `servicoComposeDe`) — nenhum gate pega, porque o `.tooling/` não é pacote do workspace e o `tsconfig` não declara `noUnusedLocals` | Removidos. MEDIDO: `tsc --noEmit --noUnusedLocals` → **0** ocorrências em `ambiente-local.ts` (os que restam são pré-existentes, de outros arquivos) |
+| **M-02** | A linha de histórico dizia "1.017 linhas" — o arquivo **realmente partido** tinha **1.043** (1.017 era o tip da 1ª rodada, +26 do `nomeDaImagem` e da spec) | A linha e o corpo do PR passam a dizer 1.043, com o 1.017 explained |
+| **M-03** | O registro de dentes tinha o parágrafo do "furo que a 2ª revisão achou" **duplicado verbatim** na mesma célula | A duplicata foi removida. ⚠️ E no caminho: o diferencial nomeava **3** superfícies, e são **4** (o `pre-push` entrou na 1ª rodada) |
+| **M-04** | Uma **fixture** `.env.example` versionada conta como "chave declarada" → o gate não acusa uma chave que só existe em fixture (falso **negativo**). Hoje não há fixture (`git ls-files` → exatamente os 4 reais) | **Declarado, não corrigido** — e o porquê está no corpo do PR: excluir fixtures é **outra lista escrita à mão**, que é a mesma classe que o M2 acabou de matar. O furo é para a frente, e nenhum gate o acusa |
+| **N-01** | `bitnami/postgres:16` religa (o namespace é descartado) enquanto o irmão `bitnami/postgresql:16` recusa | **Não é defeito**: o container religado é o `projeto-base-pg-local`, que por construção é o banco local de quem desenvolve. Registrado |
+
+O denominador do `check-runbook-drift` foi **re-medido** (36 → **37** testes) e
+o registro de dentes (`ci-defense-in-depth-dentes.md:70`) reescrito com os
+números novos — inclusive a mutação do `--others` (o achado I-02), que não
+existia antes.

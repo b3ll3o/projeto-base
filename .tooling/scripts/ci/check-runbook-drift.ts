@@ -322,6 +322,13 @@ const SKIP_DIRS_DE_ENV = new Set(['node_modules', '.git', 'dist', 'coverage', '.
  * fonte só), e a varredura do disco como reserva, **avisando**: um gate
  * cujo escopo encolhe em silêncio é exatamente a falha que este gate existe
  * para eliminar.
+ *
+ * ⚠️ O `git ls-files` leva `--others --exclude-standard`: um `.env.example`
+ * **novo, ainda não versionado** tem de contar. MEDIDO (achado I-02 da
+ * revisão do #144): com o índice apenas, o gate acusava uma chave que ESTAVA
+ * no disco — um falso positivo que barra o pre-push e aponta para um arquivo
+ * que já está certo. O `--exclude-standard` mantém o `.gitignore` como a
+ * fonte única do que fica de fora.
  */
 export function arquivosDeEnvExample(repoRoot: string): {
   arquivos: string[];
@@ -342,7 +349,15 @@ function arquivosVersionadosDeEnv(repoRoot: string): string[] | undefined {
   try {
     const saida = execFileSync(
       'git',
-      ['ls-files', '--', '*.env.example', '*.env.production.example'],
+      [
+        'ls-files',
+        '--cached',
+        '--others',
+        '--exclude-standard',
+        '--',
+        '*.env.example',
+        '*.env.production.example',
+      ],
       { cwd: repoRoot, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] },
     );
     return saida

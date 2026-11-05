@@ -305,6 +305,24 @@ describe('checkRunbookDrift', () => {
     expect(r.advisories ?? []).toEqual([]);
   });
 
+  // ⚠️ O achado I-02 da revisão do #144: com o índice apenas (`git ls-files`
+  // sem `--others`), um `.env.example` NOVO — ainda não versionado — não era
+  // visto, e o gate acusava uma chave que ESTAVA no disco. Um falso positivo
+  // que barra o pre-push e aponta para um arquivo que já está certo.
+  it('um .env.example NOVO, ainda não versionado, conta como válido', async () => {
+    mkdirSync(join(repo, 'packages/novo'), { recursive: true });
+    escreverEnvExample('packages/novo/.env.example', 'CHAVE_DO_PACOTE_NOVO=x\n');
+    // ⚠️ SEM `versionar()` de propósito — o arquivo está no disco, e no índice
+    // está só o que a `beforeEach` versionou.
+    escreverDoc(
+      '# Como rodar\n\n```bash\ndocker run -d --name projeto-base-pg-local -p 5432:5432 postgres:16-alpine\n```\n\n' +
+        '| Variável | a | b |\n|---|---|---|\n| `CHAVE_DO_PACOTE_NOVO` | a | b |\n',
+    );
+    const r = await checkRunbookDrift({ repoRoot: repo, docPath });
+    expect(r.errors).toEqual([]);
+    expect(r.ok).toBe(true);
+  });
+
   it('runbook ausente → skipped COM MOTIVO (não verde por ausência — classe 5)', async () => {
     rmSync(docPath);
     const r = await checkRunbookDrift({ repoRoot: repo, docPath });
