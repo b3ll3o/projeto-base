@@ -205,6 +205,28 @@ export interface EstadoDoBanco {
 }
 
 /**
+ * O NOME do repositório da imagem — `postgres`, e não
+ * `docker.io/library/postgres:16-alpine`.
+ *
+ * ⚠️ `docker inspect` devolve `Config.Image` **COMO A PESSOA DIGITOU** — e a
+ * forma que o mundo usa é a QUALIFICADA (`docker.io/library/postgres:16-alpine`,
+ * copiada do Docker Hub). MEDIDO em 2026-11-05: com um `startsWith('postgres:')`,
+ * a forma qualificada caía no ramo `container-imagem-inesperada` — que diz, em
+ * texto, que a imagem "não é do Postgres" (é), e IMPEDE a auto-recuperação (o
+ * `docker start`, que é o propósito do check).
+ *
+ * ⚠️ O nome é o do REPOSITÓRIO, e não a referência: o digest (`@sha256:…`) e a
+ * tag (`:16-alpine`) não fazem parte dele. E o `postgresql` do Bitnami
+ * (`bitnami/postgresql:16`) dá `postgresql` — que **não** é o Postgres do
+ * projeto, e o check não pode religar um container que não é o banco.
+ */
+export function nomeDaImagem(imagem: string): string {
+  const semDigest = imagem.split('@')[0] ?? imagem;
+  const base = semDigest.split('/').pop() ?? semDigest;
+  return base.split(':')[0] ?? base;
+}
+
+/**
  * O banco local está no ar — e, se não está, dá para religá-lo?
  *
  * ⚠️ NUNCA devolve "criar": o volume do container guarda as migrations e as
@@ -269,7 +291,11 @@ export function decideSobreBanco(estado: EstadoDoBanco): VereditoAmbiente {
     };
   }
 
-  if (estado.containerParado && (estado.imagem ?? '').startsWith('postgres:')) {
+  if (
+    estado.containerParado &&
+    estado.imagem !== undefined &&
+    nomeDaImagem(estado.imagem) === 'postgres'
+  ) {
     return {
       ok: false,
       rotulo,
