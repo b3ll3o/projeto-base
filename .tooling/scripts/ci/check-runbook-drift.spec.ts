@@ -3,13 +3,14 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
-  checkRunbookDrift,
+  SUPERFICIES_DO_CONTAINER,
   checkNomeDoContainer,
+  checkRunbookDrift,
   comparaNomesDoContainer,
   extrairChavesEnv,
   extrairScriptsPnpm,
   nomeDoContainerNoCodigo,
-  nomeDoContainerNoRunbook,
+  nomesDoContainerEmComandos,
 } from './check-runbook-drift';
 
 /** A raiz do repo — as specs do gate real leem as superfícies de verdade. */
@@ -107,18 +108,30 @@ describe('checkRunbookDrift', () => {
    * "superfície ausente" em todo teste — que é uma falha do fixture, não do
    * gate. (A mesma lição da spec que fixa a FORMA do arquivo real.)
    */
-  function escreverSuperficiesDoContainer(nome: string = 'projeto-base-pg-local'): void {
+  function escreverSuperficiesDoContainer(
+    nome: string = 'projeto-base-pg-local',
+    nomes: Partial<Record<'app' | 'tooling' | 'pre-push', string>> = {},
+  ): void {
     const app = join(repo, 'apps/api/src/shared/infrastructure/prisma');
     const tooling = join(repo, '.tooling/scripts/ci');
+    const hook = join(repo, '.husky');
     mkdirSync(app, { recursive: true });
     mkdirSync(tooling, { recursive: true });
+    mkdirSync(hook, { recursive: true });
+    const nomeApp = nomes['app'] ?? nome;
+    const nomeTooling = nomes['tooling'] ?? nome;
+    const nomeHook = nomes['pre-push'] ?? nome;
     writeFileSync(
       join(app, 'traducao-de-falha-de-conexao.ts'),
-      `// o container à parte, o \`${nome}\`.\nconst CONTAINER_DO_BANCO_LOCAL = '${nome}';\n`,
+      `// o container à parte, o \`${nome}\`.\nconst CONTAINER_DO_BANCO_LOCAL = '${nomeApp}';\n`,
     );
     writeFileSync(
       join(tooling, 'ambiente-local.ts'),
-      `export const CONTAINER_DO_BANCO_LOCAL = '${nome}';\n`,
+      `export const CONTAINER_DO_BANCO_LOCAL = '${nomeTooling}';\n`,
+    );
+    writeFileSync(
+      join(hook, 'pre-push'),
+      `#!/bin/sh\necho "   O banco local é pré-requisito: docker start ${nomeHook}"\n`,
     );
   }
 
@@ -146,6 +159,9 @@ describe('checkRunbookDrift', () => {
         '```bash',
         'docker run -d --name projeto-base-pg-local -p 5432:5432 postgres:16-alpine',
         '```',
+        '',
+        'para derrubar, `docker rm -f projeto-base-pg-local`; para reiniciar,',
+        '`docker start projeto-base-pg-local`.',
         '',
         '| Variável | Onde mora | Consumida por |',
         '|---|---|---|',
@@ -218,6 +234,54 @@ describe('checkRunbookDrift', () => {
     expect(r.errors.join('\n')).toContain('script-fantasma');
     expect(r.errors.join('\n')).not.toContain('JWT_SECRET');
   });
+
+  it('⚠️ pelo CAMINHO REAL (checkRunbookDrift): superfícies divergentes → VERMELHO', async () => {
+    // ⚠️ Esta spec existe porque as outras chamavam `comparaNomesDoContainer`
+    // DIRETO — e assim a LIGAÇÃO entre o gate e a 3ª classe podia ser
+    // desligada sem que NENHUM teste caísse. MEDIDO: comentando a linha que
+    // chama `checkNomeDoContainer`, a suíte ficava 24/24 verde.
+    escreverSuperficiesDoContainer('projeto-base-pg-local', { app: 'pg-divergente' });
+
+    const r = await checkRunbookDrift({ repoRoot: repo, docPath });
+
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toContain('diverge');
+    expect(r.errors.join('\n')).toContain('pg-divergente');
+  });
+
+  it('pelo CAMINHO REAL: o hook com o nome VELHO → VERMELHO (o pre-push é uma das cópias)', async () => {
+    escreverSuperficiesDoContainer('projeto-base-pg-local', { 'pre-push': 'pg-velho-no-hook' });
+
+    const r = await checkRunbookDrift({ repoRoot: repo, docPath });
+
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toContain('pre-push=pg-velho-no-hook');
+  });
+
+  it('pelo CAMINHO REAL: o runbook com o nome VELHO (a citação com ASPAS) → VERMELHO', async () => {
+    // ⚠️ A citação com aspas é a forma mais natural de escrever — e a 1ª
+    // versão do regex a ignorava, e aí o DONO sumia da comparação em silêncio.
+    escreverDoc(
+      '# Como rodar\n\n```bash\ndocker run -d --name "pg-velho-no-runbook" -p 5432:5432 postgres:16-alpine\n```\n',
+    );
+
+    const r = await checkRunbookDrift({ repoRoot: repo, docPath });
+
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toContain('pg-velho-no-runbook');
+  });
+
+  it('pelo CAMINHO REAL: o runbook ausente NÃO esconde a divergência entre o app e o tooling', async () => {
+    // ⚠️ A 3ª classe não precisa do runbook: o app e o tooling são CÓDIGO.
+    // Carregar o `skipped` junto com ela seria verde por ausência.
+    rmSync(docPath);
+    escreverSuperficiesDoContainer('projeto-base-pg-local', { tooling: 'pg-divergente' });
+
+    const r = await checkRunbookDrift({ repoRoot: repo, docPath });
+
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toContain('diverge');
+  });
 });
 
 describe('o nome do container do banco local (a 3ª classe de claim)', () => {
@@ -242,19 +306,19 @@ describe('o nome do container do banco local (a 3ª classe de claim)', () => {
       {
         rotulo: 'runbook',
         caminho: 'docs/como-rodar.md',
-        nome: 'projeto-base-pg-local',
+        nomes: ['projeto-base-pg-local'],
         exigida: false,
       },
       {
         rotulo: 'app',
         caminho: 'apps/api/.../traducao-de-falha-de-conexao.ts',
-        nome: 'pg-velho',
+        nomes: ['pg-velho'],
         exigida: true,
       },
       {
         rotulo: 'tooling',
         caminho: '.tooling/scripts/ci/ambiente-local.ts',
-        nome: 'pg-velho',
+        nomes: ['pg-velho'],
         exigida: true,
       },
     ]);
@@ -270,19 +334,19 @@ describe('o nome do container do banco local (a 3ª classe de claim)', () => {
       {
         rotulo: 'runbook',
         caminho: 'docs/como-rodar.md',
-        nome: 'projeto-base-pg-local',
+        nomes: ['projeto-base-pg-local'],
         exigida: false,
       },
       {
         rotulo: 'app',
         caminho: 'apps/api/.../traducao-de-falha-de-conexao.ts',
-        nome: undefined,
+        nomes: [],
         exigida: true,
       },
       {
         rotulo: 'tooling',
         caminho: '.tooling/scripts/ci/ambiente-local.ts',
-        nome: 'projeto-base-pg-local',
+        nomes: ['projeto-base-pg-local'],
         exigida: true,
       },
     ]);
@@ -302,11 +366,43 @@ describe('o nome do container do banco local (a 3ª classe de claim)', () => {
     expect(nomeDoContainerNoCodigo(codigo)).toBe('pg-certain');
   });
 
-  it('o nome no runbook vem do `--name` da receita, não de um `docker start` solto', () => {
-    expect(nomeDoContainerNoRunbook('docker start projeto-base-pg-local\n')).toBeUndefined();
+  it('o runbook nomeia o container nas 3 formas: a receita, o derrube e o reinício', () => {
     expect(
-      nomeDoContainerNoRunbook('docker run -d --name projeto-base-pg-local -p 5432:5432 \\\n'),
-    ).toBe('projeto-base-pg-local');
+      nomesDoContainerEmComandos(
+        'docker run -d --name projeto-base-pg-local -p 5432:5432 postgres:16-alpine\n' +
+          'para derrubar, `docker rm -f projeto-base-pg-local`;\n' +
+          'para reiniciar, `docker start projeto-base-pg-local`.\n',
+      ),
+    ).toEqual(['projeto-base-pg-local']);
+  });
+
+  it('`docker compose stop <serviço>` NÃO é um nome de container', () => {
+    expect(nomesDoContainerEmComandos('docker compose stop api\n')).toEqual([]);
+  });
+
+  it('o `--name` COM ASPAS é lido — a forma mais natural de escrever, e a que sumia da comparação', () => {
+    // ⚠️ A 1ª versão do regex (`--name[= ]+`) devolvia `undefined` para esta
+    // forma, e aí o DONO (o runbook) saía silenciosamente da comparação.
+    expect(nomesDoContainerEmComandos('docker run -d --name "projeto-base-pg-NOVO" \\\n')).toEqual([
+      'projeto-base-pg-NOVO',
+    ]);
+    expect(nomesDoContainerEmComandos("docker run -d --name 'projeto-base-pg-NOVO' \\\n")).toEqual([
+      'projeto-base-pg-NOVO',
+    ]);
+  });
+
+  it('a lista de superfícies tem 4 entradas, e os caminhos EXATOS (a lista é o que a spec prende)', () => {
+    // ⚠️ A lista é a raiz do furo: MEDIDO, tirar a superfície 'app' da lista
+    // (ou apontá-la para o arquivo errado) deixava a suíte VERDE — o gate
+    // passava a medir 2 superfícies e ninguém percebia. O mesmo motivo da
+    // lista de footers do #126.
+    expect(SUPERFICIES_DO_CONTAINER).toHaveLength(4);
+    expect(SUPERFICIES_DO_CONTAINER.map((s) => s.caminho)).toEqual([
+      'docs/como-rodar.md',
+      'apps/api/src/shared/infrastructure/prisma/traducao-de-falha-de-conexao.ts',
+      '.tooling/scripts/ci/ambiente-local.ts',
+      '.husky/pre-push',
+    ]);
   });
 
   it('a mutação: renomear no app e NÃO no tooling → o gate reprova', async () => {
@@ -318,11 +414,11 @@ describe('o nome do container do banco local (a 3ª classe de claim)', () => {
       {
         rotulo: 'runbook',
         caminho: 'docs/como-rodar.md',
-        nome: 'projeto-base-pg-local',
+        nomes: ['projeto-base-pg-local'],
         exigida: false,
       },
-      { rotulo: 'app', caminho: 'x.ts', nome: 'projeto-base-pg-local', exigida: true },
-      { rotulo: 'tooling', caminho: 'y.ts', nome: 'projeto-base-pg-local', exigida: true },
+      { rotulo: 'app', caminho: 'x.ts', nomes: ['projeto-base-pg-local'], exigida: true },
+      { rotulo: 'tooling', caminho: 'y.ts', nomes: ['projeto-base-pg-local'], exigida: true },
     ]);
     expect(iguais).toEqual([]);
 
@@ -330,11 +426,11 @@ describe('o nome do container do banco local (a 3ª classe de claim)', () => {
       {
         rotulo: 'runbook',
         caminho: 'docs/como-rodar.md',
-        nome: 'projeto-base-pg-local',
+        nomes: ['projeto-base-pg-local'],
         exigida: false,
       },
-      { rotulo: 'app', caminho: 'x.ts', nome: 'pg-novo', exigida: true },
-      { rotulo: 'tooling', caminho: 'y.ts', nome: 'projeto-base-pg-local', exigida: true },
+      { rotulo: 'app', caminho: 'x.ts', nomes: ['pg-novo'], exigida: true },
+      { rotulo: 'tooling', caminho: 'y.ts', nomes: ['projeto-base-pg-local'], exigida: true },
     ]);
     expect(divergentes).toHaveLength(1);
   });

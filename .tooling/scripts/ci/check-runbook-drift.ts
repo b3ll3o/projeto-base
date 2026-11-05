@@ -91,42 +91,37 @@ interface PackageJson {
  *
  * ⚠️ POR QUE UM GATE, E NÃO UM DONO ÚNICO
  *
- * As 3 superfícies estão em unidades de build diferentes: o app (`apps/api` —
- * que o `Dockerfile` copia sozinho), o tooling (`.tooling/scripts/ci`) e o
- * runbook (doc). Nenhuma importação pode ligar o app ao tooling — é DESENHO,
- * não acidente (o mesmo argumento do `check-feature-flag-contract`). A
- * duplicação do nome é, portanto, NECESSÁRIA; o que era indefensável é ela
- * não ter DONO NINGUÉM.
+ * As 4 superfícies estão em unidades de build diferentes: o app (`apps/api` —
+ * que o `Dockerfile` copia sozinho), o tooling (`.tooling/scripts/ci`), o
+ * hook (`.husky/pre-push`) e o runbook (doc). Nenhuma importação pode ligar o
+ * app ao tooling — é DESENHO, não acidente (o mesmo argumento do
+ * `check-feature-flag-contract`). A duplicação do nome é, portanto,
+ * NECESSÁRIA; o que era indefensável é ela não ter DONO NINGUÉM.
  *
- * MEDIDO em 2026-11-03 (grafo do `graphify`): as 3 vivem em 3 COMUNIDADES
- * diferentes (386 / 133 / 39) e o caminho mais curto entre elas passa por
- * `ref_node_fs` — um nó genérico de filesystem, não uma dependência. Nenhum
- * import as liga, e nenhuma linguagem de programação impede que alguém
+ * MEDIDO em 2026-11-03 (grafo do `graphify`): as 3 primeiras vivem em 3
+ * COMUNIDADES diferentes (386 / 133 / 39) e o caminho mais curto entre elas
+ * passa por `ref_node_fs` — um nó genérico de filesystem, não uma dependência.
+ * Nenhum import as liga, e nenhuma linguagem de programação impede que alguém
  * renomeie uma e não as outras.
  *
- * O DONO é o runbook §1.1: é a receita que CRIA o container. As duas cópias de
- * código têm de concordar com ele.
+ * O DONO é o runbook §1.1: é a receita que CRIA o container. As outras três
+ * cópias têm de concordar com ele.
+ *
+ * ⚠️ O `.husky/pre-push` é uma das cópias: a linha que o hook imprime quando
+ * o push é barrado é um comando COPIÁVEL — é literalmente o que a pessoa
+ * executa. Ela não é "consequência" de nada: é uma cópia autoral, e por isso
+ * entra na comparação.
  */
 export const SUPERFICIES_DO_CONTAINER = [
-  { rotulo: 'runbook', caminho: 'docs/como-rodar.md', tipo: 'runbook' },
+  { rotulo: 'runbook', caminho: 'docs/como-rodar.md', tipo: 'comandos' },
   {
     rotulo: 'app',
     caminho: 'apps/api/src/shared/infrastructure/prisma/traducao-de-falha-de-conexao.ts',
     tipo: 'codigo',
   },
   { rotulo: 'tooling', caminho: '.tooling/scripts/ci/ambiente-local.ts', tipo: 'codigo' },
+  { rotulo: 'pre-push', caminho: '.husky/pre-push', tipo: 'comandos' },
 ] as const;
-
-/**
- * O nome do container do banco local, na receita do runbook.
- *
- * Ancorado no `--name` — que é o que **cria** o container (os `docker start` e
- * `docker rm` do mesmo trecho são consequência, não definição).
- */
-export function nomeDoContainerNoRunbook(doc: string): string | undefined {
-  const achado = /--name[= ]+([A-Za-z0-9][A-Za-z0-9_.-]*)/.exec(doc);
-  return achado?.[1];
-}
 
 /**
  * O nome do container do banco local, na DECLARAÇÃO da constante do código.
@@ -145,22 +140,52 @@ export function nomeDoContainerNoCodigo(codigo: string): string | undefined {
   return achado?.[1];
 }
 
+/**
+ * TODOS os nomes de container citados em COMANDOS.
+ *
+ * Cobre as 3 formas em que o runbook e o hook citam o container: a receita
+ * (`docker run --name X`), o reinício (`docker start X`) e o derrube
+ * (`docker rm -f X`).
+ *
+ * ⚠️ As ASPAS contam: `--name "X"` é uma forma válida de `docker run` — e é
+ * a mais natural de escrever. MEDIDO: a 1ª versão deste regex (`--name[= ]+`)
+ * devolvia `undefined` para a forma com aspas, e aí o DONO (o runbook)
+ * saía **silenciosamente** da comparação — o gate ficava verde com o
+ * runbook renomeado e o código não. Um guard que depende da forma do texto é
+ * um guard com uma classe 2 inteira de furo.
+ *
+ * ⚠️ O `docker compose stop <serviço>` NÃO casa: aqui só entram `start` e
+ * `rm`, e `compose` não é nenhum dos dois.
+ */
+export function nomesDoContainerEmComandos(texto: string): string[] {
+  const out: string[] = [];
+  const re =
+    /--name[= ]+["']?([A-Za-z0-9][A-Za-z0-9_.-]*)["']?|docker\s+(?:start|rm)\s+(?:-f\s+)?([A-Za-z0-9][A-Za-z0-9_.-]*)/g;
+  for (const m of texto.matchAll(re)) {
+    const nome = m[1] ?? m[2];
+    if (nome !== undefined && !out.includes(nome)) out.push(nome);
+  }
+  return out;
+}
+
 /** Uma superfície do nome do container, já lida. */
 export interface SuperficieDoContainer {
   rotulo: string;
   caminho: string;
-  nome: string | undefined;
+  /** TODOS os nomes que a superfície cita (a receita E as referências). */
+  nomes: string[];
   /**
-   * A superfície é EXIGIDA — a ausência dela é um erro.
+   * A superfície é EXIGIDA — ela tem que citar o nome.
    *
    * ⚠️ As duas superfícies de CÓDIGO são exigidas: elas são parte do
    * template, e a ausência da constante significa que o template mudou (e o
    * gate, que não pode mais ler o nome, tem de ser atualizado).
    *
-   * ⚠️ O runbook NÃO é exigido: um repo que aponte o banco para um Postgres
-   * local (sem container) não tem receita de `docker run --name` — e acusar
-   * esse repo seria um falso positivo. Quando o runbook DECLARA um container,
-   * ele entra na comparação; quando não declara, não há o que comparar.
+   * ⚠️ O runbook e o hook NÃO são exigidos: um repo que aponte o banco para
+   * um Postgres local (sem container) não tem receita de `docker run --name`
+   * — e acusar esse repo seria um falso positivo. Quando eles citam um
+   * container, ele entra na comparação; quando não citam, não há o que
+   * comparar.
    */
   exigida: boolean;
 }
@@ -168,7 +193,7 @@ export interface SuperficieDoContainer {
 /**
  * As superfícies têm de nomear o MESMO container.
  *
- * ⚠️ Anti-vacuuidade: uma superfície EXIGIDA que não foi lida é **erro**,
+ * ⚠️ Anti-vacuuidade: uma superfície EXIGIDA que não nomeia nada é **erro**,
  * nunca verde. Um gate que não mediu nada não pode reportar sucesso — é a
  * classe 5 de `guard-classes.md` ("classe ausente do dado") aplicada a si
  * próprio.
@@ -176,7 +201,7 @@ export interface SuperficieDoContainer {
 export function comparaNomesDoContainer(superficies: SuperficieDoContainer[]): string[] {
   const errors: string[] = [];
 
-  const ausentes = superficies.filter((s) => s.exigida && s.nome === undefined);
+  const ausentes = superficies.filter((s) => s.exigida && s.nomes.length === 0);
   for (const s of ausentes) {
     errors.push(
       `runbook desatualizado: não achei o nome do container do banco local em ` +
@@ -190,13 +215,19 @@ export function comparaNomesDoContainer(superficies: SuperficieDoContainer[]): s
   // ele não sabe que o nome mudou). Então a ausência SAI SOZINHA.
   if (ausentes.length > 0) return errors;
 
-  // O runbook entra na comparação só quando DECLARA um container.
-  const declarados = superficies.filter((s) => s.nome !== undefined);
-  const distintos = [...new Set(declarados.map((s) => s.nome))];
+  // ⚠️ A comparação é entre TODOS os nomes citados, e não entre as
+  // superfícies "que declaram": o DONO (o `--name` da receita) e as
+  // REFERÊNCIAS (`docker start`, `docker rm`) têm de ser o mesmo nome, e as
+  // cópias de código também. Uma citação com o nome velho — a forma mais
+  // natural de escrever (`--name "X"`) — não pode sumir da comparação.
+  const citados = superficies.flatMap((s) => s.nomes);
+  const distintos = [...new Set(citados)];
   if (distintos.length > 1) {
     errors.push(
       'o nome do container do banco local diverge entre as superfícies que o guardam: ' +
-        declarados.map((s) => `${s.rotulo}=${s.nome ?? '(não encontrado)'}`).join(' · ') +
+        superficies
+          .map((s) => `${s.rotulo}=${s.nomes.length === 0 ? '(nenhum)' : s.nomes.join(', ')}`)
+          .join(' · ') +
         '. O runbook §1.1 é o DONO (a receita que cria o container) — renomeou num ' +
         'lugar, renomeou em todos, senão o `pnpm dev` manda `docker start` de um ' +
         'nome que não existe.',
@@ -206,7 +237,7 @@ export function comparaNomesDoContainer(superficies: SuperficieDoContainer[]): s
   return errors;
 }
 
-/** Lê as 3 superfícies do nome do container e compara. */
+/** Lê as superfícies do nome do container e compara. */
 export async function checkNomeDoContainer(opts: {
   repoRoot: string;
   doc: string;
@@ -215,27 +246,25 @@ export async function checkNomeDoContainer(opts: {
   const superficies: SuperficieDoContainer[] = [];
 
   for (const s of SUPERFICIES_DO_CONTAINER) {
-    if (s.tipo === 'runbook') {
-      superficies.push({
-        rotulo: s.rotulo,
-        caminho: s.caminho,
-        nome: nomeDoContainerNoRunbook(opts.doc),
-        exigida: false,
-      });
-      continue;
-    }
-    let codigo = '';
-    try {
-      codigo = await fs.readFile(path.join(root, s.caminho), 'utf-8');
-    } catch {
-      // arquivo ausente: o nome fica `undefined` e a comparação acusa.
-      codigo = '';
+    let texto = '';
+    if (s.caminho === 'docs/como-rodar.md') {
+      texto = opts.doc;
+    } else {
+      try {
+        texto = await fs.readFile(path.join(root, s.caminho), 'utf-8');
+      } catch {
+        // arquivo ausente: a superfície não nomeia nada, e a comparação acusa.
+        texto = '';
+      }
     }
     superficies.push({
       rotulo: s.rotulo,
       caminho: s.caminho,
-      nome: nomeDoContainerNoCodigo(codigo),
-      exigida: true,
+      nomes:
+        s.tipo === 'codigo'
+          ? [nomeDoContainerNoCodigo(texto)].filter((n): n is string => n !== undefined)
+          : nomesDoContainerEmComandos(texto),
+      exigida: s.tipo === 'codigo',
     });
   }
 
@@ -307,9 +336,15 @@ export async function checkRunbookDrift(opts: {
   } catch {
     // Template sem runbook não é erro — é ausência do que julgar. `skipped` COM
     // MOTIVO: verde por ausência é a classe 5 de guard-classes.md.
+    //
+    // ⚠️ MAS A 3ª CLASSE NÃO PRECISA DO RUNBOOK: o app e o tooling são CÓDIGO,
+    // e a divergência entre eles não depende de nenhum doc. Carregar o skip
+    // junto com a 3ª classe seria verde por ausência — MEDIDO: com o runbook
+    // ausente e o app e o tooling divergentes, o gate devolvia `ok=true`.
+    const errosDoContainer = await checkNomeDoContainer({ repoRoot: root, doc: '' });
     return {
-      ok: true,
-      errors: [],
+      ok: errosDoContainer.length === 0,
+      errors: errosDoContainer,
       skipped: true,
       reason: `runbook ausente: '${path.relative(root, docPath)}' — gate não tem o que comparar`,
     };

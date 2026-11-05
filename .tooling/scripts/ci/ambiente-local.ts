@@ -320,6 +320,16 @@ export interface ContainerNaPorta {
 /** O que o check sabe da porta da API. */
 export interface EstadoDaPorta {
   /**
+   * O daemon do Docker respondeu?
+   *
+   * ⚠️ Sem esta distinção, o veredito AFIRMA que a porta ocupada é de um
+   * processo local — e o check não sabe: com o daemon fora do ar, o
+   * `docker ps` não lista nenhum container, e o dono pode ser um container do
+   * Compose. É a mesma classe que o `dockerRespondeu` fecha no caminho do
+   * banco.
+   */
+  dockerRespondeu: boolean;
+  /**
    * O nome da porta no veredito — "porta da API" (o padrão) ou "porta do web".
    *
    * ⚠️ A porta do web é a MESMA asserção com outro rótulo: o que muda é de
@@ -353,6 +363,21 @@ export function decideSobrePorta(estado: EstadoDaPorta): VereditoAmbiente {
 
   if (!estado.ocupada) {
     return { ok: true, rotulo, mensagem: 'livre' };
+  }
+
+  // ⚠️ A porta está ocupada, mas o Docker não respondeu: o check NÃO sabe
+  // quem é o dono — e afirmar que é "um processo local" seria inventar. O
+  // sintoma é do DOCKER, e o remédio é do socket.
+  if (!estado.dockerRespondeu) {
+    return {
+      ok: false,
+      rotulo,
+      codigo: 'docker-nao-respondeu',
+      mensagem:
+        `já está em uso, e o Docker não respondeu ao listar os containers — o check não ` +
+        `consegue dizer quem está na porta. ${quem} não sobe assim.`,
+      comando: 'docker info   # o daemon responde? o socket está acessível?',
+    };
   }
 
   const containers = estado.containersNaPorta;
@@ -537,10 +562,12 @@ const SEPARADOR_DO_INSPECT = '\u001f';
  * senhas dos papéis).
  */
 export function dockerRespondeu(erro: unknown): boolean {
-  const stderr =
-    erro !== null && typeof erro === 'object'
-      ? String((erro as { stderr?: unknown }).stderr ?? '')
-      : '';
+  // ⚠️ O `stderr` do erro é `string` quando o `execFileSync` tem `encoding`,
+  // e `Buffer` sem ele — e `String(buffer)` já funciona. O `Buffer.isBuffer`
+  // é a forma explícita, e não depende do `encoding` que alguém mexer.
+  const bruto =
+    erro !== null && typeof erro === 'object' ? (erro as { stderr?: unknown }).stderr : undefined;
+  const stderr = Buffer.isBuffer(bruto) ? bruto.toString('utf-8') : String(bruto ?? '');
   // ⚠️ Case-INsensitive: o binário escreve `no such object` em minúsculo —
   // um `includes('No such object')` case-sensitivo NÃO casaria o caso real.
   return /no such (object|container)/i.test(stderr);
@@ -561,11 +588,20 @@ export function dockerRespondeu(erro: unknown): boolean {
 export function inspecionarContainer(nome: string, porta: number): EstadoDoContainer {
   let saida: string;
   try {
-    saida = execFileSync('docker', ['inspect', '--format', FORMATO_DO_INSPECT, nome], {
-      encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: PRAZO_DO_DOCKER_MS,
-    }).trim();
+    saida = execFileSync(
+      'docker',
+      // ⚠️ `--type container`: sem ele, o `inspect` também resolve uma
+      // IMAGEM pelo mesmo nome — e aí o template `.State.Status` dá um erro
+      // de parsing, que o `catch` leria como "o Docker não respondeu"
+      // (o daemon respondeu; o problema é outro).
+      ['inspect', '--type', 'container', '--format', FORMATO_DO_INSPECT, nome],
+      {
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: PRAZO_DO_DOCKER_MS,
+        maxBuffer: 1 << 20,
+      },
+    ).trim();
   } catch (erro) {
     return {
       existe: false,
@@ -576,7 +612,10 @@ export function inspecionarContainer(nome: string, porta: number): EstadoDoConta
     };
   }
 
-  const [status, imagem, bindings] = saida.split(SEPARADOR_DO_INSPECT);
+  // ⚠️ Só a PRIMEIRA linha: um `docker inspect` que casa mais de um objeto
+  // imprime uma linha por objeto, e o `split` do separador transformaria o
+  // resto em lixo.
+  const [status, imagem, bindings] = saida.split('\n')[0]?.split(SEPARADOR_DO_INSPECT) ?? [];
   return {
     existe: true,
     rodando: status === 'running',
@@ -587,7 +626,7 @@ export function inspecionarContainer(nome: string, porta: number): EstadoDoConta
 }
 
 /** Os containers que publicam a porta dada, e o serviço do Compose de cada um. */
-export function containersNaPorta(porta: number): ContainerNaPorta[] {
+export function containersNaPorta(porta: number): ContainerNaPorta[] | undefined {
   try {
     const saida = execFileSync(
       'docker',
@@ -600,7 +639,13 @@ export function containersNaPorta(porta: number): ContainerNaPorta[] {
       .filter((l) => l !== '')
       .map((nome) => ({ nome, servicoCompose: servicoComposeDe(nome) }));
   } catch {
-    return [];
+    // ⚠️ `undefined` e NÃO `[]`: o `catch` não é "nenhum container publica
+    // essa porta" — é "o `docker ps` não respondeu". Devolver `[]` fazia o
+    // veredito AFIRMAR que a porta está com um processo local, quando o
+    // check não sabe (pode ser um container do Compose que o daemon não
+    // listou). É o MESMO furo que o `dockerRespondeu` fecha no caminho do
+    // banco — fechado aqui também.
+    return undefined;
   }
 }
 
@@ -850,10 +895,12 @@ export async function verificarPorta(valores: Record<string, string>): Promise<V
     };
   }
   const ocupada = await portaAberta('127.0.0.1', porta);
+  const containers = ocupada ? containersNaPorta(porta) : [];
   return decideSobrePorta({
     porta,
     ocupada,
-    containersNaPorta: ocupada ? containersNaPorta(porta) : [],
+    dockerRespondeu: containers !== undefined,
+    containersNaPorta: containers ?? [],
   });
 }
 
@@ -908,12 +955,14 @@ export async function verificarPortaDoWeb(raiz: string = RAIZ): Promise<Veredito
     };
   }
   const ocupada = await portaAberta('127.0.0.1', porta);
+  const containers = ocupada ? containersNaPorta(porta) : [];
   return decideSobrePorta({
     rotulo: 'porta do web',
     quem: 'O web local',
     porta,
     ocupada,
-    containersNaPorta: ocupada ? containersNaPorta(porta) : [],
+    dockerRespondeu: containers !== undefined,
+    containersNaPorta: containers ?? [],
   });
 }
 

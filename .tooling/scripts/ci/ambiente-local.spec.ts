@@ -338,11 +338,19 @@ describe('temClientReal', () => {
 
 describe('decideSobrePorta', () => {
   it('porta livre: passa', () => {
-    expect(decideSobrePorta({ porta: 3000, ocupada: false, containersNaPorta: [] }).ok).toBe(true);
+    expect(
+      decideSobrePorta({
+        dockerRespondeu: true,
+        porta: 3000,
+        ocupada: false,
+        containersNaPorta: [],
+      }).ok,
+    ).toBe(true);
   });
 
   it('porta ocupada por container do Compose: dá `docker compose stop <serviço>`', () => {
     const veredito = decideSobrePorta({
+      dockerRespondeu: true,
       porta: 3000,
       ocupada: true,
       containersNaPorta: [{ nome: 'projeto-base-api', servicoCompose: 'api' }],
@@ -356,6 +364,7 @@ describe('decideSobrePorta', () => {
 
   it('porta ocupada por container que NÃO é do Compose: dá `docker stop <container>`', () => {
     const veredito = decideSobrePorta({
+      dockerRespondeu: true,
       porta: 3000,
       ocupada: true,
       containersNaPorta: [{ nome: 'outro-container', servicoCompose: undefined }],
@@ -365,7 +374,12 @@ describe('decideSobrePorta', () => {
   });
 
   it('porta ocupada por processo local: NÃO sugere pkill (este repo é copiado)', () => {
-    const veredito = decideSobrePorta({ porta: 3000, ocupada: true, containersNaPorta: [] });
+    const veredito = decideSobrePorta({
+      dockerRespondeu: true,
+      porta: 3000,
+      ocupada: true,
+      containersNaPorta: [],
+    });
 
     expect(veredito.ok).toBe(false);
     expect(falha(veredito).codigo).toBe('porta-no-processo');
@@ -373,10 +387,29 @@ describe('decideSobrePorta', () => {
     expect(falha(veredito).comando).toContain('ss -ltnp');
   });
 
+  it('Docker que NÃO respondeu: o veredito NÃO afirma que é um processo local', () => {
+    // ⚠️ O mesmo furo que o `dockerRespondeu` fecha no caminho do banco: com o
+    // daemon fora do ar, o `docker ps` não lista nenhum container, e dizer
+    // "é um processo local" seria INVENTAR o dono (pode ser um container do
+    // Compose que o daemon não listou).
+    const veredito = decideSobrePorta({
+      dockerRespondeu: false,
+      porta: 3000,
+      ocupada: true,
+      containersNaPorta: [],
+    });
+
+    expect(veredito.ok).toBe(false);
+    expect(falha(veredito).codigo).toBe('docker-nao-respondeu');
+    expect(falha(veredito).mensagem).not.toMatch(/processo local/i);
+    expect(falha(veredito).comando).toContain('docker info');
+  });
+
   it('a porta do web: o rótulo e QUEM não sobe são do web, não da API', () => {
     // ⚠️ A mensagem que diz "A API local não sobe" para a porta do web seria
     // uma afirmação FALSA: a API sobe; o web é que não sobe.
     const veredito = decideSobrePorta({
+      dockerRespondeu: true,
       rotulo: 'porta do web',
       quem: 'O web local',
       porta: 3001,
@@ -771,7 +804,9 @@ describe('a recuperação com os efeitos REAIS (docker falso no PATH)', () => {
 echo "$@" >> "$FAKE_DOCKER_LOG"
 case "$1" in
   inspect)
-    case "$3" in
+    # ⚠️ O case olha o argv INTEIRO ("$*") e não o "$3": o inspect ganhou o
+    # --type container, e o template deixou de estar na 3ª posição.
+    case "$*" in
       *HostConfig.PortBindings*)
         printf 'exited\\037postgres:16-alpine\\037{"5432/tcp":[{"HostIp":"","HostPort":"${porta}"}]}\\n'
         ;;
