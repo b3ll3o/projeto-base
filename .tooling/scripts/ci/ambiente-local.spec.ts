@@ -22,6 +22,7 @@ import {
   clienteDoPrismaGerado,
   temClientReal,
   publicaPortaNasBindings,
+  nomeDaImagem,
   inspecionarContainer,
   dockerRespondeu,
   portaDoWeb,
@@ -183,6 +184,25 @@ describe('decideSobrePrismaClient', () => {
   });
 });
 
+describe('nomeDaImagem', () => {
+  it('a forma QUALIFICADA e a forma curta dão o mesmo nome', () => {
+    expect(nomeDaImagem('docker.io/library/postgres:16-alpine')).toBe('postgres');
+    expect(nomeDaImagem('postgres:16-alpine')).toBe('postgres');
+    expect(nomeDaImagem('postgres')).toBe('postgres');
+    expect(nomeDaImagem('docker.io/library/postgres')).toBe('postgres');
+  });
+
+  it('o digest e o registro não mudam o nome', () => {
+    expect(nomeDaImagem('postgres@sha256:abc123')).toBe('postgres');
+    expect(nomeDaImagem('registry.local:5000/library/postgres:16')).toBe('postgres');
+  });
+
+  it('outra imagem não é o postgres', () => {
+    expect(nomeDaImagem('bitnami/postgresql:16')).toBe('postgresql');
+    expect(nomeDaImagem('outra-imagem:1')).toBe('outra-imagem');
+  });
+});
+
 describe('decideSobreBanco', () => {
   const base = {
     bancoAlcancavel: false,
@@ -215,6 +235,33 @@ describe('decideSobreBanco', () => {
     const veredito = decideSobreBanco({ ...base, imagem: 'outra-imagem:1' });
 
     expect(veredito.ok).toBe(false);
+    expect(falha(veredito).codigo).toBe('container-imagem-inesperada');
+    expect(falha(veredito).comando).not.toContain('docker start');
+  });
+
+  // ⚠️ A FORMA QUALIFICADA é a que o mundo usa: `docker inspect` devolve
+  // `Config.Image` COMO A PESSOA DIGITOU, e ninguém digita `postgres:16-alpine`
+  // se copiou o nome do Docker Hub (`docker.io/library/postgres:16-alpine`).
+  // MEDIDO em 2026-11-05: com o `startsWith('postgres:')`, essa forma caía no
+  // ramo `container-imagem-inesperada` — que diz "que não é do Postgres" (é) e
+  // IMPEDE a auto-recuperação (o `docker start` é o propósito do check).
+  it('container PARADO com a imagem QUALIFICADA: religa — é o Postgres', () => {
+    const veredito = decideSobreBanco({ ...base, imagem: 'docker.io/library/postgres:16-alpine' });
+
+    expect(veredito.ok).toBe(false);
+    expect(falha(veredito).codigo).toBe('subir-container');
+    expect(falha(veredito).comando).toBe(`docker start ${CONTAINER_DO_BANCO_LOCAL}`);
+  });
+
+  it('container PARADO com a imagem SEM tag: religa — é o Postgres', () => {
+    const veredito = decideSobreBanco({ ...base, imagem: 'postgres' });
+
+    expect(falha(veredito).codigo).toBe('subir-container');
+  });
+
+  it('container PARADO com o postgresql do Bitnami: NÃO religa — não é o banco do projeto', () => {
+    const veredito = decideSobreBanco({ ...base, imagem: 'bitnami/postgresql:16' });
+
     expect(falha(veredito).codigo).toBe('container-imagem-inesperada');
     expect(falha(veredito).comando).not.toContain('docker start');
   });
