@@ -207,7 +207,7 @@ Estes são os sintomas do **dia a dia**; a tabela por ambiente está no [runbook
 | `pnpm dev` falha com `Cannot find module '@projeto/...'` | `pnpm install --frozen-lockfile` |
 | `pnpm dev` falha com `PrismaClientInitializationError` (P1001) | `pnpm ambiente:check` — ele religa o banco local e diz o que falta ([runbook §1.4](./docs/como-rodar.md)) |
 | `pnpm dev` diz "port already in use" | `pnpm ambiente:check` — ele nomeia **quem** ocupa a porta e o comando de parar só ela (`docker compose stop <serviço>`); o `lsof -i :3000` acharia a porta, não o dono ([runbook §1.4](./docs/como-rodar.md)) |
-| `curl /api/v1/health` retorna 503 | `docker compose logs postgres` |
+| `curl /api/v1/health` retorna 503 | `docker compose logs postgres` — ou, se o banco é o container da máquina, `docker logs projeto-base-pg-local` |
 | Traces não chegam no OTel Collector | Subir com `docker compose --profile observability up -d` |
 | `pnpm ci:preflight` falha com cross-ref quebrada | `pnpm docs:sync --mode=fix` ou ajustar manualmente |
 
