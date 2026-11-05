@@ -100,6 +100,21 @@ o T2 cruza o app com o tooling), **parallel** na revisão (§3).
 > disponível acima de `1.18.0` é `1.19.0`. E `1.18.0` **pertence** ao #145
 > (as skills de terceiro foram criadas DEPOIS do #144 — #145 é de
 > 2026-11-03T22:22Z, e o #144 é anterior no mesmo dia).
+>
+> ⚠️ **O ATrito do merge, MEDIDO** (num worktree descartável, `main` + #145 +
+> este PR — não uma leitura de `git merge-tree`):
+>
+> | | #144 em `1.18.0` | #144 em `1.19.0` |
+> |---|---|---|
+> | arquivos em conflito | 2 | 6 (os 5 footers + a tabela de histórico) |
+> | a tabela de histórico | conflito: **duas linhas `1.18.0`**, textos diferentes | **merge automático**: `1.18.0` (skills) e `1.19.0` (start local), na ordem |
+> | os footers | merge automático (mesmo valor dos dois lados) | conflito **mecânico**: uma linha, dois valores |
+>
+> O atrito é o **mesmo**: a renomeação que o E2 pede ("quem mergear por
+> último tem de renumerar para `1.19.0`") **é** escrever um valor diferente do
+> que a `main` tem — os 6 conflitos aparecem de qualquer jeito no momento do
+> merge. A diferença é que aqui eles são **visíveis e declarados** (neste
+> plano e no corpo do PR), e não descobertos na hora do merge.
 
 ### T6 — o corpo do PR e as docs tocadas
 
