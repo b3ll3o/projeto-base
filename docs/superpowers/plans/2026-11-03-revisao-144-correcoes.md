@@ -187,7 +187,7 @@ faltava era precisão em 5 tasks, e a maior delas viraria o veredito ao contrár
 | **A versão "profunda" do check** (3 sondas do CLI do Prisma) | Está no §4 do plano original, com o gatilho para reabrir |
 | **Um gate NOVO para o container** | O `check-runbook-drift` já é o dono da invariante "runbook × código", já está no preflight e já tem spec. Gate novo custaria registro em **6 lugares** (o gate, a spec, o `preflight.ts`, o `preflight-gates.ts`, o registro de dentes e o catálogo) para medir a mesma coisa |
 | **Amarrar a porta do web ao `ALLOWED_ORIGINS` da API** | O default do CORS (`apps/api/src/main.ts:27`, e o guard de produção em `:82`) tem `3001` cravado — e a porta do web vem do `apps/web/package.json`. Se as duas divergirem, o navegador bloqueia a API em silêncio (não é um erro cru: é um CORS bloqueado). Fechar isso é uma **invariante app↔app**, que este `pnpm ambiente:check` não é o lugar de medir — e o conserto (gate novo, ou o `ALLOWED_ORIGINS` do ambiente local) é uma demanda distinta. **Declarado, não esquecido** |
-| **A linha do troubleshooting "503 → `docker compose logs postgres`"** | Restaurada como veio (a revisão pediu), mas ela culpa o `postgres` do Compose — que desde o #91 não é alcançável da máquina. Anotado aqui, sem mexer: a linha é ambígua sobre **qual** banco ela culpa |
+| **A linha do troubleshooting "503 → `docker compose logs postgres`"** | Restaurada como veio (a revisão pediu), mas ela culpa o `postgres` do Compose — que desde o #91 não é alcançável da máquina. **Corrigida**: a linha nomeia os **dois** bancos (o log do Compose e o log do container da máquina) |
 
 ## 5. O que foi implementado (2026-11-05) — com o comando que mede
 
