@@ -3,7 +3,7 @@
 Mapa completo por ambiente (dev, Docker, observabilidade, e2e, CI). O índice e o
 **Ambiente 1** (dev local com pnpm nativo) ficam aqui; os outros cinco são irmãos.
 
-> **Revisto em 2026-11-03** (o preflight do ambiente local, §1.4). Cada afirmação
+> **Revisto em 2026-11-05** (o preflight do ambiente local, §1.4). Cada afirmação
 > medida carrega a data em que foi medida — as de 2026-10-16 são da primeira redação
 > deste runbook e **não** foram re-medidas. Legenda: **✅ medido** = executado, com
 > saída observada · **📖 lido do código** = derivado do YAML/Dockerfile/script.
@@ -150,7 +150,7 @@ cd apps/api && pnpm exec prisma migrate deploy && cd ../..  # aplica as 15 migra
 pnpm dev     # roda o `pnpm ambiente:check` e depois sobe api :3000 + web :3001
 ```
 
-O `pnpm ambiente:check` é o preflight do ambiente local (✅ medido em 2026-11-03):
+O `pnpm ambiente:check` é o preflight do ambiente local (✅ medido em 2026-11-05):
 verifica o `DATABASE_URL`/`JWT_SECRET`, o Prisma Client, o banco e as **duas**
 portas que o `pnpm dev` ocupa (a da API, do `PORT`; a do web, do
 `apps/web/package.json`) **antes** de subir qualquer app, **religa o container
