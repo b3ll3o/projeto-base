@@ -21,20 +21,22 @@ import {
   alvoDoBanco,
   clienteDoPrismaGerado,
   temClientReal,
-  publicaPortaNasBindings,
-  nomeDaImagem,
-  inspecionarContainer,
-  dockerRespondeu,
   portaDoWeb,
   verificarPortaDoWeb,
-  subirContainer,
-  postgresPronto,
   EFEITOS_REAIS,
   verificarBanco,
   type EfeitosDoBanco,
   type VereditoAmbiente,
   CONTAINER_DO_BANCO_LOCAL,
 } from './ambiente-local';
+import {
+  publicaPortaNasBindings,
+  nomeDaImagem,
+  inspecionarContainer,
+  dockerRespondeu,
+  subirContainer,
+  postgresPronto,
+} from './adaptador-docker';
 
 const RAIZ = resolve(__dirname, '..', '..', '..');
 const SCRIPT = join(RAIZ, '.tooling', 'scripts', 'ci', 'ambiente-local.ts');
