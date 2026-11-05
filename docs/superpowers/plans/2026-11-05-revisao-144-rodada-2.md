@@ -145,7 +145,7 @@ achou **buracos de envelope** que mudaram o como:
 
 | Achado da revisão | Decisão |
 |---|---|
-| **TDD não é o diff**: o `tdd-enforcer` valida a **história do git** (commit de teste antes do de implementação; commit RED; commit GREEN) | Cada task vira **dois commits** — RED (a spec que falha) e GREEN (a implementação). E o RED é de verdade: medido, não presumido |
+| **TDD não é o diff**: o `tdd-enforcer` valida a **história do git** (commit de teste antes do de implementação; commit RED; commit GREEN) | Onde a task **tem** RED (T1 e T3), a história mostra os **dois commits** — o RED é a spec que falha (5 de 76 e 2 de 36, medidos), o GREEN é a implementação. Onde a task **não tem** RED (T2 é só spec — o defeito era a spec não prender o acoplamento; T4 é refatoração pura), o commit é um só, e o **dente** está no mutante medido |
 | **O `review-router` é o caminho canônico**: a skill `review-routing` declara como anti-padrão "pular router e dispatchar reviewers manualmente" — e a matriz pede `monorepo-specialist` (blocking, para `.tooling/scripts/ci/**`), `release-versioning-specialist` (o diff bumpara 6 footers), `test-writer` (`*.spec.ts`), `stack-code-reviewer` (toda alteração de código) e `doc-sync`/`documentation-specialist` (`docs/**` e `.agents/specs/**`) | A §3 passa a ser o **`review-router`**, com a evidência em `.agents/runs/<ts>-review-<n>.yaml` e o **loop de fix/re-review** (findings BLOCKING/IMPORTANT sempre disparam correção) |
 | **`pnpm ci:local` é obrigatório antes do push** (`git-workflow.md`) — e ele inclui o `ci:boot`, que **exige o banco local de pé** | A §3 termina com `pnpm ci:local` (não com uma lista de subcomandos), e o pré-requisito do banco fica declarado |
 | **Rebase antes do push**, e **revisão de novo depois do rebase** (`git-workflow.md`) | Passo explícito antes do push |
@@ -154,7 +154,7 @@ achou **buracos de envelope** que mudaram o como:
 | **O M3 não tinha critério de aceite** — e o split não baixa o arquivo de 1.017 para 300 | Declarado: o alvo do corte é a **unidade Docker** (o adaptador, 268 linhas), e o que sobra (809 linhas no arquivo de decisão) é a próxima fatia, nomeada |
 | **Claims numéricos sem o comando que os reproduz** (`tamanho-e-revisao.md` §4) | Cada número do plano ganhou o comando: 428 (`wc -l .tooling/scripts/ci/check-audit-skills.ts`), "centenas de `.env.example`" (`find . -path '*/node_modules/*' -prune -o -name '.env.example' -print \| wc -l` no `node_modules`), 125 ms (a spec de integração mede), "exatamente os 4" (`git ls-files -- '*.env.example' '*.env.production.example'`) |
 | **A citação do regex do gate não era literal** | Corrigida para o literal de `check-runbook-drift.ts:139` |
-| **`state-aware-planning` (camada 0) e `retrospective-capture` (plano ≥ 3 tasks) disparavam** | Snapshot em `.agents/runs/state-snapshot-<ts>.md` antes de executar; retro no fim, com a linha no ledger `.agents/runs/memory-triage.md` |
+| **`state-aware-planning` (camada 0) e `retrospective-capture` (plano ≥ 3 tasks) disparavam** | A §0 deste plano **é** o estado medido (commitada, com o comando que reproduz cada número) — um snapshot separado, gerado depois, seria um registro datado de uma medição que não aconteceu naquela data. O que a retro devolve é a **linha no ledger** (`.agents/runs/memory-triage.md`), e ela foi paga: a memória `spec-so-do-helper-nao-cobre-a-ligacao` (do ciclo anterior) nunca tinha ganhado linha, e o `check-memory-crystallization` acusava — o preflight local estava **vermelho** por causa disso |
 
 ### O que a revisão NÃO mudou
 
