@@ -1,4 +1,5 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -101,6 +102,14 @@ describe('checkRunbookDrift', () => {
   }
 
   /**
+   * O gate mede os arquivos VERSIONADOS — quem escreve um arquivo novo
+   * precisa versioná-lo, senão o gate (com razão) não o enxerga.
+   */
+  function versionar(): void {
+    execFileSync('git', ['add', '-A'], { cwd: repo });
+  }
+
+  /**
    * As superfícies de código que guardam o nome do container.
    *
    * ⚠️ O FIXTURE tem de ter a FORMA do repo real: o gate lê 3 superfícies
@@ -140,6 +149,12 @@ describe('checkRunbookDrift', () => {
     repo = join(tmp, 'repo');
     mkdirSync(join(repo, 'docs'), { recursive: true });
     docPath = join(repo, 'docs/como-rodar.md');
+    // ⚠️ O FIXTURE tem de ter a FORMA do repo real: o gate mede os
+    // `.env.example` VERSIONADOS (`git ls-files`), e é o `.gitignore` do repo
+    // que exclui o `node_modules` — uma fonte só. Um fixture sem git mediria
+    // o caminho de reserva, e o caminho principal ficaria sem spec.
+    execFileSync('git', ['init', '-q'], { cwd: repo });
+    writeFileSync(join(repo, '.gitignore'), 'node_modules\n');
     escreverRaiz({ dev: 'turbo run dev', 'ci:local': 'x', build: 'y' });
     escreverEnvExample(
       '.env.production.example',
@@ -170,6 +185,8 @@ describe('checkRunbookDrift', () => {
         '',
       ].join('\n'),
     );
+    // O gate mede o que está VERSIONADO — o índice precisa dos arquivos.
+    execFileSync('git', ['add', '-A'], { cwd: repo });
   });
 
   afterEach(() => {
@@ -210,6 +227,7 @@ describe('checkRunbookDrift', () => {
   it('chave que só existe no exemplo de um app conta como válida', async () => {
     mkdirSync(join(repo, 'apps/web'), { recursive: true });
     escreverEnvExample('apps/web/.env.example', 'NEXT_PUBLIC_OTEL_SERVICE_NAME=x\n');
+    versionar();
     // ⚠️ O doc reescrito tem de manter a receita do container: a 3ª classe é
     // uma regra INDEPENDENTE, e um doc sem receita é um doc que ela acusa.
     escreverDoc(
@@ -218,6 +236,73 @@ describe('checkRunbookDrift', () => {
     );
     const r = await checkRunbookDrift({ repoRoot: repo, docPath });
     expect(r.errors).toEqual([]);
+  });
+
+  // ⚠️ A LISTA DE `.env.example` era ESCRITA À MÃO (achado M2): os 4 caminhos
+  // literais eram a varredura INTEIRA, e um `.env.example` novo em outro
+  // pacote não entrava — e a lista não estava em asserção de spec nenhuma.
+  // Com a lista escrita à mão, esta spec fica VERMELHA.
+  it('chave que só existe no exemplo de um pacote NOVO (fora dos 4 literais) conta como válida', async () => {
+    mkdirSync(join(repo, 'packages/novo'), { recursive: true });
+    escreverEnvExample('packages/novo/.env.example', 'CHAVE_DO_PACOTE_NOVO=x\n');
+    versionar();
+    escreverDoc(
+      '# Como rodar\n\n```bash\ndocker run -d --name projeto-base-pg-local -p 5432:5432 postgres:16-alpine\n```\n\n' +
+        '| Variável | a | b |\n|---|---|---|\n| `CHAVE_DO_PACOTE_NOVO` | a | b |\n',
+    );
+    const r = await checkRunbookDrift({ repoRoot: repo, docPath });
+    expect(r.errors).toEqual([]);
+    expect(r.ok).toBe(true);
+  });
+
+  it('NÃO varre o node_modules (lá há .env.example de pacote publicado)', async () => {
+    mkdirSync(join(repo, 'node_modules/pacote'), { recursive: true });
+    escreverEnvExample('node_modules/pacote/.env.example', 'CHAVE_DE_TERCEIRO=x\n');
+    versionar();
+    escreverDoc(
+      '# Como rodar\n\n```bash\ndocker run -d --name projeto-base-pg-local -p 5432:5432 postgres:16-alpine\n```\n\n' +
+        '| Variável | a | b |\n|---|---|---|\n| `CHAVE_DE_TERCEIRO` | a | b |\n',
+    );
+    const r = await checkRunbookDrift({ repoRoot: repo, docPath });
+    // A chave de terceiro NÃO conta como válida — a varredura é do REPO, e quem
+    // exclui o `node_modules` é o `.gitignore` (uma fonte só).
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toContain('CHAVE_DE_TERCEIRO');
+  });
+
+  // ⚠️ A RESERVA (sem git): um gate cujo escopo encolhe em silêncio é a
+  // falha que este gate existe para eliminar — então a queda para o
+  // filesystem é **declarada**, não silenciosa.
+  it('sem git: a varredura cai no filesystem e o gate DIZ que o escopo encolheu', async () => {
+    rmSync(join(repo, '.git'), { recursive: true, force: true });
+    const r = await checkRunbookDrift({ repoRoot: repo, docPath });
+    expect(r.ok).toBe(true);
+    expect(r.advisories?.join('\n')).toContain('git indisponível');
+  });
+
+  it('sem git: a RESERVA também não varre o node_modules', async () => {
+    rmSync(join(repo, '.git'), { recursive: true, force: true });
+    mkdirSync(join(repo, 'node_modules/pacote'), { recursive: true });
+    escreverEnvExample('node_modules/pacote/.env.example', 'CHAVE_DE_TERCEIRO=x\n');
+    escreverDoc(
+      '# Como rodar\n\n```bash\ndocker run -d --name projeto-base-pg-local -p 5432:5432 postgres:16-alpine\n```\n\n' +
+        '| Variável | a | b |\n|---|---|---|\n| `CHAVE_DE_TERCEIRO` | a | b |\n',
+    );
+    const r = await checkRunbookDrift({ repoRoot: repo, docPath });
+    // ⚠️ SEM este teste, tirar o `node_modules` da lista de pulo da RESERVA
+    // deixava a suíte VERDE — a spec acima mede o caminho do git, e a lista de
+    // pulo só existe na reserva.
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toContain('CHAVE_DE_TERCEIRO');
+  });
+
+  it('com git: o gate NÃO avisa que o escopo encolheu (o aviso é do caminho de reserva)', async () => {
+    const r = await checkRunbookDrift({ repoRoot: repo, docPath });
+    expect(r.ok).toBe(true);
+    // ⚠️ Sem este teste, desligar o `git ls-files` (e usar a reserva sempre)
+    // deixava a suíte VERDE — e o gate passaria a anunciar um escopo
+    // encolhido que não encolheu.
+    expect(r.advisories ?? []).toEqual([]);
   });
 
   it('runbook ausente → skipped COM MOTIVO (não verde por ausência — classe 5)', async () => {
