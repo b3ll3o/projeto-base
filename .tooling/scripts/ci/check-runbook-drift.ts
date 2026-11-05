@@ -22,6 +22,8 @@
  */
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { readdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
 
 /** `pnpm exec X`, `pnpm --filter P X`, `pnpm turbo run X` — o token seguinte NÃO é script da raiz. */
@@ -300,16 +302,93 @@ async function scriptsDoWorkspace(repoRoot: string): Promise<Set<string>> {
   return out;
 }
 
+/** O nome de um arquivo de exemplo de ambiente. */
+const EXEMPLO_DE_ENV = /^\.env(\.production)?\.example$/;
+
+/** Diretórios que nunca contêm um `.env.example` versionado. */
+const SKIP_DIRS_DE_ENV = new Set(['node_modules', '.git', 'dist', 'coverage', '.next', '.turbo']);
+
+/**
+ * Os `.env.example` / `.env.production.example` do repo (relativos à raiz).
+ *
+ * ⚠️ A lista era ESCRITA À MÃO (achado M2 da 2ª revisão do #144): os 4
+ * caminhos literais eram a varredura INTEIRA — um `.env.example` novo em
+ * outro pacote não entrava, e a lista não estava em asserção de spec
+ * nenhuma, então ninguém percebia o furo. Aqui a lista é **DERIVADA**: não
+ * há lista para alguém encolher sem querer.
+ *
+ * A ordem é a de `check-doc-refs.ts`: `git ls-files` primeiro (a lista
+ * VERSIONADA — e é o `.gitignore` do repo que exclui o `node_modules`, uma
+ * fonte só), e a varredura do disco como reserva, **avisando**: um gate
+ * cujo escopo encolhe em silêncio é exatamente a falha que este gate existe
+ * para eliminar.
+ */
+export function arquivosDeEnvExample(repoRoot: string): {
+  arquivos: string[];
+  aviso?: string;
+} {
+  const versionados = arquivosVersionadosDeEnv(repoRoot);
+  if (versionados !== undefined) return { arquivos: versionados };
+  return {
+    arquivos: varreduraDeEnvExample(repoRoot),
+    aviso:
+      'git indisponível: a varredura de `.env.example` caiu no filesystem — ' +
+      'o escopo medido pode ser menor que o do repo versionado',
+  };
+}
+
+/** Os `.env.example` versionados — `undefined` quando o git não responde. */
+function arquivosVersionadosDeEnv(repoRoot: string): string[] | undefined {
+  try {
+    const saida = execFileSync(
+      'git',
+      ['ls-files', '--', '*.env.example', '*.env.production.example'],
+      { cwd: repoRoot, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    return saida
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l !== '');
+  } catch {
+    return undefined;
+  }
+}
+
+/** A varredura do disco — a reserva, para quando o git não responde. */
+function varreduraDeEnvExample(repoRoot: string): string[] {
+  const achados: string[] = [];
+
+  const andar = (dir: string): void => {
+    let entradas: import('node:fs').Dirent[];
+    try {
+      entradas = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entradas) {
+      if (SKIP_DIRS_DE_ENV.has(e.name)) continue;
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        andar(full);
+        continue;
+      }
+      if (EXEMPLO_DE_ENV.test(e.name)) {
+        achados.push(path.relative(repoRoot, full).split(path.sep).join('/'));
+      }
+    }
+  };
+
+  andar(repoRoot);
+  return achados.sort();
+}
+
 /** Chaves declaradas em qualquer `.env.example` / `.env.production.example` do repo. */
-async function chavesDeEnvExample(repoRoot: string): Promise<Set<string>> {
+async function chavesDeEnvExample(
+  repoRoot: string,
+): Promise<{ chaves: Set<string>; aviso?: string }> {
+  const { arquivos, aviso } = arquivosDeEnvExample(repoRoot);
   const out = new Set<string>();
-  const candidatos = [
-    '.env.example',
-    '.env.production.example',
-    'apps/api/.env.example',
-    'apps/web/.env.example',
-  ];
-  for (const rel of candidatos) {
+  for (const rel of arquivos) {
     try {
       const raw = await fs.readFile(path.join(repoRoot, rel), 'utf-8');
       for (const linha of raw.split('\n')) {
@@ -317,10 +396,10 @@ async function chavesDeEnvExample(repoRoot: string): Promise<Set<string>> {
         if (m) out.add(m[1]!);
       }
     } catch {
-      // arquivo ausente: segue para o próximo
+      // arquivo ilegível: segue para o próximo
     }
   }
-  return out;
+  return aviso === undefined ? { chaves: out } : { chaves: out, aviso };
 }
 
 export async function checkRunbookDrift(opts: {
@@ -362,9 +441,9 @@ export async function checkRunbookDrift(opts: {
   }
 
   const envExamples = await chavesDeEnvExample(root);
-  if (envExamples.size > 0) {
+  if (envExamples.chaves.size > 0) {
     for (const k of extrairChavesEnv(doc)) {
-      if (!envExamples.has(k)) {
+      if (!envExamples.chaves.has(k)) {
         errors.push(
           `runbook desatualizado: a tabela de variáveis cita '${k}' mas essa chave não está em ` +
             `nenhum .env.example do repo — corrija o runbook ou o exemplo`,
@@ -377,5 +456,7 @@ export async function checkRunbookDrift(opts: {
   // nas 3 superfícies que o guardam (o runbook §1.1 é o dono).
   errors.push(...(await checkNomeDoContainer({ repoRoot: root, doc })));
 
-  return { ok: errors.length === 0, errors };
+  const advisories = envExamples.aviso === undefined ? [] : [envExamples.aviso];
+
+  return { ok: errors.length === 0, errors, advisories };
 }
