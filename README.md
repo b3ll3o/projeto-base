@@ -18,7 +18,7 @@ Um **monorepo base reutilizável** que implementa o **padrão genérico de agent
 - **OpenTelemetry cross-stack** (backend + frontend + Collector)
 - **CI Defense-in-Depth** em 3 camadas
 
-> Contagens medidas do disco em **2026-10-29** — o comando de cada uma está no rodapé.
+> Contagens medidas do disco em **2026-11-03** — o comando de cada uma está no rodapé.
 
 ## Estrutura
 

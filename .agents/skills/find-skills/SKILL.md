@@ -25,8 +25,8 @@ description: "Descoberta e instalação de skills — quando a demanda não tem 
 O erro caro aqui é pular direto para o registro e instalar uma skill de
 terceiro para algo que o repo já resolve. A ordem é fixa:
 
-1. **No repo.** `.agents/skills/` tem 25 skills e 28 agents (medido no disco em
-   2026-10-29: `ls .agents/skills/*/SKILL.md | wc -l`,
+1. **No repo.** `.agents/skills/` tem 29 skills e 28 agents (medido no disco em
+   2026-11-03: `ls .agents/skills/*/SKILL.md | wc -l`,
    `ls .agents/agents/*.md | wc -l` — a contagem envelhece, meça de novo), e a
    matriz `specialist-routing.md` mapeia demanda → agent → skill. A dúvida "qual
    skill eu uso?" se responde lendo essa matriz, não buscando na internet.
@@ -111,7 +111,7 @@ adaptação é o trabalho — e o precedente é o das skills de UI
 | frontmatter | `name`, `version`, `updated`, `description` — e a `description` **cita a origem** e a licença |
 | cabeçalho | `> **Quem invoca:**` e `> **Quando invocar:**` (inclusive o contra-gatilho) |
 
-E o registro: `AGENTS.md §5` (a família da skill), a tabela de versões de
+E o registro: `AGENTS.md §3.2` (a família da skill), a tabela de versões de
 `.agents/specs/conventions/estrutura-e-versionamento.md` e o **bump minor** nos
 **seis** footers de versão (adicionar skill é minor bump — `estrutura-e-versionamento.md`).
 
@@ -133,7 +133,7 @@ deste projeto — é um arquivo estranho que ninguém sabe se pode editar.
 4. **Dar dono** — a skill sem agent que a carregue é órfã. O dono vai na
    tabela "Skills Carregadas" do agent **e** a memória dele muda no mesmo
    commit (o `check-agent-memory-drift` exige agente **e** memória).
-5. **Registrar** — `AGENTS.md §5`, a tabela de versões, os footers, o wrapper
+5. **Registrar** — `AGENTS.md §3.2`, a tabela de versões, os footers, o wrapper
    em `.claude/skills/<nome>/SKILL.md` (com `name`/`description` copiados
    **literalmente** do frontmatter canônico — re-serializar YAML corrompe o
    `description` e a skill é descoberta com o gatilho errado, sem erro visível)
@@ -178,7 +178,7 @@ A skill está no lugar quando:
 - a skill tem frontmatter com `name`, `version`, `updated` e `description` que
   cita a origem;
 - o corpo está em pt-BR e cabe em 300 linhas;
-- `AGENTS.md §5` e a tabela de versões mencionam a skill;
+- `AGENTS.md §3.2` e a tabela de versões mencionam a skill;
 - os seis footers de versão concordam e estão à frente da última tag
   (gate `check-version-footers`).
 

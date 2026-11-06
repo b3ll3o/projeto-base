@@ -5,7 +5,7 @@
 Passe o portão significa que nada proibido nem quebrado foi medido. **Não
 significa que a página é boa.** Este arquivo é como você descobre. Use-o
 **sobre os screenshots, nunca sobre o código**: você escreveu o código, e vai
-ler as suas intenções nele. As pictures só mostram o que está lá.
+ler as suas intenções nele. As imagens só mostram o que está lá.
 
 Abra a primeira tela do desktop, depois as folhas de página, depois a
 primeira tela do celular e as folhas do celular. Faça cada pass **separado**;

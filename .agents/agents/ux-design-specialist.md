@@ -263,7 +263,7 @@ A skill é o **processo**; este agent é o papel. Carregue conforme a task:
 | [`ui-break`](../skills/ui-break/SKILL.md) | a tela renderiza dado vindo da API | O catálogo de pior caso + as assinaturas de falha com a causa CSS de cada uma |
 | [`motion`](../skills/motion/SKILL.md) | o diff toca transição, animação, `@keyframes` | Os 10 padrões não-negociáveis e os **valores exatos** (curva, duração, origem) para não chutar |
 | [`ui-review`](../skills/ui-review/SKILL.md) | a task é de **revisão** (não de criação) | Passo 1–5: mapeia superfície → escolhe skills → agrega com severidade → persiste em `.agents/runs/` |
-| [`design-taste-frontend`](../skills/design-taste-frontend/SKILL.md) | a tela é **pública** (landing, marketing) — e não é tela de app | A direção de arte, as house rules medidas em 247 sites e o critério de critique |
+| [`design-taste-frontend`](../skills/design-taste-frontend/SKILL.md) | a tela é **pública** (landing, marketing) — e não é tela de app | A direção de arte, as house rules medidas em 246 sites e o critério de crítica |
 | [`agent-browser`](../skills/agent-browser/SKILL.md) | precisa **ver** a página rodando antes de opinar | A CLI de browser por CDP: snapshots da árvore de acessibilidade, refs `@eN`, screenshot |
 
 > **Ordem importa:** `ui-modes` primeiro. Ele diz **para que** a tela serve, e sem

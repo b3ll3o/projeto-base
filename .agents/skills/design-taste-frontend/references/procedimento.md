@@ -90,7 +90,7 @@ markup.
 - **Uma frase de apoio**, logo abaixo da manchete (32–48px abaixo),
   mostrada junto com ela — nunca ancorada no pé da primeira tela nem segura
   por animação. Quando a manchete é um nome ou uma figura de linguagem, essa
-  frase diz plainly o que a coisa é. **Uma ação primária**, nomeada pelo que
+  frase diz diretamente o que a coisa é. **Uma ação primária**, nomeada pelo que
   faz, como botão de verdade na primeira tela.
 - **A primeira tela responde à primeira pergunta do visitante, em tipo
   grande.** Para um evento: o que é, quando e onde. Para um produto: o que
@@ -192,7 +192,7 @@ está em [`inspecao-e-pesquisa.md`](inspecao-e-pesquisa.md). Escreva a
 crítica no formato dela, corrija os **três** problemas de maior peso, rode o
 portão de novo, olhe de novo. **No máximo três rodadas.**
 
-**Julgue só as pictures.** Se um problema aparece num screenshot, ele é real,
+**Julgue só as imagens.** Se um problema aparece num screenshot, ele é real,
 independentemente do que o código diga.
 
 ## 9. Mover

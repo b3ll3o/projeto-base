@@ -38,10 +38,12 @@ Ficam de fora da lista acima:
 
 ## Por que estas — honestamente
 
-Algumas regras são **medidas**: entre os 247 sites do estudo, os avaliados com
-7,5 ou mais usaram card de feature com ícone 1% das vezes, contra 28% nos
-sites abaixo de 6,5; badge em pílula 14% contra 34%; gradiente 22% contra
-52%; sombra 24% contra 48%; caixa alta pequena e espaçada 16% contra 57%.
+Algumas regras são **medidas**: entre os **246** sites remedidos com a sonda
+final (de 248 coletados; 247 carregaram — ver
+[`inspecao-e-pesquisa.md`](./inspecao-e-pesquisa.md) §7), os avaliados com 7,5
+ou mais usaram card de feature com ícone 1% das vezes, contra 28% nos sites
+abaixo de 6,5; badge em pílula 14% contra 34%; gradiente 22% contra 52%; sombra
+24% contra 48%; caixa alta pequena e espaçada 16% contra 57%.
 
 Outras são **gosto do dono** e vão contra a moda atual das galerias:
 monoespaçada em label, numeração de índice e grade de fio fino são, na

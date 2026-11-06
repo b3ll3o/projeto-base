@@ -1,6 +1,6 @@
 ---
 name: design-taste-frontend
-description: "Direção de arte e anti-slop para página PÚBLICA (landing, marketing, one-pager) — o argumento da página em claims, a direção visual, as house rules que o upstream mediu em 247 sites, e o critério de critique. Adaptado de leonxlnx/taste-skill (MIT). Use quando a tarefa for uma página pública ou quando alguém disser que a página está genérica, 'de IA' ou sem graça; NÃO use para tela de app — essa é a skill ui-craft."
+description: "Direção de arte e anti-slop para página PÚBLICA (landing, marketing, página única) — o argumento da página em claims, a direção visual, as house rules que o upstream mediu em 246 sites, e o critério de crítica. Adaptado de leonxlnx/taste-skill (MIT). Use quando a tarefa for uma página pública ou quando alguém disser que a página está genérica, 'de IA' ou sem graça; NÃO use para tela de app — essa é a skill ui-craft."
 ---
 
 # Skill `design-taste-frontend` — binding Claude Code

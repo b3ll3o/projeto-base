@@ -45,7 +45,7 @@ contato. Olhe cada uma antes de escolher.
 
 ### Mostrar software
 
-Quando o produto **é** software e não há fotografia, as pictures da página
+Quando o produto **é** software e não há fotografia, as imagens da página
 são a **própria interface**: um fragmento crível do produto em HTML, no
 tamanho real (rótulos verdadeiros, números que batem, um item em hover ou
 selecionado), com o atributo `data-ui` na raiz para as bordas e os menus do
@@ -76,7 +76,7 @@ ainda assim traga imagens reais.
 Uma imagem em movimento, sempre que exista um clipe honesto: um loop mudo
 com quadro de poster.
 
-### Onde as pictures vão
+### Onde as imagens vão
 
 Por quantidade de tela primeiro (a hero), depois por função: a imagem que
 **mostra a coisa**, a que **situa o lugar**, a que **prova o claim**. O que

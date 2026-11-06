@@ -24,7 +24,7 @@ description: "Compacta a conversa em um documento de passagem para o próximo ag
 
 Este repo já tem um formato canônico de transferência, na skill
 [`agents-coordinate`](../agents-coordinate/SKILL.md) §2.3. O handoff **usa
-esse formato** — não inventa outro:
+esse formato** — os mesmos nomes de campo, sem renomear nenhum:
 
 ```markdown
 # Handoff — <tarefa>
@@ -33,17 +33,18 @@ esse formato** — não inventa outro:
 <o que precisa ser feito, em uma ou duas frases>
 
 ## Context
-- Arquivos: <caminhos>
-- Decisões já tomadas: <as que mudam o que fazer>
-- Restrições: <o que não pode mudar>
-- Estado atual: <o que já está feito e o que falta>
+- files: <caminhos>
+- code_snippets: <os trechos que o próximo agent precisa ver>
+- prior_outputs: <o que já foi produzido, e por onde>
+- constraints: <o que não pode mudar>
 
 ## Expected Output
 Formato: <o que o próximo agent deve entregar>
 Schema: <a forma, se houver>
 
 ## Success Criteria
-<como se sabe que terminou>
+- <critério objetivo e verificável>
+- <outro critério, se houver>
 
 ## On Failure
 <o que fazer se não conseguir>
@@ -54,6 +55,23 @@ Schema: <a forma, se houver>
 ## Artefatos
 <spec, plano, ADR, issue, PR, diff — por caminho ou URL, sem copiar conteúdo>
 ```
+
+⚠️ **O que difere do canônico — declarado, não implícito:**
+
+- **As 2 últimas seções** (`Suggested skills`, `Artefatos`) **não** existem em
+  `agents-coordinate` §2.3 — elas existem porque a §6 deste arquivo exige a
+  primeira (é o mecanismo de descoberta de skill do repo) e porque a §3 exige
+  a segunda (apontar o que já existe em vez de copiar).
+- **Os campos que o `dispatch.md` NÃO usa num handoff de sessão:** `from`,
+  `to` e `composition` (quem despacha quem — num handoff não há despacho, há
+  uma sessão que continua) e `on_failure.{fallback_agent,retry_policy,max_retries}`
+  (o §2.3 trata a falha como **prosa**). O `dispatch.md` é o dono do schema do
+  **dispatch**; o dono do formato do **documento de passagem** é o §2.3 do
+  `agents-coordinate`, que é o que este template segue.
+- **O que o handoff mantém do canônico, campo por campo:** `Task`,
+  `Context.{files,code_snippets,prior_outputs,constraints}`,
+  `Expected Output.{format,schema}` e `Success Criteria` (lista de critérios
+  objetivos e verificáveis).
 
 ## §2. Onde o documento vive
 

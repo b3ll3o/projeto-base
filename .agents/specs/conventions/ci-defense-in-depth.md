@@ -110,7 +110,7 @@ Escopo de todos: **todo `.md` versionado** sob a raiz que o preflight passa
 | `check-dockerfile-hardening` | docker | apps/*/Dockerfile: FROM com @sha256:... (ou @${ARG} com ARG default = sha256:...) e stage prod com `USER 1001:1001`. docker-compose.yml: service api com `init: true`, services prod (postgres/api/web) com `read_only: true` + `cap_drop: [ALL]` + `security_opt: [no-new-privileges:true]`, top-level `networks:` + cada service com `networks:` explícito (não usar default). .dockerignore: exclui `.env.production*`. Cobre issues 83, 84, 88, 89, 90, 91, 92 |
 | `check-dependency-audit` | dependências | advisory **crítica ou alta** de dependência que não está na lista de exceções versionada; e exceção cuja verificação (o motivo medido) parou de valer |
 | `check-ci-action-pinning` | supply-chain | action do CI pinada por **tag** (ponteiro mutável) em vez de SHA |
-| `check-merge-markers` | merge | marcador de conflito de merge **versionado** (`<<<<<<< `, `>>>>>>> `, e o `=======` dentro do bloco) em qualquer arquivo de texto versionado. O `=======` sozinho NÃO é marcador — é o underline de heading setext do Markdown |
+| `check-merge-markers` | merge | marcador de conflito de merge **versionado** (`<<<<<<< `, `>>>>>>> `, e o `=======` dentro do bloco) em **todo arquivo de texto versionado**, fora das 2 categorias isentas (`docs/superpowers/**` e `.agents/runs/**`, as mesmas do `check-doc-size`). O texto é o do heurístico do git (byte NULO nos primeiros 8000 bytes ⇒ binário) e a leitura é do **índice E do disco** — é o índice que o `git commit` publica, e é o disco onde mora o conflito não resolvido. O `=======` sozinho NÃO é marcador — é o underline de heading setext do Markdown — e num bloco **truncado** (sem o `>>>>>>> `) ele também não conta. Sem `git ls-files` o gate se declara `skipped` com motivo — verde por ausência é a classe 5 de `guard-classes.md` |
 
 > **`check-types.ts` NÃO é um check** e saiu desta tabela: tem um único
 > `export interface CheckResult` (`wc -l` = 23) e é importado **só** como
@@ -137,8 +137,8 @@ extraído em commit `59eb083` (refactor que consolidou fixtures herméticas).
 
 ## Registro de dentes
 
-> A tabela de dentes (36 linhas: `mutação` / `diferencial` / `controle
-> positivo` por gate), a taxonomia dos níveis de prova e os **nove comandos
+> A tabela de dentes (44 linhas: `mutação` / `diferencial` / `controle
+> positivo` por gate), a taxonomia dos níveis de prova e os **onze comandos
 > de mutação** vivem em
 > [`ci-defense-in-depth-dentes.md`](./ci-defense-in-depth-dentes.md) —
 > extraídos em 2026-10-16 porque este arquivo passou do teto de 300 linhas de

@@ -68,9 +68,12 @@ description: Memória acumulada do agent ux-design-specialist — decisões sobr
 **Decisão:** A `design-taste-frontend` entra aqui **com uma fronteira
 explícita**: ela cobre a **página pública**, e a tela de app continua sendo
 da `ui-craft`. Isso não é arbitrário — a `ui-craft` foi adaptada do mesmo
-upstream e declares no arquivo que *"as leis de tipo de landing page não
-valem aqui"*. As duas skills são as duas metades do mesmo material, e juntas
-cobrem o upstream inteiro sem repetir.
+upstream e declara no arquivo que *"as leis de tipo de landing page não
+valem aqui"*. As duas skills são as duas metades do mesmo material e juntas
+cobrem o upstream inteiro — mas elas **compartilham as house rules** (as 12
+regras anti-slop do `ui-craft` têm contrapartida 1-a-1 em
+`design-taste-frontend/references/house-rules.md`): o que muda é o **terreno**
+de cada uma, não a lista de regras.
 
 A `agent-browser` entra como **olhar avulso**: a porta de entrada do repo
 para browser continua sendo a suíte e2e com Playwright (convenção
@@ -85,7 +88,7 @@ agent do repo tem essa competência — o `code-reviewer` lê diff, o
 **O que não foi vendorizado:** o sorteador de direção (`draw.mjs`), o
 inspetor de browser (`inspect.mjs`) e o corpus de 1,6 MB do upstream. A
 decisão segue o precedente do `graphify`: o **método** é do repo, o
-**instrumento** é do upstream. O critério de critique e os números do
+**instrumento** é do upstream. O critério de crítica e os números do
 estudo entraram traduzidos e condensados — e o §3 do `SKILL.md` diz
 explicitamente que eles não estão aqui.
 ## Padrões Descobertos

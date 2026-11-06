@@ -2,13 +2,13 @@
 name: design-taste-frontend
 version: 1.0
 updated: 2026-11-03
-description: "Direção de arte e anti-slop para página PÚBLICA (landing, marketing, one-pager) — o argumento da página em claims, a direção visual, as house rules que o upstream mediu em 247 sites, e o critério de critique. Adaptado de leonxlnx/taste-skill (MIT). Use quando a tarefa for uma página pública ou quando alguém disser que a página está genérica, 'de IA' ou sem graça; NÃO use para tela de app — essa é a skill ui-craft."
+description: "Direção de arte e anti-slop para página PÚBLICA (landing, marketing, página única) — o argumento da página em claims, a direção visual, as house rules que o upstream mediu em 246 sites, e o critério de crítica. Adaptado de leonxlnx/taste-skill (MIT). Use quando a tarefa for uma página pública ou quando alguém disser que a página está genérica, 'de IA' ou sem graça; NÃO use para tela de app — essa é a skill ui-craft."
 ---
 
 # Skill: `design-taste-frontend`
 
 > **Quem invoca:** o `ux-design-specialist` — quando a tela em questão é
-> **pública** (landing, página de marketing, one-pager, página de produto
+> **pública** (landing, página de marketing, página única, página de produto
 > pública), não uma tela de app.
 >
 > **Quando invocar:** quando o pedido é construir, redesenhar, dar estilo ou
@@ -28,14 +28,16 @@ Este repo é um **produto interno**: listagem, formulário, login, admin. O
 exatamente a metade que serve a isso — e **deixou de fora** a outra, com um
 motivo escrito no próprio arquivo:
 
-> *"As leis de tipo de landing page não valem aqui. Num app, o `h1` compete
-> com dado, não com slogan."*
+> *"As leis de tipo de landing page não valem aqui. […] Num app, o `h1` compete
+> com dado, não com slogan — ele fica em `text-xl`/`text-2xl` e o peso vem de
+> cor e peso de fonte, não de escala."*
 
 Esta skill é **a outra metade**: a página pública. Aqui valem o `h1` em
-`8vw`, o photograph hero, a seção de preço, o formulário de inscrição. E
+`8vw`, o herói em foto, a seção de preço, o formulário de inscrição. E
 valem as **house rules** — o conjunto de regras que o upstream **mediu** em
-247 sites de galeria, e que é o oposto exato do que um gerador de página
-produz.
+**246** sites de galeria remediados (de 248 coletados — §7 do
+[`inspecao-e-pesquisa.md`](./references/inspecao-e-pesquisa.md)), e que é o
+oposto exato do que um gerador de página produz.
 
 A fronteira, escrita para não se cruzar:
 
@@ -82,7 +84,7 @@ browser** (`inspect.mjs`, que mede as house rules na página viva) e um
 **Nada disso foi vendorizado aqui.** O motivo é o mesmo que tirou a
 categoria `vendor` da convenção de tamanho: um arquivo que ninguém sabe se
 pode editar é um arquivo estranho. O `graphify` — que é CLI externa — é
-referenciado e não copiado; aqui é o mesmo principle: o **método** é do
+referenciado e não copiado; aqui é o mesmo princípio: o **método** é do
 repo, o **instrumento** é do upstream.
 
 O que fazer no lugar:
