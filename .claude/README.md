@@ -233,7 +233,7 @@ cobertura do trabalho — foi a escolha registrada acima, para não poluir a
 descoberta do Claude Code com agentes que não têm nada de específico deste
 vendor.
 
-MEDIDO 2026-11-03: `ls .agents/agents/*.md | wc -l` → 28 agents;
+MEDIDO 2026-11-05: `ls .agents/agents/*.md | wc -l` → 28 agents;
 `ls .agents/skills/*/SKILL.md | wc -l` → 29 skills; `ls .claude/skills/*/SKILL.md | wc -l`
 → 21 wrappers. O terceiro binding é o `documentation-specialist` (a
 `documentation-audit` é a 16ª skill wrapper). As 4 skills de terceiro adaptadas

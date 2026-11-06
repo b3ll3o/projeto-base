@@ -289,7 +289,7 @@ nomes de campo estáveis.
 | # | Comando | Esperado |
 |---|---|---|
 | V1 | `pnpm ci:preflight` | **0 erro** |
-| V2 | `pnpm tooling:test` | **734** (era 719; +15 specs do gate) |
+| V2 | `pnpm tooling:test` | **737** (era 719; +18 specs do gate) |
 | V3 | `pnpm ci:local` | verde (Camada 1 inteira) — **requer Docker/Postgres** |
 | V3b | `pnpm format:check` + `tsc --noEmit -p .tooling/tsconfig.json` | verde |
 | V4 | mutação: plantar o bloco do #143 na árvore | **3** achados nomeando arquivo e linha |
@@ -297,7 +297,7 @@ nomes de campo estáveis.
 | V6 | mutação: marcador em `.sql`/`.prisma`/sem extensão | acusado |
 | V7 | mutação: `git merge` real | **3** erros (não 9) |
 | V8 | `wc -l AGENTS.md` | ≤ 300 |
-| V9 | contar as rows `check-` da tabela de dentes | 44 (= a contagem declarada) |
+| V9 | contar as rows `check-` da tabela de dentes | **44** rows = 41 mutação + 2 diferencial + 1 controle positivo (= a contagem declarada) |
 | V10 | `git status --porcelain` | só as mudanças do plano |
 
 ## §6 Riscos
@@ -313,3 +313,14 @@ nomes de campo estáveis.
 - **Conflito de versão com o PR #144** (que bumpara para `1.19.0`): este plano
   **não** mexe na versão. Se o #144 entrar primeiro, este PR renumera para
   `1.20.0`.
+
+> **Rebase (2026-11-05, depois da escrita deste plano):** o #144 entrou na
+> `main` e este PR foi rebaseado por cima dele. A versão foi **renumerada
+> para `1.20.0`** — a `1.19.0` é do #144 (`start local`) — e a linha `1.18.0`
+> da tabela de histórico virou `1.20.0` nos 4 docs que a carregam (o plano já
+> previa isso: *"se o #144 entrar primeiro, este PR renumera para `1.20.0`"*).
+> A linha **V2** acima vale para a **baseline do PR** (719 → 737, +18 specs do
+> gate); no topo da branch rebased o total é **832/832** (`pnpm tooling:test`),
+> porque o #144 trouxe as specs dele. O resto de V1–V10 foi re-medido depois do
+> rebase: preflight **0 erro** · `pnpm tooling:test` **832/832** ·
+> `pnpm format:check` verde · `tsc --noEmit` verde · `AGENTS.md` em **300/300**.
