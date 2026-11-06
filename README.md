@@ -48,8 +48,8 @@ projeto-base/
     ├── agents/            # issue tracker, labels de triagem, glossário
     ├── articles/          # artigos de fundo
     ├── superpowers/       # planos e specs de trabalho
-    ├── web/               # catálogo de rotas Next.js (em criação — PR paralelo)
-    ├── runbooks/          # runbooks por incidente (em criação — PR paralelo)
+    ├── web/               # catálogo de rotas Next.js
+    ├── runbooks/          # runbooks por ambiente (Docker, observabilidade, e2e/CI)
     ├── TEMPLATE_USAGE.md  # Guia principal (≤ 300 linhas)
     ├── MONOREPO.md        # convenções de monorepo
     ├── STACK.md           # stack escolhida e justificativas
@@ -120,7 +120,9 @@ pnpm install --frozen-lockfile
 
 # 2. Subir Postgres COM PORTA PUBLICADA NO HOST.
 # ⚠️ O `postgres` do compose usa só `expose` desde o #91 — a API na máquina não o alcança.
-docker run -d --name projeto-base-pg-local -p 5432:5432 -e POSTGRES_USER=projeto -e POSTGRES_PASSWORD=projeto -e POSTGRES_DB=projeto_base postgres:16-alpine
+# A receita (primeira vez) e o reinício (quando o container já existe) têm dono:
+# [runbook §1.1](./docs/como-rodar.md). O `pnpm dev` verifica e religa o banco local
+# sozinho ([runbook §1.4](./docs/como-rodar.md)) — este passo é o de primeira vez.
 # ou aponte para um Postgres existente. São TRÊS URIs (apps/api/.env.example):
 #   DATABASE_URL        → papel app_runtime  (escopo de empresa; é o que faz as RLS valerem)
 #   SYSTEM_DATABASE_URL → papel app_system   (bucket de sistema, cross-empresa)
@@ -197,12 +199,15 @@ docker compose up -d postgres api web && sleep 30 \
 
 ### Troubleshooting
 
+Estes são os sintomas do **dia a dia**; a tabela por ambiente está no [runbook §4](./docs/como-rodar.md).
+
 | Sintoma | Solução |
 |---|---|
 | `prisma migrate deploy` falha em container | `docker compose down -v` para resetar volume + re-up |
 | `pnpm dev` falha com `Cannot find module '@projeto/...'` | `pnpm install --frozen-lockfile` |
-| `docker compose` diz "port already in use" | `lsof -i :5432` → parar processo OU mudar porta no compose |
-| `curl /api/v1/health` retorna 503 | `docker compose logs postgres` |
+| `pnpm dev` falha com `PrismaClientInitializationError` (P1001) | `pnpm ambiente:check` — ele religa o banco local e diz o que falta ([runbook §1.4](./docs/como-rodar.md)) |
+| `pnpm dev` diz "port already in use" | `pnpm ambiente:check` — ele nomeia **quem** ocupa a porta e o comando de parar só ela (`docker compose stop <serviço>`); o `lsof -i :3000` acharia a porta, não o dono ([runbook §1.4](./docs/como-rodar.md)) |
+| `curl /api/v1/health` retorna 503 | `docker compose logs postgres` — ou, se o banco é o container da máquina, `docker logs projeto-base-pg-local` |
 | Traces não chegam no OTel Collector | Subir com `docker compose --profile observability up -d` |
 | `pnpm ci:preflight` falha com cross-ref quebrada | `pnpm docs:sync --mode=fix` ou ajustar manualmente |
 
@@ -285,6 +290,6 @@ Detalhes em [`docs/TEMPLATE_USAGE.md`](./docs/TEMPLATE_USAGE.md).
 
 ## Versão & Licença
 
-**Versão:** 1.17.0 — re-medido do disco em **2026-10-29**: `ls .agents/agents/*.md | wc -l` = **28** agents · `ls .agents/memory/*.md | wc -l` = **30** memórias (1 por agent + `state-aware-planning` + `_template`) · `ls .agents/skills/*/SKILL.md | wc -l` = **25** skills · `ls .agents/workflows/*.md | wc -l` = **15** workflows · `ls .agents/specs/conventions/*.md | grep -vE 'README|gaps|examples|historico|apendice' | wc -l` = **23** convenções · `ls apps/api/src/modules/ | wc -l` = **6** módulos.
+**Versão:** 1.19.0 — re-medido do disco em **2026-11-05**: `ls .agents/agents/*.md | wc -l` = **28** agents · `ls .agents/memory/*.md | wc -l` = **30** memórias (1 por agent + `state-aware-planning` + `_template`) · `ls .agents/skills/*/SKILL.md | wc -l` = **25** skills · `ls .agents/workflows/*.md | wc -l` = **15** workflows · `ls .agents/specs/conventions/*.md | grep -vE 'README|gaps|examples|historico|apendice' | wc -l` = **24** convenções · `ls apps/api/src/modules/ | wc -l` = **6** módulos.
 
 A `1.14.0` adiciona o `documentation-specialist` (+1 agent, +1 memória), a skill `documentation-audit` (+1) e a convenção `documentacao` (+1) — e corrige os fatos errados da versão anterior: Node ≥ 20 → ≥ 22.6.0, `openssl rand -base64 48` → `-hex 32` nas senhas de papel, "três modos" → dois, e a lista de agents (faltavam os 6 de auditoria). A **tag do template** é a dos 4 footers canônicos (o de [`docs/MONOREPO.md`](./docs/MONOREPO.md) manda), extraída pelo `release-template.yml` — este rodapé não a define. **Licença:** MIT.

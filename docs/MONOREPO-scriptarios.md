@@ -9,33 +9,33 @@
 
 ## §1. A lista e o comando que a reproduz
 
-**MEDIDO em 2026-10-29.** A contagem e a lista saem do próprio `package.json` —
+**MEDIDO em 2026-11-03.** A contagem e a lista saem do próprio `package.json` —
 nenhuma delas é escrita à mão:
 
 ```bash
 # contagem
-node -p "Object.keys(require('./package.json').scripts).length"   # → 29
+node -p "Object.keys(require('./package.json').scripts).length"   # → 30
 
 # a lista inteira, com o comando de cada script
 node -p "Object.entries(require('./package.json').scripts)
   .map(([k,v])=>'| `'+k+'` | `'+v+'` |').join('\n')"
 ```
 
-> ⚠️ **A tabela anterior vivia em `docs/MONOREPO.md` §7 e listava 9 dos 29**
-> scripts — `dev`, `build`, `test`, `lint`, `typecheck`, `format`, `clean`,
-> `ci:preflight` e `ci:local`. Os outros 20 (incluindo `ci:boot`,
+> ⚠️ **A tabela anterior vivia em `docs/MONOREPO.md` §7 e listava 9 dos 29
+> scripts que existiam em 2026-10-29** — `dev`, `build`, `test`, `lint`,
+> `typecheck`, `format`, `clean`, `ci:preflight` e `ci:local`. Os outros 20 (incluindo `ci:boot`,
 > `pr:refresh`, `review:route`, `specialist:route`, `tooling:test` e
 > `format:check`) não apareciam em lugar nenhum. Um catálogo de scripts que
 > lista um terço do que existe não é catálogo.
 
-## §2. Scripts canônicos (29)
+## §2. Scripts canônicos (30)
 
 ### 2.1 Build, dev e limpeza
 
 | Script | Comando | O que faz |
 |--------|---------|------------|
 | `pnpm build` | `turbo run build` | Build de tudo, com cache do Turborepo (`dist/**` e `.next/**`). |
-| `pnpm dev` | `turbo run dev` | Sobe os 2 apps em watch (api :3000, web :3001). |
+| `pnpm dev` | `pnpm ambiente:check && turbo run dev` | Sobe os 2 apps em watch (api :3000, web :3001), **depois** do preflight do ambiente local (`pnpm ambiente:check`). |
 | `pnpm clean` | `turbo run clean && rm -rf node_modules .turbo` | Limpa cache de build e dependências. |
 | `pnpm prepare` | `husky` | Instala os hooks do git — roda no `pnpm install`. |
 
@@ -62,6 +62,7 @@ node -p "Object.entries(require('./package.json').scripts)
 | `pnpm ci:preflight` | `tsx .tooling/scripts/ci/preflight.ts` | Roda os checks estruturais registrados em [`preflight-gates.ts`](../.tooling/scripts/ci/preflight-gates.ts) e aborta com exit 1. É o que o `.husky/pre-push` roda. |
 | `pnpm ci:boot` | `tsx .tooling/scripts/ci/boot-local.ts` | **Sobe a aplicação local** (api + web) e confere o health. O banco local é pré-requisito — a etapa não o sobe. |
 | `pnpm ci:local` | `preflight` + `db:generate` + `lint`/`typecheck`/`test:*` + `tooling:test` + `ci:boot` | Atalho manual da Camada 1 completa. Não está em hook nenhum. |
+| `pnpm ambiente:check` | `tsx .tooling/scripts/ci/ambiente-local.ts` | **Preflight do ambiente local**: verifica o `DATABASE_URL`/`JWT_SECRET`, o Prisma Client gerado, o banco no ar e as **duas** portas do `pnpm dev` (a da API, do `PORT`, e a do web, do `apps/web/package.json`) — e religa o container do banco local parado. **NÃO é gate**: roda só no `pnpm dev` (o `ci:boot` é o gate, e não sobe o banco). |
 | `pnpm pr:marker` | `tsx tooling/scripts/pr-refresh-gate.ts` | Gate do marcador `<!--pr-refresh:live-->` no corpo do PR. Bloqueia no **CI** (não no hook). |
 
 ### 2.4 Agents, roteamento e lint das matrizes

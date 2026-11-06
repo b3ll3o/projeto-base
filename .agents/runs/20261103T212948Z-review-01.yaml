@@ -1,0 +1,708 @@
+# review-router — revisão pós-implementação do PR #144
+#
+# Branch: feat/start-local-sem-p1001  ·  Base: main (027095b)
+# Matriz: .agents/specs/conventions/review-routing.md (v1.8, 2026-10-16)
+# Classificador: tooling/scripts/review-router.ts (headless), exit 3 (blocking=true)
+# Modo de composição: parallel (5 reviewers, mesmo dispatch)
+# Regra do repo: NÃO editei nenhum arquivo do código revisado (worktree limpo no fim).
+
+classification:
+  scope: large
+  domains_detected: [nestjs, prisma, docker, monorepo, docs, tooling]
+  matrix_version: 1.8
+  classifier_command: >-
+    cd tooling/scripts && pnpm review:route
+    --paths=.agents/runs/...-paths.txt
+    --matrix=.agents/specs/conventions/review-routing.md
+    --commits=.agents/runs/...-commits.txt
+  classifier_exit: 3 # blocking=true, veio do path_glob `.tooling/scripts/ci/**`
+  commit_types: [feat]
+  files_changed: 33
+  diff_size: 199201 bytes
+
+classification_evidence:
+  - signal: path_glob
+    pattern: 'apps/api/**/infrastructure/**'
+    reviewers_added: [nestjs-specialist, stack-code-reviewer]
+  - signal: path_glob
+    pattern: 'docs/**'
+    reviewers_added: [doc-sync, doc-writer, documentation-specialist]
+  - signal: path_glob
+    pattern: '.tooling/scripts/ci/**'
+    reviewers_added: [monorepo-specialist]
+    blocking: true
+  - signal: path_glob
+    pattern: '**/*.spec.ts'
+    reviewers_added: [test-writer]
+  - signal: commit_type
+    pattern: feat
+    reviewers_added: [stack-code-reviewer]
+  - signal: diff_pattern
+    pattern: "@(Injectable|Controller|Module|Get|Post|Put|Delete|Patch)\\("
+    reviewers_added: [nestjs-specialist]
+  - signal: matrix_gap
+    what: 'Nenhum path_glob cobre o `package.json` da RAIZ nem o `.prettierignore` — o `dev` da raiz virou `pnpm ambiente:check && turbo run dev` e ninguém é roteado por isso. Gap da matriz v1.8 (correção via PR separado, não neste).'
+    reviewers_added: []
+
+reviewers_dispatched:
+  - id: stack-code-reviewer
+    role: 'correção das decisões + efeitos + casa-padrão'
+    binding: '.agents/agents/stack-code-reviewer.md'
+    dispatched: true
+    findings: 12
+  - id: security-auditor
+    role: 'credencial, argv, escrita fora do repo, supply chain'
+    binding: '.agents/agents/security-auditor.md'
+    dispatched: true
+    findings: 7
+  - id: test-writer
+    role: 'dente dos testes (mutation testing em cópia isolada)'
+    binding: '.agents/agents/test-writer.md'
+    dispatched: true
+    findings: 16
+  - id: documentation-specialist
+    role: 'a doc conta a verdade + cobertura'
+    skill: '.agents/skills/documentation-audit/SKILL.md'
+    binding: '.agents/agents/documentation-specialist.md'
+    dispatched: true
+    findings: 11
+  - id: monorepo-specialist
+    role: 'convenções do harness de tooling + porta de gate'
+    binding: '.agents/agents/monorepo-specialist.md'
+    dispatched: true
+    findings: 9
+  - id: nestjs-specialist
+    role: 'lens DDD/Hexagonal em apps/api/**/infrastructure/**'
+    skipped: true
+    skipped_reason: 'caminho coberto pelo stack-code-reviewer (mesmo path_glob) — double-review sem ganho'
+  - id: doc-sync
+    role: 'doc ↔ código'
+    skipped: true
+    skipped_reason: 'caminho coberto pelo documentation-specialist, que carrega a skill documentation-audit'
+  - id: doc-writer
+    role: 'redação de doc'
+    skipped: true
+    skipped_reason: 'a revisão é de VERDADE da doc, não de redação — coberto pelo documentation-specialist'
+  - id: nextjs-specialist
+    role: 'front'
+    skipped: true
+    skipped_reason: 'FALSO POSITIVO do classificador: `next/image|next/font` casou dentro dos artefatos de `.agents/runs/` (evidence .txt), não no diff de código. Reclassificado com o diff sem ruído (48 KB) → o reviewer desaparece.'
+  - id: prisma-db-specialist
+    role: 'schema/migrations'
+    skipped: true
+    skipped_reason: 'O diff NÃO toca `apps/api/prisma/**` — só o catch do `$connect()`'
+  - id: docker-prod-specialist
+    role: 'hardening de imagem/compose'
+    skipped: true
+    skipped_reason: 'O diff NÃO toca Dockerfile/compose — o guard do `ports:` é a Fase 6 declarada como fora do PR'
+
+findings_aggregated:
+  totals:
+    blocker: 0
+    major: 5
+    minor: 24
+    info: 18
+  total: 47
+  consensus_count: 4
+  by_reviewer:
+    stack-code-reviewer: 12
+    test-writer: 16
+    documentation-specialist: 11
+    monorepo-specialist: 9
+    security-auditor: 7
+
+  findings:
+    # ── MAJOR ────────────────────────────────────────────────────────────────
+    - id: M-01
+      severity: major
+      consensus: false
+      reviewers_flagged: [documentation-specialist]
+      file: docs/como-rodar.md
+      line: 244
+      what: 'O corte compensatório juntou 3 linhas da tabela §2 numa célula só (`POSTGRES_USER` · `POSTGRES_PASSWORD` · `POSTGRES_DB`) e DESARMOU o `check-runbook-drift`: as 3 chaves saíram do alcance do gate.'
+      why: "O gate extrai a chave com a regex `^\\|\\s*`([A-Z][A-Z0-9_]*)`\\s*\\|`, que exige UMA chave por célula. A célula mesclada não casa → o gate acusa se a chave citada sumir de todo `.env.example`; com as 3 cegas, ninguém é avisado quando `POSTGRES_USER` sair do `.env.production.example`. Gate verde por inércia — e o próprio doc afirma na linha 260 que o gate 'casa a 1ª coluna com as chaves dos .env.example'."
+      evidence: >-
+        extrairChavesEnv: ANTES 22 chaves → DEPOIS 19. PERDIDAS: POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB
+        (check-runbook-drift.ts:76 a regex; check-runbook-drift.ts:172-180 o uso)
+      verified_by_router: true
+
+    - id: M-02
+      severity: major
+      consensus: false
+      reviewers_flagged: [stack-code-reviewer]
+      file: .tooling/scripts/ci/ambiente-local.ts
+      line: 227
+      what: 'A mensagem do ramo `banco-mudo` contradiz o estado que a produziu — nas três formas em que ela é alcançável.'
+      why: "(a) Diz 'o DATABASE_URL aponta para uma porta que ele NÃO publica' — mas o ramo só é alcançado DEPOIS de `if (!estado.containerPublicaPorta)`, ou seja, o container PUBLICA a porta sondada (afirmação invertida por construção). (b) Diz 'ele publica 5432' (constante) quando a porta publicada é a sondada. (c) Diz 'o container existe e está de pé' — mas o fall-through alcança o container PARADO (imagem que não começa por `postgres:`). A entrega deste PR é a MENSAGEM; ela mente no estado que o PR existe para diagnosticar."
+      evidence: >-
+        decideSobreBanco({bancoAlcancavel:false, host:'localhost', porta:55432, containerExiste:true,
+        containerParado:false, containerPublicaPorta:true, imagem:'postgres:16-alpine'})
+        → codigo 'banco-mudo', msg '... o DATABASE_URL aponta para uma porta que ele não publica (ele publica 5432)'
+        (o container publica 55432)
+
+    - id: M-03
+      severity: major
+      consensus: true
+      reviewers_flagged: [test-writer, stack-code-reviewer, monorepo-specialist]
+      file: .tooling/scripts/ci/ambiente-local.ts
+      line: 484
+      what: "A auto-recuperação — a feature-cabeçalho do script ('religa o container parado sozinho') — NÃO tem teste nenhum. `verificarBanco` está fora da cobertura; `subirContainer` e `esperarPorta` são as DUAS únicas funções que nunca executam em nenhuma spec."
+      why: 'M10 (`subirContainer` → return false) e M11 (`esperarPorta` → return false) deixam a suíte 28/28 VERDE. Um `docker start` que falha, uma espera que nunca confirma, um container que sobe mas não abre a porta: nada disso é detectado. E é o caminho que MUTA a máquina.'
+      evidence: >-
+        mutação M10 → 'Tests 28 passed (28)'; mutação M11 → 'Tests 28 passed (28)';
+        sonda de chamadas: 'subirContainer' 0 chamadas, 'esperarPorta' 0 chamadas;
+        coverage v8: 'functions nao cobertas: linha 406: subirContainer, linha 416: esperarPorta'
+
+    - id: M-04
+      severity: major
+      consensus: false
+      reviewers_flagged: [test-writer]
+      file: .tooling/scripts/ci/ambiente-local.ts
+      line: 308
+      what: '`clienteDoPrismaGerado()` só testa `existsSync(.prisma/client/default.js)` — e o postinstall do `@prisma/client` cria ESSE arquivo (stub que lança). O diagnóstico `sem-prisma-client` é inatingível num clone novo.'
+      why: "O postinstall chama `createDefaultGeneratedThrowFiles()` INCONDICIONALMENTE antes do `prisma generate` e escreve `default.js`/`index.js`/`edge.js`/`wasm.js`/`index-browser.js` — o stub que lança '@prisma/client did not initialize yet'. O check diria 'gerado' para um client inutilizável, e a API morre com erro cru logo em seguida — exatamente o que o PR promete matar. A mensagem do check ainda nomeia o sintoma errado ('Cannot find module .prisma/client/default'), que é o de client AUSENTE, não o de stub."
+      evidence: >-
+        @prisma/client/scripts/postinstall.js:67 → `await createDefaultGeneratedThrowFiles()` (antes do generate)
+        postinstall.js:201-230 → escreve default.js/index.js/edge.js/wasm.js/index-browser.js a partir de default-index.js
+        default-index.js:43 → `throw new Error('@prisma/client did not initialize yet. Please run "prisma generate"')`
+        no client REAL: `.prisma/client/` tem schema.prisma + libquery_engine*.so.node; o STUB não tem nenhum dos dois
+      disagreement_adjudicated: >-
+        O stack-code-reviewer concluiu que 'o código está certo e o comentário NÃO mente' (mediu que o PATH
+        resolve e que default.js existe nesta máquina) — mas mediu o cliente JÁ GERADO, não o stub. O path
+        está certo (3 `..` a partir do ARQUIVO → node_modules → .prisma/client/default.js); o defeito é
+        a ausência de discriminação stub-vs-real, que ele não exercitou.
+
+    - id: M-05
+      severity: major
+      consensus: false
+      reviewers_flagged: [test-writer]
+      file: .tooling/scripts/ci/ambiente-local.spec.ts
+      line: 299
+      what: "A spec do SCRIPT fixa o diagnóstico por SUBSTRING frouxa: `expect(saida).toContain('não responde')` — que aparece em 5 mensagens distintas (banco-remoto, sem-container, container-sem-porta, subir-container, banco-mudo)."
+      why: "M8 (trocar os blocos `banco-remoto` ↔ `sem-container`, diagnósticos opostos) deixa a suíte 28/28 VERDE. A spec não fixa QUAL diagnóstico o script deu, só que 'algo não responde'."
+      evidence: "mutação M8 → 'Tests 28 passed (28)'"
+
+    # ── MINOR (consenso primeiro) ────────────────────────────────────────────
+    - id: m-01
+      severity: minor
+      consensus: true
+      reviewers_flagged: [stack-code-reviewer, security-auditor]
+      file: '.tooling/scripts/ci/ambiente-local.ts (+ apps/api/src/shared/infrastructure/prisma/traducao-de-falha-de-conexao.ts:46)'
+      line: 60
+      what: "A entrada `'::1'` de `HOSTS_LOCAIS` é código morto: `new URL(...).hostname` devolve o IPv6 COM colchetes (`'[::1]'`), e o Set tem `'::1'` SEM colchetes."
+      why: "Um `DATABASE_URL` com IPv6 local é classificado como NÃO local: o check diz 'banco-remoto — o problema é a rede ou o serviço do Compose' e a tradução do P1001 dá o MESMO conselho errado e NÃO oferece `docker start projeto-base-pg-local`. Mesmo defeito nos DOIS arquivos (o conjunto está duplicado). Bônus do stack-code-reviewer: host em maiúsculas (`LOCALHOST`) também não casa — em esquema não-especial o WHATWG não normaliza a caixa."
+      evidence: >-
+        new URL('postgresql://u:p@[::1]:5432/db').hostname → '[::1]' ; HOSTS_LOCAIS.has('[::1]') → false
+        new URL('postgresql://u:p@LOCALHOST:5432/db').hostname → 'LOCALHOST' ; .has('LOCALHOST') → false
+
+    - id: m-02
+      severity: minor
+      consensus: true
+      reviewers_flagged: [stack-code-reviewer, security-auditor]
+      file: .tooling/scripts/ci/ambiente-local.ts
+      line: 266
+      what: 'Os remédios da porta apontam para alvos errados: `docker compose stop api` é o PRIMEIRO remédio mesmo quando o container não é serviço do Compose; `docker stop ${containers[0]}` pode parar quem não ocupa o endereço sondado; e `pkill -f "turbo run dev"` casa SUBSTRING da argv de QUALQUER processo.'
+      why: "O filtro `publish=<porta>` casa container que publica a porta em QUALQUER IP, mas a sondagem é só `portaAberta('127.0.0.1', porta)`; e `docker compose` sem `-f`/`-p` resolve o compose pelo CWD. O `pkill -f` é o pior: este repo é um template que as pessoas COPIAM — duas cópias na mesma máquina é o caso normal, e o comando mataria a outra. O usuário copia-e-cola o que o script imprimiu: o script é o autor da ação destrutiva."
+      evidence: >-
+        docker ps --filter publish=3000 → 'projeto-base-api  0.0.0.0:3000->3000/tcp'
+        sonda do padrão do pkill: 'node turbo run dev (OUTRO projeto) 1  → total casado: 1'
+
+    - id: m-03
+      severity: minor
+      consensus: true
+      reviewers_flagged: [stack-code-reviewer, monorepo-specialist]
+      file: .tooling/scripts/ci/ambiente-local.ts
+      line: 89
+      what: "O preflight declara 'ambiente local pronto — suba a aplicação' sem verificar `SYSTEM_DATABASE_URL` nem `NODE_ENV`, e com um `JWT_SECRET` mais fraco que o da API."
+      why: "A API recusa o boot sem `SYSTEM_DATABASE_URL` fora de `development` e exige segredo de ≥32 bytes sem placeholder. O check passa (a variável existe e não está vazia) e a API morre em seguida com 'SYSTEM_DATABASE_URL é obrigatório' / o erro de tamanho — duas mensagens para o mesmo problema, e o veredito 'o ambiente está pronto' é falso justamente no que a API exige."
+      evidence: >-
+        apps/api/src/shared/auth/credenciais-do-banco.ts:118-131 (SYSTEM_DATABASE_URL default-deny fora de 'development')
+        apps/api/src/shared/auth/segredo-de-servico.ts:26 (TAMANHO_MINIMO_SEGREDO = 32) + lista de placeholders
+
+    - id: m-04
+      severity: minor
+      consensus: false
+      reviewers_flagged: [stack-code-reviewer]
+      file: .tooling/scripts/ci/ambiente-local.ts
+      line: 282
+      what: "O veredito 'banco no ar' (e o sucesso da auto-recuperação) mede o MAPEAMENTO DE PORTA do Docker, não o Postgres."
+      why: "`portaAberta` faz TCP connect e quem responde é o `docker-proxy`, que o daemon sobe no instante em que o container sobe — antes do Postgres aceitar conexão. `esperarPorta` devolve `true` no PRIMEIRO poll (250 ms). O check pode declarar 'no ar — container religado' e liberar o `pnpm dev` com o Postgres ainda inicializando; aí o `$connect()` do Prisma bate cedo e o P1001 CRU volta."
+      evidence: >-
+        docker-proxy PID 99812 criado no MESMO segundo do StartedAt do container (2026-11-03T14:35:59.886Z);
+        'database system is ready to accept connections' em 14:36:00.092Z (205 ms depois);
+        primeiro start (2026-10-16): initdb de 22:16:27.208 a 22:16:28.081
+
+    - id: m-05
+      severity: minor
+      consensus: false
+      reviewers_flagged: [stack-code-reviewer]
+      file: .tooling/scripts/ci/ambiente-local.ts
+      line: 459
+      what: 'Um `DATABASE_URL` presente mas INVÁLIDO é reportado como ausente.'
+      why: "`alvoDoBanco` devolve `undefined` quando `new URL()` não parseia, e `verificarBanco` devolve o veredito `sem-database-url` ('não há DATABASE_URL para ler o alvo do banco') — enquanto `decideSobreEnv` já disse 'com DATABASE_URL e JWT_SECRET'. O preflight imprime duas mensagens CONTRADITÓRIAS para o mesmo defeito e manda o usuário procurar uma variável que ele tem."
+      evidence: "new URL('postgresql://u:p@h:notaport/db') → TypeError → alvoDoBanco → undefined (caminho já coberto pela spec: ambiente-local.spec.ts:258-261)"
+
+    - id: m-06
+      severity: minor
+      consensus: false
+      reviewers_flagged: [monorepo-specialist]
+      file: .tooling/scripts/ci/ambiente-local.ts
+      line: 3
+      what: "O cabeçalho afirma que um arquivo de `.tooling/scripts/ci/` COM shebang seria classificado como 'HARNESS ÓRFÃO' pelo `check-harness-owner`. Isso é FALSO."
+      why: 'O gate tem duas etapas: classificar (shebang) e achar DONO. Com shebang o arquivo vira harness, mas TEM dono (`package.json#scripts.ambiente:check`) → o gate ACEITA. A ESCOLHA (sem shebang) é inofensiva; a JUSTIFICATIVA escrita está errada — e a mesma afirmação falsa já é pré-existente em `check-doc-coverage.ts:1-5` e `check-harness-location.ts:1-4` (o arquivo novo a herdou). Regra do repo: doc que mente é defeito.'
+      evidence: >-
+        --- SEM shebang ---  harnessFiles() => []   orphanHarnesses => {ok:true,orphans:[]}
+        --- COM shebang ---  harnessFiles() => ['.tooling/scripts/ci/ambiente-local.ts']
+        owners => ['package.json#scripts.ambiente:check']   orphanHarnesses => {ok:true,orphans:[]}
+
+    - id: m-07
+      severity: minor
+      consensus: false
+      reviewers_flagged: [monorepo-specialist]
+      file: .prettierignore
+      line: 9
+      what: 'A correção do `format:check` depende do IGNORE GLOBAL da máquina; o repo tem uma alternativa derivável do repo (o `.gitignore`) — e o repo JÁ MEDIU que o prettier respeita o `.gitignore`.'
+      why: '`.claude/settings.local.json` NÃO está no `.gitignore` do repo: o ignore vem de `/home/leo/.config/git/ignore` (config da máquina). Numa máquina com o Claude Code instalado mas SEM a regra global, `pnpm format:check` continua reprovando — e o arquivo não está ignorado pelo repo, então `git add -A` commitaria um arquivo de permissão local. A CI não é afetada (checkout limpo), então é minor.'
+      evidence: >-
+        git check-ignore -v .claude/settings.local.json
+        => /home/leo/.config/git/ignore:1:**/.claude/settings.local.json  (o .gitignore DO REPO não menciona .claude)
+        npx prettier --ignore-path .gitignore --check .claude/settings.local.json => [warn] Code style issues found
+
+    - id: m-08
+      severity: minor
+      consensus: false
+      reviewers_flagged: [security-auditor]
+      file: .tooling/scripts/ci/ambiente-local.ts
+      line: 524
+      what: 'O guard de `PORT` aceita qualquer número > 0, mas `connect({ port })` exige 0..65535.'
+      why: "Um `PORT` fora da faixa estoura a Promise e mata o script com o erro cru do Node — exatamente a classe de 'erro cru' que o PR declara eliminar."
+      evidence: >-
+        PORT=99999 ... pnpm exec tsx .tooling/scripts/ci/ambiente-local.ts
+        → '[ambiente:check] FALHA: Port should be >= 0 and < 65536. Received type number (99999).'  EXIT=1
+
+    - id: m-09
+      severity: minor
+      consensus: false
+      reviewers_flagged: [test-writer]
+      file: .tooling/scripts/ci/ambiente-local.spec.ts
+      line: 237
+      what: "O `codigo` de `decideSobrePorta` nunca é asserido e não tem consumidor nenhum no repo; a mensagem do ramo 'processo local' (o texto que o usuário lê) também não."
+      why: "M3 (`'porta-no-processo'` → `'porta-no-container'`) deixa 28/28 verde. M3b (troca das mensagens) cai SÓ o ramo container — o ramo do `pkill` permanece verde."
+      evidence: "mutação M3 → 'Tests 28 passed (28)'; M3b → cai só 'porta ocupada por container'"
+
+    - id: m-10
+      severity: minor
+      consensus: false
+      reviewers_flagged: [test-writer]
+      file: .tooling/scripts/ci/ambiente-local.ts
+      line: 217
+      what: 'O fall-through `banco-mudo` (container de pé, imagem postgres, mas a porta não abre) nunca é alcançado por nenhum teste.'
+      why: "É o ramo que explica o sintoma 'a API morre mas o container está de pé' — o mais confuso para quem desenvolve — e é o único não coberto. A spec 'container que NÃO é do Postgres' só afirma `codigo).not.toBe('subir-container')`, que aceita qualquer outro código."
+      evidence: "mutação M9 (mensagem do banco-mudo corrompida) → 'Tests 28 passed (28)'; coverage v8 linha 217: 'branch 18 counts=[0]'"
+
+    - id: m-11
+      severity: minor
+      consensus: false
+      reviewers_flagged: [test-writer]
+      file: .tooling/scripts/ci/ambiente-local.spec.ts
+      line: 286
+      what: "Os 3 testes do SCRIPT usam `spawnSync` SEM `timeout`, e o script chama `execFileSync('docker', ...)` também sem timeout."
+      why: '`spawnSync` é bloqueante: enquanto o filho não sai, o event loop do Vitest para e o `testTimeout` não pode interromper. Um daemon do docker travado trava a suíte INDEFINIDAMENTE (no CI, o job inteiro até `timeout-minutes: 5`).'
+      evidence: 'nenhum `timeout:` nos 3 spawnSync (spec:286, 310, 339); execFileSync sem timeout em ambiente-local.ts:366 e :391'
+
+    - id: m-12
+      severity: minor
+      consensus: false
+      reviewers_flagged: [test-writer]
+      file: .tooling/scripts/ci/ambiente-local.spec.ts
+      line: 293
+      what: "Os 2 testes que usam `PORT: '3000'` fixo dependem do estado de DOCKER DA MÁQUINA, não do que a spec controla."
+      why: "Nesta máquina a 3000 está ocupada pelo container `projeto-base-api`, então o script imprime 'já está em uso por `projeto-base-api`' em vez de 'livre'. As asserções não quebram, mas a saída — sobre a qual a spec assere substring — muda de máquina para máquina."
+      evidence: "docker ps --format '{{.Names}} {{.Ports}}' → 'projeto-base-api 0.0.0.0:3000->3000/tcp'"
+
+    - id: m-13
+      severity: minor
+      consensus: false
+      reviewers_flagged: [test-writer]
+      file: .tooling/scripts/ci/ambiente-local.ts
+      line: 348
+      what: "O ramo `mapa === null || typeof mapa !== 'object'` de `publicaPortaNasBindings` não tem cobertura (só o caso '{}' é testado)."
+      why: 'É a defesa contra um `docker inspect` que devolva JSON inesperado. Sem o ramo, um `mapa` numérico entraria em `Object.values(mapa).some(...)`.'
+      evidence: "coverage v8: 'linha 348 (branch 36[0])' count 0 (uncovered)"
+
+    - id: m-14
+      severity: minor
+      consensus: false
+      reviewers_flagged: [test-writer]
+      file: .tooling/scripts/ci/ambiente-local.ts
+      line: 448
+      what: "Em `alvoDoBanco`, o guard `url.hostname === ''` nunca é exercitado e o `Number.isNaN(porta)` é CÓDIGO MORTO."
+      why: "O parser de URL rejeita porta não-numérica com ERR_INVALID_URL — o `NaN` nunca dá true, o que dá ao leitor a impressão de que a porta pode ser inválida. O `hostname === ''` (URI `postgresql://`) é real e não é testado."
+      evidence: "coverage v8 linha 448: 'branch 49 counts=[0]'; node -e: 'postgresql://host:abc → THROWS ERR_INVALID_URL'"
+
+    - id: m-15
+      severity: minor
+      consensus: false
+      reviewers_flagged: [test-writer]
+      file: .tooling/scripts/ci/ambiente-local.ts
+      line: 318
+      what: 'O `catch { return false }` de `clienteDoPrismaGerado()` (pacote não resolvível) não tem cobertura.'
+      why: "É o ramo que cobre 'o projeto nem está instalado' — justamente o ambiente de clone recém-clonado, que a spec pretende cobrir com a bifurcação do TST-01."
+      evidence: "coverage v8: 'linha 318 (branch 31[0]): } catch {' count 0 (uncovered)"
+
+    - id: m-16
+      severity: minor
+      consensus: false
+      reviewers_flagged: [documentation-specialist]
+      file: docs/fluxo-desenvolvimento.md
+      line: 4
+      what: 'O doc ficou com DUAS versões de si mesmo: o frontmatter continua `version: 1.3.0` / `updated: 2026-10-29`, enquanto o rodapé virou `**Versão do documento:** 1.4.0` / `**Última atualização:** 2026-11-03`.'
+      why: 'A divergência é NOVA (antes os dois concordavam). Nenhum gate mede isso: o `check-version-footers` cobre os 4 docs canônicos e NÃO o fluxo-desenvolvimento.'
+      evidence: 'head -8 → version: 1.3.0 / updated: 2026-10-29 ; tail -4 → 1.4.0 / 2026-11-03 ; git show main:docs/fluxo-desenvolvimento.md → frontmatter idêntico'
+
+    - id: m-17
+      severity: minor
+      consensus: false
+      reviewers_flagged: [documentation-specialist]
+      file: docs/fluxo-desenvolvimento.md
+      line: 184
+      what: "O `ambiente:check` entrou na '§4. Tabela de gates' como LINHA DE GATE e no diagrama da camada (A) ENFORCEMENT LOCAL, cujo rodapé diz '✅ IMPOSTO localmente, burlável com --no-verify'. Ele NÃO é gate: não está no registro do preflight, não é hook."
+      why: "Duas leituras do mesmo fato em dois docs canônicos: `docs/MONOREPO-scriptarios.md:65` escreve '**NÃO é gate**: roda só no `pnpm dev`'. A linha em si é honesta ('Bloqueia o start, não o push'), mas o rótulo da tabela e o '--no-verify' do diagrama são afirmações que o `pnpm dev` não satisfaz."
+      evidence: "grep -n 'ambiente' .tooling/scripts/ci/preflight-gates.ts → vazio (não é gate registrado)"
+
+    - id: m-18
+      severity: minor
+      consensus: false
+      reviewers_flagged: [documentation-specialist]
+      file: .tooling/scripts/ci/ambiente-local.ts
+      line: 21
+      what: "O cabeçalho do script afirma 'cinco asserções do ambiente local, cada uma com a decisão em FUNÇÃO PURA'. São QUATRO asserções e QUATRO decisões puras."
+      why: "Contagem sem o comando que a reproduz, num arquivo novo — o que a convenção proíbe. E o 'cada uma com a decisão em FUNÇÃO PURA' é contradito pelo fato de o JWT_SECRET morar DENTRO de `decideSobreEnv`, sem função própria. O plano repete o número errado."
+      evidence: "grep -n 'relatar(' → 4 chamadas; grep -n '^export function decide' → decideSobreEnv, decideSobrePrismaClient, decideSobreBanco, decideSobrePorta"
+
+    - id: m-19
+      severity: minor
+      consensus: false
+      reviewers_flagged: [documentation-specialist]
+      file: docs/como-rodar.md
+      line: 296
+      what: "O corte compensatório da tabela §4 estreitou a linha de `PrismaClientInitializationError` para o sabor P1001 e PERDEU o outro sabor da MESMA classe de erro ('`DATABASE_URL` ausente ou vazia — em `apps/api/.env` (Ambiente 1) ou em `.env.production` (Ambiente 3)')."
+      why: "Quem bate no 'Environment variable not found: DATABASE_URL' não casa com a linha nova (que diz P1001) e não acha remédio na tabela do runbook — linha do sintoma sem replacement."
+      evidence: "git diff main..HEAD -- docs/como-rodar.md → a linha 'DATABASE_URL ausente ou vazia' some"
+
+    - id: m-20
+      severity: minor
+      consensus: false
+      reviewers_flagged: [stack-code-reviewer]
+      file: docs/como-rodar.md
+      line: 292
+      what: "O corte compensatório do §4 removeu a linha `Cannot find package '@opentelemetry/sdk-node' na imagem prod` (que apontava para o runbook Docker §2.2, issue #104, commit 376da79)."
+      why: "A tabela §4 é o dono dos sintomas do runbook; uma linha que descreve sintoma de imagem prod desatualizada deixou de existir, e o doc que a explicava perde o ponteiro de entrada. As outras duas removidas ('invalid restart policy', 'initdb') são de defeitos já corrigidos — a perda é defensável."
+      evidence: 'git diff main..HEAD -- docs/como-rodar.md → três linhas removidas no fim da tabela §4'
+
+    - id: m-21
+      severity: minor
+      consensus: false
+      reviewers_flagged: [documentation-specialist]
+      file: README.md
+      line: 52
+      what: "O índice de `docs/` do README diz 'runbooks/ # runbooks por ambiente (dev, Docker, observabilidade, e2e/CI)'. O diretório `docs/runbooks/` tem 3 arquivos e NÃO tem runbook de 'dev'."
+      why: 'A linha foi reescrita neste PR, então é hora de ela estar certa: manda o leitor procurar em `docs/runbooks/` um runbook de dev que não existe ali (o Ambiente 1 mora no `docs/como-rodar.md` §1).'
+      evidence: "ls docs/runbooks/ → docker.md, e2e-e-ci.md, observabilidade.md ; docs/como-rodar.md:17 → '| 1 | Dev local, pnpm nativo | §1 (neste arquivo) |'"
+
+    - id: m-22
+      severity: minor
+      consensus: false
+      reviewers_flagged: [documentation-specialist]
+      file: README.md
+      line: 202
+      what: "O Troubleshooting do README afirma 'Os sintomas do ambiente local têm dono: [runbook §4]' e em seguida mantém uma tabela própria de 5 sintomas — 4 deles NÃO estão no §4 do runbook."
+      why: 'O ponteiro promete uma cobertura que o destino não tem. A tabela do README ficou como sombra do runbook — que era exatamente o que o corte da planilha 4.4 queria eliminar.'
+      evidence: "sed -n '200,211p' README.md (5 linhas) vs sed -n '290,301p' docs/como-rodar.md (§4, 7 linhas) — só o P1001 coincide"
+
+    - id: m-23
+      severity: minor
+      consensus: false
+      reviewers_flagged: [documentation-specialist]
+      file: apps/api/src/shared/infrastructure/prisma/traducao-de-falha-de-conexao.ts
+      line: 88
+      what: 'O comportamento NOVO e visível ao usuário — a API traduz o P1001 em causa + remédio no boot, por QUALQUER caminho de start (IDE, `tsx src/main.ts`, `pnpm --filter @projeto/api dev`) — não está descrito em NENHUM doc.'
+      why: 'Lacuna silenciosa: a matriz §3 da convenção `documentacao.md` não tem linha para unidade em `apps/api/src/shared/**`, e o `check-doc-coverage` só mede bounded contexts, rotas e packages — a unidade nova nunca vai ser cobrada.'
+      evidence: "grep -rn 'P1001' docs/ README.md → só o sintoma/preflight; grep -rni 'traduz' docs/ → nada sobre a tradução"
+
+    - id: m-24
+      severity: minor
+      consensus: false
+      reviewers_flagged: [documentation-specialist]
+      file: docs/MONOREPO.md
+      line: 189
+      what: "No §7: (a) a frase 'os outros 21 não apareciam em lugar nenhum' virou falsa — `ambiente:check` aparece em MONOREPO-scriptarios §2.3 e fluxo §4; (b) a tabela-resumo ainda descreve `pnpm dev` como 'Sobe os apps em watch', sem o preflight."
+      why: "O §7 é resumo; o dono do fato é o catálogo (§2 de MONOREPO-scriptarios), que agora diz 'depois do preflight do ambiente local'. O resumo precisa concordar, e hoje discorda por omissão."
+      evidence: 'docs/MONOREPO.md:185-198 vs docs/MONOREPO-scriptarios.md:38'
+
+    # ── INFO ─────────────────────────────────────────────────────────────────
+    - id: i-01
+      severity: info
+      reviewers_flagged: [documentation-specialist]
+      file: docs/fluxo-desenvolvimento.md
+      line: 146
+      what: "PRÉ-EXISTENTE: o doc afirma '41 gates' em 2 lugares; o registro tem 44."
+      evidence: "grep -cE \"^\\s+name: '\" .tooling/scripts/ci/preflight-gates.ts → 44"
+    - id: i-02
+      severity: info
+      reviewers_flagged: [documentation-specialist]
+      file: docs/MONOREPO-scriptarios.md
+      line: 31
+      what: "O catálogo de scripts está COMPLETO (30 de 30, nenhum faltando, nenhum sobrando) e o script novo está no lugar canônico com o 'NÃO é gate' explícito. Só registro que o comportamento do `ambiente:check` está descrito em 3 docs — 3 lugares para atualizar quando a checagem que falta aparecer."
+      evidence: 'no doc: 30 | no package.json: 30 | FALTANDO: (nenhum) | SOBRANDO: (nenhum)'
+    - id: i-03
+      severity: info
+      reviewers_flagged: [stack-code-reviewer]
+      file: .tooling/scripts/ci/ambiente-local.ts
+      line: 523
+      what: 'Só a porta da API (:3000) é sondada; a do web (:3001) não.'
+      why: "O título do PR é 'o start local não quebra mais com erro cru', mas um 3001 ocupado ainda derruba o `pnpm dev` com EADDRINUSE cru do Next. Lacuna de ESCOPO (o plano só pediu a porta da API), não da implementação."
+      evidence: "apps/web/package.json:13 → 'next dev --port 3001'"
+    - id: i-04
+      severity: info
+      reviewers_flagged: [stack-code-reviewer]
+      file: .tooling/scripts/ci/ambiente-local.ts
+      line: 54
+      what: '`CONTAINER_DO_BANCO_LOCAL`, `HOSTS_LOCAIS` e `alvoDoBanco` existem em DUAS cópias (o tooling e a tradução na API).'
+      why: 'Duplicação deliberada e documentada (o `.tooling/` não deve importar `apps/api/`), mas a convenção DRY quer UM dono por fato. As duas cópias JÁ divergiram no detalhe de m-01 (o `HOSTS_LOCAIS` copiado erra igual nos dois).'
+      evidence: "rg -n 'CONTAINER_DO_BANCO_LOCAL' → 2 definições do mesmo literal; `check-repeticao` não pega (o termo não está no catálogo)"
+    - id: i-05
+      severity: info
+      reviewers_flagged: [stack-code-reviewer]
+      file: .prettierignore
+      line: 8
+      what: 'Mudança fora do escopo do PR: `.claude/settings.local.json` no `.prettierignore`.'
+      why: 'Não é defeito (o conserto é real), mas é um arquivo não relacionado no mesmo PR da feature.'
+    - id: i-06
+      severity: info
+      reviewers_flagged: [monorepo-specialist]
+      file: .tooling/scripts/ci/ambiente-local.ts
+      line: 3
+      what: 'A ausência de shebang tira o ÚNICO instrumento que perceberia o script virar código morto (sair do `package.json`).'
+      why: 'Sem shebang ele fica invisível ao `check-harness-owner`. Há uma segunda rede (`check-runbook-drift` exige que todo `pnpm <script>` citado exista) — o risco é coberto, mas por um gate de DOC, não pelo de harness.'
+      evidence: "SEM shebang + SEM dono => harness=[] órfão=[] ; COM shebang + SEM dono => órfão=['.tooling/scripts/ci/ambiente-local.ts']"
+    - id: i-07
+      severity: info
+      reviewers_flagged: [monorepo-specialist]
+      file: .tooling/scripts/ci/check-repeticao.ts
+      line: 46
+      what: 'O verde de `check-bloco-duplicado` e `check-repeticao` é VACUOSO para o arquivo novo: `RAIZES_PRODUCAO` não inclui `.tooling/`.'
+      why: 'O PR não introduziu duplicação (medi com o MESMO analisador sobre `.tooling/scripts/ci`: 0 blocos duplicados), mas o verde desses gates não diz nada sobre o arquivo novo — ele não estava no corpus.'
+      evidence: "RAIZES_PRODUCAO = ['apps/api/src','apps/web/app','apps/web/lib','apps/web/components','packages/shared-types/src'] (sem .tooling)"
+    - id: i-08
+      severity: info
+      reviewers_flagged: [monorepo-specialist]
+      file: package.json
+      line: 12
+      what: 'O `check-package-json-drift` NÃO valida o path de `tsx` dentro de script COMPOSTO (`&&`) — o `pnpm ambiente:check` que o `dev` invoca não é path-checkado.'
+      why: 'Limitação pré-existente do gate; o PR só passa a depender dela numa forma nova. O gate como está PASSA (o `ambiente:check` isolado é `tsx <path>` puro e resolve).'
+      evidence: "check-package-json-drift.ts:50-52 → 'não cobre ... scripts compostos por &&'"
+    - id: i-09
+      severity: info
+      reviewers_flagged: [monorepo-specialist]
+      file: .tooling/scripts/ci/ambiente-local.ts
+      line: 195
+      what: "Docker AUSENTE é reportado como 'o container não existe', com a receita de CRIAÇÃO do runbook §1.1 no lugar do remédio real."
+      why: '`inspecionarContainer` devolve `existe: false` quando o `docker inspect` falha por qualquer motivo (binário ausente, socket sem permissão) — o `catch` engole a diferença.'
+      evidence: "ambiente-local.ts:363-386 (catch engole) → :195-204 (codigo 'sem-container')"
+    - id: i-10
+      severity: info
+      reviewers_flagged: [monorepo-specialist]
+      file: .tooling/scripts/ci/boot-local.ts
+      line: 79
+      what: '`lerEnvDotEnv` diverge do dotenv do `@nestjs/config` em borda: não entende `export FOO=bar`.'
+      why: "Se alguém escrever `export DATABASE_URL=...` no `.env`, o tooling diria 'não há DATABASE_URL' e BLOQUEARIA o `pnpm dev` — apesar de a API achar. A correção pertence ao DONO (`lerEnvDotEnv`), não ao arquivo novo. O conjunto de arquivos e a precedência (process.env vence) estão corretos."
+      evidence: "boot-local.ts:68-98 (parser não tira 'export ') vs @nestjs/config/dist/config.module.js:50 ({...config, ...process.env})"
+    - id: i-11
+      severity: info
+      reviewers_flagged: [security-auditor]
+      file: .tooling/scripts/ci/ambiente-local.ts
+      line: 297
+      what: '`lerAmbienteLocal()` devolve `{ valores }` onde `valores` é o `process.env` INTEIRO mais o conteúdo do `.env`.'
+      why: "Nada imprime `valores` hoje (medido: 0 ocorrências de sonda na saída), então não há vazamento agora. Mas é a fronteira por onde passaria TODO segredo do ambiente, e o tipo `Record<string,string>` não sinaliza ao leitor que aquilo são 'as duas variáveis'."
+      evidence: 'grep da senha-sonda na saída inteira → 0 ocorrências'
+    - id: i-12
+      severity: info
+      reviewers_flagged: [security-auditor]
+      file: .tooling/scripts/ci/ambiente-local.ts
+      line: 406
+      what: "O que se apresenta como 'checagem' EXECUTA uma escrita (`docker start`), disparado por todo `pnpm dev`."
+      why: 'Mitigadores verificados: nome do container CONSTANTE, só dispara se existe + parado + publica a porta do DATABASE_URL + imagem `postgres:`, e nunca recria container/volume (onde vivem as migrations e as senhas dos papéis). Risco residual é de disponibilidade em máquina compartilhada, não de segurança.'
+      evidence: "CONTAINER_DO_BANCO_LOCAL = 'projeto-base-pg-local' (constante, linha 54)"
+    - id: i-13
+      severity: info
+      reviewers_flagged: [security-auditor]
+      file: .tooling/scripts/ci/ambiente-local.ts
+      line: 366
+      what: 'Os 3 call sites de `docker` usam `execFileSync` sem `env:` — o filho herda o `process.env` inteiro.'
+      why: 'Os valores lidos do `.env` NÃO vão para o filho (só existem no objeto `valores`, em memória do pai); os EXPORTADOS no shell vão. Nenhum segredo entra no argv (verificado) e o `docker` não ecoa env.'
+    - id: i-14
+      severity: info
+      reviewers_flagged: [test-writer]
+      file: apps/api/src/shared/infrastructure/prisma/prisma.service.spec.ts
+      line: 57
+      what: 'As 3 chamadas a `svc.onModuleInit()` em 3 `expect` separados reexecutam o guard e o `$connect` mockado 3 vezes.'
+      why: "Não é defeito e não mascara (M12 provou que a asserção 'NUNCA a senha' tem dente) — é redundância. A leitura da spec sugere três cenários distintos onde há um."
+    - id: i-15
+      severity: info
+      reviewers_flagged: [test-writer]
+      file: apps/api/src/shared/infrastructure/prisma/prisma.service.spec.ts
+      line: 47
+      what: 'A spec stuba `NODE_ENV` e `DATABASE_URL`, mas NÃO `SYSTEM_DATABASE_URL`.'
+      why: 'Se a máquina (ou o CI) tiver `SYSTEM_DATABASE_URL` com senha exposta, o guard recusa e a spec falha pelo MOTIVO ERRADO. Risco ambiental, não atual.'
+    - id: i-16
+      severity: info
+      reviewers_flagged: [test-writer]
+      file: .tooling/scripts/ci/ambiente-local.spec.ts
+      line: 39
+      what: '`198.51.100.7` (TEST-NET-3) não é roteável e o `portaAberta` tem timeout de 800 ms.'
+      why: "O resultado é estável em rede normal. O risco real é rede com proxy transparente que aceita qualquer destino: aí `portaAberta` devolveria true e o teste 'com o banco inalcançável' cairia. O timeout de 800 ms é o custo dominante (~1,4 s por execução do script)."
+      evidence: "duração: 'banco inalcançável 1431ms' vs 'banco no ar 537ms'"
+    - id: i-17
+      severity: info
+      reviewers_flagged: [test-writer]
+      file: .tooling/scripts/ci/ambiente-local.spec.ts
+      line: 307
+      what: "No teste 'com o banco no ar e a porta livre', `portaLivre()` fecha o servidor e o teste REABRE a MESMA porta — e o `listen` não tem handler de 'error'."
+      why: "Se o SO reatribuir a porta entre o close e o listen, o `listen` emite 'error' sem listener → unhandled error no worker em vez de falha legível. Probabilidade baixa."
+    - id: i-18
+      severity: info
+      reviewers_flagged: [test-writer]
+      file: apps/api/vitest.config.ts
+      line: 79
+      what: '`prisma.service.ts` — o arquivo de PRODUÇÃO que o PR mais alterou — está na lista `coverage.exclude` do config raiz da API.'
+      why: 'Informativo: quem olhar o relatório de cobertura não vê a mudança do PR.'
+
+# ── o que a auditoria MEDIU e deu VERDADE (com comando) ─────────────────────
+verified_positives:
+  - claim: 'NENHUM vazamento de credencial (DATABASE_URL com user+senha, JWT_SECRET) em log de boot, relatório do check ou mensagem do main.ts'
+    by: [security-auditor]
+    evidence: 'grep da senha-sonda na saída INTEIRA (stdout+stderr), em 3 configurações → 0 ocorrências'
+  - claim: 'A tradução do P1001 é REAL — o erro do Prisma de verdade tem errorCode no topo'
+    by: [security-auditor]
+    evidence: "PrismaClientInitializationError, errorCode: 'P1001', message 'Can't reach database server at `127.0.0.1:59919`' (sem a senha)"
+  - claim: 'NENHUMA chamada de shell; `docker` sempre com argv em ARRAY; nenhum segredo em argv'
+    by: [security-auditor, monorepo-specialist]
+    evidence: "3 call sites `execFileSync('docker', [...])`; check-shell-injection EXIT=0"
+  - claim: 'O script NÃO escreve nada (nem dentro, nem fora do repo)'
+    by: [security-auditor]
+    evidence: "grep de writeFileSync/mkdirSync/rmSync/openSync/createWriteStream → nenhuma ocorrência; .dockerignore tem '.tooling'"
+  - claim: 'ZERO dependência nova, lockfile intocado, só stdlib do Node'
+    by: [security-auditor]
+    evidence: 'git diff --stat -- pnpm-lock.yaml → vazio; imports = node:child_process/node:fs/node:net/node:path/node:module + ./boot-local'
+  - claim: 'O `ambiente:check` NÃO está ligado em nenhum gate, hook ou job de CI'
+    by: [monorepo-specialist]
+    evidence: "grep 'ambiente:check|ambiente-local' em .github/ .husky/ preflight-gates.ts preflight.ts → 0 hits; ci:preflight EXIT=0"
+  - claim: 'A decisão de segurança do JWT NÃO foi duplicada no tooling'
+    by: [monorepo-specialist]
+    evidence: "ambiente-local.ts não importa apps/api/; a validação é só 'existe e não está vazio'; dono = segredo-de-servico.ts"
+  - claim: '`lerEnvDotEnv` foi REUSADO — não há um terceiro parser de `.env`'
+    by: [monorepo-specialist]
+    evidence: "grep 'dotenv|parseEnv|readFileSync.*\\.env|lerEnvDotEnv' → só boot-local.ts (def+uso), boot-local.spec.ts, ambiente-local.ts (import+uso)"
+  - claim: 'O `predev` NÃO foi usado e o repo não usa pre/post de script em lugar nenhum'
+    by: [monorepo-specialist]
+    evidence: 'find+grep em todo package.json → nenhum predev/postdev; .npmrc não liga enable-pre-post-scripts'
+  - claim: 'A receita do `docker run` tem UM dono'
+    by: [documentation-specialist]
+    evidence: "grep -c 'docker run -d --name projeto-base-pg-local' README.md docs/como-rodar.md → 0 e 1"
+  - claim: 'Todos os docs alterados estão em ≤ 300 linhas'
+    by: [documentation-specialist]
+    evidence: 'README 293 · como-rodar 300 · MONOREPO 294 · MONOREPO-scriptarios 113 · fluxo-desenvolvimento 299 · runbooks/docker 168'
+  - claim: 'O caminho do Prisma Client resolve certo (3 `..` a partir do ARQUIVO → node_modules → .prisma/client/default.js)'
+    by: [stack-code-reviewer, review-router]
+    evidence: 'existe no layout pnpm do repo: node_modules/.pnpm/@prisma+client@6.19.3_.../node_modules/.prisma/client/default.js'
+  - claim: 'Os dentes prometidos pelo PR funcionam: as mutações pedidas caem'
+    by: [test-writer]
+    evidence: 'M1 cai · M2 cai · M4 cai (2 specs) · M5 cai (2 specs) · M6 cai · M7 cai · M12 cai'
+
+# ── mutações executadas (mutation testing na cópia /tmp/mut-teste) ─────────
+mutation_testing:
+  method: 'git archive HEAD | tar -x -C /tmp/mut-teste + symlink de node_modules (repo original INTOCADO, nenhum .env copiado)'
+  baseline: '28 passed (28) em ambiente-local.spec.ts ; 46 passed (46) nas specs da API'
+  results:
+    - { id: M1, mutacao: "decideSobreBanco: 'subir-container' → 'sem-banco'", spec_caiu: true }
+    - {
+        id: M2,
+        mutacao: 'decideSobreBanco: inverter containerPublicaPorta ↔ containerParado',
+        spec_caiu: true,
+      }
+    - {
+        id: M3,
+        mutacao: "decideSobrePorta: 'porta-no-processo' → 'porta-no-container'",
+        spec_caiu: false,
+        nota: 'o `codigo` da porta não tem consumidor — ver m-09',
+      }
+    - { id: M4, mutacao: 'decideSobreEnv: remover o guard do JWT_SECRET', spec_caiu: true }
+    - {
+        id: M5,
+        mutacao: 'publicaPortaNasBindings: comparar a CHAVE do mapa com a porta',
+        spec_caiu: true,
+      }
+    - {
+        id: M6,
+        mutacao: 'traducao-de-falha-de-conexao: incluir url.username/url.password',
+        spec_caiu: true,
+      }
+    - { id: M7, mutacao: 'prisma.service: throw new Error(traducao) → throw erro', spec_caiu: true }
+    - {
+        id: M3b,
+        mutacao: 'decideSobrePorta: trocar as mensagens container ↔ processo local',
+        spec_caiu: parcial,
+      }
+    - {
+        id: M8,
+        mutacao: "decideSobreBanco: trocar 'banco-remoto' ↔ 'sem-container'",
+        spec_caiu: false,
+        nota: 'ver M-05',
+      }
+    - {
+        id: M9,
+        mutacao: "decideSobreBanco: corromper a mensagem do 'banco-mudo'",
+        spec_caiu: false,
+        nota: 'ver m-10',
+      }
+    - {
+        id: M10,
+        mutacao: 'subirContainer: nunca religa (return false sempre)',
+        spec_caiu: false,
+        nota: 'ver M-03',
+      }
+    - {
+        id: M11,
+        mutacao: 'esperarPorta: nunca confirma que a porta abriu',
+        spec_caiu: false,
+        nota: 'ver M-03',
+      }
+    - {
+        id: M12,
+        mutacao: 'prisma.service: a mensagem traduzida passa a carregar o DATABASE_URL',
+        spec_caiu: true,
+      }
+    - {
+        id: M13,
+        mutacao: 'clienteDoPrismaGerado: return false sempre',
+        spec_caiu: false,
+        nota: 'a bifurcação da spec absorve (ver M-04)',
+      }
+
+# ── o que NÃO foi verificado (risco residual) ──────────────────────────────
+not_verified:
+  - 'O comportamento REAL do religamento (exige `docker stop` no container de quem desenvolve — vedado pelo dispatch). A auto-recuperação foi medida com container descartável.'
+  - 'A execução do `pnpm ambiente:check` com o DATABASE_URL real (o branch de auto-recuperação é o único que escreve, e foi vedado).'
+  - 'A suíte de tooling COMPLETA (o test-writer rodou só ambiente-local.spec.ts + as 2 specs da API).'
+  - 'O job `preflight` do CI de verdade (o `prisma generate --postinstall` real foi bloqueado pelo sandbox por escrever no node_modules do repo).'
+  - 'Comportamento em Windows/macOS (o 198.51.100.7 e o timeout de 800 ms mudam em rede doméstica com captive portal).'
+  - 'O CI job `preflight` roda `pnpm tooling:test` (que executa o script via spec) ANTES do `db:generate` do job `quality` — a spec foi escrita para esse cenário, mas o job não foi reproduzido.'
+
+next_steps:
+  - "TRIAGEM DO CONTROLLER (não é meu): 0 blocker / 5 major / 24 minor / 18 info. Os 4 achados com CONSENSO entre 2+ reviewers são os de maior confiança: M-03 (auto-recuperação sem teste), m-01 (IPv6 morto), m-02 (remedy da porta), m-03 (preflight diz 'pronto' e a API recusa)."
+  - "Prioridade de correção, por severidade e por ser a ENTREGA do PR: M-02 (a mensagem mente — §1.2 do AGENTS.md: 'doc que mente é defeito P0'), M-01 (gate desarmado), M-03 e M-04 (a feature-cabeçalho sem rede de segurança), M-05 (a spec do script não fixa o diagnóstico)."
+  - 'Se o escopo apertar: M-01 é uma linha (voltar a 3 linhas e cortar em outro lugar); M-04 é um discriminador (exigir `.prisma/client/schema.prisma`, que só existe no client REAL); M-03 é uma spec do efeito (container descartável).'
+  - 'Gap da MATRIZ a corrigir em PR separado: nenhum path_glob cobre o `package.json` da RAIZ nem o `.prettierignore` — o `dev` da raiz virou composto e ninguém é roteado por isso.'
+  - 'Risco que o caller precisa saber: o `pnpm dev` deixou de ser read-only (religa o container do banco) e os remedies impressos (`pkill -f "turbo run dev"`, `docker stop <container>`) são destrutivos e sem escopo de projeto.'
+  - 'Nada foi editado no código revisado — worktree limpo (git status --porcelain vazio) no fim.'

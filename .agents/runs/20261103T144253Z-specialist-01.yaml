@@ -1,0 +1,826 @@
+# specialist-router — camada 1 do pre-planner (state-aware-planning)
+#
+# Demanda: "faça um plano para evitar o erro P1001 (Prisma: Can't reach database
+# server at localhost:5432) ao fazer o start do projeto local (`pnpm dev`)"
+# Demanda de referencia: .agents/runs/20261103T144253Z-demand.txt
+# Paths de referencia: .agents/runs/20261103T144253Z-paths.txt
+# State snapshot: .agents/runs/state-snapshot-20261103T144253Z-start-local-sem-p1001.md
+#
+# NOTA DE COLLISION: existe um plano para a MESMA demanda em
+# docs/superpowers/plans/2026-11-03-start-local-sem-p1001.md (untracked, escrito
+# as 11:53 de 2026-11-03, branch `feat/start-local-sem-p1001` que ainda nao
+# existe). Ele NAO e deste router — e a camada 2 rodando em paralelo. Os deltas
+# estao em plans_aggregated.delta_com_o_plano_em_disco.
+
+classification:
+  scope: infra
+  domains_detected: [docker, monorepo, nestjs, prisma, docs]
+  matrix_version: 1.6
+  matrix_source: .agents/specs/conventions/specialist-routing.md
+  matrix_updated: 2026-10-16
+  classifier: tooling/scripts/specialist-router.ts
+  classifier_command: >-
+    pnpm specialist:route
+    --demand=.agents/runs/20261103T144253Z-demand.txt
+    --paths=.agents/runs/20261103T144253Z-paths.txt
+    --matrix=.agents/specs/conventions/specialist-routing.md
+    --scope=infra
+  classifier_exit: 0
+  blocking: false
+  derived_tags: [compose_with_healthcheck]
+  evidence:
+    path_glob:
+      - apps/api/**
+      - apps/api/**/infrastructure/**
+      - '**/prisma/**'
+      - '**/docker-compose*.yml'
+      - docker-compose*.yml
+      - docs/**
+      - '**/*.md'
+      - package.json
+    demand_keyword:
+      - '(?i)docker(izar|ize)?|container(iza[çc][ãa]o)?|compose'
+      - "(?i)monorepo|workspace|\\bturbo\\b|pnpm.?workspace"
+      - '(?i)nestjs|fastify|prisma|controller|module'
+      - "(?i)\\bprisma\\b|schema\\.prisma|\\bmigrations?\\b|query lente|n\\+\\+1|índices?"
+      - "(?i)\\bdoc(umenta[çc][ãa]o)?\\b|readme|adr|spec(ification)?|catálogo de rotas"
+    demand_scope: [infra]
+    always_on: [monorepo-specialist]
+
+specialists_dispatched:
+  - docker-specialist
+  - docker-prod-specialist
+  - monorepo-specialist
+  - nestjs-specialist
+  - prisma-db-specialist
+  - documentation-specialist
+  - doc-writer
+
+specialists_skipped:
+  - id: orchestrator
+    reason: >-
+      Meta-agent — gates tem vida autonoma (anti-padrao explicito do
+      .agents/agents/specialist-router.md). Entrou na classificacao so pelo glob
+      `package.json` (-> [monorepo-specialist, orchestrator]); nao ha trabalho
+      de orquestracao a delegar, a camada 2 (writing-plans) e a camada 3
+      (execucao) ja tem dono.
+
+specialists_que_devolveram_tarde:
+  - id: documentation-specialist
+    note: >-
+      Devolveu ~2h depois do primeiro despacho (157 tool calls). A lens dele
+      NAO foi absorvida por completo: trouxe 3 achados que OS OUTROS NAO
+      TINHAM — (a) a linha 293 do §4 mapeia a CLASSE
+      `PrismaClientInitializationError` para "DATABASE_URL ausente ou vazia",
+      quando a classe tem DOIS errorCodes (P1012 = URL vazia; P1001 = servidor
+      fora do ar) — doc que MENTE (P0 por `documentacao.md` §1.2) e que e o
+      BECO SEM SAIDA do G-001; (b) os 3 CORTES CONCRETOS que pagam as linhas
+      novas do runbook; (c) `check-doc-refs` e `check-runbook-drift` NAO tem
+      bloco de CLI — invocados direto saem 0 sem fazer nada (o "gate sem bloco
+      CLI roda como no-op"). Os steps step-15, step-16 e step-17 sao dele.
+      CONFIRMADO por medicao direta neste run: `docker-compose.yml:89` ja
+      documenta `P1012 … You must provide a nonempty URL`; o runtime do Prisma
+      expoe `errorCode`; `check-doc-refs.ts` e `check-runbook-drift.ts` tem 0
+      blocos de CLI; os 4 docs donos dos cortes existem
+      (health.md 160, users.md 178, rotas.md 201, docker.md 168 linhas).
+
+gap_detected: false
+
+plans_aggregated:
+  unified_plan:
+    objective: >-
+      O `pnpm dev` para de quebrar com erro cru quando o banco nao esta no ar,
+      se recupera sozinho do caso comum (container `projeto-base-pg-local`
+      existe mas esta parado), e — quando nao e recuperavel — diz o que fazer
+      com o comando exato, apontando (sem duplicar) `docs/como-rodar.md` §1.1.
+      Doc e codigo coerentes (regra `documentacao.md`: doc que mente e defeito).
+
+    steps:
+      # ---------- FASE 1 — o instrumento (codigo) ----------
+      - id: step-1
+        owner: docker-specialist
+        title: 'Criar o verificador do banco local — decisao pura + efeito'
+        files:
+          - .tooling/scripts/ci/banco-local.ts
+          - .tooling/scripts/ci/banco-local.spec.ts
+        action: >-
+          Funcao pura `decideSobreBanco(estado)` -> `ok` | `subir-container` |
+          `sem-banco` | `porta-ocupada`, sem docker/rede/fs (testavel sem
+          maquina). Efeito: probe TCP com `node:net` (sem dependencia nova —
+          `pg` nao e dep de nenhum package.json e `psql` nao existe no host),
+          `docker inspect --format '{{.State.Status}}'` (argv em array, nunca
+          interpolacao — o gate `check-shell-injection` recusa),
+          `docker inspect --format '{{json .HostConfig.PortBindings}}'` e
+          `docker inspect --format '{{.Config.Image}}'`. Le a URI de
+          `AMBIENTE > apps/api/.env` (precedente do `prepara-papeis.sh:42-67`),
+          reusando o `lerEnvDotEnv` JA EXPORTADO em
+          `.tooling/scripts/ci/boot-local.ts:79` — sem parser duplicado.
+          Portas: default 5432 quando a URI nao traz.
+        command: 'npx vitest run --root .tooling/scripts/ci banco-local'
+        verification: >-
+          a spec cobre os 3 estados: banco inalcancavel + container PARADO ->
+          `subir-container`; banco inalcancavel + container INEXISTENTE ->
+          `sem-banco` (NUNCA `criar`); banco alcancavel -> `ok` E NENHUM
+          `docker` chamado (o atalho nao dispara quando nao precisa). RED-GREEN:
+          trocar `subir-container` por `sem-banco` derruba a spec.
+        risk: >-
+          `tooling/scripts/` e pacote separado e NENHEM esta em
+          `RAIZES_PRODUCAO` do `check-repeticao.ts` (medido: so
+          `apps/api/src`, `apps/web/app`, `apps/web/lib`,
+          `apps/web/components`, `packages/shared-types/src`) — um parser de
+          `.env` duplicado ali seria INVISIVEL para os gates. Da o porque de o
+          script nascer em `.tooling/scripts/ci/`.
+
+      - id: step-2
+        owner: docker-specialist
+        title: "Auto-recovery — `docker start` no container que ja existe, e o criterio que separa 'parado' de 'nao serve'"
+        files: [.tooling/scripts/ci/banco-local.ts]
+        action: >-
+          Se o probe TCP falhar E o host da URI for local (localhost/127.0.0.1)
+          E o container estiver `exited` E a imagem COMECAR por `postgres:`,
+          executar `docker start projeto-base-pg-local` e esperar a porta abrir
+          (probe TCP, ate ~15 s). Se abrir -> imprime "banco local no ar
+          (container reiniciado)" e sai 0. Se NAO abrir -> o container existe
+          mas nao serve: medir `publicaPorta()`; se a porta nao estiver
+          publicada -> mensagem "existe mas nao publica a porta no host" +
+          ponteiro ao §1.1 e sai 1. NAO recriar o container: o volume dele
+          guarda as migrations e as senhas dos papeis que o
+          `prepara-papeis.sh` aplica — recriar troca o volume e o app quebra
+          com "role app_runtime is not permitted to log in".
+        command: >-
+          docker start projeto-base-pg-local &&
+          docker inspect --format '{{json .HostConfig.PortBindings}}' projeto-base-pg-local &&
+          node -e "const s=require('net').connect(5432,'127.0.0.1');s.on('connect',()=>{console.log('CONECTOU');s.destroy()});s.on('error',e=>console.log('ERRO',e.code))"
+        verification: >-
+          Medido no ambiente: `docker inspect --format '{{.State.Status}}'
+          projeto-base-pg-local` -> exit 0 + `running`; container inexistente ->
+          exit 1 + "no such object"; `PortBindings` -> `{"5432/tcp":[{"HostIp":"","HostPort":"5432"}]}`.
+          Ao vivo: `docker stop projeto-base-pg-local && pnpm dev` -> o check
+          religa o container e o `turbo run dev` SEGUE, sem P1001.
+        risk: >-
+          `docker start` e MUDANCA DE ESTADO na maquina de quem desenvolve.
+          Medicao que para o container derruba o banco de quem estiver usando a
+          maquina — medir em janela propria. `docker` ausente / sem permissao
+          no socket: o script trata como "nao deu para medir" e sai com
+          instrucao, NUNCA como verde.
+
+      - id: step-3
+        owner: docker-specialist
+        title: 'A porta 3000 (G-003): quem ocupa e o comando exato'
+        files: [.tooling/scripts/ci/banco-local.ts]
+        action: >-
+          Antes de subir, sondar a porta do `PORT` do `apps/api/.env` (3000).
+          Se ocupada, identificar o dono SEM `lsof`/`ss` (nao portaveis):
+          `docker ps --filter publish=3000 --format '{{.Names}}'`. Se devolver
+          container -> a mensagem nomeia o container e da DOIS comandos:
+          `docker compose stop api` (compose-aware) e `docker stop <container>`
+          (nao depende do compose nem do `.env.production`). Se nao devolver
+          container -> o dono e um processo local -> `pkill -f "turbo run dev"`.
+          Bloquear com exit 1 e a mensagem; nunca deixar o EADDRINUSE cru do
+          Nest. A mensagem NAO afirma quem e o dono quando nao da para saber.
+        command: "docker ps --filter publish=3000 --format '{{.Names}}'"
+        verification: >-
+          MEDIDO no ambiente: o filtro devolve `projeto-base-api` e o label de
+          servico e `api` (projeto Compose `base`). Com a stack no ar, o
+          `pnpm dev` tem que sair 1 com a mensagem nomeando o dono e o comando
+          — sem `EADDRINUSE` cru no log.
+        risk: >-
+          `docker compose stop api` exige `docker-compose.yml` + `.env.production`
+          presente; por isso a mensagem traz `docker stop <container>` como
+          alternativa que nao depende de nenhum dos dois.
+
+      - id: step-4
+        owner: monorepo-specialist
+        title: 'O gancho — o `dev` da RAIZ roda o check uma vez, antes de qualquer app'
+        files: [package.json]
+        action: >-
+          Na raiz: `"banco:check": "tsx .tooling/scripts/ci/banco-local.ts"` e
+          `"dev": "pnpm banco:check && turbo run dev"`. O `&&` faz o check
+          rodar UMA vez e, se ele falhar, `turbo run dev` NUNCA COMECA -> o
+          `tsx watch` nunca nasce -> o watcher que sobrevive ao crash nao
+          existe nesse caminho (requisito 1 e 2). NAO usar `"predev"`: o
+          `.npmrc` do repo so declara `engine-strict=true` ->
+          `enable-pre-post-scripts` fica no default do pnpm 9 (false) -> um
+          `predev` NUNCA rodaria e o `pnpm dev` voltaria a quebrar com o P1001
+          cru sem ninguem perceber (a mudanca pareceria funcionar e nao faria
+          nada). NAO tocar em `apps/api/package.json`, em `turbo.json` nem no
+          `dev` do web.
+        command: 'node -p "require(''./package.json'').scripts.dev"'
+        verification: >-
+          `docker stop projeto-base-pg-local && pnpm dev` -> sai em <1 s com
+          causa + ponteiro, SEM stack do Prisma; e `pgrep -af 'tsx watch
+          src/main.ts'` nao devolve NADA (o watcher nunca nasceu).
+        risk: >-
+          O gancho nao cobre `pnpm --filter @projeto/api dev` nem `cd apps/api
+          && pnpm dev` — e o `docker-compose.dev.yml:25` roda exatamente
+          `pnpm --filter @projeto/api dev` DENTRO do container (la o
+          `DATABASE_URL` aponta para `postgres:5432` e nao ha socket do Docker).
+          Aceito: e o que a Fase de erro legivel (step-6) cobre. Registrar
+          como `shortcut:` no script.
+
+      - id: step-5
+        owner: monorepo-specialist
+        title: 'O check NAO entra em `ci:local`, `ci:preflight` nem no pre-push'
+        files: [package.json]
+        action: >-
+          Deixar `ci:local`, `ci:preflight` e `.husky/pre-push` como estao: o
+          check roda SOMENTE no `pnpm dev`. Medido: (a) o CI nao roda
+          `pnpm ci:local` (`grep -rn 'ci:local' .github/workflows/` -> 0) ->
+          entrar na cadeia nao mexeria no CI; (b) `ci:boot` ja falha com
+          mensagem boa quando o banco esta fora
+          (`.tooling/scripts/ci/boot-local.ts:126-128`) e o
+          `.husky/pre-push:34` imprime o remedio; (c) um passo que depende do
+          Docker dentro de um gate hermetico e VERDE-POR-INERCIA no CI — nao ha
+          Postgres la (`ci.yml:164-165` — "Nao usar service postgres aqui — e
+          dead code"): a classe 1 de `guard-classes.md`. O `ci:boot` continua
+          sendo o gate e continua SEM subir o banco (decisao do repo, mantida
+          no cabecalho de `boot-local.ts`).
+        command: "grep -rn 'ci:local' .github/workflows/"
+        verification: >-
+          esperado: vazio. `time (pnpm banco:check)` -> happy path ~0,2 s
+          (medido: `node -e` 25 ms + partida do `tsx` 175 ms + probe TCP 37 ms
+          + `docker inspect` 12 ms; no caminho feliz o check nem chama o
+          docker). `pnpm ci:preflight` -> verde: o preflight nao conhece o
+          script novo (`preflight-gates.ts` e a fonte unica dos gates).
+        risk: >-
+          Quem roda `pnpm ci:local` com o banco parado continua falhando no
+          `ci:boot` (com o ponteiro, nao com stack cru) — o start e o que foi
+          pedido, o push nao muda de comportamento.
+
+      - id: step-6
+        owner: nestjs-specialist
+        title: 'RED — spec da funcao pura que traduz o P1001 em mensagem legivel'
+        files:
+          - apps/api/src/shared/infrastructure/prisma/traducao-de-falha-de-conexao.spec.ts
+        action: >-
+          Spec no padrao da casa (spec irma do arquivo, projeto `unit` do
+          Vitest). Tres casos, o minimo que prova o conserto: (1) P1001 + alvo
+          local -> a mensagem contem `P1001`, o alvo `localhost:5432`,
+          `projeto-base-pg-local`, `docker start projeto-base-pg-local` e
+          `docs/como-rodar.md`, e NAO contem a senha do DATABASE_URL (guarda
+          anti-vazamento — a URL tem credencial); (2) erro SEM `errorCode` ->
+          a funcao devolve `undefined`; (3) `errorCode` `P1000` -> `undefined`
+          (prova que so o P1001 e traduzido e nada e mascarado). O RED nasce
+          porque o modulo ainda nao existe.
+        command: >-
+          pnpm --filter @projeto/api exec vitest run --project unit src/shared/infrastructure/prisma/traducao-de-falha-de-conexao.spec.ts
+        verification: "mesmo comando — falha com 'Cannot find module' (RED), depois verde"
+        risk: >-
+          A spec do SERVICO (step-9) depende do guard
+          `verificarCredenciaisDoBanco`, que roda ANTES do `$connect` e le
+          process.env: se o env do teste nao for stubado, o guard recusa e o
+          teste cai pelo motivo errado.
+
+      - id: step-7
+        owner: nestjs-specialist
+        title: 'GREEN — a funcao pura de traducao, em `shared/infrastructure/prisma/`'
+        files:
+          - apps/api/src/shared/infrastructure/prisma/traducao-de-falha-de-conexao.ts
+        action: >-
+          Arquivo NOVO, no mesmo diretorio de `credenciais-do-banco.ts` e
+          `papel-de-runtime.ts`. POR QUE AI (lens DDD/Hexagonal): a funcao
+          conhece o `errorCode` do Prisma — isso e INFRAESTRUTURA (adapter), nao
+          dominio nem aplicacao; `domain/` e `application/` nao a importam (regra
+          ddd-h2), so `prisma.service.ts` importa. Assinatura:
+          `traduzirFalhaDeConexao(erro: unknown, databaseUrl: string | undefined): string | undefined`
+          — devolve `undefined` quando NAO e P1001 (o caller repassa o erro
+          original intacto). Deteccao por duck-typing em `errorCode` (sem
+          `instanceof Prisma.*`): a spec nao precisa do Prisma Client gerado.
+          Alvo (host/porta) sai do DATABASE_URL via `new URL(...)` — o mesmo
+          truque do `senhaDaUri` em `credenciais-do-banco.ts`; NUNCA incluir
+          user/senha. Mensagem (alvo local): causa (o `postgres` do compose usa
+          so `expose:` desde o #91 e nao e alcancavel do host; o banco local e
+          o container `projeto-base-pg-local`) + comando de UM comando que
+          resolve o caso medido (`docker start projeto-base-pg-local`) +
+          ponteiro ao §1.1. Alvo NAO local (ex.: `postgres:5432` dentro do
+          compose): mensagem que NAO recomenda container que nao existe no host.
+          A formulacao NAO duplica o §1.1: nao repete o bloco `docker run` (a
+          receita de criacao do zero e do §1.1).
+        command: >-
+          pnpm --filter @projeto/api exec vitest run --project unit src/shared/infrastructure/prisma/traducao-de-falha-de-conexao.spec.ts
+        verification: 'mesmo comando — verde; e `pnpm --filter @projeto/api typecheck` sem erro'
+        risk: >-
+          Traduzir so o P1001 deixa P1000 (senha errada) e P1003 (banco
+          inexistente) crus. Limitacao ACEITA — o caso medido e P1001; o
+          gatilho para ampliar e alguem bater em P1000 cru no boot. A guarda de
+          credenciais do #118 ja recusa a senha EXPOSTA antes de conectar.
+
+      - id: step-8
+        owner: nestjs-specialist
+        title: 'Ligar a traducao no `onModuleInit` — try/catch no `$connect`, rethrow intacto'
+        files:
+          - apps/api/src/shared/infrastructure/prisma/prisma.service.ts
+        action: >-
+          Só o `$connect()` (hoje linha 46) e protegido; o guard de credenciais
+          (37-44) ja lanca `Error` legivel e NAO se mexe.
+          `try { await this.$connect(); } catch (erro) { const traducao =
+          traduzirFalhaDeConexao(erro, process.env['DATABASE_URL']); if
+          (traducao === undefined) throw erro; throw new Error(traducao); }`
+          Sem `process.exit` dentro do hook: quem mata o processo e o
+          `bootstrap().catch()` do main.ts (ja existente) — sair dentro do hook
+          mataria sem `$disconnect`. POR QUE (a) e NAO um check TCP pre-boot:
+          no NestJS 11.2.5 o `onModuleInit` roda DENTRO de `app.listen()` ->
+          `init()` -> `callInitHook()` (`nest-application.js:106`), e o log
+          "Nest application successfully started" (linha 109) sai DEPOIS do
+          hook — VERIFICADO no fonte instalado. Logo, com P1001 a porta nunca e
+          escutada e o log de sucesso nunca mente; um check pre-boot nao compra
+          nada e ainda duplicaria a I/O de conexao.
+        command: >-
+          pnpm --filter @projeto/api exec vitest run --project unit src/shared/infrastructure/prisma
+        verification: 'mesmo comando — verde; `pnpm --filter @projeto/api typecheck` sem erro'
+        risk: >-
+          O `throw erro` preserva a instancia e o stack originais (bom), mas o
+          main.ts imprime o objeto Error inteiro — a mensagem legivel vem na
+          PRIMEIRA linha e o stack continua abaixo. Aceitavel (o stack ajuda
+          nos erros nao traduzidos).
+
+      - id: step-9
+        owner: nestjs-specialist
+        title: 'Spec do servico — prova de que erro NAO-P1001 sai intacto'
+        files:
+          - apps/api/src/shared/infrastructure/prisma/prisma.service.spec.ts
+        action: >-
+          Ampliar a spec existente (mesma pasta, mesma convencao `*.spec.ts`).
+          Caso A (NAO-P1001): mock de `$connect` que rejeita com `Error('boom')`
+          simples -> `await expect(svc.onModuleInit()).rejects.toBe(erro)` — a
+          MESMA instancia. Caso B (P1001): rejeita com `{ errorCode: 'P1001',
+          message: '...' }` -> `rejects.toThrow(/P1001/)`. Guardar o env do
+          teste com `vi.stubEnv` (`NODE_ENV=development`,
+          `DATABASE_URL=app_runtime:<senha-de-teste-local>@localhost:5432/db`
+          — senha que nao esta em `SENHAS_EXPOSTAS=['app_runtime_dev']` nem
+          comeca com `change_me`/`***`), senao o guard recusa antes do
+          `$connect` mockado e o teste falha pelo motivo errado. Usar
+          `vi.spyOn(PrismaService.prototype, '$connect')` para NAO tocar a rede.
+        command: >-
+          pnpm --filter @projeto/api exec vitest run --project unit src/shared/infrastructure/prisma/prisma.service.spec.ts
+        verification: 'mesmo comando — verde'
+        risk: >-
+          `new PrismaService()` no teste instancia o PrismaClient real (a spec
+          existente ja faz isso e passa). O mock de `$connect` evita I/O.
+          `vi.mock` do guard seria alternativa, mas o factory cache do `vi.mock`
+          (armadilha ja registrada no repo) e mais fragil que `vi.stubEnv`.
+
+      - id: step-10
+        owner: nestjs-specialist
+        title: 'main.ts — a linha que diz que a API MORREU'
+        files: [apps/api/src/main.ts]
+        action: >-
+          O `bootstrap().catch()` (linhas 123-126) hoje imprime "Bootstrap
+          falhou:" + o Error e da `process.exit(1)`. Acrescentar UMA linha
+          generica depois do erro, para ninguem achar que o boot continua:
+          `console.error('API encerrada (codigo de saida 1). Corrija a causa acima e rode de novo.')`
+          Generica de proposito: a linha NAO aponta §1.1, porque nem toda falha
+          de boot e de banco (ex.: `ALLOWED_ORIGINS` em producao, main.ts:80-87)
+          — o ponteiro para §1.1 fica DENTRO da mensagem do P1001, onde a causa
+          e o banco.
+        command: 'pnpm --filter @projeto/api dev'
+        verification: >-
+          com o container `projeto-base-pg-local` parado, o terminal mostra as
+          3 linhas do P1001 + "API encerrada (codigo de saida 1)"
+        risk: 'nenhum — e texto de log; o exit 1 ja existia'
+
+      # ---------- FASE 2 — a doc (a fonte da verdade) ----------
+      - id: step-11
+        owner: doc-writer
+        title: 'README Opcao B: a ponte ao §1.1 no lugar do `docker run` que quebra (G-002)'
+        files: [README.md]
+        action: >-
+          README.md:123 traz o `docker run -d --name projeto-base-pg-local -p
+          5432:5432 -e POSTGRES_USER=projeto -e POSTGRES_PASSWORD=projeto -e
+          POSTGRES_DB=projeto_base postgres:16-alpine` — o MESMO comando, byte
+          a byte, que esta em `docs/como-rodar.md:66-68`. Com o container ja
+          existente, `docker run` responde "name already in use" e a pessoa fica
+          sem saida: e o G-002. O README.md:121-123 vira PONTE ao §1.1 — no
+          MESMO passo 2 (nao em nota de rodape), porque quem so le o README
+          precisa achar o caminho. O §1.1 ja tem o `docker start` do container
+          que existe (linha 74) e ja tem o `docker run` da primeira vez (66-68).
+          O §1.1 (doc) e o dono da receita; o codigo e o dono de runtime.
+        command: 'grep -n "projeto-base-pg-local" README.md'
+        verification: >-
+          `grep -c "docker run -d --name projeto-base-pg-local" README.md
+          docs/como-rodar.md` -> 0 no README, 1 no runbook (o comando passa a
+          ter UM dono)
+        risk: >-
+          Perder o comando no README tira o sintoma do ponto de entrada —
+          mitigado pela ponte no proprio passo 2 e pelo codigo passar a dizer o
+          que fazer.
+
+      - id: step-12
+        owner: doc-writer
+        title: 'README: a tabela de Troubleshooting duplicada e a linha do 503 que engana'
+        files: [README.md]
+        action: >-
+          README.md:198-207 e uma SEGUNDA tabela de Troubleshooting (6
+          sintomas) enquanto o dono e `docs/como-rodar.md:287-300` (§4, 10
+          sintomas). Dois sintomas se sobrepoem — "port already in use"
+          (README.md:204 contra como-rodar.md:297) e "/api/v1/health 503"
+          (README.md:205 contra como-rodar.md:291) — e no do 503 a solucao do
+          README (`docker compose logs postgres`) esta ERRADA no ambiente 1: o
+          `postgres` do compose nao publica porta no host (§1.1), entao olhar o
+          log dele nao resolve. Doc que mente e defeito P0. A tabela do README
+          sai e fica uma ponte ao §4; o sintoma novo (P1001) entra no §4, que
+          e o dono, e nao no README.
+        command: "grep -nE \"^\\| |em criação\" README.md"
+        verification: >-
+          `grep -c "em criação" README.md` -> 0; e
+          `grep -rnE "P1001|PrismaClientInitializationError" README.md
+          docs/como-rodar.md` -> a unica mencao esta no §4 do runbook
+        risk: >-
+          Perder a tabela no README tira o sintoma do ponto de entrada —
+          mitigado pela ponte ao §4 e pelo proprio codigo passar a dizer o que
+          fazer (requisito 3).
+
+      - id: step-13
+        owner: doc-writer
+        title: 'README: o indice de `docs/` que descreve um estado que nao existe'
+        files: [README.md]
+        action: >-
+          README.md:51-52 descreve `docs/web/` e `docs/runbooks/` como "em
+          criacao — PR paralelo", mas os arquivos JA EXISTEM (`docs/web/rotas.md`,
+          `docs/runbooks/docker.md`, `observabilidade.md`, `e2e-e-ci.md`) e o §0
+          do `docs/como-rodar.md` (linhas 13-22) os indexa por AMBIENTE (nao
+          "por incidente", como diz o README). O README e quem esta errado.
+        command: 'grep -n "em criação" README.md'
+        verification: 'grep -c "em criação" README.md -> 0'
+        risk: 'nenhum'
+
+      - id: step-14
+        owner: prisma-db-specialist
+        title: 'docs/como-rodar.md — §1.1, §3, §4 e o corte compensatorio das 300 linhas'
+        files: [docs/como-rodar.md]
+        action: >-
+          O runbook e o dono do "como executar" (`documentacao.md` §2). Mudancas:
+          §1.1 ganha UMA linha — o `pnpm dev` roda um preflight de banco antes
+          de subir a app e religa o container local parado sozinho; quando nao
+          ha container, a mensagem aponta ao §1.1 (que segue sendo a fonte
+          unica do `docker run`); §3 (comandos canonicos) ganha
+          `pnpm banco:check` — o gate `check-runbook-drift` exige que todo
+          `pnpm <script>` citado no doc exista em algum `package.json` do
+          workspace; §4 (troubleshooting, 287-300) ganha a linha do sintoma
+          P1001 no boot, com ponte ao §1.1 (a linha existente do
+          `/api/v1/health` com `checks.database` != `ok` continua valida para a
+          queda DEPOIS do boot — sao sintomas diferentes). RESTRIÇÃO DURA:
+          `docs/como-rodar.md` esta em 300/300 linhas e o `check-doc-size`
+          (`LIMITE_DE_LINHAS = 300`) reprova em 301 — o mesmo PR tem que cortar
+          o equivalente. Alavancas: a linha 291 do §4 (que RECONTA o §1.1 — o
+          fato e do §1.1, a linha tem que APONTAR) e a linha 293 (que precisa
+          ser REESCRITA, nao somada: a causa que ela afirma — "DATABASE_URL
+          ausente ou vazia" — NAO e a causa medida; a medida e P1001).
+        command: 'pnpm ci:preflight'
+        verification: >-
+          `pnpm ci:preflight` -> 0 erro; `wc -l docs/como-rodar.md` <= 300; todo
+          `pnpm <script>` novo citado no doc existe no package.json (o
+          `check-runbook-drift` acusa); `check-doc-refs` e `check-doc-claims`
+          verdes.
+        risk: >-
+          Sem o corte compensatorio o `check-doc-size` fica vermelho e o PR nao
+          passa — a adicao de ~3 linhas tem que vir acompanhada do corte no
+          MESMO PR. `docs/runbooks/*.md` tem folga (docker.md 168,
+          observabilidade.md 114, e2e-e-ci.md 86) mas NAO e lido pelo
+          `check-runbook-drift` (so o `docs/como-rodar.md` e).
+
+      - id: step-15
+        owner: documentation-specialist
+        title: '§4 — DESAMBIGUAR a linha 293: a classe `PrismaClientInitializationError` tem DOIS errorCodes'
+        files: [docs/como-rodar.md]
+        action: >-
+          A linha 293 do §4 e hoje AMBIGUA e MENTE:
+          `| \`PrismaClientInitializationError\` | \`DATABASE_URL\` ausente ou vazia — em \`apps/api/.env\` (Ambiente 1) ou em \`.env.production\` (Ambiente 3) | §1.2.1 · [runbook Docker §2.1](./runbooks/docker.md) |`.
+          A MESMA classe cobre DOIS errorCodes distintos (Prisma 6.19.3, MEDIDO
+          pelo specialist e CONFIRMADO no repo — `docker-compose.yml:89` ja
+          documenta `P1012 … You must provide a nonempty URL`): P1012 = URL
+          vazia; P1001 = servidor fora do ar (`Can't reach database server at
+          localhost:5432`). Um dev com P1001 le "DATABASE_URL ausente ou vazia" e
+          vai para §1.2.1 (senhas dos papeis) em vez de §1.1 (o container) — e
+          esse e o BECO SEM SAIDA do G-001, que e um BUG DE DOC (P0 por
+          `documentacao.md` §1.2), nao so uma lacuna. Substituir a linha 293 por
+          DUAS, com o errorCode no sintoma: a linha P1012 aponta §1.2.1 (como
+          hoje); a linha P1001 aponta §1.1 (o container parado ou inexistente) e
+          NAO repete o `docker start` (que e do §1.1). Mover a linha
+          `port already in use` (297) para logo DEPOIS das duas — a tabela passa
+          a agrupar por "erro de boot do Prisma" e depois "conflito de porta"; a
+          linha 297 em si NAO muda.
+        command: "sed -n '287,300p' docs/como-rodar.md"
+        verification: >-
+          `grep -n 'P1001\|P1012' docs/como-rodar.md` -> P1012 e P1001 como
+          sintoma da tabela §4, e P1001 citado no §1.4;
+          `wc -l docs/como-rodar.md` <= 300
+        risk: >-
+          A coluna "Causa" fica mais longa (2 linhas na tabela). Aceito — a
+          tabela ja tem linhas longas. O RISCO REAL e o oposto: deixar a linha
+          ambigua e um doc que mente.
+
+      - id: step-16
+        owner: documentation-specialist
+        title: 'Os 3 CORTES CONCRETOS que pagam as linhas novas do runbook (o teto de 300)'
+        files: [docs/como-rodar.md]
+        action: >-
+          O §1.1 novo (+3: os dois ramos criar/reiniciar), o §1.4 novo (+8: o
+          que o preflight verifica/auto-cura/recusa) e a linha P1001 do §4 (+1)
+          somam +12; `check-doc-size` FALHA acima de 300. Os 3 blocos abaixo sao
+          REDUNDANCIAS com donos JA EXISTENTES — cada corte re-encontra o fato no
+          seu dono, nunca o perde. (a) §1.5, linhas 168-170: o paragrafo do
+          `/api/docs` (3 linhas — "so existe em `development` (#122) … Para
+          ligar: `SWAGGER_ENABLED=true`") ja esta em `docs/api/health.md` §6
+          (linha 151) e `README.md:167` -> trocar por 2 linhas que APONTAM.
+          (b) §1.6, linhas 178-179: "o body de criacao usa campos em portugues:
+          `nome`, `email`, `senha` (`CreateUserSchema` …)" — o DONO e
+          `docs/api/users.md` §3.1 (linhas 74-84) -> trocar por 3 linhas que
+          apontam; e as linhas 192-194 (a UI `/users` -> `/login`) ja e o que
+          `docs/web/rotas.md` §2-§3 documenta -> cortar para 2 linhas.
+          (c) §1.7, linhas 196-210 (15 linhas): "Usuario admin local (seed)"
+          repete quase palavra por palavra o §4 de `docs/runbooks/docker.md`
+          (linhas 137-167) — o comando, a tabela de credenciais e as DUAS
+          condicoes do guard; o §1.7 ja diz "o procedimento completo … esta em
+          runbook Docker §4" -> trocar as 15 linhas por 7. Saldo: +12 −14 =
+          298 linhas.
+        command: "sed -n '165,215p' docs/como-rodar.md"
+        verification: >-
+          `wc -l docs/como-rodar.md` <= 300 (esperado 298);
+          `grep -c 'admin@admin.com' docs/como-rodar.md` -> 1 (a linha nova do
+          §1.7) e o mesmo no `docs/runbooks/docker.md` -> 1 (o dono);
+          `grep -n 'SWAGGER_ENABLED=true' docs/como-rodar.md` -> 0 (o fato e do
+          health.md/README)
+        risk: >-
+          Cortar §1.5/§1.6/§1.7 tira do runbook o texto corrido e deixa so
+          ponteiros. Aceito — os docs apontados sao canonicos por assunto
+          (health.md para a API, rotas.md para o web, docker.md §4 para o seed).
+          MEDIDO: docs/api/health.md = 160 linhas, docs/api/users.md = 178,
+          docs/web/rotas.md = 201, docs/runbooks/docker.md = 168.
+
+      - id: step-17
+        owner: documentation-specialist
+        title: 'Os 5 gates de doc — e a armadilha do gate que roda como no-op'
+        files: [docs/como-rodar.md, README.md]
+        action: >-
+          MEDIDO: `check-doc-coverage`, `check-doc-claims` e `check-doc-size`
+          tem bloco de CLI (rodam diretos); `check-doc-refs` e
+          `check-runbook-drift` NAO tem (0 blocos `import.meta.url` /
+          `process.argv[1]`) — invocados direto saem 0 SEM FAZER NADA. Um
+          "verde" obtido assim e FALSO. Por isso a forma `tsx -e`:
+          (1) check-doc-coverage — mede docs/api/<bc>.md para todo modulo,
+          docs/web/rotas.md para toda rota, README por package, e a coerencia
+          da tabela de excecoes: `pnpm exec tsx .tooling/scripts/ci/check-doc-coverage.ts`
+          (2) check-doc-claims — mede os claims dos 6 docs de API contra
+          `.tooling/scripts/ci/doc-claims.json`; NAO cobre o runbook nem o
+          README: `pnpm exec tsx .tooling/scripts/ci/check-doc-claims.ts`
+          (3) check-doc-refs — mede todo link relativo de .md versionado:
+          `pnpm exec tsx -e "import {checkDocRefs} from './.tooling/scripts/ci/check-doc-refs.ts'; checkDocRefs({docsRoot:'.', docsRoots:['docs','.agents/specs']}).then(r=>{console.log(JSON.stringify(r.errors));process.exit(r.ok?0:1)})"`
+          (4) check-doc-size — mede nenhum .md versionado acima de 300 (fora de
+          docs/superpowers/** e .agents/runs/**): `pnpm exec tsx .tooling/scripts/ci/check-doc-size.ts`
+          (5) check-runbook-drift — mede todo `pnpm <script>` citado no
+          `docs/como-rodar.md` contra a uniao dos scripts de todos os
+          package.json, e toda chave da tabela §Variaveis contra os
+          .env.example: `pnpm exec tsx -e "import {checkRunbookDrift} from './.tooling/scripts/ci/check-runbook-drift.ts'; checkRunbookDrift({repoRoot:'.'}).then(r=>{console.log(JSON.stringify(r.errors));process.exit(r.ok?0:1)})"`
+          (6) o conjunto: `pnpm ci:preflight` (roda os 5 + os outros gates).
+        command: 'pnpm ci:preflight'
+        verification: >-
+          `pnpm ci:preflight 2>&1 | tail -20` -> nenhum check em erro;
+          `wc -l docs/como-rodar.md README.md` <= 300 nos dois
+        risk: >-
+          check-doc-refs e check-runbook-drift nao imprimem nada quando
+          invocados direto — um "verde" ai e falso. Daí a forma `tsx -e`.
+          O `check-doc-size` mede so .md VERSIONADO (`git ls-files '*.md'`) —
+          `git add -N` antes de medir arquivo novo.
+
+      - id: step-18
+        owner: monorepo-specialist
+        title: 'docs/MONOREPO-scriptarios.md + docs/MONOREPO.md — a contagem de scripts e uma CLAIM medida'
+        files:
+          - docs/MONOREPO-scriptarios.md
+          - docs/MONOREPO.md
+        action: >-
+          O catalogo canonico dos scripts da raiz e
+          `docs/MONOREPO-scriptarios.md`, e a CONTAGEM e uma claim medida — hoje
+          "29" (medido: `node -p "Object.keys(require('./package.json').scripts).length"`
+          -> 29). Com um script novo, vira 30 e as OCORRENCIAS mudam no mesmo
+          PR. CONTAGEM CORRIGIDA NESTE RUN: sao 6 ocorrencias, nao 3 —
+          `docs/MONOREPO-scriptarios.md:17` (o comando + o `-> 29`), `:24` ("9
+          dos 29"), `:31` ("§2. Scripts canonicos (29)"), `docs/MONOREPO.md:5`
+          ("29 scripts"), `:186` ("**29 scripts**") e `:188` ("-> `29`").
+          Alem do numero: `docs/MONOREPO-scriptarios.md` §2.3 ganha a linha do
+          `pnpm banco:check` com o que faz e ONDE e disparado (so no `pnpm dev`
+          — nao e gate, e isso tem que estar escrito, porque o prefixo `ci:`
+          da familia sugere gate).
+        command: >-
+          node -p "Object.keys(require('./package.json').scripts).length"
+        verification: >-
+          o comando acima -> 30; `grep -rn "29" docs/MONOREPO.md
+          docs/MONOREPO-scriptarios.md | grep -vE "2026-10-29|2026-09-29"` ->
+          0 ocorrencias; `pnpm ci:preflight` verde (roda `check-doc-claims` +
+          `check-doc-refs`).
+        risk: >-
+          A contagem NAO e medida por gate nenhum (medido: `doc-claims.json` nao
+          tem entrada de scripts) -> se uma das 6 ocorrencias ficar para tras, a
+          claim envelhece em silencio. O revisor tem que ver as 6.
+
+      - id: step-19
+        owner: docker-prod-specialist
+        title: 'docs/fluxo-desenvolvimento.md §4 — a linha do gancho do `dev`'
+        files: [docs/fluxo-desenvolvimento.md]
+        action: >-
+          §4 (tabela de gates, linha 176) ganha a linha do `banco:check` na
+          camada A, declarando que ele bloqueia o START e nao o push. §2/§3
+          mencionam o gancho. O arquivo esta em 300/300 linhas (medido) — o
+          mesmo teto do runbook: o corte compensatorio e obrigatorio no mesmo
+          PR (candidatos: §1 TL;DR e §3.4, que e o maior bloco).
+        command: 'pnpm ci:preflight'
+        verification: '`pnpm ci:preflight` -> 0 erro; `wc -l docs/fluxo-desenvolvimento.md` <= 300'
+        risk: >-
+          `check-doc-size` mede so `.md` VERSIONADO (`git ls-files '*.md'`) —
+          num arquivo novo ainda untracked o gate nao ve: usar `git add -N`
+          antes de medir.
+
+      - id: step-20
+        owner: docker-prod-specialist
+        title: 'docs/runbooks/docker.md §1 — a frase que descreve um delta que nao existe desde o #91'
+        files: [docs/runbooks/docker.md]
+        action: >-
+          A frase "so o `postgres` perde a porta publicada" descreve um delta
+          base<->overlay que NAO existe desde o #91 — o base ja nao publica a
+          porta (removido em `9816aa62`, PR #95). Reescrever para: o `postgres`
+          nao e alcancavel do host (`expose` sem `ports` desde o #91); a API
+          fala com ele por DNS interno. O arquivo tem 168 linhas — folga.
+        command: 'grep -n "perde a porta publicada" docs/runbooks/docker.md'
+        verification: '`grep -c "perde a porta publicada" docs/runbooks/docker.md` -> 0; `pnpm ci:preflight` verde'
+        risk: 'nenhum'
+
+      # ---------- FASE 3 — o guard opcional (fora dos 4 requisitos) ----------
+      - id: step-21
+        owner: docker-prod-specialist
+        title: 'OPCIONAL — `check-dockerfile-hardening` recusa `ports:` no postgres de prod'
+        files:
+          - .tooling/scripts/ci/check-dockerfile-hardening.ts
+          - .tooling/scripts/ci/check-dockerfile-hardening.spec.ts
+        scope: fora-dos-4-requisitos
+        action: >-
+          Acrescentar a propriedade 8: o servico `postgres` de
+          `docker-compose.yml` NAO pode declarar `ports:` — o #91 removeu o
+          binding no host e deixou so `expose`. MEDIDO: o gate hoje mede
+          `read_only`, `cap_drop`, `security_opt`, `networks:`,
+          `deploy.resources.limits.memory`, `init: true`, `USER 1001:1001`,
+          `@sha256:` no FROM e `.env.production*` no `.dockerignore` — e NAO
+          mede `ports:`. Entao a "correcao" tentadora (publicar 5432 no host)
+          passaria VERDE, desfazendo o isolamento de rede do #91 e expondo o
+          banco de prod no host.
+        command: >-
+          pnpm exec tsx -e "import('./.tooling/scripts/ci/check-dockerfile-hardening.ts').then(async (m) => { const r = await m.checkDockerfileHardening({ repoRoot: '.' }); console.log(r.ok ? 'OK' : r.errors.join('\n')); process.exit(r.ok ? 0 : 1); });"
+        verification: >-
+          (a) o comando acima -> OK (medido em 2026-11-03); (b) MUTACAO: num
+          worktree temporario, adicionar `ports: ['5432:5432']` ao bloco
+          `postgres` -> o comando deve imprimir o erro e sair 1; (c)
+          `pnpm tooling:test` e `pnpm ci:preflight` verdes.
+        risk: >-
+          Um `ports` legitimo no postgres de prod passa a ser barrado — e a
+          intencao (#91). Um postgres de DEV em `docker-compose.dev.yml` NAO e
+          medido (o gate le so `docker-compose.yml`).
+        note: >-
+          PRIORIDADE DE CORTE: este e o PRIMEIRO step a sair se o controller
+          cortar escopo — o proprio specialist o declarou. Os step-1..step-20 cobrem os 4 requisitos.
+
+      # ---------- FASE 4 — fecho ----------
+      - id: step-22
+        owner: monorepo-specialist
+        title: 'Medicao ao vivo dos 2 erros + os gates'
+        files: []
+        action: >-
+          (1) `docker stop projeto-base-pg-local` -> `pnpm dev` -> sai em <1 s
+          com causa + ponteiro, SEM stack do Prisma, e `pgrep -af 'tsx watch
+          src/main.ts'` nao devolve NADA (o watcher nunca nasceu); (2)
+          `docker start projeto-base-pg-local` -> `pnpm dev` -> o check religa o
+          container que ja existia e o turbo sobe api :3000 e web :3001; (3)
+          container inexistente -> `pnpm dev` sai 1 com o ponteiro ao §1.1; (4)
+          a 3000 ocupada -> a mensagem nomeia os dois remedies. Medir em janela
+          propria (o `docker stop` derruba o banco de quem estiver usando a
+          maquina) e registrar no corpo do PR o comando exato (regra: claim sem
+          comando nao entra). DEPOIS: `pnpm tooling:test` + `pnpm ci:preflight`
+          verdes, `pnpm ci:local` verde, e o `review-router` em 2 etapas (spec
+          e qualidade).
+        command: >-
+          docker stop projeto-base-pg-local && pnpm dev; echo "exit=$?";
+          pgrep -af 'tsx watch src/main.ts' || echo 'nenhum watcher vivo'
+        verification: >-
+          `pnpm tooling:test` && `pnpm ci:preflight` && `pnpm ci:local` verdes
+        risk: >-
+          Nenhuma medicao pode rodar `prisma migrate reset` no banco de dev
+          (destroi os dados e os papeis de quem desenvolve).
+
+    conflicts_resolved: 4
+
+    conflicts:
+      - id: c1
+        topic: 'Onde o script do preflight nasce, e qual o nome do script na raiz'
+        positions:
+          docker-specialist: 'tooling/scripts/banco-local.ts + `banco:check`'
+          prisma-db-specialist: '.tooling/scripts/ci/preflight-banco.ts + `dev:preflight`'
+          monorepo-specialist: '.tooling/scripts/ci/banco-local.ts + `ci:banco`'
+          doc-writer: 'nao e escopo do doc-writer'
+        resolution: >-
+          LOCAL: `.tooling/scripts/ci/banco-local.ts`. Tres razoes medidas: (a)
+          `lerEnvDotEnv` JA E EXPORTADO em `.tooling/scripts/ci/boot-local.ts:79`
+          e `importar` dele evita um TERCEIRO parser de `.env` no repo; (b)
+          `tooling/scripts/` e um pacote do workspace separado
+          (`pnpm-workspace.yaml` -> `tooling/*`), onde o import cross-package nao
+          existe, e `RAIZES_PRODUCAO` do `check-repeticao.ts` (medido) nao inclui
+          NENHUM dos dois diretorios de tooling — a duplicacao ali seria
+          invisivel para os gates; (c) `pnpm tooling:test` ja roda `vitest run
+          --root tooling/scripts` E `vitest run --root .tooling/scripts/ci`, entao
+          a spec roda nos dois casos. NOME: `banco:check` — combina com o plano
+          em disco e com 2 dos 3 specialists, e e honesto: o script NAO e gate
+          (`ci:banco` colocaria no namespace `ci:` — onde vivem `ci:preflight`,
+          `ci:boot`, `ci:local` — um script que NAO roda no pre-push;
+          `check-package-json-drift` so resolve o path do `tsx <path>`, nao
+          impoe prefixo<->local, medido). A doc tem que dizer explicitamente
+          que o `banco:check` NAO e gate.
+
+      - id: c2
+        topic: 'Quao fundo o preflight deve checar (o custo do `pnpm dev`)'
+        positions:
+          docker-specialist: 'TCP + docker start + porta 3000 (caminho feliz ~0,21 s medido)'
+          monorepo-specialist: 'o mesmo, com o custo medido: 0,21 s'
+          prisma-db-specialist: '> TCP + 3 sondas do CLI do Prisma (credencial de runtime, de sistema, `migrate status`) — ~2 s medidos'
+        resolution: >-
+          A VERSAO CURTA entra no plano; a profunda fica EXPLICITAMENTE fora de
+          escopo, com o motivo. Os 4 requisitos sao cobertos pela versao curta.
+          As sondas profundas tratam de sintomas que NAO sao a demanda (senha
+          errada -> P1000, banco inexistente -> P1003, papel NOLOGIN, migration
+          pendente) e que JA tem dono: o guard `verificarCredenciaisDoBanco`
+          (#118) recusa a senha exposta antes do connect, o `prepara-papeis.sh`
+          (§1.2.1) aplica a senha dos papeis, e o `prisma migrate status` (§1.3)
+          diz as migrations pendentes. Custo: 3 spawns do CLI do Prisma, ~1,3 s
+          cada (medido), em TODO `pnpm dev`. O gatilho para reabrir: alguem bater
+          em P1000/P1003 cru no boot sem mensagem legivel.
+
+      - id: c3
+        topic: 'Onde o sintoma do P1001 entra na doc (§4 do runbook vs `docs/runbooks/docker.md`)'
+        positions:
+          doc-writer: '`docs/como-rodar.md` §4 (287-300) — o dono do troubleshooting'
+          docker-prod-specialist: '`docs/runbooks/docker.md` (168 linhas, folga), porque o runbook esta em 300/300'
+          prisma-db-specialist: '`docs/como-rodar.md` §4 + §1.1 + §3 — com corte compensatorio no mesmo PR'
+          nestjs-specialist: 'UMA linha nova na tabela §4'
+        resolution: >-
+          `docs/como-rodar.md` §4 — o dono. O `documentacao.md` §2 diz que
+          `docs/como-rodar.md` e a verdade do "como executar", e `docs/runbooks/`
+          indexa os AMBIENTES 2-6 por ambiente (`docker.md` = §2/§3,
+          `observabilidade.md` = §4, `e2e-e-ci.md` = §5/§6, indexados no §0 do
+          runbook); o defeito e do AMBIENTE 1. O teto de 300 linhas se resolve
+          CORTANDO no mesmo runbook (a linha 291 que reconta o §1.1 e a linha
+          293 que precisa ser reescrita), nao movendo o fato para um doc que
+          nao e o dono — e `check-runbook-drift` so le o `docs/como-rodar.md`.
+
+      - id: c4
+        topic: 'O `.husky/pre-push` ainda imprime `docker start projeto-base-pg-local`'
+        positions:
+          docker-specialist: 'fechar a 4a copia do literal: o hook passa a apontar para o instrumento'
+          docker-prod-specialist: 'o hook NAO deve chamar o banco:check — um push nao deve ter efeito colateral no Docker'
+          doc-writer: 'repetir o NOME do container e legitimo (dry.md §2 — nome nao e conhecimento); repetir o `docker run` com flags NAO e'
+        resolution: >-
+          DEIXA COMO ESTA — e o primeiro a cortar se o controller apertar o
+          escopo. O hook imprime um comando de ACAO (`docker start <nome>`), nao
+          a receita (`docker run` com flags) — e a receita tem UM dono: o §1.1.
+          O `ci:boot` continua sem subir o banco (decisao do repo) e o hook
+          continua dando o remedio certo. Troca-lo por `pnpm banco:check`
+          introduziria efeito colateral no Docker no push, o que o
+          docker-prod-specialist mediu como indesejado.
+
+    delta_com_o_plano_em_disco:
+      plano: docs/superpowers/plans/2026-11-03-start-local-sem-p1001.md
+      observacao: >-
+        O plano em disco NAO e deste router — e a camada 2 rodando em PARALELO
+        (untracked, escrito as 11:53 de 2026-11-03; a branch
+        `feat/start-local-sem-p1001` que ele cita ainda nao existe). O
+        controller tem que reconciliar, nao duplicar.
+      deltas:
+        - 'LOCAL do script: o plano diz `tooling/scripts/banco-local.ts`; este router diz `.tooling/scripts/ci/banco-local.ts` (DRY do `lerEnvDotEnv` + `tooling/scripts/` e pacote separado + `check-repeticao` nao varre nenhum dos dois — ver c1).'
+        - 'NOME do script: o plano diz `banco:check`; este router confirma `banco:check` (ver c1).'
+        - 'PROFUNDIDADE: o plano e o docker-specialist vao na versao curta (TCP + docker start); o prisma-db-specialist propunha a profunda (~2 s) — resolvido em c2.'
+        - 'O plano nao tem o step-21 (guard do `ports:` no compose de prod) nem o step-20 (a frase stale do #91 em `docs/runbooks/docker.md` §1).'
+        - 'O plano nao cita a contagem de scripts (29 -> 30) — 6 ocorrencias em 2 arquivos (step-15).'
+
+    out_of_escopo:
+      - 'Publicar a porta do `postgres` do compose de PRODUcao — desfaz o isolamento de rede do #91, expoe o banco de prod no host, quebra o §1.1 e colide com o `projeto-base-pg-local`. MEDIDO: a remocao do `ports` foi em `9816aa62` (PR #95).'
+      - 'Criar `docker-compose.local.yml` — `check-dockerfile-hardening` le SO `docker-compose.yml` (medido: `composeFile` default em `check-dockerfile-hardening.ts:158`), entao um compose novo ficaria FORA do gate; e duplicaria a fonte da verdade do §1.1.'
+      - "Endurecer o container local de DEV — `read_only: true` impede o PGDATA de escrever, `user: '70:70'` e imutavel num container ja criado, e `docker rm -f` + recriar perderia os papeis aplicados pelo `prepara-papeis.sh`. Divida registrada: imagem por TAG (sem digest) e `0.0.0.0:5432` no host (nao so loopback)."
+      - '`docker compose up -d postgres` no start — sobe o servico de PROD (sem porta publicada), que e um banco DIFERENTE do local: nao tem os papeis, nao satisfaz o `DATABASE_URL` do ambiente 1 e ocupa o `container_name` `projeto-base-postgres`.'
+      - 'Tocar `schema.prisma` ou criar migration — a demanda e ergonomia de start, nao de schema (lens DDD/H1-H6 confirmada).'
+      - 'Rodar `prisma migrate deploy` no preflight — o §1.3 continua sendo o passo humano; as unicas migracoes automaticas do repo sao contra o Postgres efemero do testcontainers.'
+      - 'Colocar o `banco:check` em `ci:local`/`ci:preflight`/pre-push — verde-por-inercia no CI (classe 1 de `guard-classes.md`).'
+      - 'Auto-criar o container quando ele nao existe — `docker run` e receita de primeira vez e e do §1.1; o check APONTA, e a pessoa roda.'
+      - 'Mudar o `tsx watch` para nao sobreviver ao crash — e comportamento da ferramenta, nao do repo; o preflight evita que o watcher nem nasca. Fica como divida declarada, nao como esquecimento.'
+
+    risks_known:
+      - 'O `pnpm dev` passa a falar com o Docker: numa maquina sem Docker (ou sem permissao no socket) o start falha ANTES de subir a API, com mensagem que precisa apontar a alternativa (Postgres local via brew/apt, que o README ja menciona).'
+      - 'O `pnpm dev` ganha ~0,2 s (medido) no caminho feliz; ~2 s se a versao profunda for adotada (ver c2).'
+      - 'O `banco:check` religa o container de DEV sozinho — mudanca de estado na maquina de quem desenvolve; visivel e reversivel (`docker stop`).'
+      - 'Com a traducao do P1001 no `onModuleInit`, a API MORRE no boot quando o banco esta fora — o `/api/v1/health` nunca responde, e o `ci:boot` falha por conexao recusada em vez de 503 `degraded`. O gate continua falhando; o SINAL muda.'
+      - 'O nome do container passa a existir em 2 lugares (o §1.1 e a mensagem do codigo) sem gate que ligue os dois. Aceito: o requisito (3) pede comando exato no erro.'
+      - "O comportamento do `tsx watch` diante do exit do filho e HIPOTESE nao medida: (H1) nao relanca -> terminal parece pendurado; (H2) o PID 91529 medido era o watcher (pai), nao o filho da API; (H3) relanca em loop. Medir com `pgrep -af 'tsx watch'` e `pgrep -af 'src/main.ts'` antes/depois do exit. Se for (H3), o conserto do watcher e no script `dev` e precisa ser despachado ao dono do `pnpm dev`."
+
+next_steps:
+  - 'SEQUENCIA da fase de doc: codigo -> step-15/§1.4 -> step-16 (cortes) -> step-17 (gates); o texto do §1.4 descreve o comportamento REAL do preflight, entao escrevê-lo antes do codigo faz o doc mentir (P0)'
+  - 'reconcile com o plano em disco (docs/superpowers/plans/2026-11-03-start-local-sem-p1001.md) em vez de duplicar — os deltas estao em plans_aggregated.delta_com_o_plano_em_disco'
+  - 'controller despacha orchestrator (camada 3) com o unified_plan, atribuindo ownership por step'
+  - 'step-21 e o primeiro a cortar se o controller apertar o escopo (ele esta fora dos 4 requisitos)'
+  - 'rodar o review-router em 2 etapas depois da implementacao (spec e qualidade), conforme o workflow feedback-to-spec'
+  - 'medir ao vivo o caso do `tsx watch` (H1/H2/H3) antes de decidir se o watcher precisa de wrapper — e a unica hipotese aberta que muda o desenho'
+  - 'atualizar a memoria do specialist-router com o aprendizado: `pnpm dev` sem preflight e o primeiro contato com o erro cru; e o plano em disco de 11:53 veio da camada 2 rodando em paralelo'

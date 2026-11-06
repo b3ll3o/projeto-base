@@ -9,7 +9,8 @@
   },
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev",
+    "dev": "pnpm ambiente:check && turbo run dev",
+    "ambiente:check": "tsx .tooling/scripts/ci/ambiente-local.ts",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test:unit && pnpm tooling:test",

@@ -1,0 +1,255 @@
+commit 027095bc547a7f4810e06d5f26fc6404a853d22e
+Author:     Leonardo Andreazzi <andreazzi-leonardo@hotmail.com>
+AuthorDate: Tue Nov 3 11:09:20 2026 -0300
+Commit:     GitHub <noreply@github.com>
+CommitDate: Tue Nov 3 11:09:20 2026 -0300
+
+    fix(security): a RCE do next, a CSP do web, as actions por SHA — e o gate que mede (#143)
+    
+    * fix(deps): as 7 overrides e o bump do next fecham a RCE da otimização de imagem
+    
+    MEDIDO em 2026-11-03 com `pnpm audit --json`: 89 advisories (4 críticas,
+    23 altas). As de produção:
+    
+    - `next@15.5.25` — RCE NÃO AUTENTICADA na otimização de imagem com SVG
+      (advisory 1242817, crítica): o `next/image` processa o SVG do atacante. E
+      DoS no App Router via Server Actions (1242819). O range `^15.0.0` já
+      permitia 15.5.28 — era o lockfile. Agora o range também diz o piso.
+    - `fastify@5.11.3` — 4 advisories (bypass de body, de auth, de validação e de
+      header). O `@nestjs/platform-fastify@11.2.8` PINA `5.11.3` exato: nenhuma
+      versão 11.x do nestjs traz o fastify corrigido, e o nestjs 12 é major.
+    - `sharp@0.35.4` — CVE-2026-96889 na librsvg.
+    
+    As 7 overrides são para as transitivas que NENHUM release upstream conserta:
+    `postcss` (o next 15.5.28 continua pinando 8.4.31), `tinypool` (o vitest
+    3.2.7 continua pedindo ^1.1.1), `undici` (o testcontainers pede ^5.29.0 — 9
+    advisories afetam a linha 5), `deepmerge-ts` (o @prisma/config 6.19.3 PINA
+    7.1.5), `source-map-js`, `sharp` e `fastify`.
+    
+    Depois: 43 advisories, das quais 1 crítica e 3 altas — as quatro com exposição
+    medida e nula (as exceções do gate novo, versionadas com a verificação que
+    mantém cada uma).
+    
+    Medido: 1.461 testes unitários verdes, 158 de integração verdes (com Postgres
+    real), `prisma generate` e as migrations ok, e a API e o web no ar.
+    
+    * feat(gates): o check-dependency-audit roda a auditoria e reprova o que nao esta declarado
+    
+    NENHUM instrumento media advisory de dependencia — a mesma doenca do F11 (as
+    procedures das skills de auditoria que ninguem executava). O repo tinha 89
+    advisories e nada reclamava.
+    
+    O gate roda o `pnpm audit --json` e reprova quando ha advisory CRITICA ou ALTA
+    que nao esteja na lista de excecoes versionada
+    (`.tooling/scripts/ci/excecoes-de-dependencias.json`).
+    
+    Cada excecao carrega o MOTIVO MEDIDO e a VERIFICACAO que prova que o motivo
+    continua valendo — a verificacao roda, e se parar de valer a excecao e
+    reprovada. Excecao sem verificacao e divida silenciosa. E uma excecao que
+    nao casa com nenhuma advisory vira AVISO: a lista nao pode encolher nem
+    sobrar em silencio.
+    
+    As 4 excecoes (a exposicao de cada uma foi medida):
+    - `vitest` 1139528 (critica) — e' do UI server; o repo roda `vitest run` e
+      nunca `--ui`
+    - `vite` 1242658 — o bypass e' do `launch-editor`, que so age no servidor de
+      dev e so no Windows; o CI e' Linux
+    - `zod` 1243066 — e' de colecoes constritas; o repo nao usa `z.array` nem
+      `z.tuple` (grep: 0 fora de spec)
+    - `@opentelemetry/propagator-jaeger` 1124011 — o DoS e' no parser do header
+      `uber-trace-id`; a propagacao W3C e' o DEFAULT do NodeSDK e o repo nao
+      registra o propagator Jaeger
+    
+    O proprio gate pegou dois defeitos meus no primeiro dia: o `pnpm audit` sai
+    com codigo 1 quando acha advisory (e o `execFileSync` jogava o JSON da
+    medicao dentro da excecao), e a excecao do `vite` estava mal escrita (o
+    padrao casava com o script `dev` legitimo do apps/web). Os dois tem
+    regressao na spec.
+    
+    13 testes.
+    
+    * feat(gates): as 21 actions do CI passam de tag para SHA
+    
+    MEDIDO em 2026-11-03: 21 call-sites de `uses:` em 4 workflows, TODOS por
+    tag. Uma tag e' um ponteiro MUTAVEL — quem controla a action move a tag e o
+    codigo novo entra no CI sem revisao nenhuma. O pin por SHA tira esse poder.
+    
+    O gate `check-ci-action-pinning` impede a volta da tag: todo `uses:` de
+    action de terceiros tem que ser um SHA de 40 hex, e a action local
+    (`uses: ./...`) e' isenta (nao vem de fora).
+    
+    O SHA vem da API do GitHub (a ref da tag, dereferenciada quando e' tag
+    anotada) e a tag fica no comentario — que e' o que o GitHub mostra na
+    interface.
+    
+    10 testes, incluindo dois sobre o repo real: todos os call-sites por SHA, e
+    pelo menos um (o gate nao pode passar por nao medir nada).
+    
+    * feat(gates): os dois gates novos entram no preflight e no registro de dentes
+    
+    O `check-dependency-audit` e o `check-ci-action-pinning` entram no preflight
+    e nas duas tabelas que os gates exigem (o proprio preflight acusou a
+    ausencia — "gate roda no preflight sem entrada no registro de dentes").
+    
+    O registro de dentes ganha as duas linhas com o denominador dos testes, a
+    mutacao que derruba o gate e o comando.
+    
+    * feat(web): a CSP com nonce por requisicao
+    
+    MEDIDO em 2026-11-03: `grep -rn 'Content-Security-Policy' apps/web` -> 0. O
+    web nao tinha CSP nenhuma; as unicas headers eram `Referrer-Policy` e
+    `Cache-Control` em tres rotas (o vazamento do token de convite, que e' outro
+    problema).
+    
+    Agora ha CSP com NONCE por requisicao:
+    - o middleware (`apps/web/middleware.ts`) gera o nonce e o manda no header
+      `x-nonce`; o Next aplica o nonce nos scripts inline que ELE gera;
+    - `script-src 'self' 'nonce-...' 'strict-dynamic'` e
+      `style-src 'self' 'nonce-...'` — sem `unsafe-inline`, que anularia a CSP
+      para quem controla a pagina;
+    - mais `X-Content-Type-Options`, `X-Frame-Options` e
+      `Strict-Transport-Security`.
+    
+    DUAS coisas que a implementacao encontrou:
+    
+    1. A CSP nao pode ser montada no `next.config.mjs`: o `next/headers` e'
+       importavel no escopo da requisicao, mas NAO no build — e o build e' onde o
+       config e' avaliado. A CSP foi para o middleware, que ja tinha o nonce.
+    2. O middleware roda no runtime EDGE, onde `Buffer` nao existe: o nonce e'
+       `btoa(crypto.randomUUID())`, que existe nos dois.
+    
+    `connect-src 'self'` basta: MEDIDO, o web NAO chama a API pelo browser — as
+    chamadas sao server-side (RSC e Server Actions).
+    
+    Medido: o nonce do header bate com o dos 14 scripts do HTML (0 sem nonce), e
+    o e2e passou (59 testes) — a CSP nao quebra a hidratacao.
+    
+    * docs(auditoria): o relatorio da auditoria e o plano revisado
+    
+    O relatorio (`.agents/runs/2026-11-03-auditoria-de-seguranca.md`) traz o que
+    foi RODADO, o que foi corrigido e o que NAO foi (e por que) — inclusive a
+    dimensao Cloudflare, que nao rodou porque a autorizacao do conector exige o
+    navegador do usuario.
+    
+    O plano (`docs/superpowers/plans/2026-11-03-auditoria-de-seguranca.md`) foi
+    revisado contra o repo real antes de implementar, e a §6 registra a revisao:
+    as 5 correcoes (o gate mede ao vivo, e nao uma baseline; as overrides sao 7 e
+    nao 8; as excecoes sao 4 e nao 3; os numeros de gates, call-sites e testes),
+    os 4 riscos que o plano previu e que NAO se confirmou, e as 3 coisas que a
+    implementacao encontrou e o plano nao previu.
+    
+    * chore(version): 1.17.0 — a auditoria de seguranca
+    
+    Bump minor: a postura de seguranca do produto mudou de forma material (a CSP
+    do web, as dependencias fechadas, as actions pinadas, dois gates novos).
+    
+    A linha do historico conta o que a versao traz.
+    
+    * fix(web): a CSP nao pode matar a telemetria do browser — nem o dev server
+    
+    Revisao do PR #143 (medir, mutar, corrigir) — 2 defeitos que a primeira
+    versao da CSP carregava:
+    
+    1. `connect-src 'self'` **bloqueava a telemetria do CLIENTE**. O collector de
+       telemetria e' de OUTRA origem (`NEXT_PUBLIC_OTEL_EXPORTER_OTLP_ENDPOINT` =
+       `http://localhost:4318` no `.env.example`), e o navegador recusa a
+       conexao EM SILENCIO — o `try/catch` do `instrumentation-client.ts` engole
+       a recusa, a telemetria simplesmente some, e NENHUM teste quebra. E' o
+       modo de falha mais caro de todos: a ausencia de telemetria.
+    
+       A origem do collector entra no `connect-src` (so a origem, nao o host
+       solto). MEDIDO: a env var e' inlined no bundle do middleware
+       (`.next/server/middleware.js` contem `localhost:4318`).
+    
+    2. A CSP sem `'unsafe-eval'` **quebrava o servidor de dev**: o HMR do webpack
+       usa `eval`. Agora o `'unsafe-eval'` entra SO em desenvolvimento (o padrao
+       do Next: `isDev ? "'unsafe-eval'" : ""`) — a producao nao tem, e o
+       `'unsafe-inline'` continua fora dos dois.
+    
+    3. O `X-Powered-By` (que anuncia a framework — Information exposure do
+       OWASP) foi desligado.
+    
+    9 testes no `middleware.spec.ts` (o nonce, o `connect-src` com e sem
+    collector, o `unsafe-eval` so em dev, e a NEVER de `unsafe-inline`).
+    
+    * feat(web): o e2e dos cabecalhos de seguranca
+    
+    A CSP so e' defesa se o navegador aceitar o que ela manda. O e2e novo
+    (3 testes) prende o comportamento no navegador:
+    
+    - a resposta traz a CSP, e o nonce do HEADER e' o MESMO nonce dos scripts
+      inline do HTML (se divergirem, o navegador bloqueia o bootstrap do React e
+      a pagina fica sem hidratacao — e sem erro visivel na tela);
+    - NENHUM script inline fica sem nonce (um script assim e' bloqueado pela CSP
+      — e' exatamente o XSS que a CSP quer impedir);
+    - `nosniff`, `X-Frame-Options`, HSTS, e sem `X-Powered-By`;
+    - a rota do token nao vaza a URL no Referer.
+    
+    O fluxo F18 entra na convencao (13 rotas, 18 fluxos) e no STACK.md.
+    
+    * fix(gates): a regra do gate mora no codigo, e os campos declarados sao conferidos
+    
+    Revisao do PR #143 — 3 defeitos no gate de auditoria de dependencia:
+    
+    1. A severidade que REPROVA vinha do ARQUIVO DE EXCECOES
+       (`severidadesQueReprovam`). Quem editasse o arquivo trocando
+       `["critical","high"]` por `[]` zerava a reprovacao — o gate enfraquecia
+       sem ninguem mexer no codigo. A regra mora no gate agora
+       (`SEVERIDADES_QUE_REPROVAM`); o arquivo e' DADO, como o `doc-claims.json`.
+    
+    2. Os campos `severidade` e `modulo` da excecao eram DECORATIVOS: o gate usava
+       a severidade da advisory e ignorava a declarada. Quem mudasse
+       `"critical"` para `"low"` no arquivo acharia que rebaixava a excecao — e
+       nao rebaixava nada. O gate passou a conferir os dois: divergencia e erro.
+    
+    3. A verificacao da excecao varria `dist/`, `coverage/` e `.turbo/` — o
+       padrao podia casar em ARTEFATO DE BUILD e acusar uma excecao que esta
+       valida. A verificacao olha o codigo, nao o que saiu dele.
+    
+    Alem disso: JSON quebrado na lista agora da erro claro (antes quebrava o
+    preflight com um stack trace).
+    
+    17 testes.
+    
+    * fix(gates): a forma docker:// tem regra propria — e o digest e' conferido
+    
+    Revisao do PR #143 — 2 defeitos no gate de pin das actions:
+    
+    1. `uses: docker://imagem:tag` era acusado com a mensagem de "pinne por SHA"
+       — que esta errada: nao e' uma action, e' uma IMAGEM. A regra dela e'
+       digest, nao SHA de action. Agora tem mensagem propria.
+    
+    2. O `docker://` por DIGEST era reprovado: o check olhava `@sha256:` numa
+       ref que o `refDe` ja tinha comido o `@`. Agora compara o prefixo.
+    
+    O proprio spec pegou o segundo (o digest valido nao passava).
+    
+    12 testes.
+    
+    * docs(auditoria): a revisao do PR #143 achou 9 defeitos — todos corrigidos
+    
+    O relatorio ganha a secao da revisao do PR (a mesma do plano: medir, mutar,
+    corrigir) e o plano ganha a §7.
+    
+    Os dois que mudam comportamento de PRODUCAO:
+    
+    1. A CSP com `connect-src 'self'` bloqueava a telemetria do browser — o
+       collector e' de outra origem, e o navegador recusa a conexao EM
+       SILENCIO (o `try/catch` do `instrumentation-client.ts` engole a recusa).
+       Telemetria que morre sem erro e' o modo de falha mais caro: nenhum teste
+       quebra, nenhum erro aparece.
+    
+    2. A CSP sem `'unsafe-eval'` quebrava o servidor de dev (o HMR do webpack usa
+       `eval`).
+    
+    Os outros sete: a severidade que reprova saia do arquivo de DADOS (quem
+    editasse o JSON enfraquecia o gate); os campos `severidade` e `modulo` da
+    excecao eram decorativos; a verificacao do `zod` cobria so `apps/web/app`; a
+    regra do `uses:` tratava `docker://imagem:tag` como se fosse action; o check do
+    digest olhava `@sha256:` numa ref ja sem o `@`; a verificacao varria `dist/`,
+    `coverage/` e `.turbo/`; e o Next ainda anunciava a framework no
+    `X-Powered-By`.
+    
+    ---------
+    
+    Co-authored-by: Hermes <hermes@projeto-base.local>

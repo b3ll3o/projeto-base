@@ -2,7 +2,7 @@
 
 > Documento canônico de **convenções estruturais** do monorepo. Define layout de pastas, regras de isolamento entre apps, dependências compartilhadas e versionamento.
 > Esta configuração é gerenciada pelo agent [`monorepo-specialist`](../.agents/agents/monorepo-specialist.md).
-> **Docs irmãos:** o catálogo dos scripts da raiz está em [`MONOREPO-scriptarios.md`](./MONOREPO-scriptarios.md) (29 scripts; §7 é o índice). A stack está em [`STACK.md`](./STACK.md).
+> **Docs irmãos:** o catálogo dos scripts da raiz está em [`MONOREPO-scriptarios.md`](./MONOREPO-scriptarios.md) (30 scripts; §7 é o índice). A stack está em [`STACK.md`](./STACK.md).
 
 ---
 
@@ -183,11 +183,12 @@ package e entrar no changelog que o workflow gera — não há arquivo
 ## §7. Scripts Canônicos (Root)
 
 O catálogo completo está em
-[`MONOREPO-scriptarios.md`](./MONOREPO-scriptarios.md) — **29 scripts**,
-medidos em 2026-10-29 com
-`node -p "Object.keys(require('./package.json').scripts).length"` → `29`.
-A tabela desta seção listava **9** deles; os outros 20 não apareciam em lugar
-nenhum.
+[`MONOREPO-scriptarios.md`](./MONOREPO-scriptarios.md) — **30 scripts**,
+medidos em 2026-11-03 com
+`node -p "Object.keys(require('./package.json').scripts).length"` → `30`.
+A tabela desta seção listava **9** deles; os outros 21 não apareciam em lugar
+nenhum — o `ambiente:check` (o 30º) foi direto para o catálogo, e os 20 demais
+continuam só no [`MONOREPO-scriptarios.md`](./MONOREPO-scriptarios.md).
 
 | Script | O que faz |
 |--------|------------|
@@ -271,7 +272,7 @@ visão de stack: [`docs/STACK.md` §8](./STACK.md).
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão do documento:** 1.17.0
+**Versão do documento:** 1.19.0
 
 ### Histórico de Versões
 

@@ -216,7 +216,9 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `reviewer-que-mede-reverte-o-worktree` | `pendente` | — | — |
 | `reviewer-reads-shape-not-system-semantics` | `pendente` | — | — |
 | `review-router-rollout-state` | `recusada` | progresso de campanha encerrada (13 PRs merged, métricas de 2026-09-22) | — |
+| `spec-que-fabrica-a-entrada-de-um-sistema-externo` | `pendente` | — | — |
 | `spec-que-so-verifica-render-nao-tem-dente` | `citada` | `.agents/specs/conventions/e2e-playwright.md` | `verde por construção` |
+| `spec-so-do-helper-nao-cobre-a-ligacao` | `citada` | `.agents/specs/conventions/ci-defense-in-depth-dentes.md` | `5 specs que passam pelo CAMINHO REAL` |
 | `spec-verde-com-tsc-vermelho` | `pendente` | — | — |
 | `stale-clone-hides-the-resolving-merge` | `pendente` | — | — |
 | `state-that-lives-outside-the-repo-has-no-gate` | `citada` | `.agents/workflows/pr-refresh.md` | `verde por omissão` |

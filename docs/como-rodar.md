@@ -3,9 +3,9 @@
 Mapa completo por ambiente (dev, Docker, observabilidade, e2e, CI). O índice e o
 **Ambiente 1** (dev local com pnpm nativo) ficam aqui; os outros cinco são irmãos.
 
-> **Revisto em 2026-10-29** (commit `194d305`). Cada afirmação medida carrega a
-> data em que foi medida — as de 2026-10-16 são da primeira redação deste runbook
-> e **não** foram re-medidas nesta revisão. Legenda: **✅ medido** = executado, com
+> **Revisto em 2026-11-05** (o preflight do ambiente local, §1.4). Cada afirmação
+> medida carrega a data em que foi medida — as de 2026-10-16 são da primeira redação
+> deste runbook e **não** foram re-medidas. Legenda: **✅ medido** = executado, com
 > saída observada · **📖 lido do código** = derivado do YAML/Dockerfile/script.
 
 ---
@@ -21,10 +21,8 @@ Mapa completo por ambiente (dev, Docker, observabilidade, e2e, CI). O índice e 
 | 5 | E2E local (Playwright) | [`docs/runbooks/e2e-e-ci.md`](./runbooks/e2e-e-ci.md) | rodar a suíte de navegador |
 | 6 | CI (GitHub Actions) | [`docs/runbooks/e2e-e-ci.md`](./runbooks/e2e-e-ci.md) | o que o CI roda, job por job |
 
-O **runbook canônico do repo** é este arquivo: a tabela de variáveis (§2) e o
-catálogo de scripts `pnpm` (§3) mora aqui, e são o que o gate
-[`check-runbook-drift`](../.tooling/scripts/ci/check-runbook-drift.ts) mede — os
-arquivos irmãos **não** são lidos por ele.
+O **runbook canônico do repo** é este arquivo: a tabela de variáveis (§2) e o catálogo de scripts `pnpm` (§3) mora aqui, e são o que o gate
+[`check-runbook-drift`](../.tooling/scripts/ci/check-runbook-drift.ts) mede — os arquivos irmãos **não** são lidos por ele.
 
 ### §0.1 Pré-requisitos
 
@@ -37,16 +35,15 @@ pnpm install --frozen-lockfile
 
 ### §0.2 Quando este documento precisa mudar
 
-O gate `check-runbook-drift` (preflight, Camada 1) acusa sozinho **duas** formas
-de drift: um `pnpm <script>` citado aqui que não existe mais em nenhum
-`package.json` do workspace, e uma chave da tabela "Variáveis de ambiente" que
-sumiu dos `.env.example`.
+O gate `check-runbook-drift` (preflight, Camada 1) acusa **três** formas de drift:
+um `pnpm <script>` citado aqui que não existe mais; uma chave da tabela §2 que
+sumiu dos `.env.example` (⚠️ a tabela tem **UMA CHAVE POR CÉLULA**); e o nome do
+container do banco local (§1.1) diferente do que o app e o tooling usam.
 
-O que o gate **não** mede — e precisa do olho de quem mudou a coisa: script
-novo/renomeado → §3; `.env.example` alterado → §2 + o passo que copia o arquivo;
-porta trocada → §1.5, [runbook Docker](./runbooks/docker.md), §4; ambiente novo →
-uma linha em §0 e um arquivo em [`docs/runbooks/`](./runbooks/); defeito de boot →
-a seção dele, trocando 📖 por ✅ e a data. Regra prática: **quem mudou o comando
+O que o gate **não** mede — precisa do olho de quem mudou: script novo → §3;
+`.env.example` alterado → §2 + o passo que copia; porta trocada → §1.5 e §4;
+ambiente novo → §0 + [`docs/runbooks/`](./runbooks/); defeito de boot → a seção
+dele, trocando 📖 por ✅ e a data. Regra prática: **quem mudou o comando
 escreve a linha nova no mesmo commit**.
 
 ---
@@ -71,7 +68,9 @@ docker run -d --name projeto-base-pg-local -p 5432:5432 \
 A URL tem que bater com `apps/api/.env` (✅ medido: `projeto:***@localhost:5432/projeto_base`
 — a do **DONO**, que é a `DIRECT_DATABASE_URL`; o `app_runtime` e o `app_system` vêm do
 §1.2.1); para derrubar, `docker rm -f projeto-base-pg-local`; para **reiniciar** o que já
-existe (o caminho do `pre-push` quando o `ci:boot` falha), `docker start projeto-base-pg-local`.
+existe, `docker start projeto-base-pg-local`.
+
+O `pnpm dev` **verifica e religa** esse container sozinho — ver §1.4.
 
 ### §1.2 Segredo JWT
 
@@ -98,10 +97,9 @@ deixa o padrão público valendo em todo o resto. São **três** credenciais, de
 | `app_system` | `SYSTEM_DATABASE_URL` | o **bucket de sistema** (o perfil global, a administração cross-empresa) |
 | dono | `DIRECT_DATABASE_URL` | `migrate`/`seed` — `CREATE ROLE`, `ALTER TABLE … ENABLE RLS`, `GRANT` |
 
-A separação não é cosmeticidade: desde a #118 o bucket de sistema é concedido
-pelo `current_user`, e o `current_user` vem da **credencial** — não de um GUC que a
-sessão escolhe. Um `SET app.tenant_id = '*'` na sessão de runtime não abre mais
-nada. Para subir:
+A separação não é cosmeticidade: desde a #118 o bucket de sistema é concedido pelo
+`current_user`, e ele vem da **credencial** — não de um GUC que a sessão escolhe. Um
+`SET app.tenant_id = '*'` na sessão de runtime não abre mais nada. Para subir:
 
 ```bash
 openssl rand -hex 32      # senha do papel de RUNTIME  -> DATABASE_URL
@@ -113,9 +111,8 @@ cd apps/api && sh scripts/prepara-papeis.sh && cd ../..       # APLICA a senha d
 ```
 
 ⚠️ **A senha vai DENTRO da URI, e a URI não aceita qualquer caractere.** O `base64`
-do `openssl rand -base64 48` traz `/` e `+`, e o `/` ENCERRA a parte de credencial
-da URI — a aplicação subiria com "Invalid URL". Por isso o comando acima é
-`openssl rand -hex 32`: só `[0-9a-f]`, sem percent-encoding.
+traz `/` e `+`, e o `/` ENCERRA a parte de credencial da URI — a aplicação subiria
+com "Invalid URL". Por isso o comando acima é `openssl rand -hex 32`: só `[0-9a-f]`.
 
 `prepara-papeis.sh` lê a senha de cada URI e aplica no papel com a credencial de
 **DONO** — nenhuma senha de papel fica versionada, em nenhum ambiente. ✅ medido
@@ -150,8 +147,14 @@ cd apps/api && pnpm exec prisma migrate deploy && cd ../..  # aplica as 15 migra
 ### §1.4 Subir os apps
 
 ```bash
-pnpm dev     # turbo run dev em paralelo — api :3000, web :3001
+pnpm dev     # roda o `pnpm ambiente:check` e depois sobe api :3000 + web :3001
 ```
+
+O `pnpm ambiente:check` é o preflight do ambiente local (✅ medido em 2026-11-05):
+verifica o `DATABASE_URL`/`JWT_SECRET`, o Prisma Client, o banco e as **duas**
+portas que o `pnpm dev` ocupa (a da API, do `PORT`; a do web, do
+`apps/web/package.json`) **antes** de subir qualquer app, **religa o container
+parado** (§1.1) e traduz o P1001 do Prisma (causa + comando), por QUALQUER start.
 
 ### §1.5 Verificar
 
@@ -169,9 +172,8 @@ curl -o /dev/null -w '%{http_code}\n' http://localhost:3000/api/docs   # 200 (Sw
 **desabilitado** — é o default-deny do `JWT_SECRET`: um OpenAPI publica a
 superfície completa da API a quem descobrir a URL. Para ligar: `SWAGGER_ENABLED=true`.
 
-⚠️ No boot do web saem uns `Module not found` de
-`@opentelemetry/winston-transport` e `@opentelemetry/exporter-jaeger` (peers
-opcionais): ✅ medido — **não impedem o boot**, o Next segue e fica `✓ Ready in 5.9s`.
+⚠️ No boot do web saem uns `Module not found` de `@opentelemetry/winston-transport` e
+`@opentelemetry/exporter-jaeger` (peers opcionais): ✅ medido — **não impedem o boot**.
 
 ### §1.6 Fluxo completo (API e UI) ✅ medido 2026-10-16
 
@@ -205,9 +207,8 @@ overlay `docker-compose.dev.yml`), então o procedimento completo — inclusive 
 |---|---|---|
 | `admin@admin.com` | `Admin@123` | `admin` (todas as permissions, `is_admin=true`) |
 
-Credencial de DEV, no mesmo espírito da senha `projeto:projeto` do
-`docker-compose.dev.yml`. Para ambiente real, crie o admin pelo
-`POST /api/v1/users` e promova o perfil pela UI.
+Credencial de DEV, no mesmo espírito da senha `projeto:projeto` do compose. Para
+ambiente real, crie o admin pelo `POST /api/v1/users` e promova o perfil pela UI.
 
 ### §1.8 A etapa `ci:boot` — subir a aplicação local e derrubá-la
 
@@ -251,12 +252,11 @@ existem para o container ou para o SDK de terceiros.
 
 ### §2.1 Chaves lidas pelo código que não estão em nenhum `.env.example`
 
-Três chaves são lidas pelo código e **não** aparecem em nenhum dos quatro
-`.env.example` do repo — verificado com `grep -hoE '^[A-Z][A-Z0-9_]*=' .env.example
-.env.production.example apps/api/.env.example apps/web/.env.example | sort -u`
-(linha comentada com `#` não conta). Por isso elas **não** estão na tabela acima: o
-gate `check-runbook-drift` casa a 1ª coluna da tabela com as chaves dos `.env.example`,
-e uma chave que só existe no código reprovaria o gate.
+Três chaves são lidas pelo código e **não** aparecem em nenhum `.env.example` do repo
+(`grep -hoE '^[A-Z][A-Z0-9_]*=' .env.example .env.production.example
+apps/api/.env.example apps/web/.env.example | sort -u` — linha comentada não conta).
+Por isso não estão na tabela: o gate `check-runbook-drift` casa a 1ª coluna com as
+chaves dos `.env.example`, e uma chave só do código reprovaria o gate.
 
 - `THROTTLE_TTL_MS` — `apps/api/src/app.module.ts:26-31`; default **60000 ms**. No
   `.env.production.example` está **comentada** (`# THROTTLE_TTL_MS=60000`).
@@ -275,6 +275,7 @@ do workspace.
 ```bash
 pnpm install --frozen-lockfile   # §0.1 — deps do workspace
 pnpm turbo run db:generate       # §1.3 — Prisma Client
+pnpm ambiente:check              # §1.4 — preflight do ambiente local (banco, porta, env)
 pnpm dev                         # §1.4 — api :3000 + web :3001
 pnpm ci:boot                     # §1.8 — sobe e derruba a aplicação local
 pnpm ci:preflight                # os gates estruturais (pre-push e CI)
@@ -290,11 +291,9 @@ pnpm test:e2e                    # suíte de navegador (runbook de e2e/CI)
 |---|---|---|
 | `/api/v1/health` com `checks.database` ≠ `ok` | Postgres do compose não publica porta no host (#91) | §1.1 — container próprio com `-p 5432:5432` |
 | `Cannot find module '.prisma/client/default'` | o `db:generate` veio do cache do turbo | §1.3 — `pnpm turbo run db:generate --filter=@projeto/api --force` |
-| `PrismaClientInitializationError` | `DATABASE_URL` ausente ou vazia — em `apps/api/.env` (Ambiente 1) ou em `.env.production` (Ambiente 3) | §1.2.1 · [runbook Docker §2.1](./runbooks/docker.md) |
+| `PrismaClientInitializationError` | **P1001** ("Can't reach database server"): o banco local não está no ar — o `postgres` do compose não publica porta no host (#91). Ou a `DATABASE_URL` está ausente/vazia (Ambiente 1) ou no `.env.production` (Ambiente 3) | §1.4 — `pnpm ambiente:check` religa o container parado; §1.1 tem a receita quando ele não existe · §1.2.1 |
 | API morre no boot sem mensagem clara | `JWT_SECRET` ausente ou com placeholder | §1.2 — `openssl rand -base64 48` |
 | `prisma migrate deploy` "não fez nada" e saiu 0 | rodou da raiz / script inexistente | §1.3, de dentro de `apps/api` |
 | `role app_runtime is not permitted to log in` | `prisma migrate reset` deixou o papel sem senha | §1.2.1 — rode o `prepara-papeis.sh` de novo |
 | `port already in use` em 3000/3001 | ambiente 1 e 3 não podem coexistir | derrube um (`pkill -f "turbo run dev"` ou `docker compose down`) |
-| `invalid restart policy: unknown policy 'unless-stopped'` | typo no `docker-compose.yml` | ✅ corrigido em 2026-10-16 |
-| `initdb: could not access directory` | uid do compose ≠ uid do `postgres` na imagem | ✅ corrigido em 2026-10-16 (`user: '70:70'`) |
 | `Cannot find package '@opentelemetry/sdk-node'` na imagem prod | o stage `prod` não copiava `apps/api/node_modules` | ✅ **corrigido** (issue #104, commit `376da79`) — o `Dockerfile` copia `apps/api/node_modules` e o `pnpm prune --prod` foi REMOVIDO; ver [runbook Docker §2.2](./runbooks/docker.md) |

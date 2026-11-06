@@ -24,9 +24,9 @@ mount `:ro`; api em `:3000`, web em `:3001` — acesso pelo host idêntico ao am
 
 Mudanças em `apps/api/src/` → `tsx watch` recarrega; `apps/web/app/` → Fast Refresh.
 
-> As networks (`frontend` p/ web, `backend` p/ api+postgres) seguem valendo: só o
-> `postgres` perde a porta publicada, o que não atrapalha — a API fala com ele por
-> DNS interno.
+> As networks (`frontend` p/ web, `backend` p/ api+postgres) seguem valendo. O
+> `postgres` **não é alcançável do host** — `expose: 5432` sem `ports:` desde o
+> #91 — e isso não atrapalha aqui: a API fala com ele por DNS interno.
 
 ---
 

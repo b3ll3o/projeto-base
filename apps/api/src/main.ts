@@ -122,5 +122,9 @@ async function bootstrap(): Promise<void> {
 
 bootstrap().catch((err) => {
   console.error('Bootstrap falhou:', err);
+  // Genérica de propósito: NEM TODA falha de boot é de banco (ex.:
+  // `ALLOWED_ORIGINS` em produção). O ponteiro para a causa fica DENTRO da
+  // mensagem do erro (a tradução do P1001), onde a causa e o banco.
+  console.error('API encerrada (código de saída 1). Corrija a causa acima e rode de novo.');
   process.exit(1);
 });

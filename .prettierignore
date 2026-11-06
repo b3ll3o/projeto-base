@@ -5,3 +5,8 @@ dist/
 coverage/
 pnpm-lock.yaml
 *.md
+# Artefato LOCAL da máquina: o Claude Code escreve um JSON de permissões por
+# usuário, e ele NÃO é versionado (está no ignore global do git). Sem esta
+# linha, `pnpm format:check` reprova em qualquer máquina que tenha o Claude
+# Code instalado — e reprova por um arquivo que ninguém versionou.
+.claude/settings.local.json

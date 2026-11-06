@@ -1,0 +1,20 @@
+faça um plano para evitar o erro P1001 (Prisma: Can't reach database server at localhost:5432)
+ao fazer o start do projeto local (`pnpm dev`).
+
+Contexto medido (state-snapshot-20261103T144253Z.md):
+- G-001 (major): `pnpm dev` não tem preflight de banco. `turbo run dev` -> `tsx watch src/main.ts`
+  -> Nest bootstrap -> Prisma onModuleInit -> PrismaClientInitializationError P1001 cru.
+  O `tsx watch` sobrevive ao crash (medido), o terminal parece pendurado com a API morta.
+  O conhecimento do remédio existe SÓ em README Opção B e docs/como-rodar.md §1.1.
+- G-002 (minor): README manda `docker run --name projeto-base-pg-local` — falha com
+  "name already in use" quando o container já existe (ele já existe nesta máquina, parado há 13h).
+- G-003 (info): porta 3000 do host ocupada pelo container `projeto-base-api` — o próximo
+  erro do `pnpm dev` é EADDRINUSE (docs/como-rodar.md §1.6 já registra que ambiente 1 e 3
+  não podem coexistir).
+- G-004 (info): só o `ci:boot` (pre-push) mede que a aplicação sobe; o `pnpm dev` da pessoa
+  não tem garantia nenhuma.
+
+Objetivo: o start local deve (a) não quebrar com erro cru quando o banco não está no ar,
+(b) se recuperar sozinho do caso comum (container local parado) e (c) dizer o que fazer
+quando não for recuperável — com o comando exato, sem duplicar a fonte da verdade
+(docs/como-rodar.md §1.1).
