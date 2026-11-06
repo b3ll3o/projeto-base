@@ -363,6 +363,16 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     id: 'check-harness-location',
   },
   {
+    // MEDIDO 2026-11-03: o merge do #143 deixou marcadores de conflito no
+    // `main` publicado (a tabela de histórico de versões), com as duas linhas
+    // de versão duplicadas — e a CI ficou VERDE, porque o arquivo resolvido
+    // no papel linka, compila e tem o tamanho certo. A classe "conflito que
+    // ninguém notou" não tinha instrumento.
+    name: 'nenhum marcador de conflito de merge versionado',
+    file: '.tooling/scripts/ci/check-merge-markers.ts',
+    id: 'check-merge-markers',
+  },
+  {
     // G-H-03 da campanha. Fecha o gap da auditoria: 26 agents em
     // `.agents/agents/*.md` vs 11 referenciados pela matriz
     // `specialist-routing.md`. Os 15 sem roteamento eram invisíveis:

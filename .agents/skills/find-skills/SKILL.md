@@ -25,8 +25,8 @@ description: "Descoberta e instalação de skills — quando a demanda não tem 
 O erro caro aqui é pular direto para o registro e instalar uma skill de
 terceiro para algo que o repo já resolve. A ordem é fixa:
 
-1. **No repo.** `.agents/skills/` tem 25 skills e 28 agents (medido no disco em
-   2026-10-29: `ls .agents/skills/*/SKILL.md | wc -l`,
+1. **No repo.** `.agents/skills/` tem 29 skills e 28 agents (medido no disco em
+   2026-11-03: `ls .agents/skills/*/SKILL.md | wc -l`,
    `ls .agents/agents/*.md | wc -l` — a contagem envelhece, meça de novo), e a
    matriz `specialist-routing.md` mapeia demanda → agent → skill. A dúvida "qual
    skill eu uso?" se responde lendo essa matriz, não buscando na internet.
@@ -111,12 +111,43 @@ adaptação é o trabalho — e o precedente é o das skills de UI
 | frontmatter | `name`, `version`, `updated`, `description` — e a `description` **cita a origem** e a licença |
 | cabeçalho | `> **Quem invoca:**` e `> **Quando invocar:**` (inclusive o contra-gatilho) |
 
-E o registro: `AGENTS.md §5` (a família da skill), a tabela de versões de
+E o registro: `AGENTS.md §3.2` (a família da skill), a tabela de versões de
 `.agents/specs/conventions/estrutura-e-versionamento.md` e o **bump minor** nos
-**quatro** footers de versão (adicionar skill é minor bump — `estrutura-e-versionamento.md`).
+**seis** footers de versão (adicionar skill é minor bump — `estrutura-e-versionamento.md`).
 
 **Não** vendorizar: `SKILL.md` cru, em inglês, de 700 linhas, não é uma skill
 deste projeto — é um arquivo estranho que ninguém sabe se pode editar.
+
+### §5.1 Os seis passos que a adaptação exige (medido em 2026-11-03)
+
+1. **Auditar** (§4) — origem, licença, popularidade e **o que a SKILL.md pede**
+   (segredo? rede? escrita fora do repo?).
+2. **Traduzir e dividir** — prosa em pt-BR, cada `.md` ≤ 300 linhas. O upstream
+   `leonxlnx/taste-skill` vinha com 5.200 linhas de prosa em inglês e 1,6 MB
+   de corpus: a adaptação ficou em **7 arquivos** (o maior com 243 linhas) e
+   **nenhum** byte do corpus foi vendorizado.
+3. **Fronteira com o que já existe** — o mesmo upstream já tinha dado a
+   `ui-craft` (a metade de tela de app). A skill nova cobre **a outra metade**
+   (a página pública) e diz isso no próprio `SKILL.md`, para ninguém rodar as
+   duas em cima uma da outra.
+4. **Dar dono** — a skill sem agent que a carregue é órfã. O dono vai na
+   tabela "Skills Carregadas" do agent **e** a memória dele muda no mesmo
+   commit (o `check-agent-memory-drift` exige agente **e** memória).
+5. **Registrar** — `AGENTS.md §3.2`, a tabela de versões, os footers, o wrapper
+   em `.claude/skills/<nome>/SKILL.md` (com `name`/`description` copiados
+   **literalmente** do frontmatter canônico — re-serializar YAML corrompe o
+   `description` e a skill é descoberta com o gatilho errado, sem erro visível)
+   e as contagens do `README.md` (re-medidas no disco, com o comando e a data).
+6. **Medir** — o preflight local, a suíte de `.tooling/scripts/ci` e, se a
+   skill ganhou gate, a **mutação** que prova que o gate muda de veredito.
+
+**Duas armadilhas medidas na adaptação de 2026-11-03:**
+
+- O `AGENTS.md` estava em **300/300** — o teto exato. Uma linha nova exigiu
+  compactar prosa alheia; o arquivo não tem folga.
+- O `README.md` publicava **23** convenções quando o disco tinha **24** — o
+  drift veio do merge anterior e **nenhum gate** media essa contagem. Ao
+  adicionar uma skill, re-meça **todas** as contagens que o README publica.
 
 ## §6. Como apresentar as opções
 
@@ -147,8 +178,8 @@ A skill está no lugar quando:
 - a skill tem frontmatter com `name`, `version`, `updated` e `description` que
   cita a origem;
 - o corpo está em pt-BR e cabe em 300 linhas;
-- `AGENTS.md §5` e a tabela de versões mencionam a skill;
-- os quatro footers de versão concordam e estão à frente da última tag
+- `AGENTS.md §3.2` e a tabela de versões mencionam a skill;
+- os seis footers de versão concordam e estão à frente da última tag
   (gate `check-version-footers`).
 
 ## Cross-references

@@ -17,8 +17,8 @@ lê — a task 2.2 do plano `guard-classes` fecha isso. **Regra: criar uma conve
 (`description` começando por "Apêndice histórico", com `Apenas leitura`) **não**
 entram no índice — existem para preservar o histórico de gaps resolvidos sem
 estourar o limite de 300 linhas do spec canônico, e são alcançáveis por link de
-seu próprio pai. MEDIDO 2026-10-29: `ls .agents/specs/conventions/*.md` → **30**
-arquivos, **23** no índice, e os **7** de fora são apêndices (este README + 6
+seu próprio pai. MEDIDO 2026-11-05: `ls .agents/specs/conventions/*.md` → **31**
+arquivos, **24** no índice, e os **7** de fora são apêndices (este README + 6
 apêndices): `review-routing-gaps-historical.md`, `review-routing-examples.md`,
 `specialist-routing-gaps-v1.0.md`, `specialist-routing-examples.md`,
 `specialist-routing-historico.md` e `git-workflow-apendice.md`. Os 4 primeiros

@@ -29,7 +29,7 @@ declarado.
 | `otelcol-infra-specialist` | `otelcol-audit` | `.agents/skills/otelcol-audit/` |
 | `release-versioning-specialist` | `release-versioning-audit` | `.agents/skills/release-versioning-audit/` |
 | `finding-orchestrator` | `findings-orchestration` | `.agents/skills/findings-orchestration/` |
-| `ux-design-specialist` | `ui-review` → `ui-modes` · `ui-craft` · `ui-break` · `motion` | `.agents/skills/ui-*/`, `.agents/skills/motion/` |
+| `ux-design-specialist` | `ui-review` → `ui-modes` · `ui-craft` · `ui-break` · `motion` · `design-taste-frontend` · `agent-browser` | `.agents/skills/ui-*/`, `.agents/skills/motion/`, `.agents/skills/design-taste-frontend/`, `.agents/skills/agent-browser/` |
 | `multi-tenant-specialist` | `multi-tenant-audit` | `.agents/skills/multi-tenant-audit/` |
 
 **Regra:** a entrada na matriz e a skill correspondentes entram no **mesmo PR**.

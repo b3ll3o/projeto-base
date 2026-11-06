@@ -36,6 +36,7 @@ import { checkCiLocalE2e } from './check-ci-local-e2e';
 import { checkCiLocalScope } from './check-ci-local-scope';
 import { checkTeethCount } from './check-teeth-count';
 import { checkHarnessLocation } from './check-harness-location';
+import { checkMergeMarkers } from './check-merge-markers';
 import { checkAgentRoutingCoverage } from './check-agent-routing-coverage';
 import { checkEnginesConsistency } from './check-engines-consistency';
 import { checkDockerfileHardening } from './check-dockerfile-hardening';
@@ -369,6 +370,7 @@ export const RUNNERS: Record<string, () => CheckResult | Promise<CheckResult>> =
   'check-ci-local-scope': () => checkCiLocalScope({ repoRoot: '.' }),
   'check-teeth-count': () => checkTeethCount({ repoRoot: '.' }),
   'check-harness-location': () => checkHarnessLocation({ repoRoot: '.' }),
+  'check-merge-markers': () => checkMergeMarkers({ repoRoot: '.' }),
   'check-agent-routing-coverage': () => checkAgentRoutingCoverage({ repoRoot: '.' }),
   'check-engines-consistency': () => checkEnginesConsistency({ repoRoot: '.' }),
   'check-dockerfile-hardening': () => checkDockerfileHardening({ repoRoot: '.' }),

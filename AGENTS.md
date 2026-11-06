@@ -130,43 +130,42 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 | **release-versioning-specialist** | [`.agents/agents/release-versioning-specialist.md`](./.agents/agents/release-versioning-specialist.md) | [memory](./.agents/memory/release-versioning-specialist.md) | Drift entre docs canônicos, Conventional Commits, semver, workflow release-template | Pré-tag, bump de versão, diagnóstico de release-template |
 | **finding-orchestrator** | [`.agents/agents/finding-orchestrator.md`](./.agents/agents/finding-orchestrator.md) | [memory](./.agents/memory/finding-orchestrator.md) | Dispara specialists em paralelo, agrega findings, dedup contra issues abertas, abre issues via `gh` | Cron semanal (sextas 02:00 UTC), pré-tag, on-demand do user |
 
-> **Stack vs. auditoria:** stack specialists **criam** código/configuração nova e são
-> despachados antes de implementar; auditoria specialists **revisam** o existente,
-> disparados pelo `finding-orchestrator` ou sob demanda. `docker-prod-specialist`
-> (hardening) e `docker-specialist` (autoral) coexistem — o orchestrator dispara
-> os dois quando o escopo é amplo.
->
-> **Skills de auditoria (1:1):** cada specialist de auditoria carrega uma skill de
-> processo determinístico (`.agents/skills/<name>-audit/SKILL.md`) — `prisma-audit`,
-> `openapi-audit`, `otelcol-audit`, `docker-prod-audit`, `release-versioning-audit`,
-> `findings-orchestration`, `documentation-audit`. A skill encapsula o **processo**;
-> o agent, o **papel** — é carregada por ele, não o substitui. O mesmo contrato vale
-> para o `multi-tenant-specialist`, que carrega `multi-tenant-audit` sem ser
-> despachado pelo `finding-orchestrator`.
->
-> **Skills de UI (única relação 1:N do repo, v1.11.0+):** o `ux-design-specialist`
-> carrega **5** skills, nesta ordem — `ui-review` (processo) → `ui-modes` (decide o
-> propósito da tela) → `ui-craft` (tokens, estados, anti-slop) → `ui-break` (pior caso)
-> → `motion` (movimento). `ui-modes` roda primeiro porque sem ele as outras
-> discordam entre si. Adapted de [emilkowalski/skills](https://github.com/emilkowalski/skills) (MIT), [pbakaus/impeccable](https://github.com/pbakaus/impeccable) (Apache-2.0) e [leonxlnx/taste-skill](https://github.com/leonxlnx/taste-skill) (MIT).
+> **Stack vs. auditoria:** stack specialists **criam** código novo e são despachados antes de implementar; auditoria specialists **revisam** o existente, sob demanda ou via orchestrator.
+
+> **Skills de auditoria (1:1):** cada specialist de auditoria carrega uma skill de processo
+> determinístico (`.agents/skills/<name>-audit/SKILL.md`) — `prisma-audit`, `openapi-audit`,
+> `otelcol-audit`, `docker-prod-audit`, `release-versioning-audit`, `findings-orchestration`,
+> `documentation-audit`. A skill encapsula o **processo**; o agent, o **papel** — é carregada por
+> ele, **não o substitui** (vale também para o `multi-tenant-specialist`, que carrega
+> `multi-tenant-audit` sem ser despachado pelo orchestrator).
+
+> **Skills de UI (a maior relação 1:N do repo, v1.11.0+):** o `ux-design-specialist` carrega
+> **7** skills — `ui-review` (processo) → `ui-modes` (propósito) → `ui-craft` (tokens, anti-slop)
+> → `ui-break` (pior caso) → `motion` (movimento), mais `design-taste-frontend` (página **pública**)
+> e `agent-browser` (olhar avulso). `ui-modes` roda primeiro porque sem ele as outras discordam.
 
 > **Par DURANTE → DEPOIS:** [`learning-observation`](./.agents/skills/learning-observation/SKILL.md)
 > classifica em T1/T2/T3 e exige o comando que mediu, no checkpoint de review+fix;
-> [`retrospective-capture`](./.agents/skills/retrospective-capture/SKILL.md) drena essas memórias.
-> O destino de cada uma é uma linha no ledger [`memory-triage.md`](./.agents/runs/memory-triage.md),
-> lido pelo gate `check-memory-crystallization` nas duas direções.
+> [`retrospective-capture`](./.agents/skills/retrospective-capture/SKILL.md) drena essas memórias, e
+> o destino de cada uma é uma linha no ledger [`memory-triage.md`](./.agents/runs/memory-triage.md).
 
-> **Skills de descoberta (v1.15.0+):** [`find-skills`](./.agents/skills/find-skills/SKILL.md)
-> procura a skill mais adequada a cada situação: a ordem é **repo → registro → fazer na mão**,
-> a auditoria antes de instalar é obrigatória e a adaptação ao padrão do repo é o último passo.
-> De [vercel-labs/skills](https://github.com/vercel-labs/skills) (MIT).
+> **Skills de descoberta (v1.15.0+):** [`find-skills`](./.agents/skills/find-skills/SKILL.md) procura
+> a skill mais adequada: **repo → registro → fazer na mão**, com a adaptação ao padrão do repo por último. De [vercel-labs/skills](https://github.com/vercel-labs/skills) (MIT).
 
-> **Skills de grafo (v1.16.0+):** [`graphify`](./.agents/skills/graphify/SKILL.md) — o
-> `explorer` consulta o grafo de conhecimento quando a pergunta é sobre a estrutura do código.
+> **Skills de grafo (v1.16.0+):** [`graphify`](./.agents/skills/graphify/SKILL.md) — o `explorer`
+> consulta o grafo de conhecimento quando a pergunta é sobre a estrutura do código.
 
-> **State-Aware Planning (camada 0 do pre-planner, a partir de v1.8.0):** convenção
-> [`.agents/specs/conventions/state-aware-planning.md`](./.agents/specs/conventions/state-aware-planning.md)
-> obriga gerar `state-snapshot-<ts>.md` ANTES de planejar. Alimenta o `specialist-router` (camada 1).
+> **Skills de terceiro adaptadas (v1.20.0+):** [`grilling`](./.agents/skills/grilling/SKILL.md)
+> (perguntar o que está em aberto) e [`handoff`](./.agents/skills/handoff/SKILL.md) (a passagem em
+> formato canônico) no `orchestrator`; [`design-taste-frontend`](./.agents/skills/design-taste-frontend/SKILL.md)
+> (direção de arte de página pública) e [`agent-browser`](./.agents/skills/agent-browser/SKILL.md)
+> (olhar a página rodando) no `ux-design-specialist`. As quatro são **adaptadas, não vendorizadas**:
+> o método é do repo. De [mattpocock/skills](https://github.com/mattpocock/skills) (MIT),
+> [leonxlnx/taste-skill](https://github.com/leonxlnx/taste-skill) (MIT) e
+> [vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser) (Apache-2.0).
+
+> **State-Aware Planning (camada 0 do pre-planner, a partir de v1.8.0):** a convenção
+> [`state-aware-planning.md`](./.agents/specs/conventions/state-aware-planning.md) obriga gerar `state-snapshot-<ts>.md` ANTES de planejar.
 
 ---
 
@@ -235,6 +234,7 @@ As convenções estão detalhadas em arquivos próprios sob [`.agents/specs/conv
 | CI Defense in Depth   | [`ci-defense-in-depth.md`](./.agents/specs/conventions/ci-defense-in-depth.md) | 3 camadas: pre-push local + preflight CI + quality CI gated |
 | ↳ Registro de dentes | [`ci-defense-in-depth-dentes.md`](./.agents/specs/conventions/ci-defense-in-depth-dentes.md) | Tabela de dentes (taxonomia dos níveis de prova + 11 comandos de mutação), reconciliada por `check-teeth-registry` |
 | ↳ Pendências conhecidas | [`ci-defense-in-depth-pendencias.md`](./.agents/specs/conventions/ci-defense-in-depth-pendencias.md) | Companion da de cima: itens medidos que ainda não foram corrigidos, com o comando e a data de cada um |
+| ↳ Pendências fechadas | [`ci-defense-in-depth-pendencias-fechadas.md`](./.agents/specs/conventions/ci-defense-in-depth-pendencias-fechadas.md) | Companion das pendências: o que já foi medido e corrigido — uma pendência que fecha sai para cá |
 | Retrospective Capture | [`retrospective-capture.md`](./.agents/specs/conventions/retrospective-capture.md) | Captura estruturada de aprendizados pós-atividade (T1/T2/T3 + threshold confidence ≥ 70). Para a camada **DURANTE** (`learning-observation`) e exige uma linha por memória no ledger [`memory-triage.md`](./.agents/runs/memory-triage.md) — o gate `check-memory-crystallization` lê nas duas direções |
 | State-Aware Planning (v1.8.0+) | [`state-aware-planning.md`](./.agents/specs/conventions/state-aware-planning.md) | Camada 0 do pre-planner — obriga gerar `state-snapshot-<ts>.md` antes de planejar (gap analysis AS-IS→TO-BE); alimenta `specialist-router` camada 1 |
 | Evals (v1.9.0+)               | [`evals.md`](./.agents/specs/conventions/evals.md)                         | Framework canônico dos 7 tipos (Domain, Architecture, Contract, Integration, Regression, Security, Observability); path `specs/<feature>/evals/*.evals.yaml`; gate rules por severidade |
@@ -296,5 +296,5 @@ Quando seguido corretamente, este padrão garante:
 
 **Mantido por:** projeto-base contributors
 **Licença:** MIT
-**Versão do documento:** 1.19.0
+**Versão do documento:** 1.20.0
 **Status:** Estável
