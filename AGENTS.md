@@ -38,11 +38,10 @@ bônus ou "quando sobrar tempo". Um doc que **mente** é defeito (P0); um doc qu
 **falta** é lacuna nomeada (P1); doc desatualizada é dívida **com dono**.
 
 1. **Toda unidade de código tem UM doc canônico** — o lugar está na matriz da
-   convenção [`documentacao.md`](./.agents/specs/conventions/documentacao.md).
-   O [`documentation-specialist`](./.agents/agents/documentation-specialist.md)
-   é o dono da matriz e da escrita; o
-   [`doc-writer`](./.agents/agents/doc-writer.md) escreve doc genérica e o
-   [`doc-sync`](./.agents/agents/doc-sync.md) reage ao diff — os três se completam.
+   convenção [`documentacao.md`](./.agents/specs/conventions/documentacao.md). O
+   [`documentation-specialist`](./.agents/agents/documentation-specialist.md) é o dono da
+   matriz e da escrita; o [`doc-writer`](./.agents/agents/doc-writer.md) escreve doc
+   genérica e o [`doc-sync`](./.agents/agents/doc-sync.md) reage ao diff — os três se completam.
 2. **O fato tem UM dono** (DRY,
    [`dry.md`](./.agents/specs/conventions/dry.md)); o resto **só referencia**.
 3. **Frescor é obrigatório** — toda alteração de código avalia a doc afetada
@@ -53,7 +52,8 @@ bônus ou "quando sobrar tempo". Um doc que **mente** é defeito (P0); um doc qu
 5. **Regra sem instrumento é defeito** — `check-doc-coverage` cobra cobertura
    (unidade → doc canônico), `check-doc-claims` cobra que o número que o doc
    afirma bate com o código, `check-doc-refs` cobra links, `check-runbook-drift`
-   cobra comandos e env citados que sumiram.
+   cobra comandos e env citados que sumiram, `check-skill-coverage` cobra que a
+   skill está indexada, alcançável e com binding.
 
 **Quando NÃO aplicar:** artefato gerado, histórico (`docs/superpowers/plans/**`,
 `.agents/runs/**`), teste e fixture.
@@ -145,25 +145,26 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 > e `agent-browser` (olhar avulso). `ui-modes` roda primeiro porque sem ele as outras discordam.
 
 > **Par DURANTE → DEPOIS:** [`learning-observation`](./.agents/skills/learning-observation/SKILL.md)
-> classifica em T1/T2/T3 e exige o comando que mediu, no checkpoint de review+fix;
-> [`retrospective-capture`](./.agents/skills/retrospective-capture/SKILL.md) drena essas memórias, e
+> classifica em T1/T2/T3 no checkpoint de review+fix e
+> [`retrospective-capture`](./.agents/skills/retrospective-capture/SKILL.md) drena essas memórias;
 > o destino de cada uma é uma linha no ledger [`memory-triage.md`](./.agents/runs/memory-triage.md).
 
-> **Skills de descoberta (v1.15.0+):** [`find-skills`](./.agents/skills/find-skills/SKILL.md) procura
-> a skill mais adequada: **repo → registro → fazer na mão**, com a adaptação ao padrão do repo por último. De [vercel-labs/skills](https://github.com/vercel-labs/skills) (MIT).
+> **Skills de descoberta (v1.15.0+):** [`find-skills`](./.agents/skills/find-skills/SKILL.md) procura a skill mais adequada: **repo → registro → fazer na mão**, com a adaptação ao padrão do repo por último. De [vercel-labs/skills](https://github.com/vercel-labs/skills) (MIT).
 
-> **Skills de grafo (v1.16.0+):** [`graphify`](./.agents/skills/graphify/SKILL.md) — o `explorer`
-> consulta o grafo de conhecimento quando a pergunta é sobre a estrutura do código.
+> **Skills de grafo (v1.16.0+):** [`graphify`](./.agents/skills/graphify/SKILL.md) — o `explorer` consulta o grafo de conhecimento quando a pergunta é sobre a estrutura do código.
 
 > **Skills de terceiro adaptadas (v1.20.0+):** [`grilling`](./.agents/skills/grilling/SKILL.md)
 > (perguntar o que está em aberto) e [`handoff`](./.agents/skills/handoff/SKILL.md) (a passagem em
 > formato canônico) no `orchestrator`; [`design-taste-frontend`](./.agents/skills/design-taste-frontend/SKILL.md)
-> (direção de arte de página pública) e [`agent-browser`](./.agents/skills/agent-browser/SKILL.md)
-> (olhar a página rodando) no `ux-design-specialist`. As quatro são **adaptadas, não vendorizadas**:
-> o método é do repo. De [mattpocock/skills](https://github.com/mattpocock/skills) (MIT),
-> [leonxlnx/taste-skill](https://github.com/leonxlnx/taste-skill) (MIT) e
+> (página **pública**) e [`agent-browser`](./.agents/skills/agent-browser/SKILL.md) (olhar a página rodando)
+> no `ux-design-specialist`. As quatro são **adaptadas, não vendorizadas** — o método é do repo. De
+> [mattpocock/skills](https://github.com/mattpocock/skills) (MIT), [leonxlnx/taste-skill](https://github.com/leonxlnx/taste-skill) (MIT),
 > [vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser) (Apache-2.0).
-
+>
+> **Skills de stack (o processo que o specialist segue):** [`docker`](./.agents/skills/docker/SKILL.md)
+> (convenções e processos Docker do monorepo) e [`ddd-hexagonal-validation`](./.agents/skills/ddd-hexagonal-validation/SKILL.md)
+> (auditoria da lens DDD/Hexagonal) — carregadas por mais de um agent cada.
+>
 > **State-Aware Planning (camada 0 do pre-planner, a partir de v1.8.0):** a convenção
 > [`state-aware-planning.md`](./.agents/specs/conventions/state-aware-planning.md) obriga gerar `state-snapshot-<ts>.md` ANTES de planejar.
 
@@ -248,9 +249,9 @@ As convenções estão detalhadas em arquivos próprios sob [`.agents/specs/conv
 | Documentação | [`documentacao.md`](./.agents/specs/conventions/documentacao.md) | A documentação é parte do código: doc ausente = lacuna, doc que mente = defeito. Matriz de cobertura (unidade → doc canônico), fato com UM dono, frescor verificável; medida pelo gate `check-doc-coverage`; adicionada na v1.14.0 |
 
 > **Os dois índices são o mesmo índice.** Este §6 e o
-> [`README.md`](./.agents/specs/conventions/README.md) listam os mesmos
-> arquivos: uma convenção nova entra **nos dois, no mesmo PR**. Eles já
-> divergiram (7 convenções órfãs de índice), corrigido pela task 2.2 do plano
+> [`README.md`](./.agents/specs/conventions/README.md) listam os mesmos arquivos: uma
+> convenção nova entra **nos dois, no mesmo PR**. Eles já divergiram (7 convenções órfãs
+> de índice), corrigido pela task 2.2 do plano
 > [`guard-classes`](./docs/superpowers/plans/2026-10-03-guard-classes.md).
 >
 > **Templates:** [`.agents/specs/templates/`](./.agents/specs/templates/) contém templates canônicos versionados (ex.: [`spec.md`](./.agents/specs/templates/spec.md) — template de Spec de feature). Toda spec deve derivar de um template; criar templates novos via PR com bump major da convenção relacionada.
@@ -262,11 +263,10 @@ As convenções estão detalhadas em arquivos próprios sob [`.agents/specs/conv
 
 ## §7.5. Captura de Aprendizados Pós-Atividade (v1.4.0+)
 
-Após cada **grande atividade** (plano multi-task, bugfix não-trivial, ou adoção
-de novo padrão), o workflow
-[`retrospective-mode`](./.agents/workflows/retrospective-mode.md) DEVE ser
-disparado para codificar aprendizados em memory files + proposals de harness.
-Triggers e metodologia em
+Após cada **grande atividade** (plano multi-task, bugfix não-trivial, ou adoção de
+novo padrão), o workflow
+[`retrospective-mode`](./.agents/workflows/retrospective-mode.md) DEVE ser disparado para
+codificar aprendizados em memory files + proposals de harness. Triggers e metodologia em
 [convenção dedicada](./.agents/specs/conventions/retrospective-capture.md).
 
 ---

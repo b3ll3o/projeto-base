@@ -102,3 +102,22 @@ B22-4 implementou `matchDerivedTags()` + 5 testes novos em commit único (`0b9a0
 **Decisão:** acrescentar a linha do `ux-design-specialist` na tabela de coordenação, declarando as skills que ele carrega (`ui-modes` → `ui-craft` → `ui-break` → `motion`, com `ui-review` embrulhando a revisão).
 
 **Consequências:** a matriz não mudou — os globs de `apps/web/**` já roteavam. O que faltava era a linha no agent. Skill-first de novo: a linha só entrou depois que as 5 skills existiram, e foi essa ordem que deixou a entrada honesta.
+
+## 2026-11-09 — `gap_detected` consulta a skill antes de propor agent
+
+**Contexto:** o `find-skills` declarava "**Quem invoca:** `specialist-router`",
+mas o `specialist-router.md` não o citava — a skill de descoberta do repo
+era invisível para o roteador que deveria procurá-la. MEDIDO 2026-11-09: o
+gate `check-skill-coverage` (regra RECÍPROCA) acusou a lacuna; o par skill↔agent
+estava em lados opostos e nenhum gate media isso antes.
+
+**Decisão:** o Passo 5 do agent passou a mandar consultar o
+[`find-skills`](../skills/find-skills/SKILL.md) **antes** de propor um
+`suggested_specialist`. O `gap_detected` significa "nenhum *specialist* cobre
+isto" — não "nada no repo cobre isto".
+
+**Consequências:** a ordem **repo → registro → fazer na mão** da `find-skills`
+passou a valer no ponto onde ela decide (criar agent novo é caro; adaptar uma
+skill existente é barato). Nenhum passo do roteador mudou — só o Passo 5
+ganhou a etapa de busca antes do bloqueio.
+
