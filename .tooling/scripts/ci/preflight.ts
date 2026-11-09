@@ -54,6 +54,7 @@ import { checkDocCoverage } from './check-doc-coverage';
 import { checkDocClaims } from './check-doc-claims';
 import { checkDocSize } from './check-doc-size';
 import { checkPathAlias } from './check-path-alias';
+import { checkSkillCoverage } from './check-skill-coverage';
 import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
@@ -390,6 +391,7 @@ export const RUNNERS: Record<string, () => CheckResult | Promise<CheckResult>> =
   'check-doc-claims': () => checkDocClaims({ repoRoot: '.' }),
   'check-doc-size': () => checkDocSize({ repoRoot: '.' }),
   'check-path-alias': () => checkPathAlias({ repoRoot: '.' }),
+  'check-skill-coverage': () => checkSkillCoverage({ repoRoot: '.' }),
 };
 
 /**
