@@ -318,6 +318,33 @@ describe('findPhantomRows — a direção inversa', () => {
   });
 });
 
+describe('o gate — a ligação entre a função e o veredito', () => {
+  // MEDIDO 2026-11-09 (issue #149, revisão do PR #155): a spec do
+  // `findMissingTargets` exercitava a FUNÇÃO, e o call-site do gate — a
+  // linha que faz o erro chegar ao veredito — não tinha NENHUM teste.
+  // Remover o call-site (`errors.push(...findMissingTargets(...))`) derrubava
+  // **0 de 36** testes: o gate deixava de acusar alvo inexistente e ninguém
+  // percebia.
+  it('um alvo que não existe no repo REPROVA o gate inteiro', () => {
+    const { repoRoot, memDir } = fixture();
+    writeFileSync(join(memDir, 'regra.md'), memoria('feedback'));
+    mkdirSync(join(repoRoot, '.agents', 'runs'), { recursive: true });
+    writeFileSync(
+      join(repoRoot, TRIAGE_FILE),
+      LEDGER(['| `regra` | `citada` | `.agents/specs/nao-existe.md` | `a regra original` |']),
+    );
+    const antes = process.env.HOME;
+    process.env.HOME = repoRoot;
+    try {
+      const r = checkMemoryCrystallization({ repoRoot });
+      expect(r.ok).toBe(false);
+      expect(r.errors.join('\n')).toContain('não existe');
+    } finally {
+      process.env.HOME = antes;
+    }
+  });
+});
+
 describe('findStaleAnchors — o dente', () => {
   it('acusa a âncora que deixou de estar no arquivo citado', () => {
     const { repoRoot } = fixture();

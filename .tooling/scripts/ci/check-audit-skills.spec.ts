@@ -395,6 +395,31 @@ describe('reconciliarExcecoesDeSkip', () => {
     const errors = reconciliarExcecoesDeSkip([BLOCO_SKIP], tautologico);
     expect(errors.join('\n')).toContain('PAROU de valer');
   });
+
+  it('a âncora é testada contra o corpo SEM COMENTÁRIOS', () => {
+    // MEDIDO 2026-11-09 (issue #149, revisão do PR #155): o corpo do bloco
+    // CONTÉM o comentário do marcador `[gate: skip — ...]`. Testada contra o
+    // corpo CRU, a âncora era satisfeita pelo COMENTÁRIO — e apagar o comando
+    // do bloco, deixando só um comentário que o citava, deixava o gate
+    // VERDE. A verificação provava que o COMENTÁRIO existia.
+    const soComentario = {
+      ...BLOCO_SKIP,
+      corpo: '# yq -P ".services.$svc" docker-compose.yml\n# o passo mede nada sem ele',
+    };
+    const errors = reconciliarExcecoesDeSkip([soComentario], REGISTRO);
+    expect(errors.join('\n')).toContain('PAROU de valer');
+  });
+
+  it('uma entrada que casa com DOIS blocos é erro — desambiguação 1:1', () => {
+    // MEDIDO 2026-11-09 (issue #149, revisão do PR #155): `usados` era um
+    // `Set` de índices, e um `Set` conta a entrada UMA vez — então uma
+    // entrada que cobrisse dois blocos passava, e a regra "casa com
+    // exatamente um" estava escrita no docstring e no registro de dentes sem
+    // estar implementada.
+    const doisBlocos = [BLOCO_SKIP, { ...BLOCO_SKIP, linha: 20 }];
+    const errors = reconciliarExcecoesDeSkip(doisBlocos, REGISTRO);
+    expect(errors.join('\n')).toContain('casa com 2 blocos');
+  });
 });
 
 // ── O teste que a #149 exige: contra os ARQUIVOS REAIS ──────────────────────

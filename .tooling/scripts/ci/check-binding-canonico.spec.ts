@@ -82,6 +82,30 @@ describe('lerCamposDoFrontmatter', () => {
     expect(campos.map((c) => c.campo)).toEqual(['name']);
   });
 
+  it('lê o valor MULTILINHA inteiro (YAML folded), não só a linha do cabeçalho', () => {
+    // MEDIDO 2026-11-09 (issue #149, revisão do PR #155): a versão anterior lia
+    // só a LINHA do cabeçalho, e as continuações nunca entravam na comparação.
+    // Uma `description` multilinha com a segunda linha corrompida passava
+    // VERDE — e é a continuação que carrega o texto do gatilho.
+    const folded = `---
+name: probe
+description: >-
+  Primeira linha do gatilho.
+  Segunda linha do gatilho.
+type: specialist
+---
+
+Corpo.
+`;
+    const campos = lerCamposDoFrontmatter(folded);
+    const description = campos.find((c) => c.campo === 'description');
+    expect(description).toBeDefined();
+    expect(description!.texto).toContain('Segunda linha do gatilho.');
+    // E o campo seguinte continua sendo lido como campo seguinte — a
+    // continuação não "engoliu" o `type:`.
+    expect(campos.map((c) => c.campo)).toEqual(['name', 'description', 'type']);
+  });
+
   it('devolve lista vazia quando não há frontmatter', () => {
     expect(lerCamposDoFrontmatter('# Só corpo\n')).toEqual([]);
   });
@@ -159,6 +183,36 @@ describe('checkBindingCanonico — a comparação', () => {
     const r = checkBindingCanonico(montar(semDescription, CANONICO_DE_SKILL));
     expect(r.ok).toBe(false);
     expect(r.errors.join('\n')).toContain('description');
+  });
+
+  it('description MULTILINHA com a continuação corrompida: VERMELHO', () => {
+    // O caso que a versão anterior NÃO pegava: o cabeçalho do campo é
+    // idêntico (`description: >-`) e a corrupção está na linha seguinte.
+    const canonical = `---
+name: probe
+description: >-
+  Primeira linha do gatilho.
+  Segunda linha do gatilho.
+---
+
+Corpo.
+`;
+    const corrompido = `---
+name: probe
+description: >-
+  Primeira linha do gatilho.
+  Segunda linha CORROMPIDA.
+---
+
+Corpo.
+`;
+    const arquivos = new Map<string, string>([
+      ['.claude/skills/probe/SKILL.md', corrompido],
+      ['.agents/skills/probe/SKILL.md', canonical],
+    ]);
+    const r = checkBindingCanonico({ repoRoot: '.', arquivos } as never);
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toContain('CORROMPIDA');
   });
 
   it('wrapper sem canônico: VERMELHO, nomeando os dois paths', () => {
@@ -299,6 +353,18 @@ describe('checkBindingCanonico — os arquivos do repo', () => {
     const r = checkBindingCanonico({ repoRoot: '.' });
     expect(r.errors).toEqual([]);
     expect(r.ok).toBe(true);
+  });
+
+  it('sem nenhum wrapper, o gate ANUNCA a medição (0 não é silêncio)', () => {
+    // MEDIDO em 2026-11-09 (issue #149, revisão do PR #155): a medição só era
+    // anunciada quando `comparados > 0` — e a guarda não tinha dente
+    // (neutralizá-la derrubava 0 de 19). Um repo sem wrapper produzia `ok:
+    // true` sem nenhuma linha dizendo que mediu 0: o verde mudo.
+    const r = checkBindingCanonico({
+      repoRoot: '.',
+      arquivos: new Map<string, string>(),
+    } as never);
+    expect(r.advisories?.join('\n')).toContain('medido: 0 wrapper(s)');
   });
 
   it('o gate mede o NÚMERO de wrappers — e o número não é zero', () => {

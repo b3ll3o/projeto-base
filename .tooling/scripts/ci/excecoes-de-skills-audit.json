@@ -18,10 +18,17 @@
     "",
     "`tipo: no-bloco` — o `padrao` (uma regex) tem que estar NO CORPO do bloco,",
     "que é um arquivo versionado. É a semântica que cabe aos 15 motivos: o",
-    "motivo continua valendo SE o bloco ainda usa a coisa que o motivo nomeia",
+    "motivo continua valendo SE o bloco ainda USA a coisa que o motivo nomeia",
     "(`yq -P`, `pnpm ci:preflight`, `gh issue create`, `docker buildx build`...).",
-    "O `padrao` NÃO pode aparecer no texto do motivo — se aparecesse, a",
-    "verificação seria tautológica e provaria nada.",
+    "",
+    "⚠️ A âncora é testada contra o corpo **SEM COMENTÁRIOS**. MEDIDO em",
+    "2026-11-09 (issue #149, revisão do PR #155): testada contra o corpo CRU, a",
+    "âncora era satisfeita pelo COMENTÁRIO — e o marcador `[gate: skip — ...]`",
+    "está dentro do corpo. Apagar o comando e deixar um comentário que o citava",
+    "deixava o gate VERDE: a verificação provava que o comentário existia, e",
+    "não que o comando existia. Como o motivo é um comentário, ele não pode",
+    "satisfazer a âncora — e é por isso que a âncora pode ser a mesma coisa que",
+    "o motivo nomeia (`git fetch --tags`), que é o que a medição exige.",
     "",
     "⚠️ O QUE ISTO NÃO PROVA. A verificação é repo-derivável: ela prova que o",
     "bloco ainda contém a âncora do motivo. Ela NÃO prova que o ambiente ainda",
@@ -92,7 +99,7 @@
       "motivo": "faz `git fetch --tags` — precisa de rede",
       "verificacao": {
         "tipo": "no-bloco",
-        "padrao": "git log \"\\$\\{LAST_TAG\\}\\.\\.HEAD\" --oneline"
+        "padrao": "git fetch --tags"
       }
     },
     {
@@ -100,7 +107,7 @@
       "motivo": "depende de `$LAST_TAG`, que vem do passo que precisa de rede",
       "verificacao": {
         "tipo": "no-bloco",
-        "padrao": "--pretty=format:\"%s\""
+        "padrao": "\\$\\{LAST_TAG\\}"
       }
     },
     {

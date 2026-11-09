@@ -23,7 +23,7 @@ defeito P0** (mesma seção).
 | **Já existem 2 divergências de conteúdo em `main`**: a skill `docker` e o agent `documentation-specialist` | `diff` wrapper↔canônico |
 | O `preflight` de `main` está **VERMELHO**: 1 gate, 2 erros | `pnpm ci:preflight` → `EXIT=1` |
 | O `check-memory-crystallization` roda **com o corpus da máquina** e acusa 2 memórias sem destinação | `.agents/runs/memory-triage.md` |
-| A **metade repo-derivável** do mesmo gate está **verde**: 109 linhas, 0 alvo ausente, 0 âncora vencida | `findMissingTargets()` + `findStaleAnchors()` |
+| A **metade repo-derivável** do mesmo gate está **verde**: 109 linhas em `main`, 111 nesta branch (as 2 do conserto), 0 alvo ausente, 0 âncora vencida | `findMissingTargets()` + `findStaleAnchors()` |
 | As 4 exceções de dependência **continuam valendo** — o gate confirma 4/4 | `pnpm ci:preflight` |
 | O total de advisories **mudou**: 43 → **41** (1 crítica, 3 altas, 32 moderadas, 5 baixas) | `pnpm audit --json \| jq '.metadata.vulnerabilities'` |
 
@@ -70,7 +70,7 @@ nada de específico do Claude Code"*.
 canônicos declaram `tools:` — `task-manager` tem `tools: Read, Write`,
 `code-reviewer` tem `tools: Read, Glob, Grep, Bash`. O `tools` governa o
 comportamento de **todo** agent: sem ele, o subagent herda a pool inteira da
-conversa, e o próprio `.claude/README.md:63` chama isso de *"um desvio
+conversa, e o próprio `.claude/README.md:65` chama isso de *"um desvio
 silencioso"*.
 
 Então o motivo real do piloto é **ruído de descoberta** — 28 definições de agent
@@ -89,7 +89,9 @@ inventar um escopo que a issue não pediu.
 A issue oferece: *"versionar o corpus (mesmo mínimo), ou declarar o gate como
 humano no catálogo"*.
 
-O corpus tem **161 arquivos / 655 KB** e vive em `$HOME`. Versioná-lo é
+O diretório de memória tem **161 arquivos / 655 KB** e vive em `$HOME` — dos
+quais **110** formam o corpus que o gate mede (51 são isentos: `MEMORY.md`,
+`*-result.md` e afins). Versioná-lo é
 "decisão de outro tamanho" — como a própria
 [`retrospective-capture.md`](../../../.agents/specs/conventions/retrospective-capture.md)
 já diz. E o gate **já tem** a metade que o CI pode medir:
@@ -113,12 +115,14 @@ O precedente que a issue nomeia (`excecoes-de-dependencias.json`) usa
 `verificacao` **declarativa** — regex sobre paths versionados — e nunca shell
 livre, porque o registro é versionado e um PR pode editá-lo.
 
-Os 15 motivos **não são homogêneos**: 3 são de **ferramenta ausente** (`yq`),
-6 são de **API externa** (GitHub), 1 é de **ref local**, 1 é de **banco**,
+Os 15 motivos **não são homogêneos**: 1 é de **ferramenta ausente** (`yq`),
+5 são de **API externa** (GitHub), 1 é de **ref local**, 1 é de **banco**,
 1 é de **Docker**, 1 é de **custo**, 1 é de **dependência de passo**, 1 é de
-**efeito colateral** e 1 é de **recursão**. Nenhuma semântica única de
-"ausência de padrão no repo" cobre os 15 com honestidade — e uma verificação
-inventada para caber no molde seria o
+**efeito colateral** e 1 é de **recursão** — e a soma não fecha em 15 por
+categoria porque **3** dos motivos têm duas causas ("fala com a API" e "escreve
+em `.agents/runs`"). Nenhuma semântica única de "ausência de padrão no repo"
+cobre os 15 com honestidade — e uma verificação inventada para caber no molde
+seria o
 [gate que prescreve o conserto errado](../../../.agents/specs/conventions/guard-classes.md).
 
 A semântica que cobre os 15 com honestidade é outra: **o motivo continua
@@ -154,7 +158,7 @@ reproduz.
      `description:`);
    - `name` e `description` são **obrigatórios** no wrapper de skill;
    - `tools` é **obrigatório** no wrapper de agent (sem ele, o subagent herda
-     a pool inteira — o desvio silencioso do `.claude/README.md:63`);
+     a pool inteira — o desvio silencioso do `.claude/README.md:65`);
    - **todo campo** que o wrapper declara tem que bater com o canônico
      (é o que pega a re-serialização: aspas, aspasperdidas, vírgula, truncamento);
    - wrapper **sem canônico** é erro (o binding aponta para nada);
@@ -219,7 +223,7 @@ reproduz.
    (que hoje declara a lacuna) sai, e a **justificativa falsa** do piloto
    ("o frontmatter deles não tem nada de específico para o Claude Code") sai
    junto; os dois pontos passam a apontar para o ADR.
-3. `docs/integrations/claude-code.md:36` — o exemplo do wrapper de agent ensina
+3. `docs/integrations/claude-code.md` (linha 36 em `main`) — o exemplo do wrapper de agent ensina
    `description: Generic code reviewer (from .agents/agents/code-reviewer.md)`,
    que é **exatamente a re-serialização que o contrato proíbe**. Sai.
 
@@ -276,7 +280,7 @@ reproduz.
 |---|---|---|
 | "**1** divergência de conteúdo em `main`" | São **2**: a skill `docker` e o agent `documentation-specialist` (que perdera as aspas da `description`) | §"O estado real" corrigido |
 | "os 15 motivos **não são homogêneos**" | Confirmado — e é por isso que a verificação é `no-bloco` (a âncora do motivo no corpo do bloco), e não `ausencia` de padrão no repo | Mantido |
-| "a regra de `skip` sem verificação" | São **5** regras, não 4: skip sem entrada · entrada que não casa · âncora que sumiu · motivo que mudou · registro ambíguo | Onda 2 atualizada |
+| "a regra de `skip` sem verificação" | São **7** ramos de erro, não 4: skip sem entrada · entrada que não casa · âncora que sumiu · motivo que mudou · registro ambíguo · padrão que não compila · a âncora é o próprio motivo (tautologia) | Onda 2 atualizada |
 | "o `check-audit-skills` mede os 15 blocos" | O gate lia o motivo (medindo o **comprimento**) e o **descartava** — `if (bloco.declaracao === 'skip') continue;` | Onda 2: a regra entra **no lugar do `continue`** |
 
 ### 2. Coisas que o plano não previu
@@ -301,20 +305,49 @@ reproduz.
   que continua pegando `` `review-routing` matrix lint ``, que tem o token no
   meio da célula. Um teste novo põe a regra.
 
-### 3. O que a execução mediu
+### 3. O que a REVISÃO adversarial achou (e o que foi corrigido)
+
+> MEDIDO 2026-11-09. A revisão rodou em 2 lentes (código e documentação) e
+> achou **4 P1 e 8 P2**. Todos os P1 e 8 dos P2 foram corrigidos neste PR —
+> os **4 P1 eram buracos de MEDIÇÃO**: o CI não pegava nenhum deles porque
+> nenhum teste os cobria.
+
+| # | Achado | Correção |
+|---|---|---|
+| P1 | A âncora do `skip` era testada contra o corpo **CRU**, e o marcador `[gate: skip — ...]` está DENTRO do corpo: a âncora era satisfeita pelo **comentário**. Apagar o comando e deixar um comentário que o citava deixava o gate VERDE | A âncora passa a ser testada contra `semComentarios(bloco.corpo)` — o helper já existia no arquivo e não era usado |
+| P1 | A regra "**toda entrada casa com exatamente um bloco**" estava escrita no docstring e no registro de dentes, e **não era implementada**: `usados` era um `Set`, que conta a entrada uma vez | `usados` virou `Map<índice → nº de blocos>`, e uma entrada com 2 blocos é erro |
+| P1 | O **call-site** do `findMissingTargets` não tinha dente: a spec exercitava a FUNÇÃO, e remover a linha que joga o erro no veredito derrubava **0 de 37** | Spec de integração: um alvo inexistente no ledger **reprova o gate inteiro** |
+| P1 | O gate de binding prometia comparação **byte a byte**, mas lia só a **primeira linha** do valor: uma `description` YAML folded tem o texto do gatilho nas linhas seguintes, e a continuação corrompida passava VERDE | A leitura do campo passou a incluir as **continuações** do valor, e a comparação é do campo inteiro |
+| P2 | Com `comparados === 0`, o gate não emitia nenhum advisory: verde mudo, e a guarda não tinha dente | A medição é **sempre** anunciada (`medido: 0 wrapper(s)`) |
+| P2 | 2 âncoras do `release-versioning-audit` mediam outra coisa que a que o motivo nomeia | As 2 medem agora o que o motivo nomeia (`git fetch --tags`, `${LAST_TAG}`) |
+| P2 | O ADR e o catálogo diziam "`tools` é obrigatório" sem a ressalva do canônico | Ressalva declarada nos 2, e no código |
+| P2 | O `.claude/README.md` tinha **duas** seções com justificativas incompatíveis: a nova dizia "a justificativa era falsa" e a antiga ainda a afirmava | As duas unificadas, e o critério real (ruído de descoberta) nomeado |
+| P2 | O ADR repetia como fato a falsa afirmação de que os 2 orquestradores são "os únicos que despacham" — **4** agents declaram `Agent` | O ADR e o README medem os 4 |
+| P2 | Números do plano desatualizados (1295 → 1304 testes, 109 → 111 linhas, a decomposição dos 15 motivos que somava 16, 161 arquivos × 110 do corpus, `.claude/README.md:63` → `:65`) | Todos corrigidos, com o comando que os mede |
+| P2 | O registro de dentes do `check-memory-crystallization` afirmava "19 de 36" para uma mutação de `split` sem nomear **qual** | A mutação é nomeada pelo call-site, e o número é o dela (20 de 37) |
+
+**O que a revisão não achou** (e foi verificado por ela): os 15 pares
+(entrada ↔ bloco) casam 1:1 e nenhum é tautológico; o `check-teeth-registry`
+continua verde depois da mudança da primeira célula; a divisão do
+`check-memory-crystallization` bate com o contrato declarado; o bloco CLI
+novo do `check-audit-skills` roda o gate de verdade; e o `preflight` completo
+sai `EXIT=0`.
+
+### 4. O que a execução mediu
 
 | Medida | Valor |
 |---|---|
 | Wrappers comparados pelo gate novo | **24** (21 skills + 3 agents), 0 divergência |
-| Testes da spec do gate novo | **19**, com 5 mutações que caem (3, 2, 1, 1, 1) |
-| Testes da spec do `check-audit-skills` | 24 → **34**, com 7 mutações que caem |
-| Testes da spec do `check-memory-crystallization` | 33 → **36**, com 11 mutações que caem |
+| Testes da spec do gate novo | **22**, com 6 mutações que caem (4, 2, 2, 1, 1, 1) |
+| Testes da spec do `check-audit-skills` | 24 → **36**, com 9 mutações que caem |
+| Testes da spec do `check-memory-crystallization` | 33 → **37**, com 13 mutações que caem |
 | Blocos `skip` reconciliados | **15** contra **15** entradas do registro |
 | Memórias sem destinação (o vermelho de `main`) | **2 → 0** |
 | Advisories | **43 → 41** (1 crítica, 3 altas, 32 moderadas, 5 baixas) |
 | Diferenciais (árvore real plantada e restaurada) | **8 de 8**: wrapper com `description` re-serializada (mesmo valor, byte diferente) · wrapper com valor diferente · wrapper com campo que o canônico não declara · wrapper de skill com `tools` · registro com uma entrada a menos · `padrao` que não compila · âncora que não está no corpo |
 | `pnpm ci:preflight` | 2 erros → **0** |
-| `pnpm tooling:test` | **1295** testes verdes (402 + 893) |
+| `pnpm tooling:test` | **1304** testes verdes (402 + 902) |
+| Dentes do `check-teeth-registry` | 24 → **25**, com 1 mutação que cai |
 
 ---
 
@@ -322,7 +355,7 @@ reproduz.
 
 - **Não fecha a cobertura de agents** (D2) — a decisão é registrada, não
   desfeita.
-- **Não versiona o corpus de memórias** (D3) — 161 arquivos / 655 KB é
+- **Não versiona o corpus de memórias** (D3) — 161 arquivos / 655 KB (110 no corpus) é
   "decisão de outro tamanho", e a issue aceita a alternativa.
 - **Não toca no `check-skill-coverage`** do PR #148 — o gate é outro, e os
   dois convivem.

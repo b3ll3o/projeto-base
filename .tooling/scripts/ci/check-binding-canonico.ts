@@ -102,6 +102,17 @@ export interface Divergencia {
  * O frontmatter é o bloco entre o primeiro `---` e o `---` seguinte. Só ele
  * conta: um `name:` no corpo do arquivo não é frontmatter, e um campo que
  * estiver no corpo não entra na comparação.
+ *
+ * ⚠️ **O valor de um campo pode ocupar LINHAS SEGUINTES** (YAML folded `>-`
+ * ou `|`). MEDIDO 2026-11-09 (issue #149, revisão do PR #155): a versão
+ * anterior lia só a LINHA do cabeçalho, e as linhas de continuação nunca
+ * entravam na comparação — uma `description` multilinha com a segunda linha
+ * corrompida passava VERDE. E é justamente a continuação que carrega o texto
+ * do gatilho: um valor truncado é o defeito que o `.claude/README.md`
+ * descreve.
+ *
+ * A comparação é do campo INTEIRO (a linha e as suas continuações), e a
+ * mensagem de erro mostra o bloco inteiro.
  */
 export function lerCamposDoFrontmatter(texto: string): CampoFrontmatter[] {
   const linhas = texto.split('\n');
@@ -112,7 +123,28 @@ export function lerCamposDoFrontmatter(texto: string): CampoFrontmatter[] {
     if (linha.trim() === '---') break;
     const m = /^([A-Za-z][A-Za-z0-9_-]*):/.exec(linha);
     if (m === null) continue;
-    campos.push({ campo: m[1]!, linha: i + 1, texto: linha });
+
+    // As continuações: linhas indentadas. Uma linha em branco só continua o
+    // valor se a linha DEPOIS dela também for indentada — senão o valor
+    // acabou e a linha em branco é separador.
+    const bloco = [linha];
+    let j = i + 1;
+    while (j < linhas.length) {
+      const seguinte = linhas[j]!;
+      if (seguinte.trim() === '') {
+        const depois = linhas[j + 1];
+        if (depois === undefined || !/^\s+\S/.test(depois)) break;
+        bloco.push(seguinte);
+        j++;
+        continue;
+      }
+      if (!/^\s+\S/.test(seguinte)) break;
+      bloco.push(seguinte);
+      j++;
+    }
+
+    campos.push({ campo: m[1]!, linha: i + 1, texto: bloco.join('\n') });
+    i = j - 1;
   }
   return campos;
 }
@@ -329,12 +361,15 @@ export function checkBindingCanonico(opts: {
   });
 
   const advisories: string[] = [];
-  if (comparados > 0) {
-    advisories.push(
-      `medido: ${comparados} wrapper(s) comparado(s) contra o canônico, ` +
-        `${divergencias.length} divergência(s).`,
-    );
-  }
+  // A medição é SEMPRE anunciada — inclusive quando ela é 0. MEDIDO em
+  // 2026-11-09 (issue #149, revisão do PR #155): com a guarda `comparados > 0`,
+  // um repo sem nenhum wrapper produzia `ok: true` sem NENHUMA linha dizendo
+  // que mediu 0 — o verde mudo da classe 5. E a guarda não tinha dente:
+  // neutralizá-la derrubava 0 de 19 testes.
+  advisories.push(
+    `medido: ${comparados} wrapper(s) comparado(s) contra o canônico, ` +
+      `${divergencias.length} divergência(s).`,
+  );
   advisories.push(
     'escopo: este gate confere o CONTEÚDO dos wrappers que existem. A EXISTÊNCIA ' +
       'do wrapper de skill é do `check-skill-coverage`; a de agent é uma decisão ' +

@@ -372,13 +372,26 @@ export function reconciliarExcecoesDeSkip(
   registro: RegistroDeExcecoesDeSkip,
 ): string[] {
   const errors: string[] = [];
-  const usados = new Set<number>();
+  // Índice da entrada → quantos blocos ela casou. Um `Set` contaria a entrada
+  // uma vez, e uma entrada que casa com DOIS blocos passaria — que é a regra
+  // "casa com exatamente um" escrita no docstring e no registro de dentes sem
+  // estar implementada.
+  const usados = new Map<number, number>();
 
   for (const bloco of blocos) {
     const onde = `${bloco.skill}:${bloco.linha}`;
     const candidatos = registro.excecoes.filter(
       (e) => e.skill === bloco.skill && bloco.motivo.includes(e.motivo),
     );
+
+    // ⚠️ A âncora é testada contra o corpo **SEM COMENTÁRIOS**. MEDIDO
+    // 2026-11-09 (issue #149, revisão do PR #155): testada contra o corpo
+    // CRU, a âncora era satisfeita pelo **comentário** — e o comentário do
+    // marcador (`# [gate: skip — <motivo>]`) está DENTRO do corpo. Apagar o
+    // comando do bloco e deixar só um comentário que o citava deixava o gate
+    // VERDE: a verificação provava que o COMENTÁRIO existia, e não que o
+    // COMANDO existia — que é a coisa que o motivo nomeia.
+    const codigo = semComentarios(bloco.corpo);
 
     if (candidatos.length === 0) {
       errors.push(
@@ -403,7 +416,7 @@ export function reconciliarExcecoesDeSkip(
         );
         continue;
       }
-      if (!re.test(bloco.corpo)) {
+      if (!re.test(codigo)) {
         errors.push(
           `${onde}: o motivo "${bloco.motivo}" PAROU de valer — a âncora ` +
             `"${escolhida.verificacao.padrao}" não está mais no corpo do bloco. ` +
@@ -414,7 +427,7 @@ export function reconciliarExcecoesDeSkip(
     } else {
       const comAncora = candidatos.filter((e) => {
         const re = compilaPadrao(e.verificacao.padrao);
-        return re !== null && re.test(bloco.corpo);
+        return re !== null && re.test(codigo);
       });
       if (comAncora.length === 0) {
         errors.push(
@@ -435,15 +448,25 @@ export function reconciliarExcecoesDeSkip(
       escolhida = comAncora[0]!;
     }
 
-    usados.add(registro.excecoes.indexOf(escolhida));
+    const indice = registro.excecoes.indexOf(escolhida);
+    usados.set(indice, (usados.get(indice) ?? 0) + 1);
   }
 
   registro.excecoes.forEach((e, i) => {
-    if (usados.has(i)) return;
-    errors.push(
-      `a entrada "${e.skill}" / "${e.motivo}" de ${ARQUIVO_DE_EXCECOES_DE_SKIP} não casa com ` +
-        `nenhum bloco \`skip\` — a exceção não exclui mais nada. Limpe o registro.`,
-    );
+    const quantos = usados.get(i) ?? 0;
+    if (quantos === 0) {
+      errors.push(
+        `a entrada "${e.skill}" / "${e.motivo}" de ${ARQUIVO_DE_EXCECOES_DE_SKIP} não casa com ` +
+          `nenhum bloco \`skip\` — a exceção não exclui mais nada. Limpe o registro.`,
+      );
+      return;
+    }
+    if (quantos > 1) {
+      errors.push(
+        `a entrada "${e.skill}" / "${e.motivo}" de ${ARQUIVO_DE_EXCECOES_DE_SKIP} casa com ` +
+          `${quantos} blocos \`skip\` — a âncora tem que desambiguar 1:1.`,
+      );
+    }
   });
 
   return errors;

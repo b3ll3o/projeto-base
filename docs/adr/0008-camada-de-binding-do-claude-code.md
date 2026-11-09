@@ -60,10 +60,13 @@ declara `name`, `description` e `tools`. Cada campo vem do canônico como a
 > passaria verde sobre o defeito — e a corrupção que o README descreve é
 > justamente de byte, não de sentido.
 
-`tools` é **obrigatório** no wrapper de agent e **não** é copiado no de skill:
-no agent ele restringe a pool herdada (é a allowlist que impede o desvio
-silencioso), e na skill é metadado de outra tool — carregá-lo aqui seria
-divida que quebra em outro vendor.
+`tools` é **obrigatório** no wrapper de agent **quando o canônico o declara**
+— e **não** é copiado no de skill: no agent ele restringe a pool herdada (é a
+allowlist que impede o desvio silencioso), e na skill é metadado de outra tool
+— carregá-lo aqui seria divida que quebra em outro vendor. A ressalva do
+"quando o canônico declara" é o que impede uma **acusação falsa**: um agent
+canônico sem `tools` não pode ter wrapper com `tools`, e exigir o campo lá
+seria cobrar o que não é defeito.
 
 O instrumento é o gate
 [`check-binding-canonico`](../../.tooling/scripts/ci/check-binding-canonico.ts).
@@ -74,9 +77,14 @@ erro. A **mensagem** carrega o arquivo e a **linha** divergente dos dois lados.
 ### Decisão 2 — A cobertura de agents é **parcial por decisão**, e a decisão é registrada aqui
 
 Os 3 wrappers de agent são `review-router` e `specialist-router` (os dois
-**orquestradores**, os únicos que despacham outros agents) e
-`documentation-specialist` (o dono da documentação da aplicação — o agent cujo
-frontmatter tem `Write`/`Edit`).
+**orquestradores de roteamento**) e `documentation-specialist` (o dono da
+documentação da aplicação — o agent cujo frontmatter tem `Write`/`Edit`).
+
+⚠️ **Nenhum outro critério separa os 3.** MEDIDO 2026-11-09: **4** agents
+canônicos declaram `Agent` nas `tools` — `docker-specialist`,
+`finding-orchestrator`, `review-router` e `specialist-router` — e mais 2
+têm `Write`/`Edit` (`refactorer`, `documentation-specialist`). O critério real
+do piloto é **ruído de descoberta**, e é isso que a Decisão 2 registra.
 
 O motivo do piloto é **ruído de descoberta**: 28 definições de agent no
 contexto do Claude Code é um custo que ninguém pediu. O motivo **não** é
@@ -88,7 +96,7 @@ A cobertura de **skills** é completa (29 de 29, com o PR #148) — e a assimetr
 que ela exista lá para o gatilho funcionar; o agent é uma definição que o
 Claude Code **escolhe** entre várias.
 
-### Decisão 3 — A decisões é canônica **aqui**, e o binding só aponta para ela
+### Decisão 3 — A decisão é canônica **aqui**, e o binding só aponta para ela
 
 O `.claude/README.md` continua sendo o guia do Claude Code — o que roda, como
 está ligado, o que está por measure. Mas a **decisão** mora neste ADR, e o
@@ -99,8 +107,8 @@ da decisão é o spec.
 
 - **O gate entra verde depois de consertar 2 wrappers divergentes** — a skill
   `docker` e o agent `documentation-specialist` (que tinha perdido as aspas da
-  `description`). MEDIDO 2026-11-09: o gate novo acusa **24 wrappers** (21
-  skills + 3 agents), 0 divergências depois do conserto.
+  `description`). MEDIDO 2026-11-09: o gate novo **compara 24 wrappers** (21
+  skills + 3 agents) e mede **0 divergências** depois do conserto.
 - **A cobertura de agents continua 3 de 28**, e agora isso é uma **decisão
   versionada** e não um número solto num README. Um agent novo **sem**
   wrapper é uma escolha — e a lista dos 3 é um fato que o repo pode reconciliar
@@ -112,8 +120,9 @@ da decisão é o spec.
 - **O `description` de uma skill é o seu gatilho.** Corrigir o canônico sem
   copiar para o wrapper deixa a skill descoberta com o gatilho errado, e
   agora isso é **vermelho no preflight**, com a linha do lado errado nomeada.
-- **Custo:** o gate roda em todos os preflights, mede 24 arquivos e lê duas
-  linhas de cada — nada que mereça medição de custo.
+- **Custo:** o gate roda em todos os preflights, compara 24 arquivos e lê a
+  **linha inteira** de cada campo declarado (2 na skill, 4 no agent) — nada
+  que mereça medição de custo.
 
 ## Alternativas rejeitadas
 
