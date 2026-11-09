@@ -94,9 +94,16 @@ if [ -z "$DIRECT_DATABASE_URL" ]; then
   exit 1
 fi
 
-# Extrai a senha da URI e escapa o `'` (o único caractere que muda o
-# sentido de um literal SQL). O `decodeURIComponent` desfaz o percent-encoding
-# — a senha real é a decodificada.
+# Extrai a senha CRUA da URI. O `decodeURIComponent` desfaz o
+# percent-encoding — a senha real é a decodificada.
+#
+# ⚠️ (#133) A senha CRUA é a que o FILTRO mede — e ela tem de ser a mesma que
+# o guard (TypeScript) mede. MEDIDO 2026-11-09: o escape do `'` (o único
+# caractere que muda o sentido de um literal SQL) era aplicado AQUI, e a
+# camada que ESCREVE media a senha ESCAPADA: uma senha de 12 bytes feita de
+# aspas virava 24 bytes escapados, e o script APLICAVA o que o guard recusava
+# (12 < 24). O escape é do SQL, e o SQL é montado no FIM — o filtro mede a
+# senha que o usuário digitou.
 #
 # ⚠️ (#133) A URI vai pelo AMBIENTE, e não por argv.
 #
@@ -108,8 +115,15 @@ fi
 senha_de() {
   URI_DO_BANCO="$1" node -e '
     const url = new URL(process.env.URI_DO_BANCO);
-    const senha = decodeURIComponent(url.password || "");
-    process.stdout.write(senha.replace(/'"'"'/g, "'"'"''"'"'"));
+    process.stdout.write(decodeURIComponent(url.password || ""));
+  '
+}
+
+# A senha no formato do LITERAL SQL: o `'` é o único caractere que muda o
+# sentido do literal, e ele se escapa dobrando-se.
+senha_no_sql() {
+  SENHA_NO_SQL="$1" node -e '
+    process.stdout.write(process.env.SENHA_NO_SQL.replace(/'"'"'/g, "'"'"''"'"'"));
   '
 }
 
@@ -235,7 +249,12 @@ motivo_da_recusa() {
   papel="$3"
   minuscula="$(printf '%s' "$senha" | tr '[:upper:]' '[:lower:]')"
   case "$minuscula" in
-    change_me*|'***')
+    change_me*|'***'*)
+      # ⚠️ (#133) O `***` é PREFIXO, como no guard (`startsWith`) — e não o
+      # valor exato. MEDIDO 2026-11-09: o padrão `'***'` (entre aspas) casa
+      # EXATO, e o script ACCEPTAVA `***` + 21 bytes — valor que o guard
+      # classifica como exemplo. A isca que o script diz que não pode passar
+      # passava nele.
       echo 'é um valor de EXEMPLO'
       return 0
       ;;
@@ -333,8 +352,14 @@ printf "DELETE FROM refresh_tokens WHERE expires_at < now();\n" \
   | DATABASE_URL="$DIRECT_DATABASE_URL" pnpm exec prisma db execute --stdin --schema=prisma/schema.prisma \
   || echo 'aviso: a poda do registro de refresh tokens nao rodou (a tabela talvez nao exista ainda) — o resto do setup segue.'
 
+# ⚠️ (#133) O SQL é montado aqui, e o ESCAPE do `'` é aplicado AQUI — e não
+# na leitura da URI. O filtro mede a senha CRUA (a mesma que o guard mede), e
+# o que vai para o literal SQL é a senha escapada. MEDIDO: com o escape antes
+# do filtro, uma senha de 12 bytes feita de aspas virava 24 bytes escapados
+# e o script aplicava o que o guard recusava.
 printf "ALTER ROLE %s LOGIN PASSWORD '%s';\nALTER ROLE %s LOGIN PASSWORD '%s';\n" \
-  "$PAPEL_DE_RUNTIME" "$senha_runtime" "$PAPEL_DE_SISTEMA" "$senha_sistema" \
+  "$PAPEL_DE_RUNTIME" "$(senha_no_sql "$senha_runtime")" \
+  "$PAPEL_DE_SISTEMA" "$(senha_no_sql "$senha_sistema")" \
   | DATABASE_URL="$DIRECT_DATABASE_URL" pnpm exec prisma db execute --stdin --schema=prisma/schema.prisma
 
 echo 'prepara-papeis: senhas de app_runtime e app_system aplicadas.'

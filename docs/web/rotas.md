@@ -152,7 +152,9 @@ Atributos: `sameSite: 'lax'`, `path: '/'`, `secure` só em produção, e **sem
 
 `apps/web/lib/api-client.ts` — o único caminho do web até a API:
 
-- **Base URL**: `process.env.API_BASE_URL ?? 'http://localhost:3000/api/v1'`.
+- **Base URL**: `baseUrlDaApi()` — `process.env.API_BASE_URL ?? 'http://localhost:3000/api/v1'`,
+  lida no momento do uso (e não no import: o `next build` do e2e injeta a
+  variável no ambiente do build, e a página da listagem é `force-dynamic`).
 - **Headers**: `authorization: Bearer <token>` (só quando há token),
   `x-tenant-id` (só quando há empresa — string vazia viraria `400`
   `INVALID_TENANT`), e `content-type: application/json` **só quando há corpo**

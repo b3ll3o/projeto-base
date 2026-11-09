@@ -5,8 +5,9 @@ import type { ProblemDetailsDto } from '@projeto/shared-types';
  * A URL base da API — o ÚNICO lugar do web onde ela mora.
  *
  * pt-BR (2026-11-09): o literal `process.env.API_BASE_URL ?? '...'` estava
- * replicado em 11 lugares do web, e a correção do default seria PARCIAL — o
- * "Sair" revogaria num endereço e o resto do web falaria com outro.
+ * replicado em 11 lugares do web (MEDIDO: `git grep -c "process\.env\.API_BASE_URL ??" origin/main -- apps/web` → 10, e o 11º é o `sair` que este PR acrescenta), e a correção
+ * do default seria PARCIAL — o "Sair" revogaria num endereço e o resto do
+ * web falaria com outro.
  *
  * ⚠️ Uma FUNÇÃO, e não uma constante: `API_BASE_URL` é lida no MOMENTO do
  * uso, e não no import. O `next build` do e2e injeta a variável no ambiente

@@ -156,7 +156,10 @@ describe('papel de runtime — a migration e o TypeScript sao o mesmo papel', ()
     // o `case` do shell distingue maiúsculas, e o guard não — e é a camada
     // que ESCREVE a senha que não pode deixar a isca passar.
     expect(scriptDePapeis).toMatch(/tr '\[:upper:\]' '\[:lower:]'/);
-    expect(scriptDePapeis).toMatch(/change_me\*\|'\*\*\*'\)/);
+    // ⚠️ (#133) O `***` é PREFIXO — as aspas protecting o literal e o `*`
+    // FORA delas. O padrão `'***'` (sem o `*` de fora) casa o valor EXATO, e
+    // o script aceitava `***` + 21 bytes.
+    expect(scriptDePapeis).toMatch(/change_me\*\|'\*\*\*'\*\)/);
     expect(scriptDePapeis).toContain('motivo_da_recusa');
   });
 
@@ -261,6 +264,42 @@ describe('papel de runtime — a migration e o TypeScript sao o mesmo papel', ()
       expect(executar('😀'.repeat(6), 'app_runtime', 'app_runtime').recusa).toBe(false);
       // 5 emojis = 20 bytes: recusada pelos DOIS lados.
       expect(executar('😀'.repeat(5), 'app_runtime', 'app_runtime').recusa).toBe(true);
+    });
+
+    // ⚠️ (#133) A MEDIDA é da senha CRUA — e o ESCAPE do SQL é aplicado no
+    // FIM (no `printf`), não na leitura da URI. MEDIDO 2026-11-09: com o
+    // escape antes do filtro, uma senha de 12 bytes feita de aspas virava
+    // 24 bytes ESCAPADOS, e o script — que é quem ESCREVE — aplicava o que
+    // o guard (que mede a senha crua) recusava. A camada que escreve era a
+    // mais frouxa das duas.
+    it('a senha CRUA e a que o filtro mede — o escape do SQL vem depois (#133)', () => {
+      const aspas = "'".repeat(12);
+      const medida = executar(aspas, 'app_runtime', 'app_runtime');
+      expect(medida.recusa).toBe(true);
+      // E o motivo mede o TAMANHO CRU (12) — e nao o escapado (24), que
+      // passaria pelo minimo.
+      expect(medida.motivo).toMatch(/^tem 12 bytes/);
+    });
+
+    it('o escape do aspas acontece no SQL, e nao na leitura da URI (#133)', () => {
+      // A leitura devolve a senha CRUA — e o escape e um passo separado, que
+      // roda no `printf` do SQL. E essa separacao que faz as DUAS camadas
+      // medirem a mesma coisa.
+      const leitura = /senha_de\(\)\s*\{[\s\S]*?^\}/m.exec(scriptDePapeis);
+      expect(leitura).not.toBeNull();
+      expect(leitura![0]).not.toContain('replace(');
+      expect(scriptDePapeis).toMatch(/senha_no_sql\(\)/);
+    });
+
+    // ⚠️ (#133) O `***` e PREFIXO, como no guard (`startsWith`) — e nao o
+    // valor exato. MEDIDO 2026-11-09: o padrao `'***'` (entre aspas) casa
+    // EXATO, e o script ACCEPTAVA `***` + 21 bytes — valor que o guard
+    // classifica como exemplo.
+    it('o `***` e PREFIXO — como no guard, que usa `startsWith` (#133)', () => {
+      expect(executar('***', 'app_runtime', 'app_runtime').recusa).toBe(true);
+      expect(executar('***abcdefghijklmnopqrstu', 'app_runtime', 'app_runtime').recusa).toBe(true);
+      // E o prefixo `change_me` continua sendo prefixo.
+      expect(executar('change_me_gerar', 'app_runtime', 'app_runtime').recusa).toBe(true);
     });
   });
 
