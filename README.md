@@ -13,12 +13,12 @@ Um **monorepo base reutilizável** que implementa o **padrão genérico de agent
 **Diferencial:** enquanto o template anterior era genérico para qualquer projeto, este é um **monorepo base opinativo** com:
 
 - Apps `apps/api` (NestJS) + `apps/web` (Next.js) **já implementados** — **6 módulos** em `apps/api/src/modules/` (`auth`, `feature-flags`, `health`, `profiles`, `tenancy`, `users`), em camadas `domain/`, `application/`, `infrastructure/`. O app é **multi-tenant por empresa** (RLS no Postgres), com **RBAC por perfil**, **feature flags** e **administração de sistema** (usuários, empresas, perfis).
-- **28 agents** (12 genéricos + 2 routers + 7 specialists de stack + 6 de auditoria + 1 de documentação) + 3 arquivos companheiros em `telemetry-specialist/`, interoperáveis via skill `agents:coordinate`; **25 skills + 15 workflows + 23 convenções canônicas**
+- **28 agents** (12 genéricos + 2 routers + 7 specialists de stack + 6 de auditoria + 1 de documentação) + 3 arquivos companheiros em `telemetry-specialist/`, interoperáveis via skill `agents:coordinate`; **29 skills + 15 workflows + 24 convenções canônicas**
 - **Paradigma DDD + Hexagonal** canônico (ADR-0001) com guardiões automáticos
 - **OpenTelemetry cross-stack** (backend + frontend + Collector)
 - **CI Defense-in-Depth** em 3 camadas
 
-> Contagens medidas do disco em **2026-10-29** — o comando de cada uma está no rodapé.
+> Contagens medidas do disco em **2026-11-05** — o comando de cada uma está no rodapé.
 
 ## Estrutura
 
@@ -30,8 +30,8 @@ projeto-base/
 │   ├── agents/            # 28 agents (12 genéricos + 2 routers + 7 de stack + 6 de auditoria + 1 de documentação)
 │   │                      # catálogo nominal, com papel e memória: AGENTS.md §3
 │   ├── memory/            # 30 memórias (28 agents + state-aware-planning + _template)
-│   ├── skills/            # 25 skills — coordenação, routing, auditoria, UI (agent↔skill: AGENTS.md §3.2)
-│   ├── specs/conventions/ # 23 convenções (ver AGENTS.md §6)
+│   ├── skills/            # 29 skills — coordenação, routing, auditoria, UI, terceiro adaptadas (agent↔skill: AGENTS.md §3.2)
+│   ├── specs/conventions/ # 24 convenções (ver AGENTS.md §6)
 │   ├── workflows/         # 15 workflows detalhados
 │   └── WORKFLOWS.md       # Fluxos pré-configurados, em tabela
 ├── apps/                  # api (NestJS 11) + web (Next.js 15)
@@ -290,6 +290,6 @@ Detalhes em [`docs/TEMPLATE_USAGE.md`](./docs/TEMPLATE_USAGE.md).
 
 ## Versão & Licença
 
-**Versão:** 1.19.0 — re-medido do disco em **2026-11-05**: `ls .agents/agents/*.md | wc -l` = **28** agents · `ls .agents/memory/*.md | wc -l` = **30** memórias (1 por agent + `state-aware-planning` + `_template`) · `ls .agents/skills/*/SKILL.md | wc -l` = **25** skills · `ls .agents/workflows/*.md | wc -l` = **15** workflows · `ls .agents/specs/conventions/*.md | grep -vE 'README|gaps|examples|historico|apendice' | wc -l` = **24** convenções · `ls apps/api/src/modules/ | wc -l` = **6** módulos.
+**Versão:** 1.20.0 — re-medido do disco em **2026-11-05**: `ls .agents/agents/*.md | wc -l` = **28** agents · `ls .agents/memory/*.md | wc -l` = **30** memórias (1 por agent + `state-aware-planning` + `_template`) · `ls .agents/skills/*/SKILL.md | wc -l` = **29** skills · `ls .agents/workflows/*.md | wc -l` = **15** workflows · `ls .agents/specs/conventions/*.md | grep -vE 'README|gaps|examples|historico|apendice' | wc -l` = **24** convenções · `ls apps/api/src/modules/ | wc -l` = **6** módulos.
 
 A `1.14.0` adiciona o `documentation-specialist` (+1 agent, +1 memória), a skill `documentation-audit` (+1) e a convenção `documentacao` (+1) — e corrige os fatos errados da versão anterior: Node ≥ 20 → ≥ 22.6.0, `openssl rand -base64 48` → `-hex 32` nas senhas de papel, "três modos" → dois, e a lista de agents (faltavam os 6 de auditoria). A **tag do template** é a dos 4 footers canônicos (o de [`docs/MONOREPO.md`](./docs/MONOREPO.md) manda), extraída pelo `release-template.yml` — este rodapé não a define. **Licença:** MIT.

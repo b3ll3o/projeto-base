@@ -123,6 +123,17 @@ result:
 4. **Paralelize quando possível.** Mas só se as sub-tasks forem independentes.
 5. **Documente riscos.** Especialmente quando o escopo é ambíguo.
 
+## Skills Carregadas
+
+| Skill | Quando | O que traz que o agent não traz |
+|-------|--------|--------------------------------|
+| [`grilling`](../skills/grilling/SKILL.md) | há decisão em aberto no plano e o usuário está presente | A árvore de decisão rodada a rodada: só pergunta o que já pode ser perguntado, com a resposta recomendada junto |
+| [`handoff`](../skills/handoff/SKILL.md) | a tarefa passa para outro agent ou outra sessão | O documento de passagem no formato canônico do repo (`task`/`context`/`expected_output`/`success_criteria`), versionado em `.agents/runs/` |
+
+> O `agents-coordinate` é o **protocolo** de despacho; o `handoff` é o
+> **artefato** de passagem. Despachar dentro desta sessão é `agents-coordinate`;
+> passar para a próxima sessão é `handoff`.
+
 ## Anti-Padrões (NÃO fazer)
 
 - ❌ Tentar executar o trabalho técnico (delegue ao specialist)
@@ -134,3 +145,4 @@ result:
 
 **Arquivo:** `.agents/agents/orchestrator.md`
 **Tipo:** Meta-agent (despacha, não executa)
+**Skills carregadas:** `grilling` · `handoff` (em `.agents/skills/`)
