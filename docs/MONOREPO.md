@@ -272,7 +272,7 @@ visão de stack: [`docs/STACK.md` §8](./STACK.md).
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão do documento:** 1.20.0
+**Versão do documento:** 1.21.0
 
 ### Histórico de Versões
 
@@ -295,3 +295,4 @@ visão de stack: [`docs/STACK.md` §8](./STACK.md).
 | `1.13.0` | **Sem mudança de monorepo** — o footer do `AGENTS.md` subiu para `1.13.0` sozinho, e os outros 4 footers seguiam em `1.12.0` (drift medido em 2026-10-29). O gate `check-version-footers` (criado no #126) é o que fecha essa classe. |
 | `1.14.0` | **Correção de fatos medidos contra o código** (2026-10-29). §1 — a árvore perdeu o `packages/ui/` (não existe) e o `infra/` deixou de declarar `docker-compose.yml`/`postgres/` (o real é `grafana/`, `otelcol/`, `prometheus/`, `tempo/`; o Compose mora na raiz). §4 — os 4 aliases de `tsconfig.base.json` foram listados, com `@projeto/ui` marcado como **alias morto**. §5 — o `turbo.json` agora é o arquivo real (11 tasks, não 5). §6 — o comando que "inspeciona a versão" apontava para o `package.json` da raiz (`0.1.0`), que não é a versão do template; a fonte é o rodapé deste arquivo. §7 — os 9 scripts listados viraram índice; o catálogo dos **29** foi para [`MONOREPO-scriptarios.md`](./MONOREPO-scriptarios.md). §3.2 — a regra do caret ficou **sem exceção**: `@playwright/test` ganhou caret (`^1.60.0`) e o `pnpm-lock.yaml` continua resolvendo `1.60.0`, então a versão instalada não muda. §4 — o alias morto `@projeto/ui` saiu do `tsconfig.base.json` (typecheck, lint e build verdes depois da remoção) e o gate `check-path-alias` passou a medir que todo alias aponta para um diretório que existe. §11 virou **ponteiro** para a convenção dona (`estrutura-e-versionamento.md`), que já tinha a mesma árvore e as mesmas regras — duplicata que o gate `check-doc-size` tornaria inviável. |
 | `1.20.0` | **Adição de 4 skills de terceiro adaptadas** (minor bump — "Adição de nova skill é minor bump") — `grilling`, `handoff`, `design-taste-frontend` e `agent-browser` em `.agents/skills/`, cada uma com dono (o `orchestrator` carrega as 2 primeiras; o `ux-design-specialist` as 2 últimas) e wrapper em `.claude/skills/`. Nenhum arquivo de `apps/`, `packages/` ou `infra/` mudou: a árvore do monorepo é a mesma. Índices: `AGENTS.md §3.2` + a tabela de versões de `.agents/specs/conventions/estrutura-e-versionamento.md`. |
+| `1.21.0` | **Sem mudança de monorepo** — a árvore de `apps/`, `packages/` e `infra/` é a mesma: o PR só adiciona um runbook (`docs/runbooks/cloudflare-edge.md`), que vive em `docs/`, fora da árvore do workspace. O footer do `AGENTS.md` e dos outros 4 subiu junto (o gate `check-version-footers` é o que fecha essa classe). |

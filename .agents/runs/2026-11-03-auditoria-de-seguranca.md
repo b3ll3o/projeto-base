@@ -16,7 +16,7 @@
 | Segredos no versionado | `git grep -nIE '(api[_-]?key|secret\|password\|token)\s*[:=]\s*["\x27][A-Za-z0-9_\-]{16,}'` | **0** ✓ |
 | Pin das actions do CI | `grep -rn 'uses:' .github/workflows/*.yml` | **21 call-sites, todos por TAG** |
 | Instrumentos | `ls .tooling/scripts/ci/check-*.ts` | **40 gates** — nenhum media advisory de dependência |
-| Cloudflare (borda/conta) | conector `cloudflare_mcp` | **NÃO RODOU** — a autorização exige o navegador do usuário |
+| Cloudflare (borda/conta) | conector `cloudflare_mcp` | **MEDIDA PARCIAL (2026-11-03)** — a autorização foi feita, mas o conector só expõe **documentação + spec OpenAPI**, sem execução da API da conta. Nenhuma medição do estado real da conta; a baseline oficial e o checklist de verificação ficaram em [`docs/runbooks/cloudflare-edge.md`](../../docs/runbooks/cloudflare-edge.md) |
 
 ## O que foi corrigido
 
@@ -105,8 +105,9 @@ todas por SHA, com a tag no comentário. O gate `check-ci-action-pinning`
 ## O que NÃO foi corrigido, e por quê
 
 - **A dimensão Cloudflare** (WAF, rate limiting na borda, TLS, DNSSEC, tokens
-  de API, 2FA dos membros, log de auditoria): o conector `cloudflare_mcp`
-  está `pending` e a autorização exige o navegador do usuário. **Nenhuma
+  de API, 2FA dos membros, log de auditoria): a autorização do conector foi
+  feita em 2026-11-03, mas ele só expõe **documentação e spec OpenAPI** — não
+  há ferramenta que execute a API da conta, e não há token no ambiente. **Nenhuma
   medição de borda foi feita** — e nada aqui afirma que a borda está boa ou
   ruim. O plano marca a etapa como pendente, com o runbook pronto.
 - **`zod` 3 → 4** e **`vitest` 2 → 3**: as majors do toolchain inteiro
