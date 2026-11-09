@@ -243,6 +243,8 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `vitest-workspace-thresholds-and-dist-remap` | `citada` | `.agents/specs/conventions/cobertura-testes.md` | `config raiz` |
 | `zero-survived-is-not-zero-found` | `pendente` | — | — |
 | `suite-de-integracao-nao-ve-defeito-de-banco` | `pendente` | — | — |
+| `as-duas-camadas-precisam-medir-o-mesmo-valor` | `pendente` | — | — |
+| `papel-postgres-e-do-cluster-nao-do-banco` | `pendente` | — | — |
 
 ## O que a tabela diz
 

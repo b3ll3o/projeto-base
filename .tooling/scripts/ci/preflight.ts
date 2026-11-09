@@ -40,6 +40,7 @@ import { checkTeethCount } from './check-teeth-count';
 import { checkHarnessLocation } from './check-harness-location';
 import { checkMergeMarkers } from './check-merge-markers';
 import { checkAgentRoutingCoverage } from './check-agent-routing-coverage';
+import { checkBindingCanonico } from './check-binding-canonico';
 import { checkEnginesConsistency } from './check-engines-consistency';
 import { checkDockerfileHardening } from './check-dockerfile-hardening';
 import { checkFlowMermaidSync } from './check-flow-mermaid-sync';
@@ -377,6 +378,7 @@ export const RUNNERS: Record<string, () => CheckResult | Promise<CheckResult>> =
   'check-harness-location': () => checkHarnessLocation({ repoRoot: '.' }),
   'check-merge-markers': () => checkMergeMarkers({ repoRoot: '.' }),
   'check-agent-routing-coverage': () => checkAgentRoutingCoverage({ repoRoot: '.' }),
+  'check-binding-canonico': () => checkBindingCanonico({ repoRoot: '.' }),
   'check-engines-consistency': () => checkEnginesConsistency({ repoRoot: '.' }),
   'check-dockerfile-hardening': () => checkDockerfileHardening({ repoRoot: '.' }),
   'check-flow-mermaid-sync': () => checkFlowMermaidSync({ repoRoot: '.' }),

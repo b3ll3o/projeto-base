@@ -302,6 +302,176 @@ export function executarPasso(corpo: string, repoRoot: string): Execucao {
   };
 }
 
+/**
+ * O registro das exceções `skip` — a mesma forma de
+ * `excecoes-de-dependencias.json`: o registro é DADO, a regra é CÓDIGO.
+ *
+ * MEDIDO 2026-11-09 (issue #149, F2): 15 blocos `[gate: skip]` em 7 skills, e
+ * o motivo de cada um era PROSA sem instrumento: o gate lia o motivo (medindo
+ * o COMPRIMENTO dele) e o descartava. Um `skip` cujo motivo parou de valer
+ * passava em silêncio.
+ */
+export const ARQUIVO_DE_EXCECOES_DE_SKIP = '.tooling/scripts/ci/excecoes-de-skills-audit.json';
+
+/** Uma exceção `skip` registrada: a skill, o motivo e a verificação. */
+export interface ExcecaoDeSkip {
+  /** A skill à qual o bloco pertence. */
+  skill: string;
+  /** O motivo, como SUBSTRING do motivo capturado no bloco. */
+  motivo: string;
+  /** A prova de que o motivo continua valendo. */
+  verificacao: {
+    /** O único tipo implementado — nada de shell livre. */
+    tipo: 'no-bloco';
+    /** Regex que tem que estar no CORPO do bloco. */
+    padrao: string;
+  };
+}
+
+/** O registro inteiro, com o bloco que explica o uso. */
+export interface RegistroDeExcecoesDeSkip {
+  _comoUsar: string[];
+  excecoes: ExcecaoDeSkip[];
+}
+
+/**
+ * Compila o padrão do registro. Um regex INVÁLIDO no arquivo de dados é erro
+ * do gate, não um crash: `new RegExp('[')` lança, e um gate que morre com
+ * stack trace no meio do preflight leva os ~40 gates que rodam depois dele
+ * junto — o gate que deveria acusar o registro quebrado é o que derruba a
+ * roda.
+ */
+function compilaPadrao(padrao: string): RegExp | null {
+  try {
+    return new RegExp(padrao);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Reconcilia os blocos `skip` com o registro.
+ *
+ * Cinco accuseções, e nenhuma delas aceita "não achei":
+ *
+ *   1. **todo** bloco `skip` tem entrada no registro — um `skip` sem
+ *      verificação é dívida silenciosa (e é o que acusa também o motivo que
+ *      mudou no bloco: o registro deixa de casar);
+ *   2. **toda** entrada casa com **exatamente um** bloco — entrada que não
+ *      casa é a exceção que não exclui mais nada (a "documentation lie" do
+ *      `check-doc-coverage`);
+ *   3. **nenhuma** âncora ambígua — duas âncoras que casam com o mesmo bloco
+ *      deixam a desambiguação sem dono;
+ *   4. a âncora tem que estar no corpo do bloco — se sumiu, o motivo parou
+ *      de valer;
+ *   5. o `padrao` tem que ser um regex que compila — um registro com regex
+ *      quebrado é um registro que não verifica nada.
+ */
+export function reconciliarExcecoesDeSkip(
+  blocos: Bloco[],
+  registro: RegistroDeExcecoesDeSkip,
+): string[] {
+  const errors: string[] = [];
+  // Índice da entrada → quantos blocos ela casou. Um `Set` contaria a entrada
+  // uma vez, e uma entrada que casa com DOIS blocos passaria — que é a regra
+  // "casa com exatamente um" escrita no docstring e no registro de dentes sem
+  // estar implementada.
+  const usados = new Map<number, number>();
+
+  for (const bloco of blocos) {
+    const onde = `${bloco.skill}:${bloco.linha}`;
+    const candidatos = registro.excecoes.filter(
+      (e) => e.skill === bloco.skill && bloco.motivo.includes(e.motivo),
+    );
+
+    // ⚠️ A âncora é testada contra o corpo **SEM COMENTÁRIOS**. MEDIDO
+    // 2026-11-09 (issue #149, revisão do PR #155): testada contra o corpo
+    // CRU, a âncora era satisfeita pelo **comentário** — e o comentário do
+    // marcador (`# [gate: skip — <motivo>]`) está DENTRO do corpo. Apagar o
+    // comando do bloco e deixar só um comentário que o citava deixava o gate
+    // VERDE: a verificação provava que o COMENTÁRIO existia, e não que o
+    // COMANDO existia — que é a coisa que o motivo nomeia.
+    const codigo = semComentarios(bloco.corpo);
+
+    if (candidatos.length === 0) {
+      errors.push(
+        `${onde}: bloco \`skip\` SEM verificação no registro ${ARQUIVO_DE_EXCECOES_DE_SKIP}. ` +
+          `O motivo é "${bloco.motivo}" — o registro tem que dizer por que ele ainda vale. ` +
+          `Skip sem verificação é dívida silenciosa.`,
+      );
+      continue;
+    }
+
+    // Com mais de um candidato, a âncora é o que desambigua. `findings-
+    // orchestration` tem DOIS blocos com o motivo "abre issues na API do
+    // GitHub", e eles só se distinguem pelo comando que rodam.
+    let escolhida: ExcecaoDeSkip | undefined;
+    if (candidatos.length === 1) {
+      escolhida = candidatos[0]!;
+      const re = compilaPadrao(escolhida.verificacao.padrao);
+      if (re === null) {
+        errors.push(
+          `${onde}: o padrão "${escolhida.verificacao.padrao}" da entrada do registro não é ` +
+            `um regex que compila — o registro não verifica nada.`,
+        );
+        continue;
+      }
+      if (!re.test(codigo)) {
+        errors.push(
+          `${onde}: o motivo "${bloco.motivo}" PAROU de valer — a âncora ` +
+            `"${escolhida.verificacao.padrao}" não está mais no corpo do bloco. ` +
+            `Ou o motivo muda, ou a entrada do registro sai.`,
+        );
+        continue;
+      }
+    } else {
+      const comAncora = candidatos.filter((e) => {
+        const re = compilaPadrao(e.verificacao.padrao);
+        return re !== null && re.test(codigo);
+      });
+      if (comAncora.length === 0) {
+        errors.push(
+          `${onde}: o motivo "${bloco.motivo}" PAROU de valer — nenhuma das ` +
+            `${candidatos.length} âncoras candidatas está no corpo do bloco ` +
+            `(${candidatos.map((e) => `"${e.verificacao.padrao}"`).join(', ')}).`,
+        );
+        continue;
+      }
+      if (comAncora.length > 1) {
+        errors.push(
+          `${onde}: o registro é AMBÍGUO para o motivo "${bloco.motivo}" — ` +
+            `${comAncora.length} âncoras casam com este bloco. A âncora tem que ` +
+            `desambiguar 1:1.`,
+        );
+        continue;
+      }
+      escolhida = comAncora[0]!;
+    }
+
+    const indice = registro.excecoes.indexOf(escolhida);
+    usados.set(indice, (usados.get(indice) ?? 0) + 1);
+  }
+
+  registro.excecoes.forEach((e, i) => {
+    const quantos = usados.get(i) ?? 0;
+    if (quantos === 0) {
+      errors.push(
+        `a entrada "${e.skill}" / "${e.motivo}" de ${ARQUIVO_DE_EXCECOES_DE_SKIP} não casa com ` +
+          `nenhum bloco \`skip\` — a exceção não exclui mais nada. Limpe o registro.`,
+      );
+      return;
+    }
+    if (quantos > 1) {
+      errors.push(
+        `a entrada "${e.skill}" / "${e.motivo}" de ${ARQUIVO_DE_EXCECOES_DE_SKIP} casa com ` +
+          `${quantos} blocos \`skip\` — a âncora tem que desambiguar 1:1.`,
+      );
+    }
+  });
+
+  return errors;
+}
+
 /** Gate: os passos declarados das skills de auditoria rodam e passam. */
 export function checkAuditSkills(opts: { repoRoot: string }): CheckResult {
   const errors: string[] = [];
@@ -309,6 +479,9 @@ export function checkAuditSkills(opts: { repoRoot: string }): CheckResult {
   const root = path.resolve(opts.repoRoot);
   let passosRodados = 0;
   const inicio = Date.now();
+  // Os blocos `skip` são coletados para a reconciliação com o registro: eles
+  // não são executados, e o que os vigia é o registro, não a execução.
+  const blocosSkip: Bloco[] = [];
 
   for (const skill of SKILLS_DE_AUDITORIA) {
     const arquivo = path.join(root, '.agents/skills', skill, 'SKILL.md');
@@ -347,7 +520,12 @@ export function checkAuditSkills(opts: { repoRoot: string }): CheckResult {
         continue;
       }
 
-      if (bloco.declaracao === 'skip') continue;
+      if (bloco.declaracao === 'skip') {
+        // O `skip` não é executado — e é por isso que ele precisa de
+        // instrumento: nada mais ia notar se o motivo dele parasse de valer.
+        blocosSkip.push(bloco);
+        continue;
+      }
 
       const violacoes = violacoesDoBloco(bloco.corpo);
       if (violacoes.length > 0) {
@@ -417,7 +595,60 @@ export function checkAuditSkills(opts: { repoRoot: string }): CheckResult {
     }
   }
 
+  // ── A reconciliação com o registro das exceções `skip` ─────────────────────
+  //
+  // MEDIDO 2026-11-09 (issue #149, F2): o motivo de cada `skip` era prosa sem
+  // instrumento. O gate lia o motivo (medindo o comprimento) e o descartava —
+  // `if (bloco.declaracao === 'skip') continue;`. Um `skip` cujo motivo tinha
+  // parado de valer passava em silêncio, e era o ÚNICO caminho pelo qual a
+  // skill de auditoria podia mentir sobre o que ela não mede.
+  const caminhoDoRegistro = path.join(root, ARQUIVO_DE_EXCECOES_DE_SKIP);
+  if (!existsSync(caminhoDoRegistro)) {
+    // Só há o que reclamar se existe alguma exceção para verificar. Um repo
+    // sem nenhum bloco `skip` não tem exceção nenhuma — e reclamar do
+    // registro ausente nele seria o erro do espelho: acusar o vazio.
+    if (blocosSkip.length > 0) {
+      errors.push(
+        `registro de exceções \`skip\` ausente (${ARQUIVO_DE_EXCECOES_DE_SKIP}) — ` +
+          `${blocosSkip.length} bloco(s) \`skip\` precisam de uma verificação, e o registro ` +
+          `é onde ela mora`,
+      );
+    }
+  } else {
+    let registro: RegistroDeExcecoesDeSkip;
+    try {
+      registro = JSON.parse(readFileSync(caminhoDoRegistro, 'utf-8')) as RegistroDeExcecoesDeSkip;
+    } catch (erro) {
+      errors.push(
+        `registro de exceções \`skip\` ilegível (${ARQUIVO_DE_EXCECOES_DE_SKIP}): ` +
+          `${(erro as Error).message.split('\n')[0]}`,
+      );
+      return { ok: false, errors, advisories };
+    }
+    if (!Array.isArray(registro.excecoes) || registro.excecoes.length === 0) {
+      if (blocosSkip.length > 0) {
+        errors.push(
+          `registro de exceções \`skip\` sem entradas (${ARQUIVO_DE_EXCECOES_DE_SKIP}) — ` +
+            `${blocosSkip.length} bloco(s) \`skip\` sem verificação é dívida silenciosa`,
+        );
+      }
+    } else {
+      errors.push(...reconciliarExcecoesDeSkip(blocosSkip, registro));
+      advisories.push(
+        `medido: ${blocosSkip.length} bloco(s) \`skip\` reconciliado(s) contra ` +
+          `${registro.excecoes.length} entrada(s) do registro.`,
+      );
+    }
+  }
+
   return { ok: errors.length === 0, errors, advisories };
+}
+
+if (process.argv[1]?.endsWith('check-audit-skills.ts')) {
+  const r = checkAuditSkills({ repoRoot: '.' });
+  for (const line of [...r.errors, ...(r.advisories ?? [])]) console.log(line);
+  if (r.skipped) console.log(`(skipped: ${r.reason ?? 'sem motivo declarado'})`);
+  process.exit(r.ok ? 0 : 1);
 }
 
 /** Recorta a saída para a mensagem de erro não virar um despejo. */

@@ -1,0 +1,170 @@
+{
+  "_comoUsar": [
+    "Uma entrada por bloco `[gate: skip]` das skills de auditoria. O `skip` é",
+    "uma exceção: o gate não executa aquele passo. O motivo mora no próprio",
+    "bloco — e o motivo é PROSA, que ninguém conferia.",
+    "",
+    "MEDIDO em 2026-11-09 (issue #149, F2): são 15 blocos `skip` em 7 skills, e",
+    "NENHUM instrumento dizia se o motivo ainda valia. O `check-audit-skills`",
+    " lia o motivo (mede o COMPRIMENTO dele, < 8 é erro) e depois o descartava:",
+    "`if (bloco.declaracao === 'skip') continue;` — o motivo passava por cima e",
+    "ninguém olhava.",
+    "",
+    "A `verificacao` é a prova de que o motivo continua valendo. A forma é",
+    "declarativa, como a de `excecoes-de-dependencias.json`: NADA de shell",
+    "livre (o registro é versionado e um PR pode editá-lo — quem edita o",
+    "registro não pode desligar o gate), e o PADRÃO mora no registro enquanto o",
+    "QUE é medido mora no código.",
+    "",
+    "`tipo: no-bloco` — o `padrao` (uma regex) tem que estar NO CORPO do bloco,",
+    "que é um arquivo versionado. É a semântica que cabe aos 15 motivos: o",
+    "motivo continua valendo SE o bloco ainda USA a coisa que o motivo nomeia",
+    "(`yq -P`, `pnpm ci:preflight`, `gh issue create`, `docker buildx build`...).",
+    "",
+    "⚠️ A âncora é testada contra o corpo **SEM COMENTÁRIOS**. MEDIDO em",
+    "2026-11-09 (issue #149, revisão do PR #155): testada contra o corpo CRU, a",
+    "âncora era satisfeita pelo COMENTÁRIO — e o marcador `[gate: skip — ...]`",
+    "está dentro do corpo. Apagar o comando e deixar um comentário que o citava",
+    "deixava o gate VERDE: a verificação provava que o comentário existia, e",
+    "não que o comando existia. Como o motivo é um comentário, ele não pode",
+    "satisfazer a âncora — e é por isso que a âncora pode ser a mesma coisa que",
+    "o motivo nomeia (`git fetch --tags`), que é o que a medição exige.",
+    "",
+    "⚠️ O QUE ISTO NÃO PROVA. A verificação é repo-derivável: ela prova que o",
+    "bloco ainda contém a âncora do motivo. Ela NÃO prova que o ambiente ainda",
+    "falta a ferramenta (`yq` instalado no CI, rede, Docker, token do GitHub)",
+    "— o ambiente não está no repo, e um gate cujo veredito muda de máquina para",
+    "máquina é o defeito que `gate-must-not-depend-on-machine-ambient-state`",
+    "nomeia. O que a âncora prova é o que o repo controla: se alguém reescrever",
+    "o bloco para não precisar mais da coisa que o motivo nomeia, o motivo",
+    "parou de valer e o registro tem de mudar junto.",
+    "",
+    "O `motivo` casa por SUBSTRING do motivo capturado no bloco (o do",
+    "`documentation-audit` ocupa 2 linhas; o registro guarda a 1ª). Quando duas",
+    "entradas têm o mesmo motivo na mesma skill — `findings-orchestration` tem",
+    "dois blocos \"abre issues na API do GitHub\" — a âncora é o que desambigua,",
+    "e o gate exige que a desambiguação seja de 1:1."
+  ],
+  "excecoes": [
+    {
+      "skill": "prisma-audit",
+      "motivo": "precisa do banco para o `prisma migrate status`",
+      "verificacao": {
+        "tipo": "no-bloco",
+        "padrao": "pnpm exec prisma migrate status"
+      }
+    },
+    {
+      "skill": "openapi-audit",
+      "motivo": "re-gera a spec com o toolchain e escreve o arquivo versionado",
+      "verificacao": {
+        "tipo": "no-bloco",
+        "padrao": "pnpm openapi:export"
+      }
+    },
+    {
+      "skill": "openapi-audit",
+      "motivo": "precisa da ref local `main`, que o checkout do CI não tem",
+      "verificacao": {
+        "tipo": "no-bloco",
+        "padrao": "git diff main\\.\\.HEAD"
+      }
+    },
+    {
+      "skill": "otelcol-audit",
+      "motivo": "valida a config no container do Collector — precisa do Docker",
+      "verificacao": {
+        "tipo": "no-bloco",
+        "padrao": "docker run --rm -v"
+      }
+    },
+    {
+      "skill": "docker-prod-audit",
+      "motivo": "builda as imagens prod — minutos de CI",
+      "verificacao": {
+        "tipo": "no-bloco",
+        "padrao": "docker buildx build -f apps/api/Dockerfile"
+      }
+    },
+    {
+      "skill": "docker-prod-audit",
+      "motivo": "precisa de `yq`, que não está instalado no CI (o passo mede nada sem ele)",
+      "verificacao": {
+        "tipo": "no-bloco",
+        "padrao": "yq -P"
+      }
+    },
+    {
+      "skill": "release-versioning-audit",
+      "motivo": "faz `git fetch --tags` — precisa de rede",
+      "verificacao": {
+        "tipo": "no-bloco",
+        "padrao": "git fetch --tags"
+      }
+    },
+    {
+      "skill": "release-versioning-audit",
+      "motivo": "depende de `$LAST_TAG`, que vem do passo que precisa de rede",
+      "verificacao": {
+        "tipo": "no-bloco",
+        "padrao": "\\$\\{LAST_TAG\\}"
+      }
+    },
+    {
+      "skill": "findings-orchestration",
+      "motivo": "confere a autenticação do `gh` — fala com a API",
+      "verificacao": {
+        "tipo": "no-bloco",
+        "padrao": "gh auth status"
+      }
+    },
+    {
+      "skill": "findings-orchestration",
+      "motivo": "escreve em `.agents/runs` e lê a API do GitHub",
+      "verificacao": {
+        "tipo": "no-bloco",
+        "padrao": "gh issue list"
+      }
+    },
+    {
+      "skill": "findings-orchestration",
+      "motivo": "cria labels na API do GitHub",
+      "verificacao": {
+        "tipo": "no-bloco",
+        "padrao": "gh label create"
+      }
+    },
+    {
+      "skill": "findings-orchestration",
+      "motivo": "abre issues na API do GitHub",
+      "verificacao": {
+        "tipo": "no-bloco",
+        "padrao": "gh issue create"
+      }
+    },
+    {
+      "skill": "findings-orchestration",
+      "motivo": "abre issues na API do GitHub",
+      "verificacao": {
+        "tipo": "no-bloco",
+        "padrao": "gh issue comment"
+      }
+    },
+    {
+      "skill": "findings-orchestration",
+      "motivo": "cria diretório em `.agents/runs`",
+      "verificacao": {
+        "tipo": "no-bloco",
+        "padrao": "mkdir -p \"\\$REPORT_DIR\""
+      }
+    },
+    {
+      "skill": "documentation-audit",
+      "motivo": "5.1 invoca o preflight inteiro; dentro do gate seria recursão",
+      "verificacao": {
+        "tipo": "no-bloco",
+        "padrao": "pnpm ci:preflight"
+      }
+    }
+  ]
+}

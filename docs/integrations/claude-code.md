@@ -27,21 +27,35 @@ echo "Veja regras canônicas em AGENTS.md" > CLAUDE.md
 
 ## Dispatch de Subagents
 
-Claude Code tem a ferramenta `Agent` que aceita `subagent_type`. Para usar os agents deste template, registre-os em `.claude/agents/` (Claude Code-specific) com um frontmatter que aponte para `.agents/agents/<nome>.md`:
+Claude Code tem a ferramenta `Agent` que aceita `subagent_type`. Para usar os agents deste template, registre-os em `.claude/agents/` (Claude Code-specific) com um frontmatter que aponte para `.agents/agents/<nome>.md`.
+
+O `name`, a `description` e o `tools` são copiados do frontmatter canônico como a **LINHA INTEIRA** — nunca re-serializados:
 
 ```markdown
 <!-- .claude/agents/code-reviewer.md -->
 ---
 name: code-reviewer
-description: Generic code reviewer (from .agents/agents/code-reviewer.md)
+description: <a description do canônico, copiada LITERALMENTE>
+tools: Read, Glob, Grep, Bash
 ---
 
-Veja definição completa em: ../agents/code-reviewer.md
+Veja definição completa em: ../../.agents/agents/code-reviewer.md
 ```
+
+⚠️ **Não re-serialize o YAML.** Reescrever a `description` (aspas que somem,
+vírgula que entra, texto truncado) produz o mesmo valor com bytes diferentes,
+e o Claude Code passa a descobrir o agent com o gatilho errado — sem erro
+visível. O gate
+[`check-binding-canonico`](../../.tooling/scripts/ci/check-binding-canonico.ts)
+compara as linhas byte a byte e reprova a divergência.
+
+A decisão completa (o que o wrapper declara, e por que a cobertura de agents é
+parcial) está no
+[ADR-0008](../adr/0008-camada-de-binding-do-claude-code.md).
 
 ## Skills
 
-Claude Code carrega skills de `.claude/skills/` ou plugins. Para usar a skill `agents:coordinate` deste template, criar wrapper em `.claude/skills/agents-coordinate/SKILL.md` que aponta para a definição genérica em `.agents/skills/agents-coordinate/SKILL.md`.
+Claude Code carrega skills de `.claude/skills/` ou plugins. Para usar a skill `agents:coordinate` deste template, criar wrapper em `.claude/skills/agents-coordinate/SKILL.md` que aponta para a definição genérica em `.agents/skills/agents-coordinate/SKILL.md` — com `name` e `description` copiados literalmente do frontmatter canônico, pelo mesmo motivo dos agents.
 
 ---
 

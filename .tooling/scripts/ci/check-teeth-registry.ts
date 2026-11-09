@@ -227,10 +227,19 @@ export function normalizaGateId(id: string): string {
  * abaixo da tabela cita `check-types.ts` e `turbo-redirect-differential.sh`
  * ao explicar decisões antigas, e nenhum dos dois é uma declaração de gate.
  *
- * Varrer a linha INTEIRA (e não só a primeira célula) é o que faz a coluna
+ * Varrer a PRIMEIRA CÉLULA (e não a linha inteira) é o que faz a coluna
  * mudar de lugar não quebrar: o catálogo já escreve o id na primeira célula
  * como `` `review-routing` matrix lint ``, ou seja, o token está no meio da
- * célula.
+ * célula — e a varredura da CÉLULA pega ele do mesmo jeito.
+ *
+ * MEDIDO 2026-11-09 (issue #149): a varredura pegava a LINHA INTEIRA, e o
+ * comentário do cabeçalho deste arquivo diz que a varredura da linha inteira
+ * é justamente o que "faz gate morto parecer vivo". Menção na prosa da
+ * coluna "Detecta" contava como citação de catálogo — e a reconciliação
+ * perdia o dente nas DUAS direções: gate que roda e não está na primeira
+ * coluna era perdoado, e gate que NÃO roda e é citado na prosa era acusado
+ * (foi assim que a linha do `check-binding-canonico` acusou
+ * `check-skill-coverage`, que chega com o PR #148 e ainda não está em `main`).
  */
 export function citedGateTokens(markdown: string): string[] {
   const heading = HUMAN_TABLE_HEADING.exec(markdown);
@@ -241,7 +250,22 @@ export function citedGateTokens(markdown: string): string[] {
   for (const line of after.split('\n')) {
     if (tokens.length > 0 && !line.trimStart().startsWith('|')) break;
     if (!line.trimStart().startsWith('|')) continue;
-    for (const m of line.matchAll(/`([^`]+)`/g)) {
+    // SÓ A PRIMEIRA COLUNA. MEDIDO 2026-11-09 (issue #149): a varredura
+    // pegava os backticks da LINHA INTEIRA, e a varredura da linha inteira é
+    // exatamente o que o comentário deste arquivo diz que não pode acontecer
+    // — "gate morto pareceria vivo". Uma menção na prosa da coluna "Detecta"
+    // contava como citação de catálogo, e a reconciliação perdia o dente nas
+    // DUAS direções: um gate que roda e não está na primeira coluna era
+    // perdoado, e um gate que NÃO roda e é citado na prosa era acusado.
+    //
+    // O conserto é o que o próprio comentário já prometia: ler a primeira
+    // coluna. MEDIDO 2026-11-09: com a leitura da linha inteira, uma linha de
+    // catálogo que nomeasse `check-skill-coverage` na prosa acusava "gate
+    // citado que não roda" — porque o gate chega com o PR #148 e ainda não
+    // está em `main`.
+    const primeira = line.split('|')[1];
+    if (primeira === undefined) continue;
+    for (const m of primeira.matchAll(/`([^`]+)`/g)) {
       if (m[1] !== undefined) tokens.push(m[1]);
     }
   }

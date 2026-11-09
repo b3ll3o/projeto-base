@@ -43,12 +43,14 @@ dívida que quebra em outro vendor. Ver `prefer-agents-directory`.
 
 ## Agents (3 wrappers, piloto)
 
-`review-router` e `specialist-router` (os dois **orquestradores**, os únicos que
-despacham outros agents e, portanto, os únicos em que `tools` governa o
-comportamento de verdade) e `documentation-specialist` (o dono da documentação da
+`review-router` e `specialist-router` (os dois **orquestradores de
+roteamento**) e `documentation-specialist` (o dono da documentação da
 aplicação — o agent cujo frontmatter tem `Write`/`Edit`, e que precisa deles).
-Ligar os outros 25 traria ao Claude Code agentes de papel único cujo frontmatter
-não tem nada de específico do Claude Code — ruído de descoberta em troca de nada.
+
+⚠️ **O critério real do piloto é ruído de descoberta** — 28 definições de agent
+no contexto do Claude Code. **Nenhum outro critério separa os 3**: MEDIDO
+2026-11-09, **4** agents declaram `Agent` nas `tools` e mais 2 têm
+`Write`/`Edit`. A justificativa que valia aqui era **falsa** (ver §Lacunas).
 
 Para estes dois, `tools` **é** copiado verbatim:
 
@@ -201,18 +203,22 @@ em domínio **desconhecido** e despacha **zero** reviewers — o commit passa se
 nenhuma revisão por matriz. Fechar isso é um PR na convenção de roteamento,
 fora do escopo deste trabalho.
 
-### Nenhum gate compara wrapper com canônico
+### A comparação de conteúdo agora tem instrumento
 
-O canônico é a fonte da verdade, mas **nada** no repo verifica que
-`.claude/skills/*/SKILL.md` continua batendo com `.agents/skills/*/SKILL.md`. Um
-drift aqui passaria por review — foi justamente um `tools:` descartado que a
-revisão adversarial deste commit pegou, por leitura. Um gate que diffe os dois
-`name:`/`description:` é o conserto; fica para depois, porque é tooling novo.
+**FECHADO em 2026-11-09** (issue #149, F1). O gate
+[`check-binding-canonico`](../.tooling/scripts/ci/check-binding-canonico.ts)
+compara, campo a campo e **byte a byte**, o frontmatter de cada wrapper de
+`.claude/` com o canônico de `.agents/` — a mensagem carrega o arquivo e a
+**linha** divergente. A comparação é do **campo inteiro** (a linha e as
+continuações do valor): re-serializar YAML produz o mesmo valor semântico com
+bytes diferentes.
 
-**MEDIDO 2026-11-09:** o `check-skill-coverage` cobre a **existência** do
-wrapper (a regra SEM BINDING), não o **conteúdo** dele. A comparação de
-`name:`/`description:` contra o canônico continua **sem instrumento** — este
-parágrafo é a lacuna que sobrou, e ela continua aberta.
+O primeiro caso real foi o `main` mesmo: o PR #147 trocou `healthchecks via
+curl` por `healthchecks via node` no canônico da skill `docker` e não tocou no
+wrapper — e nenhum gate acusou. O `check-skill-coverage` (PR #148) cobre a
+**existência**; este cobre o **conteúdo**: a lacuna que o #148 deixou aberta
+**está fechada**. A **decisão** está no
+[ADR-0008](../docs/adr/0008-camada-de-binding-do-claude-code.md).
 
 ### O hook herda uma regra cega do reviewer
 
@@ -234,9 +240,15 @@ formatação dele é mantida à mão.
 ### Só 3 de 28 agents têm wrapper
 
 Os outros 25 agents de `.agents/agents/` continuam sem binding. Não é falha de
-cobertura do trabalho — foi a escolha registrada acima, para não poluir a
-descoberta do Claude Code com agentes que não têm nada de específico deste
-vendor.
+cobertura — é a **decisão registrada** no
+[ADR-0008](../docs/adr/0008-camada-de-binding-do-claude-code.md): não poluir a
+descoberta do Claude Code com 28 definições de agent.
+
+⚠️ **A justificativa que valia aqui até 2026-11-09 era falsa:** ela dizia que só
+valia ligar os *"agentes de papel único cujo frontmatter não tem nada de
+específico para o Claude Code"*. MEDIDO: os **28** agents declaram `tools:` —
+sem ele, o subagent herda a pool inteira, "um desvio silencioso". O motivo
+real do piloto é **ruído de descoberta** (ver §Agents).
 
 MEDIDO 2026-11-09: `ls .agents/agents/*.md | wc -l` → 28 agents;
 `ls .agents/skills/*/SKILL.md | wc -l` → 29 skills; `ls .claude/skills/*/SKILL.md | wc -l`

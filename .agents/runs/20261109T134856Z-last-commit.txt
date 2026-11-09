@@ -1,0 +1,264 @@
+commit 108e82a269780e4b800aa5579a75f47997889ed3
+Author:     Leonardo Andreazzi <andreazzi-leonardo@hotmail.com>
+AuthorDate: Mon Nov 9 10:40:53 2026 -0300
+Commit:     GitHub <noreply@github.com>
+CommitDate: Mon Nov 9 10:40:53 2026 -0300
+
+    fix(security): as 10 issues P1 do scan de 2026-11-02, em UM PR (#147)
+    
+    * fix(security): as 10 issues P1 do scan de 2026-11-02, em UM PR
+    
+    As 10 issues abertas no repositorio (todas `severity:p1`, abertas pelo
+    `finding-orchestrator` em 2026-11-02) entram aqui juntas.
+    
+    - **#132 (revogacao)**: o refresh token ganha `jti` e passa a ter REGISTRO
+      (`refresh_tokens`) — rotacao numa UNICA transacao (consumir o antigo e
+      registrar o novo juntos, senao uma queda entre os dois deixa o cliente sem
+      refresh token nenhum), `POST /auth/logout`, e deteccao de replay com janela
+      de tolerancia de 30 s. O `app_runtime` NAO alcanca a tabela: com UPDATE
+      liberado, a credencial que o repo classifica como "a que mais vaza"
+      desrevogaria qualquer token. As colunas de tempo sao `timestamptz`: MEDIDO
+      num Postgres 16 real, a poda com `timestamp` removia tokens que ainda
+      valiam num banco a frente do UTC. ADR novo:
+      `docs/adr/0007-refresh-token-revogavel.md`.
+    - **#133 (credencial)**: a senha que a migration publicava sai do repositorio
+      (17 arquivos, inclusive o historico em `.agents/runs/`). A role nasce sem
+      senha; uma migration nova limpa (`PASSWORD NULL`) o hash em todo banco que
+      ja rodou a versao velha; o minimo de senha vai a 24 (o valor publicado tinha
+      15 e PASSAVA pelo filtro de 16); o `DENYLIST` por valor sai e o criterio
+      vira prefixo + comprimento — indexado pelo USUARIO da URI, como o guard de
+      boot ja era (o dono do dev e `projeto:projeto`, e o filtro nao pode
+      quebrar o bootstrap documentado).
+    - **#134 (drift)**: `chaves_de_assinatura` ganha model no `schema.prisma` (o
+      `prisma migrate diff` emitia `DROP TABLE` na chave de assinatura do
+      onboarding) + o gate `check-migrations-sem-model`.
+    - **#135 (convite)**: convite aceito ou expirado nao bloqueia o novo convite
+      do mesmo (empresa, e-mail) — a linha e reemitida, e o `updateMany` do
+      aceite passa a ser condicionado pelo token (a corrida aceite x reemissao
+      nao existia).
+    - **#136 (cursor)**: o cursor da paginacao aceita a forma que a tabela gera
+      (o `users_history.id` e v4 e o schema exigia v7) — e a regex neutra ganhou
+      UM dono, substituindo as duas copias que ja existiam. O e2e percorre DUAS
+      paginas do historico com o cursor devolvido.
+    - **#137**: `exec node dist/main.js` no ENTRYPOINT — o SIGTERM chega ao Node
+      (antes o tini sinalizava o `sh`, e o `sh` nao repassava). E o comentario do
+      compose, que afirmava o contrario do que o codigo produzia, foi corrigido.
+    - **#138**: `ENV HOSTNAME=0.0.0.0` no web (o standalone do Next.js fazia
+      bind no hostname do container, e o probe em `localhost` nunca conectava).
+    - **#139**: o probe do healthcheck passou a usar o `node` que a imagem ja tem
+      (o `curl` nao existia no stage `dev`, e o web nao subia) + o gate
+      `check-docker-healthcheck-binary`, que le o COMPOSE e o `build.target`
+      efetivo (com o overlay) — MEDIDO contra o estado quebrado original, ele
+      acusa.
+    - **#130**: a mensagem original da excecao saiu do `detail` da resposta (as de
+      driver do Prisma descrevem tabela, coluna e valor de coluna) — ela vai so
+      para o log. A regra vale nos DOIS ramos do filtro, e o `detail` de um 4xx
+      de dominio continua sendo o texto de dominio.
+    - **#131**: `permissions:` explicito nos 4 workflows, `persist-credentials:
+      false` onde nenhum workflow faz push, e o Dependabot para o ecosystem
+      `github-actions` (sem ele, o pin por SHA envelhece sozinho).
+    
+    Tres medicoes decidiram o desenho (estao no plano):
+    
+    1. `migrate deploy` tolera migration aplicada e MODIFICADA — inclusive com uma
+       pendente junto (exit 0, e a nova e aplicada). Foi o que autorizou
+       reescrever a migration da senha publicada.
+    2. `NOLOGIN` NAO limpa a senha (medido: `rolcanlogin = f` e `rolpassword`
+       nao-nulo). O `PASSWORD NULL` e o que apaga o hash.
+    3. Um filtro de senha sem chave quebraria o DEV (medido: o guard devolvia ok
+       para `projeto:projeto`, 6 caracteres) — o minimo novo alcanca so os papeis
+       gerenciados.
+    
+    O plano passou por DUAS revisoes adversariais (uma do plano, uma do codigo).
+    A do codigo achou 4 bloqueios — e 3 deles eram a mesma classe: uma afirmacao
+    que o codigo nao sustentava (a regra do 5xx valia so num ramo; o gate novo
+    passava verde no estado quebrado que ele diz fechar; o filtro de senha
+    quebrava o bootstrap do dev). O conserto de cada um esta na §5 do plano.
+    
+    Verificacao: `pnpm ci:preflight` (0 erro, 47 gates) e `pnpm ci:local`
+    (lint, typecheck, unit, cobertura, integracao, e2e e `ci:boot`).
+    
+    O detalhe medido que nao coube no `apps/api/Dockerfile` (o
+    `check-docker-drift` impoe 100 linhas) foi para o runbook Docker, que ganhou a
+    secao "Por que a imagem da api e assim".
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(docker): o ENTRYPOINT da api aponta para caminhos que a imagem não tinha
+    
+    A MEDIDA do #137 (o `docker stop` precisa alcançar o Node) mostrou que a
+    imagem de produção **não subia**: o `COPY` do `prisma/` e do `scripts/`
+    achata as DUAS pastas em `/repo/apps/api/`, e o ENTRYPOINT usa
+    `prisma/schema.prisma` e `./scripts/prepara-papeis.sh` — nenhum dos dois
+    existia.
+    
+    MEDIDO 2026-11-09, com a imagem de verdade (`docker buildx build --target
+    prod`):
+    
+      $ docker run --rm --entrypoint sh projeto-api -c 'ls /repo/apps/api/'
+      dist  node_modules  package.json  prisma  schema.prisma  seed.ts
+      prepara-papeis.sh          # <- o CONTEUDO das duas pastas, achatado
+    
+    E o symptom era o do ENTRYPOINT inteiro:
+    
+      Error: Could not load `--schema` from provided path `prisma/schema.prisma`:
+      file or directory not found
+    
+    O `COPY` com VÁRIAS origens copia o CONTEÚDO de cada uma direto para o
+    destino — e o destino precisa ser um diretório. O conserto são DOIS `COPY`,
+    um por pasta, com o nome preservado.
+    
+    ⚠️ Este defeito é de #128 (2026-10-27) e é anterior a este PR — e ele é a
+    razão de o `exec` do #137 ser código morto até agora: a imagem não chegava
+    ao ENTRYPOINT. O CI não via, porque o job `docker-build-prod` só CONSTRÓI a
+    imagem (e `docker compose up` local usa o overlay de dev, cujo target é
+    outro).
+    
+    ## A medição do #137, agora que a imagem sobe
+    
+    O critério de aceite da issue pede que o processo Node seja o filho DIRETO
+    do init — é isso que faz o SIGTERM do `docker stop` chegar nele. MEDIDO nas
+    duas formas, com a imagem de verdade:
+    
+      SEM o exec:                        COM o exec:
+        pid=1   ppid=0  docker-init        pid=1   ppid=0  docker-init
+        pid=7   ppid=1  sh -c …             pid=7   ppid=1  node dist/main.js
+        pid=334 ppid=7  node dist/main.js
+    
+    Sem o `exec`, o node é um NETO do tini — e o tini repassa o sinal apenas ao
+    filho DIRETO (o `sh`, porque o daemon não passa `-g`). O node nunca recebia
+    o SIGTERM, o `enableShutdownHooks()` (main.ts:97) nunca rodava, e o
+    container morria de SIGKILL no fim do grace period. Com o `exec`, o node é o
+    filho direto — e o sinal chega nele.
+    
+    `docker stop -t 10`: 251 ms com o `exec` (o container não espera o grace).
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * docs(docker): o Dockerfile volta a caber no teto de 100 linhas
+    
+    O conserto do `COPY` (que achata as duas pastas) e os comentarios do #137
+    levaram o arquivo a 104 linhas — e o `check-docker-drift` impoe 100. Os
+    comentarios foram condensados; o PORQUE de cada um continua inteiro.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(security): os 35 achados da revisão do PR #147, em UM commit
+    
+    A revisão do PR #147 mediu 35 furos — 1 P0, 7 P1 e 27 P2 — e todos estão
+    fechados aqui. O plano está em `docs/superpowers/plans/2026-11-09-acertos-da-
+    revisao-do-pr147.md`.
+    
+    O P0 era o FILTRO da senha dos papéis. O mínimo de 24 caracteres era
+    indexado pelo USUÁRIO da URI, e a senha era escrita nos PAPÉIS fixos
+    (`app_runtime`, `app_system`) — e as DUAS coisas eram independentes. MEDIDO
+    pelo revisor: uma URI cujo usuário não é um papel gerenciado passava pelo
+    filtro, e o `prepara-papeis.sh` aplicava a senha curta no papel de runtime —
+    a credencial que a #133 tirou do repositório voltava a autenticar.
+    
+    A correção é na camada que ESCREVE (`prepara-papeis.sh`): a URI tem de
+    NOMEAR o papel que recebe a senha, e o mínimo passa a ser do PAPEL. O
+    guard de boot ganhou a mesma coupling nas duas credenciais, e as DUAS
+    camadas passaram a medir em BYTES (o `sh` do container conta bytes e o
+    TypeScript contava unidades UTF-16 — as duas mediam coisas diferentes).
+    MEDIDO, com o script de verdade:
+    
+      $ DATABASE_URL='postgresql://runtime:<15 chars>@…' sh scripts/prepara-papeis.sh
+      ERRO: a credencial do papel de RUNTIME não serve: a URI nomeia 'runtime'
+      e não o papel 'app_runtime' que recebe a senha.
+      EXIT=1
+    
+    Quatro dentes, medidos por MUTAÇÃO (a mutação desfaz, a spec acusa):
+    
+    - o gate do healthcheck desce um nível no `sh -c "…"`, mede o par
+      serviço×target de CADA overlay, varre o serviço que só existe no overlay,
+      trata `HEALTHCHECK NONE` e usa o último stage quando não há
+      `build.target` — 4 mutações, 1 spec cai em cada;
+    - a spec da ATOMICIDADE da rotação injeta a falha entre o consumo e o
+      registro (a mutação que tira a transação a deixa vermelha — e a
+      atomicidade era a propriedade que o PR vendia, sem teste);
+    - as specs de Dockerfile prendem o `COPY` que não achata as pastas (o bug
+      que impedia a imagem de produção de subir) e o `ENV HOSTNAME` do web;
+    - o e2e do "Sair" (F19) fecha a emenda que nenhum spec cobria: o botão, o
+      cookie e a morte do token na API.
+    
+    No web: o cookie VAZIO conta como ausente (a regra da casa), o 401 é o
+    estado final desejado — e não "a API não revogou" —, o `API_BASE_URL` tem
+    UM dono (`baseUrlDaApi()`, no lugar de 11 cópias do literal), e o re-login
+    revoga o refresh anterior antes de gravar o novo.
+    
+    Nos docs: o `.env.production.example` afirmava o oposto do estado novo, a
+    action `sair` era a única sem verbo HTTP na tabela, o exemplo do
+    docker-specialist mostrava `wget` contra a própria regra, o comentário do
+    Dependabot prometia uma garantia que o gate não dá, e a exceção do
+    `.gitignore` era no-op para os dois arquivos que nomeava.
+    
+    ⚠️ A senha publicada CONTINUA no histórico git público, e o histórico não
+    foi reescrito (decisão do dono do repo): reescrever `main` num repositório
+    público quebra todos os clones e todos os PRs abertos. Ela está queimada
+    — 15 caracteres contra um mínimo de 24, e o hash apagado pela migration
+    `PASSWORD NULL` em todo banco que rodou a versão velha. O limite está
+    declarado no ADR-0007.
+    
+    Closes #130
+    Closes #131
+    Closes #132
+    Closes #133
+    Closes #134
+    Closes #135
+    Closes #136
+    Closes #137
+    Closes #138
+    Closes #139
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * docs(plan): o plano da revisão do PR #147 confere com o que foi executado
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(security): as duas camadas medem a MESMA senha, e o `***` é prefixo
+    
+    A revisão do PR #147 achou duas divergências entre a camada que ESCREVE a
+    senha dos papéis e o guard que a julga — e as duas eram a mesma classe: as
+    duas camadas NÃO mediam a mesma coisa.
+    
+    A primeira: o `prepara-papeis.sh` escapava o `'` (o único caractere que muda
+    o sentido de um literal SQL) na LEITURA da URI, e o filtro media a senha
+    ESCAPADA — enquanto o guard (TypeScript) media a senha CRUA. MEDIDO: uma
+    senha de 12 bytes feita de aspas virava 24 bytes escapados, e o script
+    APLICAVA o que o guard recusava (12 < 24). A camada que escreve era a mais
+    frouxa das duas, e o invariante escrito no cabeçalho ("a MEDIDA tem de ser a
+    MESMA nos dois lados") era falso.
+    
+    O conserto separa as duas coisas: a leitura devolve a senha CRUA (é a que o
+    filtro mede, e a que o guard mede) e o escape passa a acontecer no `printf`
+    do SQL, que é onde o literal é montado.
+    
+    A segunda: o `case` do shell casava `'***'` (entre aspas) como valor EXATO,
+    enquanto o guard usa `startsWith` — PREFIXO. O script ACCEPTAVA `***` + 21
+    bytes, valor que o guard classifica como exemplo: a isca que o script diz
+    que não pode passar passava nele. O padrão virou `'***'*`.
+    
+    As duas têm spec agora (o harness roda o filtro no `sh` de verdade), e a
+    spec do guard ganhou o caso dos bytes e o da troca de papéis.
+    
+    E o número que não batia: o `api-client.ts` dizia "11 lugares" quando a
+    MEDIDA em `main` é 10 — e o 11º é o `sair` que este PR acrescenta. O
+    `docs/web/rotas.md` também mostrava o literal, e agora aponta para a
+    função.
+    
+    ⚠️ E uma lead que a revisão deixou em aberto, agora MEDIDA: o PR altera o
+    SQL de uma migration JÁ APLICADA (`20261020000000_rls_isolation_empresa` —
+    tira a senha publicada e põe o papel em `NOLOGIN`), e a migration tem o
+    checksum velho no banco. Num Postgres 16 real, com um banco de rascunho que
+    rodou as 16 migrations de `main` e depois recebeu as 18 de HEAD:
+    `migrate deploy` sai **0**, sem `P3009` — o `deploy` não compara o
+    checksum das migrations já aplicadas. O comando está na §Evidence do PR.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    ---------
+    
+    Co-authored-by: CEO Agent <ceo@paperclip.ai>
+    Co-authored-by: Claude Code <noreply@anthropic.com>
