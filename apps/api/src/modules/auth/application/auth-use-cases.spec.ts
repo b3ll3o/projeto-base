@@ -193,7 +193,7 @@ describe('AuthUseCases.login', () => {
     // pt-BR: é esta a asserção que protege da enumeração de contas. Se o
     // código fizer `if (user === null) throw` ANTES de verificar, ela
     // continua verde — e o endpoint passa a responder em ~1 ms para um
-    // e-mail inexistente e em ~48 ms para um existente.
+    // e-mail inexistente e em ~230 ms para um existente.
     vi.mocked(s.userRepo.findByEmail).mockResolvedValue(null);
 
     await useCases.login({ email: 'ninguem@example.com', senha: 'x' }).catch(() => undefined);

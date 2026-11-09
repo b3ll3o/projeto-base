@@ -134,6 +134,15 @@ next_steps:
 `.agents/specs/conventions/evolucao-agents.md` seção "Regra de Bloqueio
 por gap_detected".
 
+**Antes de propor um agent novo, procure uma skill que já cubra a demanda.**
+O `gap_detected` significa "nenhum *specialist* cobre isto" — não significa
+"nada no repo cobre isto". A skill
+[`find-skills`](../skills/find-skills/SKILL.md) é o caminho canônico
+para essa busca, na ordem **repo → registro → fazer na mão**: primeiro as
+skills de `.agents/skills/`, depois o registro de skills de terceiros, e só
+depois a Adaptar ao padrão deste repo. Se uma skill existente resolver, ela
+é a resposta — e o `suggested_specialist` não deve ser criado.
+
 ### Passo 6: Despachar specialists em paralelo
 
 Para cada specialist resolvido, chamar Agent tool **na mesma mensagem** (paralelo):

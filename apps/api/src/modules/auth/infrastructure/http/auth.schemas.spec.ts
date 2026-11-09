@@ -34,7 +34,7 @@ describe('LoginSchema', () => {
   it('NÃO aplica o mínimo de senha, mas rejeita string vazia', () => {
     // pt-BR: `min(1)` é o piso de "tem algo para verificar", não a
     // política. Sem ele, um `senha: ''` passaria o boundary e viraria
-    // argon2 sobre string vazia — 48 ms de CPU por tentativa, de graça.
+    // argon2 sobre string vazia — ~230 ms de CPU por tentativa, de graça.
     expect(LoginSchema.safeParse({ email: 'joao@example.com', senha: '' }).success).toBe(false);
   });
 

@@ -574,6 +574,26 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     file: '.tooling/scripts/ci/check-path-alias.ts',
     id: 'check-path-alias',
   },
+  {
+    // pt-BR (2026-11-09): a camada de SKILLS não tinha instrumento nenhum.
+    // O `check-doc-coverage` mede BC → doc, rota → doc e package → doc; o
+    // `check-agent-routing-coverage` mede o lado dos **agents** (órfão e
+    // fantasma). O lado das **skills** — indexada, alcançável, com dono
+    // recíproco, com binding no `.claude/` — não tinha gate.
+    //
+    // MEDIDO 2026-11-09: o `README.md` contava 29 skills e as 29 existiam,
+    // e `grep -c ddd-hexagonal-validation AGENTS.md` = 0 — a skill é citada
+    // por 3 agents e **não está indexada**. Contagem não é cobertura.
+    //
+    // As 5 regras: INDEXADA (citada no `AGENTS.md`, o índice canônico),
+    // SEM DONO (nenhum agent, workflow ou skill a cita), RECÍPROCA (a skill
+    // declara "Quem invoca: X" e X não a cita de volta), SEM BINDING (sem
+    // wrapper em `.claude/skills/` — o Claude Code não a descobre) e
+    // FANTASMA (o índice aponta para uma skill que não existe).
+    name: 'cobertura da camada de skills (indexada, alcançável, com binding)',
+    file: '.tooling/scripts/ci/check-skill-coverage.ts',
+    id: 'check-skill-coverage',
+  },
 ];
 
 /**
