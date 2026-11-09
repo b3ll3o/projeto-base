@@ -40,7 +40,7 @@ import { checkTeethCount } from './check-teeth-count';
 import { checkHarnessLocation } from './check-harness-location';
 import { checkMergeMarkers } from './check-merge-markers';
 import { checkAgentRoutingCoverage } from './check-agent-routing-coverage';
-import { checkBindingCanonico } from './check-binding-canonico';
+import { checkAgentFrontmatter } from './check-agent-frontmatter';
 import { checkEnginesConsistency } from './check-engines-consistency';
 import { checkDockerfileHardening } from './check-dockerfile-hardening';
 import { checkFlowMermaidSync } from './check-flow-mermaid-sync';
@@ -60,6 +60,7 @@ import { checkDependencyDrift } from './check-dependency-drift';
 import { checkDependencyFreshness } from './check-dependency-freshness';
 import { checkActionVersionComment } from './check-action-version-comment';
 import { checkCiPrismaClientReady } from './check-ci-prisma-client-ready';
+import { checkPastaUnica } from './check-pasta-unica';
 import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
@@ -382,7 +383,7 @@ export const RUNNERS: Record<string, () => CheckResult | Promise<CheckResult>> =
   'check-harness-location': () => checkHarnessLocation({ repoRoot: '.' }),
   'check-merge-markers': () => checkMergeMarkers({ repoRoot: '.' }),
   'check-agent-routing-coverage': () => checkAgentRoutingCoverage({ repoRoot: '.' }),
-  'check-binding-canonico': () => checkBindingCanonico({ repoRoot: '.' }),
+  'check-agent-frontmatter': () => checkAgentFrontmatter({ repoRoot: '.' }),
   'check-engines-consistency': () => checkEnginesConsistency({ repoRoot: '.' }),
   'check-dockerfile-hardening': () => checkDockerfileHardening({ repoRoot: '.' }),
   'check-flow-mermaid-sync': () => checkFlowMermaidSync({ repoRoot: '.' }),
@@ -402,6 +403,7 @@ export const RUNNERS: Record<string, () => CheckResult | Promise<CheckResult>> =
   'check-dependency-freshness': () => checkDependencyFreshness({ repoRoot: '.' }),
   'check-action-version-comment': () => checkActionVersionComment({ repoRoot: '.' }),
   'check-ci-prisma-client-ready': () => checkCiPrismaClientReady({ repoRoot: '.' }),
+  'check-pasta-unica': () => checkPastaUnica({ repoRoot: '.' }),
 };
 
 /**

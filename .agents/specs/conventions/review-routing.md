@@ -1,9 +1,9 @@
 ---
 name: review-routing
-version: 1.8
-updated: 2026-10-16
+version: 1.9
+updated: 2026-11-09
 maintainer: review-router
-description: "Matriz de roteamento de revisores consultada pelo review-router — v1.5 (audit specialists) + UX e tenancy com skill de processo, v1.8."
+description: "Matriz de roteamento de revisores consultada pelo review-router — v1.5 (audit specialists) + UX e tenancy com skill de processo, v1.9 (camada de binding)."
 ---
 
 # Convenção: review-routing (matriz de roteamento de revisores)
@@ -96,6 +96,16 @@ path_globs:
 
   - pattern: ".agents/memory/**"
     reviewers: [agent-architect]
+
+  # pt-BR: a camada de binding (v1.9): a pasta `.claude/` saiu do repo e seus arquivos foram para `.agents/` — sem glob, um commit só do binding não tinha reviewer.
+  - pattern: ".agents/hooks/**"
+    reviewers: [monorepo-specialist, security-auditor]
+
+  - pattern: ".agents/settings.json"
+    reviewers: [monorepo-specialist]
+
+  - pattern: ".agents/*.md"
+    reviewers: [doc-sync, documentation-specialist]
 
   - pattern: "docs/**"
     reviewers: [doc-sync, doc-writer, documentation-specialist]
@@ -277,6 +287,7 @@ Resultado esperado:
 
 | Versão | Data | Mudança |
 |--------|------|---------|
+| 1.9 | 2026-11-09 | A camada de binding ganha **path_globs**: a pasta `.claude/` saiu do repo (ADR-0009) e os arquivos que ela carregava foram para `.agents/` — os hooks (`.agents/hooks/**`), o `settings.json` que registra o comando deles (`.agents/settings.json`) e os docs da pasta (`.agents/*.md`). Sem eles, um commit que só tocasse o binding era classificado em domínio **desconhecido** e despachava **zero** reviewers — a lacuna que o `.claude/README.md` declarava. Aditivo. |
 | 1.8 | 2026-10-16 | `multi-tenant-specialist` entra na §0 (reviewer→skill) carregando `multi-tenant-audit`. Fecha para tenancy a mesma lacuna que a v1.7 fechou para UX: reviewer roteado sem skill é opinionador com nome de especialista. Nenhum path_glob novo — a v1.6 do `specialist-routing` já roteia `**/*tenant*` e `**/*tenancy*`; o que faltava era o processo que ele executa. Aditivo. |
 | 1.7 | 2026-10-13 | UX/design ganha **processo**, não só reviewer: 5 skills (`ui-modes`, `ui-craft`, `ui-break`, `motion`, `ui-review`) em `.agents/skills/`, carregadas por `ux-design-specialist`. 2 diff_patterns novos — `outline-none`/`outline: none` e movimento (`transition`/`@keyframes`/`prefers-reduced-motion`/`transform: scale`). Nenhum path_glob novo: os globs de `apps/web/**` (v1.5) já roteavam para o specialist; o que faltava era o processo que ele executa. Aditivo. |
 | 1.6 | 2026-10-08 | Resolve conflito: mergeia v1.5 (mine, audit specialists diff_patterns) + v1.5 da main (ux-design-specialist). Mantém ambos. Aditivo. |

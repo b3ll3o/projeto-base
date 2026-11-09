@@ -53,10 +53,17 @@ bônus ou "quando sobrar tempo". Um doc que **mente** é defeito (P0); um doc qu
    (unidade → doc canônico), `check-doc-claims` cobra que o número que o doc
    afirma bate com o código, `check-doc-refs` cobra links, `check-runbook-drift`
    cobra comandos e env citados que sumiram, `check-skill-coverage` cobra que a
-   skill está indexada, alcançável e com binding.
+   skill está indexada, alcançável e descobrível, e `check-pasta-unica` cobra
+   que a pasta de tooling de IA do repo é só `.agents/`.
 
 **Quando NÃO aplicar:** artefato gerado, histórico (`docs/superpowers/plans/**`,
 `.agents/runs/**`), teste e fixture.
+
+## §1.3. REGRA MANDATÓRIA — Uma pasta só: `.agents/`
+
+> ### ⛔ Esta regra é OBRIGATÓRIA e não pode ser desativada
+
+**`.agents/` é a ÚNICA pasta de tooling de IA deste repo** — agents, skills, memórias, workflows, convenções, hooks e o binding de toda ferramenta. **Não existe `.claude/`**: se uma ferramenta criar a dela por acidente (o Claude Code cria `.claude/` sozinho), o conteúdo é **migrado para `.agents/`** e a pasta removida. O gate `check-pasta-unica` reprova (§1.2, item 5) — a única exceção é a pasta que só tem o `.claude/settings.local.json` (o registro local de permissões que o Claude Code escreve no projeto; não é cópia da árvore canônica). O binding de cada ferramenta é feito na máquina de quem usa — ver [`docs/integrations/claude-code.md`](./docs/integrations/claude-code.md).
 
 ---
 
@@ -67,12 +74,8 @@ Este repositório é um **template reutilizável**. Para começar um novo projet
 ```bash
 # 1. Copie o template
 cp -r projeto-base/ meu-novo-projeto/ && cd meu-novo-projeto/
-
-# 2. Customize o que precisar: edite AGENTS.md (regras do projeto),
-#    adicione agents em .agents/agents/ e ajuste .agents/WORKFLOWS.md
-
-# 3. O padrão genérico permanece intacto: os agents continuam
-#    interoperando via agents:coordinate
+# 2. Customize: edite AGENTS.md, adicione agents em .agents/agents/, ajuste .agents/WORKFLOWS.md
+# 3. O padrão genérico permanece intacto: os agents interoperam via agents:coordinate
 ```
 
 Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta (Claude Code, Cursor, Windsurf, etc.).
@@ -111,11 +114,7 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 | **multi-tenant-specialist**| [`.agents/agents/multi-tenant-specialist.md`](./.agents/agents/multi-tenant-specialist.md)| [memory](./.agents/memory/multi-tenant-specialist.md)        | Arquiteto de tenancy (shared-schema + `tenant_id` + RLS, contexto de tenant na fronteira, escopo de query, cache por tenant, backfill, gate cross-tenant) | Criar/alterar tenancy: `Tenant`/`Membership`/`Invitation`, `tenant_id` em model, filtro de tenant em repositório, RLS, chave de cache por tenant, migração de dados pré-tenancy, spec de isolamento |
 | **documentation-specialist**| [`.agents/agents/documentation-specialist.md`](./.agents/agents/documentation-specialist.md)| [memory](./.agents/memory/documentation-specialist.md)        | Dono da documentação da aplicação, ciente das stacks (NestJS DDD/Hexagonal, Prisma, Next.js App Router, OpenTelemetry, Docker, pnpm/turbo): matriz de cobertura, drift, frescor e escrita no formato certo | Demanda que toca `docs/**`, README, doc de módulo, referência de API, ADR ou runbook; gap de cobertura acusado por gate; auditoria periódica de saúde da documentação |
 
-> **Lens DDD/Hexagonal (v1.2.0+, ADR-0001):** ao criar/refatorar módulo NestJS,
-> o `nestjs-specialist` aplica a lens DDD/Hexagonal (boundary
-> `domain/application/infrastructure` + audit fields). A mesma lens é ato do
-> `stack-code-reviewer` (D11) em pre-commit e em CI. Ver
-> [`estrutura-e-versionamento.md`](./.agents/specs/conventions/estrutura-e-versionamento.md).
+> **Lens DDD/Hexagonal (v1.2.0+, ADR-0001):** ao criar/refatorar módulo NestJS, o `nestjs-specialist` aplica a lens DDD/Hexagonal (boundary `domain/application/infrastructure` + audit fields). A mesma lens é ato do `stack-code-reviewer` (D11) em pre-commit e em CI. Ver [`estrutura-e-versionamento.md`](./.agents/specs/conventions/estrutura-e-versionamento.md).
 >
 > **Status:** Estável
 
@@ -139,10 +138,9 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 > ele, **não o substitui** (vale também para o `multi-tenant-specialist`, que carrega
 > `multi-tenant-audit` sem ser despachado pelo orchestrator).
 
-> **Skills de UI (a maior relação 1:N do repo, v1.11.0+):** o `ux-design-specialist` carrega
-> **7** skills — `ui-review` (processo) → `ui-modes` (propósito) → `ui-craft` (tokens, anti-slop)
-> → `ui-break` (pior caso) → `motion` (movimento), mais `design-taste-frontend` (página **pública**)
-> e `agent-browser` (olhar avulso). `ui-modes` roda primeiro porque sem ele as outras discordam.
+> **Skills de UI (a maior relação 1:N do repo, v1.11.0+):** o `ux-design-specialist` carrega **8** skills —
+> `ui-review` (processo) → `ui-modes` (propósito) → `ui-craft` (tokens, anti-slop) → `ui-break` (pior caso) → `motion` (movimento), mais
+> `design-taste-frontend` (página **pública**), `agent-browser` (página web) e `agent-desktop` (app nativo). `ui-modes` roda primeiro: sem ele, as outras discordam.
 
 > **Par DURANTE → DEPOIS:** [`learning-observation`](./.agents/skills/learning-observation/SKILL.md)
 > classifica em T1/T2/T3 no checkpoint de review+fix e
@@ -156,10 +154,11 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 > **Skills de terceiro adaptadas (v1.20.0+):** [`grilling`](./.agents/skills/grilling/SKILL.md)
 > (perguntar o que está em aberto) e [`handoff`](./.agents/skills/handoff/SKILL.md) (a passagem em
 > formato canônico) no `orchestrator`; [`design-taste-frontend`](./.agents/skills/design-taste-frontend/SKILL.md)
-> (página **pública**) e [`agent-browser`](./.agents/skills/agent-browser/SKILL.md) (olhar a página rodando)
-> no `ux-design-specialist`. As quatro são **adaptadas, não vendorizadas** — o método é do repo. De
-> [mattpocock/skills](https://github.com/mattpocock/skills) (MIT), [leonxlnx/taste-skill](https://github.com/leonxlnx/taste-skill) (MIT),
-> [vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser) (Apache-2.0).
+> (página **pública**), [`agent-browser`](./.agents/skills/agent-browser/SKILL.md) (página web) e
+> [`agent-desktop`](./.agents/skills/agent-desktop/SKILL.md) (app nativo) no `ux-design-specialist`.
+> As cinco são **adaptadas, não vendorizadas** — o método é o do repo. De [mattpocock/skills](https://github.com/mattpocock/skills)
+> (MIT), [leonxlnx/taste-skill](https://github.com/leonxlnx/taste-skill) (MIT), [vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser)
+> e [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop) (Apache-2.0).
 >
 > **Skills de stack (o processo que o specialist segue):** [`docker`](./.agents/skills/docker/SKILL.md)
 > (convenções e processos Docker do monorepo) e [`ddd-hexagonal-validation`](./.agents/skills/ddd-hexagonal-validation/SKILL.md)
@@ -248,11 +247,7 @@ As convenções estão detalhadas em arquivos próprios sob [`.agents/specs/conv
 | DRY | [`dry.md`](./.agents/specs/conventions/dry.md) | Don't Repeat Yourself — o conhecimento tem UMA representação. No código: um termo de domínio tem UM dono (constante exportada) e quem usa importa; a medição é `npx tsx tooling/scripts/analisa-repeticao.ts`, e 2 gates cobram (`check-repeticao`, `check-bloco-duplicado`); adicionada na v1.13.0 |
 | Documentação | [`documentacao.md`](./.agents/specs/conventions/documentacao.md) | A documentação é parte do código: doc ausente = lacuna, doc que mente = defeito. Matriz de cobertura (unidade → doc canônico), fato com UM dono, frescor verificável; medida pelo gate `check-doc-coverage`; adicionada na v1.14.0 |
 
-> **Os dois índices são o mesmo índice.** Este §6 e o
-> [`README.md`](./.agents/specs/conventions/README.md) listam os mesmos arquivos: uma
-> convenção nova entra **nos dois, no mesmo PR**. Eles já divergiram (7 convenções órfãs
-> de índice), corrigido pela task 2.2 do plano
-> [`guard-classes`](./docs/superpowers/plans/2026-10-03-guard-classes.md).
+> **Os dois índices são o mesmo índice.** Este §6 e o [`README.md`](./.agents/specs/conventions/README.md) listam os mesmos arquivos: uma convenção nova entra **nos dois, no mesmo PR**. Eles já divergiram (7 convenções órfãs de índice), corrigido pela task 2.2 do plano [`guard-classes`](./docs/superpowers/plans/2026-10-03-guard-classes.md).
 >
 > **Templates:** [`.agents/specs/templates/`](./.agents/specs/templates/) contém templates canônicos versionados (ex.: [`spec.md`](./.agents/specs/templates/spec.md) — template de Spec de feature). Toda spec deve derivar de um template; criar templates novos via PR com bump major da convenção relacionada.
 
@@ -296,5 +291,5 @@ Quando seguido corretamente, este padrão garante:
 
 **Mantido por:** projeto-base contributors
 **Licença:** MIT
-**Versão do documento:** 1.24.0
+**Versão do documento:** 1.25.0
 **Status:** Estável

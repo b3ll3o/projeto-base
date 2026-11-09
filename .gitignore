@@ -43,9 +43,12 @@ coverage/
 .agents/runs/findings-*/*
 !.agents/runs/findings-2026-10-26T050019Z/findings.yaml
 !.agents/runs/findings-2026-10-26T050019Z/report.md
-# Artefato LOCAL do Claude Code (permissões por usuário). Não é versionado —
-# e sem esta linha, `git add -A` commitaria as permissões da máquina.
-.claude/settings.local.json
+# O Claude Code (e outras ferramentas) criam esta pasta por conta própria.
+# Neste repo ela NÃO existe: o diretório canônico é `.agents/`, e o binding do
+# Claude Code é feito na máquina (`~/.claude/`), não no repo. Se ela aparecer,
+# o gate `check-pasta-unica` reprova — a regra está em AGENTS.md §1.3.
+.claude/
+
 .env
 .env.local
 .env.*.local

@@ -4,8 +4,10 @@ import {
   citaNome,
   donoDeclarado,
   lacunasDeRegistro,
+  lerFrontmatter,
   listarSkills,
   nomesCitadosPorLink,
+  type FrontmatterSkill,
 } from './check-skill-coverage';
 
 describe('citaNome', () => {
@@ -96,15 +98,81 @@ describe('donoDeclarado', () => {
   });
 });
 
+describe('lerFrontmatter', () => {
+  it('lê `name` e `description` entre aspas', () => {
+    const fm = lerFrontmatter(
+      [
+        '---',
+        'name: ui-craft',
+        'version: 1.0',
+        'description: "a descrição"',
+        '---',
+        '',
+        '# corpo',
+      ].join('\n'),
+    );
+    expect(fm).toEqual({ name: 'ui-craft', description: 'a descrição' });
+  });
+
+  it('lê `description` CRUA (sem aspas)', () => {
+    const fm = lerFrontmatter(
+      ['---', 'name: docker', 'description: Convenções e processos docker', '---'].join('\n'),
+    );
+    expect(fm).toEqual({ name: 'docker', description: 'Convenções e processos docker' });
+  });
+
+  it('lê `description` DOBRADA (`>` + linhas indentadas)', () => {
+    const fm = lerFrontmatter(
+      ['---', 'name: x', 'description: >', '  primeira parte', '  segunda parte', '---'].join('\n'),
+    );
+    expect(fm.description).toBe('primeira parte segunda parte');
+  });
+
+  it('devolve vazio quando NÃO há frontmatter', () => {
+    expect(lerFrontmatter('# só corpo\n')).toEqual({ name: '', description: '' });
+  });
+
+  it('NÃO confunde `name` com `updated` (o campo é prefixo de outro)', () => {
+    const fm = lerFrontmatter(
+      ['---', 'name: x', 'updated: 2026-11-09', 'description: d', '---'].join('\n'),
+    );
+    expect(fm.name).toBe('x');
+  });
+
+  it('`description: # TODO` é VAZIO — o YAML entrega null, e a skill fica sem gatilho', () => {
+    const fm = lerFrontmatter(['---', 'name: x', 'description: # TODO', '---'].join('\n'));
+    expect(fm.description).toBe('');
+  });
+
+  it('`description: []` e `description: null` são VAZIOS — lista vazia e null do YAML', () => {
+    for (const valor of ['[]', 'null']) {
+      const fm = lerFrontmatter(['---', 'name: x', `description: ${valor}`, '---'].join('\n'));
+      expect(fm.description).toBe('');
+    }
+  });
+
+  it('frontmatter sem o `---` que fecha é VAZIO — o corpo não é frontmatter', () => {
+    const fm = lerFrontmatter(
+      ['---', 'name: x', 'description: d', '', '# corpo', '', 'name: do-corpo'].join('\n'),
+    );
+    expect(fm).toEqual({ name: '', description: '' });
+  });
+});
+
 describe('lacunasDeRegistro', () => {
-  const bindings = new Set(['ui-craft', 'graphify']);
+  // O 4º argumento deixou de ser o conjunto de wrappers (a pasta `.claude/`
+  // não existe mais) e passou a ser o **frontmatter** de cada skill — o que
+  // o harness lê para descobri-la. `fm()` monta o map de uma skill sadia.
+  const fm = (nomes: string[]): Map<string, FrontmatterSkill> =>
+    new Map(nomes.map((n) => [n, { name: n, description: `descrição de ${n}` }]));
+  const frontmatters = fm(['ui-craft', 'graphify']);
 
   it('a skill completa NÃO gera lacuna', () => {
     const lacunas = lacunasDeRegistro(
       ['ui-craft'],
       'a skill ui-craft está indexada',
       'o agent carrega ui-craft',
-      bindings,
+      frontmatters,
     );
     expect(lacunas).toEqual([]);
   });
@@ -114,7 +182,7 @@ describe('lacunasDeRegistro', () => {
       ['ui-craft'],
       'nada aqui',
       'o agent carrega ui-craft',
-      bindings,
+      frontmatters,
     );
     expect(lacunas.map((l) => l.regra)).toEqual(['indexada']);
     expect(lacunas[0]?.skill).toBe('ui-craft');
@@ -125,19 +193,43 @@ describe('lacunasDeRegistro', () => {
       ['ui-craft'],
       'a skill ui-craft está indexada',
       'o agent carrega outra coisa',
-      bindings,
+      frontmatters,
     );
     expect(lacunas.map((l) => l.regra)).toEqual(['sem-dono']);
   });
 
-  it('acusa a skill SEM BINDING (invisível para o Claude Code)', () => {
+  it('acusa a skill NÃO DESCOBRÍVEL (frontmatter sem name/description)', () => {
     const lacunas = lacunasDeRegistro(
       ['ui-craft'],
       'a skill ui-craft está indexada',
       'o agent carrega ui-craft',
-      new Set(),
+      new Map([['ui-craft', { name: '', description: '' }]]),
     );
-    expect(lacunas.map((l) => l.regra)).toEqual(['sem-binding']);
+    expect(lacunas.map((l) => l.regra)).toEqual(['descobrivel']);
+    expect(lacunas[0]?.detalhe).toContain('name');
+  });
+
+  it('acusa a skill cujo `name` do frontmatter NÃO é o nome do diretório', () => {
+    const lacunas = lacunasDeRegistro(
+      ['ui-craft'],
+      'a skill ui-craft está indexada',
+      'o agent carrega ui-craft',
+      new Map([['ui-craft', { name: 'outro-nome', description: 'd' }]]),
+    );
+    expect(lacunas.map((l) => l.regra)).toEqual(['descobrivel']);
+    expect(lacunas[0]?.detalhe).toContain('outro-nome');
+  });
+
+  it('acusa a skill SEM FRONTMATTER LEGÍVEL — ausência é defeito, não "não medido"', () => {
+    // Sem o frontmatter, nenhum harness acha a skill. Um gate que passasse
+    // por não ter medido seria verde por ausência (classe 5).
+    const lacunas = lacunasDeRegistro(
+      ['ui-craft'],
+      'a skill ui-craft está indexada',
+      'o agent carrega ui-craft',
+      new Map(),
+    );
+    expect(lacunas.map((l) => l.regra)).toEqual(['descobrivel']);
   });
 
   it('acusa a skill FANTASMA (citada no índice, não existe no disco)', () => {
@@ -145,7 +237,7 @@ describe('lacunasDeRegistro', () => {
       [],
       'ver `.agents/skills/skill-que-nao-existe/SKILL.md`',
       '',
-      bindings,
+      frontmatters,
     );
     expect(lacunas.map((l) => l.regra)).toEqual(['fantasma']);
     expect(lacunas[0]?.skill).toBe('skill-que-nao-existe');
@@ -156,7 +248,7 @@ describe('lacunasDeRegistro', () => {
       ['find-skills'],
       'a skill find-skills está indexada',
       'outro agent carrega outra coisa',
-      new Set(['find-skills']),
+      fm(['find-skills']),
       new Map([['find-skills', '> **Quem invoca:** `specialist-router` (quando nada cobre).']]),
       new Set(['specialist-router']),
       new Map([['specialist-router', 'o roteador classifica a demanda e nada mais']]),
@@ -169,7 +261,7 @@ describe('lacunasDeRegistro', () => {
       ['find-skills'],
       'a skill find-skills está indexada',
       'o specialist-router carrega find-skills',
-      new Set(['find-skills']),
+      fm(['find-skills']),
       new Map([['find-skills', '> **Quem invoca:** `specialist-router` (quando nada cobre).']]),
       new Set(['specialist-router']),
       new Map([['specialist-router', 'o specialist-router carrega find-skills']]),
@@ -184,7 +276,7 @@ describe('lacunasDeRegistro', () => {
       ['find-skills'],
       'a skill find-skills está indexada',
       'outro agent carrega find-skills',
-      new Set(['find-skills']),
+      fm(['find-skills']),
       new Map([['find-skills', '> **Quem invoca:** `specialist-router` (quando nada cobre).']]),
       new Set(['specialist-router']),
       new Map([['specialist-router', 'o roteador classifica a demanda e nada mais']]),
@@ -197,7 +289,7 @@ describe('lacunasDeRegistro', () => {
       ['prisma-audit'],
       'Skills de auditoria (1:1): `prisma-audit`, `openapi-audit`',
       'o agent prisma-db-specialist carrega prisma-audit',
-      new Set(['prisma-audit']),
+      fm(['prisma-audit']),
     );
     expect(lacunas).toEqual([]);
   });
@@ -207,13 +299,13 @@ describe('lacunasDeRegistro', () => {
       ['graphify'],
       'ver [`.agents/skills/graphify/SKILL.md`](./.agents/skills/graphify/SKILL.md)',
       'o explorer carrega graphify',
-      new Set(['graphify']),
+      fm(['graphify']),
     );
     expect(lacunas).toEqual([]);
   });
 
   it('a ORDEM das mensagens é estável (skill, e dentro dela a ordem das regras)', () => {
-    const lacunas = lacunasDeRegistro(['zzz-skill', 'aaa-skill'], 'nada', 'nada', new Set());
+    const lacunas = lacunasDeRegistro(['zzz-skill', 'aaa-skill'], 'nada', 'nada', new Map());
     expect(lacunas.map((l) => l.skill)).toEqual([
       'aaa-skill',
       'aaa-skill',
@@ -225,10 +317,10 @@ describe('lacunasDeRegistro', () => {
     expect(lacunas.map((l) => l.regra)).toEqual([
       'indexada',
       'sem-dono',
-      'sem-binding',
+      'descobrivel',
       'indexada',
       'sem-dono',
-      'sem-binding',
+      'descobrivel',
     ]);
   });
 
@@ -240,7 +332,7 @@ describe('lacunasDeRegistro', () => {
       [],
       'nada no índice',
       'ver `.agents/skills/skill-que-nao-existe/SKILL.md`',
-      bindings,
+      frontmatters,
     );
     expect(lacunas.map((l) => l.regra)).toEqual(['fantasma']);
     expect(lacunas[0]?.skill).toBe('skill-que-nao-existe');
@@ -251,7 +343,7 @@ describe('lacunasDeRegistro', () => {
       [],
       'ver `.agents/skills/fantasma-do-indice/SKILL.md`',
       '',
-      bindings,
+      frontmatters,
     );
     expect(lacunas[0]?.detalhe).toContain(INDICE);
   });
@@ -261,7 +353,7 @@ describe('lacunasDeRegistro', () => {
       ['ui-craft'],
       'ver `.agents/skills/ui-craft/SKILL.md`',
       'o agent carrega ui-craft',
-      new Set(['ui-craft']),
+      fm(['ui-craft']),
     );
     expect(lacunas).toEqual([]);
   });

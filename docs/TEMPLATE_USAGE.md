@@ -137,6 +137,7 @@ A regra `§1` do `AGENTS.md` é **mandatória por padrão**. Em casos excepciona
 | `1.1.0` | Adicionados 3 specialists de stack (monorepo, nestjs, nextjs) + docs STACK.md e MONOREPO.md | Estável |
 | `1.9.0` | Bump de metadata — alinhamento com o estado real do projeto (20 agents, 9 skills, 17 conventions, 10 workflows). Sem mudança no fluxo de integração por ferramenta; conteúdo das integrações em `docs/integrations/` continua válido e canônico. | Estável |
 | `1.11.0` | Bump de metadata — sincronização de versão com STACK.md (1.9.1 → 1.11.0) e MONOREPO.md (1.10.0 → 1.11.0). Resolve drift de versão cross-doc. Sem mudança no fluxo de integração por ferramenta. | Estável |
+| `1.25.0` | **Uma pasta de tooling de IA** — a pasta `.claude/` saiu do repo: os 29 wrappers de skill e os 3 de agent eram cópias do `name`/`description` que o arquivo canônico já tinha. O binding do Claude Code passa a ser feito **na máquina** (symlink em `~/.claude/`), e o gate `check-pasta-unica` reprova se a pasta voltar. Mais a skill `agent-desktop` (CLI externa, sem dependência nova). | **Mudança de consumo** — quem usa o Claude Code precisa do symlink (receita em [`integrations/claude-code.md`](./integrations/claude-code.md)); a superfície canônica (agents, skills, workflows, convenções, formato de handoff) não muda. |
 
 **Regra de breaking change:**
 - Mudanças no formato de handoff (`task/context/expected_output/success_criteria`) exigem major bump
@@ -154,13 +155,13 @@ R: Sim. Mantenha `AGENTS.md` como spec canônica (vendor-neutral) e use `CLAUDE.
 R: Não no template raiz. Projetos derivados podem escopar uma exceção via `AGENTS.override.md` com justificativa documentada.
 
 **P: Como adicionar agents de uma ferramenta específica?**
-R: Crie o agent em `.agents/agents/<nome>.md` (genérico) E, se a ferramenta exigir um wrapper, crie um arquivo de binding no diretório nativo da ferramenta (ex.: `.claude/agents/` para Claude Code).
+R: Crie o agent em `.agents/agents/<nome>.md` (genérico) — e **só lá**. Este repo tem uma pasta única de tooling de IA (regra em `AGENTS.md` §1.3): o binding de cada ferramenta é feito **na máquina de quem usa**, apontando para `.agents/`. Para o Claude Code, o binding é um symlink `~/.claude/agents/<nome>.md` → `.agents/agents/<nome>.md` — a receita está em [`integrations/claude-code.md`](./integrations/claude-code.md).
 
 **P: E se a ferramenta não suporta dispatch de subagents?**
 R: A coordenação pode ser feita manualmente via prompt: "Aja como agent X, faça Y, depois como agent Z, faça W". O template continua funcionando — só não automatiza o despacho.
 
 **P: Por que `.agents/` e não `.claude/`?**
-R: `.agents/` é vendor-neutral — funciona com qualquer IA (Claude Code, Cursor, Windsurf, Aider, Continue, Cline, Cody). `.claude/` é específico do Claude Code e impede reuso.
+R: `.agents/` é vendor-neutral — funciona com qualquer IA (Claude Code, Cursor, Windsurf, Aider, Continue, Cline, Cody). `.claude/` é específico do Claude Code e impede reuso. Desde 2026-11-09 a `.claude/` **não existe** neste repo: o binding do Claude Code é o symlink em `~/.claude/`, e o gate `check-pasta-unica` reprova se a pasta `.claude/` aparecer (as pastas dos **outros** vendors são criadas de propósito, por receita, e não são reprovadas).
 
 ---
 
@@ -172,8 +173,9 @@ R: `.agents/` é vendor-neutral — funciona com qualquer IA (Claude Code, Curso
 | `1.20.0` | **Bump de metadata** — sincronização de versão com STACK.md e MONOREPO.md (1.19.0 → 1.20.0) e as 4 skills novas (`grilling`, `handoff`, `design-taste-frontend`, `agent-browser`) ganharam wrapper em `.claude/skills/`, para que o Claude Code as descubra pelo nome. Sem mudança no fluxo de integração. |
 | `1.21.0` | **Bump de metadata** — sincronização de versão com STACK.md e MONOREPO.md (1.20.0 → 1.21.0) e o runbook da borda Cloudflare (`docs/runbooks/cloudflare-edge.md`) registrado no índice de runbooks do [`docs/como-rodar.md`](./como-rodar.md). Sem mudança no fluxo de integração. |
 | `1.22.0` | **Sincronização de versão com STACK.md e MONOREPO.md** (1.21.0 → 1.22.0) e o ADR novo do refresh token revogável (`docs/adr/0007-refresh-token-revogavel.md`) registrado. Sem mudança no fluxo de integração. |
+| `1.25.0` | **A pasta única e a skill `agent-desktop`** — a pasta `.claude/` saiu do repo: todo o binding do Claude Code passa a ser feito **na máquina** (symlink `~/.claude/skills/<nome>` → `.agents/skills/<nome>`), e a receita completa está em [`integrations/claude-code.md`](./integrations/claude-code.md). O gate `check-pasta-unica` reprova se a pasta voltar, e o `check-skill-coverage` passou a exigir o frontmatter que o harness lê (`name` e `description`, com `name` igual ao diretório) no lugar do wrapper. A skill nova é `agent-desktop`, adaptada de [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop) (Apache-2.0) — CLI externa, sem dependência nova. A regra nova está em `AGENTS.md` §1.3. |
 
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão do documento:** 1.24.0
+**Versão do documento:** 1.25.0

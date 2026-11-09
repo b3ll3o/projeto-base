@@ -265,6 +265,7 @@ A skill é o **processo**; este agent é o papel. Carregue conforme a task:
 | [`ui-review`](../skills/ui-review/SKILL.md) | a task é de **revisão** (não de criação) | Passo 1–5: mapeia superfície → escolhe skills → agrega com severidade → persiste em `.agents/runs/` |
 | [`design-taste-frontend`](../skills/design-taste-frontend/SKILL.md) | a tela é **pública** (landing, marketing) — e não é tela de app | A direção de arte, as house rules medidas em 246 sites e o critério de crítica |
 | [`agent-browser`](../skills/agent-browser/SKILL.md) | precisa **ver** a página rodando antes de opinar | A CLI de browser por CDP: snapshots da árvore de acessibilidade, refs `@eN`, screenshot |
+| [`agent-desktop`](../skills/agent-desktop/SKILL.md) | precisa **ver e operar** um app **nativo** de desktop — não a página web | A CLI que lê a árvore de acessibilidade do SO: snapshot JSON com refs `@<id>:eN`, e o contrato de entrega/retry |
 
 > **Ordem importa:** `ui-modes` primeiro. Ele diz **para que** a tela serve, e sem
 > isso as outras três discordam entre si (a queixo da densidade, a do viés
@@ -284,4 +285,4 @@ A skill é o **processo**; este agent é o papel. Carregue conforme a task:
 **Arquivo:** `.agents/agents/ux-design-specialist.md`
 **Tipo:** Specialist transversal (UX + design de interface)
 **Memória:** [`.agents/memory/ux-design-specialist.md`](../memory/ux-design-specialist.md)
-**Skills carregadas:** `ui-modes` · `ui-craft` · `ui-break` · `motion` · `ui-review` · `design-taste-frontend` · `agent-browser` (todas em `.agents/skills/`)
+**Skills carregadas:** `ui-modes` · `ui-craft` · `ui-break` · `motion` · `ui-review` · `design-taste-frontend` · `agent-browser` · `agent-desktop` (todas em `.agents/skills/`)

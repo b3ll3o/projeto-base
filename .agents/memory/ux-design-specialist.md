@@ -91,6 +91,44 @@ decisão segue o precedente do `graphify`: o **método** é do repo, o
 **instrumento** é do upstream. O critério de crítica e os números do
 estudo entraram traduzidos e condensados — e o §3 do `SKILL.md` diz
 explicitamente que eles não estão aqui.
+
+### 2026-11-09 — O agent ganha a 8ª skill: `agent-desktop` (app nativo)
+
+**Contexto:** a skill `agent-desktop` (adaptada de `vercel-labs/agent-desktop`,
+Apache-2.0) entrou no repo. A `agent-browser` já resolvia o **olhar avulso da
+página web**; esta resolve o **app nativo de desktop**.
+
+**Decisão:** o dono é este agent — a 8ª skill dele — porque a competência é a
+mesma das duas irmãs: **a aparência como ela aparece**. A fronteira entre as
+duas está escrita no `SKILL.md`, e não é uma distinção de ferramenta:
+
+| | alvo | água |
+|---|---|---|
+| `agent-browser` | página **web** | CDP do Chromium |
+| `agent-desktop` | app **nativo** | árvore de acessibilidade do SO |
+
+**O que não foi vendorizado:** o guia por plataforma. O binário o serve
+versionado com ele (`agent-desktop skills get platform`), que é a razão de a
+skill não ter `references/` — copiar a prosa do upstream seria duplicar uma
+fonte que já é versionada junto com o código. O que a skill fixa é o **método**
+(o laço observar → agir → verificar) e o **contrato de entrega** (o
+`disposition` que diz se repetir a ação pode clicar duas vezes), que é onde a
+automação erra.
+
+**Fato medido que a skill carrega:** o npm ≥ 12 bloqueia o `postinstall` por
+padrão, e o install **passa** com exit `0` avisando que o script ficou
+bloqueado. O binário nativo não linka; a CLI cai num launcher Node que
+acrescenta ~125 ms por chamada. O install exige
+`--allow-scripts=agent-desktop`. MEDIDO 2026-11-09 com npm 12.2.0 / Node
+24.15.0, num desktop Cinnamon/Wayland real: `agent-desktop status` devolveu
+`platform: linux` e `supported_surfaces: [window, sheet, alert, menu]`;
+`snapshot --app chrome -i --compact` devolveu `ref_count: 125` com
+`identity_unproven: true`.
+
+**Limite declarado na skill:** sem sessão gráfica e sem bus de acessibilidade
+(CI, Docker, container) a CLI não vê app nenhum. A skill diz isso na seção
+"onde esta skill **não** roda" — para o agent não gastar tempo ali.
+
 ## Padrões Descobertos
 
 - **`apps/web` não tinha design system para estender.** `app/globals.css` tem exatamente 2 tokens em `@theme`; `packages/ui` não existe; `apps/web/components/` não existe. Antes desta feature não havia **nenhum** `<form>`, `<input>`, `<button>` ou `<label>` no monorepo inteiro — o único Client Component era `web-vitals-reporter.tsx`. Verificável:

@@ -171,7 +171,7 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão da stack:** 1.24.0
+**Versão da stack:** 1.25.0
 
 ### Histórico de Versões
 
@@ -197,3 +197,4 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 | `1.20.0` | **Sem mudança de stack** — as 4 skills novas são docs e roteamento (nenhuma dependência, nenhum script, nenhuma config de infra mudou); o footer subiu junto com os outros 5. O gate `check-version-footers` (do #126) é o que fecha essa classe. |
 | `1.21.0` | **Sem mudança de stack** — o runbook novo (`docs/runbooks/cloudflare-edge.md`) é doc: nenhuma dependência, nenhum script, nenhuma config de infra mudou. O footer subiu junto com os outros 5. |
 | `1.22.0` | **A autenticação tem registro, e o container tem probe** — o BC `auth` ganha a tabela `refresh_tokens` (o `jti` do refresh token, a rotação, o `POST /auth/logout` e a detecção de replay) e a imagem da api ganha o `exec` no ENTRYPOINT (o SIGTERM chega ao Node) e um probe que não depende de pacote instalado. Duas migrations novas, dois gates novos. O footer subiu junto com os outros 5. |
+| `1.25.0` | **Sem mudança de stack** — a skill `agent-desktop` (adaptada de [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop), Apache-2.0) e a unificação da pasta de tooling de IA são docs e roteamento: **nenhuma dependência nova**, nenhum binário no `package.json` (a CLI é externa, instalada na máquina), nenhuma mudança em `apps/api`, `apps/web`, `packages/` ou `infra/`. O único config movido foi o `settings.json` do Claude Code, de `.claude/` para `.agents/`. |

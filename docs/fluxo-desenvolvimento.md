@@ -147,8 +147,8 @@ dois scripts existem no `package.json` (linhas 29 e 31) mas **nenhum hook os inv
 
 **Paredes — aqui paralelizar não é ganho, é conflito garantido:**
 
-- **`apps/api/prisma/schema.prisma`** — fonte única, e `db:generate` é `cache: false` (`turbo.json:8`, não o `package.json` — o cache é o turbo). Dois agents no schema não dão conflito de merge: dão **veredito sobre dado stale**, porque o typecheck de um roda contra o client que o outro ainda edita.
-- **`pnpm-lock.yaml`** — já tem `permissionDecision: "deny"` no PreToolUse (`.claude/hooks/pretooluse-block-pnpm-lock.mjs`). Um `pnpm add` paralelo destrói o guard.
+- **`apps/api/prisma/schema.prisma`** — fonte única, e `db:generate` é `cache: false` (`turbo.json:8`, não o `package.json` — o cache é do turbo). Dois agents no schema não dão conflito de merge: dão **veredito sobre dado stale**, porque o typecheck de um roda contra o client que o outro ainda edita.
+- **`pnpm-lock.yaml`** — já tem `permissionDecision: "deny"` no PreToolUse (`.agents/hooks/pretooluse-block-pnpm-lock.mjs`). Um `pnpm add` paralelo destrói o guard.
 - **`package.json` raiz, `turbo.json`, `pnpm-workspace.yaml`** — `check-package-json-drift` mede exatamente esses arquivos.
 - **`specialist-routing.md`** — fonte da verdade de **todo** o roteamento. Dois `agent-architect` colidem no arquivo que decide quem é chamado.
 - **Branches paralelas** — `check-branch-up-to-date` bloqueia contra `origin/main`: a segunda branch nasce desatualizada por construção. O histórico já escolheu o lado oposto: PR #81 (167 arquivos), #95 (10 issues).
@@ -160,7 +160,7 @@ Reescrever um como LLM é a classe 6 de `guard-classes.md` — spec verde, siste
 **As 3 peças que faltam** — nenhuma delas é "mais agents":
 
 1. **Executor** — `Agent` × N em paralelo sobre a saída do `review-router`. Menor diff e maior retorno: o roteamento, a matriz e os testes já existem.
-2. **Registro** — 25 dos 28 agents não estão em `.claude/agents/` (`ls .claude/agents/*.md | wc -l` = 3), logo o orquestrador não tem handle. Agent não registrado não é invocado nem por LLM.
+2. **Registro** — os 28 agents vivem em `.agents/agents/`, e o binding do Claude Code (symlink `~/.claude/agents/<nome>.md` → `.agents/agents/<nome>.md`) é o que os registra na máquina. Sem o symlink, o orquestrador não tem handle: agent não registrado não é invocado nem por LLM.
 3. **Relógio** — `grep -rn 'Date.now()' tooling/ .tooling/ | wc -l` devolve **12** ocorrências (4 no
    `ambiente-local.ts`, 3 no `boot-local.ts`, 2 no `check-audit-skills.ts`, 3 em specs) — sem cronômetro, "mais agents é mais rápido" é raciocínio.
 
