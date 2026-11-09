@@ -1,0 +1,207 @@
+{
+  "_nota": "As majors que existem no registro e NAO sobem agora. Cada uma tem motivo. O gate check-dependency-freshness le este arquivo e reprova quando uma pendencia envelhece (o pacote saiu do workspace, ou a faixa ja permite a major).",
+  "medidoEm": "2026-11-09",
+  "total": 25,
+  "pendencias": [
+    {
+      "pacote": "@eslint/js",
+      "faixaAtual": "^9.39.5",
+      "majorAtual": 9,
+      "majorNova": 10,
+      "motivo": "flat-config breaking: acompanha o eslint 10",
+      "declaradaEm": "2026-11-09"
+    },
+    {
+      "pacote": "@nestjs/common",
+      "faixaAtual": "^11.2.9",
+      "majorAtual": 11,
+      "majorNova": 12,
+      "motivo": "breaking change de framework: exige migracao de modulos, providers e decorators; o app inteiro e o template de uso dependem do contrato v11",
+      "declaradaEm": "2026-11-09"
+    },
+    {
+      "pacote": "@nestjs/core",
+      "faixaAtual": "^11.2.9",
+      "majorAtual": 11,
+      "majorNova": 12,
+      "motivo": "breaking change de framework: exige migracao de modulos, providers e decorators; o app inteiro e o template de uso dependem do contrato v11",
+      "declaradaEm": "2026-11-09"
+    },
+    {
+      "pacote": "@nestjs/platform-fastify",
+      "faixaAtual": "^11.2.9",
+      "majorAtual": 11,
+      "majorNova": 12,
+      "motivo": "breaking change de framework: o adaptador Fastify muda junto com o core; subir um so deixa o workspace incoerente",
+      "declaradaEm": "2026-11-09"
+    },
+    {
+      "pacote": "@nestjs/swagger",
+      "faixaAtual": "^11.4.8",
+      "majorAtual": 11,
+      "majorNova": 12,
+      "motivo": "breaking change de framework: o modulo de OpenAPI muda junto com o core; o gate de OpenAPI do repo le o contrato gerado",
+      "declaradaEm": "2026-11-09"
+    },
+    {
+      "pacote": "@nestjs/testing",
+      "faixaAtual": "^11.2.9",
+      "majorAtual": 11,
+      "majorNova": 12,
+      "motivo": "breaking change de framework: o modulo de teste muda junto com o core; a suite de integracao usa os helpers",
+      "declaradaEm": "2026-11-09"
+    },
+    {
+      "pacote": "@opentelemetry/resources",
+      "faixaAtual": "^1.30.1",
+      "majorAtual": 1,
+      "majorNova": 3,
+      "motivo": "renomeia pacotes e muda a API de tracing: o initTracing do repo constroi o ResourceProvider direto",
+      "declaradaEm": "2026-11-09"
+    },
+    {
+      "pacote": "@opentelemetry/sdk-trace-base",
+      "faixaAtual": "^1.30.1",
+      "majorAtual": 1,
+      "majorNova": 2,
+      "motivo": "renomeia pacotes e muda a API de tracing: o initTracing do repo constroi o NodeSDK e o SpanProcessor direto",
+      "declaradaEm": "2026-11-09"
+    },
+    {
+      "pacote": "@opentelemetry/sdk-trace-web",
+      "faixaAtual": "^1.30.1",
+      "majorAtual": 1,
+      "majorNova": 2,
+      "motivo": "renomeia pacotes e muda a API de tracing: o initTracing do repo registra o WebTracerProvider direto",
+      "declaradaEm": "2026-11-09"
+    },
+    {
+      "pacote": "@testcontainers/postgresql",
+      "faixaAtual": "^10.28.0",
+      "majorAtual": 10,
+      "majorNova": 12,
+      "motivo": "muda a API do container: o setup de Postgres efemero do e2e e da integracao chama o construtor direto",
+      "declaradaEm": "2026-11-09"
+    },
+    {
+      "pacote": "@types/node",
+      "faixaAtual": "^20.19.43",
+      "majorAtual": 20,
+      "majorNova": 26,
+      "motivo": "major de tipos: a serie 26 assume APIs de Node que o engines.node (>=22.6) nao garante; muda o contrato de tipos de todo o repo",
+      "declaradaEm": "2026-11-09"
+    },
+    {
+      "pacote": "@types/supertest",
+      "faixaAtual": "^6.0.3",
+      "majorAtual": 6,
+      "majorNova": 7,
+      "motivo": "major de tipos: a serie 7 acompanha a API v7 do supertest",
+      "declaradaEm": "2026-11-09"
+    },
+    {
+      "pacote": "@vitest/coverage-v8",
+      "faixaAtual": "^2.1.9",
+      "majorAtual": 2,
+      "majorNova": 5,
+      "motivo": "o runner inteiro muda: o check-test-set-covered e o ci:local dependem do formato de cobertura da serie 2",
+      "declaradaEm": "2026-11-09"
+    },
+    {
+      "pacote": "eslint",
+      "faixaAtual": "^9.39.5",
+      "majorAtual": 9,
+      "majorNova": 10,
+      "motivo": "flat-config breaking: o eslint-config do repo e da serie 9 e teria de ser reescrito junto",
+      "declaradaEm": "2026-11-09"
+    },
+    {
+      "pacote": "eslint-config-next",
+      "faixaAtual": "^15.5.29",
+      "majorAtual": 15,
+      "majorNova": 16,
+      "motivo": "acompanha o next 16; subir um so deixa o lint do web incoerente com o framework",
+      "declaradaEm": "2026-11-09"
+    },
+    {
+      "pacote": "jsdom",
+      "faixaAtual": "^30.1.3",
+      "majorAtual": 30,
+      "majorNova": 31,
+      "motivo": "major de ambiente de teste: a serie 31 muda o que o jsdom implementa de DOM, e o web roda a suite de componentes em jsdom",
+      "declaradaEm": "2026-11-09"
+    },
+    {
+      "pacote": "nestjs-pino",
+      "faixaAtual": "^4.6.1",
+      "majorAtual": 4,
+      "majorNova": 5,
+      "motivo": "breaking de API de logging: o modulo de telemetry do repo usa os tipos do PinoModule direto",
+      "declaradaEm": "2026-11-09"
+    },
+    {
+      "pacote": "next",
+      "faixaAtual": "^15.5.29",
+      "majorAtual": 15,
+      "majorNova": 16,
+      "motivo": "breaking change de framework: o CSP com nonce, o middleware e as rotas do #143 dependem do contrato do next 15",
+      "declaradaEm": "2026-11-09"
+    },
+    {
+      "pacote": "pino-http",
+      "faixaAtual": "^10.5.0",
+      "majorAtual": 10,
+      "majorNova": 11,
+      "motivo": "breaking de API de logging: o middleware de request log do repo usa a API do pino-http v10",
+      "declaradaEm": "2026-11-09"
+    },
+    {
+      "pacote": "pino-pretty",
+      "faixaAtual": "^11.3.0",
+      "majorAtual": 11,
+      "majorNova": 13,
+      "motivo": "breaking de API de logging: o formatador do pino-http usa as opcoes do pino-pretty v11",
+      "declaradaEm": "2026-11-09"
+    },
+    {
+      "pacote": "prisma",
+      "faixaAtual": "^6.19.3",
+      "majorAtual": 6,
+      "majorNova": 7,
+      "motivo": "a major estavel e a 7 (o latest do registro e um release candidate, 8.0.0-rc.33, medido em 2026-11-09); a 7 exige migrar o schema e reescrever o client",
+      "declaradaEm": "2026-11-09"
+    },
+    {
+      "pacote": "typescript",
+      "faixaAtual": "^5.9.3",
+      "majorAtual": 5,
+      "majorNova": 7,
+      "motivo": "a serie 7 e a reescrita nativa do compilador: muda o tsc inteiro, e o tsconfig do repo e compartilhado com os apps",
+      "declaradaEm": "2026-11-09"
+    },
+    {
+      "pacote": "vitest",
+      "faixaAtual": "^2.1.9",
+      "majorAtual": 2,
+      "majorNova": 5,
+      "motivo": "o runner inteiro muda: o check-test-set-covered e o ci:local dependem do formato de cobertura da serie 2",
+      "declaradaEm": "2026-11-09"
+    },
+    {
+      "pacote": "web-vitals",
+      "faixaAtual": "^4.2.4",
+      "majorAtual": 4,
+      "majorNova": 6,
+      "motivo": "muda a API de medicao: o instrument-client do web usa a API do web-vitals v4",
+      "declaradaEm": "2026-11-09"
+    },
+    {
+      "pacote": "zod",
+      "faixaAtual": "^3.25.76",
+      "majorAtual": 3,
+      "majorNova": 4,
+      "motivo": "a API foi reescrita: os schemas de auth e de tenant usam a API do zod v3",
+      "declaradaEm": "2026-11-09"
+    }
+  ]
+}

@@ -10,12 +10,33 @@
 # ⚠️ O gate `check-ci-action-pinning.ts` confere o FORMATO do pin — e só ele:
 # o `ref` tem de ser um SHA de 40 caracteres hex (`REGEX_DE_SHA`). Ele NÃO
 # resolve a tag, NÃO tem rede, e NÃO exige o comentário `# v4`: um SHA com
-# `# v99` passa, e um SHA sem comentário nenhum também. Quem quiser o
-# comentario sincronizado com a tag é o REVISOR do PR, não o gate.
+# `# v99` passa, e um SHA sem comentário nenhum também.
 #
-# ⚠️ Só o ecosystem `github-actions`: o resto do repo (pnpm) tem o
-# `renovate`/lockfile próprio, e um segundo dono de atualização é pior do
-# que nenhum.
+# MEDIDO 2026-11-09: a lacuna do comentário era REAL, e não teórica. O PR #154
+# do Dependabot subiu o `pnpm/action-setup` para 6.1.1 e deixou o comentário
+# `# v3` — o CI passou (o SHA está pinado, o formato está certo) e o humano lia
+# a versão errada na interface do GitHub. O gate
+# `check-action-version-comment.ts` fecha essa lacuna: ele confere o
+# comentário contra a tabela de pins versionada
+# (`.tooling/scripts/ci/ci-action-pins.json`) e proíbe a mesma action em SHAs
+# diferentes.
+#
+# ⚠️ O pnpm (npm) TAMBÉM tem dono agora — o próprio Dependabot, no bloco
+# abaixo. A versão anterior deste arquivo afirmava: *"Só o ecosystem
+# `github-actions`: o resto do repo (pnpm) tem o `renovate`/lockfile próprio, e
+# um segundo dono de atualização é pior do que nenhum."*
+#
+# MEDIDO 2026-11-09: essa afirmação era FALSA. Não existe `renovate.json`, nem
+# `.renovaterc`, nem `renovate` no `package.json` — o "dono próprio" citado não
+# estava no repo, e o lockfile não é dono de nada. As 53 dependências de pnpm
+# envelheciam sozinhas: foi assim que o `next` ficou 4 minors atrás e o `vitest`
+# 3 majors atrás até aparecerem os gates.
+#
+# Um segundo dono seria um problema (dois bots abrindo PR para o mesmo
+# pacote). O mesmo dono, em outro ecosystem, não. Por isso o bloco do npm
+# abaixo — e o gate `check-dependency-freshness.ts` mede a dívida que sobra (a
+# major que existe no registro e não sobe), com a pendência declarada em
+# `.tooling/scripts/ci/dependencias-major-pendentes.json` e o motivo escrito.
 version: 2
 updates:
   - package-ecosystem: 'github-actions'
@@ -27,3 +48,25 @@ updates:
       timezone: 'America/Sao_Paulo'
     commit-message:
       prefix: 'ci'
+  # O pnpm. Mesmo dono, ecosystem diferente.
+  #
+  # `versioning-strategy: increase` mantém o range `^` — o PR do Dependabot
+  # propõe a atualização dentro da major que o repo já declara, que é
+  # justamente o que o `check-dependency-drift.ts` exige (uma versão só por
+  # pacote em todos os workspaces).
+  #
+  # A major NÃO sobe por aqui: `versioning-strategy` não tem opção de major,
+  # e subir major é decisão de produto — o `prisma` estável é a 7 e o `latest`
+  # do registro é um *release candidate* (`8.0.0-rc.33`, medido em 2026-11-09).
+  # A major pendente tem dono e motivo no arquivo de pendências, e o
+  # `check-dependency-freshness.ts` reprova quando ela envelhece.
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '06:00'
+      timezone: 'America/Sao_Paulo'
+    versioning-strategy: increase
+    commit-message:
+      prefix: 'deps'

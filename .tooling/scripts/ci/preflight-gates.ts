@@ -613,6 +613,33 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     file: '.tooling/scripts/ci/check-skill-coverage.ts',
     id: 'check-skill-coverage',
   },
+  {
+    // O MESMO pacote declarado em VERSÕES diferentes em workspaces diferentes.
+    // MEDIDO 2026-11-09: 4 pacotes divergiam (@types/node, tsx, typescript,
+    // vitest) e o check-package-json-drift (que confere os SCRIPTs) não via
+    // nada. Duas versões no lockfile = duas cópias em node_modules.
+    name: 'versão única por pacote entre os workspaces (sem drift de dependência)',
+    file: '.tooling/scripts/ci/check-dependency-drift.ts',
+    id: 'check-dependency-drift',
+  },
+  {
+    // A IDADE da dependência, que o check-dependency-audit (advisory) não
+    // mede. O .github/dependabot.yml afirma que o pnpm tem dono próprio
+    // (renovate) — MEDIDO 2026-11-09: não existe renovate no repo. A major
+    // pendente tem que estar declarada, com motivo, e não pode envelhecer.
+    name: 'frescor das dependências (a major pendente tem dono e motivo)',
+    file: '.tooling/scripts/ci/check-dependency-freshness.ts',
+    id: 'check-dependency-freshness',
+  },
+  {
+    // O COMENTÁRIO de versão da action — o que o HumansONS do GitHub mostra ao
+    // aprovador. O check-ci-action-pinning confere só o formato do SHA.
+    // MEDIDO 2026-11-09: o PR #154 do Dependabot subia pnpm/action-setup
+    // para 6.1.1 e deixava o comentário '# v3'.
+    name: 'comentário de versão das actions (o pin e o que o humano lê)',
+    file: '.tooling/scripts/ci/check-action-version-comment.ts',
+    id: 'check-action-version-comment',
+  },
 ];
 
 /**
