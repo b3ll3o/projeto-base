@@ -640,6 +640,18 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     file: '.tooling/scripts/ci/check-action-version-comment.ts',
     id: 'check-action-version-comment',
   },
+  {
+    // Todo job que roda a suíte de testes do tooling tem que GERAR o client
+    // do Prisma antes. MEDIDO 2026-11-09 (PR #156): o job `preflight` roda
+    // `pnpm tooling:test` sem `db:generate`, e o spec
+    // `ambiente-local.spec.ts > o client do repo REAL` mede o client de
+    // verdade. O job só passava porque o `cache: pnpm` é chaveado pelo
+    // lockfile e o store restaurado já trazia o client — com store limpo
+    // (o que acontece na PR que muda a dependência) o job falha.
+    name: 'o CI gera o client do Prisma antes de medir o client do Prisma',
+    file: '.tooling/scripts/ci/check-ci-prisma-client-ready.ts',
+    id: 'check-ci-prisma-client-ready',
+  },
 ];
 
 /**

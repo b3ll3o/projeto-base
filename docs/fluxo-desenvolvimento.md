@@ -125,9 +125,9 @@ grep -cE "^\s+name: '" .tooling/scripts/ci/preflight-gates.ts
 > documento publicava um 0 como se fosse a contagem. O sintoma (contagem que não
 > se move) é indistinguível de "não mudou nada desde a última vez".
 >
-> **MEDIDO 2026-11-09: 51.** As contagens anteriores (21, 29, 41, 44) eram de revisões
+> **MEDIDO 2026-11-09: 52.** As contagens anteriores (21, 29, 41, 44) eram de revisões
 > antigas — a lista cresce a cada gate novo. Por isso a lista **enumerada** vive na §4 e a
-> contagem vive do lado do comando (`grep -cE "^\s+name: '" .tooling/scripts/ci/preflight-gates.ts` → **51**).
+> contagem vive do lado do comando (`grep -cE "^\s+name: '" .tooling/scripts/ci/preflight-gates.ts` → **52**).
 
 ### 3.4 Fan-out por fase — onde paralelizar dá ganho, e onde dá conflito
 
@@ -143,7 +143,7 @@ dois scripts existem no `package.json` (linhas 29 e 31) mas **nenhum hook os inv
 | Auditoria | N reviewers em paralelo, todos read-only | o roteador já resolve quem; falta o executor |
 | `.agents/memory/*.md` | 1 agente por arquivo | 30 arquivos (`find .agents/memory -name '*.md' | wc -l`), convenção 1:1 verificável |
 | Implementação | **1 por vez no mesmo codebase** | ver paredes abaixo |
-| Gates do preflight | 51 gates em `Promise.all` | hoje serial (`preflight.ts:412`), nenhum escreve |
+| Gates do preflight | 52 gates em `Promise.all` | hoje serial (`preflight.ts:412`), nenhum escreve |
 
 **Paredes — aqui paralelizar não é ganho, é conflito garantido:**
 
@@ -153,7 +153,7 @@ dois scripts existem no `package.json` (linhas 29 e 31) mas **nenhum hook os inv
 - **`specialist-routing.md`** — fonte da verdade de **todo** o roteamento. Dois `agent-architect` colidem no arquivo que decide quem é chamado.
 - **Branches paralelas** — `check-branch-up-to-date` bloqueia contra `origin/main`: a segunda branch nasce desatualizada por construção. O histórico já escolheu o lado oposto: PR #81 (167 arquivos), #95 (10 issues).
 
-**Não converta gate determinístico em prompt.** Os 51 gates são regex + TypeScript com spec
+**Não converta gate determinístico em prompt.** Os 52 gates são regex + TypeScript com spec
 própria; §5 já registra que a camada "agentic" é *"regra determinística com prosa em volta"*.
 Reescrever um como LLM é a classe 6 de `guard-classes.md` — spec verde, sistema inerte.
 
@@ -198,6 +198,7 @@ Reescrever um como LLM é a classe 6 de `guard-classes.md` — spec verde, siste
 | `check-dependency-drift` | `pnpm ci:preflight` | A+B (gate `check-dependency-drift`) | O MESMO pacote declarado em **versões diferentes** em workspaces diferentes — o lockfile instala 2 cópias e cada app typecheca contra a sua | Sim |
 | `check-dependency-freshness` | `pnpm ci:preflight` | A+B (gate `check-dependency-freshness`) | Major pendente **sem declaração de motivo**, ou pendência **envelhecida** (o pacote saiu do workspace, ou a faixa já permite a major) | Sim |
 | `check-action-version-comment` | `pnpm ci:preflight` | A+B (gate `check-action-version-comment`) | Comentário de versão da action que **mente** sobre a major do pin (MEDIDO 2026-11-09: o PR #154 do Dependabot subia `pnpm/action-setup` para 6.1.1 e deixava `# v3`), ou a mesma action em SHAs diferentes | Sim |
+| `check-ci-prisma-client-ready` | `pnpm ci:preflight` | A+B (gate `check-ci-prisma-client-ready`) | Job que roda `pnpm tooling:test` **sem** gerar o client do Prisma antes — o job só passa quando o cache do pnpm o traz pronto | Sim |
 | `turbo-redirect-differential` | `.tooling/scripts/ci/turbo-redirect-differential.sh` | A+B (gate `turbo-redirect-differential`) | Forma de `pnpm turbo run …` que o parser extrai diferente do turbo real — **classe 6** (especificação local diverge do sistema real) | Sim (se Node ≥ 22.6) |
 
 ---

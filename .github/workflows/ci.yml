@@ -113,6 +113,26 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # O client do Prisma precisa estar GERADO antes do `tooling:test` — o
+      # spec `ambiente-local.spec.ts > temClientReal > o client do repo REAL`
+      # mede o client de verdade, e ele não existe depois de um `pnpm install`.
+      #
+      # MEDIDO 2026-11-09 (PR #156): o postinstall do `@prisma/client` procura
+      # `./prisma/schema.prisma` a partir da RAIZ do repo, e o schema do repo
+      # está em `apps/api/prisma/schema.prisma` — então o postinstall roda,
+      # imprime "could not find your Prisma schema" e NÃO gera o client. O
+      # `prisma generate` (o `db:generate`) é quem acha o schema.
+      #
+      # O job `preflight` vivia sem isso porque o `cache: pnpm` do setup-node
+      # é CHAVEADO pelo `pnpm-lock.yaml`: enquanto o lockfile não mudava, o
+      # store restaurado já trazia o client gerado e o install nem rodava o
+      # postinstall. MEDIDO: com store limpo (o que acontece na PR que muda o
+      # lockfile), o `main` e a branch ficam IGUAIS — client não gerado nos
+      # dois. O verde do main era do cache, não do job.
+      #
+      # Um job que depende do cache para passar é um job que falha na PR que
+      # mexe na dependência — ou seja, na PR que mais precisa dele.
+      - run: pnpm turbo run db:generate --filter=@projeto/api
       # pt-BR: o format:check é o check mais barato do preflight (~2.4s) e
       # roda antes de ci:preflight para falhar ainda mais rápido. Até v1.8.0
       # nenhum gate de formatação existia fora do lint-staged local — drift
