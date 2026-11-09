@@ -245,6 +245,8 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `suite-de-integracao-nao-ve-defeito-de-banco` | `pendente` | — | — |
 | `as-duas-camadas-precisam-medir-o-mesmo-valor` | `pendente` | — | — |
 | `papel-postgres-e-do-cluster-nao-do-banco` | `pendente` | — | — |
+| `subagent-pode-morrer-de-429-sem-aviso` | `pendente` | — | — |
+| `pr-refresh-bold-quebra-a-classe-da-suite` | `pendente` | — | — |
 
 ## O que a tabela diz
 

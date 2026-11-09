@@ -133,11 +133,13 @@ deste projeto — é um arquivo estranho que ninguém sabe se pode editar.
 4. **Dar dono** — a skill sem agent que a carregue é órfã. O dono vai na
    tabela "Skills Carregadas" do agent **e** a memória dele muda no mesmo
    commit (o `check-agent-memory-drift` exige agente **e** memória).
-5. **Registrar** — `AGENTS.md §3.2`, a tabela de versões, os footers, o wrapper
-   em `.claude/skills/<nome>/SKILL.md` (com `name`/`description` copiados
-   **literalmente** do frontmatter canônico — re-serializar YAML corrompe o
-   `description` e a skill é descoberta com o gatilho errado, sem erro visível)
-   e as contagens do `README.md` (re-medidas no disco, com o comando e a data).
+5. **Registrar** — `AGENTS.md §3.2`, a tabela de versões, os footers e as
+   contagens do `README.md` (re-medidas no disco, com o comando e a data). O
+   frontmatter canônico **é** o que o harness lê para descobrir a skill: `name`
+   e `description` preenchidos, e `name` igual ao nome do diretório (regra
+   DESCOBRÍVEL do `check-skill-coverage`). Não há wrapper: o binding do Claude
+   Code é o symlink `~/.claude/skills/<nome>` → `.agents/skills/<nome>`, e ele
+   aponta para o arquivo canônico.
 6. **Medir** — o preflight local, a suíte de `.tooling/scripts/ci` e, se a
    skill ganhou gate, a **mutação** que prova que o gate muda de veredito.
 

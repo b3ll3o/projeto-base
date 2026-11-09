@@ -17,7 +17,7 @@
  * | **Indexada no `AGENTS.md`**  | `AGENTS.md` §3.2              | `ddd-hexagonal-validation` e `docker` sem entrada |
  * | **Alcançável**               | `find-skills` §5 passo 4       | `find-skills` sem agent que a carregue            |
  * | **Reciproca**                | `find-skills` §5 passo 4       | skill que declara "Quem invoca: X" e X não a cita |
- * | **Binding Claude Code**      | `.claude/README.md`            | **8** skills sem wrapper (21 de 29)                |
+ * | **Descobrível**              | `AGENTS.md` §1.3              | o frontmatter que o harness lê para achar a skill |
  *
  * O `check-agent-routing-coverage` mede o lado dos **agents** (órfão e
  * fantasma, os dois sentidos). O lado das **skills** não tinha nenhum
@@ -66,10 +66,23 @@
  *    `specialist-router`" e o `specialist-router.md` não menciona
  *    `find-skills` — a skill de descoberta do repo é invisível para o
  *    roteador que deveria procurá-la.
- * 4. **COM BINDING** — a skill tem wrapper em `.claude/skills/<nome>/`. O
- *    `.claude/README.md` declara "Um wrapper por skill em `.agents/skills/`"
- *    — e o estado real era 21 de 29. Sem wrapper, o Claude Code não
- *    descobre a skill.
+ * 4. **DESCOBRÍVEL** — o frontmatter do `SKILL.md` canônico tem `name` e
+ *    `description` não vazios, e o `name` é igual ao nome do diretório.
+ *
+ *    MEDIDO 2026-11-09: a pasta `.claude/` **não existe mais** neste repo
+ *    (ver `AGENTS.md` §1.3 e o gate `check-pasta-unica`), e o `SKILL.md`
+ *    canônico **é** o arquivo que o harness lê — a sonda com `.claude` como
+ *    symlink para `.agents` descobriu as 30 skills e os 28 agents **sem
+ *    wrapper nenhum**. O wrapper deixou de ser o que tornava a skill
+ *    descobrível; o que a torna descobrível é o frontmatter do próprio
+ *    arquivo. A regra que existia antes (COM BINDING) media a existência de
+ *    uma cópia — e a cópia é justamente o que a regra nova impede.
+ *
+ *    `name` igual ao diretório não é vaidade: o binding do Claude Code é um
+ *    symlink `~/.claude/skills/<diretório>` → `.agents/skills/<diretório>`, e
+ *    o harness descobre a skill pelo `name` do frontmatter. Se os dois
+ *    divergirem, a skill aparece na máquina com outro nome do que o
+ *    diretório — e o symlink aponta para o nome errado.
  * 5. **FANTASMA** — o inverso: o `AGENTS.md` (ou um agent) cita uma skill que
  *    **não existe** em `.agents/skills/`. É o mesmo par órfão/fantasma que o
  *    `check-agent-routing-coverage` mede para agents.
@@ -107,13 +120,11 @@
  */
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { lerFrontmatter as lerBloco, type CampoFrontmatter } from './frontmatter';
 import { linhasDoRelato, type CheckResult } from './check-types';
 
 /** Onde vive a skill canônica. */
 export const DIR_SKILLS = path.join('.agents', 'skills');
-
-/** Onde vive o binding Claude Code (o wrapper). */
-export const DIR_BINDING = path.join('.claude', 'skills');
 
 /** Onde vive o índice canônico de skills. */
 export const INDICE = 'AGENTS.md';
@@ -129,9 +140,61 @@ export interface Lacuna {
   /** A skill com a lacuna. */
   skill: string;
   /** Qual regra foi violada. */
-  regra: 'indexada' | 'sem-dono' | 'reciproca' | 'sem-binding' | 'fantasma';
+  regra: 'indexada' | 'sem-dono' | 'reciproca' | 'descobrivel' | 'fantasma';
   /** Detalhe legível do problema. */
   detalhe: string;
+}
+
+/**
+ * O frontmatter de uma skill — o que o harness lê para descobrir ela.
+ *
+ * Só os dois campos que importam para a descoberta: `name` (sob o qual a
+ * skill é registrada) e `description` (o texto que o modelo casa com o
+ * pedido). Os demais (`version`, `updated`) são convenção do repo.
+ */
+export interface FrontmatterSkill {
+  name: string;
+  description: string;
+}
+
+/**
+ * Lê o frontmatter do `SKILL.md`.
+ *
+ * O parser é o [`frontmatter.ts`](./frontmatter.ts) — o dono do frontmatter do
+ * repo (a camada de agents usa o mesmo). O valor pode vir entre aspas
+ * (`"..."`), cru (`texto`) ou dobrado (`>` seguido de linhas indentadas) — as
+ * três formas existem no repo, e as duas últimas são as que o `find-skills` §5
+ * proíbe, mas uma skill de fora pode vir assim.
+ *
+ * Duas formas que o parser anterior deixava passar e esta não:
+ *
+ * - **`description: # TODO`** — o `#` abre um comentário, e o valor do YAML é
+ *   **null**. A skill ficava sem **gatilho**: o Claude Code não descobre
+ *   quando usá-la. Aqui o valor vazio vira `''`, e a regra DESCOBRÍVEL
+ *   acusa.
+ * - **frontmatter sem o `---` que fecha** — o bloco não existe. O parser
+ *   anterior lia até o fim do arquivo e tratava o **corpo** como frontmatter;
+ *   uma skill com `name:` no corpo passava como se tivesse frontmatter.
+ */
+export function lerFrontmatter(conteudo: string): FrontmatterSkill {
+  const bloco = lerBloco(conteudo);
+
+  // Sem `---` que fecha, o arquivo NÃO tem frontmatter — e o corpo não é
+  // lido como se tivesse.
+  if (!bloco.abre || bloco.fecha === null) return { name: '', description: '' };
+
+  // Última ocorrência vence (o YAML last-wins), e o valor vazio — comentário,
+  // `null`, `[]` — vira string vazia.
+  const ultimos = new Map<string, CampoFrontmatter>();
+  for (const campo of bloco.campos) ultimos.set(campo.campo, campo);
+
+  const nome = ultimos.get('name');
+  const descricao = ultimos.get('description');
+
+  return {
+    name: nome === undefined || nome.vazio ? '' : nome.texto,
+    description: descricao === undefined || descricao.vazio ? '' : descricao.texto,
+  };
 }
 
 /**
@@ -297,7 +360,7 @@ export function lacunasDeRegistro(
   skills: string[],
   indice: string,
   citadores: string,
-  bindings: Set<string>,
+  frontmatters: Map<string, FrontmatterSkill>,
   canonicos?: Map<string, string>,
   agentsConhecidos?: Set<string>,
   textosPorAgent?: Map<string, string>,
@@ -356,15 +419,49 @@ export function lacunasDeRegistro(
       }
     }
 
-    // (4) COM BINDING — wrapper no .claude/skills/.
-    if (!bindings.has(skill)) {
+    // (4) DESCOBRÍVEL — o frontmatter que o harness lê para achar a skill.
+    //
+    // O `SKILL.md` canônico É o arquivo que o harness abre (medido em
+    // 2026-11-09: com `.claude` como symlink para `.agents`, as 30 skills e os
+    // 28 agents foram descobertos sem wrapper nenhum). O que decide a
+    // descoberta é o `name` e a `description` do frontmatter — e o `name`
+    // precisa concordar com o diretório, porque o binding do Claude Code é o
+    // symlink `~/.claude/skills/<diretório>`.
+    //
+    // A ausência da entrada no mapa é tratada como **defeito**, não como
+    // "não medido": sem frontmatter legível, a skill não é descobrível por
+    // nenhum harness — e um gate que passa por não ter medido é a classe 5
+    // de `guard-classes.md`.
+    const fm = frontmatters.get(skill);
+    if (fm === undefined) {
       lacunas.push({
         skill,
-        regra: 'sem-binding',
+        regra: 'descobrivel',
         detalhe:
-          `não há wrapper em ${DIR_BINDING}/${skill}/SKILL.md — o Claude Code ` +
-          'descobre a skill por esse caminho, então sem wrapper ela é invisível ' +
-          'para quem roda no Claude Code',
+          `o frontmatter de ${DIR_SKILLS}/${skill}/SKILL.md não pôde ser lido — ` +
+          'sem `name` e `description` a skill não é descobrível por nenhum ' +
+          'harness, e o Claude Code a abre por esse arquivo',
+      });
+    } else if (fm.name.trim() === '' || fm.description.trim() === '') {
+      lacunas.push({
+        skill,
+        regra: 'descobrivel',
+        detalhe:
+          `o frontmatter de ${DIR_SKILLS}/${skill}/SKILL.md não tem ` +
+          `\`name\` e \`description\` preenchidos — o harness descobre a skill ` +
+          'pelo `name` e decide se ela casa com o pedido pelo `description`; ' +
+          'sem os dois, ela é invisível',
+      });
+    } else if (fm.name.trim() !== skill) {
+      lacunas.push({
+        skill,
+        regra: 'descobrivel',
+        detalhe:
+          `o \`name\` do frontmatter de ${DIR_SKILLS}/${skill}/SKILL.md é ` +
+          `"${fm.name.trim()}" e não "${skill}" — o binding do Claude Code é o ` +
+          `symlink \`~/.claude/skills/<diretório>\` → \`${DIR_SKILLS}/<diretório>\`, ` +
+          'e o harness registra a skill pelo `name`: com os dois diferentes, ela ' +
+          'aparece na máquina com outro nome do que o diretório',
       });
     }
   }
@@ -400,7 +497,7 @@ export function lacunasDeRegistro(
     indexada: 0,
     'sem-dono': 1,
     reciproca: 2,
-    'sem-binding': 3,
+    descobrivel: 3,
     fantasma: 4,
   };
   return lacunas.sort((a, b) => a.skill.localeCompare(b.skill) || ordem[a.regra] - ordem[b.regra]);
@@ -474,29 +571,19 @@ export async function checkSkillCoverage(opts: { repoRoot: string }): Promise<Ch
     // não acusa — o gate não tem como saber quem é o dono.
   }
 
-  const bindings = new Set<string>();
-  try {
-    for (const entrada of await fs.readdir(path.join(root, DIR_BINDING), {
-      withFileTypes: true,
-    })) {
-      if (!entrada.isDirectory()) continue;
-      try {
-        await fs.access(path.join(root, DIR_BINDING, entrada.name, 'SKILL.md'));
-        bindings.add(entrada.name);
-      } catch {
-        // diretório sem SKILL.md: não é um wrapper
-      }
-    }
-  } catch {
-    // sem diretório de binding: todas as skills ficam sem binding, e o gate
-    // acusa. É o comportamento certo — a ausência do diretório é a lacuna.
+  // O frontmatter de cada skill — o que o harness lê para descobri-la.
+  // Lido do MESMO arquivo que o resto do gate lê, para que a regra e a
+  // reconciliação não possam discordar sobre o que existe.
+  const frontmatters = new Map<string, FrontmatterSkill>();
+  for (const skill of skills) {
+    frontmatters.set(skill, lerFrontmatter(canonicos.get(skill) ?? ''));
   }
 
   const lacunas = lacunasDeRegistro(
     skills,
     indice,
     citadores,
-    bindings,
+    frontmatters,
     canonicos,
     agentsConhecidos,
     porAgent,

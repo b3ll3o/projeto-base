@@ -404,23 +404,21 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     id: 'check-agent-routing-coverage',
   },
   {
-    // Issue #149 (F1). A camada de binding do Claude Code (`.claude/`) é
-    // cópia: o `.claude/README.md` promete que o `name` e a `description` do
-    // wrapper são "copiados literalmente do frontmatter canônico", e avisa
-    // que re-serializar YAML corrompe o `description` — a skill passa a ser
-    // descoberta com o gatilho errado, SEM ERRO VISÍVEL.
+    // O frontmatter do agent CANÔNICO é o que o Claude Code lê: desde que a
+    // pasta `.claude/` saiu do repo (ver ADR-0009), o arquivo descoberto É o
+    // arquivo canônico — não há wrapper, não há cópia, e a classe de defeito
+    // que o `check-binding-canonico` media (a cópia divergindo do canônico)
+    // deixou de existir.
     //
-    // Nenhum gate media isso. MEDIDO 2026-11-09: o PR #147 trocou
-    // "healthchecks via curl" por "healthchecks via node" no canônico da
-    // skill `docker` e não tocou no wrapper — a divergência ficou em `main`
-    // e nenhum gate acusou, porque nenhum gate comparava CONTEÚDO.
+    // O que RESTA é o que passa a valer: `name` (casa o arquivo com o
+    // subagent), `description` (é o gatilho) e `tools` (sem ele o subagent
+    // herda a pool inteira da conversa — o desvio silencioso que o ADR-0008
+    // registrava).
     //
-    // Este gate compara a LINHA INTEIRA, byte a byte: re-serializar YAML
-    // produz o mesmo valor semântico com bytes diferentes, e a corrupção
-    // que o README descreve é de byte, não de sentido.
-    name: 'binding Claude Code bate com o canônico (name/description/tools)',
-    file: '.tooling/scripts/ci/check-binding-canonico.ts',
-    id: 'check-binding-canonico',
+    // MEDIDO em 2026-11-09: os 28 agents canônicos declaram os três campos.
+    name: 'frontmatter do agent canônico (name/description/tools)',
+    file: '.tooling/scripts/ci/check-agent-frontmatter.ts',
+    id: 'check-agent-frontmatter',
   },
   {
     // G-H-01 da campanha. Estende `check-package-json-drift` no
@@ -598,7 +596,7 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     // O `check-doc-coverage` mede BC → doc, rota → doc e package → doc; o
     // `check-agent-routing-coverage` mede o lado dos **agents** (órfão e
     // fantasma). O lado das **skills** — indexada, alcançável, com dono
-    // recíproco, com binding no `.claude/` — não tinha gate.
+    // recíproco, descobrível — não tinha gate.
     //
     // MEDIDO 2026-11-09: o `README.md` contava 29 skills e as 29 existiam,
     // e `grep -c ddd-hexagonal-validation AGENTS.md` = 0 — a skill é citada
@@ -606,10 +604,11 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     //
     // As 5 regras: INDEXADA (citada no `AGENTS.md`, o índice canônico),
     // SEM DONO (nenhum agent, workflow ou skill a cita), RECÍPROCA (a skill
-    // declara "Quem invoca: X" e X não a cita de volta), SEM BINDING (sem
-    // wrapper em `.claude/skills/` — o Claude Code não a descobre) e
-    // FANTASMA (o índice aponta para uma skill que não existe).
-    name: 'cobertura da camada de skills (indexada, alcançável, com binding)',
+    // declara "Quem invoca: X" e X não a cita de volta), DESCOBRÍVEL (o
+    // frontmatter que o harness lê tem `name` e `description`, e o `name` é
+    // o nome do diretório) e FANTASMA (o índice aponta para uma skill que
+    // não existe).
+    name: 'cobertura da camada de skills (indexada, alcançável, descobrível)',
     file: '.tooling/scripts/ci/check-skill-coverage.ts',
     id: 'check-skill-coverage',
   },
@@ -651,6 +650,25 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     name: 'o CI gera o client do Prisma antes de medir o client do Prisma',
     file: '.tooling/scripts/ci/check-ci-prisma-client-ready.ts',
     id: 'check-ci-prisma-client-ready',
+  },
+  {
+    // A pasta única (2026-11-09): este repo tem UMA pasta de tooling de IA —
+    // `.agents/`. Até aqui existiam DUAS (`.agents/` e `.claude/`), e a
+    // segunda era uma cópia: 30 wrappers que repetiam o `name`/`description`
+    // que o `SKILL.md` canônico já tinha. MEDIDO 2026-11-09: o Claude Code
+    // 2.1.319 descobre skill de projeto **só** em `.claude/skills/` — uma
+    // pasta com apenas `.agents/skills/probe-skill/` devolveu ZERO skill de
+    // projeto — mas a mesma pasta com `.claude` como symlink para `.agents`
+    // devolveu 30 skills e 28 agents, **sem wrapper nenhum**.
+    //
+    // A pasta `.claude/` foi para fora do repo: o binding do Claude Code é
+    // feito na máquina (`~/.claude/`), e o que ele aponta é `.agents/`.
+    // Este gate fecha a regra de `AGENTS.md` §1.3 — e sem ele a regra
+    // seria prosa: o `.gitignore` esconderia a pasta do `git status`, e
+    // ninguém veria ela voltar.
+    name: 'pasta única de tooling de IA (só `.agents/`)',
+    file: '.tooling/scripts/ci/check-pasta-unica.ts',
+    id: 'check-pasta-unica',
   },
 ];
 

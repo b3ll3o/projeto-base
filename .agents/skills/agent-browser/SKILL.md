@@ -9,8 +9,8 @@ description: "Automação de browser por CLI para olhar a aplicação rodando se
 
 > **Quem invoca:** o `ux-design-specialist` (quando precisa **ver** a tela
 > antes de opinar sobre a aparência). É o agent que a carrega — o
-> `code-reviewer` não a lista, e o wrapper em `.claude/skills/` também aponta
-> só para o `ux-design-specialist`.
+> `code-reviewer` não a lista, e o binding do Claude Code (o symlink
+> `~/.claude/skills/agent-browser`) também aponta só para o `ux-design-specialist`.
 >
 > **Quando invocar:** quando a pergunta precisa da **página como o usuário a
 > vê** — a tela renderizou, a cor está certa, o formulário aceitou o dado,

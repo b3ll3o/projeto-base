@@ -1,10 +1,18 @@
 # ADR-0008: A camada de binding do Claude Code (o wrapper é cópia, e a cópia é medida)
 
-- **Status:** Aceito
+- **Status:** Substituído por [ADR-0009](./0009-pasta-unica-de-tooling-de-ia.md) (2026-11-09)
 - **Data:** 2026-11-09
 - **Decisores:** Equipe de arquitetura + agents especialistas
-- **Specs relacionadas:** [issue #149](https://github.com/b3ll3o/projeto-base/issues/149) · [`check-binding-canonico`](../../.tooling/scripts/ci/check-binding-canonico.ts) · [`check-skill-coverage`](../../.tooling/scripts/ci/check-skill-coverage.ts)
+- **Specs relacionadas:** [issue #149](https://github.com/b3ll3o/projeto-base/issues/149) · `check-binding-canonico` (removido com a pasta `.claude/`) · [`check-skill-coverage`](../../.tooling/scripts/ci/check-skill-coverage.ts)
 - **ADR anterior:** [0007-refresh-token-revogavel.md](./0007-refresh-token-revogavel.md)
+
+> ⚠️ **Este ADR foi substituído.** A pasta `.claude/` saiu do repo e o binding
+> passou a ser um **symlink na máquina** — não há mais wrapper, nem a cópia que
+> este ADR media. O texto abaixo fica como registro do que foi decidido e por
+> quê; o que vale hoje está no
+> [ADR-0009](./0009-pasta-unica-de-tooling-de-ia.md). O gate
+> `check-binding-canonico` foi removido, e o que passa a valer no lugar dele
+> é o [`check-agent-frontmatter`](../../.tooling/scripts/ci/check-agent-frontmatter.ts).
 
 ## Contexto
 
@@ -68,9 +76,9 @@ allowlist que impede o desvio silencioso), e na skill é metadado de outra tool
 canônico sem `tools` não pode ter wrapper com `tools`, e exigir o campo lá
 seria cobrar o que não é defeito.
 
-O instrumento é o gate
-[`check-binding-canonico`](../../.tooling/scripts/ci/check-binding-canonico.ts).
-Ele compara, campo a campo, todo campo que o wrapper declara; wrapper sem
+O instrumento era o gate
+`check-binding-canonico` (removido — ver [ADR-0009](./0009-pasta-unica-de-tooling-de-ia.md)).
+Ele comparava, campo a campo, todo campo que o wrapper declara; wrapper sem
 canônico, campo obrigatório ausente e campo que o canônico não declara são
 erro. A **mensagem** carrega o arquivo e a **linha** divergente dos dois lados.
 
@@ -144,8 +152,9 @@ da decisão é o spec.
 
 ## Ver Também
 
-- [`.claude/README.md`](../../.claude/README.md) — o guia do binding, e o
-  ponto onde esta ADR é referenciada.
+- [`.agents/README.md`](../../.agents/README.md) — o guia da pasta única (era
+  o `.claude/README.md`, removido com a pasta), e o ponto onde esta ADR é
+  referenciada.
 - [`../../docs/integrations/claude-code.md`](../integrations/claude-code.md) —
   a integração do Claude Code para quem usa o template.
 - [ADR-0002](./0002-autenticacao-jwt-argon2.md) — a decisão anterior sobre
