@@ -36,8 +36,12 @@ Escolhido por dois motivos concretos, não por preferência de moda:
 | Senha acima de 72 bytes | **trunca silenciosamente** | hasha o tamanho que receber |
 | Custo de um ataque de GPU | 4 KiB por hash — barato | 64 MiB por hash — caro |
 
-Parâmetros: os **defaults da lib** (`argon2id`, `m=65536`, `t=3`, `p=4`),
-medidos em ~48 ms por hash neste ambiente. Eles **não** viram constante em
+Parâmetros: os **defaults da lib** (`argon2id`, `m=65536`, `t=3`, `p=4`).
+O custo por hash é **ordem de grandeza, não constante**: MEDIDO 2026-11-09,
+~246 ms por `hash()` e ~230 ms por `verify()` numa CPU AMD EPYC 9354P de 2 vCPU
+(`node -e` com `argon2@0.45.1`, mediana de 5 amostras) — o número varia com o
+hardware, e é por isso que o **default da lib** é a escolha, e não um número
+fixo nosso. Eles **não** viram constante em
 `argon2-password-hasher.ts` porque o VO `PasswordHash` valida o formato do hash
 com regex que aceita qualquer `m`/`p`/`t` — fixar nos dois lugares criaria duas
 fontes de verdade para o mesmo número. Se a política mudar, o caminho é

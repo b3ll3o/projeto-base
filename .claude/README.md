@@ -11,7 +11,7 @@
 
 | Caminho | Papel | Estado |
 |---|---|---|
-| `.claude/skills/<dir>/SKILL.md` | Wrapper que expõe a skill canônica | 21 de 29 |
+| `.claude/skills/<dir>/SKILL.md` | Wrapper que expõe a skill canônica | 29 de 29 |
 | `.claude/agents/<name>.md` | Wrapper que expõe o agent canônico | 3 de 28 (piloto) |
 | `.claude/hooks/pretooluse-block-pnpm-lock.mjs` | Guard de escrita no lockfile | pipe-testado; inerte até `/hooks` |
 | `.claude/hooks/posttooluse-stack-review.sh` | Reviewer pós-edição, em modo feedback | pipe-testado; inerte até `/hooks` |
@@ -25,7 +25,7 @@
 > [Ativação](#ativação-estes-hooks-não-sobem-sozinhos). "Ativo" aqui significaria
 > que o hook responde a uma edição real, e hoje não responde.
 
-## Skills (21 wrappers)
+## Skills (29 wrappers)
 
 Um wrapper por skill em `.agents/skills/`. Cada um tem no máximo 30 linhas e **não
 contém procedimento**: só `name`/`description` copiados literalmente do frontmatter
@@ -166,7 +166,7 @@ Reproduzir: `printf '%s' '<payload>' | node .claude/hooks/pretooluse-block-pnpm-
 ## Findings que moldaram isto
 
 Cinco fatos medidos que explicam por que cada hook é como é: `onFailure` não ser
-campo de hook, `jq` não existir nesta máquina, o reviewer escrever o relatório
+campo de hook, `jq` não ser dependência do repo, o reviewer escrever o relatório
 incondicionalmente, `--mode` ser rótulo e não comportamento. Cada um com o
 comando de reprodução ao lado, em [`.claude/FINDINGS.md`](./FINDINGS.md).
 
@@ -209,6 +209,11 @@ drift aqui passaria por review — foi justamente um `tools:` descartado que a
 revisão adversarial deste commit pegou, por leitura. Um gate que diffe os dois
 `name:`/`description:` é o conserto; fica para depois, porque é tooling novo.
 
+**MEDIDO 2026-11-09:** o `check-skill-coverage` cobre a **existência** do
+wrapper (a regra SEM BINDING), não o **conteúdo** dele. A comparação de
+`name:`/`description:` contra o canônico continua **sem instrumento** — este
+parágrafo é a lacuna que sobrou, e ela continua aberta.
+
 ### O hook herda uma regra cega do reviewer
 
 `stack-code-reviewer.ts:150` usa `/^\s*<img\s/` **sem a flag `m`**, que só casa
@@ -233,13 +238,15 @@ cobertura do trabalho — foi a escolha registrada acima, para não poluir a
 descoberta do Claude Code com agentes que não têm nada de específico deste
 vendor.
 
-MEDIDO 2026-11-05: `ls .agents/agents/*.md | wc -l` → 28 agents;
+MEDIDO 2026-11-09: `ls .agents/agents/*.md | wc -l` → 28 agents;
 `ls .agents/skills/*/SKILL.md | wc -l` → 29 skills; `ls .claude/skills/*/SKILL.md | wc -l`
-→ 21 wrappers. O terceiro binding é o `documentation-specialist` (a
-`documentation-audit` é a 16ª skill wrapper). As 4 skills de terceiro adaptadas
+→ **29 wrappers** — a cobertura das skills é completa. O terceiro binding de
+agent é o `documentation-specialist`. As 4 skills de terceiro adaptadas
 (`grilling`, `handoff`, `design-taste-frontend`, `agent-browser`) ganharam
-wrapper na mesma hora em que entraram — a cobertura parcial é uma dívida
-anterior, não uma escolha para as novas.
+wrapper na mesma hora em que entraram; as 8 que faltavam (as de UI, a
+`graphify`, a `multi-tenant-audit` e a `learning-observation`) foram
+recuperadas em 2026-11-09 — a cobertura parcial era uma dívida anterior, e o
+gate `check-skill-coverage` agora mede a régua para que ela não volte.
 
 ## Verificação
 
@@ -262,7 +269,7 @@ rm -rf /tmp/probe
 printf '%s' '{"tool_name":"Edit","tool_input":{"file_path":"apps/api/src/modules/users/domain/events/user-created.event.ts"}}' \
   | bash .claude/hooks/posttooluse-stack-review.sh
 
-# skills: 21, todas com ponteiro ao canônico (esperado: 0)
+# skills: 29, todas com ponteiro ao canônico (esperado: 0)
 ls .claude/skills | wc -l
 grep -L '\.agents/skills/' .claude/skills/*/SKILL.md | wc -l
 

@@ -73,18 +73,26 @@ instalação direta) e grava o caminho em `graphify-out/.graphify_python`;
 `python3` solto. O bloco completo está em
 [`references/pipeline/1-instalacao.md`](./references/pipeline/1-instalacao.md).
 
-**Medido em 2026-11-03: a CLI ESTÁ instalada neste ambiente** — `which graphify`
-acha o binário, e o pipeline rodou de verdade: `graphify update .` reconstruiu
-o grafo em 5.880 nós, 12.195 arestas e 436 comunidades (a extração **estrutural**
-é determinística e de graça — a semântica é a que depende de chave). ⚠️ O
-`import graphify` **continua** falhando: a CLI é um executável, não um módulo
-Python importável — e `which` é o teste certo.
+**A CLI é OPCIONAL, e o teste é `which graphify`.** Se o binário não estiver
+lá, esta skill não roda: o que ela oferece ao `explorer` é o **protocolo**
+(quando usar, o que pedir, como verificar), não a execução local. O `explorer`
+segue com grep/read — o grafo é um **upgrade opcional**, nunca um bloqueio.
 
-**Medido em 2026-10-29 (supersedido pela medição de 2026-11-03): a CLI não
-estava instalada** — `which graphify` não achava o binário. Sem a CLI, esta skill
-não roda: o que ela oferece ao `explorer` é o **protocolo** (quando usar, o que
-pedir, como verificar), não a execução local. **Gatilho para rever esta
-medição**: `which graphify` não acha o binário.
+**Histórico das medições** (cada uma é um registro datado, não o estado atual):
+
+- **2026-10-29** — a CLI **não** estava instalada; `which graphify` não achava
+  o binário.
+- **2026-11-03** — a CLI **passou a estar** instalada e o pipeline rodou de
+  verdade: `graphify update .` reconstruiu o grafo em 5.880 nós, 12.195 arestas
+  e 436 comunidades (a extração **estrutural** é determinística e de graça — a
+  semântica é a que depende de chave). ⚠️ O `import graphify` **continua**
+  falhando: a CLI é um executável, não um módulo Python importável — e `which`
+  é o teste certo.
+- **2026-11-09** — re-medido: `which graphify` **não** achou o binário neste
+  ambiente de novo. A contagem de nós/arestas acima é do grafo de 2026-11-03 e
+  não descreve a árvore atual.
+
+**Gatilho para rever esta medição:** `which graphify` não acha o binário.
 
 **A chave de API é OPCIONAL.** O grafo não precisa de nenhuma: a extração
 **estrutural** (AST) é determinística e de graça. A extração **semântica** usa
@@ -197,7 +205,7 @@ mais que um grafo ausente:
 | **O grafo envelhece** | `graphify-out/` é um artefato do momento da extração; o código muda e ele não | use `--update`, ou reconstrua; e trate o grafo como *snapshot*, não como fonte da verdade |
 | **`graphify-out/` no repositório** | o grafo é escrito dentro da árvore de trabalho | deixe-o **fora** do versionamento (é artefato, não fonte) e avise o usuário de que ele apareceu no `git status` |
 | **A extração semântica custa caro** | subagentes + tokens por chunk | despache por cache, em lotes de 1-2, e meça antes de despachar |
-| **A CLI não está instalada** | o passo 1 falha | o `explorer` segue com grep/read; o grafo é um **upgrade opcional**, nunca um bloqueio. ⚠️ MEDIDO em 2026-11-03: neste ambiente a CLI **está** instalada (`which graphify` responde) — a armadilha é o `import graphify`, que falha mesmo com a CLI presente (é um executável, não um módulo) |
+| **A CLI não está instalada** | o passo 1 falha | o `explorer` segue com grep/read; o grafo é um **upgrade opcional**, nunca um bloqueio. O teste é `which graphify` — e a armadilha é o `import graphify`, que falha mesmo com a CLI presente (é um executável, não um módulo) |
 | **A chave de API ausente** | só as arestas estruturais | avise que o grafo ficou estrutural; **não peça a chave** |
 | **Um subagente devolveu JSON inválido** | o chunk é perdido | avise e **pule** o chunk; só pare se mais da metade falhar |
 | **O grafo encolheu** | o guard de encolhimento recusa sobrescrever um `graph.json` maior | é proposital: se a redução for de propósito, rode um build completo com `--force` |

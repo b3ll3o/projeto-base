@@ -5,10 +5,10 @@
 // VO, que é a barreira que impede a senha em claro de ir para
 // `users.password_hash`.
 //
-// ⚠️ argon2id com m=65536,t=3,p=4 medido em ~48 ms por hash neste
-// ambiente. A suíte abaixo faz ~8 hashes, ou seja ~400 ms. É o preço de
-// não medir um mock; o comentário existe para ninguém "otimizar" o
-// arquivo trocando argon2 por stub depois de um CI lento.
+// ⚠️ argon2id com m=65536,t=3,p=4 MEDIDO em ~246 ms por hash nesta CPU
+// (2 vCPU AMD EPYC 9354P, 2026-11-09). A suíte abaixo faz ~8 hashes, ou seja
+// ~2 s. É o preço de não medir um mock; o comentário existe para ninguém
+// "otimizar" o arquivo trocando argon2 por stub depois de um CI lento.
 //
 // ── POR QUE `verify` NÃO PODE LANÇAR ──────────────────────────────────────
 //

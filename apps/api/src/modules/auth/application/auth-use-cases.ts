@@ -20,9 +20,9 @@
 //  2. **TEMPO CONSTANTE.** `verify()` roda mesmo sem usuário
 //     encontrado, contra um hash descartável gerado de verdade. Um
 //     `if (user === null) throw` antes do `verify` responderia em ~1 ms
-//     para e-mail inexistente e ~48 ms para e-mail existente — a mesma
-//     informação, entregue pelo relógio. Por isso o hash de isca é um
-//     argon2 real e não `''`: `argon2.verify('')` não custaria nada.
+//     para e-mail inexistente e ~230 ms para e-mail existente (MEDIDO
+//     2026-11-09) — a mesma informação, entregue pelo relógio. Por isso o hash
+//     de isca é um argon2 real e não `''`: `argon2.verify('')` não custaria nada.
 //
 //  3. **O HASH NÃO SAI.** O retorno passa por `toUserOutput`, que não
 //     lê `senhaHash`. Não há outro caminho de leitura aqui.
@@ -76,7 +76,7 @@ const JANELA_DE_TOLERANCIA_DE_REPLAY_MS = 30_000;
 /**
  * Hash de isca para o caminho "e-mail não existe".
  *
- * Gerado UMA vez por processo e memoizado: custa ~48 ms na primeira
+ * Gerado UMA vez por processo e memoizado: custa ~230 ms na primeira
  * chamada e zero nas seguintes, e o valor nunca é reutilizado para
  * verificar nada de verdade — ele existe só para que `verify()` pague o
  * mesmo preço nos dois caminhos.
@@ -303,7 +303,7 @@ export class AuthUseCases {
    * Hash descartável para o caminho "e-mail não existe".
    *
    * Memoizado por processo: o primeiro login de um e-mail inexistente
-   * paga os ~48 ms do argon2 e os seguintes não pagam — o que é
+   * paga os ~230 ms do argon2 e os seguintes não pagam — o que é
    * exatamente o que o atacante mede, então o valor é o MESMO dos dois
    * lados, e o que importa (igualdade) se mantém.
    */

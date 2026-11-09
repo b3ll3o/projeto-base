@@ -20,7 +20,7 @@
 //   é "crie outra senha", que é uma tela que não existe.
 //
 //   `min(1)` continua sendo necessário: sem ele, `senha: ''` passaria e o
-//   argon2 gastaria ~48 ms de CPU verificando string vazia.
+//   argon2 gastaria ~230 ms de CPU verificando string vazia (MEDIDO 2026-11-09).
 //
 // Os limites NÃO são reescritos aqui: vêm do VO, como em
 // `users.schemas.ts`. Um `.max(72)` literal seria uma transcrição que

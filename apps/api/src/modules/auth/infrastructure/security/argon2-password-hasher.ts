@@ -14,8 +14,9 @@
 // ── POR QUE OS PARÂMETROS NÃO VIRAM CONSTANTE AQUI ─────────────────────────
 //
 // `hash()` usa os defaults da lib (argon2id, m=65536 = 64 MiB, t=3, p=4).
-// Medidos em 48 ms/hash neste ambiente. Eles NÃO são reescritos numa
-// constante deste arquivo por dois motivos:
+// MEDIDO 2026-11-09: ~246 ms por hash nesta CPU (2 vCPU AMD EPYC 9354P) — o
+// custo varia com o hardware, e é por isso que o default da lib é a escolha.
+// Eles NÃO são reescritos numa constante deste arquivo por dois motivos:
 //
 //  1. O VO `PasswordHash` valida o formato do hash com um regex que aceita
 //     QUALQUER `m`/`p`/`t`. Fixar os parâmetros aqui e no VO criaria duas

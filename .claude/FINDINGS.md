@@ -54,15 +54,23 @@ Para um guard que precisa da raiz do projeto, o próprio binário diz o que usar
 Daí o `${CLAUDE_PROJECT_DIR:-$PWD}` — e o fallback foi verificado: sem a env
 var, o comando ainda nega o lockfile.
 
-## 3. `jq` não está instalado nesta máquina
+## 3. `jq` não é dependência do repo
 
 `jq -e` é a validação prescrita e o `jq -r` é a extração de payload nos
-exemplos de hook. Nenhum dos dois existe aqui. Um hook escrito a partir desses
-exemplos **não quebraria com erro**: `bash -c` devolveria 127, o hook sairia
-não-zero, e o comportamento observável seria o de um hook que falha sempre.
+exemplos de hook — mas **`jq` não é uma dependência deste repo**: o
+`package.json` declara `engines.node >= 22.6` e nada mais. Num ambiente sem
+`jq`, um hook escrito a partir desses exemplos **não quebraria com erro**:
+`bash -c` devolveria 127, o hook sairia não-zero, e o comportamento observável
+seria o de um hook que falha sempre.
 
 Por isso toda a extração de JSON aqui é feita com `node` — que o repo já exige
-(`engines: node >= 22.6`).
+(`engines: node >= 22.6`) e que está presente por construção.
+
+**Medido 2026-10-13:** `jq` não estava instalado na máquina que mediu esta
+seção. **Medido 2026-11-09:** `jq --version` → `jq-1.7` existe neste
+ambiente — o que **não** muda a decisão: a garantia de que o hook roda é o
+`node`, não o `jq`. A medida da ausência não é o contrato; a dependência
+declarada é.
 
 Armadilha irmã, medida nesta mesma sessão: um harness de teste que dependia de
 `jq` para montar o comando ficou com a variável **vazia**, executou
