@@ -3,7 +3,7 @@
 - **Status:** Aceito
 - **Data:** 2026-11-09
 - **Decisores:** Equipe de arquitetura + agents especialistas
-- **Specs relacionadas:** [issue #149](https://github.com/b3ll3o/projeto-base/issues/149) · [`check-binding-canonico`](../../.tooling/scripts/ci/check-binding-canonico.ts) · o gate de cobertura da camada de skills (que chega com o PR #148)
+- **Specs relacionadas:** [issue #149](https://github.com/b3ll3o/projeto-base/issues/149) · [`check-binding-canonico`](../../.tooling/scripts/ci/check-binding-canonico.ts) · [`check-skill-coverage`](../../.tooling/scripts/ci/check-skill-coverage.ts)
 - **ADR anterior:** [0007-refresh-token-revogavel.md](./0007-refresh-token-revogavel.md)
 
 ## Contexto
@@ -107,20 +107,21 @@ da decisão é o spec.
 
 - **O gate entra verde depois de consertar 2 wrappers divergentes** — a skill
   `docker` e o agent `documentation-specialist` (que tinha perdido as aspas da
-  `description`). MEDIDO 2026-11-09: o gate novo **compara 24 wrappers** (21
+  `description`). MEDIDO 2026-11-09: o gate novo **compara 32 wrappers** (29
   skills + 3 agents) e mede **0 divergências** depois do conserto.
 - **A cobertura de agents continua 3 de 28**, e agora isso é uma **decisão
   versionada** e não um número solto num README. Um agent novo **sem**
   wrapper é uma escolha — e a lista dos 3 é um fato que o repo pode reconciliar
   depois, se a cobertura subir.
-- **O PR #148 e este PR convivem.** O `check-skill-coverage` mede a
-  **existência** do wrapper; o `check-binding-canonico` mede o **conteúdo**.
-  Os dois olham o mesmo diretório e medem coisas diferentes — o que é o motivo
-  de o segundo existir.
+- **O `check-skill-coverage` e este PR convivem.** Ele mede a **existência**
+  do wrapper (regra SEM BINDING) e veio com o PR #148; o
+  `check-binding-canonico` mede o **conteúdo**. Os dois olham o mesmo
+  diretório e medem coisas diferentes — o que é o motivo de o segundo existir,
+  e o que fecha a lacuna que o #148 declarou aberta.
 - **O `description` de uma skill é o seu gatilho.** Corrigir o canônico sem
   copiar para o wrapper deixa a skill descoberta com o gatilho errado, e
   agora isso é **vermelho no preflight**, com a linha do lado errado nomeada.
-- **Custo:** o gate roda em todos os preflights, compara 24 arquivos e lê a
+- **Custo:** o gate roda em todos os preflights, compara 32 arquivos e lê a
   **linha inteira** de cada campo declarado (2 na skill, 4 no agent) — nada
   que mereça medição de custo.
 

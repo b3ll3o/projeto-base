@@ -19,7 +19,7 @@ defeito P0** (mesma seção).
 | Fato | Medido em |
 |---|---|
 | O `check-skill-coverage.ts` **não está em `main`** — ele chega com o PR #148, que está **OPEN** | `gh pr view 148` |
-| `main` tem **21** wrappers de skill (não 29) e **3** wrappers de agent | `ls .claude/skills/*/SKILL.md \| wc -l` |
+| `main` tem **21** wrappers de skill (não 29) e **3** wrappers de agent — MEDIDO **antes** do merge do #148 | `ls .claude/skills/*/SKILL.md \| wc -l` |
 | **Já existem 2 divergências de conteúdo em `main`**: a skill `docker` e o agent `documentation-specialist` | `diff` wrapper↔canônico |
 | O `preflight` de `main` está **VERMELHO**: 1 gate, 2 erros | `pnpm ci:preflight` → `EXIT=1` |
 | O `check-memory-crystallization` roda **com o corpus da máquina** e acusa 2 memórias sem destinação | `.agents/runs/memory-triage.md` |
@@ -44,17 +44,22 @@ real para pegar — e esse caso é o mesmo que a issue descreve como
 ### D1 — A branch nasce de `main`, e o F1 vira um gate próprio
 
 O PR #148 entrega o `check-skill-coverage` (a **existência** do wrapper, regra
-`sem-binding`). Ele **não está em `main`** e o repo é trunk-based
+`sem-binding`). O repo é trunk-based
 ([`git-workflow.md`](../../../.agents/specs/conventions/git-workflow.md)): toda
 demanda nasce de `main` e chega por PR, sem empilhamento.
 
 A issue aceita as duas formas: *"uma regra no `check-skill-coverage` (ou um
-gate próprio)"*. Como `main` não tem aquele arquivo, o F1 vira
-**`.tooling/scripts/ci/check-binding-canonico.ts`** — gate próprio, com
-arquivo, spec, registro no preflight, linha no registro de dentes e linha no
-catálogo humano. Ele é **independente** do #148: se o #148 mergear primeiro, os
-dois convivem (existência × conteúdo); se este PR mergear primeiro, o #148
-continua válido.
+gate próprio)"*. Como `main` não tinha aquele arquivo quando o plano foi
+escrito, o F1 virou **`.tooling/scripts/ci/check-binding-canonico.ts`** — gate
+próprio, com arquivo, spec, registro no preflight, linha no registro de dentes
+e linha no catálogo humano.
+
+> ⚠️ **O #148 foi MERGEADO durante a execução** (`3e3ab80`, 2026-11-09), e a
+> branch foi rebaseada em cima dele. O plano não muda: os dois gates coexistem
+> (existência × conteúdo), e o PR agora sai **sobre** o #148, não ao lado. A
+> consequência medida: o gate passa a comparar **32** wrappers (29 skills + 3
+> agents), e o `check-skill-coverage` — que declarava a comparação de
+> conteúdo "sem instrumento" — deixa de declarar isso.
 
 A comparação **não** é sobre o `check-skill-coverage` porque aquele gate mede
 a **existência** do wrapper, e o #148 já o cobre.
@@ -337,7 +342,7 @@ sai `EXIT=0`.
 
 | Medida | Valor |
 |---|---|
-| Wrappers comparados pelo gate novo | **24** (21 skills + 3 agents), 0 divergência |
+| Wrappers comparados pelo gate novo | **32** (29 skills + 3 agents), 0 divergência |
 | Testes da spec do gate novo | **22**, com 6 mutações que caem (4, 2, 2, 1, 1, 1) |
 | Testes da spec do `check-audit-skills` | 24 → **36**, com 9 mutações que caem |
 | Testes da spec do `check-memory-crystallization` | 33 → **37**, com 13 mutações que caem |
@@ -346,7 +351,7 @@ sai `EXIT=0`.
 | Advisories | **43 → 41** (1 crítica, 3 altas, 32 moderadas, 5 baixas) |
 | Diferenciais (árvore real plantada e restaurada) | **8 de 8**: wrapper com `description` re-serializada (mesmo valor, byte diferente) · wrapper com valor diferente · wrapper com campo que o canônico não declara · wrapper de skill com `tools` · registro com uma entrada a menos · `padrao` que não compila · âncora que não está no corpo |
 | `pnpm ci:preflight` | 2 erros → **0** |
-| `pnpm tooling:test` | **1304** testes verdes (402 + 902) |
+| `pnpm tooling:test` | **1333** testes verdes (402 + 931, já com o #148 mergeado) |
 | Dentes do `check-teeth-registry` | 24 → **25**, com 1 mutação que cai |
 
 ---

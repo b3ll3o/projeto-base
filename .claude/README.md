@@ -48,12 +48,9 @@ roteamento**) e `documentation-specialist` (o dono da documentação da
 aplicação — o agent cujo frontmatter tem `Write`/`Edit`, e que precisa deles).
 
 ⚠️ **O critério real do piloto é ruído de descoberta** — 28 definições de agent
-no contexto do Claude Code. E **nenhum outro critério separa os 3**: MEDIDO
-2026-11-09, **4** agents canônicos declaram `Agent` nas `tools`
-(`docker-specialist`, `finding-orchestrator`, `review-router`,
-`specialist-router`) e mais 2 têm `Write`/`Edit` (`refactorer`,
-`documentation-specialist`). A justificativa que valia aqui — que os outros 25
-não têm "nada de específico do Claude Code" — era **falsa** (ver §Lacunas).
+no contexto do Claude Code. **Nenhum outro critério separa os 3**: MEDIDO
+2026-11-09, **4** agents declaram `Agent` nas `tools` e mais 2 têm
+`Write`/`Edit`. A justificativa que valia aqui era **falsa** (ver §Lacunas).
 
 Para estes dois, `tools` **é** copiado verbatim:
 
@@ -211,22 +208,17 @@ fora do escopo deste trabalho.
 **FECHADO em 2026-11-09** (issue #149, F1). O gate
 [`check-binding-canonico`](../.tooling/scripts/ci/check-binding-canonico.ts)
 compara, campo a campo e **byte a byte**, o frontmatter de cada wrapper de
-`.claude/` com o canônico de `.agents/` — e a mensagem carrega o arquivo e a
-**linha** divergente dos dois lados. A comparação é do **campo inteiro** (a
-linha e as continuações do valor), e não do valor: re-serializar YAML produz o
-mesmo valor semântico com bytes diferentes, e a corrupção que esta pasta
-descreve é de byte, não de sentido.
+`.claude/` com o canônico de `.agents/` — a mensagem carrega o arquivo e a
+**linha** divergente. A comparação é do **campo inteiro** (a linha e as
+continuações do valor): re-serializar YAML produz o mesmo valor semântico com
+bytes diferentes.
 
-O primeiro caso real foi o próprio `main`: o PR #147 trocou `healthchecks via
+O primeiro caso real foi o `main` mesmo: o PR #147 trocou `healthchecks via
 curl` por `healthchecks via node` no canônico da skill `docker` e não tocou no
-wrapper — a divergência entrou em `main` e nenhum gate acusou. O agent
-`documentation-specialist` tinha o mesmo defeito, com a `description` sem as
-aspas duplas. A **decisão** está no [ADR-0008](../docs/adr/0008-camada-de-binding-do-claude-code.md).
-
-**MEDIDO 2026-11-09:** o `check-skill-coverage` cobre a **existência** do
-wrapper (a regra SEM BINDING), não o **conteúdo** dele. A comparação de
-`name:`/`description:` contra o canônico continua **sem instrumento** — este
-parágrafo é a lacuna que sobrou, e ela continua aberta.
+wrapper — e nenhum gate acusou. O `check-skill-coverage` (PR #148) cobre a
+**existência**; este cobre o **conteúdo**: a lacuna que o #148 deixou aberta
+**está fechada**. A **decisão** está no
+[ADR-0008](../docs/adr/0008-camada-de-binding-do-claude-code.md).
 
 ### O hook herda uma regra cega do reviewer
 
@@ -248,15 +240,15 @@ formatação dele é mantida à mão.
 ### Só 3 de 28 agents têm wrapper
 
 Os outros 25 agents de `.agents/agents/` continuam sem binding. Não é falha de
-cobertura do trabalho — é a **decisão registrada** no
+cobertura — é a **decisão registrada** no
 [ADR-0008](../docs/adr/0008-camada-de-binding-do-claude-code.md): não poluir a
 descoberta do Claude Code com 28 definições de agent.
 
 ⚠️ **A justificativa que valia aqui até 2026-11-09 era falsa:** ela dizia que só
 valia ligar os *"agentes de papel único cujo frontmatter não tem nada de
-específico para o Claude Code"*. MEDIDO: os **28** agents canônicos declaram
-`tools:` — sem ele, o subagent herda a pool inteira, "um desvio silencioso".
-O motivo real do piloto é **ruído de descoberta** (ver §Agents).
+específico para o Claude Code"*. MEDIDO: os **28** agents declaram `tools:` —
+sem ele, o subagent herda a pool inteira, "um desvio silencioso". O motivo
+real do piloto é **ruído de descoberta** (ver §Agents).
 
 MEDIDO 2026-11-09: `ls .agents/agents/*.md | wc -l` → 28 agents;
 `ls .agents/skills/*/SKILL.md | wc -l` → 29 skills; `ls .claude/skills/*/SKILL.md | wc -l`
