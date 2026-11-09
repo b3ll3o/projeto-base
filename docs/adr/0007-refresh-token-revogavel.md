@@ -129,6 +129,28 @@ promete:
   conta. Trocar a senha pela API (que **não existe** — ver "Não decidido")
   seria o próximo degrau.
 
+### 7. O re-login revoga o refresh ANTERIOR, antes de gravar o novo
+
+**Decisão do dono do repo (2026-11-09).** O re-login **sobrescreve** os dois
+cookies de sessão — e o refresh token que o browser tinha antes continuaria
+válido no servidor por até 7 dias, sem nenhum dono: era a mesma classe do
+"Sair" que a #132 fechou, mas pelo caminho do login.
+
+O comportamento, como ficou em `apps/web/app/login/actions.ts`:
+
+- o web **lê** o refresh token que está no cookie (`lerTokens()`) **antes**
+  de gravar o par novo;
+- se houver um, ele **revoga** (`POST /auth/logout`) — e a revogação vem
+  **ANTES** de `guardarTokens`, para que o token velho morra antes de o
+  cookie passar a apontar para o novo;
+- a revogação é **TENTADA**: uma API fora do ar **não impede o login** (a
+  pessoa entrou com a credencial certa, e revogar o token anterior é uma
+  limpeza, não uma pré-condição);
+- a falha é **LOGADA** — uma revogação que falha em silêncio é um controle
+  que não existe;
+- um `401` da API **não** é falha: `revogarRefreshToken` o absorve, porque
+  "este token já está morto" é o estado final **desejado**.
+
 ## Consequências
 
 ### O que mudou para quem usa a API
@@ -184,6 +206,39 @@ promete:
   container).
 - **O web ainda não renova.** O token continua morrendo com a sessão do
   browser, e o fluxo de renovação do web é trabalho futuro.
+
+### LIMITE CONHECIDO — a credencial publicada continua no histórico público
+
+**A senha que a migration `20261020000000_rls_isolation_empresa` publicava
+para o papel `app_runtime` (15 caracteres) CONTINUA no histórico git público
+do repositório, e o histórico NÃO foi reescrito.** Decisão do dono do repo
+em 2026-11-09: reescrever `main` num repositório público quebra todos os
+clones e todos os PRs abertos — um custo maior que o furo que fecha.
+
+Por que a credencial está **queimada**, mesmo sem reescrever o histórico:
+
+- **Ela não é senha válida de nenhum papel.** O mínimo de senha de papel
+  gerenciado subiu para **24** caracteres (`TAMANHO_MINIMO_DE_SENHA_DE_PAPEL`,
+  em `apps/api/src/shared/infrastructure/prisma/papel-de-runtime.ts`) e ela
+  tem **15** — ou seja, ela não autentica mais nada. Ela é barrada pelo
+  **TAMANHO**, e não por valor: escrever o valor numa lista seria outra
+  forma de publicá-lo.
+- **O hash foi apagado em todo banco que rodou a versão velha.** A migration
+  `20261108000001_papel_runtime_sem_senha_publicada` faz
+  `ALTER ROLE app_runtime NOLOGIN PASSWORD NULL` — `PASSWORD NULL` apaga o
+  hash SCRAM, então a senha publicada deixa de autenticar em QUALQUER banco,
+  e não só nos novos.
+- **Ela não está mais em NENHUM arquivo da árvore.** A assinatura é
+  `git grep -l "$(git show 819f13f0:apps/api/prisma/migrations/20261020000000_rls_isolation_empresa/migration.sql | grep -oP "(?<=PASSWORD ')[^']+")" HEAD`
+  → **0 arquivos** (MEDIDO 2026-11-09: exit=1). O literal **não** é
+  reproduzido aqui de propósito: escrevê-lo neste ADR faria o próprio ADR ser
+  o contraexemplo do claim. Ele é recuperável no commit que o publicou
+  (`819f13f0`), que é justamente o histórico público que o dono do repo
+  decidiu não reescrever.
+
+O que fica de pé: quem leu o histórico público tem a senha, e ela **não**
+abre este sistema. Em produção a senha do papel vem do ambiente e o
+`prepara-papeis.sh` recusa qualquer valor de exemplo ou curto demais.
 
 ### Não decidido (e por quê)
 

@@ -77,7 +77,7 @@ export interface RefreshTokenRepositoryPort {
    * ⚠️ O retorno diz se a revogação ACONTECEU AGORA — e ele é o que fecha a
    * corrida da rotação. Dois `POST /auth/refresh` com o MESMO token ao mesmo
    * tempo (retry de cliente, duas abas) chegam os dois ao `estadoDe` como
-   * "ativo"; se o consume não for ATÔMICO, os dois emitem um par novo, e o
+   * "ativo"; se o CONSUMO não for ATÔMICO, os dois emitem um par novo, e o
    * token roubado que se apresenta na MESMA janela também passaria. Com o
    * retorno, só o que realmente consumiu o token renova — o outro recebe 401.
    */

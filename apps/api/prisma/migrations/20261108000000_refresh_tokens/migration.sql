@@ -10,7 +10,7 @@
 -- renovava sozinho, sem que nenhuma ação do titular o invalidasse.
 --
 -- A tabela é o que dá ao token uma IDENTIDADE (`jti`) que o servidor
--- conhece: um token presented whose `jti` está revogado é recusado, mesmo
+-- conhece: um token APRESENTADO cujo `jti` está revogado é recusado, mesmo
 -- que a assinatura HMAC esteja perfeita.
 --
 -- Ver `docs/adr/0007-refresh-token-revogavel.md`.

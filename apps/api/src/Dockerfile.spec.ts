@@ -85,3 +85,106 @@ describe('Dockerfile prod target — OTel tracing bootstrap (Task 1.5)', () => {
     expect(dockerfile).not.toMatch(/NODE_OPTIONS=.*telemetry\/tracing\.js/);
   });
 });
+
+// ─── #128: o `COPY` do prisma e do scripts ────────────────────────────────────
+//
+// pt-BR: o `COPY` do Docker com VÁRIOS caminhos e um destino de diretório
+// copia o CONTEÚDO de cada caminho direto para o destino — não as pastas.
+// `COPY --from=builder /repo/apps/api/prisma /repo/apps/api/scripts apps/api/`
+// deixava `schema.prisma` e `prepara-papeis.sh` soltos em `/repo/apps/api/`, e o
+// ENTRYPOINT (`--schema=prisma/schema.prisma` e `sh ./scripts/prepara-papeis.sh`)
+// não achava nenhum dos dois: a imagem de produção da API não subia.
+//
+// O conserto são DOIS `COPY`, um por pasta. Estes testes são o DENTE do
+// conserto: sem eles, voltar à forma achatada passa tudo em silêncio —
+// nenhum gate do repo mede o destino de um `COPY`, e o defeito volta.
+
+/** Um `COPY` do builder, já partido em fontes e destino. */
+interface CopyDoBuilder {
+  /** Os caminhos de origem (o último token do `COPY` é o destino). */
+  fontes: string[];
+  /** O caminho de destino. */
+  destino: string;
+}
+
+/** Tira a barra final — `apps/api/` e `apps/api` são o MESMO destino. */
+function semBarraFinal(caminho: string): string {
+  return caminho.replace(/\/+$/, '');
+}
+
+/** O último segmento do caminho — `prisma`, `scripts`, `dist`… */
+function ultimoSegmento(caminho: string): string {
+  const partes = semBarraFinal(caminho).split('/');
+  return partes[partes.length - 1] ?? '';
+}
+
+/**
+ * Todos os `COPY --from=builder`, com as fontes e o destino separados.
+ *
+ * ⚠️ A origem e o destino NÃO são distinguíveis por regex solta: o destino é
+ * o ÚLTIMO token, e as flags (`--from=builder`) saem antes da contagem. Sem
+ * isso, `COPY --from=builder A B C` seria lido como "fonte = B, destino = C"
+ * quando o destino é `C` e as fontes são `A` e `B` — que é o caso real.
+ */
+function copiesDoBuilder(dockerfile: string): CopyDoBuilder[] {
+  return dockerfile
+    .split('\n')
+    .filter((linha) => /^\s*COPY\s/i.test(linha))
+    .filter((linha) => /--from=builder\b/.test(linha))
+    .map((linha) => {
+      const tokens = linha
+        .trim()
+        .replace(/^COPY\s+/i, '')
+        .split(/\s+/)
+        .filter((token) => token !== '' && !token.startsWith('--'));
+      return { fontes: tokens.slice(0, -1), destino: tokens[tokens.length - 1] ?? '' };
+    });
+}
+
+describe('Dockerfile prod — o COPY do prisma e do scripts preserva as pastas (#128)', () => {
+  it('copia o prisma para apps/api/prisma — a pasta sobrevive ao COPY', async () => {
+    const dockerfile = await readFile(DOCKERFILE_PATH, 'utf8');
+    const copia = copiesDoBuilder(dockerfile).find(
+      (c) =>
+        semBarraFinal(c.destino) === 'apps/api/prisma' &&
+        c.fontes.some((f) => semBarraFinal(f) === '/repo/apps/api/prisma'),
+    );
+    expect(
+      copia,
+      'nenhum `COPY --from=builder` leva `/repo/apps/api/prisma` para `apps/api/prisma` — ' +
+        'sem a pasta `prisma/` o ENTRYPOINT não acha `--schema=prisma/schema.prisma` (#128)',
+    ).toBeDefined();
+  });
+
+  it('copia o scripts para apps/api/scripts — a pasta sobrevive ao COPY', async () => {
+    const dockerfile = await readFile(DOCKERFILE_PATH, 'utf8');
+    const copia = copiesDoBuilder(dockerfile).find(
+      (c) =>
+        semBarraFinal(c.destino) === 'apps/api/scripts' &&
+        c.fontes.some((f) => semBarraFinal(f) === '/repo/apps/api/scripts'),
+    );
+    expect(
+      copia,
+      'nenhum `COPY --from=builder` leva `/repo/apps/api/scripts` para `apps/api/scripts` — ' +
+        'sem a pasta `scripts/` o ENTRYPOINT não acha `sh ./scripts/prepara-papeis.sh` (#128)',
+    ).toBeDefined();
+  });
+
+  it('NENHUM COPY do builder achata `prisma`/`scripts` direto em `apps/api/`', async () => {
+    const dockerfile = await readFile(DOCKERFILE_PATH, 'utf8');
+    // ⚠️ O filtro é o DESTINO (`apps/api`) E a ORIGEM (`prisma`/`scripts`) — não
+    // o destino sozinho: `COPY --from=builder /repo/apps/api/package.json
+    // apps/api/` é legítimo (um ARQUIVO no diretório), e achatar essa também
+    // acusaria um `COPY` correto.
+    const achatas = copiesDoBuilder(dockerfile)
+      .filter((c) => semBarraFinal(c.destino) === 'apps/api')
+      .filter((c) => c.fontes.some((f) => ['prisma', 'scripts'].includes(ultimoSegmento(f))))
+      .map((c) => `${c.fontes.join(' ')} -> ${c.destino}`);
+    expect(
+      achatas,
+      'um `COPY --from=builder` com `prisma`/`scripts` e destino `apps/api/` ACHATA as ' +
+        'pastas: o conteúdo cai direto em `/repo/apps/api/` e o ENTRYPOINT não acha ' +
+        '`prisma/schema.prisma` nem `./scripts/prepara-papeis.sh` (#128)',
+    ).toEqual([]);
+  });
+});

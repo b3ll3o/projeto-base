@@ -90,10 +90,14 @@ Sem `output: 'standalone'` → imagem final tem centenas de MB (`node_modules` i
 **Api:**
 
 ```dockerfile
-ENTRYPOINT ["sh", "-c", "node ./scripts/prisma-migrate-deploy.js && node dist/main.js"]
+ENTRYPOINT ["sh", "-c", "cd /repo/apps/api && pnpm exec prisma migrate deploy --schema=prisma/schema.prisma && sh ./scripts/prepara-papeis.sh && exec node dist/main.js"]
 ```
 
-OU criar `apps/api/scripts/prisma-migrate-deploy.js` que executa `prisma migrate deploy` antes de subir o NestJS (idempotente; aguarda DB healthy).
+O passo de manutenção do banco é `apps/api/scripts/prepara-papeis.sh` (idempotente;
+aguarda DB healthy). O `cd` NÃO é cosmético: `pnpm exec` procura em
+`./node_modules/.bin`, e o binário do prisma vive em `apps/api/node_modules/.bin`.
+O `exec` antes do `node` é o que faz o SIGTERM chegar ao processo Node — sem ele, o
+`sh` forka o `node` e continua vivo como pai, e o sinal morre no shell.
 
 **Web:**
 
@@ -177,7 +181,7 @@ outputs:
     minimum_set: ['node_modules', '.turbo', 'dist', '.next', 'coverage', '*.log']
     keep: ['pnpm-lock.yaml', 'prisma/migrations/**', 'prisma/schema.prisma']
   entrypoint:
-    api: 'sh -c "node ./scripts/prisma-migrate-deploy.js && node dist/main.js"'
+    api: 'sh -c "cd /repo/apps/api && pnpm exec prisma migrate deploy --schema=prisma/schema.prisma && sh ./scripts/prepara-papeis.sh && exec node dist/main.js"'
     web: 'node server.js'
   healthcheck_cmd: 'node -e "require('http').get('http://localhost:<port>/api/(v1)/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"'
   compose_fragment:

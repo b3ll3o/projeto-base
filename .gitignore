@@ -23,14 +23,26 @@ coverage/
 # de proposito — mas essa pasta e saida de maquina. Sem esta regra, `git status`
 # mostrava `?? .agents/runs/findings-.../` e o proximo `git add -A` commitaria
 # o artefato.
-.agents/runs/findings-*/
-# ⚠️ A EXCEÇÃO: o scan de 2026-10-26 foi versionado DE PROPOSITO (o
-# `.agents/runs/` guarda, por convenção, registros datados versionados) — e a
-# regra acima o alcançava junto com os artefatos novos do `findings-orchestration`.
-# Sem esta exceção, o `git add` do lint-staged RECUSA os dois arquivos ("Os
-# caminhos a seguir são ignorados por um dos seus arquivos .gitignore") e o
-# commit não passa.
-!.agents/runs/findings-2026-10-26T050019Z/
+#
+# ⚠️ A EXCEÇÃO é por ARQUIVO, e não pela PASTA: o scan de 2026-10-26 foi
+# versionado DE PROPOSITO (o `.agents/runs/` guarda, por convenção, registros
+# datados versionados), e o `git add` do lint-staged RECUSA um caminho
+# ignorado ("Os caminhos a seguir são ignorados por um dos seus arquivos
+# .gitignore") — o commit não passa sem a re-inclusão.
+#
+# MEDIDO 2026-11-09: a exceção ANTIGA era `!.agents/runs/findings-<ts>/` — e
+# ela era NO-OP para os dois arquivos que nomeia (ambos já versionados, e
+# regra de ignore não alcança path versionado) e REABRIA a pasta: um artefato
+# NOVO do `findings-orchestration` que caísse nela era versionado pelo
+# `git add -A` (MEDIDO: `git check-ignore` → NÃO IGNORADO).
+#
+# Por isso a regra ignora o CONTEÚDO (`findings-*/*`) e a exceção re-inclui os
+# DOIS arquivos, um por um: a PASTA não pode ser excluída, senão a exceção não
+# re-inclui nada — é a regra do Git ("não é possível re-incluir um arquivo se
+# um diretório pai dele está excluído").
+.agents/runs/findings-*/*
+!.agents/runs/findings-2026-10-26T050019Z/findings.yaml
+!.agents/runs/findings-2026-10-26T050019Z/report.md
 # Artefato LOCAL do Claude Code (permissões por usuário). Não é versionado —
 # e sem esta linha, `git add -A` commitaria as permissões da máquina.
 .claude/settings.local.json

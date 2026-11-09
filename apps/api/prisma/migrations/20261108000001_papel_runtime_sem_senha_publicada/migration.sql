@@ -36,4 +36,30 @@
 -- `CREATE ROLE` — e o mesmo aviso do `apps/api/.env.example` vale para
 -- quem roda em Postgres gerenciado (RDS/Cloud SQL), onde o papel de
 -- migration não é superuser.
-ALTER ROLE app_runtime NOLOGIN PASSWORD NULL;
+--
+-- ⚠️ POR QUE O `ALTER ROLE` VAI DENTRO DE UM `DO $$ … $$`
+--
+-- O `ALTER ROLE` de um papel que NÃO EXISTE falha: `ERROR: role "app_runtime"
+-- does not exist` (MEDIDO no Postgres 16, 2026-11-09). E uma migration que
+-- falha TRAVA todas as migrations seguintes — o schema-engine aborta em
+-- `detect_failed_migrations` e não chega na próxima. O papel `app_runtime` é
+-- criado pela `20261020000000_rls_isolation_empresa`, e a ordem normal das
+-- migrations garante que ele existe quando esta roda.
+--
+-- Mas a ordem normal não é o ÚNICO mundo: um banco provisionado fora dela
+-- (ou um `migrate resolve` que pulou a criação do papel) chega aqui sem
+-- `app_runtime` — e aí a migration morre. O banco fica travado para sempre,
+-- e a senha publicada continua valendo nele: exatamente o furo que esta
+-- migration existe para fechar.
+--
+-- O padrão é o MESMO do `CREATE ROLE` guardado da
+-- `20261027000001_papel_de_sistema`: a instrução só roda quando o papel
+-- existe. Sem o papel, não há hash publicado para apagar — e a migration
+-- passa.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_runtime') THEN
+    ALTER ROLE app_runtime NOLOGIN PASSWORD NULL;
+  END IF;
+END
+$$;

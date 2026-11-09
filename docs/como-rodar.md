@@ -117,9 +117,9 @@ traz `/`, e o `/` ENCERRA a parte de credencial da URI — a aplicação subiria
 `prepara-papeis.sh` lê a senha de cada URI e aplica no papel com a credencial de
 **DONO** — nenhuma senha de papel fica versionada, em nenhum ambiente. ✅ medido
 2026-10-28: o script lê o `apps/api/.env` e **recusa** aplicar um placeholder
-(`CHANGE_ME_…`) ou uma senha **curta demais** (24 caracteres, no mínimo — ✅ medido
-2026-11-08: a senha que o repositório publicado tinha 15 caracteres, e ela
-**passava** pelo filtro antigo, que só recusava menos de 16).
+(`CHANGE_ME_…`), uma senha **curta demais** (24 caracteres, no mínimo — ✅ medido
+2026-11-08: a senha publicada tinha 15 e **passava** pelo filtro antigo, que só
+recusava menos de 16), e uma URI que não **nomeie o papel** que recebe a senha.
 
 ⚠️ **Os papeis ficam sem senha depois de um `migrate reset` OU de um `migrate deploy`.**
 A migration `20261027000001` põe o `app_runtime` em `NOLOGIN`, e a

@@ -16,7 +16,7 @@
 // admin digita na URL entra só por `obterPerfilPorSlug`, que o resolve
 // antes de chamar a API.
 
-import { ApiClient, ApiError } from './api-client';
+import { ApiClient, ApiError, baseUrlDaApi } from './api-client';
 import { exigirSessao, lerTenant, lerTokens } from './sessao';
 import type {
   AssignProfileInputDto,
@@ -31,7 +31,7 @@ async function getClient(): Promise<ApiClient> {
   const accessToken = await exigirSessao();
   const tenantId = await lerTenant();
   return new ApiClient({
-    baseUrl: process.env.API_BASE_URL ?? 'http://localhost:3000/api/v1',
+    baseUrl: baseUrlDaApi(),
     getToken: () => accessToken,
     // pt-BR (Fase 3): `/me/profile` é por empresa — sem o header a API
     // responde no bucket `null` e o perfil mostrado é sempre o global.
@@ -55,7 +55,7 @@ async function getClientOpcional(tenantScoped = true): Promise<ApiClient | null>
   if (accessToken === null) return null;
   const tenantId = tenantScoped ? await lerTenant() : null;
   return new ApiClient({
-    baseUrl: process.env.API_BASE_URL ?? 'http://localhost:3000/api/v1',
+    baseUrl: baseUrlDaApi(),
     getToken: () => accessToken,
     getTenant: () => tenantId,
   });
@@ -72,7 +72,7 @@ async function getClientOpcional(tenantScoped = true): Promise<ApiClient | null>
  */
 function clientDoToken(accessToken: string): ApiClient {
   return new ApiClient({
-    baseUrl: process.env.API_BASE_URL ?? 'http://localhost:3000/api/v1',
+    baseUrl: baseUrlDaApi(),
     getToken: () => accessToken,
     getTenant: () => null,
   });

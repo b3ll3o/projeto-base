@@ -16,16 +16,7 @@
 
 import { redirect } from 'next/navigation';
 import { limparSessao, lerTokens } from '@/lib/sessao';
-import { ApiClient } from '@/lib/api-client';
-
-/**
- * O prazo da revogação, em ms (#132).
- *
- * ⚠️ 2 s, e não os 10 s do `ApiClient`: o logout é uma operação de
- * limpeza. Uma API que aceita a conexão e não responde deixaria o botão
- * "Sair" travado por 10 s — e o logout é a única coisa que a pessoa fez.
- */
-const PRAZO_DE_REVOGACAO_MS = 2_000;
+import { revogarRefreshToken } from '@/lib/api-client';
 
 /**
  * Apaga os cookies de sessão e devolve a pessoa para a tela de login.
@@ -48,22 +39,29 @@ const PRAZO_DE_REVOGACAO_MS = 2_000;
  *
  * ⚠️ O PRAZO é de 2 s (e não os 10 s do `ApiClient`): o logout é uma
  * operação de limpeza, e esperar 10 s com o botão "Sair" pressionado é uma
- * tela travada.
+ * tela travada. Ele mora em `revogarRefreshToken` (`lib/api-client.ts`) —
+ * a função que faz a revogação, e que o re-login usa também.
  */
 export async function sair(_formData: FormData): Promise<void> {
   const { refreshToken } = await lerTokens();
 
-  if (refreshToken !== null) {
+  // ⚠️ Truthy, e não `!== null`: um cookie VAZIO conta como AUSENTE, de
+  // propósito (a regra da casa, em `lib/sessao.ts`). Com `!== null`, um
+  // cookie vazio viraria `{refreshToken: ''}` — o `RefreshSchema` da API
+  // recusa (`min(1)`) com 400, e o log acusaria uma revogação que nunca
+  // teve token para revogar.
+  if (refreshToken) {
     try {
-      const api = new ApiClient({
-        baseUrl: process.env.API_BASE_URL ?? 'http://localhost:3000/api/v1',
-        defaultTimeoutMs: PRAZO_DE_REVOGACAO_MS,
-      });
-      await api.post('/auth/logout', { refreshToken });
+      await revogarRefreshToken(refreshToken);
     } catch (erro) {
       // A API fora do ar não pode travar o logout — o cookie é apagado
       // logo abaixo de qualquer jeito. Mas o token continua VIVO no servidor,
       // e isso precisa aparecer em algum log.
+      //
+      // ⚠️ O 401 NÃO chega aqui: `revogarRefreshToken` o absorve, porque
+      // "este token já está morto" é o estado final DESEJADO — e um log
+      // dizendo que a API não revogou abriria chamado de indisponibilidade
+      // de uma API que respondeu 401 corretamente.
       console.error('[web] o logout não revogou o refresh token na API', erro);
     }
   }

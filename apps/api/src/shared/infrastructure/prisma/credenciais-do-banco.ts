@@ -45,6 +45,8 @@
 import {
   PAPEIS_COM_SENHA_GERIDA,
   PREFIXOS_DE_SENHAS_EXPOSTAS,
+  PAPEL_DE_RUNTIME,
+  PAPEL_DE_SISTEMA,
   TAMANHO_MINIMO_DE_SENHA_DE_PAPEL,
 } from './papel-de-runtime.js';
 
@@ -55,6 +57,19 @@ export interface AmbienteDoBanco {
   NODE_ENV?: string | undefined;
   DATABASE_URL?: string | undefined;
   SYSTEM_DATABASE_URL?: string | undefined;
+}
+
+/**
+ * O tamanho da senha, em BYTES UTF-8.
+ *
+ * ⚠️ (#133) A MEDIDA tem de ser a MESMA que a do `prepara-papeis.sh` — e o
+ * `sh` do container conta BYTES, enquanto esta contava unidades UTF-16.
+ * MEDIDO: `"😀😀😀😀😀😀"` (12 caracteres, 24 bytes) PASSAVA no script — que
+ * é quem ESCREVE a senha — e era RECUSADO aqui. As duas camadas que precisam
+ * concordar mediam coisas diferentes.
+ */
+function tamanhoDaSenha(senha: string): number {
+  return Buffer.byteLength(senha, 'utf8');
 }
 
 /**
@@ -71,9 +86,32 @@ function senhaExposta(senha: string | undefined, usuario: string | undefined): b
   const minusculo = senha.toLowerCase();
   if (PREFIXOS_DE_SENHAS_EXPOSTAS.some((prefixo) => minusculo.startsWith(prefixo))) return true;
   if (usuario !== undefined && PAPEIS_COM_SENHA_GERIDA.includes(usuario)) {
-    return senha.length < TAMANHO_MINIMO_DE_SENHA_DE_PAPEL;
+    return tamanhoDaSenha(senha) < TAMANHO_MINIMO_DE_SENHA_DE_PAPEL;
   }
   return false;
+}
+
+/**
+ * A credencial do SLOT está nomeando o papel do OUTRO slot?
+ *
+ * ⚠️ (#133) A SEPARAÇÃO das duas credenciais é o que fecha a #118: a que
+ * vive no container da API (`app_runtime`) é a que NÃO abre o bucket de
+ * sistema, e a que o abre (`app_system`) é uma credencial separada. Trocadas
+ * de lugar, a API passa a rodar com o poder de SISTEMA — que é a credencial
+ * que o `prepara-papeis.sh` escreve com a senha do `SYSTEM_DATABASE_URL`.
+ *
+ * ⚠️ A regra NÃO é "a URI tem de nomear o papel do seu slot": o `docker-
+ * compose.dev.yml` e o harness de teste conectam como o DONO (o papel não
+ * existe antes da migration), e essa recusa derrubaria os dois. A coupling
+ * que fecha o furo da #133 — "a URI tem de apontar para o papel que o
+ * script escreve" — é do `prepara-papeis.sh`, que é a camada que ESCREVE.
+ * Aqui a recusa é a que é verdade em TODO lugar: as DUAS credenciais não
+ * podem ser o mesmo papel gerenciado.
+ */
+function papelTrocado(usuario: string | undefined, papelEsperado: string): boolean {
+  return (
+    usuario !== undefined && PAPEIS_COM_SENHA_GERIDA.includes(usuario) && usuario !== papelEsperado
+  );
 }
 
 /** O veredito da verificação das credenciais. */
@@ -115,11 +153,13 @@ function usuarioDaUri(uri: string | undefined): string | undefined {
 /**
  * Decide se as credenciais do banco servem para a API subir.
  *
- * Duas coisas são recusadas:
+ * Três coisas são recusadas:
  *   1. a senha do papel é um valor de EXEMPLO (prefixo `CHANGE_ME…`/`***`)
  *      ou é curta demais para um papel gerenciado (#133);
  *   2. falta o `SYSTEM_DATABASE_URL` — o bucket de sistema não abre sem a
- *      credencial que o concede.
+ *      credencial que o concede;
+ *   3. as DUAS credenciais nomeiam o MESMO papel gerenciado — a separação
+ *      da #118 invertida (#133).
  *
  * ⚠️ O item 2 é **default-DENY**: a credencial é exigida em TODO ambiente
  * que não seja `development`. MEDIDO: a versão anterior exigia só quando
@@ -137,8 +177,20 @@ function usuarioDaUri(uri: string | undefined): string | undefined {
 export function verificarCredenciaisDoBanco(env: AmbienteDoBanco): VereditoCredenciais {
   const ambiente = env.NODE_ENV?.trim().toLowerCase();
 
+  const usuarioRuntime = usuarioDaUri(env.DATABASE_URL);
+  if (papelTrocado(usuarioRuntime, PAPEL_DE_RUNTIME)) {
+    return {
+      ok: false,
+      motivo:
+        `A credencial de RUNTIME (DATABASE_URL) está nomeando o papel ` +
+        `'${usuarioRuntime}' — e a credencial que vive no container da API é a ` +
+        `que NÃO abre o bucket de sistema (#118). A de SISTEMA é outra ` +
+        `credencial, e o bucket de sistema é concedido por ela.`,
+    };
+  }
+
   const senhaRuntime = senhaDaUri(env.DATABASE_URL);
-  if (senhaExposta(senhaRuntime, usuarioDaUri(env.DATABASE_URL))) {
+  if (senhaExposta(senhaRuntime, usuarioRuntime)) {
     return {
       ok: false,
       motivo:
@@ -161,8 +213,20 @@ export function verificarCredenciaisDoBanco(env: AmbienteDoBanco): VereditoCrede
     return { ok: true };
   }
 
+  const usuarioSistema = usuarioDaUri(env.SYSTEM_DATABASE_URL);
+  if (papelTrocado(usuarioSistema, PAPEL_DE_SISTEMA)) {
+    return {
+      ok: false,
+      motivo:
+        `A credencial de SISTEMA (SYSTEM_DATABASE_URL) está nomeando o papel ` +
+        `'${usuarioSistema}' — e o bucket de sistema é concedido ao papel ` +
+        `'${PAPEL_DE_SISTEMA}' (a credencial que abre o bucket é a de SISTEMA, ` +
+        `não a que vive no container da API).`,
+    };
+  }
+
   const senhaSistema = senhaDaUri(env.SYSTEM_DATABASE_URL);
-  if (senhaExposta(senhaSistema, usuarioDaUri(env.SYSTEM_DATABASE_URL))) {
+  if (senhaExposta(senhaSistema, usuarioSistema)) {
     return {
       ok: false,
       motivo:

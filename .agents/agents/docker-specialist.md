@@ -161,7 +161,8 @@ result:
         base_image: node:22-bookworm-slim
         size_mb: 215
         user: node
-        healthcheck: "wget --spider http://localhost:3000/api/health"
+        # ⚠️ (#139): probe sem pacote instalado — o `node` está nas DUAS imagens
+        healthcheck: "node -e \"require('http').get('http://localhost:3001/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""
 
     compose:
       - path: docker-compose.yml

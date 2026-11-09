@@ -25,6 +25,7 @@ import {
   PAPEL_DE_RUNTIME,
   PAPEL_DE_SISTEMA,
   ESCOPO_DE_SISTEMA,
+  PAPEIS_COM_SENHA_GERIDA,
   PARAMETRO_DE_ESCOPO,
   TAMANHO_MINIMO_DE_SENHA_DE_PAPEL,
   uriComoPapelDeRuntime,
@@ -129,7 +130,22 @@ describe('papel de runtime — a migration e o TypeScript sao o mesmo papel', ()
     // O numero mora nos DOIS lados — o TypeScript (o dono) e o shell (a
     // camada que escreve). Sem esta reconciliacao, os dois divergem em
     // silencio e a regra deixa de valer sem ninguem perceber.
-    expect(scriptDePapeis).toContain(`[ "\${#senha}" -lt ${TAMANHO_MINIMO_DE_SENHA_DE_PAPEL} ]`);
+    expect(scriptDePapeis).toContain(
+      `TAMANHO_MINIMO_DE_SENHA_DE_PAPEL=${TAMANHO_MINIMO_DE_SENHA_DE_PAPEL}`,
+    );
+  });
+
+  it('os papeis que o script ESCREVE sao os do TypeScript (#133)', () => {
+    // ⚠️ (#133) A lista do shell e a do TypeScript precisam ser a MESMA — e
+    // a spec antiga comparava a lista do shell com ELA MESMA, o que nao
+    // prova nada: se o TypeScript perdesse `app_system`, o guard deixaria
+    // de exigir 24 caracteres do papel de sistema e a spec continuaria
+    // verde.
+    const papelDoScript = /PAPEL_DE_RUNTIME='([^']*)'/.exec(scriptDePapeis);
+    const papelDeSistemaDoScript = /PAPEL_DE_SISTEMA='([^']*)'/.exec(scriptDePapeis);
+    expect(papelDoScript?.[1]).toBe(PAPEL_DE_RUNTIME);
+    expect(papelDeSistemaDoScript?.[1]).toBe(PAPEL_DE_SISTEMA);
+    expect([papelDoScript?.[1], papelDeSistemaDoScript?.[1]]).toEqual([...PAPEIS_COM_SENHA_GERIDA]);
   });
 
   it('o script recusa o placeholder e a senha curta — a camada que ESCREVE (#133)', () => {
@@ -139,9 +155,9 @@ describe('papel de runtime — a migration e o TypeScript sao o mesmo papel', ()
     // ⚠️ O `case` confere a senha JÁ NORMALIZADA (o `tr` de uma linha acima):
     // o `case` do shell distingue maiúsculas, e o guard não — e é a camada
     // que ESCREVE a senha que não pode deixar a isca passar.
-    expect(scriptDePapeis).toMatch(/tr '\[:upper:\]' '\[:lower:\]'/);
+    expect(scriptDePapeis).toMatch(/tr '\[:upper:\]' '\[:lower:]'/);
     expect(scriptDePapeis).toMatch(/change_me\*\|'\*\*\*'\)/);
-    expect(scriptDePapeis).toContain('senha_de_exemplo');
+    expect(scriptDePapeis).toContain('motivo_da_recusa');
   });
 
   // ⚠️ O comportamento do filtro do script é medido RODANDO o shell — e não
@@ -150,42 +166,70 @@ describe('papel de runtime — a migration e o TypeScript sao o mesmo papel', ()
   // real (o `case` do shell é case-SENSITIVE, e o do guard não) só aparece
   // quando a FUNÇÃO roda.
   describe('o filtro do `prepara-papeis.sh`, RODADO', () => {
-    /** A função `senha_de_exemplo` extraída do script, e um chamador. */
-    function executar(senha: string, usuario: string): number {
-      const corpo = /senha_de_exemplo\(\)[\s\S]*?^}/m.exec(scriptDePapeis);
+    /**
+     * A função `motivo_da_recusa` extraída do script, e um chamador.
+     *
+     * ⚠️ (#133) A função recebe TRÊS argumentos: a senha, o USUÁRIO da URI e
+     * o PAPEL que a senha vai SERVIR. O papel é o que decide o MÍNIMO — e o
+     * usuário é o que decide se a URI aponta para o papel que recebe a
+     * senha.
+     */
+    function executar(
+      senha: string,
+      usuario: string,
+      papel: string,
+    ): { recusa: boolean; motivo: string } {
+      const corpo = /motivo_da_recusa\(\)[\s\S]*?^}/m.exec(scriptDePapeis);
       expect(corpo).not.toBeNull();
-      const lista = /PAPEIS_COM_SENHA_GERIDA='([^']*)'/.exec(scriptDePapeis);
-      expect(lista).not.toBeNull();
+      const medidor = /tamanho_da_senha\(\)[\s\S]*?^}/m.exec(scriptDePapeis);
+      expect(medidor).not.toBeNull();
+      const papelDoScript = /PAPEL_DE_RUNTIME='([^']*)'/.exec(scriptDePapeis);
+      const papelDeSistemaDoScript = /PAPEL_DE_SISTEMA='([^']*)'/.exec(scriptDePapeis);
+      const minimo = /TAMANHO_MINIMO_DE_SENHA_DE_PAPEL=(\d+)/.exec(scriptDePapeis);
+      expect(papelDoScript).not.toBeNull();
+      expect(papelDeSistemaDoScript).not.toBeNull();
+      expect(minimo).not.toBeNull();
       const arquivo = join(mkdtempSync(join(tmpdir(), 'filtro-senha-')), 'filtro.sh');
       writeFileSync(
         arquivo,
-        `PAPEIS_COM_SENHA_GERIDA='${lista![1]}'\n${corpo![0]}\n` +
-          `senha_de_exemplo "$1" "$2"\necho $?\n`,
+        `PAPEIS_COM_SENHA_GERIDA='${papelDoScript![1]} ${papelDeSistemaDoScript![1]}'\n` +
+          `TAMANHO_MINIMO_DE_SENHA_DE_PAPEL=${minimo![1]}\n` +
+          `${medidor![0]}\n${corpo![0]}\n` +
+          `if motivo="$(motivo_da_recusa "$1" "$2" "$3")"; then ` +
+          `printf 'RECUSA|%s\\n' "$motivo"; else printf 'ACEITA\\n'; fi\n`,
         'utf-8',
       );
       // `execFileSync` com argv em ARRAY — o `check-shell-injection` recusa
       // `execSync` com o comando montado por concatenação, e a razão é boa:
       // um valor interpolado vai cru para o shell.
-      const saida = execFileSync('sh', [arquivo, senha, usuario], { encoding: 'utf-8' });
-      return Number(saida.trim().split('\n').pop());
+      const saida = execFileSync('sh', [arquivo, senha, usuario, papel], { encoding: 'utf-8' });
+      const linha = saida.trim();
+      const recusa = linha.startsWith('RECUSA');
+      return { recusa, motivo: recusa ? linha.slice('RECUSA|'.length) : '' };
     }
 
     it('recusa o placeholder — em QUALQUER caixa', () => {
       // MEDIDO 2026-11-08: o `case` do shell distingue maiúsculas, e o
       // guard normaliza — então `Change_Me_…` (a MESMA isca, com outra
       // caixa) passava pela camada que ESCREVE a senha.
-      expect(executar('CHANGE_ME_gerar_com_openssl_rand_hex_32', 'app_runtime')).toBe(0);
-      expect(executar('change_me_gerar_com_openssl_rand_hex_32', 'app_runtime')).toBe(0);
-      expect(executar('Change_Me_gerar_com_openssl_rand_hex_32', 'app_runtime')).toBe(0);
-      expect(executar('***', 'app_runtime')).toBe(0);
+      expect(
+        executar('CHANGE_ME_gerar_com_openssl_rand_hex_32', 'app_runtime', 'app_runtime').recusa,
+      ).toBe(true);
+      expect(
+        executar('change_me_gerar_com_openssl_rand_hex_32', 'app_runtime', 'app_runtime').recusa,
+      ).toBe(true);
+      expect(
+        executar('Change_Me_gerar_com_openssl_rand_hex_32', 'app_runtime', 'app_runtime').recusa,
+      ).toBe(true);
+      expect(executar('***', 'app_runtime', 'app_runtime').recusa).toBe(true);
     });
 
     it('recusa a senha CURTA de um papel gerenciado (#133)', () => {
       // O valor que o repositório publicou tinha 15 caracteres — e o filtro
       // antigo (mínimo 16) o aceitava.
-      expect(executar('a'.repeat(15), 'app_runtime')).toBe(0);
-      expect(executar('a'.repeat(15), 'app_system')).toBe(0);
-      expect(executar('a'.repeat(24), 'app_runtime')).toBe(1);
+      expect(executar('a'.repeat(15), 'app_runtime', 'app_runtime').recusa).toBe(true);
+      expect(executar('a'.repeat(15), 'app_system', 'app_system').recusa).toBe(true);
+      expect(executar('a'.repeat(24), 'app_runtime', 'app_runtime').recusa).toBe(false);
     });
 
     it('NÃO recusa a senha curta do DONO — é o bootstrap de dev documentado', () => {
@@ -193,8 +237,30 @@ describe('papel de runtime — a migration e o TypeScript sao o mesmo papel', ()
       // para o dono, e o guard de boot faz a MESMA distinção (o mínimo
       // alcança os papéis gerenciados, não o dono). As duas camadas precisam
       // concordar — e o dev precisa subir.
-      expect(executar('projeto', 'projeto')).toBe(1);
-      expect(executar('a'.repeat(15), 'projeto')).toBe(1);
+      expect(executar('projeto', 'projeto', '').recusa).toBe(false);
+      expect(executar('a'.repeat(15), 'projeto', '').recusa).toBe(false);
+    });
+
+    // ⚠️ (#133) O P0: o filtro era indexado pelo USUÁRIO da URI, e a senha
+    // era escrita nos PAPÉIS fixos. Renomear o usuário burlava o conserto —
+    // MEDIDO: `usuario='runtime'` + senha de 15 caracteres passava, e o
+    // `ALTER ROLE app_runtime` aplicava essa senha no papel de runtime.
+    it('RECUSA a URI que NAO nomeia o papel que recebe a senha (#133)', () => {
+      const burla = executar('a'.repeat(32), 'runtime', 'app_runtime');
+      expect(burla.recusa).toBe(true);
+      // E o motivo é o da COUPLING — e não o do tamanho (a senha tem 32).
+      expect(burla.motivo).toContain('app_runtime');
+      // O mesmo para o papel de SISTEMA.
+      expect(executar('a'.repeat(32), 'app_runtime', 'app_system').recusa).toBe(true);
+    });
+
+    it('a MEDIDA e em BYTES — as duas camadas medem a mesma coisa (#133)', () => {
+      // 6 emojis = 12 caracteres (que o TypeScript contava como 12) e 24
+      // BYTES. MEDIDO: antes desta correção, essa senha PASSAVA no script
+      // — que é quem ESCREVE — e era RECUSADA pelo guard.
+      expect(executar('😀'.repeat(6), 'app_runtime', 'app_runtime').recusa).toBe(false);
+      // 5 emojis = 20 bytes: recusada pelos DOIS lados.
+      expect(executar('😀'.repeat(5), 'app_runtime', 'app_runtime').recusa).toBe(true);
     });
   });
 

@@ -263,4 +263,158 @@ HEALTHCHECK --interval=10s --timeout=3s \\
     expect(res.errors).toEqual([]);
     expect(res.ok).toBe(true);
   });
+
+  // ⚠️ (#147) O probe EMBRULHADO: `sh -c "curl …"`.
+  //
+  // O primeiro token do comando é o SHELL — e `sh` é NATIVO da imagem, então
+  // o gate passava sem olhar o binário de verdade. É exatamente a forma do
+  // #139 que o gate diz fechar.
+  it('⚠️ DIFERENCIAL: o probe EMBRULHADO em `sh -c` fica VERMELHO (#147)', () => {
+    const semCurl = `FROM node:22-bookworm-slim@sha256:abc AS base
+FROM base AS prod
+HEALTHCHECK --interval=10s --timeout=3s \\
+  CMD sh -c "curl -fsS http://localhost:3000/health || exit 1"
+`;
+    // ⚠️ O compose é o de probe em `node` — senão o erro viria do COMPOSE
+    // (que também acusaria o `curl`) e o teste passaria pelo motivo errado.
+    const composeVerde = COMPOSE_BASE.replace(
+      "'curl -fsS http://localhost:3000/api/v1/health || exit 1'",
+      '\'node -e "process.exit(0)"\'',
+    );
+
+    const res = checkDockerHealthcheckBinary({ repoRoot: repoCom(semCurl, composeVerde) });
+
+    expect(res.ok).toBe(false);
+    expect(res.errors.join('\n')).toContain('curl');
+  });
+
+  it('⚠️ DIFERENCIAL: o COMPOSE com probe EMBRULHADO reprova (#147)', () => {
+    const composeEmbrulhado = COMPOSE_BASE.replace(
+      "'curl -fsS http://localhost:3000/api/v1/health || exit 1'",
+      `'sh -c "curl -fsS http://localhost:3000/api/v1/health || exit 1"'`,
+    );
+
+    const res = checkDockerHealthcheckBinary({
+      repoRoot: repoCom(DOCKERFILE_SAUDIAVEL, composeEmbrulhado, {
+        'docker-compose.dev.yml': COMPOSE_DEV,
+      }),
+    });
+
+    expect(res.ok).toBe(false);
+    expect(res.errors.join('\n')).toContain('curl');
+  });
+
+  // ⚠️ (#147) O gate fundia os overlays num `target` só — e o ÚLTIMO
+  // (alfabético) vencia. MEDIDO: com o overlay de dev quebrado e o de prod
+  // inteiro, o gate passava — e o stack de dev (o que sobe na máquina de
+  // quem desenvolve) deixava de ser medido.
+  it('⚠️ DIFERENCIAL: com DOIS overlays, o de DEV quebrado reprova (#147)', () => {
+    const res = checkDockerHealthcheckBinary({
+      repoRoot: repoCom(DOCKERFILE_SAUDIAVEL, COMPOSE_BASE, {
+        'docker-compose.dev.yml': COMPOSE_DEV,
+        'docker-compose.prod.yml': `services:\n  api:\n    build: { target: prod }\n`,
+      }),
+    });
+
+    expect(res.ok).toBe(false);
+    // E o erro NOMEIA o stage `dev` — e não o `prod`, que tem o `curl`.
+    expect(res.errors.join('\n')).toContain('dev');
+    expect(res.errors.join('\n')).not.toContain('target `prod`');
+  });
+
+  // ⚠️ (#147) Um serviço que existe SÓ no overlay nunca era verificado — e
+  // o próximo serviço que nascer no `docker-compose.dev.yml` passava sem
+  // ninguém olhar.
+  it('⚠️ DIFERENCIAL: um serviço que existe SÓ no overlay é verificado (#147)', () => {
+    const overlayComNovo = `services:
+  api:
+    build: { target: dev }
+  worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: dev
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:3000/worker/health || exit 1']
+`;
+
+    const res = checkDockerHealthcheckBinary({
+      repoRoot: repoCom(DOCKERFILE_SAUDIAVEL, COMPOSE_BASE, {
+        'docker-compose.dev.yml': overlayComNovo,
+      }),
+    });
+
+    expect(res.ok).toBe(false);
+    expect(res.errors.join('\n')).toContain('worker');
+  });
+
+  // ⚠️ (#147) `HEALTHCHECK NONE` é a forma documentada pelo Docker de
+  // desligar um probe herdado — e o gate lia `NONE` como nome de binário.
+  it('o `HEALTHCHECK NONE` é "sem probe" — e não o nome de um binário (#147)', () => {
+    const semProbe = DOCKERFILE_SAUDIAVEL.replace(
+      'CMD curl -fsS http://localhost:3000/health || exit 1',
+      'CMD NONE',
+    );
+
+    const res = checkDockerHealthcheckBinary({ repoRoot: repoCom(semProbe) });
+
+    expect(res.errors).toEqual([]);
+    expect(res.ok).toBe(true);
+  });
+
+  // ⚠️ (#147) Sem `build.target`, o Docker constrói o ÚLTIMO stage — e o
+  // serviço era PULADO. Apagar a linha `target: prod` tirava a api do
+  // alcance da medição.
+  it('um serviço SEM `build.target` é medido no ÚLTIMO stage (#147)', () => {
+    const composeSemTarget = `services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:3000/api/v1/health || exit 1']
+`;
+
+    // O ÚLTIMO stage do Dockerfile de teste é o `prod` — que TEM o `curl`.
+    const comCurl = checkDockerHealthcheckBinary({
+      repoRoot: repoCom(DOCKERFILE_SAUDIAVEL, composeSemTarget),
+    });
+    expect(comCurl.ok).toBe(true);
+
+    // E um Dockerfile cujo último stage NÃO tem o `curl` reprova.
+    const semCurl = `FROM node:22-bookworm-slim@sha256:abc AS base
+FROM base AS prod
+`;
+    const reprovado = checkDockerHealthcheckBinary({
+      repoRoot: repoCom(semCurl, composeSemTarget),
+    });
+    expect(reprovado.ok).toBe(false);
+    expect(reprovado.errors.join('\n')).toContain('curl');
+  });
+
+  // ⚠️ (#147) O Dockerfile vem do `build.dockerfile` do serviço — e um
+  // Dockerfile fora de `apps/<nome>/Dockerfile` nunca era medido.
+  it('um Dockerfile FORA de `apps/<nome>/Dockerfile` é medido (#147)', () => {
+    const compose = `services:
+  api:
+    build:
+      context: .
+      dockerfile: infra/api.Dockerfile
+      target: prod
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:3000/api/v1/health || exit 1']
+`;
+    const semCurl = `FROM node:22-bookworm-slim@sha256:abc AS base
+FROM base AS prod
+`;
+
+    const raiz = repoCom(DOCKERFILE_SAUDIAVEL, compose);
+    mkdirSync(join(raiz, 'infra'), { recursive: true });
+    writeFileSync(join(raiz, 'infra', 'api.Dockerfile'), semCurl, 'utf-8');
+
+    const res = checkDockerHealthcheckBinary({ repoRoot: raiz });
+
+    expect(res.ok).toBe(false);
+    expect(res.errors.join('\n')).toContain('curl');
+  });
 });

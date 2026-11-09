@@ -153,6 +153,33 @@ describe('PrismaRefreshTokenRepository — o registro de revogação (#132)', ()
     });
   });
 
+  it('⚠️ DIFERENCIAL: a rotação é ATÔMICA — a falha entre o consumo e o registro NÃO consome o token antigo', async () => {
+    // ⚠️ A PROPRIEDADE que o PR vende: "rotação, numa transação só" (#132).
+    // Os testes acima só medem o caminho feliz — os DOIS efeitos presentes.
+    // MEDIDO por mutação: tirando a transação (consumo e registro em duas),
+    // a suíte inteira continuava VERDE — e a atomicidade ficava sem dente.
+    //
+    // A falha é injetada pelo `jti` novo: o `create` do token novo colide
+    // com um registro que JÁ existe (P2002), e a transação inteira é
+    // desfeita. O token antigo tem de CONTINUAR ATIVO — e é isso que
+    // distingue "uma transação" de "duas".
+    await cleanDatabase(ctx.prisma);
+    const userId = await conta();
+    await repo.registrar('jti-1', userId, new Date(Date.now() + 60_000));
+    // O `jti` novo JÁ EXISTE — e o `create` do repositório vai colidir.
+    await repo.registrar('jti-2', userId, new Date(Date.now() + 60_000));
+
+    await expect(
+      repo.rotacionar('jti-1', 'jti-2', userId, new Date(Date.now() + 120_000)),
+    ).rejects.toThrow();
+
+    // ⚠️ O DIFERENCIAL: com DUAS transações, o consumo do `jti-1` ficaria
+    // VALENDO (a primeira já tinha commitado) — e quem pegasse o intervalo
+    // ficaria SEM refresh token nenhum, sem caminho de recuperação. É o
+    // cenário que o comentário do código descreve.
+    expect((await repo.estadoDe('jti-1')).revogadoEm).toBeNull();
+  });
+
   it('ROTACIONAR um `jti` já consumido devolve `false` — e NÃO registra o novo', async () => {
     // ⚠️ A atomicidade: quando o consumo falha, o registro novo também não
     // acontece (a transação inteira é desfeita). Sem isso, um token novo
@@ -202,14 +229,22 @@ describe('PrismaRefreshTokenRepository — o registro de revogação (#132)', ()
       datasourceUrl: uriComoPapelDeRuntime(ctx.uriDoBanco, ctx.senhaDoPapel),
     });
     try {
+      // ⚠️ O MATCHER importa: `rejects.toThrow()` sem matcher aceitaria
+      // QUALQUER erro — inclusive "a tabela não existe" ou "URL inválida" —
+      // e o teste passaria verde mesmo que o papel de runtime NÃO fosse
+      // lido do banco. O `42501` é o `insufficient_privilege` do Postgres:
+      // é ele que diz que a credencial foi barrada pelo GRANT, e não por
+      // qualquer outra coisa.
       await expect(
         runtime.refreshToken.updateMany({
           where: { jti: 'jti-1' },
           data: { revokedAt: null },
         }),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/42501|insufficient privilege/i);
       // E a leitura também é barrada — a tabela é do caminho de SISTEMA.
-      await expect(runtime.refreshToken.findMany({})).rejects.toThrow();
+      await expect(runtime.refreshToken.findMany({})).rejects.toThrow(
+        /42501|insufficient privilege/i,
+      );
     } finally {
       await runtime.$disconnect();
     }

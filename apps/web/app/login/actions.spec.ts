@@ -15,7 +15,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { redirect } from 'next/navigation';
 import { entrar } from './actions.js';
-import { guardarTenant, guardarTokens, limparTenant } from '@/lib/sessao';
+import { guardarTenant, guardarTokens, lerTokens, limparTenant } from '@/lib/sessao';
 import {
   CREDENCIAIS_INVALIDAS,
   ERRO_CONSULTA_DAS_EMPRESAS,
@@ -124,6 +124,11 @@ function responderPorUrl(rotas: Record<string, RespostaFake | Error>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // ⚠️ `clearAllMocks` limpa as CHAMADAS, não as IMPLEMENTAÇÕES — e o mock de
+  // `lerTokens` (a sessão anterior) deixado por um teste vaza para o
+  // seguinte. Resetar aqui é o que impede um teste de revogar (ou de não
+  // revogar) por causa do anterior.
+  vi.mocked(lerTokens).mockResolvedValue({ accessToken: null, refreshToken: null });
 });
 
 afterEach(() => {
@@ -176,6 +181,75 @@ describe('entrar — caminho feliz', () => {
       email: 'maria@empresa.com',
       senha: 'segredo123',
     });
+  });
+});
+
+describe('entrar — o re-login revoga o refresh token ANTERIOR', () => {
+  // pt-BR (2026-11-09): o re-login SOBRESCREVE os dois cookies, e o refresh
+  // token ANTERIOR continuaria válido no servidor por até 7 dias — a mesma
+  // classe do "Sair" que a #132 fechou, e pela mesma porta: num browser
+  // compartilhado, o cookie de A é sobrescrito e o refresh de A continua
+  // renovando sessão.
+
+  it('revoga o refresh da sessão anterior ANTES de gravar a sessão nova', async () => {
+    vi.mocked(lerTokens).mockResolvedValue({
+      accessToken: 'access-anterior',
+      refreshToken: 'refresh-anterior',
+    });
+    const fetchMock = responderPorUrl({
+      '/auth/logout': okResponse({ revogado: true }),
+      '/me/tenants': okResponse([{ id: 'empresa-1', nome: 'ACME', slug: 'acme' }]),
+    });
+
+    await expect(entrar(INICIAL, formData())).rejects.toThrow('NEXT_REDIRECT:/users');
+
+    const indiceDoLogout = fetchMock.mock.calls.findIndex((chamada) =>
+      String(chamada[0]).includes('/auth/logout'),
+    );
+    expect(indiceDoLogout).toBeGreaterThanOrEqual(0);
+    const [, init] = fetchMock.mock.calls[indiceDoLogout] ?? [];
+    expect(JSON.parse(String(init?.body))).toEqual({ refreshToken: 'refresh-anterior' });
+
+    // ⚠️ A ORDEM é o contrato: revogar DEPOIS de gravar seria revogar o
+    // token que a pessoa acabou de ganhar.
+    const ordemDoLogout = fetchMock.mock.invocationCallOrder[indiceDoLogout]!;
+    const ordemDoGuardar = vi.mocked(guardarTokens).mock.invocationCallOrder[0]!;
+    expect(ordemDoLogout).toBeLessThan(ordemDoGuardar);
+    expect(guardarTokens).toHaveBeenCalledWith('access-abc', 'refresh-xyz');
+  });
+
+  it('sem sessão anterior, não há o que revogar', async () => {
+    const fetchMock = responderPorUrl({
+      '/me/tenants': okResponse([{ id: 'empresa-1', nome: 'ACME', slug: 'acme' }]),
+    });
+
+    await expect(entrar(INICIAL, formData())).rejects.toThrow('NEXT_REDIRECT:/users');
+
+    const consultouLogout = fetchMock.mock.calls.some((chamada) =>
+      String(chamada[0]).includes('/auth/logout'),
+    );
+    expect(consultouLogout).toBe(false);
+  });
+
+  it('a API fora do ar NÃO impede o login — e a falha é LOGADA', async () => {
+    // A pessoa entrou com a credencial certa: a revogação é uma limpeza, não
+    // uma pré-condição. E a falha NÃO é silenciosa — uma revogação que
+    // falha sem rastro é um controle que não existe.
+    vi.mocked(lerTokens).mockResolvedValue({
+      accessToken: 'access-anterior',
+      refreshToken: 'refresh-anterior',
+    });
+    responderPorUrl({
+      '/auth/logout': new Error('ECONNREFUSED'),
+      '/me/tenants': okResponse([{ id: 'empresa-1', nome: 'ACME', slug: 'acme' }]),
+    });
+    const erro = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await expect(entrar(INICIAL, formData())).rejects.toThrow('NEXT_REDIRECT:/users');
+
+    expect(guardarTokens).toHaveBeenCalledWith('access-abc', 'refresh-xyz');
+    expect(erro).toHaveBeenCalled();
+    erro.mockRestore();
   });
 });
 

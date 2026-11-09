@@ -56,6 +56,24 @@ export interface CheckResult {
  */
 export const BINARIOS_NATOS_DA_IMAGEM_NODE = ['node', 'sh', 'bash', 'dash', 'corepack', 'env'];
 
+/**
+ * Os shells que o probe pode EMBRULHAR o comando.
+ *
+ * ⚠️ (#147) `sh -c "curl …"` tem `sh` como primeiro token — e `sh` é NATIVO
+ * da imagem, então o gate passava sem olhar o binário de verdade. MEDIDO:
+ * com o probe embrulhado e o `curl` ausente do stage, o gate devolvia
+ * `ok=true` — e é exatamente a forma do #139 que ele diz fechar.
+ */
+export const SHELLS_EMBRULHADOS = ['sh', 'bash', 'dash'];
+
+/**
+ * A forma de desligar um probe herdado (`HEALTHCHECK NONE`).
+ *
+ * ⚠️ (#147) Sem este tratamento, o `NONE` era lido como o NOME de um
+ * binário — e o gate acusava um binário que ninguém chama.
+ */
+export const SEM_PROBE = 'none';
+
 /** Um stage de um Dockerfile: o nome, o pai e os pacotes que ele instala. */
 export interface Stage {
   nome: string;
@@ -85,7 +103,40 @@ export function binarioDoHealthcheck(comando: string): string | null {
   const tokens = limpo.split(/\s+/).filter((t) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(t));
   const primeiro = tokens[0]?.replace(/^["']/, '').replace(/["']$/, '');
   if (primeiro === undefined || primeiro === '') return null;
+
+  // ⚠️ (#147) O probe EMBRULHADO: `sh -c "curl …"`. O primeiro token é o
+  // shell — nativo da imagem — e o binário de verdade está DENTRO do `-c`.
+  if (SHELLS_EMBRULHADOS.includes(primeiro)) {
+    const dentro = argumentoDoC(tokens);
+    if (dentro === '') return null;
+    return binarioDoHealthcheck(dentro);
+  }
   return primeiro;
+}
+
+/**
+ * O argumento do `-c` de um shell embrulhado, sem as aspas da ponta.
+ *
+ * O comando chega como `sh -c "curl -fsS http://…"`, e o `-c` recebe tudo
+ * que vem depois — com a aspa de abertura colada no primeiro token e a de
+ * fechamento no último. Tirar só a aspa da FRENTE basta: o que interessa
+ * é o PRIMEIRO token de dentro.
+ */
+export function argumentoDoC(tokens: string[]): string {
+  const i = tokens.findIndex((t) => t === '-c');
+  if (i === -1 || i + 1 >= tokens.length) return '';
+  return tokens[i + 1]!.replace(/^["']/, '');
+}
+
+/** O comando do probe é a forma de DESLIGAR (`NONE`)? */
+export function ehSemProbe(comando: string | null): boolean {
+  if (comando === null) return true;
+  const limpo = comando
+    .trim()
+    .replace(/^CMD-SHELL\s+/i, '')
+    .replace(/^CMD\s+/i, '')
+    .trim();
+  return limpo.toLowerCase() === SEM_PROBE;
 }
 
 /**
@@ -135,6 +186,11 @@ export function stagesDeDockerfile(texto: string): Stage[] {
       if (resto === '') {
         // O comando vem na LINHA SEGUINTE (continuação com `\`).
         aguardandoComando = true;
+      } else if (ehSemProbe(resto)) {
+        // ⚠️ (#147) `HEALTHCHECK NONE` é a forma documentada pelo Docker de
+        // desligar um probe herdado — e não é o nome de um binário.
+        atual.healthcheck = null;
+        aguardandoComando = false;
       } else {
         atual.healthcheck = resto;
         aguardandoComando = false;
@@ -144,11 +200,14 @@ export function stagesDeDockerfile(texto: string): Stage[] {
 
     if (aguardandoComando) {
       if (/^CMD\b/i.test(linha.trim())) {
-        atual.healthcheck = linha
+        const comando = linha
           .trim()
           .replace(/^CMD\s*/i, '')
           .replace(/\\\s*$/, '')
           .trim();
+        // ⚠️ (#147) `HEALTHCHECK NONE` é "sem probe" — e não o nome de um
+        // binário que ninguém tem.
+        atual.healthcheck = ehSemProbe(comando) ? null : comando;
       }
       // ⚠️ Qualquer outra linha cancela a espera: o `CMD` de um stage pode
       // vir DEPOIS do HEALTHCHECK (o web tem `CMD ["node", "server.js"]`),
@@ -190,6 +249,18 @@ export function binariosDoStage(stages: Stage[], nome: string): Set<string> {
   }
   for (const pacote of stage.pacotes) disponiveis.add(pacote);
   return disponiveis;
+}
+
+/**
+ * O stage que o Docker constrói quando nenhum `--target` é pedido.
+ *
+ * ⚠️ (#147) É o ÚLTIMO stage do Dockerfile. E o gate precisa dele: um serviço
+ * sem `build.target` declarado era PULADO — e apagar a linha `target: prod`
+ * tirava o serviço do alcance da medição.
+ */
+export function ultimoStage(stages: Stage[]): string | null {
+  const ultimo = stages[stages.length - 1];
+  return ultimo === undefined ? null : ultimo.nome;
 }
 
 // ─── O COMPOSE ──────────────────────────────────────────────────────────────
@@ -302,6 +373,77 @@ export function comandoDoHealthcheck(linhas: string[]): string | null {
   return primeiro;
 }
 
+/**
+ * Uma VARIAÇÃO do probe: o que um serviço é, em uma configuração do compose.
+ *
+ * ⚠️ (#147) O mesmo serviço tem mais de uma variação — a do compose base e
+ * a de cada overlay — e elas têm DIFERENTES `build.target`. Fundir tudo num
+ * `target` só media o stage errado.
+ */
+export interface VarianteDoProbe {
+  /** O nome do serviço. */
+  servico: string;
+  /** O `build.target` efetivo (ou `null` → o último stage do Dockerfile). */
+  target: string | null;
+  /** O `build.dockerfile` efetivo (ou `null` → `apps/<nome>/Dockerfile`). */
+  dockerfile: string | null;
+  /** O `healthcheck` efetivo (ou `null` → sem probe). */
+  healthcheck: string | null;
+  /** De onde veio a variação — para a mensagem do gate. */
+  origem: string;
+}
+
+/**
+ * As variações do compose: a do base, a de cada overlay, e as dos serviços
+ * que existem SÓ no overlay.
+ *
+ * ⚠️ (#147) Um overlay que declara um serviço NOVO (que não existe no base)
+ * é medido — e ele não era. O serviço que nasce no `docker-compose.dev.yml`
+ * passava sem ninguém olhar.
+ */
+export function variantesDoCompose(
+  base: ServicoCompose[],
+  overlays: { nome: string; servicos: ServicoCompose[] }[],
+): VarianteDoProbe[] {
+  const variantes: VarianteDoProbe[] = [];
+
+  for (const servico of base) {
+    variantes.push({
+      servico: servico.nome,
+      target: servico.target,
+      dockerfile: servico.dockerfile,
+      healthcheck: servico.healthcheck,
+      origem: 'docker-compose.yml',
+    });
+    for (const overlay of overlays) {
+      const sobreposto = overlay.servicos.find((s) => s.nome === servico.nome);
+      if (sobreposto === undefined) continue;
+      variantes.push({
+        servico: servico.nome,
+        target: sobreposto.target ?? servico.target,
+        dockerfile: sobreposto.dockerfile ?? servico.dockerfile,
+        healthcheck: sobreposto.healthcheck ?? servico.healthcheck,
+        origem: overlay.nome,
+      });
+    }
+  }
+
+  for (const overlay of overlays) {
+    for (const servico of overlay.servicos) {
+      if (base.some((s) => s.nome === servico.nome)) continue;
+      variantes.push({
+        servico: servico.nome,
+        target: servico.target,
+        dockerfile: servico.dockerfile,
+        healthcheck: servico.healthcheck,
+        origem: overlay.nome,
+      });
+    }
+  }
+
+  return variantes;
+}
+
 // ─── O GATE ─────────────────────────────────────────────────────────────────
 
 /** O gate. */
@@ -316,7 +458,6 @@ export function checkDockerHealthcheckBinary(opts: { repoRoot: string }): CheckR
   }
 
   let healthchecks = 0;
-  const dockerfiles = new Map<string, Stage[]>();
 
   // (1) O `HEALTHCHECK` de cada stage do Dockerfile, contra os binários
   // daquele stage.
@@ -324,8 +465,6 @@ export function checkDockerHealthcheckBinary(opts: { repoRoot: string }): CheckR
     const arquivo = path.join(appsRoot, app, 'Dockerfile');
     if (!existsSync(arquivo)) continue;
     const stages = stagesDeDockerfile(readFileSync(arquivo, 'utf-8'));
-    dockerfiles.set(path.join(appsRoot, app, 'Dockerfile'), stages);
-
     for (const stage of stages) {
       if (stage.healthcheck === null) continue;
       healthchecks++;
@@ -347,8 +486,14 @@ export function checkDockerHealthcheckBinary(opts: { repoRoot: string }): CheckR
   }
 
   // (2) O `healthcheck` de cada serviço do COMPOSE, contra os binários do
-  // stage que o `build.target` do serviço manda — e o `build.target` efetivo
-  // é o do OVERLAY quando existe.
+  // stage que o `build.target` do serviço manda.
+  //
+  // ⚠️ (#147) O COMPOSE é medido por VARIAÇÃO, e não por serviço: o Docker
+  // mescla o compose base com o overlay, e o que roda é o overlay. Fundir
+  // os dois num `target` só (o último, em ordem alfabética, winning) media
+  // o stage errado — MEDIDO: com o overlay de dev quebrado e o de prod
+  // inteiro, o gate passava. E um serviço que existe SÓ no overlay não era
+  // medido NUNCA.
   const composeBase = path.join(root, 'docker-compose.yml');
   if (existsSync(composeBase)) {
     const base = servicosDoCompose(readFileSync(composeBase, 'utf-8'));
@@ -357,38 +502,49 @@ export function checkDockerHealthcheckBinary(opts: { repoRoot: string }): CheckR
     // e o healthcheck herdado do compose base é o que roda.
     const overlays = readdirSync(root)
       .filter((n) => /^docker-compose\..+\.ya?ml$/.test(n))
-      .sort();
-    for (const overlay of overlays) {
-      const Over = servicosDoCompose(readFileSync(path.join(root, overlay), 'utf-8'));
-      for (const servico of Over) {
-        const original = base.find((s) => s.nome === servico.nome);
-        if (original === undefined) continue;
-        if (servico.target !== null) original.target = servico.target;
-        if (servico.healthcheck !== null) original.healthcheck = servico.healthcheck;
-      }
-    }
+      .sort()
+      .map((nome) => ({
+        nome,
+        servicos: servicosDoCompose(readFileSync(path.join(root, nome), 'utf-8')),
+      }));
 
-    for (const servico of base) {
-      if (servico.healthcheck === null || servico.target === null) continue;
-      const binario = binarioDoHealthcheck(servico.healthcheck);
+    const medidos = new Set<string>();
+    for (const variante of variantesDoCompose(base, overlays)) {
+      if (variante.healthcheck === null || ehSemProbe(variante.healthcheck)) continue;
+      const binario = binarioDoHealthcheck(variante.healthcheck);
       if (binario === null) continue;
-      healthchecks++;
 
+      // ⚠️ (#147) O Dockerfile vem do `build.dockerfile` do serviço — e é
+      // lido do DISCO, porque um Dockerfile fora de `apps/<nome>/Dockerfile`
+      // nunca era medido (o mapa só tinha os de `apps/*`).
       const dockerfile = path.join(
         root,
-        servico.dockerfile ?? path.join('apps', servico.nome, 'Dockerfile'),
+        variante.dockerfile ?? path.join('apps', variante.servico, 'Dockerfile'),
       );
-      const stages = dockerfiles.get(dockerfile);
-      if (stages === undefined) continue; // sem Dockerfile, nada a medir
+      if (!existsSync(dockerfile)) continue; // sem Dockerfile, nada a medir
+      const stages = stagesDeDockerfile(readFileSync(dockerfile, 'utf-8'));
+
+      // ⚠️ (#147) Sem `build.target`, o Docker constrói o ÚLTIMO stage — e
+      // o serviço era PULADO. Apagar a linha `target: prod` tirava a api do
+      // alcance da medição.
+      const target = variante.target ?? ultimoStage(stages);
+      if (target === null) continue;
+
+      const chave = `${variante.servico}|${target}|${dockerfile}`;
+      if (medidos.has(chave)) continue;
+      medidos.add(chave);
+      healthchecks++;
+
       if (BINARIOS_NATOS_DA_IMAGEM_NODE.includes(binario)) continue;
-      const disponiveis = binariosDoStage(stages, servico.target);
+      const disponiveis = binariosDoStage(stages, target);
       if (disponiveis.has(binario)) continue;
 
       errors.push(
-        `docker-compose: o serviço '${servico.nome}' faz o build do target ` +
-          `\`${servico.target}\` e o healthcheck chama \`${binario}\` — e o ` +
-          `binário não está NAQUELE stage. O probe falha com "not found" em ` +
-          `runtime, e o serviço fica UNHEALTHY para sempre (#139).`,
+        `docker-compose (${variante.origem}): o serviço '${variante.servico}' ` +
+          `faz o build do target \`${target}\` e o healthcheck chama ` +
+          `\`${binario}\` — e o binário não está NAQUELE stage. O probe ` +
+          `falha com "not found" em runtime, e o serviço fica UNHEALTHY ` +
+          `para sempre (#139).`,
       );
     }
   }

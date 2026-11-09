@@ -111,7 +111,8 @@ function extractTenantId(raw: unknown): string | null {
       detail: 'X-Tenant-Id deve ser um UUID de empresa válido.',
     });
   }
-  // pt-BR: o regex acima tem flag `/i` — a forma em caixa alta é um uuid
+  // pt-BR: o `UUID_RE_QUALQUER_VERSAO` (em `shared/domain/uuid.ts`, o DONO do
+  // regex) tem flag `/i` — a forma em caixa alta é um uuid
   // VÁLIDO e não pode ser recusada. Mas ela não pode descer crua: o Postgres
   // canoniza `uuid` para minúsculas e a policy compara por texto, então a
   // caixa alta não casa com nada. Um validador que aceita a entrada e entrega

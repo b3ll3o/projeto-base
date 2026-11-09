@@ -87,8 +87,8 @@ declarada dentro do `page.tsx` (5) — **10 no total** (contagem reproduzida em
 
 | Action | Arquivo | O que faz | Redirect |
 |---|---|---|---|
-| `entrar` | `apps/web/app/login/actions.ts` | Valida com o schema Zod, `POST /auth/login`, grava os dois tokens em cookie `httpOnly` e decide a empresa da sessão. | `/users`, `/empresa/nova` ou `/convite/<token>`. |
-| `sair` | `apps/web/app/users/actions.ts` | Apaga os cookies de sessão (os dois tokens **e** a empresa). | `/login`. |
+| `entrar` | `apps/web/app/login/actions.ts` | Valida com o schema Zod, `POST /auth/login`, **revoga o refresh token da sessão anterior** (`POST /auth/logout`), grava os dois tokens em cookie `httpOnly` e decide a empresa da sessão. | `/users`, `/empresa/nova` ou `/convite/<token>`. |
+| `sair` | `apps/web/app/users/actions.ts` | Revoga o refresh token (`POST /auth/logout`) e apaga os cookies de sessão (os dois tokens **e** a empresa). | `/login`. |
 | `cadastrarUsuario` | `apps/web/app/users/novo/actions.ts` | Valida e `POST /users`; com token, manda `destino.tipo='convite'`. | `/login?cadastrado=1`. |
 | `criarEmpresaDoAtor` | `apps/web/app/empresa/nova/actions.ts` | `POST /tenants` e grava o cookie `tenant_id` da empresa nova. | `/users` (ou `/login?empresa=1` em `401`). |
 | `aceitarConviteDoAtor` | `apps/web/app/convite/[token]/actions.ts` | `POST /invitations/accept` e grava o cookie `tenant_id` da empresa que convidou. | `/users` (ou `/login?convite=<token>` sem sessão / em `401`). |

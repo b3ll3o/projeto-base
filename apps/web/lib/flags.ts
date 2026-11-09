@@ -11,14 +11,14 @@
 // a diferença entre a tela funcionar para o único ator que pode usá-la e não
 // funcionar. MEDIDO: `api-client.ts:66-67` só manda o header quando existe.
 
-import { ApiClient } from './api-client';
+import { ApiClient, baseUrlDaApi } from './api-client';
 import { exigirSessao } from './sessao';
 import type { FeatureFlagDto, UpdateFeatureFlagInputDto } from '@projeto/shared-types';
 
 async function getClient(): Promise<ApiClient> {
   const accessToken = await exigirSessao();
   return new ApiClient({
-    baseUrl: process.env.API_BASE_URL ?? 'http://localhost:3000/api/v1',
+    baseUrl: baseUrlDaApi(),
     getToken: () => accessToken,
     // Sem `getTenant` — D14. Ver o cabeçalho.
   });

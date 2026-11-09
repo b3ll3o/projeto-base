@@ -5,9 +5,13 @@
 # o CI envelhece sozinho (e o primeiro a descobrir é um CVE na action).
 #
 # O Dependabot é o dono dessa renovação: ele abre PR que TROCA o SHA e
-# atualiza o comentário da tag (`# v4`), e o gate
-# `check-ci-action-pinning.ts` recusa o PR se a tag e o SHA ficarem
-# desencontrados.
+# atualiza o comentário da tag (`# v4`).
+#
+# ⚠️ O gate `check-ci-action-pinning.ts` confere o FORMATO do pin — e só ele:
+# o `ref` tem de ser um SHA de 40 caracteres hex (`REGEX_DE_SHA`). Ele NÃO
+# resolve a tag, NÃO tem rede, e NÃO exige o comentário `# v4`: um SHA com
+# `# v99` passa, e um SHA sem comentário nenhum também. Quem quiser o
+# comentario sincronizado com a tag é o REVISOR do PR, não o gate.
 #
 # ⚠️ Só o ecosystem `github-actions`: o resto do repo (pnpm) tem o
 # `renovate`/lockfile próprio, e um segundo dono de atualização é pior do

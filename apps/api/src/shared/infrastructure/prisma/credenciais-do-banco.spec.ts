@@ -199,4 +199,50 @@ describe('verificarCredenciaisDoBanco() (#118)', () => {
     });
     expect(veredito.ok).toBe(false);
   });
+
+  // ⚠️ (#133) A MEDIDA é em BYTES — e o `prepara-papeis.sh` (que é quem
+  // ESCREVE a senha) mede em bytes também. MEDIDO: 6 emojis (12 caracteres,
+  // 24 bytes) PASSAVAM no script e eram RECUSADAS aqui — as duas camadas
+  // que precisam concordar mediam coisas diferentes.
+  it('a senha é medida em BYTES — igual ao script que APLICA (#133)', () => {
+    const emBytes = verificarCredenciaisDoBanco({
+      NODE_ENV: 'production',
+      DATABASE_URL: `postgresql://app_runtime:${'😀'.repeat(6)}@postgres:5432/app`,
+      SYSTEM_DATABASE_URL: SISTEMA_BOM,
+    });
+    expect(emBytes.ok).toBe(true);
+
+    const curtaEmBytes = verificarCredenciaisDoBanco({
+      NODE_ENV: 'production',
+      DATABASE_URL: `postgresql://app_runtime:${'😀'.repeat(5)}@postgres:5432/app`,
+      SYSTEM_DATABASE_URL: SISTEMA_BOM,
+    });
+    expect(curtaEmBytes.ok).toBe(false);
+  });
+
+  // ⚠️ (#133) A SEPARAÇÃO das duas credenciais (#118) invertida: a
+  // credencial que vive no container da API é a que NÃO abre o bucket de
+  // sistema, e a que o abre é outra. Trocadas de lugar, a API passa a rodar
+  // com o poder de SISTEMA.
+  it('RECUSA as credenciais TROCADAS — a separação da #118 invertida (#133)', () => {
+    const runtimeComODeSistema = verificarCredenciaisDoBanco({
+      NODE_ENV: 'production',
+      DATABASE_URL: SISTEMA_BOM,
+      SYSTEM_DATABASE_URL: SISTEMA_BOM,
+    });
+    expect(runtimeComODeSistema.ok).toBe(false);
+    if (!runtimeComODeSistema.ok) {
+      expect(runtimeComODeSistema.motivo).toContain('app_system');
+    }
+
+    const sistemaComODeRuntime = verificarCredenciaisDoBanco({
+      NODE_ENV: 'production',
+      DATABASE_URL: RUNTIME_BOM,
+      SYSTEM_DATABASE_URL: RUNTIME_BOM,
+    });
+    expect(sistemaComODeRuntime.ok).toBe(false);
+    if (!sistemaComODeRuntime.ok) {
+      expect(sistemaComODeRuntime.motivo).toContain('app_runtime');
+    }
+  });
 });

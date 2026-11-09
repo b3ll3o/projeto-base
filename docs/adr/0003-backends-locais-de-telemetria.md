@@ -107,7 +107,8 @@ volume de logs precisar de busca, é uma decisão nova, não um detalhe deste AD
   questionável em tráfego alto.
 - **O sampling é em duas camadas, e a primeira é invisível.** `tracing.ts` não
   passa `sampler`, então o SDK Node lê `OTEL_TRACES_SAMPLER` do ambiente — e
-  `.env.production.example:96-97` entrega `parentbased_traceidratio` + `ARG=0.1`,
+  o `.env.production.example` entrega `OTEL_TRACES_SAMPLER=parentbased_traceidratio`
+  + `OTEL_TRACES_SAMPLER_ARG=0.1`,
   que descarta 90% dos traces raiz **antes do collector**. O que sobrevive cai na
   `tail_sampling`, que guarda 5% do resto. Para um request rápido e bem-sucedido
   são ~0,5%. Erro e request lento passam pela camada 2, **mas a camada 1 não os
