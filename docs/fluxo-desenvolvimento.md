@@ -125,9 +125,9 @@ grep -cE "^\s+name: '" .tooling/scripts/ci/preflight-gates.ts
 > documento publicava um 0 como se fosse a contagem. O sintoma (contagem que não
 > se move) é indistinguível de "não mudou nada desde a última vez".
 >
-> **MEDIDO 2026-11-09: 52.** As contagens anteriores (21, 29, 41, 44) eram de revisões
+> **MEDIDO 2026-11-09: 53.** As contagens anteriores (21, 29, 41, 44) eram de revisões
 > antigas — a lista cresce a cada gate novo. Por isso a lista **enumerada** vive na §4 e a
-> contagem vive do lado do comando (`grep -cE "^\s+name: '" .tooling/scripts/ci/preflight-gates.ts` → **52**).
+> contagem vive do lado do comando (`grep -cE "^\s+name: '" .tooling/scripts/ci/preflight-gates.ts` → **53**).
 
 ### 3.4 Fan-out por fase — onde paralelizar dá ganho, e onde dá conflito
 
@@ -143,7 +143,7 @@ dois scripts existem no `package.json` (linhas 29 e 31) mas **nenhum hook os inv
 | Auditoria | N reviewers em paralelo, todos read-only | o roteador já resolve quem; falta o executor |
 | `.agents/memory/*.md` | 1 agente por arquivo | 30 arquivos (`find .agents/memory -name '*.md' | wc -l`), convenção 1:1 verificável |
 | Implementação | **1 por vez no mesmo codebase** | ver paredes abaixo |
-| Gates do preflight | 52 gates em `Promise.all` | hoje serial (`preflight.ts:412`), nenhum escreve |
+| Gates do preflight | 53 gates em `Promise.all` | hoje serial (`preflight.ts:412`), nenhum escreve |
 
 **Paredes — aqui paralelizar não é ganho, é conflito garantido:**
 
@@ -153,7 +153,7 @@ dois scripts existem no `package.json` (linhas 29 e 31) mas **nenhum hook os inv
 - **`specialist-routing.md`** — fonte da verdade de **todo** o roteamento. Dois `agent-architect` colidem no arquivo que decide quem é chamado.
 - **Branches paralelas** — `check-branch-up-to-date` bloqueia contra `origin/main`: a segunda branch nasce desatualizada por construção. O histórico já escolheu o lado oposto: PR #81 (167 arquivos), #95 (10 issues).
 
-**Não converta gate determinístico em prompt.** Os 52 gates são regex + TypeScript com spec
+**Não converta gate determinístico em prompt.** Os 53 gates são regex + TypeScript com spec
 própria; §5 já registra que a camada "agentic" é *"regra determinística com prosa em volta"*.
 Reescrever um como LLM é a classe 6 de `guard-classes.md` — spec verde, sistema inerte.
 

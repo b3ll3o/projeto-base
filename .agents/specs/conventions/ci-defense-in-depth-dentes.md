@@ -29,9 +29,9 @@ dentes que não são dentes. O nível **diferencial** entrou em 2026-10-16 pelo 
 motivo: `check-dockerfile-hardening` provava os dentes **revertendo o hardening no
 repo real** (e é `mutação` que não cabe — mexer no `Dockerfile` versionado para
 ver o gate ficar vermelho não é mutação de teste), e estava arquivado com um
-rótulo que a legenda não definia. MEDIDO em 2026-11-09 (comando: `grep -cE '^\| `' .agents/specs/conventions/ci-defense-in-depth-dentes.md`): **51** linhas de gate = **48** mutação
+rótulo que a legenda não definia. MEDIDO em 2026-11-09 (comando: `grep -cE '^\| `' .agents/specs/conventions/ci-defense-in-depth-dentes.md`): **52** linhas de gate = **49** mutação
 + **2** diferencial + **0** controle negativo + **1** controle positivo + **0**
-desconhecidas (as 51 linhas são as que começam por `| \``; **49** delas nomeiam um gate `check-*` — as 2 outras são `review-routing` matrix lint e `turbo-redirect-differential`). Viradas de
+desconhecidas (as 52 linhas são as que começam por `| \``; **50** delas nomeiam um gate `check-*` — as 2 outras são `review-routing` matrix lint e `turbo-redirect-differential`). Viradas de
 2026-10-08: `check-tooling-typecheck`, `check-tsconfig-drift`, `check-eslint-drift`,
 `check-turbo-drift` e `check-doc-refs` — prova só em tmpdir não prova a integração.
 
