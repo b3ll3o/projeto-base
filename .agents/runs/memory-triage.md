@@ -169,6 +169,7 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `gh-api-F-vs-f-for-file-body` | `citada` | `.agents/workflows/pr-refresh.md` | `conteúdo como valor literal` |
 | `git-cherry-blind-to-squash-merge` | `removida` | absorvida por `git-workflow-apendice.md` §Caso 1; a metade que a memória manda seguir está **proibida por nome** lá | — |
 | `git-commit-amend-danger` | `pendente` | — | — |
+| `git-diff-files-misses-staged-files` | `pendente` | — | — |
 | `git-fixture-that-collapses-into-one-object` | `pendente` | — | — |
 | `git-log-is-a-stack-not-a-queue` | `pendente` | — | — |
 | `glob-in-block-comment-closes-it` | `pendente` | — | — |
