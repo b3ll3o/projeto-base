@@ -125,9 +125,9 @@ grep -cE "^\s+name: '" .tooling/scripts/ci/preflight-gates.ts
 > documento publicava um 0 como se fosse a contagem. O sintoma (contagem que não
 > se move) é indistinguível de "não mudou nada desde a última vez".
 >
-> **MEDIDO 2026-11-05: 44.** As contagens que este documento publicava antes (21,
-> depois 29, depois 41) eram de revisões antigas — a lista cresce a cada gate novo. Por isso
-> a lista **enumerada** vive na §4 e a contagem vive do lado do comando.
+> **MEDIDO 2026-11-09: 51.** As contagens anteriores (21, 29, 41, 44) eram de revisões
+> antigas — a lista cresce a cada gate novo. Por isso a lista **enumerada** vive na §4 e a
+> contagem vive do lado do comando (`grep -cE "^\s+name: '" .tooling/scripts/ci/preflight-gates.ts` → **51**).
 
 ### 3.4 Fan-out por fase — onde paralelizar dá ganho, e onde dá conflito
 
@@ -143,22 +143,17 @@ dois scripts existem no `package.json` (linhas 29 e 31) mas **nenhum hook os inv
 | Auditoria | N reviewers em paralelo, todos read-only | o roteador já resolve quem; falta o executor |
 | `.agents/memory/*.md` | 1 agente por arquivo | 30 arquivos (`find .agents/memory -name '*.md' | wc -l`), convenção 1:1 verificável |
 | Implementação | **1 por vez no mesmo codebase** | ver paredes abaixo |
-| Gates do preflight | 44 gates em `Promise.all` | hoje serial (`preflight.ts:412`), nenhum escreve |
+| Gates do preflight | 51 gates em `Promise.all` | hoje serial (`preflight.ts:412`), nenhum escreve |
 
 **Paredes — aqui paralelizar não é ganho, é conflito garantido:**
 
-- **`apps/api/prisma/schema.prisma`** — fonte única, e `db:generate` é `cache: false` (`turbo.json:8`,
-  não o `package.json` — o cache é do turbo). Dois agents no schema não dão conflito de merge: dão
-  **veredito sobre dado stale**, porque o typecheck de um roda contra o client que o outro ainda edita.
-- **`pnpm-lock.yaml`** — já tem `permissionDecision: "deny"` no PreToolUse
-  (`.claude/hooks/pretooluse-block-pnpm-lock.mjs`). Um `pnpm add` paralelo destrói o guard.
+- **`apps/api/prisma/schema.prisma`** — fonte única, e `db:generate` é `cache: false` (`turbo.json:8`, não o `package.json` — o cache é o turbo). Dois agents no schema não dão conflito de merge: dão **veredito sobre dado stale**, porque o typecheck de um roda contra o client que o outro ainda edita.
+- **`pnpm-lock.yaml`** — já tem `permissionDecision: "deny"` no PreToolUse (`.claude/hooks/pretooluse-block-pnpm-lock.mjs`). Um `pnpm add` paralelo destrói o guard.
 - **`package.json` raiz, `turbo.json`, `pnpm-workspace.yaml`** — `check-package-json-drift` mede exatamente esses arquivos.
-- **`specialist-routing.md`** — fonte da verdade de **todo** o roteamento. Dois `agent-architect`
-  colidem no arquivo que decide quem é chamado.
-- **Branches paralelas** — `check-branch-up-to-date` bloqueia contra `origin/main`: a segunda branch
-  nasce desatualizada por construção. O histórico já escolheu o lado oposto: PR #81 (167 arquivos), #95 (10 issues).
+- **`specialist-routing.md`** — fonte da verdade de **todo** o roteamento. Dois `agent-architect` colidem no arquivo que decide quem é chamado.
+- **Branches paralelas** — `check-branch-up-to-date` bloqueia contra `origin/main`: a segunda branch nasce desatualizada por construção. O histórico já escolheu o lado oposto: PR #81 (167 arquivos), #95 (10 issues).
 
-**Não converta gate determinístico em prompt.** Os 44 gates são regex + TypeScript com spec
+**Não converta gate determinístico em prompt.** Os 51 gates são regex + TypeScript com spec
 própria; §5 já registra que a camada "agentic" é *"regra determinística com prosa em volta"*.
 Reescrever um como LLM é a classe 6 de `guard-classes.md` — spec verde, sistema inerte.
 
@@ -200,6 +195,9 @@ Reescrever um como LLM é a classe 6 de `guard-classes.md` — spec verde, siste
 | `check-doc-claims` | `pnpm ci:preflight` | A+B (gate `check-doc-claims`) | Claim numérico de doc que **mente**: o doc cita um comando e afirma um valor ao lado, e a derivação (o código real) produz outro número. A derivação é TypeScript — o gate **não executa shell**, porque o registry (`.tooling/scripts/ci/doc-claims.json`) é versionado e um PR pode editá-lo. A derivação mede **exatamente** o caminho que o comando cita (`dir/*.controller.ts` resolve o glob; um `*.spec.ts` não conta) e o **tying** exige que o caminho medido esteja no comando (registry desamarrado é erro), e o valor tem que estar **adjacente** ao comando — a janela antiga sangrava para o claim vizinho, e um doc que MENTIA passava verde. Escopo: os 6 docs de API | Sim |
 | `check-doc-size` | `pnpm ci:preflight` | A+B (gate `check-doc-size`) | Documentação **viva** acima de 300 linhas. As 3 categorias fora do escopo estão declaradas em `tamanho-e-revisao.md` §O que o teto cobre. A contagem é o número de linhas que o arquivo tem — `wc -l` subestima em 1 os arquivos sem `\n` final | Sim |
 | `check-path-alias` | `pnpm ci:preflight` | A+B (gate `check-path-alias`) | Alias de `compilerOptions.paths` do `tsconfig.base.json` apontando para um diretório que **não existe**. Não mede alias não usado — alias válido e sem import é decisão | Sim |
+| `check-dependency-drift` | `pnpm ci:preflight` | A+B (gate `check-dependency-drift`) | O MESMO pacote declarado em **versões diferentes** em workspaces diferentes — o lockfile instala 2 cópias e cada app typecheca contra a sua | Sim |
+| `check-dependency-freshness` | `pnpm ci:preflight` | A+B (gate `check-dependency-freshness`) | Major pendente **sem declaração de motivo**, ou pendência **envelhecida** (o pacote saiu do workspace, ou a faixa já permite a major) | Sim |
+| `check-action-version-comment` | `pnpm ci:preflight` | A+B (gate `check-action-version-comment`) | Comentário de versão da action que **mente** sobre a major do pin (MEDIDO 2026-11-09: o PR #154 do Dependabot subia `pnpm/action-setup` para 6.1.1 e deixava `# v3`), ou a mesma action em SHAs diferentes | Sim |
 | `turbo-redirect-differential` | `.tooling/scripts/ci/turbo-redirect-differential.sh` | A+B (gate `turbo-redirect-differential`) | Forma de `pnpm turbo run …` que o parser extrai diferente do turbo real — **classe 6** (especificação local diverge do sistema real) | Sim (se Node ≥ 22.6) |
 
 ---
@@ -252,8 +250,8 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 - `docker-build-prod` — build real dos 2 Dockerfiles `prod` em toda PR.
 - `release-template` — syntaticamente correto (idempotência via `git rev-parse --verify`, `concurrency`, `contents: write`) e **já não é noop**: quando a tag existe ele emite `::warning::` em vez de encerrar em silêncio. O que falta: check que amarra footer↔tag (**BL1**).
 - Boundary DDD/Hexagonal **existe de fato** em `apps/api/src/modules/users/{domain,application,infrastructure}`.
-- **Pós-2026-10-29**: 4 gates de documentação entraram no preflight — `check-doc-coverage` (cobertura: BC do NestJS sem `docs/api/<bc>.md`, rota do App Router fora de `docs/web/rotas.md`, package sem `packages/<pkg>/README.md`), `check-doc-claims` (claim numérico que **mente**: o doc afirma um valor que o código não produz mais), `check-doc-size` (teto de 300 linhas da documentação viva) e `check-path-alias` (alias de `paths` para diretório inexistente). Nenhum mede frescor: o doc existir não quer dizer que ele ainda diz a verdade.
-- **Pós-#44**: 5 gates novos sobre as 7 classes de guard, incluindo o `turbo-redirect-differential` (classe 6 — spec local diverge do sistema real) e o `check-self-firing-guard` (classe 3 — guard que dispara em si mesmo). Detalhes em [`guard-classes.md`](./superpowers/plans/2026-10-03-guard-classes.md) e [`guard-classes-decisoes.md`](./superpowers/plans/2026-10-03-guard-classes-decisoes.md).
+- **Pós-2026-10-29**: 4 gates de documentação entraram no preflight — `check-doc-coverage` (BC do NestJS sem `docs/api/<bc>.md`, rota do App Router fora de `docs/web/rotas.md`, package sem `packages/<pkg>/README.md`), `check-doc-claims` (claim numérico que **mente**), `check-doc-size` (teto de 300 linhas da doc viva) e `check-path-alias` (alias de `paths` para diretório inexistente). Nenhum mede frescor: o doc existir não quer dizer que ele ainda diz a verdade. **Pós-#44**: 5 gates novos sobre as 7 classes de guard, incluindo o `turbo-redirect-differential` (classe 6) e o `check-self-firing-guard` (classe 3). Detalhes em [`guard-classes.md`](./superpowers/plans/2026-10-03-guard-classes.md) e [`guard-classes-decisoes.md`](./superpowers/plans/2026-10-03-guard-classes-decisoes.md).
+- **Pós-2026-11-09**: 3 gates de dependência entraram no preflight — `check-dependency-drift` (o mesmo pacote em versões diferentes entre workspaces), `check-dependency-freshness` (a major pendente tem dono e motivo) e `check-action-version-comment` (o comentário de versão da action não pode mentir sobre o pin).
 
 ### 7.2 Unwired / aspiracional
 
