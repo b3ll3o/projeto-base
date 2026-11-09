@@ -47,12 +47,13 @@ import {
   MIN_LENGTH as SENHA_MIN,
   MAX_LENGTH as SENHA_MAX,
 } from '../../domain/value-objects/password-hash.vo.js';
-import { UUID_RE } from '../../domain/value-objects/user-id.vo.js';
 import {
   LIMITE_MINIMO,
   LIMITE_MAXIMO,
   LIMITE_PADRAO,
 } from '../../domain/ports/user-repository.port.js';
+// pt-BR (#136): o cursor é OPACO — a forma que a tabela que o produz gera.
+import { UUID_RE_QUALQUER_VERSAO } from '../../../../shared/domain/uuid.js';
 
 /**
  * A PAGINAÇÃO — o contrato das DUAS surfaces de query da API (#124).
@@ -66,12 +67,26 @@ import {
  * `limit` aceito em uma rota e recusado na outra é a mesma regra escrita duas
  * vezes — e a segunda cópia é a que some.
  *
- * O `cursor` é validado com a `UUID_RE` do VO de id — a MESMA regex que o
- * `UserId` usa (e que a `UserOwnershipGuard` importa). Duas cópias do que é
- * "um id" divergem no primeiro ajuste do formato.
+ * ⚠️ O `cursor` NÃO é um id de DOMÍNIO (#136): ele é uma chave de paginação
+ * que o SERVIDOR devolve e o cliente devolve. Cada uma das duas rotas produz
+ * o seu, de uma tabela diferente:
+ *
+ *   - `GET /users` → `users.id`, que é **v7** (gerado pelo agregado);
+ *   - `GET /users/:id/history` → `users_history.id`, que é **v4** (o
+ *     `gen_random_uuid()` do banco).
+ *
+ * O schema validava o cursor com a `UUID_RE` do VO de id de usuário — que
+ * exige a VERSÃO 7. Resultado: a rota do histórico devolvia um cursor que
+ * ela mesma recusava com **400 VALIDATION_ERROR** na segunda página. O
+ * servidor produzia um token que não aceitava de volta.
+ *
+ * A versão do UUID não é propriedade do CONTRATO — é propriedade do gerador.
+ * O que o contrato exige é a FORMA (a que o Postgres aceita como chave), e
+ * é isso que `UUID_RE_QUALQUER_VERSAO` verifica. A `UUID_RE` v7 continua
+ * onde ela é o dono do formato: o id de usuário.
  */
 export const PaginacaoQuerySchema = z.object({
-  cursor: z.string().regex(UUID_RE, 'cursor precisa ser um id (uuid v7)').optional(),
+  cursor: z.string().regex(UUID_RE_QUALQUER_VERSAO, 'cursor precisa ser um id (uuid)').optional(),
   limit: z.coerce
     .number({ invalid_type_error: 'limit precisa ser um número' })
     .int('limit precisa ser um número inteiro')

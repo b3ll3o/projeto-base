@@ -46,6 +46,7 @@ import { JwtAuthGuard } from './jwt-auth.guard.js';
 import {
   TOKEN_ISSUER_PORT,
   type TokenIssuerPort,
+  type RefreshSubject,
   type TokenSubject,
 } from '../../domain/ports/token-issuer.port.js';
 import { AUTH_USE_CASES } from '../../application/auth-use-cases.js';
@@ -70,7 +71,9 @@ const SUB = '0190a8b6-0000-7000-8000-000000000001';
 const EMAIL = 'joao@example.com';
 
 const ACCESS: TokenSubject = { sub: SUB, email: EMAIL, typ: 'access' };
-const REFRESH: TokenSubject = { sub: SUB, email: EMAIL, typ: 'refresh' };
+// ⚠️ (#132) O `jti` é obrigatório num REFRESH subject — é o que o
+// registro de revogação indexa, e o que o logout revoga.
+const REFRESH: RefreshSubject = { sub: SUB, email: EMAIL, typ: 'refresh', jti: 'jti-de-teste' };
 
 const TOKEN_ACCESS = 'header.payload.assinatura-access';
 const TOKEN_REFRESH = 'header.payload.assinatura-refresh';
@@ -101,7 +104,13 @@ function makeUseCases() {
  */
 function makeIssuer(aceitos: { token: string; subject: TokenSubject }[] = []): TokenIssuerPort {
   return {
-    emitir: vi.fn(async () => ({ accessToken: TOKEN_ACCESS, refreshToken: TOKEN_REFRESH })),
+    emitir: vi.fn(async () => ({
+      accessToken: TOKEN_ACCESS,
+      refreshToken: TOKEN_REFRESH,
+      // ⚠️ (#132) O `jti` do refresh — é o que o registro de revogação indexa.
+      refreshJti: 'jti-de-teste',
+      refreshExpiresAt: new Date('2026-10-16T12:00:00.000Z'),
+    })),
     validarAccessToken: vi.fn(async (token: string) => {
       const achado = aceitos.find((t) => t.token === token);
       if (!achado) throw new Error('token inválido ou expirado');

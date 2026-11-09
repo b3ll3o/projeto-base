@@ -33,12 +33,14 @@
 // `.env` chega como string vazia, e `??` deixaria passar um `expiresIn: ''`
 // que o jsonwebtoken rejeita com erro de timespan no primeiro login.
 
+import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
 import { InvalidTokenException } from '../../domain/exceptions/token.exceptions.js';
 import { segredoDeServico } from '../../../../shared/auth/segredo-de-servico.js';
 import type {
+  RefreshSubject,
   TokenIssuerPort,
   TokenPair,
   TokenSubject,
@@ -105,20 +107,60 @@ export class JwtTokenService implements TokenIssuerPort {
    *
    * Os dois saem de uma chamada porque precisam ser coerentes entre si:
    * mesmo `sub`, mesmo `email`, e o refresh expira depois do access.
+   *
+   * ⚠️ (#132) Os DOIS ganham um `jti` — e cada um o seu. O `jti` é a
+   * IDENTIDADE do token: é o que o registro de revogação indexa, e é o que
+   * o logout revoga. Sem ele, o refresh era um JWT stateless sem
+   * identidade — e nada no servidor podia invalidá-lo.
+   *
+   * O `jti` do ACCESS não é registrado (o registro é dos refresh tokens) —
+   * mas ele existe, e por um motivo concreto: o access token vive 15
+   * minutos e o refresh 7 dias, e um token sem `jti` é um token que pode
+   * ser reproduzido byte a byte. MEDIDO: sem `jti`, o par emitted no mesmo
+   * segundo era IDÊNTICO ao anterior — e a rotação (que troca o jti) é o
+   * que impede a reentrada de um token já usado.
    */
   async emitir(assunto: { sub: string; email: string }): Promise<TokenPair> {
     const base = { sub: assunto.sub, email: assunto.email };
+    const accessJti = randomUUID();
+    const refreshJti = randomUUID();
     const [accessToken, refreshToken] = await Promise.all([
       this.jwt.signAsync(
-        { ...base, typ: 'access' },
+        { ...base, typ: 'access', jti: accessJti },
         { secret: this.chave, expiresIn: this.accessTtl },
       ),
       this.jwt.signAsync(
-        { ...base, typ: 'refresh' },
+        { ...base, typ: 'refresh', jti: refreshJti },
         { secret: this.chave, expiresIn: this.refreshTtl },
       ),
     ]);
-    return { accessToken, refreshToken };
+    return {
+      accessToken,
+      refreshToken,
+      refreshJti,
+      // O `exp` do token que acabou de ser assinado — decodificado, e não
+      // calculado a partir do TTL: o TTL é uma string no formato do `ms`
+      // ('7d', '24h'), e convertê-lo aqui exigiria um parser do `ms` (que
+      // não é dependência direta). O token JÁ sabe quando expira.
+      refreshExpiresAt: this.expiraEm(refreshToken),
+    };
+  }
+
+  /**
+   * O instante de expiração de um token assinado, lido do próprio token.
+   *
+   * `decode` NÃO valida a assinatura — e não precisa: o token acabou de ser
+   * assinado por esta classe, com a chave daqui.
+   */
+  private expiraEm(token: string): Date {
+    const payload = this.jwt.decode(token) as { exp?: number } | null;
+    if (payload?.exp === undefined) {
+      // Um token sem `exp` não expira — e um token que não expira é um
+      // token que não pode ser revogado por prazo. O TTL é sempre passado,
+      // então isto é o ramo IMPOSSÍVEL; e ele é ruidoso de propósito.
+      throw new Error('token sem `exp`: o refresh token não tem prazo de expiração.');
+    }
+    return new Date(payload.exp * 1000);
   }
 
   /**
@@ -127,12 +169,31 @@ export class JwtTokenService implements TokenIssuerPort {
    *         401 — a mensagem não distingue os três casos de propósito.
    */
   validarAccessToken(token: string): Promise<TokenSubject> {
-    return this.validarCom(token, 'access');
+    // ⚠️ (#132) O `jti` do access token NÃO é exposto: o `TokenSubject` é o
+    // que o guard consome, e ele não tem `jti` no contrato. O `jti` do
+    // access existe no PAYLOAD (é o que impede dois logins na mesma segunda
+    // de produzirem o mesmo token), mas ninguém o consome.
+    return this.validarCom(token, 'access').then(({ sub, email }) => ({
+      sub,
+      email,
+      typ: 'access' as const,
+    }));
   }
 
   /** @throws idem `validarAccessToken`, para o par de tipo `refresh`. */
-  validarRefreshToken(token: string): Promise<TokenSubject> {
-    return this.validarCom(token, 'refresh');
+  validarRefreshToken(token: string): Promise<RefreshSubject> {
+    return this.validarCom(token, 'refresh').then((subject) => {
+      // ⚠️ (#132) Um refresh token SEM `jti` é de antes da migração (o par
+      // stateless antigo) — e ele não tem como ser revogado: sem identidade
+      // no registro, não há o que revogar. Ele é RECUSADO, e o efeito é
+      // deslogar toda sessão que existia no momento do deploy. A alternativa
+      // (aceitar) deixaria a #132 aberta justamente para os tokens que
+      // sobraram. Ver o ADR.
+      if (subject.jti === undefined) {
+        throw new InvalidTokenException('token sem jti');
+      }
+      return { sub: subject.sub, email: subject.email, typ: 'refresh', jti: subject.jti };
+    });
   }
 
   /**
@@ -162,7 +223,7 @@ export class JwtTokenService implements TokenIssuerPort {
   private async validarCom(
     token: string,
     typEsperado: 'access' | 'refresh',
-  ): Promise<TokenSubject> {
+  ): Promise<TokenSubject & { jti?: string }> {
     let payload: Record<string, unknown>;
     try {
       payload = await this.jwt.verifyAsync<Record<string, unknown>>(token, {
@@ -183,7 +244,16 @@ export class JwtTokenService implements TokenIssuerPort {
       throw new InvalidTokenException('token inválido');
     }
 
-    return { sub, email, typ: typEsperado };
+    // ⚠️ (#132) O `jti` é OPCIONAL aqui — porque o `TokenSubject` é também o
+    // retorno de `validarAccessToken`, e o guard não usa `jti`. Quem exige
+    // o `jti` é o `validarRefreshToken` (que o tipa como `RefreshSubject`).
+    const jti = payload['jti'];
+    return {
+      sub,
+      email,
+      typ: typEsperado,
+      ...(typeof jti === 'string' ? { jti } : {}),
+    };
   }
 }
 

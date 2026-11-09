@@ -56,6 +56,7 @@ import {
 } from '../../domain/ports/token-issuer.port.js';
 import { IS_PUBLIC_KEY } from './public.decorator.js';
 import { UserProfileCacheService } from '../../../../shared/infrastructure/security/user-profile-cache.service.js';
+import { UUID_RE_QUALQUER_VERSAO } from '../../../../shared/domain/uuid.js';
 import type { TenantMembershipRepositoryPort } from '../../../tenancy/domain/ports/tenant-membership-repository.port.js';
 import { TENANT_MEMBERSHIP_REPOSITORY_PORT } from '../../../tenancy/domain/ports/tenant-membership-repository.port.js';
 
@@ -84,9 +85,6 @@ interface RequestWithUser {
   };
 }
 
-/** pt-BR (Fase 3): `tenant_id` é `@db.Uuid` em toda tabela de tenancy. */
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /**
  * Lê `X-Tenant-Id` — a empresa que o token está agindo (D2).
  *
@@ -107,13 +105,14 @@ function extractTenantId(raw: unknown): string | null {
   if (raw === undefined) {
     return null;
   }
-  if (typeof raw !== 'string' || !UUID_RE.test(raw)) {
+  if (typeof raw !== 'string' || !UUID_RE_QUALQUER_VERSAO.test(raw)) {
     throw new BadRequestException({
       code: 'INVALID_TENANT',
       detail: 'X-Tenant-Id deve ser um UUID de empresa válido.',
     });
   }
-  // pt-BR: o `UUID_RE` acima tem flag `/i` — a forma em caixa alta é um uuid
+  // pt-BR: o `UUID_RE_QUALQUER_VERSAO` (em `shared/domain/uuid.ts`, o DONO do
+  // regex) tem flag `/i` — a forma em caixa alta é um uuid
   // VÁLIDO e não pode ser recusada. Mas ela não pode descer crua: o Postgres
   // canoniza `uuid` para minúsculas e a policy compara por texto, então a
   // caixa alta não casa com nada. Um validador que aceita a entrada e entrega

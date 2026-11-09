@@ -19,7 +19,7 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { ApiClient, ApiError } from '@/lib/api-client';
+import { ApiClient, ApiError, baseUrlDaApi } from '@/lib/api-client';
 import { cadastroUsuarioSchema, type CampoCadastro } from '@/lib/cadastro-usuario-schema';
 import { mensagemDeConvite } from '@/lib/convite-mensagens';
 import { ehTokenDeConvite } from '@/lib/convite-schema';
@@ -179,7 +179,7 @@ export async function cadastrarUsuario(
       : { ...parsed.data, destino: { tipo: 'convite', token: convite } };
 
   const api = new ApiClient({
-    baseUrl: process.env.API_BASE_URL ?? 'http://localhost:3000/api/v1',
+    baseUrl: baseUrlDaApi(),
   });
 
   let erro: unknown;

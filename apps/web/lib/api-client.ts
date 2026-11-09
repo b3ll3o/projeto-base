@@ -1,6 +1,23 @@
 // apps/web/lib/api-client.ts
 import type { ProblemDetailsDto } from '@projeto/shared-types';
 
+/**
+ * A URL base da API — o ÚNICO lugar do web onde ela mora.
+ *
+ * pt-BR (2026-11-09): o literal `process.env.API_BASE_URL ?? '...'` estava
+ * replicado em 11 lugares do web (MEDIDO: `git grep -c "process\.env\.API_BASE_URL ??" origin/main -- apps/web` → 10, e o 11º é o `sair` que este PR acrescenta), e a correção
+ * do default seria PARCIAL — o "Sair" revogaria num endereço e o resto do
+ * web falaria com outro.
+ *
+ * ⚠️ Uma FUNÇÃO, e não uma constante: `API_BASE_URL` é lida no MOMENTO do
+ * uso, e não no import. O `next build` do e2e injeta a variável no ambiente
+ * do build, e a página da listagem é `force-dynamic` — o valor fixado no
+ * import seria o do build, congelado antes de a requisição chegar.
+ */
+export function baseUrlDaApi(): string {
+  return process.env.API_BASE_URL ?? 'http://localhost:3000/api/v1';
+}
+
 export interface ApiClientConfig {
   baseUrl: string;
   getToken?: () => string | null;
@@ -179,5 +196,41 @@ export class ApiTimeoutError extends Error {
   ) {
     super(`Request ${method} ${path} timed out after ${timeoutMs}ms`);
     this.name = 'ApiTimeoutError';
+  }
+}
+
+/**
+ * O prazo da revogação de um refresh token, em ms (#132).
+ *
+ * ⚠️ 2 s, e não os 10 s do `ApiClient`: revogar é uma operação de limpeza.
+ * Uma API que aceita a conexão e não responde deixaria o botão "Sair"
+ * travado por 10 s — e o logout é a única coisa que a pessoa fez.
+ */
+export const PRAZO_DE_REVOGACAO_MS = 2_000;
+
+/**
+ * Revoga o refresh token na API (#132).
+ *
+ * ⚠️ A falha NÃO é engolida: quem chama decide o que fazer com ela, e a
+ * decisão é "registrar e seguir" (o logout tem de acontecer mesmo com a API
+ * fora do ar). Por isso o `throw` é de quem chamou, e não daqui.
+ *
+ * ⚠️ O 401 é a ÚNICA falha absorvida aqui — e é absorvida porque é o estado
+ * final DESEJADO: "este token já está morto" (expirado, ou revogado antes).
+ * Um 401 não é a API falhando, e tratá-lo como falha faria o log dizer que a
+ * revogação não deu certo quando ela deu certo. Rede caída e 5xx continuam
+ * subindo, e são eles que o log tem de acusar.
+ */
+export async function revogarRefreshToken(refreshToken: string): Promise<void> {
+  const api = new ApiClient({
+    baseUrl: baseUrlDaApi(),
+    defaultTimeoutMs: PRAZO_DE_REVOGACAO_MS,
+  });
+
+  try {
+    await api.post('/auth/logout', { refreshToken });
+  } catch (erro) {
+    if (erro instanceof ApiError && erro.status === 401) return;
+    throw erro;
   }
 }

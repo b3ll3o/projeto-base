@@ -1,0 +1,11 @@
+Environment variables loaded from .env
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": PostgreSQL database "projeto_base", schema "public" at "localhost:5432"
+
+17 migrations found in prisma/migrations
+Following migrations have not yet been applied:
+20261108000000_refresh_tokens
+20261108000001_papel_runtime_sem_senha_publicada
+
+To apply migrations in development run prisma migrate dev.
+To apply migrations in production run prisma migrate deploy.

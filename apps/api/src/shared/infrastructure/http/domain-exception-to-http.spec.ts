@@ -1,7 +1,7 @@
 // apps/api/src/shared/infrastructure/http/domain-exception-to-http.spec.ts
 import { describe, it, expect } from 'vitest';
 import { HttpStatus } from '@nestjs/common';
-import { mapExceptionToHttp } from './domain-exception-to-http.js';
+import { mapExceptionToHttp, DETALHE_DE_ERRO_INTERNO } from './domain-exception-to-http.js';
 import {
   UserNotFoundException,
   EmailAlreadyInUseException,
@@ -153,16 +153,28 @@ describe('mapExceptionToHttp (application layer)', () => {
 });
 
 describe('mapExceptionToHttp (regression)', () => {
-  it('Error genérico → 500 INTERNAL (fall-through preservado após adicionar application cases)', () => {
+  // ⚠️ (#130): o fall-through é o ÚNICO ramo em que o mapper devolve um
+  // `detail` — e ele é o TEXTO GENÉRICO, porque a exceção não é nossa (a
+  // mensagem de um driver do Prisma descreve tabela, coluna e valor de
+  // coluna). Sem esta asserção, o `detail` novo não tinha cobertura nenhuma.
+  it('Error genérico → 500 INTERNAL com o detail GENÉRICO (fall-through preservado)', () => {
     const m = mapExceptionToHttp(new Error('bug'));
     expect(m.status).toBe(HttpStatus.INTERNAL_SERVER_ERROR);
     expect(m.code).toBe('INTERNAL');
+    // ⚠️ (#130): o `detail` do fall-through é o GENÉRICO — e NÃO a mensagem
+    // original. A mensagem de um driver do Prisma descreve tabela, coluna e
+    // valor de coluna, e ela é exatamente o que a issue #130 tirou do corpo
+    // da resposta.
+    expect(m.detail).toBe(DETALHE_DE_ERRO_INTERNO);
+    expect(m.detail).not.toContain('bug');
   });
 
-  it('Não-Error (string) → 500 INTERNAL (fall-through preservado)', () => {
+  it('Não-Error (string) → 500 INTERNAL com o detail GENÉRICO (fall-through preservado)', () => {
     const m = mapExceptionToHttp('boom');
     expect(m.status).toBe(HttpStatus.INTERNAL_SERVER_ERROR);
     expect(m.code).toBe('INTERNAL');
+    expect(m.detail).toBe(DETALHE_DE_ERRO_INTERNO);
+    expect(m.detail).not.toContain('boom');
   });
 });
 

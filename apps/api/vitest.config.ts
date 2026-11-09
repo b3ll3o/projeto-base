@@ -120,6 +120,10 @@ export default defineConfig({
         // mock frágil de PrismaClient só para inflar coverage.
         '**/prisma-audit.service.ts',
         '**/prisma-user.repository.ts',
+        // #132: o registro de refresh tokens é o mesmo caso — adapter Prisma
+        // coberto pelo projeto `integration` (Testcontainers + PrismaClient
+        // real), com o teste que prova que o `app_runtime` NÃO o alcança.
+        '**/prisma-refresh-token.repository.ts',
         // pt-BR: diretório `test/` contém helpers de teste (não lógica
         // de produção) e por isso é excluído da medição de cobertura.
         '**/test/**',

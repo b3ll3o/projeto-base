@@ -49,7 +49,7 @@ projeto-base (monorepo)
 | Banco de Dados | PostgreSQL | 16 | Maduro, JSONB, extensions, performance |
 | Validação | **Zod** + `ZodValidationPipe` | ^3.25.76 | Schema único, executável no cliente E no servidor. `class-validator` NÃO está instalado — o pipe é `@Body(new ZodValidationPipe(Schema))`, não o `ValidationPipe` global |
 | Documentação API | @nestjs/swagger | ^11.0.0 | OpenAPI 3.0 automático a partir dos decorators |
-| Auth | @nestjs/jwt + `JwtAuthGuard` próprio | ^12.0.2 | Sem passport: o guard valida assinatura/expiração e um `@Public()` o libera. Detalhe em [`docs/api/auth.md`](./api/auth.md) |
+| Auth | @nestjs/jwt + `JwtAuthGuard` próprio | ^12.0.2 | Sem passport: o guard valida assinatura/expiração e um `@Public()` o libera. O **refresh token é revogável**: o `jti` vive na tabela `refresh_tokens` (rotação, `POST /auth/logout` e detecção de replay — [ADR-0007](./adr/0007-refresh-token-revogavel.md)). Detalhe em [`docs/api/auth.md`](./api/auth.md) |
 | Hash de senha | argon2 (argon2id) | ^0.45.1 | Recomendação OWASP; resiste a GPU e a ASIC. Alternativa ao bcrypt, que trunca a senha em 72 bytes — ver [ADR-0002](./adr/0002-autenticacao-jwt-argon2.md) |
 | Logging | Pino | ^10.3.0 | Estruturado JSON, rápido |
 | Observabilidade | OpenTelemetry + Grafana + Tempo + Prometheus | ^0.54.0 / 11.2.0 / 2.5.0 / v2.54.1 | Vendor-neutral na produção; backends locais no perfil `observability` do Compose. Grafana é a tela (http://localhost:3300), Tempo guarda traces e o Prometheus faz *scrape* das métricas. Sem Loki — o Pino escreve em stdout e quem indexa é o driver de container. Detalhe em [ADR-0003](./adr/0003-backends-locais-de-telemetria.md) |
@@ -171,7 +171,7 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão da stack:** 1.21.0
+**Versão da stack:** 1.22.0
 
 ### Histórico de Versões
 
@@ -196,3 +196,4 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 | `1.14.0` | **Correção de fatos medidos contra o código** (2026-10-29). §1 — a árvore deixou de declarar o `infra/` como "Docker Compose, migrations, seeds": o real é a config dos 4 backends de telemetria (`grafana/`, `otelcol/`, `prometheus/`, `tempo/`), e o Compose mora na **raiz**. §2 e §3 — as 7 células que diziam `latest`/`(último)` na coluna Versão passaram a trazer a versão que o `package.json` declara (`@nestjs/swagger` `^11.0.0`, `@nestjs/jwt` `^12.0.2`, `argon2` `^0.45.1`, `pino` `^10.3.0`, `@opentelemetry/sdk-node` `^0.54.0`, `react-hook-form` `^7`, `@playwright/test` `^1.60.0`, resolvido em `1.60.0` pelo `pnpm-lock.yaml`) e o Fastify, que não é dependência direta, aparece como `5.11.3` (transitiva de `@nestjs/platform-fastify`). §3 — "8 specs" de Playwright virou **17** (`f1`–`f17`), com o que cada um cobre. §5 — a linha dos Git hooks deixou de afirmar "TDD enforcer": nenhum hook o roda (`pre-commit` = `lint-staged` → `stack-code-reviewer` → `doc-sync`; `commit-msg` = `commit-msg-gate`; `pre-push` = `ci:preflight` → `ci:boot` → `pr:refresh`).  §3 — a versão do Playwright passou a `^1.60.0` (o lock continua resolvendo `1.60.0`: o pin era acidental e nada dependia dele — não há imagem do Playwright no repo nem `playwright install` com versão). ||
 | `1.20.0` | **Sem mudança de stack** — as 4 skills novas são docs e roteamento (nenhuma dependência, nenhum script, nenhuma config de infra mudou); o footer subiu junto com os outros 5. O gate `check-version-footers` (do #126) é o que fecha essa classe. |
 | `1.21.0` | **Sem mudança de stack** — o runbook novo (`docs/runbooks/cloudflare-edge.md`) é doc: nenhuma dependência, nenhum script, nenhuma config de infra mudou. O footer subiu junto com os outros 5. |
+| `1.22.0` | **A autenticação tem registro, e o container tem probe** — o BC `auth` ganha a tabela `refresh_tokens` (o `jti` do refresh token, a rotação, o `POST /auth/logout` e a detecção de replay) e a imagem da api ganha o `exec` no ENTRYPOINT (o SIGTERM chega ao Node) e um probe que não depende de pacote instalado. Duas migrations novas, dois gates novos. O footer subiu junto com os outros 5. |

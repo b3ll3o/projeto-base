@@ -31,7 +31,12 @@ import { randomBytes } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 
 import { InvalidCredentialsException } from '../domain/exceptions/auth.exceptions.js';
+import { InvalidTokenException } from '../domain/exceptions/token.exceptions.js';
 import { TOKEN_ISSUER_PORT, type TokenIssuerPort } from '../domain/ports/token-issuer.port.js';
+import {
+  REFRESH_TOKEN_REPOSITORY_PORT,
+  type RefreshTokenRepositoryPort,
+} from '../domain/ports/refresh-token-repository.port.js';
 import { Email } from '../../users/domain/value-objects/email.vo.js';
 import { UserId } from '../../users/domain/value-objects/user-id.vo.js';
 import {
@@ -49,6 +54,24 @@ import type { RefreshInput } from './dto/refresh.input.js';
 import type { AuthSessionOutput, RefreshOutput } from './dto/auth-session.output.js';
 
 export const AUTH_USE_CASES = Symbol.for('@projeto/api/auth/AuthUseCases');
+
+/**
+ * A janela de tolerância do REPLAY (#132), em milissegundos.
+ *
+ * ⚠️ POR QUE EXISTE: dois `POST /auth/refresh` com o MESMO token são um
+ * retry de cliente, duas abas, dois workers — e NÃO um ataque. O refresh
+ * token é de uso único (a rotação consome o `jti`), e a segunda chamada
+ * encontraria um `jti` já revogado: sem esta janela, ela seria lida como
+ * REPLAY e derrubaria a sessão de quem está usando a API de verdade.
+ *
+ * Passada a janela, é replay — e a resposta é derrubar a conta.
+ *
+ * 30 s é o suficiente para um retry de rede e curto demais para ser uma
+ * janela de ataque (quem rouba um token precisa usá-lo em menos de 30 s
+ * para não ser tratado como uso concorrente — e um token de 7 dias dá
+ * tempo de sobra).
+ */
+const JANELA_DE_TOLERANCIA_DE_REPLAY_MS = 30_000;
 
 /**
  * Hash de isca para o caminho "e-mail não existe".
@@ -78,6 +101,8 @@ export class AuthUseCases {
     @Inject(USER_REPOSITORY_PORT) private readonly userRepo: UserRepositoryPort,
     @Inject(PASSWORD_HASHER_PORT) private readonly passwordHasher: PasswordHasherPort,
     @Inject(TOKEN_ISSUER_PORT) private readonly tokenIssuer: TokenIssuerPort,
+    @Inject(REFRESH_TOKEN_REPOSITORY_PORT)
+    private readonly refreshTokens: RefreshTokenRepositoryPort,
   ) {}
 
   // ─── login ───────────────────────────────────────────────────────────────
@@ -106,10 +131,16 @@ export class AuthUseCases {
       throw new InvalidCredentialsException();
     }
 
-    const { accessToken, refreshToken } = await this.tokenIssuer.emitir({
-      sub: user.id().value,
-      email: user.email().value,
-    });
+    const { accessToken, refreshToken, refreshJti, refreshExpiresAt } =
+      await this.tokenIssuer.emitir({
+        sub: user.id().value,
+        email: user.email().value,
+      });
+
+    // ⚠️ (#132) O `jti` do refresh é REGISTRADO — é o que o torna
+    // revogável. Sem esta linha, o token seria stateless de novo: valeria
+    // por 7 dias e não haveria o que revogar.
+    await this.refreshTokens.registrar(refreshJti, user.id().value, refreshExpiresAt);
 
     return { accessToken, refreshToken, user: toUserOutput(user) };
   }
@@ -120,12 +151,18 @@ export class AuthUseCases {
    * Troca um refresh token válido por um par novo.
    *
    * Recarrega o usuário antes de emitir, e isso não é redundância: o JWT
-   * é stateless e vive 7 dias, então um refresh token legitimately válido
-   * pode pertencer a uma conta que foi soft-deleted no meio do caminho.
-   * Sem esta checagem, "apagar a conta" não tiraria ninguém da sessão.
+   * vive 7 dias, então um refresh token legitimately válido pode pertencer a
+   * uma conta que foi soft-deleted no meio do caminho. Sem esta checagem,
+   * "apagar a conta" não tiraria ninguém da sessão.
+   *
+   * ⚠️ (#132) A ROTACÃO: o `jti` apresentado é CONSUMIDO, e o par novo vem
+   * com um `jti` novo. Um refresh token é de uso ÚNICO — é o que faz o
+   * logout (e a detecção de replay) terem o que revogar.
    *
    * @throws InvalidCredentialsException — token recusado pelo emissor, ou
    * usuário que não existe mais.
+   * @throws InvalidTokenException — o `jti` não está no registro, ou já foi
+   * revogado (replay).
    */
   async renovar(input: RefreshInput): Promise<RefreshOutput> {
     // A rejeição de token vem do próprio `tokenIssuer` (InvalidTokenException);
@@ -139,10 +176,104 @@ export class AuthUseCases {
       throw new InvalidCredentialsException();
     }
 
-    return this.tokenIssuer.emitir({
-      sub: user.id().value,
-      email: user.email().value,
-    });
+    // ⚠️ (#132) O ESTADO do `jti` decide se este token ainda vale.
+    const estado = await this.refreshTokens.estadoDe(subject.jti);
+    if (!estado.registrado) {
+      // O token não tem `jti` conhecido — ou o registro não o tem (token
+      // emitido antes da migração), ou ele nunca foi emitido por esta API.
+      // Em qualquer caso: não há como revogá-lo depois, e aceitar seria
+      // deixar a #132 aberta para os tokens que sobraram.
+      throw new InvalidTokenException('refresh token desconhecido');
+    }
+    if (estado.revogadoEm !== null) {
+      // REPLAY (ou uso concorrente — ver a janela de tolerância).
+      //
+      // ⚠️ O alvo da revogação é o DONO DO REGISTRO (`estado.userId`), e não
+      // o `sub` do token: o `sub` é o que o PORTADOR tem. O registro é quem
+      // sabe de quem é o token.
+      await this.tratarRevogacao(estado.userId ?? subject.sub, estado.revogadoEm);
+      throw new InvalidTokenException('refresh token revogado');
+    }
+
+    // ⚠️ A ROTAÇÃO é UMA TRANSAÇÃO: consumir o `jti` antigo e registrar o
+    // novo acontecem juntos (ou não acontecem). Em transações separadas, o
+    // intervalo entre elas deixaria o token antigo consumido e o novo sem
+    // registro — e quem pegasse o intervalo ficaria SEM refresh token nenhum,
+    // sem caminho de recuperação (o web não renova).
+    //
+    // E o consumo é ATÔMICO: dois `POST /auth/refresh` com o MESMO token ao
+    // mesmo tempo chegam os dois ao `estadoDe` como "ativo" — e só um
+    // consegue consumir a linha. O outro leva 401 (que é uso concorrente, e
+    // NÃO derruba a conta).
+    //
+    // O `emitir` (que assina o token novo) é CPU pura e fica ANTES: ele não
+    // toca o banco, e o `jti` novo precisa existir para a transação.
+    const { accessToken, refreshToken, refreshJti, refreshExpiresAt } =
+      await this.tokenIssuer.emitir({
+        sub: user.id().value,
+        email: user.email().value,
+      });
+
+    const rotacionou = await this.refreshTokens.rotacionar(
+      subject.jti,
+      refreshJti,
+      user.id().value,
+      refreshExpiresAt,
+    );
+    if (!rotacionou) {
+      // O `jti` já tinha sido consumido — por outro request (uso concorrente)
+      // ou por um replay. Nos dois casos, este token não renova.
+      throw new InvalidTokenException('refresh token já consumido');
+    }
+
+    return { accessToken, refreshToken };
+  }
+
+  // ─── sair (logout) ───────────────────────────────────────────────────────
+
+  /**
+   * Revoga o refresh token apresentado (#132).
+   *
+   * ⚠️ Sem isto, o "sair" do web era só apagar o cookie: o token continuava
+   * válido no servidor por 7 dias, e qualquer cópia dele (log, backup,
+   * dispositivo compartilhado) continuava valendo.
+   *
+   * ⚠️ O `refreshToken` é a CREDENCIAL do logout — e é por isso que a rota
+   * é `@Public()`: quem apresenta o token é quem manda revogá-lo. Exigir o
+   * access token seria pedir a credencial de quem já tem o equivalente do
+   * token que se quer matar — e o access token vive 15 minutos, o refresh 7
+   * dias: quem ficou logado mais de 15 min sem usar a API levaria 401 no
+   * logout, e o token continuaria válido.
+   *
+   * @throws InvalidTokenException — o token não é um refresh válido.
+   */
+  async sair(input: { refreshToken: string }): Promise<boolean> {
+    const subject = await this.tokenIssuer.validarRefreshToken(input.refreshToken);
+    // ⚠️ O retorno é VERDADEIRO: um `jti` que nunca entrou no registro (ou que
+    // já estava revogado) devolve `false` — e a resposta diz isso, em vez de
+    // afirmar uma revogação que não aconteceu.
+    return this.refreshTokens.revogar(subject.jti);
+  }
+
+  /**
+   * A resposta à apresentação de um `jti` JÁ REVOGADO (#132).
+   *
+   * ⚠️ A JANELA DE TOLERÂNCIA: dois `POST /auth/refresh` com o MESMO token
+   * são um retry de cliente, duas abas, dois workers — e não um ataque. Sem
+   * a janela, a segunda chamada seria lida como REPLAY e derrubaria a
+   * sessão de quem está usando a API de verdade.
+   *
+   * Passada a janela, é replay — e a resposta é derrubar a conta inteira:
+   * o `jti` reapareceu depois de ter sido rotacionado, e quem o apresentou
+   * não é mais a pessoa que o recebeu.
+   *
+   * ⚠️ A revogação é AWAITED antes do 401: se ela corresse em segundo plano,
+   * um retry do cliente encontraria a sessão ainda viva.
+   */
+  private async tratarRevogacao(userId: string, revogadoEm: Date): Promise<void> {
+    const idade = Date.now() - revogadoEm.getTime();
+    if (idade < JANELA_DE_TOLERANCIA_DE_REPLAY_MS) return;
+    await this.refreshTokens.revogarTodosDoUsuario(userId);
   }
 
   // ─── eu ──────────────────────────────────────────────────────────────────

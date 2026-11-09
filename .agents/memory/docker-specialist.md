@@ -30,8 +30,15 @@ Agent criado durante rollout do specialist-router (Fase 2 Task 9). Demanda atual
 
 - **`projeto-base-api:prod`** — 241 MB content size (1.1 GB disk usage c/ BuildKit cache)
   - Base: `node:22-bookworm-slim` (não alpine — incompatível com Prisma engines)
-  - Healthcheck embutido: `curl -fsS http://localhost:3000/api/v1/health`
-  - ENTRYPOINT: `prisma migrate deploy && node apps/api/dist/main.js`
+  - Healthcheck embutido: `NODE_OPTIONS= node -e "…http.get…"` — ⚠️ (#139): sem pacote
+    instalado (o `curl` do stage `prod` não existe no `dev`, e o compose de dev herda o
+    probe); e com o `NODE_OPTIONS=` para o probe não carregar o SDK de telemetria
+  - ENTRYPOINT: `cd /repo/apps/api && pnpm exec prisma migrate deploy --schema=prisma/schema.prisma && sh ./scripts/prepara-papeis.sh && exec node dist/main.js` — ⚠️ (#137): o
+    `exec` é o que faz o SIGTERM chegar ao Node (sem ele, o tini sinaliza o `sh`, e o
+    `sh` não repassa). O `cd` NÃO é cosmético: `pnpm exec` procura em
+    `./node_modules/.bin`, e o binário do prisma vive em `apps/api/node_modules/.bin`.
+    O `prepara-papeis.sh` é o passo de manutenção do banco (poda os tokens expirados e
+    aplica a senha dos papéis) — ele roda DEPOIS do migrate e ANTES do node.
 - **`projeto-base-web:prod`** — 96.7 MB content size (402 MB disk usage c/ BuildKit cache)
   - Base: `node:22-bookworm-slim` (standalone output do Next.js reduz ~70%)
   - Healthcheck embutido: `node -e` chamando `/api/health`

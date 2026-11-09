@@ -153,8 +153,18 @@ services:
     # pt-BR (#90, 2026-10-16): `init: true` injeta tini como PID 1 do container.
     # Sem isso, o `sh -c "pnpm ... && node ..."` no ENTRYPOINT vira PID 1 e não
     # propaga SIGTERM ao processo node — só SIGKILL no grace do Docker, que é
-    # 30s default. Com tini, o node recebe SIGTERM, executa shutdown hooks
-    # (NestJS enableShutdownHooks), fecha DB pool e HTTP server gracefully.
+    # 30s default.
+    #
+    # ⚠️ (#137, 2026-11-08): este comentário AFIRMAVA que "com tini, o node
+    # recebe SIGTERM" — e isso não se sustentava. O tini repassa o sinal
+    # APENAS ao filho DIRETO (o daemon não passa `-g`), e o `node` era filho
+    # do `sh`, não do tini: o sinal morria no shell e o
+    # `enableShutdownHooks()` do NestJS nunca rodava.
+    #
+    # O conserto NÃO é aqui — é o `exec node dist/main.js` no ENTRYPOINT do
+    # `apps/api/Dockerfile`: com `exec`, o `node` assume o PID do `sh` e é o
+    # `node` que o tini sinaliza. Este `init: true` continua certo (é o que
+    # faz o tini existir e recolher os zumbis), mas ele sozinho não basta.
     init: true
     # pt-BR (#83, 2026-10-16): hardening runtime espelhando o postgres. Api é
     # stateless — tmpfs em /tmp + /repo/.cache (cache de runtime do Vite/tsc),
@@ -189,7 +199,17 @@ services:
       - FOWNER
       - NET_BIND_SERVICE # porta 3000
     healthcheck:
-      test: ['CMD-SHELL', 'curl -fsS http://localhost:3000/api/v1/health || exit 1']
+      # pt-BR (#139): o probe usa o `node` — e não um pacote instalado. A
+      # imagem `dev` (que o overlay `docker-compose.dev.yml` monta com
+      # `build.target: dev`) NÃO tem `curl`, e o healthcheck herdado falhava
+      # com "curl: not found": a api nunca ficava `healthy` e o `web`, que
+      # depende dela com `condition: service_healthy`, não subia.
+      # Mesmo padrão do serviço `web` abaixo — uma fonte de verdade.
+      test:
+        [
+          'CMD-SHELL',
+          'NODE_OPTIONS= node -e "require(''http'').get(''http://localhost:3000/api/v1/health'',r=>process.exit(r.statusCode===200?0:1)).on(''error'',()=>process.exit(1))"',
+        ]
       interval: 10s
       timeout: 3s
       start_period: 20s

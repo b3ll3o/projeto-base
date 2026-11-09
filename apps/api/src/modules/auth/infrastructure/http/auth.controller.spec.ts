@@ -31,6 +31,11 @@ describe('AuthController', () => {
     useCases = {
       login: vi.fn(async () => SESSAO),
       renovar: vi.fn(async () => ({ accessToken: 'a2', refreshToken: 'r2' })),
+      // ⚠️ (#132): o logout revoga o `jti` do refresh apresentado — é a
+      // única rota que apaga uma sessão em vez de criar uma. E o retorno
+      // diz se a revogação ACONTECEU (um `jti` já revogado devolve
+      // `false`).
+      sair: vi.fn(async () => true),
       eu: vi.fn(async () => ({ id: 'u-1', email: 'joao@example.com' })),
     } as unknown as AuthUseCases;
     controller = new AuthController(useCases);
@@ -48,6 +53,13 @@ describe('AuthController', () => {
 
     expect(useCases.renovar).toHaveBeenCalledWith({ refreshToken: 'refresh-antigo' });
     expect(out).toEqual({ accessToken: 'a2', refreshToken: 'r2' });
+  });
+
+  it('POST /auth/logout revoga o refresh token apresentado (#132)', async () => {
+    const out = await controller.logout({ refreshToken: 'refresh-antigo' });
+
+    expect(useCases.sair).toHaveBeenCalledWith({ refreshToken: 'refresh-antigo' });
+    expect(out).toEqual({ revogado: true });
   });
 
   it('GET /auth/me delega com o `sub` do token', async () => {

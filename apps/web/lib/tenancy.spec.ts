@@ -57,19 +57,23 @@ const { clientMock, configMock, exigirSessaoMock } = vi.hoisted(() => {
   };
 });
 
-vi.mock('./api-client', () => ({
-  // ⚠️ ATRIBUIÇÃO CAMPO A CAMPO, e não `Object.assign`. `Object.assign` tem
-  // tipagem `(T, U) => T & U` e NÃO cruza `U` contra `T`: a anotação errada de
-  // `configMock.getTenant` passaria no tsc com o `unknown` E passaria com o
-  // `ApiClientConfig`. Aqui `config.getTenant` tem que caber em
-  // `configMock.getTenant`, e é essa ponte que faz o tipo real ser conferido.
-  ApiClient: vi.fn((config: ApiClientConfig) => {
-    configMock.baseUrl = config.baseUrl;
-    configMock.getToken = config.getToken;
-    configMock.getTenant = config.getTenant;
-    return clientMock;
-  }),
-}));
+vi.mock('./api-client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./api-client')>();
+  return {
+    ...actual,
+    // ⚠️ ATRIBUIÇÃO CAMPO A CAMPO, e não `Object.assign`. `Object.assign` tem
+    // tipagem `(T, U) => T & U` e NÃO cruza `U` contra `T`: a anotação errada de
+    // `configMock.getTenant` passaria no tsc com o `unknown` E passaria com o
+    // `ApiClientConfig`. Aqui `config.getTenant` tem que caber em
+    // `configMock.getTenant`, e é essa ponte que faz o tipo real ser conferido.
+    ApiClient: vi.fn((config: ApiClientConfig) => {
+      configMock.baseUrl = config.baseUrl;
+      configMock.getToken = config.getToken;
+      configMock.getTenant = config.getTenant;
+      return clientMock;
+    }),
+  };
+});
 // ⚠️ `lib/tenancy.ts` NÃO importa este módulo — o token chega por PARÂMETRO.
 // O mock existe para o NEGATIVO: se alguém voltar a ler o cookie aqui dentro,
 // a página passa a ler o cookie DUAS vezes por navegação (ela é

@@ -1,7 +1,7 @@
 ---
 name: e2e-playwright
-version: 1.6
-updated: 2026-10-27
+version: 1.7
+updated: 2026-11-09
 maintainer: test-writer
 description: "Convenção canônica de cobertura e2e de frontend — todo fluxo de usuário COM tela é mapeado no inventário abaixo e coberto por um spec Playwright que atravessa browser, Next, Server Action, API HTTP e Postgres de ponta a ponta. Gate automatizado em check-e2e-flow-coverage.ts; execução no CI."
 ---
@@ -97,8 +97,9 @@ um silêncio.
 | F16 | `/empresa/nova` → `/users` ↔ `/convite/[token]` → `/users/novo` → `/login` → `/users` | Onboarding de empresa | `f16-onboarding-empresa.spec.ts` | conta própria sem empresa é levada a criar uma · a empresa criada dá à pessoa o perfil de DONO · quem entra por convite entra NA empresa que convidou · o admin de SISTEMA não é levado a criar empresa |
 | F17 | `/admin/tenancy` | Inventário de empresas e usuários (admin) | `f17-admin-tenancy.spec.ts` | admin vê a empresa, o slug e o membro · admin vê o usuário e a empresa a que ele pertence · quase-admin recusa e não vê nome/e-mail |
 | F18 | `/login` | Cabeçalhos de segurança: CSP com nonce por requisição (o nonce do header é o dos scripts), `nosniff`, `X-Frame-Options`, HSTS, sem `X-Powered-By`, e o `Referrer-Policy` da rota do token | `f18-cabecalhos-de-seguranca.spec.ts` |
+| F19 | `/users` → `/login` | Sair revoga o refresh token | `f19-sair.spec.ts` | CONTROLE: com a sessão viva, o refresh renova · depois do "Sair", o mesmo token é recusado (401 `INVALID_TOKEN`) |
 
-⚠️ **13 rotas, 18 fluxos.** F2–F5 são quatro estados **da mesma** rota, e F6
+⚠️ **13 rotas, 19 fluxos.** F2–F5 são quatro estados **da mesma** rota, e F6
 atravessa três. F7–F8 são os fluxos que a demanda `login-usuario-senha`
 acrescentou: o login e a rota protegida sem sessão. F9–F12 são as quatro telas
 `/admin/*` do RBAC (#97), e cada uma tem um teste que é o **negativo** do
@@ -144,6 +145,9 @@ e-mail de ninguém. Sem ele, "admin vê a tela" e "qualquer um vê a tela"
 passariam no mesmo arquivo — e a escalada que a permissão não segura (o
 `gerente` de empresa recebe `listAllPermissions()`) é exatamente o que esta
 tela não pode abrir.
+
+F19 é o "Sair": a sessão é apagada e o refresh token do cookie é REVOGADO na
+API, com um CONTROLE que prova que ele renovava antes.
 
 ⚠️ **Desde 2026-10-13 quase todo spec roda autenticado, e isso é invisível na
 tabela.** `/users` — a LISTAGEM — chama `exigirSessao()`, que redireciona para
@@ -283,6 +287,7 @@ do par, não um.
 | 1.4 | 2026-10-18 | F14 cobre `/admin/flags` (feature flags) — a quinta tela `/admin/*` e a primeira cujo spec **não termina na tela**: ele salva pela tela e afirma o efeito **chamando a API** (404 desligada · 403 ligada, com o `title` nomeando quem recusou). O escenario 12 da API escreve a flag no banco e o `lib/flags.spec.ts` prova path contra um cliente mockado; nenhum dos dois via o que o admin marca NA TELA, e essa emenda era o buraco. Contador corrigido: eram "9 rotas, 13 fluxos" e são 10 e 14. MEDIDO 2026-10-18: `next build` **nao** pega uma Server Action sem `'use server'` (build sai 0; o digest `2923057904` so aparece no request, porque a página é `force-dynamic`), e `click()` resolve no despacho — o save precisa ser esperado por **estado**, nao por `waitForTimeout`. |
 | 1.5 | 2026-10-19 | F15 cobre a edição de `name`/`description` em `/admin/profiles/[slug]` — a rota de F11, que passa a ter **dois** fluxos. É o primeiro spec do inventário que **lê o Postgres** (`prismaE2E()`) para provar gravação, e a razão está no `<input>`: uncontrolled, ele conserva o que foi digitado depois do re-render, então `toHaveValue` passaria com a escrita perdida. Na tela o spec afirma o `<h1>` (derivado do servidor) e no banco o `name`/`description`. MEDIDO 2026-10-19: foi a primeira execução do `PATCH /admin/profiles/:id` de **sucesso** contra Prisma real — o único PATCH e2e anterior (`11-tenant-isolation`) esperava 403 — e ela **verde**: o caminho de escrita estava sem prova desde que `atualizarPerfil` ganhou o cliente. Segundo caso: perfil `isAdmin` mostra "somente leitura" e não renderiza `input[name="name"]` (`atualizar` recusa `isSystem` **e** `isAdmin`, `profiles.use-cases.ts:268,271`). Contador: 14 → 15 fluxos, com as **10 rotas inalteradas**. |
 | 1.6 | 2026-10-21 | F16 cobre o onboarding de empresa, e traz **duas rotas novas**: `/empresa/nova` (criar empresa) e `/convite/[token]` (entrar por convite). É o primeiro fluxo que afirma **para ONDE** o login leva: o destino deixou de ser fixo (`/users`) e passou a depender de a conta pertencer a alguma empresa. O par que segura isso é o mesmo código com decisões opostas — conta própria sem empresa vai criar uma, admin de SISTEMA NÃO vai — e um funil que mandasse todo mundo para `/empresa/nova` passaria no primeiro e falharia no segundo. O perfil `dono` é medido pela **permissão** que só ele tem entre os três da empresa (`admin.manage-profiles`), não pelo rótulo. O F16 também é o primeiro spec que planta o cookie `tenant_id` (`plantarEmpresa`, em `support/fixtures.ts`): sem ele a sessão age no bucket GLOBAL e a listagem volta recortada para a própria linha, sem dizer por quê. MEDIDO 2026-10-21: a e2e F8 mudou de expectativa junto com o produto (a conta sem empresa passou a ser levada a `/empresa/nova`) e o F7 ganhou uma empresa, para continuar medindo o login — o destino de quem TEM empresa é a listagem. Contador: 15 → 16 fluxos e 10 → 12 rotas. |
+| 1.7 | 2026-11-09 | F19 cobre o "Sair" — a única ação do app que apaga a sessão, e a única que apaga CHAMANDO a API. O spec segura o refresh token do cookie deixando de renovar (401 `INVALID_TOKEN`), e o CONTROLE — o mesmo token renovando com a sessão viva — é o que impede o 401 de ser indistinguível de "o token nunca valia". O e2e da API (`15-auth-revogacao`) mede a revogação pela API; este mede a emenda, que é o botão. Contador: 18 → 19 fluxos, com as **13 rotas inalteradas**. |
 
 ## Ver Também
 

@@ -244,7 +244,11 @@ export class TenancyUseCases {
   // ───────────────────────── interno ─────────────────────────
 
   private entrada(convite: ConvitePendente, userId: string): ConviteParaAceitar {
-    return { userId, invitationId: convite.id };
+    // ⚠️ (#135) O TOKEN vai junto do id: a reemissão reescreve a MESMA linha
+    // (o `@@unique` de `(tenantId, email)` não permite duas), trocando o
+    // token. Sem o token, um aceite que começou antes da reemissão consumiria
+    // a linha trocada — e o token novo nasceria consumido.
+    return { userId, invitationId: convite.id, token: convite.token };
   }
 
   /**

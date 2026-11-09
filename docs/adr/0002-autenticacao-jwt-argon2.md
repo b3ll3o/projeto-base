@@ -80,6 +80,16 @@ compartilham a chave de assinatura.
 
 ### O que o JWT **NÃO** garante — leia antes de auditar
 
+> ⚠️ **ATUALIZADO em 2026-11-08 — o [ADR-0007](./0007-refresh-token-revogavel.md)
+> mudou parte disto.** O **refresh token** passou a ser REVOGÁVEL (ele carrega
+> um `jti` que está no registro `refresh_tokens`, e `POST /auth/logout` o
+> revoga). O que continua valendo é o **access token**: ele segue stateless, e
+> o TTL de 15 minutos é o que limita a janela de um access token vazado.
+>
+> O texto abaixo descreve o estado ANTIGO — e ele é a razão de o ADR-0007
+> existir. Ele fica porque a lição (o preço da statelessness precisa estar
+> escrito) vale para o que sobrou.
+
 **Um token já emitido não é revogado.** O JWT é stateless: não existe lista de
 revogação, e o `guard` valida assinatura e expiração, não o estado da conta.
 Duas consequências concretas, ambas MEDIDAS em 2026-10-13 no fluxo e2e:
@@ -97,6 +107,12 @@ Se alguma dessas duas virar requisito ("sair dos outros dispositivos ao trocar a
 senha"), a decisão a tomar é: lista de revogação por `jti`, `version` de sessão
 no banco, ou token curto sem refresh. **Não** é um bug — é o preço da
 estatelessness, registrado aqui para que ninguém o descubra em produção.
+
+⚠️ **O primeiro item (a revogação) foi IMPLEMENTADO** em 2026-11-08 — a
+[issue #132](https://github.com/b3ll3o/projeto-base/issues/132) e o
+[ADR-0007](./0007-refresh-token-revogavel.md): lista de revogação por `jti`,
+com rotação, logout e detecção de replay. O **segundo item (trocar a senha
+derrubar sessões) continua em aberto** — a troca de senha pela API não existe.
 
 ### other consequences
 

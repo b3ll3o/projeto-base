@@ -12,6 +12,15 @@ on:
       - '.tooling/**'
       - '.agents/**'
 
+# pt-BR (#131): o PISO de privilégio do workflow. Este workflow roda em
+# `pull_request` — conteúdo de terceiro — e faz DUAS coisas: lê o diff e
+# roda o reviewer local. As duas cabem em `contents: read`.
+#
+# Sem este bloco, o `GITHUB_TOKEN` herda o default do repositório, que é
+# configuração de fora do repo — e pode ser mais largo do que o necessário.
+permissions:
+  contents: read
+
 jobs:
   review:
     runs-on: ubuntu-24.04
@@ -20,6 +29,10 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
+          # pt-BR (#131): o token NÃO fica em `.git/config` da workspace.
+          # Este workflow roda em `pull_request` — conteúdo de terceiro — e
+          # não faz push de nada.
+          persist-credentials: false
       - uses: pnpm/action-setup@a3252b78c470c02df07e9d59298aecedc3ccdd6d # v3
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:

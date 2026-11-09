@@ -2,26 +2,32 @@
 //
 // pt-BR (#118): spec do guard que decide se as CREDENCIAIS do banco servem.
 //
-// O vetor que este guard fecha: `app_runtime_dev` (a senha do papel de
-// runtime) está no HISTÓRICO do Git deste repositório. Quem leu o repositório
-// conhece a senha — e ela era o default de qualquer banco novo, porque a
-// migration a criava em texto puro.
+// O vetor que este guard fecha (#133): a senha do papel de runtime que o
+// repositório PUBLICAOU está no HISTÓRICO do Git — e quem leu o repositório,
+// conhece. A recusa não pode ser por VALOR (escrever o valor aqui seria
+// outra forma de publicá-lo), e é por CRITÉRIO: o prefixo de exemplo e o
+// TAMANHO mínimo. A senha publicada tinha 15 caracteres — abaixo do mínimo.
 //
 // E o segundo: o `SYSTEM_DATABASE_URL` ausente. Sem ele, o bucket de sistema
 // não abre (é a credencial que o concede, desde a migration
 // `20261027000001_papel_de_sistema`) — e a API precisa dizer isso no BOOT, e
 // não no primeiro cadastro.
+//
 
 import { describe, it, expect } from 'vitest';
 import { verificarCredenciaisDoBanco } from './credenciais-do-banco.js';
 
 const RUNTIME_BOM = 'postgresql://app_runtime:senha-de-teste-com-32-bytes-ok@postgres:5432/app';
 const SISTEMA_BOM = 'postgresql://app_system:outra-senha-de-teste-com-32-bytes@postgres:5432/app';
-const RUNTIME_EXPOSTO = 'postgresql://app_runtime:app_runtime_dev@postgres:5432/app';
+// ⚠️ (#133) O valor de teste NÃO é a senha que o repositório publicou — é um
+// valor SINTÉTICO, com o mesmo defeito que ela tinha: é curto demais para um
+// papel gerenciado. É o que o guard tem de recusar agora.
+const SENHA_CURTA_DE_PAPEL = 'curta-demais';
+const RUNTIME_EXPOSTO = `postgresql://app_runtime:${SENHA_CURTA_DE_PAPEL}@postgres:5432/app`;
 
 describe('verificarCredenciaisDoBanco() (#118)', () => {
   // ── a senha exposta ──────────────────────────────────────────────────────
-  it('RECUSA a senha exposta do papel de runtime', () => {
+  it('RECUSA a senha CURTA do papel de runtime (#133)', () => {
     const veredito = verificarCredenciaisDoBanco({
       NODE_ENV: 'production',
       DATABASE_URL: RUNTIME_EXPOSTO,
@@ -40,11 +46,11 @@ describe('verificarCredenciaisDoBanco() (#118)', () => {
     });
     expect(veredito.ok).toBe(false);
     if (!veredito.ok) {
-      expect(veredito.motivo).not.toContain('app_runtime_dev');
+      expect(veredito.motivo).not.toContain(SENHA_CURTA_DE_PAPEL);
     }
   });
 
-  it('RECUSA a senha exposta do papel de SISTEMA também', () => {
+  it('RECUSA a senha CURTA do papel de SISTEMA também', () => {
     const veredito = verificarCredenciaisDoBanco({
       NODE_ENV: 'production',
       DATABASE_URL: RUNTIME_BOM,
@@ -54,7 +60,7 @@ describe('verificarCredenciaisDoBanco() (#118)', () => {
     expect(veredito.ok).toBe(false);
   });
 
-  it('RECUSA a senha exposta FORA de produção também', () => {
+  it('RECUSA a senha CURTA FORA de produção também', () => {
     // A senha exposta num banco de dev vaza para o de teste, e de lá para o
     // de staging. O guard não é só de produção.
     const veredito = verificarCredenciaisDoBanco({
@@ -157,15 +163,86 @@ describe('verificarCredenciaisDoBanco() (#118)', () => {
     ).toBe(true);
   });
 
+  it('o DONO do banco passa — o mínimo é dos PAPÉIS, e o dev conecta como o dono (#133)', () => {
+    // MEDIDO: o `docker-compose.dev.yml` conecta como `projeto:projeto` (6
+    // caracteres) e o guard roda no boot de TODO `NODE_ENV`. Um mínimo de
+    // tamanho sem esta exceção derrubaria o ambiente de desenvolvimento no
+    // primeiro boot — e o sintoma seria "a API não sobe", sem dizer por quê.
+    const veredito = verificarCredenciaisDoBanco({
+      NODE_ENV: 'development',
+      DATABASE_URL: 'postgresql://projeto:projeto@postgres:5432/projeto_base?schema=public',
+      SYSTEM_DATABASE_URL: 'postgresql://projeto:projeto@postgres:5432/projeto_base?schema=public',
+    });
+    expect(veredito.ok).toBe(true);
+  });
+
+  it('o valor de EXEMPLO do dono também passa — o dono não tem mínimo (#133)', () => {
+    // O dono é Superuser (ou tem CREATEROLE): a credencial dele é a
+    // `DIRECT_DATABASE_URL`, que o guard de boot NÃO recebe. A regra do dono
+    // é do `prepara-papeis.sh`, que a aplica antes de escrever a senha dos
+    // papeis.
+    const veredito = verificarCredenciaisDoBanco({
+      NODE_ENV: 'development',
+      DATABASE_URL: 'postgresql://projeto:projeto@postgres:5432/projeto_base?schema=public',
+    });
+    expect(veredito.ok).toBe(true);
+  });
+
   it('a senha percent-encoded é lida depois do decode', () => {
-    // `app_runtime_dev` não tem caractere especial, mas uma senha com `@` ou
-    // `:` na URI vem percent-encoded — e é o valor DECODED que a comparação
+    // A senha tem caractere especial (`_` virando `%5F`), e uma senha com `@`
+    // ou `:` na URI vem percent-encoded — é o valor DECODED que a comparação
     // tem de ver.
     const veredito = verificarCredenciaisDoBanco({
       NODE_ENV: 'production',
-      DATABASE_URL: 'postgresql://app_runtime:app%5Fruntime%5Fdev@postgres:5432/app',
+      DATABASE_URL: 'postgresql://app_runtime:curta%5Fdemais@postgres:5432/app',
       SYSTEM_DATABASE_URL: SISTEMA_BOM,
     });
     expect(veredito.ok).toBe(false);
+  });
+
+  // ⚠️ (#133) A MEDIDA é em BYTES — e o `prepara-papeis.sh` (que é quem
+  // ESCREVE a senha) mede em bytes também. MEDIDO: 6 emojis (12 caracteres,
+  // 24 bytes) PASSAVAM no script e eram RECUSADAS aqui — as duas camadas
+  // que precisam concordar mediam coisas diferentes.
+  it('a senha é medida em BYTES — igual ao script que APLICA (#133)', () => {
+    const emBytes = verificarCredenciaisDoBanco({
+      NODE_ENV: 'production',
+      DATABASE_URL: `postgresql://app_runtime:${'😀'.repeat(6)}@postgres:5432/app`,
+      SYSTEM_DATABASE_URL: SISTEMA_BOM,
+    });
+    expect(emBytes.ok).toBe(true);
+
+    const curtaEmBytes = verificarCredenciaisDoBanco({
+      NODE_ENV: 'production',
+      DATABASE_URL: `postgresql://app_runtime:${'😀'.repeat(5)}@postgres:5432/app`,
+      SYSTEM_DATABASE_URL: SISTEMA_BOM,
+    });
+    expect(curtaEmBytes.ok).toBe(false);
+  });
+
+  // ⚠️ (#133) A SEPARAÇÃO das duas credenciais (#118) invertida: a
+  // credencial que vive no container da API é a que NÃO abre o bucket de
+  // sistema, e a que o abre é outra. Trocadas de lugar, a API passa a rodar
+  // com o poder de SISTEMA.
+  it('RECUSA as credenciais TROCADAS — a separação da #118 invertida (#133)', () => {
+    const runtimeComODeSistema = verificarCredenciaisDoBanco({
+      NODE_ENV: 'production',
+      DATABASE_URL: SISTEMA_BOM,
+      SYSTEM_DATABASE_URL: SISTEMA_BOM,
+    });
+    expect(runtimeComODeSistema.ok).toBe(false);
+    if (!runtimeComODeSistema.ok) {
+      expect(runtimeComODeSistema.motivo).toContain('app_system');
+    }
+
+    const sistemaComODeRuntime = verificarCredenciaisDoBanco({
+      NODE_ENV: 'production',
+      DATABASE_URL: RUNTIME_BOM,
+      SYSTEM_DATABASE_URL: RUNTIME_BOM,
+    });
+    expect(sistemaComODeRuntime.ok).toBe(false);
+    if (!sistemaComODeRuntime.ok) {
+      expect(sistemaComODeRuntime.motivo).toContain('app_runtime');
+    }
   });
 });

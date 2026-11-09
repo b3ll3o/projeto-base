@@ -7,7 +7,7 @@ import type * as React from 'react';
 import { revalidatePath } from 'next/cache';
 import { listarPerfis, atribuirPerfil, decidirAtribuicaoPerfil } from '../../../lib/perfil';
 import { exigirAdmin } from '../guard-admin';
-import { ApiClient } from '../../../lib/api-client';
+import { ApiClient, baseUrlDaApi } from '../../../lib/api-client';
 import { exigirSessao, lerTenant } from '../../../lib/sessao';
 import type { UserOutputDto, UsersPageDto } from '@projeto/shared-types';
 
@@ -17,7 +17,7 @@ async function listarUsers(): Promise<UserOutputDto[]> {
   const accessToken = await exigirSessao();
   const tenantId = await lerTenant();
   const client = new ApiClient({
-    baseUrl: process.env.API_BASE_URL ?? 'http://localhost:3000/api/v1',
+    baseUrl: baseUrlDaApi(),
     getToken: () => accessToken,
     getTenant: () => tenantId,
   });

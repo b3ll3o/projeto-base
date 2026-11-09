@@ -253,7 +253,7 @@ entrada escrita à mão.
 
 Inseri uma asserção impossível numa linha que recebe o render inteiro e li a
 saída do vitest. Os 8 hits de `JWT_SECRET`/`POSTGRES_PASSWORD` são todos
-`CHAVE:<oculto>` — nome preservado, valor ausente — e `app_runtime_dev` (a senha
+`CHAVE:<oculto>` — nome preservado, valor ausente — e a senha do papel de runtime (a senha
 do example) não aparece nenhuma vez.
 
 ### Pendência que eu criei

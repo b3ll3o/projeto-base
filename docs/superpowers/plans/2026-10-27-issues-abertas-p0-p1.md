@@ -130,7 +130,7 @@ declara o limite.
 ### D2 — A senha do papel sai do repo, e a migration para de poder criá-la
 
 `SENHA_DE_RUNTIME_DEV` está em **dois** lugares versionados: a migration
-(`PASSWORD 'app_runtime_dev'`) e o fonte (`papel-de-runtime.ts:26`). A migration
+(em texto puro) e o fonte (`papel-de-runtime.ts:26`). A migration
 não lê env — e é por isso que a senha foi parar ali.
 
 A correção: a migration cria o papel **sem senha** (`NOLOGIN`), e um passo de
@@ -384,7 +384,7 @@ decoração.
 - **Os 16 achados P2** do relatório. Três são falsos positivos que o próprio
   relatório declara; os outros são dívida real de escopo próprio. **Cada um vira
   issue própria** — o cap de 10 foi o que impediu, e esse é o mecanismo certo.
-- **A revogação do que já foi exposto** (`app_runtime_dev` está no histórico de
+- **A revogação do que já foi exposto** (a senha publicada está no histórico de
   um repositório público). Não é código: é rotação de credencial em ambiente
   real, e o código deste PR **deixa de recriar** a condição. Declarado no PR.
 - **`tracesToMetrics`/`serviceMap` do Grafana**, `findMany` sem `take`,

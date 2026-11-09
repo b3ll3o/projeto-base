@@ -286,4 +286,67 @@ describe('Users E2E (Fastify inject + Testcontainers)', () => {
     expect(body.entries.length).toBeGreaterThanOrEqual(2);
     expect(body.nextCursor).toBeNull(); // cabe em uma página
   });
+
+  // ⚠️ (#136) A SEGUNDA PÁGINA do histórico — o critério de aceite da issue.
+  //
+  // O defeito: o `nextCursor` do histórico é o `users_history.id`, que é um
+  // UUID **v4** (o `gen_random_uuid()` do banco) — e o schema da paginação o
+  // validava com a regex do VO de id de usuário, que exige a **versão 7**.
+  // O servidor devolvia um cursor que ele mesmo recusava com 400 na segunda
+  // página.
+  //
+  // Este teste percorre as DUAS páginas usando o cursor devolvido — e é a
+  // ÚNICA forma de pegar o defeito: uma spec que só afirme o `nextCursor`
+  // nulo nunca chega na segunda página, e uma spec unitária com um UUID v7
+  // passa com a regex antiga (o `v7` satisfaz as DUAS regexes).
+  it('GET /api/v1/users/:id/history percorre DUAS páginas com o nextCursor devolvido (#136)', async () => {
+    const dona = await criarUsuarioAutenticado(e2e, {
+      nome: 'Alice',
+      email: 'alice-pagina@b.com',
+    });
+
+    // Três versões: o INSERT + dois UPDATE.
+    for (const [i, nome] of ['Alice 2', 'Alice 3'].entries()) {
+      const p = await e2e.injetar({
+        method: 'PATCH',
+        url: `/api/v1/users/${dona.id}`,
+        headers: { ...dona.headers, 'if-match': `W/"v${i + 1}"` },
+        payload: { novoNome: nome },
+      });
+      expect(p.statusCode).toBe(200);
+    }
+
+    // A PRIMEIRA página, com `limit=1` — para o `nextCursor` existir.
+    const primeira = await e2e.injetar({
+      method: 'GET',
+      url: `/api/v1/users/${dona.id}/history?limit=1`,
+      headers: dona.headers,
+    });
+    expect(primeira.statusCode).toBe(200);
+    const corpo1 = JSON.parse(primeira.body) as {
+      entries: { version: number }[];
+      nextCursor: string | null;
+    };
+    expect(corpo1.entries).toHaveLength(1);
+    expect(corpo1.nextCursor).not.toBeNull();
+
+    // ⚠️ O cursor devolvido é um UUID **v4** (o `users_history.id`), e a
+    // rota precisa aceitá-lo.
+    expect(corpo1.nextCursor).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    );
+    expect(corpo1.nextCursor![14]).not.toBe('7'); // NÃO é v7
+
+    // A SEGUNDA página — que é onde o defeito aparecia (400 VALIDATION_ERROR).
+    const segunda = await e2e.injetar({
+      method: 'GET',
+      url: `/api/v1/users/${dona.id}/history?limit=1&cursor=${corpo1.nextCursor}`,
+      headers: dona.headers,
+    });
+    expect(segunda.statusCode).toBe(200);
+    const corpo2 = JSON.parse(segunda.body) as { entries: { version: number }[] };
+    expect(corpo2.entries).toHaveLength(1);
+    // E a página seguinte É a seguinte (a ordenação é por versão).
+    expect(corpo2.entries[0]!.version).toBeGreaterThan(corpo1.entries[0]!.version);
+  });
 });

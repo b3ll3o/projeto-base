@@ -216,26 +216,39 @@ describe('JwtTokenService', () => {
       expect(Number(payloadDe(par.accessToken)['exp']) - iat).toBe(15 * 60);
     });
 
-    it('é DETERMINÍSTICO dentro do mesmo segundo — sem `jti`, o par repete', async () => {
-      // Fato medido, não defeito: o payload é {sub, email, typ} e o
-      // `iat`/`exp` do jsonwebtoken tem granularidade de segundo, então
-      // dois `emitir()` na mesma segunda devolvem byte a byte o mesmo
-      // token. Registrado aqui DE PROPÓSITO, para que a fase 5 (rotação
-      // de refresh token) não descubra isso em produção: uma rotação
-      // dentro do mesmo segundo não muda o refresh token. Se a rotação
-      // precisar ser observável, o payload tem de ganhar um `jti`
-      // aleatório — mudança de contrato que não cabe nesta fase.
+    it('o `jti` torna o par OBSERVÁVEL dentro do mesmo segundo (#132)', async () => {
+      // O comportamento ANTERIOR (medido, e registrado DE PROPÓSITO): o
+      // payload era {sub, email, typ} e o `iat`/`exp` do jsonwebtoken tem
+      // granularidade de segundo — dois `emitir()` na mesma segunda
+      // devolviam byte a byte o mesmo token. A rotação de refresh token
+      // (que é o que impede a reentrada de um token já usado) NEEDAVA
+      // disso ser observável.
+      //
+      // ⚠️ (#132) O `jti` entrou: cada token agora tem identidade própria,
+      // e dois `emitir()` na mesma segunda NÃO repetem. É o que faz a
+      // rotação valer — e o `jti` do refresh é o que o registro de
+      // revogação indexa.
       const service = novoServico();
 
       const a = await service.emitir({ ...ASSUNTO });
       const b = await service.emitir({ ...ASSUNTO });
 
-      const identicos = a.accessToken === b.accessToken && a.refreshToken === b.refreshToken;
-      expect(identicos).toBe(true);
-      // …e no segundo seguinte já não são.
-      await new Promise((r) => setTimeout(r, 1_100));
-      const c = await service.emitir({ ...ASSUNTO });
-      expect(c.accessToken).not.toBe(a.accessToken);
+      expect(a.accessToken).not.toBe(b.accessToken);
+      expect(a.refreshToken).not.toBe(b.refreshToken);
+      expect(a.refreshJti).not.toBe(b.refreshJti);
+      // E o `jti` é o que o token CARREGA — é o que o `validarRefreshToken`
+      // devolve, e o que o registro indexa.
+      expect(payloadDe(a.refreshToken)['jti']).toBe(a.refreshJti);
+      expect(payloadDe(a.accessToken)['jti']).toBeTruthy();
+    });
+
+    it('o `refreshExpiresAt` é o `exp` do token que foi assinado (#132)', async () => {
+      const service = novoServico();
+
+      const par = await service.emitir({ ...ASSUNTO });
+
+      const exp = Number(payloadDe(par.refreshToken)['exp']);
+      expect(par.refreshExpiresAt.getTime()).toBe(exp * 1000);
     });
   });
 
@@ -323,15 +336,29 @@ describe('JwtTokenService', () => {
 
   // ─── validarRefreshToken ─────────────────────────────────────────────────
   describe('validarRefreshToken()', () => {
-    it('devolve o TokenSubject de um refresh válido', async () => {
+    it('devolve o RefreshSubject de um refresh válido — COM o `jti` (#132)', async () => {
       const service = novoServico();
-      const { refreshToken } = await service.emitir({ ...ASSUNTO });
+      const { refreshToken, refreshJti } = await service.emitir({ ...ASSUNTO });
 
       await expect(service.validarRefreshToken(refreshToken)).resolves.toEqual({
         sub: ASSUNTO.sub,
         email: ASSUNTO.email,
         typ: 'refresh',
+        jti: refreshJti,
       });
+    });
+
+    it('REJEITA um refresh SEM `jti` — ele não tem como ser revogado (#132)', async () => {
+      // O token sem `jti` é o par stateless ANTIGO (o de antes da migração):
+      // sem identidade, não há o que revogar no registro. Aceitá-lo deixaria
+      // a revogação aberta justamente para os tokens que sobraram.
+      const service = novoServico();
+      const token = new JwtService().sign(
+        { sub: ASSUNTO.sub, email: ASSUNTO.email, typ: 'refresh' },
+        { secret: SEGREDO },
+      );
+
+      await expect(service.validarRefreshToken(token)).rejects.toThrow(InvalidTokenException);
     });
 
     it('REJEITA um access token — o caminho inverso também fecha', async () => {

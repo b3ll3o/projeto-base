@@ -20,12 +20,12 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { ApiClient, ApiError } from '@/lib/api-client';
+import { ApiClient, ApiError, baseUrlDaApi, revogarRefreshToken } from '@/lib/api-client';
 import { ehTokenDeConvite } from '@/lib/convite-schema';
 import { listarEmpresas } from '@/lib/empresas';
 import { loginSchema, type CampoLogin } from '@/lib/login-schema';
 import { obterMeuPerfilGlobal } from '@/lib/perfil';
-import { guardarTenant, guardarTokens, limparTenant } from '@/lib/sessao';
+import { guardarTenant, guardarTokens, lerTokens, limparTenant } from '@/lib/sessao';
 import {
   CREDENCIAIS_INVALIDAS,
   ERRO_CONSULTA_DAS_EMPRESAS,
@@ -179,7 +179,7 @@ export async function entrar(_estadoAnterior: LoginState, formData: FormData): P
   }
 
   const api = new ApiClient({
-    baseUrl: process.env.API_BASE_URL ?? 'http://localhost:3000/api/v1',
+    baseUrl: baseUrlDaApi(),
   });
 
   let erro: unknown;
@@ -219,6 +219,28 @@ export async function entrar(_estadoAnterior: LoginState, formData: FormData): P
       valores: valoresSemSegredo(valores),
       formError: ERRO_GENERICO_LOGIN,
     };
+  }
+
+  // pt-BR (re-login, 2026-11-09): o re-login SOBRESCREVE os dois cookies, e
+  // o refresh token ANTERIOR continuaria válido no servidor por até 7 dias —
+  // a mesma classe do "Sair" que a #132 fechou. Num browser compartilhado, o
+  // cookie de A é sobrescrito e o refresh de A continua renovando sessão.
+  //
+  // ⚠️ A revogação vem ANTES de gravar a sessão nova, e é TENTADA: uma API
+  // fora do ar não pode impedir o login — a pessoa entrou com a credencial
+  // certa, e a revogação é uma limpeza, não uma pré-condição.
+  //
+  // ⚠️ E a falha é LOGADA (mesmo espírito do `sair`): uma revogação que
+  // falha em SILÊNCIO é um controle que não existe.
+  const { refreshToken: refreshAnterior } = await lerTokens();
+  if (refreshAnterior) {
+    try {
+      await revogarRefreshToken(refreshAnterior);
+    } catch (erro) {
+      // ⚠️ O 401 NÃO chega aqui: `revogarRefreshToken` o absorve, porque
+      // "este token já está morto" é o estado final DESEJADO.
+      console.error('[web] o re-login não revogou o refresh token anterior na API', erro);
+    }
   }
 
   await guardarTokens(resposta.accessToken, resposta.refreshToken);

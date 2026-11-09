@@ -43,6 +43,16 @@ concurrency:
   group: release-template
   cancel-in-progress: false
 
+# pt-BR (#131): o PISO de privilégio do workflow. `contents: read` é tudo o
+# que o workflow precisa para LER o código; o `contents: write` é do job
+# `tag`, que é o único que faz push — e ele sobrescreve este bloco.
+#
+# O piso aqui não é decorativo: sem um `permissions:` no nível do workflow,
+# o `GITHUB_TOKEN` herda o default do repositório, que é configuração de fora
+# do repo.
+permissions:
+  contents: read
+
 jobs:
   tag:
     runs-on: ubuntu-24.04

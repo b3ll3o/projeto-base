@@ -149,6 +149,16 @@ describe('checkTenantScopeSource', () => {
     // argumento (ela ABRE o escopo de sistema, na credencial de sistema). O
     // número do inventário é 0, e o total continua 39.
     //
+    // MEDIDO 2026-11-08 (#135): **43**. A alta de 4 é do conserto do
+    // convite: `emitirConvite` passou a LER a linha existente por
+    // `(empresa, e-mail)` antes do insert (é a leitura que decide entre
+    // "409 de verdade" e "reemitir"), e a reemissão reescreve a MESMA
+    // linha. As duas operações abrem o escopo da empresa — e cada uma casa
+    // DUAS vezes no gate (`comEscopo(` e `escopoDoTenant(`), ou seja,
+    // 2 × 2 = 4. É o MESMO padrão que o `existeConvitePara` do #116
+    // introduceu (a leitura que distingue a colisão de TOKEN da colisão de
+    // (empresa, e-mail)): a pergunta é uma LEITURA, e ler exige escopo.
+    //
     // ⚠️ MEDIDO, não deduzido: mutando o repositório para
     // `comEscopoDeEmpresa(this.prisma, null, fn)` o gate imprime **41** — o
     // gate VÊ este arquivo, e o 39 não é um ponto cego. A forma mutada é
@@ -156,7 +166,7 @@ describe('checkTenantScopeSource', () => {
     // diz "o tenantId é nulo" onde a forma direta diz "isto é o bucket de
     // SISTEMA", e ainda conta 2 call sites que não abrem mais nenhuma
     // empresa. O gate conta o que ele conta; a escolha é do repositório.
-    expect(r.advisories?.[0]).toContain('39 call site(s)');
+    expect(r.advisories?.[0]).toContain('43 call site(s)');
   });
 
   it('🔴 corpus VAZIO é vermelho — o gate não pode reportar verde sem medir', () => {

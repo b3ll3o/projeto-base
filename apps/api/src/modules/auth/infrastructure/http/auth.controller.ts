@@ -49,7 +49,7 @@
 // num request de leitura. É narrowing, não defesa.
 
 import { Body, Controller, Get, Inject, Post, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 
 import { ZodValidationPipe } from '../../../../shared/infrastructure/http/zod-validation.pipe.js';
@@ -137,6 +137,20 @@ export class AuthController {
   })
   @Post('login')
   @ApiOperation({ summary: 'Autenticar e emitir sessão' })
+  // ⚠️ O `RefreshSchema`/`LoginSchema` do Zod NÃO é um decorator do Swagger —
+  // e sem o `@ApiBody` o contrato publicado não declara o corpo que a rota
+  // exige. O `openapi.json` é versionado, e um contrato que não diz o que a
+  // rota pede é um contrato incompleto.
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['email', 'senha'],
+      properties: {
+        email: { type: 'string', format: 'email', example: 'pessoa@example.com' },
+        senha: { type: 'string', example: 'uma senha qualquer' },
+      },
+    },
+  })
   @ApiResponse({
     status: 201,
     description: 'Sessão emitida',
@@ -171,11 +185,50 @@ export class AuthController {
   @Public()
   @Post('refresh')
   @ApiOperation({ summary: 'Renovar a sessão a partir do refresh token' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['refreshToken'],
+      properties: { refreshToken: { type: 'string', example: 'eyJhbGciOi…' } },
+    },
+  })
   @ApiResponse({ status: 201, description: 'Par de tokens renovado' })
   @ApiResponse({ status: 401, description: 'Refresh token ausente, expirado ou inválido' })
   @ApiResponse({ status: 400, description: 'Payload inválido' })
   async refresh(@Body(new ZodValidationPipe(RefreshSchema)) body: RefreshDto): Promise<unknown> {
     return this.authUseCases.renovar({ refreshToken: body.refreshToken });
+  }
+
+  // ───────────────────────── POST /auth/logout ───────────────────────
+
+  // ⚠️ (#132) A rota é `@Public()`, e o refresh token vem no CORPO — o
+  // mesmo formato de `/auth/refresh`.
+  //
+  // O motivo de ser `@Public()`: o refresh token É a credencial do logout.
+  // Exigir o access token seria pedir a credencial de quem já tem o
+  // equivalente do token que se quer matar — e o access vive 15 minutos,
+  // o refresh 7 dias: quem ficou logado mais de 15 min sem usar a API
+  // levaria 401 no logout, e o token (que é o que importa) continuaria
+  // válido no servidor.
+  @Public()
+  @Post('logout')
+  @ApiOperation({ summary: 'Revogar o refresh token da sessão' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['refreshToken'],
+      properties: { refreshToken: { type: 'string', example: 'eyJhbGciOi…' } },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Refresh token revogado' })
+  @ApiResponse({ status: 401, description: 'Refresh token ausente, expirado ou inválido' })
+  @ApiResponse({ status: 400, description: 'Payload inválido' })
+  async logout(@Body(new ZodValidationPipe(RefreshSchema)) body: RefreshDto): Promise<unknown> {
+    // ⚠️ O `revogado` é o que o registro respondeu — e não um `true` fixo.
+    // Um token que nunca entrou no registro (ou que já estava revogado)
+    // devolve `false`, e a resposta afirma isso.
+    const revogado = await this.authUseCases.sair({ refreshToken: body.refreshToken });
+    return { revogado };
   }
 
   // ───────────────────────── GET /auth/me ─────────────────────────────

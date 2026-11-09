@@ -9,8 +9,9 @@ import { randomUUID } from 'node:crypto';
 // `domain-exception-to-http.ts:218` mapeia para 400 com `errors[].field`. Os VOs
 // gêmeos (`profile-name.vo.ts:7`, `profile-slug.vo.ts:8`) já importam daqui.
 import { UserValidationException } from '../../../users/domain/exceptions/user.exceptions.js';
-
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// pt-BR (#136): o dono único da FORMA "é um UUID" no repo. Este VOs usa
+// `randomUUID()` — que é v4 — e a forma não impõe versão.
+import { UUID_RE_QUALQUER_VERSAO } from '../../../../shared/domain/uuid.js';
 
 export class ProfileId {
   readonly #value: string;
@@ -23,7 +24,7 @@ export class ProfileId {
     if (value === undefined) {
       return new ProfileId(randomUUID());
     }
-    if (typeof value !== 'string' || !UUID_REGEX.test(value)) {
+    if (typeof value !== 'string' || !UUID_RE_QUALQUER_VERSAO.test(value)) {
       // ⚠️ Antes era `new Error(...)`, e o mapper não tem caso para `Error` cru:
       // o fall-through devolve 500. O `motivo` é ESTÁTICO de propósito — a
       // versão anterior interpolava o valor recebido (redigido, mas ainda

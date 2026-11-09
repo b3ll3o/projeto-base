@@ -347,7 +347,7 @@ plans_aggregated:
           message: '...' }` -> `rejects.toThrow(/P1001/)`. Guardar o env do
           teste com `vi.stubEnv` (`NODE_ENV=development`,
           `DATABASE_URL=app_runtime:<senha-de-teste-local>@localhost:5432/db`
-          — senha que nao esta em `SENHAS_EXPOSTAS=['app_runtime_dev']` nem
+          — senha que nao e de exemplo (prefixo `change_me`/`***`) nem e curta demais,
           comeca com `change_me`/`***`), senao o guard recusa antes do
           `$connect` mockado e o teste falha pelo motivo errado. Usar
           `vi.spyOn(PrismaService.prototype, '$connect')` para NAO tocar a rede.

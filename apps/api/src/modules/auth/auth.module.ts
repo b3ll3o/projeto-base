@@ -44,7 +44,9 @@ import { AuthController } from './infrastructure/http/auth.controller.js';
 import { JwtAuthGuard } from './infrastructure/http/jwt-auth.guard.js';
 import { JwtTokenService } from './infrastructure/security/jwt-token.service.js';
 import { Argon2PasswordHasher } from './infrastructure/security/argon2-password-hasher.js';
+import { PrismaRefreshTokenRepository } from './infrastructure/persistence/prisma-refresh-token.repository.js';
 import { TOKEN_ISSUER_PORT } from './domain/ports/token-issuer.port.js';
+import { REFRESH_TOKEN_REPOSITORY_PORT } from './domain/ports/refresh-token-repository.port.js';
 import { PASSWORD_HASHER_PORT } from '../users/domain/ports/password-hasher.port.js';
 import { PrismaPersistenceModule } from '../users/infrastructure/prisma-persistence.module.js';
 import { PrismaModule } from '../../shared/infrastructure/prisma/prisma.module.js';
@@ -85,6 +87,10 @@ export const AUTH_GUARD_SLOT = JwtAuthGuard;
     { provide: AUTH_USE_CASES, useClass: AuthUseCases },
     { provide: TOKEN_ISSUER_PORT, useClass: JwtTokenService },
     { provide: PASSWORD_HASHER_PORT, useClass: Argon2PasswordHasher },
+    // ⚠️ (#132) O REGISTRO de refresh tokens. O binding mora AQUI (e não no
+    // `PrismaPersistenceModule`, que é do BC `users`) — é o mesmo padrão do
+    // `feature-flags`: o adapter é do BC que o consome.
+    { provide: REFRESH_TOKEN_REPOSITORY_PORT, useClass: PrismaRefreshTokenRepository },
     { provide: AUTH_GUARD_SLOT, useClass: JwtAuthGuard },
     // pt-BR (#97): DONO do cache. O `JwtAuthGuard` (que LÊ) mora aqui e as
     // use cases de ProfilesModule (que INVALIDAM) precisam ser a MESMA

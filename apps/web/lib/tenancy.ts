@@ -25,7 +25,7 @@
 // e as DUAS leituras da tela montavam DOIS clientes e liam o cookie DOIS
 // vezes — a página é `force-dynamic`, e isso valia a cada navegação.
 
-import { ApiClient } from './api-client';
+import { ApiClient, baseUrlDaApi } from './api-client';
 import type { InventarioAdminTenancyDto } from '@projeto/shared-types';
 
 /**
@@ -36,7 +36,7 @@ import type { InventarioAdminTenancyDto } from '@projeto/shared-types';
  */
 function client(accessToken: string): ApiClient {
   return new ApiClient({
-    baseUrl: process.env.API_BASE_URL ?? 'http://localhost:3000/api/v1',
+    baseUrl: baseUrlDaApi(),
     getToken: () => accessToken,
     // Sem `getTenant` — D7. Ver o cabeçalho.
   });

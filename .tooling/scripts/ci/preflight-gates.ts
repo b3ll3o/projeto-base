@@ -256,6 +256,25 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     id: 'check-ci-action-pinning',
   },
   {
+    // #139: o HEALTHCHECK de uma imagem precisa de um BINARIO que existe
+    // NAQUELA imagem. O `curl` do healthcheck da api estava instalado só no
+    // stage `prod` — e o compose de dev troca o `build.target` para `dev`,
+    // que não o tem: o probe falhava com "not found", a api nunca ficava
+    // `healthy` e o `web` (que depende dela) não subia.
+    name: 'o binario do HEALTHCHECK existe na imagem do stage',
+    file: '.tooling/scripts/ci/check-docker-healthcheck-binary.ts',
+    id: 'check-docker-healthcheck-binary',
+  },
+  {
+    // #134: uma tabela que as MIGRATIONS criam e que o `schema.prisma` não
+    // descreve é uma tabela que um `prisma migrate dev` propõe DERRUBAR.
+    // MEDIDO: `chaves_de_assinatura` guardava a chave de assinatura do
+    // `criar_membership`, e perdê-la quebrava o onboarding inteiro.
+    name: 'toda tabela das migrations tem model no schema',
+    file: '.tooling/scripts/ci/check-migrations-sem-model.ts',
+    id: 'check-migrations-sem-model',
+  },
+  {
     // #125: o documento OpenAPI versionado divergir do que o código gera.
     //
     // A issue acerta o ponto: sem a spec VERSIONADA, o gate que a compara

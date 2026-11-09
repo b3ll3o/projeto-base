@@ -104,7 +104,7 @@ Estrutura canônica para apps Node no monorepo:
 ### Passo 4: Aplicar Hardening
 
 - **`USER node`** (uid 1000) no stage runtime — NUNCA `USER root` em produção
-- **`HEALTHCHECK`** com `curl --fail` ou `wget --spider` apontando para `/api/v1/health`
+- **`HEALTHCHECK`** com `node -e` (http.get) apontando para `/api/v1/health` — ⚠️ (#139): NÃO use `curl`/`wget`: o probe não pode depender de um pacote instalado, porque o compose de dev troca o `build.target` para um stage que não o tem (e herda o probe do compose base)
 - **Version pinning** — `FROM node:22.14.0-bookworm-slim@sha256:...`
 - **Read-only root filesystem** quando possível (`security-opt: no-new-privileges`)
 - **`.dockerignore`** agressivo: `node_modules`, `.git`, `.turbo`, `coverage`, `*.log`, `.env*`, `docs/`, `tools/`
@@ -153,14 +153,16 @@ result:
         base_image: node:22-bookworm-slim
         size_mb: 245
         user: node
-        healthcheck: "curl --fail http://localhost:3000/api/v1/health"
+        # ⚠️ (#139): probe sem pacote instalado — o `node` está nas DUAS imagens
+        healthcheck: "node -e \"require('http').get('http://localhost:3000/api/v1/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""
 
       - path: apps/web/Dockerfile
         targets: [base, dev, builder, prod]
         base_image: node:22-bookworm-slim
         size_mb: 215
         user: node
-        healthcheck: "wget --spider http://localhost:3000/api/health"
+        # ⚠️ (#139): probe sem pacote instalado — o `node` está nas DUAS imagens
+        healthcheck: "node -e \"require('http').get('http://localhost:3001/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""
 
     compose:
       - path: docker-compose.yml

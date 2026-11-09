@@ -11,7 +11,7 @@
 // format (ver `packages/shared-types/src/user.ts`).
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { ApiClient, ApiError } from '@/lib/api-client';
+import { ApiClient, ApiError, baseUrlDaApi } from '@/lib/api-client';
 import { exigirSessao, lerTenant } from '@/lib/sessao';
 import type { UserOutputDto, UsersPageDto } from '@projeto/shared-types';
 import { sair } from './actions';
@@ -41,7 +41,7 @@ export default async function UsersPage() {
 
   const tenantId = await lerTenant();
   const api = new ApiClient({
-    baseUrl: process.env.API_BASE_URL ?? 'http://localhost:3000/api/v1',
+    baseUrl: baseUrlDaApi(),
     getToken: () => accessToken,
     getTenant: () => tenantId,
   });

@@ -53,11 +53,15 @@ model User {
   // Relação: um User pertence a 0..1 Profile. Nullable para rollback /
   // usuários legados sem profile. onDelete: Restrict porque o admin precisa
   // reatribuir antes de deletar o Profile.
-  profile     Profile?           @relation(fields: [profileId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  profile       Profile?           @relation(fields: [profileId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   // D4: um User pode estar em N empresas. `users.profile_id` continua valendo
   // (a Fase 4 troca só o caminho de leitura), mas o perfil efetivo passa a ser
   // o do tenant — ver `multi-tenant-specialist` Passo 4.
-  memberships TenantMembership[]
+  memberships   TenantMembership[]
+  // #132: o registro dos refresh tokens emitidos — a tabela que dá ao
+  // refresh token um `jti` revogável. A relação é `CASCADE`: apagar a
+  // conta (hard delete) apaga os tokens dela.
+  refreshTokens RefreshToken[]
 
   @@index([email])
   @@index([deletedAt])
@@ -286,4 +290,64 @@ model FeatureFlag {
   version   Int      @default(1)
 
   @@map("feature_flags")
+}
+
+// pt-BR (#134): a chave de assinatura do `criar_membership`.
+//
+// A tabela É de uma migration — `20261020000004_membership_insert_via_definer`
+// a cria — e NÃO tinha model aqui. MEDIDO: `prisma migrate diff --from-url
+// <banco vivo> --to-schema-datamodel` emitia `DROP TABLE
+// "chaves_de_assinatura"` — e um `migrate dev` aplica esse DROP. A tabela
+// guarda o segredo que assina o `criar_membership`, e perdê-la quebra o
+// onboarding inteiro (42501 "chave de assinatura ausente para membership").
+//
+// ⚠️ SEM `createdAt`/`updatedAt`/`version`: uma tabela de SEGREDO não tem
+// ciclo de vida de negócio — o que muda nela é o segredo, e a troca do
+// segredo é uma operação do dono do banco, não um `UPDATE` da aplicação.
+// A exceção do `stack-code-reviewer` está declarada por model, com o motivo.
+model ChaveDeAssinatura {
+  nome      String   @id
+  segredo   Bytes    @db.ByteA
+  createdAt DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  @@map("chaves_de_assinatura")
+}
+
+// pt-BR (#132): o REGISTRO dos refresh tokens — a tabela que dá ao refresh
+// token um `jti` revogável.
+//
+// Antes dela, o refresh era um JWT stateless sem `jti`: nada o revogava, e
+// um token vazado valia por 7 dias e se renovava sozinho. Ver
+// `docs/adr/0007-refresh-token-revogavel.md`.
+//
+// `jti` é a PRIMARY KEY e não um `id` uuid: o identificador do token É o
+// `jti` (é o que o token carrega no payload e o que o logout revoga), e uma
+// segunda coluna de identidade seria outra maneira de dizer a mesma coisa.
+//
+// ⚠️ SEM `updatedAt`/`version`: o que muda na linha é `revoked_at`, e a
+// transição (ativo → revogado) acontece UMA vez — um contador de versão
+// seria um campo que ninguém lê. A exceção do `stack-code-reviewer` está
+// declarada por model, com o motivo.
+//
+// ⚠️ SEM `tenant_id`, e SEM RLS: o predicado de escopo do banco compara com
+// a EMPRESA, e aqui a coluna é o USUÁRIO — a policy não teria o que
+// comparar. E a tabela não é alcançável pelo caminho de request: a
+// migration a `REVOKE` de `app_runtime`, e login/refresh/logout falam com
+// ela pela credencial de SISTEMA.
+model RefreshToken {
+  jti       String    @id
+  userId    String    @map("user_id") @db.Uuid
+  // ⚠️ (#132) As três colunas de tempo são INSTANTES ABSOLUTOS — `timestamptz`,
+  // e não `timestamp` (que é a parede de relógio, sem fuso). A diferença não é
+  // estética: a poda compara `expires_at` com `now()`, e um `timestamp` sem
+  // fuso é convertido para o TimeZone DA SESSÃO — num banco à frente do UTC, a
+  // poda removeria tokens que ainda valem. MEDIDO 2026-11-08.
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
 }

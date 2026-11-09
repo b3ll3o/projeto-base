@@ -104,6 +104,22 @@ YArchive    → última versão deletada (lixeira)
 
 Nenhuma nova decisão arquitetural é necessária. O template está pronto.
 
+⚠️ **A EXCEÇÃO, medida em 2026-11-08:** o padrão vale para **entidades de
+negócio** — as que têm ciclo de vida (surgem, mudam, podem ser apagadas). Uma
+tabela que **não é entidade** fica fora dele, e há duas no repo agora:
+
+- `refresh_tokens` (#132) — o REGISTRO de revogação dos refresh tokens. Não é
+  uma entidade: a linha não "muda", ela é consumida (`revoked_at`) ou podada
+  pelo prazo. Não há `refresh_tokens_history` nem `refresh_tokens_archive`,
+  e não há porque ter.
+- `chaves_de_assinatura` (#134) — o SEGREDO de assinatura do `criar_membership`.
+  É material de infra, e a troca do segredo é uma operação do DONO do banco
+  (a migration), não um `UPDATE` da aplicação.
+
+A consequência no `schema.prisma` é que as duas **não** têm
+`createdAt`/`updatedAt`/`version` — e a exceção do `stack-code-reviewer`
+(`MODELS_SEM_CICLO_DE_VIDA`) é declarada por model, com o motivo escrito.
+
 ## §5. Estrutura do Módulo `users`
 
 ```text

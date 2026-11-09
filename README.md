@@ -137,8 +137,9 @@ cp apps/api/.env.example apps/api/.env
 openssl rand -base64 48    # preencha o valor na linha JWT_SECRET= de apps/api/.env
 
 # 4.1. Senhas dos PAPÉIS do banco (#118) — o .env.example traz PLACEHOLDER, e a
-# API recusa o boot com placeholder (a senha que a migration publicava,
-# `app_runtime_dev`, está no histórico do Git — quem leu o repositório, conhece).
+# API recusa o boot com placeholder (a senha que a migration publicava está no
+# histórico do Git — quem leu o repositório, conhece — e o guard recusa QUALQUER
+# senha de papel de exemplo ou curta demais, em qualquer `NODE_ENV`).
 # São DOIS papéis, com DUAS senhas: app_runtime (DATABASE_URL, o escopo de
 # empresa) e app_system (SYSTEM_DATABASE_URL, o bucket de sistema).
 # ⚠️ `-hex 32`, e NÃO `-base64 48`: o base64 traz `/`, e o `/` ENCERRA a parte
@@ -290,6 +291,6 @@ Detalhes em [`docs/TEMPLATE_USAGE.md`](./docs/TEMPLATE_USAGE.md).
 
 ## Versão & Licença
 
-**Versão:** 1.21.0 — re-medido do disco em **2026-11-05**: `ls .agents/agents/*.md | wc -l` = **28** agents · `ls .agents/memory/*.md | wc -l` = **30** memórias (1 por agent + `state-aware-planning` + `_template`) · `ls .agents/skills/*/SKILL.md | wc -l` = **29** skills · `ls .agents/workflows/*.md | wc -l` = **15** workflows · `ls .agents/specs/conventions/*.md | grep -vE 'README|gaps|examples|historico|apendice' | wc -l` = **24** convenções · `ls apps/api/src/modules/ | wc -l` = **6** módulos.
+**Versão:** 1.22.0 — re-medido do disco em **2026-11-05**: `ls .agents/agents/*.md | wc -l` = **28** agents · `ls .agents/memory/*.md | wc -l` = **30** memórias (1 por agent + `state-aware-planning` + `_template`) · `ls .agents/skills/*/SKILL.md | wc -l` = **29** skills · `ls .agents/workflows/*.md | wc -l` = **15** workflows · `ls .agents/specs/conventions/*.md | grep -vE 'README|gaps|examples|historico|apendice' | wc -l` = **24** convenções · `ls apps/api/src/modules/ | wc -l` = **6** módulos.
 
 A `1.14.0` adiciona o `documentation-specialist` (+1 agent, +1 memória), a skill `documentation-audit` (+1) e a convenção `documentacao` (+1) — e corrige os fatos errados da versão anterior: Node ≥ 20 → ≥ 22.6.0, `openssl rand -base64 48` → `-hex 32` nas senhas de papel, "três modos" → dois, e a lista de agents (faltavam os 6 de auditoria). A **tag do template** é a dos 4 footers canônicos (o de [`docs/MONOREPO.md`](./docs/MONOREPO.md) manda), extraída pelo `release-template.yml` — este rodapé não a define. **Licença:** MIT.

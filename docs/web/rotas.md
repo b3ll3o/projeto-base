@@ -87,8 +87,8 @@ declarada dentro do `page.tsx` (5) — **10 no total** (contagem reproduzida em
 
 | Action | Arquivo | O que faz | Redirect |
 |---|---|---|---|
-| `entrar` | `apps/web/app/login/actions.ts` | Valida com o schema Zod, `POST /auth/login`, grava os dois tokens em cookie `httpOnly` e decide a empresa da sessão. | `/users`, `/empresa/nova` ou `/convite/<token>`. |
-| `sair` | `apps/web/app/users/actions.ts` | Apaga os cookies de sessão (os dois tokens **e** a empresa). | `/login`. |
+| `entrar` | `apps/web/app/login/actions.ts` | Valida com o schema Zod, `POST /auth/login`, **revoga o refresh token da sessão anterior** (`POST /auth/logout`), grava os dois tokens em cookie `httpOnly` e decide a empresa da sessão. | `/users`, `/empresa/nova` ou `/convite/<token>`. |
+| `sair` | `apps/web/app/users/actions.ts` | Revoga o refresh token (`POST /auth/logout`) e apaga os cookies de sessão (os dois tokens **e** a empresa). | `/login`. |
 | `cadastrarUsuario` | `apps/web/app/users/novo/actions.ts` | Valida e `POST /users`; com token, manda `destino.tipo='convite'`. | `/login?cadastrado=1`. |
 | `criarEmpresaDoAtor` | `apps/web/app/empresa/nova/actions.ts` | `POST /tenants` e grava o cookie `tenant_id` da empresa nova. | `/users` (ou `/login?empresa=1` em `401`). |
 | `aceitarConviteDoAtor` | `apps/web/app/convite/[token]/actions.ts` | `POST /invitations/accept` e grava o cookie `tenant_id` da empresa que convidou. | `/users` (ou `/login?convite=<token>` sem sessão / em `401`). |
@@ -152,7 +152,9 @@ Atributos: `sameSite: 'lax'`, `path: '/'`, `secure` só em produção, e **sem
 
 `apps/web/lib/api-client.ts` — o único caminho do web até a API:
 
-- **Base URL**: `process.env.API_BASE_URL ?? 'http://localhost:3000/api/v1'`.
+- **Base URL**: `baseUrlDaApi()` — `process.env.API_BASE_URL ?? 'http://localhost:3000/api/v1'`,
+  lida no momento do uso (e não no import: o `next build` do e2e injeta a
+  variável no ambiente do build, e a página da listagem é `force-dynamic`).
 - **Headers**: `authorization: Bearer <token>` (só quando há token),
   `x-tenant-id` (só quando há empresa — string vazia viraria `400`
   `INVALID_TENANT`), e `content-type: application/json` **só quando há corpo**

@@ -7,9 +7,14 @@
 #
 # A migration cria os papeis (`app_runtime`, `app_system`) SEM senha —
 # `NOLOGIN`. Uma migration nao le env, e foi por isso que a senha do
-# `app_runtime` ficou versionada em texto puro (`PASSWORD 'app_runtime_dev'`,
-# no historico do Git deste repositorio). A senha tem de vir de outro lugar:
-# do ambiente, que é onde ela é segredo.
+# `app_runtime` ficou versionada em texto puro no historico do Git deste
+# repositorio. A senha tem de vir de outro lugar: do ambiente, que é onde ela
+# é segredo.
+#
+# A migration `20261108000001_papel_runtime_sem_senha_publicada` fecha o
+# buraco para quem JA aplicou a versao antiga: ela limpa (`PASSWORD NULL`) o
+# hash que a senha publicada deixou no banco. MEDIDO: depois dela,
+# `rolcanlogin = f` e `rolpassword IS NULL = t`.
 #
 # ⚠️ A ORDEM IMPORTA, e é a ordem do ENTRYPOINT:
 #
@@ -20,6 +25,13 @@
 # A senha vem da URI: `DATABASE_URL` é a credencial do papel de RUNTIME, e
 # `SYSTEM_DATABASE_URL` a do papel de SISTEMA. As DUAS sao obrigatorias no
 # mesmo lugar — e e a separacao entre elas que fecha o furo da #118.
+#
+# ⚠️ (#133) A URI tem de NOMEAR o papel que recebe a senha. O `ALTER ROLE`
+# escreve em `app_runtime` e `app_system` — papéis FIXOS — e a senha vem
+# das URIs. Uma URI que nomeasse OUTRO usuário colocaria a senha de um papel
+# em outro, e o filtro de tamanho (que é do PAPEL) deixaria passar uma
+# senha curta. Por isso o script recusa: o filtro é do papel que a senha vai
+# SERVIR, e a URI tem de apontar para ele.
 #
 # A conexao do `db execute` e a de DONO (`DIRECT_DATABASE_URL`): o `ALTER ROLE`
 # exige superuser, e o `app_runtime` nao e.
@@ -82,24 +94,92 @@ if [ -z "$DIRECT_DATABASE_URL" ]; then
   exit 1
 fi
 
-# Extrai a senha da URI e escapa o `'` (o único caractere que muda o
-# sentido de um literal SQL). O `decodeURIComponent` desfaz o percent-encoding
-# — a senha real é a decodificada.
+# Extrai a senha CRUA da URI. O `decodeURIComponent` desfaz o
+# percent-encoding — a senha real é a decodificada.
+#
+# ⚠️ (#133) A senha CRUA é a que o FILTRO mede — e ela tem de ser a mesma que
+# o guard (TypeScript) mede. MEDIDO 2026-11-09: o escape do `'` (o único
+# caractere que muda o sentido de um literal SQL) era aplicado AQUI, e a
+# camada que ESCREVE media a senha ESCAPADA: uma senha de 12 bytes feita de
+# aspas virava 24 bytes escapados, e o script APLICAVA o que o guard recusava
+# (12 < 24). O escape é do SQL, e o SQL é montado no FIM — o filtro mede a
+# senha que o usuário digitou.
+#
+# ⚠️ (#133) A URI vai pelo AMBIENTE, e não por argv.
+#
+# O argv de um processo é público na máquina: `ps aux` mostra a linha de
+# comando de qualquer usuário, e a senha estava ali — dentro da URI, que
+# é o que carrega a credencial INTEIRA. O ambiente só é legível pelo
+# próprio usuário (e pelo root), e a URI já estava no ambiente deste
+# script — ou seja, o env não expõe nada de novo.
 senha_de() {
-  node -e '
-    const url = new URL(process.argv[1]);
-    const senha = decodeURIComponent(url.password || "");
-    process.stdout.write(senha.replace(/'"'"'/g, "'"'"''"'"'"));
-  ' "$1"
+  URI_DO_BANCO="$1" node -e '
+    const url = new URL(process.env.URI_DO_BANCO);
+    process.stdout.write(decodeURIComponent(url.password || ""));
+  '
+}
+
+# A senha no formato do LITERAL SQL: o `'` é o único caractere que muda o
+# sentido do literal, e ele se escapa dobrando-se.
+senha_no_sql() {
+  SENHA_NO_SQL="$1" node -e '
+    process.stdout.write(process.env.SENHA_NO_SQL.replace(/'"'"'/g, "'"'"''"'"'"));
+  '
+}
+
+# O USUÁRIO da URI.
+usuario_de() {
+  URI_DO_BANCO="$1" node -e '
+    const url = new URL(process.env.URI_DO_BANCO);
+    process.stdout.write(decodeURIComponent(url.username || ""));
+  '
+}
+
+# O TAMANHO da senha, em BYTES UTF-8.
+#
+# ⚠️ (#133) A MEDIDA tem de ser a MESMA nos dois lados — e o `sh` do
+# container conta BYTES (`${#senha}`), enquanto o guard (TypeScript) contava
+# unidades UTF-16. MEDIDO: `"😀😀😀😀😀😀"` (12 unidades, 24 bytes) PASSAVA
+# no script — que é quem escreve — e era RECUSADO pelo guard. As duas
+# camadas que precisam concordar mediam coisas diferentes.
+#
+# Por isso a medida é a de BYTES, e é o `node` que a faz nos dois lados: o
+# `Buffer.byteLength` é o do Node, e o `node` já é dependência deste
+# script (é ele que extrai a senha). O `sh` contaria bytes, mas contaria
+# os da LOCALE — e a locale do container não é a do Node.
+tamanho_da_senha() {
+  SENHA_A_MEDIR="$1" node -e '
+    process.stdout.write(String(Buffer.byteLength(process.env.SENHA_A_MEDIR, "utf8")));
+  '
 }
 
 senha_runtime="$(senha_de "$DATABASE_URL")"
 senha_sistema="$(senha_de "$SYSTEM_DATABASE_URL")"
+usuario_runtime="$(usuario_de "$DATABASE_URL")"
+usuario_sistema="$(usuario_de "$SYSTEM_DATABASE_URL")"
+usuario_dono="$(usuario_de "$DIRECT_DATABASE_URL")"
 
 if [ -z "$senha_runtime" ] || [ -z "$senha_sistema" ]; then
   echo 'ERRO: uma das URIs não tem senha — o papel do banco não tem como autenticar.' >&2
   exit 1
 fi
+
+# ⚠️ (#133) Os PAPÉIS que este script escreve são FIXOS — e é esse o
+# defeito que o mínimo indexado pelo usuário da URI escondia.
+#
+# O `ALTER ROLE` do fim do script escreve em `app_runtime` e `app_system`,
+# com as senhas que vêm do `DATABASE_URL` e do `SYSTEM_DATABASE_URL`. As
+# DUAS coisas eram independentes: o filtro de tamanho olhava o USUÁRIO da
+# URI, e a escrita olhava o PAPEL. MEDIDO: com
+# `DATABASE_URL=postgresql://runtime:<15 caracteres>@…` o filtro não se
+# aplicava (o usuário não é um papel gerenciado) e o script rodava
+# `ALTER ROLE app_runtime LOGIN PASSWORD '<15 caracteres>'` — a
+# credencial que a #133 tirou do repositório voltava a autenticar no
+# papel de runtime.
+#
+# Por isso o mínimo é do PAPEL ESCRITO, e a URI tem de NOMEAR esse papel.
+PAPEL_DE_RUNTIME='app_runtime'
+PAPEL_DE_SISTEMA='app_system'
 
 # ⚠️ ESTE SCRIPT É ONDE O PLACEHOLDER VIRA SENHA VIVA.
 #
@@ -114,39 +194,172 @@ fi
 # um placeholder recusado pelo guard mas aplicado pelo script deixa o papel
 # com senha pública mesmo com a API recusando o boot.
 #
-# É a MESMA regra do guard (`SENHAS_EXPOSTAS` / `PREFIXOS_DE_SENHAS_EXPOSTAS`,
-# em `src/shared/infrastructure/prisma/papel-de-runtime.ts`): o prefixo de
+# É a MESMA regra do guard (`PREFIXOS_DE_SENHAS_EXPOSTAS` /
+# `TAMANHO_MINIMO_DE_SENHA_DE_PAPEL`, em
+# `src/shared/infrastructure/prisma/papel-de-runtime.ts`): o prefixo de
 # exemplo e o tamanho mínimo. As duas existem em camadas diferentes — o
 # script APLICA, o guard RECUSA — e as duas precisam recusar a isca.
-senha_de_exemplo() {
-  # $1 = senha. Devolve 0 quando ela é de EXEMPLO.
-  printf '%s' "$1" | {
-    IFS= read -r senha || true
-    case "$senha" in
-      CHANGE_ME*|change_me*) exit 0 ;;
+#
+# ⚠️ (#133) As duas medem em BYTES UTF-8 — e não em caracteres. O `sh` do
+# container conta bytes e o TypeScript contava unidades UTF-16; a regra que
+# "precisa concordar" media duas coisas diferentes.
+#
+# ⚠️ (#133) O mínimo subiu de 16 para 24. A senha que o repositório publicou
+# tinha 15 — e PASSAVA pelo filtro de 16 (que só recusava < 16). Com 24, ela
+# é barrada pelo TAMANHO, e não por valor: escrever o valor nesta lista seria
+# outra forma de publicá-lo.
+#
+# ⚠️ O NÚMERO mora em DOIS lugares — aqui e no TypeScript — e o
+# `papel-de-runtime.spec.ts` RECONCILIA os dois (lê este arquivo e compara).
+# Sem isso, os dois divergem em silêncio e a regra da camada que escreve
+# deixa de valer. O dono do número é o TypeScript
+# (`TAMANHO_MINIMO_DE_SENHA_DE_PAPEL`).
+# Os papéis cujas senhas o repositório GERE (e que, por isso, têm mínimo).
+# ⚠️ (#133) É a MESMA lista do TypeScript (`PAPEIS_COM_SENHA_GERIDA`), e as
+# duas camadas precisam concordar: o guard de boot recusa a senha curta de um
+# papel gerenciado, e o script — que ESCREVE a senha — recusa também.
+PAPEIS_COM_SENHA_GERIDA="$PAPEL_DE_RUNTIME $PAPEL_DE_SISTEMA"
+
+# O tamanho mínimo de uma senha de PAPEL do banco.
+#
+# ⚠️ (#133) O NÚMERO mora em DOIS lugares — aqui e no TypeScript — e o
+# `papel-de-runtime.spec.ts` RECONCILIA os dois (lê este arquivo e compara).
+# Sem isso, os dois divergem em silêncio e a regra da camada que escreve
+# deixa de valer. O dono do número é o TypeScript
+# (`TAMANHO_MINIMO_DE_SENHA_DE_PAPEL`).
+TAMANHO_MINIMO_DE_SENHA_DE_PAPEL=24
+
+motivo_da_recusa() {
+  # $1 = senha. $2 = usuário da URI. $3 = o PAPEL que a senha vai SERVIR
+  # (vazio = o DONO, que não tem papel). IMPRIME o motivo da recusa e
+  # devolve 0 quando a credencial é RECUSADA.
+  #
+  # ⚠️ (#133) O terceiro argumento é o PAPEL, e não o usuário da URI: o
+  # filtro é do papel que a senha vai SERVIR — e é este script que decide
+  # em qual papel ela vai cair. Indexar pelo usuário da URI é o que deixava o
+  # filtro burado (MEDIDO: `usuario='runtime'` + senha de 15 caracteres
+  # passava, e o `ALTER ROLE app_runtime` aplicava essa senha).
+  #
+  # ⚠️ O PREFIXO é conferido em minúsculas: o guard normaliza, e um
+  # `Change_Me_...` (a mesma isca, com outra caixa) passava pelo `case` do
+  # shell — e a camada que ESCREVE a senha é justamente a que não pode
+  # deixar a isca passar.
+  senha="$1"
+  usuario="$2"
+  papel="$3"
+  minuscula="$(printf '%s' "$senha" | tr '[:upper:]' '[:lower:]')"
+  case "$minuscula" in
+    change_me*|'***'*)
+      # ⚠️ (#133) O `***` é PREFIXO, como no guard (`startsWith`) — e não o
+      # valor exato. MEDIDO 2026-11-09: o padrão `'***'` (entre aspas) casa
+      # EXATO, e o script ACCEPTAVA `***` + 21 bytes — valor que o guard
+      # classifica como exemplo. A isca que o script diz que não pode passar
+      # passava nele.
+      echo 'é um valor de EXEMPLO'
+      return 0
+      ;;
+  esac
+  # ⚠️ (#133) A URI tem de NOMEAR o papel que recebe a senha. A escrita é
+  # em papel FIXO (`app_runtime`, `app_system`); se a URI nomear OUTRO
+  # usuário, a senha que entra no papel gerenciado não é a senha daquele
+  # papel — e o filtro, que é por papel, deixaria passar a senha curta de
+  # um papel que o script NÃO é. Recusar aqui é o que fecha o furo na
+  # camada que ESCREVE — a única que consegue colocá-lo.
+  if [ -n "$papel" ] && [ "$usuario" != "$papel" ]; then
+    echo "a URI nomeia '$usuario' e não o papel '$papel' que recebe a senha"
+    return 0
+  fi
+  # O tamanho mínimo alcança os PAPÉIS GERENCIADOS — e o DONO não entra: a
+  # credencial dele é a `DIRECT_DATABASE_URL`, e o guard de boot — que
+  # não a recebe — só exige que ela não seja um valor de exemplo.
+  if [ -n "$papel" ]; then
+    case " $PAPEIS_COM_SENHA_GERIDA " in
+      *" $papel "*)
+        tamanho="$(tamanho_da_senha "$senha")"
+        if [ "$tamanho" -lt "$TAMANHO_MINIMO_DE_SENHA_DE_PAPEL" ]; then
+          echo "tem $tamanho bytes — o mínimo do papel gerenciado é $TAMANHO_MINIMO_DE_SENHA_DE_PAPEL"
+          return 0
+        fi
+        ;;
     esac
-    # 16 bytes é o mínimo do próprio repositório para uma senha de banco
-    # (`CHANGE_ME_strong_password_min_16_chars`, no example do dono).
-    [ "${#senha}" -lt 16 ] && exit 0
-    exit 1
-  }
+  fi
+  return 1
 }
 
-if senha_de_exemplo "$senha_runtime"; then
-  echo 'ERRO: a senha do papel de RUNTIME é um valor de EXEMPLO (ou é curta demais).' >&2
-  echo '       Um placeholder aplicado aqui vira a senha VIVA do papel de produção.' >&2
+if motivo="$(motivo_da_recusa "$senha_runtime" "$usuario_runtime" "$PAPEL_DE_RUNTIME")"; then
+  echo "ERRO: a credencial do papel de RUNTIME não serve: $motivo." >&2
+  echo '       Um valor recusado aqui vira a senha VIVA do papel de produção.' >&2
   echo '       Gere uma senha de verdade: openssl rand -hex 32. Veja docs/como-rodar.md §1.2.1.' >&2
   exit 1
 fi
-if senha_de_exemplo "$senha_sistema"; then
-  echo 'ERRO: a senha do papel de SISTEMA é um valor de EXEMPLO (ou é curta demais).' >&2
-  echo '       Um placeholder aplicado aqui vira a senha VIVA do papel de produção.' >&2
+if motivo="$(motivo_da_recusa "$senha_sistema" "$usuario_sistema" "$PAPEL_DE_SISTEMA")"; then
+  echo "ERRO: a credencial do papel de SISTEMA não serve: $motivo." >&2
+  echo '       Um valor recusado aqui vira a senha VIVA do papel de produção.' >&2
   echo '       Gere uma senha de verdade: openssl rand -hex 32. Veja docs/como-rodar.md §1.2.1.' >&2
   exit 1
 fi
 
-printf "ALTER ROLE app_runtime LOGIN PASSWORD '%s';\nALTER ROLE app_system LOGIN PASSWORD '%s';\n" \
-  "$senha_runtime" "$senha_sistema" \
+# ⚠️ (#133) O DONO entra no mesmo filtro. A `DIRECT_DATABASE_URL` é a
+# credencial que o script USA para aplicar as senhas dos papeis — e ela é
+# Superuser (ou tem CREATEROLE), ou seja, a que mais privilege tem. O
+# placeholder do `.env.production.example` para o dono
+# (`CHANGE_ME_...`) era recusado por NINGUEM: nem o guard (que não recebe a
+# `DIRECT_DATABASE_URL`) nem este script (que só olhava as senhas dos
+# papeis). Um dono com senha de exemplo é o banco inteiro atrás de uma
+# senha pública.
+# ⚠️ (#133) O DONO entra no filtro de PLACEHOLDER — e não no de tamanho.
+#
+# O dono é Superuser (ou tem CREATEROLE): a credencial dele é a
+# `DIRECT_DATABASE_URL`, e o placeholder do `.env.production.example` para o
+# dono (`CHANGE_ME_...`) era recusado por NINGUEM — nem o guard (que não
+# recebe a `DIRECT_DATABASE_URL`) nem este script (que só olhava as senhas dos
+# papeis). Um dono com senha de exemplo é o banco inteiro atrás de uma senha
+# pública.
+#
+# ⚠️ O tamanho NÃO entra para o dono, e é DELIBERADO: o bootstrap de dev
+# documentado usa `projeto:projeto` (6 caracteres) — e o guard de boot faz a
+# MESMA distinção (o mínimo alcança os papéis gerenciados, não o dono). As
+# duas camadas concordam, e o dev sobe.
+senha_dono="$(senha_de "$DIRECT_DATABASE_URL")"
+# ⚠️ (#133) O DONO entra no filtro de PLACEHOLDER, e não no de tamanho — o
+# papel vazio é o que diz "este não é um papel gerenciado", e o usuário do
+# dono não tem de ser um papel (a `DIRECT_DATABASE_URL` é a do DONO).
+if motivo="$(motivo_da_recusa "$senha_dono" "$usuario_dono" "")"; then
+  echo 'ERRO: a senha do DONO do banco é um valor de EXEMPLO.' >&2
+  echo '       O dono é o papel que roda a migration — é o que mais privilege tem.' >&2
+  echo '       Gere uma senha de verdade: openssl rand -hex 32. Veja docs/como-rodar.md §1.2.1.' >&2
+  exit 1
+fi
+
+# ⚠️ (#132) A PODA do registro de refresh tokens, ANTES das senhas.
+#
+# A tabela `refresh_tokens` guarda uma linha por login, e ela só é útil
+# enquanto o token não expirou — o `expires_at` é o `exp` do próprio token.
+# Sem poda, a tabela só cresce.
+#
+# ⚠️ A comparação é de INSTANTES (`expires_at` é `timestamptz`, e `now()` é
+# `timestamptz`), e por isso ela vale em QUALQUER fuso do banco. MEDIDO
+# 2026-11-08 num Postgres 16 real: com a coluna `timestamp` (parede de
+# relógio, sem fuso), a mesma consulta removia tokens QUE AINDA VALIAM num
+# banco à frente do UTC (2 podados em `Asia/Tokyo`) e não podava nenhum num
+# banco atrás (0 em `America/Sao_Paulo`).
+#
+# ⚠️ A PODA NÃO ABORTA O SETUP: ela é manutenção, e um banco onde a tabela
+# ainda não existe (migration não rodada) tem que continuar recebendo a
+# senha dos papeis. Por isso o `|| echo` — e a poda vem ANTES dos `ALTER
+# ROLE` justamente para que a falha de um não impeça o outro.
+printf "DELETE FROM refresh_tokens WHERE expires_at < now();\n" \
+  | DATABASE_URL="$DIRECT_DATABASE_URL" pnpm exec prisma db execute --stdin --schema=prisma/schema.prisma \
+  || echo 'aviso: a poda do registro de refresh tokens nao rodou (a tabela talvez nao exista ainda) — o resto do setup segue.'
+
+# ⚠️ (#133) O SQL é montado aqui, e o ESCAPE do `'` é aplicado AQUI — e não
+# na leitura da URI. O filtro mede a senha CRUA (a mesma que o guard mede), e
+# o que vai para o literal SQL é a senha escapada. MEDIDO: com o escape antes
+# do filtro, uma senha de 12 bytes feita de aspas virava 24 bytes escapados
+# e o script aplicava o que o guard recusava.
+printf "ALTER ROLE %s LOGIN PASSWORD '%s';\nALTER ROLE %s LOGIN PASSWORD '%s';\n" \
+  "$PAPEL_DE_RUNTIME" "$(senha_no_sql "$senha_runtime")" \
+  "$PAPEL_DE_SISTEMA" "$(senha_no_sql "$senha_sistema")" \
   | DATABASE_URL="$DIRECT_DATABASE_URL" pnpm exec prisma db execute --stdin --schema=prisma/schema.prisma
 
 echo 'prepara-papeis: senhas de app_runtime e app_system aplicadas.'

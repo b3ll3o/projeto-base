@@ -22,7 +22,7 @@
 //    para quem ainda não pertence a empresa nenhuma, que é justamente quem
 //    vai criar a primeira.
 
-import { ApiClient } from './api-client';
+import { ApiClient, baseUrlDaApi } from './api-client';
 import type {
   ConviteAceitoDto,
   CriarEmpresaInputDto,
@@ -38,7 +38,7 @@ import type {
  */
 function client(accessToken: string): ApiClient {
   return new ApiClient({
-    baseUrl: process.env.API_BASE_URL ?? 'http://localhost:3000/api/v1',
+    baseUrl: baseUrlDaApi(),
     getToken: () => accessToken,
   });
 }

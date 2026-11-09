@@ -18,7 +18,7 @@ que não medi ainda assim, dizem o que falta medir antes de mexer.
 | 3 | 🔴 | apertar "Salvar" sem editar apaga o perfil | **CONFIRMADO por leitura**: `profileIdAtual` vem do hidden (`perfilEfetivoNoEscopo`), o `<select>` é alimentado por `GET /admin/profiles` que filtra `tenantId`. Duas fontes, e a segunda não lista perfil global |
 | 4 | 🔴 | 78 memórias tombstonadas a partir de medição no diretório errado | **PARCIALMENTE REFUTADO**: no meu ambiente a linha canônica resolve para `/root/.claude/projects/-root-projeto-base/memory` e há **2** arquivos; as 78 não existem aqui. O revisor vê **126** na máquina dele |
 | 5 | 🟠 | `/me/profile` sem quem receba a propagação | **CONFIRMADO**: `app/me/profile/page.tsx:16` chama `obterMeuPerfil()` sem `try`, e `apps/web/app` não tem `error.tsx` nem `global-error.tsx` |
-| 6 | 🟠 | `.env.production.example` declara senha que a migration não cria | **CONFIRMADO**: migration cria `PASSWORD 'app_runtime_dev'`; o example usa outro valor |
+| 6 | 🟠 | `.env.production.example` declara senha que a migration não cria | **CONFIRMADO**: a migration criava o papel COM senha em texto puro; o example usa outro valor |
 | 7 | 🟡 | `semVinculo` afirma mais que o dado sustenta | **CONFIRMADO**: `findProfileId` devolve `null` para "não pertence" e para "pertence sem perfil" |
 | 8 | 🟡 | `erro.status === 401` inalcançável no guard | **CONFIRMADO**: `obterMeuPerfil` converte 401 em `null` antes de propagar |
 | 9 | 🟡 | guarda morta `if (!out.has(...))` | **CONFIRMADO**: ramo global retorna antes e há índice único em `(user_id, tenant_id)` |

@@ -38,62 +38,62 @@ RUN pnpm --filter @projeto/api build
 ARG NODE_DIGEST=sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
 FROM node:22-bookworm-slim@${NODE_DIGEST} AS prod
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
-RUN apt-get update && apt-get install -y --no-install-recommends openssl curl && rm -rf /var/lib/apt/lists/*
+# pt-BR (#139): sem `curl` — ele existia SÓ para o `HEALTHCHECK`, e um probe que
+# depende de um pacote instalado não sobrevive à troca de stage. Ver o runbook.
+RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
 WORKDIR /repo
 ENV NODE_ENV=production PORT=3000
 COPY --from=builder /repo/apps/api/dist apps/api/dist
-# #118: `scripts/` traz o setup que aplica a SENHA dos papeis a partir do ambiente (a migration cria o papel sem senha).
-COPY --from=builder /repo/apps/api/prisma /repo/apps/api/scripts apps/api/
+# #118: `scripts/` traz o setup que aplica a SENHA dos papeis a partir do ambiente.
+# ⚠️ (#139, MEDIDO 2026-11-09) DOIS `COPY`, um por pasta: `COPY <a> <b> <dest>/`
+# copia o CONTEÚDO de cada uma direto para o destino, e as duas pastas ficavam
+# achatadas em `/repo/apps/api/` — onde o ENTRYPOINT não achava nem
+# `prisma/schema.prisma` nem `./scripts/prepara-papeis.sh`. A imagem não subia.
+COPY --from=builder /repo/apps/api/prisma apps/api/prisma
+COPY --from=builder /repo/apps/api/scripts apps/api/scripts
 COPY --from=builder /repo/package.json ./
 COPY --from=builder /repo/apps/api/package.json apps/api/
 COPY --from=builder /repo/packages packages
 COPY --from=builder /repo/pnpm-lock.yaml /repo/pnpm-workspace.yaml ./
-# ⚠️ (issue #104) AS DEPS DA API VIVEM EM `apps/api/node_modules`, não na raiz —
-# topologia do pnpm em workspace. MEDIDO no `builder`: `node_modules/@nestjs` da
-# raiz AUSENTE, o de `apps/api` PRESENTE. O `prod` copiava só a raiz — os 12
-# devDeps dela — e nenhuma das 26 `dependencies` da api.
+# ⚠️ (issue #104) AS DEPS DA API VIVEM EM `apps/api/node_modules`, não na raiz
+# (topologia do pnpm em workspace) — e é o `COPY` abaixo que as traz.
 COPY --from=builder /repo/apps/api/node_modules apps/api/node_modules
 COPY --from=builder /repo/node_modules node_modules
 # pt-BR: Task 1.5 — auto-carrega tracing OTel antes de qualquer código de usuário.
-# `--import` é ESM-aware (Node 20.6+); `--require` é CJS-only. `tracing.js` é puro
-# (tracing.spec.ts:28-35), então importá-lo direto NÃO dispararia o SDK — daí o
-# wrapper `init.js`.
-# ⚠️ (issue #104) Este `ENV` vem ANTES do `node --check`: estava depois, e o
-# `--check` mediava sintaxe sem resolver a cadeia de imports. O caminho é ABSOLUTO
-# porque o `--import` resolve contra o CWD de cada `node` (MEDIDO: com `./apps/api/…`,
-# o `pnpm exec prisma` de `/repo/apps/api` procurava `apps/api/apps/api/dist/…`,
-# porque o `cd` do ENTRYPOINT muda o CWD).
+# `--import` é ESM-aware (Node 20.6+); `--require` é CJS-only. Este `ENV` vem ANTES
+# do `node --check` (que mediava sintaxe sem resolver a cadeia de imports) e o
+# caminho é ABSOLUTO (o `--import` resolve contra o CWD de cada `node`).
 ENV NODE_OPTIONS="--import /repo/apps/api/dist/shared/infrastructure/telemetry/init.js"
 # ⚠️ (issue #104) O `pnpm prune --prod` foi REMOVIDO e NÃO trocado por
-# `pnpm install --prod`: MEDIDO como no-op (EACCES na raiz, exit 243, prompt de
-# workspace) e o 243 era absorvido pelo `&&` do RUN abaixo — a linha inútil era a
-# que MASCARAVA um build quebrado. O que traz as 26 `dependencies` é o `COPY`
-# acima: sem ele o build quebra com `ERR_MODULE_NOT_FOUND`. Preço aceito: a imagem
-# traz os 8 `devDependencies` da api também; `pnpm deploy` é refactor próprio.
+# `pnpm install --prod`: MEDIDO como no-op. O que traz as `dependencies` é o
+# `COPY` de `node_modules` acima — sem ele o build quebra com `ERR_MODULE_NOT_FOUND`.
 RUN node --check apps/api/dist/main.js
-# pt-BR (#88, 2026-10-16): user dedicado UID 1001. Antes era `USER node`, que dependia
-# do UID 1000 implícito da imagem upstream — e qualquer mudança de UID na tag quebrava
-# policies OPA/K8s `runAsUser` e mounts NFS/CIFS (ambos autenticam por UID).
-#
-# ⚠️ (issue #104) `--create-home` NOVO, e a razão não é o diretório: o `pnpm` é shim
-# do COREPACK, que grava em `$HOME/.cache`. Com `--no-create-home`, QUALQUER
-# `pnpm …` morre com `EACCES … '/home/app/.cache/node/corepack/v1'`, quebrando o
-# ENTRYPOINT antes do servidor. MEDIDO: no stage `base` o mesmo dá `9.12.0`.
+# pt-BR (#88, 2026-10-16): user dedicado UID 1001 (políticas OPA/K8s autenticam
+# por UID). `--create-home` porque o `pnpm` (shim do COREPACK) grava em
+# `$HOME/.cache` — sem ele, QUALQUER `pnpm …` morre com EACCES no boot.
 RUN groupadd --gid 1001 app && useradd --uid 1001 --gid 1001 --create-home --shell /bin/false app
 USER 1001:1001
 EXPOSE 3000
+# pt-BR (#139): o probe usa o `node` da imagem, e NÃO um pacote instalado — as DUAS
+# imagens (a `base` do stage `dev` e a `prod`) têm `node`. Um probe que depende
+# de binário é uma armadilha de stage: o compose de dev troca o `build.target` e
+# herda o healthcheck, e o binário não vem junto.
+#
+# ⚠️ O `NODE_OPTIONS=` (vazio) no COMEÇO impede o probe de carregar o SDK de
+# telemetria: o `--import` vale para TODA invocação de `node` do container, e um
+# probe que o carregasse iniciaria um SDK de OpenTelemetry A CADA 10 s.
+# MEDIDO 2026-11-08: o custo de carregar o bundle é ~360 ms.
 HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
-  CMD curl -fsS http://localhost:3000/api/v1/health || exit 1
-# ⚠️ (issue #105) Guarda de `DATABASE_URL` vazia — o compose declarava a chave em
-# `environment:`, que tem precedência sobre o `env_file` e a sobrescrevia com
-# string vazia (a chave saiu do compose). Sem a guarda o único sintoma é
-# `P1012 … nonempty URL` do `migrate deploy`, genérico e sem dizer de onde. O
-# fail-fast é AQUI porque o migrate roda ANTES do node — o desenho do
-# `JWT_SECRET` pelo motivo inverso. Não foi `${DATABASE_URL:?}` no compose pelo
-# motivo que o compose (:95-102) registra: quebra `config`/`ps`/`down`.
-# O `cd` NÃO é cosmético: `pnpm exec` procura em `./node_modules/.bin` e o binário
-# do prisma vive em `apps/api/node_modules/.bin` (MEDIDO: de `/repo` devolvia
-# `Command "prisma" not found`). E o `$` é UM, não `$$`: no JSON com `sh -c` quem
-# expande é o shell do container, então `$$` virava `$` literal e o teste rodava
-# sobre a STRING `"$DATABASE_URL"`, nunca vazia (MEDIDO: a guarda não disparava).
-ENTRYPOINT ["sh","-c","if [ -z \"$DATABASE_URL\" ]; then echo 'ERRO: DATABASE_URL vazia ou ausente no container da api (issue #105). A linha precisa existir no .env.production apontando para o papel app_runtime (ver .env.production.example); a de DONO e a DIRECT_DATABASE_URL, que e outra chave.' >&2; exit 1; fi; cd /repo/apps/api && pnpm exec prisma migrate deploy --schema=prisma/schema.prisma && sh ./scripts/prepara-papeis.sh && node dist/main.js"]
+  CMD NODE_OPTIONS= node -e "require('http').get('http://localhost:3000/api/v1/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+# ⚠️ (issue #105) Guarda de `DATABASE_URL` vazia: o compose declarava a chave em
+# `environment:` (que tem precedência sobre o `env_file`) e a sobrescrevia com
+# string vazia. O fail-fast é AQUI porque o migrate roda ANTES do node. O `cd`
+# NÃO é cosmético: `pnpm exec` procura em `./node_modules/.bin`, e o binário do
+# prisma vive em `apps/api/node_modules/.bin`. E o `$` é UM, não `$$`: no JSON
+# com `sh -c` quem expande é o shell do container.
+# pt-BR (#137): o `exec` ANTES do `node` é o que faz o SIGTERM chegar nele. Sem
+# `exec`, o `&&` faz o `sh` forkar o `node` e CONTINUAR VIVO como pai — a árvore
+# real é `tini → sh → node`, e o sinal morria no shell (o tini repassa o sinal
+# apenas ao filho direto). Com `exec`, o node é o FILHO DIRETO do tini — MEDIDO
+# 2026-11-09: `pid=7 ppid=1 node dist/main.js` (sem o `exec`, `pid=334 ppid=7`).
+ENTRYPOINT ["sh","-c","if [ -z \"$DATABASE_URL\" ]; then echo 'ERRO: DATABASE_URL vazia ou ausente no container da api (issue #105). A linha precisa existir no .env.production apontando para o papel app_runtime (ver .env.production.example); a de DONO e a DIRECT_DATABASE_URL, que e outra chave.' >&2; exit 1; fi; cd /repo/apps/api && pnpm exec prisma migrate deploy --schema=prisma/schema.prisma && sh ./scripts/prepara-papeis.sh && exec node dist/main.js"]

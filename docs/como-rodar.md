@@ -87,10 +87,9 @@ openssl rand -base64 48   # preencher a linha JWT_SECRET= de apps/api/.env
 
 O `apps/api/.env.example` traz **placeholder** nas senhas dos papéis
 (`change_me_gere_a_sua`), e a API **recusa o boot com placeholder** — em qualquer
-`NODE_ENV`, inclusive em dev. Motivo: a senha que a migration publicava
-(`app_runtime_dev`) está no histórico do Git, e um guard que só barra em produção
-deixa o padrão público valendo em todo o resto. São **três** credenciais, de
-**três** poderes, e elas não são a mesma:
+`NODE_ENV`, inclusive em dev. Motivo: a senha que a migration publicava está no
+histórico do Git, e um guard que só barra em produção deixa o padrão público
+valendo em todo o resto. São **três** credenciais, de **três** poderes:
 
 | papel | credencial | o que abre |
 |---|---|---|
@@ -112,27 +111,31 @@ cd apps/api && sh scripts/prepara-papeis.sh && cd ../..       # APLICA a senha d
 ```
 
 ⚠️ **A senha vai DENTRO da URI, e a URI não aceita qualquer caractere.** O `base64`
-traz `/` e `+`, e o `/` ENCERRA a parte de credencial da URI — a aplicação subiria
-com "Invalid URL". Por isso o comando acima é `openssl rand -hex 32`: só `[0-9a-f]`.
+traz `/`, e o `/` ENCERRA a parte de credencial da URI — a aplicação subiria com
+"Invalid URL". Por isso o comando acima é `openssl rand -hex 32`: só `[0-9a-f]`.
 
 `prepara-papeis.sh` lê a senha de cada URI e aplica no papel com a credencial de
 **DONO** — nenhuma senha de papel fica versionada, em nenhum ambiente. ✅ medido
-2026-10-27: com as senhas geradas e aplicadas, `pnpm ci:boot` sobe a API
-(`health: ok, banco: ok`) e o web (`health: ok`). ✅ medido 2026-10-28: o script lê
-o `apps/api/.env` (o README, este runbook e o `.env.example` mandam pôr as URIs LÁ)
-e **recusa** aplicar um placeholder (`CHANGE_ME_…`) ou uma senha curta.
+2026-10-28: o script lê o `apps/api/.env` e **recusa** aplicar um placeholder
+(`CHANGE_ME_…`), uma senha **curta demais** (24 caracteres, no mínimo — ✅ medido
+2026-11-08: a senha publicada tinha 15 e **passava** pelo filtro antigo, que só
+recusava menos de 16), e uma URI que não **nomeie o papel** que recebe a senha.
 
-⚠️ **`prisma migrate reset` deixa os papeis sem senha.** A migration
-`20261027000001` põe o `app_runtime` em `NOLOGIN` (é o que tira a senha publicada
-do histórico do Git), e o passo que restaura o LOGIN é o `prepara-papeis.sh`. Depois
-de um `reset`, rode o script de novo — senão o sintoma é "role app_runtime is not
-permitted to log in", com o banco aparentemente saudável.
+⚠️ **Os papeis ficam sem senha depois de um `migrate reset` OU de um `migrate deploy`.**
+A migration `20261027000001` põe o `app_runtime` em `NOLOGIN`, e a
+`20261108000001_papel_runtime_sem_senha_publicada` limpa o hash da senha que o
+repositório publicou (`ALTER ROLE app_runtime NOLOGIN PASSWORD NULL` — ✅ medido
+2026-11-08 num Postgres de verdade: `rolcanlogin = f` e `rolpassword IS NULL = t`).
+O passo que restaura o LOGIN é o `prepara-papeis.sh`: no container ele roda logo
+em seguida, mas um `migrate deploy` **fora do entrypoint** (job de CI, pipeline)
+deixa o papel morto até alguém rodar o script. O sintoma é "role app_runtime is
+not permitted to log in", com o banco aparentemente saudável.
 
 ### §1.3 Prisma Client + migrations
 
 ```bash
 pnpm turbo run db:generate                                    # ~1,5s medido
-cd apps/api && pnpm exec prisma migrate deploy && cd ../..  # aplica as 15 migrations do diretório (ls apps/api/prisma/migrations | grep -vc migration_lock.toml)
+cd apps/api && pnpm exec prisma migrate deploy && cd ../..  # aplica as migrations do diretório (N = ls apps/api/prisma/migrations | grep -vc migration_lock.toml)
 ```
 
 > Sem o `cd apps/api`, o Prisma não lê `apps/api/.env`. E **não existe** script
@@ -179,7 +182,7 @@ superfície completa da API a quem descobrir a URL. Para ligar: `SWAGGER_ENABLED
 ### §1.6 Fluxo completo (API e UI) ✅ medido 2026-10-16
 
 O body de criação usa campos **em português**: `nome`, `email`, `senha`
-(`CreateUserSchema`, `apps/api/src/modules/users/infrastructure/http/users.schemas.ts:169`).
+(`CreateUserSchema`, `users.schemas.ts:169`).
 
 ```bash
 EMAIL="voce.$(date +%s)@exemplo.dev"; J='content-type: application/json'
@@ -193,8 +196,7 @@ curl -H "authorization: Bearer $TOKEN" http://localhost:3000/api/v1/users       
 ```
 
 Pela UI: `http://localhost:3001/users` redireciona para `/login` (exige sessão);
-com o usuário acima, o login leva a `/users`, que lista o recém-criado
-("1 usuário cadastrado"). `Cadastrar usuário` abre `/users/novo`.
+o login leva a `/users`, que lista o recém-criado. `Cadastrar usuário` abre `/users/novo`.
 
 ### §1.7 Usuário admin local (seed)
 
@@ -253,9 +255,7 @@ existem para o container ou para o SDK de terceiros.
 
 ### §2.1 Chaves lidas pelo código que não estão em nenhum `.env.example`
 
-Três chaves são lidas pelo código e **não** aparecem em nenhum `.env.example` do repo
-(`grep -hoE '^[A-Z][A-Z0-9_]*=' .env.example .env.production.example
-apps/api/.env.example apps/web/.env.example | sort -u` — linha comentada não conta).
+Três chaves são lidas pelo código e **não** aparecem em nenhum `.env.example` do repo.
 Por isso não estão na tabela: o gate `check-runbook-drift` casa a 1ª coluna com as
 chaves dos `.env.example`, e uma chave só do código reprovaria o gate.
 
