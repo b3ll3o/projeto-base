@@ -46,7 +46,15 @@ WORKDIR /repo
 ENV NODE_ENV=production PORT=3000
 COPY --from=builder /repo/apps/api/dist apps/api/dist
 # #118: `scripts/` traz o setup que aplica a SENHA dos papeis a partir do ambiente (a migration cria o papel sem senha).
-COPY --from=builder /repo/apps/api/prisma /repo/apps/api/scripts apps/api/
+#
+# ⚠️ (#139, MEDIDO 2026-11-09) As DUAS pastas precisam do NOME preservado —
+# e `COPY <a> <b> <dest>/` (várias origens) copia o CONTEÚDO de cada uma
+# direto para o destino: o `prisma/` e o `scripts/` ficavam achatados em
+# `/repo/apps/api/`, e o ENTRYPOINT (que usa `prisma/schema.prisma` e
+# `./scripts/prepara-papeis.sh`) não achava nenhum dos dois — a imagem de
+# produção não SUBIA.
+COPY --from=builder /repo/apps/api/prisma apps/api/prisma
+COPY --from=builder /repo/apps/api/scripts apps/api/scripts
 COPY --from=builder /repo/package.json ./
 COPY --from=builder /repo/apps/api/package.json apps/api/
 COPY --from=builder /repo/packages packages
