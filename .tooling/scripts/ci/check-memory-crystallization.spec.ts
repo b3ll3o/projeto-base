@@ -10,7 +10,7 @@
 // veredito e ver a suíte cair.
 
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { CheckResult } from './check-types';
@@ -525,6 +525,84 @@ describe('checkMemoryCrystallization — integração contra a derivação real'
     });
     expect(r.ok).toBe(false);
     expect(r.errors.join('\n')).toContain('não está mais');
+  });
+});
+
+// ── Issue #149 (F4): a metade repo-derivável roda SEM o corpus ──────────────
+//
+// MEDIDO 2026-11-09: o runner do CI não tem o diretório de memória (o corpus
+// vive em `$HOME`), e o gate saía por `skipped` ANTES de conferir o ledger.
+// A reconciliação do `AGENTS.md` §7.5 ficava sem quem a vigiasse — a única
+// regra do §7.5 que nenhum CI media.
+//
+// O conserto é a ORDEM: o ledger é conferido contra os arquivos versionados
+// ANTES de o corpus ser consultado, porque essa conferência não depende do
+// corpus.
+describe('checkMemoryCrystallization — sem o corpus', () => {
+  it('acusa a âncora que deixou de estar, mesmo sem corpus', () => {
+    const { repoRoot } = fixture();
+    // O diretório DERIVADO (o que a fonte canônica produz com o HOME do
+    // teste) é o que precisa não existir — é ele que o gate procura.
+    rmSync(join(repoRoot, '.claude'), { recursive: true, force: true });
+    mkdirSync(join(repoRoot, '.agents', 'runs'), { recursive: true });
+    mkdirSync(join(repoRoot, '.agents', 'specs'), { recursive: true });
+    writeFileSync(join(repoRoot, '.agents', 'specs', 'a.md'), 'a regra foi reescrita.');
+    writeFileSync(
+      join(repoRoot, TRIAGE_FILE),
+      LEDGER(['| `x` | `citada` | `.agents/specs/a.md` | `a regra original` |']),
+    );
+    const antes = process.env.HOME;
+    process.env.HOME = repoRoot;
+    try {
+      const r = checkMemoryCrystallization({ repoRoot });
+      expect(r.ok).toBe(false);
+      expect(r.errors.join('\n')).toContain('não está mais');
+    } finally {
+      process.env.HOME = antes;
+    }
+  });
+
+  it('se declara skipped COM MOTIVO — nunca verde por corpus ausente', () => {
+    const { repoRoot } = fixture();
+    // O diretório DERIVADO (o que a fonte canônica produz com o HOME do
+    // teste) é o que precisa não existir — é ele que o gate procura.
+    rmSync(join(repoRoot, '.claude'), { recursive: true, force: true });
+    mkdirSync(join(repoRoot, '.agents', 'runs'), { recursive: true });
+    writeFileSync(join(repoRoot, TRIAGE_FILE), LEDGER([]));
+    const antes = process.env.HOME;
+    process.env.HOME = repoRoot;
+    try {
+      const r = checkMemoryCrystallization({ repoRoot });
+      expect(r.skipped).toBe(true);
+      expect(r.reason).toContain('camada 1 local');
+      // A ressalva diz o que FOI medido — o painel imprime as duas.
+      expect(r.advisories?.join('\n')).toContain('conferidas contra os arquivos versionados');
+    } finally {
+      process.env.HOME = antes;
+    }
+  });
+
+  it('NÃO acusa memória sem destinação quando o corpus não existe', () => {
+    // Sem corpus, o gate não sabe o que existe — eacusar seria fabricar o
+    // próprio achado. A evaporação é camada 1 local.
+    const { repoRoot } = fixture();
+    // O diretório DERIVADO (o que a fonte canônica produz com o HOME do
+    // teste) é o que precisa não existir — é ele que o gate procura.
+    rmSync(join(repoRoot, '.claude'), { recursive: true, force: true });
+    mkdirSync(join(repoRoot, '.agents', 'runs'), { recursive: true });
+    writeFileSync(
+      join(repoRoot, TRIAGE_FILE),
+      LEDGER(['| `x` | `citada` | `.agents/specs/a.md` | `a regra original` |']),
+    );
+    const antes = process.env.HOME;
+    process.env.HOME = repoRoot;
+    try {
+      const r = checkMemoryCrystallization({ repoRoot });
+      expect(r.errors.join('\n')).not.toContain('sem destinação');
+      expect(r.errors.join('\n')).not.toContain('não existem mais');
+    } finally {
+      process.env.HOME = antes;
+    }
   });
 });
 

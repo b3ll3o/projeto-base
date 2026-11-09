@@ -404,6 +404,25 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     id: 'check-agent-routing-coverage',
   },
   {
+    // Issue #149 (F1). A camada de binding do Claude Code (`.claude/`) é
+    // cópia: o `.claude/README.md` promete que o `name` e a `description` do
+    // wrapper são "copiados literalmente do frontmatter canônico", e avisa
+    // que re-serializar YAML corrompe o `description` — a skill passa a ser
+    // descoberta com o gatilho errado, SEM ERRO VISÍVEL.
+    //
+    // Nenhum gate media isso. MEDIDO 2026-11-09: o PR #147 trocou
+    // "healthchecks via curl" por "healthchecks via node" no canônico da
+    // skill `docker` e não tocou no wrapper — a divergência ficou em `main`
+    // e nenhum gate acusou, porque nenhum gate comparava CONTEÚDO.
+    //
+    // Este gate compara a LINHA INTEIRA, byte a byte: re-serializar YAML
+    // produz o mesmo valor semântico com bytes diferentes, e a corrupção
+    // que o README descreve é de byte, não de sentido.
+    name: 'binding Claude Code bate com o canônico (name/description/tools)',
+    file: '.tooling/scripts/ci/check-binding-canonico.ts',
+    id: 'check-binding-canonico',
+  },
+  {
     // G-H-01 da campanha. Estende `check-package-json-drift` no
     // caminho inverso: o `engines.node` declarado em
     // `apps/*/package.json` (se houver) tem de casar com a faixa da

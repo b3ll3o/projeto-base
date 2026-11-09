@@ -220,10 +220,25 @@ e linha no ledger apontando para memória que não existe é erro. Conferir a
 `âncora` contra o arquivo citado é o que impede que a coluna `citada` vire
 decoração depois que alguém reescreve a convenção por motivo legítimo.
 
-⚠️ **Camada 1 local.** O corpus vive em `$HOME`, fora do repo, então o runner do
-CI não tem o que medir e o gate reporta `skipped` com o motivo — nunca verde.
-Publicar uma camada 2 exigiria mover o corpus para dentro do repo, que é
-decisão de outro tamanho.
+⚠️ **Camada 1 local — e só a metade do corpus.** O corpus vive em `$HOME`,
+fora do repo, então o runner do CI não tem o que medir NESSA metade: o gate
+[`check-memory-crystallization`](../../../.tooling/scripts/ci/check-memory-crystallization.ts)
+reporta `skipped` com o motivo, nunca verde.
+
+⚠️ **O gate tem DUAS metades, e elas não medem a mesma coisa.** MEDIDO
+2026-11-09 (issue #149, F4): a metade **repo-derivável** — o `alvo` que o
+ledger cita e a **âncora** `citada:` que continua no arquivo citado — depende
+só do repo e roda nos **dois** lugares; a metade do **corpus** — evaporação e
+linha órfã — depende de `$HOME` e é camada 1 local. Antes, a ausência do
+corpus fazia o gate sair por `skipped` **antes** de chegar na metade
+repo-derivável: o CI media um diretório vazio e a reconciliação do §7.5 ficava
+sem quem a vigiasse. Agora o ledger é conferido **antes** de o corpus ser
+consultado, e o CI mede a integridade do ledger contra os arquivos versionados.
+
+Publicar a camada 2 exigiria mover o corpus para dentro do repo — 161
+arquivos, 655 KB, medido em 2026-11-09 — que é decisão de outro tamanho. O que
+**não** é opcional é a metade repo-derivável: é ela que impede que a coluna
+`citada:` vire decoração depois que alguém reescreve a convenção.
 
 ### Dreno — a retro consome o que a camada DURANTE capturou
 

@@ -1,6 +1,6 @@
 ---
 name: documentation-specialist
-description: Especialista em documentação da aplicação, ciente das stacks (NestJS DDD/Hexagonal, Prisma, Next.js App Router, OpenTelemetry, Docker Compose, pnpm/turbo). Audita cobertura e drift, mantém o inventário de docs canônicos e escreve/atualiza a doc de cada unidade de código. Use quando a demanda tocar docs/**, README, doc de módulo, referência de API, ADR, runbook — ou quando um gate de documentação acusar gap.
+description: "Especialista em documentação da aplicação, ciente das stacks (NestJS DDD/Hexagonal, Prisma, Next.js App Router, OpenTelemetry, Docker Compose, pnpm/turbo). Audita cobertura e drift, mantém o inventário de docs canônicos e escreve/atualiza a doc de cada unidade de código. Use quando a demanda tocar docs/**, README, doc de módulo, referência de API, ADR, runbook — ou quando um gate de documentação acusar gap."
 type: specialist
 tools: Read, Glob, Grep, Bash, Write, Edit
 ---

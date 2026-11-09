@@ -346,25 +346,61 @@ export function checkMemoryCrystallization(opts: { repoRoot: string }): CheckRes
   if (!derived.ok) {
     return { ok: true, errors: [], skipped: true, reason: derived.error };
   }
-  if (!existsSync(derived.dir)) {
-    return {
-      ok: true,
-      errors: [],
-      skipped: true,
-      reason: `diretório de memória ausente (${relative(repoRoot, derived.dir)}) — o corpus vive em $HOME, então este gate é camada 1 local`,
-    };
-  }
 
   const triagePath = join(repoRoot, TRIAGE_FILE);
   if (!existsSync(triagePath)) {
     return { ok: false, errors: [`ledger de cristalização ausente (${TRIAGE_FILE})`] };
   }
 
-  const corpus = corpusOf(derived.dir);
-  const allSlugs = allSlugsOf(derived.dir);
   const { rows, malformed } = parseTriage(readFileSync(triagePath, 'utf8'));
   const errors = [...malformed];
   const advisories: string[] = [];
+
+  // ── A metade REPO-DERIVÁVEL, que roda nos DOIS lados ──────────────────────
+  //
+  // MEDIDO 2026-11-09 (issue #149, F4): estas duas direções recebem só
+  // `repoRoot` e as linhas do ledger — NADA do corpus. E elas são o que impede
+  // que a coluna `citada:` vire decoração: a regra foi absorvida pela
+  // convenção, alguém reescreveu a convenção por motivo legítimo, e a memória
+  // continua "citada" por uma frase que não está mais lá.
+  //
+  // ⚠️ Antes deste conserto, elas SÓ rodavam quando o corpus existia — porque
+  // a ausência do diretório de memória (que é o caso do runner do CI) fazia o
+  // gate sair por `skipped` ANTES de chegar nelas. O CI media um diretório
+  // vazio, e a reconciliação do `AGENTS.md` §7.5 ficava sem quem a vigiasse.
+  //
+  // A ordem importa: o ledger é lido e conferido ANTES de o corpus ser
+  // consultado, porque a conferida do ledger não depende do corpus.
+  errors.push(...findMissingTargets(repoRoot, rows));
+  errors.push(...findStaleAnchors(repoRoot, rows));
+
+  if (!existsSync(derived.dir)) {
+    // O corpus vive em `$HOME`, fora do repo: o runner do CI não tem o que
+    // medir NESSA metade. O gate não some — ele mede o que dá para medir e
+    // diz, no motivo do skip, o que ficou de fora.
+    advisories.push(
+      `medido: ${rows.length} linha(s) do ledger conferidas contra os arquivos versionados ` +
+        `(alvo e âncora).`,
+    );
+    advisories.push(
+      'a reconciliação com o CORPUS de memórias NÃO RODOU — o corpus vive em $HOME, ' +
+        'fora do repo, então o runner do CI não tem o que medir. Essa metade é camada 1 ' +
+        'local (ver a convenção `retrospective-capture.md` §Destino de cada memória).',
+    );
+    return {
+      ok: errors.length === 0,
+      errors,
+      advisories,
+      skipped: true,
+      reason:
+        `diretório de memória ausente (${relative(repoRoot, derived.dir)}) — o corpus vive ` +
+        'em $HOME; o gate mediu a integridade do ledger contra os arquivos versionados, ' +
+        'mas a reconciliação com o corpus é camada 1 local',
+    };
+  }
+
+  const corpus = corpusOf(derived.dir);
+  const allSlugs = allSlugsOf(derived.dir);
 
   if (corpus.length === 0) {
     // Conjunto vazio com `ok: true` é a classe que este gate existe para
@@ -402,9 +438,6 @@ export function checkMemoryCrystallization(opts: { repoRoot: string }): CheckRes
     );
   }
 
-  errors.push(...findMissingTargets(repoRoot, rows));
-  errors.push(...findStaleAnchors(repoRoot, rows));
-
   const pendentes = rows.filter((r) => r.disposition === 'pendente');
   if (pendentes.length > 0) {
     advisories.push(
@@ -425,7 +458,9 @@ export function checkMemoryCrystallization(opts: { repoRoot: string }): CheckRes
     `medido: ${corpus.length} memória(s) no corpus, ${rows.length} linha(s) no ledger.`,
   );
   advisories.push(
-    `escopo: camada 1 local. O corpus vive fora do repo, então o CI runner não tem o que medir e reporta \`skipped\`.`,
+    'escopo: DUAS metades. A repo-derivável (alvo e âncora do ledger) roda nos dois lados; a do ' +
+      'corpus (evaporação e linha órfã) é camada 1 local, porque o corpus vive em $HOME — o CI ' +
+      'runner não tem o que medir nela e recebe `skipped` com o motivo.',
   );
 
   return { ok: errors.length === 0, errors, advisories };

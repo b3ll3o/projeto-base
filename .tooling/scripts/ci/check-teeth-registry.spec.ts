@@ -387,6 +387,38 @@ describe('reconcileCatalogoHumano — preflight ↔ catálogo humano', () => {
     expect(r.errors).toEqual([]);
   });
 
+  it('gate citado SÓ na prosa NÃO conta como citação — nos DOIS sentidos', () => {
+    // MEDIDO 2026-11-09 (issue #149): `citedGateTokens` pegava os backticks
+    // da LINHA INTEIRA, e o próprio comentário do arquivo diz que a varredura
+    // da linha inteira é o que "faz gate morto parecer vivo". Uma menção na
+    // coluna "Detecta" — que é a INTENÇÃO da prosa, não uma citação de
+    // catálogo — contava como citação.
+    //
+    // (a) O gate que RODA e não está na primeira coluna tem de ser acusado:
+    //     a prosa não é onde o catálogo declara o que roda.
+    const semCitacao = reconcileCatalogoHumano({
+      registeredGates: SPECS,
+      humanTableMarkdown: CATALOGO(
+        '| `check-eslint-drift` | eslint | o par `check-doc-refs` é o lado oposto |\n' +
+          '| `review-routing` matrix lint | roteamento | YAML inválido |',
+      ),
+    });
+    expect(semCitacao.ok).toBe(false);
+    expect(semCitacao.errors.join('\n')).toContain('check-doc-refs');
+
+    // (b) E o gate que NÃO roda, citado só na prosa, não pode ser acusado como
+    //     "citado sem gate que rode" — ele não foi citado.
+    const semFantasma = reconcileCatalogoHumano({
+      registeredGates: SPECS,
+      humanTableMarkdown: CATALOGO(
+        '| `check-doc-refs` | cross-refs | o par `check-gone` é o lado oposto |\n' +
+          '| `check-eslint-drift` | eslint | regras duplicadas |\n' +
+          '| `review-routing` matrix lint | roteamento | YAML inválido |',
+      ),
+    });
+    expect(semFantasma.errors).toEqual([]);
+  });
+
   it('CATÁLOGO AUSENTE é erro, não verde por conjunto vazio', () => {
     // Sem heading, `citedGateTokens` devolve `[]` — e `[]` é indistinguível
     // de "o catálogo não cita nada". Classe 5: se isto saísse verde, um

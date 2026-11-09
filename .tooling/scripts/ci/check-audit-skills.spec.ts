@@ -15,6 +15,9 @@ import {
   semComentarios,
   violacoesDoBloco,
   alvosDeRedirect,
+  reconciliarExcecoesDeSkip,
+  ARQUIVO_DE_EXCECOES_DE_SKIP,
+  type RegistroDeExcecoesDeSkip,
 } from './check-audit-skills';
 
 /** Um repo mínimo com uma skill de auditoria. */
@@ -276,6 +279,150 @@ describe('o gate, sobre o repo real', () => {
         expect(bloco.motivo.length).toBeGreaterThanOrEqual(8);
       }
     }
+  });
+});
+
+// ── Issue #149 (F2): o motivo de cada `skip` tem que continuar valendo ──────
+//
+// MEDIDO 2026-11-09: 15 blocos `[gate: skip]` em 7 skills, e o motivo de cada
+// um era prosa sem instrumento. O gate lia o motivo (medindo o COMPRIMENTO)
+// e o descartava: `if (bloco.declaracao === 'skip') continue;`.
+//
+// A verificação é repo-derivável: a âncora do motivo tem que continuar no
+// CORPO do bloco. É o que o repo controla — o ambiente não está no repo, e um
+// gate cujo veredito muda de máquina para máquina é o defeito que
+// `gate-must-not-depend-on-machine-ambient-state` nomeia.
+describe('reconciliarExcecoesDeSkip', () => {
+  const BLOCO_SKIP = {
+    skill: 'probe',
+    linha: 10,
+    declaracao: 'skip' as const,
+    motivo: 'precisa de `yq`, que não está instalado no CI',
+    corpo: 'yq -P ".services.$svc" docker-compose.yml',
+  };
+  const REGISTRO: RegistroDeExcecoesDeSkip = {
+    _comoUsar: [],
+    excecoes: [
+      {
+        skill: 'probe',
+        motivo: 'precisa de `yq`',
+        verificacao: { tipo: 'no-bloco', padrao: 'yq -P' },
+      },
+    ],
+  };
+
+  it('skip com entrada que casa: verde', () => {
+    expect(reconciliarExcecoesDeSkip([BLOCO_SKIP], REGISTRO)).toEqual([]);
+  });
+
+  it('skip SEM entrada no registro: erro — dívida silenciosa', () => {
+    const errors = reconciliarExcecoesDeSkip([BLOCO_SKIP], { _comoUsar: [], excecoes: [] });
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors.join('\n')).toContain('SEM verificação');
+  });
+
+  it('âncora que sumiu do corpo: o motivo PAROU de valer', () => {
+    const reescrito = { ...BLOCO_SKIP, corpo: 'docker compose config --services' };
+    const errors = reconciliarExcecoesDeSkip([reescrito], REGISTRO);
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors.join('\n')).toContain('PAROU de valer');
+  });
+
+  it('entrada que não casa com nenhum bloco: a exceção não exclui mais nada', () => {
+    const errors = reconciliarExcecoesDeSkip([], REGISTRO);
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors.join('\n')).toContain('não exclui mais nada');
+  });
+
+  it('motivo que mudou no bloco: o registro tem que mudar junto', () => {
+    const outroMotivo = { ...BLOCO_SKIP, motivo: 'precisa de rede para o registry' };
+    const errors = reconciliarExcecoesDeSkip([outroMotivo], REGISTRO);
+    expect(errors.join('\n')).toContain('SEM verificação');
+  });
+
+  it('registro ambíguo: duas âncoras casam com o mesmo bloco', () => {
+    const ambiguo: RegistroDeExcecoesDeSkip = {
+      _comoUsar: [],
+      excecoes: [
+        {
+          skill: 'probe',
+          motivo: 'precisa de `yq`',
+          verificacao: { tipo: 'no-bloco', padrao: 'yq' },
+        },
+        {
+          skill: 'probe',
+          motivo: 'precisa de `yq`',
+          verificacao: { tipo: 'no-bloco', padrao: 'yq -P' },
+        },
+      ],
+    };
+    const errors = reconciliarExcecoesDeSkip([BLOCO_SKIP], ambiguo);
+    expect(errors.join('\n')).toContain('AMBÍGUO');
+  });
+
+  it('padrão que não compila é erro do gate — não um crash', () => {
+    // `new RegExp('[')` lança. Um gate que morre com stack trace no meio do
+    // preflight leva os ~40 gates que rodam depois dele junto — o gate que
+    // deveria acusar o registro quebrado é o que derruba a roda.
+    const quebrado: RegistroDeExcecoesDeSkip = {
+      _comoUsar: [],
+      excecoes: [
+        {
+          skill: 'probe',
+          motivo: 'precisa de `yq`',
+          verificacao: { tipo: 'no-bloco', padrao: '[' },
+        },
+      ],
+    };
+    const errors = reconciliarExcecoesDeSkip([BLOCO_SKIP], quebrado);
+    expect(errors.join('\n')).toContain('não é um regex que compila');
+  });
+
+  it('a âncora NÃO pode ser o próprio motivo — seria tautologia', () => {
+    // Se a âncora fosse o texto do motivo, a verificação casaria com o
+    // motivo e não com o comando: ela provaria que o motivo existe, e não
+    // que o bloco ainda precisa da coisa que o motivo nomeia.
+    const tautologico: RegistroDeExcecoesDeSkip = {
+      _comoUsar: [],
+      excecoes: [
+        {
+          skill: 'probe',
+          motivo: 'precisa de `yq`',
+          verificacao: { tipo: 'no-bloco', padrao: 'precisa de `yq`' },
+        },
+      ],
+    };
+    const errors = reconciliarExcecoesDeSkip([BLOCO_SKIP], tautologico);
+    expect(errors.join('\n')).toContain('PAROU de valer');
+  });
+});
+
+// ── O teste que a #149 exige: contra os ARQUIVOS REAIS ──────────────────────
+describe('o registro das exceções `skip` — os arquivos do repo', () => {
+  it('todo bloco `skip` da repo real tem entrada no registro', () => {
+    const { readFileSync } = require('node:fs') as typeof import('node:fs');
+    const registro = JSON.parse(
+      readFileSync(join(process.cwd(), ARQUIVO_DE_EXCECOES_DE_SKIP), 'utf-8'),
+    ) as RegistroDeExcecoesDeSkip;
+
+    const skips: ReturnType<typeof extrairBlocos> = [];
+    for (const skill of SKILLS_DE_AUDITORIA) {
+      const md = readFileSync(join(process.cwd(), '.agents/skills', skill, 'SKILL.md'), 'utf-8');
+      for (const bloco of extrairBlocos(md, skill)) {
+        if (bloco.declaracao === 'skip') skips.push(bloco);
+      }
+    }
+    // O número é medido, não conferido: se uma skill nova entrar com `skip`, o
+    // registro tem de acompanhar — e este teste é o que fecha a conta.
+    expect(skips.length).toBe(15);
+    expect(registro.excecoes.length).toBe(skips.length);
+    expect(reconciliarExcecoesDeSkip(skips, registro)).toEqual([]);
+  });
+
+  it('o gate contra o repo real está VERDE', () => {
+    const r = checkAuditSkills({ repoRoot: process.cwd() });
+    expect(r.errors).toEqual([]);
+    expect(r.ok).toBe(true);
   });
 });
 
