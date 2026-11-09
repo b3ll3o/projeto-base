@@ -56,6 +56,10 @@ import { checkDocClaims } from './check-doc-claims';
 import { checkDocSize } from './check-doc-size';
 import { checkPathAlias } from './check-path-alias';
 import { checkSkillCoverage } from './check-skill-coverage';
+import { checkDependencyDrift } from './check-dependency-drift';
+import { checkDependencyFreshness } from './check-dependency-freshness';
+import { checkActionVersionComment } from './check-action-version-comment';
+import { checkCiPrismaClientReady } from './check-ci-prisma-client-ready';
 import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
@@ -394,6 +398,10 @@ export const RUNNERS: Record<string, () => CheckResult | Promise<CheckResult>> =
   'check-doc-size': () => checkDocSize({ repoRoot: '.' }),
   'check-path-alias': () => checkPathAlias({ repoRoot: '.' }),
   'check-skill-coverage': () => checkSkillCoverage({ repoRoot: '.' }),
+  'check-dependency-drift': () => checkDependencyDrift({ repoRoot: '.' }),
+  'check-dependency-freshness': () => checkDependencyFreshness({ repoRoot: '.' }),
+  'check-action-version-comment': () => checkActionVersionComment({ repoRoot: '.' }),
+  'check-ci-prisma-client-ready': () => checkCiPrismaClientReady({ repoRoot: '.' }),
 };
 
 /**
