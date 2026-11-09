@@ -370,16 +370,26 @@ export function lacunasDeRegistro(
   }
 
   // (5) FANTASMA — o inverso: citado, mas não existe.
-  for (const citado of nomesCitadosPorLink(indice)) {
-    if (!skills.includes(citado)) {
-      lacunas.push({
-        skill: citado,
-        regra: 'fantasma',
-        detalhe:
-          `o ${INDICE} aponta para ${DIR_SKILLS}/${citado}/SKILL.md, que não ` +
-          'existe no disco — link quebrado que aponta para uma skill que ninguém ' +
-          'escreveu',
-      });
+  //
+  // O alcance é o índice **e** os citadores (agents, workflows e as outras
+  // skills): um link para uma skill inexistente é quebrado em qualquer um
+  // deles, e a mensagem diz **onde** foi encontrado — senão quem lê tem que
+  // caçar o arquivo.
+  for (const [origem, texto] of [
+    [INDICE, indice],
+    ['agents/workflows/skills', citadores],
+  ] as const) {
+    for (const citado of nomesCitadosPorLink(texto)) {
+      if (!skills.includes(citado)) {
+        lacunas.push({
+          skill: citado,
+          regra: 'fantasma',
+          detalhe:
+            `${origem} aponta para ${DIR_SKILLS}/${citado}/SKILL.md, que não ` +
+            'existe no disco — link quebrado que aponta para uma skill que ninguém ' +
+            'escreveu',
+        });
+      }
     }
   }
 

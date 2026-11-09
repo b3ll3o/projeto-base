@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { INDICE } from './check-skill-coverage';
 import {
   citaNome,
   donoDeclarado,
@@ -229,6 +230,30 @@ describe('lacunasDeRegistro', () => {
       'sem-dono',
       'sem-binding',
     ]);
+  });
+
+  it('acusa a skill FANTASMA citada por um AGENT (não só pelo índice)', () => {
+    // O cabeçalho do gate promete "o `AGENTS.md` (ou um agent) cita uma skill
+    // que não existe". A primeira versão só varria o índice — e um agent
+    // apontando para uma skill inexistente passava.
+    const lacunas = lacunasDeRegistro(
+      [],
+      'nada no índice',
+      'ver `.agents/skills/skill-que-nao-existe/SKILL.md`',
+      bindings,
+    );
+    expect(lacunas.map((l) => l.regra)).toEqual(['fantasma']);
+    expect(lacunas[0]?.skill).toBe('skill-que-nao-existe');
+  });
+
+  it('a FANTASMA nomeia ONDE o link quebrado foi encontrado', () => {
+    const lacunas = lacunasDeRegistro(
+      [],
+      'ver `.agents/skills/fantasma-do-indice/SKILL.md`',
+      '',
+      bindings,
+    );
+    expect(lacunas[0]?.detalhe).toContain(INDICE);
   });
 
   it('NÃO acusa a skill FANTASMA se ela também existir (o par órfão/fantasma é separado)', () => {
