@@ -1,0 +1,25 @@
+# .github/dependabot.yml
+#
+# pt-BR (#131): o pin por SHA das actions do CI é o que fecha o supply
+# chain — mas um SHA pinado é uma versão CONGELADA, e sem nada que a renove,
+# o CI envelhece sozinho (e o primeiro a descobrir é um CVE na action).
+#
+# O Dependabot é o dono dessa renovação: ele abre PR que TROCA o SHA e
+# atualiza o comentário da tag (`# v4`), e o gate
+# `check-ci-action-pinning.ts` recusa o PR se a tag e o SHA ficarem
+# desencontrados.
+#
+# ⚠️ Só o ecosystem `github-actions`: o resto do repo (pnpm) tem o
+# `renovate`/lockfile próprio, e um segundo dono de atualização é pior do
+# que nenhum.
+version: 2
+updates:
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '06:00'
+      timezone: 'America/Sao_Paulo'
+    commit-message:
+      prefix: 'ci'

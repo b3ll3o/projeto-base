@@ -11,18 +11,17 @@
 //
 // #118: a senha do papel saiu do FONTE.
 //
-// Antes, `SENHA_DE_RUNTIME_DEV` vivia aqui E na migration (`PASSWORD
-// 'app_runtime_dev'`), em texto puro, num repositório público. Uma migration
-// não lê env — e foi por isso que a senha foi parar ali. Agora:
+// Antes, a senha de runtime vivia aqui E na migration, em texto puro, num
+// repositório público. Uma migration não lê env — e foi por isso que a senha
+// foi parar ali. Agora:
 //
 //   - a migration cria o papel SEM senha (`NOLOGIN`);
 //   - o setup (entrypoint do container, helper de testcontainers) aplica a
 //     senha a partir de `DATABASE_URL` / `SYSTEM_DATABASE_URL`, que são
 //     variáveis de ambiente;
-//   - este arquivo tem uma LISTA DE SENHAS EXPOSTAS (uma denylist), e não um
-//     default: o valor conhecido está aqui porque precisa ser RECUSADO, e
-//     porque ele já é público — tê-lo no repositório não piora o que a
-//     exposição já piorou. O que importa é que ele não seja mais o padrão.
+//   - este arquivo tem os CRITÉRIOS que recusam uma senha que não serve —
+//     o prefixo de exemplo e o tamanho mínimo — e nenhuma lista por valor
+//     (#133: escrever o valor publicado aqui era outra forma de publicá-lo).
 
 /** Nome do papel de runtime. Tem de bater com o `CREATE ROLE` da migration. */
 export const PAPEL_DE_RUNTIME = 'app_runtime';
@@ -42,17 +41,55 @@ export const PAPEL_DE_SISTEMA = 'app_system';
 /**
  * Senhas que NUNCA podem estar em uso.
  *
- * ⚠️ NÃO é um default — é uma denylist. O primeiro valor é a senha que o
- * repositório publikou (`app_runtime_dev`): ela está no histórico do Git, e
- * qualquer pessoa que leia o repositório a conhece. O segundo é o prefixo do
- * placeholder do `.env.production.example`.
+ * ⚠️ (#133) A lista por VALOR saiu — e a senha que o repositório publicou
+ * saiu com ela. A razão é que a lista por valor só funciona enquanto o valor
+ * está no repositório: escrevê-lo aqui era uma FORMA de publicá-lo, e o
+ * critério de aceite da #133 é que o `git grep` do literal não encontre nada.
  *
- * A segunda linha de defesa é o TAMANHO: `segredoDeServico` recusa segredos
- * com menos de 32 bytes, e `app_runtime_dev` tem 16. A denylist existe para
- * o caso em que alguém aumente o tamanho do placeholder e a recusa por
- * tamanho deixe de pegar.
+ * O que substitui a lista é um critério que não depende do valor:
+ *
+ *   1. o PREFIXO de exemplo (`CHANGE_ME…`, `***`) — o valor que o
+ *      `.env.production.example` entrega;
+ *   2. o TAMANHO — e ele é o que barra a senha publicada, que tinha 15
+ *      caracteres (abaixo de `TAMANHO_MINIMO_DE_SENHA_DE_PAPEL`).
+ *
+ * E há uma segunda barreira, que é ESTRUTURAL e não é uma lista: a senha
+ * publicada deixou de autenticar em qualquer banco. A migration
+ * `20261020000000` faz o papel nascer sem senha, e a
+ * `20261108000001_papel_runtime_sem_senha_publicada` limpa (`PASSWORD NULL`)
+ * o hash que existia em quem já rodou a versão velha. MEDIDO: depois dela,
+ * `rolcanlogin = f` e `rolpassword IS NULL = t` — o segredo não existe mais
+ * em lugar nenhum.
  */
-export const SENHAS_EXPOSTAS: readonly string[] = ['app_runtime_dev'];
+
+/**
+ * O tamanho mínimo de uma senha de PAPEL do banco (#133).
+ *
+ * 24 caracteres — o dobro do mínimo de 16 que o repositório usava, e o que
+ * a senha publicada (15 caracteres) ficava ABAIXO.
+ *
+ * ⚠️ O DONO DO BANCO não tem mínimo aqui: a credencial dele é a
+ * `DIRECT_DATABASE_URL`, que o `prepara-papeis.sh` também lê (e valida) —
+ * mas o guard de boot da API não a recebe, e o dono é Superuser por
+ * definição (ou CREATEROLE). A regra do dono é do `prepara-papeis.sh`.
+ *
+ * ⚠️ O número mora AQUI e no `prepara-papeis.sh` (que é shell, e não lê
+ * TypeScript). O `papel-de-runtime.spec.ts` RECONCILIA os dois — sem isso,
+ * os dois números divergem em silêncio e a regra da camada que escreve
+ * deixa de valer.
+ */
+export const TAMANHO_MINIMO_DE_SENHA_DE_PAPEL = 24;
+
+/**
+ * Os papéis cujas senhas são GERIDAS pelo repositório.
+ *
+ * São eles que o mínimo de tamanho alcança. O DONO (`projeto` no Compose) não
+ * entra: o guard roda no boot da API, e o Compose de DEV conecta como o dono
+ * com a senha `projeto` (6 caracteres) — MEDIDO: `verificarCredenciaisDoBanco`
+ * devolvia `{"ok":true}` para ela, e um mínimo sem esta exceção derrubaria o
+ * ambiente de desenvolvimento no primeiro boot.
+ */
+export const PAPEIS_COM_SENHA_GERIDA: readonly string[] = [PAPEL_DE_RUNTIME, PAPEL_DE_SISTEMA];
 
 /**
  * Prefixos de senha que denunciam um valor de EXEMPLO.

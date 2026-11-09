@@ -21,6 +21,47 @@ describe('Dockerfile prod target — OTel tracing bootstrap (Task 1.5)', () => {
     expect(dockerfile).toMatch(/NODE_OPTIONS=.*--import\s+\S*telemetry\/init\.js/);
   });
 
+  // ⚠️ (#137): o `exec` ANTES do `node` é o que faz o SIGTERM chegar ao
+  // processo Node. Sem ele, o `&&` faz o `sh` forkar o `node` e continuar
+  // vivo como pai — a árvore real é `tini → sh → node` — e o sinal que o
+  // `docker stop` manda para o PID 1 (o tini) chega ao `sh`, que não
+  // repassa. O `enableShutdownHooks()` do NestJS nunca roda, e o container
+  // só morre por SIGKILL no fim do grace period.
+  it('o ENTRYPOINT usa `exec` antes do node — o SIGTERM chega ao processo (#137)', async () => {
+    const dockerfile = await readFile(DOCKERFILE_PATH, 'utf8');
+    // ⚠️ A linha inteira: o ENTRYPOINT tem um `[ -z … ]` DENTRO do JSON, e
+    // um regex que para no primeiro `]` cortaria a linha no meio.
+    const entrypoint = /^ENTRYPOINT\s*(.+)$/m.exec(dockerfile);
+    expect(entrypoint).not.toBeNull();
+    // A cadeia é `… && exec node dist/main.js` — e o `exec` é o que troca o
+    // PID do shell pelo PID do node.
+    expect(entrypoint![1]).toMatch(/&&\s*exec node dist\/main\.js/);
+    // E o `exec` NÃO pode vir antes do `migrate` (que precisa do shell).
+    expect(entrypoint![1]).toMatch(/prisma migrate deploy[\s\S]*&&\s*exec node/);
+  });
+
+  // ⚠️ (#139): o probe do healthcheck NÃO pode depender de um pacote
+  // instalado — o stage `dev` não tem o `curl` do `prod`, e o compose de dev
+  // herda o probe do compose base. O `node` está nas DUAS imagens.
+  it('o HEALTHCHECK usa o node da imagem — e não um pacote instalado (#139)', async () => {
+    const dockerfile = await readFile(DOCKERFILE_PATH, 'utf8');
+    const healthcheck = /HEALTHCHECK[\s\S]*?\n\s*CMD ([^\n]*)/.exec(dockerfile);
+    expect(healthcheck).not.toBeNull();
+    expect(healthcheck![1]).toContain('node -e');
+    expect(healthcheck![1]).not.toMatch(/\bcurl\b/);
+    expect(healthcheck![1]).not.toMatch(/\bwget\b/);
+  });
+
+  it('o stage prod NÃO instala mais o curl (ele existia só para o probe) (#139)', async () => {
+    const dockerfile = await readFile(DOCKERFILE_PATH, 'utf8');
+    // ⚠️ O `curl` não pode estar em NENHUM stage: o probe é o mesmo nos
+    // dois, e um `curl` em algum stage seria a isca de um probe que volta.
+    const installs = [...dockerfile.matchAll(/apt-get install[^\n]*/g)].map((m) => m[0]);
+    for (const linha of installs) {
+      expect(linha).not.toMatch(/\bcurl\b/);
+    }
+  });
+
   it('mantém ENTRYPOINT/CMD executando node dist/main.js no target prod', async () => {
     const dockerfile = await readFile(DOCKERFILE_PATH, 'utf8');
     // prod usa ENTRYPOINT (não CMD) por causa do `sh -c` que encadeia

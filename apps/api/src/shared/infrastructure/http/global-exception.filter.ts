@@ -10,7 +10,7 @@ import {
 import type { FastifyAdapter } from '@nestjs/platform-fastify';
 import { traceIdDe } from './trace-id.js';
 import type { ProblemDetailsDto, ProblemDetailsError } from '@projeto/shared-types';
-import { mapExceptionToHttp } from './domain-exception-to-http.js';
+import { DETALHE_DE_ERRO_INTERNO, mapExceptionToHttp } from './domain-exception-to-http.js';
 
 // pt-BR: extraído de @nestjs/platform-fastify (TReply do FastifyAdapter)
 // porque o pacote 'fastify' não é dep direta de @projeto/api nesta fase.
@@ -49,8 +49,12 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const { status, code, title, detail, errors } = this.mapException(exception);
 
     if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+      // pt-BR (#130): o LOG carrega a mensagem ORIGINAL — o `detail` da
+      // resposta pode ser genérico, e é o log que serve de diagnóstico.
+      // Trocar os dois (logar o genérico) apagaria a única pista que
+      // sobraria do erro.
       this.logger.error(
-        `[${traceId}] ${request.method} ${request.url} -> ${code}: ${detail}`,
+        `[${traceId}] ${request.method} ${request.url} -> ${code}: ${this.mensagemOriginal(exception)}`,
         exception instanceof Error ? exception.stack : undefined,
       );
     }
@@ -81,14 +85,24 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       const status = exception.getStatus();
       const resp = exception.getResponse();
 
+      // ⚠️ (#130) A MESMA REGRA DOS DOIS RAMOS: um 5xx NUNCA devolve a
+      // mensagem original. Valia só no ramo de exceção não-HttpException, e
+      // um `HttpException` de 5xx (`new InternalServerErrorException('a
+      // senha do banco é X')`) continuava vazando o texto cru.
+      //
+      // O `detail` do response-OBJETO (`r['detail']` / `r['message']`) é o
+      // contrato estruturado que a aplicação montou — e ele é preservado
+      // ABAIXO de 500, onde ele é a informação que o cliente precisa.
       if (typeof resp === 'object' && resp !== null) {
         const r = resp as Record<string, unknown>;
         const detail =
-          typeof r['detail'] === 'string'
-            ? r['detail']
-            : typeof r['message'] === 'string'
-              ? r['message']
-              : exception.message;
+          status >= HttpStatus.INTERNAL_SERVER_ERROR
+            ? DETALHE_DE_ERRO_INTERNO
+            : typeof r['detail'] === 'string'
+              ? r['detail']
+              : typeof r['message'] === 'string'
+                ? r['message']
+                : exception.message;
         const result: {
           status: number;
           code: string;
@@ -112,7 +126,12 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         status,
         code: this.codeFromStatus(status),
         title: HttpStatus[status] ?? 'Erro HTTP',
-        detail: typeof resp === 'string' ? resp : exception.message,
+        detail:
+          status >= HttpStatus.INTERNAL_SERVER_ERROR
+            ? DETALHE_DE_ERRO_INTERNO
+            : typeof resp === 'string'
+              ? resp
+              : exception.message,
       };
     }
 
@@ -122,12 +141,25 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       status: mapped.status,
       code: mapped.code,
       title: mapped.title,
-      detail: exception instanceof Error ? exception.message : String(exception),
+      // pt-BR (#130): o `detail` que o mapper devolve é o ÚNICO caso em que
+      // a mensagem original NÃO pode chegar ao cliente — e o mapper só o
+      // devolve quando NÃO reconheceu a exceção (driver do Prisma, erro de
+      // rede, `TypeError`). Quando o mapper reconheceu, a mensagem é texto
+      // NOSSO (o motivo do convite, o campo inválido) e pode ir.
+      detail: mapped.detail ?? this.mensagemOriginal(exception),
       // pt-BR: `errors[]` do mapper precisa chegar ao corpo. Sem esta
       // propagação, um 400 de VO saía sem `errors` e o Server Action do
       // web caía em `ERRO_GENERICO` em vez de apontar o campo.
       ...(mapped.errors !== undefined ? { errors: mapped.errors } : {}),
     };
+  }
+
+  /**
+   * A mensagem original da exceção — a que vai para o LOG, e a que pode ir
+   * para o corpo quando o mapper reconheceu a exceção (#130).
+   */
+  private mensagemOriginal(exception: unknown): string {
+    return exception instanceof Error ? exception.message : String(exception);
   }
 
   private codeFromStatus(status: number): string {

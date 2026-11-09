@@ -15,9 +15,9 @@
 > Medido em 2026-10-29: os 2 endpoints deste BC conferem com
 > `apps/api/openapi.json`. Contagem por
 > `grep -hoE "@(Get|Post|Patch|Put|Delete)\(" apps/api/src/modules/feature-flags/infrastructure/http/*.controller.ts | wc -l`
-> → `2`. O contrato inteiro tem 22 paths e 28 operações
-> (`node -e "const d=require('./apps/api/openapi.json');console.log(Object.keys(d.paths).length)"` → `22`;
-> `node -e "const d=require('./apps/api/openapi.json');console.log(Object.values(d.paths).flatMap(p=>Object.keys(p).filter(k=>['get','post','put','patch','delete'].includes(k))).length)"` → `28`),
+> → `2`. O contrato inteiro tem 23 paths e 29 operações
+> (`node -e "const d=require('./apps/api/openapi.json');console.log(Object.keys(d.paths).length)"` → `23`;
+> `node -e "const d=require('./apps/api/openapi.json');console.log(Object.values(d.paths).flatMap(p=>Object.keys(p).filter(k=>['get','post','put','patch','delete'].includes(k))).length)"` → `29`),
 > das quais 18 são de `tenancy`, `profiles`, `feature-flags` e `health`.
 
 ## §1. Visão geral

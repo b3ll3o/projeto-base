@@ -24,13 +24,15 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { AuthUseCases } from './auth-use-cases.js';
 import { InvalidCredentialsException } from '../domain/exceptions/auth.exceptions.js';
+import { InvalidTokenException } from '../domain/exceptions/token.exceptions.js';
 import { User } from '../../users/domain/user.aggregate.js';
 import { PasswordHash } from '../../users/domain/value-objects/password-hash.vo.js';
 import { Email } from '../../users/domain/value-objects/email.vo.js';
 import { UserId } from '../../users/domain/value-objects/user-id.vo.js';
 import type { UserRepositoryPort } from '../../users/domain/ports/user-repository.port.js';
 import type { PasswordHasherPort } from '../../users/domain/ports/password-hasher.port.js';
-import type { TokenIssuerPort, TokenSubject } from '../domain/ports/token-issuer.port.js';
+import type { RefreshSubject, TokenIssuerPort } from '../domain/ports/token-issuer.port.js';
+import type { RefreshTokenRepositoryPort } from '../domain/ports/refresh-token-repository.port.js';
 
 const HASH_FALSO = '$argon2id$v=19$m=65536,p=4,t=3$c2FsdGZhbG9zb21lc2E$ZGlnZXN0ZWZhbG9zb21lc2E';
 const AGORA = new Date('2026-10-09T12:00:00.000Z');
@@ -52,7 +54,17 @@ interface Stubs {
   userRepo: UserRepositoryPort;
   hasher: PasswordHasherPort;
   issuer: TokenIssuerPort;
+  /** ⚠️ (#132) O REGISTRO de refresh tokens — o que torna o token revogável. */
+  refreshTokens: RefreshTokenRepositoryPort;
 }
+
+/** O `jti` do refresh token APRESENTADO — o que o registro indexa. */
+const JTI = 'jti-de-teste';
+/** O `jti` do refresh token NOVO (o da rotação) — DISTINTO do apresentado. */
+const JTI_NOVO = 'jti-de-teste-novo';
+
+/** O `exp` do refresh token de teste. */
+const EXPIRA_EM = new Date('2026-10-16T12:00:00.000Z');
 
 function criarStubs(): Stubs {
   return {
@@ -68,19 +80,35 @@ function criarStubs(): Stubs {
       verify: vi.fn(async () => false),
     },
     issuer: {
-      emitir: vi.fn(async () => ({ accessToken: 'access-token', refreshToken: 'refresh-token' })),
+      // ⚠️ O `jti` novo é DISTINTO do apresentado — e é por isso que a
+      // asserção tem dente: com o stub devolvendo o mesmo `jti`, uma
+      // implementação que registrasse o `jti` VELHO passaria igual.
+      emitir: vi.fn(async () => ({
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+        refreshJti: JTI_NOVO,
+        refreshExpiresAt: EXPIRA_EM,
+      })),
       validarAccessToken: vi.fn(),
-      validarRefreshToken: vi.fn(async (): Promise<TokenSubject> => ({
+      validarRefreshToken: vi.fn(async (): Promise<RefreshSubject> => ({
         sub: UUID_JOAO,
         email: 'joao@example.com',
         typ: 'refresh',
+        jti: JTI,
       })),
+    },
+    refreshTokens: {
+      registrar: vi.fn(async () => undefined),
+      estadoDe: vi.fn(async () => ({ registrado: true, revogadoEm: null, userId: UUID_JOAO })),
+      revogar: vi.fn(async () => true),
+      rotacionar: vi.fn(async () => true),
+      revogarTodosDoUsuario: vi.fn(async () => undefined),
     },
   };
 }
 
 function criarUseCases(s: Stubs): AuthUseCases {
-  return new AuthUseCases(s.userRepo, s.hasher, s.issuer);
+  return new AuthUseCases(s.userRepo, s.hasher, s.issuer, s.refreshTokens);
 }
 
 describe('AuthUseCases.login', () => {
@@ -276,6 +304,120 @@ describe('AuthUseCases.renovar', () => {
       InvalidCredentialsException,
     );
     expect(s.issuer.emitir).not.toHaveBeenCalled();
+  });
+
+  // ─── #132: a revogação ───────────────────────────────────────────────────
+
+  it('ROTACIONA: consome o `jti` apresentado e registra o novo, NA MESMA transação (#132)', async () => {
+    await useCases.renovar({ refreshToken: 'refresh-antigo' });
+
+    // ⚠️ O `jti` NOVO é o que entra no registro — e ele é DISTINTO do
+    // apresentado. Se a implementação registrasse o velho, a asserção
+    // falharia (e o token novo nasceria sem registro).
+    expect(s.refreshTokens.rotacionar).toHaveBeenCalledWith(JTI, JTI_NOVO, UUID_JOAO, EXPIRA_EM);
+    // E o consumo NÃO é um método separado: consumo e registro são a mesma
+    // transação (a janela entre dois `await` deixaria o token velho
+    // consumido e o novo sem registro).
+    expect(s.refreshTokens.revogar).not.toHaveBeenCalled();
+    expect(s.refreshTokens.registrar).not.toHaveBeenCalled();
+  });
+
+  it('um `jti` consumido CONCORRENTE não renova (#132)', async () => {
+    // Dois `POST /auth/refresh` com o MESMO token ao mesmo tempo chegam os
+    // dois ao `estadoDe` como "ativo". A revogação é ATÔMICA, e o que não
+    // conseguiu consumir o token leva 401 — sem emitir par.
+    vi.mocked(s.refreshTokens.rotacionar).mockResolvedValue(false);
+
+    await expect(useCases.renovar({ refreshToken: 'refresh-antigo' })).rejects.toBeInstanceOf(
+      InvalidTokenException,
+    );
+  });
+
+  it('um `jti` DESCONHECIDO é recusado (#132)', async () => {
+    // O token não tem `jti` no registro — ou o registro não o tem (token
+    // emitido antes da migração), ou ele nunca foi emitido por esta API.
+    vi.mocked(s.refreshTokens.estadoDe).mockResolvedValue({
+      registrado: false,
+      revogadoEm: null,
+      userId: null,
+    });
+
+    await expect(useCases.renovar({ refreshToken: 'refresh-antigo' })).rejects.toBeInstanceOf(
+      InvalidTokenException,
+    );
+    expect(s.issuer.emitir).not.toHaveBeenCalled();
+  });
+
+  it('um `jti` já REVOGADO é o REPLAY — e derruba a sessão da conta (#132)', async () => {
+    // O `jti` reapareceu depois de ter sido rotacionado: quem o apresentou
+    // não é mais a pessoa que o recebeu. A resposta derruba a conta.
+    const revogadoHa = new Date(Date.now() - 10 * 60 * 1000); // 10 min atrás
+    vi.mocked(s.refreshTokens.estadoDe).mockResolvedValue({
+      registrado: true,
+      revogadoEm: revogadoHa,
+      userId: UUID_JOAO,
+    });
+
+    await expect(useCases.renovar({ refreshToken: 'refresh-antigo' })).rejects.toBeInstanceOf(
+      InvalidTokenException,
+    );
+    expect(s.refreshTokens.revogarTodosDoUsuario).toHaveBeenCalledWith(UUID_JOAO);
+    expect(s.issuer.emitir).not.toHaveBeenCalled();
+  });
+
+  it('um `jti` revogado há POUCO é uso CONCORRENTE — e NÃO derruba a conta (#132)', async () => {
+    // Dois `POST /auth/refresh` com o mesmo token são um retry de cliente,
+    // duas abas, dois workers — e NÃO um ataque. Sem a janela de tolerância,
+    // a segunda chamada mataria a sessão de quem está usando a API.
+    const revogadoHa = new Date(Date.now() - 2 * 1000); // 2 s atrás
+    vi.mocked(s.refreshTokens.estadoDe).mockResolvedValue({
+      registrado: true,
+      revogadoEm: revogadoHa,
+      userId: UUID_JOAO,
+    });
+
+    await expect(useCases.renovar({ refreshToken: 'refresh-antigo' })).rejects.toBeInstanceOf(
+      InvalidTokenException,
+    );
+    expect(s.refreshTokens.revogarTodosDoUsuario).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthUseCases.sair (logout) (#132)', () => {
+  let s: Stubs;
+  let useCases: AuthUseCases;
+
+  beforeEach(() => {
+    s = criarStubs();
+    useCases = criarUseCases(s);
+  });
+
+  it('REVOGA o `jti` do refresh apresentado', async () => {
+    await useCases.sair({ refreshToken: 'refresh-antigo' });
+
+    expect(s.issuer.validarRefreshToken).toHaveBeenCalledWith('refresh-antigo');
+    expect(s.refreshTokens.revogar).toHaveBeenCalledWith(JTI);
+  });
+
+  it('o logout é IDEMPOTENTE — e DIZ que o token já estava revogado (#132)', async () => {
+    // O `revogar` devolve `false` quando o `jti` já estava revogado — e o
+    // logout não pode falhar por isso: o objetivo (o token não renova) já
+    // foi cumprido. E a resposta é VERDADEIRA (`revogado: false`), e não um
+    // `true` fixo que afirmaria uma revogação que não aconteceu.
+    vi.mocked(s.refreshTokens.revogar).mockResolvedValue(false);
+
+    await expect(useCases.sair({ refreshToken: 'refresh-antigo' })).resolves.toBe(false);
+  });
+
+  it('um refresh INVÁLIDO no logout é recusado — e nada é revogado', async () => {
+    vi.mocked(s.issuer.validarRefreshToken).mockRejectedValue(
+      new InvalidTokenException('token inválido'),
+    );
+
+    await expect(useCases.sair({ refreshToken: 'lixo' })).rejects.toBeInstanceOf(
+      InvalidTokenException,
+    );
+    expect(s.refreshTokens.revogar).not.toHaveBeenCalled();
   });
 });
 

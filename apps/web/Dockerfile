@@ -8,6 +8,19 @@ RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 WORKDIR /repo
 
 FROM base AS dev
+# pt-BR (#138): o `HOSTNAME` do container é o short-ID dele, e ele resolve
+# para o IP do container — não para 127.0.0.1.
+#
+# ⚠️ MEDIDO 2026-11-08: no stage `prod` (o `server.js` standalone) o
+# `HOSTNAME` é o ENDEREÇO DE BIND — `const hostname = process.env.HOSTNAME ||
+# '0.0.0.0'` — e sem esta linha o servidor escutava no IP do container e o
+# probe em `localhost:3001` nunca conectava.
+#
+# ⚠️ No stage `dev` o `next dev` NÃO lê `process.env.HOSTNAME`: ele tira o
+# endereço da flag `-H/--hostname`, cujo default é `0.0.0.0` (Next 15.5.28). O
+# `ENV` aqui é DEFENSIVO — se o default mudar, o bind continua sendo o
+# esperado. Ele não é o que faz o dev escutar em 0.0.0.0 hoje.
+ENV HOSTNAME=0.0.0.0
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     pnpm fetch
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -52,7 +65,17 @@ RUN pnpm --filter @projeto/web build
 ARG NODE_DIGEST=sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
 FROM node:22-bookworm-slim@${NODE_DIGEST} AS prod
 WORKDIR /repo
-ENV NODE_ENV=production PORT=3001
+# pt-BR (#138): o `HOSTNAME` é o ENDEREÇO DE BIND do `server.js` gerado pelo
+# Next.js standalone (`const hostname = process.env.HOSTNAME || '0.0.0.0'`).
+# O daemon do Docker exporta `HOSTNAME` em TODO container, com o valor do
+# hostname do próprio container (o short-ID) — que resolve para o IP do
+# container, NÃO para 127.0.0.1. Resultado: o servidor escutava no IP do
+# container e o probe em `http://localhost:3001/api/health` nunca conectava:
+# o serviço ficava `unhealthy` permanente, com a app no ar.
+#
+# `0.0.0.0` escuta em todas as interfaces — e o probe em `localhost` volta a
+# resolver. É a convenção que o Next.js documenta para `output: 'standalone'`.
+ENV NODE_ENV=production PORT=3001 HOSTNAME=0.0.0.0
 COPY --from=builder /repo/apps/web/.next/standalone /repo
 COPY --from=builder /repo/apps/web/.next/static /repo/apps/web/.next/static
 COPY --from=builder /repo/apps/web/public /repo/apps/web/public

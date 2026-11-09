@@ -166,3 +166,89 @@ destino não for local, o seed **recusa e sai 1**, nomeando o host — medido
 2026-10-20 com `projeto-base-postgres`, que resolve para o mesmo Postgres e mesmo
 assim é recusado. Para ambiente real, crie o admin pelo `POST /api/v1/users` e
 promova o perfil pela UI.
+
+## §4. Por que a imagem da api é assim 📖 lido do código
+
+> A seção que explica as **decisões** da imagem — o `apps/api/Dockerfile` e o
+> `apps/web/Dockerfile` guardam o `PORQUÊ` em uma linha cada (e o gate
+> `check-docker-drift` impõe o teto de 100 linhas por Dockerfile), e o
+> detalhe medido vive aqui.
+
+### §4.1 O probe do healthcheck usa `node`, e não um pacote instalado
+
+O `HEALTHCHECK` da api usava `curl -fsS`. O `curl` estava instalado **só no
+stage `prod`** — e o `docker-compose.dev.yml` troca o `build.target` para `dev`,
+que herda de `base` (onde só há `openssl`). O compose **herda** o healthcheck do
+compose base, e o probe passava a falhar com `curl: not found`: a api nunca
+ficava `healthy` e o `web` — que depende dela com
+`condition: service_healthy` — não subia. O sintoma era "o web não sobe", e a
+causa (um binário ausente) não estava no probe.
+
+O probe agora usa o `node` que a imagem **já tem** — o mesmo padrão que o
+serviço `web` usava. Um probe que depende de um pacote instalado é uma
+armadilha de stage: o `build.target` muda, e o binário não vem junto.
+
+O gate `check-docker-healthcheck-binary` cobra isso: ele resolve o **stage** do
+healthcheck (e a herança entre stages) e exige que o binário exista na imagem
+dele. O `curl` saiu do stage `prod` — depois da troca, ele não teria mais
+usuário.
+
+### §4.2 O `exec` antes do `node` é o que faz o SIGTERM chegar nele
+
+O ENTRYPOINT é um `sh -c` que encadeia migrate, preparo de papeis e
+`node dist/main.js`. Sem `exec`, o `&&` faz o `dash` **forkar** o `node` e
+continuar vivo como pai dele — a árvore real é `tini → sh → node`. O
+`docker stop` manda SIGTERM para o PID 1 (o tini); o tini repassa o sinal
+**apenas ao filho direto** (o `sh`, porque o daemon não passa `-g`); e o `sh`
+não repassa para o filho. O `node` nunca recebe o sinal, o
+`enableShutdownHooks()` do NestJS nunca dispara, e o container só morre por
+SIGKILL no fim do grace period.
+
+Com `exec`, o `node` **assume o PID do `sh`** — e é o `node` que o tini
+sinaliza.
+
+> ⚠️ O `init: true` do Compose (que injeta o tini) **continua certo** — é o que
+> faz o tini existir e recolher os zumbis. Mas ele, sozinho, não basta: ele
+> resolve o sinal para o filho direto, e o filho direto era o `sh`.
+
+### §4.3 O web define `HOSTNAME=0.0.0.0`
+
+O `server.js` gerado pelo Next.js standalone resolve o endereço de bind por
+`const hostname = process.env.HOSTNAME || '0.0.0.0'`. O daemon do Docker
+exporta `HOSTNAME` em **todo** container, com o valor do hostname do próprio
+container (o short-ID) — que resolve para o **IP do container**, não para
+127.0.0.1. Resultado: o servidor escutava no IP do container e o probe em
+`http://localhost:3001/api/health` nunca conectava — o serviço ficava
+`unhealthy` permanente, com a aplicação no ar.
+
+`ENV HOSTNAME=0.0.0.0` faz o bind ser em todas as interfaces, e o probe em
+`localhost` volta a resolver. É a convenção que o Next.js documenta para
+`output: 'standalone'`.
+
+### §4.4 As dependências vêm de `apps/api/node_modules`
+
+Topologia do pnpm em workspace: MEDIDO no stage `builder`,
+`node_modules/@nestjs` da **raiz** está AUSENTE e o de `apps/api` está
+PRESENTE. O `prod` copiava só a raiz — os 12 `devDependencies` dela, e
+nenhuma das 26 `dependencies` da api. São os dois `COPY` de `node_modules` que
+trazem as dependências certas.
+
+### §4.5 O `NODE_OPTIONS` do tracing vem ANTES do `node --check`
+
+O `--import` (ESM-aware; `--require` é CJS-only) auto-carrega o SDK de
+telemetria antes de qualquer código de usuário. `tracing.js` é puro
+(`tracing.spec.ts:28-35`), então importá-lo direto **não** dispararia o SDK —
+daí o wrapper `init.js`. O `ENV` vem antes do `node --check` porque o check
+mediava sintaxe **sem resolver a cadeia de imports**; e o caminho é ABSOLUTO
+porque o `--import` resolve contra o CWD de cada `node` (MEDIDO: com
+`./apps/api/…`, o `pnpm exec prisma` de `/repo/apps/api` procurava
+`apps/api/apps/api/dist/…`, porque o `cd` do ENTRYPOINT muda o CWD).
+
+### §4.6 O `pnpm prune --prod` foi REMOVIDO
+
+MEDIDO como no-op (EACCES na raiz, exit 243, prompt de workspace) — e o 243
+era absorvido pelo `&&` do RUN abaixo, ou seja: a linha inútil era a que
+**mascarava um build quebrado**. O que traz as `dependencies` é o `COPY` de
+`node_modules` (§4.4): sem ele o build quebra com `ERR_MODULE_NOT_FOUND`.
+Preço aceito: a imagem traz os `devDependencies` da api também; `pnpm deploy`
+é refactor próprio.

@@ -335,10 +335,12 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
     });
     const convite = await ctx.prisma.invitation.findFirstOrThrow({ where: { token: 'secreto' } });
 
-    const erro = await repo.entrarPorConvite({ userId: dono.id, invitationId: convite.id }).then(
-      () => null,
-      (e: unknown) => e,
-    );
+    const erro = await repo
+      .entrarPorConvite({ userId: dono.id, invitationId: convite.id, token: convite.token })
+      .then(
+        () => null,
+        (e: unknown) => e,
+      );
 
     expect(erro).toBeInstanceOf(ConviteInvalidoException);
     expect((erro as ConviteInvalidoException).motivo).toBe('ja-membro');
@@ -388,6 +390,148 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
     );
   });
 
+  // ─── #135: o convite ACEITO ou EXPIRADO não bloqueia o novo ───────────────
+  //
+  // O defeito: `invitations` tem unicidade GLOBAL em `(tenantId, email)`, e
+  // não há DELETE de convite em código de produção (nem coluna `revokedAt`).
+  // A linha aceita — ou a vencida — continuava ocupando a chave PARA
+  // SEMPRE, e o `INSERT` colidia: a API respondia 409 "já existe um convite
+  // PENDENTE para este e-mail", que era mentira funcional (o convite
+  // pendente não existia mais).
+  //
+  // O conserto: a linha é REEMITIDA (token novo, prazo novo, `accepted_at`
+  // de volta a NULL) — a chave continua ocupada, mas por um convite NOVO.
+
+  it('convite ACEITO não bloqueia um novo convite para o mesmo (empresa, e-mail)', async () => {
+    await cleanDatabase(ctx.prisma);
+    const { tenant } = await empresaComDono('acme', 'dono@acme.dev');
+    const base = {
+      tenantId: tenant.id,
+      email: 'ana@acme.dev',
+      role: 'member',
+      expiresAt: FUTURO,
+    };
+
+    await repo.emitirConvite({ ...base, token: 't1' });
+    const emitido = await repo.buscarConvitePorToken('t1');
+    expect(emitido).not.toBeNull();
+
+    const ana = await ctx.prisma.user.create({
+      data: { id: randomUUID(), email: 'ana@acme.dev', name: 'Ana', passwordHash: 'x' },
+    });
+
+    // O convite é ACEITO (a membership nasce).
+    await repo.entrarPorConvite({
+      userId: ana.id,
+      invitationId: emitido!.id,
+      token: emitido!.token,
+    });
+    expect((await repo.buscarConvitePorToken('t1'))?.acceptedAt).toBeInstanceOf(Date);
+
+    // O RECONVITE passa — e devolve um convite NOVO, com token novo.
+    await repo.emitirConvite({ ...base, token: 't2' });
+
+    const reemitido = await repo.buscarConvitePorToken('t2');
+    expect(reemitido).not.toBeNull();
+    expect(reemitido!.acceptedAt).toBeNull();
+    expect(reemitido!.id).toBe(emitido!.id); // a MESMA linha, reescrita
+    // E o token VELHO deixou de resolver — o segredo antigo não abre mais nada.
+    expect(await repo.buscarConvitePorToken('t1')).toBeNull();
+  });
+
+  it('convite EXPIRADO não bloqueia um novo convite para o mesmo (empresa, e-mail)', async () => {
+    await cleanDatabase(ctx.prisma);
+    const { tenant } = await empresaComDono('acme', 'dono@acme.dev');
+    const base = {
+      tenantId: tenant.id,
+      email: 'ana@acme.dev',
+      role: 'member',
+    };
+
+    // Emitido com prazo JÁ VENCIDO.
+    await repo.emitirConvite({ ...base, token: 't1', expiresAt: PASSADO });
+
+    // O reconvite passa.
+    await repo.emitirConvite({ ...base, token: 't2', expiresAt: FUTURO });
+
+    const reemitido = await repo.buscarConvitePorToken('t2');
+    expect(reemitido).not.toBeNull();
+    expect(reemitido!.acceptedAt).toBeNull();
+    expect(reemitido!.expiresAt?.getTime()).toBe(FUTURO.getTime());
+  });
+
+  it('um aceite com o token ANTIGO não consome a linha reemitida (#135)', async () => {
+    // ⚠️ A CORRIDA que o `ConviteParaAceitar.token` existe para fechar.
+    //
+    // O aceite re-lê a linha pelo `id` — e o `id` NUNCA muda (a reemissão
+    // reescreve a MESMA linha, com token novo). Sem a condição pelo token, um
+    // aceite que começou ANTES da reemissão marcaria a linha trocada como
+    // aceita — e o token NOVO, que o dono acabou de mandar por e-mail, nasceria
+    // consumido (`ja-aceito` para quem o recebeu).
+    await cleanDatabase(ctx.prisma);
+    const { tenant } = await empresaComDono('acme', 'dono@acme.dev');
+    const base = {
+      tenantId: tenant.id,
+      email: 'ana@acme.dev',
+      role: 'member',
+      expiresAt: FUTURO,
+    };
+
+    await repo.emitirConvite({ ...base, token: 't1' });
+    const antigo = await repo.buscarConvitePorToken('t1');
+    const ana = await ctx.prisma.user.create({
+      data: { id: randomUUID(), email: 'ana@acme.dev', name: 'Ana', passwordHash: 'x' },
+    });
+
+    // O convite é ACEITO — e é isso que libera a reemissão (a linha precisa
+    // deixar de estar PENDENTE).
+    await repo.entrarPorConvite({
+      userId: ana.id,
+      invitationId: antigo!.id,
+      token: antigo!.token,
+    });
+
+    // A reemissão troca o token da MESMA linha.
+    await repo.emitirConvite({ ...base, token: 't2' });
+
+    // O aceite com o token ANTIGO não pode consumir a linha nova.
+    const erro = await repo
+      .entrarPorConvite({
+        userId: ana.id,
+        invitationId: antigo!.id,
+        token: 't1',
+      })
+      .then(
+        () => null,
+        (e: unknown) => e,
+      );
+    expect(erro).toBeInstanceOf(ConviteInvalidoException);
+    expect((erro as ConviteInvalidoException).motivo).toBe('ja-aceito');
+
+    // E o token NOVO continua pendente — consumível.
+    const reemitido = await repo.buscarConvitePorToken('t2');
+    expect(reemitido?.acceptedAt).toBeNull();
+  });
+
+  it('o convite PENDENTE ainda bloqueia — o 409 continua sendo verdade', async () => {
+    await cleanDatabase(ctx.prisma);
+    const { tenant } = await empresaComDono('acme', 'dono@acme.dev');
+    const base = {
+      tenantId: tenant.id,
+      email: 'ana@acme.dev',
+      role: 'member',
+      expiresAt: FUTURO,
+    };
+
+    await repo.emitirConvite({ ...base, token: 't1' });
+    await expect(repo.emitirConvite({ ...base, token: 't2' })).rejects.toBeInstanceOf(
+      ConviteJaEmitidoException,
+    );
+    // E o token pendente continua valendo — o 409 não pode ter trocado o
+    // convite válido por um inválido.
+    expect(await repo.buscarConvitePorToken('t1')).not.toBeNull();
+  });
+
   // ───────────────────────── aceite ─────────────────────────
 
   it('o aceite cria a membership SEM perfil e marca o convite como usado', async () => {
@@ -405,7 +549,11 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
       data: { id: randomUUID(), email: 'ana@acme.dev', name: 'Ana', passwordHash: 'x' },
     });
 
-    await repo.entrarPorConvite({ userId: ana.id, invitationId: convite!.id });
+    await repo.entrarPorConvite({
+      userId: ana.id,
+      invitationId: convite!.id,
+      token: convite!.token,
+    });
 
     const membership = await ctx.prisma.tenantMembership.findUniqueOrThrow({
       where: { userId_tenantId: { userId: ana.id, tenantId: tenant.id } },
@@ -441,10 +589,12 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
     // que vence NA JANELA entre as duas é aceito por uma transação já
     // VENCIDA, e o convite fica CONSUMIDO (irrecuperável para as outras
     // tentativas).
-    const erro = await repo.entrarPorConvite({ userId: ana.id, invitationId: convite!.id }).then(
-      () => null,
-      (e: unknown) => e,
-    );
+    const erro = await repo
+      .entrarPorConvite({ userId: ana.id, invitationId: convite!.id, token: convite!.token })
+      .then(
+        () => null,
+        (e: unknown) => e,
+      );
     expect(erro).toBeInstanceOf(ConviteInvalidoException);
     // O motivo é o de "vencido" — o cliente recebe 410, não 409.
     expect((erro as ConviteInvalidoException).motivo).toBe('expirado');
@@ -471,7 +621,11 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
       data: { id: randomUUID(), email: 'ana@acme.dev', name: 'Ana', passwordHash: 'x' },
     });
 
-    await repo.entrarPorConvite({ userId: ana.id, invitationId: convite!.id });
+    await repo.entrarPorConvite({
+      userId: ana.id,
+      invitationId: convite!.id,
+      token: convite!.token,
+    });
 
     // O papel vem do convite, não do chamador. Um port que aceitasse `role`
     // do lado de fora transformaria o aceite em escalada: qualquer um com
@@ -498,13 +652,17 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
       data: { id: randomUUID(), email: 'ana@acme.dev', name: 'Ana', passwordHash: 'x' },
     });
 
-    await repo.entrarPorConvite({ userId: ana.id, invitationId: convite!.id });
+    await repo.entrarPorConvite({
+      userId: ana.id,
+      invitationId: convite!.id,
+      token: convite!.token,
+    });
 
     // O `updateMany` condicionado a `accepted_at IS NULL` é a trava de
     // corrida: dois convites com o mesmo token aceitos em paralelo — o
     // segundo encontra 0 linhas e não pode criar a membership.
     await expect(
-      repo.entrarPorConvite({ userId: ana.id, invitationId: convite!.id }),
+      repo.entrarPorConvite({ userId: ana.id, invitationId: convite!.id, token: convite!.token }),
     ).rejects.toBeInstanceOf(ConviteInvalidoException);
     expect(
       await ctx.prisma.tenantMembership.count({ where: { userId: ana.id, tenantId: tenant.id } }),
@@ -526,7 +684,11 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
       data: { id: randomUUID(), email: 'ana@acme.dev', name: 'Ana', passwordHash: 'x' },
     });
 
-    await repo.entrarPorConvite({ userId: ana.id, invitationId: convite!.id });
+    await repo.entrarPorConvite({
+      userId: ana.id,
+      invitationId: convite!.id,
+      token: convite!.token,
+    });
 
     expect(await memberships.findProfileId(ana.id, tenant.id)).toBeNull();
   });
@@ -549,7 +711,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
 
     // Nenhum `users` existe ainda — é a conta nova do `destino: 'convite'`.
     await repo.criarContaPorConvite(
-      { userId: id, invitationId: convite!.id },
+      { userId: id, invitationId: convite!.id, token: convite!.token },
       { id, nome: 'Ana', email: 'ana@acme.dev', senhaHash: 'x', createdAt: criado },
     );
 
@@ -592,7 +754,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
     // `shortcut:` que existia aqui ("chegaria como 500") não existe mais.
     await expect(
       repo.criarContaPorConvite(
-        { userId: id, invitationId: convite!.id },
+        { userId: id, invitationId: convite!.id, token: convite!.token },
         {
           id,
           nome: 'Dona',
@@ -680,7 +842,10 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
 
       const app = new PrismaTenantOnboardingRepository(runtime, assinatura);
       const nova = usuario('nova@acme.dev');
-      await app.criarContaPorConvite({ userId: nova.id, invitationId: convite!.id }, nova);
+      await app.criarContaPorConvite(
+        { userId: nova.id, invitationId: convite!.id, token: convite!.token },
+        nova,
+      );
 
       expect(await ctx.prisma.user.findUnique({ where: { id: nova.id } })).toMatchObject({
         email: 'nova@acme.dev',

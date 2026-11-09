@@ -61,6 +61,9 @@ function convite(over: Partial<ConvitePendente> = {}): ConvitePendente {
     role: 'member',
     acceptedAt: null,
     expiresAt: new Date('2026-10-26T12:00:00.000Z'),
+    // ⚠️ (#135) O token vigente vai junto: o aceite o leva de volta, para
+    // não consumir uma linha que uma reemissão trocou.
+    token: TOKEN,
     ...over,
   };
 }

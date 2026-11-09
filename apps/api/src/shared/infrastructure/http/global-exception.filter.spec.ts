@@ -16,6 +16,7 @@ import type { ArgumentsHost } from '@nestjs/common';
 import type { Span } from '@opentelemetry/api';
 import { trace } from '@opentelemetry/api';
 import { GlobalExceptionFilter } from './global-exception.filter.js';
+import { DETALHE_DE_ERRO_INTERNO } from './domain-exception-to-http.js';
 import {
   ApplicationResourceNotFoundException,
   ApplicationEmailAlreadyInUseException,
@@ -181,7 +182,7 @@ describe('GlobalExceptionFilter — HttpException branches', () => {
     expect(body.detail).toBe('only-message');
   });
 
-  it('HttpException com response-string usa code do status e detail=string', () => {
+  it('HttpException com response-string usa code do status — e um 5xx NÃO devolve o texto (#130)', () => {
     const { reply, sent } = makeReply();
     const filter = new GlobalExceptionFilter();
     const exc = new HttpException('falha generica', 503);
@@ -189,7 +190,34 @@ describe('GlobalExceptionFilter — HttpException branches', () => {
     expect(sent.status).toBe(503);
     const body = sent.body as BodyShape;
     expect(body.code).toBe('SERVICE_UNAVAILABLE');
-    expect(body.detail).toBe('falha generica');
+    // ⚠️ (#130): a regra vale nos DOIS ramos — um 5xx nunca devolve a
+    // mensagem original. A spec anterior AFIRMAVA o vazamento
+    // (`toBe('falha generica')`), e era ela que travava o defeito.
+    expect(body.detail).toBe(DETALHE_DE_ERRO_INTERNO);
+    expect(body.detail).not.toContain('falha generica');
+  });
+
+  it('HttpException com response-objeto e 5xx também recebe o detail genérico (#130)', () => {
+    const { reply, sent } = makeReply();
+    const filter = new GlobalExceptionFilter();
+    const exc = new HttpException({ detail: 'a senha do banco é X' }, 500);
+    filter.catch(exc, makeHost(reply, makeRequest()));
+    expect(sent.status).toBe(500);
+    const body = sent.body as BodyShape;
+    expect(body.detail).toBe(DETALHE_DE_ERRO_INTERNO);
+    expect(body.detail).not.toContain('senha');
+  });
+
+  it('HttpException de 4xx PRESERVA o detail do response-objeto (#130)', () => {
+    // Abaixo de 500, o `detail` estruturado é a informação que o cliente
+    // precisa — e é o que as specs de e2e affirms (o 403 de escalada
+    // contém 'administrador do sistema').
+    const { reply, sent } = makeReply();
+    const filter = new GlobalExceptionFilter();
+    const exc = new HttpException({ detail: 'detalhe de cliente' }, 403);
+    filter.catch(exc, makeHost(reply, makeRequest()));
+    const body = sent.body as BodyShape;
+    expect(body.detail).toBe('detalhe de cliente');
   });
 
   it('non-HttpException delega para mapExceptionToHttp (Erro puro → 500 INTERNAL)', () => {
@@ -199,16 +227,65 @@ describe('GlobalExceptionFilter — HttpException branches', () => {
     expect(sent.status).toBe(500);
     const body = sent.body as BodyShape;
     expect(body.code).toBe('INTERNAL');
-    expect(body.detail).toBe('boom');
+    // pt-BR (#130): o `detail` NÃO é mais a mensagem original. Uma exceção
+    // que o mapper NÃO reconhece é de terceiro — e a mensagem dela descreve
+    // tabela, coluna e valor de coluna.
+    expect(body.detail).toBe(DETALHE_DE_ERRO_INTERNO);
+    expect(body.detail).not.toContain('boom');
   });
 
-  it('non-HttpException não-Error (string) cai em detail=String(exception)', () => {
+  it('non-HttpException não-Error (string) também recebe o detail genérico', () => {
     const { reply, sent } = makeReply();
     const filter = new GlobalExceptionFilter();
     filter.catch('literal-error', makeHost(reply, makeRequest()));
     expect(sent.status).toBe(500);
     const body = sent.body as BodyShape;
-    expect(body.detail).toBe('literal-error');
+    expect(body.detail).toBe(DETALHE_DE_ERRO_INTERNO);
+    expect(body.detail).not.toContain('literal-error');
+  });
+
+  // pt-BR (#130): o caso que a issue descreve — o `detail` serializado
+  // carregava o NOME DA TABELA, o NOME DA COLUNA e o VALOR da coluna.
+  //
+  // A mensagem abaixo imita o que o `@prisma/client` 6.19.3 monta na
+  // validação de query: `Invalid \`prisma.<model>.<method>()\` invocation`
+  // concatenando os ARGUMENTOS da chamada (e numa escrita de `users` o
+  // argumento é o `data`, que contém o `passwordHash`).
+  it('erro de driver do Prisma NÃO devolve tabela, coluna nem valor de coluna', () => {
+    const { reply, sent } = makeReply();
+    const filter = new GlobalExceptionFilter();
+    const erroDeDriver = new Error(
+      'Invalid `prisma.user.create()` invocation: Argument data is missing. ' +
+        'table=users column=password_hash value=$argon2id$v=19$m=65536',
+    );
+    filter.catch(erroDeDriver, makeHost(reply, makeRequest()));
+    expect(sent.status).toBe(500);
+    const body = sent.body as BodyShape;
+    expect(body.detail).toBe(DETALHE_DE_ERRO_INTERNO);
+    expect(body.detail).not.toMatch(/users|password_hash|argon2id|prisma\./);
+  });
+
+  it('a exceção de DOMÍNIO mantém a mensagem NOVA no detail (é texto nosso)', () => {
+    const { reply, sent } = makeReply();
+    const filter = new GlobalExceptionFilter();
+    filter.catch(
+      new ApplicationValidationException('nome', 'muito curto'),
+      makeHost(reply, makeRequest()),
+    );
+    expect(sent.status).toBe(400);
+    const body = sent.body as BodyShape;
+    expect(body.detail).toContain('muito curto');
+  });
+
+  it('o LOG carrega a mensagem ORIGINAL, mesmo com detail genérico na resposta', () => {
+    const { reply } = makeReply();
+    const filter = new GlobalExceptionFilter();
+    const spy = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    filter.catch(new Error('server-boom'), makeHost(reply, makeRequest()));
+    const primeira = spy.mock.calls[0];
+    expect(primeira).toBeDefined();
+    expect(String(primeira?.[0])).toContain('server-boom');
+    spy.mockRestore();
   });
 
   it('instance é "METHOD URL" e traceId vem do request.id', () => {

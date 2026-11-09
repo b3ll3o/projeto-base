@@ -2,7 +2,7 @@
 name: docker
 version: 1.1
 updated: 2026-09-23
-description: Convenções e processos docker específicos do monorepo projeto-base. Cobre ordem de build (db:generate → tsc), next.config.mjs output: 'standalone', entrypoint com prisma migrate deploy, .dockerignore mínimo, Compose profiles dev/prod, networks bridge, volumes nomeados, healthchecks via curl, non-root user, BuildKit cache mounts para pnpm. Use sempre que criar/editar Dockerfile, compose, ou .dockerignore no projeto.
+description: Convenções e processos docker específicos do monorepo projeto-base. Cobre ordem de build (db:generate → tsc), next.config.mjs output: 'standalone', entrypoint com prisma migrate deploy, .dockerignore mínimo, Compose profiles dev/prod, networks bridge, volumes nomeados, healthchecks via node (sem depender de pacote instalado), non-root user, BuildKit cache mounts para pnpm. Use sempre que criar/editar Dockerfile, compose, ou .dockerignore no projeto.
 ---
 
 # Skill: docker
@@ -133,7 +133,10 @@ coverage
 
 ```yaml
 healthcheck:
-  test: ["CMD", "curl", "-fsS", "http://localhost:3000/api/v1/health"]
+  # ⚠️ (#139): o probe NÃO pode depender de um pacote instalado — o stage
+  # `dev` não tem o `curl` do `prod`, e o compose de dev herda este probe.
+  # O `node` está nas DUAS imagens (o mesmo padrão do serviço `web`).
+  test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3000/api/v1/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""]
   interval: 30s
   timeout: 5s
   retries: 3
@@ -176,7 +179,7 @@ outputs:
   entrypoint:
     api: 'sh -c "node ./scripts/prisma-migrate-deploy.js && node dist/main.js"'
     web: 'node server.js'
-  healthcheck_cmd: 'curl -fsS http://localhost:<port>/api/(v1/)health'
+  healthcheck_cmd: 'node -e "require('http').get('http://localhost:<port>/api/(v1)/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"'
   compose_fragment:
     profile: 'dev | prod'
     networks: 'bridge'
@@ -198,7 +201,7 @@ outputs:
 
 Ao criar/editar `docker-compose*.yml`:
 
-- [ ] Para cada service que expõe `/health` (ou `/api/v1/health`): adicionar `healthcheck:` block no compose (curl ou node http.get), mesmo se o Dockerfile já tem `HEALTHCHECK` (o compose level é independente e usado por `docker compose ps`).
+- [ ] Para cada service que expõe `/health` (ou `/api/v1/health`): adicionar `healthcheck:` block no compose (node http.get), mesmo se o Dockerfile já tem `HEALTHCHECK` (o compose level é independente e usado por `docker compose ps`).
 - [ ] `interval: 10s`, `timeout: 3s`, `start_period: 20s`, `retries: 3` (defaults sensatos para apps Node).
 - [ ] `depends_on` em services downstream deve usar `condition: service_healthy` (não `- service_name` plain) — sem isso o dependent sobe antes do upstream estar ready.
 

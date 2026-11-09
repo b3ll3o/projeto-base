@@ -41,6 +41,7 @@ import { UserProfileCacheService } from '../../../../shared/infrastructure/secur
 import {
   TOKEN_ISSUER_PORT,
   type TokenIssuerPort,
+  type RefreshSubject,
   type TokenSubject,
 } from '../../../auth/domain/ports/token-issuer.port.js';
 import { AUDIT_SERVICE_PORT } from '../../../../shared/audit/shared/audit.tokens.js';
@@ -63,7 +64,9 @@ const EMAIL = 'joao@example.com';
 const SENHA = 'senha-de-teste-123';
 
 const ACCESS: TokenSubject = { sub: SUB, email: EMAIL, typ: 'access' };
-const REFRESH: TokenSubject = { sub: SUB, email: EMAIL, typ: 'refresh' };
+// ⚠️ (#132) O `jti` é obrigatório num REFRESH subject — é o que o
+// registro de revogação indexa, e o que o logout revoga.
+const REFRESH: RefreshSubject = { sub: SUB, email: EMAIL, typ: 'refresh', jti: 'jti-de-teste' };
 
 const USER_OUTPUT = {
   id: SUB,
@@ -178,7 +181,13 @@ function makeIssuer(
   aceitos: { token: string; subject: TokenSubject }[] = [{ token: TOKEN_ACCESS, subject: ACCESS }],
 ): TokenIssuerPort {
   return {
-    emitir: vi.fn(async () => ({ accessToken: TOKEN_ACCESS, refreshToken: TOKEN_REFRESH })),
+    emitir: vi.fn(async () => ({
+      accessToken: TOKEN_ACCESS,
+      refreshToken: TOKEN_REFRESH,
+      // ⚠️ (#132) O `jti` do refresh — é o que o registro de revogação indexa.
+      refreshJti: 'jti-de-teste',
+      refreshExpiresAt: new Date('2026-10-16T12:00:00.000Z'),
+    })),
     validarAccessToken: vi.fn(async (token: string) => {
       const achado = aceitos.find((t) => t.token === token);
       if (!achado) throw new Error('token inválido');

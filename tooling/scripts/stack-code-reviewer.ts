@@ -109,6 +109,25 @@ function checkDomain(file: string, content: string): Finding[] {
   return findings;
 }
 
+/**
+ * Models que NÃO têm ciclo de vida de negócio — e que, por isso, não têm
+ * `createdAt`/`updatedAt`/`version`.
+ *
+ * ⚠️ A lista é EXPLICITA e nomeada, e não um sufixo: um sufixo novo seria
+ * uma regra invisível (ninguém lê a lista dos modelos isentos, e o nome
+ * teria de carregar o conceito). Cada entrada declara o MOTIVO — a exceção
+ * só vale se o motivo estiver escrito.
+ *
+ * - `ChaveDeAssinatura` (#134): é uma tabela de SEGREDO. O que muda nela é
+ *   o segredo, e a troca é uma operação do dono do banco (a migration
+ *   `20261020000004` semeia o segredo com `gen_random_bytes`), não um
+ *   `UPDATE` da aplicação. Um `updatedAt` aqui seria um campo que mente.
+ * - `RefreshToken` (#132): o que muda na linha é `revoked_at`, e a
+ *   transição (ativo → revogado) acontece UMA vez. `version` seria um
+ *   contador que ninguém lê — e `updatedAt` duplicaria `revoked_at`.
+ */
+const MODELS_SEM_CICLO_DE_VIDA = new Set(['ChaveDeAssinatura', 'RefreshToken']);
+
 function checkPrisma(file: string, content: string): Finding[] {
   const findings: Finding[] = [];
   if (!file.endsWith('schema.prisma')) return findings;
@@ -125,6 +144,7 @@ function checkPrisma(file: string, content: string): Finding[] {
     if (name === undefined || body === undefined) continue;
     const isAux = name.endsWith('History') || name.endsWith('Archive');
     if (isAux) continue;
+    if (MODELS_SEM_CICLO_DE_VIDA.has(name)) continue;
     const needs = [
       { field: 'createdAt', re: /createdAt\s+DateTime/ },
       { field: 'updatedAt', re: /updatedAt\s+DateTime/ },

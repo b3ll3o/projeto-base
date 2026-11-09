@@ -158,7 +158,10 @@ describe('PrismaTenantOnboardingRepository — a tradução do P2002', () => {
     const repo = new PrismaTenantOnboardingRepository(clienteDe(tx), assinaturaFalsa());
 
     await expect(
-      repo.criarContaPorConvite({ userId: 'u1', invitationId: 'i1' }, usuario('ana@acme.dev')),
+      repo.criarContaPorConvite(
+        { userId: 'u1', invitationId: 'i1', token: 'secreto' },
+        usuario('ana@acme.dev'),
+      ),
     ).rejects.toBeInstanceOf(EmailAlreadyInUseException);
   });
 

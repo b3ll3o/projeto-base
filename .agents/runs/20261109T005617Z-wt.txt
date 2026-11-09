@@ -1,0 +1,87 @@
+ M .agents/runs/20261103T144253Z-specialist-01.yaml
+ M .agents/runs/findings-2026-10-26T050019Z/findings.yaml
+ M .agents/runs/findings-2026-10-26T050019Z/report.md
+ M .agents/specs/conventions/ci-defense-in-depth-dentes.md
+ M .agents/specs/conventions/ci-defense-in-depth.md
+ M .agents/specs/conventions/estrutura-e-versionamento.md
+ M .env.production.example
+ M .github/workflows/ci.yml
+ M .github/workflows/release-template.yml
+ M .github/workflows/review-stack.yml
+ M .github/workflows/sync-docs.yml
+ M .tooling/scripts/ci/check-tenant-scope-source.spec.ts
+ M .tooling/scripts/ci/preflight-gates.ts
+ M .tooling/scripts/ci/preflight.ts
+ M AGENTS.md
+ M README.md
+ M apps/api/.env.example
+ M apps/api/Dockerfile
+ M apps/api/openapi.json
+ M apps/api/prisma/migrations/20261020000000_rls_isolation_empresa/migration.sql
+ M apps/api/prisma/migrations/20261027000001_papel_de_sistema/migration.sql
+ M apps/api/prisma/schema.prisma
+ M apps/api/scripts/prepara-papeis.sh
+ M apps/api/src/modules/auth/application/auth-use-cases.spec.ts
+ M apps/api/src/modules/auth/application/auth-use-cases.ts
+ M apps/api/src/modules/auth/auth.module.ts
+ M apps/api/src/modules/auth/domain/ports/token-issuer.port.ts
+ M apps/api/src/modules/auth/infrastructure/http/auth.controller.guard.spec.ts
+ M apps/api/src/modules/auth/infrastructure/http/auth.controller.spec.ts
+ M apps/api/src/modules/auth/infrastructure/http/auth.controller.ts
+ M apps/api/src/modules/auth/infrastructure/http/jwt-auth.guard.ts
+ M apps/api/src/modules/auth/infrastructure/security/jwt-token.service.spec.ts
+ M apps/api/src/modules/auth/infrastructure/security/jwt-token.service.ts
+ M apps/api/src/modules/profiles/domain/value-objects/profile-id.vo.ts
+ M apps/api/src/modules/tenancy/application/tenancy.use-cases.spec.ts
+ M apps/api/src/modules/tenancy/application/tenancy.use-cases.ts
+ M apps/api/src/modules/tenancy/domain/ports/tenant-onboarding.port.ts
+ M apps/api/src/modules/tenancy/infrastructure/persistence/prisma-tenant-onboarding.repository.integration.spec.ts
+ M apps/api/src/modules/tenancy/infrastructure/persistence/prisma-tenant-onboarding.repository.spec.ts
+ M apps/api/src/modules/tenancy/infrastructure/persistence/prisma-tenant-onboarding.repository.ts
+ M apps/api/src/modules/users/infrastructure/http/users.controller.auth.spec.ts
+ M apps/api/src/modules/users/infrastructure/http/users.schemas.ts
+ M apps/api/src/shared/infrastructure/http/domain-exception-to-http.ts
+ M apps/api/src/shared/infrastructure/http/global-exception.filter.spec.ts
+ M apps/api/src/shared/infrastructure/http/global-exception.filter.ts
+ M apps/api/src/shared/infrastructure/prisma/credenciais-do-banco.spec.ts
+ M apps/api/src/shared/infrastructure/prisma/credenciais-do-banco.ts
+ M apps/api/src/shared/infrastructure/prisma/papel-de-runtime.spec.ts
+ M apps/api/src/shared/infrastructure/prisma/papel-de-runtime.ts
+ M apps/api/test/testcontainers-helper.ts
+ M apps/api/vitest.config.ts
+ M apps/web/Dockerfile
+ M apps/web/app/users/actions.ts
+ M docker-compose.yml
+ M docs/MONOREPO.md
+ M docs/STACK.md
+ M docs/TEMPLATE_USAGE.md
+ M docs/adr/0002-autenticacao-jwt-argon2.md
+ M docs/api/auth.md
+ M docs/api/feature-flags.md
+ M docs/api/health.md
+ M docs/api/profiles.md
+ M docs/api/tenancy.md
+ M docs/api/users.md
+ M docs/como-rodar.md
+ M docs/runbooks/docker.md
+ M docs/superpowers/plans/2026-10-18-revisao-pr108-11-achados.md
+ M docs/superpowers/plans/2026-10-19-observabilidade-correcoes.md
+ M docs/superpowers/plans/2026-10-27-issues-abertas-p0-p1.md
+ M docs/superpowers/specs/2026-09-21-cadastro-usuario-com-auditoria-02-modelo-dados.md
+ M tooling/scripts/stack-code-reviewer.ts
+?? .agents/runs/20261109T005617Z-state.txt
+?? .agents/runs/20261109T005617Z-wt.txt
+?? .agents/runs/state-snapshot-20261109T005617Z-issues-p1-130-139.md
+?? .github/dependabot.yml
+?? .tooling/scripts/ci/check-docker-healthcheck-binary.spec.ts
+?? .tooling/scripts/ci/check-docker-healthcheck-binary.ts
+?? .tooling/scripts/ci/check-migrations-sem-model.spec.ts
+?? .tooling/scripts/ci/check-migrations-sem-model.ts
+?? apps/api/prisma/migrations/20261108000000_refresh_tokens/
+?? apps/api/prisma/migrations/20261108000001_papel_runtime_sem_senha_publicada/
+?? apps/api/src/modules/auth/domain/ports/refresh-token-repository.port.ts
+?? apps/api/src/modules/auth/infrastructure/persistence/
+?? apps/api/src/shared/domain/uuid.ts
+?? apps/api/test/e2e/scenarios/15-auth-revogacao.e2e.spec.ts
+?? docs/adr/0007-refresh-token-revogavel.md
+?? docs/superpowers/plans/2026-11-08-as-10-issues-p1-do-scan-de-2026-11-02.md

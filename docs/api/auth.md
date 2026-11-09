@@ -4,26 +4,32 @@
 > Contrato exportado para `apps/api/openapi.json` — artefato **derivado e
 > versionado** (desde o #125); o gate `check-openapi-contract` compara a spec
 > versionada com a gerada. Para regenerar: `pnpm --filter @projeto/api openapi:export`.
-> ADR-0002 (o que o JWT **não** garante): [`../adr/0002-autenticacao-jwt-argon2.md`](../adr/0002-autenticacao-jwt-argon2.md).
-> Medido em 2026-10-29: os 3 endpoints deste BC conferem com
+> ADR-0007 (o refresh token revogável): [`../adr/0007-refresh-token-revogavel.md`](../adr/0007-refresh-token-revogavel.md).
+> Medido em 2026-11-08: os 4 endpoints deste BC conferem com
 > `apps/api/openapi.json`. Contagem por
 > `grep -hoE "@(Get|Post|Patch|Put|Delete)\(" apps/api/src/modules/auth/infrastructure/http/auth.controller.ts | wc -l`
-> → `3`. O contrato inteiro tem 22 paths e 28 operações
-> (`node -e "const d=require('./apps/api/openapi.json');console.log(Object.keys(d.paths).length)"` → `22`;
-> `node -e "const d=require('./apps/api/openapi.json');console.log(Object.values(d.paths).flatMap(p=>Object.keys(p).filter(k=>['get','post','put','patch','delete'].includes(k))).length)"` → `28`),
-> das quais 3 são de `auth` — as outras 25 são `users` (7), `tenancy` (5),
+> → `4`. O contrato inteiro tem 23 paths e 29 operações
+> (`node -e "const d=require('./apps/api/openapi.json');console.log(Object.keys(d.paths).length)"` → `23`;
+> `node -e "const d=require('./apps/api/openapi.json');console.log(Object.values(d.paths).flatMap(p=>Object.keys(p).filter(k=>['get','post','put','patch','delete'].includes(k))).length)"` → `29`),
+> das quais 4 são de `auth` — as outras 25 são `users` (7), `tenancy` (5),
 > `profiles` (10), `feature-flags` (2) e `health` (1).
 
 ## §1. Visão geral
 
 - **Base path**: `/api/v1/auth`
 - **Auth**: `Authorization: Bearer <jwt>` **só** em `GET /auth/me` — o
-  `@ApiBearerAuth()` é **por handler**. `login` e `refresh` são `@Public()` e não
-  declaram `security` no contrato.
+  `@ApiBearerAuth()` é **por handler**. `login`, `refresh` e `logout` são
+  `@Public()` e não declaram `security` no contrato.
+  ⚠️ O `logout` é `@Public()` porque o **refresh token é a credencial** do
+  logout: quem apresenta o token é quem manda revogá-lo. Exigir o access
+  token (que vive 15 min) derrubaria o logout de quem ficou logado mais de
+  15 min sem usar a API — e o token de 7 dias continuaria válido. Ver o
+  [ADR-0007](../adr/0007-refresh-token-revogavel.md).
 - **Content-Type**: `application/json; charset=utf-8`
 - **Erros**: RFC 7807 (Problem Details)
-- **Guard**: `JwtAuthGuard` na **classe** do controller. `login` e `refresh` se
-  libertam com `@Public()`, lido via `Reflector` antes de qualquer validação.
+- **Guard**: `JwtAuthGuard` na **classe** do controller. `login`, `refresh` e
+  `logout` se libertam com `@Public()`, lido via `Reflector` antes de qualquer
+  validação.
 
 ## §2. Endpoints
 
@@ -31,7 +37,8 @@
 |---|--------|-------------------------|------|-------------------------------|
 | 1 | `POST` | `/api/v1/auth/login`    | ❌   | `201`, `400`, `401`, `429`    |
 | 2 | `POST` | `/api/v1/auth/refresh`  | ❌   | `201`, `400`, `401`           |
-| 3 | `GET`  | `/api/v1/auth/me`       | ✅   | `200`, `401`                  |
+| 3 | `POST` | `/api/v1/auth/logout`  | ❌   | `201`, `400`, `401`           |
+| 4 | `GET`  | `/api/v1/auth/me`       | ✅   | `200`, `401`                  |
 
 ## §3. Payloads
 
@@ -68,6 +75,24 @@ enumeração que o 401 genérico existe para fechar.
 Devolve o **mesmo par de tokens** do login — **sem** o `user`: o `RefreshOutput`
 tem só `accessToken` e `refreshToken`. `401` para refresh token ausente,
 expirado ou inválido.
+
+⚠️ **O refresh token é de uso ÚNICO (#132).** O `jti` apresentado é consumido
+(rotacionado) e o par novo vem com um `jti` novo. apresentar o mesmo token
+de novo é `401` — e, se passar de 30 s, é lido como **replay** e derruba a
+sessão da conta (a janela de 30 s é para o uso concorrente — retry de
+cliente, duas abas — que não é ataque).
+
+### `POST /auth/logout`
+
+```json
+{ "refreshToken": "eyJhbGciOi…" }
+```
+
+Revoga o `jti` do refresh token apresentado. Devolve `{ "revogado": true }`.
+`401` para refresh token ausente, expirado ou inválido.
+
+⚠️ **O corpo é o MESMO do `/auth/refresh`** — é o refresh token que é a
+credencial. A rota é `@Public()` por isso (ver §1).
 
 ### `GET /auth/me`
 
@@ -124,12 +149,26 @@ O fallback é `\|\|` e não `??` **de propósito**: `JWT_ACCESS_TTL=` vazio numa
 linha de `.env` chega como string vazia, e `??` deixaria passar um
 `expiresIn: ''`.
 
-## §6. O que o JWT não garante
+## §6. O que o JWT não garante (e o que passou a garantir)
 
-**Um token já emitido não é revogado** — não existe lista de revogação.
-Soft-delete não derruba sessão viva, e trocar a senha não derruba sessões
-existentes. O impacto é medido e registrado no
-[ADR-0002](../adr/0002-autenticacao-jwt-argon2.md).
+**O ACCESS token continua stateless** — um access token já emitido não é
+revogado; ele expira em 15 minutos, e é esse prazo que limita a janela de um
+access token vazado.
+
+**O REFRESH token passou a ser revogável (#132).** Ele carrega um `jti` que
+está no registro (`refresh_tokens`), e:
+
+- `POST /auth/logout` **revoga** o `jti` apresentado — o "sair" do web não é
+  mais só apagar o cookie;
+- `POST /auth/refresh` **consome** o `jti` apresentado (rotação) e emite um
+  par novo — um refresh token é de **uso único**;
+- um `jti` **já revogado** que reaparece é **replay** — e derruba a sessão da
+  conta (com uma janela de 30 s para o uso concorrente, que não é ataque).
+
+O que continua **sem** revogação: **trocar a senha não derruba sessões
+existentes** (a troca de senha pela API não existe), e o soft-delete não
+derruba sessão viva. O desenho inteiro está no
+[ADR-0007](../adr/0007-refresh-token-revogavel.md).
 
 ## Ver Também
 

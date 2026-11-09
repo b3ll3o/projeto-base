@@ -1,0 +1,30 @@
+commit 7e067e8fa3fa1a3164838fd21205e19b60776f81
+Author:     Leonardo Andreazzi <andreazzi-leonardo@hotmail.com>
+AuthorDate: Sun Nov 8 21:47:50 2026 -0300
+Commit:     GitHub <noreply@github.com>
+CommitDate: Sun Nov 8 21:47:50 2026 -0300
+
+    docs(runbook): a borda Cloudflare da publicação ganha o contrato de verificação (#146)
+    
+    * docs(runbook): a borda Cloudflare da publicação ganha o contrato de verificação
+    
+    A dimensão Cloudflare da auditoria de segurança ficou explicitamente não medida: o conector autorizado expõe documentação e spec OpenAPI, e não há ferramenta que execute a API da conta nem token no ambiente. O que fica no repo é o MÉTODO: a baseline oficial do Cloudflare (a lista de insights do Security Insights), o checklist item a item com onde conferir, e os endpoints da API.
+    
+    O relatório da auditoria passa a dizer MEDIDA PARCIAL em vez de NÃO RODOU — a dimensão não foi medida, e nada aqui afirma que a borda está boa ou ruim.
+    
+    Rebase sobre o main: o PR das skills de terceiro (#145) já foi mergeado e virou a 1.20.0 (já com a tag v1.20.0), então o runbook entra como a 1.21.0 (minor) — os 6 footers de versão subiram junto, e a linha do histórico é nova em vez de uma linha já publicada.
+    
+    Verificado: wc -l docs/runbooks/cloudflare-edge.md = 223 e wc -l docs/como-rodar.md = 300 (o teto de 300 linhas).
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * chore(memory): o ledger ganha a linha da memória do git diff-files
+    
+    A memória `git-diff-files-misses-staged-files` (capturada numa sessão anterior) não tinha linha no ledger `.agents/runs/memory-triage.md` — e o gate `check-memory-crystallization` mede nas duas direções: memória no disco sem linha é erro. O pre-push local (Camada 1) barrou o push por causa disso; o CI reporta `skipped` porque o corpus vive fora do repo. Disposição `pendente`: a regra ainda não está escrita num arquivo canônico (vive num plano), como as outras armadilhas de git do ledger.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    ---------
+    
+    Co-authored-by: CEO Agent <ceo@paperclip.ai>
+    Co-authored-by: Claude Code <noreply@anthropic.com>

@@ -24,6 +24,13 @@ coverage/
 # mostrava `?? .agents/runs/findings-.../` e o proximo `git add -A` commitaria
 # o artefato.
 .agents/runs/findings-*/
+# ⚠️ A EXCEÇÃO: o scan de 2026-10-26 foi versionado DE PROPOSITO (o
+# `.agents/runs/` guarda, por convenção, registros datados versionados) — e a
+# regra acima o alcançava junto com os artefatos novos do `findings-orchestration`.
+# Sem esta exceção, o `git add` do lint-staged RECUSA os dois arquivos ("Os
+# caminhos a seguir são ignorados por um dos seus arquivos .gitignore") e o
+# commit não passa.
+!.agents/runs/findings-2026-10-26T050019Z/
 # Artefato LOCAL do Claude Code (permissões por usuário). Não é versionado —
 # e sem esta linha, `git add -A` commitaria as permissões da máquina.
 .claude/settings.local.json

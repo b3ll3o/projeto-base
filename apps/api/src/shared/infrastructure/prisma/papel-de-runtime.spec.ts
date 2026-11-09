@@ -16,14 +16,17 @@
 // errada", nunca "a constante e a migration não são o mesmo nome".
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   PAPEL_DE_RUNTIME,
   PAPEL_DE_SISTEMA,
-  SENHAS_EXPOSTAS,
   ESCOPO_DE_SISTEMA,
   PARAMETRO_DE_ESCOPO,
+  TAMANHO_MINIMO_DE_SENHA_DE_PAPEL,
   uriComoPapelDeRuntime,
   uriComoPapelDeSistema,
 } from './papel-de-runtime.js';
@@ -41,6 +44,20 @@ const MIGRATION_DE_SISTEMA = new URL(
   import.meta.url,
 );
 const sqlDeSistema = readFileSync(fileURLToPath(MIGRATION_DE_SISTEMA), 'utf8');
+
+// #133: a migration de ROTAÇÃO. E ela que limpa o hash da senha que o
+// repositorio publicou — em todo banco que ja rodou a migration antiga.
+const MIGRATION_DE_ROTACAO = new URL(
+  '../../../../prisma/migrations/20261108000001_papel_runtime_sem_senha_publicada/migration.sql',
+  import.meta.url,
+);
+const sqlDeRotacao = readFileSync(fileURLToPath(MIGRATION_DE_ROTACAO), 'utf8');
+
+// #133: o `prepara-papeis.sh` e a camada que ESCREVE a senha, e o numero do
+// tamanho minimo mora nos DOIS lados (TypeScript e shell). Este arquivo
+// reconcilia os dois.
+const SCRIPT_DE_PAPEIS = new URL('../../../../scripts/prepara-papeis.sh', import.meta.url);
+const scriptDePapeis = readFileSync(fileURLToPath(SCRIPT_DE_PAPEIS), 'utf8');
 
 /**
  * O SQL SEM os comentários.
@@ -81,14 +98,104 @@ describe('papel de runtime — a migration e o TypeScript sao o mesmo papel', ()
     expect(semComentarios(sqlDeSistema)).not.toMatch(/PASSWORD/i);
   });
 
-  it('a senha antiga do papel esta na DENYLIST, e nao em lugar nenhum como default', () => {
-    // A senha `app_runtime_dev` esta no historico do Git — e continua no
-    // repositorio, mas como valor que precisa ser RECUSADO, e nao como
-    // default aplicavel. E o que o guard de boot consulta.
-    expect(SENHAS_EXPOSTAS).toContain('app_runtime_dev');
-    // E ela nao aparece como senha em nenhuma migration NOVA — o CODIGO,
-    // nao o comentario que documenta a remocao.
-    expect(semComentarios(sqlDeSistema)).not.toContain('app_runtime_dev');
+  it('a senha antiga do papel nao esta em NENHUM lugar do repositorio (#133)', () => {
+    // A senha que o repositorio publicou está no HISTÓRICO do Git — e é por
+    // isso que ela não pode estar no ARVORE: a lista por valor exigia
+    // escrevê-la, e escrever era publicar de novo.
+    //
+    // O que a barra agora é o CRITÉRIO: o prefixo de exemplo e o tamanho
+    // mínimo. E a senha publicada tinha 15 caracteres — abaixo do mínimo.
+    const arquivos = [sql, sqlDeSistema, sqlDeRotacao, scriptDePapeis].join('\n');
+    // ⚠️ O literal do `printf` do script (`PASSWORD '%s'`) NÃO é uma senha
+    // versionada — é o TEMPLATE que recebe a senha do ambiente. A regex
+    // procura um valor LITERAL, e `%s` não é um.
+    expect(arquivos).not.toMatch(/PASSWORD\s+'[a-z0-9_]+'/i);
+    // ⚠️ A asserção é pela FORMA da senha publicada (`app_runtime_` + uma
+    // palavra), e NÃO pelo valor: escrever o valor AQUI seria publicá-lo de
+    // novo — e o critério de aceite da #133 é que o `git grep` do literal não
+    // encontre nada. A forma barra o mesmo defeito (a denylist por valor era
+    // `['<a senha publicada>']`) sem escrever o segredo no repositório.
+    expect(arquivos).not.toMatch(/app_runtime_[a-z]+/);
+  });
+
+  it('a migration de ROTAÇÃO limpa o hash da senha publicada (#133)', () => {
+    // `NOLOGIN` NAO limpa a senha — MEDIDO: depois das 15 migrations, o papel
+    // tinha `rolcanlogin = f` e `rolpassword` NÃO-nulo (o hash SCRAM seguia
+    // em `pg_authid`). É o `PASSWORD NULL` que apaga o segredo.
+    expect(semComentarios(sqlDeRotacao)).toMatch(/ALTER ROLE app_runtime NOLOGIN PASSWORD NULL/);
+  });
+
+  it('o tamanho minimo do TypeScript e o do script que APLICA a senha (#133)', () => {
+    // O numero mora nos DOIS lados — o TypeScript (o dono) e o shell (a
+    // camada que escreve). Sem esta reconciliacao, os dois divergem em
+    // silencio e a regra deixa de valer sem ninguem perceber.
+    expect(scriptDePapeis).toContain(`[ "\${#senha}" -lt ${TAMANHO_MINIMO_DE_SENHA_DE_PAPEL} ]`);
+  });
+
+  it('o script recusa o placeholder e a senha curta — a camada que ESCREVE (#133)', () => {
+    // A regra é APLICADA na camada que escreve, e não só no guard: um
+    // placeholder recusado pelo guard mas aplicado pelo script deixa o papel
+    // com senha pública mesmo com a API recusando o boot.
+    // ⚠️ O `case` confere a senha JÁ NORMALIZADA (o `tr` de uma linha acima):
+    // o `case` do shell distingue maiúsculas, e o guard não — e é a camada
+    // que ESCREVE a senha que não pode deixar a isca passar.
+    expect(scriptDePapeis).toMatch(/tr '\[:upper:\]' '\[:lower:\]'/);
+    expect(scriptDePapeis).toMatch(/change_me\*\|'\*\*\*'\)/);
+    expect(scriptDePapeis).toContain('senha_de_exemplo');
+  });
+
+  // ⚠️ O comportamento do filtro do script é medido RODANDO o shell — e não
+  // por `grep` no texto. Um `grep` não distingue "o filtro recusa o
+  // placeholder" de "o filtro tem a palavra `CHANGE_ME` no fonte": o defeito
+  // real (o `case` do shell é case-SENSITIVE, e o do guard não) só aparece
+  // quando a FUNÇÃO roda.
+  describe('o filtro do `prepara-papeis.sh`, RODADO', () => {
+    /** A função `senha_de_exemplo` extraída do script, e um chamador. */
+    function executar(senha: string, usuario: string): number {
+      const corpo = /senha_de_exemplo\(\)[\s\S]*?^}/m.exec(scriptDePapeis);
+      expect(corpo).not.toBeNull();
+      const lista = /PAPEIS_COM_SENHA_GERIDA='([^']*)'/.exec(scriptDePapeis);
+      expect(lista).not.toBeNull();
+      const arquivo = join(mkdtempSync(join(tmpdir(), 'filtro-senha-')), 'filtro.sh');
+      writeFileSync(
+        arquivo,
+        `PAPEIS_COM_SENHA_GERIDA='${lista![1]}'\n${corpo![0]}\n` +
+          `senha_de_exemplo "$1" "$2"\necho $?\n`,
+        'utf-8',
+      );
+      // `execFileSync` com argv em ARRAY — o `check-shell-injection` recusa
+      // `execSync` com o comando montado por concatenação, e a razão é boa:
+      // um valor interpolado vai cru para o shell.
+      const saida = execFileSync('sh', [arquivo, senha, usuario], { encoding: 'utf-8' });
+      return Number(saida.trim().split('\n').pop());
+    }
+
+    it('recusa o placeholder — em QUALQUER caixa', () => {
+      // MEDIDO 2026-11-08: o `case` do shell distingue maiúsculas, e o
+      // guard normaliza — então `Change_Me_…` (a MESMA isca, com outra
+      // caixa) passava pela camada que ESCREVE a senha.
+      expect(executar('CHANGE_ME_gerar_com_openssl_rand_hex_32', 'app_runtime')).toBe(0);
+      expect(executar('change_me_gerar_com_openssl_rand_hex_32', 'app_runtime')).toBe(0);
+      expect(executar('Change_Me_gerar_com_openssl_rand_hex_32', 'app_runtime')).toBe(0);
+      expect(executar('***', 'app_runtime')).toBe(0);
+    });
+
+    it('recusa a senha CURTA de um papel gerenciado (#133)', () => {
+      // O valor que o repositório publicou tinha 15 caracteres — e o filtro
+      // antigo (mínimo 16) o aceitava.
+      expect(executar('a'.repeat(15), 'app_runtime')).toBe(0);
+      expect(executar('a'.repeat(15), 'app_system')).toBe(0);
+      expect(executar('a'.repeat(24), 'app_runtime')).toBe(1);
+    });
+
+    it('NÃO recusa a senha curta do DONO — é o bootstrap de dev documentado', () => {
+      // O `apps/api/.env.example` entrega `projeto:projeto` (6 caracteres)
+      // para o dono, e o guard de boot faz a MESMA distinção (o mínimo
+      // alcança os papéis gerenciados, não o dono). As duas camadas precisam
+      // concordar — e o dev precisa subir.
+      expect(executar('projeto', 'projeto')).toBe(1);
+      expect(executar('a'.repeat(15), 'projeto')).toBe(1);
+    });
   });
 
   it('o papel nao e superuser e nao tem BYPASSRLS — a propriedade que a fase existe para garantir', () => {

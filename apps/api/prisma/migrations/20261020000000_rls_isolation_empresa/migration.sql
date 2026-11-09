@@ -17,10 +17,19 @@
 -- conecta por um papel COMUM — que e o que `app_runtime` e. Por isso a
 -- aplicacao conecta por ele e as migrations continuam no dono.
 --
--- ATENCAO: `SENHA_DE_RUNTIME_DEV` e `PAPEL_DE_RUNTIME` existem em duas copias
+-- ATENCAO: `PAPEL_DE_RUNTIME` e `SENHA_DE_RUNTIME_DEV` vivem em DOIS lugares
 -- (esta e `apps/api/src/shared/infrastructure/prisma/papel-de-runtime.ts`),
--- porque migration nao le env. `papel-de-runtime.spec.ts` compara as duas: se
--- alguem trocar num lado so, o spec fica vermelho.
+-- porque migration nao le env.
+--
+-- pt-BR (#133): o papel nasce SEM SENHA. A senha que esta migration publicava
+-- em texto puro virou credencial de qualquer pessoa que lesse o repositorio —
+-- e o repositorio e publico. A senha real vem do AMBIENTE: o
+-- `prepara-papeis.sh` (o passo 2 do ENTRYPOINT) aplica a senha lida da
+-- `DATABASE_URL`.
+--
+-- `NOLOGIN` (e nao `LOGIN`) e o que garante que o papel nao autentica com
+-- NENHUMA senha enquanto o script nao roda — nem com a senha que o historico
+-- do Git carrega.
 
 -- ─────────────────────────── 1. O papel de runtime ───────────────────────────
 
@@ -28,8 +37,7 @@ DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_runtime') THEN
     CREATE ROLE app_runtime
-      LOGIN
-      PASSWORD 'app_runtime_dev'
+      NOLOGIN
       NOSUPERUSER
       NOCREATEDB
       NOCREATEROLE

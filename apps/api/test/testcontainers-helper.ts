@@ -212,6 +212,11 @@ export async function cleanDatabase(prisma: PrismaClient): Promise<void> {
   // para o seguinte, que começa esperando base vazia e falha como se o
   // repositório inventasse estado.
   await prisma.featureFlag.deleteMany({});
+  // pt-BR (#132): o REGISTRO de refresh tokens. Tem FK para `users` (com
+  // `onDelete: Cascade`), então SOME junto com a conta — mas a ausência
+  // seria silenciosa: o primeiro spec que registra um `jti` deixa a linha
+  // para o seguinte, que começa esperando base vazia.
+  await prisma.refreshToken.deleteMany({});
   await prisma.userArchive.deleteMany({});
   await prisma.userHistory.deleteMany({});
   await prisma.user.deleteMany({});

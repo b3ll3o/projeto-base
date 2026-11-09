@@ -45,10 +45,36 @@ export interface TokenSubject {
   typ: 'access' | 'refresh';
 }
 
+/**
+ * O assunto de um REFRESH token — e o `jti` é obrigatório aqui (#132).
+ *
+ * ⚠️ Por que um subtipo, e não um `jti?` no `TokenSubject`: o
+ * `TokenSubject` é o retorno do `validarAccessToken` TAMBÉM, e o guard não
+ * usa `jti` — mas o `logout` e a rotação precisam dele, e precisam dele
+ * GARANTIDO. Um `jti` opcional faria o logout virar um no-op silencioso
+ * (revogar um `jti` que não existe não falha — e o token continua valendo).
+ */
+export interface RefreshSubject extends TokenSubject {
+  typ: 'refresh';
+  /** A identidade do token — é o que o registro de revogação indexa. */
+  jti: string;
+}
+
 /** Par emitido em um login (e em cada refresh). */
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;
+  /**
+   * O `jti` do REFRESH token (#132) — é o que a revogação indexa, e é o
+   * que o `logout` revoga.
+   */
+  refreshJti: string;
+  /**
+   * Quando o refresh token expira (#132) — o `exp` do próprio token. A
+   * revogação precisa dele para podar o registro: sem prazo, a tabela só
+   * cresce.
+   */
+  refreshExpiresAt: Date;
 }
 
 export interface TokenIssuerPort {
@@ -59,7 +85,7 @@ export interface TokenIssuerPort {
    * entre si: mesmo `sub`, mesmo `email`, e expiração do refresh sempre
    * depois da do access.
    *
-   * @returns o par `{ accessToken, refreshToken }`
+   * @returns o par `{ accessToken, refreshToken, refreshJti, refreshExpiresAt }`
    */
   emitir(assunto: { sub: string; email: string }): Promise<TokenPair>;
 
@@ -73,7 +99,9 @@ export interface TokenIssuerPort {
   /**
    * Verifica assinatura, expiração E que `typ === 'refresh'`.
    *
-   * @throws quando o token não é válido para uso como refresh token.
+   * @throws quando o token não é válido para uso como refresh token — e
+   *         também quando é válido mas NÃO tem `jti` (#132): um token sem
+   *         identidade não tem como ser revogado.
    */
-  validarRefreshToken(token: string): Promise<TokenSubject>;
+  validarRefreshToken(token: string): Promise<RefreshSubject>;
 }

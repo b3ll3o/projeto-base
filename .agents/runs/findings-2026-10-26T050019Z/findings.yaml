@@ -79,7 +79,7 @@ opened_issues:
       manual sem gate.
     evidence: |
       gh repo view -> visibility PUBLIC.
-      grep -rn app_runtime_dev -> migration.sql, papel-de-runtime.ts, .env.production.example.
+      grep -rn <a senha publicada> -> migration.sql, papel-de-runtime.ts, .env.production.example.
       migration.sql:106-110: escopo_atual() = '*' OR alvo::text = escopo_atual().
       PoC do specialist (Postgres 16 real, migrations do repo): SET app.tenant_id='*'
       devolveu todos os usuarios de todas as empresas; UPDATE alterou b@globex.test.

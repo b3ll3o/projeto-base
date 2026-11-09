@@ -56,6 +56,28 @@ export interface EmpresaAberta {
 export interface ConviteParaAceitar {
   userId: string;
   invitationId: string;
+  /**
+   * O token que o convidado apresentou (#135).
+   *
+   * ⚠️ POR QUE O ACEITE PRECISA DO TOKEN, E NÃO SÓ DO ID:
+   *
+   * A reemissão de um convite REESCREVE a MESMA linha (o `@@unique` de
+   * `(tenantId, email)` não permite duas linhas, e um índice parcial abriria
+   * o drift do #134). Isso torna a linha do convite um objeto com DUAS
+   * identidades ao longo do tempo — o `id` (que não muda) e o `token` (que
+   * muda a cada reemissão).
+   *
+   * Sem o token no aceite, a corrida é real: um aceite que começou ANTES
+   * da reemissão re-lê a linha pelo `id` (que é o mesmo), passa na
+   * validade (que a reemissão acabou de estender) e marca `accepted_at` —
+   * e o token NOVO, que o dono acabou de mandar por e-mail, nasce
+   * **consumido**.
+   *
+   * Com o token, o `updateMany` do aceite é condicionado por
+   * `{id, token, acceptedAt: null}`: um aceite de um token velho não
+   * alcança a linha que a reemissão trocou.
+   */
+  token: string;
 }
 
 /** Convite lido do banco — o que o caso de uso precisa para decidir o aceite. */
@@ -66,6 +88,11 @@ export interface ConvitePendente {
   role: string;
   acceptedAt: Date | null;
   expiresAt: Date | null;
+  /**
+   * O token vigente da linha (#135) — o que o aceite precisa levar de volta
+   * para não consumir uma linha que a reemissão trocou.
+   */
+  token: string;
 }
 
 export interface ConviteParaEmitir {

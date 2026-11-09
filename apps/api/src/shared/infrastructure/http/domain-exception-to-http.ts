@@ -114,7 +114,37 @@ export interface HttpErrorMapping {
    * "erro genérico" num erro inteiramente dela. Medido.
    */
   readonly errors?: { field: string; message: string; code: string }[];
+  /**
+   * O texto que o cliente recebe em `detail` — e que o filtro HTTP usa
+   * **no lugar** da mensagem original da exceção.
+   *
+   * pt-BR (#130): ele existe SÓ no ramo de exceção NÃO RECONHECIDA (o
+   * `return` final). É o ramo em que a exceção é de terceiro — driver do
+   * Prisma, erro de rede do Postgres, `TypeError` do próprio JavaScript — e
+   * a mensagem dela descreve TABELA, COLUNA e VALOR de coluna. Verificado no
+   * bundle do `@prisma/client` 6.19.3: a validação de query concatena os
+   * ARGUMENTOS da chamada (`Invalid \`prisma.<model>.<method>()\` invocation`)
+   * — e numa escrita de `users` o argumento é o `data`, que contém o
+   * `passwordHash`.
+   *
+   * Quando o mapper RECONHECE a exceção (exceção de domínio ou de aplicação),
+   * o campo fica AUSENTE: a mensagem dela é texto NOSSO (o motivo do
+   * convite, o nome do campo inválido), e o filtro usa essa mensagem. O que
+   * o mapper sabe é, portanto, o que decide a política — e não o status.
+   */
+  readonly detail?: string;
 }
+
+/**
+ * O `detail` de um erro interno: genérico, estável, e sem nada do estado
+ * interno (#130).
+ *
+ * O `traceId` que correlaciona o cliente com o log viaja no próprio
+ * `problem` — por isso o texto não o interpola: ele é o MESMO para todo
+ * erro interno, e o log é o que carrega o diagnóstico.
+ */
+export const DETALHE_DE_ERRO_INTERNO =
+  'Erro interno. Tente novamente ou contate o suporte com o traceId.';
 
 /**
  * Motivo do convite recusado → status HTTP.
@@ -401,5 +431,13 @@ export function mapExceptionToHttp(err: unknown): HttpErrorMapping {
     return { status: HttpStatus.BAD_REQUEST, code: 'VALIDATION_ERROR', title: 'Erro de validação' };
   }
 
-  return { status: HttpStatus.INTERNAL_SERVER_ERROR, code: 'INTERNAL', title: 'Erro interno' };
+  // pt-BR (#130): este é o ÚNICO ramo que NÃO conhece a exceção — e é
+  // exatamente o ramo em que a mensagem dela não pode vazar. O `detail`
+  // genérico entra aqui; nos ramos de domínio, a mensagem é texto nosso.
+  return {
+    status: HttpStatus.INTERNAL_SERVER_ERROR,
+    code: 'INTERNAL',
+    title: 'Erro interno',
+    detail: DETALHE_DE_ERRO_INTERNO,
+  };
 }

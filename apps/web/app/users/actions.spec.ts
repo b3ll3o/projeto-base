@@ -12,7 +12,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { redirect } from 'next/navigation';
 import { sair } from './actions.js';
-import { limparSessao } from '@/lib/sessao';
+import { limparSessao, lerTokens } from '@/lib/sessao';
+import { ApiClient } from '@/lib/api-client';
 
 vi.mock('next/navigation', () => ({
   redirect: vi.fn((url: string) => {
@@ -25,6 +26,10 @@ vi.mock('@/lib/sessao', () => ({
   guardarTokens: vi.fn(async () => undefined),
   lerTokens: vi.fn(async () => ({ accessToken: null, refreshToken: null })),
   exigirSessao: vi.fn(async () => 'token'),
+}));
+
+vi.mock('@/lib/api-client', () => ({
+  ApiClient: vi.fn(() => ({ post: vi.fn(async () => ({ revogado: true })) })),
 }));
 
 beforeEach(() => {
@@ -42,5 +47,66 @@ describe('sair', () => {
     await expect(sair(new FormData())).rejects.toThrow('NEXT_REDIRECT:/login');
 
     expect(redirect).toHaveBeenCalledWith('/login');
+  });
+
+  // ─── #132: o "sair" REVOGA o refresh token no backend ─────────────────────
+  //
+  // ⚠️ Sem estes casos, a revogação NÃO é exercitada: o mock de `lerTokens`
+  // devolve `refreshToken: null`, e o `if` nunca entra. A spec ficava verde
+  // sem provar nada do que a #132 adds no web.
+  describe('#132 — a revogação no backend', () => {
+    it('chama POST /auth/logout com o refresh token', async () => {
+      vi.mocked(lerTokens).mockResolvedValue({
+        accessToken: 'access',
+        refreshToken: 'refresh-que-e-credencial',
+      });
+      const post = vi.fn(async () => ({ revogado: true }));
+      vi.mocked(ApiClient).mockImplementation(
+        () => ({ post }) as unknown as InstanceType<typeof ApiClient>,
+      );
+
+      await expect(sair(new FormData())).rejects.toThrow('NEXT_REDIRECT:/login');
+
+      expect(post).toHaveBeenCalledWith('/auth/logout', {
+        refreshToken: 'refresh-que-e-credencial',
+      });
+    });
+
+    it('a API fora do ar NÃO trava o logout — e o cookie é apagado assim mesmo', async () => {
+      vi.mocked(lerTokens).mockResolvedValue({
+        accessToken: 'access',
+        refreshToken: 'refresh',
+      });
+      const post = vi.fn(async () => {
+        throw new Error('ECONNREFUSED');
+      });
+      vi.mocked(ApiClient).mockImplementation(
+        () => ({ post }) as unknown as InstanceType<typeof ApiClient>,
+      );
+      const erro = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+      await expect(sair(new FormData())).rejects.toThrow('NEXT_REDIRECT:/login');
+
+      expect(limparSessao).toHaveBeenCalledTimes(1);
+      // ⚠️ E a falha NÃO é silenciosa: a revogação é o controle que a #132
+      // entrega, e uma falha invisível é um controle que não existe.
+      expect(erro).toHaveBeenCalled();
+      erro.mockRestore();
+    });
+
+    it('sem refresh token no cookie, não há o que revogar', async () => {
+      // ⚠️ O mock é resetado EXPLICITAMENTE: `vi.clearAllMocks()` limpa as
+      // chamadas, mas NÃO as implementações — e o caso anterior deixou um
+      // `lerTokens` devolvendo um refresh token.
+      vi.mocked(lerTokens).mockResolvedValue({ accessToken: 'access', refreshToken: null });
+      const post = vi.fn(async () => ({ revogado: true }));
+      vi.mocked(ApiClient).mockImplementation(
+        () => ({ post }) as unknown as InstanceType<typeof ApiClient>,
+      );
+
+      await expect(sair(new FormData())).rejects.toThrow('NEXT_REDIRECT:/login');
+
+      expect(post).not.toHaveBeenCalled();
+    });
   });
 });

@@ -55,6 +55,19 @@ concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.run_attempt == 1 }}
 
+# pt-BR (#131): o PISO de privilégio do workflow. Sem este bloco, o
+# `GITHUB_TOKEN` herda o default do repositório — e o default é
+# configuração de fora do repo, que pode ser mais largo do que o necessário.
+# `contents: read` é tudo o que os 3 jobs deste arquivo precisam: eles leem
+# o código, rodam os testes e sobem artefatos (a API de artefato do Actions
+# NÃO usa o `GITHUB_TOKEN`).
+#
+# É o dono do privilégio — nenhum job declara `permissions:` próprio, e um
+# job que precisar de mais sobrescreve AQUI (o caso do `release-template.yml`,
+# que precisa de `contents: write` para pushar a tag).
+permissions:
+  contents: read
+
 jobs:
   # pt-BR: preflight detecta drift estrutural (cross-refs quebradas em
   # docs/specs, tsconfig drift, ESLint config legada) em ~10s antes do
@@ -69,8 +82,6 @@ jobs:
     # Enquanto isso, o runner é fixado — `ubuntu-latest` é um alias que se move.
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    permissions:
-      contents: read
     steps:
       # `fetch-depth: 0` é exigência do gate do marcador, não preferência: com o
       # default (depth 1) o checkout de `pull_request` traz só o ref de merge e
@@ -92,6 +103,10 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          # pt-BR (#131): o token NÃO fica em `.git/config` da workspace.
+          # Nenhum job deste workflow faz push — e o `pull_request` roda
+          # conteúdo de terceiro, onde um token deambora seria o prêmio.
+          persist-credentials: false
       - uses: pnpm/action-setup@a3252b78c470c02df07e9d59298aecedc3ccdd6d # v3
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -121,8 +136,9 @@ jobs:
       #
       # O corpo vem do PAYLOAD do evento (`pull_request.body`), nao de `gh`:
       # ler o PR que disparou a run nao exige token nenhum, entao o job segue
-      # com `permissions: contents: read` como estava. Conceder
-      # `pull-requests: read` seria trocar um arquivo por uma permissao nova.
+      # com o `permissions: contents: read` do WORKFLOW (o piso declarado no
+      # topo deste arquivo). Conceder `pull-requests: read` seria trocar um
+      # arquivo por uma permissao nova.
       #
       # O payload e um SNAPSHOT do evento, entao um RE-RUN entrega o corpo
       # velho — corrigir o corpo e reexecutar a run nao revalida nada. O que
@@ -165,6 +181,8 @@ jobs:
     # Não usar service postgres aqui — é dead code.
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@a3252b78c470c02df07e9d59298aecedc3ccdd6d # v3
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -221,6 +239,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@a3252b78c470c02df07e9d59298aecedc3ccdd6d # v3
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:

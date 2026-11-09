@@ -39,14 +39,14 @@
 --
 -- A senha dos dois papéis NÃO está nesta migration — uma migration não lê
 -- env, e foi por isso que a senha do `app_runtime` ficou versionada em texto
--- puro (`PASSWORD 'app_runtime_dev'`). O setup (o entrypoint do container e
+-- puro (o literal que o repositorio publicou). O setup (o entrypoint do container e
 -- o helper de testcontainers) aplica a senha a partir de `DATABASE_URL` e de
 -- `SYSTEM_DATABASE_URL`, que são variáveis de ambiente.
 
 -- ─────────────────────────── 1. A senha some do papel de runtime ───────────────────────────
 --
 -- ⚠️ A migration ANTIGA (`20261020000000`) criou o papel COM a senha em texto
--- puro (`PASSWORD 'app_runtime_dev'`). Num banco que já rodou aquela
+-- puro (o literal que o repositorio publicou). Num banco que já rodou aquela
 -- migration, o papel continua EXISTINDO — e a senha continua valendo. Por isso
 -- o novo estado é FORÇADO aqui, e não só descrito: sem este `ALTER ROLE`, um
 -- banco novo (que roda as duas migrations em sequência) nasceria com a senha

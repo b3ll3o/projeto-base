@@ -9,10 +9,10 @@
 > Medido em 2026-10-29: os 7 endpoints deste BC conferem com
 > `apps/api/openapi.json`. Contagem por
 > `grep -hoE "@(Get|Post|Patch|Put|Delete)\(" apps/api/src/modules/users/infrastructure/http/users.controller.ts | wc -l`
-> → `7`. O contrato inteiro tem 22 paths e 28 operações
-> (`node -e "const d=require('./apps/api/openapi.json');console.log(Object.keys(d.paths).length)"` → `22`;
-> `node -e "const d=require('./apps/api/openapi.json');console.log(Object.values(d.paths).flatMap(p=>Object.keys(p).filter(k=>['get','post','put','patch','delete'].includes(k))).length)"` → `28`),
-> das quais 7 são de `users` — as outras 21 são `auth` (3), `tenancy` (5),
+> → `7`. O contrato inteiro tem 23 paths e 29 operações
+> (`node -e "const d=require('./apps/api/openapi.json');console.log(Object.keys(d.paths).length)"` → `23`;
+> `node -e "const d=require('./apps/api/openapi.json');console.log(Object.values(d.paths).flatMap(p=>Object.keys(p).filter(k=>['get','post','put','patch','delete'].includes(k))).length)"` → `29`),
+> das quais 7 são de `users` — as outras 22 são `auth` (4), `tenancy` (5),
 > `profiles` (10), `feature-flags` (2) e `health` (1). A conferência é manual:
 > nada impede que a tabela derive do contrato.
 > Spec de design: [`docs/superpowers/specs/2026-09-21-cadastro-usuario-com-auditoria-04-contrato-http.md`](../superpowers/specs/2026-09-21-cadastro-usuario-com-auditoria-04-contrato-http.md).

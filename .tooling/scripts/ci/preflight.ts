@@ -28,6 +28,8 @@ import { checkVersionFooters } from './check-version-footers';
 import { checkAuditSkills } from './check-audit-skills';
 import { checkDependencyAudit } from './check-dependency-audit';
 import { checkCiActionPinning } from './check-ci-action-pinning';
+import { checkDockerHealthcheckBinary } from './check-docker-healthcheck-binary';
+import { checkMigrationsSemModel } from './check-migrations-sem-model';
 import { checkOpenapiContract } from './check-openapi-contract';
 import { checkHarnessOwner } from './check-harness-owner';
 import { checkBranchUpToDate } from './check-branch-up-to-date';
@@ -361,6 +363,8 @@ export const RUNNERS: Record<string, () => CheckResult | Promise<CheckResult>> =
   'check-audit-skills': () => checkAuditSkills({ repoRoot: '.' }),
   'check-dependency-audit': () => checkDependencyAudit({ repoRoot: '.' }),
   'check-ci-action-pinning': () => checkCiActionPinning({ repoRoot: '.' }),
+  'check-docker-healthcheck-binary': () => checkDockerHealthcheckBinary({ repoRoot: '.' }),
+  'check-migrations-sem-model': () => checkMigrationsSemModel({ repoRoot: '.' }),
   'check-openapi-contract': () => checkOpenapiContract({ repoRoot: '.' }),
   'turbo-redirect-differential': () => checkTurboRedirectDifferential(),
   'check-harness-owner': () => checkHarnessOwner(),

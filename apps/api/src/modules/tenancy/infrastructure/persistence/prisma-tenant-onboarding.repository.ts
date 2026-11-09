@@ -418,6 +418,13 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
       // entre a validação e aqui o convite pode ter sido usado por outra
       // pessoa. O `updateMany` condicionado a `accepted_at IS NULL` é o que
       // transforma essa janela em erro em vez de membership duplicada.
+      //
+      // ⚠️ (#135) A releitura é por `id`, e o `id` NUNCA muda — inclusive
+      // quando a linha é REEMITIDA (a reemissão reescreve a MESMA linha, com
+      // token novo). Por isso o `updateMany` do aceite também é condicionado
+      // pelo TOKEN apresentado: sem isso, um aceite que começou antes da
+      // reemissão marcaria a linha trocada como aceita, e o token novo
+      // nasceria consumido. Ver `ConviteParaAceitar.token`.
       const atual = await tx.invitation.findUnique({ where: { id: convite.invitationId } });
       if (atual === null) {
         throw new ConviteInvalidoException('nao-encontrado');
@@ -490,7 +497,13 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
       await abrirEscopo(tx, escopoDoTenant(atual.tenantId));
 
       const consumido = await tx.invitation.updateMany({
-        where: { id: atual.id, acceptedAt: null },
+        // ⚠️ (#135) O TOKEN entra na condição, e não só o `id`: a reemissão
+        // reescreve a MESMA linha (o `@@unique` de `(tenantId, email)` não
+        // permite duas), trocando o token. Sem esta condição, um aceite que
+        // começou ANTES da reemissão marcaria a linha trocada como aceita —
+        // e o token novo, que o dono acabou de mandar por e-mail, nasceria
+        // consumido (`ja-aceito` para quem o recebeu).
+        where: { id: atual.id, token: convite.token, acceptedAt: null },
         data: { acceptedAt: new Date() },
       });
       if (consumido.count !== 1) {
@@ -527,6 +540,37 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
   }
 
   async emitirConvite(convite: ConviteParaEmitir): Promise<void> {
+    // ⚠️ (#135) A LEITURA vem ANTES do insert, e é ela que decide entre as
+    // três saídas:
+    //
+    //   1. não existe linha  → INSERT (o caminho de sempre);
+    //   2. existe e está PENDENTE → 409 "já existe convite" — e aqui a
+    //      mensagem é verdade;
+    //   3. existe e está ACEITO ou EXPIRADO → REEMITE a MESMA linha (token
+    //      novo, prazo novo, `accepted_at` de volta a NULL).
+    //
+    // O caso 3 é o que a #135 pede: antes, o `@@unique([tenantId, email])`
+    // global mantinha a chave ocupada PARA SEMPRE (não há DELETE de convite
+    // em código de produção, e não há coluna `revokedAt`), e a linha aceita
+    // ou vencida fazia o `INSERT` colidir — o `catch` respondia 409 "já
+    // existe um convite PENDENTE para este e-mail", que era mentira
+    // funcional: o convite pendente não existia mais.
+    //
+    // Por que REEMITIR a linha e não inserir outra: o `@@unique` é global
+    // (não parcial), e o Prisma não expressa unique parcial — um índice
+    // parcial aqui exigiria tirar o `@@unique` do datamodel e reabriria o
+    // drift que a #134 fecha (uma tabela do banco que o schema não
+    // conhece). A linha do convite é um estado ("convite pendente para
+    // (empresa, e-mail)"), não um histórico.
+    const existente = await this.conviteDe(convite.tenantId, convite.email);
+    if (existente !== null) {
+      if (conviteEstaPendente(existente, new Date())) {
+        throw new ConviteJaEmitidoException(convite.tenantId, convite.email);
+      }
+      await this.reemitirConvite(existente, convite);
+      return;
+    }
+
     try {
       await comEscopo(this.prisma, escopoDoTenant(convite.tenantId), (tx) =>
         tx.invitation.create({
@@ -554,6 +598,12 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
       // é determinística: o convite para (empresa, e-mail) EXISTE? Se existe,
       // foi ele que colidiu; se não existe, o que colidiu foi o `token`.
       //
+      // ⚠️ (#135) A pergunta aqui é "a linha EXISTE?" e NÃO "a linha está
+      // pendente?": este `catch` é o DISCRIMINADOR entre a colisão de
+      // `(tenantId, email)` e a de `token`. Filtrar por pendência aqui
+      // devolveria `false` para uma linha vencida — e o P2002 cru subiria
+      // como **500**, que é "banco fora do ar" para o que é um conflito.
+      //
       // Colisão de token é, na prática, impossível: o segredo sai de
       // `randomBytes(32)` e o produtor é quem o gera. Ela continua sendo
       // propagada crua de propósito — é o estado que o `randomBytes` no use
@@ -569,14 +619,74 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
   }
 
   /**
+   * A linha do convite para (empresa, e-mail), ou `null`.
+   *
+   * ⚠️ A leitura é FORA de uma transação abortada: uma transação abortada não
+   * responde a `findUnique` ("current transaction is aborted"), e o P2002
+   * aborta. Por isso ela abre a sua própria, no escopo da empresa.
+   */
+  private async conviteDe(
+    tenantId: string,
+    email: string,
+  ): Promise<{
+    id: string;
+    token: string;
+    acceptedAt: Date | null;
+    expiresAt: Date | null;
+  } | null> {
+    return comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
+      tx.invitation.findUnique({
+        where: { tenantId_email: { tenantId, email } },
+        select: { id: true, token: true, acceptedAt: true, expiresAt: true },
+      }),
+    );
+  }
+
+  /**
+   * REEMITE o convite: a MESMA linha, com token novo, prazo novo e
+   * `accepted_at` de volta a NULL (#135).
+   *
+   * ⚠️ O `updateMany` é CONDICIONAL pelo token anterior (`where: {id, token}`).
+   * A reemissão é read-modify-write, e sem a condição duas emissões
+   * concorrentes para o mesmo (empresa, e-mail) gravariam as duas — e o
+   * e-mail com o token da primeira nunca resolveria, porque a segunda teria
+   * sobrescrito o token. A contagem diz se a linha era a que este caller
+   * leu; se não era, outra emissão ganhou a corrida e o `count` é 0.
+   */
+  private async reemitirConvite(
+    existente: { id: string; token: string },
+    convite: ConviteParaEmitir,
+  ): Promise<void> {
+    const reescrito = await comEscopo(this.prisma, escopoDoTenant(convite.tenantId), (tx) =>
+      tx.invitation.updateMany({
+        where: { id: existente.id, token: existente.token },
+        data: {
+          token: convite.token,
+          expiresAt: convite.expiresAt,
+          // O convite volta a ser PENDENTE: é um convite novo, com prazo
+          // novo, e a pessoa precisa poder aceitá-lo.
+          acceptedAt: null,
+          version: { increment: 1 },
+        },
+      }),
+    );
+    if (reescrito.count !== 1) {
+      // Outra emissão ganhou a corrida e trocou o token entre a leitura e
+      // a escrita. O estado que o caller queria (um convite PENDENTE para
+      // (empresa, e-mail)) já existe — e o 409 é a resposta honesta.
+      throw new ConviteJaEmitidoException(convite.tenantId, convite.email);
+    }
+  }
+
+  /**
    * Já existe um convite para o par (empresa, e-mail)?
    *
    * É a pergunta que decide o 409 do convite, e ela é respondida por LEITURA
    * — não pelo nome da constraint (ver `ehViolacaoDeUnicidade`).
    *
-   * ⚠️ A leitura é FORA da transação que morreu: uma transação abortada não
-   * responde a `findUnique` ("current transaction is aborted"), e o P2002
-   * aborta. Por isso ela abre a sua própria, no escopo da empresa.
+   * ⚠️ A pergunta é "a linha EXISTE?", e não "a linha está PENDENTE?" —
+   * ver o comentário do `catch` de `emitirConvite`: aqui a pergunta é o
+   * DISCRIMINADOR entre a colisão de `(tenantId, email)` e a de `token`.
    */
   private async existeConvitePara(tenantId: string, email: string): Promise<boolean> {
     const encontrado = await comEscopo(this.prisma, escopoDoTenant(tenantId), (tx) =>
@@ -606,9 +716,31 @@ export class PrismaTenantOnboardingRepository implements TenantOnboardingPort {
           role: true,
           acceptedAt: true,
           expiresAt: true,
+          // ⚠️ (#135) O token vigente vem junto: o aceite precisa levá-lo de
+          // volta, para não consumir uma linha que uma reemissão trocou.
+          token: true,
         },
       }),
     );
     return linha;
   }
+}
+
+/**
+ * O convite ainda está PENDENTE — isto é, ainda dá para aceitá-lo (#135).
+ *
+ * ⚠️ O `expiresAt` NULL é "SEM PRAZO", e NÃO "expirado": o campo é
+ * nullable, e um convite sem prazo é um convite válido. Tratar `NULL`
+ * como expirado faria o 409 mentir na direção oposta.
+ *
+ * A função é PURA e recebe o instante: o "agora" é do chamador, e é o que
+ * torna a decisão testável sem relógio.
+ */
+export function conviteEstaPendente(
+  convite: { acceptedAt: Date | null; expiresAt: Date | null },
+  agora: Date,
+): boolean {
+  if (convite.acceptedAt !== null) return false;
+  if (convite.expiresAt !== null && convite.expiresAt.getTime() <= agora.getTime()) return false;
+  return true;
 }
