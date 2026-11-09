@@ -113,7 +113,8 @@ O `ENV HOSTNAME=0.0.0.0` do web (#138) e o `COPY` não achatado da api
   real.
 - `.agents/skills/docker/SKILL.md` — cita um arquivo que não existe.
 - `.agents/specs/conventions/ci-defense-in-depth-dentes.md` — "11 testes" e
-  "os dois diferenciais" contra 18 e 3 medidos.
+  "os dois diferenciais" contra os 18 e 3 medidos — e, depois desta rodada, 25
+  e 7 (a spec do gate cresceu com os casos novos).
 - `.github/dependabot.yml` — o comentário afirma que o gate confere a tag
   contra o SHA; ele confere só o FORMATO do ref.
 - `docs/web/rotas.md` — a action `sair` é a única sem verbo HTTP, e o PR
@@ -124,7 +125,8 @@ O `ENV HOSTNAME=0.0.0.0` do web (#138) e o `COPY` não achatado da api
   reabre a pasta para artefato novo.
 - idioma — 3 frases em inglês (`presented whose`, `consume`, "o regex
   **acima**" pendurado).
-- corpo do PR — `Closes #130`…`#139`, e "um arquivo novo" (são 22).
+- corpo do PR — `Closes #130`…`#139`, e "um arquivo novo" (são 25, depois
+  desta rodada).
 
 ## O que foi medido, depois da execução
 
@@ -133,7 +135,7 @@ uma spec, a **mutação** que desfaz o conserto e a deixa vermelha.
 
 | Onda | A medida |
 |---|---|
-| 0 | `sh scripts/prepara-papeis.sh` com `DATABASE_URL=postgresql://runtime:<15 chars>@…` → **exit 1**, com o motivo no stderr (`a URI nomeia 'runtime' e não o papel 'app_runtime'`). E a spec `papel-de-runtime.spec.ts` roda o filtro no `sh` de verdade (25 casos) |
+| 0 | `sh scripts/prepara-papeis.sh` com `DATABASE_URL=postgresql://runtime:<15 chars>@…` → **exit 1**, com o motivo no stderr (`a URI nomeia 'runtime' e não o papel 'app_runtime'`). E a spec `papel-de-runtime.spec.ts` roda o filtro no `sh` de verdade (27 testes) |
 | 1 | a migration de rotação roda num Postgres 16 real: papel ausente → o `DO` passa; papel presente → `rolcanlogin = f` e `rolpassword IS NULL = t` |
 | 2 | 4 mutações do gate, 1 spec cai em cada: sem descer um nível no `sh -c` → 2 caem; fundir os overlays → 1; pular o serviço só do overlay → 1 |
 | 3 | 6 mutações dos Dockerfiles, 1 spec cai em cada (`COPY` achatado, `COPY` com destino errado, `HOSTNAME` removido, `HOSTNAME` trocado, probe virado `curl`) |
@@ -159,7 +161,7 @@ $ pnpm ci:boot                                   → API :33283 · web :40033 (h
 
 Ondas independentes, em arquivos separados, executadas em paralelo. Cada
 subagente recebeu o arquivo exato, o comportamento esperado e o comando que
-prova. O{main} commit é feito depois de a suíte inteira passar.
+prova. O commit é feito depois de a suíte inteira passar.
 
 ## O que este plano NÃO faz
 
