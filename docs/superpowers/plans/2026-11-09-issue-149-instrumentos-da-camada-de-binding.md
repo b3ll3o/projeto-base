@@ -45,7 +45,7 @@ real para pegar — e esse caso é o mesmo que a issue descreve como
 
 O PR #148 entrega o `check-skill-coverage` (a **existência** do wrapper, regra
 `sem-binding`). Ele **não está em `main`** e o repo é trunk-based
-([`git-workflow.md`](../../.agents/specs/conventions/git-workflow.md)): toda
+([`git-workflow.md`](../../../.agents/specs/conventions/git-workflow.md)): toda
 demanda nasce de `main` e chega por PR, sem empilhamento.
 
 A issue aceita as duas formas: *"uma regra no `check-skill-coverage` (ou um
@@ -91,7 +91,7 @@ humano no catálogo"*.
 
 O corpus tem **161 arquivos / 655 KB** e vive em `$HOME`. Versioná-lo é
 "decisão de outro tamanho" — como a própria
-[`retrospective-capture.md`](../../.agents/specs/conventions/retrospective-capture.md)
+[`retrospective-capture.md`](../../../.agents/specs/conventions/retrospective-capture.md)
 já diz. E o gate **já tem** a metade que o CI pode medir:
 `findMissingTargets()` e `findStaleAnchors()` recebem só `repoRoot` + as linhas
 do ledger, e rodam **verde hoje** (109 linhas, 0 erro).
@@ -119,7 +119,7 @@ Os 15 motivos **não são homogêneos**: 3 são de **ferramenta ausente** (`yq`)
 **efeito colateral** e 1 é de **recursão**. Nenhuma semântica única de
 "ausência de padrão no repo" cobre os 15 com honestidade — e uma verificação
 inventada para caber no molde seria o
-[gate que prescreve o conserto errado](../../.agents/specs/conventions/guard-classes.md).
+[gate que prescreve o conserto errado](../../../.agents/specs/conventions/guard-classes.md).
 
 A semântica que cobre os 15 com honestidade é outra: **o motivo continua
 valendo se o bloco ainda usa a coisa que o motivo nomeia.** O motivo é uma
@@ -130,8 +130,8 @@ que faz o skip existir. `yq -P ".services.$svc"` no motivo do `yq`;
 Isso é **repo-derivável** (o bloco é um arquivo versionado), **sem shell**,
 **sem efeito colateral**, e é a mesma forma dos outros registros de exceção do
 repo: *exceção que não exclui mais nada é documentation lie*
-([`documentacao.md` §6](../../.agents/specs/conventions/documentacao.md),
-[`check-test-set-covered`](../../.tooling/scripts/ci/check-test-set-covered.ts)).
+([`documentacao.md` §6](../../../.agents/specs/conventions/documentacao.md),
+[`check-test-set-covered`](../../../.tooling/scripts/ci/check-test-set-covered.ts)).
 
 ### D5 — O F5 fecha com a **medição refeita**, não com a remoção de exceções
 

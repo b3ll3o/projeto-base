@@ -3,7 +3,7 @@
 - **Status:** Aceito
 - **Data:** 2026-11-09
 - **Decisores:** Equipe de arquitetura + agents especialistas
-- **Specs relacionadas:** [issue #149](https://github.com/b3ll3o/projeto-base/issues/149) · [`check-binding-canonico`](../../../.tooling/scripts/ci/check-binding-canonico.ts) · [`check-skill-coverage`](../../../.tooling/scripts/ci/check-skill-coverage.ts)
+- **Specs relacionadas:** [issue #149](https://github.com/b3ll3o/projeto-base/issues/149) · [`check-binding-canonico`](../../.tooling/scripts/ci/check-binding-canonico.ts) · o gate de cobertura da camada de skills (que chega com o PR #148)
 - **ADR anterior:** [0007-refresh-token-revogavel.md](./0007-refresh-token-revogavel.md)
 
 ## Contexto
@@ -66,7 +66,7 @@ silencioso), e na skill é metadado de outra tool — carregá-lo aqui seria
 divida que quebra em outro vendor.
 
 O instrumento é o gate
-[`check-binding-canonico`](../../../.tooling/scripts/ci/check-binding-canonico.ts).
+[`check-binding-canonico`](../../.tooling/scripts/ci/check-binding-canonico.ts).
 Ele compara, campo a campo, todo campo que o wrapper declara; wrapper sem
 canônico, campo obrigatório ausente e campo que o canônico não declara são
 erro. A **mensagem** carrega o arquivo e a **linha** divergente dos dois lados.
