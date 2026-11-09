@@ -312,6 +312,7 @@ reproduz.
 | Blocos `skip` reconciliados | **15** contra **15** entradas do registro |
 | Memórias sem destinação (o vermelho de `main`) | **2 → 0** |
 | Advisories | **43 → 41** (1 crítica, 3 altas, 32 moderadas, 5 baixas) |
+| Diferenciais (árvore real plantada e restaurada) | **8 de 8**: wrapper com `description` re-serializada (mesmo valor, byte diferente) · wrapper com valor diferente · wrapper com campo que o canônico não declara · wrapper de skill com `tools` · registro com uma entrada a menos · `padrao` que não compila · âncora que não está no corpo |
 | `pnpm ci:preflight` | 2 erros → **0** |
 | `pnpm tooling:test` | **1295** testes verdes (402 + 893) |
 
