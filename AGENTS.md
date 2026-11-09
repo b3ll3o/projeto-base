@@ -296,5 +296,5 @@ Quando seguido corretamente, este padrão garante:
 
 **Mantido por:** projeto-base contributors
 **Licença:** MIT
-**Versão do documento:** 1.20.0
+**Versão do documento:** 1.21.0
 **Status:** Estável

@@ -171,7 +171,7 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão da stack:** 1.20.0
+**Versão da stack:** 1.21.0
 
 ### Histórico de Versões
 
@@ -195,3 +195,4 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 | `1.13.0` | **Sem mudança de stack** — o footer do `AGENTS.md` subiu para `1.13.0` sozinho, e os outros 4 footers seguiam em `1.12.0` (drift medido em 2026-10-29). O gate `check-version-footers` (criado no #126) é o que fecha essa classe. |
 | `1.14.0` | **Correção de fatos medidos contra o código** (2026-10-29). §1 — a árvore deixou de declarar o `infra/` como "Docker Compose, migrations, seeds": o real é a config dos 4 backends de telemetria (`grafana/`, `otelcol/`, `prometheus/`, `tempo/`), e o Compose mora na **raiz**. §2 e §3 — as 7 células que diziam `latest`/`(último)` na coluna Versão passaram a trazer a versão que o `package.json` declara (`@nestjs/swagger` `^11.0.0`, `@nestjs/jwt` `^12.0.2`, `argon2` `^0.45.1`, `pino` `^10.3.0`, `@opentelemetry/sdk-node` `^0.54.0`, `react-hook-form` `^7`, `@playwright/test` `^1.60.0`, resolvido em `1.60.0` pelo `pnpm-lock.yaml`) e o Fastify, que não é dependência direta, aparece como `5.11.3` (transitiva de `@nestjs/platform-fastify`). §3 — "8 specs" de Playwright virou **17** (`f1`–`f17`), com o que cada um cobre. §5 — a linha dos Git hooks deixou de afirmar "TDD enforcer": nenhum hook o roda (`pre-commit` = `lint-staged` → `stack-code-reviewer` → `doc-sync`; `commit-msg` = `commit-msg-gate`; `pre-push` = `ci:preflight` → `ci:boot` → `pr:refresh`).  §3 — a versão do Playwright passou a `^1.60.0` (o lock continua resolvendo `1.60.0`: o pin era acidental e nada dependia dele — não há imagem do Playwright no repo nem `playwright install` com versão). ||
 | `1.20.0` | **Sem mudança de stack** — as 4 skills novas são docs e roteamento (nenhuma dependência, nenhum script, nenhuma config de infra mudou); o footer subiu junto com os outros 5. O gate `check-version-footers` (do #126) é o que fecha essa classe. |
+| `1.21.0` | **Sem mudança de stack** — o runbook novo (`docs/runbooks/cloudflare-edge.md`) é doc: nenhuma dependência, nenhum script, nenhuma config de infra mudou. O footer subiu junto com os outros 5. |
