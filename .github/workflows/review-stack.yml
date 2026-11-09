@@ -33,7 +33,7 @@ jobs:
           # Este workflow roda em `pull_request` — conteúdo de terceiro — e
           # não faz push de nada.
           persist-credentials: false
-      - uses: pnpm/action-setup@a3252b78c470c02df07e9d59298aecedc3ccdd6d # v3
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v3
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
