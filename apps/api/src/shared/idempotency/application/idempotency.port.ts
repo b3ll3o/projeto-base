@@ -5,7 +5,9 @@
  * de idempotência de escrita. Fecha a lacuna declarada em
  * `docs/system-design/dados.md` §6 — "retry não é seguro: um cliente que
  * repete por timeout **não tem como saber** se a primeira gravou, e recebe
- * 409 no lugar de 201".
+ * 409 no lugar de 201" (a §6 já descreve o estado FECHADO — a chave é o
+ * `Idempotency-Key`, e a mesma chave com o mesmo pedido devolve a mesma
+ * resposta).
  *
  * A decisão (o que a chave significa, quem a usa, por quanto tempo vale) mora
  * no [ADR-0011](../../../../docs/adr/0011-idempotencia-de-escrita.md).

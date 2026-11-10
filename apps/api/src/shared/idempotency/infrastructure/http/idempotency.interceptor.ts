@@ -5,9 +5,10 @@
 //
 // O QUE ELE FECHA
 //
-// `docs/system-design/dados.md` §6: "a lacuna real é que **retry não é
-// seguro** — um cliente que repete por timeout não tem como saber se a
-// primeira gravou, e recebe 409 no lugar de 201".
+// A lacuna que `docs/system-design/dados.md` §6 descrevia — "retry não é
+// seguro: um cliente que repete por timeout **não tem como saber** se a
+// primeira gravou, e recebe 409 no lugar de 201" — está fechada desde
+// 2026-11-10: a mesma chave com o mesmo pedido devolve a MESMA resposta.
 //
 // COMO FUNCIONA
 //
