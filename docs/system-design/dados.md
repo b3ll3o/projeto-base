@@ -240,14 +240,10 @@ de senha barato para quem lê a tabela.
 O registro é a tabela `idempotency_keys`, do caminho de **SISTEMA** (sem
 RLS, `REVOKE` do `app_runtime`) — como o `refresh_tokens`: a resposta guardada
 é PII de outra empresa, e a RLS é o que impede o papel de runtime de ler a
-base alheia. São **dois prazos**: **5 min** enquanto a operação roda (a
-reserva) e **24 h** com a resposta guardada (o replay) — e o prazo curto é
-o que impede que um processo morto trave o cliente por 24 h. A poda roda no
-boot e a cada 100 reservas. A chave é escopada pelo **ator**: a chave de uma
-conta não vale para outra — e, no ator anônimo (rota `@Public()`), ela tem
-**piso de entropia** (16 caracteres) porque o par `(chave, ator)` é
-compartilhado por todos os clientes. O bloco `/auth` fica de fora — a sessão
-tem semântica própria (o refresh token é de uso único).
+base alheia. A chave vale **5 min** enquanto a operação roda (a reserva) e
+**24 h** com a resposta guardada (o replay), e tem **piso de entropia** (16
+caracteres) — no ator anônimo, o par `(chave, ator)` é compartilhado por
+todos os clientes. O `/auth` fica de fora: a sessão tem semântica própria.
 
 ---
 
