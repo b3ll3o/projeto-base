@@ -149,13 +149,13 @@ no modelo atual — e por isso as duas dependências que o #158 e o #161 pedem
 
 | Item | Decisão | Onde fica registrado |
 |---|---|---|
-| #163 | o diff dele entra neste PR | commit `fix(deps):` + o arquivo |
-| #162 | fechado — major de flat-config fora do peer do `eslint-config-next` | comentário de fechamento com a medida |
-| #160 | fechado — `engines.node` incompatível com o piso do repo | idem |
-| #159 | fechado — a classe `Resource` sai do pacote e 3 arquivos a usam | idem |
-| #161 | fechado — o SDK 3.x contra o `sdk-trace-base` 1.x do repo | idem |
-| #158 | fechado — duas gerações de instrumentação na mesma árvore | idem |
-| #149 | fechada com a tabela de estado F1–F5 (§7) | comentário de fechamento + este plano |
+| #163 | **fechado** — o diff dele entra no PR #165 | commit `fix(gates):` + o arquivo |
+| #162 | **fechado** — major de flat-config fora do peer do `eslint-config-next` | comentário de fechamento com a medida |
+| #160 | **fechado** — `engines.node` incompatível com o piso do repo | idem |
+| #159 | **fechado** — a classe `Resource` sai do pacote e 3 arquivos a usam | idem |
+| #161 | **fechado** — o SDK 3.x contra o `sdk-trace-base` 1.x do repo | idem |
+| #158 | **fechado** — duas gerações de instrumentação na mesma árvore | idem |
+| #149 | **fechada** com a tabela de estado F1–F5 (§7) | comentário de fechamento + este plano |
 
 ## 6. A execução
 
@@ -202,4 +202,7 @@ no modelo atual — e por isso as duas dependências que o #158 e o #161 pedem
 - [x] Os 6 footers em 1.28.0, com a linha do histórico em
       `estrutura-e-versionamento.md` e `docs/STACK.md`.
 - [x] `pnpm ci:local` verde (o gate de pre-push do repo).
-- [ ] 1 PR aberto, com os 6 PRs antigos e a #149 fechados.
+- [x] 1 PR aberto (**#165**, `fix(deps): as pendências dos 6 PRs e da issue #149
+      fechadas em UM PR`), com os 6 PRs antigos (#158–#163) e a #149 fechados e as
+      6 branches apagadas — com as 6 tags `backup/<branch>` preservando o conteúdo
+      que o exame de conteúdo mediu fora da `main`.
