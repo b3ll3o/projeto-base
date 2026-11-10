@@ -4,6 +4,9 @@
 > Os apps `apps/api` e `apps/web` **já estão implementados** sobre esta stack
 > (ver [`./MONOREPO.md`](./MONOREPO.md) para a convenção do monorepo e a seção
 > [Containerização](#containerização) para os Dockerfiles).
+> **O desenho da stack** — topologia, módulos, dados, segurança e operação — está em
+> [`./system-design/README.md`](./system-design/README.md), e as **decisões** que a justificam estão em
+> [`./adr/`](./adr/).
 
 ---
 
@@ -171,7 +174,7 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão da stack:** 1.25.0
+**Versão da stack:** 1.26.0
 
 ### Histórico de Versões
 
@@ -198,3 +201,4 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 | `1.21.0` | **Sem mudança de stack** — o runbook novo (`docs/runbooks/cloudflare-edge.md`) é doc: nenhuma dependência, nenhum script, nenhuma config de infra mudou. O footer subiu junto com os outros 5. |
 | `1.22.0` | **A autenticação tem registro, e o container tem probe** — o BC `auth` ganha a tabela `refresh_tokens` (o `jti` do refresh token, a rotação, o `POST /auth/logout` e a detecção de replay) e a imagem da api ganha o `exec` no ENTRYPOINT (o SIGTERM chega ao Node) e um probe que não depende de pacote instalado. Duas migrations novas, dois gates novos. O footer subiu junto com os outros 5. |
 | `1.25.0` | **Sem mudança de stack** — a skill `agent-desktop` (adaptada de [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop), Apache-2.0) e a unificação da pasta de tooling de IA são docs e roteamento: **nenhuma dependência nova**, nenhum binário no `package.json` (a CLI é externa, instalada na máquina), nenhuma mudança em `apps/api`, `apps/web`, `packages/` ou `infra/`. O único config movido foi o `settings.json` do Claude Code, de `.claude/` para `.agents/`. |
+| `1.26.0` | **Sem mudança de stack** — o conjunto de system design canônico ([`./system-design/README.md`](./system-design/README.md), 7 documentos) é **doc**: nenhuma dependência nova, nenhum binário no `package.json`, nenhuma mudança em `apps/api`, `apps/web`, `packages/` ou `infra/`. O que mudou foi a **descoberta**: o `STACK.md` passa a apontar para o desenho, e o desenho passa a apontar para o ADR dono de cada decisão. |

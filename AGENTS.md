@@ -286,10 +286,13 @@ Quando seguido corretamente, este padrão garante:
   [`docs/agents/triage-labels.md`](./docs/agents/triage-labels.md).
 - **Domain docs** — single-context: `GLOSSARY.md` na raiz + `docs/adr/`. Ver
   [`docs/agents/domain.md`](./docs/agents/domain.md).
+- **System design** — o desenho do sistema (topologia, módulos, dados,
+  segurança, operação) e o **contrato de extensão** para o app derivado. Ver
+  [`docs/system-design/README.md`](./docs/system-design/README.md).
 
 ---
 
 **Mantido por:** projeto-base contributors
 **Licença:** MIT
-**Versão do documento:** 1.25.0
+**Versão do documento:** 1.26.0
 **Status:** Estável

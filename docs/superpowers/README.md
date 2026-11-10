@@ -1,7 +1,7 @@
 # `docs/superpowers/` — índice
 
-> Índice do diretório de **histórico** do repo. Medido em **2026-10-29**:
-> **106 planos** em `plans/` e **13 specs** em `specs/`.
+> Índice do diretório de **histórico** do repo. Medido em **2026-11-09**:
+> **119 planos** em `plans/` e **13 specs** em `specs/`.
 
 ## §1. O que é este diretório
 
@@ -30,7 +30,7 @@ o `sort` por nome devolve a linha do tempo.
 ## §3. Famílias de planos
 
 A contagem abaixo vem do prefixo do slug (a primeira palavra depois da data),
-que **particiona** os 106 planos — a soma das linhas dá o total:
+que **particiona** os 119 planos — a soma das linhas dá o total:
 
 ```bash
 ls docs/superpowers/plans/*.md \
@@ -43,8 +43,8 @@ ls docs/superpowers/plans/*.md \
 | `cadastro` | 39 | O plano de "cadastro de usuário com auditoria": 10 fases (`fase-01` a `fase-10`, cada uma em partes) + o plano. O maior bloco do repo. |
 | `melhorias` | 12 | "Melhorias do fluxo de desenvolvimento", em 4 fases (`fase-1-p0`, `fase-2-p1`, `fase-3-p1`, `fase-4-p2`). |
 | `review` | 11 | O `review-router`, em 6 fases (`fase-01` a `fase-06`: foundation, catalog, pilot, memories, migration, consolidation) + o plano. |
+| `revisao` | 7 | Revisões adversarial de PR (PR #108, #109, #114, a da branch de documentação, a do PR #144 em 2 rodadas e a do PR #147). |
 | `specialist` | 5 | O `specialist-router` + a especialidade de Docker: `fase-01-infra-router`, `fase-02-docker-specialist`, `fase-03a-dockerfiles-compose`, `fase-03b-apps-health-docs-pr` + o plano. |
-| `revisao` | 4 | Revisões adversarial de PR (PR #108, PR #109, PR #114). |
 | `pendencias` | 3 | Pendências antes do gate (pré-gate) e de feature flags. |
 | `guard` | 3 | As classes de guard (baseline, decisões, plano). |
 | `feature` | 3 | Feature flags (plano + revisões). |
@@ -53,7 +53,16 @@ ls docs/superpowers/plans/*.md \
 | `multi` | 2 | Multi-tenant (plano + revisões). |
 | `issues` | 2 | Issues abertas (P0/P1 e issues #110/#111). |
 | `fix` | 2 | Correções de issues abertas (+ apêndice). |
+| `correcoes` | 2 | Correções de observabilidade r3, de tenancy/admin e do PR #129 e do PR #145. |
 | `ci` | 2 | Robustez de CI e CI local com e2e. |
+| `auditoria` | 2 | Auditoria de 6 defeitos + o plano de cadastro com auditoria (as 4 primeiras fases). |
+| `system` | 1 | O system design padrão e extensível (ADR-0010). |
+| `teto` | 1 | Teto de linhas e dívidas de código. |
+| `start` | 1 | Start local sem o erro P1001. |
+| `atualizacao` | 1 | Atualização de dependências. |
+| `as` | 1 | As 10 issues P1 do scan de 2026-11-02. |
+| `acertos` | 1 | Os acertos da revisão do PR #147. |
+| `issue` | 1 | A instrumentação da camada de binding (issue #149). |
 | `termos` | 1 | Termos de domínio. |
 | `telemetria` | 1 | Plano de telemetria. |
 | `stack` | 1 | Stack de observabilidade. |
@@ -65,12 +74,11 @@ ls docs/superpowers/plans/*.md \
 | `idor` | 1 | IDOR e rate limit. |
 | `coverage` | 1 | Gate de cobertura. |
 | `b23.2` | 1 | Polish do backlog (B23.2/B23.3). |
-| `auditoria` | 1 | Auditoria de 6 defeitos. |
 | `archify` | 1 | Subcomando `archify` de flow. |
 
-**Total: 106** (`ls docs/superpowers/plans/*.md | wc -l`).
+**Total: 119** (`ls docs/superpowers/plans/*.md | wc -l`).
 
-Período coberto: **2026-09-21 a 2026-10-29**.
+Período coberto: **2026-09-21 a 2026-11-09**.
 
 ## §4. As specs
 
@@ -111,7 +119,7 @@ plano. As duas direções existem, e é o que impede que um plano vire órfão:
   faz em um plano novo, que aponta para o antigo — não editando o antigo.
 - **`plans/` é maior que `specs/`** porque uma demanda pode gerar 10 partes de
   plano e nenhuma spec nova (a spec já existe).
-- **Este README é índice, não dump.** Ele não lista os 106 planos um a um: as
+- **Este README é índice, não dump.** Ele não lista os 119 planos um a um: as
   famílias e as contagens bastam para saber o que existe, e `ls` dá o resto.
 
 ## §7. Ver mais

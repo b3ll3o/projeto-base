@@ -24,8 +24,7 @@
 │   ├── tsconfig/                   # tsconfig.base.json + base/node/react
 │   └── eslint-config/              # Regras ESLint compartilhadas
 ├── tooling/scripts/                # Scripts utilitários do monorepo
-├── infra/                          # Config dos backends de telemetria:
-│                                   # grafana/, otelcol/, prometheus/, tempo/
+├── infra/                          # Config dos backends de telemetria: grafana/, otelcol/, prometheus/, tempo/
 ├── docs/                           # Documentação
 ├── .agents/                        # Agents, skills, workflows
 ├── AGENTS.md                       # Spec canônica do padrão
@@ -259,10 +258,10 @@ Apps NÃO compartilham:
 > regra de dependência invertida e os guardiões mecânicos moram lá. Este
 > índice aponta; **não repete** (regra do fato único, `dry.md`).
 
-Resumo: apps backend adotam **DDD + Hexagonal (Ports & Adapters)** como
-paradigma arquitetural obrigatório (`v1.2.0`), cada feature em
-`apps/api/src/modules/<feature>/{domain,application,infrastructure}/`, e os
-shared concerns em `apps/<app>/src/shared/{audit,domain,infrastructure}/`.
+Resumo: apps backend adotam **DDD + Hexagonal (Ports & Adapters)** como paradigma arquitetural
+obrigatório (`v1.2.0`), cada feature em `apps/api/src/modules/<feature>/{domain,application,infrastructure}/`,
+os shared concerns em `apps/<app>/src/shared/{audit,domain,infrastructure}/` — e o **desenho** disso, por
+nível, em [`docs/system-design/`](../docs/system-design/README.md).
 
 Decisão: [ADR-0001](./adr/0001-arquitetura-ddd-hexagonal-auditoria.md) ·
 guardiões: agent `stack-code-reviewer` (D11) + skill
@@ -272,7 +271,7 @@ visão de stack: [`docs/STACK.md` §8](./STACK.md).
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão do documento:** 1.25.0
+**Versão do documento:** 1.26.0
 
 ### Histórico de Versões
 
@@ -298,3 +297,4 @@ visão de stack: [`docs/STACK.md` §8](./STACK.md).
 | `1.21.0` | **Sem mudança de monorepo** — a árvore de `apps/`, `packages/` e `infra/` é a mesma: o PR só adiciona um runbook (`docs/runbooks/cloudflare-edge.md`), que vive em `docs/`, fora da árvore do workspace. O footer do `AGENTS.md` e dos outros 4 subiu junto (o gate `check-version-footers` é o que fecha essa classe). |
 | `1.22.0` | **As 10 issues P1 do scan de 2026-11-02, em um PR** (minor bump — o PR adiciona rota, tabelas e gates, e corrige 10 defeitos) — **#132 (revogação)**: o refresh token ganha `jti` e passa a ter registro (`refresh_tokens`), rotação, `POST /auth/logout` e detecção de replay; **#133 (credencial)**: a senha que a migration publicava sai do repositório (a role nasce sem senha, a rotação limpa o hash, o mínimo vai a 24 caracteres); **#134 (drift)**: `chaves_de_assinatura` ganha model no `schema.prisma` (o `migrate diff` propunha `DROP TABLE`); **#135 (convite)**: convite aceito ou expirado não bloqueia o reconvite; **#136 (cursor)**: o cursor da paginação aceita a forma que a tabela gera; **#137/#138/#139 (containers)**: o SIGTERM chega ao Node (`exec`), o web define `HOSTNAME`, e o probe do healthcheck não depende de pacote instalado. **2 gates novos** (`check-docker-healthcheck-binary`, `check-migrations-sem-model`) e **2 migrations** (`refresh_tokens`, rotação do papel de runtime). |
 | `1.25.0` | **Uma pasta de tooling de IA, e a skill `agent-desktop`** (minor bump — nenhuma das duas mudanças mexe no formato de handoff nem na superfície canônica, que são os gatilhos de major) — **(A) a skill `agent-desktop`** em `.agents/skills/agent-desktop/SKILL.md`, adaptada de [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop) (Apache-2.0): uma CLI que opera app nativo de desktop pela árvore de acessibilidade do SO. A CLI é **externa** — não entra no `package.json`, não pede segredo e não roda no CI. **(B) a pasta `.claude/` sai do repo**: os 29 wrappers de skill e os 3 de agent eram cópias do `name`/`description` que o `SKILL.md` canônico já trazia; os 2 hooks, o `settings.json`, o `README.md` e o `FINDINGS.md` foram para `.agents/`, e o binding do Claude Code passa a ser feito **na máquina** (symlink `~/.claude/skills/<nome>` → `.agents/skills/<nome>`; receita em [`docs/integrations/claude-code.md`](./integrations/claude-code.md)). MEDIDO 2026-11-09: uma pasta com só `.agents/skills/probe-skill/` devolveu **ZERO** skill de projeto ao Claude Code 2.1.319, e a mesma pasta com `.claude` como symlink para `.agents` devolveu **30 skills e 28 agents**, sem wrapper nenhum. Gate novo `check-pasta-unica`; o `check-skill-coverage` trocou SEM BINDING por DESCOBRÍVEL (frontmatter com `name`/`description`, e `name` igual ao diretório). **Nenhum arquivo de `apps/`, `packages/` ou `infra/` mudou: a árvore do monorepo é a mesma.** |
+| `1.26.0` | **O system design canônico** (minor bump — doc: nenhum arquivo de `apps/`, `packages/` ou `infra/` mudou) — o conjunto `docs/system-design/` (7 documentos: índice, contexto, módulo, dados, segurança, operação e o **contrato de extensão**), o **ADR-0010** e o template que o app derivado copia. O `schema.prisma` passou a mapear para `docs/system-design/dados.md` no `doc-sync`, e a tabela de donos de `documentacao.md` §2 ganhou a linha do conjunto. |
