@@ -41,8 +41,6 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import type { FastifyAdapter } from '@nestjs/platform-fastify';
-import { trace, context } from '@opentelemetry/api';
-import { randomUUID } from 'node:crypto';
 
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
 import { UserProfileUseCases } from '../../../profiles/application/profiles.use-cases.js';
@@ -64,6 +62,7 @@ import type { TokenSubject } from '../../../auth/domain/ports/token-issuer.port.
 import { AUDIT_SERVICE_PORT } from '../../../../shared/audit/shared/audit.tokens.js';
 import { AuditContextStore } from '../../../../shared/audit/shared/audit-context-store.js';
 import { AuditContext } from '../../../../shared/audit/domain/audit-context.vo.js';
+import { traceIdDe } from '../../../../shared/infrastructure/http/trace-id.js';
 import type {
   AuditServicePort,
   ListHistoryInput,
@@ -112,6 +111,16 @@ type FastifyReply = Parameters<FastifyAdapter['setHeader']>[0];
  */
 interface RequestWithUser {
   user?: TokenSubject & { tenantId?: string | null; isAdmin?: boolean };
+  /**
+   * O id do request (Fastify) — `req-<n>`.
+   *
+   * pt-BR (2026-11-10): ele entra aqui porque o `correlationId` da auditoria
+   * é o MESMO id que a resposta carrega (`traceIdDe(request)`) — e sem span
+   * ativo, o `traceIdDe` cai no `request.id`. É o `id` do Fastify, e ele NÃO
+   * vem do cliente: o Fastify não lê `request-id` do header (não há
+   * `requestIdHeader` no adapter).
+   */
+  id?: string;
 }
 
 /**
@@ -599,11 +608,18 @@ export class UsersController {
    * porque não havia de onde tirar a identidade; agora o `JwtAuthGuard`
    * a publica em `request.user` e a auditoria fica atribuída.
    *
-   * `correlationId` é W3C-compliant quando há um span OTel ativo no
-   * contexto (32 chars hex minúsculos), correlacionando audit com
-   * traces no backend OTel. Fallback para `randomUUID()` mantém compat
-   * com testes e callers fora de uma span ativa — o VO AuditContext
-   * rejeita correlationId vazio.
+   * `correlationId` é o **mesmo id** que a resposta carrega: a derivação
+   * é a de `traceIdDe()` — traceId W3C do span ativo → `request.id` do
+   * Fastify → um UUID fixado no request. É W3C-compliant quando há span
+   * (32 chars hex minúsculos), e é o `request.id` quando não há — que é o
+   * caso do log e do corpo de erro.
+   *
+   * pt-BR (2026-11-10 — conformidade do system design): antes, este campo
+   * fazia `w3cTraceId ?? randomUUID()`, e a resposta fazia
+   * `traceIdDe()`. SEM span, os dois divergiam — o `correlationId` era um
+   * UUID aleatório e o `traceId` da resposta era o `request.id`. Era a
+   * divergência declarada em `docs/system-design/dados.md` §5. Uma
+   * derivação só fecha isso: a mesma função, o mesmo id.
    *
    * ── POR QUE O `sub` PASSA PELO VO `UserId` ──────────────────────────────
    *
@@ -618,11 +634,9 @@ export class UsersController {
    * num lugar só.
    */
   private buildContext(request?: RequestWithUser): AuditContext {
-    const span = trace.getSpan(context.active());
-    const w3cTraceId = span?.spanContext().traceId;
     return new AuditContext({
       actorId: this.resolveActorId(request),
-      correlationId: w3cTraceId ?? randomUUID(),
+      correlationId: traceIdDe(request),
       source: 'http',
       timestamp: new Date(),
       // pt-BR (Fase 10+): o mesmo header que escopa as mutações escopa a

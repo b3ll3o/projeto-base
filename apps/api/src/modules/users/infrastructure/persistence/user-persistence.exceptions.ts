@@ -73,6 +73,7 @@
 
 import { context, trace } from '@opentelemetry/api';
 import { randomUUID } from 'node:crypto';
+import { AuditContextStore } from '../../../../shared/audit/shared/audit-context-store.js';
 
 /**
  * Identificador de correlação da requisição/trace corrente.
@@ -82,11 +83,22 @@ import { randomUUID } from 'node:crypto';
  * e à do `buildContext` do controller — divergir dela criaria um correlationId
  * que o operador não consegue casar com o `traceId` da resposta.
  *
- * Fora de qualquer span ativo (spec unitária, job, boot) devolve um
- * `randomUUID()`: um id vazio faria o construtor abaixo falhar, e o
- * `AuditContext` recusa `correlationId` vazio pelo mesmo motivo.
+ * ⚠️ A ordem das fontes mudou em 2026-11-10 (conformidade do system
+ * design): o **contexto de auditoria** do request corrente manda, porque ele
+ * carrega o `traceIdDe()` — o MESMO id que a resposta devolve e que o log
+ * usa. Antes, sem span, esta função devolvia um `randomUUID()` que não
+ * aparecia em mais nada, e a falha de persistência apontava para um id que
+ * o operador não conseguia casar com a requisição.
+ *
+ * Fora de qualquer span ativo **e** de qualquer escopo de auditoria (spec
+ * unitária, job, boot) devolve um `randomUUID()`: um id vazio faria o
+ * construtor abaixo falhar, e o `AuditContext` recusa `correlationId` vazio
+ * pelo mesmo motivo.
  */
 export function correlationIdAtual(): string {
+  const ctx = AuditContextStore.tryGet();
+  if (ctx !== undefined) return ctx.correlationId;
+
   const span = trace.getSpan(context.active());
   return span?.spanContext().traceId ?? randomUUID();
 }

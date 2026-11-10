@@ -27,6 +27,7 @@ import {
   ESCOPO_DE_SISTEMA,
   PAPEIS_COM_SENHA_GERIDA,
   PARAMETRO_DE_ESCOPO,
+  STATEMENT_TIMEOUT_DO_PAPEL,
   TAMANHO_MINIMO_DE_SENHA_DE_PAPEL,
   uriComoPapelDeRuntime,
   uriComoPapelDeSistema,
@@ -60,6 +61,15 @@ const sqlDeRotacao = readFileSync(fileURLToPath(MIGRATION_DE_ROTACAO), 'utf8');
 const SCRIPT_DE_PAPEIS = new URL('../../../../scripts/prepara-papeis.sh', import.meta.url);
 const scriptDePapeis = readFileSync(fileURLToPath(SCRIPT_DE_PAPEIS), 'utf8');
 
+// 2026-11-10 (conformidade do system design): a migration do ORÇAMENTO DE
+// TEMPO do papel. O número mora nos DOIS lados (TypeScript e SQL) — e este
+// arquivo reconcilia os dois, pelo mesmo motivo do tamanho mínimo.
+const MIGRATION_DO_ORCAMENTO = new URL(
+  '../../../../prisma/migrations/20261110000000_statement_timeout_do_papel/migration.sql',
+  import.meta.url,
+);
+const sqlDoOrcamento = readFileSync(fileURLToPath(MIGRATION_DO_ORCAMENTO), 'utf8');
+
 /**
  * O SQL SEM os comentários.
  *
@@ -80,6 +90,25 @@ function semComentarios(sql: string): string {
 describe('papel de runtime — a migration e o TypeScript sao o mesmo papel', () => {
   it('o nome do papel na migration e o mesmo da constante', () => {
     expect(sql).toContain(`CREATE ROLE ${PAPEL_DE_RUNTIME}`);
+  });
+
+  // pt-BR (2026-11-10 — conformidade do system design): o orçamento de tempo
+  // do papel é declarado em DOIS lugares — a constante e a migration — porque
+  // migration não recebe parâmetro de env. Sem esta reconciliação, trocar o
+  // número num lado só não dá erro de compilação nem de migration: só
+  // aparece como "a query de 30 s rodou" (ou "a query de 2 s foi cortada"),
+  // longe da linha que causou.
+  it('o statement_timeout da migration e o da constante (o numero tem UM dono)', () => {
+    const codigo = semComentarios(sqlDoOrcamento);
+    expect(codigo).toContain(`SET statement_timeout = '${STATEMENT_TIMEOUT_DO_PAPEL}'`);
+  });
+
+  it('os DOIS papeis da API recebem o mesmo orcamento', () => {
+    // `app_runtime` é o tráfego; `app_system` é o bucket de sistema (login,
+    // refresh, logout e a idempotência). As duas falam com o mesmo banco.
+    const codigo = semComentarios(sqlDoOrcamento);
+    expect(codigo).toContain(`ALTER ROLE ${PAPEL_DE_RUNTIME} SET statement_timeout`);
+    expect(codigo).toContain(`ALTER ROLE ${PAPEL_DE_SISTEMA} SET statement_timeout`);
   });
 
   // #118: a senha do papel saiu do REPO. A forma correta deste teste é a

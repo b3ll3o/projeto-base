@@ -127,6 +127,27 @@ export const ESCOPO_DE_SISTEMA = '*';
  */
 export const PARAMETRO_DE_ESCOPO = 'app.tenant_id';
 
+/**
+ * O orçamento de tempo de uma statement, para os papéis do banco.
+ *
+ * pt-BR (2026-11-10 — conformidade do system design): fecha a lacuna
+ * declarada em `docs/system-design/operacao.md` §6 — "API → banco: **nenhum**
+ * timeout — não há `statement_timeout` no papel de runtime, e a query espera
+ * o Postgres desistir". Sem orçamento, um `SELECT` lento segura a conexão do
+ * pool até o Postgres desistir — e o pool é o limite de escala da API.
+ *
+ * ⚠️ POR QUE 8s, E NÃO OUTRO NÚMERO: o orçamento fica **abaixo** do timeout
+ * do cliente web (10 s — o fallback de `apps/web/lib/api-client.ts`), para a
+ * API responder com erro **antes** de o cliente desistir; e **acima** do prazo
+ * de transação interativa do Prisma (5 s, o default documentado em
+ * `escopo.ts`), que é o que corta a transação primeiro.
+ *
+ * ⚠️ O número mora AQUI e na migration que o aplica (que é SQL, e não lê
+ * TypeScript). O `papel-de-runtime.spec.ts` RECONCILIA os dois — o mesmo
+ * mecanismo que reconcilia o tamanho mínimo da senha de papel.
+ */
+export const STATEMENT_TIMEOUT_DO_PAPEL = '8s';
+
 /** Troca o usuário e a senha da URI pelo papel de runtime, preservando o resto. */
 export function uriComoPapelDeRuntime(uriDoDono: string, senha: string): string {
   return uriComPapel(uriDoDono, PAPEL_DE_RUNTIME, senha);
