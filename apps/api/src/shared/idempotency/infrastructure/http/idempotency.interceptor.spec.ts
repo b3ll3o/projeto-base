@@ -21,6 +21,7 @@ import { ConflictException } from '@nestjs/common';
 import {
   HEADER_DE_IDEMPOTENCIA,
   HEADER_DE_REPLAY,
+  type HeadersDaResposta,
   type IdempotencyPort,
   type ImpressaoDePedido,
   type ReservaDeChave,
@@ -35,6 +36,7 @@ class PortDuble implements IdempotencyPort {
     ator: string;
     status: number;
     resposta: unknown;
+    headers: HeadersDaResposta;
   }[] = [];
   liberados: { chave: string; ator: string }[] = [];
   veredito: ReservaDeChave = { estado: 'livre' };
@@ -49,6 +51,7 @@ class PortDuble implements IdempotencyPort {
     ator: string;
     status: number;
     resposta: unknown;
+    headers: HeadersDaResposta;
   }): Promise<void> {
     if (this.falhaAoGuardar !== null) throw this.falhaAoGuardar;
     this.guardados.push(input);
@@ -70,12 +73,16 @@ function request(extra: Record<string, unknown> = {}): Record<string, unknown> {
   };
 }
 
-/** O reply mínimo: o interceptor escreve status e header nele. */
+/**
+ * O reply mínimo: o interceptor escreve status e header nele, e LÊ os
+ * headers que ele já tem (`getHeaders()`).
+ */
 function reply(): {
   statusCode: number;
   headers: Record<string, string>;
   status: (codigo: number) => { statusCode: number };
   header: (nome: string, valor: string) => { headers: Record<string, string> };
+  getHeaders: () => Record<string, string>;
 } {
   const alvo = {
     statusCode: 200,
@@ -87,6 +94,9 @@ function reply(): {
     header(nome: string, valor: string) {
       alvo.headers[nome] = valor;
       return alvo;
+    },
+    getHeaders() {
+      return alvo.headers;
     },
   };
   return alvo;
@@ -170,13 +180,41 @@ describe('IdempotencyInterceptor', () => {
         ator: 'anônimo',
         status: 201,
         resposta: { id: 'u-1' },
+        headers: {},
       },
     ]);
   });
 
+  it('guarda SÓ os headers que o handler escreveu (o `ETag`), não os de infraestrutura', async () => {
+    const port = new PortDuble();
+    const interceptor = new IdempotencyInterceptor(port);
+    const res = reply();
+    // O header de INFRAESTRUTURA: ele já está no reply antes do handler
+    // (o rate limit e o helmet escrevem antes do interceptor) — e é do
+    // request, não da resposta.
+    res.headers['x-ratelimit-limit'] = '100';
+
+    await firstValueFrom(
+      await interceptor.intercept(contextoDe(request(), res), {
+        handle: () => {
+          // O que o HANDLER escreve: o `ETag` do `POST /users`.
+          res.header('etag', 'W/"v1"');
+          return of({ id: 'u-1' });
+        },
+      }),
+    );
+
+    expect(port.guardados[0]?.headers).toEqual({ etag: 'W/"v1"' });
+  });
+
   it('com REPLAY, o handler NÃO roda e a MESMA resposta volta', async () => {
     const port = new PortDuble();
-    port.veredito = { estado: 'replay', status: 201, resposta: { id: 'u-1' } };
+    port.veredito = {
+      estado: 'replay',
+      status: 201,
+      resposta: { id: 'u-1' },
+      headers: { etag: 'W/"v1"' },
+    };
     const interceptor = new IdempotencyInterceptor(port);
     const res = reply();
     const handler = vi.fn(() => of({ id: 'u-2' }));
@@ -189,6 +227,9 @@ describe('IdempotencyInterceptor', () => {
     expect(resposta).toEqual({ id: 'u-1' });
     expect(res.statusCode).toBe(201);
     expect(res.headers[HEADER_DE_REPLAY]).toBe('true');
+    // O `ETag` da primeira vez volta: sem ele, a resposta do retry não
+    // seria a mesma da original.
+    expect(res.headers['etag']).toBe('W/"v1"');
   });
 
   it('com CONFLITO (a chave reusada com outro pedido), responde 409', async () => {

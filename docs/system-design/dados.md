@@ -232,7 +232,7 @@ era.
 | Situação (POST, fora de `/auth`) | Resposta |
 |---|---|
 | Primeira vez | a operação roda (201) e a resposta é **guardada** |
-| Repetida, **mesmo** corpo | **replay**: a mesma resposta e o header `Idempotency-Replayed: true` |
+| Repetida, **mesmo** corpo | **replay**: a mesma resposta (status, corpo e o `ETag`) e o header `Idempotency-Replayed: true` |
 | Repetida, **outro** corpo | **409** `IDEMPOTENCY_KEY_REUSED` |
 | Repetida, operação **em andamento** | **409** `IDEMPOTENCY_KEY_IN_FLIGHT` |
 | Operação **falhou** | a chave é **liberada** — o retry executa de verdade |

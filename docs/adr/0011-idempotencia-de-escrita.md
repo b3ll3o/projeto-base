@@ -99,6 +99,21 @@ deu 2xx**: ela é logada, e o cliente recebe a resposta normal. Virar 500
 aí faria o cliente repetir — e o retry faria a operação **duas vezes**. A
 chave fica reservada (o retry leva 409), que é melhor do que duplicar.
 
+### 6.1 O replay repõe os headers que a aplicação escreveu
+
+A resposta guardada é o **status**, o **corpo** e os **headers que a
+aplicação escreveu** — hoje, o `ETag` do `POST /users` e do
+`POST /users/:id/restore` (`users.controller.ts`).
+
+Sem eles, a resposta do retry não seria a mesma da original: um cliente
+que monta o `If-Match` a partir do `ETag` que a criação devolve levaria
+**400** no `PATCH` seguinte.
+
+Os headers de **infraestrutura** (os do helmet, os do rate limit) **não**
+são repostos: eles são do **request**, e cada request tem os seus. O
+interceptor guarda o que o **handler** escreveu — a comparação é com o
+estado do reply antes do handler.
+
 ### 7. A tabela é do caminho de SISTEMA
 
 A resposta guardada é **PII de outra empresa**: o corpo do `POST /users` tem
@@ -128,7 +143,8 @@ sabem que a resposta veio da reserva — e não de uma operação nova.
 ### O que mudou para quem usa a API
 
 - `POST` com `Idempotency-Key` repetido com o **mesmo** corpo → a **mesma**
-  resposta, mesmo status, e o header `Idempotency-Replayed: true`.
+  resposta, mesmo status, os mesmos headers da aplicação (o `ETag`) e o
+  header `Idempotency-Replayed: true`.
 - A **mesma** chave com **outro** corpo → **409** `IDEMPOTENCY_KEY_REUSED`.
 - A **mesma** chave com a operação em andamento → **409**
   `IDEMPOTENCY_KEY_IN_FLIGHT`.

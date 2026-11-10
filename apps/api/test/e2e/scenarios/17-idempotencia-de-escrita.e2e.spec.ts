@@ -59,6 +59,9 @@ describe('A idempotência de escrita (Idempotency-Key)', () => {
     expect(segundo.statusCode).toBe(201);
     expect(segundo.headers['idempotency-replayed']).toBe('true');
     expect(segundo.json()).toEqual(primeiro.json());
+    // E o `ETag` volta: a resposta do retry tem de ser a MESMA da original
+    // (o `ETag` é o que o cliente usa para montar o `If-Match` do PATCH).
+    expect(segundo.headers['etag']).toBe(primeiro.headers['etag']);
   });
 
   it('o retry NÃO duplica a linha — o banco tem UM usuário', async () => {

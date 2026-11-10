@@ -50,6 +50,7 @@ import {
   ATOR_ANONIMO,
   HEADER_DE_IDEMPOTENCIA,
   HEADER_DE_REPLAY,
+  type HeadersDaResposta,
   type IdempotencyPort,
 } from '../../application/idempotency.port.js';
 import { IDEMPOTENCY_PORT } from '../../shared/idempotency.tokens.js';
@@ -82,6 +83,8 @@ export interface ReplyComIdempotencia {
   statusCode: number;
   status(codigo: number): unknown;
   header(nome: string, valor: string): unknown;
+  /** Os headers que o reply tem AGORA (Fastify). */
+  getHeaders(): Record<string, string | string[] | number>;
 }
 
 /**
@@ -136,6 +139,30 @@ export function impressaoDoPedido(req: RequestComIdempotencia): string {
     .digest('hex');
 }
 
+/**
+ * Os headers que o **handler** escreveu — e só eles.
+ *
+ * ⚠️ A comparação é com o estado do reply ANTES do handler: o que já
+ * estava lá é de infraestrutura (o helmet, o rate limit), e header de
+ * infraestrutura é do REQUEST, não da resposta — o replay tem os seus.
+ *
+ * O que o handler escreve é o `ETag` (`users.controller.ts`), e é ele que o
+ * replay precisa repôr: sem o `ETag`, a resposta do retry não seria a mesma
+ * da original, e um cliente que monta o `If-Match` a partir dele levaria
+ * 400.
+ */
+export function headersQueOHandlerEscreveu(
+  depois: Record<string, string | string[] | number>,
+  antes: Record<string, string | string[] | number>,
+): HeadersDaResposta {
+  const escritos: HeadersDaResposta = {};
+  for (const [nome, valor] of Object.entries(depois)) {
+    if (antes[nome] === valor) continue;
+    escritos[nome] = Array.isArray(valor) ? valor.join(', ') : String(valor);
+  }
+  return escritos;
+}
+
 @Injectable()
 export class IdempotencyInterceptor implements NestInterceptor {
   private readonly logger = new Logger(IdempotencyInterceptor.name);
@@ -160,9 +187,13 @@ export class IdempotencyInterceptor implements NestInterceptor {
     const reserva = await this.idempotencia.reservar({ chave, ator, rota, impressao });
 
     if (reserva.estado === 'replay') {
-      // A MESMA resposta da primeira vez — e o header que diz que ela veio
+      // A MESMA resposta da primeira vez: o status, o corpo e os headers que
+      // a aplicação escreveu (o `ETag`) — e o header que diz que ela veio
       // da reserva, para o cliente (e para o log) saber.
       reply.status(reserva.status);
+      for (const [nome, valor] of Object.entries(reserva.headers)) {
+        reply.header(nome, valor);
+      }
       reply.header(HEADER_DE_REPLAY, 'true');
       return of(reserva.resposta);
     }
@@ -181,6 +212,10 @@ export class IdempotencyInterceptor implements NestInterceptor {
       });
     }
 
+    // Os headers do reply ANTES do handler: o que já está aqui é de
+    // infraestrutura (helmet, rate limit) e é do request, não da resposta.
+    const headersAntes = { ...reply.getHeaders() };
+
     return next.handle().pipe(
       mergeMap(async (corpo: unknown) => {
         try {
@@ -189,6 +224,7 @@ export class IdempotencyInterceptor implements NestInterceptor {
             ator,
             status: reply.statusCode,
             resposta: corpo,
+            headers: headersQueOHandlerEscreveu(reply.getHeaders(), headersAntes),
           });
         } catch (erro) {
           // ⚠️ A operação JÁ ACONTECEU (o handler devolveu 2xx). Guardar a

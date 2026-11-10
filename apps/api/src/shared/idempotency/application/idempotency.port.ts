@@ -36,12 +36,27 @@ export const ATOR_ANONIMO = 'anônimo';
  */
 export const VALIDADE_DA_CHAVE_HORAS = 24;
 
+/**
+ * Os headers de resposta que a **aplicação** escreveu.
+ *
+ * ⚠️ São só os headers que o HANDLER escreveu — os de infraestrutura (os do
+ * helmet, os do rate limit) são do request, não da resposta, e cada request
+ * tem os seus.
+ */
+export type HeadersDaResposta = Record<string, string>;
+
 /** O que a reserva de uma chave devolveu. */
 export type ReservaDeChave =
   /** A chave é minha: pode executar a operação. */
   | { estado: 'livre' }
-  /** A operação já rodou: devolve a MESMA resposta, sem executar de novo. */
-  | { estado: 'replay'; status: number; resposta: unknown }
+  /**
+   * A operação já rodou: devolve a MESMA resposta, sem executar de novo.
+   *
+   * Os headers são os que a aplicação escreveu na primeira vez (o `ETag` do
+   * `POST /users`, por exemplo) — sem eles, o retry seria uma resposta
+   * diferente da original.
+   */
+  | { estado: 'replay'; status: number; resposta: unknown; headers: HeadersDaResposta }
   /** A chave existe com OUTRO pedido: o cliente reusou a chave por engano. */
   | { estado: 'conflito' }
   /** A chave está reservada e a operação ainda não terminou. */
@@ -69,8 +84,20 @@ export interface IdempotencyPort {
    */
   reservar(pedido: ImpressaoDePedido): Promise<ReservaDeChave>;
 
-  /** Grava a resposta da operação — só quando ela deu 2xx. */
-  guardar(input: { chave: string; ator: string; status: number; resposta: unknown }): Promise<void>;
+  /**
+   * Grava a resposta da operação — só quando ela deu 2xx.
+   *
+   * `headers` são os headers que a **aplicação** escreveu (o `ETag` do
+   * `POST /users`, por exemplo) — o replay precisa repô-los, ou a resposta
+   * do retry não seria a mesma da original.
+   */
+  guardar(input: {
+    chave: string;
+    ator: string;
+    status: number;
+    resposta: unknown;
+    headers: HeadersDaResposta;
+  }): Promise<void>;
 
   /**
    * Libera a chave — quando a operação NÃO deu 2xx.

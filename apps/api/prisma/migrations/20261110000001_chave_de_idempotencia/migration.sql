@@ -21,6 +21,10 @@
 -- diferença entre "a chave está reservada" (em voo) e "a resposta está
 -- guardada" (replay).
 --
+-- `response` guarda a resposta INTEIRA: o corpo (`body`) e os headers que a
+-- aplicação escreveu (`headers` — o `ETag` do `POST /users`). O replay repõe
+-- os dois, ou a resposta do retry não seria a mesma da original.
+--
 -- `expires_at` é o que permite a PODA: sem ela, a tabela só cresce.
 --
 -- ⚠️ As colunas de tempo são INSTANTES ABSOLUTOS — `timestamptz`, e não

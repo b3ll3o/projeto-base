@@ -62,12 +62,16 @@ describe('PrismaIdempotencyService — o registro da chave', () => {
       ator: PEDIDO.ator,
       status: 201,
       resposta: { id: 'u-1', nome: 'João' },
+      headers: { etag: 'W/"v1"' },
     });
 
     expect(await servico.reservar(PEDIDO)).toEqual({
       estado: 'replay',
       status: 201,
       resposta: { id: 'u-1', nome: 'João' },
+      // Os headers que a aplicação escreveu voltam com o replay — sem
+      // eles, a resposta do retry não seria a mesma da original.
+      headers: { etag: 'W/"v1"' },
     });
   });
 
@@ -117,6 +121,7 @@ describe('PrismaIdempotencyService — o registro da chave', () => {
       ator: PEDIDO.ator,
       status: 201,
       resposta: { id: 'u-1', email: 'pessoa@empresa.dev' },
+      headers: {},
     });
 
     const { PrismaClient } = await import('@prisma/client');

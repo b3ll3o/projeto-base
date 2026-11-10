@@ -386,7 +386,8 @@ model IdempotencyKey {
   // O status da resposta guardada. `null` = a operação ainda não terminou
   // (a chave está reservada) — é o que distingue "em voo" de "replay".
   status      Int?
-  // O corpo da resposta guardada.
+  // A resposta guardada: o corpo (`body`) e os headers que a aplicação
+  // escreveu (`headers` — o `ETag`). O replay repõe os dois.
   response    Json?
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   // Quando a chave expira. A poda usa esta coluna.

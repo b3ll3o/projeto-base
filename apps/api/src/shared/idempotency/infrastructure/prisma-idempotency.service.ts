@@ -19,6 +19,7 @@ import { Prisma } from '@prisma/client';
 import { comEscopoDeSistema } from '../../infrastructure/prisma/escopo.js';
 import {
   VALIDADE_DA_CHAVE_HORAS,
+  type HeadersDaResposta,
   type IdempotencyPort,
   type ImpressaoDePedido,
   type ReservaDeChave,
@@ -48,7 +49,18 @@ export class PrismaIdempotencyService implements IdempotencyPort {
       if (linha.fingerprint !== pedido.impressao) return { estado: 'conflito' };
       // A chave está reservada e a operação não terminou.
       if (linha.status === null) return { estado: 'em_voo' };
-      return { estado: 'replay', status: linha.status, resposta: linha.response };
+      // A resposta guardada é o ENVELOPE: o corpo e os headers que a
+      // aplicação escreveu.
+      const envelope = (linha.response ?? {}) as {
+        body?: unknown;
+        headers?: HeadersDaResposta;
+      };
+      return {
+        estado: 'replay',
+        status: linha.status,
+        resposta: envelope.body ?? null,
+        headers: envelope.headers ?? {},
+      };
     }
 
     // As duas tentativas falharam sem estado legível: a resposta segura é
@@ -61,16 +73,21 @@ export class PrismaIdempotencyService implements IdempotencyPort {
     ator: string;
     status: number;
     resposta: unknown;
+    headers: HeadersDaResposta;
   }): Promise<void> {
     await comEscopoDeSistema(async (tx) => {
       await tx.idempotencyKey.update({
         where: { key_actor: { key: input.chave, actor: input.ator } },
         data: {
           status: input.status,
-          response:
-            input.resposta === undefined
-              ? Prisma.DbNull
-              : (input.resposta as Prisma.InputJsonValue),
+          // A coluna `response` guarda a resposta INTEIRA: o corpo e os
+          // headers que a aplicação escreveu. O replay repõe os dois — sem
+          // os headers, a resposta do retry não seria a mesma da original
+          // (o `ETag` do `POST /users` é um deles).
+          response: {
+            body: input.resposta === undefined ? null : input.resposta,
+            headers: input.headers,
+          } as Prisma.InputJsonValue,
         },
       });
     });
