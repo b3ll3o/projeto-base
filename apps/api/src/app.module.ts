@@ -18,7 +18,12 @@ import { FeatureFlagsModule } from './modules/feature-flags/feature-flags.module
 // pt-BR (2026-11-10): o `idempotency-key` entra na redação. A chave é do
 // cliente e é PARTE da capacidade de replay (junto com o corpo e o ator) —
 // um log que a traz em claro é um log que entrega a capacidade.
-const REDACT_PATHS = [
+//
+// ⚠️ A lista é EXPORTADA porque a afirmação "a chave não vai para o log"
+// precisa de instrumento: o spec (`app.module.spec.ts`) aplica ESTES
+// caminhos — e não uma cópia deles, que passaria verde com a redação
+// quebrada aqui.
+export const REDACT_PATHS = [
   'req.headers.authorization',
   'req.headers.cookie',
   'req.headers["idempotency-key"]',
