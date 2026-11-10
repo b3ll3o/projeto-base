@@ -217,6 +217,13 @@ export async function cleanDatabase(prisma: PrismaClient): Promise<void> {
   // seria silenciosa: o primeiro spec que registra um `jti` deixa a linha
   // para o seguinte, que começa esperando base vazia.
   await prisma.refreshToken.deleteMany({});
+  // pt-BR (2026-11-10 — conformidade do system design): o REGISTRO da chave
+  // de idempotência. Não tem FK, então a posição é irrelevante — e a ausência
+  // seria SILENCIOSA: a linha da chave sobrevive de um spec para o outro, e o
+  // spec seguinte mede um REPLAY (ou um "em voo") onde esperava uma reserva
+  // nova. MEDIDO: as asserções do spec de integração passavam com a linha
+  // sobrando, porque nenhuma delas media a reserva em si.
+  await prisma.idempotencyKey.deleteMany({});
   await prisma.userArchive.deleteMany({});
   await prisma.userHistory.deleteMany({});
   await prisma.user.deleteMany({});
