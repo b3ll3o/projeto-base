@@ -160,7 +160,13 @@ varredura existe porque a poda do boot só roda quando o container reinicia —
 e um container que não reinicia deixaria a tabela crescer sem parar.
 
 A chave **expirada já deixa de valer** antes de a linha sumir: o `reservar`
-trata a expiração e reserva a chave de novo.
+trata a expiração e **reconquista** a chave — em UM `UPDATE` condicional
+(`expires_at <= agora`), e não em um DELETE seguido de INSERT. A condição é
+o que fecha a corrida: dois requests que encontram a chave expirada ao
+mesmo tempo não podem apagar a reserva um do outro, e só um fica com a
+chave (MEDIDO no spec de integração — `DUAS reservas concorrentes da MESMA
+chave expirada: só uma fica "livre"`; sem a condição, os dois saem com
+`livre` e a operação roda duas vezes).
 
 ### 9. A chave tem teto de tamanho
 
@@ -181,7 +187,13 @@ corpo e o ator): um log que a traz em claro é um log que entrega a
 capacidade — e o repo classifica credencial em log como o vetor nº 1 de
 vazamento. O header `idempotency-key` entra na redação do `pino`
 (`REDACT_PATHS`), e as mensagens de erro do interceptor logam um **prefixo
-de 8 hex** do SHA-256 da chave, nunca a chave crua.
+de 8 hex** do **HMAC-SHA256** da chave (com o pepper e a separação de
+domínio), nunca a chave crua.
+
+⚠️ O prefixo é um **HMAC**, e não um SHA-256 simples: com uma chave fixa
+no código, o prefixo viraria um oráculo de verificação — quem lesse o log
+poderia testar um palpite de chave e saber se acertou. O mesmo pepper (e a
+mesma separação de domínio) que calcula a impressão (§4) calcula o prefixo.
 
 ## Consequências
 
@@ -211,8 +223,10 @@ de 8 hex** do SHA-256 da chave, nunca a chave crua.
   POST com chave (reservar + guardar) — e não no pool do runtime. Só quem
   manda o header paga.
 - **A chave expirada ainda ocupa a linha** até a poda rodar (o `prepara-papeis.sh`
-  roda no boot do container). Quem reusar uma chave expirada leva 409
-  `IDEMPOTENCY_KEY_IN_FLIGHT` — não um replay.
+  roda no boot do container) — e ela **volta a valer**: quem reusa uma chave
+  expirada **reconquista** a reserva (§8) e a operação roda de novo. O preço
+  é que a **resposta antiga se perde**: depois das 24 h não há mais replay,
+  e quem precisar dele tem que reusar a chave dentro do prazo.
 - **O replay não é transacional com a operação**: entre a reserva e a
   gravação da resposta há uma janela em que a chave está reservada e sem
   resposta. É a janela do `em_voo`.

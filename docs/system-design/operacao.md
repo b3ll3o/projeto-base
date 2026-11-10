@@ -168,7 +168,7 @@ de métricas que o app derivado escolher.
 | Rate limit de login | **5/min** por `ip:email` | `auth.controller.ts:85`, `:126` |
 | CORS | lista `ALLOWED_ORIGINS`; em produção o bootstrap **aborta** se só houver o default de dev | `main.ts:80-91` |
 | Security headers | helmet, com CSP restritiva (a API é JSON pura: `script-src 'none'`) | `main.ts:48-71` |
-| Redação de log | `authorization` e `cookie` redigidos | `app.module.ts:16` |
+| Redação de log | `authorization`, `cookie` e `idempotency-key` redigidos | `app.module.ts` (`REDACT_PATHS`) |
 | Erro | RFC 7807, sem stack trace em produção | `global-exception.filter.ts` |
 
 > ✅ **`/health` tem teto PRÓPRIO (desde 2026-11-10).** `main.ts` e

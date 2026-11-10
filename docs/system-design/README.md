@@ -179,7 +179,7 @@ O princípio **P8** diz que a ausência também é escrita. As lacunas que
 | **`correlationId` na trilha de auditoria** | [`dados.md`](./dados.md) §5 | uma coluna em `users_history` — a correlação de hoje vale em tempo de request, não em disco |
 | **`Idempotency-Key` em `/auth`** | [`dados.md`](./dados.md) §6 | a semântica de sessão (refresh de uso único) não combina com replay |
 
-> **Fechadas em 2026-11-10:** a rota de health fora do rate limit
+> **Fechadas em 2026-11-10:** a rota de health com teto próprio
 > ([`operacao.md`](./operacao.md) §5), o orçamento de tempo no banco
 > ([`operacao.md`](./operacao.md) §6 · [ADR-0012](../adr/0012-orcamento-de-tempo-no-banco.md)),
 > a correlação única entre resposta e auditoria

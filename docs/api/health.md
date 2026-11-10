@@ -104,8 +104,8 @@ literal fixo no código — não há entrada de usuário nessa string.
   `FeatureFlagGuard`.
 - **Permissões** (`@RequirePermission`): nenhuma.
 - **Feature flags** (`@RequireFeatureFlag`): nenhuma.
-- **Rate limit**: o `ThrottlerGuard` global se aplica — a rota **não** tem
-  `@SkipThrottle()`. Ver §6.
+- **Rate limit**: o `ThrottlerGuard` global se aplica, e a rota tem teto
+  **PRÓPRIO** (`@Throttle`, 600/min) — não o global. Ver §6.
 
 ## §5. Modelo de dados
 
