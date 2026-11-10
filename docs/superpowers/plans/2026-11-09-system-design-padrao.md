@@ -291,7 +291,7 @@ T12, quando todos os arquivos existem.
 | R4 | P1 | "9 ADRs aceitos" — são **8 `Aceito` + 1 `Substituído`** (0008 → 0009); a frase já estava publicada no ADR | §1 e o ADR corrigidos; o índice passa a marcar o status de cada ADR |
 | R5 | P1 | A tabela de práticas tinha 16 linhas e o texto dizia 14; o balanço "9/3/4" não fechava; o SLO recebia 3 rótulos | §2 passou a ter **um rótulo por linha** (`fato`/`[derivado]`/`lacuna`) e o balanço deriva dela: **12/3/1** |
 | R6 | P1 | C4 era "fato" na régua e "não escrito" na tabela | C4 virou `[derivado]` nas duas linhas: o repo tem L1/L2 **implícitos**, o conjunto os **nomeia** |
-| R7 | P1 | As contagens do conjunto não fechavam (6 / 8 / 9 / 10) | **8 arquivos** em `docs/system-design/` (1 índice + 7 focais) + 1 template + 1 ADR = **10** |
+| R7 | P1 | As contagens do conjunto não fechavam (6 / 8 / 9 / 10) | **7 arquivos** em `docs/system-design/` (1 índice + 6 focais) + 1 template + 1 ADR = **9** |
 | R8 | P1 | Dois índices de ADR (`decisoes.md` + `docs/agents/domain.md`) | **`decisoes.md` não existe.** O dono é `docs/agents/domain.md`; o conjunto linka |
 | R9 | P1 | D6 ("nenhum número sem comando") **não tinha instrumento**: o `check-doc-claims` cobre só os 6 docs de API | D6 passa a exigir o **comando inline** (é o que `tamanho-e-revisao.md` cobra); o ADR deixou de prometer que o gate cobra o conjunto novo |
 | R10 | P1 | O plano citava ~20 números **sem comando** | §3.1 agora traz a tabela número → comando |
