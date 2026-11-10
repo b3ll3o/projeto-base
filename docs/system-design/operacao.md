@@ -178,6 +178,14 @@ de métricas que o app derivado escolher.
 > **100×200 + 20×429**. O `@SkipThrottle()` no controller do health fecha
 > isso, e o motivo é de princípio: **uma rota de infraestrutura não pode ser
 > recusada pela proteção da própria API**. É a **única** rota isenta.
+>
+> ⚠️ **O preço da isenção, declarado:** a rota fica **sem teto** — e ela
+> toca o banco (`SELECT 1`). O risco é de **volume**, não de peso: é a query
+> mais barata que existe, e o limite por IP nunca foi defesa contra flood
+> distribuído (ele é por cliente). O que a isenção protege é o **probe**: uma
+> sonda que leva 429 derruba o container — e o **harness de e2e do web** faz
+> poll de `/api/v1/health` a cada **200 ms** (`apps/web/e2e/support/api.ts:274`),
+> ou seja 5 req/s, acima do teto de 100/min que a rota tinha.
 
 ---
 
