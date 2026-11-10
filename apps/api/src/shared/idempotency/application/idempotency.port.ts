@@ -35,8 +35,28 @@ export const ATOR_ANONIMO = 'anônimo';
  * O retry de um cliente acontece em minutos — por timeout, por rede instável,
  * por deploy no meio da requisição. 24 h cobrem isso com folga, e o
  * registro não fica para sempre.
+ *
+ * ⚠️ Este é o prazo da RESPOSTA GUARDADA, e não o da RESERVA: a reserva
+ * (a janela entre o pedido e a resposta gravada) tem prazo próprio e menor
+ * — `PRAZO_DA_RESERVA_MINUTOS`.
  */
 export const VALIDADE_DA_CHAVE_HORAS = 24;
+
+/**
+ * O prazo da RESERVA, em minutos.
+ *
+ * ⚠️ São DOIS prazos, e a diferença entre eles é o que fecha a janela da
+ * QUEDA: a reserva é commitada antes do handler, e a resposta é gravada
+ * depois. Se o processo morre no meio, a linha fica reservada e sem
+ * resposta — e o cliente levaria 409 `IDEMPOTENCY_KEY_IN_FLIGHT` até a
+ * chave expirar (24 h, o prazo da resposta). Com este prazo curto, a
+ * reserva abandonada expira em minutos, e o retry do cliente a
+ * reconquista.
+ *
+ * 5 min é folgado para qualquer operação real: o orçamento da API no banco
+ * é de 8 s (o `statement_timeout` do papel) e o cliente web desiste em 10 s.
+ */
+export const PRAZO_DA_RESERVA_MINUTOS = 5;
 
 /**
  * O tamanho máximo da chave, em caracteres.
@@ -46,6 +66,20 @@ export const VALIDADE_DA_CHAVE_HORAS = 24;
  * que cabe em qualquer chave que um cliente real usa (um UUID v4 tem 36).
  */
 export const TAMANHO_MAXIMO_DA_CHAVE = 255;
+
+/**
+ * O tamanho MÍNIMO da chave, em caracteres.
+ *
+ * ⚠️ O mínimo é uma defesa de ENTROPIA, e não de hygiene: para a rota
+ * `@Public()` o ator é a constante `anônimo` — a MESMA para todos os
+ * clientes. Sem uma chave de alta entropia, quem adivinha a chave de outra
+ * pessoa bloqueia a escrita dela (409 por até 24 h), e — com o corpo exato
+ * — ainda recebe a resposta guardada.
+ *
+ * 16 caracteres é o piso: um UUID v4 (36) passa com folga, e uma chave
+ * sequencial ou curta não passa.
+ */
+export const TAMANHO_MINIMO_DA_CHAVE = 16;
 
 /**
  * Os headers de resposta que a **aplicação** escreveu.

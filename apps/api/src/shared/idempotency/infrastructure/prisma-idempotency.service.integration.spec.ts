@@ -23,6 +23,7 @@ import {
   type TestContext,
 } from '../../../../test/testcontainers-helper.js';
 import { uriComoPapelDeRuntime } from '../../infrastructure/prisma/papel-de-runtime.js';
+import { PRAZO_DA_RESERVA_MINUTOS } from '../application/idempotency.port.js';
 import { PrismaIdempotencyService } from './prisma-idempotency.service.js';
 
 const PEDIDO = {
@@ -98,6 +99,38 @@ describe('PrismaIdempotencyService — o registro da chave', () => {
 
     // Outro ator, MESMA chave: é outra reserva.
     expect(await servico.reservar({ ...PEDIDO, ator: 'ator-2' })).toEqual({ estado: 'livre' });
+  });
+
+  // ⚠️ A RESERVA e a RESPOSTA guardada têm prazos DIFERENTES, e a
+  // diferença é o que fecha a janela da QUEDA: se o processo morre entre a
+  // reserva e a gravação da resposta, a linha fica reservada sem resposta
+  // — e o cliente levaria 409 `IDEMPOTENCY_KEY_IN_FLIGHT` até a chave
+  // expirar (24 h, o prazo da resposta). Com o prazo curto da reserva, ela
+  // expira em minutos, e o retry reconquista a chave.
+  it('a RESERVA tem prazo curto — e a RESPOSTA guardada tem o prazo longo', async () => {
+    await cleanDatabase(ctx.prisma);
+    await servico.reservar(PEDIDO);
+
+    const reservada = await ctx.prisma.idempotencyKey.findUnique({
+      where: { key_actor: { key: PEDIDO.chave, actor: PEDIDO.ator } },
+    });
+    const minutosDaReserva = (reservada!.expiresAt.getTime() - Date.now()) / 60_000;
+    expect(minutosDaReserva).toBeLessThanOrEqual(PRAZO_DA_RESERVA_MINUTOS + 1);
+    expect(minutosDaReserva).toBeGreaterThan(PRAZO_DA_RESERVA_MINUTOS - 1);
+
+    await servico.guardar({
+      chave: PEDIDO.chave,
+      ator: PEDIDO.ator,
+      status: 201,
+      resposta: { id: 'u-1' },
+      headers: {},
+    });
+
+    const guardada = await ctx.prisma.idempotencyKey.findUnique({
+      where: { key_actor: { key: PEDIDO.chave, actor: PEDIDO.ator } },
+    });
+    const horasDaResposta = (guardada!.expiresAt.getTime() - Date.now()) / 3_600_000;
+    expect(horasDaResposta).toBeGreaterThan(23);
   });
 
   it('uma chave EXPIRADA pode ser reusada', async () => {

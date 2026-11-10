@@ -18,6 +18,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { comEscopoDeSistema } from '../../infrastructure/prisma/escopo.js';
 import {
+  PRAZO_DA_RESERVA_MINUTOS,
   VALIDADE_DA_CHAVE_HORAS,
   type HeadersDaResposta,
   type IdempotencyPort,
@@ -26,6 +27,18 @@ import {
 } from '../application/idempotency.port.js';
 
 const VALIDADE_EM_MS = VALIDADE_DA_CHAVE_HORAS * 60 * 60 * 1000;
+
+/**
+ * O prazo da RESERVA — o tempo que a linha fica "ocupada" antes de poder
+ * ser reconquistada por outro request.
+ *
+ * ⚠️ São DOIS prazos, e o da reserva é o MENOR: a reserva é commitada antes
+ * do handler e a resposta é gravada depois. Se o processo morre no meio, a
+ * linha fica reservada sem resposta — e o cliente levaria 409 até a chave
+ * expirar (24 h, o prazo da RESPOSTA). Com este prazo, a reserva
+ * abandonada expira em minutos.
+ */
+const PRAZO_DA_RESERVA_EM_MS = PRAZO_DA_RESERVA_MINUTOS * 60 * 1000;
 
 /**
  * A cada quantas reservas a tabela é podada.
@@ -132,6 +145,12 @@ export class PrismaIdempotencyService implements IdempotencyPort {
         where: { key_actor: { key: input.chave, actor: input.ator } },
         data: {
           status: input.status,
+          // ⚠️ O prazo muda aqui: a linha deixa de ser uma RESERVA (5 min) e
+          // vira uma RESPOSTA guardada (24 h). É o que dá ao replay a
+          // validade longa — e o que impede que uma reserva abandonada pelo
+          // processo (que morre antes de chegar aqui) trave o cliente por
+          // 24 h.
+          expiresAt: new Date(Date.now() + VALIDADE_EM_MS),
           // A coluna `response` guarda a resposta INTEIRA: o corpo e os
           // headers que a aplicação escreveu. O replay repõe os dois — sem
           // os headers, a resposta do retry não seria a mesma da original
@@ -176,7 +195,10 @@ export class PrismaIdempotencyService implements IdempotencyPort {
           route: pedido.rota,
           fingerprint: pedido.impressao,
           createdAt: agora,
-          expiresAt: new Date(agora.getTime() + VALIDADE_EM_MS),
+          // A reconquista é uma RESERVA nova — e a reserva tem prazo curto
+          // (5 min). O prazo longo (24 h) é o da resposta guardada, e quem o
+          // dá é o `guardar`.
+          expiresAt: new Date(agora.getTime() + PRAZO_DA_RESERVA_EM_MS),
           // A reserva nova NÃO pode herdar a resposta antiga: a chave foi
           // reusada, e o que está guardado é de um pedido que já expirou.
           status: null,
@@ -202,7 +224,11 @@ export class PrismaIdempotencyService implements IdempotencyPort {
             actor: pedido.ator,
             route: pedido.rota,
             fingerprint: pedido.impressao,
-            expiresAt: new Date(Date.now() + VALIDADE_EM_MS),
+            // A RESERVA tem prazo curto: ela vale enquanto a operação roda.
+            // Se o processo morre antes do `guardar`, a linha expira em
+            // minutos — e o retry do cliente reconquista a chave, em vez de
+            // levar 409 por 24 h.
+            expiresAt: new Date(Date.now() + PRAZO_DA_RESERVA_EM_MS),
           },
         });
       });

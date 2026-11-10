@@ -53,6 +53,7 @@ import {
   HEADER_DE_IDEMPOTENCIA,
   HEADER_DE_REPLAY,
   TAMANHO_MAXIMO_DA_CHAVE,
+  TAMANHO_MINIMO_DA_CHAVE,
   type HeadersDaResposta,
   type IdempotencyPort,
 } from '../../application/idempotency.port.js';
@@ -225,6 +226,18 @@ export class IdempotencyInterceptor implements NestInterceptor {
       throw new BadRequestException({
         code: 'IDEMPOTENCY_KEY_TOO_LONG',
         detail: `A chave de idempotência passa de ${TAMANHO_MAXIMO_DA_CHAVE} caracteres.`,
+      });
+    }
+    // ⚠️ O MÍNIMO é uma defesa de ENTROPIA, e não de hygiene: o ator
+    // anônimo é a MESMA constante para todos os clientes, e uma chave
+    // adivinhável deixa quem adivinha bloquear a escrita de outra pessoa
+    // (409 por até 24 h) — e, com o corpo exato, receber a resposta
+    // guardada. MEDIDO: sem o mínimo, quem usasse a chave da vítima antes
+    // dela recebia 409 na escrita legítima da vítima.
+    if (chave.length < TAMANHO_MINIMO_DA_CHAVE) {
+      throw new BadRequestException({
+        code: 'IDEMPOTENCY_KEY_TOO_SHORT',
+        detail: `A chave de idempotência tem menos de ${TAMANHO_MINIMO_DA_CHAVE} caracteres.`,
       });
     }
 

@@ -31,6 +31,15 @@ import { IdempotencyInterceptor, impressaoDoPedido } from './idempotency.interce
 /** O pepper de teste — a impressão depende dele (é o HMAC que a calcula). */
 const PEPPER = 'pepper-de-teste-da-impressao-do-pedido';
 
+/**
+ * A chave de teste.
+ *
+ * ⚠️ Ela tem 31 caracteres de propósito: o interceptor recusa chave com
+ * menos de `TAMANHO_MINIMO_DA_CHAVE` (a defesa de entropia contra o
+ * squatting de chave do ator anônimo).
+ */
+const CHAVE_DE_TESTE = 'chave-de-teste-da-idempotencia';
+
 /** O port, dublê: o interceptor só precisa do VEREDITO. */
 class PortDuble implements IdempotencyPort {
   reservas: ImpressaoDePedido[] = [];
@@ -70,7 +79,7 @@ function request(extra: Record<string, unknown> = {}): Record<string, unknown> {
     method: 'POST',
     url: '/api/v1/users',
     routeOptions: { url: '/api/v1/users' },
-    headers: { [HEADER_DE_IDEMPOTENCIA]: 'chave-1' },
+    headers: { [HEADER_DE_IDEMPOTENCIA]: CHAVE_DE_TESTE },
     body: { nome: 'João', email: 'joao@example.com' },
     ...extra,
   };
@@ -179,7 +188,7 @@ describe('IdempotencyInterceptor', () => {
     expect(resposta).toEqual({ id: 'u-1' });
     expect(port.guardados).toEqual([
       {
-        chave: 'chave-1',
+        chave: CHAVE_DE_TESTE,
         ator: 'anônimo',
         status: 201,
         resposta: { id: 'u-1' },
@@ -271,7 +280,7 @@ describe('IdempotencyInterceptor', () => {
       ),
     ).rejects.toThrow('deu ruim');
 
-    expect(port.liberados).toEqual([{ chave: 'chave-1', ator: 'anônimo' }]);
+    expect(port.liberados).toEqual([{ chave: CHAVE_DE_TESTE, ator: 'anônimo' }]);
     expect(port.guardados).toHaveLength(0);
   });
 
@@ -391,13 +400,27 @@ describe('IdempotencyInterceptor', () => {
     );
 
     expect(port.guardados).toHaveLength(0);
-    expect(port.liberados).toEqual([{ chave: 'chave-1', ator: 'anônimo' }]);
+    expect(port.liberados).toEqual([{ chave: CHAVE_DE_TESTE, ator: 'anônimo' }]);
   });
 
   it('uma chave maior que o teto é recusada com 400 (a chave vai para a PK)', async () => {
     const port = new PortDuble();
     const interceptor = new IdempotencyInterceptor(port);
     const req = request({ headers: { [HEADER_DE_IDEMPOTENCIA]: 'x'.repeat(256) } });
+
+    await expect(
+      interceptor.intercept(contextoDe(req, reply()), { handle: () => of({}) }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(port.reservas).toHaveLength(0);
+  });
+
+  // ⚠️ O mínimo é uma defesa de ENTROPIA: o ator anônimo é a MESMA
+  // constante para todos os clientes, e uma chave adivinhável deixa quem
+  // adivinha bloquear a escrita de outra pessoa (409 por até 24 h).
+  it('uma chave CURTA demais é recusada com 400 (o ator anônimo não escopa nada)', async () => {
+    const port = new PortDuble();
+    const interceptor = new IdempotencyInterceptor(port);
+    const req = request({ headers: { [HEADER_DE_IDEMPOTENCIA]: 'chave-1' } });
 
     await expect(
       interceptor.intercept(contextoDe(req, reply()), { handle: () => of({}) }),
