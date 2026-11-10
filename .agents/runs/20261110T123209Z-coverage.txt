@@ -1,0 +1,60 @@
+@projeto/api:test:coverage:  .../domain/events |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...ated.event.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...eted.event.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...ored.event.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...ated.event.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:  ...ain/exceptions |     100 |     87.5 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...exceptions.ts |     100 |     87.5 |     100 |     100 | 21                
+@projeto/api:test:coverage:  ...omain/policies |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...hip.policy.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:  .../value-objects |   89.77 |     87.5 |      80 |   89.77 |                   
+@projeto/api:test:coverage:   email.vo.ts      |   82.35 |    77.77 |      75 |   82.35 | 21-22,25-26,44-45 
+@projeto/api:test:coverage:   ...rd-hash.vo.ts |   94.28 |     93.1 |     100 |   94.28 | 155-156,165-166   
+@projeto/api:test:coverage:   user-id.vo.ts    |   94.28 |    77.77 |      80 |   94.28 | 66-67             
+@projeto/api:test:coverage:   user-name.vo.ts  |   83.78 |    88.88 |      50 |   83.78 | 21-22,43-44,47-48 
+@projeto/api:test:coverage:  ...structure/http |   96.14 |    98.24 |    92.3 |   96.14 |                   
+@projeto/api:test:coverage:   ...ship.guard.ts |   29.41 |      100 |       0 |   29.41 | 46-75             
+@projeto/api:test:coverage:   ...controller.ts |     100 |    98.24 |     100 |     100 | 403               
+@projeto/api:test:coverage:   users.schemas.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:  ...re/persistence |   97.59 |    91.37 |   92.85 |   97.59 |                   
+@projeto/api:test:coverage:   ...repository.ts |   96.26 |    89.13 |   88.88 |   96.26 | 98-99,188-189     
+@projeto/api:test:coverage:   ...exceptions.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...sma-mapper.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:  ...it/application |     100 |    91.66 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...it-service.ts |     100 |    91.66 |     100 |     100 | 93-97             
+@projeto/api:test:coverage:  ...d/audit/domain |      95 |    73.07 |     100 |      95 |                   
+@projeto/api:test:coverage:   ...context.vo.ts |     100 |     90.9 |     100 |     100 | 46                
+@projeto/api:test:coverage:   ...exceptions.ts |      90 |       60 |     100 |      90 | 44-45,76-77       
+@projeto/api:test:coverage:  ...d/audit/shared |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...text-store.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   audit.tokens.ts  |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:  src/shared/auth   |   93.96 |    94.28 |     100 |   93.96 |                   
+@projeto/api:test:coverage:   ...dmin-local.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...de-sistema.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...ag-catalog.ts |      90 |    83.33 |     100 |      90 | 94-95             
+@projeto/api:test:coverage:   ...ns-catalog.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...de-servico.ts |   89.36 |     90.9 |     100 |   89.36 | 94-98             
+@projeto/api:test:coverage:  ...structure/http |   97.66 |    94.77 |     100 |   97.66 |                   
+@projeto/api:test:coverage:   ...on-to-http.ts |   97.23 |    98.46 |     100 |   97.23 | 206-211           
+@projeto/api:test:coverage:   ...ion.filter.ts |   97.61 |    84.21 |     100 |   97.61 | 105,134           
+@projeto/api:test:coverage:   ...habilitado.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   trace-id.ts      |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...ation.pipe.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:  ...ructure/prisma |   80.15 |    88.46 |   88.46 |   80.15 |                   
+@projeto/api:test:coverage:   ...membership.ts |   60.71 |    63.63 |     100 |   60.71 | ...97-112,131-133 
+@projeto/api:test:coverage:   ...s-do-banco.ts |     100 |    91.89 |     100 |     100 | 127,144-147       
+@projeto/api:test:coverage:   escopo.ts        |   41.66 |      100 |      50 |   41.66 | 75-131,198-205    
+@projeto/api:test:coverage:   ...de-runtime.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...de-conexao.ts |     100 |     90.9 |     100 |     100 | 93,122            
+@projeto/api:test:coverage:  ...cture/security |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   ...he.service.ts |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:  ...ture/telemetry |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   init.ts          |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   resource.ts      |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage:   tracing.ts       |     100 |      100 |     100 |     100 |                   
+@projeto/api:test:coverage: -------------------|---------|----------|---------|---------|-------------------
+
+ Tasks:    2 successful, 2 total
+Cached:    2 cached, 2 total
+  Time:    50ms >>> FULL TURBO
+

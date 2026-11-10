@@ -100,6 +100,10 @@ const CODE_DOC_MAPPINGS: CodeDocMapping[] = [
     docFiles: [
       'docs/superpowers/specs/2026-09-21-cadastro-usuario-com-auditoria-02-modelo-dados.md',
       'docs/STACK.md',
+      // pt-BR (2026-11-09): o desenho dos dados do system design tem o
+      // PRISMA como fonte — sem este mapeamento, mudar o schema deixaria o
+      // diagrama ER e a tabela de escopo envelhecendo em silêncio.
+      'docs/system-design/dados.md',
     ],
     reason: 'Schema Prisma modificado — verificar modelo',
   },

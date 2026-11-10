@@ -50,6 +50,7 @@ Cada fato vive em **uma** representação canônica. Todo outro lugar
 | `docs/adr/NNNN-*.md` | a verdade do **porquê** | JSDoc e README **linkam** |
 | `docs/STACK.md` | a verdade das **versões** | README e docs de módulo linkam |
 | `docs/flows/<dominio>/<fluxo>/flow.md` | a verdade do **fluxo** (derivada da IR) | — |
+| `docs/system-design/README.md` | a verdade do **desenho** (topologia, fronteira, contrato de extensão) | `docs/api/*.md`, `docs/flows/**` e `docs/adr/*` **linkam**; o ADR-0010 é o dono da decisão |
 
 > **O doc legível não é cópia do gerado.** `docs/api/<bc>.md` é a *leitura*
 > do contrato; o contrato é o `@Api*`. O doc aponta para o contrato e

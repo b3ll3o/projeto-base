@@ -1102,6 +1102,40 @@ describe('UsersController — handlers HTTP', () => {
       runSpy.mockRestore();
     }
   });
+
+  // pt-BR (2026-11-10 — conformidade do system design): SEM span, o
+  // `correlationId` da auditoria e o `traceId` da resposta DIVERGIAM.
+  //
+  // MEDIDO: `buildContext()` fazia `w3cTraceId ?? randomUUID()`, e a
+  // resposta faz `traceIdDe()` — que, sem span, cai no `request.id`. Os dois
+  // ids eram de famílias diferentes, e o operador não conseguia casar a
+  // linha de auditoria com a requisição. É a divergência declarada em
+  // `docs/system-design/dados.md` §5.
+  //
+  // A correção é UNA derivação: `traceIdDe(request)` — a mesma função que
+  // o `GlobalExceptionFilter` e o log de bloqueio de feature flag usam.
+  it('sem span, o correlationId é o MESMO id que a resposta carrega', async () => {
+    const getSpanSpy = vi.spyOn(trace, 'getSpan').mockReturnValue(undefined);
+    const runSpy = vi.spyOn(AuditContextStore, 'run');
+    useCases.criarUser.mockResolvedValue(fakeUserOutput);
+
+    try {
+      const input: CreateUserDto = {
+        nome: 'João',
+        email: 'joao@example.com',
+        senha: 'senha-super-secreta',
+      };
+      // O `id` do request é o mesmo que o Fastify usa (`req.id`) — e é nele
+      // que a derivação da resposta cai quando não há span.
+      await ctrl.create(input, reply as never, { id: 'req-42' } as never);
+
+      const ctx = runSpy.mock.calls[0]?.[0] as AuditContext;
+      expect(ctx.correlationId).toBe('req-42');
+    } finally {
+      getSpanSpy.mockRestore();
+      runSpy.mockRestore();
+    }
+  });
 });
 
 // ───────────────────────────────────────────────────────────────────────────

@@ -351,3 +351,49 @@ model RefreshToken {
   @@index([userId])
   @@map("refresh_tokens")
 }
+
+// pt-BR (2026-11-10 — conformidade do system design): o REGISTRO da chave de
+// idempotência de escrita.
+//
+// A lacuna que ele fecha está em `docs/system-design/dados.md` §6: "retry não
+// é seguro — um cliente que repete por timeout não tem como saber se a
+// primeira gravou, e recebe 409 no lugar de 201".
+//
+// ⚠️ A chave é do CLIENTE (o header `Idempotency-Key`), e ela é escopada pelo
+// ATOR: a chave de uma conta não vale para outra. O par (`key`, `actor`) é a
+// PRIMARY KEY — e não um `id` uuid: o identificador da reserva É o par que o
+// cliente mandou, e uma coluna de identidade seria outra maneira de dizer a
+// mesma coisa.
+//
+// ⚠️ SEM `updatedAt`/`version`: o que muda na linha é a RESPOSTA, e a
+// transição (reservada → com resposta) acontece UMA vez — um contador de
+// versão seria um campo que ninguém lê. A exceção do `stack-code-reviewer`
+// está declarada por model, com o motivo.
+//
+// ⚠️ SEM `tenant_id`, e SEM RLS: o predicado de escopo do banco compara com
+// a EMPRESA, e aqui a coluna é o ATOR do pedido — a policy não teria o que
+// comparar. E a tabela não é alcançável pelo caminho de request: a migration
+// a `REVOKE` de `app_runtime`, e o interceptor fala com ela pela credencial
+// de SISTEMA (o mesmo caminho do `refresh_tokens`).
+//
+// ⚠️ A resposta guardada é PII de outra empresa (o corpo do `POST /users`
+// tem nome e e-mail) — e é por isso que o papel de runtime não a alcança.
+model IdempotencyKey {
+  key         String
+  actor       String
+  route       String
+  fingerprint String
+  // O status da resposta guardada. `null` = a operação ainda não terminou
+  // (a chave está reservada) — é o que distingue "em voo" de "replay".
+  status      Int?
+  // A resposta guardada: o corpo (`body`) e os headers que a aplicação
+  // escreveu (`headers` — o `ETag`). O replay repõe os dois.
+  response    Json?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  // Quando a chave expira. A poda usa esta coluna.
+  expiresAt   DateTime @map("expires_at") @db.Timestamptz(6)
+
+  @@id([key, actor])
+  @@index([expiresAt])
+  @@map("idempotency_keys")
+}

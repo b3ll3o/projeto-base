@@ -104,8 +104,8 @@ literal fixo no código — não há entrada de usuário nessa string.
   `FeatureFlagGuard`.
 - **Permissões** (`@RequirePermission`): nenhuma.
 - **Feature flags** (`@RequireFeatureFlag`): nenhuma.
-- **Rate limit**: o `ThrottlerGuard` global se aplica — a rota **não** tem
-  `@SkipThrottle()`. Ver §6.
+- **Rate limit**: o `ThrottlerGuard` global se aplica, e a rota tem teto
+  **PRÓPRIO** (`@Throttle`, 600/min) — não o global. Ver §6.
 
 ## §5. Modelo de dados
 
@@ -119,13 +119,22 @@ uma leitura de sanidade.
 
 ## §6. Notas e armadilhas
 
-⚠️ **A rota **é** contada pelo limitador global.** Os comentários de
-`apps/api/src/main.ts:75` e de `apps/api/src/app.module.ts:23` citam `/health`
-como exemplo de rota com `@SkipThrottle()` — mas **não existe nenhum
-`@SkipThrottle()` no código**: `grep -rn "SkipThrottle" apps/api/src/` devolve
-**2 hits, e os dois são comentários** (o próprio `main.ts` e o `app.module.ts`).
-O `ThrottlerGuard` global (registrado via `APP_GUARD`) conta esta rota como
-qualquer outra.
+✅ **A rota tem teto PRÓPRIO, e não o global (desde 2026-11-10).** Os
+comentários de `apps/api/src/main.ts` e de `apps/api/src/app.module.ts` já
+diziam que `/health` usaria `@SkipThrottle()` — e **não existia nenhum no
+código**: `grep -rn "SkipThrottle" apps/api/src/` devolvia **2 hits, e os dois
+eram comentários** (o próprio `main.ts` e o `app.module.ts`). MEDIDO no
+container: 120 requisições seguidas devolviam **100×200 + 20×429** — e o
+bucket do `@nestjs/throttler` é **por rota** (`generateKey` inclui classe e
+handler), então o corte era da própria rota de health.
+
+O `@Throttle` no controller (`health.controller.ts`) dá à rota o teto
+**600/min** (`LIMITE_DE_HEALTH_POR_MINUTO`), e não o global (100/min). A
+razão é o **probe**: o `HEALTHCHECK` do container roda a cada 10 s (6/min) e o
+harness de e2e do web faz poll a cada 200 ms (5 req/s) — com o teto global, a
+rajada do harness estouraria o balde e o probe levaria 429, e um healthcheck
+que falha derruba o container. O teto é 100× o probe e 2,6× a pior rajada do
+harness.
 
 ⚠️ **O `@Inject(PrismaService)` é obrigatório, não redundância.** O `dev` roda
 com `tsx` (esbuild), que **não** emite `design:paramtypes` mesmo com

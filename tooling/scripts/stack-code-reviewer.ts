@@ -125,8 +125,12 @@ function checkDomain(file: string, content: string): Finding[] {
  * - `RefreshToken` (#132): o que muda na linha é `revoked_at`, e a
  *   transição (ativo → revogado) acontece UMA vez. `version` seria um
  *   contador que ninguém lê — e `updatedAt` duplicaria `revoked_at`.
+ * - `IdempotencyKey` (2026-11-10 — conformidade do system design): o que
+ *   muda na linha é a RESPOSTA guardada, e a transição (reservada → com
+ *   resposta) acontece UMA vez. `version` seria um contador que ninguém lê,
+ *   e `updatedAt` duplicaria o `created_at` da reserva.
  */
-const MODELS_SEM_CICLO_DE_VIDA = new Set(['ChaveDeAssinatura', 'RefreshToken']);
+const MODELS_SEM_CICLO_DE_VIDA = new Set(['ChaveDeAssinatura', 'RefreshToken', 'IdempotencyKey']);
 
 function checkPrisma(file: string, content: string): Finding[] {
   const findings: Finding[] = [];

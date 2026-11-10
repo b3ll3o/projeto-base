@@ -124,6 +124,11 @@ export default defineConfig({
         // coberto pelo projeto `integration` (Testcontainers + PrismaClient
         // real), com o teste que prova que o `app_runtime` NÃO o alcança.
         '**/prisma-refresh-token.repository.ts',
+        // 2026-11-10 (conformidade do system design): o registro da chave de
+        // idempotência é o MESMO caso — adapter Prisma coberto pelo projeto
+        // `integration` (Testcontainers + PrismaClient real), com o teste que
+        // prova que o `app_runtime` NÃO alcança a tabela.
+        '**/prisma-idempotency.service.ts',
         // pt-BR: diretório `test/` contém helpers de teste (não lógica
         // de produção) e por isso é excluído da medição de cobertura.
         '**/test/**',

@@ -1,0 +1,95 @@
+commit a26fb1da32fbb0c885c8343e9c37d1cd414867ac
+Author:     Leonardo Andreazzi <andreazzi-leonardo@hotmail.com>
+AuthorDate: Mon Nov 9 18:27:50 2026 -0300
+Commit:     GitHub <noreply@github.com>
+CommitDate: Mon Nov 9 18:27:50 2026 -0300
+
+    feat(agents): uma pasta de tooling de IA (.agents/) e a skill agent-desktop (#157)
+    
+    A pasta `.claude/` sai do repo. Ela era uma **cópia**: 29 wrappers de skill e 3
+    wrappers de agent repetiam o `name`/`description` que o `SKILL.md` canônico já
+    tinha.
+    
+    MEDIDO 2026-11-09 (Claude Code 2.1.319): uma pasta só com
+    `.agents/skills/probe-skill/SKILL.md` devolveu **ZERO** skill de projeto, e a
+    mesma pasta com `.claude` como symlink para `.agents` devolveu **30 skills e 28
+    agents**, sem wrapper nenhum — o wrapper nunca foi necessário. O `SKILL.md`
+    canônico é o arquivo que o harness abre.
+    
+    - hooks, `settings.json`, `README.md` e `FINDINGS.md` foram para `.agents/`
+    - o binding do Claude Code passa a ser feito **na máquina** (symlink em
+      `~/.claude/`), com a receita em `docs/integrations/claude-code.md`
+    - regra nova em `AGENTS.md` §1.3 e gate `check-pasta-unica` (a pasta de vendor
+      NO DISCO — que o `.gitignore` esconderia do `git status` — ou VERSIONADA no
+      índice do git)
+    - `check-skill-coverage` troca a regra SEM BINDING (wrapper em `.claude/skills/`)
+      pela DESCOBRÍVEL: o frontmatter do `SKILL.md` canônico tem `name` e
+      `description` preenchidos, e `name` é igual ao nome do diretório — que é o
+      que o harness lê, e o que o symlink `~/.claude/skills/<diretório>` casa
+    - ADR-0009 registra a decisão nova; o ADR-0008 (a camada de binding com
+      wrapper) fica marcado como substituído
+    
+    ## A integração com o #155
+    
+    O #155 entrou na `main` depois desta branch, com um gate que media a camada de
+    binding ANTIGA: o `check-binding-canonico` comparava byte a byte o frontmatter
+    de cada wrapper de `.claude/` com o canônico. Sem wrapper, não há o que
+    comparar — o gate viraria verde por vacuidade, e a proteção que importava
+    (nenhum agent descoberto sem `tools`, que faz o subagent herdar a pool inteira
+    da conversa) ficaria sem instrumento.
+    
+    - `check-binding-canonico` removido (gate + spec)
+    - gate NOVO `check-agent-frontmatter`: o frontmatter do **agent canônico** — o
+      arquivo que o harness lê — tem que declarar `name` (igual ao nome do
+      arquivo), `description` (é o gatilho) e `tools`. MEDIDO: 26 testes, 28
+      agents conferidos, 0 lacuna; mutação → **3 de 26** (com `tools` fora da
+      lista de exigidos), **3 de 26** (com o teste de valor vazio neutralizado),
+      **1 de 26** (com `name` ≠ arquivo neutralizado), **1 de 26** (com a guarda do
+      `---` neutralizada), **1 de 26** (com o frontmatter sem fechamento
+      neutralizado), **1 de 26** (com a chave repetida neutralizada); diferencial
+      contra o repo real: plantar um agent sem `tools` → **VERMELHO** nomeando
+      arquivo e linha; removido → exit `0`
+    - a branch foi rebaseada na `main` que já tinha o #155 e depois o #156 (as
+      dependências), e os conflitos foram resolvidos no sentido da pasta única
+      (`.claude/` deletado; `docs/integrations/claude-code.md` com as duas versões
+      fundidas; os 4 gates novos do #156 preservados ao lado dos 2 desta branch)
+    - a **versão vai para 1.25.0**: o #156, mergeado antes, já tinha claimado a
+      `1.24.0` — e a regra do repo é "quem mergear depois renumera" (o mesmo que
+      a colisão do #145 com o #146)
+    
+    ## O que a revisão adversarial achou (e o que fecha)
+    
+    - **O parser do frontmatter tem UM dono**: o módulo novo `frontmatter.ts` é
+      usado pelas DUAS camadas (a de agents e a de skills), que antes discordavam
+      — uma pegava a primeira ocorrência de uma chave, a outra a última. Ele
+      fecha as formas que o YAML de verdade produz e que as duas deixavam passar:
+      `description: # TODO` (comentário → null), `tools: []`/`null`/`~`,
+      frontmatter **sem o `---` que fecha** (o corpo não é frontmatter) e
+      **chave repetida**.
+    - **`check-pasta-unica` mede a raiz do repo** (`git rev-parse --show-toplevel`),
+      não o diretório de onde foi chamado — rodando de um subdiretório ele via a
+      subárvore e ficava mudo. E a pasta `.claude/` que só tem o
+      `settings.local.json` (permissão local que o Claude Code escreve no
+      projeto) deixa de ser violação: reprovar ela deixava o pre-push vermelho de
+      quem usa o Claude Code.
+    - **A camada de binding ganhou `path_globs`** na matriz de `review-routing`
+      (v1.9): os hooks, o `settings.json` e os docs da pasta. Sem eles, um commit
+      que só tocasse o binding despachava ZERO reviewer — a lacuna que o
+      `.claude/README.md` declarava e que a mudança de pasta apagou sem fechar.
+    - **A receita do symlink** deixou de criar o link DENTRO de um diretório real
+      (`ln -sfn` sobre um diretório cria `<nome>/<nome>`) e parou de mandar criar
+      symlinks de hook que nada lê.
+    
+    O npm ≥ 12 bloqueia o `postinstall` da CLI por padrão: o install "passa" com
+    exit `0` avisando que o script ficou bloqueado, o binário nativo não linka e a
+    CLI cai num launcher Node que acrescenta ~125 ms por chamada. O install exige
+    `--allow-scripts=agent-desktop`. MEDIDO 2026-11-09 (npm 12.2.0, Node 24.15.0,
+    desktop Cinnamon/Wayland real): `agent-desktop status` devolve
+    `platform: linux` e `supported_surfaces: [window, sheet, alert, menu]`.
+    
+    Preflight: 0 erro. `tooling:test`: 1432 testes em 74 arquivos. Mutação dos
+    gates provada (plantar `.claude/`, plantar um agent sem `tools`, e as 6
+    mutações do gate de frontmatter).
+    
+    Co-authored-by: CEO Agent <ceo@paperclip.ai>
+    Co-authored-by: Claude Code <noreply@anthropic.com>

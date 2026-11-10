@@ -47,6 +47,7 @@ projeto-base/
     ├── api/               # referência HTTP por bounded context
     ├── adr/               # decisões arquiteturais (ADR-0001…)
     ├── flows/             # fluxos (IR → diagrama)
+    ├── system-design/     # o desenho do sistema: contexto, módulos, dados, segurança, operação e o contrato de extensão
     ├── agents/            # issue tracker, labels de triagem, glossário
     ├── articles/          # artigos de fundo
     ├── superpowers/       # planos e specs de trabalho
@@ -219,8 +220,7 @@ Estes são os sintomas do **dia a dia**; a tabela por ambiente está no [runbook
 Três opções para derivar um novo projeto:
 
 ```bash
-# Opção 1 — Copiar
-cp -r projeto-base/ meu-novo-monorepo/ && cd meu-novo-monorepo/
+cp -r projeto-base/ meu-novo-monorepo/ && cd meu-novo-monorepo/   # Opção 1 — Copiar
 
 # Opção 2 — Submodule (sincroniza updates sem perder customizações)
 git submodule add https://github.com/seu-org/projeto-base.git .agents-base
@@ -229,7 +229,7 @@ git submodule add https://github.com/seu-org/projeto-base.git .agents-base
 gh repo fork b3ll3o/projeto-base
 ```
 
-Independente da opção, o padrão de interoperabilidade permanece intacto.
+Independente da opção, o padrão de interoperabilidade permanece intacto. O **ponto de partida do desenho** é o conjunto de system design ([`docs/system-design/README.md`](./docs/system-design/README.md)), que vem com o contrato de extensão e o template que o app derivado copia.
 
 ## Regra Mandatória
 
@@ -295,6 +295,6 @@ Detalhes em [`docs/TEMPLATE_USAGE.md`](./docs/TEMPLATE_USAGE.md).
 
 ## Versão & Licença
 
-**Versão:** 1.25.0 — re-medido do disco em **2026-11-09**: `ls .agents/agents/*.md | wc -l` = **28** agents · `ls .agents/memory/*.md | wc -l` = **30** memórias (1 por agent + `state-aware-planning` + `_template`) · `ls .agents/skills/*/SKILL.md | wc -l` = **30** skills · `ls .agents/workflows/*.md | wc -l` = **15** workflows · `ls .agents/specs/conventions/*.md | grep -vE 'README|gaps|examples|historico|apendice' | wc -l` = **24** convenções · `ls apps/api/src/modules/ | wc -l` = **6** módulos · `ls .agents/hooks/ | wc -l` = **2** hooks · **0** wrappers — a pasta `.claude/` saiu do repo (2026-11-09); o binding do Claude Code é o symlink em `~/.claude/`, que aponta para `.agents/` (receita em [`docs/integrations/claude-code.md`](./docs/integrations/claude-code.md)).
+**Versão:** 1.27.0 — re-medido do disco em **2026-11-10**: `ls .agents/agents/*.md | wc -l` = **28** agents · `ls .agents/memory/*.md | wc -l` = **30** memórias (1 por agent + `state-aware-planning` + `_template`) · `ls .agents/skills/*/SKILL.md | wc -l` = **30** skills · `ls .agents/workflows/*.md | wc -l` = **15** workflows · `ls .agents/specs/conventions/*.md | grep -vE 'README|gaps|examples|historico|apendice' | wc -l` = **24** convenções · `ls apps/api/src/modules/ | wc -l` = **6** módulos · `ls .agents/hooks/ | wc -l` = **2** hooks · **0** wrappers — a pasta `.claude/` saiu do repo (2026-11-09); o binding do Claude Code é o symlink em `~/.claude/`, que aponta para `.agents/` (receita em [`docs/integrations/claude-code.md`](./docs/integrations/claude-code.md)).
 
-A `1.14.0` adiciona o `documentation-specialist` (+1 agent, +1 memória), a skill `documentation-audit` (+1) e a convenção `documentacao` (+1) — e corrige os fatos errados da versão anterior: Node ≥ 20 → ≥ 22.6.0, `openssl rand -base64 48` → `-hex 32` nas senhas de papel, "três modos" → dois, e a lista de agents (faltavam os 6 de auditoria). A **tag do template** é a dos 4 footers canônicos (o de [`docs/MONOREPO.md`](./docs/MONOREPO.md) manda), extraída pelo `release-template.yml` — este rodapé não a define. **Licença:** MIT.
+A `1.14.0` adiciona o `documentation-specialist` (+1 agent, +1 memória), a skill `documentation-audit` (+1) e a convenção `documentacao` (+1) — e corrige os fatos errados da versão anterior: Node ≥ 20 → ≥ 22.6.0, `openssl rand -base64 48` → `-hex 32` nas senhas de papel, "três modos" → dois, e a lista de agents (faltavam os 6 de auditoria). A **tag do template** é a dos 4 footers canônicos (o de [`docs/MONOREPO.md`](./docs/MONOREPO.md) manda), extraída pelo `release-template.yml` — este rodapé não a define. A `1.26.0` adiciona o conjunto de system design canônico ([`docs/system-design/`](./docs/system-design/README.md) — 7 documentos: contexto, módulo, dados, segurança, operação, extensão e o índice) com o **ADR-0010** e o **template** que um app derivado copia; nenhum arquivo de `apps/`, `packages/` ou `infra/` mudou. A `1.27.0` faz o **código casar com esse desenho**: a rota de health sai do rate limit global, a escrita aceita `Idempotency-Key` (a tabela `idempotency_keys` + um interceptor global), o papel de runtime ganha `statement_timeout = '8s'` e a correlação da auditoria passa a ser a mesma da resposta — com os **ADRs 0011 e 0012** e 2 migrations. **Licença:** MIT.

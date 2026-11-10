@@ -352,6 +352,19 @@ printf "DELETE FROM refresh_tokens WHERE expires_at < now();\n" \
   | DATABASE_URL="$DIRECT_DATABASE_URL" pnpm exec prisma db execute --stdin --schema=prisma/schema.prisma \
   || echo 'aviso: a poda do registro de refresh tokens nao rodou (a tabela talvez nao exista ainda) — o resto do setup segue.'
 
+# ⚠️ A MESMA PODA, para o REGISTRO DE IDEMPOTÊNCIA (2026-11-10 — conformidade
+# do system design). A chave de idempotência vale 24 h (`expires_at`); sem
+# poda, a tabela só cresce — e o reserve de uma chave expirada é o que
+# resolve a chave para o cliente.
+#
+# A comparação é de INSTANTES (`expires_at` é `timestamptz`, e `now()` é
+# `timestamptz`) — o mesmo motivo do refresh token: com `timestamp` (a
+# parede do relógio, sem fuso), a poda removeria chaves QUE AINDA VALEM num
+# banco à frente do UTC.
+printf "DELETE FROM idempotency_keys WHERE expires_at < now();\n" \
+  | DATABASE_URL="$DIRECT_DATABASE_URL" pnpm exec prisma db execute --stdin --schema=prisma/schema.prisma \
+  || echo 'aviso: a poda do registro de idempotencia nao rodou (a tabela talvez nao exista ainda) — o resto do setup segue.'
+
 # ⚠️ (#133) O SQL é montado aqui, e o ESCAPE do `'` é aplicado AQUI — e não
 # na leitura da URI. O filtro mede a senha CRUA (a mesma que o guard mede), e
 # o que vai para o literal SQL é a senha escapada. MEDIDO: com o escape antes

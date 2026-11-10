@@ -1,10 +1,12 @@
 // apps/api/src/app.module.ts
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import { AuditInfraModule } from './shared/audit/audit-infra.module.js';
+import { IdempotencyInfraModule } from './shared/idempotency/idempotency-infra.module.js';
+import { IdempotencyInterceptor } from './shared/idempotency/infrastructure/http/idempotency.interceptor.js';
 import { PrismaModule } from './shared/infrastructure/prisma/prisma.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { UsersModule } from './modules/users/users.module.js';
@@ -13,18 +15,50 @@ import { ProfilesModule } from './modules/profiles/profiles.module.js';
 import { TenancyModule } from './modules/tenancy/tenancy.module.js';
 import { FeatureFlagsModule } from './modules/feature-flags/feature-flags.module.js';
 
-const REDACT_PATHS = ['req.headers.authorization', 'req.headers.cookie'] as const;
+// pt-BR (2026-11-10): o `idempotency-key` entra na redação. A chave é do
+// cliente e é PARTE da capacidade de replay (junto com o corpo e o ator) —
+// um log que a traz em claro é um log que entrega a capacidade.
+//
+// ⚠️ A lista é EXPORTADA porque a afirmação "a chave não vai para o log"
+// precisa de instrumento: o spec (`app.module.spec.ts`) aplica ESTES
+// caminhos — e não uma cópia deles, que passaria verde com a redação
+// quebrada aqui.
+export const REDACT_PATHS = [
+  'req.headers.authorization',
+  'req.headers.cookie',
+  'req.headers["idempotency-key"]',
+] as const;
+
+/**
+ * O teto global de requisições, por IP, na janela de `JANELA_GLOBAL_MS`.
+ *
+ * pt-BR (2026-11-10 — conformidade do system design): o número é EXPORTADO
+ * porque ele tem UM dono, e o dono é o código. O spec do e2e
+ * (`16-health-sem-rate-limit.e2e.spec.ts`) importa este valor em vez de
+ * escrevê-lo — o mesmo motivo de `LIMITE_LOGIN_POR_MINUTO`: com o número
+ * duplicado no spec, baixar o limite no código deixa o teste verde mentindo.
+ */
+export const LIMITE_GLOBAL_POR_MINUTO = Number(process.env.THROTTLE_LIMIT ?? 100);
+
+/** A janela do limite global, em milissegundos. */
+export const JANELA_GLOBAL_MS = Number(process.env.THROTTLE_TTL_MS ?? 60_000);
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, cache: true }),
     // #72: rate-limit global. Default 100 req/min por IP (configurável via
-    // THROTTLE_TTL_MS e THROTTLE_LIMIT). Health e outros endpoints baratos
-    // usam @SkipThrottle() para não serem contados.
+    // THROTTLE_TTL_MS e THROTTLE_LIMIT).
+    //
+    // pt-BR (2026-11-10): este comentário afirmava que "health e outros
+    // endpoints baratos usam @SkipThrottle() para não serem contados" — e
+    // NÃO EXISTIA NENHUM `@SkipThrottle` no código. MEDIDO: a rota de health
+    // recebia 429 do limite global (ver o spec
+    // `16-health-sem-rate-limit.e2e.spec.ts`). A isenção agora é do
+    // controller do health, e é a única: as outras rotas são contadas.
     ThrottlerModule.forRoot([
       {
-        ttl: Number(process.env.THROTTLE_TTL_MS ?? 60_000),
-        limit: Number(process.env.THROTTLE_LIMIT ?? 100),
+        ttl: JANELA_GLOBAL_MS,
+        limit: LIMITE_GLOBAL_POR_MINUTO,
       },
     ]),
     LoggerModule.forRoot(
@@ -39,6 +73,11 @@ const REDACT_PATHS = ['req.headers.authorization', 'req.headers.cookie'] as cons
     ),
     PrismaModule,
     AuditInfraModule,
+    // pt-BR (2026-11-10 — conformidade do system design): a idempotência de
+    // escrita. O interceptor é GLOBAL (o `APP_INTERCEPTOR` abaixo), e ele só
+    // age em POST que traz `Idempotency-Key` — sem o header, o pedido é
+    // exatamente o que era.
+    IdempotencyInfraModule,
     HealthModule,
     AuthModule,
     UsersModule,
@@ -80,6 +119,14 @@ const REDACT_PATHS = ['req.headers.authorization', 'req.headers.cookie'] as cons
   ],
   // #72: registra ThrottlerGuard globalmente via APP_GUARD (injetado pelo
   // container do Nest, sem precisar instanciar manualmente no main.ts).
-  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
+  //
+  // pt-BR (2026-11-10 — conformidade do system design): o interceptor da
+  // idempotência é global pelo mesmo motivo — a chave de idempotência é uma
+  // propriedade do PEDIDO, não de uma rota. Ele só age quando o pedido traz
+  // `Idempotency-Key`; sem o header, ele passa tudo direto.
+  providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
+  ],
 })
 export class AppModule {}

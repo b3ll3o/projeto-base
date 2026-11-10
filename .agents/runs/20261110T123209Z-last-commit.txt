@@ -1,0 +1,12 @@
+commit 5651c19db0ac77ffbbef91e5b184be5557aa447d
+Author:     CEO Agent <ceo@paperclip.ai>
+AuthorDate: Mon Nov 9 22:21:59 2026 -0300
+Commit:     CEO Agent <ceo@paperclip.ai>
+CommitDate: Mon Nov 9 22:21:59 2026 -0300
+
+    docs(plano): o plano sobe para 1.2.0 com a revisão do conteúdo
+    
+    A revisão do terceiro reviewer (18 achados) entrou depois da v1.1.0, que era a
+    revisão do plano. O registro das três revisões está em §Revisão.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>

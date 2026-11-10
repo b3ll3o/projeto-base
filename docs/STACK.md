@@ -4,6 +4,9 @@
 > Os apps `apps/api` e `apps/web` **já estão implementados** sobre esta stack
 > (ver [`./MONOREPO.md`](./MONOREPO.md) para a convenção do monorepo e a seção
 > [Containerização](#containerização) para os Dockerfiles).
+> **O desenho da stack** — topologia, módulos, dados, segurança e operação — está em
+> [`./system-design/README.md`](./system-design/README.md), e as **decisões** que a justificam estão em
+> [`./adr/`](./adr/).
 
 ---
 
@@ -78,7 +81,7 @@ projeto-base (monorepo)
 | Server Actions | nativo | — | Mutações sem JS extra |
 | Auth client | **`apps/web/lib/sessao.ts`** (casa própria) | — | grava/ler cookies httpOnly `access_token` + `refresh_token` e monta o `Authorization: Bearer`. NextAuth.js / Auth.js NÃO estão instalados. O browser nunca fala com a API: todo o tráfego passa por Server Action |
 | Testes unit | Vitest + Testing Library | ^2.1.0 | `@testing-library/react` + `user-event` + `jest-dom`, em jsdom |
-| Testes E2E | Playwright | `^1.60.0` (resolvido em `1.60.0` pelo lock) | `apps/web/e2e/*.spec.ts` — **18 specs** (`f1`–`f18`), `testDir` separado do Vitest. O inventário canônico (rota, nome e estados cobertos de cada fluxo) está em [`.agents/specs/conventions/e2e-playwright.md`](../.agents/specs/conventions/e2e-playwright.md) §"Inventário de Fluxos" |
+| Testes E2E | Playwright | `^1.60.0` (resolvido em `1.60.0` pelo lock) | `apps/web/e2e/*.spec.ts` — **19 specs** (`f1`–`f19`), `testDir` separado do Vitest. O inventário canônico (rota, nome e estados cobertos de cada fluxo) está em [`.agents/specs/conventions/e2e-playwright.md`](../.agents/specs/conventions/e2e-playwright.md) §"Inventário de Fluxos" |
 | Ícones | — | — | Nenhuma biblioteca de ícones instalada; a UI atual não usa ícones |
 | Qualidade | — | — | **Lighthouse não está ligado**: sem dependência, sem `.lighthouserc*`, sem job. LCP/INP/CLS são *coletados* (`web-vitals` → OTel Metrics), mas não há orçamento que reprove. A menção a "Lighthouse ≥ 90" que sobrou é prosa de workflow, não gate |
 
@@ -86,7 +89,7 @@ projeto-base (monorepo)
 > `node -p "const p=require('./apps/web/package.json'); p.dependencies['react-hook-form'] + ' ' + p.dependencies['zod'] + ' ' + p.devDependencies['@playwright/test'] + ' ' + p.devDependencies['vitest']"`
 > → `^7 ^3.25.76 ^1.60.0 ^2.1.0`.
 >
-> **Os 18 specs de e2e** (`ls apps/web/e2e/*.spec.ts | wc -l` → `18`, e os
+> **Os 19 specs de e2e** (`ls apps/web/e2e/*.spec.ts | wc -l` → `19`, e os
 > nomes de cada um em `grep -h '^// FLUXO:' apps/web/e2e/*.spec.ts`) cobrem:
 > F1 listagem de usuários · F2 cadastro com sucesso · F3 validação no cliente ·
 > F4 email duplicado · F5 erro genérico (5xx) · F6 navegação entre telas ·
@@ -94,7 +97,8 @@ projeto-base (monorepo)
 > F10 criação de perfil (admin) · F11 detalhe de perfil e troca de permissões ·
 > F12 atribuição de perfil a usuário · F13 meu perfil · F14 ativação e
 > desativação de flags · F15 edição dos metadados de perfil · F16 onboarding de
-> empresa · F17 inventário de empresas e usuários (tenancy).
+> empresa · F17 inventário de empresas e usuários (tenancy) · F18 cabeçalhos
+> de segurança do web · F19 sair revoga o refresh token.
 
 ## §4. Monorepo
 
@@ -171,7 +175,7 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão da stack:** 1.25.0
+**Versão da stack:** 1.27.0
 
 ### Histórico de Versões
 
@@ -198,3 +202,5 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 | `1.21.0` | **Sem mudança de stack** — o runbook novo (`docs/runbooks/cloudflare-edge.md`) é doc: nenhuma dependência, nenhum script, nenhuma config de infra mudou. O footer subiu junto com os outros 5. |
 | `1.22.0` | **A autenticação tem registro, e o container tem probe** — o BC `auth` ganha a tabela `refresh_tokens` (o `jti` do refresh token, a rotação, o `POST /auth/logout` e a detecção de replay) e a imagem da api ganha o `exec` no ENTRYPOINT (o SIGTERM chega ao Node) e um probe que não depende de pacote instalado. Duas migrations novas, dois gates novos. O footer subiu junto com os outros 5. |
 | `1.25.0` | **Sem mudança de stack** — a skill `agent-desktop` (adaptada de [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop), Apache-2.0) e a unificação da pasta de tooling de IA são docs e roteamento: **nenhuma dependência nova**, nenhum binário no `package.json` (a CLI é externa, instalada na máquina), nenhuma mudança em `apps/api`, `apps/web`, `packages/` ou `infra/`. O único config movido foi o `settings.json` do Claude Code, de `.claude/` para `.agents/`. |
+| `1.26.0` | **Sem mudança de stack** — o conjunto de system design canônico ([`./system-design/README.md`](./system-design/README.md), 7 documentos) é **doc**: nenhuma dependência nova, nenhum binário no `package.json`, nenhuma mudança em `apps/api`, `apps/web`, `packages/` ou `infra/`. O que mudou foi a **descoberta**: o `STACK.md` passa a apontar para o desenho, e o desenho passa a apontar para o ADR dono de cada decisão. |
+| `1.27.0` | **O código passa a casar com o system design** — o conjunto `docs/system-design/` afirmava quatro coisas que o código não tinha, e elas agora existem: a rota de health tem teto **PRÓPRIO** (`@Throttle` com 600/min no controller — não `@SkipThrottle()`, que não existe no código), a escrita aceita **`Idempotency-Key`** (a tabela `idempotency_keys` + um interceptor global), o papel de runtime ganha **`statement_timeout = '8s'`**, e a correlação da auditoria é a **mesma** da resposta. **Nenhuma dependência nova**, nenhum binário novo no `package.json`, nenhuma mudança em `apps/web`, `packages/` ou `infra/`. |

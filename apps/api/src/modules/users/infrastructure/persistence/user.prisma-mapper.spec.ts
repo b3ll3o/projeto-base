@@ -7,6 +7,8 @@ import { PasswordHash } from '../../domain/value-objects/password-hash.vo.js';
 import { UserValidationException } from '../../domain/exceptions/user.exceptions.js';
 import { UserPersistenceException } from './user-persistence.exceptions.js';
 import { mapExceptionToHttp } from '../../../../shared/infrastructure/http/domain-exception-to-http.js';
+import { AuditContext } from '../../../../shared/audit/domain/audit-context.vo.js';
+import { AuditContextStore } from '../../../../shared/audit/shared/audit-context-store.js';
 import { HASH_REAL } from '../../../../../test/fakes/fake-password-hasher.js';
 
 describe('UserPrismaMapper', () => {
@@ -342,6 +344,31 @@ describe('UserPrismaMapper — passwordHash corrompido é falha de infraestrutur
     expect(erro.correlationId).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
     );
+  });
+
+  // pt-BR (2026-11-10 — conformidade do system design): dentro do escopo de
+  // auditoria, o correlationId é o do CONTEXTO — o mesmo id que a resposta
+  // carrega (`traceIdDe`) e que o log usa.
+  //
+  // MEDIDO antes da correção: sem span, a falha de persistência apontava
+  // para um `randomUUID()` que não aparecia em mais nada — o operador não
+  // conseguia casar a falha com a requisição. A derivação do `AuditContext`
+  // (`users.controller.ts`) já usava `traceIdDe`; a daqui usava a sua.
+  it('dentro do escopo de auditoria, o correlationId é o do contexto', () => {
+    const ctx = new AuditContext({
+      actorId: null,
+      correlationId: 'req-42',
+      source: 'http',
+      timestamp: new Date(),
+      tenantId: null,
+    });
+
+    const erro = AuditContextStore.run(ctx, () =>
+      erroLancado(rowComHashCorrompido(HASH_CORROMPIDO, null)),
+    ) as UserPersistenceException;
+
+    expect(erro.correlationId).toBe('req-42');
+    expect(erro.message).toContain('req-42'); // o operador tem onde casar
   });
 
   it('cobre também coluna NULL / não-string: o `catch` é genérico de propósito', () => {

@@ -249,7 +249,7 @@ As convenções estão detalhadas em arquivos próprios sob [`.agents/specs/conv
 
 > **Os dois índices são o mesmo índice.** Este §6 e o [`README.md`](./.agents/specs/conventions/README.md) listam os mesmos arquivos: uma convenção nova entra **nos dois, no mesmo PR**. Eles já divergiram (7 convenções órfãs de índice), corrigido pela task 2.2 do plano [`guard-classes`](./docs/superpowers/plans/2026-10-03-guard-classes.md).
 >
-> **Templates:** [`.agents/specs/templates/`](./.agents/specs/templates/) contém templates canônicos versionados (ex.: [`spec.md`](./.agents/specs/templates/spec.md) — template de Spec de feature). Toda spec deve derivar de um template; criar templates novos via PR com bump major da convenção relacionada.
+> **Templates:** [`.agents/specs/templates/`](./.agents/specs/templates/) contém templates canônicos versionados (ex.: [`spec.md`](./.agents/specs/templates/spec.md) — template de Spec de feature — e [`system-design.md`](./.agents/specs/templates/system-design.md) — o desenho do sistema que o app derivado copia). Toda spec deve derivar de um template; criar templates novos via PR com bump major da convenção relacionada.
 
 - **Pre-push obrigatório:** rodar `pnpm ci:local` antes de push (ver [git-workflow.md §Pre-Push Quality Gate](./.agents/specs/conventions/git-workflow.md))
 - **Fluxo canônico end-to-end:** [`docs/fluxo-desenvolvimento.md`](./docs/fluxo-desenvolvimento.md) — documento factual que lista cada gate (3 camadas: hooks locais, CI remoto, processo de agents), em qual comando/hook dispara, e o que **de fato** bloqueia. Re-medido a cada merge.
@@ -286,10 +286,13 @@ Quando seguido corretamente, este padrão garante:
   [`docs/agents/triage-labels.md`](./docs/agents/triage-labels.md).
 - **Domain docs** — single-context: `GLOSSARY.md` na raiz + `docs/adr/`. Ver
   [`docs/agents/domain.md`](./docs/agents/domain.md).
+- **System design** — o desenho do sistema (topologia, módulos, dados,
+  segurança, operação) e o **contrato de extensão** para o app derivado. Ver
+  [`docs/system-design/README.md`](./docs/system-design/README.md).
 
 ---
 
 **Mantido por:** projeto-base contributors
 **Licença:** MIT
-**Versão do documento:** 1.25.0
+**Versão do documento:** 1.27.0
 **Status:** Estável

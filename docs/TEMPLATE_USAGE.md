@@ -107,6 +107,17 @@ EOF
 # 5. Validar checklist de revisão (ver AGENTS.md §6)
 ```
 
+**E o desenho do sistema?** O [system design](./system-design/README.md) é o
+ponto de partida da parte de **arquitetura**: ele vem com o **contrato de
+extensão** ([`./system-design/extensao.md`](./system-design/extensao.md)) — a
+matriz de onde cada peça nova encaixa — e com o **template** que o projeto
+derivado copia:
+
+```bash
+# 6. Copiar o template do system design para o projeto derivado
+cp .agents/specs/templates/system-design.md docs/system-design.md
+```
+
 ### 3.4 Override de Regra Mandatória (quando necessário)
 
 A regra `§1` do `AGENTS.md` é **mandatória por padrão**. Em casos excepcionais (ex.: POC descartável, script one-shot), crie um arquivo **`AGENTS.override.md`** no projeto com a justificativa:
@@ -174,8 +185,10 @@ R: `.agents/` é vendor-neutral — funciona com qualquer IA (Claude Code, Curso
 | `1.21.0` | **Bump de metadata** — sincronização de versão com STACK.md e MONOREPO.md (1.20.0 → 1.21.0) e o runbook da borda Cloudflare (`docs/runbooks/cloudflare-edge.md`) registrado no índice de runbooks do [`docs/como-rodar.md`](./como-rodar.md). Sem mudança no fluxo de integração. |
 | `1.22.0` | **Sincronização de versão com STACK.md e MONOREPO.md** (1.21.0 → 1.22.0) e o ADR novo do refresh token revogável (`docs/adr/0007-refresh-token-revogavel.md`) registrado. Sem mudança no fluxo de integração. |
 | `1.25.0` | **A pasta única e a skill `agent-desktop`** — a pasta `.claude/` saiu do repo: todo o binding do Claude Code passa a ser feito **na máquina** (symlink `~/.claude/skills/<nome>` → `.agents/skills/<nome>`), e a receita completa está em [`integrations/claude-code.md`](./integrations/claude-code.md). O gate `check-pasta-unica` reprova se a pasta voltar, e o `check-skill-coverage` passou a exigir o frontmatter que o harness lê (`name` e `description`, com `name` igual ao diretório) no lugar do wrapper. A skill nova é `agent-desktop`, adaptada de [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop) (Apache-2.0) — CLI externa, sem dependência nova. A regra nova está em `AGENTS.md` §1.3. |
+| `1.26.0` | **O system design canônico** — o conjunto [`./system-design/`](./system-design/README.md) (7 documentos: índice, contexto, módulo, dados, segurança, operação e o contrato de extensão) e o template que o projeto derivado copia. O §3.3 ganhou o passo 6 (copiar o template do system design) e o ADR-0010. Sem mudança no fluxo de integração: nenhuma dependência nova, nenhum binário novo. |
+| `1.27.0` | **O app derivado herda o código que casa com o desenho** — o conjunto `docs/system-design/` afirmava quatro coisas que o código não tinha, e elas agora existem: a rota de health com teto próprio (600/min, no controller), a escrita com `Idempotency-Key` (retry seguro), o `statement_timeout` de 8 s no papel de runtime e a correlação única entre resposta e auditoria. **2 ADRs novos** (0011 e 0012) e **2 migrations**. Sem mudança no fluxo de integração: nenhuma dependência nova, nenhum binário novo, nenhum passo novo no checklist. |
 
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão do documento:** 1.25.0
+**Versão do documento:** 1.27.0

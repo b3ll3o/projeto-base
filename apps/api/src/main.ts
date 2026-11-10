@@ -71,8 +71,13 @@ async function bootstrap(): Promise<void> {
     });
 
   // #72: rate-limit global via APP_GUARD provider (registrado em app.module.ts).
-  // O guard lê a config do ThrottlerModule e aplica por IP. Rotas com
-  // @SkipThrottle() (ex: /health) não são contadas.
+  // O guard lê a config do ThrottlerModule e aplica por IP.
+  //
+  // pt-BR (2026-11-10): este comentário afirmava que "rotas com @SkipThrottle()
+  // (ex: /health) não são contadas" — e NÃO EXISTIA NENHUM `@SkipThrottle` no
+  // código. MEDIDO: a rota de health recebia 429 do limite global. A
+  // isenção agora existe de verdade, e é do controller do health
+  // (`health.controller.ts`); as outras rotas são contadas.
 
   // #73: CORS whitelist via env. Em produção é OBRIGATÓRIO setar
   // ALLOWED_ORIGINS — sem isso, o servidor aborta o bootstrap para não
