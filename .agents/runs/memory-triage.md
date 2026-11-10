@@ -247,6 +247,7 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `papel-postgres-e-do-cluster-nao-do-banco` | `pendente` | — | — |
 | `subagent-pode-morrer-de-429-sem-aviso` | `pendente` | — | — |
 | `pr-refresh-bold-quebra-a-classe-da-suite` | `pendente` | — | — |
+| `script-que-falha-no-fim-perde-a-escrita` | `pendente` | — | — |
 
 ## O que a tabela diz
 

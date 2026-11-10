@@ -19,7 +19,7 @@ state_snapshot: .agents/runs/state-snapshot-20261109T213637Z.md
 > (`proceed: true`, `gaps_detectados: 4`, todos de documentação).
 >
 > **v1.1.0** — revisão adversarial aplicada (2 agentes: `code-reviewer` +
-> `documentation-specialist`). **3 P0 e 12 P1 corrigidos**; o detalhamento
+> `documentation-specialist`). **3 P0, 11 P1 e 3 P2 corrigidos**; o detalhamento
 > está em [§Revisão](#revisão).
 
 ---
@@ -280,7 +280,7 @@ T12, quando todos os arquivos existem.
 ## Revisão
 
 > **v1.1.0** — revisão adversarial por `code-reviewer` + `documentation-specialist`,
-> em paralelo, sobre o plano e sobre o ADR já escrito. **3 P0 e 12 P1
+> em paralelo, sobre o plano e sobre o ADR já escrito. **3 P0, 11 P1 e 3 P2
 > corrigidos.** Os achados que mudaram o plano:
 
 | # | Sev. | Achado | Correção |
