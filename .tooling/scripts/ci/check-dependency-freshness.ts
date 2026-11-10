@@ -22,9 +22,10 @@
  *
  * 1. **esteja declarada** numa tabela versionada, com o motivo; e
  * 2. **não tenha envelhecido** — a pendência reprova quando o pacote é
- *    removido do workspace, ou quando a faixa declarada **já permite** a
- *    major (aí a pendência virou um bug de configuração: o range diz que
- *    pode subir, mas o lockfile não subiu).
+ *    removido do workspace, quando a faixa declarada **já permite** a major
+ *    (aí a pendência virou um bug de configuração: o range diz que pode
+ *    subir, mas o lockfile não subiu), e quando a major foi **adotada**
+ *    (a faixa já é a major que a pendência diz que não sobe agora).
  *
  * É a mesma disciplina do `check-dependency-audit`: a exceção é explícita,
  * versionada e reconciliada — não uma boa intenção.
@@ -205,10 +206,31 @@ export async function checkDependencyFreshness(opts: {
   // Uma pendência cujo pacote saiu do workspace envelheceu: a lista descreve
   // uma dívida que não existe mais.
   for (const pendencia of pendencias) {
-    if (declaradas.has(pendencia.pacote)) continue;
+    const faixa = declaradas.get(pendencia.pacote);
+    if (!faixa) {
+      errors.push(
+        `pendência envelhecida: '${pendencia.pacote}' está em '${ARQUIVO_PENDENCIAS}' mas não é ` +
+          `mais declarado no workspace. A pendência descreve um pacote que saiu — remova-a.`,
+      );
+      continue;
+    }
+
+    // A major foi ADOTADA: a pendência diz "a major N não sobe agora" e a
+    // faixa declarada já é a major N. Era esse o buraco que o PR #162
+    // (Dependabot, eslint 9 → 10) abriu — MEDIDO 2026-11-10, com a árvore
+    // plantada (eslint `^10.14.0`, @eslint/js `^10.14.0`, jsdom `^31.0.0` e
+    // as 25 pendências do arquivo versionado), o gate devolvia `ok=true`: as 3
+    // pendências diziam "não sobe" e a árvore dizia que sobe, e ninguém media.
+    // O `majorNova <= majorAtual` do laço de cima encerrava a comparação antes
+    // de a pendência ser olhada.
+    const majorAgora = majorDeclarada(faixa);
+    if (majorAgora === null || majorAgora < pendencia.majorNova) continue;
+
     errors.push(
-      `pendência envelhecida: '${pendencia.pacote}' está em '${ARQUIVO_PENDENCIAS}' mas não é ` +
-        `mais declarado no workspace. A pendência descreve um pacote que saiu — remova-a.`,
+      `pendência envelheceu: '${pendencia.pacote}' está em '${faixa}' (major ${majorAgora}) e a ` +
+        `pendência em '${ARQUIVO_PENDENCIAS}' diz que a major ${pendencia.majorNova} NÃO sobe agora. ` +
+        `O range e a pendência estão contradizendo — ou o range volta para a major ` +
+        `${pendencia.majorAtual}, ou a pendência sai (a major subiu de verdade e a dívida foi paga).`,
     );
   }
 

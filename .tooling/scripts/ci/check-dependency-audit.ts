@@ -77,7 +77,42 @@ export interface Excecao {
 
 export interface ArquivoDeExcecoes {
   excecoes: Excecao[];
+  /**
+   * A claim do arquivo: quantas advisories o `pnpm audit` media quando o
+   * número foi escrito. É DADO — a regra (o que fazer quando o declarado e o
+   * medido divergem) mora no gate.
+   */
+  advisoriesEsperadas?: AdvisoriesEsperadas;
 }
+
+/**
+ * A contagem de advisories que o arquivo declara.
+ *
+ * MEDIDO 2026-11-10: a prosa do arquivo afirmava 41 advisories e o
+ * `pnpm audit` media 31 — o número é uma MEDIÇÃO, e a medição envelhece com
+ * o lockfile. Com a contagem em número, o gate passa a medir a claim: o que
+ * o arquivo declara a mais do que existe é ERRO (a claim mente), e o que o
+ * registro publicou a mais do que o arquivo declara é AVISO (isso é evento do
+ * registro, não mudança do repo — reprovar por isso seria vermelho sem
+ * motivo).
+ */
+export interface AdvisoriesEsperadas {
+  /** Quando a claim foi medida (YYYY-MM-DD). */
+  medidoEm: string;
+  /** O total declarado. */
+  total: number;
+  critical: number;
+  high: number;
+  moderate: number;
+  low: number;
+  info: number;
+}
+
+/** As severidades que a claim conta — as mesmas do `metadata.vulnerabilities`. */
+export const SEVERIDADES_DA_CLAIM: readonly (keyof Omit<
+  AdvisoriesEsperadas,
+  'medidoEm' | 'total'
+>)[] = ['critical', 'high', 'moderate', 'low', 'info'];
 
 /**
  * As severidades que REPROVAM — no CÓDIGO, não no arquivo de dados.
@@ -132,6 +167,30 @@ export function extrairAdvisories(auditoria: string): Advisory[] {
       versaoCorrigida: a.patched_versions ?? '',
       versoesAfetadas: [...versoes].sort(),
     });
+  }
+  return saida;
+}
+
+/**
+ * A contagem por severidade do `metadata.vulnerabilities` do `pnpm audit`.
+ *
+ * Devolve `null` quando o JSON não traz a contagem (o `pnpm audit` antigo não
+ * tinha, e a spec usa JSON sintético) — sem dado medido, o gate não julga a
+ * claim: quem não mede não acusa.
+ */
+export function extrairContagem(auditoria: string): Record<string, number> | null {
+  let dados: unknown;
+  try {
+    dados = JSON.parse(auditoria);
+  } catch {
+    return null;
+  }
+  const contagem = (dados as { metadata?: { vulnerabilities?: unknown } }).metadata
+    ?.vulnerabilities;
+  if (!contagem || typeof contagem !== 'object') return null;
+  const saida: Record<string, number> = {};
+  for (const [severidade, valor] of Object.entries(contagem as Record<string, unknown>)) {
+    if (typeof valor === 'number') saida[severidade] = valor;
   }
   return saida;
 }
@@ -326,6 +385,49 @@ export function checkDependencyAudit(opts: {
   advisories.push(
     `advisories na severidade que reprova: ${contagem} (${justificadas} com exceção declarada e verificada)`,
   );
+
+  // A CLAIM: o número que o arquivo declara contra o número medido.
+  //
+  // A direção é o que separa as duas naturezas do drift:
+  //
+  // - declarado > medido → o arquivo afirma MAIS do que existe. A claim
+  //   envelheceu (ou mentiu): ERRO. Foi o que o PR #163 mediu — a prosa
+  //   afirmava 41 advisories e o `pnpm audit` media 31.
+  // - medido > declarado → o REGISTRO publicou advisory nova. Isso não é
+  //   mudança do repo, e reprovar por causa de dado externo é vermelho sem
+  //   motivo: AVISO.
+  const declaradas = lista.advisoriesEsperadas;
+  const medidas = extrairContagem(auditoria);
+  if (declaradas && medidas) {
+    const medidoTotal = SEVERIDADES_DA_CLAIM.reduce(
+      (soma, severidade) => soma + (medidas[severidade] ?? 0),
+      0,
+    );
+    // O total e cada severidade: 6 comparações, e as duas direções são
+    // naturezas diferentes do drift.
+    const numeros: ReadonlyArray<readonly [string, number, number]> = [
+      ['advisory(ies)', declaradas.total, medidoTotal],
+      ...SEVERIDADES_DA_CLAIM.map(
+        (severidade) => [severidade, declaradas[severidade], medidas[severidade] ?? 0] as const,
+      ),
+    ];
+    for (const [nome, declarado, medido] of numeros) {
+      if (declarado > medido) {
+        errors.push(
+          `a claim de advisories envelheceu: '${ARQUIVO_DE_EXCECOES}' declara ${declarado} ` +
+            `${nome} (medido em ${declaradas.medidoEm}) e o audit mede ${medido}. ` +
+            `O arquivo afirma mais do que existe — meça de novo e atualize ` +
+            `'advisoriesEsperadas' no mesmo PR.`,
+        );
+      } else if (medido > declarado) {
+        advisories.push(
+          `o audit mede ${medido} ${nome} e a claim de '${ARQUIVO_DE_EXCECOES}' declara ` +
+            `${declarado} (medido em ${declaradas.medidoEm}) — o registro publicou advisory nova. ` +
+            `Atualize a claim quando puder; não é erro do repo.`,
+        );
+      }
+    }
+  }
 
   return { ok: errors.length === 0, errors, advisories };
 }

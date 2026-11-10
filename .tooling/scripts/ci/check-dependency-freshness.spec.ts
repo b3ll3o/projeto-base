@@ -212,6 +212,37 @@ describe('check-dependency-freshness — fim a fim, num repo temporario', () => 
     }
   });
 
+  it('REPROVA quando a pendencia envelhece porque a major foi ADOTADA', async () => {
+    const dir = await repo();
+    try {
+      // A árvore que o Dependabot propoe: a faixa JÁ é a major que a
+      // pendência diz que não sobe agora.
+      await writeFile(
+        path.join(dir, 'package.json'),
+        JSON.stringify({ dependencies: { eslint: '^10.14.0' } }, null, 2),
+        'utf-8',
+      );
+      await majors(dir, { medidoEm: '2026-11-10', majors: { eslint: 10 } });
+      await pendencias(dir, [
+        {
+          pacote: 'eslint',
+          faixaAtual: '^9.39.5',
+          majorAtual: 9,
+          majorNova: 10,
+          motivo: 'flat-config breaking: acompanha o eslint 10',
+          declaradaEm: '2026-11-09',
+        },
+      ]);
+
+      const r = await checkDependencyFreshness({ repoRoot: dir });
+      expect(r.ok).toBe(false);
+      expect(r.errors.join('\n')).toContain('envelheceu');
+      expect(r.errors.join('\n')).toContain('eslint');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('nao acusa pacote que ja esta na major mais nova', async () => {
     const dir = await repo();
     try {

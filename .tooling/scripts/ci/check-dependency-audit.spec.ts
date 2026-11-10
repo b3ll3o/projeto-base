@@ -26,8 +26,11 @@ function repoCom(lista: ArquivoDeExcecoes): string {
 }
 
 /** Um `pnpm audit --json` sintético, no formato real (o id é a chave). */
-function auditoriaFake(advisories: Record<string, Record<string, unknown>>): string {
-  return JSON.stringify({ advisories, metadata: { vulnerabilities: {} } });
+function auditoriaFake(
+  advisories: Record<string, Record<string, unknown>>,
+  vulnerabilities: Record<string, number> = {},
+): string {
+  return JSON.stringify({ advisories, metadata: { vulnerabilities } });
 }
 
 const ADVISORY_CRITICA = {
@@ -191,6 +194,85 @@ describe('o gate, com auditoria sintética', () => {
     });
     expect(r.ok).toBe(true);
     expect(r.advisories.join('\n')).toMatch(/não casa com nenhuma advisory/);
+  });
+});
+
+describe('a claim de advisories — o total declarado contra o medido', () => {
+  // MEDIDO 2026-11-10: a prosa do arquivo de exceções afirmava 41 advisories
+  // e o `pnpm audit` media 31. O número é uma MEDIÇÃO, e a medição envelhece
+  // com o lockfile — o PR #163 corrigia a prosa e registrava que "o gate NÃO
+  // o confere". Aqui o gate passa a conferir: o arquivo declara o número, e
+  // quem deixa o número envelhecer tem que ser acuado.
+  const DECLARADO = {
+    medidoEm: '2026-11-09',
+    total: 31,
+    critical: 1,
+    high: 3,
+    moderate: 26,
+    low: 1,
+    info: 0,
+  };
+
+  it('REPROVA quando o arquivo declara MAIS advisories do que o audit mede', () => {
+    // A claim que mente: o arquivo afirma 41 e o audit mede 31.
+    const root = repoCom({
+      excecoes: [],
+      advisoriesEsperadas: { ...DECLARADO, total: 41, moderate: 32, low: 5 },
+    });
+    const r = checkDependencyAudit({
+      repoRoot: root,
+      auditoriaJson: auditoriaFake({}, { critical: 1, high: 3, moderate: 26, low: 1 }),
+    });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toMatch(/declara/);
+    expect(r.errors.join('\n')).toMatch(/moderate/);
+  });
+
+  it('AVISA (sem reprovar) quando o audit mede MAIS advisories do que o arquivo declara', () => {
+    // O registro publicou advisory nova: isso NÃO é mudança do repo, e um
+    // gate que reprova por causa de dado externo é vermelho sem motivo.
+    const root = repoCom({ excecoes: [], advisoriesEsperadas: DECLARADO });
+    const r = checkDependencyAudit({
+      repoRoot: root,
+      auditoriaJson: auditoriaFake({}, { critical: 1, high: 3, moderate: 30, low: 1 }),
+    });
+    expect(r.ok).toBe(true);
+    expect(r.advisories.join('\n')).toMatch(/moderat/);
+  });
+
+  it('PASSA quando o declarado bate com o medido', () => {
+    const root = repoCom({ excecoes: [], advisoriesEsperadas: DECLARADO });
+    const r = checkDependencyAudit({
+      repoRoot: root,
+      auditoriaJson: auditoriaFake({}, { critical: 1, high: 3, moderate: 26, low: 1 }),
+    });
+    expect(r.ok).toBe(true);
+    expect(r.errors).toEqual([]);
+  });
+
+  it('o arquivo do repo DECLARA a claim — o instrumento não pode ser desligado em silêncio', () => {
+    const lista = carregarExcecoes(REPO);
+    expect(lista.advisoriesEsperadas).toBeDefined();
+    expect(lista.advisoriesEsperadas!.total).toBeGreaterThan(0);
+    expect(lista.advisoriesEsperadas!.medidoEm).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('a PROSA do repo cita o mesmo número que a claim declara', () => {
+    // O número tem UM dono: o campo `advisoriesEsperadas`. A prosa é o que o
+    // humano lê, e ela não pode dizer uma coisa enquanto o campo diz outra —
+    // foi exatamente esse o defeito que a issue #149 (F5) mediu: a prosa
+    // afirmava 41 e o audit media 31.
+    const lista = carregarExcecoes(REPO);
+    const campo = lista.advisoriesEsperadas!;
+    const plural = (n: number, um: string, muitos: string) => `${n} ${n === 1 ? um : muitos}`;
+    const esperado =
+      `${campo.total} advisories (` +
+      `${plural(campo.critical, 'crítica', 'críticas')}, ` +
+      `${plural(campo.high, 'alta', 'altas')}, ` +
+      `${plural(campo.moderate, 'moderada', 'moderadas')}, ` +
+      `${plural(campo.low, 'baixa', 'baixas')})`;
+    const cru = readFileSync(join(REPO, ARQUIVO_DE_EXCECOES), 'utf-8');
+    expect(cru).toContain(esperado);
   });
 });
 
