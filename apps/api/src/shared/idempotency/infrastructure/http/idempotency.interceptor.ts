@@ -295,7 +295,7 @@ export class IdempotencyInterceptor implements NestInterceptor {
           // DUAS vezes. A chave fica reservada (o retry leva 409), que é
           // melhor do que duplicar.
           this.logger.error(
-            `[Idempotencia] a resposta da chave ${prefixoDaChave(chave)} não foi guardada`,
+            `[Idempotencia] a resposta da chave ${prefixoDaChave(chave, this.pepper)} não foi guardada`,
             erro instanceof Error ? erro.stack : String(erro),
           );
         }
@@ -316,7 +316,7 @@ export class IdempotencyInterceptor implements NestInterceptor {
       await this.idempotencia.liberar({ chave, ator });
     } catch (falha) {
       this.logger.error(
-        `[Idempotencia] a chave ${prefixoDaChave(chave)} não foi liberada`,
+        `[Idempotencia] a chave ${prefixoDaChave(chave, this.pepper)} não foi liberada`,
         falha instanceof Error ? falha.stack : String(falha),
       );
     }
@@ -329,9 +329,13 @@ export class IdempotencyInterceptor implements NestInterceptor {
  * ⚠️ A chave é do cliente e é parte da capacidade de replay (junto com o
  * corpo e o ator). Um log que a traz em claro é um log que entrega a
  * capacidade — e o repo classifica credencial em log como o vetor nº 1.
+ *
+ * ⚠️ O prefixo é um HMAC com o **pepper** (o mesmo da impressão): com uma
+ * chave fixa no código, o prefixo viraria um **oráculo de verificação** —
+ * quem lesse o log poderia testar um palpite de chave e saber se acertou.
  */
-export function prefixoDaChave(chave: string): string {
-  return createHmac('sha256', 'prefixo-de-log').update(chave).digest('hex').slice(0, 8);
+export function prefixoDaChave(chave: string, pepper: string): string {
+  return createHmac('sha256', pepper).update(chave).digest('hex').slice(0, 8);
 }
 
 /**
