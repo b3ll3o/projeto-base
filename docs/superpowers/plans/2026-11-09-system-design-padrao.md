@@ -1,7 +1,7 @@
 ---
 name: plano-system-design-padrao
 description: "Plano da demand de system design padrão — um conjunto de documentos canônicos que qualquer aplicação derivada do projeto-base estende: contexto, contêiner, componente, dados, segurança, operação e contrato de extensão, com template e ADR."
-version: 1.1.0
+version: 1.2.0
 updated: 2026-11-09
 status: revisto
 state_snapshot: .agents/runs/state-snapshot-20261109T213637Z.md
@@ -18,9 +18,10 @@ state_snapshot: .agents/runs/state-snapshot-20261109T213637Z.md
 > **Snapshot de estado:** [`.agents/runs/state-snapshot-20261109T213637Z.md`](../../../.agents/runs/state-snapshot-20261109T213637Z.md)
 > (`proceed: true`, `gaps_detectados: 4`, todos de documentação).
 >
-> **v1.1.0** — revisão adversarial aplicada (2 agentes: `code-reviewer` +
-> `documentation-specialist`). **3 P0, 11 P1 e 3 P2 corrigidos**; o detalhamento
-> está em [§Revisão](#revisão).
+> **v1.2.0** — a revisão do **conteúdo** entrou depois da execução: o
+> `code-reviewer` devolveu **18 achados** (5 P0, 7 P1, 6 P2) sobre os docs já
+> escritos, e 17 foram corrigidos. O detalhamento das três revisões está em
+> [§Revisão](#revisão).
 
 ---
 
@@ -366,4 +367,4 @@ DTOs do `users`).
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão do documento:** 1.1.0
+**Versão do documento:** 1.2.0
