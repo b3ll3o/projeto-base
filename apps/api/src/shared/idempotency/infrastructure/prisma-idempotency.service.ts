@@ -69,7 +69,10 @@ export class PrismaIdempotencyService implements IdempotencyPort {
       if (linha === null) continue;
       // A linha EXPIROU: ela não vale mais, e a chave pode ser reusada.
       if (linha.expiresAt.getTime() <= Date.now()) {
-        await this.liberar({ chave: pedido.chave, ator: pedido.ator });
+        // A reconquista é ATÔMICA (uma statement): se outro request
+        // reconquistou a chave antes, o UPDATE não casa — e o pedido volta
+        // para o INSERT, que devolve o `P2002` do dono da chave.
+        if (await this.reconquistarSeExpirada(pedido)) return { estado: 'livre' };
         continue;
       }
       // A chave existe com OUTRO pedido: o cliente reusou a chave por engano.
@@ -148,6 +151,40 @@ export class PrismaIdempotencyService implements IdempotencyPort {
         where: { key: input.chave, actor: input.ator },
       });
     });
+  }
+
+  /**
+   * A reserva EXPIRADA é reconquistada — em UMA statement.
+   *
+   * ⚠️ É um UPDATE CONDICIONAL (`expires_at <= agora`), e não um DELETE
+   * seguido de INSERT: com o DELETE sem condição, dois requests que
+   * encontram a chave expirada ao mesmo tempo podiam apagar a reserva NOVA
+   * um do outro — e os dois saíam com `livre`, que é a duplicata que a
+   * chave existe para impedir.
+   *
+   * O `UPDATE` é o que fecha a corrida: ele só casa com a linha que ainda
+   * está expirada, e o primeiro que reconquista muda o prazo dela. O
+   * segundo não casa mais — e volta para o INSERT, que devolve o `P2002`
+   * do dono da chave.
+   */
+  private async reconquistarSeExpirada(pedido: ImpressaoDePedido): Promise<boolean> {
+    const agora = new Date();
+    const resultado = await comEscopoDeSistema(async (tx) =>
+      tx.idempotencyKey.updateMany({
+        where: { key: pedido.chave, actor: pedido.ator, expiresAt: { lte: agora } },
+        data: {
+          route: pedido.rota,
+          fingerprint: pedido.impressao,
+          createdAt: agora,
+          expiresAt: new Date(agora.getTime() + VALIDADE_EM_MS),
+          // A reserva nova NÃO pode herdar a resposta antiga: a chave foi
+          // reusada, e o que está guardado é de um pedido que já expirou.
+          status: null,
+          response: Prisma.DbNull,
+        },
+      }),
+    );
+    return resultado.count === 1;
   }
 
   /**

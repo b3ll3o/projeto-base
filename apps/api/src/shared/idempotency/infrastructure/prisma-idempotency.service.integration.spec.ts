@@ -113,6 +113,59 @@ describe('PrismaIdempotencyService — o registro da chave', () => {
     expect(await servico.reservar(PEDIDO)).toEqual({ estado: 'livre' });
   });
 
+  // ⚠️ A CORRIDA que a RECONQUISTA ATÔMICA fecha: os dois requests leem a
+  // linha expirada; e o que um deles faz com ela NÃO pode apagar a reserva
+  // que o outro acabou de fazer. Com um DELETE sem condição, os dois
+  // saíam com `livre` — e a operação rodava DUAS vezes, que é exatamente o
+  // que a chave existe para impedir.
+  //
+  // São 5 rodadas porque a ordem que denuncia o defeito é uma das
+  // interleavings possíveis: com uma rodada só, o teste passaria verde
+  // contra o código defeituoso.
+  it('DUAS reservas concorrentes da MESMA chave expirada: só uma fica "livre"', async () => {
+    for (let rodada = 1; rodada <= 5; rodada += 1) {
+      await cleanDatabase(ctx.prisma);
+      await servico.reservar(PEDIDO);
+      await ctx.prisma.idempotencyKey.updateMany({
+        where: { key: PEDIDO.chave },
+        data: { expiresAt: new Date(Date.now() - 1000) },
+      });
+
+      const [a, b] = await Promise.all([servico.reservar(PEDIDO), servico.reservar(PEDIDO)]);
+
+      const livres = [a, b].filter((r) => r.estado === 'livre');
+      expect(livres, `rodada ${rodada}: a chave é de UM request`).toHaveLength(1);
+    }
+  });
+
+  // A reserva reconquistada NÃO herda a resposta antiga: a chave foi reusada,
+  // e o que estava guardado é de um pedido que já expirou.
+  it('a chave reconquistada começa VAZIA — a resposta antiga não volta', async () => {
+    await cleanDatabase(ctx.prisma);
+    await servico.reservar(PEDIDO);
+    await servico.guardar({
+      chave: PEDIDO.chave,
+      ator: PEDIDO.ator,
+      status: 201,
+      resposta: { id: 'u-antigo' },
+      headers: { etag: 'W/"v1"' },
+    });
+    // A chave expira e é reconquistada por OUTRO pedido (impressão diferente).
+    await ctx.prisma.idempotencyKey.updateMany({
+      where: { key: PEDIDO.chave },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+
+    expect(await servico.reservar({ ...PEDIDO, impressao: 'impressao-2' })).toEqual({
+      estado: 'livre',
+    });
+    const linha = await ctx.prisma.idempotencyKey.findUnique({
+      where: { key_actor: { key: PEDIDO.chave, actor: PEDIDO.ator } },
+    });
+    expect(linha?.status).toBeNull();
+    expect(linha?.response).toBeNull();
+  });
+
   it('⚠️ o papel de RUNTIME NÃO alcança a tabela (a resposta guardada é PII)', async () => {
     await cleanDatabase(ctx.prisma);
     await servico.reservar(PEDIDO);
