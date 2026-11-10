@@ -89,6 +89,13 @@ opcional e não faz parte do JWT. Semântica e o limite da garantia:
 
 Códigos de erro: `400` (payload inválido — Zod), `404` (só com `destino.tipo === 'convite'` e a flag `tenancy.invites` **desligada** — mesma resposta de porta fechada que as outras duas, ver [contrato das feature flags](../superpowers/specs/2026-10-18-feature-flags-contrato-http.md)), `409` (email já em uso).
 
+**Retry seguro (opcional):** a rota aceita o header `Idempotency-Key` — o
+mesmo pedido com a mesma chave devolve a **mesma** resposta (e o header
+`Idempotency-Replayed: true`), e a mesma chave com **outro** corpo leva
+`409`. A semântica é do sistema, não deste BC: o dono é o
+[system design §6](../system-design/dados.md) e a decisão é o
+[ADR-0011](../adr/0011-idempotencia-de-escrita.md).
+
 `destino: { tipo: 'empresa' }` **continua `201` com a flag desligada** — não usa token de convite.
 
 ### 3.2 `GET /users` — Listar (paginado por cursor)

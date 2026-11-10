@@ -4,7 +4,7 @@
 > camadas, do ator ao banco, com um **contrato de extensão** — a parte que
 > faz um aplicativo derivado *estender* este padrão em vez de só copiá-lo.
 >
-> **Medido em 2026-11-09:** a topologia confere com `docker-compose.yml`
+> **Medido em 2026-11-10:** a topologia confere com `docker-compose.yml`
 > (`docker compose --profile observability config --services` → **7**
 > serviços: 3 sem profile, 4 no profile `observability`) e com
 > `apps/api/src/`.
@@ -124,7 +124,7 @@ conselho não sobrevive ao primeiro prazo.
 | **P5** | **Fato e recomendação têm rótulos diferentes** | `[derivado]` marca o que **não** é fato deste repo. Um SLO inventado como fato é a pior mentira possível | [ADR-0010](../adr/0010-system-design-canonico.md) |
 | **P6** | **A forma carrega o significado** | A linguagem visual deste §2 é a única; um diagrama novo nasce com ela | este README |
 | **P7** | **Nenhum número sem o comando que o produz** | O `→ \`N\`` com o comando é o formato; a regra é da convenção `tamanho-e-revisao.md` | [convenção `documentacao.md`](../../.agents/specs/conventions/documentacao.md) |
-| **P8** | **O que não existe é parte do design** | A ausência de fila, de cache distribuído e de idempotência é **escrita**, com o custo que teria | [`dados.md`](./dados.md) §Lacunas |
+| **P8** | **O que não existe é parte do design** | A ausência de fila, de cache distribuído e de consistência eventual é **escrita**, com o custo que teria | este README, §6 |
 
 ---
 
@@ -164,6 +164,30 @@ necessário, ele nasce no diretório de ADR do derivado — não aqui.
 
 ---
 
+## §6. O que ainda não existe
+
+O princípio **P8** diz que a ausência também é escrita. As lacunas que
+**sobraram** depois da conformidade de 2026-11-10:
+
+| Lacuna | Onde | O que custaria |
+|---|---|---|
+| **Fila / barramento de eventos** | [`dados.md`](./dados.md) §3 | fila + worker + a decisão de consistência que a fila traz |
+| **Cache distribuído** | [`dados.md`](./dados.md) §3 | Redis + a invalidação que ele exige |
+| **Consistência eventual / replicação** | [`dados.md`](./dados.md) §4.1 | replicação + escolher a consistência por leitura |
+| **SLO e error budget** | [`operacao.md`](./operacao.md) §4 | backend de métricas que colete os SLIs |
+| **Resiliência entre serviços** | [`operacao.md`](./operacao.md) §4 | há **um** serviço: não há o que resiliar |
+| **`correlationId` na trilha de auditoria** | [`dados.md`](./dados.md) §5 | uma coluna em `users_history` — a correlação de hoje vale em tempo de request, não em disco |
+| **`Idempotency-Key` em `/auth`** | [`dados.md`](./dados.md) §6 | a semântica de sessão (refresh de uso único) não combina com replay |
+
+> **Fechadas em 2026-11-10:** a rota de health fora do rate limit
+> ([`operacao.md`](./operacao.md) §5), o orçamento de tempo no banco
+> ([`operacao.md`](./operacao.md) §6 · [ADR-0012](../adr/0012-orcamento-de-tempo-no-banco.md)),
+> a correlação única entre resposta e auditoria
+> ([`dados.md`](./dados.md) §5) e a chave de idempotência de escrita
+> ([`dados.md`](./dados.md) §6 · [ADR-0011](../adr/0011-idempotencia-de-escrita.md)).
+
+---
+
 ## Ver Também
 
 - [`../STACK.md`](../STACK.md) — o dono das versões e da justificativa de
@@ -173,10 +197,15 @@ necessário, ele nasce no diretório de ADR do derivado — não aqui.
   dono da lista de decisões).
 - [`../superpowers/plans/2026-11-09-system-design-padrao.md`](../superpowers/plans/2026-11-09-system-design-padrao.md)
   — o plano que produziu este conjunto.
+- [`../superpowers/plans/2026-11-10-conformidade-system-design.md`](../superpowers/plans/2026-11-10-conformidade-system-design.md)
+  — o plano que **fez o código casar** com este conjunto.
 - [`../adr/0010-system-design-canonico.md`](../adr/0010-system-design-canonico.md)
   — a decisão.
+- [`../adr/0011-idempotencia-de-escrita.md`](../adr/0011-idempotencia-de-escrita.md)
+  e [`../adr/0012-orcamento-de-tempo-no-banco.md`](../adr/0012-orcamento-de-tempo-no-banco.md)
+  — as decisões que a conformidade tomou.
 
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão do conjunto:** 1.0.0
+**Versão do conjunto:** 1.1.0

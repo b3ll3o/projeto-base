@@ -237,12 +237,13 @@ A ordem importa: **quem recusa primeiro** define o que o cliente vê.
 | 5 | `UserOwnershipGuard` | por rota (só `users`) | a conta não é a dona do recurso |
 | 6 | `ZodValidationPipe` | por rota (`@Body(new ZodValidationPipe(Schema))`) | payload fora do schema → 400 |
 
-> ⚠️ **Sobre o `@SkipThrottle()`:** `main.ts:75` e `app.module.ts:23`
-> afirmam em comentário que rotas como `/health` usam `@SkipThrottle()` e não
-> são contadas. **Nenhum `@SkipThrottle` existe no código**
-> (`grep -rn "SkipThrottle" apps/api/src/` → só os 2 comentários). Na
-> prática, **`/health` é contado** pelo limite global. O comentário está
-> errado; o comportamento é o que o código faz.
+> ✅ **Sobre o `@SkipThrottle()`:** `main.ts` e `app.module.ts` afirmavam em
+> comentário que rotas como `/health` usam `@SkipThrottle()` e não são
+> contadas — e **nenhum `@SkipThrottle` existia no código**
+> (`grep -rn "SkipThrottle" apps/api/src/` → só os 2 comentários). MEDIDO:
+> 120 requisições seguidas à rota de health devolviam **100×200 + 20×429**.
+> Desde 2026-11-10 existe o `@SkipThrottle()` no controller do health — e a
+> rota de health é a **única** isenta.
 
 ---
 

@@ -1,7 +1,7 @@
 # System Design — Dados
 
 > **Nível C4:** L4 (dados) — quem guarda o quê, e sob qual escopo.
-> **Medido em 2026-11-09:** `apps/api/prisma/schema.prisma` (11 models) e as
+> **Medido em 2026-11-10:** `apps/api/prisma/schema.prisma` (12 models) e as
 > migrations de RLS.
 > **Dono do modelo:** `apps/api/prisma/schema.prisma`. **Dono da política de
 > escopo:** [ADR-0004](../adr/0004-tenancy-multi-empresa.md). Este documento
@@ -11,7 +11,7 @@
 
 ## §1. O modelo
 
-11 models. O desenho abaixo é o **relacionamento real** — e ele tem uma
+12 models. O desenho abaixo é o **relacionamento real** — e ele tem uma
 particularidade que o diagrama mostra: `users_history` e `users_archive`
 **não têm chave estrangeira** para `users`.
 
@@ -69,7 +69,7 @@ erDiagram
     }
 ```
 
-### §1.1 Os cinco models que **não** têm relação com FK
+### §1.1 Os seis models que **não** têm relação com FK
 
 | Model | Por quê | Consequência |
 |---|---|---|
@@ -78,6 +78,7 @@ erDiagram
 | `feature_flags` | o estado **global** das funcionalidades | **sem `tenant_id`, sem RLS** — por decisão: a flag responde "isto existe no sistema?", e a resposta é a mesma para todo ator |
 | `chaves_de_assinatura` | o segredo que assina `criar_membership` | **o `REVOKE ALL` de `app_runtime` é o que exclui**; a RLS ligada **sem policy** é a segunda barreira |
 | `refresh_tokens` | o registro do `jti` do refresh | **sem RLS**, e `REVOKE ALL` de `app_runtime`: só `app_system` lê |
+| `idempotency_keys` | o registro da chave de idempotência de escrita | o mesmo: **sem RLS**, e `REVOKE ALL` de `app_runtime` — a resposta guardada é PII de outra empresa |
 
 > `grep -rh "ALTER TABLE .* ENABLE ROW LEVEL SECURITY" apps/api/prisma/migrations/*/migration.sql | awk '{print $3}' | sort -u | wc -l` → **9**:
 > `authorizations`, `chaves_de_assinatura`, `invitations`, `profiles`,
@@ -147,8 +148,7 @@ distribuído, não há busca externa, não há event store.
 **O cache que existe** é **in-process** e de **5 s**
 (`shared/infrastructure/security/user-profile-cache.service.ts`): carrega
 `isAdmin` e o **array de permissões** — ou seja, a autorização **é** cacheada
-junto. O que o TTL **não** cobre é o **veredito da membership**, que roda a
-cada request.
+junto. O que o TTL **não** cobre é o **veredito da membership**.
 
 ---
 
@@ -165,7 +165,7 @@ cada request.
 
 **Não há consistência eventual** em lugar nenhum — e não há replicação. Um
 derivado que precise de leitura eventual terá de introduzir a replicação **e**
-escolher a consistência por leitura: o primeiro ponto de decisão nova.
+escolher a consistência por leitura.
 
 ### §4.2 Concorrência — locking otimista
 
@@ -180,10 +180,8 @@ a API compara expectedVersion com a linha:
   diferente → 0 linhas                    → 412 Precondition Failed
 ```
 
-- A resposta mutante devolve `ETag: W/"v<n>"`
-  (`users.controller.ts:203`).
-- `If-Match` ausente ou malformado → **400**.
-- Divergência de versão → **412**
+- A resposta mutante devolve `ETag: W/"v<n>"` (`users.controller.ts:203`).
+- `If-Match` ausente ou malformado → **400**; divergência de versão → **412**
   (`ApplicationConcurrencyException`).
 - O `version` **só** sobe por um mutator do aggregate — não por escrita
   direta (`user.aggregate.ts:58-62`).
@@ -211,38 +209,41 @@ vira `INSERT em users_history`; no soft-delete, `auditService.archive()` vira
 
 - O `AuditContext` (ator, `correlationId`, origem, timestamp) viaja num
   `AsyncLocalStorage` (`AuditContextStore`): o use case não carrega o request.
-- O `correlationId` vem do **span W3C ativo**, com `randomUUID()` como reserva
-  (`users.controller.ts:620-625`).
-- O caminho completo está em
-  [`docs/flows/http-api/http-api-domain-events-to-audit/` — a IR](../flows/http-api/http-api-domain-events-to-audit/http-api-domain-events-to-audit.workflow.json).
+- O `correlationId` vem da **mesma derivação do `traceId` da resposta**
+  (`traceIdDe()`): span W3C ativo → `request.id` do Fastify → um UUID fixado
+  no request (`users.controller.ts` — `buildContext()`).
+- O caminho completo está em [`docs/flows/http-api/http-api-domain-events-to-audit/` — a IR](../flows/http-api/http-api-domain-events-to-audit/http-api-domain-events-to-audit.workflow.json).
 
-> ⚠️ **Divergência medida:** o `traceId` da resposta (`traceIdDe()`, que cai no
-> `request.id`) e o `correlationId` da auditoria (que cai em `randomUUID()`)
-> **divergem quando não há span** — ver [`operacao.md`](./operacao.md) §Correlação.
+> ✅ **A divergência foi fechada (2026-11-10):** as duas derivações são a
+> mesma função (`traceIdDe()`) — a resposta, o log e a exceção de
+> persistência carregam **um** id. O `correlationId` **não é persistido**
+> (`users_history` não tem coluna de trace): a correlação vale em tempo de
+> request. Ver [`operacao.md`](./operacao.md) §Correlação.
 
 ---
 
-## §6. Idempotência: a lacuna
+## §6. Idempotência de escrita
 
-**Não há `Idempotency-Key`.** Nenhuma tabela a guarda, nenhum header a
-lê.
+**Existe desde 2026-11-10** — a decisão está no
+[ADR-0011](../adr/0011-idempotencia-de-escrita.md). A chave é do cliente,
+no header `Idempotency-Key`; sem o header, o pedido é **exatamente** o que
+era.
 
-O que acontece hoje é diferente de "duplica":
+| Situação (POST, fora de `/auth`) | Resposta |
+|---|---|
+| Primeira vez | a operação roda (201) e a resposta é **guardada** |
+| Repetida, **mesmo** corpo | **replay**: a mesma resposta e o header `Idempotency-Replayed: true` |
+| Repetida, **outro** corpo | **409** `IDEMPOTENCY_KEY_REUSED` |
+| Repetida, operação **em andamento** | **409** `IDEMPOTENCY_KEY_IN_FLIGHT` |
+| Operação **falhou** | a chave é **liberada** — o retry executa de verdade |
 
-| Re-executar | Resultado | Por quê |
-|---|---|---|
-| `POST /users` com o **mesmo e-mail** | **409** `EmailAlreadyInUse` | `users.email` é `@unique`; o repositório traduz o P2002 em exceção de domínio (`prisma-user.repository.ts:223`) |
-| `POST /tenants/:id/invitations` com o mesmo e-mail | **409** | unicidade `(tenant_id, email)` |
-| `POST /users` com e-mail **novo** | **201**, e **duplica a intenção** | nada impede o retry de criar uma segunda conta |
-
-**A lacuna real, escrita com precisão:** não é "o re-execute duplica a linha"
-— é que **retry não é seguro**. Um cliente que repete por timeout **não tem como
-saber** se a primeira gravou, e recebe 409 no lugar de 201. A correção seria uma
-chave de idempotência gravada com a operação — **decisão nova**, e portanto
-**ADR novo**, não tarefa de documentação.
-
-> **Para quem estende:** se o seu app derivado precisa de retry seguro, é hora
-> de pedir o ADR. Não é um detalhe de implementação.
+O registro é a tabela `idempotency_keys`, do caminho de **SISTEMA** (sem
+RLS, `REVOKE` do `app_runtime`) — o mesmo caminho do `refresh_tokens`: a
+resposta guardada é PII de outra empresa, e a RLS é o que impede o papel de
+runtime de ler a base alheia. A chave vale **24 h** (poda no
+`prepara-papeis.sh`) e é escopada pelo **ator**: a chave de uma conta não
+vale para outra. O bloco `/auth` fica de fora — a sessão tem semântica
+própria (o refresh token é de uso único).
 
 ---
 

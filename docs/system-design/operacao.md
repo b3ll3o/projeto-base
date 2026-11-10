@@ -80,39 +80,43 @@ O `tail_sampling` decide **por trace**, e as policies são combinadas por
 ## §2. Correlação — a verdade medida
 
 **Não existe uma ponte explícita `request.id` → `traceparent`.** O que existe
-são **três** identificadores com uma **ordem de precedência**:
+são identificadores com uma **ordem de precedência** — e, desde 2026-11-10,
+**a mesma ordem para todos**:
 
 ```text
 traceIdDe(request)                    AuditContext.correlationId
   1º span W3C ativo                    1º span W3C ativo
-  2º request.id do Fastify             2º randomUUID()      ← diverge
-  3º UUID fixado no request
+  2º request.id do Fastify             2º request.id do Fastify
+  3º UUID fixado no request            3º UUID fixado no request
 ```
 
 - `traceIdDe()` (`shared/infrastructure/http/trace-id.ts:42-53`) é o
   identificador que **volta na resposta** (campo `traceId` do
   `application/json` — o repo **não** emite `application/problem+json`) e no
   log do guard de flag.
-- O `correlationId` da **auditoria** (`users.controller.ts:620-625`) usa outra
-  derivação.
+- O `correlationId` da **auditoria** (`users.controller.ts` — `buildContext()`)
+  usa a **mesma função**: `traceIdDe(request)`. E a falha de persistência
+  (`UserPersistenceException`) carrega o id do contexto de auditoria — o
+  mesmo.
 - O `traceparent` **entra** pelo header: a instrumentação HTTP do OTel extrai
   o `traceparent` W3C da requisição e cria o server span a partir dele.
 
-> ⚠️ **A divergência, medida:** **sem** span OTel ativo, o `traceId` da
-> resposta e o `correlationId` da linha de auditoria **não** compartilham
-> identificador. Quem investiga "o que aconteceu neste request" pode não
-> casar o log com a linha de auditoria pelo mesmo id.
+> ✅ **A divergência foi fechada (2026-11-10).** Antes, **sem** span OTel
+> ativo, o `traceId` da resposta caía no `request.id` e o `correlationId` da
+> auditoria caía em `randomUUID()` — dois ids de famílias diferentes, e
+> quem investigava "o que aconteceu neste request" não conseguia casar o
+> log com a linha de auditoria pelo mesmo id. Agora **um só**.
 >
-> ⚠️ **A divergência é entre as DUAS correlações, não entre o doc e o
+> ⚠️ **A divergência era entre as DUAS correlações, não entre o doc e o
 > código.** `docs/STACK.md` (v1.7.0) fala da **camada de instrumentação** — o
 > `traceparent` que entra cria o server span —, que é outra coisa do
-> `request.id` que a **resposta** carrega. O que diverge é que `traceIdDe`
-> (resposta) cai no `request.id` e o `correlationId` (auditoria) cai em
-> `randomUUID()` — ver [`dados.md`](./dados.md) §5.
+> `request.id` que a **resposta** carrega.
 
 **O que date de medição:** `traceIdDe` não grava nada em disco; a
 correlação entre log e auditoria **não tem** coluna de trace no schema —
-`users_history` guarda `changed_by` e `reason`, não `trace_id`.
+`users_history` guarda `changed_by` e `reason`, não `trace_id`. A
+correlação vale **em tempo de request** (resposta, log, exceção), e não na
+trilha de auditoria persistida.
 
 ---
 
@@ -160,37 +164,41 @@ de métricas que o app derivado escolher.
 
 | Controle | Valor | Onde |
 |---|---|---|
-| Rate limit global | **100 req/min** por IP (`THROTTLE_LIMIT`, `THROTTLE_TTL_MS`) | `app.module.ts:24-29` |
+| Rate limit global | **100 req/min** por IP (`THROTTLE_LIMIT`, `THROTTLE_TTL_MS`) — o balde é **por rota** (`generateKey` inclui classe e handler) | `app.module.ts` (`LIMITE_GLOBAL_POR_MINUTO`, `JANELA_GLOBAL_MS`) |
 | Rate limit de login | **5/min** por `ip:email` | `auth.controller.ts:85`, `:126` |
 | CORS | lista `ALLOWED_ORIGINS`; em produção o bootstrap **aborta** se só houver o default de dev | `main.ts:80-91` |
 | Security headers | helmet, com CSP restritiva (a API é JSON pura: `script-src 'none'`) | `main.ts:48-71` |
 | Redação de log | `authorization` e `cookie` redigidos | `app.module.ts:16` |
 | Erro | RFC 7807, sem stack trace em produção | `global-exception.filter.ts` |
 
-> ⚠️ **`/health` é contado pelo rate limit global.** `main.ts:75` e
-> `app.module.ts:23` afirmam em comentário que rotas como `/health` usam
-> `@SkipThrottle()`; **nenhum `@SkipThrottle` existe no código**
-> (`grep -rn "SkipThrottle" apps/api/src/` → só os 2 comentários). Sob
-> pressão, a probe de saúde **pode** receber 429 — e um healthcheck que
-> falha derruba o container.
+> ✅ **`/health` NÃO é contada (desde 2026-11-10).** `main.ts` e
+> `app.module.ts` afirmavam em comentário que rotas como `/health` usam
+> `@SkipThrottle()` — e **nenhum existia no código** (o grep devolvia só os
+> 2 comentários). MEDIDO no container: 120 requisições seguidas devolviam
+> **100×200 + 20×429**. O `@SkipThrottle()` no controller do health fecha
+> isso, e o motivo é de princípio: **uma rota de infraestrutura não pode ser
+> recusada pela proteção da própria API**. É a **única** rota isenta.
 
 ---
 
 ## §6. Orçamento de latência
 
-> ⚠️ **Não existe orçamento de latência escrito no repo.** O web tem timeout
-> de **10 s** (`AbortController` em `lib/api-client.ts:119-121`); a API **não
-> tem timeout** para o banco.
-
 | Camada | Timeout | Medido |
 |---|---|---|
 | Browser → web | o do fetch do Next | — |
 | Web → API | **10 s** é o *fallback* (`?? 10_000`); o cliente real passa `defaultTimeoutMs` por operação — o logout usa **2 s** (`PRAZO_DE_REVOGACAO_MS`) | `api-client.ts:119`, `:209`, `:227` |
-| API → banco | **nenhum** | não há `statement_timeout` no papel de runtime — a query espera o Postgres desistir |
+| API → banco | **8 s** por statement | `ALTER ROLE app_runtime SET statement_timeout = '8s'` — a decisão está no [ADR-0012](../adr/0012-orcamento-de-tempo-no-banco.md) |
 
-> **Lacuna:** sem timeout na API, um `SELECT` lento segura a conexão do pool
-> até o Postgres desistir. A correção é um `statement_timeout` no papel de
-> runtime — decisão de infra, e por isso **ADR novo**.
+> ✅ **A lacuna do banco foi fechada (2026-11-10).** Antes não havia
+> timeout nenhum: um `SELECT` lento segurava a conexão do pool até o Postgres
+> desistir. MEDIDO antes: `SHOW statement_timeout` numa sessão `app_runtime`
+> → **0** (sem limite); depois: **8s**. O número tem **um dono**
+> (`STATEMENT_TIMEOUT_DO_PAPEL`, em `papel-de-runtime.ts`), e o
+> `papel-de-runtime.spec.ts` reconcilia a migration com a constante.
+>
+> ⚠️ **O orçamento é do PAPEL, e do cluster** — o `ALTER ROLE ... SET` vale
+> para todos os bancos do cluster, e precisa de superuser (ou `CREATEROLE`).
+> O preço está no ADR-0012.
 
 ---
 

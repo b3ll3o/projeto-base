@@ -119,13 +119,19 @@ uma leitura de sanidade.
 
 ## §6. Notas e armadilhas
 
-⚠️ **A rota **é** contada pelo limitador global.** Os comentários de
-`apps/api/src/main.ts:75` e de `apps/api/src/app.module.ts:23` citam `/health`
-como exemplo de rota com `@SkipThrottle()` — mas **não existe nenhum
-`@SkipThrottle()` no código**: `grep -rn "SkipThrottle" apps/api/src/` devolve
-**2 hits, e os dois são comentários** (o próprio `main.ts` e o `app.module.ts`).
-O `ThrottlerGuard` global (registrado via `APP_GUARD`) conta esta rota como
-qualquer outra.
+✅ **A rota NÃO é contada pelo limitador global (desde 2026-11-10).** Os
+comentários de `apps/api/src/main.ts` e de `apps/api/src/app.module.ts` já
+diziam que `/health` usaria `@SkipThrottle()` — e **não existia nenhum no
+código**: `grep -rn "SkipThrottle" apps/api/src/` devolvia **2 hits, e os dois
+eram comentários** (o próprio `main.ts` e o `app.module.ts`). MEDIDO no
+container: 120 requisições seguidas devolviam **100×200 + 20×429** — e o
+bucket do `@nestjs/throttler` é **por rota** (`generateKey` inclui classe e
+handler), então o corte era da própria rota de health.
+
+O `@SkipThrottle()` no controller (`health.controller.ts`) fecha isso. O
+motivo é de princípio: **uma rota de infraestrutura não pode ser recusada
+pela proteção da própria API** — quem sonda a saúde precisa de uma resposta,
+não de um 429.
 
 ⚠️ **O `@Inject(PrismaService)` é obrigatório, não redundância.** O `dev` roda
 com `tsx` (esbuild), que **não** emite `design:paramtypes` mesmo com

@@ -29,6 +29,8 @@ Como as skills de engenharia devem consumir a documentação de domínio deste r
   - `0008-camada-de-binding-do-claude-code.md` — **Substituído** pelo ADR-0009
   - `0009-pasta-unica-de-tooling-de-ia.md` — `.agents/` é a única pasta de tooling de IA; o binding é feito na máquina
   - `0010-system-design-canonico.md` — o conjunto de system design canônico e o contrato de extensão
+  - `0011-idempotencia-de-escrita.md` — a chave `Idempotency-Key`: o retry de escrita volta a ser seguro
+  - `0012-orcamento-de-tempo-no-banco.md` — o `statement_timeout` de 8 s no papel de runtime
 
 Se `GLOSSARY.md` não existir, **siga em silêncio**: não sinalize a ausência nem sugira
 criá-lo antecipadamente.

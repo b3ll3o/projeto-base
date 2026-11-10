@@ -1,7 +1,7 @@
 # `docs/superpowers/` — índice
 
 > Índice do diretório de **histórico** do repo. Medido em **2026-11-09**:
-> **119 planos** em `plans/` e **13 specs** em `specs/`.
+> **120 planos** em `plans/` e **13 specs** em `specs/`.
 
 ## §1. O que é este diretório
 
@@ -30,7 +30,7 @@ o `sort` por nome devolve a linha do tempo.
 ## §3. Famílias de planos
 
 A contagem abaixo vem do prefixo do slug (a primeira palavra depois da data),
-que **particiona** os 119 planos — a soma das linhas dá o total:
+que **particiona** os 120 planos — a soma das linhas dá o total:
 
 ```bash
 ls docs/superpowers/plans/*.md \
@@ -57,6 +57,7 @@ ls docs/superpowers/plans/*.md \
 | `ci` | 2 | Robustez de CI e CI local com e2e. |
 | `auditoria` | 2 | Auditoria de 6 defeitos + o plano de cadastro com auditoria (as 4 primeiras fases). |
 | `system` | 1 | O system design padrão e extensível (ADR-0010). |
+| `conformidade` | 1 | A conformidade do código com o system design: as 4 divergências medidas (health no rate limit, correlação, timeout do papel, idempotência) fechadas, com os ADRs 0011 e 0012. |
 | `teto` | 1 | Teto de linhas e dívidas de código. |
 | `start` | 1 | Start local sem o erro P1001. |
 | `atualizacao` | 1 | Atualização de dependências. |
@@ -76,9 +77,9 @@ ls docs/superpowers/plans/*.md \
 | `b23.2` | 1 | Polish do backlog (B23.2/B23.3). |
 | `archify` | 1 | Subcomando `archify` de flow. |
 
-**Total: 119** (`ls docs/superpowers/plans/*.md | wc -l`).
+**Total: 120** (`ls docs/superpowers/plans/*.md | wc -l`).
 
-Período coberto: **2026-09-21 a 2026-11-09**.
+Período coberto: **2026-09-21 a 2026-11-10**.
 
 ## §4. As specs
 
@@ -119,7 +120,7 @@ plano. As duas direções existem, e é o que impede que um plano vire órfão:
   faz em um plano novo, que aponta para o antigo — não editando o antigo.
 - **`plans/` é maior que `specs/`** porque uma demanda pode gerar 10 partes de
   plano e nenhuma spec nova (a spec já existe).
-- **Este README é índice, não dump.** Ele não lista os 119 planos um a um: as
+- **Este README é índice, não dump.** Ele não lista os 120 planos um a um: as
   famílias e as contagens bastam para saber o que existe, e `ls` dá o resto.
 
 ## §7. Ver mais
