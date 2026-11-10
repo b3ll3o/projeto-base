@@ -49,6 +49,15 @@ nenhum custo novo, nenhum contrato novo.
 A chave é **do cliente** porque o servidor não tem como saber que dois
 pedidos são o mesmo: só o cliente sabe que reenviou.
 
+⚠️ **A chave tem de ser de alta entropia** — e o código recusa chave com
+menos de 16 caracteres (`TAMANHO_MINIMO_DA_CHAVE`, 400
+`IDEMPOTENCY_KEY_TOO_SHORT`). O motivo é §3: o ator anônimo é uma
+constante **compartilhada por todos os clientes**, e uma chave adivinhável
+deixa quem adivinha **bloquear a escrita de outra pessoa** (409 por até
+24 h). MEDIDO 2026-11-10: quem usasse a chave da vítima antes dela recebia
+`409 IDEMPOTENCY_KEY_REUSED` na escrita legítima da vítima, e nenhuma linha
+era criada. A recomendação para o cliente é um **UUID v4** (36 caracteres).
+
 ### 2. Só `POST`, e `/auth` fica de fora
 
 O interceptor age em `POST` com o header. `PATCH` e `DELETE` já têm
@@ -70,6 +79,20 @@ Sem isso, a chave de uma conta valeria para outra: o replay devolveria a
 resposta de **outro** ator — um vazamento. O `POST /users` é `@Public()` e
 não tem ator; o que protege o replay anônimo é a **impressão do pedido**
 (§4): quem repete tem que mandar o **mesmo** pedido.
+
+⚠️ **O preço do ator anônimo, declarado:** o par `(chave, ator)` é
+compartilhado por TODOS os clientes anônimos — não há IP, sessão ou
+identificador de cliente. Duas consequências, e a segunda é a que o §1
+fecha com o mínimo de entropia:
+
+1. quem conhece a chave **e** o corpo exato recebe a resposta guardada
+   (o corpo do `POST /users` carrega a `senha` — o replay exige a senha);
+2. quem conhece **só** a chave bloqueia a escrita da vítima com 409, e o
+   bloqueio dura até a chave expirar (§8).
+
+Em rota **autenticada** o ator é o `sub` — o replay por outro usuário é
+impossível, e o `tenantId` entra na impressão (o mesmo pedido em outra
+empresa dá 409 de conflito, não replay).
 
 ### 4. A impressão do pedido: método + rota concreta + escopo + corpo
 
@@ -94,6 +117,17 @@ Três decisões dentro dessa, e cada uma fecha um furo:
   consegue testar senhas sem o segredo. O pepper é o `JWT_SECRET` (que o
   repo já exige, sem default) com separação de domínio — ele não está no
   banco, e um dump não o traz.
+
+⚠️ **O preço do pepper compartilhado, declarado:** o segredo é o mesmo que
+**assina o token**. Quem vazar o `JWT_SECRET` já forja access token para
+qualquer `sub` — e passa a ter, além disso, um oráculo **offline** de senha
+(SHA-256 contra o `argon2id`). O custo marginal é real, mas é **dominado**
+pelo que o vazamento do segredo já entrega: a separação de domínio impede
+que a impressão sirva para assinar token, e o inverso (a assinatura servir
+de impressão) não ajuda ninguém. A alternativa — um segundo segredo
+(`IDEMPOTENCY_PEPPER`) — é o conserto de quem quiser o decoupling; o repo
+não a adotou porque um segredo a mais é uma variável de ambiente a mais
+para provisionar, rotacionar e documentar em todo app derivado.
 
 A mesma chave com **outro** pedido é **409** (`IDEMPOTENCY_KEY_REUSED`), e
 não um replay: o cliente reusou a chave por engano, e devolver a resposta
@@ -147,11 +181,47 @@ Por isso a tabela espelha o `refresh_tokens`
 do `app_runtime` e do `PUBLIC`, `GRANT` do `app_system`, e o acesso pela
 credencial de sistema (`comEscopoDeSistema`).
 
-### 8. A validade é de 24 h, e a poda é oportunista
+⚠️ **O conteúdo declarado, completo:** a resposta guardada é PII de outra
+empresa — e, para a rota de **convite**
+(`POST /tenants/:id/invitations`), a resposta É o **token do convite**, que
+é uma credencial. A cópia não é revogável e vive 24 h — mas a **validade do
+token continua decidida pelo registro de origem** (`invitations`, que tem RLS
+e é revogável/expirável): a cópia na tabela é só o texto, e o servidor
+valida o token contra o convite. O que a cópia acrescenta é alcance de
+leitura — a credencial de sistema lê as duas.
 
-A chave vale 24 h (`expires_at`). O retry de um cliente acontece em
-minutos — por timeout, por rede instável, por deploy no meio da requisição.
-24 h cobrem isso com folga.
+⚠️ **A armadilha para o próximo PR:** o `ALTER DEFAULT PRIVILEGES` das
+migrations `20261020000000` e `20261027000001` dá CRUD em **toda tabela
+nova** para o `app_runtime` e o `app_system`. MEDIDO: `pg_default_acl` =
+`{app_runtime=arwd/projeto, app_system=arwd/projeto}`. A tabela nova com
+PII precisa **repetir o `REVOKE`**, ou nasce aberta.
+
+### 8. São DOIS prazos: a reserva (5 min) e a resposta guardada (24 h)
+
+O prazo do `expires_at` depende do estado da linha:
+
+| Estado da linha | `expires_at` | Por quê |
+|---|---|---|
+| **reservada** (`status IS NULL`) | **5 min** (`PRAZO_DA_RESERVA_MINUTOS`) | a reserva vale enquanto a operação roda |
+| **com resposta** (`status IS NOT NULL`) | **24 h** (`VALIDADE_DA_CHAVE_HORAS`) | o prazo do replay |
+
+⚠️ **A reserva curta é o que fecha a janela da QUEDA.** A reserva é
+commitada antes do handler (§5) e a resposta é gravada depois — e, se o
+processo morre no meio, a linha fica reservada e sem resposta. Com o prazo
+único de 24 h, o cliente levaria `409 IDEMPOTENCY_KEY_IN_FLIGHT` a cada
+tentativa por **24 h** — e trocar de chave (o único caminho que ele tem)
+**re-executa** a operação, que é a duplicata que a chave existe para
+impedir. MEDIDO 2026-11-10: a linha órfã sobrevivia com
+`expires_at - now() = 23:59:59`. Com o prazo de 5 min, a reserva abandonada
+expira sozinha, e o retry a **reconquista**.
+
+5 min é folgado para qualquer operação real: o orçamento da API no banco é
+de 8 s (o `statement_timeout` do papel, ADR-0012) e o cliente web desiste
+em 10 s.
+
+A **resposta guardada** vale 24 h: o retry de um cliente acontece em
+minutos — por timeout, por rede instável, por deploy no meio da requisição —
+e 24 h cobrem isso com folga.
 
 A **linha** expirada some em dois momentos: a poda do `prepara-papeis.sh`
 (no boot do container, junto com a do `refresh_tokens`) e uma **varredura
@@ -168,12 +238,18 @@ chave (MEDIDO no spec de integração — `DUAS reservas concorrentes da MESMA
 chave expirada: só uma fica "livre"`; sem a condição, os dois saem com
 `livre` e a operação roda duas vezes).
 
-### 9. A chave tem teto de tamanho
+### 9. A chave tem teto de tamanho — e piso de entropia
 
-A chave é do cliente e vai para a PRIMARY KEY: sem teto, um header de 16 KB
-(o limite do Fastify) viraria uma linha de 16 KB. O teto é **255
-caracteres** (`TAMANHO_MAXIMO_DA_CHAVE`) — e o que passar disso leva
+O **teto**: a chave é do cliente e vai para a PRIMARY KEY; sem teto, um
+header de 16 KB (o limite do Fastify) viraria uma linha de 16 KB. O teto é
+**255 caracteres** (`TAMANHO_MAXIMO_DA_CHAVE`) — e o que passar disso leva
 **400** (`IDEMPOTENCY_KEY_TOO_LONG`), antes de tocar o banco.
+
+O **piso**: **16 caracteres** (`TAMANHO_MINIMO_DA_CHAVE`) — e o que ficar
+abaixo leva **400** (`IDEMPOTENCY_KEY_TOO_SHORT`). O motivo está no §1 e no
+§3: o ator anônimo é uma constante compartilhada, e uma chave adivinhável
+deixa quem adivinha **bloquear a escrita de outra pessoa**. A
+recomendação ao cliente é um **UUID v4** (36 caracteres).
 
 ### 10. O replay se anuncia
 
@@ -206,6 +282,12 @@ mesma separação de domínio) que calcula a impressão (§4) calcula o prefixo.
 - A **mesma** chave com a operação em andamento → **409**
   `IDEMPOTENCY_KEY_IN_FLIGHT`.
 - Um erro (4xx/5xx) **libera** a chave: o retry executa de verdade.
+- Uma chave com **menos de 16 caracteres** → **400**
+  `IDEMPOTENCY_KEY_TOO_SHORT`; com **mais de 255** → **400**
+  `IDEMPOTENCY_KEY_TOO_LONG`. A chave recomendada é um **UUID v4**.
+- A chave vale **5 min enquanto a operação roda** e **24 h com a resposta
+  guardada** (§8): um retry depois da queda do processo reconquista a
+  chave, e um retry dentro do prazo recebe o replay.
 
 ### O que NÃO mudou
 
@@ -217,8 +299,9 @@ mesma separação de domínio) que calcula a impressão (§4) calcula o prefixo.
 
 ### O preço, declarado
 
-- **A chave guardada é PII**, e a tabela é do caminho de sistema: o papel de
-  runtime **não** a alcança (o spec de integração afirma o `42501`).
+- **A chave guardada é PII** — e, na rota de convite, uma **credencial**
+  (§7) — e a tabela é do caminho de sistema: o papel de runtime **não** a
+  alcança (o spec de integração afirma o `42501`).
 - **O custo é de duas transações** no pool do cliente de **sistema** por
   POST com chave (reservar + guardar) — e não no pool do runtime. Só quem
   manda o header paga.
@@ -229,12 +312,24 @@ mesma separação de domínio) que calcula a impressão (§4) calcula o prefixo.
   e quem precisar dele tem que reusar a chave dentro do prazo.
 - **O replay não é transacional com a operação**: entre a reserva e a
   gravação da resposta há uma janela em que a chave está reservada e sem
-  resposta. É a janela do `em_voo`.
+  resposta. É a janela do `em_voo` — e ela **morre com o prazo da
+  reserva** (5 min, §8): um processo que morre no meio deixa a chave
+  travada por minutos, e não por 24 h.
+- **O ator anônimo não escopa nada** (§3): o par `(chave, ator)` é
+  compartilhado por todos os clientes anônimos. Quem conhece a chave **e**
+  o corpo exato recebe a resposta guardada; quem conhece só a chave
+  bloqueia a escrita de outra pessoa até a chave expirar. O piso de
+  entropia (§1, §9) fecha o segundo caso.
 - **`POST /auth/login` continua duplicando** o refresh token quando o
   cliente repete: o login tem semântica de sessão, e a decisão é explícita.
 - **A rotação do `JWT_SECRET` invalida as impressões antigas**: um retry de
-  uma chave guardada antes da rotação cai em "conflito" (409) em vez de
-  replay. É o preço de não criar um segundo segredo — e é um evento raro.
+  uma chave guardada antes da rotação cai em "conflito" (409
+  `IDEMPOTENCY_KEY_REUSED`) em vez de replay. É o preço de não criar um
+  segundo segredo — e é um evento raro. ⚠️ **A consequência é declarada
+  aqui**: o 409 diz "chave reusada com outro pedido", e um cliente que leia
+  assim **gera outra chave** — o que **re-executa** a operação, que é a
+  duplicata que a chave existe para impedir. Num evento raro (rotação de
+  segredo), a duplicata é o preço aceito.
 - **A tabela usa o pool de SISTEMA** (o mesmo do `refresh_tokens`): a API
   ganha **um segundo pool** contra o mesmo Postgres. O custo é de 2
   transações extras por POST com chave, e ele é pago só por quem manda o

@@ -96,6 +96,13 @@ mesmo pedido com a mesma chave devolve a **mesma** resposta (e o header
 [system design §6](../system-design/dados.md) e a decisão é o
 [ADR-0011](../adr/0011-idempotencia-de-escrita.md).
 
+⚠️ **A chave tem de ser de alta entropia** — um **UUID v4** (36 caracteres).
+A rota é `@Public()`, e o ator da reserva é a constante `anônimo`,
+compartilhada por todos os clientes: uma chave adivinhável deixa quem
+adivinha **bloquear a escrita de outra pessoa** (409 por até 24 h). O
+servidor recusa chave com menos de **16** (`IDEMPOTENCY_KEY_TOO_SHORT`) ou
+com mais de **255** caracteres (`IDEMPOTENCY_KEY_TOO_LONG`).
+
 `destino: { tipo: 'empresa' }` **continua `201` com a flag desligada** — não usa token de convite.
 
 ### 3.2 `GET /users` — Listar (paginado por cursor)

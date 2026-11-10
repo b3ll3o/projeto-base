@@ -251,7 +251,8 @@ conferida contra a credencial da sessão.
 - A auditoria **acompanha** a mutação: é o mesmo use case que grava.
 - O `AuditContext` viaja num `AsyncLocalStorage` — o use case não carrega o
   request.
-- O `correlationId` vem do span W3C ativo (ver a ressalva de divergência em
+- O `correlationId` vem da **mesma derivação do `traceId` da resposta**
+  (`traceIdDe()`) — a divergência que existia foi fechada em 2026-11-10 (ver
   [`dados.md`](./dados.md) §5).
 
 ---
