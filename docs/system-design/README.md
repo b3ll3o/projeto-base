@@ -5,7 +5,9 @@
 > faz um aplicativo derivado *estender* este padrão em vez de só copiá-lo.
 >
 > **Medido em 2026-11-09:** a topologia confere com `docker-compose.yml`
-> (`docker compose config --services` → 7 serviços) e com `apps/api/src/`.
+> (`docker compose --profile observability config --services` → **7**
+> serviços: 3 sem profile, 4 no profile `observability`) e com
+> `apps/api/src/`.
 >
 > **Para quem é:**
 > 1. **Quem vai derivar um app** a partir deste template — leia na ordem
@@ -155,7 +157,7 @@ necessário, ele nasce no diretório de ADR do derivado — não aqui.
 |---|---|
 | **Quem é o dono da versão deste conjunto?** | Este README. Os demais documentos **apontam** para cá — a versão do conjunto mora num lugar só |
 | **Quem mantém o conteúdo?** | [`documentation-specialist`](../../.agents/agents/documentation-specialist.md), com a matriz de cobertura em [`documentacao.md`](../../.agents/specs/conventions/documentacao.md) §2 |
-| **Como o conjunto se mantém verdadeiro?** | **Parcialmente.** O `doc-sync` tem um mapa **editável** (`tooling/scripts/doc-sync.ts`): `apps/api/prisma/schema.prisma` → **`docs/system-design/dados.md`**, para o modelo de dados não envelhecer. O resto do conjunto **não** tem instrumento automático — a lacuna está registrada como **Em aberto** no [ADR-0010](../adr/0010-system-design-canonico.md). Até ela ser fechada, a verificação é a **revisão** |
+| **Como o conjunto se mantém verdadeiro?** | **Parcialmente.** O `doc-sync` tem um mapa **editável** (`tooling/scripts/doc-sync.ts`): `apps/api/prisma/schema.prisma` → **`docs/system-design/dados.md`**, para o modelo de dados não envelhecer. Os **outros 5 focais** **não** têm instrumento automático — a lacuna está registrada como **Em aberto** no [ADR-0010](../adr/0010-system-design-canonico.md). Até ela ser fechada, a verificação é a **revisão** |
 | **Qual gate mede o tamanho?** | `check-doc-size` — teto de **300 linhas** por documento |
 | **Qual gate mede os links?** | `check-doc-refs` — link relativo quebrado reprova |
 | **Este conjunto entra na matriz de cobertura do `check-doc-coverage`?** | **Não** — e isso é declarado, não esquecido: o gate mede *unidade de código → doc canônico* (BC, rota, package), e o conjunto **não é** unidade de código. O dono do desenho está declarado na tabela de donos de [`documentacao.md` §2](../../.agents/specs/conventions/documentacao.md) |

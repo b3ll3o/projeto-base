@@ -171,7 +171,7 @@ flowchart TB
 | Uma validação de entrada | `modules/<bc>/infrastructure/http/<bc>.schemas.ts` (Zod) + DTO em `application/dto/` | no controller |
 | Uma regra de negócio | `modules/<bc>/domain/` (aggregate, VO, policy) | no use case |
 | Uma orquestração | `modules/<bc>/application/<bc>-use-cases.ts` | no controller |
-| Uma porta | `modules/<bc>/domain/ports/` | `application/` |
+| Uma porta | `modules/<bc>/domain/ports/` — **exceto as ports transversais** (`AuditServicePort`), que moram em `shared/<concern>/domain/` | `application/` |
 | Um adapter | `modules/<bc>/infrastructure/persistence/` | `domain/` |
 | Um evento | `modules/<bc>/domain/events/` | `application/` |
 | Um guard | `modules/<bc>/infrastructure/http/` | `shared/infrastructure/http/` (que é para o **transversal**: filtro de erro, pipe, trace) |
@@ -248,17 +248,15 @@ A ordem importa: **quem recusa primeiro** define o que o cliente vê.
 
 ## §5. `shared/` — o transversal
 
-`apps/api/src/shared/` tem 4 áreas, e cada uma tem dono:
+`apps/api/src/shared/` tem **4 áreas** (`ls -d apps/api/src/shared/*/`), e
+cada uma tem dono. `infrastructure/` é a única que se ramifica:
 
 | Área | O que mora | Por que é `shared` |
 |---|---|---|
 | `audit/` | `AuditContext` (VO), `AuditServicePort`, adapter Prisma, `AuditContextStore` (AsyncLocalStorage) | toda mutação passa por ela |
 | `auth/` | catálogo de permissões, catálogo de flags, "é admin do sistema", segredo de serviço | todo módulo consulta |
 | `domain/` | `domain-event.ts`, dono da forma UUID | contrato entre módulos |
-| `infrastructure/http/` | filtro de erro global, mapeador de exceção → HTTP, pipe Zod, trace id, habilitação do Swagger | vale para toda rota |
-| `infrastructure/prisma/` | `PrismaService` (`@Global`), **`escopo.ts`**, papéis, credenciais, assinatura de membership | o banco é um só |
-| `infrastructure/security/` | cache in-process de perfil (5 s) | todo request lê o perfil |
-| `infrastructure/telemetry/` | `tracing.ts` (NodeSDK), `resource.ts`, `init.ts` | todo o processo é instrumentado |
+| `infrastructure/` | `http/` (filtro de erro global, mapeador de exceção → HTTP, pipe Zod, trace id, habilitação do Swagger) · `prisma/` (`PrismaService` `@Global`, **`escopo.ts`**, papéis, credenciais, assinatura de membership) · `security/` (cache in-process de perfil, 5 s) · `telemetry/` (`tracing.ts` NodeSDK, `resource.ts`, `init.ts`) | vale para toda rota, todo o banco, todo request e todo o processo |
 
 ### §5.1 `escopo.ts` é o **único** escritor do escopo
 

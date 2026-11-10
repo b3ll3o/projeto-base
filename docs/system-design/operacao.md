@@ -91,7 +91,8 @@ traceIdDe(request)                    AuditContext.correlationId
 
 - `traceIdDe()` (`shared/infrastructure/http/trace-id.ts:42-53`) é o
   identificador que **volta na resposta** (campo `traceId` do
-  `problem+json`) e no log do guard de flag.
+  `application/json` — o repo **não** emite `application/problem+json`) e no
+  log do guard de flag.
 - O `correlationId` da **auditoria** (`users.controller.ts:620-625`) usa outra
   derivação.
 - O `traceparent` **entra** pelo header: a instrumentação HTTP do OTel extrai
@@ -102,9 +103,12 @@ traceIdDe(request)                    AuditContext.correlationId
 > identificador. Quem investiga "o que aconteceu neste request" pode não
 > casar o log com a linha de auditoria pelo mesmo id.
 >
-> ⚠️ **`docs/STACK.md` §7 (v1.7.0) descreve "request.id → traceparent W3C"
-> como se a ponte existisse.** O código prefere o **span** e só usa o
-> `request.id` como reserva. O doc aqui segue o **código**.
+> ⚠️ **A divergência é entre as DUAS correlações, não entre o doc e o
+> código.** `docs/STACK.md` (v1.7.0) fala da **camada de instrumentação** — o
+> `traceparent` que entra cria o server span —, que é outra coisa do
+> `request.id` que a **resposta** carrega. O que diverge é que `traceIdDe`
+> (resposta) cai no `request.id` e o `correlationId` (auditoria) cai em
+> `randomUUID()` — ver [`dados.md`](./dados.md) §5.
 
 **O que date de medição:** `traceIdDe` não grava nada em disco; a
 correlação entre log e auditoria **não tem** coluna de trace no schema —
@@ -181,7 +185,7 @@ de métricas que o app derivado escolher.
 | Camada | Timeout | Medido |
 |---|---|---|
 | Browser → web | o do fetch do Next | — |
-| Web → API | **10 s** (`AbortController`) | `api-client.ts:119` |
+| Web → API | **10 s** é o *fallback* (`?? 10_000`); o cliente real passa `defaultTimeoutMs` por operação — o logout usa **2 s** (`PRAZO_DE_REVOGACAO_MS`) | `api-client.ts:119`, `:209`, `:227` |
 | API → banco | **nenhum** | não há `statement_timeout` no papel de runtime — a query espera o Postgres desistir |
 
 > **Lacuna:** sem timeout na API, um `SELECT` lento segura a conexão do pool
@@ -205,7 +209,7 @@ Duas réplicas da API dobram as conexões abertas.
 
 **Ordem de escala, do mais barato ao mais caro:**
 
-1. ** índices** — o `EXISTS` da policy de `users` é a query cara
+1. **índices** — o `EXISTS` da policy de `users` é a query cara
    ([`dados.md`](./dados.md) §8);
 2. **pool** — mais conexões, ou um pooler;
 3. **réplicas da API** — trivial, porque são stateless;

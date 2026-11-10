@@ -2,7 +2,8 @@
 
 > **Nível C4:** L1 (contexto do sistema) + L2 (contêineres).
 > **Medido em 2026-11-09:** a topologia abaixo confere com `docker-compose.yml`
-> (`docker compose config --services` → 7 serviços) e com
+> (`docker compose --profile observability config --services` → **7**
+> serviços: 3 sem profile, 4 no profile `observability`) e com
 > `apps/api/src/main.ts`.
 > **Dono do desenho:** este documento. **Dono das decisões:** cada ADR
 > citado. **Dono do fluxo detalhado:** `docs/flows/`.
@@ -193,7 +194,7 @@ citado. Aqui está o resumo e **o preço**.
 
 | Decisão | Alternativa rejeitada | O que se paga |
 |---|---|---|
-| **Schema único + `tenant_id` + RLS** | schema-per-tenant, db-per-tenant | o isolamento não é por schema: `users` e `users_history` **não** têm `tenant_id` e são isolados por `EXISTS` sobre `tenant_memberships` — a policy mais cara do banco |
+| **Schema único + `tenant_id` + RLS** | schema-per-tenant, db-per-tenant | o isolamento não é por schema: `users` e `users_history` **não** têm `tenant_id` e são isolados por `usuario_no_escopo()`, que faz `EXISTS` sobre `tenant_memberships` — a policy mais cara do banco |
 | **Bucket de sistema por credencial** | bucket concedido por GUC (`app.tenant_id = '*'`) | são **duas** URIs e **dois** papéis; `SYSTEM_DATABASE_URL` é obrigatória fora de `development` |
 | **Contexto de empresa no header**, não no token | claim `tenant_id` no JWT | trocar de empresa **não** emite token novo — e o token continua sendo de identidade |
 | **Refresh token revogável** (tabela `refresh_tokens`) | JWT stateless sem registro | a tabela é `REVOKE` de `app_runtime`: login/refresh/logout falam com ela pela **credencial de sistema** |
@@ -216,7 +217,7 @@ citado. Aqui está o resumo e **o preço**.
 | Prefixo | `/api/v1` — o prefixo é **global**, definido uma vez | `apps/api/src/main.ts:41` |
 | Versionamento | breaking change abre `/api/v2`; o `v1` não se reescreve | política do time |
 | Verificação de drift | o `openapi.json` versionado é comparado com o gerado no preflight | gate `check-openapi-contract` |
-| Formato de erro | RFC 7807 `application/problem+json`, único | `shared/infrastructure/http/global-exception.filter.ts` |
+| Formato de erro | **shape** RFC 7807 (Problem Details) servido como `application/json` — o repo **não** emite `application/problem+json` | `shared/infrastructure/http/global-exception.filter.ts:74` |
 | Documentação viva | o Swagger só existe em `development` — **salvo** `SWAGGER_ENABLED=true`, que tem precedência nos dois sentidos | `shared/infrastructure/http/swagger-habilitado.ts` |
 
 **Rotação de rota por perfil (frontend)**: o catálogo é

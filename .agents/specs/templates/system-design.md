@@ -3,7 +3,7 @@ name: system-design
 version: 1.0
 updated: 2026-11-09
 maintainer: agent-architect
-description: "Template canônico de System Design — a estrutura de 7 blocos (Contexto → Contêineres → Módulos → Dados → Segurança → Operação → Ambientes) que um aplicativo derivado do projeto-base copia e preenche. Derivado de `spec.md`, adaptado para arquitetura."
+description: "Template canônico de System Design — a estrutura de 6 blocos (Contexto e contêineres → Módulos → Dados → Segurança → Operação → Extensão) que um aplicativo derivado do projeto-base copia e preenche. Um bloco por documento do conjunto canônico `docs/system-design/**`. Derivado de `spec.md`, adaptado para arquitetura."
 related:
   - ../conventions/documentacao.md
   - ../conventions/estrutura-e-versionamento.md
@@ -12,8 +12,9 @@ related:
 usage: |
   Copie este arquivo para docs/system-design.md do aplicativo derivado e
   preencha cada bloco. Remova os comentários <!-- ... --> após preencher.
-  Cada bloco do §1 ao §7 corresponde a um documento do conjunto canônico do
-  projeto-base — o link está no rodapé de cada seção.
+  São 6 blocos, um por documento do conjunto canônico do projeto-base:
+  Contexto e contêineres · Módulos · Dados · Segurança · Operação
+  (que inclui os ambientes) · Extensão.
   Regra que não se negocia: o bloco de Dados e o de Segurança citam o ADR
   dono de cada decisão; o System Design aponta, não reescreve.
 source_article: "Derivado de `.agents/specs/templates/spec.md` (v1.0) e do conjunto `docs/system-design/**` do projeto-base (v1.0.0)"
@@ -38,9 +39,13 @@ Em cada bloco:
 Regra da medição: todo número vem com o comando que o produz.
 -->
 
-## 1. Contexto
+## 1. Contexto e contêineres
 
-<!-- QUEM usa o sistema, O QUE ele faz, e onde está a fronteira de confiança. -->
+<!--
+QUEM usa o sistema, O QUE ele faz, onde está a fronteira de confiança — e
+quais são os contêineres (o que sobe sempre, o que é opcional, e a rede que
+separa).
+-->
 
 > **Medido em `<AAAA-MM-DD>`:** <o que foi conferido e contra o quê>
 
@@ -72,7 +77,7 @@ flowchart TB
 
 **Decisões desta seção:** `<ADR-XXXX — o que ela decide>`.
 
-## 2. Contêineres
+### 1.3 Os contêineres
 
 <!-- A topologia: o que sobe sempre, o que é opcional, e a rede que separa. -->
 
@@ -87,7 +92,7 @@ verde, observabilidade = hexágono âmbar, externo = paralelogramo cinza.
 
 **Decisões desta seção:** `<ADR-XXXX>`.
 
-## 3. Módulos
+## 2. Módulos
 
 <!-- Os bounded contexts e a regra de dependência. -->
 
@@ -111,7 +116,7 @@ infrastructure ─→ application + domain + libs externas
 
 **Decisões desta seção:** `<ADR-XXXX — a boundary>`.
 
-## 4. Dados
+## 3. Dados
 
 <!-- Onde o dado mora, sob que escopo, e o que o sistema NÃO tem. -->
 
@@ -130,7 +135,7 @@ infrastructure ─→ application + domain + libs externas
 
 **Decisões desta seção:** `<ADR-XXXX>`.
 
-## 5. Segurança
+## 4. Segurança
 
 <!-- As ameaças e o que fecha cada uma. Uma linha por ameaça. -->
 
@@ -148,7 +153,7 @@ infrastructure ─→ application + domain + libs externas
 
 **Decisões desta seção:** `<ADR-XXXX>`.
 
-## 6. Operação
+## 5. Operação
 
 <!-- Telemetria, SLO, escala, degradação. -->
 
@@ -168,7 +173,7 @@ infrastructure ─→ application + domain + libs externas
 
 **Decisões desta seção:** `<ADR-XXXX>`.
 
-## 7. Ambientes
+### 5.1 Os ambientes
 
 <!-- Os ambientes e o dono de cada um. -->
 
@@ -177,6 +182,20 @@ infrastructure ─→ application + domain + libs externas
 | 1 | `<ambiente>` | `<comando>` | `<runbook>` |
 
 **Contrato HTTP:** `<prefixo, versionamento, formato de erro, onde a spec vive>`
+
+## 6. Extensão
+
+<!--
+O CONTRATO DE EXTENSÃO: a matriz de onde cada peça nova encaixa, e o
+checklist de conformidade. É o bloco que faz o app derivado *estender* o
+padrão em vez de só copiá-lo.
+-->
+
+| Peça nova | Onde encaixa | O que o derivado precisa |
+|---|---|---|
+| `<bounded context>` | `<caminho>` | `<o que falta>` |
+
+**Checklist de conformidade:** `<os itens, um por linha, com o comando que confere cada um>`
 
 ---
 

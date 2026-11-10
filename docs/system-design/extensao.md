@@ -4,7 +4,7 @@
 > *descrito*.**
 > **Medido em 2026-11-09:** os pontos de plugagem conferem com a árvore de
 > `apps/api/src/` e com `apps/api/src/app.module.ts`.
-> **Dono:** este documento. **Decisão que ofundamenta:**
+> **Dono:** este documento. **Decisão que fundamenta:**
 > [ADR-0010](../adr/0010-system-design-canonico.md).
 
 ---
@@ -31,7 +31,7 @@ desenho. Ele **não** copia as decisões: as decisões são do `projeto-base`.
 |---|---|---|---|
 | **1. Bounded context** | `apps/api/src/modules/<bc>/{domain,application,infrastructure}/` + registro em `app.module.ts` | as 3 camadas, as ports, e o module com o provider da infraestrutura | o módulo não é registrado → a rota **não existe** (404) e o erro é silencioso |
 | **2. Porta de saída** | `modules/<bc>/domain/ports/<nome>.port.ts` + token de injeção (ex.: `Symbol`) | a interface no domínio, o adapter em `infrastructure/`, e o binding no module | o use case importa a infraestrutura → **quebra a regra de dependência** (gate D11) |
-| **3. Armazenamento** | `modules/<bc>/infrastructure/persistence/` (ou um `shared/` novo, se for global) | model no `schema.prisma` + **migration pelos 3 passos** + porta | model sem migration → o `migrate diff` do Prisma **propõe `DROP TABLE`** |
+| **3. Armazenamento** | `modules/<bc>/infrastructure/persistence/` (ou um `shared/` novo, se for global) | model no `schema.prisma` + **migration pelos 3 passos** + porta | model **removido** do schema sem a migration → o `migrate diff` do Prisma **propõe `DROP TABLE`** (o caso registrado em `schema.prisma:295-307`) |
 | **4. Consumidor de evento** | `modules/<bc>/application/` (quem reage) + o evento em `domain/events/` | o evento no domínio, o consumidor, e a decisão de **sincronia** | consumir fora da transação → o efeito acontece sem o dado |
 | **5. Exporter de telemetria** | `shared/infrastructure/telemetry/` + pipeline no `infra/otelcol/config.yaml` | o exporter, o resource attribute, e o pipeline | exporter sem `resource_to_telemetry_conversion` → **toda** métrica perde a label do serviço |
 | **6. Integração externa** | `modules/<bc>/infrastructure/` (o adapter) + a port no domínio | a port, o cliente, o **timeout**, e a entrada no modelo de ameaça | cliente sem timeout → a request pendurada segura a conexão do pool |
@@ -129,7 +129,8 @@ O padrão é o mesmo do resto:
 
 - **port** no domínio (o que a aplicação precisa), **adapter** na
   infraestrutura (como ela chega lá);
-- **timeout** no cliente — o do repo é 10 s
+- **timeout** no cliente — o do repo é 10 s de *fallback*, e o cliente real
+  passa `defaultTimeoutMs` por operação (o logout usa 2 s)
   (`apps/web/lib/api-client.ts:119`), e a lição é que **sem** timeout, uma
   integração pendurada segura o pool;
 - **entrada no modelo de ameaça** — a nova integração **é** uma fronteira

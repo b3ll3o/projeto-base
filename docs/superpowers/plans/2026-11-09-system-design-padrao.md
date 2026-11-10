@@ -198,7 +198,7 @@ Cada tarefa tem critério de aceite **verificável por comando**.
 | **T5** | Conteúdo: operação | `docs/system-design/operacao.md` | Pipeline de telemetria (com ponteiro para `docs/flows/telemetry-observability/telemetry.collector.otlp.pipeline.dataflow/flow.md`); correlação `request.id`→`traceparent`; SLO `[derivado]`; proteção; orçamento de latência; escala; degradação; **matriz de ambientes** (dev / Docker / observability / e2e / CI / edge) com links para `docs/como-rodar.md` e `docs/runbooks/cloudflare-edge.md` |
 | **T6** | Conteúdo: extensão | `docs/system-design/extensao.md` | Matriz das **6 peças novas** (BC, porta de saída, armazenamento, consumidor de evento, exporter de telemetria, integração externa) × onde encaixa × o que o derivado precisa; **checklist de conformidade de 12 itens** |
 | **T7** | Índice + linguagem visual | `docs/system-design/README.md` | Índice com os **6 focais**; paleta com as **6 classes** e **6 formas distintas**; os **8 princípios** (P1–P8, listados em §5.1) com dono; o índice de ADRs vira **link** para `docs/agents/domain.md` |
-| **T8** | Template | `.agents/specs/templates/system-design.md` | Frontmatter no formato dos templates existentes; os 7 blocos de §5.2; marcadores `<...>`; ponteiro para `extensao.md` |
+| **T8** | Template | `.agents/specs/templates/system-design.md` | Frontmatter no formato dos templates existentes; os **6 blocos** de §5.2 (1:1 com o conjunto canônico); marcadores `<...>`; ponteiro para `extensao.md` |
 | **T9** | ADR | `docs/adr/0010-system-design-canonico.md` | Contexto, decisão, consequências (positivas e negativas), alternativas rejeitadas, "ver também"; slug **ASCII** como os outros 9; **status de cada ADR** ao lado (o 0008 é substituído) |
 | **T10** | Donos e índices | `documentacao.md` §2, `tooling/scripts/doc-sync.ts`, `docs/agents/domain.md`, `docs/superpowers/README.md` | 1 linha na tabela de donos (§2 de `documentacao.md`); `docs/system-design/dados.md` no mapeamento do `schema.prisma` no `doc-sync`; `docs/agents/domain.md` com os **10 ADRs** e o 0008 marcado; contagem de planos em `docs/superpowers/README.md` atualizada |
 | **T11** | Versão e índices | `README.md`, `AGENTS.md`, `docs/STACK.md`, `docs/MONOREPO.md`, `docs/TEMPLATE_USAGE.md`, `.agents/specs/conventions/estrutura-e-versionamento.md` | Os **6 footers** de versão vão de `1.25.0` para `1.26.0` (`check-version-footers`); **linha `1.26.0` no Histórico de Versões** dos 4 que têm tabela (`MONOREPO.md`, `STACK.md`, `TEMPLATE_USAGE.md`, `estrutura-e-versionamento.md`); `README.md` e `docs/MONOREPO.md` estão **em 300 linhas** — a inserção é **substituição**, não acréscimo; `AGENTS.md` (295) aceita no máximo 4 linhas novas |
@@ -217,18 +217,24 @@ Cada tarefa tem critério de aceite **verificável por comando**.
 | **P7** | Nenhum número sem o comando que o produz | convenção `tamanho-e-revisao.md` |
 | **P8** | O que não existe é parte do design | `docs/system-design/dados.md` §Lacunas |
 
-### §5.2 Os 7 blocos do template (T8)
+### §5.2 Os 6 blocos do template (T8)
+
+**Um bloco por documento do conjunto canônico** — é o que faz o derivado e o
+base terem o **mesmo esqueleto**:
 
 1. `# System Design — <aplicação>` — cabeçalho + `> Medido em <AAAA-MM-DD>`
-2. `## §1. Contexto` — ator, o que o sistema faz, fronteira de confiança
-3. `## §2. Contêineres` — a topologia e o que é plugável
-4. `## §3. Módulos` — os bounded contexts e a regra de dependência
-5. `## §4. Dados` — modelo, escopo, consistência
-6. `## §5. Segurança` — ameaças e defesas
-7. `## §6. Operação` — telemetria, SLO, escala, ambientes
+2. `## §1. Contexto e contêineres` — ator, o que o sistema faz, fronteira de
+   confiança, a topologia e o que é plugável
+3. `## §2. Módulos` — os bounded contexts e a regra de dependência
+4. `## §3. Dados` — modelo, escopo, consistência
+5. `## §4. Segurança` — ameaças e defesas
+6. `## §5. Operação` — telemetria, SLO, escala, **e os ambientes** (§5.1)
+7. `## §6. Extensão` — a matriz de onde cada peça nova encaixa + o checklist
 
 > **Derivados de** `.agents/specs/templates/spec.md` (11 seções) **adaptados**
 > para system design — o template não é cópia, e a lista acima é a dele.
+> O bloco de **Extensão** não pode faltar: é ele que faz o derivado
+> *estender* o padrão em vez de só copiá-lo (ADR-0010 §5).
 
 ### §5.3 Ordem de execução
 
@@ -326,6 +332,34 @@ dependência no repo; (c) `docs/superpowers/README.md` foi além do previsto: a
 tabela de famílias partia 106 planos e o disco já tinha 118 — a reconciliação
 da partição veio junto, porque uma contagem que não fecha com a soma é
 mentira.
+
+### A revisão do conteúdo (3º reviewer)
+
+O `code-reviewer` foi despachado **sobre os documentos já escritos**, com
+mandato de caçar *fato errado* (número, rota, constante, valor de TTL, linha
+de código). Voltou com **18 achados**: 5 P0, 7 P1 e 6 P2.
+
+| # | Sev. | Achado | Correção |
+|---|------|--------|----------|
+| C1 | P0 | o comando `docker compose config --services` devolve **3** serviços, não 7 — os 4 do profile só aparecem com `--profile observability` (e a flag vai **antes** de `config`) | README e `contexto.md` passam a usar o comando com o profile e a qualificar "3 sem profile + 4 com" |
+| C2 | P0 | o repo **não** emite `application/problem+json` — o filtro monta o shape RFC 7807 e o Fastify serializa como `application/json` | os 2 docs dizem "shape RFC 7807 servido como `application/json`" |
+| C3 | P0 | o guard de boot não recusa por **denylist de valor** — a lista por valor saiu no #133; o critério é **prefixo + mínimo de 24 bytes** | `seguranca.md` reescreve a bullet e diz que a lista por valor **saiu de propósito** |
+| C4 | P0 | o guard de boot tem **três** recusas, e a terceira (as duas credenciais nomeando o mesmo papel gerenciado — a inversão da #118) não estava no doc | `seguranca.md` §2.1 lista as três |
+| C5 | P1 | o cache de 5 s **cacheia o array de permissões** — dizer "nunca a autorização" é falso; o que não é cacheado é o **veredito da membership** | `seguranca.md` e `dados.md` reescrevem a frase |
+| C6 | P1 | os **10 s** são o *fallback* do `api-client`; o cliente real passa `defaultTimeoutMs` por operação (o logout usa 2 s) | `operacao.md` e `extensao.md` distinguem o fallback do valor efetivo |
+| C7 | P1 | `chaves_de_assinatura`: o que exclui o runtime é o **`REVOKE ALL`**, não a RLS sem policy (que é a segunda barreira) | `dados.md` §1.1 corrige o mecanismo |
+| C8 | P1 | `operacao.md` acusava o `STACK.md` de "mentir" sobre a ponte `request.id → traceparent` — o `STACK.md` fala da **camada de instrumentação**, que é outra coisa | a acusação sai; o doc passa a descrever a divergência **medida** entre as duas correlações |
+| C9 | P1 | `README.md` §5 dizia "o resto do conjunto" (implícito 6) onde são **5** focais sem gatilho | "os **outros 5 focais**" |
+| C10 | P2 | o `DROP TABLE` do `migrate diff` é o caso do model **removido** sem migration — não do model novo sem migration | `extensao.md` §2 corrige o verbo |
+| C11 | P2 | "porta nasce em `domain/ports/`" tem exceção não declarada: as **ports transversais** (`AuditServicePort`) moram em `shared/<concern>/domain/` | `modulo.md` §3.1 declara a exceção |
+| C12 | P2 | `shared/` tem **4 áreas**, e a tabela achatava `infrastructure/` em 4 linhas (o leitor contava 7) | `modulo.md` §5 diz "4 áreas" e agrupa `infrastructure/` |
+| C13 | P2 | o **subject** do token tem 3 campos, mas o **payload assinado** tem 4 (com o `jti`) | `seguranca.md` §3.2 distingue os dois |
+| C14 | P2 | o template dizia "7 blocos" e não tinha o bloco de **Extensão** — que é o que o ADR-0010 §5 chama de primeira classe | o template passou a **6 blocos 1:1** com o conjunto canônico, com Extensão |
+
+**Um achado era falso positivo** (o revisor o descartou ele mesmo: as duas
+frases sobre quem escreve `refresh_tokens` eram compatíveis), e **um já
+estava corrigido** antes de o revisor ler o arquivo (a contagem de VOs e
+DTOs do `users`).
 
 **v1.0.0** — primeira versão do plano.
 

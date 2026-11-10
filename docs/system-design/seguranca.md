@@ -81,13 +81,23 @@ flowchart TB
 
 ### §2.1 O guard de boot
 
-`verificarCredenciaisDoBanco()` roda **antes de conectar** e recusa:
+`verificarCredenciaisDoBanco()` roda **antes de conectar** e recusa **três
+coisas**:
 
-- senha do runtime que está na **denylist** (a que o repositório já
-  publicou) ou com **prefixo de exemplo** (`CHANGE_ME…`, `***`);
+- senha de **exemplo** (`CHANGE_ME…`, `***`) ou **curta demais** — o mínimo
+  é **24 bytes** (`TAMANHO_MINIMO_DE_SENHA_DE_PAPEL`,
+  `shared/infrastructure/prisma/papel-de-runtime.ts:81,111`). ⚠️ **Não
+  existe lista por valor**: a senha que o repositório publicou saiu do código
+  de propósito (#133), justamente para não ser re-publicada — o critério é
+  **prefixo + tamanho**, nunca o valor;
 - `SYSTEM_DATABASE_URL` ausente — **em qualquer ambiente que não seja
   `development`**. É default-deny: `prod`, `staging` e `NODE_ENV` ausente
-  passariam, a API subiria, e o primeiro login estouraria 500.
+  passariam, a API subiria, e o primeiro login estouraria 500;
+- **as DUAS credenciais nomeando o mesmo papel gerenciado** (a inversão da
+  #118): `DATABASE_URL` apontando para `app_system` — ou `SYSTEM_DATABASE_URL`
+  apontando para `app_runtime` — trocaria o bucket de sistema pelo de
+  empresa, e o bucket de sistema é justamente o que a RLS mais protege
+  (`credenciais-do-banco.ts:181`, `:217`).
 
 ---
 
@@ -105,7 +115,8 @@ O hash **nunca sai**: nem no `UserOutputDto`, nem nos snapshots JSONB de
 
 ### §3.2 O token
 
-O access token é um **JWT stateless**, com **3 claims** — e só 3:
+O access token é um **JWT stateless**. O **subject** que o guard consome tem
+**3 campos**:
 
 ```ts
 interface TokenSubject {
@@ -118,6 +129,10 @@ interface TokenSubject {
 > **O token não carrega o tenant, e essa é uma decisão** ([ADR-0004](../adr/0004-tenancy-multi-empresa.md)):
 > o contexto de empresa entra pelo header `X-Tenant-Id`, porque trocar de
 > empresa **não** é trocar de token — é a mesma sessão, outra empresa.
+
+O **payload assinado** tem **4** claims: os 3 de cima mais o `jti`
+(`jwt-token.service.ts:129,133`) — no refresh, o `jti` **é** a identidade do
+token (é o que o logout revoga).
 
 | TTL | Padrão | Configurável |
 |---|---|---|
@@ -183,8 +198,10 @@ authorizations (profileId, permissionKey)  →  o catálogo de permissões
 - `isSystem` impede deletar perfil de sistema (lock-out do admin).
 
 > **A membership é conferida a cada request** e o veredito **não** é
-> cacheado. O cache de 5 s carrega `isAdmin` e as permissões do perfil —
-> nunca a autorização.
+> cacheado. ⚠️ O cache de 5 s **carrega o array de permissões** — ou seja, a
+> autorização **é** cacheada junto; o que **não** é cacheado é o **veredito
+> da membership** (`findRole` roda a cada request,
+> `jwt-auth.guard.ts:222-229`).
 
 ---
 

@@ -76,7 +76,7 @@ erDiagram
 | `users_history` | trilha de auditoria — guarda `entity_id` + `version` + snapshot JSONB | **não** é apagada em cascata; a integridade é lógica |
 | `users_archive` | o "soft delete" materializado — `entity_id` `@unique` | o mesmo |
 | `feature_flags` | o estado **global** das funcionalidades | **sem `tenant_id`, sem RLS** — por decisão: a flag responde "isto existe no sistema?", e a resposta é a mesma para todo ator |
-| `chaves_de_assinatura` | o segredo que assina `criar_membership` | RLS ligada **sem policy** — o runtime não lê |
+| `chaves_de_assinatura` | o segredo que assina `criar_membership` | **o `REVOKE ALL` de `app_runtime` é o que exclui**; a RLS ligada **sem policy** é a segunda barreira |
 | `refresh_tokens` | o registro do `jti` do refresh | **sem RLS**, e `REVOKE ALL` de `app_runtime`: só `app_system` lê |
 
 > `grep -rh "ALTER TABLE .* ENABLE ROW LEVEL SECURITY" apps/api/prisma/migrations/*/migration.sql | awk '{print $3}' | sort -u | wc -l` → **9**:
@@ -94,7 +94,7 @@ pertence a qual empresa?" tem **duas** respostas no schema.
 |---|---|
 | `profiles`, `tenants`, `tenant_memberships`, `invitations`, `authorizations` | coluna `tenant_id` |
 | `users` | **não tem `tenant_id`** — é global (1 conta, N empresas); o isolamento é o `EXISTS` sobre `tenant_memberships` |
-| `users_history`, `users_archive` | idem — seguem o `entity_id` que apontam |
+| `users_history`, `users_archive` | idem — a policy usa `usuario_no_escopo(entity_id)`, que varre `tenant_memberships` |
 
 ```mermaid
 %%{init: {"theme":"base","themeVariables":{"fontFamily":"ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif","primaryColor":"#dbeafe","primaryTextColor":"#1e3a8a","primaryBorderColor":"#1d4ed8","secondaryColor":"#dcfce7","tertiaryColor":"#fef3c7","lineColor":"#64748b","textColor":"#0f172a","mainBkg":"#f8fafc","background":"#ffffff","clusterBkg":"#f8fafc","clusterBorder":"#cbd5e1","edgeLabelBackground":"#ffffff","fontSize":"14px","actorBkg":"#dbeafe","actorBorder":"#1d4ed8","actorTextColor":"#1e3a8a","signalColor":"#334155","signalTextColor":"#334155","labelBoxBkgColor":"#dbeafe","labelBoxBorderColor":"#1d4ed8","labelTextColor":"#1e3a8a","noteBkgColor":"#fef3c7","noteBorderColor":"#b45309","noteTextColor":"#78350f","activationBkgColor":"#ede9fe","activationBorderColor":"#6d28d9"},"flowchart":{"curve":"basis","nodeSpacing":45,"rankSpacing":55,"padding":12,"htmlLabels":true,"useMaxWidth":true},"sequence":{"useMaxWidth":true,"wrap":true,"diagramMarginX":20,"diagramMarginY":10},"er":{"layoutDirection":"LR","entityPadding":12,"minEntityWidth":140}}}%%
@@ -118,7 +118,7 @@ flowchart LR
   class esc obs
 ```
 
-**Três regras, e elas são o heart do isolamento:**
+**Três regras, e elas são o coração do isolamento:**
 
 1. **O escopo é escrito em um lugar só** — `escopo.ts`. Nenhum outro arquivo
    escreve `app.tenant_id`.
@@ -146,8 +146,9 @@ distribuído, não há busca externa, não há event store.
 
 **O cache que existe** é **in-process** e de **5 s**
 (`shared/infrastructure/security/user-profile-cache.service.ts`): carrega
-`isAdmin` e as permissões. Ele **não** cacheia a autorização — o TTL cobre o
-**perfil**, não o **acesso**.
+`isAdmin` e o **array de permissões** — ou seja, a autorização **é** cacheada
+junto. O que o TTL **não** cobre é o **veredito da membership**, que roda a
+cada request.
 
 ---
 
