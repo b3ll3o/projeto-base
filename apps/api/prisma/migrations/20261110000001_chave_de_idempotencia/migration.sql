@@ -68,6 +68,22 @@ CREATE INDEX "idempotency_keys_expires_at_idx" ON "idempotency_keys"("expires_at
 -- (`comEscopoDeSistema`, `SYSTEM_DATABASE_URL`) — o mesmo caminho do
 -- `refresh_tokens`. E o DONO (a migration e o `prepara-papeis.sh`) pode
 -- tudo.
+-- ⚠️ O `REVOKE` NÃO É GUARDADO, e é DELIBERADO.
+--
+-- O `ALTER ROLE` do migration irmão (`20261110000000`) vai dentro de um
+-- `DO $$ … IF EXISTS (pg_roles) … $$`, porque um `ALTER ROLE` de papel
+-- inexistente FALHA — e uma migration que falha trava todas as seguintes.
+--
+-- Aqui é o contrário: o `REVOKE` de um papel inexistente também falha, e
+-- GUARDÁ-lo faria a coisa errada em silêncio — sem o `REVOKE`, a tabela
+-- ficaria com o CRUD que o `ALTER DEFAULT PRIVILEGES` dá a `app_runtime`, e
+-- a credencial que o repo classifica como "a que mais vaza" passaria a LER
+-- a resposta guardada (que é PII de outra empresa). Falhar alto e travar a
+-- cadeia é o preço; falhar baixo e abrir a tabela é o furo.
+--
+-- Os papéis são criados pelas migrations `20261020000000` (runtime) e
+-- `20261027000001` (sistema), ambas ANTERIORES a esta — a ordem normal
+-- garante que eles existem.
 REVOKE ALL ON idempotency_keys FROM PUBLIC;
 REVOKE ALL ON idempotency_keys FROM app_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON idempotency_keys TO app_system;

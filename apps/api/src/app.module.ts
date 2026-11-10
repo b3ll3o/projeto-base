@@ -15,7 +15,14 @@ import { ProfilesModule } from './modules/profiles/profiles.module.js';
 import { TenancyModule } from './modules/tenancy/tenancy.module.js';
 import { FeatureFlagsModule } from './modules/feature-flags/feature-flags.module.js';
 
-const REDACT_PATHS = ['req.headers.authorization', 'req.headers.cookie'] as const;
+// pt-BR (2026-11-10): o `idempotency-key` entra na redação. A chave é do
+// cliente e é PARTE da capacidade de replay (junto com o corpo e o ator) —
+// um log que a traz em claro é um log que entrega a capacidade.
+const REDACT_PATHS = [
+  'req.headers.authorization',
+  'req.headers.cookie',
+  'req.headers["idempotency-key"]',
+] as const;
 
 /**
  * O teto global de requisições, por IP, na janela de `JANELA_GLOBAL_MS`.

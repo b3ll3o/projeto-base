@@ -14,7 +14,7 @@
 //
 // Ver `docs/adr/0011-idempotencia-de-escrita.md`.
 
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { comEscopoDeSistema } from '../../infrastructure/prisma/escopo.js';
 import {
@@ -27,14 +27,41 @@ import {
 
 const VALIDADE_EM_MS = VALIDADE_DA_CHAVE_HORAS * 60 * 60 * 1000;
 
+/**
+ * A cada quantas reservas a tabela é podada.
+ *
+ * ⚠️ A poda do `prepara-papeis.sh` roda no BOOT do container — e um
+ * container que não reinicia nunca podaria. A chave expirada já deixa de
+ * valer (o `reservar` trata a expiração), mas a LINHA ficaria: a tabela
+ * cresceria sem parar. A varredura oportunista paga a poda em 1 escrita a
+ * cada 100 pedidos com chave.
+ */
+const RESERVAS_ENTRE_PODAS = 100;
+
 @Injectable()
 export class PrismaIdempotencyService implements IdempotencyPort {
+  private readonly logger = new Logger(PrismaIdempotencyService.name);
+  /** Quantas reservas desde a última poda. */
+  private reservasDesdeAPoda = 0;
+
   async reservar(pedido: ImpressaoDePedido): Promise<ReservaDeChave> {
-    // Duas tentativas: a segunda existe para o caso em que a linha estava
-    // EXPIRADA. A poda roda no boot do container (`prepara-papeis.sh`), e não
-    // a cada request — então uma chave expirada pode ainda estar na tabela
-    // quando o cliente a reusa.
-    for (let tentativa = 0; tentativa < 2; tentativa += 1) {
+    await this.podarSeChegou();
+    return this.reservarComTentativas(pedido, 2);
+  }
+
+  /**
+   * A reserva — com o número de tentativas.
+   *
+   * Duas tentativas: a segunda existe para o caso em que a linha estava
+   * EXPIRADA. A poda roda no boot do container (`prepara-papeis.sh`), e não
+   * a cada request — então uma chave expirada pode ainda estar na tabela
+   * quando o cliente a reusa.
+   */
+  private async reservarComTentativas(
+    pedido: ImpressaoDePedido,
+    tentativas: number,
+  ): Promise<ReservaDeChave> {
+    for (let tentativa = 0; tentativa < tentativas; tentativa += 1) {
       if (await this.tentarReservar(pedido)) return { estado: 'livre' };
 
       const linha = await this.ler(pedido.chave, pedido.ator);
@@ -66,6 +93,28 @@ export class PrismaIdempotencyService implements IdempotencyPort {
     // As duas tentativas falharam sem estado legível: a resposta segura é
     // "em voo" — o cliente recebe 409 e repete depois.
     return { estado: 'em_voo' };
+  }
+
+  /**
+   * A poda oportunista: a cada N reservas, as chaves expiradas somem.
+   *
+   * ⚠️ A falha da poda NÃO pode derrubar o pedido: ela é manutenção, e um
+   * pedido que funciona não pode falhar por causa dela.
+   */
+  private async podarSeChegou(): Promise<void> {
+    this.reservasDesdeAPoda += 1;
+    if (this.reservasDesdeAPoda < RESERVAS_ENTRE_PODAS) return;
+    this.reservasDesdeAPoda = 0;
+    try {
+      await comEscopoDeSistema(async (tx) => {
+        await tx.idempotencyKey.deleteMany({ where: { expiresAt: { lt: new Date() } } });
+      });
+    } catch (erro) {
+      this.logger.warn(
+        '[Idempotencia] a poda das chaves expiradas falhou — o pedido segue',
+        erro instanceof Error ? erro.stack : String(erro),
+      );
+    }
   }
 
   async guardar(input: {

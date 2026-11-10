@@ -164,8 +164,8 @@ junto. O que o TTL **não** cobre é o **veredito da membership**.
 | Auditoria | forte | a gravação e o registro de auditoria são a mesma operação (cascade no use case) |
 
 **Não há consistência eventual** em lugar nenhum — e não há replicação. Um
-derivado que precise de leitura eventual terá de introduzir a replicação **e**
-escolher a consistência por leitura.
+derivado que precise dela terá de introduzir a replicação **e** escolher a
+consistência por leitura.
 
 ### §4.2 Concorrência — locking otimista
 
@@ -181,19 +181,16 @@ a API compara expectedVersion com a linha:
 ```
 
 - A resposta mutante devolve `ETag: W/"v<n>"` (`users.controller.ts:203`).
-- `If-Match` ausente ou malformado → **400**; divergência de versão → **412**
-  (`ApplicationConcurrencyException`).
-- O `version` **só** sobe por um mutator do aggregate — não por escrita
-  direta (`user.aggregate.ts:58-62`).
+- `If-Match` ausente ou malformado → **400**; divergência de versão → **412**.
+- O `version` **só** sobe por um mutator do aggregate (`user.aggregate.ts:58`).
 
-> **Por que optimistic e não pessimista:** o usuário do sistema é humano e a
-> janela de edição é curta; um lock seguraria a transação à espera de um humano.
+> **Por que optimistic e não pessimista:** o usuário é humano e a janela de
+> edição é curta; um lock seguraria a transação à espera de um humano.
 
 ### §4.3 A trava da membership
 
-`tenant_memberships` é a **credencial** que a RLS de `users` mede — quem
-pode escrever nela pode fabricar autorização. A trava é uma função assinada;
-o mecanismo está em [`./seguranca.md`](./seguranca.md) §1 (superfície **T5**).
+`tenant_memberships` é a **credencial** que a RLS de `users` mede — quem pode
+escrever nela fabrica autorização. A trava é uma função assinada ([`./seguranca.md`](./seguranca.md) §1).
 
 ---
 
@@ -204,14 +201,13 @@ O `users` emite **4 eventos** (`user-created`, `user-updated`,
 **drenados** pelo use case e viram **registro de auditoria**.
 
 `aggregate → evento → user.pullEvents() → use case → auditService.record()`
-vira `INSERT em users_history`; no soft-delete, `auditService.archive()` vira
-`INSERT em users_archive`.
+vira `INSERT em users_history`; no soft-delete, `archive()` vira `INSERT em
+users_archive`.
 
 - O `AuditContext` (ator, `correlationId`, origem, timestamp) viaja num
-  `AsyncLocalStorage` (`AuditContextStore`): o use case não carrega o request.
+  `AsyncLocalStorage` (`AuditContextStore`) — o use case não carrega o request.
 - O `correlationId` vem da **mesma derivação do `traceId` da resposta**
-  (`traceIdDe()`): span W3C ativo → `request.id` do Fastify → um UUID fixado
-  no request (`users.controller.ts` — `buildContext()`).
+  (`traceIdDe()`): span W3C ativo → `request.id` do Fastify → UUID fixado.
 - O caminho completo está em [`docs/flows/http-api/http-api-domain-events-to-audit/` — a IR](../flows/http-api/http-api-domain-events-to-audit/http-api-domain-events-to-audit.workflow.json).
 
 > ✅ **A divergência foi fechada (2026-11-10):** as duas derivações são a
@@ -225,24 +221,28 @@ vira `INSERT em users_history`; no soft-delete, `auditService.archive()` vira
 ## §6. Idempotência de escrita
 
 **Existe desde 2026-11-10** — a decisão está no
-[ADR-0011](../adr/0011-idempotencia-de-escrita.md). A chave é do cliente,
-no header `Idempotency-Key`; sem o header, o pedido é **exatamente** o que
-era.
+[ADR-0011](../adr/0011-idempotencia-de-escrita.md). A chave é do cliente, no
+header `Idempotency-Key`; sem o header, o pedido é o que era.
 
 | Situação (POST, fora de `/auth`) | Resposta |
 |---|---|
 | Primeira vez | a operação roda (201) e a resposta é **guardada** |
-| Repetida, **mesmo** corpo | **replay**: a mesma resposta (status, corpo e o `ETag`) e o header `Idempotency-Replayed: true` |
-| Repetida, **outro** corpo | **409** `IDEMPOTENCY_KEY_REUSED` |
+| Repetida, **mesmo** pedido | **replay**: a mesma resposta (status, corpo e o `ETag`) e o header `Idempotency-Replayed: true` |
+| Repetida, **outro** pedido | **409** `IDEMPOTENCY_KEY_REUSED` |
 | Repetida, operação **em andamento** | **409** `IDEMPOTENCY_KEY_IN_FLIGHT` |
-| Operação **falhou** | a chave é **liberada** — o retry executa de verdade |
+| Operação **não deu 2xx** | a chave é **liberada** — o retry executa de verdade |
+
+O que é o **mesmo pedido**: o método, a rota **concreta** (com o path param
+resolvido), o **escopo** (a empresa) e o **corpo**. A impressão é um **HMAC**
+com o `JWT_SECRET` como pepper — não um SHA-256 do corpo, que seria um oráculo
+de senha barato para quem lê a tabela.
 
 O registro é a tabela `idempotency_keys`, do caminho de **SISTEMA** (sem
-RLS, `REVOKE` do `app_runtime`) — o mesmo caminho do `refresh_tokens`: a
-resposta guardada é PII de outra empresa, e a RLS é o que impede o papel de
-runtime de ler a base alheia. A chave vale **24 h** (poda no
-`prepara-papeis.sh`) e é escopada pelo **ator**: a chave de uma conta não
-vale para outra. O bloco `/auth` fica de fora — a sessão tem semântica
+RLS, `REVOKE` do `app_runtime`) — como o `refresh_tokens`: a resposta guardada
+é PII de outra empresa, e a RLS é o que impede o papel de runtime de ler a
+base alheia. A chave vale **24 h** (poda no boot e a cada
+100 reservas) e é escopada pelo **ator**: a chave de uma conta não vale para
+outra. O bloco `/auth` fica de fora — a sessão tem semântica
 própria (o refresh token é de uso único).
 
 ---

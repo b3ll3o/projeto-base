@@ -37,6 +37,15 @@ export const ATOR_ANONIMO = 'anônimo';
 export const VALIDADE_DA_CHAVE_HORAS = 24;
 
 /**
+ * O tamanho máximo da chave, em caracteres.
+ *
+ * ⚠️ A chave é do CLIENTE e vai para a PRIMARY KEY: sem teto, um header de
+ * 16 KB (o limite do Fastify) vira uma linha de 16 KB na tabela. 255 é o
+ * que cabe em qualquer chave que um cliente real usa (um UUID v4 tem 36).
+ */
+export const TAMANHO_MAXIMO_DA_CHAVE = 255;
+
+/**
  * Os headers de resposta que a **aplicação** escreveu.
  *
  * ⚠️ São só os headers que o HANDLER escreveu — os de infraestrutura (os do

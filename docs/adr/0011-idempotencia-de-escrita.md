@@ -71,11 +71,29 @@ resposta de **outro** ator — um vazamento. O `POST /users` é `@Public()` e
 não tem ator; o que protege o replay anônimo é a **impressão do pedido**
 (§4): quem repete tem que mandar o **mesmo** pedido.
 
-### 4. A impressão do pedido: método + rota + corpo
+### 4. A impressão do pedido: método + rota concreta + escopo + corpo
 
-A impressão é o SHA-256 de `método + rota + corpo`, com as chaves do JSON
+A impressão é o **HMAC-SHA256** (pepper: o `JWT_SECRET`, com separação de
+domínio) de `método + rota CONCRETA + escopo + corpo`, com as chaves do JSON
 **ordenadas** — a impressão não pode depender da ordem em que o cliente
 serializou o corpo.
+
+Três decisões dentro dessa, e cada uma fecha um furo:
+
+- **A rota é a CONCRETA** (com o path param resolvido), e não o template.
+  `POST /tenants/:id/invitations` tem o **mesmo** template para toda
+  empresa: com o template, a resposta da empresa A seria replayada na
+  empresa B.
+- **O escopo (a empresa) entra.** O `tenantId` não está na URL: sem ele, a
+  mesma chave no mesmo recurso em empresas diferentes seria a mesma
+  impressão.
+- **É um HMAC, e não um SHA-256.** O corpo cru carrega a `senha` em texto
+  plano (`POST /users`), e um SHA-256 simples seria um **oráculo de senha
+  barato** para quem lê a tabela (um dump, um backup) — mais fraco que o
+  `argon2id` de `users.password_hash`. Com o pepper, quem lê a tabela não
+  consegue testar senhas sem o segredo. O pepper é o `JWT_SECRET` (que o
+  repo já exige, sem default) com separação de domínio — ele não está no
+  banco, e um dump não o traz.
 
 A mesma chave com **outro** pedido é **409** (`IDEMPOTENCY_KEY_REUSED`), e
 não um replay: o cliente reusou a chave por engano, e devolver a resposta
@@ -90,9 +108,12 @@ ao mesmo tempo: o segundo encontra a linha reservada e leva 409
 
 ### 6. Só `2xx` é guardado — e o erro LIBERA a chave
 
-A resposta guardada é a do **2xx**. Quando a operação falha (4xx ou 5xx), a
-chave é **liberada**: o cliente pode repetir com a mesma chave, e a
-tentativa nova executa de verdade.
+A resposta guardada é a do **2xx**. A implementação **confere o status**
+(`reply.statusCode`), e não apenas "o handler não lançou": um 4xx devolvido
+sem exceção seria replayado como se fosse resultado, e a chave ficaria
+presa. Quando a operação falha (4xx ou 5xx), a chave é **liberada**: o
+cliente pode repetir com a mesma chave, e a tentativa nova executa de
+verdade.
 
 A exceção é a falha ao **guardar** a resposta de uma operação que **já
 deu 2xx**: ela é logada, e o cliente recebe a resposta normal. Virar 500
@@ -126,17 +147,41 @@ Por isso a tabela espelha o `refresh_tokens`
 do `app_runtime` e do `PUBLIC`, `GRANT` do `app_system`, e o acesso pela
 credencial de sistema (`comEscopoDeSistema`).
 
-### 8. A validade é de 24 h, e a poda roda no boot
+### 8. A validade é de 24 h, e a poda é oportunista
 
 A chave vale 24 h (`expires_at`). O retry de um cliente acontece em
 minutos — por timeout, por rede instável, por deploy no meio da requisição.
-24 h cobrem isso com folga, e o registro não fica para sempre: a poda roda
-no `prepara-papeis.sh`, junto com a do `refresh_tokens`.
+24 h cobrem isso com folga.
 
-### 9. O replay se anuncia
+A **linha** expirada some em dois momentos: a poda do `prepara-papeis.sh`
+(no boot do container, junto com a do `refresh_tokens`) e uma **varredura
+oportunista** (a cada 100 reservas, as chaves expiradas são apagadas). A
+varredura existe porque a poda do boot só roda quando o container reinicia —
+e um container que não reinicia deixaria a tabela crescer sem parar.
+
+A chave **expirada já deixa de valer** antes de a linha sumir: o `reservar`
+trata a expiração e reserva a chave de novo.
+
+### 9. A chave tem teto de tamanho
+
+A chave é do cliente e vai para a PRIMARY KEY: sem teto, um header de 16 KB
+(o limite do Fastify) viraria uma linha de 16 KB. O teto é **255
+caracteres** (`TAMANHO_MAXIMO_DA_CHAVE`) — e o que passar disso leva
+**400** (`IDEMPOTENCY_KEY_TOO_LONG`), antes de tocar o banco.
+
+### 10. O replay se anuncia
 
 A resposta de replay traz `Idempotency-Replayed: true`. O cliente (e o log)
 sabem que a resposta veio da reserva — e não de uma operação nova.
+
+### 11. A chave não vai para o log
+
+A chave é do cliente e é **parte da capacidade de replay** (junto com o
+corpo e o ator): um log que a traz em claro é um log que entrega a
+capacidade — e o repo classifica credencial em log como o vetor nº 1 de
+vazamento. O header `idempotency-key` entra na redação do `pino`
+(`REDACT_PATHS`), e as mensagens de erro do interceptor logam um **prefixo
+de 8 hex** do SHA-256 da chave, nunca a chave crua.
 
 ## Consequências
 
@@ -173,6 +218,13 @@ sabem que a resposta veio da reserva — e não de uma operação nova.
   resposta. É a janela do `em_voo`.
 - **`POST /auth/login` continua duplicando** o refresh token quando o
   cliente repete: o login tem semântica de sessão, e a decisão é explícita.
+- **A rotação do `JWT_SECRET` invalida as impressões antigas**: um retry de
+  uma chave guardada antes da rotação cai em "conflito" (409) em vez de
+  replay. É o preço de não criar um segundo segredo — e é um evento raro.
+- **A tabela usa o pool de SISTEMA** (o mesmo do `refresh_tokens`): a API
+  ganha **um segundo pool** contra o mesmo Postgres. O custo é de 2
+  transações extras por POST com chave, e ele é pago só por quem manda o
+  header.
 
 ## Alternativas rejeitadas
 

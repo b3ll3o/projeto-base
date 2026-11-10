@@ -171,21 +171,26 @@ de métricas que o app derivado escolher.
 | Redação de log | `authorization` e `cookie` redigidos | `app.module.ts:16` |
 | Erro | RFC 7807, sem stack trace em produção | `global-exception.filter.ts` |
 
-> ✅ **`/health` NÃO é contada (desde 2026-11-10).** `main.ts` e
+> ✅ **`/health` tem teto PRÓPRIO (desde 2026-11-10).** `main.ts` e
 > `app.module.ts` afirmavam em comentário que rotas como `/health` usam
 > `@SkipThrottle()` — e **nenhum existia no código** (o grep devolvia só os
 > 2 comentários). MEDIDO no container: 120 requisições seguidas devolviam
-> **100×200 + 20×429**. O `@SkipThrottle()` no controller do health fecha
-> isso, e o motivo é de princípio: **uma rota de infraestrutura não pode ser
-> recusada pela proteção da própria API**. É a **única** rota isenta.
+> **100×200 + 20×429**.
 >
-> ⚠️ **O preço da isenção, declarado:** a rota fica **sem teto** — e ela
-> toca o banco (`SELECT 1`). O risco é de **volume**, não de peso: é a query
-> mais barata que existe, e o limite por IP nunca foi defesa contra flood
-> distribuído (ele é por cliente). O que a isenção protege é o **probe**: uma
-> sonda que leva 429 derruba o container — e o **harness de e2e do web** faz
-> poll de `/api/v1/health` a cada **200 ms** (`apps/web/e2e/support/api.ts:274`),
-> ou seja 5 req/s, acima do teto de 100/min que a rota tinha.
+> O teto da rota é **600/min** (`LIMITE_DE_HEALTH_POR_MINUTO`), e não o
+> global (100/min). A razão é o **probe**: o `HEALTHCHECK` do container roda
+> a cada 10 s (6/min) e o **harness de e2e do web** faz poll de
+> `/api/v1/health` a cada **200 ms** (`apps/web/e2e/support/api.ts:274`) — 5
+> req/s, ou 300/min na pior rajada (o harness desiste aos 45 s: 225
+> requests). Com o teto global, essa rajada estourava o balde e o probe
+> levava 429 — e um healthcheck que falha derruba o container
+> (`depends_on: service_healthy`).
+>
+> ⚠️ **O preço do teto próprio, declarado:** a rota é **pública** e faz
+> `SELECT 1` no banco a cada chamada, então ela **continua sendo um teto**
+> (e não uma isenção): é o que fecha o vetor de pressão sobre o pool — que
+> §7 aponta como o limite de escala da API. O número é 100× o probe do
+> container e 2,6× a pior rajada do harness.
 
 ---
 

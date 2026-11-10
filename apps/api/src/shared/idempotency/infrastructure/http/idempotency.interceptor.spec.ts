@@ -17,7 +17,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { firstValueFrom, of, throwError } from 'rxjs';
 import type { ExecutionContext } from '@nestjs/common';
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import {
   HEADER_DE_IDEMPOTENCIA,
   HEADER_DE_REPLAY,
@@ -27,6 +27,9 @@ import {
   type ReservaDeChave,
 } from '../../application/idempotency.port.js';
 import { IdempotencyInterceptor, impressaoDoPedido } from './idempotency.interceptor.js';
+
+/** O pepper de teste — a impressão depende dele (é o HMAC que a calcula). */
+const PEPPER = 'pepper-de-teste-da-impressao-do-pedido';
 
 /** O port, dublê: o interceptor só precisa do VEREDITO. */
 class PortDuble implements IdempotencyPort {
@@ -305,26 +308,100 @@ describe('IdempotencyInterceptor', () => {
 
   describe('a impressão do pedido', () => {
     it('NÃO depende da ordem das chaves do corpo', () => {
-      const a = impressaoDoPedido(request({ body: { nome: 'João', email: 'j@e.com' } }) as never);
-      const b = impressaoDoPedido(request({ body: { email: 'j@e.com', nome: 'João' } }) as never);
+      const a = impressaoDoPedido(
+        request({ body: { nome: 'João', email: 'j@e.com' } }) as never,
+        PEPPER,
+      );
+      const b = impressaoDoPedido(
+        request({ body: { email: 'j@e.com', nome: 'João' } }) as never,
+        PEPPER,
+      );
       expect(a).toBe(b);
     });
 
     it('MUDA quando o corpo muda — a mesma chave com outro pedido é conflito', () => {
-      const a = impressaoDoPedido(request({ body: { nome: 'João' } }) as never);
-      const b = impressaoDoPedido(request({ body: { nome: 'Maria' } }) as never);
+      const a = impressaoDoPedido(request({ body: { nome: 'João' } }) as never, PEPPER);
+      const b = impressaoDoPedido(request({ body: { nome: 'Maria' } }) as never, PEPPER);
       expect(a).not.toBe(b);
     });
 
     it('MUDA quando a rota muda', () => {
-      const a = impressaoDoPedido(request() as never);
+      const a = impressaoDoPedido(request() as never, PEPPER);
       const b = impressaoDoPedido(
         request({
           url: '/api/v1/tenants',
           routeOptions: { url: '/api/v1/tenants' },
         }) as never,
+        PEPPER,
       );
       expect(a).not.toBe(b);
     });
+
+    // ⚠️ O path param: `POST /tenants/:id/invitations` tem o MESMO template
+    // para toda empresa. Se a impressão usasse o template, a resposta da
+    // empresa A seria replayada na empresa B.
+    it('MUDA quando o PATH PARAM muda (o template não basta)', () => {
+      const a = impressaoDoPedido(
+        request({
+          url: '/api/v1/tenants/empresa-a/invitations',
+          routeOptions: { url: '/api/v1/tenants/:id/invitations' },
+        }) as never,
+        PEPPER,
+      );
+      const b = impressaoDoPedido(
+        request({
+          url: '/api/v1/tenants/empresa-b/invitations',
+          routeOptions: { url: '/api/v1/tenants/:id/invitations' },
+        }) as never,
+        PEPPER,
+      );
+      expect(a).not.toBe(b);
+    });
+
+    // ⚠️ O escopo: o `tenantId` não está na URL.
+    it('MUDA quando o ESCOPO (empresa) muda', () => {
+      const a = impressaoDoPedido(
+        request({ user: { sub: 'u-1', tenantId: 'empresa-a' } }) as never,
+        PEPPER,
+      );
+      const b = impressaoDoPedido(
+        request({ user: { sub: 'u-1', tenantId: 'empresa-b' } }) as never,
+        PEPPER,
+      );
+      expect(a).not.toBe(b);
+    });
+
+    // ⚠️ O pepper: o corpo cru carrega a senha em texto plano, e um SHA-256
+    // simples seria um oráculo de senha barato para quem lê a tabela.
+    it('MUDA quando o PEPPER muda — a impressão não é um hash do corpo', () => {
+      const a = impressaoDoPedido(request() as never, PEPPER);
+      const b = impressaoDoPedido(request() as never, 'outro-pepper');
+      expect(a).not.toBe(b);
+    });
+  });
+
+  it('um status que NÃO é 2xx NÃO é guardado — a chave é liberada', async () => {
+    const port = new PortDuble();
+    const interceptor = new IdempotencyInterceptor(port);
+    const res = reply();
+    res.statusCode = 422;
+
+    await firstValueFrom(
+      await interceptor.intercept(contextoDe(request(), res), { handle: () => of({ erro: true }) }),
+    );
+
+    expect(port.guardados).toHaveLength(0);
+    expect(port.liberados).toEqual([{ chave: 'chave-1', ator: 'anônimo' }]);
+  });
+
+  it('uma chave maior que o teto é recusada com 400 (a chave vai para a PK)', async () => {
+    const port = new PortDuble();
+    const interceptor = new IdempotencyInterceptor(port);
+    const req = request({ headers: { [HEADER_DE_IDEMPOTENCIA]: 'x'.repeat(256) } });
+
+    await expect(
+      interceptor.intercept(contextoDe(req, reply()), { handle: () => of({}) }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(port.reservas).toHaveLength(0);
   });
 });
