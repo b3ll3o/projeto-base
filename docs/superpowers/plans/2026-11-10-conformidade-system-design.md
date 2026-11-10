@@ -165,6 +165,16 @@ cliente ──► POST /api/v1/users
 | T6 | Docs | `dados.md` §5/§6 · `operacao.md` §5/§6/§Correlação · `modulo.md` · `api/health.md` · `api/users.md` · `system-design/README.md` §6 | ✅ |
 | T7 | Versão e índices | os 6 footers → `1.27.0` + a linha no Histórico dos 4 · `docs/agents/domain.md` · `docs/superpowers/README.md` | ✅ |
 
+### Um acerto que o plano não previu
+
+O replay devolvia o status e o **corpo**, e não o `ETag` que o `POST /users`
+devolve — ou seja, a resposta do retry **não** era a mesma da original, e um
+cliente que monta o `If-Match` a partir do `ETag` levaria 400 no `PATCH`
+seguinte. O interceptor agora guarda os headers que o **handler** escreveu (a
+comparação é com o reply antes do handler: é o que separa o `ETag` da
+aplicação dos headers de infraestrutura, que são do request). A coluna
+`response` passou a guardar o **envelope** `{ body, headers }`.
+
 ### As medições que fecham cada tarefa
 
 | Tarefa | Medida (com o comando) |
