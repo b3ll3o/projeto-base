@@ -243,6 +243,45 @@ describe('check-dependency-freshness — fim a fim, num repo temporario', () => 
     }
   });
 
+  it('nao julga uma pendencia que o modelo de major nao expressa (pacote 0.x)', async () => {
+    const dir = await repo();
+    try {
+      // A major de um pacote 0.x é 0 em QUALQUER versão — o modelo não sabe
+      // dizer "a major foi adotada". Uma pendência 0.x escrita à mão não pode
+      // ser julgada por essa regra (e não pode ser acusa com "a major 0 não
+      // sobe agora"). MEDIDO 2026-11-10: sem o corte, o gate acusava erro.
+      await writeFile(
+        path.join(dir, 'package.json'),
+        JSON.stringify(
+          { dependencies: { '@opentelemetry/exporter-trace-otlp-http': '^0.54.2' } },
+          null,
+          2,
+        ),
+        'utf-8',
+      );
+      await majors(dir, {
+        medidoEm: '2026-11-10',
+        majors: { '@opentelemetry/exporter-trace-otlp-http': 0 },
+      });
+      await pendencias(dir, [
+        {
+          pacote: '@opentelemetry/exporter-trace-otlp-http',
+          faixaAtual: '^0.54.2',
+          majorAtual: 0,
+          majorNova: 0,
+          motivo: 'trem 0.x nao sobe',
+          declaradaEm: '2026-11-10',
+        },
+      ]);
+
+      const r = await checkDependencyFreshness({ repoRoot: dir });
+      expect(r.ok).toBe(true);
+      expect(r.errors).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('nao acusa pacote que ja esta na major mais nova', async () => {
     const dir = await repo();
     try {

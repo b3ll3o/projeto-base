@@ -223,6 +223,15 @@ export async function checkDependencyFreshness(opts: {
     // pendências diziam "não sobe" e a árvore dizia que sobe, e ninguém media.
     // O `majorNova <= majorAtual` do laço de cima encerrava a comparação antes
     // de a pendência ser olhada.
+    //
+    // A regra só julga a pendência COERENTE (`majorNova` > `majorAtual`): um
+    // pacote 0.x tem major 0 em qualquer versão, então o modelo não consegue
+    // dizer "a major foi adotada" — e uma pendência 0.x escrita à mão seria
+    // accuseada com uma mensagem sem sentido ("a major 0 não sobe agora").
+    // MEDIDO 2026-11-10: com uma pendência 0.x (`majorNova: 0`), o gate acusava
+    // erro. Com este corte, ele não julga o que o modelo não expressa.
+    if (pendencia.majorNova <= pendencia.majorAtual) continue;
+
     const majorAgora = majorDeclarada(faixa);
     if (majorAgora === null || majorAgora < pendencia.majorNova) continue;
 

@@ -114,6 +114,12 @@ correção (31) e a nota de que o número envelhece — e a nota diz que
 no modelo atual — e por isso as duas dependências que o #158 e o #161 pedem
 **não têm dono** no registro. (§6: fora do escopo deste PR, com o motivo.)
 
+> A regra nova do freshness só julga a pendência **coerente** (`majorNova` >
+> `majorAtual`): o modelo não diz "a major foi adotada" para um pacote 0.x, e
+> uma pendência 0.x escrita à mão seria accuseada com uma mensagem sem
+> sentido ("a major 0 não sobe agora"). MEDIDO 2026-11-10: com o corte, o gate
+> não julga o que o modelo não expressa.
+
 ## 3. O escopo do PR único
 
 | # | Arquivo | Mudança | Por quê |
@@ -166,7 +172,7 @@ no modelo atual — e por isso as duas dependências que o #158 e o #161 pedem
    vermelhas primeiro (`ok=true` com a major adotada; `undefined` sem o campo
    declarado) e o código depois as fez verdes.
 3. Implementar 1–4. — **FEITO**, com as medições:
-   - a regra nova do freshness: **1 de 17** cai com a regra neutralizada, e o
+   - a regra nova do freshness: **1 de 18** cai com a regra neutralizada, e o
      gate contra o repo real reprova (EXIT=1) com a `majorNova` da pendência
      baixada para a major já declarada (restaurada: EXIT=0);
    - a conferência da claim do audit: **2 de 21** caem com ela neutralizada, e
