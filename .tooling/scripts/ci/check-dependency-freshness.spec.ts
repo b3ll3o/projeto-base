@@ -212,7 +212,7 @@ describe('check-dependency-freshness — fim a fim, num repo temporario', () => 
     }
   });
 
-  it('REPROVA quando a pendencia envelhece porque a major foi ADOTADA', async () => {
+  it('REPROVA quando a faixa ja e (ou passou da) major que a pendencia diz que nao sobe', async () => {
     const dir = await repo();
     try {
       // A árvore que o Dependabot propoe: a faixa JÁ é a major que a
@@ -238,6 +238,66 @@ describe('check-dependency-freshness — fim a fim, num repo temporario', () => 
       expect(r.ok).toBe(false);
       expect(r.errors.join('\n')).toContain('envelheceu');
       expect(r.errors.join('\n')).toContain('eslint');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('REPROVA quando a faixa PASSOU da major que a pendencia nomeia', async () => {
+    const dir = await repo();
+    try {
+      // A faixa está numa major ACIMA da que a pendência nomeia (`^12` com
+      // pendência 9 → 10): a regra julga `>=`, e essa forma não tinha spec.
+      await writeFile(
+        path.join(dir, 'package.json'),
+        JSON.stringify({ dependencies: { eslint: '^12.0.0' } }, null, 2),
+        'utf-8',
+      );
+      await majors(dir, { medidoEm: '2026-11-10', majors: { eslint: 10 } });
+      await pendencias(dir, [
+        {
+          pacote: 'eslint',
+          faixaAtual: '^9.39.5',
+          majorAtual: 9,
+          majorNova: 10,
+          motivo: 'flat-config breaking: acompanha o eslint 10',
+          declaradaEm: '2026-11-09',
+        },
+      ]);
+
+      const r = await checkDependencyFreshness({ repoRoot: dir });
+      expect(r.ok).toBe(false);
+      expect(r.errors.join('\n')).toContain('envelheceu');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('nao acusa pendencia de pacote declarado em faixa que o gate nao entende', async () => {
+    const dir = await repo();
+    try {
+      // `latest` não tem major: o gate não inventa número para spec que ele
+      // não entende, e não acusa a pendência com ele.
+      await writeFile(
+        path.join(dir, 'package.json'),
+        JSON.stringify({ dependencies: { eslint: 'latest' } }, null, 2),
+        'utf-8',
+      );
+      await majors(dir, { medidoEm: '2026-11-10', majors: { eslint: 10 } });
+      await pendencias(dir, [
+        {
+          pacote: 'eslint',
+          faixaAtual: 'latest',
+          majorAtual: 9,
+          majorNova: 10,
+          motivo: 'flat-config breaking: acompanha o eslint 10',
+          declaradaEm: '2026-11-09',
+        },
+      ]);
+
+      const r = await checkDependencyFreshness({ repoRoot: dir });
+      expect(r.ok).toBe(true);
+      expect(r.errors).toEqual([]);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

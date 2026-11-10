@@ -172,10 +172,10 @@ no modelo atual — e por isso as duas dependências que o #158 e o #161 pedem
    vermelhas primeiro (`ok=true` com a major adotada; `undefined` sem o campo
    declarado) e o código depois as fez verdes.
 3. Implementar 1–4. — **FEITO**, com as medições:
-   - a regra nova do freshness: **1 de 18** cai com a regra neutralizada, e o
+   - a regra nova do freshness: **2 de 20** caem com a regra neutralizada, e o
      gate contra o repo real reprova (EXIT=1) com a `majorNova` da pendência
      baixada para a major já declarada (restaurada: EXIT=0);
-   - a conferência da claim do audit: **2 de 21** caem com ela neutralizada, e
+   - a conferência da claim do audit: **3 de 26** caem com ela neutralizada, e
      o gate contra o repo real reprova quando o `advisoriesEsperadas` declara 41
      contra os 31 medidos (restaurado: verde).
 4. Medir a mutação dos 2 gates tocados e **re-medir** a contagem de testes
@@ -203,7 +203,7 @@ no modelo atual — e por isso as duas dependências que o #158 e o #161 pedem
 - [x] A spec do `check-dependency-freshness` reprova a árvore da §2.3
       (`REPROVA quando a pendencia envelhece porque a major foi ADOTADA`).
 - [x] A spec do `check-dependency-audit` reprova o drift de advisory
-      (**2 de 21** caem com a conferência neutralizada).
+      (**3 de 26** caem com a conferência neutralizada).
 - [x] `pnpm tooling:test` → **1035 passed (1035)**, 56 arquivos.
 - [x] Os 6 footers em 1.28.0, com a linha do histórico em
       `estrutura-e-versionamento.md` e `docs/STACK.md`.

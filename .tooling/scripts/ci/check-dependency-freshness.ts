@@ -29,6 +29,23 @@
  *
  * É a mesma disciplina do `check-dependency-audit`: a exceção é explícita,
  * versionada e reconciliada — não uma boa intenção.
+ *
+ * ## Os limites declarados desta medição
+ *
+ * - **`faixaAtual` e `majorAtual` são o registro de QUANDO a pendência foi
+ *   declarada**, e não são reconferidos contra a árvore. Uma pendência que
+ *   envelheceu dentro da própria major (o pacote saiu do `^9.39.5` para o
+ *   `^9.41.0`) continua coerente; uma que saltou de major (`^20` → `^22`)
+ *   tem `majorAtual` velho — e a comparação continua correta, porque o que
+ *   a regra confronta é a major ADOTADA contra a `majorNova` da pendência.
+ * - **O gate vê UMA faixa por pacote** (a última lida). Se um PR subisse o
+ *   pacote em um workspace e não no outro, a regra poderia não ver a adoção
+ *   — mas o `check-dependency-drift` já reprova a divergência de faixa entre
+ *   workspaces, e a duplicação de versões no lockfile é o que ele impede.
+ * - **A linha 0.x não tem modelo**: a major de um pacote 0.x é 0 em qualquer
+ *   versão, então a regra não julga pendência 0.x (o corte `majorNova <=
+ *   majorAtual`). A dívida da linha 0.x é do registro, e o `deps:major-scan`
+ *   é quem a mede.
  */
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -235,11 +252,25 @@ export async function checkDependencyFreshness(opts: {
     const majorAgora = majorDeclarada(faixa);
     if (majorAgora === null || majorAgora < pendencia.majorNova) continue;
 
+    // A mesma pendência não pode ser accusada duas vezes: quando a faixa já
+    // permite a major do REGISTRO **e o registro é mais novo que a faixa**,
+    // o laço de cima já accuseu ("a faixa já permite a major"). MEDIDO
+    // 2026-11-10: com faixa `>=` e major do registro mais nova que a da
+    // pendência, o mesmo pacote gerava 2 erros.
+    const majorDoRegistro = majors.get(pendencia.pacote);
+    if (
+      majorDoRegistro !== undefined &&
+      majorDoRegistro > majorAgora &&
+      faixaPermiteMajor(faixa, majorDoRegistro)
+    ) {
+      continue;
+    }
+
     errors.push(
       `pendência envelheceu: '${pendencia.pacote}' está em '${faixa}' (major ${majorAgora}) e a ` +
         `pendência em '${ARQUIVO_PENDENCIAS}' diz que a major ${pendencia.majorNova} NÃO sobe agora. ` +
-        `O range e a pendência estão contradizendo — ou o range volta para a major ` +
-        `${pendencia.majorAtual}, ou a pendência sai (a major subiu de verdade e a dívida foi paga).`,
+        `O range e a pendência estão contradizendo — ou o range volta para a major anterior, ou a ` +
+        `pendência sai (a major subiu de verdade e a dívida foi paga).`,
     );
   }
 
