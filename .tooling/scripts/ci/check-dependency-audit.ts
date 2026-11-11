@@ -40,12 +40,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
-
-export interface CheckResult {
-  ok: boolean;
-  errors: string[];
-  advisories: string[];
-}
+import { type CheckResult, linhasDoRelato } from './check-types';
 
 /** Onde a lista de exceções mora. Versionada, porque é decisão humana. */
 export const ARQUIVO_DE_EXCECOES = '.tooling/scripts/ci/excecoes-de-dependencias.json';
@@ -77,7 +72,53 @@ export interface Excecao {
 
 export interface ArquivoDeExcecoes {
   excecoes: Excecao[];
+  /**
+   * A claim do arquivo: quantas advisories o `pnpm audit` media quando o
+   * número foi escrito. É DADO — a regra (o que fazer quando o declarado e o
+   * medido divergem) mora no gate.
+   */
+  advisoriesEsperadas?: AdvisoriesEsperadas;
 }
+
+/**
+ * A contagem de advisories que o arquivo declara.
+ *
+ * MEDIDO 2026-11-10: a prosa do arquivo afirmava 41 advisories e o
+ * `pnpm audit` media 31 — o número é uma MEDIÇÃO, e a medição envelhece com
+ * o lockfile. Com a contagem em número, o gate passa a medir a claim: o que
+ * o arquivo declara a mais do que existe é ERRO (a claim mente), e o que o
+ * registro publicou a mais do que o arquivo declara é AVISO (isso é evento do
+ * registro, não mudança do repo — reprovar por isso seria vermelho sem
+ * motivo).
+ */
+export interface AdvisoriesEsperadas {
+  /** Quando a claim foi medida (YYYY-MM-DD). */
+  medidoEm: string;
+  /** O total declarado. */
+  total: number;
+  critical: number;
+  high: number;
+  moderate: number;
+  low: number;
+  info: number;
+}
+
+/** As severidades que a claim conta — as mesmas do `metadata.vulnerabilities`. */
+export const SEVERIDADES_DA_CLAIM: readonly (keyof Omit<
+  AdvisoriesEsperadas,
+  'medidoEm' | 'total'
+>)[] = ['critical', 'high', 'moderate', 'low', 'info'];
+
+/**
+ * Os números que a claim TEM que declarar: o total e as 5 severidades.
+ *
+ * A forma é conferida pelo gate (e não pelo arquivo): um campo ausente
+ * desligava a comparação daquele campo em silêncio.
+ */
+export const NUMEROS_DA_CLAIM: readonly (keyof Omit<AdvisoriesEsperadas, 'medidoEm'>)[] = [
+  'total',
+  ...SEVERIDADES_DA_CLAIM,
+];
 
 /**
  * As severidades que REPROVAM — no CÓDIGO, não no arquivo de dados.
@@ -134,6 +175,35 @@ export function extrairAdvisories(auditoria: string): Advisory[] {
     });
   }
   return saida;
+}
+
+/**
+ * A contagem por severidade do `metadata.vulnerabilities` do `pnpm audit`.
+ *
+ * Devolve `null` quando o JSON não traz a contagem (o `pnpm audit` antigo não
+ * tinha, e a spec usa JSON sintético) — sem dado medido, o gate não julga a
+ * claim: quem não mede não acusa.
+ */
+export function extrairContagem(auditoria: string): Record<string, number> | null {
+  let dados: unknown;
+  try {
+    dados = JSON.parse(auditoria);
+  } catch {
+    return null;
+  }
+  const contagem = (dados as { metadata?: { vulnerabilities?: unknown } }).metadata
+    ?.vulnerabilities;
+  if (!contagem || typeof contagem !== 'object') return null;
+  const saida: Record<string, number> = {};
+  for (const [severidade, valor] of Object.entries(contagem as Record<string, unknown>)) {
+    if (typeof valor === 'number') saida[severidade] = valor;
+  }
+  // Objeto VAZIO é "sem dado medido", não "zero medido": MEDIDO 2026-11-10,
+  // `metadata.vulnerabilities: {}` (o que a spec sintética produz) fazia o
+  // gate acusar 5 erros falsos ("declara 31 advisory(ies) e o audit mede 0").
+  // Um audit que roda e não acha nada traz as chaves com 0
+  // (`{info:0, low:0, …}`) — o vazio é a assinatura de "sem contagem".
+  return Object.keys(saida).length === 0 ? null : saida;
 }
 
 /** Os arquivos sob um caminho (o arquivo, ou o diretório varrido recursivamente). */
@@ -263,7 +333,8 @@ export function checkDependencyAudit(opts: {
         const detalhe = String((erro as Error).message ?? erro).slice(0, 200);
         advisories.push(
           `a auditoria de dependência NÃO RODOU (${detalhe}) — sem rede? ` +
-            `Este gate fica sem medir; a CI tem rede e mede.`,
+            `Este gate fica sem medir (e a claim de advisories NÃO foi conferida); ` +
+            `a CI tem rede e mede.`,
         );
         return { ok: true, errors, advisories };
       }
@@ -327,5 +398,102 @@ export function checkDependencyAudit(opts: {
     `advisories na severidade que reprova: ${contagem} (${justificadas} com exceção declarada e verificada)`,
   );
 
+  // A CLAIM: o número que o arquivo declara contra o número medido.
+  //
+  // A direção é o que separa as duas naturezas do drift:
+  //
+  // - declarado > medido → o arquivo afirma MAIS do que existe. A claim
+  //   envelheceu (ou mentiu): ERRO. Foi o que o PR #163 mediu — a prosa
+  //   afirmava 41 advisories e o `pnpm audit` media 31.
+  // - medido > declarado → o REGISTRO publicou advisory nova. Isso não é
+  //   mudança do repo, e reprovar por causa de dado externo é vermelho sem
+  //   motivo: AVISO.
+  const declaradas = lista.advisoriesEsperadas;
+  const medidas = extrairContagem(auditoria);
+  if (declaradas && !medidas) {
+    advisories.push(
+      `a auditoria não trouxe a contagem de advisories (sem 'metadata.vulnerabilities') — ` +
+        `a claim de '${ARQUIVO_DE_EXCECOES}' NÃO foi conferida. Verde sem medir é pior que ` +
+        `vermelho.`,
+    );
+  }
+
+  // A forma da claim: os 6 números têm que estar lá. Um campo ausente
+  // desliga a comparação DAQUELE campo em silêncio — MEDIDO 2026-11-10: uma
+  // claim sem `moderate` (e sem `total`) passava com `ok=true`, 0 erros e 0
+  // avisos. A regra mora no gate; o arquivo é só DADO, e um dado incompleto
+  // tem que ser erro explícito, não um campo que ninguém lê.
+  const numerosFaltando = declaradas
+    ? NUMEROS_DA_CLAIM.filter((nome) => typeof declaradas[nome] !== 'number')
+    : [];
+  if (numerosFaltando.length > 0) {
+    errors.push(
+      `a claim de advisories está incompleta: '${ARQUIVO_DE_EXCECOES}' não declara ` +
+        `${numerosFaltando.join(', ')}. A claim tem que declarar os ` +
+        `${NUMEROS_DA_CLAIM.length} números (${NUMEROS_DA_CLAIM.join(', ')}) — um campo ` +
+        `ausente desliga a comparação daquele campo em silêncio.`,
+    );
+  }
+
+  if (declaradas && medidas && numerosFaltando.length === 0) {
+    // A coerência INTERNA do campo: o total declarado tem que ser a soma do
+    // próprio recorte. Sem esta conferência, um `total` fora da soma saía
+    // como "o registro publicou advisory nova" — a mensagem culpava quem não
+    // errou. MEDIDO 2026-11-10: com total 30 e as severidades somando 31, o
+    // gate só dava aviso.
+    const somaDeclarada = SEVERIDADES_DA_CLAIM.reduce(
+      (soma, severidade) => soma + declaradas[severidade],
+      0,
+    );
+    if (declaradas.total !== somaDeclarada) {
+      errors.push(
+        `a claim de advisories é incoerente: '${ARQUIVO_DE_EXCECOES}' declara total ` +
+          `${declaradas.total} e o recorte do próprio campo soma ${somaDeclarada}. O total tem ` +
+          `que ser a soma das severidades declaradas.`,
+      );
+    }
+
+    // Cada severidade, nas duas direções do drift.
+    for (const severidade of SEVERIDADES_DA_CLAIM) {
+      const declarado = declaradas[severidade];
+      const medido = medidas[severidade] ?? 0;
+      if (declarado > medido) {
+        errors.push(
+          `a claim de advisories envelheceu: '${ARQUIVO_DE_EXCECOES}' declara ${declarado} ` +
+            `${severidade} (medido em ${declaradas.medidoEm}) e o audit mede ${medido}. ` +
+            `O arquivo afirma mais do que existe — meça de novo e atualize ` +
+            `'advisoriesEsperadas' no mesmo PR.`,
+        );
+      } else if (medido > declarado) {
+        advisories.push(
+          `o audit mede ${medido} ${severidade} e a claim de '${ARQUIVO_DE_EXCECOES}' declara ` +
+            `${declarado} (medido em ${declaradas.medidoEm}) — o registro publicou advisory nova. ` +
+            `Atualize a claim quando puder; não é erro do repo.`,
+        );
+      }
+    }
+  }
+
   return { ok: errors.length === 0, errors, advisories };
+}
+
+// Executado como CLI.
+//
+// Sem este bloco, rodar o gate pela linha de comando não mede nada: ele
+// importa o módulo, não chama a função, e sai **0** — o verde-por-ignorância
+// que `guard-classes.md` chama de classe 5. MEDIDO 2026-11-10: `node
+// --import tsx .tooling/scripts/ci/check-dependency-audit.ts` saía 0 sem
+// medir, e o diferencial do registro de dentes ("inflar a claim → o gate
+// reprova") não tinha comando que o reproduzisse.
+//
+// O comando é o do diferencial: `node --import tsx
+// .tooling/scripts/ci/check-dependency-audit.ts` (ele roda o `pnpm audit`
+// de verdade, e por isso precisa de rede).
+if (process.argv[1]?.endsWith('check-dependency-audit.ts')) {
+  // O gate é SÍNCRONO (o `pnpm audit` roda dentro dele, com `execFileSync`) —
+  // MEDIDO 2026-11-10: a primeira versão usava `.then()`, e o CLI morria com
+  // "checkDependencyAudit(...).then is not a function".
+  const r = checkDependencyAudit({ repoRoot: '.' });
+  for (const linha of linhasDoRelato(r)) process.stderr.write(`${linha}\n`);
+  process.exit(r.ok ? 0 : 1);
 }

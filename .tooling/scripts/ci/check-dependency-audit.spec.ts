@@ -26,8 +26,11 @@ function repoCom(lista: ArquivoDeExcecoes): string {
 }
 
 /** Um `pnpm audit --json` sintético, no formato real (o id é a chave). */
-function auditoriaFake(advisories: Record<string, Record<string, unknown>>): string {
-  return JSON.stringify({ advisories, metadata: { vulnerabilities: {} } });
+function auditoriaFake(
+  advisories: Record<string, Record<string, unknown>>,
+  vulnerabilities: Record<string, number> = {},
+): string {
+  return JSON.stringify({ advisories, metadata: { vulnerabilities } });
 }
 
 const ADVISORY_CRITICA = {
@@ -190,7 +193,150 @@ describe('o gate, com auditoria sintética', () => {
       auditoriaJson: auditoriaFake({ '1111111': ADVISORY_MODERADA }),
     });
     expect(r.ok).toBe(true);
-    expect(r.advisories.join('\n')).toMatch(/não casa com nenhuma advisory/);
+    expect((r.advisories ?? []).join('\n')).toMatch(/não casa com nenhuma advisory/);
+  });
+});
+
+describe('a claim de advisories — o total declarado contra o medido', () => {
+  // MEDIDO 2026-11-10: a prosa do arquivo de exceções afirmava 41 advisories
+  // e o `pnpm audit` media 31. O número é uma MEDIÇÃO, e a medição envelhece
+  // com o lockfile — o PR #163 corrigia a prosa e registrava que "o gate NÃO
+  // o confere". Aqui o gate passa a conferir: o arquivo declara o número, e
+  // quem deixa o número envelhecer tem que ser acuado.
+  const DECLARADO = {
+    medidoEm: '2026-11-09',
+    total: 31,
+    critical: 1,
+    high: 3,
+    moderate: 26,
+    low: 1,
+    info: 0,
+  };
+
+  it('FALHA quando o arquivo declara MAIS advisories do que o audit mede', () => {
+    // A claim que mente: o arquivo afirma 41 e o audit mede 31.
+    const root = repoCom({
+      excecoes: [],
+      advisoriesEsperadas: { ...DECLARADO, total: 41, moderate: 32, low: 5 },
+    });
+    const r = checkDependencyAudit({
+      repoRoot: root,
+      auditoriaJson: auditoriaFake({}, { critical: 1, high: 3, moderate: 26, low: 1 }),
+    });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toMatch(/declara/);
+    expect(r.errors.join('\n')).toMatch(/moderate/);
+  });
+
+  it('FALHA quando o TOTAL declarado nao bate com o recorte do proprio campo', () => {
+    // A única forma de exercitar o total: as severidades batem com o medido
+    // e o total mente. Sem esta spec, apagar a conferência do total deixaria
+    // a suíte verde — MEDIDO 2026-11-10.
+    const root = repoCom({
+      excecoes: [],
+      advisoriesEsperadas: { ...DECLARADO, total: 41 },
+    });
+    const r = checkDependencyAudit({
+      repoRoot: root,
+      auditoriaJson: auditoriaFake({}, { critical: 1, high: 3, moderate: 26, low: 1 }),
+    });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toMatch(/incoerente/);
+  });
+
+  it('AVISA (sem reprovar) quando o audit mede MAIS advisories do que o arquivo declara', () => {
+    // O registro publicou advisory nova: isso NÃO é mudança do repo, e um
+    // gate que reprova por causa de dado externo é vermelho sem motivo.
+    const root = repoCom({ excecoes: [], advisoriesEsperadas: DECLARADO });
+    const r = checkDependencyAudit({
+      repoRoot: root,
+      auditoriaJson: auditoriaFake({}, { critical: 1, high: 3, moderate: 30, low: 1 }),
+    });
+    expect(r.ok).toBe(true);
+    expect((r.advisories ?? []).join('\n')).toMatch(/moderat/);
+  });
+
+  it('PASSA quando o declarado bate com o medido', () => {
+    const root = repoCom({ excecoes: [], advisoriesEsperadas: DECLARADO });
+    const r = checkDependencyAudit({
+      repoRoot: root,
+      auditoriaJson: auditoriaFake({}, { critical: 1, high: 3, moderate: 26, low: 1 }),
+    });
+    expect(r.ok).toBe(true);
+    expect(r.errors).toEqual([]);
+  });
+
+  it('FALHA quando a claim esta incompleta (um numero que falta)', () => {
+    // MEDIDO 2026-11-10: uma claim sem `moderate` (e sem `total`) passava com
+    // `ok=true`, 0 erros e 0 avisos — o campo ausente desligava a comparação
+    // DAQUELE campo em silêncio. A regra mora no gate; dado incompleto é erro.
+    const incompleta = { ...DECLARADO, moderate: undefined } as unknown as typeof DECLARADO;
+    const root = repoCom({ excecoes: [], advisoriesEsperadas: incompleta });
+    const r = checkDependencyAudit({
+      repoRoot: root,
+      auditoriaJson: auditoriaFake({}, { critical: 1, high: 3, moderate: 26, low: 1 }),
+    });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toMatch(/incompleta/);
+    expect(r.errors.join('\n')).toMatch(/moderate/);
+  });
+
+  it('NAO acusa quando a auditoria nao traz contagem (objeto vazio = sem dado medido)', () => {
+    // MEDIDO 2026-11-10: `metadata.vulnerabilities: {}` devolvia um objeto
+    // vazio (e não `null`), e o gate acusava 5 erros falsos ("declara 31
+    // advisory(ies) e o audit mede 0"). Objeto vazio é "sem dado", não "zero".
+    const root = repoCom({ excecoes: [], advisoriesEsperadas: DECLARADO });
+    const r = checkDependencyAudit({
+      repoRoot: root,
+      auditoriaJson: auditoriaFake({}),
+    });
+    expect(r.ok).toBe(true);
+    expect(r.errors).toEqual([]);
+  });
+
+  it('NAO acusa e DECLARA que a claim nao foi conferida quando o campo falta', () => {
+    // Verde por ignorância é a classe 5 do `guard-classes.md`: sem dado
+    // medido, o gate tem que dizer que não mediu.
+    const root = repoCom({ excecoes: [], advisoriesEsperadas: DECLARADO });
+    const r = checkDependencyAudit({
+      repoRoot: root,
+      auditoriaJson: JSON.stringify({ advisories: {} }),
+    });
+    expect(r.ok).toBe(true);
+    expect(r.errors).toEqual([]);
+    expect((r.advisories ?? []).join('\n')).toMatch(/NÃO foi conferida/);
+  });
+
+  it('o arquivo do repo DECLARA a claim — o instrumento não pode ser desligado em silêncio', () => {
+    const lista = carregarExcecoes(REPO);
+    expect(lista.advisoriesEsperadas).toBeDefined();
+    expect(lista.advisoriesEsperadas!.total).toBeGreaterThan(0);
+    expect(lista.advisoriesEsperadas!.medidoEm).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('a PROSA do repo cita o mesmo número que a claim declara', () => {
+    // O número tem UM dono: o campo `advisoriesEsperadas`. A prosa é o que o
+    // humano lê, e ela não pode dizer uma coisa enquanto o campo diz outra —
+    // foi exatamente esse o defeito que a issue #149 (F5) mediu: a prosa
+    // afirmava 41 e o audit media 31.
+    //
+    // A âncora é o NÚMERO ao lado da palavra, e não a frase montada: a prosa
+    // pode ser reescrita ("1 crítica e 3 altas") sem que a spec precise
+    // mudar, e a spec ainda acusa quando o número sai do lugar.
+    const lista = carregarExcecoes(REPO);
+    const campo = lista.advisoriesEsperadas!;
+    const cru = readFileSync(join(REPO, ARQUIVO_DE_EXCECOES), 'utf-8');
+    expect(cru).toMatch(new RegExp(`\\b${campo.total} advisories\\b`));
+    const severidades: Array<[number, string]> = [
+      [campo.critical, 'crítica'],
+      [campo.high, 'alta'],
+      [campo.moderate, 'moderada'],
+      [campo.low, 'baixa'],
+    ];
+    for (const [n, palavra] of severidades) {
+      expect(cru).toMatch(new RegExp(`\\b${n} ${palavra}s?\\b`));
+    }
+    expect(cru).toContain(campo.medidoEm);
   });
 });
 

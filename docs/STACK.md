@@ -175,7 +175,7 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão da stack:** 1.27.0
+**Versão da stack:** 1.28.0
 
 ### Histórico de Versões
 
@@ -204,3 +204,4 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 | `1.25.0` | **Sem mudança de stack** — a skill `agent-desktop` (adaptada de [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop), Apache-2.0) e a unificação da pasta de tooling de IA são docs e roteamento: **nenhuma dependência nova**, nenhum binário no `package.json` (a CLI é externa, instalada na máquina), nenhuma mudança em `apps/api`, `apps/web`, `packages/` ou `infra/`. O único config movido foi o `settings.json` do Claude Code, de `.claude/` para `.agents/`. |
 | `1.26.0` | **Sem mudança de stack** — o conjunto de system design canônico ([`./system-design/README.md`](./system-design/README.md), 7 documentos) é **doc**: nenhuma dependência nova, nenhum binário no `package.json`, nenhuma mudança em `apps/api`, `apps/web`, `packages/` ou `infra/`. O que mudou foi a **descoberta**: o `STACK.md` passa a apontar para o desenho, e o desenho passa a apontar para o ADR dono de cada decisão. |
 | `1.27.0` | **O código passa a casar com o system design** — o conjunto `docs/system-design/` afirmava quatro coisas que o código não tinha, e elas agora existem: a rota de health tem teto **PRÓPRIO** (`@Throttle` com 600/min no controller — não `@SkipThrottle()`, que não existe no código), a escrita aceita **`Idempotency-Key`** (a tabela `idempotency_keys` + um interceptor global), o papel de runtime ganha **`statement_timeout = '8s'`**, e a correlação da auditoria é a **mesma** da resposta. **Nenhuma dependência nova**, nenhum binário novo no `package.json`, nenhuma mudança em `apps/web`, `packages/` ou `infra/`. |
+| `1.28.0` | **Sem mudança de stack** — o PR fecha as pendências dos 6 PRs abertos e da issue #149: o `.github/dependabot.yml` passa a gerar `chore(deps):` (o prefixo `deps` NÃO é aceito pelo gate de Conventional Commits do repo, e os 5 PRs do Dependabot nasceram vermelhos por isso), 2 gates ganham regra (a major pendente que foi **adotada** reprova; a claim do total de advisories é conferida contra o `pnpm audit` medido) e a prosa do registro de exceções volta a bater com o audit (41 → 31 advisories). **Nenhuma dependência nova**, nenhum binário novo no `package.json`, nenhuma mudança em `apps/`, `packages/` ou `infra/`. |

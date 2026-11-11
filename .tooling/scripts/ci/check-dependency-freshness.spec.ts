@@ -212,6 +212,179 @@ describe('check-dependency-freshness — fim a fim, num repo temporario', () => 
     }
   });
 
+  it('REPROVA quando a faixa ja e (ou passou da) major que a pendencia diz que nao sobe', async () => {
+    const dir = await repo();
+    try {
+      // A árvore que o Dependabot propoe: a faixa JÁ é a major que a
+      // pendência diz que não sobe agora.
+      await writeFile(
+        path.join(dir, 'package.json'),
+        JSON.stringify({ dependencies: { eslint: '^10.14.0' } }, null, 2),
+        'utf-8',
+      );
+      await majors(dir, { medidoEm: '2026-11-10', majors: { eslint: 10 } });
+      await pendencias(dir, [
+        {
+          pacote: 'eslint',
+          faixaAtual: '^9.39.5',
+          majorAtual: 9,
+          majorNova: 10,
+          motivo: 'flat-config breaking: acompanha o eslint 10',
+          declaradaEm: '2026-11-09',
+        },
+      ]);
+
+      const r = await checkDependencyFreshness({ repoRoot: dir });
+      expect(r.ok).toBe(false);
+      expect(r.errors.join('\n')).toContain('envelheceu');
+      expect(r.errors.join('\n')).toContain('eslint');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('REPROVA quando a faixa PASSOU da major que a pendencia nomeia', async () => {
+    const dir = await repo();
+    try {
+      // A faixa está numa major ACIMA da que a pendência nomeia (`^12` com
+      // pendência 9 → 10): a regra julga `>=`, e essa forma não tinha spec.
+      await writeFile(
+        path.join(dir, 'package.json'),
+        JSON.stringify({ dependencies: { eslint: '^12.0.0' } }, null, 2),
+        'utf-8',
+      );
+      await majors(dir, { medidoEm: '2026-11-10', majors: { eslint: 10 } });
+      await pendencias(dir, [
+        {
+          pacote: 'eslint',
+          faixaAtual: '^9.39.5',
+          majorAtual: 9,
+          majorNova: 10,
+          motivo: 'flat-config breaking: acompanha o eslint 10',
+          declaradaEm: '2026-11-09',
+        },
+      ]);
+
+      const r = await checkDependencyFreshness({ repoRoot: dir });
+      expect(r.ok).toBe(false);
+      expect(r.errors.join('\n')).toContain('envelheceu');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('nao acusa pendencia de pacote declarado em faixa que o gate nao entende', async () => {
+    const dir = await repo();
+    try {
+      // `latest` não tem major: o gate não inventa número para spec que ele
+      // não entende, e não acusa a pendência com ele.
+      await writeFile(
+        path.join(dir, 'package.json'),
+        JSON.stringify({ dependencies: { eslint: 'latest' } }, null, 2),
+        'utf-8',
+      );
+      await majors(dir, { medidoEm: '2026-11-10', majors: { eslint: 10 } });
+      await pendencias(dir, [
+        {
+          pacote: 'eslint',
+          faixaAtual: 'latest',
+          majorAtual: 9,
+          majorNova: 10,
+          motivo: 'flat-config breaking: acompanha o eslint 10',
+          declaradaEm: '2026-11-09',
+        },
+      ]);
+
+      const r = await checkDependencyFreshness({ repoRoot: dir });
+      expect(r.ok).toBe(true);
+      expect(r.errors).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('REPROVA quando a major foi adotada em UM manifest dos que declaram o pacote', async () => {
+    const dir = await repo();
+    try {
+      // MEDIDO 2026-11-10: com o `eslint` em `^10.14.0` no apps/api e em
+      // `^9.39.5` no apps/web, o gate NÃO via a adoção — o mapa de faixas
+      // guardava uma só (a última lida). A regra tem que ver a major mais
+      // alta declarada em QUALQUER manifest que declare o pacote.
+      await mkdir(path.join(dir, 'apps/api'), { recursive: true });
+      await mkdir(path.join(dir, 'apps/web'), { recursive: true });
+      await writeFile(
+        path.join(dir, 'apps/api/package.json'),
+        JSON.stringify({ devDependencies: { eslint: '^10.14.0' } }, null, 2),
+        'utf-8',
+      );
+      await writeFile(
+        path.join(dir, 'apps/web/package.json'),
+        JSON.stringify({ devDependencies: { eslint: '^9.39.5' } }, null, 2),
+        'utf-8',
+      );
+      await majors(dir, { medidoEm: '2026-11-10', majors: { eslint: 10 } });
+      await pendencias(dir, [
+        {
+          pacote: 'eslint',
+          faixaAtual: '^9.39.5',
+          majorAtual: 9,
+          majorNova: 10,
+          motivo: 'flat-config breaking: acompanha o eslint 10',
+          declaradaEm: '2026-11-09',
+        },
+      ]);
+
+      const r = await checkDependencyFreshness({
+        repoRoot: dir,
+        packageJsons: ['apps/api/package.json', 'apps/web/package.json'],
+      });
+      expect(r.ok).toBe(false);
+      expect(r.errors.join('\n')).toContain('envelheceu');
+      expect(r.errors.join('\n')).toContain('^10.14.0');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('nao julga uma pendencia que o modelo de major nao expressa (pacote 0.x)', async () => {
+    const dir = await repo();
+    try {
+      // A major de um pacote 0.x é 0 em QUALQUER versão — o modelo não sabe
+      // dizer "a major foi adotada". Uma pendência 0.x escrita à mão não pode
+      // ser julgada por essa regra (e não pode ser acusa com "a major 0 não
+      // sobe agora"). MEDIDO 2026-11-10: sem o corte, o gate acusava erro.
+      await writeFile(
+        path.join(dir, 'package.json'),
+        JSON.stringify(
+          { dependencies: { '@opentelemetry/exporter-trace-otlp-http': '^0.54.2' } },
+          null,
+          2,
+        ),
+        'utf-8',
+      );
+      await majors(dir, {
+        medidoEm: '2026-11-10',
+        majors: { '@opentelemetry/exporter-trace-otlp-http': 0 },
+      });
+      await pendencias(dir, [
+        {
+          pacote: '@opentelemetry/exporter-trace-otlp-http',
+          faixaAtual: '^0.54.2',
+          majorAtual: 0,
+          majorNova: 0,
+          motivo: 'trem 0.x nao sobe',
+          declaradaEm: '2026-11-10',
+        },
+      ]);
+
+      const r = await checkDependencyFreshness({ repoRoot: dir });
+      expect(r.ok).toBe(true);
+      expect(r.errors).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('nao acusa pacote que ja esta na major mais nova', async () => {
     const dir = await repo();
     try {

@@ -147,15 +147,18 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `ambiguous-sentinel-silently-skips` | `citada` | `.agents/specs/conventions/guard-classes.md` | `devolvia` |
 | `b24-telemetry-progress` | `recusada` | registro de campanha; o plano de telemetria que ele resume já é versionado | — |
 | `b31-parser-vs-ground-truth-analysis` | `citada` | `docs/superpowers/specs/2026-09-25-b35-parser-regen-analysis.md` | `confirma o veredito de B31` |
+| `bot-de-commit-escreve-no-formato-do-gate` | `citada` | `.github/dependabot.yml` | `O prefixo é o TIPO do Conventional Commit — e o gate do repo mede.` |
 | `check-verifies-path-then-delegates-elsewhere` | `pendente` | — | — |
 | `class-7-needs-a-commit-not-a-month` | `citada` | `.agents/specs/conventions/guard-classes.md` | `re-meça pelo comando de` |
 | `classify-by-executability-not-count` | `pendente` | — | — |
+| `claim-numero-precisa-de-campo-lido-por-gate` | `citada` | `.tooling/scripts/ci/check-dependency-audit.ts` | `o número é uma MEDIÇÃO, e a medição envelhece com` |
 | `commit-message-via-file-not-heredoc` | `pendente` | — | — |
 | `conteudo-exclusivo-de-branch-defeito-ja-corrigido` | `pendente` | — | — |
 | `correction-of-one-instance-closes-the-class` | `pendente` | — | — |
 | `cost-must-reconcile-with-the-whole` | `citada` | `.agents/specs/conventions/ci-defense-in-depth.md` | `é uma história` |
 | `cross-artifact-subtraction-borrows-the-other-clock` | `pendente` | — | — |
 | `criterion-inert-on-empty-set` | `citada` | `.agents/specs/conventions/retrospective-capture.md` | `um critério escrito como` |
+| `enumere-os-caminhos-de-aging-da-pendencia` | `citada` | `.tooling/scripts/ci/check-dependency-freshness.ts` | `removido do workspace, quando a faixa declarada **já permite** a major` |
 | `e2e-web-exige-clean-antes` | `citada` | `apps/web/e2e/global-setup.ts` | `o build da suíte começa de um diretório limpo` |
 | `failed-commit-leaks-staged-files-into-next-commit` | `pendente` | — | — |
 | `fase-7-http-state` | `recusada` | checkpoint de campanha de 2026-09-22; envelheceu e não é instrução | — |

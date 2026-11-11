@@ -50,16 +50,20 @@ updates:
       prefix: 'ci'
   # O pnpm. Mesmo dono, ecosystem diferente.
   #
-  # `versioning-strategy: increase` mantém o range `^` — o PR do Dependabot
-  # propõe a atualização dentro da major que o repo já declara, que é
-  # justamente o que o `check-dependency-drift.ts` exige (uma versão só por
-  # pacote em todos os workspaces).
+  # ⚠️ `versioning-strategy: increase` NÃO mantém o range `^` — MEDIDO
+  # 2026-11-10: o PR #162 do Dependabot subiu o `eslint` de `^9.39.5` para
+  # `^10.14.0`. `increase` ergue o PISO do range quando a versão nova está
+  # fora dele; a major atravessa por aqui.
   #
-  # A major NÃO sobe por aqui: `versioning-strategy` não tem opção de major,
-  # e subir major é decisão de produto — o `prisma` estável é a 7 e o `latest`
-  # do registro é um *release candidate* (`8.0.0-rc.33`, medido em 2026-11-09).
-  # A major pendente tem dono e motivo no arquivo de pendências, e o
-  # `check-dependency-freshness.ts` reprova quando ela envelhece.
+  # A major NÃO sobe por decisão de produto — o `prisma` estável é a 7 e o
+  # `latest` do registro é um *release candidate* (`8.0.0-rc.33`, medido em
+  # 2026-11-09). Quem segura isso é o `check-dependency-freshness.ts`: a major
+  # pendente tem que estar declarada, com motivo, em
+  # `.tooling/scripts/ci/dependencias-major-pendentes.json`, e não pode
+  # envelhecer em silêncio — MEDIDO 2026-11-10, com a árvore plantada (o
+  # `eslint` em `^10.14.0` e a pendência ainda dizendo que a major 10 não
+  # sobe), o gate devolvia `ok=true`. A regra que fecha esse buraco é a
+  # "major ADOTADA envelhece a pendência", acrescentada no mesmo PR.
   - package-ecosystem: 'npm'
     directory: '/'
     schedule:
@@ -69,4 +73,18 @@ updates:
       timezone: 'America/Sao_Paulo'
     versioning-strategy: increase
     commit-message:
-      prefix: 'deps'
+      # O prefixo é o TIPO do Conventional Commit — e o gate do repo mede.
+      # MEDIDO 2026-11-10: com `prefix: 'deps'`, os 5 PRs de pnpm nasceram com
+      # o subject `deps: Bump …` e TODOS reprovaram no CI — o tipo `deps` não
+      # está na lista de 7 tipos que o `tooling/scripts/commit-msg-gate.ts`
+      # aceita, e a spec diferencial roda o gate sobre o `git log` real:
+      #   "deps: Bump eslint from 9.39.5 to 10.14.0  ->  tipo \"deps\" fora da
+      #    lista — use um de: feat, fix, chore, docs, test, refactor, ci"
+      # O tipo `deps` nunca entrou no histórico deste repo
+      # (`git log --format=%s | grep -c '^deps:'` → 0) e a convenção do repo é
+      # `chore(deps):` (2 commits no `git log`).
+      # `chore` + `include: scope` produz `chore(deps):` e `chore(deps-dev):` —
+      # a doc do Dependabot diz que o prefixo é seguido do escopo `deps` ou
+      # `deps-dev` — o mesmo formato do histórico, e um tipo que o gate aceita.
+      prefix: 'chore'
+      include: 'scope'

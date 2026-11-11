@@ -125,9 +125,10 @@ grep -cE "^\s+name: '" .tooling/scripts/ci/preflight-gates.ts
 > documento publicava um 0 como se fosse a contagem. O sintoma (contagem que não
 > se move) é indistinguível de "não mudou nada desde a última vez".
 >
-> **MEDIDO 2026-11-09: 53.** As contagens anteriores (21, 29, 41, 44) eram de revisões
-> antigas — a lista cresce a cada gate novo. Por isso a lista **enumerada** vive na §4 e a
-> contagem vive do lado do comando (`grep -cE "^\s+name: '" .tooling/scripts/ci/preflight-gates.ts` → **53**).
+> **MEDIDO 2026-11-10: 54.** As contagens anteriores (21, 29, 41, 44) eram de revisões
+> antigas — a lista cresce a cada gate novo. Por isso a contagem vive do lado do comando
+> (`grep -cE "^\s+name: '" .tooling/scripts/ci/preflight-gates.ts` → **54**) e a lista
+> **completa** vive no próprio `preflight-gates.ts`; a §4 enumera os gates com **comando próprio**.
 
 ### 3.4 Fan-out por fase — onde paralelizar dá ganho, e onde dá conflito
 
@@ -143,7 +144,7 @@ dois scripts existem no `package.json` (linhas 29 e 31) mas **nenhum hook os inv
 | Auditoria | N reviewers em paralelo, todos read-only | o roteador já resolve quem; falta o executor |
 | `.agents/memory/*.md` | 1 agente por arquivo | 30 arquivos (`find .agents/memory -name '*.md' | wc -l`), convenção 1:1 verificável |
 | Implementação | **1 por vez no mesmo codebase** | ver paredes abaixo |
-| Gates do preflight | 53 gates em `Promise.all` | hoje serial (`preflight.ts:412`), nenhum escreve |
+| Gates do preflight | 54 gates em `Promise.all` | hoje serial (`preflight.ts:412`), nenhum escreve |
 
 **Paredes — aqui paralelizar não é ganho, é conflito garantido:**
 
@@ -153,7 +154,7 @@ dois scripts existem no `package.json` (linhas 29 e 31) mas **nenhum hook os inv
 - **`specialist-routing.md`** — fonte da verdade de **todo** o roteamento. Dois `agent-architect` colidem no arquivo que decide quem é chamado.
 - **Branches paralelas** — `check-branch-up-to-date` bloqueia contra `origin/main`: a segunda branch nasce desatualizada por construção. O histórico já escolheu o lado oposto: PR #81 (167 arquivos), #95 (10 issues).
 
-**Não converta gate determinístico em prompt.** Os 53 gates são regex + TypeScript com spec
+**Não converta gate determinístico em prompt.** Os 54 gates são regex + TypeScript com spec
 própria; §5 já registra que a camada "agentic" é *"regra determinística com prosa em volta"*.
 Reescrever um como LLM é a classe 6 de `guard-classes.md` — spec verde, sistema inerte.
 
@@ -196,7 +197,8 @@ Reescrever um como LLM é a classe 6 de `guard-classes.md` — spec verde, siste
 | `check-doc-size` | `pnpm ci:preflight` | A+B (gate `check-doc-size`) | Documentação **viva** acima de 300 linhas. As 3 categorias fora do escopo estão declaradas em `tamanho-e-revisao.md` §O que o teto cobre. A contagem é o número de linhas que o arquivo tem — `wc -l` subestima em 1 os arquivos sem `\n` final | Sim |
 | `check-path-alias` | `pnpm ci:preflight` | A+B (gate `check-path-alias`) | Alias de `compilerOptions.paths` do `tsconfig.base.json` apontando para um diretório que **não existe**. Não mede alias não usado — alias válido e sem import é decisão | Sim |
 | `check-dependency-drift` | `pnpm ci:preflight` | A+B (gate `check-dependency-drift`) | O MESMO pacote declarado em **versões diferentes** em workspaces diferentes — o lockfile instala 2 cópias e cada app typecheca contra a sua | Sim |
-| `check-dependency-freshness` | `pnpm ci:preflight` | A+B (gate `check-dependency-freshness`) | Major pendente **sem declaração de motivo**, ou pendência **envelhecida** (o pacote saiu do workspace, ou a faixa já permite a major) | Sim |
+| `check-dependency-freshness` | `pnpm ci:preflight` | A+B (gate `check-dependency-freshness`) | Major pendente **sem declaração de motivo**, ou pendência **envelhecida** (o pacote saiu do workspace, ou a faixa já permite a major, ou a major foi **adotada** — a faixa já é a major que a pendência diz que não sobe; MEDIDO 2026-11-10, com a árvore plantada no `eslint` `^10.14.0`, o gate devolvia `ok=true`) | Sim |
+| `check-dependency-audit` | `pnpm ci:preflight` | A+B (gate `check-dependency-audit`) | Advisory **crítica ou alta** de dependência que não está na lista de exceções versionada; exceção cuja verificação (o motivo medido) parou de valer; e a **claim** do total de advisories (`advisoriesEsperadas`) que declara **mais** do que o `pnpm audit` mede — o que o REGISTRO publica a mais é **aviso**, não erro (dado externo não é mudança do repo) | Sim |
 | `check-action-version-comment` | `pnpm ci:preflight` | A+B (gate `check-action-version-comment`) | Comentário de versão da action que **mente** sobre a major do pin (MEDIDO 2026-11-09: o PR #154 do Dependabot subia `pnpm/action-setup` para 6.1.1 e deixava `# v3`), ou a mesma action em SHAs diferentes | Sim |
 | `check-ci-prisma-client-ready` | `pnpm ci:preflight` | A+B (gate `check-ci-prisma-client-ready`) | Job que roda `pnpm tooling:test` **sem** gerar o client do Prisma antes — o job só passa quando o cache do pnpm o traz pronto | Sim |
 | `turbo-redirect-differential` | `.tooling/scripts/ci/turbo-redirect-differential.sh` | A+B (gate `turbo-redirect-differential`) | Forma de `pnpm turbo run …` que o parser extrai diferente do turbo real — **classe 6** (especificação local diverge do sistema real) | Sim (se Node ≥ 22.6) |
