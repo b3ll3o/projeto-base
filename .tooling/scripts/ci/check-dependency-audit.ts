@@ -40,13 +40,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { linhasDoRelato } from './check-types';
-
-export interface CheckResult {
-  ok: boolean;
-  errors: string[];
-  advisories: string[];
-}
+import { type CheckResult, linhasDoRelato } from './check-types';
 
 /** Onde a lista de exceções mora. Versionada, porque é decisão humana. */
 export const ARQUIVO_DE_EXCECOES = '.tooling/scripts/ci/excecoes-de-dependencias.json';

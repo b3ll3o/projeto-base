@@ -193,7 +193,7 @@ describe('o gate, com auditoria sintética', () => {
       auditoriaJson: auditoriaFake({ '1111111': ADVISORY_MODERADA }),
     });
     expect(r.ok).toBe(true);
-    expect(r.advisories.join('\n')).toMatch(/não casa com nenhuma advisory/);
+    expect((r.advisories ?? []).join('\n')).toMatch(/não casa com nenhuma advisory/);
   });
 });
 
@@ -253,7 +253,7 @@ describe('a claim de advisories — o total declarado contra o medido', () => {
       auditoriaJson: auditoriaFake({}, { critical: 1, high: 3, moderate: 30, low: 1 }),
     });
     expect(r.ok).toBe(true);
-    expect(r.advisories.join('\n')).toMatch(/moderat/);
+    expect((r.advisories ?? []).join('\n')).toMatch(/moderat/);
   });
 
   it('PASSA quando o declarado bate com o medido', () => {
@@ -304,7 +304,7 @@ describe('a claim de advisories — o total declarado contra o medido', () => {
     });
     expect(r.ok).toBe(true);
     expect(r.errors).toEqual([]);
-    expect(r.advisories.join('\n')).toMatch(/NÃO foi conferida/);
+    expect((r.advisories ?? []).join('\n')).toMatch(/NÃO foi conferida/);
   });
 
   it('o arquivo do repo DECLARA a claim — o instrumento não pode ser desligado em silêncio', () => {
