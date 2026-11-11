@@ -172,7 +172,7 @@ no modelo atual — e por isso as duas dependências que o #158 e o #161 pedem
    vermelhas primeiro (`ok=true` com a major adotada; `undefined` sem o campo
    declarado) e o código depois as fez verdes.
 3. Implementar 1–4. — **FEITO**, com as medições:
-   - a regra nova do freshness: **2 de 20** caem com a regra neutralizada, e o
+   - a regra nova do freshness: **3 de 21** caem com a regra neutralizada, e o
      gate contra o repo real reprova (EXIT=1) com a `majorNova` da pendência
      baixada para a major já declarada (restaurada: EXIT=0);
    - a conferência da claim do audit: **3 de 26** caem com ela neutralizada, e

@@ -38,10 +38,11 @@
  *   `^9.41.0`) continua coerente; uma que saltou de major (`^20` → `^22`)
  *   tem `majorAtual` velho — e a comparação continua correta, porque o que
  *   a regra confronta é a major ADOTADA contra a `majorNova` da pendência.
- * - **O gate vê UMA faixa por pacote** (a última lida). Se um PR subisse o
- *   pacote em um workspace e não no outro, a regra poderia não ver a adoção
- *   — mas o `check-dependency-drift` já reprova a divergência de faixa entre
- *   workspaces, e a duplicação de versões no lockfile é o que ele impede.
+ * - **A regra vê a major mais ALTA declarada em QUALQUER manifest** que
+ *   declare o pacote. MEDIDO 2026-11-10: com o `eslint` em `^10.14.0` no
+ *   `apps/api` e em `^9.39.5` no `apps/web`, a versão anterior (um mapa de
+ *   uma faixa por pacote, a última lida) **não** via a adoção. A divergência
+ *   entre workspaces, por si, continua sendo do `check-dependency-drift`.
  * - **A linha 0.x não tem modelo**: a major de um pacote 0.x é 0 em qualquer
  *   versão, então a regra não julga pendência 0.x (o corte `majorNova <=
  *   majorAtual`). A dívida da linha 0.x é do registro, e o `deps:major-scan`
@@ -179,12 +180,22 @@ export async function checkDependencyFreshness(opts: {
 
   const arquivos = opts.packageJsons ?? (await listarPackageJsons(root));
   const declaradas = new Map<string, string>();
+  // TODAS as faixas declaradas de cada pacote, por manifest. A regra da major
+  // ADOTADA tem que ver a adoção em QUALQUER manifest que declare o pacote:
+  // MEDIDO 2026-11-10, com o `eslint` em `^10.14.0` no `apps/api` e em
+  // `^9.39.5` no `apps/web`, o `Map` (última faixa lida vencia) não via a
+  // adoção — e a major adotada num manifest só é barrada pelo
+  // `check-dependency-drift`, que reprova a divergência entre workspaces.
+  const faixasPorPacote = new Map<string, string[]>();
   for (const arquivo of arquivos) {
     try {
       const raw = await fs.readFile(path.join(root, arquivo), 'utf-8');
       const pkg = JSON.parse(raw) as PackageJson;
       for (const [nome, faixa] of versoesDeclaradas(pkg)) {
         declaradas.set(nome, faixa);
+        const faixas = faixasPorPacote.get(nome) ?? [];
+        faixas.push(faixa);
+        faixasPorPacote.set(nome, faixas);
       }
     } catch {
       advisories.push(`'${arquivo}' não pôde ser lido — a cobertura deste gate ficou menor`);
@@ -223,8 +234,8 @@ export async function checkDependencyFreshness(opts: {
   // Uma pendência cujo pacote saiu do workspace envelheceu: a lista descreve
   // uma dívida que não existe mais.
   for (const pendencia of pendencias) {
-    const faixa = declaradas.get(pendencia.pacote);
-    if (!faixa) {
+    const faixas = faixasPorPacote.get(pendencia.pacote);
+    if (!faixas || faixas.length === 0) {
       errors.push(
         `pendência envelhecida: '${pendencia.pacote}' está em '${ARQUIVO_PENDENCIAS}' mas não é ` +
           `mais declarado no workspace. A pendência descreve um pacote que saiu — remova-a.`,
@@ -249,7 +260,17 @@ export async function checkDependencyFreshness(opts: {
     // erro. Com este corte, ele não julga o que o modelo não expressa.
     if (pendencia.majorNova <= pendencia.majorAtual) continue;
 
-    const majorAgora = majorDeclarada(faixa);
+    // A major mais ALTA declarada em QUALQUER manifest que declare o pacote:
+    // a adoção de uma major em um manifest só é adoption se a regra a vir.
+    let majorAgora: number | null = null;
+    let faixaAgora = faixas[0]!;
+    for (const f of faixas) {
+      const m = majorDeclarada(f);
+      if (m !== null && (majorAgora === null || m > majorAgora)) {
+        majorAgora = m;
+        faixaAgora = f;
+      }
+    }
     if (majorAgora === null || majorAgora < pendencia.majorNova) continue;
 
     // A mesma pendência não pode ser accusada duas vezes: quando a faixa já
@@ -261,13 +282,13 @@ export async function checkDependencyFreshness(opts: {
     if (
       majorDoRegistro !== undefined &&
       majorDoRegistro > majorAgora &&
-      faixaPermiteMajor(faixa, majorDoRegistro)
+      faixaPermiteMajor(faixaAgora, majorDoRegistro)
     ) {
       continue;
     }
 
     errors.push(
-      `pendência envelheceu: '${pendencia.pacote}' está em '${faixa}' (major ${majorAgora}) e a ` +
+      `pendência envelheceu: '${pendencia.pacote}' está em '${faixaAgora}' (major ${majorAgora}) e a ` +
         `pendência em '${ARQUIVO_PENDENCIAS}' diz que a major ${pendencia.majorNova} NÃO sobe agora. ` +
         `O range e a pendência estão contradizendo — ou o range volta para a major anterior, ou a ` +
         `pendência sai (a major subiu de verdade e a dívida foi paga).`,
