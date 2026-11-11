@@ -127,7 +127,7 @@ no modelo atual — e por isso as duas dependências que o #158 e o #161 pedem
 | 1 | `.github/dependabot.yml` | bloco npm: `prefix: 'deps'` → `prefix: 'chore'` + `include: 'scope'`; o comentário que afirma "`versioning-strategy: increase` mantém o range `^`" (falso — o #162 subiu `^9.39.5` → `^10.14.0`) corrigido | nasce PR verde + a convenção do repo |
 | 2 | `.tooling/scripts/ci/check-dependency-freshness.ts` (+ spec) | regra nova: pendência cuja major foi **adotada** (major declarada ≥ `majorNova` da pendência) → **ERRO** | a política "a major não sobe" passa a ter instrumento (§2.3) |
 | 3 | `.tooling/scripts/ci/excecoes-de-dependencias.json` | a claim vai para **31** (medido em 2026-11-10) + campo `advisoriesEsperadas` (o número lido pela máquina, não só pela prosa) | F5 (§2.4) |
-| 4 | `.tooling/scripts/ci/check-dependency-audit.ts` (+ spec) | compara o declarado com o medido: **declarado > medido → ERRO** (o repo afirma mais do que existe); **medido > declarado → aviso** (o registro publicou advisory nova — não é mudança do repo) | a claim deixa de envelhecer em silêncio |
+| 4 | `.tooling/scripts/ci/check-dependency-audit.ts` (+ spec) | compara o declarado com o medido: **declarado > medido → ERRO** (o repo afirma mais do que existe); **medido > declarado → aviso** (o registro publicou advisory nova — não é mudança do repo). A revisão do PR acrescenta 3 regras que o esboço não tinha: a **coerência interna** do campo (o total tem que ser a soma do recorte), a **forma** da claim (um número que falta reprova — o campo ausente desligava a comparação em silêncio) e o **bloco CLI** (o comando que reproduz o diferencial) | a claim deixa de envelhecer em silêncio |
 | 5 | `.agents/specs/conventions/ci-defense-in-depth-dentes.md` | 2 linhas: contagem de testes e mutação dos 2 gates tocados | o registro de dentes é a fonte do "N testes" |
 | 6 | `.agents/specs/conventions/ci-defense-in-depth.md` | 2 linhas do catálogo | idem |
 | 7 | 6 footers + histórico de versões | 1.27.0 → **1.28.0** | o `check-version-footers` exige versão > última tag (`v1.27.0`) |
@@ -204,7 +204,7 @@ no modelo atual — e por isso as duas dependências que o #158 e o #161 pedem
       (`REPROVA quando a pendencia envelhece porque a major foi ADOTADA`).
 - [x] A spec do `check-dependency-audit` reprova o drift de advisory
       (**3 de 26** caem com a conferência neutralizada).
-- [x] `pnpm tooling:test` → **1035 passed (1035)**, 56 arquivos.
+- [x] `pnpm tooling:test` → **1044 passed (1044)**, 56 arquivos.
 - [x] Os 6 footers em 1.28.0, com a linha do histórico em
       `estrutura-e-versionamento.md` e `docs/STACK.md`.
 - [x] `pnpm ci:local` verde (o gate de pre-push do repo).
