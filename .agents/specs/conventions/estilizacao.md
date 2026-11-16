@@ -26,8 +26,7 @@ envelhece em um deles:
 | **As regras** (o que é proibido, como aderir, como estender, o contraste medido) | esta convenção |
 | **O instrumento** (quem cobra) | [`packages/eslint-config/rules/no-estilizacao-informal.js`](../../../packages/eslint-config/rules/no-estilizacao-informal.js) |
 
-> O NOME e o PAPEL de cada token vivem aqui; a MEDIDA de contraste, no
-> companion [`estilizacao-contraste.md`](./estilizacao-contraste.md); o VALOR, no `globals.css` — e só lá.
+> O NOME e o PAPEL de cada token vivem aqui; a MEDIDA de contraste, no companion [`estilizacao-contraste.md`](./estilizacao-contraste.md); o VALOR, no `globals.css` — e só lá.
 
 ## §2. Tokens
 
@@ -214,6 +213,8 @@ cada par, anotado no companion
   no `:focus-visible` — certo em todo browser de produção.
 
 ## §6. Como um app derivado ADOTA o padrão
+
+(A §5 — o mínimo de acessibilidade — está no companion [`estilizacao-acessibilidade.md`](./estilizacao-acessibilidade.md).)
 
 **Copiar, verbatim, e não editar:**
 
