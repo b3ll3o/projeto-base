@@ -266,7 +266,11 @@ describe('regra de estilo — o repo real', () => {
     );
 
     expect(violacoes).toEqual([]);
-  });
+  }, // ESLint de verdade sobre o app inteiro (com o parser do TypeScript). // ⚠️ O timeout é EXPLICITO, e o motivo é medido: este teste roda o
+  // Na máquina do CI ele leva ~7s (MEDIDO 2026-11-16 no run 43887524859:
+  // 8798ms e 6684ms), e o default do Vitest é 5000ms — o default mediria
+  // "a regra demora" como FALHA do teste, que é o motivo errado.
+  60_000);
 
   it('a regra acusa uma violação plantada no app (o dente do gate)', async () => {
     const eslint = new ESLint({
