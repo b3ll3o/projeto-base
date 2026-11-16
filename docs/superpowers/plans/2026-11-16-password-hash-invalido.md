@@ -259,7 +259,7 @@ revisão achar, commit convencional, push e PR.
 | 3 | **[minor]** "o Postgres recusa uma CHECK constraint que chame uma função volátil" é **falso** (MEDIDO: aceita; é o **índice** e a coluna gerada que exigem `IMMUTABLE`) | o motivo foi corrigido nas duas migrations de função |
 | 4 | **[minor]** quatro migrations citavam um spec que não existe (`password-hash-no-banco.integration.spec.ts`) | o nome passou a ser o real (`invariantes-da-conta-no-banco.integration.spec.ts`) |
 | 5 | **[minor]** o reparo é **um no-op silencioso** se a sessão não for a do dono (a RLS filtra a linha, o `UPDATE` afeta 0, sem erro) e a migration fica marcada como aplicada | as duas migrations de reparo ganharam uma **guarda** que levanta com o motivo |
-| 6 | **[minor]** não havia procedimento para **restaurar um dump** anterior às constraints (o `INSERT` é recusado) | o procedimento está em [`docs/api/users.md` §7.1](../api/users.md) |
+| 6 | **[minor]** não havia procedimento para **restaurar um dump** anterior às constraints (o `INSERT` é recusado) | o procedimento está em [`docs/api/users.md` §7.1](../../api/users.md) |
 | 7 | **[minor]** a neutralização não deixa rastro em `users_history` | **decisão registrada** (e o porquê): encher a trilha ajustando `version` deixaria um buraco nela |
 | 8 | **[minor]** o corpus do spec cobria 2 das **6** ordens dos parâmetros | as 4 ordens que faltavam entraram no corpus |
 | 9 | **[minor]** o teste do histórico afirmava só o `entityId` — e passava com a inconsistência que ele mesmo produzia | o teste passou a afirmar o `snapshot` e o `changedBy` |
