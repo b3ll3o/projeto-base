@@ -20,8 +20,31 @@ import type * as React from 'react';
  * `rgb(15,23,41)` para `rgb(17,71,187)` ao longo de 150ms). O indicador de
  * foco tem que estar VISÍVEL no instante do foco.
  */
-export const CLASSE_CONTROLE =
-  'rounded-md border border-control text-sm text-foreground transition-[border-color] foco';
+
+/**
+ * A base do controle — a geometria que é a MESMA no campo e no select.
+ *
+ * ⚠️ É uma constante SEPARADA porque a ordem do CSS decide, não a da
+ * string: `px-3` e `px-2` são a mesma utilitária, e o CSS compilado põe
+ * `px-3` DEPOIS de `px-2` — então o `${CLASSE_CONTROLE} px-2 py-1` do
+ * `<select>` renderizava com o padding CHEIO, e o `px-2 py-1` era código
+ * morto (MEDIDO 2026-11-16 no CSS compilado de `apps/web`). Um tamanho
+ * menor é uma constante própria, e não um `className` por cima.
+ */
+const BASE_CONTROLE =
+  'rounded-md border border-control bg-surface text-sm text-foreground transition-[border-color] foco';
+
+/** O campo de texto: geometria cheia (`px-3 py-2`). */
+export const CLASSE_CONTROLE = `${BASE_CONTROLE} px-3 py-2`;
+
+/**
+ * O `<select>`: a MESMA família, com o vão apertado (`px-2 py-1`).
+ *
+ * ⚠️ Antes o `px-2 py-1` era escrito à mão por cima de `CLASSE_CONTROLE` —
+ * e não valia nada (o CSS dava `px-3` por último). Agora o tamanho é uma
+ * escolha do dono, não um `className` que perde no CSS.
+ */
+export const CLASSE_CONTROLE_COMPACTO = `${BASE_CONTROLE} px-2 py-1`;
 
 /**
  * O estilo do checkbox — mesma família, outra forma.
@@ -91,7 +114,7 @@ export function Campo({ id, rotulo, erro, dica, ...props }: CampoProps) {
         {...props}
         aria-invalid={Boolean(erro)}
         aria-describedby={descritos}
-        className={`${CLASSE_CONTROLE} mt-1 block w-full bg-surface px-3 py-2 focus:border-foreground aria-[invalid=true]:border-destructive`}
+        className={`${CLASSE_CONTROLE} mt-1 block w-full focus:border-foreground aria-[invalid=true]:border-destructive`}
       />
       {dica ? (
         <p id={idDica} className="mt-1 text-sm text-muted-foreground">

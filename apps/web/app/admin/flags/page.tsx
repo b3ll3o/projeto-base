@@ -121,7 +121,16 @@ export default async function AdminFeatureFlagsPage(): Promise<React.JSX.Element
                     name="ativada"
                     type="checkbox"
                   />
-                  <Botao type="submit" variante="secundario" tamanho="sm">
+                  <Botao
+                    type="submit"
+                    variante="secundario"
+                    tamanho="sm"
+                    // ⚠️ O nome acessível diz DE QUAL linha (WCAG 2.4.6): o
+                    // botão é "Salvar" em N linhas da mesma tabela, e quem
+                    // navega por leitor de tela ouve N "Salvar" idênticos.
+                    // O checkbox da MESMA linha já se nomeia.
+                    aria-label={`Salvar ${f.chave}`}
+                  >
                     Salvar
                   </Botao>
                 </form>

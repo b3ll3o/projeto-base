@@ -14,7 +14,7 @@ import { exigirAdmin } from '../guard-admin';
 import { ApiClient, baseUrlDaApi } from '../../../lib/api-client';
 import { exigirSessao, lerTenant } from '../../../lib/sessao';
 import type { UserOutputDto, UsersPageDto } from '@projeto/shared-types';
-import { CLASSE_CONTROLE } from '@/components/ui/campo';
+import { CLASSE_CONTROLE_COMPACTO } from '@/components/ui/campo';
 
 export const dynamic = 'force-dynamic';
 
@@ -131,7 +131,7 @@ export default async function AdminUsersPage(): Promise<React.JSX.Element> {
                         elemento — a estrutura que o e2e mede fica igual. */}
                     <select
                       aria-label={`Perfil de ${u.email}`}
-                      className={`${CLASSE_CONTROLE} bg-surface px-2 py-1`}
+                      className={CLASSE_CONTROLE_COMPACTO}
                       defaultValue={perfilIdExibido}
                       name="profileId"
                     >
@@ -142,7 +142,16 @@ export default async function AdminUsersPage(): Promise<React.JSX.Element> {
                         </option>
                       ))}
                     </select>
-                    <Botao type="submit" variante="secundario" tamanho="sm">
+                    <Botao
+                      type="submit"
+                      variante="secundario"
+                      tamanho="sm"
+                      // ⚠️ O nome acessível diz DE QUAL linha (WCAG 2.4.6): o
+                      // botão é "Salvar" em N linhas da mesma tabela, e quem
+                      // navega por leitor de tela ouve N "Salvar" idênticos.
+                      // O select da MESMA linha já se nomeia.
+                      aria-label={`Salvar perfil de ${u.email}`}
+                    >
                       Salvar
                     </Botao>
                   </form>
