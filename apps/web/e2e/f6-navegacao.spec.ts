@@ -1,6 +1,7 @@
 // FLUXO: F6 — Navegação entre as telas
-// Cobre: a home renderiza, o link da listagem leva ao formulário, e o
-//        "Cancelar" do formulário devolve para a listagem.
+// Cobre: a home renderiza, o link da listagem leva ao formulário, o
+//        "Cancelar" do formulário devolve para a listagem, a tela reflowa a
+//        320px (WCAG 1.4.10) e o anel de foco aparece no instante.
 //
 // pt-BR: este é o primeiro arquivo da suíte de propósito — o caminho mais curto
 // do fluxo inteiro.
@@ -49,6 +50,70 @@ test.describe('F6 — Navegação', () => {
     // abaixo são o que distingue "voltou para a listagem" de "voltou para uma
     // página que não conseguiu carregar nada".
     await expect(page.getByText('Nenhum usuário cadastrado')).toBeVisible();
-    await expect(page.getByText('Não foi possível carregar a lista.')).toHaveCount(0);
+    // ⚠️ REGEX, e não a frase exata (MEDIDO 2026-11-16, revisão do PR #168):
+    // a mensagem de erro passou a dizer o que a pessoa pode fazer ("Tente de
+    // novo em instantes."), e uma asserção de string exata passaria a casar
+    // com o texto que ela queria EXCLUIR. O regex casa com o começo da
+    // mensagem — que é o estado de erro.
+    await expect(page.getByText(/Não foi possível carregar a lista/)).toHaveCount(0);
+  });
+
+  /**
+   * A 320px, a tela NÃO rola na horizontal (WCAG 1.4.10).
+   *
+   * ⚠️ MEDIDO 2026-11-16 no Chromium: com o layout `flex` fixo e o `Sidebar`
+   * `w-64 shrink-0`, a coluna de conteúdo ficava com 320 − 256 = 64px e a
+   * tela rolava na horizontal (`scrollWidth` 393 em `/login`, 437 em
+   * `/users/novo`, 378 em `/`). Este teste é a rede de segurança da correção
+   * — o chrome colapsa abaixo de `md`, e o conteúdo fica com a largura toda.
+   */
+  test('a 320px a tela não rola na horizontal', async ({ page, irPara }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await irPara('/login');
+
+    const medida = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }));
+
+    expect(medida.scrollWidth).toBeLessThanOrEqual(medida.clientWidth);
+  });
+
+  /**
+   * O anel de foco aparece NO INSTANTE — e não transita.
+   *
+   * ⚠️ A regressão que a revisão achou: `transition-colors` inclui
+   * `outline-color`, e o anel passava a SURGIR em 150ms (MEDIDO 2026-11-16).
+   * A regra `estilizacao/no-estilizacao-informal` proíbe a combinação — e
+   * esta é a MEDIDA, do lado do browser.
+   *
+   * Os valores são os do token `--color-ring` (`hsl(221 83% 40%)`), medidos
+   * no Chromium 1223.
+   */
+  test('o anel de foco aparece no instante e não transita', async ({ page, irPara }) => {
+    await irPara('/login');
+    await page.keyboard.press('Tab');
+
+    const anel = await page.evaluate(() => {
+      const el = document.activeElement;
+      if (el === null) throw new Error('sem elemento focado');
+      const cs = getComputedStyle(el);
+      return {
+        outlineColor: cs.outlineColor,
+        outlineWidth: cs.outlineWidth,
+        outlineOffset: cs.outlineOffset,
+        transitionProperty: cs.transitionProperty,
+        transitionDuration: cs.transitionDuration,
+      };
+    });
+
+    expect(anel.outlineColor).toBe('rgb(17, 71, 187)');
+    expect(anel.outlineWidth).toBe('2px');
+    expect(anel.outlineOffset).toBe('2px');
+    // O anel NÃO é uma propriedade que transita: ou ela não está na lista,
+    // ou a transição é de duração zero.
+    const transitaOAnel =
+      anel.transitionProperty.includes('outline-color') && anel.transitionDuration !== '0s';
+    expect(transitaOAnel).toBe(false);
   });
 });

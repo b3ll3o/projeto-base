@@ -80,9 +80,15 @@ export default async function UsersPage() {
     <Container>
       <CabecalhoPagina
         titulo="Usuários"
+        // ⚠️ Na falha, o cabeçalho NÃO repete a mensagem do `Alerta` (MEDIDO
+        // 2026-11-16, revisão do PR #168): a tela dizia "Não foi possível
+        // carregar a lista." no cabeçalho E "Erro ao carregar: tente de novo
+        // em instantes." no alerta — DUAS mensagens para o MESMO estado. E a
+        // contagem ("0 usuários cadastrados") seria MENTIRA: a leitura
+        // falhou, não veio vazia. O estado de erro é o `Alerta`, e só ele.
         descricao={
           error
-            ? 'Não foi possível carregar a lista.'
+            ? undefined
             : `${usuarios.length} ${usuarios.length === 1 ? 'usuário cadastrado' : 'usuários cadastrados'}`
         }
         acao={
@@ -109,7 +115,14 @@ export default async function UsersPage() {
           // recarrega a página e reexecuta a leitura que falhou (o mesmo
           // caminho do `guard-admin`).
           <div className="space-y-3">
-            <Alerta variante="erro">Erro ao carregar: tente de novo em instantes.</Alerta>
+            <Alerta variante="erro">
+              Não foi possível carregar a lista. Tente de novo em instantes.
+            </Alerta>
+            {/* ⚠️ É um `<a href="">` e não o `Botao`: esta página é Server
+                Component, e um `onClick` exigiria um wrapper `'use client'`.
+                O `href` vazio resolve para o documento atual e o browser
+                recarrega a página, reexecutando a leitura que falhou (o
+                mesmo caminho do `guard-admin`). */}
             <a href="" className={CLASSES_BOTAO_SECUNDARIO}>
               Tentar de novo
             </a>

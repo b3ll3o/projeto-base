@@ -51,13 +51,16 @@ test.describe('F11 — Detalhe de perfil (admin)', () => {
     await irPara(`/admin/profiles/${slug}`);
 
     await expect(page.getByRole('heading', { name: 'Flags' })).toBeVisible();
-    await expect(page.locator('li', { hasText: 'isSystem' })).toHaveText(/Sim/);
+    // ⚠️ `/isSystem: Sim\b/` e não `/Sim/` (MEDIDO 2026-11-16, revisão do PR
+    // #168): a casagem parcial passaria com "Sim/Não" ou com "Sistema" — e a
+    // distinção Sim/Não é o que esta tela promete. O `\b` fecha a palavra.
+    await expect(page.locator('li', { hasText: 'isSystem' })).toHaveText(/isSystem: Sim\b/);
     // O conteúdo: a tela de sistema lista as permissões COMO TEXTO, num
     // `<ul>` sem input. Afirmar a ausência do checkbox é o que prova que o
     // bloqueio é de renderização — a API, sozinha, recusaria o POST depois.
     await expect(page.locator('input[name="permissionKey"]')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Salvar' })).toHaveCount(0);
-    await expect(page.locator('li', { hasText: 'users.read' })).toHaveText(/Sim/);
+    await expect(page.locator('li', { hasText: 'users.read' })).toHaveText(/Sim\b/);
   });
 
   test('quem não é admin vê "Acesso restrito" em vez do perfil', async ({ page, irPara }) => {

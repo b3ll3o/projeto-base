@@ -58,8 +58,17 @@ export async function Sidebar(): Promise<React.JSX.Element> {
     // pt-BR: `sidebar`/`sidebar-footer` não existem em `globals.css` — o menu
     // renderizava como texto corrido, com link azul padrão do browser, colado
     // no conteúdo. Utilitários Tailwind, como o resto do app.
-    <nav aria-label="Navegação principal" className="w-64 shrink-0 border-r border-border p-8">
-      <ul className="space-y-1">
+    //
+    // ⚠️ Abaixo de `md` o menu é uma BARRA no topo (`w-full`, borda de baixo) e
+    // os links correm em linha (MEDIDO 2026-11-16, revisão do PR #168): com
+    // `w-64` fixo, a coluna de conteúdo ficava com 64px a 320px e a tela
+    // rolava na horizontal (WCAG 1.4.10). Acima de `md` é a coluna de
+    // sempre.
+    <nav
+      aria-label="Navegação principal"
+      className="w-full shrink-0 border-b border-border p-4 md:w-64 md:border-b-0 md:border-r md:p-8"
+    >
+      <ul className="flex flex-wrap gap-x-4 gap-y-1 md:block md:space-y-1">
         <li>
           <Link className={CLASSE_LINK_NAV} href="/">
             Início
@@ -118,7 +127,7 @@ export async function Sidebar(): Promise<React.JSX.Element> {
       </ul>
 
       {me !== null ? (
-        <p className="mt-8 border-t border-border pt-4 text-xs text-muted-foreground">
+        <p className="mt-4 border-t border-border pt-4 text-xs text-muted-foreground md:mt-8">
           {me.profileName ?? 'Sem perfil'} · {me.isAdmin ? 'admin' : 'usuário'}
         </p>
       ) : null}
