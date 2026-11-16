@@ -76,7 +76,7 @@ projeto-base (monorepo)
 | Linguagem | TypeScript | 5.x estrito | Type safety end-to-end |
 | Styling | Tailwind CSS | 4.x | Utility-first, zero runtime, tree-shakeable. CSS-first: os tokens vivem no bloco `@theme` de `apps/web/app/globals.css` |
 | Padrão de estilo | **`estilizacao.md`** (convenção) | — | Tokens semânticos + primitivas em `apps/web/components/ui/`; o instrumento é a regra ESLint `estilizacao/no-estilizacao-informal`. Ver [`.agents/specs/conventions/estilizacao.md`](../.agents/specs/conventions/estilizacao.md) |
-| Componentes | **escritos à mão, sobre as primitivas** | — | Não há biblioteca de componentes: shadcn/ui NÃO está instalado — nem como dependência, nem como código copiado. As primitivas (`Container`, `CabecalhoPagina`, `CabecalhoSecao`, `Campo`, `Botao`, `Alerta`, `Tabela`, `EstadoVazio`, `LinkTexto`) são o que as telas usam; o `className` repetido era a dívida que elas pagaram |
+| Componentes | **escritos à mão, sobre as primitivas** | — | Não há biblioteca de componentes: shadcn/ui NÃO está instalado — nem como dependência, nem como código copiado. As primitivas (`Container`, `CabecalhoPagina`, `CabecalhoSecao`, `Campo`, `Botao`, `Alerta`, `Tabela`, `CabecalhoTabela`, `CelulaTabela`, `EstadoVazio`, `LinkTexto`) são o que as telas usam — as 9 de `apps/web/components/ui/` exportam 11 componentes, porque `Tabela` vem com `CabecalhoTabela` e `CelulaTabela`; o `className` repetido era a dívida que elas pagaram |
 | State (URL) | Next router | nativo | Filtros, paginação, tabs na URL |
 | Forms | react-hook-form + zod | ^7 / ^3.25.76 | Client Component + validação tipada |
 | Server Actions | nativo | — | Mutações sem JS extra |
@@ -176,7 +176,7 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão da stack:** 1.28.0
+**Versão da stack:** 1.29.0
 
 ### Histórico de Versões
 

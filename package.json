@@ -38,7 +38,8 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,json,yaml,yml}\"",
     "clean": "turbo run clean && rm -rf node_modules .turbo",
     "prepare": "husky",
-    "repeticao:analisa": "cd tooling/scripts && pnpm repeticao:analisa"
+    "repeticao:analisa": "cd tooling/scripts && pnpm repeticao:analisa",
+    "estilo:contraste": "tsx tooling/scripts/contraste-token.ts"
   },
   "lint-staged": {
     "*.{ts,tsx}": [

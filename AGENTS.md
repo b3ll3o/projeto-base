@@ -247,10 +247,10 @@ As convenções estão detalhadas em arquivos próprios sob [`.agents/specs/conv
 | DRY | [`dry.md`](./.agents/specs/conventions/dry.md) | Don't Repeat Yourself — o conhecimento tem UMA representação. No código: um termo de domínio tem UM dono (constante exportada) e quem usa importa; a medição é `npx tsx tooling/scripts/analisa-repeticao.ts`, e 2 gates cobram (`check-repeticao`, `check-bloco-duplicado`); adicionada na v1.13.0 |
 | Documentação | [`documentacao.md`](./.agents/specs/conventions/documentacao.md) | A documentação é parte do código: doc ausente = lacuna, doc que mente = defeito. Matriz de cobertura (unidade → doc canônico), fato com UM dono, frescor verificável; medida pelo gate `check-doc-coverage`; adicionada na v1.14.0 |
 | Estilização | [`estilizacao.md`](./.agents/specs/conventions/estilizacao.md) | Padrão de estilo do frontend: tokens semânticos no `@theme` do Tailwind 4 (valores em `apps/web/app/globals.css`), primitivas em `apps/web/components/ui/`, o que é proibido numa tela, como um app derivado adota — e o instrumento que cobra (regra ESLint `estilizacao/no-estilizacao-informal`) |
+| **Estilização — acessibilidade** | [`estilizacao-acessibilidade.md`](./.agents/specs/conventions/estilizacao-acessibilidade.md) | O mínimo de acessibilidade do padrão (foco visível, erro por cor E texto, nome acessível, reflow) — a §5 da convenção `estilizacao.md`, extraída para caber no teto de 300 linhas |
+| **Estilização — contraste** | [`estilizacao-contraste.md`](./.agents/specs/conventions/estilizacao-contraste.md) | A medida de contraste do padrão (17 pares medidos, o comando que os reproduz) — a §2.2 da convenção `estilizacao.md`, extraída para caber no teto de 300 linhas |
 
-> **Os dois índices são o mesmo índice.** Este §6 e o [`README.md`](./.agents/specs/conventions/README.md) listam os mesmos arquivos: uma convenção nova entra **nos dois, no mesmo PR**. Eles já divergiram (7 convenções órfãs de índice), corrigido pela task 2.2 do plano [`guard-classes`](./docs/superpowers/plans/2026-10-03-guard-classes.md).
->
-> **Templates:** [`.agents/specs/templates/`](./.agents/specs/templates/) contém templates canônicos versionados (ex.: [`spec.md`](./.agents/specs/templates/spec.md) — template de Spec de feature — e [`system-design.md`](./.agents/specs/templates/system-design.md) — o desenho do sistema que o app derivado copia). Toda spec deve derivar de um template; criar templates novos via PR com bump major da convenção relacionada.
+> **Os dois índices são o mesmo índice.** Este §6 e o [`README.md`](./.agents/specs/conventions/README.md) listam os mesmos arquivos: uma convenção nova entra **nos dois, no mesmo PR**. Eles já divergiram (7 convenções órfãs de índice), corrigido pela task 2.2 do plano [`guard-classes`](./docs/superpowers/plans/2026-10-03-guard-classes.md). **Templates:** [`.agents/specs/templates/`](./.agents/specs/templates/) contém templates canônicos versionados (ex.: [`spec.md`](./.agents/specs/templates/spec.md) — template de Spec de feature — e [`system-design.md`](./.agents/specs/templates/system-design.md) — o desenho do sistema que o app derivado copia). Toda spec deve derivar de um template; criar templates novos via PR com bump major da convenção relacionada.
 
 - **Pre-push obrigatório:** rodar `pnpm ci:local` antes de push (ver [git-workflow.md §Pre-Push Quality Gate](./.agents/specs/conventions/git-workflow.md))
 - **Fluxo canônico end-to-end:** [`docs/fluxo-desenvolvimento.md`](./docs/fluxo-desenvolvimento.md) — documento factual que lista cada gate (3 camadas: hooks locais, CI remoto, processo de agents), em qual comando/hook dispara, e o que **de fato** bloqueia. Re-medido a cada merge.
@@ -295,5 +295,5 @@ Quando seguido corretamente, este padrão garante:
 
 **Mantido por:** projeto-base contributors
 **Licença:** MIT
-**Versão do documento:** 1.28.0
+**Versão do documento:** 1.29.0
 **Status:** Estável

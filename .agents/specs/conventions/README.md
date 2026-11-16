@@ -17,8 +17,8 @@ lê — a task 2.2 do plano `guard-classes` fecha isso. **Regra: criar uma conve
 (`description` começando por "Apêndice histórico", com `Apenas leitura`) **não**
 entram no índice — existem para preservar o histórico de gaps resolvidos sem
 estourar o limite de 300 linhas do spec canônico, e são alcançáveis por link de
-seu próprio pai. MEDIDO 2026-11-05: `ls .agents/specs/conventions/*.md` → **31**
-arquivos, **24** no índice, e os **7** de fora são apêndices (este README + 6
+seu próprio pai. MEDIDO 2026-11-16: `ls .agents/specs/conventions/*.md` → **34**
+arquivos, **27** no índice, e os **7** de fora são apêndices (este README + 6
 apêndices): `review-routing-gaps-historical.md`, `review-routing-examples.md`,
 `specialist-routing-gaps-v1.0.md`, `specialist-routing-examples.md`,
 `specialist-routing-historico.md` e `git-workflow-apendice.md`. Os 4 primeiros
@@ -54,6 +54,8 @@ desenho, apêndices.
 | DRY | [`dry.md`](./dry.md) | Don't Repeat Yourself — o conhecimento tem UMA representação; um termo de domínio tem UM dono (constante exportada) e quem usa importa. 2 gates: `check-repeticao` (termo) e `check-bloco-duplicado` (lógica) |
 | Documentação | [`documentacao.md`](./documentacao.md) | A documentação é parte do código: doc ausente = lacuna (P1), doc que mente = defeito (P0). Matriz de cobertura (unidade de código → doc canônico), fato com UM dono, frescor verificável; medida pelo gate `check-doc-coverage` |
 | Estilização | [`estilizacao.md`](./estilizacao.md) | Padrão de estilo do frontend: tokens semânticos no `@theme` do Tailwind 4 (os VALORES vivem em `apps/web/app/globals.css`), primitivas em `apps/web/components/ui/`, o que é proibido numa tela, como um app derivado adota; cobrado pela regra ESLint `estilizacao/no-estilizacao-informal` |
+| Estilização — acessibilidade | [`estilizacao-acessibilidade.md`](./estilizacao-acessibilidade.md) | O mínimo de acessibilidade do padrão (foco visível, erro por cor E texto, nome acessível, reflow) — a §5 da convenção `estilizacao.md`, extraída para caber no teto de 300 linhas |
+| Estilização — contraste | [`estilizacao-contraste.md`](./estilizacao-contraste.md) | A medida de contraste do padrão (17 pares medidos, o comando que os reproduz) — a §2.2 da convenção `estilizacao.md`, extraída para caber no teto de 300 linhas |
 
 ## Regra Geral
 
