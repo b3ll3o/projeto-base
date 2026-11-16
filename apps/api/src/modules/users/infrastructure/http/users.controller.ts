@@ -40,7 +40,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import type { FastifyAdapter } from '@nestjs/platform-fastify';
+import type { FastifyReply } from '../../../../shared/infrastructure/http/fastify-reply.type.js';
 
 import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.js';
 import { UserProfileUseCases } from '../../../profiles/application/profiles.use-cases.js';
@@ -89,10 +89,6 @@ import {
   type CreateUserDto,
   type UpdateUserDto,
 } from './users.schemas.js';
-
-// pt-BR: extraído de @nestjs/platform-fastify (TReply do FastifyAdapter)
-// porque o pacote 'fastify' não é dep direta de @projeto/api nesta fase.
-type FastifyReply = Parameters<FastifyAdapter['setHeader']>[0];
 
 /**
  * Request com o campo `user` publicado pelo `JwtAuthGuard`.

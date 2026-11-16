@@ -65,7 +65,7 @@ cada stack, e onde a resposta mora.
 
 | Stack | O que a doc precisa registrar | Fonte canônica |
 |---|---|---|
-| **NestJS 11** (DDD/Hexagonal) | boundary `domain/application/infrastructure`, portas do domínio, use cases, guards, o que é `@Public()` | `apps/api/src/modules/<bc>/` |
+| **NestJS 12** (DDD/Hexagonal) | boundary `domain/application/infrastructure`, portas do domínio, use cases, guards, o que é `@Public()` | `apps/api/src/modules/<bc>/` |
 | **Fastify** (adapter) | o que o adapter faz e o que ele NÃO faz (limite do Nest) | `apps/api/src/main.ts` |
 | **Prisma 6** | models, relações, índices, `unique`, soft-delete, roles do banco | `apps/api/prisma/schema.prisma` + `migrations/` |
 | **Next.js 15** (App Router) | rota × Server/Client Component, Server Actions, o que roda onde | `apps/web/app/**` |

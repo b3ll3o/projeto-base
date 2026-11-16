@@ -111,7 +111,7 @@ Heurística:
 ```yaml
 - type: review
   doc_file: docs/STACK.md
-  reason: "Sem alterações — NestJS 11 continua sendo a escolha"
+  reason: "Sem alterações — NestJS 12 continua sendo a escolha"
   evidence: "stack unchanged"
 ```
 

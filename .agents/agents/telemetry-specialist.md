@@ -53,7 +53,7 @@ task:
   description: "<decisão ou implementação de telemetria/observabilidade>"
 context:
   stack_detected:
-    backend: "apps/api (NestJS 11 + Fastify + Prisma 6 + Pino + Postgres 16)"
+    backend: "apps/api (NestJS 12 + Fastify + Prisma 6 + Pino + Postgres 16)"
     frontend: "apps/web (Next.js 15 + React 19 + standalone output)"
     infra: "docker-compose.yml (postgres + api + web)"
   prisma_schema: "apps/api/prisma/schema.prisma"   # se aplicável

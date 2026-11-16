@@ -232,7 +232,7 @@
   2026-10-08: 2 execuções, as duas `EXIT=1`). Hoje o estado no disco está
   correto — o que falta é o gate.
 
-- **Os Dockerfiles agora `node:22`, e o `engines.node` declara `>=22.6.0`** —
+- **Os Dockerfiles agora `node:22`, e o `engines.node` declara `>=22.12.0`** —
   resolvido pela issue #48. As duas propriedades do guard de base image foram
   separadas (`check-docker-drift.ts`): **distro** (glibc, por causa do engine
   binary do Prisma 6) e **major** (a que casa com `engines.node` e com

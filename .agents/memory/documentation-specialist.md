@@ -9,6 +9,14 @@ description: Memória acumulada do agent documentation-specialist — a matriz d
 
 ## Decisões Tomadas
 
+### 2026-11-16 — A doc de stack é claim de versão: ela envelhece na major
+
+**Contexto:** o `@nestjs/*` subiu para a major 12 e o Node mínimo foi de `>=22.6.0` para `>=22.12.0` (piso do NestJS 12 e do `nestjs-pino` 5).
+
+**Decisão:** as afirmações de versão da doc (`README.md`, `docs/STACK.md`, `docs/como-rodar.md`, `docs/system-design/contexto.md` e os agents que descrevem o stack) são **claim de freshness** — subiram com o código no mesmo PR. A tabela de stack do `docs/STACK.md` é o lugar que nomeia a versão; as linhas que o PR não toca não mudam.
+
+**Consequências:** a pendência de major do `@nestjs/common` saiu do registro (`.tooling/scripts/ci/dependencias-major-pendentes.json`) — a major subiu de verdade e a dívida foi paga, que é o caso que o `check-dependency-freshness` mede.
+
 ### 2026-10-29 — A cobertura é o que o gate mede; o frescor é humano
 
 **Contexto:** a regra "a documentação é parte do código" nasceu sem

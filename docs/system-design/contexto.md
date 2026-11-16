@@ -28,7 +28,7 @@ flowchart TB
 
   subgraph sistema["projeto-base — Sistema de Gestão Multi-empresa"]
     web["Web<br/><small>Next.js 15 · App Router · Server Actions</small>"]
-    api["API<br/><small>NestJS 11 + Fastify · DDD/Hexagonal</small>"]
+    api["API<br/><small>NestJS 12 + Fastify · DDD/Hexagonal</small>"]
     pg[("Dados<br/><small>PostgreSQL 16 · RLS por empresa</small>")]
   end
 

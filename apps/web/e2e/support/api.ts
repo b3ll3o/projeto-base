@@ -10,21 +10,21 @@
 // `inject` não exercita: `enableCors`, `listen`, `enableShutdownHooks` e o
 // wiring do Pino.
 //
-// Onde `tsx`: o binário vive na RAIZ do monorepo (`package.json` declara
-// `tsx` como devDependency da raiz, não de `apps/api`). O wrapper `.bin/tsx`
-// é um `sh` que termina em `exec`, então o PID que `spawn` devolve já é o do
-// Node — matar esse PID derruba o servidor, sem processo órfão segurando a
-// porta. Foi por isso que se usa o binário e não um `pnpm exec`: `pnpm exec`
-// introduz um processo no meio e o `SIGTERM` nele deixa o Node vivo.
+// Onde o runner: a API sobe pelo loader ESM do Node (`node --import tsx/esm`),
+// e NÃO pelo CLI do `tsx`. MEDIDO 2026-11-16, depois do NestJS 12 (que virou
+// ESM-only): o CLI do `tsx` transpila o `@nestjs/core` (ESM) para CJS quando um
+// pacote CJS o exige (`@nestjs/throttler`, `nestjs-pino`), e o app — que importa
+// o core por `import` — ficava com OUTRA cópia da classe `Reflector`. O DI
+// quebrava no boot ("can't resolve dependencies of the ThrottlerGuard") e a
+// API não subia. No `node` puro (produção) e no `node --import tsx/esm` a
+// cópia é UMA: o `require(esm)` nativo do Node devolve a mesma instância que
+// o `import`.
 //
-// MEDIDO em 2026-10-08, e este comentário é incompleto sem o dado: o `tsx` são
-// DOIS processos. `spawn` devolve o pai (`node …/tsx/dist/cli.mjs src/main.ts`)
-// e ele FORKA um filho (`node --require …/tsx/dist/preflight.cjs …`) que é quem
-// de fato executa `main.ts` e segura a porta. A boa notícia é que o pai
-// encaminha o `SIGTERM`: matar o pai derruba o filho junto, medido. A
-// consequência prática é outra — `filho.pid` NÃO identifica o processo que
-// está com a porta, e é por isso que cada instância tem log próprio (ver `anexarLog`)
-// e que a suíte não pode confiar em "o processo com este PID é o servidor".
+// ⚠️ O que muda no modelo de processo: o CLI do `tsx` são DOIS processos (o pai
+// forca um filho que faz o `listen` — MEDIDO 2026-10-08, e a medição continua
+// valendo para quem usa o CLI); o `node --import tsx/esm` é UM. O PID do
+// `spawn` passa a ser o do servidor, e o `derrubarApi` continua sinalizando o
+// GRUPO (`detached: true`), que é o que fecha a janela do órfão.
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -34,9 +34,6 @@ import { API_ROOT, WEB_ROOT, exigirEstado, gravarEstado } from './estado';
 import { derrubarFilho, derrubarGrupo, processoVivo } from './processos';
 import { esperarTcpAberta, portaFechouDentroDe } from './portas';
 import { abrirSaidaEmArquivo } from './saida';
-
-const REPO_ROOT = join(API_ROOT, '..', '..');
-const BIN_TSX = join(REPO_ROOT, 'node_modules', '.bin', 'tsx');
 
 /**
  * Onde a saída da API é gravada, por processo.
@@ -216,7 +213,7 @@ export async function subirApi({
   // justamente quando ele é mais necessário. A mecânica está em `saida.ts`.
   const saida = abrirSaidaEmArquivo(DIR_LOG, 'api');
 
-  const filho = spawn(BIN_TSX, ['src/main.ts'], {
+  const filho = spawn(process.execPath, ['--import', 'tsx/esm', 'src/main.ts'], {
     cwd: API_ROOT,
     // pt-BR (2026-10-08): `detached: true` cria um PROCESS GROUP próprio, e é
     // o que fecha a janela do órfão — ver `derrubarApi`, que sinaliza o grupo.
@@ -229,6 +226,11 @@ export async function subirApi({
     // seguinte ia para a instância anterior. Foi a MEDIDA, não a hipótese, que
     // amostras: `pgrep -fc src/main.ts` devolveu **16** com 12 órfãos de
     // execuções anteriores, quase todos com PPID 1719 (systemd --user).
+    //
+    // ⚠️ MEDIDO 2026-11-16: com o loader ESM do Node (`node --import tsx/esm`)
+    // a API é UM processo só — o PID do `spawn` É o do servidor. O grupo segue
+    // valendo (o `detached: true` cria o grupo), e é ele que o `derrubarApi`
+    // sinaliza.
     detached: true,
     env: ambienteDaApi({ porta, databaseUrl, jwtSecret }),
     stdio: ['ignore', saida.descritor, saida.descritor],
@@ -288,6 +290,12 @@ export async function subirApi({
  * `MORREU`, filho `SEGUE com a porta`; (2) na máquina, 12 processos
  * `src/main.ts` órfãos de execuções passadas, com PPID 1719 (systemd --user),
  * nenhum deles na porta que o `estado.json` aponta.
+ *
+ * ⚠️ MEDIDO 2026-11-16: a API hoje sobe pelo loader ESM do Node
+ * (`node --import tsx/esm`), que é UM processo — o PID do `spawn` é o do
+ * servidor. A medição acima descreve o CLI do `tsx` (DOIS processos), que foi
+ * o que a suíte usava até 2026-11-16; o sinal por GRUPO continua sendo o
+ * mecanismo, porque o `detached: true` cria o grupo.
  *
  * O sintoma é a parte que enganava: `esperarTcpFechada` estourava o prazo de
  * 20s, a `subirApiDoTeste` subia o processo novo, e o `/health` respondia — do

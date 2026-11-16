@@ -9,6 +9,14 @@ description: Memória acumulada do agent stack-code-reviewer — qualidade estru
 
 ## Decisões Tomadas
 
+### 2026-11-16 — A lens do NestJS passa de v11 para v12
+
+**Contexto:** o `@nestjs/common`/`core`/`platform-fastify`/`swagger`/`testing` subiram para a major 12 (o Dependabot bumpou só o `common`; a família inteira tem de subir junto — o `core` 11 com `common` 12 viola o peer e o `core` 12 exige `common` 12).
+
+**Decisão:** a lens do agent passa a mirar o contrato v12. A migração que ela tem de pegar: `Parameter<FastifyAdapter['setHeader']>[0]` deixou de ser o `FastifyReply` (o `setHeader` do v12 aceita também a resposta crua, e o `Parameters` devolvia a união `ServerResponse | FastifyReply`) — o tipo do reply tem UM dono (`apps/api/src/shared/infrastructure/http/fastify-reply.type.ts`, `ReturnType<FastifyAdapter['reply']>`).
+
+**Consequências:** `@nestjs/core` v12 é ESM-only; o CLI do `tsx` transpila o core para CJS quando um pacote CJS o exige (`@nestjs/throttler`, `nestjs-pino`) e o app ficava com DUAS cópias da classe `Reflector` — o DI quebrava no boot. A API sobe pelo loader ESM do Node (`node --import tsx/esm`), como a produção.
+
 ### 2026-09-22 — Lens DDD/Hexagonal adotada como parte do escopo D11
 
 **Contexto:** ADR-0001 promulgou DDD/Hexagonal como paradigma arquitetural canônico em todo o monorepo.
