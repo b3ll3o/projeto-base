@@ -112,6 +112,21 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
   const HASH_COM_FORMA =
     '$argon2id$v=19$m=65536,t=3,p=4$c2FsdHNhbHRzYWx0c2FsdHNhbHQ$ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0';
 
+  /**
+   * Um SEGUNDO envelope argon2id com forma — o que o teste de escrita grava.
+   *
+   * ⚠️ Precisa ser DIFERENTE do `HASH_COM_FORMA`: a asserção do teste é "o
+   * valor mudou", e um valor igual ao da fixture não provaria nada.
+   *
+   * ⚠️ 2026-11-16: a fixture gravava `'senha-nova-da-acme'`, que não é um
+   * hash. A CHECK constraint `users_password_hash_argon2id` (a invariante do
+   * hash passou a ter dono no banco) recusa essa escrita — e o teste, que
+   * mede a POLICY de RLS, passaria a medir a constraint. O valor tem de ser
+   * válido para o teste medir o que ele diz medir.
+   */
+  const HASH_ALTERADO =
+    '$argon2id$v=19$m=65536,t=3,p=4$YWx0ZXJhbGFkYWRvcmFsdGVy$ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0';
+
   async function criarUsuario(slug: string): Promise<string> {
     // `User.id` é `@id @db.Uuid` **sem** `@default` — é o domínio que gera
     // (`User.criar` recebe o id). Omitir aqui dá `PrismaClientValidationError`
@@ -763,7 +778,7 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
     const alterados = await comEscopo(acmeId, async (tx) => {
       const r = await tx.user.updateMany({
         where: { id: daGlobex },
-        data: { passwordHash: 'senha-escrita-pela-acme' },
+        data: { passwordHash: HASH_COM_FORMA },
       });
       return r.count;
     });
@@ -794,7 +809,7 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
     // `prisma-tenant-onboarding.repository.ts`, os dois caminhos). Um usuário
     // que nasce apontando para o admin global nasce ADMIN de todas as empresas
     // — e por `isAdmin` isso é BYPASS TOTAL do `PermissionsGuard`.
-    const id = 'ffffffff-0000-0000-0000-0000000000ff';
+    const id = UserId.create().value;
 
     await expect(
       comEscopo(acmeId, async (tx) => {
@@ -803,7 +818,7 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
             id,
             email: 'intruso@teste.local',
             name: 'Intruso',
-            passwordHash: 'x',
+            passwordHash: HASH_COM_FORMA,
             profileId: perfilGlobal,
           },
         });
@@ -820,12 +835,17 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
     // `set_config(..., true)` local previne em todo o resto — ganhava INSERT
     // irrestrito, e [E] acima passaria dependendo do GUC. Fail-closed também
     // aqui: sem escopo não se escreve, e o cadastro abre sessão de SISTEMA.
-    const id = 'dddddddd-0000-0000-0000-0000000000dd';
+    const id = UserId.create().value;
 
     await expect(
       semEscopo(async (tx) => {
         await tx.user.create({
-          data: { id, email: 'sem-escopo@teste.local', name: 'Sem Escopo', passwordHash: 'x' },
+          data: {
+            id,
+            email: 'sem-escopo@teste.local',
+            name: 'Sem Escopo',
+            passwordHash: HASH_COM_FORMA,
+          },
         });
       }),
     ).rejects.toThrow(/row-level security policy/);
@@ -842,14 +862,14 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
     const alterados = await comEscopo(acmeId, async (tx) => {
       const r = await tx.user.updateMany({
         where: { id: daAcme },
-        data: { passwordHash: 'senha-nova-da-acme' },
+        data: { passwordHash: HASH_ALTERADO },
       });
       return r.count;
     });
 
     expect(alterados).toBe(1);
     await expect(ctx.prisma.user.findUnique({ where: { id: daAcme } })).resolves.toMatchObject({
-      passwordHash: 'senha-nova-da-acme',
+      passwordHash: HASH_ALTERADO,
     });
   });
 
@@ -884,11 +904,14 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
     // conserta é `prisma-tenant-onboarding.repository.integration.spec.ts`, no
     // bloco "com a sessão da aplicação (as policies valem)" — que é o único
     // lugar do repo onde o onboarding fala com um papel sem BYPASSRLS.
-    const id = 'eeeeeeee-0000-0000-0000-0000000000ee';
+    // ⚠️ O id é gerado pelo `UserId` (v7) e não escrito à mão: a CHECK
+    // constraint `users_id_uuid_v7` (a invariante do id passou a ter dono no
+    // banco) recusa um id que não seja v7 — e um id literal fixo não é.
+    const id = UserId.create().value;
 
     const criado = await comEscopoDeSistema(async (tx) => {
       const r = await tx.user.create({
-        data: { id, email: 'nova@teste.local', name: 'Nova', passwordHash: 'x' },
+        data: { id, email: 'nova@teste.local', name: 'Nova', passwordHash: HASH_COM_FORMA },
       });
       return r.id;
     });

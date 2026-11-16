@@ -24,6 +24,8 @@ import {
 } from '../../../../../test/testcontainers-helper.js';
 import { PrismaRefreshTokenRepository } from './prisma-refresh-token.repository.js';
 import { uriComoPapelDeRuntime } from '../../../../shared/infrastructure/prisma/papel-de-runtime.js';
+import { HASH_REAL } from '../../../../../test/fakes/fake-password-hasher.js';
+import { UserId } from '../../../users/domain/value-objects/user-id.vo.js';
 
 describe('PrismaRefreshTokenRepository — o registro de revogação (#132)', () => {
   let ctx: TestContext;
@@ -44,10 +46,10 @@ describe('PrismaRefreshTokenRepository — o registro de revogação (#132)', ()
   async function conta(): Promise<string> {
     const user = await ctx.prisma.user.create({
       data: {
-        id: randomUUID(),
+        id: UserId.create().value,
         email: `ana-${randomUUID()}@acme.dev`,
         name: 'Ana',
-        passwordHash: 'x',
+        passwordHash: HASH_REAL,
       },
     });
     return user.id;

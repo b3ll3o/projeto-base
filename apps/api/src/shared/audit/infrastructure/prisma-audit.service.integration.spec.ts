@@ -27,6 +27,7 @@ import { PrismaAuditService } from './prisma-audit.service.js';
 import { AuditContext } from '../domain/audit-context.vo.js';
 import { uriComoPapelDeRuntime } from '../../infrastructure/prisma/papel-de-runtime.js';
 import { abrirEscopo } from '../../infrastructure/prisma/escopo.js';
+import { HASH_REAL } from '../../../../test/fakes/fake-password-hasher.js';
 
 describe('PrismaAuditService (Testcontainers)', () => {
   let ctx: TestContext;
@@ -319,8 +320,14 @@ describe('PrismaAuditService (Testcontainers)', () => {
       });
       await ctx.prisma.user.createMany({
         data: [
-          { id: ALICE, name: 'Alice', email: 'alice@acme.dev', passwordHash: 'x', version: 1 },
-          { id: BOB, name: 'Bob', email: 'bob@globex.dev', passwordHash: 'x', version: 1 },
+          {
+            id: ALICE,
+            name: 'Alice',
+            email: 'alice@acme.dev',
+            passwordHash: HASH_REAL,
+            version: 1,
+          },
+          { id: BOB, name: 'Bob', email: 'bob@globex.dev', passwordHash: HASH_REAL, version: 1 },
         ],
       });
       await ctx.prisma.tenantMembership.createMany({

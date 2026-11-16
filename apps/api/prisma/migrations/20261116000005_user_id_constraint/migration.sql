@@ -1,0 +1,46 @@
+-- apps/api/prisma/migrations/20261116000005_user_id_constraint/
+--
+-- pt-BR (2026-11-16): o banco passa a RECUSAR um id que não é um UUID v7.
+--
+-- ── O QUE ESTA MIGRATION FAZ ───────────────────────────────────────────────
+--
+-- A CHECK constraint `users_id_uuid_v7` sobre `users.id`. A regra mora na
+-- função `user_id_is_uuid_v7` (migration `20261116000003`) — o dono da regra
+-- no banco, como a convenção `dry.md` pede.
+--
+-- ── POR QUE ISTO PREVINE O DEFEITO ─────────────────────────────────────────
+--
+-- O defeito medido em 2026-11-16 teve DUAS causas na mesma coluna da mesma
+-- tabela, e as duas eram a mesma classe: **o dado persistido violava uma
+-- invariante que só existia em TypeScript**.
+--
+--   1. `password_hash = 'x'` em 9 linhas → a listagem inteira devolvia 500
+--      (`UserPersistenceException`);
+--   2. `id` com versão UUID 4 em 9 linhas → a listagem devolvia 400
+--      (`UserValidationException`, traduzida como erro do cliente).
+--
+-- As duas invariantes moravam só no value object (`PasswordHash` e `UserId`),
+-- que validam na LEITURA. O banco aceitaria qualquer texto e qualquer uuid.
+-- Com a constraint, a escrita passa a FALHAR no banco, no instante da
+-- escrita, com o erro do Postgres — em vez de ser descoberta na leitura, por
+-- um usuário que estava tentando usar o sistema.
+--
+-- ⚠️ O `ADD CONSTRAINT` VALIDA as linhas existentes. Por isso esta migration
+-- vem DEPOIS dos dois reparos (`20261116000001` e `20261116000004`): se uma
+-- linha violasse a regra, o `migrate deploy` falharia aqui — e essa falha é o
+-- ponto: ela é barulhenta e nomeia a linha, em vez de ser um 500 sem dono.
+--
+-- ⚠️ A constraint é MAIS ESTRITA que o value object em um ponto: o `UserId`
+-- aceita o id em QUALQUER caixa (`[0-9a-f]` com a flag `i`), e o banco
+-- compara o texto canônico do uuid, que o Postgres sempre grava em minúsculas.
+-- A regra da função usa `~*`, que é case-insensitive — a MESMA semântica do
+-- VO.
+--
+-- O spec
+-- `apps/api/src/modules/users/infrastructure/persistence/invariantes-da-conta-no-banco.integration.spec.ts`
+-- é o instrumento que amarra a regra do banco e a do VO, e afirma a
+-- implicação "o banco aceitou ⟹ o VO aceita".
+
+ALTER TABLE "users"
+  ADD CONSTRAINT "users_id_uuid_v7"
+  CHECK (user_id_is_uuid_v7("id"));

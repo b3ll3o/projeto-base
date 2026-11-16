@@ -1,0 +1,58 @@
+commit 7c2644692847e3beacd389cacf8ef3a26067236c
+Author:     Leonardo Andreazzi <andreazzi-leonardo@hotmail.com>
+AuthorDate: Mon Nov 16 15:20:16 2026 -0300
+Commit:     GitHub <noreply@github.com>
+CommitDate: Mon Nov 16 15:20:16 2026 -0300
+
+    fix(docs): o relatório semanal sem cópias — e o gerador no repo (#167)
+    
+    * chore(docs): weekly sync
+    
+    Registro semanal do cron weekly-docs-sync: a análise da semana e o
+    parecer do doc-sync sobre o que mudou.
+    
+    Período: 2026-11-09 .. 2026-11-16
+    
+    * fix(tooling): o parecer do doc-sync sem cópias e o gerador do relatório no repo
+    
+    O artefato do PR #167 saiu com 24 ações das quais 15 eram CÓPIAS: 12 linhas
+    de "History/Archive" (uma por model do schema.prisma, todas com o mesmo doc
+    e o mesmo motivo) e 3 de "Endpoints modificados" (uma por controller, todas
+    idênticas). E o gerador do relatório vivia fora do repo, então os defeitos
+    dele não tinham dono nem teste: a linha em branco do `git log` entrava como
+    arquivo, o diretório da raiz virava `README.md/` e a janela (data nua) heredava
+    a hora da execução — o mesmo comando media 6 ou 4 toques conforme o momento.
+    
+    - doc-sync: o mapeamento de controller vira GENÉRICO (docs/api/<bc>.md, a
+      regra da matriz da §3 da documentacao.md), o check de History/Archive só
+      acusa model auditado sem par, toda ação carrega `source_file` e as cópias
+      saem (o parecer caiu de 24 ações para 10, todas distintas e rastreáveis).
+    - weekly-docs-sync: o gerador do artefato semanal entra no repo
+      (`pnpm weekly:docs-sync`) com janela determinística, path vazio filtrado na
+      origem e diretório derivado do path.
+    - O agent `doc-sync` e a memória dele contam a mudança (2026-11-16).
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * chore(docs): o artefato da semana sai corrigido — sem cópias e com a janela medida
+    
+    O artefato que o cron abriu no PR #167 tinha 4 defeitos, todos medidos:
+    
+    - a linha em branco do `git log` entrava como arquivo (a linha "6" sem nome);
+    - o diretório saía dos 2 primeiros segmentos do path, então a raiz virava
+      `README.md/` e `docs/STACK.md` virava diretório;
+    - a janela era `--since=2026-11-09` — data nua, que o git resolve com a HORA
+      do momento: o mesmo comando media 6 toques às 05:45 e 4 às 14:55;
+    - o parecer trazia 24 ações das quais 15 eram cópias.
+    
+    O artefato novo é o mesmo gerado pelo comando que está no repo
+    (`pnpm weekly:docs-sync`), com a janela normalizada e escrita no próprio
+    artefato — e o parecer com a ORIGEM de cada ação.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    ---------
+    
+    Co-authored-by: Hermes <hermes@projeto-base.local>
+    Co-authored-by: CEO Agent <ceo@paperclip.ai>
+    Co-authored-by: Claude Code <noreply@anthropic.com>

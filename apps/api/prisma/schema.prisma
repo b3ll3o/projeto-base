@@ -28,11 +28,26 @@ enum AuditOperation {
 }
 
 model User {
+  // O id é um UUID **v7** (ordenado no tempo). A regra tem DOIS donos: o
+  // value object `UserId` (`src/modules/users/domain/value-objects/user-id.vo.ts`)
+  // valida na LEITURA, e a CHECK constraint `users_id_uuid_v7` valida na
+  // ESCRITA (`prisma/migrations/20261116000005_user_id_constraint/`).
+  //
+  // ⚠️ O Prisma não expressa CHECK constraint — as duas regras vivem em SQL
+  // puro, e o dono do FORMATO é o banco (a função `user_id_is_uuid_v7`).
+  // Por isso este comentário existe: quem lê o schema e não sabe das
+  // constraints está olhando só metade da regra.
   id           String    @id @db.Uuid
   email        String    @unique
   name         String
   // Hash argon2id da senha. NUNCA sai para fora: nem `UserOutputDto`, nem
   // os snapshots JSONB de `users_history`/`users_archive`.
+  //
+  // ⚠️ O FORMATO tem dois donos, pela mesma razão do `id`: o value object
+  // `PasswordHash` valida na leitura, e a CHECK constraint
+  // `users_password_hash_argon2id` valida na escrita
+  // (`prisma/migrations/20261116000002_password_hash_constraint/`). O dono do
+  // formato no BANCO é a função `password_hash_is_valid_argon2id`.
   passwordHash String    @map("password_hash")
   // ProfileId: FK para Profile. Nullable para soft-rollout: a migration
   // adiciona a coluna como null e o seed atribui 'viewer' como default.

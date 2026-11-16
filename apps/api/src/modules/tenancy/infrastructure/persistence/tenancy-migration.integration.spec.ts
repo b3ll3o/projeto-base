@@ -22,7 +22,6 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Prisma } from '@prisma/client';
-import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -32,6 +31,8 @@ import {
   type TestContext,
 } from '../../../../../test/testcontainers-helper.js';
 import { PrismaTenantMembershipRepository } from './prisma-tenant-membership.repository.js';
+import { HASH_REAL } from '../../../../../test/fakes/fake-password-hasher.js';
+import { UserId } from '../../../users/domain/value-objects/user-id.vo.js';
 
 // pt-BR: o caminho do arquivo de migration, resolvido a partir do próprio spec
 // (não de `process.cwd()`) — o mesmo motivo de `apps/api/src/main.ts.spec.ts`:
@@ -67,7 +68,7 @@ describe('Migration de tenancy (Fase 2)', () => {
    */
   async function criarUser(email: string, nome = 'Alguém') {
     return ctx.prisma.user.create({
-      data: { id: randomUUID(), email, name: nome, passwordHash: 'x' },
+      data: { id: UserId.create().value, email, name: nome, passwordHash: HASH_REAL },
     });
   }
 
@@ -271,10 +272,10 @@ describe('Perfil por empresa na membership (Fase 4 — D4)', () => {
   async function criarUser(email: string, deletado = false) {
     return ctx.prisma.user.create({
       data: {
-        id: randomUUID(),
+        id: UserId.create().value,
         email,
         name: 'Alguém',
-        passwordHash: 'x',
+        passwordHash: HASH_REAL,
         ...(deletado ? { deletedAt: new Date() } : {}),
       },
     });
@@ -497,10 +498,10 @@ describe('O rename do papel e o backfill (2026-10-22)', () => {
     await cleanDatabase(ctx.prisma);
     const user = await ctx.prisma.user.create({
       data: {
-        id: randomUUID(),
+        id: UserId.create().value,
         email: 'legado@acme.dev',
         name: 'Dona',
-        passwordHash: 'x',
+        passwordHash: HASH_REAL,
       },
     });
     const acme = await ctx.prisma.tenant.create({ data: { name: 'Acme', slug: 'acme' } });
@@ -530,10 +531,10 @@ describe('O rename do papel e o backfill (2026-10-22)', () => {
     await cleanDatabase(ctx.prisma);
     const user = await ctx.prisma.user.create({
       data: {
-        id: randomUUID(),
+        id: UserId.create().value,
         email: 'convidade@acme.dev',
         name: 'Convidado',
-        passwordHash: 'x',
+        passwordHash: HASH_REAL,
       },
     });
     const acme = await ctx.prisma.tenant.create({ data: { name: 'Acme', slug: 'acme' } });

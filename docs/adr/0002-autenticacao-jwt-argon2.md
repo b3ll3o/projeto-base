@@ -60,6 +60,37 @@ construído por uma função separada que nunca o inclui. Três garantias:
 - A senha **em claro** nunca entra no agregado, em log ou em template de
   mensagem — inclusive por interpolação `${valor}`.
 
+> ⚠️ **ATUALIZADO em 2026-11-16 — o FORMATO do hash passou a ter dois pontos
+> de enforcement, e o que mudou foi o modo de falha.**
+>
+> Antes, o formato do hash era validado em UM lugar só: o value object, e
+> apenas na **leitura**. MEDIDO em 2026-11-16 no banco local: nove linhas de
+> `users` tinham `password_hash = 'x'` — gravadas por fora da aplicação, porque
+> a coluna era TEXT sem nenhuma restrição. Uma delas bastava para derrubar a
+> listagem de usuários INTEIRA (500 `UserPersistenceException`), e o login das
+> contas afetadas respondia **500** em vez de 401 — um 500 que, sozinho, já é
+> um oráculo de existência de conta (é o que o §3 existe para fechar).
+>
+> Hoje a regra tem dois donos: o VO (na leitura) e a CHECK constraint
+> `users_password_hash_argon2id` (na escrita, em
+> `apps/api/prisma/migrations/20261116000002_password_hash_constraint/`). A
+> **consequência** é que a corrupção passou a ser recusada no momento da
+> escrita, com o erro do Postgres, em vez de ser descoberta na leitura por
+> quem estava usando o sistema. O banco é **mais estrito** que o VO (ele exige
+> exatamente `m`, `t` e `p`; o VO aceita parâmetros extras com valor numérico)
+> — e a direção é a segura: o banco recusa ANTES de a aplicação ler. O
+> instrumento que amarra as duas regras é
+> `apps/api/src/modules/users/infrastructure/persistence/invariantes-da-conta-no-banco.integration.spec.ts`.
+>
+> O **§3 não mudou**: a senha errada responde 401, com a mesma mensagem do
+> e-mail inexistente. O que mudou é o que a **CORRUPÇÃO** responde. Antes,
+> um registro corrompido respondia **500** — o `UserPersistenceException` é
+> levantado na hidratação, ANTES do `argon2.verify` — e 500 vs 401 é
+> exatamente o oráculo que este §3 existe para fechar. Hoje a corrupção é
+> impedida de existir pela constraint, e o que já estava gravado foi reparado
+> (as migrations `20261116000001` e `20261116000004`): o login dessas contas
+> responde 401, a resposta genérica.
+
 ### 3. Falha de login é genérica
 
 `POST /auth/login` devolve `401` com **a mesma** mensagem para e-mail inexistente
