@@ -19,6 +19,7 @@ import { CabecalhoSecao } from './cabecalho-secao';
 import { Campo } from './campo';
 import { Container } from './container';
 import { EstadoVazio } from './estado-vazio';
+import { LinkTexto } from './link-texto';
 import { CabecalhoTabela, CelulaTabela, Tabela } from './tabela';
 
 // pt-BR: o `cleanup` é explícito porque o `vitest.setup.ts` só carrega os
@@ -77,6 +78,20 @@ describe('Botao', () => {
     render(<Botao>Salvar</Botao>);
 
     expect(screen.getByRole('button', { name: 'Salvar' })).toBeInTheDocument();
+    // ⚠️ A TAG, e não só a role: um `<div role="button">` passaria na
+    // asserção da role (MEDIDO 2026-11-16, revisão do PR #168). O que
+    // diferencia o botão de verdade é ser `<button>` — e `<button>` tem
+    // `type`, o que a §4 do HTML usa para decidir se ele submete o form.
+    expect(screen.getByRole('button', { name: 'Salvar' }).tagName).toBe('BUTTON');
+  });
+
+  it('sem `type` explícito, o `<button>` é `type="button"` (não submete o form)', () => {
+    render(<Botao>Cancelar</Botao>);
+
+    // ⚠️ No HTML, `<button>` sem `type` dentro de um `<form>` é `submit` — e
+    // um "Cancelar" disparava a mutação. O default é `button`, e quem quer
+    // submeter escreve `type="submit"` (MEDIDO 2026-11-16).
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveAttribute('type', 'button');
   });
 
   it('com `href` é um link', () => {
@@ -147,7 +162,151 @@ describe('tabela', () => {
       </Tabela>,
     );
 
-    expect(screen.getByRole('table', { name: 'Perfis cadastrados' })).toBeInTheDocument();
+    // ⚠️ O `<caption>` E a classe `sr-only` — e não só o nome acessível: um
+    // `<div aria-label>` também daria nome à tabela, e o rótulo tem que ser
+    // o `<caption>` (MEDIDO 2026-11-16, revisão do PR #168).
+    const legenda = screen
+      .getByRole('table', { name: 'Perfis cadastrados' })
+      .querySelector('caption');
+    expect(legenda).not.toBeNull();
+    expect(legenda).toHaveTextContent('Perfis cadastrados');
+    expect(legenda?.className).toContain('sr-only');
+  });
+});
+
+describe('LinkTexto', () => {
+  it('é um link com nome acessível, anel de foco e alvo mínimo', () => {
+    render(<LinkTexto href="/login">Criar conta</LinkTexto>);
+
+    const link = screen.getByRole('link', { name: 'Criar conta' });
+    expect(link).toHaveAttribute('href', '/login');
+    // O foco é o utilitário `foco` do padrão — sem ele, a tela tem dois
+    // sistemas de foco (o anel do browser e o anel do padrão).
+    expect(link.className).toContain('foco');
+    // `min-h-6` é o alvo mínimo de 24px da WCAG 2.5.8 (MEDIDO 2026-11-16).
+    expect(link.className).toContain('min-h-6');
+  });
+
+  it('o `className` do caller é ADICIONAL', () => {
+    render(
+      <LinkTexto href="/login" className="mt-8">
+        Criar conta
+      </LinkTexto>,
+    );
+
+    const link = screen.getByRole('link', { name: 'Criar conta' });
+    expect(link.className).toContain('mt-8');
+    expect(link.className).toContain('text-muted-foreground');
+  });
+});
+
+/**
+ * O `className` do caller é ADICIONAL em TODA primitiva que o aceita.
+ *
+ * ⚠️ MEDIDO 2026-11-16 (revisão do PR #168): a fiação só tinha teste em 1 das
+ * 6 primitivas que aceitam `className` — e os ramos de `alerta.tsx`,
+ * `tabela.tsx` (3×) e `link-texto.tsx` seguiam DESCOBERTOS. A regressão que
+ * o PR corrigiu (o `className` como substitutor) voltaria sem aviso.
+ */
+describe('o className do caller entra em TODA primitiva que o aceita', () => {
+  const casos: {
+    nome: string;
+    render: () => HTMLElement;
+    donoDaClasse: string;
+    classeDoCaller: string;
+  }[] = [
+    {
+      nome: 'Alerta',
+      render: () => {
+        render(
+          <Alerta variante="erro" className="mt-4">
+            Falhou.
+          </Alerta>,
+        );
+        return screen.getByRole('alert');
+      },
+      donoDaClasse: 'text-destructive',
+      classeDoCaller: 'mt-4',
+    },
+    {
+      nome: 'CabecalhoSecao',
+      render: () => {
+        render(<CabecalhoSecao className="mt-8">Metadados</CabecalhoSecao>);
+        return screen.getByRole('heading', { level: 2 });
+      },
+      donoDaClasse: 'text-lg',
+      classeDoCaller: 'mt-8',
+    },
+    {
+      nome: 'LinkTexto',
+      render: () => {
+        render(
+          <LinkTexto href="/login" className="mt-6">
+            Criar conta
+          </LinkTexto>,
+        );
+        return screen.getByRole('link', { name: 'Criar conta' });
+      },
+      donoDaClasse: 'text-muted-foreground',
+      classeDoCaller: 'mt-6',
+    },
+    {
+      nome: 'Tabela',
+      render: () => {
+        render(
+          <Tabela legenda="Pessoas" className="mt-2">
+            <tbody>
+              <tr>
+                <CelulaTabela>Ana</CelulaTabela>
+              </tr>
+            </tbody>
+          </Tabela>,
+        );
+        return screen.getByRole('table');
+      },
+      donoDaClasse: 'border-collapse',
+      classeDoCaller: 'mt-2',
+    },
+    {
+      nome: 'CabecalhoTabela',
+      render: () => {
+        render(
+          <Tabela legenda="Pessoas">
+            <thead>
+              <tr>
+                <CabecalhoTabela className="w-10">Nome</CabecalhoTabela>
+              </tr>
+            </thead>
+          </Tabela>,
+        );
+        return screen.getByRole('columnheader', { name: 'Nome' });
+      },
+      donoDaClasse: 'font-medium',
+      classeDoCaller: 'w-10',
+    },
+    {
+      nome: 'CelulaTabela',
+      render: () => {
+        render(
+          <Tabela legenda="Pessoas">
+            <tbody>
+              <tr>
+                <CelulaTabela className="w-24">Ana</CelulaTabela>
+              </tr>
+            </tbody>
+          </Tabela>,
+        );
+        return screen.getByRole('cell', { name: 'Ana' });
+      },
+      donoDaClasse: 'break-words',
+      classeDoCaller: 'w-24',
+    },
+  ];
+
+  it.each(casos)('$nome: a classe do DONO continua E a do caller ENTRA (não substitui)', (caso) => {
+    const elemento = caso.render();
+    expect(elemento.className).toContain(caso.donoDaClasse);
+    expect(elemento.className).toContain(caso.classeDoCaller);
   });
 });
 

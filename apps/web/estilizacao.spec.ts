@@ -10,21 +10,32 @@
 // Este spec tem DUAS metades, e as duas importam:
 //
 // 1. **Sintética** — o que a regra aceita e o que ela recusa, caso a caso.
-// 2. **Diferencial contra o repo real** — a regra aplicada aos arquivos de
-//    produção do app, com a config de produção do app. É a metade que prova
-//    que a regra está LIGADA de verdade: uma regra que ninguém rodou é
-//    indistinguishable de uma regra que não existe.
+// 2. **Diferencial contra o repo real** — a regra aplicada ao app INTEIRO,
+//    com a config de produção do app.
 //
 // ⚠️ A sintética usa o parser padrão do ESLint com `jsx: true` — o texto
-//lintado é JS com JSX, não TSX, e por isso não precisa do parser do
+// lintado é JS com JSX, não TSX, e por isso não precisa do parser do
 // TypeScript. A diferencial usa a config REAL do app (que tem o parser TS).
+//
+// ⚠️ **O que cada metade PROVA** (achado da revisão do PR #168): a
+// diferencial prova que o app não tem violação — e NÃO prova que a regra está
+// LIGADA (com a regra desregistrada, ela continua verde: o resto da config
+// segue rodando). A prova de que a regra está LIGADA é do teste IRMÃO, o que
+// planta a violação na config real e exige a mensagem dela.
 
 import { ESLint, type Linter } from 'eslint';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import regra from '@projeto/eslint-config/rules/no-estilizacao-informal.js';
 
-/** A RAIZ do app (`apps/web`). */
-const RAIZ_APP = new URL('.', import.meta.url).pathname;
+/**
+ * A RAIZ do app (`apps/web`).
+ *
+ * ⚠️ `fileURLToPath`, e não `new URL('.', import.meta.url).pathname`: o
+ * `.pathname` é percent-encoded e quebra em `C:\` (a casa usa `fileURLToPath`
+ * em `lib/cadastro-usuario-schema.parity.spec.ts`).
+ */
+const RAIZ_APP = fileURLToPath(new URL('.', import.meta.url));
 
 /**
  * Config mínima: a regra sozinha, com JSX habilitado no parser padrão.
@@ -212,6 +223,66 @@ describe('regra de estilo — o que ela recusa', () => {
       ),
     ).toEqual(['cor-paleta']);
   });
+
+  // ⚠️ MEDIDO 2026-11-16 (revisão do PR #168): a regra lia a constante pelo
+  // NOME (`CLASSE_*`/`CLASSES_*`) — e 4 das 9 primitivas guardam a classe em
+  // `const base`, que não casa. A regra era cega em 6 dos 11 componentes que
+  // ela deveria medir. Agora ela resolve o VALOR da constante.
+  it('recusa a violação na constante cujo NOME não declara classe (o VALOR, não o nome)', async () => {
+    expect(
+      await mensagensDe(
+        "const base = 'text-slate-900';\nconst X = ({ className }) => (<p className={className ? `${base} ${className}` : base}>oi</p>);",
+      ),
+    ).toEqual(['cor-paleta']);
+  });
+
+  // ⚠️ O furo acima REABRIA em silêncio com um rename: `CLASSE_CONTROLE` →
+  // `ESTILO_CONTROLE` deixava a regra cega, e nenhum teste acusava. Com a
+  // resolução por VALOR, o nome deixa de ser o contrato.
+  it('recusa a violação depois de um RENAME da constante', async () => {
+    expect(
+      await mensagensDe(
+        "const ESTILO_CONTROLE = 'text-slate-900';\nconst X = () => <p className={ESTILO_CONTROLE} />;",
+      ),
+    ).toEqual(['cor-paleta']);
+  });
+
+  // ⚠️ MEDIDO 2026-11-16: a escala de sombra do Tailwind 4 tem `xs` e `2xs`
+  // além das do Tailwind 3 — e a menor delas PASSAVA.
+  it('recusa as sombras que o Tailwind 4 adicionou (xs, 2xs)', async () => {
+    expect(await mensagensDe('const X = () => <p className="shadow-xs" />;')).toEqual(['sombra']);
+    expect(await mensagensDe('const X = () => <p className="shadow-2xs" />;')).toEqual(['sombra']);
+    expect(await mensagensDe('const X = () => <p className="inset-shadow-xs" />;')).toEqual([
+      'sombra',
+    ]);
+    expect(await mensagensDe('const X = () => <p className="drop-shadow-xs" />;')).toEqual([
+      'sombra',
+    ]);
+  });
+
+  // ⚠️ MEDIDO 2026-11-16 (revisão do PR #168): o anel de foco SOBIA em 150ms
+  // porque `transition-colors` transiciona `outline-color` também. O padrão
+  // proíbe a combinação — e nada no repo a proibia.
+  it('recusa a transição de cor junto do anel de foco', async () => {
+    expect(await mensagensDe('const X = () => <p className="foco transition-colors" />;')).toEqual([
+      'foco-transicao',
+    ]);
+  });
+
+  // ⚠️ A §4.3 do padrão proíbe `outline-none` SEM substituto — e a regra
+  // pode medir: o substituto (`foco`) está na MESMA class string.
+  it('recusa o `outline-none` sem substituto', async () => {
+    expect(await mensagensDe('const X = () => <p className="outline-none" />;')).toEqual([
+      'outline-none-sem-substituto',
+    ]);
+    expect(await mensagensDe('const X = () => <p className="focus:outline-none" />;')).toEqual([
+      'outline-none-sem-substituto',
+    ]);
+  });
+
+  it('aceita o `outline-none` COM o substituto (`foco`)', async () => {
+    expect(await mensagensDe('const X = () => <p className="foco outline-none" />;')).toEqual([]);
+  });
 });
 
 describe('regra de estilo — o que ela aceita', () => {
@@ -249,18 +320,73 @@ describe('regra de estilo — o que ela aceita', () => {
   it('aceita o token com opacidade (o alert usa `bg-destructive/10`)', async () => {
     expect(await mensagensDe('const X = () => <p className="bg-destructive/10" />;')).toEqual([]);
   });
+
+  // ⚠️ MEDIDO 2026-11-16: só `shadow-none` tinha a isenção — e as outras
+  // DUAS famílias do Tailwind 4 têm a sua ("sem sombra"). Um app derivado que
+  // escreve a classe semanticamente CORRETA levava falso positivo.
+  it('aceita as sombras "sem sombra" das três famílias', async () => {
+    expect(await mensagensDe('const X = () => <p className="shadow-none" />;')).toEqual([]);
+    expect(await mensagensDe('const X = () => <p className="inset-shadow-none" />;')).toEqual([]);
+    expect(await mensagensDe('const X = () => <p className="drop-shadow-none" />;')).toEqual([]);
+  });
+
+  it('aceita `rounded-none` (a escolha de NÃO arredondar, como o `shadow-none`)', async () => {
+    expect(await mensagensDe('const X = () => <p className="rounded-none" />;')).toEqual([]);
+  });
 });
 
 describe('regra de estilo — o repo real', () => {
   /**
    * ⚠️ O timeout é EXPLICITO, e o motivo é medido: este teste roda o ESLint
-   * de verdade sobre o app inteiro (com o parser do TypeScript). Na máquina
-   * do CI ele leva ~7s (MEDIDO 2026-11-16 no run 43887524859: 8798ms e
-   * 6684ms), e o default do Vitest é 5000ms — o default mediria "a regra
-   * demora" como FALHA do teste, que é o motivo errado.
+   * de verdade sobre o app INTEIRO (com o parser do TypeScript). Local ele
+   * leva ~1,2 s; no CI o mesmo passo levou 8,8 s — e o default do Vitest é
+   * 5 s, ou seja, MENOR que o CI (o run 43887524859 foi VERMELHO por
+   * estourar o default, não por defeito da regra). O default mediria "a
+   * regra demora" como FALHA do teste, que é o motivo errado.
    */
-  const TIMEOUT_DIFERENCIAL = 60_000;
+  const TIMEOUT_DIFERENCIAL = 30_000;
 
+  /**
+   * A regra está LIGADA na config do app — e com severidade de ERRO.
+   *
+   * ⚠️ A severidade é afirmada aqui porque o resto da suíte filtra por
+   * `ruleId` e IGNORA a severidade: com a regra em `warn`, `eslint .` sai
+   * com exit 0 e o gate perde o dente sem nada avisar (MEDIDO 2026-11-16).
+   * `severity === 2` é `error`.
+   */
+  it(
+    'a regra está LIGADA na config do app, com severidade de erro',
+    async () => {
+      const eslint = new ESLint({
+        cwd: RAIZ_APP,
+        overrideConfigFile: `${RAIZ_APP}eslint.config.mjs`,
+      });
+      const [resultado] = await eslint.lintText(
+        'const X = () => <p className="text-slate-900">oi</p>;',
+        { filePath: `${RAIZ_APP}plantado.tsx` },
+      );
+      if (resultado === undefined) throw new Error('o ESLint não devolveu resultado');
+      const daRegra = resultado.messages.filter(
+        (m) => m.ruleId === 'estilizacao/no-estilizacao-informal',
+      );
+
+      expect(daRegra).toHaveLength(1);
+      expect(daRegra[0]?.severity).toBe(2);
+    },
+    TIMEOUT_DIFERENCIAL,
+  );
+
+  /**
+   * O app INTEIRO não tem nenhuma violação.
+   *
+   * ⚠️ `lintFiles(['.'])` — o mesmo alcance do `pnpm lint` do app, que é
+   * `eslint .`. O alcance anterior (`['app', 'components']`) cobria 57 dos
+   * 134 arquivos que o gate lint, e uma violação plantada em `src/` ou `lib/`
+   * passava (MEDIDO 2026-11-16).
+   *
+   * ⚠️ `resultados.length > 0` é a afirmação de que o gate MEDIU algo: sem
+   * ela, um lint que não varre nada passa por "nenhuma violação".
+   */
   it(
     'não há nenhuma violação nos arquivos de produção do app',
     async () => {
@@ -269,32 +395,16 @@ describe('regra de estilo — o repo real', () => {
         cwd: RAIZ_APP,
         overrideConfigFile: `${RAIZ_APP}eslint.config.mjs`,
       });
-      const resultados = await eslint.lintFiles(['app', 'components']);
+      const resultados = await eslint.lintFiles(['.']);
       const violacoes = resultados.flatMap((r) =>
         r.messages
           .filter((m) => m.ruleId === 'estilizacao/no-estilizacao-informal')
           .map((m) => `${r.filePath}: ${m.message}`),
       );
 
+      expect(resultados.length).toBeGreaterThan(0);
       expect(violacoes).toEqual([]);
     },
     TIMEOUT_DIFERENCIAL,
   );
-
-  it('a regra acusa uma violação plantada no app (o dente do gate)', async () => {
-    const eslint = new ESLint({
-      cwd: RAIZ_APP,
-      overrideConfigFile: `${RAIZ_APP}eslint.config.mjs`,
-    });
-    const [resultado] = await eslint.lintText(
-      'const X = () => <p className="text-slate-900">oi</p>;',
-      { filePath: `${RAIZ_APP}plantado.tsx` },
-    );
-    if (resultado === undefined) throw new Error('o ESLint não devolveu resultado');
-    const daRegra = resultado.messages.filter(
-      (m) => m.ruleId === 'estilizacao/no-estilizacao-informal',
-    );
-
-    expect(daRegra).toHaveLength(1);
-  });
 });

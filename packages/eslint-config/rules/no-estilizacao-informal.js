@@ -6,7 +6,7 @@
  * do Tailwind 4). Esta regra é o instrumento dele: ela mede o que a convenção
  * proíbe, para que a convenção não seja só prosa.
  *
- * ## O que ela mede (3 proibições, 1 por eixo do padrão)
+ * ## O que ela mede (4 proibições, 1 por eixo do padrão)
  *
  * 1. **Cor** — nenhuma classe da paleta stock do Tailwind (`text-slate-900`,
  *    `bg-red-50`, `border-slate-300`) e nenhum valor literal (`bg-[#fff]`).
@@ -16,6 +16,14 @@
  * 3. **Sombra** — nenhuma sombra em repouso. Sombra é para o que flutua de
  *    verdade (menu, dialog); separar superfícies é passo de tom
  *    (`ui-craft` §5, "sem sombra em repouso").
+ * 4. **Anel de foco que transita** — `foco` (o utilitário de foco do padrão)
+ *    junto de `transition-colors`: a transição padrão do Tailwind inclui
+ *    `outline-color`, e o anel passava a SURGIR em 150ms (MEDIDO 2026-11-16
+ *    no browser). Onde há anel, a transição é da propriedade que PRECISA
+ *    transicionar.
+ * 5. **`outline-none` sem substituto** — apagar o anel do browser sem
+ *    devolvê-lo é foco inconsistente: a regra exige que o `foco` (o
+ *    utilitário do padrão) esteja na MESMA class string.
  *
  * ## O que ela NÃO mede (e por quê)
  *
@@ -120,8 +128,12 @@ const RE_LITERAL = new RegExp(
  * `shadow-sm`, `shadow-lg`… e as famílias irmãs `drop-shadow-*` e
  * `inset-shadow-*` (MEDIDO 2026-11-16: as duas PASSAVAM, e a convenção
  * §2.3 diz que o sistema não tem sombra nenhuma).
+ *
+ * ⚠️ `xs` e `2xs` estão aqui porque o Tailwind 4 os tem (MEDIDO 2026-11-16:
+ * a regra, escrita contra a escala do Tailwind 3, deixava `shadow-xs` e
+ * `shadow-2xs` PASSAREM — e `shadow-xs` é a MENOR sombra do Tailwind 4).
  */
-const RE_SOMBRA = /^(shadow|drop-shadow|inset-shadow)(-(sm|md|lg|xl|2xl|inner|none))?$/;
+const RE_SOMBRA = /^(shadow|drop-shadow|inset-shadow)(-(2xs|xs|sm|md|lg|xl|2xl|inner|none))?$/;
 
 /** `shadow-[0_1px_2px_rgb(0_0_0/0.05)]` — sombra literal. */
 const RE_SOMBRA_LITERAL = /^(shadow|drop-shadow|inset-shadow)-\[/;
@@ -130,9 +142,35 @@ const RE_SOMBRA_LITERAL = /^(shadow|drop-shadow|inset-shadow)-\[/;
  * O raio do padrão, e SÓ ele — mas nos seus lados.
  *
  * `rounded-t-md` usa o MESMO raio (md) em um lado só, e recusá-lo seria
- * recursar o padrão (MEDIDO 2026-11-16: `rounded-t-md` era reprovado).
+ * recusar o padrão (MEDIDO 2026-11-16: `rounded-t-md` era reprovado).
  */
 const RE_RAIO = /^rounded(-(t|b|l|r|tl|tr|bl|br|s|e|ss|se|ee|es))?-md$/;
+
+/**
+ * `rounded-none` — a escolha de NÃO arredondar.
+ *
+ * ⚠️ É a mesma semântica do `shadow-none`: a classe que DIZ "sem". Negar
+ * `rounded-none` é negar a forma de escrever "isto aqui é reto", que é uma
+ * escolha legítima de família — e o padrão proíbe o raio FORA de `rounded-md`,
+ * não a ausência de raio (MEDIDO 2026-11-16).
+ */
+const SEM_RAIO = 'rounded-none';
+
+/**
+ * O utilitário de FOCO do padrão — o único foco do sistema.
+ *
+ * O nome é o do utilitário `@utility foco` de `apps/web/app/globals.css`.
+ */
+const UTILITARIO_DE_FOCO = 'foco';
+
+/**
+ * A transição que transiciona o anel de foco junto.
+ *
+ * `transition-colors` transiciona `color`, `background-color`, `border-color`
+ * E `outline-color` — e o anel do padrão é `outline`. O anel passava a
+ * SURGIR em 150ms (MEDIDO 2026-11-16 no browser).
+ */
+const TRANSICAO_DE_COR = 'transition-colors';
 
 /**
  * Separa uma class string em classes.
@@ -190,55 +228,6 @@ function semVariante(classe) {
   return resultado;
 }
 
-/**
- * Coleta TODAS as strings de classe de uma expressão.
- *
- * ⚠️ Só o literal e o template literal eram lidos (MEDIDO 2026-11-16): o
- * ternário (`cond ? 'text-slate-900' : 'bg-surface'`) e a chamada de helper
- * (`cn('text-slate-900')`) PASSAVAM sem leitura — e o app derivado, que é o
- * consumidor do padrão, vai usar as duas formas.
- */
-function stringsDeClasse(no, coletar) {
-  if (no === null || typeof no !== 'object') return;
-  switch (no.type) {
-    case 'Literal':
-      if (typeof no.value === 'string') coletar(no.value);
-      return;
-    case 'TemplateLiteral':
-      for (const quasi of no.quasis) coletar(quasi.value.cooked ?? '');
-      return;
-    case 'ConditionalExpression':
-      stringsDeClasse(no.consequent, coletar);
-      stringsDeClasse(no.alternate, coletar);
-      return;
-    case 'LogicalExpression':
-      stringsDeClasse(no.left, coletar);
-      stringsDeClasse(no.right, coletar);
-      return;
-    case 'CallExpression':
-      for (const argumento of no.arguments) stringsDeClasse(argumento, coletar);
-      return;
-    case 'ArrayExpression':
-      for (const elemento of no.elements) stringsDeClasse(elemento, coletar);
-      return;
-    default:
-  }
-}
-
-/**
- * Nomes que DECLARAM "isto aqui é uma lista de classes".
- *
- * ⚠️ MEDIDO 2026-11-16 (revisão Next.js): a regra só olhava o `className`
- * literal, e as 8 primitivas guardam as classes em CONSTANTES
- * (`CLASSES_BOTAO.base`, `CLASSE_CONTROLE`, `CLASSE_CHECKBOX`) — ou seja, a
- * regra era cega exatamente ONDE O PADRÃO MORA. Um `text-slate-900` de volta
- * na `CLASSES_BOTAO` passava o gate.
- *
- * A regra do NOME é o contrato: quem guarda classe em constante dá o nome
- * que diz que é classe (`CLASSE_*`, `CLASSES_*`), e a regra lê esse lugar.
- */
-const RE_NOME_DE_CLASSE = /(^|_)(CLASSES?|CLASS_NAMES?)(_|$)/i;
-
 /** Tira o embrulho de tipo (`as const`, `satisfies`, parênteses). */
 function desembrulha(no) {
   if (no === null || typeof no !== 'object') return no;
@@ -255,25 +244,166 @@ function desembrulha(no) {
 }
 
 /**
- * Coleta as strings de classe de um valor inicial de constante.
+ * Nomes que DECLARAM "isto aqui é uma lista de classes".
  *
- * Aceita a string direta e o OBJETO de classes (`CLASSES_BOTAO = { base,
- * primario, secundario }`) — que é a forma que o repo usa.
+ * ⚠️ O nome é um INDÍCIO, não o contrato: a regra resolve o VALOR da
+ * constante (ver `resolverValor`), e por isso enxerga também as que se
+ * chamam `base`. O nome continua sendo a convenção do repo — quem guarda
+ * classe em constante dá o nome que diz que é classe (`CLASSE_*`,
+ * `CLASSES_*`) — e o padrão casa para LER o valor de uma constante que está
+ * NO MESMO ARQUIVO, que é o caso em que a resolução por escopo funciona.
+ *
+ * A leitura pelo nome continua valendo para a constante IMPORTADA de outro
+ * arquivo (é o caso do `CLASSES_BOTAO_SECUNDARIO`, importado pelo
+ * `guard-admin.tsx`): a referência não é resolvível dentro do arquivo, e o
+ * nome é a única pista.
  */
-function stringsDeValor(no, coletar) {
-  const nu = desembrulha(no);
-  if (nu === null || typeof nu !== 'object') return;
-  if (nu.type === 'ObjectExpression') {
-    for (const propriedade of nu.properties) {
-      if (propriedade.type === 'Property') stringsDeValor(propriedade.value, coletar);
+const RE_NOME_DE_CLASSE = /(^|_)(CLASSES?|CLASS_NAMES?)(_|$)/i;
+
+/**
+ * O `init` da declaração que vale para um identificador — ou `null`.
+ *
+ * ⚠️ A resolução é pelo ESCOPO, e não pelo nome: o escopo sabe qual
+ * declaração vale (uma variável local sombreia a de módulo), e é ele que
+ * entrega o `init`.
+ *
+ * ⚠️ Só a declaração de VARIÁVEL entra. Um `import` é uma `def` de outro
+ * tipo — e a constante importada de outro arquivo não é resolvível aqui (a
+ * leitura dela é pelo nome, em `RE_NOME_DE_CLASSE`).
+ */
+function initDoIdentificador(no, context) {
+  let escopo = context.sourceCode.getScope(no);
+  while (escopo !== null && escopo !== undefined) {
+    const variavel = escopo.set.get(no.name);
+    if (variavel !== undefined) {
+      for (const def of variavel.defs) {
+        if (def.type === 'Variable' && def.node && def.node.init) return def.node.init;
+      }
     }
-    return;
+    escopo = escopo.upper;
   }
-  if (nu.type === 'ArrayExpression') {
-    for (const elemento of nu.elements) stringsDeValor(elemento, coletar);
-    return;
+  return null;
+}
+
+/**
+ * Resolve um identificador (ou membro) até o NÓ que guarda o VALOR.
+ *
+ * ⚠️ MEDIDO 2026-11-16 (revisão do PR #168): a regra lia a constante de
+ * classe pelo NOME (`CLASSE_*`/`CLASSES_*`), e 4 das 9 primitivas guardam a
+ * classe em `const base` — que não casa. A regra era CEGA em 6 dos 11
+ * componentes que ela deveria medir, e a §7 da convenção afirmava o
+ * contrário.
+ *
+ * Resolvendo pelo VALOR, o NOME deixa de ser o contrato: um rename
+ * (`CLASSE_CONTROLE` → `ESTILO_CONTROLE`) não abre mais o furo, porque o que
+ * a regra lê é a classe que a constante GUARDA.
+ */
+function resolverValor(no, context) {
+  const nu = desembrulha(no);
+  if (nu === null || typeof nu !== 'object') return null;
+  if (nu.type === 'Identifier') {
+    const init = initDoIdentificador(nu, context);
+    return init === null ? null : desembrulha(init);
   }
-  stringsDeClasse(nu, coletar);
+  if (nu.type === 'MemberExpression') {
+    const objeto = resolverValor(nu.object, context);
+    if (objeto === null || objeto.type !== 'ObjectExpression') return null;
+    // A chave dinâmica (`CLASSES[variante]`) não diz qual é — o objeto
+    // inteiro é lido, que é o comportamento seguro.
+    if (nu.computed) return objeto;
+    const chave = nu.property.type === 'Identifier' ? nu.property.name : String(nu.property.value);
+    for (const propriedade of objeto.properties) {
+      if (propriedade.type !== 'Property' || propriedade.computed) continue;
+      const nome =
+        propriedade.key.type === 'Identifier'
+          ? propriedade.key.name
+          : String(propriedade.key.value);
+      if (nome === chave) return desembrulha(propriedade.value);
+    }
+    return null;
+  }
+  return nu;
+}
+
+/**
+ * O leitor de classes: percorre uma expressão e coleta as strings de classe.
+ *
+ * O `context` é o que dá acesso ao ESCOPO — e é por ele que um identificador
+ * vira o valor que ele guarda.
+ */
+function criarLeitor(context) {
+  /** Os nós já lidos — o ciclo (`const a = b; const b = a;`) é real. */
+  const vistos = new Set();
+
+  /**
+   * Coleta TODAS as strings de classe de uma expressão.
+   *
+   * ⚠️ Só o literal e o template literal eram lidos (MEDIDO 2026-11-16): o
+   * ternário (`cond ? 'text-slate-900' : 'bg-surface'`) e a chamada de helper
+   * (`cn('text-slate-900')`) PASSAVAM sem leitura — e o app derivado, que é o
+   * consumidor do padrão, vai usar as duas formas.
+   *
+   * ⚠️ As EXPRESSÕES do template literal entram na leitura (MEDIDO
+   * 2026-11-16): é em `${base}` que a primitiva guarda a classe, e sem esta
+   * leitura a regra era cega nas 4 primitivas que usam `const base`.
+   */
+  function stringsDeClasse(no, coletar) {
+    if (no === null || typeof no !== 'object') return;
+    if (vistos.has(no)) return;
+    vistos.add(no);
+    switch (no.type) {
+      case 'Literal':
+        if (typeof no.value === 'string') coletar(no.value);
+        return;
+      case 'TemplateLiteral':
+        for (const quasi of no.quasis) coletar(quasi.value.cooked ?? '');
+        for (const expressao of no.expressions) stringsDeClasse(expressao, coletar);
+        return;
+      case 'ConditionalExpression':
+        stringsDeClasse(no.consequent, coletar);
+        stringsDeClasse(no.alternate, coletar);
+        return;
+      case 'LogicalExpression':
+        stringsDeClasse(no.left, coletar);
+        stringsDeClasse(no.right, coletar);
+        return;
+      case 'CallExpression':
+        for (const argumento of no.arguments) stringsDeClasse(argumento, coletar);
+        return;
+      case 'ArrayExpression':
+        for (const elemento of no.elements) stringsDeClasse(elemento, coletar);
+        return;
+      case 'Identifier':
+        stringsDeValor(resolverValor(no, context), coletar);
+        return;
+      case 'MemberExpression':
+        stringsDeValor(resolverValor(no, context), coletar);
+        return;
+      default:
+    }
+  }
+
+  /**
+   * Coleta as strings de classe de um VALOR — a string direta, o OBJETO de
+   * classes (`CLASSES_BOTAO = { base, primario, secundario }`) ou o ARRAY.
+   */
+  function stringsDeValor(no, coletar) {
+    const nu = desembrulha(no);
+    if (nu === null || typeof nu !== 'object') return;
+    if (nu.type === 'ObjectExpression') {
+      for (const propriedade of nu.properties) {
+        if (propriedade.type === 'Property') stringsDeValor(propriedade.value, coletar);
+      }
+      return;
+    }
+    if (nu.type === 'ArrayExpression') {
+      for (const elemento of nu.elements) stringsDeValor(elemento, coletar);
+      return;
+    }
+    stringsDeClasse(nu, coletar);
+  }
+
+  return { stringsDeClasse, stringsDeValor };
 }
 
 export default {
@@ -292,35 +422,77 @@ export default {
       raio: 'Raio fora do padrão ("{{classe}}"). O padrão tem UM raio: {{raio}}.',
       sombra:
         'Sombra em repouso ("{{classe}}"). No padrão, sombra é só para o que flutua; superfície separada por passo de tom.',
+      'foco-transicao':
+        'Anel de foco com transição de cor ("{{classe}}"). `transition-colors` transiciona `outline-color` também, e o anel passava a surgir em 150ms. Use a transição da propriedade que precisa transicionar.',
+      'outline-none-sem-substituto':
+        '`outline-none` sem substituto ("{{classe}}"). O foco do padrão é o utilitário `foco`: apagar o anel do browser sem devolvê-lo deixa a tela com dois sistemas de foco.',
     },
   },
   create(context) {
+    const { stringsDeClasse, stringsDeValor } = criarLeitor(context);
+
+    /**
+     * As violações já acusadas neste ARQUIVO.
+     *
+     * ⚠️ A regra lê a classe por DOIS caminhos (a constante pelo nome e o uso
+     * pelo valor resolvido) — e as duas vezes acusam a MESMA classe. Sem esta
+     * memória, cada violação apareceria DUAS vezes no relatório.
+     */
+    const acusadas = new Set();
+
     /** Acusa uma class string inteira (a posição reportada é o atributo). */
     function conferir(node, valor) {
       if (typeof valor !== 'string') return;
-      for (const classe of classesDe(valor)) {
+      const classes = classesDe(valor);
+
+      // O anel de foco que transita (MEDIDO 2026-11-16): a combinação é o
+      // defeito, e nenhuma classe sozinha é proibida.
+      const temFoco = classes.some((c) => semVariante(c) === UTILITARIO_DE_FOCO);
+      const temTransicao = classes.some((c) => semVariante(c) === TRANSICAO_DE_COR);
+      if (temFoco && temTransicao) {
+        acusar(node, 'foco-transicao', TRANSICAO_DE_COR);
+      }
+
+      // `outline-none` sem substituto: apagar o anel do browser sem
+      // devolvê-lo é a receita da §4.3 do padrão — e a regra pode MEDIR
+      // porque o substituto (`foco`) está na MESMA class string.
+      const temOutlineNone = classes.some((c) => semVariante(c) === 'outline-none');
+      if (temOutlineNone && !temFoco) {
+        acusar(node, 'outline-none-sem-substituto', 'outline-none');
+      }
+
+      for (const classe of classes) {
         if (RE_LITERAL.test(classe)) {
-          context.report({ node, messageId: 'cor-literal', data: { classe } });
+          acusar(node, 'cor-literal', classe);
           continue;
         }
         const base = semVariante(classe);
         if (RE_PALETA.test(base)) {
-          context.report({ node, messageId: 'cor-paleta', data: { classe } });
+          acusar(node, 'cor-paleta', classe);
           continue;
         }
-        if (RE_SOMBRA.test(base) && base !== 'shadow-none') {
-          context.report({ node, messageId: 'sombra', data: { classe } });
+        if (RE_SOMBRA.test(base) && !base.endsWith('-none')) {
+          acusar(node, 'sombra', classe);
           continue;
         }
         if (RE_SOMBRA_LITERAL.test(base)) {
-          context.report({ node, messageId: 'sombra', data: { classe } });
+          acusar(node, 'sombra', classe);
           continue;
         }
-        if (base.startsWith('rounded') && !RE_RAIO.test(base)) {
-          context.report({ node, messageId: 'raio', data: { classe, raio: 'rounded-md' } });
+        if (base.startsWith('rounded') && base !== SEM_RAIO && !RE_RAIO.test(base)) {
+          acusar(node, 'raio', classe);
           continue;
         }
       }
+    }
+
+    /** Acusa uma vez só: a mesma classe não é contada duas vezes. */
+    function acusar(node, messageId, classe) {
+      const chave = `${messageId}|${classe}`;
+      if (acusadas.has(chave)) return;
+      acusadas.add(chave);
+      const data = messageId === 'raio' ? { classe, raio: 'rounded-md' } : { classe };
+      context.report({ node, messageId, data });
     }
 
     return {
@@ -343,6 +515,12 @@ export default {
        *
        * ⚠️ É o alcance que faltava: as primitivas guardam as classes em
        * constantes, e a regra precisa medir ONDE O PADRÃO MORA.
+       *
+       * ⚠️ MEDIDO 2026-11-16 (revisão do PR #168): esta leitura era pelo
+       * NOME, e 4 das 9 primitivas guardam a classe em `const base` — que
+       * não casa. A regra era cega em 6 dos 11 componentes exportados. Agora
+       * o alcance é o VALOR (via `resolverValor`), e o nome é só o indício
+       * para a constante que vem de OUTRO arquivo.
        */
       VariableDeclarator(node) {
         const nome = node.id && node.id.type === 'Identifier' ? node.id.name : null;
