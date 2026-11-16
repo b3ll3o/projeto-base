@@ -25,6 +25,8 @@
 // `Record` explícito no lugar de `SearchParams`.
 
 import { LoginForm } from '@/components/login-form';
+import { CabecalhoPagina } from '@/components/ui/cabecalho-pagina';
+import { Container } from '@/components/ui/container';
 import { ehTokenDeConvite, PARAM_CONVITE } from '@/lib/convite-schema';
 import { entrar } from './actions';
 import {
@@ -69,14 +71,14 @@ export default async function LoginPage({ searchParams }: Props) {
     typeof brutoConvite === 'string' && ehTokenDeConvite(brutoConvite) ? brutoConvite : undefined;
 
   return (
-    <main className="mx-auto max-w-3xl p-8">
-      <h1 className="text-2xl font-semibold text-slate-900">Entrar</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        Use o e-mail e a senha da sua conta para acessar o sistema.
-      </p>
+    <Container>
+      <CabecalhoPagina
+        titulo="Entrar"
+        descricao="Use o e-mail e a senha da sua conta para acessar o sistema."
+      />
       <div className="mt-8">
         <LoginForm action={entrar} aviso={aviso} convite={convite} />
       </div>
-    </main>
+    </Container>
   );
 }

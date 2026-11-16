@@ -169,6 +169,7 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `gate-that-prescribes-the-wrong-remedy` | `pendente` | — | — |
 | `gate-without-cli-block-runs-as-noop` | `pendente` | — | — |
 | `gauge-measures-a-different-object` | `pendente` | — | — |
+| `getcomputedstyle-durante-transicao-devolve-o-inicio` | `pendente` | — | — |
 | `gh-api-F-vs-f-for-file-body` | `citada` | `.agents/workflows/pr-refresh.md` | `conteúdo como valor literal` |
 | `git-cherry-blind-to-squash-merge` | `removida` | absorvida por `git-workflow-apendice.md` §Caso 1; a metade que a memória manda seguir está **proibida por nome** lá | — |
 | `git-commit-amend-danger` | `pendente` | — | — |
@@ -212,6 +213,7 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `rebase-ages-the-commit-message-too` | `pendente` | — | — |
 | `rebase-skip-descarta-o-commit-inteiro` | `pendente` | — | — |
 | `red-gate-hides-the-queue` | `pendente` | — | — |
+| `regra-de-lint-que-so-le-literal-e-cega` | `pendente` | — | — |
 | `renomear-valor-gravado-e-o-furo-da-coluna` | `citada` | `.agents/specs/conventions/migracao-de-dados.md` | `Renome de VALOR gravado` |
 | `reserva-que-cria-nao-pode-ser-a-reserva-da-falha` | `citada` | `apps/web/app/login/actions.ts` | `o destino de exceção de uma LEITURA tem de ser um caminho que NÃO ESCREVE` |
 | `rota-protegida-sem-bearer-sai-publica-no-documento` | `citada` | `apps/api/src/modules/users/infrastructure/http/users.controller.ts` | `pública é a ÚNICA que não declara `security` — e `@ApiBearerAuth()` é o` |

@@ -9,6 +9,7 @@ revisões de qualidade e sincronização de documentação.
 | --- | --- | --- |
 | `stack-code-reviewer.ts` | `pnpm stack:review --files=<lista>` | pre-commit + CI `review-stack.yml` (D11) |
 | `doc-sync.ts` | `pnpm docs:sync --files=<lista>` | pre-commit + CI `sync-docs.yml` (D12) — **report-only**: nunca bloqueia |
+| `contraste-token.ts` | `pnpm estilo:contraste` | mede a razão de contraste dos tokens do padrão de estilização (a tabela da §2.2 da convenção `estilizacao.md`) |
 
 ## Como adicionar um novo script
 

@@ -13,7 +13,7 @@
     "rules"
   ],
   "scripts": {
-    "lint:self": "eslint index.js rules/",
+    "lint": "eslint .",
     "test": "echo \"no tests yet (will be added in Task 4.x)\" && exit 0"
   },
   "dependencies": {

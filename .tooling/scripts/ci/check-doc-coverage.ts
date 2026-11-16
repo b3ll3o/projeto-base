@@ -59,12 +59,39 @@ export const DOC_DE_ROTAS = 'docs/web/rotas.md';
 /** README canônico de um package do workspace. */
 export const README_DE_PACKAGE = (pkg: string): string => path.join('packages', pkg, 'README.md');
 
+/**
+ * A convenção do padrão de estilização — a dona das PRIMITIVAS e do bloco
+ * `@theme` (a §3 lista cada primitiva pelo path do arquivo).
+ */
+export const CONVENCAO_DE_ESTILO = '.agents/specs/conventions/estilizacao.md';
+
+/**
+ * O README do pacote de regras — o dono das REGRAS do ESLint do repo.
+ *
+ * ⚠️ O pacote de regras tem as regras DELE, e uma regra nova entra no repo
+ * sem ninguém saber o que ela mede. O README é o doc canônico dela.
+ */
+export const README_DE_REGRAS = 'packages/eslint-config/README.md';
+
 /** Raízes que o gate lê, relativas à raiz do repo. */
 export const RAIZES = {
   modulos: path.join('apps', 'api', 'src', 'modules'),
   rotas: path.join('apps', 'web', 'app'),
   packages: 'packages',
+  primitivas: path.join('apps', 'web', 'components', 'ui'),
 } as const;
+
+/**
+ * As unidades de ARQUIVO ÚNICO que a matriz cobra.
+ *
+ * ⚠️ São as duas que NÃO se enumeram do disco: o bloco `@theme` (o token) e
+ * a regra do ESLint (o instrumento). Cada uma tem UM doc canônico, e o gate
+ * pergunta se o doc CITA o path — a mesma pergunta que ele faz das rotas.
+ */
+export const UNIDADES_DE_ARQUIVO: readonly { unidade: string; doc: string }[] = [
+  { unidade: 'apps/web/app/globals.css', doc: CONVENCAO_DE_ESTILO },
+  { unidade: 'packages/eslint-config/rules/no-estilizacao-informal.js', doc: README_DE_REGRAS },
+];
 
 /** Subdiretórios que nunca são um BC (infraestrutura dentro de `modules/`). */
 const IGNORADOS_NA_MODULOS = new Set(['__tests__', 'shared']);
@@ -89,6 +116,15 @@ const ARQUIVOS_DE_ROTA = ['page.tsx', 'route.ts'];
  * (`ok=true, errors=0`).
  */
 const SEGMENTO_DE_SLOT = /^@/;
+
+/** O conteúdo de um arquivo, ou string vazia se ele não existe. */
+async function lerSeExiste(p: string): Promise<string> {
+  try {
+    return await fs.readFile(p, 'utf-8');
+  } catch {
+    return '';
+  }
+}
 
 async function existe(p: string): Promise<boolean> {
   try {
@@ -145,6 +181,28 @@ export async function listarRotas(repoRoot: string): Promise<string[]> {
 
   await andar(base);
   return achados.sort();
+}
+
+/**
+ * As PRIMITIVAS de interface: `apps/web/components/ui/*.tsx`.
+ *
+ * ⚠️ O spec (`*.spec.tsx`) NÃO é primitiva — é o teste dela. E o diretório
+ * inteiro é a FAMÍLIA: uma primitiva nova que não apareça na §3 da
+ * convenção é uma primitiva sem doc canônico, e é isso que este gate
+ * pergunta.
+ */
+export async function listarPrimitivas(repoRoot: string): Promise<string[]> {
+  const base = path.join(repoRoot, RAIZES.primitivas);
+  let entradas: import('node:fs').Dirent[];
+  try {
+    entradas = await fs.readdir(base, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entradas
+    .filter((e) => e.isFile() && e.name.endsWith('.tsx') && !e.name.endsWith('.spec.tsx'))
+    .map((e) => path.join(RAIZES.primitivas, e.name).split(path.sep).join('/'))
+    .sort();
 }
 
 /** Packages do workspace: `packages/<pkg>/`. */
@@ -239,12 +297,26 @@ export function coberturaFaltando(entradas: {
   modulos: string[];
   rotas: string[];
   packages: string[];
+  /** As primitivas de interface (`apps/web/components/ui/*.tsx`). */
+  primitivas: string[];
+  /**
+   * As unidades de ARQUIVO ÚNICO que EXISTEM em disco.
+   *
+   * ⚠️ Só as que existem: uma unidade que não está no disco não é uma
+   * unidade de código sem doc — é uma unidade que não existe. (O gate
+   * mede o repo real; num repo de teste, `globals.css` não existe.)
+   */
+  unidadesDeArquivo: readonly { unidade: string; doc: string }[];
   /** Docs de BC que EXISTEM em disco, como path relativo ao repo. */
   docsDeBc: Set<string>;
   docDeBc: (bc: string) => string;
   docDeRotas: string;
   docDeRotasExiste: boolean;
   catalogoDeRotas: string;
+  /** O CONTEÚDO da convenção do padrão de estilização. */
+  convencaoDeEstilo: string;
+  /** O CONTEÚDO do README do pacote de regras. */
+  readmeDeRegras: string;
   /** READMEs que EXISTEM em disco, como path relativo ao repo. */
   readmesDePackage: Set<string>;
   readmeDePackage: (pkg: string) => string;
@@ -306,6 +378,44 @@ export function coberturaFaltando(entradas: {
     }
   }
 
+  // As PRIMITIVAS: cada arquivo de `apps/web/components/ui/` tem que
+  // aparecer na §3 da convenção do padrão (pelo path do arquivo). É a
+  // pergunta que a matriz da §3 do `documentacao.md` promete.
+  for (const primitiva of entradas.primitivas) {
+    if (!entradas.convencaoDeEstilo.includes(primitiva)) {
+      if (excecoes.has(primitiva)) {
+        queValem.add(primitiva);
+        continue;
+      }
+      errors.push(
+        `documentação ausente: a primitiva '${primitiva}' não aparece em ` +
+          `'${CONVENCAO_DE_ESTILO}' — acrescente a linha na §3 (regra: convenção documentacao.md §3)`,
+      );
+    }
+  }
+
+  // As unidades de ARQUIVO ÚNICO (o bloco `@theme` e a regra do ESLint).
+  for (const { unidade, doc } of entradas.unidadesDeArquivo) {
+    const conteudo =
+      doc === README_DE_REGRAS ? entradas.readmeDeRegras : entradas.convencaoDeEstilo;
+    // O doc pode citar a unidade pelo caminho RELATIVO A ELE
+    // (`rules/x.js`, no README que fica no mesmo package) ou pelo caminho da
+    // repo (`packages/x/rules/x.js`). Os dois apontam para a mesma unidade, e
+    // obrigar um só deles seria cobrar uma forma de escrever, não a
+    // presença do doc.
+    const relativoAoDoc = path.relative(path.dirname(doc), unidade).split(path.sep).join('/');
+    if (!conteudo.includes(unidade) && !conteudo.includes(relativoAoDoc)) {
+      if (excecoes.has(unidade)) {
+        queValem.add(unidade);
+        continue;
+      }
+      errors.push(
+        `documentação ausente: '${unidade}' não aparece em '${doc}' ` +
+          `(regra: convenção documentacao.md §3)`,
+      );
+    }
+  }
+
   // O sentido INVERSO: uma exceção que não exclui nada é documentation lie.
   // Sem esta checagem, a tabela de exceções vira um arquivo de desculpas — e
   // a dívida que ela escondesse deixa de ser visível. Mesmo padrão de
@@ -338,10 +448,16 @@ export async function checkDocCoverage(opts: {
   const modulos = await listarModulos(root);
   const rotas = await listarRotas(root);
   const packages = await listarPackages(root);
+  const primitivas = await listarPrimitivas(root);
 
   // Corpus vazio = o gate não tem o que medir. `skipped` COM MOTIVO, nunca
   // verde por ausência (classe 5 de `guard-classes.md`).
-  if (modulos.length === 0 && rotas.length === 0 && packages.length === 0) {
+  if (
+    modulos.length === 0 &&
+    rotas.length === 0 &&
+    packages.length === 0 &&
+    primitivas.length === 0
+  ) {
     return {
       ok: true,
       errors: [],
@@ -389,15 +505,31 @@ export async function checkDocCoverage(opts: {
     }
   }
 
+  // O CONTEÚDO dos dois docs das unidades de arquivo único — a pergunta do
+  // gate é "o doc CITA o path", e citation se mede no texto.
+  const convencaoDeEstilo = await lerSeExiste(path.join(root, CONVENCAO_DE_ESTILO));
+  const readmeDeRegras = await lerSeExiste(path.join(root, README_DE_REGRAS));
+
+  // As unidades de arquivo único que EXISTEM: uma que não está no disco não
+  // é uma unidade de código sem doc — é uma unidade que não existe.
+  const unidadesDeArquivo: { unidade: string; doc: string }[] = [];
+  for (const u of UNIDADES_DE_ARQUIVO) {
+    if (await existe(path.join(root, u.unidade))) unidadesDeArquivo.push(u);
+  }
+
   const errors = coberturaFaltando({
     modulos,
     rotas,
     packages,
+    primitivas,
+    unidadesDeArquivo,
     docsDeBc: docDeBcExiste,
     docDeBc: DOC_DE_BC,
     docDeRotas,
     docDeRotasExiste,
     catalogoDeRotas,
+    convencaoDeEstilo,
+    readmeDeRegras,
     readmesDePackage: readmeDePackageExiste,
     readmeDePackage: README_DE_PACKAGE,
     excecoes,

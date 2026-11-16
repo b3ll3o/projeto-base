@@ -43,11 +43,14 @@
 'use client';
 
 import { startTransition, useActionState, useEffect, type FormEvent } from 'react';
-import Link from 'next/link';
 import { useForm } from 'react-hook-form';
+import { Alerta } from '@/components/ui/alerta';
+import { Botao } from '@/components/ui/botao';
+import { Campo } from '@/components/ui/campo';
 import { cadastrarUsuario } from '@/app/users/novo/actions';
 import { CADASTRO_INICIAL, type CadastroUsuarioState } from '@/app/users/novo/state';
 import type { CampoCadastro } from '@/lib/cadastro-usuario-schema';
+import { LinkTexto } from '@/components/ui/link-texto';
 import { PARAM_CONVITE } from '@/lib/convite-schema';
 import {
   cadastroUsuarioSchema,
@@ -181,107 +184,55 @@ export function CadastroUsuarioForm({
       aria-busy={pendente}
       className="max-w-md space-y-5"
     >
-      {estado.formError ? (
-        <p
-          role="alert"
-          className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800"
-        >
-          {estado.formError}
-        </p>
-      ) : null}
+      {estado.formError ? <Alerta variante="erro">{estado.formError}</Alerta> : null}
 
-      <div>
-        <label htmlFor="nome" className="block text-sm font-medium text-slate-900">
-          Nome
-        </label>
-        <input
-          id="nome"
-          {...register('nome')}
-          type="text"
-          maxLength={NOME_MAX}
-          autoComplete="name"
-          disabled={pendente}
-          aria-invalid={Boolean(erroDe('nome'))}
-          aria-describedby={erroDe('nome') ? 'nome-erro' : undefined}
-          className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 aria-[invalid=true]:border-red-500"
-        />
-        {erroDe('nome') ? (
-          // pt-BR: `role="alert"` anuncia a mensagem assim que ela aparece,
-          // sem mover o foco. É o que faz o erro chegar a quem não enxerga
-          // o campo vermelho.
-          <p id="nome-erro" role="alert" className="mt-1 text-sm text-red-700">
-            {erroDe('nome')}
-          </p>
-        ) : null}
-      </div>
+      <Campo
+        id="nome"
+        rotulo="Nome"
+        erro={erroDe('nome')}
+        {...register('nome')}
+        type="text"
+        maxLength={NOME_MAX}
+        autoComplete="name"
+        disabled={pendente}
+      />
 
-      <div>
-        <label htmlFor="email" className="block text-sm font-medium text-slate-900">
-          Email
-        </label>
-        <input
-          id="email"
-          {...register('email')}
-          type="email"
-          maxLength={EMAIL_MAX}
-          autoComplete="email"
-          disabled={pendente}
-          aria-invalid={Boolean(erroDe('email'))}
-          aria-describedby={erroDe('email') ? 'email-erro' : undefined}
-          className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 aria-[invalid=true]:border-red-500"
-        />
-        {erroDe('email') ? (
-          <p id="email-erro" role="alert" className="mt-1 text-sm text-red-700">
-            {erroDe('email')}
-          </p>
-        ) : null}
-      </div>
+      <Campo
+        id="email"
+        rotulo="Email"
+        erro={erroDe('email')}
+        {...register('email')}
+        type="email"
+        maxLength={EMAIL_MAX}
+        autoComplete="email"
+        disabled={pendente}
+      />
 
-      <div>
-        <label htmlFor="senha" className="block text-sm font-medium text-slate-900">
-          Senha
-        </label>
-        <input
-          id="senha"
-          {...register('senha')}
-          type="password"
-          maxLength={SENHA_MAX}
-          // pt-BR: `new-password` e não `current-password`. O valor do
-          // atributo é o que o gerenciador de senhas usa para decidir entre
-          // PREENCHER um campo que é senha nova (oferece gerar uma) e
-          // PREENCHER-AGORA um que a pessoa já tem. Este formulário cria a
-          // conta, então é senha nova — e é o valor que faz o Chrome e o
-          // Safari oferecerem uma sugestão forte em vez de repetir a senha
-          // do próprio site.
-          autoComplete="new-password"
-          disabled={pendente}
-          aria-invalid={Boolean(erroDe('senha'))}
-          aria-describedby={erroDe('senha') ? 'senha-erro' : undefined}
-          className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 aria-[invalid=true]:border-red-500"
-        />
-        {erroDe('senha') ? (
-          <p id="senha-erro" role="alert" className="mt-1 text-sm text-red-700">
-            {erroDe('senha')}
-          </p>
-        ) : null}
-      </div>
+      <Campo
+        id="senha"
+        rotulo="Senha"
+        erro={erroDe('senha')}
+        {...register('senha')}
+        type="password"
+        maxLength={SENHA_MAX}
+        // pt-BR: `new-password` e não `current-password`. O valor do
+        // atributo é o que o gerenciador de senhas usa para decidir entre
+        // PREENCHER um campo que é senha nova (oferece gerar uma) e
+        // PREENCHER-AGORA um que a pessoa já tem. Este formulário cria a
+        // conta, então é senha nova — e é o valor que faz o Chrome e o
+        // Safari oferecerem uma sugestão forte em vez de repetir a senha
+        // do próprio site.
+        autoComplete="new-password"
+        disabled={pendente}
+      />
 
       <div className="flex items-center gap-3 pt-2">
-        <button
-          type="submit"
-          disabled={pendente}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
-        >
+        <Botao type="submit" disabled={pendente}>
           {pendente ? 'Cadastrando…' : 'Cadastrar usuário'}
-        </button>
+        </Botao>
         {/* pt-BR: cancelar é uma ação, não um sumiço. Um formulário sem
             saída visível obriga a pessoa a voltar pelo navegador. */}
-        <Link
-          href="/users"
-          className="text-sm text-slate-600 underline underline-offset-2 hover:text-slate-900"
-        >
-          Cancelar
-        </Link>
+        <LinkTexto href="/users">Cancelar</LinkTexto>
         {/* pt-BR (onboarding de empresa, 2026-10-21): quem JÁ TEM CONTA e
             chegou pelo link de convite cai NESTA tela — e sem esta saída o
             caminho fica sem volta: o e-mail dela já está cadastrado, o
@@ -290,12 +241,7 @@ export function CadastroUsuarioForm({
             query porque o login sabe levá-lo até a tela de aceite
             (`/login?convite=…` → `/convite/<token>`). */}
         {convite ? (
-          <Link
-            href={`/login?${PARAM_CONVITE}=${convite}`}
-            className="text-sm text-slate-600 underline underline-offset-2 hover:text-slate-900"
-          >
-            Já tenho conta
-          </Link>
+          <LinkTexto href={`/login?${PARAM_CONVITE}=${convite}`}>Já tenho conta</LinkTexto>
         ) : null}
       </div>
     </form>

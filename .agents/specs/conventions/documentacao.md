@@ -68,6 +68,9 @@ Cada fato vive em **uma** representação canônica. Todo outro lugar
 | Endpoint (método + path) | `docs/api/<bc>.md` §Endpoints | reference |
 | Model Prisma | `schema.prisma` (`///`) + seção em `docs/api/<bc>.md` | reference |
 | Rota Next.js `apps/web/app/<rota>/` | `docs/web/rotas.md` | reference |
+| Primitiva de interface `apps/web/components/ui/<arquivo>.tsx` | `.agents/specs/conventions/estilizacao.md` §3 | reference |
+| Bloco `@theme` de `apps/web/app/globals.css` | `.agents/specs/conventions/estilizacao.md` §2 | reference |
+| Regra ESLint `packages/eslint-config/rules/<regra>.js` | `packages/eslint-config/README.md` | reference |
 | Export de `packages/shared-types` | `packages/shared-types/README.md` | reference |
 | Variável de ambiente | `docs/como-rodar.md` §Variáveis | reference |
 | Script `pnpm` | `docs/como-rodar.md` | how-to |

@@ -11,9 +11,13 @@
 // quem não tem o bypass de admin seria inconsistente com o resto da tela.
 
 import type * as React from 'react';
-import Link from 'next/link';
+import { Botao } from '@/components/ui/botao';
+import { CabecalhoPagina } from '@/components/ui/cabecalho-pagina';
+import { Container } from '@/components/ui/container';
+import { CabecalhoTabela, CelulaTabela, Tabela } from '@/components/ui/tabela';
 import { listarPerfis } from '../../../lib/perfil';
 import { exigirAdmin } from '../guard-admin';
+import { LinkTexto } from '@/components/ui/link-texto';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,48 +31,45 @@ export default async function AdminProfilesPage(): Promise<React.JSX.Element> {
   const profiles = await listarPerfis();
 
   return (
-    <main className="mx-auto max-w-3xl p-8">
-      <h1 className="text-2xl font-semibold text-slate-900">Perfis de acesso</h1>
+    <Container>
+      <CabecalhoPagina titulo="Perfis de acesso" />
 
-      <p className="mt-4">
-        <Link
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
-          href="/admin/profiles/new"
-        >
-          + Novo perfil
-        </Link>
-      </p>
+      <div className="mt-4">
+        <Botao href="/admin/profiles/new">+ Novo perfil</Botao>
+      </div>
 
-      <table className="mt-6 w-full border-collapse text-sm">
+      <Tabela legenda="Perfis cadastrados">
         <thead>
-          <tr className="border-b border-slate-200 text-left">
-            <th className="py-2 pr-4 font-medium text-slate-500">Slug</th>
-            <th className="py-2 pr-4 font-medium text-slate-500">Nome</th>
-            <th className="py-2 pr-4 font-medium text-slate-500">Admin?</th>
-            <th className="py-2 pr-4 font-medium text-slate-500">Sistema?</th>
-            <th className="py-2 pr-4 font-medium text-slate-500">Permissões</th>
-            <th className="py-2"></th>
+          <tr>
+            <CabecalhoTabela>Slug</CabecalhoTabela>
+            <CabecalhoTabela>Nome</CabecalhoTabela>
+            <CabecalhoTabela>Admin?</CabecalhoTabela>
+            <CabecalhoTabela>Sistema?</CabecalhoTabela>
+            <CabecalhoTabela>Permissões</CabecalhoTabela>
+            <CabecalhoTabela>
+              <span className="sr-only">Ações</span>
+            </CabecalhoTabela>
           </tr>
         </thead>
         <tbody>
           {profiles.map((p) => (
-            <tr key={p.id} className="border-b border-slate-100">
-              <td className="py-3 pr-4">
+            <tr key={p.id}>
+              <CelulaTabela>
                 <code>{p.slug}</code>
-              </td>
-              <td className="py-3 pr-4 text-slate-900">{p.name}</td>
-              <td className="py-3 pr-4">{p.isAdmin ? '✅' : '—'}</td>
-              <td className="py-3 pr-4">{p.isSystem ? '✅' : '—'}</td>
-              <td className="py-3 pr-4">{p.permissionCount}</td>
-              <td className="py-3">
-                <Link className="text-slate-700 underline" href={`/admin/profiles/${p.slug}`}>
+              </CelulaTabela>
+              <CelulaTabela>{p.name}</CelulaTabela>
+              <CelulaTabela>{p.isAdmin ? 'Sim' : 'Não'}</CelulaTabela>
+              <CelulaTabela>{p.isSystem ? 'Sim' : 'Não'}</CelulaTabela>
+              <CelulaTabela className="tabular-nums">{p.permissionCount}</CelulaTabela>
+              <CelulaTabela>
+                <LinkTexto href={`/admin/profiles/${p.slug}`} aria-label={`Editar ${p.name}`}>
                   editar
-                </Link>
-              </td>
+                </LinkTexto>
+              </CelulaTabela>
             </tr>
           ))}
         </tbody>
-      </table>
-    </main>
+      </Tabela>
+    </Container>
   );
 }

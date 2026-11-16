@@ -1,0 +1,291 @@
+commit f66ea995d72b36be32f06e82733b004796b712fe
+Author:     Leonardo Andreazzi <andreazzi-leonardo@hotmail.com>
+AuthorDate: Tue Nov 10 21:27:27 2026 -0300
+Commit:     GitHub <noreply@github.com>
+CommitDate: Tue Nov 10 21:27:27 2026 -0300
+
+    fix(deps): as pendências dos 6 PRs e da issue #149 fechadas em UM PR (#165)
+    
+    * ci(deps): o bot do Dependabot nasce com um tipo que o gate aceita
+    
+    O bloco `npm` do `.github/dependabot.yml` usava `commit-message.prefix: 'deps'`
+    — e o tipo `deps` NÃO está na lista de 7 tipos que o
+    `tooling/scripts/commit-msg-gate.ts` aceita (`feat`, `fix`, `chore`, `docs`,
+    `test`, `refactor`, `ci`). A spec diferencial roda o gate sobre o `git log`
+    real do repositório, então o subject do bot entra na medição.
+    
+    MEDIDO 2026-11-10, o log do job `preflight` do PR #162:
+    
+      "deps: Bump eslint from 9.39.5 to 10.14.0  ->  tipo \"deps\" fora da lista —
+       use um de: feat, fix, chore, docs, test, refactor, ci (medido em git log; se
+       o novo tipo é legítimo, acrescente aqui e o teste diferencial cobra)"
+    
+    Os 5 PRs do Dependabot de pnpm nasceram com `deps: Bump …` e TODOS reprovaram
+    no CI — por uma causa que não era a dependência deles. Os 5 de
+    `github-actions` usavam o prefixo `ci` (que está na lista) e passaram todos.
+    
+    O tipo `deps` nunca entrou no histórico deste repo
+    (`git log --format=%s | grep -c '^deps:'` → 0) e a convenção do repo é
+    `chore(deps):` — 2 commits no `git log`.
+    
+    Agora é `prefix: 'chore'` + `include: 'scope'`: a doc do Dependabot diz que o
+    prefixo é seguido do escopo (`deps` para dependências, `deps-dev` para
+    devDependencies), o que produz `chore(deps):` e `chore(deps-dev):` — o mesmo
+    formato do histórico, e um tipo que o gate aceita. MEDIDO: o gate aceita as
+    duas formas e continua reprovando `deps:`.
+    
+    O comentário do arquivo que afirmava que "`versioning-strategy: increase`
+    mantém o range `^`" também era FALSO — MEDIDO 2026-11-10, o PR #162 subiu o
+    `eslint` de `^9.39.5` para `^10.14.0`: `increase` ergue o PISO do range quando
+    a versão nova está fora dele. Corrigido, com o dono da política indicado: quem
+    segura a major é o `check-dependency-freshness.ts`.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(gates): a major adotada reprova e a claim de advisories volta a bater
+    
+    Duas regras que fecham buracos medidos — as duas com a spec VERMELHA antes do
+    código (TDD) e com a mutação que prova o dente.
+    
+    **1. A major pendente tinha dono, mas não instrumento.**
+    `check-dependency-freshness.ts` reprovava a pendência que envelhece por pacote
+    removido do workspace ou por faixa que já permite a major — e não a pendência
+    cuja major foi ADOTADA (a faixa declarada já É a major que a pendência diz que
+    não sobe agora). O `majorNova <= majorAtual` do laço de cima encerrava a
+    comparação antes de a pendência ser olhada.
+    
+    MEDIDO 2026-11-10, com a árvore plantada (as 5 `package.json` reais com
+    `eslint: ^10.14.0`, `@eslint/js: ^10.14.0` e `jsdom: ^31.0.0`, mais as duas
+    tabelas versionadas), o gate devolvia `ok=true` e 0 erro — as 3 pendências
+    diziam "a major não sobe agora" e a árvore dizia que sobe. Era o buraco pelo
+    qual o PR #162 (Dependabot, eslint 9 → 10) parecia um PR normal.
+    
+    Agora a pendência cuja major foi adotada reprova, com a contradição nomeada
+    ("ou o range volta para a major 9, ou a pendência sai"). MEDIDO: com a regra
+    neutralizada, 1 de 17 spec cai; no repo real, baixar a `majorNova` de uma
+    pendência para a major já declarada reprova (EXIT=1) e restaurar devolve
+    EXIT=0. As 25 pendências do repo não são atingidas — o gate segue verde.
+    
+    **2. A claim de advisories envelhecia em silêncio.**
+    `.tooling/scripts/ci/excecoes-de-dependencias.json` afirmava 41 advisories
+    (1 crítica, 3 altas, 32 moderadas, 5 baixas). MEDIDO 2026-11-10 com
+    `pnpm --config.engine-strict=false audit --json`:
+    `metadata.vulnerabilities` = `{"info":0,"low":1,"moderate":26,"high":3,"critical":1}`
+    → 31. Os 4 ids que reprovam são os mesmos (1139528, 1242658, 1243066,
+    1124011) e o gate confirma 4/4 com exceção declarada e verificada.
+    
+    O número vai para 31 e passa a ser **medido**: o arquivo ganha o campo
+    `advisoriesEsperadas`, e o gate compara o declarado com o audit medido — o que
+    o arquivo declara A MAIS é ERRO (a claim mente, e foi assim que o #163 foi
+    encontrado), e o que o REGISTRO publica a mais é AVISO (dado externo não é
+    mudança do repo — reprovar por isso seria vermelho sem motivo). A spec prende
+    o campo: sem ele no arquivo do repo, a suíte fica vermelha, então o
+    instrumento não pode ser desligado em silêncio.
+    
+    MEDIDO: com a conferência neutralizada, 2 de 21 specs caem; no repo real,
+    inflar o `advisoriesEsperadas` para 41 reprova nomeando a severidade, e
+    restaurar devolve verde.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * docs(versionamento): os registros medem as 2 regras novas e a versão vai a 1.28.0
+    
+    A documentação é parte do código: o que muda de comportamento muda de doc no
+    mesmo PR.
+    
+    - **Registro de dentes** (`ci-defense-in-depth-dentes.md`): as 2 linhas dos
+      gates tocados ganham a contagem de testes re-medida (freshness 16 → 17,
+      audit 13 → 21 — a do audit já estava defasada) e o comando de mutação com o
+      que ele mede — a regra nova neutralizada derruba 1 de 17 e a conferência da
+      claim neutralizada derruba 2 de 21, e as duas diferenciais contra o repo
+      real (a `majorNova` baixada; o `advisoriesEsperadas` inflado).
+    - **Catálogo** (`ci-defense-in-depth.md`): as 2 linhas descrevem o 3º caso de
+      aging da pendência de major e a claim do total de advisories, com a
+      assimetria declarada (declarar a mais é erro; o registro publicar a mais é
+      aviso).
+    - **`docs/fluxo-desenvolvimento.md`**: a linha do `check-dependency-freshness`
+      ganha o 3º caso, e a contagem de gates do preflight sai de **53** para
+      **54** — MEDIDO 2026-11-10, `grep -cE "^\s+name: '"
+      .tooling/scripts/ci/preflight-gates.ts` → 54. A doc já estava defasada
+      (o `check-pasta-unica` do #157 entrou sem o footer acompanhando), e ela é
+      tocada aqui.
+    - **Versão**: os 6 footers vão de 1.27.0 para **1.28.0** (minor bump: 2 gates
+      ganham regra e o config do bot muda — o template passa a detectar o que
+      antes passava calado), com a linha de histórico em
+      `estrutura-e-versionamento.md` e em `docs/STACK.md`.
+    
+    `docs/MONOREPO.md` fica com o footer bumpsado e **sem** linha nova no
+    histórico: o arquivo está com 300 linhas, o teto do `check-doc-size`, e o
+    histórico de lá já pula versões (1.8.0, 1.15–1.19, 1.23, 1.24).
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * docs(plano): o plano das pendências dos 6 PRs e da issue #149
+    
+    O plano datado da demanda, com o state snapshot que o precede e as medidas
+    que o sustentam.
+    
+    - `docs/superpowers/plans/2026-11-10-pendencias-prs-e-issues-abertas.md`: o
+      que está aberto (6 PRs + a issue #149), a causa comum dos 5 PRs vermelhos do
+      Dependabot (o prefixo do bot, não a dependência), a incompatibilidade medida
+      de cada uma das 5 versões (peer do `eslint-config-next`, `engines.node` do
+      jsdom 31, a classe `Resource` que o resources 3.1.0 remove e os 3 arquivos
+      que a usam, as duas gerações do SDK de tracing), o buraco do
+      `check-dependency-freshness` (a major adotada não envelhecia a pendência) e
+      a claim de advisories que envelheceu (41 declaradas, 31 medidas), o escopo
+      do PR único, o que ele **não** faz, e a tabela de estado F1–F5 da issue
+      #149.
+    - `.agents/runs/state-snapshot-20261110T221736Z.md`: o AS-IS medido antes de
+      planejar (preflight com 0 erro, 6 PRs e 1 issue abertos, 31 advisories
+      medidas) e os 4 gaps detectados.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * docs(plano): o plano registra o que a execução fechou
+    
+    Os 6 PRs (#158–#163) e a issue #149 estão fechados, com o motivo medido em
+    cada comentário; as 6 branches foram apagadas depois do exame de conteúdo, e as
+    6 tags `backup/<branch>` preservam o que o exame mediu fora da `main`. O PR
+    único é o #165.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * docs(memory): as 3 lições do B43 entram no ledger de cristalização
+    
+    A retrospectiva da campanha (PR #165) produziu 3 memórias reutilizáveis, e
+    cada uma tem uma linha no ledger com a âncora verbatim que a mantém presa ao
+    arquivo versionado onde a regra ficou escrita:
+    
+    - `bot-de-commit-escreve-no-formato-do-gate` → `.github/dependabot.yml`
+    - `enumere-os-caminhos-de-aging-da-pendencia` → `check-dependency-freshness.ts`
+    - `claim-numero-precisa-de-campo-lido-por-gate` → `check-dependency-audit.ts`
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(gates): a pendência 0.x não é julgada por uma regra que o modelo não expressa
+    
+    MEDIDO 2026-11-10, no exame de borda da regra nova: uma pendência escrita à
+    mão para um pacote 0.x (`majorNova: 0`, `majorAtual: 0`) era ACUSADA com
+    "a major 0 NÃO sobe agora" — uma mensagem sem sentido, porque a major de um
+    pacote 0.x é 0 em qualquer versão e o modelo não sabe dizer "a major foi
+    adotada".
+    
+    A regra agora só julga a pendência coerente (`majorNova` > `majorAtual`), que é
+    a única em que a comparação faz sentido. MEDIDO: com uma pendência 0.x o gate
+    fica verde; a major adotada continua sendo reprovada (1 de 18 cai com a regra
+    neutralizada) e as 25 pendências do repo real não são atingidas.
+    
+    O registro de dentes e o plano accompany a re-medida (17 → 18 testes).
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(gates): os achados da revisão do PR #165, corrigidos no PR
+    
+    A revisão (test-writer + monorepo-specialist) achou 2 P0-nulos e 7 P2 nos 2
+    gates. Os que mudam comportamento:
+    
+    - **A claim incompleta desligava a comparação em silêncio** (P1): uma claim
+      sem `moderate` (e sem `total`) passava com `ok=true`, 0 erros e 0 avisos —
+      o campo ausente fazia `declarado > medido` e `medido > declarado` darem
+      falso. A forma da claim (6 números) é conferida pelo GATE, e um dado
+      incompleto é erro explícito.
+    - **`metadata.vulnerabilities: {}` produzia 5 erros falsos** (P1): o gate lia
+      "o audit mede 0" e accusava a claim. Objeto vazio é "sem dado medido", e o
+      gate declara que a claim NÃO foi conferida — verde por ignorância é a
+      classe 5 do `guard-classes.md`.
+    - **A coerência interna do `total` nunca era conferida** (P2): editar só o
+      total (31 → 30) trocava o erro por aviso e a mensagem culpava "o registro
+      publicou advisory nova". O total declarado tem que ser a soma do recorte do
+      próprio campo.
+    - **O gate de audit não tinha bloco CLI** (P2): `node --import tsx
+      .tooling/scripts/ci/check-dependency-audit.ts` saía 0 sem medir, e o
+      diferencial do registro de dentes não tinha comando que o reproduzisse. O
+      bloco existe agora (o gate é SÍNCRONO — a primeira versão usava `.then()`
+      e o CLI morria).
+    - **A pendência podia ser accusada duas vezes** (P2): com faixa `>=` e major
+      do registro mais nova que a da pendência, o mesmo pacote gerava 2 erros.
+    - **A mensagem usava um número que o gate não conferiu** (P2): o `majorAtual`
+      da pendência é o registro de quando ela foi declarada, e pode estar velho.
+    
+    E as specs que faltavam: a faixa que PASSOU da major nomeada, a pendência de
+    pacote em faixa que o gate não entende, a claim incompleta, a contagem
+    ausente e a contagem vazia. As 2 specs de borda da regra do freshness foram
+    renomeadas para dizer o que a regra mede (`>=`, e não só `==`), e a spec da
+    prosa passou a ancorar o NÚMERO ao lado da palavra (a frase exata era frágil).
+    
+    Os 3 limites que a revisão mediu e que a regra NÃO cobre ficam declarados no
+    cabeçalho do gate: `faixaAtual`/`majorAtual` são o registro de quando a
+    pendência foi declarada; o gate vê UMA faixa por pacote (e o
+    `check-dependency-drift` já reprova a divergência entre workspaces); e a
+    linha 0.x não tem modelo.
+    
+    MEDIDO: freshness 20 testes (2 de 20 caem com a regra neutralizada), audit 26
+    testes (3 de 26 caem com a conferência neutralizada). `pnpm ci:preflight` com
+    0 erro e `pnpm tooling:test` com 1043 verdes.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * fix(gates): a major adotada é vista em QUALQUER manifest que declare o pacote
+    
+    MEDIDO 2026-11-10: com o `eslint` em `^10.14.0` no `apps/api` e em
+    `^9.39.5` no `apps/web`, o gate NÃO via a adoção — o mapa de faixas guardava
+    uma só (a última lida vencia), e a major adotada num manifest escapava da
+    regra.
+    
+    A regra agora olha a major mais ALTA declarada em qualquer manifest que
+    declare o pacote. MEDIDO: com a árvore plantada (o `eslint` em `^10.14.0` no
+    `apps/api/package.json`), o gate reprova (EXIT=1) e, restaurado, devolve
+    EXIT=0 — o diferencial contra o repo real voltou a existir.
+    
+    O cabeçalho do gate agora declara os 3 limites que a regra NÃO cobre (o
+    `faixaAtual`/`majorAtual` são o registro de quando a pendência foi declarada;
+    a divergência entre workspaces é do `check-dependency-drift`; e a linha 0.x
+    não tem modelo).
+    
+    MEDIDO: freshness 21 testes (3 de 21 caem com a regra neutralizada).
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * docs(gates): o fluxo tem a linha do audit, e a §4 não se diz enumerada
+    
+    Duas correções de doc no PR #165:
+    
+    - A §4 do `docs/fluxo-desenvolvimento.md` ganhou a linha do
+      `check-dependency-audit` (o gate da dependência que faltava, e que este PR
+      mudou) — com o que ele bloqueia, incluindo a claim do total.
+    - A frase que dizia "a lista **enumerada** vive na §4" mentia: a §4 tem os
+      gates com **comando próprio** (e os hooks das camadas A e B), que são menos
+      que os 54 checks do preflight. A lista completa vive no
+      `preflight-gates.ts`, e a contagem continua publicada pelo comando (MEDIDO
+      2026-11-10: **54**).
+    
+    O arquivo fica com 300 linhas — o teto do `check-doc-size`.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * refactor(gates): o audit usa o CheckResult canônico em vez do seu
+    
+    A interface `CheckResult` do `check-dependency-audit.ts` era uma cópia do
+    `check-types.ts` (o dono). Com o bloco CLI novo, o arquivo importava de lá e
+    mesmo assim declarava a sua — e as duas divergiam no detalhe que importa: no
+    canônico, `advisories` é opcional; na cópia, era obrigatório.
+    
+    O gate passa a usar a interface do dono, e as 3 leituras da spec ganham a
+    guarda (`?? []`) que o tipo opcional exige.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    * docs(plano): o plano registra o que a revisão do PR acrescentou
+    
+    A revisão do PR #165 (test-writer + monorepo-specialist) mudou o escopo do
+    item 4: além de comparar o declarado com o medido, o gate do audit agora
+    confere a coerência interna do campo, a forma da claim (um número que falta
+    reprova) e tem bloco CLI (o comando que reproduz o diferencial). A contagem
+    final da suíte também entrou.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
+    
+    ---------
+    
+    Co-authored-by: CEO Agent <ceo@paperclip.ai>
+    Co-authored-by: Claude Code <noreply@anthropic.com>

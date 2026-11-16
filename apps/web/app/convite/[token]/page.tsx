@@ -23,6 +23,8 @@
 // diferentes.
 
 import { redirect } from 'next/navigation';
+import { CabecalhoPagina } from '@/components/ui/cabecalho-pagina';
+import { Container } from '@/components/ui/container';
 import { CONVITE_INVALIDO } from '@/lib/convite-mensagens';
 import { ehTokenDeConvite } from '@/lib/convite-schema';
 import { lerTokens } from '@/lib/sessao';
@@ -33,10 +35,9 @@ export default async function PaginaConvite({ params }: { params: Promise<{ toke
 
   if (!ehTokenDeConvite(token)) {
     return (
-      <main className="mx-auto max-w-3xl p-8">
-        <h1 className="text-2xl font-semibold text-slate-900">Convite inválido</h1>
-        <p className="mt-1 text-sm text-slate-500">{CONVITE_INVALIDO}</p>
-      </main>
+      <Container>
+        <CabecalhoPagina titulo="Convite inválido" descricao={CONVITE_INVALIDO} />
+      </Container>
     );
   }
 
@@ -50,15 +51,14 @@ export default async function PaginaConvite({ params }: { params: Promise<{ toke
   }
 
   return (
-    <main className="mx-auto max-w-3xl p-8">
-      <h1 className="text-2xl font-semibold text-slate-900">Convite para uma empresa</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        Você foi convidado para entrar em uma empresa. Ao aceitar, sua conta entra na empresa que
-        convidou.
-      </p>
+    <Container>
+      <CabecalhoPagina
+        titulo="Convite para uma empresa"
+        descricao="Você foi convidado para entrar em uma empresa. Ao aceitar, sua conta entra na empresa que convidou."
+      />
       <div className="mt-8">
         <AceitarConvite token={token} />
       </div>
-    </main>
+    </Container>
   );
 }

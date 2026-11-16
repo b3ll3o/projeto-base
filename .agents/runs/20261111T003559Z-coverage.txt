@@ -1,0 +1,102 @@
+
+> @projeto/web@0.0.1 test:coverage /home/leo/Documentos/projetos/base/apps/web
+> vitest run --coverage
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.9 /home/leo/Documentos/projetos/base/apps/web
+      Coverage enabled with v8
+
+ ✓ lib/api-client.spec.ts (24 tests) 24ms
+ ✓ lib/perfil.spec.ts (39 tests) 22ms
+ ✓ app/empresa/nova/actions.spec.ts (15 tests) 17ms
+ ✓ app/users/novo/actions.spec.ts (26 tests) 26ms
+ ✓ app/login/actions.spec.ts (30 tests) 34ms
+ ✓ app/convite/[token]/actions.spec.ts (14 tests) 15ms
+ ✓ lib/sessao.spec.ts (18 tests) 20ms
+ ✓ src/telemetry/web-vitals-reporter.spec.tsx (5 tests) 43ms
+ ✓ app/users/actions.spec.ts (7 tests) 13ms
+ ✓ vitest-include.spec.ts (10 tests) 7ms
+ ✓ lib/tenancy.spec.ts (5 tests) 9ms
+ ✓ lib/flags.spec.ts (8 tests) 9ms
+ ✓ e2e/support/saida.spec.ts (8 tests) 12ms
+ ✓ lib/cadastro-usuario-schema.spec.ts (20 tests) 13ms
+ ✓ instrumentation.node.spec.ts (7 tests) 303ms
+ ✓ lib/empresa-schema.spec.ts (10 tests) 7ms
+ ✓ e2e/support/banco.spec.ts (8 tests) 72ms
+ ✓ instrumentation.spec.ts (4 tests) 19ms
+ ✓ lib/empresas.spec.ts (7 tests) 9ms
+ ✓ src/Dockerfile.spec.ts (2 tests) 9ms
+ ✓ lib/cadastro-usuario-schema.parity.spec.ts (5 tests) 5ms
+ ✓ lib/next-config.spec.ts (5 tests) 5ms
+ ✓ lib/login-schema.spec.ts (7 tests) 7ms
+ ✓ cliente-prisma-unico.spec.ts (1 test) 4ms
+ ✓ middleware.spec.ts (9 tests) 6ms
+ ✓ lib/convite-schema.spec.ts (7 tests) 5ms
+ ✓ e2e/support/api.spec.ts (5 tests) 45ms
+ ✓ app/admin/flags/page.spec.tsx (2 tests) 5ms
+ ✓ playwright-isolamento.spec.ts (1 test) 3ms
+ ✓ components/Sidebar.spec.tsx (8 tests) 474ms
+ ✓ app/login/page.spec.tsx (9 tests) 1065ms
+ ✓ components/empresa-form.spec.tsx (8 tests) 969ms
+ ✓ app/admin/tenancy/page.spec.tsx (4 tests) 196ms
+ ✓ components/login-form.spec.tsx (19 tests) 2248ms
+ ✓ instrumentation-client.spec.ts (4 tests) 171ms
+ ✓ app/admin/profiles/[slug]/page.spec.tsx (3 tests) 250ms
+ ✓ app/empresa/nova/page.spec.tsx (2 tests) 36ms
+ ✓ app/convite/[token]/page.spec.tsx (3 tests) 186ms
+ ✓ app/convite/[token]/aceitar-convite.spec.tsx (4 tests) 254ms
+ ✓ components/cadastro-usuario-form.spec.tsx (28 tests) 4498ms
+   ✓ CadastroUsuarioForm — o campo de senha > senha vazia pede a senha, não acusa comprimento 445ms
+
+ Test Files  40 passed (40)
+      Tests  401 passed (401)
+   Start at  21:36:51
+   Duration  9.27s (transform 1.87s, setup 6.04s, collect 3.98s, tests 11.11s, environment 8.46s, prepare 3.02s)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |    98.5 |    94.49 |   96.73 |    98.5 |                   
+ web               |   86.61 |    95.83 |      80 |   86.61 |                   
+  ...ion-client.ts |     100 |      100 |     100 |     100 |                   
+  ...ation.edge.ts |       0 |      100 |     100 |       0 | 9                 
+  ...ation.node.ts |     100 |    85.71 |     100 |     100 | 52                
+  ...umentation.ts |     100 |      100 |     100 |     100 |                   
+  middleware.ts    |   71.92 |      100 |   66.66 |   71.92 | 34-50             
+ ...onvite/[token] |     100 |    90.47 |     100 |     100 |                   
+  actions.ts       |     100 |    94.73 |     100 |     100 | 61                
+  state.ts         |     100 |       50 |     100 |     100 | 24                
+ ...p/empresa/nova |     100 |    90.32 |     100 |     100 |                   
+  actions.ts       |     100 |     93.1 |     100 |     100 | 81-82             
+  state.ts         |     100 |       50 |     100 |     100 | 48                
+ web/app/login     |     100 |    94.11 |     100 |     100 |                   
+  actions.ts       |     100 |    95.91 |     100 |     100 | 165-166           
+  state.ts         |     100 |       50 |     100 |     100 | 138               
+ web/app/users     |     100 |      100 |     100 |     100 |                   
+  actions.ts       |     100 |      100 |     100 |     100 |                   
+ ...app/users/novo |     100 |    93.33 |     100 |     100 |                   
+  actions.ts       |     100 |    92.85 |     100 |     100 | 135-137           
+  state.ts         |     100 |      100 |     100 |     100 |                   
+ web/components    |   99.56 |    93.63 |     100 |   99.56 |                   
+  Sidebar.tsx      |   98.73 |       75 |     100 |   98.73 | 129               
+  ...ario-form.tsx |     100 |    97.29 |     100 |     100 | 138               
+  empresa-form.tsx |   99.12 |     93.1 |     100 |   99.12 | 166               
+  login-form.tsx   |     100 |    96.87 |     100 |     100 | 136               
+ web/lib           |   99.52 |     96.8 |   96.49 |   99.52 |                   
+  api-client.ts    |   98.09 |    91.66 |     100 |   98.09 | 166-167           
+  ...rio-schema.ts |     100 |      100 |     100 |     100 |                   
+  ...-mensagens.ts |     100 |      100 |     100 |     100 |                   
+  ...ite-schema.ts |     100 |      100 |     100 |     100 |                   
+  ...esa-schema.ts |     100 |      100 |     100 |     100 |                   
+  empresas.ts      |     100 |      100 |     100 |     100 |                   
+  flags.ts         |     100 |      100 |     100 |     100 |                   
+  login-schema.ts  |     100 |      100 |     100 |     100 |                   
+  perfil.ts        |     100 |    98.07 |   91.66 |     100 | 153               
+  sessao.ts        |     100 |      100 |     100 |     100 |                   
+  tenancy.ts       |     100 |      100 |     100 |     100 |                   
+ web/src/telemetry |     100 |      100 |     100 |     100 |                   
+  ...-reporter.tsx |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------
+EXIT=0

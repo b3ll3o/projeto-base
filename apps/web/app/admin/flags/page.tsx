@@ -36,8 +36,13 @@
 
 import type * as React from 'react';
 import { revalidatePath } from 'next/cache';
+import { Botao } from '@/components/ui/botao';
+import { CabecalhoPagina } from '@/components/ui/cabecalho-pagina';
+import { Container } from '@/components/ui/container';
+import { CabecalhoTabela, CelulaTabela, Tabela } from '@/components/ui/tabela';
 import { exigirAdminDoSistema } from '../guard-admin';
 import { definirFeatureFlag, listarFeatureFlags } from '../../../lib/flags';
+import { CLASSE_CHECKBOX } from '@/components/ui/campo';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,39 +85,28 @@ export default async function AdminFeatureFlagsPage(): Promise<React.JSX.Element
   }
 
   return (
-    <main className="mx-auto max-w-3xl p-8">
-      <h1 className="text-2xl font-semibold text-slate-900">Feature flags</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        Desligar vale para o sistema inteiro — para todas as empresas, não só para a sua.
-      </p>
+    <Container>
+      <CabecalhoPagina
+        titulo="Feature flags"
+        descricao="Desligar vale para o sistema inteiro — para todas as empresas, não só para a sua."
+      />
 
-      <table className="mt-6 w-full border-collapse text-sm">
-        {/* `<caption>` e `scope` não são enfeite: sem eles a tabela só é
-            legível por quem enxerga. Em modo de navegação por tabela, o leitor
-            de tela associa célula a coluna pelo `scope`, e sem `caption` não há
-            título que diga o que a tabela é. WCAG 1.3.1. */}
-        <caption className="sr-only">Funcionalidades do sistema e o estado de cada uma</caption>
+      <Tabela legenda="Funcionalidades do sistema e o estado de cada uma">
         <thead>
-          <tr className="border-b border-slate-200 text-left">
-            <th className="py-2 pr-4 font-medium text-slate-500" scope="col">
-              Chave
-            </th>
-            <th className="py-2 pr-4 font-medium text-slate-500" scope="col">
-              O que faz
-            </th>
-            <th className="py-2 font-medium text-slate-500" scope="col">
-              Ativa
-            </th>
+          <tr>
+            <CabecalhoTabela>Chave</CabecalhoTabela>
+            <CabecalhoTabela>O que faz</CabecalhoTabela>
+            <CabecalhoTabela>Ativa</CabecalhoTabela>
           </tr>
         </thead>
         <tbody>
           {flags.map((f) => (
-            <tr key={f.chave} className="border-b border-slate-100">
-              <td className="py-3 pr-4">
+            <tr key={f.chave}>
+              <CelulaTabela>
                 <code>{f.chave}</code>
-              </td>
-              <td className="py-3 pr-4 text-slate-900">{f.descricao}</td>
-              <td className="py-3">
+              </CelulaTabela>
+              <CelulaTabela>{f.descricao}</CelulaTabela>
+              <CelulaTabela>
                 <form action={alternar} className="flex items-center gap-2">
                   <input type="hidden" name="chave" value={f.chave} />
                   <input
@@ -122,23 +116,29 @@ export default async function AdminFeatureFlagsPage(): Promise<React.JSX.Element
                     // saber PELO NOME se a linha estava ligada — só inferindo do
                     // `checked`. (Revisão adversarial 2026-10-18, achado D.)
                     aria-label={`${f.chave} — ${f.ativada ? 'ligada' : 'desligada'}`}
-                    className="size-4 rounded border-slate-300"
+                    className={CLASSE_CHECKBOX}
                     defaultChecked={f.ativada}
                     name="ativada"
                     type="checkbox"
                   />
-                  <button
+                  <Botao
                     type="submit"
-                    className="rounded-md border border-slate-300 px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                    variante="secundario"
+                    tamanho="sm"
+                    // ⚠️ O nome acessível diz DE QUAL linha (WCAG 2.4.6): o
+                    // botão é "Salvar" em N linhas da mesma tabela, e quem
+                    // navega por leitor de tela ouve N "Salvar" idênticos.
+                    // O checkbox da MESMA linha já se nomeia.
+                    aria-label={`Salvar ${f.chave}`}
                   >
                     Salvar
-                  </button>
+                  </Botao>
                 </form>
-              </td>
+              </CelulaTabela>
             </tr>
           ))}
         </tbody>
-      </table>
-    </main>
+      </Tabela>
+    </Container>
   );
 }

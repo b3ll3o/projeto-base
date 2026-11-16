@@ -10,8 +10,13 @@
 
 import type * as React from 'react';
 import { redirect } from 'next/navigation';
+import { Botao } from '@/components/ui/botao';
+import { CabecalhoPagina } from '@/components/ui/cabecalho-pagina';
+import { Campo } from '@/components/ui/campo';
+import { Container } from '@/components/ui/container';
 import { criarPerfil, listarPermissoes } from '../../../../lib/perfil';
 import { exigirAdmin } from '../../guard-admin';
+import { CLASSE_CHECKBOX } from '@/components/ui/campo';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,53 +67,35 @@ export default async function NewProfilePage(): Promise<React.JSX.Element> {
   }
 
   return (
-    <main className="mx-auto max-w-3xl p-8">
-      <h1 className="text-2xl font-semibold text-slate-900">Novo perfil</h1>
+    <Container>
+      <CabecalhoPagina titulo="Novo perfil" />
 
       <form action={create} className="mt-8 space-y-4 text-sm">
-        <p>
-          <label className="block space-y-1">
-            <span className="font-medium text-slate-700">Slug</span>
-            <input
-              className="block w-full rounded-md border border-slate-300 px-3 py-2"
-              type="text"
-              name="slug"
-              required
-              minLength={3}
-              maxLength={40}
-              pattern={SLUG_PATTERN}
-            />
-          </label>
-        </p>
-        <p>
-          <label className="block space-y-1">
-            <span className="font-medium text-slate-700">Nome</span>
-            <input
-              className="block w-full rounded-md border border-slate-300 px-3 py-2"
-              type="text"
-              name="name"
-              required
-            />
-          </label>
-        </p>
-        <p>
-          <label className="block space-y-1">
-            <span className="font-medium text-slate-700">Descrição</span>
-            <input
-              className="block w-full rounded-md border border-slate-300 px-3 py-2"
-              type="text"
-              name="description"
-            />
-          </label>
-        </p>
+        <Campo
+          id="slug"
+          rotulo="Slug"
+          type="text"
+          name="slug"
+          required
+          minLength={3}
+          maxLength={40}
+          pattern={SLUG_PATTERN}
+        />
+        <Campo id="name" rotulo="Nome" type="text" name="name" required maxLength={80} />
+        <Campo id="description" rotulo="Descrição" type="text" name="description" />
 
-        <fieldset className="rounded-md border border-slate-200 p-4">
-          <legend className="px-1 text-sm font-medium text-slate-700">Permissões</legend>
+        <fieldset className="rounded-md bg-surface p-4">
+          <legend className="px-1 text-sm font-medium text-foreground">Permissões</legend>
           <ul className="space-y-1">
             {catalogo.map((k) => (
               <li key={k}>
                 <label className="flex items-center gap-2">
-                  <input type="checkbox" name="permissionKey" value={k} />
+                  <input
+                    type="checkbox"
+                    name="permissionKey"
+                    value={k}
+                    className={CLASSE_CHECKBOX}
+                  />
                   <code>{k}</code>
                 </label>
               </li>
@@ -116,13 +103,8 @@ export default async function NewProfilePage(): Promise<React.JSX.Element> {
           </ul>
         </fieldset>
 
-        <button
-          type="submit"
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
-        >
-          Criar perfil
-        </button>
+        <Botao type="submit">Criar perfil</Botao>
       </form>
-    </main>
+    </Container>
   );
 }
