@@ -31,7 +31,7 @@ function resolvePath(p: string): string {
 
 type ActionType = 'review' | 'update' | 'create' | 'alert';
 
-interface DocAction {
+export interface DocAction {
   type: ActionType;
   doc_file: string;
   section?: string;
@@ -41,9 +41,16 @@ interface DocAction {
   evidence?: { file: string; line: number; code: string };
   severity?: 'minor' | 'major';
   blocking_for_merge?: boolean;
+  /**
+   * pt-BR: o arquivo de CÓDIGO que disparou a ação. Sem ele, duas ações do
+   * mesmo doc e do mesmo motivo são indistinguíveis — e foi assim que o
+   * parecer da semana saiu com 3 linhas idênticas de "Endpoints modificados"
+   * (uma por controller). O `reason` diz O QUÊ; o `source_file` diz ONDE.
+   */
+  source_file?: string;
 }
 
-interface DocSyncReport {
+export interface DocSyncReport {
   status: 'success' | 'no-changes';
   actions: DocAction[];
   files_changed: string[];
@@ -71,47 +78,68 @@ interface CodeDocMapping {
 // gitignored, o que já não é verdade.
 export const GENERATED_DOC_FILES = new Set(['apps/api/openapi.json']);
 
+/**
+ * pt-BR: docs que aparecem em mais de um mapeamento têm UM dono — o nome
+ * repetido em dois lugares é a hora em que um deles vira o outro.
+ */
+const DOC_DE_MODELO_DADOS =
+  'docs/superpowers/specs/2026-09-21-cadastro-usuario-com-auditoria-02-modelo-dados.md';
+const DOC_DE_CONTRATO_HTTP =
+  'docs/superpowers/specs/2026-09-21-cadastro-usuario-com-auditoria-04-contrato-http.md';
+const DOC_DE_STACK = 'docs/STACK.md';
+const DOC_DE_DADOS = 'docs/system-design/dados.md';
+
+/**
+ * O doc canônico de um bounded context — a regra da matriz de
+ * `documentacao.md` §3: `apps/api/src/modules/<bc>/` → `docs/api/<bc>.md`.
+ */
+export function docDeBc(bc: string): string {
+  return `docs/api/${bc}.md`;
+}
+
+/**
+ * O bounded context de um controller, pelo path do arquivo.
+ *
+ * O padrão NÃO é ancorado no começo: um path ABSOLUTO (o `resolvePath` os
+ * preserva) tem o mesmo sufixo.
+ */
+export function bcDoController(file: string): string | null {
+  const m = /apps\/api\/src\/modules\/([^/]+)\//.exec(file);
+  return m?.[1] ?? null;
+}
+
 const CODE_DOC_MAPPINGS: CodeDocMapping[] = [
   {
     codePattern: /apps\/api\/src\/modules\/auth\/infrastructure\/http\/auth\.controller\.ts$/,
-    docFiles: [
-      'docs/api/auth.md',
-      'apps/api/openapi.json',
-      'docs/adr/0002-autenticacao-jwt-argon2.md',
-    ],
+    docFiles: ['apps/api/openapi.json', 'docs/adr/0002-autenticacao-jwt-argon2.md'],
     // pt-BR (2026-10-13): o mapeamento entrou junto com o módulo de auth.
     // Sem ele, criar o controller não dispara NENHUMA verificação de doc —
     // e o primeiro sintoma de um contrato de autenticação fora de sincronia
-    // é um 401 que ninguém sabe explicar. `docs/api/auth.md` é o contrato
-    // em prosa; o ADR é onde vive o que o JWT NÃO garante (revogação).
+    // é um 401 que ninguém sabe explicar. O ADR é onde vive o que o JWT NÃO
+    // garante (revogação); o contrato em prosa (`docs/api/auth.md`) vem da
+    // regra GENÉRICA do bounded context, não desta lista.
     reason: 'Controller de auth modificado — verificar contrato e ADR',
   },
   {
     codePattern: /apps\/api\/src\/modules\/users\/infrastructure\/http\/users\.controller\.ts$/,
-    docFiles: [
-      'docs/api/users.md',
-      'apps/api/openapi.json',
-      'docs/superpowers/specs/2026-09-21-cadastro-usuario-com-auditoria-04-contrato-http.md',
-    ],
-    reason: 'Controller modificado — verificar contrato HTTP',
+    docFiles: ['apps/api/openapi.json', DOC_DE_CONTRATO_HTTP],
+    reason: 'Controller de users modificado — verificar contrato HTTP',
   },
   {
     codePattern: /apps\/api\/prisma\/schema\.prisma$/,
     docFiles: [
-      'docs/superpowers/specs/2026-09-21-cadastro-usuario-com-auditoria-02-modelo-dados.md',
-      'docs/STACK.md',
+      DOC_DE_MODELO_DADOS,
+      DOC_DE_STACK,
       // pt-BR (2026-11-09): o desenho dos dados do system design tem o
       // PRISMA como fonte — sem este mapeamento, mudar o schema deixaria o
       // diagrama ER e a tabela de escopo envelhecendo em silêncio.
-      'docs/system-design/dados.md',
+      DOC_DE_DADOS,
     ],
     reason: 'Schema Prisma modificado — verificar modelo',
   },
   {
     codePattern: /apps\/api\/src\/modules\/users\/domain\/value-objects\//,
-    docFiles: [
-      'docs/superpowers/specs/2026-09-21-cadastro-usuario-com-auditoria-02-modelo-dados.md',
-    ],
+    docFiles: [DOC_DE_MODELO_DADOS],
     reason: 'VO modificado — atualizar regras',
   },
   {
@@ -151,39 +179,90 @@ function checkMissingDoc(file: string): DocAction | null {
   return null;
 }
 
-function checkIfMatchInPrisma(file: string, content: string): DocAction[] {
-  const actions: DocAction[] = [];
-  if (!/apps\/api\/prisma\/schema\.prisma$/.test(file)) return actions;
-  if (/createdAt/.test(content) && !/AuditOperation/.test(content)) return actions;
+/**
+ * Os models auditados (com rastro de autoria: `createdAt` + `createdBy`) que
+ * NÃO têm a tabela History/Archive correspondente.
+ *
+ * MEDIDO 2026-11-16: a versão anterior emitia UMA ação por model do schema,
+ * todas com o mesmo doc e o mesmo motivo — 12 linhas IDÊNTICAS no parecer da
+ * semana (PR #167). E o guard era o INVERSO do comentário ao lado: ele saía
+ * cedo quando o schema NÃO tinha a enum `AuditOperation`, que é exatamente o
+ * caso que a função existe para checar.
+ *
+ * Sem a enum de auditoria o schema não tem histórico de versão — aí a lista
+ * é vazia POR DEFINIÇÃO, e não por omissão.
+ */
+export function modelsSemParDeHistorico(schema: string): string[] {
+  if (!/enum\s+AuditOperation\b/.test(schema)) return [];
 
-  // Detecta novo model sem AuditOperation enum import
-  const auditOpRegex = /model\s+\w+\s*{/g;
-  const matches = content.match(auditOpRegex) || [];
-  for (const _ of matches) {
-    actions.push({
-      type: 'review',
-      doc_file:
-        'docs/superpowers/specs/2026-09-21-cadastro-usuario-com-auditoria-02-modelo-dados.md',
-      reason: 'Verificar se tabela History/Archive correspondente foi criada',
-      severity: 'minor',
-    });
+  const corpos = new Map<string, string>();
+  const modelo = /model\s+(\w+)\s*\{([^}]*)\}/g;
+  let achado: RegExpExecArray | null;
+  while ((achado = modelo.exec(schema)) !== null) {
+    const nome = achado[1];
+    const corpo = achado[2];
+    if (nome !== undefined && corpo !== undefined) corpos.set(nome, corpo);
   }
-  return actions;
+
+  const semPar: string[] = [];
+  for (const [nome, corpo] of corpos) {
+    if (/(History|Archive)$/.test(nome)) continue;
+    // Rastro de autoria: o model é auditado e por isso tem histórico.
+    if (!/createdAt\b/.test(corpo) || !/createdBy\b/.test(corpo)) continue;
+    const temPar = [...corpos.keys()].some((k) => k === `${nome}History` || k === `${nome}Archive`);
+    if (!temPar) semPar.push(nome);
+  }
+  return semPar;
 }
 
-function checkControllerDoc(file: string, content: string): DocAction[] {
-  const actions: DocAction[] = [];
-  if (!/\.controller\.ts$/.test(file)) return actions;
-  if (!/@Post|@Get|@Patch|@Delete/.test(content)) return actions;
+function checkIfMatchInPrisma(file: string, content: string): DocAction[] {
+  if (!/apps\/api\/prisma\/schema\.prisma$/.test(file)) return [];
+  const semPar = modelsSemParDeHistorico(content);
+  if (semPar.length === 0) return [];
+  return [
+    {
+      type: 'review',
+      doc_file: DOC_DE_MODELO_DADOS,
+      reason: `Model sem tabela History/Archive correspondente — verificar: ${semPar.join(', ')}`,
+      severity: 'minor',
+      source_file: file,
+    },
+  ];
+}
 
-  actions.push({
-    type: 'review',
-    doc_file:
-      'docs/superpowers/specs/2026-09-21-cadastro-usuario-com-auditoria-04-contrato-http.md',
-    reason: 'Endpoints modificados — verificar tabela de endpoints',
-    severity: 'minor',
-  });
-  return actions;
+/**
+ * O doc canônico do bounded context do controller — a regra da matriz de
+ * `documentacao.md` §3 (`apps/api/src/modules/<bc>/` → `docs/api/<bc>.md`).
+ *
+ * MEDIDO 2026-11-16: a versão anterior mandava QUALQUER controller para UM
+ * doc só (o contrato HTTP do módulo de users) — o `health.controller.ts`
+ * apontava para a spec de cadastro de usuário. E, como o motivo era o mesmo
+ * para todos, 3 controllers diferentes produziam 3 linhas idênticas no
+ * parecer.
+ *
+ * O verbo HTTP é lido do ARQUIVO: sem decorator de verbo o controller não
+ * tem endpoint, e a ação só existe se o arquivo pôde ser lido — é o que
+ * mantém `readFileSync` no caminho real (ver `doc-sync.resolvePath.spec.ts`).
+ */
+function checkControllerDoc(file: string, content: string): DocAction[] {
+  if (!/\.controller\.ts$/.test(file)) return [];
+  if (!/@(Post|Get|Patch|Delete)\b/.test(content)) return [];
+  const bc = bcDoController(file);
+  if (!bc) return [];
+  const doc = docDeBc(bc);
+  // O doc canônico do BC ainda não existe: COBERTURA é do
+  // `check-doc-coverage` (a matriz da §3 da `documentacao.md`). Aqui seria a
+  // mesma falta acusada duas vezes — e o doc-sync é report-only.
+  if (!existsSync(resolvePath(doc))) return [];
+  return [
+    {
+      type: 'review',
+      doc_file: doc,
+      reason: `Controller ${bc} modificado — verificar contrato e tabela de endpoints`,
+      severity: 'minor',
+      source_file: file,
+    },
+  ];
 }
 
 export function syncDocs(files: string[]): DocSyncReport {
@@ -191,7 +270,11 @@ export function syncDocs(files: string[]): DocSyncReport {
   const filesChanged: string[] = [];
   let alerts = 0;
 
-  for (const f of files) {
+  // pt-BR: o MESMO arquivo pode entrar N vezes — o relatório semanal passa a
+  // lista de arquivos da semana, e um arquivo tocado em 6 commits entra 6
+  // vezes. Cada entrada repetida virava um conjunto inteiro de ações
+  // repetidas no parecer.
+  for (const f of new Set(files)) {
     const stacks = detectStacksBatch([f])[0]?.stacks ?? [];
     // pt-BR: pula arquivos cujo único stack é `monorepo` (configs de
     // workspace como pnpm-workspace.yaml, turbo.json, package.json na
@@ -200,44 +283,65 @@ export function syncDocs(files: string[]): DocSyncReport {
     // porque têm stack específico aplicável.
     if (stacks.length === 1 && stacks[0] === 'monorepo') continue;
 
+    const doArquivo: DocAction[] = [];
+
     // pt-BR: emite `review` action para cada mapping code→doc que casa
     // (além de checar docs ausentes). Garante que modificações em
     // arquivos mapeados sempre geram sinalização para o humano revisar.
     for (const m of CODE_DOC_MAPPINGS) {
       if (!m.codePattern.test(f)) continue;
       for (const d of m.docFiles) {
-        actions.push({
+        doArquivo.push({
           type: 'review',
           doc_file: d,
           reason: m.reason,
           severity: 'minor',
+          source_file: f,
         });
       }
     }
 
     const missing = checkMissingDoc(f);
-    if (missing) actions.push(missing);
+    if (missing) doArquivo.push({ ...missing, source_file: f });
 
     let content = '';
     try {
       content = readFileSync(resolvePath(f), 'utf-8');
     } catch {
-      continue;
+      // O arquivo não pôde ser lido: as checagens que dependem do CONTEÚDO
+      // não têm o que perguntar, mas as que dependem do PATH (o doc
+      // canônico do BC) continuam válidas.
+      content = '';
     }
-    actions.push(...checkIfMatchInPrisma(f, content));
-    actions.push(...checkControllerDoc(f, content));
+    doArquivo.push(...checkIfMatchInPrisma(f, content));
+    doArquivo.push(...checkControllerDoc(f, content));
+
+    if (doArquivo.length > 0) filesChanged.push(f);
+    actions.push(...doArquivo);
+  }
+
+  // pt-BR: mesma ação = mesmo tipo, mesmo doc, mesmo motivo, mesma origem.
+  // Sem esta deduplicação o parecer da semana saiu com 24 ações das quais
+  // 15 eram cópias (12 de "History/Archive" + 3 de "Endpoints modificados").
+  const vistas = new Set<string>();
+  const unicas: DocAction[] = [];
+  for (const a of actions) {
+    const chave = `${a.type}|${a.doc_file}|${a.reason}|${a.source_file ?? ''}`;
+    if (vistas.has(chave)) continue;
+    vistas.add(chave);
+    unicas.push(a);
   }
 
   // Auto-apply minor updates (no-op: só registra)
-  for (const a of actions) {
+  for (const a of unicas) {
     if (a.severity === 'major' && a.type !== 'alert') alerts++;
   }
 
   const docsHealth = Math.max(0, 100 - alerts * 10);
 
   return {
-    status: actions.length === 0 ? 'no-changes' : 'success',
-    actions,
+    status: unicas.length === 0 ? 'no-changes' : 'success',
+    actions: unicas,
     files_changed: filesChanged,
     alerts,
     docs_health_score: docsHealth,

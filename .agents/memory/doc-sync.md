@@ -9,6 +9,36 @@ description: Memória acumulada do agent doc-sync — sincronização reativa co
 
 ## Decisões Tomadas
 
+### 2026-11-16 — o parecer da semana saiu com 15 cópias em 24 ações
+
+**Contexto:** o artefato do PR #167 (`.agents/runs/weekly-docs-sync-2026-11-16_054502.md`)
+tinha 24 ações das quais 15 eram CÓPIAS: 12 linhas de "History/Archive" (uma
+por model do `schema.prisma`, todas com o mesmo doc e o mesmo motivo) e 3 de
+"Endpoints modificados" (uma por controller, todas idênticas). E o gerador do
+relatório vivia FORA do repo (o script do cron), então os defeitos dele não
+tinham dono, não tinham teste e não podiam ser corrigidos no ciclo.
+
+**Decisão:**
+1. O mapeamento de controller virou **GENÉRICO**: `apps/api/src/modules/<bc>/`
+   → `docs/api/<bc>.md`, a regra da matriz da §3 da `documentacao.md` — e não
+   mais uma lista de paths hardcoded que só cobria `auth` e `users`.
+2. O check de History/Archive só acusa model **AUDITADO** (com `createdAt` +
+   `createdBy`) sem par `<Model>History`/`<Model>Archive`. O guard antigo era o
+   INVERSO do comentário: saía cedo justamente no caso que a função existe para
+   checar.
+3. Toda ação carrega `source_file` — o path que a disparou. O `reason` diz O
+   QUÊ; o `source_file` diz ONDE.
+4. Ações com mesmo tipo + doc + motivo + origem são a MESMA ação (dedupe), e o
+   MESMO arquivo repetido na lista não repete ação.
+5. O gerador do relatório semanal entrou no repo:
+   `tooling/scripts/weekly-docs-sync.ts` (`pnpm weekly:docs-sync`), com janela
+   determinística, path vazio filtrado na origem e diretório derivado do path.
+
+**Consequências:** o parecer da semana caiu de 24 ações (15 cópias) para 10
+ações distintas e rastreáveis. A COBERTURA de doc ausente continua sendo do
+`check-doc-coverage` — o doc-sync não passou a bloquear por doc de BC
+faltando, porque essa falta já tem dono.
+
 ### 2026-10-15 — report-only era contrato morto; agora só doc ausente reprova
 
 **Contexto:** a decisão de 2026-10-06 se provou por ela mesma: ela dizia "o
@@ -72,9 +102,9 @@ justamente o custo de um diagrama que descreve comportamento.
 ## Padrões Descobertos
 
 - 4 ações por finding: `review` (padrão), `update` (auto-aplicado se info/minor), `create` (arquivo novo), `alert` (blocker/major → humano).
-- Mapeamento heurístico code→docs: `apps/api/src/modules/<feature>/` → `docs/api/<feature>.md` + `docs/superpowers/specs/.../<feature>-*.md`. Cobertura não exaustiva — gaps viram `alert`.
-- Idempotência: rodar doc-sync múltiplas vezes produz mesmo resultado (não duplica linhas, não cria arquivos duplicados).
-- Rastreabilidade: cada finding tem `evidence` (path:linha + trecho + razão).
+- Mapeamento code→docs: `apps/api/src/modules/<bc>/` → `docs/api/<bc>.md` (canônico, pela matriz da §3 da `documentacao.md`) + `apps/api/openapi.json`; o ADR e a spec de contrato entram como docs EXTRAS do módulo. `schema.prisma` → a spec de modelo + `docs/STACK.md` + `docs/system-design/dados.md`.
+- Idempotência: rodar doc-sync múltiplas vezes produz o mesmo resultado — e o MESMO arquivo repetido na lista não repete ação (o relatório semanal passa a lista de arquivos da semana, e um arquivo tocado em N commits entra N vezes).
+- Rastreabilidade: cada ação carrega `source_file` (o path que a disparou) e o `reason`. O campo `evidence` (path:linha + trecho) existe no schema mas NÃO é populado pelo script — o doc-sync não tem diff, ele só sabe o path.
 
 ## Lições Aprendidas
 
