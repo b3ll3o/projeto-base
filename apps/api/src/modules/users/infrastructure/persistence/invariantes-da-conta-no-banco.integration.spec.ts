@@ -272,6 +272,22 @@ const CORPUS_DO_HASH: Caso[] = [
     banco: false,
     vo: false,
   },
+  {
+    // O teto, nos DOIS lados do limite: 512 caracteres é aceito pelos dois
+    // lados, 513 é recusado pelos dois. Sem este par, o corpus só prenderia o
+    // teto na faixa [97, 638) — e uma deriva do limite para 600 (que aceitaria
+    // um valor que o VO recusa) ficaria VERDE.
+    nome: 'argon2id com exatamente 512 caracteres',
+    valor: `$argon2id$v=19$m=65536,t=3,p=4$c2FsdA$${'A'.repeat(474)}`,
+    banco: true,
+    vo: true,
+  },
+  {
+    nome: 'argon2id com 513 caracteres',
+    valor: `$argon2id$v=19$m=65536,t=3,p=4$c2FsdA$${'A'.repeat(475)}`,
+    banco: false,
+    vo: false,
+  },
 ];
 
 /** O corpus do ID. */
@@ -331,6 +347,17 @@ const CLASSES_DE_DIVERGENCIA = [
   'argon2id com caractere multibyte no digest',
 ];
 
+/**
+ * Um hash que os DOIS lados aceitam — o valor de uso nos testes que só
+ * precisam de uma conta legível.
+ *
+ * ⚠️ Uma constante NOMEADA, e não `CORPUS_DO_HASH[0]?.valor ?? ''` repetido:
+ * o índice mágico significa "um hash válido" em oito lugares, e o `?? ''`
+ * esconde o corpus vazio (o `''` cairia no banco e a recusa seria a do valor
+ * vazio, não a do formato).
+ */
+const HASH_VALIDO = CORPUS_DO_HASH[0]?.valor ?? '';
+
 /** O que o value object do hash diz do valor — sem exceção escapando. */
 function voAceitaHash(valor: string): boolean {
   try {
@@ -364,6 +391,24 @@ describe('As invariantes da conta no BANCO (users.id e users.password_hash)', ()
 
   beforeEach(async () => {
     await cleanDatabase(ctx.prisma);
+    // ⚠️ As DUAS constraints voltam aqui — e não só no último bloco do
+    // arquivo. Os blocos de reparo DERRUBAM a constraint (é assim que a linha
+    // corrompida entra) e, sem esta restauração, o estado do banco dependeria
+    // da ORDEM dos `describe`: sem constraint, `bancoAceita` dá `false` para
+    // tudo, o corpo do `if` dos testes de IMPLICAÇÃO nunca roda — e o teste
+    // passa VACUAMENTE, sem uma única asserção.
+    await ctx.prisma.$executeRawUnsafe(
+      `ALTER TABLE users DROP CONSTRAINT IF EXISTS ${CONSTRAINT_DO_HASH}`,
+    );
+    await ctx.prisma.$executeRawUnsafe(
+      `ALTER TABLE users DROP CONSTRAINT IF EXISTS ${CONSTRAINT_DO_ID}`,
+    );
+    await ctx.prisma.$executeRawUnsafe(
+      await readFile(CAMINHOS_DAS_MIGRATIONS.hashConstraint, 'utf8'),
+    );
+    await ctx.prisma.$executeRawUnsafe(
+      await readFile(CAMINHOS_DAS_MIGRATIONS.idConstraint, 'utf8'),
+    );
   });
 
   /**
@@ -418,15 +463,13 @@ describe('As invariantes da conta no BANCO (users.id e users.password_hash)', ()
     });
 
     it('recusa um id que não é uuid v7', async () => {
-      await expect(
-        bancoAceita('5e82103f-1ed2-4405-b099-ac2f5a08625b', CORPUS_DO_HASH[0]?.valor ?? ''),
-      ).resolves.toBe(false);
+      await expect(bancoAceita('5e82103f-1ed2-4405-b099-ac2f5a08625b', HASH_VALIDO)).resolves.toBe(
+        false,
+      );
     });
 
     it('aceita uma conta válida', async () => {
-      await expect(
-        bancoAceita(UserId.create().value, CORPUS_DO_HASH[0]?.valor ?? ''),
-      ).resolves.toBe(true);
+      await expect(bancoAceita(UserId.create().value, HASH_VALIDO)).resolves.toBe(true);
     });
   });
 
@@ -451,7 +494,7 @@ describe('As invariantes da conta no BANCO (users.id e users.password_hash)', ()
     it.each(CORPUS_DO_ID.map((c) => [c.nome, c] as const))(
       'ID — %s: o banco e o VO dizem o que a tabela espera',
       async (_nome, caso) => {
-        const motivo = await motivoDaRecusa(caso.valor, CORPUS_DO_HASH[0]?.valor ?? '');
+        const motivo = await motivoDaRecusa(caso.valor, HASH_VALIDO);
         expect(motivo === null).toBe(caso.banco);
         if (!caso.banco) {
           expect(motivo, `a recusa de "${caso.nome}" foi por "${motivo}"`).toBe(
@@ -467,25 +510,34 @@ describe('As invariantes da conta no BANCO (users.id e users.password_hash)', ()
       // que fecha o buraco: não existe valor que o banco grave e a aplicação
       // não consiga ler. Sem ela, a tabela poderia estar errada nos dois lados
       // ao mesmo tempo e o spec ficaria verde.
+      let aceitos = 0;
       for (const caso of CORPUS_DO_HASH) {
         if (await bancoAceita(UserId.create().value, caso.valor)) {
+          aceitos++;
           expect(
             voAceitaHash(caso.valor),
             `o banco aceitou "${caso.nome}" e o VO recusou — a listagem quebraria`,
           ).toBe(true);
         }
       }
+      // ⚠️ A contagem NÃO É decoration: sem ela, o teste passa VACUAMENTE
+      // quando o banco não aceita nada (por exemplo, se a constraint
+      // sumisse) — e a afirmação-título do spec viraria verde vazio.
+      expect(aceitos, 'nenhum caso do corpus foi aceito pelo banco').toBeGreaterThan(0);
     });
 
     it('IMPLICAÇÃO (id): o que o banco aceitou, o VO aceita — o 400 não volta', async () => {
+      let aceitos = 0;
       for (const caso of CORPUS_DO_ID) {
-        if (await bancoAceita(caso.valor, CORPUS_DO_HASH[0]?.valor ?? '')) {
+        if (await bancoAceita(caso.valor, HASH_VALIDO)) {
+          aceitos++;
           expect(
             voAceitaId(caso.valor),
             `o banco aceitou "${caso.nome}" e o VO recusou — a listagem quebraria`,
           ).toBe(true);
         }
       }
+      expect(aceitos, 'nenhum caso do corpus foi aceito pelo banco').toBeGreaterThan(0);
     });
 
     it('a divergência declarada é na direção segura (o banco é mais estrito)', async () => {
@@ -622,7 +674,7 @@ describe('As invariantes da conta no BANCO (users.id e users.password_hash)', ()
           id: idV4,
           email: 'id-velho@teste.local',
           name: 'Id Velho',
-          passwordHash: CORPUS_DO_HASH[0]?.valor ?? '',
+          passwordHash: HASH_VALIDO,
         },
       });
       expect(voAceitaId(idV4)).toBe(false);
@@ -655,7 +707,7 @@ describe('As invariantes da conta no BANCO (users.id e users.password_hash)', ()
           id: idDoCriador,
           email: 'criador@teste.local',
           name: 'Criador',
-          passwordHash: CORPUS_DO_HASH[0]?.valor ?? '',
+          passwordHash: HASH_VALIDO,
         },
       });
 
@@ -665,7 +717,7 @@ describe('As invariantes da conta no BANCO (users.id e users.password_hash)', ()
           id: idV4,
           email: 'com-historico@teste.local',
           name: 'Com Histórico',
-          passwordHash: CORPUS_DO_HASH[0]?.valor ?? '',
+          passwordHash: HASH_VALIDO,
           createdBy: idDoCriador,
           updatedBy: idDoCriador,
           deletedBy: idDoCriador,
@@ -781,7 +833,7 @@ describe('As invariantes da conta no BANCO (users.id e users.password_hash)', ()
           id: idV4,
           email: 'com-fk@teste.local',
           name: 'Com FK',
-          passwordHash: CORPUS_DO_HASH[0]?.valor ?? '',
+          passwordHash: HASH_VALIDO,
         },
       });
       const empresa = await ctx.prisma.tenant.create({
@@ -827,7 +879,7 @@ describe('As invariantes da conta no BANCO (users.id e users.password_hash)', ()
           id: '6be471e2-65d8-460b-acf6-0497c0cfff25',
           email: 'id-velho2@teste.local',
           name: 'Id Velho',
-          passwordHash: CORPUS_DO_HASH[0]?.valor ?? '',
+          passwordHash: HASH_VALIDO,
         },
       });
 
@@ -928,9 +980,33 @@ describe('As invariantes da conta no BANCO (users.id e users.password_hash)', ()
       );
 
       await expect(bancoAceita(UserId.create().value, 'x')).resolves.toBe(false);
+      await expect(bancoAceita('5e82103f-1ed2-4405-b099-ac2f5a08625b', HASH_VALIDO)).resolves.toBe(
+        false,
+      );
+    });
+
+    it('a constraint falha ALTO quando uma linha violadora existe', async () => {
+      // É a afirmação da doc ("a constraint sem o reparo falha no
+      // `ADD CONSTRAINT`, com um 'violated by some row'") — e ela não tinha
+      // instrumento: nenhum teste media a falha. Um reparo que deixasse uma
+      // linha violadora passaria por aqui.
+      await ctx.prisma.$executeRawUnsafe(
+        `ALTER TABLE users DROP CONSTRAINT IF EXISTS ${CONSTRAINT_DO_HASH}`,
+      );
+      await ctx.prisma.user.create({
+        data: {
+          id: UserId.create().value,
+          email: 'violadora@teste.local',
+          name: 'Violadora',
+          passwordHash: 'x',
+        },
+      });
+
       await expect(
-        bancoAceita('5e82103f-1ed2-4405-b099-ac2f5a08625b', CORPUS_DO_HASH[0]?.valor ?? ''),
-      ).resolves.toBe(false);
+        ctx.prisma.$executeRawUnsafe(
+          await readFile(CAMINHOS_DAS_MIGRATIONS.hashConstraint, 'utf8'),
+        ),
+      ).rejects.toThrow(/users_password_hash_argon2id/);
     });
   });
 });

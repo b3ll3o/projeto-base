@@ -253,12 +253,16 @@ revisão achar, commit convencional, push e PR.
 
 > **Revisado em 2026-11-16**, depois da implementação: dois subagentes
 > revisaram o diff (um `code-reviewer`, um `prisma-db-specialist`) e mediram o
-> que o plano afirmava. **Dezenove achados; dezoito viraram mudança, um foi
-> registrado como decisão.**
+> que o plano afirmava. **Vinte e três achados; vinte e dois viraram mudança,
+> um foi registrado como decisão.**
 >
 > A segunda rodada (outros três subagentes — `prisma-db-specialist`,
 > `security-auditor` e `code-reviewer` — mais a medição no Postgres local)
-> achou mais seis; estão na tabela, de 14 a 19.
+> achou mais seis; estão na tabela, de 14 a 19. A terceira (o `code-reviewer`
+> que só terminou no fim) achou mais quatro — de 20 a 23 — e o mais grave
+> deles era o spec: **o corpus só prendia o teto de 512 na faixa [97, 638)**,
+> e uma deriva do limite para 600 (que aceitaria um valor que o VO recusa)
+> ficaria VERDE.
 
 | # | Achado | Mudança |
 |---|---|---|
@@ -281,6 +285,10 @@ revisão achar, commit convencional, push e PR.
 | 17 | **[minor]** a função do id recebia `uuid`: um texto que não é uuid LEVANTA (`22P02`) em vez de devolver o veredito, e um uuid sem hifens era canonicalizado e aceito (o VO recusa) | a função passou a receber `text` — o mesmo domínio do VO — e a CHECK constraint chama `("id"::text)`, que é a forma canônica que a aplicação lê |
 | 18 | **[minor]** a divergência declarada (o banco mais estrito que o VO) era fixada num ÚNICO caso do corpus, e é uma CLASSE | o spec passou a afirmar a divergência por CLASSE (parâmetro extra; teto em bytes), e o corpus ganhou os membros medidos |
 | 19 | **[minor]** o spec do reparo do id afirmava 3 das **onze** referências soltas (o `entity_id` do histórico, o `changed_by` e o `created_by`) — o `users_archive`, a chave de idempotência, o `updated_by`, o `deleted_by` e o CASCADE de memberships e refresh tokens podiam sumir sem o spec ficar vermelho | o spec passou a afirmar as onze, e ganhou o teste do `ON UPDATE CASCADE` (MEDIDO: com o `UPDATE idempotency_keys` removido da migration, o spec fica VERMELHO) |
+| 20 | **[major]** o corpus do spec só prendia o teto de 512 na faixa [97, 638): o único caso sensível ao tamanho tinha 638 caracteres, e uma deriva do limite para 600 ficaria VERDE | entraram os dois lados do limite (512 aceito pelos dois, 513 recusado pelos dois). MEDIDO: com o teto do banco em 600, o spec fica VERMELHO em três asserções |
+| 21 | **[minor]** a spec de RLS gravava, no UPDATE de usuário alheio, o MESMO valor da fixture — e a asserção "o hash é o da fixture" ficava tautológica (valia para "escrita barrada" e para "escrita feita") | o UPDATE passou a gravar o `HASH_ALTERADO` (o valor que a spec define justamente para ser diferente) |
+| 22 | **[minor]** o `beforeEach` do spec não restaurava as constraints que os blocos de reparo derrubam: sem elas, os testes de IMPLICAÇÃO passavam VACUAMENTE (o `if` nunca entrava) e o estado do banco dependia da ordem dos `describe` | o `beforeEach` restaura as duas constraints, e a contagem de casos aceitos deixa o vazio visível |
+| 23 | **[minor]** a falha alta do `ADD CONSTRAINT` (afirmada na doc: "violated by some row") não tinha instrumento — um reparo que deixasse uma linha violadora passaria | o spec ganhou o teste que aplica a constraint na presença da linha violadora e mede a recusa |
 
 ⚠️ Um achado **não** virou mudança: o port `UsuarioParaProvisionar.senhaHash`
 continua com o tipo cru (`string`). O motivo está no §4 — a convenção de BC

@@ -778,7 +778,12 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
     const alterados = await comEscopo(acmeId, async (tx) => {
       const r = await tx.user.updateMany({
         where: { id: daGlobex },
-        data: { passwordHash: HASH_COM_FORMA },
+        // ⚠️ O valor tem de ser DIFERENTE do da fixture (o `HASH_ALTERADO`):
+        // se a escrita passasse, o hash mudaria — e a asserção abaixo
+        // ("o hash é o da fixture") viraria um sinal de que a escrita foi
+        // barrada. Com o valor IGUAL ao da fixture, ela valia tanto para
+        // "escrita barrada" quanto para "escrita feita".
+        data: { passwordHash: HASH_ALTERADO },
       });
       return r.count;
     });

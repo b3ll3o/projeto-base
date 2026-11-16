@@ -153,6 +153,7 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `classify-by-executability-not-count` | `pendente` | — | — |
 | `claim-numero-precisa-de-campo-lido-por-gate` | `citada` | `.tooling/scripts/ci/check-dependency-audit.ts` | `o número é uma MEDIÇÃO, e a medição envelhece com` |
 | `commit-message-via-file-not-heredoc` | `pendente` | — | — |
+| `contagem-de-caracteres-divergem-pg-vs-js` | `pendente` | — | — |
 | `conteudo-exclusivo-de-branch-defeito-ja-corrigido` | `pendente` | — | — |
 | `correction-of-one-instance-closes-the-class` | `pendente` | — | — |
 | `cost-must-reconcile-with-the-whole` | `citada` | `.agents/specs/conventions/ci-defense-in-depth.md` | `é uma história` |
