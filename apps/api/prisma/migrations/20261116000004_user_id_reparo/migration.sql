@@ -24,8 +24,9 @@
 --     `idempotency_keys.actor`, as colunas de auditoria (`users.created_by`,
 --     `users.updated_by`, `users.deleted_by`, `users_history.changed_by`,
 --     `users_archive.deleted_by`) e o `id` DENTRO dos snapshots JSONB
---     (`users_history.snapshot`, `users_archive.snapshot`,
---     `idempotency_keys.response`) — que é o corpo que a API devolve.
+--     (`users_history.snapshot`, `users_archive.snapshot`) e do ENVELOPE da
+--     chave de idempotência (`idempotency_keys.response.body`) — que é o
+--     corpo que a API devolve, dentro do envelope `{ body, headers }`.
 --
 -- ⚠️ A assinatura HMAC da membership NÃO é um problema aqui: ela é conferida
 -- no INSERT, dentro de `criar_membership`
