@@ -1,7 +1,7 @@
 {
   "_nota": "As majors que existem no registro e NAO sobem agora. Cada uma tem motivo. O gate check-dependency-freshness le este arquivo e reprova quando uma pendencia envelhece (o pacote saiu do workspace, ou a faixa ja permite a major).",
-  "medidoEm": "2026-11-09",
-  "total": 25,
+  "medidoEm": "2026-11-16",
+  "total": 18,
   "pendencias": [
     {
       "pacote": "@eslint/js",
@@ -9,46 +9,6 @@
       "majorAtual": 9,
       "majorNova": 10,
       "motivo": "flat-config breaking: acompanha o eslint 10",
-      "declaradaEm": "2026-11-09"
-    },
-    {
-      "pacote": "@nestjs/common",
-      "faixaAtual": "^11.2.9",
-      "majorAtual": 11,
-      "majorNova": 12,
-      "motivo": "breaking change de framework: exige migracao de modulos, providers e decorators; o app inteiro e o template de uso dependem do contrato v11",
-      "declaradaEm": "2026-11-09"
-    },
-    {
-      "pacote": "@nestjs/core",
-      "faixaAtual": "^11.2.9",
-      "majorAtual": 11,
-      "majorNova": 12,
-      "motivo": "breaking change de framework: exige migracao de modulos, providers e decorators; o app inteiro e o template de uso dependem do contrato v11",
-      "declaradaEm": "2026-11-09"
-    },
-    {
-      "pacote": "@nestjs/platform-fastify",
-      "faixaAtual": "^11.2.9",
-      "majorAtual": 11,
-      "majorNova": 12,
-      "motivo": "breaking change de framework: o adaptador Fastify muda junto com o core; subir um so deixa o workspace incoerente",
-      "declaradaEm": "2026-11-09"
-    },
-    {
-      "pacote": "@nestjs/swagger",
-      "faixaAtual": "^11.4.8",
-      "majorAtual": 11,
-      "majorNova": 12,
-      "motivo": "breaking change de framework: o modulo de OpenAPI muda junto com o core; o gate de OpenAPI do repo le o contrato gerado",
-      "declaradaEm": "2026-11-09"
-    },
-    {
-      "pacote": "@nestjs/testing",
-      "faixaAtual": "^11.2.9",
-      "majorAtual": 11,
-      "majorNova": 12,
-      "motivo": "breaking change de framework: o modulo de teste muda junto com o core; a suite de integracao usa os helpers",
       "declaradaEm": "2026-11-09"
     },
     {
@@ -132,27 +92,11 @@
       "declaradaEm": "2026-11-09"
     },
     {
-      "pacote": "nestjs-pino",
-      "faixaAtual": "^4.6.1",
-      "majorAtual": 4,
-      "majorNova": 5,
-      "motivo": "breaking de API de logging: o modulo de telemetry do repo usa os tipos do PinoModule direto",
-      "declaradaEm": "2026-11-09"
-    },
-    {
       "pacote": "next",
       "faixaAtual": "^15.5.29",
       "majorAtual": 15,
       "majorNova": 16,
       "motivo": "breaking change de framework: o CSP com nonce, o middleware e as rotas do #143 dependem do contrato do next 15",
-      "declaradaEm": "2026-11-09"
-    },
-    {
-      "pacote": "pino-http",
-      "faixaAtual": "^10.5.0",
-      "majorAtual": 10,
-      "majorNova": 11,
-      "motivo": "breaking de API de logging: o middleware de request log do repo usa a API do pino-http v10",
       "declaradaEm": "2026-11-09"
     },
     {

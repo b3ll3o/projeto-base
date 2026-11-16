@@ -36,7 +36,7 @@ projeto-base/
 │   ├── specs/conventions/ # 24 convenções (ver AGENTS.md §6)
 │   ├── workflows/         # 15 workflows detalhados
 │   └── WORKFLOWS.md       # Fluxos pré-configurados, em tabela
-├── apps/                  # api (NestJS 11) + web (Next.js 15)
+├── apps/                  # api (NestJS 12) + web (Next.js 15)
 ├── packages/              # eslint-config, shared-types, tsconfig
 ├── tooling/scripts/       # stack-code-reviewer, doc-sync, routers
 ├── turbo.json             # pipeline cacheado (turbo)
@@ -68,7 +68,7 @@ projeto-base/
 
 ### Pré-requisitos
 
-- **Node.js** ≥ 22.6.0 (`package.json` → `engines.node`)
+- **Node.js** ≥ 22.12.0 (`package.json` → `engines.node`)
 - **pnpm** ≥ 9.12.0 (`packageManager` → `corepack enable && corepack prepare pnpm@9.12.0 --activate`)
 - **Docker** + **Docker Compose** v2 (apenas para o modo Docker)
 - **PostgreSQL 16** rodando em `localhost:5432`. ⚠️ Desde o #91 o `postgres` do compose
@@ -109,7 +109,7 @@ docker compose logs -f api web
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up
-# Editar apps/api/src/ → tsx watch recarrega em <2s
+# Editar apps/api/src/ → node --watch recarrega em <2s
 # Editar apps/web/app/ → Next.js Fast Refresh imediato
 ```
 
@@ -261,7 +261,7 @@ Todo workflow é disparado pela skill `agents:coordinate` (§Regra Mandatória).
 Conforme convenção [`docs/STACK.md`](./docs/STACK.md):
 
 - **Monorepo:** pnpm workspaces + Turborepo
-- **Backend (`apps/api`):** NestJS 11 + Fastify + Prisma 6 + PostgreSQL 16
+- **Backend (`apps/api`):** NestJS 12 + Fastify + Prisma 6 + PostgreSQL 16
 - **Frontend (`apps/web`):** Next.js 15 (App Router) + React 19 + Tailwind CSS 4
 - **Observabilidade:** OpenTelemetry SDK + OTel Collector (perfil Compose `observability`)
 

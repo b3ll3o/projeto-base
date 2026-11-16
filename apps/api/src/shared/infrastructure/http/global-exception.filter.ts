@@ -7,14 +7,10 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import type { FastifyAdapter } from '@nestjs/platform-fastify';
 import { traceIdDe } from './trace-id.js';
 import type { ProblemDetailsDto, ProblemDetailsError } from '@projeto/shared-types';
 import { DETALHE_DE_ERRO_INTERNO, mapExceptionToHttp } from './domain-exception-to-http.js';
-
-// pt-BR: extraído de @nestjs/platform-fastify (TReply do FastifyAdapter)
-// porque o pacote 'fastify' não é dep direta de @projeto/api nesta fase.
-type FastifyReply = Parameters<FastifyAdapter['setHeader']>[0];
+import type { FastifyReply } from './fastify-reply.type.js';
 
 /**
  * Filter global: converte TODA exceção em RFC 7807 Problem Details.

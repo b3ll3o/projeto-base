@@ -11,7 +11,7 @@ const MAX_DOCKERFILE_LINES = 100;
 /**
  * Major do Node que os Dockerfiles devem usar.
  *
- * Casa com `package.json` -> `engines.node: ">=22.6.0"`. Build e suite rodam
+ * Casa com `package.json` -> `engines.node: ">=22.12.0"`. Build e suite rodam
  * em node 22 no CI (`node-version: 22`); a producao rodava em 20, sem nada que
  * comparasse os dois. O CI provava que a imagem **monta**, nao que ela roda
  * sobre o contrato que o proprio repo declara.
@@ -49,7 +49,7 @@ const REQUIRED_DOCKERFILES = ['apps/api/Dockerfile', 'apps/web/Dockerfile'] as c
  * A distro e a major sao guardadas SEPARADAMENTE, e cada mensagem nomeia a
  * causa real. Um `FROM node:20-alpine` falha **pela distro** (musl, sem glibc
  * para o engine binary do Prisma 6); um `FROM node:20-bookworm-slim` falha
- * **pela major** (o repo declara `engines.node >=22.6` e o CI roda node 22).
+ * **pela major** (o repo declara `engines.node >=22.12` e o CI roda node 22).
  *
  * Quando as duas falham, sao dois erros — nao um compounded. Uma mensagem unica
  * apontaria para uma causa e deixaria a outra invisivel, que era exatamente a
@@ -81,7 +81,7 @@ export function checkBaseImage(dockerfileRelPath: string, content: string): stri
     if (major !== String(REQUIRED_NODE_MAJOR)) {
       errors.push(
         `${dockerfileRelPath} usa major do Node ${major ?? 'desconhecida'} — ` +
-          `o repo declara engines.node ">=22.6.0" e o CI roda node ${REQUIRED_NODE_MAJOR} ` +
+          `o repo declara engines.node ">=22.12.0" e o CI roda node ${REQUIRED_NODE_MAJOR} ` +
           `(imagem de produção em major diferente da de build)`,
       );
     }

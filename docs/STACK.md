@@ -15,7 +15,7 @@
 ```text
 projeto-base (monorepo)
 ├── apps/
-│   ├── api/      # NestJS 11 + Fastify + Prisma 6 + PostgreSQL 16
+│   ├── api/      # NestJS 12 + Fastify + Prisma 6 + PostgreSQL 16
 │   └── web/      # Next.js 15 + React 19 + Tailwind 4
 ├── packages/
 │   ├── shared-types/        # Tipos compartilhados front↔back
@@ -45,13 +45,13 @@ projeto-base (monorepo)
 
 | Camada | Escolha | Versão | Justificativa |
 |--------|---------|--------|---------------|
-| Runtime | Node.js | ≥ 22.6.0 | Medido em `package.json` → `engines.node`; casa com a imagem base `node:22-bookworm-slim` |
-| Framework | NestJS | 11.x | Estrutura modular, DI nativo, OpenAPI integrado |
-| HTTP Adapter | Fastify | 5.11.3 (transitiva) | 2-3× mais rápido que Express; menor footprint. O adapter é `@nestjs/platform-fastify` `^11.0.0` — o `fastify` em si não é dependência direta |
+| Runtime | Node.js | ≥ 22.12.0 | Medido em `package.json` → `engines.node`; casa com a imagem base `node:22-bookworm-slim` |
+| Framework | NestJS | 12.x | Estrutura modular, DI nativo, OpenAPI integrado |
+| HTTP Adapter | Fastify | 5.12.8 (transitiva) | 2-3× mais rápido que Express; menor footprint. O adapter é `@nestjs/platform-fastify` `^12.0.0` — o `fastify` em si não é dependência direta |
 | ORM | Prisma | 6.x | Type-safe, migrations versionadas, excelente DX |
 | Banco de Dados | PostgreSQL | 16 | Maduro, JSONB, extensions, performance |
 | Validação | **Zod** + `ZodValidationPipe` | ^3.25.76 | Schema único, executável no cliente E no servidor. `class-validator` NÃO está instalado — o pipe é `@Body(new ZodValidationPipe(Schema))`, não o `ValidationPipe` global |
-| Documentação API | @nestjs/swagger | ^11.0.0 | OpenAPI 3.0 automático a partir dos decorators |
+| Documentação API | @nestjs/swagger | ^12.1.2 | OpenAPI 3.0 automático a partir dos decorators |
 | Auth | @nestjs/jwt + `JwtAuthGuard` próprio | ^12.0.2 | Sem passport: o guard valida assinatura/expiração e um `@Public()` o libera. O **refresh token é revogável**: o `jti` vive na tabela `refresh_tokens` (rotação, `POST /auth/logout` e detecção de replay — [ADR-0007](./adr/0007-refresh-token-revogavel.md)). Detalhe em [`docs/api/auth.md`](./api/auth.md) |
 | Hash de senha | argon2 (argon2id) | ^0.45.1 | Recomendação OWASP; resiste a GPU e a ASIC. Alternativa ao bcrypt, que trunca a senha em 72 bytes — ver [ADR-0002](./adr/0002-autenticacao-jwt-argon2.md) |
 | Logging | Pino | ^10.3.0 | Estruturado JSON, rápido |

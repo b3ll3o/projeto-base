@@ -12,7 +12,8 @@
  *
  * O que esta etapa faz, em ordem:
  *   1. Lê `apps/api/.env` — a configuração local (runbook §1.2).
- *   2. Sobe a API em `tsx src/main.ts` (o MESMO caminho do `pnpm dev`).
+ *   2. Sobe a API em `node --import tsx/esm src/main.ts` (o MESMO caminho do
+ *      `pnpm dev`).
  *   3. Espera `/api/v1/health` responder 200 com o banco "ok" (runbook §1.5).
  *   4. Sobe o web em `next dev` (o MESMO caminho do `pnpm dev`).
  *   5. Espera `/api/health` responder 200 (runbook §1.5).
@@ -26,6 +27,20 @@
  * ⚠️ As portas são LIVRES, e não 3000/3001: o `pnpm dev` da pessoa pode estar
  * no ar, e uma etapa que briga pela porta falharia por um motivo que não é
  * defeito. Mesma razão do `portaLivre()` da suíte e2e.
+ *
+ * ⚠️ A API sobe pelo loader ESM do Node (`node --import tsx/esm`), e NÃO pelo
+ * CLI do `tsx`. MEDIDO 2026-11-16, depois do NestJS 12 (que virou ESM-only):
+ * o CLI do `tsx` transpila o `@nestjs/core` (ESM) para CJS quando um pacote
+ * CJS o exige (`@nestjs/throttler`, `nestjs-pino`), e o app — que importa o
+ * core por `import` — ficava com OUTRA cópia da classe `Reflector`. O DI
+ * quebrava no boot: "Nest can't resolve dependencies of the ThrottlerGuard
+ * (..., ?). Please make sure that the argument Reflector at index [2] is
+ * available in the AppModule module". No `node` puro (produção) e no
+ * `node --import tsx/esm` a cópia é UMA — o `require(esm)` nativo do Node
+ * devolve a mesma instância que o `import`. MEDIDO com o comando:
+ *   `node -e "..."` comparando `Reflect.getMetadata('design:paramtypes',
+ *   ThrottlerGuard)[2] === Reflector` → `true` no node e no
+ *   `node --import tsx/esm`; `false` no CLI do `tsx`.
  */
 
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -375,7 +390,7 @@ async function main(): Promise<number> {
   const webPorta = await portaLivre();
 
   console.log(`[ci:boot] subindo a API em http://127.0.0.1:${apiPorta} …`);
-  const api = subir('api', join(RAIZ, 'node_modules', '.bin', 'tsx'), ['src/main.ts'], API_DIR, {
+  const api = subir('api', process.execPath, ['--import', 'tsx/esm', 'src/main.ts'], API_DIR, {
     ...process.env,
     PORT: String(apiPorta),
     DATABASE_URL: databaseUrl,

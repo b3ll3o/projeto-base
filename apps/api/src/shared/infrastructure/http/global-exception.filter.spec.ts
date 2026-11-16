@@ -10,12 +10,12 @@
 // simples (não NestJS managed), então pode ser instanciado direto.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { FastifyAdapter } from '@nestjs/platform-fastify';
 import { HttpException, Logger } from '@nestjs/common';
 import type { ArgumentsHost } from '@nestjs/common';
 import type { Span } from '@opentelemetry/api';
 import { trace } from '@opentelemetry/api';
 import { GlobalExceptionFilter } from './global-exception.filter.js';
+import type { FastifyReply } from './fastify-reply.type.js';
 import { DETALHE_DE_ERRO_INTERNO } from './domain-exception-to-http.js';
 import {
   ApplicationResourceNotFoundException,
@@ -25,10 +25,6 @@ import {
   ApplicationInvalidRestoreException,
   ApplicationValidationException,
 } from '../../../modules/users/application/exceptions/application.exceptions.js';
-
-// pt-BR: tipo FastifyReply extraído via Parameters<FastifyAdapter['setHeader']>[0]
-// porque o pacote 'fastify' não é dep direta de @projeto/api nesta fase.
-type FastifyReply = Parameters<FastifyAdapter['setHeader']>[0];
 
 interface CapturedReply {
   status?: number;

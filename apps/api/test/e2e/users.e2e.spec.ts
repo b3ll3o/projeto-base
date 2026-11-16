@@ -3,7 +3,7 @@
 // Testes E2E ponta-a-ponta do UsersController (Fase 7 Task 7.7).
 //
 // Stack:
-//  - NestJS 11 + FastifyAdapter (mesmo adapter de produção)
+//  - NestJS 12 + FastifyAdapter (mesmo adapter de produção)
 //  - Testcontainers (postgres:16-alpine) — PrismaClient REAL, sem mocks
 //  - GlobalExceptionFilter + ZodValidationPipe(z.any()) replicando o
 //    wiring de main.ts, então os erros chegam no formato RFC 7807 Problem

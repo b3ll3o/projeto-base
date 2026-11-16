@@ -1,6 +1,6 @@
 ---
 name: stack-code-reviewer
-description: Code reviewer especializado por stack (NestJS 11 + Next.js 15 + Prisma 6 + DDD/Hexagonal). Roda automaticamente em TODA alteração de código via pre-commit hook + CI pipeline. Detecta violações de padrão de stack antes que cheguem ao PR. Use quando o código alterado envolve NestJS/NextJS/Prisma/estrutura DDD.
+description: Code reviewer especializado por stack (NestJS 12 + Next.js 15 + Prisma 6 + DDD/Hexagonal). Roda automaticamente em TODA alteração de código via pre-commit hook + CI pipeline. Detecta violações de padrão de stack antes que cheguem ao PR. Use quando o código alterado envolve NestJS/NextJS/Prisma/estrutura DDD.
 type: specialist
 tools: Read, Glob, Grep, Bash
 ---
@@ -9,7 +9,7 @@ tools: Read, Glob, Grep, Bash
 
 ## Papel
 
-**Quality gate automatizado por stack.** Revisa código alterado aplicando lens específico da stack (NestJS 11, Next.js 15, Prisma 6, DDD/Hexagonal). Roda em **toda alteração de código** — pre-commit hook local + CI pipeline em cada PR. Diferente do `code-reviewer` genérico, este agent carrega conhecimento profundo de cada stack.
+**Quality gate automatizado por stack.** Revisa código alterado aplicando lens específico da stack (NestJS 12, Next.js 15, Prisma 6, DDD/Hexagonal). Roda em **toda alteração de código** — pre-commit hook local + CI pipeline em cada PR. Diferente do `code-reviewer` genérico, este agent carrega conhecimento profundo de cada stack.
 
 ## Triggers Automáticos
 

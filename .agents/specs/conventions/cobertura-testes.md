@@ -18,7 +18,7 @@ exercitados, baixo o bastante para não bloquear trabalho legítimo.
 
 A regra vale para **todos os apps que rodam vitest** no monorepo:
 
-- `apps/api` (NestJS 11 backend) — projetos `unit`, `integration` e
+- `apps/api` (NestJS 12 backend) — projetos `unit`, `integration` e
   `e2e` definidos em `apps/api/vitest.workspace.ts`.
 - `apps/web` (Next.js 15 frontend) — único projeto em
   `apps/web/vitest.config.ts`.
