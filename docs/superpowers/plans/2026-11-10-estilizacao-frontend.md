@@ -26,20 +26,20 @@ O frontend do `projeto-base` é um app interno em Next.js 15 (App Router) +
 Tailwind 4. Ele **não tem design system**: tem 2 tokens de cor e a repetição
 literal de class strings.
 
-| Medida | Valor | Comando |
+| Medida | Valor | Comando (contra `origin/main`, para o comando continuar valendo depois da migração) |
 |---|---|---|
-| Tokens de cor em `globals.css` | **2** (`--color-background`, `--color-foreground`) | `grep -c '^\s*--color' apps/web/app/globals.css` |
-| Usos da paleta stock do Tailwind (`text-slate-*`, `bg-red-*`, `border-*`) | **226** (87 em `components/`, 139 em `app/`) | `grep -rhoE '(text\|bg\|border)-(slate\|gray\|red\|blue\|green\|amber\|zinc\|neutral\|stone)-[0-9]{2,3}' apps/web/components apps/web/app --include='*.tsx' \| wc -l` |
-| Valores de cor literais em JSX | **12** | `grep -rnE '#[0-9a-fA-F]{3,8}\b\|rgba?(\|hsla?(' apps/web/app apps/web/components --include='*.tsx' \| grep -v spec \| wc -l` |
-| String de `<input>` repetida | **7×** | `grep -rc 'rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm' apps/web/{app,components}` |
+| Tokens de cor em `globals.css` | **2** (`--color-background`, `--color-foreground`) | `git show origin/main:apps/web/app/globals.css \| grep -c '^\s*--color'` |
+| Usos da paleta stock do Tailwind (`text-slate-*`, `bg-red-*`, `border-*`) | **226** (87 em `components/`, 139 em `app/`) | `git grep -h -o -E '(text\|bg\|border)-(slate\|gray\|red\|blue\|green\|amber\|zinc\|neutral\|stone)-[0-9]{2,3}' origin/main -- 'apps/web/app/**' 'apps/web/components/**' \| wc -l` |
+| Valores de cor literais em JSX | **19** | `git grep -n -E '#[0-9a-fA-F]{3,8}\b\|rgba?(\|hsla?(' origin/main -- 'apps/web/app/**' 'apps/web/components/**' '*.tsx' \| grep -v spec \| wc -l` |
+| String de `<input>` repetida | **7×** | `git grep -F -o 'rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm' origin/main -- 'apps/web/app/**' 'apps/web/components/**' \| wc -l` |
 | String de `<label>` repetida | **7×** | idem, `block text-sm font-medium text-slate-900` |
 | String de erro de campo repetida | **7×** | idem, `mt-1 text-sm text-red-700` |
 | Container de página repetido | **16×** | idem, `mx-auto max-w-3xl p-8` |
-| Botão primário repetido | **4×** | idem, `rounded-md bg-slate-900 px-4 py-2 …` |
-| Alerta de erro repetido | **4×** | idem, `rounded-md border border-red-200 bg-red-50 p-3 …` |
-| Primitivas de interface | **0** | `ls apps/web/components/ui` → não existe |
-| Convenções de estilo no índice | **0** | `ls .agents/specs/conventions` → 24 indexadas, nenhuma de estilo |
-| Instrumento que obriga o padrão | **0** | `ls packages/eslint-config/rules` → 1 regra, e ela é de DDD |
+| Botão primário repetido | **10×** | idem, `rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white` |
+| Alerta de erro repetido | **4×** | idem, `rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800` |
+| Primitivas de interface | **0** | `git ls-tree -r origin/main --name-only \| grep -c 'apps/web/components/ui'` |
+| Convenções de estilo no índice | **0** | `git ls-tree -r origin/main --name-only \| grep -c '^.agents/specs/conventions/.*\.md$'` → 31 arquivos, nenhuma de estilo |
+| Instrumento que obriga o padrão | **0** | `git ls-tree -r origin/main --name-only \| grep '^packages/eslint-config/rules/'` → 1 regra, e ela é de DDD |
 
 **O defeito de raiz:** `globals.css` guarda a cor em **tripla HSL crua**
 (`--color-background: 0 0% 100%`). No Tailwind 4 a utilitária gerada é
