@@ -183,10 +183,98 @@ Use cases persistem histórico via `AuditServicePort.record(...)` — a porta é
 `apps/api/src/shared/audit/application/audit-service.port.ts` e o adaptador
 Prisma fica em `apps/api/src/shared/audit/infrastructure/`.
 
-## §7. Referências Cruzadas
+## §7. Invariantes da linha (e quem as guarda)
+
+Duas colunas de `users` têm regra de formato, e cada regra tem **um dono
+autoritativo** — a função SQL, que é onde o dado morre:
+
+| Coluna | Regra | Dono autoritativo (na escrita) | Reafirmação na aplicação (na leitura) |
+|---|---|---|---|
+| `id` | UUID **v7** (ordenado no tempo) | CHECK constraint `users_id_uuid_v7` (função `user_id_is_uuid_v7`) | VO `UserId` |
+| `password_hash` | envelope **argon2id** (PHC) | CHECK constraint `users_password_hash_argon2id` (função `password_hash_is_valid_argon2id`) | VO `PasswordHash` |
+
+Antes de 2026-11-16 a regra vivia SÓ no value object, e ele validava na
+**leitura** — a coluna era `TEXT`/`uuid` sem nenhuma restrição. MEDIDO no banco
+local: nove linhas violavam as DUAS (gravadas por fora da aplicação), e uma
+delas bastava para a listagem inteira devolver 500 (hash) e depois 400 (id).
+
+A função SQL e o VO **não são duas fontes de verdade**: a função é a regra, e o
+VO é a **reafirmação** dela na fronteira da aplicação (onde o valor entra no
+agregado). Para o `id`, as duas regras são **iguais** — mesmo conjunto de
+valores, mesma forma canônica. Para o `password_hash`, o banco é **mais
+estrito** em **dois** pontos — os parâmetros (a
+`users_password_hash_argon2id` exige exatamente `m`, `t` e `p`; o VO aceita
+parâmetros extras com valor numérico) e o teto (o banco conta 512 **bytes**, o
+VO conta 512 unidades UTF-16) — e a direção é a segura: o banco recusa
+**antes** da aplicação ler. O instrumento que ata as duas é
+[`invariantes-da-conta-no-banco.integration.spec.ts`](../../apps/api/src/modules/users/infrastructure/persistence/invariantes-da-conta-no-banco.integration.spec.ts),
+que passa o mesmo corpus pelos dois lados e afirma a implicação "o banco
+aceitou ⟹ o VO aceita" — a cópia do VO só pode divergir no sentido seguro.
+
+### §7.1 As migrations que deram dono às regras
+
+| Migration | O que faz |
+|---|---|
+| `20261116000000_password_hash_funcao` | cria `password_hash_is_valid_argon2id(text)` — o dono da regra do hash no banco |
+| `20261116000001_password_hash_reparo` | **neutraliza** as linhas cujo hash não é argon2id: grava um envelope argon2id com digest aleatório (a conta sobrevive e continua incapaz de autenticar) |
+| `20261116000002_password_hash_constraint` | a CHECK constraint `users_password_hash_argon2id` |
+| `20261116000003_user_id_funcao` | cria `user_id_is_uuid_v7(text)` — o dono da regra do id no banco |
+| `20261116000004_user_id_reparo` | **troca o id** das contas cujo id não é v7 (o id é a identidade: as memberships e os refresh tokens o referenciam por FK com `ON UPDATE CASCADE`, e as referências soltas — histórico, arquivo, colunas de auditoria e a chave de idempotência — viajam com o rekey) |
+| `20261116000005_user_id_constraint` | a CHECK constraint `users_id_uuid_v7` |
+
+A **ordem** é a que a convenção dos 3 passos exige: o reparo antes da
+restrição. O `ADD CONSTRAINT` valida as linhas existentes, e uma linha que
+violasse a regra faria o `migrate deploy` falhar — barulhento e nomeando a
+linha, que é o que se quer de uma falha de migração.
+
+**O reparo não deixa rastro em `users_history`.** Ele é um `UPDATE` cru, e a
+trilha de auditoria é da aplicação. O registro do que aconteceu é o `NOTICE`
+da migration (quantas linhas foram reparadas) e a conta continua existindo —
+com a credencial neutralizada, e portanto inapto a entrar. Encher a trilha
+ajustando a sequência de `version` deixaria um **buraco** nela (a entrada
+`N+1` nunca existiu), que é pior que a ausência.
+
+**O reparo do id invalida a sessão em voo.** O `sub` do JWT emitido antes do
+rekey é o id VELHO, e ele não acha mais ninguém: o cliente precisa
+reautenticar. As memberships e os refresh tokens viajam por
+`ON UPDATE CASCADE` (o `refresh token` continua válido — o que não basta, sem
+o access token novo).
+
+**Restaurar um dump anterior às duas constraints**: o `INSERT` é recusado
+(`violates check constraint`). O caminho é restaurar **sem** as duas
+constraints (o SQL delas está nas migrations `20261116000002` e
+`20261116000005`), rodar o **reparo** — o SQL das migrations
+`20261116000001` e `20261116000004`, que é idempotente — e só então
+reaplicar as constraints. Nenhuma das duas etapas é opcional: o reparo sem a
+constraint deixa a linha ilegível (a listagem volta a cair), e a constraint
+sem o reparo falha no `ADD CONSTRAINT`, com um "violated by some row" que não
+aponta para a causa.
+
+**Desbloquear uma conta neutralizada**: o reparo do hash deixa a conta
+incapaz de autenticar — ela continua existindo, mas a credencial dela não
+existe mais (o login responde 401). Para devolver o acesso, grave um hash
+argon2id **real**, o que o `Argon2PasswordHasher` emite: a constraint recusa
+qualquer outro valor, e um `'x'` seria recusado com `violates check
+constraint "users_password_hash_argon2id"`.
+
+```sql
+UPDATE users
+   SET password_hash = '<hash argon2id gerado pela lib>', updated_at = now()
+ WHERE email = 'conta@exemplo';
+```
+
+> ⚠️ **Exceção declarada** à regra "migration de modelo e migration de dados no
+> mesmo PR" (convenção [`migracao-de-dados.md`](../../.agents/specs/conventions/migracao-de-dados.md)
+> §4): a restrição **depende** do reparo, e um PR só com a restrição falharia
+> ao subir em qualquer banco que ainda tivesse a linha quebrada — que é
+> exatamente o banco que o reparo existe para consertar. As migrations ficam
+> separadas por arquivo, e a ordem entre elas é o que segura o contrato.
+
+## §8. Referências Cruzadas
 
 - OpenAPI JSON: `apps/api/openapi.json` — **gerado e versionado** (desde o #125; `git ls-files apps/api/openapi.json` devolve a linha, `git check-ignore -v` devolve `exit=1`); regenerar via `pnpm --filter @projeto/api openapi:export`
 - Spec de design do contrato: [`04-contrato-http.md`](../superpowers/specs/2026-09-21-cadastro-usuario-com-auditoria-04-contrato-http.md)
 - ADR-0001 (DDD + Hexagonal + Auditoria): [`docs/adr/0001-arquitetura-ddd-hexagonal-auditoria.md`](../adr/0001-arquitetura-ddd-hexagonal-auditoria.md)
+- ADR-0002 (argon2id e a senha fora do agregado): [`docs/adr/0002-autenticacao-jwt-argon2.md`](../adr/0002-autenticacao-jwt-argon2.md)
 - Controller fonte: [`apps/api/src/modules/users/infrastructure/http/users.controller.ts`](../../apps/api/src/modules/users/infrastructure/http/users.controller.ts)
 - Schemas Zod: [`apps/api/src/modules/users/infrastructure/http/users.schemas.ts`](../../apps/api/src/modules/users/infrastructure/http/users.schemas.ts)

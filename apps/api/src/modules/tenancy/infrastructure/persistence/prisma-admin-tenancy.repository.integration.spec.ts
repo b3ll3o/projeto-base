@@ -22,7 +22,6 @@
 //      que o unitário NÃO pode provar: mock não tem policy.
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { randomUUID } from 'node:crypto';
 import {
   setupTestDatabase,
   cleanDatabase,
@@ -36,6 +35,8 @@ import {
 } from '../../../../shared/infrastructure/prisma/papel-de-runtime.js';
 import { abrirEscopo } from '../../../../shared/infrastructure/prisma/escopo.js';
 import { PrismaAdminTenancyRepository } from './prisma-admin-tenancy.repository.js';
+import { HASH_REAL } from '../../../../../test/fakes/fake-password-hasher.js';
+import { UserId } from '../../../users/domain/value-objects/user-id.vo.js';
 
 const AGORA = new Date('2026-10-22T12:00:00.000Z');
 
@@ -84,13 +85,13 @@ describe('PrismaAdminTenancyRepository — o inventário do bucket de SISTEMA (P
   });
 
   async function criarConta(nome: string, email: string, apagadaEm?: Date): Promise<string> {
-    const id = randomUUID();
+    const id = UserId.create().value;
     await ctx.prisma.user.create({
       data: {
         id,
         name: nome,
         email,
-        passwordHash: 'x',
+        passwordHash: HASH_REAL,
         createdAt: AGORA,
         version: 1,
         deletedAt: apagadaEm ?? null,

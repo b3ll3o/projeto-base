@@ -156,9 +156,9 @@ pnpm dev     # roda o `pnpm ambiente:check` e depois sobe api :3000 + web :3001
 
 O `pnpm ambiente:check` é o preflight do ambiente local (✅ medido em 2026-11-05):
 verifica o `DATABASE_URL`/`JWT_SECRET`, o Prisma Client, o banco e as **duas**
-portas que o `pnpm dev` ocupa (a da API, do `PORT`; a do web, do
-`apps/web/package.json`) **antes** de subir qualquer app, **religa o container
-parado** (§1.1) e traduz o P1001 do Prisma (causa + comando), por QUALQUER start.
+portas que o `pnpm dev` ocupa (a do `PORT`; a do `apps/web/package.json`)
+**antes** de subir qualquer app, **religa o container parado** (§1.1) e traduz o
+P1001 do Prisma (causa + comando), por QUALQUER start.
 
 ### §1.5 Verificar
 
@@ -203,8 +203,7 @@ o login leva a `/users`, que lista o recém-criado. `Cadastrar usuário` abre `/
 O seed cria os perfis `admin`/`viewer` e, **fora de produção**, um usuário admin
 pronto para login. O comando roda **dentro do container** da stack de dev (o
 overlay `docker-compose.dev.yml`), então o procedimento completo — inclusive as
-**duas** condições que o guard do seed exige — está em
-[runbook Docker §4](./runbooks/docker.md).
+**duas** condições que o guard do seed exige — está em [runbook Docker §4](./runbooks/docker.md).
 
 | e-mail | senha | perfil |
 |---|---|---|
@@ -217,8 +216,7 @@ ambiente real, crie o admin pelo `POST /api/v1/users` e promova o perfil pela UI
 
 `pnpm ci:boot` sobe a aplicação **do jeito que quem desenvolve roda**, espera a
 saúde dos dois e **derruba tudo** no fim. É a etapa que o `pnpm ci:local` e o
-`.husky/pre-push` rodam — o procedimento completo está em
-[runbook de e2e/CI §3](./runbooks/e2e-e-ci.md).
+`.husky/pre-push` rodam — o procedimento completo está em [runbook de e2e/CI §3](./runbooks/e2e-e-ci.md).
 
 ---
 
@@ -297,4 +295,6 @@ pnpm test:e2e                    # suíte de navegador (runbook de e2e/CI)
 | `prisma migrate deploy` "não fez nada" e saiu 0 | rodou da raiz / script inexistente | §1.3, de dentro de `apps/api` |
 | `role app_runtime is not permitted to log in` | `prisma migrate reset` deixou o papel sem senha | §1.2.1 — rode o `prepara-papeis.sh` de novo |
 | `port already in use` em 3000/3001 | ambiente 1 e 3 não podem coexistir | derrube um (`pkill -f "turbo run dev"` ou `docker compose down`) |
+| `GET /api/v1/users` → **500** (hash) ou **400** ("id ... UUID v7") e a tela "Não foi possível carregar a lista" | uma linha de `users` viola uma invariante que só o value object guardava: `password_hash` fora do formato argon2id, ou `id` com versão UUID 4 (medido 2026-11-16) | `cd apps/api && pnpm exec prisma migrate deploy && cd ../..` — as migrations reparam a linha, e as constraints impedem a volta. ⚠️ As duas migrations de reparo exigem a credencial do **DONO** da tabela (`DIRECT_DATABASE_URL`): sem ela, elas levantam em vez de reparam em silêncio — ver §1.2; ver [`docs/api/users.md` §7](./api/users.md) |
+| `violates check constraint "users_password_hash_argon2id"` numa escrita | a coluna `password_hash` recebeu um valor que não é argon2id — o banco agora recusa na escrita (o que antes virava 500 na leitura) | o valor gravado tem de vir do `Argon2PasswordHasher` |
 | `Cannot find package '@opentelemetry/sdk-node'` na imagem prod | o stage `prod` não copiava `apps/api/node_modules` | ✅ **corrigido** (issue #104, commit `376da79`) — o `Dockerfile` copia `apps/api/node_modules` e o `pnpm prune --prod` foi REMOVIDO; ver [runbook Docker §2.2](./runbooks/docker.md) |

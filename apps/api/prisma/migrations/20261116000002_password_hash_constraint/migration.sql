@@ -1,0 +1,47 @@
+-- apps/api/prisma/migrations/20261116000002_password_hash_constraint/
+--
+-- pt-BR (2026-11-16): o banco passa a RECUSAR um hash que não é argon2id.
+--
+-- ── O QUE ESTA MIGRATION FAZ ───────────────────────────────────────────────
+--
+-- A CHECK constraint `users_password_hash_argon2id` sobre `users.password_hash`.
+-- A regra mora na função `password_hash_is_valid_argon2id` (migration
+-- `20261116000000`) — o dono da regra no banco, como a convenção `dry.md` pede.
+--
+-- ── POR QUE ISTO PREVINE O DEFEITO ─────────────────────────────────────────
+--
+-- O defeito medido em 2026-11-16 não foi um bug do VO: foi o banco ACEITAR um
+-- valor que a aplicação não consegue ler. Nove linhas de `users` tinham
+-- `password_hash` fora do envelope argon2id — gravadas por fora da aplicação
+-- (script, SQL manual), porque a coluna era TEXT sem nenhuma restrição. A
+-- consequência foi a
+-- listagem de usuários inteira devolvendo 500, e o login das contas afetadas
+-- devolvendo 500 em vez de 401.
+--
+-- Com a constraint, essa escrita passa a FALHAR no banco, no instante da
+-- escrita, com o erro do Postgres — em vez de ser descoberta na leitura, por
+-- um usuário que estava tentando usar o sistema.
+--
+-- ── POR QUE A FUNÇÃO, E NÃO A REGRA ESCRITA AQUI ───────────────────────────
+--
+-- A regra tem de ser a MESMA que o `WHERE` do reparo (`20261116000001`). Duas
+-- cópias da regra em SQL divergem em silêncio — e a divergência aparece como
+-- "o `migrate deploy` falhou numa linha que o reparo não pegou". Uma função,
+-- dois usos, uma fonte.
+--
+-- ⚠️ O `ADD CONSTRAINT` VALIDA as linhas existentes. Por isso esta migration
+-- vem DEPOIS do reparo (`20261116000001`): se uma linha violasse a regra, o
+-- `migrate deploy` falharia aqui — e essa falha é o ponto: ela é barulhenta e
+-- nomeia a linha, em vez de ser um 500 sem dono.
+--
+-- ⚠️ A constraint é MAIS ESTRITA que o value object em DOIS pontos (os
+-- parâmetros extras — o VO aceita `nome=número` além de `m`, `t` e `p` — e o
+-- teto, que o banco conta em BYTES e o VO em unidades UTF-16), e a direção é
+-- a segura: o banco recusa ANTES de a aplicação ler. O spec
+-- `apps/api/src/modules/users/infrastructure/persistence/invariantes-da-conta-no-banco.integration.spec.ts`
+-- é o instrumento que amarra as duas regras e afirma a implicação "o banco
+-- aceitou ⟹ o VO aceita".
+
+ALTER TABLE "users"
+  ADD CONSTRAINT "users_password_hash_argon2id"
+  CHECK (password_hash_is_valid_argon2id("password_hash"));

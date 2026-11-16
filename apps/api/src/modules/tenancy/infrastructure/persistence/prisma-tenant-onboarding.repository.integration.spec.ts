@@ -37,6 +37,8 @@ import { listAllPermissions } from '../../../../shared/auth/permissions-catalog.
 import { EmailAlreadyInUseException } from '../../../users/domain/exceptions/user.exceptions.js';
 import { uriComoPapelDeRuntime } from '../../../../shared/infrastructure/prisma/papel-de-runtime.js';
 import { AssinaturaDeMembership } from '../../../../shared/infrastructure/prisma/assinatura-de-membership.js';
+import { HASH_REAL } from '../../../../../test/fakes/fake-password-hasher.js';
+import { UserId } from '../../../users/domain/value-objects/user-id.vo.js';
 
 const AGORA = new Date('2026-10-19T12:00:00.000Z');
 
@@ -59,7 +61,7 @@ const PASSADO = new Date(Date.now() - 60 * 60 * 1000);
 
 function usuario(email: string) {
   return {
-    id: randomUUID(),
+    id: UserId.create().value,
     nome: 'Ana',
     email,
     senhaHash: '$argon2id$v=19$m=65536,p=4,t=3$J44j$digest',
@@ -233,10 +235,10 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
     // `users.email` estourar, e o estourar é na 4ª escrita.
     await ctx.prisma.user.create({
       data: {
-        id: randomUUID(),
+        id: UserId.create().value,
         name: 'Outra',
         email: 'dono@acme.dev',
-        passwordHash: 'x',
+        passwordHash: HASH_REAL,
         version: 1,
       },
     });
@@ -417,7 +419,12 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
     expect(emitido).not.toBeNull();
 
     const ana = await ctx.prisma.user.create({
-      data: { id: randomUUID(), email: 'ana@acme.dev', name: 'Ana', passwordHash: 'x' },
+      data: {
+        id: UserId.create().value,
+        email: 'ana@acme.dev',
+        name: 'Ana',
+        passwordHash: HASH_REAL,
+      },
     });
 
     // O convite é ACEITO (a membership nasce).
@@ -480,7 +487,12 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
     await repo.emitirConvite({ ...base, token: 't1' });
     const antigo = await repo.buscarConvitePorToken('t1');
     const ana = await ctx.prisma.user.create({
-      data: { id: randomUUID(), email: 'ana@acme.dev', name: 'Ana', passwordHash: 'x' },
+      data: {
+        id: UserId.create().value,
+        email: 'ana@acme.dev',
+        name: 'Ana',
+        passwordHash: HASH_REAL,
+      },
     });
 
     // O convite é ACEITO — e é isso que libera a reemissão (a linha precisa
@@ -546,7 +558,12 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
     });
     const convite = await repo.buscarConvitePorToken('secreto');
     const ana = await ctx.prisma.user.create({
-      data: { id: randomUUID(), email: 'ana@acme.dev', name: 'Ana', passwordHash: 'x' },
+      data: {
+        id: UserId.create().value,
+        email: 'ana@acme.dev',
+        name: 'Ana',
+        passwordHash: HASH_REAL,
+      },
     });
 
     await repo.entrarPorConvite({
@@ -580,7 +597,12 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
     });
     const convite = await repo.buscarConvitePorToken('secreto');
     const ana = await ctx.prisma.user.create({
-      data: { id: randomUUID(), email: 'ana@acme.dev', name: 'Ana', passwordHash: 'x' },
+      data: {
+        id: UserId.create().value,
+        email: 'ana@acme.dev',
+        name: 'Ana',
+        passwordHash: HASH_REAL,
+      },
     });
 
     // O caso de uso (`exigirConviteValido`) recusa o convite vencido ANTES de
@@ -618,7 +640,12 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
     });
     const convite = await repo.buscarConvitePorToken('secreto');
     const ana = await ctx.prisma.user.create({
-      data: { id: randomUUID(), email: 'ana@acme.dev', name: 'Ana', passwordHash: 'x' },
+      data: {
+        id: UserId.create().value,
+        email: 'ana@acme.dev',
+        name: 'Ana',
+        passwordHash: HASH_REAL,
+      },
     });
 
     await repo.entrarPorConvite({
@@ -649,7 +676,12 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
     });
     const convite = await repo.buscarConvitePorToken('secreto');
     const ana = await ctx.prisma.user.create({
-      data: { id: randomUUID(), email: 'ana@acme.dev', name: 'Ana', passwordHash: 'x' },
+      data: {
+        id: UserId.create().value,
+        email: 'ana@acme.dev',
+        name: 'Ana',
+        passwordHash: HASH_REAL,
+      },
     });
 
     await repo.entrarPorConvite({
@@ -681,7 +713,12 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
     });
     const convite = await repo.buscarConvitePorToken('secreto');
     const ana = await ctx.prisma.user.create({
-      data: { id: randomUUID(), email: 'ana@acme.dev', name: 'Ana', passwordHash: 'x' },
+      data: {
+        id: UserId.create().value,
+        email: 'ana@acme.dev',
+        name: 'Ana',
+        passwordHash: HASH_REAL,
+      },
     });
 
     await repo.entrarPorConvite({
@@ -706,13 +743,13 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
       expiresAt: FUTURO,
     });
     const convite = await repo.buscarConvitePorToken('secreto');
-    const id = randomUUID();
+    const id = UserId.create().value;
     const criado = new Date('2026-10-19T12:00:00.000Z');
 
     // Nenhum `users` existe ainda — é a conta nova do `destino: 'convite'`.
     await repo.criarContaPorConvite(
       { userId: id, invitationId: convite!.id, token: convite!.token },
-      { id, nome: 'Ana', email: 'ana@acme.dev', senhaHash: 'x', createdAt: criado },
+      { id, nome: 'Ana', email: 'ana@acme.dev', senhaHash: HASH_REAL, createdAt: criado },
     );
 
     const conta = await ctx.prisma.user.findUniqueOrThrow({ where: { id } });
@@ -740,7 +777,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
       expiresAt: FUTURO,
     });
     const convite = await repo.buscarConvitePorToken('secreto');
-    const id = randomUUID();
+    const id = UserId.create().value;
 
     // O e-mail do convite é o de quem JÁ tem conta: o `tx.user.create` estoura
     // o índice único de `users.email` no MEIO da transação. Se a transação
@@ -759,7 +796,7 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
           id,
           nome: 'Dona',
           email: 'dono@acme.dev',
-          senhaHash: 'x',
+          senhaHash: HASH_REAL,
           createdAt: new Date('2026-10-19T12:00:00.000Z'),
         },
       ),
@@ -963,7 +1000,12 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
       await cleanDatabase(ctx.prisma);
       const { dono, tenant } = await empresaComDono('acme', 'dono@acme.dev');
       const outro = await ctx.prisma.user.create({
-        data: { id: randomUUID(), name: 'Bia', email: 'bia@acme.dev', passwordHash: 'x' },
+        data: {
+          id: UserId.create().value,
+          name: 'Bia',
+          email: 'bia@acme.dev',
+          passwordHash: HASH_REAL,
+        },
       });
 
       const empresas = await memberships.listarEmpresasDoUsuario(dono.id);
@@ -978,7 +1020,12 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
       await cleanDatabase(ctx.prisma);
       await empresaComDono('acme', 'dono@acme.dev');
       const solta = await ctx.prisma.user.create({
-        data: { id: randomUUID(), name: 'Sem', email: 'sem@acme.dev', passwordHash: 'x' },
+        data: {
+          id: UserId.create().value,
+          name: 'Sem',
+          email: 'sem@acme.dev',
+          passwordHash: HASH_REAL,
+        },
       });
 
       expect(await memberships.listarEmpresasDoUsuario(solta.id)).toEqual([]);

@@ -19,13 +19,14 @@
 //   3. `user.deletedAt: null` contra soft-delete real.
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { randomUUID } from 'node:crypto';
 import {
   setupTestDatabase,
   cleanDatabase,
   type TestContext,
 } from '../../../../../test/testcontainers-helper.js';
 import { PrismaTenantMembershipRepository } from './prisma-tenant-membership.repository.js';
+import { HASH_REAL } from '../../../../../test/fakes/fake-password-hasher.js';
+import { UserId } from '../../../users/domain/value-objects/user-id.vo.js';
 
 const AGORA = new Date('2026-10-19T12:00:00.000Z');
 
@@ -43,9 +44,9 @@ describe('PrismaTenantMembershipRepository.atribuirPerfil — Postgres (Fase 6)'
   });
 
   async function criarConta(email: string, nome = 'Ana'): Promise<string> {
-    const id = randomUUID();
+    const id = UserId.create().value;
     await ctx.prisma.user.create({
-      data: { id, name: nome, email, passwordHash: 'x', createdAt: AGORA, version: 1 },
+      data: { id, name: nome, email, passwordHash: HASH_REAL, createdAt: AGORA, version: 1 },
     });
     return id;
   }
