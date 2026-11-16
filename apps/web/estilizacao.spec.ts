@@ -252,25 +252,34 @@ describe('regra de estilo — o que ela aceita', () => {
 });
 
 describe('regra de estilo — o repo real', () => {
-  it('não há nenhuma violação nos arquivos de produção do app', async () => {
-    // A config REAL do app — é ela que registra a regra em `pnpm lint`.
-    const eslint = new ESLint({
-      cwd: RAIZ_APP,
-      overrideConfigFile: `${RAIZ_APP}eslint.config.mjs`,
-    });
-    const resultados = await eslint.lintFiles(['app', 'components']);
-    const violacoes = resultados.flatMap((r) =>
-      r.messages
-        .filter((m) => m.ruleId === 'estilizacao/no-estilizacao-informal')
-        .map((m) => `${r.filePath}: ${m.message}`),
-    );
+  /**
+   * ⚠️ O timeout é EXPLICITO, e o motivo é medido: este teste roda o ESLint
+   * de verdade sobre o app inteiro (com o parser do TypeScript). Na máquina
+   * do CI ele leva ~7s (MEDIDO 2026-11-16 no run 43887524859: 8798ms e
+   * 6684ms), e o default do Vitest é 5000ms — o default mediria "a regra
+   * demora" como FALHA do teste, que é o motivo errado.
+   */
+  const TIMEOUT_DIFERENCIAL = 60_000;
 
-    expect(violacoes).toEqual([]);
-  }, // ESLint de verdade sobre o app inteiro (com o parser do TypeScript). // ⚠️ O timeout é EXPLICITO, e o motivo é medido: este teste roda o
-  // Na máquina do CI ele leva ~7s (MEDIDO 2026-11-16 no run 43887524859:
-  // 8798ms e 6684ms), e o default do Vitest é 5000ms — o default mediria
-  // "a regra demora" como FALHA do teste, que é o motivo errado.
-  60_000);
+  it(
+    'não há nenhuma violação nos arquivos de produção do app',
+    async () => {
+      // A config REAL do app — é ela que registra a regra em `pnpm lint`.
+      const eslint = new ESLint({
+        cwd: RAIZ_APP,
+        overrideConfigFile: `${RAIZ_APP}eslint.config.mjs`,
+      });
+      const resultados = await eslint.lintFiles(['app', 'components']);
+      const violacoes = resultados.flatMap((r) =>
+        r.messages
+          .filter((m) => m.ruleId === 'estilizacao/no-estilizacao-informal')
+          .map((m) => `${r.filePath}: ${m.message}`),
+      );
+
+      expect(violacoes).toEqual([]);
+    },
+    TIMEOUT_DIFERENCIAL,
+  );
 
   it('a regra acusa uma violação plantada no app (o dente do gate)', async () => {
     const eslint = new ESLint({
