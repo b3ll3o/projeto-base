@@ -18,28 +18,27 @@ import { syncDocs } from './doc-sync.js';
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 describe('resolvePath (regression)', () => {
-  it('CWD não interfere na leitura de schema.prisma relativo', () => {
+  it('CWD não interfere na leitura do controller relativo', () => {
     // pt-BR: Se CWD mudar (ex: vitest em tooling/scripts/), syncDocs ainda
-    // deve localizar apps/api/prisma/schema.prisma via REPO_ROOT.
-    // Antes do fix, esta chamada resultava em 0 actions de History/Archive
-    // porque readFileSync falhava silenciosamente.
-    const report = syncDocs(['apps/api/prisma/schema.prisma']);
+    // deve localizar o arquivo via REPO_ROOT.
+    //
+    // A sonda é a ação que depende do CONTEÚDO: o decorator de verbo HTTP
+    // mora no arquivo, então a ação só existe se `readFileSync` leu o
+    // arquivo de verdade. MEDIDO 2026-11-16: a sonda antiga era a ação de
+    // History/Archive do `schema.prisma`, que deixou de existir para o
+    // schema do repo (o model `User` tem `UserHistory`/`UserArchive`) — e uma
+    // sonda que não mede mais nada é uma sonda que passa vacuamente.
+    const report = syncDocs(['apps/api/src/modules/users/infrastructure/http/users.controller.ts']);
     expect(
-      report.actions.some((a) => a.type === 'review' && /History|Archive/.test(a.reason)),
+      report.actions.some((a) => a.type === 'review' && /tabela de endpoints/i.test(a.reason)),
     ).toBe(true);
   });
 
-  it('CWD não interfere na leitura de users.controller.ts relativo', () => {
-    // pt-BR: Mesmo cenário para o controller — readFileSync deve resolver
-    // relativo a REPO_ROOT, não a CWD.
-    const report = syncDocs(['apps/api/src/modules/users/infrastructure/http/users.controller.ts']);
-    expect(
-      report.actions.some(
-        (a) =>
-          a.type === 'review' &&
-          /Endpoinst modificados|endpoints modificados|tabela de endpoints/i.test(a.reason),
-      ),
-    ).toBe(true);
+  it('o schema relativo resolve contra REPO_ROOT', () => {
+    // O mapeamento do `schema.prisma` é de PATH — não de conteúdo. A prova
+    // aqui é o doc canônico do model, não a leitura do arquivo.
+    const report = syncDocs(['apps/api/prisma/schema.prisma']);
+    expect(report.actions.some((a) => a.doc_file === 'docs/STACK.md')).toBe(true);
   });
 
   it('paths absolutos são preservados (sem dupla resolução)', () => {
@@ -61,7 +60,8 @@ describe('resolvePath (regression)', () => {
     // `isAbsolute` de verdade seria preciso exportar `resolvePath`; o que a
     // asserção removida não podia provar, a de baixo prova: um path com dupla
     // resolução (`REPO_ROOT` prefixado duas vezes) não existe, a leitura falha,
-    // e `report.actions` vem vazio. É essa que verifica a semântica.
+    // e a ação que depende do CONTEÚDO não sai. É essa que verifica a
+    // semântica.
     //
     // O diretório home literal NÃO volta aqui, nem neste comentário — nem
     // escrito de outro jeito para escapar do grep. A varredura por path de
@@ -70,18 +70,25 @@ describe('resolvePath (regression)', () => {
     // explicar a regra suja exatamente o que a regra existe para limpar: um
     // guard que se dispara sozinho é a mesma classe do guard que nunca dispara.
     // O comando mora no backlog da demanda, que é `.md` e está fora do sweep.
-    const absPath = join(REPO_ROOT, 'apps/api/prisma/schema.prisma');
+    const absPath = join(
+      REPO_ROOT,
+      'apps/api/src/modules/users/infrastructure/http/users.controller.ts',
+    );
     const report = syncDocs([absPath]);
     // Mesma expectation do teste relativo — absolute path deve funcionar
-    // idêntico porque o conteúdo do schema é o mesmo.
+    // idêntico porque o conteúdo do arquivo é o mesmo.
     expect(
-      report.actions.some((a) => a.type === 'review' && /History|Archive/.test(a.reason)),
+      report.actions.some((a) => a.type === 'review' && /tabela de endpoints/i.test(a.reason)),
     ).toBe(true);
   });
 
   it('path com prefixo ./ também resolve corretamente', () => {
     // pt-BR: callers podem passar './apps/...' — deve funcionar igual.
-    const report = syncDocs(['./apps/api/prisma/schema.prisma']);
-    expect(report.actions.length).toBeGreaterThan(0);
+    const report = syncDocs([
+      './apps/api/src/modules/users/infrastructure/http/users.controller.ts',
+    ]);
+    expect(
+      report.actions.some((a) => a.type === 'review' && /tabela de endpoints/i.test(a.reason)),
+    ).toBe(true);
   });
 });

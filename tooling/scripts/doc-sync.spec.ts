@@ -13,11 +13,65 @@ import { existsSync, mkdtempSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { syncDocs, GENERATED_DOC_FILES } from './doc-sync.js';
+import { syncDocs, GENERATED_DOC_FILES, modelsSemParDeHistorico } from './doc-sync.js';
 
 const REPO = new URL('../..', import.meta.url).pathname;
 const TSX = join(REPO, 'node_modules', '.bin', 'tsx');
 const SCRIPT = join(REPO, 'tooling', 'scripts', 'doc-sync.ts');
+
+/**
+ * pt-BR (2026-11-16): fixtures do schema — o contrato do check de
+ * History/Archive é testado com SCHEMA escrito à mão, não com o schema do
+ * repo. Um teste que lê o arquivo real mede o arquivo real.
+ */
+const SCHEMA_SEM_PAR_DE_HISTORICO = `
+enum AuditOperation {
+  INSERT
+  UPDATE
+}
+
+model Fatura {
+  id        String   @id
+  createdAt DateTime @default(now())
+  createdBy String?
+}
+
+model User {
+  id        String   @id
+  createdAt DateTime @default(now())
+  createdBy String?
+}
+
+model UserHistory {
+  id String @id
+}
+`;
+
+const SCHEMA_COM_PAR_DE_HISTORICO = `
+enum AuditOperation {
+  INSERT
+  UPDATE
+}
+
+model Fatura {
+  id        String   @id
+  createdAt DateTime @default(now())
+  createdBy String?
+}
+
+model FaturaArchive {
+  id String @id
+}
+`;
+
+/** Sem a enum de auditoria não há histórico de versão a esperar. */
+const SCHEMA_SEM_ENUM_DE_AUDITORIA = `
+model Fatura {
+  id        String   @id
+  createdAt DateTime @default(now())
+  createdBy String?
+}
+`;
 
 /** Roda o CLI no argv que `pnpm run` produz: newline vira a par `\\n`. */
 function cliComLista(arquivos: string[]): string {
@@ -46,12 +100,19 @@ describe('doc-sync', () => {
   });
 
   it('schema sem AuditOperation dispara review de History/Archive', () => {
-    const report = syncDocs(['apps/api/prisma/schema.prisma']);
-    // pt-BR: doc-sync checa se há novo model sem AuditOperation — se
-    // houver, recomenda verificar a tabela History/Archive.
-    expect(
-      report.actions.some((a) => a.type === 'review' && /History|Archive/.test(a.reason)),
-    ).toBe(true);
+    // pt-BR (2026-11-16): este teste mentia sobre o que media. O NOME diz
+    // "schema SEM AuditOperation", mas a fixture é o schema do REPO — que tem
+    // a enum. E o código antigo emitia uma ação por model, todas com o mesmo
+    // motivo: o parecer da semana saiu com 12 linhas idênticas (PR #167).
+    // O guard também era o inverso do comentário — saía cedo justamente no
+    // caso que a função existe para checar.
+    //
+    // O contrato agora é testado com FIXTURE (a função pura
+    // `modelsSemParDeHistorico`), e não com o schema do repo: um teste que
+    // depende do arquivo real mede o arquivo real, não a regra.
+    expect(modelsSemParDeHistorico(SCHEMA_SEM_PAR_DE_HISTORICO)).toEqual(['Fatura']);
+    expect(modelsSemParDeHistorico(SCHEMA_COM_PAR_DE_HISTORICO)).toEqual([]);
+    expect(modelsSemParDeHistorico(SCHEMA_SEM_ENUM_DE_AUDITORIA)).toEqual([]);
   });
 
   it('controller com decorators de verbo HTTP dispara review', () => {
@@ -194,6 +255,56 @@ describe('docFile gerado não pode reprovar o CI', () => {
       .filter((f): f is string => !!f && !GENERATED_DOC_FILES.has(f))
       .filter((f) => !versionados.has(f));
     expect(naoVersionados).toEqual([]);
+  });
+});
+
+describe('o parecer não repete linha (o defeito do PR #167)', () => {
+  const SEMANA = [
+    'apps/api/src/modules/auth/infrastructure/http/auth.controller.ts',
+    'apps/api/src/modules/health/health.controller.ts',
+    'apps/api/src/modules/users/infrastructure/http/users.controller.ts',
+    'apps/api/prisma/schema.prisma',
+  ];
+
+  it('nenhuma linha do parecer repete doc + motivo', () => {
+    // MEDIDO 2026-11-16: o parecer da semana tinha 24 ações das quais 15 eram
+    // cópias — 12 linhas de "History/Archive" (uma por model, todas
+    // idênticas) e 3 de "Endpoints modificados" (uma por controller, todas
+    // idênticas). A tabela contava ruído como se fosse sinal.
+    const chaves = syncDocs(SEMANA).actions.map((a) => `${a.doc_file}|${a.reason}`);
+    expect(chaves.length).toBe(new Set(chaves).size);
+  });
+
+  it('o MESMO arquivo repetido na lista não repete ação', () => {
+    // O relatório semanal passa a lista de arquivos da semana, e um arquivo
+    // tocado em N commits entra N vezes.
+    const uma = syncDocs(['apps/api/prisma/schema.prisma']).actions.length;
+    const repetida = syncDocs([
+      'apps/api/prisma/schema.prisma',
+      'apps/api/prisma/schema.prisma',
+      'apps/api/prisma/schema.prisma',
+    ]).actions.length;
+    expect(repetida).toBe(uma);
+  });
+
+  it('toda ação diz o arquivo que a disparou', () => {
+    const report = syncDocs(SEMANA);
+    expect(report.actions.length).toBeGreaterThan(0);
+    for (const a of report.actions) {
+      expect(a.source_file).toBeTruthy();
+    }
+    expect(report.files_changed).toContain('apps/api/prisma/schema.prisma');
+  });
+
+  it('o controller aponta para o doc canônico do SEU bounded context', () => {
+    // O `health.controller.ts` apontava para a spec de contrato HTTP do
+    // módulo de users: um doc que não tem o endpoint do health.
+    const report = syncDocs(['apps/api/src/modules/health/health.controller.ts']);
+    const docs = report.actions.map((a) => a.doc_file);
+    expect(docs).toContain('docs/api/health.md');
+    expect(docs).not.toContain(
+      'docs/superpowers/specs/2026-09-21-cadastro-usuario-com-auditoria-04-contrato-http.md',
+    );
   });
 });
 

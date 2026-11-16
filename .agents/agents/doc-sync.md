@@ -69,6 +69,10 @@ success_criteria:
 ### Passo 1: Mapear Mudanças para Documentação
 
 ```text
+apps/api/src/modules/<bc>/**/*.controller.ts → docs/api/<bc>.md (canônico pela
+                                          matriz da §3 da `documentacao.md`),
+                                          apps/api/openapi.json + os docs
+                                          extras do módulo (ADR, spec)
 apps/api/src/modules/users/**/*        → apps/api/README.md, docs/api/users.md,
                                           docs/superpowers/specs/*users*.md,
                                           apps/api/openapi.json, docs/STACK.md
@@ -215,7 +219,7 @@ result:
 3. **Auto-apply conservador.** Só aplico updates de baixo risco automaticamente.
 4. **Alertas sempre.** Mudanças grandes sempre geram alerta humano.
 5. **Idempotente.** Rodar 2x com mesmo diff não gera mudanças adicionais.
-6. **Rastreável.** Cada update cita `evidence` (arquivo + linha + trecho).
+6. **Rastreável.** Cada ação cita a ORIGEM (`source_file`, o path que a disparou) e o `reason`. Duas ações com o mesmo tipo, doc, motivo e origem são a MESMA ação — o parecer não repete linha.
 
 ## Configuração de Hooks
 
