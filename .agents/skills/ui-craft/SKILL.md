@@ -27,31 +27,32 @@ login. O modo é **Operate** (ver skill `ui-modes`). Duas consequências practic
 
 ## 1. Tokens — fonte única
 
-Tudo referencia token. Valor solto em JSX é finding. A fonte é
-`apps/web/app/globals.css`, bloco `@theme` do Tailwind 4.
+Tudo referencia token. Valor solto em JSX é finding.
 
-Hoje existem **2** tokens (`--color-background`, `--color-foreground`) e **14**
-valores literais de cor em JSX — medido em 2026-11-02:
-`grep -rnE '#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(' apps/web/app apps/web/components --include='*.tsx' | wc -l` → `14`.
+**⚠️ Onde o token mora mudou (2026-11-11).** O padrão de estilização do
+template agora é a convenção
+[`.agents/specs/conventions/estilizacao.md`](../../specs/conventions/estilizacao.md):
+ela é a dona das **regras** (os papéis de cada token, o que é proibido, como
+um app derivado adota) e o `apps/web/app/globals.css` é o dono dos
+**valores**. Esta skill guarda as **leis de craft** — as que valem para
+qualquer tela, mesmo fora deste repo.
 
-O que se espalha é a **paleta stock do Tailwind**: **226** usos de
-`text-{slate,gray}-*`, `bg-red-*`, `border-*` — medido em 2026-11-02:
-`grep -rhoE '(text|bg|border)-(slate|gray|red|blue|green|amber|zinc|neutral|stone)-[0-9]{2,3}' apps/web/components apps/web/app --include='*.tsx' | wc -l`
-→ `226` (87 em `components/`, 139 em `app/`). Essa é a segunda fonte de cor — e
-ela continua produzindo cor fora do sistema **depois** que todos os
-`--color-*` existirem. Tokenizar não é só hoistar literal: é trocar
-`text-slate-500` por `text-muted-foreground`. Ao propor tokens, cubra nesta ordem:
+O conjunto de tokens do app medido em **2026-11-11** (13 tokens de cor +
+raio + fonte), em `apps/web/app/globals.css`:
 
 | Papel | Token | Regra |
 |-------|-------|-------|
 | Fundo de página | `--color-background` | 1 valor |
 | Superfície elevada | `--color-surface` | 1 passo de tom acima do fundo, **nunca** sombra para separar |
+| Apoio (hover) | `--color-muted` | fundo de apoio, não de conteúdo |
 | Tinta primária | `--color-foreground` | texto corrido NUNCA em cinza suave — página em cinza lê inacabada |
 | Tinta secundária | `--color-muted-foreground` | só metadado e legenda |
-| Borda | `--color-border` | 1 passo; borda não substitui espaçamento |
-| Ação | `--color-primary` + `--color-primary-foreground` | um só par. A ação primária da tela |
+| Borda decorativa | `--color-border` | 1 passo; borda não substitui espaçamento |
+| Contorno de controle | `--color-control` | o campo precisa de 3:1 contra a superfície (WCAG 1.4.11) |
+| Ação | `--color-primary` + `--color-primary-foreground` + `--color-primary-hover` | um par e o hover. A ação primária da tela |
 | Foco | `--color-ring` | **precisa** existir e diferir de `--color-primary` |
-| Erro | `--color-destructive` + `--color-destructive-foreground` | par completo |
+| Erro | `--color-destructive` | tinta do erro; o fundo vem por opacidade do próprio token |
+| Sucesso | `--color-success` | tinta da confirmação |
 
 **Regra dos 3 passos de tom.** Uma escala de cor é uma rampa com passos nomeados
 (`50/100/…/900` é o padrão do Tailwind). Superfície separada por **um passo**, nunca
@@ -60,34 +61,25 @@ por linha ou sombra. Sombra é para o que flutua de verdade: menu, dialog.
 **Regra do foco.** `--color-ring` é obrigatório. `outline: none` sem substituto é
 bug de acessibilidade, não escolha de estilo.
 
-```css
-/* apps/web/app/globals.css — extensão do @theme existente, não reescrita */
-@theme {
-  --color-background: hsl(0 0% 100%);
-  --color-foreground: hsl(222.2 84% 4.9%);
-  --color-surface: hsl(220 14% 97%);
-  --color-muted-foreground: hsl(220 9% 46%);
-  --color-border: hsl(220 13% 91%);
-  --color-primary: hsl(221 83% 53%);
-  --color-primary-foreground: hsl(0 0% 100%);
-  --color-ring: hsl(221 83% 40%);
-  --color-destructive: hsl(0 72% 45%);
-  --color-destructive-foreground: hsl(0 0% 100%);
-}
-```
+> **Os VALORES não são transcritos aqui.** O bloco `@theme` de
+> `apps/web/app/globals.css` é o dono deles, e a convenção
+> `estilizacao.md` §2.1 é o dono dos papéis. Token escrito em dois lugares
+> envelhece em um deles — e o lugar que envelhece é o que ninguém repara.
 
 > **O token guarda a COR COMPLETA, não a tripla HSL.** O Tailwind 4 emite
 > `background-color: var(--color-surface)` literalmente — com
 > `--color-surface: 220 14% 97%` o browser descarta a declaração em silêncio e o
-> elemento fica transparente. Só os 2 tokens atuais sobrevivem porque
-> `globals.css:15-16` envolve o valor na mão: `hsl(var(--color-background))`.
-> Medido em 2026-10-13: `npx @tailwindcss/cli` com `220 14% 97%` emite a
-> variável crua; `hsl(222 84% 5%)` emite cor válida. Tripla sem `hsl()` é
-> exatamente o defeito que o comentário de `globals.css:5-9` já registra — não
-> introduza o mesmo bug em 8 tokens novos.
+> elemento fica transparente. MEDIDO 2026-11-11 no build deste app: era
+> exatamente o que `globals.css` fazia (`--color-background: 0 0% 100%`), e o
+> defeito era INVISÍVEL porque ninguém usava `bg-background` — o `body` envolvia
+> o valor na mão (`hsl(var(--color-background))`). Com a cor completa no token,
+> o `body` usa `var(--color-background)` direto: `hsl()` em volta passaria a
+> ser `hsl(hsl(0 0% 100%))`.
 
 > **Ao propor token novo:** diga de onde ele é reusado e o que hoje está duplicado.
-> Token com um único consumidor é variável com nome difícil — e inline.
+> Token com um único consumidor é variável com nome difícil — e inline. E o
+> token novo exige: papel na convenção, valor com a cor completa, **contraste
+> medido** e um consumidor real (convenção `estilizacao.md` §4.4).
 
 ## 2. Hierarquia tipográfica
 
@@ -120,6 +112,8 @@ pequeno, nada no meio.
 - Nada de `rounded-md` no meio: raio é decisão de **família de componente**, tomada
   uma vez. Achado (2px), médio (6px) ou redondo (9999px) — decidir e aplicar.
   O default fraco (9–16px "soft") não está entre as opções.
+  **A decisão deste repo:** médio (6px) em tudo — `--radius-md` no `@theme`,
+  e a regra de lint recusa qualquer outro raio (convenção `estilizacao.md` §4.3).
 
 ## 4. Os 4 estados, sempre
 

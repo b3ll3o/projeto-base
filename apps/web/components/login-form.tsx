@@ -26,11 +26,15 @@
 //    reescreve o campo com ''. O preço é a pessoa redigitar; a alternativa
 //    é o segredo no payload da Server Action.
 //
-// pt-BR (o desenho visual NÃO é novo): as classes Tailwind são as MESMAS do
-// campo de e-mail e do campo de senha de `cadastro-usuario-form.tsx`,
-// copiadas. O design system deste repositório é a repetição dessas classes
-// inline, e introduzir um componente de campo aqui criaria duas maneiras de
-// escrever o mesmo campo sem apagar nenhuma das duas.
+// pt-BR (2026-11-11, padrão de estilização): o desenho visual NÃO mudou de
+// substantivo — o campo de e-mail e o de senha usam agora o MESMO
+// componente (`components/ui/campo.tsx`) que o cadastro. Antes eles
+// repetiam a mesma class string inline, e este arquivo registrava por quê:
+// "O design system deste repositório é a repetição dessas classes inline".
+// Essa frase deixou de ser verdade — o design system passou a ser o
+// conjunto de primitivas de `components/ui/`, e a fiação de
+// `aria-invalid`/`aria-describedby` deixou de ser feita à mão nos 7 campos
+// do app.
 //
 // pt-BR (os dois `role="alert"`): o aviso genérico de credencial e os erros
 // de campo são nós diferentes, cada um anunciado quando aparece, sem mover o
@@ -41,12 +45,15 @@
 'use client';
 
 import { startTransition, useActionState, useEffect, type FormEvent } from 'react';
-import Link from 'next/link';
 import { useForm } from 'react-hook-form';
+import { Alerta } from '@/components/ui/alerta';
+import { Botao } from '@/components/ui/botao';
+import { Campo } from '@/components/ui/campo';
 import { entrar } from '@/app/login/actions';
 import { LOGIN_INICIAL, type LoginState } from '@/app/login/state';
 import { EMAIL_MAX, SENHA_MAX } from '@/lib/cadastro-usuario-schema';
 import { loginSchema, type CampoLogin, type LoginInput } from '@/lib/login-schema';
+import { LinkTexto } from '@/components/ui/link-texto';
 
 type ActionLogin = (estado: LoginState, formData: FormData) => Promise<LoginState>;
 
@@ -182,91 +189,46 @@ export function LoginForm({
         // fala em curso). E `aria-live="polite"` é redundante aqui por
         // construção: `status` já é polite por definição, e escrever os dois
         // cria um segundo lugar onde o comportamento do aviso mora.
-        <p
-          role="status"
-          className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900"
-        >
-          {aviso}
-        </p>
+        // A decisão de `role` é da VARIANTE do `Alerta`, não de quem chama.
+        <Alerta variante="sucesso">{aviso}</Alerta>
       ) : null}
 
-      {estado.formError ? (
-        <p
-          role="alert"
-          className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800"
-        >
-          {estado.formError}
-        </p>
-      ) : null}
+      {estado.formError ? <Alerta variante="erro">{estado.formError}</Alerta> : null}
 
-      <div>
-        <label htmlFor="email" className="block text-sm font-medium text-slate-900">
-          E-mail
-        </label>
-        <input
-          id="email"
-          {...register('email')}
-          type="email"
-          maxLength={EMAIL_MAX}
-          autoComplete="email"
-          disabled={pendente}
-          aria-invalid={Boolean(erroDe('email'))}
-          aria-describedby={erroDe('email') ? 'email-erro' : undefined}
-          className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 aria-[invalid=true]:border-red-500"
-        />
-        {erroDe('email') ? (
-          // pt-BR: `role="alert"` anuncia a mensagem assim que ela aparece,
-          // sem mover o foco. É o que faz o erro chegar a quem não enxerga o
-          // campo vermelho.
-          <p id="email-erro" role="alert" className="mt-1 text-sm text-red-700">
-            {erroDe('email')}
-          </p>
-        ) : null}
-      </div>
+      <Campo
+        id="email"
+        rotulo="E-mail"
+        erro={erroDe('email')}
+        {...register('email')}
+        type="email"
+        maxLength={EMAIL_MAX}
+        autoComplete="email"
+        disabled={pendente}
+      />
 
-      <div>
-        <label htmlFor="senha" className="block text-sm font-medium text-slate-900">
-          Senha
-        </label>
-        <input
-          id="senha"
-          {...register('senha')}
-          type="password"
-          maxLength={SENHA_MAX}
-          // pt-BR: `current-password` e não `new-password` — é o valor que
-          // faz o gerenciador de senhas PREENCHER o campo em vez de
-          // OFERECER GERAR uma senha nova. Este formulário não cria conta:
-          // quem está aqui já tem uma.
-          autoComplete="current-password"
-          disabled={pendente}
-          aria-invalid={Boolean(erroDe('senha'))}
-          aria-describedby={erroDe('senha') ? 'senha-erro' : undefined}
-          className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900 aria-[invalid=true]:border-red-500"
-        />
-        {erroDe('senha') ? (
-          <p id="senha-erro" role="alert" className="mt-1 text-sm text-red-700">
-            {erroDe('senha')}
-          </p>
-        ) : null}
-      </div>
+      <Campo
+        id="senha"
+        rotulo="Senha"
+        erro={erroDe('senha')}
+        {...register('senha')}
+        type="password"
+        maxLength={SENHA_MAX}
+        // pt-BR: `current-password` e não `new-password` — é o valor que
+        // faz o gerenciador de senhas PREENCHER o campo em vez de
+        // OFERECER GERAR uma senha nova. Este formulário não cria conta:
+        // quem está aqui já tem uma.
+        autoComplete="current-password"
+        disabled={pendente}
+      />
 
       <div className="flex items-center gap-3 pt-2">
-        <button
-          type="submit"
-          disabled={pendente}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
-        >
+        <Botao type="submit" disabled={pendente}>
           {pendente ? 'Entrando…' : 'Entrar'}
-        </button>
+        </Botao>
         {/* pt-BR: quem não tem conta precisa de uma saída. Sem este link a
             tela de login é um beco sem saída para quem ainda não se
             cadastrou. */}
-        <Link
-          href="/users/novo"
-          className="text-sm text-slate-600 underline underline-offset-2 hover:text-slate-900"
-        >
-          Criar conta
-        </Link>
+        <LinkTexto href="/users/novo">Criar conta</LinkTexto>
       </div>
     </form>
   );

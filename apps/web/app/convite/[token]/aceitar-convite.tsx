@@ -13,10 +13,12 @@
 'use client';
 
 import { useActionState } from 'react';
-import Link from 'next/link';
+import { Alerta } from '@/components/ui/alerta';
+import { Botao } from '@/components/ui/botao';
 import { PARAM_CONVITE } from '@/lib/convite-schema';
 import { aceitarConviteDoAtor } from './actions';
 import { CONVITE_INICIAL, type ConviteState } from './state';
+import { LinkTexto } from '@/components/ui/link-texto';
 
 export function AceitarConvite({ token }: { token: string }) {
   const [estado, despachar, pendente] = useActionState<ConviteState, FormData>(
@@ -28,22 +30,11 @@ export function AceitarConvite({ token }: { token: string }) {
     <form action={despachar} className="max-w-md space-y-5">
       <input type="hidden" name="token" value={token} />
 
-      {estado.formError ? (
-        <p
-          role="alert"
-          className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800"
-        >
-          {estado.formError}
-        </p>
-      ) : null}
+      {estado.formError ? <Alerta variante="erro">{estado.formError}</Alerta> : null}
 
-      <button
-        type="submit"
-        disabled={pendente}
-        className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
-      >
+      <Botao type="submit" disabled={pendente}>
         {pendente ? 'Aceitando…' : 'Aceitar convite'}
-      </button>
+      </Botao>
 
       {/* pt-BR (onboarding de empresa, 2026-10-21): esta é a ÚNICA tela do
           convite que a pessoa vê COM sessão — e ela pode estar logada na
@@ -52,12 +43,7 @@ export function AceitarConvite({ token }: { token: string }) {
           "enviado para outro e-mail". O token viaja na query porque o login
           o leva de volta até aqui — e é o que faz o aceite voltar a
           funcionar depois da troca de conta. */}
-      <Link
-        href={`/login?${PARAM_CONVITE}=${token}`}
-        className="block text-sm text-slate-600 underline underline-offset-2 hover:text-slate-900"
-      >
-        Entrar com outra conta
-      </Link>
+      <LinkTexto href={`/login?${PARAM_CONVITE}=${token}`}>Entrar com outra conta</LinkTexto>
     </form>
   );
 }

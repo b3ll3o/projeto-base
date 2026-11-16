@@ -48,21 +48,27 @@ export async function Sidebar(): Promise<React.JSX.Element> {
     // pt-BR: `sidebar`/`sidebar-footer` não existem em `globals.css` — o menu
     // renderizava como texto corrido, com link azul padrão do browser, colado
     // no conteúdo. Utilitários Tailwind, como o resto do app.
-    <nav aria-label="Navegação principal" className="w-64 shrink-0 border-r border-slate-200 p-8">
+    <nav aria-label="Navegação principal" className="w-64 shrink-0 border-r border-border p-8">
       <ul className="space-y-1">
         <li>
-          <Link className="text-sm font-medium text-slate-700 hover:text-slate-900" href="/">
+          <Link
+            className="text-sm font-medium text-muted-foreground hover:text-foreground foco"
+            href="/"
+          >
             Início
           </Link>
         </li>
         <li>
-          <Link className="text-sm font-medium text-slate-700 hover:text-slate-900" href="/users">
+          <Link
+            className="text-sm font-medium text-muted-foreground hover:text-foreground foco"
+            href="/users"
+          >
             Usuários
           </Link>
         </li>
         <li>
           <Link
-            className="text-sm font-medium text-slate-700 hover:text-slate-900"
+            className="text-sm font-medium text-muted-foreground hover:text-foreground foco"
             href="/me/profile"
           >
             Meu perfil
@@ -71,14 +77,14 @@ export async function Sidebar(): Promise<React.JSX.Element> {
         {me?.isAdmin === true ? (
           <>
             <li>
-              <hr className="my-4 border-slate-200" />
+              <hr className="my-4 border-border" />
             </li>
             <li>
-              <strong className="text-xs uppercase tracking-wide text-slate-400">Admin</strong>
+              <strong className="text-xs font-medium text-muted-foreground">Admin</strong>
             </li>
             <li>
               <Link
-                className="text-sm font-medium text-slate-700 hover:text-slate-900"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground foco"
                 href="/admin/profiles"
               >
                 Perfis
@@ -86,7 +92,7 @@ export async function Sidebar(): Promise<React.JSX.Element> {
             </li>
             <li>
               <Link
-                className="text-sm font-medium text-slate-700 hover:text-slate-900"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground foco"
                 href="/admin/users"
               >
                 Atribuir perfis
@@ -97,14 +103,14 @@ export async function Sidebar(): Promise<React.JSX.Element> {
         {meGlobal?.isAdmin === true ? (
           <>
             <li>
-              <hr className="my-4 border-slate-200" />
+              <hr className="my-4 border-border" />
             </li>
             <li>
-              <strong className="text-xs uppercase tracking-wide text-slate-400">Sistema</strong>
+              <strong className="text-xs font-medium text-muted-foreground">Sistema</strong>
             </li>
             <li>
               <Link
-                className="text-sm font-medium text-slate-700 hover:text-slate-900"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground foco"
                 href="/admin/flags"
               >
                 Feature flags
@@ -112,7 +118,7 @@ export async function Sidebar(): Promise<React.JSX.Element> {
             </li>
             <li>
               <Link
-                className="text-sm font-medium text-slate-700 hover:text-slate-900"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground foco"
                 href="/admin/tenancy"
               >
                 Empresas e usuários
@@ -123,7 +129,7 @@ export async function Sidebar(): Promise<React.JSX.Element> {
       </ul>
 
       {me !== null ? (
-        <p className="mt-8 border-t border-slate-200 pt-4 text-xs text-slate-500">
+        <p className="mt-8 border-t border-border pt-4 text-xs text-muted-foreground">
           {me.profileName ?? 'Sem perfil'} · {me.isAdmin ? 'admin' : 'usuário'}
         </p>
       ) : null}

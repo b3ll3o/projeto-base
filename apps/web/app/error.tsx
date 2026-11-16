@@ -18,6 +18,9 @@
 'use client';
 
 import { useEffect } from 'react';
+import { Botao } from '@/components/ui/botao';
+import { CabecalhoPagina } from '@/components/ui/cabecalho-pagina';
+import { Container } from '@/components/ui/container';
 
 export default function ErroDePagina({
   error,
@@ -34,24 +37,25 @@ export default function ErroDePagina({
   }, [error]);
 
   return (
-    <main className="mx-auto max-w-3xl p-8">
-      <h1 className="text-2xl font-semibold text-slate-900">Algo deu errado ao carregar</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        Isto não é sobre o seu perfil nem sobre a sua conta. Tente de novo — se persistir, o serviço
-        pode estar fora do ar.
-      </p>
-      <button
+    <Container>
+      <CabecalhoPagina
+        titulo="Algo deu errado ao carregar"
+        descricao="Isto não é sobre o seu perfil nem sobre a sua conta. Tente de novo — se persistir, o serviço pode estar fora do ar."
+      />
+      <Botao
         type="button"
+        variante="secundario"
+        tamanho="sm"
+        className="mt-4"
         onClick={() => {
           reset();
         }}
-        className="mt-4 rounded border border-slate-300 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50"
       >
         Tentar de novo
-      </button>
+      </Botao>
       {error.digest !== undefined && (
-        <p className="mt-4 font-mono text-xs text-slate-400">ref: {error.digest}</p>
+        <p className="mt-4 font-mono text-xs text-muted-foreground">ref: {error.digest}</p>
       )}
-    </main>
+    </Container>
   );
 }

@@ -14,6 +14,10 @@
 import type * as React from 'react';
 import { notFound } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
+import { Botao } from '@/components/ui/botao';
+import { CabecalhoPagina } from '@/components/ui/cabecalho-pagina';
+import { Campo } from '@/components/ui/campo';
+import { Container } from '@/components/ui/container';
 import {
   obterPerfilPorSlug,
   listarPermissoes,
@@ -21,6 +25,7 @@ import {
   atualizarPerfil,
 } from '../../../../lib/perfil';
 import { exigirAdmin } from '../../guard-admin';
+import { CLASSE_CHECKBOX } from '@/components/ui/campo';
 
 export const dynamic = 'force-dynamic';
 
@@ -110,75 +115,66 @@ export default async function AdminProfileDetailPage({
   }
 
   return (
-    <main className="mx-auto max-w-3xl p-8">
-      <h1 className="text-2xl font-semibold text-slate-900">Perfil: {profile.name}</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        <code>{profile.slug}</code> · versão {profile.version}
-      </p>
+    <Container>
+      <CabecalhoPagina
+        titulo={`Perfil: ${profile.name}`}
+        descricao={
+          <>
+            <code>{profile.slug}</code> · versão {profile.version}
+          </>
+        }
+      />
 
       <section className="mt-8">
-        <h2 className="text-lg font-medium text-slate-900">Flags</h2>
-        <ul className="mt-3 space-y-1 text-sm text-slate-900">
+        <h2 className="text-lg font-medium text-foreground">Flags</h2>
+        <ul className="mt-3 space-y-1 text-sm text-foreground">
           <li>isAdmin: {profile.isAdmin ? '✅' : '—'} (bypass total no guard)</li>
           <li>isSystem: {profile.isSystem ? '✅' : '—'} (protegido contra DELETE)</li>
         </ul>
       </section>
 
       <section className="mt-8">
-        <h2 className="text-lg font-medium text-slate-900">Metadados</h2>
+        <h2 className="text-lg font-medium text-foreground">Metadados</h2>
         {profile.isSystem || profile.isAdmin ? (
-          <p className="mt-3 text-sm text-slate-500">
+          <p className="mt-3 text-sm text-muted-foreground">
             Perfil de {profile.isSystem ? 'sistema' : 'administrador'}: nome e descrição são{' '}
             <strong>somente leitura</strong>. A API recusa alterações.
           </p>
         ) : (
           <form action={salvarMetadados} className="mt-3 space-y-4 text-sm">
-            <p>
-              <label className="block space-y-1">
-                <span className="font-medium text-slate-700">Nome</span>
-                <input
-                  className="block w-full rounded-md border border-slate-300 px-3 py-2"
-                  type="text"
-                  name="name"
-                  defaultValue={profile.name}
-                  required
-                  minLength={2}
-                  maxLength={80}
-                />
-              </label>
-            </p>
-            <p>
-              <label className="block space-y-1">
-                <span className="font-medium text-slate-700">Descrição</span>
-                <input
-                  className="block w-full rounded-md border border-slate-300 px-3 py-2"
-                  type="text"
-                  name="description"
-                  defaultValue={profile.description ?? ''}
-                />
-              </label>
-            </p>
-            <button
-              type="submit"
-              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
-            >
-              Salvar metadados
-            </button>
+            <Campo
+              id="name"
+              rotulo="Nome"
+              type="text"
+              name="name"
+              defaultValue={profile.name}
+              required
+              minLength={2}
+              maxLength={80}
+            />
+            <Campo
+              id="description"
+              rotulo="Descrição"
+              type="text"
+              name="description"
+              defaultValue={profile.description ?? ''}
+            />
+            <Botao type="submit">Salvar metadados</Botao>
           </form>
         )}
       </section>
 
       <section className="mt-8">
-        <h2 className="text-lg font-medium text-slate-900">
+        <h2 className="text-lg font-medium text-foreground">
           Permissões ({profile.permissions.length})
         </h2>
         {profile.isSystem ? (
           <>
-            <p className="mt-3 text-sm text-slate-500">
+            <p className="mt-3 text-sm text-muted-foreground">
               Perfil de sistema: as permissões são <strong>somente leitura</strong>. A API recusa
               alterações com <code>ProfileSystemProtectedException</code>.
             </p>
-            <ul className="mt-3 space-y-1 text-sm text-slate-900">
+            <ul className="mt-3 space-y-1 text-sm text-foreground">
               {catalogo.map((k) => (
                 <li key={k}>
                   <code>{k}</code> {atribuidas.has(k) ? '✅' : '—'}
@@ -191,27 +187,25 @@ export default async function AdminProfileDetailPage({
             <ul className="space-y-1">
               {catalogo.map((k) => (
                 <li key={k}>
-                  <label className="flex items-center gap-2 text-sm text-slate-900">
+                  <label className="flex items-center gap-2 text-sm text-foreground">
                     <input
                       type="checkbox"
                       name="permissionKey"
                       value={k}
                       defaultChecked={atribuidas.has(k)}
+                      className={CLASSE_CHECKBOX}
                     />
                     <code>{k}</code>
                   </label>
                 </li>
               ))}
             </ul>
-            <button
-              type="submit"
-              className="mt-4 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
-            >
+            <Botao type="submit" className="mt-4">
               Salvar
-            </button>
+            </Botao>
           </form>
         )}
       </section>
-    </main>
+    </Container>
   );
 }

@@ -30,9 +30,12 @@
 
 import type * as React from 'react';
 import { redirect } from 'next/navigation';
+import { CabecalhoPagina } from '@/components/ui/cabecalho-pagina';
+import { Container } from '@/components/ui/container';
 import { ApiError, ApiTimeoutError } from '../../lib/api-client';
 import { obterMeuPerfil, obterMeuPerfilGlobal } from '../../lib/perfil';
 import type { MeProfileDto } from '@projeto/shared-types';
+import { CLASSES_BOTAO_SECUNDARIO } from '@/components/ui/botao';
 
 /**
  * Tela de serviço indisponível — com retry, que é o que a pessoa pode fazer.
@@ -43,29 +46,31 @@ import type { MeProfileDto } from '@projeto/shared-types';
  */
 export function ServicoIndisponivel(): React.JSX.Element {
   return (
-    <main className="mx-auto max-w-3xl p-8">
-      <h1 className="text-2xl font-semibold text-slate-900">Serviço indisponível</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        Não foi possível falar com a API agora. Isto não é sobre o seu perfil — recarregue em
-        instantes.
-      </p>
-      <a
-        href=""
-        className="mt-4 inline-block rounded border border-slate-300 px-3 py-1 text-sm text-slate-700 hover:bg-slate-50"
-      >
+    <Container>
+      <CabecalhoPagina
+        titulo="Serviço indisponível"
+        descricao="Não foi possível falar com a API agora. Isto não é sobre o seu perfil — recarregue em instantes."
+      />
+      {/* pt-BR: `<a href="">` e não o `Botao` — este é o ÚNICO lugar do app
+          que recarrega a página inteira em vez de navegar. O `Botao` com
+          `href` é um link do Next (navegação do cliente), e o que esta tela
+          quer é reexecutar a leitura que falhou. */}
+      <a href="" className={`${CLASSES_BOTAO_SECUNDARIO} mt-4`}>
         Tentar de novo
       </a>
-    </main>
+    </Container>
   );
 }
 
 /** Negativa de acesso — a pessoa não tem o que precisa. Aqui é verdade. */
 function AcessoRestrito(): React.JSX.Element {
   return (
-    <main className="mx-auto max-w-3xl p-8">
-      <h1 className="text-2xl font-semibold text-slate-900">Acesso restrito</h1>
-      <p className="mt-1 text-sm text-slate-500">Esta página exige perfil de administrador.</p>
-    </main>
+    <Container>
+      <CabecalhoPagina
+        titulo="Acesso restrito"
+        descricao="Esta página exige perfil de administrador."
+      />
+    </Container>
   );
 }
 

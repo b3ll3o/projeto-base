@@ -74,8 +74,9 @@ projeto-base (monorepo)
 | Framework | Next.js | 15.x | App Router estável, RSC, Server Actions |
 | React | React | 19.x | Concurrent features, use() hook, ações |
 | Linguagem | TypeScript | 5.x estrito | Type safety end-to-end |
-| Styling | Tailwind CSS | 4.x | Utility-first, zero runtime, tree-shakeable |
-| Componentes | **escritos à mão com Tailwind** | — | Não há biblioteca de componentes. As classes são inline e repetidas por design (`cadastro-usuario-form.tsx` e `login-form.tsx` compartilham as mesmas classes de campo). shadcn/ui NÃO está instalado — nem como dependência, nem como código copiado |
+| Styling | Tailwind CSS | 4.x | Utility-first, zero runtime, tree-shakeable. CSS-first: os tokens vivem no bloco `@theme` de `apps/web/app/globals.css` |
+| Padrão de estilo | **`estilizacao.md`** (convenção) | — | Tokens semânticos + primitivas em `apps/web/components/ui/`; o instrumento é a regra ESLint `estilizacao/no-estilizacao-informal`. Ver [`.agents/specs/conventions/estilizacao.md`](../.agents/specs/conventions/estilizacao.md) |
+| Componentes | **escritos à mão, sobre as primitivas** | — | Não há biblioteca de componentes: shadcn/ui NÃO está instalado — nem como dependência, nem como código copiado. As primitivas (`Container`, `CabecalhoPagina`, `Campo`, `Botao`, `Alerta`, `Tabela`, `EstadoVazio`, `LinkTexto`) são o que as telas usam; o `className` repetido era a dívida que elas pagaram |
 | State (URL) | Next router | nativo | Filtros, paginação, tabs na URL |
 | Forms | react-hook-form + zod | ^7 / ^3.25.76 | Client Component + validação tipada |
 | Server Actions | nativo | — | Mutações sem JS extra |

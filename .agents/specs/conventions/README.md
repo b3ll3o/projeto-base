@@ -53,6 +53,7 @@ desenho, apêndices.
 | Migração de Dados | [`migracao-de-dados.md`](./migracao-de-dados.md) | Regra dos 3 passos (add nullable, backfill, drop) + quando **não** há backfill a fazer |
 | DRY | [`dry.md`](./dry.md) | Don't Repeat Yourself — o conhecimento tem UMA representação; um termo de domínio tem UM dono (constante exportada) e quem usa importa. 2 gates: `check-repeticao` (termo) e `check-bloco-duplicado` (lógica) |
 | Documentação | [`documentacao.md`](./documentacao.md) | A documentação é parte do código: doc ausente = lacuna (P1), doc que mente = defeito (P0). Matriz de cobertura (unidade de código → doc canônico), fato com UM dono, frescor verificável; medida pelo gate `check-doc-coverage` |
+| Estilização | [`estilizacao.md`](./estilizacao.md) | Padrão de estilo do frontend: tokens semânticos no `@theme` do Tailwind 4 (os VALORES vivem em `apps/web/app/globals.css`), primitivas em `apps/web/components/ui/`, o que é proibido numa tela, como um app derivado adota; cobrado pela regra ESLint `estilizacao/no-estilizacao-informal` |
 
 ## Regra Geral
 

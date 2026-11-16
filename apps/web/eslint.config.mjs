@@ -3,9 +3,27 @@
 // Estende a config compartilhada @projeto/eslint-config e adiciona
 // ajustes específicos do frontend (TS para JSX, hooks rules).
 import baseConfig from '@projeto/eslint-config';
+import noEstilizacaoInformal from '@projeto/eslint-config/rules/no-estilizacao-informal.js';
 
 export default [
   ...baseConfig,
+  {
+    // pt-BR (2026-11-11, padrão de estilização): a regra que obriga o padrão
+    // de estilo do app. Ela é registrada AQUI, e não no `@projeto/eslint-config`
+    // compartilhado, porque é o único app do repo com Tailwind — o backend
+    // não tem classe de estilo para medir.
+    //
+    // O padrão está em `.agents/specs/conventions/estilizacao.md`; os valores
+    // dos tokens, em `apps/web/app/globals.css`.
+    plugins: {
+      estilizacao: {
+        rules: { 'no-estilizacao-informal': noEstilizacaoInformal },
+      },
+    },
+    rules: {
+      'estilizacao/no-estilizacao-informal': 'error',
+    },
+  },
   {
     ignores: [
       // Arquivos auto-gerados / config do Next.js (não mexer).
