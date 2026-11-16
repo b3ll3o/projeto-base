@@ -35,7 +35,8 @@
   --color-surface: hsl(0 0% 100%);
   /* Apoio: hover de linha e de botão secundário. MEDIDO 2026-11-11: com
      `hsl(210 40% 96%)` o hover do secundário ficava em 1,10:1 contra a
-     superfície — invisível. A 93% ele fica em ~1,33:1, que é o que a
+     superfície — invisível. A 93% ele fica em 1,18:1 (MEDIDO 2026-11-16, a
+     medida canônica está na convenção `estilizacao.md` §2.2), que é o que a
      perceptualidade de um estado de hover precisa. */
   --color-muted: hsl(214 30% 93%);
   /* Tinta primária: o texto corrido NUNCA em cinza suave — página em cinza

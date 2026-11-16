@@ -4,8 +4,9 @@ import type * as React from 'react';
  * O cabeçalho de uma tela: título, descrição e a ação da direita.
  *
  * pt-BR: o `h1` de tela era `text-2xl font-semibold text-slate-900` em 16
- * arquivos e o subtítulo `mt-1 text-sm text-slate-500` em 10. O `h1` é a
- * única coisa que a tela NÃO repete: é o que a pessoa navega por ele.
+ * OCORRÊNCIAS (14 arquivos distintos) e o subtítulo `mt-1 text-sm
+ * text-slate-500` em 13 ocorrências (10 arquivos). O `h1` é a única coisa
+ * que a tela NÃO repete: é o que a pessoa navega por ele.
  *
  * ⚠️ UM `h1` por tela. As duas telas que renderizam dois ramos mutuamente
  * exclusivos (`guard-admin.tsx`, `convite/[token]/page.tsx`) renderizam UM
