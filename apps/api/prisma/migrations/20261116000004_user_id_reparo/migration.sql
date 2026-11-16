@@ -91,7 +91,7 @@ BEGIN
            || substr(replace(gen_random_uuid()::text, '-', ''), 17, 16)
          )::uuid AS id_novo
     FROM users u
-   WHERE NOT user_id_is_uuid_v7(u.id);
+   WHERE NOT user_id_is_uuid_v7(u.id::text);
 
   UPDATE users u
      SET id = r.id_novo,
@@ -152,29 +152,37 @@ BEGIN
    WHERE a.deleted_by = r.id_antigo;
 
   -- O `id` DENTRO dos snapshots JSONB. O snapshot é o que a API devolve em
-  -- `GET /users/{id}/history` e no arquivo de auditoria — e o `response` da
-  -- chave de idempotência é o corpo de um `POST /users` que um replay serve
-  -- depois. Um snapshot com o id VELHO é uma resposta que cita uma conta que
-  -- não existe mais.
+  -- `GET /users/{id}/history` e no arquivo de auditoria — e um snapshot com o
+  -- id VELHO é uma resposta que cita uma conta que não existe mais.
   --
-  -- ⚠️ O `jsonb_set` NÃO cria a chave que não existe (`create_missing` é
-  -- `false` por padrão): um snapshot sem `id` fica como está, e um snapshot
-  -- cujo `id` é outro id (o de outra conta) não é tocado — o `WHERE` só casa
-  -- o id que este reparo trocou.
+  -- ⚠️ O `create_missing` do `jsonb_set` é `true` por PADRÃO (MEDIDO:
+  -- `jsonb_set('{"a":1}', '{id}', '"x"')` devolve `{"a": 1, "id": "x"}`) — e
+  -- criar a chave `id` num snapshot que não tem `id` seria fabricar um dado.
+  -- Por isso o `false` é PASSADO EXPLICITAMENTE nos três `jsonb_set` abaixo:
+  -- o comportamento não pode depender do `WHERE` (que já só casa o id que
+  -- este reparo trocou) nem de um padrão que muda de versão.
   UPDATE users_history h
-     SET snapshot = jsonb_set(h.snapshot, '{id}', to_jsonb(r.id_novo::text))
+     SET snapshot = jsonb_set(h.snapshot, '{id}', to_jsonb(r.id_novo::text), false)
     FROM rekey_de_user r
    WHERE h.snapshot ->> 'id' = r.id_antigo::text;
 
   UPDATE users_archive a
-     SET snapshot = jsonb_set(a.snapshot, '{id}', to_jsonb(r.id_novo::text))
+     SET snapshot = jsonb_set(a.snapshot, '{id}', to_jsonb(r.id_novo::text), false)
     FROM rekey_de_user r
    WHERE a.snapshot ->> 'id' = r.id_antigo::text;
 
+  -- ⚠️ O `response` da chave de idempotência é um ENVELOPE, e o id da conta
+  -- está em `response.body.id` — NÃO em `response.id`.
+  -- MEDIDO: `prisma-idempotency.service.ts:154-163` grava
+  -- `{ body: <o que a aplicação devolveu>, headers: {...} }`, e o replay
+  -- repõe `envelope.body`. Um `jsonb_set(response, '{id}', ...)` não casaria
+  -- com NADA: o `WHERE` (`response ->> 'id'`) leria um `NULL` — e a coluna
+  -- ficaria com o id VELHO, que é o que o replay serviria ao cliente (o id de
+  -- uma conta que não existe mais, e que o VO do cliente recusaria com 400).
   UPDATE idempotency_keys k
-     SET response = jsonb_set(k.response, '{id}', to_jsonb(r.id_novo::text))
+     SET response = jsonb_set(k.response, '{body,id}', to_jsonb(r.id_novo::text), false)
     FROM rekey_de_user r
-   WHERE k.response ->> 'id' = r.id_antigo::text;
+   WHERE k.response -> 'body' ->> 'id' = r.id_antigo::text;
 
   RAISE NOTICE
     'users.id: % conta(s) com id fora do formato UUID v7 receberam um id novo (memberships e refresh tokens acompanharam por ON UPDATE CASCADE).'

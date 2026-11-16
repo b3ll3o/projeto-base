@@ -216,7 +216,7 @@ ambiente real, crie o admin pelo `POST /api/v1/users` e promova o perfil pela UI
 
 `pnpm ci:boot` sobe a aplicação **do jeito que quem desenvolve roda**, espera a
 saúde dos dois e **derruba tudo** no fim. É a etapa que o `pnpm ci:local` e o
-`.husky/pre-push` rodam — o procedimento está em [runbook de e2e/CI §3](./runbooks/e2e-e-ci.md).
+`.husky/pre-push` rodam — o procedimento completo está em [runbook de e2e/CI §3](./runbooks/e2e-e-ci.md).
 
 ---
 
@@ -294,7 +294,7 @@ pnpm test:e2e                    # suíte de navegador (runbook de e2e/CI)
 | API morre no boot sem mensagem clara | `JWT_SECRET` ausente ou com placeholder | §1.2 — `openssl rand -base64 48` |
 | `prisma migrate deploy` "não fez nada" e saiu 0 | rodou da raiz / script inexistente | §1.3, de dentro de `apps/api` |
 | `role app_runtime is not permitted to log in` | `prisma migrate reset` deixou o papel sem senha | §1.2.1 — rode o `prepara-papeis.sh` de novo |
-| `port already in use` em 3000/3001 | ambiente 1 e 3 não podem coexistem | derrube um (`pkill -f "turbo run dev"` ou `docker compose down`) |
-| `GET /api/v1/users` → **500** (hash) ou **400** ("id ... UUID v7") e a tela "Não foi possível carregar a lista" | uma linha de `users` viola uma invariante que só o value object guardava: `password_hash` fora do formato argon2id, ou `id` com versão UUID 4 (medido 2026-11-16) | `cd apps/api && pnpm exec prisma migrate deploy` — as migrations reparam a linha, e as constraints impedem a volta; ver [`docs/api/users.md` §7](./api/users.md) |
+| `port already in use` em 3000/3001 | ambiente 1 e 3 não podem coexistir | derrube um (`pkill -f "turbo run dev"` ou `docker compose down`) |
+| `GET /api/v1/users` → **500** (hash) ou **400** ("id ... UUID v7") e a tela "Não foi possível carregar a lista" | uma linha de `users` viola uma invariante que só o value object guardava: `password_hash` fora do formato argon2id, ou `id` com versão UUID 4 (medido 2026-11-16) | `cd apps/api && pnpm exec prisma migrate deploy && cd ../..` — as migrations reparam a linha, e as constraints impedem a volta. ⚠️ As duas migrations de reparo exigem a credencial do **DONO** da tabela (`DIRECT_DATABASE_URL`): sem ela, elas levantam em vez de reparam em silêncio — ver §1.2; ver [`docs/api/users.md` §7](./api/users.md) |
 | `violates check constraint "users_password_hash_argon2id"` numa escrita | a coluna `password_hash` recebeu um valor que não é argon2id — o banco agora recusa na escrita (o que antes virava 500 na leitura) | o valor gravado tem de vir do `Argon2PasswordHasher` |
 | `Cannot find package '@opentelemetry/sdk-node'` na imagem prod | o stage `prod` não copiava `apps/api/node_modules` | ✅ **corrigido** (issue #104, commit `376da79`) — o `Dockerfile` copia `apps/api/node_modules` e o `pnpm prune --prod` foi REMOVIDO; ver [runbook Docker §2.2](./runbooks/docker.md) |

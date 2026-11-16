@@ -30,11 +30,16 @@
 -- linha violasse a regra, o `migrate deploy` falharia aqui — e essa falha é o
 -- ponto: ela é barulhenta e nomeia a linha, em vez de ser um 500 sem dono.
 --
--- ⚠️ A constraint é MAIS ESTRITA que o value object em um ponto: o `UserId`
--- aceita o id em QUALQUER caixa (`[0-9a-f]` com a flag `i`), e o banco
--- compara o texto canônico do uuid, que o Postgres sempre grava em minúsculas.
--- A regra da função usa `~*`, que é case-insensitive — a MESMA semântica do
--- VO.
+-- ⚠️ A regra da função é a MESMA do value object: o `UserId` aceita o id em
+-- QUALQUER caixa (`[0-9a-f]` com a flag `i`), e a função usa `~*`, que é
+-- case-insensitive — as duas regras casam no MESMO conjunto de valores, e o
+-- spec (`invariantes-da-conta-no-banco.integration.spec.ts`) é quem afirma
+-- isso.
+--
+-- ⚠️ O `("id"::text)` é o que dá à função o MESMO texto que a aplicação lê:
+-- a coluna `users.id` é `uuid`, e o `::text` devolve a forma canônica (com
+-- hifens). A função recebe `text` (e não `uuid`) para responder SIM ou NÃO
+-- para qualquer entrada — ver a migration `20261116000003`.
 --
 -- O spec
 -- `apps/api/src/modules/users/infrastructure/persistence/invariantes-da-conta-no-banco.integration.spec.ts`
@@ -43,4 +48,4 @@
 
 ALTER TABLE "users"
   ADD CONSTRAINT "users_id_uuid_v7"
-  CHECK (user_id_is_uuid_v7("id"));
+  CHECK (user_id_is_uuid_v7("id"::text));

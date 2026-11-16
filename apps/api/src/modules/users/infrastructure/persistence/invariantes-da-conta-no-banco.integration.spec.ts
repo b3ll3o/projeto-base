@@ -191,8 +191,60 @@ const CORPUS_DO_HASH: Caso[] = [
     vo: true,
   },
   {
+    // A MESMA classe do caso acima, com outro membro: o banco recusa
+    // QUALQUER `nome=número` além de `m`, `t` e `p`, onde quer que ele
+    // apareça no bloco.
+    nome: 'argon2id com parâmetro extra de valor numérico no começo do bloco',
+    valor: '$argon2id$v=19$keyid=123,m=65536,t=3,p=4$c2FsdA$hash',
+    banco: false,
+    vo: true,
+  },
+  {
+    // O SEGUNDO ponto em que o banco é mais estrito que o VO: o teto. O VO
+    // conta unidades UTF-16 e o banco conta BYTES — e um caractere astral
+    // (emoji) vale 2 unidades e 4 bytes. Este valor tem 38 caracteres ASCII
+    // + 200 emojis: 438 unidades UTF-16 (o VO aceita) e 838 bytes (o banco
+    // recusa).
+    nome: 'argon2id com caractere multibyte no digest',
+    valor: `$argon2id$v=19$m=65536,t=3,p=4$c2FsdA$${'😀'.repeat(200)}`,
+    banco: false,
+    vo: true,
+  },
+  {
     nome: 'argon2id com parâmetro extra de valor não numérico',
     valor: '$argon2id$v=19$m=65536,t=3,p=4,keyid=abc$c2FsdA$hash',
+    banco: false,
+    vo: false,
+  },
+  {
+    // A VARIANTE errada: argon2i e argon2d não são argon2id. O regex do banco
+    // é `^\$argon2id\$` — e um regex afrouxado aqui aceitaria argon2i.
+    nome: 'argon2i (a variante errada)',
+    valor: '$argon2i$v=19$m=65536,t=3,p=4$c2FsdA$ZGlnZXN0',
+    banco: false,
+    vo: false,
+  },
+  {
+    nome: 'argon2d (a variante errada)',
+    valor: '$argon2d$v=19$m=65536,t=3,p=4$c2FsdA$ZGlnZXN0',
+    banco: false,
+    vo: false,
+  },
+  {
+    nome: 'argon2id com parâmetro fracionário',
+    valor: '$argon2id$v=19$m=65.5,t=3,p=4$c2FsdA$hash',
+    banco: false,
+    vo: false,
+  },
+  {
+    nome: 'argon2id com parâmetro negativo',
+    valor: '$argon2id$v=19$m=65536,t=3,p=-4$c2FsdA$hash',
+    banco: false,
+    vo: false,
+  },
+  {
+    nome: 'argon2id com salt vazio',
+    valor: '$argon2id$v=19$m=65536,t=3,p=4$$hash',
     banco: false,
     vo: false,
   },
@@ -263,6 +315,20 @@ const CORPUS_DO_ID: Caso[] = [
     // uma coluna.
     motivo: 'cast',
   },
+];
+
+/**
+ * As CLASSES de divergência declarada: onde o banco é mais estrito que o VO.
+ *
+ * ⚠️ Uma classe, e não um caso: o banco recusa qualquer `nome=número` além
+ * de `m`, `t` e `p` — onde quer que ele apareça no bloco — e o banco conta
+ * o teto em BYTES enquanto o VO conta unidades UTF-16. As duas divergências
+ * são na direção segura (o banco recusa antes de a aplicação ler), e o spec
+ * abaixo afirma que TODA divergência do corpus pertence a uma destas classes.
+ */
+const CLASSES_DE_DIVERGENCIA = [
+  'argon2id com parâmetro extra de valor numérico',
+  'argon2id com caractere multibyte no digest',
 ];
 
 /** O que o value object do hash diz do valor — sem exceção escapando. */
@@ -426,10 +492,24 @@ describe('As invariantes da conta no BANCO (users.id e users.password_hash)', ()
       const divergentes = [...CORPUS_DO_HASH, ...CORPUS_DO_ID]
         .filter((c) => c.vo && !c.banco)
         .map((c) => c.nome);
-      // Hoje é UM caso: o VO aceita um parâmetro extra de valor numérico e o
-      // banco recusa. A lista é declarada aqui para que um segundo caso
-      // apareça NOMEADO, e não como um acidente silencioso.
-      expect(divergentes).toEqual(['argon2id com parâmetro extra de valor numérico']);
+      // A divergência é uma CLASSE, e não um caso: o banco recusa qualquer
+      // `nome=número` além de `m`, `t` e `p` (o VO aceita), e o banco conta
+      // o teto em BYTES enquanto o VO conta unidades UTF-16 (o banco recusa).
+      // As duas classes são declaradas aqui pelo NOME — e a regra é de
+      // CLASSE, para que um TERCEIRO membro de uma classe existente não
+      // quebre o spec (ele não é uma divergência nova), e para que uma
+      // divergência de uma classe INEXISTENTE apareça NOMEADA, e não como um
+      // acidente silencioso.
+      const foraDaClasse = divergentes.filter(
+        (nome) => !CLASSES_DE_DIVERGENCIA.some((classe) => nome.startsWith(classe)),
+      );
+      expect(foraDaClasse, `divergência NÃO declarada: ${foraDaClasse.join(', ')}`).toEqual([]);
+      for (const classe of CLASSES_DE_DIVERGENCIA) {
+        expect(
+          divergentes.some((nome) => nome.startsWith(classe)),
+          `a classe de divergência "${classe}" sumiu do corpus`,
+        ).toBe(true);
+      }
     });
   });
 
@@ -587,6 +667,9 @@ describe('As invariantes da conta no BANCO (users.id e users.password_hash)', ()
           name: 'Com Histórico',
           passwordHash: CORPUS_DO_HASH[0]?.valor ?? '',
           createdBy: idDoCriador,
+          updatedBy: idDoCriador,
+          deletedBy: idDoCriador,
+          deletedAt: new Date('2026-11-01T00:00:00.000Z'),
         },
       });
       await ctx.prisma.userHistory.create({
@@ -596,6 +679,33 @@ describe('As invariantes da conta no BANCO (users.id e users.password_hash)', ()
           operation: 'INSERT',
           snapshot: { id: idV4 },
           changedBy: idDoCriador,
+        },
+      });
+      await ctx.prisma.userArchive.create({
+        data: {
+          entityId: idV4,
+          version: 1,
+          snapshot: { id: idV4 },
+          deletedBy: idDoCriador,
+        },
+      });
+      await ctx.prisma.idempotencyKey.create({
+        data: {
+          key: 'chave-de-rekey',
+          actor: idV4,
+          route: '/api/v1/users',
+          fingerprint: 'dedalhe-da-requisição',
+          status: 201,
+          // ⚠️ O `response` é um ENVELOPE — `{ body, headers }` — e é o que a
+          // aplicação grava (`prisma-idempotency.service.ts:154-163`). O id da
+          // conta está em `body.id`. Um fixture com o `id` no TOPO mediria
+          // um formato que a aplicação nunca escreve — e o reparo do id
+          // passaria no fixture e falharia no dado real.
+          response: {
+            body: { id: idV4, email: 'com-historico@teste.local' },
+            headers: { etag: 'W/"1"' },
+          },
+          expiresAt: new Date('2026-12-01T00:00:00.000Z'),
         },
       });
 
@@ -624,11 +734,88 @@ describe('As invariantes da conta no BANCO (users.id e users.password_hash)', ()
       expect((historico[0]?.snapshot as { id?: string } | undefined)?.id).toBe(reparada?.id);
       expect(historico[0]?.changedBy).toBe(criador?.id);
 
-      // A coluna de auditoria da própria conta também viaja.
+      // O ARQUIVO de auditoria é a MESMA referência solta, em outra tabela — e
+      // é a que o `GET /users/{id}/archive` devolve.
+      const arquivo = await ctx.prisma.userArchive.findUnique({
+        where: { entityId: reparada?.id ?? '' },
+      });
+      expect(arquivo).not.toBeNull();
+      expect((arquivo?.snapshot as { id?: string } | undefined)?.id).toBe(reparada?.id);
+      expect(arquivo?.deletedBy).toBe(criador?.id);
+
+      // A chave de idempotência: o `actor` é o id da conta em TEXTO (e é
+      // parte da PK), e o `response` é o ENVELOPE que a API devolve no replay
+      // — com o id da conta em `body.id`.
+      const chave = await ctx.prisma.idempotencyKey.findMany({
+        where: { key: 'chave-de-rekey' },
+      });
+      expect(chave).toHaveLength(1);
+      expect(chave[0]?.actor).toBe(reparada?.id);
+      const envelope = chave[0]?.response as { body?: { id?: string } } | undefined;
+      expect(envelope?.body?.id).toBe(reparada?.id);
+
+      // As colunas de auditoria da própria conta também viajam — as TRÊS.
       const comCriador = await ctx.prisma.user.findUnique({
         where: { id: reparada?.id ?? '' },
       });
       expect(comCriador?.createdBy).toBe(criador?.id);
+      expect(comCriador?.updatedBy).toBe(criador?.id);
+      expect(comCriador?.deletedBy).toBe(criador?.id);
+
+      // E o id VELHO não sobrou em NENHUMA das referências soltas: uma
+      // referência que sobrou é um id que aponta para uma conta que não existe
+      // mais — e o spec ficaria verde se medisse só o caminho feliz.
+      await expect(ctx.prisma.userHistory.count({ where: { entityId: idV4 } })).resolves.toBe(0);
+      await expect(ctx.prisma.userArchive.count({ where: { entityId: idV4 } })).resolves.toBe(0);
+      await expect(ctx.prisma.idempotencyKey.count({ where: { actor: idV4 } })).resolves.toBe(0);
+    });
+
+    it('as referências COM FK viajam por ON UPDATE CASCADE (membership e refresh token)', async () => {
+      await ctx.prisma.$executeRawUnsafe(
+        `ALTER TABLE users DROP CONSTRAINT IF EXISTS ${CONSTRAINT_DO_ID}`,
+      );
+
+      const idV4 = '9c1f0d2e-3b4a-4c5d-8e6f-7a8b9c0d1e2f';
+      await ctx.prisma.user.create({
+        data: {
+          id: idV4,
+          email: 'com-fk@teste.local',
+          name: 'Com FK',
+          passwordHash: CORPUS_DO_HASH[0]?.valor ?? '',
+        },
+      });
+      const empresa = await ctx.prisma.tenant.create({
+        data: { name: 'Acme', slug: 'acme-do-rekey' },
+      });
+      await ctx.prisma.tenantMembership.create({
+        data: { userId: idV4, tenantId: empresa.id },
+      });
+      await ctx.prisma.refreshToken.create({
+        data: {
+          jti: 'jti-do-rekey',
+          userId: idV4,
+          expiresAt: new Date('2026-12-01T00:00:00.000Z'),
+        },
+      });
+
+      const sql = await readFile(CAMINHOS_DAS_MIGRATIONS.idReparo, 'utf8');
+      await ctx.prisma.$executeRawUnsafe(sql);
+
+      const reparada = await ctx.prisma.user.findUnique({
+        where: { email: 'com-fk@teste.local' },
+      });
+      expect(reparada?.id).not.toBe(idV4);
+
+      // A membership e o refresh token apontam para a conta por FK com
+      // `ON UPDATE CASCADE` — o banco propaga sozinho. Se o cascade não
+      // existisse, o reparo deixaria as duas linhas apontando para um id morto
+      // (e o `ON DELETE CASCADE` apagaria a membership junto com a conta).
+      const membership = await ctx.prisma.tenantMembership.findFirst({
+        where: { tenantId: empresa.id },
+      });
+      expect(membership?.userId).toBe(reparada?.id);
+      const token = await ctx.prisma.refreshToken.findUnique({ where: { jti: 'jti-do-rekey' } });
+      expect(token?.userId).toBe(reparada?.id);
     });
 
     it('o reparo é idempotente (rodar de novo não altera nada)', async () => {
@@ -687,27 +874,36 @@ describe('As invariantes da conta no BANCO (users.id e users.password_hash)', ()
 
     it('a função do id devolve o veredito do corpus', async () => {
       for (const caso of CORPUS_DO_ID) {
-        let valido: boolean | undefined;
-        try {
-          const linhas = await ctx.prisma.$queryRaw<{ valido: boolean }[]>`
-            SELECT user_id_is_uuid_v7(${caso.valor}::uuid) AS valido
-          `;
-          valido = linhas[0]?.valido;
-        } catch {
-          // O valor não é um literal uuid: o banco não consegue nem GUARDAR
-          // uma coluna assim (`22P02`), e a expectativa do corpus é a mesma —
-          // a escrita é recusada. A função não chega a ser chamada.
-          valido = false;
-        }
-        expect(valido, `a função divergiu do esperado em "${caso.nome}"`).toBe(caso.banco);
+        // ⚠️ Sem `::uuid`: a função recebe `text` (o mesmo domínio do VO) e
+        // responde SIM ou NÃO para QUALQUER entrada. Com o parâmetro `uuid`,
+        // um texto que não é uuid LEVANTA (`22P02`) em vez de devolver o
+        // veredito — e um uuid sem hifens era canonicalizado e aceito, quando
+        // o VO o recusa.
+        const linhas = await ctx.prisma.$queryRaw<{ valido: boolean }[]>`
+          SELECT user_id_is_uuid_v7(${caso.valor}) AS valido
+        `;
+        expect(linhas[0]?.valido, `a função divergiu do esperado em "${caso.nome}"`).toBe(
+          caso.banco,
+        );
       }
+    });
+
+    it('a função do id recusa a forma NÃO canônica (uuid sem hifens)', async () => {
+      // O Postgres canonicaliza o que entra na coluna `uuid` — e o VO exige os
+      // hifens. A função recebe o texto CRU, então precisa recusar a forma
+      // não canônica: senão ela aceitaria algo que o VO recusa (a direção
+      // perigosa).
+      const linhas = await ctx.prisma.$queryRaw<{ valido: boolean }[]>`
+        SELECT user_id_is_uuid_v7('01a1e5f862f47d5fb8f8bcb72367da9b') AS valido
+      `;
+      expect(linhas[0]?.valido).toBe(false);
     });
 
     it('a função do id devolve false (e não NULL) para um valor que não é uuid', async () => {
       // `NULL` em uma CHECK constraint significa "a linha PASSA" — a regra tem
       // de ser binária.
       const linhas = await ctx.prisma.$queryRaw<{ valido: boolean | null }[]>`
-        SELECT user_id_is_uuid_v7(NULL) AS valido
+        SELECT user_id_is_uuid_v7(NULL::text) AS valido
       `;
       expect(linhas[0]?.valido).toBe(false);
     });

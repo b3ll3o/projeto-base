@@ -10,10 +10,11 @@
 --
 -- ── POR QUE ISTO PREVINE O DEFEITO ─────────────────────────────────────────
 --
--- O defeito medido em 2026-11-16 não foi um bug doVO: foi o banco ACEITAR um
+-- O defeito medido em 2026-11-16 não foi um bug do VO: foi o banco ACEITAR um
 -- valor que a aplicação não consegue ler. Nove linhas de `users` tinham
--- `password_hash = 'x'` — gravadas por fora da aplicação (script, SQL manual),
--- porque a coluna era TEXT sem nenhuma restrição. A consequence foi a
+-- `password_hash` fora do envelope argon2id — gravadas por fora da aplicação
+-- (script, SQL manual), porque a coluna era TEXT sem nenhuma restrição. A
+-- consequência foi a
 -- listagem de usuários inteira devolvendo 500, e o login das contas afetadas
 -- devolvendo 500 em vez de 401.
 --
@@ -33,9 +34,10 @@
 -- `migrate deploy` falharia aqui — e essa falha é o ponto: ela é barulhenta e
 -- nomeia a linha, em vez de ser um 500 sem dono.
 --
--- ⚠️ A constraint é MAIS ESTRITA que o value object em dois pontos (parâmetros
--- extras e o limite de 512), e a direção é a segura: o banco recusa ANTES de a
--- aplicação ler. O spec
+-- ⚠️ A constraint é MAIS ESTRITA que o value object em DOIS pontos (os
+-- parâmetros extras — o VO aceita `nome=número` além de `m`, `t` e `p` — e o
+-- teto, que o banco conta em BYTES e o VO em unidades UTF-16), e a direção é
+-- a segura: o banco recusa ANTES de a aplicação ler. O spec
 -- `apps/api/src/modules/users/infrastructure/persistence/invariantes-da-conta-no-banco.integration.spec.ts`
 -- é o instrumento que amarra as duas regras e afirma a implicação "o banco
 -- aceitou ⟹ o VO aceita".

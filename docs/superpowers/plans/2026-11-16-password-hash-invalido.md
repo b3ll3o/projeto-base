@@ -3,7 +3,7 @@ name: plano-password-hash-invalido
 description: "O hash da senha vira uma invariante do BANCO: uma função SQL que é o dono da regra argon2id, o reparo das linhas já corrompidas, uma CHECK constraint em users.password_hash e o spec que amarra a regra do banco com a do value object."
 version: 1.0.0
 updated: 2026-11-16
-status: em-andamento
+status: executado
 state_snapshot: .agents/runs/state-snapshot-20261116T183713Z.md
 ---
 
@@ -32,11 +32,11 @@ depois dele. Medido em 2026-11-16, com os comandos ao lado.
 | `/users` na UI | "Não foi possível carregar a lista. Tente de novo em instantes." | browser em `http://localhost:3001/users` |
 | `/admin/users` na UI | **HTTP 500** (o RSC deixa a exceção escapar) | browser em `http://localhost:3001/admin/users` |
 | `/`, `/me/profile`, `/admin/profiles`, `/admin/tenancy`, `/admin/flags` | 200 — **só** a listagem de usuários quebra | browser nas 5 rotas |
-| Linhas com hash inválido | **9** de 14 (`password_hash = 'x'`) | `docker exec projeto-base-pg-local psql -U projeto -d projeto_base -tAc "select count(*) from users where password_hash !~ '^\$argon2id\$'"` |
+| Linhas com hash inválido | **9** de 14 (`password_hash` fora do envelope argon2id) | `docker exec projeto-base-pg-local psql -U projeto -d projeto_base -tAc "select count(*) from users where password_hash !~ '^\$argon2id\$'"` |
 | Login de uma conta com hash inválido | **500** — e não 401 | `curl -X POST http://localhost:3000/api/v1/auth/login -H 'content-type: application/json' -d '{"email":"probe-52d2dca4@x.dev","senha":"SenhaForte123"}'` |
 | Guard da regra argon2id | **só** o value object (`password-hash.vo.ts`) | `grep -rn "PasswordHash.create" apps/api/src --include=*.ts \| grep -v spec` |
-| `users.password_hash` no banco | `String` sem CHECK (`schema.prisma:36`) | `grep -n -A2 "passwordHash" apps/api/prisma/schema.prisma` |
-| Fixtures que gravam hash inválido | **25** (22 com `'x'` + 3 com texto claro) | `grep -rn "passwordHash: 'x'" apps/api/src --include=*.ts \| wc -l` |
+| `users.password_hash` no banco | `String` sem CHECK (AS-IS: `schema.prisma:36`) | `grep -n -A2 "passwordHash" apps/api/prisma/schema.prisma` |
+| Fixtures que gravam hash inválido | **25** (22 com `'x'` + 3 com texto claro) | `grep -rnE "passwordHash: ('x'\|'senha-)" apps/api/src --include=*.ts \| grep -v "user.prisma-mapper.spec.ts" \| wc -l` |
 | Sites de produção que gravam hash inválido | **0** | idem, `apps/api/src` fora de `*.spec.ts` |
 | Gates que medem `users.password_hash` | **0** | `grep -rn "password_hash" .tooling/scripts/ci/` |
 
@@ -80,10 +80,11 @@ resposta do login normal; hoje não é.
 >
 > A diferença de grau entre as duas: o hash inválido pode ser **neutralizado**
 > (a conta sobrevive, sem conseguir autenticar); o id **não** — ele é a
-> identidade, e as memberships o referenciam por HMAC (a assinatura é calculada
-> sobre o `user_id`, e a chave é da aplicação). Trocar o id é possível (o
-> `ON UPDATE CASCADE` leva as memberships e os refresh tokens junto); apagar a
-> conta levaria tudo junto.
+> identidade, e as memberships o referenciam por FK (o `ON UPDATE CASCADE` leva
+> as memberships e os refresh tokens junto). Trocar o id é possível; apagar a
+> conta levaria tudo junto. A assinatura HMAC da membership **não** é o
+> obstáculo: ela é conferida no `INSERT` e não é gravada em coluna nenhuma —
+> trocar o `user_id` não a invalida.
 
 ## §2. A causa raiz
 
@@ -119,9 +120,10 @@ Prova, contra um Postgres de verdade (testcontainers):
    ordem — o VO aceita as duas ordens e o banco precisa aceitar as duas.
 3. **O banco é MAIS ESTRITO que o VO** — a implicação que garante que o 500
    não volta: *se o banco aceitou, o VO aceita*. Um corpus vai pelos dois
-   lados; o que o VO aceita e o banco recusa (parâmetro extra com valor numérico)
-   é a **divergência declarada e na direção segura**: o banco recusa antes de a
-   aplicação ler, e o gravador da aplicação nunca produz esse formato.
+   lados; o que o VO aceita e o banco recusa (o parâmetro extra com valor
+   numérico e o teto contado em bytes) é a **divergência declarada e na
+   direção segura**: o banco recusa antes de a aplicação ler, e o gravador da
+   aplicação nunca produz esse formato.
 4. **O reparo neutraliza a linha corrompida** (T2).
 
 ### T2 — Migration (GREEN): o banco passa a ser dono da regra
@@ -134,15 +136,16 @@ antes da restrição) — **três por invariante**:
 | 1 | `20261116000000_password_hash_funcao` | cria `password_hash_is_valid_argon2id(text)` — o dono da regra do hash no banco |
 | 2 | `20261116000001_password_hash_reparo` | repara as linhas: cada hash inválido vira um envelope argon2id **com digest aleatório** — envelope válido (o VO aceita), senha impossível (o `argon2.verify` nunca casa), e a **linha sobrevive** para a auditoria |
 | 3 | `20261116000002_password_hash_constraint` | a CHECK constraint `users_password_hash_argon2id` |
-| 4 | `20261116000003_user_id_funcao` | cria `user_id_is_uuid_v7(uuid)` |
+| 4 | `20261116000003_user_id_funcao` | cria `user_id_is_uuid_v7(text)` |
 | 5 | `20261116000004_user_id_reparo` | troca o id das contas cujo id não é v7 (e leva junto o histórico, o arquivo e a chave de idempotência, que não têm FK) |
 | 6 | `20261116000005_user_id_constraint` | a CHECK constraint `users_id_uuid_v7` |
 
 O reparo do hash **não apaga conta** e **não habilita acesso**: uma conta cujo
 hash estava corrompido já não conseguia entrar; depois do reparo, ela entra
 como credencial inválida (401), que é a resposta certa. O reparo do id **não
-apaga conta** também: o id é a identidade, e as memberships o referenciam por
-HMAC — apagar a conta levaria o resto junto.
+apaga conta** também: o id é a identidade, e as memberships e os refresh tokens
+o referenciam por FK com `ON UPDATE CASCADE` — apagar a conta levaria o resto
+junto.
 
 Por que uma **função** e não a regra escrita duas vezes (no `WHERE` do reparo e
 no CHECK): é a exigência da convenção `dry.md` — *o fato tem UM dono*. A função
@@ -175,7 +178,8 @@ que mais trabalha**: é mecânica, mas toca 7 arquivos.
 A **segunda** invariante tem o mesmo preço: as fixtures gravavam `id:
 randomUUID()` — um **UUID v4** — e a constraint `users_id_uuid_v7` recusa. O
 `UserId.create().value` (v7) é o que passa, e é o que a aplicação usa. Havia
-**20** sitios, em 6 arquivos (o `randomUUID()` que NÃO é id de conta — o slug de
+**23** sítios, em 6 arquivos (20 `randomUUID()` de id de conta + 3 ids literais da
+spec de RLS; o `randomUUID()` que NÃO é id de conta — o slug de
 um e-mail, o id de uma tenant — fica).
 
 Três sites não quebrariam (a escrita morre na RLS antes de a CHECK ser avaliada) —
@@ -185,9 +189,9 @@ defeito:
 
 | Site | O que o spec afirma | Por que muda mesmo sem quebrar |
 |---|---|---|
-| `prisma-rls.integration.spec.ts:766` | update de senha alheia é barrado (RLS) | o `USING` filtra a linha → `UPDATE 0`; o hash nunca é avaliado |
-| `prisma-rls.integration.spec.ts:806` e `:828` | insert sem escopo é barrado (RLS) | o `WITH CHECK` da RLS é avaliado **antes** da CHECK constraint (medido) |
-| `prisma-rls.integration.spec.ts:845` e `:852` | **CONTROLE**: com escopo, a escrita **passa** (`alterados === 1`) | aqui a constraint **rejeita** — é o que quebra |
+| `prisma-rls.integration.spec.ts:781` | update de senha alheia é barrado (RLS) | o `USING` filtra a linha → `UPDATE 0`; o hash nunca é avaliado |
+| `prisma-rls.integration.spec.ts:821` e `:847` | insert sem escopo é barrado (RLS) | o `WITH CHECK` da RLS é avaliado **antes** da CHECK constraint (medido) |
+| `prisma-rls.integration.spec.ts:865` e `:872` | **CONTROLE**: com escopo, a escrita **passa** (`alterados === 1`) | aqui a constraint **rejeita** — é o que quebra |
 
 ⚠️ Ordem de avaliação medida no Postgres: em um INSERT, a policy de RLS
 (`WITH CHECK`) é avaliada **antes** da CHECK constraint; em um UPDATE cuja linha
@@ -197,7 +201,7 @@ erro). Os specs que continuam medindo RLS continuam medindo RLS.
 O hash usado precisa ser aceito pelo VO **e** pela constraint: a regex do banco
 tem de aceitar `m,p,t` e `m,t,p` (as duas ordens existem no repo — `HASH_REAL`
 é `m,p,t`, `HASH_COM_FORMA` é `m,t,p`), e salt/digest curtos (o
-`prisma-tenant-onboarding.repository.integration.spec.ts:64` grava um hash de
+`prisma-tenant-onboarding.repository.integration.spec.ts:67` grava um hash de
 42 caracteres com salt de 4). O VO aceita `[^$]+` (1+ caracteres) e a constraint
 tem de acompanhar.
 
@@ -232,7 +236,7 @@ revisão achar, commit convencional, push e PR.
 | Recriar a base local | O conserto é a migration; recriar o banco esconderia o defeito e perderia os dados de dev. |
 | Um comando "doctor" que caça hash inválido | A constraint é a prevenção; o doctor seria detecção de um caso que a constraint já torna impossível. |
 | O port `UsuarioParaProvisionar.senhaHash` virar `PasswordHash` | O tipo cru é **deliberado** (convenção de BC: `tenancy` não importa `users/domain`), e o chamador de produção passa o valor do VO (`user-use-cases.ts:159`). Com a constraint, uma escrita inválida nesse ponto falha **no write**, com o erro do banco — o furo de TIPO continua, o de DADO não. Mudar o tipo é uma decisão de fronteira entre BCs, e é de outra demanda. |
-| Apagar as 9 contas quebradas em vez de rekeyar | O id é a identidade e as memberships o referenciam por HMAC; apagar levaria o resto junto. Trocar o id preserva a conta e o `ON UPDATE CASCADE` leva as referências junto. |
+| Apagar as 9 contas quebradas em vez de rekeyar | O id é a identidade e as memberships e os refresh tokens o referenciam por FK; apagar levaria o resto junto. Trocar o id preserva a conta e o `ON UPDATE CASCADE` leva as referências com FK, enquanto a migration leva as referências soltas (histórico, arquivo, auditoria, idempotência). |
 
 ## §5. Riscos
 
@@ -241,7 +245,7 @@ revisão achar, commit convencional, push e PR.
 | A constraint recusa um hash legítimo gravado por outra ferramenta | O gravador da aplicação é o `Argon2PasswordHasher`, que emite `m,t,p` — a constraint aceita. Hash de outra origem com parâmetro extra é recusado: falha **barulhenta e cedo**, no write, e não 500 na leitura. |
 | O reparo torna uma conta "trancada" sem o operador saber | Ela já estava trancada: com hash inválido o login era 500, nunca 200. O reparo só troca 500 por 401. O relatório da migration diz quantas linhas foram reparadas. |
 | O reparo do id muda a identidade de uma conta | O id novo é um UUID v7 de verdade (timestamp + `7` + variante + aleatório), gerado em SQL com a mesma forma do `UserId.create()`. O histórico, o arquivo e a chave de idempotência viajam com ele; memberships e refresh tokens, por `ON UPDATE CASCADE`. |
-| 45 fixtures mudarem de valor pode alterar o que um spec mede | O `HASH_REAL` é um hash argon2id válido e o `UserId.create().value` é um v7 — os specs que medem RLS, auditoria e tenancy medem acesso, não formato de hash nem versão de id. O `ci:local` roda a suíte inteira. |
+| 48 sítios de fixture mudarem de valor (25 de hash + 23 de id) pode alterar o que um spec mede | O `HASH_REAL` é um hash argon2id válido e o `UserId.create().value` é um v7 — os specs que medem RLS, auditoria e tenancy medem acesso, não formato de hash nem versão de id. O `ci:local` roda a suíte inteira. |
 | A regra do banco divergir do VO no futuro | A T1 é o instrumento: o corpus passa pelos dois lados e afirma a implicação "banco aceitou ⟹ VO aceita". Mudar a regra em um lado sem o outro deixa o spec vermelho. |
 | A constraint falhar no `migrate deploy` de um banco com linha quebrada | É o comportamento PROPOSITAL: o `ADD CONSTRAINT` valida as linhas existentes, e a falha nomeia a linha. E o reparo vem antes na ordem das migrations. |
 
@@ -249,12 +253,16 @@ revisão achar, commit convencional, push e PR.
 
 > **Revisado em 2026-11-16**, depois da implementação: dois subagentes
 > revisaram o diff (um `code-reviewer`, um `prisma-db-specialist`) e mediram o
-> que o plano afirmava. Doze achados; onze viraram mudança, um foi registrado
-> como decisão.
+> que o plano afirmava. **Dezenove achados; dezoito viraram mudança, um foi
+> registrado como decisão.**
+>
+> A segunda rodada (outros três subagentes — `prisma-db-specialist`,
+> `security-auditor` e `code-reviewer` — mais a medição no Postgres local)
+> achou mais seis; estão na tabela, de 14 a 19.
 
 | # | Achado | Mudança |
 |---|---|---|
-| 1 | **[major]** o rekey deixava **sete** referências soltas apontando para o id velho: `users.created_by/updated_by/deleted_by`, `users_history.changed_by`, `users_archive.deleted_by` e o `id` DENTRO de três snapshots JSONB (`users_history.snapshot`, `users_archive.snapshot`, `idempotency_keys.response`) | a migration passou a atualizar todas — e o spec passou a **afirmar** o `snapshot` e o `changed_by`, para o teste ter dente no achado |
+| 1 | **[major]** o rekey deixava **onze** referências soltas apontando para o id velho: `users_history.entity_id`, `users_archive.entity_id`, `idempotency_keys.actor`, `users.created_by/updated_by/deleted_by`, `users_history.changed_by`, `users_archive.deleted_by` e o `id` DENTRO de três snapshots JSONB (`users_history.snapshot`, `users_archive.snapshot`, `idempotency_keys.response`) | a migration passou a atualizar todas — e o spec passou a **afirmar** o `snapshot` e o `changed_by`, para o teste ter dente no achado |
 | 2 | **[major]** a justificativa da migration afirmava que o id de uma membership "não pode ser trocado sem refazer a assinatura" — e não há coluna de assinatura: o HMAC é conferido no INSERT e **descartado** | o texto foi reescrito com a razão verdadeira |
 | 3 | **[minor]** "o Postgres recusa uma CHECK constraint que chame uma função volátil" é **falso** (MEDIDO: aceita; é o **índice** e a coluna gerada que exigem `IMMUTABLE`) | o motivo foi corrigido nas duas migrations de função |
 | 4 | **[minor]** quatro migrations citavam um spec que não existe (`password-hash-no-banco.integration.spec.ts`) | o nome passou a ser o real (`invariantes-da-conta-no-banco.integration.spec.ts`) |
@@ -264,9 +272,15 @@ revisão achar, commit convencional, push e PR.
 | 8 | **[minor]** o corpus do spec cobria 2 das **6** ordens dos parâmetros | as 4 ordens que faltavam entraram no corpus |
 | 9 | **[minor]** o teste do histórico afirmava só o `entityId` — e passava com a inconsistência que ele mesmo produzia | o teste passou a afirmar o `snapshot` e o `changedBy` |
 | 10 | **[minor]** o ADR se contradizia: "um registro corrompido continua respondendo a MESMA coisa que uma senha errada", duas linhas depois de dizer que ele respondia 500 | o texto foi corrigido: o §3 cobre a senha errada (401); a corrupção respondia 500, e é a constraint que impede ela de existir |
-| 11 | **[minor]** dois ids literais da spec de RLS (`ffffffff-…`, `dddddddd-…`) não são v7 — a dependência da RLS era invisível no teste | viraram `UserId.create().value` |
+| 11 | **[minor]** três ids literais da spec de RLS (`ffffffff-…`, `dddddddd-…`, `eeeeeeee-…`) não são v7 — a dependência da RLS era invisível no teste | viraram `UserId.create().value` |
 | 12 | **[minor]** o helper do spec engole qualquer erro: o caso "texto que não é uuid" passava pelo **cast**, não pela constraint | o spec passou a medir o **motivo** da recusa (`23514` = constraint, `P2023` = cast) |
 | 13 | **[info]** "byte a byte" na descrição do UUID v7 | "no mesmo formato" |
+| 14 | **[major]** o rekey do id **não corrigia** o `id` dentro de `idempotency_keys.response`: a coluna guarda um ENVELOPE (`{ body, headers }` — `prisma-idempotency.service.ts:154-163`), e o `WHERE` procurava `response ->> 'id'`, que é `NULL` — o replay continuava servindo o id VELHO (de uma conta que não existe mais) | a migration passou a usar o caminho real (`{body,id}`), e o spec passou a gravar o envelope real e a afirmar `body.id` |
+| 15 | **[major]** o teto do banco contava CARACTERES (`length`) e o do VO conta unidades UTF-16: um valor com emoji (512 caracteres = 515 bytes = 513 unidades) era **aceito pelo banco e recusado pelo VO** — a direção perigosa, que quebra a implicação "o banco aceitou ⟹ o VO aceita" | a função passou a contar BYTES (`octet_length`), que é a unidade que as duas contas respeitam, e o corpus ganhou o caso multibyte |
+| 16 | **[minor]** o `jsonb_set` usa `create_missing` — que é `true` por PADRÃO (MEDIDO: `jsonb_set('{"a":1}','{id}','"x"')` devolve `{"a":1,"id":"x"}`), e o comentário afirmava o contrário | os três `jsonb_set` passaram a passar `false` explicitamente, e o comentário foi corrigido |
+| 17 | **[minor]** a função do id recebia `uuid`: um texto que não é uuid LEVANTA (`22P02`) em vez de devolver o veredito, e um uuid sem hifens era canonicalizado e aceito (o VO recusa) | a função passou a receber `text` — o mesmo domínio do VO — e a CHECK constraint chama `("id"::text)`, que é a forma canônica que a aplicação lê |
+| 18 | **[minor]** a divergência declarada (o banco mais estrito que o VO) era fixada num ÚNICO caso do corpus, e é uma CLASSE | o spec passou a afirmar a divergência por CLASSE (parâmetro extra; teto em bytes), e o corpus ganhou os membros medidos |
+| 19 | **[minor]** o spec do reparo do id afirmava 3 das **onze** referências soltas (o `entity_id` do histórico, o `changed_by` e o `created_by`) — o `users_archive`, a chave de idempotência, o `updated_by`, o `deleted_by` e o CASCADE de memberships e refresh tokens podiam sumir sem o spec ficar vermelho | o spec passou a afirmar as onze, e ganhou o teste do `ON UPDATE CASCADE` (MEDIDO: com o `UPDATE idempotency_keys` removido da migration, o spec fica VERMELHO) |
 
 ⚠️ Um achado **não** virou mudança: o port `UsuarioParaProvisionar.senhaHash`
 continua com o tipo cru (`string`). O motivo está no §4 — a convenção de BC

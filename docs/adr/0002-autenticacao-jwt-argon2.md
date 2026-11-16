@@ -65,21 +65,22 @@ construído por uma função separada que nunca o inclui. Três garantias:
 >
 > Antes, o formato do hash era validado em UM lugar só: o value object, e
 > apenas na **leitura**. MEDIDO em 2026-11-16 no banco local: nove linhas de
-> `users` tinham `password_hash = 'x'` — gravadas por fora da aplicação, porque
-> a coluna era TEXT sem nenhuma restrição. Uma delas bastava para derrubar a
-> listagem de usuários INTEIRA (500 `UserPersistenceException`), e o login das
-> contas afetadas respondia **500** em vez de 401 — um 500 que, sozinho, já é
-> um oráculo de existência de conta (é o que o §3 existe para fechar).
+> `users` tinham `password_hash` fora do envelope argon2id — gravadas por fora
+> da aplicação, porque a coluna era TEXT sem nenhuma restrição. Uma delas
+> bastava para derrubar a listagem de usuários INTEIRA (500
+> `UserPersistenceException`), e o login das contas afetadas respondia **500**
+> em vez de 401 — um 500 que, sozinho, já é um oráculo de existência de conta
+> (é o que o §3 existe para fechar).
 >
-> Hoje a regra tem dois donos: o VO (na leitura) e a CHECK constraint
+> Hoje a regra tem **um dono autoritativo** — a CHECK constraint
 > `users_password_hash_argon2id` (na escrita, em
-> `apps/api/prisma/migrations/20261116000002_password_hash_constraint/`). A
-> **consequência** é que a corrupção passou a ser recusada no momento da
-> escrita, com o erro do Postgres, em vez de ser descoberta na leitura por
-> quem estava usando o sistema. O banco é **mais estrito** que o VO (ele exige
-> exatamente `m`, `t` e `p`; o VO aceita parâmetros extras com valor numérico)
-> — e a direção é a segura: o banco recusa ANTES de a aplicação ler. O
-> instrumento que amarra as duas regras é
+> `apps/api/prisma/migrations/20261116000002_password_hash_constraint/`) — e o
+> value object vira a **reafirmação** dela na leitura. A **consequência** é que
+> a corrupção passou a ser recusada no momento da escrita, com o erro do
+> Postgres, em vez de ser descoberta na leitura por quem estava usando o
+> sistema. O formato em detalhe (e o porquê de o banco ser mais estrito que o
+> VO) está em [`docs/api/users.md` §7](../api/users.md); o instrumento que ata
+> as duas é
 > `apps/api/src/modules/users/infrastructure/persistence/invariantes-da-conta-no-banco.integration.spec.ts`.
 >
 > O **§3 não mudou**: a senha errada responde 401, com a mesma mensagem do

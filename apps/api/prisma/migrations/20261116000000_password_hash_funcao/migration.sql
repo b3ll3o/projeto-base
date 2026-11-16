@@ -42,14 +42,22 @@
 --
 -- O VO aceita o envelope PHC do argon2id com os parâmetros `m`, `t` e `p` em
 -- QUALQUER ordem, e aceita parâmetros extras desde que sejam `nome=número`.
--- A função é MAIS ESTRITA em dois pontos, e a direção é a segura — o banco
+-- A função é MAIS ESTRITA em DOIS pontos, e a direção é a segura — o banco
 -- recusa ANTES de a aplicação ler:
 --
 --   1. os parâmetros têm de ser EXATAMENTE `m`, `t` e `p` (em qualquer ordem).
 --      O VO aceitaria `keyid=123`; o banco não. Detectar o parâmetro repetido
 --      exigiria um subquery, e CHECK constraint não aceita subquery — por isso
 --      a lista de permissões é explícita, com as SEIS ordens possíveis.
---   2. o valor tem de ter no máximo 512 caracteres, como o VO.
+--
+--   2. o teto é de 512 BYTES, e o do VO é de 512 unidades UTF-16. São a
+--      mesma cota para o que o argon2 emite (ASCII: base64 e dígitos), mas
+--      NÃO para o resto: um caractere astral (emoji) vale 1 byte-caractere no
+--      Postgres e 2 unidades no JavaScript. Medido: 512 caracteres com um
+--      emoji passavam no banco (515 bytes) e o VO recusava (513 unidades) —
+--      ou seja, o banco aceitou um valor que a aplicação não conseguiria ler,
+--      que é EXATAMENTE a quebra que este PR existe para fechar. A
+--      divergência é na direção segura (o banco recusa antes).
 --
 -- ⚠️ O `coalesce(..., false)` é o que faz o veredito ser BINÁRIO. Sem ele, um
 -- `NULL` devolveria `NULL` — e em uma CHECK constraint `NULL` significa "a
@@ -61,8 +69,8 @@
 -- constraint o Postgres ACEITA uma função volátil — mas o valor de uma
 -- constraint precisa ser ESTÁVEL, e uma função que mudasse de resultado
 -- entre duas leituras da mesma linha faria a constraint mentir. A função é de
--- fato imutável: só `length`, o operador de regex e `substring`, que não
--- dependem de estado nenhum.
+-- fato imutável: só `octet_length`, o operador de regex e `substring`, que
+-- não dependem de estado nenhum.
 
 CREATE OR REPLACE FUNCTION password_hash_is_valid_argon2id(p_valor text)
 RETURNS boolean
@@ -70,7 +78,7 @@ LANGUAGE sql
 IMMUTABLE
 AS $$
   SELECT coalesce(
-    length(p_valor) <= 512
+    octet_length(p_valor) <= 512
     AND p_valor ~ '^\$argon2id\$v=[0-9]+\$[^$]+\$[^$]+\$[^$]+$'
     AND substring(p_valor from '^\$argon2id\$v=[0-9]+\$([^$]*)\$')
         ~ (
