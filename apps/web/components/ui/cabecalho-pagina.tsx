@@ -29,8 +29,12 @@ export function CabecalhoPagina({
 }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-4">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">{titulo}</h1>
+      {/* ⚠️ `min-w-0` + `break-words` (MEDIDO 2026-11-16): sem eles, um `h1`
+          com palavra longa (o nome de um perfil vai a 80 chars) estourava a
+          tela — o item flex tinha `min-width: auto`, e a largura mínima dele
+          era a palavra mais longa (856px a `text-2xl`). */}
+      <div className="min-w-0">
+        <h1 className="break-words text-2xl font-semibold text-foreground">{titulo}</h1>
         {descricao ? <p className="mt-1 text-sm text-muted-foreground">{descricao}</p> : null}
       </div>
       {acao ? <div className="flex items-center gap-3">{acao}</div> : null}

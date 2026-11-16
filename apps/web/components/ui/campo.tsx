@@ -12,12 +12,26 @@ import type * as React from 'react';
  * ⚠️ O `border` aqui é o **contorno de controle** (`--color-control`), que
  * precisa de 3:1 contra a superfície (WCAG 1.4.11) — a borda decorativa
  * (`--color-border`) não tem essa obrigação e é mais fraca.
+ *
+ * ⚠️ A transição é de `border-color` e NÃO de `transition-colors`: a
+ * transição padrão do Tailwind inclui `outline-color`, e o anel de foco
+ * passava a SURGIR em 150ms, do `currentColor` para o token do anel
+ * (MEDIDO 2026-11-16 no browser: `outline-color` computado mudava de
+ * `rgb(15,23,41)` para `rgb(17,71,187)` ao longo de 150ms). O indicador de
+ * foco tem que estar VISÍVEL no instante do foco.
  */
 export const CLASSE_CONTROLE =
-  'rounded-md border border-control text-sm text-foreground transition-colors foco';
+  'rounded-md border border-control text-sm text-foreground transition-[border-color] foco';
 
-/** O estilo do checkbox — mesma família, outra forma. */
-export const CLASSE_CHECKBOX = 'size-4 rounded-md border-control accent-primary foco';
+/**
+ * O estilo do checkbox — mesma família, outra forma.
+ *
+ * ⚠️ O `border` (a LARGURA do fio) está aqui à mão, e a cor vem do token:
+ * `border-control` sozinho é só cor, e o `size-6` (24px) é o alvo mínimo da
+ * WCAG 2.5.8. O checkbox nativo do Chrome ignora `border`, mas um
+ * `appearance: none` futuro não ignoraria.
+ */
+export const CLASSE_CHECKBOX = 'size-6 rounded-md border border-control accent-primary foco';
 
 /**
  * Campo de formulário: rótulo, controle, dica e erro — com a fiação de

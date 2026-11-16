@@ -15,6 +15,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { Alerta } from './alerta';
 import { Botao } from './botao';
 import { CabecalhoPagina } from './cabecalho-pagina';
+import { CabecalhoSecao } from './cabecalho-secao';
 import { Campo } from './campo';
 import { Container } from './container';
 import { EstadoVazio } from './estado-vazio';
@@ -172,6 +173,18 @@ describe('Container e CabecalhoPagina', () => {
     render(<CabecalhoPagina titulo="Usuários" acao={<Botao href="/users/novo">Novo</Botao>} />);
 
     expect(screen.getByRole('link', { name: 'Novo' })).toBeInTheDocument();
+  });
+});
+
+describe('CabecalhoSecao', () => {
+  it('é o `h2` da tela e o `className` do caller é ADICIONAL', () => {
+    render(<CabecalhoSecao className="mt-8">Metadados</CabecalhoSecao>);
+
+    const h2 = screen.getByRole('heading', { level: 2 });
+    expect(h2).toHaveTextContent('Metadados');
+    // O vão do caller ENTRA, e o estilo do título continua o do dono.
+    expect(h2.className).toContain('mt-8');
+    expect(h2.className).toContain('text-lg');
   });
 });
 

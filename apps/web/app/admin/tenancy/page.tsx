@@ -34,6 +34,7 @@
 // tabela é. WCAG 1.3.1 — o mesmo padrão de `app/admin/flags/page.tsx`.
 
 import type * as React from 'react';
+import { CabecalhoSecao } from '@/components/ui/cabecalho-secao';
 import { CabecalhoPagina } from '@/components/ui/cabecalho-pagina';
 import { Container } from '@/components/ui/container';
 import { CabecalhoTabela, CelulaTabela, Tabela } from '@/components/ui/tabela';
@@ -86,7 +87,7 @@ export default async function AdminTenancyPage(): Promise<React.JSX.Element> {
     <Container>
       <CabecalhoPagina titulo="Empresas e usuários" />
 
-      <h2 className="mt-8 text-lg font-medium text-foreground">Empresas e seus membros</h2>
+      <CabecalhoSecao className="mt-8">Empresas e seus membros</CabecalhoSecao>
       <Tabela legenda="Empresas do sistema e os membros de cada uma">
         <thead>
           <tr>
@@ -120,7 +121,7 @@ export default async function AdminTenancyPage(): Promise<React.JSX.Element> {
         </tbody>
       </Tabela>
 
-      <h2 className="mt-8 text-lg font-medium text-foreground">Usuários e suas empresas</h2>
+      <CabecalhoSecao className="mt-8">Usuários e suas empresas</CabecalhoSecao>
       <Tabela legenda="Usuários do sistema e as empresas de cada um">
         <thead>
           <tr>

@@ -11,7 +11,7 @@
 // format (ver `packages/shared-types/src/user.ts`).
 import { redirect } from 'next/navigation';
 import { Alerta } from '@/components/ui/alerta';
-import { Botao } from '@/components/ui/botao';
+import { Botao, CLASSES_BOTAO_SECUNDARIO } from '@/components/ui/botao';
 import { CabecalhoPagina } from '@/components/ui/cabecalho-pagina';
 import { Container } from '@/components/ui/container';
 import { EstadoVazio } from '@/components/ui/estado-vazio';
@@ -104,7 +104,16 @@ export default async function UsersPage() {
 
       <div className="mt-6">
         {error ? (
-          <Alerta variante="erro">Erro ao carregar: tente de novo em instantes.</Alerta>
+          // pt-BR (revisão 2026-11-16): erro sem AÇÃO é erro sem saída — a
+          // pessoa lê "tente de novo" e não tem onde tentar. O `<a href="">`
+          // recarrega a página e reexecuta a leitura que falhou (o mesmo
+          // caminho do `guard-admin`).
+          <div className="space-y-3">
+            <Alerta variante="erro">Erro ao carregar: tente de novo em instantes.</Alerta>
+            <a href="" className={CLASSES_BOTAO_SECUNDARIO}>
+              Tentar de novo
+            </a>
+          </div>
         ) : usuarios.length === 0 ? (
           // Estado vazio: informação + próximo passo. Não é erro, e não é a
           // mesma tela de "falhou ao carregar".
@@ -117,9 +126,9 @@ export default async function UsersPage() {
           <ul className="space-y-2">
             {usuarios.map((u: UserOutputDto) => (
               <li key={u.id} className="rounded-md bg-surface p-4">
-                <div className="font-medium text-foreground">{u.nome}</div>
-                <div className="text-sm text-muted-foreground">{u.email}</div>
-                <div className="mt-1 text-xs text-muted-foreground">v{u.version}</div>
+                <div className="break-words font-medium text-foreground">{u.nome}</div>
+                <div className="break-words text-sm text-muted-foreground">{u.email}</div>
+                <div className="mt-1 text-xs tabular-nums text-muted-foreground">v{u.version}</div>
               </li>
             ))}
           </ul>

@@ -133,10 +133,84 @@ describe('regra de estilo — o que ela recusa', () => {
     ]);
   });
 
+  // ⚠️ MEDIDO 2026-11-16 (revisão de código): com a cor presa ao FIM do nome
+  // (`^prefix-cor$`), `border-t-slate-200` PASSAVA — e essa é a forma mais
+  // comum de borda do Tailwind. O furo era do INSTRUMENTO, não do app.
+  it('recusa a paleta stock com modificador de LADO (border-t-, divide-y-)', async () => {
+    expect(await mensagensDe('const X = () => <p className="border-t-slate-200" />;')).toEqual([
+      'cor-paleta',
+    ]);
+    expect(await mensagensDe('const X = () => <p className="border-l-red-500" />;')).toEqual([
+      'cor-paleta',
+    ]);
+    expect(await mensagensDe('const X = () => <p className="divide-y-slate-200" />;')).toEqual([
+      'cor-paleta',
+    ]);
+  });
+
+  it('recusa a paleta stock em placeholder e em ring-offset', async () => {
+    expect(await mensagensDe('const X = () => <p className="placeholder-slate-400" />;')).toEqual([
+      'cor-paleta',
+    ]);
+    expect(await mensagensDe('const X = () => <p className="ring-offset-slate-100" />;')).toEqual([
+      'cor-paleta',
+    ]);
+  });
+
+  it('recusa a opacidade arbitrária e o "importante" do Tailwind 4', async () => {
+    expect(await mensagensDe('const X = () => <p className="bg-slate-900/[0.5]" />;')).toEqual([
+      'cor-paleta',
+    ]);
+    expect(await mensagensDe('const X = () => <p className="bg-slate-900!" />;')).toEqual([
+      'cor-paleta',
+    ]);
+  });
+
   it('recusa sombra literal', async () => {
     expect(
       await mensagensDe('const X = () => <p className="shadow-[0_1px_2px_rgb(0_0_0/0.05)]" />;'),
     ).toEqual(['sombra']);
+  });
+
+  // ⚠️ MEDIDO 2026-11-16: `drop-shadow-*` e `inset-shadow-*` PASSAVAM, e a
+  // convenção §2.3 diz que o sistema não tem sombra nenhuma.
+  it('recusa as famílias de sombra irmãs (drop-shadow, inset-shadow)', async () => {
+    expect(await mensagensDe('const X = () => <p className="drop-shadow-lg" />;')).toEqual([
+      'sombra',
+    ]);
+    expect(await mensagensDe('const X = () => <p className="inset-shadow-sm" />;')).toEqual([
+      'sombra',
+    ]);
+  });
+
+  // ⚠️ MEDIDO 2026-11-16: só o literal e o template literal eram lidos — o
+  // ternário e a chamada de helper PASSAVAM. O app derivado usa as duas.
+  it('recusa a violação em ternário e em chamada de helper', async () => {
+    expect(
+      await mensagensDe("const X = () => <p className={ok ? 'text-slate-900' : 'bg-surface'} />;"),
+    ).toEqual(['cor-paleta']);
+    expect(await mensagensDe("const X = () => <p className={cn('text-slate-900')} />;")).toEqual([
+      'cor-paleta',
+    ]);
+  });
+
+  // ⚠️ MEDIDO 2026-11-16 (revisão Next.js): a regra era cega ONDE O PADRÃO
+  // MORA — as primitivas guardam as classes em constantes. Um
+  // `text-slate-900` de volta na `CLASSES_BOTAO` passava o gate.
+  it('recusa a violação na CONSTANTE de classe', async () => {
+    expect(
+      await mensagensDe(
+        "const CLASSE_CONTROLE = 'border border-slate-300 px-3 py-2';\nconst X = () => <p className={CLASSE_CONTROLE} />;",
+      ),
+    ).toEqual(['cor-paleta']);
+  });
+
+  it('recusa a violação no objeto de classes (a forma que o repo usa)', async () => {
+    expect(
+      await mensagensDe(
+        "const CLASSES_BOTAO = { base: 'rounded-md', primario: 'bg-slate-900' };\nconst X = () => <p className={CLASSES_BOTAO.primario} />;",
+      ),
+    ).toEqual(['cor-paleta']);
   });
 });
 
@@ -151,6 +225,10 @@ describe('regra de estilo — o que ela aceita', () => {
 
   it('aceita o raio do padrão e o anel de foco', async () => {
     expect(await mensagensDe('const X = () => <p className="rounded-md foco" />;')).toEqual([]);
+    // ⚠️ MEDIDO 2026-11-16: `rounded-t-md` usa o MESMO raio do padrão em um
+    // lado só, e era reprovado — recusar o padrão é tão errado quanto deixar
+    // o padrão passar.
+    expect(await mensagensDe('const X = () => <p className="rounded-t-md" />;')).toEqual([]);
   });
 
   it('aceita classe sem cor (espaçamento, tipografia, flexbox)', async () => {

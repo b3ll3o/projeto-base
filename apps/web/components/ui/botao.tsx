@@ -14,9 +14,14 @@ import NextLink from 'next/link';
  * `text-foreground` passado por cima de `text-primary-foreground` NÃO
  * troca a cor — as duas utilitárias têm a mesma especificidade. (Trocar isso
  * exigiria `tailwind-merge`, que o repo não usa.)
+ *
+ * ⚠️ A transição é de `background-color` e NÃO de `transition-colors`: a
+ * transição padrão do Tailwind inclui `outline-color`, e o anel de foco
+ * passava a SURGIR em 150ms (MEDIDO 2026-11-16 no browser). O indicador de
+ * foco tem que estar VISÍVEL no instante do foco.
  */
 export const CLASSES_BOTAO = {
-  base: 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors foco disabled:cursor-not-allowed disabled:opacity-60',
+  base: 'inline-flex items-center justify-center rounded-md text-sm font-medium transition-[background-color] foco disabled:cursor-not-allowed disabled:opacity-60',
   primario: 'bg-primary text-primary-foreground hover:bg-primary-hover',
   secundario: 'border border-control bg-surface text-foreground hover:bg-muted',
 } as const;
@@ -72,20 +77,23 @@ type BotaoProps = PropsComHref | PropsSemHref;
  * formulário por acidente é pior que um botão que não faz nada.
  */
 export function Botao(props: BotaoProps) {
-  const { variante = 'primario', tamanho = 'md', children, className } = props;
+  // ⚠️ `variante` e `tamanho` são REMOVIDOS do objeto espalhado: sem isso
+  // eles viravam atributo no DOM (`<button variante="secundario">`), que é
+  // HTML inválido (MEDIDO 2026-11-16).
+  const { variante = 'primario', tamanho = 'md', children, className, ...resto } = props;
   const base = `${CLASSES_BOTAO.base} ${CLASSES_BOTAO[variante]} ${TAMANHOS[tamanho]}`;
   const classes = className ? `${base} ${className}` : base;
 
-  if ('href' in props) {
+  if ('href' in resto) {
     return (
-      <NextLink {...props} href={props.href} className={classes}>
+      <NextLink {...resto} href={resto.href} className={classes}>
         {children}
       </NextLink>
     );
   }
 
   return (
-    <button {...props} className={classes}>
+    <button {...resto} className={classes}>
       {children}
     </button>
   );

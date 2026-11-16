@@ -1,7 +1,7 @@
 ---
 name: plano-estilizacao-frontend
 description: "Plano do padrão de estilização do frontend — tokens semânticos no @theme do Tailwind 4, primitivas de interface extraídas da repetição de class strings, migração das 15 telas do apps/web e a convenção que todo app derivado deste template passa a seguir."
-version: 1.1.0
+version: 1.2.0
 updated: 2026-11-16
 status: executado
 state_snapshot: .agents/runs/state-snapshot-20261111T003559Z.md
@@ -92,6 +92,20 @@ E **uma** decisão nova:
 | **D14** | Foco | utilitário `foco` (`@utility` do Tailwind 4) | 25 elementos repetiam o mesmo comportamento de foco em 4 classes (`focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900` + `focus:outline-none`). Um utilitário é a resposta do Tailwind 4 para "a mesma coisa em 25 lugares" |
 | **D15** | Primitiva de link | **dentro** (`LinkTexto`) — inverte a D11 original | a revisão mediu **5** cópias da mesma classe de link de texto em `origin/main`, não 4. Um link de texto carrega uma REGRA (tinta secundária, sublinhado, foco do sistema) que é o que faz a pessoa saber que aquilo navega — e um link sem o `foco` fica com o anel default do browser, ou seja, a tela passa a ter DOIS sistemas de foco |
 
+### §2.2 Decisões corrigidas na revisão do PR
+
+A revisão do PR (3 reviewers em paralelo: UX/design, código e Next.js)
+mudou **cinco** coisas que o plano original não previa. Elas estão aqui
+porque o plano é o registro do que foi decidido.
+
+| # | Antes | Depois | Por quê |
+|---|-------|--------|---------|
+| **D16** | a regra lia só o `className` literal | a regra lê também a **constante de classe** (cujo nome declara que é classe: `CLASSE_*`, `CLASSES_*`) | MEDIDO: as 8 primitivas guardam as classes em constantes, e a regra era cega **exatamente onde o padrão mora** — um `text-slate-900` de volta na `CLASSES_BOTAO` passava o gate |
+| **D17** | o `h2` sem dono (`text-lg font-medium text-foreground` em 7 lugares) | nona primitiva: `CabecalhoSecao` | a convenção §3 promete que as primitivas são a ÚNICA fonte de classe do app; o `h1` tinha dono e o `h2` não |
+| **D18** | `transition-colors` no campo e no botão | `transition-[border-color]` e `transition-[background-color]` | `transition-colors` inclui `outline-color`, e o anel de foco passava a **surgir em 150ms** (do `currentColor` para o token do anel). MEDIDO no browser |
+| **D19** | emoji `✅` como estado | texto `Sim` / `Não` | a própria convenção §4.3 proíbe emoji como ícone, e o leitor de tela anunciava "white heavy check mark" |
+| **D20** | o `className` do caller era SUBSTITUÍDO em 4 primitivas | é ADICIONAL em todas | o tipo aceitava `className` e a classe sumia sem aviso — a convenção §4.3 promete o contrário |
+
 ---
 
 ## §3. O padrão, em 4 peças
@@ -124,6 +138,7 @@ Tailwind 4: o valor do token é a **cor completa**; `bg-surface` sai
 |---|---|---|
 | `Container` | `mx-auto max-w-3xl p-8` (o `<main>` da tela) | 16× |
 | `CabecalhoPagina` | `h1` de tela + subtítulo + slot de ações | 16× / 10× |
+| `CabecalhoSecao` | o `h2` de tela (adicionado na revisão do PR — D17) | 7× |
 | `Campo` | `label` + `input` + erro + dica, com `id`/`aria-invalid`/`aria-describedby` | 7× / 7× / 7× |
 | `Botao` (`primario`, `secundario`; com `href` é link) | as duas strings de botão | 4× + 4× |
 | `Alerta` (`erro`, `sucesso`) | os dois alertas (`role="alert"` vs `role="status"`) | 4× + 1× |
@@ -169,7 +184,7 @@ há Tailwind. Ela roda em `pnpm --filter @projeto/web lint`, que está no
 | # | Tarefa | Arquivos | Aceite |
 |---|--------|----------|---------|
 | **T1** | Tokens no `@theme` + `body` com a cor completa | `apps/web/app/globals.css` | `grep -c '^\s*--color' apps/web/app/globals.css` → 13 (o número subiu de 9 na revisão — a D4); `pnpm --filter @projeto/web build` não falha e a utilitária gerada tem cor válida |
-| **T2** | 8 primitivas | `apps/web/components/ui/*.tsx` (8 arquivos) | cada uma renderiza e tem spec |
+| **T2** | 9 primitivas | `apps/web/components/ui/*.tsx` (9 arquivos) | cada uma renderiza e tem spec |
 | **T3** | Migração das telas | 15 `app/**/*.tsx` + `components/{login-form,cadastro-usuario-form,empresa-form,Sidebar}.tsx` + `app/convite/[token]/aceitar-convite.tsx` | **0** classes da paleta stock; texto, id, role e ordem de coluna intactos |
 | **T4** | Regra ESLint + registro + `.d.ts` | `packages/eslint-config/rules/no-estilizacao-informal.{js,d.ts}`, `apps/web/eslint.config.mjs` | `pnpm --filter @projeto/web lint` verde com o código migrado, **vermelho** com `text-slate-900` |
 | **T5** | Spec da regra (dente) | `apps/web/estilizacao.spec.ts` | caso sintético (paleta stock, literal, raio, sombra) **e** diferencial contra o repo real (0 erros) |
@@ -218,3 +233,40 @@ printf 'export const X = () => <p className="text-slate-900">oi</p>;\n' > apps/w
 pnpm --filter @projeto/web lint           # → erro da regra
 rm apps/web/app/_violacao.tsx
 ```
+
+## §7. O que a revisão do PR mudou (medido)
+
+3 reviewers em paralelo (UX/design, código, Next.js) sobre o commit da
+primeira entrega. Achados corrigidos **antes** do merge:
+
+| Achado | Correção |
+|---|---|
+| O anel de foco surgia em 150ms (`transition-colors` transiciona `outline-color`) | `transition-[border-color]` / `transition-[background-color]` (D18) |
+| Título de seção e e-mail longos estouravam a tela (WCAG 1.4.10): `scrollWidth` 2741px a 320px | `break-words` + `min-w-0` no título; `break-words` na célula |
+| Alvo de toque abaixo de 24×24 (WCAG 2.5.8): checkbox 16×16, link 57×20 | `size-6` no checkbox; `min-h-6` no `LinkTexto` |
+| A regra não recusava `border-t-slate-200` (a cor tinha de ser o último segmento) | a cor é o último segmento, com modificador de lado, opacidade arbitrária e `!` |
+| A regra não recusava `drop-shadow-*` / `inset-shadow-*` | as três famílias de sombra |
+| A regra não recusa `rounded-t-md` (recusava o próprio padrão) | o raio do padrão é aceito nos lados |
+| A regra lia só o literal | lê também template, ternário, `||`, argumento de helper e **constante de classe** (D16) |
+| `variante` e `tamanho` vazavam como atributo DOM (`<button variante="secundario">`) | rest spread |
+| `role` do `Alerta` podia ser sobrescrito pelo caller | `role` não é prop e vem depois do spread |
+| 4 primitivas SUBSTITUÍAM o `className` do caller | somam (D20) |
+| Emoji `✅` como estado do perfil | texto `Sim` / `Não` (D19) |
+| O `h2` e o link do menu eram classe repetida (7× cada) | `CabecalhoSecao` (D17) + constante no `Sidebar` |
+| `eslint .` reprovava com 2303 erros do `.next-dev/` (distDir alternativo, `NEXT_DIST_DIR`) | `.next-dev` e `.next-boot` no `ignores` e no `.gitignore` |
+| O campo "Nome" de `admin/profiles/new` não tinha `maxLength` (o domínio recusa >80) | `maxLength={80}` |
+| O estado de erro de `/users` não tinha ação | "Tentar de novo" (o mesmo caminho do `guard-admin`) |
+| A convenção afirmava um reflow que não acontecia (e a causa era o chrome, não o conteúdo) | §5.7 reescrita com a medição (com o chrome fora, o conteúdo cabe em 320px) |
+
+**O que ficou DECLARADO, não corrigido** (e por quê):
+
+- **Reflow em 320px no app de referência**: o chrome (`Sidebar` de `w-64`
+  fixo) não colapsa. Fechar isso é chrome de app, não padrão de estilo — a
+  convenção §5.7 declara o limite e o motivo.
+- **Contagem de `/users`**: a tela afirma o total de uma página (a API é
+  paginada e não devolve o total). Pré-existente, e mexer nisso muda o
+  contrato da tela — fora do escopo de estilo.
+- **`tailwind.config.ts`**: inerte (sintaxe v3, e o Tailwind 4 só lê config
+  com `@config`). Fica, com o aviso escrito no arquivo: apagá-lo é decisão de
+  outro escopo, e a armadilha (adicionar `@config` e o `content` v3 passar a
+  valer) está nomeada.

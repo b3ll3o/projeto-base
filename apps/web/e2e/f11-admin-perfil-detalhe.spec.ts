@@ -51,13 +51,13 @@ test.describe('F11 — Detalhe de perfil (admin)', () => {
     await irPara(`/admin/profiles/${slug}`);
 
     await expect(page.getByRole('heading', { name: 'Flags' })).toBeVisible();
-    await expect(page.locator('li', { hasText: 'isSystem' })).toHaveText(/✅/);
+    await expect(page.locator('li', { hasText: 'isSystem' })).toHaveText(/Sim/);
     // O conteúdo: a tela de sistema lista as permissões COMO TEXTO, num
     // `<ul>` sem input. Afirmar a ausência do checkbox é o que prova que o
     // bloqueio é de renderização — a API, sozinha, recusaria o POST depois.
     await expect(page.locator('input[name="permissionKey"]')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Salvar' })).toHaveCount(0);
-    await expect(page.locator('li', { hasText: 'users.read' })).toHaveText(/✅/);
+    await expect(page.locator('li', { hasText: 'users.read' })).toHaveText(/Sim/);
   });
 
   test('quem não é admin vê "Acesso restrito" em vez do perfil', async ({ page, irPara }) => {

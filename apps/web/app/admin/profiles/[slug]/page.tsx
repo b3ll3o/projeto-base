@@ -15,6 +15,7 @@ import type * as React from 'react';
 import { notFound } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { Botao } from '@/components/ui/botao';
+import { CabecalhoSecao } from '@/components/ui/cabecalho-secao';
 import { CabecalhoPagina } from '@/components/ui/cabecalho-pagina';
 import { Campo } from '@/components/ui/campo';
 import { Container } from '@/components/ui/container';
@@ -120,21 +121,22 @@ export default async function AdminProfileDetailPage({
         titulo={`Perfil: ${profile.name}`}
         descricao={
           <>
-            <code>{profile.slug}</code> · versão {profile.version}
+            <code>{profile.slug}</code> · versão{' '}
+            <span className="tabular-nums">{profile.version}</span>
           </>
         }
       />
 
       <section className="mt-8">
-        <h2 className="text-lg font-medium text-foreground">Flags</h2>
+        <CabecalhoSecao>Flags</CabecalhoSecao>
         <ul className="mt-3 space-y-1 text-sm text-foreground">
-          <li>isAdmin: {profile.isAdmin ? '✅' : '—'} (bypass total no guard)</li>
-          <li>isSystem: {profile.isSystem ? '✅' : '—'} (protegido contra DELETE)</li>
+          <li>isAdmin: {profile.isAdmin ? 'Sim' : 'Não'} (bypass total no guard)</li>
+          <li>isSystem: {profile.isSystem ? 'Sim' : 'Não'} (protegido contra DELETE)</li>
         </ul>
       </section>
 
       <section className="mt-8">
-        <h2 className="text-lg font-medium text-foreground">Metadados</h2>
+        <CabecalhoSecao>Metadados</CabecalhoSecao>
         {profile.isSystem || profile.isAdmin ? (
           <p className="mt-3 text-sm text-muted-foreground">
             Perfil de {profile.isSystem ? 'sistema' : 'administrador'}: nome e descrição são{' '}
@@ -165,9 +167,9 @@ export default async function AdminProfileDetailPage({
       </section>
 
       <section className="mt-8">
-        <h2 className="text-lg font-medium text-foreground">
-          Permissões ({profile.permissions.length})
-        </h2>
+        <CabecalhoSecao>
+          Permissões <span className="tabular-nums">({profile.permissions.length})</span>
+        </CabecalhoSecao>
         {profile.isSystem ? (
           <>
             <p className="mt-3 text-sm text-muted-foreground">
@@ -177,7 +179,7 @@ export default async function AdminProfileDetailPage({
             <ul className="mt-3 space-y-1 text-sm text-foreground">
               {catalogo.map((k) => (
                 <li key={k}>
-                  <code>{k}</code> {atribuidas.has(k) ? '✅' : '—'}
+                  <code>{k}</code> {atribuidas.has(k) ? 'Sim' : 'Não'}
                 </li>
               ))}
             </ul>

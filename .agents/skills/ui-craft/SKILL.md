@@ -89,10 +89,16 @@ pequeno, nada no meio.
 | Papel | Tamanho | Peso | Nota |
 |-------|---------|------|------|
 | Título de tela | `text-2xl` (24px) | 600 | o `h1` da rota |
-| Título de seção | `text-base` (16px) | 600 | |
+| Título de seção | um passo abaixo | ~500 | o tamanho exato é o da convenção do repo |
 | Corpo | `text-sm` (14px) | 400 | padrão de dado em tabela/lista |
 | Metadado | `text-xs` (12px) | 400 | só secundário; **não** para texto que se precisa ler |
 | Microcopy de erro | `text-sm` | 400 | **nunca** menor que o corpo — erro pequeno não é erro |
+
+> ⚠️ **Onde o repo tem a sua resposta, a convenção vence.** A tabela acima é a
+> lei genérica (vale para tela de qualquer repo); neste template os tamanhos
+> são os de [`estilizacao.md`](../../specs/conventions/estilizacao.md) §4.2.
+> MEDIDO 2026-11-16: as duas divergiam e o código seguia a convenção — quem
+> seguisse a skill escrevia `text-base` e quebrava a hierarquia do app.
 
 **Regras que não se negociam:**
 

@@ -10,6 +10,16 @@ import Link from 'next/link';
 import type { MeProfileDto } from '@projeto/shared-types';
 import { obterMeuPerfil, obterMeuPerfilGlobal } from '../lib/perfil';
 
+/**
+ * A classe do link de navegação — UM DONO para os 7 links do menu.
+ *
+ * pt-BR (padrão de estilização, 2026-11-16): a mesma string aparecia 7×
+ * escrita à mão. O chrome do app não é copiado pelo app derivado (a
+ * convenção `estilizacao.md` §6 diz isso), mas a repetição dentro do app
+ * continua sendo repetição — e a regra de lint lê constante de classe.
+ */
+const CLASSE_LINK_NAV = 'text-sm font-medium text-muted-foreground hover:text-foreground foco';
+
 export async function Sidebar(): Promise<React.JSX.Element> {
   // pt-BR (#107, 2026-10-18): este é o CHROME, e chrome não pode derrubar a
   // página. `obterMeuPerfil()` passou a propagar 403/5xx/timeout/rede — certo
@@ -51,26 +61,17 @@ export async function Sidebar(): Promise<React.JSX.Element> {
     <nav aria-label="Navegação principal" className="w-64 shrink-0 border-r border-border p-8">
       <ul className="space-y-1">
         <li>
-          <Link
-            className="text-sm font-medium text-muted-foreground hover:text-foreground foco"
-            href="/"
-          >
+          <Link className={CLASSE_LINK_NAV} href="/">
             Início
           </Link>
         </li>
         <li>
-          <Link
-            className="text-sm font-medium text-muted-foreground hover:text-foreground foco"
-            href="/users"
-          >
+          <Link className={CLASSE_LINK_NAV} href="/users">
             Usuários
           </Link>
         </li>
         <li>
-          <Link
-            className="text-sm font-medium text-muted-foreground hover:text-foreground foco"
-            href="/me/profile"
-          >
+          <Link className={CLASSE_LINK_NAV} href="/me/profile">
             Meu perfil
           </Link>
         </li>
@@ -83,18 +84,12 @@ export async function Sidebar(): Promise<React.JSX.Element> {
               <strong className="text-xs font-medium text-muted-foreground">Admin</strong>
             </li>
             <li>
-              <Link
-                className="text-sm font-medium text-muted-foreground hover:text-foreground foco"
-                href="/admin/profiles"
-              >
+              <Link className={CLASSE_LINK_NAV} href="/admin/profiles">
                 Perfis
               </Link>
             </li>
             <li>
-              <Link
-                className="text-sm font-medium text-muted-foreground hover:text-foreground foco"
-                href="/admin/users"
-              >
+              <Link className={CLASSE_LINK_NAV} href="/admin/users">
                 Atribuir perfis
               </Link>
             </li>
@@ -109,18 +104,12 @@ export async function Sidebar(): Promise<React.JSX.Element> {
               <strong className="text-xs font-medium text-muted-foreground">Sistema</strong>
             </li>
             <li>
-              <Link
-                className="text-sm font-medium text-muted-foreground hover:text-foreground foco"
-                href="/admin/flags"
-              >
+              <Link className={CLASSE_LINK_NAV} href="/admin/flags">
                 Feature flags
               </Link>
             </li>
             <li>
-              <Link
-                className="text-sm font-medium text-muted-foreground hover:text-foreground foco"
-                href="/admin/tenancy"
-              >
+              <Link className={CLASSE_LINK_NAV} href="/admin/tenancy">
                 Empresas e usuários
               </Link>
             </li>

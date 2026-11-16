@@ -81,7 +81,7 @@ export default async function NewProfilePage(): Promise<React.JSX.Element> {
           maxLength={40}
           pattern={SLUG_PATTERN}
         />
-        <Campo id="name" rotulo="Nome" type="text" name="name" required />
+        <Campo id="name" rotulo="Nome" type="text" name="name" required maxLength={80} />
         <Campo id="description" rotulo="Descrição" type="text" name="description" />
 
         <fieldset className="rounded-md bg-surface p-4">

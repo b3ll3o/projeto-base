@@ -19,12 +19,18 @@ import NextLink from 'next/link';
  * tela é `text-foreground` — a exceção de uso está na convenção
  * `estilizacao.md` §2.1.
  */
-export function LinkTexto({ children, ...props }: React.ComponentProps<typeof NextLink>) {
+export function LinkTexto({
+  children,
+  className,
+  ...props
+}: React.ComponentProps<typeof NextLink>) {
+  // ⚠️ `min-h-6` (MEDIDO 2026-11-16): o link de texto media 57×20px — abaixo
+  // do alvo mínimo de 24px da WCAG 2.5.8. `inline-flex` + `min-h-6` dá a
+  // altura sem mudar a tinta nem o sublinhado.
+  const base =
+    'inline-flex min-h-6 items-center text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground foco';
   return (
-    <NextLink
-      {...props}
-      className="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground foco"
-    >
+    <NextLink {...props} className={className ? `${base} ${className}` : base}>
       {children}
     </NextLink>
   );

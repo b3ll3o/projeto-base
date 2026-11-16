@@ -25,7 +25,7 @@ type AlertaProps = {
   /** `erro` interrompe a fala; `sucesso` anuncia sem interromper. */
   variante?: 'erro' | 'sucesso';
   children: React.ReactNode;
-} & Omit<React.ComponentProps<'p'>, 'children'>;
+} & Omit<React.ComponentProps<'p'>, 'children' | 'role'>;
 
 export function Alerta({ variante = 'erro', children, className, ...props }: AlertaProps) {
   const base =
@@ -34,9 +34,11 @@ export function Alerta({ variante = 'erro', children, className, ...props }: Ale
       : 'rounded-md border border-success/30 bg-success/10 p-3 text-sm text-success';
 
   return (
+    // ⚠️ O `role` vem DEPOIS do spread: `role` não é prop (o tipo não deixa
+    // passar), e a decisão vem da VARIANTE. Antes, o `role` do caller vencia.
     <p
-      role={variante === 'erro' ? 'alert' : 'status'}
       {...props}
+      role={variante === 'erro' ? 'alert' : 'status'}
       className={className ? `${base} ${className}` : base}
     >
       {children}

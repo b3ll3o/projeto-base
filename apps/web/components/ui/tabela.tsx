@@ -20,6 +20,7 @@ import type * as React from 'react';
 export function Tabela({
   children,
   legenda,
+  className,
   ...props
 }: React.ComponentProps<'table'> & {
   /**
@@ -35,9 +36,10 @@ export function Tabela({
    */
   legenda: string;
 }) {
+  const base = 'w-full border-collapse text-sm';
   return (
     <div className="mt-6 overflow-x-auto">
-      <table {...props} className="w-full border-collapse text-sm">
+      <table {...props} className={className ? `${base} ${className}` : base}>
         <caption className="sr-only">{legenda}</caption>
         {children}
       </table>
@@ -52,22 +54,27 @@ export function Tabela({
  * cabeçalho de linha — e é raro; quando aparecer, é porque a primeira
  * coluna é a chave da linha.
  */
-export function CabecalhoTabela({ children, scope = 'col', ...props }: React.ComponentProps<'th'>) {
+export function CabecalhoTabela({
+  children,
+  scope = 'col',
+  className,
+  ...props
+}: React.ComponentProps<'th'>) {
+  const base = 'border-b border-border py-2 pr-4 text-left font-medium text-muted-foreground';
   return (
-    <th
-      scope={scope}
-      {...props}
-      className="border-b border-border py-2 pr-4 text-left font-medium text-muted-foreground"
-    >
+    <th scope={scope} {...props} className={className ? `${base} ${className}` : base}>
       {children}
     </th>
   );
 }
 
 /** Célula de dado. */
-export function CelulaTabela({ children, ...props }: React.ComponentProps<'td'>) {
+export function CelulaTabela({ children, className, ...props }: React.ComponentProps<'td'>) {
+  // ⚠️ `break-words` (MEDIDO 2026-11-16): um e-mail tem 254 chars e não tem
+  // onde quebrar — sem isto, a tabela estourava a tela em 2421px a 320px.
+  const base = 'break-words border-b border-border/60 py-3 pr-4 text-foreground';
   return (
-    <td {...props} className="border-b border-border/60 py-3 pr-4 text-foreground">
+    <td {...props} className={className ? `${base} ${className}` : base}>
       {children}
     </td>
   );

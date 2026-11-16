@@ -40,6 +40,14 @@ export default [
       // gera centenas de `no-undef`/`no-unused-vars`. Era `eslint .` varrendo
       // 400 MB de artefato.
       '**/.next-e2e/**',
+      // pt-BR (2026-11-16): `.next-dev` é um `distDir` ALTERNATIVO
+      // (`NEXT_DIST_DIR=.next-dev`) e o `.next-boot` é o do `ci:boot` — o
+      // mesmo motivo do `.next-e2e`: o `next dev` e o `next build` não
+      // dividem o mesmo diretório. MEDIDO: sem estas linhas, `pnpm lint` do
+      // web reportava **2303 erros** em artefato de build — e o ESLint não
+      // lê `.gitignore`.
+      '**/.next-dev/**',
+      '**/.next-boot/**',
       '**/playwright-report/**',
       '**/test-results/**',
       '**/coverage/**',

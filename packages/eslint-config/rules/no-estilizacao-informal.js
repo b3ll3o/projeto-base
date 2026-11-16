@@ -36,8 +36,14 @@
  * comum.
  */
 
-/** A paleta stock do Tailwind — a segunda fonte de cor, que o padrão proíbe. */
-const PALETA_STOCK = new Set([
+/**
+ * A paleta stock do Tailwind — a segunda fonte de cor, que o padrão proíbe.
+ *
+ * ⚠️ A lista é EXPLÍCITA, e não "qualquer nome em minúsculas": com a lista
+ * explícita, `text-sm` (tamanho) e `text-primary` (token do padrão) não
+ * precisam ser filtrados depois — eles simplesmente não casam.
+ */
+const PALETA_STOCK = [
   'slate',
   'gray',
   'zinc',
@@ -65,15 +71,7 @@ const PALETA_STOCK = new Set([
   // exatamente o que os botões primários usavam antes do padrão.
   'white',
   'black',
-]);
-
-/**
- * Cores que NÃO são escolha de cor e por isso passam.
- *
- * `transparent` é "sem cor" e `current` é "a cor do pai". Nenhum dos dois
- * pode ser convertido em token sem perder o sentido.
- */
-const CORES_NEUTRAS = new Set(['transparent', 'current', 'inherit']);
+];
 
 /** Utilitárias que recebem cor. */
 const PREFIXOS_DE_COR = [
@@ -81,6 +79,7 @@ const PREFIXOS_DE_COR = [
   'bg',
   'border',
   'ring',
+  'ring-offset',
   'outline',
   'decoration',
   'fill',
@@ -92,31 +91,48 @@ const PREFIXOS_DE_COR = [
   'to',
   'divide',
   'shadow',
+  'placeholder',
+  'mask',
 ];
-
-/** O único raio do padrão. */
-const RAIO_UNICO = 'rounded-md';
 
 /**
  * `text-slate-900`, `bg-red-50`, `border-slate-300`, `text-white`…
  *
- * O número do tom é OPCIONAL porque `white` e `black` não têm tom — e o
- * número, quando existe, é o que distingue a paleta de `text-sm` (tamanho)
- * e de `text-2xl` (tamanho): nenhum dos dois casa, porque o nome é uma
- * palavra do Tailwind que não está na paleta.
+ * ⚠️ A cor é o ÚLTIMO segmento, e pode vir depois de um modificador de
+ * LADO (`border-t-slate-200`, `divide-y-slate-200`) — MEDIDO 2026-11-16: com a
+ * cor presa ao fim (`^prefix-cor$`), `border-t-slate-200` PASSAVA, e essa é
+ * a forma mais comum de borda do Tailwind.
+ *
+ * A opacidade aceita o número (`/50`) e o arbitrário (`/[0.5]`), e o `!` final
+ * é o "importante" do Tailwind 4 (`bg-slate-900!`).
  */
-const RE_PALETA = new RegExp(`^(${PREFIXOS_DE_COR.join('|')})-([a-z]+)(-\\d{2,3})?(/\\d{1,3})?$`);
+const RE_PALETA = new RegExp(
+  `^(?:${PREFIXOS_DE_COR.join('|')})(?:-[a-z0-9]+)*-(?:${PALETA_STOCK.join('|')})` +
+    `(?:-\\d{2,3})?(?:/(?:\\d{1,3}|\\[[^\\]]+\\]))?!?$`,
+);
 
 /** `bg-[#fff]`, `text-[rgb(0,0,0)]`, `border-[hsl(0_0%_0%)]`. */
 const RE_LITERAL = new RegExp(
   `^(${PREFIXOS_DE_COR.join('|')})-\\[(#|rgb|hsl|hwb|lab|lch|oklab|oklch|color:)`,
 );
 
-/** `shadow-sm`, `shadow-lg`… (a cor de sombra também entra pela paleta). */
-const RE_SOMBRA = /^shadow(-(sm|md|lg|xl|2xl|inner|none))?$/;
+/**
+ * `shadow-sm`, `shadow-lg`… e as famílias irmãs `drop-shadow-*` e
+ * `inset-shadow-*` (MEDIDO 2026-11-16: as duas PASSAVAM, e a convenção
+ * §2.3 diz que o sistema não tem sombra nenhuma).
+ */
+const RE_SOMBRA = /^(shadow|drop-shadow|inset-shadow)(-(sm|md|lg|xl|2xl|inner|none))?$/;
 
 /** `shadow-[0_1px_2px_rgb(0_0_0/0.05)]` — sombra literal. */
-const RE_SOMBRA_LITERAL = /^shadow-\[/;
+const RE_SOMBRA_LITERAL = /^(shadow|drop-shadow|inset-shadow)-\[/;
+
+/**
+ * O raio do padrão, e SÓ ele — mas nos seus lados.
+ *
+ * `rounded-t-md` usa o MESMO raio (md) em um lado só, e recusá-lo seria
+ * recursar o padrão (MEDIDO 2026-11-16: `rounded-t-md` era reprovado).
+ */
+const RE_RAIO = /^rounded(-(t|b|l|r|tl|tr|bl|br|s|e|ss|se|ee|es))?-md$/;
 
 /**
  * Separa uma class string em classes.
@@ -171,7 +187,93 @@ function semVariante(classe) {
     }
     resultado += ch;
   }
-  return resultado.replace(/\/\d{1,3}$/, '');
+  return resultado;
+}
+
+/**
+ * Coleta TODAS as strings de classe de uma expressão.
+ *
+ * ⚠️ Só o literal e o template literal eram lidos (MEDIDO 2026-11-16): o
+ * ternário (`cond ? 'text-slate-900' : 'bg-surface'`) e a chamada de helper
+ * (`cn('text-slate-900')`) PASSAVAM sem leitura — e o app derivado, que é o
+ * consumidor do padrão, vai usar as duas formas.
+ */
+function stringsDeClasse(no, coletar) {
+  if (no === null || typeof no !== 'object') return;
+  switch (no.type) {
+    case 'Literal':
+      if (typeof no.value === 'string') coletar(no.value);
+      return;
+    case 'TemplateLiteral':
+      for (const quasi of no.quasis) coletar(quasi.value.cooked ?? '');
+      return;
+    case 'ConditionalExpression':
+      stringsDeClasse(no.consequent, coletar);
+      stringsDeClasse(no.alternate, coletar);
+      return;
+    case 'LogicalExpression':
+      stringsDeClasse(no.left, coletar);
+      stringsDeClasse(no.right, coletar);
+      return;
+    case 'CallExpression':
+      for (const argumento of no.arguments) stringsDeClasse(argumento, coletar);
+      return;
+    case 'ArrayExpression':
+      for (const elemento of no.elements) stringsDeClasse(elemento, coletar);
+      return;
+    default:
+  }
+}
+
+/**
+ * Nomes que DECLARAM "isto aqui é uma lista de classes".
+ *
+ * ⚠️ MEDIDO 2026-11-16 (revisão Next.js): a regra só olhava o `className`
+ * literal, e as 8 primitivas guardam as classes em CONSTANTES
+ * (`CLASSES_BOTAO.base`, `CLASSE_CONTROLE`, `CLASSE_CHECKBOX`) — ou seja, a
+ * regra era cega exatamente ONDE O PADRÃO MORA. Um `text-slate-900` de volta
+ * na `CLASSES_BOTAO` passava o gate.
+ *
+ * A regra do NOME é o contrato: quem guarda classe em constante dá o nome
+ * que diz que é classe (`CLASSE_*`, `CLASSES_*`), e a regra lê esse lugar.
+ */
+const RE_NOME_DE_CLASSE = /(^|_)(CLASSES?|CLASS_NAMES?)(_|$)/i;
+
+/** Tira o embrulho de tipo (`as const`, `satisfies`, parênteses). */
+function desembrulha(no) {
+  if (no === null || typeof no !== 'object') return no;
+  if (
+    no.type === 'TSAsExpression' ||
+    no.type === 'TSSatisfiesExpression' ||
+    no.type === 'TSTypeAssertion' ||
+    no.type === 'TSNonNullExpression' ||
+    no.type === 'ParenthesizedExpression'
+  ) {
+    return desembrulha(no.expression);
+  }
+  return no;
+}
+
+/**
+ * Coleta as strings de classe de um valor inicial de constante.
+ *
+ * Aceita a string direta e o OBJETO de classes (`CLASSES_BOTAO = { base,
+ * primario, secundario }`) — que é a forma que o repo usa.
+ */
+function stringsDeValor(no, coletar) {
+  const nu = desembrulha(no);
+  if (nu === null || typeof nu !== 'object') return;
+  if (nu.type === 'ObjectExpression') {
+    for (const propriedade of nu.properties) {
+      if (propriedade.type === 'Property') stringsDeValor(propriedade.value, coletar);
+    }
+    return;
+  }
+  if (nu.type === 'ArrayExpression') {
+    for (const elemento of nu.elements) stringsDeValor(elemento, coletar);
+    return;
+  }
+  stringsDeClasse(nu, coletar);
 }
 
 export default {
@@ -202,12 +304,9 @@ export default {
           continue;
         }
         const base = semVariante(classe);
-        const paleta = RE_PALETA.exec(base);
-        if (paleta && !CORES_NEUTRAS.has(paleta[2])) {
-          if (PALETA_STOCK.has(paleta[2])) {
-            context.report({ node, messageId: 'cor-paleta', data: { classe } });
-            continue;
-          }
+        if (RE_PALETA.test(base)) {
+          context.report({ node, messageId: 'cor-paleta', data: { classe } });
+          continue;
         }
         if (RE_SOMBRA.test(base) && base !== 'shadow-none') {
           context.report({ node, messageId: 'sombra', data: { classe } });
@@ -217,8 +316,8 @@ export default {
           context.report({ node, messageId: 'sombra', data: { classe } });
           continue;
         }
-        if (base.startsWith('rounded') && base !== RAIO_UNICO) {
-          context.report({ node, messageId: 'raio', data: { classe, raio: RAIO_UNICO } });
+        if (base.startsWith('rounded') && !RE_RAIO.test(base)) {
+          context.report({ node, messageId: 'raio', data: { classe, raio: 'rounded-md' } });
           continue;
         }
       }
@@ -235,16 +334,20 @@ export default {
           return;
         }
         if (valor.type === 'JSXExpressionContainer') {
-          const expressao = valor.expression;
-          if (!expressao) return;
-          if (expressao.type === 'Literal' && typeof expressao.value === 'string') {
-            conferir(node, expressao.value);
-            return;
-          }
-          if (expressao.type === 'TemplateLiteral') {
-            for (const quasi of expressao.quasis) conferir(node, quasi.value.cooked ?? '');
-          }
+          stringsDeClasse(valor.expression, (texto) => conferir(node, texto));
         }
+      },
+
+      /**
+       * As CONSTANTES de classe.
+       *
+       * ⚠️ É o alcance que faltava: as primitivas guardam as classes em
+       * constantes, e a regra precisa medir ONDE O PADRÃO MORA.
+       */
+      VariableDeclarator(node) {
+        const nome = node.id && node.id.type === 'Identifier' ? node.id.name : null;
+        if (nome === null || !RE_NOME_DE_CLASSE.test(nome)) return;
+        stringsDeValor(node.init, (texto) => conferir(node, texto));
       },
     };
   },

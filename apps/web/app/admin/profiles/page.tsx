@@ -58,9 +58,9 @@ export default async function AdminProfilesPage(): Promise<React.JSX.Element> {
                 <code>{p.slug}</code>
               </CelulaTabela>
               <CelulaTabela>{p.name}</CelulaTabela>
-              <CelulaTabela>{p.isAdmin ? '✅' : '—'}</CelulaTabela>
-              <CelulaTabela>{p.isSystem ? '✅' : '—'}</CelulaTabela>
-              <CelulaTabela>{p.permissionCount}</CelulaTabela>
+              <CelulaTabela>{p.isAdmin ? 'Sim' : 'Não'}</CelulaTabela>
+              <CelulaTabela>{p.isSystem ? 'Sim' : 'Não'}</CelulaTabela>
+              <CelulaTabela className="tabular-nums">{p.permissionCount}</CelulaTabela>
               <CelulaTabela>
                 <LinkTexto href={`/admin/profiles/${p.slug}`} aria-label={`Editar ${p.name}`}>
                   editar

@@ -45,7 +45,6 @@ export default function ErroDePagina({
       <Botao
         type="button"
         variante="secundario"
-        tamanho="sm"
         className="mt-4"
         onClick={() => {
           reset();

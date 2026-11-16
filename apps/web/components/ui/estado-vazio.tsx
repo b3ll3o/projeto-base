@@ -24,7 +24,10 @@ export function EstadoVazio({
   acao?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-md border border-dashed border-control bg-surface p-12 text-center">
+    // ⚠️ Sem fio de 1px: a convenção `estilizacao.md` §2.3 só admite fio em
+    // divisória decorativa e em dado tabular. A superfície se separa do
+    // fundo por PASSO DE TOM (`bg-surface` sobre a página).
+    <div className="rounded-md bg-surface p-12 text-center">
       <p className="text-sm font-medium text-foreground">{titulo}</p>
       {descricao ? <p className="mt-1 text-sm text-muted-foreground">{descricao}</p> : null}
       {acao ? <div className="mt-4">{acao}</div> : null}

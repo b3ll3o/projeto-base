@@ -8,6 +8,7 @@
 
 import type * as React from 'react';
 import { redirect } from 'next/navigation';
+import { CabecalhoSecao } from '@/components/ui/cabecalho-secao';
 import { CabecalhoPagina } from '@/components/ui/cabecalho-pagina';
 import { Container } from '@/components/ui/container';
 import { obterMeuPerfil } from '../../../lib/perfil';
@@ -60,7 +61,7 @@ export default async function MeProfilePage(): Promise<React.JSX.Element> {
       <CabecalhoPagina titulo="Meu perfil" />
 
       <section className="mt-8">
-        <h2 className="text-lg font-medium text-foreground">Identidade</h2>
+        <CabecalhoSecao>Identidade</CabecalhoSecao>
         <dl className="mt-3 space-y-2 text-sm">
           <dt className="font-medium text-muted-foreground">Perfil</dt>
           <dd className="text-foreground">
@@ -78,9 +79,9 @@ export default async function MeProfilePage(): Promise<React.JSX.Element> {
       </section>
 
       <section className="mt-8">
-        <h2 className="text-lg font-medium text-foreground">
-          Permissões ({me.permissions.length})
-        </h2>
+        <CabecalhoSecao>
+          Permissões <span className="tabular-nums">({me.permissions.length})</span>
+        </CabecalhoSecao>
         {me.permissions.length === 0 ? (
           <p className="mt-3 text-sm text-muted-foreground">
             <em>
