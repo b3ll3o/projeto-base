@@ -84,7 +84,7 @@ um silêncio.
 | F3 | `/users/novo` | Validação no cliente | `f3-cadastro-validacao.spec.ts` | vazio · email malformado · limite de tamanho · foco no 1º inválido |
 | F4 | `/users/novo` | Email duplicado | `f4-cadastro-email-duplicado.spec.ts` | 409 → erro no campo · valores preservados · `aria-invalid` |
 | F5 | `/users/novo` | Erro genérico | `f5-cadastro-erro-generico.spec.ts` | 500 com traceId · rede caída sem traceId |
-| F6 | `/` ↔ `/users` ↔ `/users/novo` | Navegação | `f6-navegacao.spec.ts` | home · link da listagem · Cancelar |
+| F6 | `/` ↔ `/users` ↔ `/users/novo` | Navegação | `f6-navegacao.spec.ts` | home · link da listagem · Cancelar · reflow a 320px · anel de foco no instante |
 | F7 | `/login` → `/users` | Login de usuário | `f7-login.spec.ts` | válido · senha errada · e-mail inexistente · `autocomplete` · saída para o cadastro |
 | F8 | `/users` ↔ `/login`, `/users/novo` | Rota protegida sem sessão | `f8-sessao-obrigatoria.spec.ts` | sem cookie vai ao login · **sem cookie o cadastro é alcançável** · conteúdo NÃO entregue · cookie inválido · volta pelo login |
 | F9 | `/admin/profiles` | Listagem de perfis (admin) | `f9-admin-profiles.spec.ts` | admin vê tabela com flags e contagem · quase-admin vê "Acesso restrito" · tabela não renderiza |

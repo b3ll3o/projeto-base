@@ -34,6 +34,10 @@
 // tabela é. WCAG 1.3.1 — o mesmo padrão de `app/admin/flags/page.tsx`.
 
 import type * as React from 'react';
+import { CabecalhoSecao } from '@/components/ui/cabecalho-secao';
+import { CabecalhoPagina } from '@/components/ui/cabecalho-pagina';
+import { Container } from '@/components/ui/container';
+import { CabecalhoTabela, CelulaTabela, Tabela } from '@/components/ui/tabela';
 import { exigirAdminDoSistema, ServicoIndisponivel } from '../guard-admin';
 import { listarInventario } from '../../../lib/tenancy';
 import { exigirSessao } from '../../../lib/sessao';
@@ -80,33 +84,26 @@ export default async function AdminTenancyPage(): Promise<React.JSX.Element> {
   const { empresas, usuarios } = inventario;
 
   return (
-    <main className="mx-auto max-w-3xl p-8">
-      <h1 className="text-2xl font-semibold text-slate-900">Empresas e usuários</h1>
+    <Container>
+      <CabecalhoPagina titulo="Empresas e usuários" />
 
-      <h2 className="mt-8 text-lg font-medium text-slate-900">Empresas e seus membros</h2>
-      <table className="mt-3 w-full border-collapse text-sm">
-        <caption className="sr-only">Empresas do sistema e os membros de cada uma</caption>
+      <CabecalhoSecao className="mt-8">Empresas e seus membros</CabecalhoSecao>
+      <Tabela legenda="Empresas do sistema e os membros de cada uma">
         <thead>
-          <tr className="border-b border-slate-200 text-left">
-            <th className="py-2 pr-4 font-medium text-slate-500" scope="col">
-              Empresa
-            </th>
-            <th className="py-2 pr-4 font-medium text-slate-500" scope="col">
-              Slug
-            </th>
-            <th className="py-2 font-medium text-slate-500" scope="col">
-              Membros
-            </th>
+          <tr>
+            <CabecalhoTabela>Empresa</CabecalhoTabela>
+            <CabecalhoTabela>Slug</CabecalhoTabela>
+            <CabecalhoTabela>Membros</CabecalhoTabela>
           </tr>
         </thead>
         <tbody>
           {empresas.map((empresa) => (
-            <tr key={empresa.id} className="border-b border-slate-100">
-              <td className="py-3 pr-4 text-slate-900">{empresa.nome}</td>
-              <td className="py-3 pr-4">
+            <tr key={empresa.id}>
+              <CelulaTabela>{empresa.nome}</CelulaTabela>
+              <CelulaTabela>
                 <code>{empresa.slug}</code>
-              </td>
-              <td className="py-3">
+              </CelulaTabela>
+              <CelulaTabela>
                 {empresa.membros.length === 0 ? (
                   <em>sem membros</em>
                 ) : (
@@ -118,34 +115,27 @@ export default async function AdminTenancyPage(): Promise<React.JSX.Element> {
                     ))}
                   </ul>
                 )}
-              </td>
+              </CelulaTabela>
             </tr>
           ))}
         </tbody>
-      </table>
+      </Tabela>
 
-      <h2 className="mt-8 text-lg font-medium text-slate-900">Usuários e suas empresas</h2>
-      <table className="mt-3 w-full border-collapse text-sm">
-        <caption className="sr-only">Usuários do sistema e as empresas de cada um</caption>
+      <CabecalhoSecao className="mt-8">Usuários e suas empresas</CabecalhoSecao>
+      <Tabela legenda="Usuários do sistema e as empresas de cada um">
         <thead>
-          <tr className="border-b border-slate-200 text-left">
-            <th className="py-2 pr-4 font-medium text-slate-500" scope="col">
-              Usuário
-            </th>
-            <th className="py-2 pr-4 font-medium text-slate-500" scope="col">
-              E-mail
-            </th>
-            <th className="py-2 font-medium text-slate-500" scope="col">
-              Empresas
-            </th>
+          <tr>
+            <CabecalhoTabela>Usuário</CabecalhoTabela>
+            <CabecalhoTabela>E-mail</CabecalhoTabela>
+            <CabecalhoTabela>Empresas</CabecalhoTabela>
           </tr>
         </thead>
         <tbody>
           {usuarios.map((usuario) => (
-            <tr key={usuario.id} className="border-b border-slate-100">
-              <td className="py-3 pr-4 text-slate-900">{usuario.nome}</td>
-              <td className="py-3 pr-4">{usuario.email}</td>
-              <td className="py-3">
+            <tr key={usuario.id}>
+              <CelulaTabela>{usuario.nome}</CelulaTabela>
+              <CelulaTabela>{usuario.email}</CelulaTabela>
+              <CelulaTabela>
                 {usuario.empresas.length === 0 ? (
                   <em>sem empresa</em>
                 ) : (
@@ -157,11 +147,11 @@ export default async function AdminTenancyPage(): Promise<React.JSX.Element> {
                     ))}
                   </ul>
                 )}
-              </td>
+              </CelulaTabela>
             </tr>
           ))}
         </tbody>
-      </table>
-    </main>
+      </Tabela>
+    </Container>
   );
 }

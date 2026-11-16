@@ -270,7 +270,7 @@ visão de stack: [`docs/STACK.md` §8](./STACK.md).
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão do documento:** 1.28.0
+**Versão do documento:** 1.29.0
 
 ### Histórico de Versões
 

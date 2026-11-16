@@ -85,8 +85,14 @@ test.describe('F1 — Listagem de usuários', () => {
       // O título continua lá: a tela não some, ela informa. É o que a pessoa
       // precisa ver para saber que o problema é o dado, não a página.
       await expect(page.getByRole('heading', { name: 'Usuários' })).toBeVisible();
-      await expect(page.getByText('Não foi possível carregar a lista.')).toBeVisible();
-      await expect(page.getByText(/^Erro ao carregar:/)).toBeVisible();
+      // ⚠️ A mensagem é UMA (MEDIDO 2026-11-16, revisão do PR #168): a tela
+      // dizia "Não foi possível carregar a lista." no cabeçalho E "Erro ao
+      // carregar: …" no alerta — DUAS mensagens para o MESMO estado, e a
+      // contagem ("0 usuários cadastrados") seria mentira. O estado de erro
+      // mora no `Alerta`, e só ele.
+      await expect(
+        page.getByText('Não foi possível carregar a lista. Tente de novo em instantes.'),
+      ).toBeVisible();
       await expect(itensDaLista(page)).toHaveCount(0);
     } finally {
       // O `finally` é o que mantém a janela de falha confinada a este teste:

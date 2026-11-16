@@ -5,11 +5,16 @@
 
 import type * as React from 'react';
 import { revalidatePath } from 'next/cache';
+import { Botao } from '@/components/ui/botao';
+import { CabecalhoPagina } from '@/components/ui/cabecalho-pagina';
+import { Container } from '@/components/ui/container';
+import { CabecalhoTabela, CelulaTabela, Tabela } from '@/components/ui/tabela';
 import { listarPerfis, atribuirPerfil, decidirAtribuicaoPerfil } from '../../../lib/perfil';
 import { exigirAdmin } from '../guard-admin';
 import { ApiClient, baseUrlDaApi } from '../../../lib/api-client';
 import { exigirSessao, lerTenant } from '../../../lib/sessao';
 import type { UserOutputDto, UsersPageDto } from '@projeto/shared-types';
+import { CLASSE_CONTROLE_COMPACTO } from '@/components/ui/campo';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,16 +64,16 @@ export default async function AdminUsersPage(): Promise<React.JSX.Element> {
   }
 
   return (
-    <main className="mx-auto max-w-3xl p-8">
-      <h1 className="text-2xl font-semibold text-slate-900">Atribuir perfis</h1>
+    <Container>
+      <CabecalhoPagina titulo="Atribuir perfis" />
 
-      <table className="mt-6 w-full border-collapse text-sm">
+      <Tabela legenda="Pessoas e o perfil atribuído a cada uma">
         <thead>
-          <tr className="border-b border-slate-200 text-left">
-            <th className="py-2 pr-4 font-medium text-slate-500">Nome</th>
-            <th className="py-2 pr-4 font-medium text-slate-500">Email</th>
-            <th className="py-2 pr-4 font-medium text-slate-500">Perfil atual</th>
-            <th className="py-2 font-medium text-slate-500">Atribuir</th>
+          <tr>
+            <CabecalhoTabela>Nome</CabecalhoTabela>
+            <CabecalhoTabela>Email</CabecalhoTabela>
+            <CabecalhoTabela>Perfil atual</CabecalhoTabela>
+            <CabecalhoTabela>Atribuir</CabecalhoTabela>
           </tr>
         </thead>
         <tbody>
@@ -111,13 +116,13 @@ export default async function AdminUsersPage(): Promise<React.JSX.Element> {
             const atual = profiles.find((p) => p.id === perfilIdNoEscopo);
             const perfilIdExibido = atual?.id ?? '';
             return (
-              <tr key={u.id} className="border-b border-slate-100">
-                <td className="py-3 pr-4 text-slate-900">{u.nome}</td>
-                <td className="py-3 pr-4">{u.email}</td>
-                <td className="py-3 pr-4">
+              <tr key={u.id}>
+                <CelulaTabela>{u.nome}</CelulaTabela>
+                <CelulaTabela>{u.email}</CelulaTabela>
+                <CelulaTabela>
                   {atual ? <code>{atual.slug}</code> : <em>sem perfil</em>}
-                </td>
-                <td className="py-3">
+                </CelulaTabela>
+                <CelulaTabela>
                   <form action={atribuir} className="flex items-center gap-2">
                     <input type="hidden" name="userId" value={u.id} />
                     <input type="hidden" name="profileIdAtual" value={perfilIdExibido} />
@@ -126,7 +131,7 @@ export default async function AdminUsersPage(): Promise<React.JSX.Element> {
                         elemento — a estrutura que o e2e mede fica igual. */}
                     <select
                       aria-label={`Perfil de ${u.email}`}
-                      className="rounded-md border border-slate-300 px-2 py-1 text-sm"
+                      className={CLASSE_CONTROLE_COMPACTO}
                       defaultValue={perfilIdExibido}
                       name="profileId"
                     >
@@ -137,19 +142,25 @@ export default async function AdminUsersPage(): Promise<React.JSX.Element> {
                         </option>
                       ))}
                     </select>
-                    <button
+                    <Botao
                       type="submit"
-                      className="rounded-md border border-slate-300 px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
+                      variante="secundario"
+                      tamanho="sm"
+                      // ⚠️ O nome acessível diz DE QUAL linha (WCAG 2.4.6): o
+                      // botão é "Salvar" em N linhas da mesma tabela, e quem
+                      // navega por leitor de tela ouve N "Salvar" idênticos.
+                      // O select da MESMA linha já se nomeia.
+                      aria-label={`Salvar perfil de ${u.email}`}
                     >
                       Salvar
-                    </button>
+                    </Botao>
                   </form>
-                </td>
+                </CelulaTabela>
               </tr>
             );
           })}
         </tbody>
-      </table>
-    </main>
+      </Tabela>
+    </Container>
   );
 }

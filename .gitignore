@@ -151,6 +151,11 @@ test-results/
 # `.next/` com o `pnpm dev` de quem esta desenvolvendo.
 .next-boot/
 
+# pt-BR: `.next-dev/` e um `distDir` ALTERNATIVO (`NEXT_DIST_DIR=.next-dev`),
+# para o `next dev` nao disputar o `.next/` com um build em andamento. Mesmo
+# formato dos dois acima, e pelo mesmo motivo.
+.next-dev/
+
 # pt-BR: `next-env.d.ts` e GERADO pelo Next, e o `distDir` da suite e2e faz os
 # dois builds disputarem o mesmo arquivo antes rastreado: o `next build` da
 # suite escreve `/// <reference path="./.next-e2e/types/routes.d.ts" />`, o

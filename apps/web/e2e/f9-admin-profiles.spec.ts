@@ -41,10 +41,10 @@ test.describe('F9 — Listagem de perfis (admin)', () => {
     // a tela promete entregar. A ordem das colunas é a do `<thead>` do
     // `page.tsx` — Slug · Nome · Admin? · Sistema? · Permissões.
     const leitor = linhas.filter({ hasText: 'leitor' });
-    await expect(leitor.getByRole('cell').nth(2)).toHaveText('—'); // Admin?
+    await expect(leitor.getByRole('cell').nth(2)).toHaveText('Não'); // Admin?
     await expect(leitor.getByRole('cell').nth(4)).toHaveText('1'); // Permissões
     const escritor = linhas.filter({ hasText: 'escritor' });
-    await expect(escritor.getByRole('cell').nth(3)).toHaveText('✅'); // Sistema?
+    await expect(escritor.getByRole('cell').nth(3)).toHaveText('Sim'); // Sistema?
     await expect(escritor.getByRole('cell').nth(4)).toHaveText('2');
   });
 

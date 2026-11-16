@@ -8,6 +8,9 @@
 
 import type * as React from 'react';
 import { redirect } from 'next/navigation';
+import { CabecalhoSecao } from '@/components/ui/cabecalho-secao';
+import { CabecalhoPagina } from '@/components/ui/cabecalho-pagina';
+import { Container } from '@/components/ui/container';
 import { obterMeuPerfil } from '../../../lib/perfil';
 import { ApiError } from '../../../lib/api-client';
 import { ServicoIndisponivel } from '../../admin/guard-admin';
@@ -51,16 +54,17 @@ export default async function MeProfilePage(): Promise<React.JSX.Element> {
 
   return (
     // pt-BR: `me-profile-page` não existe em `globals.css` — a tela renderizava
-    // como texto solto, sem hierarquia visível. Mesmos utilitários de `/users`
-    // e `/login`, que são o padrão do resto do app.
-    <main className="mx-auto max-w-3xl p-8">
-      <h1 className="text-2xl font-semibold text-slate-900">Meu perfil</h1>
+    // como texto solto, sem hierarquia visível. Hoje ela usa as MESMAS
+    // primitivas de `/users` e `/login` (`Container`, `CabecalhoPagina`),
+    // que são o padrão do resto do app.
+    <Container>
+      <CabecalhoPagina titulo="Meu perfil" />
 
       <section className="mt-8">
-        <h2 className="text-lg font-medium text-slate-900">Identidade</h2>
+        <CabecalhoSecao>Identidade</CabecalhoSecao>
         <dl className="mt-3 space-y-2 text-sm">
-          <dt className="font-medium text-slate-500">Perfil</dt>
-          <dd className="text-slate-900">
+          <dt className="font-medium text-muted-foreground">Perfil</dt>
+          <dd className="text-foreground">
             {me.profileName !== null ? (
               <>
                 <strong>{me.profileName}</strong> <code>({me.profileSlug})</code>
@@ -69,15 +73,17 @@ export default async function MeProfilePage(): Promise<React.JSX.Element> {
               <em>Sem perfil — deny-by-default</em>
             )}
           </dd>
-          <dt className="font-medium text-slate-500">Admin?</dt>
-          <dd className="text-slate-900">{me.isAdmin ? 'Sim (bypass total)' : 'Não'}</dd>
+          <dt className="font-medium text-muted-foreground">Admin?</dt>
+          <dd className="text-foreground">{me.isAdmin ? 'Sim (bypass total)' : 'Não'}</dd>
         </dl>
       </section>
 
       <section className="mt-8">
-        <h2 className="text-lg font-medium text-slate-900">Permissões ({me.permissions.length})</h2>
+        <CabecalhoSecao>
+          Permissões <span className="tabular-nums">({me.permissions.length})</span>
+        </CabecalhoSecao>
         {me.permissions.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-500">
+          <p className="mt-3 text-sm text-muted-foreground">
             <em>
               Sem permissões explícitas.{' '}
               {me.isAdmin ? 'Mas você é admin, então passa em qualquer guard.' : ''}
@@ -86,13 +92,13 @@ export default async function MeProfilePage(): Promise<React.JSX.Element> {
         ) : (
           <ul className="mt-3 space-y-1">
             {me.permissions.map((k) => (
-              <li key={k} className="text-sm text-slate-900">
+              <li key={k} className="text-sm text-foreground">
                 <code>{k}</code>
               </li>
             ))}
           </ul>
         )}
       </section>
-    </main>
+    </Container>
   );
 }

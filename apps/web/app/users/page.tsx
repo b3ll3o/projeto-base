@@ -9,8 +9,12 @@
 // mostrava só o título. O TypeScript não acusou porque o tipo Mentia na
 // mesma direção que o runtime. Tipos compartilhados são cópia do wire
 // format (ver `packages/shared-types/src/user.ts`).
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { Alerta } from '@/components/ui/alerta';
+import { Botao, CLASSES_BOTAO_SECUNDARIO } from '@/components/ui/botao';
+import { CabecalhoPagina } from '@/components/ui/cabecalho-pagina';
+import { Container } from '@/components/ui/container';
+import { EstadoVazio } from '@/components/ui/estado-vazio';
 import { ApiClient, ApiError, baseUrlDaApi } from '@/lib/api-client';
 import { exigirSessao, lerTenant } from '@/lib/sessao';
 import type { UserOutputDto, UsersPageDto } from '@projeto/shared-types';
@@ -62,75 +66,87 @@ export default async function UsersPage() {
       redirect('/login');
     }
     error = err instanceof Error ? err.message : 'Erro desconhecido';
+    // pt-BR (padrão de estilização, 2026-11-11): a tela NÃO cola a exceção
+    // crua na mensagem. O que a pessoa precisa saber é que a lista não veio
+    // e o que ela pode fazer; a exceção crua (que pode ser o número HTTP, ou
+    // uma frase do proxy) é do log do servidor, que é onde o diagnóstico
+    // vive. A mensagem da tela é a mesma para toda falha de leitura.
+    console.error('[web] listagem de usuários', error);
   }
 
   const usuarios = data?.users ?? [];
 
   return (
-    <main className="mx-auto max-w-3xl p-8">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Usuários</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            {error
-              ? 'Não foi possível carregar a lista.'
-              : `${usuarios.length} ${usuarios.length === 1 ? 'usuário cadastrado' : 'usuários cadastrados'}`}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link
-            href="/users/novo"
-            className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
-          >
-            Cadastrar usuário
-          </Link>
-          {/* pt-BR: "Sair" é um formulário, não um link. Um `<a href>` que
-              apagasse cookie não teria Server Action para reescrever o
-              cookie — o navegador não pode mudar cookie do servidor. E não
-              é botão com `onClick`: esta página é Server Component, e sem
-              'use client' não há manipulador de evento. */}
-          <form action={sair}>
-            <button
-              type="submit"
-              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
-            >
-              Sair
-            </button>
-          </form>
-        </div>
-      </div>
+    <Container>
+      <CabecalhoPagina
+        titulo="Usuários"
+        // ⚠️ Na falha, o cabeçalho NÃO repete a mensagem do `Alerta` (MEDIDO
+        // 2026-11-16, revisão do PR #168): a tela dizia "Não foi possível
+        // carregar a lista." no cabeçalho E "Erro ao carregar: tente de novo
+        // em instantes." no alerta — DUAS mensagens para o MESMO estado. E a
+        // contagem ("0 usuários cadastrados") seria MENTIRA: a leitura
+        // falhou, não veio vazia. O estado de erro é o `Alerta`, e só ele.
+        descricao={
+          error
+            ? undefined
+            : `${usuarios.length} ${usuarios.length === 1 ? 'usuário cadastrado' : 'usuários cadastrados'}`
+        }
+        acao={
+          <>
+            <Botao href="/users/novo">Cadastrar usuário</Botao>
+            {/* pt-BR: "Sair" é um formulário, não um link. Um `<a href>` que
+                apagasse cookie não teria Server Action para reescrever o
+                cookie — o navegador não pode mudar cookie do servidor. E não
+                é botão com `onClick`: esta página é Server Component, e sem
+                'use client' não há manipulador de evento. */}
+            <form action={sair}>
+              <Botao type="submit" variante="secundario">
+                Sair
+              </Botao>
+            </form>
+          </>
+        }
+      />
 
-      {error ? (
-        <p
-          role="alert"
-          className="mt-6 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800"
-        >
-          Erro ao carregar: {error}
-        </p>
-      ) : usuarios.length === 0 ? (
-        // Estado vazio: informação + próximo passo. Não é erro, e não é a
-        // mesma tela de "falhou ao carregar".
-        <div className="mt-6 rounded-lg border border-dashed border-slate-300 p-12 text-center">
-          <p className="text-sm font-medium text-slate-900">Nenhum usuário cadastrado</p>
-          <p className="mt-1 text-sm text-slate-500">Cadastre o primeiro usuário para começar.</p>
-          <Link
-            href="/users/novo"
-            className="mt-4 inline-block rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
-          >
-            Cadastrar usuário
-          </Link>
-        </div>
-      ) : (
-        <ul className="mt-6 space-y-2">
-          {usuarios.map((u: UserOutputDto) => (
-            <li key={u.id} className="rounded border border-slate-200 bg-white p-4">
-              <div className="font-medium text-slate-900">{u.nome}</div>
-              <div className="text-sm text-slate-600">{u.email}</div>
-              <div className="mt-1 text-xs text-slate-400">v{u.version}</div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </main>
+      <div className="mt-6">
+        {error ? (
+          // pt-BR (revisão 2026-11-16): erro sem AÇÃO é erro sem saída — a
+          // pessoa lê "tente de novo" e não tem onde tentar. O `<a href="">`
+          // recarrega a página e reexecuta a leitura que falhou (o mesmo
+          // caminho do `guard-admin`).
+          <div className="space-y-3">
+            <Alerta variante="erro">
+              Não foi possível carregar a lista. Tente de novo em instantes.
+            </Alerta>
+            {/* ⚠️ É um `<a href="">` e não o `Botao`: esta página é Server
+                Component, e um `onClick` exigiria um wrapper `'use client'`.
+                O `href` vazio resolve para o documento atual e o browser
+                recarrega a página, reexecutando a leitura que falhou (o
+                mesmo caminho do `guard-admin`). */}
+            <a href="" className={CLASSES_BOTAO_SECUNDARIO}>
+              Tentar de novo
+            </a>
+          </div>
+        ) : usuarios.length === 0 ? (
+          // Estado vazio: informação + próximo passo. Não é erro, e não é a
+          // mesma tela de "falhou ao carregar".
+          <EstadoVazio
+            titulo="Nenhum usuário cadastrado"
+            descricao="Cadastre o primeiro usuário para começar."
+            acao={<Botao href="/users/novo">Cadastrar usuário</Botao>}
+          />
+        ) : (
+          <ul className="space-y-2">
+            {usuarios.map((u: UserOutputDto) => (
+              <li key={u.id} className="rounded-md bg-surface p-4">
+                <div className="break-words font-medium text-foreground">{u.nome}</div>
+                <div className="break-words text-sm text-muted-foreground">{u.email}</div>
+                <div className="mt-1 text-xs tabular-nums text-muted-foreground">v{u.version}</div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Container>
   );
 }

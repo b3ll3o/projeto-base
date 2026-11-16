@@ -10,6 +10,16 @@ import Link from 'next/link';
 import type { MeProfileDto } from '@projeto/shared-types';
 import { obterMeuPerfil, obterMeuPerfilGlobal } from '../lib/perfil';
 
+/**
+ * A classe do link de navegação — UM DONO para os 7 links do menu.
+ *
+ * pt-BR (padrão de estilização, 2026-11-16): a mesma string aparecia 7×
+ * escrita à mão. O chrome do app não é copiado pelo app derivado (a
+ * convenção `estilizacao.md` §6 diz isso), mas a repetição dentro do app
+ * continua sendo repetição — e a regra de lint lê constante de classe.
+ */
+const CLASSE_LINK_NAV = 'text-sm font-medium text-muted-foreground hover:text-foreground foco';
+
 export async function Sidebar(): Promise<React.JSX.Element> {
   // pt-BR (#107, 2026-10-18): este é o CHROME, e chrome não pode derrubar a
   // página. `obterMeuPerfil()` passou a propagar 403/5xx/timeout/rede — certo
@@ -48,47 +58,47 @@ export async function Sidebar(): Promise<React.JSX.Element> {
     // pt-BR: `sidebar`/`sidebar-footer` não existem em `globals.css` — o menu
     // renderizava como texto corrido, com link azul padrão do browser, colado
     // no conteúdo. Utilitários Tailwind, como o resto do app.
-    <nav aria-label="Navegação principal" className="w-64 shrink-0 border-r border-slate-200 p-8">
-      <ul className="space-y-1">
+    //
+    // ⚠️ Abaixo de `md` o menu é uma BARRA no topo (`w-full`, borda de baixo) e
+    // os links correm em linha (MEDIDO 2026-11-16, revisão do PR #168): com
+    // `w-64` fixo, a coluna de conteúdo ficava com 64px a 320px e a tela
+    // rolava na horizontal (WCAG 1.4.10). Acima de `md` é a coluna de
+    // sempre.
+    <nav
+      aria-label="Navegação principal"
+      className="w-full shrink-0 border-b border-border p-4 md:w-64 md:border-b-0 md:border-r md:p-8"
+    >
+      <ul className="flex flex-wrap gap-x-4 gap-y-1 md:block md:space-y-1">
         <li>
-          <Link className="text-sm font-medium text-slate-700 hover:text-slate-900" href="/">
+          <Link className={CLASSE_LINK_NAV} href="/">
             Início
           </Link>
         </li>
         <li>
-          <Link className="text-sm font-medium text-slate-700 hover:text-slate-900" href="/users">
+          <Link className={CLASSE_LINK_NAV} href="/users">
             Usuários
           </Link>
         </li>
         <li>
-          <Link
-            className="text-sm font-medium text-slate-700 hover:text-slate-900"
-            href="/me/profile"
-          >
+          <Link className={CLASSE_LINK_NAV} href="/me/profile">
             Meu perfil
           </Link>
         </li>
         {me?.isAdmin === true ? (
           <>
             <li>
-              <hr className="my-4 border-slate-200" />
+              <hr className="my-4 border-border" />
             </li>
             <li>
-              <strong className="text-xs uppercase tracking-wide text-slate-400">Admin</strong>
+              <strong className="text-xs font-medium text-muted-foreground">Admin</strong>
             </li>
             <li>
-              <Link
-                className="text-sm font-medium text-slate-700 hover:text-slate-900"
-                href="/admin/profiles"
-              >
+              <Link className={CLASSE_LINK_NAV} href="/admin/profiles">
                 Perfis
               </Link>
             </li>
             <li>
-              <Link
-                className="text-sm font-medium text-slate-700 hover:text-slate-900"
-                href="/admin/users"
-              >
+              <Link className={CLASSE_LINK_NAV} href="/admin/users">
                 Atribuir perfis
               </Link>
             </li>
@@ -97,24 +107,18 @@ export async function Sidebar(): Promise<React.JSX.Element> {
         {meGlobal?.isAdmin === true ? (
           <>
             <li>
-              <hr className="my-4 border-slate-200" />
+              <hr className="my-4 border-border" />
             </li>
             <li>
-              <strong className="text-xs uppercase tracking-wide text-slate-400">Sistema</strong>
+              <strong className="text-xs font-medium text-muted-foreground">Sistema</strong>
             </li>
             <li>
-              <Link
-                className="text-sm font-medium text-slate-700 hover:text-slate-900"
-                href="/admin/flags"
-              >
+              <Link className={CLASSE_LINK_NAV} href="/admin/flags">
                 Feature flags
               </Link>
             </li>
             <li>
-              <Link
-                className="text-sm font-medium text-slate-700 hover:text-slate-900"
-                href="/admin/tenancy"
-              >
+              <Link className={CLASSE_LINK_NAV} href="/admin/tenancy">
                 Empresas e usuários
               </Link>
             </li>
@@ -123,7 +127,7 @@ export async function Sidebar(): Promise<React.JSX.Element> {
       </ul>
 
       {me !== null ? (
-        <p className="mt-8 border-t border-slate-200 pt-4 text-xs text-slate-500">
+        <p className="mt-4 border-t border-border pt-4 text-xs text-muted-foreground md:mt-8">
           {me.profileName ?? 'Sem perfil'} · {me.isAdmin ? 'admin' : 'usuário'}
         </p>
       ) : null}
