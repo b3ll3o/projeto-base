@@ -137,10 +137,10 @@ Tailwind 4: o valor do token é a **cor completa**; `bg-surface` sai
 | Primitiva | Substitui | today |
 |---|---|---|
 | `Container` | `mx-auto max-w-3xl p-8` (o `<main>` da tela) | 16× |
-| `CabecalhoPagina` | `h1` de tela + subtítulo + slot de ações | 16× / 10× |
+| `CabecalhoPagina` | `h1` de tela + subtítulo + slot de ações | 16× / 13× |
 | `CabecalhoSecao` | o `h2` de tela (adicionado na revisão do PR — D17) | 7× |
 | `Campo` | `label` + `input` + erro + dica, com `id`/`aria-invalid`/`aria-describedby` | 7× / 7× / 7× |
-| `Botao` (`primario`, `secundario`; com `href` é link) | as duas strings de botão | 4× + 4× |
+| `Botao` (`primario`, `secundario`; com `href` é link) | as duas strings de botão | 10× + 5× |
 | `Alerta` (`erro`, `sucesso`) | os dois alertas (`role="alert"` vs `role="status"`) | 4× + 1× |
 | `Tabela` + `CabecalhoTabela` + `CelulaTabela` | `mt-6 w-full border-collapse text-sm`, `th`, `td` | 5 tabelas |
 | `EstadoVazio` | o bloco `border-dashed p-12` + o texto de estado vazio | 1× |
@@ -193,7 +193,7 @@ há Tailwind. Ela roda em `pnpm --filter @projeto/web lint`, que está no
 | **T8** | Ponteiro na `ui-craft` (evita 3ª cópia dos valores) | `.agents/skills/ui-craft/SKILL.md` | a skill aponta para `globals.css` e para a convenção, e não transcreve valor de token |
 | **T9** | Entrada humana para o padrão | `docs/STACK.md` (§3) | quem chega pelo doc da stack acha a convenção |
 | **T10** | Conferência visual real | browser | a troca de identidade (fundo `slate-50`, ação azul) precisa de olho humano, não só de contraste medido |
-| **T11** | Revisão do PR | 2 reviewers em paralelo (código + UI) | achado corrigido antes do merge |
+| **T11** | Revisão do PR | 3 reviewers em paralelo (UX/design, código, Next.js) | achado corrigido antes do merge |
 
 **Fora do escopo (decidido, não é falta):** dark mode; `packages/ui` novo;
 `next/font`; reescrita visual que mude texto, id, role ou ordem de coluna;

@@ -40,19 +40,25 @@ qualquer tela, mesmo fora deste repo.
 O conjunto de tokens do app medido em **2026-11-11** (13 tokens de cor +
 raio + fonte), em `apps/web/app/globals.css`:
 
-| Papel | Token | Regra |
-|-------|-------|-------|
-| Fundo de página | `--color-background` | 1 valor |
-| Superfície elevada | `--color-surface` | 1 passo de tom acima do fundo, **nunca** sombra para separar |
-| Apoio (hover) | `--color-muted` | fundo de apoio, não de conteúdo |
-| Tinta primária | `--color-foreground` | texto corrido NUNCA em cinza suave — página em cinza lê inacabada |
-| Tinta secundária | `--color-muted-foreground` | só metadado e legenda |
-| Borda decorativa | `--color-border` | 1 passo; borda não substitui espaçamento |
-| Contorno de controle | `--color-control` | o campo precisa de 3:1 contra a superfície (WCAG 1.4.11) |
-| Ação | `--color-primary` + `--color-primary-foreground` + `--color-primary-hover` | um par e o hover. A ação primária da tela |
-| Foco | `--color-ring` | **precisa** existir e diferir de `--color-primary` |
-| Erro | `--color-destructive` | tinta do erro; o fundo vem por opacidade do próprio token |
-| Sucesso | `--color-success` | tinta da confirmação |
+**O PAPEL de cada token (o que ele significa — fundo de página, tinta de
+erro, contorno de controle) é o da §2.1 da convenção
+[`estilizacao.md`](../../specs/conventions/estilizacao.md)**, que é a dona.
+Aqui fica só a **lei de craft** de cada token — a que vale para tela de
+qualquer repo, mesmo fora deste.
+
+| Token | Lei de craft |
+|-------|--------------|
+| `--color-background` | 1 valor |
+| `--color-surface` | 1 passo de tom acima do fundo, **nunca** sombra para separar |
+| `--color-muted` | fundo de apoio, não de conteúdo |
+| `--color-foreground` | texto corrido NUNCA em cinza suave — página em cinza lê inacabada |
+| `--color-muted-foreground` | só metadado e legenda |
+| `--color-border` | 1 passo; borda não substitui espaçamento |
+| `--color-control` | o campo precisa de 3:1 contra a superfície (WCAG 1.4.11) |
+| `--color-primary` + `--color-primary-foreground` + `--color-primary-hover` | um par e o hover. A ação primária da tela |
+| `--color-ring` | **precisa** existir e diferir de `--color-primary` |
+| `--color-destructive` | tinta do erro; o fundo vem por opacidade do próprio token |
+| `--color-success` | tinta da confirmação |
 
 **Regra dos 3 passos de tom.** Uma escala de cor é uma rampa com passos nomeados
 (`50/100/…/900` é o padrão do Tailwind). Superfície separada por **um passo**, nunca
@@ -62,8 +68,7 @@ por linha ou sombra. Sombra é para o que flutua de verdade: menu, dialog.
 bug de acessibilidade, não escolha de estilo.
 
 > **Os VALORES não são transcritos aqui.** O bloco `@theme` de
-> `apps/web/app/globals.css` é o dono deles, e a convenção
-> `estilizacao.md` §2.1 é o dono dos papéis. Token escrito em dois lugares
+> `apps/web/app/globals.css` é o dono deles. Token escrito em dois lugares
 > envelhece em um deles — e o lugar que envelhece é o que ninguém repara.
 
 > **O token guarda a COR COMPLETA, não a tripla HSL.** O Tailwind 4 emite
@@ -102,8 +107,10 @@ pequeno, nada no meio.
 
 **Regras que não se negociam:**
 
-- Corpo em **16px ou mais** quando é texto corrido de leitura. `text-sm` (14px) é
-  para **dado** (célula de tabela, item de lista), não para parágrafo.
+- Corpo em **`text-sm`** (14px) — a lei é a da tabela acima, e o `text-sm` serve
+  ao texto corrido **e** ao **dado** (célula de tabela, item de lista): a
+  §4.2 da convenção `estilizacao.md` não separa os dois, e o app inteiro usa
+  `text-sm`. `text-xs` (12px) é só metadado, e o erro nunca é menor que o corpo.
 - **Rótulo em maiúsculo minúsculo e espaçado é proibido** fora de dado tabular.
 - **Duas famílias no máximo**, e uma é o normal.
 - Alinhamento à esquerda por padrão. Centralizar no máximo um momento por tela.
@@ -173,7 +180,7 @@ Cada item com critério observável, não com opinião:
 - [ ] `--color-ring` existe e é aplicado em todo elemento focável via `:focus-visible`
 - [ ] Nenhum `outline: none` sem substituto (`grep -rn "outline-none\|outline: none" apps/web`)
 - [ ] Contraste ≥ 4.5:1 texto normal, ≥ 3:1 texto grande e borda de input — **medido**, não estimado
-- [ ] Corpo de texto corrido ≥ 16px; `text-xs` só em metadado
+- [ ] Corpo de texto corrido em `text-sm`; `text-xs` só em metadado
 - [ ] Coluna numérica com `tabular-nums`
 - [ ] Os 4 estados renderizam (vazio, carregando, erro, sucesso) — e o e2e cobre ao menos vazio e erro
 - [ ] `aria-invalid` + `aria-describedby` no campo com erro; erro não comunicado **só** por cor
