@@ -107,10 +107,10 @@ pequeno, nada no meio.
 
 **Regras que não se negociam:**
 
-- Corpo em **`text-sm`** (14px) — a lei é a da tabela acima, e o `text-sm` serve
-  ao texto corrido **e** ao **dado** (célula de tabela, item de lista): a
-  §4.2 da convenção `estilizacao.md` não separa os dois, e o app inteiro usa
-  `text-sm`. `text-xs` (12px) é só metadado, e o erro nunca é menor que o corpo.
+- Corpo em **`text-sm`** (14px) — no repo, o corpo e o **dado** (célula de
+  tabela, item de lista) são o MESMO tamanho: a §4.2 da convenção
+  `estilizacao.md` não separa os dois, e o app inteiro usa `text-sm`.
+  `text-xs` (12px) é só metadado, e o erro nunca é menor que o corpo.
 - **Rótulo em maiúsculo minúsculo e espaçado é proibido** fora de dado tabular.
 - **Duas famílias no máximo**, e uma é o normal.
 - Alinhamento à esquerda por padrão. Centralizar no máximo um momento por tela.
