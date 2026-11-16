@@ -11,6 +11,7 @@ import {
   checkDocCoverage,
   declaracoesDeExcecao,
   listarModulos,
+  listarPrimitivas,
   listarRotas,
 } from './check-doc-coverage';
 import { linhasDoRelato } from './check-types';
@@ -124,6 +125,41 @@ describe('listarRotas', () => {
     writeFileSync(join(repo, 'apps/web/app/(marketing)/inicio/page.tsx'), '');
     writeFileSync(join(repo, 'apps/web/app/@modal/overlay/page.tsx'), '');
     expect(await listarRotas(repo)).toEqual(['apps/web/app/(marketing)/inicio/page.tsx']);
+  });
+});
+
+describe('listarPrimitivas', () => {
+  let tmp: string;
+  let repo: string;
+
+  beforeEach(() => {
+    tmp = mkdtempSync(join(tmpdir(), 'doc-coverage-prim-'));
+    repo = join(tmp, 'repo');
+    mkdirSync(join(repo, 'apps/web/components/ui'), { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it('lista as primitivas pelo path do repo, ordenadas', async () => {
+    for (const n of ['botao.tsx', 'alerta.tsx']) {
+      writeFileSync(join(repo, 'apps/web/components/ui', n), '');
+    }
+    expect(await listarPrimitivas(repo)).toEqual([
+      'apps/web/components/ui/alerta.tsx',
+      'apps/web/components/ui/botao.tsx',
+    ]);
+  });
+
+  it('o SPEC não é primitiva (é o teste dela)', async () => {
+    writeFileSync(join(repo, 'apps/web/components/ui/botao.tsx'), '');
+    writeFileSync(join(repo, 'apps/web/components/ui/primitivas.spec.tsx'), '');
+    expect(await listarPrimitivas(repo)).toEqual(['apps/web/components/ui/botao.tsx']);
+  });
+
+  it('raiz ausente → lista vazia', async () => {
+    expect(await listarPrimitivas(join(tmp, 'nao-existe'))).toEqual([]);
   });
 });
 
@@ -288,6 +324,21 @@ describe('checkDocCoverage', () => {
         recursive: true,
         force: true,
       });
+    }
+  });
+
+  it('o gate é vermelho quando uma PRIMITIVA nova aparece sem citação — MUTAÇÃO no repo real', async () => {
+    // A mesma classe da rota nova: uma unidade de código nova sem doc
+    // canônico. A §3 da convenção lista cada primitiva pelo path do
+    // arquivo, e o gate pergunta se o doc CITA esse path.
+    const sonda = join(REPO_REAL, 'apps', 'web', 'components', 'ui', 'sonda-do-teste.tsx');
+    writeFileSync(sonda, 'export const X = () => null;\n');
+    try {
+      const r = await checkDocCoverage({ repoRoot: REPO_REAL });
+      expect(r.ok).toBe(false);
+      expect(r.errors.join('\n')).toContain('sonda-do-teste.tsx');
+    } finally {
+      rmSync(sonda, { force: true });
     }
   });
 
