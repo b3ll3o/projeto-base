@@ -119,11 +119,20 @@ O guard de `/admin/*` é compartilhado e **distingue três causas** —
 > as empresas são o conteúdo principal, e o histórico é secundário. O `401` é
 > a EXCEÇÃO: sessão expirada é login, como em qualquer outra leitura
 > (`redirecionarParaLoginSeSessaoExpirada`, `app/admin/guard-admin.tsx`).
-> E o histórico é PAGINADO por cursor (`GET /admin/users/:id/history`): a tela
-> segue o `nextCursor` até o fim, com um teto de 10 páginas de 100 — e quando
-> o teto corta, a tela DIZ que não coube tudo. A data é em pt-BR
-> (`toLocaleString('pt-BR')`), e "quem mudou" é o nome de quem está no
+> E o `Alerta` DISTINGUE a causa: uma recusa (403) e um "não existe" (404) não
+> melhoram com retry, e o "Tentar de novo" só aparece na falha transitória.
+>
+> O histórico é PAGINADO por cursor (`GET /admin/users/:id/history`) e a ordem
+> é **descendente** — a versão mais RECENTE primeiro (a ordem é do port de
+> auditoria, e o cursor aponta para as versões mais antigas). A tela pede **UMA
+> página por visita**, com o cursor na URL (`?cursor=`), e o "carregar mais" é um
+> link. A data é em pt-BR com o fuso **declarado** (`America/Sao_Paulo` — o
+> servidor roda em UTC), e "quem mudou" é o nome **atual** de quem está no
 > inventário — ou o id cru, quando a conta não está mais lá.
+>
+> ⚠️ A **pessoa apagada** aparece na tela mesmo sem estar no inventário (o
+> inventário filtra `deletedAt: null`): a API entrega a trilha dela, e a tela
+> tira o nome do `snapshot` da última versão — e DIZ que a pessoa foi apagada.
 >
 > ⚠️ O rótulo do VÍNCULO é `papel: … · perfil: …` — as duas partes NOMEADAS,
 > porque o papel e o perfil podem ser a MESMA palavra (`gerente · gerente` é

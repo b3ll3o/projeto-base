@@ -261,6 +261,15 @@ conferida contra a credencial da sessão.
   Nenhum outro ator lê: a policy `history_leitura` libera a linha quando
   `usuario_no_escopo(entity_id)`, e o bucket de SISTEMA é o único que
   atravessa empresas.
+- A **recusa** do portão D2 é **registrada com o ator e o alvo**
+  (`Logger('AdminUserHistory')`): uma escalada é 403, e 403 não loga no
+  `GlobalExceptionFilter` — sem o registro, a tentativa de ler a trilha
+  alheia ficava só na linha de access log (method/url/status), sem ator, e
+  não atribuível a ninguém.
+- O **cursor** da paginação é o id da **linha** (`users_history.id`), e ele é
+  resolvido **dentro da entidade**: um cursor de outra trilha é **inválido**
+  (400), e a resposta é a mesma de "o cursor não existe" — o erro não diz se
+  aquele id existe.
 
 ---
 

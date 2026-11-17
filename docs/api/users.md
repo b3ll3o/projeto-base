@@ -167,10 +167,33 @@ EMPRESA DELE). O `@RequirePermission('admin.manage-users')` é defense in depth.
 
 **Query**: `cursor`, `limit` (§3.2). **Response `200`**: `UserHistoryPageDto` — o mesmo envelope da rota 7.
 
-**Códigos de erro**: `400` (`VALIDATION_ERROR` — query inválida **ou** `:id` que
-não é um UUID v7), `403` (`FORBIDDEN` — não é o administrador do sistema) e
-`404` (`USER_NOT_FOUND` — pessoa inexistente). A leitura é no **bucket de
-SISTEMA** — é ele que atravessa empresas.
+**A ORDEM É DESCENDENTE** — a versão mais **recente** primeiro. ⚠️ A ordem é do
+**input do port** (`ListHistoryInput.ordem`, padrão `'asc'`), e não do wire: a
+rota do DONO (a 7) continua **ascendente**, e a rota do ADMIN pede `'desc'`. A
+ordem anda com o **cursor**: o `nextCursor` aponta para as versões mais
+**antigas**. ⚠️ Inverter só a exibição não resolveria — o cursor da API andava
+para o mais antigo, e a primeira página (as 100 mais antigas) não contém a
+mais recente.
+
+**O CURSOR** é o `id` da **linha** (`users_history.id`, um uuid v4) — e ele é
+resolvido **dentro da entidade**: um cursor de outra trilha é **inválido** (400),
+e a resposta é a **mesma** de "o cursor não existe" (o erro não diz se aquele id
+existe).
+
+**A PESSOA APAGADA** é alcançável: o soft-delete **não apaga a trilha** — a
+linha em `users`, a entrada `DELETE` em `users_history` e o `users_archive`
+continuam lá, visíveis na credencial de sistema. A conferência de existência
+usa `includeDeleted`, e por isso o histórico de quem **saiu** da empresa não é
+um 404.
+
+**Códigos de erro**: `400` (`VALIDATION_ERROR` — query inválida, cursor de outra
+trilha **ou** `:id` que não é um UUID v7), `403` (`FORBIDDEN` — não é o
+administrador do sistema) e `404` (`USER_NOT_FOUND` — pessoa inexistente). A
+leitura é no **bucket de SISTEMA** — é ele que atravessa empresas.
+
+⚠️ **A RECUSA DEIXA RASTRO**: o portão D2 é registrado com o ator e o alvo
+(`Logger('AdminUserHistory')`) — uma escalada é 403, e 403 não loga no
+`GlobalExceptionFilter`.
 
 ## §4. `includeDeleted` — case-insensitive
 
@@ -231,62 +254,9 @@ aceitou ⟹ o VO aceita" — a cópia do VO só pode divergir no sentido seguro.
 
 ### §7.1 As migrations que deram dono às regras
 
-| Migration | O que faz |
-|---|---|
-| `20261116000000_password_hash_funcao` | cria `password_hash_is_valid_argon2id(text)` — o dono da regra do hash no banco |
-| `20261116000001_password_hash_reparo` | **neutraliza** as linhas cujo hash não é argon2id: grava um envelope argon2id com digest aleatório (a conta sobrevive e continua incapaz de autenticar) |
-| `20261116000002_password_hash_constraint` | a CHECK constraint `users_password_hash_argon2id` |
-| `20261116000003_user_id_funcao` | cria `user_id_is_uuid_v7(text)` — o dono da regra do id no banco |
-| `20261116000004_user_id_reparo` | **troca o id** das contas cujo id não é v7 (o id é a identidade: as memberships e os refresh tokens o referenciam por FK com `ON UPDATE CASCADE`, e as referências soltas — histórico, arquivo, colunas de auditoria e a chave de idempotência — viajam com o rekey) |
-| `20261116000005_user_id_constraint` | a CHECK constraint `users_id_uuid_v7` |
-
-A **ordem** é a que a convenção dos 3 passos exige: o reparo antes da
-restrição. O `ADD CONSTRAINT` valida as linhas existentes, e uma linha que
-violasse a regra faria o `migrate deploy` falhar — barulhento e nomeando a
-linha, que é o que se quer de uma falha de migração.
-
-**O reparo não deixa rastro em `users_history`.** Ele é um `UPDATE` cru, e a
-trilha de auditoria é da aplicação. O registro do que aconteceu é o `NOTICE`
-da migration (quantas linhas foram reparadas) e a conta continua existindo —
-com a credencial neutralizada, e portanto inapto a entrar. Encher a trilha
-ajustando a sequência de `version` deixaria um **buraco** nela (a entrada
-`N+1` nunca existiu), que é pior que a ausência.
-
-**O reparo do id invalida a sessão em voo.** O `sub` do JWT emitido antes do
-rekey é o id VELHO, e ele não acha mais ninguém: o cliente precisa
-reautenticar. As memberships e os refresh tokens viajam por
-`ON UPDATE CASCADE` (o `refresh token` continua válido — o que não basta, sem
-o access token novo).
-
-**Restaurar um dump anterior às duas constraints**: o `INSERT` é recusado
-(`violates check constraint`). O caminho é restaurar **sem** as duas
-constraints (o SQL delas está nas migrations `20261116000002` e
-`20261116000005`), rodar o **reparo** — o SQL das migrations
-`20261116000001` e `20261116000004`, que é idempotente — e só então
-reaplicar as constraints. Nenhuma das duas etapas é opcional: o reparo sem a
-constraint deixa a linha ilegível (a listagem volta a cair), e a constraint
-sem o reparo falha no `ADD CONSTRAINT`, com um "violated by some row" que não
-aponta para a causa.
-
-**Desbloquear uma conta neutralizada**: o reparo do hash deixa a conta
-incapaz de autenticar — ela continua existindo, mas a credencial dela não
-existe mais (o login responde 401). Para devolver o acesso, grave um hash
-argon2id **real**, o que o `Argon2PasswordHasher` emite: a constraint recusa
-qualquer outro valor, e um `'x'` seria recusado com `violates check
-constraint "users_password_hash_argon2id"`.
-
-```sql
-UPDATE users
-   SET password_hash = '<hash argon2id gerado pela lib>', updated_at = now()
- WHERE email = 'conta@exemplo';
-```
-
-> ⚠️ **Exceção declarada** à regra "migration de modelo e migration de dados no
-> mesmo PR" (convenção [`migracao-de-dados.md`](../../.agents/specs/conventions/migracao-de-dados.md)
-> §4): a restrição **depende** do reparo, e um PR só com a restrição falharia
-> ao subir em qualquer banco que ainda tivesse a linha quebrada — que é
-> exatamente o banco que o reparo existe para consertar. As migrations ficam
-> separadas por arquivo, e a ordem entre elas é o que segura o contrato.
+As seis migrations que deram o **dono** ao banco — a ordem (o reparo antes da
+restrição), o que elas não deixam na trilha, e como restaurar um dump anterior
+— estão em [`users-migracoes.md`](./users-migracoes.md).
 
 ## §8. Referências Cruzadas
 
