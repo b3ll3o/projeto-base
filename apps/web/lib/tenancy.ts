@@ -2,7 +2,14 @@
 //
 // pt-BR (visão de admin, 2026-10-22): cliente (server-side) do INVENTÁRIO da
 // tenancy — as DUAS direções, vistas pelo administrador do SISTEMA. Usado por
-// `app/admin/tenancy/page.tsx`.
+// `app/admin/tenancy/page.tsx`, `app/users/[id]/page.tsx` e
+// `app/empresa/[id]/page.tsx`.
+//
+// Este arquivo tem DOIS donos: o CLIENTE do inventário (`listarInventario`) e o
+// RÓTULO do vínculo (`vinculo`) — o `papel · perfil` que as três telas
+// escrevem. O rótulo morava como função local da tela do inventário, e as
+// telas novas precisaram do MESMO texto: duas cópias de uma decisão envelhecem
+// em uma delas só (convenção `dry.md`).
 //
 // ⚠️ D7 — este cliente é montado SEM `getTenant`, ao contrário de
 // `lib/perfil.ts:30-40`. Não é descuido: enviar `X-Tenant-Id` tira o ator do
@@ -55,4 +62,36 @@ function client(accessToken: string): ApiClient {
  */
 export async function listarInventario(accessToken: string): Promise<InventarioAdminTenancyDto> {
   return client(accessToken).get<InventarioAdminTenancyDto>('/admin/tenancy');
+}
+
+/**
+ * O PAPEL da tenancy, no idioma da tela.
+ *
+ * ⚠️ O enum da API é `'gerente' | 'member'` (`tenant_memberships.role`) — e
+ * `member` é INGLÊS numa tela pt-BR. O rótulo é o DONO da tradução, e ele é
+ * o `vinculo` abaixo.
+ */
+const PAPEL: Record<string, string> = {
+  gerente: 'gerente',
+  member: 'membro',
+};
+
+/**
+ * O vínculo, do jeito que a tela mostra: `papel: X · perfil: Y`.
+ *
+ * O `perfil` é `null` quando o vínculo não tem um (ou tem o de outra empresa) —
+ * e "sem perfil" é o rótulo honesto para esse estado.
+ *
+ * ⚠️ As DUAS partes são NOMEADAS, e não soltas: o papel e o perfil podem ter
+ * a MESMA palavra (`gerente · gerente` é o caso comum — o dono veste o papel
+ * `gerente` e o perfil `gerente`), e o par solto parecia duplicata. Quem lê a
+ * tela precisa saber qual é qual sem deduzir.
+ *
+ * ⚠️ O DONO morava em `app/admin/tenancy/page.tsx`, como função local — e as
+ * telas de detalhe do usuário e da empresa precisaram do MESMO rótulo. Duas
+ * cópias de uma decisão envelhecem em uma delas só (convenção `dry.md`).
+ */
+export function vinculo(role: string, perfil: string | null): string {
+  const papel = PAPEL[role] ?? role;
+  return perfil === null ? `papel: ${papel} · sem perfil` : `papel: ${papel} · perfil: ${perfil}`;
 }

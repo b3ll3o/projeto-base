@@ -16,6 +16,7 @@
 // admin digita na URL entra só por `obterPerfilPorSlug`, que o resolve
 // antes de chamar a API.
 
+import { cache } from 'react';
 import { ApiClient, ApiError, baseUrlDaApi } from './api-client';
 import { exigirSessao, lerTenant, lerTokens } from './sessao';
 import type {
@@ -46,14 +47,14 @@ async function getClient(): Promise<ApiClient> {
  * estarem no layout (ex.: Sidebar) — o login de verdade é responsabilidade
  * da página, não o chrome.
  *
- * `tenantScoped = false` monta `getTenant` devolvendo `null` — e o `ApiClient`
- * só manda o header quando o valor existe (`api-client.ts:66-67`), então o
- * `/me/profile` responde no bucket global. Ver `obterMeuPerfilGlobal`.
+ * ⚠️ Este cliente é o da EMPRESA da sessão: o `getTenant` devolve a empresa
+ * escolhida, e o `/me/profile` responde no bucket dela. O bucket GLOBAL — o
+ * que `obterMeuPerfilGlobal` precisa — é o `clientDoToken`, abaixo.
  */
-async function getClientOpcional(tenantScoped = true): Promise<ApiClient | null> {
+async function getClientOpcional(): Promise<ApiClient | null> {
   const { accessToken } = await lerTokens();
   if (accessToken === null) return null;
-  const tenantId = tenantScoped ? await lerTenant() : null;
+  const tenantId = await lerTenant();
   return new ApiClient({
     baseUrl: baseUrlDaApi(),
     getToken: () => accessToken,
@@ -146,11 +147,44 @@ export async function obterMeuPerfil(): Promise<MeProfileDto | null> {
  * cookie nenhum — depender do store do Next devolver um cookie recém-escrito
  * é a mesma fragilidade que `lib/empresas.ts` documenta. Sem o parâmetro, o
  * comportamento é o de sempre: o token vem do cookie.
+ *
+ * ⚠️ A leitura é MEMOIZADA por requisição (`lerPerfilGlobal`, abaixo): o
+ * `Sidebar`, o guard e a página leem o MESMO perfil, e sem o memo seriam
+ * DUAS requisições HTTP de verdade — o dedupe automático do Next não cola
+ * porque o `ApiClient` sempre manda `signal`.
  */
 export async function obterMeuPerfilGlobal(accessToken?: string): Promise<MeProfileDto | null> {
-  const client =
-    accessToken === undefined ? await getClientOpcional(false) : clientDoToken(accessToken);
-  if (client === null) return null;
+  if (accessToken !== undefined) return lerPerfilGlobal(accessToken);
+  // ⚠️ Sem token no PARAMETRO, o token vem do COOKIE — e é o mesmo cookie que
+  // o `Sidebar` e a página leem, então o memo abaixo é o MESMO para as três
+  // leituras. Sem esta linha, cada chamada sem token montaria um client
+  // diferente e o memo não bateria.
+  const { accessToken: doCookie } = await lerTokens();
+  if (doCookie === null) return null;
+  return lerPerfilGlobal(doCookie);
+}
+
+/**
+ * A MESMA leitura, MEMOIZADA por requisição.
+ *
+ * ⚠️ O memo é do REACT (`cache`), e não o dedupe automático do Next: o
+ * dedupe do Next 15 é opt-out quando a requisição leva `signal`, e o
+ * `ApiClient` SEMPRE manda um (`api-client.ts:120-129`). MEDIDO 2026-11-17 em
+ * `next/dist/server/lib/dedupe-fetch.js`: *"If we're passed a signal, then we
+ * assume that someone else controls the lifetime of this object and opts out
+ * of caching"*.
+ *
+ * Por que isso importa: o `Sidebar` (o layout, em TODAS as telas) e a página
+ * leem o MESMO perfil global — mesma URL, mesmo token, nenhum `X-Tenant-Id` —
+ * e sem o memo são DUAS requisições HTTP de verdade.
+ *
+ * A CHAVE é o token: `cache` chaveia primitivos por VALOR, e o token do cookie
+ * é o mesmo em todas as leituras da requisição. O escopo do memo é a
+ * REQUISIÇÃO (o React cria um cache por render), então o perfil de uma pessoa
+ * nunca é servido a outra.
+ */
+const lerPerfilGlobal = cache(async (accessToken: string): Promise<MeProfileDto | null> => {
+  const client = clientDoToken(accessToken);
 
   try {
     return await client.get<MeProfileDto>('/me/profile');
@@ -166,7 +200,7 @@ export async function obterMeuPerfilGlobal(accessToken?: string): Promise<MeProf
     if (erro instanceof ApiError && erro.status === 401) return null;
     throw erro;
   }
-}
+});
 
 export async function listarPerfis(): Promise<ProfileSummary[]> {
   const client = await getClient();

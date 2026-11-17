@@ -36,7 +36,13 @@ export function CabecalhoPagina({
           era a palavra mais longa (856px a `text-2xl`). */}
       <div className="min-w-0">
         <h1 className="break-words text-2xl font-semibold text-foreground">{titulo}</h1>
-        {descricao ? <p className="mt-1 text-sm text-muted-foreground">{descricao}</p> : null}
+        {/* ⚠️ `break-words` na descrição, pelo mesmo motivo do `h1`: a
+            legenda pode ser uma palavra única — o slug de uma empresa vai a
+            50 caracteres e não tem onde quebrar — e sem ela a tela rolava na
+            horizontal a 320px (WCAG 1.4.10). */}
+        {descricao ? (
+          <p className="mt-1 break-words text-sm text-muted-foreground">{descricao}</p>
+        ) : null}
       </div>
       {acao ? <div className="flex items-center gap-3">{acao}</div> : null}
     </div>

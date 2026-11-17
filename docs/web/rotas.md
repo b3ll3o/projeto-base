@@ -1,6 +1,6 @@
 # Catálogo de rotas — `apps/web`
 
-> Medido em **2026-10-29**. Fonte da verdade: o código de `apps/web/app/**`,
+> Medido em **2026-11-17**. Fonte da verdade: o código de `apps/web/app/**`,
 > `apps/web/lib/**` e `apps/web/components/**`. Este doc é **reference**
 > (Diátaxis): responde "o que é isto, exatamente?", não "como eu faço X?".
 >
@@ -15,7 +15,7 @@
 |---|---|
 | **Rota** | URL pública. Segmentos dinâmicos aparecem como `[param]`. |
 | **Arquivo** | Path relativo ao repo — a chave que o gate mede. |
-| **Server ou Client** | `Server Component` roda no servidor Node; `Route Handler` é um `route.ts`. **Nenhuma das 13 páginas é Client Component**: a interatividade chega por Client Component filho (ver §6). |
+| **Server ou Client** | `Server Component` roda no servidor Node; `Route Handler` é um `route.ts`. **Nenhuma das 15 páginas é Client Component** (contagem em §11): a interatividade chega por Client Component filho (ver §6). |
 | **O que faz** | Uma frase, com o que a pessoa vê. |
 | **Guard** | O que impede o acesso quando a pessoa não tem o que precisa. |
 
@@ -43,7 +43,7 @@ O guard de `/admin/*` é compartilhado e **distingue três causas** —
 
 | Rota | Arquivo | Server ou Client | O que faz | Guard |
 |---|---|---|---|---|
-| `/users` | `apps/web/app/users/page.tsx` | Server Component | Lista os usuários da empresa (`GET /users?limit=20`). Botão "Sair". | `exigirSessao()` → `redirect('/login')`. `401` da API também vai ao login. |
+| `/users` | `apps/web/app/users/page.tsx` | Server Component | Lista os usuários da empresa (`GET /users?limit=20`). Botão "Sair". **A lista só é CLICÁVEL pelo administrador do sistema** — para os demais, a linha é texto e não abre o detalhe. | `exigirSessao()` → `redirect('/login')`. `401` da API também vai ao login. |
 | `/empresa/nova` | `apps/web/app/empresa/nova/page.tsx` | Server Component | Cria a empresa; quem cria entra como gerente. | `exigirSessao()` → `redirect('/login')`. |
 | `/me/profile` | `apps/web/app/me/profile/page.tsx` | Server Component | Perfil do usuário logado e as permissões efetivas (read-only). | `obterMeuPerfil()`: `401`/`403` → login; `5xx`/timeout/rede → "Serviço indisponível". |
 | `/convite/[token]` | `apps/web/app/convite/[token]/page.tsx` | Server Component | Porta de entrada do convite. Sem sessão, manda para `/users/novo?convite=<token>`; com sessão, mostra o botão de aceitar. | Token precisa casar `ehTokenDeConvite` (64 hex); fora disso, "Convite inválido". |
@@ -54,6 +54,30 @@ O guard de `/admin/*` é compartilhado e **distingue três causas** —
 > ramo — o oposto do guard, onde `403` é a tela de acesso restrito. O
 > comportamento do **código** é o que está na tabela acima; o comentário da
 > página descreve a distinção do guard, que ela não implementa.
+>
+> ⚠️ O link da listagem para `/users/[id]` só existe para o **administrador do
+> sistema**. O detalhe é o inventário de tenancy de UMA pessoa, que só o
+> `isAdmin` global pode ver. Para os demais, a linha é texto: o guard do
+> `/users/[id]` (abaixo) recusa com "Acesso restrito".
+>
+> ⚠️ **O que decide o link é o `isAdmin` GLOBAL — e não o recorte da
+> listagem.** O recorte de `GET /users` é do tenant **quando há cookie
+> `tenant_id`**; sem ele (o administrador do sistema não tem empresa, e quem
+> tem perfil global também não), a listagem sai no bucket GLOBAL e mostra a
+> base INTEIRA (o carve-out de `users.controller.ts`). Ou seja: o
+> administrador do sistema não é "quem vê a empresa dele" — é quem vê a base
+> toda, e é por isso que o clique para o inventário faz sentido.
+>
+> ⚠️ A leitura do perfil é TOLERANTE, mas não MUDO: ela tem TRÊS vereditos
+> (`sim` / `nao` / `indisponivel`), e o terceiro AVISA na tela. Sem o aviso,
+> uma API fora do ar no perfil produzia a MESMA tela de "não é admin" — e o
+> administrador via a lista sem link sem nenhuma explicação. A listagem nunca
+> cai por causa dessa leitura.
+>
+> ⚠️ A leitura do perfil é MEMOIZADA por requisição (`React.cache`, em
+> `lib/perfil.ts`): o `Sidebar` (o layout) e a página leem o MESMO perfil, e
+> o dedupe automático do Next não cola — ele é opt-out quando a requisição
+> leva `signal`, e o `ApiClient` sempre manda um.
 
 ## §4. Rotas de administração
 
@@ -65,17 +89,55 @@ O guard de `/admin/*` é compartilhado e **distingue três causas** —
 | `/admin/profiles/[slug]` | `apps/web/app/admin/profiles/[slug]/page.tsx` | Server Component | Detalhe do perfil: flags, metadados e permissões. | `exigirAdmin()` — `isAdmin` **da empresa**. |
 | `/admin/flags` | `apps/web/app/admin/flags/page.tsx` | Server Component | Liga e desliga feature flags, para o sistema inteiro. | `exigirAdminDoSistema()` — `isAdmin` **global** (`tenantId === null`). |
 | `/admin/tenancy` | `apps/web/app/admin/tenancy/page.tsx` | Server Component | Inventário da tenancy: empresas com seus membros, e usuários com suas empresas. Leitura pura. | `exigirSessao()` + `exigirAdminDoSistema(accessToken)` — `isAdmin` **global**. |
+| `/users/[id]` | `apps/web/app/users/[id]/page.tsx` | Server Component | Detalhe de UMA pessoa: nome no `h1`, e-mail na descrição, e os **cards** das empresas em que ela está inserida (nome, slug e o vínculo `papel: … · perfil: …`). Cada card abre a empresa. | `exigirSessao()` + `exigirAdminDoSistema(accessToken)` — `isAdmin` **global** (`tenantId === null`). |
+| `/empresa/[id]` | `apps/web/app/empresa/[id]/page.tsx` | Server Component | Detalhe de UMA empresa: nome no `h1`, slug na descrição, e a tabela de membros (Nome, E-mail, Vínculo `papel: … · perfil: …`). | `exigirSessao()` + `exigirAdminDoSistema(accessToken)` — `isAdmin` **global** (`tenantId === null`). |
 
 > ⚠️ Os dois `isAdmin` **não são a mesma pessoa**: o da empresa é o perfil de
 > DONO (`true` em toda empresa nova), e o global é o do bucket de SISTEMA.
-> `/admin/flags` e `/admin/tenancy` exigem o global — autorizar pelo sinal
-> errado mostraria a base inteira para um gerente que a API recusa.
+> `/admin/flags`, `/admin/tenancy`, `/users/[id]` e `/empresa/[id]` exigem o
+> global — autorizar pelo sinal errado mostraria a base inteira para um gerente
+> que a API recusa.
+>
+> ⚠️ **`/users/[id]` e `/empresa/[id]` são telas de ADMINISTRAÇÃO DO SISTEMA e
+> mesmo assim NÃO moram sob `/admin/`.** A URL é a pessoa e a empresa
+> **inspecionadas**, não uma seção do app: `/users/[id]` é o detalhe de quem
+> estava na listagem `/users`, e `/empresa/[id]` é a empresa que o card abre.
+> O critério que escolhe a seção deste doc é o **guard**, e o delas é o mesmo de
+> `/admin/tenancy` — `exigirSessao()` + `exigirAdminDoSistema(accessToken)`,
+> `isAdmin` **global** (`tenantId === null`). Pelo path, `/users/[id]` é rota
+> autenticada (§3); pelo guard, é rota de administração (§4).
+>
+> ⚠️ A LEITURA DO INVENTÁRIO tem TRÊS respostas, e não uma: `401` é sessão
+> expirada (vai ao login), `403` é a API recusando o ator ("Acesso restrito")
+> e o resto é serviço fora (retry). As três são do DONO único
+> `telaDaFalhaDeLeitura` (`app/admin/guard-admin.tsx`), a mesma tabela do
+> guard — e as três telas que leem o inventário (`/admin/tenancy`,
+> `/users/[id]`, `/empresa/[id]`) usam o mesmo dono.
+>
+> ⚠️ O rótulo do VÍNCULO é `papel: … · perfil: …` — as duas partes NOMEADAS,
+> porque o papel e o perfil podem ser a MESMA palavra (`gerente · gerente` é
+> o caso comum) e o par solto parecia duplicata. E o `member` do enum da API
+> é `membro` na tela: o dono da tradução é o `vinculo` (`lib/tenancy.ts`).
 
 ## §5. Route Handler
 
 | Rota | Arquivo | Server ou Client | O que faz | Guard |
 |---|---|---|---|---|
 | `/api/health` | `apps/web/app/api/health/route.ts` | Route Handler (`GET`) | Responde `{ status: "ok", timestamp }`. `force-dynamic`. | — |
+
+> ⚠️ A tela de "não encontrado" é `apps/web/app/not-found.tsx` — o arquivo que o
+> Next renderiza quando a página chama `notFound()`. Sem ele, o 404 era a
+> **página default do Next**: em inglês e sem o `<main>` do app. Ela não tem
+> URL própria (é a resposta a qualquer path que não casa com uma rota), e o
+> `check-doc-coverage` não a cobra — mas é uma tela do app, e as telas do app
+> são pt-BR. As rotas que a chamam: `/admin/profiles/[slug]`, `/users/[id]` e
+> `/empresa/[id]`.
+>
+> ⚠️ A SAÍDA dela é o **início** (`/`), e não a listagem de usuários: `/users`
+> exige sessão (`exigirSessao()` → `redirect('/login')`), e quem erra a URL sem
+> sessão recebia a tela de login por um link que prometia a lista de usuários.
+> A home é pública — e o `Sidebar` do layout já oferece "Usuários" para quem
+> tem sessão.
 
 ## §6. Server Actions
 
@@ -170,8 +232,11 @@ Atributos: `sameSite: 'lax'`, `path: '/'`, `secure` só em produção, e **sem
 ## §11. Como reproduzir as contagens
 
 ```bash
-# 14 rotas do App Router (13 páginas + 1 route handler)
+# 16 rotas do App Router (15 páginas + 1 route handler)
 find apps/web/app -name 'page.tsx' -o -name 'route.ts' | wc -l
+
+# 15 páginas — as rotas do catálogo (o route handler é o /api/health)
+find apps/web/app -name 'page.tsx' | wc -l
 
 # 5 Server Actions em arquivo com 'use server' no topo
 grep -rlE "^'use server';[[:space:]]*$" apps/web/app --include=actions.ts | wc -l

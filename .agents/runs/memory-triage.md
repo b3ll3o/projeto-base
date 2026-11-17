@@ -254,6 +254,8 @@ entre "somei do disco" e "decidi que ela vai embora" precisa registrar.
 | `subagent-pode-morrer-de-429-sem-aviso` | `pendente` | — | — |
 | `pr-refresh-bold-quebra-a-classe-da-suite` | `pendente` | — | — |
 | `script-que-falha-no-fim-perde-a-escrita` | `pendente` | — | — |
+| `ator-negativo-sem-tenant-nao-distingue-guard` | `citada` | `apps/web/e2e/f20-admin-usuario-detalhe.spec.ts` | `O ATOR NEGATIVO É O DONO DA EMPRESA` |
+| `ci-local-falha-com-o-app-local-no-ar` | `pendente` | — | — |
 
 ## O que a tabela diz
 
