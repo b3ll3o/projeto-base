@@ -28,6 +28,30 @@ encolhe com o tempo. A deliberação está em
 [Pendências conhecidas](./ci-defense-in-depth-pendencias.md); script e demais
 detalhes em [git-workflow.md §Pre-Push Quality Gate](./git-workflow.md).
 
+⚠️ **As DUAS tasks que rodam contra o banco dependem de `db:generate`**
+(`dependsOn: ["db:generate"]`, sem o `^` — a task do MESMO pacote). Sem isso,
+`test:e2e` e `test:integration` sobem **em paralelo** com o `db:generate` que o
+`typecheck` dispara, e o import de `@prisma/client` encontra o client ausente ou
+sendo escrito: o e2e morre na COLETA (`Class extends value undefined is not a
+constructor or null`, 19 arquivos de spec caídos de uma vez) — e a falha não é do
+código sob teste.
+
+**MEDIDO 2026-11-17**, com o client do Prisma apagado do disco:
+
+```bash
+rm -rf node_modules/.pnpm/@prisma+client@*/node_modules/.prisma/client
+pnpm turbo run typecheck test:e2e --filter=@projeto/api
+```
+
+- **sem** o `dependsOn`: `Test Files 19 failed (19)` — o `test:e2e` tinha
+  começado antes do `db:generate` terminar;
+- **com** o `dependsOn`: `Test Files 19 passed (19)` e `Tasks: 7 successful, 7
+  total` — o mesmo comando, o mesmo estado do disco.
+
+O pacote `@projeto/web` não tem `db:generate`, e o turbo **pula** a task
+inexistente (a dry-run mostra `cmd: <NONEXISTENT>` e não há erro) — por isso a
+dependência é declarada no `turbo.json` e não no `package.json` de cada app.
+
 **O que o HOOK roda é menos que o `ci:local`** — e é proposital: o hook é
 rápido, o `ci:local` é lento. `.husky/pre-push` roda `pnpm ci:preflight`
 (Camada 2) e `pnpm ci:boot`. O `ci:boot` é a etapa que **sobe a aplicação

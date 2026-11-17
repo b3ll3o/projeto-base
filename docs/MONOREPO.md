@@ -121,7 +121,7 @@ Cada app/package estende `tsconfig.base.json` e adiciona seus próprios aliases.
 
 ## §5. Turborepo — Pipelines
 
-Conteúdo real de `turbo.json` (medido em 2026-10-29 com `cat turbo.json`):
+Conteúdo real de `turbo.json` (medido em 2026-11-17 com `cat turbo.json`):
 
 ```jsonc
 {
@@ -136,8 +136,8 @@ Conteúdo real de `turbo.json` (medido em 2026-10-29 com `cat turbo.json`):
     "test": { "dependsOn": ["^build"], "outputs": ["coverage/**"] },
     "test:unit": { "outputs": ["coverage/**"] },
     "test:coverage": { "outputs": ["coverage/**"] },
-    "test:integration": { "cache": false, "outputs": [] },
-    "test:e2e": { "cache": false, "outputs": [] },
+    "test:integration": { "dependsOn": ["db:generate"], "cache": false, "outputs": [] },
+    "test:e2e": { "dependsOn": ["db:generate"], "cache": false, "outputs": [] },
     "clean": { "cache": false }
   }
 }
@@ -145,7 +145,8 @@ Conteúdo real de `turbo.json` (medido em 2026-10-29 com `cat turbo.json`):
 
 **Convenção:** toda tarefa declara `outputs` (o que cachear) ou `cache: false` (o
 que nunca cachear); `dependsOn: ["^build"]` garante a ordem topológica; `dev` é
-`cache: false, persistent: true` (watch mode).
+`cache: false, persistent: true` (watch mode); e as tasks de BANCO dependem de
+`db:generate` (o porquê medido: [`ci-defense-in-depth.md`](../.agents/specs/conventions/ci-defense-in-depth.md)).
 
 ## §6. Versionamento
 
@@ -257,10 +258,9 @@ Apps NÃO compartilham:
 > §"Arquitetura por Módulo (DDD/Hexagonal)"** — a árvore das três camadas, a
 > regra de dependência e os guardiões moram lá. Este índice aponta; **não repete**.
 
-Resumo: apps backend adotam **DDD + Hexagonal (Ports & Adapters)** como paradigma arquitetural
-obrigatório (`v1.2.0`), cada feature em `apps/api/src/modules/<feature>/{domain,application,infrastructure}/`,
-os shared concerns em `apps/<app>/src/shared/{audit,domain,infrastructure}/` — e o **desenho** disso, por
-nível, em [`docs/system-design/`](../docs/system-design/README.md).
+Resumo: apps backend adotam **DDD + Hexagonal (Ports & Adapters)** (`v1.2.0`), cada feature em
+`apps/api/src/modules/<feature>/{domain,application,infrastructure}/`, os shared concerns em
+`apps/<app>/src/shared/{audit,domain,infrastructure}/` — e o **desenho** disso em [`docs/system-design/`](../docs/system-design/README.md).
 
 Decisão: [ADR-0001](./adr/0001-arquitetura-ddd-hexagonal-auditoria.md) ·
 guardiões: agent `stack-code-reviewer` (D11) + skill
