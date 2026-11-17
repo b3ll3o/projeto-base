@@ -89,7 +89,7 @@ O guard de `/admin/*` é compartilhado e **distingue três causas** —
 | `/admin/profiles/[slug]` | `apps/web/app/admin/profiles/[slug]/page.tsx` | Server Component | Detalhe do perfil: flags, metadados e permissões. | `exigirAdmin()` — `isAdmin` **da empresa**. |
 | `/admin/flags` | `apps/web/app/admin/flags/page.tsx` | Server Component | Liga e desliga feature flags, para o sistema inteiro. | `exigirAdminDoSistema()` — `isAdmin` **global** (`tenantId === null`). |
 | `/admin/tenancy` | `apps/web/app/admin/tenancy/page.tsx` | Server Component | Inventário da tenancy: empresas com seus membros, e usuários com suas empresas. Leitura pura. | `exigirSessao()` + `exigirAdminDoSistema(accessToken)` — `isAdmin` **global**. |
-| `/users/[id]` | `apps/web/app/users/[id]/page.tsx` | Server Component | Detalhe de UMA pessoa: nome no `h1`, e-mail na descrição, e os **cards** das empresas em que ela está inserida (nome, slug e o vínculo `papel: … · perfil: …`). Cada card abre a empresa. | `exigirSessao()` + `exigirAdminDoSistema(accessToken)` — `isAdmin` **global** (`tenantId === null`). |
+| `/users/[id]` | `apps/web/app/users/[id]/page.tsx` | Server Component | Detalhe de UMA pessoa: nome no `h1`, e-mail na descrição, os **cards** das empresas em que ela está inserida (nome, slug e o vínculo `papel: … · perfil: …`) e a seção **Histórico** — a tabela das versões de auditoria da pessoa (versão, o que houve, o nome e o e-mail de CADA versão, quando e quem mudou), da mais antiga para a mais recente. Cada card abre a empresa. | `exigirSessao()` + `exigirAdminDoSistema(accessToken)` — `isAdmin` **global** (`tenantId === null`). |
 | `/empresa/[id]` | `apps/web/app/empresa/[id]/page.tsx` | Server Component | Detalhe de UMA empresa: nome no `h1`, slug na descrição, e a tabela de membros (Nome, E-mail, Vínculo `papel: … · perfil: …`). | `exigirSessao()` + `exigirAdminDoSistema(accessToken)` — `isAdmin` **global** (`tenantId === null`). |
 
 > ⚠️ Os dois `isAdmin` **não são a mesma pessoa**: o da empresa é o perfil de
@@ -113,6 +113,17 @@ O guard de `/admin/*` é compartilhado e **distingue três causas** —
 > `telaDaFalhaDeLeitura` (`app/admin/guard-admin.tsx`), a mesma tabela do
 > guard — e as três telas que leem o inventário (`/admin/tenancy`,
 > `/users/[id]`, `/empresa/[id]`) usam o mesmo dono.
+>
+> ⚠️ O HISTÓRICO de `/users/[id]` é a ÚNICA leitura desta tela que NÃO
+> derruba a tela: a falha dele vira um `Alerta` DENTRO da seção — a pessoa e
+> as empresas são o conteúdo principal, e o histórico é secundário. O `401` é
+> a EXCEÇÃO: sessão expirada é login, como em qualquer outra leitura
+> (`redirecionarParaLoginSeSessaoExpirada`, `app/admin/guard-admin.tsx`).
+> E o histórico é PAGINADO por cursor (`GET /admin/users/:id/history`): a tela
+> segue o `nextCursor` até o fim, com um teto de 10 páginas de 100 — e quando
+> o teto corta, a tela DIZ que não coube tudo. A data é em pt-BR
+> (`toLocaleString('pt-BR')`), e "quem mudou" é o nome de quem está no
+> inventário — ou o id cru, quando a conta não está mais lá.
 >
 > ⚠️ O rótulo do VÍNCULO é `papel: … · perfil: …` — as duas partes NOMEADAS,
 > porque o papel e o perfil podem ser a MESMA palavra (`gerente · gerente` é

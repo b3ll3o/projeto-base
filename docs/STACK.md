@@ -82,7 +82,7 @@ projeto-base (monorepo)
 | Server Actions | nativo | — | Mutações sem JS extra |
 | Auth client | **`apps/web/lib/sessao.ts`** (casa própria) | — | grava/ler cookies httpOnly `access_token` + `refresh_token` e monta o `Authorization: Bearer`. NextAuth.js / Auth.js NÃO estão instalados. O browser nunca fala com a API: todo o tráfego passa por Server Action |
 | Testes unit | Vitest + Testing Library | ^2.1.9 | `@testing-library/react` + `user-event` + `jest-dom`, em jsdom |
-| Testes E2E | Playwright | `^1.65.0` (resolvido em `1.65.0` pelo lock) | `apps/web/e2e/*.spec.ts` — **20 specs** (`f1`–`f20`), `testDir` separado do Vitest. O inventário canônico (rota, nome e estados cobertos de cada fluxo) está em [`.agents/specs/conventions/e2e-playwright.md`](../.agents/specs/conventions/e2e-playwright.md) §"Inventário de Fluxos" |
+| Testes E2E | Playwright | `^1.65.0` (resolvido em `1.65.0` pelo lock) | `apps/web/e2e/*.spec.ts` — **21 specs** (`f1`–`f21`), `testDir` separado do Vitest. O inventário canônico (rota, nome e estados cobertos de cada fluxo) está em [`.agents/specs/conventions/e2e-playwright.md`](../.agents/specs/conventions/e2e-playwright.md) §"Inventário de Fluxos" |
 | Ícones | — | — | Nenhuma biblioteca de ícones instalada; a UI atual não usa ícones |
 | Qualidade | — | — | **Lighthouse não está ligado**: sem dependência, sem `.lighthouserc*`, sem job. LCP/INP/CLS são *coletados* (`web-vitals` → OTel Metrics), mas não há orçamento que reprove. A menção a "Lighthouse ≥ 90" que sobrou é prosa de workflow, não gate |
 
@@ -90,7 +90,7 @@ projeto-base (monorepo)
 > `node -p "const p=require('./apps/web/package.json'); p.dependencies['react-hook-form'] + ' ' + p.dependencies['zod'] + ' ' + p.devDependencies['@playwright/test'] + ' ' + p.devDependencies['vitest']"`
 > → `^7.91.0 ^3.25.76 ^1.65.0 ^2.1.9`.
 >
-> **Os 20 specs de e2e** (`ls apps/web/e2e/*.spec.ts | wc -l` → `20`, e os
+> **Os 21 specs de e2e** (`ls apps/web/e2e/*.spec.ts | wc -l` → `21`, e os
 > nomes de cada um em `grep -h '^// FLUXO:' apps/web/e2e/*.spec.ts`) cobrem:
 > F1 listagem de usuários · F2 cadastro com sucesso · F3 validação no cliente ·
 > F4 email duplicado · F5 erro genérico (5xx) · F6 navegação entre telas ·
@@ -100,7 +100,8 @@ projeto-base (monorepo)
 > desativação de flags · F15 edição dos metadados de perfil · F16 onboarding de
 > empresa · F17 inventário de empresas e usuários (tenancy) · F18 cabeçalhos
 > de segurança do web · F19 sair revoga o refresh token · F20 detalhe do
-> usuário e as empresas em que ele está (admin do sistema).
+> usuário e as empresas em que ele está (admin do sistema) · F21 histórico de
+> auditoria de uma pessoa (admin do sistema).
 
 ## §4. Monorepo
 

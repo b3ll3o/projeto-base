@@ -6,13 +6,13 @@
 > versionada com a gerada. A fonte do contrato são os decorators `@Api*` do
 > código; este documento é a referência legível e precisa ser atualizado junto.
 > Para regenerar: `pnpm --filter @projeto/api openapi:export`.
-> Medido em 2026-10-29: os 7 endpoints deste BC conferem com
+> Medido em 2026-11-17: os 8 endpoints deste BC conferem com
 > `apps/api/openapi.json`. Contagem por
-> `grep -hoE "@(Get|Post|Patch|Put|Delete)\(" apps/api/src/modules/users/infrastructure/http/users.controller.ts | wc -l`
-> → `7`. O contrato inteiro tem 23 paths e 29 operações
-> (`node -e "const d=require('./apps/api/openapi.json');console.log(Object.keys(d.paths).length)"` → `23`;
-> `node -e "const d=require('./apps/api/openapi.json');console.log(Object.values(d.paths).flatMap(p=>Object.keys(p).filter(k=>['get','post','put','patch','delete'].includes(k))).length)"` → `29`),
-> das quais 7 são de `users` — as outras 22 são `auth` (4), `tenancy` (5),
+> `grep -hoE "@(Get|Post|Patch|Put|Delete)\(" apps/api/src/modules/users/infrastructure/http/*.controller.ts | wc -l`
+> → `8`. O contrato inteiro tem 24 paths e 30 operações
+> (`node -e "const d=require('./apps/api/openapi.json');console.log(Object.keys(d.paths).length)"` → `24`;
+> `node -e "const d=require('./apps/api/openapi.json');console.log(Object.values(d.paths).flatMap(p=>Object.keys(p).filter(k=>['get','post','put','patch','delete'].includes(k))).length)"` → `30`),
+> das quais 8 são de `users` — as outras 22 são `auth` (4), `tenancy` (5),
 > `profiles` (10), `feature-flags` (2) e `health` (1). A conferência é manual:
 > nada impede que a tabela derive do contrato.
 > Spec de design: [`docs/superpowers/specs/2026-09-21-cadastro-usuario-com-auditoria-04-contrato-http.md`](../superpowers/specs/2026-09-21-cadastro-usuario-com-auditoria-04-contrato-http.md).
@@ -20,13 +20,15 @@
 
 ## §1. Visão Geral
 
-- **Base path**: `/api/v1/users`
-- **Auth**: `Authorization: Bearer <jwt>` em **6 das 7** rotas — `POST /users` é
-  `@Public()`. O `@ApiBearerAuth()` é **por handler**, não no controller.
+- **Base path**: `/api/v1/users` — e `/api/v1/admin/users` (rota 8, a do admin do SISTEMA)
+- **Auth**: `Authorization: Bearer <jwt>` em **7 das 8** rotas — `POST /users` é
+  `@Public()`. O `@ApiBearerAuth()` é **por handler** no `UsersController` e
+  **na classe** no `AdminUserHistoryController`.
 - **Guards**: `JwtAuthGuard` na **classe** do controller. As 5 rotas por `{id}`
   (`GET`, `PATCH`, `DELETE` em `/api/v1/users/{id}`, mais
   `POST /api/v1/users/{id}/restore` e `GET /api/v1/users/{id}/history`) somam
   `@UseGuards(UserOwnershipGuard)` — a sessão precisa ser a **dona** do recurso.
+  A rota 8 soma `PermissionsGuard` + `@RequirePermission('admin.manage-users')`.
 - **Content-Type**: `application/json; charset=utf-8` (request e response)
 - **Erros**: RFC 7807 (Problem Details)
 - **Versionamento**: `v1` no path; breaking changes abrem `v2`
@@ -42,6 +44,7 @@
 | 5 | `DELETE`| `/api/v1/users/{id}`                | ✅   | `204`, `400`, `403`, `404`, `412`           |
 | 6 | `POST` | `/api/v1/users/{id}/restore`         | ✅   | `201`, `400`, `403`, `404`, `412`           |
 | 7 | `GET`  | `/api/v1/users/{id}/history`         | ✅   | `200`, `403`                                |
+| 8 | `GET`  | `/api/v1/admin/users/{id}/history`  | ✅   | `200`, `400`, `403`, `404`                   |
 
 Os códigos da tabela são os **declarados** no `openapi.json` — por `@ApiResponse`
 explícito ou pelo default do método. Códigos que o runtime pode produzir sem
@@ -153,6 +156,21 @@ Resposta `200` com `UserOutputDto` + novo `ETag`. Conflito de versão → `412 P
 **Códigos de erro**: `400` (`VALIDATION_ERROR` — query inválida, pela MESMA validação de §3.2) e `403` (`USER_OWNERSHIP_VIOLATION`). A
 #124 fechou só uma das DUAS surfaces de query da API; a outra (`GET /users/{id}/history`) ainda
 passava `Number(limit)` cru, e `limit=abc` virava `NaN` no `take:` do Prisma — **500**.
+
+### 3.8 `GET /admin/users/{id}/history` — Histórico do ADMIN DO SISTEMA
+
+A rota 7 é do **dono** (o `UserOwnershipGuard` exige que o `:id` seja o `sub` do
+token); esta é do **administrador do SISTEMA**, e o `:id` é o de **qualquer**
+pessoa. O portão é D2 (`tenantId === null && isAdmin`), dentro da use case — e
+é ele que recusa o dono de uma empresa (que tem `isAdmin` no perfil efetivo DA
+EMPRESA DELE). O `@RequirePermission('admin.manage-users')` é defense in depth.
+
+**Query**: `cursor`, `limit` (§3.2). **Response `200`**: `UserHistoryPageDto` — o mesmo envelope da rota 7.
+
+**Códigos de erro**: `400` (`VALIDATION_ERROR` — query inválida **ou** `:id` que
+não é um UUID v7), `403` (`FORBIDDEN` — não é o administrador do sistema) e
+`404` (`USER_NOT_FOUND` — pessoa inexistente). A leitura é no **bucket de
+SISTEMA** — é ele que atravessa empresas.
 
 ## §4. `includeDeleted` — case-insensitive
 

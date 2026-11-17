@@ -25,6 +25,11 @@ import type {
 } from '../../../shared/audit/application/audit-service.port.js';
 import { AuditContextStore } from '../../../shared/audit/shared/audit-context-store.js';
 import { TENANCY_USE_CASES } from '../../tenancy/application/tenancy.use-cases.js';
+import {
+  exigeAdministradorDeSistema,
+  type AtorAutenticado,
+} from '../../../shared/auth/eh-administrador-de-sistema.js';
+import type { UserHistoryPageDto, UserOutputDto } from '@projeto/shared-types';
 // `import type` e não no import de cima: `TenancyUseCases` é apagado em
 // runtime (só entra como tipo do campo `tenancy`), e manter a aresta viva em
 // runtime criaria um ciclo users/application → tenancy/application →
@@ -38,6 +43,7 @@ import type { SoftDeleteUserInput } from './dto/soft-delete-user.input.js';
 import type { RestoreUserInput } from './dto/restore-user.input.js';
 import type { GetUserByIdInput } from './dto/get-user-by-id.input.js';
 import type { ListUsersInput } from './dto/list-users.input.js';
+import type { ListUserHistoryInput } from './dto/list-user-history.input.js';
 import { toUserOutput, toUserOutputNoEscopo, type UserOutput } from './dto/user.output.js';
 import type { ListUsersOutput } from './dto/list-users.output.js';
 
@@ -49,7 +55,7 @@ import {
   ApplicationResourceNotFoundException,
   ApplicationValidationException,
 } from './exceptions/application.exceptions.js';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 
 /**
  * Casos de uso do bounded context de Users.
@@ -72,6 +78,19 @@ import { Inject, Injectable } from '@nestjs/common';
  * diretamente.
  */
 export const USER_USE_CASES = Symbol.for('@projeto/api/users/UserUseCases');
+
+/**
+ * O REGISTRO da leitura de histórico pelo admin do SISTEMA.
+ *
+ * ⚠️ O nome do logger é o que separa este registro dos outros: quem lê o log
+ * precisa saber que ali está "o administrador do sistema leu o histórico de
+ * uma pessoa" — e o histórico carrega o NOME e o E-MAIL de cada versão.
+ *
+ * O `AuditContext` do repo é auditoria de ESCRITA (INSERT/UPDATE/DELETE), e
+ * uma leitura não é uma entidade: o precedente para operação sensível é o
+ * `Logger` dedicado (`AdminTenancyInventory`), e é o que está aqui.
+ */
+const loggerHistorico = new Logger('AdminUserHistory');
 
 /**
  * pt-BR: decorado com `@Injectable()` + `@Inject(USER_REPOSITORY_PORT)` /
@@ -185,6 +204,81 @@ export class UserUseCases {
       throw new ApplicationResourceNotFoundException('User', id.value);
     }
     return toUserOutput(user);
+  }
+
+  /**
+   * O HISTÓRICO de uma pessoa, lido pelo ADMINISTRADOR DO SISTEMA.
+   *
+   * ⚠️ É a rota do ADMIN, e não a do DONO. A do DONO (`GET /users/:id/history`)
+   * é barrada pelo `UserOwnershipGuard` — o `:id` tem de ser o `sub` do
+   * token. Esta existe porque a tela do admin do SISTEMA é de outra pessoa:
+   * o admin do sistema não é dono de ninguém, e sem esta rota ele não
+   * consegue ler o histórico de ninguém.
+   *
+   * ⚠️ O PORTÃO É D2 (`tenantId === null && isAdmin`), e ele mora AQUI, na
+   * camada de aplicação — não no guard. Quem tem `isAdmin` no perfil efetivo
+   * DA EMPRESA DELE (o dono de uma empresa) passa pelo `PermissionsGuard` e
+   * chega aqui; o D2 é o que o recusa. Um portão no guard seria o mesmo
+   * portão em dois lugares, e o `@RequirePermission` é defense in depth.
+   */
+  async listarHistoricoDeUsuarioNoSistema(
+    input: ListUserHistoryInput,
+    ator: AtorAutenticado,
+  ): Promise<UserHistoryPageDto> {
+    // ⚠️ O PORTÃO D2 É A PRIMEIRA LINHA, antes de qualquer leitura. Recusar
+    // depois de ler seria devolver o histórico e o 403 — e o teste negativo
+    // (que afirma que o `auditService` NÃO foi chamado) existe para prender
+    // esta ordem.
+    exigeAdministradorDeSistema(ator, 'só o administrador do sistema lê o histórico de uma pessoa');
+
+    // ⚠️ A EXISTÊNCIA é conferida ANTES da leitura. Sem isto, o histórico de
+    // um id inexistente devolveria 200 com uma lista vazia — e "não existe" e
+    // "existe mas nunca foi mudado" sairiam IGUAIS, o que transformaria a
+    // rota num oráculo de existência para quem não deveria saber.
+    //
+    // O escopo da busca é o de SISTEMA (`null`): o admin do sistema não
+    // pertence a empresa nenhuma, e a pessoa lida pode estar em qualquer uma.
+    await this.obterPorId({ id: input.id }, null);
+
+    const pagina = await this.auditService.listHistory(
+      {
+        entityName: 'User',
+        entityId: input.id,
+        cursor: input.cursor ?? null,
+        limit: input.limit,
+      },
+      // ⚠️ O escopo da LEITURA é o de SISTEMA (`null`), e não o da empresa do
+      // ator. A policy `history_leitura` libera a linha quando
+      // `usuario_no_escopo(entity_id)` — e o bucket de SISTEMA é o único que
+      // atravessa empresas. Com o escopo errado a leitura volta VAZIA, e
+      // "vazia" parece "não tem histórico".
+      null,
+    );
+
+    // ⚠️ O REGISTRO DA LEITURA. O histórico é dado pessoal (o nome e o e-mail
+    // de cada versão da pessoa), e o ATOR entra no registro — sem ele, o log
+    // diz que o histórico foi lido, e não por quem.
+    loggerHistorico.log(
+      `histórico lido: ${pagina.entries.length} entrada(s) da pessoa ${input.id} — ator ${ator.userId}`,
+    );
+
+    return {
+      entries: pagina.entries.map((entrada) => ({
+        entityId: entrada.entityId,
+        version: entrada.version,
+        previousVersion: entrada.previousVersion,
+        operation: entrada.operation,
+        // ⚠️ O snapshot gravado é o `toUserOutput` da pessoa — o MESMO
+        // formato que a rota do DONO devolve. O port o declara como
+        // `Record<string, unknown>` porque a auditoria é genérica; aqui a
+        // entidade é `User`, e o formato é o do DTO.
+        snapshot: entrada.snapshot as unknown as UserOutputDto,
+        changedAt: entrada.changedAt.toISOString(),
+        changedBy: entrada.changedBy,
+        reason: entrada.reason,
+      })),
+      nextCursor: pagina.nextCursor,
+    };
   }
 
   async listar(input: ListUsersInput, tenantId: string | null): Promise<ListUsersOutput> {

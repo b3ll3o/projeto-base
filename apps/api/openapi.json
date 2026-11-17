@@ -417,6 +417,50 @@
         "tags": ["users"]
       }
     },
+    "/api/v1/admin/users/{id}/history": {
+      "get": {
+        "operationId": "AdminUserHistoryController_history",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Histórico paginado da pessoa"
+          },
+          "400": {
+            "description": "Query inválida (limit fora da faixa, cursor malformado)"
+          },
+          "403": {
+            "description": "Só o administrador do sistema"
+          },
+          "404": {
+            "description": "Pessoa inexistente"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Histórico de auditoria de um usuário (admin do sistema)",
+        "tags": ["admin"]
+      }
+    },
     "/api/v1/tenants/{id}/invitations": {
       "post": {
         "operationId": "TenancyInvitationsController_convidar",

@@ -73,7 +73,14 @@ test.describe('F20 — Detalhe do usuário e as empresas em que ele está (admin
     // ── o DETALHE: quem é a pessoa ──
     await expect(page.getByRole('heading', { level: 1, name: 'Dona Do Detalhe' })).toBeVisible();
     // O e-mail é o que distingue a pessoa — o nome, não.
-    await expect(page.getByText(emailDono)).toBeVisible();
+    //
+    // ⚠️ O e-mail da pessoa aparece na tela DUAS vezes desde o F21: na
+    // legenda do cabeçalho e na coluna "Nome e e-mail" do HISTÓRICO (a
+    // versão de criação). A asserção mede a PESSOA DE HOJE — a legenda —
+    // e é `h1 + p` porque o `p` da descrição é o IRMÃO do `h1` (o
+    // `CabecalhoPagina`). Sem o escopo, o `getByText` page-wide casaria os
+    // dois e o spec cairia em strict mode.
+    await expect(page.locator('main h1 + p')).toHaveText(emailDono);
 
     // ── os CARDS: as empresas em que ela está inserida ──
     const card = page.getByRole('link', { name: 'Empresa Do Detalhe' });

@@ -538,6 +538,39 @@ export async function apagarUsuario(email: string, id: string, version: number):
 }
 
 /**
+ * Renomeia UM usuário — e a VERSÃO que o histórico da pessoa passa a guardar.
+ *
+ * pt-BR (F21 — histórico, 2026-11-17): existe pelo mesmo motivo do
+ * `apagarUsuario` acima — o guard de dono (T-A) exige que o `:id` da rota
+ * seja o `sub` do token, e o token do harness é de outra pessoa. Quem foi
+ * semeado conhece a própria senha, então entra como ele.
+ *
+ * ⚠️ É a PESSOA que se renomeia, e não o admin: o `UserOwnershipGuard` barra
+ * qualquer outro ator. E o `If-Match` traz a versão que o seed devolveu —
+ * sem ele a API responde 428, e o histórico fica com a ÚNICA entrada da
+ * criação (que é o que o F21 precisa contrapor: DUAS versões).
+ */
+export async function renomearUsuario(
+  email: string,
+  id: string,
+  version: number,
+  novoNome: string,
+): Promise<void> {
+  const { accessToken } = await parDeTokens(email, SENHA_DE_TESTE);
+  const { status, corpo } = await chamar('PATCH', `/users/${id}`, {
+    token: accessToken,
+    cabecalhos: { 'if-match': `W/"v${version}"` },
+    corpo: { novoNome },
+  });
+  if (status !== 200) {
+    throw new Error(
+      `PATCH /users/${id} respondeu ${status} (esperado 200): ${JSON.stringify(corpo)}. ` +
+        'Sem a alteração o histórico tem UMA entrada só, e o spec mediria a criação sem a alteração.',
+    );
+  }
+}
+
+/**
  * Deixa a listagem vazia, truncando as tabelas do schema de users.
  *
  * pt-BR (2026-10-14): antes isto era soft-delete de tudo que a listagem

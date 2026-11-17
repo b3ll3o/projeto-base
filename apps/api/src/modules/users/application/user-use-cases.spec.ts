@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { ForbiddenException } from '@nestjs/common';
 import { UserUseCases } from './user-use-cases.js';
 import { InMemoryUserRepository } from '../infrastructure/persistence/in-memory-user.repository.js';
 import { InMemoryAuditService } from '../../../shared/audit/application/in-memory-audit-service.js';
@@ -623,6 +624,91 @@ describe('UserUseCases', () => {
         null,
       );
       spy.mockRestore();
+    });
+  });
+
+  // ─────────── o histórico lido pelo ADMIN DO SISTEMA ───────────
+  //
+  // A rota `GET /users/:id/history` é do DONO — o `UserOwnershipGuard` cobra
+  // `sub === id`. A do ADMIN do SISTEMA é outra pessoa: o portão é D2 (bucket
+  // GLOBAL + `isAdmin`), dentro da use case.
+  //
+  // ⚠️ O teste negativo aqui tem DENTE: ele afirma que o `auditService` NÃO
+  // foi chamado. Um `expect(...).rejects.toThrow(403)` sozinho passaria
+  // também se a use case lesse o histórico ANTES de recusar — e a leitura
+  // happening-before a recusa é justamente o furo que a escalada procura.
+  describe('listarHistoricoDeUsuarioNoSistema()', () => {
+    const ADMIN_DE_SISTEMA = { userId: 'admin-1', tenantId: null, isAdmin: true };
+
+    /** Cria uma pessoa (com o INSERT no histórico) e devolve o id dela. */
+    async function criarPessoa(email: string): Promise<string> {
+      const ctx = makeCtx();
+      const criada = await AuditContextStore.run(ctx, () =>
+        useCases.criarUser({ nome: 'Alvo', email, senha: SENHA_VALIDA }, null),
+      );
+      return criada.id;
+    }
+
+    it('recusa o DONO DE EMPRESA (isAdmin na EMPRESA dele) e NÃO lê o histórico', async () => {
+      const id = await criarPessoa('alvo-empresa@b.com');
+      const listagem = vi.spyOn(audit, 'listHistory');
+
+      await expect(
+        useCases.listarHistoricoDeUsuarioNoSistema(
+          { id, limit: 20 },
+          { userId: 'gerente-1', tenantId: EMPRESA, isAdmin: true },
+        ),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(listagem).not.toHaveBeenCalled();
+    });
+
+    it('recusa o ator do bucket GLOBAL SEM isAdmin e NÃO lê o histórico', async () => {
+      const id = await criarPessoa('alvo-comum@b.com');
+      const listagem = vi.spyOn(audit, 'listHistory');
+
+      await expect(
+        useCases.listarHistoricoDeUsuarioNoSistema(
+          { id, limit: 20 },
+          { userId: 'comum-1', tenantId: null, isAdmin: false },
+        ),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(listagem).not.toHaveBeenCalled();
+    });
+
+    it('pessoa inexistente → 404, e o histórico NÃO é lido', async () => {
+      const listagem = vi.spyOn(audit, 'listHistory');
+
+      await expect(
+        useCases.listarHistoricoDeUsuarioNoSistema(
+          { id: '0190a8b6-1234-7abc-9def-000000000999', limit: 20 },
+          ADMIN_DE_SISTEMA,
+        ),
+      ).rejects.toThrow(ApplicationResourceNotFoundException);
+
+      expect(listagem).not.toHaveBeenCalled();
+    });
+
+    it('o ADMIN DO SISTEMA lê o histórico da pessoa — no escopo de SISTEMA', async () => {
+      const id = await criarPessoa('alvo-admin@b.com');
+      const listagem = vi.spyOn(audit, 'listHistory');
+
+      const pagina = await useCases.listarHistoricoDeUsuarioNoSistema(
+        { id, limit: 20 },
+        ADMIN_DE_SISTEMA,
+      );
+
+      // ⚠️ O SEGUNDO argumento é o ESCOPO, e ele é `null` (bucket de SISTEMA) —
+      // não a empresa do ator. Com o escopo errado a leitura volta vazia, e
+      // "vazia" parece "não tem histórico".
+      expect(listagem).toHaveBeenCalledWith(
+        { entityName: 'User', entityId: id, cursor: null, limit: 20 },
+        null,
+      );
+      expect(pagina.entries.length).toBeGreaterThanOrEqual(1);
+      expect(pagina.entries[0]?.entityId).toBe(id);
+      expect(pagina.nextCursor).toBeNull();
     });
   });
 

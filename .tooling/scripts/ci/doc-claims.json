@@ -3,12 +3,12 @@
   "claims": [
     {
       "doc": "docs/api/users.md",
-      "comando": "grep -hoE \"@(Get|Post|Patch|Put|Delete)\\(\" apps/api/src/modules/users/infrastructure/http/users.controller.ts | wc -l",
+      "comando": "grep -hoE \"@(Get|Post|Patch|Put|Delete)\\(\" apps/api/src/modules/users/infrastructure/http/*.controller.ts | wc -l",
       "derivacao": {
         "tipo": "contar-decoradores-http",
-        "caminhos": ["apps/api/src/modules/users/infrastructure/http/users.controller.ts"]
+        "caminhos": ["apps/api/src/modules/users/infrastructure/http/*.controller.ts"]
       },
-      "motivo": "Contagem de endpoints do BC `users`. O valor é o número de métodos HTTP declarados no controller."
+      "motivo": "Contagem de endpoints do BC `users`. O valor é o número de métodos HTTP declarados nos controllers do BC — 2 controllers, 8 endpoints. A contagem passou a ser por GLOB quando o BC ganhou o segundo controller (o do admin do sistema, `admin-user-history.controller.ts`); o pin por arquivo só valia enquanto havia UM controller, e o motivo é o mesmo dos outros BCs com mais de um."
     },
     {
       "doc": "docs/api/auth.md",

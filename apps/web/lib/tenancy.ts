@@ -5,11 +5,15 @@
 // `app/admin/tenancy/page.tsx`, `app/users/[id]/page.tsx` e
 // `app/empresa/[id]/page.tsx`.
 //
-// Este arquivo tem DOIS donos: o CLIENTE do inventário (`listarInventario`) e o
-// RÓTULO do vínculo (`vinculo`) — o `papel · perfil` que as três telas
-// escrevem. O rótulo morava como função local da tela do inventário, e as
-// telas novas precisaram do MESMO texto: duas cópias de uma decisão envelhecem
-// em uma delas só (convenção `dry.md`).
+// pt-BR (2026-11-17): o HISTÓRICO de auditoria de UMA pessoa entrou aqui —
+// `GET /admin/users/:id/history`, lido pela tela do detalhe da pessoa.
+//
+// Este arquivo tem TRÊS donos: o CLIENTE do inventário (`listarInventario`),
+// o CLIENTE do histórico (`listarHistoricoDoUsuario`) e os RÓTULOS que as
+// telas escrevem (`vinculo` e `rotuloDaOperacao`) — o `papel · perfil` e o
+// `criação · alteração` que as telas mostram. Os rótulos moravam como
+// função local de cada tela, e as telas novas precisaram do MESMO texto: duas
+// cópias de uma decisão envelhecem em uma delas só (convenção `dry.md`).
 //
 // ⚠️ D7 — este cliente é montado SEM `getTenant`, ao contrário de
 // `lib/perfil.ts:30-40`. Não é descuido: enviar `X-Tenant-Id` tira o ator do
@@ -25,6 +29,11 @@
 // que a API lê para decidir o bucket — mandá-lo é o cliente asserting um
 // escopo que a tela de inventário não tem.
 //
+// ⚠️ O HISTÓRICO HERDA O MESMO D7: ele é lido no bucket de SISTEMA (a API
+// lê a trilha de auditoria com o escopo `null`), e um `X-Tenant-Id` ali
+// tiraria o admin do sistema do bucket global — a resposta viria VAZIA, e
+// "vazia" parece "não tem histórico".
+//
 // ⚠️ 2026-10-29 (revisão do PR #127): o token entra por PARÂMETRO, e o
 // cliente nasce de uma função que o recebe — o mesmo desenho de
 // `lib/empresas.ts`. Antes este arquivo tinha a SUA cópia do `getClient()` de
@@ -33,7 +42,7 @@
 // vezes — a página é `force-dynamic`, e isso valia a cada navegação.
 
 import { ApiClient, baseUrlDaApi } from './api-client';
-import type { InventarioAdminTenancyDto } from '@projeto/shared-types';
+import type { InventarioAdminTenancyDto, UserHistoryPageDto } from '@projeto/shared-types';
 
 /**
  * O cliente do inventário.
@@ -62,6 +71,53 @@ function client(accessToken: string): ApiClient {
  */
 export async function listarInventario(accessToken: string): Promise<InventarioAdminTenancyDto> {
   return client(accessToken).get<InventarioAdminTenancyDto>('/admin/tenancy');
+}
+
+/**
+ * Quantas entradas de histórico a tela pede POR PÁGINA.
+ *
+ * ⚠️ 100 é o MÁXIMO da API (`LIMITE_MAXIMO`, `user-repository.port.ts`), e
+ * não o padrão (20): a tela segue o cursor até o fim, e 20 por página daria
+ * 50 requisições para 1000 entradas.
+ */
+export const TAMANHO_DA_PAGINA_HISTORICO = 100;
+
+/**
+ * Quantas páginas de histórico a tela percorre antes de PARAR e dizer que o
+ * histórico não coube.
+ *
+ * ⚠️ O teto é uma ESCOLHA DE TELA, e não um limite da API: 10 páginas de 100
+ * são 1000 versões, e uma pessoa com mais que isso é um caso patológico. O
+ * que não é aceitável é mostrar um histórico PARCIAL sem dizer — e por isso o
+ * corte é visível na tela (a tela avisa).
+ *
+ * ⚠️ E o número mora AQUI, e não na página: o `100` é do cliente (acima) e o
+ * `10` é do teto — separados, os dois envelheceriam sozinhos e a tela passaria
+ * a percorrer um número de entradas diferente do que ela diz.
+ */
+export const TETO_DE_PAGINAS_HISTORICO = 10;
+
+/**
+ * UMA página do histórico de uma pessoa (`GET /admin/users/:id/history`).
+ *
+ * O `cursor` é o da PRÓXIMA página, e `null` no fim — a API pagina por
+ * cursor, e a tela segue o `nextCursor` até ele vir `null`.
+ *
+ * ⚠️ O `id` vai codificado: ele vem do path da tela, e um id cru moldaria a
+ * URL ANTES de a API ver o caminho.
+ */
+export async function listarHistoricoDoUsuario(
+  accessToken: string,
+  id: string,
+  cursor?: string,
+): Promise<UserHistoryPageDto> {
+  const consulta =
+    cursor === undefined
+      ? `?limit=${TAMANHO_DA_PAGINA_HISTORICO}`
+      : `?limit=${TAMANHO_DA_PAGINA_HISTORICO}&cursor=${encodeURIComponent(cursor)}`;
+  return client(accessToken).get<UserHistoryPageDto>(
+    `/admin/users/${encodeURIComponent(id)}/history${consulta}`,
+  );
 }
 
 /**
@@ -94,4 +150,25 @@ const PAPEL: Record<string, string> = {
 export function vinculo(role: string, perfil: string | null): string {
   const papel = PAPEL[role] ?? role;
   return perfil === null ? `papel: ${papel} · sem perfil` : `papel: ${papel} · perfil: ${perfil}`;
+}
+
+/**
+ * A OPERAÇÃO da auditoria, no idioma da tela: o que aconteceu naquela versão.
+ *
+ * ⚠️ O enum da API é INGLÊS (`AuditOperationType`: `INSERT`, `UPDATE`,
+ * `DELETE`, `RESTORE`) e a tela é pt-BR. O rótulo é o DONO da tradução —
+ * o mesmo desenho do `vinculo` acima, e pelo mesmo motivo (`dry.md`).
+ *
+ * ⚠️ Uma operação que a API não conhece PASSA COMO VEIO: a tela não
+ * esconde dado, e um `operation` novo é informação, não erro.
+ */
+const OPERACAO: Record<string, string> = {
+  INSERT: 'criação',
+  UPDATE: 'alteração',
+  DELETE: 'remoção',
+  RESTORE: 'restauração',
+};
+
+export function rotuloDaOperacao(operation: string): string {
+  return OPERACAO[operation] ?? operation;
 }

@@ -258,9 +258,13 @@ describe('checkDocClaims', () => {
     const doc = join(REPO_REAL, 'docs', 'api', 'users.md');
     const original = readFileSync(doc, 'utf-8');
     try {
+      // ⚠️ A mutação acompanha o DOC: a contagem de endpoints do BC `users`
+      // passou a ser por GLOB (o BC tem DOIS controllers desde a rota do
+      // admin do sistema), e o valor que o gate compara é o `→ \`N\`` ao lado
+      // do comando citado.
       const trocado = original.replace(
-        'apps/api/src/modules/users/infrastructure/http/users.controller.ts | wc -l`\n> → `7`',
-        'apps/api/src/modules/users/infrastructure/http/users.controller.ts | wc -l`\n> → `8`',
+        'apps/api/src/modules/users/infrastructure/http/*.controller.ts | wc -l`\n> → `8`',
+        'apps/api/src/modules/users/infrastructure/http/*.controller.ts | wc -l`\n> → `9`',
       );
       expect(trocado).not.toBe(original);
       writeFileSync(doc, trocado);

@@ -254,6 +254,13 @@ conferida contra a credencial da sessão.
 - O `correlationId` vem da **mesma derivação do `traceId` da resposta**
   (`traceIdDe()`) — a divergência que existia foi fechada em 2026-11-10 (ver
   [`dados.md`](./dados.md) §5).
+- A **LEITURA** da trilha tem DOIS donos: o **dono** da pessoa
+  (`GET /users/{id}/history` — o `UserOwnershipGuard` exige que o `:id` seja o
+  `sub` do token) e o **administrador do SISTEMA**
+  (`GET /admin/users/{id}/history` — portão D2: bucket global + `isAdmin`).
+  Nenhum outro ator lê: a policy `history_leitura` libera a linha quando
+  `usuario_no_escopo(entity_id)`, e o bucket de SISTEMA é o único que
+  atravessa empresas.
 
 ---
 

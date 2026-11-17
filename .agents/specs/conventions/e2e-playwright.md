@@ -1,6 +1,6 @@
 ---
 name: e2e-playwright
-version: 1.9
+version: 1.10
 updated: 2026-11-17
 maintainer: test-writer
 description: "Convenção canônica de cobertura e2e de frontend — todo fluxo de usuário COM tela é mapeado no inventário abaixo e coberto por um spec Playwright que atravessa browser, Next, Server Action, API HTTP e Postgres de ponta a ponta. Gate automatizado em check-e2e-flow-coverage.ts; execução no CI."
@@ -99,8 +99,9 @@ um silêncio.
 | F18 | `/login` | Cabeçalhos de segurança: CSP com nonce por requisição (o nonce do header é o dos scripts), `nosniff`, `X-Frame-Options`, HSTS, sem `X-Powered-By`, e o `Referrer-Policy` da rota do token | `f18-cabecalhos-de-seguranca.spec.ts` |
 | F19 | `/users` → `/login` | Sair revoga o refresh token | `f19-sair.spec.ts` | CONTROLE: com a sessão viva, o refresh renova · depois do "Sair", o mesmo token é recusado (401 `INVALID_TOKEN`) |
 | F20 | `/users` → `/users/[id]` → `/empresa/[id]` | Detalhe do usuário e as empresas em que ele está (admin do sistema) | `f20-admin-usuario-detalhe.spec.ts` | admin abre a pessoa da listagem · os cards mostram as empresas em que ela está · o card abre a empresa e os membros · id inexistente é 404 · a 320px as duas telas não rolam na horizontal · quem não é admin do sistema não abre o detalhe |
+| F21 | `/users/[id]` | Histórico de auditoria de uma pessoa (admin do sistema) | `f21-historico-usuario.spec.ts` | admin vê as DUAS versões da pessoa — a criação com o nome ANTIGO e a alteração com o novo · a versão, o que houve, o nome e o e-mail de CADA versão, o quando, quem mudou e o motivo · quem não é admin do sistema não abre o detalhe e o histórico não é entregue |
 
-⚠️ **15 rotas, 20 fluxos.** MEDIDO 2026-11-17 — `find apps/web/app -name 'page.tsx' | wc -l` → `15` e `grep -c '^| F[0-9]' .agents/specs/conventions/e2e-playwright.md` → `20` (com o route handler, `find apps/web/app -name 'page.tsx' -o -name 'route.ts' | wc -l` → `16`).
+⚠️ **15 rotas, 21 fluxos.** MEDIDO 2026-11-17 — `find apps/web/app -name 'page.tsx' | wc -l` → `15` e `grep -c '^| F[0-9]' .agents/specs/conventions/e2e-playwright.md` → `21` (com o route handler, `find apps/web/app -name 'page.tsx' -o -name 'route.ts' | wc -l` → `16`).
 
 ⚠️ **O roteiro de F2–F15 está na §Revisões, uma linha por versão.** F2–F5 são
 quatro estados **da mesma** rota e F6 atravessa três; F9–F12 são as quatro telas
@@ -135,19 +136,16 @@ F19 é o "Sair": a sessão é apagada e o refresh token do cookie é REVOGADO na
 API, com um CONTROLE que prova que ele renovava antes.
 
 F20 é o inventário de tenancy do administrador de SISTEMA na direção de UMA
-pessoa: a listagem `/users` vira clicável, a pessoa abre o detalhe, e o detalhe
-mostra as empresas em que ela está inserida — em cards clicáveis, cada um
-abrindo a empresa e os seus membros. O que o spec segura é o PAR
-RECUSA/LIBERDADE: o clique — que leva ao inventário — só existe para o
+pessoa: a listagem `/users` vira clicável, o detalhe mostra as empresas em que
+ela está inserida — em cards clicáveis, cada um abrindo a empresa e os seus
+membros. O spec segura o PAR RECUSA/LIBERDADE: o clique só existe para o
 administrador de SISTEMA, e o que o separa dos demais é o `isAdmin` GLOBAL
 (NÃO o recorte da listagem: sem `tenant_id`, `GET /users` responde no bucket
-GLOBAL e mostra a base inteira). Sem o par, "o admin vê as empresas" e
-"qualquer um vê as empresas" passariam no mesmo arquivo. E a recusa é medida
-COM o dado plantado: "não vê o nome" passa no vazio, e um teste que passa no
-vazio não mede nada. ⚠️ E o ator negativo é o DONO da empresa, com a empresa
-no cookie — o caso exato que a tela precisa recusar (o `gerente` tem
-`isAdmin: true` NA EMPRESA). A ESCOLHA do guard é do spec UNIT: MEDIDO
-2026-11-17, as duas recusas caem na mesma tela e o e2e não as distingue.
+GLOBAL e mostra a base inteira). E a recusa é medida COM o dado plantado: "não
+vê o nome" passa no vazio. ⚠️ O ator negativo é o DONO da empresa, com a
+empresa no cookie — o caso exato que a tela precisa recusar. A ESCOLHA do
+guard é do spec UNIT: as duas recusas caem na mesma tela e o e2e não as
+distingue.
 
 ⚠️ **Desde 2026-10-13 quase todo spec roda autenticado, e isso é invisível na
 tabela.** `/users` — a LISTAGEM — chama `exigirSessao()` (redireciona para
@@ -289,6 +287,7 @@ do par, não um.
 | 1.7 | 2026-11-09 | F19 cobre o "Sair" — a única ação do app que apaga a sessão, e a única que apaga CHAMANDO a API. O spec segura o refresh token do cookie deixando de renovar (401 `INVALID_TOKEN`), e o CONTROLE — o mesmo token renovando com a sessão viva — é o que impede o 401 de ser indistinguível de "o token nunca valia". O e2e da API (`15-auth-revogacao`) mede a revogação pela API; este mede a emenda, que é o botão. Contador: 18 → 19 fluxos, com as **13 rotas inalteradas**. |
 | 1.8 | 2026-11-17 | F20 cobre o detalhe do usuário e as empresas em que ele está — o inventário de tenancy do administrador de SISTEMA na direção de UMA pessoa: a listagem `/users` vira clicável, a pessoa abre o detalhe, e o detalhe mostra as empresas em que ela está inserida em cards clicáveis, cada card abrindo a empresa e os seus membros. O spec segura o PAR RECUSA/LIBERDADE (o clique só existe para o admin de SISTEMA) e semeia a empresa e o dono ANTES da recusa — "não vê o nome" passa no vazio. Contador: 19 → 20 fluxos, e **13 → 15 rotas** (as duas telas novas, `/users/[id]` e `/empresa/[id]`). |
 | 1.9 | 2026-11-17 | O ator negativo do F20 passou a ser o **DONO da empresa, com o cookie `tenant_id` plantado** — o caso exato que a tela precisa recusar (o `gerente` tem `isAdmin: true` NA EMPRESA, e o guard da empresa o liberaria). O quase-admin anterior (perfil global sem `isAdmin`, sem vínculo) não era esse caso. ⚠️ **MEDIDO: a escolha do guard NÃO é do e2e.** Mutando o guard de `/users/[id]` de `exigirAdminDoSistema` para `exigirAdmin`, o spec UNIT cai (3 de 7) e o e2e NÃO — as duas recusas (a do guard e o 403 da API) caem na MESMA tela de "Acesso restrito", e o browser não distingue uma da outra. O e2e prova a afirmação de SEGURANÇA (o dono não vê o inventário); o unit prova a ESCOLHA do guard. O texto da convenção também foi corrigido: o que separa o admin de SISTEMA é o `isAdmin` GLOBAL, e NÃO o recorte da listagem (sem `tenant_id`, `GET /users` responde no bucket GLOBAL e mostra a base inteira). Contador: 20 fluxos e 15 rotas, inalterados. |
+| 1.10 | 2026-11-17 | F21 cobre o HISTÓRICO de auditoria de UMA pessoa — a mesma tela `/users/[id]`, agora com a seção que mostra TODAS as versões: o nome e o e-mail de CADA versão, quando, quem mudou e por quê. ⚠️ O DADO PRECISA EXISTIR: o histórico só tem entradas onde houve mutação, e uma pessoa recém-nascida tem UMA (a criação) — o spec semeia a pessoa e a PESSOA se renomeia com o PRÓPRIO token (`PATCH /users/:id` com `If-Match`), porque o `UserOwnershipGuard` exige que o `:id` da rota seja o `sub` do token; e o que o spec mede são as DUAS entradas, com o nome ANTIGO na criação e o novo na alteração. O par RECUSA/LIBERDADE é o do F20 (o DONO da empresa, com a empresa no cookie, não abre a tela). Contador: 20 → 21 fluxos, com as **15 rotas inalteradas**. |
 
 ## Ver Também
 
