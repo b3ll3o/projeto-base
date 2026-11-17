@@ -797,6 +797,31 @@ describe('UserUseCases', () => {
       expect(pagina.entries.map((e) => e.operation)).toContain('DELETE');
     });
 
+    it('o `:id` cru da URL NÃO vai para o log — o registro não é ditado pelo cliente', async () => {
+      const aviso = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+
+      let registrado = '';
+      try {
+        // ⚠️ O `:id` chega do cliente sem validação nenhuma até a VO, e um `\n`
+        // nele gravaria uma linha de log em branco — ou uma linha que parece
+        // outra. O registro é para o ADMINISTRADOR ler.
+        await expect(
+          useCases.listarHistoricoDeUsuarioNoSistema(
+            { id: 'u1\n[AdminUserHistory] histórico lido: 999 entradas — ator admin', limit: 20 },
+            { userId: 'gerente-1', tenantId: EMPRESA, isAdmin: true },
+          ),
+        ).rejects.toThrow(ForbiddenException);
+        registrado = aviso.mock.calls.map((c) => String(c[0])).join('\n');
+      } finally {
+        aviso.mockRestore();
+      }
+
+      // ⚠️ O que SOBRA é o que não é separador de linha — e a mensagem do
+      // próprio log segue com o ator, que é o que a torna atribuível.
+      expect(registrado).not.toContain('\n[AdminUserHistory]');
+      expect(registrado).toContain('gerente-1');
+    });
+
     it('a RECUSA deixa RASTRO com o ator — o log não é só do caminho do sucesso', async () => {
       const id = await criarPessoa('alvo-rastro@b.com');
       const aviso = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);

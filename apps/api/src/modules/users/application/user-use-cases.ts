@@ -254,7 +254,7 @@ export class UserUseCases {
     // então passava sem rastro".
     if (!ehAdministradorDeSistema(ator)) {
       loggerHistorico.warn(
-        `leitura recusada: o ator ${ator.userId} tentou ler o histórico da pessoa ${input.id}`,
+        `leitura recusada: o ator ${ator.userId} tentou ler o histórico da pessoa ${idParaRegistro(input.id)}`,
       );
     }
     exigeAdministradorDeSistema(ator, 'só o administrador do sistema lê o histórico de uma pessoa');
@@ -519,4 +519,16 @@ function extractReason(ev: { eventName: string; [k: string]: unknown }): string 
     return (ev as unknown as { reason: string | null }).reason;
   }
   return null;
+}
+
+/**
+ * O id da pessoa **para o registro** — e o `:id` cru da URL não vai para o log.
+ *
+ * ⚠️ O `:id` chega do cliente sem validação nenhuma até a VO (`UserId.create`),
+ * e um `\n` nele gravaria uma linha de log em branco — ou pior, uma linha
+ * que parece outra. O registro é para o ADMINISTRADOR ler, e não pode ser
+ * ditado pelo cliente. MEDIDO 2026-11-17 (revisão de segurança).
+ */
+function idParaRegistro(id: string): string {
+  return id.replace(/[^0-9a-zA-Z-]/g, '');
 }

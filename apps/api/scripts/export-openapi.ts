@@ -82,7 +82,10 @@ async function exportOpenApi(): Promise<void> {
     ? resolve(process.env.OPENAPI_OUTPUT_PATH)
     : resolve(process.cwd(), 'openapi.json');
   await mkdir(dirname(outputPath), { recursive: true });
-  await writeFile(outputPath, await formatarComoJson(JSON.stringify(document, null, 2)));
+  await writeFile(
+    outputPath,
+    await formatarComoJson(JSON.stringify(document, null, 2), outputPath),
+  );
 
   // pt-BR: close garante que o processo não fica esperando handles
   // abertos do NestJS/Fastify.
@@ -103,9 +106,15 @@ async function exportOpenApi(): Promise<void> {
  * A comparação do gate (`check-openapi-contract`) é SEMÂNTICA, e continua
  * passando: o que muda aqui é a FORMATAÇÃO, não o conteúdo.
  */
-async function formatarComoJson(texto: string): Promise<string> {
-  const { format } = await import('prettier');
-  return await format(texto, { parser: 'json' });
+async function formatarComoJson(texto: string, caminho: string): Promise<string> {
+  const { format, resolveConfig } = await import('prettier');
+  // ⚠️ A CONFIG do REPOSITÓRIO, e não a default: o `format` sem `filepath`
+  // usa `printWidth: 80`, e o repo usa 100 (`.prettierrc.json`) — e a saída
+  // com 80 quebra um array que o repo manteria em uma linha. MEDIDO: hoje as
+  // duas configs dão o MESMO arquivo, e o `format:check` passa; o defeito é
+  // latente (o gate volta no primeiro array de 81–100 chars).
+  const config = (await resolveConfig(caminho)) ?? {};
+  return await format(texto, { ...config, filepath: caminho, parser: 'json' });
 }
 
 exportOpenApi().catch((err) => {
