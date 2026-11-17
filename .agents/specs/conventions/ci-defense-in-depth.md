@@ -48,9 +48,26 @@ pnpm turbo run typecheck test:e2e --filter=@projeto/api
 - **com** o `dependsOn`: `Test Files 19 passed (19)` e `Tasks: 7 successful, 7
   total` — o mesmo comando, o mesmo estado do disco.
 
-O pacote `@projeto/web` não tem `db:generate`, e o turbo **pula** a task
-inexistente (a dry-run mostra `cmd: <NONEXISTENT>` e não há erro) — por isso a
-dependência é declarada no `turbo.json` e não no `package.json` de cada app.
+⚠️ **E A DEPENDÊNCIA É QUALIFICADA COM O PACOTE** (`@projeto/api#db:generate`),
+e não a mesma de dentro do pacote (`db:generate`).
+
+MEDIDO 2026-11-17: o `@projeto/web` **não tem** `db:generate` (só o `@projeto/api`
+tem Prisma), e o turbo **pula** a task inexistente — a dry-run mostra
+`cmd: <NONEXISTENT>` e não há erro. Com a dependência simples, a invariante
+que este texto declara ("o `db:generate` não pode correr em paralelo com o
+e2e") **não valeria para o e2e do WEB** — e é o e2e do web que sobe a API
+(`apps/web/e2e/global-setup.ts` → `subirApi` → importa `@prisma/client`).
+
+Com a dependência qualificada, a dry-run mostra:
+
+```
+@projeto/api#db:generate            cmd=prisma generate
+@projeto/web#test:e2e               cmd=playwright test   deps=["@projeto/api#db:generate"]
+```
+
+E o mesmo para `@projeto/api#test:e2e` — que continua depending de
+`@projeto/api#db:generate` (a sintaxe qualificada não vira ciclo no próprio
+pacote).
 
 **O que o HOOK roda é menos que o `ci:local`** — e é proposital: o hook é
 rápido, o `ci:local` é lento. `.husky/pre-push` roda `pnpm ci:preflight`

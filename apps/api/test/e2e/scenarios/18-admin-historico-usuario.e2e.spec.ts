@@ -246,6 +246,125 @@ describe('E2E 18: histórico de usuário lido pelo admin do sistema', () => {
     expect(corpo.detail).toContain('permissão requerida ausente');
   });
 
+  // ─────────── a ordem, o cursor e a pessoa apagada ───────────
+
+  it('a trilha vem da MAIS RECENTE para a mais antiga — e o cursor leva à página seguinte', async () => {
+    const alvo = await criarUsuarioAutenticado(e2e, {
+      nome: 'Alvo',
+      email: 'alvo-ordem@b.com',
+    });
+
+    // A PESSOA se renomeia (a rota do dono é owner-only) — duas alterações,
+    // para a trilha ter três versões.
+    for (const [versao, nome] of [
+      [1, 'Nome Dois'],
+      [2, 'Nome Tres'],
+    ] as const) {
+      const res = await e2e.injetar({
+        method: 'PATCH',
+        url: `/api/v1/users/${alvo.id}`,
+        payload: { novoNome: nome },
+        headers: { ...alvo.headers, 'if-match': `W/"v${versao}"` },
+      });
+      expect(res.statusCode).toBe(200);
+    }
+
+    const primeira = await e2e.injetar({
+      method: 'GET',
+      url: `${ROTA}/${alvo.id}/history?limit=2`,
+    });
+
+    expect(primeira.statusCode).toBe(200);
+    const pagina1 = JSON.parse(primeira.body) as PaginaWire;
+    // ⚠️ A ORDEM é descendente: a versão mais recente PRIMEIRO. A ordem
+    // antiga (ascendente) punha a tela de exibir as 100 versões mais ANTIGAS e
+    // cortava justamente as mais recentes.
+    expect(pagina1.entries.map((e) => e.version)).toEqual([3, 2]);
+    expect(pagina1.nextCursor).not.toBeNull();
+
+    // E o CURSOR leva à página seguinte — que é a que ficou de fora.
+    const segunda = await e2e.injetar({
+      method: 'GET',
+      url: `${ROTA}/${alvo.id}/history?limit=2&cursor=${pagina1.nextCursor}`,
+    });
+
+    expect(segunda.statusCode).toBe(200);
+    const pagina2 = JSON.parse(segunda.body) as PaginaWire;
+    expect(pagina2.entries.map((e) => e.version)).toEqual([1]);
+    expect(pagina2.nextCursor).toBeNull();
+  });
+
+  it('a pessoa APAGADA tem a trilha lida — o soft-delete não apaga a trilha', async () => {
+    const alvo = await criarUsuarioAutenticado(e2e, {
+      nome: 'Alvo Apagado',
+      email: 'alvo-apagado@b.com',
+    });
+
+    const remocao = await e2e.injetar({
+      method: 'DELETE',
+      url: `/api/v1/users/${alvo.id}`,
+      headers: { ...alvo.headers, 'if-match': 'W/"v1"' },
+    });
+    expect(remocao.statusCode).toBe(204);
+
+    // ⚠️ Sem o `includeDeleted`, a pessoa apagada daria 404 — e a trilha de
+    // quem SAIU seria inalcançável pela única rota que a lê, que é
+    // exatamente o caso que a rota existe para servir.
+    const res = await e2e.injetar({
+      method: 'GET',
+      url: `${ROTA}/${alvo.id}/history`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const corpo = JSON.parse(res.body) as PaginaWire;
+    expect(corpo.entries.map((e) => e.operation)).toContain('DELETE');
+  });
+
+  it('o cursor de OUTRA pessoa é RECUSADO — e a resposta não diz se aquele id existe', async () => {
+    const alvo = await criarUsuarioAutenticado(e2e, {
+      nome: 'Alvo',
+      email: 'alvo-cursor@b.com',
+    });
+    const outro = await criarUsuarioAutenticado(e2e, {
+      nome: 'Outro',
+      email: 'outro-cursor@b.com',
+    });
+
+    // O cursor do OUTRO — e a trilha dele precisa de mais de uma versão, para
+    // o `nextCursor` existir (com uma versão só, a página é a última).
+    for (const [versao, nome] of [
+      [1, 'Outro Dois'],
+      [2, 'Outro Tres'],
+    ] as const) {
+      const res = await e2e.injetar({
+        method: 'PATCH',
+        url: `/api/v1/users/${outro.id}`,
+        payload: { novoNome: nome },
+        headers: { ...outro.headers, 'if-match': `W/"v${versao}"` },
+      });
+      expect(res.statusCode).toBe(200);
+    }
+
+    const doOutro = await e2e.injetar({
+      method: 'GET',
+      url: `${ROTA}/${outro.id}/history?limit=1`,
+    });
+    const pagina = JSON.parse(doOutro.body) as PaginaWire;
+    const cursorAlheio = pagina.nextCursor;
+    expect(cursorAlheio).not.toBeNull();
+
+    // …e a trilha do alvo, paginada com ele: a resposta é 400 — a MESMA de
+    // "o cursor não existe". O erro não diz se aquele id existe.
+    const res = await e2e.injetar({
+      method: 'GET',
+      url: `${ROTA}/${alvo.id}/history?limit=1&cursor=${cursorAlheio}`,
+    });
+
+    expect(res.statusCode).toBe(400);
+    const corpo = JSON.parse(res.body) as { code: string };
+    expect(corpo.code).toBe('VALIDATION_ERROR');
+  });
+
   // ─────────── pessoa inexistente ───────────
 
   it('pessoa inexistente → 404 (e não uma lista vazia)', async () => {

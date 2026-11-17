@@ -19,6 +19,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { PrismaClient, type Prisma } from '@prisma/client';
 import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service.js';
 import { comEscopoDeEmpresa } from '../../infrastructure/prisma/escopo.js';
+import { AuditCursorInvalidoException } from '../domain/audit.exceptions.js';
 import type { AuditContext } from '../domain/audit-context.vo.js';
 import type {
   ArchiveEntry,
@@ -93,35 +94,101 @@ export class PrismaAuditService implements AuditServicePort {
     );
   }
 
+  /**
+   * A trilha de auditoria de UMA entidade — paginada por cursor.
+   *
+   * ⚠️ pt-BR (2026-11-17): o cursor é o **id da LINHA** (`users_history.id`), e
+   * ele é resolvido **dentro da entidade** antes da query. A implementação
+   * anterior entregava o cursor ao Prisma como `cursor: { id }`, e o Prisma
+   * traduzia isso num subselect:
+   *
+   * ```sql
+   * WHERE entity_id=$1 AND version >= (SELECT version FROM users_history WHERE id=$2)
+   * ORDER BY version ASC OFFSET 0        -- ← sem LIMIT, e o subselect NÃO é da entidade
+   * ```
+   *
+   * Três defeitos numa query só:
+   *
+   * 1. **Sem `LIMIT`** — o banco trazia a trilha inteira para a página devolver
+   *    `limit` linhas.
+   * 2. **O subselect não filtrava por `entity_id`** — o cursor de OUTRA trilha
+   *    devolvia uma página **errada** (a partir de uma versão alheia), e não um
+   *    erro.
+   * 3. **A ordem era imposta ao leitor** — não havia como pedir a trilha do
+   *    mais novo para o mais antigo, que é a ordem de quem lê uma auditoria.
+   *
+   * A query de agora resolve o cursor (filtrando por `entity_id`) e usa um
+   * **range de `version`**, o que traz o `LIMIT` de volta:
+   *
+   * ```sql
+   * WHERE entity_id=$1 AND version < $2   -- ← $2 = a versão do cursor, da MESMA entidade
+   * ORDER BY version DESC
+   * LIMIT $3
+   * ```
+   *
+   * E a ordem é do **input** (`ordem`), com `'asc'` como padrão — a rota do
+   * DONO continua igual, e a rota do ADMIN pede `'desc'`.
+   */
   async listHistory(
     input: ListHistoryInput,
     tenantId: string | null,
   ): Promise<{ entries: HistoryEntry[]; nextCursor: string | null }> {
-    const cursor = input.cursor ? { id: input.cursor } : undefined;
-    const rows = await comEscopoDeEmpresa(this.prisma, tenantId, (tx) =>
-      tx.userHistory.findMany({
-        where: { entityId: input.entityId },
-        ...(cursor ? { cursor, skip: 1 } : {}),
+    const ordem = input.ordem ?? 'asc';
+    return comEscopoDeEmpresa(this.prisma, tenantId, async (tx) => {
+      const versaoDoCursor = await this.versaoDoCursor(tx, input);
+
+      const rows = await tx.userHistory.findMany({
+        where: {
+          entityId: input.entityId,
+          ...(versaoDoCursor === null
+            ? {}
+            : ordem === 'desc'
+              ? { version: { lt: versaoDoCursor } }
+              : { version: { gt: versaoDoCursor } }),
+        },
         take: input.limit + 1,
-        orderBy: [{ version: 'asc' }],
-      }),
-    );
-    const hasMore = rows.length > input.limit;
-    const page = hasMore ? rows.slice(0, input.limit) : rows;
-    const last = page[page.length - 1];
-    return {
-      entries: page.map((r) => ({
-        entityId: r.entityId,
-        version: r.version,
-        previousVersion: r.previousVersion,
-        operation: r.operation,
-        snapshot: r.snapshot as Record<string, unknown>,
-        changedAt: r.changedAt,
-        changedBy: r.changedBy,
-        reason: r.reason,
-      })),
-      nextCursor: hasMore && last !== undefined ? last.id : null,
-    };
+        orderBy: [{ version: ordem }],
+      });
+      const hasMore = rows.length > input.limit;
+      const page = hasMore ? rows.slice(0, input.limit) : rows;
+      const last = page[page.length - 1];
+      return {
+        entries: page.map((r) => ({
+          id: r.id,
+          entityId: r.entityId,
+          version: r.version,
+          previousVersion: r.previousVersion,
+          operation: r.operation,
+          snapshot: r.snapshot as Record<string, unknown>,
+          changedAt: r.changedAt,
+          changedBy: r.changedBy,
+          reason: r.reason,
+        })),
+        nextCursor: hasMore && last !== undefined ? last.id : null,
+      };
+    });
+  }
+
+  /**
+   * A VERSÃO do cursor — e `null` quando não há cursor.
+   *
+   * ⚠️ A busca é por `id` **e** confere o `entity_id` da linha: um cursor de
+   * outra trilha é INVÁLIDO, e a resposta é a mesma de "não existe" — 400, e
+   * nada que diga se aquele id existe.
+   */
+  private async versaoDoCursor(
+    tx: Parameters<Parameters<PrismaClient['$transaction']>[0]>[0],
+    input: ListHistoryInput,
+  ): Promise<number | null> {
+    if (input.cursor === null || input.cursor === undefined || input.cursor === '') return null;
+    const linha = await tx.userHistory.findUnique({
+      where: { id: input.cursor },
+      select: { version: true, entityId: true },
+    });
+    if (linha === null || linha.entityId !== input.entityId) {
+      throw new AuditCursorInvalidoException({ entityId: input.entityId, cursor: input.cursor });
+    }
+    return linha.version;
   }
 
   async getHistoryEntry(
@@ -137,6 +204,7 @@ export class PrismaAuditService implements AuditServicePort {
     );
     if (!row) return null;
     return {
+      id: row.id,
       entityId: row.entityId,
       version: row.version,
       previousVersion: row.previousVersion,

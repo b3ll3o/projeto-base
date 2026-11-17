@@ -2,13 +2,22 @@
  * InMemoryAuditService — implementação in-memory do AuditServicePort.
  *
  * Usado em testes unitários de use cases (Fase 5+). Não thread-safe.
- * Armazena history + archive como arrays simples; cursor = offset numérico
- * stringificado.
+ * Armazena history + archive como arrays simples.
+ *
+ * pt-BR (2026-11-17): o cursor da trilha é o **id da LINHA** — o mesmo que a
+ * produção devolve (`users_history.id`) — e o `HistoryEntry` passou a carregá-lo
+ * para que o duplo pudesse devolvê-lo. Antes, o duplo usava um **offset
+ * numérico** (`"20"`), que a API recusa com 400 (`PaginacaoQuerySchema` exige
+ * uuid): o contrato era cumprido só pela implementação de produção, e um
+ * teste feito contra o duplo não media o contrato. O `archive` continua com
+ * offset — o archive não é paginado por cursor na API.
  *
  * pt-BR: substituir por PrismaAuditService em produção via DI binding.
  */
 
+import { randomUUID } from 'node:crypto';
 import type { AuditContext } from '../domain/audit-context.vo.js';
+import { AuditCursorInvalidoException } from '../domain/audit.exceptions.js';
 import type {
   ArchiveEntry,
   ArchiveInput,
@@ -27,6 +36,7 @@ export class InMemoryAuditService implements AuditServicePort {
 
   async record(input: AuditRecordInput, ctx: AuditContext): Promise<void> {
     const entry: HistoryEntry = {
+      id: randomUUID(),
       entityId: input.entityId,
       version: input.newVersion,
       previousVersion: input.previousVersion,
@@ -46,17 +56,36 @@ export class InMemoryAuditService implements AuditServicePort {
   // é contrato de domínio novo, não fiação. O filtro que vale é a policy; o
   // `PrismaAuditService` é quem o executa. Mesma lacuna já registrada para
   // `InMemoryUserRepository.list(input, _tenantId)`.
+  //
+  // ⚠️ O cursor é o **id da linha**, e ele é resolvido **dentro da entidade** —
+  // o mesmo contrato do `PrismaAuditService`, para que um teste feito contra o
+  // duplo meça o mesmo contrato que a produção cumpre.
   async listHistory(
     input: ListHistoryInput,
     _tenantId: string | null,
   ): Promise<{ entries: HistoryEntry[]; nextCursor: string | null }> {
-    const filtered = this.history.filter((e) => e.entityId === input.entityId);
-    const offset = input.cursor ? Number(input.cursor) : 0;
+    const ordem = input.ordem ?? 'asc';
+    const filtradas = this.history.filter((e) => e.entityId === input.entityId);
+    const ordenadas = [...filtradas].sort((a, b) =>
+      ordem === 'desc' ? b.version - a.version : a.version - b.version,
+    );
+
+    let restantes = ordenadas;
+    if (input.cursor !== null && input.cursor !== undefined && input.cursor !== '') {
+      const indice = ordenadas.findIndex((e) => e.id === input.cursor);
+      if (indice < 0) {
+        throw new AuditCursorInvalidoException({ entityId: input.entityId, cursor: input.cursor });
+      }
+      restantes = ordenadas.slice(indice + 1);
+    }
+
     const limit = Math.max(1, input.limit);
-    const page = filtered.slice(offset, offset + limit);
-    const nextOffset = offset + limit;
-    const nextCursor = nextOffset < filtered.length ? String(nextOffset) : null;
-    return { entries: page, nextCursor };
+    const page = restantes.slice(0, limit);
+    const last = page[page.length - 1];
+    return {
+      entries: page,
+      nextCursor: restantes.length > limit && last !== undefined ? last.id : null,
+    };
   }
 
   async getHistoryEntry(

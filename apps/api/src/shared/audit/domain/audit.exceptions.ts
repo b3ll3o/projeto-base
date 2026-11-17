@@ -59,6 +59,42 @@ export class AuditHistoryNotFoundException extends Error {
 }
 
 /**
+ * Lançada quando o CURSOR da paginação não é uma linha da trilha que está
+ * sendo lida.
+ *
+ * pt-BR (2026-11-17): o cursor é o id da LINHA de `users_history`, e ele é
+ * resolvido **dentro da entidade** — um cursor de outra trilha é recusado.
+ * Antes, o cursor entrava como subselect (`version >= (SELECT version …
+ * WHERE id = $2)`), e o subselect **não filtrava por `entity_id`**: o cursor
+ * de outra trilha devolvia uma página **errada** (a partir de uma versão
+ * alheia) em vez de um erro. "Página errada" é pior que "erro" — a pessoa
+ * lê uma trilha que não pediu.
+ *
+ * A resposta é a MESMA para "o cursor não existe" e para "o cursor é de outra
+ * trilha": 400, e nada que diga se aquele id existe.
+ *
+ * Mapeamento HTTP no GlobalExceptionFilter: 400 VALIDATION_ERROR.
+ *
+ * @throws {TypeError} se `entityId` for vazio após trim.
+ */
+export class AuditCursorInvalidoException extends Error {
+  public readonly entityId: string;
+  public readonly cursor: string;
+
+  constructor(props: { entityId: string; cursor: string }) {
+    const entityId = props.entityId?.trim() ?? '';
+    if (entityId === '') {
+      throw new TypeError('AuditCursorInvalidoException: entityId inválido (vazio)');
+    }
+    super(`Cursor de paginação inválido para a trilha ${entityId}.`);
+    this.name = 'AuditCursorInvalidoException';
+    this.entityId = entityId;
+    this.cursor = props.cursor;
+    Object.setPrototypeOf(this, AuditCursorInvalidoException.prototype);
+  }
+}
+
+/**
  * Lançada quando uma entrada de arquivo (entityName, entityId) não é encontrada.
  *
  * Mapeamento HTTP no GlobalExceptionFilter (Fase 7): 410 Gone.

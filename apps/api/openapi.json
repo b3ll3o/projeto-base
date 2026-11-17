@@ -443,7 +443,7 @@
             "description": "Histórico paginado da pessoa"
           },
           "400": {
-            "description": "Query inválida (limit fora da faixa, cursor malformado)"
+            "description": "Query inválida (limit fora da faixa, cursor malformado ou cursor de outra trilha), ou id que não é um UUID v7"
           },
           "403": {
             "description": "Só o administrador do sistema"
@@ -458,7 +458,7 @@
           }
         ],
         "summary": "Histórico de auditoria de um usuário (admin do sistema)",
-        "tags": ["admin"]
+        "tags": ["admin-users"]
       }
     },
     "/api/v1/tenants/{id}/invitations": {

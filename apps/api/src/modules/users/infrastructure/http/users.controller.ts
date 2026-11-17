@@ -77,6 +77,8 @@ import { UserId } from '../../domain/value-objects/user-id.vo.js';
 
 import { UserUseCases, USER_USE_CASES } from '../../application/user-use-cases.js';
 import type { GetUserByIdInput } from '../../application/dto/get-user-by-id.input.js';
+import { toUserHistoryPageDto } from '../../application/dto/user-history.output.js';
+import type { UserHistoryPageDto } from '@projeto/shared-types';
 import type { ListUsersInput } from '../../application/dto/list-users.input.js';
 import type { RestoreUserInput } from '../../application/dto/restore-user.input.js';
 import type { SoftDeleteUserInput } from '../../application/dto/soft-delete-user.input.js';
@@ -550,7 +552,7 @@ export class UsersController {
     @Query('cursor') cursor?: string,
     @Query('limit') limit = '20',
     @Req() request?: RequestWithUser,
-  ): Promise<unknown> {
+  ): Promise<UserHistoryPageDto> {
     // ⚠️ #124: a SEGUNDA surface de query da API, e a #124 tinha fechado só a
     // primeira. `limit=abc` virava `NaN` e chegava ao `take:` do Prisma —
     // 500, onde o certo é 400. O schema é o mesmo da paginação de
@@ -567,7 +569,13 @@ export class UsersController {
     // pt-BR (Fase 10+): o escopo vem do MESMO header que escopa as mutações.
     // Sem ele a leitura cai em SISTEMA e devolve o histórico cross-tenant — que
     // é o elo 1 da escalada fechada na migration `20261020000002`.
-    return this.auditService.listHistory(input, empresaDoAtor(request));
+    //
+    // ⚠️ pt-BR (2026-11-17): a rota passa pelo MESMO mapeamento da rota do
+    // ADMIN do SISTEMA (`toUserHistoryPageDto`). Ela devolvia o port CRU
+    // (`Promise<unknown>`), e só a outra passava pelo mapeamento: o wire
+    // coincidia, mas as DUAS surfaces do mesmo dado podiam divergir sozinhas.
+    const pagina = await this.auditService.listHistory(input, empresaDoAtor(request));
+    return toUserHistoryPageDto(pagina);
   }
 
   // ───────────────────────── helpers ─────────────────────────────

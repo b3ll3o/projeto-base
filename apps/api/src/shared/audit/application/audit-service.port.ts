@@ -23,6 +23,23 @@ export interface AuditRecordInput {
 }
 
 export interface HistoryEntry {
+  /**
+   * O id da LINHA na tabela de auditoria — e o **cursor** que a leitura
+   * devolve.
+   *
+   * ⚠️ Ele não é o id da entidade: `users_history` tem a PK própria
+   * (`gen_random_uuid()`), e o `entityId` é o id do agregado auditado. São
+   * dois ids diferentes, e o cursor é o da LINHA.
+   *
+   * pt-BR (2026-11-17): o campo não existia, e a consequência foi o cursor
+   * **não ter dono**: a produção devolvia `last.id` (o id que só o
+   * repositório Prisma enxergava), e o duplo em memória — que não tinha
+   * de onde tirar um id de linha — inventava um **offset numérico** (`"20"`),
+   * que a API recusa com 400 na página seguinte. Um contrato que só a
+   * implementação de produção consegue cumprir é um contrato que o teste
+   * não mede.
+   */
+  id: string;
   entityId: string;
   version: number;
   previousVersion: number | null;
@@ -47,6 +64,21 @@ export interface ListHistoryInput {
   entityId: string;
   cursor?: string | null;
   limit: number;
+  /**
+   * A ordem da leitura — e o cursor anda **na direção dela**.
+   *
+   * ⚠️ `'asc'` (padrão) é a ordem CRONOLÓGICA: da versão mais antiga para a
+   * mais recente. `'desc'` é a ordem da trilha de auditoria de quem lê:
+   * **a mais recente primeiro**.
+   *
+   * pt-BR (2026-11-17): o campo não existia, e a consequência foi que a
+   * ordem era imposta ao **leitor** — a tela do administrador do sistema
+   * mostrava as 100 versões mais ANTIGAS, e as mais recentes (as que dizem
+   * quando a pessoa mudou pela última vez) eram as que o teto de páginas
+   * cortava. Inverter a exibição **sem** isto não resolveria: o cursor anda
+   * junto com a ordem, e o cursor da API andava para o mais antigo.
+   */
+  ordem?: 'asc' | 'desc';
 }
 
 export interface GetHistoryEntryInput {

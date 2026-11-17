@@ -82,13 +82,30 @@ async function exportOpenApi(): Promise<void> {
     ? resolve(process.env.OPENAPI_OUTPUT_PATH)
     : resolve(process.cwd(), 'openapi.json');
   await mkdir(dirname(outputPath), { recursive: true });
-  await writeFile(outputPath, JSON.stringify(document, null, 2));
+  await writeFile(outputPath, await formatarComoJson(JSON.stringify(document, null, 2)));
 
   // pt-BR: close garante que o processo não fica esperando handles
   // abertos do NestJS/Fastify.
   await app.close();
 
   console.log(`OpenAPI exportado para ${outputPath}`);
+}
+
+/**
+ * O JSON do contrato, no formato que o REPOSITÓRIO usa.
+ *
+ * ⚠️ pt-BR (2026-11-17): o `JSON.stringify` puro escrevia arrays em uma linha
+ * só — e o `pnpm format:check` (o glob do Prettier inclui `*.json`) REPROVAva
+ * o arquivo gerado. O commit passava porque o `lint-staged` formatava no
+ * commit; mas quem rodasse o export e commitasse sem o hook deixava o
+ * repositório vermelho — uma armadilha que não é do código, e sim do formato.
+ *
+ * A comparação do gate (`check-openapi-contract`) é SEMÂNTICA, e continua
+ * passando: o que muda aqui é a FORMATAÇÃO, não o conteúdo.
+ */
+async function formatarComoJson(texto: string): Promise<string> {
+  const { format } = await import('prettier');
+  return await format(texto, { parser: 'json' });
 }
 
 exportOpenApi().catch((err) => {

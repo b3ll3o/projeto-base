@@ -121,32 +121,26 @@ Cada app/package estende `tsconfig.base.json` e adiciona seus próprios aliases.
 
 ## §5. Turborepo — Pipelines
 
-Conteúdo real de `turbo.json` (medido em 2026-11-17 com `cat turbo.json`):
+As tasks que a convenção abaixo usa (medido em 2026-11-17 com `cat turbo.json`;
+**o dono do pipeline é o arquivo**, e ele é a fonte — o bloco aqui é o recorte
+que a convenção usa, não uma cópia):
 
 ```jsonc
-{
-  "$schema": "https://turbo.build/schema.json",
-  "globalDependencies": ["**/.env.*local", "tsconfig.base.json"],
-  "tasks": {
-    "build": { "dependsOn": ["^build"], "outputs": ["dist/**", ".next/**"] },
-    "dev": { "cache": false, "persistent": true },
-    "lint": { "outputs": [] },
-    "db:generate": { "cache": false },
-    "typecheck": { "dependsOn": ["^build", "db:generate"], "outputs": [] },
-    "test": { "dependsOn": ["^build"], "outputs": ["coverage/**"] },
-    "test:unit": { "outputs": ["coverage/**"] },
-    "test:coverage": { "outputs": ["coverage/**"] },
-    "test:integration": { "dependsOn": ["db:generate"], "cache": false, "outputs": [] },
-    "test:e2e": { "dependsOn": ["db:generate"], "cache": false, "outputs": [] },
-    "clean": { "cache": false }
-  }
-}
+"build": { "dependsOn": ["^build"], "outputs": ["dist/**", ".next/**"] },
+"dev": { "cache": false, "persistent": true },
+"db:generate": { "cache": false },
+"typecheck": { "dependsOn": ["^build", "db:generate"], "outputs": [] },
+"test:integration": { "dependsOn": ["@projeto/api#db:generate"], "cache": false, "outputs": [] },
+"test:e2e": { "dependsOn": ["@projeto/api#db:generate"], "cache": false, "outputs": [] }
 ```
 
 **Convenção:** toda tarefa declara `outputs` (o que cachear) ou `cache: false` (o
 que nunca cachear); `dependsOn: ["^build"]` garante a ordem topológica; `dev` é
 `cache: false, persistent: true` (watch mode); e as tasks de BANCO dependem de
-`db:generate` (o porquê medido: [`ci-defense-in-depth.md`](../.agents/specs/conventions/ci-defense-in-depth.md)).
+`db:generate` — **qualificada com o pacote** (`@projeto/api#db:generate`), porque
+só o `@projeto/api` tem Prisma: a dependência simples virava `<NONEXISTENT>`
+(que o turbo pula) e a invariante não valeria para o e2e do web, que é o que
+sobe a API (o porquê medido: [`ci-defense-in-depth.md`](../.agents/specs/conventions/ci-defense-in-depth.md)).
 
 ## §6. Versionamento
 

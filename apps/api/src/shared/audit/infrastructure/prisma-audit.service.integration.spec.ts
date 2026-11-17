@@ -18,6 +18,7 @@
 // válidos porque as colunas Prisma são `@db.Uuid`.
 
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
+import { PrismaClient } from '@prisma/client';
 import {
   setupTestDatabase,
   cleanDatabase,
@@ -25,6 +26,7 @@ import {
 } from '../../../../test/testcontainers-helper.js';
 import { PrismaAuditService } from './prisma-audit.service.js';
 import { AuditContext } from '../domain/audit-context.vo.js';
+import { AuditCursorInvalidoException } from '../domain/audit.exceptions.js';
 import { uriComoPapelDeRuntime } from '../../infrastructure/prisma/papel-de-runtime.js';
 import { abrirEscopo } from '../../infrastructure/prisma/escopo.js';
 import { HASH_REAL } from '../../../../test/fakes/fake-password-hasher.js';
@@ -154,6 +156,139 @@ describe('PrismaAuditService (Testcontainers)', () => {
     expect(page3.entries).toHaveLength(1);
     expect(page3.entries[0]?.version).toBe(5);
     expect(page3.nextCursor).toBeNull();
+  });
+
+  // ─────────── a ordem descendente, o LIMIT e o cursor dentro da entidade ───────────
+
+  it('a ordem `desc` traz a versão mais recente PRIMEIRO — e o cursor anda com ela', async () => {
+    const contexto = ctxAudit();
+    for (let v = 1; v <= 5; v++) {
+      await svc.record(
+        {
+          entityName: 'User',
+          entityId: ENTITY_U1,
+          operation: v === 1 ? 'INSERT' : 'UPDATE',
+          previousVersion: v === 1 ? null : v - 1,
+          newVersion: v,
+          snapshot: { id: ENTITY_U1, v },
+        },
+        contexto,
+      );
+    }
+
+    const pagina = await svc.listHistory(
+      { entityName: 'User', entityId: ENTITY_U1, limit: 2, ordem: 'desc' },
+      SISTEMA,
+    );
+
+    // ⚠️ A ordem é do INPUT porque o cursor anda com ela: com a ordem
+    // invertida, o cursor aponta para as versões MAIS ANTIGAS — e é por isso
+    // que a tela do admin pôde mostrar a mais recente primeiro.
+    expect(pagina.entries.map((e) => e.version)).toEqual([5, 4]);
+    expect(pagina.nextCursor).not.toBeNull();
+
+    const pagina2 = await svc.listHistory(
+      {
+        entityName: 'User',
+        entityId: ENTITY_U1,
+        cursor: pagina.nextCursor,
+        limit: 2,
+        ordem: 'desc',
+      },
+      SISTEMA,
+    );
+    expect(pagina2.entries.map((e) => e.version)).toEqual([3, 2]);
+  });
+
+  it('o cursor de OUTRA trilha é INVÁLIDO — e não uma página errada', async () => {
+    const contexto = ctxAudit();
+    await svc.record(
+      {
+        entityName: 'User',
+        entityId: ENTITY_U1,
+        operation: 'INSERT',
+        previousVersion: null,
+        newVersion: 1,
+        snapshot: { id: ENTITY_U1 },
+      },
+      contexto,
+    );
+    await svc.record(
+      {
+        entityName: 'User',
+        entityId: ENTITY_U2,
+        operation: 'INSERT',
+        previousVersion: null,
+        newVersion: 1,
+        snapshot: { id: ENTITY_U2 },
+      },
+      contexto,
+    );
+
+    const doOutro = await ctx.prisma.userHistory.findFirstOrThrow({
+      where: { entityId: ENTITY_U2 },
+      select: { id: true },
+    });
+
+    // ⚠️ O cursor de outra trilha devolvia uma página ERRADA (a partir de uma
+    // versão alheia) em vez de um erro — e a resposta é a MESMA para "não
+    // existe" e para "é de outra trilha": nada que diga se aquele id existe.
+    await expect(
+      svc.listHistory(
+        { entityName: 'User', entityId: ENTITY_U1, cursor: doOutro.id, limit: 10 },
+        SISTEMA,
+      ),
+    ).rejects.toThrow(AuditCursorInvalidoException);
+  });
+
+  it('a query da página usa LIMIT — o banco não traz a trilha inteira', async () => {
+    const contexto = ctxAudit();
+    for (let v = 1; v <= 5; v++) {
+      await svc.record(
+        {
+          entityName: 'User',
+          entityId: ENTITY_U1,
+          operation: v === 1 ? 'INSERT' : 'UPDATE',
+          previousVersion: v === 1 ? null : v - 1,
+          newVersion: v,
+          snapshot: { id: ENTITY_U1, v },
+        },
+        contexto,
+      );
+    }
+
+    // ⚠️ A implementação anterior entregava o cursor ao Prisma como
+    // `cursor: { id }`, e o Prisma traduzia isso num subselect SEM `LIMIT`:
+    // o banco trazia a trilha inteira para a página devolver `limit` linhas.
+    //
+    // A medição é do SQL REAL — e ela precisa de um escopo de EMPRESA, porque
+    // o bucket de SISTEMA abre a CREDENCIAL de sistema (um client próprio, que
+    // não é o cliente instrumentado aqui).
+    const prismaComLog = new PrismaClient({
+      datasourceUrl: ctx.uriDoBanco,
+      log: [{ emit: 'event', level: 'query' }],
+    });
+    const sqls: string[] = [];
+    prismaComLog.$on('query', (evento) => {
+      if (evento.query.includes('users_history')) sqls.push(evento.query);
+    });
+
+    try {
+      const svcComLog = new PrismaAuditService(prismaComLog);
+      await svcComLog.listHistory(
+        { entityName: 'User', entityId: ENTITY_U1, limit: 2 },
+        '0190a8b6-1234-7abc-9def-0000000000aa',
+      );
+    } finally {
+      await prismaComLog.$disconnect();
+    }
+
+    // ⚠️ E o `LIMIT` precisa estar lá — a página pede 2 e o banco traz 2.
+    const consulta = sqls.find((q) => q.includes('users_history') && q.includes('LIMIT'));
+    expect(consulta).toBeDefined();
+    // E o filtro de versão (o range do cursor) também: sem ele, o subselect
+    // do cursor antigo continuava lá.
+    expect(sqls.some((q) => q.includes('"version"') && q.includes('users_history'))).toBe(true);
   });
 
   it('getHistoryEntry retorna entrada específica via composite unique (entityId, version)', async () => {

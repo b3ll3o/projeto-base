@@ -33,6 +33,12 @@
 // as rotas não se cruzam: `PUT :id/profile` e `GET :id/history`. O prefixo
 // compartilhado é de propósito: as duas rotas são do mesmo ator (o admin do
 // sistema) e da mesma tela.
+//
+// ⚠️ E A TAG é a do IRMÃO (`admin-users`), e não `admin`: MEDIDO 2026-11-17 no
+// contrato gerado, as DUAS rotas de `/admin/users` caíam em tags diferentes
+// (`admin` e `admin-users`) — e quem agrupa o contrato por tag via a rota do
+// histórico para o bucket do inventário de tenancy, longe da rota que veste o
+// perfil da mesma pessoa.
 
 import { Controller, Get, Inject, Param, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -48,7 +54,7 @@ import { UserUseCases, USER_USE_CASES } from '../../application/user-use-cases.j
 import type { ListUserHistoryInput } from '../../application/dto/list-user-history.input.js';
 import { PaginacaoQuerySchema } from './users.schemas.js';
 
-@ApiTags('admin')
+@ApiTags('admin-users')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('admin/users')
@@ -68,7 +74,8 @@ export class AdminUserHistoryController {
   @ApiResponse({ status: 200, description: 'Histórico paginado da pessoa' })
   @ApiResponse({
     status: 400,
-    description: 'Query inválida (limit fora da faixa, cursor malformado)',
+    description:
+      'Query inválida (limit fora da faixa, cursor malformado ou cursor de outra trilha), ou id que não é um UUID v7',
   })
   @ApiResponse({ status: 403, description: 'Só o administrador do sistema' })
   @ApiResponse({ status: 404, description: 'Pessoa inexistente' })

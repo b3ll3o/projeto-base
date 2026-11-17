@@ -26,10 +26,11 @@ import type {
 import { AuditContextStore } from '../../../shared/audit/shared/audit-context-store.js';
 import { TENANCY_USE_CASES } from '../../tenancy/application/tenancy.use-cases.js';
 import {
+  ehAdministradorDeSistema,
   exigeAdministradorDeSistema,
   type AtorAutenticado,
 } from '../../../shared/auth/eh-administrador-de-sistema.js';
-import type { UserHistoryPageDto, UserOutputDto } from '@projeto/shared-types';
+import type { UserHistoryPageDto } from '@projeto/shared-types';
 // `import type` e não no import de cima: `TenancyUseCases` é apagado em
 // runtime (só entra como tipo do campo `tenancy`), e manter a aresta viva em
 // runtime criaria um ciclo users/application → tenancy/application →
@@ -44,6 +45,7 @@ import type { RestoreUserInput } from './dto/restore-user.input.js';
 import type { GetUserByIdInput } from './dto/get-user-by-id.input.js';
 import type { ListUsersInput } from './dto/list-users.input.js';
 import type { ListUserHistoryInput } from './dto/list-user-history.input.js';
+import { toUserHistoryPageDto } from './dto/user-history.output.js';
 import { toUserOutput, toUserOutputNoEscopo, type UserOutput } from './dto/user.output.js';
 import type { ListUsersOutput } from './dto/list-users.output.js';
 
@@ -197,9 +199,22 @@ export class UserUseCases {
 
   // ----- READ -----
 
-  async obterPorId(input: GetUserByIdInput, tenantId: string | null): Promise<UserOutput> {
+  /**
+   * A pessoa pelo id — e, com `includeDeleted`, mesmo apagada.
+   *
+   * ⚠️ pt-BR (2026-11-17): a opção existe para a rota do ADMIN do SISTEMA,
+   * cuja trilha precisa alcançar a pessoa que **saiu** — o soft-delete não
+   * apaga a trilha, e sem esta opção o histórico de quem saiu era
+   * inalcançável. As outras chamadas seguem sem a opção (e sem a pessoa
+   * apagada) — o comportamento delas não muda.
+   */
+  async obterPorId(
+    input: GetUserByIdInput,
+    tenantId: string | null,
+    options?: FindByIdOptions,
+  ): Promise<UserOutput> {
     const id = UserId.create(input.id);
-    const user = await this.userRepo.findById(id, tenantId);
+    const user = await this.userRepo.findById(id, tenantId, options);
     if (user === null) {
       throw new ApplicationResourceNotFoundException('User', id.value);
     }
@@ -229,6 +244,19 @@ export class UserUseCases {
     // depois de ler seria devolver o histórico e o 403 — e o teste negativo
     // (que afirma que o `auditService` NÃO foi chamado) existe para prender
     // esta ordem.
+    //
+    // ⚠️ E A RECUSA DEIXA RASTRO (2026-11-17): o `Logger` só era chamado no
+    // caminho do SUCESSO, e o `GlobalExceptionFilter` só loga a partir de 500 —
+    // então a tentativa de ler a trilha alheia por um ator que não é admin
+    // ficava numa linha com method/url/status, e sem ator. Agora é um registro
+    // com o ATOR e o ALVO — o precedente é o `recusaEscalada`
+    // (`profiles.use-cases.ts`), cujo comentário já diz: "uma escalada é 403,
+    // então passava sem rastro".
+    if (!ehAdministradorDeSistema(ator)) {
+      loggerHistorico.warn(
+        `leitura recusada: o ator ${ator.userId} tentou ler o histórico da pessoa ${input.id}`,
+      );
+    }
     exigeAdministradorDeSistema(ator, 'só o administrador do sistema lê o histórico de uma pessoa');
 
     // ⚠️ A EXISTÊNCIA é conferida ANTES da leitura. Sem isto, o histórico de
@@ -236,9 +264,16 @@ export class UserUseCases {
     // "existe mas nunca foi mudado" sairiam IGUAIS, o que transformaria a
     // rota num oráculo de existência para quem não deveria saber.
     //
+    // ⚠️ E A EXISTÊNCIA INCLUI A PESSOA APAGADA (2026-11-17). O soft-delete
+    // NÃO apaga a trilha: a linha em `users`, a entrada `DELETE` em
+    // `users_history` e o `users_archive` continuam lá, visíveis na credencial
+    // de sistema. Sem o `includeDeleted`, o histórico de quem SAIU da empresa
+    // era inalcançável pela única rota que o lê — que é exatamente o caso que
+    // a rota existe para servir.
+    //
     // O escopo da busca é o de SISTEMA (`null`): o admin do sistema não
     // pertence a empresa nenhuma, e a pessoa lida pode estar em qualquer uma.
-    await this.obterPorId({ id: input.id }, null);
+    await this.obterPorId({ id: input.id }, null, { includeDeleted: true });
 
     const pagina = await this.auditService.listHistory(
       {
@@ -246,6 +281,12 @@ export class UserUseCases {
         entityId: input.id,
         cursor: input.cursor ?? null,
         limit: input.limit,
+        // ⚠️ A ORDEM é DESCENDENTE: a mais recente primeiro. A ordem é do
+        // INPUT porque o cursor anda com ela — e o cursor da API andava para o
+        // mais antigo, o que punha a tela de exibir as 100 versões mais
+        // ANTIGAS e cortava justamente as mais recentes (as que dizem quando a
+        // pessoa mudou pela última vez).
+        ordem: 'desc',
       },
       // ⚠️ O escopo da LEITURA é o de SISTEMA (`null`), e não o da empresa do
       // ator. A policy `history_leitura` libera a linha quando
@@ -262,23 +303,7 @@ export class UserUseCases {
       `histórico lido: ${pagina.entries.length} entrada(s) da pessoa ${input.id} — ator ${ator.userId}`,
     );
 
-    return {
-      entries: pagina.entries.map((entrada) => ({
-        entityId: entrada.entityId,
-        version: entrada.version,
-        previousVersion: entrada.previousVersion,
-        operation: entrada.operation,
-        // ⚠️ O snapshot gravado é o `toUserOutput` da pessoa — o MESMO
-        // formato que a rota do DONO devolve. O port o declara como
-        // `Record<string, unknown>` porque a auditoria é genérica; aqui a
-        // entidade é `User`, e o formato é o do DTO.
-        snapshot: entrada.snapshot as unknown as UserOutputDto,
-        changedAt: entrada.changedAt.toISOString(),
-        changedBy: entrada.changedBy,
-        reason: entrada.reason,
-      })),
-      nextCursor: pagina.nextCursor,
-    };
+    return toUserHistoryPageDto(pagina);
   }
 
   async listar(input: ListUsersInput, tenantId: string | null): Promise<ListUsersOutput> {
