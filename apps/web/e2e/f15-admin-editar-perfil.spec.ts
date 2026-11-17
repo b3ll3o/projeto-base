@@ -209,10 +209,10 @@ test.describe('F15 — Edição dos metadados do perfil (admin)', () => {
     // só na segunda.
     const resposta = await page.goto(appUrl('/admin/profiles/slug-que-nao-existe'));
 
-    // O 404 default do Next, porque o app não tem `not-found.tsx` (MEDIDO:
-    // `find apps/web/app -name 'not-found*'` → vazio). A afirmação é pelo
-    // STATUS, não pelo texto: o texto é o do Next e muda de versão para
-    // versão, e um spec que dependesse dele reprovaria numa upgrade.
+    // O 404 é o do APP: `app/not-found.tsx` (a tela pt-BR do "não
+    // encontrado"). A afirmação é pelo STATUS, não pelo texto: o texto é o
+    // do app e pode mudar, e um spec que dependesse dele reprovaria numa
+    // mudança de copy.
     expect(resposta?.status()).toBe(404);
     // E o formulário não aparece: um 404 que renderizasse o form de edição
     // deixaria o admin gravando num perfil que não existe.

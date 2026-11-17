@@ -39,21 +39,11 @@ import { CabecalhoPagina } from '@/components/ui/cabecalho-pagina';
 import { Container } from '@/components/ui/container';
 import { CabecalhoTabela, CelulaTabela, Tabela } from '@/components/ui/tabela';
 import { exigirAdminDoSistema, ServicoIndisponivel } from '../guard-admin';
-import { listarInventario } from '../../../lib/tenancy';
+import { listarInventario, vinculo } from '../../../lib/tenancy';
 import { exigirSessao } from '../../../lib/sessao';
 import type { InventarioAdminTenancyDto } from '@projeto/shared-types';
 
 export const dynamic = 'force-dynamic';
-
-/**
- * O vínculo, do jeito que a tela mostra: `papel · perfil`.
- *
- * O `perfil` é `null` quando o vínculo não tem um (ou tem o de outra empresa) —
- * e "sem perfil" é o rótulo honesto para esse estado.
- */
-function vinculo(role: string, perfil: string | null): string {
-  return `${role} · ${perfil ?? 'sem perfil'}`;
-}
 
 export default async function AdminTenancyPage(): Promise<React.JSX.Element> {
   // ⚠️ A SESSÃO PRIMEIRO, e o token segue para o guard: uma leitura do
@@ -101,7 +91,10 @@ export default async function AdminTenancyPage(): Promise<React.JSX.Element> {
             <tr key={empresa.id}>
               <CelulaTabela>{empresa.nome}</CelulaTabela>
               <CelulaTabela>
-                <code>{empresa.slug}</code>
+                {/* pt-BR: o slug é METADADO (o identificador legível), e é a
+                    tinta secundária nos DOIS lugares onde ele aparece — aqui
+                    e no card de `/users/[id]`. Mesmo dado, mesma tinta. */}
+                <code className="text-muted-foreground">{empresa.slug}</code>
               </CelulaTabela>
               <CelulaTabela>
                 {empresa.membros.length === 0 ? (

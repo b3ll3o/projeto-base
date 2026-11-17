@@ -9,6 +9,7 @@
 // mostrava só o título. O TypeScript não acusou porque o tipo Mentia na
 // mesma direção que o runtime. Tipos compartilhados são cópia do wire
 // format (ver `packages/shared-types/src/user.ts`).
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Alerta } from '@/components/ui/alerta';
 import { Botao, CLASSES_BOTAO_SECUNDARIO } from '@/components/ui/botao';
@@ -16,6 +17,7 @@ import { CabecalhoPagina } from '@/components/ui/cabecalho-pagina';
 import { Container } from '@/components/ui/container';
 import { EstadoVazio } from '@/components/ui/estado-vazio';
 import { ApiClient, ApiError, baseUrlDaApi } from '@/lib/api-client';
+import { obterMeuPerfilGlobal } from '@/lib/perfil';
 import { exigirSessao, lerTenant } from '@/lib/sessao';
 import type { UserOutputDto, UsersPageDto } from '@projeto/shared-types';
 import { sair } from './actions';
@@ -40,6 +42,68 @@ import { sair } from './actions';
 // para um problema de sessão.
 export const dynamic = 'force-dynamic';
 
+/**
+ * A superfície da linha da listagem — a mesma nos dois ramos (clicável ou
+ * texto).
+ *
+ * pt-BR: o `rounded-md bg-surface p-4` estava escrito à mão em DOIS lugares
+ * (o `<li>` e o card de `/users/[id]`), e a convenção `dry.md` diz que um
+ * termo tem UM dono. A superfície é `bg-surface` + `rounded-md` — e o fio de
+ * 1px NÃO entra: a convenção `estilizacao.md` §2.3 só admite divisória
+ * decorativa e dado tabular.
+ */
+const SUPERFICIE_DA_LINHA = 'rounded-md bg-surface p-4';
+
+/**
+ * O ator é o ADMINISTRADOR DO SISTEMA?
+ *
+ * pt-BR: a leitura do perfil NÃO pode derrubar a listagem — quem não é admin
+ * do sistema vê a lista como sempre, e uma API fora do ar no perfil não pode
+ * levar a listagem embora. `obterMeuPerfilGlobal` devolve `null` no 401, e
+ * `null` é "não é admin"; 403, 5xx, timeout e rede sobem, e aqui viram
+ * `false` — a mesma resposta de quem não é admin, e não um erro de página.
+ */
+async function ehAdminDoSistema(accessToken: string): Promise<boolean> {
+  try {
+    const me = await obterMeuPerfilGlobal(accessToken);
+    return me?.isAdmin === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A LISTAGEM, lida em separado — e o `401` é sessão que expirou.
+ *
+ * pt-BR: 401 aqui NÃO é erro de rede — é sessão que expirou (o access token
+ * vive 15min, contrato (F)). A pessoa precisa voltar ao login, e mostrar
+ * "Não foi possível carregar a lista" para isso seria mandar quem tem um
+ * problema de credencial procurar problema de conexão.
+ *
+ * O `redirect` lança NEXT_REDIRECT e sai da função; ele está DENTRO do
+ * `catch` e não dentro de outro `try`, então não há nada que o engula.
+ */
+async function lerLista(api: ApiClient): Promise<{
+  data: UsersPageDto | null;
+  error: string | null;
+}> {
+  try {
+    return { data: await api.get<UsersPageDto>('/users?limit=20'), error: null };
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) {
+      redirect('/login');
+    }
+    const error = err instanceof Error ? err.message : 'Erro desconhecido';
+    // pt-BR (padrão de estilização, 2026-11-11): a tela NÃO cola a exceção
+    // crua na mensagem. O que a pessoa precisa saber é que a lista não veio
+    // e o que ela pode fazer; a exceção crua (que pode ser o número HTTP, ou
+    // uma frase do proxy) é do log do servidor, que é onde o diagnóstico
+    // vive. A mensagem da tela é a mesma para toda falha de leitura.
+    console.error('[web] listagem de usuários', error);
+    return { data: null, error };
+  }
+}
+
 export default async function UsersPage() {
   const accessToken = await exigirSessao();
 
@@ -50,29 +114,15 @@ export default async function UsersPage() {
     getTenant: () => tenantId,
   });
 
-  let data: UsersPageDto | null = null;
-  let error: string | null = null;
-  try {
-    data = await api.get<UsersPageDto>('/users?limit=20');
-  } catch (err) {
-    // pt-BR: 401 aqui NÃO é erro de rede — é sessão que expirou (o access
-    // token vive 15min, contrato (F)). A pessoa precisa voltar ao login, e
-    // mostrar "Não foi possível carregar a lista" para isso seria mandar
-    // quem tem um problema de credencial procurar problema de conexão.
-    //
-    // O `redirect` lança NEXT_REDIRECT e sai da função; ele está DENTRO do
-    // `catch` e não dentro de outro `try`, então não há nada que o engula.
-    if (err instanceof ApiError && err.status === 401) {
-      redirect('/login');
-    }
-    error = err instanceof Error ? err.message : 'Erro desconhecido';
-    // pt-BR (padrão de estilização, 2026-11-11): a tela NÃO cola a exceção
-    // crua na mensagem. O que a pessoa precisa saber é que a lista não veio
-    // e o que ela pode fazer; a exceção crua (que pode ser o número HTTP, ou
-    // uma frase do proxy) é do log do servidor, que é onde o diagnóstico
-    // vive. A mensagem da tela é a mesma para toda falha de leitura.
-    console.error('[web] listagem de usuários', error);
-  }
+  // pt-BR: as DUAS leituras correm EM PARALELO. O `isAdmin` GLOBAL é o do
+  // bucket de sistema (D8) — o da empresa é o do DONO, e usá-lo abriria o
+  // inventário da tenancy para um gerente que a API recusa com 403. E
+  // serializadas, elas somavam dois prazos de timeout (10 s cada) na tela
+  // principal, com o LCP esperando a segunda.
+  const [adminDoSistema, { data, error }] = await Promise.all([
+    ehAdminDoSistema(accessToken),
+    lerLista(api),
+  ]);
 
   const usuarios = data?.users ?? [];
 
@@ -137,13 +187,49 @@ export default async function UsersPage() {
           />
         ) : (
           <ul className="space-y-2">
-            {usuarios.map((u: UserOutputDto) => (
-              <li key={u.id} className="rounded-md bg-surface p-4">
-                <div className="break-words font-medium text-foreground">{u.nome}</div>
-                <div className="break-words text-sm text-muted-foreground">{u.email}</div>
-                <div className="mt-1 text-xs tabular-nums text-muted-foreground">v{u.version}</div>
-              </li>
-            ))}
+            {usuarios.map((u: UserOutputDto) => {
+              // pt-BR: o conteúdo do item é o MESMO nos dois ramos — o que
+              // muda é se a pessoa é clicável. O clique leva ao detalhe, que
+              // mostra as empresas dela: e o inventário da tenancy é
+              // exclusivo do administrador do sistema.
+              const conteudo = (
+                <>
+                  <div className="break-words font-medium text-foreground">{u.nome}</div>
+                  <div className="break-words text-sm text-muted-foreground">{u.email}</div>
+                  {/* ⚠️ `aria-hidden`: a versão é METADADO, e dentro do link
+                      ela entrava no nome acessível ("Ana ana@x.dev v 3, link") —
+                      o leitor de tela anunciava a versão como parte do
+                      destino. O dado continua VISÍVEL; ele só para de ser
+                      lido. */}
+                  <div
+                    aria-hidden="true"
+                    className="mt-1 text-xs tabular-nums text-muted-foreground"
+                  >
+                    v{u.version}
+                  </div>
+                </>
+              );
+              return (
+                <li key={u.id}>
+                  {/* ⚠️ A SUPERFÍCIE É O ALVO, e não o `<li>`: com o
+                      `p-4` no `<li>` e o link dentro dele, a faixa de 16px em
+                      volta do texto era zona morta (não abria nada no toque)
+                      e o anel de foco desenhava um retângulo solto da
+                      superfície. É o card de `/users/[id]` que faz o
+                      contrário — o link É a superfície. */}
+                  {adminDoSistema ? (
+                    <Link
+                      href={`/users/${u.id}`}
+                      className={`foco block ${SUPERFICIE_DA_LINHA} hover:bg-muted`}
+                    >
+                      {conteudo}
+                    </Link>
+                  ) : (
+                    <div className={SUPERFICIE_DA_LINHA}>{conteudo}</div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

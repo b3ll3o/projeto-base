@@ -60,9 +60,19 @@ vi.mock('../../../lib/sessao', () => ({
   lerTenant: vi.fn(async (): Promise<string | null> => null),
   lerTokens: vi.fn(async () => ({ accessToken: 'token-admin', refreshToken: null })),
 }));
-vi.mock('../../../lib/tenancy', () => ({
-  listarInventario: (accessToken: string) => listarInventario(accessToken),
-}));
+// ⚠️ O mock é PARCIAL: `vinculo` (o rótulo `papel · perfil`) passou a morar
+// em `lib/tenancy.ts` — e um mock do módulo INTEIRO o deixaria `undefined`, e
+// a página quebraria ao renderizar a tabela de membros. O spec passava só
+// porque a fixture era `{empresas: [], usuarios: []}`: a tabela vazia nunca
+// chamava `vinculo`. O teste do vínculo, aqui embaixo, é o que fecha esse
+// buraco.
+vi.mock('../../../lib/tenancy', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../../lib/tenancy')>();
+  return {
+    ...real,
+    listarInventario: (accessToken: string) => listarInventario(accessToken),
+  };
+});
 
 const { default: Page } = await import('./page');
 
@@ -122,5 +132,39 @@ describe('admin/tenancy — a página usa o guard do ADMINISTRADOR DO SISTEMA', 
     // E a tela é a de serviço fora — e NÃO a do inventário: um erro genérico
     // subindo para o `app/error.tsx` é a tela que não oferece retry.
     expect(screen.queryByRole('heading', { name: 'Empresas e usuários' })).not.toBeInTheDocument();
+  });
+
+  it('o membro aparece com o VÍNCULO `papel · perfil` — o rótulo que mora em `lib/tenancy`', async () => {
+    // ⚠️ A fixture com um membro é o que dá DENTE ao mock parcial: com a
+    // lista vazia, `vinculo` nunca era chamado, e o `undefined` do mock
+    // inteiro passava despercebido.
+    listarInventario.mockResolvedValue({
+      empresas: [
+        {
+          id: 'e1',
+          nome: 'Acme',
+          slug: 'acme',
+          membros: [
+            {
+              id: 'u1',
+              nome: 'Dona Da Empresa',
+              email: 'dona@exemplo.dev',
+              role: 'gerente',
+              perfil: 'gerente',
+            },
+          ],
+        },
+      ],
+      usuarios: [],
+    });
+
+    render(await Page());
+
+    // ⚠️ REGEX, e não string exata: o membro é renderizado como UM texto
+    // ("Ana — ana@x.dev (gerente · gerente)"), e `getByText` compara o texto
+    // do elemento com a string INTEIRA. A regex casa o mesmo elemento — o
+    // `<li>` — e não o `<ul>` que o contém (o texto direto dele é vazio).
+    expect(screen.getByText(/Dona Da Empresa/)).toBeInTheDocument();
+    expect(screen.getByText(/gerente · gerente/)).toBeInTheDocument();
   });
 });

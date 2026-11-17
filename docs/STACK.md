@@ -78,19 +78,19 @@ projeto-base (monorepo)
 | Padrão de estilo | **`estilizacao.md`** (convenção) | — | Tokens semânticos + primitivas em `apps/web/components/ui/`; o instrumento é a regra ESLint `estilizacao/no-estilizacao-informal`. Ver [`.agents/specs/conventions/estilizacao.md`](../.agents/specs/conventions/estilizacao.md) |
 | Componentes | **escritos à mão, sobre as primitivas** | — | Não há biblioteca de componentes: shadcn/ui NÃO está instalado — nem como dependência, nem como código copiado. As primitivas (`Container`, `CabecalhoPagina`, `CabecalhoSecao`, `Campo`, `Botao`, `Alerta`, `Tabela`, `CabecalhoTabela`, `CelulaTabela`, `EstadoVazio`, `LinkTexto`) são o que as telas usam — as 9 de `apps/web/components/ui/` exportam 11 componentes, porque `Tabela` vem com `CabecalhoTabela` e `CelulaTabela`; o `className` repetido era a dívida que elas pagaram |
 | State (URL) | Next router | nativo | Filtros, paginação, tabs na URL |
-| Forms | react-hook-form + zod | ^7 / ^3.25.76 | Client Component + validação tipada |
+| Forms | react-hook-form + zod | ^7.91.0 / ^3.25.76 | Client Component + validação tipada |
 | Server Actions | nativo | — | Mutações sem JS extra |
 | Auth client | **`apps/web/lib/sessao.ts`** (casa própria) | — | grava/ler cookies httpOnly `access_token` + `refresh_token` e monta o `Authorization: Bearer`. NextAuth.js / Auth.js NÃO estão instalados. O browser nunca fala com a API: todo o tráfego passa por Server Action |
-| Testes unit | Vitest + Testing Library | ^2.1.0 | `@testing-library/react` + `user-event` + `jest-dom`, em jsdom |
-| Testes E2E | Playwright | `^1.60.0` (resolvido em `1.60.0` pelo lock) | `apps/web/e2e/*.spec.ts` — **19 specs** (`f1`–`f19`), `testDir` separado do Vitest. O inventário canônico (rota, nome e estados cobertos de cada fluxo) está em [`.agents/specs/conventions/e2e-playwright.md`](../.agents/specs/conventions/e2e-playwright.md) §"Inventário de Fluxos" |
+| Testes unit | Vitest + Testing Library | ^2.1.9 | `@testing-library/react` + `user-event` + `jest-dom`, em jsdom |
+| Testes E2E | Playwright | `^1.65.0` (resolvido em `1.65.0` pelo lock) | `apps/web/e2e/*.spec.ts` — **20 specs** (`f1`–`f20`), `testDir` separado do Vitest. O inventário canônico (rota, nome e estados cobertos de cada fluxo) está em [`.agents/specs/conventions/e2e-playwright.md`](../.agents/specs/conventions/e2e-playwright.md) §"Inventário de Fluxos" |
 | Ícones | — | — | Nenhuma biblioteca de ícones instalada; a UI atual não usa ícones |
 | Qualidade | — | — | **Lighthouse não está ligado**: sem dependência, sem `.lighthouserc*`, sem job. LCP/INP/CLS são *coletados* (`web-vitals` → OTel Metrics), mas não há orçamento que reprove. A menção a "Lighthouse ≥ 90" que sobrou é prosa de workflow, não gate |
 
-> **Versões do frontend medidas em 2026-10-29**, com
+> **Versões do frontend medidas em 2026-11-17**, com
 > `node -p "const p=require('./apps/web/package.json'); p.dependencies['react-hook-form'] + ' ' + p.dependencies['zod'] + ' ' + p.devDependencies['@playwright/test'] + ' ' + p.devDependencies['vitest']"`
-> → `^7 ^3.25.76 ^1.60.0 ^2.1.0`.
+> → `^7.91.0 ^3.25.76 ^1.65.0 ^2.1.9`.
 >
-> **Os 19 specs de e2e** (`ls apps/web/e2e/*.spec.ts | wc -l` → `19`, e os
+> **Os 20 specs de e2e** (`ls apps/web/e2e/*.spec.ts | wc -l` → `20`, e os
 > nomes de cada um em `grep -h '^// FLUXO:' apps/web/e2e/*.spec.ts`) cobrem:
 > F1 listagem de usuários · F2 cadastro com sucesso · F3 validação no cliente ·
 > F4 email duplicado · F5 erro genérico (5xx) · F6 navegação entre telas ·
@@ -99,7 +99,8 @@ projeto-base (monorepo)
 > F12 atribuição de perfil a usuário · F13 meu perfil · F14 ativação e
 > desativação de flags · F15 edição dos metadados de perfil · F16 onboarding de
 > empresa · F17 inventário de empresas e usuários (tenancy) · F18 cabeçalhos
-> de segurança do web · F19 sair revoga o refresh token.
+> de segurança do web · F19 sair revoga o refresh token · F20 detalhe do
+> usuário e as empresas em que ele está (admin do sistema).
 
 ## §4. Monorepo
 
