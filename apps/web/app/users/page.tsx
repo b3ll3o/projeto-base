@@ -46,11 +46,11 @@ export const dynamic = 'force-dynamic';
  * A superfície da linha da listagem — a mesma nos dois ramos (clicável ou
  * texto).
  *
- * pt-BR: o `rounded-md bg-surface p-4` estava escrito à mão em DOIS lugares
- * (o `<li>` e o card de `/users/[id]`), e a convenção `dry.md` diz que um
- * termo tem UM dono. A superfície é `bg-surface` + `rounded-md` — e o fio de
- * 1px NÃO entra: a convenção `estilizacao.md` §2.3 só admite divisória
- * decorativa e dado tabular.
+ * pt-BR: o `rounded-md bg-surface p-4` seria escrito à mão em DOIS ramos
+ * (o link e o div), e a convenção `dry.md` diz que um termo tem UM dono. A
+ * superfície é `bg-surface` + `rounded-md` — e o fio de 1px NÃO entra: a
+ * convenção `estilizacao.md` §2.3 só admite divisória decorativa e dado
+ * tabular.
  */
 const SUPERFICIE_DA_LINHA = 'rounded-md bg-surface p-4';
 
