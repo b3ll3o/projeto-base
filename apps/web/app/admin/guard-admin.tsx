@@ -27,6 +27,12 @@
 // Os três são respostas diferentes para três causas diferentes. O padrão de
 // 401 já existia no repo em `app/users/page.tsx`; aqui ele vira o padrão das
 // telas admin.
+//
+// ⚠️ A MESMA TABELA, para a LEITURA, é `telaDaFalhaDeLeitura` (este arquivo):
+// as telas que leem o inventário (`/admin/tenancy`, `/users/[id]`,
+// `/empresa/[id]`) têm a mesma distinção — 401 é sessão expirada, 403 é a API
+// recusando o ator, e o resto é serviço fora — e o `catch` nu delas tratava
+// as TRÊS como "serviço indisponível". O dono é um só, e a tabela é uma só.
 
 import type * as React from 'react';
 import { redirect } from 'next/navigation';
@@ -63,7 +69,7 @@ export function ServicoIndisponivel(): React.JSX.Element {
 }
 
 /** Negativa de acesso — a pessoa não tem o que precisa. Aqui é verdade. */
-function AcessoRestrito(): React.JSX.Element {
+export function AcessoRestrito(): React.JSX.Element {
   return (
     <Container>
       <CabecalhoPagina
@@ -72,6 +78,32 @@ function AcessoRestrito(): React.JSX.Element {
       />
     </Container>
   );
+}
+
+/**
+ * A TELA de uma leitura que falhou — a MESMA tabela 401/403/5xx do guard.
+ *
+ * ⚠️ Por que isto existe: o `catch` nu de uma tela transformava TODO erro em
+ * "Serviço indisponível" — e as duas respostas mais frequentes NÃO são
+ * serviço fora:
+ *
+ *   - **401** → a SESSÃO EXPIROU (o access token vive 15 min). Mandar a
+ *     pessoa para o login é a resposta certa; "tente de novo" não conserta
+ *     credencial vencida. É a mesma leitura que `app/users/page.tsx` faz da
+ *     listagem.
+ *   - **403** → a API RECUSOU o ator (D2). "Serviço indisponível" seria a
+ *     mentira que este arquivo existe para matar: o serviço está de pé, e o
+ *     que falta é a permissão.
+ *   - **5xx / timeout / rede** → serviço fora. O retry é o que a pessoa pode
+ *     fazer.
+ *
+ * A tela do 401 é o LOGIN, e ela não é um JSX: `redirect` lança
+ * `NEXT_REDIRECT` e sai da função.
+ */
+export function telaDaFalhaDeLeitura(erro: unknown): React.JSX.Element {
+  if (erro instanceof ApiError && erro.status === 401) redirect('/login');
+  if (erro instanceof ApiError && erro.status === 403) return AcessoRestrito();
+  return ServicoIndisponivel();
 }
 
 /**

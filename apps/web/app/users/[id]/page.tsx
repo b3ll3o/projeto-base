@@ -8,10 +8,12 @@
 // DONO, e autorizar por ele mostraria as empresas de uma pessoa para um
 // gerente que a API recusa com 403.
 //
-// ⚠️ A LEITURA QUE FALHOU É SERVIÇO FORA, e não "não existe": o guard já
-// provou que o ator É o administrador do sistema, então falhar aqui é a API
-// fora do ar — e a tela com retry é a honesta (o mesmo caminho de
-// `app/admin/tenancy/page.tsx`).
+// ⚠️ A LEITURA QUE FALHOU tem TRÊS respostas, e o DONO delas é
+// `telaDaFalhaDeLeitura` (`app/admin/guard-admin.tsx`): 401 é sessão
+// expirada (login), 403 é a API recusando o ator ("Acesso restrito") e o
+// resto é serviço fora (retry). O `catch` nu tratava as três como serviço
+// fora — e "não existe" NÃO é uma delas: id fora do inventário é
+// `notFound()`, que é outra resposta.
 
 import type * as React from 'react';
 import Link from 'next/link';
@@ -22,7 +24,7 @@ import { Botao } from '@/components/ui/botao';
 import { Container } from '@/components/ui/container';
 import { EstadoVazio } from '@/components/ui/estado-vazio';
 import { LinkTexto } from '@/components/ui/link-texto';
-import { exigirAdminDoSistema, ServicoIndisponivel } from '../../admin/guard-admin';
+import { exigirAdminDoSistema, telaDaFalhaDeLeitura } from '../../admin/guard-admin';
 import { listarInventario, vinculo } from '../../../lib/tenancy';
 import { exigirSessao } from '../../../lib/sessao';
 import type { InventarioAdminTenancyDto } from '@projeto/shared-types';
@@ -56,8 +58,11 @@ export default async function DetalheUsuarioPage({
     // é o inventário, e a leitura por id não existe. Quando a API ganhar
     // `GET /admin/tenancy/usuarios/:id`, esta é a linha que muda.
     inventario = await listarInventario(accessToken);
-  } catch {
-    return <ServicoIndisponivel />;
+  } catch (erro) {
+    // ⚠️ A falha NÃO é tudo "serviço fora": 401 é sessão expirada (login) e
+    // 403 é a API recusando o ator (acesso restrito). `telaDaFalhaDeLeitura`
+    // é o DONO dessa tabela — a mesma do guard, em `guard-admin.tsx`.
+    return telaDaFalhaDeLeitura(erro);
   }
 
   // pt-BR: id desconhecido é `notFound()` — a pessoa não existe, e a tela de
@@ -81,7 +86,7 @@ export default async function DetalheUsuarioPage({
               descricao="Esta pessoa não está inserida em nenhuma empresa."
               acao={
                 <Botao href="/admin/tenancy" variante="secundario">
-                  Ver o inventário
+                  Ver empresas e usuários
                 </Botao>
               }
             />
@@ -100,16 +105,22 @@ export default async function DetalheUsuarioPage({
                 >
                   <div className="break-words font-medium text-foreground">{empresa.nome}</div>
                   {/* pt-BR: o slug é METADADO (o identificador legível) — e é
-                      a tinta secundária nos DOIS lugares onde ele aparece. */}
-                  <div className="break-words text-xs text-muted-foreground">
+                      a tinta secundária nos DOIS lugares onde ele aparece.
+                      ⚠️ `aria-hidden`: dentro do link ele entrava no nome
+                      acessível do card ("Acme acme papel: gerente · perfil:
+                      gerente"), e o leitor de tela anunciava o identificador
+                      como parte do destino. O dado continua VISÍVEL; ele só
+                      para de ser lido — o mesmo tratamento que a versão
+                      recebe na listagem (`app/users/page.tsx`). */}
+                  <div aria-hidden="true" className="break-words text-xs text-muted-foreground">
                     <code>{empresa.slug}</code>
                   </div>
                   {/* pt-BR: o VÍNCULO é o dado que dá sentido ao card (o que
-                      a pessoa é NAQUELA empresa), então ele é tinta primária —
-                      e o rótulo "Vínculo" diz o que o par é, como a coluna
-                      do inventário diz. */}
+                      a pessoa é NAQUELA empresa), então ele é tinta primária.
+                      E o rótulo NÃO é mais preciso aqui: o `vinculo` já NOMEIA
+                      as duas partes ("papel: … · perfil: …"), e um "Vínculo:"
+                      na frente só repetiria o que o par já diz. */}
                   <div className="mt-1 text-sm text-foreground">
-                    <span className="text-muted-foreground">Vínculo:</span>{' '}
                     {vinculo(empresa.role, empresa.perfil)}
                   </div>
                 </Link>

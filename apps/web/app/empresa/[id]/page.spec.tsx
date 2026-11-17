@@ -130,6 +130,6 @@ describe('empresa/[id] — a página da empresa usa o guard do ADMINISTRADOR DO 
     expect(screen.getByText('Dona Da Empresa')).toBeInTheDocument();
     expect(screen.getByText('dona@exemplo.dev')).toBeInTheDocument();
     // O vínculo: o rótulo do papel e o perfil efetivo NAQUELA empresa.
-    expect(screen.getByText('gerente · gerente')).toBeInTheDocument();
+    expect(screen.getByText('papel: gerente · perfil: gerente')).toBeInTheDocument();
   });
 });

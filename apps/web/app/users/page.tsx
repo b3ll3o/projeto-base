@@ -55,20 +55,38 @@ export const dynamic = 'force-dynamic';
 const SUPERFICIE_DA_LINHA = 'rounded-md bg-surface p-4';
 
 /**
- * O ator é o ADMINISTRADOR DO SISTEMA?
+ * O ator é o ADMINISTRADOR DO SISTEMA? — TRÊS vereditos, não dois.
  *
- * pt-BR: a leitura do perfil NÃO pode derrubar a listagem — quem não é admin
- * do sistema vê a lista como sempre, e uma API fora do ar no perfil não pode
- * levar a listagem embora. `obterMeuPerfilGlobal` devolve `null` no 401, e
- * `null` é "não é admin"; 403, 5xx, timeout e rede sobem, e aqui viram
- * `false` — a mesma resposta de quem não é admin, e não um erro de página.
+ * pt-BR: `false` como resposta de TUDO era mentira. 5xx, timeout e rede caídos
+ * viravam "não é admin", e o administrador do sistema via a lista SEM link e
+ * SEM aviso — sem nenhum caminho para distinguir "a API do perfil caiu" de
+ * "eu não sou administrador". Agora:
+ *
+ *   - `sim` → a linha abre o detalhe (a API respondeu, e disse que sim);
+ *   - `nao` → a linha é texto (a API respondeu, e disse que não);
+ *   - `indisponivel` → a linha é texto E a tela avisa — a leitura NÃO deu
+ *     veredito, e o app diz isso em vez de fabricar um.
+ *
+ * A falha é FECHADA (sem link), e VISÍVEL (o `Alerta` da tela) — o que
+ * impede o pior: o admin concluir que não é administrador do sistema.
  */
-async function ehAdminDoSistema(accessToken: string): Promise<boolean> {
+type VereditoDoAdmin = 'sim' | 'nao' | 'indisponivel';
+
+async function ehAdminDoSistema(): Promise<VereditoDoAdmin> {
   try {
-    const me = await obterMeuPerfilGlobal(accessToken);
-    return me?.isAdmin === true;
+    // ⚠️ SEM token por parâmetro: o token vem do COOKIE, e é o mesmo que o
+    // `Sidebar` (o layout) usa — as duas leituras caem no MESMO memo do
+    // `React.cache` (`lib/perfil.ts`), e a página não faz uma segunda
+    // requisição HTTP do mesmo perfil.
+    const me = await obterMeuPerfilGlobal();
+    // `null` é o 401 — token expirado. A listagem leva 401 também, e o
+    // `redirect('/login')` dela trata; aqui é "não deu para confirmar".
+    if (me === null) return 'indisponivel';
+    return me.isAdmin === true ? 'sim' : 'nao';
   } catch {
-    return false;
+    // 403, 5xx, timeout e rede: a API não deu veredito. A linha fica texto
+    // (falha fechada) e a tela avisa.
+    return 'indisponivel';
   }
 }
 
@@ -119,10 +137,12 @@ export default async function UsersPage() {
   // inventário da tenancy para um gerente que a API recusa com 403. E
   // serializadas, elas somavam dois prazos de timeout (10 s cada) na tela
   // principal, com o LCP esperando a segunda.
-  const [adminDoSistema, { data, error }] = await Promise.all([
-    ehAdminDoSistema(accessToken),
-    lerLista(api),
-  ]);
+  //
+  // ⚠️ A leitura do perfil NÃO pode derrubar a listagem: quem não é admin do
+  // sistema vê a lista como sempre, e uma API fora do ar no perfil não pode
+  // levar a listagem embora. O que ela faz é decidir se a linha ABRE — e,
+  // quando não dá veredito, a tela DIZ que não deu (o `Alerta` abaixo).
+  const [veredito, { data, error }] = await Promise.all([ehAdminDoSistema(), lerLista(api)]);
 
   const usuarios = data?.users ?? [];
 
@@ -159,6 +179,19 @@ export default async function UsersPage() {
       />
 
       <div className="mt-6">
+        {veredito === 'indisponivel' ? (
+          // ⚠️ A leitura do perfil FALHOU, e a lista continua de pé — mas sem o
+          // link. Sem este aviso, o administrador do sistema via a lista sem
+          // link e sem explicação, e o veredito errado era "eu não sou
+          // administrador". O `Alerta` é o estado de ERRO da tela (a convenção
+          // `estilizacao.md` §4.1), e a mensagem diz o que a pessoa perde.
+          <div className="mb-3">
+            <Alerta variante="erro">
+              Não foi possível confirmar seu acesso de administrador do sistema. Por isso, as
+              empresas de cada pessoa não aparecem aqui.
+            </Alerta>
+          </div>
+        ) : null}
         {error ? (
           // pt-BR (revisão 2026-11-16): erro sem AÇÃO é erro sem saída — a
           // pessoa lê "tente de novo" e não tem onde tentar. O `<a href="">`
@@ -217,7 +250,7 @@ export default async function UsersPage() {
                       e o anel de foco desenhava um retângulo solto da
                       superfície. É o card de `/users/[id]` que faz o
                       contrário — o link É a superfície. */}
-                  {adminDoSistema ? (
+                  {veredito === 'sim' ? (
                     <Link
                       href={`/users/${u.id}`}
                       className={`foco block ${SUPERFICIE_DA_LINHA} hover:bg-muted`}

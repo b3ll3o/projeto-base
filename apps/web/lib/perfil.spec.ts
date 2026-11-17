@@ -257,6 +257,30 @@ describe('getTenant é montado no ApiClient (Fase 3)', () => {
   });
 
   /**
+   * A leitura SEM token usa o token do COOKIE — e é isso que faz o memo
+   * bater.
+   *
+   * O memo é o `React.cache` de `lerPerfilGlobal`, e ele chaveia pelo TOKEN.
+   * O `Sidebar` (o layout) chama `obterMeuPerfilGlobal()` sem argumento, e a
+   * página passa o token da sessão: se a leitura sem token montasse um
+   * client com o token DIFERENTE (ou nenhum), as duas seriam duas entradas
+   * do memo — e duas requisições HTTP do mesmo perfil, que é o defeito que
+   * o memo existe para matar.
+   */
+  it('a leitura sem token usa o token do COOKIE — a chave do memo é o token', async () => {
+    clientMock.get.mockResolvedValue(null);
+
+    await obterMeuPerfilGlobal();
+
+    const ctor = ApiClient as unknown as { mock: { calls: unknown[][] } };
+    const ultima = ctor.mock.calls[ctor.mock.calls.length - 1];
+    const config = (ultima?.[0] ?? {}) as { getToken?: () => string | null };
+    // O token do cookie (`lerTokensMock` devolve `token-admin`) — e não
+    // `undefined`, e não o token da empresa.
+    expect(config.getToken?.()).toBe('token-admin');
+  });
+
+  /**
    * A política de ERRO é a mesma de `obterMeuPerfil`, e só o 401 vira `null`.
    *
    * O que o merge de #108 revelou: esta função nasceu com `catch { return null }`

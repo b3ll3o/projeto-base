@@ -99,12 +99,29 @@ describe('users — a listagem só é clicável pelo ADMINISTRADOR DO SISTEMA', 
     expect(screen.getByText('Dona Da Empresa')).toBeInTheDocument();
   });
 
-  it('a leitura do perfil que falha NÃO derruba a listagem — e ela segue sem link', async () => {
+  it('a leitura do perfil que falha NÃO derruba a listagem — e ela AVISA que não deu', async () => {
     obterMeuPerfilGlobal.mockRejectedValue(new Error('500 Internal Server Error'));
 
     render(await Page());
 
     expect(screen.getByText('Dona Da Empresa')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Dona Da Empresa/ })).not.toBeInTheDocument();
+    // ⚠️ O AVISO é o que separa "a API do perfil caiu" de "eu não sou
+    // administrador do sistema". Sem ele, o `false` do `catch` era a MESMA
+    // resposta dos dois — e o administrador via a lista sem link sem
+    // explicação nenhuma.
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Não foi possível confirmar seu acesso de administrador do sistema',
+    );
+  });
+
+  it('quem NÃO é admin do sistema não recebe aviso — a resposta da API É o veredito', async () => {
+    obterMeuPerfilGlobal.mockResolvedValue({ isAdmin: false });
+
+    render(await Page());
+
+    // A API respondeu, e a resposta é "não é admin" — nada a avisar. O aviso
+    // é para quando a RESPOSTA não veio.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

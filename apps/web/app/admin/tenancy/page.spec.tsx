@@ -165,6 +165,6 @@ describe('admin/tenancy — a página usa o guard do ADMINISTRADOR DO SISTEMA', 
     // do elemento com a string INTEIRA. A regex casa o mesmo elemento — o
     // `<li>` — e não o `<ul>` que o contém (o texto direto dele é vazio).
     expect(screen.getByText(/Dona Da Empresa/)).toBeInTheDocument();
-    expect(screen.getByText(/gerente · gerente/)).toBeInTheDocument();
+    expect(screen.getByText(/papel: gerente · perfil: gerente/)).toBeInTheDocument();
   });
 });

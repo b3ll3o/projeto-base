@@ -3,9 +3,12 @@
 // pt-BR: a empresa e QUEM está dentro dela. Tela do ADMINISTRADOR DO SISTEMA,
 // com o MESMO guard do inventário (`app/admin/tenancy/page.tsx`).
 //
-// ⚠️ A LEITURA QUE FALHOU É SERVIÇO FORA, e não "não existe": o guard já
-// provou que o ator É o administrador do sistema, então falhar aqui é a API
-// fora do ar — e a tela com retry é a honesta.
+// ⚠️ A LEITURA QUE FALHOU tem TRÊS respostas, e o DONO delas é
+// `telaDaFalhaDeLeitura` (`app/admin/guard-admin.tsx`): 401 é sessão
+// expirada (login), 403 é a API recusando o ator ("Acesso restrito") e o
+// resto é serviço fora (retry). O `catch` nu tratava as três como serviço
+// fora — e "não existe" NÃO é uma delas: id fora do inventário é
+// `notFound()`, que é outra resposta.
 
 import type * as React from 'react';
 import { notFound } from 'next/navigation';
@@ -16,7 +19,7 @@ import { Container } from '@/components/ui/container';
 import { EstadoVazio } from '@/components/ui/estado-vazio';
 import { LinkTexto } from '@/components/ui/link-texto';
 import { CabecalhoTabela, CelulaTabela, Tabela } from '@/components/ui/tabela';
-import { exigirAdminDoSistema, ServicoIndisponivel } from '../../admin/guard-admin';
+import { exigirAdminDoSistema, telaDaFalhaDeLeitura } from '../../admin/guard-admin';
 import { listarInventario, vinculo } from '../../../lib/tenancy';
 import { exigirSessao } from '../../../lib/sessao';
 import type { InventarioAdminTenancyDto } from '@projeto/shared-types';
@@ -47,8 +50,11 @@ export default async function DetalheEmpresaPage({
     // é o inventário, e a leitura por id não existe. Quando a API ganhar
     // `GET /admin/tenancy/empresas/:id`, esta é a linha que muda.
     inventario = await listarInventario(accessToken);
-  } catch {
-    return <ServicoIndisponivel />;
+  } catch (erro) {
+    // ⚠️ A falha NÃO é tudo "serviço fora": 401 é sessão expirada (login) e
+    // 403 é a API recusando o ator (acesso restrito). `telaDaFalhaDeLeitura`
+    // é o DONO dessa tabela — a mesma do guard, em `guard-admin.tsx`.
+    return telaDaFalhaDeLeitura(erro);
   }
 
   // pt-BR: id desconhecido é `notFound()` — a empresa não existe, e a tela de
@@ -76,7 +82,7 @@ export default async function DetalheEmpresaPage({
               descricao="Esta empresa ainda não tem ninguém dentro dela."
               acao={
                 <Botao href="/admin/tenancy" variante="secundario">
-                  Ver o inventário
+                  Ver empresas e usuários
                 </Botao>
               }
             />

@@ -38,7 +38,7 @@ import { CabecalhoSecao } from '@/components/ui/cabecalho-secao';
 import { CabecalhoPagina } from '@/components/ui/cabecalho-pagina';
 import { Container } from '@/components/ui/container';
 import { CabecalhoTabela, CelulaTabela, Tabela } from '@/components/ui/tabela';
-import { exigirAdminDoSistema, ServicoIndisponivel } from '../guard-admin';
+import { exigirAdminDoSistema, telaDaFalhaDeLeitura } from '../guard-admin';
 import { listarInventario, vinculo } from '../../../lib/tenancy';
 import { exigirSessao } from '../../../lib/sessao';
 import type { InventarioAdminTenancyDto } from '@projeto/shared-types';
@@ -62,13 +62,13 @@ export default async function AdminTenancyPage(): Promise<React.JSX.Element> {
   let inventario: InventarioAdminTenancyDto;
   try {
     inventario = await listarInventario(accessToken);
-  } catch {
-    // ⚠️ A LEITURA FALHOU — e a tela honesta é a de serviço fora, com retry.
-    // O guard já provou que o ator É o administrador do sistema, então um 403
-    // aqui seria a rota discordando do guard (permissão faltando no seed), e
-    // não a conta da pessoa: "não foi possível falar com a API" é a verdade
-    // também nesse caso.
-    return <ServicoIndisponivel />;
+  } catch (erro) {
+    // ⚠️ A LEITURA FALHOU — e a tela honesta depende da CAUSA: 401 é sessão
+    // expirada (login), 403 é a API recusando o ator (acesso restrito), e o
+    // resto é serviço fora (retry). O `catch` nu tratava as três como
+    // "serviço indisponível" — a mesma mentira que o `guard-admin.tsx` existe
+    // para matar, e `telaDaFalhaDeLeitura` é o DONO da tabela.
+    return telaDaFalhaDeLeitura(erro);
   }
 
   const { empresas, usuarios } = inventario;

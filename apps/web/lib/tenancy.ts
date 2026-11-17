@@ -65,15 +65,33 @@ export async function listarInventario(accessToken: string): Promise<InventarioA
 }
 
 /**
- * O vínculo, do jeito que a tela mostra: `papel · perfil`.
+ * O PAPEL da tenancy, no idioma da tela.
+ *
+ * ⚠️ O enum da API é `'gerente' | 'member'` (`tenant_memberships.role`) — e
+ * `member` é INGLÊS numa tela pt-BR. O rótulo é o DONO da tradução, e ele é
+ * o `vinculo` abaixo.
+ */
+const PAPEL: Record<string, string> = {
+  gerente: 'gerente',
+  member: 'membro',
+};
+
+/**
+ * O vínculo, do jeito que a tela mostra: `papel: X · perfil: Y`.
  *
  * O `perfil` é `null` quando o vínculo não tem um (ou tem o de outra empresa) —
  * e "sem perfil" é o rótulo honesto para esse estado.
+ *
+ * ⚠️ As DUAS partes são NOMEADAS, e não soltas: o papel e o perfil podem ter
+ * a MESMA palavra (`gerente · gerente` é o caso comum — o dono veste o papel
+ * `gerente` e o perfil `gerente`), e o par solto parecia duplicata. Quem lê a
+ * tela precisa saber qual é qual sem deduzir.
  *
  * ⚠️ O DONO morava em `app/admin/tenancy/page.tsx`, como função local — e as
  * telas de detalhe do usuário e da empresa precisaram do MESMO rótulo. Duas
  * cópias de uma decisão envelhecem em uma delas só (convenção `dry.md`).
  */
 export function vinculo(role: string, perfil: string | null): string {
-  return `${role} · ${perfil ?? 'sem perfil'}`;
+  const papel = PAPEL[role] ?? role;
+  return perfil === null ? `papel: ${papel} · sem perfil` : `papel: ${papel} · perfil: ${perfil}`;
 }

@@ -84,7 +84,7 @@ vi.mock('./sessao', () => ({
   lerTokens: vi.fn(async () => ({ accessToken: 'token-do-cookie', refreshToken: null })),
 }));
 
-const { listarInventario } = await import('./tenancy');
+const { listarInventario, vinculo } = await import('./tenancy');
 
 const TOKEN = 'token-admin';
 
@@ -171,5 +171,30 @@ describe('lib/tenancy — o cliente do inventário de tenancy', () => {
     clientMock.get.mockRejectedValue(erro);
 
     await expect(listarInventario(TOKEN)).rejects.toBe(erro);
+  });
+});
+
+/**
+ * O RÓTULO do vínculo — o dono é `vinculo`, e as TRÊS telas que o mostram
+ * (o inventário, o card da pessoa e a tabela de membros) dependem dele.
+ */
+describe('lib/tenancy — o rótulo do vínculo', () => {
+  it('nomeia as DUAS partes — o papel e o perfil', () => {
+    // ⚠️ Sem o nome, o par é `gerente · gerente`: a mesma palavra duas vezes,
+    // e a tela parece duplicata. Quem lê precisa saber qual é qual.
+    expect(vinculo('gerente', 'gerente')).toBe('papel: gerente · perfil: gerente');
+    expect(vinculo('gerente', 'editor')).toBe('papel: gerente · perfil: editor');
+  });
+
+  it('traduz `member` — o enum da API é inglês e a tela é pt-BR', () => {
+    expect(vinculo('member', 'editor')).toBe('papel: membro · perfil: editor');
+  });
+
+  it('diz "sem perfil" quando o vínculo não tem um', () => {
+    expect(vinculo('gerente', null)).toBe('papel: gerente · sem perfil');
+  });
+
+  it('um papel que a API não conhece passa como veio — a tela não esconde dado', () => {
+    expect(vinculo('auditor', null)).toBe('papel: auditor · sem perfil');
   });
 });

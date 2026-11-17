@@ -24,11 +24,23 @@
 
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
+import { ApiError } from '../../../lib/api-client';
 
 const exigirAdminDoSistema = vi.fn();
 const exigirAdmin = vi.fn();
 const listarInventario = vi.fn();
 const exigirSessao = vi.fn();
+
+/** O corpo RFC 7807 de um erro da API — o que o `ApiError` carrega. */
+const PROBLEMA = {
+  type: 'about:blank',
+  title: 'erro',
+  status: 401,
+  detail: 'detalhe',
+  instance: '/admin/tenancy',
+  code: 'ERRO',
+  traceId: 'trace-1',
+};
 
 // ⚠️ `../../admin/guard-admin` e NÃO `../../../app/admin/guard-admin`: o
 // caminho relativo é o que resolve o MESMO arquivo que a página importa, e um
@@ -141,6 +153,29 @@ describe('users/[id] — o detalhe do usuário usa o guard do ADMINISTRADOR DO S
     expect(screen.queryByRole('heading', { name: 'Dona Da Empresa' })).not.toBeInTheDocument();
   });
 
+  // ⚠️ A TRIAGEM da falha mora em `guard-admin.tsx` (`telaDaFalhaDeLeitura`) —
+  // e o `catch` nu tratava as três causas como "serviço indisponível". A
+  // 401 é SESSÃO EXPIRADA (o login resolve) e a 403 é a API RECUSANDO o
+  // ator (o serviço está de pé); "tente de novo" não resolve nenhuma das
+  // duas.
+  it('um 401 na leitura do inventário é SESSÃO EXPIRADA — e vai para o login', async () => {
+    listarInventario.mockRejectedValue(new ApiError('Unauthorized', 'UNAUTHORIZED', 401, PROBLEMA));
+
+    // O `redirect` lança NEXT_REDIRECT: a página NÃO renderiza, e o Next
+    // transforma o lançamento no redirecionamento.
+    await expect(Page(params('u1'))).rejects.toThrow('NEXT_REDIRECT');
+  });
+
+  it('um 403 na leitura do inventário é a API recusando o ator — e vira "Acesso restrito"', async () => {
+    listarInventario.mockRejectedValue(new ApiError('Forbidden', 'FORBIDDEN', 403, PROBLEMA));
+
+    render(await Page(params('u1')));
+
+    expect(screen.getByRole('heading', { name: 'Acesso restrito' })).toBeInTheDocument();
+    // E NÃO a de serviço fora — que é a tela que mente sobre a causa.
+    expect(screen.queryByRole('heading', { name: 'Serviço indisponível' })).not.toBeInTheDocument();
+  });
+
   it('mostra a pessoa e o card da empresa em que ela está inserida', async () => {
     render(await Page(params('u1')));
 
@@ -151,6 +186,6 @@ describe('users/[id] — o detalhe do usuário usa o guard do ADMINISTRADOR DO S
     const card = screen.getByRole('link', { name: /Acme/ });
     expect(card).toHaveAttribute('href', '/empresa/e1');
     // E o vínculo: o rótulo do papel e o perfil efetivo NAQUELA empresa.
-    expect(card).toHaveTextContent('gerente · gerente');
+    expect(card).toHaveTextContent('papel: gerente · perfil: gerente');
   });
 });

@@ -28,7 +28,12 @@ export default function NotFound(): React.JSX.Element {
         descricao="O que você procurou não existe — ou foi removido."
       />
       <div className="mt-8">
-        <LinkTexto href="/users">Voltar para usuários</LinkTexto>
+        {/* ⚠️ A saída é o INÍCIO, e não a listagem de usuários: `/users` exige
+            sessão (`exigirSessao()` → `redirect('/login')`), e quem erra a URL
+            sem sessão recebia a tela de login por um link que promete a lista
+            de usuários. A home é pública — e o `Sidebar` do layout já oferece
+            "Usuários" para quem tem sessão. */}
+        <LinkTexto href="/">Voltar para o início</LinkTexto>
       </div>
     </Container>
   );
