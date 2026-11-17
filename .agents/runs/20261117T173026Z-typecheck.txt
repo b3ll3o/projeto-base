@@ -1,0 +1,7 @@
+Scope: 6 of 7 workspace projects
+packages/shared-types typecheck$ tsc --noEmit
+packages/shared-types typecheck: Done
+apps/api typecheck$ tsc --noEmit
+apps/web typecheck$ tsc --noEmit && tsc --noEmit -p tsconfig.e2e.json
+apps/web typecheck: Done
+apps/api typecheck: Done

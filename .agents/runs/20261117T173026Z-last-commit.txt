@@ -1,0 +1,32 @@
+commit 251bb31c40c504eb3039494b2d5be0de8b60a467
+Author:     CEO Agent <ceo@paperclip.ai>
+AuthorDate: Tue Nov 17 14:28:11 2026 -0300
+Commit:     CEO Agent <ceo@paperclip.ai>
+CommitDate: Tue Nov 17 14:28:11 2026 -0300
+
+    fix(deps): a advisory do picomatch entra no registro de exceções
+    
+    O registro do npm publicou uma advisory nova — `picomatch` (1247710), ReDoS por
+    glob com branch repetida, CVSS 7.5 (AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H: só
+    disponibilidade) — e o `check-dependency-audit` reprovava: advisory na
+    severidade que reprova sem exceção declarada é ERRO, e o preflight é a camada
+    que barra o push.
+    
+    MEDIDO em 2026-11-17, com `pnpm audit --json` e `pnpm why picomatch -r`:
+    
+    - `vulnerable_versions: <=4.0.7` e `patched_versions: <0.0.0` — NÃO EXISTE
+      versão corrigida (a 4.0.7 é a última), então não há upgrade que feche;
+    - o módulo chega SÓ por `devDependencies` (`lint-staged` na raiz;
+      `typescript-eslint` → `tinyglobby` via `@projeto/eslint-config`) e o audit
+      devolve 0 achados em caminho de produção — o pacote não vai para a imagem do
+      app;
+    - o vetor exige uma ENTRADA de glob que não seja do repo, e o repo NUNCA chama
+      o picomatch direto: a verificação da exceção mede essa ausência (nos
+      `package.json`, no código dos apps e no tooling) e o gate a roda a cada
+      preflight — se alguém passar a chamar o picomatch, a exceção para de valer.
+    
+    A claim de `advisoriesEsperadas` foi re-medida (30 → 32 advisories; as altas
+    foram de 3 para 5), e o texto que a explicava foi corrigido com os números de
+    hoje.
+    
+    Co-Authored-By: Claude Code <noreply@anthropic.com>
