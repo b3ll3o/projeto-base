@@ -151,6 +151,47 @@ describe('tabela', () => {
     expect(screen.getByRole('columnheader', { name: 'Nome' })).toHaveAttribute('scope', 'col');
   });
 
+  it('a REGIÃO ROLÁVEL é alcançável por teclado e tem nome acessível', () => {
+    render(
+      <Tabela legenda="Histórico de Ana, da mais antiga para a mais recente">
+        <tbody>
+          <tr>
+            <CelulaTabela>Ana</CelulaTabela>
+          </tr>
+        </tbody>
+      </Tabela>,
+    );
+
+    // ⚠️ O `tabIndex` é o que torna a região rolável alcançável por teclado
+    // no Firefox e no Safari (o Chromium já a focava por padrão) — e sem ele,
+    // as colunas que ficam FORA da tela a 320px eram inalcançáveis.
+    const regiao = screen.getByRole('region', { name: /Histórico de Ana/ });
+    expect(regiao).toHaveAttribute('tabindex', '0');
+    expect(regiao.className).toContain('overflow-x-auto');
+  });
+
+  it('a célula que guarda dado longo NÃO pode estourar a largura da tabela', () => {
+    render(
+      <Tabela legenda="Pessoas">
+        <tbody>
+          <tr>
+            <CelulaTabela className="w-48">{'a'.repeat(254)}</CelulaTabela>
+          </tr>
+        </tbody>
+      </Tabela>,
+    );
+
+    // ⚠️ `wrap-anywhere` (e não `break-word`): o `break-word` NÃO reduz a
+    // contribuição min-content de uma célula — MEDIDO, a tabela media os
+    // mesmos 2.097px com e sem ele. E a largura fixa é o que fecha o
+    // transbordo; a primitiva não a impõe, porque não sabe o que a célula
+    // guarda.
+    const celula = screen.getByRole('cell');
+    expect(celula.className).toContain('wrap-anywhere');
+    expect(celula.className).not.toContain('break-words');
+    expect(celula.className).toContain('w-48');
+  });
+
   it('a legenda vira `<caption>` invisível', () => {
     render(
       <Tabela legenda="Perfis cadastrados">
@@ -298,7 +339,7 @@ describe('o className do caller entra em TODA primitiva que o aceita', () => {
         );
         return screen.getByRole('cell', { name: 'Ana' });
       },
-      donoDaClasse: 'break-words',
+      donoDaClasse: 'wrap-anywhere',
       classeDoCaller: 'w-24',
     },
   ];

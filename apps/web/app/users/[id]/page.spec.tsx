@@ -81,17 +81,11 @@ const SNAPSHOT_NOVO = {
  * inventário).
  */
 const HISTORICO = {
+  // ⚠️ A ORDEM É DESCENDENTE — a mais NOVA primeiro. É o que a API devolve
+  // desde que a ordem entrou no port de auditoria (`ListHistoryInput.ordem`):
+  // a trilha do administrador do sistema é lida de trás para frente, e a
+  // versão mais recente é a primeira da primeira página.
   entries: [
-    {
-      entityId: 'u1',
-      version: 1,
-      previousVersion: null,
-      operation: 'INSERT' as const,
-      snapshot: SNAPSHOT_ANTIGO,
-      changedAt: '2026-11-01T10:00:00.000Z',
-      changedBy: null,
-      reason: null,
-    },
     {
       entityId: 'u1',
       version: 2,
@@ -105,6 +99,16 @@ const HISTORICO = {
       // reason no evento `.deleted.v1`). Uma fixture com um motivo inventado
       // provaria um estado que a API não produz — e o spec passaria mesmo se a
       // tela não soubesse mostrar o motivo.
+      reason: null,
+    },
+    {
+      entityId: 'u1',
+      version: 1,
+      previousVersion: null,
+      operation: 'INSERT' as const,
+      snapshot: SNAPSHOT_ANTIGO,
+      changedAt: '2026-11-01T10:00:00.000Z',
+      changedBy: null,
       reason: null,
     },
   ],
@@ -156,6 +160,15 @@ const { default: Page } = await import('./page');
 /** Os params da rota — `id` é o UUID da pessoa. */
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
+/**
+ * A query da tela — e o **cursor** da paginação do histórico.
+ *
+ * ⚠️ O cursor viaja na URL, e a tela pede UMA página por visita: o "carregar
+ * mais" é um link para `?cursor=`, e a página nova é a página antiga com o
+ * cursor.
+ */
+const query = (cursor?: string) => ({ searchParams: Promise.resolve(cursor ? { cursor } : {}) });
+
 describe('users/[id] — o detalhe do usuário usa o guard do ADMINISTRADOR DO SISTEMA', () => {
   beforeEach(() => {
     exigirAdminDoSistema.mockReset();
@@ -187,14 +200,14 @@ describe('users/[id] — o detalhe do usuário usa o guard do ADMINISTRADOR DO S
   });
 
   it('chama `exigirAdminDoSistema()` e NUNCA `exigirAdmin()`', async () => {
-    await Page(params('u1'));
+    await Page({ ...params('u1'), ...query() });
 
     expect(exigirAdminDoSistema).toHaveBeenCalledTimes(1);
     expect(exigirAdmin).not.toHaveBeenCalled();
   });
 
   it('manda o MESMO token para o guard e para a leitura — a sessão é lida UMA vez', async () => {
-    await Page(params('u1'));
+    await Page({ ...params('u1'), ...query() });
 
     expect(exigirSessao).toHaveBeenCalledTimes(1);
     expect(exigirAdminDoSistema).toHaveBeenCalledWith('token-admin');
@@ -211,7 +224,7 @@ describe('users/[id] — o detalhe do usuário usa o guard do ADMINISTRADOR DO S
     const tela = { tipo: 'negativa-do-guard' };
     exigirAdminDoSistema.mockResolvedValue({ bloqueio: true, tela });
 
-    expect(await Page(params('u1'))).toBe(tela);
+    expect(await Page({ ...params('u1'), ...query() })).toBe(tela);
     expect(listarInventario).not.toHaveBeenCalled();
     // E o histórico também não é lido: o guard barra ANTES de qualquer leitura.
     expect(listarHistoricoDoUsuario).not.toHaveBeenCalled();
@@ -222,7 +235,7 @@ describe('users/[id] — o detalhe do usuário usa o guard do ADMINISTRADOR DO S
 
     // Se a página não pegasse o erro, o `render` aqui MORRERIA com ele — e o
     // teste ficaria vermelho sem dizer nada sobre a tela.
-    render(await Page(params('u1')));
+    render(await Page({ ...params('u1'), ...query() }));
 
     expect(screen.getByRole('heading', { name: 'Serviço indisponível' })).toBeInTheDocument();
     // E a tela é a de serviço fora — e NÃO a do detalhe: um erro genérico
@@ -240,13 +253,13 @@ describe('users/[id] — o detalhe do usuário usa o guard do ADMINISTRADOR DO S
 
     // O `redirect` lança NEXT_REDIRECT: a página NÃO renderiza, e o Next
     // transforma o lançamento no redirecionamento.
-    await expect(Page(params('u1'))).rejects.toThrow('NEXT_REDIRECT');
+    await expect(Page({ ...params('u1'), ...query() })).rejects.toThrow('NEXT_REDIRECT');
   });
 
   it('um 403 na leitura do inventário é a API recusando o ator — e vira "Acesso restrito"', async () => {
     listarInventario.mockRejectedValue(new ApiError('Forbidden', 'FORBIDDEN', 403, PROBLEMA));
 
-    render(await Page(params('u1')));
+    render(await Page({ ...params('u1'), ...query() }));
 
     expect(screen.getByRole('heading', { name: 'Acesso restrito' })).toBeInTheDocument();
     // E NÃO a de serviço fora — que é a tela que mente sobre a causa.
@@ -254,7 +267,7 @@ describe('users/[id] — o detalhe do usuário usa o guard do ADMINISTRADOR DO S
   });
 
   it('mostra a pessoa e o card da empresa em que ela está inserida', async () => {
-    render(await Page(params('u1')));
+    render(await Page({ ...params('u1'), ...query() }));
 
     expect(screen.getByRole('heading', { level: 1, name: 'Dona Da Empresa' })).toBeInTheDocument();
     expect(screen.getByText('dona@exemplo.dev')).toBeInTheDocument();
@@ -293,7 +306,7 @@ describe('users/[id] — o histórico da pessoa', () => {
   });
 
   it('mostra as VERSÕES — a versão, o que houve, o nome e o e-mail daquele registro, o quando e quem mudou', async () => {
-    render(await Page(params('u1')));
+    render(await Page({ ...params('u1'), ...query() }));
 
     // As CINCO colunas — e o cabeçalho nomeia o que a coluna é (o leitor de
     // tela precisa dele para associar a célula).
@@ -303,7 +316,11 @@ describe('users/[id] — o histórico da pessoa', () => {
       screen.getByRole('columnheader', { name: 'Nome e e-mail naquele registro' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Quando' })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'Quem mudou' })).toBeInTheDocument();
+    // ⚠️ O cabeçalho DIZ que o nome é o ATUAL: a coluna traz o nome de HOJE
+    // do ator (tirado do inventário), e não o nome do momento da alteração.
+    expect(
+      screen.getByRole('columnheader', { name: 'Quem mudou (nome atual)' }),
+    ).toBeInTheDocument();
     // ⚠️ A coluna "MOTIVO" NÃO existe — e a ausência é o que se mede.
     // `users_history.reason` é sempre `null` (medido na API), então a coluna
     // renderizaria "—" em toda linha: ruído que esconde o dado.
@@ -322,31 +339,56 @@ describe('users/[id] — o histórico da pessoa', () => {
     expect(screen.getByText('novo@exemplo.dev')).toBeInTheDocument();
   });
 
-  it('mostra a DATA em pt-BR — e a data CRUA não entra na tela', async () => {
-    render(await Page(params('u1')));
+  it('mostra a DATA em pt-BR com o fuso DECLARADO — e a data CRUA não entra na tela', async () => {
+    render(await Page({ ...params('u1'), ...query() }));
 
-    const quando = new Date('2026-11-02T12:30:00.000Z').toLocaleString('pt-BR');
-    expect(screen.getByText(quando)).toBeInTheDocument();
+    // ⚠️ A EXPECTATIVA É UMA LITERAL, e não `toLocaleString()` do próprio
+    // runtime: o spec antigo derivava a expectativa do MESMO formatador do
+    // código — e por isso não podia acusar nada. As 12:30 UTC são 09:30 em
+    // São Paulo, e é isso que a tela tem que dizer.
+    expect(screen.getByText('02/11/2026, 09:30:00')).toBeInTheDocument();
     // ⚠️ A data crua é o ISO — e ela é o que o `snapshot` traz. Se ela
     // aparecesse, a pessoa leria "2026-11-02T12:30:00.000Z" na tela.
     expect(screen.queryByText('2026-11-02T12:30:00.000Z')).not.toBeInTheDocument();
+  });
+
+  it('a data INVÁLIDA vira "—" — e não o literal "Invalid Date"', async () => {
+    listarHistoricoDoUsuario.mockResolvedValue({
+      entries: [{ ...HISTORICO.entries[0]!, changedAt: 'nao-e-data' }],
+      nextCursor: null,
+    });
+
+    render(await Page({ ...params('u1'), ...query() }));
+
+    expect(screen.getByText('—')).toBeInTheDocument();
+    expect(screen.queryByText('Invalid Date')).not.toBeInTheDocument();
   });
 
   it('"Quem mudou" é o NOME de quem está no inventário — e o id cru quando não está', async () => {
     // O ator da alteração é a própria pessoa, e ela ESTÁ no inventário: o
     // nome é o que a tela mostra (o id cru é metadado).
     listarHistoricoDoUsuario.mockResolvedValue({
-      entries: [HISTORICO.entries[1]!],
+      entries: [HISTORICO.entries[0]!],
       nextCursor: null,
     });
 
-    render(await Page(params('u1')));
+    render(await Page({ ...params('u1'), ...query() }));
 
     expect(screen.getByRole('cell', { name: 'Dona Da Empresa' })).toBeInTheDocument();
 
     // E quem NÃO está no inventário (conta apagada) entra pelo id CRU — um
     // rótulo inventado ("usuário desconhecido") seria mentira: o dado que
     // existe é o id.
+    //
+    // ⚠️ **O ESTADO É CONSTRUÍDO À MÃO, e o app ainda não o produz.**
+    // MEDIDO 2026-11-17 no banco: `users_history` tem 0 linhas com
+    // `changed_by <> entity_id` — toda mutação de `User` é owner-only
+    // (`PATCH`/`DELETE`/`restore` com o `UserOwnershipGuard`), e o `POST
+    // /users` (público) grava o ator nulo. Logo, o ator de uma pessoa é a
+    // PRÓPRIA pessoa — e ela está no inventário quando não está apagada
+    // (e, quando está apagada, a página sai do inventário). O ramo é
+    // DEFENSIVO (uma rota de admin que mexa na pessoa o torna alcançável),
+    // e o spec diz isso — em vez de fingir que mede um estado real.
     listarHistoricoDoUsuario.mockResolvedValue({
       entries: [
         {
@@ -357,7 +399,7 @@ describe('users/[id] — o histórico da pessoa', () => {
       nextCursor: null,
     });
     cleanup();
-    render(await Page(params('u1')));
+    render(await Page({ ...params('u1'), ...query() }));
 
     expect(
       screen.getByRole('cell', { name: 'a1b2c3d4-0000-4000-8000-000000009999' }),
@@ -366,11 +408,11 @@ describe('users/[id] — o histórico da pessoa', () => {
 
   it('sem ator, a célula mostra o traço — e o dado que falta NÃO é inventado', async () => {
     listarHistoricoDoUsuario.mockResolvedValue({
-      entries: [HISTORICO.entries[0]!],
+      entries: [HISTORICO.entries[1]!],
       nextCursor: null,
     });
 
-    render(await Page(params('u1')));
+    render(await Page({ ...params('u1'), ...query() }));
 
     // O traço de "quem mudou": a criação por rota pública não tem ator.
     expect(screen.getAllByRole('cell', { name: '—' })).toHaveLength(1);
@@ -379,7 +421,7 @@ describe('users/[id] — o histórico da pessoa', () => {
   it('a falha do HISTÓRICO mostra o Alerta — e a pessoa CONTINUA na tela', async () => {
     listarHistoricoDoUsuario.mockRejectedValue(new Error('500 Internal Server Error'));
 
-    render(await Page(params('u1')));
+    render(await Page({ ...params('u1'), ...query() }));
 
     expect(screen.getByRole('alert')).toHaveTextContent(/histórico/i);
     // ⚠️ A pessoa e as empresas são o CONTEÚDO PRINCIPAL: o histórico é
@@ -395,41 +437,141 @@ describe('users/[id] — o histórico da pessoa', () => {
       new ApiError('Unauthorized', 'UNAUTHORIZED', 401, PROBLEMA),
     );
 
-    await expect(Page(params('u1'))).rejects.toThrow('NEXT_REDIRECT');
+    await expect(Page({ ...params('u1'), ...query() })).rejects.toThrow('NEXT_REDIRECT');
   });
 
-  it('o TETO de páginas corta o histórico — e a tela DIZ que não coube tudo', async () => {
-    // ⚠️ O teto (10 páginas de 100) é um caso PATOLÓGICO — e é por isso que
-    // ele precisa de teste: sem uma linha que diga, a tela mostraria um
-    // histórico PARCIAL parecendo completo. E o que ela mostra são as
-    // versões MAIS ANTIGAS: a API devolve da mais antiga para a mais
-    // recente, e o cursor anda para frente.
+  it('a tela pede UMA página por visita — e o "carregar mais" leva às mais antigas', async () => {
+    // ⚠️ A tela antiga buscava até 10 páginas e mostrava as 100 mais ANTIGAS —
+    // e o teto cortava justamente as mais recentes. Agora é uma página por
+    // visita, com o cursor na URL.
     listarHistoricoDoUsuario.mockResolvedValue({
       entries: [HISTORICO.entries[0]!],
-      nextCursor: 'cursor-que-nunca-termina',
+      nextCursor: 'cursor-da-pagina-2',
     });
 
-    render(await Page(params('u1')));
+    render(await Page({ ...params('u1'), ...query() }));
 
-    // Dez páginas — o teto — e nenhuma a mais.
-    expect(listarHistoricoDoUsuario).toHaveBeenCalledTimes(10);
-    expect(screen.getByText(/há mais histórico/i)).toBeInTheDocument();
+    // Uma requisição — e ela sem cursor (é a primeira página).
+    expect(listarHistoricoDoUsuario).toHaveBeenCalledTimes(1);
+    expect(listarHistoricoDoUsuario).toHaveBeenCalledWith('token-admin', 'u1', undefined);
+
+    // E o "carregar mais" é um LINK para o cursor da próxima página — a
+    // página é um Server Component, e o cursor viaja na URL.
+    const carregarMais = screen.getByRole('link', { name: /carregar mais/i });
+    expect(carregarMais).toHaveAttribute('href', '/users/u1?cursor=cursor-da-pagina-2');
   });
 
-  it('segue o CURSOR até a última página — e diz quando o teto corta o histórico', async () => {
-    // ⚠️ A primeira página vem com cursor, e a segunda fecha a sequência.
-    // Uma tela que lê só a primeira página mostra um histórico PARCIAL sem
-    // dizer — e o cursor é o que a API devolve para isso.
-    listarHistoricoDoUsuario
-      .mockResolvedValueOnce({ entries: [HISTORICO.entries[0]!], nextCursor: 'cursor-2' })
-      .mockResolvedValueOnce({ entries: [HISTORICO.entries[1]!], nextCursor: null });
+  it('o cursor da URL é o que a tela pede — a segunda página é a página antiga', async () => {
+    listarHistoricoDoUsuario.mockResolvedValue({
+      entries: [HISTORICO.entries[1]!],
+      nextCursor: null,
+    });
 
-    render(await Page(params('u1')));
+    render(await Page({ ...params('u1'), ...query('cursor-da-pagina-2') }));
 
-    expect(listarHistoricoDoUsuario).toHaveBeenCalledTimes(2);
-    expect(listarHistoricoDoUsuario).toHaveBeenNthCalledWith(2, 'token-admin', 'u1', 'cursor-2');
-    // As DUAS entradas estão na tela — a segunda página entrou.
+    // ⚠️ A SEGUNDA página pede o cursor que a primeira devolveu — e não repete
+    // a primeira.
+    expect(listarHistoricoDoUsuario).toHaveBeenCalledTimes(1);
+    expect(listarHistoricoDoUsuario).toHaveBeenCalledWith(
+      'token-admin',
+      'u1',
+      'cursor-da-pagina-2',
+    );
+    // E a entrada da SEGUNDA página (a criação) está na tela.
     expect(screen.getByText('Nome Antigo')).toBeInTheDocument();
-    expect(screen.getByText('Nome Novo')).toBeInTheDocument();
+    // E não há "carregar mais" — a última página não tem cursor.
+    expect(screen.queryByRole('link', { name: /carregar mais/i })).not.toBeInTheDocument();
+  });
+
+  it('a ORDEM é descendente — a versão mais recente vem PRIMEIRO', async () => {
+    render(await Page({ ...params('u1'), ...query() }));
+
+    const versoes = screen
+      .getAllByRole('cell')
+      .filter((c) => /^\d+$/.test(c.textContent ?? ''))
+      .map((c) => c.textContent);
+    expect(versoes).toEqual(['2', '1']);
+  });
+
+  it('o 403 do HISTÓRICO NÃO diz "Tente de novo" — uma recusa não melhora com retry', async () => {
+    listarHistoricoDoUsuario.mockRejectedValue(
+      new ApiError('Forbidden', 'FORBIDDEN', 403, PROBLEMA),
+    );
+
+    render(await Page({ ...params('u1'), ...query() }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/permissão/i);
+    expect(screen.getByRole('alert')).not.toHaveTextContent(/tente de novo/i);
+    // E o "tentar de novo" não aparece — ele só faz sentido na falha
+    // transitória.
+    expect(screen.queryByText('Tentar de novo')).not.toBeInTheDocument();
+    // E a pessoa CONTINUA na tela.
+    expect(screen.getByRole('heading', { level: 1, name: 'Dona Da Empresa' })).toBeInTheDocument();
+  });
+
+  it('a falha TRANSITÓRIA do HISTÓRICO ainda oferece o retry', async () => {
+    listarHistoricoDoUsuario.mockRejectedValue(new Error('500 Internal Server Error'));
+
+    render(await Page({ ...params('u1'), ...query() }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/tente de novo/i);
+    expect(screen.getByText('Tentar de novo')).toBeInTheDocument();
+  });
+
+  it('campo AUSENTE no snapshot vira "—" — e não uma célula vazia', async () => {
+    listarHistoricoDoUsuario.mockResolvedValue({
+      entries: [
+        {
+          ...HISTORICO.entries[0]!,
+          snapshot: { ...SNAPSHOT_NOVO, nome: undefined, email: undefined },
+        },
+      ],
+      nextCursor: null,
+    });
+
+    render(await Page({ ...params('u1'), ...query() }));
+
+    // ⚠️ Uma célula VAZIA é indistinguível de "a pessoa não tinha nome" — e o
+    // "—" diz que o dado não veio.
+    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText('Nome Novo')).not.toBeInTheDocument();
+  });
+
+  it('o snapshot NULO NÃO derruba a tela — a seção mostra "—" e a pessoa continua', async () => {
+    listarHistoricoDoUsuario.mockResolvedValue({
+      entries: [{ ...HISTORICO.entries[0]!, snapshot: null as unknown as typeof SNAPSHOT_NOVO }],
+      nextCursor: null,
+    });
+
+    render(await Page({ ...params('u1'), ...query() }));
+
+    // ⚠️ O raio do erro é a SEÇÃO — e não a página inteira, que é o que a
+    // seção existe para proteger.
+    expect(screen.getByRole('heading', { level: 1, name: 'Dona Da Empresa' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText('—')).toBeInTheDocument();
+  });
+
+  it('a PESSOA APAGADA aparece na tela — tirada do snapshot da última versão', async () => {
+    // ⚠️ O INVENTÁRIO filtra `deletedAt: null` — a pessoa apagada não está
+    // nele. E a API entrega a trilha dela.
+    listarInventario.mockResolvedValue({ empresas: [], usuarios: [] });
+    listarHistoricoDoUsuario.mockResolvedValue({
+      entries: [
+        {
+          ...HISTORICO.entries[0]!,
+          snapshot: { ...SNAPSHOT_NOVO, nome: 'Pessoa Que Saiu', isDeleted: true },
+        },
+      ],
+      nextCursor: null,
+    });
+
+    render(await Page({ ...params('u1'), ...query() }));
+
+    // A pessoa continua na tela — com o nome COMO ELA FOI APAGADA.
+    expect(screen.getByRole('heading', { level: 1, name: 'Pessoa Que Saiu' })).toBeInTheDocument();
+    // E a tela DIZ que ela foi apagada — senão o administrador lia uma
+    // pessoa sem empresa e sem explicação.
+    expect(screen.getByText(/foi apagada/i)).toBeInTheDocument();
   });
 });

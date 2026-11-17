@@ -42,7 +42,11 @@
 // vezes — a página é `force-dynamic`, e isso valia a cada navegação.
 
 import { ApiClient, baseUrlDaApi } from './api-client';
-import type { InventarioAdminTenancyDto, UserHistoryPageDto } from '@projeto/shared-types';
+import type {
+  AuditOperationType,
+  InventarioAdminTenancyDto,
+  UserHistoryPageDto,
+} from '@projeto/shared-types';
 
 /**
  * O cliente do inventário.
@@ -79,29 +83,23 @@ export async function listarInventario(accessToken: string): Promise<InventarioA
  * ⚠️ 100 é o MÁXIMO da API (`LIMITE_MAXIMO`, `user-repository.port.ts`), e
  * não o padrão (20): a tela segue o cursor até o fim, e 20 por página daria
  * 50 requisições para 1000 entradas.
+ *
+ * ⚠️ E o número tem um DONO: a paridade com a API é medida pelo
+ * `lib/paginacao.parity.spec.ts` — sem ela, uma cópia aqui envelhecia
+ * sozinha, e o `?limit=100` viraria 400 na API (a seção inteira viraria um
+ * `Alerta` para toda pessoa).
  */
 export const TAMANHO_DA_PAGINA_HISTORICO = 100;
-
-/**
- * Quantas páginas de histórico a tela percorre antes de PARAR e dizer que o
- * histórico não coube.
- *
- * ⚠️ O teto é uma ESCOLHA DE TELA, e não um limite da API: 10 páginas de 100
- * são 1000 versões, e uma pessoa com mais que isso é um caso patológico. O
- * que não é aceitável é mostrar um histórico PARCIAL sem dizer — e por isso o
- * corte é visível na tela (a tela avisa).
- *
- * ⚠️ E o número mora AQUI, e não na página: o `100` é do cliente (acima) e o
- * `10` é do teto — separados, os dois envelheceriam sozinhos e a tela passaria
- * a percorrer um número de entradas diferente do que ela diz.
- */
-export const TETO_DE_PAGINAS_HISTORICO = 10;
 
 /**
  * UMA página do histórico de uma pessoa (`GET /admin/users/:id/history`).
  *
  * O `cursor` é o da PRÓXIMA página, e `null` no fim — a API pagina por
  * cursor, e a tela segue o `nextCursor` até ele vir `null`.
+ *
+ * ⚠️ A API devolve a trilha do **mais novo para o mais antigo** (a ordem é
+ * do input do port de auditoria), e o cursor aponta para as versões mais
+ * **antigas**.
  *
  * ⚠️ O `id` vai codificado: ele vem do path da tela, e um id cru moldaria a
  * URL ANTES de a API ver o caminho.
@@ -159,10 +157,15 @@ export function vinculo(role: string, perfil: string | null): string {
  * `DELETE`, `RESTORE`) e a tela é pt-BR. O rótulo é o DONO da tradução —
  * o mesmo desenho do `vinculo` acima, e pelo mesmo motivo (`dry.md`).
  *
+ * ⚠️ O mapa é TIPADO pelo enum (`Record<AuditOperationType, string>`): sem
+ * a tipagem, um valor novo no enum da API sairia em inglês na tela sem o
+ * compilador reclamar — e a tradução que falta é justamente a que o
+ * compilador devia apontar.
+ *
  * ⚠️ Uma operação que a API não conhece PASSA COMO VEIO: a tela não
  * esconde dado, e um `operation` novo é informação, não erro.
  */
-const OPERACAO: Record<string, string> = {
+const OPERACAO: Record<AuditOperationType, string> = {
   INSERT: 'criação',
   UPDATE: 'alteração',
   DELETE: 'remoção',
@@ -170,5 +173,5 @@ const OPERACAO: Record<string, string> = {
 };
 
 export function rotuloDaOperacao(operation: string): string {
-  return OPERACAO[operation] ?? operation;
+  return OPERACAO[operation as AuditOperationType] ?? operation;
 }

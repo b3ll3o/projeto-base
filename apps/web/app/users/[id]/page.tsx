@@ -38,19 +38,28 @@ import {
   telaDaFalhaDeLeitura,
 } from '../../admin/guard-admin';
 import {
-  TETO_DE_PAGINAS_HISTORICO,
   listarHistoricoDoUsuario,
   listarInventario,
   rotuloDaOperacao,
   vinculo,
 } from '../../../lib/tenancy';
 import { exigirSessao } from '../../../lib/sessao';
-import type { UserHistoryEntryDto } from '@projeto/shared-types';
+import { ApiError } from '../../../lib/api-client';
+import type { UserHistoryEntryDto, UserOutputDto } from '@projeto/shared-types';
 
 export const dynamic = 'force-dynamic';
 
 interface PageProps {
   params: Promise<{ id: string }>;
+  /**
+   * A query da tela — e o **cursor** da paginação do histórico.
+   *
+   * ⚠️ O cursor viaja na URL, e não num estado do browser: a página é um
+   * Server Component, e o "carregar mais" é um LINK. O histórico de uma
+   * pessoa é paginado, e uma página que só mostra a primeira página mostra um
+   * histórico PARCIAL — que parece completo.
+   */
+  searchParams: Promise<{ cursor?: string }>;
 }
 
 /**
@@ -73,30 +82,24 @@ async function ler<T>(leitura: () => Promise<T>): Promise<Leitura<T>> {
 }
 
 /**
- * O histórico INTEIRO da pessoa — as páginas, até o fim.
+ * UMA PÁGINA do histórico — a que a URL pede.
  *
- * ⚠️ A API pagina por CURSOR (`nextCursor`), e a tela segue o cursor até ele
- * vir `null`. Uma tela que lê só a primeira página mostra um histórico
- * PARCIAL sem dizer — e parece completo.
+ * ⚠️ A API devolve a trilha do **mais novo para o mais antigo**, e o
+ * `nextCursor` aponta para as versões mais **antigas**. A tela pede UMA página
+ * por visita: a versão mais recente é a primeira da primeira página, e as
+ * mais antigas chegam pelo "carregar mais".
  *
- * ⚠️ O TETO existe (10 páginas de 100), e o corte é VISÍVEL: quem tem mais
- * que isso vê a tela dizer que não coube tudo.
+ * ⚠️ A versão antiga da tela buscava até 10 páginas e mostrava as 100 mais
+ * ANTIGAS — e o teto cortava justamente as mais recentes, que são as que dizem
+ * quando a pessoa mudou pela última vez.
  */
 async function lerHistorico(
   accessToken: string,
   id: string,
-): Promise<{ entradas: UserHistoryEntryDto[]; truncado: boolean }> {
-  const entradas: UserHistoryEntryDto[] = [];
-  let cursor: string | undefined;
-  for (let pagina = 0; pagina < TETO_DE_PAGINAS_HISTORICO; pagina++) {
-    const resposta = await listarHistoricoDoUsuario(accessToken, id, cursor);
-    entradas.push(...resposta.entries);
-    if (resposta.nextCursor === null) return { entradas, truncado: false };
-    cursor = resposta.nextCursor;
-  }
-  // ⚠️ Chegou aqui com cursor ainda pendente: a API tem MAIS, e a tela diz
-  // que tem. Sem esta linha, o histórico parcial pareceria completo.
-  return { entradas, truncado: true };
+  cursor: string | undefined,
+): Promise<{ entradas: UserHistoryEntryDto[]; proximoCursor: string | null }> {
+  const pagina = await listarHistoricoDoUsuario(accessToken, id, cursor);
+  return { entradas: pagina.entries, proximoCursor: pagina.nextCursor };
 }
 
 /**
@@ -110,10 +113,9 @@ async function lerHistorico(
  * base) entra pelo ID CRU, em tinta secundária — o id é o dado que existe, e
  * o nome não.
  *
- * ⚠️ O MAP e não o `find` por linha: com o teto da própria feature (1000
- * entradas) e uma base de 10 mil usuários, a varredura linear daria ~10
- * milhões de comparações de string por requisição. O mapa é construído UMA
- * vez, por tela.
+ * ⚠️ O MAP e não o `find` por linha: com a base de 10 mil usuários, a
+ * varredura linear daria ~10 milhões de comparações de string por
+ * requisição. O mapa é construído UMA vez, por tela.
  */
 function quemMudou(
   changedBy: string | null,
@@ -127,8 +129,42 @@ function quemMudou(
   return nome;
 }
 
+/**
+ * O DADO de uma versão — o nome e o e-mail **daquele** registro.
+ *
+ * ⚠️ O campo ausente vira "—", e não uma célula vazia: uma célula vazia é
+ * indistinguível de "a pessoa não tinha nome". E o `snapshot` NULO (o banco
+ * aceita `null` em JSONB) não pode derrubar a tela — o raio do erro é a
+ * seção, e não a página inteira, que é o que a seção existe para proteger.
+ */
+function dadoDaVersao(snapshot: UserOutputDto | null): React.ReactNode {
+  if (snapshot === null || snapshot === undefined) return '—';
+  const nome = snapshot.nome;
+  const email = snapshot.email;
+  return (
+    <>
+      <div className="break-words">{nome ?? '—'}</div>
+      <div className="break-words text-sm text-muted-foreground">{email ?? '—'}</div>
+    </>
+  );
+}
+
+/**
+ * A data da versão — em pt-BR, e com o fuso **declarado**.
+ *
+ * ⚠️ O fuso é explícito (`America/Sao_Paulo`) porque a página é um Server
+ * Component: sem ele, a data sai no fuso do SERVIDOR (o container roda em
+ * UTC), e a pessoa de Brasília lê 12:30 onde eram 09:30.
+ */
+function quandoDe(changedAt: string): string {
+  const data = new Date(changedAt);
+  if (Number.isNaN(data.getTime())) return '—';
+  return data.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+}
+
 export default async function DetalheUsuarioPage({
   params,
+  searchParams,
 }: PageProps): Promise<React.JSX.Element> {
   // pt-BR: a sessão primeiro, e o token segue para o guard — uma leitura do
   // cookie store, e o mesmo token na checagem de perfil e na leitura do
@@ -142,6 +178,7 @@ export default async function DetalheUsuarioPage({
   if (guarda.bloqueio) return guarda.tela;
 
   const { id } = await params;
+  const { cursor } = await searchParams;
 
   // ⚠️ As DUAS leituras correm EM PARALELO: o inventário e o histórico não
   // dependem um do outro (o nome de "quem mudou" é resolvido na RENDERIZAÇÃO,
@@ -153,7 +190,7 @@ export default async function DetalheUsuarioPage({
   // PRECISA ter (o `Alerta` da seção, ou o login no 401).
   const [inventario, historico] = await Promise.all([
     ler(() => listarInventario(accessToken)),
-    ler(() => lerHistorico(accessToken, id)),
+    ler(() => lerHistorico(accessToken, id, cursor)),
   ]);
 
   // ⚠️ A falha do INVENTÁRIO é a de hoje: a tela inteira
@@ -169,8 +206,17 @@ export default async function DetalheUsuarioPage({
 
   // pt-BR: id desconhecido é `notFound()` — a pessoa não existe, e a tela de
   // "serviço fora" mentiria sobre a causa.
+  //
+  // ⚠️ E A PESSOA APAGADA NÃO ESTÁ NO INVENTÁRIO (o inventário filtra
+  // `deletedAt: null`) — mas a API entrega a trilha dela, e o `snapshot` da
+  // ÚLTIMA versão é a pessoa COMO ELA FOI APAGADA. Sem isto, o histórico de
+  // quem saiu da empresa era inalcançável pela única rota que o lê.
   const usuario = inventario.valor.usuarios.find((u) => u.id === id);
-  if (usuario === undefined) notFound();
+  const primeiraEntrada = historico.ok ? historico.valor.entradas[0] : undefined;
+  const snapshotDaPessoa = usuario === undefined ? primeiraEntrada?.snapshot : undefined;
+  if (usuario === undefined && snapshotDaPessoa === undefined) notFound();
+  const pessoa = usuario ?? { nome: snapshotDaPessoa!.nome, email: snapshotDaPessoa!.email };
+  const pessoaApagada = snapshotDaPessoa?.isDeleted === true;
 
   // ⚠️ O NOME de cada ator, indexado UMA vez: a coluna "Quem mudou" resolve
   // um id por linha do histórico, e o `find` linear por linha custaria
@@ -179,11 +225,20 @@ export default async function DetalheUsuarioPage({
 
   return (
     <Container>
-      <CabecalhoPagina titulo={usuario.nome} descricao={usuario.email} />
+      <CabecalhoPagina titulo={pessoa.nome} descricao={pessoa.email} />
+
+      {pessoaApagada ? (
+        // ⚠️ A pessoa APAGADA é a informação principal que o inventário não
+        // tem — e a tela precisa dizer, ou o administrador lê uma pessoa sem
+        // empresa e sem explicação.
+        <p className="mt-2 text-sm text-muted-foreground">
+          Esta pessoa foi apagada — o histórico abaixo é a trilha que ela deixou.
+        </p>
+      ) : null}
 
       <section className="mt-8">
         <CabecalhoSecao>Empresas</CabecalhoSecao>
-        {usuario.empresas.length === 0 ? (
+        {usuario === undefined || usuario.empresas.length === 0 ? (
           // pt-BR: lista vazia é RESPOSTA, não erro — a conta do administrador
           // do sistema não pertence a empresa nenhuma. E o estado vazio diz o
           // que a pessoa pode FAZER: o inventário é onde as empresas estão.
@@ -253,7 +308,8 @@ export default async function DetalheUsuarioPage({
             <>
               {/* pt-BR: a ORDEM é DECLARADA, e não só implícita: quem lê
                   precisa saber se a linha mais nova vem primeiro. A ordem é a
-                  da API (`version` crescente — a mais antiga primeiro).
+                  da API (`version` DECRESCENTE — a mais nova primeiro), e é a
+                  ordem de quem lê uma trilha de auditoria.
 
                   ⚠️ A coluna "MOTIVO" NÃO entra, e o motivo é MEDIDO:
                   `users_history.reason` é SEMPRE `null` — o `DELETE /users/{id}`
@@ -264,19 +320,19 @@ export default async function DetalheUsuarioPage({
                   esconde o dado que a coluna devia mostrar. Se a API passar a
                   gravar o motivo, a coluna volta com o dado. */}
               <p className="mt-1 text-sm text-muted-foreground">
-                As versões da pessoa, da mais antiga para a mais recente.
+                As versões da pessoa, da mais recente para a mais antiga.
               </p>
               {/* ⚠️ A legenda NOMEIA a pessoa: duas pessoas abertas na mesma
                   tela dariam a mesma legenda ao leitor de tela, e a legenda é
                   o nome acessível da tabela. */}
-              <Tabela legenda={`Histórico de ${usuario.nome}, da mais antiga para a mais recente`}>
+              <Tabela legenda={`Histórico de ${pessoa.nome}, da mais recente para a mais antiga`}>
                 <thead>
                   <tr>
                     <CabecalhoTabela>Versão</CabecalhoTabela>
                     <CabecalhoTabela>O que houve</CabecalhoTabela>
                     <CabecalhoTabela>Nome e e-mail naquele registro</CabecalhoTabela>
                     <CabecalhoTabela>Quando</CabecalhoTabela>
-                    <CabecalhoTabela>Quem mudou</CabecalhoTabela>
+                    <CabecalhoTabela>Quem mudou (nome atual)</CabecalhoTabela>
                   </tr>
                 </thead>
                 <tbody>
@@ -286,50 +342,50 @@ export default async function DetalheUsuarioPage({
                       <CelulaTabela>{rotuloDaOperacao(entrada.operation)}</CelulaTabela>
                       {/* pt-BR: o NOME e o E-MAIL são os DA VERSÃO — o
                           `snapshot` gravado. O nome de hoje é o do título da
-                          tela, e é o que muda a cada alteração. */}
-                      <CelulaTabela>
-                        <div className="break-words">{entrada.snapshot.nome}</div>
-                        <div className="break-words text-sm text-muted-foreground">
-                          {entrada.snapshot.email}
-                        </div>
-                      </CelulaTabela>
-                      {/* pt-BR: a data em pt-BR, e a CRU não entra na tela.
-                          A página é Server Component, então não há hydration
-                          para brigar com o fuso do browser. */}
-                      <CelulaTabela>
-                        {new Date(entrada.changedAt).toLocaleString('pt-BR')}
-                      </CelulaTabela>
+                          tela, e é o que muda a cada alteração.
+
+                          ⚠️ `w-48`: MEDIDO, com o e-mail de 249 chars (o VO
+                          permite 254) a tabela media 2.097px dentro de um
+                          wrapper de 288px a 320px — e "Quando" e "Quem
+                          mudou" ficavam a 7 telas de rolagem. */}
+                      <CelulaTabela className="w-48">{dadoDaVersao(entrada.snapshot)}</CelulaTabela>
+                      <CelulaTabela>{quandoDe(entrada.changedAt)}</CelulaTabela>
                       <CelulaTabela>{quemMudou(entrada.changedBy, nomeDoAtor)}</CelulaTabela>
                     </tr>
                   ))}
                 </tbody>
               </Tabela>
-              {historico.valor.truncado ? (
-                // ⚠️ A tela DIZ que o histórico não coube — e diz o que ela
-                // mostra. A API devolve da mais ANTIGA para a mais recente, e
-                // o teto corta o FIM da sequência: o que fica na tela são as
-                // versões MAIS ANTIGAS, e as mais RECENTES são as que não
-                // couberam. Dizer "as mais recentes" seria mentira.
-                <p className="mt-3 text-sm text-muted-foreground">
-                  Mostrando as {historico.valor.entradas.length} versões mais antigas — há mais
-                  histórico do que esta tela mostra.
-                </p>
+              {historico.valor.proximoCursor !== null ? (
+                // ⚠️ O "CARREGAR MAIS" é um LINK, e não um botão: a página é um
+                // Server Component, e o cursor viaja na URL. E o cursor aponta
+                // para as versões MAIS ANTIGAS — a ordem da trilha.
+                <div className="mt-3">
+                  <LinkTexto
+                    href={`/users/${id}?cursor=${encodeURIComponent(historico.valor.proximoCursor)}`}
+                  >
+                    Carregar mais histórico
+                  </LinkTexto>
+                </div>
               ) : null}
             </>
           )
         ) : (
           <div className="mt-3 space-y-3">
-            <Alerta variante="erro">
-              Não foi possível carregar o histórico desta pessoa. Tente de novo em instantes.
-            </Alerta>
-            {/* ⚠️ É um `<a href="">` e não o `Botao`: esta página é Server
-                Component, e um `onClick` exigiria um wrapper `'use client'`.
-                O `href` vazio resolve para o documento atual e o browser
-                recarrega a página, reexecutando a leitura que falhou (o
-                mesmo caminho do `guard-admin`). */}
-            <a href="" className={CLASSES_BOTAO_SECUNDARIO}>
-              Tentar de novo
-            </a>
+            <Alerta variante="erro">{mensagemDoErroDoHistorico(historico.erro)}</Alerta>
+            {/* ⚠️ O "TENTAR DE NOVO" só aparece na falha TRANSITÓRIA. Uma
+                recusa (403) e um "não existe" (404) não melhoram com retry —
+                e o botão "tente de novo" numa recusa é a tela mentindo sobre a
+                causa. */}
+            {erroTransitorio(historico.erro) ? (
+              // ⚠️ É um `<a href="">` e não o `Botao`: esta página é Server
+              // Component, e um `onClick` exigiria um wrapper `'use client'`.
+              // O `href` vazio resolve para o documento atual e o browser
+              // recarrega a página, reexecutando a leitura que falhou (o
+              // mesmo caminho do `guard-admin`).
+              <a href="" className={CLASSES_BOTAO_SECUNDARIO}>
+                Tentar de novo
+              </a>
+            ) : null}
           </div>
         )}
       </section>
@@ -339,4 +395,31 @@ export default async function DetalheUsuarioPage({
       </div>
     </Container>
   );
+}
+
+/**
+ * A falha TRANSITÓRIA — a única em que "tentar de novo" faz sentido.
+ *
+ * ⚠️ Uma recusa (403) e um "não existe" (404) não melhoram com retry: o
+ * primeiro não vai virar 200, e o segundo aponta para um id que não existe.
+ */
+function erroTransitorio(erro: unknown): boolean {
+  if (erro instanceof ApiError) return erro.status !== 403 && erro.status !== 404;
+  return true;
+}
+
+/**
+ * A mensagem do erro do histórico — e ela DIZ a causa.
+ *
+ * ⚠️ O texto antigo era o mesmo para todo erro não-401 ("Tente de novo em
+ * instantes"), e a recusa da API é PERMANENTE: "tente de novo" é mentira.
+ */
+function mensagemDoErroDoHistorico(erro: unknown): string {
+  if (erro instanceof ApiError && erro.status === 403) {
+    return 'Você não tem permissão de ler o histórico desta pessoa.';
+  }
+  if (erro instanceof ApiError && erro.status === 404) {
+    return 'Não há histórico disponível para esta pessoa.';
+  }
+  return 'Não foi possível carregar o histórico desta pessoa. Tente de novo em instantes.';
 }

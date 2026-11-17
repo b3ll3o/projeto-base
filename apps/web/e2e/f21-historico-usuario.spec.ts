@@ -90,24 +90,29 @@ test.describe('F21 — O histórico de auditoria de uma pessoa (admin do sistema
     const linhas = tabela.locator('tbody tr');
     await expect(linhas).toHaveCount(2);
 
+    // ⚠️ A ORDEM É DESCENDENTE — a versão mais NOVA primeiro. É o que a API
+    // devolve desde que a ordem entrou no port de auditoria: a trilha do
+    // administrador do sistema é lida de trás para frente, e a última
+    // alteração é a primeira linha.
+    //
+    // A ALTERAÇÃO: o nome DEPOIS.
+    await expect(linhas.nth(0)).toContainText('alteração');
+    await expect(linhas.nth(0)).toContainText('Pessoa Renomeada');
+
     // A CRIAÇÃO: o nome e o e-mail ANTES da alteração. É o que prova que a
     // linha é a VERSÃO, e não a pessoa de hoje repetida.
-    await expect(linhas.nth(0)).toContainText('criação');
-    await expect(linhas.nth(0)).toContainText('Pessoa Do Historico');
-    await expect(linhas.nth(0)).toContainText(email);
-
-    // A ALTERAÇÃO: o nome DEPOIS.
-    await expect(linhas.nth(1)).toContainText('alteração');
-    await expect(linhas.nth(1)).toContainText('Pessoa Renomeada');
+    await expect(linhas.nth(1)).toContainText('criação');
+    await expect(linhas.nth(1)).toContainText('Pessoa Do Historico');
+    await expect(linhas.nth(1)).toContainText(email);
 
     // ⚠️ A COLUNA "QUEM MUDOU" é a 5ª (a ordem das colunas é a do contrato
     // da tela: Versão · O que houve · Nome e e-mail · Quando · Quem mudou).
     // A criação não tem ator — a rota de cadastro é pública — e a
     // tela mostra o TRAÇO, e não um nome inventado.
-    await expect(linhas.nth(0).getByRole('cell').nth(4)).toHaveText('—');
+    await expect(linhas.nth(1).getByRole('cell').nth(4)).toHaveText('—');
     // E a alteração tem: quem mudou é a própria pessoa, e a tela mostra o
     // NOME que está no inventário.
-    await expect(linhas.nth(1).getByRole('cell').nth(4)).toContainText('Pessoa Renomeada');
+    await expect(linhas.nth(0).getByRole('cell').nth(4)).toContainText('Pessoa Renomeada');
   });
 
   test('quem não é admin do sistema não abre o detalhe — e o histórico não é entregue', async ({

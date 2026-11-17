@@ -38,7 +38,12 @@ export function Tabela({
 }) {
   const base = 'w-full border-collapse text-sm';
   return (
-    <div className="mt-6 overflow-x-auto">
+    // ⚠️ A REGIÃO ROLÁVEL é alcançável por TECLADO (MEDIDO 2026-11-17): sem
+    // `tabindex`, ela só era focável no Chromium (que torna região rolável
+    // focável por padrão) — no Firefox e no Safari, as colunas que ficam
+    // FORA da tela a 320px eram inalcançáveis, e o `role` + o nome acessível
+    // é o que diz ao leitor de tela o que há ali.
+    <div className="mt-6 overflow-x-auto" tabIndex={0} role="region" aria-label={legenda}>
       <table {...props} className={className ? `${base} ${className}` : base}>
         <caption className="sr-only">{legenda}</caption>
         {children}
@@ -68,11 +73,28 @@ export function CabecalhoTabela({
   );
 }
 
-/** Célula de dado. */
+/**
+ * Célula de dado.
+ *
+ * ⚠️ `wrap-anywhere` (MEDIDO 2026-11-17): um e-mail tem 254 chars e não tem
+ * onde quebrar.
+ *
+ * ⚠️ **O `break-words` anterior NÃO fazia isto.** A medição: com e-mail de
+ * 249 chars, a tabela media **2.097px** dentro de um wrapper de 288px a
+ * 320px — e com `overflow-wrap: normal` mediava **os mesmos 2.097px**. A
+ * classe é `overflow-wrap: break-word`, e a especificação diz que
+ * `break-word` **não** reduz a contribuição min-content (quem reduz é
+ * `anywhere`). O que impedia a **página** de rolar era o `overflow-x-auto` do
+ * wrapper — e o comentário antigo atribuía isso ao `break-words`.
+ *
+ * ⚠️ E `anywhere` sozinho não resolve: MEDIDO, a tabela cai de 2.097px para
+ * 2.066px. O que fecha é a **LARGURA** da célula — com `width` fixa, a
+ * tabela cai para 442px e as colunas da direita deixam de estar a 7 telas de
+ * rolagem. A largura é passada por quem chama (`className`), porque a
+ * primitiva não sabe o que a célula guarda.
+ */
 export function CelulaTabela({ children, className, ...props }: React.ComponentProps<'td'>) {
-  // ⚠️ `break-words` (MEDIDO 2026-11-16): um e-mail tem 254 chars e não tem
-  // onde quebrar — sem isto, a tabela estourava a tela em 2421px a 320px.
-  const base = 'break-words border-b border-border/60 py-3 pr-4 text-foreground';
+  const base = 'wrap-anywhere border-b border-border/60 py-3 pr-4 text-foreground';
   return (
     <td {...props} className={className ? `${base} ${className}` : base}>
       {children}
