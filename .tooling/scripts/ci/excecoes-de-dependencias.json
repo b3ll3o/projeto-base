@@ -7,10 +7,10 @@
     "",
     "O estado que motivou este gate: MEDIDO em 2026-11-03 com `pnpm audit --json`",
     "(89 advisories: 4 críticas, 23 altas). O estado de HOJE é o medido em",
-    "2026-11-16, com o mesmo comando — `pnpm audit --json`, cujo",
-    "`metadata.vulnerabilities` devolve `{\"info\":0,\"low\":1,\"moderate\":25,\"high\":3,\"critical\":1}`",
-    "→ 30 advisories (1 crítica, 3 altas, 25 moderadas, 1 baixa), das quais 4 na",
-    "severidade que reprova — as 4 são as exceções abaixo. Nenhuma outra.",
+    "2026-11-17, com o mesmo comando — `pnpm audit --json`, cujo",
+    "`metadata.vulnerabilities` devolve `{\"info\":0,\"low\":1,\"moderate\":25,\"high\":5,\"critical\":1}`",
+    "→ 32 advisories (1 crítica, 5 altas, 25 moderadas, 1 baixa), das quais 5 na",
+    "severidade que reprova — as 5 são as exceções abaixo. Nenhuma outra.",
     "",
     "MEDIDO 2026-11-09 (e reconferido em 2026-11-10): o total caiu de 41 para 31",
     "depois do PR #156 — o lockfile mudou (27 dependências subiram dentro do range",
@@ -22,6 +22,14 @@
     "foram de 26 para 25. As 4 na severidade que reprova NÃO mudaram: são as",
     "mesmas 4 exceções abaixo.",
     "",
+    "MEDIDO 2026-11-17: o total subiu de 30 para 32 — o REGISTRO publicou advisory",
+    "nova (o `picomatch`, ReDoS por glob com branch repetida), e o lockfile NÃO",
+    "mudou: as altas foram de 3 para 5 (o mapa do audit tem 4 entradas `high` — o",
+    "`metadata` conta uma a mais) e a quinta na severidade que reprova é a",
+    "exceção do `picomatch`. Ele não tem versão corrigida",
+    "(`vulnerable_versions: <=4.0.7`, `patched_versions: <0.0.0`) e é",
+    "`devDependency` pura — sem caminho de produção no audit.",
+    "",
     "ESTE NÚMERO ENVELHECE: ele é uma MEDIÇÃO, e a medição envelhece com o",
     "lockfile. O gate o confere — o campo `advisoriesEsperadas` deste arquivo é",
     "comparado com o `metadata.vulnerabilities` que o `pnpm audit` devolve: o que",
@@ -30,17 +38,17 @@
     "advisory nova, e isso não é mudança do repo — reprovar por isso seria",
     "vermelho sem motivo). Quem atualiza o lockfile atualiza a claim no mesmo PR.",
     "",
-    "NENHUMA das 4 pode sair da lista: MEDIDO em 2026-11-09, a `verificacao` de",
+    "NENHUMA das 5 pode sair da lista: MEDIDO em 2026-11-09, a `verificacao` de",
     "cada uma continua valendo (o gate a roda a cada preflight e confirmou 4/4",
     "com exceção declarada e verificada). O advisory é que tem de sumir do",
     "`pnpm audit` — o `id` é a chave de casamento.",
     "A severidade que REPROVA mora no CÓDIGO do gate (SEVERIDADES_QUE_REPROVAM), não neste arquivo — quem edita este arquivo não pode enfraquecer o gate."
   ],
   "advisoriesEsperadas": {
-    "medidoEm": "2026-11-16",
-    "total": 30,
+    "medidoEm": "2026-11-17",
+    "total": 32,
     "critical": 1,
-    "high": 3,
+    "high": 5,
     "moderate": 25,
     "low": 1,
     "info": 0
@@ -96,6 +104,30 @@
         "tipo": "ausencia",
         "padrao": "JaegerPropagator",
         "caminhos": ["apps/api/src", "apps/web"]
+      }
+    },
+    {
+      "id": "1247710",
+      "modulo": "picomatch",
+      "severidade": "high",
+      "motivo": "ReDoS (CVSS 7.5 — AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H: só disponibilidade) por glob com branch repetida. MEDIDO em 2026-11-17 com `pnpm audit --json`: `vulnerable_versions: <=4.0.7` e `patched_versions: <0.0.0` — NÃO EXISTE versão corrigida (a 4.0.7 é a última), então não há upgrade que feche. MEDIDO com `pnpm why picomatch -r` e com os `paths` do audit: o módulo chega SÓ por `devDependencies` (`lint-staged` na raiz; `typescript-eslint` → `tinyglobby` via `@projeto/eslint-config`) e o audit devolve **0** achados em caminho de produção — o pacote não vai para a imagem do app. O vetor exige uma ENTRADA de glob que não seja do repo: o picomatch é chamado pelo lint-staged (a lista de arquivos staged) e pelo tinyglobby (os globs do tsconfig/eslint), e o REPO NUNCA o chama direto (verificação abaixo) — a entrada é sempre config versionada e revisada.",
+      "verificacao": {
+        "tipo": "ausencia",
+        "padrao": "picomatch",
+        "caminhos": [
+          "package.json",
+          "apps/api/package.json",
+          "apps/web/package.json",
+          "packages/eslint-config/package.json",
+          "packages/shared-types/package.json",
+          "apps/api/src",
+          "apps/web/app",
+          "apps/web/lib",
+          "apps/web/components",
+          "tooling/scripts",
+          ".tooling/scripts"
+        ],
+        "excluir": ["excecoes-de-dependencias\\.json$"]
       }
     }
   ]
