@@ -8,17 +8,17 @@
 // vazio, e um teste que passa no vazio não mede nada. Por isso os DOIS
 // testes semeiam a empresa e o dono antes de olhar a tela.
 //
-// ⚠️ O QUE ESTE SPEC SEGURA É O PAR RECUSA/LIBERDADE. A lista `/users` é a
-// tela da EMPRESA: quem não é administrador do sistema a vê (o recorte da
-// listagem é do tenant, e o quase-admin tem perfil GLOBAL — o carve-out
-// documentado em `users.controller.ts`). O que o admin do sistema tem é o
+// ⚠️ O QUE ESTE SPEC SEGURA É O PAR RECUSA/LIBERDADE. O que separa o
+// administrador do SISTEMA dos demais é o `isAdmin` GLOBAL — e NÃO o recorte
+// da listagem: sem o cookie `tenant_id`, `GET /users` responde no bucket
+// GLOBAL (o carve-out documentado em `users.controller.ts`), e o
+// administrador do sistema vê a base INTEIRA. O que ele tem a mais é o
 // INVENTÁRIO da tenancy — as empresas de uma pessoa atravessando empresas.
 // Sem o par, "o admin vê as empresas" e "qualquer um vê as empresas" passam
 // no mesmo arquivo.
 
 import type { Page } from '@playwright/test';
-import { expect, plantarSessao, test } from './support/fixtures';
-import { semearQuaseAdmin } from './support/rbac';
+import { expect, plantarEmpresa, plantarSessao, test } from './support/fixtures';
 import { SENHA_DE_TESTE, criarEmpresa, emailUnico, parDeTokens } from './support/dados';
 
 /**
@@ -29,6 +29,8 @@ import { SENHA_DE_TESTE, criarEmpresa, emailUnico, parDeTokens } from './support
  *
  * O `id` do dono volta porque o caso da RECUSA precisa do path da página de
  * detalhe — sem ele, o teste não teria como abrir a porta que diz para fechar.
+ * E os TOKENS voltam porque o caso da recusa é o DONO, acting com a própria
+ * sessão.
  */
 async function semearEmpresaComDono(
   semear: (nome: string, email: string) => Promise<{ id: string }>,
@@ -41,7 +43,7 @@ async function semearEmpresaComDono(
     'Empresa Do Detalhe',
     'empresa-do-detalhe',
   );
-  return { emailDono, id: conta.id, empresa };
+  return { emailDono, id: conta.id, empresa, tokens };
 }
 
 /** O link da listagem que ABRE a pessoa — o nome é o que a pessoa lê. */
@@ -96,12 +98,31 @@ test.describe('F20 — Detalhe do usuário e as empresas em que ele está (admin
     page,
     semear,
   }) => {
-    // ⚠️ O DADO EXISTE. O quase-admin tem as três chaves `admin.manage-*` —
-    // o guard da API o LIBERA — e mesmo assim a tela recusa.
-    const { emailDono, id } = await semearEmpresaComDono(semear);
+    // ⚠️ O ATOR NEGATIVO É O DONO DA EMPRESA — o caso exato que esta tela
+    // precisa recusar. O DONO veste o perfil `gerente`, que tem `isAdmin: true`
+    // NA EMPRESA (`apps/api/src/modules/tenancy/domain/perfis-da-empresa.ts`);
+    // com o cookie `tenant_id` plantado, o guard da EMPRESA (`exigirAdmin`) o
+    // LIBERARIA, e o guard do SISTEMA (`exigirAdminDoSistema`) recusa —
+    // porque o `isAdmin` que ele exige é o GLOBAL.
+    //
+    // ⚠️ O QUE ESTE SPEC PROVA (e o que NÃO prova): o DONO não vê o
+    // inventário da tenancy — a afirmação de segurança do produto, medida no
+    // browser com o dado plantado. A ESCOLHA do guard é do spec UNIT
+    // (`app/users/[id]/page.spec.tsx`, que afirma `exigirAdminDoSistema` e
+    // NUNCA `exigirAdmin`).
+    //
+    // MEDIDO 2026-11-17: mutando o guard de `/users/[id]` para `exigirAdmin`,
+    // o spec unit cai (3 de 7) e o e2e NÃO — as duas recusas (a do guard e o
+    // 403 da API) caem na MESMA tela de "Acesso restrito", e o browser não
+    // distingue uma da outra. O quase-admin anterior também não distinguia:
+    // ele produzia a mesma tela nos DOIS guards.
+    const { emailDono, id, empresa, tokens } = await semearEmpresaComDono(semear);
 
-    const quase = await semearQuaseAdmin();
-    await plantarSessao(page, quase.tokens);
+    await plantarSessao(page, tokens);
+    // ⚠️ O cookie da empresa é o que tira o ator do bucket GLOBAL — e sem
+    // ele, o guard da EMPRESA leria o mesmo perfil (o global) que o do
+    // SISTEMA, e o ator não seria o caso que esta tela precisa recusar.
+    await plantarEmpresa(page, empresa.id);
 
     await irPara('/users');
 
