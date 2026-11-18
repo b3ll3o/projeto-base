@@ -118,22 +118,6 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 >
 > **Status:** Estável
 
-### §3.4 Especialistas do Kit de Documentação (v1.30.0+)
-
-> Os **14 itens** do kit de documentação moderna (5 pilares) têm um **specialist
-> dono**; cada pilar tem um **auditor** e uma **skill de auditoria**. A matriz
-> completa (item → doc canônico → âncoras → dono) é a convenção
-> [`kit-documentacao.md`](./.agents/specs/conventions/kit-documentacao.md), e o
-> gate [`check-doc-kit`](./.tooling/scripts/ci/check-doc-kit.ts) cobra a cobertura.
-
-| Pilar | Itens | Specialists | Auditor | Skill de auditoria |
-|---|---|---|---|---|
-| 1 — Onboarding | README · CONTRIBUTING · Glossário | `readme-specialist` · `contributing-specialist` · `glossary-specialist` | `onboarding-docs-auditor` | `onboarding-docs-audit` |
-| 2 — Arquitetura | HLD · C4 | `hld-specialist` · `c4-specialist` | `architecture-docs-auditor` | `architecture-docs-audit` |
-| 3 — Decisões | PRD · TDR · ADR | `prd-specialist` · `tdr-specialist` · `adr-specialist` | `decision-docs-auditor` | `decision-docs-audit` |
-| 4 — Contratos | OpenAPI · AsyncAPI · ERD | `openapi-doc-specialist` · `asyncapi-specialist` · `erd-specialist` | `contract-docs-auditor` | `contract-docs-audit` |
-| 5 — Operação | Runbooks · Post-mortem · CHANGELOG | `runbook-specialist` · `postmortem-specialist` · `changelog-specialist` | `operations-docs-auditor` | `operations-docs-audit` |
-
 ## §3.2 Specialists de Auditoria e Triagem (v2.0+)
 
 | Agent | Arquivo | Memória | Papel | Quando invocar |
@@ -178,6 +162,22 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 > [`state-aware-planning.md`](./.agents/specs/conventions/state-aware-planning.md) obriga gerar `state-snapshot-<ts>.md` ANTES de planejar.
 
 ---
+
+### §3.3 Especialistas do Kit de Documentação (v1.30.0+)
+
+> Os **14 itens** do kit de documentação moderna (5 pilares) têm um **specialist
+> dono**; cada pilar tem um **auditor** e uma **skill de auditoria**. A matriz
+> completa (item → doc canônico → âncoras → dono) é a convenção
+> [`kit-documentacao.md`](./.agents/specs/conventions/kit-documentacao.md), e o
+> gate [`check-doc-kit`](./.tooling/scripts/ci/check-doc-kit.ts) cobra a cobertura.
+
+| Pilar | Itens | Specialists | Auditor | Skill de auditoria |
+|---|---|---|---|---|
+| 1 — Onboarding | README · CONTRIBUTING · Glossário | `readme-specialist` · `contributing-specialist` · `glossary-specialist` | `onboarding-docs-auditor` | `onboarding-docs-audit` |
+| 2 — Arquitetura | HLD · C4 | `hld-specialist` · `c4-specialist` | `architecture-docs-auditor` | `architecture-docs-audit` |
+| 3 — Decisões | PRD · TDR · ADR | `prd-specialist` · `tdr-specialist` · `adr-specialist` | `decision-docs-auditor` | `decision-docs-audit` |
+| 4 — Contratos | OpenAPI · AsyncAPI · ERD | `openapi-doc-specialist` · `asyncapi-specialist` · `erd-specialist` | `contract-docs-auditor` | `contract-docs-audit` |
+| 5 — Operação | Runbooks · Post-mortem · CHANGELOG | `runbook-specialist` · `postmortem-specialist` · `changelog-specialist` | `operations-docs-auditor` | `operations-docs-audit` |
 
 ## §4. Mecanismo de Coordenação
 

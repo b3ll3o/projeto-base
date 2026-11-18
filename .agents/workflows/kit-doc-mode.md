@@ -74,4 +74,4 @@ type: workflow
 - Convenção: [`.agents/specs/conventions/kit-documentacao.md`](../specs/conventions/kit-documentacao.md)
 - Gate: [`.tooling/scripts/ci/check-doc-kit.ts`](../../.tooling/scripts/ci/check-doc-kit.ts)
 - Matriz de roteamento: [`.agents/specs/conventions/specialist-routing.md`](../specs/conventions/specialist-routing.md)
-- Catálogo de agents: [`AGENTS.md`](../../AGENTS.md) §3.4
+- Catálogo de agents: [`AGENTS.md`](../../AGENTS.md) §3.3
