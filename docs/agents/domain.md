@@ -7,14 +7,17 @@ Como as skills de engenharia devem consumir a documentação de domínio deste r
 
 ## Antes de explorar, leia estes
 
-- **`GLOSSARY.md`** na raiz do repo — glossário e termos canônicos. **Ainda não existe**;
-  a skill `domain-modeling` o cria quando um termo ou decisão é de fato resolvido.
+- **`GLOSSARY.md`** na raiz do repo — glossário e termos canônicos. **Existe**
+  desde a v1.30.0 do template: [`GLOSSARY.md`](../../GLOSSARY.md) é a fonte do
+  vocabulário do domínio (termo, definição e o caminho real onde ele aparece).
+  Ele é criado **lazy** — um termo entra quando é de fato resolvido, e a skill
+  `domain-modeling` continua sendo quem sugere a entrada.
   (Nome canônico **a partir da v1.3.0** do plugin; até a 1.2.3 o arquivo se chamava
   `CONTEXT.md`. As duas versões estão em disco, mas a carregada nesta sessão é a
   **1.3.1** — MEDIDO em `~/.claude/plugins/cache/claude-plugins-official/mattpocock-skills/`,
   que lista `1.2.3` e `1.3.1`. Então `domain-modeling` escreve `GLOSSARY.md`, e o
   `git mv CONTEXT.md GLOSSARY.md` só se aplica a uma sessão que carregue a 1.2.3.
-  Nenhum dos dois arquivos está na raiz hoje.)
+  O `GLOSSARY.md` está na raiz; o `CONTEXT.md` não está.)
 - **`docs/adr/`** — decisões arquiteturais registradas. **Este é o índice
   canônico dos ADRs**: ele lista **o que existe**; o
   [system design](../system-design/README.md) lista **o que cada um
@@ -32,8 +35,10 @@ Como as skills de engenharia devem consumir a documentação de domínio deste r
   - `0011-idempotencia-de-escrita.md` — a chave `Idempotency-Key`: o retry de escrita volta a ser seguro
   - `0012-orcamento-de-tempo-no-banco.md` — o `statement_timeout` de 8 s no papel de runtime
 
-Se `GLOSSARY.md` não existir, **siga em silêncio**: não sinalize a ausência nem sugira
-criá-lo antecipadamente.
+O `GLOSSARY.md` **existe** ([`../../GLOSSARY.md`](../../GLOSSARY.md)). Ele cresce
+**lazy**: um termo entra quando é de fato resolvido. **Se um termo que o repo usa
+não estiver lá, anote a lacuna** — a ausência de um termo é lacuna nomeada, não
+motivo para inventar sinônimo.
 
 ## Layout: single-context
 
@@ -44,7 +49,7 @@ isso é config compartilhada e ferramenta, não contexto de domínio separado.
 
 ```text
 /
-├── GLOSSARY.md          ← glossário (a criar, lazily)
+├── GLOSSARY.md          ← glossário (existe; cresce lazy)
 ├── docs/adr/            ← decisões do sistema
 ├── apps/{api,web}/      ← o produto
 ├── packages/*           ← config compartilhada

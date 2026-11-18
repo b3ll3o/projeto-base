@@ -567,6 +567,23 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     id: 'check-doc-claims',
   },
   {
+    // pt-BR (2026-11-18): o kit completo de documentação moderna (5 pilares,
+    // 14 itens) entrou no repo como OBRIGATÓRIO — e "obrigatório" sem
+    // instrumento é prosa. A convenção `kit-documentacao.md` declara a matriz
+    // (item → doc canônico → specialist → auditor → âncoras), e este gate a lê
+    // **por nome de coluna** e mede cada linha: o doc existe, tem as âncoras,
+    // o índice cita, os dois donos existem, e os itens condicionais estão
+    // declarados (a não-aplicabilidade do AsyncAPI é declarada, e o gatilho
+    // que a invalida é medido).
+    //
+    // O gate NÃO tem a lista dos 14 itens no código: a matriz é a fonte
+    // única, como no `check-doc-coverage` (que lê a tabela de exceções da
+    // `documentacao.md`).
+    name: 'cobertura do kit de documentação (14 itens, 5 pilares)',
+    file: '.tooling/scripts/ci/check-doc-kit.ts',
+    id: 'check-doc-kit',
+  },
+  {
     // pt-BR (2026-10-29): o teto de 300 linhas para `.md` é a regra mais
     // antiga do repo e a única que NENHUM gate mediava. MEDIDO: `grep -rln
     // 'MAX_LOC' tooling/scripts/ .tooling/scripts/ | grep -v spec` devolve UM

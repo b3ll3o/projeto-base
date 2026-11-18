@@ -13,7 +13,7 @@ Um **monorepo base reutilizável** que implementa o **padrão genérico de agent
 **Diferencial:** enquanto o template anterior era genérico para qualquer projeto, este é um **monorepo base opinativo** com:
 
 - Apps `apps/api` (NestJS) + `apps/web` (Next.js) **já implementados** — **6 módulos** em `apps/api/src/modules/` (`auth`, `feature-flags`, `health`, `profiles`, `tenancy`, `users`), em camadas `domain/`, `application/`, `infrastructure/`. O app é **multi-tenant por empresa** (RLS no Postgres), com **RBAC por perfil**, **feature flags** e **administração de sistema** (usuários, empresas, perfis).
-- **28 agents** (12 genéricos + 2 routers + 7 specialists de stack + 6 de auditoria + 1 de documentação) + 3 arquivos companheiros em `telemetry-specialist/`, interoperáveis via skill `agents:coordinate`; **30 skills + 15 workflows + 24 convenções canônicas**
+- **47 agents** (12 genéricos + 2 routers + 7 specialists de stack + 6 de auditoria + 1 de documentação + 19 do kit) + 3 arquivos companheiros em `telemetry-specialist/`, interoperáveis via skill `agents:coordinate`; **35 skills + 17 workflows + 29 convenções canônicas**
 - **Paradigma DDD + Hexagonal** canônico (ADR-0001) com guardiões automáticos
 - **OpenTelemetry cross-stack** (backend + frontend + Collector)
 - **CI Defense-in-Depth** em 3 camadas
@@ -26,15 +26,18 @@ Um **monorepo base reutilizável** que implementa o **padrão genérico de agent
 projeto-base/
 ├── AGENTS.md              # Spec canônica do padrão (LEIA PRIMEIRO, ≤ 300 linhas)
 ├── README.md              # Este arquivo
+├── CONTRIBUTING.md        # guia de contribuição (commits, branches, review, estilo)
+├── GLOSSARY.md            # a linguagem do domínio (termos canônicos)
+├── CHANGELOG.md           # o histórico das versões (Keep a Changelog)
 ├── .agents/
-│   ├── agents/            # 28 agents (12 genéricos + 2 routers + 7 de stack + 6 de auditoria + 1 de documentação)
+│   ├── agents/            # 47 agents (12 genéricos + 2 routers + 7 de stack + 6 de auditoria + 1 de documentação + 19 do kit)
 │   │                      # catálogo nominal, com papel e memória: AGENTS.md §3
-│   ├── memory/            # 30 memórias (28 agents + state-aware-planning + _template)
-│   ├── skills/            # 30 skills — coordenação, routing, auditoria, UI, terceiro adaptadas (agent↔skill: AGENTS.md §3.2)
+│   ├── memory/            # 49 memórias (47 agents + state-aware-planning + _template)
+│   ├── skills/            # 35 skills — coordenação, routing, auditoria, UI, terceiro adaptadas (agent↔skill: AGENTS.md §3.2)
 │   ├── hooks/             # 2 hooks do Claude Code (guard do lockfile + reviewer pós-edição)
 │   ├── settings.json      # binding do Claude Code: registra os 2 hooks
-│   ├── specs/conventions/ # 24 convenções (ver AGENTS.md §6)
-│   ├── workflows/         # 15 workflows detalhados
+│   ├── specs/conventions/ # 29 convenções (ver AGENTS.md §6)
+│   ├── workflows/         # 17 workflows detalhados
 │   └── WORKFLOWS.md       # Fluxos pré-configurados, em tabela
 ├── apps/                  # api (NestJS 12) + web (Next.js 15)
 ├── packages/              # eslint-config, shared-types, tsconfig
@@ -46,6 +49,9 @@ projeto-base/
     ├── fluxo-desenvolvimento.md  # os gates: camada, comando, o que de fato bloqueia
     ├── api/               # referência HTTP por bounded context
     ├── adr/               # decisões arquiteturais (ADR-0001…)
+    ├── prd/               # o contexto de produto (PRD / one-pager)
+    ├── tdr/               # o plano técnico antes da entrega (TDR / RFC)
+    ├── post-mortems/      # o template blameless de incidente
     ├── flows/             # fluxos (IR → diagrama)
     ├── system-design/     # o desenho do sistema: contexto, módulos, dados, segurança, operação e o contrato de extensão
     ├── agents/            # issue tracker, labels de triagem, glossário
@@ -56,15 +62,12 @@ projeto-base/
     ├── TEMPLATE_USAGE.md  # Guia principal (≤ 300 linhas)
     ├── MONOREPO.md        # convenções de monorepo
     ├── STACK.md           # stack escolhida e justificativas
-    └── integrations/      # Integração por ferramenta: claude-code, cursor, windsurf,
-                           # aider, continue, copilot, cline, cody
+    └── integrations/      # Integração por ferramenta: claude-code, cursor, windsurf, aider, continue, copilot, cline, cody
 ```
 
 ## Como executar localmente
 
-> **Mapa completo por ambiente** (dev, Docker, observabilidade, e2e, CI): [`docs/como-rodar.md`](./docs/como-rodar.md) — **6 ambientes** indexados no §0 (`grep -cE '^\| [0-9]+ \| ' docs/como-rodar.md`). O **Ambiente 1** (dev local, pnpm nativo) está no runbook principal; os outros 5 são runbooks irmãos em `docs/runbooks/`.
->
-> **Dois modos** neste README: **Docker Compose** (reproduz o ambiente de produção) e **pnpm nativo** (itera rápido, com o Postgres em Docker).
+> **Mapa completo por ambiente** (dev, Docker, observabilidade, e2e, CI): [`docs/como-rodar.md`](./docs/como-rodar.md) — **6 ambientes** indexados no §0 (`grep -cE '^\| [0-9]+ \| ' docs/como-rodar.md`). O **Ambiente 1** (dev local, pnpm nativo) está no runbook principal; os outros 5 são runbooks irmãos em `docs/runbooks/`. **Dois modos** aqui: **Docker Compose** (reproduz produção) e **pnpm nativo** (itera rápido, Postgres no Docker).
 
 ### Pré-requisitos
 
@@ -78,16 +81,14 @@ projeto-base/
 
 Reproduz fielmente o ambiente de produção com healthchecks, network interna e migrations automáticas.
 
-A API assina JWT e **recusa o boot sem `JWT_SECRET`** — sem valor, sem default, sem exceção.
-Gere um antes de subir o serviço `api`:
+A API assina JWT e **recusa o boot sem `JWT_SECRET`** — sem valor, sem default, sem exceção. Gere um antes de subir o serviço `api`:
 
 ```bash
 export JWT_SECRET=$(openssl rand -base64 48)
 ```
 
-O Postgres não depende dele (`docker compose up -d postgres` funciona sem), porque o Compose
-interpola o arquivo inteiro antes de qualquer comando: exigir a variável no compose quebraria
-também `config`, `ps` e `down`.
+O Postgres não depende dele (`docker compose up -d postgres` funciona sem): o Compose interpola o arquivo
+inteiro antes de qualquer comando, e exigir a variável quebraria também `config`, `ps` e `down`.
 
 ```bash
 # Stack completa (postgres + api + web prod targets)
@@ -150,10 +151,9 @@ openssl rand -base64 48    # preencha o valor na linha JWT_SECRET= de apps/api/.
 openssl rand -hex 32    # -> senha do papel de RUNTIME, em DATABASE_URL
 openssl rand -hex 32    # -> senha do papel de SISTEMA, em SYSTEM_DATABASE_URL
 
-# 5. Rodar migrations — o binário do Prisma direto, de dentro de apps/api, para que ele leia
-# o apps/api/.env. Não existe script `prisma:migrate:deploy` em nenhum package.json: o pnpm
-# responde "None of the selected packages has a ... script" e SAI 0 — verde para quem só olha
-# o exit code
+# 5. Rodar migrations — o binário do Prisma direto, de dentro de apps/api, para que leia o apps/api/.env.
+# Não existe script `prisma:migrate:deploy` em nenhum package.json: o pnpm responde "None of the
+# selected packages has a ... script" e SAI 0 — verde para quem só olha o exit code
 cd apps/api && pnpm exec prisma migrate deploy && cd ../..
 
 # 5.1. Aplicar a senha de cada papel (a migration cria os papéis SEM senha)
@@ -163,23 +163,18 @@ cd apps/api && sh scripts/prepara-papeis.sh && cd ../..
 pnpm dev    # turbo run dev em paralelo — api em :3000, web em :3001
 ```
 
-⚠️ **`JWT_SECRET` não tem valor default, por decisão de projeto** (ver
-[ADR-0002](docs/adr/0002-autenticacao-jwt-argon2.md)): um segredo padrão no repositório faria
-todos que instalaram o projeto compartilharem a chave de assinatura.
+⚠️ **`JWT_SECRET` não tem valor default, por decisão de projeto** ([ADR-0002](docs/adr/0002-autenticacao-jwt-argon2.md)):
+um segredo padrão no repositório faria todos que instalaram o projeto compartilharem a chave de assinatura.
 
-Endpoints:
-
-- **API:** <http://localhost:3000>
-- **API Docs (Swagger):** <http://localhost:3000/api/docs> — só em `development` (#122); fora dele é desabilitado (`SWAGGER_ENABLED=true` liga de propósito)
-- **Web:** <http://localhost:3001>
+Endpoints: **API** <http://localhost:3000> · **API Docs (Swagger)** <http://localhost:3000/api/docs> (só em
+`development` #122; `SWAGGER_ENABLED=true` liga de propósito) · **Web** <http://localhost:3001>
 
 ### Verificação rápida (CI-equivalente local)
 
 ```bash
 # Atalho consolidado antes de push — ~1min
-pnpm ci:local    # ci:preflight → db:generate → lint/typecheck/test:unit/
-                # test:coverage/test:integration/test:e2e (api, web, shared-types)
-                # → tooling:test → ci:boot
+pnpm ci:local    # ci:preflight → db:generate → lint/typecheck/test:unit/test:coverage/
+                # test:integration/test:e2e (api, web, shared-types) → tooling:test → ci:boot
 
 # Granular (debug de gate específico)
 pnpm ci:preflight                          # ~10s — drift
@@ -194,7 +189,6 @@ pnpm docs:sync --files="$(git diff --name-only main | tr '\n' ',' | sed 's/,$//'
 **Fluxo canônico (do primeiro comando ao merge):** [`docs/fluxo-desenvolvimento.md`](./docs/fluxo-desenvolvimento.md) — documento factual com cada gate, em qual camada, e o que **de fato** bloqueia.
 
 Smoke completo da stack Docker (requer daemon):
-
 ```bash
 docker compose up -d postgres api web && sleep 30 \
   && pnpm --filter @projeto/api test:integration \
@@ -215,21 +209,29 @@ Estes são os sintomas do **dia a dia**; a tabela por ambiente está no [runbook
 | Traces não chegam no OTel Collector | Subir com `docker compose --profile observability up -d` |
 | `pnpm ci:preflight` falha com cross-ref quebrada | `pnpm docs:sync --mode=fix` ou ajustar manualmente |
 
+## Documentação
+
+A documentação é **parte do código** — e o **kit completo** (5 pilares, 14 itens) é
+obrigatório: cada item tem doc canônico, specialist dono e auditor por pilar. A matriz
+(item → doc → âncoras → dono) é a fonte única em
+[`kit-documentacao.md`](./.agents/specs/conventions/kit-documentacao.md); o gate
+`check-doc-kit` cobra a cobertura. O guia de execução (ambiente, variáveis, scripts) é
+[`docs/como-rodar.md`](./docs/como-rodar.md), e os docs de cada pilar estão na **Estrutura** acima.
+
 ## Como usar
 
 Três opções para derivar um novo projeto:
 
 ```bash
 cp -r projeto-base/ meu-novo-monorepo/ && cd meu-novo-monorepo/   # Opção 1 — Copiar
-
 # Opção 2 — Submodule (sincroniza updates sem perder customizações)
 git submodule add https://github.com/seu-org/projeto-base.git .agents-base
-
 # Opção 3 — Fork + personalizar (mantenha §1 do AGENTS.md intacta)
 gh repo fork b3ll3o/projeto-base
 ```
 
-Independente da opção, o padrão de interoperabilidade permanece intacto. O **ponto de partida do desenho** é o conjunto de system design ([`docs/system-design/README.md`](./docs/system-design/README.md)), que vem com o contrato de extensão e o template que o app derivado copia.
+Independente da opção, o padrão de interoperabilidade permanece intacto. O **ponto de partida do desenho** é o
+[system design](./docs/system-design/README.md), que vem com o contrato de extensão e o template que o app derivado copia.
 
 ## Regra Mandatória
 
@@ -239,20 +241,21 @@ Detalhes completos em [`AGENTS.md`](./AGENTS.md) (seção §1).
 
 ## Agents Inclusos
 
-**28 agents** no catálogo — o catálogo nominal (agent, papel e memória de cada um) é o [`AGENTS.md` §3 e §3.2](./AGENTS.md); o README só aponta, não duplica.
+**47 agents** no catálogo — o catálogo nominal (agent, papel e memória de cada um) é o [`AGENTS.md` §3 e §3.2](./AGENTS.md); o README só aponta, não duplica.
 
 - **Genéricos (12):** `agent-architect`, `orchestrator`, `explorer`, `code-reviewer`, `stack-code-reviewer`, `security-auditor`, `doc-sync`, `refactorer`, `test-writer`, `tdd-enforcer`, `doc-writer`, `task-manager`
 - **Routers (2):** `review-router` (dispensa reviewers em paralelo após task DONE), `specialist-router` (pré-planejamento; bloqueia se `gap_detected`)
 - **Specialists de stack (7):** `monorepo-specialist`, `nestjs-specialist`, `nextjs-specialist`, `docker-specialist`, `telemetry-specialist`, `ux-design-specialist`, `multi-tenant-specialist`
 - **Specialists de auditoria (6):** `prisma-db-specialist`, `openapi-contract-specialist`, `otelcol-infra-specialist`, `docker-prod-specialist`, `release-versioning-specialist`, `finding-orchestrator`
 - **Documentação (1):** `documentation-specialist` — dono da doc da aplicação (matriz de cobertura, drift, frescor); carrega a skill `documentation-audit`
+- **Kit de documentação (19):** 14 specialists (um por item do kit) + 5 auditadores (um por pilar) — a matriz está em [`kit-documentacao.md`](./.agents/specs/conventions/kit-documentacao.md)
 
 Cada agent possui arquivo de **memória** em `.agents/memory/<nome>.md` que armazena decisões, padrões e sugestões de evolução — garantindo que os agents evoluam junto com a aplicação.
 
 ## Workflows Pré-Configurados
 
 O índice completo — trigger, tipo e cadeia de agents de cada workflow — é o
-[`.agents/WORKFLOWS.md`](./.agents/WORKFLOWS.md). **15** deles têm o detalhe passo a passo
+[`.agents/WORKFLOWS.md`](./.agents/WORKFLOWS.md). **17** deles têm o detalhe passo a passo
 (`ls .agents/workflows/*.md | wc -l`), em [`.agents/workflows/`](./.agents/workflows/).
 Todo workflow é disparado pela skill `agents:coordinate` (§Regra Mandatória).
 
@@ -265,14 +268,10 @@ Conforme convenção [`docs/STACK.md`](./docs/STACK.md):
 - **Frontend (`apps/web`):** Next.js 15 (App Router) + React 19 + Tailwind CSS 4
 - **Observabilidade:** OpenTelemetry SDK + OTel Collector (perfil Compose `observability`)
 
-Os apps `apps/api` e `apps/web` **já estão implementados** — **6 módulos** em
-`apps/api/src/modules/` (`auth`, `feature-flags`, `health`, `profiles`, `tenancy`, `users`),
-em camadas `domain/`, `application/` e `infrastructure/`, conforme o
-[ADR-0001](./docs/adr/0001-arquitetura-ddd-hexagonal-auditoria.md). O domínio é multi-tenant
-(empresa), com RBAC por perfil, feature flags e administração de sistema. Para subir localmente,
-ver a seção "Como executar localmente" acima.
-
-Veja [`docs/MONOREPO.md`](./docs/MONOREPO.md) para convenções detalhadas.
+Os apps `apps/api` e `apps/web` **já estão implementados** — **6 módulos** em `apps/api/src/modules/`
+(`auth`, `feature-flags`, `health`, `profiles`, `tenancy`, `users`), em camadas `domain/`, `application/` e
+`infrastructure/` ([ADR-0001](./docs/adr/0001-arquitetura-ddd-hexagonal-auditoria.md)): multi-tenant (empresa),
+com RBAC por perfil, feature flags e administração de sistema. Convenções: [`docs/MONOREPO.md`](./docs/MONOREPO.md).
 
 ## Compatibilidade por Ferramenta
 
@@ -295,6 +294,6 @@ Detalhes em [`docs/TEMPLATE_USAGE.md`](./docs/TEMPLATE_USAGE.md).
 
 ## Versão & Licença
 
-**Versão:** 1.29.0 — re-medido do disco em **2026-11-16**: `ls .agents/agents/*.md | wc -l` = **28** agents · `ls .agents/memory/*.md | wc -l` = **30** memórias (1 por agent + `state-aware-planning` + `_template`) · `ls .agents/skills/*/SKILL.md | wc -l` = **30** skills · `ls .agents/workflows/*.md | wc -l` = **15** workflows · `ls .agents/specs/conventions/*.md | grep -vE 'README|gaps|examples|historico|apendice' | wc -l` = **27** convenções (o número inclui a convenção `estilizacao` e os companions `estilizacao-acessibilidade` e `estilizacao-contraste`) · `ls apps/api/src/modules/ | wc -l` = **6** módulos · `ls .agents/hooks/ | wc -l` = **2** hooks · **0** wrappers — a pasta `.claude/` saiu do repo (2026-11-09); o binding do Claude Code é o symlink em `~/.claude/`, que aponta para `.agents/` (receita em [`docs/integrations/claude-code.md`](./docs/integrations/claude-code.md)).
+**Versão:** 1.30.0 — re-medido do disco em **2026-11-18**: `ls .agents/agents/*.md | wc -l` = **47** agents · `ls .agents/memory/*.md | wc -l` = **49** memórias (1 por agent + `state-aware-planning` + `_template`) · `ls .agents/skills/*/SKILL.md | wc -l` = **35** skills · `ls .agents/workflows/*.md | wc -l` = **17** workflows · `ls .agents/specs/conventions/*.md | grep -vE 'README|gaps|examples|historico|apendice' | wc -l` = **29** convenções (o número inclui a convenção `estilizacao` e os companions `estilizacao-acessibilidade` e `estilizacao-contraste`) · `ls apps/api/src/modules/ | wc -l` = **6** módulos · `ls .agents/hooks/ | wc -l` = **2** hooks · **0** wrappers — a pasta `.claude/` saiu do repo (2026-11-09); o binding do Claude Code é o symlink em `~/.claude/`, que aponta para `.agents/` (receita em [`docs/integrations/claude-code.md`](./docs/integrations/claude-code.md)).
 
 A `1.14.0` adiciona o `documentation-specialist` (+1 agent, +1 memória), a skill `documentation-audit` (+1) e a convenção `documentacao` (+1) — e corrige os fatos errados da versão anterior: Node ≥ 20 → ≥ 22.6.0, `openssl rand -base64 48` → `-hex 32` nas senhas de papel, "três modos" → dois, e a lista de agents (faltavam os 6 de auditoria). A **tag do template** é a dos 4 footers canônicos (o de [`docs/MONOREPO.md`](./docs/MONOREPO.md) manda), extraída pelo `release-template.yml` — este rodapé não a define. A `1.26.0` adiciona o conjunto de system design canônico ([`docs/system-design/`](./docs/system-design/README.md) — 7 documentos: contexto, módulo, dados, segurança, operação, extensão e o índice) com o **ADR-0010** e o **template** que um app derivado copia; nenhum arquivo de `apps/`, `packages/` ou `infra/` mudou. A `1.27.0` faz o **código casar com esse desenho**: a rota de health sai do rate limit global, a escrita aceita `Idempotency-Key` (a tabela `idempotency_keys` + um interceptor global), o papel de runtime ganha `statement_timeout = '8s'` e a correlação da auditoria passa a ser a mesma da resposta — com os **ADRs 0011 e 0012** e 2 migrations. **Licença:** MIT.

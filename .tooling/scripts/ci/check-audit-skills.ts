@@ -59,6 +59,14 @@ export const SKILLS_DE_AUDITORIA: readonly string[] = [
   // Os 5 blocos dela estavam sem declaração, e um deles (5.1) invoca o
   // preflight inteiro: executá-lo de dentro do gate seria recursão.
   'documentation-audit',
+  // MEDIDO em 2026-11-18: as 5 skills de auditoria do kit de documentação
+  // moderna (1 por pilar) entraram com a convenção `kit-documentacao.md`.
+  // Cada uma é o PROCESSO do auditor do seu pilar; o agent é o papel.
+  'onboarding-docs-audit',
+  'architecture-docs-audit',
+  'decision-docs-audit',
+  'contract-docs-audit',
+  'operations-docs-audit',
 ];
 
 /**

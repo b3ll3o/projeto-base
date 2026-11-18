@@ -52,6 +52,7 @@ import { checkBlocoDuplicado } from './check-bloco-duplicado';
 import { checkFeatureFlagContract } from './check-feature-flag-contract';
 import { checkFeatureFlagPortas } from './check-feature-flag-portas';
 import { checkDocCoverage } from './check-doc-coverage';
+import { checkDocKit } from './check-doc-kit';
 import { checkDocClaims } from './check-doc-claims';
 import { checkDocSize } from './check-doc-size';
 import { checkPathAlias } from './check-path-alias';
@@ -396,6 +397,7 @@ export const RUNNERS: Record<string, () => CheckResult | Promise<CheckResult>> =
   'check-feature-flag-contract': () => checkFeatureFlagContract(),
   'check-feature-flag-portas': () => checkFeatureFlagPortas(),
   'check-doc-coverage': () => checkDocCoverage({ repoRoot: '.' }),
+  'check-doc-kit': () => checkDocKit({ repoRoot: '.' }),
   'check-doc-claims': () => checkDocClaims({ repoRoot: '.' }),
   'check-doc-size': () => checkDocSize({ repoRoot: '.' }),
   'check-path-alias': () => checkPathAlias({ repoRoot: '.' }),

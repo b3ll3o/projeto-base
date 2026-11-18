@@ -114,9 +114,25 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 | **multi-tenant-specialist**| [`.agents/agents/multi-tenant-specialist.md`](./.agents/agents/multi-tenant-specialist.md)| [memory](./.agents/memory/multi-tenant-specialist.md)        | Arquiteto de tenancy (shared-schema + `tenant_id` + RLS, contexto de tenant na fronteira, escopo de query, cache por tenant, backfill, gate cross-tenant) | Criar/alterar tenancy: `Tenant`/`Membership`/`Invitation`, `tenant_id` em model, filtro de tenant em repositório, RLS, chave de cache por tenant, migração de dados pré-tenancy, spec de isolamento |
 | **documentation-specialist**| [`.agents/agents/documentation-specialist.md`](./.agents/agents/documentation-specialist.md)| [memory](./.agents/memory/documentation-specialist.md)        | Dono da documentação da aplicação, ciente das stacks (NestJS DDD/Hexagonal, Prisma, Next.js App Router, OpenTelemetry, Docker, pnpm/turbo): matriz de cobertura, drift, frescor e escrita no formato certo | Demanda que toca `docs/**`, README, doc de módulo, referência de API, ADR ou runbook; gap de cobertura acusado por gate; auditoria periódica de saúde da documentação |
 
-> **Lens DDD/Hexagonal (v1.2.0+, ADR-0001):** ao criar/refatorar módulo NestJS, o `nestjs-specialist` aplica a lens DDD/Hexagonal (boundary `domain/application/infrastructure` + audit fields). A mesma lens é ato do `stack-code-reviewer` (D11) em pre-commit e em CI. Ver [`estrutura-e-versionamento.md`](./.agents/specs/conventions/estrutura-e-versionamento.md).
+> **Lens DDD/Hexagonal (v1.2.0+, ADR-0001):** o `nestjs-specialist` aplica a lens DDD/Hexagonal (boundary `domain/application/infrastructure` + audit fields); a mesma lens é ato do `stack-code-reviewer` (D11) em pre-commit e em CI. Ver [`estrutura-e-versionamento.md`](./.agents/specs/conventions/estrutura-e-versionamento.md).
 >
 > **Status:** Estável
+
+### §3.4 Especialistas do Kit de Documentação (v1.30.0+)
+
+> Os **14 itens** do kit de documentação moderna (5 pilares) têm um **specialist
+> dono**; cada pilar tem um **auditor** e uma **skill de auditoria**. A matriz
+> completa (item → doc canônico → âncoras → dono) é a convenção
+> [`kit-documentacao.md`](./.agents/specs/conventions/kit-documentacao.md), e o
+> gate [`check-doc-kit`](./.tooling/scripts/ci/check-doc-kit.ts) cobra a cobertura.
+
+| Pilar | Itens | Specialists | Auditor | Skill de auditoria |
+|---|---|---|---|---|
+| 1 — Onboarding | README · CONTRIBUTING · Glossário | `readme-specialist` · `contributing-specialist` · `glossary-specialist` | `onboarding-docs-auditor` | `onboarding-docs-audit` |
+| 2 — Arquitetura | HLD · C4 | `hld-specialist` · `c4-specialist` | `architecture-docs-auditor` | `architecture-docs-audit` |
+| 3 — Decisões | PRD · TDR · ADR | `prd-specialist` · `tdr-specialist` · `adr-specialist` | `decision-docs-auditor` | `decision-docs-audit` |
+| 4 — Contratos | OpenAPI · AsyncAPI · ERD | `openapi-doc-specialist` · `asyncapi-specialist` · `erd-specialist` | `contract-docs-auditor` | `contract-docs-audit` |
+| 5 — Operação | Runbooks · Post-mortem · CHANGELOG | `runbook-specialist` · `postmortem-specialist` · `changelog-specialist` | `operations-docs-auditor` | `operations-docs-audit` |
 
 ## §3.2 Specialists de Auditoria e Triagem (v2.0+)
 
@@ -132,15 +148,15 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 > **Stack vs. auditoria:** stack specialists **criam** código novo e são despachados antes de implementar; auditoria specialists **revisam** o existente, sob demanda ou via orchestrator.
 
 > **Skills de auditoria (1:1):** cada specialist de auditoria carrega uma skill de processo
-> determinístico (`.agents/skills/<name>-audit/SKILL.md`) — `prisma-audit`, `openapi-audit`,
-> `otelcol-audit`, `docker-prod-audit`, `release-versioning-audit`, `findings-orchestration`,
-> `documentation-audit`. A skill encapsula o **processo**; o agent, o **papel** — é carregada por
-> ele, **não o substitui** (vale também para o `multi-tenant-specialist`, que carrega
-> `multi-tenant-audit` sem ser despachado pelo orchestrator).
+> determinístico (`.agents/skills/<name>-audit/SKILL.md`) — `prisma-audit`, `openapi-audit`, `otelcol-audit`,
+> `docker-prod-audit`, `release-versioning-audit`, `findings-orchestration`, `documentation-audit`,
+> `multi-tenant-audit` (do `multi-tenant-specialist`, que **não** é despachado pelo orchestrator) e as
+> **5 do kit** (`onboarding-docs-audit`, `architecture-docs-audit`, `decision-docs-audit`,
+> `contract-docs-audit`, `operations-docs-audit`). A skill encapsula o **processo**; o agent, o **papel**.
 
 > **Skills de UI (a maior relação 1:N do repo, v1.11.0+):** o `ux-design-specialist` carrega **8** skills —
 > `ui-review` (processo) → `ui-modes` (propósito) → `ui-craft` (tokens, anti-slop) → `ui-break` (pior caso) → `motion` (movimento), mais
-> `design-taste-frontend` (página **pública**), `agent-browser` (página web) e `agent-desktop` (app nativo). `ui-modes` roda primeiro: sem ele, as outras discordam.
+> `design-taste-frontend` (página **pública**), `agent-browser` (página web) e `agent-desktop` (app nativo). `ui-modes` roda primeiro.
 
 > **Par DURANTE → DEPOIS:** [`learning-observation`](./.agents/skills/learning-observation/SKILL.md) classifica em T1/T2/T3 no checkpoint de review+fix e [`retrospective-capture`](./.agents/skills/retrospective-capture/SKILL.md) drena essas memórias; o destino de cada uma é uma linha no ledger [`memory-triage.md`](./.agents/runs/memory-triage.md).
 
@@ -148,18 +164,15 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 
 > **Skills de grafo (v1.16.0+):** [`graphify`](./.agents/skills/graphify/SKILL.md) — o `explorer` consulta o grafo de conhecimento quando a pergunta é sobre a estrutura do código.
 
-> **Skills de terceiro adaptadas (v1.20.0+):** [`grilling`](./.agents/skills/grilling/SKILL.md)
-> (perguntar o que está em aberto) e [`handoff`](./.agents/skills/handoff/SKILL.md) (a passagem em
-> formato canônico) no `orchestrator`; [`design-taste-frontend`](./.agents/skills/design-taste-frontend/SKILL.md)
-> (página **pública**), [`agent-browser`](./.agents/skills/agent-browser/SKILL.md) (página web) e
-> [`agent-desktop`](./.agents/skills/agent-desktop/SKILL.md) (app nativo) no `ux-design-specialist`.
-> As cinco são **adaptadas, não vendorizadas** — o método é o do repo. De [mattpocock/skills](https://github.com/mattpocock/skills)
-> (MIT), [leonxlnx/taste-skill](https://github.com/leonxlnx/taste-skill) (MIT), [vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser)
+> **Skills de terceiro adaptadas (v1.20.0+):** [`grilling`](./.agents/skills/grilling/SKILL.md) e
+> [`handoff`](./.agents/skills/handoff/SKILL.md) no `orchestrator`; [`design-taste-frontend`](./.agents/skills/design-taste-frontend/SKILL.md),
+> [`agent-browser`](./.agents/skills/agent-browser/SKILL.md) e [`agent-desktop`](./.agents/skills/agent-desktop/SKILL.md) no `ux-design-specialist`.
+> **Adaptadas, não vendorizadas** — o método é o do repo. De [mattpocock/skills](https://github.com/mattpocock/skills) (MIT),
+> [leonxlnx/taste-skill](https://github.com/leonxlnx/taste-skill) (MIT), [vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser)
 > e [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop) (Apache-2.0).
 >
-> **Skills de stack (o processo que o specialist segue):** [`docker`](./.agents/skills/docker/SKILL.md)
-> (convenções e processos Docker do monorepo) e [`ddd-hexagonal-validation`](./.agents/skills/ddd-hexagonal-validation/SKILL.md)
-> (auditoria da lens DDD/Hexagonal) — carregadas por mais de um agent cada.
+> **Skills de stack (o processo que o specialist segue):** [`docker`](./.agents/skills/docker/SKILL.md) e
+> [`ddd-hexagonal-validation`](./.agents/skills/ddd-hexagonal-validation/SKILL.md) — carregadas por mais de um agent cada.
 >
 > **State-Aware Planning (camada 0 do pre-planner, a partir de v1.8.0):** a convenção
 > [`state-aware-planning.md`](./.agents/specs/conventions/state-aware-planning.md) obriga gerar `state-snapshot-<ts>.md` ANTES de planejar.
@@ -174,13 +187,10 @@ Toda coordenação multi-agent passa pela skill **`agents:coordinate`**.
 
 **Resumo do protocolo:** A recebe a tarefa e identifica que precisa de B; A
 invoca B (Agent tool · Skill tool · handoff estruturado); B devolve
-`{ task, context, expected_output, success_criteria }`; A consolida ou encadeia
-o próximo agent. O diagrama completo, os campos e a validação do despacho
-estão na skill — este arquivo é o **índice**, não a fonte.
+`{ task, context, expected_output, success_criteria }`; A consolida ou encadeia o próximo agent.
+O diagrama completo, os campos e a validação do despacho estão na skill — este arquivo é o **índice**, não a fonte.
 
-**Modos de composição:** *sequential* (`A → B → C`, cada um depende do
-anterior), *parallel* (`A, B, C → merge`, independentes) e *hierarchical*
-(`orchestrator → specialists`, despacho centralizado).
+**Modos de composição:** *sequential* (`A → B → C`), *parallel* (`A, B, C → merge`) e *hierarchical* (`orchestrator → specialists`).
 
 ---
 
@@ -211,6 +221,7 @@ Workflows genéricos prontos para uso estão em [`.agents/WORKFLOWS.md`](./.agen
 | `audit-mode` (v2.0+) | "auditar stack / rodar scan / revisar saúde" | finding-orchestrator (8 specialists em paralelo → agrega → dedup → abre issues via `gh`) |
 | `release-pre-tag` (v2.0+) | "auditar antes de tag vX.Y.Z" | release-versioning-specialist + finding-orchestrator (subset focado em versioning) |
 | `doc-audit-mode` (v1.14.0+) | "a documentação está em dia? / auditar a doc / revisar, atualizar e criar documentações" | documentation-specialist (`documentation-audit` → escreve → `check-doc-coverage` + `check-doc-refs`) |
+| `kit-doc-mode` (v1.30.0+) | "o kit de documentação está em dia? / auditar um item do kit / o doc do item X envelheceu" | specialist do item (`<item>-specialist`) → auditor do pilar (`<pilar>-docs-auditor`) → `check-doc-kit`; a matriz do kit está em [`kit-documentacao.md`](./.agents/specs/conventions/kit-documentacao.md) |
 
 ---
 
@@ -245,6 +256,7 @@ As convenções estão detalhadas em arquivos próprios sob [`.agents/specs/conv
 | Migração de Dados | [`migracao-de-dados.md`](./.agents/specs/conventions/migracao-de-dados.md) | Regra dos 3 passos (add nullable, backfill, drop) + quando **não** há backfill a fazer; promovida de `prisma-db-specialist.md:160` na v1.12.0 |
 | DRY | [`dry.md`](./.agents/specs/conventions/dry.md) | Don't Repeat Yourself — o conhecimento tem UMA representação. No código: um termo de domínio tem UM dono (constante exportada) e quem usa importa; a medição é `npx tsx tooling/scripts/analisa-repeticao.ts`, e 2 gates cobram (`check-repeticao`, `check-bloco-duplicado`); adicionada na v1.13.0 |
 | Documentação | [`documentacao.md`](./.agents/specs/conventions/documentacao.md) | A documentação é parte do código: doc ausente = lacuna, doc que mente = defeito. Matriz de cobertura (unidade → doc canônico), fato com UM dono, frescor verificável; medida pelo gate `check-doc-coverage`; adicionada na v1.14.0 |
+| **Kit de documentação** | [`kit-documentacao.md`](./.agents/specs/conventions/kit-documentacao.md) | O kit completo de documentação moderna (5 pilares, 14 itens) é **obrigatório**: cada item tem doc canônico, specialist dono e auditor por pilar; a matriz (item → doc → âncoras → dono) é a fonte única, medida pelo gate `check-doc-kit`; adicionada na v1.30.0 |
 | Estilização | [`estilizacao.md`](./.agents/specs/conventions/estilizacao.md) | Padrão de estilo do frontend: tokens semânticos no `@theme` do Tailwind 4 (valores em `apps/web/app/globals.css`), primitivas em `apps/web/components/ui/`, o que é proibido numa tela, como um app derivado adota — e o instrumento que cobra (regra ESLint `estilizacao/no-estilizacao-informal`) |
 | **Estilização — acessibilidade** | [`estilizacao-acessibilidade.md`](./.agents/specs/conventions/estilizacao-acessibilidade.md) | O mínimo de acessibilidade do padrão (foco visível, erro por cor E texto, nome acessível, reflow) — a §5 da convenção `estilizacao.md`, extraída para caber no teto de 300 linhas |
 | **Estilização — contraste** | [`estilizacao-contraste.md`](./.agents/specs/conventions/estilizacao-contraste.md) | A medida de contraste do padrão (17 pares medidos, o comando que os reproduz) — a §2.2 da convenção `estilizacao.md`, extraída para caber no teto de 300 linhas |
@@ -258,17 +270,13 @@ As convenções estão detalhadas em arquivos próprios sob [`.agents/specs/conv
 
 ## §7.5. Captura de Aprendizados Pós-Atividade (v1.4.0+)
 
-Após cada **grande atividade** (plano multi-task, bugfix não-trivial, ou adoção de
-novo padrão), o workflow
-[`retrospective-mode`](./.agents/workflows/retrospective-mode.md) DEVE ser disparado para
-codificar aprendizados em memory files + proposals de harness. Triggers e metodologia em
+Após cada **grande atividade** (plano multi-task, bugfix não-trivial, ou adoção de novo padrão), o workflow
+[`retrospective-mode`](./.agents/workflows/retrospective-mode.md) DEVE ser disparado — metodologia em
 [convenção dedicada](./.agents/specs/conventions/retrospective-capture.md).
 
 ---
 
 ## §7. Garantias do Padrão
-
-Quando seguido corretamente, este padrão garante:
 
 ✅ **Interoperabilidade** — qualquer agent pode chamar qualquer outro agent
 ✅ **Vendor-neutrality** — funciona em Claude Code, Cursor, Windsurf, Aider, etc.
@@ -279,20 +287,14 @@ Quando seguido corretamente, este padrão garante:
 
 ## Agent skills
 
-- **Issue tracker** — GitHub Issues deste repo, via CLI `gh`. Ver
-  [`docs/agents/issue-tracker.md`](./docs/agents/issue-tracker.md).
-- **Triage labels** — sete papéis canônicos (duas categoria, cinco estado)
-  mapeados para os rótulos do tracker. Ver
-  [`docs/agents/triage-labels.md`](./docs/agents/triage-labels.md).
-- **Domain docs** — single-context: `GLOSSARY.md` na raiz + `docs/adr/`. Ver
-  [`docs/agents/domain.md`](./docs/agents/domain.md).
-- **System design** — o desenho do sistema (topologia, módulos, dados,
-  segurança, operação) e o **contrato de extensão** para o app derivado. Ver
-  [`docs/system-design/README.md`](./docs/system-design/README.md).
+- **Issue tracker** — GitHub Issues deste repo, via CLI `gh` ([`docs/agents/issue-tracker.md`](./docs/agents/issue-tracker.md)).
+- **Triage labels** — sete papéis canônicos ([`docs/agents/triage-labels.md`](./docs/agents/triage-labels.md)).
+- **Domain docs** — single-context: `GLOSSARY.md` na raiz + `docs/adr/` ([`docs/agents/domain.md`](./docs/agents/domain.md)).
+- **System design** — topologia, módulos, dados, segurança, operação e o **contrato de extensão** ([`docs/system-design/README.md`](./docs/system-design/README.md)).
 
 ---
 
 **Mantido por:** projeto-base contributors
 **Licença:** MIT
-**Versão do documento:** 1.29.0
+**Versão do documento:** 1.30.0
 **Status:** Estável

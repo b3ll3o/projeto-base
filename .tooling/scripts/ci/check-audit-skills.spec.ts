@@ -33,12 +33,14 @@ function repoCom(skills: Record<string, string>): string {
 describe('a lista de skills de auditoria', () => {
   // ⚠️ Este é o teste que impede a reincidência: a lista é o instrumento, e
   // uma lista que alguém encolhe sem querer volta a medir menos.
-  it('nomeia as SETE skills de auditoria do repo', () => {
+  it('nomeia as DOZE skills de auditoria do repo', () => {
     // A lista é o instrumento que impede uma skill de auditoria nova de entrar
     // no repo sem ser auditada — sem este pino, uma skill nova escaparia.
     // MEDIDO em 2026-10-29: a `documentation-audit` entrou pelo merge do #129
     // depois do inventário da revisão e escapou por 23 de 25 skills.
-    expect(SKILLS_DE_AUDITORIA.length).toBe(7);
+    // MEDIDO em 2026-11-18: as 5 skills do kit de documentação (1 por pilar)
+    // entraram com a convenção `kit-documentacao.md`.
+    expect(SKILLS_DE_AUDITORIA.length).toBe(12);
     expect(SKILLS_DE_AUDITORIA).toContain('prisma-audit');
     expect(SKILLS_DE_AUDITORIA).toContain('openapi-audit');
     expect(SKILLS_DE_AUDITORIA).toContain('otelcol-audit');
@@ -46,6 +48,11 @@ describe('a lista de skills de auditoria', () => {
     expect(SKILLS_DE_AUDITORIA).toContain('release-versioning-audit');
     expect(SKILLS_DE_AUDITORIA).toContain('findings-orchestration');
     expect(SKILLS_DE_AUDITORIA).toContain('documentation-audit');
+    expect(SKILLS_DE_AUDITORIA).toContain('onboarding-docs-audit');
+    expect(SKILLS_DE_AUDITORIA).toContain('architecture-docs-audit');
+    expect(SKILLS_DE_AUDITORIA).toContain('decision-docs-audit');
+    expect(SKILLS_DE_AUDITORIA).toContain('contract-docs-audit');
+    expect(SKILLS_DE_AUDITORIA).toContain('operations-docs-audit');
   });
 
   it('cada skill da lista tem SKILL.md de verdade', async () => {

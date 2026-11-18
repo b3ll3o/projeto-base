@@ -106,8 +106,11 @@ ls CHANGELOG.md 2>/dev/null || echo "(sem CHANGELOG.md)"
 ls .changeset/ 2>/dev/null
 
 # 5.3 Consistência: última entry do CHANGELOG == última tag?
+# O padrão Keep a Changelog escreve `## [1.30.0]`, com colchetes — a regex antiga
+# (`##\s+v?[0-9]+\.`...) não casava com o colchete e a comparação saía VAZIA
+# (o mesmo modo de falha da regex morta do F3).
 if [ -f CHANGELOG.md ]; then
-  CHANGELOG_LAST=$(grep -oE "##\s+v?[0-9]+\.[0-9]+\.[0-9]+" CHANGELOG.md | head -1)
+  CHANGELOG_LAST=$(grep -oE "##\s+\[?v?[0-9]+\.[0-9]+\.[0-9]+\]?" CHANGELOG.md | head -1)
   echo "CHANGELOG last: $CHANGELOG_LAST"
   echo "Tag last:       $LAST_TAG"
 fi

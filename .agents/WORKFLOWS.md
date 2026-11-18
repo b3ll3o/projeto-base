@@ -16,6 +16,7 @@
 | `security-mode` | "auditoria segurança" | sequential | security-auditor → code-reviewer |
 | `docs-mode` | "documentar" | sequential | doc-writer → code-reviewer |
 | `doc-audit-mode` (v1.14.0+) | "a documentação está em dia? / auditar a doc / revisar, atualizar e criar documentações" | sequential | documentation-specialist (`documentation-audit` → escreve → `check-doc-coverage` + `check-doc-refs`) → code-reviewer |
+| `kit-doc-mode` (v1.30.0+) | "o kit de documentação está em dia? / auditar um item do kit / o doc do item X envelheceu" | sequential | specialist do item (`<item>-specialist`) → auditor do pilar (`<pilar>-docs-auditor`) → `check-doc-kit` — detalhe em [`kit-doc-mode.md`](./workflows/kit-doc-mode.md) |
 | `task-mode` | "todo / tarefa" | single | task-manager |
 | `explore-mode` | "como funciona X?" | single | explorer |
 | `review-mode` | "revisar PR / código" | single | code-reviewer + tdd-enforcer |
