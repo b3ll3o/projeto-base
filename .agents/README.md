@@ -18,11 +18,11 @@
 
 | Caminho | Papel | Estado |
 |---|---|---|
-| `.agents/agents/<name>.md` | Definição canônica do agent | 28 arquivos — `ls .agents/agents/*.md \| wc -l` |
-| `.agents/skills/<name>/SKILL.md` | Definição canônica da skill | 30 arquivos — `ls -d .agents/skills/*/ \| wc -l` |
-| `.agents/memory/<name>.md` | Memória acumulada por agent | 30 arquivos — `ls .agents/memory/*.md \| wc -l` |
-| `.agents/workflows/<id>.md` | Workflow detalhado | 15 arquivos — `ls .agents/workflows/*.md \| wc -l` |
-| `.agents/specs/conventions/*.md` | Convenções do repo | 31 arquivos (24 convenções + o índice e 6 apêndices) — `ls .agents/specs/conventions/*.md \| wc -l` |
+| `.agents/agents/<name>.md` | Definição canônica do agent | 47 arquivos — `ls .agents/agents/*.md \| wc -l` |
+| `.agents/skills/<name>/SKILL.md` | Definição canônica da skill | 35 arquivos — `ls -d .agents/skills/*/ \| wc -l` |
+| `.agents/memory/<name>.md` | Memória acumulada por agent | 49 arquivos — `ls .agents/memory/*.md \| wc -l` |
+| `.agents/workflows/<id>.md` | Workflow detalhado | 17 arquivos — `ls .agents/workflows/*.md \| wc -l` |
+| `.agents/specs/conventions/*.md` | Convenções do repo | 36 arquivos (29 convenções + o índice e 6 apêndices) — `ls .agents/specs/conventions/*.md \| wc -l` |
 | `.agents/hooks/pretooluse-block-pnpm-lock.mjs` | Guard de escrita no lockfile | pipe-testado; inerte até `/hooks` |
 | `.agents/hooks/posttooluse-stack-review.sh` | Reviewer pós-edição, em modo feedback | pipe-testado; inerte até `/hooks` |
 | `.agents/settings.json` | Registra os dois hooks | válido; recarrega no `/hooks` |

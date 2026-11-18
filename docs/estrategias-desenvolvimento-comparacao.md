@@ -14,7 +14,7 @@ O framework de referência ("vetorial encontra similaridade, grafos encontram
 relacionamentos, fine-tuning especializa comportamento, e às vezes a resposta é
 software convencional") aplicado a este repo produz um veredito desconfortável:
 **quase nenhum problema aqui precisa de IA**, e mesmo assim o repo construiu
-três camadas — 4734 linhas de tooling determinístico (`find tooling/scripts -name '*.ts' -not -name '*.spec.ts' | xargs wc -l`), 28 agents, 2191 linhas de
+três camadas — 5793 linhas de tooling determinístico (`find tooling/scripts -name '*.ts' -not -name '*.spec.ts' | xargs wc -l`), 47 agents, 4226 linhas de
 memória (`ls .agents/memory/*.md | xargs wc -l`) — para resolver o que, em 100% dos casos verificados, é regra
 determinística.
 
