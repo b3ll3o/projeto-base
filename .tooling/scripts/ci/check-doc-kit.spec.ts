@@ -129,7 +129,7 @@ function entradas(sobre: Partial<Entradas> = {}): Entradas {
   ];
   return {
     itens,
-    itensEsperados: null,
+    itensEsperados: 5,
     condicionais: [
       {
         item: 'AsyncAPI',
@@ -330,6 +330,62 @@ describe('itensDeclarados', () => {
   });
 });
 
+describe('lerMatriz — as colunas obrigatórias', () => {
+  const base = [
+    '### §2.1 Pilar 1 — Onboarding',
+    '',
+    '| # | Item | Doc canônico | Tipo | Âncoras | Índice | Condição | Specialist | Auditor |',
+    '|---|---|---|---|---|---|---|---|---|',
+    '| 1 | README | `README.md` | arquivo | `## O que é` | — | obrigatório | `readme-specialist` | `onboarding-docs-auditor` |',
+  ].join('\n');
+
+  it('a matriz sem a coluna "Âncoras" é erro — a medição desligaria em silêncio', () => {
+    const quebrada = base.replace('| Âncoras |', '| Anchor |');
+    const m = lerMatriz(quebrada);
+    expect(m.erros.some((e) => e.includes('não tem a coluna "Âncoras"'))).toBe(true);
+  });
+
+  it('a §5.1 sem a coluna da skill é erro — a tabela inteira deixaria de ser lida', () => {
+    const semSkill = [
+      '## §5.1 Os auditores do kit',
+      '',
+      '| Pilar | Itens | Auditor |',
+      '|---|---|---|',
+      '| 1 — Onboarding | 1 | `onboarding-docs-auditor` |',
+    ].join('\n');
+    const m = lerMatriz(semSkill);
+    expect(m.erros.some((e) => e.includes('não tem a coluna "Skill de auditoria"'))).toBe(true);
+  });
+
+  it('o padrão da célula e o comando da §4 têm que ser o mesmo', () => {
+    const comComando = [
+      '## §4. Itens condicionais',
+      '',
+      '| Item | Gatilho | Sonda (glob) | Padrão | Não aplicável declarado |',
+      '|---|---|---|---|---|',
+      '| AsyncAPI | existe broker | `package.json` | `"bullmq":` | **sim** |',
+      '',
+      '```bash',
+      'grep -lE \'"kafkajs":\' package.json',
+      '```',
+    ].join('\n');
+    const m = lerMatriz(comComando);
+    expect(m.erros.some((e) => e.includes('não são o mesmo'))).toBe(true);
+  });
+
+  it('a §4 sem o comando que reproduz a medição é erro', () => {
+    const semComando = [
+      '## §4. Itens condicionais',
+      '',
+      '| Item | Gatilho | Sonda (glob) | Padrão | Não aplicável declarado |',
+      '|---|---|---|---|---|',
+      '| AsyncAPI | existe broker | `package.json` | `"bullmq":` | **sim** |',
+    ].join('\n');
+    const m = lerMatriz(semComando);
+    expect(m.erros.some((e) => e.includes('grep -lE'))).toBe(true);
+  });
+});
+
 describe('lacunasDoKit', () => {
   it('kit sadio não acusa nada', () => {
     expect(lacunasDoKit(entradas())).toEqual([]);
@@ -395,6 +451,16 @@ describe('lacunasDoKit', () => {
       itens: [item({ numero: '1' }), item({ numero: '1', item: 'Outro item' })],
     });
     expect(lacunasDoKit(e).some((x) => x.includes('número "1"'))).toBe(true);
+  });
+
+  it('a §5.1 sem uma linha por pilar é erro — a reconciliação seria pulada', () => {
+    const e = entradas({ pilares: PILARES.slice(0, 3) });
+    expect(lacunasDoKit(e).some((x) => x.includes('§5.1 declara 3 auditor(es)'))).toBe(true);
+  });
+
+  it('a convenção sem declarar a contagem é erro — o gate não inventa o número', () => {
+    const e = entradas({ itensEsperados: null });
+    expect(lacunasDoKit(e).some((x) => x.includes('não declara a contagem de itens'))).toBe(true);
   });
 
   it('a contagem de itens é a declarada na convenção', () => {

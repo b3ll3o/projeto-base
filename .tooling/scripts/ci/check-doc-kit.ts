@@ -43,6 +43,7 @@
  * Dizer que este gate cobre frescor **todo** seria a classe 1 de
  * `guard-classes.md` — condição inalcançável.
  */
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -116,7 +117,8 @@ export interface DeclaracaoCondicional {
 /** Uma tabela markdown lida: o cabeçalho e as linhas de dados. */
 interface Tabela {
   cabecalho: string[];
-  linhas: string[][];
+  /** As linhas de dado, cada uma com a linha onde está no arquivo. */
+  linhas: { cels: string[]; linha: number }[];
   /** A linha (1-based) do cabeçalho no arquivo. */
   linha: number;
 }
@@ -185,7 +187,7 @@ export function lerTabelas(md: string): { tabela: Tabela; heading: string; erros
       i++;
       continue;
     }
-    const dados: string[][] = [];
+    const dados: { cels: string[]; linha: number }[] = [];
     const errosDaTabela: string[] = [];
     let j = i + 2;
     for (; j < linhas.length && linhas[j]!.trimStart().startsWith('|'); j++) {
@@ -202,7 +204,7 @@ export function lerTabelas(md: string): { tabela: Tabela; heading: string; erros
         );
         continue;
       }
-      dados.push(cels);
+      dados.push({ cels, linha: j + 1 });
     }
     achadas.push({
       tabela: { cabecalho, linhas: dados, linha: i + 1 },
@@ -262,6 +264,29 @@ export function lerMatriz(md: string): {
     erros.push(...errosDaTabela);
     const colDoc = coluna(tabela.cabecalho, 'Doc canônico');
     if (colDoc >= 0) {
+      // Toda coluna da matriz é OBRIGATÓRIA: uma coluna renomeada faria
+      // `dados[-1]` virar `undefined` e a medição daquele campo **desligar
+      // em silêncio** (MEDIDO em 2026-11-18, falsificação do PR do kit: a
+      // coluna `Âncoras` renomeada deixou os 14 itens sem âncora, verde).
+      const obrigatorias = [
+        'Item',
+        'Doc canônico',
+        'Tipo',
+        'Âncoras',
+        'Índice',
+        'Condição',
+        'Specialist',
+        'Auditor',
+      ];
+      for (const nome of obrigatorias) {
+        if (coluna(tabela.cabecalho, nome) < 0) {
+          erros.push(
+            `a matriz §2 (pilar ${pilarDoHeading(heading) ?? '?'}) não tem a coluna ` +
+              `"${nome}" — a medição desse campo ficaria desligada em silêncio ` +
+              '(regra: convenção kit-documentacao.md §2, formato das células).',
+          );
+        }
+      }
       const pilar = pilarDoHeading(heading);
       const cols = {
         numero: coluna(tabela.cabecalho, '#'),
@@ -273,7 +298,7 @@ export function lerMatriz(md: string): {
         specialist: coluna(tabela.cabecalho, 'Specialist'),
         auditor: coluna(tabela.cabecalho, 'Auditor'),
       };
-      for (const dados of tabela.linhas) {
+      for (const { cels: dados, linha: linhaDoDado } of tabela.linhas) {
         const doc = valor(dados[colDoc]);
         if (doc === '') continue;
         const tipo = valor(dados[cols.tipo]) as TipoDeDoc;
@@ -292,7 +317,7 @@ export function lerMatriz(md: string): {
           condicao: valor(dados[cols.condicao]) === 'condicional' ? 'condicional' : 'obrigatorio',
           specialist: valor(dados[cols.specialist]),
           auditor: valor(dados[cols.auditor]),
-          linha: tabela.linha,
+          linha: linhaDoDado,
         });
       }
       continue;
@@ -300,12 +325,22 @@ export function lerMatriz(md: string): {
 
     const colSkill = coluna(tabela.cabecalho, 'Skill de auditoria');
     const colPilar = coluna(tabela.cabecalho, 'Pilar');
+    const colAuditor51 = coluna(tabela.cabecalho, 'Auditor');
+    if (colPilar >= 0 && colSkill < 0) {
+      // A §5.1 existe (tem a coluna Pilar) mas perdeu a coluna da skill: a
+      // tabela inteira deixaria de ser lida, e com ela TODAS as reconciliações
+      // de auditor (MEDIDO em 2026-11-18, falsificação do PR do kit).
+      erros.push(
+        'a §5.1 (pilar → auditor → skill) não tem a coluna "Skill de auditoria" — ' +
+          'a tabela inteira deixaria de ser lida.',
+      );
+    }
     if (colSkill >= 0 && colPilar >= 0) {
       // A §5.1 — o auditor e a skill de CADA pilar. Ela é a fonte da segunda
       // reconciliação do gate: o auditor de um item tem que ser o do pilar
       // dele, e a skill tem que existir.
-      const colAuditor = coluna(tabela.cabecalho, 'Auditor');
-      for (const dados of tabela.linhas) {
+      const colAuditor = colAuditor51;
+      for (const { cels: dados } of tabela.linhas) {
         const numero = valor(dados[colPilar]);
         const m = /(\d+)/.exec(numero);
         if (m === null) continue;
@@ -324,7 +359,7 @@ export function lerMatriz(md: string): {
       const colGatilho = coluna(tabela.cabecalho, 'Gatilho');
       const colPadrao = coluna(tabela.cabecalho, 'Padrão');
       const colDeclaracao = coluna(tabela.cabecalho, 'Não aplicável declarado');
-      for (const dados of tabela.linhas) {
+      for (const { cels: dados } of tabela.linhas) {
         const item = valor(dados[colItem]);
         if (item === '') continue;
         condicionais.push({
@@ -342,6 +377,32 @@ export function lerMatriz(md: string): {
     }
   }
 
+  // A §4 declara o padrão do gatilho em DUAS cópias: a célula da tabela e o
+  // `grep -lE` da prosa logo abaixo. As duas têm que ser o mesmo padrão — um
+  // typo em uma delas deixa o item sem doc PARA SEMPRE, com o gate verde
+  // (MEDIDO em 2026-11-18, falsificação do PR do kit).
+  const mComando = /grep -lE '([^']+)'/.exec(md);
+  if (condicionais.length > 0) {
+    if (mComando === null) {
+      erros.push(
+        'a §4 não traz o comando (grep -lE) que reproduz a medição do gatilho — ' +
+          'a coluna "Padrão" sozinha não é um claim verificável.',
+      );
+    } else {
+      const doComando = normalizarAlternativas(mComando[1]!);
+      for (const d of condicionais) {
+        const daCelula = normalizarAlternativas(d.padrao);
+        if (daCelula.join('|') !== doComando.join('|')) {
+          erros.push(
+            `o padrão da coluna "${daCelula.join('|')}" e o comando da §4 ` +
+              `"${doComando.join('|')}" não são o mesmo — o comando é o que ` +
+              'reproduz a medição, e um dos dois desatualizado mede outra coisa.',
+          );
+        }
+      }
+    }
+  }
+
   return {
     itens,
     condicionais,
@@ -349,6 +410,19 @@ export function lerMatriz(md: string): {
     pilaresVistos: [...pilaresVistos].sort(),
     erros,
   };
+}
+
+/**
+ * As alternativas de um padrão de regex: split por `|`, sem o escape de
+ * markdown, ordenadas — para comparar duas cópias do mesmo padrão.
+ */
+export function normalizarAlternativas(padrao: string): string[] {
+  return padrao
+    .replace(/\\\|/g, '|')
+    .split('|')
+    .map((s) => s.trim())
+    .filter((s) => s !== '')
+    .sort();
 }
 
 /** Converte um glob em regex — `**` atravessa diretórios, `*` não. */
@@ -539,12 +613,34 @@ export function lacunasDoKit(entradas: Entradas): string[] {
     ];
   }
 
-  if (entradas.itensEsperados !== null && entradas.itensEsperados > 0) {
+  // A §5.1 (pilar → auditor → skill) é a fonte do auditor de cada item.
+  // Sem uma linha por pilar, a reconciliação auditor↔pilar é pulada em
+  // silêncio (MEDIDO em 2026-11-18, falsificação do PR do kit).
+  if (entradas.pilares.length !== PILARES.length) {
+    errors.push(
+      `a §5.1 declara ${entradas.pilares.length} auditor(es) e o kit tem ` +
+        `${PILARES.length} pilares — a reconciliação auditor↔pilar seria pulada em ` +
+        'silêncio, e uma skill que sumisse do disco não seria notada.',
+    );
+  }
+  for (const pilar of PILARES) {
+    if (!entradas.pilares.some((p) => p.pilar === pilar)) {
+      errors.push(`a §5.1 não declara o auditor do Pilar ${pilar}.`);
+    }
+  }
+
+  if (entradas.itensEsperados === null) {
+    errors.push(
+      `a convenção não declara a contagem de itens (frontmatter "itens:") — o gate ` +
+        'não pode inventar o número, e sem a declarado a contagem não é medida.',
+    );
+  } else if (entradas.itensEsperados > 0) {
     if (entradas.itens.length !== entradas.itensEsperados) {
       errors.push(
         `a matriz tem ${entradas.itens.length} item(ns) e a convenção declara ` +
           `${entradas.itensEsperados} — o kit mudou de tamanho sem a convenção ` +
-          'mudar junto (fato com UM dono).',
+          `mudar junto (fato com UM dono). A contagem é o frontmatter "itens:" de ` +
+          `${CONVENCAO}.`,
       );
     }
   }
@@ -573,7 +669,9 @@ export function lacunasDoKit(entradas: Entradas): string[] {
   const vistos = new Set<string>();
   const vistosNumero = new Set<string>();
   for (const item of entradas.itens) {
-    const quem = `item ${item.numero} ("${item.item}")`;
+    // A linha da convenção vai na mensagem: um erro que não diz ONDE corrigir
+    // obriga o leitor a caçar a linha (MEDIDO em 2026-11-18, falsificação).
+    const quem = `item ${item.numero} ("${item.item}") — ${CONVENCAO} linha ${item.linha}`;
 
     if (vistos.has(item.item)) {
       errors.push(`${quem}: o item está repetido na matriz — um item por linha.`);
@@ -692,8 +790,9 @@ export function lacunasDoKit(entradas: Entradas): string[] {
           const base = path.posix.basename(arquivo);
           if (!citaComoLink(conteudo, base)) {
             errors.push(
-              `${quem}: o índice "${item.indice}" não cita "${base}" como link — um ` +
-                'índice que não lista o que existe é índice de ficção.',
+              `${quem}: o índice "${item.indice}" não cita "${base}" como link nem ` +
+                'como code span — um índice que não lista o que existe é índice de ' +
+                'ficção.',
             );
           }
         }
@@ -746,7 +845,35 @@ const IGNORADOS = new Set([
   '.agents/runs',
 ]);
 
-async function listarArquivos(repoRoot: string, base = ''): Promise<string[]> {
+/**
+ * Os arquivos **versionados** — o conjunto que o CI vai medir.
+ *
+ * ⚠️ A árvore de trabalho mentia: um arquivo no disco e **fora** do índice
+ * (o `git rm --cached`) deixava o gate verde aqui e reprovava no CI, onde o
+ * arquivo não existe. MEDIDO em 2026-11-18 (falsificação do PR do kit).
+ * O `check-doc-coverage` já mede pelo `git ls-files` pelo mesmo motivo.
+ *
+ * Sem git (o gate roda num repo sem repositório?), a lista cai para a
+ * varredura — e a ressalva diz isso, em vez de fingir que mediu o versionado.
+ */
+async function listarArquivos(
+  repoRoot: string,
+): Promise<{ arquivos: string[]; versionado: boolean }> {
+  try {
+    const saida = execFileSync('git', ['ls-files'], {
+      cwd: repoRoot,
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return { arquivos: saida.split('\n').filter((l) => l.trim() !== ''), versionado: true };
+  } catch {
+    const arquivos = await listarArquivosNoDisco(repoRoot, '');
+    return { arquivos, versionado: false };
+  }
+}
+
+/** A varredura do disco — o plano B quando não há git. */
+async function listarArquivosNoDisco(repoRoot: string, base = ''): Promise<string[]> {
   const achados: string[] = [];
   let entradas: import('node:fs').Dirent[];
   try {
@@ -759,7 +886,7 @@ async function listarArquivos(repoRoot: string, base = ''): Promise<string[]> {
     const relativo = base === '' ? entrada.name : `${base}/${entrada.name}`;
     if (IGNORADOS.has(relativo)) continue;
     if (entrada.isDirectory()) {
-      achados.push(...(await listarArquivos(repoRoot, relativo)));
+      achados.push(...(await listarArquivosNoDisco(repoRoot, relativo)));
     } else if (entrada.isFile()) {
       achados.push(relativo);
     }
@@ -794,7 +921,7 @@ export async function checkDocKit(opts: { repoRoot: string }): Promise<CheckResu
     };
   }
 
-  const todos = await listarArquivos(root);
+  const { arquivos: todos, versionado } = await listarArquivos(root);
   const cache = new Map<string, string[]>();
   const casaCom = (glob: string): string[] => {
     const achados = cache.get(glob);
@@ -831,17 +958,18 @@ export async function checkDocKit(opts: { repoRoot: string }): Promise<CheckResu
       return 'erro';
     }
     if (declaracao.sondas.length === 0) return 'erro';
-    let algumArquivo = false;
     for (const sondaGlob of declaracao.sondas) {
       const arquivosDaSonda = casaCom(sondaGlob);
-      if (arquivosDaSonda.length === 0) continue;
-      algumArquivo = true;
+      // UM glob morto é uma sonda cega: o broker real fica invisível e o
+      // item continua sem doc, com o gate verde (MEDIDO em 2026-11-18,
+      // falsificação do PR do kit: `apps/*/package.jsom` escondeu o broker
+      // de `apps/api/package.json`).
+      if (arquivosDaSonda.length === 0) return 'erro';
       for (const arquivo of arquivosDaSonda) {
         if (re.test(ler(arquivo))) return 'disparou';
       }
     }
-    // A sonda não casou NENHUM arquivo: ela não mede nada.
-    return algumArquivo ? 'nao-disparou' : 'erro';
+    return 'nao-disparou';
   };
 
   const skillExiste = (nome: string): boolean =>
@@ -868,6 +996,12 @@ export async function checkDocKit(opts: { repoRoot: string }): Promise<CheckResu
     `medido: ${matriz.itens.length} item(ns) do kit em ${matriz.pilaresVistos.length} pilar(es) ` +
       `(${matriz.pilares.length} auditor(es) na §5.1).`,
   );
+  if (!versionado) {
+    advisories.push(
+      'escopo: o `git ls-files` falhou — o gate mediu a ÁRVORE DE TRABALHO, não o ' +
+        'conjunto versionado. Um arquivo fora do índice passa aqui e reprova no CI.',
+    );
+  }
 
   return { ok: errors.length === 0, errors, advisories };
 }
