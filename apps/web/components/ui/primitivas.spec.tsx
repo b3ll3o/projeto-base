@@ -153,7 +153,7 @@ describe('tabela', () => {
 
   it('a REGIÃO ROLÁVEL é alcançável por teclado e tem nome acessível', () => {
     render(
-      <Tabela legenda="Histórico de Ana, da mais antiga para a mais recente">
+      <Tabela legenda="Histórico de Ana, da mais recente para a mais antiga">
         <tbody>
           <tr>
             <CelulaTabela>Ana</CelulaTabela>
@@ -175,21 +175,28 @@ describe('tabela', () => {
       <Tabela legenda="Pessoas">
         <tbody>
           <tr>
-            <CelulaTabela className="w-48">{'a'.repeat(254)}</CelulaTabela>
+            <CelulaTabela className="w-48">
+              <div className="wrap-anywhere">{'a'.repeat(254)}</div>
+            </CelulaTabela>
           </tr>
         </tbody>
       </Tabela>,
     );
 
-    // ⚠️ `wrap-anywhere` (e não `break-word`): o `break-word` NÃO reduz a
-    // contribuição min-content de uma célula — MEDIDO, a tabela media os
-    // mesmos 2.097px com e sem ele. E a largura fixa é o que fecha o
-    // transbordo; a primitiva não a impõe, porque não sabe o que a célula
-    // guarda.
+    // ⚠️ A BASE É `break-words`, e ela NÃO reduz a contribuição min-content
+    // (MEDIDO: a tabela media os mesmos 2.097px com `break-word` e com
+    // `overflow-wrap: normal`). E a base NÃO impõe `anywhere`: MEDIDO a
+    // 320px, `anywhere` em todas as células fez a coluna de e-mail de
+    // `/admin/users` cair para 52px e o e-mail renderizar em 9 fragmentos.
+    // Dado tabular PODE rolar na horizontal (WCAG 1.4.10), e palavra
+    // quebrada no meio é pior que rolagem.
     const celula = screen.getByRole('cell');
-    expect(celula.className).toContain('wrap-anywhere');
-    expect(celula.className).not.toContain('break-words');
+    expect(celula.className).toContain('break-words');
     expect(celula.className).toContain('w-48');
+
+    // ⚠️ E O OPT-IN É DO CALLER: `wrap-anywhere` no CONTEÚDO da célula — que
+    // é o que reduz a contribuição min-content e faz a largura fixa valer.
+    expect(screen.getByText('a'.repeat(254)).className).toContain('wrap-anywhere');
   });
 
   it('a legenda vira `<caption>` invisível', () => {
@@ -339,7 +346,7 @@ describe('o className do caller entra em TODA primitiva que o aceita', () => {
         );
         return screen.getByRole('cell', { name: 'Ana' });
       },
-      donoDaClasse: 'wrap-anywhere',
+      donoDaClasse: 'break-words',
       classeDoCaller: 'w-24',
     },
   ];

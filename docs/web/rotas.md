@@ -125,8 +125,10 @@ O guard de `/admin/*` é compartilhado e **distingue três causas** —
 > O histórico é PAGINADO por cursor (`GET /admin/users/:id/history`) e a ordem
 > é **descendente** — a versão mais RECENTE primeiro (a ordem é do port de
 > auditoria, e o cursor aponta para as versões mais antigas). A tela pede **UMA
-> página por visita**, com o cursor na URL (`?cursor=`), e o "carregar mais" é um
-> link. A data é em pt-BR com o fuso **declarado** (`America/Sao_Paulo` — o
+> página por visita**, com o cursor na URL (`?cursor=`), e a paginação tem DOIS
+> links honestos: "ver as versões mais antigas" (troca a página) e "ver as
+> versões mais recentes" (volta ao topo da trilha). A data é em pt-BR com o
+> fuso **declarado** (`America/Sao_Paulo` — o
 > servidor roda em UTC), e "quem mudou" é o nome **atual** de quem está no
 > inventário — ou o id cru, quando a conta não está mais lá.
 >

@@ -72,6 +72,11 @@ function client(accessToken: string): ApiClient {
  * `empresas: []` e `usuarios: []` são RESPOSTAS legítimas — a empresa
  * recém-aberta não tem ninguém dentro, e a conta do administrador do sistema
  * vive no bucket GLOBAL e não pertence a empresa nenhuma.
+ *
+ * shortcut: o endpoint traz TODA pessoa e TODA empresa com os seus membros —
+ * uma base de 10 mil pessoas devolve o inventário inteiro a cada clique da
+ * tela do detalhe. Subir para uma página com cursor quando a base passar de
+ * ~1.000 pessoas (e o nome do ator vier no payload do histórico).
  */
 export async function listarInventario(accessToken: string): Promise<InventarioAdminTenancyDto> {
   return client(accessToken).get<InventarioAdminTenancyDto>('/admin/tenancy');
@@ -81,8 +86,8 @@ export async function listarInventario(accessToken: string): Promise<InventarioA
  * Quantas entradas de histórico a tela pede POR PÁGINA.
  *
  * ⚠️ 100 é o MÁXIMO da API (`LIMITE_MAXIMO`, `user-repository.port.ts`), e
- * não o padrão (20): a tela segue o cursor até o fim, e 20 por página daria
- * 50 requisições para 1000 entradas.
+ * não o padrão (20): a tela pede UMA página por visita, e 20 por página
+ * mostraria 20 linhas de uma trilha que a API pagina de 100 em 100.
  *
  * ⚠️ E o número tem um DONO: a paridade com a API é medida pelo
  * `lib/paginacao.parity.spec.ts` — sem ela, uma cópia aqui envelhecia
@@ -95,7 +100,7 @@ export const TAMANHO_DA_PAGINA_HISTORICO = 100;
  * UMA página do histórico de uma pessoa (`GET /admin/users/:id/history`).
  *
  * O `cursor` é o da PRÓXIMA página, e `null` no fim — a API pagina por
- * cursor, e a tela segue o `nextCursor` até ele vir `null`.
+ * cursor, e a tela pede UMA página por visita (o cursor viaja na URL).
  *
  * ⚠️ A API devolve a trilha do **mais novo para o mais antigo** (a ordem é
  * do input do port de auditoria), e o cursor aponta para as versões mais
@@ -103,16 +108,23 @@ export const TAMANHO_DA_PAGINA_HISTORICO = 100;
  *
  * ⚠️ O `id` vai codificado: ele vem do path da tela, e um id cru moldaria a
  * URL ANTES de a API ver o caminho.
+ *
+ * ⚠️ O `limite` é OPCIONAL, e o padrão é o tamanho da página da tela. Ele
+ * existe para a leitura de UMA versão (a mais recente), que a tela do
+ * detalhe precisa quando a pessoa está fora do inventário (a apagada) e a
+ * página corrente do histórico não é a primeira.
  */
 export async function listarHistoricoDoUsuario(
   accessToken: string,
   id: string,
   cursor?: string,
+  limite?: number,
 ): Promise<UserHistoryPageDto> {
+  const tamanho = limite ?? TAMANHO_DA_PAGINA_HISTORICO;
   const consulta =
     cursor === undefined
-      ? `?limit=${TAMANHO_DA_PAGINA_HISTORICO}`
-      : `?limit=${TAMANHO_DA_PAGINA_HISTORICO}&cursor=${encodeURIComponent(cursor)}`;
+      ? `?limit=${tamanho}`
+      : `?limit=${tamanho}&cursor=${encodeURIComponent(cursor)}`;
   return client(accessToken).get<UserHistoryPageDto>(
     `/admin/users/${encodeURIComponent(id)}/history${consulta}`,
   );

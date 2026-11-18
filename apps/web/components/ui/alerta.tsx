@@ -20,6 +20,13 @@ import type * as React from 'react';
  *
  * ⚠️ A cor do alerta é reforço. A mensagem é texto, e é o texto que a
  * pessoa lê.
+ *
+ * ⚠️ E O `role="alert"` NÃO É O QUE FAZ O ALERTO SER LIDO — MEDIDO
+ * 2026-11-17 (revisão do PR #171): uma região viva só anuncia MUDANÇA, e um
+ * `Alerta` que entra no HTML inicial do Server Component não é uma mudança.
+ * Quem chega por leitor de tela lê o texto na ORDEM DE LEITURA (ele está no
+ * DOM), e é isso que importa — o `role` continua sendo o que dá a
+ * semântica de "isto é um erro" para quem navega por região.
  */
 type AlertaProps = {
   /** `erro` interrompe a fala; `sucesso` anuncia sem interromper. */

@@ -571,6 +571,34 @@ export async function renomearUsuario(
 }
 
 /**
+ * UMA PÁGINA do histórico de uma pessoa — e o `nextCursor` que vem junto.
+ *
+ * ⚠️ pt-BR (F21, revisão do PR #171): a tela pede 100 por página, e com o
+ * dado semeado (2 versões) o `nextCursor` dela é `null` — o caminho da
+ * paginação NÃO ERA EXERCITÁVEL. Pedir a página com `limit=1` dá o cursor de
+ * verdade (o id da LINHA, que é o que a tela viaja na URL), e a página 2 da
+ * tela passa a ter o que mostrar.
+ *
+ * A rota é a do ADMIN do SISTEMA (`/admin/users/:id/history`), e o token é o
+ * dele — a rota do DONO exige que o `:id` seja o `sub` do token.
+ */
+export async function paginaDoHistorico(
+  token: string,
+  id: string,
+  limite: number,
+): Promise<{ entries: { version: number }[]; nextCursor: string | null }> {
+  const { status, corpo } = await chamar('GET', `/admin/users/${id}/history?limit=${limite}`, {
+    token,
+  });
+  if (status !== 200) {
+    throw new Error(
+      `GET /admin/users/${id}/history respondeu ${status} (esperado 200): ${JSON.stringify(corpo)}`,
+    );
+  }
+  return corpo as { entries: { version: number }[]; nextCursor: string | null };
+}
+
+/**
  * Deixa a listagem vazia, truncando as tabelas do schema de users.
  *
  * pt-BR (2026-10-14): antes isto era soft-delete de tudo que a listagem
