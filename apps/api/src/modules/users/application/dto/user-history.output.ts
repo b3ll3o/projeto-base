@@ -63,7 +63,24 @@ export function toUserHistoryPageDto(pagina: {
  * pode trazer um `Date`. O `String(date)` sairia como "Tue Nov 17 2026 …" —
  * e o `changedAt` do `snapshot` é lido como ISO pela tela.
  */
-function paraUserOutputDto(snapshot: Record<string, unknown>): UserOutputDto {
+function paraUserOutputDto(snapshot: Record<string, unknown> | null | undefined): UserOutputDto {
+  // ⚠️ O SNAPSHOT PODE SER NULO — e o `jsonb 'null'` passa na coluna NOT
+  // NULL (MEDIDO 2026-11-17 na revisão do PR #171). Sem esta guarda, a rota
+  // do admin morria com 500 ao ler uma linha assim — e a guarda da tela
+  // (`dadoDaVersao`) nunca rodava, porque a API quebrava antes de serializar.
+  if (snapshot === null || snapshot === undefined || typeof snapshot !== 'object') {
+    return {
+      id: '',
+      nome: '',
+      email: '',
+      profileId: null,
+      version: 0,
+      createdAt: '',
+      updatedAt: '',
+      deletedAt: null,
+      isDeleted: false,
+    };
+  }
   return {
     id: texto(snapshot.id),
     nome: texto(snapshot.nome),

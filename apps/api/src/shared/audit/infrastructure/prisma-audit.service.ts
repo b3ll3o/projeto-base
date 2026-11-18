@@ -170,7 +170,7 @@ export class PrismaAuditService implements AuditServicePort {
           version: r.version,
           previousVersion: r.previousVersion,
           operation: r.operation,
-          snapshot: r.snapshot as Record<string, unknown>,
+          snapshot: r.snapshot as Record<string, unknown> | null,
           changedAt: r.changedAt,
           changedBy: r.changedBy,
           reason: r.reason,
@@ -227,7 +227,7 @@ export class PrismaAuditService implements AuditServicePort {
       version: row.version,
       previousVersion: row.previousVersion,
       operation: row.operation,
-      snapshot: row.snapshot as Record<string, unknown>,
+      snapshot: row.snapshot as Record<string, unknown> | null,
       changedAt: row.changedAt,
       changedBy: row.changedBy,
       reason: row.reason,
@@ -264,24 +264,43 @@ export class PrismaAuditService implements AuditServicePort {
     const rows = await comEscopoDeEmpresa(this.prisma, tenantId, async (tx) => {
       // ⚠️ O CURSOR É RESOLVIDO AQUI, e não entregue ao Prisma como
       // `cursor: { id }`: o Prisma traduz isso num subselect que, com um id
-      // inexistente, morre num erro de cliente do Prisma (500). O
-      // `AuditCursorInvalidoException` é a mesma resposta da trilha — 400, e
-      // sem dizer se aquele id existe.
-      let depoisDe: string | undefined;
+      // inexistente, morre num erro de cliente do Prisma (500) — e, MEDIDO
+      // 2026-11-17 no Postgres 16, a query do cursor antigo saía SEM
+      // `LIMIT` (`WHERE deleted_at <= (SELECT deleted_at …) ORDER BY deleted_at
+      // DESC OFFSET $2`): o archive inteiro atravessava a rede a cada página.
+      // O `AuditCursorInvalidoException` é a mesma resposta da trilha — 400,
+      // e sem dizer se aquele id existe.
+      //
+      // ⚠️ E O RANGE É COMPOSTO (`deletedAt` + `id`): o `deleted_at` NÃO É
+      // ÚNICO (duas remoções no mesmo instante empatam), e um empate com o
+      // `OFFSET 1` do Prisma pula uma linha ARBITRÁRIA — a mesma classe de
+      // defeito que o `cursor` da trilha tinha.
+      let depoisDe: { deletedAt: Date; id: string } | undefined;
       if (input.cursor !== null && input.cursor !== undefined && input.cursor !== '') {
         const linha = await tx.userArchive.findFirst({
           where: { id: input.cursor },
-          select: { id: true },
+          select: { id: true, deletedAt: true },
         });
         if (linha === null) {
           throw new AuditCursorInvalidoException({ entityId: '', cursor: input.cursor });
         }
-        depoisDe = linha.id;
+        depoisDe = { deletedAt: linha.deletedAt, id: linha.id };
       }
       return tx.userArchive.findMany({
-        ...(depoisDe !== undefined ? { cursor: { id: depoisDe }, skip: 1 } : {}),
+        ...(depoisDe !== undefined
+          ? {
+              where: {
+                OR: [
+                  { deletedAt: { lt: depoisDe.deletedAt } },
+                  { deletedAt: depoisDe.deletedAt, id: { lt: depoisDe.id } },
+                ],
+              },
+            }
+          : {}),
         take: input.limit + 1,
-        orderBy: [{ deletedAt: 'desc' }],
+        // ⚠️ A ORDEM É COMPOSTA — e o `id` é o desempate: sem ele, duas linhas
+        // com o mesmo `deletedAt` trocam de lugar entre uma página e outra.
+        orderBy: [{ deletedAt: 'desc' }, { id: 'desc' }],
       });
     });
     const hasMore = rows.length > input.limit;
@@ -292,7 +311,7 @@ export class PrismaAuditService implements AuditServicePort {
         id: r.id,
         entityId: r.entityId,
         version: r.version,
-        snapshot: r.snapshot as Record<string, unknown>,
+        snapshot: r.snapshot as Record<string, unknown> | null,
         deletedAt: r.deletedAt,
         deletedBy: r.deletedBy,
         reason: r.reason,
@@ -315,7 +334,7 @@ export class PrismaAuditService implements AuditServicePort {
       id: row.id,
       entityId: row.entityId,
       version: row.version,
-      snapshot: row.snapshot as Record<string, unknown>,
+      snapshot: row.snapshot as Record<string, unknown> | null,
       deletedAt: row.deletedAt,
       deletedBy: row.deletedBy,
       reason: row.reason,

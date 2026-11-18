@@ -21,7 +21,7 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'node:module';
 import type pinoType from 'pino';
 
-import { REDACT_PATHS } from './app.module.js';
+import { REDACT_PATHS, SERIALIZADOR_DO_REQUEST } from './app.module.js';
 
 const req = createRequire(import.meta.url);
 const pino = req('pino') as typeof pinoType;
@@ -56,6 +56,44 @@ describe('A redação do log (REDACT_PATHS)', () => {
     // E a redação ACONTECEU — o pino marca o valor redigido, e é esse
     // marcador que diz que o caminho casou (e não que o header não veio).
     expect(saida).toContain('[Redacted]');
+  });
+
+  // ⚠️ A QUERY NÃO VAI PARA O ACCESS LOG — e o `pino-std-serializers`
+  // gravava `req.url` (com a query) e `req.query` (a query parseada) em
+  // CADA request. MEDIDO 2026-11-17 na revisão de segurança do PR #171: uma
+  // rota com filtro (`GET /users?email=alguem@empresa.com`) punha o e-mail de
+  // outra pessoa no log.
+  it('o access log NÃO leva a query — nem no url, nem no campo `query`', () => {
+    const capturadas: string[] = [];
+    const stream = {
+      write: (s: string) => {
+        capturadas.push(s);
+      },
+    };
+    const log = pino(
+      { redact: [...REDACT_PATHS], serializers: { req: SERIALIZADOR_DO_REQUEST } },
+      stream,
+    );
+
+    log.info(
+      {
+        req: {
+          method: 'GET',
+          url: '/api/v1/users?email=alguem@empresa.com&limit=20',
+          headers: { authorization: 'Bearer segredo' },
+          remoteAddress: '127.0.0.1',
+        },
+      },
+      'pedido',
+    );
+
+    const saida = capturadas.join('');
+    // O dado de outra pessoa NÃO vai para o log.
+    expect(saida).not.toContain('alguem@empresa.com');
+    expect(saida).not.toContain('limit=20');
+    // E o CAMINHO continua — é ele que diz qual requisição foi.
+    expect(saida).toContain('/api/v1/users');
+    expect(saida).toContain('GET');
   });
 
   it('a redação é DIRIGIDA: um header que não está na lista sai em claro', () => {

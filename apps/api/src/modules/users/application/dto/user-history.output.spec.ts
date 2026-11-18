@@ -62,6 +62,18 @@ describe('toUserHistoryEntryDto — o mapeamento da trilha para o wire', () => {
     expect(dto.entityId).toBe('0190a8b6-1234-7abc-9def-000000000001');
   });
 
+  it('um snapshot NULO não derruba o mapeamento — e sai com os campos vazios', () => {
+    // ⚠️ O `jsonb 'null'` passa na coluna NOT NULL (MEDIDO 2026-11-17 na
+    // revisão do PR #171), e a linha chega aqui com o snapshot nulo — e a
+    // projeção sem guarda derrubava a rota com 500.
+    const dto = toUserHistoryEntryDto(entrada({ snapshot: null }));
+
+    expect(dto.snapshot.nome).toBe('');
+    expect(dto.snapshot.email).toBe('');
+    expect(dto.snapshot.isDeleted).toBe(false);
+    expect(dto.snapshot.deletedAt).toBeNull();
+  });
+
   it('o `snapshot` é PROJETADO: um campo a mais não vaza no wire', () => {
     const dto = toUserHistoryEntryDto(
       entrada({ snapshot: { ...SNAPSHOT, segredoDaOutraEntidade: 'nao deve vazar' } }),

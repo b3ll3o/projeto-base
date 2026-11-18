@@ -62,7 +62,15 @@ export interface HistoryEntry {
   version: number;
   previousVersion: number | null;
   operation: AuditOperation;
-  snapshot: Record<string, unknown>;
+  /**
+   * O snapshot — e ele pode ser NULO.
+   *
+   * ⚠️ MEDIDO 2026-11-17 (revisão do PR #171): a coluna é `Json` NOT NULL, e
+   * o Postgres aceita `jsonb 'null'` — que é NOT NULL e é nulo. O cast
+   * `as Record<string, unknown>` mentia, e a leitura quebrava na projeção
+   * (um `TypeError` que derrubava a rota com 500).
+   */
+  snapshot: Record<string, unknown> | null;
   changedAt: Date;
   changedBy: string | null;
   reason: string | null;
@@ -81,7 +89,8 @@ export interface ArchiveEntry {
   id: string;
   entityId: string;
   version: number;
-  snapshot: Record<string, unknown>;
+  /** O snapshot — e ele pode ser NULO (o mesmo `jsonb 'null'` da trilha). */
+  snapshot: Record<string, unknown> | null;
   deletedAt: Date;
   deletedBy: string | null;
   reason: string | null;

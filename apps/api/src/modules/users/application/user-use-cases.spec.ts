@@ -868,6 +868,36 @@ describe('UserUseCases', () => {
       expect(registrado).toContain('leitura recusada');
       expect(registrado).toContain('gerente-1');
       expect(registrado).toContain(id);
+      // ⚠️ E O ESCOPO: ele é o que distingue D2 (`tenantId === null`) de
+      // tudo o mais, e sem ele o mesmo ator (membro de DUAS empresas)
+      // produzia DUAS linhas idênticas para escaladas em empresas
+      // diferentes (MEDIDO 2026-11-17 na revisão de segurança do PR #171).
+      expect(registrado).toContain(EMPRESA);
+    });
+
+    it('a RECUSA sem header de empresa registra o escopo GLOBAL — e ele distingue a escalada', async () => {
+      const id = await criarPessoa('alvo-rastro-global@b.com');
+      const aviso = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+
+      let registrado = '';
+      try {
+        await expect(
+          useCases.listarHistoricoDeUsuarioNoSistema(
+            { id, limit: 20 },
+            // ⚠️ O ator SEM empresa e SEM `isAdmin` global: o bucket global
+            // sem o admin do sistema é recusado pelo D2 (e o `isAdmin` de
+            // empresa não promove no bucket global).
+            { userId: 'gerente-1', tenantId: null, isAdmin: false },
+          ),
+        ).rejects.toThrow(ForbiddenException);
+        registrado = aviso.mock.calls.map((c) => String(c[0])).join('\n');
+      } finally {
+        aviso.mockRestore();
+      }
+
+      // O ator SEM empresa é o do bucket global — e a linha diz isso, para
+      // que a escalada em duas empresas não produza a mesma linha.
+      expect(registrado).toContain('escopo sistema');
     });
   });
 

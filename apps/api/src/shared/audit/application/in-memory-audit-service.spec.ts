@@ -12,12 +12,12 @@ import type {
   ListHistoryInput,
 } from './audit-service.port.js';
 
-const makeCtx = (actorId: string | null = 'actor-1') =>
+const makeCtx = (actorId: string | null = 'actor-1', quando = '2026-09-21T10:00:00.000Z') =>
   new AuditContext({
     actorId,
     correlationId: 'corr-1',
     source: 'http',
-    timestamp: new Date('2026-09-21T10:00:00.000Z'),
+    timestamp: new Date(quando),
   });
 
 describe('InMemoryAuditService', () => {
@@ -320,14 +320,21 @@ describe('InMemoryAuditService', () => {
   });
 
   it('listArchive() pagina por cursor; getArchiveEntry() retorna null quando ausente', async () => {
-    const ctx = makeCtx();
-    for (const id of ['a', 'b', 'c']) {
+    // ⚠️ CADA ARQUIVO COM O SEU INSTANTE — a ordem do archive é por
+    // `deletedAt` (e o `id` é o desempate): com o mesmo instante, a ordem
+    // seria a do desempate — e o `id` do archive é um uuid aleatório, o que
+    // tornaria a afirmação do spec dependente da sorte.
+    for (const [id, quando] of [
+      ['a', '2026-09-21T10:00:00.000Z'],
+      ['b', '2026-09-21T11:00:00.000Z'],
+      ['c', '2026-09-21T12:00:00.000Z'],
+    ] as const) {
       await svc.archive({
         entityName: 'User',
         entityId: id,
         version: 1,
         snapshot: { id },
-        ctx,
+        ctx: makeCtx('actor-1', quando),
       } satisfies ArchiveInput);
     }
     const page1 = await svc.listArchive(
@@ -338,7 +345,9 @@ describe('InMemoryAuditService', () => {
       SISTEMA,
     );
     expect(page1.entries).toHaveLength(2);
-    expect(page1.entries.map((e) => e.entityId)).toEqual(['a', 'b']);
+    // A ordem é por `deletedAt` DECRESCENTE — e o `c` (o mais recente) vem
+    // primeiro.
+    expect(page1.entries.map((e) => e.entityId)).toEqual(['c', 'b']);
     expect(page1.nextCursor).not.toBeNull();
 
     const found = await svc.getArchiveEntry(

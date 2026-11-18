@@ -58,12 +58,15 @@ describe('PrismaAuditService (Testcontainers)', () => {
   const ENTITY_C = '0190a8b6-1234-7abc-9def-00000000000c';
   const ENTITY_MISSING = '0190a8b6-1234-7abc-9def-0000000000ff';
 
-  const ctxAudit = (actorId: string | null = ACTOR_1): AuditContext =>
+  const ctxAudit = (
+    actorId: string | null = ACTOR_1,
+    quando = '2026-09-21T10:00:00Z',
+  ): AuditContext =>
     new AuditContext({
       actorId,
       correlationId: 'corr-1',
       source: 'http',
-      timestamp: new Date('2026-09-21T10:00:00Z'),
+      timestamp: new Date(quando),
     });
 
   // pt-BR (Fase 10+): os testes deste escopo usam `ctx.prisma`, que é o DONO e
@@ -436,6 +439,44 @@ describe('PrismaAuditService (Testcontainers)', () => {
       SISTEMA,
     );
     expect(missing).toBeNull();
+  });
+
+  // ⚠️ A SEGUNDA PÁGINA DO ARCHIVE — e o caminho do cursor nunca era medido
+  // (MEDIDO 2026-11-17 na revisão do PR #171: a spec só buscava a página 1).
+  // O `cursor: { id }` do Prisma emitia `WHERE deleted_at <= (SELECT
+  // deleted_at …) ORDER BY deleted_at DESC OFFSET $2` — SEM `LIMIT` (o archive
+  // inteiro atravessava a rede) e com o limite em `deleted_at`, que NÃO É
+  // ÚNICO (um empate com o `OFFSET` pula uma linha arbitrária).
+  it('a segunda página do archive vem pelo RANGE (e não pelo cursor do Prisma)', async () => {
+    // ⚠️ Cada arquivo COM O SEU INSTANTE — o `deleted_at` é a ordem, e o
+    // `id` é o desempate (com o mesmo instante, a ordem seria a do
+    // desempate — e o id do archive é um uuid aleatório).
+    for (const [id, quando] of [
+      [ENTITY_A, '2026-09-21T10:00:00.000Z'],
+      [ENTITY_B, '2026-09-21T11:00:00.000Z'],
+      [ENTITY_C, '2026-09-21T12:00:00.000Z'],
+    ] as const) {
+      await svc.archive({
+        entityName: 'User',
+        entityId: id,
+        version: 1,
+        snapshot: { id },
+        ctx: ctxAudit(ACTOR_1, quando),
+      });
+    }
+
+    const page1 = await svc.listArchive({ entityName: 'User', limit: 2 }, SISTEMA);
+    expect(page1.entries.map((e) => e.entityId)).toEqual([ENTITY_C, ENTITY_B]);
+    expect(page1.nextCursor).not.toBeNull();
+
+    // A SEGUNDA página: a que ficou de fora — e nenhuma linha se repete nem
+    // some.
+    const page2 = await svc.listArchive(
+      { entityName: 'User', limit: 2, cursor: page1.nextCursor },
+      SISTEMA,
+    );
+    expect(page2.entries.map((e) => e.entityId)).toEqual([ENTITY_A]);
+    expect(page2.nextCursor).toBeNull();
   });
 
   // ─────────── Fase 10+: a auditoria como diretório de uuids cross-tenant ───────────

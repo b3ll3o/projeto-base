@@ -141,8 +141,11 @@ export class InMemoryAuditService implements AuditServicePort {
     // cursor pelo **id da LINHA**. O duplo usava um offset numérico
     // (`Number(cursor)`) — e um cursor que só a produção cumpre é um
     // contrato que o teste não mede.
+    // ⚠️ A ORDEM É COMPOSTA (`deletedAt` + `id`) — a mesma da produção: o
+    // `deletedAt` NÃO É ÚNICO, e um empate sem desempate troca as linhas de
+    // lugar entre uma página e outra.
     const ordenadas = [...this.archives].sort(
-      (a, b) => b.deletedAt.getTime() - a.deletedAt.getTime(),
+      (a, b) => b.deletedAt.getTime() - a.deletedAt.getTime() || b.id.localeCompare(a.id),
     );
     let restantes = ordenadas;
     if (input.cursor !== null && input.cursor !== undefined && input.cursor !== '') {

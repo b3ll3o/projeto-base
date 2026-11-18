@@ -14,7 +14,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { Reflector } from '@nestjs/core';
-import { ExecutionContext, ForbiddenException } from '@nestjs/common';
+import { ExecutionContext, ForbiddenException, Logger } from '@nestjs/common';
 import { PermissionsGuard } from './permissions.guard.js';
 import type { UserProfileUseCases } from '../../../application/profiles.use-cases.js';
 
@@ -62,6 +62,42 @@ describe('PermissionsGuard', () => {
     const { guard } = makeGuard([KEY_GUARD]);
     const { ctx } = makeCtx({ isAdmin: false, permissions: [] });
     await expect(guard.canActivate(ctx)).rejects.toThrow(ForbiddenException);
+  });
+
+  // ⚠️ A RECUSA DEIXA RASTRO — e o registro leva o ATOR, o ESCOPO e o
+  // alvo (MEDIDO 2026-11-17 na revisão de segurança do PR #171): o escopo é o
+  // que distingue a escalada numa empresa de outra, e sem ele o mesmo ator
+  // (membro de DUAS empresas) produzia DUAS linhas idênticas.
+  it('a RECUSA registra o ator, o ESCOPO e o caminho — e o caminho sem a query', async () => {
+    const aviso = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    try {
+      const { guard } = makeGuard([KEY_GUARD]);
+      const { ctx } = makeCtx({
+        sub: '0190a8b6-1234-7abc-9def-000000000001',
+        tenantId: '0190a8b6-1234-7abc-9def-0000000000aa',
+        isAdmin: false,
+        permissions: [],
+      });
+      // O request com método e url — e a url COM a query (é o request target
+      // completo).
+      const req = ctx.switchToHttp().getRequest<{ url?: string; method?: string }>();
+      req.url = '/api/v1/admin/users/alheio/history?limit=20&cursor=segredo';
+      req.method = 'GET';
+
+      await expect(guard.canActivate(ctx)).rejects.toThrow(ForbiddenException);
+
+      const registrado = aviso.mock.calls.map((c) => String(c[0])).join('\n');
+      expect(registrado).toContain('permissão recusada');
+      expect(registrado).toContain('0190a8b6-1234-7abc-9def-000000000001');
+      // O ESCOPO — sem ele, duas empresas do mesmo ator dão a mesma linha.
+      expect(registrado).toContain('0190a8b6-1234-7abc-9def-0000000000aa');
+      // E o CAMINHO sem a query: a query pode carregar um dado de outra
+      // pessoa.
+      expect(registrado).toContain('/api/v1/admin/users/alheio/history');
+      expect(registrado).not.toContain('cursor=segredo');
+    } finally {
+      aviso.mockRestore();
+    }
   });
 
   it('Libera quando `isAdmin=true` mesmo sem a permission (bypass total)', async () => {
