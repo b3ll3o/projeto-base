@@ -50,7 +50,7 @@ A regra do repo continua valendo: **o fato tem UM dono**
 > |---|---|---|
 > | `Doc canônico` | um caminho, ou um glob (`*.md`) | o arquivo (ou a família) que o item exige |
 > | `Tipo` | `arquivo` · `familia` · `artefato` | como o gate mede (ver §3) |
-> | `Âncoras` | `âncora`; `âncora` | seções mínimas que o doc tem que conter |
+> | `Âncoras` | `âncora`; `âncora` | o mínimo que o doc tem que conter: heading (começa com `#`) ou chave literal |
 > | `Índice` | um caminho, ou `—` | quem lista as instâncias do item (se houver) |
 > | `Condição` | `obrigatório` · `condicional` | se o item nasce sempre ou depende (§4) |
 
@@ -98,7 +98,7 @@ A regra do repo continua valendo: **o fato tem UM dono**
 | Tipo | O que é o doc canônico | O que o gate exige |
 |---|---|---|
 | `arquivo` | um arquivo | existe, tem ≥ 1 linha de conteúdo e contém **todas** as âncoras |
-| `familia` | um glob (`docs/adr/*.md`) | o glob casa ≥ 1 arquivo e **cada** arquivo casa contém **todas** as âncoras |
+| `familia` | um glob (`docs/adr/*.md`) | o glob casa ≥ 1 arquivo e **cada arquivo do glob** contém **todas** as âncoras |
 | `artefato` | um arquivo **gerado** e versionado | existe e contém **todas** as âncoras. O **frescor** do artefato contra o código é de outro gate (o `check-openapi-contract`, para o OpenAPI) — este gate não o mede, e não promete |
 
 **A âncora é um heading, não um texto solto.** A âncora que começa com `#`
@@ -140,7 +140,7 @@ colunas são o comando que reproduz a medição — o `\|` da tabela markdown é
 **escape do pipe**, e o comando real usa o pipe cru:
 
 ```bash
-grep -lE '"bullmq":|"kafkajs":|"amqplib":|"@aws-sdk/client-sqs":|"@nestjs/microservices":' package.json
+grep -lE '"bullmq":|"kafkajs":|"amqplib":|"@aws-sdk/client-sqs":|"@nestjs/microservices":|"amqp-connection-manager":|"@cloudamqp/amqp-client":|"nats":|"@google-cloud/pubsub":' package.json
 ```
 
 > O padrão casa a **chave da dependência** (com o dois-pontos), e não o nome
@@ -170,7 +170,7 @@ O gate cobra as **duas direções**:
 
 | Gate | Classe | Mede | Falha quando |
 |---|---|---|---|
-| `check-doc-kit` | **Cobertura do kit** | os 14 itens têm doc canônico, âncoras, índice e dono | falta doc, falta âncora, falta índice, falta dono |
+| `check-doc-kit` | **Cobertura do kit** | os 14 itens têm doc canônico, âncoras, índice, dono, o auditor do pilar, a skill e a contagem — e os condicionais nos dois sentidos | falta doc, falta âncora, falta índice, falta dono, auditor trocado, skill inexistente, contagem divergente, condição sem declaração |
 | `check-audit-skills` | **Procedimento** | os blocos `run` das skills de auditoria do kit rodam e passam | um passo quebra ou imprime `✗` |
 
 O `check-doc-kit` reconcilia **duas** tabelas desta convenção: a **§2** (item
