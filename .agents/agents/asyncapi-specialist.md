@@ -27,7 +27,7 @@ colunas que são o **comando que reproduz a medição**:
 | **Padrão** (regex) | `"bullmq"\|"kafkajs"\|"amqplib"\|"@aws-sdk/client-sqs"` |
 
 ```bash
-grep -lE '"bullmq"|"kafkajs"|"amqplib"|"@aws-sdk/client-sqs"' \
+grep -lE '"bullmq":|"kafkajs":|"amqplib":|"@aws-sdk/client-sqs":|"@nestjs/microservices":|"amqp-connection-manager":|"@cloudamqp/amqp-client":|"nats":|"@google-cloud/pubsub":' \
   package.json apps/*/package.json packages/*/package.json
 ```
 
@@ -103,7 +103,7 @@ task: { description: "avaliar o gatilho e (se disparado) escrever o AsyncAPI" }
 context:
   doc: "docs/api/asyncapi.yaml"
   sonda: ["package.json", "apps/*/package.json", "packages/*/package.json"]
-  padrao: '"bullmq"|"kafkajs"|"amqplib"|"@aws-sdk/client-sqs"'
+  padrao: '"bullmq":|"kafkajs":|"amqplib":|"@aws-sdk/client-sqs":|"@nestjs/microservices":|"amqp-connection-manager":|"@cloudamqp/amqp-client":|"nats":|"@google-cloud/pubsub":'   # a §4 da convenção é a fonte única do valor
   broker: "<nome e versão do broker, se houver>"
 expected_output:
   format: yaml
