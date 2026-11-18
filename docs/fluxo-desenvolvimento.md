@@ -85,7 +85,7 @@ maintainer: stack-code-reviewer
 | 3 | Instalar / validar deps | `pnpm install` | nenhum |
 | 4 | (Camada C) Snapshot de estado | ver §5 | nenhum — prosa em [`state-aware-planning.md`](../.agents/workflows/state-aware-planning.md) |
 | 5 | Codar com o specialist | ver `.agents/agents/<specialist>.md` | nenhum — prosa |
-| 6 | Commit | `git add -A && git commit -m "…"` | **commit-msg**: Conventional Commits · **pre-commit**: lint-staged, stack-code-reviewer, doc-sync |
+| 6 | Commit | `git add <arquivos> && git commit -m "…"` — **por caminho, nunca `-A`**: o `-A` stageia o que estiver na árvore, inclusive o trabalho de outra sessão | **commit-msg**: Conventional Commits · **pre-commit**: lint-staged, stack-code-reviewer, doc-sync |
 | 7 | Verificação completa local | `pnpm ci:local` | **nenhum** — o `ci:local` inteiro não está em nenhum hook (§7). A EXCEÇÃO é a etapa `ci:boot`, que o `pre-push` roda: ela sobe a aplicação local |
 | 8 | Push | `git push -u origin <branch>` | **pre-push**: `pnpm ci:preflight` + `pnpm ci:boot` (sobe a aplicação local) |
 | 9 | Abrir PR | `gh pr create` | — |
@@ -144,7 +144,7 @@ paralelo e publica a revisão no PR.
 | Auditoria | N reviewers em paralelo, todos read-only | o roteador já resolve quem; falta o executor |
 | `.agents/memory/*.md` | 1 agente por arquivo | 49 arquivos (`find .agents/memory -name '*.md' | wc -l`), convenção 1:1 verificável |
 | Implementação | **1 por vez no mesmo codebase** | ver paredes abaixo |
-| Gates do preflight | 54 gates em `Promise.all` | hoje serial (`preflight.ts:412`), nenhum escreve |
+| Gates do preflight | 56 gates | hoje serial (`preflight.ts:446`), nenhum escreve |
 
 **Paredes — aqui paralelizar não é ganho, é conflito garantido:**
 
