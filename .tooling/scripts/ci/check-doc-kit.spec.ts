@@ -19,6 +19,7 @@ import {
   itensDeclarados,
   lacunasDoKit,
   lerMatriz,
+  sondaDoGatilho,
 } from './check-doc-kit';
 
 /** Raiz do repo real — usada no caso "o repo real está coberto". */
@@ -383,6 +384,58 @@ describe('lerMatriz — as colunas obrigatórias', () => {
     ].join('\n');
     const m = lerMatriz(semComando);
     expect(m.erros.some((e) => e.includes('grep -lE'))).toBe(true);
+  });
+});
+
+describe('sondaDoGatilho', () => {
+  const declaracao = {
+    item: 'AsyncAPI',
+    gatilho: 'existe broker',
+    sondas: ['package.json', 'apps/*/package.json'],
+    padrao: '"bullmq":',
+    declaracao: 'sim',
+    linha: 90,
+  };
+
+  it('dispara quando o padrão casa em algum arquivo da sonda', () => {
+    const r = sondaDoGatilho(
+      declaracao,
+      (glob) => (glob === 'package.json' ? ['package.json'] : ['apps/api/package.json']),
+      () => '{ "bullmq": "^5.0.0" }',
+    );
+    expect(r).toBe('disparou');
+  });
+
+  it('NÃO dispara quando nenhum arquivo casa', () => {
+    const r = sondaDoGatilho(
+      declaracao,
+      () => ['package.json'],
+      () => '{ "prisma": "^6" }',
+    );
+    expect(r).toBe('nao-disparou');
+  });
+
+  it('UM glob morto é erro — a sonda cega esconde o broker real', () => {
+    // MEDIDO em 2026-11-18 (falsificação do PR do kit): um glob de
+    // `package.json` com o sufixo digitado errado deixava o broker de
+    // `apps/api/package.json` invisível, e o gate ficava verde com o item
+    // sem doc. O glob vivo não casa com o padrão (não há broker nele), e o
+    // morto é o que esconderia o broker.
+    const r = sondaDoGatilho(
+      declaracao,
+      (glob) => (glob === 'package.json' ? ['package.json'] : []),
+      () => '{ "prisma": "^6.0.0" }',
+    );
+    expect(r).toBe('erro');
+  });
+
+  it('regex que não compila é erro, não "não disparou"', () => {
+    const r = sondaDoGatilho(
+      { ...declaracao, padrao: '"bullmq":(' },
+      () => ['package.json'],
+      () => '{}',
+    );
+    expect(r).toBe('erro');
   });
 });
 

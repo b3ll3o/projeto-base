@@ -381,7 +381,11 @@ export function lerMatriz(md: string): {
   // `grep -lE` da prosa logo abaixo. As duas têm que ser o mesmo padrão — um
   // typo em uma delas deixa o item sem doc PARA SEMPRE, com o gate verde
   // (MEDIDO em 2026-11-18, falsificação do PR do kit).
-  const mComando = /grep -lE '([^']+)'/.exec(md);
+  // O comando é procurado **na §4**, e não no documento inteiro: um outro
+  // `grep -lE` antes da seção reconciliaria a célula com o comando errado.
+  const iniSecao4 = md.search(/^##\s+§4\b/m);
+  const secao4 = iniSecao4 >= 0 ? md.slice(iniSecao4) : md;
+  const mComando = /grep -lE '([^']+)'/.exec(secao4);
   if (condicionais.length > 0) {
     if (mComando === null) {
       erros.push(
@@ -598,6 +602,42 @@ export function casaAncora(ancora: string, conteudo: string, tipo: TipoDeDoc): b
     if (prefixo && t.startsWith(ancora)) return true;
   }
   return false;
+}
+
+/**
+ * A sonda do gatilho — com o terceiro estado.
+ *
+ * Uma sonda que NÃO mede devolve `erro`: o gate recusa a não-aplicabilidade,
+ * porque "não disparou" é justamente o estado que autoriza o item a não ter
+ * doc.
+ *
+ * ⚠️ **UM glob morto entre vários é uma sonda cega.** MEDIDO em 2026-11-18
+ * (falsificação do PR do kit): um glob de `package.json` com o sufixo
+ * digitado errado escondia o broker real de `apps/api/package.json`, e o gate
+ * ficava verde com o item sem doc. Por isso **cada** glob da coluna Sonda
+ * tem que casar ≥ 1 arquivo.
+ */
+export function sondaDoGatilho(
+  declaracao: DeclaracaoCondicional,
+  arquivosDaSonda: (glob: string) => string[],
+  ler: (caminho: string) => string,
+): ResultadoDaSonda {
+  if (declaracao.padrao === '') return 'erro';
+  let re: RegExp;
+  try {
+    re = new RegExp(declaracao.padrao);
+  } catch {
+    return 'erro';
+  }
+  if (declaracao.sondas.length === 0) return 'erro';
+  for (const sondaGlob of declaracao.sondas) {
+    const arquivos = arquivosDaSonda(sondaGlob);
+    if (arquivos.length === 0) return 'erro';
+    for (const arquivo of arquivos) {
+      if (re.test(ler(arquivo))) return 'disparou';
+    }
+  }
+  return 'nao-disparou';
 }
 
 /**
@@ -942,35 +982,8 @@ export async function checkDocKit(opts: { repoRoot: string }): Promise<CheckResu
   };
   const agentExiste = (nome: string): boolean => existe(path.join(DIR_AGENTS, `${nome}.md`));
 
-  /**
-   * A sonda do gatilho — com o terceiro estado.
-   *
-   * Uma sonda que NÃO mede (regex que não compila, ou glob que não casa
-   * arquivo nenhum) devolve `erro`: o gate recusa a não-aplicabilidade, porque
-   * "não disparou" é justamente o estado que autoriza o item a não ter doc.
-   */
-  const sonda = (declaracao: DeclaracaoCondicional): ResultadoDaSonda => {
-    if (declaracao.padrao === '') return 'erro';
-    let re: RegExp;
-    try {
-      re = new RegExp(declaracao.padrao);
-    } catch {
-      return 'erro';
-    }
-    if (declaracao.sondas.length === 0) return 'erro';
-    for (const sondaGlob of declaracao.sondas) {
-      const arquivosDaSonda = casaCom(sondaGlob);
-      // UM glob morto é uma sonda cega: o broker real fica invisível e o
-      // item continua sem doc, com o gate verde (MEDIDO em 2026-11-18,
-      // falsificação do PR do kit: `apps/*/package.jsom` escondeu o broker
-      // de `apps/api/package.json`).
-      if (arquivosDaSonda.length === 0) return 'erro';
-      for (const arquivo of arquivosDaSonda) {
-        if (re.test(ler(arquivo))) return 'disparou';
-      }
-    }
-    return 'nao-disparou';
-  };
+  const sonda = (declaracao: DeclaracaoCondicional): ResultadoDaSonda =>
+    sondaDoGatilho(declaracao, casaCom, ler);
 
   const skillExiste = (nome: string): boolean =>
     todos.some((a) => a === path.join('.agents', 'skills', nome, 'SKILL.md'));
