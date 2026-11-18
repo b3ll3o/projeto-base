@@ -10,11 +10,13 @@ import {
   type ItemDoKit,
   type PilarDoKit,
   casaAncora,
+  citaComoLink,
   celulasDaLinha,
   checkDocKit,
   coluna,
   declaraNaoAplicavel,
   globParaRegex,
+  itensDeclarados,
   lacunasDoKit,
   lerMatriz,
 } from './check-doc-kit';
@@ -127,6 +129,7 @@ function entradas(sobre: Partial<Entradas> = {}): Entradas {
   ];
   return {
     itens,
+    itensEsperados: null,
     condicionais: [
       {
         item: 'AsyncAPI',
@@ -293,6 +296,33 @@ describe('lerMatriz', () => {
   });
 });
 
+describe('citaComoLink', () => {
+  it('cita por link', () => {
+    expect(citaComoLink('| 1 | [`a.md`](./a.md) | x |', 'a.md')).toBe(true);
+  });
+
+  it('cita por code span', () => {
+    expect(citaComoLink('- `a.md` — a decisão', 'a.md')).toBe(true);
+  });
+
+  it('NÃO aceita a menção em prosa', () => {
+    // MEDIDO em 2026-11-18 (falsificação do PR do kit): o nome do arquivo
+    // aparecendo numa frase já bastava para o índice "citar" o doc.
+    expect(citaComoLink('o arquivo a.md foi revisado', 'a.md')).toBe(false);
+  });
+});
+
+describe('itensDeclarados', () => {
+  it('lê a contagem do frontmatter da convenção', () => {
+    expect(itensDeclarados('---\nname: kit-documentacao\nitens: 14\n---\n')).toBe(14);
+  });
+
+  it('sem a declaração → null (o gate não pode inventar a contagem)', () => {
+    expect(itensDeclarados('---\nname: kit-documentacao\n---\n')).toBeNull();
+    expect(itensDeclarados('sem frontmatter')).toBeNull();
+  });
+});
+
 describe('lacunasDoKit', () => {
   it('kit sadio não acusa nada', () => {
     expect(lacunasDoKit(entradas())).toEqual([]);
@@ -358,6 +388,11 @@ describe('lacunasDoKit', () => {
       itens: [item({ numero: '1' }), item({ numero: '1', item: 'Outro item' })],
     });
     expect(lacunasDoKit(e).some((x) => x.includes('número "1"'))).toBe(true);
+  });
+
+  it('a contagem de itens é a declarada na convenção', () => {
+    const e = entradas({ itensEsperados: 14 });
+    expect(lacunasDoKit(e).some((x) => x.includes('a matriz tem'))).toBe(true);
   });
 
   it('kit sem item → erro (verde por ausência é teatro)', () => {

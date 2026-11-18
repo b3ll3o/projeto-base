@@ -46,6 +46,7 @@
 import { readFileSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { lerFrontmatter } from './frontmatter';
 import { linhasDoRelato, type CheckResult } from './check-types';
 
 /** A convenção que declara a matriz do kit — a única fonte. */
@@ -392,11 +393,35 @@ export function globParaRegex(glob: string): RegExp {
  * devolvendo `false`, um typo no padrão deixava o AsyncAPI **para sempre**
  * sem doc, e o gate ficava verde.
  */
+/**
+ * A contagem de itens **declarada** no frontmatter da convenção (`itens: 14`).
+ *
+ * O frontmatter é a casa do dado versionado; a prosa do §1 cita o mesmo
+ * número, e o gate compara os dois — a matriz que cresce em silêncio é a
+ * classe 1 de `guard-classes.md`.
+ */
+export function itensDeclarados(md: string): number | null {
+  const bloco = lerFrontmatter(md);
+  if (!bloco.abre || bloco.fecha === null) return null;
+  const campo = bloco.campos.find((c) => c.campo === 'itens');
+  if (campo === undefined || campo.vazio) return null;
+  const n = Number(campo.texto);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
 export type ResultadoDaSonda = 'disparou' | 'nao-disparou' | 'erro';
 
 /** As entradas que a medição precisa — injetáveis para a spec. */
 export interface Entradas {
   itens: ItemDoKit[];
+  /**
+   * A contagem de itens **declarada** na convenção (o frontmatter `itens`).
+   *
+   * MEDIDO em 2026-11-18 (falsificação do PR do kit): um 15º item, com doc,
+   * âncoras e donos válidos, deixava o gate VERDE — o kit crescia em silêncio.
+   * O número declarado é o dono do fato; o gate compara.
+   */
+  itensEsperados: number | null;
   condicionais: DeclaracaoCondicional[];
   /** Os pilares lidos da §5.1 (auditor e skill de cada um). */
   pilares: PilarDoKit[];
@@ -412,6 +437,24 @@ export interface Entradas {
   skillExiste: (nome: string) => boolean;
   /** O gatilho do item condicional: disparou, não disparou, ou a sonda não mede. */
   sonda: (declaracao: DeclaracaoCondicional) => ResultadoDaSonda;
+}
+
+/**
+ * O índice **cita** o doc como link?
+ *
+ * ⚠️ O `includes(basename)` aceitava a menção do nome em qualquer prosa —
+ * MEDIDO em 2026-11-18 (falsificação do PR do kit): o nome do arquivo
+ * aparecendo numa frase já bastava. A citação de um índice é um **link**:
+ * `](<caminho que termina no basename>)`.
+ */
+export function citaComoLink(indice: string, base: string): boolean {
+  const alvo = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Duas formas de CITAÇÃO: link (`[texto](caminho)`) ou code span
+  // (`` `arquivo.md` ``). Nenhuma delas é a menção em prosa — que é o que a
+  // comparação por `includes` aceitava (MEDIDO em 2026-11-18, falsificação
+  // do PR do kit).
+  const re = new RegExp('(\\]\\([^)]*' + alvo + '\\)|`' + alvo + '`)');
+  return re.test(indice);
 }
 
 /**
@@ -440,7 +483,7 @@ export function declaraNaoAplicavel(texto: string): boolean {
   return normalizar(texto).startsWith('sim');
 }
 
-/** A célula da §4 diz que o item **se aplica** (`não`)? */
+/** A célula da §4 diz que o item **se aplica** (o valor "não")? */
 export function declaraQueSeAplica(texto: string): boolean {
   return normalizar(texto).startsWith('nao');
 }
@@ -486,6 +529,16 @@ export function lacunasDoKit(entradas: Entradas): string[] {
       `a matriz do kit em ${CONVENCAO} não tem item nenhum — o gate não tem o que ` +
         'medir (verde por ausência é a classe 5 de `guard-classes.md`)',
     ];
+  }
+
+  if (entradas.itensEsperados !== null && entradas.itensEsperados > 0) {
+    if (entradas.itens.length !== entradas.itensEsperados) {
+      errors.push(
+        `a matriz tem ${entradas.itens.length} item(ns) e a convenção declara ` +
+          `${entradas.itensEsperados} — o kit mudou de tamanho sem a convenção ` +
+          'mudar junto (fato com UM dono).',
+      );
+    }
   }
 
   // Um pilar sem item é um kit que encolheu em silêncio.
@@ -629,10 +682,10 @@ export function lacunasDoKit(entradas: Entradas): string[] {
         const conteudo = entradas.ler(item.indice);
         for (const arquivo of arquivos) {
           const base = path.posix.basename(arquivo);
-          if (!conteudo.includes(base)) {
+          if (!citaComoLink(conteudo, base)) {
             errors.push(
-              `${quem}: o índice "${item.indice}" não cita "${base}" — um índice que ` +
-                'não lista o que existe é índice de ficção.',
+              `${quem}: o índice "${item.indice}" não cita "${base}" como link — um ` +
+                'índice que não lista o que existe é índice de ficção.',
             );
           }
         }
@@ -790,6 +843,7 @@ export async function checkDocKit(opts: { repoRoot: string }): Promise<CheckResu
     ...matriz.erros,
     ...lacunasDoKit({
       itens: matriz.itens,
+      itensEsperados: itensDeclarados(md),
       condicionais: matriz.condicionais,
       pilares: matriz.pilares,
       existe,

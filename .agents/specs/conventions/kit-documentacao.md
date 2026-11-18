@@ -1,5 +1,6 @@
 ---
 name: kit-documentacao
+itens: 14
 version: 1.0
 updated: 2026-11-18
 maintainer: documentation-specialist
@@ -109,10 +110,16 @@ JSON). ⚠️ `## Contexto` **não** casa com `## Contexto do Negocio` — a
 comparação por `includes` aceitaria, e o gate passaria por um doc que não tem
 a seção.
 
+O **número de itens** é declarado no **frontmatter** desta convenção
+(`itens: 14`), e o gate compara a contagem da matriz com a declaração — um
+kit que cresce em silêncio é a classe 1 de `guard-classes.md`.
+
 Além das âncoras, o gate exige, para todo item:
 
 - **o índice existe** (quando a coluna `Índice` não é `—`) e **cita o doc
-  canônico** — o índice que não lista o que existe é índice de fiction;
+  canônico** — a citação é um **link** (`[texto](caminho)`) ou um **code
+  span** (`` `arquivo.md` ``). A menção do nome em prosa **não** cita: o índice
+  que não lista o que existe é índice de ficção;
 - **o specialist e o auditor existem** em `.agents/agents/` — um item sem dono
   é um item que ninguém repara.
 
@@ -125,7 +132,7 @@ declarada, nunca inferida).
 
 | Item | Gatilho | Sonda (glob) | Padrão | Não aplicável declarado |
 |---|---|---|---|---|
-| AsyncAPI | item 10 do kit — existe canal assíncrono (broker de mensageria ou emissor de evento) | `package.json`; `apps/*/package.json`; `packages/*/package.json` | `"bullmq"\|"kafkajs"\|"amqplib"\|"@aws-sdk/client-sqs"` | **sim** — em 2026-11-18: o repo não tem broker; a fila está registrada como lacuna em [`docs/system-design/dados.md`](../../../docs/system-design/dados.md) §3 |
+| AsyncAPI | item 10 do kit — existe canal assíncrono (broker de mensageria ou emissor de evento) | `package.json`; `apps/*/package.json`; `packages/*/package.json` | `"bullmq":\|"kafkajs":\|"amqplib":\|"@aws-sdk/client-sqs":\|"@nestjs/microservices":\|"amqp-connection-manager":\|"@cloudamqp/amqp-client":\|"nats":\|"@google-cloud/pubsub":` | **sim** — em 2026-11-18: o repo não tem broker; a fila está registrada como lacuna em [`docs/system-design/dados.md`](../../../docs/system-design/dados.md) §3 |
 
 A **sonda** é um glob de arquivos e o **padrão** é uma expressão regular: o
 gatilho disparou se **algum** arquivo da sonda casa com o padrão. As duas
@@ -133,8 +140,12 @@ colunas são o comando que reproduz a medição — o `\|` da tabela markdown é
 **escape do pipe**, e o comando real usa o pipe cru:
 
 ```bash
-grep -lE '"bullmq"|"kafkajs"|"amqplib"|"@aws-sdk/client-sqs"' package.json
+grep -lE '"bullmq":|"kafkajs":|"amqplib":|"@aws-sdk/client-sqs":|"@nestjs/microservices":' package.json
 ```
+
+> O padrão casa a **chave da dependência** (com o dois-pontos), e não o nome
+> solto: um `"keywords": ["bullmq"]` no `package.json` não é um broker, e não
+> pode disparar o gatilho.
 
 > O gate aplica o padrão ao **conteúdo** do arquivo (a regex casa em qualquer
 > ponto) e o `grep` casa **por linha** — para padrão de dependência, as duas
