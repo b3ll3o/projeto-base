@@ -261,14 +261,21 @@ conferida contra a credencial da sessão.
   Nenhum outro ator lê: a policy `history_leitura` libera a linha quando
   `usuario_no_escopo(entity_id)`, e o bucket de SISTEMA é o único que
   atravessa empresas.
-- A **recusa** é **registrada com o ator e o alvo**, e nos DOIS portões:
+- A **recusa** é **registrada com o ator, o ESCOPO e o alvo**, e nos DOIS
+  portões:
   o D2 (`Logger('AdminUserHistory')`) e o `PermissionsGuard`
   (`Logger('PermissionsGuard')`, que é a porta que bate PRIMEIRO — o
   `@RequirePermission`). Uma escalada é 403, e 403 não loga no
   `GlobalExceptionFilter` — sem o registro, a tentativa de ler a trilha
   alheia ficava só na linha de access log (method/url/status), sem ator, e
-  não atribuível a ninguém. O valor que vem do cliente (o `:id` do path) vai
-  sanitizado (`paraRegistro`), e nunca cru.
+  não atribuível a ninguém. O **escopo** (`tenantId`) entra no registro
+  porque é ele que distingue D2 (`tenantId === null && isAdmin`) de tudo o
+  mais — e o mesmo ator, membro de DUAS empresas, produzia DUAS linhas
+  idênticas para escaladas em empresas diferentes. E todo valor que vem do
+  cliente (o `:id` do path, o `sub` do ator) vai **sanitizado**
+  (`paraRegistro`), e nunca cru. O log do **5xx** grava o caminho **sem a
+  query string** — a query pode carregar um filtro, um token ou um dado de
+  outra pessoa.
 - ⚠️ **O ESCOPO DA TRILHA É O VÍNCULO DE HORA DA LEITURA, e não o da
   ESCRITA** — e `users_history` **não tem coluna de empresa**. A policy
   `history_leitura` libera a linha quando `usuario_no_escopo(entity_id)`, e
