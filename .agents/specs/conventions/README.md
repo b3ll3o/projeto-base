@@ -48,6 +48,7 @@ desenho, apêndices.
 | Engineering Loop (v1.9.0+) | [`engineering-loop.md`](./engineering-loop.md) | Ciclo UNDERSTAND → IMPLEMENT → TEST → REVIEW → OBSERVE → LEARN; fecha via workflow `feedback-to-spec` |
 | Demand Archiving | [`demand-archiving.md`](./demand-archiving.md) | Quando e como arquivar uma demanda; frontmatter canônico validado por `archive:lint` |
 | Review Routing | [`review-routing.md`](./review-routing.md) | Matriz que decide quem revisa o quê; apêndice de exemplos em [`review-routing-examples.md`](./review-routing-examples.md) |
+| Revisão de PR | [`pr-review.md`](./pr-review.md) | Todo PR precisa de ≥ 1 comentário de revisão antes do merge; a revisão é orquestrada (um specialist por parte do diff) e o processo está ligado por 2 gates |
 | Specialist Routing | [`specialist-routing.md`](./specialist-routing.md) | Roteamento por especialidade; apêndice de exemplos em [`specialist-routing-examples.md`](./specialist-routing-examples.md) |
 | Guard Classes | [`guard-classes.md`](./guard-classes.md) | As 7 classes pelas quais um controle falha reportando verde; receita de detecção por classe **e a coluna "não pega"** |
 | Migração de Dados | [`migracao-de-dados.md`](./migracao-de-dados.md) | Regra dos 3 passos (add nullable, backfill, drop) + quando **não** há backfill a fazer |

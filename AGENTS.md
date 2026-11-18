@@ -142,10 +142,7 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 > `ui-review` (processo) → `ui-modes` (propósito) → `ui-craft` (tokens, anti-slop) → `ui-break` (pior caso) → `motion` (movimento), mais
 > `design-taste-frontend` (página **pública**), `agent-browser` (página web) e `agent-desktop` (app nativo). `ui-modes` roda primeiro: sem ele, as outras discordam.
 
-> **Par DURANTE → DEPOIS:** [`learning-observation`](./.agents/skills/learning-observation/SKILL.md)
-> classifica em T1/T2/T3 no checkpoint de review+fix e
-> [`retrospective-capture`](./.agents/skills/retrospective-capture/SKILL.md) drena essas memórias;
-> o destino de cada uma é uma linha no ledger [`memory-triage.md`](./.agents/runs/memory-triage.md).
+> **Par DURANTE → DEPOIS:** [`learning-observation`](./.agents/skills/learning-observation/SKILL.md) classifica em T1/T2/T3 no checkpoint de review+fix e [`retrospective-capture`](./.agents/skills/retrospective-capture/SKILL.md) drena essas memórias; o destino de cada uma é uma linha no ledger [`memory-triage.md`](./.agents/runs/memory-triage.md).
 
 > **Skills de descoberta (v1.15.0+):** [`find-skills`](./.agents/skills/find-skills/SKILL.md) procura a skill mais adequada: **repo → registro → fazer na mão**, com a adaptação ao padrão do repo por último. De [vercel-labs/skills](https://github.com/vercel-labs/skills) (MIT).
 
@@ -209,6 +206,7 @@ Workflows genéricos prontos para uso estão em [`.agents/WORKFLOWS.md`](./.agen
 | `feedback-to-spec` (v1.9.0+) | "feedback to spec / próxima spec de finding / T1/T2/T3 → spec" | task-manager → orchestrator (state-aware) → specialist-router → specialist (template spec) → task-manager (loop close) |
 | `pr-refresh` (v1.10.0+) | "atualizar título/descrição do PR" | pr-refresh-scan (mede) → agente (reclassifica + reescreve) — hook local, nunca bloqueia |
 | `pr-pendencias` (v1.11.0+) | "revisar pendências do PR / o que ficou para depois" | 1 agente por pendência (mede) → adversarial (reroda o comando) → consolida; cada uma sai como `resolvida`, `viva`, `mudou-de-forma` ou `decisão-de-não-construir` |
+| `pr-review-mode` (v1.30.0+) | "revisar o PR" / **todo PR aberto** | parallel→merge — review-router (roteia o diff) → **1 specialist por parte alterada, em paralelo** → consolidação (dedup + severidade) → **1 comentário no PR** com o marcador `<!-- pr-review -->`; a regra está em [`pr-review.md`](./.agents/specs/conventions/pr-review.md) e é cobrada pelo gate `pr-review-gate` (CI) + `check-pr-review-wired` (preflight) |
 | `ui-review-mode` (v1.11.0+) | "revisar a UI / essa tela está feia / auditar a11y" | ux-design-specialist (`ui-review` → `ui-modes` · `ui-craft` · `ui-break` · `motion`) |
 | `audit-mode` (v2.0+) | "auditar stack / rodar scan / revisar saúde" | finding-orchestrator (8 specialists em paralelo → agrega → dedup → abre issues via `gh`) |
 | `release-pre-tag` (v2.0+) | "auditar antes de tag vX.Y.Z" | release-versioning-specialist + finding-orchestrator (subset focado em versioning) |
@@ -241,6 +239,7 @@ As convenções estão detalhadas em arquivos próprios sob [`.agents/specs/conv
 | Engineering Loop (v1.9.0+)    | [`engineering-loop.md`](./.agents/specs/conventions/engineering-loop.md)  | Convenção unificadora do ciclo UNDERSTAND → IMPLEMENT → TEST → REVIEW → OBSERVE → LEARN; 6 templates de fase em `.agents/specs/templates/engineering-loop/`; integra retro + archive + state-aware; fecha o loop via workflow `feedback-to-spec` |
 | Demand Archiving   | [`demand-archiving.md`](./.agents/specs/conventions/demand-archiving.md) | Quando e como arquivar uma demanda; frontmatter canônico de 8 campos validado por `archive:lint` |
 | Review Routing     | [`review-routing.md`](./.agents/specs/conventions/review-routing.md) | Matriz que decide **quem revisa o quê**; apêndice de exemplos em [`review-routing-examples.md`](./.agents/specs/conventions/review-routing-examples.md) |
+| Revisão de PR      | [`pr-review.md`](./.agents/specs/conventions/pr-review.md) | Todo PR precisa de **≥ 1 comentário de revisão** antes do merge; a revisão é **orquestrada** (1 specialist por parte do diff) e o processo é ligado por 2 gates |
 | Specialist Routing | [`specialist-routing.md`](./.agents/specs/conventions/specialist-routing.md) | Roteamento por especialidade; apêndice de exemplos em [`specialist-routing-examples.md`](./.agents/specs/conventions/specialist-routing-examples.md) |
 | Guard Classes | [`guard-classes.md`](./.agents/specs/conventions/guard-classes.md) | As 7 classes pelas quais um controle falha reportando verde; receita de detecção por classe **e a coluna "não pega"** |
 | Migração de Dados | [`migracao-de-dados.md`](./.agents/specs/conventions/migracao-de-dados.md) | Regra dos 3 passos (add nullable, backfill, drop) + quando **não** há backfill a fazer; promovida de `prisma-db-specialist.md:160` na v1.12.0 |

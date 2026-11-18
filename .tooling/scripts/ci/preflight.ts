@@ -61,6 +61,7 @@ import { checkDependencyFreshness } from './check-dependency-freshness';
 import { checkActionVersionComment } from './check-action-version-comment';
 import { checkCiPrismaClientReady } from './check-ci-prisma-client-ready';
 import { checkPastaUnica } from './check-pasta-unica';
+import { checkPrReviewWired } from './check-pr-review-wired';
 import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
@@ -404,6 +405,7 @@ export const RUNNERS: Record<string, () => CheckResult | Promise<CheckResult>> =
   'check-action-version-comment': () => checkActionVersionComment({ repoRoot: '.' }),
   'check-ci-prisma-client-ready': () => checkCiPrismaClientReady({ repoRoot: '.' }),
   'check-pasta-unica': () => checkPastaUnica({ repoRoot: '.' }),
+  'check-pr-review-wired': () => checkPrReviewWired({ repoRoot: '.' }),
 };
 
 /**

@@ -670,6 +670,21 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     file: '.tooling/scripts/ci/check-pasta-unica.ts',
     id: 'check-pasta-unica',
   },
+  {
+    // A regra de revisão de PR precisa de DOIS instrumentos, e este é o
+    // segundo: o gate que mede a regra (`tooling/scripts/pr-review-gate.ts`,
+    // no CI) e o gate que mede se o PROCESSO continua ligado.
+    //
+    // Sem este, a regra envelhece em prosa: o workflow `pr-review.yml` sai do
+    // repo, o script `pr:review-check` sai do `package.json`, a convenção sai
+    // do índice — e o `review-comment` continua publicando um status que
+    // ninguém exige. É a classe 1 do `guard-classes.md` ("condição
+    // inalcançável"), o mesmo modo de falha que o repo já mediu no
+    // `review-router` (9 reviewers despachados para um `console.log`).
+    name: 'processo de revisão de PR ligado (workflow, gate, convenção, índices)',
+    file: '.tooling/scripts/ci/check-pr-review-wired.ts',
+    id: 'check-pr-review-wired',
+  },
 ];
 
 /**
