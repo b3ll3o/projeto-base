@@ -566,6 +566,15 @@ describe('lacunasDoKit', () => {
     );
   });
 
+  it('uma família sem índice é erro — o índice é o que diz que as instâncias existem', () => {
+    // MEDIDO em 2026-11-18 (revisão de tooling): trocar o índice de um item
+    // `familia` por `—` desligava a exigência em silêncio.
+    const e = entradas({
+      itens: [item({ tipo: 'familia', doc: 'docs/adr/*.md', indice: null })],
+    });
+    expect(lacunasDoKit(e).some((x) => x.includes('não declara índice'))).toBe(true);
+  });
+
   it('índice que não cita o doc canônico → erro', () => {
     const e = entradas({
       itens: [item({ indice: 'docs/agents/domain.md' })],

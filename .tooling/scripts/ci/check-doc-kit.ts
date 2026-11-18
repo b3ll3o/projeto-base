@@ -876,6 +876,15 @@ export function lacunasDoKit(entradas: Entradas): string[] {
     }
 
     // ── O índice ────────────────────────────────────────────────────────────
+    // Uma FAMÍLIA sempre tem índice: é ele que diz que as instâncias
+    // existem. Sem o índice declarado, trocar o índice por `—` desligaria a
+    // exigência em silêncio (MEDIDO em 2026-11-18, revisão de tooling).
+    if (item.tipo === 'familia' && item.indice === null) {
+      errors.push(
+        `${quem}: o item é uma família e não declara índice — é o índice que ` +
+          'diz que as instâncias existem (regra: convenção kit-documentacao.md §3).',
+      );
+    }
     if (item.indice !== null && !naoAplicavel) {
       if (!entradas.existe(item.indice)) {
         errors.push(`${quem}: o índice "${item.indice}" não existe — o item declara quem o lista.`);

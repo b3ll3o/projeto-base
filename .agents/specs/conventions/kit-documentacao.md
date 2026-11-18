@@ -93,7 +93,7 @@ A regra do repo continua valendo: **o fato tem UM dono**
 
 | # | Item | Doc canônico | Tipo | Âncoras | Índice | Condição | Specialist | Auditor |
 |---|---|---|---|---|---|---|---|---|
-| 12 | Runbooks / Playbooks | `docs/runbooks/*.md` | familia | `## §1.` | — | obrigatório | `runbook-specialist` | `operations-docs-auditor` |
+| 12 | Runbooks / Playbooks | `docs/runbooks/*.md` | familia | `## §1.` | `docs/runbooks.md` | obrigatório | `runbook-specialist` | `operations-docs-auditor` |
 | 13 | Post-Mortems | `docs/post-mortems/README.md` | arquivo | `## O template`; `### Linha do tempo`; `### Causa raiz`; `### Ações` | — | obrigatório | `postmortem-specialist` | `operations-docs-auditor` |
 | 14 | CHANGELOG | `CHANGELOG.md` | arquivo | `## [Unreleased]`; `### Adicionado`; `### Corrigido`; `### Quebras de compatibilidade` | — | obrigatório | `changelog-specialist` | `operations-docs-auditor` |
 
@@ -120,8 +120,10 @@ kit que cresce em silêncio é a classe 1 de `guard-classes.md`.
 
 Além das âncoras, o gate exige, para todo item:
 
-- **o índice existe** (quando a coluna `Índice` não é `—`) e **cita o doc
-  canônico** — a citação é um **link** (`[texto](caminho)`) ou um **code
+- **o índice existe** e **cita o doc canônico** — uma **família** sempre
+  tem índice (é ele que diz que as instâncias existem); um item simples pode
+  não ter (a coluna `—`). Sem o índice de uma família, trocar o índice por
+  `—` desligaria a exigência em silêncio — a citação é um **link** (`[texto](caminho)`) ou um **code
   span** (`` `arquivo.md` ``). A menção do nome em prosa **não** cita: o índice
   que não lista o que existe é índice de ficção;
 - **o specialist e o auditor existem** em `.agents/agents/` — um item sem dono
