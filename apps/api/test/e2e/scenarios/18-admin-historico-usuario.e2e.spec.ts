@@ -365,6 +365,54 @@ describe('E2E 18: histórico de usuário lido pelo admin do sistema', () => {
     expect(corpo.code).toBe('VALIDATION_ERROR');
   });
 
+  // ─────────── a query inválida: as DUAS promessas de 400 do contrato ───────────
+
+  it('`limit` que não é número → 400 (e não 500 do Prisma)', async () => {
+    const alvo = await criarUsuarioAutenticado(e2e, {
+      nome: 'Alvo',
+      email: 'alvo-limit@b.com',
+    });
+
+    const res = await e2e.injetar({
+      method: 'GET',
+      url: `${ROTA}/${alvo.id}/history?limit=abc`,
+    });
+
+    expect(res.statusCode).toBe(400);
+    const corpo = JSON.parse(res.body) as { code: string };
+    expect(corpo.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('`cursor` que não é id → 400 (o schema exige um id, e a API recusa o seu)', async () => {
+    const alvo = await criarUsuarioAutenticado(e2e, {
+      nome: 'Alvo',
+      email: 'alvo-cursor-formato@b.com',
+    });
+
+    const res = await e2e.injetar({
+      method: 'GET',
+      url: `${ROTA}/${alvo.id}/history?cursor=nao-e-uuid`,
+    });
+
+    expect(res.statusCode).toBe(400);
+    const corpo = JSON.parse(res.body) as { code: string };
+    expect(corpo.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('`limit` acima do máximo → 400', async () => {
+    const alvo = await criarUsuarioAutenticado(e2e, {
+      nome: 'Alvo',
+      email: 'alvo-limit-max@b.com',
+    });
+
+    const res = await e2e.injetar({
+      method: 'GET',
+      url: `${ROTA}/${alvo.id}/history?limit=101`,
+    });
+
+    expect(res.statusCode).toBe(400);
+  });
+
   // ─────────── pessoa inexistente ───────────
 
   it('pessoa inexistente → 404 (e não uma lista vazia)', async () => {

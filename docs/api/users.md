@@ -43,8 +43,8 @@
 | 4 | `PATCH`| `/api/v1/users/{id}`                 | ✅   | `200`, `400`, `403`, `404`, `412`           |
 | 5 | `DELETE`| `/api/v1/users/{id}`                | ✅   | `204`, `400`, `403`, `404`, `412`           |
 | 6 | `POST` | `/api/v1/users/{id}/restore`         | ✅   | `201`, `400`, `403`, `404`, `412`           |
-| 7 | `GET`  | `/api/v1/users/{id}/history`         | ✅   | `200`, `403`                                |
-| 8 | `GET`  | `/api/v1/admin/users/{id}/history`  | ✅   | `200`, `400`, `403`, `404`                   |
+| 7 | `GET`  | `/api/v1/users/{id}/history`         | ✅   | `200`, `400`, `403`                           |
+| 8 | `GET`  | `/api/v1/admin/users/{id}/history`  | ✅   | `200`, `400`, `401`, `403`, `404`             |
 
 Os códigos da tabela são os **declarados** no `openapi.json` — por `@ApiResponse`
 explícito ou pelo default do método. Códigos que o runtime pode produzir sem
@@ -146,6 +146,15 @@ Resposta `200` com `UserOutputDto` + novo `ETag`. Conflito de versão → `412 P
 
 `If-Match: W/"v<N>"` obrigatório. `201 Created` com `UserOutputDto` + novo `ETag`.
 
+**Corpo (opcional)**: `{ "reason"?: string }` — o **motivo** da restauração.
+⚠️ Ele é gravado na trilha (`users_history.reason`), e é a ÚNICA mutação de
+`User` que o grava: o `DELETE` fixa `reason: null`, e a criação e a renomeação
+não têm motivo. O motivo é **opcional** (quem restaura sem dizer por quê
+restaura sem motivo) e tem teto de 500 caracteres — um motivo maior é `400`
+(`VALIDATION_ERROR`), e não um erro de banco no meio da escrita.
+
+⚠️ A versão NÃO vem do corpo: ela vem do header `If-Match`.
+
 ### 3.7 `GET /users/{id}/history` — Histórico de auditoria
 
 **Query params**: `cursor`, `limit` (mesma convenção de §3.2). `includeDeleted` **não** se aplica.
@@ -156,6 +165,15 @@ Resposta `200` com `UserOutputDto` + novo `ETag`. Conflito de versão → `412 P
 **Códigos de erro**: `400` (`VALIDATION_ERROR` — query inválida, pela MESMA validação de §3.2) e `403` (`USER_OWNERSHIP_VIOLATION`). A
 #124 fechou só uma das DUAS surfaces de query da API; a outra (`GET /users/{id}/history`) ainda
 passava `Number(limit)` cru, e `limit=abc` virava `NaN` no `take:` do Prisma — **500**.
+
+⚠️ A ORDEM É **ASCENDENTE** — a versão mais antiga primeiro. ⚠️ E ela é
+**explícita** (`ordem: 'asc'` na use case), e não o default do port: a rota do
+ADMIN (§3.8) pede `'desc'`, e um copy-paste que invertesse a ordem aqui não
+cairia em nenhum teste.
+
+⚠️ O `:id` é validado (`UserId.create`): um id que não é um UUID v7 é `400`,
+e não um `500` do Prisma — a rota passa pela **use case**
+(`listarHistoricoDoUsuario`), e não pelo port direto do controller.
 
 ### 3.8 `GET /admin/users/{id}/history` — Histórico do ADMIN DO SISTEMA
 
@@ -191,9 +209,13 @@ trilha **ou** `:id` que não é um UUID v7), `403` (`FORBIDDEN` — não é o
 administrador do sistema) e `404` (`USER_NOT_FOUND` — pessoa inexistente). A
 leitura é no **bucket de SISTEMA** — é ele que atravessa empresas.
 
-⚠️ **A RECUSA DEIXA RASTRO**: o portão D2 é registrado com o ator e o alvo
-(`Logger('AdminUserHistory')`) — uma escalada é 403, e 403 não loga no
-`GlobalExceptionFilter`.
+⚠️ **A RECUSA DEIXA RASTRO — NOS DOIS PORTÕES**: o D2 (dentro da use case,
+`Logger('AdminUserHistory')`) e o `PermissionsGuard` (que é a porta que bate
+**primeiro**, `Logger('PermissionsGuard')`). Uma escalada é 403, e 403 não
+loga no `GlobalExceptionFilter` — sem o registro, a tentativa de ler a trilha
+alheia ficava só na linha de access log (method/url/status), sem ator, e não
+atribuível a ninguém. O `:id` do path vai **sanitizado** (`paraRegistro`): ele
+vem do cliente, e um `\n` nele gravaria uma linha de log em branco.
 
 ## §4. `includeDeleted` — case-insensitive
 

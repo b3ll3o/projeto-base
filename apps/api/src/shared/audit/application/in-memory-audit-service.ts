@@ -9,8 +9,9 @@
  * para que o duplo pudesse devolvê-lo. Antes, o duplo usava um **offset
  * numérico** (`"20"`), que a API recusa com 400 (`PaginacaoQuerySchema` exige
  * uuid): o contrato era cumprido só pela implementação de produção, e um
- * teste feito contra o duplo não media o contrato. O `archive` continua com
- * offset — o archive não é paginado por cursor na API.
+ * teste feito contra o duplo não media o contrato. O `archive` passou pelo
+ * mesmo caminho (id da linha + ordem por `deletedAt` decrescente) — era o
+ * mesmo defeito, na mesma interface.
  *
  * pt-BR: substituir por PrismaAuditService em produção via DI binding.
  */
@@ -51,11 +52,18 @@ export class InMemoryAuditService implements AuditServicePort {
 
   // pt-BR (Fase 10+, 2026-10-17): as quatro leituras recebem `tenantId` para
   // casar com `AuditServicePort`, mas o duplo NÃO filtra por empresa. Ele não
-  // tem como: `HistoryEntry`/`ArchiveEntry` não carregam `tenantId`, e
-  // inventar um filtro aqui exigiria um `tenantId` sintético nas entradas — que
-  // é contrato de domínio novo, não fiação. O filtro que vale é a policy; o
+  // tem como: `users_history` e `users_archive` não têm coluna de empresa (a
+  // trilha é escopada pela POLICY, e não por uma coluna), e inventar um filtro
+  // aqui exigiria um `tenantId` sintético nas entradas — que é contrato de
+  // domínio novo, não fiação. O filtro que vale é a policy; o
   // `PrismaAuditService` é quem o executa. Mesma lacuna já registrada para
   // `InMemoryUserRepository.list(input, _tenantId)`.
+  //
+  // ⚠️ A CONSEQUÊNCIA PRA QUEM TESTA: o teste unitário roda contra este
+  // duplo, e ele é CEGO ao escopo — então NENHUMA spec pode afirmar sobre o
+  // CONTEÚDO de uma leitura sem afirmar antes o ARGUMENTO de escopo (o
+  // `tenantId` com que a leitura foi chamada). Sem o argumento, a asserção
+  // mede o duplo, e o duplo não filtra.
   //
   // ⚠️ O cursor é o **id da linha**, e ele é resolvido **dentro da entidade** —
   // o mesmo contrato do `PrismaAuditService`, para que um teste feito contra o
@@ -65,7 +73,7 @@ export class InMemoryAuditService implements AuditServicePort {
     _tenantId: string | null,
   ): Promise<{ entries: HistoryEntry[]; nextCursor: string | null }> {
     const ordem = input.ordem ?? 'asc';
-    const filtradas = this.history.filter((e) => e.entityId === input.entityId);
+    const filtradas = this.history.filter((e) => mesmoEntityId(e.entityId, input.entityId));
     const ordenadas = [...filtradas].sort((a, b) =>
       ordem === 'desc' ? b.version - a.version : a.version - b.version,
     );
@@ -79,7 +87,11 @@ export class InMemoryAuditService implements AuditServicePort {
       restantes = ordenadas.slice(indice + 1);
     }
 
-    const limit = Math.max(1, input.limit);
+    // ⚠️ O `limit` NÃO é erguido para 1: a produção usa `take: limit + 1` e
+    // devolve `limit` linhas — com `limit = 0`, a produção devolve ZERO e o
+    // duplo devolvia uma. Inalcançável por HTTP (o schema recusa `limit < 1`),
+    // mas é divergência de contrato do port — e o port é o contrato.
+    const limit = input.limit;
     const page = restantes.slice(0, limit);
     const last = page[page.length - 1];
     return {
@@ -93,7 +105,9 @@ export class InMemoryAuditService implements AuditServicePort {
     _tenantId: string | null,
   ): Promise<HistoryEntry | null> {
     return (
-      this.history.find((e) => e.entityId === input.entityId && e.version === input.version) ?? null
+      this.history.find(
+        (e) => mesmoEntityId(e.entityId, input.entityId) && e.version === input.version,
+      ) ?? null
     );
   }
 
@@ -101,6 +115,10 @@ export class InMemoryAuditService implements AuditServicePort {
     // upsert by entityId (only one archive per entity)
     const existingIdx = this.archives.findIndex((e) => e.entityId === input.entityId);
     const entry: ArchiveEntry = {
+      // ⚠️ O id da LINHA — e é ele que a leitura devolve como cursor. Sem ele,
+      // o duplo tinha de inventar um offset numérico (`"20"`), e a API
+      // recusa esse offset com 400.
+      id: existingIdx >= 0 ? this.archives[existingIdx]!.id : randomUUID(),
       entityId: input.entityId,
       version: input.version,
       snapshot: input.snapshot,
@@ -119,18 +137,47 @@ export class InMemoryAuditService implements AuditServicePort {
     input: ListArchiveInput,
     _tenantId: string | null,
   ): Promise<{ entries: ArchiveEntry[]; nextCursor: string | null }> {
-    const offset = input.cursor ? Number(input.cursor) : 0;
-    const limit = Math.max(1, input.limit);
-    const page = this.archives.slice(offset, offset + limit);
-    const nextOffset = offset + limit;
-    const nextCursor = nextOffset < this.archives.length ? String(nextOffset) : null;
-    return { entries: page, nextCursor };
+    // ⚠️ O MESMO contrato da produção: ordem por `deletedAt` DECRESCENTE e
+    // cursor pelo **id da LINHA**. O duplo usava um offset numérico
+    // (`Number(cursor)`) — e um cursor que só a produção cumpre é um
+    // contrato que o teste não mede.
+    const ordenadas = [...this.archives].sort(
+      (a, b) => b.deletedAt.getTime() - a.deletedAt.getTime(),
+    );
+    let restantes = ordenadas;
+    if (input.cursor !== null && input.cursor !== undefined && input.cursor !== '') {
+      const indice = ordenadas.findIndex((e) => e.id === input.cursor);
+      if (indice < 0) {
+        throw new AuditCursorInvalidoException({ entityId: '', cursor: input.cursor });
+      }
+      restantes = ordenadas.slice(indice + 1);
+    }
+    const limit = input.limit;
+    const page = restantes.slice(0, limit);
+    const last = page[page.length - 1];
+    return {
+      entries: page,
+      nextCursor: restantes.length > limit && last !== undefined ? last.id : null,
+    };
   }
 
   async getArchiveEntry(
     input: GetArchiveEntryInput,
     _tenantId: string | null,
   ): Promise<ArchiveEntry | null> {
-    return this.archives.find((e) => e.entityId === input.entityId) ?? null;
+    return this.archives.find((e) => mesmoEntityId(e.entityId, input.entityId)) ?? null;
   }
+}
+
+/**
+ * O MESMO entity id — e a comparação é SEM distinção de caixa.
+ *
+ * ⚠️ O Postgres compara a coluna `uuid` sem distinção de caixa, e o
+ * `UserId.create` aceita um id em caixa alta (a regex é case-insensitive) sem
+ * normalizar. O duplo comparava STRINGS: o mesmo id em caixa alta lia trilha
+ * vazia no duplo e a trilha real na produção — e o teste unitário roda contra
+ * o duplo.
+ */
+function mesmoEntityId(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase();
 }

@@ -230,9 +230,15 @@ describe('PrismaAuditService (Testcontainers)', () => {
       select: { id: true },
     });
 
-    // ⚠️ O cursor de outra trilha devolvia uma página ERRADA (a partir de uma
-    // versão alheia) em vez de um erro — e a resposta é a MESMA para "não
-    // existe" e para "é de outra trilha": nada que diga se aquele id existe.
+    // ⚠️ O cursor de outra trilha NÃO pode devolver uma página de outra
+    // trilha — e a resposta é a MESMA para "não existe" e para "é de outra
+    // trilha": nada que diga se aquele id existe.
+    //
+    // ⚠️ MEDIDO 2026-11-17 contra a implementação ANTERIOR (a do
+    // `cursor: { id }` do Prisma): o sintoma dependia de a versão alheia cair
+    // dentro do range pedido — com ela ACIMA da pedida, a página vinha
+    // VAZIA; com ela abaixo, vinha uma página ERRADA. As duas saídas são
+    // ruins, e a que o banco devolve é o que a query decide.
     await expect(
       svc.listHistory(
         { entityName: 'User', entityId: ENTITY_U1, cursor: doOutro.id, limit: 10 },
@@ -241,7 +247,7 @@ describe('PrismaAuditService (Testcontainers)', () => {
     ).rejects.toThrow(AuditCursorInvalidoException);
   });
 
-  it('a query da página usa LIMIT — o banco não traz a trilha inteira', async () => {
+  it('a página usa LIMIT e o cursor é resolvido DENTRO da entidade — sem subselect', async () => {
     const contexto = ctxAudit();
     for (let v = 1; v <= 5; v++) {
       await svc.record(
@@ -257,9 +263,12 @@ describe('PrismaAuditService (Testcontainers)', () => {
       );
     }
 
-    // ⚠️ A implementação anterior entregava o cursor ao Prisma como
-    // `cursor: { id }`, e o Prisma traduzia isso num subselect SEM `LIMIT`:
-    // o banco trazia a trilha inteira para a página devolver `limit` linhas.
+    // ⚠️ O QUE ESTE TESTE MEDE É O QUE MUDOU — e não o `LIMIT`, que já
+    // existia (a implementação anterior tinha `take: limit + 1`, e o Prisma
+    // emite o `LIMIT`). O que mudou foi o CURSOR: ele deixou de ser o
+    // `cursor: { id }` do Prisma (que vira um subselect SEM filtro de
+    // entidade) e passou a ser resolvido dentro da entidade, com um RANGE de
+    // `version`.
     //
     // A medição é do SQL REAL — e ela precisa de um escopo de EMPRESA, porque
     // o bucket de SISTEMA abre a CREDENCIAL de sistema (um client próprio, que
@@ -275,20 +284,50 @@ describe('PrismaAuditService (Testcontainers)', () => {
 
     try {
       const svcComLog = new PrismaAuditService(prismaComLog);
-      await svcComLog.listHistory(
+      const primeira = await svcComLog.listHistory(
         { entityName: 'User', entityId: ENTITY_U1, limit: 2 },
+        '0190a8b6-1234-7abc-9def-0000000000aa',
+      );
+      // E a SEGUNDA página — a que tem o cursor (o range de `version`).
+      await svcComLog.listHistory(
+        {
+          entityName: 'User',
+          entityId: ENTITY_U1,
+          cursor: primeira.nextCursor,
+          limit: 2,
+        },
         '0190a8b6-1234-7abc-9def-0000000000aa',
       );
     } finally {
       await prismaComLog.$disconnect();
     }
 
-    // ⚠️ E o `LIMIT` precisa estar lá — a página pede 2 e o banco traz 2.
-    const consulta = sqls.find((q) => q.includes('users_history') && q.includes('LIMIT'));
-    expect(consulta).toBeDefined();
-    // E o filtro de versão (o range do cursor) também: sem ele, o subselect
-    // do cursor antigo continuava lá.
-    expect(sqls.some((q) => q.includes('"version"') && q.includes('users_history'))).toBe(true);
+    // ⚠️ A query da PÁGINA tem `LIMIT` e filtra por ENTIDADE.
+    const paginaSemCursor = sqls.find((q) => q.includes('LIMIT') && q.includes('entity_id'));
+    expect(paginaSemCursor).toBeDefined();
+
+    // ⚠️ E A PÁGINA COM CURSOR TEM `LIMIT` — e a implementação anterior NÃO
+    // tinha: a tradução do `cursor: { id }` do Prisma emitia a query com
+    // `OFFSET` e SEM `LIMIT`, e o banco trazia a trilha inteira para a
+    // página devolver `limit` linhas. MEDIDO no SQL real: a query do cursor
+    // antigo era `... ORDER BY "version" ASC OFFSET $3` — sem `LIMIT`.
+    const paginaComCursor = sqls.find((q) => /"version"\s*[<>]/.test(q));
+    expect(paginaComCursor).toBeDefined();
+    expect(paginaComCursor).toContain('LIMIT');
+
+    // ⚠️ E NENHUMA query tem subselect sobre a própria tabela: era a
+    // assinatura do `cursor: { id }` do Prisma — e o subselect NÃO filtrava
+    // por entidade (o cursor de outra trilha vinha de uma versão alheia).
+    // ESTE é o assert que distingue a implementação nova da antiga: com a
+    // antiga, a segunda página referenciava a tabela DUAS vezes.
+    const comSubselect = sqls.filter(
+      (q) => (q.match(/FROM "[^"]+"\."users_history"/g) ?? []).length > 1,
+    );
+    expect(comSubselect).toHaveLength(0);
+
+    // ⚠️ E o cursor é resolvido por uma query que filtra por ID **E** por
+    // ENTIDADE — a conferência é do BANCO, e não do JavaScript.
+    expect(sqls.some((q) => q.includes('"id"') && q.includes('entity_id'))).toBe(true);
   });
 
   it('getHistoryEntry retorna entrada específica via composite unique (entityId, version)', async () => {

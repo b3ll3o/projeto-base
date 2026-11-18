@@ -34,6 +34,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiBody,
   ApiHeader,
   ApiOperation,
   ApiQuery,
@@ -59,14 +60,9 @@ import {
 } from '../../../feature-flags/infrastructure/http/guards/feature-flag.guard.js';
 import type { TokenSubject } from '../../../auth/domain/ports/token-issuer.port.js';
 
-import { AUDIT_SERVICE_PORT } from '../../../../shared/audit/shared/audit.tokens.js';
 import { AuditContextStore } from '../../../../shared/audit/shared/audit-context-store.js';
 import { AuditContext } from '../../../../shared/audit/domain/audit-context.vo.js';
 import { traceIdDe } from '../../../../shared/infrastructure/http/trace-id.js';
-import type {
-  AuditServicePort,
-  ListHistoryInput,
-} from '../../../../shared/audit/application/audit-service.port.js';
 import {
   ZodValidationPipe,
   validarComZod,
@@ -77,7 +73,7 @@ import { UserId } from '../../domain/value-objects/user-id.vo.js';
 
 import { UserUseCases, USER_USE_CASES } from '../../application/user-use-cases.js';
 import type { GetUserByIdInput } from '../../application/dto/get-user-by-id.input.js';
-import { toUserHistoryPageDto } from '../../application/dto/user-history.output.js';
+import type { ListUserHistoryInput } from '../../application/dto/list-user-history.input.js';
 import type { UserHistoryPageDto } from '@projeto/shared-types';
 import type { ListUsersInput } from '../../application/dto/list-users.input.js';
 import type { RestoreUserInput } from '../../application/dto/restore-user.input.js';
@@ -87,6 +83,7 @@ import {
   CreateUserSchema,
   ListUsersQuerySchema,
   PaginacaoQuerySchema,
+  RestoreUserSchema,
   UpdateUserSchema,
   type CreateUserDto,
   type UpdateUserDto,
@@ -139,7 +136,6 @@ function empresaDoAtor(request?: RequestWithUser): string | null {
 export class UsersController {
   constructor(
     @Inject(USER_USE_CASES) private readonly userUseCases: UserUseCases,
-    @Inject(AUDIT_SERVICE_PORT) private readonly auditService: AuditServicePort,
     // pt-BR (2026-10-17): `GET /users` hidrata o perfil para decidir o
     // recorte. Provider do `ProfilesModule`, que `UsersModule` importa.
     // `@Inject` explícito pela mesma razão do `Reflector` no `PermissionsGuard`:
@@ -515,8 +511,24 @@ export class UsersController {
     description: 'O `:id` da rota não é o `sub` do token (USER_OWNERSHIP_VIOLATION)',
   })
   @ApiHeader({ name: 'If-Match', required: true })
+  @ApiBody({
+    required: false,
+    schema: {
+      type: 'object',
+      properties: {
+        reason: {
+          type: 'string',
+          maxLength: 500,
+          description: 'O motivo da restauração (opcional) — gravado na trilha de auditoria.',
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 201, description: 'User restaurado' })
-  @ApiResponse({ status: 400, description: 'Header If-Match ausente ou inválido' })
+  @ApiResponse({
+    status: 400,
+    description: 'Header If-Match ausente ou inválido, ou motivo acima do limite',
+  })
   @ApiResponse({ status: 404, description: 'User não encontrado' })
   @ApiResponse({ status: 412, description: 'Conflito de versão' })
   async restore(
@@ -524,9 +536,17 @@ export class UsersController {
     @Headers('if-match') ifMatch: string,
     @Res({ passthrough: true }) reply: FastifyReply,
     @Req() request: RequestWithUser,
+    // ⚠️ O CORPO é OPCIONAL — e o `@Body()` vem por último de propósito: o
+    // Nest resolve por decorator, e os specs chamam o handler com os
+    // argumentos posicionais.
+    @Body() body?: unknown,
   ): Promise<unknown> {
     const expectedVersion = this.parseIfMatch(ifMatch);
-    const input: RestoreUserInput = { id, expectedVersion };
+    // ⚠️ O MOTIVO da restauração é lido do corpo — e ele ia para o LIXO
+    // (MEDIDO 2026-11-17 na revisão do PR #171): o contrato o aceitava, e a
+    // trilha de auditoria não o registrava.
+    const consulta = validarComZod(RestoreUserSchema, body ?? {});
+    const input: RestoreUserInput = { id, expectedVersion, reason: consulta.reason ?? null };
     const user = await AuditContextStore.run(this.buildContext(request), () =>
       this.userUseCases.restaurar(input, empresaDoAtor(request)),
     );
@@ -540,6 +560,11 @@ export class UsersController {
   @UseGuards(UserOwnershipGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Histórico de auditoria do usuário' })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Query inválida (limit fora da faixa, cursor malformado) ou id que não é um UUID v7',
+  })
   @ApiResponse({
     status: 403,
     description: 'O `:id` da rota não é o `sub` do token (USER_OWNERSHIP_VIOLATION)',
@@ -560,22 +585,24 @@ export class UsersController {
     // regra escrita duas vezes.
     const consulta = validarComZod(PaginacaoQuerySchema, { cursor, limit });
 
-    const input: ListHistoryInput = {
-      entityName: 'User',
-      entityId: id,
+    const input: ListUserHistoryInput = {
+      id,
       cursor: consulta.cursor ?? null,
       limit: consulta.limit,
     };
     // pt-BR (Fase 10+): o escopo vem do MESMO header que escopa as mutações.
-    // Sem ele a leitura cai em SISTEMA e devolve o histórico cross-tenant — que
-    // é o elo 1 da escalada fechada na migration `20261020000002`.
+    // Sem ele a leitura cai no bucket de SISTEMA — e esse é o bucket do ator
+    // SEM empresa (o `tenantId === null` do token), e não um escalate: o
+    // `UserOwnershipGuard` garante que o `:id` é o `sub` do token, e a query
+    // filtra por `entity_id`.
     //
-    // ⚠️ pt-BR (2026-11-17): a rota passa pelo MESMO mapeamento da rota do
-    // ADMIN do SISTEMA (`toUserHistoryPageDto`). Ela devolvia o port CRU
-    // (`Promise<unknown>`), e só a outra passava pelo mapeamento: o wire
-    // coincidia, mas as DUAS surfaces do mesmo dado podiam divergir sozinhas.
-    const pagina = await this.auditService.listHistory(input, empresaDoAtor(request));
-    return toUserHistoryPageDto(pagina);
+    // ⚠️ pt-BR (2026-11-17): a rota passa pela USE CASE
+    // (`listarHistoricoDoUsuario`), e não pelo PORT DIRETO — era a única rota
+    // do repo que compunha o escopo e chamava o port do controller. Três
+    // coisas moravam no lugar errado: o mapeamento para o DTO (a outra rota
+    // tinha), a VALIDAÇÃO do `:id` (o id cru ia para a query — 500 onde o
+    // certo é 400) e a ORDEM (ascendente, e ela é explícita agora).
+    return this.userUseCases.listarHistoricoDoUsuario(input, empresaDoAtor(request));
   }
 
   // ───────────────────────── helpers ─────────────────────────────

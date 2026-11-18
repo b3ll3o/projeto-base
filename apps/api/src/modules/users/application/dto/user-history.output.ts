@@ -10,10 +10,16 @@
 //
 // ⚠️ O `snapshot` é o `toUserOutput` da pessoa (`user-use-cases.ts` grava
 // esse formato), e o port o declara como `Record<string, unknown>` porque a
-// auditoria é genérica. O cast aqui é FIEL — e é o ÚNICO lugar onde ele
-// acontece.
+// auditoria é genérica.
 //
-// ⚠️ O `id` da LINHA (o cursor) **não** vai para o DTO: ele é o cursor da
+// ⚠️ E A PROJEÇÃO É UMA LISTA, E NÃO UM CAST (MEDIDO 2026-11-17 na revisão
+// do PR #171): o cast `as unknown as UserOutputDto` rotulava o JSONB como
+// `UserOutputDto` sem que nada na fronteira garantisse a forma. A tabela de
+// auditoria é GENÉRICA (`entity_name` não é coluna), e o dia que uma segunda
+// entidade for auditada, o snapshot dela sai no wire rotulado como o de uma
+// pessoa — com os campos que ela tiver e a de User não tem.
+//
+// O `id` da LINHA (o cursor) **não** vai para o DTO: ele é o cursor da
 // paginação, e o cursor viaja no ENVELOPE (`nextCursor`). Ele fica no port
 // porque a leitura precisa dele — e porque o duplo em memória precisa dele
 // para devolver um cursor que a API aceite.
@@ -28,7 +34,7 @@ export function toUserHistoryEntryDto(entrada: HistoryEntry): UserHistoryEntryDt
     version: entrada.version,
     previousVersion: entrada.previousVersion,
     operation: entrada.operation,
-    snapshot: entrada.snapshot as unknown as UserOutputDto,
+    snapshot: paraUserOutputDto(entrada.snapshot),
     changedAt: entrada.changedAt.toISOString(),
     changedBy: entrada.changedBy,
     reason: entrada.reason,
@@ -44,4 +50,51 @@ export function toUserHistoryPageDto(pagina: {
     entries: pagina.entries.map(toUserHistoryEntryDto),
     nextCursor: pagina.nextCursor,
   };
+}
+
+/**
+ * O SNAPSHOT cru → o `UserOutputDto` — e a PROJEÇÃO é a lista dos campos.
+ *
+ * ⚠️ O que NÃO está na lista não vai para o wire. É o que fecha o vetor do
+ * `entity_name`: o snapshot de outra entidade sai com os campos vazios — e
+ * não com os campos dela, rotulados como os de uma pessoa.
+ *
+ * ⚠️ E a DATA: o snapshot vem do JSONB (string ISO), mas o duplo em memória
+ * pode trazer um `Date`. O `String(date)` sairia como "Tue Nov 17 2026 …" —
+ * e o `changedAt` do `snapshot` é lido como ISO pela tela.
+ */
+function paraUserOutputDto(snapshot: Record<string, unknown>): UserOutputDto {
+  return {
+    id: texto(snapshot.id),
+    nome: texto(snapshot.nome),
+    email: texto(snapshot.email),
+    profileId:
+      snapshot.profileId === null || snapshot.profileId === undefined
+        ? null
+        : texto(snapshot.profileId),
+    version: numero(snapshot.version),
+    createdAt: dataIso(snapshot.createdAt),
+    updatedAt: dataIso(snapshot.updatedAt),
+    deletedAt:
+      snapshot.deletedAt === null || snapshot.deletedAt === undefined
+        ? null
+        : dataIso(snapshot.deletedAt),
+    isDeleted: snapshot.isDeleted === true,
+  };
+}
+
+/** O valor textual — e `''` quando não é texto. */
+function texto(valor: unknown): string {
+  return typeof valor === 'string' ? valor : '';
+}
+
+/** O valor numérico — e `0` quando não é número. */
+function numero(valor: unknown): number {
+  return typeof valor === 'number' && Number.isFinite(valor) ? valor : 0;
+}
+
+/** A data em ISO — e `''` quando não há data. */
+function dataIso(valor: unknown): string {
+  if (valor instanceof Date) return valor.toISOString();
+  return typeof valor === 'string' ? valor : '';
 }

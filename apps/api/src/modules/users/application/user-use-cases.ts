@@ -24,6 +24,7 @@ import type {
   AuditServicePort,
 } from '../../../shared/audit/application/audit-service.port.js';
 import { AuditContextStore } from '../../../shared/audit/shared/audit-context-store.js';
+import { paraRegistro } from '../../../shared/domain/para-registro.js';
 import { TENANCY_USE_CASES } from '../../tenancy/application/tenancy.use-cases.js';
 import {
   ehAdministradorDeSistema,
@@ -254,7 +255,7 @@ export class UserUseCases {
     // então passava sem rastro".
     if (!ehAdministradorDeSistema(ator)) {
       loggerHistorico.warn(
-        `leitura recusada: o ator ${ator.userId} tentou ler o histórico da pessoa ${idParaRegistro(input.id)}`,
+        `leitura recusada: o ator ${ator.userId} tentou ler o histórico da pessoa ${paraRegistro(input.id)}`,
       );
     }
     exigeAdministradorDeSistema(ator, 'só o administrador do sistema lê o histórico de uma pessoa');
@@ -299,10 +300,44 @@ export class UserUseCases {
     // ⚠️ O REGISTRO DA LEITURA. O histórico é dado pessoal (o nome e o e-mail
     // de cada versão da pessoa), e o ATOR entra no registro — sem ele, o log
     // diz que o histórico foi lido, e não por quem.
+    // ⚠️ O `:id` vai SANITIZADO (`paraRegistro`), e não cru: ele vem do
+    // cliente, e um `\n` nele gravaria uma linha de log em branco — ou uma
+    // linha que PARECE outra. O registro da RECUSA já fazia isso; o do
+    // SUCESSO não fazia (MEDIDO 2026-11-17, revisão do PR #171).
     loggerHistorico.log(
-      `histórico lido: ${pagina.entries.length} entrada(s) da pessoa ${input.id} — ator ${ator.userId}`,
+      `histórico lido: ${pagina.entries.length} entrada(s) da pessoa ${paraRegistro(input.id)} — ator ${ator.userId}`,
     );
 
+    return toUserHistoryPageDto(pagina);
+  }
+
+  /**
+   * O HISTÓRICO de uma pessoa — lido pelo DONO dela.
+   *
+   * ⚠️ A rota do DONO (`GET /users/:id/history`) mora AQUI, e não no
+   * controller: era a ÚNICA rota do repo que compunha o escopo e chamava o
+   * PORT DIRETO do controller — e o `:id` CRU ia para a query sem validação
+   * nenhuma (um id que não é uuid dava 500 onde o certo é 400).
+   *
+   * ⚠️ A ORDEM é ASCENDENTE — e ela é EXPLICITA, e não o default do port: a
+   * rota do ADMIN pede `'desc'`, e um copy-paste que invertesse a ordem
+   * ninguém notaria sem uma asserção sobre a ordem.
+   */
+  async listarHistoricoDoUsuario(
+    input: ListUserHistoryInput,
+    tenantId: string | null,
+  ): Promise<UserHistoryPageDto> {
+    const id = UserId.create(input.id);
+    const pagina = await this.auditService.listHistory(
+      {
+        entityName: 'User',
+        entityId: id.value,
+        cursor: input.cursor ?? null,
+        limit: input.limit,
+        ordem: 'asc',
+      },
+      tenantId,
+    );
     return toUserHistoryPageDto(pagina);
   }
 
@@ -436,7 +471,10 @@ export class UserUseCases {
       throw new ApplicationConcurrencyException('User', input.expectedVersion, user.version());
     }
     try {
-      user.restaurar(ctx.timestamp);
+      // ⚠️ O MOTIVO viaja com o evento: ele era aceito pela API e
+      // descartado no caminho (MEDIDO 2026-11-17 na revisão do PR #171), e a
+      // trilha de auditoria ficava sem o porquê da restauração.
+      user.restaurar(ctx.timestamp, input.reason ?? null);
     } catch (e) {
       this.translateDomainException(e, 'User', id.value);
     }
@@ -515,20 +553,12 @@ function extractPreviousVersion(ev: { eventName: string; [k: string]: unknown })
 }
 
 function extractReason(ev: { eventName: string; [k: string]: unknown }): string | null {
-  if (ev.eventName.endsWith('.deleted.v1') && 'reason' in ev) {
+  // ⚠️ A EXCLUSÃO e a RESTAURAÇÃO: as duas carregam o motivo. Antes, só a
+  // exclusão carregava — e o motivo que a API aceitava na restauração era
+  // descartado (MEDIDO 2026-11-17 na revisão do PR #171).
+  const temMotivo = ev.eventName.endsWith('.deleted.v1') || ev.eventName.endsWith('.restored.v1');
+  if (temMotivo && 'reason' in ev) {
     return (ev as unknown as { reason: string | null }).reason;
   }
   return null;
-}
-
-/**
- * O id da pessoa **para o registro** — e o `:id` cru da URL não vai para o log.
- *
- * ⚠️ O `:id` chega do cliente sem validação nenhuma até a VO (`UserId.create`),
- * e um `\n` nele gravaria uma linha de log em branco — ou pior, uma linha
- * que parece outra. O registro é para o ADMINISTRADOR ler, e não pode ser
- * ditado pelo cliente. MEDIDO 2026-11-17 (revisão de segurança).
- */
-function idParaRegistro(id: string): string {
-  return id.replace(/[^0-9a-zA-Z-]/g, '');
 }

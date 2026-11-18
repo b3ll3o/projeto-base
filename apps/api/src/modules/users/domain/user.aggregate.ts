@@ -316,7 +316,16 @@ export class User {
     this.#events.push(new UserDeletedEvent(this.#id.value, this.#version, reason, agora));
   }
 
-  restaurar(agora: Date): void {
+  /**
+   * A restauração — e o MOTIVO dela viaja com o evento.
+   *
+   * ⚠️ pt-BR (2026-11-17, revisão do PR #171): o motivo era aceito pela API e
+   * descartado no caminho — o evento de restauração não o carregava. O dado
+   * que o cliente mandava sumia, e a trilha de auditoria ficava sem ele.
+   * O motivo é OPCIONAL: quem restaura sem dizer por quê, restaura sem
+   * motivo — e a trilha registra `null`, como faz para o resto.
+   */
+  restaurar(agora: Date, motivo?: string | null): void {
     if (this.#deletedAt === null) {
       throw new InvalidRestoreException('User não está excluído; não há nada para restaurar');
     }
@@ -330,7 +339,13 @@ export class User {
     this.#updatedAt = agora;
     this.#version = restoredFromVersion + 1;
     this.#events.push(
-      new UserRestoredEvent(this.#id.value, this.#version, restoredFromVersion, agora),
+      new UserRestoredEvent(
+        this.#id.value,
+        this.#version,
+        restoredFromVersion,
+        agora,
+        motivo ?? null,
+      ),
     );
   }
 }

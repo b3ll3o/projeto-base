@@ -77,6 +77,7 @@ export class AdminUserHistoryController {
     description:
       'Query inválida (limit fora da faixa, cursor malformado ou cursor de outra trilha), ou id que não é um UUID v7',
   })
+  @ApiResponse({ status: 401, description: 'Sem token (ou token expirado)' })
   @ApiResponse({ status: 403, description: 'Só o administrador do sistema' })
   @ApiResponse({ status: 404, description: 'Pessoa inexistente' })
   async history(

@@ -75,7 +75,8 @@ export class AuditHistoryNotFoundException extends Error {
  *
  * Mapeamento HTTP no GlobalExceptionFilter: 400 VALIDATION_ERROR.
  *
- * @throws {TypeError} se `entityId` for vazio após trim.
+ * ⚠️ O `entityId` é OPCIONAL de fato: a lista do ARCHIVE não é por entidade
+ * (a tabela tem uma só), e o cursor dela não tem trilha para nomear.
  */
 export class AuditCursorInvalidoException extends Error {
   public readonly entityId: string;
@@ -83,10 +84,15 @@ export class AuditCursorInvalidoException extends Error {
 
   constructor(props: { entityId: string; cursor: string }) {
     const entityId = props.entityId?.trim() ?? '';
-    if (entityId === '') {
-      throw new TypeError('AuditCursorInvalidoException: entityId inválido (vazio)');
-    }
-    super(`Cursor de paginação inválido para a trilha ${entityId}.`);
+    // ⚠️ O `entityId` pode ser VAZIO, e é de propósito: a lista do ARCHIVE
+    // não é POR ENTIDADE (a tabela tem uma só), e o cursor dela não tem
+    // trilha para nomear. Com o nome, a mensagem diz de qual trilha é o
+    // cursor; sem ele, a mensagem é a mesma para os dois casos.
+    super(
+      entityId === ''
+        ? 'Cursor de paginação inválido.'
+        : `Cursor de paginação inválido para a trilha ${entityId}.`,
+    );
     this.name = 'AuditCursorInvalidoException';
     this.entityId = entityId;
     this.cursor = props.cursor;

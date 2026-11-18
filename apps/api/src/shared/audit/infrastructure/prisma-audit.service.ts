@@ -104,21 +104,32 @@ export class PrismaAuditService implements AuditServicePort {
    *
    * ```sql
    * WHERE entity_id=$1 AND version >= (SELECT version FROM users_history WHERE id=$2)
-   * ORDER BY version ASC OFFSET 0        -- ← sem LIMIT, e o subselect NÃO é da entidade
+   * ORDER BY version ASC OFFSET 0        -- ← o subselect NÃO filtra por entidade
    * ```
    *
-   * Três defeitos numa query só:
+   * Defeitos na query antiga:
    *
-   * 1. **Sem `LIMIT`** — o banco trazia a trilha inteira para a página devolver
-   *    `limit` linhas.
-   * 2. **O subselect não filtrava por `entity_id`** — o cursor de OUTRA trilha
-   *    devolvia uma página **errada** (a partir de uma versão alheia), e não um
-   *    erro.
-   * 3. **A ordem era imposta ao leitor** — não havia como pedir a trilha do
+   * 1. **O subselect não filtrava por `entity_id`** — o cursor de OUTRA trilha
+   *    não filtrava a Entidade, e o resultado dependia de a versão alheia cair
+   *    dentro do range pedido: com a versão alheia ACIMA da pedida, a página
+   *    vinha VAZIA; com ela abaixo, vinha uma página ERRADA. MEDIDO 2026-11-17
+   *    contra a implementação anterior: o sintoma observado foi a página
+   *    VAZIA. As duas saídas são ruins — e a que o banco devolve é o que a
+   *    query decide, não o que o chamador pediu.
+   * 2. **A ordem era imposta ao leitor** — não havia como pedir a trilha do
    *    mais novo para o mais antigo, que é a ordem de quem lê uma auditoria.
    *
+   * ⚠️ E O `LIMIT`: na PRIMEIRA página ele existia (`take: input.limit + 1`),
+   * mas no caminho do CURSOR a tradução do Prisma (`cursor: { id }` + `skip`)
+   * emitia a query com `OFFSET` e SEM `LIMIT` — e o banco trazia a trilha
+   * inteira para a página devolver `limit` linhas. MEDIDO 2026-11-17 no SQL
+   * real: a query do cursor antigo era `... ORDER BY "version" ASC OFFSET $3`
+   * — sem `LIMIT`. O teste da integração foi reescrito para medir o que
+   * MUDOU (o `LIMIT` no caminho do cursor, o filtro por `entity_id` e o range
+   * de `version`).
+   *
    * A query de agora resolve o cursor (filtrando por `entity_id`) e usa um
-   * **range de `version`**, o que traz o `LIMIT` de volta:
+   * **range de `version`**:
    *
    * ```sql
    * WHERE entity_id=$1 AND version < $2   -- ← $2 = a versão do cursor, da MESMA entidade
@@ -172,20 +183,27 @@ export class PrismaAuditService implements AuditServicePort {
   /**
    * A VERSÃO do cursor — e `null` quando não há cursor.
    *
-   * ⚠️ A busca é por `id` **e** confere o `entity_id` da linha: um cursor de
-   * outra trilha é INVÁLIDO, e a resposta é a mesma de "não existe" — 400, e
-   * nada que diga se aquele id existe.
+   * ⚠️ A busca filtra por `id` **E** por `entity_id` no próprio banco: um
+   * cursor de outra trilha é INVÁLIDO, e a resposta é a mesma de "não
+   * existe" — 400, e nada que diga se aquele id existe.
+   *
+   * ⚠️ E o filtro é do BANCO, e não do JavaScript: a linha de outra trilha
+   * não entra no processo (o `findFirst` com os dois filtros não a devolve),
+   * e a comparação de uuid do Postgres é sem distinção de caixa — como a do
+   * filtro `entity_id` da query principal. A conferência em JS (`linha
+   * .entityId !== input.entityId`) comparava STRINGS, e um id em caixa alta
+   * (que o `UserId.create` aceita) era recusado aqui e aceito pela query.
    */
   private async versaoDoCursor(
     tx: Parameters<Parameters<PrismaClient['$transaction']>[0]>[0],
     input: ListHistoryInput,
   ): Promise<number | null> {
     if (input.cursor === null || input.cursor === undefined || input.cursor === '') return null;
-    const linha = await tx.userHistory.findUnique({
-      where: { id: input.cursor },
-      select: { version: true, entityId: true },
+    const linha = await tx.userHistory.findFirst({
+      where: { id: input.cursor, entityId: input.entityId },
+      select: { version: true },
     });
-    if (linha === null || linha.entityId !== input.entityId) {
+    if (linha === null) {
       throw new AuditCursorInvalidoException({ entityId: input.entityId, cursor: input.cursor });
     }
     return linha.version;
@@ -243,19 +261,35 @@ export class PrismaAuditService implements AuditServicePort {
     input: ListArchiveInput,
     tenantId: string | null,
   ): Promise<{ entries: ArchiveEntry[]; nextCursor: string | null }> {
-    const cursor = input.cursor ? { id: input.cursor } : undefined;
-    const rows = await comEscopoDeEmpresa(this.prisma, tenantId, (tx) =>
-      tx.userArchive.findMany({
-        ...(cursor ? { cursor, skip: 1 } : {}),
+    const rows = await comEscopoDeEmpresa(this.prisma, tenantId, async (tx) => {
+      // ⚠️ O CURSOR É RESOLVIDO AQUI, e não entregue ao Prisma como
+      // `cursor: { id }`: o Prisma traduz isso num subselect que, com um id
+      // inexistente, morre num erro de cliente do Prisma (500). O
+      // `AuditCursorInvalidoException` é a mesma resposta da trilha — 400, e
+      // sem dizer se aquele id existe.
+      let depoisDe: string | undefined;
+      if (input.cursor !== null && input.cursor !== undefined && input.cursor !== '') {
+        const linha = await tx.userArchive.findFirst({
+          where: { id: input.cursor },
+          select: { id: true },
+        });
+        if (linha === null) {
+          throw new AuditCursorInvalidoException({ entityId: '', cursor: input.cursor });
+        }
+        depoisDe = linha.id;
+      }
+      return tx.userArchive.findMany({
+        ...(depoisDe !== undefined ? { cursor: { id: depoisDe }, skip: 1 } : {}),
         take: input.limit + 1,
         orderBy: [{ deletedAt: 'desc' }],
-      }),
-    );
+      });
+    });
     const hasMore = rows.length > input.limit;
     const page = hasMore ? rows.slice(0, input.limit) : rows;
     const last = page[page.length - 1];
     return {
       entries: page.map((r) => ({
+        id: r.id,
         entityId: r.entityId,
         version: r.version,
         snapshot: r.snapshot as Record<string, unknown>,
@@ -278,6 +312,7 @@ export class PrismaAuditService implements AuditServicePort {
     );
     if (!row) return null;
     return {
+      id: row.id,
       entityId: row.entityId,
       version: row.version,
       snapshot: row.snapshot as Record<string, unknown>,

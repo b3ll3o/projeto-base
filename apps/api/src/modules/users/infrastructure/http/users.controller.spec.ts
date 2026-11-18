@@ -59,7 +59,6 @@ import { ZodValidationPipe } from '../../../../shared/infrastructure/http/zod-va
 import { AuditContextStore } from '../../../../shared/audit/shared/audit-context-store.js';
 import type { AuditContext } from '../../../../shared/audit/domain/audit-context.vo.js';
 import type { UserUseCases } from '../../application/user-use-cases.js';
-import type { AuditServicePort } from '../../../../shared/audit/application/audit-service.port.js';
 
 interface ErrorPayload {
   code?: unknown;
@@ -79,10 +78,10 @@ describe('UsersController.parseIfMatch', () => {
   let ctrl: UsersController;
 
   beforeEach(() => {
-    // Stubs `{} as never` para os dois colaboradores — parseIfMatch
-    // não chama nem userUseCases nem auditService. Outros testes
-    // (integração / e2e Task 7.7) validam o caminho feliz + mutação.
-    ctrl = new UsersController({} as never, {} as never, {} as never, {} as never, {} as never);
+    // Stubs `{} as never` para os colaboradores — parseIfMatch não chama
+    // nenhum deles. Outros testes (integração / e2e Task 7.7) validam o
+    // caminho feliz + mutação.
+    ctrl = new UsersController({} as never, {} as never, {} as never, {} as never);
   });
 
   it('aceita W/"v3" canônico', () => {
@@ -224,6 +223,7 @@ interface UserUseCasesStub {
   atualizarNome: Mock;
   softDelete: Mock;
   restaurar: Mock;
+  listarHistoricoDoUsuario: Mock;
 }
 
 function makeUserUseCasesStub(): UserUseCasesStub {
@@ -234,12 +234,7 @@ function makeUserUseCasesStub(): UserUseCasesStub {
     atualizarNome: vi.fn(),
     softDelete: vi.fn(),
     restaurar: vi.fn(),
-  };
-}
-
-function makeAuditStub(): { listHistory: Mock } {
-  return {
-    listHistory: vi.fn(),
+    listarHistoricoDoUsuario: vi.fn(),
   };
 }
 
@@ -256,7 +251,6 @@ const fakeUserOutput = {
 
 describe('UsersController — handlers HTTP', () => {
   let useCases: UserUseCasesStub & UserUseCases;
-  let audit: { listHistory: Mock } & AuditServicePort;
   let reply: ReplyStub;
   // pt-BR (2026-10-17): `GET /users` hidrata o perfil para decidir o recorte,
   // então `{}` no terceiro lugar do construtor não sobe — os testes de `list()`
@@ -273,7 +267,6 @@ describe('UsersController — handlers HTTP', () => {
 
   beforeEach(() => {
     useCases = makeUserUseCasesStub() as unknown as UserUseCasesStub & UserUseCases;
-    audit = makeAuditStub() as unknown as { listHistory: Mock } & AuditServicePort;
     reply = makeReply();
     // Default = quem TEM `users.read`: é o caso comum de uma conta com perfil
     // e é o que mantém as asserções deste arquivo em `somenteUsuarioId: null`.
@@ -285,13 +278,7 @@ describe('UsersController — handlers HTTP', () => {
     // `listar` devolve `[]` = D4, ninguém desligou nada. O gate de `convite` só
     // fecha quando a LINHA existe com `ativada: false` (specs abaixo).
     flags = { listar: vi.fn(async () => []) };
-    ctrl = new UsersController(
-      useCases,
-      audit,
-      profiles as never,
-      memberships as never,
-      flags as never,
-    );
+    ctrl = new UsersController(useCases, profiles as never, memberships as never, flags as never);
   });
 
   it('create() wrapa em AuditContextStore.run e seta ETag + status 201', async () => {
@@ -936,23 +923,60 @@ describe('UsersController — handlers HTTP', () => {
     await ctrl.restore('u-1', 'W/"v8"', reply as never, SEM_TOKEN);
 
     expect(runSpy).toHaveBeenCalledTimes(1);
-    expect(useCases.restaurar).toHaveBeenCalledWith({ id: 'u-1', expectedVersion: 8 }, null);
+    expect(useCases.restaurar).toHaveBeenCalledWith(
+      { id: 'u-1', expectedVersion: 8, reason: null },
+      null,
+    );
     expect(reply.header).toHaveBeenCalledWith('ETag', 'W/"v9"');
     expect(reply.status).toHaveBeenCalledWith(201);
     runSpy.mockRestore();
   });
 
-  it('history() NÃO wrapa em AuditContextStore.run e delega para auditService.listHistory', async () => {
+  // ⚠️ O MOTIVO da restauração: o contrato o aceitava e a rota o DESCARTAVA
+  // (MEDIDO 2026-11-17 na revisão do PR #171) — e a trilha de auditoria
+  // ficava sem o porquê da restauração.
+  it('restore() leva o MOTIVO do corpo para a use case', async () => {
     const runSpy = vi.spyOn(AuditContextStore, 'run');
-    audit.listHistory.mockResolvedValue({ entries: [], nextCursor: null });
+    useCases.restaurar.mockResolvedValue({ ...fakeUserOutput, version: 9 });
+
+    await ctrl.restore('u-1', 'W/"v8"', reply as never, SEM_TOKEN, {
+      reason: 'a pessoa voltou',
+    } as never);
+
+    expect(useCases.restaurar).toHaveBeenCalledWith(
+      { id: 'u-1', expectedVersion: 8, reason: 'a pessoa voltou' },
+      null,
+    );
+    runSpy.mockRestore();
+  });
+
+  it('restore() SEM corpo deixa o motivo nulo — e não quebra', async () => {
+    const runSpy = vi.spyOn(AuditContextStore, 'run');
+    useCases.restaurar.mockResolvedValue({ ...fakeUserOutput, version: 9 });
+
+    await ctrl.restore('u-1', 'W/"v8"', reply as never, SEM_TOKEN);
+
+    expect(useCases.restaurar).toHaveBeenCalledWith(
+      { id: 'u-1', expectedVersion: 8, reason: null },
+      null,
+    );
+    runSpy.mockRestore();
+  });
+
+  it('history() NÃO wrapa em AuditContextStore.run e delega para a USE CASE', async () => {
+    const runSpy = vi.spyOn(AuditContextStore, 'run');
+    useCases.listarHistoricoDoUsuario.mockResolvedValue({ entries: [], nextCursor: null });
 
     const result = await ctrl.history('u-1', undefined, '20');
 
     expect(runSpy).not.toHaveBeenCalled();
-    expect(audit.listHistory).toHaveBeenCalledWith(
+    // ⚠️ A ROTA DO DONO passa pela USE CASE — e não pelo port DIRETO (era a
+    // única rota do repo que compunha o escopo e chamava o port do
+    // controller): o `:id` CRU ia para a query sem validação, e o mapeamento
+    // para o DTO (que a rota do ADMIN tinha) morava no controller.
+    expect(useCases.listarHistoricoDoUsuario).toHaveBeenCalledWith(
       {
-        entityName: 'User',
-        entityId: 'u-1',
+        id: 'u-1',
         cursor: null,
         limit: 20,
       },
@@ -963,17 +987,16 @@ describe('UsersController — handlers HTTP', () => {
   });
 
   it('history() propaga cursor quando fornecido', async () => {
-    audit.listHistory.mockResolvedValue({ entries: [], nextCursor: null });
+    useCases.listarHistoricoDoUsuario.mockResolvedValue({ entries: [], nextCursor: null });
     // ⚠️ O cursor é um id — o `nextCursor` que o repositório devolve é o
     // `last.id` de `users_history`, que é um UUID. A fixture antiga ('cur-1')
     // era uma string que o banco NUNCA devolveria, e por isso ela não
     // exercitava a validação: ela só se parecia com um cursor.
     const cursor = '0190a8b6-1234-7abc-9def-000000000001';
     await ctrl.history('u-1', cursor, '5');
-    expect(audit.listHistory).toHaveBeenCalledWith(
+    expect(useCases.listarHistoricoDoUsuario).toHaveBeenCalledWith(
       {
-        entityName: 'User',
-        entityId: 'u-1',
+        id: 'u-1',
         cursor,
         limit: 5,
       },
@@ -1030,7 +1053,7 @@ describe('UsersController — handlers HTTP', () => {
     });
 
     it('ACEITA o limite máximo e o mínimo', async () => {
-      audit.listHistory.mockResolvedValue({ entries: [], nextCursor: null });
+      useCases.listarHistoricoDoUsuario.mockResolvedValue({ entries: [], nextCursor: null });
       await ctrl.history('u-1', undefined, '100');
       await ctrl.history('u-1', undefined, '1');
     });
@@ -1044,11 +1067,11 @@ describe('UsersController — handlers HTTP', () => {
   // cross-tenant, que é o elo 1 da escalada fechada na migration
   // `20261020000002`. Sem este teste, a fiação nova é código morto.
   it('history() repassa a empresa do token como escopo', async () => {
-    audit.listHistory.mockResolvedValue({ entries: [], nextCursor: null });
+    useCases.listarHistoricoDoUsuario.mockResolvedValue({ entries: [], nextCursor: null });
     await ctrl.history('u-1', undefined, '20', {
       user: { sub: 'u-1', tenantId: EMPRESA },
     } as never);
-    expect(audit.listHistory).toHaveBeenCalledWith(expect.anything(), EMPRESA);
+    expect(useCases.listarHistoricoDoUsuario).toHaveBeenCalledWith(expect.anything(), EMPRESA);
   });
 
   it('as mutações gravam a auditoria no escopo da empresa do token', async () => {

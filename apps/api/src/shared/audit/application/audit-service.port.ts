@@ -13,6 +13,24 @@ import type { AuditContext } from '../domain/audit-context.vo.js';
 export type AuditOperation = 'INSERT' | 'UPDATE' | 'DELETE' | 'RESTORE';
 
 export interface AuditRecordInput {
+  /**
+   * O NOME da entidade auditada — e ele é um RÓTULO, e não um filtro.
+   *
+   * ⚠️ MEDIDO 2026-11-17 (revisão do PR #171): `users_history` e
+   * `users_archive` NÃO têm coluna de entidade (`entity_name` não é
+   * coluna), e o filtro da leitura é só o `entity_id`. A consequence é
+   * medida: uma segunda entidade auditada na MESMA tabela com o MESMO id
+   * leria a trilha da outra.
+   *
+   * ⚠️ A MITIGAÇÃO está na FRONTEIRA de leitura: o `snapshot` é PROJETADO
+   * (`toUserHistoryEntryDto`), e o que não é campo de `UserOutputDto` não
+   * vai para o wire. Uma segunda entidade com um id diferente não é
+   * alcançável pelo filtro; uma com o MESMO id é, e a trilha dela sai com
+   * os campos vazios — em vez de sair rotulada como a de uma pessoa.
+   *
+   * Separar as entidades de verdade é uma COLUNA (`entity_name`) e uma
+   * migration — e o filtro da leitura passaria a ser `entity_name` + `entity_id`.
+   */
   entityName: string;
   entityId: string;
   operation: AuditOperation;
@@ -51,6 +69,16 @@ export interface HistoryEntry {
 }
 
 export interface ArchiveEntry {
+  /**
+   * O id da LINHA no archive — e o **cursor** que a leitura devolve.
+   *
+   * ⚠️ pt-BR (2026-11-17): o campo não existia, e a consequência foi o
+   * cursor do archive não ter dono — o duplo em memória devolvia um **offset
+   * numérico** (`"20"`), e a produção devolvia o id da linha. O mesmo
+   * formato, o mesmo contrato: um cursor que só a produção cumpre é um
+   * contrato que o teste não mede.
+   */
+  id: string;
   entityId: string;
   version: number;
   snapshot: Record<string, unknown>;
@@ -60,6 +88,11 @@ export interface ArchiveEntry {
 }
 
 export interface ListHistoryInput {
+  /**
+   * O NOME da entidade — um RÓTULO, e não um filtro (veja
+   * `AuditRecordInput.entityName`): a tabela não tem coluna de entidade, e o
+   * filtro da leitura é o `entity_id`.
+   */
   entityName: string;
   entityId: string;
   cursor?: string | null;
@@ -121,6 +154,17 @@ export interface GetArchiveEntryInput {
  * Por que as leituras precisaram e antes não: `users_history.entity_id` é o
  * uuid do usuário, então ler histórico cross-tenant é o que entregava o
  * material da escalada descrita na §3 da migration `20261020000001`.
+ *
+ * ⚠️ O PORT NÃO EXPÕE O ESCOPO NAS ENTRADAS, e isso é uma decisão, não uma
+ * lacuna esquecida: `users_history` e `users_archive` não têm coluna de
+ * empresa — a trilha é escopada pela POLICY (RLS), e a policy decide pelo
+ * `entity_id` e pelo bucket. O `PrismaAuditService` abre o bucket
+ * correspondente (`comEscopoDeEmpresa`) e é ele que executa o filtro.
+ *
+ * A consequência é medida: o duplo em memória é CEGO ao escopo — e por isso
+ * NENHUMA spec pode afirmar sobre o CONTEÚDO de uma leitura sem afirmar
+ * antes o ARGUMENTO de escopo (o `tenantId` com que a leitura foi chamada).
+ * Sem o argumento, a asserção mede o duplo, e o duplo não filtra.
  */
 export interface AuditServicePort {
   record(input: AuditRecordInput, ctx: AuditContext): Promise<void>;

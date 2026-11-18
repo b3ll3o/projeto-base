@@ -297,6 +297,28 @@ describe('InMemoryAuditService', () => {
     expect(wrongEntity).toBeNull();
   });
 
+  it('listArchive() recusa um cursor que não é id de linha — e não vira offset', async () => {
+    // ⚠️ O cursor do archive é o id da LINHA (o mesmo da produção) — e o
+    // duplo usava um OFFSET numérico (`Number(cursor)`), que a API recusa
+    // com 400. Um cursor inválido é recusado, e a resposta é a mesma para
+    // "não existe" e para "é de outra trilha".
+    const ctx = makeCtx();
+    await svc.archive({
+      entityName: 'User',
+      entityId: 'a',
+      version: 1,
+      snapshot: { id: 'a' },
+      ctx,
+    } satisfies ArchiveInput);
+
+    await expect(
+      svc.listArchive(
+        { entityName: 'User', cursor: 'nao-e-um-id', limit: PAGE_SIZE } satisfies ListArchiveInput,
+        SISTEMA,
+      ),
+    ).rejects.toThrow(AuditCursorInvalidoException);
+  });
+
   it('listArchive() pagina por cursor; getArchiveEntry() retorna null quando ausente', async () => {
     const ctx = makeCtx();
     for (const id of ['a', 'b', 'c']) {

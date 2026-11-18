@@ -421,6 +421,26 @@ describe('UserUseCases', () => {
       expect(restores).toHaveLength(1);
     });
 
+    it('o MOTIVO da restauração CHEGA à trilha — e não é descartado', async () => {
+      // ⚠️ O motivo era aceito pelo contrato e DESCARTADO no caminho
+      // (MEDIDO 2026-11-17 na revisão do PR #171): a trilha de auditoria
+      // ficava sem o porquê da restauração.
+      const ctx = makeCtx();
+      const created = await AuditContextStore.run(ctx, () =>
+        useCases.criarUser({ nome: 'João', email: 'joao@example.com', senha: SENHA_VALIDA }, null),
+      );
+      await AuditContextStore.run(ctx, () =>
+        useCases.softDelete({ id: created.id, reason: null, expectedVersion: 1 }, null),
+      );
+      await AuditContextStore.run(ctx, () =>
+        useCases.restaurar({ id: created.id, expectedVersion: 2, reason: 'a pessoa voltou' }, null),
+      );
+
+      const restores = audit.history.filter((h) => h.operation === 'RESTORE');
+      expect(restores).toHaveLength(1);
+      expect(restores[0]?.reason).toBe('a pessoa voltou');
+    });
+
     it('rejeita restaurar User não-deletado', async () => {
       const ctx = makeCtx();
       const created = await AuditContextStore.run(ctx, () =>
