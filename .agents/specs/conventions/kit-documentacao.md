@@ -90,7 +90,7 @@ A regra do repo continua valendo: **o fato tem UM dono**
 | # | Item | Doc canônico | Tipo | Âncoras | Índice | Condição | Specialist | Auditor |
 |---|---|---|---|---|---|---|---|---|
 | 12 | Runbooks / Playbooks | `docs/runbooks/*.md` | familia | `## §1.` | — | obrigatório | `runbook-specialist` | `operations-docs-auditor` |
-| 13 | Post-Mortems | `docs/post-mortems/README.md` | arquivo | `## O template`; `## Linha do tempo`; `## Causa raiz`; `## Ações` | — | obrigatório | `postmortem-specialist` | `operations-docs-auditor` |
+| 13 | Post-Mortems | `docs/post-mortems/README.md` | arquivo | `## O template`; `### Linha do tempo`; `### Causa raiz`; `### Ações` | — | obrigatório | `postmortem-specialist` | `operations-docs-auditor` |
 | 14 | CHANGELOG | `CHANGELOG.md` | arquivo | `## [Unreleased]`; `### Adicionado`; `### Corrigido`; `### Quebras de compatibilidade` | — | obrigatório | `changelog-specialist` | `operations-docs-auditor` |
 
 ## §3. Como o gate mede cada tipo

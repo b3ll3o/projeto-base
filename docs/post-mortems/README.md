@@ -109,14 +109,14 @@ não impediu — ou não existia):
 Cada parte do template tem uma regra própria. A regra é curta, e é o que
 separa um post-mortem que serve de um que só ocupa espaço.
 
-## Resumo
+### Resumo
 
 O parágrafo que alguém lê **antes** de decidir se abre o resto. Duas a quatro
 frases: **o que** aconteceu, **quem** foi afetado e **o que** mudou no
 sistema. Sem "foi um erro humano" — se a frase é essa, a causa raiz ainda não
 foi encontrada.
 
-## Impacto
+### Impacto
 
 O que quebrou, para quem, e **por quanto tempo** — com a medida. Um impacto
 sem número é opinião.
@@ -125,7 +125,7 @@ O item **"o que NÃO estava quebrado"** não é enfeite: é o que impede o
 relatório de virar medo. O incidente de maior risco costuma ser o que quase
 aconteceu, e o leitor precisa saber que aquilo não aconteceu.
 
-## Linha do tempo
+### Linha do tempo
 
 A sequência **observável**, em **UTC**, com a mesma origem de tempo em todas
 as linhas — o fuso do log e o fuso do alerta raramente são o mesmo, e a
@@ -135,7 +135,7 @@ Cada linha é um fato que **alguma máquina registrou**: o alerta que disparou,
 o log, o commit, o deploy. "O time percebeu" não é linha de tempo; "o alerta
 `X` disparou" é.
 
-## Causa raiz
+### Causa raiz
 
 Três frases, nesta ordem:
 
@@ -151,7 +151,7 @@ O item 3 é o que separa uma causa raiz de uma descrição. "O deploy quebrou"
 **Não** é causa raiz: "falha humana", "falha de processo", "erro humano". São
 três jeitos de parar a investigação na pessoa.
 
-## Ações
+### Ações
 
 Toda ação tem **responsável**, **prazo** e **como se sabe que foi feita**.
 Uma ação sem o terceiro campo é um desejo.
@@ -168,7 +168,7 @@ O **tipo** importa:
 Toda ação de **decisão** aponta para o ADR, e nenhum ADR é escrito dentro do
 post-mortem: o post-mortem registra a necessidade, o ADR decide.
 
-## O que mudou no sistema
+### O que mudou no sistema
 
 O **estado novo**, verificável. É a seção que o leitor consulta um ano
 depois: o que é diferente agora, o que continua igual e por que isso ainda é
