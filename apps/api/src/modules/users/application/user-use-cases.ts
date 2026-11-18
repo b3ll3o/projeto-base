@@ -255,7 +255,7 @@ export class UserUseCases {
     // então passava sem rastro".
     if (!ehAdministradorDeSistema(ator)) {
       loggerHistorico.warn(
-        `leitura recusada: o ator ${ator.userId} tentou ler o histórico da pessoa ${paraRegistro(input.id)}`,
+        `leitura recusada: o ator ${paraRegistro(ator.userId)} (escopo ${paraRegistro(ator.tenantId ?? 'sistema')}) tentou ler o histórico da pessoa ${paraRegistro(input.id)}`,
       );
     }
     exigeAdministradorDeSistema(ator, 'só o administrador do sistema lê o histórico de uma pessoa');
@@ -300,12 +300,17 @@ export class UserUseCases {
     // ⚠️ O REGISTRO DA LEITURA. O histórico é dado pessoal (o nome e o e-mail
     // de cada versão da pessoa), e o ATOR entra no registro — sem ele, o log
     // diz que o histórico foi lido, e não por quem.
-    // ⚠️ O `:id` vai SANITIZADO (`paraRegistro`), e não cru: ele vem do
-    // cliente, e um `\n` nele gravaria uma linha de log em branco — ou uma
-    // linha que PARECE outra. O registro da RECUSA já fazia isso; o do
-    // SUCESSO não fazia (MEDIDO 2026-11-17, revisão do PR #171).
+    // ⚠️ O `:id` e o ATOR vão SANITIZADOS (`paraRegistro`), e não crus: os dois
+    // vêm do cliente (o `sub` é assinado por nós, mas a invariante mora em
+    // outro arquivo — e um `\n` em qualquer um deles gravaria uma linha de
+    // log em branco, ou uma linha que PARECE outra).
+    //
+    // ⚠️ E O ESCOPO vai junto: ele é o que distingue D2 (`tenantId === null`)
+    // de tudo o mais — e o mesmo ator, membro de DUAS empresas, produzia
+    // DUAS linhas idênticas para escaladas em empresas diferentes
+    // (MEDIDO 2026-11-17, revisão de segurança do PR #171).
     loggerHistorico.log(
-      `histórico lido: ${pagina.entries.length} entrada(s) da pessoa ${paraRegistro(input.id)} — ator ${ator.userId}`,
+      `histórico lido: ${pagina.entries.length} entrada(s) da pessoa ${paraRegistro(input.id)} — ator ${paraRegistro(ator.userId)} (escopo ${paraRegistro(ator.tenantId ?? 'sistema')})`,
     );
 
     return toUserHistoryPageDto(pagina);

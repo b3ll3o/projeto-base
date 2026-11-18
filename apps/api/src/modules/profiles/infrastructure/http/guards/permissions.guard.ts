@@ -137,8 +137,13 @@ export class PermissionsGuard implements CanActivate {
       // e o registro é uma linha de log, não um relatório. E o valor vai
       // sanitizado (`paraRegistro`): o path vem do cliente.
       const caminho = (req.url ?? '?').split('?')[0] ?? '?';
+      // ⚠️ E O ESCOPO vai junto: ele é o que distingue a escalada numa
+      // empresa de outra — e o mesmo ator, membro de DUAS empresas, produzia
+      // DUAS linhas idênticas (MEDIDO 2026-11-17, revisão de segurança do
+      // PR #171).
       this.logger.warn(
-        `permissão recusada: o ator ${paraRegistro(user.sub ?? 'desconhecido')} tentou ` +
+        `permissão recusada: o ator ${paraRegistro(user.sub ?? 'desconhecido')} ` +
+          `(escopo ${paraRegistro(user.tenantId ?? 'sistema')}) tentou ` +
           `${req.method ?? '?'} ${paraRegistro(caminho)} — precisa de uma de [${required.join(', ')}]`,
       );
       throw new ForbiddenException(

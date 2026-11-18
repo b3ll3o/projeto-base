@@ -13,6 +13,23 @@ import { DETALHE_DE_ERRO_INTERNO, mapExceptionToHttp } from './domain-exception-
 import type { FastifyReply } from './fastify-reply.type.js';
 
 /**
+ * O CAMINHO do request — e SEM a query string.
+ *
+ * ⚠️ O `url` do Fastify é o request target COMPLETO (com a query), e a query
+ * pode carregar um filtro, um token ou um dado de outra pessoa. O log do 5xx e
+ * o campo `instance` da resposta são do servidor — e nenhum dos dois precisa
+ * do que o cliente mandou na query.
+ *
+ * ⚠️ MEDIDO 2026-11-17 (revisão de segurança do PR #171): o
+ * `PermissionsGuard` decidiu NÃO registrar a query (e o `paraRegistro` também
+ * não), e o filtro gravava a query inteira — a exceção à regra que o diff
+ * acabou de escrever.
+ */
+function caminhoDoRequest(request: { url: string }): string {
+  return request.url.split('?')[0] ?? request.url;
+}
+
+/**
  * Filter global: converte TODA exceção em RFC 7807 Problem Details.
  *
  * Cada erro carrega: type, title, status, detail, instance, code, traceId e,
@@ -50,11 +67,15 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       // Trocar os dois (logar o genérico) apagaria a única pista que
       // sobraria do erro.
       this.logger.error(
-        `[${traceId}] ${request.method} ${request.url} -> ${code}: ${this.mensagemOriginal(exception)}`,
+        `[${traceId}] ${request.method} ${caminhoDoRequest(request)} -> ${code}: ${this.mensagemOriginal(exception)}`,
         exception instanceof Error ? exception.stack : undefined,
       );
     }
 
+    // ⚠️ A INSTÂNCIA do Problem Details é o request INTEIRO (com a query):
+    // ela volta para quem mandou a query — e o RFC 7807 quer o URI da
+    // ocorrência. O que vai para o LOG é o caminho sem a query (o log é do
+    // servidor, e a query pode carregar um dado de outra pessoa).
     const instance = `${request.method} ${request.url}`;
     const problem: ProblemDetailsDto = {
       type: `https://errors.projeto.com/${code}`,
