@@ -403,31 +403,29 @@ describe('PrismaAuditService (Testcontainers)', () => {
   });
 
   it('listArchive pagina por cursor; getArchiveEntry retorna null quando ausente', async () => {
-    await svc.archive({
-      entityName: 'User',
-      entityId: ENTITY_A,
-      version: 1,
-      snapshot: { id: ENTITY_A },
-      ctx: ctxAudit(),
-    });
-    await svc.archive({
-      entityName: 'User',
-      entityId: ENTITY_B,
-      version: 1,
-      snapshot: { id: ENTITY_B },
-      ctx: ctxAudit(),
-    });
-    await svc.archive({
-      entityName: 'User',
-      entityId: ENTITY_C,
-      version: 1,
-      snapshot: { id: ENTITY_C },
-      ctx: ctxAudit(),
-    });
+    // ⚠️ CADA ARQUIVO COM O SEU INSTANTE — a ordem do archive é por
+    // `deletedAt` (e o `id` é o desempate): com o mesmo instante, a ordem
+    // seria a do desempate — e o `id` do archive é um uuid aleatório, o que
+    // tornaria a afirmação do spec dependente da sorte.
+    for (const [id, quando] of [
+      [ENTITY_A, '2026-09-21T10:00:00Z'],
+      [ENTITY_B, '2026-09-21T11:00:00Z'],
+      [ENTITY_C, '2026-09-21T12:00:00Z'],
+    ] as const) {
+      await svc.archive({
+        entityName: 'User',
+        entityId: id,
+        version: 1,
+        snapshot: { id },
+        ctx: ctxAudit(ACTOR_1, quando),
+      });
+    }
 
     const page1 = await svc.listArchive({ entityName: 'User', limit: 2 }, SISTEMA);
     expect(page1.entries).toHaveLength(2);
-    expect(page1.entries.map((e) => e.entityId)).toEqual([ENTITY_A, ENTITY_B]);
+    // A ordem é por `deletedAt` DECRESCENTE — e o `c` (o mais recente) vem
+    // primeiro.
+    expect(page1.entries.map((e) => e.entityId)).toEqual([ENTITY_C, ENTITY_B]);
     expect(page1.nextCursor).not.toBeNull();
 
     const found = await svc.getArchiveEntry({ entityName: 'User', entityId: ENTITY_A }, SISTEMA);
