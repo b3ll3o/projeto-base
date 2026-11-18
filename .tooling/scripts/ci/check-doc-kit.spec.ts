@@ -208,6 +208,13 @@ describe('casaAncora', () => {
     expect(casaAncora('## O que é', 'o texto ## O que é no meio\n', 'arquivo')).toBe(false);
   });
 
+  it('NÃO casa com um heading DENTRO de um bloco de código (é template, não seção)', () => {
+    expect(
+      casaAncora('## Linha do tempo', '```markdown\n## Linha do tempo\n```\n', 'arquivo'),
+    ).toBe(false);
+    expect(casaAncora('## Linha do tempo', '## Linha do tempo\n', 'arquivo')).toBe(true);
+  });
+
   it('no artefato gerado, a âncora é a chave literal', () => {
     expect(casaAncora('"paths"', '{ "paths": {} }', 'artefato')).toBe(true);
     expect(casaAncora('"paths"', '{ "pathz": {} }', 'artefato')).toBe(false);

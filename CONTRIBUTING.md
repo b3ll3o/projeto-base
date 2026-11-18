@@ -59,61 +59,33 @@ O dono da regra completa é
 
 ## Fluxo de branches
 
-**Trunk-based.** `main` é o tronco único e sempre integrável. Nenhuma
-alteração entra em `main` sem Pull Request.
-
-1. Atualize a base antes de qualquer trabalho:
-
-   ```bash
-   git checkout main && git pull --ff-only origin main
-   ```
-
-2. Crie a branch **a partir da `main` atualizada** — `git switch -c`, e **não**
-   `git branch`, que cria sem trocar de branch:
-
-   ```bash
-   git switch -c feature/<nome-descritivo>
-   ```
-
-   Prefixos: `feature/`, `fix/`, `refactor/`, `docs/`, `chore/`, `hotfix/`.
-   O nome descreve **o problema**, não a ferramenta.
-
-3. Antes de **qualquer** commit ou push, confirme em qual branch você está —
-   como **último comando**, não como último do raciocínio:
-
-   ```bash
-   git branch --show-current
-   ```
-
-4. Rebase na `main` atual antes do push se a `main` avançou:
-
-   ```bash
-   git fetch origin main && git rebase origin/main
-   ```
-
-5. Push da branch e PR para `main`. Merge por squash; branch apagada quando o
-   PR sai de `open` (merged **ou** closed).
-
-O dono da regra completa é
-[`git-workflow.md`](./.agents/specs/conventions/git-workflow.md), com o
-apêndice de casos de branch morta em
+**Trunk-based**: `main` é o tronco único e sempre integrável, e nenhuma
+alteração entra nela sem Pull Request. A regra completa — prefixos de branch,
+o rebase antes do push, o merge squash e a branch que se apaga quando o PR sai
+de `open` — é do
+[`git-workflow.md`](./.agents/specs/conventions/git-workflow.md), com os casos
+de branch morta no
 [`git-workflow-apendice.md`](./.agents/specs/conventions/git-workflow-apendice.md).
+
+O primeiro passo de **toda** tarefa:
+
+```bash
+git checkout main && git pull --ff-only origin main
+git switch -c feature/<nome-descritivo>
+```
 O fluxo inteiro, do primeiro comando ao merge, está em
 [`docs/fluxo-desenvolvimento.md`](./docs/fluxo-desenvolvimento.md).
 
 ## Code Review
 
-**Todo PR aberto precisa de pelo menos um comentário de revisão antes do
-merge.** O check `review-comment` (workflow `pr-review.yml`) reprova o merge
-sem ele, e o comentário do processo orquestrado carrega o marcador
-`<!-- pr-review -->`.
-
-Quem revisa o quê é decidido pela matriz
-[`review-routing.md`](./.agents/specs/conventions/review-routing.md): o diff é
-classificado e **um specialist por parte alterada** é despachado, em
-paralelo. O processo passo a passo está em
-[`pr-review-mode.md`](./.agents/workflows/pr-review-mode.md); a regra, em
-[`pr-review.md`](./.agents/specs/conventions/pr-review.md).
+A regra (o comentário obrigatório, o check que a cobra e o marcador do
+comentário orquestrado) é da
+[`pr-review.md`](./.agents/specs/conventions/pr-review.md); **quem revisa o
+quê** é a matriz
+[`review-routing.md`](./.agents/specs/conventions/review-routing.md) — o diff é
+classificado e **um specialist por parte alterada** é despachado, em paralelo.
+O processo passo a passo está em
+[`pr-review-mode.md`](./.agents/workflows/pr-review-mode.md).
 
 Duas regras de conduta:
 

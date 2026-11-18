@@ -10,8 +10,9 @@ Como as skills de engenharia devem consumir a documentação de domínio deste r
 - **`GLOSSARY.md`** na raiz do repo — glossário e termos canônicos. **Existe**
   desde a v1.30.0 do template: [`GLOSSARY.md`](../../GLOSSARY.md) é a fonte do
   vocabulário do domínio (termo, definição e o caminho real onde ele aparece).
-  Ele é criado **lazy** — um termo entra quando é de fato resolvido, e a skill
-  `domain-modeling` continua sendo quem sugere a entrada.
+  Ele é criado **lazy** — um termo entra quando é de fato resolvido, e quem
+  sugere a entrada é o
+  [`glossary-specialist`](../../.agents/agents/glossary-specialist.md) (item 3 do kit).
   (Nome canônico **a partir da v1.3.0** do plugin; até a 1.2.3 o arquivo se chamava
   `CONTEXT.md`. As duas versões estão em disco, mas a carregada nesta sessão é a
   **1.3.1** — MEDIDO em `~/.claude/plugins/cache/claude-plugins-official/mattpocock-skills/`,

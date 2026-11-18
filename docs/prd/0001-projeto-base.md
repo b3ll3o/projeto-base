@@ -24,7 +24,7 @@ O que toda app precisa decidir antes de escrever a primeira feature:
 | Onde a fronteira do domínio fica (`domain` / `application` / `infrastructure`) | a resposta errada não quebra o build — quebra a testabilidade, anos depois |
 | Qual credencial atravessa o banco | "só mais um `where`" isola enquanto o código estiver certo |
 | O que uma rota que **esqueceu** o escopo de empresa lê | a resposta errada é **zero linhas**, e "a lista veio vazia" não parece bug |
-| Se o refresh token é revogável | a resposta errada é um token de 7 dias que se renova sozinho, e que nada invalida |
+| Se o refresh token é revogável | a resposta errada é um token de 7 dias que se renova sozinho, e que nada invalida (`grep -n "DEFAULT_REFRESH_TTL" apps/api/src/modules/auth/infrastructure/security/jwt-token.service.ts` → `'7d'`) |
 | O que "auditoria" significa | cada time inventa o seu formato, e o histórico fica ilegível |
 | Como o que foi decidido é **registrado** | sem ADR, a decisão vive na cabeça de quem partiu |
 

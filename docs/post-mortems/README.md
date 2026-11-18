@@ -31,7 +31,7 @@ A regra vale para o **escrito**, não para o tom: o documento descreve **o
 sistema** — o guard, a configuração, o gate, a instrução, a sequência de
 passos — e nunca a pessoa que executou a sequência.
 
-O motivo não é diplomacy. É técnica:
+O motivo não é diplomacia. É técnica:
 
 - **Quem lê o incidente depois é o sistema.** Uma causa escrita como "a pessoa
   esqueceu de rodar o gate" não sugere nenhuma ação; escrita como "o gate não

@@ -146,10 +146,9 @@ path_globs:
   - { pattern: "docs/post-mortems/**", specialists: [postmortem-specialist] }
   - { pattern: "docs/api/asyncapi.yaml", specialists: [asyncapi-specialist] }
   - { pattern: "docs/runbooks/**", specialists: [runbook-specialist] }
-  - { pattern: "docs/superpowers/plans/**", specialists: [tdr-specialist] }
   - { pattern: "docs/system-design/README.md", specialists: [hld-specialist] }
   - { pattern: "docs/system-design/contexto.md", specialists: [c4-specialist] }
-  - { pattern: "docs/system-design/modulo.md", specialists: [c4-specialist] }
+  - { pattern: "docs/system-design/modulo.md", specialists: [hld-specialist] }
   - { pattern: "docs/system-design/dados.md", specialists: [erd-specialist] }
 ```
 

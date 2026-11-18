@@ -19,7 +19,9 @@
 **O que foi proposto:** dar ao repositório um **desenho de sistema próprio** —
 a topologia do ator ao banco, a fronteira de confiança, o caminho de um
 request e o **contrato de extensão** — em vez de deixar a arquitetura
-espalhada por 6 arquivos sem endereço.
+espalhada por 6 arquivos sem endereço — quem mede o espalhamento é o
+[ADR-0010](../adr/0010-system-design-canonico.md) §Contexto, e a decisão que
+sustentou a proposta é a §Decisão do mesmo ADR.
 
 A **decisão** que sustentou a proposta está no
 [ADR-0010](../adr/0010-system-design-canonico.md) §Decisão: um conjunto de **7

@@ -1,6 +1,6 @@
 ---
 name: openapi-doc-specialist
-description: "Specialist no artefato OpenAPI do kit de documentação — dono de apps/api/openapi.json (gerado por pnpm --filter @projeto/api openapi:export e versionado) e da versão legível em docs/api/*.md. Garante que o contrato publicado existe, está fresco e é consumível; o drift do contrato contra o código é do openapi-contract-specialist. Use quando a demanda for 'publicar o OpenAPI', 'o openapi.json está velho' ou quando o check-doc-kit acusar o item 9 do kit."
+description: "Specialist no artefato OpenAPI do kit de documentação — dono de apps/api/openapi.json (gerado por pnpm --filter @projeto/api openapi:export e versionado). Garante que o contrato publicado existe, está fresco e é consumível; o drift do contrato contra o código é do openapi-contract-specialist, e a versão legível docs/api/<bc>.md é do documentation-specialist. Use quando a demanda for 'publicar o OpenAPI', 'o openapi.json está velho' ou quando o check-doc-kit acusar o item 9 do kit."
 type: specialist
 tools: Read, Glob, Grep, Bash, Write, Edit
 ---

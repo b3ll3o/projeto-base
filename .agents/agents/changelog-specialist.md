@@ -54,8 +54,10 @@ versão a ser fechada entra aqui."*. Cada entrada é uma linha por mudança
 visível, com o link do artefato criado.
 
 As 4 seções de `###` são as **obrigatórias** (são as âncoras do gate).
-`### Removido`, `### Depreciado` e `### Segurança` são permitidas e ficam
-**depois** das obrigatórias, nesta ordem.
+`### Segurança`, `### Depreciado` e `### Removido` são permitidas e ficam
+**depois** das obrigatórias — nesta ordem, que é a do
+[Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) (segurança antes
+de deprecado, deprecado antes de removido).
 
 ## Quando me invocar
 

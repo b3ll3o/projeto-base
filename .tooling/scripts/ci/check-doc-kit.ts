@@ -509,9 +509,17 @@ export function casaAncora(ancora: string, conteudo: string, tipo: TipoDeDoc): b
   if (tipo === 'artefato' || !ancora.startsWith('#')) return conteudo.includes(ancora);
   const ultimo = [...ancora].at(-1) ?? '';
   const prefixo = !/[A-Za-z0-9]/.test(ultimo);
+  let dentroDeCerca = false;
   for (const linha of conteudo.split('\n')) {
     const t = linha.trim();
-    if (!t.startsWith('#')) continue;
+    // Um heading DENTRO de um bloco de código é o **template** que o doc
+    // oferece, não uma seção do doc: o `## Resumo` de um template de
+    // post-mortem não é a seção "Resumo" do post-mortem.
+    if (t.startsWith('```')) {
+      dentroDeCerca = !dentroDeCerca;
+      continue;
+    }
+    if (dentroDeCerca || !t.startsWith('#')) continue;
     if (t === ancora) return true;
     if (prefixo && t.startsWith(ancora)) return true;
   }

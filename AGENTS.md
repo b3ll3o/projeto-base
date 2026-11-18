@@ -112,7 +112,7 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 | **telemetry-specialist**| [`.agents/agents/telemetry-specialist.md`](./.agents/agents/telemetry-specialist.md)| [memory](./.agents/memory/telemetry-specialist.md)        | Arquiteto de telemetria/observabilidade cross-stack (OpenTelemetry SDK init, exporters OTLP, propagação W3C, sampling, web-vitals, collector) | Decisões de instrumentação em backend/frontend/infra; correlação Pino↔OTel; bridge `request.id` → W3C `traceparent`; config OTel Collector Compose |
 | **ux-design-specialist**| [`.agents/agents/ux-design-specialist.md`](./.agents/agents/ux-design-specialist.md)| [memory](./.agents/memory/ux-design-specialist.md)        | Specialist em UX/design de interface (tokens, estados, formulários, a11y, microcopy) | Criar/revisar a aparência e o comportamento de telas e componentes, definir tokens, auditar a11y de UI |
 | **multi-tenant-specialist**| [`.agents/agents/multi-tenant-specialist.md`](./.agents/agents/multi-tenant-specialist.md)| [memory](./.agents/memory/multi-tenant-specialist.md)        | Arquiteto de tenancy (shared-schema + `tenant_id` + RLS, contexto de tenant na fronteira, escopo de query, cache por tenant, backfill, gate cross-tenant) | Criar/alterar tenancy: `Tenant`/`Membership`/`Invitation`, `tenant_id` em model, filtro de tenant em repositório, RLS, chave de cache por tenant, migração de dados pré-tenancy, spec de isolamento |
-| **documentation-specialist**| [`.agents/agents/documentation-specialist.md`](./.agents/agents/documentation-specialist.md)| [memory](./.agents/memory/documentation-specialist.md)        | Dono da documentação da aplicação, ciente das stacks (NestJS DDD/Hexagonal, Prisma, Next.js App Router, OpenTelemetry, Docker, pnpm/turbo): matriz de cobertura, drift, frescor e escrita no formato certo | Demanda que toca `docs/**`, README, doc de módulo, referência de API, ADR ou runbook; gap de cobertura acusado por gate; auditoria periódica de saúde da documentação |
+| **documentation-specialist**| [`.agents/agents/documentation-specialist.md`](./.agents/agents/documentation-specialist.md)| [memory](./.agents/memory/documentation-specialist.md)        | Dono da documentação da aplicação, ciente das stacks (NestJS DDD/Hexagonal, Prisma, Next.js App Router, OpenTelemetry, Docker, pnpm/turbo): matriz de cobertura, drift, frescor e escrita no formato certo | Demanda que toca `docs/**` **de unidade de código** (`docs/api/<bc>.md`, catálogo de rotas, README de package), gap de cobertura acusado por gate, auditoria periódica — **README, CONTRIBUTING, GLOSSARY, CHANGELOG, ADR, runbooks, PRD, TDR e post-mortems são do kit** (§3.3) |
 
 > **Lens DDD/Hexagonal (v1.2.0+, ADR-0001):** o `nestjs-specialist` aplica a lens DDD/Hexagonal (boundary `domain/application/infrastructure` + audit fields); a mesma lens é ato do `stack-code-reviewer` (D11) em pre-commit e em CI. Ver [`estrutura-e-versionamento.md`](./.agents/specs/conventions/estrutura-e-versionamento.md).
 >
@@ -165,19 +165,19 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 
 ### §3.3 Especialistas do Kit de Documentação (v1.30.0+)
 
-> Os **14 itens** do kit de documentação moderna (5 pilares) têm um **specialist
-> dono**; cada pilar tem um **auditor** e uma **skill de auditoria**. A matriz
-> completa (item → doc canônico → âncoras → dono) é a convenção
-> [`kit-documentacao.md`](./.agents/specs/conventions/kit-documentacao.md), e o
-> gate [`check-doc-kit`](./.tooling/scripts/ci/check-doc-kit.ts) cobra a cobertura.
+> Os **14 itens** do kit de documentação moderna (5 pilares) têm um **specialist dono**; cada pilar tem um
+> **auditor** e uma **skill de auditoria**. A matriz é a convenção [`kit-documentacao.md`](./.agents/specs/conventions/kit-documentacao.md)
+> — o gate [`check-doc-kit`](./.tooling/scripts/ci/check-doc-kit.ts) cobra a cobertura.
 
-| Pilar | Itens | Specialists | Auditor | Skill de auditoria |
+| Pilar | Itens | Specialist dono | Auditor | Skill de auditoria |
 |---|---|---|---|---|
-| 1 — Onboarding | README · CONTRIBUTING · Glossário | `readme-specialist` · `contributing-specialist` · `glossary-specialist` | `onboarding-docs-auditor` | `onboarding-docs-audit` |
-| 2 — Arquitetura | HLD · C4 | `hld-specialist` · `c4-specialist` | `architecture-docs-auditor` | `architecture-docs-audit` |
-| 3 — Decisões | PRD · TDR · ADR | `prd-specialist` · `tdr-specialist` · `adr-specialist` | `decision-docs-auditor` | `decision-docs-audit` |
-| 4 — Contratos | OpenAPI · AsyncAPI · ERD | `openapi-doc-specialist` · `asyncapi-specialist` · `erd-specialist` | `contract-docs-auditor` | `contract-docs-audit` |
-| 5 — Operação | Runbooks · Post-mortem · CHANGELOG | `runbook-specialist` · `postmortem-specialist` · `changelog-specialist` | `operations-docs-auditor` | `operations-docs-audit` |
+| 1 — Onboarding | README · CONTRIBUTING · Glossário | [`readme-specialist`](./.agents/agents/readme-specialist.md) · [`contributing-specialist`](./.agents/agents/contributing-specialist.md) · [`glossary-specialist`](./.agents/agents/glossary-specialist.md) | [`onboarding-docs-auditor`](./.agents/agents/onboarding-docs-auditor.md) | [`onboarding-docs-audit`](./.agents/skills/onboarding-docs-audit/SKILL.md) |
+| 2 — Arquitetura | HLD · C4 | [`hld-specialist`](./.agents/agents/hld-specialist.md) · [`c4-specialist`](./.agents/agents/c4-specialist.md) | [`architecture-docs-auditor`](./.agents/agents/architecture-docs-auditor.md) | [`architecture-docs-audit`](./.agents/skills/architecture-docs-audit/SKILL.md) |
+| 3 — Decisões | PRD · TDR · ADR | [`prd-specialist`](./.agents/agents/prd-specialist.md) · [`tdr-specialist`](./.agents/agents/tdr-specialist.md) · [`adr-specialist`](./.agents/agents/adr-specialist.md) | [`decision-docs-auditor`](./.agents/agents/decision-docs-auditor.md) | [`decision-docs-audit`](./.agents/skills/decision-docs-audit/SKILL.md) |
+| 4 — Contratos | OpenAPI · AsyncAPI · ERD | [`openapi-doc-specialist`](./.agents/agents/openapi-doc-specialist.md) · [`asyncapi-specialist`](./.agents/agents/asyncapi-specialist.md) · [`erd-specialist`](./.agents/agents/erd-specialist.md) | [`contract-docs-auditor`](./.agents/agents/contract-docs-auditor.md) | [`contract-docs-audit`](./.agents/skills/contract-docs-audit/SKILL.md) |
+| 5 — Operação | Runbooks · Post-mortem · CHANGELOG | [`runbook-specialist`](./.agents/agents/runbook-specialist.md) · [`postmortem-specialist`](./.agents/agents/postmortem-specialist.md) · [`changelog-specialist`](./.agents/agents/changelog-specialist.md) | [`operations-docs-auditor`](./.agents/agents/operations-docs-auditor.md) | [`operations-docs-audit`](./.agents/skills/operations-docs-audit/SKILL.md) |
+
+A **memória** de cada agent é `.agents/memory/<nome>.md` (um por agent).
 
 ## §4. Mecanismo de Coordenação
 

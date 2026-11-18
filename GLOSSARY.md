@@ -21,7 +21,7 @@
 | **Empresa** (`tenant`) | A organização que os dados protegem. Tem `slug` global (é o identificador de URL). Sem soft-delete: apagar cascateia perfis, memberships e convites. | `model Tenant` em [`schema.prisma`](./apps/api/prisma/schema.prisma) · [ADR-0004](./docs/adr/0004-tenancy-multi-empresa.md) |
 | **Membership** | Vínculo entre **uma conta** e **uma empresa**, com o `role` e o perfil efetivo que a pessoa veste **naquela** empresa. Uma conta pode estar em N empresas, mas só uma vez em cada. | `model TenantMembership` em [`schema.prisma`](./apps/api/prisma/schema.prisma) · [ADR-0004](./docs/adr/0004-tenancy-multi-empresa.md) |
 | **Perfil** (`profile`) | Agregado de permissões. `slug` imutável e `name` editável; `tenantId` nulo = perfil global. `isAdmin` é bypass total; `isSystem` protege contra delete. | `model Profile` em [`schema.prisma`](./apps/api/prisma/schema.prisma) · [ADR-0005](./docs/adr/0005-rbac-por-perfil.md) |
-| **Claim de permissão** | A permissão que um perfil carrega. No repo é a `permission_key` da relação `authorizations` — string de pontos (`users.read`), comparada por igualdade exata, **sem hierarquia**. | [`permissions-catalog.ts`](./apps/api/src/shared/auth/permissions-catalog.ts) · `model Authorization` em [`schema.prisma`](./apps/api/prisma/schema.prisma) · [ADR-0005](./docs/adr/0005-rbac-por-perfil.md) |
+| **Permissão** (`permission_key`) | A permissão que um perfil carrega. No repo é a `permission_key` da relação `authorizations` — string de pontos (`users.read`), comparada por igualdade exata, **sem hierarquia**. | [`permissions-catalog.ts`](./apps/api/src/shared/auth/permissions-catalog.ts) · `model Authorization` em [`schema.prisma`](./apps/api/prisma/schema.prisma) · [ADR-0005](./docs/adr/0005-rbac-por-perfil.md) |
 | **Administrador do sistema** | O ator que atravessa empresas: `tenantId === null` **e** `isAdmin`. O bucket de sistema **sem** `isAdmin` não administra — é o que o `viewer` global veste. | [`eh-administrador-de-sistema.ts`](./apps/api/src/shared/auth/eh-administrador-de-sistema.ts) · [ADR-0005](./docs/adr/0005-rbac-por-perfil.md) |
 | **Bucket de sistema** | O recorte de dados **sem empresa** — perfis globais, contas de sistema. É alcançado pela **credencial** `app_system` (`SYSTEM_DATABASE_URL`), nunca por um valor que a sessão escolhe. | [`escopo.ts`](./apps/api/src/shared/infrastructure/prisma/escopo.ts) · [ADR-0004](./docs/adr/0004-tenancy-multi-empresa.md) |
 | **Escopo de empresa** | O recorte de dados **de uma empresa**, aplicado no banco pelo GUC de sessão `app.tenant_id` e pelas policies de RLS. Rota sem escopo lê **zero linhas** — fail-closed por omissão. | [`escopo.ts`](./apps/api/src/shared/infrastructure/prisma/escopo.ts) · [`dados.md`](./docs/system-design/dados.md) · [ADR-0004](./docs/adr/0004-tenancy-multi-empresa.md) |
@@ -53,8 +53,8 @@
 **O termo do glossário ganha do termo genérico.** Quando você escrever um
 título de issue, o nome de um caso de teste, o rótulo de um campo ou a
 descrição de uma feature, use o termo **como está definido aqui** — `empresa`,
-não `tenant`; `membership`, não `associação`; `perfil`, não `papel`; `claim de
-permissão`, não `flag de permissão`. Não derive sinônimo: um segundo nome para
+não `tenant`; `membership`, não `associação`; `perfil`, não `papel`; `permissão`,
+não `flag de permissão`. Não derive sinônimo: um segundo nome para
 o mesmo conceito é a metade do caminho para um termo que significa duas
 coisas.
 
