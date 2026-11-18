@@ -53,6 +53,10 @@ A regra do repo continua valendo: **o fato tem UM dono**
 > | `Âncoras` | `âncora`; `âncora` | o mínimo que o doc tem que conter: heading (começa com `#`) ou chave literal |
 > | `Índice` | um caminho, ou `—` | quem lista as instâncias do item (se houver) |
 > | `Condição` | `obrigatório` · `condicional` | se o item nasce sempre ou depende (§4) |
+>
+> A §4 tem 3 colunas a mais — **Padrão**, **Controle positivo** e **Não
+> aplicável declarado** — e o gate reconcilia o **Padrão** com o comando
+> `grep -lE` da própria §4: as duas cópias têm que ser o mesmo padrão.
 
 ### §2.1 Pilar 1 — Porta de Entrada e Onboarding
 
@@ -130,9 +134,9 @@ Um item condicional **nasce com o seu gatilho**. Antes do gatilho, ele não é
 mesma doutrina de [`documentacao.md`](./documentacao.md) §5 (exceção
 declarada, nunca inferida).
 
-| Item | Gatilho | Sonda (glob) | Padrão | Não aplicável declarado |
-|---|---|---|---|---|
-| AsyncAPI | item 10 do kit — existe canal assíncrono (broker de mensageria ou emissor de evento) | `package.json`; `apps/*/package.json`; `packages/*/package.json` | `"bullmq":\|"kafkajs":\|"amqplib":\|"@aws-sdk/client-sqs":\|"@nestjs/microservices":\|"amqp-connection-manager":\|"@cloudamqp/amqp-client":\|"nats":\|"@google-cloud/pubsub":` | **sim** — em 2026-11-18: o repo não tem broker; a fila está registrada como lacuna em [`docs/system-design/dados.md`](../../../docs/system-design/dados.md) §3 |
+| Item | Gatilho | Sonda (glob) | Padrão | Controle positivo | Não aplicável declarado |
+|---|---|---|---|---|---|
+| AsyncAPI | item 10 do kit — existe canal assíncrono (broker de mensageria ou emissor de evento) | `package.json`; `apps/*/package.json`; `packages/*/package.json` | `"bullmq":\|"kafkajs":\|"amqplib":\|"@aws-sdk/client-sqs":\|"@nestjs/microservices":\|"amqp-connection-manager":\|"@cloudamqp/amqp-client":\|"nats":\|"@google-cloud/pubsub":` | `"name":` | **sim** — em 2026-11-18: o repo não tem broker; a fila está registrada como lacuna em [`docs/system-design/dados.md`](../../../docs/system-design/dados.md) §3 |
 
 A **sonda** é um glob de arquivos e o **padrão** é uma expressão regular: o
 gatilho disparou se **algum** arquivo da sonda casa com o padrão. As duas
@@ -140,7 +144,10 @@ colunas são o comando que reproduz a medição — o `\|` da tabela markdown é
 **escape do pipe**, e o comando real usa o pipe cru:
 
 ```bash
-grep -lE '"bullmq":|"kafkajs":|"amqplib":|"@aws-sdk/client-sqs":|"@nestjs/microservices":|"amqp-connection-manager":|"@cloudamqp/amqp-client":|"nats":|"@google-cloud/pubsub":' package.json
+# os TRÊS globs da coluna Sonda — o comando tem que varrer todos, senão um
+# broker adicionado num app passaria (o `grep` da raiz não o vê)
+grep -lE '"bullmq":|"kafkajs":|"amqplib":|"@aws-sdk/client-sqs":|"@nestjs/microservices":|"amqp-connection-manager":|"@cloudamqp/amqp-client":|"nats":|"@google-cloud/pubsub":' \
+  package.json apps/*/package.json packages/*/package.json
 ```
 
 > O padrão casa a **chave da dependência** (com o dois-pontos), e não o nome
@@ -151,13 +158,22 @@ grep -lE '"bullmq":|"kafkajs":|"amqplib":|"@aws-sdk/client-sqs":|"@nestjs/micros
 > ponto) e o `grep` casa **por linha** — para padrão de dependência, as duas
 > formas coincidem.
 
-**Uma sonda que NÃO mede é erro.** Se o padrão não compila, ou se a sonda não
-casa **nenhum** arquivo, o gate acusa "a sonda do gatilho não mede" e **exige
-o doc** — porque "não disparou" é justamente o estado que autoriza o item a
-não ter doc. Uma sonda cega que degradasse para "não disparou" deixaria o item
-sem doc **para sempre**, com o gate verde.
+**Uma sonda que NÃO mede é erro.** O gate acusa "a sonda do gatilho não mede"
+e **exige o doc** — porque "não disparou" é justamente o estado que autoriza
+o item a não ter doc. Uma sonda cega que degradasse para "não disparou"
+deixaria o item sem doc **para sempre**, com o gate verde. A sonda é cega em
+três casos:
 
-O gate cobra as **duas direções**:
+1. o **padrão** não compila;
+2. a **sonda** não casa **nenhum** arquivo (um glob com o sufixo digitado
+   errado esconde o broker real);
+3. o **controle positivo** não casa em nenhum arquivo da sonda — é o caso mais
+   comum: um padrão que **compila e não casa nada** é indistinguível de "não há
+   broker". O controle positivo é um padrão que **tem que casar** (o
+   `"name":` de todo `package.json`), e é o que separa "não há broker" de
+   "a sonda está cega".
+
+O gate cobra as **três direções**:
 
 1. o gatilho **dispara** e o doc não existe → **erro**;
 2. o gatilho **não dispara** e a não-aplicabilidade **não está declarada** →
@@ -170,7 +186,7 @@ O gate cobra as **duas direções**:
 
 | Gate | Classe | Mede | Falha quando |
 |---|---|---|---|
-| `check-doc-kit` | **Cobertura do kit** | os 14 itens têm doc canônico, âncoras, índice, dono, o auditor do pilar, a skill e a contagem — e os condicionais nos dois sentidos | falta doc, falta âncora, falta índice, falta dono, auditor trocado, skill inexistente, contagem divergente, condição sem declaração |
+| `check-doc-kit` | **Cobertura do kit** | os 14 itens têm doc canônico, âncoras, índice, dono, o auditor do pilar, a skill e a contagem — e os condicionais nas **três direções** | falta doc, falta âncora, falta índice, falta dono, auditor trocado, skill inexistente, contagem divergente, condição sem declaração |
 | `check-audit-skills` | **Procedimento** | os blocos `run` das skills de auditoria do kit rodam e passam | um passo quebra ou imprime `✗` |
 
 O `check-doc-kit` reconcilia **duas** tabelas desta convenção: a **§2** (item

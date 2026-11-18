@@ -110,9 +110,16 @@ ls .changeset/ 2>/dev/null
 # (`##\s+v?[0-9]+\.`...) não casava com o colchete e a comparação saía VAZIA
 # (o mesmo modo de falha da regex morta do F3).
 if [ -f CHANGELOG.md ]; then
-  CHANGELOG_LAST=$(grep -oE "##\s+\[?v?[0-9]+\.[0-9]+\.[0-9]+\]?" CHANGELOG.md | head -1)
-  echo "CHANGELOG last: $CHANGELOG_LAST"
-  echo "Tag last:       $LAST_TAG"
+  # Só a VERSÃO, sem o `## ` e sem o `v` da tag — os dois formatos são
+  # diferentes (`## [1.30.0]` e `v1.29.0`) e, comparados como texto, nunca
+  # podem ser iguais (MEDIDO em 2026-11-18, revisão de docs).
+  CHANGELOG_LAST=$(grep -oE "[0-9]+\.[0-9]+\.[0-9]+" CHANGELOG.md | head -1)
+  TAG_LAST=${LAST_TAG#v}
+  echo "CHANGELOG last: ${CHANGELOG_LAST:-ausente}"
+  echo "Tag last:       ${TAG_LAST:-ausente}"
+  if [ -n "$CHANGELOG_LAST" ] && [ -n "$TAG_LAST" ] && [ "$CHANGELOG_LAST" != "$TAG_LAST" ]; then
+    echo "  as versões divergem (o CHANGELOG declara $CHANGELOG_LAST, a tag é $TAG_LAST)"
+  fi
 fi
 ```
 

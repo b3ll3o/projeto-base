@@ -102,6 +102,16 @@ export interface PilarDoKit {
 export interface DeclaracaoCondicional {
   /** O nome do item, como está na §4. */
   item: string;
+  /**
+   * O **controle positivo** do gatilho: um padrão que TEM que casar em
+   * algum arquivo da sonda (o `name` do `package.json`, por exemplo).
+   *
+   * ⚠️ Sem ele, um padrão que COMPILA e não casa nada é indistinguível de
+   * "não há broker" — e o item fica sem doc para sempre, com o gate verde
+   * (MEDIDO em 2026-11-18, revisão de tooling: trocar `"bullmq":` por
+   * `"bulmqq":` nas DUAS cópias deixava o gate verde).
+   */
+  controle: string;
   /** O texto da coluna "Gatilho". */
   gatilho: string;
   /** Os globs da coluna "Sonda". */
@@ -204,6 +214,16 @@ export function lerTabelas(md: string): { tabela: Tabela; heading: string; erros
         );
         continue;
       }
+      // Uma linha igual ao cabeçalho é um **cabeçalho duplicado**: ela
+      // entrava como dado e a tabela de baixo é a medida (MEDIDO em 2026-11-18,
+      // revisão de tooling).
+      if (cels.length === cabecalho.length && cels.every((c, k) => c === cabecalho[k])) {
+        errosDaTabela.push(
+          `a linha ${j + 1} da tabela repete o cabeçalho — cabeçalho duplicado ` +
+            'faz a medição ler a tabela errada.',
+        );
+        continue;
+      }
       dados.push({ cels, linha: j + 1 });
     }
     achadas.push({
@@ -269,6 +289,7 @@ export function lerMatriz(md: string): {
       // em silêncio** (MEDIDO em 2026-11-18, falsificação do PR do kit: a
       // coluna `Âncoras` renomeada deixou os 14 itens sem âncora, verde).
       const obrigatorias = [
+        '#',
         'Item',
         'Doc canônico',
         'Tipo',
@@ -359,6 +380,14 @@ export function lerMatriz(md: string): {
       const colGatilho = coluna(tabela.cabecalho, 'Gatilho');
       const colPadrao = coluna(tabela.cabecalho, 'Padrão');
       const colDeclaracao = coluna(tabela.cabecalho, 'Não aplicável declarado');
+      const colControle = coluna(tabela.cabecalho, 'Controle positivo');
+      if (colControle < 0) {
+        erros.push(
+          'a §4 não tem a coluna "Controle positivo" — sem ela, um padrão que ' +
+            'compila e não casa nada é indistinguível de "não há broker", e o ' +
+            'item fica sem doc para sempre com o gate verde.',
+        );
+      }
       for (const { cels: dados } of tabela.linhas) {
         const item = valor(dados[colItem]);
         if (item === '') continue;
@@ -370,6 +399,7 @@ export function lerMatriz(md: string): {
             .map((s) => s.trim())
             .filter((s) => s !== ''),
           padrao: valor(dados[colPadrao]),
+          controle: valor(dados[colControle]),
           declaracao: valor(dados[colDeclaracao]),
           linha: tabela.linha,
         });
@@ -385,26 +415,30 @@ export function lerMatriz(md: string): {
   // `grep -lE` antes da seção reconciliaria a célula com o comando errado.
   const iniSecao4 = md.search(/^##\s+§4\b/m);
   const secao4 = iniSecao4 >= 0 ? md.slice(iniSecao4) : md;
-  const mComando = /grep -lE '([^']+)'/.exec(secao4);
+  // Os comandos da §4, na ORDEM em que aparecem: a Nª linha condicional casa
+  // com o Nº comando (MEDIDO em 2026-11-18, revisão de tooling: um item
+  // condicional legítimo, com o próprio comando, era acusado contra o 1º).
+  const comandos = [...secao4.matchAll(/grep -lE '([^']+)'/g)].map((m) => m[1]!);
   if (condicionais.length > 0) {
-    if (mComando === null) {
+    if (comandos.length < condicionais.length) {
       erros.push(
-        'a §4 não traz o comando (grep -lE) que reproduz a medição do gatilho — ' +
-          'a coluna "Padrão" sozinha não é um claim verificável.',
+        `a §4 tem ${condicionais.length} item(ns) condicional(is) e ` +
+          `${comandos.length} comando(s) \`grep -lE\` — cada item condicional ` +
+          'precisa do comando que reproduz a sua medição.',
       );
-    } else {
-      const doComando = normalizarAlternativas(mComando[1]!);
-      for (const d of condicionais) {
-        const daCelula = normalizarAlternativas(d.padrao);
-        if (daCelula.join('|') !== doComando.join('|')) {
-          erros.push(
-            `o padrão da coluna "${daCelula.join('|')}" e o comando da §4 ` +
-              `"${doComando.join('|')}" não são o mesmo — o comando é o que ` +
-              'reproduz a medição, e um dos dois desatualizado mede outra coisa.',
-          );
-        }
-      }
     }
+    condicionais.forEach((d, i) => {
+      if (i >= comandos.length) return;
+      const doComando = normalizarAlternativas(comandos[i]!);
+      const daCelula = normalizarAlternativas(d.padrao);
+      if (daCelula.join('|') !== doComando.join('|')) {
+        erros.push(
+          `o padrão da coluna "${daCelula.join('|')}" e o comando da §4 ` +
+            `"${doComando.join('|')}" não são o mesmo — o comando é o que ` +
+            'reproduz a medição, e um dos dois desatualizado mede outra coisa.',
+        );
+      }
+    });
   }
 
   return {
@@ -630,6 +664,27 @@ export function sondaDoGatilho(
     return 'erro';
   }
   if (declaracao.sondas.length === 0) return 'erro';
+  // O CONTROLE POSITIVO: um padrão que tem que casar em algum arquivo da
+  // sonda. Sem ele, "o padrão não casou" é indistinguível de "a sonda está
+  // cega" — e a não-aplicabilidade continua valendo para sempre.
+  if (declaracao.controle !== '') {
+    let reControle: RegExp;
+    try {
+      reControle = new RegExp(declaracao.controle);
+    } catch {
+      return 'erro';
+    }
+    let controleCasou = false;
+    for (const sondaGlob of declaracao.sondas) {
+      for (const arquivo of arquivosDaSonda(sondaGlob)) {
+        if (reControle.test(ler(arquivo))) {
+          controleCasou = true;
+          break;
+        }
+      }
+    }
+    if (!controleCasou) return 'erro';
+  }
   for (const sondaGlob of declaracao.sondas) {
     const arquivos = arquivosDaSonda(sondaGlob);
     if (arquivos.length === 0) return 'erro';
@@ -896,7 +951,7 @@ const IGNORADOS = new Set([
  * Sem git (o gate roda num repo sem repositório?), a lista cai para a
  * varredura — e a ressalva diz isso, em vez de fingir que mediu o versionado.
  */
-async function listarArquivos(
+export async function listarArquivos(
   repoRoot: string,
 ): Promise<{ arquivos: string[]; versionado: boolean }> {
   try {

@@ -96,8 +96,11 @@ o primeiro deploy que responde.
 ```bash
 # no repo derivado
 git log --reverse --format=%cI | head -1     # data do primeiro commit
-# a data do primeiro deploy vem do CI: a run mais antiga do workflow de deploy
-gh run list --limit 1 --created "<data-do-primeiro-commit>" --json createdAt
+# a data do PRIMEIRO deploy: o `gh run list` ordena do mais novo para o mais
+# velho, então `--limit 1` devolveria a run MAIS RECENTE (MEDIDO em 2026-11-18,
+# revisão de docs) — a menor data é a do primeiro deploy
+gh run list --created "<data-do-primeiro-commit>" --json createdAt --limit 1000 \
+  | jq -r 'map(.createdAt) | min'
 ```
 
 **Quem mede:** quem deriva, ao publicar o primeiro deploy.

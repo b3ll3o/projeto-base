@@ -8,14 +8,13 @@
 
 ## Antes de começar
 
-O que precisa estar na máquina:
+O que precisa estar na máquina está no **runbook canônico** —
+[`docs/como-rodar.md` §0.1](./docs/como-rodar.md) (Node, pnpm, Docker e
+Chromium). A versão do **PostgreSQL** é o único acréscimo: o ambiente local
+usa `postgres:16-alpine` (`grep -nE 'image: postgres' docker-compose.yml`).
 
-| Ferramenta | Versão | De onde vem a exigência |
-|---|---|---|
-| Node.js | `>= 22.12.0` | `package.json` → `engines.node` |
-| pnpm | `9.12.0` | `package.json` → `packageManager` (`corepack enable && corepack prepare pnpm@9.12.0 --activate`) |
-| Docker + Compose v2 | v2 | ambiente Docker ([`docs/como-rodar.md`](./docs/como-rodar.md)) |
-| PostgreSQL 16 | — | ambiente local; `grep -nE 'image: postgres' docker-compose.yml` → `postgres:16-alpine`. O compose **não** publica a porta desde o #91 (runbook §1.1) |
+> O dono das versões é o [`docs/STACK.md` §8](./docs/STACK.md) — este guia
+> **linka** em vez de repetir, para o número não viver em dois lugares.
 
 Instalação:
 

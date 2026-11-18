@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -19,6 +20,7 @@ import {
   itensDeclarados,
   lacunasDoKit,
   lerMatriz,
+  listarArquivos,
   sondaDoGatilho,
 } from './check-doc-kit';
 
@@ -137,6 +139,7 @@ function entradas(sobre: Partial<Entradas> = {}): Entradas {
         gatilho: 'existe broker',
         sondas: ['package.json'],
         padrao: '"bullmq"',
+        controle: '"name":',
         declaracao: 'sim — em 2026-11-18',
         linha: 90,
       },
@@ -346,6 +349,30 @@ describe('lerMatriz — as colunas obrigatórias', () => {
     expect(m.erros.some((e) => e.includes('não tem a coluna "Âncoras"'))).toBe(true);
   });
 
+  it('a matriz sem a coluna "#" é erro — a unicidade da numeração desligaria', () => {
+    // MEDIDO em 2026-11-18 (revisão de tooling): renomear a coluna `#`
+    // desligava em silêncio o guard da numeração (o gate ficava verde com dois
+    // itens de mesmo número).
+    const semNumero = base.replace('| # | Item |', '| N | Item |');
+    const m = lerMatriz(semNumero);
+    expect(m.erros.some((e) => e.includes('não tem a coluna "#"'))).toBe(true);
+  });
+
+  it('cabeçalho repetido dentro da tabela é erro', () => {
+    // MEDIDO em 2026-11-18 (revisão de tooling): o cabeçalho duplicado
+    // entrava como dado, e a tabela de baixo é a que era medida.
+    const comCabecalho = [
+      '### §2.1 Pilar 1 — Onboarding',
+      '',
+      '| # | Item | Doc canônico | Tipo | Âncoras | Índice | Condição | Specialist | Auditor |',
+      '|---|---|---|---|---|---|---|---|---|',
+      '| # | Item | Doc canônico | Tipo | Âncoras | Índice | Condição | Specialist | Auditor |',
+      '| 1 | README | `README.md` | arquivo | `## O que é` | — | obrigatório | `readme-specialist` | `onboarding-docs-auditor` |',
+    ].join('\n');
+    const m = lerMatriz(comCabecalho);
+    expect(m.erros.some((e) => e.includes('cabeçalho duplicado'))).toBe(true);
+  });
+
   it('a §5.1 sem a coluna da skill é erro — a tabela inteira deixaria de ser lida', () => {
     const semSkill = [
       '## §5.1 Os auditores do kit',
@@ -356,6 +383,24 @@ describe('lerMatriz — as colunas obrigatórias', () => {
     ].join('\n');
     const m = lerMatriz(semSkill);
     expect(m.erros.some((e) => e.includes('não tem a coluna "Skill de auditoria"'))).toBe(true);
+  });
+
+  it('a §4 sem a coluna "Controle positivo" é erro — a sonda ficaria cega', () => {
+    // MEDIDO em 2026-11-18 (revisão de tooling): sem o controle, um padrão
+    // que compila e não casa nada é indistinguível de "não há broker".
+    const semControle = [
+      '## §4. Itens condicionais',
+      '',
+      '| Item | Gatilho | Sonda (glob) | Padrão | Não aplicável declarado |',
+      '|---|---|---|---|---|',
+      '| AsyncAPI | existe broker | `package.json` | `"bullmq":` | **sim** |',
+      '',
+      '```bash',
+      'grep -lE \'"bullmq":\' package.json',
+      '```',
+    ].join('\n');
+    const m = lerMatriz(semControle);
+    expect(m.erros.some((e) => e.includes('Controle positivo'))).toBe(true);
   });
 
   it('o padrão da célula e o comando da §4 têm que ser o mesmo', () => {
@@ -393,6 +438,7 @@ describe('sondaDoGatilho', () => {
     gatilho: 'existe broker',
     sondas: ['package.json', 'apps/*/package.json'],
     padrao: '"bullmq":',
+    controle: '"name":',
     declaracao: 'sim',
     linha: 90,
   };
@@ -401,16 +447,28 @@ describe('sondaDoGatilho', () => {
     const r = sondaDoGatilho(
       declaracao,
       (glob) => (glob === 'package.json' ? ['package.json'] : ['apps/api/package.json']),
-      () => '{ "bullmq": "^5.0.0" }',
+      () => '{ "name": "projeto-base", "bullmq": "^5.0.0" }',
     );
     expect(r).toBe('disparou');
+  });
+
+  it('o CONTROLE POSITIVO que não casa é erro — a sonda está cega', () => {
+    // MEDIDO em 2026-11-18 (revisão de tooling): trocar `"bullmq":` por
+    // `"bulmqq":` nas DUAS cópias (a célula e o comando) deixava o gate verde
+    // — o padrão compila, não casa nada, e o item ficava sem doc para sempre.
+    const r = sondaDoGatilho(
+      declaracao,
+      (glob) => (glob === 'package.json' ? ['package.json'] : ['apps/api/package.json']),
+      () => '{ "bullmq": "^5.0.0" }',
+    );
+    expect(r).toBe('erro');
   });
 
   it('NÃO dispara quando nenhum arquivo casa', () => {
     const r = sondaDoGatilho(
       declaracao,
       () => ['package.json'],
-      () => '{ "prisma": "^6" }',
+      () => '{ "name": "projeto-base", "prisma": "^6" }',
     );
     expect(r).toBe('nao-disparou');
   });
@@ -424,7 +482,7 @@ describe('sondaDoGatilho', () => {
     const r = sondaDoGatilho(
       declaracao,
       (glob) => (glob === 'package.json' ? ['package.json'] : []),
-      () => '{ "prisma": "^6.0.0" }',
+      () => '{ "name": "projeto-base", "prisma": "^6.0.0" }',
     );
     expect(r).toBe('erro');
   });
@@ -433,9 +491,42 @@ describe('sondaDoGatilho', () => {
     const r = sondaDoGatilho(
       { ...declaracao, padrao: '"bullmq":(' },
       () => ['package.json'],
-      () => '{}',
+      () => '{ "name": "projeto-base" }',
     );
     expect(r).toBe('erro');
+  });
+});
+
+describe('a lista de arquivos — o conjunto VERSIONADO', () => {
+  it('um arquivo no disco e fora do índice não entra na lista', async () => {
+    // MEDIDO em 2026-11-18 (revisão de tooling): o gate media a árvore de
+    // trabalho, e um arquivo no disco e fora do índice passava aqui e reprovava
+    // no CI (onde o arquivo não existe).
+    const tmp = mkdtempSync(join(tmpdir(), 'doc-kit-lista-'));
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: tmp });
+      writeFileSync(join(tmp, 'versionado.md'), 'x');
+      execFileSync('git', ['add', 'versionado.md'], { cwd: tmp });
+      writeFileSync(join(tmp, 'nao-versionado.md'), 'x');
+      const { arquivos, versionado } = await listarArquivos(tmp);
+      expect(versionado).toBe(true);
+      expect(arquivos).toContain('versionado.md');
+      expect(arquivos).not.toContain('nao-versionado.md');
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('sem git, a lista cai para a varredura — e o gate diz que não mediu o versionado', async () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'doc-kit-sem-git-'));
+    try {
+      writeFileSync(join(tmp, 'a.md'), 'x');
+      const { arquivos, versionado } = await listarArquivos(tmp);
+      expect(versionado).toBe(false);
+      expect(arquivos).toContain('a.md');
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });
 
@@ -506,6 +597,25 @@ describe('lacunasDoKit', () => {
     expect(lacunasDoKit(e).some((x) => x.includes('número "1"'))).toBe(true);
   });
 
+  it('uma família cujo glob não casa NENHUM arquivo é erro', () => {
+    // MEDIDO em 2026-11-18 (revisão de tooling): o ramo que acusa "doc
+    // canônico não existe" quando a família não casa nenhum arquivo era o
+    // único guard desse caso, e nenhum teste o media.
+    const e = entradas({
+      itens: [item({ tipo: 'familia', doc: 'docs/adr/*.md' })],
+      arquivos: () => [],
+    });
+    expect(lacunasDoKit(e).some((x) => x.includes('não existe'))).toBe(true);
+  });
+
+  it('a §5.1 sem a linha de um pilar é erro — a reconciliação seria pulada', () => {
+    const e = entradas({
+      pilares: PILARES.filter((p) => p.pilar !== 5),
+    });
+    const erros = lacunasDoKit(e);
+    expect(erros.some((x) => x.includes('não declara o auditor do Pilar 5'))).toBe(true);
+  });
+
   it('a §5.1 sem uma linha por pilar é erro — a reconciliação seria pulada', () => {
     const e = entradas({ pilares: PILARES.slice(0, 3) });
     expect(lacunasDoKit(e).some((x) => x.includes('§5.1 declara 3 auditor(es)'))).toBe(true);
@@ -557,6 +667,7 @@ describe('lacunasDoKit', () => {
       gatilho: 'existe broker',
       sondas: ['package.json'],
       padrao: '"bullmq"',
+      controle: '"name":',
       declaracao: 'sim — em 2026-11-18',
       linha: 90,
     };
@@ -574,6 +685,7 @@ describe('lacunasDoKit', () => {
       gatilho: 'existe broker',
       sondas: ['package.json'],
       padrao: '"bullmq"',
+      controle: '"name":',
       declaracao: '',
       linha: 90,
     };
@@ -595,6 +707,7 @@ describe('lacunasDoKit', () => {
           gatilho: 'existe broker',
           sondas: ['package.json'],
           padrao: '"bullmq"',
+          controle: '"name":',
           declaracao: '',
           linha: 90,
         },
@@ -638,6 +751,7 @@ describe('lacunasDoKit', () => {
           gatilho: 'existe broker',
           sondas: ['package.json'],
           padrao: '"bullmq"',
+          controle: '"name":',
           declaracao: '**não** — o item se aplica',
           linha: 90,
         },
@@ -668,6 +782,7 @@ describe('lacunasDoKit', () => {
           gatilho: 'x',
           sondas: ['package.json'],
           padrao: 'y',
+          controle: '"name":',
           declaracao: 'sim',
           linha: 90,
         },
@@ -684,6 +799,7 @@ describe('lacunasDoKit', () => {
           gatilho: 'x',
           sondas: ['package.json'],
           padrao: 'y',
+          controle: '"name":',
           declaracao: 'sim',
           linha: 90,
         },

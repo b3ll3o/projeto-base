@@ -25,8 +25,8 @@ grep -rliE 'embedding|openai|langchain|pgvector|neo4j' --include=package.json ap
 # → 0
 ```
 
-A camada que o repo chama de "agentic" é, estruturalmente, **28 `pattern:` em
-YAML** (`.agents/specs/conventions/review-routing.md:39-131`) executados por
+A camada que o repo chama de "agentic" é, estruturalmente, **31 `pattern:` em
+YAML** (`.agents/specs/conventions/review-routing.md:42-140`) executados por
 `tooling/scripts/review-router.ts` — TypeScript determinístico. Pelo framework,
 isso se chama software convencional. O nome errado produziu custo concreto, e a
 seção 7 lista os oito.
@@ -44,23 +44,23 @@ sistema.
 proibido, script fantasma no `package.json`, link quebrado, tamanho de `.md`.
 **O que não resolve:** nada que exija julgamento semântico.
 
-**Evidência de que funciona:** o `preflight` roda 9 checks declarados no array `checks` de
-`.tooling/scripts/ci/preflight.ts:80-125` e mede ~1,6s localmente
-(`time pnpm ci:preflight` → `real 0m1,562s`, 3 execuções em 2026-10-02), contra
-`timeout-minutes: 20` no job `quality` (`.github/workflows/ci.yml:36`).
+**Evidência de que funciona:** o `preflight` roda **56** checks declarados em `PREFLIGHT_CHECKS`
+(`.tooling/scripts/ci/preflight-gates.ts`) e mede ~34s localmente
+(`time pnpm ci:preflight` → `real 0m34,004s`, medido em 2026-11-18), contra
+`timeout-minutes: 20` no job `quality` (`.github/workflows/ci.yml:188`).
 
-O bloqueio é real: `tooling/scripts/stack-code-reviewer.ts:236` faz
+O bloqueio é real: `tooling/scripts/stack-code-reviewer.ts:298` faz
 `process.exit(1)`, e o guard anti-falso-positivo `isDomainFile()`
-(`stack-code-reviewer.ts:56`) limita a regra a paths com componente `/domain/` —
+(`stack-code-reviewer.ts:80`) limita a regra a paths com componente `/domain/` —
 verificado nos dois sentidos: fora de `/domain/` importando `@nestjs/common` →
 0 findings; dentro → 1 blocker + exit 1.
 
-**Custo por task:** ~1,6s (preflight) + ~0,5s (stack-code-reviewer).
-Manutenção: 2373 linhas:
+**Custo por task:** ~34s (preflight) + ~0,5s (stack-code-reviewer).
+Manutenção: 37802 linhas:
 
 ```bash
 wc -l .tooling/scripts/ci/*.ts tooling/scripts/stack-code-reviewer.ts tooling/scripts/doc-sync.ts | tail -1
-# → 2373 total
+# → 37802 total
 ```
 
 **Modo de falha:** não é o gate errar — é o gate virar teatro. Verde sem ter
@@ -78,9 +78,9 @@ positivo em teste de regressão nomeado pelo incidente
 (`tooling/scripts/review-router.spec.ts:275`). É o único artefato do repo
 comparável a um fine-tuning bem feito — e está em código, não em prosa.
 
-**Custo:** ~0,5s por invocação. Manutenção: 28 `pattern:` em `review-routing.md`
-(288 linhas) + 60 em `specialist-routing.md` (300 linhas), medido por
-`grep -c '^  - pattern:'`.
+**Custo:** ~0,5s por invocação. Manutenção: 31 `pattern:` em `review-routing.md`
+(299 linhas) + 76 em `specialist-routing.md` (279 linhas), medido por
+`grep -cE 'pattern:'`.
 
 **Modo de falha:** sub-invocação silenciosa.
 `grep -rn 'review:route\|specialist:route' .github .husky .tooling | wc -l` → **0**.
@@ -98,18 +98,21 @@ defeito observado por um agente que virou *candidata a regra determinística*.
 É o caminho que só o híbrido percorre: memória (julgamento) → regra → barreira.
 
 **O que não resolve:** enforcement. Por construção —
-`grep -rn 'agents/memory' tooling/ .tooling/ .husky/ .github/ | wc -l` → **0**.
+`grep -rn 'agents/memory' tooling/ .tooling/ .husky/ .github/ | wc -l` → **4**
+(há quem consome: o `check-agent-memory-drift` do preflight lê
+`.agents/memory`).
 
 **Custo:** zero marginal na escrita (editada no mesmo commit da atividade). O
 custo real é de **descoberta**: um LLM que não abre o arquivo paga a leitura e
 mesmo assim não aprende.
 
 **Modo de falha:** evaporação e paralelismo. `wc -l .agents/memory/*.md | sort -n`
-mostra 8 de 21 memórias presas em 31 linhas — o piso do template
-(`.agents/memory/_template.md` tem 32) — e nenhuma delas é de um agent exercitado
-por hook ou CI. Agrava: 18 links em `AGENTS.md:65-88` apontam para
-`../.agents/memory/…`, que resolve **para fora do repo** (o diretório pai não tem
-`.agents/`), enquanto a coluna vizinha usa `./.agents/agents/…`.
+mostra as memórias presas no piso do template
+(`.agents/memory/_template.md`) — o corpus são **49** arquivos
+(`ls .agents/memory/*.md | wc -l` → 49) — e as que não são exercitadas por hook
+ou CI envelhecem sem ninguém perceber. O `AGENTS.md` tem **29** links para
+memórias (`grep -c 'agents/memory' AGENTS.md` → 29), todos com `./.agents/memory/…`
+— que resolve dentro do repo.
 
 ## 2. A quarta: o híbrido em 3 camadas — implementa ou só declara?
 
@@ -117,10 +120,10 @@ por hook ou CI. Agrava: 18 links em `AGENTS.md:65-88` apontam para
 
 - Camada 1 tem barreira **provada ao vivo**: violação DDD real em
   `domain/probe.ts` → `1 finding(s) — 1 blocker` + EXIT=1 pelo mesmo caminho que
-  `.husky/pre-commit:19` e `review-stack.yml:31` executam.
-- Camada 2 é código testado: `pnpm tooling:test` → **57 arquivos / 999 testes
-  verdes** (dois runners: `tooling/scripts` → 18/402 e `.tooling/scripts/ci` → 39/597).
-- Camada 3 é artefato versionado: 2191 linhas em 30 arquivos (`ls .agents/memory/*.md | xargs wc -l`).
+  `.husky/pre-commit:3` e `review-stack.yml:42` executam.
+- Camada 2 é código testado: `pnpm tooling:test` → **79 arquivos / 1581 testes
+  verdes** (dois runners: `tooling/scripts` → 21/454 e `.tooling/scripts/ci` → 58/1127).
+- Camada 3 é artefato versionado: 4284 linhas em 49 arquivos (`ls .agents/memory/*.md | xargs wc -l`).
 
 **A carga de prova não está mais concentrada na Camada 1.** A Camada 2 era
 inert — os 6 specs de `.tooling/scripts/ci` (os próprios checks do preflight)
@@ -145,7 +148,7 @@ não existe.
 
 | Dimensão | Determinístico | Agentic | Memória |
 | --- | --- | --- | --- |
-| Latência de feedback | ~1,6s (medido) — o dev vê o erro antes de terminar a frase | ~0,5s/invocação, **0 no caminho real** (nenhum hook/CI chama) | 0 na escrita; custo real é de descoberta |
+| Latência de feedback | ~34s (medido em 2026-11-18) — o dev vê o erro antes de terminar a frase | ~0,5s/invocação, **0 no caminho real** (nenhum hook/CI chama) | 0 na escrita; custo real é de descoberta |
 | Custo por task | ~2,1s por ciclo commit+push contra job de 20 min | ~1,0s se rodasse; marginal por regra nova = 1-2 linhas | 0 marginal; custo é de disciplina (alguém tem que rodar a retro) |
 | Cobertura de falha | Alta onde está ligado | **Zero hoje** — sem consumidor | **Zero por construção** — nenhum código lê memória |
 | Bypass silencioso | Baixo e inspecionável: `--no-verify` é pego por `format:check` (`ci.yml:30`) | Altíssimo e invisível: sub-invocação não produz saída nenhuma | Altíssimo: evaporação silenciosa |
@@ -178,7 +181,7 @@ footer, se um link existe. Conhecimento que muda é fonte viva, nunca cópia.
 
 | Tipo do problema | Instâncias verificadas no repo | Estratégia correta | O que foi feito |
 | --- | --- | --- | --- |
-| Regra determinística | 9 checks de drift/preflight, 207 testes de tooling | Determinística — e funciona | ✅ Camada 1 |
+| Regra determinística | 56 checks de drift/preflight, 1581 testes de tooling | Determinística — e funciona | ✅ Camada 1 |
 | Similaridade semântica | 0 | Vetorial | — (nada a fazer) |
 | Relacionamento multi-hop | 0 | Grafo | — (nada a fazer) |
 | Especialização de comportamento | 1 caso real (roteamento de reviewer) | Regra, não agentic | ⚠️ chamada de "agentic", é TypeScript com regex |
@@ -189,8 +192,7 @@ Os três "0" não são estimativas: são o resultado do `grep` de dependências 
 ## 6. Onde este repo acertou
 
 1. **Precisão de gate demonstrada nos dois sentidos** — `isDomainFile()`
-   (`stack-code-reviewer.ts:52`) é sensível *e* específico, que é a parte difícil
-   de gating determinístico.
+   (`stack-code-reviewer.ts:52`) é sensível *e* específico, que é a parte difícil de gating determinístico.
 2. **O pipeline consertou o próprio gate mentiroso** — commit `5490de6` moveu a
    lógica para `apps/api/test/config/coverage-floor.ts`, com spec dedicado e
    caminho ligado em `vitest.config.ts:56`.
@@ -208,9 +210,9 @@ Os três "0" não são estimativas: são o resultado do `grep` de dependências 
 
 | O que o repo tentou | O que era de fato | Custo do erro de rótulo |
 | --- | --- | --- |
-| Camada "agentic" de roteamento | 28 `pattern:` regex em YAML rodados por TypeScript (`review-routing.md:39-131`) | Foi o que deixou `specialist:lint` **fora** do preflight (`grep -c specialist .tooling/scripts/ci/preflight.ts` = **0**) enquanto `review:lint` está dentro (`preflight.ts:50`, que executa `pnpm review:lint`). A camada tratada como "semântica" foi tratada como opcional. |
+| Camada "agentic" de roteamento | 31 `pattern:` regex em YAML rodados por TypeScript (`review-routing.md:42-140`) | Foi o que deixou `specialist:lint` **fora** do preflight (`grep -c specialist .tooling/scripts/ci/preflight.ts` = **0**) enquanto `review:lint` está dentro (`preflight.ts:50`, que executa `pnpm review:lint`). A camada tratada como "semântica" foi tratada como opcional. |
 | Memória acumulada como "fine-tuning" | Fine-tuning de conhecimento que **muda** — proibido pelo framework | `README.md:259` afirmava que os apps "ainda **não foram criados**"; existem, com 40 specs. Corrigido. `docs/MONOREPO.md:262` está em `1.9.0` enquanto a última tag é `v1.8.0` — o drift encolheu de 3 versões para 1, mas a classe é a mesma: fato volatile envelhecendo como se fosse estável, agora sem check que amarre os dois. |
-| Arquitetura de 3 camadas escolhida antes do problema | Nenhum problema verificado pede IA | Superfície de manutenção (4734 + 2191 linhas) e 12 furos de costura (§7 + §8), para resolver o que cabia num script de 1,6s. |
+| Arquitetura de 3 camadas escolhida antes do problema | Nenhum problema verificado pede IA | Superfície de manutenção (5793 + 4284 linhas) e 12 furos de costura (§7 + §8), para resolver o que cabia num script de 1,6s. |
 | Camada 2 como "barreira de roteamento" | Telemetria | `review-router.ts:350` tem exit 3 sem consumidor algum. Um exit code sem consumidor é uma constante, não um portão. |
 | `tdd:check` como verificação de TDD | Task sem dono: declarada no `package.json` como `turbo run tdd:check`, ausente do `turbo.json` e de todo pacote do workspace | **A análise original errou a classe do erro** e a tabela é a prova: afirmava "exit 0 com FULL TURBO em 37ms" (falso verde). Medido: `pnpm tdd:check` → **EXIT=1**, `Could not find task in project`. A task já tinha morrido; o script que a invocava ficou. Quem reportava verde era este documento, não o comando. |
 | `release-template.yml` como "automática e idempotente" | Era inerte — o footer tinha regredido para `1.5.0` e `v1.5.0` já existia, então todo push era noop. Footer alinhado em `1.9.0`; a idempotência agora emite `::warning::` em vez de encerrar em silêncio | Idempotência confundida com *correctly*-idempotência: o mecanismo criado para evitar erro mascarava drift. Falta o check que amarra footer↔tag (**BL1**). |
@@ -235,8 +237,7 @@ O modo de falha mais caro **não** é a estratégia errada por imprecisão. É o
    `domain/value-objects/user-id.vo.ts`, o `stack-code-reviewer` acusou
    `[blocker] … domain/ importa 'node:fs' — viola pureza do núcleo`.
 2. **Gate que roda e não bloqueia — VIVO.** `grep -c 'process.exit'
-   tooling/scripts/doc-sync.ts` → **0**. O `|| exit 1` em
-   `.husky/pre-commit:25` é guarda de crash, não gate.
+   tooling/scripts/doc-sync.ts` → **0**. O `|| exit 1` em `.husky/pre-commit:25` é guarda de crash, não gate.
 3. **Token de sucesso ambíguo — FECHADO.** `check-archive-integrity.ts` fazia
    `return { ok: true, errors: [] }` quando `.agents/runs/archive` não existia.
    Hoje devolve `skipped: true` com motivo (`:83`, `:93`, `:109`) e o painel
@@ -269,14 +270,12 @@ painéis sem multiplicar o número de sinais.
    explicitamente. Vetorial é para similaridade semântica. Grafo é para relação
    multi-hop. Fine-tuning é para especializar comportamento estável.
 2. **Esse dado expira?** Se sim, é check de drift, não memória. Contagem de
-   arquivos, versão de footer e existência de link são verificáveis contra o
-   disco a cada uso.
+   arquivos, versão de footer e existência de link são verificáveis contra o disco a cada uso.
 3. **Nomeie a camada pelo mecanismo, não pela ambição.** Se a decisão sai de
    regex em YAML executada por TypeScript com testes, isso é regra determinística
    com prosa em volta — e vale como tal: ganha CI, ganha hook, ganha TDD.
 4. **Sub-invocação é o modo de falha mais caro, porque não tem sinal.** Se um
-   componente não tem gatilho, ele não é camada, é rascunho. O wiring importa
-   mais que a sofisticação.
+   componente não tem gatilho, ele não é camada, é rascunho. O wiring importa mais que a sofisticação.
 5. **Defense-in-depth só é defesa se alguma camada for barreira no topo.**
    Verifique o ruleset, não a documentação. Três camadas locais + CI sem
    `required_status_checks` são três vezes telemetria.
