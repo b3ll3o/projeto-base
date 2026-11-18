@@ -98,7 +98,16 @@ A regra do repo continua valendo: **o fato tem UM dono**
 |---|---|---|
 | `arquivo` | um arquivo | existe, tem ≥ 1 linha de conteúdo e contém **todas** as âncoras |
 | `familia` | um glob (`docs/adr/*.md`) | o glob casa ≥ 1 arquivo e **cada** arquivo casa contém **todas** as âncoras |
-| `artefato` | um arquivo **gerado** e versionado | existe, e o gate roda o comando de frescor declarado pelo item (§5) |
+| `artefato` | um arquivo **gerado** e versionado | existe e contém **todas** as âncoras. O **frescor** do artefato contra o código é de outro gate (o `check-openapi-contract`, para o OpenAPI) — este gate não o mede, e não promete |
+
+**A âncora é um heading, não um texto solto.** A âncora que começa com `#`
+casa com uma linha de heading **igual** a ela; se o último caractere da âncora
+não for letra ou dígito, ela casa também com um heading que **começa** por
+ela (o `## §1.` casa com `## §1. Ambiente 2 — ...`). A âncora que **não**
+começa com `#` é literal (`erDiagram` dentro do diagrama, `"paths"` dentro do
+JSON). ⚠️ `## Contexto` **não** casa com `## Contexto do Negocio` — a
+comparação por `includes` aceitaria, e o gate passaria por um doc que não tem
+a seção.
 
 Além das âncoras, o gate exige, para todo item:
 
@@ -120,8 +129,22 @@ declarada, nunca inferida).
 
 A **sonda** é um glob de arquivos e o **padrão** é uma expressão regular: o
 gatilho disparou se **algum** arquivo da sonda casa com o padrão. As duas
-colunas são o comando que reproduz a medição — `grep -lE '<padrão>' <sonda>` —
-e é assim que o claim se sustenta sem o gate executar shell.
+colunas são o comando que reproduz a medição — o `\|` da tabela markdown é o
+**escape do pipe**, e o comando real usa o pipe cru:
+
+```bash
+grep -lE '"bullmq"|"kafkajs"|"amqplib"|"@aws-sdk/client-sqs"' package.json
+```
+
+> O gate aplica o padrão ao **conteúdo** do arquivo (a regex casa em qualquer
+> ponto) e o `grep` casa **por linha** — para padrão de dependência, as duas
+> formas coincidem.
+
+**Uma sonda que NÃO mede é erro.** Se o padrão não compila, ou se a sonda não
+casa **nenhum** arquivo, o gate acusa "a sonda do gatilho não mede" e **exige
+o doc** — porque "não disparou" é justamente o estado que autoriza o item a
+não ter doc. Uma sonda cega que degradasse para "não disparou" deixaria o item
+sem doc **para sempre**, com o gate verde.
 
 O gate cobra as **duas direções**:
 
@@ -138,6 +161,11 @@ O gate cobra as **duas direções**:
 |---|---|---|---|
 | `check-doc-kit` | **Cobertura do kit** | os 14 itens têm doc canônico, âncoras, índice e dono | falta doc, falta âncora, falta índice, falta dono |
 | `check-audit-skills` | **Procedimento** | os blocos `run` das skills de auditoria do kit rodam e passam | um passo quebra ou imprime `✗` |
+
+O `check-doc-kit` reconcilia **duas** tabelas desta convenção: a **§2** (item
+→ doc → âncoras → dono) e a **§5.1** (pilar → auditor → skill). O auditor de
+um item tem que ser o do **pilar dele**, e a skill de auditoria do pilar tem
+que **existir** — sem isso, as duas tabelas divergem em silêncio.
 
 O `check-doc-kit` **não** mede frescor do texto, qualidade da prosa nem
 acerto do quadrante Diátaxis — ver §6.
@@ -174,7 +202,9 @@ Dizer que o gate cobre frescor **todo** seria a classe 1 de
 - **Histórico**: `docs/superpowers/plans/**` e `.agents/runs/**` — o TDR é
   medido pelo **template e pela instância viva**, não pelo arquivo de plano.
 - **App derivado**: o kit é do `projeto-base`; o app derivado tem o **seu**
-  kit, e o `docs/system-design/extensao.md` §4 diz o que ele copia.
+  kit — ele **ajusta a matriz** (o doc canônico do item 6 é o PRD do app, não
+  o do template) e o `docs/system-design/extensao.md` §4 item 13 diz o que ele
+  confere.
 - **Documento de terceiro/vendor**: `.agents/skills/graphify/**`.
 
 ## §8. Quem é responsável

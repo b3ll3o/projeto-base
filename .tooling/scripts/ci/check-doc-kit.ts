@@ -86,6 +86,16 @@ export interface ItemDoKit {
   linha: number;
 }
 
+/** O auditor e a skill de um pilar, lidos da §5.1 da convenção. */
+export interface PilarDoKit {
+  /** O número do pilar (1..5). */
+  pilar: number;
+  /** O auditor declarado para o pilar. */
+  auditor: string;
+  /** A skill de auditoria declarada para o pilar. */
+  skill: string;
+}
+
 /** A declaração de um item condicional (a §4 da convenção). */
 export interface DeclaracaoCondicional {
   /** O nome do item, como está na §4. */
@@ -151,9 +161,9 @@ function ehSeparador(celulas: string[]): boolean {
  * precede: é o heading que diz a qual pilar os itens pertencem, e ele é a
  * única forma de saber que um pilar inteiro sumiu.
  */
-export function lerTabelas(md: string): { tabela: Tabela; heading: string }[] {
+export function lerTabelas(md: string): { tabela: Tabela; heading: string; erros: string[] }[] {
   const linhas = md.split('\n');
-  const achadas: { tabela: Tabela; heading: string }[] = [];
+  const achadas: { tabela: Tabela; heading: string; erros: string[] }[] = [];
   let heading = '';
   let i = 0;
   while (i < linhas.length) {
@@ -175,13 +185,29 @@ export function lerTabelas(md: string): { tabela: Tabela; heading: string }[] {
       continue;
     }
     const dados: string[][] = [];
+    const errosDaTabela: string[] = [];
     let j = i + 2;
     for (; j < linhas.length && linhas[j]!.trimStart().startsWith('|'); j++) {
       const cels = celulasDaLinha(linhas[j]!);
       if (ehSeparador(cels)) continue;
+      // Uma linha com NÚMERO DIFERENTE de células desloca as demais na
+      // leitura por nome — a coluna "Doc canônico" leria a célula do vizinho.
+      // O gate prefere falhar alto a medir a coluna errada.
+      if (cels.length !== cabecalho.length) {
+        errosDaTabela.push(
+          `a linha ${j + 1} da tabela tem ${cels.length} células e o cabeçalho tem ` +
+            `${cabecalho.length} — a linha está fora da forma da tabela (regra: ` +
+            'convenção kit-documentacao.md §2, formato das células).',
+        );
+        continue;
+      }
       dados.push(cels);
     }
-    achadas.push({ tabela: { cabecalho, linhas: dados, linha: i + 1 }, heading });
+    achadas.push({
+      tabela: { cabecalho, linhas: dados, linha: i + 1 },
+      heading,
+      erros: errosDaTabela,
+    });
     i = j;
   }
   return achadas;
@@ -220,14 +246,19 @@ export function pilarDoHeading(heading: string): number | null {
 export function lerMatriz(md: string): {
   itens: ItemDoKit[];
   condicionais: DeclaracaoCondicional[];
+  pilares: PilarDoKit[];
   pilaresVistos: number[];
+  erros: string[];
 } {
   const tabelas = lerTabelas(md);
   const itens: ItemDoKit[] = [];
   const condicionais: DeclaracaoCondicional[] = [];
+  const pilares: PilarDoKit[] = [];
+  const erros: string[] = [];
   const pilaresVistos = new Set<number>();
 
-  for (const { tabela, heading } of tabelas) {
+  for (const { tabela, heading, erros: errosDaTabela } of tabelas) {
+    erros.push(...errosDaTabela);
     const colDoc = coluna(tabela.cabecalho, 'Doc canônico');
     if (colDoc >= 0) {
       const pilar = pilarDoHeading(heading);
@@ -266,6 +297,26 @@ export function lerMatriz(md: string): {
       continue;
     }
 
+    const colSkill = coluna(tabela.cabecalho, 'Skill de auditoria');
+    const colPilar = coluna(tabela.cabecalho, 'Pilar');
+    if (colSkill >= 0 && colPilar >= 0) {
+      // A §5.1 — o auditor e a skill de CADA pilar. Ela é a fonte da segunda
+      // reconciliação do gate: o auditor de um item tem que ser o do pilar
+      // dele, e a skill tem que existir.
+      const colAuditor = coluna(tabela.cabecalho, 'Auditor');
+      for (const dados of tabela.linhas) {
+        const numero = valor(dados[colPilar]);
+        const m = /(\d+)/.exec(numero);
+        if (m === null) continue;
+        pilares.push({
+          pilar: Number(m[1]),
+          auditor: valor(dados[colAuditor]),
+          skill: valor(dados[colSkill]),
+        });
+      }
+      continue;
+    }
+
     const colSonda = coluna(tabela.cabecalho, 'Sonda');
     if (colSonda >= 0) {
       const colItem = coluna(tabela.cabecalho, 'Item');
@@ -290,7 +341,13 @@ export function lerMatriz(md: string): {
     }
   }
 
-  return { itens, condicionais, pilaresVistos: [...pilaresVistos].sort() };
+  return {
+    itens,
+    condicionais,
+    pilares,
+    pilaresVistos: [...pilaresVistos].sort(),
+    erros,
+  };
 }
 
 /** Converte um glob em regex — `**` atravessa diretórios, `*` não. */
@@ -325,10 +382,24 @@ export function globParaRegex(glob: string): RegExp {
   return new RegExp('^' + out + '$');
 }
 
+/**
+ * O resultado da sonda do item condicional.
+ *
+ * O terceiro estado (`erro`) é o que impede a **degradação silenciosa**: uma
+ * sonda com regex inválida ou com glob que não casa nada NÃO pode virar
+ * "não disparou" — porque "não disparou" é o estado que autoriza o item a
+ * não ter doc. MEDIDO em 2026-11-18 (revisão do PR do kit): com o `catch`
+ * devolvendo `false`, um typo no padrão deixava o AsyncAPI **para sempre**
+ * sem doc, e o gate ficava verde.
+ */
+export type ResultadoDaSonda = 'disparou' | 'nao-disparou' | 'erro';
+
 /** As entradas que a medição precisa — injetáveis para a spec. */
 export interface Entradas {
   itens: ItemDoKit[];
   condicionais: DeclaracaoCondicional[];
+  /** Os pilares lidos da §5.1 (auditor e skill de cada um). */
+  pilares: PilarDoKit[];
   /** O doc canônico existe? */
   existe: (caminho: string) => boolean;
   /** O conteúdo do arquivo (string vazia se não existe). */
@@ -337,8 +408,71 @@ export interface Entradas {
   arquivos: (glob: string) => string[];
   /** O agent existe em `.agents/agents/`? */
   agentExiste: (nome: string) => boolean;
-  /** O gatilho do item condicional disparou? */
-  sondaDispara: (declaracao: DeclaracaoCondicional) => boolean;
+  /** A skill existe em `.agents/skills/`? */
+  skillExiste: (nome: string) => boolean;
+  /** O gatilho do item condicional: disparou, não disparou, ou a sonda não mede. */
+  sonda: (declaracao: DeclaracaoCondicional) => ResultadoDaSonda;
+}
+
+/**
+ * Normaliza o texto de uma célula para comparação: minúsculas, sem acento,
+ * sem `**` e com espaço colapsado.
+ */
+export function normalizar(texto: string): string {
+  return texto
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\*+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * A célula da §4 declara a **não-aplicabilidade**?
+ *
+ * ⚠️ O teste "a célula está preenchida" não serve: o valor `**não**` (que
+ * significa "o item **se aplica**") contava como declaração, e o doc deixava
+ * de ser exigido. MEDIDO em 2026-11-18 (revisão do PR do kit). A célula só
+ * declara não-aplicabilidade quando começa com **sim**.
+ */
+export function declaraNaoAplicavel(texto: string): boolean {
+  return normalizar(texto).startsWith('sim');
+}
+
+/** A célula da §4 diz que o item **se aplica** (`não`)? */
+export function declaraQueSeAplica(texto: string): boolean {
+  return normalizar(texto).startsWith('nao');
+}
+
+/**
+ * A âncora casa com o doc?
+ *
+ * Para doc **markdown**, a âncora é uma linha de heading. O `includes()` puro
+ * aceitava `## Contexto do Negocio` como se fosse `## Contexto` — MEDIDO em
+ * 2026-11-18 (revisão do PR do kit). A regra:
+ *
+ * - a âncora casa com um heading **igual** a ela; ou
+ * - casa com um heading que **começa** por ela, **se** o último caractere da
+ *   âncora não for letra ou dígito (o `## §1.` casa com `## §1. Ambiente 2 —
+ *   ...`; o `## Contexto` NÃO casa com `## Contexto do Negocio`).
+ *
+ * Para o tipo `artefato` (JSON gerado), a âncora é uma **chave literal** e a
+ * comparação é por substring — JSON não tem heading.
+ */
+export function casaAncora(ancora: string, conteudo: string, tipo: TipoDeDoc): boolean {
+  // A âncora que começa com `#` é um HEADING; as outras são literais
+  // (`erDiagram` dentro de um diagrama, `"paths"` dentro de um JSON).
+  if (tipo === 'artefato' || !ancora.startsWith('#')) return conteudo.includes(ancora);
+  const ultimo = [...ancora].at(-1) ?? '';
+  const prefixo = !/[A-Za-z0-9]/.test(ultimo);
+  for (const linha of conteudo.split('\n')) {
+    const t = linha.trim();
+    if (!t.startsWith('#')) continue;
+    if (t === ancora) return true;
+    if (prefixo && t.startsWith(ancora)) return true;
+  }
+  return false;
 }
 
 /**
@@ -365,7 +499,18 @@ export function lacunasDoKit(entradas: Entradas): string[] {
     }
   }
 
+  // A §5.1: o auditor de cada pilar e a skill que ele carrega.
+  for (const pilar of entradas.pilares) {
+    if (pilar.skill !== '' && !entradas.skillExiste(pilar.skill)) {
+      errors.push(
+        `Pilar ${pilar.pilar}: a skill de auditoria "${pilar.skill}" não existe em ` +
+          '.agents/skills/ — a §5.1 declara uma skill que ninguém carrega.',
+      );
+    }
+  }
+
   const vistos = new Set<string>();
+  const vistosNumero = new Set<string>();
   for (const item of entradas.itens) {
     const quem = `item ${item.numero} ("${item.item}")`;
 
@@ -373,11 +518,29 @@ export function lacunasDoKit(entradas: Entradas): string[] {
       errors.push(`${quem}: o item está repetido na matriz — um item por linha.`);
     }
     vistos.add(item.item);
+    if (item.numero !== '') {
+      if (vistosNumero.has(item.numero)) {
+        errors.push(
+          `${quem}: o número "${item.numero}" já é de outro item — a numeração da ` +
+            'matriz é única (a coluna `#` é o índice do item).',
+        );
+      }
+      vistosNumero.add(item.numero);
+    }
 
     if (!(['arquivo', 'familia', 'artefato'] as string[]).includes(item.tipo)) {
       errors.push(
         `${quem}: tipo "${item.tipo}" não é um tipo que o gate sabe medir ` +
           '(arquivo, familia ou artefato).',
+      );
+    }
+
+    // O auditor do item tem que ser o do pilar dele (a §5.1 é a fonte).
+    const pilar = entradas.pilares.find((p) => p.pilar === item.pilar);
+    if (pilar !== undefined && pilar.auditor !== '' && item.auditor !== pilar.auditor) {
+      errors.push(
+        `${quem}: o auditor "${item.auditor}" não é o auditor do Pilar ${item.pilar} ` +
+          `("${pilar.auditor}"), declarado na §5.1 da convenção.`,
       );
     }
 
@@ -396,17 +559,34 @@ export function lacunasDoKit(entradas: Entradas): string[] {
             'não disparou e ninguém escreveu por que o item não se aplica.',
         );
       } else {
-        const disparou = entradas.sondaDispara(declaracao);
-        if (disparou && declaracao.declaracao !== '') {
+        const resultado = entradas.sonda(declaracao);
+        if (resultado === 'erro') {
           errors.push(
-            `${quem}: a declaração de não-aplicabilidade parou de valer — o gatilho ` +
-              `disparou ("${declaracao.gatilho}"). Remova a declaração.`,
+            `${quem}: a sonda do gatilho NÃO mede ("${declaracao.gatilho}") — uma ` +
+              'sonda cega não autoriza a não-aplicabilidade, e o doc é exigido ' +
+              'até a sonda medir (regra: convenção kit-documentacao.md §4).',
           );
+        } else {
+          const disparou = resultado === 'disparou';
+          const dizSim = declaraNaoAplicavel(declaracao.declaracao);
+          const dizNao = declaraQueSeAplica(declaracao.declaracao);
+          if (disparou && dizSim) {
+            errors.push(
+              `${quem}: a declaração de não-aplicabilidade parou de valer — o gatilho ` +
+                `disparou ("${declaracao.gatilho}"). Remova a declaração.`,
+            );
+          }
+          if (!disparou && dizSim) {
+            naoAplicavel = true;
+          } else if (!disparou && !dizNao) {
+            errors.push(`${quem}: item condicional sem declaração de não-aplicabilidade (§4).`);
+          } else if (!disparou && dizNao) {
+            errors.push(
+              `${quem}: a §4 diz que o item SE APLICA, mas o gatilho não disparou — ` +
+                'ou a sonda está errada, ou a declaração está.',
+            );
+          }
         }
-        if (!disparou && declaracao.declaracao === '') {
-          errors.push(`${quem}: item condicional sem declaração de não-aplicabilidade (§4).`);
-        }
-        naoAplicavel = !disparou && declaracao.declaracao !== '';
       }
     }
 
@@ -431,7 +611,7 @@ export function lacunasDoKit(entradas: Entradas): string[] {
           errors.push(`${quem}: o doc canônico "${arquivo}" está vazio.`);
         }
         for (const ancora of item.ancoras) {
-          if (!conteudo.includes(ancora)) {
+          if (!casaAncora(ancora, conteudo, item.tipo)) {
             errors.push(
               `${quem}: o doc canônico "${arquivo}" não tem a âncora "${ancora}" ` +
                 `(regra: convenção kit-documentacao.md §2, coluna Âncoras).`,
@@ -574,35 +754,57 @@ export async function checkDocKit(opts: { repoRoot: string }): Promise<CheckResu
   };
   const agentExiste = (nome: string): boolean => existe(path.join(DIR_AGENTS, `${nome}.md`));
 
-  const sondaDispara = (declaracao: DeclaracaoCondicional): boolean => {
-    if (declaracao.padrao === '') return false;
+  /**
+   * A sonda do gatilho — com o terceiro estado.
+   *
+   * Uma sonda que NÃO mede (regex que não compila, ou glob que não casa
+   * arquivo nenhum) devolve `erro`: o gate recusa a não-aplicabilidade, porque
+   * "não disparou" é justamente o estado que autoriza o item a não ter doc.
+   */
+  const sonda = (declaracao: DeclaracaoCondicional): ResultadoDaSonda => {
+    if (declaracao.padrao === '') return 'erro';
     let re: RegExp;
     try {
       re = new RegExp(declaracao.padrao);
     } catch {
-      return false;
+      return 'erro';
     }
-    for (const sonda of declaracao.sondas) {
-      for (const arquivo of casaCom(sonda)) {
-        if (re.test(ler(arquivo))) return true;
+    if (declaracao.sondas.length === 0) return 'erro';
+    let algumArquivo = false;
+    for (const sondaGlob of declaracao.sondas) {
+      const arquivosDaSonda = casaCom(sondaGlob);
+      if (arquivosDaSonda.length === 0) continue;
+      algumArquivo = true;
+      for (const arquivo of arquivosDaSonda) {
+        if (re.test(ler(arquivo))) return 'disparou';
       }
     }
-    return false;
+    // A sonda não casou NENHUM arquivo: ela não mede nada.
+    return algumArquivo ? 'nao-disparou' : 'erro';
   };
 
-  const errors = lacunasDoKit({
-    itens: matriz.itens,
-    condicionais: matriz.condicionais,
-    existe,
-    ler,
-    arquivos: casaCom,
-    agentExiste,
-    sondaDispara,
-  });
+  const skillExiste = (nome: string): boolean =>
+    todos.some((a) => a === path.join('.agents', 'skills', nome, 'SKILL.md'));
+
+  const errors = [
+    ...matriz.erros,
+    ...lacunasDoKit({
+      itens: matriz.itens,
+      condicionais: matriz.condicionais,
+      pilares: matriz.pilares,
+      existe,
+      ler,
+      arquivos: casaCom,
+      agentExiste,
+      skillExiste,
+      sonda,
+    }),
+  ];
 
   const advisories: string[] = [];
   advisories.push(
-    `medido: ${matriz.itens.length} item(ns) do kit em ${matriz.pilaresVistos.length} pilar(es).`,
+    `medido: ${matriz.itens.length} item(ns) do kit em ${matriz.pilaresVistos.length} pilar(es) ` +
+      `(${matriz.pilares.length} auditor(es) na §5.1).`,
   );
 
   return { ok: errors.length === 0, errors, advisories };
