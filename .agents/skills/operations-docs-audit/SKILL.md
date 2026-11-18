@@ -2,7 +2,7 @@
 name: operations-docs-audit
 version: 1.0
 updated: 2026-11-18
-description: "Processo determinístico de auditoria do pilar 5 do kit de documentação — mede a seção §1 de cada runbook, as quatro seções do template de post-mortem, as quatro seções mínimas do CHANGELOG e compara a versão declarada no CHANGELOG com os 4 footers canônicos do repo. Carregado por `operations-docs-auditor` quando a task é de auditoria (não escrita). Use para scan periódico, pré-release ou revisão sob demanda."
+description: "Processo determinístico de auditoria do pilar 5 do kit de documentação — mede a seção §1 de cada runbook, as quatro seções do template de post-mortem, as quatro seções mínimas do CHANGELOG e compara a versão declarada no CHANGELOG com os 6 footers canônicos do repo. Carregado por `operations-docs-auditor` quando a task é de auditoria (não escrita). Use para scan periódico, pré-release ou revisão sob demanda."
 ---
 
 # Skill: operations-docs-audit
@@ -98,12 +98,13 @@ else
 fi
 ```
 
-## Passo 4 — A versão do CHANGELOG contra os 4 footers canônicos
+## Passo 4 — A versão do CHANGELOG contra os 6 footers canônicos
 
-Os 4 footers canônicos estão declarados na convenção
+Os 6 footers canônicos estão declarados na convenção
 [`post-merge-release.md`](../../specs/conventions/post-merge-release.md)
 ("Onde a versão canônica vive"). A comparação **imprime os dois lados** — o
-veredito é do gate `check-doc-claims`, que é o dono do número.
+veredito é do gate `check-version-footers`, que é o dono do número — o
+`check-doc-claims` mede os claims numéricos dos docs de API, não o footer.
 
 ```bash
 # [gate: run — compara a versão declarada no CHANGELOG com os 4 footers canônicos]
@@ -119,14 +120,17 @@ else
   echo "changelog: CHANGELOG.md ausente no repo — versão declarada ausente"
 fi
 divergentes=0
-for f in docs/MONOREPO.md docs/STACK.md docs/TEMPLATE_USAGE.md .agents/specs/conventions/estrutura-e-versionamento.md; do
+# Os SEIS footers — a lista autoritativa é `FOOTERS_DE_VERSAO` em
+# `.tooling/scripts/ci/check-version-footers.ts` (o `AGENTS.md` e o `README.md`
+# entraram depois, e são exatamente os que já derivaram uma vez — issue #126).
+for f in docs/MONOREPO.md docs/STACK.md docs/TEMPLATE_USAGE.md .agents/specs/conventions/estrutura-e-versionamento.md AGENTS.md README.md; do
   v=$(grep -m1 -oE '\*\*Versão[^:]*:\*\* *[0-9]+\.[0-9]+\.[0-9]+' "$f" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
   echo "  footer $f: ${v:-sem footer de versão}"
   if [ -n "$declarada" ] && [ "$v" != "$declarada" ]; then
     divergentes=$((divergentes + 1))
   fi
 done
-echo "changelog: $divergentes de 4 footer(s) canônico(s) divergem da versão declarada — o veredito é do check-doc-claims"
+echo "changelog: $divergentes de 6 footer(s) canônico(s) divergem da versão declarada — o veredito é do check-version-footers"
 ```
 
 ## Passo 5 — Fechar o loop
@@ -154,7 +158,8 @@ ficou verde, ou quando a lacuna está **declarada** num lugar canônico.
 - Agent: `.agents/agents/operations-docs-auditor.md` (papel, anti-padrões)
 - Convenção: `.agents/specs/conventions/kit-documentacao.md` §2.5
 - Convenção vizinha: `.agents/specs/conventions/post-merge-release.md`
-  ("Onde a versão canônica vive" — os 4 footers)
+  ("Onde a versão canônica vive" — os footers; a lista que o gate mede é os
+  6 de `check-version-footers.ts`)
 - Gate: `.tooling/scripts/ci/check-doc-kit.ts`
 - Specs dos itens: `runbook-specialist` · `postmortem-specialist` ·
   `changelog-specialist`

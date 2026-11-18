@@ -112,7 +112,7 @@ models, o gatilho do AsyncAPI com a declaração da §4, e o doc de contrato por
 bounded context.
 
 ```bash
-# [gate: run — amostra do que a skill mede: o gatilho do item condicional AsyncAPI]
+# exemplo — amostra do que a skill mede: o gatilho do item condicional AsyncAPI]
 grep -lE '"bullmq"|"kafkajs"|"amqplib"|"@aws-sdk/client-sqs"' package.json apps/*/package.json packages/*/package.json
 ```
 
@@ -159,7 +159,7 @@ result:
       - { item: 9, doc: "apps/api/openapi.json", measured: "chaves exigidas", value: "3 de 3" }
       - { item: 11, doc: "docs/system-design/dados.md", measured: "models citados", value: "12 de 12" }
       - { item: 10, doc: "docs/api/asyncapi.yaml", measured: "gatilho", value: "não dispara" }
-      - { item: 11, doc: "docs/api/", measured: "BCs com doc", value: "6 de 6" }
+      - { item: 9, doc: "docs/api/", measured: "BCs com doc", value: "6 de 6" }
     findings: []
     owner: ["openapi-doc-specialist", "asyncapi-specialist", "erd-specialist"]
 ```
@@ -208,5 +208,6 @@ result:
 ---
 
 **Arquivo:** `.agents/agents/contract-docs-auditor.md`
+**Memória:** `.agents/memory/contract-docs-auditor.md`
 **Tipo:** Auditor de documentação (pilar 4 do kit — contratos)
 **Skill carregada:** `.agents/skills/contract-docs-audit/SKILL.md` (processo determinístico — mede OpenAPI, ERD, o gatilho do AsyncAPI e a cobertura de BC)

@@ -29,8 +29,9 @@ Diferença em relação aos outros dois agentes de doc do catálogo:
 
 - A demanda cita `docs/**` **de unidade de código** — `docs/api/<bc>.md`,
   `docs/web/rotas.md`, doc de package — ou um inventário que ficou vago.
-  ⚠️ **README, CONTRIBUTING, GLOSSARY, CHANGELOG, ADR, runbooks, PRD, TDR e
-  post-mortems NÃO são meus**: são os 14 itens do kit, com o dono em
+  ⚠️ **NENHUM dos 14 itens do kit é meu** — README, CONTRIBUTING, GLOSSARY,
+  HLD, C4, PRD, TDR, ADR, OpenAPI, AsyncAPI, ERD, runbooks, post-mortems e
+  CHANGELOG: o dono de cada um está na matriz de
   [`kit-documentacao.md` §2](../specs/conventions/kit-documentacao.md).
 - Um gate de documentação acusou gap (cobertura, tamanho, drift).
 - Um módulo, model, rota ou script **novo** entrou no código e ninguém

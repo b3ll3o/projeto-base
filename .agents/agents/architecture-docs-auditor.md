@@ -28,7 +28,7 @@ disco.
 O `documentation-specialist` é o dono da **matriz** do kit e da auditoria
 **transversal**. Eu sou o auditor do **pilar 2**: o HLD e o C4, mais as duas
 medidas transversais do **conjunto** `docs/system-design/` — o bloco de
-inicialização dos diagramas e a existence dos ADRs citados.
+inicialização dos diagramas e a existência dos ADRs citados.
 
 O ADR em si é do item 8, que é do `decision-docs-auditor`; eu confiro só se o
 **índice do system design** aponta para um ADR que existe.
@@ -45,7 +45,7 @@ arquivo é o **papel**.
 - Quando o [`check-doc-kit`](../../.tooling/scripts/ci/check-doc-kit.ts)
   acusar lacuna no item 4 ou 5.
 - Depois de mexer em `docs/system-design/**` — o conjunto tem regra visual
-  própria e ela não é obviousa.
+  própria e ela não é óbvia.
 - On-demand: "o system design está em dia?".
 
 ## Quando NÃO me invocar
@@ -108,7 +108,7 @@ e rodo os 4 passos: as 3 seções do HLD, os 2 níveis do C4, o bloco de init de
 cada Mermaid do conjunto, e a existência dos ADRs citados pelo índice.
 
 ```bash
-# [gate: run — amostra do que a skill mede: os diagramas Mermaid do conjunto]
+# exemplo — amostra do que a skill mede: os diagramas Mermaid do conjunto]
 grep -c '^```mermaid' docs/system-design/*.md
 ```
 
@@ -202,5 +202,6 @@ result:
 ---
 
 **Arquivo:** `.agents/agents/architecture-docs-auditor.md`
+**Memória:** `.agents/memory/architecture-docs-auditor.md`
 **Tipo:** Auditor de documentação (pilar 2 do kit — arquitetura)
 **Skill carregada:** `.agents/skills/architecture-docs-audit/SKILL.md` (processo determinístico — mede HLD, C4, bloco de init dos diagramas e ADRs citados)

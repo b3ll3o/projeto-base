@@ -106,7 +106,7 @@ rodo os 4 passos: as 3 seções do README, as 4 seções do CONTRIBUTING, os
 termos do GLOSSARY e os links dos três contra o que existe em disco.
 
 ```bash
-# [gate: run — amostra do que a skill mede: as três seções mínimas do README]
+# exemplo — amostra do que a skill mede: as três seções mínimas do README]
 grep -c '^## ' README.md
 ```
 
@@ -205,5 +205,6 @@ result:
 ---
 
 **Arquivo:** `.agents/agents/onboarding-docs-auditor.md`
+**Memória:** `.agents/memory/onboarding-docs-auditor.md`
 **Tipo:** Auditor de documentação (pilar 1 do kit — onboarding)
 **Skill carregada:** `.agents/skills/onboarding-docs-audit/SKILL.md` (processo determinístico — mede seções mínimas, termos e links)

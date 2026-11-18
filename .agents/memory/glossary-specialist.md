@@ -52,7 +52,8 @@ o RBAC"*. O glossário vira o lugar onde isso está escrito uma vez.
 
 ### 2026-11-18 — Termo não decidido é lacuna nomeada, não definição inventada
 
-**Contexto:** o item 3 do kit é **obrigatório** — mas o `GLOSSARY.md` não
+**Contexto:** o item 3 do kit é **obrigatório** — e o `GLOSSARY.md` **não
+existia** antes do kit (nasceu com ele, no mesmo PR) —
 existe, e o `docs/agents/domain.md` diz que ele nasce *"quando um termo ou
 decisão é de fato resolvido"*.
 
@@ -66,8 +67,8 @@ glossário cresce junto com o produto, sem inflar.
 
 ## Padrões Descobertos
 
-- `GLOSSARY.md` **não existe** na raiz (medido em 2026-11-18). O
-  `docs/agents/domain.md` avisa: *"**Ainda não existe**"*, e diz que a skill
+- `GLOSSARY.md` **existe** na raiz (medido em 2026-11-18: 87 linhas, 30
+  termos). O `docs/agents/domain.md` aponta para ele, e a skill
   `domain-modeling` (plugin `mattpocock-skills`) o cria.
 - O nome canônico do arquivo é **`GLOSSARY.md`** desde a v1.3.0 do plugin; até
   a v1.2.3 ele se chamava `CONTEXT.md`. O `domain.md` registra essa troca

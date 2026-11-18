@@ -70,18 +70,19 @@ em ADR e em código, antes de o glossário existir.
 
 | O que eu garanto | Como se mede | Quem confere |
 |---|---|---|
-| As 2 âncoras do gate existem: `## Termos do domínio`, `## Como usar este glossário` | `grep -c '^## ' GLOSSARY.md` → as 2 linhas | [`check-doc-kit`](../../.tooling/scripts/ci/check-doc-kit.ts) |
-| Todo termo tem **dono** (ADR, catálogo ou schema) | cada entrada cita o path do dono | `onboarding-docs-auditor` |
-| Nenhum termo tem 2 definições | `grep -c` do termo no glossário = 1 | `onboarding-docs-auditor` |
-| Nenhuma entrada duplica um ADR | a entrada **linka**, não reescreve | `onboarding-docs-auditor` |
+| As 2 âncoras do gate existem: `## Termos do domínio`, `## Como usar este glossário` | `grep -cF '## Termos do domínio' GLOSSARY.md` → 1 (e o mesmo para a outra) | [`check-doc-kit`](../../.tooling/scripts/ci/check-doc-kit.ts) |
+| Todo termo tem **dono** (ADR, catálogo ou schema) | cada entrada cita o path do dono | leitura do agent (o auditor mede a **cobertura** do item) |
+| Nenhum termo tem 2 definições | `grep -c` do termo no glossário = 1 | leitura do agent (o auditor mede a **cobertura** do item) |
+| Nenhuma entrada duplica um ADR | a entrada **linka**, não reescreve | leitura do agent (o auditor mede a **cobertura** do item) |
 | O glossário tem no máximo 300 linhas | `check-doc-size` | gate |
 
-> **Estado medido em 2026-11-18:** `GLOSSARY.md` **não existe** na raiz
-> (`ls GLOSSARY.md` → "Não such file or directory"). O item 3 do kit está
-> como **lacuna nomeada**. O [`docs/agents/domain.md`](../../docs/agents/domain.md)
-> já avisa que o arquivo "ainda não existe" e que a skill `domain-modeling`
-> o cria quando um termo é de fato resolvido — o nome canônico é
-> `GLOSSARY.md` (era `CONTEXT.md` até a v1.2.3 do plugin).
+> **Estado medido em 2026-11-18:** `GLOSSARY.md` **existe** na raiz, com
+> **87 linhas** e **30 termos** (`wc -l GLOSSARY.md` → 87;
+> `grep -cE '^\| \*\*' GLOSSARY.md` → 30). As duas âncoras do item 3
+> estão lá (`grep -cF '## Termos do domínio' GLOSSARY.md` → 1;
+> `grep -cF '## Como usar este glossário' GLOSSARY.md` → 1). O
+> [`docs/agents/domain.md`](../../docs/agents/domain.md) aponta para ele, e o
+> crescimento é **lazy**: um termo entra quando é de fato resolvido.
 
 ## Inputs (do dispatch)
 

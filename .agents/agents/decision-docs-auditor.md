@@ -106,7 +106,7 @@ os 4 passos: as 3 seções de cada ADR, a cobertura do índice de domínio, as
 seções do PRD e do TDR e a citação da instância pelos dois índices.
 
 ```bash
-# [gate: run — amostra do que a skill mede: os ADRs em disco e os citados no índice]
+# exemplo — amostra do que a skill mede: os ADRs em disco e os citados no índice]
 git ls-files 'docs/adr/*.md' | wc -l
 ```
 
@@ -199,5 +199,6 @@ result:
 ---
 
 **Arquivo:** `.agents/agents/decision-docs-auditor.md`
+**Memória:** `.agents/memory/decision-docs-auditor.md`
 **Tipo:** Auditor de documentação (pilar 3 do kit — decisões)
 **Skill carregada:** `.agents/skills/decision-docs-audit/SKILL.md` (processo determinístico — mede ADR, PRD, TDR e a cobertura dos índices)

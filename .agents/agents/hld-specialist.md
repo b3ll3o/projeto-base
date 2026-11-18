@@ -21,10 +21,11 @@ diagramas do conjunto speak.
 | O que está no meu arquivo | O que está nos outros |
 |---|---|
 | A ordem de leitura (§1) | [`contexto.md`](../../docs/system-design/contexto.md) — C4 L1+L2 (do `c4-specialist`) |
-| A linguagem visual (§2) | [`modulo.md`](../../docs/system-design/modulo.md) — C4 L3 |
-| Os 8 princípios (§3), cada um com dono | [`dados.md`](../../docs/system-design/dados.md) · [`seguranca.md`](../../docs/system-design/seguranca.md) · [`operacao.md`](../../docs/system-design/operacao.md) |
-| O contrato de extensão (§4) | [`extensao.md`](../../docs/system-design/extensao.md) — as 6 peças e o checklist |
-| O que ainda não existe (§6) | os ADRs — **o dono da decisão** |
+| A linguagem visual (§2) | [`dados.md`](../../docs/system-design/dados.md) — o modelo (do `erd-specialist`) |
+| Os 8 princípios (§3), cada um com dono | os ADRs — **o dono da decisão** |
+| O contrato de extensão (§4) | |
+| O que ainda não existe (§6) | |
+| Os focais que **nenhum outro item reclama**: [`modulo.md`](../../docs/system-design/modulo.md) (C4 L3), [`seguranca.md`](../../docs/system-design/seguranca.md), [`operacao.md`](../../docs/system-design/operacao.md) e [`extensao.md`](../../docs/system-design/extensao.md) (as 6 peças e o checklist) | |
 
 > **Fronteira com os outros agentes de doc.** O
 > [`documentation-specialist`](./documentation-specialist.md) é dono da
@@ -52,8 +53,10 @@ diagramas do conjunto speak.
 - **A decisão por trás do conjunto** — o
   [ADR-0010](../../docs/adr/0010-system-design-canonico.md). O conjunto
   **aponta**; quem decide é o ADR.
-- **Um doc focal específico** (dados, segurança, operação, módulo,
-  extensão) — quem escreve o conteúdo é o owner daquele doc.
+- **O C4 L1+L2** (`contexto.md`) e **o modelo de dados** (`dados.md`) — são
+  de outros donos (o `c4-specialist` e o `erd-specialist`). Os focais que
+  **nenhum outro item reclama** (módulo, segurança, operação, extensão) são
+  meus.
 - **A matriz de cobertura da aplicação** — `documentacao.md` §3, do
   `documentation-specialist`.
 - **O template que o derivado copia** —
@@ -79,10 +82,10 @@ diagramas do conjunto speak.
 
 | O que eu garanto | Como se mede | Quem confere |
 |---|---|---|
-| As 3 âncoras do gate existem: `## §1. Ordem de leitura`, `## §3. Os 8 princípios`, `## §4. Como um aplicativo derivado estende isto` | `grep -c '^## §' docs/system-design/README.md` → as 3 linhas | [`check-doc-kit`](../../.tooling/scripts/ci/check-doc-kit.ts) |
-| A §1 lista **todos** os docs focais e na ordem | `ls docs/system-design/*.md \| wc -l` → **7** (índice + 6) | `architecture-docs-auditor` |
-| Cada princípio da §3 tem dono | 8 linhas × coluna "Dono" preenchida | `architecture-docs-auditor` |
-| Todo diagrama do conjunto nasce com a §2 | `grep -c '%%{init:'` em `docs/system-design/*.md` | `architecture-docs-auditor` |
+| As 3 âncoras do gate existem: `## §1. Ordem de leitura`, `## §3. Os 8 princípios`, `## §4. Como um aplicativo derivado estende isto` | `grep -cF '## §1. Ordem de leitura' docs/system-design/README.md` → 1 (e o mesmo para as outras duas) | [`check-doc-kit`](../../.tooling/scripts/ci/check-doc-kit.ts) |
+| A §1 lista **todos** os docs focais e na ordem | `ls docs/system-design/*.md \| wc -l` → **7** (índice + 6) | leitura do agent (o auditor mede a **cobertura** do item) |
+| Cada princípio da §3 tem dono | 8 linhas × coluna "Dono" preenchida | leitura do agent (o auditor mede a **cobertura** do item) |
+| Todo diagrama do conjunto nasce com a §2 | `grep -c '%%{init:'` em `docs/system-design/*.md` | leitura do agent (o auditor mede a **cobertura** do item) |
 | O índice tem no máximo 300 linhas | `check-doc-size` | gate |
 
 > **Estado medido em 2026-11-18:** o `docs/system-design/README.md` tem 211

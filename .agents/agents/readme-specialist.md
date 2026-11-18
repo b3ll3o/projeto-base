@@ -56,7 +56,7 @@ execução, nem o índice de ADRs — eu **aponto** para quem os possui.
 1. **A vitrine é a primeira resposta, não o catálogo.** O README que carrega a
    lista completa de agents envelhece a cada PR; o README que aponta para o
    índice envelhece quando o índice muda.
-2. **Todo número tem o comando que o reproduz.** Um "28 agents" sem o `ls`
+2. **Todo número tem o comando que o reproduz.** Um "47 agents" sem o `ls`
    que o mede é uma claim sem lastro (`tamanho-e-revisao.md`).
 3. **O README aponta; ele não duplica.** O fato tem **um** dono
    (`dry.md`): o runbook é do `docs/como-rodar.md`, o desenho é do system
@@ -70,15 +70,15 @@ execução, nem o índice de ADRs — eu **aponto** para quem os possui.
 
 | O que eu garanto | Como se mede | Quem confere |
 |---|---|---|
-| As 3 âncoras do gate existem: `## O que é`, `## Como executar localmente`, `## Documentação` | `grep -c '^## ' README.md` → as 3 linhas | [`check-doc-kit`](../../.tooling/scripts/ci/check-doc-kit.ts) |
-| As contagens do rodapé batem com o disco | os `ls … \| wc -l` impressos ao lado de cada número | eu + `onboarding-docs-auditor` |
-| Todo comando do bloco de execução roda | rodar o comando de fora, com o `.env` de exemplo | eu + `onboarding-docs-auditor` |
+| As 3 âncoras do gate existem: `## O que é`, `## Como executar localmente`, `## Documentação` | `grep -cF '## O que é' README.md` → 1 (e o mesmo para as outras duas) | [`check-doc-kit`](../../.tooling/scripts/ci/check-doc-kit.ts) |
+| As contagens do rodapé batem com o disco | os `ls … \| wc -l` impressos ao lado de cada número | leitura do agent (o auditor mede a **cobertura** do item) |
+| Todo comando do bloco de execução roda | rodar o comando de fora, com o `.env` de exemplo | leitura do agent (o auditor mede a **cobertura** do item) |
 | Todo link relativo do arquivo resolve | `check-doc-refs` (roda no `preflight`) | gate |
 | O README tem no máximo 300 linhas | `check-doc-size` | gate |
 
-> **Estado medido em 2026-11-18:** o `README.md` tem 10 seções `##`, e
-> **não tem `## Documentação`** — o gate do kit reprova o item 1 enquanto
-> ela não existir. `grep -c '^## Documentação' README.md` → `0`.
+> **Estado medido em 2026-11-18:** o `README.md` tem **11** seções `##`
+> (`grep -c '^## ' README.md` → 11), **299 linhas** (`wc -l README.md`), e as
+> 3 âncoras do item 1 estão lá (`grep -cF '## Documentação' README.md` → 1).
 
 ## Inputs (do dispatch)
 
@@ -159,9 +159,9 @@ result:
     file: README.md
     sections_changed: ["## Documentação"]
     claims_reconciled:
-      - claim: "28 agents"
+      - claim: "47 agents"
         command: "ls .agents/agents/*.md | wc -l"
-        value: 28
+        value: 47
     commands_verified:
       - command: "pnpm --filter @projeto/api openapi:export"
         result: "ok"
@@ -189,7 +189,7 @@ result:
 - ❌ **Duplicar o catálogo de agents.** O README aponta para `AGENTS.md` §3.
 - ❌ **Copiar o runbook para dentro do README.** O runbook é do
   `docs/como-rodar.md`; o README dá o caminho do primeiro minuto.
-- ❌ **Número sem comando.** "28 agents" sem o `ls` que o mede.
+- ❌ **Número sem comando.** "47 agents" sem o `ls` que o mede.
 - ❌ **Comando não verificado.** Citar `pnpm dev` sem rodar não prova nada.
 - ❌ **README com 500 linhas.** O teto é 300 — e ele é medido.
 - ❌ **Rodapé de versão autoral.** A tag do template é dos 4 footers

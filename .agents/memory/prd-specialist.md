@@ -53,9 +53,9 @@ cópia.
 
 ## Padrões Descobertos
 
-- O repo não tem `docs/prd/` nem `docs/tdr/` em disco — as duas famílias
-  nascem com o kit (medido em 2026-11-18, `ls docs/prd docs/tdr` → não
-  existe).
+- As famílias `docs/prd/` e `docs/tdr/` **nasceram com o kit** (medido em
+  2026-11-18, `ls docs/prd docs/tdr` → as duas existem, com 1 instância
+  cada e o índice `README.md` de cada uma).
 - `apps/api/src/modules/` tem 6 bounded contexts (`auth`, `feature-flags`,
   `health`, `profiles`, `tenancy`, `users`) — `ls apps/api/src/modules/ | wc -l`
   → `6`. É o número que serve de métrica de "escopo entregue".

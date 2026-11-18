@@ -94,7 +94,9 @@ else
       echo "  AUSENTE: $s"
     fi
   done
-  tabela=$(grep -cE '^\|[^-]' GLOSSARY.md)
+  # O cabeçalho da tabela também casa com `^\|` — a contagem de termos
+  # usa o formato do termo (`| **Termo**`), e não a linha do cabeçalho.
+  tabela=$(grep -cE '^\| \*\*' GLOSSARY.md)
   lista=$(grep -cE '^[-*] ' GLOSSARY.md)
   adr=$(grep -c 'docs/adr/' GLOSSARY.md)
   echo "GLOSSARY.md: $((tabela + lista)) termo(s) declarado(s) em $tabela linha(s) de tabela e $lista de lista, $adr citação(ões) de docs/adr/"

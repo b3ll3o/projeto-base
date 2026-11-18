@@ -149,6 +149,9 @@ path_globs:
   - { pattern: "docs/system-design/README.md", specialists: [hld-specialist] }
   - { pattern: "docs/system-design/contexto.md", specialists: [c4-specialist] }
   - { pattern: "docs/system-design/modulo.md", specialists: [hld-specialist] }
+  - { pattern: "docs/system-design/seguranca.md", specialists: [hld-specialist] }
+  - { pattern: "docs/system-design/operacao.md", specialists: [hld-specialist] }
+  - { pattern: "docs/system-design/extensao.md", specialists: [hld-specialist] }
   - { pattern: "docs/system-design/dados.md", specialists: [erd-specialist] }
 ```
 

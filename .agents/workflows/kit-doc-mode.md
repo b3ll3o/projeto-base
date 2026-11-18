@@ -55,7 +55,9 @@ type: workflow
 
 5. **Rodar a skill de auditoria do pilar** — o processo determinístico:
    ```bash
-   # a skill do pilar é o procedimento; o agent é o papel
+   # a skill do pilar é o PROCEDIMENTO (a do agent); o `check-audit-skills`
+   # é o gate que EXECUTA todas as skills de auditoria do repo — ele roda a
+   # do pilar junto com as outras.
    pnpm exec tsx .tooling/scripts/ci/check-audit-skills.ts
    ```
 

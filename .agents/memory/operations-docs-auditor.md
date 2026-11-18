@@ -15,7 +15,9 @@ description: Memória acumulada do agent operations-docs-auditor — auditor do 
 2026-11-18, declarando a versão **1.30.0**. Os 4 footers canônicos
 (`docs/MONOREPO.md`, `docs/STACK.md`, `docs/TEMPLATE_USAGE.md` e
 `.agents/specs/conventions/estrutura-e-versionamento.md`) declaravam **1.29.0**
-— os quatro, iguais entre si.
+— os quatro, iguais entre si. (MEDIDO depois: o bump do kit levou os **6**
+footers — com o `AGENTS.md` e o `README.md`, que a lista de 4 omitia — a
+**1.30.0**.)
 
 **Decisão:** O passo 4 imprime `changelog: versão declarada 1.30.0`, a linha de
 cada footer, e a **contagem** de quantos divergem (`4 de 4`). Ele **não**
@@ -60,17 +62,20 @@ a doutrina de `documentation-audit` §Erros comuns.
   leitura (`📖 lido do código`, `✅ medido 2026-10-21`) e a seção §2 logo
   depois. O `docs/como-rodar.md` tem a forma `## §1.1` / `§1.2` / `§1.4` —
   numeração com subseção, porque é um runbook longo.
-- O `docs/post-mortems/README.md` **não existia** em 2026-11-18 — o item 13
-  era lacuna aberta, e a matriz já o declara `obrigatório`.
+- O `docs/post-mortems/README.md` **nasceu com o kit** (2026-11-18, 228
+  linhas) — o item 13 é `obrigatório` e o template blameless tem as 4 seções
+  mínimas que a matriz declara.
 - O `CHANGELOG.md` tem 69 linhas, 2 seções de versão e as 4 seções mínimas
   (`## [Unreleased]`, `### Adicionado`, `### Corrigido`, `### Quebras de
   compatibilidade`). Ele é o **único** item do kit com os 4 em nível `###`.
-- Os 4 footers canônicos estão listados na convenção
+- Os footers canônicos estão listados na convenção
   `post-merge-release.md` §"Onde a versão canônica vive", e a própria
   convenção registra que a lista **já foi de 3 para 4** (a #126) — a
-  omissão do `docs/TEMPLATE_USAGE.md` era a raiz do defeito.
-- O `AGENTS.md` declara a versão **1.29.0** no rodapé — é a quinta fonte da
-  versão, e nenhuma delas é o `package.json`.
+  omissão do `docs/TEMPLATE_USAGE.md` era a raiz do defeito. ⚠️ A lista que o
+  gate `check-version-footers` mede tem **6** (com o `AGENTS.md` e o
+  `README.md`), e é essa que o passo 4 da skill percorre.
+- O `AGENTS.md` e o `README.md` também declaram a versão no rodapé — são a
+  quinta e a sexta fonte, e nenhuma delas é o `package.json`.
 
 ## Lições Aprendidas
 

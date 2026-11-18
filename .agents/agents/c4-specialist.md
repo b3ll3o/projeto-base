@@ -71,10 +71,10 @@ Meu arquivo desenha a **topologia**. Ele não desenha o caminho de um request
 
 | O que eu garanto | Como se mede | Quem confere |
 |---|---|---|
-| As 2 âncoras do gate existem: `## §1. C4 — Nível 1: o contexto`, `## §2. C4 — Nível 2: os contêineres` | `grep -c '^## §' docs/system-design/contexto.md` → as 2 linhas | [`check-doc-kit`](../../.tooling/scripts/ci/check-doc-kit.ts) |
-| A contagem de contêineres confere com o Compose | `docker compose --profile observability config --services \| wc -l` → **7** (3 sem profile + 4 no profile `observability`) | `architecture-docs-auditor` |
-| Todo diagrama nasce com o `%%{init}%%` canônico | `grep -c '%%{init:' docs/system-design/contexto.md` → **3** (L1, L2 e a fronteira de confiança) | `architecture-docs-auditor` |
-| Cada afirmação do diagrama tem dono | a tabela "O que o diagrama afirma" | `architecture-docs-auditor` |
+| As 2 âncoras do gate existem: `## §1. C4 — Nível 1: o contexto`, `## §2. C4 — Nível 2: os contêineres` | `grep -cF '## §1. C4 — Nível 1: o contexto' docs/system-design/contexto.md` → 1 | [`check-doc-kit`](../../.tooling/scripts/ci/check-doc-kit.ts) |
+| A contagem de contêineres confere com o Compose | `docker compose --profile observability config --services \| wc -l` → **7** (3 sem profile + 4 no profile `observability`) | leitura do agent (o auditor mede a **cobertura** do item) |
+| Todo diagrama nasce com o `%%{init}%%` canônico | `grep -c '%%{init:' docs/system-design/contexto.md` → **3** (L1, L2 e a fronteira de confiança) | leitura do agent (o auditor mede a **cobertura** do item) |
+| Cada afirmação do diagrama tem dono | a tabela "O que o diagrama afirma" | leitura do agent (o auditor mede a **cobertura** do item) |
 | O doc tem no máximo 300 linhas | `check-doc-size` | gate |
 
 > **Estado medido em 2026-11-18:** o `docs/system-design/contexto.md` tem 259

@@ -64,8 +64,8 @@ proposta seja boa.
   `## Segurança`, `## Rollout`, `## Revisão`) — mais que qualquer outro item
   do kit: o gate compara com `includes()`, então a string tem que aparecer
   literal.
-- O `docs/tdr/` não existe em disco (medido em 2026-11-18) — o item nasce
-  com o kit.
+- O `docs/tdr/` **nasceu com o kit** (medido em 2026-11-18: `ls docs/tdr`
+  → existe, com o índice e 1 instância).
 
 ## Lições Aprendidas
 

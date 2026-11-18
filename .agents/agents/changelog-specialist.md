@@ -76,7 +76,9 @@ de deprecado, deprecado antes de removido).
   `.github/workflows/release-template.yml`.
 - **O registro do incidente** — o `postmortem-specialist` (item 13).
 - **O procedimento de recuperação** — o `runbook-specialist` (item 12).
-- **O texto do README ou de um doc de módulo** — o `documentation-specialist`.
+- **O texto do README** — o `readme-specialist` (item 1 do kit).
+- **O texto de um doc de módulo** (`docs/api/<bc>.md`) — o
+  `documentation-specialist`.
 - **O gate de release** — quem decide o bump é o
   `release-versioning-specialist`; eu **descrevo** o que o bump contém.
 
@@ -105,8 +107,8 @@ de deprecado, deprecado antes de removido).
 | `CHANGELOG.md` existe e tem as 4 âncoras (`## [Unreleased]`, `### Adicionado`, `### Corrigido`, `### Quebras de compatibilidade`) | `pnpm exec tsx .tooling/scripts/ci/check-doc-kit.ts` (item 14) | `operations-docs-auditor` + skill `operations-docs-audit` |
 | A versão de cada seção publicada é a dos footers canônicos | `pnpm exec tsx .tooling/scripts/ci/check-version-footers.ts` (mede os 6 footers) | `release-versioning-specialist` + skill `release-versioning-audit` |
 | A tag da versão publicada é a que o git tem (ou a que o workflow vai criar) | `git tag --sort=-v:refname \| head -5` — a tag é criada pelo workflow **depois** do merge, então a versão pode estar no changelog antes de a tag existir | `release-versioning-specialist` |
-| A faixa `[Unreleased]` acumula tudo que ainda não foi publicado | `git log v<última>..HEAD --pretty=format:"%s"` contra as entradas da faixa | `operations-docs-auditor` |
-| Nenhuma entrada duplica o "Histórico de Versões" dos footers | leitura; o `dry.md` é o critério | `operations-docs-auditor` |
+| A faixa `[Unreleased]` acumula tudo que ainda não foi publicado | `git log v<última>..HEAD --pretty=format:"%s"` contra as entradas da faixa | leitura do agent (o auditor mede a **cobertura** do item) |
+| Nenhuma entrada duplica o "Histórico de Versões" dos footers | leitura; o `dry.md` é o critério | leitura do agent (o auditor mede a **cobertura** do item) |
 
 > ⚠️ **Limite declarado:** o `check-doc-kit` mede o arquivo e as âncoras. Ele
 > **não** mede se a entrada descreve a mudança, se a faixa está completa, nem
@@ -240,7 +242,8 @@ result:
 | `release-versioning-specialist` | Dono da **versão** (footers + semver + tag); eu sou o dono do **texto** |
 | `postmortem-specialist` | O registro blameless alimenta a entrada "Corrigido" e, às vezes, a de quebra |
 | `runbook-specialist` | Um runbook novo é mudança visível: vira entrada em `### Adicionado` |
-| `documentation-specialist` | Dono do README e dos docs de módulo — a mudança deles também é entrada |
+| `readme-specialist` | Dono do **README** (item 1 do kit) — a mudança dele também é entrada |
+| `documentation-specialist` | Dono dos docs de **unidade de código** (`docs/api/<bc>.md`) |
 | `operations-docs-auditor` | Audita o item 14; carrega a skill `operations-docs-audit` |
 | `adr-specialist` | Uma decisão nova com quebra é entrada **e** ADR — os dois, cada um no seu doc |
 

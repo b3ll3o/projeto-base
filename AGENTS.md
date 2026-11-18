@@ -96,7 +96,7 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 | **refactorer**     | [`.agents/agents/refactorer.md`](./.agents/agents/refactorer.md)          | [memory](./.agents/memory/refactorer.md)          | Refatoração incremental TDD-driven   | "Refatorar X", code smells, débito técnico           |
 | **test-writer**    | [`.agents/agents/test-writer.md`](./.agents/agents/test-writer.md)        | [memory](./.agents/memory/test-writer.md)         | Criação de testes (TDD/BDD/ATDD)     | Cobertura < 80%, nova feature, bug fix               |
 | **tdd-enforcer**   | [`.agents/agents/tdd-enforcer.md`](./.agents/agents/tdd-enforcer.md)      | [memory](./.agents/memory/tdd-enforcer.md)        | Valida ciclo Red→Green→Refactor      | Antes de merge, em PR, em git hooks                  |
-| **doc-writer**     | [`.agents/agents/doc-writer.md`](./.agents/agents/doc-writer.md)          | [memory](./.agents/memory/doc-writer.md)          | Geração de documentação              | README, ADRs, API docs, user guides                  |
+| **doc-writer**     | [`.agents/agents/doc-writer.md`](./.agents/agents/doc-writer.md)          | [memory](./.agents/memory/doc-writer.md)          | Geração de documentação sem dono no kit | User guides, propostas, doc de módulo — **README, ADR, CHANGELOG e os outros itens do kit são dos seus donos** (§3.3) |
 | **task-manager**   | [`.agents/agents/task-manager.md`](./.agents/agents/task-manager.md)      | [memory](./.agents/memory/task-manager.md)        | Gestão de tarefas e backlog          | "Todo", "tarefa", priorização                        |
 | **review-router**  | [`.agents/agents/review-router.md`](.agents/agents/review-router.md)       | [memory](./.agents/memory/review-router.md) | Orquestrador de revisão pós-task | Após cada task (implementer DONE) — classifica diff e dispara reviewers em paralelo |
 | **specialist-router**| [`.agents/agents/specialist-router.md`](./.agents/agents/specialist-router.md)  | [memory](./.agents/memory/specialist-router.md)         | Orquestrador de demanda — identifica specialist(s) para planejar/executar. Bloqueia se `gap_detected`. | Demanda com escopo técnico definido (qualquer task exceto housekeeping trivial ou docs isolada) |
@@ -204,7 +204,7 @@ Workflows genéricos prontos para uso estão em [`.agents/WORKFLOWS.md`](./.agen
 | `bugfix-mode`        | "corrigir bug"         | orchestrator → explorer → test-writer → code-reviewer   |
 | `refactor-mode`      | "refatorar"            | refactorer → test-writer → code-reviewer                 |
 | `security-mode`      | "auditoria segurança"  | security-auditor → code-reviewer                         |
-| `docs-mode`          | "documentar"           | doc-writer → code-reviewer                               |
+| `docs-mode`          | "documentar"           | specialist do **item** do kit (ou `doc-writer` para doc sem dono) → code-reviewer |
 | `task-mode`          | "todo / tarefa"        | task-manager                                            |
 | `backend-feature`    | "endpoint NestJS"      | nestjs-specialist → test-writer → code-reviewer          |
 | `frontend-feature`   | "página/rota Next.js"  | nextjs-specialist → test-writer → code-reviewer          |

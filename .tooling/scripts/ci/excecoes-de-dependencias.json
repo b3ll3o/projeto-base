@@ -7,10 +7,10 @@
     "",
     "O estado que motivou este gate: MEDIDO em 2026-11-03 com `pnpm audit --json`",
     "(89 advisories: 4 críticas, 23 altas). O estado de HOJE é o medido em",
-    "2026-11-17, com o mesmo comando — `pnpm audit --json`, cujo",
-    "`metadata.vulnerabilities` devolve `{\"info\":0,\"low\":1,\"moderate\":25,\"high\":5,\"critical\":1}`",
-    "→ 32 advisories (1 crítica, 5 altas, 25 moderadas, 1 baixa), das quais 5 na",
-    "severidade que reprova — as 5 são as exceções abaixo. Nenhuma outra.",
+    "2026-11-18, com o mesmo comando — `pnpm audit --json`, cujo",
+    "`metadata.vulnerabilities` devolve `{\"info\":0,\"low\":1,\"moderate\":25,\"high\":3,\"critical\":1}`",
+    "→ 30 advisories (1 crítica, 3 altas, 25 moderadas, 1 baixa), das quais 4 na",
+    "severidade que reprova — as 4 são as exceções abaixo. Nenhuma outra.",
     "",
     "MEDIDO 2026-11-09 (e reconferido em 2026-11-10): o total caiu de 41 para 31",
     "depois do PR #156 — o lockfile mudou (27 dependências subiram dentro do range",
@@ -24,11 +24,11 @@
     "",
     "MEDIDO 2026-11-17: o total subiu de 30 para 32 — o REGISTRO publicou advisory",
     "nova (o `picomatch`, ReDoS por glob com branch repetida), e o lockfile NÃO",
-    "mudou: as altas foram de 3 para 5 (o mapa do audit tem 4 entradas `high` — o",
-    "`metadata` conta uma a mais) e a quinta na severidade que reprova é a",
-    "exceção do `picomatch`. Ele não tem versão corrigida",
-    "(`vulnerable_versions: <=4.0.7`, `patched_versions: <0.0.0`) e é",
-    "`devDependency` pura — sem caminho de produção no audit.",
+    "mudou. MEDIDO em 2026-11-18: o total voltou de 32 para 30 — o advisory do",
+    "`picomatch` **saiu do registro** (o `pnpm audit` já não o devolve), e o",
+    "lockfile segue o mesmo. A exceção do `picomatch` saiu daqui com ele: uma",
+    "exceção que não casa com nenhuma advisory é dívida silenciosa, e o gate",
+    "exige que a lista seja limpa.",
     "",
     "ESTE NÚMERO ENVELHECE: ele é uma MEDIÇÃO, e a medição envelhece com o",
     "lockfile. O gate o confere — o campo `advisoriesEsperadas` deste arquivo é",
@@ -45,10 +45,10 @@
     "A severidade que REPROVA mora no CÓDIGO do gate (SEVERIDADES_QUE_REPROVAM), não neste arquivo — quem edita este arquivo não pode enfraquecer o gate."
   ],
   "advisoriesEsperadas": {
-    "medidoEm": "2026-11-17",
-    "total": 32,
+    "medidoEm": "2026-11-18",
+    "total": 30,
     "critical": 1,
-    "high": 5,
+    "high": 3,
     "moderate": 25,
     "low": 1,
     "info": 0
@@ -104,30 +104,6 @@
         "tipo": "ausencia",
         "padrao": "JaegerPropagator",
         "caminhos": ["apps/api/src", "apps/web"]
-      }
-    },
-    {
-      "id": "1247710",
-      "modulo": "picomatch",
-      "severidade": "high",
-      "motivo": "ReDoS (CVSS 7.5 — AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H: só disponibilidade) por glob com branch repetida. MEDIDO em 2026-11-17 com `pnpm audit --json`: `vulnerable_versions: <=4.0.7` e `patched_versions: <0.0.0` — NÃO EXISTE versão corrigida (a 4.0.7 é a última), então não há upgrade que feche. MEDIDO com `pnpm why picomatch -r` e com os `paths` do audit: o módulo chega SÓ por `devDependencies` (`lint-staged` na raiz; `typescript-eslint` → `tinyglobby` via `@projeto/eslint-config`) e o audit devolve **0** achados em caminho de produção — o pacote não vai para a imagem do app. O vetor exige uma ENTRADA de glob que não seja do repo: o picomatch é chamado pelo lint-staged (a lista de arquivos staged) e pelo tinyglobby (os globs do tsconfig/eslint), e o REPO NUNCA o chama direto (verificação abaixo) — a entrada é sempre config versionada e revisada.",
-      "verificacao": {
-        "tipo": "ausencia",
-        "padrao": "picomatch",
-        "caminhos": [
-          "package.json",
-          "apps/api/package.json",
-          "apps/web/package.json",
-          "packages/eslint-config/package.json",
-          "packages/shared-types/package.json",
-          "apps/api/src",
-          "apps/web/app",
-          "apps/web/lib",
-          "apps/web/components",
-          "tooling/scripts",
-          ".tooling/scripts"
-        ],
-        "excluir": ["excecoes-de-dependencias\\.json$"]
       }
     }
   ]

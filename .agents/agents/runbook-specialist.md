@@ -92,12 +92,12 @@ formato de ambiente já existente (ambiente → §1 …).
 | O que eu garanto | Como se mede | Quem confere |
 |---|---|---|
 | Todo arquivo de `docs/runbooks/*.md` contém a âncora `## §1.` | `pnpm exec tsx .tooling/scripts/ci/check-doc-kit.ts` (item 12, tipo `familia` — mede **cada** arquivo do glob) | `operations-docs-auditor` + skill `operations-docs-audit` |
-| A família não encolhe em silêncio | `ls docs/runbooks/*.md \| wc -l` (hoje: `4`) | `operations-docs-auditor` |
-| Runbook novo tem as 5 partes (sintoma → diagnóstico → ação → escalada → verificação) | leitura; o gate mede a âncora, **não** o conteúdo | `operations-docs-auditor` |
-| Nenhum `pnpm <script>` citado no runbook canônico existe sem estar em um `package.json` do workspace | `check-runbook-drift` (classe 1) — `pnpm exec tsx .tooling/scripts/ci/check-runbook-drift.ts` | `operations-docs-auditor` |
-| Toda chave da tabela de variáveis do runbook canônico existe em algum `.env.example` | `check-runbook-drift` (classe 2) | `operations-docs-auditor` |
-| O nome do container do banco local é o mesmo nas 4 superfícies que o guardam | `check-runbook-drift` (classe 3) | `operations-docs-auditor` |
-| Nenhum comando do meu runbook é falsehood: o script existe | `grep -n 'pnpm ' <runbook>` cruzado com `node -e "console.log(Object.keys(require('./package.json').scripts).length)"` | `operations-docs-auditor` |
+| A família não encolhe em silêncio | `ls docs/runbooks/*.md \| wc -l` (hoje: `4`) | leitura do agent (o auditor mede a **cobertura** do item) |
+| Runbook novo tem as 5 partes (sintoma → diagnóstico → ação → escalada → verificação) | leitura; o gate mede a âncora, **não** o conteúdo | leitura do agent (o auditor mede a **cobertura** do item) |
+| Nenhum `pnpm <script>` citado no runbook canônico existe sem estar em um `package.json` do workspace | `check-runbook-drift` (classe 1) — `pnpm exec tsx .tooling/scripts/ci/check-runbook-drift.ts` | check-runbook-drift |
+| Toda chave da tabela de variáveis do runbook canônico existe em algum `.env.example` | `check-runbook-drift` (classe 2) | check-runbook-drift |
+| O nome do container do banco local é o mesmo nas 4 superfícies que o guardam | `check-runbook-drift` (classe 3) | check-runbook-drift |
+| Nenhum comando do meu runbook é falsehood: o script existe | `grep -n 'pnpm ' <runbook>` cruzado com `node -e "console.log(Object.keys(require('./package.json').scripts).length)"` | leitura do agent (o auditor mede a **cobertura** do item) |
 
 > ⚠️ **Limite declarado:** o `check-runbook-drift` mede **só**
 > `docs/como-rodar.md` (o runbook canônico) — os irmãos da família

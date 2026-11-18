@@ -12,7 +12,8 @@ description: Memória acumulada do agent readme-specialist — a vitrine do repo
 ### 2026-11-18 — O README tem exatamente 300 linhas: a âncora que falta vai estourar o teto
 
 **Contexto:** o gate `check-doc-kit` exige a âncora `## Documentação` no
-item 1 do kit, e o `README.md` não a tem (`grep -c '^## Documentação'
+item 1 do kit, e o `README.md` **não a tinha** — a seção nasceu com o kit
+(`grep -cF '## Documentação'
 README.md` → `0`). Mas o `README.md` já está em **300 linhas** pela contagem
 do `check-doc-size` (`split('\n').length` menos o último elemento vazio), que
 é o teto exato. As 3 ancoras novas custam de 8 a 12 linhas.
@@ -57,12 +58,13 @@ envelhece a cada PR; o link, não.
 
 ## Padrões Descobertos
 
-- O `README.md` tem **10** seções `##` (`grep -c '^## ' README.md` → 10) e
-  nenhuma delas é `## Documentação` — a lacuna do item 1 é **nominal**.
+- O `README.md` tem **11** seções `##` (`grep -c '^## ' README.md` → 11) e a
+  `## Documentação` **existe** (`grep -cF '## Documentação' README.md` → 1) —
+  a lacuna do item 1 foi fechada com o kit.
 - O `README.md` é o **tutor** do repo, e não um `reference`: tem "Opção A —
   Docker Compose" e "Opção B — pnpm nativo", com pré-requisitos e
   troubleshooting. O quadrante Diátaxis dele é tutorial.
-- A seção `## Versão & Licença` (linha 296) é o **rodapé** do repo, e ele
+- A seção `## Versão & Licença` (linha 295) é o **rodapé** do repo, e ele
   diz que a tag do template é a dos 4 footers canônicos — o dono é o
   `release-versioning-specialist`.
 - O `docs/como-rodar.md` indexa **6 ambientes** (`grep -cE '^\| [0-9]+ \| '

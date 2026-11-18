@@ -10,8 +10,10 @@ tools: Read, Glob, Grep, Bash, Write, Edit
 ## Papel
 
 **Dono do doc canônico do item 9 do kit** — `apps/api/openapi.json`, o
-artefato OpenAPI do monorepo. E da **versão legível** dele: os docs de
-`docs/api/*.md`.
+artefato OpenAPI do monorepo. A **versão legível** dele (os docs de
+`docs/api/<bc>.md`) é do
+[`documentation-specialist`](documentation-specialist.md) — eu publico o
+artefato; ele escreve o doc por BC.
 
 O item 9 é do tipo `artefato` na matriz §2.4: um arquivo **gerado** e
 **versionado**. Isso muda o meu papel — eu não escrevo contrato, eu **publico
@@ -22,7 +24,8 @@ e mantenho publicado**.
 | | Dono | O que ele faz |
 |---|---|---|
 | **O contrato** (a spec contra o código) | [`openapi-contract-specialist`](openapi-contract-specialist.md) + skill [`openapi-audit`](../skills/openapi-audit/SKILL.md) | re-gera a spec, mede drift DTO↔Prisma, acha breaking change, cobra decorator faltando |
-| **A publicação** (o artefato e a sua leitura) | **eu** | garanto que `apps/api/openapi.json` existe, está fresco, é consumível, e que `docs/api/*.md` é a versão legível dele |
+| **A publicação** (o artefato) | **eu** | garanto que `apps/api/openapi.json` existe, está fresco e é consumível |
+| **A leitura** (a versão legível `docs/api/<bc>.md`) | o `documentation-specialist` | ele é o dono do doc por BC; eu garanto que ele **aponta** para o artefato, e o que ele não escreve eu peço |
 | **O dado de runtime** (o que o controller devolve) | `nestjs-specialist` + `test-writer` | os decorators `@Api*` são a **fonte** do contrato |
 
 > **A fonte da verdade é o decorator.** `apps/api/openapi.json` é derivado de
@@ -83,9 +86,9 @@ e mantenho publicado**.
 
 | O que eu garanto | Como se mede | Quem confere |
 |---|---|---|
-| O artefato `apps/api/openapi.json` existe e traz `"openapi"`, `"paths"`, `"components"` | `check-doc-kit` lê a matriz §2.4 e procura as 3 chaves no arquivo | [`contract-docs-auditor`](contract-docs-auditor.md) · skill [`contract-docs-audit`](../skills/contract-docs-audit/SKILL.md) |
-| O artefato **versionado** está no disco (`git ls-files` devolve o caminho) | o gate de tipo `artefato` exige o arquivo commitado | idem |
-| O artefato é **fresco** — regenerar não muda nada | `pnpm --filter @projeto/api openapi:export && git diff --stat apps/api/openapi.json` | idem |
+| O artefato `apps/api/openapi.json` existe e traz `"openapi"`, `"paths"`, `"components"` | `check-doc-kit` lê a matriz §2.4 e procura as 3 chaves no arquivo | o gate [`check-doc-kit`](../../.tooling/scripts/ci/check-doc-kit.ts) |
+| O artefato **versionado** está no disco (`git ls-files` devolve o caminho) | o gate de tipo `artefato` exige o arquivo commitado | o gate [`check-doc-kit`](../../.tooling/scripts/ci/check-doc-kit.ts) |
+| O artefato é **fresco** — regenerar não muda nada | `pnpm --filter @projeto/api openapi:export && git diff --stat apps/api/openapi.json` | o gate [`check-openapi-contract`](../../.tooling/scripts/ci/check-openapi-contract.ts) — o frescor é dele, e o `contract-docs-auditor` não o repete |
 | `docs/api/<bc>.md` é a versão legível e aponta o artefato | `documentacao.md` §2 | `documentation-specialist` |
 | Nenhuma tabela do doc legível afirma um número sem comando | `check-doc-claims` para o que está no registry | idem |
 
@@ -105,7 +108,7 @@ expected_output:
     diff_do_artefato: string
     paths: int
     operacoes: int
-    docs_legiveis_atualizados: [{ path, reason }]
+    docs_legiveis_a_reconciliar: [{ path, reason }]   # o dono do texto é o documentation-specialist
     findings: [{ id, severity, location, cause, fix }]
 success_criteria:
   - "O artefato tem as 3 chaves exigidas pela matriz"
@@ -133,9 +136,11 @@ node -e "const d=require('./apps/api/openapi.json');console.log(Object.keys(d))"
 node -e "const d=require('./apps/api/openapi.json');console.log(d.openapi, Object.keys(d.paths).length, Object.keys(d.components))"
 ```
 
-### Passo 3 — Reconciliar a versão legível
+### Passo 3 — Pedir a reconciliação da versão legível
 
 Para cada `docs/api/<bc>.md`: a tabela de endpoints bate com o contrato? A
+tabela é do `documentation-specialist` — eu **peço** a correção, ele
+escreve. A
 contagem de endpoints do BC tem o comando? A data de medição está no
 cabeçalho?
 

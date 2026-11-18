@@ -73,17 +73,19 @@ chega de fora.
 
 | O que eu garanto | Como se mede | Quem confere |
 |---|---|---|
-| As 4 âncoras do gate existem: `## Padrão de commits`, `## Fluxo de branches`, `## Code Review`, `## Estilo de código` | `grep -c '^## ' CONTRIBUTING.md` → as 4 linhas | [`check-doc-kit`](../../.tooling/scripts/ci/check-doc-kit.ts) |
-| O padrão de commits bate com o gate que o cobra | o exemplo de commit passa no `check-commit-msg` | `onboarding-docs-auditor` |
-| Todo fluxo de branch nomeia a convenção que o rege | cada regra linka `git-workflow.md` | `onboarding-docs-auditor` |
+| As 4 âncoras do gate existem: `## Padrão de commits`, `## Fluxo de branches`, `## Code Review`, `## Estilo de código` | `grep -cF '## Padrão de commits' CONTRIBUTING.md` → 1 (e o mesmo para as outras três) | [`check-doc-kit`](../../.tooling/scripts/ci/check-doc-kit.ts) |
+| O padrão de commits bate com o gate que o cobra | o exemplo de commit passa no `check-commit-msg` | check-commit-msg |
+| Todo fluxo de branch nomeia a convenção que o rege | cada regra linka `git-workflow.md` | leitura do agent (o auditor mede a **cobertura** do item) |
 | Todo comando de exemplo roda | rodar o comando | eu |
 | O CONTRIBUTING tem no máximo 300 linhas | `check-doc-size` | gate |
 
-> **Estado medido em 2026-11-18:** `CONTRIBUTING.md` **não existe** na raiz
-> (`ls CONTRIBUTING.md` → "Não such file or directory"). O item 2 do kit
-> está como **lacuna nomeada** até o primeiro draft — e este agent é o dono
-> dele, não o autor do primeiro rascunho: o rascunho nasce da
-> `git-workflow.md`, que já existe e já é medida.
+> **Estado medido em 2026-11-18:** `CONTRIBUTING.md` **existe** na raiz, com
+> **196 linhas** (`wc -l CONTRIBUTING.md` → 196), e as 4 âncoras do item 2
+> estão lá (`grep -cF '## Padrão de commits' CONTRIBUTING.md` → 1;
+> `## Fluxo de branches` → 1; `## Code Review` → 1; `## Estilo de código` → 1).
+> O conteúdo é **link**, não cópia: a regra de branch é do
+> [`git-workflow.md`](../specs/conventions/git-workflow.md) e a de review é da
+> [`pr-review.md`](../specs/conventions/pr-review.md).
 
 ## Inputs (do dispatch)
 

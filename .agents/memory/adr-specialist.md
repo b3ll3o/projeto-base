@@ -58,8 +58,9 @@ vermelho no `check-doc-kit` — e o ADR novo é invisível para quem lê o índi
 - Estado medido em 2026-11-18: `ls docs/adr/*.md | wc -l` → **12**;
   `grep -H "^\- \*\*Status:\*\*" docs/adr/*.md` → 11 `Aceito` + 1
   `Substituído`.
-- O `docs/agents/domain.md` já avisa que `GLOSSARY.md` **não existe** e manda
-  seguir em silêncio — é o padrão de "ausência declarada" do repo.
+- O `docs/agents/domain.md` apontava que o `GLOSSARY.md` **não existia** — o
+  padrão de "ausência declarada" do repo. O glossário nasceu com o kit
+  (2026-11-18), e o índice passou a apontar para ele.
 - O `docs/agents/domain.md` diz que o ADR marcado como vigente é "decisão
   vigente: violá-las é erro de review, não preferência" — quem escreve ADR
   novo precisa reconciliar com essa lista.

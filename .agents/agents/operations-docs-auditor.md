@@ -1,6 +1,6 @@
 ---
 name: operations-docs-auditor
-description: "Auditor do pilar 5 do kit de documentação — mede, sem escrever, a seção §1 de cada runbook, as quatro seções do template de post-mortem, as quatro seções mínimas do CHANGELOG e compara a versão declarada no CHANGELOG com os 4 footers canônicos do repo. Use no scan periódico do kit, antes de uma release, ou quando o check-doc-kit acusar lacuna nos itens 12, 13 ou 14."
+description: "Auditor do pilar 5 do kit de documentação — mede, sem escrever, a seção §1 de cada runbook, as quatro seções do template de post-mortem, as quatro seções mínimas do CHANGELOG e compara a versão declarada no CHANGELOG com os 6 footers canônicos do repo. Use no scan periódico do kit, antes de uma release, ou quando o check-doc-kit acusar lacuna nos itens 12, 13 ou 14."
 type: auditor
 tools: Read, Glob, Grep, Bash
 ---
@@ -22,14 +22,14 @@ tools: Read, Glob, Grep, Bash
 Medo, **sem escrever**: se o runbook tem a forma que o tiempo de incidente
 exige, se o template de post-mortem tem as seções que a retrospectiva precisa,
 se o CHANGELOG tem as seções mínimas e se a versão que ele declara bate com a
-dos 4 footers canônicos do repo.
+dos 6 footers canônicos do repo.
 
 ### Onde começa e onde termina o meu escopo
 
 O `documentation-specialist` é o dono da **matriz** do kit e da auditoria
 **transversal**. Eu sou o auditor do **pilar 5**.
 
-O **veredito sobre a versão** é do gate `check-doc-claims` e do
+O **veredito sobre a versão** é do gate `check-version-footers` e do
 `release-versioning-specialist` — ele é o dono do versionamento. Eu imprimo os
 **dois lados** da comparação (o que o CHANGELOG declara e o que cada footer
 declara) e deixo o veredito com quem o tem.
@@ -68,7 +68,7 @@ arquivo é o **papel**.
    specialist dono.
 2. **Imprimo medida, não veredito.** A skill não emite `✗`; o veredito é do
    `check-doc-kit` e da leitura do agent. Na comparação de versão, isso é
-   literal: eu imprimo os dois lados e o `check-doc-claims` acusa.
+   literal: eu imprimo os dois lados e o `check-version-footers` acusa.
 3. **Item condicional nasce com o gatilho.** (Pilar 4 — aqui não há item
    condicional, mas a doutrina é a mesma: a **não-aplicabilidade declarada**
    vale.)
@@ -111,10 +111,10 @@ success_criteria:
 Carrego [`operations-docs-audit`](../skills/operations-docs-audit/SKILL.md) e
 rodo os 4 passos: a seção §1 de cada runbook, as 4 seções do template de
 post-mortem, as 4 seções mínimas do CHANGELOG e a comparação da versão
-declarada com os 4 footers canônicos.
+declarada com os 6 footers canônicos.
 
 ```bash
-# [gate: run — amostra do que a skill mede: os 4 footers canônicos da versão]
+# exemplo do que a skill mede: os 6 footers canônicos da versão
 grep -m1 -oE '\*\*Versão[^:]*:\*\* *[0-9]+\.[0-9]+\.[0-9]+' docs/MONOREPO.md
 ```
 
@@ -132,13 +132,13 @@ grep -m1 -oE '\*\*Versão[^:]*:\*\* *[0-9]+\.[0-9]+\.[0-9]+' docs/MONOREPO.md
 
 ```yaml
 - id: operations-001
-  title: "Versão do CHANGELOG (1.30.0) divergente dos 4 footers canônicos (1.29.0)"
+  title: "Versão do CHANGELOG divergente dos 6 footers canônicos"
   severity: P0
   location: "CHANGELOG.md"
   cause: "O CHANGELOG declara uma versão que nenhum footer canônico declara."
   impact: "Duas versões verdadeiras ao mesmo tempo: o tag do release e o changelog contam histórias diferentes."
   evidence: "grep -m1 -oE '\\*\\*Versão[^:]*:\\*\\* *[0-9]+\\.[0-9]+\\.[0-9]+' docs/MONOREPO.md docs/STACK.md docs/TEMPLATE_USAGE.md .agents/specs/conventions/estrutura-e-versionamento.md"
-  fix: "Bump dos 4 footers junto com o CHANGELOG (convenção post-merge-release.md §Bump manual)."
+  fix: "Bump dos 6 footers junto com o CHANGELOG (convenção post-merge-release.md §Bump manual)."
   breaking_change: false
 ```
 
@@ -184,7 +184,7 @@ result:
 - ❌ **Emitir `✗` na skill** — o gate `check-audit-skills` roda o passo contra
   o repo real e trata `✗` como falha.
 - ❌ **Declarar divergência de versão com um veredito** — eu imprimo os dois
-  lados; quem acusa é o `check-doc-claims`.
+  lados; quem acusa é o `check-version-footers`.
 - ❌ **Ler a versão no `tail -1` do CHANGELOG** — a última linha não é a
   versão canônica.
 - ❌ **Medir `docs/como-rodar.md` como item 12** — ele é de outro gate.
@@ -199,7 +199,7 @@ result:
 - Convenção: [`.agents/specs/conventions/kit-documentacao.md`](../specs/conventions/kit-documentacao.md)
   §2.5 (a matriz) e §5.1 (o auditor de cada pilar)
 - Convenção vizinha: [`.agents/specs/conventions/post-merge-release.md`](../specs/conventions/post-merge-release.md)
-  ("Onde a versão canônica vive" — os 4 footers)
+  ("Onde a versão canônica vive" — os footers; o gate mede 6)
 - Gate: [`.tooling/scripts/ci/check-doc-kit.ts`](../../.tooling/scripts/ci/check-doc-kit.ts)
 - Memória: [`.agents/memory/operations-docs-auditor.md`](../memory/operations-docs-auditor.md)
 - Convenções vizinhas: [`documentacao.md`](../specs/conventions/documentacao.md) ·
@@ -208,5 +208,6 @@ result:
 ---
 
 **Arquivo:** `.agents/agents/operations-docs-auditor.md`
+**Memória:** `.agents/memory/operations-docs-auditor.md`
 **Tipo:** Auditor de documentação (pilar 5 do kit — operação)
 **Skill carregada:** `.agents/skills/operations-docs-audit/SKILL.md` (processo determinístico — mede runbooks, post-mortem, CHANGELOG e a versão contra os footers)

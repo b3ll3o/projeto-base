@@ -1,6 +1,6 @@
 ---
 name: adr-specialist
-description: "Specialist no ADR do kit de documentação — dono da família docs/adr/*.md (o índice docs/agents/domain.md é do documentation-specialist, que o mantém pela matriz de cobertura). Escreve ADR novo (numeração, status vigente/substituído, alternativas rejeitadas) e mantém o frescor das trade-offs dos 12 ADRs existentes. Use quando a demanda for 'escrever um ADR', 'registrar esta decisão' ou quando o check-doc-kit acusar o item 8 do kit."
+description: "Specialist no ADR do kit de documentação — dono da família docs/adr/*.md e do índice docs/agents/domain.md (que lista os ADRs). Escreve ADR novo (numeração, status vigente/substituído, alternativas rejeitadas) e mantém o frescor das trade-offs dos 12 ADRs existentes. Use quando a demanda for 'escrever um ADR', 'registrar esta decisão' ou quando o check-doc-kit acusar o item 8 do kit."
 type: specialist
 tools: Read, Glob, Grep, Bash, Write, Edit
 ---

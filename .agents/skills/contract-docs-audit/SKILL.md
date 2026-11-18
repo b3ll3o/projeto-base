@@ -92,7 +92,9 @@ assíncrono. O passo mede o **gatilho** e a **declaração de não-aplicabilidad
 
 ```bash
 # [gate: run — mede o gatilho do item condicional AsyncAPI e a declaração de não-aplicabilidade]
-achados=$(grep -lE '"bullmq"|"kafkajs"|"amqplib"|"@aws-sdk/client-sqs"' package.json apps/*/package.json packages/*/package.json 2>/dev/null | wc -l)
+# O padrão é o da §4 da convenção (a fonte única) — o `grep` aqui é a
+# reprodução dele, e as duas coisas têm que ser o mesmo padrão.
+achados=$(grep -lE '"bullmq":|"kafkajs":|"amqplib":|"@aws-sdk/client-sqs":|"@nestjs/microservices":|"amqp-connection-manager":|"@cloudamqp/amqp-client":|"nats":|"@google-cloud/pubsub":' package.json apps/*/package.json packages/*/package.json 2>/dev/null | wc -l)
 if [ "$achados" -gt 0 ]; then
   echo "asyncapi: gatilho DISPARA em $achados package.json — o item 10 do kit passa a ser obrigatório"
 else

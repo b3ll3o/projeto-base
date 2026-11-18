@@ -77,9 +77,9 @@ inventado no guia envelhece no primeiro PR que usa o bot.
 - A revisão é **orquestrada**: `review-router` classifica o diff e dispara
   1 specialist por parte alterada; todo PR aberto precisa de **≥ 1
   comentário de revisão** com o marcador `<!-- pr-review -->`.
-- `CONTRIBUTING.md` **não existe** na raiz (medido em 2026-11-18) — o item 2
-  do kit é lacuna nomeada, e as 4 convenções que ele deveria resumir já
-  existem e já são medidas.
+- `CONTRIBUTING.md` **nasceu com o kit** (2026-11-18, 196 linhas) e é
+  **link**, não cópia: as 4 convenções que ele resume (`git-workflow.md`,
+  `pr-review.md`, `review-routing.md`, `idioma.md`) continuam sendo os donos.
 
 ## Lições Aprendidas
 

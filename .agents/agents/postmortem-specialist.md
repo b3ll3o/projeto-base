@@ -95,10 +95,10 @@ próximo incidente. A regra é **estrutural**, não de tom:
 | O que eu garanto | Como se mede | Quem confere |
 |---|---|---|
 | `docs/post-mortems/README.md` existe e tem as 4 âncoras (`## O template`, `## Linha do tempo`, `## Causa raiz`, `## Ações`) | `pnpm exec tsx .tooling/scripts/ci/check-doc-kit.ts` (item 13) | `operations-docs-auditor` + skill `operations-docs-audit` |
-| Todo registro em `docs/post-mortems/` segue o template declarado no README | leitura; o gate **não** mede o formato dos registros | `operations-docs-auditor` |
-| Nenhum registro aponta uma pessoa pelo nome | leitura; o README §A regra blameless proíbe, e o que se escreve é a **condição** | `operations-docs-auditor` |
-| A causa raiz de todo incidente com decisão nova tem ADR | `ls docs/adr/*.md \| wc -l` e a coluna "ADR" do índice | `operations-docs-auditor` |
-| O índice lista **todo** registro que existe | `ls docs/post-mortems/*.md \| wc -l` contra as linhas da tabela do índice | `operations-docs-auditor` |
+| Todo registro em `docs/post-mortems/` segue o template declarado no README | leitura; o gate **não** mede o formato dos registros | leitura do agent (o auditor mede a **cobertura** do item) |
+| Nenhum registro aponta uma pessoa pelo nome | leitura; o README §A regra blameless proíbe, e o que se escreve é a **condição** | leitura do agent (o auditor mede a **cobertura** do item) |
+| A causa raiz de todo incidente com decisão nova tem ADR | `ls docs/adr/*.md \| wc -l` e a coluna "ADR" do índice | leitura do agent (o auditor mede a **cobertura** do item) |
+| O índice lista **todo** registro que existe | `ls docs/post-mortems/*.md \| grep -v README.md \| wc -l` contra as linhas da tabela do índice | leitura do agent (o auditor mede a **cobertura** do item) |
 
 > ⚠️ **Limite declarado:** o `check-doc-kit` mede o README e as âncoras. Ele
 > **não** mede o formato dos registros, nem a ausência de culpa, nem o vínculo
@@ -228,7 +228,7 @@ result:
 | `adr-specialist` | Escreve a **decisão**; eu escrevo o **vínculo** com o incidente que a originou |
 | `runbook-specialist` | Escreve o **procedimento** de recuperação que o post-mortem aponta |
 | `changelog-specialist` | Publica a **mudança visível** que a ação do post-mortem produziu |
-| `documentation-specialist` | Dono da convenção `documentacao.md` — o README (formato + índice) é meu, os ADRs são dele |
+| `documentation-specialist` | Dono da convenção `documentacao.md` — o README (formato + índice) é meu, os ADRs são do `adr-specialist` |
 | `operations-docs-auditor` | Audita o item 13; carrega a skill `operations-docs-audit` |
 | `security-auditor` | Quando o incidente é de segurança, o achado técnico é dele; o registro blameless é meu |
 

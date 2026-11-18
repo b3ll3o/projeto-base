@@ -1,6 +1,6 @@
 ---
 name: doc-writer
-description: Gera e mantém documentação de qualidade: READMEs, ADRs, API docs, user guides, OpenSpec/proposals. Use para criar/atualizar README, documentar API, escrever ADR, gerar user guide.
+description: "Gera e mantém documentação de qualidade: user guides, OpenSpec/proposals e a documentação que NÃO tem dono no kit. Use para criar/atualizar um user guide, uma proposta, um doc de módulo. ⚠️ README da raiz, ADRs, CHANGELOG, CONTRIBUTING, GLOSSARY, runbooks, PRD, TDR e post-mortems são dos 14 itens do kit — o dono de cada um está na matriz de `kit-documentacao.md`."
 type: specialist
 tools: Read, Glob, Grep, Write
 ---
