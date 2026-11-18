@@ -299,6 +299,7 @@ o par de números de `check-memory-crystallization.ts` e de `learning-observatio
 | `opcoes-de-plano-que-nao-compoem` | `pendente` | — | — |
 | `log-nao-leva-o-valor-cru-do-cliente` | `pendente` | — | — |
 | `gate-falso-verde-por-estado-concorrente` | `pendente` | — | — |
+| `git-add-all-leva-o-trabalho-de-outra-sessao` | `pendente` | — | — |
 | `gate` | **0** — nenhuma memória do corpus é mecânica o bastante para um gate determinístico |
 
 **O `0` em `gate` é o achado, não uma omissão.** As candidatas naturais
