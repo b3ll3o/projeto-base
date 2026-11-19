@@ -59,8 +59,8 @@ revisor é explícito no corpo do agent.
 
 ## Padrões Descobertos
 
-> Vazio de propósito: o agent ainda **não rodou**. esta seção se preenche com
-> o que a primeira execução teach.
+> Vazio de propósito: o agent ainda **não rodou**. Esta seção se preenche com
+> o que a primeira execução mostrar.
 
 ## Lições Aprendidas
 
