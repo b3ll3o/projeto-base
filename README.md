@@ -13,7 +13,7 @@ Um **monorepo base reutilizável** que implementa o **padrão genérico de agent
 **Diferencial:** enquanto o template anterior era genérico para qualquer projeto, este é um **monorepo base opinativo** com:
 
 - Apps `apps/api` (NestJS) + `apps/web` (Next.js) **já implementados** — **6 módulos** em `apps/api/src/modules/` (`auth`, `feature-flags`, `health`, `profiles`, `tenancy`, `users`), em camadas `domain/`, `application/`, `infrastructure/`. O app é **multi-tenant por empresa** (RLS no Postgres), com **RBAC por perfil**, **feature flags** e **administração de sistema** (usuários, empresas, perfis).
-- **47 agents** (12 genéricos + 2 routers + 7 specialists de stack + 6 de auditoria + 1 de documentação + 19 do kit) + 3 arquivos companheiros em `telemetry-specialist/`, interoperáveis via skill `agents:coordinate`; **35 skills + 17 workflows + 29 convenções canônicas**
+- **48 agents** (12 genéricos + 2 routers + 8 specialists de stack + 6 de auditoria + 1 de documentação + 19 do kit) + 3 arquivos companheiros em `telemetry-specialist/`, interoperáveis via skill `agents:coordinate`; **35 skills + 18 workflows + 29 convenções canônicas**
 - **Paradigma DDD + Hexagonal** canônico (ADR-0001) com guardiões automáticos
 - **OpenTelemetry cross-stack** (backend + frontend + Collector)
 - **CI Defense-in-Depth** em 3 camadas
@@ -30,14 +30,14 @@ projeto-base/
 ├── GLOSSARY.md            # a linguagem do domínio (termos canônicos)
 ├── CHANGELOG.md           # o histórico das versões (Keep a Changelog)
 ├── .agents/
-│   ├── agents/            # 47 agents (12 genéricos + 2 routers + 7 de stack + 6 de auditoria + 1 de documentação + 19 do kit)
+│   ├── agents/            # 48 agents (12 genéricos + 2 routers + 8 de stack + 6 de auditoria + 1 de documentação + 19 do kit)
 │   │                      # catálogo nominal, com papel e memória: AGENTS.md §3
-│   ├── memory/            # 49 memórias (47 agents + state-aware-planning + _template)
+│   ├── memory/            # 50 memórias (48 agents + state-aware-planning + _template)
 │   ├── skills/            # 35 skills — coordenação, routing, auditoria, UI, terceiro adaptadas (agent↔skill: AGENTS.md §3.2)
 │   ├── hooks/             # 2 hooks do Claude Code (guard do lockfile + reviewer pós-edição)
 │   ├── settings.json      # binding do Claude Code: registra os 2 hooks
 │   ├── specs/conventions/ # 29 convenções (ver AGENTS.md §6)
-│   ├── workflows/         # 17 workflows detalhados
+│   ├── workflows/         # 18 workflows detalhados
 │   └── WORKFLOWS.md       # Fluxos pré-configurados, em tabela
 ├── apps/                  # api (NestJS 12) + web (Next.js 15)
 ├── packages/              # eslint-config, shared-types, tsconfig
@@ -241,11 +241,11 @@ Detalhes completos em [`AGENTS.md`](./AGENTS.md) (seção §1).
 
 ## Agents Inclusos
 
-**47 agents** no catálogo — o catálogo nominal (agent, papel e memória de cada um) é o [`AGENTS.md` §3 e §3.2](./AGENTS.md); o README só aponta, não duplica.
+**48 agents** no catálogo — o catálogo nominal (agent, papel e memória de cada um) é o [`AGENTS.md` §3 e §3.2](./AGENTS.md); o README só aponta, não duplica.
 
 - **Genéricos (12):** `agent-architect`, `orchestrator`, `explorer`, `code-reviewer`, `stack-code-reviewer`, `security-auditor`, `doc-sync`, `refactorer`, `test-writer`, `tdd-enforcer`, `doc-writer`, `task-manager`
 - **Routers (2):** `review-router` (dispensa reviewers em paralelo após task DONE), `specialist-router` (pré-planejamento; bloqueia se `gap_detected`)
-- **Specialists de stack (7):** `monorepo-specialist`, `nestjs-specialist`, `nextjs-specialist`, `docker-specialist`, `telemetry-specialist`, `ux-design-specialist`, `multi-tenant-specialist`
+- **Specialists de stack (8):** `monorepo-specialist`, `nestjs-specialist`, `nextjs-specialist`, `docker-specialist`, `telemetry-specialist`, `ux-design-specialist`, `multi-tenant-specialist`, `e2e-specialist`
 - **Specialists de auditoria (6):** `prisma-db-specialist`, `openapi-contract-specialist`, `otelcol-infra-specialist`, `docker-prod-specialist`, `release-versioning-specialist`, `finding-orchestrator`
 - **Documentação (1):** `documentation-specialist` — dono da doc da aplicação (matriz de cobertura, drift, frescor); carrega a skill `documentation-audit`
 - **Kit de documentação (19):** 14 specialists (um por item do kit) + 5 auditadores (um por pilar) — a matriz está em [`kit-documentacao.md`](./.agents/specs/conventions/kit-documentacao.md)
@@ -255,7 +255,7 @@ Cada agent possui arquivo de **memória** em `.agents/memory/<nome>.md` que arma
 ## Workflows Pré-Configurados
 
 O índice completo — trigger, tipo e cadeia de agents de cada workflow — é o
-[`.agents/WORKFLOWS.md`](./.agents/WORKFLOWS.md). **17** deles têm o detalhe passo a passo
+[`.agents/WORKFLOWS.md`](./.agents/WORKFLOWS.md). **18** deles têm o detalhe passo a passo
 (`ls .agents/workflows/*.md | wc -l`), em [`.agents/workflows/`](./.agents/workflows/).
 Todo workflow é disparado pela skill `agents:coordinate` (§Regra Mandatória).
 
@@ -294,6 +294,6 @@ Detalhes em [`docs/TEMPLATE_USAGE.md`](./docs/TEMPLATE_USAGE.md).
 
 ## Versão & Licença
 
-**Versão:** 1.30.0 — re-medido do disco em **2026-11-18**: `ls .agents/agents/*.md | wc -l` = **47** agents · `ls .agents/memory/*.md | wc -l` = **49** memórias (1 por agent + `state-aware-planning` + `_template`) · `ls .agents/skills/*/SKILL.md | wc -l` = **35** skills · `ls .agents/workflows/*.md | wc -l` = **17** workflows · `ls .agents/specs/conventions/*.md | grep -vE 'README|gaps|examples|historico|apendice' | wc -l` = **29** convenções (o número inclui a convenção `estilizacao` e os companions `estilizacao-acessibilidade` e `estilizacao-contraste`) · `ls apps/api/src/modules/ | wc -l` = **6** módulos · `ls .agents/hooks/ | wc -l` = **2** hooks · **0** wrappers — a pasta `.claude/` saiu do repo (2026-11-09); o binding do Claude Code é o symlink em `~/.claude/`, que aponta para `.agents/` (receita em [`docs/integrations/claude-code.md`](./docs/integrations/claude-code.md)).
+**Versão:** 1.30.0 — re-medido do disco em **2026-11-18**: `ls .agents/agents/*.md | wc -l` = **48** agents · `ls .agents/memory/*.md | wc -l` = **50** memórias (1 por agent + `state-aware-planning` + `_template`) · `ls .agents/skills/*/SKILL.md | wc -l` = **35** skills · `ls .agents/workflows/*.md | wc -l` = **18** workflows · `ls .agents/specs/conventions/*.md | grep -vE 'README|gaps|examples|historico|apendice' | wc -l` = **29** convenções (o número inclui a convenção `estilizacao` e os companions `estilizacao-acessibilidade` e `estilizacao-contraste`) · `ls apps/api/src/modules/ | wc -l` = **6** módulos · `ls .agents/hooks/ | wc -l` = **2** hooks · **0** wrappers — a pasta `.claude/` saiu do repo (2026-11-09); o binding do Claude Code é o symlink em `~/.claude/`, que aponta para `.agents/` (receita em [`docs/integrations/claude-code.md`](./docs/integrations/claude-code.md)).
 
 A `1.14.0` adiciona o `documentation-specialist` (+1 agent, +1 memória), a skill `documentation-audit` (+1) e a convenção `documentacao` (+1) — e corrige os fatos errados da versão anterior: Node ≥ 20 → ≥ 22.6.0, `openssl rand -base64 48` → `-hex 32` nas senhas de papel, "três modos" → dois, e a lista de agents (faltavam os 6 de auditoria). A **tag do template** é a dos 4 footers canônicos (o de [`docs/MONOREPO.md`](./docs/MONOREPO.md) manda), extraída pelo `release-template.yml` — este rodapé não a define. A `1.26.0` adiciona o conjunto de system design canônico ([`docs/system-design/`](./docs/system-design/README.md) — 7 documentos: contexto, módulo, dados, segurança, operação, extensão e o índice) com o **ADR-0010** e o **template** que um app derivado copia; nenhum arquivo de `apps/`, `packages/` ou `infra/` mudou. A `1.27.0` faz o **código casar com esse desenho**: a rota de health sai do rate limit global, a escrita aceita `Idempotency-Key` (a tabela `idempotency_keys` + um interceptor global), o papel de runtime ganha `statement_timeout = '8s'` e a correlação da auditoria passa a ser a mesma da resposta — com os **ADRs 0011 e 0012** e 2 migrations. **Licença:** MIT.

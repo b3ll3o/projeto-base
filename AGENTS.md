@@ -23,9 +23,8 @@ Esta regra vale para todo agent (`.agents/agents/*.md`), toda skill
 4. **Composição explícita.** Agents podem ser encadeados (sequential), paralelizados (parallel) ou organizados hierarquicamente (orchestrator → specialists) — mas o modo de composição DEVE ser documentado no despacho.
 5. **Modelo-agnóstico.** Agents são definidos em Markdown puro. Não há acoplamento com vendor. Toda instrução específica de ferramenta (Claude Code, Cursor, etc.) vive em `docs/TEMPLATE_USAGE.md`, nunca no corpo do agent.
 
-**Quando NÃO aplicar esta regra:** tarefa trivial de um único agent sem
-dependências externas, interação puramente conversacional (sem execução), ou
-exploração read-only de um único arquivo ou trecho.
+**Quando NÃO aplicar esta regra:** tarefa trivial de um único agent sem dependências
+externas, interação puramente conversacional (sem execução), ou exploração read-only de um único arquivo ou trecho.
 
 Em todos os outros casos, **coordene via `agents:coordinate`**.
 
@@ -109,6 +108,7 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 | **monorepo-specialist**| [`.agents/agents/monorepo-specialist.md`](./.agents/agents/monorepo-specialist.md)| [memory](./.agents/memory/monorepo-specialist.md)        | Arquiteto de monorepo (workspaces, pipelines) | Adicionar/remover/mover apps ou packages, configurar turbo  |
 | **nestjs-specialist**  | [`.agents/agents/nestjs-specialist.md`](./.agents/agents/nestjs-specialist.md)    | [memory](./.agents/memory/nestjs-specialist.md)          | Arquiteto backend NestJS                    | Criar/refatorar módulo NestJS, DI, validação, Swagger       |
 | **nextjs-specialist**  | [`.agents/agents/nextjs-specialist.md`](./.agents/agents/nextjs-specialist.md)    | [memory](./.agents/memory/nextjs-specialist.md)          | Arquiteto frontend Next.js                  | Criar rota/página, decidir RSC vs. Client, Server Actions    |
+| **e2e-specialist**    | [`.agents/agents/e2e-specialist.md`](./.agents/agents/e2e-specialist.md)      | [memory](./.agents/memory/e2e-specialist.md)            | Dono da cobertura e2e de fluxos de usuário (Playwright): audita, planeja, revisa o plano, implementa o spec faltante, roda a suíte e commita/pusha na branch | Antes de todo push que toque `apps/web/**`; "os fluxos têm e2e?", "falta teste e2e" |
 | **telemetry-specialist**| [`.agents/agents/telemetry-specialist.md`](./.agents/agents/telemetry-specialist.md)| [memory](./.agents/memory/telemetry-specialist.md)        | Arquiteto de telemetria/observabilidade cross-stack (OpenTelemetry SDK init, exporters OTLP, propagação W3C, sampling, web-vitals, collector) | Decisões de instrumentação em backend/frontend/infra; correlação Pino↔OTel; bridge `request.id` → W3C `traceparent`; config OTel Collector Compose |
 | **ux-design-specialist**| [`.agents/agents/ux-design-specialist.md`](./.agents/agents/ux-design-specialist.md)| [memory](./.agents/memory/ux-design-specialist.md)        | Specialist em UX/design de interface (tokens, estados, formulários, a11y, microcopy) | Criar/revisar a aparência e o comportamento de telas e componentes, definir tokens, auditar a11y de UI |
 | **multi-tenant-specialist**| [`.agents/agents/multi-tenant-specialist.md`](./.agents/agents/multi-tenant-specialist.md)| [memory](./.agents/memory/multi-tenant-specialist.md)        | Arquiteto de tenancy (shared-schema + `tenant_id` + RLS, contexto de tenant na fronteira, escopo de query, cache por tenant, backfill, gate cross-tenant) | Criar/alterar tenancy: `Tenant`/`Membership`/`Invitation`, `tenant_id` em model, filtro de tenant em repositório, RLS, chave de cache por tenant, migração de dados pré-tenancy, spec de isolamento |

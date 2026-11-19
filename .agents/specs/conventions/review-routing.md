@@ -1,9 +1,9 @@
 ---
 name: review-routing
-version: 1.9
-updated: 2026-11-09
+version: 1.10
+updated: 2026-11-18
 maintainer: review-router
-description: "Matriz de roteamento de revisores consultada pelo review-router — v1.5 (audit specialists) + UX e tenancy com skill de processo, v1.9 (camada de binding)."
+description: "Matriz de roteamento de revisores consultada pelo review-router — v1.5 (audit specialists) + UX e tenancy com skill de processo, v1.9 (camada de binding), v1.10 (specs e2e)."
 ---
 
 # Convenção: review-routing (matriz de roteamento de revisores)
@@ -130,6 +130,9 @@ path_globs:
     reviewers: [test-writer]
   - pattern: "**/*.spec.ts"
     reviewers: [test-writer]
+
+  # v1.10 — cobertura e2e: os specs de fluxo de usuário têm dono próprio.
+  - { pattern: "apps/web/e2e/**", reviewers: [e2e-specialist] }
 
   # pt-BR: OpenTelemetry (T6.2 — v1.4). Paths canônicos do rollout telemetria.
   - pattern: "apps/api/**/telemetry/**"
@@ -269,13 +272,10 @@ Resultado esperado:
 - `doc-sync` DISPATCHED — `path_glob .agents/specs/**` + `commit_type docs`
 
 > Os cenários que envolvem **vários** commits ou **vários** paths vivem no
-> apêndice [`review-routing-examples.md`](./review-routing-examples.md)
-> (cenários D e E). Aqui ficam só os de 1 commit / 1 path, que são os que
-> cabem no exemplo curto. A extração do cenário C (v1.6) foi o que abriu
-> espaço para as rotas de `tooling/` que a task 3.2 do plano
-> [`guard-classes`](../../../docs/superpowers/plans/2026-10-03-guard-classes.md)
-> precisou corrigir.
-
+> apêndice [`review-routing-examples.md`](./review-routing-examples.md) (cenários D e E).
+> Aqui ficam só os de 1 commit / 1 path — os que cabem no exemplo curto. A extração
+> do cenário C (v1.6) abriu espaço para as rotas de `tooling/` que a task 3.2 do
+> plano [`guard-classes`](../../../docs/superpowers/plans/2026-10-03-guard-classes.md) corrigiu.
 
 ---
 
@@ -287,13 +287,13 @@ Resultado esperado:
 
 | Versão | Data | Mudança |
 |--------|------|---------|
+| 1.10 | 2026-11-18 | `e2e-specialist` entra como reviewer dos specs de fluxo de usuário: 1 path_glob novo (`apps/web/e2e/**`). Antes eles caíam só no `**/*.spec.ts` → `test-writer`, que não é o dono do inventário de fluxos nem da regra da convenção `e2e-playwright.md`. Aditivo. |
 | 1.9 | 2026-11-09 | A camada de binding ganha **path_globs**: a pasta `.claude/` saiu do repo (ADR-0009) e os arquivos que ela carregava foram para `.agents/` — os hooks (`.agents/hooks/**`), o `settings.json` que registra o comando deles (`.agents/settings.json`) e os docs da pasta (`.agents/*.md`). Sem eles, um commit que só tocasse o binding era classificado em domínio **desconhecido** e despachava **zero** reviewers — a lacuna que o `.claude/README.md` declarava. Aditivo. |
 | 1.8 | 2026-10-16 | `multi-tenant-specialist` entra na §0 (reviewer→skill) carregando `multi-tenant-audit`. Fecha para tenancy a mesma lacuna que a v1.7 fechou para UX: reviewer roteado sem skill é opinionador com nome de especialista. Nenhum path_glob novo — a v1.6 do `specialist-routing` já roteia `**/*tenant*` e `**/*tenancy*`; o que faltava era o processo que ele executa. Aditivo. |
 | 1.7 | 2026-10-13 | UX/design ganha **processo**, não só reviewer: 5 skills (`ui-modes`, `ui-craft`, `ui-break`, `motion`, `ui-review`) em `.agents/skills/`, carregadas por `ux-design-specialist`. 2 diff_patterns novos — `outline-none`/`outline: none` e movimento (`transition`/`@keyframes`/`prefers-reduced-motion`/`transform: scale`). Nenhum path_glob novo: os globs de `apps/web/**` (v1.5) já roteavam para o specialist; o que faltava era o processo que ele executa. Aditivo. |
 | 1.6 | 2026-10-08 | Resolve conflito: mergeia v1.5 (mine, audit specialists diff_patterns) + v1.5 da main (ux-design-specialist). Mantém ambos. Aditivo. |
-| 1.5 | 2026-10-06 | Adicionar `ux-design-specialist` (UX/design de interface). 1 path_glob novo (`apps/web/app/globals.css`) + 1 diff_pattern novo. Aditivo. |
+| 1.5 | 2026-10-06 / 2026-10-08 | Adicionar `ux-design-specialist` (UX/design de interface): 1 path_glob novo (`apps/web/app/globals.css`) + 1 diff_pattern novo. Adicionar os 5 audit specialists (prisma-db, openapi-contract, otelcol-infra, docker-prod, release-versioning) com 5 `diff_patterns` correspondentes. Aditivo. |
 | 1.1 | 2026-09-22 | Adicionar exemplos de uso (Seção 5) + Seção 6 "Gaps Conhecidos" priorizando 2 P1 + 2 P2 para v1.2; bump version frontmatter `1` → `1.1` |
 | 1.2 | 2026-09-22 | 2 P1 gaps resolvidos: propagação de `blocking` em path_globs (`e4c0971`) + narrowing do regex de segurança (`f496b05`). (Seção 6) |
 | 1.3 | 2026-09-22 | 3 P2 gaps resolvidos: PR #20 (enrich `domains[]`), PR #21 (lint WARNING em `blocking`), PR #22 (cenários migrados para apêndice). Zero breaking change. (Seção 6) |
 | 1.4 | 2026-09-23 | Adicionar diff_pattern OpenTelemetry + 3 path_globs (`apps/api/**/telemetry/**`, `apps/web/**/instrumentation*`, `infra/otelcol/**`) roteando para `telemetry-specialist`. Cobre NestJS decorators, OTel enums, context API e span API. Acionado por T6.2. Aditivo. |
-| 1.5 | 2026-10-08 | Adicionar os 5 audit specialists (prisma-db, openapi-contract, otelcol-infra, docker-prod, release-versioning) com 5 `diff_patterns` correspondentes. Aditivo. |

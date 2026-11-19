@@ -1,9 +1,9 @@
 ---
 name: specialist-routing
-version: 1.7
+version: 1.8
 updated: 2026-11-18
 maintainer: specialist-router
-description: "Matriz canônica de roteamento de demanda — mapeia paths/keywords/scopes para 47 specialists. Source of truth do classificador headless (tooling/scripts/specialist-router.ts) e do lint da matriz. Atualizada por PR."
+description: "Matriz canônica de roteamento de demanda — mapeia paths/keywords/scopes para 48 specialists. Source of truth do classificador headless (tooling/scripts/specialist-router.ts) e do lint da matriz. Atualizada por PR."
 ---
 
 # Convenção: specialist-routing
@@ -59,6 +59,10 @@ path_globs:
   - pattern: "apps/web/app/globals.css"
     specialists: [ux-design-specialist]
     rationale: "Tokens de design (cor, espaçamento, tipografia) e resets"
+
+  - pattern: "apps/web/e2e/**"
+    specialists: [e2e-specialist]
+    rationale: "Specs e2e (Playwright) — o dono do inventário de fluxos e da cobertura e2e das telas"
 
   - { pattern: "packages/**", specialists: [monorepo-specialist] }
   - pattern: "pnpm-workspace.yaml"
@@ -188,6 +192,8 @@ demand_keywords:
     specialists: [finding-orchestrator]
   - regex: "(?i)\\btest(es)?\\b|tdd|cobertura|coverage|\\bspec\\b"
     specialists: [test-writer]
+  - regex: "(?i)\\be2e\\b|end.?to.?end|playwright|fluxo de (tela|usuário)"
+    specialists: [e2e-specialist]
   - regex: "(?i)\\bdoc(umenta[çc][ãa]o)?\\b|readme|adr|spec(ification)?|catálogo de rotas"
     specialists: [doc-writer, documentation-specialist]
   - regex: "(?i)telemetry|tracing|opentelemetry|\\botel\\b|spans?"
@@ -277,3 +283,7 @@ derived_tags:
 
 > Completo em [`specialist-routing-historico.md`](./specialist-routing-historico.md)
 > (apenas leitura), para preservar o limite de 300 linhas deste spec.
+
+| Versão | Data | Mudança |
+|---|---|---|
+| 1.8 | 2026-11-18 | `e2e-specialist` entra na matriz (1 path_glob + 1 demand_keyword). Total: 48 specialists. |
