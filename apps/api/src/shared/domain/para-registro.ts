@@ -30,11 +30,16 @@ const PERMITIDO = /[^0-9a-zA-Z._:/-]/g;
 const LIMITE = 64;
 
 /**
- * A IMPRESSÃO digital do valor cru — 8 hex, o bastante para distinguir dois
- * valores e curto o bastante para não poluir a linha.
+ * A IMPRESSÃO digital do valor cru — 12 hex, ou 48 bits.
+ *
+ * ⚠️ MEDIDO 2026-11-18 na 5ª revisão do PR #171: eram 8 hex (32 bits), e o
+ * limite de COLISÃO pelo paradoxo dos aniversários sobre N valores é ~2^16
+ * (≈65 mil) — e o texto afirmava, como se fosse garantido, que "dois ids
+ * malformados diferentes não produzem a mesma linha". Com 48 bits o limite
+ * sobe para ~2^24 (≈16 milhões).
  */
 function impressao(valor: string): string {
-  return createHash('sha256').update(valor).digest('hex').slice(0, 8);
+  return createHash('sha256').update(valor).digest('hex').slice(0, 12);
 }
 
 /**
@@ -46,8 +51,10 @@ function impressao(valor: string): string {
  *
  * ⚠️ E a IMPRESSÃO digital vai junto quando o valor foi alterado (ou
  * truncado): sem ela, `!!!` e `$$$` produziriam a mesma linha — e a escalada
- * deixaria de ser atribuível a um alvo. Com o valor já seguro (um uuid, um
- * path), a linha sai como é: a impressão seria ruído.
+ * deixaria de ser atribuível a um alvo. A impressão tem 48 bits: a colisão é
+ * improvável, e NÃO é impossível (o limite de aniversários é ~2^24) — por
+ * isso o texto do registro não promete unicidade. Com o valor já seguro (um
+ * uuid, um path), a linha sai como é: a impressão seria ruído.
  */
 export function paraRegistro(valor: string): string {
   const seguro = valor.replace(PERMITIDO, '_').slice(0, LIMITE);

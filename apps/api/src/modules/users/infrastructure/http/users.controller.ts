@@ -569,6 +569,13 @@ export class UsersController {
     status: 403,
     description: 'O `:id` da rota não é o `sub` do token (USER_OWNERSHIP_VIOLATION)',
   })
+  // ⚠️ O 401 DECLARADO, e não só o `security` do contrato: as DUAS rotas
+  // irmãs exigem token (a do DONO e a do ADMIN do sistema), e só a do ADMIN
+  // declarava o 401 — MEDIDO 2026-11-18 na 5ª revisão do PR #171: o
+  // `openapi.json` gerado saía com `/users/{id}/history` sem o 401 e com o
+  // `/admin/users/{id}/history` com ele, e a diferença não estava escrita em
+  // lugar nenhum. Um cliente gerado do contrato não tratava o 401 da do DONO.
+  @ApiResponse({ status: 401, description: 'Sem token (ou token expirado)' })
   @ApiQuery({ name: 'cursor', required: false, type: String })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'Histórico paginado' })

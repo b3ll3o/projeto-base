@@ -165,7 +165,11 @@ describe('tabela', () => {
     // ⚠️ O `tabIndex` é o que torna a região rolável alcançável por teclado
     // no Firefox e no Safari (o Chromium já a focava por padrão) — e sem ele,
     // as colunas que ficam FORA da tela a 320px eram inalcançáveis.
-    const regiao = screen.getByRole('region', { name: /Histórico de Ana/ });
+    //
+    // ⚠️ E `group`, e não `region`: `region` é um LANDMARK, e as 6 tabelas do
+    // app viravam 6 landmarks. O `group` conserva o nome acessível e o
+    // `tabindex` — e não entra na lista de landmarks do leitor de tela.
+    const regiao = screen.getByRole('group', { name: /Histórico de Ana/ });
     expect(regiao).toHaveAttribute('tabindex', '0');
     expect(regiao.className).toContain('overflow-x-auto');
   });

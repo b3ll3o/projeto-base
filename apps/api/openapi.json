@@ -424,6 +424,9 @@
           "400": {
             "description": "Query inválida (limit fora da faixa, cursor malformado) ou id que não é um UUID v7"
           },
+          "401": {
+            "description": "Sem token (ou token expirado)"
+          },
           "403": {
             "description": "O `:id` da rota não é o `sub` do token (USER_OWNERSHIP_VIOLATION)"
           }

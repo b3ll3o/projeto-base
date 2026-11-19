@@ -166,6 +166,72 @@ test.describe('F21 — O histórico de auditoria de uma pessoa (admin do sistema
     await expect(volta).toHaveAttribute('href', `/users/${conta.id}`);
   });
 
+  /**
+   * A 320px, a coluna do e-mail RESPETA a largura que declara — e a página
+   * não rola na horizontal.
+   *
+   * ⚠️ Este teste é o INSTRUMENTO do conserto do ALTO 1 (5ª revisão do PR
+   * #171, MEDIDO): os números que sustentavam o motivo do PR (a tabela de
+   * 2.332px, a célula de 1.997px) viviam SÓ na prosa, e a mutação que desfaz
+   * o conserto — trocar `wrap-anywhere` por `break-words` no CONTEÚDO da
+   * célula — não quebrava teste nenhum. Este é o que dá dente ao conserto.
+   *
+   * ⚠️ E A AFIRMAÇÃO É SOBRE A COLUNA QUE DECLARA A LARGURA, e não sobre
+   * "a tabela cabe": o `w-48` só vale quando o `wrap-anywhere` está no
+   * conteúdo (é o `anywhere` que reduz a contribuição min-content) — e sem ele
+   * a célula estica para a largura do e-mail inteiro, e a "Quando" e a "Quem
+   * mudou" ficam a ~7 telas de rolagem. Medir a coluna é medir o conserto.
+   */
+  test('a 320px a coluna do e-mail respeita a largura declarada', async ({
+    comoAdmin,
+    irPara,
+    page,
+    semear,
+  }) => {
+    // Fixture sem valor: o que importa é o cookie de admin plantado.
+    void comoAdmin;
+
+    // ⚠️ O e-mail no MÁXIMO do VO (254 chars): com o e-mail de 30 chars a
+    // tabela cabe em qualquer largura, e o defeito não apareceria — o teste
+    // passaria medindo nada.
+    const email = `${'a'.repeat(242)}@example.com`;
+    const conta = await semear('Pessoa Do Historico Longo', email);
+
+    await page.setViewportSize({ width: 320, height: 640 });
+    await irPara(`/users/${conta.id}`);
+
+    const tabela = tabelaDoHistorico(page);
+    await expect(tabela).toBeVisible();
+
+    // A COLUNA DO E-MAIL — a 3ª (Versão · O que houve · Nome e e-mail ·
+    // Quando · Quem mudou).
+    const celula = tabela.locator('tbody tr').first().locator('td').nth(2);
+    const largura = await celula.evaluate((el) => el.getBoundingClientRect().width);
+
+    // ⚠️ O TETO é o `w-48`: 192px — e o `pr-4` da célula ENTRA na caixa
+    // (`box-sizing: border-box`, o do Tailwind), então o teto é 192, e não
+    // 192+16.
+    //
+    // ⚠️ E O TETO NÃO É O PISO: MEDIDO 2026-11-18 a 320px, a célula mede
+    // **69,17px** — a largura da tabela é DISTRIBUÍDA entre as colunas (a
+    // "Quando", que é `whitespace-nowrap`, fica com 153px), e o `w-48` é o
+    // máximo da coluna, não o que ela ocupa.
+    //
+    // ⚠️ E O QUE O TESTE AFIRMA É O DENTE: SEM o `wrap-anywhere` no conteúdo,
+    // a MESMA célula mede **2.017px** (o e-mail inteiro, que não tem
+    // espaço para quebrar) — e a página continuaria sem rolar, porque o
+    // `overflow-x-auto` do wrapper segura o transbordo. Por isso a
+    // afirmação é sobre a COLUNA, e não sobre a rolagem da página.
+    expect(largura).toBeLessThanOrEqual(192);
+
+    // E A PÁGINA NÃO ROLA — o mesmo padrão do F6 (`f6-navegacao.spec.ts`).
+    const medida = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }));
+    expect(medida.scrollWidth).toBeLessThanOrEqual(medida.clientWidth);
+  });
+
   test('quem não é admin do sistema não abre o detalhe — e o histórico não é entregue', async ({
     irPara,
     page,

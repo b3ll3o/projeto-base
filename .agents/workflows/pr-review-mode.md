@@ -182,11 +182,21 @@ O `<!-- pr-review -->` é obrigatório: é o que o gate procura.
 ## Passo 7 — Conferir o gate
 
 ```bash
-pnpm pr:review-check --pr=<n>     # local, usa o `gh` autenticado
+pnpm pr:review-check --pr=<n> --repo=owner/nome   # local, usa o `gh` autenticado
 ```
+
+> ⚠️ O `--repo` é o que o comando usa **fora de um clone**; dentro do repo, o
+> `origin` do git serve e a flag é redundante. MEDIDO 2026-11-18 na 5ª revisão
+> do PR #171: o comando **sem** a flag saía 1 ("não sei qual repositório ler")
+> — e quem segue o passo lia vermelho DEPOIS de publicar, e publicava de novo.
 
 Verde = o gate enxerga o comentário. **Vermelho depois de publicar** = o
 comentário não carrega o marcador, ou não foi publicado no PR certo.
+
+**`NÃO VERIFICADO`** = o gate não mediu nada, e a mensagem diz **qual** dos
+dois motivos foi: "o número {n} não é um PR" (o número é de uma issue) ou "a
+API não respondeu" (o `gh` sem token ou sem permissão). Os dois têm conserto
+próprio — e o de "não é PR" NÃO é autenticar o `gh`.
 
 ## O comentário consolidado — formato
 

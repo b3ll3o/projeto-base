@@ -44,6 +44,14 @@ jobs:
     # O NOME do job é o contexto do status check — é o que o ruleset exige
     # (`required_status_checks`). Mudar o nome aqui exige mudar lá.
     name: review-comment
+    # ⚠️ O `issue_comment` escuta QUALQUER comentário do repo — e o número de
+    # uma ISSUE não é PR. MEDIDO 2026-11-18 na 5ª revisão do PR #171: o job
+    # rodava (com `checkout` + `pnpm install` inteiro) para toda issue que
+    # não é PR, e o gate respondia 404 — vermelho por um número que não
+    # existe como PR. A condição deixa o job passar só quando o issue é
+    # pull request (`issue.pull_request` é o objeto do PR, e é vazio numa
+    # issue comum).
+    if: github.event_name != 'issue_comment' || github.event.issue.pull_request
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     env:

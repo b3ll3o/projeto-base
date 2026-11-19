@@ -87,6 +87,17 @@ O terceiro estado é o ponto: `pr-refresh-gate` já mediu que **pular com `0`
 é verde**, e é o pior estado possível num gate de PR — o PR nasce inativo e
 ninguém é avisado. Aqui o gate não pula: ele diz que não mediu.
 
+⚠️ **E O "não verificável" DIZ O MOTIVO, que são DOIS.** MEDIDO 2026-11-18 na
+5ª revisão do PR #171: o número de uma ISSUE respondia "não consegui ler a
+API", e o conserto indicado era **autenticar o `gh`** — que já estava
+autenticado, e que não era a causa. O gate resolve o PR antes de ler os
+comentários, e um **404** é "o número {n} não é um PR" (o número é de uma
+issue), com o conserto próprio: conferir o número.
+
+⚠️ E o repositório vem do `--repo=owner/nome`, do `GITHUB_REPOSITORY` (CI) ou
+do **`origin` do git** — o último é o que faz o comando documentado
+(`pnpm pr:review-check --pr=<n>`) funcionar de dentro do clone.
+
 ## Os dois instrumentos
 
 | Instrumento | Onde | O que cobra |

@@ -749,6 +749,16 @@ describe('lacunasDoKit', () => {
     const erros = lacunasDoKit(e);
     expect(erros.some((x) => x.includes('a sonda do gatilho NÃO mede'))).toBe(true);
     expect(erros.some((x) => x.includes('não existe'))).toBe(true);
+    // ⚠️ E A SEGUNDA MENSAGEM CITA A PRIMEIRA (MEDIDO 2026-11-18 na 5ª
+    // revisão do PR #171): são DUAS mensagens para UMA causa, e as duas
+    //Falavam de coisas diferentes — a do doc não dizia que a sonda é a
+    // causa. Sem esta asserção, o gate pode voltar a duplicar a causa em
+    // silêncio.
+    expect(
+      erros.some(
+        (x) => x.includes('não existe') && x.includes('a sonda do gatilho acima NÃO mede'),
+      ),
+    ).toBe(true);
   });
 
   it('condicional: a §4 dizendo "não" deixa o item OBRIGATÓRIO', () => {

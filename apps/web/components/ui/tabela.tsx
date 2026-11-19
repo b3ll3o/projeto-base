@@ -64,10 +64,16 @@ export function Tabela({
     // convenção `estilizacao.md` §4.3 exige o utilitário `foco` em TODO
     // elemento focável — sem ele, a região ganha o anel DEFAULT do browser e
     // a app passa a ter dois sistemas de foco na mesma tela.
+    //
+    // ⚠️ `role="group"`, e não `role="region"`: `region` é um LANDMARK, e as
+    // 6 tabelas do app viravam 6 landmarks (MEDIDO 2026-11-18 na 5ª revisão
+    // do PR #171: a revisão apontou o landmark como INFO — é decisão de UI, e
+    // não defeito). O `group` conserva o nome acessível e a alcançabilidade
+    // por teclado, e não entra na lista de landmarks do leitor de tela.
     <div
       className="mt-6 overflow-x-auto foco"
       tabIndex={0}
-      role="region"
+      role="group"
       aria-labelledby={idDaLegenda}
     >
       <table {...props} className={className ? `${base} ${className}` : base}>
@@ -128,6 +134,13 @@ export function CabecalhoTabela({
  * **página** de rolar era o `overflow-x-auto` do wrapper — e o comentário
  * antigo atribuía isso ao `break-words`.
  *
+ * ⚠️ E A MEDIDA DE HOJE, com o instrumento que a reproduz: o e2e do F21
+ * (`apps/web/e2e/f21-historico-usuario.spec.ts`) mede a 320px, com o e-mail
+ * de 254 chars — e afirma que a coluna do e-mail respeita o `w-48` que
+ * declara. MEDIDO 2026-11-18: a célula mede **69,17px** e a tabela
+ * **409,92px**; sem o `wrap-anywhere` no conteúdo, a MESMA célula mede
+ * **2.017px**.
+ *
  * ⚠️ E a base NÃO impõe `anywhere`: MEDIDO 2026-11-17 a 320px, `anywhere` em
  * todas as células fez a tabela de `/admin/users` caber em 295px — e a coluna
  * de e-mail cair para **52px**, rendendo o e-mail em 9 fragmentos
@@ -136,12 +149,17 @@ export function CabecalhoTabela({
  * pior que rolagem.
  *
  * ⚠️ QUEM PRECISA que a célula não alargue a tabela OPT-IN: põe
- * `wrap-anywhere` no conteúdo INTERNO da célula (e não na própria célula —
- * as duas classes na mesma etiqueta se resolvem pela ORDEM do CSS
- * compilado, e essa ordem é do Tailwind, não do código). Com `anywhere` no
- * conteúdo e uma largura fixa na célula (`w-48`), a coluna respeita a
- * largura: MEDIDO, a tabela da trilha de auditoria cai de 2.097px para a
- * largura das colunas.
+ * `wrap-anywhere` no conteúdo INTERNO da célula — e o motivo é a **HERANÇA**:
+ * `overflow-wrap` é propriedade herdada, o `<td>` traz `break-words` na base
+ * e o `<div>` interno traz `wrap-anywhere`, que especifica o valor DELE e
+ * vence o herdado. A ordem do CSS compilado só decide quando as DUAS classes
+ * estão no MESMO elemento — e aqui elas não estão (MEDIDO 2026-11-18 na 5ª
+ * revisão do PR #171: o comentário antigo explicava o mecanismo pela ORDEM,
+ * que não é o mecanismo).
+ *
+ * Com `anywhere` no conteúdo e uma largura fixa na célula (`w-48`), a coluna
+ * respeita a largura — e é isso que o e2e do histórico mede a 320px
+ * (`apps/web/e2e/f21-historico-usuario.spec.ts`).
  */
 export function CelulaTabela({ children, className, ...props }: React.ComponentProps<'td'>) {
   const base = 'break-words border-b border-border/60 py-3 pr-4 text-foreground';

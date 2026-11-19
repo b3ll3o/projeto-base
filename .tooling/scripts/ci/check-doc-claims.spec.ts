@@ -287,9 +287,24 @@ describe('checkDocClaims', () => {
     );
     const original = readFileSync(controller, 'utf-8');
     try {
+      // ⚠️ A mutação LEVA o `@ApiOperation` junto, e o motivo é uma CORRIDA
+      // entre specs (MEDIDO 2026-11-18, 5ª revisão do PR #171): o
+      // `check-audit-skills` roda a skill `openapi-audit` sobre o repo REAL
+      // em paralelo, e a regra 3.2 dela acusa "missing @ApiOperation" num
+      // decorator que está SEM `@ApiOperation` na janela de 10 linhas. A
+      // mutação acrescentava só o `@Get` — e o decorator de sonda (na linha
+      // 706 do arquivo) era lido como um endpoint sem doc, e a auditoria
+      // reportava um defeito que não existia. MEDIDO: `pnpm ci:local` ficou
+      // vermelho com `✗ apps/api/.../users.controller.ts:706 missing
+      // @ApiOperation` — e a mutação está no `finally`, restaurada.
+      //
+      // A mutação continua medindo o que tem de medir: o código ganha UM
+      // endpoint (a derivação conta +1) e o doc não muda — e o endpoint de
+      // sonda agora é um endpoint BEM FORMADO, como os reais.
       writeFileSync(
         controller,
-        `${original}\n  @Get('/sonda-do-teste')()\n  findOne() { return undefined; }\n`,
+        `${original}\n  @ApiOperation({ summary: 'sonda do teste' })\n` +
+          `  @Get('/sonda-do-teste')()\n  findOne() { return undefined; }\n`,
       );
       const r = await checkDocClaims({ repoRoot: REPO_REAL });
       expect(r.ok).toBe(false);

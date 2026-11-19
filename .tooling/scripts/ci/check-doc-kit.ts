@@ -805,6 +805,11 @@ export function lacunasDoKit(entradas: Entradas): string[] {
     // existe — o gate acusaria uma lacuna que não é lacuna. O dono continua
     // sendo exigido: o item tem specialist e auditor mesmo sem doc.
     let naoAplicavel = false;
+    // ⚠️ A Sonda CEGA é uma causa, e as duas mensagens que saem dela têm de
+    // dizer isso: MEDIDO 2026-11-18 na 5ª revisão do PR #171, o gate
+    // empurrava o erro da sonda E seguia exigindo o doc — e a ausência do doc
+    // virava um segundo erro, sem nenhum dos dois apontar para o outro.
+    let sondaCega = false;
     if (item.condicao === 'condicional') {
       const declaracao = entradas.condicionais.find((d) => d.item === item.item);
       if (declaracao === undefined) {
@@ -815,6 +820,7 @@ export function lacunasDoKit(entradas: Entradas): string[] {
       } else {
         const resultado = entradas.sonda(declaracao);
         if (resultado === 'erro') {
+          sondaCega = true;
           errors.push(
             `${quem}: a sonda do gatilho NÃO mede ("${declaracao.gatilho}") — uma ` +
               'sonda cega não autoriza a não-aplicabilidade, e o doc é exigido ' +
@@ -846,16 +852,22 @@ export function lacunasDoKit(entradas: Entradas): string[] {
 
     // ── O doc canônico ──────────────────────────────────────────────────────
     const arquivos = item.tipo === 'familia' ? entradas.arquivos(item.doc) : [item.doc];
+    // ⚠️ A CITAÇÃO da sonda cega: quando a sonda é a CAUSA, a mensagem do doc
+    // aponta para ela — duas mensagens, uma causa (MEDIDO 2026-11-18 na 5ª
+    // revisão do PR #171).
+    const porSondaCega = sondaCega
+      ? ' — e a sonda do gatilho acima NÃO mede, então a não-aplicabilidade ' + 'não foi declarada'
+      : '';
     if (naoAplicavel) {
       // Não aplicável: o doc não é exigido. O dono continua exigido abaixo.
     } else if (item.tipo !== 'familia' && !entradas.existe(item.doc)) {
       errors.push(
-        `${quem}: o doc canônico "${item.doc}" não existe ` +
+        `${quem}: o doc canônico "${item.doc}" não existe${porSondaCega} ` +
           `(regra: convenção kit-documentacao.md §2).`,
       );
     } else if (arquivos.length === 0) {
       errors.push(
-        `${quem}: o doc canônico "${item.doc}" não existe ` +
+        `${quem}: o doc canônico "${item.doc}" não existe${porSondaCega} ` +
           `(regra: convenção kit-documentacao.md §2).`,
       );
     } else {

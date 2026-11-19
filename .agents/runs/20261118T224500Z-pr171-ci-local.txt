@@ -1,0 +1,55 @@
+# Evidência da 5ª revisão do PR #171 — `pnpm ci:local` no HEAD desta branch
+
+- **Comando:** `pnpm ci:local`
+- **Exit code:** 0
+- **Branch:** `feat/historico-usuario-admin`
+- **HEAD:** `6b507b2d4aa584aae6aca1d0b2c2e990ac46f0dc`
+- **Rodado em:** 2026-11-18 (UTC)
+- **Registro:** este arquivo é o RESUMO da execução — as linhas de medição de
+  cada suíte, mais o veredito do preflight e o boot da aplicação. O log
+  completo (1 MB, com a tabela de cobertura por arquivo) NÃO é versionado: o
+  `.agents/runs/` guarda registros datados, e o repositório inteiro tem 1,7 MB
+  lá dentro.
+
+⚠️ **Duas execuções anteriores do MESMO comando falharam — e as duas por
+causas que NÃO são deste diff:**
+
+1. **F7 (e2e do web) — flake de timeout.** O alert de "e-mail ou senha
+   incorretos" não apareceu em 5 s, com a e2e da API rodando em paralelo (a
+   API carregada). MEDIDO: o F7 **isolado** passa (o teste que falhou, em
+   489 ms), e a execução arquivada passou inteira. Nenhum arquivo do F7 foi
+   tocado por esta revisão.
+2. **A CORRIDA entre dois specs** — o `check-doc-claims.spec.ts` muta o repo
+   REAL (acrescenta um `@Get` de sonda no fim do `users.controller.ts`, na
+   linha 706) e o `check-audit-skills.spec.ts`, que roda **em paralelo**,
+   lê o mesmo arquivo: a regra 3.2 da skill `openapi-audit` acusava
+   "missing @ApiOperation" num decorator que a mutação tinha acabado de
+   escrever. MEDIDO: com a mutação antiga, a regra acusa
+   `users.controller.ts:706 missing @ApiOperation`; com a mutação nova (o
+   `@ApiOperation` junto, como os endpoints reais), a regra não acusa nada.
+   **Corrigido** — a mutação agora escreve um endpoint bem formado, e
+   continua medindo o que media.
+
+⚠ 0 erro(s); 1 check(s) não rodaram (skipped) — parte do painel acima não foi medida.
+@projeto/web:test:coverage:  Test Files  46 passed (46)
+@projeto/web:test:coverage:       Tests  520 passed (520)
+@projeto/api:test:unit:  Test Files  85 passed (85)
+@projeto/api:test:unit:       Tests  1189 passed (1189)
+@projeto/web:test:unit:  Test Files  46 passed (46)
+@projeto/web:test:unit:       Tests  520 passed (520)
+@projeto/api:test:coverage:  Test Files  85 passed (85)
+@projeto/api:test:coverage:       Tests  1189 passed (1189)
+@projeto/api:test:integration:  Test Files  14 passed (14)
+@projeto/api:test:integration:       Tests  250 passed (250)
+@projeto/web:test:e2e:   74 passed (1.9m)
+@projeto/api:test:e2e:  Test Files  19 passed (19)
+@projeto/api:test:e2e:       Tests  141 passed (141)
+ Test Files  21 passed (21)
+      Tests  466 passed (466)
+ Test Files  58 passed (58)
+      Tests  1138 passed (1138)
+[ci:boot] subindo a API em http://127.0.0.1:33355 …
+[ci:boot] ✓ API no ar (health: ok, banco: ok)
+[ci:boot] subindo o web em http://127.0.0.1:41029 …
+[ci:boot] ✓ web no ar (health: ok)
+[ci:boot] ✓ aplicação local no ar — API :33355 · web :41029

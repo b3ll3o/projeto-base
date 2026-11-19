@@ -6,9 +6,11 @@ import { describe, expect, it } from 'vitest';
 import {
   achatarPaginas,
   coletarComentario,
+  ehNaoEncontrado,
   extrairComentario,
   MARCADOR,
   numeroDoPr,
+  ownerENome,
   repositorio,
   temMarcador,
   verificarRevisao,
@@ -173,7 +175,69 @@ describe('numeroDoPr e repositorio', () => {
 
   it('devolve undefined quando não há nada', () => {
     expect(numeroDoPr([])).toBeUndefined();
-    expect(repositorio([])).toBeUndefined();
+  });
+
+  it('sem flag e sem env, cai no `origin` do git', () => {
+    // ⚠️ O fallback é o que faz o COMANDO DOCUMENTADO funcionar: MEDIDO
+    // 2026-11-18 na 5ª revisão do PR #171, `pnpm pr:review-check --pr=171`
+    // (sem `--repo`) saía 1 com "não sei qual repositório ler".
+    const remoto = execFileSync('git', ['remote', 'get-url', 'origin'], {
+      encoding: 'utf-8',
+    }).trim();
+    process.env['GITHUB_REPOSITORY'] = '';
+    try {
+      expect(repositorio([])).toBe(ownerENome(remoto));
+    } finally {
+      delete process.env['GITHUB_REPOSITORY'];
+    }
+  });
+});
+
+describe('ownerENome', () => {
+  it('lê a forma SCP (ssh do GitHub)', () => {
+    expect(ownerENome('git@github.com:b3ll3o/projeto-base.git')).toBe('b3ll3o/projeto-base');
+  });
+
+  it('lê a forma HTTPS', () => {
+    expect(ownerENome('https://github.com/b3ll3o/projeto-base.git')).toBe('b3ll3o/projeto-base');
+  });
+
+  it('lê a forma `ssh://`', () => {
+    expect(ownerENome('ssh://git@github.com/b3ll3o/projeto-base.git')).toBe('b3ll3o/projeto-base');
+  });
+
+  it('devolve undefined para o que não é um remoto', () => {
+    expect(ownerENome('')).toBeUndefined();
+    expect(ownerENome('   ')).toBeUndefined();
+    expect(ownerENome('lixo')).toBeUndefined();
+  });
+
+  it('tira a barra final ANTES do `.git`', () => {
+    // ⚠️ A ordem importa: com o `.git` primeiro, um remoto terminado em
+    // `.git/` devolvia `owner/nome.git` — e o gate lia
+    // `repos/owner/nome.git/pulls/N`, que é 404.
+    expect(ownerENome('https://github.com/b3ll3o/projeto-base.git/')).toBe('b3ll3o/projeto-base');
+  });
+
+  it('lê o caminho INTEIRO da forma SCP (o GitLab tem subgrupo)', () => {
+    expect(ownerENome('git@gitlab.com:grupo/sub/projeto.git')).toBe('grupo/sub/projeto');
+  });
+});
+
+describe('ehNaoEncontrado', () => {
+  it('reconhece o 404 do `gh`', () => {
+    const erro = Object.assign(new Error('falhou'), {
+      stderr: Buffer.from('gh: Not Found (HTTP 404)\n'),
+    });
+    expect(ehNaoEncontrado(erro)).toBe(true);
+  });
+
+  it('NÃO confunde rede caída com 404', () => {
+    const erro = Object.assign(new Error('falhou'), {
+      stderr: Buffer.from('error connecting to api.github.com\n'),
+    });
+    expect(ehNaoEncontrado(erro)).toBe(false);
+    expect(ehNaoEncontrado(new Error('sem stderr'))).toBe(false);
   });
 });
 
@@ -183,6 +247,9 @@ describe('numeroDoPr e repositorio', () => {
  * O gate fala com a API pelo `gh`; este duplo exercita o **caminho inteiro**
  * (argv → `gh` → JSON → parse → veredito) sem rede. É o que prova que o
  * gate está ligado ao formato real da resposta, e não só à função pura.
+ *
+ * ⚠️ O valor `{ erro: '...' }` faz o duplo SAIR com 1 e escrever a mensagem
+ * no stderr — é o que reproduz o 404 do `gh` (`gh: Not Found (HTTP 404)`).
  */
 function ghFalso(respostas: Record<string, unknown>): string {
   const dir = mkdtempSync(join(tmpdir(), 'pr-review-gate-'));
@@ -200,7 +267,12 @@ const respostas = ${JSON.stringify(respostas)};
 const caminho = process.argv.find((a) => a.startsWith('repos/')) ?? '';
 const chaves = Object.keys(respostas).sort((a, b) => b.length - a.length);
 const chave = chaves.find((k) => caminho.endsWith(k));
-process.stdout.write(JSON.stringify(respostas[chave ?? ''] ?? []));
+const resposta = respostas[chave ?? ''];
+if (resposta && typeof resposta === 'object' && !Array.isArray(resposta) && resposta.erro) {
+  process.stderr.write(resposta.erro);
+  process.exit(1);
+}
+process.stdout.write(JSON.stringify(resposta ?? []));
 `,
   );
   chmodSync(script, 0o755);
@@ -259,6 +331,63 @@ describe('CLI do gate', () => {
     });
     expect(r.status).toBe(1);
     expect(r.stderr).toContain(MARCADOR);
+  });
+
+  it('sai 0 SEM `--repo` — o comando que o §Passo 7 manda rodar', () => {
+    // ⚠️ O DENTE deste teste: o comando documentado é
+    // `pnpm pr:review-check --pr=<n>`, e MEDIDO 2026-11-18 na 5ª revisão do
+    // PR #171 ele saía 1 ("não sei qual repositório ler"). Quem seguia o
+    // passo lia vermelho DEPOIS de publicar — e publicava de novo.
+    const dir = ghFalso({
+      '/pulls/171/reviews': [{ id: 1, body: `${MARCADOR}\nrevisão`, user: { login: 'leo' } }],
+      '/pulls/171/comments': [],
+      '/issues/171/comments': [],
+    });
+    const r = spawnSync('node', ['--import', 'tsx', GATE, '--pr=171'], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        GITHUB_REPOSITORY: '',
+        PATH: `${dir}:${process.env['PATH'] ?? ''}`,
+      },
+    });
+    expect(r.status).toBe(0);
+  });
+
+  it('sai 1 com o motivo "o repositório não existe" quando o 404 é do repo', () => {
+    // ⚠️ O GitHub responde 404 para o repositório INEXISTENTE e para o
+    // privado SEM acesso — e a mensagem precisa dizer qual das DUAS coisas
+    // aconteceu, porque o conserto é outro (MEDIDO 2026-11-18 na revisão do
+    // diff: `--repo=owner-que-nao-existe/repo` caía no ramo do "não é um PR",
+    // e conferir o número não consertava nada).
+    const dir = ghFalso({
+      'repo-que-nao-existe': { erro: 'gh: Not Found (HTTP 404)\n' },
+    });
+    const r = spawnSync(
+      'node',
+      ['--import', 'tsx', GATE, '--pr=171', '--repo=inexistente/repo-que-nao-existe'],
+      { encoding: 'utf8', env: { ...process.env, PATH: `${dir}:${process.env['PATH'] ?? ''}` } },
+    );
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('não existe');
+    expect(r.stderr).not.toContain('não é um PR');
+  });
+
+  it('sai 1 com o motivo "não é um PR" quando a API responde 404', () => {
+    // ⚠️ O número de uma ISSUE não é PR — e o 404 é a resposta do GitHub
+    // para "esse pull request não existe". O conserto indicado NÃO é
+    // "autentique o `gh`": o token funcionava. MEDIDO 2026-11-18 na 5ª
+    // revisão do PR #171.
+    const dir = ghFalso({
+      '/pulls/149': { erro: 'gh: Not Found (HTTP 404)\n' },
+    });
+    const r = spawnSync('node', ['--import', 'tsx', GATE, '--pr=149', '--repo=o/n'], {
+      encoding: 'utf8',
+      env: { ...process.env, PATH: `${dir}:${process.env['PATH'] ?? ''}` },
+    });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('não é um PR');
+    expect(r.stderr).not.toContain('autenticado');
   });
 });
 

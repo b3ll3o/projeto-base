@@ -158,14 +158,18 @@ function quemMudou(
  * seção, e não a página inteira, que é o que a seção existe para proteger.
  *
  * ⚠️ `wrap-anywhere` (e não `break-words`): `break-word` NÃO reduz a
- * contribuição min-content — só `anywhere` reduz. MEDIDO 2026-11-17: com o
- * `break-words` aqui, a tabela media 2.247px dentro de um wrapper de 288px,
- * e "Quando" e "Quem mudou" ficavam a ~7,8 telas de rolagem.
+ * contribuição min-content — só `anywhere` reduz. MEDIDO 2026-11-18 (pelo
+ * e2e do F21, com o e-mail de 254 chars): com o `break-words` aqui, a célula
+ * do e-mail media **2.017px** dentro de um wrapper de 288px — e "Quando" e
+ * "Quem mudou" ficavam a ~7 telas de rolagem.
  *
- * ⚠️ E A CLASSA VAI NO CONTEÚDO, e não na célula: a célula tem `break-words`
- * na base (a primitiva), e as duas classes na MESMA etiqueta se resolvem pela
- * ordem do CSS compilado — que é do Tailwind, não do código. O div com
- * `wrap-anywhere` tem a classe DELE, e vale por si.
+ * ⚠️ E A CLASSA VAI NO CONTEÚDO, e não na célula — e o motivo é a HERANÇA:
+ * `overflow-wrap` é propriedade herdada, o `<td>` traz `break-words` na base
+ * (a primitiva) e o `<div>` interno traz `wrap-anywhere`, que especifica o
+ * valor DELE e vence o herdado. A ordem do CSS compilado só decide quando as
+ * DUAS classes estão no MESMO elemento — e aqui elas não estão (MEDIDO
+ * 2026-11-18 na 5ª revisão do PR #171: o comentário antigo explicava o
+ * mecanismo pela ORDEM, que não é o mecanismo).
  */
 function dadoDaVersao(snapshot: UserOutputDto | null): React.ReactNode {
   if (snapshot === null || snapshot === undefined) return '—';
@@ -499,14 +503,21 @@ export default async function DetalheUsuarioPage({
                           `snapshot` gravado. O nome de hoje é o do título da
                           tela, e é o que muda a cada alteração.
 
-                          ⚠️ `w-48`: MEDIDO, com o e-mail de 249 chars (o VO
-                          permite 254) a tabela media 2.097px dentro de um
-                          wrapper de 288px a 320px — e "Quando" e "Quem
-                          mudou" ficavam a 7 telas de rolagem. A largura
-                          SÓ vale com o `wrap-anywhere` no conteúdo (a
-                          primitiva usa `break-words`, que não reduz a
-                          contribuição min-content) — é por isso que o
-                          `dadoDaVersao` usa `wrap-anywhere`. */}
+                          ⚠️ `w-48` — e o que ele VALE, que não são 192px:
+                          MEDIDO 2026-11-18 pelo e2e do F21 a 320px, esta
+                          célula (a 3ª: Versão · O que houve · Nome e e-mail ·
+                          Quando · Quem mudou) mede **69,17px**, e a tabela
+                          409,92px dentro de um wrapper de 288px. A largura
+                          da tabela é DISTRIBUÍDA entre as colunas (a "Quando",
+                          que é `whitespace-nowrap`, fica com 153px), e o
+                          `w-48` é o TETO da coluna, não o que ela ocupa.
+
+                          ⚠️ E O QUE O CONSERTO COMPROU: SEM o `wrap-anywhere`
+                          no conteúdo, a MESMA célula media **2.017px** (o
+                          e-mail inteiro) — e a página continuaria sem rolar,
+                          porque o `overflow-x-auto` do wrapper segura o
+                          transbordo. É por isso que o `dadoDaVersao` usa
+                          `wrap-anywhere` — e é o que o e2e mede. */}
                       <CelulaTabela className="w-48">{dadoDaVersao(entrada.snapshot)}</CelulaTabela>
                       {/* ⚠️ `whitespace-nowrap`: a DATA não quebra no meio —
                           "17/11/2026," e "21:00:31" em duas linhas é
@@ -539,9 +550,9 @@ export default async function DetalheUsuarioPage({
                     // Sem ela, quem cai na página 2 pelo link não tem como
                     // saber o que ficou para trás.
                     <span className="text-xs text-muted-foreground">
-                      Versões{' '}
-                      {historico.valor.entradas[historico.valor.entradas.length - 1]!.version} a{' '}
-                      {historico.valor.entradas[0]!.version} desta página.
+                      Da versão {historico.valor.entradas[0]!.version} à{' '}
+                      {historico.valor.entradas[historico.valor.entradas.length - 1]!.version} desta
+                      página.
                     </span>
                   ) : null}
                   {historico.valor.proximoCursor !== null ? (

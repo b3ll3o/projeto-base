@@ -43,7 +43,7 @@
 | 4 | `PATCH`| `/api/v1/users/{id}`                 | ✅   | `200`, `400`, `403`, `404`, `412`           |
 | 5 | `DELETE`| `/api/v1/users/{id}`                | ✅   | `204`, `400`, `403`, `404`, `412`           |
 | 6 | `POST` | `/api/v1/users/{id}/restore`         | ✅   | `201`, `400`, `403`, `404`, `412`           |
-| 7 | `GET`  | `/api/v1/users/{id}/history`         | ✅   | `200`, `400`, `403`                           |
+| 7 | `GET`  | `/api/v1/users/{id}/history`         | ✅   | `200`, `400`, `401`, `403`                    |
 | 8 | `GET`  | `/api/v1/admin/users/{id}/history`  | ✅   | `200`, `400`, `401`, `403`, `404`             |
 
 Os códigos da tabela são os **declarados** no `openapi.json` — por `@ApiResponse`
@@ -162,9 +162,14 @@ restaura sem motivo) e tem teto de 500 caracteres — um motivo maior é `400`
 **Response `200`**: `{ entries: UserHistoryEntryDto[], nextCursor: string | null }`
 (`UserHistoryPageDto`, de `packages/shared-types`).
 
-**Códigos de erro**: `400` (`VALIDATION_ERROR` — query inválida, pela MESMA validação de §3.2) e `403` (`USER_OWNERSHIP_VIOLATION`). A
+**Códigos de erro**: `400` (`VALIDATION_ERROR` — query inválida, pela MESMA validação de §3.2), `401` (sem token ou token expirado) e `403` (`USER_OWNERSHIP_VIOLATION`). A
 #124 fechou só uma das DUAS surfaces de query da API; a outra (`GET /users/{id}/history`) ainda
 passava `Number(limit)` cru, e `limit=abc` virava `NaN` no `take:` do Prisma — **500**.
+
+⚠️ O `401` é **declarado** nas DUAS rotas irmãs (esta e a de §3.8) — MEDIDO
+2026-11-18 na 5ª revisão do PR #171: só a do ADMIN declarava, e a diferença
+não estava escrita em lugar nenhum. As DUAS exigem token (`JwtAuthGuard`), e
+um cliente gerado do contrato precisa ver o `401` nas DUAS.
 
 ⚠️ A ORDEM É **ASCENDENTE** — a versão mais antiga primeiro. ⚠️ E ela é
 **explícita** (`ordem: 'asc'` na use case), e não o default do port: a rota do
