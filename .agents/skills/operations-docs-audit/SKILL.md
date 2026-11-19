@@ -107,7 +107,7 @@ veredito é do gate `check-version-footers`, que é o dono do número — o
 `check-doc-claims` mede os claims numéricos dos docs de API, não o footer.
 
 ```bash
-# [gate: run — compara a versão declarada no CHANGELOG com os 4 footers canônicos]
+# [gate: run — compara a versão declarada no CHANGELOG com os 6 footers canônicos]
 ch=CHANGELOG.md
 declarada=""
 if [ -f "$ch" ]; then

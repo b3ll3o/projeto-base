@@ -164,11 +164,11 @@ grep -oE '\*\*Versão do documento:\*\* [0-9]+\.[0-9]+\.[0-9]+' docs/MONOREPO.md
 node -p "require('./package.json').version"   # → 0.1.0
 ```
 
-Os 4 footers versionados (`docs/MONOREPO.md`, `docs/STACK.md`,
-`docs/TEMPLATE_USAGE.md` e
+Os 6 footers versionados (`docs/MONOREPO.md`, `docs/STACK.md`,
+`docs/TEMPLATE_USAGE.md`, `AGENTS.md`, `README.md` e
 `.agents/specs/conventions/estrutura-e-versionamento.md`) têm de **concordar
 entre si** — o gate `check-version-footers` barra o PR quando divergem. O bump
-mecânico dos quatro é `pnpm tooling:bump-version X.Y.Z`.
+mecânico dos seis é `pnpm tooling:bump-version X.Y.Z`.
 
 Mudança em `packages/` **DEVE** atualizar a versão no `package.json` do
 package e entrar no changelog que o workflow gera — não há arquivo

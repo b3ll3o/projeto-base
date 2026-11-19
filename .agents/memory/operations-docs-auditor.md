@@ -102,4 +102,6 @@ a doutrina de `documentation-audit` §Erros comuns.
 - [ ] Medir se o **template de post-mortem** tem o campo de **linha do tempo
       com horário** — é o que separa um post-mortem de um relatório.
 - [ ] Apontar no relatório a **5ª fonte** da versão (o rodapé do `AGENTS.md`)
-      quando ela divergir dos 4 footers — é a quinta que ninguém mede.
+      quando ela divergir dos 6 footers — desde a v1.15.0 o gate
+      `check-version-footers` mede os SEIS, e essa quinta deixou de ser a
+      que ninguém media.
