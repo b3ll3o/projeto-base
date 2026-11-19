@@ -188,8 +188,9 @@ R: `.agents/` é vendor-neutral — funciona com qualquer IA (Claude Code, Curso
 | `1.26.0` | **O system design canônico** — o conjunto [`./system-design/`](./system-design/README.md) (7 documentos: índice, contexto, módulo, dados, segurança, operação e o contrato de extensão) e o template que o projeto derivado copia. O §3.3 ganhou o passo 6 (copiar o template do system design) e o ADR-0010. Sem mudança no fluxo de integração: nenhuma dependência nova, nenhum binário novo. |
 | `1.27.0` | **O app derivado herda o código que casa com o desenho** — o conjunto `docs/system-design/` afirmava quatro coisas que o código não tinha, e elas agora existem: a rota de health com teto próprio (600/min, no controller), a escrita com `Idempotency-Key` (retry seguro), o `statement_timeout` de 8 s no papel de runtime e a correlação única entre resposta e auditoria. **2 ADRs novos** (0011 e 0012) e **2 migrations**. Sem mudança no fluxo de integração: nenhuma dependência nova, nenhum binário novo, nenhum passo novo no checklist. |
 | `1.30.0` | **O kit de documentação entra como obrigatório** — 5 pilares e 14 itens, cada um com doc canônico, specialist dono e auditor por pilar ([`kit-documentacao.md`](../.agents/specs/conventions/kit-documentacao.md)); o gate `check-doc-kit` cobra a cobertura. O app derivado herda o mesmo kit: a matriz é a fonte única e a convenção diz o que é copiado. Sem mudança no fluxo de integração: nenhuma dependência nova, nenhum binário novo, nenhum passo novo no checklist. |
+| `1.31.0` | **Bump de metadata** — sincronização de versão com STACK.md e MONOREPO.md (1.30.0 → 1.31.0) e o agent `e2e-specialist` + o workflow `e2e-coverage-mode` registrados no catálogo. Sem mudança no fluxo de integração: nenhuma dependência nova, nenhum binário novo, nenhum passo novo no checklist. |
 
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão do documento:** 1.30.0
+**Versão do documento:** 1.31.0

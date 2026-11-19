@@ -271,11 +271,10 @@ Resultado esperado:
 - `code-quality-reviewer` SKIPPED — `all_changed_paths endsWith .md` (skip rule 1)
 - `doc-sync` DISPATCHED — `path_glob .agents/specs/**` + `commit_type docs`
 
-> Os cenários que envolvem **vários** commits ou **vários** paths vivem no
-> apêndice [`review-routing-examples.md`](./review-routing-examples.md) (cenários D e E).
-> Aqui ficam só os de 1 commit / 1 path — os que cabem no exemplo curto. A extração
-> do cenário C (v1.6) abriu espaço para as rotas de `tooling/` que a task 3.2 do
-> plano [`guard-classes`](../../../docs/superpowers/plans/2026-10-03-guard-classes.md) corrigiu.
+> Os cenários que envolvem **vários** commits ou **vários** paths vivem no apêndice
+> [`review-routing-examples.md`](./review-routing-examples.md) (cenários D e E). Aqui ficam só os de 1
+> commit / 1 path — os que cabem no exemplo curto. A extração do cenário C (v1.6) abriu espaço para as
+> rotas de `tooling/` que a task 3.2 do plano [`guard-classes`](../../../docs/superpowers/plans/2026-10-03-guard-classes.md) corrigiu.
 
 ---
 
@@ -292,8 +291,9 @@ Resultado esperado:
 | 1.8 | 2026-10-16 | `multi-tenant-specialist` entra na §0 (reviewer→skill) carregando `multi-tenant-audit`. Fecha para tenancy a mesma lacuna que a v1.7 fechou para UX: reviewer roteado sem skill é opinionador com nome de especialista. Nenhum path_glob novo — a v1.6 do `specialist-routing` já roteia `**/*tenant*` e `**/*tenancy*`; o que faltava era o processo que ele executa. Aditivo. |
 | 1.7 | 2026-10-13 | UX/design ganha **processo**, não só reviewer: 5 skills (`ui-modes`, `ui-craft`, `ui-break`, `motion`, `ui-review`) em `.agents/skills/`, carregadas por `ux-design-specialist`. 2 diff_patterns novos — `outline-none`/`outline: none` e movimento (`transition`/`@keyframes`/`prefers-reduced-motion`/`transform: scale`). Nenhum path_glob novo: os globs de `apps/web/**` (v1.5) já roteavam para o specialist; o que faltava era o processo que ele executa. Aditivo. |
 | 1.6 | 2026-10-08 | Resolve conflito: mergeia v1.5 (mine, audit specialists diff_patterns) + v1.5 da main (ux-design-specialist). Mantém ambos. Aditivo. |
-| 1.5 | 2026-10-06 / 2026-10-08 | Adicionar `ux-design-specialist` (UX/design de interface): 1 path_glob novo (`apps/web/app/globals.css`) + 1 diff_pattern novo. Adicionar os 5 audit specialists (prisma-db, openapi-contract, otelcol-infra, docker-prod, release-versioning) com 5 `diff_patterns` correspondentes. Aditivo. |
+| 1.5 | 2026-10-06 | Adicionar `ux-design-specialist` (UX/design de interface). 1 path_glob novo (`apps/web/app/globals.css`) + 1 diff_pattern novo. Aditivo. |
 | 1.1 | 2026-09-22 | Adicionar exemplos de uso (Seção 5) + Seção 6 "Gaps Conhecidos" priorizando 2 P1 + 2 P2 para v1.2; bump version frontmatter `1` → `1.1` |
 | 1.2 | 2026-09-22 | 2 P1 gaps resolvidos: propagação de `blocking` em path_globs (`e4c0971`) + narrowing do regex de segurança (`f496b05`). (Seção 6) |
 | 1.3 | 2026-09-22 | 3 P2 gaps resolvidos: PR #20 (enrich `domains[]`), PR #21 (lint WARNING em `blocking`), PR #22 (cenários migrados para apêndice). Zero breaking change. (Seção 6) |
 | 1.4 | 2026-09-23 | Adicionar diff_pattern OpenTelemetry + 3 path_globs (`apps/api/**/telemetry/**`, `apps/web/**/instrumentation*`, `infra/otelcol/**`) roteando para `telemetry-specialist`. Cobre NestJS decorators, OTel enums, context API e span API. Acionado por T6.2. Aditivo. |
+| 1.5 | 2026-10-08 | Adicionar os 5 audit specialists (prisma-db, openapi-contract, otelcol-infra, docker-prod, release-versioning) com 5 `diff_patterns` correspondentes. Aditivo. |

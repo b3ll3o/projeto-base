@@ -134,9 +134,8 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 > **Skills de auditoria (1:1):** cada specialist de auditoria carrega uma skill de processo
 > determinístico (`.agents/skills/<name>-audit/SKILL.md`) — `prisma-audit`, `openapi-audit`, `otelcol-audit`,
 > `docker-prod-audit`, `release-versioning-audit`, `findings-orchestration`, `documentation-audit`,
-> `multi-tenant-audit` (do `multi-tenant-specialist`, que **não** é despachado pelo orchestrator) e as
-> **5 do kit** (`onboarding-docs-audit`, `architecture-docs-audit`, `decision-docs-audit`,
-> `contract-docs-audit`, `operations-docs-audit`). A skill encapsula o **processo**; o agent, o **papel**.
+> `multi-tenant-audit` (do `multi-tenant-specialist`, que **não** é despachado pelo orchestrator) e as **5 do kit**
+> (`onboarding-docs-audit`, `architecture-docs-audit`, `decision-docs-audit`, `contract-docs-audit`, `operations-docs-audit`). A skill encapsula o **processo**; o agent, o **papel**.
 
 > **Skills de UI (a maior relação 1:N do repo, v1.11.0+):** o `ux-design-specialist` carrega **8** skills —
 > `ui-review` (processo) → `ui-modes` (propósito) → `ui-craft` (tokens, anti-slop) → `ui-break` (pior caso) → `motion` (movimento), mais
@@ -222,6 +221,7 @@ Workflows genéricos prontos para uso estão em [`.agents/WORKFLOWS.md`](./.agen
 | `release-pre-tag` (v2.0+) | "auditar antes de tag vX.Y.Z" | release-versioning-specialist + finding-orchestrator (subset focado em versioning) |
 | `doc-audit-mode` (v1.14.0+) | "a documentação está em dia? / auditar a doc / revisar, atualizar e criar documentações" | documentation-specialist (`documentation-audit` → escreve → `check-doc-coverage` + `check-doc-refs`) |
 | `kit-doc-mode` (v1.30.0+) | "o kit de documentação está em dia? / auditar um item do kit / o doc do item X envelheceu" | specialist do item (`<item>-specialist`) → auditor do pilar (`<pilar>-docs-auditor`) → `check-doc-kit`; a matriz do kit está em [`kit-documentacao.md`](./.agents/specs/conventions/kit-documentacao.md) |
+| `e2e-coverage-mode` (v1.31.0+) | "os fluxos da aplicação têm e2e?" / **todo push** que toque `apps/web/**` | sequential — e2e-specialist (auditar → planejar) → code-reviewer (revisar o plano) → e2e-specialist (implementar → verificar) → code-reviewer (revisar o spec) → e2e-specialist (commitar/pushar); o detalhe está em [`e2e-coverage-mode.md`](./.agents/workflows/e2e-coverage-mode.md) |
 
 ---
 
@@ -296,5 +296,5 @@ Após cada **grande atividade** (plano multi-task, bugfix não-trivial, ou adoç
 
 **Mantido por:** projeto-base contributors
 **Licença:** MIT
-**Versão do documento:** 1.30.0
+**Versão do documento:** 1.31.0
 **Status:** Estável

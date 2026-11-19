@@ -3,7 +3,7 @@
 > Registro de versão do template, em **pt-BR**, no formato
 > [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 >
-> A versão corrente do template é **1.30.0**. O **fato** de cada versão é a
+> A versão corrente do template é **1.31.0**. O **fato** de cada versão é a
 > tag correspondente no git — este arquivo é o **leitura** do que a tag
 > contém, e a tag é a que se confere.
 
@@ -20,6 +20,22 @@
 ### Quebras de compatibilidade
 
 - Nada ainda — a próxima versão a ser fechada entra aqui.
+
+## [1.31.0] — 2026-11-19
+
+### Adicionado
+
+- Agent [`e2e-specialist`](./.agents/agents/e2e-specialist.md): o dono do ciclo de cobertura e2e de fluxos de usuário. Antes de todo push que toque `apps/web/**`, ele audita se toda tela da aplicação tem spec e2e que a atravessa; quando falta, monta o plano (com o `state_snapshot`), revisa o plano com outro agent, implementa o spec, roda `pnpm ci:local`, revisa o spec e commita/pusha na branch. A regra que ele executa é a convenção [`e2e-playwright`](./.agents/specs/conventions/e2e-playwright.md) — todo fluxo de usuário com tela tem spec e2e que atravessa o backend. O gate [`check-e2e-flow-coverage`](./.tooling/scripts/ci/check-e2e-flow-coverage.ts) mede a metade **declarativa** (paridade entre inventário, specs e `page.tsx`); o agent fecha a **semântica** (o spec afirma o efeito? a recusa está coberta com dado plantado? a semente é pela API?).
+- Workflow [`e2e-coverage-mode`](./.agents/workflows/e2e-coverage-mode.md): o mesmo ciclo em formato de dispatch canônico ([`protocolos/dispatch.md`](./.agents/skills/agents-coordinate/protocolos/dispatch.md)), com revisão do plano **e** revisão do spec implementado.
+- Roteamento: a matriz [`specialist-routing`](./.agents/specs/conventions/specialist-routing.md) v1.8 ganha 1 path_glob (`apps/web/e2e/**`) e 1 demand_keyword; a matriz [`review-routing`](./.agents/specs/conventions/review-routing.md) v1.10 dá aos specs de fluxo um dono próprio.
+
+### Corrigido
+
+- O rodapé do `README.md` passava a descrever **dois conteúdos com o mesmo rótulo de versão**: as contagens do disco foram re-medidas (48 agents · 50 memórias · 18 workflows) sem o número da versão acompanhar. Agora o rótulo da versão e as contagens andam juntos — a versão do documento sobe para 1.31.0.
+
+### Quebras de compatibilidade
+
+- Nenhuma em runtime: nenhum endpoint, script, migration, tabela ou contrato de API mudou.
 
 ## [1.30.0] — 2026-11-18
 
@@ -45,7 +61,7 @@
 - Nenhuma em runtime: nenhum endpoint, script, migration, tabela ou contrato de API mudou.
 - Uma mudança de comportamento, em [`docs/agents/domain.md`](./docs/agents/domain.md): a instrução "se `GLOSSARY.md` não existir, siga em silêncio" foi retirada, porque o arquivo passa a existir a partir desta versão.
 
-## Histórico anterior a 1.30.0
+## Histórico anterior a 1.31.0
 
 O histórico **anterior** a esta versão não está neste arquivo — ele vive nas
 **tags do git**, que são o registro datado do que foi feito em cada versão.
