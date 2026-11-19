@@ -606,4 +606,63 @@ describe('E2E 11 — isolamento entre empresas', () => {
 
     expect(recusa.statusCode).toBe(403);
   });
+
+  // ⚠️ A TRILHA DE AUDITORIA — e o ÚNICO caminho de leitura que não é o
+  // bucket de SISTEMA. MEDIDO 2026-11-17 (revisão do PR #171): TODAS as
+  // leituras HTTP da trilha passavam pela CREDENCIAL DE SISTEMA (o header
+  // de empresa ausente caía no bucket `null`), e a policy — que é o filtro de
+  // verdade — não era exercitada por NENHUM teste HTTP. Uma policy
+  // quebrada passava pela suíte inteira.
+  it('a TRILHA é lida ATRAVÉS da policy — e a ordem é ASCENDENTE', async () => {
+    const acme = await abrirEmpresa('acme');
+
+    // A pessoa é CONVIDADA na ACME — e o vínculo é o que a policy olha.
+    const pessoa = await criarUsuarioAutenticado(e2e, {
+      nome: 'Ana',
+      email: 'ana+trilha@acme.dev',
+    });
+    const convite = await e2e.injetar({
+      method: 'POST',
+      url: `/api/v1/tenants/${acme.empresa.id}/invitations`,
+      headers: acme.headers,
+      payload: { email: 'ana+trilha@acme.dev' },
+    });
+    expect(convite.statusCode).toBe(201);
+    const { token } = JSON.parse(convite.body) as { token: string };
+    const aceite = await e2e.injetar({
+      method: 'POST',
+      url: '/api/v1/invitations/accept',
+      headers: pessoa.headers,
+      payload: { token },
+    });
+    expect(aceite.statusCode).toBe(201);
+
+    // A pessoa se renomeia — e a versão vai para a trilha.
+    const renomeio = await e2e.injetar({
+      method: 'PATCH',
+      url: `/api/v1/users/${pessoa.id}`,
+      payload: { novoNome: 'Ana Renomeada' },
+      headers: { ...pessoa.headers, 'x-tenant-id': acme.empresa.id, 'if-match': 'W/"v1"' },
+    });
+    expect(renomeio.statusCode).toBe(200);
+
+    // A leitura COM o header da empresa — e é a CREDENCIAL DE RUNTIME (a
+    // policy `history_leitura` vale), e não o bucket de SISTEMA.
+    const leitura = await e2e.injetar({
+      method: 'GET',
+      url: `/api/v1/users/${pessoa.id}/history`,
+      headers: { ...pessoa.headers, 'x-tenant-id': acme.empresa.id },
+    });
+
+    expect(leitura.statusCode).toBe(200);
+    const corpo = JSON.parse(leitura.body) as { entries: { version: number }[] };
+    // ⚠️ O CONTEÚDO, e não só o status: a policy é o que libera a linha, e
+    // uma policy quebrada devolveria uma lista VAZIA — com 200. Um teste que
+    // só olhasse o status passaria.
+    expect(corpo.entries.length).toBeGreaterThanOrEqual(2);
+    // ⚠️ E A ORDEM É ASCENDENTE — a rota do DONO. A rota do ADMIN pede
+    // `desc`, e um copy-paste que invertesse a ordem aqui não cairia em
+    // nenhum teste.
+    expect(corpo.entries.map((e) => e.version)).toEqual([1, 2]);
+  });
 });

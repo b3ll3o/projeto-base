@@ -1,9 +1,9 @@
 ---
 name: specialist-routing
-version: 1.6
-updated: 2026-10-16
+version: 1.7
+updated: 2026-11-18
 maintainer: specialist-router
-description: "Matriz canônica de roteamento de demanda — mapeia paths/keywords/scopes para 27 specialists. Source of truth do classificador headless (tooling/scripts/specialist-router.ts) e do lint da matriz. Atualizada por PR."
+description: "Matriz canônica de roteamento de demanda — mapeia paths/keywords/scopes para 47 specialists. Source of truth do classificador headless (tooling/scripts/specialist-router.ts) e do lint da matriz. Atualizada por PR."
 ---
 
 # Convenção: specialist-routing
@@ -60,8 +60,7 @@ path_globs:
     specialists: [ux-design-specialist]
     rationale: "Tokens de design (cor, espaçamento, tipografia) e resets"
 
-  - pattern: "packages/**"
-    specialists: [monorepo-specialist]
+  - { pattern: "packages/**", specialists: [monorepo-specialist] }
   - pattern: "pnpm-workspace.yaml"
     specialists: [monorepo-specialist]
     blocking: true
@@ -72,10 +71,8 @@ path_globs:
   - pattern: "tsconfig*.json"
     specialists: [monorepo-specialist]
 
-  - pattern: "**/Dockerfile*"
-    specialists: [docker-specialist]
-  - pattern: "**/docker-compose*.yml"
-    specialists: [docker-specialist]
+  - { pattern: "**/Dockerfile*", specialists: [docker-specialist] }
+  - { pattern: "**/docker-compose*.yml", specialists: [docker-specialist] }
   - pattern: "**/.dockerignore"
     specialists: [docker-specialist]
 
@@ -93,89 +90,69 @@ path_globs:
     specialists: [telemetry-specialist]
     rationale: "OpenTelemetry Collector config (receivers, processors, exporters, pipelines)"
 
-  # v1.3 — Specialists de auditoria. Em geral, `finding-orchestrator` dispara
-  # todos os 5 em paralelo (cron `weekly-findings-scan` ou sob demanda). Aqui,
-  # roteamos para auditoria sob demanda do `specialist-router` quando a demanda cita
-  # o path. Ver WORKFLOWS.md §audit-mode.
-  - pattern: "apps/api/prisma/**"
-    specialists: [prisma-db-specialist]
-  - pattern: "apps/api/openapi.json"
-    specialists: [openapi-contract-specialist]
-  - pattern: "apps/api/src/modules/**/controllers/**"
-    specialists: [openapi-contract-specialist, nestjs-specialist]
-  - pattern: "apps/api/src/modules/**/application/dto/**"
-    specialists: [openapi-contract-specialist, nestjs-specialist]
-  - pattern: "apps/*/Dockerfile"
-    specialists: [docker-prod-specialist, docker-specialist]
-  - pattern: "docker-compose*.yml"
-    specialists: [docker-prod-specialist, docker-specialist]
-  - pattern: ".dockerignore"
-    specialists: [docker-prod-specialist, docker-specialist]
-  - pattern: "docs/{MONOREPO,STACK}.md"
-    specialists: [release-versioning-specialist, doc-writer]
-  - pattern: ".agents/specs/conventions/estrutura-e-versionamento.md"
-    specialists: [release-versioning-specialist, doc-writer]
+  - { pattern: "apps/api/prisma/**", specialists: [prisma-db-specialist] }
+  - { pattern: "apps/api/openapi.json", specialists: [openapi-contract-specialist, openapi-doc-specialist] }
+  - { pattern: "apps/api/src/modules/**/controllers/**", specialists: [openapi-contract-specialist, nestjs-specialist] }
+  - { pattern: "apps/api/src/modules/**/application/dto/**", specialists: [openapi-contract-specialist, nestjs-specialist] }
+  - { pattern: "apps/*/Dockerfile", specialists: [docker-prod-specialist, docker-specialist] }
+  - { pattern: "docker-compose*.yml", specialists: [docker-prod-specialist, docker-specialist] }
+  - { pattern: ".dockerignore", specialists: [docker-prod-specialist, docker-specialist] }
+  - { pattern: "docs/{MONOREPO,STACK}.md", specialists: [release-versioning-specialist, doc-writer] }
+  - { pattern: ".agents/specs/conventions/estrutura-e-versionamento.md", specialists: [release-versioning-specialist, doc-writer] }
   - pattern: ".github/workflows/release-template.yml"
     specialists: [release-versioning-specialist, monorepo-specialist]
 
-  # v1.6 — tenancy. NÃO duplica `apps/api/prisma/**` (schema é do prisma-db).
-  # MEDIDO 2026-10-17: só BASENAME, case-sensitive, e `tenancy` NÃO contém `tenant`.
   - pattern: "**/*tenant*"
     specialists: [multi-tenant-specialist]
     rationale: "Tenant, TenantMembership, filtro por tenant_id, RLS — o domínio de tenancy, não o de schema"
-  - pattern: "**/*tenancy*"
-    specialists: [multi-tenant-specialist]
-  - pattern: ".github/workflows/**"
-    specialists: [monorepo-specialist, security-auditor]
+  - { pattern: "**/*tenancy*", specialists: [multi-tenant-specialist] }
+  - { pattern: ".github/workflows/**", specialists: [monorepo-specialist, security-auditor] }
   - pattern: "**/.agents/**"
     specialists: [refactorer, doc-writer, documentation-specialist]
     domain: "agents-meta"
-  - pattern: "tooling/scripts/**"
-    specialists: [refactorer]
-  - pattern: "docs/**"
-    specialists: [doc-writer, documentation-specialist]
-  - pattern: "docs/adr/**"
-    specialists: [doc-writer, documentation-specialist]
-  - pattern: "**/*.md"
-    specialists: [doc-writer, documentation-specialist]
-  - pattern: "**/*.spec.ts"
-    specialists: [test-writer]
-  - pattern: "**/*.test.ts"
-    specialists: [test-writer]
-  - pattern: "vitest.config.*"
-    specialists: [tdd-enforcer, test-writer]
-  - pattern: "**/TODO*"
-    specialists: [task-manager]
-  - pattern: "package.json"
-    specialists: [monorepo-specialist, orchestrator]
-  - pattern: "**/auth/**"
-    specialists: [security-auditor, nestjs-specialist]
-  - pattern: ".agents/agents/agent-architect.md"
-    specialists: [agent-architect]
-  - pattern: ".agents/agents/orchestrator.md"
-    specialists: [orchestrator, specialist-router]
-  - pattern: ".agents/agents/explorer.md"
-    specialists: [explorer]
-  - pattern: ".agents/agents/code-reviewer.md"
-    specialists: [code-reviewer]
-  - pattern: ".agents/agents/stack-code-reviewer.md"
-    specialists: [stack-code-reviewer]
-  - pattern: ".agents/agents/doc-sync.md"
-    specialists: [doc-sync]
-  - pattern: ".agents/agents/documentation-specialist.md"
-    specialists: [documentation-specialist]
-  - pattern: ".agents/agents/review-router.md"
-    specialists: [review-router]
-  - pattern: ".agents/agents/specialist-router.md"
-    specialists: [specialist-router]
-  - pattern: ".agents/agents/tdd-enforcer.md"
-    specialists: [tdd-enforcer]
-  - pattern: ".agents/agents/task-manager.md"
-    specialists: [task-manager]
-  - pattern: ".agents/agents/otelcol-infra-specialist.md"
-    specialists: [otelcol-infra-specialist, telemetry-specialist]
-  - pattern: "infra/otelcol/**"
-    specialists: [otelcol-infra-specialist, telemetry-specialist]
+  - { pattern: "tooling/scripts/**", specialists: [refactorer] }
+  - { pattern: "docs/**", specialists: [doc-writer, documentation-specialist] }
+  - { pattern: "docs/adr/**", specialists: [doc-writer, documentation-specialist, adr-specialist] }
+  - { pattern: "**/*.md", specialists: [doc-writer, documentation-specialist] }
+  - { pattern: "**/*.spec.ts", specialists: [test-writer] }
+  - { pattern: "**/*.test.ts", specialists: [test-writer] }
+  - { pattern: "vitest.config.*", specialists: [tdd-enforcer, test-writer] }
+  - { pattern: "**/TODO*", specialists: [task-manager] }
+  - { pattern: "package.json", specialists: [monorepo-specialist, orchestrator] }
+  - { pattern: "**/auth/**", specialists: [security-auditor, nestjs-specialist] }
+  - { pattern: ".agents/agents/agent-architect.md", specialists: [agent-architect] }
+  - { pattern: ".agents/agents/orchestrator.md", specialists: [orchestrator, specialist-router] }
+  - { pattern: ".agents/agents/explorer.md", specialists: [explorer] }
+  - { pattern: ".agents/agents/code-reviewer.md", specialists: [code-reviewer] }
+  - { pattern: ".agents/agents/stack-code-reviewer.md", specialists: [stack-code-reviewer] }
+  - { pattern: ".agents/agents/doc-sync.md", specialists: [doc-sync] }
+  - { pattern: ".agents/agents/documentation-specialist.md", specialists: [documentation-specialist] }
+  - { pattern: ".agents/agents/review-router.md", specialists: [review-router] }
+  - { pattern: ".agents/agents/specialist-router.md", specialists: [specialist-router] }
+  - { pattern: ".agents/agents/tdd-enforcer.md", specialists: [tdd-enforcer] }
+  - { pattern: ".agents/agents/task-manager.md", specialists: [task-manager] }
+  - { pattern: ".agents/agents/otelcol-infra-specialist.md", specialists: [otelcol-infra-specialist, telemetry-specialist] }
+  - { pattern: "infra/otelcol/**", specialists: [otelcol-infra-specialist, telemetry-specialist] }
+
+  # v1.7 — kit de documentação moderna (14 itens, 5 pilares). A matriz do kit
+  # (item → doc canônico → specialist → auditor → âncoras) vive na convenção
+  # `kit-documentacao.md`; aqui o roteamento é só o CAMINHO de cada item.
+  - { pattern: "README.md", specialists: [readme-specialist] }
+  - { pattern: "CONTRIBUTING.md", specialists: [contributing-specialist] }
+  - { pattern: "GLOSSARY.md", specialists: [glossary-specialist] }
+  - { pattern: "CHANGELOG.md", specialists: [changelog-specialist] }
+  - { pattern: "docs/prd/**", specialists: [prd-specialist] }
+  - { pattern: "docs/tdr/**", specialists: [tdr-specialist] }
+  - { pattern: "docs/post-mortems/**", specialists: [postmortem-specialist] }
+  - { pattern: "docs/api/asyncapi.yaml", specialists: [asyncapi-specialist] }
+  - { pattern: "docs/runbooks/**", specialists: [runbook-specialist] }
+  - { pattern: "docs/system-design/README.md", specialists: [hld-specialist] }
+  - { pattern: "docs/system-design/contexto.md", specialists: [c4-specialist] }
+  - { pattern: "docs/system-design/modulo.md", specialists: [hld-specialist] }
+  - { pattern: "docs/system-design/seguranca.md", specialists: [hld-specialist] }
+  - { pattern: "docs/system-design/operacao.md", specialists: [hld-specialist] }
+  - { pattern: "docs/system-design/extensao.md", specialists: [hld-specialist] }
+  - { pattern: "docs/system-design/dados.md", specialists: [erd-specialist] }
 ```
 
 ## 2. DEMAND KEYWORDS
@@ -184,6 +161,8 @@ path_globs:
 demand_keywords:
   - regex: "(?i)docker(izar|ize)?|container(iza[çc][ãa]o)?|compose"
     specialists: [docker-specialist]
+  - regex: "(?i)kit de documenta|auditar (o )?kit|auditoria do kit|itens do kit"
+    specialists: [onboarding-docs-auditor, architecture-docs-auditor, decision-docs-auditor, contract-docs-auditor, operations-docs-auditor]
   - regex: "(?i)monorepo|workspace|\\bturbo\\b|pnpm.?workspace"
     specialists: [monorepo-specialist]
   - regex: "(?i)nestjs|fastify|prisma|controller|module"

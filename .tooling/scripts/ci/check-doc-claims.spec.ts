@@ -258,9 +258,13 @@ describe('checkDocClaims', () => {
     const doc = join(REPO_REAL, 'docs', 'api', 'users.md');
     const original = readFileSync(doc, 'utf-8');
     try {
+      // ⚠️ A mutação acompanha o DOC: a contagem de endpoints do BC `users`
+      // passou a ser por GLOB (o BC tem DOIS controllers desde a rota do
+      // admin do sistema), e o valor que o gate compara é o `→ \`N\`` ao lado
+      // do comando citado.
       const trocado = original.replace(
-        'apps/api/src/modules/users/infrastructure/http/users.controller.ts | wc -l`\n> → `7`',
-        'apps/api/src/modules/users/infrastructure/http/users.controller.ts | wc -l`\n> → `8`',
+        'apps/api/src/modules/users/infrastructure/http/*.controller.ts | wc -l`\n> → `8`',
+        'apps/api/src/modules/users/infrastructure/http/*.controller.ts | wc -l`\n> → `9`',
       );
       expect(trocado).not.toBe(original);
       writeFileSync(doc, trocado);
@@ -283,9 +287,24 @@ describe('checkDocClaims', () => {
     );
     const original = readFileSync(controller, 'utf-8');
     try {
+      // ⚠️ A mutação LEVA o `@ApiOperation` junto, e o motivo é uma CORRIDA
+      // entre specs (MEDIDO 2026-11-18, 5ª revisão do PR #171): o
+      // `check-audit-skills` roda a skill `openapi-audit` sobre o repo REAL
+      // em paralelo, e a regra 3.2 dela acusa "missing @ApiOperation" num
+      // decorator que está SEM `@ApiOperation` na janela de 10 linhas. A
+      // mutação acrescentava só o `@Get` — e o decorator de sonda (na linha
+      // 706 do arquivo) era lido como um endpoint sem doc, e a auditoria
+      // reportava um defeito que não existia. MEDIDO: `pnpm ci:local` ficou
+      // vermelho com `✗ apps/api/.../users.controller.ts:706 missing
+      // @ApiOperation` — e a mutação está no `finally`, restaurada.
+      //
+      // A mutação continua medindo o que tem de medir: o código ganha UM
+      // endpoint (a derivação conta +1) e o doc não muda — e o endpoint de
+      // sonda agora é um endpoint BEM FORMADO, como os reais.
       writeFileSync(
         controller,
-        `${original}\n  @Get('/sonda-do-teste')()\n  findOne() { return undefined; }\n`,
+        `${original}\n  @ApiOperation({ summary: 'sonda do teste' })\n` +
+          `  @Get('/sonda-do-teste')()\n  findOne() { return undefined; }\n`,
       );
       const r = await checkDocClaims({ repoRoot: REPO_REAL });
       expect(r.ok).toBe(false);

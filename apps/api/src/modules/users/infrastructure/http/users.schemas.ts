@@ -202,3 +202,25 @@ export const UpdateUserSchema = z.object({
 
 /** Tipo inferido do `UpdateUserSchema` — consumido pelo controller. */
 export type UpdateUserDto = z.infer<typeof UpdateUserSchema>;
+
+/**
+ * O corpo de `POST /users/:id/restore` — e o MOTIVO da restauração.
+ *
+ * ⚠️ pt-BR (2026-11-17, revisão do PR #171): o motivo era ACEITO pelo
+ * contrato (`RestoreUserInputDto.reason`) e DESCARTADO — a rota não lia
+ * corpo nenhum, e o `extractReason` só lia o evento de exclusão. O dado que
+ * o cliente mandava sumia, e a trilha de auditoria ficava sem o porquê da
+ * restauração.
+ *
+ * ⚠️ O MOTIVO é OPCIONAL e tem LENITE: quem restaura sem dizer por quê
+ * restaura sem motivo — e a trilha registra `null`, como faz para o resto.
+ * O teto de 500 caracteres é uma ESCOLHA da API (a coluna `reason` do banco
+ * é texto sem limite): o motivo de uma restauração é uma frase, e um texto
+ * de tamanho livre num campo de auditoria é onde nasce o vazamento.
+ */
+export const RestoreUserSchema = z.object({
+  reason: z.string().trim().min(1).max(500).optional(),
+});
+
+/** Tipo inferido do `RestoreUserSchema` — consumido pelo controller. */
+export type RestoreUserDto = z.infer<typeof RestoreUserSchema>;

@@ -25,6 +25,7 @@
     "ci:local": "pnpm ci:preflight && pnpm turbo run db:generate --filter=@projeto/api && pnpm turbo run lint typecheck test:unit test:coverage test:integration test:e2e --filter=@projeto/api --filter=@projeto/web --filter=@projeto/shared-types --filter=@projeto/eslint-config && pnpm tooling:test && pnpm ci:boot",
     "pr:refresh": "tsx tooling/scripts/pr-refresh-hook.ts",
     "pr:marker": "tsx tooling/scripts/pr-refresh-gate.ts",
+    "pr:review-check": "tsx tooling/scripts/pr-review-gate.ts",
     "stack:review": "tsx tooling/scripts/stack-code-reviewer.ts",
     "docs:sync": "tsx tooling/scripts/doc-sync.ts",
     "weekly:docs-sync": "tsx tooling/scripts/weekly-docs-sync.ts",

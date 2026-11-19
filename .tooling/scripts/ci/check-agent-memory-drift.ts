@@ -153,15 +153,35 @@ export function findDriftedAgents(
  * alterado. As duas fontes são concatenadas; sobrepor linhas é inofensivo,
  * porque a única coisa que se perde é a granularidade do hunk.
  */
-function diffRange(repoRoot: string, base: string): string {
+/**
+ * O teto do buffer do `execFileSync`.
+ *
+ * ⚠️ O padrão do Node é **1 MB**, e um diff de branch grande passa disso:
+ * MEDIDO em 2026-11-18 (revisão de conformidade do PR do kit), o diff tinha
+ * **1.125.353 bytes** → `ENOBUFS` → o `catch` devolvia string vazia → o gate
+ * dizia "nenhum agent alterado" (verde sobre um diff de 22 agents). O `ENOBUFS`
+ * é **erro**, não "não mudou nada".
+ */
+export const MAX_BUFFER_DO_DIFF = 64 * 1024 * 1024;
+
+export function diffRange(repoRoot: string, base: string): string {
   const run = (args: string[]): string => {
     try {
       return execFileSync('git', args, {
         cwd: resolve(repoRoot),
         encoding: 'utf-8',
         stdio: ['ignore', 'pipe', 'pipe'],
+        maxBuffer: MAX_BUFFER_DO_DIFF,
       });
-    } catch {
+    } catch (erro) {
+      const codigo = (erro as { code?: string }).code;
+      if (codigo === 'ENOBUFS') {
+        throw new Error(
+          `o diff de \`${args.join(' ')}\` passou do \`maxBuffer\` ` +
+            `(${MAX_BUFFER_DO_DIFF} bytes) — o gate NÃO mediu nada, e um gate que ` +
+            'não mede não pode reportar verde',
+        );
+      }
       return '';
     }
   };
@@ -209,8 +229,16 @@ function readTouchedMemories(repoRoot: string, base: string): Set<string> {
         cwd: resolve(repoRoot),
         encoding: 'utf-8',
         stdio: ['ignore', 'pipe', 'pipe'],
+        // O mesmo teto do `diffRange` — e o mesmo tratamento do ENOBUFS.
+        maxBuffer: MAX_BUFFER_DO_DIFF,
       });
-    } catch {
+    } catch (erro) {
+      if ((erro as { code?: string }).code === 'ENOBUFS') {
+        throw new Error(
+          `o diff de \`${args.join(' ')}\` passou do \`maxBuffer\` (64 MB) — o gate ` +
+            'NÃO mediu nenhuma memória tocada',
+        );
+      }
       return '';
     }
   };

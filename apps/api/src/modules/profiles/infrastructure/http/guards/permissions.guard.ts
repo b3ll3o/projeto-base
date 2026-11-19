@@ -23,13 +23,32 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PERMISSION_KEYS_METADATA } from '../decorators/require-permission.decorator.js';
 import { UserProfileUseCases } from '../../../application/profiles.use-cases.js';
+import { paraRegistro } from '../../../../../shared/domain/para-registro.js';
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
+  /**
+   * O REGISTRO das recusas — e o porquê de ele existir aqui.
+   *
+   * ⚠️ pt-BR (2026-11-17, revisão do PR #171): a recusa deste guard é a
+   * PORTA que bate PRIMEIRO numa rota protegida por permissão — e ela não
+   * deixava rastro com o ator. O `GlobalExceptionFilter` só loga a partir de
+   * 500, e o access log (`nestjs-pino`) carrega method/url/status, sem
+   * ator. A escalada ficava numa linha sem ninguém — e a rota de histórico
+   * do administrador do sistema (dado pessoal: o nome e o e-mail de cada
+   * versão da pessoa) é justamente o alvo que uma escalada tentaria ler.
+   *
+   * ⚠️ O registro leva o ATOR e o ALVO — e o alvo é o PATH, sanitizado
+   * (`paraRegistro`): o path vem do cliente, e um `\n` nele gravaria uma
+   * linha de log em branco.
+   */
+  private readonly logger = new Logger('PermissionsGuard');
+
   // pt-BR (#97): `@Inject(Reflector)` EXPLÍCITO, mesmo sendo classe concreta
   // — o mesmo motivo e o mesmo defeito do `JwtAuthGuard` (ver o comentário
   // dele). MEDIDO 2026-10-16: sem o token, o `tsx` (esbuild) não emite
@@ -67,6 +86,8 @@ export class PermissionsGuard implements CanActivate {
         isAdmin?: boolean;
         permissions?: readonly string[];
       };
+      method?: string;
+      url?: string;
     }>();
     const user = req.user;
     if (user === undefined) {
@@ -107,6 +128,24 @@ export class PermissionsGuard implements CanActivate {
     const userPerms = new Set(perfil?.permissions ?? user.permissions ?? []);
     const hasAny = required.some((k) => userPerms.has(k));
     if (!hasAny) {
+      // ⚠️ A RECUSA DEIXA RASTRO COM O ATOR — e o alvo é o PATH sanitizado.
+      // Sem esta linha, a escalada ficava só no access log (method/url/status),
+      // sem ator: uma escalada de leitura do histórico de uma pessoa alheia
+      // não era atribuível a ninguém.
+      // ⚠️ SÓ O CAMINHO: o `url` do Fastify vem COM a query string, e a
+      // query pode carregar um filtro, um token ou um dado de outra pessoa —
+      // e o registro é uma linha de log, não um relatório. E o valor vai
+      // sanitizado (`paraRegistro`): o path vem do cliente.
+      const caminho = (req.url ?? '?').split('?')[0] ?? '?';
+      // ⚠️ E O ESCOPO vai junto: ele é o que distingue a escalada numa
+      // empresa de outra — e o mesmo ator, membro de DUAS empresas, produzia
+      // DUAS linhas idênticas (MEDIDO 2026-11-17, revisão de segurança do
+      // PR #171).
+      this.logger.warn(
+        `permissão recusada: o ator ${paraRegistro(user.sub ?? 'desconhecido')} ` +
+          `(escopo ${paraRegistro(user.tenantId ?? 'sistema')}) tentou ` +
+          `${req.method ?? '?'} ${paraRegistro(caminho)} — precisa de uma de [${required.join(', ')}]`,
+      );
       throw new ForbiddenException(
         `permissão requerida ausente: precisa de uma de [${required.join(', ')}]`,
       );

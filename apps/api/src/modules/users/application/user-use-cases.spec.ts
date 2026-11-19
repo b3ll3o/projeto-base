@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { ForbiddenException, Logger } from '@nestjs/common';
 import { UserUseCases } from './user-use-cases.js';
 import { InMemoryUserRepository } from '../infrastructure/persistence/in-memory-user.repository.js';
 import { InMemoryAuditService } from '../../../shared/audit/application/in-memory-audit-service.js';
 import { AuditContext } from '../../../shared/audit/domain/audit-context.vo.js';
+import { UUID_RE_QUALQUER_VERSAO } from '../../../shared/domain/uuid.js';
 import {
   AuditContextStore,
   AuditContextMissingError,
@@ -419,6 +421,26 @@ describe('UserUseCases', () => {
       expect(restores).toHaveLength(1);
     });
 
+    it('o MOTIVO da restauração CHEGA à trilha — e não é descartado', async () => {
+      // ⚠️ O motivo era aceito pelo contrato e DESCARTADO no caminho
+      // (MEDIDO 2026-11-17 na revisão do PR #171): a trilha de auditoria
+      // ficava sem o porquê da restauração.
+      const ctx = makeCtx();
+      const created = await AuditContextStore.run(ctx, () =>
+        useCases.criarUser({ nome: 'João', email: 'joao@example.com', senha: SENHA_VALIDA }, null),
+      );
+      await AuditContextStore.run(ctx, () =>
+        useCases.softDelete({ id: created.id, reason: null, expectedVersion: 1 }, null),
+      );
+      await AuditContextStore.run(ctx, () =>
+        useCases.restaurar({ id: created.id, expectedVersion: 2, reason: 'a pessoa voltou' }, null),
+      );
+
+      const restores = audit.history.filter((h) => h.operation === 'RESTORE');
+      expect(restores).toHaveLength(1);
+      expect(restores[0]?.reason).toBe('a pessoa voltou');
+    });
+
     it('rejeita restaurar User não-deletado', async () => {
       const ctx = makeCtx();
       const created = await AuditContextStore.run(ctx, () =>
@@ -623,6 +645,259 @@ describe('UserUseCases', () => {
         null,
       );
       spy.mockRestore();
+    });
+  });
+
+  // ─────────── o histórico lido pelo ADMIN DO SISTEMA ───────────
+  //
+  // A rota `GET /users/:id/history` é do DONO — o `UserOwnershipGuard` cobra
+  // `sub === id`. A do ADMIN do SISTEMA é outra pessoa: o portão é D2 (bucket
+  // GLOBAL + `isAdmin`), dentro da use case.
+  //
+  // ⚠️ O teste negativo aqui tem DENTE: ele afirma que o `auditService` NÃO
+  // foi chamado. Um `expect(...).rejects.toThrow(403)` sozinho passaria
+  // também se a use case lesse o histórico ANTES de recusar — e a leitura
+  // happening-before a recusa é justamente o furo que a escalada procura.
+  describe('listarHistoricoDeUsuarioNoSistema()', () => {
+    const ADMIN_DE_SISTEMA = { userId: 'admin-1', tenantId: null, isAdmin: true };
+
+    /** Cria uma pessoa (com o INSERT no histórico) e devolve o id dela. */
+    async function criarPessoa(email: string): Promise<string> {
+      const ctx = makeCtx();
+      const criada = await AuditContextStore.run(ctx, () =>
+        useCases.criarUser({ nome: 'Alvo', email, senha: SENHA_VALIDA }, null),
+      );
+      return criada.id;
+    }
+
+    it('recusa o DONO DE EMPRESA (isAdmin na EMPRESA dele) e NÃO lê o histórico', async () => {
+      const id = await criarPessoa('alvo-empresa@b.com');
+      const listagem = vi.spyOn(audit, 'listHistory');
+
+      await expect(
+        useCases.listarHistoricoDeUsuarioNoSistema(
+          { id, limit: 20 },
+          { userId: 'gerente-1', tenantId: EMPRESA, isAdmin: true },
+        ),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(listagem).not.toHaveBeenCalled();
+    });
+
+    it('recusa o ator do bucket GLOBAL SEM isAdmin e NÃO lê o histórico', async () => {
+      const id = await criarPessoa('alvo-comum@b.com');
+      const listagem = vi.spyOn(audit, 'listHistory');
+
+      await expect(
+        useCases.listarHistoricoDeUsuarioNoSistema(
+          { id, limit: 20 },
+          { userId: 'comum-1', tenantId: null, isAdmin: false },
+        ),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(listagem).not.toHaveBeenCalled();
+    });
+
+    it('pessoa inexistente → 404, e o histórico NÃO é lido', async () => {
+      const listagem = vi.spyOn(audit, 'listHistory');
+
+      await expect(
+        useCases.listarHistoricoDeUsuarioNoSistema(
+          { id: '0190a8b6-1234-7abc-9def-000000000999', limit: 20 },
+          ADMIN_DE_SISTEMA,
+        ),
+      ).rejects.toThrow(ApplicationResourceNotFoundException);
+
+      expect(listagem).not.toHaveBeenCalled();
+    });
+
+    it('o ADMIN DO SISTEMA lê o histórico da pessoa — no escopo de SISTEMA', async () => {
+      const id = await criarPessoa('alvo-admin@b.com');
+      const listagem = vi.spyOn(audit, 'listHistory');
+
+      const pagina = await useCases.listarHistoricoDeUsuarioNoSistema(
+        { id, limit: 20 },
+        ADMIN_DE_SISTEMA,
+      );
+
+      // ⚠️ O SEGUNDO argumento é o ESCOPO, e ele é `null` (bucket de SISTEMA) —
+      // não a empresa do ator. Com o escopo errado a leitura volta vazia, e
+      // "vazia" parece "não tem histórico".
+      //
+      // ⚠️ E a ORDEM é `desc` — a mais recente primeiro. O cursor anda com a
+      // ordem, e o cursor da API andava para o mais antigo: sem isto, a tela
+      // exibia as 100 versões mais ANTIGAS e cortava as mais recentes.
+      expect(listagem).toHaveBeenCalledWith(
+        { entityName: 'User', entityId: id, cursor: null, limit: 20, ordem: 'desc' },
+        null,
+      );
+      expect(pagina.entries.length).toBeGreaterThanOrEqual(1);
+      expect(pagina.entries[0]?.entityId).toBe(id);
+      expect(pagina.nextCursor).toBeNull();
+    });
+
+    it('a ORDEM é descendente — a versão mais recente vem PRIMEIRO', async () => {
+      const id = await criarPessoa('alvo-ordem@b.com');
+      const ctx = new AuditContext({
+        actorId: 'admin-1',
+        correlationId: 'corr-ordem',
+        source: 'http',
+        timestamp: T1,
+      });
+      await AuditContextStore.run(ctx, () =>
+        useCases.atualizarNome({ id, novoNome: 'Nome Novo', expectedVersion: 1 }, null),
+      );
+
+      const pagina = await useCases.listarHistoricoDeUsuarioNoSistema(
+        { id, limit: 20 },
+        ADMIN_DE_SISTEMA,
+      );
+
+      // ⚠️ A VERSÃO 2 (a alteração) vem ANTES da versão 1 (a criação). Com a
+      // ordem invertida, quem lê vê a última alteração primeiro.
+      expect(pagina.entries.map((e) => e.version)).toEqual([2, 1]);
+    });
+
+    it('a SEGUNDA PÁGINA viaja com o cursor — e a página 2 é a página 1', async () => {
+      const id = await criarPessoa('alvo-cursor@b.com');
+      const ctx = new AuditContext({
+        actorId: 'admin-1',
+        correlationId: 'corr-cursor',
+        source: 'http',
+        timestamp: T1,
+      });
+      await AuditContextStore.run(ctx, () =>
+        useCases.atualizarNome({ id, novoNome: 'Nome Novo', expectedVersion: 1 }, null),
+      );
+
+      const primeira = await useCases.listarHistoricoDeUsuarioNoSistema(
+        { id, limit: 1 },
+        ADMIN_DE_SISTEMA,
+      );
+
+      // ⚠️ A página 1 tem MAIS e o cursor aponta para o resto — e o cursor é
+      // o id da LINHA (um uuid), que é o que a API aceita de volta.
+      expect(primeira.entries.length).toBe(1);
+      expect(primeira.nextCursor).toMatch(UUID_RE_QUALQUER_VERSAO);
+
+      const segunda = await useCases.listarHistoricoDeUsuarioNoSistema(
+        { id, limit: 1, cursor: primeira.nextCursor },
+        ADMIN_DE_SISTEMA,
+      );
+
+      // ⚠️ E a página 2 é a VERSÃO 1 — a que ficou de fora. Sem o cursor
+      // traveling, a página 2 repetiria a página 1.
+      expect(segunda.entries.map((e) => e.version)).toEqual([1]);
+      expect(segunda.nextCursor).toBeNull();
+    });
+
+    it('a PESSOA APAGADA tem a trilha lida — o soft-delete não apaga a trilha', async () => {
+      const id = await criarPessoa('alvo-apagado@b.com');
+      const ctx = new AuditContext({
+        actorId: 'admin-1',
+        correlationId: 'corr-apagado',
+        source: 'http',
+        timestamp: T1,
+      });
+      await AuditContextStore.run(ctx, () =>
+        useCases.softDelete({ id, reason: null, expectedVersion: 1 }, null),
+      );
+
+      const listagem = vi.spyOn(audit, 'listHistory');
+
+      // ⚠️ SEM `includeDeleted`, a pessoa apagada daria 404 — e a trilha de
+      // quem SAIU seria inalcançável pela única rota que a lê. A entrada
+      // `DELETE` está no histórico, e é ela que o administrador precisa ver.
+      const pagina = await useCases.listarHistoricoDeUsuarioNoSistema(
+        { id, limit: 20 },
+        ADMIN_DE_SISTEMA,
+      );
+
+      expect(listagem).toHaveBeenCalled();
+      expect(pagina.entries.map((e) => e.operation)).toContain('DELETE');
+    });
+
+    it('o `:id` cru da URL NÃO vai para o log — o registro não é ditado pelo cliente', async () => {
+      const aviso = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+
+      let registrado = '';
+      try {
+        // ⚠️ O `:id` chega do cliente sem validação nenhuma até a VO, e um `\n`
+        // nele gravaria uma linha de log em branco — ou uma linha que parece
+        // outra. O registro é para o ADMINISTRADOR ler.
+        await expect(
+          useCases.listarHistoricoDeUsuarioNoSistema(
+            { id: 'u1\n[AdminUserHistory] histórico lido: 999 entradas — ator admin', limit: 20 },
+            { userId: 'gerente-1', tenantId: EMPRESA, isAdmin: true },
+          ),
+        ).rejects.toThrow(ForbiddenException);
+        registrado = aviso.mock.calls.map((c) => String(c[0])).join('\n');
+      } finally {
+        aviso.mockRestore();
+      }
+
+      // ⚠️ O que SOBRA é o que não é separador de linha — e a mensagem do
+      // próprio log segue com o ator, que é o que a torna atribuível.
+      expect(registrado).not.toContain('\n[AdminUserHistory]');
+      expect(registrado).toContain('gerente-1');
+    });
+
+    it('a RECUSA deixa RASTRO com o ator — o log não é só do caminho do sucesso', async () => {
+      const id = await criarPessoa('alvo-rastro@b.com');
+      const aviso = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+
+      // ⚠️ O `mockRestore()` vem DEPOIS da leitura das chamadas — o restore
+      // limpa o registro, e a leitura depois dele mede uma lista vazia.
+      let registrado = '';
+      try {
+        await expect(
+          useCases.listarHistoricoDeUsuarioNoSistema(
+            { id, limit: 20 },
+            { userId: 'gerente-1', tenantId: EMPRESA, isAdmin: true },
+          ),
+        ).rejects.toThrow(ForbiddenException);
+        registrado = aviso.mock.calls.map((c) => String(c[0])).join('\n');
+      } finally {
+        aviso.mockRestore();
+      }
+
+      // ⚠️ Sem isto, a tentativa de ler a trilha alheia ficava só numa linha
+      // de access log (method/url/status) — e sem ator, não atribuível a
+      // ninguém. A escalada é 403, e 403 não loga no `GlobalExceptionFilter`.
+      expect(registrado).not.toBe('');
+      expect(registrado).toContain('leitura recusada');
+      expect(registrado).toContain('gerente-1');
+      expect(registrado).toContain(id);
+      // ⚠️ E O ESCOPO: ele é o que distingue D2 (`tenantId === null`) de
+      // tudo o mais, e sem ele o mesmo ator (membro de DUAS empresas)
+      // produzia DUAS linhas idênticas para escaladas em empresas
+      // diferentes (MEDIDO 2026-11-17 na revisão de segurança do PR #171).
+      expect(registrado).toContain(EMPRESA);
+    });
+
+    it('a RECUSA sem header de empresa registra o escopo GLOBAL — e ele distingue a escalada', async () => {
+      const id = await criarPessoa('alvo-rastro-global@b.com');
+      const aviso = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+
+      let registrado = '';
+      try {
+        await expect(
+          useCases.listarHistoricoDeUsuarioNoSistema(
+            { id, limit: 20 },
+            // ⚠️ O ator SEM empresa e SEM `isAdmin` global: o bucket global
+            // sem o admin do sistema é recusado pelo D2 (e o `isAdmin` de
+            // empresa não promove no bucket global).
+            { userId: 'gerente-1', tenantId: null, isAdmin: false },
+          ),
+        ).rejects.toThrow(ForbiddenException);
+        registrado = aviso.mock.calls.map((c) => String(c[0])).join('\n');
+      } finally {
+        aviso.mockRestore();
+      }
+
+      // O ator SEM empresa é o do bucket global — e a linha diz isso, para
+      // que a escalada em duas empresas não produza a mesma linha.
+      expect(registrado).toContain('escopo sistema');
     });
   });
 

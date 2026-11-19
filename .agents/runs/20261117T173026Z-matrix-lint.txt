@@ -1,0 +1,10 @@
+
+> projeto-base@0.1.0 specialist:lint /home/leo/Documentos/projetos/base
+> cd tooling/scripts && pnpm specialist:lint --matrix=../../.agents/specs/conventions/specialist-routing.md --agents=../../.agents/agents/
+
+
+> @repo/review-router-tooling@0.1.0 specialist:lint /home/leo/Documentos/projetos/base/tooling/scripts
+> tsx lint-specialist-routing.ts "--matrix=../../.agents/specs/conventions/specialist-routing.md" "--agents=../../.agents/agents/"
+
+WARN: path_glob com blocking:true sem rationale (illegível): pnpm-workspace.yaml
+WARN: path_glob com blocking:true sem rationale (illegível): turbo.json

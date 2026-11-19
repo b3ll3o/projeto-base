@@ -68,6 +68,7 @@ import {
 import {
   AuditHistoryNotFoundException,
   AuditArchiveNotFoundException,
+  AuditCursorInvalidoException,
 } from '../../audit/domain/audit.exceptions.js';
 import { InvalidTokenException } from '../../../modules/auth/domain/exceptions/token.exceptions.js';
 import { InvalidCredentialsException } from '../../../modules/auth/domain/exceptions/auth.exceptions.js';
@@ -214,6 +215,15 @@ export function mapExceptionToHttp(err: unknown): HttpErrorMapping {
       status: HttpStatus.NOT_FOUND,
       code: 'USER_NOT_FOUND',
       title: 'Usuário não encontrado',
+    };
+  }
+  if (err instanceof AuditCursorInvalidoException) {
+    // ⚠️ 400, e a MESMA resposta para "o cursor não existe" e para "o cursor é
+    // de outra trilha" — o erro não diz se aquele id existe.
+    return {
+      status: HttpStatus.BAD_REQUEST,
+      code: 'VALIDATION_ERROR',
+      title: 'Cursor de paginação inválido',
     };
   }
   if (err instanceof AuditHistoryNotFoundException) {

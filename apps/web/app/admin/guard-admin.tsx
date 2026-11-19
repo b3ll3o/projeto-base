@@ -101,9 +101,27 @@ export function AcessoRestrito(): React.JSX.Element {
  * `NEXT_REDIRECT` e sai da função.
  */
 export function telaDaFalhaDeLeitura(erro: unknown): React.JSX.Element {
-  if (erro instanceof ApiError && erro.status === 401) redirect('/login');
+  redirecionarParaLoginSeSessaoExpirada(erro);
   if (erro instanceof ApiError && erro.status === 403) return AcessoRestrito();
   return ServicoIndisponivel();
+}
+
+/**
+ * A SESSÃO EXPIROU — e a resposta é o LOGIN.
+ *
+ * ⚠️ É o DONO da decisão "401 numa leitura = credencial vencida = login", e
+ * ele existe separado de `telaDaFalhaDeLeitura` por um motivo concreto: há
+ * leitura que NÃO pode virar tela INTEIRA. O histórico da pessoa, na tela do
+ * detalhe (`app/users/[id]`), é secundário — a falha dele vira um `Alerta`
+ * DENTRO da seção, e a pessoa e as empresas continuam na tela. Mas o 401
+ * continua sendo 401: "tente de novo" não conserta credencial vencida, e a
+ * resposta certa é a tela que leva a pessoa até o login.
+ *
+ * ⚠️ A função NÃO lança para os outros erros — o 403 e o 5xx seguem a quem
+ * chamou, e cada um tem a sua resposta (acesso restrito / serviço fora).
+ */
+export function redirecionarParaLoginSeSessaoExpirada(erro: unknown): void {
+  if (erro instanceof ApiError && erro.status === 401) redirect('/login');
 }
 
 /**

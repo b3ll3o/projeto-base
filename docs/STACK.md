@@ -82,7 +82,7 @@ projeto-base (monorepo)
 | Server Actions | nativo | — | Mutações sem JS extra |
 | Auth client | **`apps/web/lib/sessao.ts`** (casa própria) | — | grava/ler cookies httpOnly `access_token` + `refresh_token` e monta o `Authorization: Bearer`. NextAuth.js / Auth.js NÃO estão instalados. O browser nunca fala com a API: todo o tráfego passa por Server Action |
 | Testes unit | Vitest + Testing Library | ^2.1.9 | `@testing-library/react` + `user-event` + `jest-dom`, em jsdom |
-| Testes E2E | Playwright | `^1.65.0` (resolvido em `1.65.0` pelo lock) | `apps/web/e2e/*.spec.ts` — **20 specs** (`f1`–`f20`), `testDir` separado do Vitest. O inventário canônico (rota, nome e estados cobertos de cada fluxo) está em [`.agents/specs/conventions/e2e-playwright.md`](../.agents/specs/conventions/e2e-playwright.md) §"Inventário de Fluxos" |
+| Testes E2E | Playwright | `^1.65.0` (resolvido em `1.65.0` pelo lock) | `apps/web/e2e/*.spec.ts` — **21 specs** (`f1`–`f21`), `testDir` separado do Vitest. O inventário canônico (rota, nome e estados cobertos de cada fluxo) está em [`.agents/specs/conventions/e2e-playwright.md`](../.agents/specs/conventions/e2e-playwright.md) §"Inventário de Fluxos" |
 | Ícones | — | — | Nenhuma biblioteca de ícones instalada; a UI atual não usa ícones |
 | Qualidade | — | — | **Lighthouse não está ligado**: sem dependência, sem `.lighthouserc*`, sem job. LCP/INP/CLS são *coletados* (`web-vitals` → OTel Metrics), mas não há orçamento que reprove. A menção a "Lighthouse ≥ 90" que sobrou é prosa de workflow, não gate |
 
@@ -90,7 +90,7 @@ projeto-base (monorepo)
 > `node -p "const p=require('./apps/web/package.json'); p.dependencies['react-hook-form'] + ' ' + p.dependencies['zod'] + ' ' + p.devDependencies['@playwright/test'] + ' ' + p.devDependencies['vitest']"`
 > → `^7.91.0 ^3.25.76 ^1.65.0 ^2.1.9`.
 >
-> **Os 20 specs de e2e** (`ls apps/web/e2e/*.spec.ts | wc -l` → `20`, e os
+> **Os 21 specs de e2e** (`ls apps/web/e2e/*.spec.ts | wc -l` → `21`, e os
 > nomes de cada um em `grep -h '^// FLUXO:' apps/web/e2e/*.spec.ts`) cobrem:
 > F1 listagem de usuários · F2 cadastro com sucesso · F3 validação no cliente ·
 > F4 email duplicado · F5 erro genérico (5xx) · F6 navegação entre telas ·
@@ -100,7 +100,8 @@ projeto-base (monorepo)
 > desativação de flags · F15 edição dos metadados de perfil · F16 onboarding de
 > empresa · F17 inventário de empresas e usuários (tenancy) · F18 cabeçalhos
 > de segurança do web · F19 sair revoga o refresh token · F20 detalhe do
-> usuário e as empresas em que ele está (admin do sistema).
+> usuário e as empresas em que ele está (admin do sistema) · F21 histórico de
+> auditoria de uma pessoa (admin do sistema).
 
 ## §4. Monorepo
 
@@ -177,7 +178,7 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão da stack:** 1.29.0
+**Versão da stack:** 1.30.0
 
 ### Histórico de Versões
 
@@ -207,3 +208,4 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 | `1.26.0` | **Sem mudança de stack** — o conjunto de system design canônico ([`./system-design/README.md`](./system-design/README.md), 7 documentos) é **doc**: nenhuma dependência nova, nenhum binário no `package.json`, nenhuma mudança em `apps/api`, `apps/web`, `packages/` ou `infra/`. O que mudou foi a **descoberta**: o `STACK.md` passa a apontar para o desenho, e o desenho passa a apontar para o ADR dono de cada decisão. |
 | `1.27.0` | **O código passa a casar com o system design** — o conjunto `docs/system-design/` afirmava quatro coisas que o código não tinha, e elas agora existem: a rota de health tem teto **PRÓPRIO** (`@Throttle` com 600/min no controller — não `@SkipThrottle()`, que não existe no código), a escrita aceita **`Idempotency-Key`** (a tabela `idempotency_keys` + um interceptor global), o papel de runtime ganha **`statement_timeout = '8s'`**, e a correlação da auditoria é a **mesma** da resposta. **Nenhuma dependência nova**, nenhum binário novo no `package.json`, nenhuma mudança em `apps/web`, `packages/` ou `infra/`. |
 | `1.28.0` | **Sem mudança de stack** — o PR fecha as pendências dos 6 PRs abertos e da issue #149: o `.github/dependabot.yml` passa a gerar `chore(deps):` (o prefixo `deps` NÃO é aceito pelo gate de Conventional Commits do repo, e os 5 PRs do Dependabot nasceram vermelhos por isso), 2 gates ganham regra (a major pendente que foi **adotada** reprova; a claim do total de advisories é conferida contra o `pnpm audit` medido) e a prosa do registro de exceções volta a bater com o audit (41 → 31 advisories). **Nenhuma dependência nova**, nenhum binário novo no `package.json`, nenhuma mudança em `apps/`, `packages/` ou `infra/`. |
+| `1.30.0` | **Sem mudança de stack** — o kit de documentação moderna ([`kit-documentacao.md`](../.agents/specs/conventions/kit-documentacao.md)) é **doc**: nenhuma dependência nova, nenhum binário no `package.json`, nenhuma mudança em `apps/api`, `apps/web`, `packages/` ou `infra/`. O que mudou foi a **cobertura**: os 14 itens do kit passaram a ter doc canônico, specialist dono e auditor por pilar, e o gate `check-doc-kit` cobra. |

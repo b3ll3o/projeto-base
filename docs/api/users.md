@@ -6,13 +6,13 @@
 > versionada com a gerada. A fonte do contrato são os decorators `@Api*` do
 > código; este documento é a referência legível e precisa ser atualizado junto.
 > Para regenerar: `pnpm --filter @projeto/api openapi:export`.
-> Medido em 2026-10-29: os 7 endpoints deste BC conferem com
+> Medido em 2026-11-17: os 8 endpoints deste BC conferem com
 > `apps/api/openapi.json`. Contagem por
-> `grep -hoE "@(Get|Post|Patch|Put|Delete)\(" apps/api/src/modules/users/infrastructure/http/users.controller.ts | wc -l`
-> → `7`. O contrato inteiro tem 23 paths e 29 operações
-> (`node -e "const d=require('./apps/api/openapi.json');console.log(Object.keys(d.paths).length)"` → `23`;
-> `node -e "const d=require('./apps/api/openapi.json');console.log(Object.values(d.paths).flatMap(p=>Object.keys(p).filter(k=>['get','post','put','patch','delete'].includes(k))).length)"` → `29`),
-> das quais 7 são de `users` — as outras 22 são `auth` (4), `tenancy` (5),
+> `grep -hoE "@(Get|Post|Patch|Put|Delete)\(" apps/api/src/modules/users/infrastructure/http/*.controller.ts | wc -l`
+> → `8`. O contrato inteiro tem 24 paths e 30 operações
+> (`node -e "const d=require('./apps/api/openapi.json');console.log(Object.keys(d.paths).length)"` → `24`;
+> `node -e "const d=require('./apps/api/openapi.json');console.log(Object.values(d.paths).flatMap(p=>Object.keys(p).filter(k=>['get','post','put','patch','delete'].includes(k))).length)"` → `30`),
+> das quais 8 são de `users` — as outras 22 são `auth` (4), `tenancy` (5),
 > `profiles` (10), `feature-flags` (2) e `health` (1). A conferência é manual:
 > nada impede que a tabela derive do contrato.
 > Spec de design: [`docs/superpowers/specs/2026-09-21-cadastro-usuario-com-auditoria-04-contrato-http.md`](../superpowers/specs/2026-09-21-cadastro-usuario-com-auditoria-04-contrato-http.md).
@@ -20,13 +20,15 @@
 
 ## §1. Visão Geral
 
-- **Base path**: `/api/v1/users`
-- **Auth**: `Authorization: Bearer <jwt>` em **6 das 7** rotas — `POST /users` é
-  `@Public()`. O `@ApiBearerAuth()` é **por handler**, não no controller.
+- **Base path**: `/api/v1/users` — e `/api/v1/admin/users` (rota 8, a do admin do SISTEMA)
+- **Auth**: `Authorization: Bearer <jwt>` em **7 das 8** rotas — `POST /users` é
+  `@Public()`. O `@ApiBearerAuth()` é **por handler** no `UsersController` e
+  **na classe** no `AdminUserHistoryController`.
 - **Guards**: `JwtAuthGuard` na **classe** do controller. As 5 rotas por `{id}`
   (`GET`, `PATCH`, `DELETE` em `/api/v1/users/{id}`, mais
   `POST /api/v1/users/{id}/restore` e `GET /api/v1/users/{id}/history`) somam
   `@UseGuards(UserOwnershipGuard)` — a sessão precisa ser a **dona** do recurso.
+  A rota 8 soma `PermissionsGuard` + `@RequirePermission('admin.manage-users')`.
 - **Content-Type**: `application/json; charset=utf-8` (request e response)
 - **Erros**: RFC 7807 (Problem Details)
 - **Versionamento**: `v1` no path; breaking changes abrem `v2`
@@ -41,7 +43,8 @@
 | 4 | `PATCH`| `/api/v1/users/{id}`                 | ✅   | `200`, `400`, `403`, `404`, `412`           |
 | 5 | `DELETE`| `/api/v1/users/{id}`                | ✅   | `204`, `400`, `403`, `404`, `412`           |
 | 6 | `POST` | `/api/v1/users/{id}/restore`         | ✅   | `201`, `400`, `403`, `404`, `412`           |
-| 7 | `GET`  | `/api/v1/users/{id}/history`         | ✅   | `200`, `403`                                |
+| 7 | `GET`  | `/api/v1/users/{id}/history`         | ✅   | `200`, `400`, `401`, `403`                    |
+| 8 | `GET`  | `/api/v1/admin/users/{id}/history`  | ✅   | `200`, `400`, `401`, `403`, `404`             |
 
 Os códigos da tabela são os **declarados** no `openapi.json` — por `@ApiResponse`
 explícito ou pelo default do método. Códigos que o runtime pode produzir sem
@@ -143,6 +146,15 @@ Resposta `200` com `UserOutputDto` + novo `ETag`. Conflito de versão → `412 P
 
 `If-Match: W/"v<N>"` obrigatório. `201 Created` com `UserOutputDto` + novo `ETag`.
 
+**Corpo (opcional)**: `{ "reason"?: string }` — o **motivo** da restauração.
+⚠️ Ele é gravado na trilha (`users_history.reason`), e é a ÚNICA mutação de
+`User` que o grava: o `DELETE` fixa `reason: null`, e a criação e a renomeação
+não têm motivo. O motivo é **opcional** (quem restaura sem dizer por quê
+restaura sem motivo) e tem teto de 500 caracteres — um motivo maior é `400`
+(`VALIDATION_ERROR`), e não um erro de banco no meio da escrita.
+
+⚠️ A versão NÃO vem do corpo: ela vem do header `If-Match`.
+
 ### 3.7 `GET /users/{id}/history` — Histórico de auditoria
 
 **Query params**: `cursor`, `limit` (mesma convenção de §3.2). `includeDeleted` **não** se aplica.
@@ -150,9 +162,65 @@ Resposta `200` com `UserOutputDto` + novo `ETag`. Conflito de versão → `412 P
 **Response `200`**: `{ entries: UserHistoryEntryDto[], nextCursor: string | null }`
 (`UserHistoryPageDto`, de `packages/shared-types`).
 
-**Códigos de erro**: `400` (`VALIDATION_ERROR` — query inválida, pela MESMA validação de §3.2) e `403` (`USER_OWNERSHIP_VIOLATION`). A
+**Códigos de erro**: `400` (`VALIDATION_ERROR` — query inválida, pela MESMA validação de §3.2), `401` (sem token ou token expirado) e `403` (`USER_OWNERSHIP_VIOLATION`). A
 #124 fechou só uma das DUAS surfaces de query da API; a outra (`GET /users/{id}/history`) ainda
 passava `Number(limit)` cru, e `limit=abc` virava `NaN` no `take:` do Prisma — **500**.
+
+⚠️ O `401` é **declarado** nas DUAS rotas irmãs (esta e a de §3.8) — MEDIDO
+2026-11-18 na 5ª revisão do PR #171: só a do ADMIN declarava, e a diferença
+não estava escrita em lugar nenhum. As DUAS exigem token (`JwtAuthGuard`), e
+um cliente gerado do contrato precisa ver o `401` nas DUAS.
+
+⚠️ A ORDEM É **ASCENDENTE** — a versão mais antiga primeiro. ⚠️ E ela é
+**explícita** (`ordem: 'asc'` na use case), e não o default do port: a rota do
+ADMIN (§3.8) pede `'desc'`, e um copy-paste que invertesse a ordem aqui não
+cairia em nenhum teste.
+
+⚠️ O `:id` é validado (`UserId.create`): um id que não é um UUID v7 é `400`,
+e não um `500` do Prisma — a rota passa pela **use case**
+(`listarHistoricoDoUsuario`), e não pelo port direto do controller.
+
+### 3.8 `GET /admin/users/{id}/history` — Histórico do ADMIN DO SISTEMA
+
+A rota 7 é do **dono** (o `UserOwnershipGuard` exige que o `:id` seja o `sub` do
+token); esta é do **administrador do SISTEMA**, e o `:id` é o de **qualquer**
+pessoa. O portão é D2 (`tenantId === null && isAdmin`), dentro da use case — e
+é ele que recusa o dono de uma empresa (que tem `isAdmin` no perfil efetivo DA
+EMPRESA DELE). O `@RequirePermission('admin.manage-users')` é defense in depth.
+
+**Query**: `cursor`, `limit` (§3.2). **Response `200`**: `UserHistoryPageDto` — o mesmo envelope da rota 7.
+
+**A ORDEM É DESCENDENTE** — a versão mais **recente** primeiro. ⚠️ A ordem é do
+**input do port** (`ListHistoryInput.ordem`, padrão `'asc'`), e não do wire: a
+rota do DONO (a 7) continua **ascendente**, e a rota do ADMIN pede `'desc'`. A
+ordem anda com o **cursor**: o `nextCursor` aponta para as versões mais
+**antigas**. ⚠️ Inverter só a exibição não resolveria — o cursor da API andava
+para o mais antigo, e a primeira página (as 100 mais antigas) não contém a
+mais recente.
+
+**O CURSOR** é o `id` da **linha** (`users_history.id`, um uuid v4) — e ele é
+resolvido **dentro da entidade**: um cursor de outra trilha é **inválido** (400),
+e a resposta é a **mesma** de "o cursor não existe" (o erro não diz se aquele id
+existe).
+
+**A PESSOA APAGADA** é alcançável: o soft-delete **não apaga a trilha** — a
+linha em `users`, a entrada `DELETE` em `users_history` e o `users_archive`
+continuam lá, visíveis na credencial de sistema. A conferência de existência
+usa `includeDeleted`, e por isso o histórico de quem **saiu** da empresa não é
+um 404.
+
+**Códigos de erro**: `400` (`VALIDATION_ERROR` — query inválida, cursor de outra
+trilha **ou** `:id` que não é um UUID v7), `403` (`FORBIDDEN` — não é o
+administrador do sistema) e `404` (`USER_NOT_FOUND` — pessoa inexistente). A
+leitura é no **bucket de SISTEMA** — é ele que atravessa empresas.
+
+⚠️ **A RECUSA DEIXA RASTRO — NOS DOIS PORTÕES**: o D2 (dentro da use case,
+`Logger('AdminUserHistory')`) e o `PermissionsGuard` (que é a porta que bate
+**primeiro**, `Logger('PermissionsGuard')`). Uma escalada é 403, e 403 não
+loga no `GlobalExceptionFilter` — sem o registro, a tentativa de ler a trilha
+alheia ficava só na linha de access log (method/url/status), sem ator, e não
+atribuível a ninguém. O `:id` do path vai **sanitizado** (`paraRegistro`): ele
+vem do cliente, e um `\n` nele gravaria uma linha de log em branco.
 
 ## §4. `includeDeleted` — case-insensitive
 
@@ -213,62 +281,9 @@ aceitou ⟹ o VO aceita" — a cópia do VO só pode divergir no sentido seguro.
 
 ### §7.1 As migrations que deram dono às regras
 
-| Migration | O que faz |
-|---|---|
-| `20261116000000_password_hash_funcao` | cria `password_hash_is_valid_argon2id(text)` — o dono da regra do hash no banco |
-| `20261116000001_password_hash_reparo` | **neutraliza** as linhas cujo hash não é argon2id: grava um envelope argon2id com digest aleatório (a conta sobrevive e continua incapaz de autenticar) |
-| `20261116000002_password_hash_constraint` | a CHECK constraint `users_password_hash_argon2id` |
-| `20261116000003_user_id_funcao` | cria `user_id_is_uuid_v7(text)` — o dono da regra do id no banco |
-| `20261116000004_user_id_reparo` | **troca o id** das contas cujo id não é v7 (o id é a identidade: as memberships e os refresh tokens o referenciam por FK com `ON UPDATE CASCADE`, e as referências soltas — histórico, arquivo, colunas de auditoria e a chave de idempotência — viajam com o rekey) |
-| `20261116000005_user_id_constraint` | a CHECK constraint `users_id_uuid_v7` |
-
-A **ordem** é a que a convenção dos 3 passos exige: o reparo antes da
-restrição. O `ADD CONSTRAINT` valida as linhas existentes, e uma linha que
-violasse a regra faria o `migrate deploy` falhar — barulhento e nomeando a
-linha, que é o que se quer de uma falha de migração.
-
-**O reparo não deixa rastro em `users_history`.** Ele é um `UPDATE` cru, e a
-trilha de auditoria é da aplicação. O registro do que aconteceu é o `NOTICE`
-da migration (quantas linhas foram reparadas) e a conta continua existindo —
-com a credencial neutralizada, e portanto inapto a entrar. Encher a trilha
-ajustando a sequência de `version` deixaria um **buraco** nela (a entrada
-`N+1` nunca existiu), que é pior que a ausência.
-
-**O reparo do id invalida a sessão em voo.** O `sub` do JWT emitido antes do
-rekey é o id VELHO, e ele não acha mais ninguém: o cliente precisa
-reautenticar. As memberships e os refresh tokens viajam por
-`ON UPDATE CASCADE` (o `refresh token` continua válido — o que não basta, sem
-o access token novo).
-
-**Restaurar um dump anterior às duas constraints**: o `INSERT` é recusado
-(`violates check constraint`). O caminho é restaurar **sem** as duas
-constraints (o SQL delas está nas migrations `20261116000002` e
-`20261116000005`), rodar o **reparo** — o SQL das migrations
-`20261116000001` e `20261116000004`, que é idempotente — e só então
-reaplicar as constraints. Nenhuma das duas etapas é opcional: o reparo sem a
-constraint deixa a linha ilegível (a listagem volta a cair), e a constraint
-sem o reparo falha no `ADD CONSTRAINT`, com um "violated by some row" que não
-aponta para a causa.
-
-**Desbloquear uma conta neutralizada**: o reparo do hash deixa a conta
-incapaz de autenticar — ela continua existindo, mas a credencial dela não
-existe mais (o login responde 401). Para devolver o acesso, grave um hash
-argon2id **real**, o que o `Argon2PasswordHasher` emite: a constraint recusa
-qualquer outro valor, e um `'x'` seria recusado com `violates check
-constraint "users_password_hash_argon2id"`.
-
-```sql
-UPDATE users
-   SET password_hash = '<hash argon2id gerado pela lib>', updated_at = now()
- WHERE email = 'conta@exemplo';
-```
-
-> ⚠️ **Exceção declarada** à regra "migration de modelo e migration de dados no
-> mesmo PR" (convenção [`migracao-de-dados.md`](../../.agents/specs/conventions/migracao-de-dados.md)
-> §4): a restrição **depende** do reparo, e um PR só com a restrição falharia
-> ao subir em qualquer banco que ainda tivesse a linha quebrada — que é
-> exatamente o banco que o reparo existe para consertar. As migrations ficam
-> separadas por arquivo, e a ordem entre elas é o que segura o contrato.
+As seis migrations que deram o **dono** ao banco — a ordem (o reparo antes da
+restrição), o que elas não deixam na trilha, e como restaurar um dump anterior
+— estão em [`users-migracoes.md`](./users-migracoes.md).
 
 ## §8. Referências Cruzadas
 

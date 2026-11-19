@@ -18,6 +18,7 @@
 // válidos porque as colunas Prisma são `@db.Uuid`.
 
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
+import { PrismaClient } from '@prisma/client';
 import {
   setupTestDatabase,
   cleanDatabase,
@@ -25,6 +26,7 @@ import {
 } from '../../../../test/testcontainers-helper.js';
 import { PrismaAuditService } from './prisma-audit.service.js';
 import { AuditContext } from '../domain/audit-context.vo.js';
+import { AuditCursorInvalidoException } from '../domain/audit.exceptions.js';
 import { uriComoPapelDeRuntime } from '../../infrastructure/prisma/papel-de-runtime.js';
 import { abrirEscopo } from '../../infrastructure/prisma/escopo.js';
 import { HASH_REAL } from '../../../../test/fakes/fake-password-hasher.js';
@@ -56,12 +58,15 @@ describe('PrismaAuditService (Testcontainers)', () => {
   const ENTITY_C = '0190a8b6-1234-7abc-9def-00000000000c';
   const ENTITY_MISSING = '0190a8b6-1234-7abc-9def-0000000000ff';
 
-  const ctxAudit = (actorId: string | null = ACTOR_1): AuditContext =>
+  const ctxAudit = (
+    actorId: string | null = ACTOR_1,
+    quando = '2026-09-21T10:00:00Z',
+  ): AuditContext =>
     new AuditContext({
       actorId,
       correlationId: 'corr-1',
       source: 'http',
-      timestamp: new Date('2026-09-21T10:00:00Z'),
+      timestamp: new Date(quando),
     });
 
   // pt-BR (Fase 10+): os testes deste escopo usam `ctx.prisma`, que é o DONO e
@@ -156,6 +161,178 @@ describe('PrismaAuditService (Testcontainers)', () => {
     expect(page3.nextCursor).toBeNull();
   });
 
+  // ─────────── a ordem descendente, o LIMIT e o cursor dentro da entidade ───────────
+
+  it('a ordem `desc` traz a versão mais recente PRIMEIRO — e o cursor anda com ela', async () => {
+    const contexto = ctxAudit();
+    for (let v = 1; v <= 5; v++) {
+      await svc.record(
+        {
+          entityName: 'User',
+          entityId: ENTITY_U1,
+          operation: v === 1 ? 'INSERT' : 'UPDATE',
+          previousVersion: v === 1 ? null : v - 1,
+          newVersion: v,
+          snapshot: { id: ENTITY_U1, v },
+        },
+        contexto,
+      );
+    }
+
+    const pagina = await svc.listHistory(
+      { entityName: 'User', entityId: ENTITY_U1, limit: 2, ordem: 'desc' },
+      SISTEMA,
+    );
+
+    // ⚠️ A ordem é do INPUT porque o cursor anda com ela: com a ordem
+    // invertida, o cursor aponta para as versões MAIS ANTIGAS — e é por isso
+    // que a tela do admin pôde mostrar a mais recente primeiro.
+    expect(pagina.entries.map((e) => e.version)).toEqual([5, 4]);
+    expect(pagina.nextCursor).not.toBeNull();
+
+    const pagina2 = await svc.listHistory(
+      {
+        entityName: 'User',
+        entityId: ENTITY_U1,
+        cursor: pagina.nextCursor,
+        limit: 2,
+        ordem: 'desc',
+      },
+      SISTEMA,
+    );
+    expect(pagina2.entries.map((e) => e.version)).toEqual([3, 2]);
+  });
+
+  it('o cursor de OUTRA trilha é INVÁLIDO — e não uma página errada', async () => {
+    const contexto = ctxAudit();
+    await svc.record(
+      {
+        entityName: 'User',
+        entityId: ENTITY_U1,
+        operation: 'INSERT',
+        previousVersion: null,
+        newVersion: 1,
+        snapshot: { id: ENTITY_U1 },
+      },
+      contexto,
+    );
+    await svc.record(
+      {
+        entityName: 'User',
+        entityId: ENTITY_U2,
+        operation: 'INSERT',
+        previousVersion: null,
+        newVersion: 1,
+        snapshot: { id: ENTITY_U2 },
+      },
+      contexto,
+    );
+
+    const doOutro = await ctx.prisma.userHistory.findFirstOrThrow({
+      where: { entityId: ENTITY_U2 },
+      select: { id: true },
+    });
+
+    // ⚠️ O cursor de outra trilha NÃO pode devolver uma página de outra
+    // trilha — e a resposta é a MESMA para "não existe" e para "é de outra
+    // trilha": nada que diga se aquele id existe.
+    //
+    // ⚠️ MEDIDO 2026-11-17 contra a implementação ANTERIOR (a do
+    // `cursor: { id }` do Prisma): o sintoma dependia de a versão alheia cair
+    // dentro do range pedido — com ela ACIMA da pedida, a página vinha
+    // VAZIA; com ela abaixo, vinha uma página ERRADA. As duas saídas são
+    // ruins, e a que o banco devolve é o que a query decide.
+    await expect(
+      svc.listHistory(
+        { entityName: 'User', entityId: ENTITY_U1, cursor: doOutro.id, limit: 10 },
+        SISTEMA,
+      ),
+    ).rejects.toThrow(AuditCursorInvalidoException);
+  });
+
+  it('a página usa LIMIT e o cursor é resolvido DENTRO da entidade — sem subselect', async () => {
+    const contexto = ctxAudit();
+    for (let v = 1; v <= 5; v++) {
+      await svc.record(
+        {
+          entityName: 'User',
+          entityId: ENTITY_U1,
+          operation: v === 1 ? 'INSERT' : 'UPDATE',
+          previousVersion: v === 1 ? null : v - 1,
+          newVersion: v,
+          snapshot: { id: ENTITY_U1, v },
+        },
+        contexto,
+      );
+    }
+
+    // ⚠️ O QUE ESTE TESTE MEDE É O QUE MUDOU — e não o `LIMIT`, que já
+    // existia (a implementação anterior tinha `take: limit + 1`, e o Prisma
+    // emite o `LIMIT`). O que mudou foi o CURSOR: ele deixou de ser o
+    // `cursor: { id }` do Prisma (que vira um subselect SEM filtro de
+    // entidade) e passou a ser resolvido dentro da entidade, com um RANGE de
+    // `version`.
+    //
+    // A medição é do SQL REAL — e ela precisa de um escopo de EMPRESA, porque
+    // o bucket de SISTEMA abre a CREDENCIAL de sistema (um client próprio, que
+    // não é o cliente instrumentado aqui).
+    const prismaComLog = new PrismaClient({
+      datasourceUrl: ctx.uriDoBanco,
+      log: [{ emit: 'event', level: 'query' }],
+    });
+    const sqls: string[] = [];
+    prismaComLog.$on('query', (evento) => {
+      if (evento.query.includes('users_history')) sqls.push(evento.query);
+    });
+
+    try {
+      const svcComLog = new PrismaAuditService(prismaComLog);
+      const primeira = await svcComLog.listHistory(
+        { entityName: 'User', entityId: ENTITY_U1, limit: 2 },
+        '0190a8b6-1234-7abc-9def-0000000000aa',
+      );
+      // E a SEGUNDA página — a que tem o cursor (o range de `version`).
+      await svcComLog.listHistory(
+        {
+          entityName: 'User',
+          entityId: ENTITY_U1,
+          cursor: primeira.nextCursor,
+          limit: 2,
+        },
+        '0190a8b6-1234-7abc-9def-0000000000aa',
+      );
+    } finally {
+      await prismaComLog.$disconnect();
+    }
+
+    // ⚠️ A query da PÁGINA tem `LIMIT` e filtra por ENTIDADE.
+    const paginaSemCursor = sqls.find((q) => q.includes('LIMIT') && q.includes('entity_id'));
+    expect(paginaSemCursor).toBeDefined();
+
+    // ⚠️ E A PÁGINA COM CURSOR TEM `LIMIT` — e a implementação anterior NÃO
+    // tinha: a tradução do `cursor: { id }` do Prisma emitia a query com
+    // `OFFSET` e SEM `LIMIT`, e o banco trazia a trilha inteira para a
+    // página devolver `limit` linhas. MEDIDO no SQL real: a query do cursor
+    // antigo era `... ORDER BY "version" ASC OFFSET $3` — sem `LIMIT`.
+    const paginaComCursor = sqls.find((q) => /"version"\s*[<>]/.test(q));
+    expect(paginaComCursor).toBeDefined();
+    expect(paginaComCursor).toContain('LIMIT');
+
+    // ⚠️ E NENHUMA query tem subselect sobre a própria tabela: era a
+    // assinatura do `cursor: { id }` do Prisma — e o subselect NÃO filtrava
+    // por entidade (o cursor de outra trilha vinha de uma versão alheia).
+    // ESTE é o assert que distingue a implementação nova da antiga: com a
+    // antiga, a segunda página referenciava a tabela DUAS vezes.
+    const comSubselect = sqls.filter(
+      (q) => (q.match(/FROM "[^"]+"\."users_history"/g) ?? []).length > 1,
+    );
+    expect(comSubselect).toHaveLength(0);
+
+    // ⚠️ E o cursor é resolvido por uma query que filtra por ID **E** por
+    // ENTIDADE — a conferência é do BANCO, e não do JavaScript.
+    expect(sqls.some((q) => q.includes('"id"') && q.includes('entity_id'))).toBe(true);
+  });
+
   it('getHistoryEntry retorna entrada específica via composite unique (entityId, version)', async () => {
     await svc.record(
       {
@@ -226,31 +403,29 @@ describe('PrismaAuditService (Testcontainers)', () => {
   });
 
   it('listArchive pagina por cursor; getArchiveEntry retorna null quando ausente', async () => {
-    await svc.archive({
-      entityName: 'User',
-      entityId: ENTITY_A,
-      version: 1,
-      snapshot: { id: ENTITY_A },
-      ctx: ctxAudit(),
-    });
-    await svc.archive({
-      entityName: 'User',
-      entityId: ENTITY_B,
-      version: 1,
-      snapshot: { id: ENTITY_B },
-      ctx: ctxAudit(),
-    });
-    await svc.archive({
-      entityName: 'User',
-      entityId: ENTITY_C,
-      version: 1,
-      snapshot: { id: ENTITY_C },
-      ctx: ctxAudit(),
-    });
+    // ⚠️ CADA ARQUIVO COM O SEU INSTANTE — a ordem do archive é por
+    // `deletedAt` (e o `id` é o desempate): com o mesmo instante, a ordem
+    // seria a do desempate — e o `id` do archive é um uuid aleatório, o que
+    // tornaria a afirmação do spec dependente da sorte.
+    for (const [id, quando] of [
+      [ENTITY_A, '2026-09-21T10:00:00Z'],
+      [ENTITY_B, '2026-09-21T11:00:00Z'],
+      [ENTITY_C, '2026-09-21T12:00:00Z'],
+    ] as const) {
+      await svc.archive({
+        entityName: 'User',
+        entityId: id,
+        version: 1,
+        snapshot: { id },
+        ctx: ctxAudit(ACTOR_1, quando),
+      });
+    }
 
     const page1 = await svc.listArchive({ entityName: 'User', limit: 2 }, SISTEMA);
     expect(page1.entries).toHaveLength(2);
-    expect(page1.entries.map((e) => e.entityId)).toEqual([ENTITY_A, ENTITY_B]);
+    // A ordem é por `deletedAt` DECRESCENTE — e o `c` (o mais recente) vem
+    // primeiro.
+    expect(page1.entries.map((e) => e.entityId)).toEqual([ENTITY_C, ENTITY_B]);
     expect(page1.nextCursor).not.toBeNull();
 
     const found = await svc.getArchiveEntry({ entityName: 'User', entityId: ENTITY_A }, SISTEMA);
@@ -262,6 +437,44 @@ describe('PrismaAuditService (Testcontainers)', () => {
       SISTEMA,
     );
     expect(missing).toBeNull();
+  });
+
+  // ⚠️ A SEGUNDA PÁGINA DO ARCHIVE — e o caminho do cursor nunca era medido
+  // (MEDIDO 2026-11-17 na revisão do PR #171: a spec só buscava a página 1).
+  // O `cursor: { id }` do Prisma emitia `WHERE deleted_at <= (SELECT
+  // deleted_at …) ORDER BY deleted_at DESC OFFSET $2` — SEM `LIMIT` (o archive
+  // inteiro atravessava a rede) e com o limite em `deleted_at`, que NÃO É
+  // ÚNICO (um empate com o `OFFSET` pula uma linha arbitrária).
+  it('a segunda página do archive vem pelo RANGE (e não pelo cursor do Prisma)', async () => {
+    // ⚠️ Cada arquivo COM O SEU INSTANTE — o `deleted_at` é a ordem, e o
+    // `id` é o desempate (com o mesmo instante, a ordem seria a do
+    // desempate — e o id do archive é um uuid aleatório).
+    for (const [id, quando] of [
+      [ENTITY_A, '2026-09-21T10:00:00.000Z'],
+      [ENTITY_B, '2026-09-21T11:00:00.000Z'],
+      [ENTITY_C, '2026-09-21T12:00:00.000Z'],
+    ] as const) {
+      await svc.archive({
+        entityName: 'User',
+        entityId: id,
+        version: 1,
+        snapshot: { id },
+        ctx: ctxAudit(ACTOR_1, quando),
+      });
+    }
+
+    const page1 = await svc.listArchive({ entityName: 'User', limit: 2 }, SISTEMA);
+    expect(page1.entries.map((e) => e.entityId)).toEqual([ENTITY_C, ENTITY_B]);
+    expect(page1.nextCursor).not.toBeNull();
+
+    // A SEGUNDA página: a que ficou de fora — e nenhuma linha se repete nem
+    // some.
+    const page2 = await svc.listArchive(
+      { entityName: 'User', limit: 2, cursor: page1.nextCursor },
+      SISTEMA,
+    );
+    expect(page2.entries.map((e) => e.entityId)).toEqual([ENTITY_A]);
+    expect(page2.nextCursor).toBeNull();
   });
 
   // ─────────── Fase 10+: a auditoria como diretório de uuids cross-tenant ───────────

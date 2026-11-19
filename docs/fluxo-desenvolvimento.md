@@ -18,9 +18,10 @@ maintainer: stack-code-reviewer
 2. **Commit** dispara `commit-msg` (Conventional Commits — `exit 1` se a mensagem não segue `tipo(escopo?): descrição`) e `pre-commit`: `lint-staged` (só Prettier) + `stack-code-reviewer` (aborta em blocker) + `doc-sync` (aborta **só** quando um doc de referência mapeado está ausente — §7.2).
 3. **Push** dispara `pre-push`: `pnpm ci:preflight` — os gates estruturais declarados em [`preflight.ts`](../.tooling/scripts/ci/preflight.ts) — e `pnpm ci:boot`, que sobe a aplicação local; ambos abortam com exit 1 se falhar.
 4. **PR para `main`** dispara 3 jobs de CI (`preflight`, `quality`, `docker-build-prod`) + `stack-code-review` + `docs-sync`. **Pós-#44** os jobs `preflight` e `quality` rodam a suíte do tooling, que valida os próprios dentes dele — contagem por `pnpm tooling:test` (dois roots).
-5. **Merge em `main`** só dispara `release-template` (auto-tag) **se** o commit tocar `docs/MONOREPO.md`.
+5. **PR aberto** dispara o job `review-comment` (workflow [`pr-review.yml`](../.github/workflows/pr-review.yml)): o PR **precisa de ≥ 1 comentário de revisão** — marcador `<!-- pr-review -->` — antes do merge. O check é `required` no ruleset `master`.
+6. **Merge em `main`** só dispara `release-template` (auto-tag) **se** o commit tocar `docs/MONOREPO.md`.
 
-> **Ressalva crítica:** nenhum check de CI é *required_status_check* (apenas `quality` em `main` é *required* via ruleset — ver §7.2). A garantia real é a cadeia do workflow (`preflight` bloqueia `quality` via `needs:`), não o check isolado.
+> **Ressalva crítica:** nenhum check de CI é *required_status_check* — só `quality` e `review-comment` são *required* no ruleset de `main` (ver §7.2). A garantia real é a cadeia do workflow (`preflight` bloqueia `quality` via `needs:`), não o check isolado.
 
 ---
 
@@ -36,11 +37,11 @@ maintainer: stack-code-reviewer
 │     specialist-router  → classifica demanda                  │
 │     specialist         → implementa (DDD/Hexagonal)          │
 │     review-router      → emite N reviewers em YAML           │
+│     pr-review-mode    → 1 specialist por parte → comenta o PR│
 │     retrospective-mode → captura aprendizados                │
-│  ⚠ MEDIDO 2026-10-29: 28 agents no catálogo; 2 por hook.     │
-│  Só 2 rodam por hook (stack-code-reviewer, doc-sync); os     │
-│  2 routers têm CLI, mas emitem despacho que ninguém consome. │
-│  Só 3 estão registrados como subagent — ver §3.4.            │
+│  ⚠ MEDIDO 2026-11-18: 47 agents no catálogo; 2 por hook.     │
+│  Só 2 rodam por hook (stack-code-reviewer, doc-sync); os 2   │
+│  routers emitem despacho que ninguém consome; 3 são subagent │
 └──────────────────────────────────────────────────────────────┘
                │
                ▼
@@ -65,8 +66,9 @@ maintainer: stack-code-reviewer
 │            └ docker-build-prod (paralelo, sem needs)         │
 │     review-stack.yml  → stack-code-reviewer --mode=ci        │
 │     sync-docs.yml     → doc-sync --mode=full                 │
+│     pr-review.yml     → pr-review-gate (revisão; required)   │
 │     release-template  → tag annotated no merge em main       │
-│   ⚠ NENHUM é required_status_check (§7)                     │
+│   ⚠ Só `quality` e `review-comment` são required (§7)       │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -79,17 +81,18 @@ maintainer: stack-code-reviewer
 | # | Passo | Comando | Gate que dispara |
 |---|-------|---------|------------------|
 | 1 | Sincronizar a base | `git pull --ff-only origin main` | nenhum — [git-workflow.md](../.agents/specs/conventions/git-workflow.md) classifica a base atualizada como **convenção**, não hook |
-| 2 | Criar branch | `git checkout -b feat/<slug>` | nenhum |
+| 2 | Criar branch | `git switch -c feature/<nome-descritivo>` (o prefixo e o comando são do dono: [`git-workflow.md`](../.agents/specs/conventions/git-workflow.md) §Padrão de Nomeação de Branches) | nenhum |
 | 3 | Instalar / validar deps | `pnpm install` | nenhum |
 | 4 | (Camada C) Snapshot de estado | ver §5 | nenhum — prosa em [`state-aware-planning.md`](../.agents/workflows/state-aware-planning.md) |
 | 5 | Codar com o specialist | ver `.agents/agents/<specialist>.md` | nenhum — prosa |
-| 6 | Commit | `git add -A && git commit -m "…"` | **commit-msg**: Conventional Commits · **pre-commit**: lint-staged, stack-code-reviewer, doc-sync |
+| 6 | Commit | `git add <arquivos> && git commit -m "…"` — **por caminho, nunca `-A`**: o `-A` stageia o que estiver na árvore, inclusive o trabalho de outra sessão | **commit-msg**: Conventional Commits · **pre-commit**: lint-staged, stack-code-reviewer, doc-sync |
 | 7 | Verificação completa local | `pnpm ci:local` | **nenhum** — o `ci:local` inteiro não está em nenhum hook (§7). A EXCEÇÃO é a etapa `ci:boot`, que o `pre-push` roda: ela sobe a aplicação local |
 | 8 | Push | `git push -u origin <branch>` | **pre-push**: `pnpm ci:preflight` + `pnpm ci:boot` (sobe a aplicação local) |
 | 9 | Abrir PR | `gh pr create` | — |
 | 10 | CI do PR | automático em `pull_request` | `preflight` → `quality`; `docker-build-prod` em paralelo; `stack-code-review` e `docs-sync` em workflows separados |
-| 11 | Revisão / fix loop | `gh pr merge` só após CI verde | **NENHUM** — sem `required_status_checks`, o botão decide (§7) |
-| 12 | Release | automático | `release-template` roda **só** em push para `main` que toque `docs/MONOREPO.md` |
+| 11 | Revisão do PR | workflow [`pr-review-mode`](../.agents/workflows/pr-review-mode.md) — 1 specialist por parte do diff | **job `review-comment`** (workflow `pr-review.yml`) — o PR precisa de ≥ 1 comentário de revisão, com o marcador `<!-- pr-review -->` |
+| 12 | Revisão / fix loop | `gh pr merge` só após CI verde | os checks `required` do ruleset `master`: `quality` **e** `review-comment` (§7) |
+| 13 | Release | automático | `release-template` roda **só** em push para `main` que toque `docs/MONOREPO.md` |
 
 ### 3.1 Detalhe do pre-commit
 
@@ -125,26 +128,23 @@ grep -cE "^\s+name: '" .tooling/scripts/ci/preflight-gates.ts
 > documento publicava um 0 como se fosse a contagem. O sintoma (contagem que não
 > se move) é indistinguível de "não mudou nada desde a última vez".
 >
-> **MEDIDO 2026-11-10: 54.** As contagens anteriores (21, 29, 41, 44) eram de revisões
-> antigas — a lista cresce a cada gate novo. Por isso a contagem vive do lado do comando
-> (`grep -cE "^\s+name: '" .tooling/scripts/ci/preflight-gates.ts` → **54**) e a lista
-> **completa** vive no próprio `preflight-gates.ts`; a §4 enumera os gates com **comando próprio**.
+> **MEDIDO 2026-11-17: 55.** As contagens anteriores (21, 29, 41, 44, 54) eram de revisões antigas — a lista cresce a cada gate novo. Por isso a contagem vive do lado do comando (`grep -cE "^\s+name: '" .tooling/scripts/ci/preflight-gates.ts` → **55**) e a lista **completa** vive no próprio `preflight-gates.ts`; a §4 enumera os gates com **comando próprio**.
 
 ### 3.4 Fan-out por fase — onde paralelizar dá ganho, e onde dá conflito
 
-O pedido "mais agents" esbarra num fato medido: **o despacho já é emitido e nunca executado.**
-`review-router.ts` emite 8 reviewers para um diff de 87 arquivos (`git diff --name-only a6eaae7^ a6eaae7`) e
-termina em `console.log`. `git grep -nE 'review:route|specialist:route' -- .husky .github` → **vazio**: os
-dois scripts existem no `package.json` (linhas 29 e 31) mas **nenhum hook os invoca**. A instrução de paralelo existe como prosa em `review-router.md:70`
-("chamar Agent tool **na mesma mensagem**"), num arquivo que nenhum hook lê.
+O pedido "mais agents" esbarra num fato medido: **o despacho era emitido e nunca executado.**
+`review-router.ts` emitia 8 reviewers para um diff de 87 arquivos e terminava em `console.log`;
+`git grep -nE 'review:route' -- .husky .github` devolvia **vazio**. O executor chegou em 2026-11-17:
+o workflow [`pr-review-mode`](../.agents/workflows/pr-review-mode.md) despacha os reviewers em
+paralelo e publica a revisão no PR.
 
 | Fase | Fan-out | Por que |
 |------|---------|---------|
 | Análise / pesquisa | N agentes **read-only**, domínios disjuntos por `path_glob` | sem escrita, sem colisão; a matriz já separa `nestjs` de `nextjs` |
 | Auditoria | N reviewers em paralelo, todos read-only | o roteador já resolve quem; falta o executor |
-| `.agents/memory/*.md` | 1 agente por arquivo | 30 arquivos (`find .agents/memory -name '*.md' | wc -l`), convenção 1:1 verificável |
+| `.agents/memory/*.md` | 1 agente por arquivo | 49 arquivos (`find .agents/memory -name '*.md' | wc -l`), convenção 1:1 verificável |
 | Implementação | **1 por vez no mesmo codebase** | ver paredes abaixo |
-| Gates do preflight | 54 gates em `Promise.all` | hoje serial (`preflight.ts:412`), nenhum escreve |
+| Gates do preflight | 56 gates | hoje serial (`preflight.ts:446`), nenhum escreve |
 
 **Paredes — aqui paralelizar não é ganho, é conflito garantido:**
 
@@ -154,16 +154,15 @@ dois scripts existem no `package.json` (linhas 29 e 31) mas **nenhum hook os inv
 - **`specialist-routing.md`** — fonte da verdade de **todo** o roteamento. Dois `agent-architect` colidem no arquivo que decide quem é chamado.
 - **Branches paralelas** — `check-branch-up-to-date` bloqueia contra `origin/main`: a segunda branch nasce desatualizada por construção. O histórico já escolheu o lado oposto: PR #81 (167 arquivos), #95 (10 issues).
 
-**Não converta gate determinístico em prompt.** Os 54 gates são regex + TypeScript com spec
-própria; §5 já registra que a camada "agentic" é *"regra determinística com prosa em volta"*.
-Reescrever um como LLM é a classe 6 de `guard-classes.md` — spec verde, sistema inerte.
+**Não converta gate determinístico em prompt.** Os 55 gates são regex + TypeScript com spec própria; §5 já registra que a camada "agentic" é *"regra determinística com prosa em volta"*. Reescrever um como LLM é a classe 6 de `guard-classes.md` — spec verde, sistema inerte.
 
-**As 3 peças que faltam** — nenhuma delas é "mais agents":
+**As 2 peças que ainda faltam** — nenhuma delas é "mais agents":
 
-1. **Executor** — `Agent` × N em paralelo sobre a saída do `review-router`. Menor diff e maior retorno: o roteamento, a matriz e os testes já existem.
-2. **Registro** — os 28 agents vivem em `.agents/agents/`, e o binding do Claude Code (symlink `~/.claude/agents/<nome>.md` → `.agents/agents/<nome>.md`) é o que os registra na máquina. Sem o symlink, o orquestrador não tem handle: agent não registrado não é invocado nem por LLM.
-3. **Relógio** — `grep -rn 'Date.now()' tooling/ .tooling/ | wc -l` devolve **12** ocorrências (4 no
+1. **Registro** — os 47 agents vivem em `.agents/agents/`, e o binding do Claude Code (symlink `~/.claude/agents/<nome>.md` → `.agents/agents/<nome>.md`) é o que os registra na máquina. Sem o symlink, o orquestrador não tem handle: agent não registrado não é invocado nem por LLM.
+2. **Relógio** — `grep -rn 'Date.now()' tooling/ .tooling/ | wc -l` devolve **12** ocorrências (4 no
    `ambiente-local.ts`, 3 no `boot-local.ts`, 2 no `check-audit-skills.ts`, 3 em specs) — sem cronômetro, "mais agents é mais rápido" é raciocínio.
+
+**A peça do executor saiu em 2026-11-17**: o workflow [`pr-review-mode`](../.agents/workflows/pr-review-mode.md) despacha `Agent` × N em paralelo sobre a saída do `review-router` e publica **1 comentário de revisão** no PR.
 
 ---
 
@@ -194,6 +193,7 @@ Reescrever um como LLM é a classe 6 de `guard-classes.md` — spec verde, siste
 | `check-test-set-covered` | `pnpm ci:preflight` | A+B (gate `check-test-set-covered`) | Script `test*` declarado num pacote do workspace que nenhuma invocação `turbo run` do `ci:local` executa (task pedida **e** pacote alcançado por `--filter`), e exceção declarada em [`tdd.md`](../.agents/specs/conventions/tdd.md) que deixou de valer. **Mede o conjunto, não a execução**: suíte instável continua "verde" para quem olha uma execução só | Sim |
 | `check-doc-coverage` | `pnpm ci:preflight` | A+B (gate `check-doc-coverage`) | Unidade de código **sem doc canônico**: bounded context do NestJS sem `docs/api/<bc>.md`, rota do App Router ausente de `docs/web/rotas.md`, package do workspace sem `packages/<pkg>/README.md`. Mede **cobertura**, não frescor | Sim |
 | `check-doc-claims` | `pnpm ci:preflight` | A+B (gate `check-doc-claims`) | Claim numérico de doc que **mente**: o doc cita um comando e afirma um valor ao lado, e a derivação (o código real) produz outro número. A derivação é TypeScript — o gate **não executa shell**, porque o registry (`.tooling/scripts/ci/doc-claims.json`) é versionado e um PR pode editá-lo. A derivação mede **exatamente** o caminho que o comando cita (`dir/*.controller.ts` resolve o glob; um `*.spec.ts` não conta) e o **tying** exige que o caminho medido esteja no comando (registry desamarrado é erro), e o valor tem que estar **adjacente** ao comando — a janela antiga sangrava para o claim vizinho, e um doc que MENTIA passava verde. Escopo: os 6 docs de API | Sim |
+| `check-doc-kit` | `pnpm ci:preflight` | A+B (gate `check-doc-kit`) | Item do **kit de documentação moderna** sem doc canônico, sem âncora mínima, sem índice que o cite, ou sem dono (specialist e auditor). A matriz é lida da convenção `kit-documentacao.md` (fonte única, por nome de coluna) — os 14 itens, 5 pilares. Os **condicionais** são medidos nas **três** direções: gatilho dispara → o doc é exigido e a não-aplicabilidade tem que ter saído; gatilho não dispara → a não-aplicabilidade tem que estar **declarada**; a não-aplicabilidade declarada com o gatilho disparado → a declaração parou de valer. Mede **cobertura**, não frescor | Sim |
 | `check-doc-size` | `pnpm ci:preflight` | A+B (gate `check-doc-size`) | Documentação **viva** acima de 300 linhas. As 3 categorias fora do escopo estão declaradas em `tamanho-e-revisao.md` §O que o teto cobre. A contagem é o número de linhas que o arquivo tem — `wc -l` subestima em 1 os arquivos sem `\n` final | Sim |
 | `check-path-alias` | `pnpm ci:preflight` | A+B (gate `check-path-alias`) | Alias de `compilerOptions.paths` do `tsconfig.base.json` apontando para um diretório que **não existe**. Não mede alias não usado — alias válido e sem import é decisão | Sim |
 | `check-dependency-drift` | `pnpm ci:preflight` | A+B (gate `check-dependency-drift`) | O MESMO pacote declarado em **versões diferentes** em workspaces diferentes — o lockfile instala 2 cópias e cada app typecheca contra a sua | Sim |
@@ -202,6 +202,8 @@ Reescrever um como LLM é a classe 6 de `guard-classes.md` — spec verde, siste
 | `check-action-version-comment` | `pnpm ci:preflight` | A+B (gate `check-action-version-comment`) | Comentário de versão da action que **mente** sobre a major do pin (MEDIDO 2026-11-09: o PR #154 do Dependabot subia `pnpm/action-setup` para 6.1.1 e deixava `# v3`), ou a mesma action em SHAs diferentes | Sim |
 | `check-ci-prisma-client-ready` | `pnpm ci:preflight` | A+B (gate `check-ci-prisma-client-ready`) | Job que roda `pnpm tooling:test` **sem** gerar o client do Prisma antes — o job só passa quando o cache do pnpm o traz pronto | Sim |
 | `turbo-redirect-differential` | `.tooling/scripts/ci/turbo-redirect-differential.sh` | A+B (gate `turbo-redirect-differential`) | Forma de `pnpm turbo run …` que o parser extrai diferente do turbo real — **classe 6** (especificação local diverge do sistema real) | Sim (se Node ≥ 22.6) |
+| `pr-review-gate` | `pnpm pr:review-check` | B (job `review-comment`) | PR **sem** comentário de revisão (marcador `<!-- pr-review -->`) em nenhum dos 3 canais da API — o PR **não pode ser mergeado**. Sai 1 também quando **não deu para medir** (sem PR, sem token, API caída, ou **o número não é um PR** — o 404 da API, que é um caminho com conserto próprio): pular com `0` seria verde sem medir | Não — é gate de PR, roda no workflow `pr-review.yml`, e é `required` no ruleset |
+| `check-pr-review-wired` | `pnpm ci:preflight` | A+B (gate `check-pr-review-wired`) | O **processo** de revisão de PR desligado: o workflow `pr-review.yml` não existe, não escuta `pull_request_review`, não invoca o gate, o script `pr:review-check` falta no `package.json` ou aponta para outro path, a convenção `pr-review.md` não está indexada nos **dois** índices, ou o doc do workflow não está em `.agents/WORKFLOWS.md` | Sim |
 
 ---
 
@@ -213,7 +215,7 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 |---------------|-----------|------------|---------------------|
 | **Determinística** (regra fixa, verificável) | `.tooling/scripts/ci/*.ts`, `.husky/*`, `tooling/scripts/*.ts` | Erra **alto e nomeado**: exit 1, arquivo, linha, regra | `stack-code-reviewer` (DDD imports bloqueados), `checkTsconfigDrift`, `checkPackageJsonDrift` |
 | **Agente / roteamento** (YAML + regex executado por TS — *não* é IA) | `.agents/specs/conventions/{review,specialist}-routing.md` + `tooling/scripts/*-router.ts` | Erra **baixo e anônimo**: classifica para o reviewer errado, sem sinal | `review-router.ts` (30 testes), `specialist-router.ts` (39 testes) |
-| **Memória / prosa** | `.agents/memory/*.md`, `.agents/runs/*.md` | **Evapora** — não existe evento detectável quando envelhece | 30 memórias versionadas (`find .agents/memory -name '*.md' | wc -l`); as retrospectivas `b<N>-result.md` gravam **fora** do repo |
+| **Memória / prosa** | `.agents/memory/*.md`, `.agents/runs/*.md` | **Evapora** — não existe evento detectável quando envelhece | 49 memórias versionadas (`find .agents/memory -name '*.md' | wc -l`); as retrospectivas `b<N>-result.md` gravam **fora** do repo |
 
 > **Tese honesta:** nenhum problema medido neste repo pede IA. `grep -rniE 'embedding\|openai\|langchain\|pgvector\|neo4j' apps/*/package.json packages/*/package.json` retorna zero. A camada "agentic" é regex em YAML executado por TypeScript — é **regra determinística com prosa em volta**. O custo do rótulo errado já apareceu: `review:lint` está dentro do preflight, `specialist:lint` (mesma família, 13 testes verdes) está fora.
 
@@ -255,6 +257,7 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 - Boundary DDD/Hexagonal **existe de fato** em `apps/api/src/modules/users/{domain,application,infrastructure}`.
 - **Pós-2026-10-29**: 4 gates de documentação entraram no preflight — `check-doc-coverage` (BC do NestJS sem `docs/api/<bc>.md`, rota do App Router fora de `docs/web/rotas.md`, package sem `packages/<pkg>/README.md`), `check-doc-claims` (claim numérico que **mente**), `check-doc-size` (teto de 300 linhas da doc viva) e `check-path-alias` (alias de `paths` para diretório inexistente). Nenhum mede frescor: o doc existir não quer dizer que ele ainda diz a verdade. **Pós-#44**: 5 gates novos sobre as 7 classes de guard, incluindo o `turbo-redirect-differential` (classe 6) e o `check-self-firing-guard` (classe 3). Detalhes em [`guard-classes.md`](./superpowers/plans/2026-10-03-guard-classes.md) e [`guard-classes-decisoes.md`](./superpowers/plans/2026-10-03-guard-classes-decisoes.md).
 - **Pós-2026-11-09**: 3 gates de dependência entraram no preflight — `check-dependency-drift` (o mesmo pacote em versões diferentes entre workspaces), `check-dependency-freshness` (a major pendente tem dono e motivo) e `check-action-version-comment` (o comentário de versão da action não pode mentir sobre o pin).
+- **Pós-2026-11-17**: a **revisão de PR virou regra** — todo PR aberto precisa de ≥ 1 comentário de revisão (marcador `<!-- pr-review -->`) antes do merge. O processo é o workflow [`pr-review-mode`](../.agents/workflows/pr-review-mode.md): classifica o diff, despacha **1 specialist por parte alterada em paralelo**, consolida e publica **1 comentário** no PR. Dois instrumentos: o job `review-comment` (workflow `pr-review.yml`) mede a regra e é `required` no ruleset `master`; o gate `check-pr-review-wired` (preflight) mede se o **processo** continua ligado.
 
 ### 7.2 Unwired / aspiracional
 
@@ -262,7 +265,7 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 
 | Item | Evidência de que não funciona |
 |------|------------------------------|
-| **Nenhum check bloqueia merge** *(parcialmente corrigido)* | O ruleset `master` (id 23853096) tem `required_status_checks: [{context: "quality"}]` e `main` só é atualizável por PR. O que sobra: `required_approving_review_count = 0` e `required_reviewers = []` (contribuidor único). Só **1 dos 3** contexts é exigido — a garantia real é a cadeia do workflow (`preflight` bloqueia `quality` via `needs:`), não o check isolado. |
+| **Nenhum check bloqueia merge** *(parcialmente corrigido)* | O ruleset `master` (id 23853096) tem `required_status_checks: [{context: "quality"}, {context: "review-comment"}]` e `main` só é atualizável por PR. O que sobra: `required_approving_review_count = 0` e `required_reviewers = []` (contribuidor único). A garantia real é a cadeia do workflow (`preflight` bloqueia `quality` via `needs:`) **e** o `review-comment`, que exige a revisão — não o check isolado. |
 | `lint-staged` não é linter | `node -e "console.log(Object.values(require('./package.json')['lint-staged']).join(' \| '))"` → `prettier --write \| prettier --write`. Nenhum eslint, tsc ou vitest. O ESLint entra pelo turbo. |
 | `doc-sync` aborta — mas **só** por doc ausente | MEDIDO 2026-10-29: `grep -c 'process.exit' tooling/scripts/doc-sync.ts` → **3** (era **0** até 2026-10-06): 2 dos 3 são o comentário que explica o número, e **1** é o `exit(1)` do código (`tooling/scripts/doc-sync.ts:293`). O `exit(1)` só dispara com `alerts > 0`, e `alerts` só sobe no `checkMissingDoc` — doc de referência mapeado e ausente. Severidade `minor` não bloqueia, e `docs_health_score` sozinho não reprova. Doc **gerado** (`apps/api/openapi.json`, versionado desde o #125) fica de fora do `existsSync` via `GENERATED_DOC_FILES`, ou todo PR que toca controller reprovaria em checkout limpo. O job `docs-sync` do CI roda o mesmo script, então **ele também** falha nesse caso. |
 | `specialist:lint` fora do preflight | `grep -c specialist .tooling/scripts/ci/preflight.ts` → **0**: não há nem invocação nem comentário que cite o nome. `review:lint` roda no preflight, `specialist:lint` não: duas matrizes de routing, dois scripts, um só no gate. |
@@ -270,8 +273,7 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 
 ### 7.3 Regra que resume a camada
 
-> **Gate não ligado não é gate fraco — é pior que ausência, porque consome confiança.**
-> E o token de sucesso não pode ser o mesmo para "verifiquei e passou" e "não havia nada para verificar": todo check que faz short-circuit por ausência do alvo precisa de um terceiro estado (`skipped`) com motivo.
+> **Gate não ligado não é gate fraco — é pior que ausência, porque consome confiança.** E o token de sucesso não pode ser o mesmo para "verifiquei e passou" e "não havia nada para verificar": todo check que faz short-circuit por ausência do alvo precisa de um terceiro estado (`skipped`) com motivo.
 
 ---
 
@@ -287,8 +289,6 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 ### Planos e backlog ativos
 
 - [`docs/superpowers/plans/2026-09-21-cadastro-usuario-com-auditoria-plan.md`](./superpowers/plans/2026-09-21-cadastro-usuario-com-auditoria-plan.md) — plano de fundação do BC `users`
-- [`docs/superpowers/plans/2026-10-02-melhorias-fluxo-desenvolvimento.md`](./superpowers/plans/2026-10-02-melhorias-fluxo-desenvolvimento.md) — plano de melhorias que produziu o #43 e #44
-- [`docs/superpowers/plans/2026-10-03-guard-classes.md`](./superpowers/plans/2026-10-03-guard-classes.md) — plano das 7 classes de guard (gates do #44)
 - [`docs/superpowers/plans/2026-10-16-multi-tenant-plan.md`](./superpowers/plans/2026-10-16-multi-tenant-plan.md) — plano da demanda multi-tenant (perfil por empresa)
 - [`.agents/runs/backlog-2026-10-02.md`](../.agents/runs/backlog-2026-10-02.md) — backlog vivo de itens adiados + achados durante a execução (BL1–BL10 + X1–X15)
 

@@ -21,6 +21,22 @@ A skill encapsula os passos shell; este arquivo guarda estado entre execuções.
 - Primeira aparição: v2.0 (escaneamento inicial)
 - Findings emitidos até o momento: vide `.agents/runs/findings-<ts>/findings.yaml`
 
+## Decisões Tomadas
+
+### 2026-11-18 — A versão do CHANGELOG é minha; o texto é do `changelog-specialist`
+
+**Contexto:** o item 14 do kit deu ao `changelog-specialist` a escrita do
+`CHANGELOG.md` — e meu escopo listava "CHANGELOG — entry agregada", com
+"CHANGELOG.md escrito à mão" como anti-padrão. Dois donos, um arquivo.
+
+**Decisão:** eu sou dono da **versão** que o CHANGELOG declara (a que o footer
+e a tag carregam); o **texto** da entrada é do `changelog-specialist`. O
+anti-padrão virou "entrada escrita por fora do `changelog-specialist`".
+
+**Consequências:** o `check-version-footers` continua sendo o instrumento da
+versão; o texto passa a ter dono, e a divergência entre a versão declarada e
+a entrada tem onde ser vista.
+
 ## Convenções observadas
 
 Este memory file deve ser atualizado pelo agent toda vez que ele produzir findings novos — em particular:

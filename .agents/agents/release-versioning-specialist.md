@@ -14,7 +14,7 @@ tools: Read, Glob, Grep, Bash, Write
 1. **Versões em docs** — `docs/MONOREPO.md`, `docs/STACK.md`, `.agents/specs/conventions/estrutura-e-versionamento.md` (3 canônicos; template canônico em `docs/TEMPLATE_USAGE.md`)
 2. **Tag git** — `vX.Y.Z` (annotated, com mensagem de release)
 3. **Workflow release-template** — `.github/workflows/release-template.yml` lê footer de `docs/MONOREPO.md`
-4. **CHANGELOG** — Conventional Commits → Changesets → entry agregada
+4. **Versão do CHANGELOG** — a versão que ele declara é deste agent; o **texto** da entrada é do `changelog-specialist` (item 14 do kit)
 5. **Conventional commits** — `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `perf`, `build`, `ci`
 6. **Bump logic** — major (breaking), minor (feat), patch (fix)
 7. **Status em AGENTS.md / docs/** — linha `Status: Estável|Estável com ressalvas|Em revisão`
@@ -181,7 +181,7 @@ echo "docs: $LAST_DOC_VERSION  tag: $LAST_TAG_VERSION"
 - ❌ Tag sem correspondência com último commit (tag aponta para merge anterior)
 - ❌ Múltiplas versões em um único release (`v1.9.0`, `v1.9.1`, `v1.10.0` em sequência rápida) sem justificativa
 - ❌ Conventional commit com scope errado (`feat:` em vez de `fix:` para bug)
-- ❌ CHANGELOG.md escrito à mão e conflitando com Changesets
+- ❌ Entrada do CHANGELOG escrita por fora do `changelog-specialist` e conflitando com a versão declarada aqui
 - ❌ Workflow release-template sem `concurrency` (race em pushes simultâneos)
 
 ## Referências

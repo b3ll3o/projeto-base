@@ -1,0 +1,81 @@
+name: pr-review
+
+# O check da regra de [`pr-review.md`](../../.agents/specs/conventions/pr-review.md):
+# todo PR aberto precisa de pelo menos um COMENTÁRIO DE REVISÃO antes do merge.
+#
+# Por que este workflow é SEPARADO do `ci.yml` — e não um passo a mais lá:
+#
+# O gate é vermelho enquanto o PR não tem revisão. Se ele morasse no job
+# `preflight` do `ci.yml`, ele reprovaria TODO push de branch (o preflight roda
+# em `push: ['**']`) e, no `pull_request`, derrubaria o `quality` junto
+# (`needs: preflight`). O CI inteiro ficaria vermelho até a revisão existir.
+#
+# E o evento que fecha o laço é `pull_request_review`: publicar a revisão
+# NÃO dispara o `ci.yml` (que só escuta `pull_request: opened|synchronize|
+# reopened|edited`). Sem este `on:`, o gate ficaria vermelho para sempre
+# depois da primeira execução — e um gate que nunca fica verde é o mesmo que
+# um gate desligado.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+  # A review submetida é o evento que vira o gate VERDE.
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  # O comentário de conversa (o canal do `gh pr comment`) também conta —
+  # e a criação dele precisa re-disparar o gate.
+  issue_comment:
+    types: [created]
+
+# pt-BR (#131): o PISO de privilégio deste workflow. Ele lê pull requests e
+# comentários — e é só isso. `contents: read` para o checkout, e os dois
+# `read` para a API.
+#
+# `pull-requests: read` e `issues: read` são os privilégios NOVOS em relação
+# ao `ci.yml`, que só precisa de `contents: read`: é este workflow que lê a
+# lista de reviews e a lista de comentários do PR. O token NÃO faz push
+# de nada.
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+
+jobs:
+  review-comment:
+    # O NOME do job é o contexto do status check — é o que o ruleset exige
+    # (`required_status_checks`). Mudar o nome aqui exige mudar lá.
+    name: review-comment
+    # ⚠️ O `issue_comment` escuta QUALQUER comentário do repo — e o número de
+    # uma ISSUE não é PR. MEDIDO 2026-11-18 na 5ª revisão do PR #171: o job
+    # rodava (com `checkout` + `pnpm install` inteiro) para toda issue que
+    # não é PR, e o gate respondia 404 — vermelho por um número que não
+    # existe como PR. A condição deixa o job passar só quando o issue é
+    # pull request (`issue.pull_request` é o objeto do PR, e é vazio numa
+    # issue comum).
+    if: github.event_name != 'issue_comment' || github.event.issue.pull_request
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      # `pull_request` e `pull_request_review` trazem `pull_request.number`;
+      # `issue_comment` traz `issue.number` (o PR é a issue).
+      PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      # O `gh` lê `GH_TOKEN` primeiro e `GITHUB_TOKEN` depois. O token do
+      # workflow é o do job — e ele só lê.
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # pt-BR (#131): o token NÃO fica em `.git/config` da workspace.
+          # Este workflow não faz push de nada.
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # O gate tem TRÊS estados, e nenhum deles é "verde por ausência": sem
+      # PR, sem token ou com a API caída, ele sai 1 dizendo `NÃO VERIFICADO`.
+      # Pular com 0 seria o estado silencioso que a regra denuncia.
+      - name: Gate do comentário de revisão
+        run: pnpm pr:review-check

@@ -1,22 +1,27 @@
 // apps/web/lib/tenancy.spec.ts
 //
 // Contrato web↔API do inventário da tenancy (visão de admin, 2026-10-22;
-// revisão de 2026-10-29 — as DUAS rotas viraram UMA).
+// revisão de 2026-10-29 — as DUAS rotas viraram UMA) e do HISTÓRICO de
+// auditoria de uma pessoa (2026-11-17).
 //
 // O inventário é UMA chamada: `GET /admin/tenancy` devolve
 // `{ empresas, usuarios }` — as DUAS listas viajam juntas, e é isso que
 // garante que a tela não discorde de si mesma (em duas respostas seriam dois
 // instantes do banco).
 //
+// O histórico é paginado por cursor: `GET /admin/users/:id/history` devolve
+// `{ entries, nextCursor }`.
+//
 // O que estes testes seguram, além do path e do método:
 //
-//  1. **D7** — `listarInventario` monta o `ApiClient` SEM `getTenant`. É a
-//     razão de o arquivo existir em vez de reusar o factory de `perfil.ts`:
-//     mandar `X-Tenant-Id` tira o ator do bucket global (`tenantId !== null`)
-//     e D2 exige `tenantId === null`, então o admin do sistema que tivesse
-//     empresa selecionada no cookie levaria 403 numa tela recem-nascida. O
-//     teste mede a CONFIGURAÇÃO do cliente, não só a chamada — um `getTenant`
-//     a mais passaria em qualquer asserção de path.
+//  1. **D7** — `listarInventario` e `listarHistoricoDoUsuario` montam o
+//     `ApiClient` SEM `getTenant`. É a razão de o arquivo existir em vez de
+//     reusar o factory de `perfil.ts`: mandar `X-Tenant-Id` tira o ator do
+//     bucket global (`tenantId !== null`) e D2 exige `tenantId === null`,
+//     então o admin do sistema que tivesse empresa selecionada no cookie
+//     levaria 403 numa tela recem-nascida. O teste mede a CONFIGURAÇÃO do
+//     cliente, não só a chamada — um `getTenant` a mais passaria em qualquer
+//     asserção de path.
 //  2. O path e o método da chamada.
 //  3. O INVENTÁRIO INTEIRO volta como veio — as DUAS listas dentro do mesmo
 //     envelope. É o contrato do DTO: um `toEqual` do envelope mede os dois
@@ -84,7 +89,8 @@ vi.mock('./sessao', () => ({
   lerTokens: vi.fn(async () => ({ accessToken: 'token-do-cookie', refreshToken: null })),
 }));
 
-const { listarInventario, vinculo } = await import('./tenancy');
+const { listarInventario, listarHistoricoDoUsuario, rotuloDaOperacao, vinculo } =
+  await import('./tenancy');
 
 const TOKEN = 'token-admin';
 
@@ -119,6 +125,35 @@ const USUARIO = {
 };
 
 const INVENTARIO = { empresas: [EMPRESA], usuarios: [USUARIO] };
+
+/** O `snapshot` de uma versão — o `UserOutputDto` da pessoa NAQUELE momento. */
+const SNAPSHOT = {
+  id: 'a1b2c3d4-0000-4000-8000-000000000002',
+  nome: 'Bruno',
+  email: 'bruno@acme.test',
+  profileId: null,
+  version: 1,
+  createdAt: '2026-11-01T10:00:00.000Z',
+  updatedAt: '2026-11-01T10:00:00.000Z',
+  deletedAt: null,
+  isDeleted: false,
+};
+
+const PAGINA_HISTORICO = {
+  entries: [
+    {
+      entityId: 'a1b2c3d4-0000-4000-8000-000000000002',
+      version: 1,
+      previousVersion: null,
+      operation: 'INSERT' as const,
+      snapshot: SNAPSHOT,
+      changedAt: '2026-11-01T10:00:00.000Z',
+      changedBy: null,
+      reason: null,
+    },
+  ],
+  nextCursor: null,
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -171,6 +206,73 @@ describe('lib/tenancy — o cliente do inventário de tenancy', () => {
     clientMock.get.mockRejectedValue(erro);
 
     await expect(listarInventario(TOKEN)).rejects.toBe(erro);
+  });
+});
+
+/**
+ * O HISTÓRICO de auditoria de UMA pessoa, lido pelo administrador do SISTEMA.
+ */
+describe('lib/tenancy — o cliente do histórico de uma pessoa', () => {
+  it('lê o histórico por GET em `/admin/users/:id/history` e pede a página CHEIA', async () => {
+    clientMock.get.mockResolvedValue(PAGINA_HISTORICO);
+
+    const resposta = await listarHistoricoDoUsuario(TOKEN, 'u1');
+
+    // ⚠️ O `limit=100` é o MÁXIMO da API (`LIMITE_MAXIMO`), e não o padrão
+    // (20): a tela segue o cursor até o fim, e 20 por página daria 50
+    // requisições para 1000 entradas.
+    expect(clientMock.get).toHaveBeenCalledWith('/admin/users/u1/history?limit=100');
+    expect(resposta).toEqual(PAGINA_HISTORICO);
+  });
+
+  it('manda o CURSOR quando a página seguinte vem — a paginação é do servidor', async () => {
+    await listarHistoricoDoUsuario(TOKEN, 'u1', 'cursor-da-pagina-2');
+
+    expect(clientMock.get).toHaveBeenCalledWith(
+      '/admin/users/u1/history?limit=100&cursor=cursor-da-pagina-2',
+    );
+  });
+
+  it('NÃO manda `X-Tenant-Id` — D7: o histórico é do bucket GLOBAL', async () => {
+    await listarHistoricoDoUsuario(TOKEN, 'u1');
+
+    expect(configMock.getTenant).toBeUndefined();
+  });
+
+  it('manda o token que recebeu por parâmetro', async () => {
+    await listarHistoricoDoUsuario(TOKEN, 'u1');
+
+    expect(configMock.getToken?.()).toBe(TOKEN);
+  });
+
+  it('NÃO lê a sessão do cookie — o token chega por parâmetro', async () => {
+    await listarHistoricoDoUsuario(TOKEN, 'u1');
+
+    expect(exigirSessaoMock).not.toHaveBeenCalled();
+  });
+
+  it('erro da API PROPAGA — não vira histórico vazio (a tela mentiria: "sem histórico")', async () => {
+    const erro = new Error('Forbidden');
+    clientMock.get.mockRejectedValue(erro);
+
+    await expect(listarHistoricoDoUsuario(TOKEN, 'u1')).rejects.toBe(erro);
+  });
+});
+
+/**
+ * O RÓTULO da operação — o dono é `rotuloDaOperacao`, e a tela do detalhe da
+ * pessoa depende dele para dizer o que aconteceu em cada versão.
+ */
+describe('lib/tenancy — o rótulo da operação do histórico', () => {
+  it('traduz as QUATRO operações da auditoria para o idioma da tela', () => {
+    expect(rotuloDaOperacao('INSERT')).toBe('criação');
+    expect(rotuloDaOperacao('UPDATE')).toBe('alteração');
+    expect(rotuloDaOperacao('DELETE')).toBe('remoção');
+    expect(rotuloDaOperacao('RESTORE')).toBe('restauração');
+  });
+
+  it('uma operação que a API não conhece passa como veio — a tela não esconde dado', () => {
+    expect(rotuloDaOperacao('TRUNCATE')).toBe('TRUNCATE');
   });
 });
 

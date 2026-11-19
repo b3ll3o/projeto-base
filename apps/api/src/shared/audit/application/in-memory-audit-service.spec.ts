@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { InMemoryAuditService } from './in-memory-audit-service.js';
 import { AuditContext } from '../domain/audit-context.vo.js';
+import { AuditCursorInvalidoException } from '../domain/audit.exceptions.js';
+import { UUID_RE_QUALQUER_VERSAO } from '../../domain/uuid.js';
 import type {
   ArchiveInput,
   AuditRecordInput,
@@ -10,12 +12,12 @@ import type {
   ListHistoryInput,
 } from './audit-service.port.js';
 
-const makeCtx = (actorId: string | null = 'actor-1') =>
+const makeCtx = (actorId: string | null = 'actor-1', quando = '2026-09-21T10:00:00.000Z') =>
   new AuditContext({
     actorId,
     correlationId: 'corr-1',
     source: 'http',
-    timestamp: new Date('2026-09-21T10:00:00.000Z'),
+    timestamp: new Date(quando),
   });
 
 describe('InMemoryAuditService', () => {
@@ -116,6 +118,105 @@ describe('InMemoryAuditService', () => {
     expect(page3.nextCursor).toBeNull();
   });
 
+  // ─────────── o cursor é o id da LINHA, e a ordem anda com ele ───────────
+
+  it('o nextCursor é o ID da última entrada — um uuid que a API aceita de volta', async () => {
+    const ctx = makeCtx();
+    for (let v = 1; v <= 3; v++) {
+      await svc.record(
+        {
+          entityName: 'User',
+          entityId: 'u1',
+          operation: v === 1 ? 'INSERT' : 'UPDATE',
+          previousVersion: v === 1 ? null : v - 1,
+          newVersion: v,
+          snapshot: { id: 'u1', v },
+        },
+        ctx,
+      );
+    }
+
+    const pagina = await svc.listHistory(
+      { entityName: 'User', entityId: 'u1', limit: 1 } satisfies ListHistoryInput,
+      SISTEMA,
+    );
+
+    // ⚠️ O cursor é o id da LINHA (`users_history.id`), e não um offset: o
+    // `PaginacaoQuerySchema` da API exige um uuid e recusa um número com 400.
+    const ultima = pagina.entries[0]!;
+    expect(pagina.nextCursor).toBe(ultima.id);
+    expect(pagina.nextCursor).toMatch(UUID_RE_QUALQUER_VERSAO);
+  });
+
+  it('a ORDEM `desc` traz a versão mais recente PRIMEIRO', async () => {
+    const ctx = makeCtx();
+    for (let v = 1; v <= 3; v++) {
+      await svc.record(
+        {
+          entityName: 'User',
+          entityId: 'u1',
+          operation: v === 1 ? 'INSERT' : 'UPDATE',
+          previousVersion: v === 1 ? null : v - 1,
+          newVersion: v,
+          snapshot: { id: 'u1', v },
+        },
+        ctx,
+      );
+    }
+
+    const pagina = await svc.listHistory(
+      { entityName: 'User', entityId: 'u1', limit: 10, ordem: 'desc' } satisfies ListHistoryInput,
+      SISTEMA,
+    );
+
+    // ⚠️ A ordem é do INPUT porque o cursor anda com ela: com a ordem
+    // invertida, o cursor aponta para as versões MAIS ANTIGAS.
+    expect(pagina.entries.map((e) => e.version)).toEqual([3, 2, 1]);
+  });
+
+  it('o cursor de OUTRA trilha é INVÁLIDO — e a resposta é a mesma de "não existe"', async () => {
+    const ctx = makeCtx();
+    await svc.record(
+      {
+        entityName: 'User',
+        entityId: 'u1',
+        operation: 'INSERT',
+        previousVersion: null,
+        newVersion: 1,
+        snapshot: { id: 'u1' },
+      },
+      ctx,
+    );
+    await svc.record(
+      {
+        entityName: 'User',
+        entityId: 'u2',
+        operation: 'INSERT',
+        previousVersion: null,
+        newVersion: 1,
+        snapshot: { id: 'u2' },
+      },
+      ctx,
+    );
+
+    const doOutro = svc.history.find((e) => e.entityId === 'u2')!;
+
+    // ⚠️ O cursor de outra trilha devolvia uma página ERRADA (a partir de uma
+    // versão alheia) em vez de um erro — e "página errada" é pior que "erro":
+    // a pessoa lê uma trilha que não pediu.
+    await expect(
+      svc.listHistory(
+        {
+          entityName: 'User',
+          entityId: 'u1',
+          cursor: doOutro.id,
+          limit: 10,
+        } satisfies ListHistoryInput,
+        SISTEMA,
+      ),
+    ).rejects.toThrow(AuditCursorInvalidoException);
+  });
+
   it('archive() insere; segunda chamada faz upsert (substitui)', async () => {
     const ctx = makeCtx('actor-A');
     const input1: ArchiveInput = {
@@ -196,15 +297,44 @@ describe('InMemoryAuditService', () => {
     expect(wrongEntity).toBeNull();
   });
 
-  it('listArchive() pagina por cursor; getArchiveEntry() retorna null quando ausente', async () => {
+  it('listArchive() recusa um cursor que não é id de linha — e não vira offset', async () => {
+    // ⚠️ O cursor do archive é o id da LINHA (o mesmo da produção) — e o
+    // duplo usava um OFFSET numérico (`Number(cursor)`), que a API recusa
+    // com 400. Um cursor inválido é recusado, e a resposta é a mesma para
+    // "não existe" e para "é de outra trilha".
     const ctx = makeCtx();
-    for (const id of ['a', 'b', 'c']) {
+    await svc.archive({
+      entityName: 'User',
+      entityId: 'a',
+      version: 1,
+      snapshot: { id: 'a' },
+      ctx,
+    } satisfies ArchiveInput);
+
+    await expect(
+      svc.listArchive(
+        { entityName: 'User', cursor: 'nao-e-um-id', limit: PAGE_SIZE } satisfies ListArchiveInput,
+        SISTEMA,
+      ),
+    ).rejects.toThrow(AuditCursorInvalidoException);
+  });
+
+  it('listArchive() pagina por cursor; getArchiveEntry() retorna null quando ausente', async () => {
+    // ⚠️ CADA ARQUIVO COM O SEU INSTANTE — a ordem do archive é por
+    // `deletedAt` (e o `id` é o desempate): com o mesmo instante, a ordem
+    // seria a do desempate — e o `id` do archive é um uuid aleatório, o que
+    // tornaria a afirmação do spec dependente da sorte.
+    for (const [id, quando] of [
+      ['a', '2026-09-21T10:00:00.000Z'],
+      ['b', '2026-09-21T11:00:00.000Z'],
+      ['c', '2026-09-21T12:00:00.000Z'],
+    ] as const) {
       await svc.archive({
         entityName: 'User',
         entityId: id,
         version: 1,
         snapshot: { id },
-        ctx,
+        ctx: makeCtx('actor-1', quando),
       } satisfies ArchiveInput);
     }
     const page1 = await svc.listArchive(
@@ -215,7 +345,9 @@ describe('InMemoryAuditService', () => {
       SISTEMA,
     );
     expect(page1.entries).toHaveLength(2);
-    expect(page1.entries.map((e) => e.entityId)).toEqual(['a', 'b']);
+    // A ordem é por `deletedAt` DECRESCENTE — e o `c` (o mais recente) vem
+    // primeiro.
+    expect(page1.entries.map((e) => e.entityId)).toEqual(['c', 'b']);
     expect(page1.nextCursor).not.toBeNull();
 
     const found = await svc.getArchiveEntry(

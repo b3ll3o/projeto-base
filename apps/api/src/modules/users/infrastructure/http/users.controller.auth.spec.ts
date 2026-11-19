@@ -491,7 +491,6 @@ describe('UsersController.buildContext — actorId vem do sub do token', () => {
     useCases = makeUseCases();
     ctrl = new UsersController(
       useCases as unknown as UserUseCases,
-      makeAudit() as never,
       {} as never,
       // pt-BR (achado 1): o recorte chama `findProfileId(sub, null)` para
       // saber se o ator é admin de SISTEMA. `{}` explodes aqui; `null` é a

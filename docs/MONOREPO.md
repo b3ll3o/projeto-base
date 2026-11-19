@@ -121,31 +121,26 @@ Cada app/package estende `tsconfig.base.json` e adiciona seus próprios aliases.
 
 ## §5. Turborepo — Pipelines
 
-Conteúdo real de `turbo.json` (medido em 2026-10-29 com `cat turbo.json`):
+As tasks que a convenção abaixo usa (medido em 2026-11-17 com `cat turbo.json`;
+**o dono do pipeline é o arquivo**, e ele é a fonte — o bloco aqui é o recorte
+que a convenção usa, não uma cópia):
 
 ```jsonc
-{
-  "$schema": "https://turbo.build/schema.json",
-  "globalDependencies": ["**/.env.*local", "tsconfig.base.json"],
-  "tasks": {
-    "build": { "dependsOn": ["^build"], "outputs": ["dist/**", ".next/**"] },
-    "dev": { "cache": false, "persistent": true },
-    "lint": { "outputs": [] },
-    "db:generate": { "cache": false },
-    "typecheck": { "dependsOn": ["^build", "db:generate"], "outputs": [] },
-    "test": { "dependsOn": ["^build"], "outputs": ["coverage/**"] },
-    "test:unit": { "outputs": ["coverage/**"] },
-    "test:coverage": { "outputs": ["coverage/**"] },
-    "test:integration": { "cache": false, "outputs": [] },
-    "test:e2e": { "cache": false, "outputs": [] },
-    "clean": { "cache": false }
-  }
-}
+"build": { "dependsOn": ["^build"], "outputs": ["dist/**", ".next/**"] },
+"dev": { "cache": false, "persistent": true },
+"db:generate": { "cache": false },
+"typecheck": { "dependsOn": ["^build", "db:generate"], "outputs": [] },
+"test:integration": { "dependsOn": ["@projeto/api#db:generate"], "cache": false, "outputs": [] },
+"test:e2e": { "dependsOn": ["@projeto/api#db:generate"], "cache": false, "outputs": [] }
 ```
 
 **Convenção:** toda tarefa declara `outputs` (o que cachear) ou `cache: false` (o
 que nunca cachear); `dependsOn: ["^build"]` garante a ordem topológica; `dev` é
-`cache: false, persistent: true` (watch mode).
+`cache: false, persistent: true` (watch mode); e as tasks de BANCO dependem de
+`db:generate` — **qualificada com o pacote** (`@projeto/api#db:generate`), porque
+só o `@projeto/api` tem Prisma: a dependência simples virava `<NONEXISTENT>`
+(que o turbo pula) e a invariante não valeria para o e2e do web, que é o que
+sobe a API (o porquê medido: [`ci-defense-in-depth.md`](../.agents/specs/conventions/ci-defense-in-depth.md)).
 
 ## §6. Versionamento
 
@@ -257,10 +252,9 @@ Apps NÃO compartilham:
 > §"Arquitetura por Módulo (DDD/Hexagonal)"** — a árvore das três camadas, a
 > regra de dependência e os guardiões moram lá. Este índice aponta; **não repete**.
 
-Resumo: apps backend adotam **DDD + Hexagonal (Ports & Adapters)** como paradigma arquitetural
-obrigatório (`v1.2.0`), cada feature em `apps/api/src/modules/<feature>/{domain,application,infrastructure}/`,
-os shared concerns em `apps/<app>/src/shared/{audit,domain,infrastructure}/` — e o **desenho** disso, por
-nível, em [`docs/system-design/`](../docs/system-design/README.md).
+Resumo: apps backend adotam **DDD + Hexagonal (Ports & Adapters)** (`v1.2.0`), cada feature em
+`apps/api/src/modules/<feature>/{domain,application,infrastructure}/`, os shared concerns em
+`apps/<app>/src/shared/{audit,domain,infrastructure}/` — e o **desenho** disso em [`docs/system-design/`](../docs/system-design/README.md).
 
 Decisão: [ADR-0001](./adr/0001-arquitetura-ddd-hexagonal-auditoria.md) ·
 guardiões: agent `stack-code-reviewer` (D11) + skill
@@ -270,7 +264,7 @@ visão de stack: [`docs/STACK.md` §8](./STACK.md).
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão do documento:** 1.29.0
+**Versão do documento:** 1.30.0
 
 ### Histórico de Versões
 
@@ -298,3 +292,4 @@ visão de stack: [`docs/STACK.md` §8](./STACK.md).
 | `1.25.0` | **Uma pasta de tooling de IA, e a skill `agent-desktop`** (minor bump — nenhuma das duas mudanças mexe no formato de handoff nem na superfície canônica, que são os gatilhos de major) — **(A) a skill `agent-desktop`** em `.agents/skills/agent-desktop/SKILL.md`, adaptada de [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop) (Apache-2.0): uma CLI que opera app nativo de desktop pela árvore de acessibilidade do SO. A CLI é **externa** — não entra no `package.json`, não pede segredo e não roda no CI. **(B) a pasta `.claude/` sai do repo**: os 29 wrappers de skill e os 3 de agent eram cópias do `name`/`description` que o `SKILL.md` canônico já trazia; os 2 hooks, o `settings.json`, o `README.md` e o `FINDINGS.md` foram para `.agents/`, e o binding do Claude Code passa a ser feito **na máquina** (symlink `~/.claude/skills/<nome>` → `.agents/skills/<nome>`; receita em [`docs/integrations/claude-code.md`](./integrations/claude-code.md)). MEDIDO 2026-11-09: uma pasta com só `.agents/skills/probe-skill/` devolveu **ZERO** skill de projeto ao Claude Code 2.1.319, e a mesma pasta com `.claude` como symlink para `.agents` devolveu **30 skills e 28 agents**, sem wrapper nenhum. Gate novo `check-pasta-unica`; o `check-skill-coverage` trocou SEM BINDING por DESCOBRÍVEL (frontmatter com `name`/`description`, e `name` igual ao diretório). **Nenhum arquivo de `apps/`, `packages/` ou `infra/` mudou: a árvore do monorepo é a mesma.** |
 | `1.26.0` | **O system design canônico** (minor bump — doc: nenhum arquivo de `apps/`, `packages/` ou `infra/` mudou) — o conjunto `docs/system-design/` (7 documentos: índice, contexto, módulo, dados, segurança, operação e o **contrato de extensão**), o **ADR-0010** e o template que o app derivado copia. O `schema.prisma` passou a mapear para `docs/system-design/dados.md` no `doc-sync`, e a tabela de donos de `documentacao.md` §2 ganhou a linha do conjunto. |
 | `1.27.0` | **O código passa a casar com o system design** (minor bump — o PR muda `apps/api` e o banco) — a rota de health ganha teto **PRÓPRIO** (`@Throttle` com 600/min no controller — e não `@SkipThrottle()`, que não existe no código; os dois comentários que afirmavam um `@SkipThrottle()` inexistente foram corrigidos); a escrita aceita `Idempotency-Key` (a pasta `apps/api/src/shared/idempotency/`, com port, adapter e interceptor); o papel de runtime ganha `statement_timeout = '8s'`; e a correlação da auditoria passa a usar a mesma derivação do `traceId` da resposta. **2 migrations** (`statement_timeout` do papel, `idempotency_keys`) e **2 ADRs** (0011, 0012). A árvore do workspace é a mesma — `shared/idempotency/` mora dentro de `apps/api/src/shared/`, e `packages/` e `infra/` não mudaram. |
+| `1.30.0` | **O kit completo de documentação moderna, com dono e auditoria** (minor bump — doc: nenhum arquivo de `apps/`, `packages/` ou `infra/` mudou) — a convenção [`kit-documentacao.md`](../.agents/specs/conventions/kit-documentacao.md) declara os **5 pilares** e os **14 itens** do kit (README, CONTRIBUTING, GLOSSARY, HLD, C4, PRD, TDR, ADR, OpenAPI, AsyncAPI, ERD, Runbooks, Post-mortems, CHANGELOG); cada item passa a ter doc canônico, **specialist dono** e **auditor por pilar** — **19 agents novos** (14 specialists + 5 auditadores) e **5 skills de auditoria**. O instrumento é o gate `check-doc-kit`, que lê a matriz da convenção e mede doc, âncoras, índice e donos. Docs novos: `CONTRIBUTING.md`, `GLOSSARY.md`, `CHANGELOG.md` (raiz) e `docs/prd/`, `docs/tdr/`, `docs/post-mortems/`. |

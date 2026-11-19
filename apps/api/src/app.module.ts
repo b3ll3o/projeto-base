@@ -30,6 +30,37 @@ export const REDACT_PATHS = [
 ] as const;
 
 /**
+ * O serializador do REQUEST no access log — e a QUERY não vai nele.
+ *
+ * ⚠️ MEDIDO 2026-11-17 (revisão de segurança do PR #171): o
+ * `pino-std-serializers` grava `req.url` (o request target **completo**, com a
+ * query) e `req.query` (a query já parseada) em CADA request — e a
+ * `REDACT_PATHS` só cobre header. Uma rota com filtro
+ * (`GET /users?email=alguem@empresa.com`) punha o e-mail de outra pessoa no
+ * log — e era exatamente o que o registro da recusa (que sanitiza o alvo)
+ * dizia estar impedindo.
+ *
+ * ⚠️ O log é do SERVIDOR: o caminho (sem a query) e o método dizem qual
+ * requisição foi — e o que a query carrega é do cliente (e pode ser um filtro,
+ * um token ou o dado de outra pessoa).
+ */
+export const SERIALIZADOR_DO_REQUEST = (req: {
+  method?: string;
+  url?: string;
+  headers?: Record<string, unknown>;
+  remoteAddress?: string;
+  remotePort?: number;
+  id?: number;
+}): Record<string, unknown> => ({
+  method: req.method,
+  url: (req.url ?? '').split('?')[0],
+  headers: req.headers,
+  remoteAddress: req.remoteAddress,
+  remotePort: req.remotePort,
+  id: req.id,
+});
+
+/**
  * O teto global de requisições, por IP, na janela de `JANELA_GLOBAL_MS`.
  *
  * pt-BR (2026-11-10 — conformidade do system design): o número é EXPORTADO
@@ -63,11 +94,12 @@ export const JANELA_GLOBAL_MS = Number(process.env.THROTTLE_TTL_MS ?? 60_000);
     ]),
     LoggerModule.forRoot(
       process.env.NODE_ENV === 'production'
-        ? { pinoHttp: { redact: [...REDACT_PATHS] } }
+        ? { pinoHttp: { redact: [...REDACT_PATHS], serializers: { req: SERIALIZADOR_DO_REQUEST } } }
         : {
             pinoHttp: {
               transport: { target: 'pino-pretty', options: { singleLine: true, colorize: true } },
               redact: [...REDACT_PATHS],
+              serializers: { req: SERIALIZADOR_DO_REQUEST },
             },
           },
     ),

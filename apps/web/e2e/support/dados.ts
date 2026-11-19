@@ -538,6 +538,67 @@ export async function apagarUsuario(email: string, id: string, version: number):
 }
 
 /**
+ * Renomeia UM usuário — e a VERSÃO que o histórico da pessoa passa a guardar.
+ *
+ * pt-BR (F21 — histórico, 2026-11-17): existe pelo mesmo motivo do
+ * `apagarUsuario` acima — o guard de dono (T-A) exige que o `:id` da rota
+ * seja o `sub` do token, e o token do harness é de outra pessoa. Quem foi
+ * semeado conhece a própria senha, então entra como ele.
+ *
+ * ⚠️ É a PESSOA que se renomeia, e não o admin: o `UserOwnershipGuard` barra
+ * qualquer outro ator. E o `If-Match` traz a versão que o seed devolveu —
+ * sem ele a API responde 428, e o histórico fica com a ÚNICA entrada da
+ * criação (que é o que o F21 precisa contrapor: DUAS versões).
+ */
+export async function renomearUsuario(
+  email: string,
+  id: string,
+  version: number,
+  novoNome: string,
+): Promise<void> {
+  const { accessToken } = await parDeTokens(email, SENHA_DE_TESTE);
+  const { status, corpo } = await chamar('PATCH', `/users/${id}`, {
+    token: accessToken,
+    cabecalhos: { 'if-match': `W/"v${version}"` },
+    corpo: { novoNome },
+  });
+  if (status !== 200) {
+    throw new Error(
+      `PATCH /users/${id} respondeu ${status} (esperado 200): ${JSON.stringify(corpo)}. ` +
+        'Sem a alteração o histórico tem UMA entrada só, e o spec mediria a criação sem a alteração.',
+    );
+  }
+}
+
+/**
+ * UMA PÁGINA do histórico de uma pessoa — e o `nextCursor` que vem junto.
+ *
+ * ⚠️ pt-BR (F21, revisão do PR #171): a tela pede 100 por página, e com o
+ * dado semeado (2 versões) o `nextCursor` dela é `null` — o caminho da
+ * paginação NÃO ERA EXERCITÁVEL. Pedir a página com `limit=1` dá o cursor de
+ * verdade (o id da LINHA, que é o que a tela viaja na URL), e a página 2 da
+ * tela passa a ter o que mostrar.
+ *
+ * A rota é a do ADMIN do SISTEMA (`/admin/users/:id/history`), e o token é o
+ * dele — a rota do DONO exige que o `:id` seja o `sub` do token.
+ */
+export async function paginaDoHistorico(
+  token: string,
+  id: string,
+  limite: number,
+): Promise<{ entries: { version: number }[]; nextCursor: string | null }> {
+  const { status, corpo } = await chamar('GET', `/admin/users/${id}/history?limit=${limite}`, {
+    token,
+  });
+  if (status !== 200) {
+    throw new Error(
+      `GET /admin/users/${id}/history respondeu ${status} (esperado 200): ${JSON.stringify(corpo)}`,
+    );
+  }
+  return corpo as { entries: { version: number }[]; nextCursor: string | null };
+}
+
+/**
  * Deixa a listagem vazia, truncando as tabelas do schema de users.
  *
  * pt-BR (2026-10-14): antes isto era soft-delete de tudo que a listagem

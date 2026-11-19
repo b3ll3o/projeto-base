@@ -52,6 +52,7 @@ import { checkBlocoDuplicado } from './check-bloco-duplicado';
 import { checkFeatureFlagContract } from './check-feature-flag-contract';
 import { checkFeatureFlagPortas } from './check-feature-flag-portas';
 import { checkDocCoverage } from './check-doc-coverage';
+import { checkDocKit } from './check-doc-kit';
 import { checkDocClaims } from './check-doc-claims';
 import { checkDocSize } from './check-doc-size';
 import { checkPathAlias } from './check-path-alias';
@@ -61,6 +62,7 @@ import { checkDependencyFreshness } from './check-dependency-freshness';
 import { checkActionVersionComment } from './check-action-version-comment';
 import { checkCiPrismaClientReady } from './check-ci-prisma-client-ready';
 import { checkPastaUnica } from './check-pasta-unica';
+import { checkPrReviewWired } from './check-pr-review-wired';
 import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
@@ -395,6 +397,7 @@ export const RUNNERS: Record<string, () => CheckResult | Promise<CheckResult>> =
   'check-feature-flag-contract': () => checkFeatureFlagContract(),
   'check-feature-flag-portas': () => checkFeatureFlagPortas(),
   'check-doc-coverage': () => checkDocCoverage({ repoRoot: '.' }),
+  'check-doc-kit': () => checkDocKit({ repoRoot: '.' }),
   'check-doc-claims': () => checkDocClaims({ repoRoot: '.' }),
   'check-doc-size': () => checkDocSize({ repoRoot: '.' }),
   'check-path-alias': () => checkPathAlias({ repoRoot: '.' }),
@@ -404,6 +407,7 @@ export const RUNNERS: Record<string, () => CheckResult | Promise<CheckResult>> =
   'check-action-version-comment': () => checkActionVersionComment({ repoRoot: '.' }),
   'check-ci-prisma-client-ready': () => checkCiPrismaClientReady({ repoRoot: '.' }),
   'check-pasta-unica': () => checkPastaUnica({ repoRoot: '.' }),
+  'check-pr-review-wired': () => checkPrReviewWired({ repoRoot: '.' }),
 };
 
 /**

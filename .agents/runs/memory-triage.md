@@ -293,6 +293,13 @@ o par de números de `check-memory-crystallization.ts` e de `learning-observatio
 | `pendente` | regra reutilizável que **ninguém escreveu** — é a maior fatia do corpus |
 | `recusada` | registro de campanha, não é regra |
 | `removida` | tombstone; o corpus pode encolher por aqui |
+| `doc-que-promete-a-coluna-que-a-tela-nao-tem` | `pendente` | — | — |
+| `overflow-wrap-break-word-nao-reduz-min-content` | `pendente` | — | — |
+| `cursor-do-port-que-o-duplo-inventa` | `pendente` | — | — |
+| `opcoes-de-plano-que-nao-compoem` | `pendente` | — | — |
+| `log-nao-leva-o-valor-cru-do-cliente` | `pendente` | — | — |
+| `gate-falso-verde-por-estado-concorrente` | `pendente` | — | — |
+| `git-add-all-leva-o-trabalho-de-outra-sessao` | `pendente` | — | — |
 | `gate` | **0** — nenhuma memória do corpus é mecânica o bastante para um gate determinístico |
 
 **O `0` em `gate` é o achado, não uma omissão.** As candidatas naturais

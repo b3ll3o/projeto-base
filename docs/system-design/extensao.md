@@ -142,7 +142,7 @@ O padrão é o mesmo do resto:
 
 ## §4. Checklist de conformidade
 
-12 itens. Cada um tem um **comando** que o confirma.
+13 itens. Cada um tem um **comando** que o confirma.
 
 | # | Item | Como conferir |
 |---|---|---|
@@ -158,6 +158,7 @@ O padrão é o mesmo do resto:
 | 10 | Model novo ⇒ model + migration + doc do BC | `grep -n "^model " apps/api/prisma/schema.prisma` · `ls apps/api/prisma/migrations/` |
 | 11 | Variável de ambiente nova ⇒ declarada no runbook e no example | `grep -n "VARIAVEL" docs/como-rodar.md` · `grep -n "VARIAVEL" apps/api/.env.example` |
 | 12 | Feature flag nova ⇒ chave no **código** + linha no contrato | `grep -n "<chave>" apps/api/src/shared/auth/feature-flag-catalog.ts` · `grep -n "<chave>" docs/api/feature-flags.md` |
+| 13 | O **kit de documentação** do app derivado é o **dele**: a matriz [`kit-documentacao.md`](../../.agents/specs/conventions/kit-documentacao.md) aponta para os docs do app (o PRD e o TDR são os do app, não os do template) | `pnpm exec tsx .tooling/scripts/ci/check-doc-kit.ts` → exit 0 |
 
 > **O item 6 é o que mais custa quando se esquece.** Uma leitura sem escopo
 > **não dá erro**: ela lê **zero linhas**. O sintoma é "a lista está

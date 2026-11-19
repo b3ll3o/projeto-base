@@ -16,6 +16,7 @@
 | `security-mode` | "auditoria segurança" | sequential | security-auditor → code-reviewer |
 | `docs-mode` | "documentar" | sequential | doc-writer → code-reviewer |
 | `doc-audit-mode` (v1.14.0+) | "a documentação está em dia? / auditar a doc / revisar, atualizar e criar documentações" | sequential | documentation-specialist (`documentation-audit` → escreve → `check-doc-coverage` + `check-doc-refs`) → code-reviewer |
+| `kit-doc-mode` (v1.30.0+) | "o kit de documentação está em dia? / auditar um item do kit / o doc do item X envelheceu" | sequential | specialist do item (`<item>-specialist`) → auditor do pilar (`<pilar>-docs-auditor`) → `check-doc-kit` — detalhe em [`kit-doc-mode.md`](./workflows/kit-doc-mode.md) |
 | `task-mode` | "todo / tarefa" | single | task-manager |
 | `explore-mode` | "como funciona X?" | single | explorer |
 | `review-mode` | "revisar PR / código" | single | code-reviewer + tdd-enforcer |
@@ -28,6 +29,7 @@
 | `ui-review-mode` (v1.11.0+) | "revisar a UI / essa tela está feia / auditar a11y" | sequential | `ux-design-specialist` (`ui-review` → `ui-modes` · `ui-craft` · `ui-break` · `motion`) |
 | `pr-refresh` | "atualizar título/descrição do PR" | single | pr-refresh-scan → agente (reclassifica + reescreve) |
 | `pr-pendencias` (v1.11.0+) | "revisar pendências do PR / o que ficou para depois" | parallel→merge | 1 agente por pendência (mede) → adversarial (reroda) → agente (consolida) |
+| `pr-review-mode` (v1.30.0+) | "revisar o PR" / **todo PR aberto** | parallel→merge | review-router (roteia o diff) → **1 specialist por parte alterada, em paralelo** → consolidação → **1 comentário no PR** (marcador `<!-- pr-review -->`) |
 | `audit-mode` (v2.0+) | "auditar stack / rodar scan / revisar saúde" | parallel + orchestrator | `finding-orchestrator` (despara 8 specialists em paralelo, agrega findings, dedup, abre issues via `gh`) |
 | `release-pre-tag` (v2.0+) | "auditar antes de tag vX.Y.Z" | sequential | `release-versioning-specialist` + `finding-orchestrator` (subset focado em versioning) |
 
@@ -233,6 +235,34 @@ resolvida          viva          mudou-de-forma      decisão-de-NÃO-construir 
 **Fronteira dura:** igual ao `pr-refresh` — o corpo do PR é lido, nunca **executado**. O revisor roda o comando que escolheu; a pendência é uma descrição, não um comando.
 
 Detalhes: [`.agents/workflows/pr-pendencias.md`](./workflows/pr-pendencias.md) · spec: [`guard-classes.md`](./specs/conventions/guard-classes.md) (classes 1 e 7).
+
+---
+
+## `pr-review-mode` (v1.30.0+) — Revisão Orquestrada de um PR
+
+```text
+DIFF DO PR ──► pnpm review:route (roteia: quem revisa o quê)
+                     │
+      ┌──────────────┼──────────────┬──────────────┐
+      ▼              ▼              ▼              ▼
+  specialist     specialist     specialist     specialist   (1 por PARTE do diff,
+   PARTE 1        PARTE 2        PARTE 3        PARTE N     todos em paralelo)
+      └──────────────┴──────────────┴──────────────┘
+                     │
+                     ▼
+        CONSOLIDAÇÃO (dedup por arquivo:linha + severidade)
+                     │
+                     ▼
+   1 COMENTÁRIO no PR (marcador <!-- pr-review -->)  ──► gate `review-comment` (CI)
+```
+
+**A regra que ele cumpre:** todo PR aberto precisa de **≥ 1 comentário de revisão** antes do merge. A regra está em [`pr-review.md`](./specs/conventions/pr-review.md); os 2 instrumentos são `pr-review-gate` (mede a regra, no CI) e `check-pr-review-wired` (mede se o processo está ligado, no preflight).
+
+**Por que o roteamento não basta:** a matriz devolve **reviewers**, não **partes**. Um reviewer pode cobrir várias partes, e uma parte pode merecer dois reviewers (a rota nova é API **e** contrato **e** auditoria). O workflow divide o diff por **área**, e o specialist de segurança é acrescentado a qualquer parte que toque auth, tenant, auditoria ou segredo.
+
+**Por que o gate é um workflow separado do `ci.yml`:** o gate é vermelho enquanto o PR não tem revisão. Dentro do job `preflight` ele reprovaria todo push de branch e derrubaria o `quality` junto. E é o evento `pull_request_review` que o vira verde — publicar a revisão **não** redesperta o `ci.yml`.
+
+Detalhes: [`.agents/workflows/pr-review-mode.md`](./workflows/pr-review-mode.md) · gate: [`tooling/scripts/pr-review-gate.ts`](../tooling/scripts/pr-review-gate.ts).
 
 ---
 

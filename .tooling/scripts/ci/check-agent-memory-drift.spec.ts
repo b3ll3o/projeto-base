@@ -28,8 +28,36 @@
 // - memória tocada no mesmo range → verde
 // - agent sem arquivo de memória → erro nomeando o agent
 
-import { describe, expect, it } from 'vitest';
-import { hasBehaviorDelta, findDriftedAgents } from './check-agent-memory-drift.js';
+import { describe, expect, it, vi } from 'vitest';
+
+// O `git diff` estoura o buffer: é o defeito que o gate precisa reportar
+// como ERRO (e não devolver um diff vazio).
+vi.mock('node:child_process', () => ({
+  execFileSync: () => {
+    throw Object.assign(new Error('stdout maxBuffer length exceeded'), { code: 'ENOBUFS' });
+  },
+}));
+import {
+  MAX_BUFFER_DO_DIFF,
+  diffRange,
+  hasBehaviorDelta,
+  findDriftedAgents,
+} from './check-agent-memory-drift.js';
+
+describe('diffRange — o buffer do diff', () => {
+  it('o limite é grande o bastante para um diff de branch grande', () => {
+    // MEDIDO em 2026-11-18 (revisão de conformidade do PR do kit): o diff
+    // tinha 1.125.353 bytes e o padrão do Node (1 MB) estourava.
+    expect(MAX_BUFFER_DO_DIFF).toBeGreaterThanOrEqual(64 * 1024 * 1024);
+  });
+
+  it('um diff que estoura o buffer é ERRO — nunca um diff vazio', () => {
+    // O defeito medido: o `catch` devolvia string vazia, o gate dizia "nenhum
+    // agent alterado" e reportava VERDE sobre um diff de 22 agents. Um gate
+    // que não mediu não pode reportar verde.
+    expect(() => diffRange('/tmp', 'origin/main')).toThrow(/maxBuffer|NÃO mediu/);
+  });
+});
 
 describe('hasBehaviorDelta', () => {
   it('prosa alterada É delta comportamental', () => {

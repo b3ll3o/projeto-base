@@ -24,7 +24,14 @@ import type {
   AuditServicePort,
 } from '../../../shared/audit/application/audit-service.port.js';
 import { AuditContextStore } from '../../../shared/audit/shared/audit-context-store.js';
+import { paraRegistro } from '../../../shared/domain/para-registro.js';
 import { TENANCY_USE_CASES } from '../../tenancy/application/tenancy.use-cases.js';
+import {
+  ehAdministradorDeSistema,
+  exigeAdministradorDeSistema,
+  type AtorAutenticado,
+} from '../../../shared/auth/eh-administrador-de-sistema.js';
+import type { UserHistoryPageDto } from '@projeto/shared-types';
 // `import type` e não no import de cima: `TenancyUseCases` é apagado em
 // runtime (só entra como tipo do campo `tenancy`), e manter a aresta viva em
 // runtime criaria um ciclo users/application → tenancy/application →
@@ -38,6 +45,8 @@ import type { SoftDeleteUserInput } from './dto/soft-delete-user.input.js';
 import type { RestoreUserInput } from './dto/restore-user.input.js';
 import type { GetUserByIdInput } from './dto/get-user-by-id.input.js';
 import type { ListUsersInput } from './dto/list-users.input.js';
+import type { ListUserHistoryInput } from './dto/list-user-history.input.js';
+import { toUserHistoryPageDto } from './dto/user-history.output.js';
 import { toUserOutput, toUserOutputNoEscopo, type UserOutput } from './dto/user.output.js';
 import type { ListUsersOutput } from './dto/list-users.output.js';
 
@@ -49,7 +58,7 @@ import {
   ApplicationResourceNotFoundException,
   ApplicationValidationException,
 } from './exceptions/application.exceptions.js';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 
 /**
  * Casos de uso do bounded context de Users.
@@ -72,6 +81,19 @@ import { Inject, Injectable } from '@nestjs/common';
  * diretamente.
  */
 export const USER_USE_CASES = Symbol.for('@projeto/api/users/UserUseCases');
+
+/**
+ * O REGISTRO da leitura de histórico pelo admin do SISTEMA.
+ *
+ * ⚠️ O nome do logger é o que separa este registro dos outros: quem lê o log
+ * precisa saber que ali está "o administrador do sistema leu o histórico de
+ * uma pessoa" — e o histórico carrega o NOME e o E-MAIL de cada versão.
+ *
+ * O `AuditContext` do repo é auditoria de ESCRITA (INSERT/UPDATE/DELETE), e
+ * uma leitura não é uma entidade: o precedente para operação sensível é o
+ * `Logger` dedicado (`AdminTenancyInventory`), e é o que está aqui.
+ */
+const loggerHistorico = new Logger('AdminUserHistory');
 
 /**
  * pt-BR: decorado com `@Injectable()` + `@Inject(USER_REPOSITORY_PORT)` /
@@ -178,13 +200,150 @@ export class UserUseCases {
 
   // ----- READ -----
 
-  async obterPorId(input: GetUserByIdInput, tenantId: string | null): Promise<UserOutput> {
+  /**
+   * A pessoa pelo id — e, com `includeDeleted`, mesmo apagada.
+   *
+   * ⚠️ pt-BR (2026-11-17): a opção existe para a rota do ADMIN do SISTEMA,
+   * cuja trilha precisa alcançar a pessoa que **saiu** — o soft-delete não
+   * apaga a trilha, e sem esta opção o histórico de quem saiu era
+   * inalcançável. As outras chamadas seguem sem a opção (e sem a pessoa
+   * apagada) — o comportamento delas não muda.
+   */
+  async obterPorId(
+    input: GetUserByIdInput,
+    tenantId: string | null,
+    options?: FindByIdOptions,
+  ): Promise<UserOutput> {
     const id = UserId.create(input.id);
-    const user = await this.userRepo.findById(id, tenantId);
+    const user = await this.userRepo.findById(id, tenantId, options);
     if (user === null) {
       throw new ApplicationResourceNotFoundException('User', id.value);
     }
     return toUserOutput(user);
+  }
+
+  /**
+   * O HISTÓRICO de uma pessoa, lido pelo ADMINISTRADOR DO SISTEMA.
+   *
+   * ⚠️ É a rota do ADMIN, e não a do DONO. A do DONO (`GET /users/:id/history`)
+   * é barrada pelo `UserOwnershipGuard` — o `:id` tem de ser o `sub` do
+   * token. Esta existe porque a tela do admin do SISTEMA é de outra pessoa:
+   * o admin do sistema não é dono de ninguém, e sem esta rota ele não
+   * consegue ler o histórico de ninguém.
+   *
+   * ⚠️ O PORTÃO É D2 (`tenantId === null && isAdmin`), e ele mora AQUI, na
+   * camada de aplicação — não no guard. Quem tem `isAdmin` no perfil efetivo
+   * DA EMPRESA DELE (o dono de uma empresa) passa pelo `PermissionsGuard` e
+   * chega aqui; o D2 é o que o recusa. Um portão no guard seria o mesmo
+   * portão em dois lugares, e o `@RequirePermission` é defense in depth.
+   */
+  async listarHistoricoDeUsuarioNoSistema(
+    input: ListUserHistoryInput,
+    ator: AtorAutenticado,
+  ): Promise<UserHistoryPageDto> {
+    // ⚠️ O PORTÃO D2 É A PRIMEIRA LINHA, antes de qualquer leitura. Recusar
+    // depois de ler seria devolver o histórico e o 403 — e o teste negativo
+    // (que afirma que o `auditService` NÃO foi chamado) existe para prender
+    // esta ordem.
+    //
+    // ⚠️ E A RECUSA DEIXA RASTRO (2026-11-17): o `Logger` só era chamado no
+    // caminho do SUCESSO, e o `GlobalExceptionFilter` só loga a partir de 500 —
+    // então a tentativa de ler a trilha alheia por um ator que não é admin
+    // ficava numa linha com method/url/status, e sem ator. Agora é um registro
+    // com o ATOR e o ALVO — o precedente é o `recusaEscalada`
+    // (`profiles.use-cases.ts`), cujo comentário já diz: "uma escalada é 403,
+    // então passava sem rastro".
+    if (!ehAdministradorDeSistema(ator)) {
+      loggerHistorico.warn(
+        `leitura recusada: o ator ${paraRegistro(ator.userId)} (escopo ${paraRegistro(ator.tenantId ?? 'sistema')}) tentou ler o histórico da pessoa ${paraRegistro(input.id)}`,
+      );
+    }
+    exigeAdministradorDeSistema(ator, 'só o administrador do sistema lê o histórico de uma pessoa');
+
+    // ⚠️ A EXISTÊNCIA é conferida ANTES da leitura. Sem isto, o histórico de
+    // um id inexistente devolveria 200 com uma lista vazia — e "não existe" e
+    // "existe mas nunca foi mudado" sairiam IGUAIS, o que transformaria a
+    // rota num oráculo de existência para quem não deveria saber.
+    //
+    // ⚠️ E A EXISTÊNCIA INCLUI A PESSOA APAGADA (2026-11-17). O soft-delete
+    // NÃO apaga a trilha: a linha em `users`, a entrada `DELETE` em
+    // `users_history` e o `users_archive` continuam lá, visíveis na credencial
+    // de sistema. Sem o `includeDeleted`, o histórico de quem SAIU da empresa
+    // era inalcançável pela única rota que o lê — que é exatamente o caso que
+    // a rota existe para servir.
+    //
+    // O escopo da busca é o de SISTEMA (`null`): o admin do sistema não
+    // pertence a empresa nenhuma, e a pessoa lida pode estar em qualquer uma.
+    await this.obterPorId({ id: input.id }, null, { includeDeleted: true });
+
+    const pagina = await this.auditService.listHistory(
+      {
+        entityName: 'User',
+        entityId: input.id,
+        cursor: input.cursor ?? null,
+        limit: input.limit,
+        // ⚠️ A ORDEM é DESCENDENTE: a mais recente primeiro. A ordem é do
+        // INPUT porque o cursor anda com ela — e o cursor da API andava para o
+        // mais antigo, o que punha a tela de exibir as 100 versões mais
+        // ANTIGAS e cortava justamente as mais recentes (as que dizem quando a
+        // pessoa mudou pela última vez).
+        ordem: 'desc',
+      },
+      // ⚠️ O escopo da LEITURA é o de SISTEMA (`null`), e não o da empresa do
+      // ator. A policy `history_leitura` libera a linha quando
+      // `usuario_no_escopo(entity_id)` — e o bucket de SISTEMA é o único que
+      // atravessa empresas. Com o escopo errado a leitura volta VAZIA, e
+      // "vazia" parece "não tem histórico".
+      null,
+    );
+
+    // ⚠️ O REGISTRO DA LEITURA. O histórico é dado pessoal (o nome e o e-mail
+    // de cada versão da pessoa), e o ATOR entra no registro — sem ele, o log
+    // diz que o histórico foi lido, e não por quem.
+    // ⚠️ O `:id` e o ATOR vão SANITIZADOS (`paraRegistro`), e não crus: os dois
+    // vêm do cliente (o `sub` é assinado por nós, mas a invariante mora em
+    // outro arquivo — e um `\n` em qualquer um deles gravaria uma linha de
+    // log em branco, ou uma linha que PARECE outra).
+    //
+    // ⚠️ E O ESCOPO vai junto: ele é o que distingue D2 (`tenantId === null`)
+    // de tudo o mais — e o mesmo ator, membro de DUAS empresas, produzia
+    // DUAS linhas idênticas para escaladas em empresas diferentes
+    // (MEDIDO 2026-11-17, revisão de segurança do PR #171).
+    loggerHistorico.log(
+      `histórico lido: ${pagina.entries.length} entrada(s) da pessoa ${paraRegistro(input.id)} — ator ${paraRegistro(ator.userId)} (escopo ${paraRegistro(ator.tenantId ?? 'sistema')})`,
+    );
+
+    return toUserHistoryPageDto(pagina);
+  }
+
+  /**
+   * O HISTÓRICO de uma pessoa — lido pelo DONO dela.
+   *
+   * ⚠️ A rota do DONO (`GET /users/:id/history`) mora AQUI, e não no
+   * controller: era a ÚNICA rota do repo que compunha o escopo e chamava o
+   * PORT DIRETO do controller — e o `:id` CRU ia para a query sem validação
+   * nenhuma (um id que não é uuid dava 500 onde o certo é 400).
+   *
+   * ⚠️ A ORDEM é ASCENDENTE — e ela é EXPLICITA, e não o default do port: a
+   * rota do ADMIN pede `'desc'`, e um copy-paste que invertesse a ordem
+   * ninguém notaria sem uma asserção sobre a ordem.
+   */
+  async listarHistoricoDoUsuario(
+    input: ListUserHistoryInput,
+    tenantId: string | null,
+  ): Promise<UserHistoryPageDto> {
+    const id = UserId.create(input.id);
+    const pagina = await this.auditService.listHistory(
+      {
+        entityName: 'User',
+        entityId: id.value,
+        cursor: input.cursor ?? null,
+        limit: input.limit,
+        ordem: 'asc',
+      },
+      tenantId,
+    );
+    return toUserHistoryPageDto(pagina);
   }
 
   async listar(input: ListUsersInput, tenantId: string | null): Promise<ListUsersOutput> {
@@ -317,7 +476,10 @@ export class UserUseCases {
       throw new ApplicationConcurrencyException('User', input.expectedVersion, user.version());
     }
     try {
-      user.restaurar(ctx.timestamp);
+      // ⚠️ O MOTIVO viaja com o evento: ele era aceito pela API e
+      // descartado no caminho (MEDIDO 2026-11-17 na revisão do PR #171), e a
+      // trilha de auditoria ficava sem o porquê da restauração.
+      user.restaurar(ctx.timestamp, input.reason ?? null);
     } catch (e) {
       this.translateDomainException(e, 'User', id.value);
     }
@@ -396,7 +558,11 @@ function extractPreviousVersion(ev: { eventName: string; [k: string]: unknown })
 }
 
 function extractReason(ev: { eventName: string; [k: string]: unknown }): string | null {
-  if (ev.eventName.endsWith('.deleted.v1') && 'reason' in ev) {
+  // ⚠️ A EXCLUSÃO e a RESTAURAÇÃO: as duas carregam o motivo. Antes, só a
+  // exclusão carregava — e o motivo que a API aceitava na restauração era
+  // descartado (MEDIDO 2026-11-17 na revisão do PR #171).
+  const temMotivo = ev.eventName.endsWith('.deleted.v1') || ev.eventName.endsWith('.restored.v1');
+  if (temMotivo && 'reason' in ev) {
     return (ev as unknown as { reason: string | null }).reason;
   }
   return null;

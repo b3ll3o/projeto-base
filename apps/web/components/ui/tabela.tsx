@@ -20,6 +20,7 @@ import type * as React from 'react';
 export function Tabela({
   children,
   legenda,
+  id,
   className,
   ...props
 }: React.ComponentProps<'table'> & {
@@ -35,16 +36,70 @@ export function Tabela({
    * despercebida.
    */
   legenda: string;
+  /**
+   * O `id` do `<caption>` — e opcional.
+   *
+   * ⚠️ Quem não passar, o id sai da LEGENDA (determinístico — o
+   * `useId` é hook, e hook não roda em Server Component). Duas tabelas com a
+   * MESMA legenda na mesma tela shareariam o id — e o `aria-labelledby`
+   * apontaria para o primeiro. Quem renderiza as duas, dá um id para cada.
+   */
+  id?: string;
 }) {
   const base = 'w-full border-collapse text-sm';
+  // ⚠️ O NOME da região é o MESMO texto do `<caption>`, e não uma segunda
+  // cópia: `aria-label={legenda}` punha a frase duas vezes no DOM (a região
+  // e a legenda), e o leitor de tela anunciava as duas ao entrar na tabela.
+  // O `aria-labelledby` APONTA para o caption — o texto vive uma vez só, e a
+  // região o nomeia.
+  const idDaLegenda = id ?? idDaLegendaDaTabela(legenda);
   return (
-    <div className="mt-6 overflow-x-auto">
+    // ⚠️ A REGIÃO ROLÁVEL é alcançável por TECLADO (MEDIDO 2026-11-17): sem
+    // `tabindex`, ela só era focável no Chromium (que torna região rolável
+    // focável por padrão) — no Firefox e no Safari, as colunas que ficam
+    // FORA da tela a 320px eram inalcançáveis, e o `role` + o nome acessível
+    // é o que diz ao leitor de tela o que há ali.
+    //
+    // ⚠️ E `foco`: a região é um elemento FOCÁVEL novo (o `tabIndex`), e a
+    // convenção `estilizacao.md` §4.3 exige o utilitário `foco` em TODO
+    // elemento focável — sem ele, a região ganha o anel DEFAULT do browser e
+    // a app passa a ter dois sistemas de foco na mesma tela.
+    //
+    // ⚠️ `role="group"`, e não `role="region"`: `region` é um LANDMARK, e as
+    // 6 tabelas do app viravam 6 landmarks (MEDIDO 2026-11-18 na 5ª revisão
+    // do PR #171: a revisão apontou o landmark como INFO — é decisão de UI, e
+    // não defeito). O `group` conserva o nome acessível e a alcançabilidade
+    // por teclado, e não entra na lista de landmarks do leitor de tela.
+    <div
+      className="mt-6 overflow-x-auto foco"
+      tabIndex={0}
+      role="group"
+      aria-labelledby={idDaLegenda}
+    >
       <table {...props} className={className ? `${base} ${className}` : base}>
-        <caption className="sr-only">{legenda}</caption>
+        <caption id={idDaLegenda} className="sr-only">
+          {legenda}
+        </caption>
         {children}
       </table>
     </div>
   );
+}
+
+/**
+ * O `id` do `<caption>` — e a REGIÃO rolável o nomeia por ele.
+ *
+ * ⚠️ Ele vem da LEGENDA, e não de um contador: a primitiva é usada em Server
+ * Component, e `useId` é hook (hook não roda no servidor). A legenda é o
+ * texto que já distingue uma tabela da outra — e duas tabelas com a MESMA
+ * legenda na mesma tela shareariam o `id` (o `aria-labelledby` apontaria
+ * para a primeira), o que é raro e não vale um contador global.
+ */
+function idDaLegendaDaTabela(legenda: string): string {
+  return `tabela-${legenda
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')}`;
 }
 
 /**
@@ -68,10 +123,45 @@ export function CabecalhoTabela({
   );
 }
 
-/** Célula de dado. */
+/**
+ * Célula de dado.
+ *
+ * ⚠️ A base é `break-words` (`overflow-wrap: break-word`), e ela **NÃO**
+ * reduz a contribuição min-content da célula: a especificação diz que só
+ * `anywhere` reduz. MEDIDO 2026-11-17: com e-mail de 249 chars, a tabela
+ * media **2.097px** dentro de um wrapper de 288px a 320px — e com
+ * `overflow-wrap: normal` mediava os **mesmos** 2.097px. O que impedia a
+ * **página** de rolar era o `overflow-x-auto` do wrapper — e o comentário
+ * antigo atribuía isso ao `break-words`.
+ *
+ * ⚠️ E A MEDIDA DE HOJE, com o instrumento que a reproduz: o e2e do F21
+ * (`apps/web/e2e/f21-historico-usuario.spec.ts`) mede a 320px, com o e-mail
+ * de 254 chars — e afirma que a coluna do e-mail respeita o `w-48` que
+ * declara. MEDIDO 2026-11-18: a célula mede **69,17px** e a tabela
+ * **409,92px**; sem o `wrap-anywhere` no conteúdo, a MESMA célula mede
+ * **2.017px**.
+ *
+ * ⚠️ E a base NÃO impõe `anywhere`: MEDIDO 2026-11-17 a 320px, `anywhere` em
+ * todas as células fez a tabela de `/admin/users` caber em 295px — e a coluna
+ * de e-mail cair para **52px**, rendendo o e-mail em 9 fragmentos
+ * ("pess / oa.d / .a.em / pres / a@ex / empl / o.dev / .br"). Dado tabular
+ * PODE rolar na horizontal (WCAG 1.4.10), e palavra quebrada no meio é
+ * pior que rolagem.
+ *
+ * ⚠️ QUEM PRECISA que a célula não alargue a tabela OPT-IN: põe
+ * `wrap-anywhere` no conteúdo INTERNO da célula — e o motivo é a **HERANÇA**:
+ * `overflow-wrap` é propriedade herdada, o `<td>` traz `break-words` na base
+ * e o `<div>` interno traz `wrap-anywhere`, que especifica o valor DELE e
+ * vence o herdado. A ordem do CSS compilado só decide quando as DUAS classes
+ * estão no MESMO elemento — e aqui elas não estão (MEDIDO 2026-11-18 na 5ª
+ * revisão do PR #171: o comentário antigo explicava o mecanismo pela ORDEM,
+ * que não é o mecanismo).
+ *
+ * Com `anywhere` no conteúdo e uma largura fixa na célula (`w-48`), a coluna
+ * respeita a largura — e é isso que o e2e do histórico mede a 320px
+ * (`apps/web/e2e/f21-historico-usuario.spec.ts`).
+ */
 export function CelulaTabela({ children, className, ...props }: React.ComponentProps<'td'>) {
-  // ⚠️ `break-words` (MEDIDO 2026-11-16): um e-mail tem 254 chars e não tem
-  // onde quebrar — sem isto, a tabela estourava a tela em 2421px a 320px.
   const base = 'break-words border-b border-border/60 py-3 pr-4 text-foreground';
   return (
     <td {...props} className={className ? `${base} ${className}` : base}>

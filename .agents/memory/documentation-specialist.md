@@ -9,6 +9,22 @@ description: Memória acumulada do agent documentation-specialist — a matriz d
 
 ## Decisões Tomadas
 
+### 2026-11-18 — O escopo que sobrou depois do kit
+
+**Contexto:** o kit de documentação moderna (14 itens, 5 pilares) deu dono a
+README, CONTRIBUTING, GLOSSARY, CHANGELOG, ADR, runbooks, PRD, TDR e
+post-mortems — que antes eram "docs do repo" e caíam no meu gatilho.
+
+**Decisão:** meu escopo passa a ser a doc de **unidade de código** (o BC, a
+rota, o package) e a auditoria **transversal** do inventário. O "Quando me
+invocar" do agent e a linha do `AGENTS.md` §3.1 dizem isso, e apontam para a
+matriz do kit como a fonte do resto.
+
+**Consequências:** o `documentation-specialist` não é mais o dono genérico de
+"doc que é do repo" — o dono de cada doc do kit é o specialist do item. A
+matriz de cobertura §3 da convenção `documentacao.md` continua sendo minha
+(unidade de código → doc canônico), e ela **não** inclui os itens do kit.
+
 ### 2026-11-16 — A doc de stack é claim de versão: ela envelhece na major
 
 **Contexto:** o `@nestjs/*` subiu para a major 12 e o Node mínimo foi de `>=22.6.0` para `>=22.12.0` (piso do NestJS 12 e do `nestjs-pino` 5).

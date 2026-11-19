@@ -567,6 +567,23 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     id: 'check-doc-claims',
   },
   {
+    // pt-BR (2026-11-18): o kit completo de documentação moderna (5 pilares,
+    // 14 itens) entrou no repo como OBRIGATÓRIO — e "obrigatório" sem
+    // instrumento é prosa. A convenção `kit-documentacao.md` declara a matriz
+    // (item → doc canônico → specialist → auditor → âncoras), e este gate a lê
+    // **por nome de coluna** e mede cada linha: o doc existe, tem as âncoras,
+    // o índice cita, os dois donos existem, e os itens condicionais estão
+    // declarados (a não-aplicabilidade do AsyncAPI é declarada, e o gatilho
+    // que a invalida é medido).
+    //
+    // O gate NÃO tem a lista dos 14 itens no código: a matriz é a fonte
+    // única, como no `check-doc-coverage` (que lê a tabela de exceções da
+    // `documentacao.md`).
+    name: 'cobertura do kit de documentação (14 itens, 5 pilares)',
+    file: '.tooling/scripts/ci/check-doc-kit.ts',
+    id: 'check-doc-kit',
+  },
+  {
     // pt-BR (2026-10-29): o teto de 300 linhas para `.md` é a regra mais
     // antiga do repo e a única que NENHUM gate mediava. MEDIDO: `grep -rln
     // 'MAX_LOC' tooling/scripts/ .tooling/scripts/ | grep -v spec` devolve UM
@@ -669,6 +686,21 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     name: 'pasta única de tooling de IA (só `.agents/`)',
     file: '.tooling/scripts/ci/check-pasta-unica.ts',
     id: 'check-pasta-unica',
+  },
+  {
+    // A regra de revisão de PR precisa de DOIS instrumentos, e este é o
+    // segundo: o gate que mede a regra (`tooling/scripts/pr-review-gate.ts`,
+    // no CI) e o gate que mede se o PROCESSO continua ligado.
+    //
+    // Sem este, a regra envelhece em prosa: o workflow `pr-review.yml` sai do
+    // repo, o script `pr:review-check` sai do `package.json`, a convenção sai
+    // do índice — e o `review-comment` continua publicando um status que
+    // ninguém exige. É a classe 1 do `guard-classes.md` ("condição
+    // inalcançável"), o mesmo modo de falha que o repo já mediu no
+    // `review-router` (9 reviewers despachados para um `console.log`).
+    name: 'processo de revisão de PR ligado (workflow, gate, convenção, índices)',
+    file: '.tooling/scripts/ci/check-pr-review-wired.ts',
+    id: 'check-pr-review-wired',
   },
 ];
 

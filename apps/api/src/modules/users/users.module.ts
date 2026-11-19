@@ -14,13 +14,22 @@
  *
  * pt-BR: o `UserUseCases` é instanciado uma vez pelo container e exportado.
  * O `UsersController` (Fase 7) é registrado no array `controllers` e o
- * consome via `@Inject(USER_USE_CASES)` + `@Inject(AUDIT_SERVICE_PORT)`.
+ * consome via `@Inject(USER_USE_CASES)` — e a AUDITORIA entra pela USE CASE
+ * (o controller não injeta o port: era a única rota do repo que chamava o
+ * port de auditoria direto, e a rota do histórico do DONO passou pela use
+ * case em 2026-11-17).
  */
 import { Module } from '@nestjs/common';
 import { UserUseCases, USER_USE_CASES } from './application/user-use-cases.js';
 import { PrismaPersistenceModule } from './infrastructure/prisma-persistence.module.js';
 import { AuditInfraModule } from '../../shared/audit/audit-infra.module.js';
 import { UsersController } from './infrastructure/http/users.controller.js';
+// pt-BR (visão de admin, 2026-11-17): a rota do ADMIN DO SISTEMA para o
+// histórico de uma pessoa (`GET /admin/users/:id/history`). Ela mora neste
+// módulo porque a use case (`UserUseCases`) é dele — e porque o
+// `PermissionsGuard` de que ela precisa vem do `ProfilesModule`, que já está
+// nos imports abaixo.
+import { AdminUserHistoryController } from './infrastructure/http/admin-user-history.controller.js';
 import { JwtAuthGuard } from '../auth/infrastructure/http/jwt-auth.guard.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { TenancyModule } from '../tenancy/tenancy.module.js';
@@ -54,7 +63,7 @@ import { FeatureFlagsModule } from '../feature-flags/feature-flags.module.js';
     ProfilesModule,
     FeatureFlagsModule,
   ],
-  controllers: [UsersController],
+  controllers: [UsersController, AdminUserHistoryController],
   providers: [
     {
       provide: USER_USE_CASES,

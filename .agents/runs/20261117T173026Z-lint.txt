@@ -1,0 +1,30 @@
+
+> projeto-base@0.1.0 lint /home/leo/Documentos/projetos/base
+> turbo run lint
+
+
+   • turbo 2.11.10
+   • Packages in scope: @projeto/api, @projeto/eslint-config, @projeto/shared-types, @projeto/tsconfig, @projeto/web, @repo/review-router-tooling
+   • Running lint in 6 packages
+   • Remote caching disabled
+
+@projeto/eslint-config:lint: cache hit, replaying logs 932a7981b92f9625
+@projeto/eslint-config:lint: 
+@projeto/eslint-config:lint: > @projeto/eslint-config@0.0.1 lint /home/leo/Documentos/projetos/base/packages/eslint-config
+@projeto/eslint-config:lint: > eslint .
+@projeto/eslint-config:lint: 
+@projeto/web:lint: cache hit, replaying logs 3231b2e8e8e0284e
+@projeto/web:lint: 
+@projeto/web:lint: > @projeto/web@0.0.1 lint /home/leo/Documentos/projetos/base/apps/web
+@projeto/web:lint: > eslint .
+@projeto/web:lint: 
+@projeto/api:lint: cache hit, replaying logs da3953d4ff43149a
+@projeto/api:lint: 
+@projeto/api:lint: > @projeto/api@0.0.1 lint /home/leo/Documentos/projetos/base/apps/api
+@projeto/api:lint: > eslint .
+@projeto/api:lint: 
+
+ Tasks:    3 successful, 3 total
+Cached:    3 cached, 3 total
+  Time:    22ms >>> FULL TURBO
+

@@ -248,12 +248,42 @@ conferida contra a credencial da sessão.
 | Snapshot da entidade arquivada | `users_archive` | no soft-delete |
 | Ator, origem, timestamp, `correlationId` | as duas tabelas | junto da mutação |
 
-- A auditoria **acompanha** a mutação: é o mesmo use case que grava.
-- O `AuditContext` viaja num `AsyncLocalStorage` — o use case não carrega o
-  request.
+- A auditoria **acompanha** a mutação: é o mesmo use case que grava, e o
+  `AuditContext` viaja num `AsyncLocalStorage`.
 - O `correlationId` vem da **mesma derivação do `traceId` da resposta**
-  (`traceIdDe()`) — a divergência que existia foi fechada em 2026-11-10 (ver
-  [`dados.md`](./dados.md) §5).
+  (`traceIdDe()`) — ver [`dados.md`](./dados.md) §5.
+- A **LEITURA** da trilha tem DOIS donos: o **dono** da pessoa
+  (`GET /users/{id}/history` — o `UserOwnershipGuard` exige que o `:id` seja o
+  `sub` do token) e o **administrador do SISTEMA**
+  (`GET /admin/users/{id}/history` — portão D2: bucket global + `isAdmin`).
+  Nenhum outro ator lê: a policy `history_leitura` libera a linha quando
+  `usuario_no_escopo(entity_id)`, e só o bucket de SISTEMA atravessa empresas.
+- A **recusa** é **registrada com o ator, o ESCOPO e o alvo**, nos DOIS
+  portões (o D2 e o `PermissionsGuard`, que bate primeiro): uma escalada é
+  403, e 403 não loga no `GlobalExceptionFilter` — sem o registro, ela ficava
+  só no access log, sem ator. O **escopo** (`tenantId`) entra porque
+  distingue D2 (`tenantId === null && isAdmin`) — e o mesmo ator, membro de
+  DUAS empresas, produzia DUAS linhas idênticas. E o valor que o cliente
+  controla (o `:id`) ou que vem de fora do registro (o `sub`) vai
+  **sanitizado** (`paraRegistro`), e nunca cru.
+- ⚠️ **A QUERY STRING NÃO VAI PARA NENHUM LOG.** O `pino-std-serializers`
+  gravava `req.url` (o request target completo) e `req.query` em **cada**
+  request, e a redação de header não os alcançava: uma rota com filtro
+  (`GET /users?email=alguem@empresa.com`) punha o e-mail de outra pessoa no
+  access log. Agora o access log grava o caminho sem a query (o serializador
+  `SERIALIZADOR_DO_REQUEST`), e o log do 5xx também. O `instance` do
+  Problem Details **mantém** a query: ele volta para quem a mandou.
+- ⚠️ **O ESCOPO DA TRILHA É O VÍNCULO DE HORA DA LEITURA** — e
+  `users_history` **não tem coluna de empresa**: a policy libera a linha
+  quando `usuario_no_escopo(entity_id)`, que pergunta pelo VÍNCULO do
+  `entity_id` na empresa do header. Duas consequências, medidas:
+  - uma pessoa membro de **DUAS** empresas tem a trilha inteira lida pelas
+    duas — inclusive as versões gravadas na outra;
+  - a empresa que a pessoa **deixou** perde a trilha, e só o bucket de
+    SISTEMA a lê (o "fail-closed" da migration `20261020000002`).
+- O **cursor** da paginação é o id da **linha** (`users_history.id`), resolvido
+  **dentro da entidade**: um cursor de outra trilha é **inválido** (400), e a
+  resposta é a mesma de "o cursor não existe" — o erro não diz se ele existe.
 
 ---
 
@@ -262,7 +292,6 @@ conferida contra a credencial da sessão.
 - [`./dados.md`](./dados.md) — o escopo, a RLS e a credencial na prática.
 - [`./contexto.md`](./contexto.md) — as fronteiras de confiança.
 - [`./operacao.md`](./operacao.md) — como a segurança aparece no log.
-- [`../api/auth.md`](../api/auth.md) — o contrato HTTP do BC `auth`.
 
 ---
 

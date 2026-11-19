@@ -28,6 +28,47 @@ encolhe com o tempo. A deliberação está em
 [Pendências conhecidas](./ci-defense-in-depth-pendencias.md); script e demais
 detalhes em [git-workflow.md §Pre-Push Quality Gate](./git-workflow.md).
 
+⚠️ **As DUAS tasks que rodam contra o banco dependem de `db:generate`**
+(`dependsOn: ["db:generate"]`, sem o `^` — a task do MESMO pacote). Sem isso,
+`test:e2e` e `test:integration` sobem **em paralelo** com o `db:generate` que o
+`typecheck` dispara, e o import de `@prisma/client` encontra o client ausente ou
+sendo escrito: o e2e morre na COLETA (`Class extends value undefined is not a
+constructor or null`, 19 arquivos de spec caídos de uma vez) — e a falha não é do
+código sob teste.
+
+**MEDIDO 2026-11-17**, com o client do Prisma apagado do disco:
+
+```bash
+rm -rf node_modules/.pnpm/@prisma+client@*/node_modules/.prisma/client
+pnpm turbo run typecheck test:e2e --filter=@projeto/api
+```
+
+- **sem** o `dependsOn`: `Test Files 19 failed (19)` — o `test:e2e` tinha
+  começado antes do `db:generate` terminar;
+- **com** o `dependsOn`: `Test Files 19 passed (19)` e `Tasks: 7 successful, 7
+  total` — o mesmo comando, o mesmo estado do disco.
+
+⚠️ **E A DEPENDÊNCIA É QUALIFICADA COM O PACOTE** (`@projeto/api#db:generate`),
+e não a mesma de dentro do pacote (`db:generate`).
+
+MEDIDO 2026-11-17: o `@projeto/web` **não tem** `db:generate` (só o `@projeto/api`
+tem Prisma), e o turbo **pula** a task inexistente — a dry-run mostra
+`cmd: <NONEXISTENT>` e não há erro. Com a dependência simples, a invariante
+que este texto declara ("o `db:generate` não pode correr em paralelo com o
+e2e") **não valeria para o e2e do WEB** — e é o e2e do web que sobe a API
+(`apps/web/e2e/global-setup.ts` → `subirApi` → importa `@prisma/client`).
+
+Com a dependência qualificada, a dry-run mostra:
+
+```
+@projeto/api#db:generate            cmd=prisma generate
+@projeto/web#test:e2e               cmd=playwright test   deps=["@projeto/api#db:generate"]
+```
+
+E o mesmo para `@projeto/api#test:e2e` — que continua depending de
+`@projeto/api#db:generate` (a sintaxe qualificada não vira ciclo no próprio
+pacote).
+
 **O que o HOOK roda é menos que o `ci:local`** — e é proposital: o hook é
 rápido, o `ci:local` é lento. `.husky/pre-push` roda `pnpm ci:preflight`
 (Camada 2) e `pnpm ci:boot`. O `ci:boot` é a etapa que **sobe a aplicação
@@ -94,6 +135,7 @@ Escopo de todos: **todo `.md` versionado** sob a raiz que o preflight passa
 | `check-path-alias` | tsconfig | todo alias de `compilerOptions.paths` do `tsconfig.base.json` aponta para um **diretório que existe**. O alvo é resolvido contra o diretório do tsconfig (o `baseUrl` é `.`). Não mede alias **não usado** — alias válido e sem import é decisão, não defeito. Tsconfig ausente → `skipped` COM MOTIVO |
 | `check-doc-coverage` | docs | **cobertura** de documentação: BC do backend sem `docs/api/<bc>.md`, rota do App Router fora do catálogo `docs/web/rotas.md`, package do workspace sem `packages/<pkg>/README.md`. Mede a **existência** do doc, não o frescor dele — declarado no cabeçalho do gate. A tabela de **exceções declaradas** da convenção `documentacao.md` é lida (unidade → motivo) e reconciliada **nos dois sentidos**; uma exceção que não exclui nada é documentation lie. Corpus vazio → `skipped` COM MOTIVO, nunca verde por conjunto vazio |
 | `check-doc-claims` | docs | **claims numéricos** dos docs: o doc tem que **citar** o comando declarado e **afirmar** o valor ao lado dele, e a derivação (o código real) tem que produzir o mesmo número. A derivação é TypeScript — o gate **não executa shell**, porque o registry é versionado e um PR pode editá-lo. A derivação mede **exatamente** o caminho que o comando cita (`dir/*.controller.ts` resolve o glob; um `*.spec.ts` não conta), e o **tying** exige que o caminho medido esteja no comando citado — registry desamarrado é erro. Escopo: os 6 docs de API (18 ocorrências, 8 comandos). Registry ausente → erro; registry vazio → `skipped` COM MOTIVO |
+| `check-doc-kit` | docs | **cobertura do kit de documentação moderna**: os 14 itens dos 5 pilares (a matriz é lida da convenção `kit-documentacao.md`, por NOME de coluna) — o doc canônico existe (e, para `familia`, cada arquivo do glob), tem **todas** as âncoras mínimas, o índice do item existe e **cita** o doc, e o specialist e o auditor existem em `.agents/agents/`. Os **condicionais** são medidos nas **três** direções: gatilho dispara → o doc é exigido e a declaração de não-aplicabilidade tem que ter saído; gatilho não dispara → a não-aplicabilidade tem que estar **declarada**. Matriz vazia → erro (verde por conjunto vazio é a classe 5). Mede **cobertura**, não frescor — declarado no cabeçalho do gate |
 | `check-feature-flag-portas` | feature flags | as portas declaradas de cada flag (`portas:` na spec da flag) existem no código do controller, **nos 2 sentidos**. `@Post()` sem path casa a rota **raiz** do `@Controller()`, o prefixo do controller vale para rota com path, e cada entrada herda a chave do **seu** bloco — não a do último |
 | `check-teeth-count` | dentes | contagem de itens em `PREFLIGHT_CHECKS` (real) vs. matches de `^  - '` no `preflight-gates.ts` (literal) — drift entre o array executado e o array declarado é vermelho nomeando os dois números |
 | `check-harness-location` | dentes | todo `check-*.ts` vive em `.tooling/scripts/ci/` (raiz do harness); subdir cria harness órfão e quebra a URL do painel |
@@ -120,6 +162,7 @@ Escopo de todos: **todo `.md` versionado** sob a raiz que o preflight passa
 | `check-action-version-comment` | supply-chain | o **comentário de versão** da action — o que o HumansONS do GitHub mostra ao aprovador. O `check-ci-action-pinning` confere só o formato do SHA. MEDIDO 2026-11-09: o PR #154 do Dependabot subia `pnpm/action-setup` para 6.1.1 e deixava o comentário `# v3` — o CI passava e o humano lia a versão errada. O gate confere o comentário contra a tabela de pins versionada e proíbe a mesma action em SHAs diferentes |
 | `check-ci-prisma-client-ready` | ci | todo job que roda `pnpm tooling:test` tem que **gerar o client do Prisma antes** — MEDIDO 2026-11-09 (PR #156): o job `preflight` rodava a suíte sem `db:generate`, e o spec `ambiente-local.spec.ts > o client do repo REAL` mede o client de verdade. O job só passava porque o `cache: pnpm` é chaveado pelo `pnpm-lock.yaml` e o store restaurado já trazia o client gerado — com store limpo (o que acontece na PR que muda a dependência) o job falha. Um job que só passa por causa do cache falha na PR que mais precisa dele || `check-skill-coverage` | skills | **cobertura da camada de skills**: a skill existe em `.agents/skills/` mas não está indexada no `AGENTS.md` (o índice canônico), não é citada por nenhum agent/workflow/skill (órfã), declara um `Quem invoca` que não a cita de volta (recíproca), não é **descobrível** (frontmatter sem `name`/`description`, ou `name` ≠ diretório — é o que o harness lê para achar a skill) — ou o índice aponta para uma skill que não existe (fantasma) |
 | `check-pasta-unica` | estrutura | **pasta única de tooling de IA**: reprova se a pasta `.claude/` existir na árvore de trabalho ou estiver versionada no git. Fecha a regra de `AGENTS.md` §1.3 — sem ele, o `.gitignore` a esconderia da `git status` e ninguém veria ela voltar. **Exceção**: a pasta que só tem o `.claude/settings.local.json` (permissão local da máquina, que o Claude Code escreve no projeto — reprovar ela deixaria o pre-push vermelho de quem usa o Claude Code). As pastas dos **outros** vendors (`.cursor/`, `.windsurf/`, `.continue/`) não entram: são criadas de propósito, por receita de `docs/integrations/` |
+| `check-pr-review-wired` | processo | **o processo de revisão de PR está ligado**: reprova se o workflow `.github/workflows/pr-review.yml` não existir, se ele **não escutar** `pull_request_review` (é o evento que vira o gate verde — sem ele, publicar a revisão não redesperta o check e ele fica vermelho para sempre), se nenhum passo do job invocar o gate, se o script `pr:review-check` faltar no `package.json` ou apontar para outro path, se a convenção `pr-review.md` não estiver indexada nos **dois** índices (README das convenções e `AGENTS.md` §6), ou se o doc do workflow não estiver listado em `.agents/WORKFLOWS.md`. Fecha a classe 1 do `guard-classes.md` — um gate de PR que roda e **ninguém exige** é condição inalcançável, o mesmo modo de falha que o repo mediu no `review-router` (9 reviewers despachados para um `console.log`) |
 
 > **`check-types.ts` NÃO é um check** e saiu desta tabela: tem um único
 > `export interface CheckResult` (`wc -l` = 23) e é importado **só** como

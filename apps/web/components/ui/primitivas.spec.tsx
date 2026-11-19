@@ -151,6 +151,58 @@ describe('tabela', () => {
     expect(screen.getByRole('columnheader', { name: 'Nome' })).toHaveAttribute('scope', 'col');
   });
 
+  it('a REGIÃO ROLÁVEL é alcançável por teclado e tem nome acessível', () => {
+    render(
+      <Tabela legenda="Histórico de Ana, da mais recente para a mais antiga">
+        <tbody>
+          <tr>
+            <CelulaTabela>Ana</CelulaTabela>
+          </tr>
+        </tbody>
+      </Tabela>,
+    );
+
+    // ⚠️ O `tabIndex` é o que torna a região rolável alcançável por teclado
+    // no Firefox e no Safari (o Chromium já a focava por padrão) — e sem ele,
+    // as colunas que ficam FORA da tela a 320px eram inalcançáveis.
+    //
+    // ⚠️ E `group`, e não `region`: `region` é um LANDMARK, e as 6 tabelas do
+    // app viravam 6 landmarks. O `group` conserva o nome acessível e o
+    // `tabindex` — e não entra na lista de landmarks do leitor de tela.
+    const regiao = screen.getByRole('group', { name: /Histórico de Ana/ });
+    expect(regiao).toHaveAttribute('tabindex', '0');
+    expect(regiao.className).toContain('overflow-x-auto');
+  });
+
+  it('a célula que guarda dado longo NÃO pode estourar a largura da tabela', () => {
+    render(
+      <Tabela legenda="Pessoas">
+        <tbody>
+          <tr>
+            <CelulaTabela className="w-48">
+              <div className="wrap-anywhere">{'a'.repeat(254)}</div>
+            </CelulaTabela>
+          </tr>
+        </tbody>
+      </Tabela>,
+    );
+
+    // ⚠️ A BASE É `break-words`, e ela NÃO reduz a contribuição min-content
+    // (MEDIDO: a tabela media os mesmos 2.097px com `break-word` e com
+    // `overflow-wrap: normal`). E a base NÃO impõe `anywhere`: MEDIDO a
+    // 320px, `anywhere` em todas as células fez a coluna de e-mail de
+    // `/admin/users` cair para 52px e o e-mail renderizar em 9 fragmentos.
+    // Dado tabular PODE rolar na horizontal (WCAG 1.4.10), e palavra
+    // quebrada no meio é pior que rolagem.
+    const celula = screen.getByRole('cell');
+    expect(celula.className).toContain('break-words');
+    expect(celula.className).toContain('w-48');
+
+    // ⚠️ E O OPT-IN É DO CALLER: `wrap-anywhere` no CONTEÚDO da célula — que
+    // é o que reduz a contribuição min-content e faz a largura fixa valer.
+    expect(screen.getByText('a'.repeat(254)).className).toContain('wrap-anywhere');
+  });
+
   it('a legenda vira `<caption>` invisível', () => {
     render(
       <Tabela legenda="Perfis cadastrados">
