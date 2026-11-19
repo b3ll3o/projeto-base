@@ -46,6 +46,27 @@ function criarTag(tag: string): void {
   execFileSync('git', ['tag', tag], { cwd: raiz });
 }
 
+/**
+ * Cria o repo git COM a tag, e devolve o caminho do arquivo que a tag mediu.
+ *
+ * O caso que a tag precisa medir é "o conteúdo mudou DEPOIS dela": então a
+ * tag é criada com o conteúdo inicial, e a modificação acontece depois — como
+ * num PR que mexe no doc e não mexe na versão.
+ */
+async function criarRepoComTag(tag: string, versao: string): Promise<void> {
+  await escreverTodos(versao);
+  criarTag(tag);
+}
+
+/** Reescreve um dos arquivos com a MESMA versão e outro conteúdo. */
+async function mudarConteudoSemVersao(
+  arquivo: string,
+  rotulo: string,
+  versao: string,
+): Promise<void> {
+  await fs.writeFile(path.join(raiz, arquivo), `conteudo novo\n\n${rotulo} ${versao}\n`, 'utf-8');
+}
+
 beforeEach(async () => {
   raiz = await fs.mkdtemp(path.join(os.tmpdir(), 'check-version-footers-'));
 });
@@ -98,6 +119,38 @@ describe('checkVersionFooters (#126)', () => {
     // Igualdade não é erro — só "menor" é.
     await escreverTodos('1.11.0');
     criarTag('v1.11.0');
+    const r = await checkVersionFooters({ repoRoot: raiz });
+    expect(r.ok).toBe(true);
+  });
+
+  // ── a terceira regra: o conteúdo mudou e a versão NÃO ─────────────────
+  //
+  // MEDIDO no PR #172: o rodapé do `README.md` passou de 47/49/17 para
+  // 48/50/18 e o rótulo continuou `1.30.0` — que já era o da tag publicada.
+  // Dois conteúdos com o mesmo rótulo, e o gate existente não via: ele compara
+  // o NÚMERO entre os footers e contra a tag, não o resto da linha.
+  it('ERRO quando o conteúdo do footer mudou desde a tag e a versão ficou', async () => {
+    await criarRepoComTag('v1.11.0', '1.11.0');
+    await mudarConteudoSemVersao('README.md', '**Versão:**', '1.11.0');
+    const r = await checkVersionFooters({ repoRoot: raiz });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => /README\.md/.test(e) && /1\.11\.0/.test(e))).toBe(true);
+  });
+
+  it('PASSA quando o conteúdo mudou E a versão subiu', async () => {
+    await criarRepoComTag('v1.11.0', '1.11.0');
+    await mudarConteudoSemVersao('README.md', '**Versão:**', '1.12.0');
+    // os outros cinco precisam acompanhar, senão a PRIMEIRA regra acusa
+    for (const footer of FOOTERS_DE_VERSAO) {
+      if (footer.arquivo !== 'README.md')
+        await escreverFooter(footer.arquivo, footer.rotulo, '1.12.0');
+    }
+    const r = await checkVersionFooters({ repoRoot: raiz });
+    expect(r.ok).toBe(true);
+  });
+
+  it('PASSA quando nada mudou desde a tag', async () => {
+    await criarRepoComTag('v1.11.0', '1.11.0');
     const r = await checkVersionFooters({ repoRoot: raiz });
     expect(r.ok).toBe(true);
   });

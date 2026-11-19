@@ -300,15 +300,22 @@ o par de números de `check-memory-crystallization.ts` e de `learning-observatio
 | `log-nao-leva-o-valor-cru-do-cliente` | `pendente` | — | — |
 | `gate-falso-verde-por-estado-concorrente` | `pendente` | — | — |
 | `git-add-all-leva-o-trabalho-de-outra-sessao` | `pendente` | — | — |
-| `gate` | **0** — nenhuma memória do corpus é mecânica o bastante para um gate determinístico |
+| `matriz-de-roteamento-acumula` | `citada` | `.agents/specs/conventions/specialist-routing-historico.md` | `A matriz **acumula** specialists — não há precedência` |
+| `reviewer-morreu-por-cota-retomar` | `pendente` | — | — |
+| `rodape-com-contagem-exige-bump` | `gate` | `.tooling/scripts/ci/check-version-footers.ts` | — |
+| `gate` | **1** — `rodape-com-contagem-exige-bump` (a 3ª regra do gate: o conteúdo do footer mudou desde a tag e a versão não) |
 
-**O `0` em `gate` é o achado, não uma omissão.** As candidatas naturais
-(`glob-in-block-comment-closes-it`, `gate-without-cli-block-runs-as-noop`) são
-mecânicas, mas o gate que as mediria não existe — e inventar `gate:` para uma
-regra sem gate é a mesma *documentation-only prevention* que a
+**O `1` em `gate` é o achado, não uma omissão.** A regra do rodapé — "contagem
+re-medida sem bump faz um rótulo nomear dois conteúdos" — mede-se por
+comparação com a tag, que é determinística: o gate `check-version-footers`
+ganhou a 3ª regra em 2026-11-19 (PR #172), e é ela que a mede. As candidatas
+naturais restantes (`glob-in-block-comment-closes-it`,
+`gate-without-cli-block-runs-as-noop`) são mecânicas, mas o gate que as
+mediria não existe — e inventar `gate:` para uma regra sem gate é a mesma
+*documentation-only prevention* que a
 [prevenção hierárquica de `task-observer`](https://github.com/iamneilroberts/claude-skills/blob/main/skills/task-observer/SKILL.md)
 classifica como a mais fraca. `gate:` aqui significa *existe um `.ts` no repo que
-mede isto*, e hoje não existe para nenhuma.
+mede isto*, e hoje existe para uma só — o `check-version-footers`.
 
 **`pendente` não é o mesmo que regras ignoradas.** Várias são
 **praticadas e nunca enunciadas**: a tabela de dentes usa "o par" em **15** das

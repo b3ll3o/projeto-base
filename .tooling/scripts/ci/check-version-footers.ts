@@ -93,6 +93,15 @@ export function ultimaTag(repoRoot: string): string | null {
   }
 }
 
+/** Lê o conteúdo de um arquivo do disco, ou `null` se ele não existe. */
+async function lerConteudo(repoRoot: string, arquivo: string): Promise<string | null> {
+  try {
+    return await fs.readFile(path.join(repoRoot, arquivo), 'utf-8');
+  } catch {
+    return null;
+  }
+}
+
 /** Lê a versão de um footer, ou `null` se o rótulo não estiver no arquivo. */
 async function lerVersao(repoRoot: string, footer: FooterEsperado): Promise<string | null> {
   let texto: string;
@@ -101,12 +110,32 @@ async function lerVersao(repoRoot: string, footer: FooterEsperado): Promise<stri
   } catch {
     return null;
   }
+  return extrairVersao(texto, footer.rotulo);
+}
 
-  const re = new RegExp(
-    `${footer.rotulo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} (\\d+\\.\\d+\\.\\d+)`,
-  );
+/** A versão que um texto de footer declara, ou `null` se ele não declara. */
+export function extrairVersao(texto: string, rotulo: string): string | null {
+  const re = new RegExp(`${rotulo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} (\\d+\\.\\d+\\.\\d+)`);
   const m = re.exec(texto);
   return m === null ? null : m[1]!;
+}
+
+/**
+ * O conteúdo de um arquivo NA TAG — ou `null` se ele não existia nela.
+ *
+ * Sem shell: argv em array, pelo mesmo motivo do gate `check-shell-injection`
+ * (que este gate tem de passar).
+ */
+function conteudoNaTag(repoRoot: string, tag: string, arquivo: string): string | null {
+  try {
+    return execFileSync('git', ['show', `${tag}:${arquivo}`], {
+      cwd: repoRoot,
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -162,6 +191,43 @@ export async function checkVersionFooters(opts: { repoRoot: string }): Promise<C
         `A versão dos footers (${distintas[0]}) está ATRÁS da última tag (${tag}). ` +
           `O bump de versão é o que o release consome — e é a PROCEDÊNCIA do bump ` +
           `que ficou com um arquivo de fora (o #126).`,
+      );
+    }
+  }
+
+  // (3) o CONTEÚDO de um footer mudou desde a última tag e a versão NÃO.
+  //
+  // ⚠️ Esta é a regra que faltava no PR #172: o rodapé do `README.md` passou
+  // de 47/49/17 para 48/50/18 e o rótulo continuou `1.30.0` — que já era o da
+  // tag publicada. As duas primeiras regras medem o NÚMERO (concordância
+  // entre os seis, e não-atrás-da-tag): as duas PASSAM quando o conteúdo
+  // muda e o número fica. O rótulo passou a nomear DOIS conteúdos.
+  //
+  // A janela medida é a do ÚLTIMO RELEASE: desde a tag, o conteúdo mudou e a
+  // versão não mudou em lugar nenhum. Um bump no meio da janela cobre a
+  // janela — que é o caso normal do PR que faz o bump e o ajuste no mesmo
+  // diff (o `AGENTS.md` que ganha a linha do workflow depois do bump).
+  if (tag !== null) {
+    for (const footer of FOOTERS_DE_VERSAO) {
+      const atual = await lerConteudo(root, footer.arquivo);
+      const naTag = conteudoNaTag(root, tag, footer.arquivo);
+      // Sem base de comparação (o arquivo não existia na tag) ou sem mudança:
+      // nada a medir.
+      if (atual === null || naTag === null || atual === naTag) continue;
+
+      const versaoAtual = encontradas.get(footer.arquivo);
+      const versaoNaTag = extrairVersao(naTag, footer.rotulo);
+      if (versaoAtual === undefined || versaoNaTag === null || versaoAtual !== versaoNaTag) {
+        continue;
+      }
+
+      errors.push(
+        `${footer.arquivo}: o conteúdo mudou desde a tag ${tag} e a versão continua ` +
+          `${versaoAtual} — o rótulo de versão nomeia DOIS conteúdos. ` +
+          `O bump é o que consome o rodapé (o release-template.yml aborta se os ` +
+          `seis divergirem), e um doc que muda sem bump entra na main sem tag: ` +
+          `bumpe a versão (minor ou patch, conforme ` +
+          `'.agents/specs/conventions/estrutura-e-versionamento.md').`,
       );
     }
   }
