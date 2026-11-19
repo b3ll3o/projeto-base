@@ -102,7 +102,7 @@ grep -rnoE '`(apps|packages|docs|\.agents)/[A-Za-z0-9._/-]+`' docs/ README.md \
 # 4.1 Docs canônicos com data de medição ("Medido em YYYY-MM-DD")
 grep -rn 'Medido em' docs/ README.md | sed 's/:.*Medido em/ → /' | cut -d' ' -f1 | sort | uniq -c
 
-# 4.2 Footers de versão dos 4 docs canônicos (o gate check-version-footers
+# 4.2 Footers de versão dos 6 docs canônicos (o gate check-version-footers
 #     já valida que eles não divergem entre si)
 grep -rn -i 'versão\|version' docs/MONOREPO.md docs/STACK.md docs/como-rodar.md docs/TEMPLATE_USAGE.md | head -20
 ```

@@ -27,20 +27,20 @@
 
 ```yaml
 doc-writer → code-reviewer:
-  task: "Atualizar docs/MONOREPO.md, docs/STACK.md, docs/TEMPLATE_USAGE.md, .agents/specs/conventions/estrutura-e-versionamento.md com nova versão + Histórico de Versões"
-  context: ["docs/MONOREPO.md", "docs/STACK.md", "docs/TEMPLATE_USAGE.md", ".agents/specs/conventions/estrutura-e-versionamento.md"]
+  task: "Atualizar os SEIS footers de versão (docs/MONOREPO.md, docs/STACK.md, docs/TEMPLATE_USAGE.md, AGENTS.md, README.md, .agents/specs/conventions/estrutura-e-versionamento.md) com a nova versão + Histórico de Versões"
+  context: ["docs/MONOREPO.md", "docs/STACK.md", "docs/TEMPLATE_USAGE.md", "AGENTS.md", "README.md", ".agents/specs/conventions/estrutura-e-versionamento.md"]
   expected_output: { updated_files: [...], changelog_entry: "..." }
-  success_criteria: "4 docs atualizados; linha adicionada no Histórico com Conventional Commits summary"
+  success_criteria: "6 footers atualizados; linha adicionada no Histórico com Conventional Commits summary"
 
 code-reviewer → task-manager:
-  task: "Validar consistência cross-refs entre os 4 docs (paths relativos devem resolver)"
-  context: ["diff dos 4 docs"]
+  task: "Validar consistência cross-refs entre os 6 footers (paths relativos devem resolver)"
+  context: ["diff dos 6 footers"]
   expected_output: { broken_refs: [...] }
-  success_criteria: "0 broken refs; números de versão consistentes entre os 4 docs"
+  success_criteria: "0 broken refs; números de versão consistentes entre os 6 footers"
 
 task-manager:
   task: "Criar task `chore/bump-A.B.C` com acceptance criteria completos"
-  context: ["4 docs atualizados", "histórico preenchido"]
+  context: ["6 footers atualizados", "histórico preenchido"]
   expected_output: { task_id: "TASK-bump-A.B.C", acceptance_criteria: [...] }
   success_criteria: "Task tem ID único, type=chore, priority=high, acceptance_criteria verificáveis"
 ```

@@ -18,10 +18,10 @@
 
 | Caminho | Papel | Estado |
 |---|---|---|
-| `.agents/agents/<name>.md` | Definição canônica do agent | 47 arquivos — `ls .agents/agents/*.md \| wc -l` |
+| `.agents/agents/<name>.md` | Definição canônica do agent | 48 arquivos — `ls .agents/agents/*.md \| wc -l` |
 | `.agents/skills/<name>/SKILL.md` | Definição canônica da skill | 35 arquivos — `ls -d .agents/skills/*/ \| wc -l` |
-| `.agents/memory/<name>.md` | Memória acumulada por agent | 49 arquivos — `ls .agents/memory/*.md \| wc -l` |
-| `.agents/workflows/<id>.md` | Workflow detalhado | 17 arquivos — `ls .agents/workflows/*.md \| wc -l` |
+| `.agents/memory/<name>.md` | Memória acumulada por agent | 50 arquivos — `ls .agents/memory/*.md \| wc -l` |
+| `.agents/workflows/<id>.md` | Workflow detalhado | 18 arquivos — `ls .agents/workflows/*.md \| wc -l` |
 | `.agents/specs/conventions/*.md` | Convenções do repo | 36 arquivos (29 convenções + o índice e 6 apêndices) — `ls .agents/specs/conventions/*.md \| wc -l` |
 | `.agents/hooks/pretooluse-block-pnpm-lock.mjs` | Guard de escrita no lockfile | pipe-testado; inerte até `/hooks` |
 | `.agents/hooks/posttooluse-stack-review.sh` | Reviewer pós-edição, em modo feedback | pipe-testado; inerte até `/hooks` |
@@ -272,13 +272,13 @@ dele é a mesma cegueira: o hook não mede o que o reviewer não mede.
 `.mjs` é coberto pelo pre-commit; o `.sh` **não é coberto por nada**. A
 formatação dele é mantida à mão.
 
-### Nenhum agent é "piloto" — todos os 28 são descobertos
+### Nenhum agent é "piloto" — todos os 48 são descobertos
 
-Com o symlink, o Claude Code descobre os **28** agents de `.agents/agents/`
-(inclusive os 25 que antes não tinham wrapper), porque o arquivo canônico já
-carrega `name`, `description` e `tools`. O `tools` é o que limita a pool de
-ferramentas do subagent — sem ele, o subagent herda **todas** as tools da
-conversa principal.
+Com o symlink, o Claude Code descobre os **48** agents de `.agents/agents/`
+(`ls .agents/agents/*.md | wc -l`; a sonda de 2026-11-09 media 28), porque o
+arquivo canônico já carrega `name`, `description` e `tools`. O `tools` é o que
+limita a pool de ferramentas do subagent — sem ele, o subagent herda **todas**
+as tools da conversa principal.
 
 ## Verificação
 

@@ -39,9 +39,9 @@ maintainer: stack-code-reviewer
 │     review-router      → emite N reviewers em YAML           │
 │     pr-review-mode    → 1 specialist por parte → comenta o PR│
 │     retrospective-mode → captura aprendizados                │
-│  ⚠ MEDIDO 2026-11-18: 47 agents no catálogo; 2 por hook.     │
+│  ⚠ MEDIDO 2026-11-18: 48 agents no catálogo; 2 por hook.     │
 │  Só 2 rodam por hook (stack-code-reviewer, doc-sync); os 2   │
-│  routers emitem despacho que ninguém consome; 3 são subagent │
+│  routers emitem despacho que ninguém consome; 5 são subagent │
 └──────────────────────────────────────────────────────────────┘
                │
                ▼
@@ -158,7 +158,7 @@ paralelo e publica a revisão no PR.
 
 **As 2 peças que ainda faltam** — nenhuma delas é "mais agents":
 
-1. **Registro** — os 47 agents vivem em `.agents/agents/`, e o binding do Claude Code (symlink `~/.claude/agents/<nome>.md` → `.agents/agents/<nome>.md`) é o que os registra na máquina. Sem o symlink, o orquestrador não tem handle: agent não registrado não é invocado nem por LLM.
+1. **Registro** — os 48 agents vivem em `.agents/agents/`, e o binding do Claude Code (symlink `~/.claude/agents/<nome>.md` → `.agents/agents/<nome>.md`) é o que os registra na máquina. Sem o symlink, o orquestrador não tem handle: agent não registrado não é invocado nem por LLM.
 2. **Relógio** — `grep -rn 'Date.now()' tooling/ .tooling/ | wc -l` devolve **12** ocorrências (4 no
    `ambiente-local.ts`, 3 no `boot-local.ts`, 2 no `check-audit-skills.ts`, 3 em specs) — sem cronômetro, "mais agents é mais rápido" é raciocínio.
 
@@ -215,7 +215,7 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 |---------------|-----------|------------|---------------------|
 | **Determinística** (regra fixa, verificável) | `.tooling/scripts/ci/*.ts`, `.husky/*`, `tooling/scripts/*.ts` | Erra **alto e nomeado**: exit 1, arquivo, linha, regra | `stack-code-reviewer` (DDD imports bloqueados), `checkTsconfigDrift`, `checkPackageJsonDrift` |
 | **Agente / roteamento** (YAML + regex executado por TS — *não* é IA) | `.agents/specs/conventions/{review,specialist}-routing.md` + `tooling/scripts/*-router.ts` | Erra **baixo e anônimo**: classifica para o reviewer errado, sem sinal | `review-router.ts` (30 testes), `specialist-router.ts` (39 testes) |
-| **Memória / prosa** | `.agents/memory/*.md`, `.agents/runs/*.md` | **Evapora** — não existe evento detectável quando envelhece | 49 memórias versionadas (`find .agents/memory -name '*.md' | wc -l`); as retrospectivas `b<N>-result.md` gravam **fora** do repo |
+| **Memória / prosa** | `.agents/memory/*.md`, `.agents/runs/*.md` | **Evapora** — não existe evento detectável quando envelhece | 50 memórias versionadas (`find .agents/memory -name '*.md' | wc -l`); as retrospectivas `b<N>-result.md` gravam **fora** do repo |
 
 > **Tese honesta:** nenhum problema medido neste repo pede IA. `grep -rniE 'embedding\|openai\|langchain\|pgvector\|neo4j' apps/*/package.json packages/*/package.json` retorna zero. A camada "agentic" é regex em YAML executado por TypeScript — é **regra determinística com prosa em volta**. O custo do rótulo errado já apareceu: `review:lint` está dentro do preflight, `specialist:lint` (mesma família, 13 testes verdes) está fora.
 
