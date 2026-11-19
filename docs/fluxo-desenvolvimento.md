@@ -41,7 +41,7 @@ maintainer: stack-code-reviewer
 │     retrospective-mode → captura aprendizados                │
 │  ⚠ MEDIDO 2026-11-18: 48 agents no catálogo; 2 por hook.     │
 │  Só 2 rodam por hook (stack-code-reviewer, doc-sync); os 2   │
-│  routers emitem despacho que ninguém consome; 3 são subagent │
+│  routers emitem despacho que ninguém consome; 5 são subagent │
 └──────────────────────────────────────────────────────────────┘
                │
                ▼

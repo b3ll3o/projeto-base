@@ -1,7 +1,7 @@
 ---
 name: specialist-routing
 version: 1.8
-updated: 2026-11-18
+updated: 2026-11-19
 maintainer: specialist-router
 description: "Matriz canônica de roteamento de demanda — mapeia paths/keywords/scopes para 48 specialists. Source of truth do classificador headless (tooling/scripts/specialist-router.ts) e do lint da matriz. Atualizada por PR."
 ---
@@ -63,6 +63,9 @@ path_globs:
   - pattern: "apps/web/e2e/**"
     specialists: [e2e-specialist]
     rationale: "Specs e2e (Playwright) — o dono do inventário de fluxos e da cobertura e2e das telas"
+  - pattern: "apps/web/app/**/page.tsx"
+    specialists: [e2e-specialist]
+    rationale: "Tela nova ou tela mudada — o inventário de fluxos e o spec e2e podem precisar de atualização (o glob de specs sozinho não alcança um page.tsx que acabou de nascer)"
 
   - { pattern: "packages/**", specialists: [monorepo-specialist] }
   - pattern: "pnpm-workspace.yaml"

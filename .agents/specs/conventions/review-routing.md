@@ -1,7 +1,7 @@
 ---
 name: review-routing
 version: 1.10
-updated: 2026-11-18
+updated: 2026-11-19
 maintainer: review-router
 description: "Matriz de roteamento de revisores consultada pelo review-router — v1.5 (audit specialists) + UX e tenancy com skill de processo, v1.9 (camada de binding), v1.10 (specs e2e)."
 ---
@@ -286,7 +286,7 @@ Resultado esperado:
 
 | Versão | Data | Mudança |
 |--------|------|---------|
-| 1.10 | 2026-11-18 | `e2e-specialist` entra como reviewer dos specs de fluxo de usuário: 1 path_glob novo (`apps/web/e2e/**`). Antes eles caíam só no `**/*.spec.ts` → `test-writer`, que não é o dono do inventário de fluxos nem da regra da convenção `e2e-playwright.md`. Aditivo. |
+| 1.10 | 2026-11-19 | `e2e-specialist` entra como reviewer dos specs de fluxo de usuário: 1 path_glob novo (`apps/web/e2e/**`). Antes eles caíam só no `**/*.spec.ts` → `test-writer`, que não é o dono do inventário de fluxos nem da regra da convenção `e2e-playwright.md`. Aditivo. **Sem skill de processo** — e por isso **sem linha na §0**: o agent não carrega `e2e-audit` (não existe), e o processo que ele executa é a convenção `e2e-playwright.md`, que ele mesmo cita como dona. A §0 é o registro dos reviewers COM skill; um reviewer sem skill fica registrado aqui. |
 | 1.9 | 2026-11-09 | A camada de binding ganha **path_globs**: a pasta `.claude/` saiu do repo (ADR-0009) e os arquivos que ela carregava foram para `.agents/` — os hooks (`.agents/hooks/**`), o `settings.json` que registra o comando deles (`.agents/settings.json`) e os docs da pasta (`.agents/*.md`). Sem eles, um commit que só tocasse o binding era classificado em domínio **desconhecido** e despachava **zero** reviewers — a lacuna que o `.claude/README.md` declarava. Aditivo. |
 | 1.8 | 2026-10-16 | `multi-tenant-specialist` entra na §0 (reviewer→skill) carregando `multi-tenant-audit`. Fecha para tenancy a mesma lacuna que a v1.7 fechou para UX: reviewer roteado sem skill é opinionador com nome de especialista. Nenhum path_glob novo — a v1.6 do `specialist-routing` já roteia `**/*tenant*` e `**/*tenancy*`; o que faltava era o processo que ele executa. Aditivo. |
 | 1.7 | 2026-10-13 | UX/design ganha **processo**, não só reviewer: 5 skills (`ui-modes`, `ui-craft`, `ui-break`, `motion`, `ui-review`) em `.agents/skills/`, carregadas por `ux-design-specialist`. 2 diff_patterns novos — `outline-none`/`outline: none` e movimento (`transition`/`@keyframes`/`prefers-reduced-motion`/`transform: scale`). Nenhum path_glob novo: os globs de `apps/web/**` (v1.5) já roteavam para o specialist; o que faltava era o processo que ele executa. Aditivo. |

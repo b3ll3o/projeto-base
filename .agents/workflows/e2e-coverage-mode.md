@@ -13,7 +13,8 @@ type: workflow
 > coberta? a semente é pela API?) e **implementa** o que falta.
 
 **Trigger:** "os fluxos da aplicação têm e2e?", "falta teste e2e", "cobertura e2e
-antes do push", e **todo push** que toque `apps/web/**`.
+antes do push", e **todo push** que toque telas (`apps/web/app/**/page.tsx`) ou
+specs (`apps/web/e2e/**`).
 
 **Composição:** sequential (1 implementador + revisores), com retorno ao
 implementador após cada correção.

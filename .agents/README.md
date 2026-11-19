@@ -272,13 +272,13 @@ dele é a mesma cegueira: o hook não mede o que o reviewer não mede.
 `.mjs` é coberto pelo pre-commit; o `.sh` **não é coberto por nada**. A
 formatação dele é mantida à mão.
 
-### Nenhum agent é "piloto" — todos os 28 são descobertos
+### Nenhum agent é "piloto" — todos os 48 são descobertos
 
-Com o symlink, o Claude Code descobre os **28** agents de `.agents/agents/`
-(inclusive os 25 que antes não tinham wrapper), porque o arquivo canônico já
-carrega `name`, `description` e `tools`. O `tools` é o que limita a pool de
-ferramentas do subagent — sem ele, o subagent herda **todas** as tools da
-conversa principal.
+Com o symlink, o Claude Code descobre os **48** agents de `.agents/agents/`
+(`ls .agents/agents/*.md | wc -l`; a sonda de 2026-11-09 media 28), porque o
+arquivo canônico já carrega `name`, `description` e `tools`. O `tools` é o que
+limita a pool de ferramentas do subagent — sem ele, o subagent herda **todas**
+as tools da conversa principal.
 
 ## Verificação
 

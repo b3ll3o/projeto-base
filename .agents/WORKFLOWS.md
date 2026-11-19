@@ -40,7 +40,7 @@
 | `backend-feature` | "implementar endpoint NestJS" | sequential | nestjs-specialist → test-writer → code-reviewer → tdd-enforcer | [`.agents/workflows/backend-feature.md`](./workflows/backend-feature.md) |
 | `frontend-feature` | "criar página/rota Next.js" | sequential | nextjs-specialist → test-writer → code-reviewer → tdd-enforcer | [`.agents/workflows/frontend-feature.md`](./workflows/frontend-feature.md) |
 | `monorepo-change` | "adicionar/mover pacote ou app" | sequential | monorepo-specialist → code-reviewer | [`.agents/workflows/monorepo-change.md`](./workflows/monorepo-change.md) |
-| `e2e-coverage-mode` | "os fluxos têm e2e?" / **antes de todo push** que toque telas | sequential | e2e-specialist (auditar → planejar) → code-reviewer (revisar o plano) → e2e-specialist (implementar → verificar → commitar/pushar) | [`.agents/workflows/e2e-coverage-mode.md`](./workflows/e2e-coverage-mode.md) |
+| `e2e-coverage-mode` | "os fluxos têm e2e?" / **antes de todo push** que toque telas (`apps/web/app/**/page.tsx`) ou specs (`apps/web/e2e/**`) | sequential | e2e-specialist (auditar → planejar) → code-reviewer (revisar o plano) → e2e-specialist (implementar → verificar) → code-reviewer (revisar o spec) → e2e-specialist (commitar/pushar) | [`.agents/workflows/e2e-coverage-mode.md`](./workflows/e2e-coverage-mode.md) |
 | `archive-demand` | "arquivar demanda implementada" | single | archive-demand skill (controller) | [`.agents/workflows/archive-demand.md`](./workflows/archive-demand.md) |
 
 | `feedback-to-spec` | "feedback to spec / próxima spec de finding / T1/T2/T3 → spec" | sequential | task-manager → orchestrator → specialist-router → specialist (template spec) → task-manager | [workflows/feedback-to-spec.md](./workflows/feedback-to-spec.md) |

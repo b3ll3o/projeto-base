@@ -221,7 +221,7 @@ Workflows genéricos prontos para uso estão em [`.agents/WORKFLOWS.md`](./.agen
 | `release-pre-tag` (v2.0+) | "auditar antes de tag vX.Y.Z" | release-versioning-specialist + finding-orchestrator (subset focado em versioning) |
 | `doc-audit-mode` (v1.14.0+) | "a documentação está em dia? / auditar a doc / revisar, atualizar e criar documentações" | documentation-specialist (`documentation-audit` → escreve → `check-doc-coverage` + `check-doc-refs`) |
 | `kit-doc-mode` (v1.30.0+) | "o kit de documentação está em dia? / auditar um item do kit / o doc do item X envelheceu" | specialist do item (`<item>-specialist`) → auditor do pilar (`<pilar>-docs-auditor`) → `check-doc-kit`; a matriz do kit está em [`kit-documentacao.md`](./.agents/specs/conventions/kit-documentacao.md) |
-| `e2e-coverage-mode` (v1.31.0+) | "os fluxos da aplicação têm e2e?" / **todo push** que toque `apps/web/**` | sequential — e2e-specialist (auditar → planejar) → code-reviewer (revisar o plano) → e2e-specialist (implementar → verificar) → code-reviewer (revisar o spec) → e2e-specialist (commitar/pushar); o detalhe está em [`e2e-coverage-mode.md`](./.agents/workflows/e2e-coverage-mode.md) |
+| `e2e-coverage-mode` (v1.31.0+) | "os fluxos da aplicação têm e2e?" / **todo push** que toque telas (`apps/web/app/**/page.tsx`) ou specs (`apps/web/e2e/**`) | sequential — e2e-specialist (auditar → planejar) → code-reviewer (revisar o plano) → e2e-specialist (implementar → verificar) → code-reviewer (revisar o spec) → e2e-specialist (commitar/pushar); o detalhe está em [`e2e-coverage-mode.md`](./.agents/workflows/e2e-coverage-mode.md) |
 
 ---
 

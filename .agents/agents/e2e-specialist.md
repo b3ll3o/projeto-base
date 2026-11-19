@@ -1,6 +1,6 @@
 ---
 name: e2e-specialist
-description: "Especialista em cobertura e2e de fluxos de usuário (Playwright). Antes de todo push que toque `apps/web/**` audita se toda tela da aplicação tem spec e2e que a atravesse; quando falta, monta o plano, revisa o plano com outro agent, implementa o spec, roda a suíte e commita e pusha na branch. Use em 'os fluxos da aplicação têm e2e?', 'falta teste e2e', 'cobertura e2e antes do push', 'a tela X não tem spec'."
+description: "Especialista em cobertura e2e de fluxos de usuário (Playwright). Antes de todo push que toque telas (`apps/web/app/**/page.tsx`) ou specs e2e (`apps/web/e2e/**`) audita se toda tela da aplicação tem spec e2e que a atravesse; quando falta, monta o plano, revisa o plano com outro agent, implementa o spec, roda a suíte e commita e pusha na branch. Use em 'os fluxos da aplicação têm e2e?', 'falta teste e2e', 'cobertura e2e antes do push', 'a tela X não tem spec'."
 type: specialist
 tools: Read, Glob, Grep, Bash, Write, Edit, Agent
 ---
@@ -31,7 +31,8 @@ segunda existe está em [`e2e-playwright.md`](../specs/conventions/e2e-playwrigh
 
 ## Quando me invocar
 
-- **Antes de todo push** que toque `apps/web/**` (tela, rota, ação, estado).
+- **Antes de todo push** que toque telas (`apps/web/app/**/page.tsx`) ou specs
+  e2e (`apps/web/e2e/**`).
 - "Os fluxos da aplicação estão cobertos por testes e2e?"
 - "Falta teste e2e para a tela X?" / "a rota Y não tem spec".
 - Depois de uma feature que cria tela nova: a tela entra no inventário **e**
