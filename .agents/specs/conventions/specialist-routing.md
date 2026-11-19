@@ -289,4 +289,4 @@ derived_tags:
 
 | Versão | Data | Mudança |
 |---|---|---|
-| 1.8 | 2026-11-18 | `e2e-specialist` entra na matriz (1 path_glob + 1 demand_keyword). Total: 48 specialists. |
+| 1.8 | 2026-11-18 | `e2e-specialist` entra na matriz (2 path_globs — `apps/web/e2e/**` + `apps/web/app/**/page.tsx` — e 1 demand_keyword). Total: 48 specialists. |
