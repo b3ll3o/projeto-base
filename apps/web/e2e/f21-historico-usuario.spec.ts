@@ -171,10 +171,11 @@ test.describe('F21 — O histórico de auditoria de uma pessoa (admin do sistema
    * não rola na horizontal.
    *
    * ⚠️ Este teste é o INSTRUMENTO do conserto do ALTO 1 (5ª revisão do PR
-   * #171, MEDIDO): os números que sustentavam o motivo do PR (a tabela de
-   * 2.332px, a célula de 1.997px) viviam SÓ na prosa, e a mutação que desfaz
-   * o conserto — trocar `wrap-anywhere` por `break-words` no CONTEÚDO da
-   * célula — não quebrava teste nenhum. Este é o que dá dente ao conserto.
+   * #171, MEDIDO): os números que sustentavam o motivo do PR — a tabela de
+   * 2.332px e a célula de 1.997px, no CORPO do PR — viviam SÓ na prosa, e a
+   * mutação que desfaz o conserto (trocar `wrap-anywhere` por `break-words`
+   * no CONTEÚDO da célula) não quebrava teste nenhum. Este é o que dá dente
+   * ao conserto.
    *
    * ⚠️ E A AFIRMAÇÃO É SOBRE A COLUNA QUE DECLARA A LARGURA, e não sobre
    * "a tabela cabe": o `w-48` só vale quando o `wrap-anywhere` está no
