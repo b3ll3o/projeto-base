@@ -7,6 +7,11 @@ description: Memória acumulada do agent e2e-specialist — cobertura e2e de flu
 
 > Arquivo de memória do agent `e2e-specialist`. Atualizado após cada execução
 > significativa.
+>
+> ⚠️ **Regra desta memória:** ela guarda o que o agent **decidiu** e o que ele
+> **descobriu rodando** — não a transcrição das regras dos specs, que são da
+> convenção [`e2e-playwright.md`](../specs/conventions/e2e-playwright.md).
+> Uma memória que copia a convenção envelhece quando a convenção sobe.
 
 ## Decisões Tomadas
 
@@ -23,43 +28,46 @@ descobria um spec quebrado era o CI.
 metade declarativa; a metade semântica (o spec afirma o efeito? cobre a
 recusa? a semente é pela API?) é do agent.
 
-**Consequências:** o agent roda a suíte no Passo 5 — o custo (Postgres
+**Consequências:** o agent roda `pnpm ci:local` no Passo 5 — o custo (Postgres
 efêmero + API + `next build`) é o preço da prova que o hook não pagava.
 
-### 2026-11-18 — O revisor do plano é outro agent
+### 2026-11-18 — O revisor do plano e o revisor do spec são outros agents
 
 **Contexto:** a regra do repo é "reviewer ≠ implementer" e "review+fix em cada
-task". Um plano escrito e revisado pelo mesmo agent é o plano confirmando a
-si mesmo.
+task". Um plano — ou um spec — escrito e revisado pelo mesmo agent é o
+agente confirmando a si mesmo.
 
-**Decisão:** o Passo 3 despacha `code-reviewer` (ou a skill `grilling`) como
-revisor do plano, com as seis perguntas mínimas fixas no próprio agent.
+**Decisão:** o Passo 3 despacha `code-reviewer` (ou a skill `grilling`) para o
+**plano**, e o Passo 6 despacha `code-reviewer` (ou o `review-router`) para o
+**spec implementado**. O schema é o canônico de `protocolos/dispatch.md`, com
+`on_failure`.
 
-**Consequências:** o despacho é explícito e rastreável, e a correção do plano
-acontece **antes** do spec existir — mais barato do que corrigir depois.
+**Consequências:** o despacho é explícito e rastreável, e a correção acontece
+**antes** do spec existir — mais barato do que corrigir depois.
+
+### 2026-11-18 — Fica registrado como reviewer dos specs e2e, com modo próprio
+
+**Contexto:** o `review-routing.md` v1.10 roteia `apps/web/e2e/**` para este
+agent. Um agent com um único modo (implementador que termina em `git push`)
+seria perigoso nesse papel.
+
+**Decisão:** o agent tem **dois modos** — o pipeline (implementador) e o
+**modo revisor** (lê o diff, devolve `findings[]`, não escreve, não pusha).
+
+**Consequências:** o despacho de revisão não pode terminar em push — o modo
+revisor é explícito no corpo do agent.
 
 ## Padrões Descobertos
 
-- O `// FLUXO: F<N>` na **primeira linha** do spec é o que liga o spec ao
-  inventário. O nome do arquivo não liga nada — "o nome já diz" é coincidência.
-- A linha do inventário e o spec entram no **mesmo diff**: o gate transforma o
-  meio-cumprido em vermelho nomeando o fluxo.
-- A coluna `Rota` do inventário é conferida contra os `page.tsx` do disco — é o
-  único assertion do gate que não é declarativa, e é a que fecha o buraco.
-- O `F<N>` novo é o **próximo livre** da sequência, não um número escolhido.
-- `workers: 1` no Playwright tem dente: com 2 workers, um spec derruba o
-  Postgres do outro (o container é compartilhado).
+> Vazio de propósito: o agent ainda **não rodou**. esta seção se preenche com
+> o que a primeira execução teach.
 
 ## Lições Aprendidas
 
-- ❌ Paridade não é cobertura — reconciliar dois conjuntos escritos à mão
-  provou paridade, e `/me/profile` (tela real, sem linha e sem spec) passou
-  como "reconciliado sobre 12 fluxo(s) e 12 spec(s)".
-- ❌ Spec que só verifica render passa com a validação desligada.
-- ❌ "Não vê o nome" sem dado plantado passa no vazio.
-- ❌ `toHaveValue` em input uncontrolled passa com a escrita perdida — o input
-  conserva o que foi digitado depois do re-render; a prova é no banco.
-- ❌ Semeiar o estado prévio pela tela mede o fluxo anterior dentro deste.
+> Vazio de propósito: o agent ainda **não rodou**. As lições entram aqui
+> depois da primeira execução — as regras dos specs (semear pela API, assertar
+> o efeito, `toHaveValue` em input uncontrolled) são da convenção
+> `e2e-playwright.md` §"Regras que os Specs Devem Seguir", não daqui.
 
 ## Sugestões de Evolução
 
