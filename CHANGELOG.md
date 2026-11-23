@@ -15,11 +15,11 @@
 
 ### Corrigido
 
-- Nada ainda — a próxima versão a ser fechada entra aqui.
+- O script [`deps:major-scan`](./.tooling/scripts/ci/scan-dependency-majors.ts) lia o `dist-tags --json` como um objeto plano, e o `npm` 12 devolve uma **lista** de objetos: `tags.latest` dava `undefined`, TODOS os pacotes caíam em "sem consulta ao registro" e o arquivo versionado [`dependencias-major-disponiveis.json`](./.tooling/scripts/ci/dependencias-major-disponiveis.json) era escrito com `majors: {}` — o gate [`check-dependency-freshness`](./.tooling/scripts/ci/check-dependency-freshness.ts) ficava sem medição **sem acusar nada**. A normalização agora aceita as duas formas do registro.
 
 ### Quebras de compatibilidade
 
-- Nada ainda — a próxima versão a ser fechada entra aqui.
+- A família `@opentelemetry/*` subiu para a geração `core` 3.x no node (`@opentelemetry/sdk-node` `0.301.2`, `@opentelemetry/resources` `3.1.1`, `@opentelemetry/exporter-trace-otlp-http` `0.301.2`, `@opentelemetry/auto-instrumentations-node` `0.83.1`, `@opentelemetry/instrumentation-pino` `0.71.0`) e para a linha 2.x no browser (`@opentelemetry/sdk-trace-web` e `@opentelemetry/sdk-trace-base` `2.12.1`, `@opentelemetry/auto-instrumentations-web` `0.70.1`, `@opentelemetry/instrumentation-user-interaction` `0.69.1`, `@opentelemetry/instrumentation-document-load` `0.70.1`). Duas APIs mudaram no código: a classe `Resource` virou **interface** (a construção passou a ser `resourceFromAttributes()`) e o `provider.addSpanProcessor()` saiu do `WebTracerProvider` (o processor agora entra no construtor, em `spanProcessors`). O `engines.node` da raiz subiu de `>=22.12.0` para `>=22.15.0`, que é o piso que o `core`/`resources`/`sdk-node` 3.x exigem. O `NodeSDK` 0.301.2 também passa a criar o `MeterProvider` e o `LoggerProvider` por default (o 0.54.2 só criava se o app pedisse): o `OTEL_METRICS_EXPORTER` e o `OTEL_LOGS_EXPORTER` passam a ser lidos, e o `MeterProvider`/`LoggerProvider` sem instrumento nenhum não exporta nada — o app da API não registra métrica e o log é o Pino, não a API de logs do OTel. Quem quiser o comportamento antigo desliga com `OTEL_METRICS_EXPORTER=none` e `OTEL_LOGS_EXPORTER=none`.
 
 ## [1.31.0] — 2026-11-19
 

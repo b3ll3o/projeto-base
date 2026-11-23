@@ -55,8 +55,17 @@ vi.mock('@opentelemetry/exporter-trace-otlp-http', () => ({
 // pt-BR: `@opentelemetry/semantic-conventions` NÃO é mockado de propósito —
 // o `Resource` recebe as chaves reais ('service.name', 'deployment.environment'),
 // e um teste que passa com chaves inventadas não prova nada.
+//
+// O `resources` 3.x tirou a classe `Resource` do lugar: ela virou interface e
+// a construção passou a ser a função `resourceFromAttributes`. O mock segue a
+// API nova — o que o teste afirma (as chaves REAIS que chegam ao Resource)
+// continua sendo o que a produção faz.
 vi.mock('@opentelemetry/resources', () => ({
-  Resource: vi.fn((atributos: unknown) => ({ atributos })),
+  resourceFromAttributes: vi.fn((atributos: unknown) => ({ atributos })),
+  // O `defaultResource()` é mesclado com o resource do app: o mock entrega
+  // o que a mescla devolveria — o resource do app, sem os atributos padrão
+  // do SDK (que o teste não afirma).
+  defaultResource: vi.fn(() => ({ merge: (outro: unknown) => outro })),
 }));
 
 const CHAVE_ENDPOINT = 'OTEL_EXPORTER_OTLP_ENDPOINT';

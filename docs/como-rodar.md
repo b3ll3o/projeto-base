@@ -27,7 +27,7 @@ O **runbook canônico** é este arquivo: §2 (variáveis) e §3 (scripts `pnpm`)
 
 ### §0.1 Pré-requisitos
 
-Node >= 22.12.0 · pnpm 9.12.0 (`packageManager`) · Docker com `compose` v2
+Node >= 22.15.0 · pnpm 9.12.0 (`packageManager`) · Docker com `compose` v2
 (ambientes 2–4) · Chromium para o e2e (instalado pelo `pretest:e2e`).
 
 ```bash
@@ -176,8 +176,7 @@ curl -o /dev/null -w '%{http_code}\n' http://localhost:3000/api/docs   # 200 (Sw
 **desabilitado** — é o default-deny do `JWT_SECRET`: um OpenAPI publica a
 superfície completa da API a quem descobrir a URL. Para ligar: `SWAGGER_ENABLED=true`.
 
-⚠️ No boot do web saem uns `Module not found` de `@opentelemetry/winston-transport` e
-`@opentelemetry/exporter-jaeger` (peers opcionais): ✅ medido — **não impedem o boot**.
+ℹ️ No boot do web **não** saem mais `Module not found` de `@opentelemetry/winston-transport` e `@opentelemetry/exporter-jaeger` (peers opcionais): ✅ medido em 2026-11-23 — o standalone de produção escreve `✓ Ready in 325ms` e nenhum aviso.
 
 ### §1.6 Fluxo completo (API e UI) ✅ medido 2026-10-16
 

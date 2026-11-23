@@ -45,9 +45,9 @@ projeto-base (monorepo)
 
 | Camada | Escolha | Versão | Justificativa |
 |--------|---------|--------|---------------|
-| Runtime | Node.js | ≥ 22.12.0 | Medido em `package.json` → `engines.node`; casa com a imagem base `node:22-bookworm-slim` |
+| Runtime | Node.js | ≥ 22.15.0 | Medido em `package.json` → `engines.node`; casa com a imagem base `node:22-bookworm-slim` |
 | Framework | NestJS | 12.x | Estrutura modular, DI nativo, OpenAPI integrado |
-| HTTP Adapter | Fastify | 5.12.8 (transitiva) | 2-3× mais rápido que Express; menor footprint. O adapter é `@nestjs/platform-fastify` `^12.0.0` — o `fastify` em si não é dependência direta |
+| HTTP Adapter | Fastify | 5.12.8 (transitiva) | 2-3× mais rápido que Express; menor footprint. O adapter é `@nestjs/platform-fastify` `^12.5.1` — o `fastify` em si não é dependência direta |
 | ORM | Prisma | 6.x | Type-safe, migrations versionadas, excelente DX |
 | Banco de Dados | PostgreSQL | 16 | Maduro, JSONB, extensions, performance |
 | Validação | **Zod** + `ZodValidationPipe` | ^3.25.76 | Schema único, executável no cliente E no servidor. `class-validator` NÃO está instalado — o pipe é `@Body(new ZodValidationPipe(Schema))`, não o `ValidationPipe` global |
@@ -55,7 +55,7 @@ projeto-base (monorepo)
 | Auth | @nestjs/jwt + `JwtAuthGuard` próprio | ^12.0.2 | Sem passport: o guard valida assinatura/expiração e um `@Public()` o libera. O **refresh token é revogável**: o `jti` vive na tabela `refresh_tokens` (rotação, `POST /auth/logout` e detecção de replay — [ADR-0007](./adr/0007-refresh-token-revogavel.md)). Detalhe em [`docs/api/auth.md`](./api/auth.md) |
 | Hash de senha | argon2 (argon2id) | ^0.45.1 | Recomendação OWASP; resiste a GPU e a ASIC. Alternativa ao bcrypt, que trunca a senha em 72 bytes — ver [ADR-0002](./adr/0002-autenticacao-jwt-argon2.md) |
 | Logging | Pino | ^10.3.0 | Estruturado JSON, rápido |
-| Observabilidade | OpenTelemetry + Grafana + Tempo + Prometheus | ^0.54.0 / 11.2.0 / 2.5.0 / v2.54.1 | Vendor-neutral na produção; backends locais no perfil `observability` do Compose. Grafana é a tela (http://localhost:3300), Tempo guarda traces e o Prometheus faz *scrape* das métricas. Sem Loki — o Pino escreve em stdout e quem indexa é o driver de container. Detalhe em [ADR-0003](./adr/0003-backends-locais-de-telemetria.md) |
+| Observabilidade | OpenTelemetry + Grafana + Tempo + Prometheus | ^0.301.2 / 11.2.0 / 2.5.0 / v2.54.1 | Vendor-neutral na produção; backends locais no perfil `observability` do Compose. Grafana é a tela (http://localhost:3300), Tempo guarda traces e o Prometheus faz *scrape* das métricas. Sem Loki — o Pino escreve em stdout e quem indexa é o driver de container. No browser o SDK é o `@opentelemetry/sdk-trace-web` `^2.12.1` (a linha 2.x é a última estável do browser: o `core` 3.x que o node usa não tem equivalente estável para browser). Detalhe em [ADR-0003](./adr/0003-backends-locais-de-telemetria.md) |
 | Testes | **Vitest** + Testcontainers | ^2.1.9 | Unit + e2e com Postgres real. **Não há Jest** no repositório, e o harness e2e usa `app.inject` do Fastify, não `supertest` — a `devDep` `supertest` não é importada em lugar nenhum |
 | Fila / Cache | — | — | Não existem. Nenhum serviço de fila ou cache foi adotado; a versão anterior desta tabela listava BullMQ + Redis (ioredis) e nenhuma das duas libs estava em nenhum `package.json` |
 
@@ -78,7 +78,7 @@ projeto-base (monorepo)
 | Padrão de estilo | **`estilizacao.md`** (convenção) | — | Tokens semânticos + primitivas em `apps/web/components/ui/`; o instrumento é a regra ESLint `estilizacao/no-estilizacao-informal`. Ver [`.agents/specs/conventions/estilizacao.md`](../.agents/specs/conventions/estilizacao.md) |
 | Componentes | **escritos à mão, sobre as primitivas** | — | Não há biblioteca de componentes: shadcn/ui NÃO está instalado — nem como dependência, nem como código copiado. As primitivas (`Container`, `CabecalhoPagina`, `CabecalhoSecao`, `Campo`, `Botao`, `Alerta`, `Tabela`, `CabecalhoTabela`, `CelulaTabela`, `EstadoVazio`, `LinkTexto`) são o que as telas usam — as 9 de `apps/web/components/ui/` exportam 11 componentes, porque `Tabela` vem com `CabecalhoTabela` e `CelulaTabela`; o `className` repetido era a dívida que elas pagaram |
 | State (URL) | Next router | nativo | Filtros, paginação, tabs na URL |
-| Forms | react-hook-form + zod | ^7.91.0 / ^3.25.76 | Client Component + validação tipada |
+| Forms | react-hook-form + zod | ^7.92.0 / ^3.25.76 | Client Component + validação tipada |
 | Server Actions | nativo | — | Mutações sem JS extra |
 | Auth client | **`apps/web/lib/sessao.ts`** (casa própria) | — | grava/ler cookies httpOnly `access_token` + `refresh_token` e monta o `Authorization: Bearer`. NextAuth.js / Auth.js NÃO estão instalados. O browser nunca fala com a API: todo o tráfego passa por Server Action |
 | Testes unit | Vitest + Testing Library | ^2.1.9 | `@testing-library/react` + `user-event` + `jest-dom`, em jsdom |

@@ -19,7 +19,7 @@
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { Resource } from '@opentelemetry/resources';
+import { defaultResource, resourceFromAttributes } from '@opentelemetry/resources';
 import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
 
 declare global {
@@ -46,11 +46,16 @@ const endpoint =
 if (!globalThis.__otel_sdk__) {
   try {
     const sdk = new NodeSDK({
-      resource: new Resource({
-        [SemanticResourceAttributes.SERVICE_NAME]:
-          process.env.OTEL_SERVICE_NAME ?? 'projeto-base-web',
-        [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: process.env.NODE_ENV ?? 'development',
-      }),
+      // O `defaultResource()` entra na mescla porque a classe 1.x injetava
+      // `telemetry.sdk.*` sozinha e a função 3.x não.
+      resource: defaultResource().merge(
+        resourceFromAttributes({
+          [SemanticResourceAttributes.SERVICE_NAME]:
+            process.env.OTEL_SERVICE_NAME ?? 'projeto-base-web',
+          [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]:
+            process.env.NODE_ENV ?? 'development',
+        }),
+      ),
       traceExporter: new OTLPTraceExporter({ url: endpoint }),
       instrumentations: [
         getNodeAutoInstrumentations({

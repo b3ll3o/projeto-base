@@ -25,7 +25,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 // `const`. Por isso o alvo precisa vir de `vi.hoisted` — declarar um objeto
 // aqui e usá-lo dentro da factory daria ReferenceError na hora do import.
 const h = vi.hoisted(() => ({
-  provider: { addSpanProcessor: vi.fn(), register: vi.fn() },
+  provider: { register: vi.fn() },
+  construtorDoProvider: vi.fn(),
   exporter: vi.fn(),
   spanProcessor: vi.fn(),
   autoInstrumentations: vi.fn(),
@@ -35,7 +36,14 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock('@opentelemetry/sdk-trace-web', () => ({
-  WebTracerProvider: vi.fn(() => h.provider),
+  // pt-BR: no `sdk-trace-web` 2.x o span processor entra no CONSTRUTOR — o
+  // `addSpanProcessor` saiu de cena. O mock passa a capturar a config para
+  // que o teste afirme o mesmo fato (o processor está ligado) pelo caminho
+  // que a produção usa.
+  WebTracerProvider: vi.fn((cfg: unknown) => {
+    h.construtorDoProvider(cfg);
+    return h.provider;
+  }),
 }));
 vi.mock('@opentelemetry/sdk-trace-base', () => ({
   BatchSpanProcessor: vi.fn((e: unknown) => {
@@ -63,7 +71,10 @@ vi.mock('@opentelemetry/exporter-trace-otlp-http', () => ({
 vi.mock('@opentelemetry/auto-instrumentations-web', () => ({
   getWebAutoInstrumentations: h.autoInstrumentations,
 }));
-vi.mock('@opentelemetry/resources', () => ({ Resource: vi.fn(() => ({})) }));
+vi.mock('@opentelemetry/resources', () => ({
+  resourceFromAttributes: vi.fn(() => ({})),
+  defaultResource: vi.fn(() => ({ merge: (outro: unknown) => outro })),
+}));
 
 const CHAVE = 'NEXT_PUBLIC_OTEL_EXPORTER_OTLP_ENDPOINT';
 
@@ -119,7 +130,15 @@ describe('instrumentation-client — a telemetria nunca derruba a aplicação', 
     // ou seja, telemetria que parece ligada e não emite nada.
     expect(h.provider.register).toHaveBeenCalledTimes(1);
     expect(h.autoInstrumentations).toHaveBeenCalledTimes(1);
-    expect(h.provider.addSpanProcessor).toHaveBeenCalledTimes(1);
+    // pt-BR: o processor é ligado no construtor do provider (o
+    // `addSpanProcessor` não existe mais no `sdk-trace-web` 2.x). O que o
+    // teste afirma é o FATO — há um `BatchSpanProcessor` ligado ao provider.
+    expect(h.spanProcessor).toHaveBeenCalledTimes(1);
+    expect(h.construtorDoProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        spanProcessors: [expect.objectContaining({ tipo: 'BatchSpanProcessor' })],
+      }),
+    );
   });
 
   it('se o OTel explodir, a aplicação continua e o motivo fica registrado', async () => {

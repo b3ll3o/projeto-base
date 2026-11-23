@@ -33,6 +33,28 @@ function majorDeclarada(faixa: string): number | null {
 }
 
 /**
+ * As tags de distribuição do registro, como um mapa `tag → versão`.
+ *
+ * MEDIDO 2026-11-23: o `npm` 12 devolve o `dist-tags --json` como uma LISTA
+ * de objetos (`[{ "latest": "12.6.0", ... }]`), e não como o objeto plano
+ * (`{ "latest": "12.6.0" }`) que o `npm` 10 devolvia. O script lia o objeto
+ * plano, recebia uma lista, e `tags.prev`/`tags.latest` davam `undefined` —
+ * TODOS os pacotes caíam em "sem consulta ao registro" e o arquivo versionado
+ * era escrito com `majors: {}`, ou seja, o gate perdia a medição sem acusar
+ * nada. Por isso a normalização é explícita e as DUAS formas são aceitas.
+ */
+export function normalizaDistTags(bruto: unknown): Record<string, string> {
+  const registros = Array.isArray(bruto) ? bruto : [bruto];
+  const tags: Record<string, string> = {};
+  for (const registro of registros) {
+    if (registro && typeof registro === 'object') {
+      Object.assign(tags, registro as Record<string, string>);
+    }
+  }
+  return tags;
+}
+
+/**
  * A major mais nova **ESTÁVEL** publicada no registro.
  *
  * `dist-tags.latest` não serve: MEDIDO 2026-11-09, o `latest` do `prisma` é
@@ -50,7 +72,7 @@ function majorNoRegistro(pacote: string): number | null {
       stdio: ['ignore', 'pipe', 'ignore'],
       timeout: 60_000,
     });
-    const tags = JSON.parse(out) as Record<string, string>;
+    const tags = normalizaDistTags(JSON.parse(out));
 
     // A tag `prev` é a estável anterior a um RC; ela é a fonte da major real.
     const candidatas = [tags.prev, tags.latest].filter((v): v is string => !!v);

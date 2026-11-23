@@ -1,7 +1,7 @@
 {
   "_nota": "As majors que existem no registro e NAO sobem agora. Cada uma tem motivo. O gate check-dependency-freshness le este arquivo e reprova quando uma pendencia envelhece (o pacote saiu do workspace, ou a faixa ja permite a major).",
-  "medidoEm": "2026-11-16",
-  "total": 18,
+  "medidoEm": "2026-11-23",
+  "total": 16,
   "pendencias": [
     {
       "pacote": "@eslint/js",
@@ -12,36 +12,20 @@
       "declaradaEm": "2026-11-09"
     },
     {
-      "pacote": "@opentelemetry/resources",
-      "faixaAtual": "^1.30.1",
-      "majorAtual": 1,
-      "majorNova": 3,
-      "motivo": "renomeia pacotes e muda a API de tracing: o initTracing do repo constroi o ResourceProvider direto",
-      "declaradaEm": "2026-11-09"
-    },
-    {
-      "pacote": "@opentelemetry/sdk-trace-base",
-      "faixaAtual": "^1.30.1",
-      "majorAtual": 1,
-      "majorNova": 2,
-      "motivo": "renomeia pacotes e muda a API de tracing: o initTracing do repo constroi o NodeSDK e o SpanProcessor direto",
-      "declaradaEm": "2026-11-09"
-    },
-    {
-      "pacote": "@opentelemetry/sdk-trace-web",
-      "faixaAtual": "^1.30.1",
-      "majorAtual": 1,
-      "majorNova": 2,
-      "motivo": "renomeia pacotes e muda a API de tracing: o initTracing do repo registra o WebTracerProvider direto",
-      "declaradaEm": "2026-11-09"
-    },
-    {
       "pacote": "@testcontainers/postgresql",
       "faixaAtual": "^10.28.0",
       "majorAtual": 10,
       "majorNova": 12,
       "motivo": "muda a API do container: o setup de Postgres efemero do e2e e da integracao chama o construtor direto",
       "declaradaEm": "2026-11-09"
+    },
+    {
+      "pacote": "@testing-library/jest-dom",
+      "faixaAtual": "^7.0.1",
+      "majorAtual": 7,
+      "majorNova": 8,
+      "motivo": "a 8 declara peer `vitest >=5 <6` (MEDIDO 2026-11-23, `npm view @testing-library/jest-dom@8 peerDependencies`): subir o jest-dom exige subir o vitest 2 -> 5 junto, que é a major do runner (declarada nesta lista)",
+      "declaradaEm": "2026-11-23"
     },
     {
       "pacote": "@types/node",
