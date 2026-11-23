@@ -147,15 +147,9 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 
 > **Skills de grafo (v1.16.0+):** [`graphify`](./.agents/skills/graphify/SKILL.md) — o `explorer` consulta o grafo de conhecimento quando a pergunta é sobre a estrutura do código.
 
-> **Skills de terceiro adaptadas (v1.20.0+):** [`grilling`](./.agents/skills/grilling/SKILL.md) e
-> [`handoff`](./.agents/skills/handoff/SKILL.md) no `orchestrator`; [`design-taste-frontend`](./.agents/skills/design-taste-frontend/SKILL.md),
-> [`agent-browser`](./.agents/skills/agent-browser/SKILL.md) e [`agent-desktop`](./.agents/skills/agent-desktop/SKILL.md) no `ux-design-specialist`.
-> **Adaptadas, não vendorizadas** — o método é o do repo. De [mattpocock/skills](https://github.com/mattpocock/skills) (MIT),
-> [leonxlnx/taste-skill](https://github.com/leonxlnx/taste-skill) (MIT), [vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser)
-> e [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop) (Apache-2.0).
+> **Skills de terceiro adaptadas (v1.20.0+):** [`grilling`](./.agents/skills/grilling/SKILL.md) e [`handoff`](./.agents/skills/handoff/SKILL.md) no `orchestrator`; [`design-taste-frontend`](./.agents/skills/design-taste-frontend/SKILL.md), [`agent-browser`](./.agents/skills/agent-browser/SKILL.md) e [`agent-desktop`](./.agents/skills/agent-desktop/SKILL.md) no `ux-design-specialist`. **Adaptadas, não vendorizadas** — o método é o do repo. De [mattpocock/skills](https://github.com/mattpocock/skills) (MIT), [leonxlnx/taste-skill](https://github.com/leonxlnx/taste-skill) (MIT), [vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser) e [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop) (Apache-2.0).
 >
-> **Skills de stack (o processo que o specialist segue):** [`docker`](./.agents/skills/docker/SKILL.md) e
-> [`ddd-hexagonal-validation`](./.agents/skills/ddd-hexagonal-validation/SKILL.md) — carregadas por mais de um agent cada.
+> **Skills de stack (o processo que o specialist segue):** [`docker`](./.agents/skills/docker/SKILL.md) e [`ddd-hexagonal-validation`](./.agents/skills/ddd-hexagonal-validation/SKILL.md) — carregadas por mais de um agent cada.
 >
 > **State-Aware Planning (camada 0 do pre-planner, a partir de v1.8.0):** a convenção
 > [`state-aware-planning.md`](./.agents/specs/conventions/state-aware-planning.md) obriga gerar `state-snapshot-<ts>.md` ANTES de planejar.
