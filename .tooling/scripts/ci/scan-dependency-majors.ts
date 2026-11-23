@@ -142,4 +142,11 @@ async function main(): Promise<void> {
   }
 }
 
-void main();
+// O `main()` só roda quando o arquivo é o ENTRADA do processo — o mesmo
+// guard que os outros scripts do repo usam (`check-archive-integrity.ts`,
+// `boot-local.ts`, …). Sem ele, importar este módulo (o que o spec faz para
+// testar o `normalizaDistTags`) dispara a varredura de rede e REESCREVE o
+// arquivo versionado no meio da suíte de testes.
+if (process.argv[1]?.endsWith('scan-dependency-majors.ts')) {
+  void main();
+}

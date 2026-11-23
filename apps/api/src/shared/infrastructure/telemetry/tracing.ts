@@ -17,6 +17,15 @@ export function initTracing(): void {
     traceExporter: new OTLPTraceExporter({
       url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? 'http://otel-collector:4318/v1/traces',
     }),
+    // O `sdk-node` 0.301.2 cria o `MeterProvider` e o `LoggerProvider` por
+    // default (o 0.54.2 só criava se o app pedisse) e os dois exporters leem o
+    // `OTEL_EXPORTER_OTLP_ENDPOINT` como URL BASE: com o endpoint do repo
+    // apontando para `/v1/traces`, as métricas iam para `/v1/traces/v1/metrics`
+    // e os logs para `/v1/traces/v1/logs` — MEDIDO 2026-11-23 no sink OTLP
+    // local, `POST /v1/traces/v1/metrics` (7.528 bytes). Vazio nos dois = o
+    // comportamento antigo: só traces.
+    metricReaders: [],
+    logRecordProcessors: [],
     instrumentations: [
       // Auto-bundle para o que NÃO tem bridge específica de log.
       // Pino é tratado explicitamente abaixo (precisa ser uma versão

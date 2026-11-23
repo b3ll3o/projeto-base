@@ -130,11 +130,14 @@ tipo (a interface `Resource` das duas gerações tem os mesmos membros).
 | web | `@opentelemetry/instrumentation-user-interaction` | `^0.43.0` | `^0.69.1` |
 | web | `@opentelemetry/instrumentation-document-load` | `^0.43.0` | `^0.70.1` |
 | web | `@opentelemetry/instrumentation-fetch` | `^0.54.2` | `^0.301.2` |
-| raiz | `engines.node` | `>=22.12.0` | `>=22.15.0` |
+| raiz | `engines.node` | `>=22.12.0` | `>=22.22.2` |
 
-O piso do Node sobe porque `core`/`resources`/`sdk-node` 3.x declaram
-`engines.node: ">=22.15.0"` e o `.npmrc` do repo liga `engine-strict=true` — sem
-isso, o `pnpm install` quebra em Node 22.12–22.14.
+O piso do Node sobe porque o `.npmrc` do repo liga `engine-strict=true` e o
+piso **real** da árvore é o do `jsdom` 30.1.3 (`^22.22.2 || ^24.15.0 || >=26.0.0`),
+que já estava no repo antes deste PR — o `engines.node` declarado (`>=22.12.0`)
+mentia. O `@opentelemetry/*` 3.x (`>=22.15.0`) fica ABAIXO dele: quem mandava no
+piso era o `jsdom`. MEDIDO: `npm view jsdom@30.1.3 engines.node` →
+`^22.22.2 || ^24.15.0 || >=26.0.0`.
 
 ### 2.2 Código
 
@@ -143,9 +146,19 @@ isso, o `pnpm install` quebra em Node 22.12–22.14.
 | `apps/api/src/shared/infrastructure/telemetry/resource.ts` | `new Resource({...})` → `resourceFromAttributes({...})`, mesclado com `defaultResource()` |
 | `apps/web/instrumentation.node.ts` | idem |
 | `apps/web/instrumentation-client.ts` | idem + `provider.addSpanProcessor(...)` → `spanProcessors: [...]` no construtor |
+| `apps/api/src/shared/infrastructure/telemetry/tracing.ts` | `metricReaders: []` e `logRecordProcessors: []` |
+| `apps/web/instrumentation.node.ts` | idem |
 
 O `defaultResource()` entra na mescla porque a classe 1.x injetava `telemetry.sdk.*`
 sozinha e a função 3.x não: sem a mescla, o painel perde o nome e a versão do SDK.
+
+`metricReaders: []` e `logRecordProcessors: []` são o conserto de uma **regressão
+que o bump trouxe**: o `NodeSDK` 0.301.2 cria o `MeterProvider` e o `LoggerProvider`
+por default, e os dois exporters leem o `OTEL_EXPORTER_OTLP_ENDPOINT` como URL BASE
+— com o endpoint do repo apontando para `/v1/traces`, as métricas iam para
+`/v1/traces/v1/metrics` e os logs para `/v1/traces/v1/logs`. MEDIDO 2026-11-23 num
+sink OTLP local: `POST /v1/traces/v1/metrics` (7.528 bytes) e, com os dois
+providers vazios, **nenhum** request novo.
 
 ### 2.3 Specs
 
@@ -182,6 +195,29 @@ pnpm --filter @projeto/web test:unit                     # 520 testes
 pnpm ci:preflight                                         # inclui freshness, drift e audit
 pnpm ci:local                                             # a suíte inteira, incluindo e2e e boot
 ```
+
+Prova de que o SDK novo **exporta** — e de que o **browser** exporta (não é só
+"não quebrou"): o bundle do cliente sobe num Chromium de verdade (Playwright), com
+o endpoint do client apontando para um sink OTLP local, e o span chega com o
+recurso que a mescla promete:
+
+```
+$ node apps/web/<script de browser check>.mjs   # Playwright: abre /login, espera o batch de 5s
+ERROS DE CONSOLE: nenhum
+REQUEST POST /v1/traces bytes= 22536 ua= Mozilla/5.0 (X11; Linux x86_64) ...
+$ head -c 400 /tmp/last-span-body.txt
+{"resourceSpans":[{"resource":{"attributes":[
+  {"key":"service.name","value":{"stringValue":"projeto-base-web"}},
+  {"key":"telemetry.sdk.language","value":{"stringValue":"webjs"}},
+  {"key":"telemetry.sdk.name","value":{"stringValue":"opentelemetry"}},
+  {"key":"telemetry.sdk.version","value":{"stringValue":"3.1.1"}}]}, ...
+  {"scope":{"name":"@opentelemetry/instrumentation-document-load","version":"0.70.1"} ...
+```
+
+O `telemetry.sdk.*` no recurso é a prova de que a mescla com `defaultResource()`
+funciona, e o scope `instrumentation-document-load` 0.70.1 é a prova de que o
+**mix do browser** (provider `core` 2.12.1 + instrumentação `core` 3.x) emite
+span num browser de verdade.
 
 Prova de que o SDK novo **exporta** (não é só "não quebrou"):
 

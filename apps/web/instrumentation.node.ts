@@ -57,6 +57,13 @@ if (!globalThis.__otel_sdk__) {
         }),
       ),
       traceExporter: new OTLPTraceExporter({ url: endpoint }),
+      // O `sdk-node` 0.301.2 cria o `MeterProvider` e o `LoggerProvider` por
+      // default e os exporters leem o `OTEL_EXPORTER_OTLP_ENDPOINT` como URL
+      // BASE — com o endpoint apontando para `/v1/traces`, as métricas iam
+      // para `/v1/traces/v1/metrics` (MEDIDO 2026-11-23 no sink OTLP local).
+      // Vazio nos dois = só traces, como antes do bump.
+      metricReaders: [],
+      logRecordProcessors: [],
       instrumentations: [
         getNodeAutoInstrumentations({
           // fs instrumentation gera ruído massivo em RSC e build pipeline;
