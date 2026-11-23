@@ -47,6 +47,44 @@ segunda existe está em [`e2e-playwright.md`](../specs/conventions/e2e-playwrigh
 - Cobertura de **endpoint sem tela**: quem cobre isso é o e2e de API
   (`apps/api`, projeto `e2e` do Vitest).
 
+## Inputs (do dispatch)
+
+```yaml
+task:
+  description: "<auditar a cobertura e2e, ou implementar o spec de um fluxo>"
+
+context:
+  files: ["apps/web/e2e/", ".agents/specs/conventions/e2e-playwright.md"]
+  modo: "pipeline | revisor"        # revisor: não escreve, não pusha
+
+expected_output:
+  format: yaml
+  schema:
+    audit: { telas: 0, fluxos: 0, specs: 0 }
+    plano: "docs/superpowers/plans/<data>-e2e-<slug>.md"
+    findings: [...]
+
+success_criteria:
+  - "A auditoria declara o DENOMINADOR (quantas telas, quantos fluxos, quantos specs)"
+  - "O plano é revisado por OUTRO agent antes de existir o spec"
+  - "O spec afirma o EFEITO (o dado na tela ou no banco), não só que renderizou"
+  - "A recusa está com o dado PLANTADO, e a semente é pela API/banco"
+  - "O spec e o inventário entram no MESMO diff, e a suíte roda antes do push"
+```
+
+## Princípios
+
+- **A regra tem um dono:** a convenção [`e2e-playwright.md`](../specs/conventions/e2e-playwright.md)
+  é o processo; este agent é o **ciclo**. Nada de regra duplicada aqui.
+- **Medir antes de dizer:** "não achei nada" e "não olhei" são respostas
+  diferentes — a auditoria declara o denominador.
+- **Reviewer ≠ implementador:** o plano e o spec são revisados por outro
+  agent; este agent não se aprova.
+- **O spec afirma o efeito:** renderizar não é provar — a asserção é o dado
+  que a pessoa lê.
+- **A suíte é o preço da prova:** o hook `pre-push` roda preflight e boot, não
+  a suíte — por isso o Passo 5 roda `pnpm ci:local`.
+
 ## Pipeline
 
 ### Passo 0 — Pré-condições (o que torna o passo legal)
@@ -222,42 +260,12 @@ errado.
 
 ## Saída
 
-```yaml
-result:
-  agent: e2e-specialist
-  task_id: <id-do-dispatch>
-  status: success | partial | failure
-
-  output:
-    audit:
-      telas: 15
-      fluxos: 21
-      specs: 21
-    plano: docs/superpowers/plans/2026-11-18-e2e-<slug>.md
-    revisao_plano: { revisor: code-reviewer, rodadas: 2 }
-    implementado:
-      - fluxo: F22
-        spec: apps/web/e2e/f22-<slug>.spec.ts
-    verificacao:
-      comando: "pnpm ci:local"
-      resultado: "22 specs, 0 falhas"
-
-  metadata:
-    started_at: <ISO-8601>
-    finished_at: <ISO-8601>
-    files_touched: [...]
-    files_read: [...]
-
-  findings:
-    - severity: blocker | major | minor | info
-      category: bug | smell | security | perf | testability | style
-      description: "..."
-      location: { file, line }
-      recommendation: "..."
-
-  next_steps:
-    - "..."
-```
+O schema YAML completo está em
+[`e2e-specialist/output-schema.md`](./e2e-specialist/output-schema.md) (split
+by-responsibility, ≤ 300 linhas cada) — é o de
+[`protocolos/outputs.md`](../skills/agents-coordinate/protocolos/outputs.md),
+com o `output` deste ciclo (`audit`, `plano`, `revisao_plano`, `implementado`,
+`verificacao`).
 
 ## Coordenação
 
@@ -265,7 +273,8 @@ result:
 |---|---|
 | `test-writer` | escreve unit/integration; o e2e é deste agent |
 | `code-reviewer` | revisa o **plano** (Passo 3) e o **spec** (Passo 6) |
-| `documentation-specialist` | dono da doc da aplicação; a convenção `e2e-playwright.md` é dela |
+| `test-writer` | maintainer da convenção `e2e-playwright.md` — o processo que este agent executa |
+| `documentation-specialist` | dono da doc da aplicação (a doc da rota, não a convenção do spec) |
 | `nextjs-specialist` | dono da tela; o spec mede o que ele constrói |
 | `explorer` | mapeia rotas e fluxos quando o inventário está confuso |
 | `stack-code-reviewer` | roda no pre-commit de todo `.ts` — não substitui a revisão do plano |
@@ -286,4 +295,5 @@ A skill [`grilling`](../skills/grilling/SKILL.md) entra como alternativa ao
 ---
 
 **Arquivo:** `.agents/agents/e2e-specialist.md`
+**Memória:** [`.agents/memory/e2e-specialist.md`](../memory/e2e-specialist.md)
 **Tipo:** Specialist em cobertura e2e (Playwright) — dono do ciclo auditar → planejar → revisar → implementar → verificar → revisar o spec → commitar/pushar

@@ -30,6 +30,7 @@
 | `pr-refresh` | "atualizar título/descrição do PR" | single | pr-refresh-scan → agente (reclassifica + reescreve) |
 | `pr-pendencias` (v1.11.0+) | "revisar pendências do PR / o que ficou para depois" | parallel→merge | 1 agente por pendência (mede) → adversarial (reroda) → agente (consolida) |
 | `pr-review-mode` (v1.30.0+) | "revisar o PR" / **todo PR aberto** | parallel→merge | review-router (roteia o diff) → **1 specialist por parte alterada, em paralelo** → consolidação → **1 comentário no PR** (marcador `<!-- pr-review -->`) |
+| `e2e-coverage-mode` (v1.31.0+) | "os fluxos têm e2e?" / quando a demanda é roteada ao `e2e-specialist` (tela `apps/web/app/**/page.tsx` ou spec `apps/web/e2e/**`) | sequential | e2e-specialist (auditar → planejar) → code-reviewer (revisar o plano) → e2e-specialist (implementar → verificar) → code-reviewer (revisar o spec) → e2e-specialist (commitar/pushar) — detalhe em [`e2e-coverage-mode.md`](./workflows/e2e-coverage-mode.md) |
 | `audit-mode` (v2.0+) | "auditar stack / rodar scan / revisar saúde" | parallel + orchestrator | `finding-orchestrator` (despara 8 specialists em paralelo, agrega findings, dedup, abre issues via `gh`) |
 | `release-pre-tag` (v2.0+) | "auditar antes de tag vX.Y.Z" | sequential | `release-versioning-specialist` + `finding-orchestrator` (subset focado em versioning) |
 
@@ -40,7 +41,6 @@
 | `backend-feature` | "implementar endpoint NestJS" | sequential | nestjs-specialist → test-writer → code-reviewer → tdd-enforcer | [`.agents/workflows/backend-feature.md`](./workflows/backend-feature.md) |
 | `frontend-feature` | "criar página/rota Next.js" | sequential | nextjs-specialist → test-writer → code-reviewer → tdd-enforcer | [`.agents/workflows/frontend-feature.md`](./workflows/frontend-feature.md) |
 | `monorepo-change` | "adicionar/mover pacote ou app" | sequential | monorepo-specialist → code-reviewer | [`.agents/workflows/monorepo-change.md`](./workflows/monorepo-change.md) |
-| `e2e-coverage-mode` | "os fluxos têm e2e?" / **antes de todo push** que toque telas (`apps/web/app/**/page.tsx`) ou specs (`apps/web/e2e/**`) | sequential | e2e-specialist (auditar → planejar) → code-reviewer (revisar o plano) → e2e-specialist (implementar → verificar) → code-reviewer (revisar o spec) → e2e-specialist (commitar/pushar) | [`.agents/workflows/e2e-coverage-mode.md`](./workflows/e2e-coverage-mode.md) |
 | `archive-demand` | "arquivar demanda implementada" | single | archive-demand skill (controller) | [`.agents/workflows/archive-demand.md`](./workflows/archive-demand.md) |
 
 | `feedback-to-spec` | "feedback to spec / próxima spec de finding / T1/T2/T3 → spec" | sequential | task-manager → orchestrator → specialist-router → specialist (template spec) → task-manager | [workflows/feedback-to-spec.md](./workflows/feedback-to-spec.md) |

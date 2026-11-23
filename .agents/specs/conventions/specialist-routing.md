@@ -252,6 +252,10 @@ skip_rules:
     skip_if: "nenhum path em tooling/scripts/** nem .agents/** E nenhum keyword refactor|simplificar|dry|limpar match E scope != refactor"
     rationale: "Refactorer só quando paths ou keywords sinalizam refactor"
 
+  e2e-specialist:
+    skip_if: "nenhum path em apps/web/** E nenhum keyword tela|fluxo de (tela|usuário)|playwright match"
+    rationale: "O e2e de API (endpoint sem tela) é do Vitest de apps/api — o agent recusa essa demanda no próprio corpo"
+
 always_on:
   - monorepo-specialist
 ```

@@ -115,9 +115,40 @@ Resultado esperado:
 - `spec-compliance-reviewer` DISPATCHED — `commit_type feat` (não em skip list)
 - `code-quality-reviewer` DISPATCHED — há `.ts` files
 
+### Cenário A: chore em package de tooling (1 arquivo)
+
+```text
+paths:  [tooling/scripts/package.json]
+commits: ["chore(tooling): bump v0.1.0 → v0.1.1"]
+scope:  trivial
+files:  1
+```
+
+Resultado esperado:
+
+- `spec-compliance-reviewer` SKIPPED — `commit_type == 'chore' AND task.scope != 'large'` (skip rule 2)
+- `code-quality-reviewer` DISPATCHED (path `package.json` não termina em `.md`/`.txt`, scope não é `docs`)
+- Nenhum domain reviewer — nenhum path_glob match
+- Nenhum diff_pattern match — bump de versão não toca código
+
+### Cenário B: doc-only update (1 arquivo .md)
+
+```text
+paths:  [.agents/specs/conventions/review-routing.md]
+commits: ["docs(agents): adicionar exemplos de uso"]
+scope:  docs
+files:  1
+```
+
+Resultado esperado:
+
+- `spec-compliance-reviewer` DISPATCHED — `commit_type == 'docs'` (não casa nenhuma skip rule)
+- `code-quality-reviewer` SKIPPED — `all_changed_paths endsWith .md` (skip rule 1)
+- `doc-sync` DISPATCHED — `path_glob .agents/specs/**` + `commit_type docs`
+
 ## Cross-refs
 
-- [review-routing.md](./review-routing.md) — matrix canônica (cenários A/B; C/D/E aqui)
+- [review-routing.md](./review-routing.md) — matrix canônica (os cenários A–E estão aqui)
 - [tooling/scripts/review-router.ts](../../../tooling/scripts/review-router.ts) — classifier headless
 - [tooling/scripts/review-router.spec.ts](../../../tooling/scripts/review-router.spec.ts) — 32 testes TDD (`grep -cE '^\s*(it|test)\('` medido 2026-10-08)
 - [tooling/scripts/lint-review-routing.ts](../../../tooling/scripts/lint-review-routing.ts) — linter da matrix

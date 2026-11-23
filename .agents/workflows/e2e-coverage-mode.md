@@ -1,6 +1,6 @@
 ---
 name: e2e-coverage-mode
-description: Fecha a cobertura e2e de todos os fluxos da aplicação antes de um push — audita, planeja, revisa o plano, implementa os specs faltantes, roda a suíte, revisa o spec e commita/pusha na branch. Use antes de todo push que toque telas, rotas ou ações, e quando alguém perguntar "os fluxos da aplicação têm e2e?".
+description: Fecha a cobertura e2e de todos os fluxos da aplicação antes de um push — audita, planeja, revisa o plano, implementa os specs faltantes, roda a suíte, revisa o spec e commita/pusha na branch. Use quando a demanda é roteada ao e2e-specialist (tela ou spec e2e) e quando alguém perguntar "os fluxos da aplicação têm e2e?".
 type: workflow
 ---
 
@@ -13,8 +13,9 @@ type: workflow
 > coberta? a semente é pela API?) e **implementa** o que falta.
 
 **Trigger:** "os fluxos da aplicação têm e2e?", "falta teste e2e", "cobertura e2e
-antes do push", e **todo push** que toque telas (`apps/web/app/**/page.tsx`) ou
-specs (`apps/web/e2e/**`).
+antes do push", e **quando a demanda é roteada ao agent** — a matriz
+`specialist-routing.md` v1.8 roteia uma tela (`apps/web/app/**/page.tsx`) ou
+um spec (`apps/web/e2e/**`).
 
 **Composição:** sequential (1 implementador + revisores), com retorno ao
 implementador após cada correção.
