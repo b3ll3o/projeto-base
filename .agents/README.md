@@ -244,9 +244,17 @@ para não serem descobertas como surpresa.
 Um clone novo não vem com `.claude/`: quem usa o Claude Code precisa do
 symlink. A receita está em
 [Binding do Claude Code](#binding-do-claude-code-na-máquina) e em
-[`docs/integrations/claude-code.md`](../docs/integrations/claude-code.md).
-O custo é o inverso do de antes: a configuração é da máquina, e ela vale para
+[`docs/integrations/claude-code.md`](../docs/integrations/claude-code.md). O custo é o inverso do de antes: a configuração é da máquina, e ela vale para
 todo projeto aberto nela.
+
+⚠️ **O que é descoberto na SUA máquina depende do binding:** MEDIDO
+2026-11-23, `~/.claude/agents/` tem **29** symlinks
+(`find ~/.claude/agents -maxdepth 1 -type l | wc -l`), um por agent. O repo
+tem **48** agents canônicos (`ls .agents/agents/*.md | wc -l`): o número de
+ARQUIVOS não é o de agentes descobertos no Claude Code. E **nenhum** agent é
+"piloto" — o canônico já carrega `name`, `description` e `tools`, que é o que
+o Claude Code lê; o `tools` é o que limita a pool de ferramentas do subagent
+(sem ele, o subagent herda **todas** as tools da conversa principal).
 
 ### A descoberta de uma skill nova só é medida no próximo preflight
 
@@ -271,14 +279,6 @@ dele é a mesma cegueira: o hook não mede o que o reviewer não mede.
 `prettier` não tem parser para shell e `shellcheck` não está instalado. O guard
 `.mjs` é coberto pelo pre-commit; o `.sh` **não é coberto por nada**. A
 formatação dele é mantida à mão.
-
-### Nenhum agent é "piloto" — todos os 48 são descobertos
-
-Com o symlink, o Claude Code descobre os **48** agents de `.agents/agents/`
-(`ls .agents/agents/*.md | wc -l`; a sonda de 2026-11-09 media 28), porque o
-arquivo canônico já carrega `name`, `description` e `tools`. O `tools` é o que
-limita a pool de ferramentas do subagent — sem ele, o subagent herda **todas**
-as tools da conversa principal.
 
 ## Verificação
 

@@ -138,7 +138,7 @@ describe('aplicarBump() (#126)', () => {
     const { FOOTERS_DE_VERSAO } =
       await import('../../.tooling/scripts/ci/check-version-footers.js');
     expect(FOOTERS.map((f) => f.arquivo).sort()).toEqual(
-      [...FOOTERS_DE_VERSAO.map((f: { arquivo: string }) => f.arquivo)].sort(),
+      [...FOOTERS_DE_VERSAO.map((f) => f.arquivo)].sort(),
     );
   });
 });

@@ -287,6 +287,3 @@ derived_tags:
 > Completo em [`specialist-routing-historico.md`](./specialist-routing-historico.md)
 > (apenas leitura), para preservar o limite de 300 linhas deste spec.
 
-| Versão | Data | Mudança |
-|---|---|---|
-| 1.8 | 2026-11-18 | `e2e-specialist` entra na matriz (2 path_globs — `apps/web/e2e/**` + `apps/web/app/**/page.tsx` — e 1 demand_keyword). Total: 48 specialists. |

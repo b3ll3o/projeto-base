@@ -28,13 +28,10 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { FOOTERS_DE_VERSAO } from '../../.tooling/scripts/ci/check-version-footers.js';
-
-/** Um footer: onde está e como o texto dele é. */
-interface Footer {
-  arquivo: string;
-  rotulo: string;
-}
+import {
+  FOOTERS_DE_VERSAO,
+  type FooterEsperado,
+} from '../../.tooling/scripts/ci/check-version-footers.js';
 
 /**
  * Os SEIS footers — a lista do gate, importada.
@@ -42,8 +39,11 @@ interface Footer {
  * ⚠️ A lista é exportada e a spec a prende: uma lista de segurança que
  * ninguém prende é uma lista que alguém encolhe sem querer (o mesmo motivo
  * do `HOSTS_DESTINO_LOCAL` do PR #115).
+ *
+ * O TIPO também vem de lá (`FooterEsperado`): a lista e o tipo são o mesmo
+ * fato, e um tipo repetido aqui é um terceiro lugar para divergir.
  */
-export const FOOTERS: readonly Footer[] = FOOTERS_DE_VERSAO;
+export const FOOTERS: readonly FooterEsperado[] = FOOTERS_DE_VERSAO;
 
 const SEMVER = /^\d+\.\d+\.\d+$/;
 
@@ -66,7 +66,7 @@ export function trocarVersao(texto: string, rotulo: string, versao: string): str
 }
 
 /**
- * Aplica o bump nos QUATRO footers. Devolve os arquivos que mudaram.
+ * Aplica o bump nos SEIS footers. Devolve os arquivos que mudaram.
  */
 export function aplicarBump(raiz: string, versao: string): string[] {
   if (!SEMVER.test(versao)) {

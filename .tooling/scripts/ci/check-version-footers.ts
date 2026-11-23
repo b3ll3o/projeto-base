@@ -6,25 +6,43 @@
  *
  * A raiz do defeito NÃO era o footer — era a PROCEDÊNCIA. MEDIDO em
  * `.agents/workflows/release-mode.md:30`: o handoff do `doc-writer` nomeava
- * TRÊS dos quatro arquivos versionados (`docs/TEMPLATE_USAGE.md` não estava
- * na lista), e o `release-template.yml` — que LÊ os quatro e aborta se
+ * TRÊS dos arquivos versionados (`docs/TEMPLATE_USAGE.md` não estava
+ * na lista), e o `release-template.yml` — que LÊ os seis e aborta se
  * divergirem — só descobre isso no momento do release.
  *
  * Este gate move a checagem para o PR: a divergência é barrada aqui, e o
  * `release-template` nunca chega a abortar.
  *
- * A segunda regra: a versão dos quatro não pode estar ATRÁS da da última tag.
- * Sem ela, os quatro podem concordar numa versão já ultrapassada — que é o
+ * A segunda regra: a versão dos seis não pode estar ATRÁS da da última tag.
+ * Sem ela, os seis podem concordar numa versão já ultrapassada — que é o
  * que acontece quando um bump esquece um dos arquivos (o defeito do #126) e
  * ninguém percebe até o release abortar.
+ *
+ * A terceira regra: o RODAPÉ (a linha do rótulo) mudou e a versão não — o
+ * rótulo de versão nomeando DOIS conteúdos. MEDIDO 2026-11-19: comparar o
+ * ARQUIVO inteiro (e não o rodapé) reprovava 25 de 72 commits do histórico,
+ * inclusive PRs já mergeados cujo rodapé era byte-idêntico. Com a linha,
+ * sobram 2 — e são os 2 commits deste PR em que as contagens do `README.md`
+ * mudaram sem a versão acompanhar: a classe que a regra existe para pegar.
+ *
+ * A âncora da 3ª regra é o COMMIT que instalou a versão atual, não a última
+ * tag: ancorar na tag deixa a regra inerte depois de um bump no meio da
+ * janela (MEDIDO 2026-11-23).
  */
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import type { CheckResult } from './check-types';
 
-/** Um footer de versão: onde ele está e como o texto dele é. */
-interface FooterEsperado {
+/**
+ * Um footer de versão: onde ele está e como o texto dele é.
+ *
+ * EXPORTADO porque o script de release (`tooling/scripts/bump-version.ts`)
+ * importa a LISTA daqui — e a lista e o tipo têm de ser a mesma coisa. O
+ * tipo repetido no consumidor era o mesmo fato declarado em três lugares
+ * (a interface local, o cast da spec e a lista).
+ */
+export interface FooterEsperado {
   arquivo: string;
   /** O rótulo que precede a versão, com os `**` do markdown. */
   rotulo: string;
@@ -121,14 +139,68 @@ export function extrairVersao(texto: string, rotulo: string): string | null {
 }
 
 /**
- * O conteúdo de um arquivo NA TAG — ou `null` se ele não existia nela.
+ * A LINHA do rodapé — a que carrega o rótulo e a versão — ou `null`.
  *
- * Sem shell: argv em array, pelo mesmo motivo do gate `check-shell-injection`
- * (que este gate tem de passar).
+ * ⚠️ É a LINHA, e não o arquivo. MEDIDO 2026-11-19 (PR #172): comparar o
+ * arquivo INTEIRO reprovava **25 de 72** commits do histórico — inclusive
+ * PRs já MERGED (#166 NestJS 12, #170 cards de empresa) cujo rodapé era
+ * byte-idêntico e cuja versão estava certa. O motivo: o repositório muda
+ * prosa o tempo todo (a rotina é PR de feature + PR de release separado —
+ * `post-merge-release.md` §Bump manual), e a regra do arquivo inteiro
+ * transformava TODO PR que tocasse um dos seis num PR de release.
+ *
+ * A linha é o que a regra quer: o rótulo de versão nomeia o conteúdo que
+ * está NA LINHA (no `README.md`, as contagens do disco). Se a linha é a
+ * mesma, o rótulo nomeia UM conteúdo — a prosa em volta não muda o que o
+ * rodapé nomeia.
  */
-function conteudoNaTag(repoRoot: string, tag: string, arquivo: string): string | null {
+export function extrairRodape(texto: string, rotulo: string): string | null {
+  const re = new RegExp(`${rotulo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\d+\\.\\d+\\.\\d+`);
+  for (const linha of texto.split('\n')) {
+    if (re.test(linha)) return linha.trim();
+  }
+  return null;
+}
+
+/**
+ * O COMMIT que instalou a versão atual do rodapé — ou `null`.
+ *
+ * ⚠️ A âncora é o commit que TROUXE a versão, não a última tag. MEDIDO
+ * 2026-11-23 (PR #172): ancorar na tag deixa a 3ª regra INERTE depois de um
+ * bump no meio da janela — o gate devolvia `[]` com o rodapé do `README.md`
+ * alterado (48 → 49 agents) e a versão em `1.32.0`, que era a versão já
+ * bumpeada. O rótulo `1.32.0` nomeava DOIS conteúdos, e a regra existia
+ * justamente para isso.
+ *
+ * O comentário antigo ("um bump no meio da janela cobre a janela") era
+ * FALSO: o bump cobre só o que veio ANTES dele.
+ *
+ * `git log -S` acha o commit em que a string aparece (ou some) — com
+ * `--format=%H` e `head -1` é o mais recente. Sem shell: argv em array.
+ */
+export function commitQueInstalou(
+  repoRoot: string,
+  arquivo: string,
+  rotulo: string,
+  versao: string,
+): string | null {
   try {
-    return execFileSync('git', ['show', `${tag}:${arquivo}`], {
+    const saida = execFileSync(
+      'git',
+      ['log', '--format=%H', '-S', `${rotulo} ${versao}`, '--', arquivo],
+      { cwd: repoRoot, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    const primeira = saida.trim().split('\n')[0];
+    return primeira === undefined || primeira === '' ? null : primeira;
+  } catch {
+    return null;
+  }
+}
+
+/** O conteúdo de um arquivo NUM COMMIT — ou `null` se ele não existia nele. */
+function conteudoNoCommit(repoRoot: string, commit: string, arquivo: string): string | null {
+  try {
+    return execFileSync('git', ['show', `${commit}:${arquivo}`], {
       cwd: repoRoot,
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -144,6 +216,7 @@ function conteudoNaTag(repoRoot: string, tag: string, arquivo: string): string |
  */
 export async function checkVersionFooters(opts: { repoRoot: string }): Promise<CheckResult> {
   const errors: string[] = [];
+  const advisories: string[] = [];
   const root = path.resolve(opts.repoRoot);
 
   const encontradas = new Map<string, string>();
@@ -176,6 +249,20 @@ export async function checkVersionFooters(opts: { repoRoot: string }): Promise<C
 
   // (2) a versão tem de ser maior que a da última tag.
   const tag = ultimaTag(root);
+  if (tag === null) {
+    // ⚠️ Sem tag não há o que comparar — e o gate NÃO pode devolver verde
+    // mudo: `guard-classes.md` diz que quem não pode ser comparado é
+    // RECLASSIFICADO (skipped com motivo), nunca apagado em silêncio.
+    // MEDIDO 2026-11-23: fora de um repo git, ou num repo sem tag, as regras
+    // 2 e 3 não rodavam e o gate devolvia `{ok:true, errors:[]}` — verde por
+    // ausência. No CI o risco é contido (o `ci.yml` usa `fetch-depth: 0`), mas
+    // nada cobra esse fetch-depth para ESTE gate.
+    advisories.push(
+      `não há tag neste repositório (ou o git não respondeu) — a regra da ` +
+        `versão-atrás-da-tag e a do rodapé-mudou-sem-bump NÃO RODARAM. ` +
+        `O verde aqui é só a concordância entre os seis footers.`,
+    );
+  }
   if (tag !== null && distintas.length === 1) {
     const atual = versaoNumerica(distintas[0]!);
     const ultima = versaoNumerica(tag.replace(/^v/, ''));
@@ -186,7 +273,7 @@ export async function checkVersionFooters(opts: { repoRoot: string }): Promise<C
       // IGUAIS à tag que acabou de ser criada — e o gate roda em todo preflight
       // depois disso. Igualdade é o estado NORMAL entre um release e o
       // próximo; o que é defeito é os footers ficarem ATRÁS da tag (um bump
-      // esquecido, ou um revert que mexeu só num dos quatro).
+      // esquecido, ou um revert que mexeu só num dos seis).
       errors.push(
         `A versão dos footers (${distintas[0]}) está ATRÁS da última tag (${tag}). ` +
           `O bump de versão é o que o release consome — e é a PROCEDÊNCIA do bump ` +
@@ -195,7 +282,7 @@ export async function checkVersionFooters(opts: { repoRoot: string }): Promise<C
     }
   }
 
-  // (3) o CONTEÚDO de um footer mudou desde a última tag e a versão NÃO.
+  // (3) o CONTEÚDO do RODAPÉ mudou e a versão NÃO.
   //
   // ⚠️ Esta é a regra que faltava no PR #172: o rodapé do `README.md` passou
   // de 47/49/17 para 48/50/18 e o rótulo continuou `1.30.0` — que já era o da
@@ -203,34 +290,53 @@ export async function checkVersionFooters(opts: { repoRoot: string }): Promise<C
   // entre os seis, e não-atrás-da-tag): as duas PASSAM quando o conteúdo
   // muda e o número fica. O rótulo passou a nomear DOIS conteúdos.
   //
-  // A janela medida é a do ÚLTIMO RELEASE: desde a tag, o conteúdo mudou e a
-  // versão não mudou em lugar nenhum. Um bump no meio da janela cobre a
-  // janela — que é o caso normal do PR que faz o bump e o ajuste no mesmo
-  // diff (o `AGENTS.md` que ganha a linha do workflow depois do bump).
-  if (tag !== null) {
-    for (const footer of FOOTERS_DE_VERSAO) {
-      const atual = await lerConteudo(root, footer.arquivo);
-      const naTag = conteudoNaTag(root, tag, footer.arquivo);
-      // Sem base de comparação (o arquivo não existia na tag) ou sem mudança:
-      // nada a medir.
-      if (atual === null || naTag === null || atual === naTag) continue;
+  // O que se compara é o RODAPÉ (a LINHA do rótulo), não o arquivo. MEDIDO
+  // 2026-11-19: a versão que comparava o arquivo inteiro reprovava 25 de 72
+  // commits do histórico — inclusive PRs já MERGED (#166, #170) cujo rodapé
+  // era byte-idêntico. O repositório muda prosa o tempo todo, e a regra do
+  // arquivo inteiro transformava TODO PR que tocasse um dos seis num PR de
+  // release. A linha é o que o rótulo nomeia: no `README.md`, as contagens
+  // do disco; a prosa em volta não muda o que o rodapé nomeia.
+  //
+  // A ÂNCORA é o COMMIT que instalou a versão atual, e não a última tag.
+  // MEDIDO 2026-11-23: ancorar na tag deixa a regra INERTE depois de um bump
+  // no meio da janela (o gate devolvia `[]` com o rodapé alterado e a versão
+  // já bumpeada — o rótulo nomeava DOIS conteúdos e ninguém via). O bump
+  // cobre o que veio ANTES dele, não o que vem depois.
+  for (const footer of FOOTERS_DE_VERSAO) {
+    const atual = await lerConteudo(root, footer.arquivo);
+    const versaoAtual = encontradas.get(footer.arquivo);
+    if (atual === null || versaoAtual === undefined) continue;
 
-      const versaoAtual = encontradas.get(footer.arquivo);
-      const versaoNaTag = extrairVersao(naTag, footer.rotulo);
-      if (versaoAtual === undefined || versaoNaTag === null || versaoAtual !== versaoNaTag) {
-        continue;
-      }
+    const rodapeAtual = extrairRodape(atual, footer.rotulo);
+    if (rodapeAtual === null) continue;
 
-      errors.push(
-        `${footer.arquivo}: o conteúdo mudou desde a tag ${tag} e a versão continua ` +
-          `${versaoAtual} — o rótulo de versão nomeia DOIS conteúdos. ` +
-          `O bump é o que consome o rodapé (o release-template.yml aborta se os ` +
-          `seis divergirem), e um doc que muda sem bump entra na main sem tag: ` +
-          `bumpe a versão (minor ou patch, conforme ` +
-          `'.agents/specs/conventions/estrutura-e-versionamento.md').`,
-      );
-    }
+    // A âncora: o commit que trouxe a versão atual para este arquivo. Sem
+    // ele (versão nunca commitada, ou `git` indisponível), não há com o que
+    // comparar — e a regra não mede.
+    const ancora = commitQueInstalou(root, footer.arquivo, footer.rotulo, versaoAtual);
+    if (ancora === null) continue;
+
+    const naAncora = conteudoNoCommit(root, ancora, footer.arquivo);
+    if (naAncora === null) continue;
+
+    const rodapeNaAncora = extrairRodape(naAncora, footer.rotulo);
+    // O rodapé não mudou desde que a versão foi instalada: o rótulo nomeia UM
+    // conteúdo. A prosa em volta pode ter mudado — não é o que a regra mede.
+    if (rodapeNaAncora === null || rodapeNaAncora === rodapeAtual) continue;
+
+    errors.push(
+      `${footer.arquivo}: o rodapé mudou desde que a versão ${versaoAtual} foi ` +
+        `instalada (commit ${ancora.slice(0, 8)}) e a versão não mudou — o rótulo ` +
+        `de versão nomeia DOIS conteúdos. ` +
+        `O bump é o que consome o rodapé (o release-template.yml aborta se os ` +
+        `seis divergirem), e um doc que muda sem bump entra na main sem tag: ` +
+        `bumpe a versão (minor ou patch, conforme ` +
+        `'.agents/specs/conventions/estrutura-e-versionamento.md').`,
+    );
   }
 
-  return { ok: errors.length === 0, errors };
+  return advisories.length > 0
+    ? { ok: errors.length === 0, errors, advisories }
+    : { ok: errors.length === 0, errors };
 }

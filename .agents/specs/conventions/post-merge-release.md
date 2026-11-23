@@ -115,16 +115,23 @@ que vale, e a spec dela prende a lista.
 
 ### A regra que fecha a classe do rodapé
 
-Os seis footers dizem a **versão**; o gate também mede se o **conteúdo** do
-arquivo mudou desde a última tag **sem** a versão acompanhar. MEDIDO no PR
-#172: o rodapé do `README.md` passou de 47/49/17 para 48/50/18 e o rótulo
-continuou `1.30.0` — que já era o da tag publicada. Dois conteúdos com o
-mesmo rótulo.
+Os seis footers dizem a **versão**; o gate também mede se o **rodapé** mudou
+desde a última tag **sem** a versão acompanhar. MEDIDO no PR #172: o rodapé do
+`README.md` passou de 47/49/17 para 48/50/18 e o rótulo continuou `1.30.0` —
+que já era o da tag publicada. Dois conteúdos com o mesmo rótulo.
 
-A janela medida é a do **último release**: desde a tag, o conteúdo mudou e a
+⚠️ O que se compara é o **rodapé** (a linha do rótulo), não o arquivo
+inteiro. MEDIDO 2026-11-19: a versão que comparava o arquivo reprovava **25
+de 72** commits do histórico — inclusive PRs já MERGED (#166 NestJS 12, #170
+cards de empresa) cujo rodapé era byte-idêntico. O repositório muda prosa o
+tempo todo (PR de feature + PR de release separado), e a regra do arquivo
+inteiro transformava TODO PR que tocasse um dos seis num PR de release. A
+prosa em volta não muda o que o rodapé nomeia.
+
+A janela medida é a do **último release**: desde a tag, o rodapé mudou e a
 versão não mudou em lugar nenhum. Um bump no meio da janela cobre a janela —
 que é o caso normal do PR que bumpa e ajusta no mesmo diff. Quem muda o
-conteúdo de um dos seis **bumpa junto** (minor ou patch, conforme
+**rodapé** de um dos seis **bumpa junto** (patch, conforme
 [`estrutura-e-versionamento.md`](./estrutura-e-versionamento.md)).
 
 O instrumento é o gate `check-version-footers` (3ª regra), e o dente está
