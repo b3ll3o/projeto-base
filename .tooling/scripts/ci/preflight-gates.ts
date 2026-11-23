@@ -199,17 +199,18 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     id: 'check-shell-injection',
   },
   {
-    // #126: os footers de versão dos QUATRO docs canônicos divergirem.
+    // #126: os footers de versão dos SEIS docs canônicos divergirem.
     //
     // A raiz do defeito era a PROCEDÊNCIA, não o footer: o handoff do
-    // `release-mode.md` nomeava TRÊS dos quatro arquivos, e o
-    // `release-template.yml` — que LÊ os quatro e aborta se divergirem —
+    // `release-mode.md` nomeava TRÊS dos arquivos, e o
+    // `release-template.yml` — que LÊ os seis e aborta se divergirem —
     // só descobre isso no momento do release.
     //
     // Este gate move a checagem para o PR: a divergência é barrada aqui, e o
     // release nunca chega a abortar. A segunda regra (a versão não pode
     // estar ATRÁS da última tag) pega o outro lado do mesmo defeito — um
-    // bump que esqueceu um arquivo.
+    // bump que esqueceu um arquivo. A terceira (o rodapé mudou desde a tag e
+    // a versão não) pega o rótulo de versão nomeando DOIS conteúdos.
     name: 'footers de versão divergentes (#126)',
     file: '.tooling/scripts/ci/check-version-footers.ts',
     id: 'check-version-footers',

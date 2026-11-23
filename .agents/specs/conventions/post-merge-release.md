@@ -6,7 +6,7 @@
 ## Objetivo
 
 Eliminar a etapa manual de taggear o template após cada bump de versão.
-A versão canônica do template vive em 3 arquivos (footer + Histórico
+A versão canônica do template vive em 6 arquivos (footer + Histórico
 de Versões) e não em `package.json`, então o versionamento
 Changesets/semantic-release tradicional não se aplica — precisa de
 workflow customizado.
@@ -17,8 +17,9 @@ O workflow [`.github/workflows/release-template.yml`](../../../.github/workflows
 dispara em **duas** situações:
 
 1. **`push` em `main` com mudança em `docs/MONOREPO.md`** (único arquivo
-   onde a versão é detectada pelo regex). Os outros 2 arquivos versionados
-   (`docs/STACK.md` e `.agents/specs/conventions/estrutura-e-versionamento.md`)
+   onde a versão é detectada pelo regex). Os outros 5 arquivos versionados
+   (`docs/STACK.md`, `docs/TEMPLATE_USAGE.md`, `AGENTS.md`, `README.md` e
+   `.agents/specs/conventions/estrutura-e-versionamento.md`)
    **DEVEM** ser atualizados juntos para consistência mas **não disparam**
    o workflow — apenas `MONOREPO.md` é a fonte da verdade da tag.
 2. **`workflow_dispatch` manual** — usado para backfill (ex: tag
@@ -96,23 +97,54 @@ docs/MONOREPO.md, docs/STACK.md e
 | `docs/STACK.md` | Footer `**Versão da stack:** X.Y.Z` |
 | `docs/TEMPLATE_USAGE.md` | Footer `**Versão do documento:** X.Y.Z` |
 | `.agents/specs/conventions/estrutura-e-versionamento.md` | Histórico de Versões (linha por release) |
+| `AGENTS.md` | Footer `**Versão do documento:** X.Y.Z` |
+| `README.md` | Footer `**Versão:** X.Y.Z` |
 
-Os 4 arquivos DEVEM ter a mesma versão. Divergência entre eles é bug.
+Os **seis** arquivos DEVEM ter a mesma versão. Divergência entre eles é bug.
 
-⚠️ A lista tem QUATRO desde a #126 — e esta convenção dizia três. A omissão
-do `docs/TEMPLATE_USAGE.md` era exatamente a raiz do defeito que a #126
-corrigiu: o arquivo que ficava de fora era o do footer, e quem seguia esta
-procedência produzia a divergência que o `check-version-footers` accuse no
-PR — sem pista de qual arquivo faltou. A lista do gate
+⚠️ A lista tem SEIS desde a v1.15.0 — e esta convenção dizia TRÊS (no
+Objetivo) e QUATRO (aqui). A omissão do `docs/TEMPLATE_USAGE.md` era
+exatamente a raiz do defeito que a #126 corrigiu: o arquivo que ficava de fora
+era o do footer, e quem seguia esta PROCEDÊNCIA produzia a divergência que o
+`check-version-footers` accuse no PR — sem pista de qual arquivo faltou. Os
+`AGENTS.md` e o `README.md` entraram depois, e o drift JÁ TINHA ACONTECIDO:
+o `AGENTS.md` foi para `1.13.0` no merge do #116 enquanto os quatro seguiam em
+`1.12.0`, e **nenhum gate olhou** — o gate media só os quatro. A lista do gate
 (`FOOTERS_DE_VERSAO`, em `.tooling/scripts/ci/check-version-footers.ts`) é a
 que vale, e a spec dela prende a lista.
+
+### A regra que fecha a classe do rodapé
+
+Os seis footers dizem a **versão**; o gate também mede se o **rodapé** mudou
+desde a última tag **sem** a versão acompanhar. MEDIDO no PR #172: o rodapé do
+`README.md` passou de 47/49/17 para 48/50/18 e o rótulo continuou `1.30.0` —
+que já era o da tag publicada. Dois conteúdos com o mesmo rótulo.
+
+⚠️ O que se compara é o **rodapé** (a linha do rótulo), não o arquivo
+inteiro. MEDIDO 2026-11-19: a versão que comparava o arquivo reprovava **25
+de 72** commits do histórico — inclusive PRs já MERGED (#166 NestJS 12, #170
+cards de empresa) cujo rodapé era byte-idêntico. O repositório muda prosa o
+tempo todo (PR de feature + PR de release separado), e a regra do arquivo
+inteiro transformava TODO PR que tocasse um dos seis num PR de release. A
+prosa em volta não muda o que o rodapé nomeia.
+
+A janela medida é a do **último release**: desde a tag, o rodapé mudou e a
+versão não mudou em lugar nenhum. Um bump no meio da janela cobre a janela —
+que é o caso normal do PR que bumpa e ajusta no mesmo diff. Quem muda o
+**rodapé** de um dos seis **bumpa junto** (patch, conforme
+[`estrutura-e-versionamento.md`](./estrutura-e-versionamento.md)).
+
+O instrumento é o gate `check-version-footers` (3ª regra), e o dente está
+registrado em [`ci-defense-in-depth-dentes.md`](./ci-defense-in-depth-dentes.md).
+
 
 ## Bump manual (fluxo de dev)
 
 Para bumpar a versão (ex: 1.3.0 → 1.4.0):
 
 1. Branch: `chore/bump-X.Y.Z` a partir de `main`.
-2. Editar os 4 docs (footer + adicionar linha no Histórico).
+2. Editar os **6 footers** (o `README.md` e o `AGENTS.md` inclusos) e adicionar
+   a linha do novo release no Histórico dos 4 docs canônicos.
 3. Commit conventional: `chore(template): bump version X.Y.Z → A.B.C`.
 4. Push + PR.
 5. Merge → workflow auto-tag `vA.B.C`.

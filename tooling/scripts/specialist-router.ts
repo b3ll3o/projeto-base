@@ -113,6 +113,14 @@ const SKIP_RULES: Record<string, (i: ClassifyInput) => boolean> = {
         p.startsWith('tooling/scripts/') || p.startsWith('.agents/') || p.includes('/.agents/'),
     ) &&
     !/(refactor|simplificar|simplify|dry|limpar|cleanup)/i.test(demand),
+  // O e2e de API (endpoint sem tela) é do Vitest de apps/api — o
+  // `e2e-specialist` recusa essa demanda no próprio corpo ("Quando NÃO me
+  // invocar"). MEDIDO 2026-11-23: sem esta regra, a demanda "cobertura e2e
+  // do endpoint de criação de usuário" + path `apps/api/.../users.controller.ts`
+  // devolvia `e2e-specialist` no conjunto.
+  'e2e-specialist': ({ paths, demand }) =>
+    !paths.some((p) => p.startsWith('apps/web/')) &&
+    !/tela|fluxo de (tela|usuário)|playwright/i.test(demand),
 };
 const shouldSkip = (sp: string, i: ClassifyInput) => SKIP_RULES[sp]?.(i) ?? false;
 

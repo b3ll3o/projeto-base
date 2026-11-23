@@ -192,7 +192,7 @@ result:
 - ❌ **Número sem comando.** "47 agents" sem o `ls` que o mede.
 - ❌ **Comando não verificado.** Citar `pnpm dev` sem rodar não prova nada.
 - ❌ **README com 500 linhas.** O teto é 300 — e ele é medido.
-- ❌ **Rodapé de versão autoral.** A tag do template é dos 4 footers
+- ❌ **Rodapé de versão autoral.** A tag do template é dos 6 footers
   canônicos; o `docs/MONOREPO.md` manda (`release-versioning-specialist`).
 - ❌ **Mexer em `AGENTS.md`, `docs/**` ou `.agents/specs/**`.** Não são meus.
 

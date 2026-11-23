@@ -1,9 +1,9 @@
 ---
 name: review-routing
-version: 1.9
-updated: 2026-11-09
+version: 1.10
+updated: 2026-11-19
 maintainer: review-router
-description: "Matriz de roteamento de revisores consultada pelo review-router — v1.5 (audit specialists) + UX e tenancy com skill de processo, v1.9 (camada de binding)."
+description: "Matriz de roteamento de revisores consultada pelo review-router — v1.5 (audit specialists) + UX e tenancy com skill de processo, v1.9 (camada de binding), v1.10 (specs e2e)."
 ---
 
 # Convenção: review-routing (matriz de roteamento de revisores)
@@ -35,6 +35,12 @@ declarado.
 **Regra:** a entrada na matriz e a skill correspondentes entram no **mesmo PR**.
 Um reviewer roteado sem skill é um opinionador com nome de especialista — foi
 exatamente o que a v1.6 aceitou em `ux-design-specialist` até a v1.7.
+
+⚠️ **Exceção declarada (v1.31.0):** um reviewer cujo **processo é uma
+convenção canônica** entra no registro do §1 com a convenção nomeada, sem
+linha aqui. É o caso do `e2e-specialist`: o processo é a convenção
+[`e2e-playwright.md`](./e2e-playwright.md) (o `maintainer` dela é o
+`test-writer`), e criar uma skill `e2e-audit` seria duplicá-la.
 
 ## 1. PATH GLOBS
 
@@ -130,6 +136,12 @@ path_globs:
     reviewers: [test-writer]
   - pattern: "**/*.spec.ts"
     reviewers: [test-writer]
+
+  # v1.10 — cobertura e2e. ⚠️ ADITIVO: a matriz ACUMULA (sem precedência) e
+  # `**/*.spec.ts` já mandava o spec e2e ao `test-writer` — MEDIDO com a matriz
+  # real, `apps/web/e2e/f1-listagem.spec.ts` casa os DOIS globs. O
+  # `e2e-specialist` ENTRA no conjunto; não substituto ninguém.
+  - { pattern: "apps/web/e2e/**", reviewers: [e2e-specialist] }
 
   # pt-BR: OpenTelemetry (T6.2 — v1.4). Paths canônicos do rollout telemetria.
   - pattern: "apps/api/**/telemetry/**"
@@ -232,61 +244,11 @@ always_on:
   - code-quality-reviewer
 ```
 
-## 5. Exemplos de Uso
-
-> Ilustram como o classificador headless + skip rules resolvem
-> o conjunto de reviewers despachados em cenários típicos.
-
-### Cenário A: chore em package de tooling (1 arquivo)
-
-```text
-paths:  [tooling/scripts/package.json]
-commits: ["chore(tooling): bump v0.1.0 → v0.1.1"]
-scope:  trivial
-files:  1
-```
-
-Resultado esperado:
-
-- `spec-compliance-reviewer` SKIPPED — `commit_type == 'chore' AND task.scope != 'large'` (skip rule 2)
-- `code-quality-reviewer` DISPATCHED (path `package.json` não termina em `.md`/`.txt`, scope não é `docs`)
-- Nenhum domain reviewer — nenhum path_glob match
-- Nenhum diff_pattern match — bump de versão não toca código
-
-### Cenário B: doc-only update (1 arquivo .md)
-
-```text
-paths:  [.agents/specs/conventions/review-routing.md]
-commits: ["docs(agents): adicionar exemplos de uso"]
-scope:  docs
-files:  1
-```
-
-Resultado esperado:
-
-- `spec-compliance-reviewer` DISPATCHED — `commit_type == 'docs'` (não casa nenhuma skip rule)
-- `code-quality-reviewer` SKIPPED — `all_changed_paths endsWith .md` (skip rule 1)
-- `doc-sync` DISPATCHED — `path_glob .agents/specs/**` + `commit_type docs`
-
-> Os cenários que envolvem **vários** commits ou **vários** paths vivem no
-> apêndice [`review-routing-examples.md`](./review-routing-examples.md)
-> (cenários D e E). Aqui ficam só os de 1 commit / 1 path, que são os que
-> cabem no exemplo curto. A extração do cenário C (v1.6) foi o que abriu
-> espaço para as rotas de `tooling/` que a task 3.2 do plano
-> [`guard-classes`](../../../docs/superpowers/plans/2026-10-03-guard-classes.md)
-> precisou corrigir.
-
-
----
-
-> **Histórico de gaps conhecidos (v1.2 e v1.3)** migrado para o apêndice
-> [`review-routing-gaps-historical.md`](./review-routing-gaps-historical.md)
-> (apenas leitura) para preservar o limite de 300 linhas deste spec.
-
 ## 7. Histórico de Versões
 
 | Versão | Data | Mudança |
 |--------|------|---------|
+| 1.10 | 2026-11-19 | `e2e-specialist` entra como reviewer dos specs de fluxo de usuário: 1 path_glob novo (`apps/web/e2e/**`). Antes eles caíam só no `**/*.spec.ts` → `test-writer`, que não é o dono do inventário de fluxos. **Aditivo — a matriz acumula:** MEDIDO, o spec e2e casa os DOIS globs e é despachado ao `test-writer` **e** ao `e2e-specialist` (que não substituto ninguém). **Sem skill de processo** — o processo é a convenção `e2e-playwright.md` (a exceção declarada na §0). |
 | 1.9 | 2026-11-09 | A camada de binding ganha **path_globs**: a pasta `.claude/` saiu do repo (ADR-0009) e os arquivos que ela carregava foram para `.agents/` — os hooks (`.agents/hooks/**`), o `settings.json` que registra o comando deles (`.agents/settings.json`) e os docs da pasta (`.agents/*.md`). Sem eles, um commit que só tocasse o binding era classificado em domínio **desconhecido** e despachava **zero** reviewers — a lacuna que o `.claude/README.md` declarava. Aditivo. |
 | 1.8 | 2026-10-16 | `multi-tenant-specialist` entra na §0 (reviewer→skill) carregando `multi-tenant-audit`. Fecha para tenancy a mesma lacuna que a v1.7 fechou para UX: reviewer roteado sem skill é opinionador com nome de especialista. Nenhum path_glob novo — a v1.6 do `specialist-routing` já roteia `**/*tenant*` e `**/*tenancy*`; o que faltava era o processo que ele executa. Aditivo. |
 | 1.7 | 2026-10-13 | UX/design ganha **processo**, não só reviewer: 5 skills (`ui-modes`, `ui-craft`, `ui-break`, `motion`, `ui-review`) em `.agents/skills/`, carregadas por `ux-design-specialist`. 2 diff_patterns novos — `outline-none`/`outline: none` e movimento (`transition`/`@keyframes`/`prefers-reduced-motion`/`transform: scale`). Nenhum path_glob novo: os globs de `apps/web/**` (v1.5) já roteavam para o specialist; o que faltava era o processo que ele executa. Aditivo. |

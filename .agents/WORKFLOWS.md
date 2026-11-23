@@ -30,6 +30,7 @@
 | `pr-refresh` | "atualizar título/descrição do PR" | single | pr-refresh-scan → agente (reclassifica + reescreve) |
 | `pr-pendencias` (v1.11.0+) | "revisar pendências do PR / o que ficou para depois" | parallel→merge | 1 agente por pendência (mede) → adversarial (reroda) → agente (consolida) |
 | `pr-review-mode` (v1.30.0+) | "revisar o PR" / **todo PR aberto** | parallel→merge | review-router (roteia o diff) → **1 specialist por parte alterada, em paralelo** → consolidação → **1 comentário no PR** (marcador `<!-- pr-review -->`) |
+| `e2e-coverage-mode` (v1.31.0+) | "os fluxos têm e2e?" / quando a demanda é roteada ao `e2e-specialist` (tela `apps/web/app/**/page.tsx` ou spec `apps/web/e2e/**`) | sequential | e2e-specialist (auditar → planejar) → code-reviewer (revisar o plano) → e2e-specialist (implementar → verificar) → code-reviewer (revisar o spec) → e2e-specialist (commitar/pushar) — detalhe em [`e2e-coverage-mode.md`](./workflows/e2e-coverage-mode.md) |
 | `audit-mode` (v2.0+) | "auditar stack / rodar scan / revisar saúde" | parallel + orchestrator | `finding-orchestrator` (despara 8 specialists em paralelo, agrega findings, dedup, abre issues via `gh`) |
 | `release-pre-tag` (v2.0+) | "auditar antes de tag vX.Y.Z" | sequential | `release-versioning-specialist` + `finding-orchestrator` (subset focado em versioning) |
 

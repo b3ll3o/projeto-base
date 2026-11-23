@@ -1,9 +1,9 @@
 ---
 name: specialist-routing
-version: 1.7
-updated: 2026-11-18
+version: 1.8
+updated: 2026-11-19
 maintainer: specialist-router
-description: "Matriz canônica de roteamento de demanda — mapeia paths/keywords/scopes para 47 specialists. Source of truth do classificador headless (tooling/scripts/specialist-router.ts) e do lint da matriz. Atualizada por PR."
+description: "Matriz canônica de roteamento de demanda — mapeia paths/keywords/scopes para 48 specialists. Source of truth do classificador headless (tooling/scripts/specialist-router.ts) e do lint da matriz. Atualizada por PR."
 ---
 
 # Convenção: specialist-routing
@@ -59,6 +59,13 @@ path_globs:
   - pattern: "apps/web/app/globals.css"
     specialists: [ux-design-specialist]
     rationale: "Tokens de design (cor, espaçamento, tipografia) e resets"
+
+  - pattern: "apps/web/e2e/**"
+    specialists: [e2e-specialist]
+    rationale: "Specs e2e (Playwright) — o dono do inventário de fluxos e da cobertura e2e das telas"
+  - pattern: "apps/web/app/**/page.tsx"
+    specialists: [e2e-specialist]
+    rationale: "Tela nova ou tela mudada — o inventário de fluxos e o spec e2e podem precisar de atualização (o glob de specs sozinho não alcança um page.tsx que acabou de nascer)"
 
   - { pattern: "packages/**", specialists: [monorepo-specialist] }
   - pattern: "pnpm-workspace.yaml"
@@ -188,6 +195,8 @@ demand_keywords:
     specialists: [finding-orchestrator]
   - regex: "(?i)\\btest(es)?\\b|tdd|cobertura|coverage|\\bspec\\b"
     specialists: [test-writer]
+  - regex: "(?i)\\be2e\\b|end.?to.?end|playwright|fluxo de (tela|usuário)"
+    specialists: [e2e-specialist]
   - regex: "(?i)\\bdoc(umenta[çc][ãa]o)?\\b|readme|adr|spec(ification)?|catálogo de rotas"
     specialists: [doc-writer, documentation-specialist]
   - regex: "(?i)telemetry|tracing|opentelemetry|\\botel\\b|spans?"
@@ -243,6 +252,10 @@ skip_rules:
     skip_if: "nenhum path em tooling/scripts/** nem .agents/** E nenhum keyword refactor|simplificar|dry|limpar match E scope != refactor"
     rationale: "Refactorer só quando paths ou keywords sinalizam refactor"
 
+  e2e-specialist:
+    skip_if: "nenhum path em apps/web/** E nenhum keyword tela|fluxo de (tela|usuário)|playwright match"
+    rationale: "O e2e de API (endpoint sem tela) é do Vitest de apps/api — o agent recusa essa demanda no próprio corpo"
+
 always_on:
   - monorepo-specialist
 ```
@@ -277,3 +290,4 @@ derived_tags:
 
 > Completo em [`specialist-routing-historico.md`](./specialist-routing-historico.md)
 > (apenas leitura), para preservar o limite de 300 linhas deste spec.
+

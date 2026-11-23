@@ -164,11 +164,11 @@ grep -oE '\*\*Versão do documento:\*\* [0-9]+\.[0-9]+\.[0-9]+' docs/MONOREPO.md
 node -p "require('./package.json').version"   # → 0.1.0
 ```
 
-Os 4 footers versionados (`docs/MONOREPO.md`, `docs/STACK.md`,
-`docs/TEMPLATE_USAGE.md` e
+Os 6 footers versionados (`docs/MONOREPO.md`, `docs/STACK.md`,
+`docs/TEMPLATE_USAGE.md`, `AGENTS.md`, `README.md` e
 `.agents/specs/conventions/estrutura-e-versionamento.md`) têm de **concordar
 entre si** — o gate `check-version-footers` barra o PR quando divergem. O bump
-mecânico dos quatro é `pnpm tooling:bump-version X.Y.Z`.
+mecânico dos seis é `pnpm tooling:bump-version X.Y.Z`.
 
 Mudança em `packages/` **DEVE** atualizar a versão no `package.json` do
 package e entrar no changelog que o workflow gera — não há arquivo
@@ -264,7 +264,7 @@ visão de stack: [`docs/STACK.md` §8](./STACK.md).
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão do documento:** 1.30.0
+**Versão do documento:** 1.31.0
 
 ### Histórico de Versões
 
@@ -293,3 +293,4 @@ visão de stack: [`docs/STACK.md` §8](./STACK.md).
 | `1.26.0` | **O system design canônico** (minor bump — doc: nenhum arquivo de `apps/`, `packages/` ou `infra/` mudou) — o conjunto `docs/system-design/` (7 documentos: índice, contexto, módulo, dados, segurança, operação e o **contrato de extensão**), o **ADR-0010** e o template que o app derivado copia. O `schema.prisma` passou a mapear para `docs/system-design/dados.md` no `doc-sync`, e a tabela de donos de `documentacao.md` §2 ganhou a linha do conjunto. |
 | `1.27.0` | **O código passa a casar com o system design** (minor bump — o PR muda `apps/api` e o banco) — a rota de health ganha teto **PRÓPRIO** (`@Throttle` com 600/min no controller — e não `@SkipThrottle()`, que não existe no código; os dois comentários que afirmavam um `@SkipThrottle()` inexistente foram corrigidos); a escrita aceita `Idempotency-Key` (a pasta `apps/api/src/shared/idempotency/`, com port, adapter e interceptor); o papel de runtime ganha `statement_timeout = '8s'`; e a correlação da auditoria passa a usar a mesma derivação do `traceId` da resposta. **2 migrations** (`statement_timeout` do papel, `idempotency_keys`) e **2 ADRs** (0011, 0012). A árvore do workspace é a mesma — `shared/idempotency/` mora dentro de `apps/api/src/shared/`, e `packages/` e `infra/` não mudaram. |
 | `1.30.0` | **O kit completo de documentação moderna, com dono e auditoria** (minor bump — doc: nenhum arquivo de `apps/`, `packages/` ou `infra/` mudou) — a convenção [`kit-documentacao.md`](../.agents/specs/conventions/kit-documentacao.md) declara os **5 pilares** e os **14 itens** do kit (README, CONTRIBUTING, GLOSSARY, HLD, C4, PRD, TDR, ADR, OpenAPI, AsyncAPI, ERD, Runbooks, Post-mortems, CHANGELOG); cada item passa a ter doc canônico, **specialist dono** e **auditor por pilar** — **19 agents novos** (14 specialists + 5 auditadores) e **5 skills de auditoria**. O instrumento é o gate `check-doc-kit`, que lê a matriz da convenção e mede doc, âncoras, índice e donos. Docs novos: `CONTRIBUTING.md`, `GLOSSARY.md`, `CHANGELOG.md` (raiz) e `docs/prd/`, `docs/tdr/`, `docs/post-mortems/`. |
+| `1.31.0` | **O especialista em cobertura e2e de fluxos de usuário** (minor bump — "Adição de novo agent é minor bump") — o agent [`e2e-specialist`](../.agents/agents/e2e-specialist.md) (com a memória dele) e o workflow [`e2e-coverage-mode`](../.agents/workflows/e2e-coverage-mode.md): o dono do ciclo que fecha, antes do push, o espaço entre "a tela existe" e "a tela foi provada" — audita (a metade semântica que o gate de paridade não cobre), planeja (com o `state_snapshot`), revisa o plano com outro agent, implementa o spec faltante, roda `pnpm ci:local`, revisa o spec e commita/pusha na branch. Matrizes: `specialist-routing.md` v1.8 (2 path_globs + 1 demand_keyword) e `review-routing.md` v1.10 (1 path_glob). Índices: `AGENTS.md §3.1`, `.agents/WORKFLOWS.md`, `README.md`. **Nenhum arquivo de `apps/`, `packages/` ou `infra/` mudou** — a única mudança de dependência é o **override** de `effect` para `3.22.1` (advisory `1248071`, CVE-2026-121707: o pacote sai da árvore de produção de `apps/api`, onde era transitivo do `@prisma/config`); nenhum arquivo de `apps/` foi tocado. |

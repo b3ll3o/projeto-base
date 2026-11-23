@@ -178,7 +178,7 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão da stack:** 1.30.0
+**Versão da stack:** 1.31.0
 
 ### Histórico de Versões
 
@@ -209,3 +209,4 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 | `1.27.0` | **O código passa a casar com o system design** — o conjunto `docs/system-design/` afirmava quatro coisas que o código não tinha, e elas agora existem: a rota de health tem teto **PRÓPRIO** (`@Throttle` com 600/min no controller — não `@SkipThrottle()`, que não existe no código), a escrita aceita **`Idempotency-Key`** (a tabela `idempotency_keys` + um interceptor global), o papel de runtime ganha **`statement_timeout = '8s'`**, e a correlação da auditoria é a **mesma** da resposta. **Nenhuma dependência nova**, nenhum binário novo no `package.json`, nenhuma mudança em `apps/web`, `packages/` ou `infra/`. |
 | `1.28.0` | **Sem mudança de stack** — o PR fecha as pendências dos 6 PRs abertos e da issue #149: o `.github/dependabot.yml` passa a gerar `chore(deps):` (o prefixo `deps` NÃO é aceito pelo gate de Conventional Commits do repo, e os 5 PRs do Dependabot nasceram vermelhos por isso), 2 gates ganham regra (a major pendente que foi **adotada** reprova; a claim do total de advisories é conferida contra o `pnpm audit` medido) e a prosa do registro de exceções volta a bater com o audit (41 → 31 advisories). **Nenhuma dependência nova**, nenhum binário novo no `package.json`, nenhuma mudança em `apps/`, `packages/` ou `infra/`. |
 | `1.30.0` | **Sem mudança de stack** — o kit de documentação moderna ([`kit-documentacao.md`](../.agents/specs/conventions/kit-documentacao.md)) é **doc**: nenhuma dependência nova, nenhum binário no `package.json`, nenhuma mudança em `apps/api`, `apps/web`, `packages/` ou `infra/`. O que mudou foi a **cobertura**: os 14 itens do kit passaram a ter doc canônico, specialist dono e auditor por pilar, e o gate `check-doc-kit` cobra. |
+| `1.31.0` | **Sem mudança de stack** — o agent `e2e-specialist` e o workflow `e2e-coverage-mode` são docs e roteamento: **nenhuma dependência nova**, nenhum binário no `package.json`, nenhuma mudança em `apps/api`, `apps/web`, `packages/` ou `infra/`. A única mudança na árvore é o **override** de `effect` para `3.22.1` (a versão corrigida da advisory `1248071`, CVE-2026-121707 — o `effect` era transitivo do `@prisma/config` e está na árvore de produção de `apps/api`); o `package.json` e o `pnpm-lock.yaml` mudaram, nenhum arquivo de `apps/` foi tocado. O footer subiu junto com os outros 5. |

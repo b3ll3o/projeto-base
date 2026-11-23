@@ -15,8 +15,10 @@
 #   - Lê versão do footer de docs/MONOREPO.md ("**Versão do documento:** X.Y.Z")
 #     — usa o ÚLTIMO match (`tail -1`) para resiliência contra footers duplicados
 #   - Se workflow_dispatch passar input `version`, usa ele; senão extrai
-#   - #67: valida que os 4 footers (STACK, MONOREPO, TEMPLATE_USAGE, estrutura-e-versionamento)
-#     estão em sincronia — falha se drift detectado
+#   - #67: valida que os 6 footers (STACK, MONOREPO, TEMPLATE_USAGE,
+#     estrutura-e-versionamento, AGENTS.md, README.md) estão em sincronia —
+#     falha se drift detectado. A lista é a do gate `check-version-footers`
+#     (`FOOTERS_DE_VERSAO`), que cobra SEIS desde a v1.15.0.
 #   - Se tag `vX.Y.Z` já existe → noop (idempotente)
 #   - Senão cria annotated tag `vX.Y.Z` apontando para o merge commit + push
 #
@@ -100,7 +102,7 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Validar sincronia dos 4 footers de versao (issue #67)
+      - name: Validar sincronia dos 6 footers de versao (issue #67)
         id: drift
         run: |
           set -euo pipefail
@@ -113,18 +115,22 @@ jobs:
             | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -1 || echo "")
           est_ver=$(grep -oE '\*\*Versão da convenção:\*\* [0-9]+\.[0-9]+\.[0-9]+' .agents/specs/conventions/estrutura-e-versionamento.md \
             | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -1 || echo "")
-          echo "STACK=$stack_ver MONOREPO=$mono_ver TEMPLATE_USAGE=$tpl_ver ESTRUTURA=$est_ver TARGET=$target"
+          agents_ver=$(grep -oE '\*\*Versão do documento:\*\* [0-9]+\.[0-9]+\.[0-9]+' AGENTS.md \
+            | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -1 || echo "")
+          readme_ver=$(grep -oE '\*\*Versão:\*\* [0-9]+\.[0-9]+\.[0-9]+' README.md \
+            | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -1 || echo "")
+          echo "STACK=$stack_ver MONOREPO=$mono_ver TEMPLATE_USAGE=$tpl_ver ESTRUTURA=$est_ver AGENTS=$agents_ver README=$readme_ver TARGET=$target"
           drift=0
-          for v in "$stack_ver" "$mono_ver" "$tpl_ver" "$est_ver"; do
+          for v in "$stack_ver" "$mono_ver" "$tpl_ver" "$est_ver" "$agents_ver" "$readme_ver"; do
             if [ "$v" != "$target" ]; then
-              echo "::error::Drift detectado: footer em '$v' difere de MONOREPO ($target). Sincronize os 4 footers antes de mergear."
+              echo "::error::Drift detectado: footer em '$v' difere de MONOREPO ($target). Sincronize os 6 footers antes de mergear."
               drift=1
             fi
           done
           if [ $drift -ne 0 ]; then
             exit 1
           fi
-          echo "✓ 4 footers em sincronia em $target."
+          echo "✓ 6 footers em sincronia em $target."
 
       - name: Criar annotated tag + push
         if: steps.check.outputs.exists == 'false'

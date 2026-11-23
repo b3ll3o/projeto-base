@@ -83,7 +83,7 @@ node -p "Object.entries(require('./package.json').scripts)
 | Script | Comando | O que faz |
 |--------|---------|------------|
 | `pnpm pr:refresh` | `tsx tooling/scripts/pr-refresh-hook.ts` | Reescreve as claims numéricas do corpo do PR a cada push. **Nunca bloqueia** (advisory): o exit code é capturado e não propagado. |
-| `pnpm tooling:bump-version` | `tsx tooling/scripts/bump-version.ts` | Bump **mecânico** dos 4 footers de versão de uma vez: `pnpm tooling:bump-version 1.14.0`. |
+| `pnpm tooling:bump-version` | `tsx tooling/scripts/bump-version.ts` | Bump **mecânico** dos 6 footers de versão de uma vez: `pnpm tooling:bump-version 1.14.0`. |
 
 ## §3. Onde cada script é disparado
 
@@ -106,8 +106,11 @@ re-medido a cada merge). O resumo, medido nos hooks em 2026-10-29:
 **Mantido por:** projeto-base contributors
 **Doc irmão:** [`MONOREPO.md`](./MONOREPO.md) (estrutura, aliases, versionamento)
 
-> Este arquivo **não** tem footer de versão: os 4 footers canônicos são os de
+> Este arquivo **não** tem footer de versão: os 6 footers canônicos são os de
 > [`MONOREPO.md`](./MONOREPO.md), [`STACK.md`](./STACK.md),
-> [`TEMPLATE_USAGE.md`](./TEMPLATE_USAGE.md) e
-> [`estrutura-e-versionamento.md`](../.agents/specs/conventions/estrutura-e-versionamento.md)
-> — a lista é do gate `check-version-footers`, e ela não cresce.
+> [`TEMPLATE_USAGE.md`](./TEMPLATE_USAGE.md),
+> [`estrutura-e-versionamento.md`](../.agents/specs/conventions/estrutura-e-versionamento.md),
+> [`AGENTS.md`](../AGENTS.md) e [`README.md`](../README.md)
+> — a lista é a do gate `check-version-footers` (`FOOTERS_DE_VERSAO`), e a spec
+> dele a prende: cresceu de 4 para 6 na v1.15.0, quando o `AGENTS.md` já tinha
+> divergido sem ninguém ver.

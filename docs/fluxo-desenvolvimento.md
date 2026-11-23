@@ -39,9 +39,9 @@ maintainer: stack-code-reviewer
 │     review-router      → emite N reviewers em YAML           │
 │     pr-review-mode    → 1 specialist por parte → comenta o PR│
 │     retrospective-mode → captura aprendizados                │
-│  ⚠ MEDIDO 2026-11-18: 47 agents no catálogo; 2 por hook.     │
+│  ⚠ MEDIDO 2026-11-18: 48 agents no catálogo; 2 por hook.     │
 │  Só 2 rodam por hook (stack-code-reviewer, doc-sync); os 2   │
-│  routers emitem despacho que ninguém consome; 3 são subagent │
+│  routers emitem despacho que ninguém consome; 5 são subagent │
 └──────────────────────────────────────────────────────────────┘
                │
                ▼
@@ -128,7 +128,7 @@ grep -cE "^\s+name: '" .tooling/scripts/ci/preflight-gates.ts
 > documento publicava um 0 como se fosse a contagem. O sintoma (contagem que não
 > se move) é indistinguível de "não mudou nada desde a última vez".
 >
-> **MEDIDO 2026-11-17: 55.** As contagens anteriores (21, 29, 41, 44, 54) eram de revisões antigas — a lista cresce a cada gate novo. Por isso a contagem vive do lado do comando (`grep -cE "^\s+name: '" .tooling/scripts/ci/preflight-gates.ts` → **55**) e a lista **completa** vive no próprio `preflight-gates.ts`; a §4 enumera os gates com **comando próprio**.
+> **MEDIDO 2026-11-23: 56.** As contagens anteriores eram de revisões antigas — a lista cresce a cada gate novo. Por isso a contagem vive do lado do comando (`grep -cE "^\s+name: '" .tooling/scripts/ci/preflight-gates.ts` → **56**) e a lista **completa** vive no próprio `preflight-gates.ts`; a §4 enumera os gates com **comando próprio**.
 
 ### 3.4 Fan-out por fase — onde paralelizar dá ganho, e onde dá conflito
 
@@ -142,7 +142,7 @@ paralelo e publica a revisão no PR.
 |------|---------|---------|
 | Análise / pesquisa | N agentes **read-only**, domínios disjuntos por `path_glob` | sem escrita, sem colisão; a matriz já separa `nestjs` de `nextjs` |
 | Auditoria | N reviewers em paralelo, todos read-only | o roteador já resolve quem; falta o executor |
-| `.agents/memory/*.md` | 1 agente por arquivo | 49 arquivos (`find .agents/memory -name '*.md' | wc -l`), convenção 1:1 verificável |
+| `.agents/memory/*.md` | 1 agente por arquivo | 50 arquivos (`find .agents/memory -name '*.md' | wc -l`), convenção 1:1 verificável |
 | Implementação | **1 por vez no mesmo codebase** | ver paredes abaixo |
 | Gates do preflight | 56 gates | hoje serial (`preflight.ts:446`), nenhum escreve |
 
@@ -154,11 +154,11 @@ paralelo e publica a revisão no PR.
 - **`specialist-routing.md`** — fonte da verdade de **todo** o roteamento. Dois `agent-architect` colidem no arquivo que decide quem é chamado.
 - **Branches paralelas** — `check-branch-up-to-date` bloqueia contra `origin/main`: a segunda branch nasce desatualizada por construção. O histórico já escolheu o lado oposto: PR #81 (167 arquivos), #95 (10 issues).
 
-**Não converta gate determinístico em prompt.** Os 55 gates são regex + TypeScript com spec própria; §5 já registra que a camada "agentic" é *"regra determinística com prosa em volta"*. Reescrever um como LLM é a classe 6 de `guard-classes.md` — spec verde, sistema inerte.
+**Não converta gate determinístico em prompt.** Os 56 gates são regex + TypeScript com spec própria; §5 já registra que a camada "agentic" é *"regra determinística com prosa em volta"*. Reescrever um como LLM é a classe 6 de `guard-classes.md` — spec verde, sistema inerte.
 
 **As 2 peças que ainda faltam** — nenhuma delas é "mais agents":
 
-1. **Registro** — os 47 agents vivem em `.agents/agents/`, e o binding do Claude Code (symlink `~/.claude/agents/<nome>.md` → `.agents/agents/<nome>.md`) é o que os registra na máquina. Sem o symlink, o orquestrador não tem handle: agent não registrado não é invocado nem por LLM.
+1. **Registro** — os 48 agents vivem em `.agents/agents/`, e o binding do Claude Code (symlink `~/.claude/agents/<nome>.md` → `.agents/agents/<nome>.md`) é o que os registra na máquina. Sem o symlink, o orquestrador não tem handle: agent não registrado não é invocado nem por LLM.
 2. **Relógio** — `grep -rn 'Date.now()' tooling/ .tooling/ | wc -l` devolve **12** ocorrências (4 no
    `ambiente-local.ts`, 3 no `boot-local.ts`, 2 no `check-audit-skills.ts`, 3 em specs) — sem cronômetro, "mais agents é mais rápido" é raciocínio.
 
@@ -199,13 +199,13 @@ paralelo e publica a revisão no PR.
 | `check-dependency-drift` | `pnpm ci:preflight` | A+B (gate `check-dependency-drift`) | O MESMO pacote declarado em **versões diferentes** em workspaces diferentes — o lockfile instala 2 cópias e cada app typecheca contra a sua | Sim |
 | `check-dependency-freshness` | `pnpm ci:preflight` | A+B (gate `check-dependency-freshness`) | Major pendente **sem declaração de motivo**, ou pendência **envelhecida** (o pacote saiu do workspace, ou a faixa já permite a major, ou a major foi **adotada** — a faixa já é a major que a pendência diz que não sobe; MEDIDO 2026-11-10, com a árvore plantada no `eslint` `^10.14.0`, o gate devolvia `ok=true`) | Sim |
 | `check-dependency-audit` | `pnpm ci:preflight` | A+B (gate `check-dependency-audit`) | Advisory **crítica ou alta** de dependência que não está na lista de exceções versionada; exceção cuja verificação (o motivo medido) parou de valer; e a **claim** do total de advisories (`advisoriesEsperadas`) que declara **mais** do que o `pnpm audit` mede — o que o REGISTRO publica a mais é **aviso**, não erro (dado externo não é mudança do repo) | Sim |
+| `check-version-footers` | `pnpm ci:preflight` | A+B (gate `check-version-footers`) | Os **seis** footers de versão divergirem, a versão atrás da última tag, ou o **rodapé** ter mudado sem a versão acompanhar (o rótulo nomeando DOIS conteúdos). A âncora da 3ª regra é o **commit que instalou a versão atual**, não a última tag | Sim |
+| `check-e2e-flow-coverage` | `pnpm ci:preflight` | A+B (gate `check-e2e-flow-coverage`) | Paridade **declarativa** dos fluxos e2e: toda tela do disco tem linha no inventário de [`e2e-playwright.md`](../.agents/specs/conventions/e2e-playwright.md), e todo fluxo tem spec. A semântica é do [`e2e-specialist`](../.agents/agents/e2e-specialist.md) | Sim |
 | `check-action-version-comment` | `pnpm ci:preflight` | A+B (gate `check-action-version-comment`) | Comentário de versão da action que **mente** sobre a major do pin (MEDIDO 2026-11-09: o PR #154 do Dependabot subia `pnpm/action-setup` para 6.1.1 e deixava `# v3`), ou a mesma action em SHAs diferentes | Sim |
 | `check-ci-prisma-client-ready` | `pnpm ci:preflight` | A+B (gate `check-ci-prisma-client-ready`) | Job que roda `pnpm tooling:test` **sem** gerar o client do Prisma antes — o job só passa quando o cache do pnpm o traz pronto | Sim |
 | `turbo-redirect-differential` | `.tooling/scripts/ci/turbo-redirect-differential.sh` | A+B (gate `turbo-redirect-differential`) | Forma de `pnpm turbo run …` que o parser extrai diferente do turbo real — **classe 6** (especificação local diverge do sistema real) | Sim (se Node ≥ 22.6) |
 | `pr-review-gate` | `pnpm pr:review-check` | B (job `review-comment`) | PR **sem** comentário de revisão (marcador `<!-- pr-review -->`) em nenhum dos 3 canais da API — o PR **não pode ser mergeado**. Sai 1 também quando **não deu para medir** (sem PR, sem token, API caída, ou **o número não é um PR** — o 404 da API, que é um caminho com conserto próprio): pular com `0` seria verde sem medir | Não — é gate de PR, roda no workflow `pr-review.yml`, e é `required` no ruleset |
 | `check-pr-review-wired` | `pnpm ci:preflight` | A+B (gate `check-pr-review-wired`) | O **processo** de revisão de PR desligado: o workflow `pr-review.yml` não existe, não escuta `pull_request_review`, não invoca o gate, o script `pr:review-check` falta no `package.json` ou aponta para outro path, a convenção `pr-review.md` não está indexada nos **dois** índices, ou o doc do workflow não está em `.agents/WORKFLOWS.md` | Sim |
-
----
 
 ## §5. Estratégias de fluxo e classificação de problemas
 
@@ -215,7 +215,7 @@ Derivado do framework de Rojas (*vetorial = similaridade, grafo = relação mult
 |---------------|-----------|------------|---------------------|
 | **Determinística** (regra fixa, verificável) | `.tooling/scripts/ci/*.ts`, `.husky/*`, `tooling/scripts/*.ts` | Erra **alto e nomeado**: exit 1, arquivo, linha, regra | `stack-code-reviewer` (DDD imports bloqueados), `checkTsconfigDrift`, `checkPackageJsonDrift` |
 | **Agente / roteamento** (YAML + regex executado por TS — *não* é IA) | `.agents/specs/conventions/{review,specialist}-routing.md` + `tooling/scripts/*-router.ts` | Erra **baixo e anônimo**: classifica para o reviewer errado, sem sinal | `review-router.ts` (30 testes), `specialist-router.ts` (39 testes) |
-| **Memória / prosa** | `.agents/memory/*.md`, `.agents/runs/*.md` | **Evapora** — não existe evento detectável quando envelhece | 49 memórias versionadas (`find .agents/memory -name '*.md' | wc -l`); as retrospectivas `b<N>-result.md` gravam **fora** do repo |
+| **Memória / prosa** | `.agents/memory/*.md`, `.agents/runs/*.md` | **Evapora** — não existe evento detectável quando envelhece | 50 memórias versionadas (`find .agents/memory -name '*.md' | wc -l`); as retrospectivas `b<N>-result.md` gravam **fora** do repo |
 
 > **Tese honesta:** nenhum problema medido neste repo pede IA. `grep -rniE 'embedding\|openai\|langchain\|pgvector\|neo4j' apps/*/package.json packages/*/package.json` retorna zero. A camada "agentic" é regex em YAML executado por TypeScript — é **regra determinística com prosa em volta**. O custo do rótulo errado já apareceu: `review:lint` está dentro do preflight, `specialist:lint` (mesma família, 13 testes verdes) está fora.
 

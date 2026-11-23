@@ -9,42 +9,41 @@
 // divergirem — só descobria isso no momento do release.
 //
 // A lista do `release-mode.md` foi corrigida (nomeia os quatro). Este script
-// é a segunda metade: um bump que escrever os QUATRO de uma vez, para que
+// é a segunda metade: um bump que escreve os QUATRO de uma vez, para que
 // "esquecer um" não dependa de atenção.
+//
+// ⚠️ MEDIDO em 2026-11-19: a lista deste script tinha QUATRO e o gate
+// `check-version-footers` cobra SEIS — o `AGENTS.md` e o `README.md` ficavam
+// de fora, e o bump produzia exatamente a divergência que o gate acusa (o
+// `AGENTS.md` já tinha divergido para `1.13.0` no merge do #116 sem ninguém
+// ver). A lista agora é a DO GATE: uma lista só, importada de lá.
 //
 // Uso:
 //
 //   pnpm tooling:bump-version 1.13.0
 //
-// ⚠️ Ele escreve os QUATRO, e não "os que achar". A lista está aqui, e é a
-// mesma do gate `check-version-footers` — um arquivo que o bump escreve e o
-// gate não conhece seria uma divergência garantida.
+// ⚠️ Ele escreve os SEIS, e não "os que achar". Um arquivo que o bump escreve
+// e o gate não conhece seria uma divergência garantida — e um que o gate cobra
+// e o bump não escreve também.
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-
-/** Um footer: onde está e como o texto dele é. */
-interface Footer {
-  arquivo: string;
-  rotulo: string;
-}
+import {
+  FOOTERS_DE_VERSAO,
+  type FooterEsperado,
+} from '../../.tooling/scripts/ci/check-version-footers.js';
 
 /**
- * Os QUATRO footers.
+ * Os SEIS footers — a lista do gate, importada.
  *
  * ⚠️ A lista é exportada e a spec a prende: uma lista de segurança que
  * ninguém prende é uma lista que alguém encolhe sem querer (o mesmo motivo
  * do `HOSTS_DESTINO_LOCAL` do PR #115).
+ *
+ * O TIPO também vem de lá (`FooterEsperado`): a lista e o tipo são o mesmo
+ * fato, e um tipo repetido aqui é um terceiro lugar para divergir.
  */
-export const FOOTERS: readonly Footer[] = [
-  { arquivo: 'docs/MONOREPO.md', rotulo: '**Versão do documento:**' },
-  { arquivo: 'docs/STACK.md', rotulo: '**Versão da stack:**' },
-  { arquivo: 'docs/TEMPLATE_USAGE.md', rotulo: '**Versão do documento:**' },
-  {
-    arquivo: '.agents/specs/conventions/estrutura-e-versionamento.md',
-    rotulo: '**Versão da convenção:**',
-  },
-];
+export const FOOTERS: readonly FooterEsperado[] = FOOTERS_DE_VERSAO;
 
 const SEMVER = /^\d+\.\d+\.\d+$/;
 
@@ -67,7 +66,7 @@ export function trocarVersao(texto: string, rotulo: string, versao: string): str
 }
 
 /**
- * Aplica o bump nos QUATRO footers. Devolve os arquivos que mudaram.
+ * Aplica o bump nos SEIS footers. Devolve os arquivos que mudaram.
  */
 export function aplicarBump(raiz: string, versao: string): string[] {
   if (!SEMVER.test(versao)) {

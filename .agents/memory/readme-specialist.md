@@ -65,7 +65,7 @@ envelhece a cada PR; o link, não.
   Docker Compose" e "Opção B — pnpm nativo", com pré-requisitos e
   troubleshooting. O quadrante Diátaxis dele é tutorial.
 - A seção `## Versão & Licença` (linha 295) é o **rodapé** do repo, e ele
-  diz que a tag do template é a dos 4 footers canônicos — o dono é o
+  diz que a tag do template é a dos 6 footers canônicos — o dono é o
   `release-versioning-specialist`.
 - O `docs/como-rodar.md` indexa **6 ambientes** (`grep -cE '^\| [0-9]+ \| '
   docs/como-rodar.md`), e o README já aponta para ele — a duplicação do

@@ -69,7 +69,8 @@
       "source-map-js": "^1.2.2",
       "tinypool": "^2.1.2",
       "undici": "^8.12.3",
-      "deepmerge-ts": "^8.0.2"
+      "deepmerge-ts": "^8.0.2",
+      "effect": "3.22.1"
     }
   }
 }

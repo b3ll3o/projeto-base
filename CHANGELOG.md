@@ -3,7 +3,7 @@
 > Registro de versão do template, em **pt-BR**, no formato
 > [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 >
-> A versão corrente do template é **1.30.0**. O **fato** de cada versão é a
+> A versão corrente do template é **1.31.0**. O **fato** de cada versão é a
 > tag correspondente no git — este arquivo é o **leitura** do que a tag
 > contém, e a tag é a que se confere.
 
@@ -20,6 +20,31 @@
 ### Quebras de compatibilidade
 
 - Nada ainda — a próxima versão a ser fechada entra aqui.
+
+## [1.31.0] — 2026-11-19
+
+### Adicionado
+
+- Agent [`e2e-specialist`](./.agents/agents/e2e-specialist.md): o dono do ciclo de cobertura e2e de fluxos de usuário. Antes de todo push que toque uma **tela** (`apps/web/app/**/page.tsx`) ou um **spec e2e** (`apps/web/e2e/**`) — os dois globs que a matriz roteia —, ele audita se toda tela da aplicação tem spec e2e que a atravessa; quando falta, monta o plano (com o `state_snapshot`), revisa o plano com outro agent, implementa o spec, roda `pnpm ci:local`, revisa o spec e commita/pusha na branch. A regra que ele executa é a convenção [`e2e-playwright`](./.agents/specs/conventions/e2e-playwright.md) — todo fluxo de usuário com tela tem spec e2e que atravessa o backend. O gate [`check-e2e-flow-coverage`](./.tooling/scripts/ci/check-e2e-flow-coverage.ts) mede a metade **declarativa** (paridade entre inventário, specs e `page.tsx`); o agent fecha a **semântica** (o spec afirma o efeito? a recusa está coberta com dado plantado? a semente é pela API?).
+- Workflow [`e2e-coverage-mode`](./.agents/workflows/e2e-coverage-mode.md): o mesmo ciclo em formato de dispatch canônico ([`protocolos/dispatch.md`](./.agents/skills/agents-coordinate/protocolos/dispatch.md)), com revisão do plano **e** revisão do spec implementado.
+- Roteamento: a matriz [`specialist-routing`](./.agents/specs/conventions/specialist-routing.md) v1.8 ganha 2 path_globs (`apps/web/e2e/**` + `apps/web/app/**/page.tsx`) e 1 demand_keyword; a matriz [`review-routing`](./.agents/specs/conventions/review-routing.md) v1.10 **soma** o `e2e-specialist` aos reviewers dos specs de fluxo (a matriz acumula: o spec e2e já ia ao `test-writer` por `**/*.spec.ts` e passa a ir também ao dono do inventário de fluxos).
+- 3ª regra do gate [`check-version-footers`](./.tooling/scripts/ci/check-version-footers.ts): o **rodapé** de um dos seis footers de versão mudou desde a última tag e a versão **não** mudou. As duas regras anteriores medem o número (concordância entre os seis, e não-atrás-da-tag) — as duas passavam quando o rodapé muda e o número fica, que é a classe do rodapé que nomeava dois conteúdos. A janela medida é a do último release: um bump no meio da janela cobre a janela.
+
+### Corrigido
+
+- O rodapé do `README.md` passava a descrever **dois conteúdos com o mesmo rótulo de versão**: as contagens do disco foram re-medidas (48 agents · 50 memórias · 18 workflows) sem o número da versão acompanhar. Agora o rótulo da versão e as contagens andam juntos — a versão do documento sobe para 1.31.0.
+- O script [`tooling:bump-version`](./tooling/scripts/bump-version.ts) escrevia **quatro** dos seis footers de versão: o `AGENTS.md` e o `README.md` ficavam de fora, e o bump produzia exatamente a divergência que o gate acusa — o mesmo defeito do #126, que o gate media só quatro. A lista agora é a do gate (`FOOTERS_DE_VERSAO`), importada de lá: uma lista só.
+- A convenção [`post-merge-release`](./.agents/specs/conventions/post-merge-release.md) e o handoff do workflow [`release-mode`](./.agents/workflows/release-mode.md) diziam "3/4 arquivos versionados" — o gate mede **seis** desde a v1.15.0. O conjunto e o procedimento foram alinhados.
+- A 3ª regra do `check-version-footers` media o **arquivo inteiro** em vez do **rodapé**: reprovava 25 de 72 commits do histórico — inclusive PRs já mergeados (#166 NestJS 12, #170 cards de empresa) cujo rodapé era byte-idêntico e cuja versão estava certa. O repositório muda prosa o tempo todo (PR de feature + PR de release separado), e a regra transformava TODO PR que tocasse um dos seis num PR de release. O que se compara agora é a linha do rótulo — que é o que o rótulo de versão nomeia. Há teste para o caso (prosa mudou, rodapé não → verde).
+- O workflow [`release-template`](./.github/workflows/release-template.yml) validava **quatro** footers de versão enquanto o gate cobra **seis** desde a v1.15.0: uma divergência no `AGENTS.md` ou no `README.md` não abortava o release. Agora valida os seis.
+- A convenção [`estrutura-e-versionamento`](./.agents/specs/conventions/estrutura-e-versionamento.md) não definia o tipo de bump para "o rodapé de um doc versionado mudou" — que é exatamente o caso que a 3ª regra cria. A regra é: patch.
+- A 3ª regra do `check-version-footers` ancorava a comparação na **última tag**, e ficava **inerte** depois de um bump no meio da janela: o gate devolvia `[]` com o rodapé do `README.md` alterado e a versão já bumpeada — o rótulo nomeava DOIS conteúdos, e a regra existe justamente para isso. A âncora agora é o **commit que instalou a versão atual** (`git log -S`), e a janela medida é a que vai dele até agora. Há teste para o caso.
+- O `check-version-footers` devolvia **verde mudo** fora de um repo git (ou num repo sem tag): as regras da tag não rodavam e o resultado era `{ok:true, errors:[]}` — verde por ausência. Agora declara a **ressalva** (`guard-classes.md`: quem não pode ser comparado é reclassificado, nunca apagado em silêncio).
+- O advisory [`effect`](https://github.com/Effect-TS/effect/security/advisories/GHSA-7589-6fvf-x4pw) `1248071` (ReDoS em `Schema.TemplateLiteral`, CVE-2026-121707) entrou no registro do npm em 2026-11-19 e reprovava o gate de SCA de **qualquer** branch — inclusive da `main`. O `effect` está na árvore de produção de `apps/api` (transitivo do `@prisma/config`, que é o CLI do prisma — e o CLI roda no ENTRYPOINT do container). O conserto é um **override** para `effect@3.22.1` (a versão corrigida), não uma exceção: o pacote sai da árvore. MEDIDO: `pnpm audit --json` → 30 advisories, `effect` ausente; `prisma -v`, `prisma validate` e `prisma generate` verdes com o `effect@3.22.1`. (issue #181)
+
+### Quebras de compatibilidade
+
+- Nenhuma em runtime: nenhum endpoint, script, migration, tabela ou contrato de API mudou.
 
 ## [1.30.0] — 2026-11-18
 
@@ -45,7 +70,7 @@
 - Nenhuma em runtime: nenhum endpoint, script, migration, tabela ou contrato de API mudou.
 - Uma mudança de comportamento, em [`docs/agents/domain.md`](./docs/agents/domain.md): a instrução "se `GLOSSARY.md` não existir, siga em silêncio" foi retirada, porque o arquivo passa a existir a partir desta versão.
 
-## Histórico anterior a 1.30.0
+## Histórico anterior a 1.31.0
 
 O histórico **anterior** a esta versão não está neste arquivo — ele vive nas
 **tags do git**, que são o registro datado do que foi feito em cada versão.

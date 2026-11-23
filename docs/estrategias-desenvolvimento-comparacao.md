@@ -1,8 +1,8 @@
 ---
 name: estrategias-desenvolvimento-comparacao
 description: Comparação entre regra determinística, camada agentic e memória acumulada, e onde este repo errou a classificação
-version: 1.1.0
-updated: 2026-10-03
+version: 1.2.0
+updated: 2026-11-23
 maintainer: orquestração
 ---
 
@@ -14,7 +14,7 @@ O framework de referência ("vetorial encontra similaridade, grafos encontram
 relacionamentos, fine-tuning especializa comportamento, e às vezes a resposta é
 software convencional") aplicado a este repo produz um veredito desconfortável:
 **quase nenhum problema aqui precisa de IA**, e mesmo assim o repo construiu
-três camadas — 5793 linhas de tooling determinístico (`find tooling/scripts -name '*.ts' -not -name '*.spec.ts' | xargs wc -l`), 47 agents, 4284 linhas de
+três camadas — 5940 linhas de tooling determinístico (`find tooling/scripts -name '*.ts' -not -name '*.spec.ts' | xargs wc -l`), 48 agents, 4365 linhas de
 memória (`ls .agents/memory/*.md | xargs wc -l`) — para resolver o que, em 100% dos casos verificados, é regra
 determinística.
 
@@ -108,10 +108,10 @@ mesmo assim não aprende.
 
 **Modo de falha:** evaporação e paralelismo. `wc -l .agents/memory/*.md | sort -n`
 mostra as memórias presas no piso do template
-(`.agents/memory/_template.md`) — o corpus são **49** arquivos
-(`ls .agents/memory/*.md | wc -l` → 49) — e as que não são exercitadas por hook
-ou CI envelhecem sem ninguém perceber. O `AGENTS.md` tem **29** links para
-memórias (`grep -c 'agents/memory' AGENTS.md` → 29), todos com `./.agents/memory/…`
+(`.agents/memory/_template.md`) — o corpus são **50** arquivos
+(`ls .agents/memory/*.md | wc -l` → 50) — e as que não são exercitadas por hook
+ou CI envelhecem sem ninguém perceber. O `AGENTS.md` tem **30** links para
+memórias (`grep -c 'agents/memory' AGENTS.md` → 30), todos com `./.agents/memory/…`
 — que resolve dentro do repo.
 
 ## 2. A quarta: o híbrido em 3 camadas — implementa ou só declara?
@@ -121,9 +121,9 @@ memórias (`grep -c 'agents/memory' AGENTS.md` → 29), todos com `./.agents/mem
 - Camada 1 tem barreira **provada ao vivo**: violação DDD real em
   `domain/probe.ts` → `1 finding(s) — 1 blocker` + EXIT=1 pelo mesmo caminho que
   `.husky/pre-commit:3` e `review-stack.yml:42` executam.
-- Camada 2 é código testado: `pnpm tooling:test` → **79 arquivos / 1581 testes
-  verdes** (dois runners: `tooling/scripts` → 21/454 e `.tooling/scripts/ci` → 58/1127).
-- Camada 3 é artefato versionado: 4284 linhas em 49 arquivos (`ls .agents/memory/*.md | xargs wc -l`).
+- Camada 2 é código testado: `pnpm tooling:test` → **79 arquivos / 1610 testes
+  verdes** (dois runners: `tooling/scripts` → 21/467 e `.tooling/scripts/ci` → 58/1143).
+- Camada 3 é artefato versionado: 4365 linhas em 50 arquivos (`ls .agents/memory/*.md | xargs wc -l`).
 
 **A carga de prova não está mais concentrada na Camada 1.** A Camada 2 era
 inert — os 6 specs de `.tooling/scripts/ci` (os próprios checks do preflight)
@@ -181,7 +181,7 @@ footer, se um link existe. Conhecimento que muda é fonte viva, nunca cópia.
 
 | Tipo do problema | Instâncias verificadas no repo | Estratégia correta | O que foi feito |
 | --- | --- | --- | --- |
-| Regra determinística | 56 checks de drift/preflight, 1581 testes de tooling | Determinística — e funciona | ✅ Camada 1 |
+| Regra determinística | 56 checks de drift/preflight, 1610 testes de tooling | Determinística — e funciona | ✅ Camada 1 |
 | Similaridade semântica | 0 | Vetorial | — (nada a fazer) |
 | Relacionamento multi-hop | 0 | Grafo | — (nada a fazer) |
 | Especialização de comportamento | 1 caso real (roteamento de reviewer) | Regra, não agentic | ⚠️ chamada de "agentic", é TypeScript com regex |
@@ -212,7 +212,7 @@ Os três "0" não são estimativas: são o resultado do `grep` de dependências 
 | --- | --- | --- |
 | Camada "agentic" de roteamento | 31 `pattern:` regex em YAML rodados por TypeScript (`review-routing.md:42-140`) | Foi o que deixou `specialist:lint` **fora** do preflight (`grep -c specialist .tooling/scripts/ci/preflight.ts` = **0**) enquanto `review:lint` está dentro (`preflight.ts:50`, que executa `pnpm review:lint`). A camada tratada como "semântica" foi tratada como opcional. |
 | Memória acumulada como "fine-tuning" | Fine-tuning de conhecimento que **muda** — proibido pelo framework | `README.md:259` afirmava que os apps "ainda **não foram criados**"; existem, com 40 specs. Corrigido. `docs/MONOREPO.md:262` está em `1.9.0` enquanto a última tag é `v1.8.0` — o drift encolheu de 3 versões para 1, mas a classe é a mesma: fato volatile envelhecendo como se fosse estável, agora sem check que amarre os dois. |
-| Arquitetura de 3 camadas escolhida antes do problema | Nenhum problema verificado pede IA | Superfície de manutenção (5793 + 4284 linhas) e 12 furos de costura (§7 + §8), para resolver o que cabia num script de 1,6s. |
+| Arquitetura de 3 camadas escolhida antes do problema | Nenhum problema verificado pede IA | Superfície de manutenção (5940 + 4365 linhas) e 12 furos de costura (§7 + §8), para resolver o que cabia num script de 1,6s. |
 | Camada 2 como "barreira de roteamento" | Telemetria | `review-router.ts:350` tem exit 3 sem consumidor algum. Um exit code sem consumidor é uma constante, não um portão. |
 | `tdd:check` como verificação de TDD | Task sem dono: declarada no `package.json` como `turbo run tdd:check`, ausente do `turbo.json` e de todo pacote do workspace | **A análise original errou a classe do erro** e a tabela é a prova: afirmava "exit 0 com FULL TURBO em 37ms" (falso verde). Medido: `pnpm tdd:check` → **EXIT=1**, `Could not find task in project`. A task já tinha morrido; o script que a invocava ficou. Quem reportava verde era este documento, não o comando. |
 | `release-template.yml` como "automática e idempotente" | Era inerte — o footer tinha regredido para `1.5.0` e `v1.5.0` já existia, então todo push era noop. Footer alinhado em `1.9.0`; a idempotência agora emite `::warning::` em vez de encerrar em silêncio | Idempotência confundida com *correctly*-idempotência: o mecanismo criado para evitar erro mascarava drift. Falta o check que amarra footer↔tag (**BL1**). |

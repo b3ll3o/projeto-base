@@ -23,9 +23,8 @@ Esta regra vale para todo agent (`.agents/agents/*.md`), toda skill
 4. **Composição explícita.** Agents podem ser encadeados (sequential), paralelizados (parallel) ou organizados hierarquicamente (orchestrator → specialists) — mas o modo de composição DEVE ser documentado no despacho.
 5. **Modelo-agnóstico.** Agents são definidos em Markdown puro. Não há acoplamento com vendor. Toda instrução específica de ferramenta (Claude Code, Cursor, etc.) vive em `docs/TEMPLATE_USAGE.md`, nunca no corpo do agent.
 
-**Quando NÃO aplicar esta regra:** tarefa trivial de um único agent sem
-dependências externas, interação puramente conversacional (sem execução), ou
-exploração read-only de um único arquivo ou trecho.
+**Quando NÃO aplicar esta regra:** tarefa trivial de um único agent sem dependências
+externas, interação puramente conversacional (sem execução), ou exploração read-only de um único arquivo ou trecho.
 
 Em todos os outros casos, **coordene via `agents:coordinate`**.
 
@@ -109,6 +108,7 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 | **monorepo-specialist**| [`.agents/agents/monorepo-specialist.md`](./.agents/agents/monorepo-specialist.md)| [memory](./.agents/memory/monorepo-specialist.md)        | Arquiteto de monorepo (workspaces, pipelines) | Adicionar/remover/mover apps ou packages, configurar turbo  |
 | **nestjs-specialist**  | [`.agents/agents/nestjs-specialist.md`](./.agents/agents/nestjs-specialist.md)    | [memory](./.agents/memory/nestjs-specialist.md)          | Arquiteto backend NestJS                    | Criar/refatorar módulo NestJS, DI, validação, Swagger       |
 | **nextjs-specialist**  | [`.agents/agents/nextjs-specialist.md`](./.agents/agents/nextjs-specialist.md)    | [memory](./.agents/memory/nextjs-specialist.md)          | Arquiteto frontend Next.js                  | Criar rota/página, decidir RSC vs. Client, Server Actions    |
+| **e2e-specialist**    | [`.agents/agents/e2e-specialist.md`](./.agents/agents/e2e-specialist.md)      | [memory](./.agents/memory/e2e-specialist.md)            | Dono da cobertura e2e de fluxos de usuário (Playwright): audita, planeja, revisa o plano, implementa o spec faltante, roda a suíte e commita/pusha na branch | Quando a demanda é roteada a ele — a matriz `specialist-routing.md` v1.8 roteia uma **tela** (`apps/web/app/**/page.tsx`) ou um **spec e2e** (`apps/web/e2e/**`); "os fluxos têm e2e?", "falta teste e2e" |
 | **telemetry-specialist**| [`.agents/agents/telemetry-specialist.md`](./.agents/agents/telemetry-specialist.md)| [memory](./.agents/memory/telemetry-specialist.md)        | Arquiteto de telemetria/observabilidade cross-stack (OpenTelemetry SDK init, exporters OTLP, propagação W3C, sampling, web-vitals, collector) | Decisões de instrumentação em backend/frontend/infra; correlação Pino↔OTel; bridge `request.id` → W3C `traceparent`; config OTel Collector Compose |
 | **ux-design-specialist**| [`.agents/agents/ux-design-specialist.md`](./.agents/agents/ux-design-specialist.md)| [memory](./.agents/memory/ux-design-specialist.md)        | Specialist em UX/design de interface (tokens, estados, formulários, a11y, microcopy) | Criar/revisar a aparência e o comportamento de telas e componentes, definir tokens, auditar a11y de UI |
 | **multi-tenant-specialist**| [`.agents/agents/multi-tenant-specialist.md`](./.agents/agents/multi-tenant-specialist.md)| [memory](./.agents/memory/multi-tenant-specialist.md)        | Arquiteto de tenancy (shared-schema + `tenant_id` + RLS, contexto de tenant na fronteira, escopo de query, cache por tenant, backfill, gate cross-tenant) | Criar/alterar tenancy: `Tenant`/`Membership`/`Invitation`, `tenant_id` em model, filtro de tenant em repositório, RLS, chave de cache por tenant, migração de dados pré-tenancy, spec de isolamento |
@@ -134,9 +134,8 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 > **Skills de auditoria (1:1):** cada specialist de auditoria carrega uma skill de processo
 > determinístico (`.agents/skills/<name>-audit/SKILL.md`) — `prisma-audit`, `openapi-audit`, `otelcol-audit`,
 > `docker-prod-audit`, `release-versioning-audit`, `findings-orchestration`, `documentation-audit`,
-> `multi-tenant-audit` (do `multi-tenant-specialist`, que **não** é despachado pelo orchestrator) e as
-> **5 do kit** (`onboarding-docs-audit`, `architecture-docs-audit`, `decision-docs-audit`,
-> `contract-docs-audit`, `operations-docs-audit`). A skill encapsula o **processo**; o agent, o **papel**.
+> `multi-tenant-audit` (do `multi-tenant-specialist`, que **não** é despachado pelo orchestrator) e as **5 do kit**
+> (`onboarding-docs-audit`, `architecture-docs-audit`, `decision-docs-audit`, `contract-docs-audit`, `operations-docs-audit`). A skill encapsula o **processo**; o agent, o **papel**.
 
 > **Skills de UI (a maior relação 1:N do repo, v1.11.0+):** o `ux-design-specialist` carrega **8** skills —
 > `ui-review` (processo) → `ui-modes` (propósito) → `ui-craft` (tokens, anti-slop) → `ui-break` (pior caso) → `motion` (movimento), mais
@@ -148,15 +147,9 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 
 > **Skills de grafo (v1.16.0+):** [`graphify`](./.agents/skills/graphify/SKILL.md) — o `explorer` consulta o grafo de conhecimento quando a pergunta é sobre a estrutura do código.
 
-> **Skills de terceiro adaptadas (v1.20.0+):** [`grilling`](./.agents/skills/grilling/SKILL.md) e
-> [`handoff`](./.agents/skills/handoff/SKILL.md) no `orchestrator`; [`design-taste-frontend`](./.agents/skills/design-taste-frontend/SKILL.md),
-> [`agent-browser`](./.agents/skills/agent-browser/SKILL.md) e [`agent-desktop`](./.agents/skills/agent-desktop/SKILL.md) no `ux-design-specialist`.
-> **Adaptadas, não vendorizadas** — o método é o do repo. De [mattpocock/skills](https://github.com/mattpocock/skills) (MIT),
-> [leonxlnx/taste-skill](https://github.com/leonxlnx/taste-skill) (MIT), [vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser)
-> e [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop) (Apache-2.0).
+> **Skills de terceiro adaptadas (v1.20.0+):** [`grilling`](./.agents/skills/grilling/SKILL.md) e [`handoff`](./.agents/skills/handoff/SKILL.md) no `orchestrator`; [`design-taste-frontend`](./.agents/skills/design-taste-frontend/SKILL.md), [`agent-browser`](./.agents/skills/agent-browser/SKILL.md) e [`agent-desktop`](./.agents/skills/agent-desktop/SKILL.md) no `ux-design-specialist`. **Adaptadas, não vendorizadas** — o método é o do repo. De [mattpocock/skills](https://github.com/mattpocock/skills) (MIT), [leonxlnx/taste-skill](https://github.com/leonxlnx/taste-skill) (MIT), [vercel-labs/agent-browser](https://github.com/vercel-labs/agent-browser) e [vercel-labs/agent-desktop](https://github.com/vercel-labs/agent-desktop) (Apache-2.0).
 >
-> **Skills de stack (o processo que o specialist segue):** [`docker`](./.agents/skills/docker/SKILL.md) e
-> [`ddd-hexagonal-validation`](./.agents/skills/ddd-hexagonal-validation/SKILL.md) — carregadas por mais de um agent cada.
+> **Skills de stack (o processo que o specialist segue):** [`docker`](./.agents/skills/docker/SKILL.md) e [`ddd-hexagonal-validation`](./.agents/skills/ddd-hexagonal-validation/SKILL.md) — carregadas por mais de um agent cada.
 >
 > **State-Aware Planning (camada 0 do pre-planner, a partir de v1.8.0):** a convenção
 > [`state-aware-planning.md`](./.agents/specs/conventions/state-aware-planning.md) obriga gerar `state-snapshot-<ts>.md` ANTES de planejar.
@@ -222,6 +215,7 @@ Workflows genéricos prontos para uso estão em [`.agents/WORKFLOWS.md`](./.agen
 | `release-pre-tag` (v2.0+) | "auditar antes de tag vX.Y.Z" | release-versioning-specialist + finding-orchestrator (subset focado em versioning) |
 | `doc-audit-mode` (v1.14.0+) | "a documentação está em dia? / auditar a doc / revisar, atualizar e criar documentações" | documentation-specialist (`documentation-audit` → escreve → `check-doc-coverage` + `check-doc-refs`) |
 | `kit-doc-mode` (v1.30.0+) | "o kit de documentação está em dia? / auditar um item do kit / o doc do item X envelheceu" | specialist do item (`<item>-specialist`) → auditor do pilar (`<pilar>-docs-auditor`) → `check-doc-kit`; a matriz do kit está em [`kit-documentacao.md`](./.agents/specs/conventions/kit-documentacao.md) |
+| `e2e-coverage-mode` (v1.31.0+) | "os fluxos da aplicação têm e2e?" / quando a demanda é roteada ao `e2e-specialist` (tela `apps/web/app/**/page.tsx` ou spec `apps/web/e2e/**`) | sequential — e2e-specialist (auditar → planejar) → code-reviewer (revisar o plano) → e2e-specialist (implementar → verificar) → code-reviewer (revisar o spec) → e2e-specialist (commitar/pushar); o detalhe está em [`e2e-coverage-mode.md`](./.agents/workflows/e2e-coverage-mode.md) |
 
 ---
 
@@ -296,5 +290,5 @@ Após cada **grande atividade** (plano multi-task, bugfix não-trivial, ou adoç
 
 **Mantido por:** projeto-base contributors
 **Licença:** MIT
-**Versão do documento:** 1.30.0
+**Versão do documento:** 1.31.0
 **Status:** Estável

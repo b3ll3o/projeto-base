@@ -77,10 +77,10 @@ describe('trocarVersao()', () => {
 });
 
 describe('aplicarBump() (#126)', () => {
-  it('aplica a versão nos QUATRO footers', async () => {
+  it('aplica a versão nos SEIS footers', async () => {
     await criar('1.11.0');
     const alterados = aplicarBump(raiz, '1.12.0');
-    expect(alterados.length).toBe(4);
+    expect(alterados.length).toBe(6);
     for (const footer of FOOTERS) {
       expect(await ler(footer)).toBe('1.12.0');
     }
@@ -111,17 +111,34 @@ describe('aplicarBump() (#126)', () => {
     expect(() => aplicarBump(raiz, '1.12.0')).toThrow();
   });
 
-  it('a lista tem os QUATRO arquivos, e eles existem no repo real', async () => {
+  it('a lista tem os SEIS arquivos, e eles existem no repo real', async () => {
     // A lista é a raiz do defeito: se ela encolher, o bump volta a pular um.
-    expect(FOOTERS.length).toBe(4);
+    //
+    // ⚠️ MEDIDO em 2026-11-19: a lista deste script tinha QUATRO e o gate
+    // `check-version-footers` cobra SEIS — o `AGENTS.md` e o `README.md`
+    // ficavam de fora, e o bump produzia a divergência que o gate acusa. A
+    // lista agora é a DO GATE (fonte única), importada de lá.
+    expect(FOOTERS.length).toBe(6);
     const arquivos = FOOTERS.map((f) => f.arquivo);
     expect(arquivos).toContain('docs/MONOREPO.md');
     expect(arquivos).toContain('docs/STACK.md');
     expect(arquivos).toContain('docs/TEMPLATE_USAGE.md');
     expect(arquivos).toContain('.agents/specs/conventions/estrutura-e-versionamento.md');
+    expect(arquivos).toContain('AGENTS.md');
+    expect(arquivos).toContain('README.md');
 
     for (const footer of FOOTERS) {
       await expect(fs.access(path.join(RAIZ_DO_REPO, footer.arquivo))).resolves.toBeUndefined();
     }
+  });
+
+  it('a lista é a MESMA do gate que cobra a divergência', async () => {
+    // Duas listas de footers é a raiz do #126 de novo: o que o script escreve
+    // e o que o gate mede precisam ser o mesmo conjunto.
+    const { FOOTERS_DE_VERSAO } =
+      await import('../../.tooling/scripts/ci/check-version-footers.js');
+    expect(FOOTERS.map((f) => f.arquivo).sort()).toEqual(
+      [...FOOTERS_DE_VERSAO.map((f) => f.arquivo)].sort(),
+    );
   });
 });
