@@ -183,6 +183,24 @@ describe('instrumentation.node — a telemetria do servidor nunca derruba o serv
     });
   });
 
+  it('o SDK sobe sem provider de métricas e sem provider de logs', async () => {
+    // pt-BR: o `sdk-node` 0.301.2 cria o `MeterProvider` e o `LoggerProvider`
+    // por default, e os dois exporters leem o `OTEL_EXPORTER_OTLP_ENDPOINT`
+    // como URL BASE — com o endpoint do repo apontando para `/v1/traces`,
+    // as métricas iam para `/v1/traces/v1/metrics` e os logs para
+    // `/v1/traces/v1/logs` (MEDIDO 2026-11-23: `POST /v1/traces/v1/metrics`,
+    // 7.528 bytes). Os dois arrays VAZIOS são o que impede isso — e é a
+    // única coisa que impede: sem eles, o SDK recria os dois providers e
+    // exporta para paths que não existem.
+    await carregar();
+
+    const cfg = h.construtorDoSdk.mock.calls[0]?.[0] as
+      { metricReaders?: unknown[]; logRecordProcessors?: unknown[] } | undefined;
+
+    expect(cfg?.metricReaders).toEqual([]);
+    expect(cfg?.logRecordProcessors).toEqual([]);
+  });
+
   it('se o OTel explodir, o módulo registra o motivo e não propaga', async () => {
     // pt-BR: mesmo com endpoint válido, um erro futuro do SDK não pode
     // derrubar o servidor. O sintoma sem isto não é tela quebrada — é um
