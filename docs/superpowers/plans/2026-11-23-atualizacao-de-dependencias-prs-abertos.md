@@ -130,7 +130,7 @@ tipo (a interface `Resource` das duas gerações tem os mesmos membros).
 | web | `@opentelemetry/instrumentation-user-interaction` | `^0.43.0` | `^0.69.1` |
 | web | `@opentelemetry/instrumentation-document-load` | `^0.43.0` | `^0.70.1` |
 | web | `@opentelemetry/instrumentation-fetch` | `^0.54.2` | `^0.301.2` |
-| raiz | `engines.node` | `>=22.12.0` | `>=22.22.2` |
+| raiz | `engines.node` | `>=22.12.0` | `^22.22.2 \|\| ^24.15.0 \|\| >=26.0.0` (§6: o range real da árvore, não só o piso) |
 
 O piso do Node sobe porque o `.npmrc` do repo liga `engine-strict=true` e o
 piso **real** da árvore é o do `jsdom` 30.1.3 (`^22.22.2 || ^24.15.0 || >=26.0.0`),
@@ -175,11 +175,12 @@ SDK sobe UMA vez", "os atributos de recurso saem das variáveis de ambiente",
 
 | arquivo | mudança |
 |---|---|
-| `.tooling/scripts/ci/dependencias-major-pendentes.json` | as 3 pendências do OpenTelemetry saem (a major **subiu de verdade**); entra a do `@testing-library/jest-dom` (7 → 8), medida hoje; `total` 18 → 16 |
+| `.tooling/scripts/ci/dependencias-major-pendentes.json` | as 3 pendências do OpenTelemetry saem (a major **subiu de verdade**); entra a do `@testing-library/jest-dom` (7 → 8), medida hoje; e entra a do `@prisma/client` (6 → 7), que a medição errada do scan escondia (§6); `total` 18 → 17 |
 | `.tooling/scripts/ci/dependencias-major-disponiveis.json` | regerado por `pnpm deps:major-scan` |
 | `.tooling/scripts/ci/excecoes-de-dependencias.json` | a claim do audit é re-medida: 30 → **18** advisories (o total caiu porque a árvore 1.x do OTel carregava 12 moderadas que a árvore nova não traz) |
-| `.tooling/scripts/ci/scan-dependency-majors.ts` | conserto: o `npm` 12 devolve `dist-tags --json` como **lista**, e o script lia objeto plano — o arquivo era escrito com `majors: {}` e o gate perdia a medição **sem acusar nada** |
-| `docs/STACK.md` | as versões declaradas (`node` ≥ 22.15.0, `platform-fastify` ^12.5.1, OpenTelemetry ^0.301.2, `react-hook-form` ^7.92.0) |
+| `.tooling/scripts/ci/scan-dependency-majors.ts` | conserto: o `npm` 12 devolve `dist-tags --json` como **lista**, e o script lia objeto plano — o arquivo era escrito com `majors: {}` e o gate perdia a medição **sem acusar nada**. Mais: a ordem das tags (`latest` → `prev`) e a raiz do repo (§6) |
+| `.tooling/scripts/ci/check-dependency-freshness.ts` | o gate passa a conferir a **cobertura** da medição: registro vazio, pacote sem consulta, pacote declarado ausente do registro e contagens que não batem (§6) |
+| `docs/STACK.md` | as versões declaradas (`node` ≥ 22.22.2, `platform-fastify` ^12.5.1, OpenTelemetry ^0.301.2, `react-hook-form` ^7.92.0) |
 | `docs/como-rodar.md` | o piso do Node na linha de requisitos |
 | `CHANGELOG.md` | a entrada em **Quebras de compatibilidade** (as 2 APIs que mudaram + o `engines.node`) |
 
@@ -232,11 +233,27 @@ docker exec projeto-base-tempo wget -q -O- 'http://localhost:3200/api/search?tag
 | item | por quê |
 |---|---|
 | `prisma` 6 → 7 (#176) | migração de schema (`prisma.config.ts` + driver adapter + reescrita do client); a major já está declarada como pendência, com dono e motivo |
+| `@prisma/client` 6 → 7 | a mesma migração do `prisma` — o client é gerado pelo CLI; a major 7 é estável no registro (`latest: 7.10.1`), e ela estava **invisível** porque o scan media a tag `prev` antes da `latest` (§6) |
 | `@nestjs/*` 12.6.0 | "new defaults and behaviour changes" que o PR sob revisão não traz; bump próprio, com o delta medido |
 | `@testing-library/jest-dom` 8 | declara peer `vitest >=5 <6` — exige o vitest 5, que é a major do runner (já declarada) |
-| majors de `next`, `eslint`, `typescript`, `zod`, `vitest`, `web-vitals` | as 16 pendências que continuam na tabela, cada uma com dono e motivo |
+| majors de `next`, `eslint`, `typescript`, `zod`, `vitest`, `web-vitals` | as 17 pendências que continuam na tabela, cada uma com dono e motivo |
 
 ## 5. Fechamento
 
 Um PR só, com as três atualizações. Os 5 PRs do Dependabot são fechados com o
 motivo medido — e o #176 ganha a pendência como dívida declarada, não como PR morto.
+
+## 6. O que a revisão posterior ao plano mediu (2026-11-24)
+
+O plano mediu as dependências; a revisão do PR mediu **as ferramentas que medem as
+dependências** — e achou que a medição estava pela metade.
+
+| achado | medição | conserto |
+|---|---|---|
+| O scan media a tag `prev` **antes** da `latest` | `npm view @prisma/client dist-tags --json` → `latest: 7.10.1` (estável), `prev: 6.19.3` (a estável de um RC antigo). O scan gravava major **6** e a major 7 ficava invisível | ordem `latest` → `prev` (o `prev` é o plano B quando o `latest` é RC, como o `prisma`, cujo `latest` é `8.0.0-rc.35`); registro regerado; `@prisma/client` 6 → 7 entra como pendência declarada |
+| O gate não conferia a **cobertura** da medição | `semConsulta` não era lido por NENHUM gate; `majors: {}` passava verde — o gate ficava verde **sem medir** (classe 5 do `guard-classes.md`) | o gate reprova quando o registro está vazio, quando há pacote sem consulta, quando um pacote declarado não está no registro e quando as contagens não batem |
+| O scan media a árvore do `process.cwd()` | rodado de outro diretório, media o manifesto de lá e gravava o arquivo versionado no lugar errado | a raiz vem do próprio script |
+| O `engines.node` declarava um **piso**, não o range | `>=22.22.2` promete Node 23.x e 25.x, que a árvore **não** aceita (`jsdom` 30.1.3 = `^22.22.2 \|\| ^24.15.0 \|\| >=26.0.0`, com `engine-strict=true`) | o range real passa a ser o declarado, e `apps/api` e `apps/web` passam a declará-lo também — o gate `check-engines-consistency` comparava a raiz com cada app e **nenhum app declarava** `engines`, então ele não media nada |
+| Docs diziam `>=22.12.0` | `README.md` (o doc de onboarding), a memória do `nestjs-specialist`, a convenção de pendências do CI e o plano | todos re-medidos contra o `package.json` |
+| A tabela da stack mudou sem bump de versão | `docs/STACK.md` continuava em `1.31.0`, cuja linha de histórico diz "**Sem mudança de stack**" — e a tabela mudou | bump dos **seis** footers para `1.32.0` (`pnpm tooling:bump-version 1.32.0`) + a linha de histórico que descreve a mudança |
+| A mensagem do gate de Docker citava um `engines.node` fixo | `check-docker-drift.ts` escrevia `">=22.12.0"` no erro — um número que envelhecia sem ninguém ver | a mensagem cita o `engines.node` lido do `package.json` |

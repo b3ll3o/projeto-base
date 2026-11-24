@@ -11,10 +11,12 @@ const MAX_DOCKERFILE_LINES = 100;
 /**
  * Major do Node que os Dockerfiles devem usar.
  *
- * Casa com `package.json` -> `engines.node: ">=22.12.0"`. Build e suite rodam
- * em node 22 no CI (`node-version: 22`); a producao rodava em 20, sem nada que
- * comparasse os dois. O CI provava que a imagem **monta**, nao que ela roda
- * sobre o contrato que o proprio repo declara.
+ * Casa com a MAJOR que o `package.json` da raiz declara em `engines.node`
+ * (lida do disco — a mensagem de erro cita o range declarado, que é o
+ * contrato). Build e suite rodam em node 22 no CI (`node-version: 22`); a
+ * producao rodava em 20, sem nada que comparasse os dois. O CI provava que a
+ * imagem **monta**, nao que ela roda sobre o contrato que o proprio repo
+ * declara.
  */
 const REQUIRED_NODE_MAJOR = 22;
 
@@ -49,13 +51,18 @@ const REQUIRED_DOCKERFILES = ['apps/api/Dockerfile', 'apps/web/Dockerfile'] as c
  * A distro e a major sao guardadas SEPARADAMENTE, e cada mensagem nomeia a
  * causa real. Um `FROM node:20-alpine` falha **pela distro** (musl, sem glibc
  * para o engine binary do Prisma 6); um `FROM node:20-bookworm-slim` falha
- * **pela major** (o repo declara `engines.node >=22.12` e o CI roda node 22).
+ * **pela major** (o repo declara `engines.node` com major 22 e o CI roda
+ * node 22).
  *
  * Quando as duas falham, sao dois erros — nao um compounded. Uma mensagem unica
  * apontaria para uma causa e deixaria a outra invisivel, que era exatamente a
  * falha de leitura do guard anterior.
  */
-export function checkBaseImage(dockerfileRelPath: string, content: string): string[] {
+export function checkBaseImage(
+  dockerfileRelPath: string,
+  content: string,
+  enginesNode = 'não declarada',
+): string[] {
   const errors: string[] = [];
   // O primeiro FROM e o que define a base; estagios posteriores (`FROM ... AS
   // prod`) reaproveitam a mesma imagem ou sao explicitos, entao o primeiro
@@ -81,7 +88,7 @@ export function checkBaseImage(dockerfileRelPath: string, content: string): stri
     if (major !== String(REQUIRED_NODE_MAJOR)) {
       errors.push(
         `${dockerfileRelPath} usa major do Node ${major ?? 'desconhecida'} — ` +
-          `o repo declara engines.node ">=22.12.0" e o CI roda node ${REQUIRED_NODE_MAJOR} ` +
+          `o repo declara engines.node "${enginesNode}" e o CI roda node ${REQUIRED_NODE_MAJOR} ` +
           `(imagem de produção em major diferente da de build)`,
       );
     }
@@ -117,6 +124,20 @@ function splitImageTag(image: string): [string, string] {
 export function checkDockerDrift(repoRoot: string): CheckResult {
   const errors: string[] = [];
 
+  // O `engines.node` declarado na raiz — a mensagem de erro do guard de major
+  // cita o contrato do repo, e um texto fixo (">=22.12.0") envelhecia sem
+  // ninguém ver.
+  const enginesNode = (() => {
+    try {
+      const pkg = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf-8')) as {
+        engines?: { node?: string };
+      };
+      return pkg.engines?.node ?? 'não declarada';
+    } catch {
+      return 'não declarada';
+    }
+  })();
+
   // 1. .dockerignore deve existir na raiz.
   const dockerignorePath = join(repoRoot, '.dockerignore');
   if (!existsSync(dockerignorePath)) {
@@ -148,7 +169,7 @@ export function checkDockerDrift(repoRoot: string): CheckResult {
     // contra `node:20-bookworm-slim`, o que fazia um alpine (problema de
     // glibc) e um node:22-bookworm-slim (perfeitamente valido) produzirem a
     // MESMA mensagem -- e atribuia bump de major a um problema de distro.
-    for (const error of checkBaseImage(dockerfileRelPath, content)) {
+    for (const error of checkBaseImage(dockerfileRelPath, content, enginesNode)) {
       errors.push(error);
     }
   }

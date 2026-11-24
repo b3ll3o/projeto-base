@@ -45,7 +45,7 @@ projeto-base (monorepo)
 
 | Camada | Escolha | Versão | Justificativa |
 |--------|---------|--------|---------------|
-| Runtime | Node.js | ≥ 22.22.2 | Medido em `package.json` → `engines.node`; casa com a imagem base `node:22-bookworm-slim`. O piso é o do `jsdom` 30.1.3 (`^22.22.2 || ^24.15.0 || >=26.0.0`), não o do `@opentelemetry/*` 3.x (`>=22.15.0`) |
+| Runtime | Node.js | `^22.22.2 \|\| ^24.15.0 \|\| >=26.0.0` | Medido em `package.json` → `engines.node`; casa com a imagem base `node:22-bookworm-slim` (que resolve 22.23.3). O range é o do `jsdom` 30.1.3 — `>=22.22.2` sozinho prometia Node 23.x e 25.x, que a árvore **não** aceita (o `.npmrc` liga `engine-strict=true`); o `@opentelemetry/*` 3.x (`>=22.15.0`) fica abaixo dele |
 | Framework | NestJS | 12.x | Estrutura modular, DI nativo, OpenAPI integrado |
 | HTTP Adapter | Fastify | 5.12.8 (transitiva) | 2-3× mais rápido que Express; menor footprint. O adapter é `@nestjs/platform-fastify` `^12.5.1` — o `fastify` em si não é dependência direta |
 | ORM | Prisma | 6.x | Type-safe, migrations versionadas, excelente DX |
@@ -178,7 +178,7 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão da stack:** 1.31.0
+**Versão da stack:** 1.32.0
 
 ### Histórico de Versões
 
@@ -210,3 +210,4 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 | `1.28.0` | **Sem mudança de stack** — o PR fecha as pendências dos 6 PRs abertos e da issue #149: o `.github/dependabot.yml` passa a gerar `chore(deps):` (o prefixo `deps` NÃO é aceito pelo gate de Conventional Commits do repo, e os 5 PRs do Dependabot nasceram vermelhos por isso), 2 gates ganham regra (a major pendente que foi **adotada** reprova; a claim do total de advisories é conferida contra o `pnpm audit` medido) e a prosa do registro de exceções volta a bater com o audit (41 → 31 advisories). **Nenhuma dependência nova**, nenhum binário novo no `package.json`, nenhuma mudança em `apps/`, `packages/` ou `infra/`. |
 | `1.30.0` | **Sem mudança de stack** — o kit de documentação moderna ([`kit-documentacao.md`](../.agents/specs/conventions/kit-documentacao.md)) é **doc**: nenhuma dependência nova, nenhum binário no `package.json`, nenhuma mudança em `apps/api`, `apps/web`, `packages/` ou `infra/`. O que mudou foi a **cobertura**: os 14 itens do kit passaram a ter doc canônico, specialist dono e auditor por pilar, e o gate `check-doc-kit` cobra. |
 | `1.31.0` | **Sem mudança de stack** — o agent `e2e-specialist` e o workflow `e2e-coverage-mode` são docs e roteamento: **nenhuma dependência nova**, nenhum binário no `package.json`, nenhuma mudança em `apps/api`, `apps/web`, `packages/` ou `infra/`. A única mudança na árvore é o **override** de `effect` para `3.22.1` (a versão corrigida da advisory `1248071`, CVE-2026-121707 — o `effect` era transitivo do `@prisma/config` e está na árvore de produção de `apps/api`); o `package.json` e o `pnpm-lock.yaml` mudaram, nenhum arquivo de `apps/` foi tocado. O footer subiu junto com os outros 5. |
+| `1.32.0` | **A família NestJS, o `react-hook-form` e a família OpenTelemetry sobem juntas** — a tabela de versões acima muda em 4 linhas: `@nestjs/common`, `@nestjs/core`, `@nestjs/platform-fastify` e `@nestjs/testing` para a `12.5.1` (com o `core` em uma instância só — o precedente do #166), `react-hook-form` para a `7.92.0`, e o OpenTelemetry para a geração `core` 3.x no node (`@opentelemetry/sdk-node` `0.301.2`, `@opentelemetry/resources` `3.1.1`) e para a última linha estável do browser (`@opentelemetry/sdk-trace-web` e `@opentelemetry/sdk-trace-base` `2.12.1` — não há 3.x estável para browser). Duas APIs mudaram no código: a classe `Resource` virou **interface** (`resourceFromAttributes()`) e o `provider.addSpanProcessor()` saiu do `WebTracerProvider` (o processor entra no construtor, em `spanProcessors`). O **Runtime** mudou de `≥ 22.12.0` para `^22.22.2 \|\| ^24.15.0 \|\| >=26.0.0` — o range real da árvore é o do `jsdom` 30.1.3 (que já estava no repo; o `>=22.12.0` declarado mentia, e o `>=22.22.2` sozinho prometia Node 23.x/25.x, que a árvore **não** aceita com `engine-strict=true`). O footer subiu junto com os outros 5. |

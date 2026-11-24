@@ -27,7 +27,7 @@ O **runbook canônico** é este arquivo: §2 (variáveis) e §3 (scripts `pnpm`)
 
 ### §0.1 Pré-requisitos
 
-Node >= 22.22.2 · pnpm 9.12.0 (`packageManager`) · Docker com `compose` v2
+Node `^22.22.2 || ^24.15.0 || >=26.0.0` · pnpm 9.12.0 (`packageManager`) · Docker com `compose` v2
 (ambientes 2–4) · Chromium para o e2e (instalado pelo `pretest:e2e`).
 
 ```bash

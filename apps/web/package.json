@@ -2,6 +2,9 @@
   "name": "@projeto/web",
   "version": "0.0.1",
   "private": true,
+  "engines": {
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+  },
   "scripts": {
     "lint": "eslint .",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.e2e.json",

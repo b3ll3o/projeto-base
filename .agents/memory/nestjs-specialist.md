@@ -21,7 +21,7 @@ description: Memória acumulada do agent nestjs-specialist — decisões sobre a
 
 **Decisão (medida em `apps/api/package.json`, 2026-10-13):**
 
-- **Versão:** NestJS 12 + Node.js **≥ 22.12.0** (`engines.node` da raiz — era "20 LTS", e a imagem base é `node:22-bookworm-slim`)
+- **Versão:** NestJS 12 + Node.js **≥ 22.22.2** (`engines.node` da raiz — era "20 LTS", e a imagem base é `node:22-bookworm-slim`; o piso subiu de `>=22.12.0` para `>=22.22.2` no PR #188, pelo `jsdom` 30.1.3)
 - **Adapter HTTP:** Fastify (performance superior ao Express)
 - **ORM:** Prisma 6 (type-safe, migrations versionadas, generators)
 - **Validação:** **Zod** + `ZodValidationPipe` próprio, aplicado por rota com `@Body(new ZodValidationPipe(Schema))`. ❌ `class-validator`, ❌ `class-transformer`, ❌ `ValidationPipe` global — nenhum dos três está instalado (`grep -rl '"class-validator"' --include=package.json` → nada). O ganho do Zod aqui é o mesmo schema rodando no cliente do web e no boundary da API
