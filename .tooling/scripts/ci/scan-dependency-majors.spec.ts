@@ -21,7 +21,7 @@
 //   classificando as versões como antes
 
 import { describe, expect, it } from 'vitest';
-import { isPreRelease, normalizaDistTags } from './scan-dependency-majors.js';
+import { isPreRelease, majorEstavelNasTags, normalizaDistTags } from './scan-dependency-majors.js';
 
 describe('normalizaDistTags', () => {
   it('aceita a forma PLANA (npm 10): um objeto tag → versão', () => {
@@ -66,5 +66,30 @@ describe('isPreRelease', () => {
   it('uma versão estável não é pre-release', () => {
     expect(isPreRelease('12.6.0')).toBe(false);
     expect(isPreRelease('6.19.3')).toBe(false);
+  });
+});
+
+describe('majorEstavelNasTags', () => {
+  // MEDIDO 2026-11-24: o `@prisma/client` publica `latest: 7.10.1` (estável) e
+  // `prev: 6.19.3` (a estável que sobrou de um RC antigo). Medir o `prev`
+  // primeiro gravava major 6 e ESCONDIA a major 7 que existe — a dívida
+  // `@prisma/client` 6 → 7 ficava sem dono e sem medição.
+  it('o `latest` estável vence o `prev` antigo', () => {
+    expect(majorEstavelNasTags({ latest: '7.10.1', prev: '6.19.3' })).toBe(7);
+  });
+
+  it('quando o `latest` é um RC, a major estável vem do `prev`', () => {
+    // O caso do `prisma`: `latest` = `8.0.0-rc.35` (promessa), `prev` =
+    // `7.10.1` (a major estável real).
+    expect(majorEstavelNasTags({ latest: '8.0.0-rc.35', prev: '7.10.1' })).toBe(7);
+  });
+
+  it('sem `prev`, o `latest` estável é a major', () => {
+    expect(majorEstavelNasTags({ latest: '12.6.0' })).toBe(12);
+  });
+
+  it('sem tag nenhuma, ou só pre-release, não há major', () => {
+    expect(majorEstavelNasTags({})).toBeNull();
+    expect(majorEstavelNasTags({ latest: '8.0.0-rc.35' })).toBeNull();
   });
 });

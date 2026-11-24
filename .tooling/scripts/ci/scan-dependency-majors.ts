@@ -20,10 +20,14 @@
  */
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { listarPackageJsons, versoesDeclaradas } from './check-dependency-drift';
 
-const RAIZ = process.cwd();
+// A raiz vem do PRÓPRIO SCRIPT, e não do `process.cwd()`: MEDIDO 2026-11-24,
+// rodar o script de outro diretório media o manifesto daquele diretório e
+// gravava o arquivo versionado no lugar errado (ou morria com ENOENT).
+const RAIZ = resolve(__dirname, '..', '..', '..');
 const SAIDA = path.join('.tooling', 'scripts', 'ci', 'dependencias-major-disponiveis.json');
 
 /** A major de uma faixa declarada. */
@@ -57,14 +61,30 @@ export function normalizaDistTags(bruto: unknown): Record<string, string> {
 /**
  * A major mais nova **ESTÁVEL** publicada no registro.
  *
- * `dist-tags.latest` não serve: MEDIDO 2026-11-09, o `latest` do `prisma` é
+ * A ordem das tags é `latest` → `prev`, e ela importa. MEDIDO 2026-11-24:
+ * o `@prisma/client` publica `latest: 7.10.1` (ESTÁVEL) e `prev: 6.19.3`
+ * (a estável que sobrou de um RC antigo) — medir o `prev` primeiro gravava
+ * major **6** e escondia a major 7 que existe. A major que o repo deve subir
+ * é a do `latest` quando ele é estável.
+ *
+ * O `latest` nem sempre serve: MEDIDO 2026-11-09, o `latest` do `prisma` é
  * `8.0.0-rc.33` — um *release candidate*. Um RC não entra em `main` de um
  * template, e a major dele não é uma major "disponível": é uma promessa.
- *
- * O registro tem a tag `prev` para a versão estável anterior ao RC, e é ela
- * que diz a major estável real. Quando não existe `prev` (o pacote nunca
- * teve RC), o `latest` é usado — mas só se não for pre-release.
+ * Quando o `latest` é pre-release, a fonte da major estável real é a tag
+ * `prev` (a estável anterior ao RC).
  */
+export function majorEstavelNasTags(tags: Record<string, string>): number | null {
+  // `latest` primeiro (a major mais nova); `prev` é o plano B para quando o
+  // `latest` é um RC.
+  const candidatas = [tags.latest, tags.prev].filter((v): v is string => !!v);
+  for (const versao of candidatas) {
+    if (isPreRelease(versao)) continue;
+    const m = versao.match(/^(\d+)/);
+    if (m) return Number(m[1]);
+  }
+  return null;
+}
+
 function majorNoRegistro(pacote: string): number | null {
   try {
     const out = execFileSync('npm', ['view', pacote, 'dist-tags', '--json'], {
@@ -72,16 +92,7 @@ function majorNoRegistro(pacote: string): number | null {
       stdio: ['ignore', 'pipe', 'ignore'],
       timeout: 60_000,
     });
-    const tags = normalizaDistTags(JSON.parse(out));
-
-    // A tag `prev` é a estável anterior a um RC; ela é a fonte da major real.
-    const candidatas = [tags.prev, tags.latest].filter((v): v is string => !!v);
-    for (const versao of candidatas) {
-      if (isPreRelease(versao)) continue;
-      const m = versao.match(/^(\d+)/);
-      if (m) return Number(m[1]);
-    }
-    return null;
+    return majorEstavelNasTags(normalizaDistTags(JSON.parse(out)));
   } catch {
     return null;
   }

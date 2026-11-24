@@ -1,7 +1,7 @@
 {
   "_nota": "As majors que existem no registro e NAO sobem agora. Cada uma tem motivo. O gate check-dependency-freshness le este arquivo e reprova quando uma pendencia envelhece (o pacote saiu do workspace, ou a faixa ja permite a major).",
-  "medidoEm": "2026-11-23",
-  "total": 16,
+  "medidoEm": "2026-11-24",
+  "total": 17,
   "pendencias": [
     {
       "pacote": "@eslint/js",
@@ -10,6 +10,14 @@
       "majorNova": 10,
       "motivo": "flat-config breaking: acompanha o eslint 10",
       "declaradaEm": "2026-11-09"
+    },
+    {
+      "pacote": "@prisma/client",
+      "faixaAtual": "^6.19.3",
+      "majorAtual": 6,
+      "majorNova": 7,
+      "motivo": "a mesma migracao do `prisma`: o client e gerado pelo CLI, e a 7 exige `prisma.config.ts` + driver adapter + reescrita do client gerado. MEDIDO 2026-11-24 (`npm view @prisma/client dist-tags --json`): `latest` 7.10.1 e `prev` 6.19.3 — a major 7 e ESTAVEL, e o `prev` e a estable que sobrou de um RC antigo (por isso o scan mede o `latest` primeiro)",
+      "declaradaEm": "2026-11-24"
     },
     {
       "pacote": "@testcontainers/postgresql",
@@ -96,7 +104,7 @@
       "faixaAtual": "^6.19.3",
       "majorAtual": 6,
       "majorNova": 7,
-      "motivo": "a major estavel e a 7 (o latest do registro e um release candidate, 8.0.0-rc.33, medido em 2026-11-09); a 7 exige migrar o schema e reescrever o client",
+      "motivo": "a major estavel e a 7 (o latest do registro e um release candidate, 8.0.0-rc.35, medido em 2026-11-24); a 7 exige migrar o schema e reescrever o client",
       "declaradaEm": "2026-11-09"
     },
     {

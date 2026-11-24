@@ -402,4 +402,119 @@ describe('check-dependency-freshness — fim a fim, num repo temporario', () => 
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  // ⚠️ A COBERTURA da medição. MEDIDO 2026-11-24: o `semConsulta` não era
+  // lido por nenhum gate e um `majors: {}` passava verde — o gate ficava
+  // verde SEM MEDIR (a classe 5 do `guard-classes.md`). Estas specs plantam a
+  // árvore quebrada e exigem que o gate acuse.
+
+  it('REPROVA quando o registro foi escrito com majors VAZIO (a medição nao aconteceu)', async () => {
+    const dir = await repo();
+    try {
+      await writeFile(
+        path.join(dir, 'package.json'),
+        JSON.stringify({ dependencies: { zod: '^3.25.76' } }, null, 2),
+        'utf-8',
+      );
+      await majors(dir, { medidoEm: '2026-11-24', majors: {}, semConsulta: [] });
+      await pendencias(dir, []);
+
+      const r = await checkDependencyFreshness({ repoRoot: dir });
+      expect(r.ok).toBe(false);
+      expect(r.errors.join('\n')).toContain("'majors' VAZIO");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('REPROVA quando o registro tem pacote SEM consulta ao registro', async () => {
+    const dir = await repo();
+    try {
+      await writeFile(
+        path.join(dir, 'package.json'),
+        JSON.stringify({ dependencies: { zod: '^3.25.76' } }, null, 2),
+        'utf-8',
+      );
+      await majors(dir, {
+        medidoEm: '2026-11-24',
+        majors: {},
+        semConsulta: ['zod'],
+      });
+      await pendencias(dir, []);
+
+      const r = await checkDependencyFreshness({ repoRoot: dir });
+      expect(r.ok).toBe(false);
+      expect(r.errors.join('\n')).toContain('SEM consulta ao registro');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('REPROVA quando um pacote DECLARADO nao esta no registro (a medicao esta velha)', async () => {
+    const dir = await repo();
+    try {
+      await writeFile(
+        path.join(dir, 'package.json'),
+        JSON.stringify({ dependencies: { zod: '^3.25.76', next: '^15.5.29' } }, null, 2),
+        'utf-8',
+      );
+      // O registro mediu so o `zod`: o `next` (dep nova) nao foi medido.
+      await majors(dir, { medidoEm: '2026-11-24', majors: { zod: 4 }, semConsulta: [] });
+      await pendencias(dir, []);
+
+      const r = await checkDependencyFreshness({ repoRoot: dir });
+      expect(r.ok).toBe(false);
+      expect(r.errors.join('\n')).toContain('next');
+      expect(r.errors.join('\n')).toContain('deps:major-scan');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('REPROVA quando o totalDeclaradas do registro nao bate com o dado', async () => {
+    const dir = await repo();
+    try {
+      await writeFile(
+        path.join(dir, 'package.json'),
+        JSON.stringify({ dependencies: { zod: '^3.25.76' } }, null, 2),
+        'utf-8',
+      );
+      await majors(dir, {
+        medidoEm: '2026-11-24',
+        totalDeclaradas: 67,
+        majors: { zod: 4 },
+        semConsulta: [],
+      });
+      await pendencias(dir, []);
+
+      const r = await checkDependencyFreshness({ repoRoot: dir });
+      expect(r.ok).toBe(false);
+      expect(r.errors.join('\n')).toContain('totalDeclaradas');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('REPROVA quando o total das pendencias nao bate com o array', async () => {
+    const dir = await repo();
+    try {
+      await writeFile(
+        path.join(dir, 'package.json'),
+        JSON.stringify({ dependencies: { zod: '^3.25.76' } }, null, 2),
+        'utf-8',
+      );
+      await majors(dir, { medidoEm: '2026-11-24', majors: { zod: 4 }, semConsulta: [] });
+      await writeFile(
+        path.join(dir, '.tooling', 'scripts', 'ci', 'dependencias-major-pendentes.json'),
+        JSON.stringify({ total: 18, pendencias: [] }, null, 2),
+        'utf-8',
+      );
+
+      const r = await checkDependencyFreshness({ repoRoot: dir });
+      expect(r.ok).toBe(false);
+      expect(r.errors.join('\n')).toContain("'total: 18'");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });

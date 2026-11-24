@@ -1,6 +1,6 @@
 {
   "_nota": "Gerado por 'pnpm run deps:major-scan'. O gate check-dependency-freshness le este arquivo (hermético, sem rede) e compara com as faixas declaradas no workspace. Não editar à mão: rode o script.",
-  "medidoEm": "2026-11-23",
+  "medidoEm": "2026-11-24",
   "totalDeclaradas": 67,
   "majors": {
     "@eslint/js": 10,
@@ -28,7 +28,7 @@
     "@opentelemetry/sdk-trace-web": 2,
     "@opentelemetry/semantic-conventions": 1,
     "@playwright/test": 1,
-    "@prisma/client": 6,
+    "@prisma/client": 7,
     "@tailwindcss/postcss": 4,
     "@testcontainers/postgresql": 12,
     "@testing-library/jest-dom": 8,
