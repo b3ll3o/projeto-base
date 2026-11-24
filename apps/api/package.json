@@ -15,7 +15,7 @@
     "test:coverage": "vitest run --project unit --coverage",
     "test:integration": "vitest run --project integration",
     "test:e2e": "vitest run --project e2e",
-    "dev": "node --watch --import tsx/esm src/main.ts",
+    "dev": "node --watch --import tsx/esm --import ./src/shared/infrastructure/telemetry/init.ts src/main.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "openapi:export": "node --import tsx/esm scripts/export-openapi.ts"

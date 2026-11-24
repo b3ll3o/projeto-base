@@ -45,6 +45,17 @@ const endpoint =
 
 if (!globalThis.__otel_sdk__) {
   try {
+    // O `sdk-node` 0.301.2 cria o `LoggerProvider` por default e o exporter
+    // dele lê o `OTEL_EXPORTER_OTLP_ENDPOINT` como URL BASE — com o endpoint
+    // apontando para `/v1/traces`, os logs iam para `/v1/traces/v1/logs`, um
+    // path que não existe. `none` faz o SDK não criar provider de logs
+    // nenhum (é o `OTEL_LOGS_EXPORTER` que o repo já usava).
+    //
+    // ⚠️ O default é `none` e não `otlp`: o default do SDK para logs é `otlp`,
+    // que leria o endpoint como URL BASE. Quem quiser logs põe
+    // `OTEL_LOGS_EXPORTER=otlp` no ambiente — e o endpoint tem de ser a BASE.
+    if (!process.env.OTEL_LOGS_EXPORTER) process.env.OTEL_LOGS_EXPORTER = 'none';
+
     const sdk = new NodeSDK({
       // O `defaultResource()` entra na mescla porque a classe 1.x injetava
       // `telemetry.sdk.*` sozinha e a função 3.x não.
@@ -57,13 +68,12 @@ if (!globalThis.__otel_sdk__) {
         }),
       ),
       traceExporter: new OTLPTraceExporter({ url: endpoint }),
-      // O `sdk-node` 0.301.2 cria o `MeterProvider` e o `LoggerProvider` por
-      // default e os exporters leem o `OTEL_EXPORTER_OTLP_ENDPOINT` como URL
-      // BASE — com o endpoint apontando para `/v1/traces`, as métricas iam
-      // para `/v1/traces/v1/metrics` (MEDIDO 2026-11-23 no sink OTLP local).
-      // Vazio nos dois = só traces, como antes do bump.
+      // O `MeterProvider` é o outro provider que o 0.301.2 cria por default,
+      // e o exporter dele tem o mesmo problema de URL BASE (as métricas iam
+      // para `/v1/traces/v1/metrics` — MEDIDO 2026-11-23 no sink OTLP local).
+      // Aqui o desligamento é **por código**: `metricReaders: []` faz o SDK
+      // não criar o provider (ele só cria quando `readers.length > 0`).
       metricReaders: [],
-      logRecordProcessors: [],
       instrumentations: [
         getNodeAutoInstrumentations({
           // fs instrumentation gera ruído massivo em RSC e build pipeline;

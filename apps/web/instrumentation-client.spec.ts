@@ -24,16 +24,27 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 // pt-BR: `vi.mock` é içado para o topo do arquivo, antes de qualquer
 // `const`. Por isso o alvo precisa vir de `vi.hoisted` — declarar um objeto
 // aqui e usá-lo dentro da factory daria ReferenceError na hora do import.
-const h = vi.hoisted(() => ({
-  provider: { register: vi.fn() },
-  construtorDoProvider: vi.fn(),
-  exporter: vi.fn(),
-  spanProcessor: vi.fn(),
-  autoInstrumentations: vi.fn(),
-  warn: vi.fn(),
-  // permite simular "o OTel explodiu" sem depender de nenhum detalhe do SDK
-  explodirNoExporter: false,
-}));
+const h = vi.hoisted(() => {
+  // a ORDEM das duas chamadas — o `register()` tem que vir ANTES das
+  // auto-instrumentações (cada instrumentação resolve o tracer global no
+  // construtor super()).
+  const ordem: string[] = [];
+  return {
+    provider: {
+      register: vi.fn(() => {
+        ordem.push('register');
+      }),
+    },
+    construtorDoProvider: vi.fn(),
+    exporter: vi.fn(),
+    spanProcessor: vi.fn(),
+    autoInstrumentations: vi.fn(),
+    warn: vi.fn(),
+    ordem,
+    // permite simular "o OTel explodiu" sem depender de nenhum detalhe do SDK
+    explodirNoExporter: false,
+  };
+});
 
 vi.mock('@opentelemetry/sdk-trace-web', () => ({
   // pt-BR: no `sdk-trace-web` 2.x o span processor entra no CONSTRUTOR — o
@@ -69,12 +80,17 @@ vi.mock('@opentelemetry/exporter-trace-otlp-http', () => ({
   }),
 }));
 vi.mock('@opentelemetry/auto-instrumentations-web', () => ({
-  getWebAutoInstrumentations: h.autoInstrumentations,
+  getWebAutoInstrumentations: vi.fn((cfg: unknown) => {
+    h.autoInstrumentations(cfg);
+    h.ordem.push('autoInstrumentations');
+  }),
 }));
-vi.mock('@opentelemetry/resources', () => ({
-  resourceFromAttributes: vi.fn(() => ({})),
-  defaultResource: vi.fn(() => ({ merge: (outro: unknown) => outro })),
-}));
+// ⚠️ `@opentelemetry/resources` NÃO é mockado, de propósito: com mock, a
+// spec só via a FORMA (um `merge` que devolve o outro lado) e não via a
+// semântica. MEDIDO 2026-11-24 (mutações): invertendo a ordem do `merge` a
+// spec caía por `TypeError` do mock — e removendo o `defaultResource()` da
+// mescla ela FICAVA VERDE, ou seja, nada prendia o `service.name` do app nem
+// o `telemetry.sdk.*`. O módulo real prende as duas coisas.
 
 const CHAVE = 'NEXT_PUBLIC_OTEL_EXPORTER_OTLP_ENDPOINT';
 
@@ -130,6 +146,7 @@ describe('instrumentation-client — a telemetria nunca derruba a aplicação', 
     // ou seja, telemetria que parece ligada e não emite nada.
     expect(h.provider.register).toHaveBeenCalledTimes(1);
     expect(h.autoInstrumentations).toHaveBeenCalledTimes(1);
+    expect(h.ordem).toEqual(['register', 'autoInstrumentations']);
     // pt-BR: o processor é ligado no construtor do provider (o
     // `addSpanProcessor` não existe mais no `sdk-trace-web` 2.x). O que o
     // teste afirma é o FATO — há um `BatchSpanProcessor` ligado ao provider.
@@ -139,6 +156,29 @@ describe('instrumentation-client — a telemetria nunca derruba a aplicação', 
         spanProcessors: [expect.objectContaining({ tipo: 'BatchSpanProcessor' })],
       }),
     );
+  });
+
+  it('o recurso que o provider recebe tem o nome do app E os atributos do SDK', async () => {
+    // pt-BR: no `resources` 3.x a classe `Resource` virou função, e a
+    // construção é `defaultResource().merge(resourceFromAttributes(...))` — o
+    // ARGUMENTO da mescla vence (MEDIDO no fonte do `resources` 3.1.1: o
+    // `merge` monta a lista com o argumento primeiro e o getter de atributos
+    // mantém o primeiro). A ORDEM importa: invertida, o `service.name`
+    // vira `unknown_service:<argv0>` e o painel perde o nome do serviço.
+    process.env[CHAVE] = 'http://localhost:4318/v1/traces';
+
+    await carregarModulo();
+
+    const cfg = h.construtorDoProvider.mock.calls[0]?.[0] as
+      { resource?: { attributes?: Record<string, unknown> } } | undefined;
+    const atributos = cfg?.resource?.attributes ?? {};
+
+    expect(atributos['service.name']).toBe('projeto-base-web');
+    expect(String(atributos['service.name'])).not.toContain('unknown_service');
+    // O `defaultResource()` é o que traz o `telemetry.sdk.*` — sem ele, o
+    // painel perde a versão do SDK que produziu o span.
+    expect(atributos['telemetry.sdk.name']).toBe('opentelemetry');
+    expect(atributos['telemetry.sdk.language']).toBeDefined();
   });
 
   it('se o OTel explodir, a aplicação continua e o motivo fica registrado', async () => {

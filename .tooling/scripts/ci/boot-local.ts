@@ -390,14 +390,30 @@ async function main(): Promise<number> {
   const webPorta = await portaLivre();
 
   console.log(`[ci:boot] subindo a API em http://127.0.0.1:${apiPorta} …`);
-  const api = subir('api', process.execPath, ['--import', 'tsx/esm', 'src/main.ts'], API_DIR, {
-    ...process.env,
-    PORT: String(apiPorta),
-    DATABASE_URL: databaseUrl,
-    JWT_SECRET: jwtSecret,
-    NODE_ENV: 'development',
-    OTEL_SDK_DISABLED: 'true',
-  });
+  const api = subir(
+    'api',
+    process.execPath,
+    [
+      '--import',
+      'tsx/esm',
+      // O preload da telemetria ANTES do app: sem ele, o `http` (e o resto)
+      // carrega antes de o SDK subir e NENHUMA instrumentação é patcheada —
+      // MEDIDO 2026-11-24: sem o preload a API não exporta span nenhum; com
+      // ele, o span SERVER da requisição chega ao collector.
+      '--import',
+      './src/shared/infrastructure/telemetry/init.ts',
+      'src/main.ts',
+    ],
+    API_DIR,
+    {
+      ...process.env,
+      PORT: String(apiPorta),
+      DATABASE_URL: databaseUrl,
+      JWT_SECRET: jwtSecret,
+      NODE_ENV: 'development',
+      OTEL_SDK_DISABLED: 'true',
+    },
+  );
 
   let web: Processo | undefined;
   try {

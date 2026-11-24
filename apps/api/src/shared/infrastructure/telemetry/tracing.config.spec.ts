@@ -49,16 +49,30 @@ beforeEach(() => {
   h.cfg = undefined;
   delete (globalThis as { __otel_sdk__?: unknown }).__otel_sdk__;
   delete process.env.OTEL_SDK_DISABLED;
+  delete process.env.OTEL_LOGS_EXPORTER;
   vi.resetModules();
 });
 
 describe('initTracing — a config do NodeSDK', () => {
-  it('sobe sem provider de métricas e sem provider de logs', async () => {
+  it('sobe sem provider de métricas', async () => {
     const { initTracing } = await import('./tracing.js');
     initTracing();
 
+    // `metricReaders: []` — o SDK só cria o `MeterProvider` quando
+    // `readers.length > 0` (MEDIDO no fonte do `sdk-node` 0.301.2).
     expect(h.cfg?.metricReaders).toEqual([]);
-    expect(h.cfg?.logRecordProcessors).toEqual([]);
+  });
+
+  it('sobe sem provider de logs: o array fica de fora e o env manda', async () => {
+    // pt-BR: `logRecordProcessors: []` é TRUTHY — o SDK criava o
+    // `LoggerProvider` global SEM processor (o agent mediu: `_loggerProvider`
+    // existia). O desligamento certo é pelo env: `OTEL_LOGS_EXPORTER=none` faz
+    // o `configureLoggerProviderFromEnv` sair ANTES de criar o provider.
+    const { initTracing } = await import('./tracing.js');
+    initTracing();
+
+    expect(h.cfg?.logRecordProcessors).toBeUndefined();
+    expect(process.env.OTEL_LOGS_EXPORTER).toBe('none');
   });
 
   it('o exporter de traces aponta para o path de traces, não para a URL base', async () => {

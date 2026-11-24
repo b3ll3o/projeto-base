@@ -245,6 +245,7 @@ existem para o container ou para o SDK de terceiros.
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `.env.production` (opcional) | sim — `tracing.ts`; há default `http://otel-collector:4318/v1/traces` |
 | `OTEL_SERVICE_NAME` | `.env.example` (raiz) · `apps/api/.env.example` | sim — `resource.ts` (default `projeto-base-api`) |
 | `OTEL_SERVICE_VERSION` | `.env.example` (raiz) | sim — `resource.ts` (default `0.0.0`) |
+| `OTEL_LOGS_EXPORTER` | `apps/api/.env.example` (`none`) | sim — `tracing.ts` e `instrumentation.node.ts` põem o default `none` (o SDK **não** cria `LoggerProvider`); com `otlp` no ambiente, o exporter de logs lê o `OTEL_EXPORTER_OTLP_ENDPOINT` como URL **BASE** — o endpoint do repo aponta para `/v1/traces`, e o log iria para `/v1/traces/v1/logs` |
 | `OTEL_TRACES_SAMPLER` | `.env.example` (raiz) · `.env.production` | não pelo código do repo — `tracing.ts` **não** passa `sampler`, então o SDK do Node lê a chave do ambiente por conta própria |
 | `OTEL_TRACES_SAMPLER_ARG` | `.env.example` (raiz) · `.env.production` | idem `OTEL_TRACES_SAMPLER` |
 | `API_BASE_URL` | `apps/web/.env.example` — **há fallback** `http://localhost:3000/api/v1` | sim (web) — RSC de `/users`, `/login`, Server Action de `/users/novo` |
