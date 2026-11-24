@@ -7,10 +7,10 @@
     "",
     "O estado que motivou este gate: MEDIDO em 2026-11-03 com `pnpm audit --json`",
     "(89 advisories: 4 críticas, 23 altas). O estado de HOJE é o medido em",
-    "2026-11-18, com o mesmo comando — `pnpm audit --json`, cujo",
-    "`metadata.vulnerabilities` devolve `{\"info\":0,\"low\":1,\"moderate\":25,\"high\":3,\"critical\":1}`",
-    "→ 30 advisories (1 crítica, 3 altas, 25 moderadas, 1 baixa), das quais 4 na",
-    "severidade que reprova — as 4 são as exceções abaixo. Nenhuma outra.",
+    "2026-11-23, com o mesmo comando — `pnpm audit --json`, cujo",
+    "`metadata.vulnerabilities` devolve `{\"info\":0,\"low\":1,\"moderate\":14,\"high\":2,\"critical\":1}`",
+    "→ 18 advisories (1 crítica, 2 altas, 14 moderadas, 1 baixa), das quais 3 na",
+    "severidade que reprova — as 3 são as exceções abaixo. Nenhuma outra.",
     "",
     "MEDIDO 2026-11-09 (e reconferido em 2026-11-10): o total caiu de 41 para 31",
     "depois do PR #156 — o lockfile mudou (27 dependências subiram dentro do range",
@@ -40,6 +40,15 @@
     "MEDIDO: `pnpm audit --json` → 30 advisories, `effect` ausente; `prisma -v`,",
     "`prisma validate` e `prisma generate` verdes com o `effect@3.22.1`.",
     "",
+    "MEDIDO em 2026-11-23: o total caiu de 30 para 18 depois que a família",
+    "`@opentelemetry/*` subiu para a geração `core` 3.x (o `sdk-node` 0.301.2 e o",
+    "`instrumentation-user-interaction` 0.69.1) — a árvore 1.x do OTel carregava 12",
+    "advisories moderadas que a árvore nova não traz. As 3 na severidade que",
+    "reprova NÃO mudaram: são as mesmas exceções. A exceção do",
+    "`@opentelemetry/propagator-jaeger` (1124011) saiu daqui com o advisory: a",
+    "árvore nova não traz mais o pacote, a `verificacao` de ausência dele",
+    "continua valendo e a lista volta a casar com o `pnpm audit`.",
+    "",
     "ESTE NÚMERO ENVELHECE: ele é uma MEDIÇÃO, e a medição envelhece com o",
     "lockfile. O gate o confere — o campo `advisoriesEsperadas` deste arquivo é",
     "comparado com o `metadata.vulnerabilities` que o `pnpm audit` devolve: o que",
@@ -48,18 +57,17 @@
     "advisory nova, e isso não é mudança do repo — reprovar por isso seria",
     "vermelho sem motivo). Quem atualiza o lockfile atualiza a claim no mesmo PR.",
     "",
-    "NENHUMA das 5 pode sair da lista: MEDIDO em 2026-11-09, a `verificacao` de",
-    "cada uma continua valendo (o gate a roda a cada preflight e confirmou 4/4",
-    "com exceção declarada e verificada). O advisory é que tem de sumir do",
-    "`pnpm audit` — o `id` é a chave de casamento.",
+    "NENHUMA das 3 pode sair da lista: MEDIDO em 2026-11-23, a `verificacao` de",
+    "cada uma continua valendo (o gate a roda a cada preflight). O advisory é que",
+    "tem de sumir do `pnpm audit` — o `id` é a chave de casamento.",
     "A severidade que REPROVA mora no CÓDIGO do gate (SEVERIDADES_QUE_REPROVAM), não neste arquivo — quem edita este arquivo não pode enfraquecer o gate."
   ],
   "advisoriesEsperadas": {
     "medidoEm": "2026-11-23",
-    "total": 30,
+    "total": 18,
     "critical": 1,
-    "high": 3,
-    "moderate": 25,
+    "high": 2,
+    "moderate": 14,
     "low": 1,
     "info": 0
   },
@@ -103,17 +111,6 @@
         "padrao": "z\\.(array|tuple)\\(",
         "caminhos": ["apps/api/src", "apps/web"],
         "excluir": ["\\.spec\\.ts$"]
-      }
-    },
-    {
-      "id": "1124011",
-      "modulo": "@opentelemetry/propagator-jaeger",
-      "severidade": "high",
-      "motivo": "O DoS é no parser do header `uber-trace-id` (formato Jaeger). MEDIDO em 2026-11-03: a propagação W3C é o DEFAULT do NodeSDK e o repo NÃO registra o propagator Jaeger (0 ocorrências de `JaegerPropagator` no código) — o pacote está na árvore por transitive do `sdk-trace-node`, mas nunca parseia header nenhum. A versão corrigida (2.9.0+) está DEPRECADA no upstream ('package no longer supported'), então o override traria um pacote morto e um aviso em cada install por uma exposição que não existe.",
-      "verificacao": {
-        "tipo": "ausencia",
-        "padrao": "JaegerPropagator",
-        "caminhos": ["apps/api/src", "apps/web"]
       }
     }
   ]

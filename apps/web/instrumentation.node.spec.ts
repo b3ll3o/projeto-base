@@ -55,9 +55,14 @@ vi.mock('@opentelemetry/exporter-trace-otlp-http', () => ({
 // pt-BR: `@opentelemetry/semantic-conventions` NÃO é mockado de propósito —
 // o `Resource` recebe as chaves reais ('service.name', 'deployment.environment'),
 // e um teste que passa com chaves inventadas não prova nada.
-vi.mock('@opentelemetry/resources', () => ({
-  Resource: vi.fn((atributos: unknown) => ({ atributos })),
-}));
+//
+// `@opentelemetry/resources` também NÃO é mockado (MEDIDO 2026-11-24): com
+// mock, a spec só via a FORMA — invertendo a ordem do `merge` ela caía por
+// `TypeError` do mock, e removendo o `defaultResource()` da mescla FICAVA
+// VERDE, ou seja, nada prendia o `service.name` do app nem o `telemetry.sdk.*`.
+// O módulo real prende as duas coisas: o ARGUMENTO da mescla vence (no
+// `resources` 3.1.1 o `merge` monta a lista com o argumento primeiro e o
+// getter de atributos mantém o primeiro).
 
 const CHAVE_ENDPOINT = 'OTEL_EXPORTER_OTLP_ENDPOINT';
 const CHAVE_SERVICO = 'OTEL_SERVICE_NAME';
@@ -81,12 +86,14 @@ beforeEach(() => {
   h.explodirNoExporter = false;
   delete process.env[CHAVE_ENDPOINT];
   delete process.env[CHAVE_SERVICO];
+  delete process.env.OTEL_LOGS_EXPORTER;
   delete (globalThis as Record<string, unknown>)[CHAVE_OTEL_SDK];
 });
 
 afterEach(() => {
   delete process.env[CHAVE_ENDPOINT];
   delete process.env[CHAVE_SERVICO];
+  delete process.env.OTEL_LOGS_EXPORTER;
   delete (globalThis as Record<string, unknown>)[CHAVE_OTEL_SDK];
   vi.restoreAllMocks();
 });
@@ -135,16 +142,11 @@ describe('instrumentation.node — a telemetria do servidor nunca derruba o serv
 
     await carregar();
 
-    expect(h.construtorDoSdk).toHaveBeenCalledWith(
-      expect.objectContaining({
-        resource: {
-          atributos: {
-            'service.name': 'cadastro-web',
-            'deployment.environment': 'production',
-          },
-        },
-      }),
-    );
+    const cfg = h.construtorDoSdk.mock.calls[0]?.[0] as
+      { resource?: { attributes?: Record<string, unknown> } } | undefined;
+
+    expect(cfg?.resource?.attributes?.['service.name']).toBe('cadastro-web');
+    expect(cfg?.resource?.attributes?.['deployment.environment']).toBe('production');
   });
 
   it('sem OTEL_SERVICE_NAME, o nome do serviço cai no default do app', async () => {
@@ -155,13 +157,13 @@ describe('instrumentation.node — a telemetria do servidor nunca derruba o serv
 
     await carregar();
 
-    expect(h.construtorDoSdk).toHaveBeenCalledWith(
-      expect.objectContaining({
-        resource: expect.objectContaining({
-          atributos: expect.objectContaining({ 'service.name': 'projeto-base-web' }),
-        }),
-      }),
-    );
+    const cfg = h.construtorDoSdk.mock.calls[0]?.[0] as
+      { resource?: { attributes?: Record<string, unknown> } } | undefined;
+
+    expect(cfg?.resource?.attributes?.['service.name']).toBe('projeto-base-web');
+    // O `defaultResource()` é o que traz o `telemetry.sdk.*` — sem ele, o
+    // painel perde a versão do SDK que produziu o span.
+    expect(cfg?.resource?.attributes?.['telemetry.sdk.name']).toBe('opentelemetry');
   });
 
   it('a instrumentação de fs fica desabilitada', async () => {
@@ -172,6 +174,30 @@ describe('instrumentation.node — a telemetria do servidor nunca derruba o serv
     expect(h.autoInstrumentations).toHaveBeenCalledWith({
       '@opentelemetry/instrumentation-fs': { enabled: false },
     });
+  });
+
+  it('o SDK sobe sem provider de métricas e sem provider de logs', async () => {
+    // pt-BR: o `sdk-node` 0.301.2 cria o `MeterProvider` e o `LoggerProvider`
+    // por default, e os dois exporters leem o `OTEL_EXPORTER_OTLP_ENDPOINT`
+    // como URL BASE — com o endpoint do repo apontando para `/v1/traces`,
+    // as métricas iam para `/v1/traces/v1/metrics` e os logs para
+    // `/v1/traces/v1/logs` (MEDIDO 2026-11-23: `POST /v1/traces/v1/metrics`,
+    // 7.528 bytes). Os dois arrays VAZIOS são o que impede isso — e é a
+    // única coisa que impede: sem eles, o SDK recria os dois providers e
+    // exporta para paths que não existem.
+    await carregar();
+
+    const cfg = h.construtorDoSdk.mock.calls[0]?.[0] as
+      { metricReaders?: unknown[]; logRecordProcessors?: unknown[] } | undefined;
+
+    expect(cfg?.metricReaders).toEqual([]);
+    // pt-BR: `logRecordProcessors: []` é TRUTHY — o SDK criava o
+    // `LoggerProvider` global SEM processor (MEDIDO 2026-11-24 no fonte do
+    // `sdk-node` 0.301.2). O desligamento certo é pelo env:
+    // `OTEL_LOGS_EXPORTER=none` faz o `configureLoggerProviderFromEnv` sair
+    // ANTES de criar o provider.
+    expect(cfg?.logRecordProcessors).toBeUndefined();
+    expect(process.env.OTEL_LOGS_EXPORTER).toBe('none');
   });
 
   it('se o OTel explodir, o módulo registra o motivo e não propaga', async () => {

@@ -128,6 +128,23 @@ export async function lerPendencias(repoRoot: string): Promise<MajorPendente[]> 
 }
 
 /**
+ * O `total` que o arquivo de pendências declara, ou `null`.
+ *
+ * A contagem é uma CLAIM: ela vale enquanto o array tem o tamanho que ela
+ * diz. MEDIDO 2026-11-24: nenhum gate a conferia — o número podia envelhecer
+ * em silêncio (o mesmo defeito das claims numéricas do `check-doc-claims`).
+ */
+export async function lerTotalPendencias(repoRoot: string): Promise<number | null> {
+  try {
+    const raw = await fs.readFile(path.join(repoRoot, ARQUIVO_PENDENCIAS), 'utf-8');
+    const dados = JSON.parse(raw) as { total?: number };
+    return typeof dados.total === 'number' ? dados.total : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * As majors declaradas no registro, por pacote.
  *
  * Esta função **não** consulta a rede: o gate é hermético, como o resto do
@@ -143,15 +160,37 @@ export const ARQUIVO_MAORES = path.join(
   'dependencias-major-disponiveis.json',
 );
 
-export async function lerMajoresDisponiveis(repoRoot: string): Promise<Map<string, number> | null> {
+/**
+ * O registro de majors: o que foi medido, o que ficou sem consulta e a
+ * contagem que o próprio scan gravou.
+ *
+ * ⚠️ Os três campos são o que separa "o gate mediu" de "o gate ficou verde
+ * sem medir". MEDIDO 2026-11-24: o `semConsulta` não era lido por NENHUM
+ * gate — um scan que regredisse escrevia `majors: {}` e o gate passava
+ * verde, sem medir nada (a classe 5 do `guard-classes.md`). Por isso o
+ * registro é lido inteiro, e o gate cobra a cobertura dele.
+ */
+export interface RegistroDeMajores {
+  majors: Map<string, number>;
+  semConsulta: string[];
+  totalDeclaradas: number | null;
+}
+
+export async function lerMajoresDisponiveis(repoRoot: string): Promise<RegistroDeMajores | null> {
   try {
     const raw = await fs.readFile(path.join(repoRoot, ARQUIVO_MAJORES), 'utf-8');
     const dados = JSON.parse(raw) as {
       medidoEm?: string;
       majors?: Record<string, number>;
+      semConsulta?: string[];
+      totalDeclaradas?: number;
     };
     if (!dados.majors) return null;
-    return new Map(Object.entries(dados.majors));
+    return {
+      majors: new Map(Object.entries(dados.majors)),
+      semConsulta: dados.semConsulta ?? [],
+      totalDeclaradas: typeof dados.totalDeclaradas === 'number' ? dados.totalDeclaradas : null,
+    };
   } catch {
     return null;
   }
@@ -165,8 +204,8 @@ export async function checkDependencyFreshness(opts: {
   const advisories: string[] = [];
   const root = path.resolve(opts.repoRoot);
 
-  const majors = await lerMajoresDisponiveis(root);
-  if (!majors) {
+  const registro = await lerMajoresDisponiveis(root);
+  if (!registro) {
     return {
       ok: true,
       errors: [],
@@ -176,6 +215,31 @@ export async function checkDependencyFreshness(opts: {
         `quais majors existem (sem rede, por desenho). Rode 'pnpm run deps:major-scan' ` +
         `e commite o resultado para habilitar a medição.`,
     };
+  }
+
+  const majors = registro.majors;
+
+  // ⚠️ A COBERTURA da medição, antes de qualquer regra de major.
+  //
+  // MEDIDO 2026-11-24: o `semConsulta` não era lido por NENHUM gate e um
+  // `majors: {}` passava verde — o gate ficava "sem medição" **sem acusar
+  // nada**, que é a classe 5 do `guard-classes.md` (o verde por ausência).
+  // O script foi consertado no PR #188 (o `npm` 12 devolve `dist-tags` como
+  // lista), mas um gate que não cobra a cobertura do arquivo não fecha a
+  // classe: ele fecha o SINTOMA de hoje e deixa a próxima regressão passar.
+  if (majors.size === 0) {
+    errors.push(
+      `'${ARQUIVO_MAORES}' tem 'majors' VAZIO: a medição do registro não aconteceu ` +
+        `(ou regrediu). O gate ficaria verde sem medir nada — rode 'pnpm run deps:major-scan' ` +
+        `e commite o resultado.`,
+    );
+  }
+  if (registro.semConsulta.length > 0) {
+    errors.push(
+      `'${ARQUIVO_MAORES}' tem ${registro.semConsulta.length} pacote(s) SEM consulta ao registro ` +
+        `(${registro.semConsulta.join(', ')}): a medição está incompleta e o gate não pode ` +
+        `julgar o que não foi consultado. Rode 'pnpm run deps:major-scan' e commite o resultado.`,
+    );
   }
 
   const arquivos = opts.packageJsons ?? (await listarPackageJsons(root));
@@ -204,6 +268,43 @@ export async function checkDependencyFreshness(opts: {
 
   const pendencias = await lerPendencias(root);
   const porPacote = new Map(pendencias.map((p) => [p.pacote, p]));
+
+  // ⚠️ O REGISTRO tem que cobrir o que o workspace declara.
+  //
+  // MEDIDO 2026-11-24: um pacote declarado e AUSENTE do `majors` passava verde
+  // — a regra de major só olha o que o registro mediu, então um pacote que o
+  // scan não viu (dep nova, scan velho) é invisível para o gate. E a
+  // contagem que o próprio scan grava (`totalDeclaradas`) não era conferida
+  // por ninguém: um número que envelhece sem ninguém reclamar é claim sem
+  // instrumento.
+  const semMedicao = [...declaradas.keys()].filter(
+    (pacote) => !majors.has(pacote) && !registro.semConsulta.includes(pacote),
+  );
+  if (semMedicao.length > 0) {
+    errors.push(
+      `${semMedicao.length} pacote(s) declarado(s) no workspace não estão em '${ARQUIVO_MAORES}' ` +
+        `(${semMedicao.join(', ')}): a medição do registro está desatualizada — rode ` +
+        `'pnpm run deps:major-scan' e commite o resultado.`,
+    );
+  }
+  if (
+    registro.totalDeclaradas !== null &&
+    registro.totalDeclaradas !== majors.size + registro.semConsulta.length
+  ) {
+    errors.push(
+      `'${ARQUIVO_MAORES}' declara 'totalDeclaradas: ${registro.totalDeclaradas}' mas tem ` +
+        `${majors.size} pacote(s) medido(s) + ${registro.semConsulta.length} sem consulta = ` +
+        `${majors.size + registro.semConsulta.length}. A contagem não bate com o dado — o número ` +
+        `é uma claim e ela envelheceu.`,
+    );
+  }
+  const totalDeclarado = await lerTotalPendencias(root);
+  if (totalDeclarado !== null && totalDeclarado !== pendencias.length) {
+    errors.push(
+      `'${ARQUIVO_PENDENCIAS}' declara 'total: ${totalDeclarado}' mas tem ${pendencias.length} ` +
+        `pendência(s). A contagem não bate com o dado — o número é uma claim e ela envelheceu.`,
+    );
+  }
 
   for (const [pacote, majorNova] of majors) {
     const faixa = declaradas.get(pacote);

@@ -1,7 +1,7 @@
 {
   "_nota": "As majors que existem no registro e NAO sobem agora. Cada uma tem motivo. O gate check-dependency-freshness le este arquivo e reprova quando uma pendencia envelhece (o pacote saiu do workspace, ou a faixa ja permite a major).",
-  "medidoEm": "2026-11-16",
-  "total": 18,
+  "medidoEm": "2026-11-24",
+  "total": 17,
   "pendencias": [
     {
       "pacote": "@eslint/js",
@@ -12,28 +12,12 @@
       "declaradaEm": "2026-11-09"
     },
     {
-      "pacote": "@opentelemetry/resources",
-      "faixaAtual": "^1.30.1",
-      "majorAtual": 1,
-      "majorNova": 3,
-      "motivo": "renomeia pacotes e muda a API de tracing: o initTracing do repo constroi o ResourceProvider direto",
-      "declaradaEm": "2026-11-09"
-    },
-    {
-      "pacote": "@opentelemetry/sdk-trace-base",
-      "faixaAtual": "^1.30.1",
-      "majorAtual": 1,
-      "majorNova": 2,
-      "motivo": "renomeia pacotes e muda a API de tracing: o initTracing do repo constroi o NodeSDK e o SpanProcessor direto",
-      "declaradaEm": "2026-11-09"
-    },
-    {
-      "pacote": "@opentelemetry/sdk-trace-web",
-      "faixaAtual": "^1.30.1",
-      "majorAtual": 1,
-      "majorNova": 2,
-      "motivo": "renomeia pacotes e muda a API de tracing: o initTracing do repo registra o WebTracerProvider direto",
-      "declaradaEm": "2026-11-09"
+      "pacote": "@prisma/client",
+      "faixaAtual": "^6.19.3",
+      "majorAtual": 6,
+      "majorNova": 7,
+      "motivo": "a mesma migracao do `prisma`: o client e gerado pelo CLI, e a 7 exige `prisma.config.ts` + driver adapter + reescrita do client gerado. MEDIDO 2026-11-24 (`npm view @prisma/client dist-tags --json`): `latest` 7.10.1 e `prev` 6.19.3 — a major 7 e ESTAVEL, e o `prev` e a estable que sobrou de um RC antigo (por isso o scan mede o `latest` primeiro)",
+      "declaradaEm": "2026-11-24"
     },
     {
       "pacote": "@testcontainers/postgresql",
@@ -42,6 +26,14 @@
       "majorNova": 12,
       "motivo": "muda a API do container: o setup de Postgres efemero do e2e e da integracao chama o construtor direto",
       "declaradaEm": "2026-11-09"
+    },
+    {
+      "pacote": "@testing-library/jest-dom",
+      "faixaAtual": "^7.0.1",
+      "majorAtual": 7,
+      "majorNova": 8,
+      "motivo": "a 8 declara peer `vitest >=5 <6` (MEDIDO 2026-11-23, `npm view @testing-library/jest-dom@8 peerDependencies`): subir o jest-dom exige subir o vitest 2 -> 5 junto, que é a major do runner (declarada nesta lista)",
+      "declaradaEm": "2026-11-23"
     },
     {
       "pacote": "@types/node",
@@ -112,7 +104,7 @@
       "faixaAtual": "^6.19.3",
       "majorAtual": 6,
       "majorNova": 7,
-      "motivo": "a major estavel e a 7 (o latest do registro e um release candidate, 8.0.0-rc.33, medido em 2026-11-09); a 7 exige migrar o schema e reescrever o client",
+      "motivo": "a major estavel e a 7 (o latest do registro e um release candidate, 8.0.0-rc.35, medido em 2026-11-24); a 7 exige migrar o schema e reescrever o client",
       "declaradaEm": "2026-11-09"
     },
     {

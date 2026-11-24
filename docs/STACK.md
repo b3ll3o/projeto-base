@@ -45,9 +45,9 @@ projeto-base (monorepo)
 
 | Camada | Escolha | Versão | Justificativa |
 |--------|---------|--------|---------------|
-| Runtime | Node.js | ≥ 22.12.0 | Medido em `package.json` → `engines.node`; casa com a imagem base `node:22-bookworm-slim` |
+| Runtime | Node.js | `^22.22.2 \|\| ^24.15.0 \|\| >=26.0.0` | Medido em `package.json` → `engines.node`; casa com a imagem base `node:22-bookworm-slim` (que resolve 22.23.3). O range é o do `jsdom` 30.1.3 — `>=22.22.2` sozinho prometia Node 23.x e 25.x, que a árvore **não** aceita (o `.npmrc` liga `engine-strict=true`); o `@opentelemetry/*` 3.x (`>=22.15.0`) fica abaixo dele |
 | Framework | NestJS | 12.x | Estrutura modular, DI nativo, OpenAPI integrado |
-| HTTP Adapter | Fastify | 5.12.8 (transitiva) | 2-3× mais rápido que Express; menor footprint. O adapter é `@nestjs/platform-fastify` `^12.0.0` — o `fastify` em si não é dependência direta |
+| HTTP Adapter | Fastify | 5.12.8 (transitiva) | 2-3× mais rápido que Express; menor footprint. O adapter é `@nestjs/platform-fastify` `^12.5.1` — o `fastify` em si não é dependência direta |
 | ORM | Prisma | 6.x | Type-safe, migrations versionadas, excelente DX |
 | Banco de Dados | PostgreSQL | 16 | Maduro, JSONB, extensions, performance |
 | Validação | **Zod** + `ZodValidationPipe` | ^3.25.76 | Schema único, executável no cliente E no servidor. `class-validator` NÃO está instalado — o pipe é `@Body(new ZodValidationPipe(Schema))`, não o `ValidationPipe` global |
@@ -55,7 +55,7 @@ projeto-base (monorepo)
 | Auth | @nestjs/jwt + `JwtAuthGuard` próprio | ^12.0.2 | Sem passport: o guard valida assinatura/expiração e um `@Public()` o libera. O **refresh token é revogável**: o `jti` vive na tabela `refresh_tokens` (rotação, `POST /auth/logout` e detecção de replay — [ADR-0007](./adr/0007-refresh-token-revogavel.md)). Detalhe em [`docs/api/auth.md`](./api/auth.md) |
 | Hash de senha | argon2 (argon2id) | ^0.45.1 | Recomendação OWASP; resiste a GPU e a ASIC. Alternativa ao bcrypt, que trunca a senha em 72 bytes — ver [ADR-0002](./adr/0002-autenticacao-jwt-argon2.md) |
 | Logging | Pino | ^10.3.0 | Estruturado JSON, rápido |
-| Observabilidade | OpenTelemetry + Grafana + Tempo + Prometheus | ^0.54.0 / 11.2.0 / 2.5.0 / v2.54.1 | Vendor-neutral na produção; backends locais no perfil `observability` do Compose. Grafana é a tela (http://localhost:3300), Tempo guarda traces e o Prometheus faz *scrape* das métricas. Sem Loki — o Pino escreve em stdout e quem indexa é o driver de container. Detalhe em [ADR-0003](./adr/0003-backends-locais-de-telemetria.md) |
+| Observabilidade | OpenTelemetry + Grafana + Tempo + Prometheus | ^0.301.2 (node) · ^2.12.1 (browser) / 11.2.0 / 2.5.0 / v2.54.1 | Vendor-neutral na produção; backends locais no perfil `observability` do Compose. Grafana é a tela (http://localhost:3300), Tempo guarda traces e o Prometheus faz *scrape* das métricas. Sem Loki — o Pino escreve em stdout e quem indexa é o driver de container. No browser o SDK é o `@opentelemetry/sdk-trace-web` `^2.12.1` (a linha 2.x é a última estável do browser: o `core` 3.x que o node usa não tem equivalente estável para browser). Detalhe em [ADR-0003](./adr/0003-backends-locais-de-telemetria.md) |
 | Testes | **Vitest** + Testcontainers | ^2.1.9 | Unit + e2e com Postgres real. **Não há Jest** no repositório, e o harness e2e usa `app.inject` do Fastify, não `supertest` — a `devDep` `supertest` não é importada em lugar nenhum |
 | Fila / Cache | — | — | Não existem. Nenhum serviço de fila ou cache foi adotado; a versão anterior desta tabela listava BullMQ + Redis (ioredis) e nenhuma das duas libs estava em nenhum `package.json` |
 
@@ -78,7 +78,7 @@ projeto-base (monorepo)
 | Padrão de estilo | **`estilizacao.md`** (convenção) | — | Tokens semânticos + primitivas em `apps/web/components/ui/`; o instrumento é a regra ESLint `estilizacao/no-estilizacao-informal`. Ver [`.agents/specs/conventions/estilizacao.md`](../.agents/specs/conventions/estilizacao.md) |
 | Componentes | **escritos à mão, sobre as primitivas** | — | Não há biblioteca de componentes: shadcn/ui NÃO está instalado — nem como dependência, nem como código copiado. As primitivas (`Container`, `CabecalhoPagina`, `CabecalhoSecao`, `Campo`, `Botao`, `Alerta`, `Tabela`, `CabecalhoTabela`, `CelulaTabela`, `EstadoVazio`, `LinkTexto`) são o que as telas usam — as 9 de `apps/web/components/ui/` exportam 11 componentes, porque `Tabela` vem com `CabecalhoTabela` e `CelulaTabela`; o `className` repetido era a dívida que elas pagaram |
 | State (URL) | Next router | nativo | Filtros, paginação, tabs na URL |
-| Forms | react-hook-form + zod | ^7.91.0 / ^3.25.76 | Client Component + validação tipada |
+| Forms | react-hook-form + zod | ^7.92.0 / ^3.25.76 | Client Component + validação tipada |
 | Server Actions | nativo | — | Mutações sem JS extra |
 | Auth client | **`apps/web/lib/sessao.ts`** (casa própria) | — | grava/ler cookies httpOnly `access_token` + `refresh_token` e monta o `Authorization: Bearer`. NextAuth.js / Auth.js NÃO estão instalados. O browser nunca fala com a API: todo o tráfego passa por Server Action |
 | Testes unit | Vitest + Testing Library | ^2.1.9 | `@testing-library/react` + `user-event` + `jest-dom`, em jsdom |
@@ -178,7 +178,7 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão da stack:** 1.31.0
+**Versão da stack:** 1.32.0
 
 ### Histórico de Versões
 
@@ -210,3 +210,4 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 | `1.28.0` | **Sem mudança de stack** — o PR fecha as pendências dos 6 PRs abertos e da issue #149: o `.github/dependabot.yml` passa a gerar `chore(deps):` (o prefixo `deps` NÃO é aceito pelo gate de Conventional Commits do repo, e os 5 PRs do Dependabot nasceram vermelhos por isso), 2 gates ganham regra (a major pendente que foi **adotada** reprova; a claim do total de advisories é conferida contra o `pnpm audit` medido) e a prosa do registro de exceções volta a bater com o audit (41 → 31 advisories). **Nenhuma dependência nova**, nenhum binário novo no `package.json`, nenhuma mudança em `apps/`, `packages/` ou `infra/`. |
 | `1.30.0` | **Sem mudança de stack** — o kit de documentação moderna ([`kit-documentacao.md`](../.agents/specs/conventions/kit-documentacao.md)) é **doc**: nenhuma dependência nova, nenhum binário no `package.json`, nenhuma mudança em `apps/api`, `apps/web`, `packages/` ou `infra/`. O que mudou foi a **cobertura**: os 14 itens do kit passaram a ter doc canônico, specialist dono e auditor por pilar, e o gate `check-doc-kit` cobra. |
 | `1.31.0` | **Sem mudança de stack** — o agent `e2e-specialist` e o workflow `e2e-coverage-mode` são docs e roteamento: **nenhuma dependência nova**, nenhum binário no `package.json`, nenhuma mudança em `apps/api`, `apps/web`, `packages/` ou `infra/`. A única mudança na árvore é o **override** de `effect` para `3.22.1` (a versão corrigida da advisory `1248071`, CVE-2026-121707 — o `effect` era transitivo do `@prisma/config` e está na árvore de produção de `apps/api`); o `package.json` e o `pnpm-lock.yaml` mudaram, nenhum arquivo de `apps/` foi tocado. O footer subiu junto com os outros 5. |
+| `1.32.0` | **A família NestJS, o `react-hook-form` e a família OpenTelemetry sobem juntas** — a tabela de versões acima muda em 4 linhas: `@nestjs/common`, `@nestjs/core`, `@nestjs/platform-fastify` e `@nestjs/testing` para a `12.5.1` (com o `core` em uma instância só — o precedente do #166), `react-hook-form` para a `7.92.0`, e o OpenTelemetry para a geração `core` 3.x no node (`@opentelemetry/sdk-node` `0.301.2`, `@opentelemetry/resources` `3.1.1`) e para a última linha estável do browser (`@opentelemetry/sdk-trace-web` e `@opentelemetry/sdk-trace-base` `2.12.1` — não há 3.x estável para browser). Duas APIs mudaram no código: a classe `Resource` virou **interface** (`resourceFromAttributes()`) e o `provider.addSpanProcessor()` saiu do `WebTracerProvider` (o processor entra no construtor, em `spanProcessors`). O **Runtime** mudou de `≥ 22.12.0` para `^22.22.2 \|\| ^24.15.0 \|\| >=26.0.0` — o range real da árvore é o do `jsdom` 30.1.3 (que já estava no repo; o `>=22.12.0` declarado mentia, e o `>=22.22.2` sozinho prometia Node 23.x/25.x, que a árvore **não** aceita com `engine-strict=true`). O footer subiu junto com os outros 5. |

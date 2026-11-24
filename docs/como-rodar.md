@@ -27,7 +27,7 @@ O **runbook canônico** é este arquivo: §2 (variáveis) e §3 (scripts `pnpm`)
 
 ### §0.1 Pré-requisitos
 
-Node >= 22.12.0 · pnpm 9.12.0 (`packageManager`) · Docker com `compose` v2
+Node `^22.22.2 || ^24.15.0 || >=26.0.0` · pnpm 9.12.0 (`packageManager`) · Docker com `compose` v2
 (ambientes 2–4) · Chromium para o e2e (instalado pelo `pretest:e2e`).
 
 ```bash
@@ -176,8 +176,7 @@ curl -o /dev/null -w '%{http_code}\n' http://localhost:3000/api/docs   # 200 (Sw
 **desabilitado** — é o default-deny do `JWT_SECRET`: um OpenAPI publica a
 superfície completa da API a quem descobrir a URL. Para ligar: `SWAGGER_ENABLED=true`.
 
-⚠️ No boot do web saem uns `Module not found` de `@opentelemetry/winston-transport` e
-`@opentelemetry/exporter-jaeger` (peers opcionais): ✅ medido — **não impedem o boot**.
+ℹ️ No boot do web **não** saem mais `Module not found` de `@opentelemetry/winston-transport` e `@opentelemetry/exporter-jaeger` (peers opcionais): ✅ medido em 2026-11-23 — o standalone de produção escreve `✓ Ready in 325ms` e nenhum aviso.
 
 ### §1.6 Fluxo completo (API e UI) ✅ medido 2026-10-16
 
@@ -246,6 +245,7 @@ existem para o container ou para o SDK de terceiros.
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `.env.production` (opcional) | sim — `tracing.ts`; há default `http://otel-collector:4318/v1/traces` |
 | `OTEL_SERVICE_NAME` | `.env.example` (raiz) · `apps/api/.env.example` | sim — `resource.ts` (default `projeto-base-api`) |
 | `OTEL_SERVICE_VERSION` | `.env.example` (raiz) | sim — `resource.ts` (default `0.0.0`) |
+| `OTEL_LOGS_EXPORTER` | `apps/api/.env.example` (`none`) | sim — `tracing.ts` e `instrumentation.node.ts` põem o default `none` (o SDK **não** cria `LoggerProvider`); com `otlp` no ambiente, o exporter de logs lê o `OTEL_EXPORTER_OTLP_ENDPOINT` como URL **BASE** — o endpoint do repo aponta para `/v1/traces`, e o log iria para `/v1/traces/v1/logs` |
 | `OTEL_TRACES_SAMPLER` | `.env.example` (raiz) · `.env.production` | não pelo código do repo — `tracing.ts` **não** passa `sampler`, então o SDK do Node lê a chave do ambiente por conta própria |
 | `OTEL_TRACES_SAMPLER_ARG` | `.env.example` (raiz) · `.env.production` | idem `OTEL_TRACES_SAMPLER` |
 | `API_BASE_URL` | `apps/web/.env.example` — **há fallback** `http://localhost:3000/api/v1` | sim (web) — RSC de `/users`, `/login`, Server Action de `/users/novo` |

@@ -3,7 +3,7 @@
 > Registro de versão do template, em **pt-BR**, no formato
 > [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 >
-> A versão corrente do template é **1.31.0**. O **fato** de cada versão é a
+> A versão corrente do template é **1.32.0**. O **fato** de cada versão é a
 > tag correspondente no git — este arquivo é o **leitura** do que a tag
 > contém, e a tag é a que se confere.
 
@@ -20,6 +20,29 @@
 ### Quebras de compatibilidade
 
 - Nada ainda — a próxima versão a ser fechada entra aqui.
+
+## [1.32.0] — 2026-11-24
+
+### Adicionado
+
+- Nada ainda — a próxima versão a ser fechada entra aqui.
+
+### Corrigido
+
+- O script [`deps:major-scan`](./.tooling/scripts/ci/scan-dependency-majors.ts) lia o `dist-tags --json` como um objeto plano, e o `npm` 12 devolve uma **lista** de objetos: `tags.latest` dava `undefined`, TODOS os pacotes caíam em "sem consulta ao registro" e o arquivo versionado [`dependencias-major-disponiveis.json`](./.tooling/scripts/ci/dependencias-major-disponiveis.json) era escrito com `majors: {}` — o gate [`check-dependency-freshness`](./.tooling/scripts/ci/check-dependency-freshness.ts) ficava sem medição **sem acusar nada**. A normalização agora aceita as duas formas do registro.
+- A família `@nestjs/*` subiu para a `12.5.1` (`@nestjs/common`, `@nestjs/core`, `@nestjs/platform-fastify` e `@nestjs/testing`, com o `core` em uma instância só — o precedente do #166) e o `react-hook-form` para a `7.92.0`. As release notes da 12.5.1 (2026-11-16) não têm breaking que afete o app: 1 feature aditiva, 4 bugfixes, graceful shutdown de microservices (o repo não usa) e docs. A `12.6.0` (2026-11-20) **não** entra aqui: ela traz "new defaults and behaviour changes" (o router do Fastify responde 400 a um alvo que não começa com `/`, o `logger: true` do módulo de teste deixou de desligar o log) e fica para um PR próprio, com o delta medido.
+- O `deps:major-scan` media a major do registro pela tag `prev` **antes** da `latest`: MEDIDO 2026-11-24 (`npm view @prisma/client dist-tags --json`), o `@prisma/client` publica `latest: 7.10.1` (estável) e `prev: 6.19.3` (a estável que sobrou de um RC antigo) — o scan gravava major **6** e escondia a major 7 que existe. A ordem agora é `latest` → `prev` (o `prev` é o plano B para quando o `latest` é um RC, como o `prisma`, cujo `latest` é `8.0.0-rc.35`), e o registro foi regerado: a major 7 do `@prisma/client` entrou como **pendência declarada**, com dono e motivo — a mesma migração do `prisma` (`prisma.config.ts` + driver adapter + reescrita do client gerado).
+- O gate `check-dependency-freshness` media a major sem conferir a **cobertura** da medição: o `semConsulta` do registro não era lido por NENHUM gate e um `majors: {}` passava verde — o gate ficava verde **sem medir nada** (a classe 5 do `guard-classes.md`). Agora ele reprova quando o registro foi escrito sem medição, quando há pacote sem consulta ao registro, quando um pacote **declarado** não está no registro (a medição está velha) e quando as contagens (`totalDeclaradas` do registro e o `total` das pendências) não batem com o dado.
+- O `deps:major-scan` media a árvore do `process.cwd()`: rodar o script de outro diretório media o manifesto daquele diretório e gravava o arquivo versionado no lugar errado. A raiz agora vem do próprio script.
+- **A telemetria da API era inerte em dev** — o `dev` subia a API com `node --import tsx/esm src/main.ts`, e os imports ESTÁTICOS do `main.ts` (Nest, Fastify) são avaliados ANTES do corpo do módulo: o `http` carregava antes de o SDK subir e **nenhuma** instrumentação era patcheada. MEDIDO 2026-11-24 contra um sink OTLP local (porta 4320), com uma requisição real em `/api/v1/health`: **sem** o preload, 0 requests no sink; **com** o preload, `POST /v1/traces spans=[2:GET]` — o span SERVER da requisição. O `dev` e o `ci:boot` passaram a pré-carregar o `telemetry/init.ts` (o mesmo caminho que o `Dockerfile` já usava em produção via `NODE_OPTIONS`), e uma spec prende a ORDEM (o preload antes do app).
+- O `logRecordProcessors: []` do `NodeSDK` não desligava o provider de logs — o array é TRUTHY, então o SDK criava um `LoggerProvider` global **sem processor** (MEDIDO no fonte do `sdk-node` 0.301.2) e o `OTEL_LOGS_EXPORTER` era ignorado. Os logs agora são desligados pelo env (`OTEL_LOGS_EXPORTER=none`, o default do código), que faz o SDK **não criar** o provider; as métricas continuam desligadas por código (`metricReaders: []`), porque o `.env.example` declara `OTEL_METRICS_EXPORTER=otlp` e o desligamento pelo env religaria o path errado.
+- As specs do web mockavam o `@opentelemetry/resources`, e com mock elas só prendiam a FORMA: invertendo a ordem do `merge` caíam por `TypeError` do mock, e removendo o `defaultResource()` da mescla **ficavam verdes** — nada prendia o `service.name` do app nem o `telemetry.sdk.*`. As specs agora usam o módulo real (o `service.name` do app sobrevive à mescla e o `telemetry.sdk.*` está lá) e prendem a ordem `register()` → auto-instrumentações.
+- O doc canônico do `telemetry-specialist` ([`patterns.md`](./.agents/agents/telemetry-specialist/patterns.md)) ensinava `new Resource({...})` — que, no `resources` 3.x, nem compila (a classe virou interface). O snippet foi corrigido para a API nova.
+
+### Quebras de compatibilidade
+
+- A família `@opentelemetry/*` subiu para a geração `core` 3.x no node (`@opentelemetry/sdk-node` `0.301.2`, `@opentelemetry/resources` `3.1.1`, `@opentelemetry/exporter-trace-otlp-http` `0.301.2`, `@opentelemetry/auto-instrumentations-node` `0.83.1`, `@opentelemetry/instrumentation-pino` `0.71.0`) e para a linha 2.x no browser (`@opentelemetry/sdk-trace-web` e `@opentelemetry/sdk-trace-base` `2.12.1`, `@opentelemetry/auto-instrumentations-web` `0.70.1`, `@opentelemetry/instrumentation-user-interaction` `0.69.1`, `@opentelemetry/instrumentation-document-load` `0.70.1`). Duas APIs mudaram no código: a classe `Resource` virou **interface** (a construção passou a ser `resourceFromAttributes()`) e o `provider.addSpanProcessor()` saiu do `WebTracerProvider` (o processor agora entra no construtor, em `spanProcessors`). O `NodeSDK` 0.301.2 também passou a criar o `MeterProvider` e o `LoggerProvider` por default (o 0.54.2 só criava se o app pedisse) e os dois exporters leem o `OTEL_EXPORTER_OTLP_ENDPOINT` como URL BASE — com o endpoint do repo apontando para `/v1/traces`, as métricas iam para `/v1/traces/v1/metrics` (MEDIDO 2026-11-23 num sink OTLP local: `POST /v1/traces/v1/metrics`, 7.528 bytes) e os logs para `/v1/traces/v1/logs`, dois paths que não existem. O `MeterProvider` é desligado por código (`metricReaders: []` — o SDK só o cria quando `readers.length > 0`) e o `LoggerProvider` pelo env (`OTEL_LOGS_EXPORTER=none`, o default do código — o SDK não cria o provider), que é o que faz o resultado ser o de antes do bump: só traces. O `engines.node` da raiz subiu de `>=22.12.0` para `^22.22.2 || ^24.15.0 || >=26.0.0` — o range real da árvore é o do `jsdom` 30.1.3, e o `>=22.22.2` sozinho prometia Node 23.x e 25.x, que a árvore **não** aceita (o `.npmrc` liga `engine-strict=true`); o `@opentelemetry/*` 3.x (`>=22.15.0`) fica abaixo dele. Os apps (`apps/api` e `apps/web`) passaram a declarar o mesmo range: o gate [`check-engines-consistency`](./.tooling/scripts/ci/check-engines-consistency.ts) compara a raiz com cada app, e nenhum app declarava `engines` — ele não media nada.
+- O **browser** fica com duas gerações do `core` no bundle: o `sdk-trace-web` 2.12.1 traz o `core` 2.12.1 e a instrumentação (`auto-instrumentations-web` 0.70.1 → `instrumentation-user-interaction` 0.69.1) traz o `core` 3.1.1. Não há `sdk-trace-web` 3.x estável (`npm view @opentelemetry/sdk-trace-web dist-tags` → `latest: 2.12.0`, `canary: 3.0.0-development.0`), então a linha 2.x é a última disponível para o browser. As duas cópias do `core` não compartilham estado: o `context`/`trace`/`propagation` vêm do `@opentelemetry/api` (uma cópia só) e o `core` 3.x não exporta `context` — o que faz o conserto ter funcionado foi o `Resource` ser **estrutural** (as duas gerações têm os mesmos membros), MEDIDO com um span real saindo do browser. O peer de `@opentelemetry/api` (`<1.10.0` na linha 1.x e na 2.x do browser, contra o `^1.10.0` declarado) é **preexistente**: a árvore já tinha `sdk-trace-web` 1.30.1 com o mesmo peer, e o `core` 3.x do node exige `>=1.10.0 <1.11.0` — as duas gerações do browser não aceitam a mesma `api`.
 
 ## [1.31.0] — 2026-11-19
 
@@ -70,7 +93,7 @@
 - Nenhuma em runtime: nenhum endpoint, script, migration, tabela ou contrato de API mudou.
 - Uma mudança de comportamento, em [`docs/agents/domain.md`](./docs/agents/domain.md): a instrução "se `GLOSSARY.md` não existir, siga em silêncio" foi retirada, porque o arquivo passa a existir a partir desta versão.
 
-## Histórico anterior a 1.31.0
+## Histórico anterior a 1.32.0
 
 O histórico **anterior** a esta versão não está neste arquivo — ele vive nas
 **tags do git**, que são o registro datado do que foi feito em cada versão.

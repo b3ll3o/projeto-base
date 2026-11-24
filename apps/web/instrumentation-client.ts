@@ -14,7 +14,7 @@ import { WebTracerProvider } from '@opentelemetry/sdk-trace-web';
 import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { getWebAutoInstrumentations } from '@opentelemetry/auto-instrumentations-web';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { Resource } from '@opentelemetry/resources';
+import { defaultResource, resourceFromAttributes } from '@opentelemetry/resources';
 import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
 
 if (typeof window !== 'undefined') {
@@ -41,17 +41,21 @@ if (typeof window !== 'undefined') {
   if (endpoint) {
     try {
       const provider = new WebTracerProvider({
-        resource: new Resource({
-          [SemanticResourceAttributes.SERVICE_NAME]:
-            process.env.NEXT_PUBLIC_OTEL_SERVICE_NAME ?? 'projeto-base-web',
-        }),
+        // O `defaultResource()` entra na mescla porque a classe 1.x injetava
+        // `telemetry.sdk.*` sozinha e a função 3.x não.
+        resource: defaultResource().merge(
+          resourceFromAttributes({
+            [SemanticResourceAttributes.SERVICE_NAME]:
+              process.env.NEXT_PUBLIC_OTEL_SERVICE_NAME ?? 'projeto-base-web',
+          }),
+        ),
+        spanProcessors: [new BatchSpanProcessor(new OTLPTraceExporter({ url: endpoint }))],
       });
 
       // pt-BR: a URL precisa ser absoluta para o navegador. O caminho de
       // produção via Next.js API route continua válido, mas essa rota
       // precisa existir de verdade (ainda não existe em apps/web) — até lá,
       // apontar `NEXT_PUBLIC_*` para o collector e o caminho que funciona.
-      provider.addSpanProcessor(new BatchSpanProcessor(new OTLPTraceExporter({ url: endpoint })));
 
       // Register the provider as global BEFORE instantiating the auto-instrumentations:
       // each instrumentation calls `trace.getTracer(name, version)` in its super()

@@ -23,23 +23,38 @@ Ordem obrigatória no backend (regra `main.ts` + ADR-0001):
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { Resource } from '@opentelemetry/resources';
+import { defaultResource, resourceFromAttributes } from '@opentelemetry/resources';
 import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
 
 if (process.env.OTEL_SDK_DISABLED !== 'true' && !globalThis.__otel_sdk__) {
   const sdk = new NodeSDK({
-    resource: new Resource({
-      [SemanticResourceAttributes.SERVICE_NAME]:
-        process.env.OTEL_SERVICE_NAME ?? 'projeto-base-api',
-      [SemanticResourceAttributes.SERVICE_VERSION]:
-        process.env.OTEL_SERVICE_VERSION ?? '0.0.0',
-      [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]:
-        process.env.NODE_ENV ?? 'development',
-    }),
+    // ⚠️ `resources` 3.x: a classe `Resource` virou INTERFACE — a construção
+    // é a função `resourceFromAttributes`, e o `defaultResource()` é o que
+    // traz o `telemetry.sdk.*` (a classe 1.x injetava sozinha). A ORDEM da
+    // mescla importa: no 3.x o ARGUMENTO vence.
+    resource: defaultResource().merge(
+      resourceFromAttributes({
+        [SemanticResourceAttributes.SERVICE_NAME]:
+          process.env.OTEL_SERVICE_NAME ?? 'projeto-base-api',
+        [SemanticResourceAttributes.SERVICE_VERSION]:
+          process.env.OTEL_SERVICE_VERSION ?? '0.0.0',
+        [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]:
+          process.env.NODE_ENV ?? 'development',
+      }),
+    ),
     traceExporter: new OTLPTraceExporter({
       url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT
         ?? 'http://otel-collector:4318/v1/traces',
     }),
+    // ⚠️ `sdk-node` 0.301.2 cria o `MeterProvider` e o `LoggerProvider` por
+    // default, e os exporters leem o `OTEL_EXPORTER_OTLP_ENDPOINT` como URL
+    // BASE — com o endpoint apontando para `/v1/traces`, as métricas iam
+    // para `/v1/traces/v1/metrics` (um path que não existe).
+    // `metricReaders: []` impede o `MeterProvider` (o SDK só cria com
+    // `readers.length > 0`); os logs são desligados pelo
+    // `OTEL_LOGS_EXPORTER=none` (o array `logRecordProcessors: []` é TRUTHY e
+    // criava um `LoggerProvider` global SEM processor).
+    metricReaders: [],
     instrumentations: [getNodeAutoInstrumentations({
       '@opentelemetry/instrumentation-fs': { enabled: false },
     })],
