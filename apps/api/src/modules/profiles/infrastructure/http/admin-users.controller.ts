@@ -9,7 +9,9 @@ import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.j
 import { PermissionsGuard } from './guards/permissions.guard.js';
 import { RequirePermission } from './decorators/require-permission.decorator.js';
 import { UserProfileUseCases } from '../../application/profiles.use-cases.js';
+import { ZodValidationPipe } from '../../../../shared/infrastructure/http/zod-validation.pipe.js';
 import { atorDe, type ReqComAtor } from '../../../../shared/auth/eh-administrador-de-sistema.js';
+import { AtribuirPerfilSchema, type AtribuirPerfilDto } from './profiles.schemas.js';
 
 // ⚠️ `@ApiBearerAuth()` NA CLASSE, e não em cada handler: no documento
 // OpenAPI a rota protegida é a que declara `security`, e a rota PÚBLICA é a
@@ -37,10 +39,15 @@ export class AdminUsersController {
   @RequirePermission('admin.manage-users')
   async atribuirProfile(
     @Param('id') userId: string,
-    @Body() body: { profileId: string | null },
+    // ⚠️ (issue #185, code-N1-003) O corpo passa pelo Zod: `profileId` fora
+    // de `string | null` (ou ausente) é 400 VALIDATION_ERROR, e não uma
+    // exceção do VO no meio da rota.
+    @Body(new ZodValidationPipe(AtribuirPerfilSchema)) body: AtribuirPerfilDto,
     @Req() req: ReqComAtor,
   ): Promise<{ ok: true }> {
-    await this.useCases.atribuirProfileAoUser(userId, body.profileId, atorDe(req));
+    // ⚠️ O `?? null`: a AUSÊNCIA do `profileId` é o mesmo que `null` (o usuário
+    // fica sem perfil) — e o schema aceita as duas formas.
+    await this.useCases.atribuirProfileAoUser(userId, body.profileId ?? null, atorDe(req));
     return { ok: true };
   }
 }

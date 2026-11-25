@@ -274,7 +274,22 @@ export class ProfileUseCases {
     }
     const agora = new Date();
     profile.renomear(input.name, agora);
-    profile.alterarDescricao(input.description ?? null, agora);
+    // ⚠️ (issue #185, code-N1-002) "AUSENTE" ≠ "NULL".
+    //
+    // O controller só põe a chave `description` no input quando o cliente
+    // mandou o campo (`...(body.description !== undefined ? { description } : {})`),
+    // e `input.description ?? null` transformava a AUSÊNCIA em limpeza: todo
+    // PATCH parcial — um PATCH que só renomeia — APAGAVA a descrição, que é
+    // dado de configuração que o cliente não tocou. E a limpeza também
+    // entrava na auditoria como se fosse uma edição deliberada (o
+    // `alterarDescricao` bumpa a versão e emite `ProfileUpdatedEvent`).
+    //
+    // `null` EXPLICITO continua limpando — é o que o contrato diz — e o tipo
+    // (`description?: string | null`) já distinguia as duas coisas; só não era
+    // usado. `criar` NÃO muda: ali o documento é novo, e `?? null` é o certo.
+    if (input.description !== undefined) {
+      profile.alterarDescricao(input.description, agora);
+    }
     await this.profileRepo.save(profile);
     await this.cache.invalidateAll();
     return this.toDetail(profile);
