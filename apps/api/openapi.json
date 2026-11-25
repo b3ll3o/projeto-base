@@ -65,8 +65,11 @@
           "401": {
             "description": "Credenciais inválidas"
           },
+          "423": {
+            "description": "Conta bloqueada por tentativas de login"
+          },
           "429": {
-            "description": "Limite de tentativas por conta (`ip:email`) excedido"
+            "description": "Limite de tentativas excedido (global por IP ou de login por `ip:email`)"
           }
         },
         "summary": "Autenticar e emitir sessão",

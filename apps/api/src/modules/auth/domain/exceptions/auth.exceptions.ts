@@ -48,3 +48,39 @@ export class InvalidCredentialsException extends Error {
     Object.setPrototypeOf(this, InvalidCredentialsException.prototype);
   }
 }
+
+/**
+ * A conta está TRAVADA por tentativas de login malsucedidas (issue #182).
+ *
+ * ⚠️ POR QUE UM ERRO PRÓPRIO, E NÃO O `InvalidCredentialsException`
+ *
+ * O lockout é por CONTA: a chave é o e-mail normalizado, e a janela é de 15
+ * minutos. Antes do lockout, o único limite era por `(IP, e-mail)` — e o
+ * número do NIST (5 tentativas por conta) nunca se aplicava a uma conta
+ * só: MEDIDO no guard real do `@nestjs/throttler`, 10 IPs distintos × 5
+ * tentativas contra a MESMA conta davam 50 de 50 permitidas.
+ *
+ * O erro é DISTINTO do `InvalidCredentialsException` porque a resposta que o
+ * cliente precisa dar é diferente: "credencial errada" manda voltar para o
+ * formulário; "conta travada" manda esperar e volver depois. Um 401
+ * genérico para os dois casos não informa nada — e o usuário legítimo
+ * ficaria tentando a senha certa sem entender o que acontece.
+ *
+ * ⚠️ E NÃO É ORACLE DE ENUMERAÇÃO
+ *
+ * O contador é por e-mail, e ele conta tentativas de login de QUALQUER
+ * e-mail — inclusive de um e-mail que não existe na base. O atacante não
+ * aprende nada sobre a existência da conta: ele já sabe que o e-mail existe
+ * (ele é quem mandou a senha). E a mensagem não diz quantas tentativas
+ * faltam nem quando a janela expira — o tempo é da resposta, não do corpo.
+ */
+export class ContaBloqueadaException extends Error {
+  constructor(message = 'Conta temporariamente bloqueada por tentativas de login malsucedidas.') {
+    super(message);
+    this.name = 'ContaBloqueadaException';
+    // pt-BR: mesma razão dos outros `*.exceptions.ts` do repo — sem isto,
+    // `err instanceof ContaBloqueadaException` dá false para a exceção vinda
+    // de outro arquivo já transpilado, e o mapper cai no 500 em vez do 423.
+    Object.setPrototypeOf(this, ContaBloqueadaException.prototype);
+  }
+}

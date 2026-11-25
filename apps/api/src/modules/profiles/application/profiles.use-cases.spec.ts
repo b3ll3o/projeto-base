@@ -283,6 +283,44 @@ describe('ProfileUseCases', () => {
       expect(updated.version).toBeGreaterThanOrEqual(2);
     });
 
+    // ⚠️ (issue #185, code-N1-002) "AUSENTE" ≠ "NULL".
+    //
+    // O controller só põe a chave `description` no input quando o cliente
+    // mandou o campo, e o use case transformava a AUSÊNCIA em limpeza:
+    // todo PATCH parcial (um PATCH que só renomeia) APAGAVA a descrição.
+    it('PATCH sem `description` PRESERVA a descrição existente', async () => {
+      const created = await uc.criar(
+        { slug: 'custom', name: 'Velho Long', description: 'Descrição que fica' },
+        ATOR_ADMIN,
+      );
+      const updated = await uc.atualizar(created.id, { name: 'Novo' }, ATOR_ADMIN);
+      expect(updated.name).toBe('Novo');
+      expect(updated.description).toBe('Descrição que fica');
+    });
+
+    it('PATCH com `description: null` LIMPA a descrição (limpeza explícita continua possível)', async () => {
+      const created = await uc.criar(
+        { slug: 'custom', name: 'Velho Long', description: 'Descrição que some' },
+        ATOR_ADMIN,
+      );
+      const updated = await uc.atualizar(
+        created.id,
+        { name: 'Novo', description: null },
+        ATOR_ADMIN,
+      );
+      expect(updated.description).toBeNull();
+    });
+
+    it('PATCH sem `description` não emite um segundo evento de alteração', async () => {
+      // O `alterarDescricao` bumpa a versão e emite `ProfileUpdatedEvent` — e
+      // ele nem precisava rodar: a descrição não mudou. A versão subia DUAS
+      // vezes (rename + descrição) e a auditoria registrava uma edição que o
+      // cliente não fez.
+      const created = await uc.criar({ slug: 'custom', name: 'Velho Long' }, ATOR_ADMIN);
+      const updated = await uc.atualizar(created.id, { name: 'Novo' }, ATOR_ADMIN);
+      expect(updated.version).toBe(2);
+    });
+
     it('rejeita atualizar profile não encontrado', async () => {
       await expect(
         uc.atualizar('00000000-0000-0000-0000-000000000000', { name: 'X' }, ATOR_ADMIN),

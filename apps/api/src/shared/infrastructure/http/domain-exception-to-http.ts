@@ -71,7 +71,10 @@ import {
   AuditCursorInvalidoException,
 } from '../../audit/domain/audit.exceptions.js';
 import { InvalidTokenException } from '../../../modules/auth/domain/exceptions/token.exceptions.js';
-import { InvalidCredentialsException } from '../../../modules/auth/domain/exceptions/auth.exceptions.js';
+import {
+  InvalidCredentialsException,
+  ContaBloqueadaException,
+} from '../../../modules/auth/domain/exceptions/auth.exceptions.js';
 import {
   ProfileNotFoundException,
   ProfileSlugAlreadyInUseException,
@@ -192,6 +195,18 @@ export function mapExceptionToHttp(err: unknown): HttpErrorMapping {
       status: HttpStatus.UNAUTHORIZED,
       code: 'INVALID_TOKEN',
       title: 'Sessão inválida',
+    };
+  }
+  // ⚠️ A CONTA TRAVADA é 423 (Locked), e não 429: o 429 é o do THROTTLER
+  // (teto por requisição), e um cliente que confunde os dois treats o
+  // travamento como "tente de novo em X segundos" — quando o que importa é
+  // "a conta está travada por 15 minutos". O `detail` é FIXO: o tempo que
+  // resta na janela é informação que ajuda o atacante a cronometrar.
+  if (err instanceof ContaBloqueadaException) {
+    return {
+      status: HttpStatus.LOCKED,
+      code: 'ACCOUNT_LOCKED',
+      title: 'Conta bloqueada',
     };
   }
 
