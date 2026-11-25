@@ -86,7 +86,11 @@ model User {
 }
 
 model UserHistory {
-  id              String         @id @default(uuid()) @db.Uuid
+  // ⚠️ (issue #183, prisma-N1-003) O DEFAULT é DO BANCO (`gen_random_uuid()`),
+  // não o `@default(uuid())` do Prisma — que é client-side e materializa
+  // "UUID NOT NULL" sem DEFAULT; o diff propunha `DROP DEFAULT` (migration
+  // `20260922003354`, linhas 77-78).
+  id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   entityId        String         @map("entity_id") @db.Uuid
   version         Int            @map("version")
   previousVersion Int?           @map("previous_version")
@@ -102,7 +106,10 @@ model UserHistory {
 }
 
 model UserArchive {
-  id        String   @id @default(uuid()) @db.Uuid
+  // ⚠️ (issue #183, prisma-N1-003) DEFAULT do banco (`gen_random_uuid()`), como
+  // em `UserHistory` — a migration `20260922003354` linha 78 o põe, e o
+  // `@default(uuid())` do Prisma é client-side.
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   entityId  String   @unique @map("entity_id") @db.Uuid
   version   Int      @map("version")
   snapshot  Json     @map("snapshot")
@@ -129,7 +136,10 @@ model UserArchive {
 // Restrict + check explícito antes). Perfis de sistema (isSystem=true)
 // são protegidos no agregado (`marcarExcluido` lança).
 model Profile {
-  id          String   @id @default(uuid()) @db.Uuid
+  // ⚠️ (issue #183, prisma-N1-003) DEFAULT do banco (`gen_random_uuid()`), como
+  // em `UserHistory` — a migration `20261016000000_rbac_profile_authorization`
+  // linha 14 o põe na criação da tabela.
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   // Slug canônico: 'admin', 'manager', 'viewer'. Kebab-case, imutável após
   // criação (renomear quebraria referências em audit logs). O `name` é o
   // rótulo editável.
@@ -150,8 +160,12 @@ model Profile {
   isAdmin     Boolean  @default(false) @map("is_admin")
   // Perfil de sistema: protegido contra DELETE via use case.
   isSystem    Boolean  @default(false) @map("is_system")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  // ⚠️ (issue #183, prisma-N1-002) `TIMESTAMPTZ` como o banco (migration
+  // `20261016000000`, linhas 20-21): sem `@db`, o Prisma mapeia para
+  // `timestamp(3)` (sem fuso) e o diff propõe converter a coluna — o que
+  // reinterpretava o instante como hora-local (3 h de deslocamento, MEDIDO).
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
   version     Int      @default(1)
 
   tenant         Tenant?            @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
@@ -176,11 +190,16 @@ model Profile {
 // 'admin.*' não implica 'users.read'). O catálogo de chaves vive em
 // `permissions.catalog.ts` e é validado no seed/import.
 model Authorization {
-  id            String   @id @default(uuid()) @db.Uuid
+  // ⚠️ (issue #183, prisma-N1-003) DEFAULT do banco (`gen_random_uuid()`), como
+  // em `Profile` — a migration `20261016000000_rbac_profile_authorization`
+  // linha 28 o põe na criação da tabela.
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   profileId     String   @map("profile_id") @db.Uuid
   permissionKey String   @map("permission_key")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  // ⚠️ (issue #183, prisma-N1-002) `TIMESTAMPTZ` como no `Profile` — a
+  // migration `20261016000000` (linhas 31-32) cria as duas colunas com fuso.
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
   version       Int      @default(0)
 
   profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade, onUpdate: Cascade)
@@ -300,8 +319,10 @@ model Invitation {
 model FeatureFlag {
   chave     String   @id
   ativada   Boolean  @default(true)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  // ⚠️ (issue #183, prisma-N1-002) `TIMESTAMPTZ` como no `Profile` — a
+  // migration `20261020000006_feature_flags` (linhas 47-48) cria as duas com fuso.
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
   version   Int      @default(1)
 
   @@map("feature_flags")
