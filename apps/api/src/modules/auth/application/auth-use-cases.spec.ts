@@ -23,7 +23,11 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { AuthUseCases } from './auth-use-cases.js';
-import { InvalidCredentialsException } from '../domain/exceptions/auth.exceptions.js';
+import {
+  InvalidCredentialsException,
+  ContaBloqueadaException,
+} from '../domain/exceptions/auth.exceptions.js';
+import { LIMITE_DE_TENTATIVAS_DE_LOGIN } from '../domain/ports/login-lockout.port.js';
 import { InvalidTokenException } from '../domain/exceptions/token.exceptions.js';
 import { User } from '../../users/domain/user.aggregate.js';
 import { PasswordHash } from '../../users/domain/value-objects/password-hash.vo.js';
@@ -33,6 +37,7 @@ import type { UserRepositoryPort } from '../../users/domain/ports/user-repositor
 import type { PasswordHasherPort } from '../../users/domain/ports/password-hasher.port.js';
 import type { RefreshSubject, TokenIssuerPort } from '../domain/ports/token-issuer.port.js';
 import type { RefreshTokenRepositoryPort } from '../domain/ports/refresh-token-repository.port.js';
+import type { LoginLockoutPort } from '../domain/ports/login-lockout.port.js';
 
 const HASH_FALSO = '$argon2id$v=19$m=65536,p=4,t=3$c2FsdGZhbG9zb21lc2E$ZGlnZXN0ZWZhbG9zb21lc2E';
 const AGORA = new Date('2026-10-09T12:00:00.000Z');
@@ -56,6 +61,8 @@ interface Stubs {
   issuer: TokenIssuerPort;
   /** ⚠️ (#132) O REGISTRO de refresh tokens — o que torna o token revogável. */
   refreshTokens: RefreshTokenRepositoryPort;
+  /** ⚠️ (#182) O CONTADOR de tentativas de login por conta. */
+  loginLockout: LoginLockoutPort;
 }
 
 /** O `jti` do refresh token APRESENTADO — o que o registro indexa. */
@@ -97,6 +104,14 @@ function criarStubs(): Stubs {
         jti: JTI,
       })),
     },
+    loginLockout: {
+      // ⚠️ O contador é um DOBRO EM MEMÓRIA, e ele é o que o spec mede: o
+      // limite por conta (5 tentativas em 15 minutos) não pode ser testado
+      // contra um stub que devolve sempre 0.
+      tentativas: vi.fn(async () => 0),
+      registrarFalha: vi.fn(async () => undefined),
+      limpar: vi.fn(async () => undefined),
+    },
     refreshTokens: {
       registrar: vi.fn(async () => undefined),
       estadoDe: vi.fn(async () => ({ registrado: true, revogadoEm: null, userId: UUID_JOAO })),
@@ -108,7 +123,7 @@ function criarStubs(): Stubs {
 }
 
 function criarUseCases(s: Stubs): AuthUseCases {
-  return new AuthUseCases(s.userRepo, s.hasher, s.issuer, s.refreshTokens);
+  return new AuthUseCases(s.userRepo, s.hasher, s.issuer, s.refreshTokens, s.loginLockout);
 }
 
 describe('AuthUseCases.login', () => {
@@ -235,6 +250,61 @@ describe('AuthUseCases.login', () => {
       useCases.login({ email: 'joao@example.com', senha: 'senha-correta' }),
     ).rejects.toBeInstanceOf(InvalidCredentialsException);
     expect(s.issuer.emitir).not.toHaveBeenCalled();
+  });
+
+  // ─── O LOCKOUT POR CONTA (issue #182, sec-N1-002) ──────────────────────────
+
+  it('a FALHA conta no contador da conta (mesmo com e-mail que não existe)', async () => {
+    // ⚠️ A contagem é para QUALQUER e-mail, inclusive de um e-mail que não
+    // existe na base: se fosse só para contas existentes, o NIST valeria só
+    // para quem já sabe o nome da conta.
+    vi.mocked(s.userRepo.findByEmail).mockResolvedValue(null);
+    vi.mocked(s.hasher.verify).mockResolvedValue(false);
+
+    await expect(
+      useCases.login({ email: 'ninguem@projeto.test', senha: 'errada' }),
+    ).rejects.toThrow(InvalidCredentialsException);
+
+    expect(s.loginLockout.registrarFalha).toHaveBeenCalledWith('ninguem@projeto.test');
+  });
+
+  it('a FALHA conta com o e-mail NORMALIZADO (o do VO, não o digitado)', async () => {
+    vi.mocked(s.userRepo.findByEmail).mockResolvedValue(null);
+    vi.mocked(s.hasher.verify).mockResolvedValue(false);
+
+    await expect(
+      useCases.login({ email: '  NINGUEM@Projeto.Test ', senha: 'errada' }),
+    ).rejects.toThrow(InvalidCredentialsException);
+
+    // O contador tem de ser o do e-mail NORMALIZADO — senão
+    // `Joao@Example.com` e `joao@example.com` teriam contadores separados, e
+    // o limite por conta seria meio limite.
+    expect(s.loginLockout.registrarFalha).toHaveBeenCalledWith('ninguem@projeto.test');
+  });
+
+  it('conta TRAVADA é recusada ANTES de qualquer verificação de senha', async () => {
+    // O contador está no limite: a conta está travada.
+    vi.mocked(s.loginLockout.tentativas).mockResolvedValue(LIMITE_DE_TENTATIVAS_DE_LOGIN);
+    vi.mocked(s.userRepo.findByEmail).mockResolvedValue(criarUser());
+    vi.mocked(s.hasher.verify).mockResolvedValue(true);
+
+    await expect(
+      useCases.login({ email: 'joao@example.com', senha: 'senha-correta' }),
+    ).rejects.toThrow(ContaBloqueadaException);
+
+    // ⚠️ O `verify` NÃO RODA: cada tentativa paga um argon2id de ~250 ms e
+    // 64 MiB, e uma conta travada não pode virar um vetor de exaustão.
+    expect(s.hasher.verify).not.toHaveBeenCalled();
+    expect(s.userRepo.findByEmail).not.toHaveBeenCalled();
+  });
+
+  it('o SUCESSO zera o contador (a trava não pode ser arma de DoS)', async () => {
+    vi.mocked(s.userRepo.findByEmail).mockResolvedValue(criarUser());
+    vi.mocked(s.hasher.verify).mockResolvedValue(true);
+
+    await useCases.login({ email: 'joao@example.com', senha: 'senha-correta' });
+
+    expect(s.loginLockout.limpar).toHaveBeenCalledWith('joao@example.com');
   });
 
   it('não emite token quando a verificação falha', async () => {

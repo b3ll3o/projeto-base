@@ -30,9 +30,17 @@
 import { randomBytes } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 
-import { InvalidCredentialsException } from '../domain/exceptions/auth.exceptions.js';
+import {
+  InvalidCredentialsException,
+  ContaBloqueadaException,
+} from '../domain/exceptions/auth.exceptions.js';
 import { InvalidTokenException } from '../domain/exceptions/token.exceptions.js';
 import { TOKEN_ISSUER_PORT, type TokenIssuerPort } from '../domain/ports/token-issuer.port.js';
+import {
+  LOGIN_LOCKOUT_PORT,
+  LIMITE_DE_TENTATIVAS_DE_LOGIN,
+  type LoginLockoutPort,
+} from '../domain/ports/login-lockout.port.js';
 import {
   REFRESH_TOKEN_REPOSITORY_PORT,
   type RefreshTokenRepositoryPort,
@@ -103,6 +111,7 @@ export class AuthUseCases {
     @Inject(TOKEN_ISSUER_PORT) private readonly tokenIssuer: TokenIssuerPort,
     @Inject(REFRESH_TOKEN_REPOSITORY_PORT)
     private readonly refreshTokens: RefreshTokenRepositoryPort,
+    @Inject(LOGIN_LOCKOUT_PORT) private readonly loginLockout: LoginLockoutPort,
   ) {}
 
   // ─── login ───────────────────────────────────────────────────────────────
@@ -117,6 +126,24 @@ export class AuthUseCases {
     // A MESMA normalização do cadastro (trim + toLowerCase). Sem ela,
     // ` Joao@Example.com ` não encontraria `joao@example.com`.
     const email = Email.create(input.email);
+
+    // ⚠️ (issue #182, sec-N1-002) O LOCKOUT POR CONTA é consultado ANTES de
+    // qualquer verificação de senha — e a ordem é o que protege:
+    //
+    //   1. Se a conta está travada, o argon2 NÃO roda. Um ataque de senha
+    //      contra uma conta travada deixa de custar um verify (≈250 ms e
+    //      64 MiB) por tentativa — e a CPU da api deixa de ser o gargalo do
+    //      ataque.
+    //   2. O limite é POR CONTA (a chave é o e-mail NORMALIZADO), e não por
+    //      `(IP, e-mail)` como o balde do `@Throttle`: MEDIDO no guard real do
+    //      `@nestjs/throttler`, 10 IPs distintos × 5 tentativas contra a MESMA
+    //      conta davam 50 de 50 permitidas — o número do NIST (5 por conta)
+    //      nunca se aplicava a uma conta só.
+    const tentativas = await this.loginLockout.tentativas(email.value);
+    if (tentativas >= LIMITE_DE_TENTATIVAS_DE_LOGIN) {
+      throw new ContaBloqueadaException();
+    }
+
     // `null` = bucket de SISTEMA (`escopoDoTenant(null)` → `'*'`). O login
     // acontece ANTES de existir empresa: não há header, e um usuário sem
     // membership é invisível sob qualquer outro escopo — a conta simplesmente
@@ -128,8 +155,19 @@ export class AuthUseCases {
     const senhaConfere = await this.passwordHasher.verify(input.senha, hashArmazenado);
 
     if (user === null || user.isDeleted() || !senhaConfere) {
+      // ⚠️ A FALHA CONTA — e ela conta para QUALQUER e-mail, inclusive de um
+      // e-mail que não existe na base. Se a contagem fosse só para contas
+      // existentes, o tempo do `findByEmail` viraria um oráculo de existência
+      // (e o NIST valeria só para quem já sabia o nome).
+      await this.loginLockout.registrarFalha(email.value);
       throw new InvalidCredentialsException();
     }
+
+    // ⚠️ O SUCESSO ZERA o contador: sem isso, o lockout seria uma ARMA de
+    // DoS — o atacante trava a conta de uma vítima com 5 senhas erradas, e a
+    // vítima fica 15 minutos sem conseguir entrar. Quem entra em casa
+    // destrava a porta.
+    await this.loginLockout.limpar(email.value);
 
     const { accessToken, refreshToken, refreshJti, refreshExpiresAt } =
       await this.tokenIssuer.emitir({
