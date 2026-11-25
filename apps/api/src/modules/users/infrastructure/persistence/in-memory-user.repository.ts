@@ -4,8 +4,11 @@ import {
   type UserListInput,
   type UserListResult,
   type FindByIdOptions,
+  type AuditoriaDaEscritaDoUsuario,
 } from '../../domain/ports/user-repository.port.js';
 import { User } from '../../domain/user.aggregate.js';
+import { AuditContextStore } from '../../../../shared/audit/shared/audit-context-store.js';
+import type { AuditServicePort } from '../../../../shared/audit/application/audit-service.port.js';
 import type { UserId } from '../../domain/value-objects/user-id.vo.js';
 import type { Email } from '../../domain/value-objects/email.vo.js';
 import {
@@ -28,6 +31,53 @@ import {
 export class InMemoryUserRepository implements UserRepositoryPort {
   private readonly byId = new Map<string, User>();
   private readonly emailIndex = new Map<string, string>(); // email.value -> id.value
+
+  /**
+   * O REGISTRO de auditoria — o duplo do que o `PrismaUserRepository` grava
+   * na MESMA transação da mutação (issue #184).
+   *
+   * ⚠️ Sem ele, o duplo IGNORARIA a auditoria que viaja com a escrita, e os
+   * specs que leem a trilha (`audit.history`) mediriam um histórico vazio —
+   * que parece "a auditoria não grava" e é "o duplo não sabe gravar".
+   */
+  constructor(private readonly auditoria?: AuditServicePort) {}
+
+  /**
+   * Grava a auditoria que viaja com a escrita — como o adaptador de Prisma
+   * faz (issue #184): o histórico E o arquivo, na mesma "transação".
+   */
+  private async gravarAuditoria(
+    user: User,
+    auditoria: AuditoriaDaEscritaDoUsuario | undefined,
+  ): Promise<void> {
+    if (this.auditoria === undefined || auditoria === undefined) return;
+
+    const ctx = AuditContextStore.get();
+    for (const registro of auditoria.historico) {
+      await this.auditoria.record(
+        {
+          entityName: 'User',
+          entityId: user.id().value,
+          operation: registro.operation,
+          previousVersion: registro.previousVersion,
+          newVersion: registro.newVersion,
+          snapshot: registro.snapshot,
+          reason: registro.reason ?? null,
+        },
+        ctx,
+      );
+    }
+    if (auditoria.arquivo !== undefined) {
+      await this.auditoria.archive({
+        entityName: 'User',
+        entityId: user.id().value,
+        version: auditoria.arquivo.version,
+        snapshot: auditoria.arquivo.snapshot,
+        reason: auditoria.arquivo.reason ?? null,
+        ctx,
+      });
+    }
+  }
 
   async findById(
     id: UserId,
@@ -73,7 +123,12 @@ export class InMemoryUserRepository implements UserRepositoryPort {
     });
   }
 
-  async save(user: User, expectedVersion: number, _tenantId: string | null): Promise<User> {
+  async save(
+    user: User,
+    expectedVersion: number,
+    _tenantId: string | null,
+    auditoria?: AuditoriaDaEscritaDoUsuario,
+  ): Promise<User> {
     // Snapshot defensivo: clonamos o agregado para evitar que mutações
     // posteriores na referência original do caller afetem o que ficou
     // persistido. Sem isso, o optimistic locking quebra (mesma referência
@@ -91,18 +146,39 @@ export class InMemoryUserRepository implements UserRepositoryPort {
     });
 
     const current = this.byId.get(snapshot.id().value);
+    const id = snapshot.id().value;
+    const email = snapshot.email().value;
 
+    // ⚠️ (issue #184, 2ª revisão) O DUPLO É ATÔMICO COMO O ADAPTADOR.
+    //
+    // MEDIDO: com a auditoria gravada DEPOIS de mutar os índices, o duplo
+    // NÃO era atômico — a falha da auditoria deixava o usuário gravado
+    // ("sobreviveu a falha da auditoria? true"), enquanto o adaptador de
+    // Prisma desfaz a mutação. O duplo mentia sobre a garantia que este PR
+    // cria: uma spec que afirmasse "a falha da auditoria desfaz a mutação"
+    // ficaria VERMELHA contra o duplo e VERDE na produção — o inverso do
+    // defeito.
+    //
+    // A ordem é VALIDAR → AUDITAR → MUTAR. Ela é atômica nos DOIS sentidos
+    // sem precisar de rollback:
+    //
+    // - a auditoria falha → os índices não foram mexidos, e o usuário não
+    //   sobrevive (é o que o adaptador de Prisma faz);
+    // - a mutação falha → a auditoria não foi gravada, porque TODA falha
+    //   possível da mutação (versão, e-mail em uso) é detectada na
+    //   VALIDAÇÃO, antes da auditoria.
     if (current === undefined) {
       // INSERT path: só permitido se expectedVersion === 0
       if (expectedVersion !== 0) {
         throw new ConcurrencyException(expectedVersion, null);
       }
       // valida unicidade de email (exceto se for o próprio id, o que aqui é N/A)
-      if (this.emailIndex.has(snapshot.email().value)) {
-        throw new EmailAlreadyInUseException(snapshot.email().value);
+      if (this.emailIndex.has(email)) {
+        throw new EmailAlreadyInUseException(email);
       }
-      this.byId.set(snapshot.id().value, snapshot);
-      this.emailIndex.set(snapshot.email().value, snapshot.id().value);
+      await this.gravarAuditoria(user, auditoria);
+      this.byId.set(id, snapshot);
+      this.emailIndex.set(email, id);
       return snapshot;
     }
 
@@ -112,20 +188,23 @@ export class InMemoryUserRepository implements UserRepositoryPort {
       throw new ConcurrencyException(expectedVersion, actualVersion);
     }
 
-    // Se email mudou, atualiza índice
-    if (current.email().value !== snapshot.email().value) {
-      this.emailIndex.delete(current.email().value);
-      // verifica se novo email já está em uso por OUTRO user
-      const occupier = this.emailIndex.get(snapshot.email().value);
-      if (occupier !== undefined && occupier !== snapshot.id().value) {
-        // restaura índice antigo antes de propagar erro
-        this.emailIndex.set(current.email().value, snapshot.id().value);
-        throw new EmailAlreadyInUseException(snapshot.email().value);
+    // Se email mudou, valida que o novo email está livre — ANTES da
+    // auditoria, porque é a única falha possível da mutação.
+    const emailMudou = current.email().value !== email;
+    if (emailMudou) {
+      const occupier = this.emailIndex.get(email);
+      if (occupier !== undefined && occupier !== id) {
+        throw new EmailAlreadyInUseException(email);
       }
-      this.emailIndex.set(snapshot.email().value, snapshot.id().value);
     }
 
-    this.byId.set(snapshot.id().value, snapshot);
+    await this.gravarAuditoria(user, auditoria);
+
+    if (emailMudou) {
+      this.emailIndex.delete(current.email().value);
+      this.emailIndex.set(email, id);
+    }
+    this.byId.set(id, snapshot);
     return snapshot;
   }
 

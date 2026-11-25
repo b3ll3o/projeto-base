@@ -3,7 +3,7 @@
   "diagram_type": "sequence",
   "meta": {
     "title": "POST /users — Criar Usuário (com cascade de auditoria)",
-    "subtitle": "POST /users → UsersController (+ ZodValidationPipe) → UserUseCases → User aggregate → PrismaUserRepo → PostgreSQL + AuditServicePort → users_history",
+    "subtitle": "POST /users → UsersController (+ ZodValidationPipe) → UserUseCases → User aggregate → PrismaUserRepo → PostgreSQL (users + users_history, NA MESMA transação)",
     "output": "http-api-users-create.sequence.html",
     "viewBox": [1020, 940],
     "animation": "trace",
@@ -13,8 +13,8 @@
       {
         "id": "happy-path",
         "label": "CREATE caminho feliz",
-        "focus": ["client", "controller", "usecases", "repo", "audit"],
-        "note": "INSERT user + INSERT audit record (UserCreatedEvent)."
+        "focus": ["client", "controller", "usecases", "repo", "pg"],
+        "note": "INSERT user + INSERT users_history — NA MESMA transação."
       },
       {
         "id": "validation-409",
@@ -56,13 +56,7 @@
       "id": "repo",
       "type": "backend",
       "label": "PrismaRepo",
-      "sublabel": "save(user,0)"
-    },
-    {
-      "id": "audit",
-      "type": "backend",
-      "label": "AuditService",
-      "sublabel": "record INSERT"
+      "sublabel": "save(user,0,auditoria)"
     },
     {
       "id": "pg",
@@ -113,7 +107,7 @@
       "from": "usecases",
       "to": "repo",
       "y": 300,
-      "label": "save(user, expectedVersion=0)",
+      "label": "save(user, expectedVersion=0, auditoria)",
       "variant": "emphasis"
     },
     {
@@ -131,24 +125,24 @@
       "variant": "return"
     },
     {
-      "from": "usecases",
-      "to": "audit",
-      "y": 416,
-      "label": "pullEvents() → record INSERT",
-      "variant": "emphasis"
-    },
-    {
-      "from": "audit",
+      "from": "repo",
       "to": "pg",
-      "y": 454,
-      "label": "INSERT INTO users_history",
+      "y": 416,
+      "label": "INSERT INTO users_history (mesma transação)",
       "variant": "default"
     },
     {
-      "from": "audit",
+      "from": "pg",
+      "to": "repo",
+      "y": 454,
+      "label": "linha da trilha",
+      "variant": "return"
+    },
+    {
+      "from": "repo",
       "to": "usecases",
       "y": 492,
-      "label": "ack",
+      "label": "snapshot persistido",
       "variant": "return"
     },
     {
@@ -210,25 +204,19 @@
     {
       "participant": "repo",
       "from": 294,
-      "to": 374,
+      "to": 490,
       "type": "backend"
     },
     {
       "participant": "pg",
       "from": 334,
-      "to": 374,
+      "to": 378,
       "type": "database"
     },
     {
-      "participant": "audit",
-      "from": 410,
-      "to": 488,
-      "type": "backend"
-    },
-    {
       "participant": "pg",
-      "from": 448,
-      "to": 488,
+      "from": 410,
+      "to": 454,
       "type": "database"
     },
     {
@@ -253,11 +241,12 @@
   "cards": [
     {
       "dot": "emerald",
-      "title": "Caminho feliz — INSERT + audit cascade",
+      "title": "Caminho feliz — INSERT + trilha na MESMA transação",
       "items": [
         "expectedVersion=0 (criação inicial) garante que outro writer não sobrescreve",
         "AuditContextStore.run() propaga W3C traceId do OTel span ativo",
-        "UserCreatedEvent → mapEventNameToOperation() → INSERT em users_history"
+        "UserCreatedEvent → mapEventNameToOperation() → registro em users_history",
+        "A trilha e a mutação são a MESMA transação (issue #184) — ou as duas acontecem, ou nenhuma"
       ]
     },
     {

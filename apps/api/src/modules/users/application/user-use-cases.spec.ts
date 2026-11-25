@@ -46,8 +46,13 @@ describe('UserUseCases', () => {
   let useCases: UserUseCases;
 
   beforeEach(() => {
-    repo = new InMemoryUserRepository();
     audit = new InMemoryAuditService();
+    // ⚠️ (issue #184) O duplo do repositório recebe o REGISTRO de auditoria:
+    // é ele que grava o histórico que viaja com a escrita (como o adaptador de
+    // Prisma faz). Sem isso, o duplo ignoraria a auditoria e a trilha lida
+    // pelos specs sairia VAZIA — que parece "a auditoria não grava" e é "o
+    // duplo não sabe gravar".
+    repo = new InMemoryUserRepository(audit);
     hasher = new FakePasswordHasher();
     useCases = new UserUseCases(repo, audit, hasher, tenancyQueNaoDeveSerChamado());
   });
