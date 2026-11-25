@@ -78,9 +78,10 @@ describe('O schema casa com o banco (issue #183)', () => {
   });
 
   it('o `prisma migrate diff` do banco para o datamodel sai VAZIO', () => {
-    // MEDIDO: sem o conserto, o diff propunha 12 ALTERs — 6 conversões de
-    // tipo de timestamp e 4 `DROP DEFAULT` de id. O conserto é o schema
-    // casar com o banco (o BANCO é o que já está em todo ambiente aplicado).
+    // MEDIDO: sem o conserto, o diff propunha 5 `ALTER TABLE` com 13 cláusulas
+    // de `ALTER COLUMN` — 6 conversões de tipo de timestamp, 4 `DROP DEFAULT`
+    // de id e 3 `DROP DEFAULT` de `updated_at`. O conserto é o schema casar
+    // com o banco (o BANCO é o que já está em todo ambiente aplicado).
     const saida = execFileSync(
       'pnpm',
       [
@@ -202,6 +203,14 @@ describe('O schema casa com o banco (issue #183)', () => {
     }
   });
 
+  // ⚠️ Este caso NÃO discrimina o conserto (MEDIDO 2026-11-25): com o schema
+  // antigo ele PASSA — porque a COLUNA do banco sempre foi `TIMESTAMPTZ` (a
+  // migration `20261016000000` a criou assim), e o defeito era o SCHEMA
+  // declarar `timestamp(3)`. O que este caso GUARDA é o valor: se um
+  // `ALTER` destrutivo (o `SET DATA TYPE TIMESTAMP(3)` que o diff propunha)
+  // for aplicado um dia, a mesma escrita e a mesma leitura dão
+  // `02:14:55` em vez de `05:14:55`. O caso que discrimina o conserto é o
+  // anterior (o DDL canônico com fuso).
   it('um instante gravado e relido em sessão não-UTC não muda de valor', async () => {
     const { PrismaClient } = await import('@prisma/client');
     const dono = new PrismaClient({ datasourceUrl: ctx.uriDoBanco });
