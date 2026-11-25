@@ -38,8 +38,8 @@ RUN pnpm --filter @projeto/api build
 ARG NODE_DIGEST=sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
 FROM node:22-bookworm-slim@${NODE_DIGEST} AS prod
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
-# pt-BR (#139): sem `curl` — ele existia SÓ para o `HEALTHCHECK`, e um probe que
-# depende de um pacote instalado não sobrevive à troca de stage. Ver o runbook.
+# pt-BR (#139): sem `curl` — um probe que depende de um pacote instalado não
+# sobrevive à troca de stage.
 RUN apt-get update && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
 WORKDIR /repo
 ENV NODE_ENV=production PORT=3000
@@ -60,17 +60,14 @@ COPY --from=builder /repo/pnpm-lock.yaml /repo/pnpm-workspace.yaml ./
 COPY --from=builder /repo/apps/api/node_modules apps/api/node_modules
 COPY --from=builder /repo/node_modules node_modules
 # pt-BR: Task 1.5 — auto-carrega tracing OTel antes de qualquer código de usuário.
-# `--import` é ESM-aware (Node 20.6+); `--require` é CJS-only. Este `ENV` vem ANTES
-# do `node --check` (que mediava sintaxe sem resolver a cadeia de imports) e o
-# caminho é ABSOLUTO (o `--import` resolve contra o CWD de cada `node`).
+# `--import` é ESM-aware; o caminho é ABSOLUTO (resolve contra o CWD de cada `node`).
 ENV NODE_OPTIONS="--import /repo/apps/api/dist/shared/infrastructure/telemetry/init.js"
 # ⚠️ (issue #104) O `pnpm prune --prod` foi REMOVIDO e NÃO trocado por
 # `pnpm install --prod`: MEDIDO como no-op. O que traz as `dependencies` é o
 # `COPY` de `node_modules` acima — sem ele o build quebra com `ERR_MODULE_NOT_FOUND`.
 RUN node --check apps/api/dist/main.js
-# pt-BR (#88, 2026-10-16): user dedicado UID 1001 (políticas OPA/K8s autenticam
-# por UID). `--create-home` porque o `pnpm` (shim do COREPACK) grava em
-# `$HOME/.cache` — sem ele, QUALQUER `pnpm …` morre com EACCES no boot.
+# pt-BR (#88): user dedicado UID 1001 (políticas OPA/K8s autenticam por UID).
+# `--create-home` porque o `pnpm` usa `$HOME` — sem ele, morre com EACCES.
 RUN groupadd --gid 1001 app && useradd --uid 1001 --gid 1001 --create-home --shell /bin/false app
 USER 1001:1001
 EXPOSE 3000
@@ -91,9 +88,12 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
 # NÃO é cosmético: `pnpm exec` procura em `./node_modules/.bin`, e o binário do
 # prisma vive em `apps/api/node_modules/.bin`. E o `$` é UM, não `$$`: no JSON
 # com `sh -c` quem expande é o shell do container.
+# ⚠️ (issue #180) O `unset DIRECT_DATABASE_URL` ANTES do `exec node`: a URI de
+# DONO (superuser) é do CLI do Prisma e do `prepara-papeis.sh`, e não pode
+# ficar no ambiente do processo que expõe a API — o guard de boot recusa.
 # pt-BR (#137): o `exec` ANTES do `node` é o que faz o SIGTERM chegar nele. Sem
 # `exec`, o `&&` faz o `sh` forkar o `node` e CONTINUAR VIVO como pai — a árvore
 # real é `tini → sh → node`, e o sinal morria no shell (o tini repassa o sinal
 # apenas ao filho direto). Com `exec`, o node é o FILHO DIRETO do tini — MEDIDO
 # 2026-11-09: `pid=7 ppid=1 node dist/main.js` (sem o `exec`, `pid=334 ppid=7`).
-ENTRYPOINT ["sh","-c","if [ -z \"$DATABASE_URL\" ]; then echo 'ERRO: DATABASE_URL vazia ou ausente no container da api (issue #105). A linha precisa existir no .env.production apontando para o papel app_runtime (ver .env.production.example); a de DONO e a DIRECT_DATABASE_URL, que e outra chave.' >&2; exit 1; fi; cd /repo/apps/api && pnpm exec prisma migrate deploy --schema=prisma/schema.prisma && sh ./scripts/prepara-papeis.sh && exec node dist/main.js"]
+ENTRYPOINT ["sh","-c","if [ -z \"$DATABASE_URL\" ]; then echo 'ERRO: DATABASE_URL vazia ou ausente no container da api (issue #105). A linha precisa existir no .env.production apontando para o papel app_runtime (ver .env.production.example); a de DONO e a DIRECT_DATABASE_URL, que e outra chave.' >&2; exit 1; fi; cd /repo/apps/api && pnpm exec prisma migrate deploy --schema=prisma/schema.prisma && sh ./scripts/prepara-papeis.sh && unset DIRECT_DATABASE_URL && exec node dist/main.js"]

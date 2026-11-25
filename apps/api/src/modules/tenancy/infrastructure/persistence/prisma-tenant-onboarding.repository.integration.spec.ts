@@ -36,6 +36,7 @@ import {
 import { listAllPermissions } from '../../../../shared/auth/permissions-catalog.js';
 import { EmailAlreadyInUseException } from '../../../users/domain/exceptions/user.exceptions.js';
 import { uriComoPapelDeRuntime } from '../../../../shared/infrastructure/prisma/papel-de-runtime.js';
+import type { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service.js';
 import { AssinaturaDeMembership } from '../../../../shared/infrastructure/prisma/assinatura-de-membership.js';
 import { HASH_REAL } from '../../../../../test/fakes/fake-password-hasher.js';
 import { UserId } from '../../../users/domain/value-objects/user-id.vo.js';
@@ -90,7 +91,11 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
 
   beforeAll(async () => {
     ctx = await setupTestDatabase();
-    assinatura = new AssinaturaDeMembership();
+    // ⚠️ (issue #180) A assinatura é lida pela FUNÇÃO `SECURITY DEFINER`, e o
+    // cliente aqui é o de DONO do container (o dono tem `EXECUTE` na função e
+    // não é filtrado pela RLS da tabela) — a aplicação real usa o cliente de
+    // RUNTIME, que também tem `EXECUTE`.
+    assinatura = new AssinaturaDeMembership(ctx.prisma as unknown as PrismaService);
     await assinatura.onModuleInit();
     repo = new PrismaTenantOnboardingRepository(ctx.prisma, assinatura);
     memberships = new PrismaTenantMembershipRepository(ctx.prisma);

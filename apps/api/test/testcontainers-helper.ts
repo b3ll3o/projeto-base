@@ -152,6 +152,26 @@ export async function setupTestDatabase(
     stdio: 'inherit',
   });
 
+  // ⚠️ (issue #180) A URI de DONO sai do AMBIENTE do processo depois das
+  // migrations — e é o que a imagem de produção faz no ENTRYPOINT
+  // (`unset DIRECT_DATABASE_URL` antes do `exec node`).
+  //
+  // O motivo é o guard de boot (`verificarCredenciaisDoBanco`): a URI de dono
+  // (superuser) ignora RLS por definição, e o processo que expõe a API não
+  // pode carregá-la. O harness é o lugar onde essa regra é IMPLEMENTADA — e
+  // um harness que não a implementa treina oboot a aceitar o que a produção
+  // recusa.
+  //
+  // Quem precisa da credencial de dono nos specs a tem pelo `ctx.uriDoBanco`
+  // (a mesma URI, passada explicitamente) — nunca pelo ambiente.
+  //
+  // E é VAZIO, e não ausente: o `ConfigModule` carrega o `.env` do repo (que
+  // tem a URI de dono, porque o CLI do Prisma precisa dela localmente), e o
+  // dotenv NÃO sobrescreve uma variável já existente — então o vazio segura o
+  // valor do `.env` fora do ambiente do processo. É o que a imagem de
+  // produção faz com o `unset` no ENTRYPOINT.
+  process.env.DIRECT_DATABASE_URL = '';
+
   // #118: a migration cria os papeis SEM senha (`NOLOGIN`) — uma migration
   // nao le env, e foi por isso que a senha do `app_runtime` ficou versionada
   // em texto puro. O setup e' quem aplica a senha, e aqui ele e' o proprio

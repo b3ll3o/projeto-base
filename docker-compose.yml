@@ -137,7 +137,18 @@ services:
     # tabela) E pela aplicação, que lê a chave de assinatura de membership com a
     # mesma conexão de DONO, porque `app_runtime` não tem permissão sobre ela.
     #
-    # Consequência prática: trocar por `DIRECT_DATABASE_URL: ${...}` aqui
+        # ⚠️ (issue #180) A URI de DONO CONTINUA no ambiente do CONTAINER — e não
+    # pode deixar de estar: o `prisma migrate deploy` (o CLI) e o
+    # `prepara-papeis.sh` rodam com ela, no ENTRYPOINT. O que muda é o
+    # AMBIENTE DO PROCESSO NODE: o ENTRYPOINT da imagem faz
+    # `unset DIRECT_DATABASE_URL` antes do `exec node`, e o guard de boot
+    # (`verificarCredenciaisDoBanco`) recusa a subida se ela estiver lá fora
+    # de `development`.
+    #
+    # MEDIDO (a issue #180): o `env_file` é UM arquivo só (`.env.production`),
+    # com as TRÊS URIs — ele não entrega "só" nada. A seletividade é do
+    # processo, e é por isso que ela é do ENTRYPOINT.
+# Consequência prática: trocar por `DIRECT_DATABASE_URL: ${...}` aqui
     # quebraria o BOOT do container em toda máquina onde a variável não esteja
     # no shell — em DOIS lugares distintos, o `migrate` do ENTRYPOINT e o
     # `onModuleInit` acima — e, pior, `docker compose config` mostraria a

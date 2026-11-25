@@ -39,6 +39,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       NODE_ENV: process.env['NODE_ENV'],
       DATABASE_URL: process.env['DATABASE_URL'],
       SYSTEM_DATABASE_URL: process.env['SYSTEM_DATABASE_URL'],
+      // ⚠️ (issue #180) A URI de DONO entra no ambiente inspecionado para o
+      // guard RECUSÁ-la: é a credencial que ignora RLS, e o processo que
+      // expõe a API não pode carregá-la.
+      DIRECT_DATABASE_URL: process.env['DIRECT_DATABASE_URL'],
     });
     if (!veredito.ok) {
       throw new Error(`Credenciais do banco recusadas: ${veredito.motivo}`);
