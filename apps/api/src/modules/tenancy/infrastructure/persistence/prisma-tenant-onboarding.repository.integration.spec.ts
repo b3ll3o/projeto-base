@@ -90,6 +90,14 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
 
   beforeAll(async () => {
     ctx = await setupTestDatabase();
+    // ⚠️ (issue #180, 2ª revisão) A assinatura é lida pela FUNÇÃO
+    // `SECURITY DEFINER`, e o cliente é o de SISTEMA — o mesmo que a
+    // aplicação real usa (`clienteDeSistema()`, que resolve a
+    // `SYSTEM_DATABASE_URL` do ambiente).
+    //
+    // E o runtime NÃO pode ler a chave (migration
+    // `20261127000000_leitura_da_chave_fora_do_runtime`): MEDIDO, quando
+    // podia, a escalada era inteira.
     assinatura = new AssinaturaDeMembership();
     await assinatura.onModuleInit();
     repo = new PrismaTenantOnboardingRepository(ctx.prisma, assinatura);

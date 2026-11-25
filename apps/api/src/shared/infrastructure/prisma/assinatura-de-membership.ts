@@ -17,14 +17,39 @@
 // atacante que este controle existe para travar. Na tabela, ele lê a linha e
 // recebe `42501`.
 //
-// ⚠️ A leitura acontece NO BOOT, com uma conexão de DONO que é fechada em
-// seguida. Dentro da transação do onboarding a sessão é `app_runtime` (é a
-// policy que estamos obedecendo), e portanto não conseguiria ler a chave — o
-// cache não é otimização, é o que torna possível ler em algum momento.
+// ⚠️ A leitura acontece NO BOOT, e o cache não é otimização: é o que torna
+// possível ler em algum momento (dentro da transação do onboarding a sessão é
+// `app_runtime` numa policy de empresa, e a chave não pertence a nenhuma).
+//
+// ⚠️ (issue #180) A leitura é por uma FUNÇÃO `SECURITY DEFINER`
+// (`ler_chave_de_assinatura`, migration `20261126000000`), e NÃO por uma
+// conexão de DONO. MEDIDO: a URI de dono (`DIRECT_DATABASE_URL`) chegava ao
+// container da api pelo `env_file`, e o próprio código a lia — de modo que o
+// processo que expõe a API carregava a credencial que ignora RLS, e quem
+// conseguisse ler o `env` (SSRF reflexivo, erro que imprima o env, o
+// comprometimento de qualquer dependência) tinha acesso a TODAS as empresas.
+// A função roda com o poder do dono e devolve UM segredo — e a aplicação nunca
+// vê a senha do dono.
+//
+// ⚠️ (issue #180, 2ª revisão) QUEM LÊ A CHAVE É O PAPEL DE SISTEMA, E O DE
+// RUNTIME NÃO PODE.
+//
+// MEDIDO: a 1ª versão deste PR lia a chave pelo cliente de RUNTIME, e a
+// migration dava `EXECUTE` da função ao runtime. Aí a escalada é INTEIRA: o
+// runtime lê o segredo (32 bytes), monta o corpo, assina com `hmac()` e
+// chama `criar_membership` — MEDIDO, a vítima ganhou `role: owner` numa
+// empresa alheia.
+//
+// E a leitura é pelo papel de SISTEMA porque a assinatura só tem valor como
+// assinatura de um corpo que a APLICAÇÃO pediu: o material que só ela tem é a
+// chave. O papel de sistema é a credencial ELEVADA da aplicação (a que o
+// bucket de sistema exige por conceito, #118), e MEDIDO: ele já insere
+// membership direto — a escalada que a assinatura impede é a do papel de
+// RUNTIME, que é o que serve as requisições.
 
 import { Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { createHmac } from 'node:crypto';
-import { PrismaClient } from '@prisma/client';
+import { clienteDeSistema } from './escopo.js';
 
 /** Nome da chave. Tem de bater com o `INSERT` da migration `20261020000004`. */
 const NOME_DA_CHAVE = 'membership';
@@ -72,6 +97,28 @@ export class AssinaturaDeMembership implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AssinaturaDeMembership.name);
   private segredo: Buffer | undefined;
 
+  // ⚠️ (issue #180, 2ª revisão) O cliente é o de SISTEMA
+  // (`clienteDeSistema()`), e NÃO o de runtime.
+  //
+  // MEDIDO: a 1ª versão deste PR lia a chave pelo `PrismaService` (o cliente
+  // de RUNTIME), e a migration dava `EXECUTE` da função de leitura ao
+  // runtime. Aí a escalada é inteira: o runtime lê o segredo (32 bytes),
+  // assina um corpo com `hmac()` e chama `criar_membership` — MEDIDO, a
+  // vítima ganhou `role: owner` numa empresa alheia.
+  //
+  // A assinatura é a barreira que impede o runtime de escrever membership
+  // onde não pode (a RLS filtra a escrita direta — MEDIDO, `42501`), e por
+  // isso a chave tem de ficar FORA do alcance do runtime. O papel de SISTEMA
+  // é a credencial elevada da APLICAÇÃO (a que o bucket de sistema exige por
+  // conceito, #118), e ela já está no ambiente dela.
+  //
+  // pt-BR: SEM CONSTRUTOR, e sem `PrismaService` — o cliente vem do
+  // AMBIENTE (`clienteDeSistema()` resolve a `SYSTEM_DATABASE_URL`), e é o
+  // mesmo padrão do `PrismaLoginLockoutRepository`. Injetar o `PrismaService`
+  // (o cliente de RUNTIME) seria ruído que sugere o oposto do que o código
+  // faz.
+  constructor() {}
+
   /**
    * Falha ALTO e no boot, nunca no primeiro onboarding.
    *
@@ -81,16 +128,19 @@ export class AssinaturaDeMembership implements OnModuleInit, OnModuleDestroy {
    * esse 500 por um processo que não sobe.
    */
   async onModuleInit(): Promise<void> {
-    const urlDoDono = process.env['DIRECT_DATABASE_URL'];
-    if (!urlDoDono) {
-      throw new Error(
-        'DIRECT_DATABASE_URL ausente: a assinatura de membership é lida com a conexão de DONO, porque o papel de runtime não tem permissão para lê-la. Rode com as duas variáveis.',
-      );
-    }
-    const dono = new PrismaClient({ datasourceUrl: urlDoDono });
+    // ⚠️ (issue #180) A leitura vai pela FUNÇÃO `SECURITY DEFINER`, com a
+    // credencial de SISTEMA — e NÃO por uma conexão de DONO nem pelo cliente
+    // de runtime. A URI de dono (`DIRECT_DATABASE_URL`) não é lida aqui, nem
+    // em nenhum outro ponto do processo: ela é do CLI do Prisma (`migrate`),
+    // e o `compose` a remove do ambiente do processo Node antes do `exec`
+    // (ver o ENTRYPOINT da imagem).
+    //
+    // E o runtime NÃO pode ler a chave (migration
+    // `20261127000000_leitura_da_chave_fora_do_runtime`): MEDIDO, quando
+    // podia, a escalada era inteira.
     try {
-      const linhas = await dono.$queryRaw<Array<{ segredo: Buffer }>>`
-        SELECT segredo FROM chaves_de_assinatura WHERE nome = ${NOME_DA_CHAVE}
+      const linhas = await clienteDeSistema().$queryRaw<Array<{ segredo: Buffer }>>`
+        SELECT ler_chave_de_assinatura(${NOME_DA_CHAVE}::text) AS segredo
       `;
       const segredo = linhas[0]?.segredo;
       if (!segredo) {
@@ -105,10 +155,15 @@ export class AssinaturaDeMembership implements OnModuleInit, OnModuleDestroy {
       }
       this.segredo = segredo;
       this.logger.log('Chave de assinatura de membership carregada');
-    } finally {
-      // A conexão de DONO não é devolvida ao pool de propósito: ela é a única
-      // que ignora RLS, e o processo não precisa dela para nada além disto.
-      await dono.$disconnect();
+    } catch (erro) {
+      // ⚠️ A falha ALTO e no boot: a chave ausente adiada vira um 500 no
+      // primeiro cadastro de empresa, em produção. E a mensagem precisa dizer
+      // a CAUSA — a função não existir (migration rodou?) e a chave não
+      // existir (a migration que a semeia rodou?) são defeitos diferentes.
+      throw new Error(
+        `chave de assinatura de membership ilegível: ${erro instanceof Error ? erro.message : String(erro)}. ` +
+          'A função `ler_chave_de_assinatura` existe (migration 20261126000000) e a linha `membership` foi semeada (migration 20261020000004)?',
+      );
     }
   }
 
