@@ -29,11 +29,10 @@ COPY apps/api apps/api
 RUN pnpm --filter @projeto/api db:generate
 RUN pnpm --filter @projeto/api build
 # ⚠️ (issue #187) As dependências DE PRODUÇÃO, empacotadas: o `prod` copiava o
-# `node_modules` INTEIRO do builder (MEDIDO: 687 MB e 718 pacotes, com
-# `eslint`, `typescript`, `vitest` e `supertest` dentro da imagem).
-# O `pnpm deploy --prod` empacota um `node_modules` AUTOCONTIDO em `/out` (só
-# as `dependencies`); o `--config.inject-workspace-packages=true` permite
-# empacotar a dependência de WORKSPACE (`@projeto/shared-types`).
+# `node_modules` INTEIRO do builder (MEDIDO: 687 MB e 718 pacotes, com `eslint`,
+# `typescript`, `vitest` e `supertest` na imagem). O `pnpm deploy --prod` empacota
+# um `node_modules` AUTOCONTIDO em `/out` (só as `dependencies`); o
+# `--config.inject-workspace-packages=true` permite a dependência de WORKSPACE.
 FROM builder AS deps-prod
 RUN pnpm --config.inject-workspace-packages=true deploy --prod --filter @projeto/api /out
 
@@ -63,9 +62,9 @@ COPY --from=builder /repo/pnpm-lock.yaml /repo/pnpm-workspace.yaml ./
 # `prisma` (que é `dependency`) sobrevive: é ele que o ENTRYPOINT usa.
 COPY --from=deps-prod /out/node_modules apps/api/node_modules
 # ⚠️ (issue #187) O CLIENT do Prisma é gerado AQUI: o `deploy` empacota o
-# `@prisma/client` (o pacote), mas o client GERADO (`node_modules/.prisma`) não
-# vai junto — MEDIDO, sem esta linha o `migrate deploy` respondia
-# `@prisma/client : Not found`. As URLs são placeholders: o `generate` não CONECTA.
+# `@prisma/client` (o pacote), mas o client GERADO (`node_modules/.prisma`) não vai
+# junto — MEDIDO, sem esta linha o `migrate deploy` respondia `@prisma/client :
+# Not found`. As URLs são placeholders: o `generate` não CONECTA.
 RUN DATABASE_URL=postgresql://build:build@localhost:5432/build \
     DIRECT_DATABASE_URL=postgresql://build:build@localhost:5432/build \
     pnpm --dir /repo/apps/api exec prisma generate --schema=prisma/schema.prisma
@@ -75,32 +74,26 @@ ENV NODE_OPTIONS="--import /repo/apps/api/dist/shared/infrastructure/telemetry/i
 # `pnpm install --prod`: MEDIDO como no-op. O `COPY` acima é o que traz as
 # `dependencies`.
 RUN node --check apps/api/dist/main.js
-# pt-BR (#88): user dedicado UID 1001 (políticas OPA/K8s autenticam por UID).
+# pt-BR (#88): user dedicado UID 1001 (políticas OPA/K8s autenticam por UID);
 # `--create-home` porque o `pnpm` usa `$HOME` — sem ele, morre com EACCES.
 RUN groupadd --gid 1001 app && useradd --uid 1001 --gid 1001 --create-home --shell /bin/false app
-# ⚠️ (issue #178) O cache do corepack, ASSADO no build e legível pelo uid do
-# runtime (é de LEITURA: a api sobe com `read_only: true`).
+# ⚠️ (issue #178) O cache do corepack, ASSADO no build e legível pelo uid do runtime
+# (é de LEITURA: a api sobe com `read_only: true`).
 COPY --from=builder --chown=1001:1001 /root/.cache/node/corepack /repo/.corepack
 ENV COREPACK_HOME=/repo/.corepack
 USER 1001:1001
 EXPOSE 3000
 # pt-BR (#139): o probe usa o `node` da imagem, e NÃO um pacote instalado (o
-# compose de dev troca o `build.target` e herda o probe). ⚠️ O `NODE_OPTIONS=`
-# (vazio) impede o probe de carregar o SDK de telemetria (MEDIDO: ~360 ms).
+# compose de dev troca o `build.target` e herda o probe); o `NODE_OPTIONS=` (vazio)
+# impede o probe de carregar o SDK de telemetria (MEDIDO: ~360 ms).
 HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
   CMD NODE_OPTIONS= node -e "require('http').get('http://localhost:3000/api/v1/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
-# ⚠️ (issue #105) Guarda de `DATABASE_URL` vazia: o compose declarava a chave em
-# `environment:` (que tem precedência sobre o `env_file`) e a sobrescrevia com
-# string vazia. O fail-fast é AQUI porque o migrate roda ANTES do node. O `cd`
-# NÃO é cosmético: `pnpm exec` procura em `./node_modules/.bin`, e o binário do
-# prisma vive em `apps/api/node_modules/.bin`. E o `$` é UM, não `$$`: no JSON
-# com `sh -c` quem expande é o shell do container.
-# ⚠️ (issue #180) O `unset DIRECT_DATABASE_URL` ANTES do `exec node`: a URI de
-# DONO (superuser) é do CLI do Prisma e do `prepara-papeis.sh`, e não pode
-# ficar no ambiente do processo que expõe a API — o guard de boot recusa.
-# pt-BR (#137): o `exec` ANTES do `node` é o que faz o SIGTERM chegar nele. Sem
-# `exec`, o `&&` faz o `sh` forkar o `node` e CONTINUAR VIVO como pai — a árvore
-# real é `tini → sh → node`, e o sinal morria no shell (o tini repassa o sinal
-# apenas ao filho direto). Com `exec`, o node é o FILHO DIRETO do tini — MEDIDO
-# 2026-11-09: `pid=7 ppid=1 node dist/main.js` (sem o `exec`, `pid=334 ppid=7`).
+# ⚠️ (issue #105) Guarda de `DATABASE_URL` vazia: o fail-fast é AQUI porque o
+# migrate roda ANTES do node. O `cd` NÃO é cosmético (`pnpm exec` procura em
+# `./node_modules/.bin`), e o `$` é UM, não `$$`.
+# ⚠️ (issue #180) O `unset DIRECT_DATABASE_URL` ANTES do `exec node`: a URI de DONO
+# (superuser) é do CLI do Prisma e do `prepara-papeis.sh`, e não pode ficar no
+# ambiente do processo que expõe a API — o guard de boot recusa.
+# pt-BR (#137): o `exec` ANTES do `node` faz o SIGTERM chegar nele (sem ele, o
+# `sh` forka o `node` e continua vivo como pai).
 ENTRYPOINT ["sh","-c","if [ -z \"$DATABASE_URL\" ]; then echo 'ERRO: DATABASE_URL vazia ou ausente no container da api (issue #105). A linha precisa existir no .env.production apontando para o papel app_runtime (ver .env.production.example); a de DONO e a DIRECT_DATABASE_URL, que e outra chave.' >&2; exit 1; fi; cd /repo/apps/api && pnpm exec prisma migrate deploy --schema=prisma/schema.prisma && sh ./scripts/prepara-papeis.sh && unset DIRECT_DATABASE_URL && exec node dist/main.js"]
