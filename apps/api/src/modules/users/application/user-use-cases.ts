@@ -12,6 +12,7 @@ import {
 import {
   USER_REPOSITORY_PORT,
   type UserRepositoryPort,
+  type LinhaDeHistoricoDaEscrita,
   type FindByIdOptions,
 } from '../domain/ports/user-repository.port.js';
 import {
@@ -172,7 +173,11 @@ export class UserUseCases {
     //    órfã para sempre, porque o rollback do `$transaction` de tenancy não
     //    alcança uma escrita que já saiu daqui.
     if (input.destino === undefined) {
-      await this.userRepo.save(user, 0, tenantId);
+      // ⚠️ (issue #184) A auditoria viaja DENTRO da escrita: a mutação e o
+      // registro do histórico são a MESMA transação.
+      await this.userRepo.save(user, 0, tenantId, {
+        historico: this.registrosDeAuditoria(user),
+      });
     } else {
       const usuario = {
         id: user.id().value,
@@ -192,7 +197,31 @@ export class UserUseCases {
     }
 
     // 6. Auditar evento de criação
-    await this.emitAuditForEvents(user);
+    //
+    // ⚠️ (issue #184) O caminho COM destino tem a AUDITORIA FORA da transação
+    // de tenancy: o usuário é gravado dentro da transação da
+    // empresa/perfil/membership, e o histórico é uma transação à parte. O
+    // conserto completo desse caminho (a transação de tenancy ganhar a
+    // escrita de auditoria) é uma demanda própria — o port de tenancy tem a
+    // sua própria fronteira transacional, e mexer nela é mexer no onboarding.
+    // O que este PR garante é o RESTO: e o `registrosDeAuditoria` drena os
+    // eventos, então o caminho COM destino também precisa gravá-los.
+    if (input.destino !== undefined) {
+      for (const registro of this.registrosDeAuditoria(user)) {
+        await this.auditService.record(
+          {
+            entityName: 'User',
+            entityId: user.id().value,
+            operation: registro.operation as AuditOperation,
+            previousVersion: registro.previousVersion,
+            newVersion: registro.newVersion,
+            snapshot: registro.snapshot,
+            reason: registro.reason ?? null,
+          },
+          ctx,
+        );
+      }
+    }
 
     // 7. Retornar DTO
     return toUserOutput(user);
@@ -389,8 +418,9 @@ export class UserUseCases {
     } catch (e) {
       this.translateDomainException(e, 'User', id.value);
     }
-    await this.userRepo.save(user, input.expectedVersion, tenantId);
-    await this.emitAuditForEvents(user);
+    await this.userRepo.save(user, input.expectedVersion, tenantId, {
+      historico: this.registrosDeAuditoria(user),
+    });
     return toUserOutput(user);
   }
 
@@ -420,8 +450,9 @@ export class UserUseCases {
     } catch (e) {
       this.translateDomainException(e, 'User', id.value);
     }
-    await this.userRepo.save(user, input.expectedVersion, tenantId);
-    await this.emitAuditForEvents(user);
+    await this.userRepo.save(user, input.expectedVersion, tenantId, {
+      historico: this.registrosDeAuditoria(user),
+    });
     return toUserOutput(user);
   }
 
@@ -443,17 +474,17 @@ export class UserUseCases {
     } catch (e) {
       this.translateDomainException(e, 'User', id.value);
     }
-    await this.userRepo.save(user, input.expectedVersion, tenantId);
-    await this.emitAuditForEvents(user);
-
-    // Soft-delete também vai para o archive
-    await this.auditService.archive({
-      entityName: 'User',
-      entityId: id.value,
-      version: user.version(),
-      snapshot: toUserOutput(user) as unknown as Record<string, unknown>,
-      reason: input.reason,
-      ctx,
+    // ⚠️ (issue #184) O histórico E o arquivo do soft-delete vão na MESMA
+    // transação da mutação — eram DUAS antes (o `save` e o `archive` abriam
+    // transações diferentes), e um soft-delete sem arquivo é um registro que
+    // não volta.
+    await this.userRepo.save(user, input.expectedVersion, tenantId, {
+      historico: this.registrosDeAuditoria(user),
+      arquivo: {
+        version: user.version(),
+        snapshot: toUserOutput(user) as unknown as Record<string, unknown>,
+        reason: input.reason,
+      },
     });
 
     return toUserOutput(user);
@@ -483,38 +514,48 @@ export class UserUseCases {
     } catch (e) {
       this.translateDomainException(e, 'User', id.value);
     }
-    await this.userRepo.save(user, input.expectedVersion, tenantId);
-    await this.emitAuditForEvents(user);
+    await this.userRepo.save(user, input.expectedVersion, tenantId, {
+      historico: this.registrosDeAuditoria(user),
+    });
     return toUserOutput(user);
   }
 
   // ----- HELPERS -----
 
   /**
-   * Drena os domain events pendentes do agregado e chama audit.record()
-   * para cada um. Converte o tipo de evento para AuditOperation.
+   * Os REGISTROS de auditoria dos eventos pendentes do agregado — SEM
+   * gravá-los.
+   *
+   * ⚠️ (issue #184) Antes, este método GRAVAVA: cada evento virava uma
+   * chamada a `auditService.record`, que abria a SUA transação — e a mutação
+   * (o `userRepo.save`) tinha aberto a DELE. MEDIDO: com a auditoria falhando
+   * depois (P2002 no unique `(entity_id, version)`), a linha em `users`
+   * SOBREVIVIA e o `users_history` ficava com 1 linha de 2 — o estado
+   * alterado sem o registro que promete justificar a alteração.
+   *
+   * Agora os registros viajam DENTRO da escrita (`userRepo.save(…, auditoria)`)
+   * e são gravados na MESMA transação da mutação — ou os dois acontecem, ou
+   * nenhum.
    */
-  private async emitAuditForEvents(user: User): Promise<void> {
-    const ctx = AuditContextStore.get();
+  private registrosDeAuditoria(user: User): LinhaDeHistoricoDaEscrita[] {
     const events = user.pullEvents();
-    for (const ev of events) {
+    return events.map((ev) => {
       const op = mapEventNameToOperation(ev.eventName);
       const previousVersion = extractPreviousVersion(
         ev as unknown as { eventName: string; [k: string]: unknown },
       );
-      await this.auditService.record(
-        {
-          entityName: 'User',
-          entityId: ev.aggregateId,
-          operation: op,
-          previousVersion,
-          newVersion: user.version(),
-          snapshot: toUserOutput(user) as unknown as Record<string, unknown>,
-          reason: extractReason(ev as unknown as { eventName: string; [k: string]: unknown }),
-        },
-        ctx,
-      );
-    }
+      return {
+        // ⚠️ O `cast`: o `AuditOperation` do `shared/audit` é um enum de
+        // string (nominal no TypeScript), e o port do usuário declara o mesmo
+        // conjunto de valores como união de literais — para o DOMÍNIO do
+        // usuário não depender do enum de outro BC.
+        operation: op as LinhaDeHistoricoDaEscrita['operation'],
+        previousVersion,
+        newVersion: user.version(),
+        snapshot: toUserOutput(user) as unknown as Record<string, unknown>,
+        reason: extractReason(ev as unknown as { eventName: string; [k: string]: unknown }),
+      };
+    });
   }
 
   /**

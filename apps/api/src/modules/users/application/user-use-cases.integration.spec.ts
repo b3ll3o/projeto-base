@@ -106,6 +106,49 @@ describe('UserUseCases (integration with Prisma)', () => {
     expect(users).toHaveLength(1);
   });
 
+  // ⚠️ (issue #184) A MUTAÇÃO e o REGISTRO DE AUDITORIA são a mesma
+  // transação — e este é o teste que prova.
+  it('a falha da auditoria DESFAZ a mutação (o usuário não sobrevive)', async () => {
+    const ctx = makeCtx();
+    const created = await AuditContextStore.run(ctx, () =>
+      sut.criarUser({ nome: 'Dani', email: 'dani@example.com', senha: SENHA_VALIDA }, null),
+    );
+
+    // A auditoria é forçada a FALHAR: o `users_history` tem UNIQUE em
+    // `(entity_id, version)`, e a linha da versão 2 é planted antes da
+    // mutação — então a escrita da auditoria estoura com P2002.
+    await prisma.userHistory.create({
+      data: {
+        entityId: created.id,
+        version: 2,
+        operation: 'UPDATE',
+        snapshot: { plantado: true },
+        changedAt: new Date('2026-09-21T10:00:00.000Z'),
+        changedBy: ACTOR_ADMIN_1,
+      },
+    });
+
+    await expect(
+      AuditContextStore.run(ctx, () =>
+        sut.atualizarNome({ id: created.id, novoNome: 'Dani Maria', expectedVersion: 1 }, null),
+      ),
+    ).rejects.toThrow();
+
+    // ⚠️ A MUTAÇÃO NÃO SOBREVIVEU: o nome é o de antes e a versão é a de
+    // antes. MEDIDO (a issue #184, antes do conserto): com a auditoria em
+    // outra transação, o `users` SOBREVIVIA (o nome era o novo) e o
+    // `users_history` ficava com 1 linha de 2 esperadas — o estado alterado
+    // sem o registro que promete justificar a alteração.
+    const depois = await prisma.user.findUnique({ where: { id: created.id } });
+    expect(depois?.name).toBe('Dani');
+    expect(depois?.version).toBe(1);
+
+    // E o histórico tem SÓ a linha plantada — a da mutação não foi gravada
+    // (a transação inteira foi desfeita).
+    const hist = await prisma.userHistory.findMany({ where: { entityId: created.id } });
+    expect(hist.map((h) => h.version)).toEqual([1, 2]);
+  });
+
   it('atualizarNome aplica mutação e grava UPDATE no histórico', async () => {
     const ctx = makeCtx();
     const created = await AuditContextStore.run(ctx, () =>

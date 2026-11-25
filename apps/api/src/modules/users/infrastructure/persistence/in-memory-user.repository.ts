@@ -4,8 +4,14 @@ import {
   type UserListInput,
   type UserListResult,
   type FindByIdOptions,
+  type AuditoriaDaEscritaDoUsuario,
 } from '../../domain/ports/user-repository.port.js';
 import { User } from '../../domain/user.aggregate.js';
+import { AuditContextStore } from '../../../../shared/audit/shared/audit-context-store.js';
+import type {
+  AuditOperation,
+  AuditServicePort,
+} from '../../../../shared/audit/application/audit-service.port.js';
 import type { UserId } from '../../domain/value-objects/user-id.vo.js';
 import type { Email } from '../../domain/value-objects/email.vo.js';
 import {
@@ -28,6 +34,53 @@ import {
 export class InMemoryUserRepository implements UserRepositoryPort {
   private readonly byId = new Map<string, User>();
   private readonly emailIndex = new Map<string, string>(); // email.value -> id.value
+
+  /**
+   * O REGISTRO de auditoria — o duplo do que o `PrismaUserRepository` grava
+   * na MESMA transação da mutação (issue #184).
+   *
+   * ⚠️ Sem ele, o duplo IGNORARIA a auditoria que viaja com a escrita, e os
+   * specs que leem a trilha (`audit.history`) mediriam um histórico vazio —
+   * que parece "a auditoria não grava" e é "o duplo não sabe gravar".
+   */
+  constructor(private readonly auditoria?: AuditServicePort) {}
+
+  /**
+   * Grava a auditoria que viaja com a escrita — como o adaptador de Prisma
+   * faz (issue #184): o histórico E o arquivo, na mesma "transação".
+   */
+  private async gravarAuditoria(
+    user: User,
+    auditoria: AuditoriaDaEscritaDoUsuario | undefined,
+  ): Promise<void> {
+    if (this.auditoria === undefined || auditoria === undefined) return;
+
+    const ctx = AuditContextStore.get();
+    for (const registro of auditoria.historico) {
+      await this.auditoria.record(
+        {
+          entityName: 'User',
+          entityId: user.id().value,
+          operation: registro.operation as AuditOperation,
+          previousVersion: registro.previousVersion,
+          newVersion: registro.newVersion,
+          snapshot: registro.snapshot,
+          reason: registro.reason ?? null,
+        },
+        ctx,
+      );
+    }
+    if (auditoria.arquivo !== undefined) {
+      await this.auditoria.archive({
+        entityName: 'User',
+        entityId: user.id().value,
+        version: auditoria.arquivo.version,
+        snapshot: auditoria.arquivo.snapshot,
+        reason: auditoria.arquivo.reason ?? null,
+        ctx,
+      });
+    }
+  }
 
   async findById(
     id: UserId,
@@ -73,7 +126,12 @@ export class InMemoryUserRepository implements UserRepositoryPort {
     });
   }
 
-  async save(user: User, expectedVersion: number, _tenantId: string | null): Promise<User> {
+  async save(
+    user: User,
+    expectedVersion: number,
+    _tenantId: string | null,
+    auditoria?: AuditoriaDaEscritaDoUsuario,
+  ): Promise<User> {
     // Snapshot defensivo: clonamos o agregado para evitar que mutações
     // posteriores na referência original do caller afetem o que ficou
     // persistido. Sem isso, o optimistic locking quebra (mesma referência
@@ -103,6 +161,7 @@ export class InMemoryUserRepository implements UserRepositoryPort {
       }
       this.byId.set(snapshot.id().value, snapshot);
       this.emailIndex.set(snapshot.email().value, snapshot.id().value);
+      await this.gravarAuditoria(user, auditoria);
       return snapshot;
     }
 
@@ -126,6 +185,7 @@ export class InMemoryUserRepository implements UserRepositoryPort {
     }
 
     this.byId.set(snapshot.id().value, snapshot);
+    await this.gravarAuditoria(user, auditoria);
     return snapshot;
   }
 

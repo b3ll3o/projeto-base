@@ -31,7 +31,9 @@ import {
   type UserListInput,
   type UserListResult,
   type FindByIdOptions,
+  type AuditoriaDaEscritaDoUsuario,
 } from '../../domain/ports/user-repository.port.js';
+import { AuditContextStore } from '../../../../shared/audit/shared/audit-context-store.js';
 import type { User } from '../../domain/user.aggregate.js';
 import type { UserId } from '../../domain/value-objects/user-id.vo.js';
 import type { Email } from '../../domain/value-objects/email.vo.js';
@@ -64,7 +66,12 @@ export class PrismaUserRepository implements UserRepositoryPort {
    *
    * Devolve o agregado persistido (snapshot via User.restaurarDePersistencia).
    */
-  async save(user: User, expectedVersion: number, tenantId: string | null): Promise<User> {
+  async save(
+    user: User,
+    expectedVersion: number,
+    tenantId: string | null,
+    auditoria?: AuditoriaDaEscritaDoUsuario,
+  ): Promise<User> {
     const row = UserPrismaMapper.toPersistence(user);
     const id = user.id().value;
 
@@ -88,7 +95,9 @@ export class PrismaUserRepository implements UserRepositoryPort {
           }
           esperavaLinhaAusente = true;
           await tx.user.create({ data: row });
-          return this.loadSnapshot(tx, id);
+          const criado = await this.loadSnapshot(tx, id);
+          await this.gravarAuditoria(tx, user, auditoria);
+          return criado;
         }
 
         // UPDATE path: aplica lock otimista via WHERE version=expected.
@@ -136,7 +145,9 @@ export class PrismaUserRepository implements UserRepositoryPort {
           throw new ConcurrencyException(expectedVersion, actual?.version ?? null);
         }
 
-        return this.loadSnapshot(tx, id);
+        const atualizado = await this.loadSnapshot(tx, id);
+        await this.gravarAuditoria(tx, user, auditoria);
+        return atualizado;
       });
     } catch (erro) {
       throw await this.traduzirFalhaDeUnicidade(erro, {
@@ -198,6 +209,70 @@ export class PrismaUserRepository implements UserRepositoryPort {
    * é outra coisa. Um `catch` que respondesse "email em uso" para QUALQUER
    * falha passaria por ambos.
    */
+  /**
+   * Grava a AUDITORIA da escrita — NA MESMA transação da mutação.
+   *
+   * ⚠️ (issue #184) É aqui que a atomicidade mora: a mutação e o registro de
+   * auditoria são DUAS escritas independentes quando a auditoria é gravada por
+   * fora (o `auditService.record` abre a SUA transação). MEDIDO: com a
+   * auditoria falhando depois (P2002 no unique `(entity_id, version)`), a
+   * linha em `users` SOBREVIVIA (o usuário existia) e o `users_history` ficava
+   * com 1 linha de 2 esperadas — o estado alterado, sem o registro que
+   * promete justificar a alteração.
+   *
+   * ⚠️ O `userHistory` e o `userArchive` são as MESMAS tabelas que o
+   * `PrismaAuditService` grava — e a FORMA da linha tem um dono: o
+   * `shared/audit`. O que muda aqui é que a escrita acontece na transação que
+   * a mutação abriu.
+   */
+  private async gravarAuditoria(
+    tx: ClienteTransacional,
+    user: User,
+    auditoria: AuditoriaDaEscritaDoUsuario | undefined,
+  ): Promise<void> {
+    if (auditoria === undefined) return;
+
+    const ctx = AuditContextStore.get();
+    const entityId = user.id().value;
+
+    for (const registro of auditoria.historico) {
+      await tx.userHistory.create({
+        data: {
+          entityId,
+          version: registro.newVersion,
+          previousVersion: registro.previousVersion,
+          operation: registro.operation,
+          snapshot: registro.snapshot as Prisma.InputJsonValue,
+          changedAt: ctx.timestamp,
+          changedBy: ctx.actorId,
+          reason: registro.reason ?? null,
+        },
+      });
+    }
+
+    if (auditoria.arquivo !== undefined) {
+      const arquivo = auditoria.arquivo;
+      await tx.userArchive.upsert({
+        where: { entityId },
+        create: {
+          entityId,
+          version: arquivo.version,
+          snapshot: arquivo.snapshot as Prisma.InputJsonValue,
+          deletedAt: ctx.timestamp,
+          deletedBy: ctx.actorId,
+          reason: arquivo.reason ?? null,
+        },
+        update: {
+          version: arquivo.version,
+          snapshot: arquivo.snapshot as Prisma.InputJsonValue,
+          deletedAt: ctx.timestamp,
+          deletedBy: ctx.actorId,
+          reason: arquivo.reason ?? null,
+        },
+      });
+    }
+  }
+
   private async traduzirFalhaDeUnicidade(
     erro: unknown,
     contexto: {
