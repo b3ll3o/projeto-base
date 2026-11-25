@@ -25,7 +25,10 @@ import {
   ApplicationResourceNotFoundException,
   ApplicationEmailAlreadyInUseException,
 } from './exceptions/application.exceptions.js';
-import { ConcurrencyException } from '../domain/exceptions/user.exceptions.js';
+import {
+  AuditTrailConflictException,
+  ConcurrencyException,
+} from '../domain/exceptions/user.exceptions.js';
 import { FakePasswordHasher, SENHA_VALIDA } from '../../../../test/fakes/fake-password-hasher.js';
 import { tenancyQueNaoDeveSerChamado } from '../../../../test/fakes/fake-tenancy-use-cases.js';
 
@@ -128,11 +131,15 @@ describe('UserUseCases (integration with Prisma)', () => {
       },
     });
 
+    // ⚠️ A asserção NOMEIA a exceção: `rejects.toThrow()` sem argumento
+    // aceita QUALQUER erro — e o P2002 do `users_history` subia traduzido
+    // como `EmailAlreadyInUseException` ("email já em uso") antes do
+    // conserto. O caso passava com o defeito vivo. MEDIDO.
     await expect(
       AuditContextStore.run(ctx, () =>
         sut.atualizarNome({ id: created.id, novoNome: 'Dani Maria', expectedVersion: 1 }, null),
       ),
-    ).rejects.toThrow();
+    ).rejects.toThrow(AuditTrailConflictException);
 
     // ⚠️ A MUTAÇÃO NÃO SOBREVIVEU: o nome é o de antes e a versão é a de
     // antes. MEDIDO (a issue #184, antes do conserto): com a auditoria em
@@ -144,9 +151,52 @@ describe('UserUseCases (integration with Prisma)', () => {
     expect(depois?.version).toBe(1);
 
     // E o histórico tem SÓ a linha plantada — a da mutação não foi gravada
-    // (a transação inteira foi desfeita).
-    const hist = await prisma.userHistory.findMany({ where: { entityId: created.id } });
+    // (a transação inteira foi desfeita). O `orderBy` não é decoração: sem
+    // ele o Postgres pode devolver as linhas em qualquer ordem, e o
+    // `toEqual([1, 2])` passaria a depender do plano de execução.
+    const hist = await prisma.userHistory.findMany({
+      where: { entityId: created.id },
+      orderBy: { version: 'asc' },
+    });
     expect(hist.map((h) => h.version)).toEqual([1, 2]);
+  });
+
+  // ⚠️ (issue #184, 2ª revisão) A OUTRA metade da promessa: o ARQUIVO do
+  // soft-delete também viaja na mesma transação da mutação. Um soft-delete
+  // cujo arquivo não foi gravado é um registro que não volta.
+  it('a falha da auditoria DESFAZ o soft-delete (o usuário não fica apagado e o arquivo não é gravado)', async () => {
+    const ctx = makeCtx();
+    const created = await AuditContextStore.run(ctx, () =>
+      sut.criarUser({ nome: 'Ema', email: 'ema@example.com', senha: SENHA_VALIDA }, null),
+    );
+
+    // A linha conflitante do histórico é a versão 2 — a que o soft-delete
+    // tentaria gravar.
+    await prisma.userHistory.create({
+      data: {
+        entityId: created.id,
+        version: 2,
+        operation: 'DELETE',
+        snapshot: { plantado: true },
+        changedAt: new Date('2026-09-21T10:00:00.000Z'),
+        changedBy: ACTOR_ADMIN_1,
+      },
+    });
+
+    await expect(
+      AuditContextStore.run(ctx, () =>
+        sut.softDelete({ id: created.id, expectedVersion: 1, reason: 'teste' }, null),
+      ),
+    ).rejects.toThrow(AuditTrailConflictException);
+
+    // O usuário NÃO ficou apagado — o rollback levou a mutação.
+    const depois = await prisma.user.findUnique({ where: { id: created.id } });
+    expect(depois?.deletedAt).toBeNull();
+    expect(depois?.version).toBe(1);
+
+    // E o ARQUIVO não foi gravado — ele viaja na mesma transação.
+    const arquivo = await prisma.userArchive.findMany({ where: { entityId: created.id } });
+    expect(arquivo).toHaveLength(0);
   });
 
   it('atualizarNome aplica mutação e grava UPDATE no histórico', async () => {

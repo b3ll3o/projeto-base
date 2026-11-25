@@ -38,6 +38,7 @@ import type { User } from '../../domain/user.aggregate.js';
 import type { UserId } from '../../domain/value-objects/user-id.vo.js';
 import type { Email } from '../../domain/value-objects/email.vo.js';
 import {
+  AuditTrailConflictException,
   ConcurrencyException,
   EmailAlreadyInUseException,
 } from '../../domain/exceptions/user.exceptions.js';
@@ -236,18 +237,35 @@ export class PrismaUserRepository implements UserRepositoryPort {
     const entityId = user.id().value;
 
     for (const registro of auditoria.historico) {
-      await tx.userHistory.create({
-        data: {
-          entityId,
-          version: registro.newVersion,
-          previousVersion: registro.previousVersion,
-          operation: registro.operation,
-          snapshot: registro.snapshot as Prisma.InputJsonValue,
-          changedAt: ctx.timestamp,
-          changedBy: ctx.actorId,
-          reason: registro.reason ?? null,
-        },
-      });
+      try {
+        await tx.userHistory.create({
+          data: {
+            entityId,
+            version: registro.newVersion,
+            previousVersion: registro.previousVersion,
+            operation: registro.operation,
+            snapshot: registro.snapshot as Prisma.InputJsonValue,
+            changedAt: ctx.timestamp,
+            changedBy: ctx.actorId,
+            reason: registro.reason ?? null,
+          },
+        });
+      } catch (erro) {
+        // ⚠️ (issue #184, 2ª revisão) O P2002 AQUI é da TRILHA, não do e-mail.
+        // MEDIDO: sem esta discriminação, o conflito do unique
+        // `(entity_id, version)` subia pelo `catch` genérico do `save` e virava
+        // `EmailAlreadyInUseException` — HTTP 409 "email já em uso" para um
+        // conflito de trilha (erro não-acionável: o e-mail estava livre).
+        //
+        // ⚠️ O `meta.target` NÃO discrimina: o unique do `users_history` é um
+        // ÍNDICE (`CREATE UNIQUE INDEX`), não uma constraint, e o Prisma
+        // devolve `target: null` nesse caso (MEDIDO). A discriminação é pelo
+        // LOCAL da escrita — e aqui está a escrita do histórico.
+        if (erro instanceof Prisma.PrismaClientKnownRequestError && erro.code === 'P2002') {
+          throw new AuditTrailConflictException(entityId, registro.newVersion);
+        }
+        throw erro;
+      }
     }
 
     if (auditoria.arquivo !== undefined) {

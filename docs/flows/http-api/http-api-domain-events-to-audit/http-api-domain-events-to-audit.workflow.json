@@ -3,7 +3,7 @@
   "diagram_type": "workflow",
   "meta": {
     "title": "Domain Events → Audit — Pipeline users.user.*.v1",
-    "subtitle": "User aggregate drena eventos → UserUseCases converte → PrismaAuditService persiste como AuditRecord",
+    "subtitle": "User aggregate drena eventos → UserUseCases converte em REGISTROS → o repositório grava users_history NA MESMA transação da mutação",
     "animation": "trace",
     "visual_preset": "signal-flow",
     "quality_profile": "standard",
@@ -11,14 +11,21 @@
     "views": [
       {
         "id": "pipeline",
-        "label": "Drain → map → record",
-        "focus": ["user_aggregate", "domain_events", "emit_audit", "audit_record"],
-        "note": "4 etapas: aggregate emite → use case drena → mapper converte → audit service persiste."
+        "label": "Drain → map → persist",
+        "focus": [
+          "user_aggregate",
+          "domain_events",
+          "emit_audit",
+          "audit_record"
+        ],
+        "note": "4 etapas: aggregate emite → use case drena e converte → o registro viaja dentro da escrita → o repositório persiste (mesma transação)."
       },
       {
         "id": "events",
         "label": "4 event types",
-        "focus": ["domain_events"],
+        "focus": [
+          "domain_events"
+        ],
         "note": "users.user.created.v1 → INSERT | updated.v1 → UPDATE | deleted.v1 → DELETE | restored.v1 → RESTORE"
       }
     ],
@@ -81,7 +88,12 @@
       "variant": "dashed"
     }
   ],
-  "mainPath": ["user_aggregate", "domain_events", "emit_audit", "audit_record"],
+  "mainPath": [
+    "user_aggregate",
+    "domain_events",
+    "emit_audit",
+    "audit_record"
+  ],
   "nodes": [
     {
       "id": "user_aggregate",
@@ -109,8 +121,8 @@
       "lane": "users",
       "col": 1,
       "type": "backend",
-      "label": "emitAuditForEvents",
-      "sublabel": "mapEventNameToOp",
+      "label": "registrosDeAuditoria",
+      "sublabel": "mapEventNameToOperation",
       "tag": "INSERT/UPDATE/DELETE/RESTORE",
       "width": 170
     },
@@ -119,9 +131,9 @@
       "lane": "users",
       "col": 2,
       "type": "database",
-      "label": "AuditRecord row",
+      "label": "users_history row",
       "sublabel": "AuditContext + AuditOp",
-      "tag": "INSERT INTO AuditRecord",
+      "tag": "INSERT INTO users_history",
       "width": 160
     }
   ],
@@ -146,7 +158,7 @@
       "id": "emit-to-record",
       "from": "emit_audit",
       "to": "audit_record",
-      "label": "AuditServicePort.record()",
+      "label": "save(user, expectedVersion, auditoria)",
       "variant": "default",
       "role": "main"
     }
@@ -180,6 +192,15 @@
         "mapEventNameToOperation lança Error se eventName desconhecido (fail-fast)",
         "AuditContext (W3C traceId) correlaciona com HTTP request origin",
         "previousVersion permite replay/versioning de histórico de mudanças"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Atomicidade (issue #184)",
+      "items": [
+        "A mutação e o registro da trilha são a MESMA transação — ou os dois acontecem, ou nenhum",
+        "os registros viajam DENTRO de userRepo.save(user, expectedVersion, tenantId, { historico })",
+        "o caminho COM destino (onboarding) é a exceção declarada: a transação de tenancy tem a sua própria fronteira"
       ]
     }
   ]

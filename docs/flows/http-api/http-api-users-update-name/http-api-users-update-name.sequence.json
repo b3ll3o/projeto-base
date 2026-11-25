@@ -5,7 +5,10 @@
     "title": "PATCH /users/:id — Renomear com If-Match optimistic locking",
     "subtitle": "PATCH /users/:id (If-Match: W/v<n>) → UsersController.parseIfMatch → UserUseCases.atualizarNome → version mismatch → 412 Precondition",
     "output": "http-api-users-update-name.sequence.html",
-    "viewBox": [1020, 900],
+    "viewBox": [
+      1020,
+      900
+    ],
     "animation": "trace",
     "visual_preset": "signal-flow",
     "quality_profile": "showcase",
@@ -13,19 +16,35 @@
       {
         "id": "happy-path",
         "label": "Optimistic lock OK → 200",
-        "focus": ["client", "controller", "usecases", "repo", "audit", "pg"],
-        "note": "version() === expectedVersion → renomear + UPDATE + audit cascade."
+        "focus": [
+          "client",
+          "controller",
+          "usecases",
+          "repo",
+          "pg"
+        ],
+        "note": "version() === expectedVersion → renomear + UPDATE + trilha NA MESMA transação."
       },
       {
         "id": "version-mismatch-412",
         "label": "Stale If-Match → 412",
-        "focus": ["client", "controller", "usecases", "repo", "filter"],
+        "focus": [
+          "client",
+          "controller",
+          "usecases",
+          "repo",
+          "filter"
+        ],
         "note": "version() !== expectedVersion → ApplicationConcurrencyException → 412 Precondition Failed."
       },
       {
         "id": "if-match-invalid-400",
         "label": "Header ausente/inválido → 400",
-        "focus": ["client", "controller", "filter"],
+        "focus": [
+          "client",
+          "controller",
+          "filter"
+        ],
         "note": "parseIfMatch rejeita sem W/v<n> → BadRequestException → 400."
       }
     ],
@@ -56,13 +75,7 @@
       "id": "repo",
       "type": "backend",
       "label": "PrismaRepo",
-      "sublabel": "save(user,n-1)"
-    },
-    {
-      "id": "audit",
-      "type": "backend",
-      "label": "AuditService",
-      "sublabel": "record UPDATE"
+      "sublabel": "save(user,n-1,auditoria)"
     },
     {
       "id": "pg",
@@ -99,29 +112,25 @@
       "from": "client",
       "to": "controller",
       "y": 180,
-      "label": "PATCH /users/:id {novoNome}",
-      "variant": "emphasis"
+      "label": "PATCH /users/:id {novoNome}"
     },
     {
       "from": "controller",
       "to": "usecases",
       "y": 220,
-      "label": "parseIfMatch → expectedVersion",
-      "variant": "emphasis"
+      "label": "parseIfMatch → expectedVersion"
     },
     {
       "from": "usecases",
       "to": "repo",
       "y": 300,
-      "label": "findById(UserId)",
-      "variant": "default"
+      "label": "findById(UserId)"
     },
     {
       "from": "repo",
       "to": "pg",
       "y": 340,
-      "label": "SELECT WHERE id AND deletedAt IS NULL",
-      "variant": "default"
+      "label": "SELECT WHERE id AND deletedAt IS NULL"
     },
     {
       "from": "pg",
@@ -134,15 +143,14 @@
       "from": "usecases",
       "to": "repo",
       "y": 416,
-      "label": "renomear + save(user,n-1)",
+      "label": "renomear + save(user,n-1, auditoria)",
       "variant": "emphasis"
     },
     {
       "from": "repo",
       "to": "pg",
       "y": 492,
-      "label": "UPDATE WHERE id AND version=n-1",
-      "variant": "default"
+      "label": "UPDATE WHERE id AND version=n-1"
     },
     {
       "from": "pg",
@@ -152,44 +160,51 @@
       "variant": "return"
     },
     {
-      "from": "usecases",
-      "to": "audit",
+      "from": "repo",
+      "to": "pg",
       "y": 568,
-      "label": "pullEvents() → record UPDATE",
+      "label": "INSERT INTO users_history (mesma transação)",
       "variant": "emphasis"
     },
     {
-      "from": "audit",
-      "to": "pg",
+      "from": "pg",
+      "to": "repo",
       "y": 606,
-      "label": "INSERT INTO users_history",
-      "variant": "default"
+      "label": "linha da trilha",
+      "variant": "return"
+    },
+    {
+      "from": "repo",
+      "to": "usecases",
+      "y": 644,
+      "label": "snapshot persistido",
+      "variant": "return"
     },
     {
       "from": "usecases",
       "to": "controller",
-      "y": 644,
+      "y": 682,
       "label": "toUserOutput(user)",
       "variant": "return"
     },
     {
       "from": "controller",
       "to": "client",
-      "y": 682,
+      "y": 720,
       "label": "200 + ETag: W/v(n+1)",
       "variant": "return"
     },
     {
       "from": "usecases",
       "to": "filter",
-      "y": 720,
+      "y": 758,
       "label": "version!=n → 412",
       "variant": "security"
     },
     {
       "from": "controller",
       "to": "filter",
-      "y": 760,
+      "y": 796,
       "label": "IfMatchInvalid → 400",
       "variant": "security"
     }
@@ -198,19 +213,19 @@
     {
       "participant": "controller",
       "from": 174,
-      "to": 678,
+      "to": 716,
       "type": "backend"
     },
     {
       "participant": "usecases",
       "from": 254,
-      "to": 640,
+      "to": 678,
       "type": "backend"
     },
     {
       "participant": "repo",
       "from": 294,
-      "to": 524,
+      "to": 638,
       "type": "backend"
     },
     {
@@ -220,27 +235,27 @@
       "type": "database"
     },
     {
-      "participant": "audit",
+      "participant": "pg",
       "from": 562,
       "to": 600,
-      "type": "backend"
+      "type": "database"
     },
     {
       "participant": "usecases",
-      "from": 754,
-      "to": 784,
+      "from": 752,
+      "to": 782,
       "type": "backend"
     },
     {
       "participant": "controller",
-      "from": 794,
-      "to": 824,
+      "from": 790,
+      "to": 820,
       "type": "backend"
     },
     {
       "participant": "filter",
-      "from": 754,
-      "to": 824,
+      "from": 752,
+      "to": 820,
       "type": "security"
     }
   ],
@@ -265,11 +280,12 @@
     },
     {
       "dot": "cyan",
-      "title": "Audit cascade em UPDATE",
+      "title": "Trilha de auditoria — NA MESMA transação da escrita",
       "items": [
         "UserUpdatedEvent → mapEventNameToOperation('*.updated.v1') → UPDATE",
         "previousVersion = n-1 (extraído do evento)",
-        "AuditContextStore.run() propaga W3C traceId OTel → correlationId"
+        "AuditContextStore.run() propaga W3C traceId OTel → correlationId",
+        "O registro vai DENTRO de save(user,n-1,auditoria) — a mutação e a trilha são a mesma transação (issue #184)"
       ]
     }
   ]

@@ -20,6 +20,7 @@
 //     UserNotFound / AuditHistoryNotFound   → 404 NOT_FOUND
 //     UserDeleted / AuditArchiveNotFound    → 410 GONE
 //     EmailAlreadyInUse                     → 409 CONFLICT
+//     AuditTrailConflict                    → 409 CONFLICT
 //     ConcurrencyException                  → 412 PRECONDITION_FAILED
 //     InvalidRestore                        → 422 UNPROCESSABLE_ENTITY
 //     UserValidationException               → 400 VALIDATION_ERROR
@@ -60,6 +61,7 @@ import {
   UserNotFoundException,
   UserOwnershipViolationException,
   EmailAlreadyInUseException,
+  AuditTrailConflictException,
   ConcurrencyException,
   UserDeletedException,
   InvalidRestoreException,
@@ -253,6 +255,17 @@ export function mapExceptionToHttp(err: unknown): HttpErrorMapping {
   }
   if (err instanceof EmailAlreadyInUseException) {
     return { status: HttpStatus.CONFLICT, code: 'EMAIL_IN_USE', title: 'Email já em uso' };
+  }
+  // ⚠️ (issue #184, 2ª revisão) O conflito da TRILHA é 409, e NÃO é
+  // "email já em uso" — MEDIDO, o P2002 do `users_history` subia pelo `catch`
+  // genérico do repositório e virava `EmailAlreadyInUseException`, dizendo ao
+  // cliente que o e-mail estava ocupado quando ele estava livre.
+  if (err instanceof AuditTrailConflictException) {
+    return {
+      status: HttpStatus.CONFLICT,
+      code: 'AUDIT_TRAIL_CONFLICT',
+      title: 'Conflito na trilha de auditoria',
+    };
   }
   if (err instanceof ConcurrencyException) {
     return {

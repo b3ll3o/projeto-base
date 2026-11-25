@@ -206,13 +206,19 @@ export class UserUseCases {
     // sua própria fronteira transacional, e mexer nela é mexer no onboarding.
     // O que este PR garante é o RESTO: e o `registrosDeAuditoria` drena os
     // eventos, então o caminho COM destino também precisa gravá-los.
+    //
+    // TODO(#184): a transação de tenancy precisa GRAVAR a auditoria — o
+    // usuário e a empresa ficam commitados e a linha do histórico pode falhar
+    // DEPOIS, o que deixa um cadastro existindo sem registro na trilha (e o
+    // cliente leva 500; repetir o cadastro dá "email já em uso"). Dono: quem
+    // mexer no port de tenancy. Sem dono declarado, isto é dívida silenciosa.
     if (input.destino !== undefined) {
       for (const registro of this.registrosDeAuditoria(user)) {
         await this.auditService.record(
           {
             entityName: 'User',
             entityId: user.id().value,
-            operation: registro.operation as AuditOperation,
+            operation: registro.operation,
             previousVersion: registro.previousVersion,
             newVersion: registro.newVersion,
             snapshot: registro.snapshot,
@@ -545,11 +551,15 @@ export class UserUseCases {
         ev as unknown as { eventName: string; [k: string]: unknown },
       );
       return {
-        // ⚠️ O `cast`: o `AuditOperation` do `shared/audit` é um enum de
-        // string (nominal no TypeScript), e o port do usuário declara o mesmo
-        // conjunto de valores como união de literais — para o DOMÍNIO do
-        // usuário não depender do enum de outro BC.
-        operation: op as LinhaDeHistoricoDaEscrita['operation'],
+        // Sem `cast`: o `AuditOperation` do `shared/audit` é uma união de
+        // literais (`'INSERT' | 'UPDATE' | 'DELETE' | 'RESTORE'`), e o port
+        // do usuário declara o MESMO conjunto como união de literais. O
+        // `cast` que existia aqui afirmava o contrário ("enum de string,
+        // nominal no TypeScript") e estreitava o tipo em silêncio — uma
+        // operação nova no `shared/audit` passaria sem erro e sumiria do
+        // lado do usuário. MEDIDO: removendo os dois `cast`, o `tsc --noEmit`
+        // da api sai limpo (exit 0, sem saída).
+        operation: op,
         previousVersion,
         newVersion: user.version(),
         snapshot: toUserOutput(user) as unknown as Record<string, unknown>,
