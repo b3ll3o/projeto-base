@@ -36,7 +36,6 @@ import {
 import { listAllPermissions } from '../../../../shared/auth/permissions-catalog.js';
 import { EmailAlreadyInUseException } from '../../../users/domain/exceptions/user.exceptions.js';
 import { uriComoPapelDeRuntime } from '../../../../shared/infrastructure/prisma/papel-de-runtime.js';
-import type { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service.js';
 import { AssinaturaDeMembership } from '../../../../shared/infrastructure/prisma/assinatura-de-membership.js';
 import { HASH_REAL } from '../../../../../test/fakes/fake-password-hasher.js';
 import { UserId } from '../../../users/domain/value-objects/user-id.vo.js';
@@ -91,11 +90,15 @@ describe('PrismaTenantOnboardingRepository — entrada na empresa (Fase 5)', () 
 
   beforeAll(async () => {
     ctx = await setupTestDatabase();
-    // ⚠️ (issue #180) A assinatura é lida pela FUNÇÃO `SECURITY DEFINER`, e o
-    // cliente aqui é o de DONO do container (o dono tem `EXECUTE` na função e
-    // não é filtrado pela RLS da tabela) — a aplicação real usa o cliente de
-    // RUNTIME, que também tem `EXECUTE`.
-    assinatura = new AssinaturaDeMembership(ctx.prisma as unknown as PrismaService);
+    // ⚠️ (issue #180, 2ª revisão) A assinatura é lida pela FUNÇÃO
+    // `SECURITY DEFINER`, e o cliente é o de SISTEMA — o mesmo que a
+    // aplicação real usa (`clienteDeSistema()`, que resolve a
+    // `SYSTEM_DATABASE_URL` do ambiente).
+    //
+    // E o runtime NÃO pode ler a chave (migration
+    // `20261127000000_leitura_da_chave_fora_do_runtime`): MEDIDO, quando
+    // podia, a escalada era inteira.
+    assinatura = new AssinaturaDeMembership();
     await assinatura.onModuleInit();
     repo = new PrismaTenantOnboardingRepository(ctx.prisma, assinatura);
     memberships = new PrismaTenantMembershipRepository(ctx.prisma);

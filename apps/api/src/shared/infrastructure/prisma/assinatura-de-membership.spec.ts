@@ -17,7 +17,17 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createHmac } from 'node:crypto';
 import { AssinaturaDeMembership, corpoDaAssinatura } from './assinatura-de-membership.js';
-import type { PrismaService } from './prisma.service.js';
+import { clienteDeSistema } from './escopo.js';
+
+// ⚠️ (issue #180, 2ª revisão) A leitura da chave é pelo cliente de SISTEMA —
+// e não pelo de runtime: MEDIDO, com o runtime lendo o segredo, a escalada
+// era inteira (o runtime lia os 32 bytes, assinava um corpo e criava um
+// `owner` numa empresa alheia).
+vi.mock('./escopo.js', () => ({
+  clienteDeSistema: vi.fn(),
+}));
+
+const mockClienteDeSistema = vi.mocked(clienteDeSistema);
 
 describe('AssinaturaDeMembership (Fase 10+)', () => {
   const urlOriginal = process.env['DIRECT_DATABASE_URL'];
@@ -82,16 +92,16 @@ describe('AssinaturaDeMembership (Fase 10+)', () => {
     it('sem a chave legível o boot falha, e a mensagem diz a CAUSA', async () => {
       // ⚠️ (issue #180) A leitura NÃO depende mais do `DIRECT_DATABASE_URL`: a
       // chave vem por uma FUNÇÃO `SECURITY DEFINER`, com a credencial de
-      // RUNTIME. E o que ainda precisa falhar alto é a CHAVE ausente — uma
+      // SISTEMA. E o que ainda precisa falhar alto é a CHAVE ausente — uma
       // chave faltando adiada vira um 500 no primeiro cadastro de empresa, em
       // produção, com um stack trace que aponta para o `$queryRaw` e não para a
       // causa.
-      const prisma = {
+      mockClienteDeSistema.mockReturnValue({
         $queryRaw: vi.fn(async () => {
           throw new Error('a função ler_chave_de_assinatura não existe');
         }),
-      } as unknown as PrismaService;
-      const signer = new AssinaturaDeMembership(prisma);
+      } as unknown as ReturnType<typeof clienteDeSistema>);
+      const signer = new AssinaturaDeMembership();
       await expect(signer.onModuleInit()).rejects.toThrow(
         /chave de assinatura de membership ilegível/,
       );
@@ -99,10 +109,10 @@ describe('AssinaturaDeMembership (Fase 10+)', () => {
 
     it('a chave lida é usada para assinar (o caminho feliz, com banco de mentira)', async () => {
       const segredo = Buffer.alloc(32, 7);
-      const prisma = {
+      mockClienteDeSistema.mockReturnValue({
         $queryRaw: vi.fn(async () => [{ segredo }]),
-      } as unknown as PrismaService;
-      const signer = new AssinaturaDeMembership(prisma);
+      } as unknown as ReturnType<typeof clienteDeSistema>);
+      const signer = new AssinaturaDeMembership();
       await signer.onModuleInit();
       expect(signer.assinar('u', 't', 'gerente', null)).toBe(
         createHmac('sha256', segredo).update('1:u1:t7:gerente0:', 'utf8').digest('hex'),
@@ -114,7 +124,7 @@ describe('AssinaturaDeMembership (Fase 10+)', () => {
       // `assinar` que devolvesse string vazia pareceria funcionar até a função
       // do banco recusar, e a falha apareceria como `42501` — o mesmo sintoma de
       // assinatura errada, com outra causa embaixo.
-      const signer = new AssinaturaDeMembership({} as PrismaService);
+      const signer = new AssinaturaDeMembership();
       expect(() => signer.assinar('u', 't', 'gerente', null)).toThrow(
         /não carregada: `AssinaturaDeMembership.onModuleInit` não rodou/,
       );

@@ -28,18 +28,28 @@
 // processo que expõe a API carregava a credencial que ignora RLS, e quem
 // conseguisse ler o `env` (SSRF reflexivo, erro que imprima o env, o
 // comprometimento de qualquer dependência) tinha acesso a TODAS as empresas.
-// A função roda com o poder do dono e devolve UM segredo; o papel de runtime
-// só precisa de `EXECUTE` — e a aplicação nunca vê a senha do dono.
+// A função roda com o poder do dono e devolve UM segredo — e a aplicação nunca
+// vê a senha do dono.
+//
+// ⚠️ (issue #180, 2ª revisão) QUEM LÊ A CHAVE É O PAPEL DE SISTEMA, E O DE
+// RUNTIME NÃO PODE.
+//
+// MEDIDO: a 1ª versão deste PR lia a chave pelo cliente de RUNTIME, e a
+// migration dava `EXECUTE` da função ao runtime. Aí a escalada é INTEIRA: o
+// runtime lê o segredo (32 bytes), monta o corpo, assina com `hmac()` e
+// chama `criar_membership` — MEDIDO, a vítima ganhou `role: owner` numa
+// empresa alheia.
+//
+// E a leitura é pelo papel de SISTEMA porque a assinatura só tem valor como
+// assinatura de um corpo que a APLICAÇÃO pediu: o material que só ela tem é a
+// chave. O papel de sistema é a credencial ELEVADA da aplicação (a que o
+// bucket de sistema exige por conceito, #118), e MEDIDO: ele já insere
+// membership direto — a escalada que a assinatura impede é a do papel de
+// RUNTIME, que é o que serve as requisições.
 
-import {
-  Inject,
-  Injectable,
-  Logger,
-  type OnModuleDestroy,
-  type OnModuleInit,
-} from '@nestjs/common';
+import { Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { createHmac } from 'node:crypto';
-import { PrismaService } from './prisma.service.js';
+import { clienteDeSistema } from './escopo.js';
 
 /** Nome da chave. Tem de bater com o `INSERT` da migration `20261020000004`. */
 const NOME_DA_CHAVE = 'membership';
@@ -87,14 +97,27 @@ export class AssinaturaDeMembership implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AssinaturaDeMembership.name);
   private segredo: Buffer | undefined;
 
-  // ⚠️ (issue #180) O cliente é o de RUNTIME (`PrismaService`) — o mesmo que
-  // serve as requisições. Antes, este módulo abria um `PrismaClient` com a
-  // URI de DONO, e a credencial de superuser ficava dentro do processo.
-  // pt-BR: `@Inject(PrismaService)` é NECESSÁRIO — o param é uma CLASSE, e
-  // o `tsx` (esbuild) não emite `design:paramtypes`, então sem o token o Nest
-  // resolve `undefined` e o defeito só se manifesta em dev, no primeiro boot
-  // (o mesmo motivo do `PrismaUserRepository`).
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  // ⚠️ (issue #180, 2ª revisão) O cliente é o de SISTEMA
+  // (`clienteDeSistema()`), e NÃO o de runtime.
+  //
+  // MEDIDO: a 1ª versão deste PR lia a chave pelo `PrismaService` (o cliente
+  // de RUNTIME), e a migration dava `EXECUTE` da função de leitura ao
+  // runtime. Aí a escalada é inteira: o runtime lê o segredo (32 bytes),
+  // assina um corpo com `hmac()` e chama `criar_membership` — MEDIDO, a
+  // vítima ganhou `role: owner` numa empresa alheia.
+  //
+  // A assinatura é a barreira que impede o runtime de escrever membership
+  // onde não pode (a RLS filtra a escrita direta — MEDIDO, `42501`), e por
+  // isso a chave tem de ficar FORA do alcance do runtime. O papel de SISTEMA
+  // é a credencial elevada da APLICAÇÃO (a que o bucket de sistema exige por
+  // conceito, #118), e ela já está no ambiente dela.
+  //
+  // pt-BR: SEM CONSTRUTOR, e sem `PrismaService` — o cliente vem do
+  // AMBIENTE (`clienteDeSistema()` resolve a `SYSTEM_DATABASE_URL`), e é o
+  // mesmo padrão do `PrismaLoginLockoutRepository`. Injetar o `PrismaService`
+  // (o cliente de RUNTIME) seria ruído que sugere o oposto do que o código
+  // faz.
+  constructor() {}
 
   /**
    * Falha ALTO e no boot, nunca no primeiro onboarding.
@@ -106,12 +129,17 @@ export class AssinaturaDeMembership implements OnModuleInit, OnModuleDestroy {
    */
   async onModuleInit(): Promise<void> {
     // ⚠️ (issue #180) A leitura vai pela FUNÇÃO `SECURITY DEFINER`, com a
-    // credencial de RUNTIME — e NÃO por uma conexão de DONO. A URI de dono
-    // (`DIRECT_DATABASE_URL`) não é lida aqui, nem em nenhum outro ponto do
-    // processo: ela é do CLI do Prisma (`migrate`), e o `compose` a remove do
-    // ambiente do processo Node antes do `exec` (ver o ENTRYPOINT da imagem).
+    // credencial de SISTEMA — e NÃO por uma conexão de DONO nem pelo cliente
+    // de runtime. A URI de dono (`DIRECT_DATABASE_URL`) não é lida aqui, nem
+    // em nenhum outro ponto do processo: ela é do CLI do Prisma (`migrate`),
+    // e o `compose` a remove do ambiente do processo Node antes do `exec`
+    // (ver o ENTRYPOINT da imagem).
+    //
+    // E o runtime NÃO pode ler a chave (migration
+    // `20261127000000_leitura_da_chave_fora_do_runtime`): MEDIDO, quando
+    // podia, a escalada era inteira.
     try {
-      const linhas = await this.prisma.$queryRaw<Array<{ segredo: Buffer }>>`
+      const linhas = await clienteDeSistema().$queryRaw<Array<{ segredo: Buffer }>>`
         SELECT ler_chave_de_assinatura(${NOME_DA_CHAVE}::text) AS segredo
       `;
       const segredo = linhas[0]?.segredo;
