@@ -192,8 +192,9 @@ R: `.agents/` é vendor-neutral — funciona com qualquer IA (Claude Code, Curso
 | `1.32.0` | **Bump de metadata** — sincronização de versão com STACK.md e MONOREPO.md (1.31.0 → 1.32.0) e o `engines.node` da raiz (e o dos apps) passou a declarar o range que a árvore aceita (`^22.22.2 \|\| ^24.15.0 \|\| >=26.0.0`), que o `.npmrc` do repo exige por causa do `engine-strict=true`. Sem mudança no fluxo de integração: nenhuma dependência nova, nenhum binário novo, nenhum passo novo no checklist — o app derivado copia o `engines.node` da raiz junto com o `packageManager`. |
 | `1.33.0` | **Bump de metadata** — sincronização de versão com STACK.md e MONOREPO.md (1.32.0 → 1.33.0). Sem mudança no fluxo de integração: nenhuma dependência nova, nenhum binário novo, nenhum passo novo no checklist. O app derivado herda o schema do Prisma que casa com o banco e a migration idempotente — os dois corrigidos pela issue #183. |
 | `1.34.0` | **Bump de metadata** — sincronização de versão com STACK.md e MONOREPO.md (1.32.0 → 1.34.0). Sem mudança no fluxo de integração: nenhuma dependência nova, nenhum binário novo, nenhum passo novo no checklist. O app derivado herda a validação de Zod no boundary de admin de perfil e o `PATCH` que preserva a descrição — os dois corrigidos pela issue #185. |
+| `1.35.0` | **Bump de metadata** — sincronização de versão com STACK.md e MONOREPO.md (1.32.0 → 1.35.0). Sem mudança no fluxo de integração: nenhuma dependência nova, nenhum binário novo, nenhum passo novo no checklist. O app derivado herda o limite do login compondo com o teto global e o lockout por conta — os dois corrigidos pela issue #182. |
 
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão do documento:** 1.34.0
+**Versão do documento:** 1.35.0

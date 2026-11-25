@@ -47,6 +47,8 @@ import { Argon2PasswordHasher } from './infrastructure/security/argon2-password-
 import { PrismaRefreshTokenRepository } from './infrastructure/persistence/prisma-refresh-token.repository.js';
 import { TOKEN_ISSUER_PORT } from './domain/ports/token-issuer.port.js';
 import { REFRESH_TOKEN_REPOSITORY_PORT } from './domain/ports/refresh-token-repository.port.js';
+import { LOGIN_LOCKOUT_PORT } from './domain/ports/login-lockout.port.js';
+import { PrismaLoginLockoutRepository } from './infrastructure/persistence/prisma-login-lockout.repository.js';
 import { PASSWORD_HASHER_PORT } from '../users/domain/ports/password-hasher.port.js';
 import { PrismaPersistenceModule } from '../users/infrastructure/prisma-persistence.module.js';
 import { PrismaModule } from '../../shared/infrastructure/prisma/prisma.module.js';
@@ -91,6 +93,10 @@ export const AUTH_GUARD_SLOT = JwtAuthGuard;
     // `PrismaPersistenceModule`, que é do BC `users`) — é o mesmo padrão do
     // `feature-flags`: o adapter é do BC que o consome.
     { provide: REFRESH_TOKEN_REPOSITORY_PORT, useClass: PrismaRefreshTokenRepository },
+    // ⚠️ (#182) O CONTADOR de tentativas de login por conta. O binding mora
+    // AQUI pelo mesmo motivo do registro de refresh tokens: o adapter é do
+    // BC que o consome.
+    { provide: LOGIN_LOCKOUT_PORT, useClass: PrismaLoginLockoutRepository },
     { provide: AUTH_GUARD_SLOT, useClass: JwtAuthGuard },
     // pt-BR (#97): DONO do cache. O `JwtAuthGuard` (que LÊ) mora aqui e as
     // use cases de ProfilesModule (que INVALIDAM) precisam ser a MESMA
