@@ -122,8 +122,20 @@ pnpm exec prisma migrate diff \
 
 ```bash
 # Para cada model, checar createdAt/updatedAt/deletedAt [gate: run — confere os audit fields de cada model]
+#
+# ⚠️ A ISENÇÃO é a MESMA lista do `stack-code-reviewer`
+# (`tooling/scripts/stack-code-reviewer.ts` → `MODELS_SEM_CICLO_DE_VIDA`): um
+# model SEM ciclo de vida (o que muda na linha não é uma transição) não tem
+# `createdAt`/`updatedAt`/`version` — e um campo de auditoria nele seria um
+# campo que MENTE. A lista está escrita nos DOIS lugares de propósito: este
+# passo é um script de shell (não importa TypeScript), e o do reviewer é o
+# instrumento que reprova no pre-commit.
+MODELOS_SEM_CICLO_DE_VIDA='ChaveDeAssinatura RefreshToken IdempotencyKey TentativaDeLogin'
 grep -E "^model " apps/api/prisma/schema.prisma | while read m; do
   model=$(echo "$m" | awk '{print $2}')
+  case " $MODELOS_SEM_CICLO_DE_VIDA " in
+    *" $model "*) echo "=== $model === (sem ciclo de vida — isento)"; continue ;;
+  esac
   echo "=== $model ==="
   grep -A 30 "^model $model " apps/api/prisma/schema.prisma \
     | grep -E "(createdAt|updatedAt|deletedAt)" \

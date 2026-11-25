@@ -412,3 +412,33 @@ model IdempotencyKey {
   @@index([expiresAt])
   @@map("idempotency_keys")
 }
+
+// pt-BR (issue #182, sec-N1-002): o CONTADOR de tentativas de login por
+// CONTA. O limite que existia era por `(IP, e-mail)` — o balde do
+// `@Throttle` — e o número do NIST (5 tentativas por conta) nunca se
+// aplicava a uma conta só: 10 IPs distintos × 5 tentativas contra a MESMA
+// conta davam 50 de 50 permitidas.
+//
+// A chave é o e-mail NORMALIZADO (trim + toLowerCase — a mesma normalização
+// do cadastro e do login), e a janela é de 15 minutos: a partir de 5 falhas
+// a conta é recusada até a janela expirar, e um login bem-sucedido ZERA o
+// contador.
+//
+// ⚠️ SEM RLS, de propósito: o predicado de escopo do banco
+// (`no_escopo_atual`) compara a coluna com a EMPRESA (`app.tenant_id`), e
+// aqui a coluna é a CONTA. Não há policy que case as duas — e uma policy
+// que não filtra nada é pior do que nenhuma. O alcance real é o `REVOKE`
+// da migration: só a credencial de SISTEMA e o dono chegam aqui.
+model TentativaDeLogin {
+  // O e-mail NORMALIZADO da conta tentada.
+  email String @id
+  // O contador dentro da janela.
+  tentativas Int @default(0)
+  // O começo da janela: quando expira, o contador zera.
+  janelaIniciadaEm DateTime @default(now()) @map("janela_iniciada_em") @db.Timestamptz(6)
+  // O instante da última falha.
+  ultimaTentativaEm DateTime @default(now()) @map("ultima_tentativa_em") @db.Timestamptz(6)
+
+  @@index([janelaIniciadaEm])
+  @@map("login_tentativas")
+}

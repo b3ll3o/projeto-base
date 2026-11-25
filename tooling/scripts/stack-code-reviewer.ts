@@ -129,8 +129,19 @@ function checkDomain(file: string, content: string): Finding[] {
  *   muda na linha é a RESPOSTA guardada, e a transição (reservada → com
  *   resposta) acontece UMA vez. `version` seria um contador que ninguém lê,
  *   e `updatedAt` duplicaria o `created_at` da reserva.
+ * - `TentativaDeLogin` (#182 — lockout por conta): a linha é um CONTADOR
+ *   dentro de uma janela, e o que muda nela é o próprio `tentativas` — o
+ *   número que ela guarda. `version` seria um contador que ninguém lê (o
+ *   contador É a versão), e `createdAt`/`updatedAt` duplicariam
+ *   `janela_iniciada_em`/`ultima_tentativa_em`, que são as duas instantes
+ *   que a janela precisa.
  */
-const MODELS_SEM_CICLO_DE_VIDA = new Set(['ChaveDeAssinatura', 'RefreshToken', 'IdempotencyKey']);
+const MODELS_SEM_CICLO_DE_VIDA = new Set([
+  'ChaveDeAssinatura',
+  'RefreshToken',
+  'IdempotencyKey',
+  'TentativaDeLogin',
+]);
 
 function checkPrisma(file: string, content: string): Finding[] {
   const findings: Finding[] = [];
