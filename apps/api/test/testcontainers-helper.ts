@@ -244,6 +244,14 @@ export async function cleanDatabase(prisma: PrismaClient): Promise<void> {
   // nova. MEDIDO: as asserções do spec de integração passavam com a linha
   // sobrando, porque nenhuma delas media a reserva em si.
   await prisma.idempotencyKey.deleteMany({});
+  // ⚠️ (issue #182) O CONTADOR de tentativas de login. A ausência desta linha
+  // é SILENCIOSA: o contador sobrevive à limpeza, e o spec seguinte que usar
+  // o mesmo e-mail encontra a conta TRAVADA — e o spec falha como "login
+  // recusado", que parece defeito do código de login e é herança do spec
+  // anterior. É o mesmo motivo das linhas acima: cada tabela que guarda
+  // estado precisa ser limpa, e a ausência do `deleteMany` é o que faz o
+  // estado vazar de um spec para o outro.
+  await prisma.tentativaDeLogin.deleteMany({});
   await prisma.userArchive.deleteMany({});
   await prisma.userHistory.deleteMany({});
   await prisma.user.deleteMany({});
