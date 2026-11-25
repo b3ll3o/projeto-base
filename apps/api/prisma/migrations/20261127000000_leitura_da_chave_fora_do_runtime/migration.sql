@@ -1,0 +1,83 @@
+-- Migration: a leitura da chave de assinatura SAI do alcance do papel de
+-- RUNTIME (issue #180, 2ª revisão do PR #193).
+--
+-- O QUE ELA FECHA
+--
+-- A 1ª versão do PR #193 trocou "a aplicação lê a chave com a conexão de DONO"
+-- por "a aplicação lê a chave por uma FUNÇÃO `SECURITY DEFINER`". A troca
+-- tirava a credencial de superuser do processo — e MEDIAVA, no mesmo
+-- movimento, que a função dava ao papel de RUNTIME a LEITURA DIRETA do
+-- segredo.
+--
+-- MEDIDO (o furo, ao vivo, contra o Postgres do testcontainers):
+--
+--   1. a sessão `app_runtime` chamou `ler_chave_de_assinatura('membership')`
+--      e LEU o segredo (32 bytes);
+--   2. com o segredo em mãos, montou o corpo com `corpo_de_membership` (que
+--      tem `EXECUTE` liberado ao runtime) e assinou com `hmac()` (pgcrypto);
+--   3. chamou `criar_membership(vitima, empresa_alheia, 'owner', NULL, <assinatura>)`;
+--   4. a linha foi gravada — a vítima ganhou `role: owner` numa empresa que
+--      não era dela.
+--
+-- ⚠️ POR QUE ISSO É A ESCALADA QUE O `criar_membership` EXISTE PARA IMPEDIR
+--
+-- MEDIDO: o `criar_membership` é `SECURITY DEFINER` (grava com o poder do
+-- dono), e é por isso que a ASSINATURA existe — ela é o que separa "chamei" de
+-- "a aplicação me pediu". Sem assinatura, MEDIDO na 1ª versão da migration
+-- `20261020000004`: chamar a função com o `user_id` alheio escalava (o
+-- `SELECT name FROM users` ia de `[alice]` para `[alice, bruno]`).
+--
+-- E MEDIDO agora: com o `app_runtime` lendo o segredo, a escalada volta
+-- inteira — com a assinatura CORRETA, que é o que a tornava impossível.
+--
+-- ⚠️ A BARREIRA RESTA DE PÉ: A RLS FILTRA
+--
+-- MEDIDO: a sessão `app_runtime` que ESCOLHE o GUC (`set_config('app.tenant_id',
+-- <empresa_alheia>, true)`) NÃO enxerga nada da empresa alheia (`SELECT name
+-- FROM users` → `[]`). O GUC é escolhível — e a RLS filtra assim mesmo. A
+-- assinatura continua sendo a barreira da escrita, e é por isso que a chave
+-- tem de ficar INALCANÇÁVEL ao papel de runtime.
+--
+-- ⚠️ POR QUE ASSINAR NO BANCO NÃO RESOLVE
+--
+-- A saídaóbvia — "a assinatura passa a ser feita por uma função
+-- `assinar_membership(...)`, e o runtime pede a assinatura em vez de ler o
+-- segredo" — é a MESMA escalada com outro nome: a função devolveria o HMAC
+-- de QUALQUER corpo que o runtime pedisse, e o corpo é
+-- `(user_id, tenant_id, role, profile_id)` — escolhido por quem pede. O
+-- runtime pediria a assinatura de `(vitima, empresa_alheia, 'owner')` e
+-- chamaria o `criar_membership` com ela.
+--
+-- A assinatura só tem valor como assinatura de um corpo que a APLICAÇÃO
+-- pediu. E o material que só a aplicação tem é a chave — que é exatamente o
+-- que esta migration tira do alcance do runtime.
+--
+-- O QUE ESTA MIGRATION FAZ
+--
+-- O `GRANT EXECUTE` que a migration anterior deu ao papel de runtime na
+-- função que LÊ o segredo é REVOGADO. A função continua existindo — e
+-- continua sendo do DONO (o papel que roda a migration), que não é filtrado
+-- pela RLS da tabela — mas o runtime não pode mais chamá-la.
+
+-- ⚠️ A APLICAÇÃO CONTINUA LENDO A CHAVE — PELO PAPEL DE SISTEMA
+--
+-- A 1ª versão do PR #193 leu a chave com o `PrismaService` (o cliente de
+-- RUNTIME). Com o `REVOKE` abaixo, essa leitura passa a dar `42501` — e a
+-- aplicação lê com o cliente de SISTEMA, que é a credencial que ela JÁ tem
+-- no ambiente (a `SYSTEM_DATABASE_URL`, que o bucket de sistema exige por
+-- CONCEITO, #118).
+--
+-- ⚠️ POR QUE ISSO NÃO É UMA ESCALADA NOVO
+--
+-- MEDIDO: a sessão `app_system` JÁ insere membership direto, sem assinatura
+-- (`INSERT INTO tenant_memberships` com o escopo de sistema → gravado, com
+-- `role: owner`). O papel de sistema é a credencial ELEVADA da aplicação — a
+-- que o bucket de sistema exige — e ela éSUA por desenho. A escalada que a
+-- assinatura impede é a do papel de RUNTIME, que é o que serve as requisições
+-- (é o que uma injeção de SQL alcança), e não o da credencial que a
+-- aplicação já carrega.
+--
+-- O `app_system` precisa de `EXECUTE` na função, e precisa de `USAGE` no
+-- schema `public` — os dois já são dele (migration `20261027000001`).
+
+REVOKE ALL ON FUNCTION ler_chave_de_assinatura(TEXT) FROM app_runtime;

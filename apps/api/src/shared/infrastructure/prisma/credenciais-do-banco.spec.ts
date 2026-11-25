@@ -139,6 +139,43 @@ describe('verificarCredenciaisDoBanco() (#118)', () => {
     ).toBe(true);
   });
 
+  // ── a credencial de DONO (#180) ───────────────────────────────────────────
+  it('RECUSA a URI de DONO no ambiente do processo (fora de `development`)', () => {
+    // ⚠️ (issue #180) A URI de dono (superuser) ignora RLS por definição, e o
+    // processo que expõe a API não pode carregá-la: quem lesse o `env` (SSRF
+    // reflexivo, erro que imprima o env, o comprometimento de uma dependência)
+    // teria acesso a TODAS as empresas.
+    const veredito = verificarCredenciaisDoBanco({
+      NODE_ENV: 'production',
+      DATABASE_URL: RUNTIME_BOM,
+      SYSTEM_DATABASE_URL: SISTEMA_BOM,
+      DIRECT_DATABASE_URL: 'postgresql://projeto:senha-do-dono@postgres:5432/projeto_base',
+    });
+    expect(veredito.ok).toBe(false);
+    expect(veredito.ok === false ? veredito.motivo : '').toContain('DIRECT_DATABASE_URL');
+  });
+
+  it('a mensagem da recusa da URI de DONO NÃO embute a senha dela', () => {
+    const veredito = verificarCredenciaisDoBanco({
+      NODE_ENV: 'production',
+      DATABASE_URL: RUNTIME_BOM,
+      SYSTEM_DATABASE_URL: SISTEMA_BOM,
+      DIRECT_DATABASE_URL: 'postgresql://projeto:senha-secreta-do-dono@postgres:5432/x',
+    });
+    expect(veredito.ok === false ? veredito.motivo : '').not.toContain('senha-secreta-do-dono');
+  });
+
+  it('ACEITA a URI de DONO em `development` (é o que o CLI do Prisma usa localmente)', () => {
+    expect(
+      verificarCredenciaisDoBanco({
+        NODE_ENV: 'development',
+        DATABASE_URL: RUNTIME_BOM,
+        SYSTEM_DATABASE_URL: SISTEMA_BOM,
+        DIRECT_DATABASE_URL: 'postgresql://projeto:senha@localhost:5432/x',
+      }).ok,
+    ).toBe(true);
+  });
+
   it('ACEITA uma URI sem senha (o papel confia em peer/cert)', () => {
     // Sem senha não há senha exposta: e o banco que decide. A URI sem
     // credencial é válida em alguns deploys.
