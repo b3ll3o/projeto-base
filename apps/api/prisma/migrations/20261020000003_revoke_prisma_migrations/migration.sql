@@ -30,8 +30,61 @@
 -- tabela, e o dono não é afetado por `REVOKE` de um papel. Se algum dia o papel
 -- precisar de leitura para diagnóstico, o caminho é o dono — que já tem.
 --
--- ⚠️ Este `REVOKE` é idempotente e não quebra a subida: a migration roda pelo
--- dono, e `docker compose up` continua executando `prisma migrate deploy`
+-- ⚠️ Este `REVOKE` não quebra a subida: a migration roda pelo dono, e
+-- `docker compose up` continua executando `prisma migrate deploy`
 -- (apps/api/Dockerfile, ENTRYPOINT) com `DIRECT_DATABASE_URL`.
+--
+-- ⚠️ (issue #183, prisma-N1-001) O `REVOKE` é guardado por-existing, porque
+-- o statement cru NÃO é idempotente: `REVOKE ALL ON _prisma_migrations` numa
+-- base onde a tabela não existe levanta
+-- `ERROR: relation "_prisma_migrations" does not exist` (MEDIDO no Postgres 16).
+-- E a base onde a tabela NÃO existe é justamente o **shadow database** que o
+-- `prisma migrate dev` cria para replayar as migrations antes de compará-las
+-- com o schema — lá o Prisma não cria a tabela `_prisma_migrations` (ela é
+-- do banco ALVO). Consequência medida: `prisma migrate dev` morria com
+-- P3006/P1014 ("Migration `20261020000003_revoke_prisma_migrations` failed to
+-- apply cleanly to the shadow database"), e o caminho oficial de criação de
+-- migration ficava indisponível para todo desenvolvedor.
+--
+-- O guard NÃO afrouxa a garantia: onde a tabela existe (o banco de produção e
+-- o de desenvolvimento), o `REVOKE` efetivo continua valendo — o bloco só
+-- pula o statement quando não há o que revogar.
+--
+-- ⚠️ (MEDIDO 2026-11-25) ESTE ARQUIVO FOI EDITADO DEPOIS DE APLICADO, e
+-- isso muda o CHECKSUM que o Prisma gravou em `_prisma_migrations`. Efeito
+-- medido, por ambiente:
+--
+--   - `prisma migrate deploy` (o que a imagem de produção roda): TOLERA — sai
+--     0, e a produção não quebra.
+--   - `prisma migrate status`: calado ("up to date") — o desvio não aparece.
+--   - `prisma migrate dev` (o que o DESENVOLVEDOR roda): RECUSA — "The
+--     migration `20261020000003_revoke_prisma_migrations` was modified after
+--     it was applied … All data will be lost." (exit 130).
+--
+-- A receita (MEDIDA) para a base local que já aplicou a versão antiga:
+--
+--   UPDATE _prisma_migrations
+--      SET checksum = '<sha256 do arquivo atual>'
+--    WHERE migration_name = '20261020000003_revoke_prisma_migrations';
+--
+-- (o sha256 é o do arquivo, e `sha256sum` o mede) — depois disso o
+-- `migrate dev` roda limpo. O alternative é `prisma migrate reset` (ou
+-- `docker compose down -v`), que APAGA a base.
+--
+-- ⚠️ O `migrate resolve --applied` NÃO serve (P3008: "already recorded as
+-- applied") nem o `--rolled-back` (P3012: não está em estado de falha) — o
+-- Prisma não tem o comando para "reconciliar o checksum".
 
-REVOKE ALL ON _prisma_migrations FROM app_runtime;
+-- ⚠️ O predicado é o `to_regclass`, e não um `SELECT ... FROM pg_class`:
+-- o `to_regclass` resolve o nome EXATAMENTE como o statement o resolve (o
+-- `search_path` decide), e devolve NULL quando não há nada com esse nome
+-- alcançável. MEDIDO 2026-11-25: com a `_prisma_migrations` de OUTRO schema
+-- (e fora do `search_path`), o `pg_class` a encontra, o guard dispara, e o
+-- `REVOKE` — que resolve pelo `search_path` — estoura
+-- `ERROR: relation "_prisma_migrations" does not exist`: a migration falhava
+-- com o MESMO erro que ela existe para remover.
+DO $$ BEGIN
+  IF to_regclass('_prisma_migrations') IS NOT NULL THEN
+    EXECUTE 'REVOKE ALL ON _prisma_migrations FROM app_runtime';
+  END IF;
+END $$;

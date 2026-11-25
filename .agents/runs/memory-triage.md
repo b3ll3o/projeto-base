@@ -304,6 +304,7 @@ o par de números de `check-memory-crystallization.ts` e de `learning-observatio
 | `reviewer-morreu-por-cota-retomar` | `pendente` | — | — |
 | `rodape-com-contagem-exige-bump` | `gate` | `.tooling/scripts/ci/check-version-footers.ts` | — |
 | `gate` | **1** — `rodape-com-contagem-exige-bump` (a 3ª regra do gate: o conteúdo do footer mudou desde a tag e a versão não) |
+| `z-array-em-apps-api-src-reprova-a-excecao-do-zod` | `pendente` | — | — |
 
 **O `1` em `gate` é o achado, não uma omissão.** A regra do rodapé — "contagem
 re-medida sem bump faz um rótulo nomear dois conteúdos" — mede-se por
