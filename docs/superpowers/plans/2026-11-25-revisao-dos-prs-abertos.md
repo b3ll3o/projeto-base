@@ -1,9 +1,9 @@
 ---
 name: plano-revisao-dos-prs-abertos
 description: "A 2ª rodada de revisão dos PRs abertos — 4 PRs (#192 a #195), 3 revisores em paralelo (Prisma, HTTP e segurança) e 1 achado P0 medido ao vivo: a função `SECURITY DEFINER` que lê a chave de assinatura dava ao papel de RUNTIME a leitura direta do segredo, e com ele a escalada inteira (a vítima ganhou `owner` numa empresa alheia). O plano fecha esse furo e mais 7 achados — o `P2002` do `users_history` traduzido como 'email já em uso', o duplo em memória que não era atômico, e 5 IRs de fluxo que nomeavam um método removido."
-version: 1.0.0
+version: 1.1.0
 updated: 2026-11-25
-status: em-execucao
+status: executado
 ---
 
 # Plano — a 2ª revisão dos PRs abertos (#193, #194, #195)
@@ -31,10 +31,10 @@ O que mudou de verdade:
 | Revisão | a do próprio PR, feita na abertura | 3 revisores **em paralelo**, um por PR, com lens do stack |
 | Achado mais grave | nenhum P0 | **1 P0 medido ao vivo** |
 
-E o `main` andou: `v1.32.0` → `v1.36.0` (os PRs #189 a #192 entraram). Isso
+E o `main` andou: `v1.32.0` → `v1.38.0` (os PRs #189 a #194 entraram). Isso
 muda o que os PRs restantes precisam carregar — o §8 do
 [`plano-issues-abertas-178-187.md`](./2026-11-25-issues-abertas-178-187.md)
-registra a reconcileiação.
+registra a reconcileciação.
 
 ## 1. Os worktrees
 
@@ -220,6 +220,9 @@ os dois `cast`, o `tsc --noEmit` da api sai limpo (exit 0, sem saída).
 ## 6. A ordem de merge
 
 **#193 (1.37.0) → #194 (1.38.0) → #195 (1.39.0).**
+
+MEDIDO em 2026-11-25: os PRs **#193 e #194 já entraram** no `main` (`00b7e80a` e
+`472ee463`); o único PR aberto da série é o **#195**, este.
 
 ⚠️ E o motivo não é só o do rodapé: os PRs #189 a #192 já consumiram o
 `1.33.0` a `1.36.0`, e o `docs/MONOREPO.md` estava no **teto de 300 linhas** do

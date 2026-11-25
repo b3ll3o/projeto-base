@@ -134,6 +134,11 @@ Database schema is up to date!
 
 ## O que o snapshot já decide
 
+> **Estado em 2026-11-25, depois do merge:** os PRs #189 a #194 entraram e as
+> **10 issues (#178–#187) estão fechadas**. O `status: open` dos gaps abaixo é o
+> de 2026-11-24 (a data do snapshot) — o fecho está no §8 do
+> [`plano-issues-abertas-178-187.md`](../../docs/superpowers/plans/2026-11-25-issues-abertas-178-187.md).
+
 - **#181 e #186 não são trabalho**: as duas descrevem estados que o `main` já superou
   (o `effect` já está em 3.22.1 com o gate verde; a branch que colidia com o 1.26.0 não
   existe mais). O plano as trata como encerramento, não como correção.
