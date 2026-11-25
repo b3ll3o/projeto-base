@@ -30,8 +30,28 @@
 -- tabela, e o dono não é afetado por `REVOKE` de um papel. Se algum dia o papel
 -- precisar de leitura para diagnóstico, o caminho é o dono — que já tem.
 --
--- ⚠️ Este `REVOKE` é idempotente e não quebra a subida: a migration roda pelo
--- dono, e `docker compose up` continua executando `prisma migrate deploy`
+-- ⚠️ Este `REVOKE` não quebra a subida: a migration roda pelo dono, e
+-- `docker compose up` continua executando `prisma migrate deploy`
 -- (apps/api/Dockerfile, ENTRYPOINT) com `DIRECT_DATABASE_URL`.
+--
+-- ⚠️ (issue #183, prisma-N1-001) O `REVOKE` é guardado por-existing, porque
+-- o statement cru NÃO é idempotente: `REVOKE ALL ON _prisma_migrations` numa
+-- base onde a tabela não existe levanta
+-- `ERROR: relation "_prisma_migrations" does not exist` (MEDIDO no Postgres 16).
+-- E a base onde a tabela NÃO existe é justamente o **shadow database** que o
+-- `prisma migrate dev` cria para replayar as migrations antes de compará-las
+-- com o schema — lá o Prisma não cria a tabela `_prisma_migrations` (ela é
+-- do banco ALVO). Consequência medida: `prisma migrate dev` morria com
+-- P3006/P1014 ("Migration `20261020000003_revoke_prisma_migrations` failed to
+-- apply cleanly to the shadow database"), e o caminho oficial de criação de
+-- migration ficava indisponível para todo desenvolvedor.
+--
+-- O guard NÃO afrouxa a garantia: onde a tabela existe (o banco de produção e
+-- o de desenvolvimento), o `REVOKE` efetivo continua valendo — o bloco só
+-- pula o statement quando não há o que revogar.
 
-REVOKE ALL ON _prisma_migrations FROM app_runtime;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_class WHERE relname = '_prisma_migrations') THEN
+    EXECUTE 'REVOKE ALL ON _prisma_migrations FROM app_runtime';
+  END IF;
+END $$;
