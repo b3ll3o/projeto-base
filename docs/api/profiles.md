@@ -3,19 +3,17 @@
 > Documento de referência da API HTTP do **Bounded Context `profiles`** (RBAC:
 > perfis, permissões e a atribuição de perfil a um usuário).
 > A fonte do contrato são os decorators `@Api*` dos controllers **e** o
-> `apps/api/openapi.json`, que é **VERSIONADO** (`git ls-files
-> apps/api/openapi.json` → imprime o caminho; `git check-ignore -v
-> apps/api/openapi.json` → `exit=1`, ou seja, nenhuma regra do `.gitignore` o
-> pega). O gate `check-openapi-contract` compara a spec versionada com a gerada
-> pelo código — regenerar: `pnpm --filter @projeto/api openapi:export`.
-> ADR-0001 (DDD + Hexagonal, a estrutura `domain/application/infrastructure` que
-> este BC segue): [`../adr/0001-arquitetura-ddd-hexagonal-auditoria.md`](../adr/0001-arquitetura-ddd-hexagonal-auditoria.md).
-> Medido em 2026-10-29: os 10 endpoints deste BC conferem com
-> `apps/api/openapi.json`. Contagem por
-> `grep -hoE "@(Get|Post|Patch|Put|Delete)\(" apps/api/src/modules/profiles/infrastructure/http/*.controller.ts | wc -l`
-> → `10`. O contrato inteiro tem 24 paths e 30 operações
-> (`node -e "const d=require('./apps/api/openapi.json');console.log(Object.keys(d.paths).length)"` → `24`;
-> `node -e "const d=require('./apps/api/openapi.json');console.log(Object.values(d.paths).flatMap(p=>Object.keys(p).filter(k=>['get','post','put','patch','delete'].includes(k))).length)"` → `30`),
+> `apps/api/openapi.json`, que é **VERSIONADO** (`git check-ignore -v` nele →
+> `exit=1`: nenhuma regra do `.gitignore` o pega). O gate
+> `check-openapi-contract` compara a spec versionada com a gerada — regenerar:
+> `pnpm --filter @projeto/api openapi:export`.
+> ADR-0001 (DDD + Hexagonal): [`../adr/0001-arquitetura-ddd-hexagonal-auditoria.md`](../adr/0001-arquitetura-ddd-hexagonal-auditoria.md).
+> Medido em 2026-10-29: este BC tem **10** endpoints
+> (`grep -hoE "@(Get|Post|Patch|Put|Delete)\(" apps/api/src/modules/profiles/infrastructure/http/*.controller.ts | wc -l`
+> → `10`) e o contrato inteiro tem **24 paths**
+> (`node -e "const d=require('./apps/api/openapi.json');console.log(Object.keys(d.paths).length)"` → `24`)
+> e **30 operações**
+> (`node -e "const d=require('./apps/api/openapi.json');console.log(Object.values(d.paths).flatMap(p=>Object.keys(p).filter(k=>['get','post','put','patch','delete'].includes(k))).length)"` → `30`),
 > das quais 18 são de `tenancy`, `profiles`, `feature-flags` e `health`.
 
 ## §1. Visão geral
@@ -28,16 +26,15 @@
   (`@ApiBearerAuth()` na **classe** dos 4 controllers — nenhuma delas tem rota
   pública).
 - **Header de empresa**: `X-Tenant-Id` é **opcional** e muda o escopo de 9 das 10
-  rotas — a exceção é `GET /admin/permissions`, que devolve o catálogo **global**
-  de permissões (`listarPermissoes()` não recebe o ator). Ausente → bucket
-  GLOBAL (`tenantId === null`), onde mora o perfil de sistema e o único
+  rotas — a exceção é `GET /admin/permissions` (catálogo **global**). Ausente →
+  bucket GLOBAL (`tenantId === null`), onde mora o perfil de sistema e o único
   `isAdmin`; malformado → `400 INVALID_TENANT`; presente e a conta não pertence
   à empresa → `403 TENANT_MEMBERSHIP_REQUIRED`.
 - **Content-Type**: `application/json; charset=utf-8` (request e response).
-- **Erros**: RFC 7807 (Problem Details) — `type`, `title`, `status`, `detail`,
-  `instance`, `code`, `traceId` e `errors[]` (`global-exception.filter.ts:59-68`).
-- **Guards**: `JwtAuthGuard` na classe dos 4 controllers; `PermissionsGuard`
-  nos 3 controllers `admin.*` (e **não** no `me-profile`).
+- **Erros**: RFC 7807 — `type`, `title`, `status`, `detail`, `instance`, `code`,
+  `traceId` e `errors[]` (`global-exception.filter.ts:59-68`).
+- **Guards**: `JwtAuthGuard` na classe dos 4 controllers; `PermissionsGuard` nos
+  3 controllers `admin.*` (e **não** no `me-profile`).
 
 ## §2. Endpoints
 
@@ -54,10 +51,9 @@
 | 9  | `PUT`    | `/api/v1/admin/users/{id}/profile`          | ✅   | `200`                   |
 | 10 | `GET`    | `/api/v1/me/profile`                        | ✅   | `200`                   |
 
-⚠️ Os códigos da tabela são os **declarados** no `openapi.json`. Os 4 controllers deste
-BC não declaram `@ApiResponse`, então o contrato só traz o default do Nest por
-método — e os erros de domínio (403, 404, 409) **não aparecem** na spec. A lista
-real está em §3.9.
+⚠️ Os códigos da tabela são os **declarados** no `openapi.json`. Os 4 controllers
+deste BC não declaram `@ApiResponse` — os erros de domínio (403, 404, 409)
+**não aparecem** na spec. A lista real está em §3.9.
 
 ## §3. Payloads
 
@@ -96,6 +92,13 @@ Response `201` (`ProfileDetail` — o summary **mais** `permissions`, `createdAt
   "createdAt": "2026-10-29T12:00:00.000Z", "updatedAt": "…", "version": 1 }
 ```
 
+⚠️ **O corpo é validado por Zod na fronteira** (`profiles.schemas.ts`) — o que
+impede o `500` que a rota devolvia antes (issue #185): um `initialPermissions`
+que não é lista de textos era iterado pelo agregado como valor cru (TypeError),
+e uma string como lista de CARACTERES. Agora: `initialPermissions` fora de
+lista, ou `slug`/`name` fora do VO (com a **mensagem do VO**) → `400`; e mais
+chaves **distintas** que o catálogo → `400` (o catálogo é o dono do número).
+
 ⚠️ **`isAdmin` e `isSystem` NÃO são aceitos no body.** O controller não os
 repassa e o tipo de entrada `CreateProfileInput` não os tem — a garantia é do
 **tipo**, não do controller (um segundo controller ou um endpoint novo
@@ -116,7 +119,11 @@ em que está agindo).
 
 - `GET` → `200` com `ProfileDetail`.
 - `PATCH` — body: `{ "name": "Novo nome", "description": "opcional" }`. `name` é
-  obrigatório; `description` ausente deixa a descrição como está. Response `200`.
+  obrigatório. Response `200`.
+  ⚠️ **`description` AUSENTE e `description: null` são diferentes** (issue #185):
+  ausente = o cliente não tocou no campo (preservado); `null` = o cliente pediu
+  a limpeza. Antes, a ausência virava limpeza — e todo PATCH parcial apagava a
+  descrição que o cliente não tocou.
 - `DELETE` → `200` com corpo **vazio** (não é `204`: o `openapi.json` declara
   `200`, e o Nest devolve `200` para um handler que resolve `void`).
 
@@ -131,7 +138,9 @@ Request:
 Response `201` com o `ProfileDetail` **já atualizado** (as permissões depois
 da concessão). A chave precisa constar no catálogo
 (`shared/auth/permissions-catalog.ts`); chave fora do catálogo → `400
-INVALID_PERMISSION_KEY`. A permissão é **concedida**, não **trocada**: a lista
+INVALID_PERMISSION_KEY`. ⚠️ A comparação é **EXATA** (a chave não é aparada) e a
+chave vazia → `400 VALIDATION_ERROR` (a forma é do boundary; a existência da
+chave, do domínio). A permissão é **concedida**, não **trocada**: a lista
 do perfil é acrescida, não substituída.
 
 ### 3.5 `DELETE /admin/profiles/{id}/authorizations/{key}` — revogar
@@ -162,6 +171,9 @@ Request — `{ "profileId": "0190a8b6-…" }`. `profileId: null` **limpa** o per
 do usuário (é o mesmo PUT; não existe DELETE para isso). Response `200`:
 `{ "ok": true }`.
 
+⚠️ O corpo é validado por Zod (issue #185): `profileId` ausente é o mesmo que
+`null` (o usuário fica sem perfil), e um `profileId` que não é uuid → `400`.
+
 ⚠️ **O `:id` do usuário é UUID** e o do perfil também. A comparação de
 propriedade (ninguém altera o próprio perfil dentro da empresa) normaliza
 **caixa** — o `UUID_RE` do VO tem flag `/i`, então um id em caixa alta passaria
@@ -191,7 +203,7 @@ E **não existe `userId` nem objeto `profile` aninhado**: os campos são
 
 | Status | Onde | Motivo |
 |--------|------|--------|
-| `400` | 2, 6, 7 (e todas, pelo header) | `slug` malformado (`VALIDATION_ERROR`), `permissionKey` fora do catálogo (`INVALID_PERMISSION_KEY`), `profileId` que não é UUID, `X-Tenant-Id` malformado (`INVALID_TENANT`) |
+| `400` | 2, 3, 4, 6, 7 (e todas, pelo header) | `slug`/`name` fora das regras do VO (`VALIDATION_ERROR`), corpo malformado — `initialPermissions` que não é lista de textos, `permissionKey` vazia, `profileId` que não é UUID (`VALIDATION_ERROR`), `permissionKey` fora do catálogo (`INVALID_PERMISSION_KEY`), `X-Tenant-Id` malformado (`INVALID_TENANT`) |
 | `401` | todas | token ausente, inválido, expirado ou de tipo errado |
 | `403` | todas | falta a permissão (`admin.manage-*`), escalada bloqueada (`PRIVILEGE_ESCALATION`), perfil protegido (`PROFILE_SYSTEM_PROTECTED` / `PROFILE_ADMIN_PROTECTED`) ou empresa da qual a conta não é membro (`TENANT_MEMBERSHIP_REQUIRED`) |
 | `404` | 3, 4, 5, 6, 7, 9 | perfil ou usuário inexistente (`PROFILE_NOT_FOUND` / `USER_NOT_FOUND`) |
@@ -225,70 +237,14 @@ depende destas".
 cache) e escreve `isAdmin`/`permissions` de volta em `req.user`. Sem isso,
 cache frio daria `403` a quem **tem** a permissão.
 
-## §5. Modelo de dados
+## §5. Modelo de dados e notas de armadilha
 
-Modelos Prisma do BC (`apps/api/prisma/schema.prisma`):
-
-| Model | Tabela | Papel |
-|-------|--------|-------|
-| `Profile` | `profiles` | o perfil. `slug`, `name`, `description`, `tenantId` (nulo = perfil global), `isAdmin` (bypass total), `isSystem` (congelado). Sem soft-delete |
-| `Authorization` | `authorizations` | "perfil TEM a permissão X". `@@unique([profileId, permissionKey])` |
-
-⚠️ **O `slug` do perfil NÃO tem `@unique` no Prisma.** A unicidade vem de **dois
-índices parciais em SQL puro** (migration
-`20261017000000_tenant_membership_invitation`): `profiles_slug_global_uniq`
-(`slug` onde `tenant_id IS NULL`) e `profiles_tenant_slug_uniq`
-(`tenant_id`+`slug` onde `tenant_id IS NOT NULL`). O motivo: no Postgres
-`NULL != NULL`, então um `@@unique([tenantId, slug])` deixaria o seed duplicar o
-`admin` global em silêncio.
-
-⚠️ **As duas colunas de vínculo do perfil.** `users.profile_id` é o bucket GLOBAL (o
-perfil de sistema do seed); `tenant_memberships.profile_id` é o perfil **daquela
-empresa** — é o que a Fase 4 passou a ler. O hard-delete é protegido pela contagem
-de usos (§6).
-
-⚠️ **O que a RLS implica.** `profiles` tem `ENABLE ROW LEVEL SECURITY` e as
-policies comparam `tenant_id` com o escopo da sessão (`no_escopo_atual(...)`,
-migration `20261020000000_rls_isolation_empresa`). A leitura "todos os perfis" só
-devolve a base inteira na **credencial de sistema**. E a RLS **não** fecha a
-escalada no caminho do bucket global: sob o escopo `'*'` a policy aceita qualquer
-`profile_id` — quem fecha é a trava de escalada da aplicação.
-
-## §6. Notas e armadilhas
-
-⚠️ **Um perfil `isSystem: true` é intocável.** `PATCH` e `DELETE` devolvem
-`403 PROFILE_SYSTEM_PROTECTED`. O trio `gerente`/`coordenador`/`funcionario` que
-toda empresa nasce com é criado **congelado** (`isSystem: true`) — é o CATÁLOGO,
-e uma empresa que apaga o seu `coordenador` deixa de ter os três perfis que toda
-empresa tem. Quem precisa de um papel sob medida cria um perfil
-(`POST /admin/profiles`) e ajusta esse.
-
-⚠️ **Um perfil `isAdmin: true` também é intocável** — `403 PROFILE_ADMIN_PROTECTED`
-no `PATCH` e no `DELETE`. E só um ator com `isAdmin` pode **vestir** um perfil
-admin. O campo `isAdmin` que a listagem devolve é o bypass total do
-`PermissionsGuard`, lido do perfil e não do `Authorization`: um perfil `isAdmin`
-sem nenhuma autorização continua passando em tudo.
-
-⚠️ **`DELETE` só passa com ZERO usos.** A trava soma as **duas** contagens —
-`users.profile_id` (bucket global) e `tenant_memberships.profile_id` (por empresa) —
-e devolve `409 PROFILE_HAS_USERS` se houver algum. Sem a segunda contagem, a
-trava passaria e o `ON DELETE RESTRICT` do banco estouraria `P2003` — `500` onde
-o certo é `409`.
-
-⚠️ **Dentro da empresa ninguém altera o próprio perfil** (nem para vestir outro,
-nem para tirar o que tem) — `403 PRIVILEGE_ESCALATION`. O motivo é a
-irreversibilidade: `emitirConvite` grava `role: 'member'` fixo, então não existe
-rota que devolva `gerente` a ninguém. Fora da empresa (`X-Tenant-Id` ausente) a
-regra não se aplica.
-
-⚠️ **`PUT /admin/users/{id}/profile` escreve em coluna diferente conforme o
-header.** Com `X-Tenant-Id`, grava `tenant_memberships.profile_id`; sem header,
-grava `users.profile_id`. Sem header, um ator não-admin com
-`admin.manage-users` desligava o perfil `isAdmin` do root — hoje o `403` sai
-antes. E **o motivo da escalada não vai para o corpo**: a
-`ProfilePrivilegeEscalationException` o carrega no campo `motivo`, que é o que
-o log lê — o `detail` do RFC 7807 sai com o **nome da classe**, porque dizer
-qual regra impediu a escalada é mapear o sistema.
+⚠️ As duas seções que descrevem o **modelo** (`profiles`, `permissions`,
+`authorizations`) e as **armadilhas** do domínio (perfil de sistema intocável,
+`isAdmin` como bypass, a trava de `DELETE`, a escalada dentro da empresa) foram
+para o arquivo irmão [`profiles-notas.md`](./profiles-notas.md) — este
+documento é a referência do **CONTRATO HTTP**, e ele já passou do teto de 300
+linhas que a convenção de documentação viva impõe.
 
 ## Ver Também
 

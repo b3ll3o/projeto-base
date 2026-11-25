@@ -45,6 +45,7 @@
 
 import { z } from 'zod';
 import { PERMISSIONS } from '../../../../shared/auth/permissions-catalog.js';
+import { UUID_RE_QUALQUER_VERSAO } from '../../../../shared/domain/uuid.js';
 import { ProfileName } from '../../domain/value-objects/profile-name.vo.js';
 import { ProfileSlug } from '../../domain/value-objects/profile-slug.vo.js';
 
@@ -58,35 +59,39 @@ import { ProfileSlug } from '../../domain/value-objects/profile-slug.vo.js';
 const LIMITE_DE_PERMISSOES = PERMISSIONS.length;
 
 /**
- * Valida um valor pelo VO e devolve a **mensagem do VO** como erro.
+ * Valida um valor pelo VO, e devolve a **mensagem do VO** como erro.
  *
  * Os VOs (`ProfileName`, `ProfileSlug`) são a fonte única das regras — o
  * mesmo motivo pelo qual `users.schemas.ts` importa os limites de lá em vez
- * de reescrevê-los. O `refine` do Zod aceita uma string como mensagem de
- * erro, então a mensagem que o cliente lê é a do próprio domínio.
+ * de reescrevê-los.
+ *
+ * ⚠️ É `superRefine` (e não `refine`), e a razão é a VERSÃO do zod: no zod
+ * `3.25.76` (a do repo) o `refine` reprova só quando o retorno é `false` —
+ * uma string de mensagem é TRUTHY e APROVA. MEDIDO 2026-11-25: com o
+ * `refine`, `{slug: 'Slug Inválido'}` passava pelo schema inteiro. O
+ * `superRefine` é o que permite acrescentar o erro COM a mensagem do VO
+ * (`ctx.addIssue`), e é ele que reprova de verdade.
  */
-function validoPeloVo(criar: (valor: unknown) => unknown): (valor: unknown) => boolean | string {
-  return (valor: unknown): boolean | string => {
+function validoPeloVo(
+  criar: (valor: unknown) => unknown,
+): (valor: unknown, ctx: z.RefinementCtx) => void {
+  return (valor: unknown, ctx: z.RefinementCtx): void => {
     try {
       criar(valor);
-      return true;
     } catch (erro) {
-      return erro instanceof Error ? erro.message : 'valor inválido';
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: erro instanceof Error ? erro.message : 'valor inválido',
+      });
     }
   };
 }
 
 /** O nome do perfil — pelas regras do `ProfileName` (2..80, aparado). */
-const NomeDePerfil = z.string().refine(
-  validoPeloVo((valor) => ProfileName.create(valor)),
-  'name inválido',
-);
+const NomeDePerfil = z.string().superRefine(validoPeloVo((valor) => ProfileName.create(valor)));
 
 /** O slug do perfil — pelas regras do `ProfileSlug` (kebab-case, 3..40). */
-const SlugDePerfil = z.string().refine(
-  validoPeloVo((valor) => ProfileSlug.create(valor)),
-  'slug inválido',
-);
+const SlugDePerfil = z.string().superRefine(validoPeloVo((valor) => ProfileSlug.create(valor)));
 
 /**
  * A lista de chaves de permissão.
@@ -95,12 +100,18 @@ const SlugDePerfil = z.string().refine(
  * O predicado exige lista de textos e respeita o teto do catálogo.
  */
 const ListaDeChavesDePermissao = z.custom<string[]>(
-  (valor) =>
-    Array.isArray(valor) &&
-    valor.length <= LIMITE_DE_PERMISSOES &&
-    valor.every((item) => typeof item === 'string'),
+  (valor) => {
+    if (!Array.isArray(valor)) return false;
+    if (!valor.every((item) => typeof item === 'string')) return false;
+    // ⚠️ O teto conta as chaves DISTINTAS, e não o comprimento: um perfil
+    // concede permissões do CATÁLOGO, e o catálogo é quem tem o número. Com o
+    // comprimento, uma lista de 9 cópias da MESMA chave caía em 400 — e o
+    // domínio (que deduplica) aceitaria. E o tamanho bruto da lista não é
+    // problema de memória: o limite do corpo é do Fastify (1 MB), não nosso.
+    return new Set(valor).size <= LIMITE_DE_PERMISSOES;
+  },
   {
-    message: `initialPermissions precisa ser uma lista de até ${LIMITE_DE_PERMISSOES} chaves de permissão`,
+    message: `initialPermissions precisa ser uma lista de chaves de permissão (no máximo ${LIMITE_DE_PERMISSOES} distintas)`,
   },
 );
 
@@ -114,7 +125,10 @@ const ListaDeChavesDePermissao = z.custom<string[]>(
 export const CriarPerfilSchema = z.object({
   slug: SlugDePerfil,
   name: NomeDePerfil,
-  description: z.string().optional(),
+  // ⚠️ `null` é aceito, e o `PATCH` também aceita: um perfil sem descrição é
+  // um estado válido, e `null` e "ausente" dizem a MESMA coisa aqui (o
+  // agregado nasce com `description: null`).
+  description: z.string().nullable().optional(),
   initialPermissions: ListaDeChavesDePermissao.optional(),
 });
 
@@ -145,7 +159,18 @@ export type AtualizarPerfilDto = z.infer<typeof AtualizarPerfilSchema>;
  * um valor que o cliente manda DE PROPÓSITO.
  */
 export const AtribuirPerfilSchema = z.object({
-  profileId: z.string().uuid('profileId precisa ser um uuid').nullable(),
+  // ⚠️ A FORMA do UUID vem do DONO (`shared/domain/uuid.ts`), e não de um
+  // `.uuid()` reescrito: o repo tem um único lugar que diz o que é um id
+  // aceitável, e `users.schemas.ts` já importa dele.
+  //
+  // E a AUSÊNCIA continua válida: `profileId` ausente é o mesmo que
+  // `profileId: null` (o usuário fica sem perfil) — e é o que o `PUT` fazia
+  // antes deste PR.
+  profileId: z
+    .string()
+    .regex(UUID_RE_QUALQUER_VERSAO, 'profileId precisa ser um id (uuid)')
+    .nullable()
+    .optional(),
 });
 
 /** Tipo inferido do `AtribuirPerfilSchema` — consumido pelo controller. */
@@ -158,7 +183,11 @@ export type AtribuirPerfilDto = z.infer<typeof AtribuirPerfilSchema>;
  * (texto não vazio), e o agregado diz se a chave existe no catálogo.
  */
 export const ConcederAutorizacaoSchema = z.object({
-  permissionKey: z.string().trim().min(1, 'permissionKey não pode ser vazio'),
+  // ⚠️ SEM `.trim()`: a comparação com o CATÁLOGO é EXATA (o domínio), e
+  // aparar aqui transformaria `' users.read '` (que era 400
+  // INVALID_PERMISSION_KEY) numa concessão de `users.read`. O schema diz a
+  // FORMA (texto não vazio); quem diz se a chave EXISTE é o domínio.
+  permissionKey: z.string().min(1, 'permissionKey não pode ser vazio'),
 });
 
 /** Tipo inferido do `ConcederAutorizacaoSchema` — consumido pelo controller. */

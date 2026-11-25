@@ -45,7 +45,9 @@ export class AdminUsersController {
     @Body(new ZodValidationPipe(AtribuirPerfilSchema)) body: AtribuirPerfilDto,
     @Req() req: ReqComAtor,
   ): Promise<{ ok: true }> {
-    await this.useCases.atribuirProfileAoUser(userId, body.profileId, atorDe(req));
+    // ⚠️ O `?? null`: a AUSÊNCIA do `profileId` é o mesmo que `null` (o usuário
+    // fica sem perfil) — e o schema aceita as duas formas.
+    await this.useCases.atribuirProfileAoUser(userId, body.profileId ?? null, atorDe(req));
     return { ok: true };
   }
 }
