@@ -120,6 +120,47 @@ export interface FindByIdOptions {
  * bucket de sistema. Quem valida se o ator pode ler a linha que quer continua
  * sendo a query e a guarda de aplicação.
  */
+/**
+ * A AUDITORIA que acompanha uma escrita — e que tem de ser gravada NA MESMA
+ * transação da mutação (issue #184).
+ *
+ * ⚠️ Os nomes dos campos são os MESMOS do `AuditRecordInput` do BC de
+ * auditoria (`shared/audit/application/audit-service.port.ts`), e a operação é
+ * o MESMO conjunto de valores do enum `AuditOperation`: a forma do dado é o
+ * que o banco grava, e ela tem UM dono. O que muda aqui é o ESCOPO — o
+ * registro viaja dentro da escrita, e não numa chamada separada.
+ */
+export interface LinhaDeHistoricoDaEscrita {
+  /** A operação: `INSERT`, `UPDATE`, `DELETE` ou `RESTORE`. */
+  operation: 'INSERT' | 'UPDATE' | 'DELETE' | 'RESTORE';
+  /** A versão anterior (null quando não havia). */
+  previousVersion: number | null;
+  /** A versão que a gravação produz. */
+  newVersion: number;
+  /** O snapshot do agregado no momento da gravação. */
+  snapshot: Record<string, unknown>;
+  /** O motivo, quando houver. */
+  reason?: string | null;
+}
+
+/** A linha de ARQUIVO (o soft-delete), quando a escrita também apaga. */
+export interface LinhaDeArquivoDaEscrita {
+  /** A versão que o arquivo carrega. */
+  version: number;
+  /** O snapshot do agregado no momento do arquivo. */
+  snapshot: Record<string, unknown>;
+  /** O motivo, quando houver. */
+  reason?: string | null;
+}
+
+/** A auditoria completa de uma escrita: o histórico e, às vezes, o arquivo. */
+export interface AuditoriaDaEscritaDoUsuario {
+  /** Uma linha por evento do agregado. */
+  historico: LinhaDeHistoricoDaEscrita[];
+  /** A linha de arquivo, quando a escrita é um soft-delete. */
+  arquivo?: LinhaDeArquivoDaEscrita;
+}
+
 export interface UserRepositoryPort {
   /**
    * Busca User pelo id. Retorna null se não existir.
@@ -137,14 +178,28 @@ export interface UserRepositoryPort {
   findByEmail(email: Email, tenantId: string | null): Promise<User | null>;
 
   /**
-   * Persiste o estado atual do agregado.
+   * Persiste o estado atual do agregado — E, na MESMA transação, a auditoria
+   * que o acompanha.
    *
    * - INSERT: quando expectedVersion === 0 (agregado novo, ainda não persistido).
    * - UPDATE: quando expectedVersion === aggregate.version() - 1 (estado pré-mutação).
    *
    * Lança ConcurrencyException se a versão atual persistida divergir de expectedVersion.
+   *
+   * ⚠️ (issue #184) A `auditoria` NÃO é um extra: é a MESMA transação. MEDIDO:
+   * a mutação e o registro de auditoria eram DUAS transações (o repositório
+   * abria uma, e o `auditService.record` abria outra) — e se a auditoria
+   * falhasse depois da mutação ter feito commit, o estado do usuário ficava
+   * alterado SEM registro no histórico, que é justamente o que a auditoria
+   * promete. E a spec do projeto declara "Atomicidade: `prisma.$transaction
+   * ([opPrincipal, opHistory, opArchive?])` — ou tudo ou nada".
    */
-  save(user: User, expectedVersion: number, tenantId: string | null): Promise<User>;
+  save(
+    user: User,
+    expectedVersion: number,
+    tenantId: string | null,
+    auditoria?: AuditoriaDaEscritaDoUsuario,
+  ): Promise<User>;
 
   /**
    * Lista Users com paginação por cursor (opaca).

@@ -9,6 +9,9 @@ import {
 } from '../../domain/exceptions/user.exceptions.js';
 import { HASH_REAL as HASH } from '../../../../../test/fakes/fake-password-hasher.js';
 import { PasswordHash } from '../../domain/value-objects/password-hash.vo.js';
+import type { AuditServicePort } from '../../../../shared/audit/application/audit-service.port.js';
+import { AuditContext } from '../../../../shared/audit/domain/audit-context.vo.js';
+import { AuditContextStore } from '../../../../shared/audit/shared/audit-context-store.js';
 
 const T0 = new Date('2026-09-21T10:00:00Z');
 const T1 = new Date('2026-09-21T11:00:00Z');
@@ -203,6 +206,100 @@ describe('InMemoryUserRepository', () => {
       const refetched = await repo.findById(UserId.create(idA), null);
       expect(refetched!.nome().value).toBe('João');
       expect(refetched!.version()).toBe(1);
+    });
+  });
+
+  describe('save() — atomicidade com a auditoria (issue #184)', () => {
+    // ⚠️ O DUPLO tem de falhar COMO o adaptador de Prisma: se a auditoria
+    // falha, a mutação NÃO sobrevive.
+    //
+    // MEDIDO (2ª revisão do PR #194): com a auditoria gravada DEPOIS de
+    // mutar os índices, o duplo NÃO era atômico — o usuário sobrevivia à
+    // falha da auditoria ("sobreviveu a falha da auditoria? true"), enquanto
+    // o adaptador de Prisma desfaz a mutação. O duplo mentia sobre a
+    // garantia que o PR cria: uma spec que afirmasse "a falha da auditoria
+    // desfaz a mutação" ficaria VERMELHA contra o duplo e VERDE na produção
+    // — o inverso do defeito.
+    const CTX = new AuditContext({
+      actorId: 'actor-1',
+      correlationId: 'corr-1',
+      source: 'http',
+      timestamp: T0,
+    });
+
+    const auditoriaQueFalha = {
+      record: async () => {
+        throw new Error('auditoria falhou (P2002)');
+      },
+      archive: async () => {
+        throw new Error('auditoria falhou (P2002)');
+      },
+    };
+
+    it('a falha da auditoria DESFAZ a inserção (o usuário não sobrevive)', async () => {
+      const repoComAuditoria = new InMemoryUserRepository(
+        auditoriaQueFalha as unknown as AuditServicePort,
+      );
+      const u = User.criar({
+        id: idA,
+        nome: 'João',
+        email: 'joao@example.com',
+        agora: T0,
+        senhaHash: PasswordHash.create(HASH),
+      });
+
+      await expect(
+        AuditContextStore.run(CTX, () =>
+          repoComAuditoria.save(u, 0, null, {
+            historico: [
+              {
+                operation: 'INSERT',
+                previousVersion: null,
+                newVersion: 1,
+                snapshot: { nome: 'João' },
+              },
+            ],
+          }),
+        ),
+      ).rejects.toThrow('auditoria falhou');
+
+      // A MUTAÇÃO NÃO SOBREVIVEU — é o que o adaptador de Prisma faz.
+      expect(await repoComAuditoria.findById(UserId.create(idA), null)).toBeNull();
+      expect(repoComAuditoria.size).toBe(0);
+    });
+
+    it('a falha da auditoria DESFAZ a atualização (o nome e a versão ficam como estavam)', async () => {
+      const repoComAuditoria = new InMemoryUserRepository(
+        auditoriaQueFalha as unknown as AuditServicePort,
+      );
+      const u = User.criar({
+        id: idA,
+        nome: 'João',
+        email: 'joao@example.com',
+        agora: T0,
+        senhaHash: PasswordHash.create(HASH),
+      });
+      await repoComAuditoria.save(u, 0, null);
+
+      u.renomear('João Mutado', T1);
+      await expect(
+        AuditContextStore.run(CTX, () =>
+          repoComAuditoria.save(u, 1, null, {
+            historico: [
+              {
+                operation: 'UPDATE',
+                previousVersion: 1,
+                newVersion: 2,
+                snapshot: { nome: 'João Mutado' },
+              },
+            ],
+          }),
+        ),
+      ).rejects.toThrow('auditoria falhou');
+
+      const depois = await repoComAuditoria.findById(UserId.create(idA), null);
+      expect(depois!.nome().value).toBe('João');
+      expect(depois!.version()).toBe(1);
     });
   });
 

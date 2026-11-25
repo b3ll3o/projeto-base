@@ -59,6 +59,35 @@ export class UserOwnershipViolationException extends Error {
 }
 
 /**
+ * A trilha de auditoria já tem uma linha para a VERSÃO que a escrita tentou
+ * gravar — e a mutação foi desfeita.
+ *
+ * pt-BR (issue #184, 2ª revisão): MEDIDO, o P2002 do `users_history` (unique
+ * `(entity_id, version)`) subia pelo `catch` genérico do repositório e virava
+ * `EmailAlreadyInUseException` — HTTP 409 "email já em uso" para um conflito
+ * de TRILHA. O erro era não-acionável: dizia ao cliente que o e-mail estava
+ * ocupado quando o e-mail estava livre.
+ *
+ * ⚠️ O `meta.target` do P2002 NÃO serve para discriminar aqui: o unique do
+ * `users_history` é um ÍNDICE (`CREATE UNIQUE INDEX`), não uma constraint, e
+ * o Prisma devolve `target: null` nesse caso (MEDIDO). A discriminação é pelo
+ * LOCAL da escrita — a escrita do histórico é o que estourou o P2002.
+ *
+ * Mapeamento HTTP: 409 CONFLICT — o cliente pode repetir a operação; o
+ * conflito é de trilha, não de entrada.
+ */
+export class AuditTrailConflictException extends Error {
+  constructor(
+    public readonly entityId: string,
+    public readonly version: number,
+  ) {
+    super(`Conflito na trilha de auditoria: já existe um registro para a versão ${version}`);
+    this.name = 'AuditTrailConflictException';
+    Object.setPrototypeOf(this, AuditTrailConflictException.prototype);
+  }
+}
+
+/**
  * Invariante de value object violada — o `nome` ou o `email` está fora da
  * faixa que o VO aceita.
  *

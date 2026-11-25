@@ -3,7 +3,7 @@
   "diagram_type": "sequence",
   "meta": {
     "title": "DELETE /users/:id — Soft-delete com audit + archive",
-    "subtitle": "DELETE /users/:id (If-Match) → marcarExcluido + audit.record(DELETE) + audit.archive → users_archive",
+    "subtitle": "DELETE /users/:id (If-Match) → marcarExcluido + save(user,n-1,auditoria) → PostgreSQL (users + users_history + users_archive, NA MESMA transação)",
     "output": "http-api-users-soft-delete.sequence.html",
     "viewBox": [1020, 820],
     "animation": "trace",
@@ -13,8 +13,8 @@
       {
         "id": "happy-path",
         "label": "Soft-delete cascade → 204",
-        "focus": ["client", "controller", "usecases", "repo", "audit", "pg"],
-        "note": "marcarExcluido + UPDATE users + INSERT history + INSERT archive."
+        "focus": ["client", "controller", "usecases", "repo", "pg"],
+        "note": "marcarExcluido + UPDATE users + INSERT history + INSERT archive — NA MESMA transação."
       },
       {
         "id": "errors",
@@ -50,13 +50,7 @@
       "id": "repo",
       "type": "backend",
       "label": "PrismaRepo",
-      "sublabel": "save(user,n-1)"
-    },
-    {
-      "id": "audit",
-      "type": "backend",
-      "label": "AuditService",
-      "sublabel": "record + archive"
+      "sublabel": "save(user,n-1,auditoria)"
     },
     {
       "id": "pg",
@@ -88,29 +82,25 @@
       "from": "client",
       "to": "controller",
       "y": 180,
-      "label": "DELETE /users/:id + If-Match",
-      "variant": "emphasis"
+      "label": "DELETE /users/:id + If-Match"
     },
     {
       "from": "controller",
       "to": "usecases",
       "y": 220,
-      "label": "parseIfMatch + softDelete(input)",
-      "variant": "emphasis"
+      "label": "parseIfMatch + softDelete(input)"
     },
     {
       "from": "usecases",
       "to": "repo",
       "y": 260,
-      "label": "findById(UserId)",
-      "variant": "default"
+      "label": "findById(UserId)"
     },
     {
       "from": "repo",
       "to": "pg",
       "y": 300,
-      "label": "SELECT WHERE id AND deletedAt IS NULL",
-      "variant": "default"
+      "label": "SELECT WHERE id AND deletedAt IS NULL"
     },
     {
       "from": "pg",
@@ -123,43 +113,41 @@
       "from": "usecases",
       "to": "repo",
       "y": 376,
-      "label": "marcarExcluido(reason,ctx.ts)",
-      "variant": "emphasis"
+      "label": "marcarExcluido(reason,ctx.ts)"
     },
     {
       "from": "repo",
       "to": "pg",
       "y": 452,
-      "label": "UPDATE users SET deletedAt=NOW()",
-      "variant": "default"
+      "label": "UPDATE users SET deletedAt=NOW()"
     },
     {
-      "from": "usecases",
-      "to": "audit",
+      "from": "repo",
+      "to": "pg",
       "y": 490,
-      "label": "pullEvents() → record DELETE",
+      "label": "INSERT INTO users_history (mesma transação)",
       "variant": "emphasis"
     },
     {
-      "from": "audit",
+      "from": "repo",
       "to": "pg",
       "y": 528,
-      "label": "INSERT INTO users_history",
-      "variant": "default"
-    },
-    {
-      "from": "usecases",
-      "to": "audit",
-      "y": 566,
-      "label": "archive(entity=snapshot,reason)",
+      "label": "INSERT INTO users_archive (mesma transação)",
       "variant": "emphasis"
     },
     {
-      "from": "audit",
-      "to": "pg",
+      "from": "pg",
+      "to": "repo",
+      "y": 566,
+      "label": "linhas da trilha e do arquivo",
+      "variant": "return"
+    },
+    {
+      "from": "repo",
+      "to": "usecases",
       "y": 604,
-      "label": "INSERT INTO users_archive",
-      "variant": "default"
+      "label": "snapshot persistido",
+      "variant": "return"
     },
     {
       "from": "controller",
@@ -192,7 +180,7 @@
     {
       "participant": "repo",
       "from": 254,
-      "to": 446,
+      "to": 598,
       "type": "backend"
     },
     {
@@ -202,10 +190,10 @@
       "type": "database"
     },
     {
-      "participant": "audit",
+      "participant": "pg",
       "from": 484,
-      "to": 598,
-      "type": "backend"
+      "to": 560,
+      "type": "database"
     },
     {
       "participant": "filter",
@@ -226,10 +214,10 @@
     },
     {
       "dot": "cyan",
-      "title": "Audit cascade (DELETE + archive)",
+      "title": "Trilha + arquivo — NA MESMA transação da escrita",
       "items": [
-        "audit.record(DELETE) insere em users_history (audit trail)",
-        "audit.archive() insere snapshot completo em users_archive (restore path)",
+        "a escrita do soft-delete carrega o histórico (DELETE) E o arquivo (users_archive)",
+        "os dois vão dentro de save(user,n-1,auditoria) — a mutação e a trilha são a mesma transação (issue #184)",
         "extrai previousVersion + reason do UserDeletedEvent"
       ]
     },

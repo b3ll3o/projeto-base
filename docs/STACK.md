@@ -178,7 +178,7 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão da stack:** 1.37.0
+**Versão da stack:** 1.38.0
 
 ### Histórico de Versões
 
@@ -216,3 +216,4 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 | `1.35.0` | **Sem mudança de stack** — nenhuma dependência nova, nenhum binário novo no `package.json`, nenhuma mudança em `apps/web`, `packages/` ou `infra/`. A única mudança na árvore é o BC de Auth de `apps/api`: o arquivo novo `throttle-do-login.ts` (o dono da política de limite do login), o arquivo novo `login-lockout.port.ts` com o seu adapter Prisma, a migration `20261125000000_tentativas_de_login` (a tabela `login_tentativas`) e o status 423 novo no contrato HTTP — o login passa a ter DOIS tetos (o global por IP e o de login por `(IP, e-mail)`) e a conta trava por 5 falhas em 15 minutos (issue #182). O footer subiu junto com os outros 5. |
 | `1.36.0` | **Sem mudança de stack** — nenhuma dependência nova, nenhum binário novo no `package.json`, nenhuma mudança em `apps/web`, `packages/` ou `infra/`. A única mudança na árvore é a imagem de produção da api (`apps/api/Dockerfile`): o cache do corepack assado no build (o container não baixa o pnpm do registry a cada boot), o stage novo `deps-prod` com `pnpm deploy --prod` (a imagem não embarca mais as devDependencies) e o healthcheck do postgres medindo TCP em vez do socket unix (issue #178/#179/#187). O footer subiu junto com os outros 5. |
 | `1.37.0` | **Sem mudança de stack** — nenhuma dependência nova, nenhum binário novo no `package.json`, nenhuma mudança em `apps/web`, `packages/` ou `infra/`. A única mudança na árvore é o BC de Auth/`shared` de `apps/api` e a imagem: a chave de assinatura passa a ser lida por uma função `SECURITY DEFINER` (migration nova), o guard de boot recusa a URI de dono no ambiente do processo, e o ENTRYPOINT da imagem a remove antes do `exec node` (issue #180). O footer subiu junto com os outros 5. |
+| `1.38.0` | **Sem mudança de stack** — nenhuma dependência nova, nenhum binário novo no `package.json`, nenhuma mudança em `apps/web`, `packages/` ou `infra/`. A única mudança na árvore é o BC de Usuários de `apps/api`: a mutação e o registro de auditoria passam a ser a mesma transação (issue #184). O footer subiu junto com os outros 5. |

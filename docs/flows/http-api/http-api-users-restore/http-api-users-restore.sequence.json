@@ -13,8 +13,8 @@
       {
         "id": "happy-path",
         "label": "Restore → 201",
-        "focus": ["client", "controller", "usecases", "repo", "audit", "pg"],
-        "note": "User soft-deletado restaurado, deletedAt=NULL, ETag atualizado."
+        "focus": ["client", "controller", "usecases", "repo", "pg"],
+        "note": "User soft-deletado restaurado, deletedAt=NULL, ETag atualizado — trilha NA MESMA transação."
       },
       {
         "id": "errors",
@@ -50,13 +50,7 @@
       "id": "repo",
       "type": "backend",
       "label": "PrismaRepo",
-      "sublabel": "findById inc"
-    },
-    {
-      "id": "audit",
-      "type": "backend",
-      "label": "AuditService",
-      "sublabel": "record RESTORE"
+      "sublabel": "save(user,n-1,auditoria)"
     },
     {
       "id": "pg",
@@ -88,29 +82,25 @@
       "from": "client",
       "to": "controller",
       "y": 180,
-      "label": "POST /users/:id/restore",
-      "variant": "emphasis"
+      "label": "POST /users/:id/restore"
     },
     {
       "from": "controller",
       "to": "usecases",
       "y": 220,
-      "label": "restaurar({id,expectedVer})",
-      "variant": "emphasis"
+      "label": "restaurar({id,expectedVer})"
     },
     {
       "from": "usecases",
       "to": "repo",
       "y": 260,
-      "label": "findById(id, includeDeleted:true)",
-      "variant": "default"
+      "label": "findById(id, includeDeleted:true)"
     },
     {
       "from": "repo",
       "to": "pg",
       "y": 300,
-      "label": "SELECT WHERE id (sem filtro deletedAt)",
-      "variant": "default"
+      "label": "SELECT WHERE id (sem filtro deletedAt)"
     },
     {
       "from": "pg",
@@ -123,48 +113,54 @@
       "from": "usecases",
       "to": "repo",
       "y": 376,
-      "label": "restaurar + save(user,n-1)",
+      "label": "restaurar + save(user,n-1, auditoria)",
       "variant": "emphasis"
     },
     {
       "from": "repo",
       "to": "pg",
       "y": 452,
-      "label": "UPDATE SET deletedAt=NULL WHERE version=n-1",
-      "variant": "default"
+      "label": "UPDATE SET deletedAt=NULL WHERE version=n-1"
     },
     {
-      "from": "usecases",
-      "to": "audit",
+      "from": "repo",
+      "to": "pg",
       "y": 490,
-      "label": "pullEvents() → record RESTORE",
+      "label": "INSERT INTO users_history (mesma transação)",
       "variant": "emphasis"
     },
     {
-      "from": "audit",
-      "to": "pg",
+      "from": "pg",
+      "to": "repo",
       "y": 528,
-      "label": "INSERT INTO users_history",
-      "variant": "default"
+      "label": "linha da trilha",
+      "variant": "return"
+    },
+    {
+      "from": "repo",
+      "to": "usecases",
+      "y": 566,
+      "label": "snapshot persistido",
+      "variant": "return"
     },
     {
       "from": "usecases",
       "to": "controller",
-      "y": 566,
+      "y": 604,
       "label": "toUserOutput(user)",
       "variant": "return"
     },
     {
       "from": "controller",
       "to": "client",
-      "y": 604,
+      "y": 642,
       "label": "201 + ETag: W/v(n+1)",
       "variant": "return"
     },
     {
       "from": "usecases",
       "to": "filter",
-      "y": 672,
+      "y": 720,
       "label": "404/412/422",
       "variant": "security"
     }
@@ -173,19 +169,19 @@
     {
       "participant": "controller",
       "from": 174,
-      "to": 600,
+      "to": 638,
       "type": "backend"
     },
     {
       "participant": "usecases",
       "from": 214,
-      "to": 596,
+      "to": 660,
       "type": "backend"
     },
     {
       "participant": "repo",
       "from": 254,
-      "to": 446,
+      "to": 560,
       "type": "backend"
     },
     {
@@ -195,21 +191,21 @@
       "type": "database"
     },
     {
-      "participant": "audit",
+      "participant": "pg",
       "from": 484,
       "to": 522,
-      "type": "backend"
+      "type": "database"
     },
     {
       "participant": "usecases",
-      "from": 666,
-      "to": 698,
+      "from": 714,
+      "to": 746,
       "type": "backend"
     },
     {
       "participant": "filter",
-      "from": 666,
-      "to": 698,
+      "from": 714,
+      "to": 746,
       "type": "security"
     }
   ],
@@ -218,9 +214,9 @@
       "dot": "emerald",
       "title": "Restore cascade",
       "items": [
-        "includeDeleted:true no findById (linha 232 do use-cases.ts) — necessário para carregar",
+        "includeDeleted:true no findById — necessário para carregar",
         "restaurar() seta deletedAt=null + emite UserRestoredEvent",
-        "audit.record(RESTORE) com previousVersion=restoredFromVersion"
+        "o registro RESTORE (previousVersion=restoredFromVersion) vai dentro de save(user,n-1,auditoria)"
       ]
     },
     {
