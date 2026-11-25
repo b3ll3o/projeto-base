@@ -5,10 +5,7 @@
     "title": "POST /users/:id/restore — Restaurar soft-deleted",
     "subtitle": "POST /users/:id/restore (If-Match) → findById(includeDeleted) → restaurar() → UPDATE users + audit RESTORE",
     "output": "http-api-users-restore.sequence.html",
-    "viewBox": [
-      1020,
-      760
-    ],
+    "viewBox": [1020, 760],
     "animation": "trace",
     "visual_preset": "signal-flow",
     "quality_profile": "showcase",
@@ -16,24 +13,13 @@
       {
         "id": "happy-path",
         "label": "Restore → 201",
-        "focus": [
-          "client",
-          "controller",
-          "usecases",
-          "repo",
-          "pg"
-        ],
+        "focus": ["client", "controller", "usecases", "repo", "pg"],
         "note": "User soft-deletado restaurado, deletedAt=NULL, ETag atualizado — trilha NA MESMA transação."
       },
       {
         "id": "errors",
         "label": "404/412/422",
-        "focus": [
-          "client",
-          "controller",
-          "usecases",
-          "filter"
-        ],
+        "focus": ["client", "controller", "usecases", "filter"],
         "note": "User não existe → 404; versão mismatch → 412; já ativo → 422."
       }
     ],

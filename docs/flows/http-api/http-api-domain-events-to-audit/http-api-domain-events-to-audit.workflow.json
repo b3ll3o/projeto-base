@@ -12,20 +12,13 @@
       {
         "id": "pipeline",
         "label": "Drain → map → persist",
-        "focus": [
-          "user_aggregate",
-          "domain_events",
-          "emit_audit",
-          "audit_record"
-        ],
+        "focus": ["user_aggregate", "domain_events", "emit_audit", "audit_record"],
         "note": "4 etapas: aggregate emite → use case drena e converte → o registro viaja dentro da escrita → o repositório persiste (mesma transação)."
       },
       {
         "id": "events",
         "label": "4 event types",
-        "focus": [
-          "domain_events"
-        ],
+        "focus": ["domain_events"],
         "note": "users.user.created.v1 → INSERT | updated.v1 → UPDATE | deleted.v1 → DELETE | restored.v1 → RESTORE"
       }
     ],
@@ -88,12 +81,7 @@
       "variant": "dashed"
     }
   ],
-  "mainPath": [
-    "user_aggregate",
-    "domain_events",
-    "emit_audit",
-    "audit_record"
-  ],
+  "mainPath": ["user_aggregate", "domain_events", "emit_audit", "audit_record"],
   "nodes": [
     {
       "id": "user_aggregate",

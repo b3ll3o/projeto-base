@@ -5,10 +5,7 @@
     "title": "DELETE /users/:id — Soft-delete com audit + archive",
     "subtitle": "DELETE /users/:id (If-Match) → marcarExcluido + save(user,n-1,auditoria) → PostgreSQL (users + users_history + users_archive, NA MESMA transação)",
     "output": "http-api-users-soft-delete.sequence.html",
-    "viewBox": [
-      1020,
-      820
-    ],
+    "viewBox": [1020, 820],
     "animation": "trace",
     "visual_preset": "signal-flow",
     "quality_profile": "showcase",
@@ -16,24 +13,13 @@
       {
         "id": "happy-path",
         "label": "Soft-delete cascade → 204",
-        "focus": [
-          "client",
-          "controller",
-          "usecases",
-          "repo",
-          "pg"
-        ],
+        "focus": ["client", "controller", "usecases", "repo", "pg"],
         "note": "marcarExcluido + UPDATE users + INSERT history + INSERT archive — NA MESMA transação."
       },
       {
         "id": "errors",
         "label": "404/412 error paths",
-        "focus": [
-          "client",
-          "controller",
-          "usecases",
-          "filter"
-        ],
+        "focus": ["client", "controller", "usecases", "filter"],
         "note": "User não existe ou já deletado → 404; versão mismatch → 412."
       }
     ],

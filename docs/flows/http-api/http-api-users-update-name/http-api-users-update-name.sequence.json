@@ -5,10 +5,7 @@
     "title": "PATCH /users/:id — Renomear com If-Match optimistic locking",
     "subtitle": "PATCH /users/:id (If-Match: W/v<n>) → UsersController.parseIfMatch → UserUseCases.atualizarNome → version mismatch → 412 Precondition",
     "output": "http-api-users-update-name.sequence.html",
-    "viewBox": [
-      1020,
-      900
-    ],
+    "viewBox": [1020, 900],
     "animation": "trace",
     "visual_preset": "signal-flow",
     "quality_profile": "showcase",
@@ -16,35 +13,19 @@
       {
         "id": "happy-path",
         "label": "Optimistic lock OK → 200",
-        "focus": [
-          "client",
-          "controller",
-          "usecases",
-          "repo",
-          "pg"
-        ],
+        "focus": ["client", "controller", "usecases", "repo", "pg"],
         "note": "version() === expectedVersion → renomear + UPDATE + trilha NA MESMA transação."
       },
       {
         "id": "version-mismatch-412",
         "label": "Stale If-Match → 412",
-        "focus": [
-          "client",
-          "controller",
-          "usecases",
-          "repo",
-          "filter"
-        ],
+        "focus": ["client", "controller", "usecases", "repo", "filter"],
         "note": "version() !== expectedVersion → ApplicationConcurrencyException → 412 Precondition Failed."
       },
       {
         "id": "if-match-invalid-400",
         "label": "Header ausente/inválido → 400",
-        "focus": [
-          "client",
-          "controller",
-          "filter"
-        ],
+        "focus": ["client", "controller", "filter"],
         "note": "parseIfMatch rejeita sem W/v<n> → BadRequestException → 400."
       }
     ],

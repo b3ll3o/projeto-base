@@ -5,10 +5,7 @@
     "title": "POST /users — Criar Usuário (com cascade de auditoria)",
     "subtitle": "POST /users → UsersController (+ ZodValidationPipe) → UserUseCases → User aggregate → PrismaUserRepo → PostgreSQL (users + users_history, NA MESMA transação)",
     "output": "http-api-users-create.sequence.html",
-    "viewBox": [
-      1020,
-      940
-    ],
+    "viewBox": [1020, 940],
     "animation": "trace",
     "visual_preset": "signal-flow",
     "quality_profile": "showcase",
@@ -16,35 +13,19 @@
       {
         "id": "happy-path",
         "label": "CREATE caminho feliz",
-        "focus": [
-          "client",
-          "controller",
-          "usecases",
-          "repo",
-          "pg"
-        ],
+        "focus": ["client", "controller", "usecases", "repo", "pg"],
         "note": "INSERT user + INSERT users_history — NA MESMA transação."
       },
       {
         "id": "validation-409",
         "label": "Email duplicado → 409",
-        "focus": [
-          "client",
-          "controller",
-          "usecases",
-          "repo",
-          "filter"
-        ],
+        "focus": ["client", "controller", "usecases", "repo", "filter"],
         "note": "findByEmail pré-check lança ApplicationEmailAlreadyInUseException → 409."
       },
       {
         "id": "validation-400",
         "label": "Payload inválido → 400",
-        "focus": [
-          "client",
-          "controller",
-          "filter"
-        ],
+        "focus": ["client", "controller", "filter"],
         "note": "ZodValidationPipe rejeita DTO antes do handler (defense-in-depth)."
       }
     ],
