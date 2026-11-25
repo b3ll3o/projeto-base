@@ -127,17 +127,19 @@ services:
     # omissão é load-bearing — ela NÃO é um esquecimento.
     #
     # ⚠️ A versão anterior deste texto dizia que o serviço `api` "não consome em
-    # runtime". MEDIDO FALSO: `AssinaturaDeMembership.onModuleInit`
-    # (`apps/api/src/shared/infrastructure/prisma/assinatura-de-membership.ts:84`)
-    # lê `process.env['DIRECT_DATABASE_URL']` em TODO boot, e o provider está em
-    # `PrismaModule`, que é `@Global()`. O que a variável é: usada pelo
-    # `ENTRYPOINT` do Dockerfile, que roda `prisma migrate deploy` ANTES de subir o
-    # servidor (`migrate` exige a conexão de DONO — `CREATE ROLE`,
-    # `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` e `GRANT` exigem posse da
-    # tabela) E pela aplicação, que lê a chave de assinatura de membership com a
-    # mesma conexão de DONO, porque `app_runtime` não tem permissão sobre ela.
+    # ⚠️ (issue #180) ESTA NOTA ERA OBSOLETA e foi corrigida. Ela dizia (MEDIDO
+    # FALSO) que o `AssinaturaDeMembership.onModuleInit` lia
+    # `process.env['DIRECT_DATABASE_URL']` em TODO boot. Não lê mais: a chave
+    # de assinatura é lida por uma FUNÇÃO `SECURITY DEFINER` (migration
+    # `20261126000000_chave_de_assinatura_via_definer`), com a credencial de
+    # RUNTIME — e o processo da API não carrega a URI de DONO.
     #
-        # ⚠️ (issue #180) A URI de DONO CONTINUA no ambiente do CONTAINER — e não
+    # O que a variável é, AGORA: usada pelo `ENTRYPOINT` do Dockerfile, que roda
+    # `prisma migrate deploy` ANTES de subir o servidor (`migrate` exige a
+    # conexão de DONO — `CREATE ROLE`, `ALTER TABLE ... ENABLE ROW LEVEL
+    # SECURITY` e `GRANT` exigem posse da tabela) e pelo `prepara-papeis.sh`.
+    #
+    # ⚠️ (issue #180) A URI de DONO CONTINUA no ambiente do CONTAINER — e não
     # pode deixar de estar: o `prisma migrate deploy` (o CLI) e o
     # `prepara-papeis.sh` rodam com ela, no ENTRYPOINT. O que muda é o
     # AMBIENTE DO PROCESSO NODE: o ENTRYPOINT da imagem faz
@@ -148,7 +150,7 @@ services:
     # MEDIDO (a issue #180): o `env_file` é UM arquivo só (`.env.production`),
     # com as TRÊS URIs — ele não entrega "só" nada. A seletividade é do
     # processo, e é por isso que ela é do ENTRYPOINT.
-# Consequência prática: trocar por `DIRECT_DATABASE_URL: ${...}` aqui
+    # Consequência prática: trocar por `DIRECT_DATABASE_URL: ${...}` aqui
     # quebraria o BOOT do container em toda máquina onde a variável não esteja
     # no shell — em DOIS lugares distintos, o `migrate` do ENTRYPOINT e o
     # `onModuleInit` acima — e, pior, `docker compose config` mostraria a
