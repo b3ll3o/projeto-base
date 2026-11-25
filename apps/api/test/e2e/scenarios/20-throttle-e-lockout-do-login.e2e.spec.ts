@@ -181,7 +181,10 @@ describe('E2E 20: o limite do login compõe com o teto global, e a conta trava',
     // requisiões encontraria o teto, e o limite observado seria o do `@Throttle`
     // antigo — muito acima do global.
     let quatro_um_e_um = 0;
-    let recusaGlobal: { retryDoGlobal?: string; retryDoLogin?: string } | null = null;
+    let recusaGlobal: {
+      retryDoGlobal: string | undefined;
+      retryDoLogin: string | undefined;
+    } | null = null;
 
     for (let i = 0; i < LIMITE_GLOBAL_POR_MINUTO + 10; i += 1) {
       const res = await e2e.injetar({
