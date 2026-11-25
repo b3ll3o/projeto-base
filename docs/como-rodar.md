@@ -1,7 +1,7 @@
 # Como rodar o projeto — índice, ambiente local e troubleshooting
 
-Mapa completo por ambiente (dev, Docker, observabilidade, e2e, CI). O índice e o
-**Ambiente 1** (dev local com pnpm nativo) ficam aqui; os outros cinco são irmãos.
+Mapa completo por ambiente (dev, Docker, observabilidade, e2e, CI). O índice e o **Ambiente 1** (dev local
+com pnpm nativo) ficam aqui; os outros cinco são irmãos.
 
 > **Revisto em 2026-11-05** (o preflight do ambiente local, §1.4). Cada afirmação
 > medida carrega a data em que foi medida — as de 2026-10-16 são da primeira redação
@@ -23,12 +23,12 @@ Mapa completo por ambiente (dev, Docker, observabilidade, e2e, CI). O índice e 
 | 7 | Borda Cloudflare da publicação | [`docs/runbooks/cloudflare-edge.md`](./runbooks/cloudflare-edge.md) | verificar e corrigir TLS, WAF, rate limiting, DNSSEC, MFA e tokens da conta |
 
 O **runbook canônico** é este arquivo: §2 (variáveis) e §3 (scripts `pnpm`) moram aqui, e é o que o gate
-[`check-runbook-drift`](../.tooling/scripts/ci/check-runbook-drift.ts) mede — os irmãos **não** são lidos por ele.
+[`check-runbook-drift`](../.tooling/scripts/ci/check-runbook-drift.ts) mede — os irmãos não são lidos por ele.
 
 ### §0.1 Pré-requisitos
 
-Node `^22.22.2 || ^24.15.0 || >=26.0.0` · pnpm 9.12.0 (`packageManager`) · Docker com `compose` v2
-(ambientes 2–4) · Chromium para o e2e (instalado pelo `pretest:e2e`).
+Node `^22.22.2 || ^24.15.0 || >=26.0.0` · pnpm 9.12.0 (`packageManager`) · Docker com `compose` v2 (ambientes 2–4) ·
+Chromium para o e2e (instalado pelo `pretest:e2e`).
 
 ```bash
 pnpm install --frozen-lockfile
@@ -36,16 +36,14 @@ pnpm install --frozen-lockfile
 
 ### §0.2 Quando este documento precisa mudar
 
-O gate `check-runbook-drift` (preflight, Camada 1) acusa **três** formas de drift:
-um `pnpm <script>` citado aqui que não existe mais; uma chave da tabela §2 que
-sumiu dos `.env.example` (⚠️ a tabela tem **UMA CHAVE POR CÉLULA**); e o nome do
-container do banco local (§1.1) diferente do que o app e o tooling usam.
+O gate `check-runbook-drift` (preflight, Camada 1) acusa **três** formas de drift: um `pnpm <script>` citado
+aqui que não existe mais; uma chave da tabela §2 que sumiu dos `.env.example` (⚠️ a tabela tem **UMA CHAVE
+POR CÉLULA**); e o nome do container do banco local (§1.1) diferente do que o app e o tooling usam.
 
-O que o gate **não** mede — precisa do olho de quem mudou: script novo → §3;
-`.env.example` alterado → §2 + o passo que copia; porta trocada → §1.5 e §4;
-ambiente novo → §0 + [`docs/runbooks/`](./runbooks/); defeito de boot → a seção
-dele, trocando 📖 por ✅ e a data. Regra prática: **quem mudou o comando
-escreve a linha nova no mesmo commit**.
+O que o gate **não** mede — precisa do olho de quem mudou: script novo → §3; `.env.example` alterado → §2 +
+o passo que copia; porta trocada → §1.5 e §4; ambiente novo → §0 + [`docs/runbooks/`](./runbooks/); defeito de
+boot → a seção dele, trocando 📖 por ✅ e a data. Regra prática: **quem mudou o comando escreve a linha nova
+no mesmo commit**.
 
 ---
 
@@ -147,6 +145,8 @@ cd apps/api && pnpm exec prisma migrate deploy && cd ../..  # aplica as migratio
 > cache, o `prisma generate` não roda e a suíte morre com `Cannot find module
 > '.prisma/client/default'` — sintoma que parece "o Prisma está desatualizado" e
 > não é. O conserto é `pnpm turbo run db:generate --filter=@projeto/api --force`.
+>
+> ⚠️ **`migrate dev` recusa uma migration EDITADA depois de aplicada** (issue #183): o `migrate deploy` tolera, o `migrate status` fica calado, mas o `migrate dev` responde "All data will be lost" e sai 130 — a receita (MEDIDA) está na própria migration.
 
 ### §1.4 Subir os apps
 
