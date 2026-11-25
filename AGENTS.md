@@ -290,5 +290,5 @@ Após cada **grande atividade** (plano multi-task, bugfix não-trivial, ou adoç
 
 **Mantido por:** projeto-base contributors
 **Licença:** MIT
-**Versão do documento:** 1.32.0
+**Versão do documento:** 1.36.0
 **Status:** Estável
