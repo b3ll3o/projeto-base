@@ -54,7 +54,25 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER:-projeto}"']
+      # ⚠️ (issue #179) O probe mede o caminho REAL do cliente: TCP.
+      #
+      # `pg_isready` SEM `-h` connecta pelo SOCKET UNIX
+      # (`/var/run/postgresql/.s.PGSQL.5432`), e durante o `initdb` o
+      # entrypoint do postgres sobe um servidor TEMPORÁRIO que escuta SÓ no
+      # socket (não em TCP) para rodar os scripts de init. MEDIDO nessa
+      # janela: `pg_isready -U projeto` (socket) responde 'accepting
+      # connections' com rc=0, enquanto `pg_isready -h 127.0.0.1 -U projeto`
+      # responde 'no response' com rc=2 — e a api conecta por TCP (via DNS).
+      #
+      # O healthcheck mentia, e a `depends_on: service_healthy` liberava a api
+      # nessa janela: ela rodava `prisma migrate deploy` contra um postgres
+      # que não aceitava TCP e MORRE com P1001, em crash-loop (o
+      # `restart: unless-stopped` repetia a migration a cada tentativa).
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -h 127.0.0.1 -U "$${POSTGRES_USER:-projeto}" -d "$${POSTGRES_DB:-projeto_base}"',
+        ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -189,17 +207,17 @@ services:
     tmpfs:
       - /tmp:size=128m
       - /repo/.cache:size=64m
-      # MEDIDO 2026-10-19: sem esta linha a api não sobe. O ENTRYPOINT roda
-      # `pnpm exec prisma migrate deploy` antes de qualquer código, e o corepack
-      # resolve o `pnpm` em `$HOME/.cache/node/corepack` — que precisa CRIAR o
-      # diretório. Com `read_only: true` não há como criar, e o container entra
-      # em crash loop a cada boot. Sem isto, nenhum trace da aplicação existe
-      # para olhar. `uid/gid` são necessários porque tmpfs nasce root:root e o
-      # processo roda como 1001:1001 — sem eles o erro muda de ENOENT para
-      # EACCES (medido: um sem o outro não sobe).
-      # (Custo: tmpfs nasce vazio a cada boot, então o pnpm é baixado de novo;
-      # o conserto definitivo é assar o cache no build, em PR separado.)
-      - /home/app/.cache:size=32m,mode=0755,uid=1001,gid=1001
+      # ⚠️ (issue #178) O tmpfs do `/home/app/.cache` SAIU: ele existia porque o
+      # corepack resolvia o `pnpm` em `$HOME/.cache/node/corepack` — e o
+      # diretório tinha que ser CRIÁVEL no boot (com `read_only: true` não há
+      # como criar, e o container entrava em crash loop). O cache do corepack
+      # agora é ASSADO na imagem (`COREPACK_HOME=/repo/.corepack`, o `COPY
+      # --from=builder` do `apps/api/Dockerfile`), e MEDIDO com a imagem nova e
+      # `--read-only` SEM este tmpfs: o ENTRYPOINT passa do corepack e chega ao
+      # Prisma (a falha que sobra é a do banco) — sem baixar nada do registry.
+      #
+      # O `/repo/.cache` (tmpfs acima) continua: é o cache de runtime do
+      # Vite/tsc, que o `dev` usa.
     security_opt:
       - 'no-new-privileges:true'
     cap_drop:
