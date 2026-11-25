@@ -11,6 +11,12 @@ import { PrismaModule } from './shared/infrastructure/prisma/prisma.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
+import {
+  JANELA_LOGIN_MS,
+  LIMITE_LOGIN_POR_MINUTO,
+  foraDaRotaDeLogin,
+  trackerDoLogin,
+} from './modules/auth/infrastructure/http/throttle-do-login.js';
 import { ProfilesModule } from './modules/profiles/profiles.module.js';
 import { TenancyModule } from './modules/tenancy/tenancy.module.js';
 import { FeatureFlagsModule } from './modules/feature-flags/feature-flags.module.js';
@@ -90,6 +96,30 @@ export const JANELA_GLOBAL_MS = Number(process.env.THROTTLE_TTL_MS ?? 60_000);
       {
         ttl: JANELA_GLOBAL_MS,
         limit: LIMITE_GLOBAL_POR_MINUTO,
+      },
+      // ⚠️ (issue #182, sec-N1-001) O SEGUNDO throttler — o do login.
+      //
+      // O `@Throttle` da rota de login usava a chave `'default'`, que é o
+      // MESMO nome deste primeiro throttler: no `@nestjs/throttler@6.8.0` o
+      // decorator SUBSTITUI o valor do módulo na rota (`routeOrClassLimit ??
+      // namedThrottler.limit`), e não vira um bucket novo. MEDIDO com o guard
+      // real: na rota de login, 1 IP + 200 e-mails diferentes → 200
+      // requisições permitidas, com o teto global por IP em 100. O decorator
+      // não restringia — REMOVIA a restrição.
+      //
+      // Com o throttler NOMEADO, os DOIS valem na rota de login: o global por
+      // IP (100/min) e o de login por `(IP, e-mail)` (5/min). E o `skipIf`
+      // garante que o bucket de login não conte as OUTRAS rotas — sem ele, o
+      // teto de 5/min viraria um limite global de 5/min.
+      {
+        name: 'login',
+        ttl: JANELA_LOGIN_MS,
+        limit: LIMITE_LOGIN_POR_MINUTO,
+        // ⚠️ O TRACKER é o `(IP, e-mail)` — e não o IP. O IP sozinho é o
+        // teto global (que já existe, com nome `'default'`); a chave por
+        // e-mail é o que segura o ataque de brute force contra UMA conta.
+        getTracker: trackerDoLogin,
+        skipIf: foraDaRotaDeLogin,
       },
     ]),
     LoggerModule.forRoot(

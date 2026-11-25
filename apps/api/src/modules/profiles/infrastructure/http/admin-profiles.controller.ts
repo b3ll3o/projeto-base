@@ -27,19 +27,14 @@ import {
   type ProfileDetail,
   type ProfileSummary,
 } from '../../application/profiles.use-cases.js';
+import { ZodValidationPipe } from '../../../../shared/infrastructure/http/zod-validation.pipe.js';
 import { atorDe, type ReqComAtor } from '../../../../shared/auth/eh-administrador-de-sistema.js';
-
-interface CreateProfileBody {
-  slug: string;
-  name: string;
-  description?: string;
-  initialPermissions?: string[];
-}
-
-interface UpdateProfileBody {
-  name: string;
-  description?: string;
-}
+import {
+  AtualizarPerfilSchema,
+  CriarPerfilSchema,
+  type AtualizarPerfilDto,
+  type CriarPerfilDto,
+} from './profiles.schemas.js';
 
 // ⚠️ `@ApiBearerAuth()` NA CLASSE, e não em cada handler: no documento
 // OpenAPI a rota protegida é a que declara `security`, e a rota PÚBLICA é a
@@ -92,7 +87,15 @@ export class AdminProfilesController {
   @Post()
   @ApiOperation({ summary: 'Criar um perfil' })
   @RequirePermission('admin.manage-profiles')
-  async create(@Body() body: CreateProfileBody, @Req() req: ReqComAtor): Promise<ProfileDetail> {
+  // ⚠️ (issue #185, code-N1-003) O corpo é validado por Zod: sem isso o
+  // `initialPermissions` cru chegava ao agregado, que itera o valor SEM
+  // checar o tipo — um objeto ou um número davam TypeError e a rota
+  // respondia 500 onde o certo é 400. O padrão é o do repo (o pipe global
+  // é `z.any()`, um noop: cada rota sobrescreve).
+  async create(
+    @Body(new ZodValidationPipe(CriarPerfilSchema)) body: CriarPerfilDto,
+    @Req() req: ReqComAtor,
+  ): Promise<ProfileDetail> {
     // pt-BR (#97): `isAdmin`/`isSystem` NÃO são repassados do body, mesmo
     // que o cliente os mande — um ator com `admin.manage-profiles` criaria
     // profile de bypass total. As flags vêm só do seed/migration
@@ -117,7 +120,7 @@ export class AdminProfilesController {
   @RequirePermission('admin.manage-profiles')
   async update(
     @Param('id') id: string,
-    @Body() body: UpdateProfileBody,
+    @Body(new ZodValidationPipe(AtualizarPerfilSchema)) body: AtualizarPerfilDto,
     @Req() req: ReqComAtor,
   ): Promise<ProfileDetail> {
     const input: UpdateProfileInput = {

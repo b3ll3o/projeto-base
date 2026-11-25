@@ -14,7 +14,9 @@ import { JwtAuthGuard } from '../../../auth/infrastructure/http/jwt-auth.guard.j
 import { PermissionsGuard } from './guards/permissions.guard.js';
 import { RequirePermission } from './decorators/require-permission.decorator.js';
 import { AuthorizationUseCases, type ProfileDetail } from '../../application/profiles.use-cases.js';
+import { ZodValidationPipe } from '../../../../shared/infrastructure/http/zod-validation.pipe.js';
 import { atorDe, type ReqComAtor } from '../../../../shared/auth/eh-administrador-de-sistema.js';
+import { ConcederAutorizacaoSchema, type ConcederAutorizacaoDto } from './profiles.schemas.js';
 
 // ⚠️ `@ApiBearerAuth()` NA CLASSE, e não em cada handler: no documento
 // OpenAPI a rota protegida é a que declara `security`, e a rota PÚBLICA é a
@@ -42,7 +44,10 @@ export class AdminAuthorizationsController {
   @RequirePermission('admin.manage-authorizations')
   async atribuir(
     @Param('id') id: string,
-    @Body() body: { permissionKey: string },
+    // ⚠️ (issue #185, code-N1-003) O corpo passa pelo Zod: a FORMA é do
+    // boundary (texto não vazio) e a VALIDADE da chave continua sendo do
+    // domínio (`isPermissionKey`).
+    @Body(new ZodValidationPipe(ConcederAutorizacaoSchema)) body: ConcederAutorizacaoDto,
     @Req() req: ReqComAtor,
   ): Promise<ProfileDetail> {
     return this.useCases.atribuir(id, body.permissionKey, atorDe(req));

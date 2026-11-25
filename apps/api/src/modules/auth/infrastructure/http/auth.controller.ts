@@ -50,7 +50,6 @@
 
 import { Body, Controller, Get, Inject, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { Throttle } from '@nestjs/throttler';
 
 import { ZodValidationPipe } from '../../../../shared/infrastructure/http/zod-validation.pipe.js';
 import { AuthUseCases, AUTH_USE_CASES } from '../../application/auth-use-cases.js';
@@ -63,26 +62,22 @@ import { Public } from './public.decorator.js';
 /**
  * Tentativas de login por minuto, por conta (`ip:email`).
  *
- * Por que o teto GLOBAL do `@nestjs/throttler` (100/min) não serve aqui: ele é
- * por IP, e o ataque de brute force é "muitas senhas contra UM e-mail". Por IP,
- * um atacante distribuído nunca esgota o bucket de nenhum IP seu, e um IP
- * compartilhado de verdade (NAT de escritório, VPN) tranca a rede inteira atrás
- * de um usuário que errou a senha uma vez.
+ * ⚠️ (issue #182) A CONSTANTE e a POLÍTICA do limite do login passaram para
+ * `throttle-do-login.ts` — o dono da política. O motivo é o conserto do
+ * sec-N1-001: o `@Throttle` da rota usava a chave `'default'`, o MESMO nome
+ * do único throttler do módulo, e no `@nestjs/throttler@6.8.0` o decorator
+ * SUBSTITUI o valor do módulo na rota (`routeOrClassLimit ??
+ * namedThrottler.limit`). MEDIDO com o guard real: 1 IP + 200 e-mails
+ * diferentes → 200 requisições permitidas na rota de login, com o teto global
+ * por IP em 100 — o decorator não restringia, REMOVIA a restrição.
  *
- * Por que 5: é o número que o NIST SP 800-63B sugere para tentativas de
- * autenticação, e o teto mais apertado que serve ao ataque sem travar o
- * usuário legítimo que errou a senha duas vezes.
+ * Com o throttler NOMEADO (`'login'`), os dois valem na rota: o global por IP
+ * e o de login por `(IP, e-mail)`.
  *
- * ⚠️ Este número é a restrição que a suíte impõe, e ela a pagou no momento em
- * que o limite entrou. MEDIDO 2026-10-14, com o limite instalado: `users.e2e.spec.ts`
- * fazia 6 logins da MESMA chave `ip:email` (seis `it()` independentes que por
- * acaso compartilhavam `a@b.com`) e o 6º levou 429; o harness e2e gastava um
- * login por `beforeEach` na conta de sessão, com 17 testes vermelhos. As DUAS
- * correções foram nos specs — e-mail próprio por teste, e token reaproveitado —
- * e nenhuma no número. Subir o teto para a suíte passar seria trocar o
- * controle de segurança pela conveniência do teste.
+ * O reexport existe porque o spec e2e (`09-rate-limit.e2e.spec.ts`) importa
+ * este caminho — e o NÚMERO tem UM dono, importado pelos dois lados.
  */
-export const LIMITE_LOGIN_POR_MINUTO = 5;
+export { LIMITE_LOGIN_POR_MINUTO } from './throttle-do-login.js';
 import { LoginSchema, RefreshSchema, type LoginDto, type RefreshDto } from './auth.schemas.js';
 
 @ApiTags('auth')
@@ -98,43 +93,21 @@ export class AuthController {
   // ───────────────────────── POST /auth/login ─────────────────────────
 
   @Public()
-  // ⚠️ O `getTracker` é o ponto inteiro deste decorator: sem ele o throttler
-  // chaveia por IP, que é o teto global e não o que segura brute force. A
-  // chave `ip:email` esgota o bucket DA CONTA que está sendo atacada.
+  // ⚠️ (issue #182, sec-N1-001) O `@Throttle` desta rota SAIU — e a rota
+  // continua com o teto do login, que agora vive no throttler NOMEADO
+  // `'login'` do `ThrottlerModule.forRoot` (ver
+  // `throttle-do-login.ts`, o dono da política).
   //
-  // MEDIDO, removendo o `getTracker` (o tracker padrão da lib volta a ser o IP):
-  // 2 dos 3 testes do `09-rate-limit.e2e.spec.ts` caem. O que morre é o
-  // per-conta — a conta B recebe 429 onde esperava 401, porque herdou o bucket
-  // que a conta A esgotou. Esse é o teste que separa "limitou por conta" de
-  // "limitou por IP", e ele só é o load-bearing DEPOIS que o harness deixou de
-  // gastar um login por `beforeEach`: antes da correção, os três caíam no
-  // `beforeEach` e a mutação provava o motivo errado (a 5ª tentativa do 1º
-  // teste era 429 porque o bucket do IP já vinha gasto pelo bootstrap).
+  // O motivo do conserto: o decorator usava a chave `'default'`, que é o
+  // MESMO nome do único throttler do módulo — e no `@nestjs/throttler@6.8.0`
+  // o decorator SUBSTITUI o valor do módulo na rota
+  // (`routeOrClassLimit ?? namedThrottler.limit`), em vez de virar um bucket
+  // novo. MEDIDO com o guard real: na rota de login, 1 IP + 200 e-mails
+  // diferentes → 200 requisições permitidas, com o teto global por IP em
+  // 100. O decorator não restringia — REMOVIA a restrição que existia.
   //
-  // `req.body` pode não existir (o throttle roda antes dos pipes, e um corpo
-  // ausente é 400 do Zod, não 500 daqui). Fallback para string vazia mantém a
-  // chave estável: login sem e-mail conta no bucket compartilhado, o que é o
-  // comportamento correto — esse request não é uma tentativa de conta.
-  //
-  // ⚠️ A chave é `default`, e não um nome próprio como `login`. MEDIDO: com
-  // `@Throttle({ login: {...} })` e um `ThrottlerModule.forRoot([{...}])` sem
-  // `name`, o header continuava `x-ratelimit-limit: 100` em todo request e o
-  // spec caía 3/3 com 401 onde esperava 429 — um decorator que nomeia um
-  // throttler inexistente é inerte, e o sintoma é justamente o 429 que nunca
-  // chega. Só `default` existe no módulo; o `limit`/`ttl` aqui sobrescrevem os
-  // do `forRoot` apenas nesta rota.
-  @Throttle({
-    default: {
-      limit: LIMITE_LOGIN_POR_MINUTO,
-      ttl: 60_000,
-      getTracker: (req) => {
-        const ip = (req.ip ?? req.socket?.remoteAddress ?? 'desconhecido') as string;
-        const email =
-          typeof req.body?.email === 'string' ? req.body.email.toLowerCase().trim() : '';
-        return `${ip}:${email}`;
-      },
-    },
-  })
+  // Com o throttler nomeado, os DOIS valem na rota de login: o global por IP
+  // (100/min) e o de login por `(IP, e-mail)` (5/min).
   @Post('login')
   @ApiOperation({ summary: 'Autenticar e emitir sessão' })
   // ⚠️ O `RefreshSchema`/`LoginSchema` do Zod NÃO é um decorator do Swagger —
@@ -169,13 +142,21 @@ export class AuthController {
   // ⚠️ 429 entrou no contrato em 2026-10-14, junto com o `@Throttle`. O
   // `openapi.json` versionado listava 201/400/401 — a rota já devolvia 429
   // desde que o limite por conta (`ip:email`) foi instalado, e o contrato
-  // continuava calado. O `doc-sync` pointed para estes arquivos no pre-commit
-  // do commit que trouxe o `@Throttle`; o contrato é gerado deste decorator,
-  // então corrigir aqui e reexportar é o caminho, e não editar o JSON.
+  // continuava calado.
+  //
+  // ⚠️ (issue #182) O `@Throttle` da rota SAIU (o dono da política é o
+  // throttler nomeado `'login'` do módulo), mas o 429 CONTINUA: a rota tem
+  // DOIS tetos agora — o global por IP (100/min) e o de login por
+  // `(IP, e-mail)` (5/min) — e qualquer um dos dois responde 429.
   @ApiResponse({
     status: 429,
-    description: 'Limite de tentativas por conta (`ip:email`) excedido',
+    description: 'Limite de tentativas excedido (global por IP ou de login por `ip:email`)',
   })
+  // ⚠️ 423 é a conta TRAVADA por tentativas (o lockout por conta, que é POR
+  // CONTA e não por IP) — e é um status diferente do 429 de propósito: um
+  // cliente que confunde os dois trata o travamento como "tente de novo em X
+  // segundos", quando o que importa é "a conta está travada por 15 minutos".
+  @ApiResponse({ status: 423, description: 'Conta bloqueada por tentativas de login' })
   async login(@Body(new ZodValidationPipe(LoginSchema)) body: LoginDto): Promise<unknown> {
     return this.authUseCases.login({ email: body.email, senha: body.senha });
   }
