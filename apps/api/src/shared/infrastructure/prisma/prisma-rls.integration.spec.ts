@@ -1318,6 +1318,64 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
     expect(cruzada.detalhe).toContain('assinatura invalida');
   });
 
+  it('🔴 `app_runtime` não consegue forjar a assinatura nem com o segredo em mãos', async () => {
+    // ⚠️ (issue #180, 2ª revisão) A escalada INTEIRA, como `app_runtime`, e
+    // com a ASSINATURA CORRETA.
+    //
+    // MEDIDO (a 1ª versão do PR #193): o runtime lia o segredo pela função
+    // `ler_chave_de_assinatura`, montava o corpo com `corpo_de_membership`
+    // (que tem `EXECUTE` liberado ao runtime), assinava com `hmac()` (pgcrypto)
+    // e chamava `criar_membership` — e a linha era gravada: a vítima ganhou
+    // `role: owner` numa empresa que não era dela.
+    //
+    // Este teste é o que fecha a classe: ele dá ao runtime TUDO que ele
+    // poderia ter (o segredo, o corpo, o `hmac`) e afirma que a escalada
+    // NÃO acontece. O teste anterior (a assinatura forjada à mão) prova o
+    // caminho óbvio; este prova o caminho com o material em mãos.
+    const alice = await criarUsuario('alice');
+    const bruno = await criarUsuario('bruno');
+    await associar(alice, acmeId);
+
+    // A escalada, em SQL, como `app_runtime`: o segredo pela função, o corpo
+    // pela função, o HMAC pelo pgcrypto, e a chamada.
+    const escalada = await tentarComo(Prisma.sql`
+      WITH lido AS (
+        SELECT ler_chave_de_assinatura('membership'::text) AS segredo
+      ),
+      corpo AS (
+        SELECT corpo_de_membership(
+          ${bruno}::uuid,
+          ${acmeId}::uuid,
+          'owner'::text,
+          NULL::uuid
+        ) AS c
+      ),
+      assinado AS (
+        SELECT encode(hmac(convert_to(corpo.c, 'UTF8'), lido.segredo, 'sha256'), 'hex') AS a
+        FROM corpo, lido
+      )
+      SELECT criar_membership(
+        ${bruno}::uuid,
+        ${acmeId}::uuid,
+        'owner'::text,
+        NULL::uuid,
+        assinado.a::text
+      )::text AS id
+      FROM assinado
+    `);
+
+    // A escalada NÃO aconteceu: a leitura da chave foi recusada (é a primeira
+    // etapa da escalada, e ela morre ali).
+    expect(escalada.ok).toBe(false);
+    expect(escalada.detalhe).toMatch(/^42501:/);
+
+    // E o vínculo NÃO foi criado — o Bruno não ganhou `owner` na ACME.
+    const vinculo = await ctx.prisma.$queryRaw<Array<{ role: string }>>`
+      SELECT role FROM tenant_memberships WHERE user_id = ${bruno}::uuid AND tenant_id = ${acmeId}::uuid
+    `;
+    expect(vinculo).toHaveLength(0);
+  });
+
   it('🔴 `app_runtime` não lê a chave de assinatura — senão ela não prova nada', async () => {
     // ⚠️ Este é o teste que dá sentido ao anterior. Uma assinatura só prova
     // alguma coisa enquanto o material da chave está fora do alcance de quem a
@@ -1342,6 +1400,24 @@ describe('RLS — isolamento de empresa no Postgres (Fase 9)', () => {
     // totalmente diferente.
     expect(leaked.detalhe).toMatch(/^42501:/);
     expect(leaked.detalhe).toContain('permission denied for table chaves_de_assinatura');
+
+    // ⚠️ (issue #180, 2ª revisão) A MESMA proteção precisa valer pela
+    // FUNÇÃO — e é aqui que a 1ª versão do PR #193 a furou.
+    //
+    // MEDIDO: com `EXECUTE` da função `ler_chave_de_assinatura` liberado ao
+    // runtime, a escalada era INTEIRA — o runtime lia o segredo (32 bytes),
+    // assinava um corpo com `hmac()` e chamava `criar_membership`: a vítima
+    // ganhou `role: owner` numa empresa alheia.
+    //
+    // E o teste acima passava com o furo vivo: ele mede a leitura da TABELA, e
+    // a função é outra porta para o mesmo segredo. Um teste que mede só a
+    // porta que já está fechada mede a porta — não a proteção.
+    const pelaFuncao = await tentarComo(Prisma.sql`
+      SELECT ler_chave_de_assinatura('membership'::text) AS segredo
+    `);
+    expect(pelaFuncao.ok).toBe(false);
+    expect(pelaFuncao.detalhe).toMatch(/^42501:/);
+    expect(pelaFuncao.detalhe).toContain('permission denied for function');
   });
 
   it('🟢 `criar_membership` com assinatura da aplicação grava, e a gravação vale como vínculo', async () => {

@@ -57,6 +57,11 @@ export interface AmbienteDoBanco {
   NODE_ENV?: string | undefined;
   DATABASE_URL?: string | undefined;
   SYSTEM_DATABASE_URL?: string | undefined;
+  // ⚠️ (issue #180) A URI de DONO entra no ambiente INSPECIONADO, e é ela que
+  // o guard recusa: é a credencial que ignora RLS por definição, e o processo
+  // que expõe a API não pode carregá-la. O `| undefined` explícito é
+  // exigência do `exactOptionalPropertyTypes`.
+  DIRECT_DATABASE_URL?: string | undefined;
 }
 
 /**
@@ -176,6 +181,37 @@ function usuarioDaUri(uri: string | undefined): string | undefined {
  */
 export function verificarCredenciaisDoBanco(env: AmbienteDoBanco): VereditoCredenciais {
   const ambiente = env.NODE_ENV?.trim().toLowerCase();
+
+  // ⚠️ (issue #180) A CREDENCIAL DE DONO no ambiente do processo é recusada —
+  // e a recusa é DEFAULT-DENY, como a do `SYSTEM_DATABASE_URL`.
+  //
+  // MEDIDO: a URI de dono chegava ao container da api pelo `env_file` do
+  // Compose, e o próprio código a lia (`process.env['DIRECT_DATABASE_URL']`),
+  // abrindo um `PrismaClient` de superuser a cada boot. A precondição do
+  // desenho de isolamento — "o runtime NÃO tem o poder do dono" — estava
+  // violada no processo que expõe a API: quem lesse o `env` (SSRF reflexivo,
+  // erro que imprima o env, o comprometimento de qualquer dependência) tinha
+  // acesso a TODAS as empresas, porque o dono ignora RLS por definição.
+  //
+  // ⚠️ A recusa é só em AMBIENTE DE PRODUÇÃO: em `development` a URI de dono
+  // é o que o CLI do Prisma usa (`migrate`), e tirá-la do `.env` de
+  // desenvolvimento quebraria o fluxo local sem proteger nada — o banco de
+  // desenvolvimento é local.
+  if (ambiente !== 'development') {
+    const uriDoDono = env.DIRECT_DATABASE_URL?.trim();
+    if (uriDoDono !== undefined && uriDoDono !== '') {
+      return {
+        ok: false,
+        motivo:
+          `DIRECT_DATABASE_URL está no ambiente do processo: é a credencial de ` +
+          `DONO (superuser), que ignora RLS por definição, e o processo que ` +
+          `expõe a API não pode carregá-la (#180). A assinatura de membership ` +
+          `já é lida por uma função SECURITY DEFINER, e o ` +
+          `\`prisma migrate deploy\` roda numa etapa separada — a imagem de ` +
+          `produção remove a variável do ambiente do Node antes do \`exec\`.`,
+      };
+    }
+  }
 
   const usuarioRuntime = usuarioDaUri(env.DATABASE_URL);
   if (papelTrocado(usuarioRuntime, PAPEL_DE_RUNTIME)) {
