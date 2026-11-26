@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { checkDocRefs } from './check-doc-refs';
-import { detalhar, formatMark, relatarUmCheck, resumir } from './preflight';
+import { detalhar, executarCheck, formatMark, relatarUmCheck, resumir } from './preflight';
 import type { CheckResult } from './check-types';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -210,6 +210,37 @@ describe('checkDocRefs', () => {
     it('deve manter ✗ para o check que rodou e falhou', () => {
       expect(formatMark({ ok: false, errors: ['algo quebrado'] })).toBe('✗');
     });
+  });
+});
+
+describe('executarCheck - um gate que LANÇA não derruba o preflight inteiro', () => {
+  it('🔴 o check que lança vira um veredito VERMELHO com o motivo (e os outros gates rodam)', async () => {
+    // MEDIDO em 2026-11-26: o `preflight` chamava `check.fn()` sem proteção, e
+    // um gate que lançava derrubava o preflight INTEIRO — os outros 56 nem
+    // rodavam. O `ENOENT` de um `.md` apagado-sem-stage no `check-doc-size`
+    // era exatamente esse caminho.
+    const r = await executarCheck(() => {
+      throw new Error("ENOENT: no such file or directory, open 'doc.md'");
+    });
+    expect(r.ok).toBe(false);
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0]).toContain('LANÇOU');
+    expect(r.errors[0]).toContain('ENOENT');
+  });
+
+  it('🔴 o painel conta o gate que lançou como 1 erro (e a marca é ✗)', async () => {
+    const r = await executarCheck(() => {
+      throw new Error('boom');
+    });
+    const relatorio = relatarUmCheck(r);
+    expect(relatorio.mark).toBe('✗');
+    expect(relatorio.erros).toBe(1);
+  });
+
+  it('✅ o check que devolve veredito passa intacto', async () => {
+    const r = await executarCheck(() => ({ ok: true, errors: [], advisories: ['ressalva'] }));
+    expect(r.ok).toBe(true);
+    expect(r.advisories).toEqual(['ressalva']);
   });
 });
 

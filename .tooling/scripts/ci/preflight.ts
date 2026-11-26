@@ -437,6 +437,33 @@ export function resolverChecks(): Array<{
   }));
 }
 
+/**
+ * Roda UM check e devolve o veredito — mesmo quando o check LANÇA.
+ *
+ * ⚠️ MEDIDO em 2026-11-26: o `preflight` chamava `check.fn()` sem proteção, e
+ * um gate que lançava derrubava o preflight INTEIRO — os outros 56 nem
+ * rodavam, e o `ENOENT` de um `.md` apagado-sem-stage era exatamente isso
+ * (medido no `check-doc-size`). Um gate com defeito é uma LINHA vermelha no
+ * painel; é a forma que ele deveria ter, e não a forma que derrubava a casa.
+ *
+ * O gate que lançou vira um check VERMELHO com o motivo no `errors` — o
+ * painel mostra a linha, a contagem de erros soma 1, e o resto do preflight
+ * continua.
+ */
+export async function executarCheck(
+  fn: () => CheckResult | Promise<CheckResult>,
+): Promise<CheckResult> {
+  try {
+    return await fn();
+  } catch (err) {
+    const motivo = err instanceof Error ? (err.stack ?? err.message) : String(err);
+    return {
+      ok: false,
+      errors: [`o check LANÇOU e não devolveu veredito: ${motivo}`],
+    };
+  }
+}
+
 async function main(): Promise<void> {
   console.log('\u{1F50D} Pre-flight CI checks\n');
   const checks = resolverChecks();
@@ -450,7 +477,7 @@ async function main(): Promise<void> {
     // mas medido contra uma ref que pode estar velha" é uma ressalva sobre o
     // verde, e um painel que só a lê no ramo vermelho descarta exatamente a
     // afirmação que ela existe para qualificar.
-    const relatorio = relatarUmCheck(await check.fn());
+    const relatorio = relatarUmCheck(await executarCheck(check.fn));
     console.log(relatorio.mark);
     for (const linha of relatorio.linhas) {
       console.log(`      ${linha}`);

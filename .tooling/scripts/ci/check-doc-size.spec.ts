@@ -9,6 +9,7 @@ import {
   LIMITE_DE_LINHAS,
   arquivosAcimaDoTeto,
   categoriaDe,
+  checkDocSize,
   contarLinhas,
   globParaRegex,
 } from './check-doc-size';
@@ -74,6 +75,29 @@ describe('categoriaDe', () => {
     for (const c of CATEGORIAS_FORA_DO_ESCOPO) {
       expect(c.razao.length).toBeGreaterThan(20);
       expect(c.globs.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('arquivosIlegiveis — o arquivo que o índice lista e o disco não tem', () => {
+  it('🔴 arquivo no índice e ausente do disco → NÃO derruba o gate (e diz que não mediu)', async () => {
+    // MEDIDO em 2026-11-26: o `readFile` LANÇAVA (ENOENT) e o `preflight`
+    // — que chama `check.fn()` sem try/catch — ABORTAVA INTEIRO: os outros
+    // 56 gates nem rodavam.
+    const repo = mkdtempSync(join(tmpdir(), 'doc-size-ilegivel-'));
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: repo });
+      writeFileSync(join(repo, 'doc.md'), 'ok\n');
+      execFileSync('git', ['add', 'doc.md'], { cwd: repo });
+      rmSync(join(repo, 'doc.md'));
+
+      const r = await checkDocSize({ repoRoot: repo });
+      expect(r.ok).toBe(true);
+      expect(r.errors).toEqual([]);
+      expect(r.advisories?.join('\n')).toContain('doc.md');
+      expect(r.advisories?.join('\n')).toContain('NÃO medidos');
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
     }
   });
 });

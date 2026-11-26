@@ -20,6 +20,7 @@
  */
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import ts from 'typescript';
 import { linhasDoRelato, type CheckResult } from './check-types';
 
 /** O tsconfig que declara os aliases do workspace. */
@@ -86,14 +87,22 @@ export async function aliasesMortos(opts: {
     return [];
   }
 
-  let config: unknown;
-  try {
-    config = JSON.parse(bruto);
-  } catch {
-    // JSON inválido é erro de outro gate (o `tsc`); aqui não há o que medir.
-    return [];
-  }
+  const { config, erro } = parseDoTsconfig(bruto, tsconfigAbs);
+  if (erro !== undefined) return [];
+  return aliasesMortosDoConfig(config, tsconfigDir);
+}
 
+/**
+ * Os aliases mortos de um `tsconfig` já LIDO.
+ *
+ * Separado do `aliasesMortos` para que o gate possa usar o MESMO caminho de
+ * medição sem o `catch` engolir o erro de parse (que o gate declara como
+ * `skipped` com motivo).
+ */
+export async function aliasesMortosDoConfig(
+  config: unknown,
+  tsconfigDir: string,
+): Promise<AliasMorto[]> {
   const mortos: AliasMorto[] = [];
   for (const alias of extrairAliases(config)) {
     const resolvido = resolverAlvo(tsconfigDir, alias.alvo);
@@ -109,6 +118,41 @@ export async function aliasesMortos(opts: {
     }
   }
   return mortos;
+}
+
+/**
+ * O `tsconfig` LIDO COMO O `tsc` LÊ — e não como o `JSON.parse` lê.
+ *
+ * ⚠️ MEDIDO em 2026-11-26: `tsconfig.json` é **JSONC** — o TypeScript aceita
+ * comentário e vírgula final, e o `JSON.parse` REJEITA os dois. A primeira
+ * versão deste gate usava `JSON.parse`, e o `catch` devolvia `[]` — **verde
+ * silencioso** (a classe 5 de `guard-classes.md`): um `tsconfig.base.json`
+ * com um `//` no meio desligava o gate inteiro, e os aliases mortos que
+ * ninguém via não eram vistos. MEDIDO: com um `//` no `tsconfig.base.json` e
+ * DOIS aliases mortos, o gate devolvia `{ok: true, errors: []}`.
+ *
+ * `ts.parseConfigFileTextToJson` é o mesmo leitor do `tsc` — comentário,
+ * vírgula final e BOM saem como o compilador entende. E JSON que é inválido
+ * DE VERDADE devolve o erro, que o gate declara como `skipped` COM MOTIVO
+ * (nunca verde por ausência).
+ */
+export function parseDoTsconfig(
+  bruto: string,
+  caminho = TSCONFIG_RAIZ,
+): { config: unknown; erro?: string } {
+  // `ts.readConfigFile` e não `ts.parseConfigFileTextToJson`: MEDIDO
+  // 2026-11-26, o segundo LANÇA um "Debug Failure" quando o texto tem
+  // comentário (o `attachFileToDiagnostic` do TS compara o nome do arquivo
+  // com um diagnóstico sem arquivo) — e um tsconfig com comentário é
+  // exatamente o caso que este gate precisa ler. O `readConfigFile` é a MESMA
+  // porta que o `tsc` usa, e o leitor é injetado para medir o CONTEÚDO já
+  // lido (o gate não quer tocar o disco duas vezes).
+  const lido = ts.readConfigFile(caminho, () => bruto);
+  if (lido.error !== undefined) {
+    const mensagem = ts.flattenDiagnosticMessageText(lido.error.messageText, ' ');
+    return { config: undefined, erro: `'${caminho}' não é JSON nem JSONC: ${mensagem}` };
+  }
+  return { config: lido.config };
 }
 
 export async function checkPathAlias(opts: {
@@ -127,7 +171,32 @@ export async function checkPathAlias(opts: {
     };
   }
 
-  const mortos = await aliasesMortos(opts);
+  // O gate LÊ o tsconfig por conta própria (e não via `aliasesMortos`) para
+  // poder DECLARAR um JSON inválido como `skipped` com motivo — o `aliasesMortos`
+  // devolve `[]` no mesmo caso, e verde por ausência é a classe 5.
+  const tsconfigAbs = path.join(root, tsconfigRel);
+  let bruto: string;
+  try {
+    bruto = await fs.readFile(tsconfigAbs, 'utf-8');
+  } catch {
+    return {
+      ok: true,
+      errors: [],
+      skipped: true,
+      reason: `'${tsconfigRel}' ausente — o gate não tem o que comparar`,
+    };
+  }
+  const { config, erro } = parseDoTsconfig(bruto, tsconfigAbs);
+  if (erro !== undefined) {
+    return {
+      ok: true,
+      errors: [],
+      skipped: true,
+      reason: `${erro} — o gate não tem o que comparar (o erro de JSON é do \`tsc\`)`,
+    };
+  }
+
+  const mortos = await aliasesMortosDoConfig(config, path.dirname(tsconfigAbs));
   const errors = mortos.map(
     (m) =>
       `alias morto: '${m.nome}' aponta para '${m.alvo}' (${m.resolvido}), que não existe — ` +

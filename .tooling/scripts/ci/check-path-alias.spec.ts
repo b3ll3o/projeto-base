@@ -86,6 +86,46 @@ describe('checkPathAlias', () => {
     expect(r.errors.join('\n')).toContain('@projeto/x');
   });
 
+  it('🔴 tsconfig com COMENTÁRIO (JSONC) e alias morto → VERMELHO (o gate não pode passar verde em silêncio)', async () => {
+    // MEDIDO em 2026-11-26: com `JSON.parse`, o `catch` devolvia `[]` e o gate
+    // ficava VERDE com DOIS aliases mortos — um `//` no tsconfig desligava o
+    // gate inteiro (a classe 5 de `guard-classes.md`).
+    writeFileSync(
+      join(repo, 'tsconfig.base.json'),
+      `{
+  // comentário: o \`tsc\` aceita JSONC, o \`JSON.parse\` não
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@projeto/ui": ["./packages/ui/src"]
+    }
+  }
+}
+`,
+    );
+    const r = await checkPathAlias({ repoRoot: repo });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toContain('@projeto/ui');
+  });
+
+  it('🔴 tsconfig com vírgula final (JSONC) → o gate mede, não pula', async () => {
+    writeFileSync(
+      join(repo, 'tsconfig.base.json'),
+      '{\n  "compilerOptions": {\n    "baseUrl": ".",\n    "paths": {\n      "@projeto/ui": ["./packages/ui/src"],\n    },\n  },\n}\n',
+    );
+    const r = await checkPathAlias({ repoRoot: repo });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toContain('@projeto/ui');
+  });
+
+  it('🔴 tsconfig que é JSON INVÁLIDO de verdade → skipped COM MOTIVO (nunca verde por ausência)', async () => {
+    writeFileSync(join(repo, 'tsconfig.base.json'), '{ "compilerOptions": { ');
+    const r = await checkPathAlias({ repoRoot: repo });
+    expect(r.skipped).toBe(true);
+    expect(r.reason).toContain('JSONC');
+    expect(r.errors).toEqual([]);
+  });
+
   it('tsconfig ausente → skipped COM MOTIVO (nunca verde por ausência — classe 5)', async () => {
     const r = await checkPathAlias({ repoRoot: repo });
     expect(r.skipped).toBe(true);

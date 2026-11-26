@@ -142,7 +142,14 @@ export async function arquivosAcimaDoTeto(
 ): Promise<AcimaDoTeto[]> {
   const acima: AcimaDoTeto[] = [];
   for (const rel of arquivos) {
-    const conteudo = await fs.readFile(path.join(repoRoot, rel), 'utf-8');
+    const conteudo = await lerSeExiste(path.join(repoRoot, rel));
+    // ⚠️ MEDIDO em 2026-11-26: o `readFile` LANÇAVA quando o arquivo estava
+    // no ÍNDICE do git mas não no disco (o `.md` foi apagado e a remoção ainda
+    // não foi staged). O `preflight` chama `check.fn()` sem try/catch, e o
+    // `ENOENT` derrubava o preflight INTEIRO — os outros 56 gates nem rodaram.
+    // Um arquivo apagado não tem linhas: ele não é medido, e o gate diz que
+    // não mediu (advisory), em vez de derrubar a casa.
+    if (conteudo === null) continue;
     const linhas = contarLinhas(conteudo);
     const categoria = categoriaDe(rel);
     if (categoria === null && linhas > LIMITE_DE_LINHAS) {
@@ -150,6 +157,30 @@ export async function arquivosAcimaDoTeto(
     }
   }
   return acima;
+}
+
+/**
+ * Os arquivos do índice que NÃO existem no disco.
+ *
+ * MEDIDO em 2026-11-26: é o estado de um `.md` apagado cuja remoção ainda
+ * não foi staged — o índice ainda o lista, o disco não o tem. O gate não
+ * pode medê-lo (não há linhas), e não pode fingir que mediu.
+ */
+export async function arquivosIlegiveis(repoRoot: string, arquivos: string[]): Promise<string[]> {
+  const fora: string[] = [];
+  for (const rel of arquivos) {
+    if ((await lerSeExiste(path.join(repoRoot, rel))) === null) fora.push(rel);
+  }
+  return fora;
+}
+
+/** O conteúdo do arquivo, ou `null` se ele não existe no disco. */
+async function lerSeExiste(caminho: string): Promise<string | null> {
+  try {
+    return await fs.readFile(caminho, 'utf-8');
+  } catch {
+    return null;
+  }
 }
 
 export async function checkDocSize(opts: { repoRoot: string }): Promise<CheckResult> {
@@ -176,7 +207,17 @@ export async function checkDocSize(opts: { repoRoot: string }): Promise<CheckRes
       `tamanho-e-revisao.md §O que o teto cobre`,
   );
 
-  return { ok: errors.length === 0, errors };
+  const ilegiveis = await arquivosIlegiveis(root, arquivos);
+  const advisories =
+    ilegiveis.length > 0
+      ? [
+          `${ilegiveis.length} arquivo(s) estão no índice do git e não existem no disco ` +
+            `(${ilegiveis.join(', ')}) — NÃO medidos (não há linhas para medir); ` +
+            `o próximo commit que stagear a remoção os tira do índice`,
+        ]
+      : [];
+
+  return { ok: errors.length === 0, errors, advisories };
 }
 
 // Executado como CLI.

@@ -19,6 +19,14 @@
 
 ## Pendências encerradas
 
+- **FECHADO 2026-11-26 — o `check-path-alias` lia o `tsconfig` com `JSON.parse`, e um `//` desligava o gate inteiro.** O `tsconfig.json` é **JSONC**: o `tsc` aceita comentário e vírgula final, e o `JSON.parse` REJEITA os dois. O `catch` devolvia `[]` — **verde silencioso**, a classe 5 de `guard-classes.md`. MEDIDO (2026-11-26): um `tsconfig.base.json` com um `//` no meio e **DOIS aliases mortos** devolvia `{ok: true, errors: []}` — o gate não via nenhum dos dois.
+  O conserto lê o arquivo com a **mesma porta que o `tsc` usa** (`ts.readConfigFile`, que aceita JSONC), e JSON que é inválido DE VERDADE volta como `skipped` **COM MOTIVO** (nunca verde por ausência). ⚠️ `ts.parseConfigFileTextToJson` **não** serve: MEDIDO, ele LANÇA um "Debug Failure" quando o texto tem comentário (o `attachFileToDiagnostic` do TS compara o nome do arquivo com um diagnóstico sem arquivo) — e tsconfig com comentário é exatamente o caso que o gate precisa ler.
+  Dentes: `npx vitest run --root .tooling/scripts/ci check-path-alias` (denominador **13**) → **3 de 13** com o parse revertido ao `JSON.parse` (o `tsconfig` com comentário volta a passar verde em silêncio).
+
+- **FECHADO 2026-11-26 — um gate que LANÇAVA derrubava o preflight INTEIRO (os outros 56 nem rodavam).** O `preflight` chamava `check.fn()` sem proteção. O caso real: um `.md` apagado cuja remoção ainda não foi staged fica no **índice** do git e some do **disco** — o `check-doc-size` fazia `readFile` e o `ENOENT` derrubava o preflight (MEDIDO 2026-11-26: `Error: ENOENT ... at async arquivosAcimaDoTeto`, com o processo morrendo no primeiro gate de doc).
+  O conserto é em DUAS camadas: (1) o `check-doc-size` não mede o que não existe e **DIZ que não mediu** (advisory com o nome do arquivo); (2) o `preflight` roda cada check por `executarCheck`, que transforma um gate que lançou em **um check vermelho com o motivo** — uma linha no painel, e o resto do preflight continua. Um gate com defeito é uma linha vermelha, não a queda da casa.
+  Dentes: `npx vitest run --root .tooling/scripts/ci preflight.spec` (denominador **43**) → **3 de 43** com o `try/catch` neutralizado; `npx vitest run --root .tooling/scripts/ci check-doc-size` (denominador **15**) → **1 de 15** com o `readFile` que lança.
+
 - **FECHADO 2026-10-08 — o painel lia `ok` e `errors` para decisões
   diferentes.** `relatarUmCheck` tirava a **marca** de `result.ok` e a
   **contagem** de `errors.length`; `ok` e `errors` são independentes por
