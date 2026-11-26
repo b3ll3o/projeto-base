@@ -51,7 +51,7 @@ describe('Profile (aggregate)', () => {
 
     it('emite ProfileCreatedEvent na criação', () => {
       const p = Profile.criar({ slug: 'viewer', name: 'Visualizador', agora: T0 });
-      expect(firstEventName(p)).toBe('profile.created.v1');
+      expect(firstEventName(p)).toBe('profiles.profile.created.v1');
     });
   });
 
@@ -113,7 +113,7 @@ describe('Profile (aggregate)', () => {
       expect(p.nome().value).toBe('Novo');
       expect(p.version()).toBe(2);
       expect(p.updatedAt()).toEqual(t1);
-      expect(firstEventName(p)).toBe('profile.updated.v1');
+      expect(firstEventName(p)).toBe('profiles.profile.updated.v1');
     });
 
     it('alterarDescricao aceita null', () => {
@@ -166,7 +166,7 @@ describe('Profile (aggregate)', () => {
       const p = Profile.criar({ slug: 'custom', name: 'Customizado', agora: T0 });
       pullEvents(p);
       p.deletar('obsoleto', T0);
-      expect(firstEventName(p)).toBe('profile.deleted.v1');
+      expect(firstEventName(p)).toBe('profiles.profile.deleted.v1');
     });
 
     it('bloqueia deleção de profile isSystem', () => {

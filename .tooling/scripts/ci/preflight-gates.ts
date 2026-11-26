@@ -715,6 +715,14 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     file: '.tooling/scripts/ci/check-pr-review-wired.ts',
     id: 'check-pr-review-wired',
   },
+  {
+    // A regra event-driven (convenção `event-driven.md`): nome canônico do
+    // evento, quem emite, quem consome, efeito colateral escrito direto e
+    // segredo no payload.
+    name: 'arquitetura event-driven (nome, emissão, consumo, efeito colateral)',
+    file: '.tooling/scripts/ci/check-event-driven.ts',
+    id: 'check-event-driven',
+  },
 ];
 
 /**

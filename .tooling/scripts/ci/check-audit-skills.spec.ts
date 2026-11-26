@@ -40,7 +40,7 @@ describe('a lista de skills de auditoria', () => {
     // depois do inventário da revisão e escapou por 23 de 25 skills.
     // MEDIDO em 2026-11-18: as 5 skills do kit de documentação (1 por pilar)
     // entraram com a convenção `kit-documentacao.md`.
-    expect(SKILLS_DE_AUDITORIA.length).toBe(12);
+    expect(SKILLS_DE_AUDITORIA.length).toBe(13);
     expect(SKILLS_DE_AUDITORIA).toContain('prisma-audit');
     expect(SKILLS_DE_AUDITORIA).toContain('openapi-audit');
     expect(SKILLS_DE_AUDITORIA).toContain('otelcol-audit');
@@ -446,7 +446,7 @@ describe('o registro das exceções `skip` — os arquivos do repo', () => {
     }
     // O número é medido, não conferido: se uma skill nova entrar com `skip`, o
     // registro tem de acompanhar — e este teste é o que fecha a conta.
-    expect(skips.length).toBe(15);
+    expect(skips.length).toBe(16);
     expect(registro.excecoes.length).toBe(skips.length);
     expect(reconciliarExcecoesDeSkip(skips, registro)).toEqual([]);
   });

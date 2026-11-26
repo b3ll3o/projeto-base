@@ -67,6 +67,10 @@ export const SKILLS_DE_AUDITORIA: readonly string[] = [
   'decision-docs-audit',
   'contract-docs-audit',
   'operations-docs-audit',
+  // MEDIDO em 2026-11-26: a skill da auditoria event-driven (convenção
+  // `event-driven.md`) entrou com a regra. Um passo dela roda o gate — e o
+  // gate precisa do toolchain, então esse passo é `skip` com âncora.
+  'event-driven-audit',
 ];
 
 /**

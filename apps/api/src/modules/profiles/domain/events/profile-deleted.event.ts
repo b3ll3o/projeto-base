@@ -1,7 +1,7 @@
 import type { DomainEvent } from '../../../../shared/domain/domain-event.js';
 
 export class ProfileDeletedEvent implements DomainEvent {
-  readonly eventName = 'profile.deleted.v1';
+  readonly eventName = 'profiles.profile.deleted.v1';
   readonly occurredAt: Date;
   readonly aggregateId: string;
 
