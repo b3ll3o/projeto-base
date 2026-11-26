@@ -108,7 +108,7 @@ O que o gate mediu na árvore de 2026-11-26, e o que está no registro
 
 | violação | quantidade | quem |
 |----------|-----------|------|
-| **ED5** — evento sem handler nomeado | **7** (4 de `users`, 3 de `profiles`) | o use case drena por `endsWith('.created.v1')`; os 3 de `profiles` **não são drenados por ninguém** (eventos mortos) |
+| **ED5** — evento sem consumidor na camada `application` | **7** (4 de `users`, 3 de `profiles`) | o use case drena por `endsWith('.created.v1')`; os 3 de `profiles` **não são drenados por ninguém** (eventos mortos) |
 | **ED6** — efeito colateral escrito direto | **1** (`auditService.record` no caminho de tenancy, `TODO(#184)`) | o registro fora da transação da mutação |
 
 O **plano** que fecha essa dívida é

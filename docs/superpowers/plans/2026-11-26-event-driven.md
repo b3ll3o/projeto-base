@@ -35,7 +35,7 @@ Medido em 2026-11-26, na árvore de `v1.39.0`
 | medida | valor | comando |
 |--------|-------|---------|
 | eventos de domínio | **7** (4 em `users`, 3 em `profiles`) | `find apps/api/src/modules -path '*/domain/events/*.event.ts' \| wc -l` |
-| eventos com **handler nomeado** | **0** | `pnpm tsx .tooling/scripts/ci/check-event-driven.ts` |
+| eventos com **consumidor na camada `application`** | **0** | `pnpm tsx .tooling/scripts/ci/check-event-driven.ts` |
 | escrita de efeito colateral direta pela `application` | **1** | idem |
 | módulos com evento | **2** de 6 | `ls apps/api/src/modules/*/domain/events -d` |
 | barramento, broker, outbox | **0** | `grep -rn "EventBus\|outbox\|bullmq\|kafkajs" apps/api/src apps/api/package.json` |
