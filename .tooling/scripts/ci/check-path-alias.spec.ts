@@ -198,12 +198,36 @@ describe('checkPathAlias', () => {
     expect(r.errors).toEqual([]);
   });
 
+  it('🔴 o MESMO alias em dois configs: pai vivo + filho que SUBSTITUI por um quebrado → VERMELHO', async () => {
+    // MEDIDO em 2026-11-27: o `paths` NÃO é mesclado no `extends` — o filho
+    // SUBSTITUI o do pai. Então `@x → ./lib` no pai e `@x → ./nao-existe` no
+    // filho são aliases DIFERENTES, e o do filho é o que o `tsc` do filho usa
+    // (que sai 2 com TS2307). O pool antigo (nome+base) juntava os dois e
+    // "basta um destino vivo" mascarava o quebrado: gate VERDE com tsc
+    // vermelho.
+    mkdirSync(join(repo, 'base', 'lib'), { recursive: true });
+    writeFileSync(
+      join(repo, 'base', 'tsconfig.base.json'),
+      JSON.stringify({ compilerOptions: { baseUrl: '.', paths: { '@x': ['./lib'] } } }),
+    );
+    mkdirSync(join(repo, 'app'), { recursive: true });
+    writeFileSync(
+      join(repo, 'app', 'tsconfig.json'),
+      JSON.stringify({
+        extends: '../base/tsconfig.base.json',
+        compilerOptions: { paths: { '@x': ['./nao-existe'] } },
+      }),
+    );
+    const r = await checkPathAlias({ repoRoot: repo });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toContain('@x');
+  });
+
   it('o repo real não tem alias morto', async () => {
     const r = await checkPathAlias({ repoRoot: REPO_REAL });
     expect(r.errors).toEqual([]);
     expect(r.ok).toBe(true);
   });
-
   it('a medição do repo real não é verde por acidente: um alias morto é achado', async () => {
     // A árvore sadia exercita só metade do conserto: um gate que mede o repo
     // real e nunca acha nada pode estar medindo o vazio.

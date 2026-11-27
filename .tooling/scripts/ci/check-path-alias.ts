@@ -39,6 +39,11 @@
  * não usado é uma decisão, não um defeito — o `@projeto/shared-domain` aponta
  * para `apps/api/src/shared/domain`, que existe, e ninguém importa. Remover
  * alias não usado é escopo de quem usa, não deste gate.
+ *
+ * **O `paths` NÃO é mesclado no `extends`** — o filho SUBSTITUI o do pai (é o
+ * que o TS faz). Por isso o gate julga cada **declaração** por si: pai com
+ * `@x → ./ok` e filho com `@x → ./nao-existe` são aliases diferentes, e o do
+ * filho é o que o `tsc` do filho usa.
  */
 import type { Stats } from 'node:fs';
 import * as fs from 'node:fs/promises';
@@ -82,6 +87,15 @@ export interface AliasMedido {
   vivo: boolean;
   /** O caminho absoluto que o alvo representa (o prefixo, no caso wildcard). */
   resolvido: string;
+  /**
+   * A lista de alvos da DECLARAÇÃO que este alvo veio.
+   *
+   * É o que separa "o mesmo alias em dois configs" de "o mesmo alias
+   * declarado uma vez". O `paths` NÃO é mesclado no `extends` — o filho
+   * SUBSTITUI o do pai — então `@x → ./ok` no pai e `@x → ./nao-existe` no
+   * filho são aliases DIFERENTES, mesmo com o mesmo nome e a mesma base.
+   */
+  alvos: string[];
 }
 
 /**
@@ -354,7 +368,14 @@ export async function medirAliases(repoRoot: string): Promise<Medicao> {
     for (const alias of config.aliases) {
       for (const alvo of alias.alvos) {
         const { vivo, resolvido } = await alvoVivo(config.base, alvo);
-        aliases.push({ nome: alias.nome, alvo, base: config.base, vivo, resolvido });
+        aliases.push({
+          nome: alias.nome,
+          alvo,
+          base: config.base,
+          vivo,
+          resolvido,
+          alvos: alias.alvos,
+        });
       }
     }
   }
@@ -399,13 +420,17 @@ export async function checkPathAlias(opts: { repoRoot: string }): Promise<CheckR
   // TS faz (tenta cada um em ordem). Só quando NENHUM resolve o alias é
   // morto, e aí o relatório nomeia cada destino que falhou.
   //
-  // O agrupamento é por (NOME, BASE): o mesmo nome em bases diferentes são
-  // aliases diferentes (o `@/*` do web e um `@/*` de outro projeto), e um
-  // vivo em uma base não pode esconder um morto em outra. A base entra
-  // também na chave porque é ela que decide a resolução.
+  // O agrupamento é por DECLARAÇÃO — (NOME, BASE, LISTA DE ALVOS) — e não por
+  // (NOME, BASE). MEDIDO em 2026-11-27: `paths` NÃO é mesclado no `extends`
+  // (o filho SUBSTITUI o do pai), então `tsconfig.base.json` com `@x → ./ok`
+  // (vivo) e `app/tsconfig.json` com `@x → ./nao-existe` são aliases
+  // DIFERENTES — mas o pool antigo (nome+base) os juntava, e "basta um
+  // destino vivo" mascarava o quebrado: o gate dizia verde com um `tsc` do
+  // filho saindo 2 (TS2307). A lista de alvos da declaração é o que separa
+  // "o mesmo alias em dois configs" de "o mesmo alias declarado uma vez".
   const porAlias = new Map<string, AliasMedido[]>();
   for (const medido of aliases) {
-    const chave = `${medido.nome}\u0000${medido.base}`;
+    const chave = `${medido.nome}\u0000${medido.base}\u0000${medido.alvos.join('\u0001')}`;
     const lista = porAlias.get(chave) ?? [];
     lista.push(medido);
     porAlias.set(chave, lista);

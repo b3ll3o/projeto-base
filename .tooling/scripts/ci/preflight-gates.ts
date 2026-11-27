@@ -613,6 +613,10 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     // `"@/*"` do `apps/web` (150 imports `@/…`) virava "alias morto", e o
     // gate media só o `tsconfig.base.json`. Agora o gate mede TODOS os
     // tsconfigs e julga o alvo na forma que o TS aceita.
+    //
+    // MEDIDO em 2026-11-27: o `paths` NÃO é mesclado no `extends` (o filho
+    // SUBSTITUI o do pai), então o gate julga cada DECLARAÇÃO por si — pai
+    // vivo + filho que substitui por um quebrado é VERMELHO.
     name: 'alias de path aponta para um local que existe (como o TS aceita)',
     file: '.tooling/scripts/ci/check-path-alias.ts',
     id: 'check-path-alias',
