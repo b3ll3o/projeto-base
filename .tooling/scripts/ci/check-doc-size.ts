@@ -243,9 +243,22 @@ export async function checkDocSize(opts: { repoRoot: string }): Promise<CheckRes
 // `checkDocSize` é **assíncrono**, então o bloco usa `.then()` — o mesmo padrão
 // de `check-ci-local-e2e.ts`. Um `const r = await ...` de topo não compila em
 // CJS-via-tsx.
+//
+// ⚠️ MEDIDO em 2026-11-27: o `lerSeExiste` passou a LANÇAR o que não é
+// `ENOENT` (ilegibilidade ≠ ausência), e este bloco — que não tem `catch` —
+// morria com stack trace e **exit 1** do crash (não o do veredito). O
+// preflight não sente nada: lá o `executarCheck` transforma o LANÇO em uma
+// LINHA vermelha. Invocado direto, o gate precisa fazer o mesmo.
 if (process.argv[1]?.endsWith('check-doc-size.ts')) {
-  checkDocSize({ repoRoot: '.' }).then((r) => {
-    for (const linha of linhasDoRelato(r)) process.stderr.write(`${linha}\n`);
-    process.exit(r.ok ? 0 : 1);
-  });
+  checkDocSize({ repoRoot: '.' }).then(
+    (r) => {
+      for (const linha of linhasDoRelato(r)) process.stderr.write(`${linha}\n`);
+      process.exit(r.ok ? 0 : 1);
+    },
+    (erro: unknown) => {
+      const motivo = erro instanceof Error ? erro.message : String(erro);
+      process.stderr.write(`✗ o gate LANÇOU e não devolveu veredito: ${motivo}\n`);
+      process.exit(1);
+    },
+  );
 }
