@@ -1,6 +1,13 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { checkDocRefs } from './check-doc-refs';
-import { detalhar, executarCheck, formatMark, relatarUmCheck, resumir } from './preflight';
+import {
+  detalhar,
+  executarCheck,
+  formatMark,
+  relatarUmCheck,
+  resumir,
+  rodarChecks,
+} from './preflight';
 import type { CheckResult } from './check-types';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -220,8 +227,8 @@ describe('executarCheck - um gate que LANÇA não derruba o preflight inteiro', 
     // `.md` apagado-sem-stage no `check-doc-size` era exatamente esse caminho.
     //
     // MEDIDO em 2026-11-27, o tamanho da queda: o preflight tem 56 checks no
-    // TOTAL e o crash ocorreu no 48º (o `check-doc-size`) — 47 rodaram e
-    // imprimiram ✓, os 8 seguintes nunca rodaram, o resumo final não imprimiu,
+    // TOTAL e o crash ocorreu no 48º (o `check-doc-size`) — 47 rodaram antes
+    // do crash, os 8 seguintes nunca rodaram, o resumo final não imprimiu,
     // e o exit foi 2 (o do crash), não 1.
     const r = await executarCheck(() => {
       throw new Error("ENOENT: no such file or directory, open 'doc.md'");
@@ -245,6 +252,62 @@ describe('executarCheck - um gate que LANÇA não derruba o preflight inteiro', 
     const r = await executarCheck(() => ({ ok: true, errors: [], advisories: ['ressalva'] }));
     expect(r.ok).toBe(true);
     expect(r.advisories).toEqual(['ressalva']);
+  });
+});
+
+describe('rodarChecks - o LOOP isola o gate que lança (e os outros rodam)', () => {
+  // ⚠️ A spec anterior testava só `executarCheck` — o HELPER. Trocar o
+  // `main()` para chamar `check.fn()` direto (sem o isolamento) deixava a
+  // suíte VERDE e devolvia o crash que o PR fecha. O dente tem que estar no
+  // LOOP: um check que lança no MEIO não pode impedir o check seguinte.
+  it('🔴 o check que lança no meio vira 1 erro — e o check DEPOIS dele roda', async () => {
+    const rodou: string[] = [];
+    const r = await rodarChecks(
+      [
+        {
+          name: 'a',
+          file: 'a.ts',
+          fn: () => {
+            rodou.push('a');
+            return { ok: true, errors: [] };
+          },
+        },
+        {
+          name: 'b',
+          file: 'b.ts',
+          fn: () => {
+            rodou.push('b');
+            throw new Error('boom');
+          },
+        },
+        {
+          name: 'c',
+          file: 'c.ts',
+          fn: () => {
+            rodou.push('c');
+            return { ok: true, errors: [] };
+          },
+        },
+      ],
+      () => {},
+    );
+    // Os TRÊS rodaram: o que lançou virou linha, não casa fora de combate.
+    expect(rodou).toEqual(['a', 'b', 'c']);
+    expect(r.erros).toBe(1);
+    expect(r.pulados).toBe(0);
+  });
+
+  it('🔴 o painel escreve uma linha por check (o que launcher não aparece)', async () => {
+    const linhas: string[] = [];
+    await rodarChecks(
+      [
+        { name: 'a', file: 'a.ts', fn: () => ({ ok: true, errors: [] }) },
+        { name: 'b', file: 'b.ts', fn: () => ({ ok: false, errors: ['ruim'] }) },
+      ],
+      (texto) => linhas.push(texto),
+    );
+    expect(linhas.filter((l) => l.startsWith('  • '))).toHaveLength(2);
+    expect(linhas.join('')).toContain('✗');
   });
 });
 

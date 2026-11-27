@@ -98,11 +98,10 @@ export function categoriaDe(relPath: string): Categoria | null {
 /**
  * O número de linhas que o arquivo **tem**.
  *
- * `wc -l` conta *newlines*, e um arquivo sem newline final tem uma linha a
- * menos do que `wc -l` diz — é por isso que `wc -l` e a contagem de linha
- * divergem em 1 nos arquivos sem `
-` final. Aqui a contagem é a do arquivo:
- * `split('\n').length` menos o último elemento, quando ele é vazio.
+ * `wc -l` conta *newlines*: um arquivo sem newline final tem uma linha a
+ * MAIS do que `wc -l` diz — por isso `wc -l` subestima em 1 nesses arquivos.
+ * Aqui a contagem é a do arquivo: `split('\n').length` menos o último
+ * elemento, quando ele é vazio.
  */
 export function contarLinhas(conteudo: string): number {
   if (conteudo === '') return 0;
@@ -145,12 +144,12 @@ export async function arquivosAcimaDoTeto(
     const conteudo = await lerSeExiste(path.join(repoRoot, rel));
     // ⚠️ MEDIDO em 2026-11-26: o `readFile` LANÇAVA quando o arquivo estava
     // no ÍNDICE do git mas não no disco (o `.md` foi apagado e a remoção ainda
-    // não foi staged). O `preflight` chama `check.fn()` sem try/catch, e o
+    // não foi staged). O `preflight` CHAMAVA `check.fn()` sem try/catch, e o
     // `ENOENT` derrubava o preflight INTEIRO.
     //
     // ⚠️ MEDIDO em 2026-11-27, o tamanho dessa queda: o preflight tem 56
     // checks NO TOTAL e o crash ocorreu no **48º** (`check-doc-size`) — 47
-    // checks rodaram e imprimiram ✓, os **8** seguintes nunca rodaram, o
+    // checks rodaram antes do crash, os **8** seguintes nunca rodaram, o
     // resumo final não imprimiu, e o exit foi **2** (o do crash), não 1.
     //
     // Um arquivo apagado não tem linhas: ele não é medido, e o gate diz que
@@ -180,12 +179,20 @@ export async function arquivosIlegiveis(repoRoot: string, arquivos: string[]): P
   return fora;
 }
 
-/** O conteúdo do arquivo, ou `null` se ele não existe no disco. */
+/**
+ * O conteúdo do arquivo, ou `null` se ele não existe no disco.
+ *
+ * Só o `ENOENT` é "não existe". Qualquer OUTRO erro (EACCES, EISDIR) é
+ * **ilegibilidade** — e ilegibilidade não é ausência: engolir aqui
+ * reportava "não existe no disco" (advisory com motivo falso) e o arquivo
+ * ficava sem medição, em silêncio.
+ */
 async function lerSeExiste(caminho: string): Promise<string | null> {
   try {
     return await fs.readFile(caminho, 'utf-8');
-  } catch {
-    return null;
+  } catch (erro) {
+    if ((erro as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw erro;
   }
 }
 

@@ -45,18 +45,45 @@ jobs:
             exit 0
           fi
 
-          # Já apagada (o botão "Delete branch" do GitHub, ou um push --delete
-          # manual): a ref não existe e o job sai com aviso. Qualquer OUTRO
-          # erro (403, 500) é erro de verdade — engolir aqui seria apagar
-          # branch nenhuma e sair verde.
-          if ! saida=$(gh api "repos/$REPO/git/ref/heads/$BRANCH" 2>&1); then
-            if printf '%s' "$saida" | grep -q '"status":"404"'; then
+          # O nome da branch vai na URL: `#` e `?` são LEGAIS no git e no
+          # GitHub, e na URL são fragmento e query. Sem encoding, `feature/x#1`
+          # vira `feature/x` — e o DELETE apagaria a branch errada. O `/` do
+          # path de branch é preservado (é separador de path, não caractere).
+          BRANCH_ENC=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe='/'))" "$BRANCH")
+
+          # PR EMPILHADO: a branch é a BASE de outro PR aberto. Apagá-la
+          # quebra o PR de cima. O botão "Delete branch" do GitHub tem o mesmo
+          # efeito, mas aqui a falha é automática e silenciosa — por isso a
+          # checagem é explícita.
+          bases=$(gh api "repos/$REPO/pulls?state=open&base=$BRANCH_ENC" --jq '[.[] | select(.base.ref == env.BRANCH)] | length')
+          if [ "$bases" != "0" ]; then
+            echo "::notice::a branch $BRANCH é a base de $bases PR(s) aberto(s) — não apaga"
+            exit 0
+          fi
+
+          # O GET devolve a ref inteira: `git/ref/heads/<branch>`. O 404 é o
+          # caso "a branch já não existe" (o botão do GitHub, ou um
+          # `push --delete` manual) — sai com aviso. Qualquer OUTRO erro
+          # (403, 500) é erro de verdade: engolir aqui seria apagar branch
+          # nenhuma e sair verde.
+          if ! resposta=$(gh api --include "repos/$REPO/git/ref/heads/$BRANCH_ENC" 2>&1); then
+            if printf '%s' "$resposta" | grep -qE '^HTTP/[0-9.]+ 404' ||
+               printf '%s' "$resposta" | grep -q '"status":"404"'; then
               echo "::notice::a branch $BRANCH já não existe"
               exit 0
             fi
-            echo "::error::não deu para ler a ref $BRANCH: $saida"
+            echo "::error::não deu para ler a ref $BRANCH: $resposta"
             exit 1
           fi
 
-          gh api -X DELETE "repos/$REPO/git/refs/heads/$BRANCH"
+          # A CONFERÊNCIA é o que fecha o buraco do encoding: mesmo que a URL
+          # tenha sido interpretada de outro jeito, a ref lida precisa ser
+          # EXATAMENTE a branch do PR. Se não for, o DELETE é de outra branch.
+          ref=$(printf '%s\n' "$resposta" | grep -oE '"ref":"[^"]+"' | head -1 | sed 's/^"ref":"//; s/"$//')
+          if [ "$ref" != "refs/heads/$BRANCH" ]; then
+            echo "::error::a ref lida ($ref) não é a branch do PR ($BRANCH) — não apago"
+            exit 1
+          fi
+
+          gh api -X DELETE "repos/$REPO/git/refs/heads/$BRANCH_ENC"
           echo "::notice::branch $BRANCH apagada (PR merged)"

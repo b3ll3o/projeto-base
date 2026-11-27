@@ -82,10 +82,10 @@ describe('categoriaDe', () => {
 describe('arquivosIlegiveis — o arquivo que o índice lista e o disco não tem', () => {
   it('🔴 arquivo no índice e ausente do disco → NÃO derruba o gate (e diz que não mediu)', async () => {
     // MEDIDO em 2026-11-26: o `readFile` LANÇAVA (ENOENT) e o `preflight`
-    // — que chama `check.fn()` sem try/catch — ABORTAVA INTEIRO.
+    // — que CHAMAVA `check.fn()` sem try/catch — ABORTAVA INTEIRO.
     //
     // MEDIDO em 2026-11-27, o tamanho da queda: o preflight tem 56 checks no
-    // TOTAL e o crash ocorreu no 48º (este gate) — 47 rodaram e imprimiram ✓,
+    // TOTAL e o crash ocorreu no 48º (este gate) — 47 rodaram antes do crash,
     // os 8 seguintes nunca rodaram, o resumo final não imprimiu, e o exit foi
     // 2 (o do crash), não 1.
     const repo = mkdtempSync(join(tmpdir(), 'doc-size-ilegivel-'));
