@@ -212,7 +212,7 @@ O nome deve descrever **o problema**, não a ferramenta. `fix/coverage-gate-40`
        │
        ▼
 12. Merge (squash preferencialmente) e apagar a branch
-   (ver §Branch Morta: Apagar Quando o PR Sai de OPEN)
+   (§Branch Morta: Apagar Quando o PR Sai de OPEN — mergeada, a branch some sozinha: `delete-merged-branch.yml`)
 ```
 
 ## Branch Morta: Apagar Quando o PR Sai de OPEN

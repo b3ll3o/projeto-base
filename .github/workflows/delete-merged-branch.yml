@@ -1,0 +1,62 @@
+name: delete-merged-branch
+
+# Apaga a branch do PR assim que o PR é MERGEADO.
+#
+# É o instrumento da regra de
+# [`git-workflow.md`](../../.agents/specs/conventions/git-workflow.md)
+# §"Branch Morta: Apagar Quando o PR Sai de OPEN": a regra diz que a branch
+# mergeada está morta, e este workflow é quem a apaga — sem depender de
+# ninguém lembrar.
+#
+# Por que um workflow próprio: nenhum evento de `push` vê o PR FECHADO.
+# `pull_request: closed` é o único gatilho que sabe se o PR foi mergeado.
+#
+# Por que só MERGED: PR fechado SEM merge precisa do exame de conteúdo
+# (apêndice §Caso 3) — apagar no escuro perde trabalho que ninguém mais tem.
+on:
+  pull_request:
+    types: [closed]
+
+# pt-BR (#131): este workflow é o ÚNICO que precisa escrever no repo — ele
+# apaga a ref da branch. Todo o resto do CI é `contents: read`.
+permissions:
+  contents: write
+
+jobs:
+  delete:
+    # `merged` decide: `false` (PR fechado sem merge, ou reaberto) não apaga.
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Apagar a branch mergeada
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          set -euo pipefail
+
+          # Branch de FORK: a ref vive no outro repositório — o DELETE aqui é
+          # 404 e não é a branch que a regra quer apagar.
+          if [ "$HEAD_REPO" != "$REPO" ]; then
+            echo "::notice::branch de fork ($HEAD_REPO) — nada a apagar aqui"
+            exit 0
+          fi
+
+          # Já apagada (o botão "Delete branch" do GitHub, ou um push --delete
+          # manual): a ref não existe e o job sai com aviso. Qualquer OUTRO
+          # erro (403, 500) é erro de verdade — engolir aqui seria apagar
+          # branch nenhuma e sair verde.
+          if ! saida=$(gh api "repos/$REPO/git/ref/heads/$BRANCH" 2>&1); then
+            if printf '%s' "$saida" | grep -q '"status":"404"'; then
+              echo "::notice::a branch $BRANCH já não existe"
+              exit 0
+            fi
+            echo "::error::não deu para ler a ref $BRANCH: $saida"
+            exit 1
+          fi
+
+          gh api -X DELETE "repos/$REPO/git/refs/heads/$BRANCH"
+          echo "::notice::branch $BRANCH apagada (PR merged)"

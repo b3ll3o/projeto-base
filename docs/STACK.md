@@ -121,7 +121,7 @@ projeto-base (monorepo)
 | Editor | VS Code | Suporte nativo a TS, ESLint, Prisma |
 | Container | Docker + Compose | Postgres + api + web + `otel-collector` + `tempo` + `prometheus` + `grafana` (os 4 últimos, perfil `observability`). **Sem Redis** — nenhum serviço de cache/fila existe |
 | Git hooks | Husky + lint-staged | `pre-commit`: `lint-staged` → `stack-code-reviewer` → `doc-sync` · `commit-msg`: `commit-msg-gate` (Conventional Commits) · `pre-push`: `ci:preflight` → `ci:boot` → `pr:refresh` (advisory). **Nenhum hook roda `tdd-enforcer`** — ele existe como agent ([`tdd-enforcer`](../.agents/agents/tdd-enforcer.md)), mas `grep -rn "tdd-enforcer" .husky/ .github/workflows/` volta vazio. Detalhe linha a linha em [`docs/fluxo-desenvolvimento.md` §3.1](./fluxo-desenvolvimento.md) |
-| CI | GitHub Actions (`.github/workflows/`) | `ci.yml` + `review-stack.yml` + `sync-docs.yml` + `release-template.yml` |
+| CI | GitHub Actions (`.github/workflows/`) | `ci.yml` + `review-stack.yml` + `sync-docs.yml` + `pr-review.yml` + `release-template.yml` + `delete-merged-branch.yml` (apaga a branch do PR mergeado — regra [git-workflow.md](../.agents/specs/conventions/git-workflow.md) §"Branch Morta") |
 | Secrets | (a definir por projeto) | Doppler / Vault / 1Password |
 
 **Fluxo canônico (do primeiro comando ao merge):** como cada ferramenta acima dispara gates (pre-commit, pre-push, CI, release) e o que cada um bloqueia de fato está em [`docs/fluxo-desenvolvimento.md`](./fluxo-desenvolvimento.md).

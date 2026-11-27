@@ -20,6 +20,7 @@ maintainer: stack-code-reviewer
 4. **PR para `main`** dispara 3 jobs de CI (`preflight`, `quality`, `docker-build-prod`) + `stack-code-review` + `docs-sync`. **Pós-#44** os jobs `preflight` e `quality` rodam a suíte do tooling, que valida os próprios dentes dele — contagem por `pnpm tooling:test` (dois roots).
 5. **PR aberto** dispara o job `review-comment` (workflow [`pr-review.yml`](../.github/workflows/pr-review.yml)): o PR **precisa de ≥ 1 comentário de revisão** — marcador `<!-- pr-review -->` — antes do merge. O check é `required` no ruleset `master`.
 6. **Merge em `main`** só dispara `release-template` (auto-tag) **se** o commit tocar `docs/MONOREPO.md`.
+7. **PR mergeado** dispara `delete-merged-branch` — a branch do PR é apagada do remoto na hora (regra [git-workflow.md](../.agents/specs/conventions/git-workflow.md) §"Branch Morta: Apagar Quando o PR Sai de OPEN"). PR **fechado sem merge** não apaga nada.
 
 > **Ressalva crítica:** nenhum check de CI é *required_status_check* — só `quality` e `review-comment` são *required* no ruleset de `main` (ver §7.2). A garantia real é a cadeia do workflow (`preflight` bloqueia `quality` via `needs:`), não o check isolado.
 
@@ -68,6 +69,7 @@ maintainer: stack-code-reviewer
 │     sync-docs.yml     → doc-sync --mode=full                 │
 │     pr-review.yml     → pr-review-gate (revisão; required)   │
 │     release-template  → tag annotated no merge em main       │
+│     delete-merged-branch → apaga a branch do PR mergeado     │
 │   ⚠ Só `quality` e `review-comment` são required (§7)       │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -93,6 +95,7 @@ maintainer: stack-code-reviewer
 | 11 | Revisão do PR | workflow [`pr-review-mode`](../.agents/workflows/pr-review-mode.md) — 1 specialist por parte do diff | **job `review-comment`** (workflow `pr-review.yml`) — o PR precisa de ≥ 1 comentário de revisão, com o marcador `<!-- pr-review -->` |
 | 12 | Revisão / fix loop | `gh pr merge` só após CI verde | os checks `required` do ruleset `master`: `quality` **e** `review-comment` (§7) |
 | 13 | Release | automático | `release-template` roda **só** em push para `main` que toque `docs/MONOREPO.md` |
+| 14 | Apagar a branch | automático | workflow `delete-merged-branch` — dispara no PR **mergeado**; PR fechado sem merge não apaga (exame de conteúdo obrigatório) |
 
 ### 3.1 Detalhe do pre-commit
 
@@ -134,9 +137,8 @@ grep -cE "^\s+name: '" .tooling/scripts/ci/preflight-gates.ts
 
 O pedido "mais agents" esbarra num fato medido: **o despacho era emitido e nunca executado.**
 `review-router.ts` emitia 8 reviewers para um diff de 87 arquivos e terminava em `console.log`;
-`git grep -nE 'review:route' -- .husky .github` devolvia **vazio**. O executor chegou em 2026-11-17:
-o workflow [`pr-review-mode`](../.agents/workflows/pr-review-mode.md) despacha os reviewers em
-paralelo e publica a revisão no PR.
+`git grep -nE 'review:route' -- .husky .github` devolvia **vazio**. O executor chegou em 2026-11-17: o
+workflow [`pr-review-mode`](../.agents/workflows/pr-review-mode.md) despacha em paralelo e publica a revisão.
 
 | Fase | Fan-out | Por que |
 |------|---------|---------|
@@ -159,10 +161,7 @@ paralelo e publica a revisão no PR.
 **As 2 peças que ainda faltam** — nenhuma delas é "mais agents":
 
 1. **Registro** — os 48 agents vivem em `.agents/agents/`, e o binding do Claude Code (symlink `~/.claude/agents/<nome>.md` → `.agents/agents/<nome>.md`) é o que os registra na máquina. Sem o symlink, o orquestrador não tem handle: agent não registrado não é invocado nem por LLM.
-2. **Relógio** — `grep -rn 'Date.now()' tooling/ .tooling/ | wc -l` devolve **12** ocorrências (4 no
-   `ambiente-local.ts`, 3 no `boot-local.ts`, 2 no `check-audit-skills.ts`, 3 em specs) — sem cronômetro, "mais agents é mais rápido" é raciocínio.
-
-**A peça do executor saiu em 2026-11-17**: o workflow [`pr-review-mode`](../.agents/workflows/pr-review-mode.md) despacha `Agent` × N em paralelo sobre a saída do `review-router` e publica **1 comentário de revisão** no PR.
+2. **Relógio** — `grep -rn 'Date.now()' tooling/ .tooling/ | wc -l` devolve **12** ocorrências (4 no `ambiente-local.ts`, 3 no `boot-local.ts`, 2 no `check-audit-skills.ts`, 3 em specs) — sem cronômetro, "mais agents é mais rápido" é raciocínio.
 
 ---
 
