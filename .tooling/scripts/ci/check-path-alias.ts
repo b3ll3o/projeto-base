@@ -208,12 +208,30 @@ function escapaRegex(texto: string): string {
 /**
  * O alvo resolve para um local que o TS consegue usar?
  *
+ * ⚠️ **A CHAVE é o que decide se o `*` do ALVO é substituição ou nome de
+ * arquivo.** MEDIDO em 2026-11-27 com a matriz completa (4 combinações de
+ * chave × alvo, cada uma com `tsc --noEmit --traceResolution`):
+ *
+ * | chave    | alvo        | o TS faz                                    |
+ * |----------|-------------|---------------------------------------------|
+ * | `@k/*`   | `./src/*`   | substitui o capturado → `src/deep`         |
+ * | `@k/*`   | `./src/deep`| usa o alvo como está (o capturado é ignorado)|
+ * | `@kexato`| `./src/deep`| usa o alvo como está                        |
+ * | `@kexato`| `./src/*`   | o `*` é LITERAL → `src/*` não existe → **NÃO resolve** (TS2307) |
+ *
+ * A última linha é o furo: sem `*` na CHAVE não há trecho capturado para
+ * substituir, e o TS procura o caminho `./src/*` LITERAL (o trace do TS
+ * mostra `Trying substitution './src/*', candidate module location: './src/*'`
+ * e `Directory '…/src/*' does not exist`). O gate que decide o modo
+ * "wildcard" olhando SÓ o alvo diz que esse alias está vivo — verde com o
+ * `tsc` vermelho.
+ *
  * Formas, na ordem que o TS as tenta:
  *
- *   1. **wildcard** — o `*` do alvo é o ponto onde o TS substitui o trecho do
- *      specifier que casou com o `*` do ALIAS. O que tem de existir é o
- *      prefixo fixo (o diretório) e, dentro dele, pelo menos um arquivo de
- *      módulo que case com a cauda do padrão.
+ *   1. **wildcard** — a chave tem `*` E o alvo tem `*`: o `*` do alvo é o
+ *      ponto onde o TS substitui o trecho do specifier que casou com o `*`
+ *      da chave. O que tem de existir é o prefixo fixo (o diretório) e,
+ *      dentro dele, pelo menos um arquivo de módulo que case com a cauda.
  *   2. **arquivo** — o alvo nomeia um arquivo; o TS o usa.
  *   3. **diretório** — o alvo nomeia um diretório; o TS procura `index.*`
  *      dentro dele.
@@ -221,13 +239,20 @@ function escapaRegex(texto: string): string {
  * E, para as três, a extensão que o TS acrescentaria: `./src/x` resolve para
  * `src/x.ts`.
  */
-async function alvoVivo(base: string, alvo: string): Promise<{ vivo: boolean; resolvido: string }> {
+async function alvoVivo(
+  base: string,
+  alvo: string,
+  chave: string,
+): Promise<{ vivo: boolean; resolvido: string }> {
   const resolvido = path.resolve(base, alvo);
 
+  // O `*` do ALVO só é slot de substituição se a CHAVE também tiver `*`.
+  // Sem `*` na chave, o `*` do alvo é um caractere LITERAL do nome do
+  // caminho — e nenhum módulo se chama assim.
   const i = indiceDoWildcard(alvo);
-  if (i >= 0) {
+  if (i >= 0 && indiceDoWildcard(chave) >= 0) {
     // O `*` do ALVO é o ponto onde o TS substitui o trecho do specifier que
-    // casou com o `*` do ALIAS (MEDIDO 2026-11-27: `@/deep/a` → `./src/*`
+    // casou com o `*` da CHAVE (MEDIDO 2026-11-27: `@/deep/a` → `./src/*`
     // resolve para `src/deep/a.ts` — o `*` casa `/` também).
     //
     // O alvo se quebra em três pedaços: o DIRETÓRIO fixo (o que existe sem
@@ -367,7 +392,7 @@ export async function medirAliases(repoRoot: string): Promise<Medicao> {
     }
     for (const alias of config.aliases) {
       for (const alvo of alias.alvos) {
-        const { vivo, resolvido } = await alvoVivo(config.base, alvo);
+        const { vivo, resolvido } = await alvoVivo(config.base, alvo, alias.nome);
         aliases.push({
           nome: alias.nome,
           alvo,

@@ -121,8 +121,8 @@ memórias (`grep -c 'agents/memory' AGENTS.md` → 30), todos com `./.agents/mem
 - Camada 1 tem barreira **provada ao vivo**: violação DDD real em
   `domain/probe.ts` → `1 finding(s) — 1 blocker` + EXIT=1 pelo mesmo caminho que
   `.husky/pre-commit:3` e `review-stack.yml:42` executam.
-- Camada 2 é código testado: `pnpm tooling:test` → **80 arquivos / 1643 testes
-  verdes** (dois runners: `tooling/scripts` → 21/467 e `.tooling/scripts/ci` → 59/1176; MEDIDO 2026-11-27).
+- Camada 2 é código testado: `pnpm tooling:test` → **80 arquivos / 1646 testes
+  verdes** (dois runners: `tooling/scripts` → 21/467 e `.tooling/scripts/ci` → 59/1179; MEDIDO 2026-11-27).
 - Camada 3 é artefato versionado: 4365 linhas em 50 arquivos (`ls .agents/memory/*.md | xargs wc -l`).
 
 **A carga de prova não está mais concentrada na Camada 1.** A Camada 2 era
@@ -181,7 +181,7 @@ footer, se um link existe. Conhecimento que muda é fonte viva, nunca cópia.
 
 | Tipo do problema | Instâncias verificadas no repo | Estratégia correta | O que foi feito |
 | --- | --- | --- | --- |
-| Regra determinística | 56 checks de drift/preflight, 1643 testes de tooling | Determinística — e funciona | ✅ Camada 1 |
+| Regra determinística | 56 checks de drift/preflight, 1646 testes de tooling | Determinística — e funciona | ✅ Camada 1 |
 | Similaridade semântica | 0 | Vetorial | — (nada a fazer) |
 | Relacionamento multi-hop | 0 | Grafo | — (nada a fazer) |
 | Especialização de comportamento | 1 caso real (roteamento de reviewer) | Regra, não agentic | ⚠️ chamada de "agentic", é TypeScript com regex |

@@ -223,6 +223,44 @@ describe('checkPathAlias', () => {
     expect(r.errors.join('\n')).toContain('@x');
   });
 
+  it('🔴 a CHAVE é o que decide se o `*` do ALVO é substituição ou nome de arquivo', async () => {
+    // MEDIDO em 2026-11-27 (matriz de 4 combinações, com `tsc --noEmit
+    // --traceResolution`): o `*` do ALVO só é SLOT DE SUBSTITUIÇÃO quando a
+    // CHAVE também tem `*`. Sem `*` na chave não há trecho capturado para
+    // substituir, e o TS procura o caminho `./src/*` LITERAL — o trace mostra
+    // `Trying substitution './src/*', candidate module location: './src/*'` e
+    // `Directory '…/src/*' does not exist` → TS2307.
+    //
+    // O gate que decide o modo "wildcard" olhando SÓ o alvo dizia que esse
+    // alias estava vivo: VERDE com o `tsc` vermelho. Este caso fixa que a
+    // chave é consultada.
+    mkdirSync(join(repo, 'src', 'deep'), { recursive: true });
+    writeFileSync(join(repo, 'src', 'deep', 'index.ts'), 'export const x = 1;\n');
+    writeFileSync(
+      join(repo, 'tsconfig.json'),
+      JSON.stringify({
+        compilerOptions: { baseUrl: '.', paths: { '@exato': ['./src/*'] } },
+      }),
+    );
+    const r = await checkPathAlias({ repoRoot: repo });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toContain('@exato');
+  });
+
+  it('o `*` do alvo COM `*` na chave continua vivo (o caso do `@/*` do web)', async () => {
+    // O contraponto do caso anterior: com `*` na CHAVE, o `*` do alvo É o
+    // slot de substituição, e o TS resolve (`@k/deep` → `src/deep/index.ts`).
+    mkdirSync(join(repo, 'src', 'deep'), { recursive: true });
+    writeFileSync(join(repo, 'src', 'deep', 'index.ts'), 'export const x = 1;\n');
+    writeFileSync(
+      join(repo, 'tsconfig.json'),
+      JSON.stringify({ compilerOptions: { baseUrl: '.', paths: { '@k/*': ['./src/*'] } } }),
+    );
+    const r = await checkPathAlias({ repoRoot: repo });
+    expect(r.ok).toBe(true);
+    expect(r.errors).toEqual([]);
+  });
+
   it('o repo real não tem alias morto', async () => {
     const r = await checkPathAlias({ repoRoot: REPO_REAL });
     expect(r.errors).toEqual([]);
