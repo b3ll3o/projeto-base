@@ -128,13 +128,14 @@ Veja `docs/TEMPLATE_USAGE.md` para detalhes de integração com cada ferramenta 
 | **docker-prod-specialist** | [`.agents/agents/docker-prod-specialist.md`](./.agents/agents/docker-prod-specialist.md) | [memory](./.agents/memory/docker-prod-specialist.md) | Hardening runtime (non-root, read-only, cap-drop), healthchecks prod, secrets, image pinning | PR que toca `Dockerfile`, `docker-compose*.yml`, `.dockerignore` |
 | **release-versioning-specialist** | [`.agents/agents/release-versioning-specialist.md`](./.agents/agents/release-versioning-specialist.md) | [memory](./.agents/memory/release-versioning-specialist.md) | Drift entre docs canônicos, Conventional Commits, semver, workflow release-template | Pré-tag, bump de versão, diagnóstico de release-template |
 | **finding-orchestrator** | [`.agents/agents/finding-orchestrator.md`](./.agents/agents/finding-orchestrator.md) | [memory](./.agents/memory/finding-orchestrator.md) | Dispara specialists em paralelo, agrega findings, dedup contra issues abertas, abre issues via `gh` | Cron semanal (sextas 02:00 UTC), pré-tag, on-demand do user |
+| **event-driven-auditor** | [`.agents/agents/event-driven-auditor.md`](./.agents/agents/event-driven-auditor.md) | [memory](./.agents/memory/event-driven-auditor.md) | Auditor da regra event-driven: nome canônico e versionamento do evento, quem emite, quem consome (handler), efeito colateral escrito direto, segredo no payload, atomicidade mutação↔registro | PR que toca `domain/events/`, criação/renomeio de evento, decisão de handler, auditoria da arquitetura de eventos |
 
 > **Stack vs. auditoria:** stack specialists **criam** código novo e são despachados antes de implementar; auditoria specialists **revisam** o existente, sob demanda ou via orchestrator.
 
 > **Skills de auditoria (1:1):** cada specialist de auditoria carrega uma skill de processo
 > determinístico (`.agents/skills/<name>-audit/SKILL.md`) — `prisma-audit`, `openapi-audit`, `otelcol-audit`,
 > `docker-prod-audit`, `release-versioning-audit`, `findings-orchestration`, `documentation-audit`,
-> `multi-tenant-audit` (do `multi-tenant-specialist`, que **não** é despachado pelo orchestrator) e as **5 do kit**
+> `multi-tenant-audit` (do `multi-tenant-specialist`, que **não** é despachado pelo orchestrator), `event-driven-audit` (do `event-driven-auditor`) e as **5 do kit**
 > (`onboarding-docs-audit`, `architecture-docs-audit`, `decision-docs-audit`, `contract-docs-audit`, `operations-docs-audit`). A skill encapsula o **processo**; o agent, o **papel**.
 
 > **Skills de UI (a maior relação 1:N do repo, v1.11.0+):** o `ux-design-specialist` carrega **8** skills —
@@ -251,6 +252,7 @@ As convenções estão detalhadas em arquivos próprios sob [`.agents/specs/conv
 | DRY | [`dry.md`](./.agents/specs/conventions/dry.md) | Don't Repeat Yourself — o conhecimento tem UMA representação. No código: um termo de domínio tem UM dono (constante exportada) e quem usa importa; a medição é `npx tsx tooling/scripts/analisa-repeticao.ts`, e 2 gates cobram (`check-repeticao`, `check-bloco-duplicado`); adicionada na v1.13.0 |
 | Documentação | [`documentacao.md`](./.agents/specs/conventions/documentacao.md) | A documentação é parte do código: doc ausente = lacuna, doc que mente = defeito. Matriz de cobertura (unidade → doc canônico), fato com UM dono, frescor verificável; medida pelo gate `check-doc-coverage`; adicionada na v1.14.0 |
 | **Kit de documentação** | [`kit-documentacao.md`](./.agents/specs/conventions/kit-documentacao.md) | O kit completo de documentação moderna (5 pilares, 14 itens) é **obrigatório**: cada item tem doc canônico, specialist dono e auditor por pilar; a matriz (item → doc → âncoras → dono) é a fonte única, medida pelo gate `check-doc-kit`; adicionada na v1.30.0 |
+| **Event-Driven** | [`event-driven.md`](./.agents/specs/conventions/event-driven.md) | A aplicação é event-driven: a mudança de estado publica evento versionado e o efeito colateral é do handler — medido pelo gate `check-event-driven`, papel no `event-driven-auditor` |
 | Estilização | [`estilizacao.md`](./.agents/specs/conventions/estilizacao.md) | Padrão de estilo do frontend: tokens semânticos no `@theme` do Tailwind 4 (valores em `apps/web/app/globals.css`), primitivas em `apps/web/components/ui/`, o que é proibido numa tela, como um app derivado adota — e o instrumento que cobra (regra ESLint `estilizacao/no-estilizacao-informal`) |
 | **Estilização — acessibilidade** | [`estilizacao-acessibilidade.md`](./.agents/specs/conventions/estilizacao-acessibilidade.md) | O mínimo de acessibilidade do padrão (foco visível, erro por cor E texto, nome acessível, reflow) — a §5 da convenção `estilizacao.md`, extraída para caber no teto de 300 linhas |
 | **Estilização — contraste** | [`estilizacao-contraste.md`](./.agents/specs/conventions/estilizacao-contraste.md) | A medida de contraste do padrão (17 pares medidos, o comando que os reproduz) — a §2.2 da convenção `estilizacao.md`, extraída para caber no teto de 300 linhas |
@@ -290,5 +292,5 @@ Após cada **grande atividade** (plano multi-task, bugfix não-trivial, ou adoç
 
 **Mantido por:** projeto-base contributors
 **Licença:** MIT
-**Versão do documento:** 1.39.1
+**Versão do documento:** 1.40.0
 **Status:** Estável

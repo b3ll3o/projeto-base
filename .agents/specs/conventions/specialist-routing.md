@@ -113,6 +113,9 @@ path_globs:
     specialists: [multi-tenant-specialist]
     rationale: "Tenant, TenantMembership, filtro por tenant_id, RLS — o domínio de tenancy, não o de schema"
   - { pattern: "**/*tenancy*", specialists: [multi-tenant-specialist] }
+  - pattern: "apps/api/src/modules/**/domain/events/**"
+    specialists: [event-driven-auditor, nestjs-specialist]
+    rationale: "Evento de domínio — o contrato que amarra o aggregate ao handler (regra `event-driven.md`)"
   - { pattern: ".github/workflows/**", specialists: [monorepo-specialist, security-auditor] }
   - pattern: "**/.agents/**"
     specialists: [refactorer, doc-writer, documentation-specialist]
@@ -199,6 +202,8 @@ demand_keywords:
     specialists: [e2e-specialist]
   - regex: "(?i)\\bdoc(umenta[çc][ãa]o)?\\b|readme|adr|spec(ification)?|catálogo de rotas"
     specialists: [doc-writer, documentation-specialist]
+  - regex: "(?i)event.?driven|evento de domínio|handler de evento|publicar o evento"
+    specialists: [event-driven-auditor]
   - regex: "(?i)telemetry|tracing|opentelemetry|\\botel\\b|spans?"
     specialists: [telemetry-specialist]
   - regex: "(?i)\\btela(s)?\\b|\\bux\\b|\\bdesign\\b|layout|formul[áa]rio|acessibilidade|\\ba11y\\b|EmptyState|estados? de"

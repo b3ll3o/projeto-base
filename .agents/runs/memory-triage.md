@@ -306,6 +306,7 @@ o par de números de `check-memory-crystallization.ts` e de `learning-observatio
 | `gate` | **1** — `rodape-com-contagem-exige-bump` (a 3ª regra do gate: o conteúdo do footer mudou desde a tag e a versão não) |
 | `z-array-em-apps-api-src-reprova-a-excecao-do-zod` | `pendente` | — | — |
 | `conflito-de-rodape-de-versao-entre-branches` | `citada` | `.agents/specs/conventions/estrutura-e-versionamento.md` | `o rodapé de número maior` |
+| `scanner-de-regex-em-gate-de-texto` | `citada` | `.tooling/scripts/ci/check-event-driven.ts` | `distinção importa porque uma regex pode conter aspas` |
 
 **O `1` em `gate` é o achado, não uma omissão.** A regra do rodapé — "contagem
 re-medida sem bump faz um rótulo nomear dois conteúdos" — mede-se por

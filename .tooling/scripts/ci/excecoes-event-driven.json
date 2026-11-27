@@ -1,0 +1,126 @@
+{
+  "_comoUsar": [
+    "Cada exceção aqui é uma admission consciente: uma violação da convenção",
+    "`event-driven.md` que o repositório aceita e o gate mede, em vez de esconder.",
+    "",
+    "A `verificacao` é a prova de que o motivo continua valendo. A forma é",
+    "declarativa, como a de `excecoes-de-dependencias.json`: NADA de shell livre",
+    "(o registro é versionado e um PR pode editá-lo — quem edita o registro não",
+    "pode desligar o gate), e o PADRÃO mora no registro enquanto o QUE é medido",
+    "mora no código.",
+    "",
+    "`tipo: evento-sem-handler` (regra **ED5**) — o evento existe, é emitido pelo",
+    "aggregate e NINGUÉM consome: nenhum arquivo da camada `application` de",
+    "qualquer módulo referencia a CLASSE do evento. É o caso de `profiles` (os 3",
+    "eventos são emitidos e nunca drenados) e de `users` (os 4 eventos são",
+    "drenados pelo use case, mas por um `switch` de `endsWith` — não por um",
+    "handler nomeado).",
+    "",
+    "`tipo: efeito-colateral-direto` (regra **ED6**) — a camada `application`",
+    "escreve um efeito colateral direto (a auditoria), em vez de publicar o",
+    "evento e deixar o handler escrever. É o resto do `TODO(#184)`: o caminho de",
+    "tenancy grava a auditoria fora da transação da mutação, e a correção é o",
+    "handler.",
+    "",
+    "⚠️ A exceção é declarada pelo QUE é medido, não pelo que se espera que um dia",
+    "vire verdade. Quando o plano `docs/superpowers/plans/2026-11-26-event-driven.md`",
+    "corrigir a violação, a ENTRADA É QUE SOME — e o gate acusa a entrada que",
+    "ficou (exceção que parou de valer é erro, não aviso).",
+    "",
+    "MEDIDO em 2026-11-26 (a árvore que o gate mediu): 7 eventos de domínio, em",
+    "2 módulos (`users` com 4, `profiles` com 3); 0 com handler declarado; 1",
+    "escrita de efeito colateral direto na camada `application`",
+    "(`apps/api/src/modules/users/application/user-use-cases.ts`, o `auditService.record`",
+    "do caminho de tenancy). 8 exceções — 7 de ED5 e 1 de ED6."
+  ],
+  "excecoes": [
+    {
+      "regra": "ED5",
+      "chave": "users.user.created.v1",
+      "motivo": "o agregado emite e o use case drena por `endsWith('.created.v1')`; não há consumidor na camada `application` — a Fase 1 do plano",
+      "verificacao": {
+        "tipo": "evento-sem-handler",
+        "classe": "UserCreatedEvent",
+        "arquivo": "apps/api/src/modules/users/domain/events/user-created.event.ts"
+      },
+      "ocorrencias": 1
+    },
+    {
+      "regra": "ED5",
+      "chave": "users.user.updated.v1",
+      "motivo": "o agregado emite e o use case drena por `endsWith('.updated.v1')`; não há consumidor na camada `application` — a Fase 1 do plano",
+      "verificacao": {
+        "tipo": "evento-sem-handler",
+        "classe": "UserUpdatedEvent",
+        "arquivo": "apps/api/src/modules/users/domain/events/user-updated.event.ts"
+      },
+      "ocorrencias": 1
+    },
+    {
+      "regra": "ED5",
+      "chave": "users.user.deleted.v1",
+      "motivo": "o agregado emite e o use case drena por `endsWith('.deleted.v1')`; não há consumidor na camada `application` — a Fase 1 do plano",
+      "verificacao": {
+        "tipo": "evento-sem-handler",
+        "classe": "UserDeletedEvent",
+        "arquivo": "apps/api/src/modules/users/domain/events/user-deleted.event.ts"
+      },
+      "ocorrencias": 1
+    },
+    {
+      "regra": "ED5",
+      "chave": "users.user.restored.v1",
+      "motivo": "o agregado emite e o use case drena por `endsWith('.restored.v1')`; não há consumidor na camada `application` — a Fase 1 do plano",
+      "verificacao": {
+        "tipo": "evento-sem-handler",
+        "classe": "UserRestoredEvent",
+        "arquivo": "apps/api/src/modules/users/domain/events/user-restored.event.ts"
+      },
+      "ocorrencias": 1
+    },
+    {
+      "regra": "ED5",
+      "chave": "profiles.profile.created.v1",
+      "motivo": "o agregado emite e NINGUÉM drena: o repositório de perfil não recebe auditoria — a Fase 2 do plano",
+      "verificacao": {
+        "tipo": "evento-sem-handler",
+        "classe": "ProfileCreatedEvent",
+        "arquivo": "apps/api/src/modules/profiles/domain/events/profile-created.event.ts"
+      },
+      "ocorrencias": 1
+    },
+    {
+      "regra": "ED5",
+      "chave": "profiles.profile.updated.v1",
+      "motivo": "o agregado emite e NINGUÉM drena: o repositório de perfil não recebe auditoria — a Fase 2 do plano",
+      "verificacao": {
+        "tipo": "evento-sem-handler",
+        "classe": "ProfileUpdatedEvent",
+        "arquivo": "apps/api/src/modules/profiles/domain/events/profile-updated.event.ts"
+      },
+      "ocorrencias": 1
+    },
+    {
+      "regra": "ED5",
+      "chave": "profiles.profile.deleted.v1",
+      "motivo": "o agregado emite e NINGUÉM drena: o repositório de perfil não recebe auditoria — a Fase 2 do plano",
+      "verificacao": {
+        "tipo": "evento-sem-handler",
+        "classe": "ProfileDeletedEvent",
+        "arquivo": "apps/api/src/modules/profiles/domain/events/profile-deleted.event.ts"
+      },
+      "ocorrencias": 1
+    },
+    {
+      "regra": "ED6",
+      "chave": "apps/api/src/modules/users/application/user-use-cases.ts|auditService.record",
+      "motivo": "o caminho de tenancy grava a auditoria FORA da transação da mutação (`TODO(#184)`); a Fase 1 do plano fecha com o handler",
+      "verificacao": {
+        "tipo": "efeito-colateral-direto",
+        "arquivo": "apps/api/src/modules/users/application/user-use-cases.ts",
+        "padrao": "auditService.record"
+      },
+      "ocorrencias": 1
+    }
+  ]
+}

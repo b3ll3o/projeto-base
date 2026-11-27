@@ -18,11 +18,11 @@
 
 | Caminho | Papel | Estado |
 |---|---|---|
-| `.agents/agents/<name>.md` | Definição canônica do agent | 48 arquivos — `ls .agents/agents/*.md \| wc -l` |
-| `.agents/skills/<name>/SKILL.md` | Definição canônica da skill | 35 arquivos — `ls -d .agents/skills/*/ \| wc -l` |
-| `.agents/memory/<name>.md` | Memória acumulada por agent | 50 arquivos — `ls .agents/memory/*.md \| wc -l` |
+| `.agents/agents/<name>.md` | Definição canônica do agent | 49 arquivos — `ls .agents/agents/*.md \| wc -l` |
+| `.agents/skills/<name>/SKILL.md` | Definição canônica da skill | 36 arquivos — `ls -d .agents/skills/*/ \| wc -l` |
+| `.agents/memory/<name>.md` | Memória acumulada por agent | 51 arquivos — `ls .agents/memory/*.md \| wc -l` |
 | `.agents/workflows/<id>.md` | Workflow detalhado | 18 arquivos — `ls .agents/workflows/*.md \| wc -l` |
-| `.agents/specs/conventions/*.md` | Convenções do repo | 36 arquivos (29 convenções + o índice e 6 apêndices) — `ls .agents/specs/conventions/*.md \| wc -l` |
+| `.agents/specs/conventions/*.md` | Convenções do repo | 37 arquivos (30 convenções + o índice e 6 apêndices) — `ls .agents/specs/conventions/*.md \| wc -l` |
 | `.agents/hooks/pretooluse-block-pnpm-lock.mjs` | Guard de escrita no lockfile | pipe-testado; inerte até `/hooks` |
 | `.agents/hooks/posttooluse-stack-review.sh` | Reviewer pós-edição, em modo feedback | pipe-testado; inerte até `/hooks` |
 | `.agents/settings.json` | Registra os dois hooks | válido; recarrega no `/hooks` |
@@ -250,7 +250,7 @@ todo projeto aberto nela.
 ⚠️ **O que é descoberto na SUA máquina depende do binding:** MEDIDO
 2026-11-23, `~/.claude/agents/` tem **29** symlinks
 (`find ~/.claude/agents -maxdepth 1 -type l | wc -l`), um por agent. O repo
-tem **48** agents canônicos (`ls .agents/agents/*.md | wc -l`): o número de
+tem **49** agents canônicos (`ls .agents/agents/*.md | wc -l`): o número de
 ARQUIVOS não é o de agentes descobertos no Claude Code. E **nenhum** agent é
 "piloto" — o canônico já carrega `name`, `description` e `tools`, que é o que
 o Claude Code lê; o `tools` é o que limita a pool de ferramentas do subagent

@@ -25,6 +25,26 @@ if [ -n "$changed_files" ]; then
   fi
 fi
 
+# A regra event-driven (convenção `.agents/specs/conventions/event-driven.md`).
+#
+# O gate roda na CAMADA B (preflight) e na CAMADA C (CI), mas o preflight só
+# acontece no push. Um evento novo sem handler, ou com o nome fora do formato
+# canônico, é barato de consertar no commit e caro de consertar depois que a
+# branch já existe — e o gate é rápido (varre `apps/api/src`).
+#
+# O gate é REPO-WIDE (não só os arquivos staged): a violação que importa é a
+# que existe na árvore, e um evento emitido em um arquivo de outra branch
+# continua sendo um evento sem handler.
+event_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E 'apps/api/src/.*\.ts$' || true)
+if [ -n "$event_files" ]; then
+  if [ -f .tooling/scripts/ci/check-event-driven.ts ]; then
+    echo "check-event-driven..."
+    pnpm tsx .tooling/scripts/ci/check-event-driven.ts || exit 1
+  else
+    echo "skip check-event-driven (gate ausente)"
+  fi
+fi
+
 # Defesa: se algum comando futuro invocar `husky <arg>` por engano, repara core.hooksPath.
 # Idempotente; custo ~50ms.
 pnpm exec husky >/dev/null 2>&1 || true

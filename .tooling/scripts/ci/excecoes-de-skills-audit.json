@@ -165,6 +165,14 @@
         "tipo": "no-bloco",
         "padrao": "pnpm ci:preflight"
       }
+    },
+    {
+      "skill": "event-driven-audit",
+      "motivo": "precisa do toolchain (tsx) para rodar o gate da regra",
+      "verificacao": {
+        "tipo": "no-bloco",
+        "padrao": "check-event-driven\\.ts"
+      }
     }
   ]
 }

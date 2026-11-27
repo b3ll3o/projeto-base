@@ -178,7 +178,7 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão da stack:** 1.39.1
+**Versão da stack:** 1.40.0
 
 ### Histórico de Versões
 
@@ -219,3 +219,4 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 | `1.38.0` | **Sem mudança de stack** — nenhuma dependência nova, nenhum binário novo no `package.json`, nenhuma mudança em `apps/web`, `packages/` ou `infra/`. A única mudança na árvore é o BC de Usuários de `apps/api`: a mutação e o registro de auditoria passam a ser a mesma transação (issue #184). O footer subiu junto com os outros 5. |
 | `1.39.0` | **Sem mudança de stack** — nenhuma dependência nova, nenhum binário novo no `package.json`, nenhuma mudança em `apps/`, `packages/` ou `infra/`. Este PR é **doc**: o plano das 10 issues do scan de 2026-11-23 e o snapshot que o alimenta, e o encerramento das 2 issues que o `main` já tinha corrigido (a #181 pelo override do `effect`, a #186 por obsolescência). O footer subiu junto com os outros 5. |
 | `1.39.1` | **Sem mudança de stack** — nenhuma dependência nova, nenhum binário novo no `package.json`, nenhuma mudança em `apps/`, `packages/` ou `infra/`. Este PR é **tooling**: três gates da camada de preflight que mediam errado (o `check-path-alias` media uma semântica de `paths` que o TypeScript não tem, e o `check-doc-size` lançava `ENOENT` derrubando o preflight) saem do buraco, e o `preflight` passa a transformar um gate que lançou em uma linha vermelha. A camada de CI ganha **um workflow novo**: `delete-merged-branch.yml`, que apaga a branch do PR mergeado — é o instrumento da regra de branch morta de [`git-workflow.md`](../.agents/specs/conventions/git-workflow.md). O footer subiu junto com os outros 5. |
+| `1.40.0` | **Sem mudança de stack** — nenhuma dependência nova, nenhum binário novo no `package.json`, nenhuma mudança em `apps/web`, `packages/` ou `infra/`. A única mudança na árvore é o BC de `profiles` de `apps/api`: os 3 eventos passam a `profiles.profile.created.v1` (prefixo derivado do caminho), e o PR acrescenta a convenção `event-driven.md` + o gate `check-event-driven` (75 testes, 41 mutações medidas) + o agent `event-driven-auditor` + a skill `event-driven-audit`. O footer subiu junto com os outros 5. |
