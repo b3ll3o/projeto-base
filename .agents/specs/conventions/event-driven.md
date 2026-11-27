@@ -119,6 +119,11 @@ O plano é o dono do COMO; esta convenção é o dono do QUÊ.
 gate acusa a exceção que **parou de valer** (o defeito foi corrigido e a entrada
 ficou). Corrigir a violação é remover a entrada — no mesmo PR.
 
+O registro também declara **quantas** ocorrências cada entrada cobre
+(`ocorrencias`), e o gate compara esse número com o medido: uma dívida que
+cresce no arquivo e o registro dizendo `1` é um registro que envelhece em
+silêncio.
+
 ## 6. O PAPEL E O PROCESSO
 
 | peça | arquivo | o que é |

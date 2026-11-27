@@ -62,6 +62,12 @@
  * (o defeito foi corrigido e a entrada ficou) é TAMBÉM erro — é o que fecha a
  * classe 7 de `guard-classes.md`: um registro que só cresce é um registro que
  * envelhece em silêncio.
+ *
+ * A reconciliação tem TRÊS direções: a violação nova (não declarada) é erro;
+ * a exceção que parou de valer é erro; e a **CONTAGEM** que a exceção declara
+ * (`ocorrencias`) tem que ser a contagem medida — porque um número que só
+ * existe no registro não mede nada, e a dívida cresce no código enquanto o
+ * registro continua dizendo 1.
  */
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
@@ -670,6 +676,8 @@ export function checkEventDriven(
 
   // ── ED5 — o evento tem consumidor na camada application ─────────────────
   const violacoesED5: string[] = [];
+  /** Quantas vezes cada chave aparece no medido — o registro declara a contagem. */
+  const ocorrenciasED5 = new Map<string, number>();
   for (const evento of eventos) {
     const base = (evento.caminho.split('/').pop() ?? '').replace(/\.ts$/, '.js');
     const temConsumidor = [...arvore.entries()].some(([caminho, conteudo]) => {
@@ -684,20 +692,30 @@ export function checkEventDriven(
       // uma string é rótulo, não uso (MEDIDO).
       return semImports(analise.semStrings).includes(evento.classe);
     });
-    if (!temConsumidor) violacoesED5.push(evento.eventName);
+    if (!temConsumidor) {
+      violacoesED5.push(evento.eventName);
+      ocorrenciasED5.set(evento.eventName, (ocorrenciasED5.get(evento.eventName) ?? 0) + 1);
+    }
   }
 
   // ── ED6 — o efeito colateral não é escrito direto pela application ───────
   const violacoesED6: string[] = [];
+  /** Quantas vezes cada chave aparece no medido — o registro declara a contagem. */
+  const ocorrenciasED6 = new Map<string, number>();
   for (const [caminho, conteudo] of arvore) {
     if (!caminho.includes(CAMINHO_DA_CAMADA_DE_APLICACAO)) continue;
     const analise = analisar(conteudo);
     const codigo = semImports(analise.codigo);
     for (const escrita of ESCRITAS_DE_EFEITO_COLATERAL) {
-      if (!escrita.padrao.test(codigo)) continue;
+      // A CONTAGEM das chamadas: o `matchAll` exige a regex global, e a
+      // original é sem `g` (o `test` não precisa). A contagem é o que o
+      // registro declara — uma dívida que cresce em um arquivo e o registro
+      // continua dizendo 1 é um registro que envelhece em silêncio.
+      const achados = [...codigo.matchAll(new RegExp(escrita.padrao.source, 'g'))];
+      if (achados.length === 0) continue;
       const chave = `${caminho}|${escrita.rotulo}`;
-      if (violacoesED6.includes(chave)) continue;
-      violacoesED6.push(chave);
+      if (!violacoesED6.includes(chave)) violacoesED6.push(chave);
+      ocorrenciasED6.set(chave, achados.length);
     }
   }
 
@@ -757,6 +775,20 @@ export function checkEventDriven(
       errors.push(
         `exceção declarada ${chave} declara o padrão "${excecao.verificacao.padrao ?? ''}", ` +
           `e o medido é "${excecao.chave.split('|')[1] ?? ''}" — a verificação do registro não bate com o medido`,
+      );
+    }
+    // A CONTAGEM que o registro declara tem que ser a contagem medida — o
+    // `ocorrencias` é um NÚMERO no registro, e número que ninguém mede
+    // envelhece em silêncio (a dívida cresce no arquivo e o registro continua
+    // dizendo 1).
+    const medida =
+      excecao.regra === 'ED5'
+        ? (ocorrenciasED5.get(excecao.chave) ?? 0)
+        : (ocorrenciasED6.get(excecao.chave) ?? 0);
+    if (excecao.ocorrencias !== medida) {
+      errors.push(
+        `exceção declarada ${chave} declara ${excecao.ocorrencias} ocorrência(s) e o medido é ` +
+          `${medida} — o registro declara a dívida, e a dívida mudou de tamanho`,
       );
     }
     // A exceção aponta para um arquivo que não existe mais: ela já não descreve

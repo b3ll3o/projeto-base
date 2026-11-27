@@ -26,7 +26,7 @@ evento, escrever o handler) é papel do **agent**, não da skill.
   camadas A e B)
 - Registro: `.tooling/scripts/ci/excecoes-event-driven.json`
 - Medido: **7 eventos** de domínio, em **2 módulos** (`users` com 4,
-  `profiles` com 3); **0** com handler nomeado; **1** escrita de efeito
+  `profiles` com 3); **0** com consumidor na camada `application`; **1** escrita de efeito
   colateral direto na camada `application`
 
 ## Decisões fechadas que o agente herda

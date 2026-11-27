@@ -2,7 +2,7 @@
 name: event-driven-audit
 version: 1.0.0
 updated: 2026-11-26
-description: "Processo determinístico de auditoria da arquitetura event-driven da aplicação — inventário de eventos de domínio, nome canônico e versionamento do contrato, quem emite, quem consome (handler nomeado), escrita direta de efeito colateral pela camada application, segredo no payload e atomicidade entre a mutação e o registro. Carregado por `event-driven-auditor` quando a task é de auditoria (não criação). Para scan periódico ou pré-merge, despache o `event-driven-auditor` direto."
+description: "Processo determinístico de auditoria da arquitetura event-driven da aplicação — inventário de eventos de domínio, nome canônico e versionamento do contrato, quem emite, quem consome (na camada `application`), escrita direta de efeito colateral pela camada application, segredo no payload e atomicidade entre a mutação e o registro. Carregado por `event-driven-auditor` quando a task é de auditoria (não criação). Para scan periódico ou pré-merge, despache o `event-driven-auditor` direto."
 ---
 
 # Skill: event-driven-audit
@@ -77,7 +77,7 @@ arquivo** (diretório do módulo + nome do arquivo). A checagem completa é a do
 gate; aqui o que se vê é o **nome declarado**, para comparar com o esperado à
 mão quando o gate acusar.
 
-## Passo 4 — Quem consome (o handler nomeado)
+## Passo 4 — Quem consome (na camada `application`)
 
 ```bash
 # [gate: run — mede quais eventos têm consumidor na camada application]
@@ -85,14 +85,14 @@ for f in $(find apps/api/src/modules -path '*/domain/events/*.event.ts'); do
   base=$(basename "$f" .event.ts)
   classe=$(echo "$base" | awk -F'-' '{printf "%s%sEvent", toupper(substr($1,1,1)), substr($1,2)}')
   if grep -rq "$classe" apps/api/src/modules/*/application --include=*.ts 2>/dev/null; then
-    echo "COM HANDLER  $classe  $f"
+    echo "COM CONSUMIDOR  $classe  $f"
   else
-    echo "SEM HANDLER  $classe  $f"
+    echo "SEM CONSUMIDOR  $classe  $f"
   fi
 done
 ```
 
-`SEM HANDLER` é **finding P1** quando o evento é novo, e **dívida declarada**
+`SEM CONSUMIDOR` é **finding P1** quando o evento é novo, e **dívida declarada**
 quando está no registro de exceções. A diferença é o registro: a auditoria
 confere se a entrada existe, e não se o evento é do agrado de quem audita.
 
@@ -146,7 +146,9 @@ a mesma. Se os dois divergirem, é o spec que vale.
 # [gate: run — mede o tamanho do registro de exceções e quantas entradas são de evento]
 echo "--- entradas no registro ---"
 grep -c '"regra"' .tooling/scripts/ci/excecoes-event-driven.json
-echo "--- entradas de ED5 (evento sem handler) ---"
+echo "--- entradas de ED5 (evento sem consumidor) ---"
+grep -c '"regra": "ED5"' .tooling/scripts/ci/excecoes-event-driven.json
+echo "--- entradas de ED6 (escrita direta de efeito colateral) ---"
 grep -c '"regra": "ED6"' .tooling/scripts/ci/excecoes-event-driven.json
 ```
 
@@ -166,7 +168,7 @@ entrada ficou). Registro que só cresce é registro que envelhece em silêncio.
 | Erro | Causa | Fix |
 |---|---|---|
 | Passo 2 devolve **0** eventos | o caminho dos eventos mudou, ou o módulo foi movido | conferir `find apps/api/src/modules -path '*/domain/events/*.event.ts'`; **0 eventos é achado**, não verde |
-| Passo 4 diz `SEM HANDLER` para um evento do `users` | o consumo é genérico (`endsWith`), não por classe | isso é a **Fase 1** do plano; até lá, está no registro |
+| Passo 4 diz `SEM CONSUMIDOR` para um evento do `users` | o consumo é genérico (`endsWith`), não por classe | isso é a **Fase 1** do plano; até lá, está no registro |
 | Passo 5 devolve a chamada do `TODO(#184)` | a dívida conhecida | não é achado novo; é a exceção declarada |
 | Passo 3 devolve 0 eventos sem `vN` | o grep do nome não casou | conferir o padrão: o `vN` está DENTRO da string do `eventName` |
 | O gate reprova e o Passo 2 não mostra nada | o gate mede a árvore de produção e o grep mede o disco | conferir se o arquivo está em `domain/events/` e é `.event.ts` |

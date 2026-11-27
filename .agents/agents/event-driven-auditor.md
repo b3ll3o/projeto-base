@@ -23,7 +23,7 @@ Responsável por:
 2. **A emissão** — quem constrói o evento: só o aggregate
 3. **A dependência** — o domínio não importa a infraestrutura; um módulo não
    importa a infraestrutura de outro
-4. **O consumo** — todo evento tem handler nomeado na camada `application`
+4. **O consumo** — todo evento tem consumidor na camada `application` (um arquivo que importa a classe do evento e a usa)
 5. **O efeito colateral** — a application publica; o handler escreve
 6. **O segredo** — o payload do evento não carrega credencial
 7. **A atomicidade** — a mutação e o registro do efeito são a mesma transação
@@ -63,12 +63,12 @@ expected_output:
   schema:
     findings: [...]        # P0/P1/P2 com location+cause+impact+fix
     eventos: n             # eventos medidos
-    sem_handler: [...]     # eventos sem consumidor nomeado
+    sem_consumidor: [...] # eventos sem consumidor na camada `application`
     escrita_direta: [...]  # efeito colateral escrito pela application
     gate: "<veredito do check-event-driven>"
 success_criteria:
   - "Cada finding cita a regra (ED1..ED8) e o instrumento que a mede"
-  - "Nenhum evento novo sem handler entra sem decisão explícita no registro"
+  - "Nenhum evento novo sem consumidor entra sem decisão explícita no registro"
   - "A atomicidade (ED8) é confirmada pelo spec de integração, não por opinião"
 ```
 
@@ -111,7 +111,8 @@ runtime, na auditoria, com o dado já gravado.
 ### Passo 3 — Quem emite, quem consome
 
 Quem emite é o **aggregate** (ED3). Quem consome é um **handler** na camada
-`application`, nomeado pelo evento (ED5). Quem escreve o efeito colateral é o
+`application` — o gate mede a REFERÊNCIA à classe do evento (ED5), não o nome
+do handler. Quem escreve o efeito colateral é o
 handler (ED6) — nunca a application.
 
 O caso que o gate não pega, e que é o mais comum: **o handler existe e não faz

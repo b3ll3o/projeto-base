@@ -37,7 +37,7 @@
     {
       "regra": "ED5",
       "chave": "users.user.created.v1",
-      "motivo": "o agregado emite e o use case drena por `endsWith('.created.v1')`; não há handler nomeado — a Fase 1 do plano",
+      "motivo": "o agregado emite e o use case drena por `endsWith('.created.v1')`; não há consumidor na camada `application` — a Fase 1 do plano",
       "verificacao": {
         "tipo": "evento-sem-handler",
         "classe": "UserCreatedEvent",
@@ -48,7 +48,7 @@
     {
       "regra": "ED5",
       "chave": "users.user.updated.v1",
-      "motivo": "o agregado emite e o use case drena por `endsWith('.updated.v1')`; não há handler nomeado — a Fase 1 do plano",
+      "motivo": "o agregado emite e o use case drena por `endsWith('.updated.v1')`; não há consumidor na camada `application` — a Fase 1 do plano",
       "verificacao": {
         "tipo": "evento-sem-handler",
         "classe": "UserUpdatedEvent",
@@ -59,7 +59,7 @@
     {
       "regra": "ED5",
       "chave": "users.user.deleted.v1",
-      "motivo": "o agregado emite e o use case drena por `endsWith('.deleted.v1')`; não há handler nomeado — a Fase 1 do plano",
+      "motivo": "o agregado emite e o use case drena por `endsWith('.deleted.v1')`; não há consumidor na camada `application` — a Fase 1 do plano",
       "verificacao": {
         "tipo": "evento-sem-handler",
         "classe": "UserDeletedEvent",
@@ -70,7 +70,7 @@
     {
       "regra": "ED5",
       "chave": "users.user.restored.v1",
-      "motivo": "o agregado emite e o use case drena por `endsWith('.restored.v1')`; não há handler nomeado — a Fase 1 do plano",
+      "motivo": "o agregado emite e o use case drena por `endsWith('.restored.v1')`; não há consumidor na camada `application` — a Fase 1 do plano",
       "verificacao": {
         "tipo": "evento-sem-handler",
         "classe": "UserRestoredEvent",

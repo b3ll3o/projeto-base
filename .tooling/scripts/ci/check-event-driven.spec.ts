@@ -424,6 +424,67 @@ export const rotulo = 'UserCreatedEvent';
     expect(r.errors).toEqual([]);
   });
 
+  it('🔴 ED6: a exceção que declara 1 ocorrência e o medido são 2 é erro', () => {
+    const caminho = 'apps/api/src/modules/users/application/user-use-cases.ts';
+    const arvore = arvoreSadia({
+      [caminho]: `export class UserUseCases {
+  async criar(): Promise<void> {
+    await this.auditService.record({});
+    await this.auditService.record({});
+  }
+}
+`,
+    });
+    const r = checkEventDriven({
+      arvore,
+      excecoes: [
+        {
+          regra: 'ED6',
+          chave: `${caminho}|auditService.record`,
+          motivo: 'fixture: dívida conhecida',
+          ocorrencias: 1,
+          verificacao: {
+            tipo: 'efeito-colateral-direto',
+            arquivo: caminho,
+            padrao: 'auditService.record',
+          },
+        },
+      ],
+    });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.includes('ocorrência'))).toBe(true);
+  });
+
+  it('✅ ED6: a exceção que declara a contagem que o gate mede é dívida aceita', () => {
+    const caminho = 'apps/api/src/modules/users/application/user-use-cases.ts';
+    const arvore = arvoreSadia({
+      [caminho]: `export class UserUseCases {
+  async criar(): Promise<void> {
+    await this.auditService.record({});
+    await this.auditService.record({});
+  }
+}
+`,
+    });
+    const r = checkEventDriven({
+      arvore,
+      excecoes: [
+        {
+          regra: 'ED6',
+          chave: `${caminho}|auditService.record`,
+          motivo: 'fixture: dívida conhecida',
+          ocorrencias: 2,
+          verificacao: {
+            tipo: 'efeito-colateral-direto',
+            arquivo: caminho,
+            padrao: 'auditService.record',
+          },
+        },
+      ],
+    });
+    expect(r.errors).toEqual([]);
+  });
+
   it('🔴 anti-vacuuidade: árvore sem nenhum evento é ERRO, não verde vago', () => {
     const r = checkEventDriven({ arvore: arvoreCom({}), excecoes: [] });
     expect(r.ok).toBe(false);
