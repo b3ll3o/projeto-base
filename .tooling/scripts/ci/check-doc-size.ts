@@ -146,7 +146,13 @@ export async function arquivosAcimaDoTeto(
     // ⚠️ MEDIDO em 2026-11-26: o `readFile` LANÇAVA quando o arquivo estava
     // no ÍNDICE do git mas não no disco (o `.md` foi apagado e a remoção ainda
     // não foi staged). O `preflight` chama `check.fn()` sem try/catch, e o
-    // `ENOENT` derrubava o preflight INTEIRO — os outros 56 gates nem rodaram.
+    // `ENOENT` derrubava o preflight INTEIRO.
+    //
+    // ⚠️ MEDIDO em 2026-11-27, o tamanho dessa queda: o preflight tem 56
+    // checks NO TOTAL e o crash ocorreu no **48º** (`check-doc-size`) — 47
+    // checks rodaram e imprimiram ✓, os **8** seguintes nunca rodaram, o
+    // resumo final não imprimiu, e o exit foi **2** (o do crash), não 1.
+    //
     // Um arquivo apagado não tem linhas: ele não é medido, e o gate diz que
     // não mediu (advisory), em vez de derrubar a casa.
     if (conteudo === null) continue;

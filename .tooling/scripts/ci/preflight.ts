@@ -441,10 +441,16 @@ export function resolverChecks(): Array<{
  * Roda UM check e devolve o veredito — mesmo quando o check LANÇA.
  *
  * ⚠️ MEDIDO em 2026-11-26: o `preflight` chamava `check.fn()` sem proteção, e
- * um gate que lançava derrubava o preflight INTEIRO — os outros 56 nem
- * rodavam, e o `ENOENT` de um `.md` apagado-sem-stage era exatamente isso
- * (medido no `check-doc-size`). Um gate com defeito é uma LINHA vermelha no
- * painel; é a forma que ele deveria ter, e não a forma que derrubava a casa.
+ * um gate que lançava derrubava o preflight INTEIRO, e o `ENOENT` de um `.md`
+ * apagado-sem-stage era exatamente isso (medido no `check-doc-size`).
+ *
+ * ⚠️ **O tamanho da queda é medido, e é menor do que se dizia.** MEDIDO em
+ * 2026-11-27 no `origin/main` com um `.md` plantado e apagado: o preflight tem
+ * **56 checks no total** e o crash ocorreu no **48º** (`check-doc-size`):
+ * **47** checks rodaram e imprimiram ✓, os **8** seguintes nunca rodaram, o
+ * **resumo final não imprimiu**, e o processo saiu com **exit 2** (o do
+ * crash), não 1. Um gate com defeito é uma LINHA vermelha no painel; é a
+ * forma que ele deveria ter, e não a forma que derrubava a casa.
  *
  * O gate que lançou vira um check VERMELHO com o motivo no `errors` — o
  * painel mostra a linha, a contagem de erros soma 1, e o resto do preflight

@@ -37,20 +37,6 @@
   fica registrado aqui é a ASSIMETRIA. Alternativa a decidir: tornar a etapa
   *skipped com motivo* quando `DATABASE_URL` não resolve, em vez de erro.
 
-- **O `check-path-alias` mede uma semântica de `paths` que o TypeScript não
-  tem — e acusa formas legítimas como "alias morto".** (medido 2026-10-30).
-  O alvo de um `paths` do TS é um **local de módulo**, resolvido por wildcard
-  e por arquivo; o gate exige um **diretório** (`st.isDirectory()`). Duas
-  formas legítimas são acusadas: (a) alvo que é **arquivo** (`"./src/x.ts"`
-  resolve — `tsc --noEmit` sai 0); (b) alvo com **wildcard** (`"./*"` — que é
-  o que `apps/web/tsconfig.json` usa, com 76 imports `@/…`). Comando: o gate contra o tsconfig do web →
-  `alias morto: '@/*' aponta para './*' (…/apps/web/*), que não existe`.
-  Além disso, `extrairAliases` pega só o **primeiro** destino, e o TS tenta
-  **todos** em ordem (MEDIDO: `['./src/nao-existe','./src/real.ts']` resolve
-  para `real.ts`, `tsc` sai 0). **Latente**: o gate mede só o
-  `tsconfig.base.json`, cujos 3 aliases apontam para diretórios que existem.
-  Conserto: resolver o alvo como o TS resolve (globbing + fallback na ordem).
-
 - **O `check-doc-size` tira o corpus do ÍNDICE do git, então um `.md` não
   versionado é invisível.** (medido 2026-10-30). `listarMarkdown` usa
   `git ls-files '*.md'`, que devolve o índice. Um `.md` de 400 linhas no disco
@@ -59,7 +45,8 @@
   `git add -N`. ⚠️ O caso inverso (arquivo removido do disco mas ainda no
   índice) fazia o gate **lançar** `ENOENT` e o `preflight` abortar inteiro —
   **FECHADO em 2026-11-26** (o gate não mede o que não existe e DIZ que não
-  mediu; o preflight deixou de derrubar os outros 56 gates por causa de um):
+  mediu; o preflight deixou de derrubar os **8** checks que vinham depois do
+  48º por causa de um):
   ver [`pendencias-fechadas.md`](./ci-defense-in-depth-pendencias-fechadas.md).
   O que fica ABERTO aqui é o **escopo** (o que "documentação viva" significa),
   e isso é decisão de política — não correção pontual.

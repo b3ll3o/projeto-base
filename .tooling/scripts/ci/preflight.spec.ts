@@ -216,9 +216,13 @@ describe('checkDocRefs', () => {
 describe('executarCheck - um gate que LANÇA não derruba o preflight inteiro', () => {
   it('🔴 o check que lança vira um veredito VERMELHO com o motivo (e os outros gates rodam)', async () => {
     // MEDIDO em 2026-11-26: o `preflight` chamava `check.fn()` sem proteção, e
-    // um gate que lançava derrubava o preflight INTEIRO — os outros 56 nem
-    // rodavam. O `ENOENT` de um `.md` apagado-sem-stage no `check-doc-size`
-    // era exatamente esse caminho.
+    // um gate que lançava derrubava o preflight INTEIRO. O `ENOENT` de um
+    // `.md` apagado-sem-stage no `check-doc-size` era exatamente esse caminho.
+    //
+    // MEDIDO em 2026-11-27, o tamanho da queda: o preflight tem 56 checks no
+    // TOTAL e o crash ocorreu no 48º (o `check-doc-size`) — 47 rodaram e
+    // imprimiram ✓, os 8 seguintes nunca rodaram, o resumo final não imprimiu,
+    // e o exit foi 2 (o do crash), não 1.
     const r = await executarCheck(() => {
       throw new Error("ENOENT: no such file or directory, open 'doc.md'");
     });
