@@ -20,6 +20,7 @@ maintainer: stack-code-reviewer
 4. **PR para `main`** dispara 3 jobs de CI (`preflight`, `quality`, `docker-build-prod`) + `stack-code-review` + `docs-sync`. **Pós-#44** os jobs `preflight` e `quality` rodam a suíte do tooling, que valida os próprios dentes dele — contagem por `pnpm tooling:test` (dois roots).
 5. **PR aberto** dispara o job `review-comment` (workflow [`pr-review.yml`](../.github/workflows/pr-review.yml)): o PR **precisa de ≥ 1 comentário de revisão** — marcador `<!-- pr-review -->` — antes do merge. O check é `required` no ruleset `master`.
 6. **Merge em `main`** só dispara `release-template` (auto-tag) **se** o commit tocar `docs/MONOREPO.md`.
+7. **PR mergeado** dispara `delete-merged-branch` — a branch do PR é apagada do remoto na hora (regra [git-workflow.md](../.agents/specs/conventions/git-workflow.md) §"Branch Morta: Apagar Quando o PR Sai de OPEN"). PR **fechado sem merge** não apaga nada.
 
 > **Ressalva crítica:** nenhum check de CI é *required_status_check* — só `quality` e `review-comment` são *required* no ruleset de `main` (ver §7.2). A garantia real é a cadeia do workflow (`preflight` bloqueia `quality` via `needs:`), não o check isolado.
 
@@ -68,6 +69,7 @@ maintainer: stack-code-reviewer
 │     sync-docs.yml     → doc-sync --mode=full                 │
 │     pr-review.yml     → pr-review-gate (revisão; required)   │
 │     release-template  → tag annotated no merge em main       │
+│     delete-merged-branch → apaga a branch do PR mergeado     │
 │   ⚠ Só `quality` e `review-comment` são required (§7)       │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -93,6 +95,7 @@ maintainer: stack-code-reviewer
 | 11 | Revisão do PR | workflow [`pr-review-mode`](../.agents/workflows/pr-review-mode.md) — 1 specialist por parte do diff | **job `review-comment`** (workflow `pr-review.yml`) — o PR precisa de ≥ 1 comentário de revisão, com o marcador `<!-- pr-review -->` |
 | 12 | Revisão / fix loop | `gh pr merge` só após CI verde | os checks `required` do ruleset `master`: `quality` **e** `review-comment` (§7) |
 | 13 | Release | automático | `release-template` roda **só** em push para `main` que toque `docs/MONOREPO.md` |
+| 14 | Apagar a branch | automático | workflow `delete-merged-branch` — dispara no PR **mergeado**; PR fechado sem merge não apaga (exame de conteúdo obrigatório) |
 
 ### 3.1 Detalhe do pre-commit
 
@@ -134,9 +137,8 @@ grep -cE "^\s+name: '" .tooling/scripts/ci/preflight-gates.ts
 
 O pedido "mais agents" esbarra num fato medido: **o despacho era emitido e nunca executado.**
 `review-router.ts` emitia 8 reviewers para um diff de 87 arquivos e terminava em `console.log`;
-`git grep -nE 'review:route' -- .husky .github` devolvia **vazio**. O executor chegou em 2026-11-17:
-o workflow [`pr-review-mode`](../.agents/workflows/pr-review-mode.md) despacha os reviewers em
-paralelo e publica a revisão no PR.
+`git grep -nE 'review:route' -- .husky .github` devolvia **vazio**. O executor chegou em 2026-11-17: o
+workflow [`pr-review-mode`](../.agents/workflows/pr-review-mode.md) despacha em paralelo e publica a revisão.
 
 | Fase | Fan-out | Por que |
 |------|---------|---------|
@@ -159,10 +161,7 @@ paralelo e publica a revisão no PR.
 **As 2 peças que ainda faltam** — nenhuma delas é "mais agents":
 
 1. **Registro** — os 48 agents vivem em `.agents/agents/`, e o binding do Claude Code (symlink `~/.claude/agents/<nome>.md` → `.agents/agents/<nome>.md`) é o que os registra na máquina. Sem o symlink, o orquestrador não tem handle: agent não registrado não é invocado nem por LLM.
-2. **Relógio** — `grep -rn 'Date.now()' tooling/ .tooling/ | wc -l` devolve **12** ocorrências (4 no
-   `ambiente-local.ts`, 3 no `boot-local.ts`, 2 no `check-audit-skills.ts`, 3 em specs) — sem cronômetro, "mais agents é mais rápido" é raciocínio.
-
-**A peça do executor saiu em 2026-11-17**: o workflow [`pr-review-mode`](../.agents/workflows/pr-review-mode.md) despacha `Agent` × N em paralelo sobre a saída do `review-router` e publica **1 comentário de revisão** no PR.
+2. **Relógio** — `grep -rn 'Date.now()' tooling/ .tooling/ | wc -l` devolve **12** ocorrências (4 no `ambiente-local.ts`, 3 no `boot-local.ts`, 2 no `check-audit-skills.ts`, 3 em specs) — sem cronômetro, "mais agents é mais rápido" é raciocínio.
 
 ---
 
@@ -195,7 +194,7 @@ paralelo e publica a revisão no PR.
 | `check-doc-claims` | `pnpm ci:preflight` | A+B (gate `check-doc-claims`) | Claim numérico de doc que **mente**: o doc cita um comando e afirma um valor ao lado, e a derivação (o código real) produz outro número. A derivação é TypeScript — o gate **não executa shell**, porque o registry (`.tooling/scripts/ci/doc-claims.json`) é versionado e um PR pode editá-lo. A derivação mede **exatamente** o caminho que o comando cita (`dir/*.controller.ts` resolve o glob; um `*.spec.ts` não conta) e o **tying** exige que o caminho medido esteja no comando (registry desamarrado é erro), e o valor tem que estar **adjacente** ao comando — a janela antiga sangrava para o claim vizinho, e um doc que MENTIA passava verde. Escopo: os 6 docs de API | Sim |
 | `check-doc-kit` | `pnpm ci:preflight` | A+B (gate `check-doc-kit`) | Item do **kit de documentação moderna** sem doc canônico, sem âncora mínima, sem índice que o cite, ou sem dono (specialist e auditor). A matriz é lida da convenção `kit-documentacao.md` (fonte única, por nome de coluna) — os 14 itens, 5 pilares. Os **condicionais** são medidos nas **três** direções: gatilho dispara → o doc é exigido e a não-aplicabilidade tem que ter saído; gatilho não dispara → a não-aplicabilidade tem que estar **declarada**; a não-aplicabilidade declarada com o gatilho disparado → a declaração parou de valer. Mede **cobertura**, não frescor | Sim |
 | `check-doc-size` | `pnpm ci:preflight` | A+B (gate `check-doc-size`) | Documentação **viva** acima de 300 linhas. As 3 categorias fora do escopo estão declaradas em `tamanho-e-revisao.md` §O que o teto cobre. A contagem é o número de linhas que o arquivo tem — `wc -l` subestima em 1 os arquivos sem `\n` final | Sim |
-| `check-path-alias` | `pnpm ci:preflight` | A+B (gate `check-path-alias`) | Alias de `compilerOptions.paths` do `tsconfig.base.json` apontando para um diretório que **não existe**. Não mede alias não usado — alias válido e sem import é decisão | Sim |
+| `check-path-alias` | `pnpm ci:preflight` | A+B (gate `check-path-alias`) | Alias de `compilerOptions.paths` de **todos** os tsconfigs do repo apontando para um local que **não existe** — o gate exige que o **alvo** exista (arquivo, diretório ou padrão com `*` — e o `*` do alvo só é slot de substituição quando a **chave** também tem `*`; sem ele o `*` é nome de arquivo e o TS dá TS2307), e com vários destinos basta um existir; ele **não** exige que o import resolva. O `paths`/`baseUrl` são os efetivos (após `extends`), e o `paths` **não** é mesclado: o filho substitui o do pai, e o gate julga cada **declaração** por si. O tsconfig é lido **como o `tsc` lê** (JSONC); config que o TS não parseia vira **advisory** com motivo (e o gate só fica `skipped` quando NENHUM config pôde ser medido). Não mede alias não usado — alias válido e sem import é decisão | Sim |
 | `check-dependency-drift` | `pnpm ci:preflight` | A+B (gate `check-dependency-drift`) | O MESMO pacote declarado em **versões diferentes** em workspaces diferentes — o lockfile instala 2 cópias e cada app typecheca contra a sua | Sim |
 | `check-dependency-freshness` | `pnpm ci:preflight` | A+B (gate `check-dependency-freshness`) | Major pendente **sem declaração de motivo**, ou pendência **envelhecida** (o pacote saiu do workspace, ou a faixa já permite a major, ou a major foi **adotada** — a faixa já é a major que a pendência diz que não sobe; MEDIDO 2026-11-10, com a árvore plantada no `eslint` `^10.14.0`, o gate devolvia `ok=true`) | Sim |
 | `check-dependency-audit` | `pnpm ci:preflight` | A+B (gate `check-dependency-audit`) | Advisory **crítica ou alta** de dependência que não está na lista de exceções versionada; exceção cuja verificação (o motivo medido) parou de valer; e a **claim** do total de advisories (`advisoriesEsperadas`) que declara **mais** do que o `pnpm audit` mede — o que o REGISTRO publica a mais é **aviso**, não erro (dado externo não é mudança do repo) | Sim |

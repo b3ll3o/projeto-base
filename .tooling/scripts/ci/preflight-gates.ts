@@ -605,7 +605,19 @@ export const PREFLIGHT_CHECKS: CheckSpec[] = [
     // alias — só a própria declaração. O `check-tsconfig-drift` não pega:
     // ele compara `strict` e `noUncheckedIndexedAccess`, e `paths` não está
     // entre elas.
-    name: 'alias de path aponta para diretório que existe',
+    //
+    // pt-BR (2026-11-27): o alvo de um `paths` do TS é um LOCAL DE MÓDULO, e
+    // o TS aceita arquivo, diretório e padrão com `*` — e com vários
+    // destinos basta um existir (ele os tenta em ordem). A regra antiga
+    // ("aponta para um diretório que existe") acusava formas legítimas: o
+    // `"@/*"` do `apps/web` (150 imports `@/…`) virava "alias morto", e o
+    // gate media só o `tsconfig.base.json`. Agora o gate mede TODOS os
+    // tsconfigs e julga o alvo na forma que o TS aceita.
+    //
+    // MEDIDO em 2026-11-27: o `paths` NÃO é mesclado no `extends` (o filho
+    // SUBSTITUI o do pai), então o gate julga cada DECLARAÇÃO por si — pai
+    // vivo + filho que substitui por um quebrado é VERMELHO.
+    name: 'alias de path aponta para um local que existe (como o TS aceita)',
     file: '.tooling/scripts/ci/check-path-alias.ts',
     id: 'check-path-alias',
   },

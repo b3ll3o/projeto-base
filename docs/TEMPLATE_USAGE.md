@@ -197,8 +197,9 @@ R: `.agents/` é vendor-neutral — funciona com qualquer IA (Claude Code, Curso
 | `1.37.0` | **Bump de metadata** — sincronização de versão com STACK.md e MONOREPO.md (1.32.0 → 1.37.0). Sem mudança no fluxo de integração: nenhuma dependência nova, nenhum binário novo, nenhum passo novo no checklist. O app derivado herda a separação entre a credencial de DONO (do CLI) e a credencial do processo que expõe a API — a correção da issue #180. |
 | `1.38.0` | **Bump de metadata** — sincronização de versão com STACK.md e MONOREPO.md (1.32.0 → 1.38.0). Sem mudança no fluxo de integração: nenhuma dependência nova, nenhum binário novo, nenhum passo novo no checklist. O app derivado herda a mutação e a auditoria na mesma transação — a correção da issue #184. |
 | `1.39.0` | **Bump de metadata** — sincronização de versão com STACK.md e MONOREPO.md (1.32.0 → 1.39.0). Sem mudança no fluxo de integração: nenhuma dependência nova, nenhum binário novo, nenhum passo novo no checklist. O app derivado herda o plano das issues e as correções dos 6 PRs irmãos. |
+| `1.39.1` | **Bump de metadata** — sincronização de versão com STACK.md e MONOREPO.md (1.39.0 → 1.39.1). Sem mudança no fluxo de integração: nenhuma dependência nova, nenhum binário novo, nenhum passo novo no checklist. O app derivado herda a correção dos três gates de preflight (o `check-path-alias` passa a resolver o alvo de `paths` como o TypeScript resolve — arquivo, diretório ou padrão com `*` — e a medir todos os tsconfigs, não só o da raiz; o `check-doc-size` não mede o que não existe e diz que não mediu; o `preflight` não cai mais quando um gate lança). |
 
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão do documento:** 1.39.0
+**Versão do documento:** 1.39.1

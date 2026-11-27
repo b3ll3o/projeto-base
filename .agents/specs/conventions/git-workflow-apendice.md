@@ -203,3 +203,33 @@ git branch <branch> backup/<branch>
 
 Quando a limpeza acabar, as tags `backup/*` podem ser removidas. Até lá, elas
 são o que separa limpeza de incidente.
+
+## A branch mergeada some sozinha — o instrumento da regra
+
+> **REGRA:** depois que um PR é **mergeado**, a branch dele está morta e é
+> apagada. Quem apaga é o workflow
+> [`.github/workflows/delete-merged-branch.yml`](../../../.github/workflows/delete-merged-branch.yml)
+> — o evento é `pull_request: closed` com `merged == true`, e a branch sai do
+> **remoto** pelo `DELETE` da ref. A branch **local** continua até alguém rodar
+> `git branch -D <branch>` (o squash esconde a ancestralidade, e `-d` recusa).
+
+O que o workflow **não** faz — e por quê:
+
+| Caso | O que acontece | Por quê |
+|---|---|---|
+| PR mergeado | a branch remota é apagada | a regra: branch mergeada está morta |
+| PR fechado **sem** merge | **nada** é apagado | o conteúdo pode não estar em `main` — apêndice §Caso 3 exige exame de conteúdo antes |
+| PR de **fork** | **nada** é apagado | a ref vive no outro repositório |
+| Branch **base de outro PR aberto** (PR empilhado) | **nada** é apagado | apagá-la quebraria o PR de cima |
+| Branch já apagada (botão do GitHub, `push --delete` manual) | **nada** — sem erro | o `GET` da ref devolve 404 e o job sai com aviso; qualquer OUTRO erro (403, 500) deixa o job **vermelho** |
+| Nome de branch com `#` ou `?` (legais no git) | a branch certa é apagada | o nome vai percent-encoded na URL, e a ref lida é conferida contra a branch do PR antes do `DELETE` |
+
+Se a automação não rodou (workflow desabilitado, permissão negada), a limpeza
+manual é a do bloco principal de
+[`git-workflow.md`](./git-workflow.md) §"Branch Morta: Apagar Quando o PR Sai
+de OPEN" — e ela ainda vale: a regra é da branch, não do workflow.
+
+```bash
+# a branch mergeada continua local depois do merge:
+git branch -D <branch>
+```

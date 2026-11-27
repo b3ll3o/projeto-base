@@ -50,7 +50,8 @@ pnpm ci:local
 > ⚠️ `pr:marker` lê o corpo do PR **do evento**: corrigir o corpo e re-run não
 > revalida — só um push novo revalida (correção no `main` desde o #81). Outros
 > workflows: `release-template.yml` (auto-tag pós-merge), `review-stack.yml`,
-> `sync-docs.yml`.
+> `sync-docs.yml`, `pr-review.yml` (revisão obrigatória) e
+> `delete-merged-branch.yml` (apaga a branch do PR mergeado).
 
 O detalhamento de **qual** gate roda em **qual** camada (hooks locais, CI remoto,
 processo de agents) está em

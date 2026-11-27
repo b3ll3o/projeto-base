@@ -411,18 +411,34 @@ export const RUNNERS: Record<string, () => CheckResult | Promise<CheckResult>> =
 };
 
 /**
+ * Um gate com o seu runner: QUEM é, DE ONDE vem, e COMO roda.
+ *
+ * O tipo é nomeado (e não um array de checks escrito inline) porque o gate de
+ * anti-regressão `preflight-gates.spec.ts` recusa, no `preflight.ts`, um
+ * parâmetro de checks tipado como array: uma lista declarada aqui seria uma
+ * SEGUNDA fonte, e o `preflight-gates.ts` passaria a ser decoração.
+ */
+export interface CheckComRunner {
+  name: string;
+  file: string;
+  fn: () => CheckResult | Promise<CheckResult>;
+}
+
+/**
  * Junta a lista (QUEM, DE ONDE) com os runners (COMO) na ordem do painel.
  *
  * A falha aqui é explícita e nomeia o id: um gate declarado e não rodado
  * some do painel em silêncio, e "parte do painel acima não foi medida" é a
  * forma mais cara de erro silencioso que existe — a linha verde ao lado é
  * indistinguível de um gate que passou.
+ *
+ * ⚠️ Esta falha é de **CONFIGURAÇÃO**, não de gate: ela é LANÇADA antes do
+ * painel existir, e o `main()` cai no `catch` do IIFE (exit 2, sem painel e
+ * sem resumo final). Um gate **com defeito** é uma LINHA vermelha no painel
+ * (`executarCheck`); um gate **sem runner** é a casa fora de combate — sinal
+ * distinto, e é por isso que ele não vira linha.
  */
-export function resolverChecks(): Array<{
-  name: string;
-  file: string;
-  fn: () => CheckResult | Promise<CheckResult>;
-}> {
+export function resolverChecks(): CheckComRunner[] {
   const faltando = idsDeclarados().filter((id) => !(id in RUNNERS));
   if (faltando.length > 0) {
     throw new Error(
@@ -437,27 +453,77 @@ export function resolverChecks(): Array<{
   }));
 }
 
-async function main(): Promise<void> {
-  console.log('\u{1F50D} Pre-flight CI checks\n');
-  const checks = resolverChecks();
+/**
+ * Roda UM check e devolve o veredito — mesmo quando o check LANÇA.
+ *
+ * ⚠️ MEDIDO em 2026-11-26: o `preflight` chamava `check.fn()` sem proteção, e
+ * um gate que lançava derrubava o preflight INTEIRO, e o `ENOENT` de um `.md`
+ * apagado-sem-stage era exatamente isso (medido no `check-doc-size`).
+ *
+ * ⚠️ **O tamanho da queda é medido, e é menor do que se dizia.** MEDIDO em
+ * 2026-11-27 no `origin/main` com um `.md` plantado e apagado: o preflight tem
+ * **56 checks no total** e o crash ocorreu no **48º** (`check-doc-size`):
+ * **47** checks rodaram antes do crash, os **8** seguintes nunca rodaram, o
+ * **resumo final não imprimiu**, e o processo saiu com **exit 2** (o do
+ * crash), não 1. Um gate com defeito é uma LINHA vermelha no painel; é a
+ * forma que ele deveria ter, e não a forma que derrubava a casa.
+ *
+ * O gate que lançou vira um check VERMELHO com o motivo no `errors` — o
+ * painel mostra a linha, a contagem de erros soma 1, e o resto do preflight
+ * continua.
+ */
+export async function executarCheck(
+  fn: () => CheckResult | Promise<CheckResult>,
+): Promise<CheckResult> {
+  try {
+    return await fn();
+  } catch (err) {
+    const motivo = err instanceof Error ? (err.stack ?? err.message) : String(err);
+    return {
+      ok: false,
+      errors: [`o check LANÇOU e não devolveu veredito: ${motivo}`],
+    };
+  }
+}
 
+/**
+ * Roda a lista de checks — cada um isolado — e devolve o total.
+ *
+ * ⚠️ O isolamento mora AQUI, e não dentro de `executarCheck`: o `main()`
+ * chamava `check.fn()` direto, e um gate que lançava derrubava o preflight
+ * INTEIRO. A spec precisa provar que o LOOP usa o isolamento — testar
+ * `executarCheck` isolado provava só o helper, e trocar o loop por
+ * `check.fn()` deixava a suíte verde.
+ */
+export async function rodarChecks(
+  checks: CheckComRunner[],
+  escrever: (texto: string) => void = (texto) => process.stdout.write(texto),
+): Promise<{ erros: number; pulados: number }> {
   let totalErrors = 0;
   let totalSkipped = 0;
   for (const check of checks) {
-    process.stdout.write(`  • ${check.name}... `);
+    escrever(`  • ${check.name}... `);
     // As linhas saem nos DOIS ramos, porque é `relatarUmCheck` que decide isso.
     // Um `advisories` sobre um `ok: true` é o caso que mais importa: "verde,
     // mas medido contra uma ref que pode estar velha" é uma ressalva sobre o
     // verde, e um painel que só a lê no ramo vermelho descarta exatamente a
     // afirmação que ela existe para qualificar.
-    const relatorio = relatarUmCheck(await check.fn());
-    console.log(relatorio.mark);
+    const relatorio = relatarUmCheck(await executarCheck(check.fn));
+    escrever(`${relatorio.mark}\n`);
     for (const linha of relatorio.linhas) {
-      console.log(`      ${linha}`);
+      escrever(`      ${linha}\n`);
     }
     if (relatorio.pulou) totalSkipped++;
     totalErrors += relatorio.erros;
   }
+  return { erros: totalErrors, pulados: totalSkipped };
+}
+
+async function main(): Promise<void> {
+  console.log('\u{1F50D} Pre-flight CI checks\n');
+  const checks = resolverChecks();
+
+  const { erros: totalErrors, pulados: totalSkipped } = await rodarChecks(checks);
 
   console.log('');
   // O resumo inteiro vem de UM lugar, para que "erro" e "não rodou" possam

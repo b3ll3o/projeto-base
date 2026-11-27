@@ -37,47 +37,19 @@
   fica registrado aqui é a ASSIMETRIA. Alternativa a decidir: tornar a etapa
   *skipped com motivo* quando `DATABASE_URL` não resolve, em vez de erro.
 
-- **O `check-path-alias` usa `JSON.parse` num arquivo que o `tsc` aceita como
-  JSONC — e o `catch` devolve verde silencioso.** (medido 2026-10-30). O
-  `tsconfig.json` do TypeScript é JSONC: comentário e vírgula final são legais.
-  O gate usa `JSON.parse`, que os rejeita; o `catch` devolve `[]` **sem
-  `skipped` e sem motivo**, ou seja, verde por ausência — a classe 5 do
-  `guard-classes.md`. Comando: um `tsconfig.base.json` com um `//` no meio
-  → `checkPathAlias` devolve `{ok: true, errors: []}` **e** `skipped:
-  undefined`, mesmo com um alias **realmente morto** declarado. Os tsconfigs
-  deste repo **já** adotam a convenção de comentário (`"//e2e"`, `"//"` como
-  chave em `apps/web/tsconfig.json`, `tooling/scripts/tsconfig.json` e
-  `.tooling/tsconfig.json`), e o `tsc` aceita (`ts.parseConfigFileTextToJson`).
-  **Latente**: o `tsconfig.base.json` (único que o gate mede) é JSON limpo.
-  É o **primeiro** da fila porque é o que morde primeiro — um `//` no
-  `tsconfig.base.json` desliga o gate em silêncio. Conserto:
-  `ts.parseConfigFileTextToJson`, que já está disponível (o
-  `check-shell-injection` importa o `typescript`).
-
-- **O `check-path-alias` mede uma semântica de `paths` que o TypeScript não
-  tem — e acusa formas legítimas como "alias morto".** (medido 2026-10-30).
-  O alvo de um `paths` do TS é um **local de módulo**, resolvido por wildcard
-  e por arquivo; o gate exige um **diretório** (`st.isDirectory()`). Duas
-  formas legítimas são acusadas: (a) alvo que é **arquivo** (`"./src/x.ts"`
-  resolve — `tsc --noEmit` sai 0); (b) alvo com **wildcard** (`"./*"` — que é
-  o que `apps/web/tsconfig.json` usa, com 76 imports `@/…`). Comando: o gate contra o tsconfig do web →
-  `alias morto: '@/*' aponta para './*' (…/apps/web/*), que não existe`.
-  Além disso, `extrairAliases` pega só o **primeiro** destino, e o TS tenta
-  **todos** em ordem (MEDIDO: `['./src/nao-existe','./src/real.ts']` resolve
-  para `real.ts`, `tsc` sai 0). **Latente**: o gate mede só o
-  `tsconfig.base.json`, cujos 3 aliases apontam para diretórios que existem.
-  Conserto: resolver o alvo como o TS resolve (globbing + fallback na ordem).
-
 - **O `check-doc-size` tira o corpus do ÍNDICE do git, então um `.md` não
   versionado é invisível.** (medido 2026-10-30). `listarMarkdown` usa
   `git ls-files '*.md'`, que devolve o índice. Um `.md` de 400 linhas no disco
   e **fora** do índice → `ok: true, errors: 0`. É a classe da memória
   `gate-blind-to-uncommitted-work`; o conserto é o que ela aponta:
-  `git add -N`. ⚠️ O caso inverso também é um buraco: arquivo removido do
-  disco mas ainda no índice faz o gate **lançar** `ENOENT`, e o `preflight`
-  (que chama `check.fn()` sem try/catch) aborta inteiro. A mudança é de
-  **escopo do gate** (o que "documentação viva" significa), e é decisão de
-  política — não correção pontual.
+  `git add -N`. ⚠️ O caso inverso (arquivo removido do disco mas ainda no
+  índice) fazia o gate **lançar** `ENOENT` e o `preflight` abortar inteiro —
+  **FECHADO em 2026-11-26** (o gate não mede o que não existe e DIZ que não
+  mediu; o preflight deixou de derrubar os **8** checks que vinham depois do
+  48º por causa de um):
+  ver [`pendencias-fechadas.md`](./ci-defense-in-depth-pendencias-fechadas.md).
+  O que fica ABERTO aqui é o **escopo** (o que "documentação viva" significa),
+  e isso é decisão de política — não correção pontual.
 
 - **O caso do repo real no spec do `check-doc-size` é um controle POSITIVO, e
   não distingue "o gate mede" de "o gate não mede nada".** (medido 2026-10-30).

@@ -121,7 +121,7 @@ projeto-base (monorepo)
 | Editor | VS Code | Suporte nativo a TS, ESLint, Prisma |
 | Container | Docker + Compose | Postgres + api + web + `otel-collector` + `tempo` + `prometheus` + `grafana` (os 4 últimos, perfil `observability`). **Sem Redis** — nenhum serviço de cache/fila existe |
 | Git hooks | Husky + lint-staged | `pre-commit`: `lint-staged` → `stack-code-reviewer` → `doc-sync` · `commit-msg`: `commit-msg-gate` (Conventional Commits) · `pre-push`: `ci:preflight` → `ci:boot` → `pr:refresh` (advisory). **Nenhum hook roda `tdd-enforcer`** — ele existe como agent ([`tdd-enforcer`](../.agents/agents/tdd-enforcer.md)), mas `grep -rn "tdd-enforcer" .husky/ .github/workflows/` volta vazio. Detalhe linha a linha em [`docs/fluxo-desenvolvimento.md` §3.1](./fluxo-desenvolvimento.md) |
-| CI | GitHub Actions (`.github/workflows/`) | `ci.yml` + `review-stack.yml` + `sync-docs.yml` + `release-template.yml` |
+| CI | GitHub Actions (`.github/workflows/`) | `ci.yml` + `review-stack.yml` + `sync-docs.yml` + `pr-review.yml` + `release-template.yml` + `delete-merged-branch.yml` (apaga a branch do PR mergeado — regra [git-workflow.md](../.agents/specs/conventions/git-workflow.md) §"Branch Morta") |
 | Secrets | (a definir por projeto) | Doppler / Vault / 1Password |
 
 **Fluxo canônico (do primeiro comando ao merge):** como cada ferramenta acima dispara gates (pre-commit, pre-push, CI, release) e o que cada um bloqueia de fato está em [`docs/fluxo-desenvolvimento.md`](./fluxo-desenvolvimento.md).
@@ -178,7 +178,7 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 ---
 
 **Mantido por:** projeto-base contributors
-**Versão da stack:** 1.39.0
+**Versão da stack:** 1.39.1
 
 ### Histórico de Versões
 
@@ -218,3 +218,4 @@ O único guardião automatizado no template raiz é o agent [`stack-code-reviewe
 | `1.37.0` | **Sem mudança de stack** — nenhuma dependência nova, nenhum binário novo no `package.json`, nenhuma mudança em `apps/web`, `packages/` ou `infra/`. A única mudança na árvore é o BC de Auth/`shared` de `apps/api` e a imagem: a chave de assinatura passa a ser lida por uma função `SECURITY DEFINER` (migration nova), o guard de boot recusa a URI de dono no ambiente do processo, e o ENTRYPOINT da imagem a remove antes do `exec node` (issue #180). O footer subiu junto com os outros 5. |
 | `1.38.0` | **Sem mudança de stack** — nenhuma dependência nova, nenhum binário novo no `package.json`, nenhuma mudança em `apps/web`, `packages/` ou `infra/`. A única mudança na árvore é o BC de Usuários de `apps/api`: a mutação e o registro de auditoria passam a ser a mesma transação (issue #184). O footer subiu junto com os outros 5. |
 | `1.39.0` | **Sem mudança de stack** — nenhuma dependência nova, nenhum binário novo no `package.json`, nenhuma mudança em `apps/`, `packages/` ou `infra/`. Este PR é **doc**: o plano das 10 issues do scan de 2026-11-23 e o snapshot que o alimenta, e o encerramento das 2 issues que o `main` já tinha corrigido (a #181 pelo override do `effect`, a #186 por obsolescência). O footer subiu junto com os outros 5. |
+| `1.39.1` | **Sem mudança de stack** — nenhuma dependência nova, nenhum binário novo no `package.json`, nenhuma mudança em `apps/`, `packages/` ou `infra/`. Este PR é **tooling**: três gates da camada de preflight que mediam errado (o `check-path-alias` media uma semântica de `paths` que o TypeScript não tem, e o `check-doc-size` lançava `ENOENT` derrubando o preflight) saem do buraco, e o `preflight` passa a transformar um gate que lançou em uma linha vermelha. A camada de CI ganha **um workflow novo**: `delete-merged-branch.yml`, que apaga a branch do PR mergeado — é o instrumento da regra de branch morta de [`git-workflow.md`](../.agents/specs/conventions/git-workflow.md). O footer subiu junto com os outros 5. |

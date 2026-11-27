@@ -2,9 +2,8 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { aliasesMortos, checkPathAlias, extrairAliases } from './check-path-alias';
+import { aliasesDe, checkPathAlias, medirAliases } from './check-path-alias';
 
 /** Raiz do repo real — usada no caso "o repo real não tem alias morto". */
 const REPO_REAL = join(import.meta.dirname, '..', '..', '..');
@@ -15,27 +14,26 @@ const REPO_REAL = join(import.meta.dirname, '..', '..', '..');
 const TSX = join(REPO_REAL, 'node_modules/.bin/tsx');
 const SCRIPT = join(REPO_REAL, '.tooling/scripts/ci/check-path-alias.ts');
 
-describe('extrairAliases', () => {
+describe('aliasesDe', () => {
   it('lê o `paths` do tsconfig', () => {
-    const aliases = extrairAliases({
-      compilerOptions: { paths: { '@projeto/shared-types': ['./packages/shared-types/src'] } },
-    });
+    const aliases = aliasesDe({ '@projeto/shared-types': ['./packages/shared-types/src'] });
     expect(aliases).toEqual([
-      { nome: '@projeto/shared-types', alvo: './packages/shared-types/src' },
+      { nome: '@projeto/shared-types', alvos: ['./packages/shared-types/src'] },
     ]);
   });
 
-  it('aceita alvo em string', () => {
-    const aliases = extrairAliases({
-      compilerOptions: { paths: { '@projeto/ui': './packages/ui/src' } },
-    });
-    expect(aliases[0]?.alvo).toBe('./packages/ui/src');
+  it('aceita alvo em string e normaliza para lista', () => {
+    const aliases = aliasesDe({ '@projeto/ui': './packages/ui/src' });
+    expect(aliases[0]?.alvos).toEqual(['./packages/ui/src']);
   });
 
-  it('config sem `paths` → lista vazia', () => {
-    expect(extrairAliases({ compilerOptions: {} })).toEqual([]);
-    expect(extrairAliases({})).toEqual([]);
-    expect(extrairAliases(null)).toEqual([]);
+  it('GUARDA TODOS os alvos, na ordem — o TS tenta cada um em ordem', () => {
+    const aliases = aliasesDe({ '@x': ['./nao-existe', './src/real.ts'] });
+    expect(aliases[0]?.alvos).toEqual(['./nao-existe', './src/real.ts']);
+  });
+
+  it('sem `paths` → lista vazia', () => {
+    expect(aliasesDe({})).toEqual([]);
   });
 });
 
@@ -43,10 +41,16 @@ describe('checkPathAlias', () => {
   let tmp: string;
   let repo: string;
 
-  function escreverTsconfig(paths: Record<string, string | string[]>): void {
+  function escreverTsconfig(
+    paths: Record<string, string | string[]>,
+    extra: Record<string, unknown> = {},
+    nome = 'tsconfig.base.json',
+  ): void {
+    const caminho = join(repo, nome);
+    mkdirSync(join(caminho, '..'), { recursive: true });
     writeFileSync(
-      join(repo, 'tsconfig.base.json'),
-      JSON.stringify({ compilerOptions: { baseUrl: '.', paths } }, null, 2),
+      caminho,
+      JSON.stringify({ compilerOptions: { baseUrl: '.', paths, ...extra }, ...extra }, null, 2),
     );
   }
 
@@ -67,7 +71,7 @@ describe('checkPathAlias', () => {
     expect(r.ok).toBe(true);
   });
 
-  it('alias apontando para diretório INEXISTENTE → VERMELHO, nomeando o alias e o alvo', async () => {
+  it('🔴 alias apontando para diretório INEXISTENTE → VERMELHO, nomeando o alias e o alvo', async () => {
     escreverTsconfig({
       '@projeto/shared-types': ['./packages/shared-types/src'],
       '@projeto/ui': ['./packages/ui/src'],
@@ -78,18 +82,183 @@ describe('checkPathAlias', () => {
     expect(r.errors.join('\n')).toContain('./packages/ui/src');
   });
 
-  it('alias que aponta para um ARQUIVO (não diretório) → VERMELHO', async () => {
+  it('🔴 alias que aponta para um ARQUIVO (não diretório) → VERDE (o TS resolve arquivo)', async () => {
+    // MEDIDO 2026-10-30: a forma (a) do defeito — o alvo de um `paths` do TS
+    // é um LOCAL DE MÓDULO, e o TS resolve tanto arquivo quanto diretório.
+    // O gate antigo exigia `st.isDirectory()` e acusava esta forma legítima.
     writeFileSync(join(repo, 'arquivo.ts'), '');
     escreverTsconfig({ '@projeto/x': ['./arquivo.ts'] });
     const r = await checkPathAlias({ repoRoot: repo });
-    expect(r.ok).toBe(false);
-    expect(r.errors.join('\n')).toContain('@projeto/x');
+    expect(r.ok).toBe(true);
+    expect(r.errors).toEqual([]);
   });
 
-  it('tsconfig ausente → skipped COM MOTIVO (nunca verde por ausência — classe 5)', async () => {
+  it('🔴 alias com WILDCARD cuja raiz existe → VERDE (o TS resolve wildcard)', async () => {
+    // MEDIDO 2026-10-30: a forma (b) do defeito — `apps/web/tsconfig.json`
+    // declara `"@/*": ["./*"]`, com 150 imports `@/…` no web.
+    mkdirSync(join(repo, 'lib'), { recursive: true });
+    writeFileSync(join(repo, 'lib', 'api-client.ts'), '');
+    escreverTsconfig({ '@/*': ['./lib/*'] });
+    const r = await checkPathAlias({ repoRoot: repo });
+    expect(r.ok).toBe(true);
+    expect(r.errors).toEqual([]);
+  });
+
+  it('🔴 alias com WILDCARD cuja raiz NÃO existe → VERMELHO', async () => {
+    escreverTsconfig({ '@/*': ['./lib/*'] });
+    const r = await checkPathAlias({ repoRoot: repo });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toContain('@/*');
+  });
+
+  it('🔴 alias com 2 alvos, o 1º inexistente e o 2º existente → VERDE (fallback na ordem)', async () => {
+    // MEDIDO 2026-10-30: `['./src/nao-existe','./src/real.ts']` resolve para
+    // `real.ts` no TS. O gate antigo olhava SÓ o primeiro destino.
+    mkdirSync(join(repo, 'src'), { recursive: true });
+    writeFileSync(join(repo, 'src', 'real.ts'), '');
+    escreverTsconfig({ '@x': ['./src/nao-existe', './src/real.ts'] });
+    const r = await checkPathAlias({ repoRoot: repo });
+    expect(r.ok).toBe(true);
+    expect(r.errors).toEqual([]);
+  });
+
+  it('🔴 alias com 2 alvos, NENHUM existente → VERMELHO, nomeando os 2', async () => {
+    escreverTsconfig({ '@x': ['./src/nao-existe', './outro/nao-existe'] });
+    const r = await checkPathAlias({ repoRoot: repo });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toContain('./src/nao-existe');
+    expect(r.errors.join('\n')).toContain('./outro/nao-existe');
+  });
+
+  it('🔴 tsconfig com COMENTÁRIO (JSONC) → medido, não pulado', async () => {
+    // MEDIDO em 2026-11-26: com `JSON.parse`, o `catch` devolvia `[]` e o gate
+    // ficava VERDE com DOIS aliases mortos — um `//` no tsconfig desligava o
+    // gate inteiro (a classe 5 de `guard-classes.md`).
+    writeFileSync(
+      join(repo, 'tsconfig.base.json'),
+      `{
+  // comentário: o \`tsc\` aceita JSONC, o \`JSON.parse\` não
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@projeto/ui": ["./packages/ui/src"]
+    }
+  }
+}
+`,
+    );
+    const r = await checkPathAlias({ repoRoot: repo });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toContain('@projeto/ui');
+  });
+
+  it('🔴 tsconfig com vírgula final (JSONC) → o gate mede, não pula', async () => {
+    writeFileSync(
+      join(repo, 'tsconfig.base.json'),
+      '{\n  "compilerOptions": {\n    "baseUrl": ".",\n    "paths": {\n      "@projeto/ui": ["./packages/ui/src"],\n    },\n  },\n}\n',
+    );
+    const r = await checkPathAlias({ repoRoot: repo });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toContain('@projeto/ui');
+  });
+
+  it('🔴 tsconfig que é JSON INVÁLIDO de verdade → NÃO MEDIDO, com motivo (nunca verde por ausência)', async () => {
+    writeFileSync(join(repo, 'tsconfig.base.json'), '{ "compilerOptions": { ');
+    const r = await checkPathAlias({ repoRoot: repo });
+    expect(r.ok).toBe(true);
+    expect(r.skipped).toBe(true);
+    expect(r.reason).toContain('JSONC');
+    expect(r.errors).toEqual([]);
+  });
+
+  it('🔴 tsconfig ausente → skipped COM MOTIVO (nunca verde por ausência)', async () => {
     const r = await checkPathAlias({ repoRoot: repo });
     expect(r.skipped).toBe(true);
-    expect(r.reason).toContain('tsconfig.base.json');
+    expect(r.reason).toContain('tsconfig');
+    expect(r.errors).toEqual([]);
+  });
+
+  it('🔴 o alias herdado por `extends` é resolvido contra a base do config que o DECLARA', async () => {
+    // O `paths` vive no base; o filho o herda. O TS resolve o alvo do PAI
+    // contra o `baseUrl` do PAI — o gate antigo resolvia contra o diretório
+    // do tsconfig que lia.
+    mkdirSync(join(repo, 'base'), { recursive: true });
+    mkdirSync(join(repo, 'base', 'lib'), { recursive: true });
+    writeFileSync(
+      join(repo, 'base', 'tsconfig.base.json'),
+      JSON.stringify({ compilerOptions: { baseUrl: '.', paths: { '@x': ['./lib'] } } }),
+    );
+    mkdirSync(join(repo, 'app'), { recursive: true });
+    writeFileSync(
+      join(repo, 'app', 'tsconfig.json'),
+      JSON.stringify({ extends: '../base/tsconfig.base.json' }),
+    );
+    const r = await checkPathAlias({ repoRoot: repo });
+    expect(r.ok).toBe(true);
+    expect(r.errors).toEqual([]);
+  });
+
+  it('🔴 o MESMO alias em dois configs: pai vivo + filho que SUBSTITUI por um quebrado → VERMELHO', async () => {
+    // MEDIDO em 2026-11-27: o `paths` NÃO é mesclado no `extends` — o filho
+    // SUBSTITUI o do pai. Então `@x → ./lib` no pai e `@x → ./nao-existe` no
+    // filho são aliases DIFERENTES, e o do filho é o que o `tsc` do filho usa
+    // (que sai 2 com TS2307). O pool antigo (nome+base) juntava os dois e
+    // "basta um destino vivo" mascarava o quebrado: gate VERDE com tsc
+    // vermelho.
+    mkdirSync(join(repo, 'base', 'lib'), { recursive: true });
+    writeFileSync(
+      join(repo, 'base', 'tsconfig.base.json'),
+      JSON.stringify({ compilerOptions: { baseUrl: '.', paths: { '@x': ['./lib'] } } }),
+    );
+    mkdirSync(join(repo, 'app'), { recursive: true });
+    writeFileSync(
+      join(repo, 'app', 'tsconfig.json'),
+      JSON.stringify({
+        extends: '../base/tsconfig.base.json',
+        compilerOptions: { paths: { '@x': ['./nao-existe'] } },
+      }),
+    );
+    const r = await checkPathAlias({ repoRoot: repo });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toContain('@x');
+  });
+
+  it('🔴 a CHAVE é o que decide se o `*` do ALVO é substituição ou nome de arquivo', async () => {
+    // MEDIDO em 2026-11-27 (matriz de 4 combinações, com `tsc --noEmit
+    // --traceResolution`): o `*` do ALVO só é SLOT DE SUBSTITUIÇÃO quando a
+    // CHAVE também tem `*`. Sem `*` na chave não há trecho capturado para
+    // substituir, e o TS procura o caminho `./src/*` LITERAL — o trace mostra
+    // `Trying substitution './src/*', candidate module location: './src/*'` e
+    // `Directory '…/src/*' does not exist` → TS2307.
+    //
+    // O gate que decide o modo "wildcard" olhando SÓ o alvo dizia que esse
+    // alias estava vivo: VERDE com o `tsc` vermelho. Este caso fixa que a
+    // chave é consultada.
+    mkdirSync(join(repo, 'src', 'deep'), { recursive: true });
+    writeFileSync(join(repo, 'src', 'deep', 'index.ts'), 'export const x = 1;\n');
+    writeFileSync(
+      join(repo, 'tsconfig.json'),
+      JSON.stringify({
+        compilerOptions: { baseUrl: '.', paths: { '@exato': ['./src/*'] } },
+      }),
+    );
+    const r = await checkPathAlias({ repoRoot: repo });
+    expect(r.ok).toBe(false);
+    expect(r.errors.join('\n')).toContain('@exato');
+  });
+
+  it('o `*` do alvo COM `*` na chave continua vivo (o caso do `@/*` do web)', async () => {
+    // O contraponto do caso anterior: com `*` na CHAVE, o `*` do alvo É o
+    // slot de substituição, e o TS resolve (`@k/deep` → `src/deep/index.ts`).
+    mkdirSync(join(repo, 'src', 'deep'), { recursive: true });
+    writeFileSync(join(repo, 'src', 'deep', 'index.ts'), 'export const x = 1;\n');
+    writeFileSync(
+      join(repo, 'tsconfig.json'),
+      JSON.stringify({ compilerOptions: { baseUrl: '.', paths: { '@k/*': ['./src/*'] } } }),
+    );
+    const r = await checkPathAlias({ repoRoot: repo });
+    expect(r.ok).toBe(true);
+    expect(r.errors).toEqual([]);
   });
 
   it('o repo real não tem alias morto', async () => {
@@ -97,26 +266,37 @@ describe('checkPathAlias', () => {
     expect(r.errors).toEqual([]);
     expect(r.ok).toBe(true);
   });
-
   it('a medição do repo real não é verde por acidente: um alias morto é achado', async () => {
     // A árvore sadia exercita só metade do conserto: um gate que mede o repo
     // real e nunca acha nada pode estar medindo o vazio.
-    const mortos = await aliasesMortos({ repoRoot: REPO_REAL });
-    expect(mortos).toEqual([]);
+    const mortos = await medirAliases(join(tmp, 'vazio'));
+    expect(mortos.aliases).toEqual([]);
     // E o mesmo código, contra uma árvore com alias morto, acha.
-    const tmp2 = mkdtempSync(join(tmpdir(), 'path-alias-mut-'));
-    try {
-      const repo2 = join(tmp2, 'repo');
-      mkdirSync(repo2, { recursive: true });
-      writeFileSync(
-        join(repo2, 'tsconfig.base.json'),
-        JSON.stringify({ compilerOptions: { paths: { '@projeto/ui': ['./packages/ui/src'] } } }),
-      );
-      const achados = await aliasesMortos({ repoRoot: repo2 });
-      expect(achados.map((a) => a.nome)).toEqual(['@projeto/ui']);
-    } finally {
-      rmSync(tmp2, { recursive: true, force: true });
-    }
+    const repo2 = join(tmp, 'repo2');
+    mkdirSync(repo2, { recursive: true });
+    writeFileSync(
+      join(repo2, 'tsconfig.base.json'),
+      JSON.stringify({
+        compilerOptions: { baseUrl: '.', paths: { '@projeto/ui': ['./packages/ui/src'] } },
+      }),
+    );
+    const achados = await medirAliases(repo2);
+    expect(achados.aliases.filter((a) => !a.vivo).map((a) => a.nome)).toEqual(['@projeto/ui']);
+  });
+
+  it('🔴 no repo REAL, o alias com WILDCARD do web é medido e NÃO é acusado', async () => {
+    // MEDIDO 2026-11-27: `apps/web/tsconfig.json` declara
+    // `"@/*": ["./*"]`, e o web tem 150 imports `@/…` (MEDIDO:
+    // `grep -rhoE "from '@/[^']*'" apps/web --include=*.ts --include=*.tsx
+    // | wc -l` → 150). Um gate que exigisse diretório acusaria essa forma
+    // legítima — foi o que segurou o escopo do gate em UM tsconfig.
+    const medido = await medirAliases(REPO_REAL);
+    const web = medido.aliases.filter((a) => a.nome === '@/*');
+    expect(web.length).toBeGreaterThan(0);
+    expect(web.every((a) => a.vivo)).toBe(true);
+    // E o gate não é verde por ausência: ele mediu os 3 aliases da raiz
+    // mais o wildcard do web.
+    expect(medido.aliases.length).toBeGreaterThanOrEqual(4);
   });
 });
 
@@ -129,7 +309,9 @@ describe('rodado como CLI', () => {
     try {
       writeFileSync(
         join(repo, 'tsconfig.base.json'),
-        JSON.stringify({ compilerOptions: { paths: { '@projeto/ui': ['./packages/ui/src'] } } }),
+        JSON.stringify({
+          compilerOptions: { baseUrl: '.', paths: { '@projeto/ui': ['./packages/ui/src'] } },
+        }),
       );
 
       let stderr = '';

@@ -212,32 +212,32 @@ O nome deve descrever **o problema**, não a ferramenta. `fix/coverage-gate-40`
        │
        ▼
 12. Merge (squash preferencialmente) e apagar a branch
-   (ver §Branch Morta: Apagar Quando o PR Sai de OPEN)
+   (§Branch Morta: Apagar Quando o PR Sai de OPEN — mergeada, o REMOTO some sozinha: `delete-merged-branch.yml`)
 ```
 
 ## Branch Morta: Apagar Quando o PR Sai de OPEN
 
 > **REGRA:** branch cujo PR saiu de `open` — **merged** ou **closed** — está
-> **morta**. Apague-a local e remotamente assim que o PR fechar, não "quando
-> der". Branch viva é a que tem PR aberto: alguém ainda pode mergear, revisar ou
-> rebasar.
+> **morta**. Apague-a assim que o PR fechar, não "quando der". Branch viva é a
+> que tem PR aberto: alguém ainda pode mergear, revisar ou rebasar. No PR
+> **mergeado** o remoto é apagado pelo workflow `delete-merged-branch.yml` — e
+> o **local** fica (`-d` recusa: o squash escondeu a ancestralidade); no PR
+> **fechado sem merge** o apagamento é manual, e só depois do exame de conteúdo.
 
 ```bash
 gh pr list --state all --limit 200 --json number,headRefName,mergedAt  # PR saiu de open?
 # --limit é obrigatório: o gh pagina em 30 e o corte é silencioso, sem aviso e
 # sem exit code diferente — sem ele, PRs antigos somem da lista sem você ver
-# tag SÓ com conteúdo fora de main (exame no apêndice, passo 3): com exame
-# vazio a main já tem tudo, e a tag vira ruído que se acumula a cada limpeza
 git tag backup/<branch> <branch>      # só se o exame acusou conteúdo
 git branch -d <branch> || git branch -D <branch>   # -d recusa se o squash escondeu a ancestralidade
-git push origin --delete <branch>
+git push origin --delete <branch>    # só no caminho FECHADO SEM MERGE — no mergeado o remoto já foi apagado
 ```
 
 ### Como decidir
 
 | PR | Pode apagar? |
 |---|---|
-| `merged` (tem `mergedAt`) | **Sim**, direto — se nenhum arquivo da branch estiver ausente em `main` |
+| `merged` (tem `mergedAt`) | **Sim**, direto — o remoto sai sozinho (`delete-merged-branch.yml`) e o local, com `-D` |
 | `closed` sem merge, ou nunca teve PR | **Só após exame de conteúdo** — apêndice §Caso 2 e §Caso 3 |
 
 **O que decide é `mergedAt`, não a recusa do `-d`.** `-d` recusa apagar branch
@@ -250,8 +250,8 @@ branches fechadas: #35 entregou 1 arquivo, #36 entregou 0. O predicado de "está
 tudo em `main`" é o **arquivo**, não o commit: `--not --remotes` mede *"não está
 em nenhuma ref remota"* — inerte enquanto `origin/<branch>` existir, e
 **não-zero depois** do `push --delete`, que é o passo seguinte do mesmo bloco;
-já `--not origin/main` acusa falso positivo com squash. O exame inteiro, e a
-tag de recuperação, estão no [apêndice](./git-workflow-apendice.md) §Caso 1.
+já `--not origin/main` acusa falso positivo com squash — o exame inteiro está
+no [apêndice](./git-workflow-apendice.md) §Caso 1.
 
 ## Pre-Push Quality Gate
 
