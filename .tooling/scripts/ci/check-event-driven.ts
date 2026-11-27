@@ -55,6 +55,9 @@
  * - Ele **não** resolve o **barrel** por conteúdo: um import do diretório
  *   `events/` conta como o import do evento, mesmo que o barrel não o
  *   reexporte (o nome vinculado é o do evento).
+ * - Ele **não** mede o **aggregate** real: o prefixo sai do NOME DO ARQUIVO
+ *   (`user-profile-created.event.ts` → agregado `user`), e a classe do
+ *   aggregate (`UserProfile`) não é consultada. É decisão de desenho do nome.
  * - Ele **não** lê os `*.spec.ts` e os `*.test.ts`: um spec que constrói um
  *   evento não é emissão, e um spec de handler não é consumidor. Medir os
  *   specs faria o gate passar por specs e falhar por produção. ⚠️ O furo
@@ -149,16 +152,34 @@ export function importaClasseDoEvento(
   caminhoDoImportador: string,
   evento: EventoDeclarado,
 ): boolean {
+  return nomesLocaisDoEvento(codigo, caminhoDoImportador, evento).length > 0;
+}
+
+/**
+ * Os nomes LOCAIS que o arquivo liga à classe do evento — a classe e o
+ * ALIAS (`import { UserCreatedEvent as UCE }` liga `UCE`).
+ *
+ * ⚠️ MEDIDO em 2026-11-27: casar só o alias acusava falso positivo em ED5
+ * (o consumidor legítimo deixava de contar) e deixava passar a emissão em ED3
+ * (`new UCE(...)` fora do domínio não era medida).
+ */
+export function nomesLocaisDoEvento(
+  codigo: string,
+  caminhoDoImportador: string,
+  evento: EventoDeclarado,
+): string[] {
   const dirDoEvento = evento.caminho.split('/').slice(0, -1).join('/');
+  const out: string[] = [];
   for (const imp of importsComNomes(codigo)) {
     if (!imp.nomes.includes(evento.classe)) continue;
     const resolvido = resolverCaminho(caminhoDoImportador, imp.alvo);
     if (resolvido === null) continue;
     const normalizado = normalizarCaminho(resolvido);
-    if (normalizado === evento.caminho) return true;
-    if (normalizado === `${dirDoEvento}/index.ts`) return true;
+    const eOBARREL = normalizado === `${dirDoEvento}/index.ts`;
+    if (normalizado !== evento.caminho && !eOBARREL) continue;
+    out.push(...imp.nomes);
   }
-  return false;
+  return [...new Set(out)];
 }
 
 /** Um evento de domínio declarado no código. */
@@ -397,7 +418,7 @@ export function analisar(texto: string): Analise {
  * Um `/` abre uma REGEX literal ou é uma DIVISÃO.
  *
  * A distinção importa porque uma regex pode conter aspas (`/['"]/`) — e uma
- * aspatreatmenta que abre string desmonta o arquivo inteiro (MEDIDO em
+ * aspa que abre string desmonta o arquivo inteiro (MEDIDO em
  * 2026-11-27: `apps/api/src/shared/infrastructure/prisma/traducao-de-falha-de-conexao.ts:90`
  * tem `/at `([^`]+)`/` e o `semStrings` saía com o arquivo desmontado dali).
  *
@@ -406,7 +427,10 @@ export function analisar(texto: string): Analise {
  */
 export function abreRegex(ultimo: string, ultimaPalavra: string): boolean {
   if (ultimo === '') return true;
-  if ('(,=:[!&|?{};+-*%^~'.includes(ultimo)) return true;
+  // O `>` de `=>` fecha uma seta: o que vem depois é expressão, e expressão
+  // começa com regex (MEDIDO em 2026-11-27: `(s: string) => /['"]/.test(s)`
+  // desmontava o arquivo a partir do apóstrofo).
+  if ('(,=:[!&|?{};+-*%^~>'.includes(ultimo)) return true;
   const PALAVRAS_DE_REGEX = [
     'return',
     'typeof',
@@ -466,7 +490,10 @@ export function semImports(codigo: string): string {
   let dentroDeImport = false;
   for (const linha of codigo.split('\n')) {
     if (dentroDeImport) {
-      if (linha.includes(';')) dentroDeImport = false;
+      // O consumo acaba no `;` OU no `from` — um import de várias linhas SEM
+      // ponto-e-vírgula engolia o código seguinte (MEDIDO em 2026-11-27: a
+      // emissão que viesse depois sumia da medição).
+      if (linha.includes(';') || /\bfrom\b/.test(linha)) dentroDeImport = false;
       saida.push('');
       continue;
     }
@@ -520,8 +547,14 @@ export function nomesDoImport(clausula: string): string[] {
     const parte = bruto.trim();
     if (parte === '') continue;
     const como = parte.split(/\s+as\s+/);
-    const nome = (como[1] ?? como[0] ?? '').trim().replace(/^\*\s+as\s+/, '');
-    if (nome !== '') out.push(nome);
+    const original = (como[0] ?? '').trim();
+    const alias = (como[1] ?? '').trim();
+    // O NOME ORIGINAL e o ALIAS: `import { UserCreatedEvent as UCE }` liga o
+    // evento ao nome `UCE` — e quem consome usa `UCE` (MEDIDO em
+    // 2026-11-27: casar só o alias acusava falso positivo em ED5 e deixava
+    // passar a emissão em ED3).
+    if (original !== '') out.push(original);
+    if (alias !== '') out.push(alias);
   }
   return out;
 }
@@ -534,17 +567,37 @@ export function nomesDoImport(clausula: string): string[] {
  */
 export function importsComNomes(codigo: string): ImportDeclarado[] {
   const out: ImportDeclarado[] = [];
+  // O import de VÁRIAS linhas: a cláusula pode atravessar linhas, e o `[^;]*?`
+  // impede que ela atravesse o `;` de uma declaração anterior (MEDIDO em
+  // 2026-11-27: a versão por LINHA não reconhecia o import multilinha — e o
+  // consumidor legítimo era acusado, enquanto o domínio importando a
+  // infraestrutura passava).
   for (const m of codigo.matchAll(
-    /^[ \t]*(?:import\s+(?:type\s+)?([^\n]*?)\s+from\s+['"]([^'"]+)['"]|import\s+['"]([^'"]+)['"]|export\s+(\*|\{[^}]*\})\s+from\s+['"]([^'"]+)['"])/gm,
+    /^[ \t]*(?:import\s+(?:type\s+)?([^;]*?)\s+from\s+['"]([^'"]+)['"]|import\s+['"]([^'"]+)['"]|export\s+(\*|\{[^}]*\})\s+from\s+['"]([^'"]+)['"])/gm,
   )) {
     const alvo = m[2] ?? m[3] ?? m[5] ?? '';
     const clausula = m[1] ?? m[4] ?? '';
     out.push({ alvo, nomes: nomesDoImport(clausula) });
   }
-  // O import DINÂMICO (`await import('...')`) não é ancorado na linha — vem
-  // depois de `await` — e é import do mesmo jeito.
-  for (const m of codigo.matchAll(/\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g)) {
-    out.push({ alvo: m[1] ?? '', nomes: [] });
+  return out;
+}
+
+/**
+ * Os imports DINÂMICOS (`await import('...')`).
+ *
+ * A detecção é feita no código SEM STRINGS e o CAMINHO é lido do código com
+ * as strings — o scanner PRESERVA a posição de cada caractere, então o
+ * caminho lido é o do import real. Detectar no código com as strings faria
+ * `export const doc = "await import('../infra/x.js')"` virar import
+ * (MEDIDO em 2026-11-27: era violação ED4 falsa).
+ */
+export function importsDinamicos(codigo: string, semStrings: string): string[] {
+  const out: string[] = [];
+  for (const m of semStrings.matchAll(/\bimport\s*\(\s*(['"])\s*\1\s*\)/g)) {
+    const indice = m.index ?? 0;
+    const trecho = codigo.slice(indice);
+    const caminho = /['"]([^'"]+)['"]/.exec(trecho);
+    out.push(caminho?.[1] ?? '');
   }
   return out;
 }
@@ -630,7 +683,10 @@ export function prefixoEsperadoDoEvento(caminho: string): string | null {
   const modulo = moduloDoCaminho(caminho);
   if (modulo === null) return null;
   const arquivo = caminho.split('/').pop() ?? '';
-  const base = arquivo.replace(/\.event\.ts$/, '');
+  // O sufixo `.event.` é o do aggregate, mas um arquivo `user-created.ts`
+  // dentro de `domain/events/` também é um evento — e medir só o que tem o
+  // sufixo deixava esse arquivo de fora da medição (MEDIDO em 2026-11-27).
+  const base = arquivo.replace(/\.event\.ts$/, '').replace(/\.ts$/, '');
   if (base === arquivo) return null;
   const segmentos = base.split('-');
   const aggregate = segmentos[0];
@@ -692,17 +748,59 @@ export function propriedadesDeclaradas(corpo: string): string[] {
       }
     }
   }
-  // Os campos de classe: o que está FORA do construtor.
-  const foraDoConstrutor = construtor !== null ? corpo.slice(0, construtor.index) : corpo;
-  for (const m of foraDoConstrutor.matchAll(
-    /(?:^|[;{}])\s*(?:(?:public|private|protected|readonly|static|declare|override)\s+)*([A-Za-z0-9_$]+)\s*[!?]?\s*(?::[^;={}]*)?(?:=|;)/gm,
-  )) {
-    const nome = m[1];
-    if (nome === undefined) continue;
-    if (nome === 'constructor' || nome === 'implements' || nome === 'extends') continue;
-    out.push(nome);
+  // Os campos de classe: as declarações no TOPO do corpo da classe. Um
+  // campo declarado DEPOIS do construtor é campo (MEDIDO em 2026-11-27: a
+  // versão anterior cortava o corpo no construtor, e o campo depois dele
+  // sumia — o evento era acusado de não declarar o campo e o segredo passava).
+  for (const segmento of segmentosDoTopo(corpo)) {
+    // A parte ANTES da primeira chave: o que vem depois é corpo de método,
+    // e lá dentro há `const`/`let` que NÃO são campos.
+    const chave = segmento.indexOf('{');
+    const assinatura = chave === -1 ? segmento : segmento.slice(0, chave);
+    for (const m of assinatura.matchAll(
+      /(?:^|[;{}])\s*(?:(const|let|var)\s+)?(?:(?:public|private|protected|readonly|static|declare|override)\s+)*([A-Za-z0-9_$]+)\s*[!?]?\s*(?::[^;={}]*)?(?:=|;)/gm,
+    )) {
+      const nome = m[2];
+      if (nome === undefined) continue;
+      // `const x = 1` é uma LOCAL, não um campo.
+      if (m[1] !== undefined) continue;
+      if (nome === 'constructor' || nome === 'implements' || nome === 'extends') continue;
+      out.push(nome);
+    }
   }
   return [...new Set(out)];
+}
+
+/**
+ * Os segmentos de TOPO do corpo da classe — o que está direto na classe, e
+ * não dentro de um método.
+ */
+export function segmentosDoTopo(corpo: string): string[] {
+  const out: string[] = [];
+  let nivel = 0;
+  let inicio = 0;
+  for (let i = 0; i < corpo.length; i++) {
+    const c = corpo[i];
+    if (c === '{') {
+      nivel += 1;
+      continue;
+    }
+    if (c === '}') {
+      nivel -= 1;
+      if (nivel <= 0) {
+        nivel = 0;
+        out.push(corpo.slice(inicio, i));
+        inicio = i + 1;
+      }
+      continue;
+    }
+    if (c === ';' && nivel === 0) {
+      out.push(corpo.slice(inicio, i + 1));
+      inicio = i + 1;
+    }
+  }
+  if (inicio < corpo.length) out.push(corpo.slice(inicio));
+  return out;
 }
 
 /**
@@ -771,8 +869,16 @@ export function arquivosDeEvento(arvore: Map<string, string>): string[] {
   const out: string[] = [];
   for (const caminho of arvore.keys()) {
     if (moduloDoCaminho(caminho) === null) continue;
-    const pareceEvento = caminho.endsWith('.event.ts') || caminho.includes('/events/');
-    if (!pareceEvento) continue;
+    const temSufixo = caminho.endsWith('.event.ts');
+    if (!temSufixo && !caminho.includes('/events/')) continue;
+    if (!temSufixo) {
+      // Sob `/events/`: só é CANDIDATO se declarar um evento. O barrel
+      // (`index.ts`) e o vizinho (`mapper.ts`) NÃO são eventos — e acusá-los
+      // seria o gate brigando com a convenção, que endossa o barrel
+      // (MEDIDO em 2026-11-27: criar o barrel deixava o gate vermelho).
+      const codigo = semComentarios(arvore.get(caminho) ?? '');
+      if (!/\beventName\b/.test(codigo)) continue;
+    }
     out.push(caminho);
   }
   return out.sort();
@@ -1032,7 +1138,12 @@ export function checkEventDriven(
   for (const evento of eventos) {
     for (const [caminho, conteudo] of arvore) {
       const analise = analisarDe(caminho, conteudo);
-      if (!new RegExp(`\\bnew\\s+${evento.classe}\\s*[<(]`).test(analise.semStrings)) continue;
+      // O nome local: a classe do evento OU o ALIAS que o import criou
+      // (`new UCE(...)` é a mesma emissão).
+      const nomes = nomesLocaisDoEvento(analise.codigo, caminho, evento);
+      if (nomes.length === 0) continue;
+      const emissao = new RegExp(`\\bnew\\s+(${nomes.join('|')})\\s*[<(]`);
+      if (!emissao.test(analise.semStrings)) continue;
       // O arquivo tem que IMPORTAR este evento: uma classe homônima local
       // não é o evento (MEDIDO: `new UserCreatedEvent(` de uma classe local
       // acusava o evento de outro módulo).
@@ -1064,7 +1175,11 @@ export function checkEventDriven(
   for (const [caminho, conteudo] of arvore) {
     if (!caminho.includes(CAMINHO_DO_DOMINIO)) continue;
     const analise = analisarDe(caminho, conteudo);
-    for (const alvo of importsDe(analise.codigo)) {
+    const alvos = [
+      ...importsDe(analise.codigo),
+      ...importsDinamicos(analise.codigo, analise.semStrings),
+    ];
+    for (const alvo of alvos) {
       if (!alvo.includes('infrastructure')) continue;
       errors.push(
         `${caminho}: o domínio importa a infraestrutura ("${alvo}") — ` +
@@ -1083,7 +1198,11 @@ export function checkEventDriven(
       const analise = analisarDe(caminho, conteudo);
       // O consumidor tem que IMPORTAR o evento — o nome da classe solta
       // contaria um homônimo de outro módulo (MEDIDO).
-      if (!importaClasseDoEvento(analise.codigo, caminho, evento)) return false;
+      // Os nomes LOCAIS: a classe e o alias (`import { UserCreatedEvent as
+      // UCE }` — o uso é `UCE`, e medir só a classe acusava o consumidor
+      // legítimo).
+      const nomes = nomesLocaisDoEvento(analise.codigo, caminho, evento);
+      if (nomes.length === 0) return false;
       // E tem que USAR a classe, não só importá-la: um `import` sem uso
       // não é consumidor (MEDIDO: o `import` sozinho satisfazia o gate).
       // E o uso é medido no código SEM STRINGS: o nome da classe dentro de
@@ -1091,7 +1210,8 @@ export function checkEventDriven(
       // ⚠️ E o uso é por FRONTEIRA de identificador: `UserCreatedEventPayload`
       // contém o nome da classe e NÃO é uso dela (MEDIDO em 2026-11-27: o
       // evento morto passava por causa de um `type` que só o continha).
-      return new RegExp(`\\b${evento.classe}\\b`).test(semImports(analise.semStrings));
+      const corpo = semImports(analise.semStrings);
+      return nomes.some((nome) => new RegExp(`\\b${nome}\\b`).test(corpo));
     });
     if (!temConsumidor) {
       violacoesED5.push(evento.eventName);

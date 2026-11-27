@@ -106,7 +106,7 @@ que a fase fez o que promete.
 | artefato | o que é |
 |----------|---------|
 | `.agents/specs/conventions/event-driven.md` | as 8 regras (ED1..ED8) e o que o gate mede |
-| `.tooling/scripts/ci/check-event-driven.ts` (+ spec) | o veredito: 64 testes, 32 mutações medidas |
+| `.tooling/scripts/ci/check-event-driven.ts` (+ spec) | o veredito: 75 testes, 41 mutações medidas |
 | `.tooling/scripts/ci/excecoes-event-driven.json` | a dívida aceita (8 entradas), versionada |
 | `.agents/agents/event-driven-auditor.md` + memória | o papel |
 | `.agents/skills/event-driven-audit/SKILL.md` | o processo determinístico (read-only) |

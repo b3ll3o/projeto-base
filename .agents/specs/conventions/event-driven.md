@@ -70,8 +70,10 @@ Ele mede, no código de produção (`apps/api/src`, sem os `*.spec.ts` nem os
 - **quem consome** (ED5) — por referência à CLASSE do evento na camada
   `application`, **fora de um `import`**: o arquivo tem que **importar a
   classe do evento** (o import resolvido por caminho — o barrel do diretório
-  de eventos também) **e usá-la** (com fronteira de identificador: um
-  `UserCreatedEventPayload` não é uso de `UserCreatedEvent`);
+  de eventos também, e o **alias** do import conta como o mesmo evento:
+  `import { UserCreatedEvent as UCE }`) **e usá-la** (com fronteira de
+  identificador: um `UserCreatedEventPayload` não é uso de
+  `UserCreatedEvent`);
 - **quem escreve o efeito colateral** (ED6) — pelas escritas nomeadas
   (`auditService.record`, `auditService.archive`) na camada `application`, e
   medidas no código **sem strings** (uma escrita citada dentro de uma string
