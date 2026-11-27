@@ -1,3 +1,6 @@
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   ARQUIVO_DE_EXCECOES,
@@ -483,6 +486,310 @@ export const rotulo = 'UserCreatedEvent';
       ],
     });
     expect(r.errors).toEqual([]);
+  });
+
+  it('🔴 ED3: a REGEX LITERAL com aspas não desmonta a medição (o emissor depois dela é visto)', () => {
+    // MEDIDO em 2026-11-27: o scanner tratava o apóstrofo de `/['"]/` como
+    // abertura de string, e o arquivo ficava desmontado dali — o `new` que
+    // viesse depois sumia da medição.
+    const arvore = arvoreSadia({
+      [CAMINHO_DO_HANDLER]: `import { UserCreatedEvent } from '../../domain/events/user-created.event.js';
+
+const RE = /['"]/;
+
+export function trata(): void {
+  const evento = new UserCreatedEvent('id', 1, new Date());
+  void evento;
+}
+`,
+    });
+    const r = checkEventDriven({ arvore, excecoes: [] });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.includes('fora do domínio'))).toBe(true);
+  });
+
+  it('🔴 ED4: o import com ASPAS DUPLAS é import (o domínio não importa a infraestrutura)', () => {
+    const arvore = arvoreSadia({
+      'apps/api/src/modules/users/domain/user.aggregate.ts': `import { PrismaUserRepository } from "../infrastructure/persistence/prisma-user.repository.js";
+
+export class User {}
+`,
+    });
+    const r = checkEventDriven({ arvore, excecoes: [] });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.includes('o domínio importa a infraestrutura'))).toBe(true);
+  });
+
+  it('🔴 ED4: `export * from` da infraestrutura também é import', () => {
+    const arvore = arvoreSadia({
+      'apps/api/src/modules/users/domain/user.aggregate.ts': `export * from '../infrastructure/persistence/prisma-user.repository.js';
+`,
+    });
+    const r = checkEventDriven({ arvore, excecoes: [] });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.includes('o domínio importa a infraestrutura'))).toBe(true);
+  });
+
+  it('🔴 ED4: `export * from` com ASPAS DUPLAS também é import', () => {
+    const arvore = arvoreSadia({
+      'apps/api/src/modules/users/domain/user.aggregate.ts': `export * from "../infrastructure/persistence/prisma-user.repository.js";
+`,
+    });
+    const r = checkEventDriven({ arvore, excecoes: [] });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.includes('o domínio importa a infraestrutura'))).toBe(true);
+  });
+
+  it('🔴 ED4: o import DINÂMICO da infraestrutura também é import', () => {
+    const arvore = arvoreSadia({
+      'apps/api/src/modules/users/domain/user.aggregate.ts': `export async function carrega(): Promise<void> {
+  await import('../infrastructure/persistence/prisma-user.repository.js');
+}
+`,
+    });
+    const r = checkEventDriven({ arvore, excecoes: [] });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.includes('o domínio importa a infraestrutura'))).toBe(true);
+  });
+
+  it('🔴 ED5: um tipo que CONTÉM o nome da classe não é uso (o evento continua morto)', () => {
+    const arvore = arvoreSadia({
+      [CAMINHO_DO_HANDLER]: `import { UserCreatedEvent } from '../../domain/events/user-created.event.js';
+
+export type UserCreatedEventPayload = { id: string };
+`,
+    });
+    const r = checkEventDriven({ arvore, excecoes: [] });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.includes('não tem consumidor na camada application'))).toBe(true);
+  });
+
+  it('🔴 ED5: o import por BARREL (`events/index.js`) é consumidor', () => {
+    const arvore = arvoreSadia({
+      [CAMINHO_DO_HANDLER]: `import { UserCreatedEvent } from '../../domain/events/index.js';
+
+export function trata(evento: UserCreatedEvent): void {
+  void evento.aggregateId;
+}
+`,
+    });
+    const r = checkEventDriven({ arvore, excecoes: [] });
+    expect(r.errors).toEqual([]);
+  });
+
+  it('🔴 ED3: o import por BARREL não esconde a emissão fora do domínio', () => {
+    const arvore = arvoreSadia({
+      [CAMINHO_DO_HANDLER]: `import { UserCreatedEvent } from '../../domain/events/index.js';
+
+export function trata(): void {
+  const evento = new UserCreatedEvent('id', 1, new Date());
+  void evento;
+}
+`,
+    });
+    const r = checkEventDriven({ arvore, excecoes: [] });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.includes('fora do domínio'))).toBe(true);
+  });
+
+  it('🔴 ED5: o evento de OUTRO módulo com o mesmo nome de arquivo não é o evento', () => {
+    const arvore = arvoreSadia({
+      [CAMINHO_DO_HANDLER]: `import { UserCreatedEvent } from '../../../profiles/domain/events/user-created.event.js';
+
+export function trata(evento: UserCreatedEvent): void {
+  void evento.aggregateId;
+}
+`,
+    });
+    const r = checkEventDriven({ arvore, excecoes: [] });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.includes('não tem consumidor na camada application'))).toBe(true);
+  });
+
+  it('✅ ED6: a escrita de efeito colateral dentro de uma STRING não é escrita', () => {
+    const arvore = arvoreSadia({
+      'apps/api/src/modules/users/application/user-use-cases.ts': `export const doc = 'await this.auditService.record({})';
+`,
+    });
+    const r = checkEventDriven({ arvore, excecoes: [] });
+    expect(r.errors).toEqual([]);
+  });
+
+  it('🔴 ED6: o import sem ponto-e-vírgula não engole a escrita que vem depois', () => {
+    const arvore = arvoreSadia({
+      'apps/api/src/modules/users/application/user-use-cases.ts': `import { UserCreatedEvent } from '../domain/events/user-created.event.js'
+
+export class UserUseCases {
+  async criar(): Promise<void> {
+    await this.auditService.record({});
+  }
+}
+`,
+    });
+    const r = checkEventDriven({ arvore, excecoes: [] });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.includes('efeito colateral direta'))).toBe(true);
+  });
+
+  it('🔴 ED1: o arquivo de evento FORA do caminho canônico é erro (não escapa da medição)', () => {
+    const arvore = arvoreSadia({
+      'apps/api/src/modules/users/application/events/rogue.event.ts': `export class RogueEvent {
+  readonly eventName = 'users.rogue.created.v1';
+  readonly token: string;
+}
+`,
+    });
+    const r = checkEventDriven({ arvore, excecoes: [] });
+    expect(r.ok).toBe(false);
+    expect(
+      r.errors.some((e) => e.includes('rogue.event.ts')) &&
+        r.errors.some((e) => e.includes('não mora em') || e.includes('NÃO leu')),
+    ).toBe(true);
+  });
+
+  it('🔴 ED1: o arquivo de evento SEM o sufixo `.event.` também entra na medição', () => {
+    const arvore = arvoreSadia({
+      'apps/api/src/modules/users/domain/events/user-created.ts': `export class UserCreatedEvent {
+  readonly eventName = 'users.user.created.v1';
+}
+`,
+    });
+    const r = checkEventDriven({ arvore, excecoes: [] });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.includes('user-created.ts'))).toBe(true);
+  });
+
+  it('🔴 ED7: o segredo em campo MUTÁVEL é erro', () => {
+    const arvore = arvoreSadia({
+      [CAMINHO_DO_EVENTO]: EVENTO_OK.replace(
+        '  readonly version: number;',
+        '  readonly version: number;\n  passwordHash!: string;',
+      ),
+    });
+    const r = checkEventDriven({ arvore, excecoes: [] });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.includes('passwordHash'))).toBe(true);
+  });
+
+  it('🔴 ED7: o segredo em PARAMETER PROPERTY do construtor é erro', () => {
+    const arvore = arvoreSadia({
+      [CAMINHO_DO_EVENTO]: EVENTO_OK.replace(
+        '  constructor(aggregateId: string, version: number, occurredAt: Date) {',
+        '  constructor(aggregateId: string, version: number, occurredAt: Date, public senhaHash: string) {',
+      ),
+    });
+    const r = checkEventDriven({ arvore, excecoes: [] });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.includes('senhaHash'))).toBe(true);
+  });
+
+  it('✅ ED1: o campo declarado SEM anotação de tipo é campo declarado', () => {
+    const arvore = arvoreSadia({
+      [CAMINHO_DO_EVENTO]: EVENTO_OK.replace(
+        '  readonly occurredAt: Date;',
+        '  readonly occurredAt = new Date();',
+      ),
+    });
+    const r = checkEventDriven({ arvore, excecoes: [] });
+    expect(r.errors.some((e) => e.includes('não declara `occurredAt`'))).toBe(false);
+  });
+
+  it('🔴 ED1: `implements DomainEvent` DENTRO de uma string não implementa o contrato', () => {
+    const arvore = arvoreSadia({
+      [CAMINHO_DO_EVENTO]: `import type { DomainEvent } from '../../../../shared/domain/domain-event.js';
+
+export class UserCreatedEvent {
+  readonly eventName = 'users.user.created.v1';
+  readonly occurredAt: Date;
+  readonly aggregateId: string;
+  readonly version: number;
+  readonly contrato = 'implements DomainEvent';
+}
+`,
+    });
+    const r = checkEventDriven({ arvore, excecoes: [] });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.includes('não implementa `DomainEvent`'))).toBe(true);
+  });
+
+  it('🔴 ED1: outra classe do MESMO arquivo não implementa o contrato do evento', () => {
+    const arvore = arvoreSadia({
+      [CAMINHO_DO_EVENTO]: `import type { DomainEvent } from '../../../../shared/domain/domain-event.js';
+
+export class Auxiliar implements DomainEvent {
+  readonly eventName = 'users.aux.v1';
+}
+
+export class UserCreatedEvent {
+  readonly eventName = 'users.user.created.v1';
+  readonly occurredAt: Date;
+  readonly aggregateId: string;
+  readonly version: number;
+}
+`,
+    });
+    const r = checkEventDriven({ arvore, excecoes: [] });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.includes('não implementa `DomainEvent`'))).toBe(true);
+  });
+
+  it('🔴 registro: a entrada DUPLICADA é erro (a segunda não pode esconder a primeira)', () => {
+    const arvore = arvoreCom({ [CAMINHO_DO_EVENTO]: EVENTO_OK });
+    const r = checkEventDriven({
+      arvore,
+      excecoes: [excecaoDoEvento(), excecaoDoEvento()],
+    });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.includes('duplicada'))).toBe(true);
+  });
+
+  it('🔴 registro: a verificação com o TIPO da outra regra é erro', () => {
+    const arvore = arvoreCom({ [CAMINHO_DO_EVENTO]: EVENTO_OK });
+    const r = checkEventDriven({
+      arvore,
+      excecoes: [
+        {
+          ...excecaoDoEvento(),
+          verificacao: {
+            tipo: 'efeito-colateral-direto',
+            classe: 'UserCreatedEvent',
+            arquivo: CAMINHO_DO_EVENTO,
+          },
+        } as unknown as ExcecaoDeclarada,
+      ],
+    });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.includes('verificacao.tipo'))).toBe(true);
+  });
+
+  it('🔴 registro: a entrada sem `verificacao` é erro (a verificação é a prova)', () => {
+    const arvore = arvoreCom({ [CAMINHO_DO_EVENTO]: EVENTO_OK });
+    const r = checkEventDriven({
+      arvore,
+      excecoes: [
+        {
+          regra: 'ED5',
+          chave: 'users.user.created.v1',
+          motivo: 'fixture: sem verificação',
+          ocorrencias: 1,
+        } as unknown as ExcecaoDeclarada,
+      ],
+    });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.includes('verificacao'))).toBe(true);
+  });
+
+  it('🔴 registro: o JSON CORROMPIDO é erro do gate, não stack trace', () => {
+    const raiz = mkdtempSync(join(tmpdir(), 'event-driven-'));
+    mkdirSync(join(raiz, '.tooling/scripts/ci'), { recursive: true });
+    writeFileSync(
+      join(raiz, '.tooling/scripts/ci/excecoes-event-driven.json'),
+      '{ isto não é json',
+    );
+    const r = checkEventDriven({ raiz, arvore: arvoreCom({ [CAMINHO_DO_EVENTO]: EVENTO_OK }) });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.includes('excecoes-event-driven.json'))).toBe(true);
+    expect(r.errors.some((e) => e.includes('JSON inválido'))).toBe(true);
   });
 
   it('🔴 anti-vacuuidade: árvore sem nenhum evento é ERRO, não verde vago', () => {

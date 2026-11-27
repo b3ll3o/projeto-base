@@ -68,15 +68,26 @@ Ele mede, no código de produção (`apps/api/src`, sem os `*.spec.ts` nem os
   declara;
 - **quem emite** (ED3) e **como a dependência aponta** (ED4);
 - **quem consome** (ED5) — por referência à CLASSE do evento na camada
-  `application`, **fora de um `import`**: o arquivo tem que importar a classe
-  do evento **e usá-la**;
+  `application`, **fora de um `import`**: o arquivo tem que **importar a
+  classe do evento** (o import resolvido por caminho — o barrel do diretório
+  de eventos também) **e usá-la** (com fronteira de identificador: um
+  `UserCreatedEventPayload` não é uso de `UserCreatedEvent`);
 - **quem escreve o efeito colateral** (ED6) — pelas escritas nomeadas
-  (`auditService.record`, `auditService.archive`) na camada `application`;
-- o **segredo no payload** (ED7) — pelo NOME do campo declarado na classe do
-  evento;
+  (`auditService.record`, `auditService.archive`) na camada `application`, e
+  medidas no código **sem strings** (uma escrita citada dentro de uma string
+  não é uma escrita);
+- o **segredo no payload** (ED7) — pelo NOME do **campo declarado** pela
+  classe: os campos de classe e as parameter properties do construtor
+  (um `readonly x: T` de construtor É um campo; um parâmetro comum não é);
 - o **caminho canônico** do evento (`<módulo>/domain/events/`) e o
-  **evento ilegível** (um `*.event.ts` que o gate não conseguiu ler — que
-  escaparia de ED1, ED2 e ED7).
+  **evento ilegível** (um arquivo de evento que o gate não conseguiu ler — que
+  escaparia de ED1, ED2 e ED7). ⚠️ O conjunto de arquivos de evento é TODO
+  arquivo de um módulo que parece evento (`*.event.ts` ou sob um diretório
+  `events/`) — um evento fora do caminho canônico é **erro**, não um arquivo
+  que a medição ignora;
+- o **registro de exceções**: a chave duplicada, a `verificacao` ausente, a
+  `verificacao.tipo` incompatível com a regra e o JSON corrompido são erros
+  do gate (não stack trace).
 
 Ele **não** mede:
 
@@ -90,7 +101,11 @@ Ele **não** mede:
   `infrastructure/persistence/` de outro) — isso é da lens DDD/Hexagonal, e quem
   a aplica é o `stack-code-reviewer`;
 - o **comportamento** em runtime — o gate é texto sobre o código;
-- código de produção escrito dentro de um `*.spec.ts` — o gate não lê specs.
+- código de produção escrito dentro de um `*.spec.ts` — o gate não lê specs;
+- o **agregado com hífen no nome** (`user-profile-created.event.ts`): o
+  prefixo esperado sai do PRIMEIRO token do nome do arquivo, e o agregado do
+  domínio (`UserProfile`) não é consultado. Mudar isso é decisão de desenho
+  do nome — não medida, e o gate não a mede.
 
 ⚠️ **O gate é mais estrito que o texto e mais fraco que a palavra.**
 Ele mede *referência à classe*, não *handler nomeado*; e ele não mede o
